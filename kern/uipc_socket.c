@@ -1236,7 +1236,7 @@ somove(struct socket *so, int wait)
 #endif
 
 	/* Send window update to source peer if receive buffer has changed. */
-	if (m)
+	if (m && so->so_proto->pr_flags & PR_WANTRCVD && so->so_pcb)
 		(so->so_proto->pr_usrreq)(so, PRU_RCVD, NULL,
 		    (struct mbuf *)0L, NULL, NULL);
 
