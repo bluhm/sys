@@ -1271,15 +1271,15 @@ somove(struct socket *so, int wait)
 			if (o) {
 				error = (*sosp->so_proto->pr_usrreq)(sosp,
 				    PRU_SEND, m, NULL, NULL, NULL);
-				m = o;
 				if (error) {
 					if (sosp->so_state & SS_CANTSENDMORE)
 						error = EPIPE;
-					m_freem(m);
+					m_freem(o);
 					goto release;
 				}
 				len -= oobmark;
 				so->so_splicelen += oobmark;
+				m = o;
 				o = m_get(wait, MT_DATA);
 			}
 			oobmark = 0;
