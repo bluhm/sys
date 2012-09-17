@@ -1151,7 +1151,7 @@ int
 somove(struct socket *so, int wait)
 {
 	struct socket	*sosp = so->so_splice;
-	struct mbuf	*m = NULL, **mp, *nextrecord;
+	struct mbuf	*m, **mp, *nextrecord;
 	u_long		 len, off, oobmark;
 	long		 space;
 	int		 error = 0, maxreached = 0;
@@ -1229,14 +1229,17 @@ somove(struct socket *so, int wait)
 
 	SBLASTRECORDCHK(&so->so_rcv, "somove");
 	SBLASTMBUFCHK(&so->so_rcv, "somove");
-	KDASSERT(m->m_nextpkt == NULL);
 	KASSERT(so->so_rcv.sb_mb == so->so_rcv.sb_lastrecord);
 #ifdef SOCKBUF_DEBUG
 	sbcheck(&so->so_rcv);
 #endif
 
-	/* Send window update to source peer if receive buffer has changed. */
-	if (m && so->so_proto->pr_flags & PR_WANTRCVD && so->so_pcb)
+	/* m might be NULL if the loop did break during the first iteration. */
+	if (m == NULL)
+		goto release;
+
+	/* Send window update to source peer as receive buffer has changed. */
+	if (so->so_proto->pr_flags & PR_WANTRCVD && so->so_pcb)
 		(so->so_proto->pr_usrreq)(so, PRU_RCVD, NULL,
 		    (struct mbuf *)0L, NULL, NULL);
 
@@ -1256,7 +1259,7 @@ somove(struct socket *so, int wait)
 	 * Handle oob data.  If any malloc fails, ignore error.
 	 * TCP urgent data is not very reliable anyway.
 	 */
-	while (m && ((state & SS_RCVATMARK) || oobmark) &&
+	while (((state & SS_RCVATMARK) || oobmark) &&
 	    (so->so_options & SO_OOBINLINE)) {
 		struct mbuf *o = NULL;
 
@@ -1272,6 +1275,7 @@ somove(struct socket *so, int wait)
 				if (error) {
 					if (sosp->so_state & SS_CANTSENDMORE)
 						error = EPIPE;
+					m_freem(m);
 					goto release;
 				}
 				len -= oobmark;
@@ -1288,6 +1292,7 @@ somove(struct socket *so, int wait)
 			if (error) {
 				if (sosp->so_state & SS_CANTSENDMORE)
 					error = EPIPE;
+				m_freem(m);
 				goto release;
 			}
 			len -= 1;
@@ -1302,23 +1307,18 @@ somove(struct socket *so, int wait)
 	}
 
 	/* Append all remaining data to drain socket. */
-	if (m) {
-		if (so->so_rcv.sb_cc == 0 || maxreached)
-			sosp->so_state &= ~SS_ISSENDING;
-		error = (*sosp->so_proto->pr_usrreq)(sosp, PRU_SEND, m, NULL,
-		    NULL, NULL);
-		m = NULL;
-		if (error) {
-			if (sosp->so_state & SS_CANTSENDMORE)
-				error = EPIPE;
-			goto release;
-		}
-		so->so_splicelen += len;
+	if (so->so_rcv.sb_cc == 0 || maxreached)
+		sosp->so_state &= ~SS_ISSENDING;
+	error = (*sosp->so_proto->pr_usrreq)(sosp, PRU_SEND, m, NULL, NULL,
+	    NULL);
+	if (error) {
+		if (sosp->so_state & SS_CANTSENDMORE)
+			error = EPIPE;
+		goto release;
 	}
+	so->so_splicelen += len;
 
  release:
-	if (m)
-		m_freem(m);
 	sosp->so_state &= ~SS_ISSENDING;
 	if (error)
 		so->so_error = error;
