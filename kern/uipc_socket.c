@@ -1337,10 +1337,10 @@ void
 sorwakeup(struct socket *so)
 {
 #ifdef SOCKET_SPLICE
-	if (so->so_rcv.sb_flags & SB_SPLICE) {
+	if (so->so_rcv.sb_flags & SB_SPLICE)
 		(void) somove(so, M_DONTWAIT);
+	if (so->so_splice)
 		return;
-	}
 #endif
 	sowakeup(so, &so->so_rcv);
 	if (so->so_upcall)
