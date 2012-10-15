@@ -2735,7 +2735,7 @@ ip6_setpktopts(struct mbuf *control, struct ip6_pktopts *opt,
 		if (clen < CMSG_LEN(0))
 			return (EINVAL);
 		cm = (struct cmsghdr *)cmsgs;
-		if (cm->cmsg_len < CMSG_LEN(0) ||
+		if (cm->cmsg_len < CMSG_LEN(0) || cm->cmsg_len > clen ||
 		    CMSG_ALIGN(cm->cmsg_len) > clen)
 			return (EINVAL);
 		if (cm->cmsg_level == IPPROTO_IPV6) {
