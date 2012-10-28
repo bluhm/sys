@@ -250,11 +250,11 @@ struct baddynamicports {
 #define sotopf(so)  (so->so_proto->pr_domain->dom_family)
 
 void	 in_losing(struct inpcb *);
-int	 in_pcballoc(struct socket *, void *);
-int	 in_pcbbind(void *, struct mbuf *, struct proc *);
-int	 in_pcbconnect(void *, struct mbuf *);
-void	 in_pcbdetach(void *);
-void	 in_pcbdisconnect(void *);
+int	 in_pcballoc(struct socket *, struct inpcbtable *);
+int	 in_pcbbind(struct inpcb *, struct mbuf *, struct proc *);
+int	 in_pcbconnect(struct inpcb *, struct mbuf *);
+void	 in_pcbdetach(struct inpcb *);
+void	 in_pcbdisconnect(struct inpcb *);
 struct inpcb *
 	 in_pcbhashlookup(struct inpcbtable *, struct in_addr,
 			       u_int, struct in_addr, u_int, u_int);
