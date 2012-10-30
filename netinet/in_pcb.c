@@ -177,6 +177,8 @@ in_pcballoc(struct socket *so, struct inpcbtable *table)
 	struct inpcb *inp;
 	int s;
 
+	splsoftassert(IPL_SOFTNET);
+
 	if (inpcb_pool_initialized == 0) {
 		pool_init(&inpcb_pool, sizeof(struct inpcb), 0, 0, 0,
 		    "inpcbpl", NULL);
