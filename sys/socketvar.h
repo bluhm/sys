@@ -104,8 +104,8 @@ struct socket {
 		struct mbuf *sb_lastrecord;/* first mbuf of last record in
 					      socket buffer */
 		struct	selinfo sb_sel;	/* process selecting read/write */
-		short	sb_flags;	/* flags, see below */
-		short	sb_flagsintr;	/* flags, changed during interrupt */
+		char	sb_flags;	/* flags, see below */
+		char	sb_flagsintr;	/* flags, changed during interrupt */
 		u_short	sb_timeo;	/* timeout for read/write */
 	} so_rcv, so_snd;
 #define	SB_MAX		(256*1024)	/* default for max chars in sockbuf */
