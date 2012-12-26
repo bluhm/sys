@@ -275,8 +275,9 @@ socantrcvmore(struct socket *so)
 int
 sbwait(struct sockbuf *sb)
 {
+	splsoftassert(IPL_SOFTNET);
 
-	sb->sb_flags |= SB_WAIT;
+	sb->sb_flagsintr |= SB_WAIT;
 	return (tsleep(&sb->sb_cc,
 	    (sb->sb_flags & SB_NOINTR) ? PSOCK : PSOCK | PCATCH, "netio",
 	    sb->sb_timeo));
@@ -311,10 +312,12 @@ sb_lock(struct sockbuf *sb)
 void
 sowakeup(struct socket *so, struct sockbuf *sb)
 {
+	splsoftassert(IPL_SOFTNET);
+
 	selwakeup(&sb->sb_sel);
-	sb->sb_flags &= ~SB_SEL;
-	if (sb->sb_flags & SB_WAIT) {
-		sb->sb_flags &= ~SB_WAIT;
+	sb->sb_flagsintr &= ~SB_SEL;
+	if (sb->sb_flagsintr & SB_WAIT) {
+		sb->sb_flagsintr &= ~SB_WAIT;
 		wakeup(&sb->sb_cc);
 	}
 	if (so->so_state & SS_ASYNC)
