@@ -105,6 +105,7 @@ struct socket {
 					      socket buffer */
 		struct	selinfo sb_sel;	/* process selecting read/write */
 		short	sb_flags;	/* flags, see below */
+		short	sb_flagsintr;	/* flags, changed during interrupt */
 		u_short	sb_timeo;	/* timeout for read/write */
 	} so_rcv, so_snd;
 #define	SB_MAX		(256*1024)	/* default for max chars in sockbuf */
@@ -152,7 +153,7 @@ struct socket {
  * Do we need to notify the other side when I/O is possible?
  */
 #define	sb_notify(sb)	(((sb)->sb_flags & (SB_WAIT|SB_SEL|SB_ASYNC| \
-    SB_KNOTE|SB_SPLICE)) != 0)
+    SB_KNOTE)) != 0 && ((sb)->sb_flagsintr & (SB_SPLICE)) != 0)
 
 /*
  * How much space is there in a socket buffer (so->so_snd or so->so_rcv)?
