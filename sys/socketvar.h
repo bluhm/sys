@@ -152,8 +152,8 @@ struct socket {
 /*
  * Do we need to notify the other side when I/O is possible?
  */
-#define	sb_notify(sb)	(((sb)->sb_flags & (SB_WAIT|SB_SEL|SB_ASYNC| \
-    SB_KNOTE)) != 0 && ((sb)->sb_flagsintr & (SB_SPLICE)) != 0)
+#define	sb_notify(sb)	((((sb)->sb_flags | (sb)->sb_flagsintr) & \
+    (SB_WAIT|SB_SEL|SB_ASYNC|SB_SPLICE|SB_KNOTE)) != 0)
 
 /*
  * How much space is there in a socket buffer (so->so_snd or so->so_rcv)?
