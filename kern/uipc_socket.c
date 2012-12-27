@@ -1239,7 +1239,7 @@ somove(struct socket *so, int wait)
 		u_long size = len - off;
 
 #ifdef DIAGNOSTIC
-		switch (m->m_type) {
+		switch ((*mp)->m_type) {
 		case MT_OOBDATA:
 		case MT_DATA:
 		case MT_HEADER:
