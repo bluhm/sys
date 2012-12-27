@@ -1233,6 +1233,12 @@ somove(struct socket *so, int wait)
 	SBLASTRECORDCHK(&so->so_rcv, "somove 2");
 	SBLASTMBUFCHK(&so->so_rcv, "somove 2");
 
+	if (m && so->so_proto->pr_flags & PR_ATOMIC &&
+	    m->m_flags & M_PKTHDR && m->m_pkthdr.len > space) {
+		sbdroprecord(&so->so_rcv);
+		goto redo;
+	}
+
 	/* Take at most len mbufs out of receive buffer. */
 	for (off = 0, mp = &m; off <= len && *mp;
 	    off += (*mp)->m_len, mp = &(*mp)->m_next) {
@@ -1240,7 +1246,7 @@ somove(struct socket *so, int wait)
 
 #ifdef DIAGNOSTIC
 		if ((*mp)->m_type != MT_DATA)
-                        panic("somove 3");
+			panic("somove 3");
 #endif
 		if ((*mp)->m_len > size) {
 			if (!maxreached || (*mp = m_copym(
@@ -1352,7 +1358,7 @@ somove(struct socket *so, int wait)
 	so->so_splicelen += len;
 
 	/* Move several packets if possible. */
-	if (so->so_rcv.sb_mb)
+	if (!maxreached && so->so_rcv.sb_mb)
 		goto redo;
 
  release:
