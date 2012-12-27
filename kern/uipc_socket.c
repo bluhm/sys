@@ -1042,7 +1042,7 @@ sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
 		return (EPROTONOSUPPORT);
 	if (so->so_options & SO_ACCEPTCONN)
 		return (EOPNOTSUPP);
-	if ((so->so_state & (SS_ISCONNECTED|SS_ISCONNECTING)) == 00 &&
+	if ((so->so_state & (SS_ISCONNECTED|SS_ISCONNECTING)) == 0 &&
 	    (so->so_proto->pr_flags & PR_CONNREQUIRED))
 		return (ENOTCONN);
 
@@ -1181,7 +1181,7 @@ somove(struct socket *so, int wait)
 		goto release;
 
 	/* Calculate how many bytes can be copied now. */
-	len = so->so_rcv.sb_cc;
+	len = so->so_rcv.sb_datacc;
 	if (len == 0)
 		goto release;
 	if (so->so_splicemax) {
@@ -1230,11 +1230,24 @@ somove(struct socket *so, int wait)
 		m = so->so_rcv.sb_mb;
 		sbsync(&so->so_rcv, nextrecord);
 	}
+	SBLASTRECORDCHK(&so->so_rcv, "somove 2");
+	SBLASTMBUFCHK(&so->so_rcv, "somove 2");
 
 	/* Take at most len mbufs out of receive buffer. */
 	for (off = 0, mp = &m; off < len;
 	    off += (*mp)->m_len, mp = &(*mp)->m_next) {
 		u_long size = len - off;
+
+#ifdef DIAGNOSTIC
+		switch (m->m_type) {
+		case MT_OOBDATA:
+		case MT_DATA:
+		case MT_HEADER:
+			break;
+		default:
+                        panic("somove 3");
+		}
+#endif
 
 		if ((*mp)->m_len > size) {
 			if (!maxreached || (*mp = m_copym(
@@ -1255,8 +1268,8 @@ somove(struct socket *so, int wait)
 	}
 	*mp = NULL;
 
-	SBLASTRECORDCHK(&so->so_rcv, "somove 2");
-	SBLASTMBUFCHK(&so->so_rcv, "somove 2");
+	SBLASTRECORDCHK(&so->so_rcv, "somove 4");
+	SBLASTMBUFCHK(&so->so_rcv, "somove 4");
 	KASSERT(so->so_rcv.sb_mb == so->so_rcv.sb_lastrecord);
 	SBCHECK(&so->so_rcv);
 
