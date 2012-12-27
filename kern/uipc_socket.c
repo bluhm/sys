@@ -1042,7 +1042,8 @@ sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
 		return (EPROTONOSUPPORT);
 	if (so->so_options & SO_ACCEPTCONN)
 		return (EOPNOTSUPP);
-	if ((so->so_state & (SS_ISCONNECTED|SS_ISCONNECTING)) == 0)
+	if ((so->so_state & (SS_ISCONNECTED|SS_ISCONNECTING)) == 00 &&
+	    (so->so_proto->pr_flags & PR_CONNREQUIRED))
 		return (ENOTCONN);
 
 	/* If no fd is given, unsplice by removing existing link. */
@@ -1069,6 +1070,10 @@ sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
 	if ((error = getsock(curproc->p_fd, fd, &fp)) != 0)
 		return (error);
 	sosp = fp->f_data;
+
+	if (so->so_state & SS_ISCONFIRMING)
+		(*so->so_proto->pr_usrreq)(so, PRU_RCVD, NULL, NULL, NULL,
+		    curproc);
 
 	/* Lock both receive and send buffer. */
 	if ((error = sblock(&so->so_rcv,
@@ -1202,12 +1207,32 @@ somove(struct socket *so, int wait)
 	}
 	sosp->so_state |= SS_ISSENDING;
 
-	/* Take at most len mbufs out of receive buffer. */
 	m = so->so_rcv.sb_mb;
+	SBLASTRECORDCHK(&so->so_rcv, "somove 1");
+	SBLASTMBUFCHK(&so->so_rcv, "somove 1");
 	nextrecord = m->m_nextpkt;
+
+	/* Drop address and control information not used with splicing. */
+	if (so->so_proto->pr_flags & PR_ADDR) {
+#ifdef DIAGNOSTIC
+		if (m->m_type != MT_SONAME)
+			panic("somove 1a");
+#endif
+		sbfree(&so->so_rcv, m);
+		MFREE(m, so->so_rcv.sb_mb);
+		m = so->so_rcv.sb_mb;
+		sbsync(&so->so_rcv, nextrecord);
+	}
+
+	/* Take at most len mbufs out of receive buffer. */
 	for (off = 0, mp = &m; off < len;
 	    off += (*mp)->m_len, mp = &(*mp)->m_next) {
 		u_long size = len - off;
+
+		if (*mp == NULL) {
+			len -= size;
+			break;
+		}
 
 		if ((*mp)->m_len > size) {
 			if (!maxreached || (*mp = m_copym(
@@ -1228,8 +1253,8 @@ somove(struct socket *so, int wait)
 	}
 	*mp = NULL;
 
-	SBLASTRECORDCHK(&so->so_rcv, "somove");
-	SBLASTMBUFCHK(&so->so_rcv, "somove");
+	SBLASTRECORDCHK(&so->so_rcv, "somove 2");
+	SBLASTMBUFCHK(&so->so_rcv, "somove 2");
 	KASSERT(so->so_rcv.sb_mb == so->so_rcv.sb_lastrecord);
 	SBCHECK(&so->so_rcv);
 
