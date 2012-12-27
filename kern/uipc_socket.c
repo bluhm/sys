@@ -1156,7 +1156,7 @@ int
 somove(struct socket *so, int wait)
 {
 	struct socket	*sosp = so->so_splice;
-	struct mbuf	*m, **mp, *cm, *nextrecord;
+	struct mbuf	*m, **mp, *nextrecord;
 	u_long		 len, off, oobmark;
 	long		 space;
 	int		 error = 0, maxreached = 0;
@@ -1227,21 +1227,8 @@ somove(struct socket *so, int wait)
 		sbfree(&so->so_rcv, m);
 		so->so_rcv.sb_mb = m->m_next;
 		m->m_nextpkt = m->m_next = NULL;
-		cm = m;
 		m = so->so_rcv.sb_mb;
 		sbsync(&so->so_rcv, nextrecord);
-		/*
-		 * Dispose of any SCM_RIGHTS message that went
-		 * through the read path rather than recv.
-		 */
-		if (so->so_proto->pr_domain->dom_dispose &&
-		    mtod(cm, struct cmsghdr *)->cmsg_type == SCM_RIGHTS)
-			so->so_proto->pr_domain->dom_dispose(cm);
-		m_free(cm);
-		if (m)
-			nextrecord = so->so_rcv.sb_mb->m_nextpkt;
-		else
-			nextrecord = so->so_rcv.sb_mb;
 	}
 
 	/* Take at most len mbufs out of receive buffer. */
