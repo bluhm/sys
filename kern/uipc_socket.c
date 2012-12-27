@@ -1234,21 +1234,14 @@ somove(struct socket *so, int wait)
 	SBLASTMBUFCHK(&so->so_rcv, "somove 2");
 
 	/* Take at most len mbufs out of receive buffer. */
-	for (off = 0, mp = &m; off < len;
+	for (off = 0, mp = &m; off <= len && *mp;
 	    off += (*mp)->m_len, mp = &(*mp)->m_next) {
 		u_long size = len - off;
 
 #ifdef DIAGNOSTIC
-		switch ((*mp)->m_type) {
-		case MT_OOBDATA:
-		case MT_DATA:
-		case MT_HEADER:
-			break;
-		default:
+		if ((*mp)->m_type != MT_DATA)
                         panic("somove 3");
-		}
 #endif
-
 		if ((*mp)->m_len > size) {
 			if (!maxreached || (*mp = m_copym(
 			    so->so_rcv.sb_mb, 0, size, wait)) == NULL) {
