@@ -1164,6 +1164,7 @@ somove(struct socket *so, int wait)
 
 	splsoftassert(IPL_SOFTNET);
 
+ redo:
 	if (so->so_error) {
 		error = so->so_error;
 		goto release;
@@ -1349,6 +1350,10 @@ somove(struct socket *so, int wait)
 		goto release;
 	}
 	so->so_splicelen += len;
+
+	/* Move several packets if possible. */
+	if (so->so_rcv.sb_mb)
+		goto redo;
 
  release:
 	sosp->so_state &= ~SS_ISSENDING;
