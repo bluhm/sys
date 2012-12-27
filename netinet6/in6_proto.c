@@ -132,7 +132,7 @@ struct ip6protosw inet6sw[] = {
   ip6_init,	0,		frag6_slowtimo,	frag6_drain,
   ip6_sysctl,
 },
-{ SOCK_DGRAM,	&inet6domain,	IPPROTO_UDP,	PR_ATOMIC|PR_ADDR,
+{ SOCK_DGRAM,	&inet6domain,	IPPROTO_UDP,	PR_ATOMIC|PR_ADDR|PR_SPLICE,
   udp6_input,	0,		udp6_ctlinput,	ip6_ctloutput,
   udp_usrreq,	0,
   0,		0,		0,
