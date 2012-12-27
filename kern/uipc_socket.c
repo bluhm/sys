@@ -1225,8 +1225,7 @@ somove(struct socket *so, int wait)
 	}
 	while (m && m->m_type == MT_CONTROL) {
 		sbfree(&so->so_rcv, m);
-		so->so_rcv.sb_mb = m->m_next;
-		m->m_nextpkt = m->m_next = NULL;
+		MFREE(m, so->so_rcv.sb_mb);
 		m = so->so_rcv.sb_mb;
 		sbsync(&so->so_rcv, nextrecord);
 	}
@@ -1269,6 +1268,7 @@ somove(struct socket *so, int wait)
 	/* m might be NULL if the loop did break during the first iteration. */
 	if (m == NULL)
 		goto release;
+	m->m_nextpkt = NULL;
 
 	/* Send window update to source peer as receive buffer has changed. */
 	if (so->so_proto->pr_flags & PR_WANTRCVD && so->so_pcb)
