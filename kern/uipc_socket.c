@@ -1156,7 +1156,7 @@ int
 somove(struct socket *so, int wait)
 {
 	struct socket	*sosp = so->so_splice;
-	struct mbuf	*m, **mp, *nextrecord;
+	struct mbuf	*m, **mp, *cm, *nextrecord;
 	u_long		 len, off, oobmark;
 	long		 space;
 	int		 error = 0, maxreached = 0;
@@ -1223,16 +1223,31 @@ somove(struct socket *so, int wait)
 		m = so->so_rcv.sb_mb;
 		sbsync(&so->so_rcv, nextrecord);
 	}
+	while (m && m->m_type == MT_CONTROL) {
+		sbfree(&so->so_rcv, m);
+		so->so_rcv.sb_mb = m->m_next;
+		m->m_nextpkt = m->m_next = NULL;
+		cm = m;
+		m = so->so_rcv.sb_mb;
+		sbsync(&so->so_rcv, nextrecord);
+		/*
+		 * Dispose of any SCM_RIGHTS message that went
+		 * through the read path rather than recv.
+		 */
+		if (so->so_proto->pr_domain->dom_dispose &&
+		    mtod(cm, struct cmsghdr *)->cmsg_type == SCM_RIGHTS)
+			so->so_proto->pr_domain->dom_dispose(cm);
+		m_free(cm);
+		if (m)
+			nextrecord = so->so_rcv.sb_mb->m_nextpkt;
+		else
+			nextrecord = so->so_rcv.sb_mb;
+	}
 
 	/* Take at most len mbufs out of receive buffer. */
 	for (off = 0, mp = &m; off < len;
 	    off += (*mp)->m_len, mp = &(*mp)->m_next) {
 		u_long size = len - off;
-
-		if (*mp == NULL) {
-			len -= size;
-			break;
-		}
 
 		if ((*mp)->m_len > size) {
 			if (!maxreached || (*mp = m_copym(
