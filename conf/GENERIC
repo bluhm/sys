@@ -48,6 +48,7 @@ option		UDF		# UDF (DVD) file system
 option		MSDOSFS		# MS-DOS file system
 option		FIFO		# FIFOs; RECOMMENDED
 
+option		SOCKBUF_DEBUG	# More socket buffer checks
 option		SOCKET_SPLICE	# Socket Splicing for TCP
 option		TCP_SACK	# Selective Acknowledgements for TCP
 option		TCP_ECN		# Explicit Congestion Notification for TCP
