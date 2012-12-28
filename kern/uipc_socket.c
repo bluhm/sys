@@ -1245,7 +1245,7 @@ somove(struct socket *so, int wait)
 		u_long size = len - off;
 
 #ifdef DIAGNOSTIC
-		if ((*mp)->m_type != MT_DATA)
+		if ((*mp)->m_type != MT_DATA && (*mp)->m_type != MT_HEADER)
 			panic("somove 3");
 #endif
 		if ((*mp)->m_len > size) {
