@@ -1164,7 +1164,7 @@ somove(struct socket *so, int wait)
 
 	splsoftassert(IPL_SOFTNET);
 
- redo:
+ nextpkt:
 	if (so->so_error) {
 		error = so->so_error;
 		goto release;
@@ -1236,7 +1236,7 @@ somove(struct socket *so, int wait)
 	if (m && so->so_proto->pr_flags & PR_ATOMIC &&
 	    m->m_flags & M_PKTHDR && m->m_pkthdr.len > space) {
 		sbdroprecord(&so->so_rcv);
-		goto redo;
+		goto nextpkt;
 	}
 
 	/* Take at most len mbufs out of receive buffer. */
@@ -1359,7 +1359,7 @@ somove(struct socket *so, int wait)
 
 	/* Move several packets if possible. */
 	if (!maxreached && so->so_rcv.sb_mb)
-		goto redo;
+		goto nextpkt;
 
  release:
 	sosp->so_state &= ~SS_ISSENDING;
