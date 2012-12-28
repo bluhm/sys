@@ -1230,9 +1230,7 @@ somove(struct socket *so, int wait)
 	SBLASTRECORDCHK(&so->so_rcv, "somove");
 	SBLASTMBUFCHK(&so->so_rcv, "somove");
 	KASSERT(so->so_rcv.sb_mb == so->so_rcv.sb_lastrecord);
-#ifdef SOCKBUF_DEBUG
-	sbcheck(&so->so_rcv);
-#endif
+	SBCHECK(&so->so_rcv);
 
 	/* m might be NULL if the loop did break during the first iteration. */
 	if (m == NULL)
