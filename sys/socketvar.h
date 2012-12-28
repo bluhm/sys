@@ -329,7 +329,7 @@ void	sbcheck(struct sockbuf *sb);
 #else
 #define	SBLASTRECORDCHK(sb, where)	/* nothing */
 #define	SBLASTMBUFCHK(sb, where)	/* nothing */
-#define	SBCHECK(sb, where)		/* nothing */
+#define	SBCHECK(sb)			/* nothing */
 #endif /* SOCKBUF_DEBUG */
 
 #endif /* _KERNEL */
