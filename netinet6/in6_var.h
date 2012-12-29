@@ -115,7 +115,7 @@ struct	in6_ifaddr {
 				 */
 	time_t	ia6_updatetime;
 
-	/* back pointer to the prefix (for all addreesses, not just autoconf) */
+	/* back pointer to the prefix (for all addresses, not just autoconf) */
 	struct nd_prefix *ia6_ndpr;
 
 	/* multicast addresses joined from the kernel */
