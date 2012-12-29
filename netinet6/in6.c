@@ -1260,20 +1260,15 @@ in6_unlink_ifa(struct in6_ifaddr *ia, struct ifnet *ifp)
 		in6_savemkludge(oia);
 	}
 
-	/*
-	 * When an autoconfigured address is being removed, release the
-	 * reference to the base prefix.
-	 */
-	if ((oia->ia6_flags & IN6_IFF_AUTOCONF) != 0) {
-		if (oia->ia6_ndpr == NULL) {
-			log(LOG_NOTICE, "in6_unlink_ifa: autoconf'ed address "
-			    "%p has no prefix\n", oia);
-		} else {
-			oia->ia6_flags &= ~IN6_IFF_AUTOCONF;
-			if (--oia->ia6_ndpr->ndpr_refcnt == 0)
-				prelist_remove(oia->ia6_ndpr);
-			oia->ia6_ndpr = NULL;
-		}
+	/* Release the reference to the base prefix. */
+	if (oia->ia6_ndpr == NULL) {
+		log(LOG_NOTICE, "in6_unlink_ifa: address %p has no prefix\n",
+		    oia);
+	} else {
+		oia->ia6_flags &= ~IN6_IFF_AUTOCONF;
+		if (--oia->ia6_ndpr->ndpr_refcnt == 0)
+			prelist_remove(oia->ia6_ndpr);
+		oia->ia6_ndpr = NULL;
 	}
 
 	/*
