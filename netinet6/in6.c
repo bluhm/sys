@@ -2449,6 +2449,14 @@ in6if_do_dad(struct ifnet *ifp)
 		 * NS would confuse the DAD procedure.
 		 */
 		return (0);
+#if NCARP > 0
+	case IFT_CARP:
+		/*
+		 * XXX: DAD does not work currently on carp(4)
+		 * so disable it for now.
+		 */
+		return (0);
+#endif
 	default:
 		/*
 		 * Our DAD routine requires the interface up and running.
