@@ -78,10 +78,10 @@ struct m_hdr {
 };
 
 /* pf stuff */
-struct statekey;
+struct pf_state_key;
 struct pkthdr_pf {
 	void		*hdr;		/* saved hdr pos in mbuf, for ECN */
-	struct statekey	*statekey;	/* pf stackside statekey */
+	struct pf_state_key *statekey;	/* pf stackside statekey */
 	u_int32_t	 qid;		/* queue id */
 	u_int16_t	 tag;		/* tag id */
 	u_int8_t	 flags;
