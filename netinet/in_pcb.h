@@ -70,6 +70,8 @@
 #include <netinet/icmp6.h>
 #include <netinet/ip_ipsp.h>
 
+struct pf_state_key;
+
 union inpaddru {
 	struct in6_addr iau_addr6;
 	struct {
@@ -145,7 +147,7 @@ struct inpcb {
 #define inp_csumoffset	in6p_cksum
 #endif
 	struct	icmp6_filter *inp_icmp6filt;
-	void	*inp_pf_sk;
+	struct	pf_state_key *inp_pf_sk;
 	u_int	inp_rtableid;
 	int	inp_pipex;		/* pipex indication */
 	int	inp_divertfl;		/* divert flags */
