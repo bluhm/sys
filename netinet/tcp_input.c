@@ -594,7 +594,7 @@ tcp_input(struct mbuf *m, ...)
 	 */
 #if NPF > 0
 	if (m->m_pkthdr.pf.statekey)
-		inp = ((struct pf_state_key *)m->m_pkthdr.pf.statekey)->inp;
+		inp = m->m_pkthdr.pf.statekey->inp;
 #endif
 findpcb:
 	if (inp == NULL) {
@@ -613,8 +613,7 @@ findpcb:
 		}
 #if NPF > 0
 		if (m->m_pkthdr.pf.statekey && inp) {
-			((struct pf_state_key *)m->m_pkthdr.pf.statekey)->inp =
-			    inp;
+			m->m_pkthdr.pf.statekey->inp = inp;
 			inp->inp_pf_sk = m->m_pkthdr.pf.statekey;
 		}
 #endif
@@ -882,7 +881,7 @@ findpcb:
 
 #if NPF > 0
 	if (m->m_pkthdr.pf.statekey) {
-		((struct pf_state_key *)m->m_pkthdr.pf.statekey)->inp = inp;
+		m->m_pkthdr.pf.statekey->inp = inp;
 		inp->inp_pf_sk = m->m_pkthdr.pf.statekey;
 	}
 	/* The statekey has finished finding the inp, it is no longer needed. */

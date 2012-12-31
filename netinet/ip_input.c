@@ -672,7 +672,7 @@ in_ouraddr(struct in_addr ina, struct mbuf *m)
 	if (m->m_pkthdr.pf.flags & PF_TAG_DIVERTED)
 		return (1);
 
-	key = (struct pf_state_key *)m->m_pkthdr.pf.statekey;
+	key = m->m_pkthdr.pf.statekey;
 	if (key != NULL) {
 		if (key->inp != NULL)
 			return (1);

@@ -500,7 +500,7 @@ in_pcbdetach(struct inpcb *inp)
 #endif
 #if NPF > 0
 	if (inp->inp_pf_sk)
-		((struct pf_state_key *)inp->inp_pf_sk)->inp = NULL;
+		inp->inp_pf_sk->inp = NULL;
 #endif
 	s = splnet();
 	LIST_REMOVE(inp, inp_lhash);
