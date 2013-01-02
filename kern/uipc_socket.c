@@ -1183,8 +1183,6 @@ somove(struct socket *so, int wait)
 
 	/* Calculate how many bytes can be copied now. */
 	len = so->so_rcv.sb_datacc;
-	if (len == 0)
-		goto release;
 	if (so->so_splicemax) {
 		KASSERT(so->so_splicelen < so->so_splicemax);
 		if (so->so_splicemax <= so->so_splicelen + len) {
@@ -1208,16 +1206,18 @@ somove(struct socket *so, int wait)
 	}
 	sosp->so_state |= SS_ISSENDING;
 
-	m = so->so_rcv.sb_mb;
 	SBLASTRECORDCHK(&so->so_rcv, "somove 1");
 	SBLASTMBUFCHK(&so->so_rcv, "somove 1");
+	m = so->so_rcv.sb_mb;
+	if (m == NULL)
+		goto release;
 	nextrecord = m->m_nextpkt;
 
 	/* Drop address and control information not used with splicing. */
 	if (so->so_proto->pr_flags & PR_ADDR) {
 #ifdef DIAGNOSTIC
 		if (m->m_type != MT_SONAME)
-			panic("somove 1a");
+			panic("somove soname");
 #endif
 		sbfree(&so->so_rcv, m);
 		MFREE(m, so->so_rcv.sb_mb);
@@ -1229,14 +1229,28 @@ somove(struct socket *so, int wait)
 		MFREE(m, so->so_rcv.sb_mb);
 		m = so->so_rcv.sb_mb;
 		sbsync(&so->so_rcv, nextrecord);
+		if (m)
+			nextrecord = so->so_rcv.sb_mb->m_nextpkt;
+		else
+			nextrecord = so->so_rcv.sb_mb;
 	}
+
 	SBLASTRECORDCHK(&so->so_rcv, "somove 2");
 	SBLASTMBUFCHK(&so->so_rcv, "somove 2");
+	if (m == NULL)
+		goto release;
 
-	if (m && so->so_proto->pr_flags & PR_ATOMIC &&
-	    m->m_flags & M_PKTHDR && m->m_pkthdr.len > space) {
-		sbdroprecord(&so->so_rcv);
-		goto nextpkt;
+	if (so->so_proto->pr_flags & PR_ATOMIC) {
+		if ((m->m_flags & M_PKTHDR) == 0)
+			panic("somove pkthdr");
+		if (sosp->so_snd.sb_hiwat < m->m_pkthdr.len) {
+			sbdroprecord(&so->so_rcv);
+			/* XXX We should set an error or increase a counter. */
+			goto nextpkt;
+		}
+		if (len < m->m_pkthdr.len)
+			goto release;
+		len = m->m_pkthdr.len;
 	}
 
 	/* Take at most len mbufs out of receive buffer. */
@@ -1270,8 +1284,6 @@ somove(struct socket *so, int wait)
 	SBLASTRECORDCHK(&so->so_rcv, "somove 4");
 	SBLASTMBUFCHK(&so->so_rcv, "somove 4");
 	SBCHECK(&so->so_rcv);
-
-	/* m might be NULL if the loop did break during the first iteration. */
 	if (m == NULL)
 		goto release;
 	m->m_nextpkt = NULL;
