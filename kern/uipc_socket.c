@@ -1236,9 +1236,8 @@ somove(struct socket *so, int wait)
 		if ((m->m_flags & M_PKTHDR) == 0)
 			panic("somove pkthdr");
 		if (sosp->so_snd.sb_hiwat < m->m_pkthdr.len) {
-			sbdroprecord(&so->so_rcv);
-			/* XXX We should set an error or increase a counter. */
-			goto nextpkt;
+			error = EMSGSIZE;
+			goto release;
 		}
 		if (len < m->m_pkthdr.len)
 			goto release;
