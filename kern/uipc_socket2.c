@@ -312,7 +312,7 @@ sb_lock(struct sockbuf *sb)
 void
 sowakeup(struct socket *so, struct sockbuf *sb)
 {
-	splsoftassert(IPL_SOFTNET);
+	int s = splsoftnet();
 
 	selwakeup(&sb->sb_sel);
 	sb->sb_flagsintr &= ~SB_SEL;
@@ -320,6 +320,7 @@ sowakeup(struct socket *so, struct sockbuf *sb)
 		sb->sb_flagsintr &= ~SB_WAIT;
 		wakeup(&sb->sb_cc);
 	}
+	splx(s);
 	if (so->so_state & SS_ASYNC)
 		csignal(so->so_pgid, SIGIO, so->so_siguid, so->so_sigeuid);
 }
