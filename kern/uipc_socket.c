@@ -1241,7 +1241,10 @@ somove(struct socket *so, int wait)
 		}
 		if (len < m->m_pkthdr.len)
 			goto release;
-		len = m->m_pkthdr.len;
+		if (m->m_pkthdr.len < len) {
+			maxreached = 0;
+			len = m->m_pkthdr.len;
+		}
 		/*
 		 * Throw away the name mbuf after it has been assured
 		 * that the whole first record can be processed.
