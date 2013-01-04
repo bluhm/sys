@@ -1219,26 +1219,18 @@ somove(struct socket *so, int wait)
 		if (m->m_type != MT_SONAME)
 			panic("somove soname");
 #endif
-		sbfree(&so->so_rcv, m);
-		MFREE(m, so->so_rcv.sb_mb);
-		m = so->so_rcv.sb_mb;
-		sbsync(&so->so_rcv, nextrecord);
+		m = m->m_next;
 	}
 	while (m && m->m_type == MT_CONTROL) {
-		sbfree(&so->so_rcv, m);
-		MFREE(m, so->so_rcv.sb_mb);
-		m = so->so_rcv.sb_mb;
-		sbsync(&so->so_rcv, nextrecord);
-		if (m)
-			nextrecord = so->so_rcv.sb_mb->m_nextpkt;
-		else
-			nextrecord = so->so_rcv.sb_mb;
+		m = m->m_next;
 	}
-
-	SBLASTRECORDCHK(&so->so_rcv, "somove 2");
-	SBLASTMBUFCHK(&so->so_rcv, "somove 2");
-	if (m == NULL)
-		goto release;
+	if (m == NULL) {
+		sbdroprecord(&so->so_rcv);
+		if (so->so_proto->pr_flags & PR_WANTRCVD && so->so_pcb)
+			(so->so_proto->pr_usrreq)(so, PRU_RCVD, NULL,
+			    (struct mbuf *)0L, NULL, NULL);
+		goto nextpkt;
+	}
 
 	if (so->so_proto->pr_flags & PR_ATOMIC) {
 		if ((m->m_flags & M_PKTHDR) == 0)
@@ -1251,7 +1243,29 @@ somove(struct socket *so, int wait)
 		if (len < m->m_pkthdr.len)
 			goto release;
 		len = m->m_pkthdr.len;
+		/*
+		 * Throw away the name mbuf after it has been assured
+		 * that the whole first record can be processed.
+		 */
+		m = so->so_rcv.sb_mb;
+		sbfree(&so->so_rcv, m);
+		MFREE(m, so->so_rcv.sb_mb);
+		sbsync(&so->so_rcv, nextrecord);
 	}
+	/*
+	 * Throw away the control mbufs after it has been assured
+	 * that the whole first record can be processed.
+	 */
+	m = so->so_rcv.sb_mb;
+	while (m && m->m_type == MT_CONTROL) {
+		sbfree(&so->so_rcv, m);
+		MFREE(m, so->so_rcv.sb_mb);
+		m = so->so_rcv.sb_mb;
+		sbsync(&so->so_rcv, nextrecord);
+	}
+
+	SBLASTRECORDCHK(&so->so_rcv, "somove 2");
+	SBLASTMBUFCHK(&so->so_rcv, "somove 2");
 
 	/* Take at most len mbufs out of receive buffer. */
 	for (off = 0, mp = &m; off <= len && *mp;
