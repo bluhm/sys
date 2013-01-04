@@ -1260,7 +1260,7 @@ somove(struct socket *so, int wait)
 
 #ifdef DIAGNOSTIC
 		if ((*mp)->m_type != MT_DATA && (*mp)->m_type != MT_HEADER)
-			panic("somove 3");
+			panic("somove type");
 #endif
 		if ((*mp)->m_len > size) {
 			if (!maxreached || (*mp = m_copym(
@@ -1281,8 +1281,8 @@ somove(struct socket *so, int wait)
 	}
 	*mp = NULL;
 
-	SBLASTRECORDCHK(&so->so_rcv, "somove 4");
-	SBLASTMBUFCHK(&so->so_rcv, "somove 4");
+	SBLASTRECORDCHK(&so->so_rcv, "somove 3");
+	SBLASTMBUFCHK(&so->so_rcv, "somove 3");
 	SBCHECK(&so->so_rcv);
 	if (m == NULL)
 		goto release;
