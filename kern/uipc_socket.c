@@ -1221,9 +1221,8 @@ somove(struct socket *so, int wait)
 #endif
 		m = m->m_next;
 	}
-	while (m && m->m_type == MT_CONTROL) {
+	while (m && m->m_type == MT_CONTROL)
 		m = m->m_next;
-	}
 	if (m == NULL) {
 		sbdroprecord(&so->so_rcv);
 		if (so->so_proto->pr_flags & PR_WANTRCVD && so->so_pcb)
