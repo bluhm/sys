@@ -624,7 +624,7 @@ udp_input(struct mbuf *m, ...)
 	/*
 	 * The statekey has finished finding the inp, it is no longer needed.
 	 * If UDP socket splicing is used, the statekey will confuse pf when
-	 * the same packet goes through ip_outpout().  So reset the statekey.
+	 * the same packet goes through ip_output().  So reset the statekey.
 	 */
 	m->m_pkthdr.pf.statekey = NULL;
 #endif
