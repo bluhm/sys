@@ -899,6 +899,7 @@ findpcb:
 		((struct pf_state_key *)m->m_pkthdr.pf.statekey)->inp = inp;
 		inp->inp_pf_sk = m->m_pkthdr.pf.statekey;
 	}
+	m->m_pkthdr.pf.statekey = NULL;
 #endif
 
 #ifdef IPSEC

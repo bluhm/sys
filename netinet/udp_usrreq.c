@@ -620,6 +620,15 @@ udp_input(struct mbuf *m, ...)
 		}
 	}
 
+#if NPF > 0
+	/*
+	 * The statekey has finished finding the inp, it is no longer needed.
+	 * If UDP socket splicing is used, the statekey will confuse pf when
+	 * the same packet goes through ip_outpout().  So reset the statekey.
+	 */
+	m->m_pkthdr.pf.statekey = NULL;
+#endif
+
 #ifdef IPSEC
 	mtag = m_tag_find(m, PACKET_TAG_IPSEC_IN_DONE, NULL);
 	s = splnet();
