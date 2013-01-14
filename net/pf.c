@@ -4152,7 +4152,7 @@ pf_tcp_track_full(struct pf_pdesc *pd, struct pf_state_peer *src,
 
 
 #define MAXACKWINDOW (0xffff + 1500)	/* 1500 is an arbitrary fudge factor */
-	if (SEQ_GEQ(src->seqhi, end) &&
+	if (SEQ_GEQ(src->seqhi, end - ((th->th_flags & TH_FIN) ? 1 : 0)) &&
 	    /* Last octet inside other's window space */
 	    SEQ_GEQ(seq, src->seqlo - (dst->max_win << dws)) &&
 	    /* Retrans: not more than one window back */
