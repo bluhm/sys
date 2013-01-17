@@ -1,4 +1,4 @@
-/*	$OpenBSD: tcp_input.c,v 1.254 2013/01/17 00:48:04 henning Exp $	*/
+/*	$OpenBSD: tcp_input.c,v 1.255 2013/01/17 11:43:06 bluhm Exp $	*/
 /*	$NetBSD: tcp_input.c,v 1.23 1996/02/13 23:43:44 christos Exp $	*/
 
 /*
