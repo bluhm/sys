@@ -1262,8 +1262,9 @@ in6_unlink_ifa(struct in6_ifaddr *ia, struct ifnet *ifp)
 
 	/* Release the reference to the base prefix. */
 	if (oia->ia6_ndpr == NULL) {
-		log(LOG_NOTICE, "in6_unlink_ifa: address %p has no prefix\n",
-		    oia);
+		if (!IN6_IS_ADDR_LINKLOCAL(IA6_IN6(oia)))
+			log(LOG_NOTICE, "in6_unlink_ifa: interface address "
+			    "%p has no prefix\n", oia);
 	} else {
 		oia->ia6_flags &= ~IN6_IFF_AUTOCONF;
 		if (--oia->ia6_ndpr->ndpr_refcnt == 0)
