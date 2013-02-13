@@ -1302,6 +1302,12 @@ somove(struct socket *so, int wait)
 	if (m == NULL)
 		goto release;
 	m->m_nextpkt = NULL;
+	if (m->m_flags & M_PKTHDR) {
+		m_tag_delete_chain(m);
+		bzero(&m->m_pkthdr, sizeof(m->m_pkthdr));
+		m->m_pkthdr.len = len;
+		m->m_pkthdr.pf.prio = IFQ_DEFPRIO;
+	}
 
 	/* Send window update to source peer as receive buffer has changed. */
 	if (so->so_proto->pr_flags & PR_WANTRCVD && so->so_pcb)
