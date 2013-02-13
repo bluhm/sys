@@ -1,4 +1,4 @@
-/*	$OpenBSD: uipc_mbuf.c,v 1.167 2012/09/26 14:53:23 markus Exp $	*/
+/*	$OpenBSD: uipc_mbuf.c,v 1.169 2013/02/09 20:56:35 miod Exp $	*/
 /*	$NetBSD: uipc_mbuf.c,v 1.15.4.1 1996/06/13 17:11:44 cgd Exp $	*/
 
 /*
@@ -99,6 +99,7 @@
 
 struct	mbstat mbstat;		/* mbuf stats */
 struct	pool mbpool;		/* mbuf pool */
+struct	pool mtagpool;
 
 /* mbuf cluster pools */
 u_int	mclsizes[] = {
@@ -149,6 +150,10 @@ mbinit(void)
 	pool_init(&mbpool, MSIZE, 0, 0, 0, "mbpl", NULL);
 	pool_set_constraints(&mbpool, &kp_dma_contig);
 	pool_setlowat(&mbpool, mblowat);
+
+	pool_init(&mtagpool, PACKET_TAG_MAXSIZE + sizeof(struct m_tag),
+	    0, 0, 0, "mtagpl", NULL);
+	pool_setipl(&mtagpool, IPL_NET);
 
 	for (i = 0; i < nitems(mclsizes); i++) {
 		snprintf(mclnames[i], sizeof(mclnames[0]), "mcl%dk",
@@ -1341,7 +1346,8 @@ m_dup_pkthdr(struct mbuf *to, struct mbuf *from, int wait)
 
 #ifdef DDB
 void
-m_print(void *v, int (*pr)(const char *, ...))
+m_print(void *v,
+    int (*pr)(const char *, ...) __attribute__((__format__(__kprintf__,1,2))))
 {
 	struct mbuf *m = v;
 
