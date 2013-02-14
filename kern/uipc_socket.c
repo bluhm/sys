@@ -48,6 +48,7 @@
 #include <sys/socketvar.h>
 #include <sys/signalvar.h>
 #include <sys/resourcevar.h>
+#include <net/if.h>
 #include <net/route.h>
 #include <sys/pool.h>
 
