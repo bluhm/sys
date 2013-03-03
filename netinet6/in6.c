@@ -2166,7 +2166,8 @@ in6_ifawithscope(struct ifnet *oifp, struct in6_addr *dst, u_int rdomain)
 		if (ifp->if_rdomain != rdomain)
 			continue;
 #if NCARP > 0
-		/* Never use a carp address of an interface which is not
+		/*
+		 * Never use a carp address of an interface which is not
 		 * the master.
 		 */
 		if (ifp->if_type == IFT_CARP &&
