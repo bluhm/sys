@@ -681,7 +681,7 @@ in6_ifdetach(struct ifnet *ifp)
 			continue;
 		}
 
-		ia = (struct in6_ifaddr *)ifa;
+		ia = ifatoia6(ifa);
 
 		/*
 		 * leave from multicast groups we have joined for the interface

@@ -253,7 +253,7 @@ in6_pcbbind(struct inpcb *inp, struct mbuf *nam, struct proc *p)
 			 * deprecated addresses (default: forbid bind(2)).
 			 */
 			if (ia &&
-			    ((struct in6_ifaddr *)ia)->ia6_flags &
+			    ifatoia6(ia)->ia6_flags &
 			    (IN6_IFF_ANYCAST|IN6_IFF_NOTREADY|IN6_IFF_DETACHED))
 				return (EADDRNOTAVAIL);
 		}

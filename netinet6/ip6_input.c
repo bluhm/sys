@@ -488,7 +488,7 @@ ip6_input(struct mbuf *m)
 #endif
 	    ip6_forward_rt.ro_rt->rt_ifp->if_type == IFT_LOOP) {
 		struct in6_ifaddr *ia6 =
-			(struct in6_ifaddr *)ip6_forward_rt.ro_rt->rt_ifa;
+			ifatoia6(ip6_forward_rt.ro_rt->rt_ifa);
 		if (ia6->ia6_flags & IN6_IFF_ANYCAST)
 			isanycast = 1;
 		/*

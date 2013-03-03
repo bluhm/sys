@@ -197,7 +197,7 @@ frag6_input(struct mbuf **mp, int *offp, int proto)
 	rtalloc_mpath((struct route *)&ro, &ip6->ip6_src.s6_addr32[0]);
 
 	if (ro.ro_rt != NULL && ro.ro_rt->rt_ifa != NULL)
-		dstifp = ((struct in6_ifaddr *)ro.ro_rt->rt_ifa)->ia_ifp;
+		dstifp = ifatoia6(ro.ro_rt->rt_ifa)->ia_ifp;
 	if (ro.ro_rt != NULL) {
 		RTFREE(ro.ro_rt);
 		ro.ro_rt = NULL;

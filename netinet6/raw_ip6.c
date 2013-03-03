@@ -718,7 +718,7 @@ rip6_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 			error = EADDRNOTAVAIL;
 			break;
 		}
-		if (ia && ((struct in6_ifaddr *)ia)->ia6_flags &
+		if (ia && ifatoia6(ia)->ia6_flags &
 		    (IN6_IFF_ANYCAST|IN6_IFF_NOTREADY|
 		     IN6_IFF_DETACHED|IN6_IFF_DEPRECATED)) {
 			error = EADDRNOTAVAIL;

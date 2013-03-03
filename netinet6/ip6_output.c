@@ -588,7 +588,7 @@ reroute:
 	 * then rt (for unicast) and ifp must be non-NULL valid values.
 	 */
 	if (rt) {
-		ia = (struct in6_ifaddr *)(rt->rt_ifa);
+		ia = ifatoia6(rt->rt_ifa);
 		rt->rt_use++;
 	}
 

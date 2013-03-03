@@ -913,7 +913,7 @@ purge_detached(struct ifnet *ifp)
 			ifa_next = ifa->ifa_list.tqe_next;
 			if (ifa->ifa_addr->sa_family != AF_INET6)
 				continue;
-			ia = (struct in6_ifaddr *)ifa;
+			ia = ifatoia6(ifa);
 			if ((ia->ia6_flags & IN6_IFF_AUTOCONF) ==
 			    IN6_IFF_AUTOCONF && ia->ia6_ndpr == pr) {
 				in6_purgeaddr(ifa);
@@ -1166,7 +1166,7 @@ prelist_update(struct nd_prefix *new, struct nd_defrouter *dr, struct mbuf *m)
 		if (ifa->ifa_addr->sa_family != AF_INET6)
 			continue;
 
-		ifa6 = (struct in6_ifaddr *)ifa;
+		ifa6 = ifatoia6(ifa);
 
 		/*
 		 * Spec is not clear here, but I believe we should concentrate
@@ -1315,7 +1315,7 @@ nd6_addr_add(void *prptr, void *arg2)
 		if (ifa->ifa_addr->sa_family != AF_INET6)
 			continue;
 
-		ia6 = (struct in6_ifaddr *)ifa;
+		ia6 = ifatoia6(ifa);
 
 		/*
 		 * Spec is not clear here, but I believe we should concentrate
@@ -1797,13 +1797,13 @@ in6_ifadd(struct nd_prefix *pr, int privacy)
 	 */
 	ifa = &in6ifa_ifpforlinklocal(ifp, 0)->ia_ifa; /* 0 is OK? */
 	if (ifa)
-		ib = (struct in6_ifaddr *)ifa;
+		ib = ifatoia6(ifa);
 	else
 		return NULL;
 
 #if 0 /* don't care link local addr state, and always do DAD */
 	/* if link-local address is not eligible, do not autoconfigure. */
-	if (((struct in6_ifaddr *)ifa)->ia6_flags & IN6_IFF_NOTREADY) {
+	if (ifatoia6(ifa)->ia6_flags & IN6_IFF_NOTREADY) {
 		printf("in6_ifadd: link-local address not ready\n");
 		return NULL;
 	}
