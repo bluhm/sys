@@ -1,4 +1,4 @@
-/*	$OpenBSD: in6_src.c,v 1.27 2011/11/24 17:39:55 sperreault Exp $	*/
+/*	$OpenBSD: in6_src.c,v 1.28 2013/03/04 14:42:25 bluhm Exp $	*/
 /*	$KAME: in6_src.c,v 1.36 2001/02/06 04:08:17 itojun Exp $	*/
 
 /*
