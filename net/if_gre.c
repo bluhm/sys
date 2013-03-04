@@ -600,9 +600,8 @@ recompute:
 			error = EINVAL;
 			break;
 		}
-		sc->g_src = (satosin((struct sockadrr *)&lifr->addr))->sin_addr;
-		sc->g_dst =
-		    (satosin((struct sockadrr *)&lifr->dstaddr))->sin_addr;
+		sc->g_src = ((struct sockaddr_in *)&lifr->addr)->sin_addr;
+		sc->g_dst = ((struct sockaddr_in *)&lifr->dstaddr)->sin_addr;
 		goto recompute;
 	case SIOCDIFPHYADDR:
 		if ((error = suser(prc, 0)) != 0)
