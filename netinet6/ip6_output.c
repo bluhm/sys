@@ -2116,7 +2116,6 @@ ip6_initpktopts(struct ip6_pktopts *opt)
 	opt->ip6po_minmtu = IP6PO_MINMTU_MCASTONLY;
 }
 
-#define sin6tosa(sin6)	((struct sockaddr *)(sin6)) /* XXX */
 int
 ip6_pcbopt(int optname, u_char *buf, int len, struct ip6_pktopts **pktopt,
     int priv, int uproto)

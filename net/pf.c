@@ -5730,7 +5730,7 @@ pf_routable(struct pf_addr *addr, sa_family_t af, struct pfi_kif *kif,
 	switch (af) {
 #ifdef INET
 	case AF_INET:
-		dst = satosin(&ro.ro_dst);
+		dst = (struct sockaddr_in *)&ro.ro_dst;
 		dst->sin_family = AF_INET;
 		dst->sin_len = sizeof(*dst);
 		dst->sin_addr = addr->v4;
@@ -5811,7 +5811,7 @@ pf_rtlabel_match(struct pf_addr *addr, sa_family_t af, struct pf_addr_wrap *aw,
 	switch (af) {
 #ifdef INET
 	case AF_INET:
-		dst = satosin(&ro.ro_dst);
+		dst = (struct sockaddr_in *)(&ro.ro_dst);
 		dst->sin_family = AF_INET;
 		dst->sin_len = sizeof(*dst);
 		dst->sin_addr = addr->v4;

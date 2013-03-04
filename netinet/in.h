@@ -844,8 +844,17 @@ void	   in_proto_cksum_out(struct mbuf *, struct ifnet *);
 #define	in_hosteq(s,t)	((s).s_addr == (t).s_addr)
 #define	in_nullhost(x)	((x).s_addr == INADDR_ANY)
 
+#ifdef TYPECAST_DEBUG
+#define	satosin(sa)	(sa == (struct sockaddr *)0 ? 			\
+	((struct sockaddr_in *)(sa)) : ((struct sockaddr_in *)(sa)))
+#define	sintosa(sin)	(sin == (struct sockaddr_in *)0 ? 		\
+	((struct sockaddr *)(sin)) : ((struct sockaddr *)(sin)))
+#define	ifatoia(ifa)	(ifa == (struct ifaddr *)0 ? 			\
+	((struct in_ifaddr *)(ifa)) : ((struct in_ifaddr *)(ifa)))
+#else
 #define	satosin(sa)	((struct sockaddr_in *)(sa))
 #define	sintosa(sin)	((struct sockaddr *)(sin))
 #define	ifatoia(ifa)	((struct in_ifaddr *)(ifa))
+#endif /* TYPECAST_DEBUG */
 #endif /* _KERNEL */
 #endif /* _NETINET_IN_H_ */

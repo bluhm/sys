@@ -810,7 +810,7 @@ in_selectsrc(struct sockaddr_in *sin, struct route *ro, int soopts,
 				*errorp = EADDRNOTAVAIL;
 				return NULL;
 			}
-			return satosin(&ia->ia_addr);
+			return (&ia->ia_addr);
 		}
 	}
 	/*
@@ -863,7 +863,7 @@ in_selectsrc(struct sockaddr_in *sin, struct route *ro, int soopts,
 			return NULL;
 		}
 	}
-	return satosin(&ia->ia_addr);
+	return (&ia->ia_addr);
 }
 
 void

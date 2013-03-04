@@ -121,7 +121,6 @@
 #define in6_rtchange	in_rtchange
 
 struct	inpcbtable rawin6pcbtable;
-#define ifatoia6(ifa)	((struct in6_ifaddr *)(ifa))
 
 struct rip6stat rip6stat;
 
