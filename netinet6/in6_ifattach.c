@@ -676,10 +676,9 @@ in6_ifdetach(struct ifnet *ifp)
 
 	/* undo everything done by in6_ifattach(), just in case */
 	TAILQ_FOREACH_SAFE(ifa, &ifp->if_addrlist, ifa_list, next) {
-		if (ifa->ifa_addr->sa_family != AF_INET6
-		 || !IN6_IS_ADDR_LINKLOCAL(&satosin6(&ifa->ifa_addr)->sin6_addr)) {
+		if (ifa->ifa_addr->sa_family != AF_INET6 ||
+		    !IN6_IS_ADDR_LINKLOCAL(&satosin6(ifa->ifa_addr)->sin6_addr))
 			continue;
-		}
 
 		ia = ifatoia6(ifa);
 
