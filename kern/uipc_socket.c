@@ -1443,8 +1443,10 @@ soidle(void *arg)
 	int s;
 
 	s = splsoftnet();
-	so->so_error = ETIMEDOUT;
-	sounsplice(so, so->so_splice, 1);
+	if (so->so_splice) {
+		so->so_error = ETIMEDOUT;
+		sounsplice(so, so->so_splice, 1);
+	}
 	splx(s);
 }
 #endif /* SOCKET_SPLICE */
