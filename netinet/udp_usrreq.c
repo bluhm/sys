@@ -1153,13 +1153,11 @@ udp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *addr,
 			break;
 		}
 		s = splsoftnet();
-		error = in_pcballoc(so, &udbtable);
-		splx(s);
-		if (error)
+		if ((error = soreserve(so, udp_sendspace, udp_recvspace)) ||
+		    (error = in_pcballoc(so, &udbtable))) {
+			splx(s);
 			break;
-		error = soreserve(so, udp_sendspace, udp_recvspace);
-		if (error)
-			break;
+		}
 #ifdef INET6
 		if (((struct inpcb *)so->so_pcb)->inp_flags & INP_IPV6)
 			((struct inpcb *) so->so_pcb)->inp_ipv6.ip6_hlim =
