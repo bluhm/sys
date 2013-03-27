@@ -618,12 +618,8 @@ rip6_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 			break;
 		}
 		s = splsoftnet();
-		if ((error = soreserve(so, rip6_sendspace, rip6_recvspace)) != 0) {
-			splx(s);
-			break;
-		}
-		if ((error = in_pcballoc(so, &rawin6pcbtable)) != 0)
-		{
+		if ((error = soreserve(so, rip6_sendspace, rip6_recvspace)) ||
+		    (error = in_pcballoc(so, &rawin6pcbtable))) {
 			splx(s);
 			break;
 		}

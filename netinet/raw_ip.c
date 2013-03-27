@@ -396,8 +396,8 @@ int
 rip_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
     struct mbuf *control, struct proc *p)
 {
-	int error = 0;
 	struct inpcb *inp = sotoinpcb(so);
+	int s, error = 0;
 #ifdef MROUTING
 	extern struct socket *ip_mrouter;
 #endif
@@ -423,9 +423,13 @@ rip_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 			error = EPROTONOSUPPORT;
 			break;
 		}
+		s = splsoftnet();
 		if ((error = soreserve(so, rip_sendspace, rip_recvspace)) ||
-		    (error = in_pcballoc(so, &rawcbtable)))
+		    (error = in_pcballoc(so, &rawcbtable))) {
+			splx(s);
 			break;
+		}
+		splx(s);
 		inp = (struct inpcb *)so->so_pcb;
 		inp->inp_ip.ip_p = (long)nam;
 		break;
