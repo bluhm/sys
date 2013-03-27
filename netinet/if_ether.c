@@ -829,7 +829,7 @@ arplookup(u_int32_t addr, int create, int proxy, u_int tableid)
 	sin.sin_family = AF_INET;
 	sin.sin_addr.s_addr = addr;
 	sin.sin_other = proxy ? SIN_PROXY : 0;
-	rt = rtalloc1((struct sockaddr *)(&sin), create, tableid);
+	rt = rtalloc1((struct sockaddr *)&sin, create, tableid);
 	if (rt == 0)
 		return (0);
 	rt->rt_refcnt--;
