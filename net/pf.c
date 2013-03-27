@@ -5746,7 +5746,7 @@ pf_routable(struct pf_addr *addr, sa_family_t af, struct pfi_kif *kif,
 		 */
 		if (IN6_IS_SCOPE_EMBED(&addr->v6))
 			goto out;
-		dst6 = (struct sockaddr_in6 *)&ro.ro_dst;
+		dst6 = &ro.ro_dst;
 		dst6->sin6_family = AF_INET6;
 		dst6->sin6_len = sizeof(*dst6);
 		dst6->sin6_addr = addr->v6;
@@ -5819,7 +5819,7 @@ pf_rtlabel_match(struct pf_addr *addr, sa_family_t af, struct pf_addr_wrap *aw,
 #endif /* INET */
 #ifdef INET6
 	case AF_INET6:
-		dst6 = (struct sockaddr_in6 *)&ro.ro_dst;
+		dst6 = &ro.ro_dst;
 		dst6->sin6_family = AF_INET6;
 		dst6->sin6_len = sizeof(*dst6);
 		dst6->sin6_addr = addr->v6;
