@@ -764,6 +764,11 @@ extern void in6_if_up(struct ifnet *);
 void 	in6_get_rand_ifid(struct ifnet *, struct in6_addr *);
 int	in6_mask2len(struct in6_addr *, u_char *);
 
+struct sockaddr;
+struct sockaddr_in6;
+struct ifaddr;
+struct in6_ifaddr;
+
 inline static struct sockaddr_in6 *
 satosin6(struct sockaddr *sa)
 {

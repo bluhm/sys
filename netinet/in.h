@@ -845,6 +845,9 @@ void	   in_proto_cksum_out(struct mbuf *, struct ifnet *);
 #define	in_nullhost(x)	((x).s_addr == INADDR_ANY)
 
 struct sockaddr;
+struct sockaddr_in;
+struct ifaddr;
+struct in_ifaddr;
 
 inline static struct sockaddr_in *
 satosin(struct sockaddr *sa)
@@ -857,8 +860,6 @@ sintosa(struct sockaddr_in *sin)
 {
 	return ((struct sockaddr *)(sin));
 }
-
-struct ifaddr;
 
 inline static struct in_ifaddr *
 ifatoia(struct ifaddr *ifa)
