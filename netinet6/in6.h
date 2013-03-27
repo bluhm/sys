@@ -764,9 +764,23 @@ extern void in6_if_up(struct ifnet *);
 void 	in6_get_rand_ifid(struct ifnet *, struct in6_addr *);
 int	in6_mask2len(struct in6_addr *, u_char *);
 
-#define	satosin6(sa)	((struct sockaddr_in6 *)(sa))
-#define	sin6tosa(sin6)	((struct sockaddr *)(sin6))
-#define	ifatoia6(ifa)	((struct in6_ifaddr *)(ifa))
+inline static struct sockaddr_in6 *
+satosin6(struct sockaddr *sa)
+{
+	return ((struct sockaddr_in6 *)(sa));
+}
+
+inline static struct sockaddr *
+sin6tosa(struct sockaddr_in6 *sin6)
+{
+	return ((struct sockaddr *)(sin6));
+}
+
+inline static struct in6_ifaddr *
+ifatoia6(struct ifaddr *ifa)
+{
+	return ((struct in6_ifaddr *)(ifa));
+}
 #endif /* _KERNEL */
 
 #if __BSD_VISIBLE
