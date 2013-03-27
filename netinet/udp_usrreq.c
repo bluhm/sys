@@ -1158,6 +1158,7 @@ udp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *addr,
 			splx(s);
 			break;
 		}
+		splx(s);
 #ifdef INET6
 		if (((struct inpcb *)so->so_pcb)->inp_flags & INP_IPV6)
 			((struct inpcb *) so->so_pcb)->inp_ipv6.ip6_hlim =
