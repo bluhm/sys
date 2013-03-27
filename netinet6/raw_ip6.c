@@ -593,8 +593,8 @@ rip6_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 	struct mbuf *control, struct proc *p)
 {
 	struct in6pcb *in6p = sotoin6pcb(so);
-	int s;
 	int error = 0;
+	int s;
 	int priv;
 
 	priv = 0;

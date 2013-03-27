@@ -397,7 +397,8 @@ rip_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
     struct mbuf *control, struct proc *p)
 {
 	struct inpcb *inp = sotoinpcb(so);
-	int s, error = 0;
+	int error = 0;
+	int s;
 #ifdef MROUTING
 	extern struct socket *ip_mrouter;
 #endif
