@@ -562,8 +562,7 @@ udp_input(struct mbuf *m, ...)
 		    ip->ip_dst, uh->uh_dport, m->m_pkthdr.rdomain);
 #if NPF > 0
 		if (m->m_pkthdr.pf.statekey && inp) {
-			m->m_pkthdr.pf.statekey->inp =
-			    inp;
+			m->m_pkthdr.pf.statekey->inp = inp;
 			inp->inp_pf_sk = m->m_pkthdr.pf.statekey;
 		}
 #endif
