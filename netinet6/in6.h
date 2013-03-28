@@ -769,19 +769,19 @@ struct sockaddr_in6;
 struct ifaddr;
 struct in6_ifaddr;
 
-inline static struct sockaddr_in6 *
+static __inline struct sockaddr_in6 *
 satosin6(struct sockaddr *sa)
 {
 	return ((struct sockaddr_in6 *)(sa));
 }
 
-inline static struct sockaddr *
+static __inline struct sockaddr *
 sin6tosa(struct sockaddr_in6 *sin6)
 {
 	return ((struct sockaddr *)(sin6));
 }
 
-inline static struct in6_ifaddr *
+static __inline struct in6_ifaddr *
 ifatoia6(struct ifaddr *ifa)
 {
 	return ((struct in6_ifaddr *)(ifa));
