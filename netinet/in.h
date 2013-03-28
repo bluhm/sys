@@ -849,6 +849,12 @@ struct sockaddr_in;
 struct ifaddr;
 struct in_ifaddr;
 
+/*
+ * Convert between address family specific and general structs.
+ * Inline functions check the source type and are stricter than
+ * casts or defines.
+ */
+
 static __inline struct sockaddr_in *
 satosin(struct sockaddr *sa)
 {

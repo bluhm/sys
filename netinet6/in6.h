@@ -769,6 +769,12 @@ struct sockaddr_in6;
 struct ifaddr;
 struct in6_ifaddr;
 
+/*
+ * Convert between address family specific and general structs.
+ * Inline functions check the source type and are stricter than
+ * casts or defines.
+ */
+
 static __inline struct sockaddr_in6 *
 satosin6(struct sockaddr *sa)
 {
