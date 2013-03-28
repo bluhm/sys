@@ -1,4 +1,4 @@
-/*	$OpenBSD: in.h,v 1.95 2012/10/21 13:06:03 benno Exp $	*/
+/*	$OpenBSD: in.h,v 1.96 2013/03/28 15:05:32 bluhm Exp $	*/
 /*	$NetBSD: in.h,v 1.20 1996/02/13 23:41:47 christos Exp $	*/
 
 /*
