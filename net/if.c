@@ -1499,10 +1499,8 @@ ifioctl(struct socket *so, u_long cmd, caddr_t data, struct proc *p)
 			ifp->if_xflags |= IFXF_NOINET6;
 #endif
 #ifdef INET
-			for (ifa = TAILQ_FIRST(&ifp->if_addrlist); ifa != NULL;
-			    ifa = nifa) {
-				nifa = TAILQ_NEXT(ifa, ifa_list);
-
+			TAILQ_FOREACH_SAFE(ifa, &ifp->if_addrlist, ifa_list,
+			    nifa) {
 				/* only remove AF_INET */
 				if (ifa->ifa_addr->sa_family != AF_INET)
 					continue;
@@ -1711,11 +1709,11 @@ ifconf(u_long cmd, caddr_t data)
 				break;
 			space -= sizeof (ifr), ifrp++;
 		} else
-			for (ifa = TAILQ_FIRST(&ifp->if_addrlist);
-			    space >= sizeof (ifr) &&
-			    ifa != NULL;
-			    ifa = TAILQ_NEXT(ifa, ifa_list)) {
+			TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
 				struct sockaddr *sa = ifa->ifa_addr;
+
+				if (space < sizeof(ifr))
+					break;
 #if defined(COMPAT_43) || defined(COMPAT_LINUX)
 				if (cmd == OSIOCGIFCONF) {
 					struct osockaddr *osa =
