@@ -1160,12 +1160,11 @@ udp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *addr,
 		}
 		splx(s);
 #ifdef INET6
-		if (((struct inpcb *)so->so_pcb)->inp_flags & INP_IPV6)
-			((struct inpcb *) so->so_pcb)->inp_ipv6.ip6_hlim =
-			    ip6_defhlim;
+		if (sotoinpcb(so)->inp_flags & INP_IPV6)
+			sotoinpcb(so)->inp_ipv6.ip6_hlim = ip6_defhlim;
 		else
 #endif /* INET6 */
-			((struct inpcb *) so->so_pcb)->inp_ip.ip_ttl = ip_defttl;
+			sotoinpcb(so)->inp_ip.ip_ttl = ip_defttl;
 		break;
 
 	case PRU_DETACH:
