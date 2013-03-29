@@ -629,7 +629,7 @@ tcp_notify(inp, error)
 	struct inpcb *inp;
 	int error;
 {
-	struct tcpcb *tp = intotcpcb(inp->inp_ppcb);
+	struct tcpcb *tp = intotcpcb(inp);
 	struct socket *so = inp->inp_socket;
 
 	/*
