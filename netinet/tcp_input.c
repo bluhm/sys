@@ -360,7 +360,7 @@ tcp_input(struct mbuf *m, ...)
 	u_int8_t *optp = NULL;
 	int optlen = 0;
 	int tlen, off;
-	struct tcpcb *tp = 0;
+	struct tcpcb *tp = NULL;
 	int tiflags;
 	struct socket *so = NULL;
 	int todrop, acked, ourfinisacked;
@@ -3657,7 +3657,7 @@ syn_cache_get(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 	struct syn_cache *sc;
 	struct syn_cache_head *scp;
 	struct inpcb *inp = NULL;
-	struct tcpcb *tp = 0;
+	struct tcpcb *tp = NULL;
 	struct mbuf *am;
 	int s;
 	struct socket *oso;
