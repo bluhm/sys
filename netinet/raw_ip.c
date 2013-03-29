@@ -419,6 +419,10 @@ rip_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 			error = EACCES;
 			break;
 		}
+		if ((long)nam < 0 || (long)nam >= IPPROTO_MAX) {
+			error = EPROTONOSUPPORT;
+			break;
+		}
 		if ((error = soreserve(so, rip_sendspace, rip_recvspace)) ||
 		    (error = in_pcballoc(so, &rawcbtable)))
 			break;

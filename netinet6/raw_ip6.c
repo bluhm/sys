@@ -613,6 +613,10 @@ rip6_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 			error = EACCES;
 			break;
 		}
+		if ((long)nam < 0 || (long)nam >= IPPROTO_MAX) {
+			error = EPROTONOSUPPORT;
+			break;
+		}
 		s = splsoftnet();
 		if ((error = soreserve(so, rip6_sendspace, rip6_recvspace)) != 0) {
 			splx(s);
