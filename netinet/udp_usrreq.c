@@ -323,6 +323,9 @@ udp_input(struct mbuf *m, ...)
 
 #ifdef IPSEC
 	if (udpencap_enable && udpencap_port &&
+#if NPF > 0
+	    !(m->m_pkthdr.pf.flags & PF_TAG_DIVERTED) &&
+#endif
 	    uh->uh_dport == htons(udpencap_port)) {
 		u_int32_t spi;
 		int skip = iphlen + sizeof(struct udphdr);

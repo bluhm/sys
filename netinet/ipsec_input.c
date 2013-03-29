@@ -137,6 +137,9 @@ ipsec_common_input(struct mbuf *m, int skip, int protoff, int af, int sproto,
 
 	if ((sproto == IPPROTO_ESP && !esp_enable) ||
 	    (sproto == IPPROTO_AH && !ah_enable) ||
+#if NPF > 0
+	    (m->m_pkthdr.pf.flags & PF_TAG_DIVERTED) ||
+#endif
 	    (sproto == IPPROTO_IPCOMP && !ipcomp_enable)) {
 		switch (af) {
 #ifdef INET
