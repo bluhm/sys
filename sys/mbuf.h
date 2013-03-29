@@ -79,6 +79,7 @@ struct m_hdr {
 
 /* pf stuff */
 struct pf_state_key;
+
 struct pkthdr_pf {
 	void		*hdr;		/* saved hdr pos in mbuf, for ECN */
 	struct pf_state_key *statekey;	/* pf stackside statekey */
