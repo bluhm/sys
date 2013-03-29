@@ -244,7 +244,7 @@ divert_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *addr,
 		error = soreserve(so, divert_sendspace, divert_recvspace);
 		if (error)
 			break;
-		((struct inpcb *) so->so_pcb)->inp_flags |= INP_HDRINCL;
+		sotoinpcb(so)->inp_flags |= INP_HDRINCL;
 		break;
 
 	case PRU_DETACH:

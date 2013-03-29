@@ -764,7 +764,7 @@ findpcb:
 					 * full-blown connection.
 					 */
 					tp = NULL;
-					inp = (struct inpcb *)so->so_pcb;
+					inp = sotoinpcb(so);
 					tp = intotcpcb(inp);
 					if (tp == NULL)
 						goto badsyn;	/*XXX*/
@@ -3708,7 +3708,7 @@ syn_cache_get(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 	 * IPsec-related information.
 	 */
 	{
-	  struct inpcb *newinp = (struct inpcb *)so->so_pcb;
+	  struct inpcb *newinp = sotoinpcb(so);
 	  bcopy(inp->inp_seclevel, newinp->inp_seclevel,
 		sizeof(inp->inp_seclevel));
 	  newinp->inp_secrequire = inp->inp_secrequire;
@@ -3736,7 +3736,7 @@ syn_cache_get(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 	  int flags = inp->inp_flags;
 	  struct inpcb *oldinpcb = inp;
 
-	  inp = (struct inpcb *)so->so_pcb;
+	  inp = sotoinpcb(so);
 	  inp->inp_flags |= (flags & INP_IPV6);
 	  if ((inp->inp_flags & INP_IPV6) != 0) {
 	    inp->inp_ipv6.ip6_hlim =
@@ -3744,7 +3744,7 @@ syn_cache_get(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 	  }
 	}
 #else /* INET6 */
-	inp = (struct inpcb *)so->so_pcb;
+	inp = sotoinpcb(so);
 #endif /* INET6 */
 
 #if NPF > 0

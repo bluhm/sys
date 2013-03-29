@@ -431,7 +431,7 @@ rip_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 			break;
 		}
 		splx(s);
-		inp = (struct inpcb *)so->so_pcb;
+		inp = sotoinpcb(so);
 		inp->inp_ip.ip_p = (long)nam;
 		break;
 
