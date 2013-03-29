@@ -1,4 +1,4 @@
-/*	$OpenBSD: ipsec_input.c,v 1.108 2012/09/26 14:53:23 markus Exp $	*/
+/*	$OpenBSD: ipsec_input.c,v 1.110 2013/03/28 23:10:06 tedu Exp $	*/
 /*
  * The authors of this code are John Ioannidis (ji@tla.org),
  * Angelos D. Keromytis (kermit@csd.uch.gr) and
@@ -42,9 +42,9 @@
 #include <sys/protosw.h>
 #include <sys/mbuf.h>
 #include <sys/socket.h>
-#include <sys/proc.h>
 #include <sys/sysctl.h>
 #include <sys/kernel.h>
+#include <sys/timeout.h>
 
 #include <net/if.h>
 #include <net/netisr.h>

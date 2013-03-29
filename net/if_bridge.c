@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_bridge.c,v 1.207 2013/03/26 13:19:25 mpi Exp $	*/
+/*	$OpenBSD: if_bridge.c,v 1.210 2013/03/28 23:10:05 tedu Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 Jason L. Wright (jason@thought.net)
@@ -38,14 +38,13 @@
 #include "vlan.h"
 
 #include <sys/param.h>
-#include <sys/proc.h>
 #include <sys/systm.h>
 #include <sys/mbuf.h>
 #include <sys/socket.h>
+#include <sys/timeout.h>
 #include <sys/ioctl.h>
 #include <sys/errno.h>
 #include <sys/kernel.h>
-#include <machine/cpu.h>
 
 #include <net/if.h>
 #include <net/if_types.h>

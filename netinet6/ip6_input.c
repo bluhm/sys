@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip6_input.c,v 1.109 2013/03/26 13:19:26 mpi Exp $	*/
+/*	$OpenBSD: ip6_input.c,v 1.111 2013/03/28 23:10:06 tedu Exp $	*/
 /*	$KAME: ip6_input.c,v 1.188 2001/03/29 05:34:31 itojun Exp $	*/
 
 /*
@@ -74,9 +74,9 @@
 #include <sys/socketvar.h>
 #include <sys/errno.h>
 #include <sys/time.h>
+#include <sys/timeout.h>
 #include <sys/kernel.h>
 #include <sys/syslog.h>
-#include <sys/proc.h>
 
 #include <net/if.h>
 #include <net/if_types.h>

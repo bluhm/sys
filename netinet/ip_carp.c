@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_carp.c,v 1.201 2013/03/26 13:19:26 mpi Exp $	*/
+/*	$OpenBSD: ip_carp.c,v 1.204 2013/03/28 23:10:05 tedu Exp $	*/
 
 /*
  * Copyright (c) 2002 Michael Shalayeff. All rights reserved.
@@ -37,19 +37,17 @@
 #include "ether.h"
 
 #include <sys/param.h>
-#include <sys/proc.h>
 #include <sys/systm.h>
 #include <sys/mbuf.h>
 #include <sys/socket.h>
 #include <sys/socketvar.h>
+#include <sys/timeout.h>
 #include <sys/ioctl.h>
 #include <sys/errno.h>
 #include <sys/device.h>
 #include <sys/kernel.h>
 #include <sys/sysctl.h>
 #include <sys/syslog.h>
-
-#include <machine/cpu.h>
 
 #include <net/if.h>
 #include <net/if_types.h>
