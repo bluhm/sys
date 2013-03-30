@@ -691,6 +691,7 @@ rip6_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		 * this in a more natural way.
 		 */
 		if (!IN6_IS_ADDR_UNSPECIFIED(&addr->sin6_addr) &&
+		    !(so->so_options & SO_BINDANY) &&
 		    (ia = ifa_ifwithaddr((struct sockaddr *)addr,
 		    in6p->inp_rtableid)) == 0) {
 			error = EADDRNOTAVAIL;
