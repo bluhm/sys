@@ -1028,6 +1028,9 @@ pf_find_state(struct pfi_kif *kif, struct pf_state_key_cmp *key, u_int dir,
 	if (dir == PF_OUT && m->m_pkthdr.pf.statekey &&
 	    m->m_pkthdr.pf.statekey->reverse)
 		sk = m->m_pkthdr.pf.statekey->reverse;
+	else if (dir == PF_OUT && m->m_pkthdr.pf.inp &&
+	   m->m_pkthdr.pf.inp->inp_pf_sk)
+	       sk = m->m_pkthdr.pf.inp->inp_pf_sk;
 	else {
 		if ((sk = RB_FIND(pf_state_tree, &pf_statetbl,
 		    (struct pf_state_key *)key)) == NULL)

@@ -79,10 +79,12 @@ struct m_hdr {
 
 /* pf stuff */
 struct pf_state_key;
+struct inpcb;
 
 struct pkthdr_pf {
 	void		*hdr;		/* saved hdr pos in mbuf, for ECN */
 	struct pf_state_key *statekey;	/* pf stackside statekey */
+	struct inpcb	*inp;		/* connected pcb for outgoing packet */
 	u_int32_t	 qid;		/* queue id */
 	u_int16_t	 tag;		/* tag id */
 	u_int8_t	 flags;
