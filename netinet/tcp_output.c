@@ -68,6 +68,8 @@
  * Research Laboratory (NRL).
  */
 
+#include "pf.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/mbuf.h>
@@ -97,8 +99,6 @@
 #include <netinet6/tcpipv6.h>
 #include <netinet6/in6_var.h>
 #endif /* INET6 */
-
-#include "pf.h"
 
 #ifdef notyet
 extern struct mbuf *m_copypack();
