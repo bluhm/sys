@@ -98,6 +98,8 @@
 #include <netinet6/in6_var.h>
 #endif /* INET6 */
 
+#include "pf.h"
+
 #ifdef notyet
 extern struct mbuf *m_copypack();
 #endif
@@ -1074,6 +1076,10 @@ send:
 
 	/* force routing domain */
 	m->m_pkthdr.rdomain = tp->t_inpcb->inp_rtableid;
+
+#if NPF > 0
+	m->m_pkthdr.pf.inp = tp->t_inpcb;
+#endif
 
 	switch (tp->pf) {
 	case 0:	/*default to PF_INET*/

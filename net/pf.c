@@ -1037,11 +1037,16 @@ pf_find_state(struct pfi_kif *kif, struct pf_state_key_cmp *key, u_int dir,
 		    kif, dir) == 0) {
 			m->m_pkthdr.pf.statekey->reverse = sk;
 			sk->reverse = m->m_pkthdr.pf.statekey;
+		} else if (dir == PF_OUT && m->m_pkthdr.pf.inp && !sk->inp) {
+			((struct inpcb *)m->m_pkthdr.pf.inp)->inp_pf_sk = sk;
+			sk->inp = m->m_pkthdr.pf.inp;
 		}
 	}
 
-	if (dir == PF_OUT)
+	if (dir == PF_OUT) {
 		m->m_pkthdr.pf.statekey = NULL;
+		m->m_pkthdr.pf.inp = NULL;
+	}
 
 	/* list is sorted, if-bound states before floating ones */
 	TAILQ_FOREACH(si, &sk->states, entry)
@@ -6914,6 +6919,13 @@ done:
 
 	if (pd.dir == PF_IN && s && s->key[PF_SK_STACK])
 		pd.m->m_pkthdr.pf.statekey = s->key[PF_SK_STACK];
+	if (pd.dir == PF_OUT && pd.m->m_pkthdr.pf.inp &&
+	    !((struct inpcb *)pd.m->m_pkthdr.pf.inp)->inp_pf_sk &&
+	    s && s->key[PF_SK_STACK] && !s->key[PF_SK_STACK]->inp) {
+		((struct inpcb *)pd.m->m_pkthdr.pf.inp)->inp_pf_sk =
+		    s->key[PF_SK_STACK];
+		s->key[PF_SK_STACK]->inp = pd.m->m_pkthdr.pf.inp;
+	}
 
 #ifdef ALTQ
 	if (action == PF_PASS && qid) {
