@@ -267,6 +267,7 @@ udp_input(struct mbuf *m, ...)
 			/* XXX stat */
 			goto bad;
 		}
+	}
 #endif /* INET6 */
 
 	/*
