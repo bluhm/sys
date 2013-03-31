@@ -1041,7 +1041,7 @@ pf_find_state(struct pfi_kif *kif, struct pf_state_key_cmp *key, u_int dir,
 			m->m_pkthdr.pf.statekey->reverse = sk;
 			sk->reverse = m->m_pkthdr.pf.statekey;
 		} else if (dir == PF_OUT && m->m_pkthdr.pf.inp && !sk->inp) {
-			((struct inpcb *)m->m_pkthdr.pf.inp)->inp_pf_sk = sk;
+			m->m_pkthdr.pf.inp->inp_pf_sk = sk;
 			sk->inp = m->m_pkthdr.pf.inp;
 		}
 	}
