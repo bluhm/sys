@@ -98,7 +98,6 @@
 #include <netinet/tcpip.h>
 #include <netinet/tcp_debug.h>
 
-#include "pf.h"
 #if NPF > 0
 #include <net/pfvar.h>
 #endif
