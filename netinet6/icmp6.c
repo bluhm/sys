@@ -1819,11 +1819,15 @@ ni6_store_addrs(struct icmp6_nodeinfo *ni6, struct icmp6_nodeinfo *nni6,
 			if (ifa6->ia6_lifetime.ia6t_expire == 0)
 				ltime = ND6_INFINITE_LIFETIME;
 			else {
-				if (ifa6->ia6_lifetime.ia6t_expire >
-				    time_second)
-					ltime = htonl(ifa6->ia6_lifetime.ia6t_expire - time_second);
-				else
+				time_t diff = ifa6->ia6_lifetime.ia6t_expire -
+				    time_second;
+
+				if (diff <= 0)
 					ltime = 0;
+				if (diff >= ND6_INFINITE_LIFETIME)
+					ltime = ND6_INFINITE_LIFETIME;
+				else
+					ltime = htonl((u_int32_t)diff);
 			}
 
 			bcopy(&ltime, cp, sizeof(u_int32_t));
