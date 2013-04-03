@@ -1824,7 +1824,7 @@ ni6_store_addrs(struct icmp6_nodeinfo *ni6, struct icmp6_nodeinfo *nni6,
 
 				if (diff <= 0)
 					ltime = 0;
-				if (diff >= ND6_INFINITE_LIFETIME)
+				else if (diff >= ND6_INFINITE_LIFETIME)
 					ltime = ND6_INFINITE_LIFETIME;
 				else
 					ltime = htonl((u_int32_t)diff);
