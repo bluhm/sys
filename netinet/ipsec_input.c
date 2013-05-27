@@ -1,4 +1,4 @@
-/*	$OpenBSD: ipsec_input.c,v 1.111 2013/03/31 00:59:52 bluhm Exp $	*/
+/*	$OpenBSD: ipsec_input.c,v 1.114 2013/04/24 10:17:08 mpi Exp $	*/
 /*
  * The authors of this code are John Ioannidis (ji@tla.org),
  * Angelos D. Keromytis (kermit@csd.uch.gr) and
@@ -83,6 +83,17 @@
 #include "bpfilter.h"
 
 void *ipsec_common_ctlinput(u_int, int, struct sockaddr *, void *, int);
+#ifdef INET
+int ah4_input_cb(struct mbuf *, ...);
+int esp4_input_cb(struct mbuf *, ...);
+int ipcomp4_input_cb(struct mbuf *, ...);
+#endif
+
+#ifdef INET6
+int ah6_input_cb(struct mbuf *, int, int);
+int esp6_input_cb(struct mbuf *, int, int);
+int ipcomp6_input_cb(struct mbuf *, int, int);
+#endif
 
 #ifdef ENCDEBUG
 #define DPRINTF(x)	if (encdebug) printf x
@@ -98,11 +109,6 @@ int ipcomp_enable = 0;
 int *espctl_vars[ESPCTL_MAXID] = ESPCTL_VARS;
 int *ahctl_vars[AHCTL_MAXID] = AHCTL_VARS;
 int *ipcompctl_vars[IPCOMPCTL_MAXID] = IPCOMPCTL_VARS;
-
-#ifdef INET6
-extern struct ip6protosw inet6sw[];
-extern u_char ip6_protox[];
-#endif
 
 /*
  * ipsec_common_input() gets called when we receive an IPsec-protected packet
@@ -952,7 +958,6 @@ void *
 ipsec_common_ctlinput(u_int rdomain, int cmd, struct sockaddr *sa,
     void *v, int proto)
 {
-	extern u_int ip_mtudisc_timeout;
 	struct ip *ip = v;
 	int s;
 

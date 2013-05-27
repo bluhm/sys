@@ -1,4 +1,4 @@
-/*	$OpenBSD: pipex_local.h,v 1.17 2012/09/19 17:50:17 yasuoka Exp $	*/
+/*	$OpenBSD: pipex_local.h,v 1.19 2013/04/20 07:54:28 yasuoka Exp $	*/
 
 /*
  * Copyright (c) 2009 Internet Initiative Japan Inc.
@@ -162,7 +162,8 @@ struct pipex_session {
 #define PIPEX_STATE_INITIAL		0x0000
 #define PIPEX_STATE_OPENED		0x0001
 #define PIPEX_STATE_CLOSE_WAIT		0x0002
-#define PIPEX_STATE_CLOSED		0x0003
+#define PIPEX_STATE_CLOSE_WAIT2		0x0003
+#define PIPEX_STATE_CLOSED		0x0004
 
 	uint16_t	ip_forward:1,		/* {en|dis}ableIP forwarding */
 			ip6_forward:1,		/* {en|dis}able IPv6 forwarding */
@@ -346,7 +347,6 @@ extern struct pipex_hash_head	pipex_id_hashtable[];
 #define SEQ16_GE(a,b)	((int)((a) - (b)) >= 0)
 #define SEQ16_SUB(a,b)	((int16_t)((a) - (b)))
 
-#define RUPDIV(n,d)     (((n) + (d) - ((n) % (d))) / (d))
 #define	pipex_session_is_acfc_accepted(s)				\
     (((s)->ppp_flags & PIPEX_PPP_ACFC_ACCEPTED)? 1 : 0)
 #define	pipex_session_is_pfc_accepted(s)				\

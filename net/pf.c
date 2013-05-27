@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf.c,v 1.821 2013/03/29 13:16:14 bluhm Exp $ */
+/*	$OpenBSD: pf.c,v 1.825 2013/05/14 23:59:26 mikeb Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -89,7 +89,7 @@
 
 #ifdef INET6
 #include <netinet/ip6.h>
-#include <netinet/in_pcb.h>
+#include <netinet6/ip6_var.h>
 #include <netinet/icmp6.h>
 #include <netinet6/nd6.h>
 #include <netinet6/ip6_divert.h>
@@ -916,25 +916,28 @@ pf_state_key_setup(struct pf_pdesc *pd, struct pf_state_key **skw,
 }
 
 int
-pf_state_insert(struct pfi_kif *kif, struct pf_state_key *skw,
-    struct pf_state_key *sks, struct pf_state *s)
+pf_state_insert(struct pfi_kif *kif, struct pf_state_key **skw,
+    struct pf_state_key **sks, struct pf_state *s)
 {
 	splsoftassert(IPL_SOFTNET);
 
 	s->kif = kif;
-	if (skw == sks) {
-		if (pf_state_key_attach(skw, s, PF_SK_WIRE))
+	if (*skw == *sks) {
+		if (pf_state_key_attach(*skw, s, PF_SK_WIRE))
 			return (-1);
+		*skw = *sks = s->key[PF_SK_WIRE];
 		s->key[PF_SK_STACK] = s->key[PF_SK_WIRE];
 	} else {
-		if (pf_state_key_attach(skw, s, PF_SK_WIRE)) {
-			pool_put(&pf_state_key_pl, sks);
+		if (pf_state_key_attach(*skw, s, PF_SK_WIRE)) {
+			pool_put(&pf_state_key_pl, *sks);
 			return (-1);
 		}
-		if (pf_state_key_attach(sks, s, PF_SK_STACK)) {
+		*skw = s->key[PF_SK_WIRE];
+		if (pf_state_key_attach(*sks, s, PF_SK_STACK)) {
 			pf_state_key_detach(s, PF_SK_WIRE);
 			return (-1);
 		}
+		*sks = s->key[PF_SK_STACK];
 	}
 
 	if (s->id == 0 && s->creatorid == 0) {
@@ -3789,7 +3792,7 @@ pf_create_state(struct pf_pdesc *pd, struct pf_rule *r, struct pf_rule *a,
 		goto csfailed;
 	}
 
-	if (pf_state_insert(BOUND_IFACE(r, pd->kif), *skw, *sks, s)) {
+	if (pf_state_insert(BOUND_IFACE(r, pd->kif), skw, sks, s)) {
 		pf_state_key_detach(s, PF_SK_STACK);
 		pf_state_key_detach(s, PF_SK_WIRE);
 		*sks = *skw = NULL;
@@ -5712,9 +5715,7 @@ pf_routable(struct pf_addr *addr, sa_family_t af, struct pfi_kif *kif,
 	struct sockaddr_in	*dst;
 	int			 ret = 1;
 	int			 check_mpath;
-	extern int		 ipmultipath;
 #ifdef INET6
-	extern int		 ip6_multipath;
 	struct sockaddr_in6	*dst6;
 	struct route_in6	 ro;
 #else
@@ -7039,6 +7040,12 @@ done:
 			action = pf_refragment6(m0, mtag, fwdir);
 	}
 #endif
+	if (s && action != PF_DROP) {
+		if (!s->if_index_in && dir == PF_IN)
+			s->if_index_in = ifp->if_index;
+		else if (!s->if_index_out && dir == PF_OUT)
+			s->if_index_out = ifp->if_index;
+	}
 
 	return (action);
 }

@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_icmp.c,v 1.96 2012/09/18 12:35:51 blambert Exp $	*/
+/*	$OpenBSD: ip_icmp.c,v 1.99 2013/05/03 09:35:20 mpi Exp $	*/
 /*	$NetBSD: ip_icmp.c,v 1.19 1996/02/13 23:42:22 christos Exp $	*/
 
 /*
@@ -105,17 +105,21 @@
  * host table maintenance routines.
  */
 
+#ifdef ICMPPRINTFS
+int	icmpprintfs = 0;	/* Settable from ddb */
+#endif
+
+/* values controllable via sysctl */
 int	icmpmaskrepl = 0;
 int	icmpbmcastecho = 0;
 int	icmptstamprepl = 1;
-#ifdef ICMPPRINTFS
-int	icmpprintfs = 0;
-#endif
 int	icmperrppslim = 100;
-int	icmperrpps_count = 0;
-struct timeval icmperrppslim_last;
 int	icmp_rediraccept = 0;
 int	icmp_redirtimeout = 10 * 60;
+
+static int icmperrpps_count = 0;
+static struct timeval icmperrppslim_last;
+
 static struct rttimer_queue *icmp_redirect_timeout_q = NULL;
 struct	icmpstat icmpstat;
 
@@ -124,8 +128,6 @@ int *icmpctl_vars[ICMPCTL_MAXID] = ICMPCTL_VARS;
 void icmp_mtudisc_timeout(struct rtentry *, struct rttimer *);
 int icmp_ratelimit(const struct in_addr *, const int, const int);
 void icmp_redirect_timeout(struct rtentry *, struct rttimer *);
-
-extern	struct protosw inetsw[];
 
 void
 icmp_init(void)
@@ -312,8 +314,6 @@ icmp_input(struct mbuf *m, ...)
 	struct in_ifaddr *ia;
 	void *(*ctlfunc)(int, struct sockaddr *, u_int, void *);
 	int code;
-	extern u_char ip_protox[];
-	extern int ipforwarding;
 	int hlen;
 	va_list ap;
 	struct rtentry *rt;
@@ -1007,7 +1007,6 @@ icmp_mtudisc_timeout(struct rtentry *rt, struct rttimer *r)
 	if ((rt->rt_flags & (RTF_DYNAMIC | RTF_HOST)) ==
 	    (RTF_DYNAMIC | RTF_HOST)) {
 		void *(*ctlfunc)(int, struct sockaddr *, u_int, void *);
-		extern u_char ip_protox[];
 		struct sockaddr_in sa;
 		struct rt_addrinfo info;
 

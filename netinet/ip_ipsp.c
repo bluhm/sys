@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_ipsp.c,v 1.186 2013/03/28 23:10:05 tedu Exp $	*/
+/*	$OpenBSD: ip_ipsp.c,v 1.189 2013/04/11 12:06:25 mpi Exp $	*/
 /*
  * The authors of this code are John Ioannidis (ji@tla.org),
  * Angelos D. Keromytis (kermit@csd.uch.gr),
@@ -64,6 +64,7 @@
 #include <netinet/in_systm.h>
 #include <netinet/ip.h>
 #include <netinet/in_pcb.h>
+#include <netinet/ip_var.h>
 #endif /* INET */
 
 #ifdef INET6
@@ -89,7 +90,6 @@ void tdb_hashstats(void);
 #define	DPRINTF(x)
 #endif
 
-u_int8_t	get_sa_require(struct inpcb *);
 void		tdb_rehash(void);
 void		tdb_timeout(void *v);
 void		tdb_firstuse(void *v);
@@ -97,12 +97,6 @@ void		tdb_soft_timeout(void *v);
 void		tdb_soft_firstuse(void *v);
 int		tdb_hash(u_int, u_int32_t, union sockaddr_union *, u_int8_t);
 
-extern int	ipsec_auth_default_level;
-extern int	ipsec_esp_trans_default_level;
-extern int	ipsec_esp_network_default_level;
-extern int	ipsec_ipcomp_default_level;
-
-extern int encdebug;
 int ipsec_in_use = 0;
 u_int64_t ipsec_last_added = 0;
 
@@ -140,8 +134,6 @@ struct xformsw xformsw[] = {
 };
 
 struct xformsw *xformswNXFORMSW = &xformsw[nitems(xformsw)];
-
-unsigned char ipseczeroes[IPSEC_ZEROES_SIZE]; /* zeroes! */
 
 #define	TDB_HASHSIZE_INIT	32
 
@@ -943,11 +935,15 @@ get_sa_require(struct inpcb *inp)
 		sareq |= inp->inp_seclevel[SL_ESP_NETWORK] >= IPSEC_LEVEL_USE ?
 		    NOTIFY_SATYPE_TUNNEL : 0;
 	} else {
-		sareq |= ipsec_auth_default_level >= IPSEC_LEVEL_USE ?
+		/*
+		 * Code left for documentation purposes, these
+		 * conditions are always evaluated to false.
+		 */
+		sareq |= IPSEC_AUTH_LEVEL_DEFAULT >= IPSEC_LEVEL_USE ?
 		    NOTIFY_SATYPE_AUTH : 0;
-		sareq |= ipsec_esp_trans_default_level >= IPSEC_LEVEL_USE ?
+		sareq |= IPSEC_ESP_TRANS_LEVEL_DEFAULT >= IPSEC_LEVEL_USE ?
 		    NOTIFY_SATYPE_CONF : 0;
-		sareq |= ipsec_esp_network_default_level >= IPSEC_LEVEL_USE ?
+		sareq |= IPSEC_ESP_NETWORK_LEVEL_DEFAULT >= IPSEC_LEVEL_USE ?
 		    NOTIFY_SATYPE_TUNNEL : 0;
 	}
 

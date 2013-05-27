@@ -1,4 +1,4 @@
-/* $OpenBSD: ip_ipcomp.c,v 1.30 2013/02/14 16:22:34 mikeb Exp $ */
+/* $OpenBSD: ip_ipcomp.c,v 1.32 2013/05/14 14:29:08 mpi Exp $ */
 
 /*
  * Copyright (c) 2001 Jean-Jacques Bernard-Gundol (jj@wabbitt.org)
@@ -43,6 +43,7 @@
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
 #include <netinet/ip.h>
+#include <netinet/ip_var.h>
 #endif				/* INET */
 
 #ifdef INET6
@@ -63,6 +64,9 @@
 #include <lib/libz/zlib.h>
 
 #include "bpfilter.h"
+
+int ipcomp_output_cb(void *);
+int ipcomp_input_cb(void *);
 
 #ifdef ENCDEBUG
 #define DPRINTF(x)      if (encdebug) printf x

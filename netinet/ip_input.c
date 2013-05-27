@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_input.c,v 1.206 2013/03/29 13:16:14 bluhm Exp $	*/
+/*	$OpenBSD: ip_input.c,v 1.211 2013/05/17 09:04:30 mpi Exp $	*/
 /*	$NetBSD: ip_input.c,v 1.30 1996/03/16 23:53:58 christos Exp $	*/
 
 /*
@@ -112,28 +112,12 @@ int	ipprintfs = 0;
 
 struct rttimer_queue *ip_mtudisc_timeout_q = NULL;
 
-int	ipsec_auth_default_level = IPSEC_AUTH_LEVEL_DEFAULT;
-int	ipsec_esp_trans_default_level = IPSEC_ESP_TRANS_LEVEL_DEFAULT;
-int	ipsec_esp_network_default_level = IPSEC_ESP_NETWORK_LEVEL_DEFAULT;
-int	ipsec_ipcomp_default_level = IPSEC_IPCOMP_LEVEL_DEFAULT;
-
 /* Keep track of memory used for reassembly */
 int	ip_maxqueue = 300;
 int	ip_frags = 0;
 
-/* from in_pcb.c */
-extern int ipport_firstauto;
-extern int ipport_lastauto;
-extern int ipport_hifirstauto;
-extern int ipport_hilastauto;
-extern struct baddynamicports baddynamicports;
-extern int la_hold_total;
-
 int *ipctl_vars[IPCTL_MAXID] = IPCTL_VARS;
 
-extern	struct domain inetdomain;
-extern	struct protosw inetsw[];
-u_char	ip_protox[IPPROTO_MAX];
 struct	in_ifaddrhead in_ifaddr;
 struct	ifqueue ipintrq;
 
@@ -391,8 +375,6 @@ ipv4_input(struct mbuf *m)
 	if (IN_MULTICAST(ip->ip_dst.s_addr)) {
 		struct in_multi *inm;
 #ifdef MROUTING
-		extern struct socket *ip_mrouter;
-
 		if (ipmforwarding && ip_mrouter) {
 			if (m->m_flags & M_EXT) {
 				if ((m = m_pullup(m, hlen)) == NULL) {
@@ -1102,12 +1084,10 @@ ip_dooptions(struct mbuf *m)
 			bcopy((caddr_t)(cp + off), (caddr_t)&ipaddr.sin_addr,
 			    sizeof(ipaddr.sin_addr));
 			if (opt == IPOPT_SSRR) {
-#define	INA	struct in_ifaddr *
-#define	SA	struct sockaddr *
-			    if ((ia = (INA)ifa_ifwithdstaddr((SA)&ipaddr,
-				m->m_pkthdr.rdomain)) == 0)
-				ia = (INA)ifa_ifwithnet((SA)&ipaddr,
-				    m->m_pkthdr.rdomain);
+			    if ((ia = ifatoia(ifa_ifwithdstaddr(sintosa(&ipaddr),
+				m->m_pkthdr.rdomain))) == NULL)
+				ia = ifatoia(ifa_ifwithnet(sintosa(&ipaddr),
+				    m->m_pkthdr.rdomain));
 			} else
 				/* keep packet in the virtual instance */
 				ia = ip_rtaddr(ipaddr.sin_addr,
@@ -1150,8 +1130,8 @@ ip_dooptions(struct mbuf *m)
 			 * use the incoming interface (should be same).
 			 * Again keep the packet inside the virtual instance.
 			 */
-			if ((ia = (INA)ifa_ifwithaddr((SA)&ipaddr,
-			    m->m_pkthdr.rdomain)) == 0 &&
+			if ((ia = ifatoia(ifa_ifwithaddr(sintosa(&ipaddr),
+			    m->m_pkthdr.rdomain))) == 0 &&
 			    (ia = ip_rtaddr(ipaddr.sin_addr,
 			    m->m_pkthdr.rdomain)) == 0) {
 				type = ICMP_UNREACH;
@@ -1186,8 +1166,8 @@ ip_dooptions(struct mbuf *m)
 				    sizeof(struct in_addr) > ipt.ipt_len)
 					goto bad;
 				ipaddr.sin_addr = dst;
-				ia = (INA)ifaof_ifpforaddr((SA)&ipaddr,
-							    m->m_pkthdr.rcvif);
+				ia = ifatoia(ifaof_ifpforaddr(sintosa(&ipaddr),
+				    m->m_pkthdr.rcvif));
 				if (ia == 0)
 					continue;
 				bcopy((caddr_t)&ia->ia_addr.sin_addr,
@@ -1201,7 +1181,7 @@ ip_dooptions(struct mbuf *m)
 					goto bad;
 				bcopy((caddr_t)&sin, (caddr_t)&ipaddr.sin_addr,
 				    sizeof(struct in_addr));
-				if (ifa_ifwithaddr((SA)&ipaddr,
+				if (ifa_ifwithaddr(sintosa(&ipaddr),
 				    m->m_pkthdr.rdomain) == 0)
 					continue;
 				ipt.ipt_ptr += sizeof(struct in_addr);
