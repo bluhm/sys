@@ -885,7 +885,7 @@ in6_update_ifa(struct ifnet *ifp, struct in6_aliasreq *ifra,
 		ia = malloc(sizeof(*ia), M_IFADDR, M_WAITOK | M_ZERO);
 		LIST_INIT(&ia->ia6_memberships);
 		/* Initialize the address and masks, and put time stamp */
-		ia->ia_ifa.ifa_addr = (struct sockaddr *)&ia->ia_addr;
+		ia->ia_ifa.ifa_addr = sin6tosa(&ia->ia_addr);
 		ia->ia_addr.sin6_family = AF_INET6;
 		ia->ia_addr.sin6_len = sizeof(ia->ia_addr);
 		ia->ia6_createtime = ia->ia6_updatetime = time_second;
@@ -894,13 +894,11 @@ in6_update_ifa(struct ifnet *ifp, struct in6_aliasreq *ifra,
 			 * XXX: some functions expect that ifa_dstaddr is not
 			 * NULL for p2p interfaces.
 			 */
-			ia->ia_ifa.ifa_dstaddr =
-			    (struct sockaddr *)&ia->ia_dstaddr;
+			ia->ia_ifa.ifa_dstaddr = sin6tosa(&ia->ia_dstaddr);
 		} else {
 			ia->ia_ifa.ifa_dstaddr = NULL;
 		}
-		ia->ia_ifa.ifa_netmask =
-		    (struct sockaddr *)&ia->ia_prefixmask;
+		ia->ia_ifa.ifa_netmask = sin6tosa(&ia->ia_prefixmask);
 
 		ia->ia_ifp = ifp;
 		TAILQ_INSERT_TAIL(&in6_ifaddr, ia, ia_list);
