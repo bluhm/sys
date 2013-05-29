@@ -175,7 +175,7 @@ in6_ifloop_request(int cmd, struct ifaddr *ifa)
 	info.rti_info[RTAX_DST] = ifa->ifa_addr;
 	if (cmd != RTM_DELETE)
 		info.rti_info[RTAX_GATEWAY] = ifa->ifa_addr;
-	info.rti_info[RTAX_NETMASK] = (struct sockaddr *)&all1_sa;
+	info.rti_info[RTAX_NETMASK] = sin6tosa(&all1_sa);
 	e = rtrequest1(cmd, &info, RTP_CONNECTED, &nrt,
 	    ifa->ifa_ifp->if_rdomain);
 	if (e != 0) {
@@ -1046,13 +1046,13 @@ in6_update_ifa(struct ifnet *ifp, struct in6_aliasreq *ifra,
 		 * actually do not need the routes, since they usually specify
 		 * the outgoing interface.
 		 */
-		rt = rtalloc1((struct sockaddr *)&mltaddr, 0, ifp->if_rdomain);
+		rt = rtalloc1(sin6tosa(&mltaddr), 0, ifp->if_rdomain);
 		if (rt) {
 			/*
 			 * 32bit came from "mltmask"
 			 */
 			if (memcmp(&mltaddr.sin6_addr,
-			    &((struct sockaddr_in6 *)rt_key(rt))->sin6_addr,
+			    &satosin6(rt_key(rt))->sin6_addr,
 			    32 / 8)) {
 				RTFREE(rt);
 				rt = NULL;
@@ -1062,13 +1062,10 @@ in6_update_ifa(struct ifnet *ifp, struct in6_aliasreq *ifra,
 			struct rt_addrinfo info;
 
 			bzero(&info, sizeof(info));
-			info.rti_info[RTAX_DST] = (struct sockaddr *)&mltaddr;
-			info.rti_info[RTAX_GATEWAY] =
-			    (struct sockaddr *)&ia->ia_addr;
-			info.rti_info[RTAX_NETMASK] =
-			    (struct sockaddr *)&mltmask;
-			info.rti_info[RTAX_IFA] =
-			    (struct sockaddr *)&ia->ia_addr;
+			info.rti_info[RTAX_DST] = sin6tosa(&mltaddr);
+			info.rti_info[RTAX_GATEWAY] = sin6tosa(&ia->ia_addr);
+			info.rti_info[RTAX_NETMASK] = sin6tosa(&mltmask);
+			info.rti_info[RTAX_IFA] = sin6tosa(&ia->ia_addr);
 			/* XXX: we need RTF_CLONING to fake nd6_rtrequest */
 			info.rti_flags = RTF_UP | RTF_CLONING;
 			error = rtrequest1(RTM_ADD, &info, RTP_CONNECTED, NULL,
@@ -1118,11 +1115,11 @@ in6_update_ifa(struct ifnet *ifp, struct in6_aliasreq *ifra,
 		mltaddr.sin6_scope_id = 0;
 
 		/* XXX: again, do we really need the route? */
-		rt = rtalloc1((struct sockaddr *)&mltaddr, 0, ifp->if_rdomain);
+		rt = rtalloc1(sin6tosa(&mltaddr), 0, ifp->if_rdomain);
 		if (rt) {
 			/* 32bit came from "mltmask" */
 			if (memcmp(&mltaddr.sin6_addr,
-			    &((struct sockaddr_in6 *)rt_key(rt))->sin6_addr,
+			    &satosin6(rt_key(rt))->sin6_addr,
 			    32 / 8)) {
 				RTFREE(rt);
 				rt = NULL;
@@ -1132,13 +1129,10 @@ in6_update_ifa(struct ifnet *ifp, struct in6_aliasreq *ifra,
 			struct rt_addrinfo info;
 
 			bzero(&info, sizeof(info));
-			info.rti_info[RTAX_DST] = (struct sockaddr *)&mltaddr;
-			info.rti_info[RTAX_GATEWAY] =
-			    (struct sockaddr *)&ia->ia_addr;
-			info.rti_info[RTAX_NETMASK] =
-			    (struct sockaddr *)&mltmask;
-			info.rti_info[RTAX_IFA] =
-			    (struct sockaddr *)&ia->ia_addr;
+			info.rti_info[RTAX_DST] = sin6tosa(&mltaddr);
+			info.rti_info[RTAX_GATEWAY] = sin6tosa(&ia->ia_addr);
+			info.rti_info[RTAX_NETMASK] = sin6tosa(&mltmask);
+			info.rti_info[RTAX_IFA] = sin6tosa(&ia->ia_addr);
 			info.rti_flags = RTF_UP | RTF_CLONING;
 			error = rtrequest1(RTM_ADD, &info, RTP_CONNECTED,
 			    NULL, ifp->if_rdomain);
@@ -1883,7 +1877,7 @@ in6_ifpprefix(const struct ifnet *ifp, const struct in6_addr *addr)
 	dst.sin6_len = sizeof(struct sockaddr_in6);
 	dst.sin6_family = AF_INET6;
 	dst.sin6_addr = *addr;
-	rt = rtalloc1((struct sockaddr *)&dst, RT_NOCLONING, tableid);
+	rt = rtalloc1(sin6tosa(&dst), RT_NOCLONING, tableid);
 
 	if (rt == NULL)
 		return (0);
