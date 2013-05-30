@@ -217,8 +217,7 @@ nd6_ns_input(struct mbuf *m, int off, int icmp6len)
 		tsin6.sin6_family = AF_INET6;
 		tsin6.sin6_addr = taddr6;
 
-		rt = rtalloc1((struct sockaddr *)&tsin6, 0,
-			      m->m_pkthdr.rdomain);
+		rt = rtalloc1(sin6tosa(&tsin6), 0, m->m_pkthdr.rdomain);
 		if (rt && (rt->rt_flags & RTF_ANNOUNCE) != 0 &&
 		    rt->rt_gateway->sa_family == AF_LINK) {
 			/*

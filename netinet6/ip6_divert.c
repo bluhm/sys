@@ -249,8 +249,7 @@ divert6_packet(struct mbuf *m, int dir)
 
 	if (inp != CIRCLEQ_END(&divb6table.inpt_queue)) {
 		sa = inp->inp_socket;
-		if (sbappendaddr(&sa->so_rcv, (struct sockaddr *)&addr, 
-		    m, NULL) == 0) {
+		if (sbappendaddr(&sa->so_rcv, sin6tosa(&addr), m, NULL) == 0) {
 			div6stat.divs_fullsock++;
 			m_freem(m);
 			return (0);

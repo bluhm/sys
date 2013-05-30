@@ -855,7 +855,7 @@ reroute:
 		mtu32 = (u_int32_t)mtu;
 		bzero(&ip6cp, sizeof(ip6cp));
 		ip6cp.ip6c_cmdarg = (void *)&mtu32;
-		pfctlinput2(PRC_MSGSIZE, (struct sockaddr *)&ro_pmtu->ro_dst,
+		pfctlinput2(PRC_MSGSIZE, sin6tosa(&ro_pmtu->ro_dst),
 		    (void *)&ip6cp);
 #endif
 
@@ -905,7 +905,7 @@ reroute:
 		mtu32 = (u_int32_t)mtu;
 		bzero(&ip6cp, sizeof(ip6cp));
 		ip6cp.ip6c_cmdarg = (void *)&mtu32;
-		pfctlinput2(PRC_MSGSIZE, (struct sockaddr *)&ro_pmtu->ro_dst,
+		pfctlinput2(PRC_MSGSIZE, sin6tosa(&ro_pmtu->ro_dst),
 		    (void *)&ip6cp);
 #endif
 
@@ -3139,7 +3139,7 @@ ip6_mloopback(struct ifnet *ifp, struct mbuf *m, struct sockaddr_in6 *dst)
 	if (IN6_IS_SCOPE_EMBED(&ip6->ip6_dst))
 		ip6->ip6_dst.s6_addr16[1] = 0;
 
-	(void)looutput(ifp, copym, (struct sockaddr *)dst, NULL);
+	(void)looutput(ifp, copym, sin6tosa(dst), NULL);
 }
 
 /*

@@ -652,7 +652,7 @@ nd6_lookup(struct in6_addr *addr6, int create, struct ifnet *ifp)
 	sin6.sin6_family = AF_INET6;
 	sin6.sin6_addr = *addr6;
 
-	rt = rtalloc1((struct sockaddr *)&sin6, create, ifp->if_rdomain);
+	rt = rtalloc1(sin6tosa(&sin6), create, ifp->if_rdomain);
 	if (rt && (rt->rt_flags & RTF_LLINFO) == 0) {
 		/*
 		 * This is the case for the default route.
@@ -678,7 +678,7 @@ nd6_lookup(struct in6_addr *addr6, int create, struct ifnet *ifp)
 			 * be covered by our own prefix.
 			 */
 			struct ifaddr *ifa =
-			    ifaof_ifpforaddr((struct sockaddr *)&sin6, ifp);
+			    ifaof_ifpforaddr(sin6tosa(&sin6), ifp);
 			if (ifa == NULL)
 				return (NULL);
 
@@ -691,10 +691,9 @@ nd6_lookup(struct in6_addr *addr6, int create, struct ifnet *ifp)
 			bzero(&info, sizeof(info));
 			info.rti_flags = (ifa->ifa_flags | RTF_HOST |
 			    RTF_LLINFO) & ~RTF_CLONING;
-			info.rti_info[RTAX_DST] = (struct sockaddr *)&sin6;
+			info.rti_info[RTAX_DST] = sin6tosa(&sin6);
 			info.rti_info[RTAX_GATEWAY] = ifa->ifa_addr;
-			info.rti_info[RTAX_NETMASK] =
-			    (struct sockaddr *)&all1_sa;
+			info.rti_info[RTAX_NETMASK] = sin6tosa(&all1_sa);
 			if ((e = rtrequest1(RTM_ADD, &info, RTP_CONNECTED,
 			    &rt, ifp->if_rdomain)) != 0) {
 #if 0
@@ -1733,7 +1732,7 @@ nd6_output(struct ifnet *ifp, struct ifnet *origifp, struct mbuf *m0,
 	 */
 	if (rt) {
 		if ((rt->rt_flags & RTF_UP) == 0) {
-			if ((rt0 = rt = rtalloc1((struct sockaddr *)dst,
+			if ((rt0 = rt = rtalloc1(sin6tosa(dst),
 			    RT_REPORT, m->m_pkthdr.rdomain)) != NULL)
 			{
 				rt->rt_refcnt--;
@@ -1888,8 +1887,7 @@ nd6_output(struct ifnet *ifp, struct ifnet *origifp, struct mbuf *m0,
 			goto bad;
 		}
 #endif /* IPSEC */
-		return ((*ifp->if_output)(origifp, m, (struct sockaddr *)dst,
-		    rt));
+		return ((*ifp->if_output)(origifp, m, sin6tosa(dst), rt));
 	}
 #ifdef IPSEC
 	if (mtag != NULL) {
@@ -1899,7 +1897,7 @@ nd6_output(struct ifnet *ifp, struct ifnet *origifp, struct mbuf *m0,
 		goto bad;
 	}
 #endif /* IPSEC */
-	return ((*ifp->if_output)(ifp, m, (struct sockaddr *)dst, rt));
+	return ((*ifp->if_output)(ifp, m, sin6tosa(dst), rt));
 
   bad:
 	if (m)

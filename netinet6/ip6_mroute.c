@@ -941,9 +941,7 @@ int
 socket_send(struct socket *s, struct mbuf *mm, struct sockaddr_in6 *src)
 {
 	if (s) {
-		if (sbappendaddr(&s->so_rcv,
-				 (struct sockaddr *)src,
-				 mm, (struct mbuf *)0) != 0) {
+		if (sbappendaddr(&s->so_rcv, sin6tosa(src), mm, NULL) != 0) {
 			sorwakeup(s);
 			return 0;
 		}
@@ -1537,7 +1535,7 @@ phyint_send(struct ip6_hdr *ip6, struct mif6 *mifp, struct mbuf *m)
 		 * we need no ND for a multicast forwarded packet...right?
 		 */
 		error = (*ifp->if_output)(ifp, mb_copy,
-		    (struct sockaddr *)&ro.ro_dst, NULL);
+		    sin6tosa(&ro.ro_dst), NULL);
 #ifdef MRT6DEBUG
 		if (mrt6debug & DEBUG_XMIT)
 			log(LOG_DEBUG, "phyint_send on mif %d err %d\n",
@@ -1835,8 +1833,7 @@ pim6_input(struct mbuf **mp, int *offp, int proto)
 #endif
 
 		looutput(mif6table[reg_mif_num].m6_ifp, m,
-			      (struct sockaddr *) &dst,
-			      (struct rtentry *) NULL);
+		    sin6tosa(&dst), NULL);
 	
 		/* prepare the register head to send to the mrouting daemon */
 		m = mcp;
