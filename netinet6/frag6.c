@@ -189,7 +189,7 @@ frag6_input(struct mbuf **mp, int *offp, int proto)
 #ifdef IN6_IFSTAT_STRICT
 	/* find the destination interface of the packet. */
 	bzero(&ro, sizeof(ro));
-	dst = (struct sockaddr_in6 *)&ro.ro_dst;
+	dst = &ro.ro_dst;
 	dst->sin6_family = AF_INET6;
 	dst->sin6_len = sizeof(struct sockaddr_in6);
 	dst->sin6_addr = ip6->ip6_dst;
