@@ -479,7 +479,7 @@ in6_pcbconnect(struct inpcb *inp, struct mbuf *nam)
  */
 int
 in6_pcbnotify(struct inpcbtable *head, struct sockaddr *dst, 
-	uint fport_arg, struct sockaddr *src, uint lport_arg, int cmd, 
+	uint fport_arg, const struct sockaddr *src, uint lport_arg, int cmd, 
 	void *cmdarg, void (*notify)(struct inpcb *, int))
 {
 	struct inpcb *inp, *ninp;
@@ -505,7 +505,7 @@ in6_pcbnotify(struct inpcbtable *head, struct sockaddr *dst,
 	/*
 	 * note that src can be NULL when we get notify by local fragmentation.
 	 */
-	sa6_src = (src == NULL) ? sa6_any : *(struct sockaddr_in6 *)src;
+	sa6_src = (src == NULL) ? sa6_any : *(const struct sockaddr_in6 *)src;
 	flowinfo = sa6_src.sin6_flowinfo;
 
 	/*
