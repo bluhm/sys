@@ -801,7 +801,7 @@ nd6_na_input(struct mbuf *m, int off, int icmp6len)
 			struct in6_addr *in6;
 			int s;
 
-			in6 = &((struct sockaddr_in6 *)rt_key(rt))->sin6_addr;
+			in6 = &satosin6(rt_key(rt))->sin6_addr;
 
 			/*
 			 * Lock to protect the default router list.
@@ -836,7 +836,7 @@ nd6_na_input(struct mbuf *m, int off, int icmp6len)
 		 * we assume ifp is not a loopback here, so just set the 2nd
 		 * argument as the 1st one.
 		 */
-		nd6_output(ifp, ifp, n, (struct sockaddr_in6 *)rt_key(rt), rt);
+		nd6_output(ifp, ifp, n, satosin6(rt_key(rt)), rt);
 		if (ln->ln_hold == n) {
 			/* n is back in ln_hold. Discard. */
 			m_freem(ln->ln_hold);

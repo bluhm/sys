@@ -1652,7 +1652,7 @@ nd6_prefix_onlink(struct nd_prefix *pr)
 		    "errno = %d\n",
 		    ip6_sprintf(&pr->ndpr_prefix.sin6_addr),
 		    pr->ndpr_plen, ifp->if_xname,
-		    ip6_sprintf(&((struct sockaddr_in6 *)ifa->ifa_addr)->sin6_addr),
+		    ip6_sprintf(&satosin6(ifa->ifa_addr)->sin6_addr),
 		    ip6_sprintf(&mask6.sin6_addr), rtflags, error));
 	}
 
@@ -1972,7 +1972,6 @@ rt6_flush(struct in6_addr *gateway, struct ifnet *ifp)
 int
 rt6_deleteroute(struct radix_node *rn, void *arg, u_int id)
 {
-#define SIN6(s)	((struct sockaddr_in6 *)s)
 	struct rt_addrinfo info;
 	struct rtentry *rt = (struct rtentry *)rn;
 	struct in6_addr *gate = (struct in6_addr *)arg;
@@ -1980,7 +1979,7 @@ rt6_deleteroute(struct radix_node *rn, void *arg, u_int id)
 	if (rt->rt_gateway == NULL || rt->rt_gateway->sa_family != AF_INET6)
 		return (0);
 
-	if (!IN6_ARE_ADDR_EQUAL(gate, &SIN6(rt->rt_gateway)->sin6_addr))
+	if (!IN6_ARE_ADDR_EQUAL(gate, &satosin6(rt->rt_gateway)->sin6_addr))
 		return (0);
 
 	/*
@@ -2004,5 +2003,4 @@ rt6_deleteroute(struct radix_node *rn, void *arg, u_int id)
 	info.rti_info[RTAX_GATEWAY] = rt->rt_gateway;
 	info.rti_info[RTAX_NETMASK] = rt_mask(rt);
 	return (rtrequest1(RTM_DELETE, &info, RTP_ANY, NULL, id));
-#undef SIN6
 }

@@ -242,8 +242,7 @@ divert6_packet(struct mbuf *m, int dir)
 		TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
 			if (ifa->ifa_addr->sa_family != AF_INET6)
 				continue;
-			addr.sin6_addr = ((struct sockaddr_in6 *)
-			    ifa->ifa_addr)->sin6_addr;
+			addr.sin6_addr = satosin6(ifa->ifa_addr)->sin6_addr;
 			break;
 		}
 	}
