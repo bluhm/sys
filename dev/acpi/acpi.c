@@ -60,6 +60,7 @@
 #define APMDEV_NORMAL	0
 #define APMDEV_CTL	8
 
+#include "wd.h"
 #include "wsdisplay.h"
 
 #ifdef ACPI_DEBUG
@@ -854,8 +855,10 @@ acpi_attach(struct device *parent, struct device *self, void *aux)
 	/* attach battery, power supply and button devices */
 	aml_find_node(&aml_root, "_HID", acpi_foundhid, sc);
 
+#if NWD > 0
 	/* Attach IDE bay */
 	aml_walknodes(&aml_root, AML_WALK_PRE, acpi_foundide, sc);
+#endif
 
 	/* attach docks */
 	aml_find_node(&aml_root, "_DCK", acpi_founddock, sc);
@@ -1361,6 +1364,7 @@ is_ejectable_bay(struct aml_node *node)
 	return ((is_ata(node) || is_ata(node->parent)) && is_ejectable(node));
 }
 
+#if NWD > 0
 int
 acpiide_notify(struct aml_node *node, int ntype, void *arg)
 {
@@ -1447,6 +1451,7 @@ acpi_foundide(struct aml_node *node, void *arg)
 	aml_register_notify(node, "acpiide", acpiide_notify, ide, 0);
 	return (0);
 }
+#endif /* NWD > 0 */
 
 void
 acpi_reset(void)
