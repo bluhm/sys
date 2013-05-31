@@ -504,7 +504,7 @@ in6_pcbnotify(struct inpcbtable *head, struct sockaddr_in6 *dst,
 	/*
 	 * note that src can be NULL when we get notify by local fragmentation.
 	 */
-	sa6_src = (src == NULL) ? sa6_any : *(const struct sockaddr_in6 *)src;
+	sa6_src = (src == NULL) ? sa6_any : *src;
 	flowinfo = sa6_src.sin6_flowinfo;
 
 	/*
