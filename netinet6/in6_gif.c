@@ -167,7 +167,7 @@ int in6_gif_input(struct mbuf **mp, int *offp, int proto)
 
 	ip6 = mtod(m, struct ip6_hdr *);
 
-#define satoin6(sa)	((satosin6(sa))->sin6_addr)
+#define satoin6(sa)	(satosin6(sa)->sin6_addr)
 	LIST_FOREACH(sc, &gif_softc_list, gif_list) {
 		if (sc->gif_psrc == NULL || sc->gif_pdst == NULL ||
 		    sc->gif_psrc->sa_family != AF_INET6 ||
