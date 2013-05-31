@@ -946,8 +946,8 @@ in_pcbhashlookup(struct inpcbtable *table, struct in_addr faddr,
 
 #ifdef INET6
 struct inpcb *
-in6_pcbhashlookup(struct inpcbtable *table, struct in6_addr *faddr,
-    u_int fport_arg, struct in6_addr *laddr, u_int lport_arg)
+in6_pcbhashlookup(struct inpcbtable *table, const struct in6_addr *faddr,
+    u_int fport_arg, const struct in6_addr *laddr, u_int lport_arg)
 {
 	struct inpcbhead *head;
 	struct inpcb *inp;
