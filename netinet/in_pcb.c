@@ -480,7 +480,6 @@ in_pcbdetach(struct inpcb *inp)
 		ip_freemoptions(inp->inp_moptions);
 #ifdef IPSEC
 	/* IPsec cleanup here */
-	s = splsoftnet();
 	if (inp->inp_tdb_in)
 		TAILQ_REMOVE(&inp->inp_tdb_in->tdb_inp_in,
 			     inp, inp_tdb_in_next);
@@ -493,7 +492,6 @@ in_pcbdetach(struct inpcb *inp)
 		ipsp_reffree(inp->inp_ipsec_remoteauth);
 	if (inp->inp_ipo)
 		ipsec_delete_policy(inp->inp_ipo);
-	splx(s);
 #endif
 #if NPF > 0
 	if (inp->inp_pf_sk)
