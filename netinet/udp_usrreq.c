@@ -737,7 +737,7 @@ udp_notify(struct inpcb *inp, int errno)
 
 #ifdef INET6
 void
-udp6_ctlinput(int cmd, struct sockaddr *sa, void *d)
+udp6_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *d)
 {
 	struct udphdr uh;
 	struct sockaddr_in6 sa6;

@@ -236,7 +236,7 @@ rip6_input(struct mbuf **mp, int *offp, int proto)
 }
 
 void
-rip6_ctlinput(int cmd, struct sockaddr *sa, void *d)
+rip6_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *d)
 {
 	struct ip6_hdr *ip6;
 	struct ip6ctlparam *ip6cp = NULL;

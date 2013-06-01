@@ -653,10 +653,7 @@ tcp_notify(inp, error)
 
 #ifdef INET6
 void
-tcp6_ctlinput(cmd, sa, d)
-	int cmd;
-	struct sockaddr *sa;
-	void *d;
+tcp6_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *d)
 {
 	struct tcphdr th;
 	struct tcpcb *tp;

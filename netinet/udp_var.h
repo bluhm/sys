@@ -103,7 +103,7 @@ extern struct	inpcbtable udbtable;
 extern struct	udpstat udpstat;
 
 #ifdef INET6
-void	udp6_ctlinput(int, struct sockaddr *, void *);
+void	udp6_ctlinput(int, struct sockaddr *, u_int, void *);
 int	udp6_input(struct mbuf **, int *, int);
 #endif /* INET6 */
 void	 *udp_ctlinput(int, struct sockaddr *, u_int, void *);

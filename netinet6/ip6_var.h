@@ -295,7 +295,7 @@ void	frag6_drain(void);
 
 void	rip6_init(void);
 int	rip6_input(struct mbuf **mp, int *offp, int proto);
-void	rip6_ctlinput(int, struct sockaddr *, void *);
+void	rip6_ctlinput(int, struct sockaddr *, u_int, void *);
 int	rip6_ctloutput(int, struct socket *, int, int, struct mbuf **);
 int	rip6_output(struct mbuf *, ...);
 int	rip6_usrreq(struct socket *,
