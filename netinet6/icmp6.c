@@ -1891,15 +1891,10 @@ icmp6_rip6_input(struct mbuf **mp, int off)
 			/* XXX rdomain support */
 			if ((divert = pf_find_divert(m)) == NULL)
 				continue;
-			if (IN6_IS_ADDR_UNSPECIFIED(&divert->addr.v6))
-				continue;  /* divert-reply */
-			if (!divert->port)
-				goto divert_socket;
 			if (!IN6_ARE_ADDR_EQUAL(&in6p->in6p_laddr,
 			    &divert->addr.v6))
 				continue;
 		} else
- divert_socket:
 #endif
 		if (!IN6_IS_ADDR_UNSPECIFIED(&in6p->in6p_laddr) &&
 		   !IN6_ARE_ADDR_EQUAL(&in6p->in6p_laddr, &ip6->ip6_dst))
