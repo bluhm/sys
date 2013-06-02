@@ -6922,11 +6922,10 @@ done:
 
 	if (pd.dir == PF_IN && s && s->key[PF_SK_STACK])
 		pd.m->m_pkthdr.pf.statekey = s->key[PF_SK_STACK];
-	if (pd.dir == PF_OUT && pd.m->m_pkthdr.pf.inp &&
-	    !((struct inpcb *)pd.m->m_pkthdr.pf.inp)->inp_pf_sk &&
+	if (pd.dir == PF_OUT &&
+	    pd.m->m_pkthdr.pf.inp && !pd.m->m_pkthdr.pf.inp->inp_pf_sk &&
 	    s && s->key[PF_SK_STACK] && !s->key[PF_SK_STACK]->inp) {
-		((struct inpcb *)pd.m->m_pkthdr.pf.inp)->inp_pf_sk =
-		    s->key[PF_SK_STACK];
+		pd.m->m_pkthdr.pf.inp->inp_pf_sk = s->key[PF_SK_STACK];
 		s->key[PF_SK_STACK]->inp = pd.m->m_pkthdr.pf.inp;
 	}
 
