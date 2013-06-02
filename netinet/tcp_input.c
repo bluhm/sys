@@ -1324,8 +1324,7 @@ trimthenstep6:
 			/*
 			 * The socket will be recreated but the new state
 			 * has already been linked to the socket.  Remove the
-			 * link between old socket and new state.  Otherwise
-			 * closing the socket would remove the state.
+			 * link between old socket and new state.
 			 */
 			if (inp->inp_pf_sk) {
 				inp->inp_pf_sk->inp = NULL;
