@@ -363,6 +363,29 @@ icmp_input(struct mbuf *m, ...)
 #endif
 	if (icp->icmp_type > ICMP_MAXTYPE)
 		goto raw;
+#if NPF > 0
+	if (m->m_pkthdr.pf.flags & PF_TAG_DIVERTED) {
+		switch (icp->icmp_type) {
+		/*
+		 * These ICMP types map to other connections.  They must be
+		 * delivered to pr_ctlinput() also for diverted connections.
+		 */
+		case ICMP_UNREACH:
+		case ICMP_TIMXCEED:
+		case ICMP_PARAMPROB:
+		case ICMP_SOURCEQUENCH:
+			break;
+		 /*
+		  * Even if pf_icmp_mapping() consideres redirects belonging
+		  * to a diverted connection, we must process it here anyway.
+		  */
+		case ICMP_REDIRECT:
+			break;
+		default:
+			goto raw;
+		}
+	}
+#endif /* NPF */
 	icmpstat.icps_inhist[icp->icmp_type]++;
 	code = icp->icmp_code;
 	switch (icp->icmp_type) {
