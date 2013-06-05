@@ -376,7 +376,7 @@ icmp_input(struct mbuf *m, ...)
 		case ICMP_SOURCEQUENCH:
 			break;
 		 /*
-		  * Even if pf_icmp_mapping() consideres redirects belonging
+		  * Although pf_icmp_mapping() considers redirects belonging
 		  * to a diverted connection, we must process it here anyway.
 		  */
 		case ICMP_REDIRECT:
