@@ -50,6 +50,7 @@
 #include <sys/sockio.h>
 #include <sys/kernel.h>
 #include <sys/systm.h>
+#include <sys/timeout.h>
 
 #include <net/if.h>
 #include <net/if_types.h>
