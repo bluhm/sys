@@ -99,7 +99,7 @@ ddb_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 				Debugger();
 				newp = NULL;
 			} else
-				return (EOPNOTSUPP);
+				return (ENODEV);
 		}
 		return (sysctl_rdint(oldp, oldlenp, newp, 0));
 	default:
