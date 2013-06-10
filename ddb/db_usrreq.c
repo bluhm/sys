@@ -1,4 +1,4 @@
-/*	$OpenBSD: db_usrreq.c,v 1.14 2010/07/26 01:56:27 guenther Exp $	*/
+/*	$OpenBSD: db_usrreq.c,v 1.15 2013/06/10 22:46:13 bluhm Exp $	*/
 
 /*
  * Copyright (c) 1996 Michael Shalayeff.  All rights reserved.
