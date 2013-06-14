@@ -1238,10 +1238,13 @@ in6_unlink_ifa(struct in6_ifaddr *ia, struct ifnet *ifp)
 
 	/* Release the reference to the base prefix. */
 	if (ia->ia6_ndpr == NULL) {
+		int plen = in6_mask2len(&ia->ia_prefixmask.sin6_addr, NULL);
+
 		if (!IN6_IS_ADDR_LINKLOCAL(IA6_IN6(ia)) &&
 		    !IN6_IS_ADDR_LOOPBACK(IA6_IN6(ia)))
 			log(LOG_NOTICE, "in6_unlink_ifa: interface address "
-			    "%s has no prefix\n", ip6_sprintf(IA6_IN6(ia)));
+			    "%s/%d has no prefix\n",
+			    ip6_sprintf(IA6_IN6(ia)), plen);
 	} else {
 		ia->ia6_flags &= ~IN6_IFF_AUTOCONF;
 		if (--ia->ia6_ndpr->ndpr_refcnt == 0)
