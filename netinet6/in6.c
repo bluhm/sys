@@ -1240,7 +1240,7 @@ in6_unlink_ifa(struct in6_ifaddr *ia, struct ifnet *ifp)
 	if (ia->ia6_ndpr == NULL) {
 		if (!IN6_IS_ADDR_LINKLOCAL(IA6_IN6(ia)) &&
 		    !IN6_IS_ADDR_LOOPBACK(IA6_IN6(ia)) &&
-		    !IN6_ARE_ADDR_EQUAL(IA6_MASKIN6(ia), in6mask128))
+		    !IN6_ARE_ADDR_EQUAL(IA6_MASKIN6(ia), &in6mask128))
 			log(LOG_NOTICE, "in6_unlink_ifa: interface address "
 			    "%s has no prefix\n", ip6_sprintf(IA6_IN6(ia)));
 	} else {
