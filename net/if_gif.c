@@ -149,7 +149,6 @@ gif_start(struct ifnet *ifp)
 	struct gif_softc *sc = (struct gif_softc*)ifp;
 	struct mbuf *m;
 	int s;
-	sa_family_t family;
 
 	while (1) {
 		s = splnet();
@@ -166,9 +165,6 @@ gif_start(struct ifnet *ifp)
 			m_freem(m);
 			continue;
 		}
-
-		/* get tunnel address family */
-		family = sc->gif_psrc->sa_family;
 
 		/*
 		 * Check if the packet is coming via bridge and needs
