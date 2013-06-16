@@ -676,7 +676,7 @@ gif_checkloop(struct ifnet *ifp, struct mbuf *m)
 	 */
 	for (mtag = m_tag_find(m, PACKET_TAG_GIF, NULL); mtag;
 	    mtag = m_tag_find(m, PACKET_TAG_GIF, mtag)) {
-		if (*(struct ifnet **)(mtag + 1) != ifp) {
+		if (*(struct ifnet **)(mtag + 1) == ifp) {
 			log(LOG_NOTICE, "gif_output: "
 			    "recursively called too many times\n");
 			m_freem(m);
