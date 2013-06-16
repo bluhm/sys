@@ -104,7 +104,6 @@ struct	in6_ifaddr {
 	struct	sockaddr_in6 ia_net;	/* network number of interface */
 	struct	sockaddr_in6 ia_dstaddr; /* space for destination addr */
 	struct	sockaddr_in6 ia_prefixmask; /* prefix mask */
-	u_int32_t ia_plen;		/* prefix length */
 	TAILQ_ENTRY(in6_ifaddr) ia_list;	/* list of IP6 addresses */
 	LIST_HEAD(in6_multihead, in6_multi) ia6_multiaddrs;
 					/* list of multicast addresses */
