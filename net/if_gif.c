@@ -290,7 +290,6 @@ gif_output(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst,
 	struct gif_softc *sc = (struct gif_softc*)ifp;
 	int error = 0;
 	int s;
-	sa_family_t family = dst->sa_family;
 
 	if (!(ifp->if_flags & IFF_UP) ||
 	    sc->gif_psrc == NULL || sc->gif_pdst == NULL ||
@@ -312,12 +311,12 @@ gif_output(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst,
 	switch (sc->gif_psrc->sa_family) {
 #ifdef INET
 	case AF_INET:
-		error = in_gif_output(ifp, family, &m);
+		error = in_gif_output(ifp, dst->sa_family, &m);
 		break;
 #endif
 #ifdef INET6
 	case AF_INET6:
-		error = in6_gif_output(ifp, family, &m);
+		error = in6_gif_output(ifp, dst->sa_family, &m);
 		break;
 #endif
 	default:
