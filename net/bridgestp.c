@@ -1,4 +1,4 @@
-/*	$OpenBSD: bridgestp.c,v 1.42 2012/10/05 17:17:04 camield Exp $	*/
+/*	$OpenBSD: bridgestp.c,v 1.44 2013/06/20 12:03:40 mpi Exp $	*/
 
 /*
  * Copyright (c) 2000 Jason L. Wright (jason@thought.net)

@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_spppsubr.c,v 1.102 2013/05/31 19:16:52 mpi Exp $	*/
+/*	$OpenBSD: if_spppsubr.c,v 1.104 2013/06/20 12:03:40 mpi Exp $	*/
 /*
  * Synchronous PPP/Cisco link level subroutines.
  * Keepalive protocol implemented in both Cisco and PPP modes.
