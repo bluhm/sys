@@ -613,20 +613,20 @@ findpcb:
 #endif
 	}
 	if (inp == NULL) {
-		int	inpl_flags = 0;
+		int	inpl_reverse = 0;
 		if (m->m_pkthdr.pf.flags & PF_TAG_TRANSLATE_LOCALHOST)
-			inpl_flags = INPLOOKUP_WILDCARD;
+			inpl_reverse = 1;
 		++tcpstat.tcps_pcbhashmiss;
 		switch (af) {
 #ifdef INET6
 		case AF_INET6:
 			inp = in6_pcblookup_listen(&tcbtable,
-			    &ip6->ip6_dst, th->th_dport, inpl_flags, m);
+			    &ip6->ip6_dst, th->th_dport, inpl_reverse, m);
 			break;
 #endif /* INET6 */
 		case AF_INET:
 			inp = in_pcblookup_listen(&tcbtable,
-			    ip->ip_dst, th->th_dport, inpl_flags, m,
+			    ip->ip_dst, th->th_dport, inpl_reverse, m,
 			    m->m_pkthdr.rdomain);
 			break;
 		}
