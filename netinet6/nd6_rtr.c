@@ -904,8 +904,7 @@ purge_detached(struct ifnet *ifp)
 		    !LIST_EMPTY(&pr->ndpr_advrtrs)))
 			continue;
 
-		for (ifa = ifp->if_addrlist.tqh_first; ifa; ifa = ifa_next) {
-			ifa_next = ifa->ifa_list.tqe_next;
+		TAILQ_FOREACH_SAFE(ifa, &ifp->if_addrlist, ifa_list, ifa_next) {
 			if (ifa->ifa_addr->sa_family != AF_INET6)
 				continue;
 			ia = ifatoia6(ifa);
