@@ -890,9 +890,7 @@ purge_detached(struct ifnet *ifp)
 	struct in6_ifaddr *ia;
 	struct ifaddr *ifa, *ifa_next;
 
-	for (pr = nd_prefix.lh_first; pr; pr = pr_next) {
-		pr_next = pr->ndpr_next;
-
+	LIST_FOREACH_SAFE(pr, &nd_prefix, ndpr_entry, pr_next) {
 		/*
 		 * This function is called when we need to make more room for
 		 * new prefixes rather than keeping old, possibly stale ones.

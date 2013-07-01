@@ -270,8 +270,6 @@ struct nd_prefix {
 	int	ndpr_refcnt;	/* reference counter from addresses */
 };
 
-#define ndpr_next		ndpr_entry.le_next
-
 #define ndpr_raf		ndpr_flags
 #define ndpr_raf_onlink		ndpr_flags.onlink
 #define ndpr_raf_auto		ndpr_flags.autonomous
