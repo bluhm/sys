@@ -1,4 +1,4 @@
-/*	$OpenBSD: ipmi.c,v 1.68 2013/04/10 01:35:55 guenther Exp $ */
+/*	$OpenBSD: ipmi.c,v 1.69 2013/07/03 15:10:57 bluhm Exp $ */
 
 /*
  * Copyright (c) 2005 Jordan Hargrave
