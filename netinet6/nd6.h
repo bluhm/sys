@@ -275,32 +275,6 @@ struct nd_prefix {
 #define ndpr_raf_auto		ndpr_flags.autonomous
 #define ndpr_raf_router		ndpr_flags.router
 
-/*
- * Message format for use in obtaining information about prefixes
- * from inet6 sysctl function
- */
-struct inet6_ndpr_msghdr {
-	u_short	inpm_msglen;	/* to skip over non-understood messages */
-	u_char	inpm_version;	/* future binary compatibility */
-	u_char	inpm_type;	/* message type */
-	struct in6_addr inpm_prefix;
-	u_long	prm_vltim;
-	u_long	prm_pltime;
-	u_long	prm_expire;
-	u_long	prm_preferred;
-	struct in6_prflags prm_flags;
-	u_short	prm_index;	/* index for associated ifp */
-	u_char	prm_plen;	/* length of prefix in bits */
-};
-
-#define prm_raf_onlink		prm_flags.prf_ra.onlink
-#define prm_raf_auto		prm_flags.prf_ra.autonomous
-
-#define prm_statef_onlink	prm_flags.prf_state.onlink
-
-#define prm_rrf_decrvalid	prm_flags.prf_rr.decrvalid
-#define prm_rrf_decrprefd	prm_flags.prf_rr.decrprefd
-
 struct nd_pfxrouter {
 	LIST_ENTRY(nd_pfxrouter) pfr_entry;
 	struct nd_defrouter *router;
