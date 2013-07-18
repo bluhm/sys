@@ -1,4 +1,4 @@
-/*	$OpenBSD: pfvar.h,v 1.384 2013/06/26 09:12:39 henning Exp $ */
+/*	$OpenBSD: pfvar.h,v 1.388 2013/07/05 13:07:58 blambert Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -1053,14 +1053,14 @@ struct pfr_addr {
 #define	pfra_ip6addr	pfra_u._pfra_ip6addr
 
 enum { PFR_DIR_IN, PFR_DIR_OUT, PFR_DIR_MAX };
-enum { PFR_OP_BLOCK, PFR_OP_PASS, PFR_OP_ADDR_MAX, PFR_OP_TABLE_MAX };
+enum { PFR_OP_BLOCK, PFR_OP_MATCH, PFR_OP_PASS, PFR_OP_ADDR_MAX, PFR_OP_TABLE_MAX };
 #define PFR_OP_XPASS	PFR_OP_ADDR_MAX
 
 struct pfr_astats {
 	struct pfr_addr	 pfras_a;
 	u_int64_t	 pfras_packets[PFR_DIR_MAX][PFR_OP_ADDR_MAX];
 	u_int64_t	 pfras_bytes[PFR_DIR_MAX][PFR_OP_ADDR_MAX];
-	long		 pfras_tzero;
+	time_t		 pfras_tzero;
 };
 
 enum { PFR_REFCNT_RULE, PFR_REFCNT_ANCHOR, PFR_REFCNT_MAX };
@@ -1071,7 +1071,7 @@ struct pfr_tstats {
 	u_int64_t	 pfrts_bytes[PFR_DIR_MAX][PFR_OP_TABLE_MAX];
 	u_int64_t	 pfrts_match;
 	u_int64_t	 pfrts_nomatch;
-	long		 pfrts_tzero;
+	time_t		 pfrts_tzero;
 	int		 pfrts_cnt;
 	int		 pfrts_refcnt[PFR_REFCNT_MAX];
 };
@@ -1090,7 +1090,7 @@ struct _pfr_kentry {
 	union sockaddr_union	 _pfrke_sa;
 	SLIST_ENTRY(pfr_kentry)	 _pfrke_workq;
 	struct pfr_kcounters	*_pfrke_counters;
-	long			 _pfrke_tzero;
+	time_t			 _pfrke_tzero;
 	u_int8_t		 _pfrke_af;
 	u_int8_t		 _pfrke_net;
 	u_int8_t		 _pfrke_flags;
@@ -1197,7 +1197,7 @@ struct pfi_kif {
 	RB_ENTRY(pfi_kif)		 pfik_tree;
 	u_int64_t			 pfik_packets[2][2][2];
 	u_int64_t			 pfik_bytes[2][2][2];
-	u_int32_t			 pfik_tzero;
+	time_t				 pfik_tzero;
 	int				 pfik_flags;
 	int				 pfik_flags_new;
 	void				*pfik_ah_cookie;
@@ -1405,10 +1405,10 @@ struct pf_status {
 	u_int64_t	pcounters[2][2][3];
 	u_int64_t	bcounters[2][2];
 	u_int64_t	stateid;
+	time_t		since;
 	u_int32_t	running;
 	u_int32_t	states;
 	u_int32_t	src_nodes;
-	u_int32_t	since;
 	u_int32_t	debug;
 	u_int32_t	hostid;
 	u_int32_t	reass;			/* reassembly */
@@ -1848,8 +1848,8 @@ void	pf_route6(struct mbuf **, struct pf_rule *, int,
 
 void	pfr_initialize(void);
 int	pfr_match_addr(struct pfr_ktable *, struct pf_addr *, sa_family_t);
-void	pfr_update_stats(struct pfr_ktable *, struct pf_addr *, sa_family_t,
-	    u_int64_t, int, int, int);
+void	pfr_update_stats(struct pfr_ktable *, struct pf_addr *,
+	    struct pf_pdesc *, int, int);
 int	pfr_pool_get(struct pf_pool *, struct pf_addr **,
 	    struct pf_addr **, sa_family_t);
 int	pfr_states_increase(struct pfr_ktable *, struct pf_addr *, int);
@@ -1869,7 +1869,7 @@ int	pfr_get_tstats(struct pfr_table *, struct pfr_tstats *, int *, int);
 int	pfr_clr_tstats(struct pfr_table *, int, int *, int);
 int	pfr_set_tflags(struct pfr_table *, int, int, int, int *, int *, int);
 int	pfr_clr_addrs(struct pfr_table *, int *, int);
-int	pfr_insert_kentry(struct pfr_ktable *, struct pfr_addr *, long);
+int	pfr_insert_kentry(struct pfr_ktable *, struct pfr_addr *, time_t);
 int	pfr_add_addrs(struct pfr_table *, struct pfr_addr *, int, int *,
 	    int);
 int	pfr_del_addrs(struct pfr_table *, struct pfr_addr *, int, int *,
