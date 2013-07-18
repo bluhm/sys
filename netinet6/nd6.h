@@ -141,8 +141,8 @@ struct	in6_oprlist {
 		struct	in6_addr prefix;
 		struct	prf_ra raflags;
 		time_t	expire;
-		u_long	vltime;
-		u_long	pltime;
+		u_int32_t vltime;
+		u_int32_t pltime;
 		u_short	if_index;
 		u_short	advrtrs; /* number of advertisement routers */
 		u_char	prefixlen;
@@ -255,12 +255,12 @@ struct nd_prefix {
 	struct sockaddr_in6 ndpr_prefix;	/* prefix */
 	struct in6_addr ndpr_mask; /* netmask derived from the prefix */
 
-	u_int32_t ndpr_vltime;	/* advertised valid lifetime */
-	u_int32_t ndpr_pltime;	/* advertised preferred lifetime */
-
 	time_t ndpr_expire;	/* expiration time of the prefix */
 	time_t ndpr_preferred;	/* preferred time of the prefix */
 	time_t ndpr_lastupdate; /* reception time of last advertisement */
+
+	u_int32_t ndpr_vltime;	/* advertised valid lifetime */
+	u_int32_t ndpr_pltime;	/* advertised preferred lifetime */
 
 	struct prf_ra ndpr_flags;
 	u_int32_t ndpr_stateflags; /* actual state flags */
