@@ -48,10 +48,9 @@
  */
 struct rt_kmetrics {
 	u_int64_t	rmx_pksent;	/* packets sent using this route */
+	int64_t		rmx_expire;	/* lifetime for route, e.g. redirect */
 	u_int		rmx_locks;	/* Kernel must leave these values */
 	u_int		rmx_mtu;	/* MTU for this path */
-	u_int		rmx_expire;	/* lifetime for route, e.g. redirect */
-	u_int		rmx_pad;
 };
 
 /*
@@ -59,9 +58,9 @@ struct rt_kmetrics {
  */
 struct rt_metrics {
 	u_int64_t	rmx_pksent;	/* packets sent using this route */
+	int64_t		rmx_expire;	/* lifetime for route, e.g. redirect */
 	u_int		rmx_locks;	/* Kernel must leave these values */
 	u_int		rmx_mtu;	/* MTU for this path */
-	u_int		rmx_expire;	/* lifetime for route, e.g. redirect */
 	u_int		rmx_refcnt;	/* # references hold */
 	/* some apps may still need these no longer used metrics */
 	u_int		rmx_hopcount;	/* max hops expected */
@@ -70,6 +69,7 @@ struct rt_metrics {
 	u_int		rmx_ssthresh;	/* outbound gateway buffer limit */
 	u_int		rmx_rtt;	/* estimated round trip time */
 	u_int		rmx_rttvar;	/* estimated rtt variance */
+	u_int		rmx_pad;
 };
 
 /*
