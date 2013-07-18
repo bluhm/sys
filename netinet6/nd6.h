@@ -107,10 +107,10 @@ struct nd_ifinfo {
 struct in6_nbrinfo {
 	char ifname[IFNAMSIZ];	/* if name, e.g. "en0" */
 	struct in6_addr addr;	/* IPv6 address of the neighbor */
+	time_t	expire;		/* lifetime for NDP state transition */
 	long	asked;		/* number of queries already sent for this addr */
 	int	isrouter;	/* if it acts as a router */
 	int	state;		/* reachability state */
-	int	expire;		/* lifetime for NDP state transition */
 };
 
 #define DRLSTSIZ 10
@@ -119,19 +119,19 @@ struct	in6_drlist {
 	char ifname[IFNAMSIZ];
 	struct {
 		struct	in6_addr rtaddr;
-		u_char	flags;
+		time_t	expire;
 		u_short	rtlifetime;
-		u_long	expire;
-		u_short if_index;
+		u_short	if_index;
+		u_char	flags;
 	} defrouter[DRLSTSIZ];
 };
 
 struct	in6_defrouter {
 	struct	sockaddr_in6 rtaddr;
-	u_char	flags;
+	time_t	expire;
 	u_short	rtlifetime;
-	u_long	expire;
-	u_short if_index;
+	u_short	if_index;
+	u_char	flags;
 };
 
 #ifdef _KERNEL
@@ -156,30 +156,30 @@ struct	in6_prlist {
 	char ifname[IFNAMSIZ];
 	struct {
 		struct	in6_addr prefix;
-		struct prf_ra raflags;
-		u_char	prefixlen;
-		u_char	origin;
+		struct	prf_ra raflags;
+		time_t	expire;
 		u_int32_t vltime;
 		u_int32_t pltime;
-		time_t expire;
-		u_short if_index;
-		u_short advrtrs; /* number of advertisement routers */
+		u_short	if_index;
+		u_short	advrtrs; /* number of advertisement routers */
+		u_char	prefixlen;
+		u_char	origin;
 		struct	in6_addr advrtr[DRLSTSIZ]; /* XXX: explicit limit */
 	} prefix[PRLSTSIZ];
 };
 
 struct in6_prefix {
 	struct	sockaddr_in6 prefix;
-	struct prf_ra raflags;
-	u_char	prefixlen;
-	u_char	origin;
+	struct	prf_ra raflags;
+	time_t	expire;
 	u_int32_t vltime;
 	u_int32_t pltime;
-	time_t expire;
 	u_int32_t flags;
-	int refcnt;
-	u_short if_index;
-	u_short advrtrs; /* number of advertisement routers */
+	int	refcnt;
+	u_short	if_index;
+	u_short	advrtrs; /* number of advertisement routers */
+	u_char	prefixlen;
+	u_char	origin;
 	/* struct sockaddr_in6 advrtr[] */
 };
 
