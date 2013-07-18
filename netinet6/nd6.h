@@ -47,10 +47,10 @@ struct	llinfo_nd6 {
 	struct	rtentry *ln_rt;
 	struct	mbuf *ln_hold;	/* last packet until resolved/timeout */
 	time_t	ln_expire;	/* lifetime for NDP state transition */
-	long	ln_asked;	/* number of queries already sent for this addr */
+	long	ln_asked;	/* number of queries already sent for addr */
+	int	ln_byhint;	/* # of times we made it reachable by UL hint */
 	short	ln_state;	/* reachability state */
 	short	ln_router;	/* 2^0: ND6 router bit */
-	int	ln_byhint;	/* # of times we made it reachable by UL hint */
 
 	long	ln_ntick;
 	struct	timeout ln_timer_ch;
@@ -108,7 +108,7 @@ struct in6_nbrinfo {
 	char ifname[IFNAMSIZ];	/* if name, e.g. "en0" */
 	struct in6_addr addr;	/* IPv6 address of the neighbor */
 	time_t	expire;		/* lifetime for NDP state transition */
-	long	asked;		/* number of queries already sent for this addr */
+	long	asked;		/* number of queries already sent for addr */
 	int	isrouter;	/* if it acts as a router */
 	int	state;		/* reachability state */
 };
