@@ -46,14 +46,14 @@ struct	llinfo_nd6 {
 	struct	llinfo_nd6 *ln_prev;
 	struct	rtentry *ln_rt;
 	struct	mbuf *ln_hold;	/* last packet until resolved/timeout */
+	time_t	ln_expire;	/* lifetime for NDP state transition */
 	long	ln_asked;	/* number of queries already sent for this addr */
-	u_long	ln_expire;	/* lifetime for NDP state transition */
 	short	ln_state;	/* reachability state */
 	short	ln_router;	/* 2^0: ND6 router bit */
 	int	ln_byhint;	/* # of times we made it reachable by UL hint */
 
 	long	ln_ntick;
-	struct timeout ln_timer_ch;
+	struct	timeout ln_timer_ch;
 };
 
 #define ND6_LLINFO_PURGE	-3
@@ -139,14 +139,14 @@ struct	in6_oprlist {
 	char ifname[IFNAMSIZ];
 	struct {
 		struct	in6_addr prefix;
-		struct prf_ra raflags;
+		struct	prf_ra raflags;
+		time_t	expire;
+		u_long	vltime;
+		u_long	pltime;
+		u_short	if_index;
+		u_short	advrtrs; /* number of advertisement routers */
 		u_char	prefixlen;
 		u_char	origin;
-		u_long vltime;
-		u_long pltime;
-		u_long expire;
-		u_short if_index;
-		u_short advrtrs; /* number of advertisement routers */
 		struct	in6_addr advrtr[DRLSTSIZ]; /* XXX: explicit limit */
 	} prefix[PRLSTSIZ];
 };
@@ -242,11 +242,11 @@ TAILQ_HEAD(nd_drhead, nd_defrouter);
 struct	nd_defrouter {
 	TAILQ_ENTRY(nd_defrouter) dr_entry;
 	struct	in6_addr rtaddr;
-	u_char	flags;		/* flags on RA message */
-	u_short	rtlifetime;
-	u_long	expire;
 	struct  ifnet *ifp;
+	time_t	expire;
 	int	installed;	/* is installed into kernel routing table */
+	u_short	rtlifetime;
+	u_char	flags;		/* flags on RA message */
 };
 
 struct nd_prefix {
