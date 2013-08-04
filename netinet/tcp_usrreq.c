@@ -498,9 +498,6 @@ tcp_ctloutput(op, so, level, optname, mp)
 			(void) m_free(*mp);
 		return (ECONNRESET);
 	}
-#ifdef INET6
-	tp = intotcpcb(inp);
-#endif /* INET6 */
 	if (level != IPPROTO_TCP) {
 		switch (so->so_proto->pr_domain->dom_family) {
 #ifdef INET6
@@ -518,9 +515,7 @@ tcp_ctloutput(op, so, level, optname, mp)
 		splx(s);
 		return (error);
 	}
-#ifndef INET6
 	tp = intotcpcb(inp);
-#endif /* !INET6 */
 
 	switch (op) {
 
