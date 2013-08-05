@@ -1831,7 +1831,6 @@ in6_leavegroup_task(void *arg1, void *arg2)
 
 	in6_delmulti(imm->i6mm_maddr);
 	free(imm,  M_IPMADDR);
-	return 0;
 }
 
 /*
