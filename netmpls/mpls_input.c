@@ -22,7 +22,6 @@
 #include <sys/mbuf.h>
 #include <sys/systm.h>
 #include <sys/socket.h>
-#include <sys/workq.h>
 
 #include <net/if.h>
 #include <net/if_types.h>
