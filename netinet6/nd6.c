@@ -44,6 +44,7 @@
 #include <sys/ioctl.h>
 #include <sys/syslog.h>
 #include <sys/queue.h>
+#include <sys/workq.h>
 #include <dev/rndvar.h>
 
 #include <net/if.h>

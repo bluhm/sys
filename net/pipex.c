@@ -38,6 +38,7 @@
 #include <sys/time.h>
 #include <sys/timeout.h>
 #include <sys/kernel.h>
+#include <sys/workq.h>
 
 #include <net/if.h>
 #include <net/if_types.h>

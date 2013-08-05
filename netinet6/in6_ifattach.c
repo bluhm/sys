@@ -37,6 +37,7 @@
 #include <sys/sockio.h>
 #include <sys/kernel.h>
 #include <sys/syslog.h>
+#include <sys/workq.h>
 
 #include <crypto/md5.h>
 

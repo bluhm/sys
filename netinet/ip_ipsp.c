@@ -47,14 +47,13 @@
 #include <sys/proc.h>
 #include <sys/sysctl.h>
 #include <sys/timeout.h>
+#include <sys/workq.h>
 
 #include <net/if.h>
 #include <net/route.h>
-
 #if NPF > 0
 #include <net/pfvar.h>
 #endif
-
 #if NPFSYNC > 0
 #include <net/if_pfsync.h>
 #endif

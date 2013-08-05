@@ -45,6 +45,7 @@
 #include <sys/syslog.h>
 #include <sys/sysctl.h>
 #include <sys/pool.h>
+#include <sys/workq.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>

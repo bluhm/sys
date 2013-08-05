@@ -43,6 +43,7 @@
 #include <sys/time.h>
 #include <sys/kernel.h>
 #include <sys/syslog.h>
+#include <sys/workq.h>
 
 #include <net/if.h>
 #include <net/if_enc.h>

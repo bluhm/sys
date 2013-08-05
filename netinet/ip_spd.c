@@ -29,6 +29,7 @@
 #include <sys/protosw.h>
 #include <sys/pool.h>
 #include <sys/timeout.h>
+#include <sys/workq.h>
 
 #include <net/if.h>
 #include <net/route.h>

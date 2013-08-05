@@ -78,6 +78,7 @@
 #include <sys/socket.h>
 #include <sys/proc.h>
 #include <sys/sysctl.h>
+#include <sys/workq.h>
 
 #include <net/if.h>
 #include <net/route.h>

@@ -45,6 +45,7 @@
 #include <sys/ioctl.h>
 #include <sys/errno.h>
 #include <sys/kernel.h>
+#include <sys/workq.h>
 
 #include <net/if.h>
 #include <net/if_types.h>

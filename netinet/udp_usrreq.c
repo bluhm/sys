@@ -76,6 +76,7 @@
 #include <sys/socketvar.h>
 #include <sys/proc.h>
 #include <sys/sysctl.h>
+#include <sys/workq.h>
 
 #include <net/if.h>
 #include <net/if_media.h>

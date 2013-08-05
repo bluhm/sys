@@ -79,6 +79,7 @@
 #include <sys/proc.h>
 #include <sys/domain.h>
 #include <sys/pool.h>
+#include <sys/workq.h>
 
 #include <net/if.h>
 #include <net/route.h>

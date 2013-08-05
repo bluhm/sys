@@ -71,6 +71,7 @@
 #include <sys/socket.h>
 #include <sys/protosw.h>
 #include <sys/syslog.h>
+#include <sys/workq.h>
 #include <dev/rndvar.h>
 
 #include <net/if.h>

@@ -38,7 +38,6 @@
 #include <net/if.h>
 
 #include <netinet/in.h>
-#include <netinet6/in6_var.h>
 #include <netinet/ip6.h>
 #include <netinet6/ip6_var.h>
 

@@ -77,6 +77,7 @@
 #include <sys/socket.h>
 #include <sys/socketvar.h>
 #include <sys/kernel.h>
+#include <sys/workq.h>
 
 #include <net/route.h>
 #include <net/if.h>

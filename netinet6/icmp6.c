@@ -75,6 +75,7 @@
 #include <sys/kernel.h>
 #include <sys/syslog.h>
 #include <sys/domain.h>
+#include <sys/workq.h>
 
 #include <net/if.h>
 #include <net/route.h>

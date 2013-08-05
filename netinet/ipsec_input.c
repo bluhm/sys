@@ -45,6 +45,7 @@
 #include <sys/sysctl.h>
 #include <sys/kernel.h>
 #include <sys/timeout.h>
+#include <sys/workq.h>
 
 #include <net/if.h>
 #include <net/netisr.h>

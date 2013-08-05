@@ -80,6 +80,7 @@
 #include <sys/domain.h>
 #include <sys/kernel.h>
 #include <sys/pool.h>
+#include <sys/workq.h>
 
 #include <dev/rndvar.h>
 

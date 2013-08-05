@@ -52,6 +52,7 @@
 #include <sys/proc.h>
 #include <sys/rwlock.h>
 #include <sys/syslog.h>
+#include <sys/workq.h>
 
 #include <crypto/md5.h>
 

@@ -67,6 +67,7 @@
 #include <sys/kernel.h>
 #include <sys/domain.h>
 #include <sys/mbuf.h>
+#include <sys/workq.h>
 
 #include <net/if.h>
 #include <net/radix.h>

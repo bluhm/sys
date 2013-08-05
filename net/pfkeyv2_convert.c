@@ -100,9 +100,10 @@
 #include <sys/kernel.h>
 #include <sys/socket.h>
 #include <sys/timeout.h>
+#include <sys/workq.h>
+
 #include <net/route.h>
 #include <net/if.h>
-
 #if NPF > 0
 #include <net/pfvar.h>
 #endif

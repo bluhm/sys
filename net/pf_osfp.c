@@ -25,6 +25,7 @@
 #endif /* _KERNEL */
 #include <sys/mbuf.h>
 #include <sys/syslog.h>
+#include <sys/workq.h>
 
 #include <netinet/in.h>
 #include <netinet/in_systm.h>

@@ -42,6 +42,7 @@
 #include <sys/socketvar.h>
 #include <sys/proc.h>
 #include <sys/kernel.h>
+#include <sys/workq.h>
 
 #include <net/if.h>
 #include <net/if_enc.h>

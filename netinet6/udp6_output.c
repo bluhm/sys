@@ -71,6 +71,7 @@
 #include <sys/stat.h>
 #include <sys/systm.h>
 #include <sys/syslog.h>
+#include <sys/workq.h>
 
 #include <net/if.h>
 #include <net/route.h>

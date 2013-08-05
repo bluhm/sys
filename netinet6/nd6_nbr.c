@@ -43,6 +43,7 @@
 #include <sys/syslog.h>
 #include <sys/queue.h>
 #include <sys/timeout.h>
+#include <sys/workq.h>
 
 #include <net/if.h>
 #include <net/if_types.h>

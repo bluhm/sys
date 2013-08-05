@@ -94,6 +94,7 @@
 #include <sys/ioctl.h>
 #include <sys/syslog.h>
 #include <sys/sysctl.h>
+#include <sys/workq.h>
 
 #include <net/if.h>
 #include <net/route.h>

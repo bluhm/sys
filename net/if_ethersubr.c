@@ -86,6 +86,7 @@ didn't get a copy, you may request one from <license@ipv6.nrl.navy.mil>.
 #include <sys/errno.h>
 #include <sys/syslog.h>
 #include <sys/timeout.h>
+#include <sys/workq.h>
 
 
 #include <net/if.h>
