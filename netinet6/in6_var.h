@@ -486,6 +486,7 @@ do {									\
  * belongs to.
  */
 struct in6_multi_mship {
+	struct	workq_task wqt;		/* Allow network driver to sleep */
 	struct	in6_multi *i6mm_maddr;	/* Multicast address pointer */
 	LIST_ENTRY(in6_multi_mship) i6mm_chain;  /* multicast options chain */
 };

@@ -124,6 +124,7 @@ int in6_lifaddr_ioctl(struct socket *, u_long, caddr_t, struct ifnet *,
 int in6_ifinit(struct ifnet *, struct in6_ifaddr *, int);
 void in6_unlink_ifa(struct in6_ifaddr *, struct ifnet *);
 void in6_ifloop_request(int, struct ifaddr *);
+void in6_leavegroup_task(void *, void *);
 
 const struct sockaddr_in6 sa6_any = {
 	sizeof(sa6_any), AF_INET6, 0, 0, IN6ADDR_ANY_INIT, 0
@@ -1816,7 +1817,19 @@ in6_leavegroup(struct in6_multi_mship *imm)
 {
 
 	if (imm->i6mm_maddr)
-		in6_delmulti(imm->i6mm_maddr);
+		workq_queue_task(NULL, &imm->wqt, 0, in6_leavegroup_task, imm,
+		    NULL);
+	else 
+		free(imm,  M_IPMADDR);
+	return 0;
+}
+
+void
+in6_leavegroup_task(void *arg1, void *arg2)
+{
+	struct in6_multi_mship *imm = arg1;
+
+	in6_delmulti(imm->i6mm_maddr);
 	free(imm,  M_IPMADDR);
 	return 0;
 }
