@@ -185,6 +185,9 @@ panic(const char *fmt, ...)
 	int bootopt;
 	va_list ap;
 
+	/* do not trigger assertions, we know that we are inconsistent */
+	splassert_ctl = 0;
+
 	bootopt = RB_AUTOBOOT | RB_DUMP;
 	va_start(ap, fmt);
 	if (panicstr)
