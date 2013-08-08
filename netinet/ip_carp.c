@@ -1969,9 +1969,11 @@ carp_addr_updated(void *v)
 	TAILQ_FOREACH(ifa, &sc->sc_if.if_addrlist, ifa_list) {
 		if (ifa->ifa_addr->sa_family == AF_INET)
 			new_naddrs++;
+#ifdef INET6
 		else if (ifa->ifa_addr->sa_family == AF_INET6 &&
 		    !IN6_IS_ADDR_LINKLOCAL(&ifatoia6(ifa)->ia_addr.sin6_addr))
 			new_naddrs6++;
+#endif /* INET6 */
 	}
 
 	/* We received address changes from if_addrhooks callback */
