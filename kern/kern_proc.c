@@ -396,8 +396,8 @@ proc_printit(struct proc *p, const char *modif,
 		pst = pstat[(int)p->p_stat - 1];
 
 	(*pr)("PROC (%s) pid=%d stat=%s\n", p->p_comm, p->p_pid, pst);
-	(*pr)("process flags=%b\n", p->p_p->ps_flags, P_BITS);
-	(*pr)("proc flags=%b\n", p->p_flag, P_BITS);
+	(*pr)("    process flags=%b\n", p->p_p->ps_flags, P_BITS);
+	(*pr)("    proc    flags=%b\n", p->p_flag, P_BITS);
 	(*pr)("    pri=%u, usrpri=%u, nice=%d\n",
 	    p->p_priority, p->p_usrpri, p->p_p->ps_nice);
 	(*pr)("    forw=%p, list=%p,%p\n",
