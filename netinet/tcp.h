@@ -127,5 +127,6 @@ struct tcphdr {
 #define	TCP_MAXSEG		0x02   /* set maximum segment size */
 #define	TCP_MD5SIG		0x04   /* enable TCP MD5 signature option */
 #define	TCP_SACK_ENABLE		0x08   /* enable SACKs (if disabled by def.) */
+#define	TCP_NOPUSH		0x10   /* don't push last block of write */
 
 #endif /* _NETINET_TCP_H_ */

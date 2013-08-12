@@ -415,8 +415,9 @@ again:
 	if (len) {
 		if (len == txmaxseg)
 			goto send;
-		if ((idle || tp->t_flags & TF_NODELAY) &&
-		    len + off >= so->so_snd.sb_cc && !soissending(so))
+		if ((idle || (tp->t_flags & TF_NODELAY)) &&
+		    len + off >= so->so_snd.sb_cc && !soissending(so) &&
+		    (tp->t_flags & TF_NOPUSH) == 0)
 			goto send;
 		if (tp->t_force)
 			goto send;
