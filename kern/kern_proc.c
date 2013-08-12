@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_proc.c,v 1.51 2013/08/08 23:25:06 syl Exp $	*/
+/*	$OpenBSD: kern_proc.c,v 1.52 2013/08/12 20:43:28 bluhm Exp $	*/
 /*	$NetBSD: kern_proc.c,v 1.14 1996/02/09 18:59:41 christos Exp $	*/
 
 /*
