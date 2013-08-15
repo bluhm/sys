@@ -361,8 +361,8 @@ in6_control(struct socket *so, u_long cmd, caddr_t data, struct ifnet *ifp,
 		if (!privileged)
 			return (EPERM);
 		/* FALLTHROUGH */
-	case OSIOCGIFINFO_IN6:
 	case SIOCGIFINFO_IN6:
+	case SIOCGNBRINFO_IN6:
 		return (nd6_ioctl(cmd, data, ifp));
 	}
 
