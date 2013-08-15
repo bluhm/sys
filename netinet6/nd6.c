@@ -1238,14 +1238,10 @@ nd6_rtrequest(int req, struct rtentry *rt, struct rt_addrinfo *info)
 int
 nd6_ioctl(u_long cmd, caddr_t data, struct ifnet *ifp)
 {
-	struct in6_drlist *drl = (struct in6_drlist *)data;
-	struct in6_oprlist *oprl = (struct in6_oprlist *)data;
 	struct in6_ndireq *ndi = (struct in6_ndireq *)data;
 	struct in6_nbrinfo *nbi = (struct in6_nbrinfo *)data;
-	struct nd_defrouter *dr;
-	struct nd_prefix *pr;
 	struct rtentry *rt;
-	int i = 0, error = 0;
+	error = 0;
 	int s;
 
 	switch (cmd) {
