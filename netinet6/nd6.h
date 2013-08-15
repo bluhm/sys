@@ -113,6 +113,7 @@ struct in6_nbrinfo {
 	int	state;		/* reachability state */
 };
 
+#ifdef _KERNEL
 #define DRLSTSIZ 10
 #define PRLSTSIZ 10
 struct	in6_drlist {
@@ -125,6 +126,7 @@ struct	in6_drlist {
 		u_char	flags;
 	} defrouter[DRLSTSIZ];
 };
+#endif
 
 struct	in6_defrouter {
 	struct	sockaddr_in6 rtaddr;
@@ -150,7 +152,6 @@ struct	in6_oprlist {
 		struct	in6_addr advrtr[DRLSTSIZ]; /* XXX: explicit limit */
 	} prefix[PRLSTSIZ];
 };
-#endif
 
 struct	in6_prlist {
 	char ifname[IFNAMSIZ];
@@ -167,6 +168,7 @@ struct	in6_prlist {
 		struct	in6_addr advrtr[DRLSTSIZ]; /* XXX: explicit limit */
 	} prefix[PRLSTSIZ];
 };
+#endif
 
 struct in6_prefix {
 	struct	sockaddr_in6 prefix;
