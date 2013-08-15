@@ -400,11 +400,6 @@ struct	in6_rrenumreq {
 
 #define SIOCGIFAFLAG_IN6	_IOWR('i', 73, struct in6_ifreq)
 
-#ifdef _KERNEL
-#define SIOCGDRLST_IN6		_IOWR('i', 74, struct in6_drlist)
-#define SIOCGPRLST_IN6		_IOWR('i', 75, struct in6_prlist)
-#define OSIOCGIFINFO_IN6	_IOWR('i', 76, struct in6_ondireq)
-#endif
 #define SIOCGIFINFO_IN6		_IOWR('i', 108, struct in6_ndireq)
 #define SIOCSNDFLUSH_IN6	_IOWR('i', 77, struct in6_ifreq)
 #define SIOCGNBRINFO_IN6	_IOWR('i', 78, struct in6_nbrinfo)

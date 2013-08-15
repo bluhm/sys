@@ -1245,11 +1245,6 @@ nd6_ioctl(u_long cmd, caddr_t data, struct ifnet *ifp)
 	int s;
 
 	switch (cmd) {
-	case SIOCGDRLST_IN6:
-	case SIOCGPRLST_IN6:
-	case OSIOCGIFINFO_IN6:
-		error = EOPNOTSUPP;
-		break;
 	case SIOCGIFINFO_IN6:
 		ndi->ndi = *ND_IFINFO(ifp);
 		break;
