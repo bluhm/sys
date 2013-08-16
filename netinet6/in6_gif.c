@@ -78,8 +78,6 @@ in6_gif_output(struct ifnet *ifp, int family, struct mbuf **m0)
 	struct gif_softc *sc = (struct gif_softc*)ifp;
 	struct sockaddr_in6 *sin6_src = satosin6(sc->gif_psrc);
 	struct sockaddr_in6 *sin6_dst = satosin6(sc->gif_pdst);
-	struct tdb tdb;
-	struct xformsw xfs;
 	int error;
 	struct mbuf *m = *m0;
 
@@ -89,18 +87,6 @@ in6_gif_output(struct ifnet *ifp, int family, struct mbuf **m0)
 		m_freem(m);
 		return EAFNOSUPPORT;
 	}
-
-	/* setup dummy tdb.  it highly depends on ipip_output() code. */
-	bzero(&tdb, sizeof(tdb));
-	bzero(&xfs, sizeof(xfs));
-	tdb.tdb_src.sin6.sin6_family = AF_INET6;
-	tdb.tdb_src.sin6.sin6_len = sizeof(struct sockaddr_in6);
-	tdb.tdb_src.sin6.sin6_addr = sin6_src->sin6_addr;
-	tdb.tdb_dst.sin6.sin6_family = AF_INET6;
-	tdb.tdb_dst.sin6.sin6_len = sizeof(struct sockaddr_in6);
-	tdb.tdb_dst.sin6.sin6_addr = sin6_dst->sin6_addr;
-	tdb.tdb_xform = &xfs;
-	xfs.xf_type = -1;	/* not XF_IP4 */
 
 	switch (family) {
 #ifdef INET
@@ -132,15 +118,15 @@ in6_gif_output(struct ifnet *ifp, int family, struct mbuf **m0)
 	*m0 = NULL;
 #if NBRIDGE > 0
 	if (family == AF_LINK)
-		error = etherip_output(m, &tdb, m0, IPPROTO_ETHERIP);
+		error = etherip_output(m, sc->gif_tdb, m0, IPPROTO_ETHERIP);
 	else
 #endif /* NBRIDGE */
 #if MPLS
 	if (family == AF_MPLS)
-		error = etherip_output(m, &tdb, m0, IPPROTO_MPLS);
+		error = etherip_output(m, sc->gif_tdb, m0, IPPROTO_MPLS);
 	else
 #endif
-	error = ipip_output(m, &tdb, m0, 0, 0);
+	error = ipip_output(m, sc->gif_tdb, m0, 0, 0);
 	if (error)
 	        return error;
 	else if (*m0 == NULL)

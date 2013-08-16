@@ -51,11 +51,13 @@
 #include <netinet/ip.h>
 #include <netinet/ip_ether.h>
 #include <netinet/ip_var.h>
+#include <netinet/ip_ipsp.h>
 #endif	/* INET */
 
 #ifdef INET6
 #ifndef INET
 #include <netinet/in.h>
+#include <netinet/ip_ipsp.h>
 #endif
 #include <netinet6/in6_var.h>
 #include <netinet/ip6.h>
@@ -80,12 +82,18 @@ struct gif_softc_head gif_softc_list;
 struct if_clone gif_cloner =
     IF_CLONE_INITIALIZER("gif", gif_clone_create, gif_clone_destroy);
 
+struct xformsw gif_xfs;
+
 /* ARGSUSED */
 void
 gifattach(int count)
 {
 	LIST_INIT(&gif_softc_list);
 	if_clone_attach(&gif_cloner);
+
+	/* for dummy tdb. it highly depends on ipip_output() code. */
+	bzero(&gif_xfs, sizeof(gif_xfs));
+	gif_xfs.xf_type = -1;	/* not XF_IP4 */
 }
 
 int
@@ -97,6 +105,13 @@ gif_clone_create(struct if_clone *ifc, int unit)
 	sc = malloc(sizeof(*sc), M_DEVBUF, M_NOWAIT|M_ZERO);
 	if (!sc)
 		return (ENOMEM);
+
+	sc->gif_tdb = malloc(sizeof(*sc->gif_tdb), M_DEVBUF, M_NOWAIT|M_ZERO);
+	if (!sc->gif_tdb) {
+		free(sc, M_DEVBUF);
+		return (ENOMEM);
+	}
+	sc->gif_tdb->tdb_xform = &gif_xfs;
 
 	snprintf(sc->gif_if.if_xname, sizeof sc->gif_if.if_xname,
 	     "%s%d", ifc->ifc_name, unit);
@@ -140,6 +155,10 @@ gif_clone_destroy(struct ifnet *ifp)
 	if (sc->gif_pdst)
 		free((caddr_t)sc->gif_pdst, M_IFADDR);
 	sc->gif_pdst = NULL;
+
+	free(sc->gif_tdb, M_DEVBUF);
+	sc->gif_tdb = NULL;
+
 	free(sc, M_DEVBUF);
 	return (0);
 }
@@ -510,6 +529,11 @@ gif_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		sa = malloc(dst->sa_len, M_IFADDR, M_WAITOK);
 		bcopy((caddr_t)dst, (caddr_t)sa, dst->sa_len);
 		sc->gif_pdst = sa;
+
+		bcopy(sc->gif_psrc, &sc->gif_tdb->tdb_src,
+		    sc->gif_psrc->sa_len);
+		bcopy(sc->gif_pdst, &sc->gif_tdb->tdb_dst,
+		    sc->gif_pdst->sa_len);
 
 		s = splnet();
 		ifp->if_flags |= IFF_RUNNING;
