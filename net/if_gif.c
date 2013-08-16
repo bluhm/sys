@@ -106,12 +106,7 @@ gif_clone_create(struct if_clone *ifc, int unit)
 	if (!sc)
 		return (ENOMEM);
 
-	sc->gif_tdb = malloc(sizeof(*sc->gif_tdb), M_DEVBUF, M_NOWAIT|M_ZERO);
-	if (!sc->gif_tdb) {
-		free(sc, M_DEVBUF);
-		return (ENOMEM);
-	}
-	sc->gif_tdb->tdb_xform = &gif_xfs;
+	sc->gif_tdb.tdb_xform = &gif_xfs;
 
 	snprintf(sc->gif_if.if_xname, sizeof sc->gif_if.if_xname,
 	     "%s%d", ifc->ifc_name, unit);
@@ -155,9 +150,6 @@ gif_clone_destroy(struct ifnet *ifp)
 	if (sc->gif_pdst)
 		free((caddr_t)sc->gif_pdst, M_IFADDR);
 	sc->gif_pdst = NULL;
-
-	free(sc->gif_tdb, M_DEVBUF);
-	sc->gif_tdb = NULL;
 
 	free(sc, M_DEVBUF);
 	return (0);
@@ -530,9 +522,9 @@ gif_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		bcopy((caddr_t)dst, (caddr_t)sa, dst->sa_len);
 		sc->gif_pdst = sa;
 
-		bcopy(sc->gif_psrc, &sc->gif_tdb->tdb_src,
+		bcopy(sc->gif_psrc, &sc->gif_tdb.tdb_src,
 		    sc->gif_psrc->sa_len);
-		bcopy(sc->gif_pdst, &sc->gif_tdb->tdb_dst,
+		bcopy(sc->gif_pdst, &sc->gif_tdb.tdb_dst,
 		    sc->gif_pdst->sa_len);
 
 		s = splnet();

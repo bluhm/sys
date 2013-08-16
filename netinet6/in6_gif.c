@@ -118,15 +118,15 @@ in6_gif_output(struct ifnet *ifp, int family, struct mbuf **m0)
 	*m0 = NULL;
 #if NBRIDGE > 0
 	if (family == AF_LINK)
-		error = etherip_output(m, sc->gif_tdb, m0, IPPROTO_ETHERIP);
+		error = etherip_output(m, &sc->gif_tdb, m0, IPPROTO_ETHERIP);
 	else
 #endif /* NBRIDGE */
 #if MPLS
 	if (family == AF_MPLS)
-		error = etherip_output(m, sc->gif_tdb, m0, IPPROTO_MPLS);
+		error = etherip_output(m, &sc->gif_tdb, m0, IPPROTO_MPLS);
 	else
 #endif
-	error = ipip_output(m, sc->gif_tdb, m0, 0, 0);
+	error = ipip_output(m, &sc->gif_tdb, m0, 0, 0);
 	if (error)
 	        return error;
 	else if (*m0 == NULL)

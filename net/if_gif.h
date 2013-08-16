@@ -53,7 +53,7 @@ struct gif_softc {
 	} gifsc_gifscr;
 	int		gif_flags;
 	u_int		gif_rtableid;
-	struct tdb	*gif_tdb;
+	struct tdb	gif_tdb;
 	LIST_ENTRY(gif_softc) gif_list;	/* list of all gifs */
 };
 
