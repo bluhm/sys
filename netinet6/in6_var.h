@@ -1,4 +1,4 @@
-/*	$OpenBSD: in6_var.h,v 1.40 2013/06/17 18:02:24 bluhm Exp $	*/
+/*	$OpenBSD: in6_var.h,v 1.41 2013/08/26 07:15:58 bluhm Exp $	*/
 /*	$KAME: in6_var.h,v 1.55 2001/02/16 12:49:45 itojun Exp $	*/
 
 /*
