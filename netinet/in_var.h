@@ -114,7 +114,7 @@ do {									\
 	/* struct in_ifaddr *ia; */					\
 do {									\
 	TAILQ_FOREACH((ia), &in_ifaddr, ia_list)			\
-	    	if ((ia)->ia_ifp == (ifp))				\
+		if ((ia)->ia_ifp == (ifp))				\
 			break;						\
 } while (/* CONSTCOND */ 0)
 #endif
