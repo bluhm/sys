@@ -98,11 +98,10 @@ void	in_socktrim(struct sockaddr_in *);
 do {									\
 	struct in_ifaddr *ia;						\
 									\
-	for (ia = TAILQ_FIRST(&in_ifaddr); ia != NULL && \
-	    (ia->ia_ifp->if_rdomain != rtable_l2(rdomain) || 		\
-	    ia->ia_addr.sin_addr.s_addr != (addr).s_addr);		\
-	    ia = TAILQ_NEXT(ia, ia_list))				\
-		 continue;						\
+	TAILQ_FOREACH(ia, &in_ifaddr, ia_list)				\
+		if (ia->ia_ifp->if_rdomain == rtable_l2(rdomain) &&	\
+		    ia->ia_addr.sin_addr.s_addr == (addr).s_addr)	\
+			 break;						\
 	(ifp) = (ia == NULL) ? NULL : ia->ia_ifp;			\
 } while (/* CONSTCOND */ 0)
 
@@ -114,10 +113,9 @@ do {									\
 	/* struct ifnet *ifp; */					\
 	/* struct in_ifaddr *ia; */					\
 do {									\
-	for ((ia) = TAILQ_FIRST(&in_ifaddr);				\
-	    (ia) != NULL && (ia)->ia_ifp != (ifp);	\
-	    (ia) = TAILQ_NEXT((ia), ia_list))				\
-		continue;						\
+	TAILQ_FOREACH(ia, &in_ifaddr, ia_list)				\
+	    	if ((ia)->ia_ifp == (ifp))				\
+			break;						\
 } while (/* CONSTCOND */ 0)
 #endif
 
