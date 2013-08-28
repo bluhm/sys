@@ -621,7 +621,15 @@ in_ifinit(struct ifnet *ifp, struct in_ifaddr *ia, struct sockaddr_in *sin,
 {
 	u_int32_t i = sin->sin_addr.s_addr;
 	struct sockaddr_in oldaddr;
-	int s = splnet(), flags = RTF_UP, error = 0;
+	int s, flags = RTF_UP, error = 0;
+
+	/*
+	 * How should a packet be routed during
+	 * an address change--and is it safe?
+	 * Is the "ifp" even in a consistent state?
+	 * Be safe for now.
+	 */
+	splsoftassert(IPL_SOFTNET);
 
 	if (newaddr)
 		TAILQ_INSERT_TAIL(&in_ifaddr, ia, ia_list);
@@ -630,6 +638,7 @@ in_ifinit(struct ifnet *ifp, struct in_ifaddr *ia, struct sockaddr_in *sin,
 	 * Always remove the address from the tree to make sure its
 	 * position gets updated in case the key changes.
 	 */
+	s = splnet();
 	if (!newaddr)
 		ifa_del(ifp, &ia->ia_ifa);
 	oldaddr = ia->ia_addr;
@@ -647,14 +656,6 @@ in_ifinit(struct ifnet *ifp, struct in_ifaddr *ia, struct sockaddr_in *sin,
 		goto out;
 	}
 	splx(s);
-
-	/*
-	 * How should a packet be routed during
-	 * an address change--and is it safe?
-	 * Is the "ifp" even in a consistent state?
-	 * Be safe for now.
-	 */
-	splsoftassert(IPL_SOFTNET);
 
 	if (ia->ia_netmask == 0) {
 		if (IN_CLASSA(i))
