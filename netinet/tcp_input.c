@@ -659,6 +659,7 @@ findpcb:
 		tiwin = th->th_win;
 
 	so = inp->inp_socket;
+	KASSERT(so->so_pcb == inp);
 	if (so->so_options & (SO_DEBUG|SO_ACCEPTCONN)) {
 		union syn_cache_sa src;
 		union syn_cache_sa dst;

@@ -592,6 +592,7 @@ udp_input(struct mbuf *m, ...)
 			return;
 		}
 	}
+	KASSERT(inp->inp_socket->so_pcb == inp);
 
 #if NPF > 0
 	/* The statekey has finished finding the inp, it is no longer needed. */
