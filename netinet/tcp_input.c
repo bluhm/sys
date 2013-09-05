@@ -641,6 +641,7 @@ findpcb:
 			goto dropwithreset_ratelim;
 		}
 	}
+	KASSERT(inp->inp_socket->so_pcb == inp);
 
 	/* Check the minimum TTL for socket. */
 	if (inp->inp_ip_minttl && inp->inp_ip_minttl > ip->ip_ttl)
@@ -659,7 +660,6 @@ findpcb:
 		tiwin = th->th_win;
 
 	so = inp->inp_socket;
-	KASSERT(so->so_pcb == inp);
 	if (so->so_options & (SO_DEBUG|SO_ACCEPTCONN)) {
 		union syn_cache_sa src;
 		union syn_cache_sa dst;
