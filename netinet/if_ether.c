@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ether.c,v 1.105 2013/08/28 06:58:57 mpi Exp $	*/
+/*	$OpenBSD: if_ether.c,v 1.107 2013/09/03 10:25:32 mpi Exp $	*/
 /*	$NetBSD: if_ether.c,v 1.31 1996/05/11 12:59:58 mycroft Exp $	*/
 
 /*
@@ -67,7 +67,6 @@
 #include <net/if_bridge.h>
 #endif
 
-#define SIN(s) ((struct sockaddr_in *)s)
 #define SDL(s) ((struct sockaddr_dl *)s)
 #define SRP(s) ((struct sockaddr_inarp *)s)
 
@@ -145,7 +144,6 @@ arp_rtrequest(int req, struct rtentry *rt)
 {
 	struct sockaddr *gate = rt->rt_gateway;
 	struct llinfo_arp *la = (struct llinfo_arp *)rt->rt_llinfo;
-	struct in_ifaddr *ia;
 	struct ifaddr *ifa;
 	struct mbuf *m;
 
@@ -194,7 +192,7 @@ arp_rtrequest(int req, struct rtentry *rt)
 		 * restore cloning bit.
 		 */
 		if ((rt->rt_flags & RTF_HOST) == 0 &&
-		    SIN(rt_mask(rt))->sin_addr.s_addr != 0xffffffff)
+		    satosin(rt_mask(rt))->sin_addr.s_addr != 0xffffffff)
 			rt->rt_flags |= RTF_CLONING;
 		if (rt->rt_flags & RTF_CLONING) {
 			/*
@@ -229,8 +227,8 @@ arp_rtrequest(int req, struct rtentry *rt)
 		/* Announce a new entry if requested. */
 		if (rt->rt_flags & RTF_ANNOUNCE)
 			arprequest(rt->rt_ifp,
-			    &SIN(rt_key(rt))->sin_addr.s_addr,
-			    &SIN(rt_key(rt))->sin_addr.s_addr,
+			    &satosin(rt_key(rt))->sin_addr.s_addr,
+			    &satosin(rt_key(rt))->sin_addr.s_addr,
 			    (u_char *)LLADDR(SDL(gate)));
 		/*FALLTHROUGH*/
 	case RTM_RESOLVE:
@@ -259,13 +257,13 @@ arp_rtrequest(int req, struct rtentry *rt)
 		rt->rt_flags |= RTF_LLINFO;
 		LIST_INSERT_HEAD(&llinfo_arp, la, la_list);
 
-		TAILQ_FOREACH(ia, &in_ifaddr, ia_list) {
-			if (ia->ia_ifp == rt->rt_ifp &&
-			    SIN(rt_key(rt))->sin_addr.s_addr ==
-			    (IA_SIN(ia))->sin_addr.s_addr)
+		TAILQ_FOREACH(ifa, &rt->rt_ifp->if_addrlist, ifa_list) {
+			if ((ifa->ifa_addr->sa_family == AF_INET) &&
+			    ifatoia(ifa)->ia_addr.sin_addr.s_addr ==
+			    satosin(rt_key(rt))->sin_addr.s_addr)
 				break;
 		}
-		if (ia) {
+		if (ifa) {
 			/*
 			 * This test used to be
 			 *	if (lo0ifp->if_flags & IFF_UP)
@@ -294,7 +292,6 @@ arp_rtrequest(int req, struct rtentry *rt)
 			 * address we are using, otherwise we will have trouble
 			 * with source address selection.
 			 */
-			ifa = &ia->ia_ifa;
 			if (ifa != rt->rt_ifa) {
 				ifafree(rt->rt_ifa);
 				ifa->ifa_refcnt++;
@@ -385,22 +382,23 @@ arpresolve(struct arpcom *ac, struct rtentry *rt, struct mbuf *m,
 		return (1);
 	}
 	if (m->m_flags & M_MCAST) {	/* multicast */
-		ETHER_MAP_IP_MULTICAST(&SIN(dst)->sin_addr, desten);
+		ETHER_MAP_IP_MULTICAST(&satosin(dst)->sin_addr, desten);
 		return (1);
 	}
 	if (rt) {
 		la = (struct llinfo_arp *)rt->rt_llinfo;
 		if (la == NULL)
 			log(LOG_DEBUG, "arpresolve: %s: route without link "
-			    "local address\n", inet_ntoa(SIN(dst)->sin_addr));
+			    "local address\n",
+			    inet_ntoa(satosin(dst)->sin_addr));
 	} else {
-		if ((la = arplookup(SIN(dst)->sin_addr.s_addr, RT_REPORT, 0,
+		if ((la = arplookup(satosin(dst)->sin_addr.s_addr, RT_REPORT, 0,
 		    ac->ac_if.if_rdomain)) != NULL)
 			rt = la->la_rt;
 		else
 			log(LOG_DEBUG,
 			    "arpresolve: %s: can't allocate llinfo\n",
-			    inet_ntoa(SIN(dst)->sin_addr));
+			    inet_ntoa(satosin(dst)->sin_addr));
 	}
 	if (la == 0 || rt == 0) {
 		m_freem(m);
@@ -472,8 +470,8 @@ arpresolve(struct arpcom *ac, struct rtentry *rt, struct mbuf *m,
 			rt->rt_expire = time_second;
 			if (la->la_asked++ < arp_maxtries)
 				arprequest(&ac->ac_if,
-				    &(SIN(rt->rt_ifa->ifa_addr)->sin_addr.s_addr),
-				    &(SIN(dst)->sin_addr.s_addr),
+				    &satosin(rt->rt_ifa->ifa_addr)->sin_addr.s_addr,
+				    &satosin(dst)->sin_addr.s_addr,
 #if NCARP > 0
 				    (rt->rt_ifp->if_type == IFT_CARP) ?
 					((struct arpcom *) rt->rt_ifp->if_softc
@@ -562,11 +560,12 @@ void
 in_arpinput(struct mbuf *m)
 {
 	struct ether_arp *ea;
-	struct arpcom *ac = (struct arpcom *)m->m_pkthdr.rcvif;
+	struct ifnet *ifp = m->m_pkthdr.rcvif;
+	struct arpcom *ac = (struct arpcom *)ifp;
 	struct ether_header *eh;
 	struct llinfo_arp *la = 0;
 	struct rtentry *rt;
-	struct in_ifaddr *ia;
+	struct ifaddr *ifa;
 	struct sockaddr_dl *sdl;
 	struct sockaddr sa;
 	struct in_addr isaddr, itaddr, myaddr;
@@ -593,57 +592,55 @@ in_arpinput(struct mbuf *m)
 	bcopy((caddr_t)ea->arp_spa, (caddr_t)&isaddr, sizeof(isaddr));
 
 	/* First try: check target against our addresses */
-	TAILQ_FOREACH(ia, &in_ifaddr, ia_list) {
-		if (itaddr.s_addr != ia->ia_addr.sin_addr.s_addr)
+	TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
+		if (ifa->ifa_addr->sa_family != AF_INET)
+			continue;
+
+		if (itaddr.s_addr != ifatoia(ifa)->ia_addr.sin_addr.s_addr)
 			continue;
 
 #if NCARP > 0
-		if (ia->ia_ifp->if_type == IFT_CARP &&
-		    ((ia->ia_ifp->if_flags & (IFF_UP|IFF_RUNNING)) ==
+		if (ifp->if_type == IFT_CARP &&
+		    ((ifp->if_flags & (IFF_UP|IFF_RUNNING)) ==
 		    (IFF_UP|IFF_RUNNING))) {
-			if (ia->ia_ifp == m->m_pkthdr.rcvif) {
-				if (op == ARPOP_REPLY)
-					break;
-				if (carp_iamatch(ia, ea->arp_sha,
-				    &enaddr, &ether_shost))
-					break;
-				else
-					goto out;
-			}
-		} else
-#endif
-			if (ia->ia_ifp == m->m_pkthdr.rcvif)
+			if (op == ARPOP_REPLY)
 				break;
+			if (carp_iamatch(ifatoia(ifa), ea->arp_sha,
+			    &enaddr, &ether_shost))
+				break;
+			else
+				goto out;
+		}
+#endif
+		break;
 	}
 
 	/* Second try: check source against our addresses */
-	if (ia == NULL) {
-		TAILQ_FOREACH(ia, &in_ifaddr, ia_list) {
-			if (isaddr.s_addr != ia->ia_addr.sin_addr.s_addr)
+	if (ifa == NULL) {
+		TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
+			if (ifa->ifa_addr->sa_family != AF_INET)
 				continue;
-			if (ia->ia_ifp == m->m_pkthdr.rcvif)
+
+			if (isaddr.s_addr ==
+			    ifatoia(ifa)->ia_addr.sin_addr.s_addr)
 				break;
 		}
 	}
 
 	/* Third try: not one of our addresses, just find an usable ia */
-	if (ia == NULL) {
-		struct ifaddr *ifa;
-
-		TAILQ_FOREACH(ifa, &m->m_pkthdr.rcvif->if_addrlist, ifa_list) {
+	if (ifa == NULL) {
+		TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
 			if (ifa->ifa_addr->sa_family == AF_INET)
 				break;
 		}
-		if (ifa)
-			ia = (struct in_ifaddr *)ifa;
 	}
 
-	if (ia == NULL)
+	if (ifa == NULL)
 		goto out;
 
 	if (!enaddr)
 		enaddr = ac->ac_enaddr;
-	myaddr = ia->ia_addr.sin_addr;
+	myaddr = ifatoia(ifa)->ia_addr.sin_addr;
 
 	if (!bcmp((caddr_t)ea->arp_sha, enaddr, sizeof (ea->arp_sha)))
 		goto out;	/* it's from me, ignore it. */
