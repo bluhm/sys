@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_gem_sbus.c,v 1.1 2009/07/13 19:53:58 kettenis Exp $	*/
+/*	$OpenBSD: if_gem_sbus.c,v 1.2 2013/09/05 20:55:58 bluhm Exp $	*/
 /*	$NetBSD: if_gem_sbus.c,v 1.1 2006/11/24 13:23:32 martin Exp $	*/
 
 /*-
