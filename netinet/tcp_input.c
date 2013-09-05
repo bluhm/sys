@@ -642,6 +642,7 @@ findpcb:
 		}
 	}
 	KASSERT(inp->inp_socket->so_pcb == inp);
+	KASSERT(intotcpcb(inp)->t_inpcb == inp);
 
 	/* Check the minimum TTL for socket. */
 	if (inp->inp_ip_minttl && inp->inp_ip_minttl > ip->ip_ttl)
