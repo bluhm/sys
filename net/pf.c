@@ -6000,7 +6000,7 @@ pf_walk_header6(struct pf_pdesc *pd, struct ip6_hdr *h, u_short *reason)
 	struct ip6_ext		 ext;
 	struct ip6_rthdr	 rthdr;
 	u_int32_t		 end;
-	int			 rthdr_cnt = 0;
+	int			 fraghdr_cnt = 0, rthdr_cnt = 0;
 
 	pd->off += sizeof(struct ip6_hdr);
 	end = pd->off + ntohs(h->ip6_plen);
@@ -6009,7 +6009,7 @@ pf_walk_header6(struct pf_pdesc *pd, struct ip6_hdr *h, u_short *reason)
 	for (;;) {
 		switch (pd->proto) {
 		case IPPROTO_FRAGMENT:
-			if (pd->fragoff != 0) {
+			if (fraghdr_cnt++) {
 				DPFPRINTF(LOG_NOTICE, "IPv6 multiple fragment");
 				REASON_SET(reason, PFRES_FRAG);
 				return (PF_DROP);
@@ -6025,10 +6025,14 @@ pf_walk_header6(struct pf_pdesc *pd, struct ip6_hdr *h, u_short *reason)
 				DPFPRINTF(LOG_NOTICE, "IPv6 short fragment");
 				return (PF_DROP);
 			}
-			pd->fragoff = pd->off;
 			/* stop walking over non initial fragments */
-			if (ntohs((frag.ip6f_offlg & IP6F_OFF_MASK)) != 0)
+			if (ntohs((frag.ip6f_offlg & IP6F_OFF_MASK)) != 0) {
+				pd->fragoff = pd->off;
 				return (PF_PASS);
+			}
+			/* RFC6946:  reassemble only non atomic fragments */
+			if (frag.ip6f_offlg & IP6F_MORE_FRAG)
+				pd->fragoff = pd->off;
 			pd->off += sizeof(frag);
 			pd->proto = frag.ip6f_nxt;
 			break;
