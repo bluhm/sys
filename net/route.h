@@ -207,7 +207,7 @@ struct rt_msghdr {
 /* overload no longer used field */
 #define rtm_use	rtm_rmx.rmx_pksent
 
-#define RTM_VERSION	4	/* Up the ante and ignore older versions */
+#define RTM_VERSION	5	/* Up the ante and ignore older versions */
 
 #define RTM_MAXSIZE	2048	/* Maximum size of an accepted route msg */
 
