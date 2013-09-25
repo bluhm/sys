@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.c,v 1.264 2013/08/28 07:38:50 mpi Exp $	*/
+/*	$OpenBSD: if.c,v 1.266 2013/09/17 13:34:17 mpi Exp $	*/
 /*	$NetBSD: if.c,v 1.35 1996/05/07 05:26:04 thorpej Exp $	*/
 
 /*
@@ -65,9 +65,10 @@
 #include "bpfilter.h"
 #include "bridge.h"
 #include "carp.h"
+#include "ether.h"
 #include "pf.h"
 #include "trunk.h"
-#include "ether.h"
+#include "vlan.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -131,6 +132,10 @@
 
 #if NPF > 0
 #include <net/pfvar.h>
+#endif
+
+#if NVLAN > 0
+#include <net/if_vlan_var.h>
 #endif
 
 void	if_attachsetup(struct ifnet *);
@@ -204,37 +209,31 @@ if_attachsetup(struct ifnet *ifp)
 {
 	int wrapped = 0;
 
-	/*
-	 * Always increment the index to avoid races.
-	 */
-	if_index++;
-
-	/*
-	 * If we hit USHRT_MAX, we skip back to 1 since there are a
-	 * number of places where the value of ifp->if_index or
-	 * if_index itself is compared to or stored in an unsigned
-	 * short.  By jumping back, we won't botch those assignments
-	 * or comparisons.
-	 */
-	if (if_index == USHRT_MAX) {
+	if (ifindex2ifnet == 0)
 		if_index = 1;
-		wrapped++;
-	}
-
-	while (if_index < if_indexlim && ifindex2ifnet[if_index] != NULL) {
-		if_index++;
-
-		if (if_index == USHRT_MAX) {
+	else {
+		while (if_index < if_indexlim &&
+		    ifindex2ifnet[if_index] != NULL) {
+			if_index++;
 			/*
-			 * If we have to jump back to 1 twice without
-			 * finding an empty slot then there are too many
-			 * interfaces.
+			 * If we hit USHRT_MAX, we skip back to 1 since
+			 * there are a number of places where the value
+			 * of ifp->if_index or if_index itself is compared
+			 * to or stored in an unsigned short.  By
+			 * jumping back, we won't botch those assignments
+			 * or comparisons.
 			 */
-			if (wrapped)
-				panic("too many interfaces");
-
-			if_index = 1;
-			wrapped++;
+			if (if_index == USHRT_MAX) {
+				if_index = 1;
+				/*
+				 * However, if we have to jump back to 1
+				 * *twice* without finding an empty
+				 * slot in ifindex2ifnet[], then there
+				 * there are too many (>65535) interfaces.
+				 */
+				if (wrapped++)
+					panic("too many interfaces");
+			}
 		}
 	}
 	ifp->if_index = if_index;
@@ -285,6 +284,10 @@ if_attachsetup(struct ifnet *ifp)
 		if_attachdomain1(ifp);
 #if NPF > 0
 	pfi_attach_ifnet(ifp);
+#endif
+
+#if NVLAN > 0
+	LIST_INIT(&ifp->if_vlist);
 #endif
 
 	/* Announce the interface. */
@@ -446,9 +449,6 @@ if_attach_common(struct ifnet *ifp)
 	ifp->if_linkstatehooks = malloc(sizeof(*ifp->if_linkstatehooks),
 	    M_TEMP, M_WAITOK);
 	TAILQ_INIT(ifp->if_linkstatehooks);
-	ifp->if_detachhooks = malloc(sizeof(*ifp->if_detachhooks),
-	    M_TEMP, M_WAITOK);
-	TAILQ_INIT(ifp->if_detachhooks);
 }
 
 void
@@ -508,8 +508,10 @@ if_detach(struct ifnet *ifp)
 	ifp->if_ioctl = if_detached_ioctl;
 	ifp->if_watchdog = if_detached_watchdog;
 
-	/* Call detach hooks, ie. to remove vlan interfaces */
-	dohooks(ifp->if_detachhooks, HOOK_REMOVE | HOOK_FREE);
+#if NVLAN > 0
+	if (!LIST_EMPTY(&ifp->if_vlist))
+		vlan_ifdetach(ifp);
+#endif
 
 #if NTRUNK > 0
 	if (ifp->if_type == IFT_IEEE8023ADLAG)
@@ -613,7 +615,6 @@ do { \
 
 	free(ifp->if_addrhooks, M_TEMP);
 	free(ifp->if_linkstatehooks, M_TEMP);
-	free(ifp->if_detachhooks, M_TEMP);
 
 	for (dp = domains; dp; dp = dp->dom_next) {
 		if (dp->dom_ifdetach && ifp->if_afdata[dp->dom_family])
