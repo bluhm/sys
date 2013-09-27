@@ -1104,7 +1104,7 @@ db_show_radix_node(struct radix_node *rn, void *w, u_int id)
 
 	db_printf("rtentry=%p", rt);
 
-	db_printf(" flags=0x%x refcnt=%d use=%llu expire=%u rtableid %u\n",
+	db_printf(" flags=0x%x refcnt=%d use=%llu expire=%lld rtableid=%u\n",
 	    rt->rt_flags, rt->rt_refcnt, rt->rt_use, rt->rt_expire, id);
 
 	db_printf(" key="); db_print_sa(rt_key(rt));
