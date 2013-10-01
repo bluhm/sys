@@ -1132,6 +1132,7 @@ again:
 		rtm->rtm_version = RTM_OVERSION;
 		rtm->rtm_type = type;
 		rtm->rtm_msglen = len;
+		rtm->rtm_hdrlen = hlen;
 	}
 #endif
 	return (len);
