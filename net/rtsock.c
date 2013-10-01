@@ -102,7 +102,8 @@ int		 rt_msg2(int, int, struct rt_addrinfo *, caddr_t,
 		     struct walkarg *);
 void		 rt_xaddrs(caddr_t, caddr_t, struct rt_addrinfo *);
 #ifndef SMALL_KERNEL
-struct rt_msghdr *rtmsg_3to4(struct mbuf *, int *);
+struct rt_msghdr *rtmsg_4to5(struct mbuf *, int *);
+void rt_ogetmetrics(struct rt_kmetrics *in, struct rt_ometrics *out);
 #endif
 
 /* Sleazy use of local variables throughout file, warning!!!! */
@@ -506,7 +507,11 @@ route_output(struct mbuf *m, ...)
 			error = EINVAL;
 			goto flush;
 		}
-		rtm = rtmsg_3to4(m, &len);
+		if (len > RTM_MAXSIZE) {
+			error = EMSGSIZE;
+			goto fail;
+		}
+		rtm = rtmsg_4to5(m, &len);
 		if (rtm == 0) {
 			error = ENOBUFS;
 			goto flush;
@@ -768,6 +773,7 @@ report:
 			rtm->rtm_use = 0;
 			rtm->rtm_priority = rt->rt_priority & RTP_MASK;
 			rt_getmetrics(&rt->rt_rmx, &rtm->rtm_rmx);
+/* XXX */
 			rtm->rtm_addrs = info.rti_addrs;
 			break;
 
@@ -954,6 +960,18 @@ rt_getmetrics(struct rt_kmetrics *in, struct rt_metrics *out)
 	out->rmx_pksent = in->rmx_pksent;
 }
 
+#ifndef SMALL_KERNEL
+void
+rt_ogetmetrics(struct rt_kmetrics *in, struct rt_ometrics *out)
+{
+	bzero(out, sizeof(*out));
+	out->rmx_locks = in->rmx_locks;
+	out->rmx_mtu = in->rmx_mtu;
+	out->rmx_expire = (u_int)in->rmx_expire;
+	out->rmx_pksent = in->rmx_pksent;
+}
+#endif
+
 #define ROUNDUP(a) \
 	((a) > 0 ? (1 + (((a) - 1) | (sizeof(long) - 1))) : sizeof(long))
 #define ADVANCE(x, n) (x += ROUNDUP((n)->sa_len))
@@ -1044,20 +1062,10 @@ again:
 	switch (type) {
 	case RTM_DELADDR:
 	case RTM_NEWADDR:
-#ifndef SMALL_KERNEL
-		if (vers == RTM_OVERSION)
-			len = sizeof(struct ifa_omsghdr);
-		else
-#endif
-			len = sizeof(struct ifa_msghdr);
+		len = sizeof(struct ifa_msghdr);
 		break;
 	case RTM_IFINFO:
-#ifndef SMALL_KERNEL
-		if (vers == RTM_OVERSION)
-			len = sizeof(struct if_omsghdr);
-		else
-#endif
-			len = sizeof(struct if_msghdr);
+		len = sizeof(struct if_msghdr);
 		break;
 	default:
 #ifndef SMALL_KERNEL
@@ -1360,10 +1368,15 @@ sysctl_dumpentry(struct radix_node *rn, void *v, u_int id)
 		struct rt_omsghdr *rtm = (struct rt_omsghdr *)w->w_tmem;
 
 		rtm->rtm_flags = rt->rt_flags;
-		rtm->rtm_rmx.rmx_locks = rt->rt_rmx.rmx_locks;
-		rtm->rtm_rmx.rmx_mtu = rt->rt_rmx.rmx_mtu;
+		rtm->rtm_priority = rt->rt_priority & RTP_MASK;
+		rt_ogetmetrics(&rt->rt_rmx, &rtm->rtm_rmx);
+		rtm->rtm_rmx.rmx_refcnt = rt->rt_refcnt;
 		rtm->rtm_index = rt->rt_ifp->if_index;
 		rtm->rtm_addrs = info.rti_addrs;
+		rtm->rtm_tableid = id;
+#ifdef MPLS
+		rtm->rtm_mpls = info.rti_mpls;
+#endif
 		if ((error = copyout(rtm, w->w_where, size)) != 0)
 			w->w_where = NULL;
 		else
@@ -1407,25 +1420,13 @@ sysctl_iflist(int af, struct walkarg *w)
 #ifndef SMALL_KERNEL
 		len = rt_msg2(RTM_IFINFO, RTM_OVERSION, &info, 0, w);
 		if (w->w_where && w->w_tmem && w->w_needed <= 0) {
-			struct if_omsghdr *ifm;
+			struct if_msghdr *ifm;
 
-			ifm = (struct if_omsghdr *)w->w_tmem;
+			ifm = (struct if_msghdr *)w->w_tmem;
 			ifm->ifm_index = ifp->if_index;
+			ifm->ifm_tableid = ifp->if_rdomain;
 			ifm->ifm_flags = ifp->if_flags;
-			/* just init the most important types of if_data */
-			ifm->ifm_data.ifi_type = ifp->if_data.ifi_type;
-			ifm->ifm_data.ifi_addrlen = ifp->if_data.ifi_addrlen;
-			ifm->ifm_data.ifi_hdrlen = ifp->if_data.ifi_hdrlen;
-			ifm->ifm_data.ifi_link_state =
-			    ifp->if_data.ifi_link_state;
-			ifm->ifm_data.ifi_mtu = ifp->if_data.ifi_mtu;
-			ifm->ifm_data.ifi_metric = ifp->if_data.ifi_metric;
-			if (ifp->if_data.ifi_baudrate > ULONG_MAX)
-				ifm->ifm_data.ifi_baudrate = ULONG_MAX;
-			else
-				ifm->ifm_data.ifi_baudrate =
-				    ifp->if_data.ifi_baudrate;
-
+			ifm->ifm_data = ifp->if_data;
 			ifm->ifm_addrs = info.rti_addrs;
 			error = copyout(ifm, w->w_where, len);
 			if (error)
@@ -1457,9 +1458,9 @@ sysctl_iflist(int af, struct walkarg *w)
 #ifndef SMALL_KERNEL
 			len = rt_msg2(RTM_NEWADDR, RTM_OVERSION, &info, 0, w);
 			if (w->w_where && w->w_tmem && w->w_needed <= 0) {
-				struct ifa_omsghdr *ifam;
+				struct ifa_msghdr *ifam;
 
-				ifam = (struct ifa_omsghdr *)w->w_tmem;
+				ifam = (struct ifa_msghdr *)w->w_tmem;
 				ifam->ifam_index = ifa->ifa_ifp->if_index;
 				ifam->ifam_flags = ifa->ifa_flags;
 				ifam->ifam_metric = ifa->ifa_metric;
@@ -1557,36 +1558,43 @@ sysctl_rtable(int *name, u_int namelen, void *where, size_t *given, void *new,
 
 #ifndef SMALL_KERNEL
 struct rt_msghdr *
-rtmsg_3to4(struct mbuf *m, int *len)
+rtmsg_4to5(struct mbuf *m, int *len)
 {
 	struct rt_msghdr *rtm;
 	struct rt_omsghdr *ortm;
-	int slen;
 
-	slen = *len - sizeof(struct rt_omsghdr);
-	*len = sizeof(struct rt_msghdr) + slen;
+	*len += sizeof(struct rt_msghdr) - sizeof(struct rt_omsghdr);
 	R_Malloc(rtm, struct rt_msghdr *, *len);
 	if (rtm == 0)
 		return (NULL);
 	bzero(rtm, sizeof(struct rt_msghdr));
 	ortm = mtod(m, struct rt_omsghdr *);
-	rtm->rtm_msglen = sizeof(struct rt_msghdr) + slen;
+	rtm->rtm_msglen = *len;
 	rtm->rtm_version = RTM_VERSION;
 	rtm->rtm_type = ortm->rtm_type;
 	rtm->rtm_hdrlen = sizeof(struct rt_msghdr);
+
 	rtm->rtm_index = ortm->rtm_index;
-	rtm->rtm_tableid = 0; /* XXX we only care about the main table */
-	rtm->rtm_flags = ortm->rtm_flags;
+	rtm->rtm_tableid = ortm->rtm_tableid;
+	rtm->rtm_priority = ortm->rtm_priority;
+	rtm->rtm_mpls = ortm->rtm_mpls;
 	rtm->rtm_addrs = ortm->rtm_addrs;
-	rtm->rtm_seq = ortm->rtm_seq;
+	rtm->rtm_addrs = ortm->rtm_flags;
 	rtm->rtm_fmask = ortm->rtm_fmask;
+	rtm->rtm_pid = ortm->rtm_pid;
+	rtm->rtm_seq = ortm->rtm_seq;
+	rtm->rtm_errno = ortm->rtm_errno;
 	rtm->rtm_inits = ortm->rtm_inits;
+
 	/* copy just the interesting stuff ignore the rest */
+	rtm->rtm_rmx.rmx_pksent = ortm->rtm_rmx.rmx_pksent;
+	rtm->rtm_rmx.rmx_expire = (int64_t)ortm->rtm_rmx.rmx_expire;
 	rtm->rtm_rmx.rmx_locks = ortm->rtm_rmx.rmx_locks;
 	rtm->rtm_rmx.rmx_mtu = ortm->rtm_rmx.rmx_mtu;
 
-	m_copydata(m, sizeof(struct rt_omsghdr), slen,
-	    ((caddr_t)rtm + sizeof(struct rt_msghdr)));
+	m_copydata(m, sizeof(struct rt_omsghdr),
+	    *len - sizeof(struct rt_msghdr),
+	    (caddr_t)rtm + sizeof(struct rt_msghdr));
 
 	return (rtm);
 }
