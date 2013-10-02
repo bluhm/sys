@@ -1,4 +1,4 @@
-#	$OpenBSD: GENERIC,v 1.200 2013/08/17 10:08:34 bluhm Exp $
+#	$OpenBSD: GENERIC,v 1.202 2013/10/01 06:57:25 dlg Exp $
 #
 #	Machine-independent option; used by all architectures for their
 #	GENERIC kernel
@@ -67,6 +67,10 @@ option		MPLS		# Multi-Protocol Label Switching
 
 #mpath0		at root		# SCSI Multipathing
 #scsibus*	at mpath?
+#emc*		at scsibus?
+#hds*		at scsibus?
+#rdac*		at scsibus?
+#sym*		at scsibus?
 
 softraid0	at root		# Software RAID
 scsibus*	at softraid?

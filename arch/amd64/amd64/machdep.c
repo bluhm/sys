@@ -1,4 +1,4 @@
-/*	$OpenBSD: machdep.c,v 1.165 2013/06/29 21:06:15 brad Exp $	*/
+/*	$OpenBSD: machdep.c,v 1.167 2013/09/29 12:56:31 kettenis Exp $	*/
 /*	$NetBSD: machdep.c,v 1.3 2003/05/07 22:58:18 fvdl Exp $	*/
 
 /*-
@@ -754,7 +754,8 @@ boot(int howto)
 
 haltsys:
 	doshutdownhooks();
-	config_suspend(TAILQ_FIRST(&alldevs), DVACT_POWERDOWN);
+	if (!TAILQ_EMPTY(&alldevs))
+		config_suspend(TAILQ_FIRST(&alldevs), DVACT_POWERDOWN);
 
 #ifdef MULTIPROCESSOR
 	x86_broadcast_ipi(X86_IPI_HALT);
@@ -1851,7 +1852,6 @@ getbootinfo(char *bootinfo, int bootinfo_size)
 				printf(" console 0x%x:%d",
 				    cdp->consdev, cdp->conspeed);
 #endif
-				cnset(cdp->consdev);
 			}
 			break;
 		case BOOTARG_BOOTMAC:
