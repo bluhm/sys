@@ -1,8 +1,8 @@
-/*	$OpenBSD: pf.c,v 1.840 2013/09/27 10:20:08 bluhm Exp $ */
+/*	$OpenBSD: pf.c,v 1.843 2013/10/12 12:13:10 henning Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
- * Copyright (c) 2002 - 2012 Henning Brauer <henning@openbsd.org>
+ * Copyright (c) 2002 - 2013 Henning Brauer <henning@openbsd.org>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -100,6 +100,9 @@
  * Global variables
  */
 struct pf_state_tree	 pf_statetbl;
+struct pf_queuehead	 pf_queues[2];
+struct pf_queuehead	*pf_queues_active;
+struct pf_queuehead	*pf_queues_inactive;
 
 struct pf_altqqueue	 pf_altqs[2];
 struct pf_altqqueue	*pf_altqs_active;
@@ -138,7 +141,7 @@ union pf_headers {
 };
 
 
-struct pool		 pf_src_tree_pl, pf_rule_pl;
+struct pool		 pf_src_tree_pl, pf_rule_pl, pf_queue_pl;
 struct pool		 pf_state_pl, pf_state_key_pl, pf_state_item_pl;
 struct pool		 pf_altq_pl, pf_rule_item_pl, pf_sn_item_pl;
 
@@ -3416,6 +3419,12 @@ pf_test_rule(struct pf_pdesc *pd, struct pf_rule **rm, struct pf_state **sm,
 			goto cleanup;
 		}
 
+		if (r->max_states && (r->states_cur >= r->max_states)) {
+			pf_status.lcounters[LCNT_STATES]++;
+			REASON_SET(&reason, PFRES_MAXSTATES);
+			goto cleanup;
+		}
+
 		action = pf_create_state(pd, r, a, nr, &skw, &sks, &rewrite,
 		    sm, tag, &rules, &act, sns);
 
@@ -3492,13 +3501,6 @@ pf_create_state(struct pf_pdesc *pd, struct pf_rule *r, struct pf_rule *a,
 	u_int16_t		 mss = tcp_mssdflt;
 	u_short			 reason;
 	u_int			 i;
-
-	/* check maximums */
-	if (r->max_states && (r->states_cur >= r->max_states)) {
-		pf_status.lcounters[LCNT_STATES]++;
-		REASON_SET(&reason, PFRES_MAXSTATES);
-		return (PF_DROP);
-	}
 
 	s = pool_get(&pf_state_pl, PR_NOWAIT | PR_ZERO);
 	if (s == NULL) {
@@ -3941,7 +3943,7 @@ pf_tcp_track_full(struct pf_pdesc *pd, struct pf_state_peer *src,
 	if (seq == end) {
 		/* Ease sequencing restrictions on no data packets */
 		seq = src->seqlo;
-		end = seq;
+		data_end = end = seq;
 	}
 
 	ackskew = dst->seqlo - ack;
