@@ -101,10 +101,10 @@ struct mbuf	*rt_msg1(int, struct rt_addrinfo *);
 int		 rt_msg2(int, int, struct rt_addrinfo *, caddr_t,
 		     struct walkarg *);
 void		 rt_xaddrs(caddr_t, caddr_t, struct rt_addrinfo *);
-#ifndef SMALL_KERNEL
+#ifdef RTM_OVERSION
 struct rt_msghdr *rtmsg_4to5(struct mbuf *, int *);
 void rt_ogetmetrics(struct rt_kmetrics *in, struct rt_ometrics *out);
-#endif
+#endif /* RTM_OVERSION */
 
 /* Sleazy use of local variables throughout file, warning!!!! */
 #define dst	info.rti_info[RTAX_DST]
@@ -485,6 +485,23 @@ route_output(struct mbuf *m, ...)
 		goto fail;
 	}
 	switch (mtod(m, struct rt_msghdr *)->rtm_version) {
+#ifdef RTM_OVERSION
+	case RTM_OVERSION:
+		if (len < sizeof(struct rt_omsghdr)) {
+			error = EINVAL;
+			goto flush;
+		}
+		if (len > RTM_MAXSIZE) {
+			error = EMSGSIZE;
+			goto fail;
+		}
+		rtm = rtmsg_4to5(m, &len);
+		if (rtm == 0) {
+			error = ENOBUFS;
+			goto flush;
+		}
+		break;
+#endif /* RTM_OVERSION */
 	case RTM_VERSION:
 		if (len < sizeof(struct rt_msghdr)) {
 			error = EINVAL;
@@ -501,23 +518,6 @@ route_output(struct mbuf *m, ...)
 		}
 		m_copydata(m, 0, len, (caddr_t)rtm);
 		break;
-#ifndef SMALL_KERNEL
-	case RTM_OVERSION:
-		if (len < sizeof(struct rt_omsghdr)) {
-			error = EINVAL;
-			goto flush;
-		}
-		if (len > RTM_MAXSIZE) {
-			error = EMSGSIZE;
-			goto fail;
-		}
-		rtm = rtmsg_4to5(m, &len);
-		if (rtm == 0) {
-			error = ENOBUFS;
-			goto flush;
-		}
-		break;
-#endif
 	default:
 		error = EPROTONOSUPPORT;
 		goto fail;
@@ -1068,12 +1068,12 @@ again:
 		len = sizeof(struct if_msghdr);
 		break;
 	default:
-#ifndef SMALL_KERNEL
+#ifdef RTM_OVERSION
 		if (vers == RTM_OVERSION)
 			len = sizeof(struct rt_omsghdr);
 		else
-#endif
-			len = sizeof(struct rt_msghdr);
+#endif /* RTM_OVERSION */
+		len = sizeof(struct rt_msghdr);
 		break;
 	}
 	hlen = len;
@@ -1117,15 +1117,7 @@ again:
 	if (cp && w)		/* clear the message header */
 		bzero(cp0, hlen);
 
-	if (cp && vers != RTM_OVERSION) {
-		struct rt_msghdr *rtm = (struct rt_msghdr *)cp0;
-
-		rtm->rtm_version = RTM_VERSION;
-		rtm->rtm_type = type;
-		rtm->rtm_msglen = len;
-		rtm->rtm_hdrlen = hlen;
-	}
-#ifndef SMALL_KERNEL
+#ifdef RTM_OVERSION
 	if (cp && vers == RTM_OVERSION) {
 		struct rt_omsghdr *rtm = (struct rt_omsghdr *)cp0;
 
@@ -1133,8 +1125,16 @@ again:
 		rtm->rtm_type = type;
 		rtm->rtm_msglen = len;
 		rtm->rtm_hdrlen = hlen;
+	} else
+#endif /* RTM_OVERSION */
+	if (cp) {
+		struct rt_msghdr *rtm = (struct rt_msghdr *)cp0;
+
+		rtm->rtm_version = RTM_VERSION;
+		rtm->rtm_type = type;
+		rtm->rtm_msglen = len;
+		rtm->rtm_hdrlen = hlen;
 	}
-#endif
 	return (len);
 }
 
@@ -1363,7 +1363,7 @@ sysctl_dumpentry(struct radix_node *rn, void *v, u_int id)
 		else
 			w->w_where += size;
 	}
-#ifndef SMALL_KERNEL
+#ifdef RTM_OVERSION
 	size = rt_msg2(RTM_GET, RTM_OVERSION, &info, NULL, w);
 	if (w->w_where && w->w_tmem && w->w_needed <= 0) {
 		struct rt_omsghdr *rtm = (struct rt_omsghdr *)w->w_tmem;
@@ -1418,7 +1418,7 @@ sysctl_iflist(int af, struct walkarg *w)
 				return (error);
 			w->w_where += len;
 		}
-#ifndef SMALL_KERNEL
+#ifdef RTM_OVERSION
 		len = rt_msg2(RTM_IFINFO, RTM_OVERSION, &info, 0, w);
 		if (w->w_where && w->w_tmem && w->w_needed <= 0) {
 			struct if_msghdr *ifm;
@@ -1434,7 +1434,7 @@ sysctl_iflist(int af, struct walkarg *w)
 				return (error);
 			w->w_where += len;
 		}
-#endif
+#endif /* RTM_OVERSION */
 		ifpaddr = 0;
 		while ((ifa = TAILQ_NEXT(ifa, ifa_list)) != NULL) {
 			if (af && af != ifa->ifa_addr->sa_family)
@@ -1456,7 +1456,7 @@ sysctl_iflist(int af, struct walkarg *w)
 					return (error);
 				w->w_where += len;
 			}
-#ifndef SMALL_KERNEL
+#ifdef RTM_OVERSION
 			len = rt_msg2(RTM_NEWADDR, RTM_OVERSION, &info, 0, w);
 			if (w->w_where && w->w_tmem && w->w_needed <= 0) {
 				struct ifa_msghdr *ifam;
@@ -1471,7 +1471,7 @@ sysctl_iflist(int af, struct walkarg *w)
 					return (error);
 				w->w_where += len;
 			}
-#endif
+#endif /* RTM_OVERSION */
 		}
 		ifaaddr = netmask = brdaddr = 0;
 	}

@@ -207,6 +207,7 @@ struct rt_msghdr {
 /* overload no longer used field */
 #define rtm_use	rtm_rmx.rmx_pksent
 
+#if defined(_KERNEL) && ! defined(SMALL_KERNEL)
 /*
  * Compatibility structures for version 4 messages.
  * Remove them after OpenBSD 5.5.
@@ -244,6 +245,7 @@ struct rt_omsghdr {
 	struct	rt_ometrics rtm_rmx; /* metrics themselves */
 };
 #define RTM_OVERSION	4	/* Provide backward compatibility */
+#endif /* defined(_KERNEL) && ! defined(SMALL_KERNEL) */
 
 #define RTM_VERSION	5	/* Up the ante and ignore older versions */
 
