@@ -773,7 +773,6 @@ report:
 			rtm->rtm_use = 0;
 			rtm->rtm_priority = rt->rt_priority & RTP_MASK;
 			rt_getmetrics(&rt->rt_rmx, &rtm->rtm_rmx);
-/* XXX */
 			rtm->rtm_addrs = info.rti_addrs;
 			break;
 
