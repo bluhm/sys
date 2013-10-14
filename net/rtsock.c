@@ -1580,9 +1580,9 @@ rtmsg_4to5(struct mbuf *m, int *len)
 	rtm->rtm_priority = ortm->rtm_priority;
 	rtm->rtm_mpls = ortm->rtm_mpls;
 	rtm->rtm_addrs = ortm->rtm_addrs;
-	rtm->rtm_addrs = ortm->rtm_flags;
+	rtm->rtm_flags = ortm->rtm_flags;
 	rtm->rtm_fmask = ortm->rtm_fmask;
-	rtm->rtm_pid = ortm->rtm_pid;
+	/* rtm_pid is set by kernel later */
 	rtm->rtm_seq = ortm->rtm_seq;
 	rtm->rtm_errno = ortm->rtm_errno;
 	rtm->rtm_inits = ortm->rtm_inits;
