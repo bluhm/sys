@@ -489,7 +489,7 @@ route_output(struct mbuf *m, ...)
 	case RTM_OVERSION:
 		if (len < sizeof(struct rt_omsghdr)) {
 			error = EINVAL;
-			goto flush;
+			goto fail;
 		}
 		if (len > RTM_MAXSIZE) {
 			error = EMSGSIZE;
@@ -498,7 +498,7 @@ route_output(struct mbuf *m, ...)
 		rtm = rtmsg_4to5(m, &len);
 		if (rtm == 0) {
 			error = ENOBUFS;
-			goto flush;
+			goto fail;
 		}
 		break;
 #endif /* RTM_OVERSION */
