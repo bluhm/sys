@@ -191,7 +191,7 @@ arp_rtrequest(int req, struct rtentry *rt)
 		 * such as older version of routed or gated might provide,
 		 * restore cloning bit.
 		 */
-		if ((rt->rt_flags & RTF_HOST) == 0 &&
+		if ((rt->rt_flags & RTF_HOST) == 0 && rt_mask(rt) &&
 		    satosin(rt_mask(rt))->sin_addr.s_addr != 0xffffffff)
 			rt->rt_flags |= RTF_CLONING;
 		if (rt->rt_flags & RTF_CLONING) {
