@@ -960,7 +960,7 @@ rt_getmetrics(struct rt_kmetrics *in, struct rt_metrics *out)
 	out->rmx_pksent = in->rmx_pksent;
 }
 
-#ifndef SMALL_KERNEL
+#ifdef RTM_OVERSION
 void
 rt_ogetmetrics(struct rt_kmetrics *in, struct rt_ometrics *out)
 {
@@ -970,7 +970,7 @@ rt_ogetmetrics(struct rt_kmetrics *in, struct rt_ometrics *out)
 	out->rmx_expire = (u_int)in->rmx_expire;
 	out->rmx_pksent = in->rmx_pksent;
 }
-#endif
+#endif /* RTM_OVERSION */
 
 #define ROUNDUP(a) \
 	((a) > 0 ? (1 + (((a) - 1) | (sizeof(long) - 1))) : sizeof(long))
@@ -1557,7 +1557,7 @@ sysctl_rtable(int *name, u_int namelen, void *where, size_t *given, void *new,
 	return (error);
 }
 
-#ifndef SMALL_KERNEL
+#ifdef RTM_OVERSION
 struct rt_msghdr *
 rtmsg_4to5(struct mbuf *m, int *len)
 {
@@ -1599,7 +1599,7 @@ rtmsg_4to5(struct mbuf *m, int *len)
 
 	return (rtm);
 }
-#endif
+#endif /* RTM_OVERSION */
 
 /*
  * Definitions of protocols supported in the ROUTE domain.
