@@ -658,8 +658,7 @@ in_pcblookup(struct inpcbtable *table, void *faddrp, u_int fport_arg,
 	struct in_addr laddr = *(struct in_addr *)laddrp;
 
 	rdomain = rtable_l2(rdomain);	/* convert passed rtableid to rdomain */
-	for (inp = LIST_FIRST(INPCBLHASH(table, lport, rdomain)); inp;
-	    inp = LIST_NEXT(inp, inp_lhash)) {
+	LIST_FOREACH(inp, INPCBLHASH(table, lport, rdomain), inp_lhash) {
 		if (rtable_l2(inp->inp_rtableid) != rdomain)
 			continue;
 		if (inp->inp_lport != lport)
