@@ -84,7 +84,7 @@
 #include <sys/ioctl.h>
 #include <sys/errno.h>
 #include <sys/syslog.h>
-
+#include <sys/workq.h>
 
 #include <net/if.h>
 #include <net/netisr.h>
