@@ -64,6 +64,8 @@
 #ifndef _NETINET6_IN6_VAR_H_
 #define _NETINET6_IN6_VAR_H_
 
+#include <sys/workq.h>
+
 /*
  * Interface address, Internet version.  One of these structures
  * is allocated for each interface with an Internet address.
