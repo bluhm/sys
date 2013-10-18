@@ -64,24 +64,18 @@ route6_input(struct mbuf **mp, int *offp, int proto)
 	}
 
 	switch (rh->ip6r_type) {
+	case IPV6_RTHDR_TYPE_0:
+		/*
+		 * RFC 5095 specifies to handle routing header type 0
+		 * the same way as an unrecognised routing type.
+		 */
+		/* FALLTHROUGH */
 	default:
 		/* unknown routing type */
 		if (rh->ip6r_segleft == 0) {
 			rhlen = (rh->ip6r_len + 1) << 3;
 			break;	/* Final dst. Just ignore the header. */
 		}
-		/* FALLTHROUGH */
-	/*
-	 * See http://www.secdev.org/conf/IPv6_RH_security-csw07.pdf
-	 * for why IPV6_RTHDR_TYPE_0 is banned here.
-	 *
-	 * We return ICMPv6 parameter problem so that innocent people
-	 * (not an attacker) would notice about the use of IPV6_RTHDR_TYPE_0.
-	 * Since there's no amplification, and ICMPv6 error will be rate-
-	 * controlled, it shouldn't cause any problem.
-	 */
-	case IPV6_RTHDR_TYPE_0:
-		in6_ifstat_inc(m->m_pkthdr.rcvif, ifs6_in_hdrerr);
 		ip6stat.ip6s_badoptions++;
 		icmp6_error(m, ICMP6_PARAM_PROB, ICMP6_PARAMPROB_HEADER,
 			    (caddr_t)&rh->ip6r_type - (caddr_t)ip6);
