@@ -2129,8 +2129,8 @@ carp_set_addr6(struct carp_softc *sc, struct sockaddr_in6 *sin6)
 		    ia->ia_ifp->if_type != IFT_CARP &&
 		    (ia->ia_ifp->if_flags & IFF_MULTICAST) &&
 		    (i == 4)) {
-			if (!ia_if)
-				ia_if = ia;
+			ia_if = ia;
+			break;
 		}
 	}
 
