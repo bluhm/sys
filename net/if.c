@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.c,v 1.268 2013/10/17 16:27:40 bluhm Exp $	*/
+/*	$OpenBSD: if.c,v 1.271 2013/10/19 14:54:18 mikeb Exp $	*/
 /*	$NetBSD: if.c,v 1.35 1996/05/07 05:26:04 thorpej Exp $	*/
 
 /*
@@ -65,10 +65,9 @@
 #include "bpfilter.h"
 #include "bridge.h"
 #include "carp.h"
-#include "ether.h"
 #include "pf.h"
 #include "trunk.h"
-#include "vlan.h"
+#include "ether.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -82,6 +81,7 @@
 #include <sys/ioctl.h>
 #include <sys/domain.h>
 #include <sys/sysctl.h>
+#include <sys/workq.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -135,10 +135,6 @@
 #include <net/pfvar.h>
 #endif
 
-#if NVLAN > 0
-#include <net/if_vlan_var.h>
-#endif
-
 void	if_attachsetup(struct ifnet *);
 void	if_attachdomain1(struct ifnet *);
 void	if_attach_common(struct ifnet *);
@@ -158,6 +154,8 @@ struct if_clone	*if_clone_lookup(const char *, int *);
 
 void	if_congestion_clear(void *);
 int	if_group_egress_build(void);
+
+void	if_link_state_change_task(void *, void *);
 
 int	ifai_cmp(struct ifaddr_item *,  struct ifaddr_item *);
 void	ifa_item_insert(struct sockaddr *, struct ifaddr *, struct ifnet *);
@@ -210,31 +208,37 @@ if_attachsetup(struct ifnet *ifp)
 {
 	int wrapped = 0;
 
-	if (ifindex2ifnet == 0)
+	/*
+	 * Always increment the index to avoid races.
+	 */
+	if_index++;
+
+	/*
+	 * If we hit USHRT_MAX, we skip back to 1 since there are a
+	 * number of places where the value of ifp->if_index or
+	 * if_index itself is compared to or stored in an unsigned
+	 * short.  By jumping back, we won't botch those assignments
+	 * or comparisons.
+	 */
+	if (if_index == USHRT_MAX) {
 		if_index = 1;
-	else {
-		while (if_index < if_indexlim &&
-		    ifindex2ifnet[if_index] != NULL) {
-			if_index++;
+		wrapped++;
+	}
+
+	while (if_index < if_indexlim && ifindex2ifnet[if_index] != NULL) {
+		if_index++;
+
+		if (if_index == USHRT_MAX) {
 			/*
-			 * If we hit USHRT_MAX, we skip back to 1 since
-			 * there are a number of places where the value
-			 * of ifp->if_index or if_index itself is compared
-			 * to or stored in an unsigned short.  By
-			 * jumping back, we won't botch those assignments
-			 * or comparisons.
+			 * If we have to jump back to 1 twice without
+			 * finding an empty slot then there are too many
+			 * interfaces.
 			 */
-			if (if_index == USHRT_MAX) {
-				if_index = 1;
-				/*
-				 * However, if we have to jump back to 1
-				 * *twice* without finding an empty
-				 * slot in ifindex2ifnet[], then there
-				 * there are too many (>65535) interfaces.
-				 */
-				if (wrapped++)
-					panic("too many interfaces");
-			}
+			if (wrapped)
+				panic("too many interfaces");
+
+			if_index = 1;
+			wrapped++;
 		}
 	}
 	ifp->if_index = if_index;
@@ -285,10 +289,6 @@ if_attachsetup(struct ifnet *ifp)
 		if_attachdomain1(ifp);
 #if NPF > 0
 	pfi_attach_ifnet(ifp);
-#endif
-
-#if NVLAN > 0
-	LIST_INIT(&ifp->if_vlist);
 #endif
 
 	/* Announce the interface. */
@@ -450,6 +450,9 @@ if_attach_common(struct ifnet *ifp)
 	ifp->if_linkstatehooks = malloc(sizeof(*ifp->if_linkstatehooks),
 	    M_TEMP, M_WAITOK);
 	TAILQ_INIT(ifp->if_linkstatehooks);
+	ifp->if_detachhooks = malloc(sizeof(*ifp->if_detachhooks),
+	    M_TEMP, M_WAITOK);
+	TAILQ_INIT(ifp->if_detachhooks);
 }
 
 void
@@ -509,10 +512,8 @@ if_detach(struct ifnet *ifp)
 	ifp->if_ioctl = if_detached_ioctl;
 	ifp->if_watchdog = if_detached_watchdog;
 
-#if NVLAN > 0
-	if (!LIST_EMPTY(&ifp->if_vlist))
-		vlan_ifdetach(ifp);
-#endif
+	/* Call detach hooks, ie. to remove vlan interfaces */
+	dohooks(ifp->if_detachhooks, HOOK_REMOVE | HOOK_FREE);
 
 #if NTRUNK > 0
 	if (ifp->if_type == IFT_IEEE8023ADLAG)
@@ -615,6 +616,7 @@ do { \
 
 	free(ifp->if_addrhooks, M_TEMP);
 	free(ifp->if_linkstatehooks, M_TEMP);
+	free(ifp->if_detachhooks, M_TEMP);
 
 	for (dp = domains; dp; dp = dp->dom_next) {
 		if (dp->dom_ifdetach && ifp->if_afdata[dp->dom_family])
@@ -1112,17 +1114,35 @@ if_up(struct ifnet *ifp)
 }
 
 /*
- * Process a link state change.
- * NOTE: must be called at splsoftnet or equivalent.
+ * Schedule a link state change task.
  */
 void
 if_link_state_change(struct ifnet *ifp)
 {
-	rt_ifmsg(ifp);
+	/* try to put the routing table update task on syswq */
+	workq_add_task(NULL, 0, if_link_state_change_task,
+	    (void *)((unsigned long)ifp->if_index), NULL);
+}
+
+/*
+ * Process a link state change.
+ */
+void
+if_link_state_change_task(void *arg, void *unused)
+{
+	unsigned int index = (unsigned long)arg;
+	struct ifnet *ifp;
+	int s;
+
+	s = splsoftnet();
+	if ((ifp = if_get(index)) != NULL) {
+		rt_ifmsg(ifp);
 #ifndef SMALL_KERNEL
-	rt_if_track(ifp);
+		rt_if_track(ifp);
 #endif
-	dohooks(ifp->if_linkstatehooks, 0);
+		dohooks(ifp->if_linkstatehooks, 0);
+	}
+	splx(s);
 }
 
 /*
