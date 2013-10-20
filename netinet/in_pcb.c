@@ -485,7 +485,7 @@ in_pcbdetach(struct inpcb *inp)
 		TAILQ_REMOVE(&inp->inp_tdb_in->tdb_inp_in,
 			     inp, inp_tdb_in_next);
 	if (inp->inp_tdb_out)
-	        TAILQ_REMOVE(&inp->inp_tdb_out->tdb_inp_out, inp,
+		TAILQ_REMOVE(&inp->inp_tdb_out->tdb_inp_out, inp,
 			     inp_tdb_out_next);
 	if (inp->inp_ipsec_remotecred)
 		ipsp_reffree(inp->inp_ipsec_remotecred);
@@ -696,8 +696,8 @@ in_pcblookup(struct inpcbtable *table, void *faddrp, u_int fport_arg,
 #endif /* INET6 */
 		{
 #ifdef INET6
-		        if (inp->inp_flags & INP_IPV6)
-			        continue;
+			if (inp->inp_flags & INP_IPV6)
+				continue;
 #endif /* INET6 */
 
 			if (inp->inp_faddr.s_addr != INADDR_ANY) {
@@ -1097,7 +1097,7 @@ in6_pcblookup_listen(struct inpcbtable *table, struct in6_addr *laddr,
 		if (inp->inp_lport == lport && inp->inp_fport == 0 &&
 		    IN6_ARE_ADDR_EQUAL(&inp->inp_laddr6, key1) &&
 		    IN6_IS_ADDR_UNSPECIFIED(&inp->inp_faddr6) &&
-		    rtable_l2(inp->inp_rtableid) == rtable))
+		    rtable_l2(inp->inp_rtableid) == rtable)
 			break;
 	}
 	if (inp == NULL && ! IN6_ARE_ADDR_EQUAL(key1, key2)) {
