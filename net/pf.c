@@ -6490,7 +6490,6 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0,
 		}
 	}
 	pd.eh = eh;
-
 	pd.m->m_pkthdr.pf.flags |= PF_TAG_PROCESSED;
 
 	switch (pd.virtual_proto) {
