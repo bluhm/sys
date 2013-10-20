@@ -915,8 +915,7 @@ in_pcbhashlookup(struct inpcbtable *table, struct in_addr faddr,
 			continue;	/*XXX*/
 #endif
 		if (inp->inp_faddr.s_addr == faddr.s_addr &&
-		    inp->inp_fport == fport &&
-		    inp->inp_lport == lport &&
+		    inp->inp_fport == fport && inp->inp_lport == lport &&
 		    inp->inp_laddr.s_addr == laddr.s_addr &&
 		    rtable_l2(inp->inp_rtableid) == rdomain) {
 			/*
@@ -1096,9 +1095,9 @@ in6_pcblookup_listen(struct inpcbtable *table, struct in6_addr *laddr,
 		if (!(inp->inp_flags & INP_IPV6))
 			continue;
 		if (inp->inp_lport == lport && inp->inp_fport == 0 &&
-		    rtable_l2(inp->inp_rtableid) == rtable &&
 		    IN6_ARE_ADDR_EQUAL(&inp->inp_laddr6, key1) &&
-		    IN6_IS_ADDR_UNSPECIFIED(&inp->inp_faddr6))
+		    IN6_IS_ADDR_UNSPECIFIED(&inp->inp_faddr6) &&
+		    rtable_l2(inp->inp_rtableid) == rtable))
 			break;
 	}
 	if (inp == NULL && ! IN6_ARE_ADDR_EQUAL(key1, key2)) {
@@ -1107,9 +1106,9 @@ in6_pcblookup_listen(struct inpcbtable *table, struct in6_addr *laddr,
 			if (!(inp->inp_flags & INP_IPV6))
 				continue;
 			if (inp->inp_lport == lport && inp->inp_fport == 0 &&
-			    rtable_l2(inp->inp_rtableid) == rtable &&
 			    IN6_ARE_ADDR_EQUAL(&inp->inp_laddr6, key2) &&
-			    IN6_IS_ADDR_UNSPECIFIED(&inp->inp_faddr6))
+			    IN6_IS_ADDR_UNSPECIFIED(&inp->inp_faddr6) &&
+			    rtable_l2(inp->inp_rtableid) == rtable)
 				break;
 		}
 	}
