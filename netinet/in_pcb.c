@@ -1107,8 +1107,8 @@ in6_pcblookup_listen(struct inpcbtable *table, struct in6_addr *laddr,
 			if (!(inp->inp_flags & INP_IPV6))
 				continue;
 			if (inp->inp_lport == lport && inp->inp_fport == 0 &&
-		    	    rtable_l2(inp->inp_rtableid) == rtable &&
-		    	    IN6_ARE_ADDR_EQUAL(&inp->inp_laddr6, key2) &&
+			    rtable_l2(inp->inp_rtableid) == rtable &&
+			    IN6_ARE_ADDR_EQUAL(&inp->inp_laddr6, key2) &&
 			    IN6_IS_ADDR_UNSPECIFIED(&inp->inp_faddr6))
 				break;
 		}
