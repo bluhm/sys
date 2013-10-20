@@ -318,15 +318,6 @@ ip6_input(struct mbuf *m)
 	}
 #endif
 
-	if (ip6_check_rh0hdr(m, &off)) {
-		ip6stat.ip6s_badoptions++;
-		in6_ifstat_inc(m->m_pkthdr.rcvif, ifs6_in_discard);
-		in6_ifstat_inc(m->m_pkthdr.rcvif, ifs6_in_hdrerr);
-		icmp6_error(m, ICMP6_PARAM_PROB, ICMP6_PARAMPROB_HEADER, off);
-		/* m is already freed */
-		return;
-	}
-
 #if NPF > 0
         /*
          * Packet filter
@@ -340,6 +331,17 @@ ip6_input(struct mbuf *m)
 	ip6 = mtod(m, struct ip6_hdr *);
 	srcrt = !IN6_ARE_ADDR_EQUAL(&odst, &ip6->ip6_dst);
 #endif
+
+	/* pf scans the header chain, do not do it twice */
+	if (!(m->m_pkthdr.pf.flags & PF_TAG_PROCESSED) &&
+	    ip6_check_rh0hdr(m, &off)) {
+		ip6stat.ip6s_badoptions++;
+		in6_ifstat_inc(m->m_pkthdr.rcvif, ifs6_in_discard);
+		in6_ifstat_inc(m->m_pkthdr.rcvif, ifs6_in_hdrerr);
+		icmp6_error(m, ICMP6_PARAM_PROB, ICMP6_PARAMPROB_HEADER, off);
+		/* m is already freed */
+		return;
+	}
 
 	if (IN6_IS_ADDR_LOOPBACK(&ip6->ip6_src) ||
 	    IN6_IS_ADDR_LOOPBACK(&ip6->ip6_dst)) {

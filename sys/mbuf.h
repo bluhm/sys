@@ -100,6 +100,7 @@ struct pkthdr_pf {
 #define	PF_TAG_DIVERTED_PACKET		0x10
 #define	PF_TAG_REROUTE			0x20
 #define	PF_TAG_REFRAGMENTED		0x40	/* refragmented ipv6 packet */
+#define	PF_TAG_PROCESSED		0x80	/* packet was checked by pf */
 
 /* record/packet header in first mbuf of chain; valid if M_PKTHDR set */
 struct	pkthdr {
