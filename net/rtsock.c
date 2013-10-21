@@ -103,6 +103,7 @@ int		 rt_msg2(int, int, struct rt_addrinfo *, caddr_t,
 void		 rt_xaddrs(caddr_t, caddr_t, struct rt_addrinfo *);
 #ifdef RTM_OVERSION
 struct rt_msghdr *rtmsg_4to5(struct mbuf *, int *);
+struct rt_omsghdr *rtmsg_5to4(struct rt_msghdr *);
 void rt_ogetmetrics(struct rt_kmetrics *in, struct rt_ometrics *out);
 #endif /* RTM_OVERSION */
 
@@ -467,6 +468,7 @@ route_output(struct mbuf *m, ...)
 	va_list			 ap;
 	u_int			 tableid;
 	u_int8_t		 prio;
+	u_char			 vers;
 
 	va_start(ap, m);
 	so = va_arg(ap, struct socket *);
@@ -484,7 +486,8 @@ route_output(struct mbuf *m, ...)
 		error = EINVAL;
 		goto fail;
 	}
-	switch (mtod(m, struct rt_msghdr *)->rtm_version) {
+	vers = mtod(m, struct rt_msghdr *)->rtm_version;
+	switch (vers) {
 #ifdef RTM_OVERSION
 	case RTM_OVERSION:
 		if (len < sizeof(struct rt_omsghdr)) {
@@ -924,6 +927,21 @@ fail:
 	if (rp)
 		rp->rcb_proto.sp_family = 0; /* Avoid us */
 	if (rtm) {
+#ifdef RTM_OVERSION
+		if (vers == RTM_OVERSION) {
+			struct rt_omsghdr *ortm;
+
+			if ((ortm = rtmsg_5to4(rtm)) == NULL) {
+				m_freem(m);
+				m = NULL;
+			} else 
+			if (m_copyback(m, 0, ortm->rtm_msglen, ortm, M_NOWAIT)){
+				m_freem(m);
+				m = NULL;
+			} else if (m->m_pkthdr.len > ortm->rtm_msglen)
+				m_adj(m, ortm->rtm_msglen - m->m_pkthdr.len);
+		} else
+#endif /* RTM_OVERSION */
 		if (m_copyback(m, 0, rtm->rtm_msglen, rtm, M_NOWAIT)) {
 			m_freem(m);
 			m = NULL;
@@ -1597,6 +1615,48 @@ rtmsg_4to5(struct mbuf *m, int *len)
 	    (caddr_t)rtm + sizeof(struct rt_msghdr));
 
 	return (rtm);
+}
+
+struct rt_omsghdr *
+rtmsg_5to4(struct rt_msghdr *rtm)
+{
+	struct rt_omsghdr *ortm;
+	int len;
+
+	len = rtm->rtm_msglen + sizeof(struct rt_omsghdr) -
+	    sizeof(struct rt_msghdr);
+	R_Malloc(ortm, struct rt_omsghdr *, len);
+	if (ortm == NULL)
+		return (NULL);
+	bzero(ortm, sizeof(struct rt_omsghdr));
+	ortm->rtm_msglen = len;
+	ortm->rtm_version = RTM_VERSION;
+	ortm->rtm_type = rtm->rtm_type;
+	ortm->rtm_hdrlen = sizeof(struct rt_omsghdr);
+
+	ortm->rtm_index = rtm->rtm_index;
+	ortm->rtm_tableid = rtm->rtm_tableid;
+	ortm->rtm_priority = rtm->rtm_priority;
+	ortm->rtm_mpls = rtm->rtm_mpls;
+	ortm->rtm_addrs = rtm->rtm_addrs;
+	ortm->rtm_flags = rtm->rtm_flags;
+	ortm->rtm_fmask = rtm->rtm_fmask;
+	ortm->rtm_pid = rtm->rtm_pid;
+	ortm->rtm_seq = rtm->rtm_seq;
+	ortm->rtm_errno = rtm->rtm_errno;
+	ortm->rtm_inits = rtm->rtm_inits;
+
+	/* copy just the interesting stuff ignore the rest */
+	ortm->rtm_rmx.rmx_pksent = rtm->rtm_rmx.rmx_pksent;
+	ortm->rtm_rmx.rmx_expire = (u_int)rtm->rtm_rmx.rmx_expire;
+	ortm->rtm_rmx.rmx_locks = rtm->rtm_rmx.rmx_locks;
+	ortm->rtm_rmx.rmx_mtu = rtm->rtm_rmx.rmx_mtu;
+
+	memcpy((caddr_t)ortm + sizeof(struct rt_omsghdr),
+	    (caddr_t)rtm + sizeof(struct rt_msghdr),
+	    len - sizeof(struct rt_omsghdr));
+
+	return (ortm);
 }
 #endif /* RTM_OVERSION */
 
