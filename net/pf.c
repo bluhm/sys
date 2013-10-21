@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf.c,v 1.846 2013/10/20 11:03:00 phessler Exp $ */
+/*	$OpenBSD: pf.c,v 1.848 2013/10/20 13:42:36 henning Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -5443,7 +5443,7 @@ pf_routable(struct pf_addr *addr, sa_family_t af, struct pfi_kif *kif,
 
 			if (kif->pfik_ifp == ifp)
 				ret = 1;
-			rt = rt_mpath_next(rt, 0);
+			rt = rt_mpath_next(rt);
 		} while (check_mpath == 1 && rt != NULL && ret == 0);
 	} else
 		ret = 0;
@@ -6749,7 +6749,11 @@ pf_cksum(struct pf_pdesc *pd, struct mbuf *m)
 		m->m_pkthdr.csum_flags |= M_UDP_CSUM_OUT;
 		break;
 	case IPPROTO_ICMP:
+		pd->hdr.icmp->icmp_cksum = 0;
+		m->m_pkthdr.csum_flags |= M_ICMP_CSUM_OUT;
+		break;
 	case IPPROTO_ICMPV6:
+		pd->hdr.icmp6->icmp6_cksum = 0;
 		m->m_pkthdr.csum_flags |= M_ICMP_CSUM_OUT;
 		break;
 	default:
