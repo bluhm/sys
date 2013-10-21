@@ -1627,7 +1627,7 @@ rtmsg_5to4(struct rt_msghdr *rtm)
 		return (NULL);
 	bzero(ortm, sizeof(struct rt_omsghdr));
 	ortm->rtm_msglen = len;
-	ortm->rtm_version = RTM_VERSION;
+	ortm->rtm_version = RTM_OVERSION;
 	ortm->rtm_type = rtm->rtm_type;
 	ortm->rtm_hdrlen = sizeof(struct rt_omsghdr);
 
