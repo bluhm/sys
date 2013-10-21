@@ -1565,7 +1565,7 @@ rtmsg_4to5(struct mbuf *m, int *len)
 
 	*len += sizeof(struct rt_msghdr) - sizeof(struct rt_omsghdr);
 	R_Malloc(rtm, struct rt_msghdr *, *len);
-	if (rtm == 0)
+	if (rtm == NULL)
 		return (NULL);
 	bzero(rtm, sizeof(struct rt_msghdr));
 	ortm = mtod(m, struct rt_omsghdr *);
