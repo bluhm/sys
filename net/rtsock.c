@@ -931,11 +931,8 @@ fail:
 		if (vers == RTM_OVERSION) {
 			struct rt_omsghdr *ortm;
 
-			if ((ortm = rtmsg_5to4(rtm)) == NULL) {
-				m_freem(m);
-				m = NULL;
-			} else 
-			if (m_copyback(m, 0, ortm->rtm_msglen, ortm, M_NOWAIT)){
+			if ((ortm = rtmsg_5to4(rtm)) == NULL ||
+			    m_copyback(m, 0, ortm->rtm_msglen, ortm, M_NOWAIT)){
 				m_freem(m);
 				m = NULL;
 			} else if (m->m_pkthdr.len > ortm->rtm_msglen)
