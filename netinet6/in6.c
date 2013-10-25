@@ -1778,16 +1778,18 @@ in6_delmulti(struct in6_multi *in6m)
 			ifafree(&in6m->in6m_ia->ia_ifa); /* release reference */
 		}
 
-		/*
-		 * Notify the network driver to update its multicast
-		 * reception filter.
-		 */
-		bzero(&ifr.ifr_addr, sizeof(struct sockaddr_in6));
-		ifr.ifr_addr.sin6_len = sizeof(struct sockaddr_in6);
-		ifr.ifr_addr.sin6_family = AF_INET6;
-		ifr.ifr_addr.sin6_addr = in6m->in6m_addr;
-		(*in6m->in6m_ifp->if_ioctl)(in6m->in6m_ifp,
-					    SIOCDELMULTI, (caddr_t)&ifr);
+		if (in6m->in6m_ifp != NULL) {
+			/*
+			 * Notify the network driver to update its multicast
+			 * reception filter.
+			 */
+			bzero(&ifr.ifr_addr, sizeof(struct sockaddr_in6));
+			ifr.ifr_addr.sin6_len = sizeof(struct sockaddr_in6);
+			ifr.ifr_addr.sin6_family = AF_INET6;
+			ifr.ifr_addr.sin6_addr = in6m->in6m_addr;
+			(*in6m->in6m_ifp->if_ioctl)(in6m->in6m_ifp,
+			    SIOCDELMULTI, (caddr_t)&ifr);
+		}
 		free(in6m, M_IPMADDR);
 	}
 	splx(s);
@@ -1815,10 +1817,9 @@ in6_joingroup(struct ifnet *ifp, struct in6_addr *addr, int *errorp)
 int
 in6_leavegroup(struct in6_multi_mship *imm)
 {
-
 	if (imm->i6mm_maddr)
 		workq_queue_task(NULL, &imm->wqt, 0, in6_leavegroup_task, imm,
-		    NULL);
+		    (void *)(unsigned long)imm->i6mm_maddr->in6m_ifp->if_index);
 	else 
 		free(imm,  M_IPMADDR);
 	return 0;
@@ -1827,7 +1828,12 @@ in6_leavegroup(struct in6_multi_mship *imm)
 void
 in6_leavegroup_task(void *arg1, void *arg2)
 {
-	struct in6_multi_mship *imm = arg1;
+	struct in6_multi_mship	*imm = arg1;
+	unsigned int		 index = (unsigned long)arg2;
+
+	/* If interface has been be freed, avoid call to if_ioctl(). */
+	if (if_get(index) != imm->i6mm_maddr->in6m_ifp)
+		imm->i6mm_maddr->in6m_ifp = NULL;
 
 	in6_delmulti(imm->i6mm_maddr);
 	free(imm,  M_IPMADDR);
