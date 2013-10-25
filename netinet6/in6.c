@@ -1657,10 +1657,9 @@ in6_joingroup(struct ifnet *ifp, struct in6_addr *addr, int *errorp)
 int
 in6_leavegroup(struct in6_multi_mship *imm)
 {
-
 	if (imm->i6mm_maddr)
 		workq_queue_task(NULL, &imm->wqt, 0, in6_leavegroup_task, imm,
-		    NULL);
+		    (void *)(unsigned long)imm->i6mm_maddr->in6m_ifp->if_index);
 	else 
 		free(imm,  M_IPMADDR);
 	return 0;
@@ -1669,7 +1668,12 @@ in6_leavegroup(struct in6_multi_mship *imm)
 void
 in6_leavegroup_task(void *arg1, void *arg2)
 {
-	struct in6_multi_mship *imm = arg1;
+	struct in6_multi_mship	*imm = arg1;
+	unsigned int		 index = (unsigned long)arg2;
+
+	/* If interface has been be freed, avoid call to if_ioctl(). */
+	if (if_get(index) != imm->i6mm_maddr->in6m_ifp)
+		imm->i6mm_maddr->in6m_ifp = NULL;
 
 	in6_delmulti(imm->i6mm_maddr);
 	free(imm,  M_IPMADDR);
