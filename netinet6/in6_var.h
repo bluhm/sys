@@ -1,4 +1,4 @@
-/*	$OpenBSD: in6_var.h,v 1.42 2013/10/14 11:07:42 mpi Exp $	*/
+/*	$OpenBSD: in6_var.h,v 1.44 2013/10/24 11:31:43 mpi Exp $	*/
 /*	$KAME: in6_var.h,v 1.55 2001/02/16 12:49:45 itojun Exp $	*/
 
 /*
@@ -86,6 +86,7 @@ struct in6_addrlifetime {
 	u_int32_t ia6t_pltime;	/* prefix lifetime */
 };
 
+#ifdef _KERNEL
 struct nd_ifinfo;
 struct in6_ifextra {
 	struct in6_ifstat *in6_ifstat;
@@ -121,6 +122,7 @@ struct	in6_ifaddr {
 	/* multicast addresses joined from the kernel */
 	LIST_HEAD(, in6_multi_mship) ia6_memberships;
 };
+#endif /* _KERNEL */
 
 /*
  * IPv6 interface statistics, as defined in RFC2465 Ipv6IfStatsEntry (p12).
@@ -374,7 +376,7 @@ struct	in6_rrenumreq {
 	(((d)->s6_addr32[1] ^ (a)->s6_addr32[1]) & (m)->s6_addr32[1]) == 0 && \
 	(((d)->s6_addr32[2] ^ (a)->s6_addr32[2]) & (m)->s6_addr32[2]) == 0 && \
 	(((d)->s6_addr32[3] ^ (a)->s6_addr32[3]) & (m)->s6_addr32[3]) == 0 )
-#endif
+#endif /* _KERNEL */
 
 #define SIOCSIFADDR_IN6		 _IOW('i', 12, struct in6_ifreq)
 #define SIOCGIFADDR_IN6		_IOWR('i', 33, struct in6_ifreq)
@@ -386,7 +388,7 @@ struct	in6_rrenumreq {
  */
 #define SIOCSIFDSTADDR_IN6	 _IOW('i', 14, struct in6_ifreq)
 #define SIOCSIFNETMASK_IN6	 _IOW('i', 22, struct in6_ifreq)
-#endif
+#endif /* _KERNEL */
 
 #define SIOCGIFDSTADDR_IN6	_IOWR('i', 34, struct in6_ifreq)
 #define SIOCGIFNETMASK_IN6	_IOWR('i', 37, struct in6_ifreq)
@@ -444,9 +446,7 @@ struct	in6_rrenumreq {
 #ifdef _KERNEL
 #define IN6_ARE_SCOPE_CMP(a,b) ((a)-(b))
 #define IN6_ARE_SCOPE_EQUAL(a,b) ((a)==(b))
-#endif
 
-#ifdef _KERNEL
 TAILQ_HEAD(in6_ifaddrhead, in6_ifaddr);
 extern struct in6_ifaddrhead in6_ifaddr;
 
@@ -456,11 +456,6 @@ do {								\
 	if (ifp)						\
 		((struct in6_ifextra *)((ifp)->if_afdata[AF_INET6]))->in6_ifstat->tag++; \
 } while (0)
-
-extern struct ifqueue ip6intrq;		/* IP6 packet input queue */
-extern struct in6_addr zeroin6_addr;
-extern u_char inet6ctlerrmap[];
-extern unsigned long in6_maxmtu;
 
 /*
  * Macro for finding the internet address structure (in6_ifaddr) corresponding
@@ -479,7 +474,6 @@ do {									\
 	}								\
 	(ia) = (struct in6_ifaddr *)ifa;				\
 } while (0)
-#endif /* _KERNEL */
 
 /*
  * Multi-cast membership entry.  One for each group/ifp that a PCB
@@ -500,7 +494,6 @@ struct	in6_multi {
 	u_int	in6m_timer;		/* MLD6 listener report timer */
 };
 
-#ifdef _KERNEL
 /*
  * Macro for iterating over all the in6_multi records linked to a given
  * interface.
@@ -551,7 +544,6 @@ void	in6_purgemkludge(struct ifnet *);
 struct in6_ifaddr *in6ifa_ifpforlinklocal(struct ifnet *, int);
 struct in6_ifaddr *in6ifa_ifpwithaddr(struct ifnet *, struct in6_addr *);
 int	in6_ifpprefix(const struct ifnet *, const struct in6_addr *);
-char	*ip6_sprintf(struct in6_addr *);
 int	in6_addr2scopeid(struct ifnet *, struct in6_addr *);
 int	in6_matchlen(struct in6_addr *, struct in6_addr *);
 int	in6_are_prefix_equal(struct in6_addr *, struct in6_addr *, int);
@@ -559,13 +551,6 @@ void	in6_prefixlen2mask(struct in6_addr *, int);
 void	in6_purgeprefix(struct ifnet *);
 void	in6_ifaddloop(struct ifaddr *);
 void	in6_ifremloop(struct ifaddr *);
-
-struct inpcb;
-int in6_embedscope(struct in6_addr *, const struct sockaddr_in6 *,
-	struct inpcb *, struct ifnet **);
-int in6_recoverscope(struct sockaddr_in6 *, const struct in6_addr *,
-	struct ifnet *);
-void in6_clearscope(struct in6_addr *);
 #endif /* _KERNEL */
 
 #endif /* _NETINET6_IN6_VAR_H_ */

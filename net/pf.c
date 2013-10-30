@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf.c,v 1.849 2013/10/21 09:39:23 henning Exp $ */
+/*	$OpenBSD: pf.c,v 1.855 2013/10/28 12:09:41 mikeb Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -62,7 +62,6 @@
 #include <net/radix_mpath.h>
 
 #include <netinet/in.h>
-#include <netinet/in_var.h>
 #include <netinet/in_systm.h>
 #include <netinet/ip.h>
 #include <netinet/ip_var.h>
@@ -832,10 +831,10 @@ pf_state_key_addr_setup(struct pf_pdesc *pd, void *arg, int sidx,
 		break;
 	default:
 		if (multi == PF_ICMP_MULTI_LINK) {
-			key->addr[sidx].addr32[0] = IPV6_ADDR_INT32_MLL;
+			key->addr[sidx].addr32[0] = __IPV6_ADDR_INT32_MLL;
 			key->addr[sidx].addr32[1] = 0;
 			key->addr[sidx].addr32[2] = 0;
-			key->addr[sidx].addr32[3] = IPV6_ADDR_INT32_ONE;
+			key->addr[sidx].addr32[3] = __IPV6_ADDR_INT32_ONE;
 			saddr = NULL; /* overwritten */
 		}
 	}
@@ -2157,7 +2156,8 @@ pf_translate_icmp_af(int af, void *arg)
 		/* aligns well with a icmpv4 nextmtu */
 		icmp6->icmp6_mtu = htonl(mtu);
 		/* icmpv4 pptr is a one most significant byte */
-		icmp6->icmp6_pptr = htonl(ptr << 24);
+		if (ptr >= 0)
+			icmp6->icmp6_pptr = htonl(ptr << 24);
 		break;
 	case AF_INET6:
 		icmp4 = arg;
@@ -2249,7 +2249,8 @@ pf_translate_icmp_af(int af, void *arg)
 		icmp4->icmp_type = type;
 		icmp4->icmp_code = code;
 		icmp4->icmp_nextmtu = htons(mtu);
-		icmp4->icmp_void = htonl(ptr);
+		if (ptr >= 0)
+			icmp4->icmp_void = htonl(ptr);
 		break;
 	}
 
@@ -4861,8 +4862,12 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **state,
 						pd->proto = IPPROTO_ICMP;
 					else
 						pd->proto = IPPROTO_ICMPV6;
-					th.th_sport = nk->port[sidx];
-					th.th_dport = nk->port[didx];
+					pf_change_ap(pd, pd2.src, &th.th_sport,
+					    &nk->addr[pd2.sidx], nk->port[sidx],
+					    nk->af);
+					pf_change_ap(pd, pd2.dst, &th.th_dport,
+					    &nk->addr[pd2.didx], nk->port[didx],
+					    nk->af);
 					m_copyback(pd2.m, pd2.off, 8, &th,
 					    M_NOWAIT);
 					pd->m->m_pkthdr.rdomain = nk->rdomain;
@@ -4973,12 +4978,12 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **state,
 						pd->proto = IPPROTO_ICMP;
 					else
 						pd->proto = IPPROTO_ICMPV6;
-					pf_change_ap(pd, pd2.src,
-					    &uh.uh_sum, &nk->addr[pd2.sidx],
-					    nk->port[sidx], nk->af);
-					pf_change_ap(pd, pd2.dst,
-					    &uh.uh_sum, &nk->addr[pd2.didx],
-					    nk->port[didx], nk->af);
+					pf_change_ap(pd, pd2.src, &uh.uh_sport,
+					    &nk->addr[pd2.sidx], nk->port[sidx],
+					    nk->af);
+					pf_change_ap(pd, pd2.dst, &uh.uh_dport,
+					    &nk->addr[pd2.didx], nk->port[didx],
+					    nk->af);
 					m_copyback(pd2.m, pd2.off, sizeof(uh),
 					    &uh, M_NOWAIT);
 					pd->m->m_pkthdr.rdomain = nk->rdomain;
@@ -5325,8 +5330,10 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **state,
 		}
 		}
 	}
-	if (copyback)
+	if (copyback) {
 		pf_cksum(pd, pd->m);
+		m_copyback(pd->m, pd->off, pd->hdrlen, pd->hdr.any, M_NOWAIT);
+	}
 
 	return (PF_PASS);
 }

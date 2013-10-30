@@ -1,4 +1,4 @@
-/*	$OpenBSD: in.h,v 1.97 2013/10/09 09:33:43 mpi Exp $	*/
+/*	$OpenBSD: in.h,v 1.100 2013/10/23 15:12:42 mpi Exp $	*/
 /*	$NetBSD: in.h,v 1.20 1996/02/13 23:41:47 christos Exp $	*/
 
 /*
@@ -28,8 +28,6 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- *	@(#)in.h	8.3 (Berkeley) 1/3/94
  */
 
 /*
@@ -283,9 +281,6 @@ struct ip_opts {
 #define	IP_MULTICAST_LOOP	11   /* u_char; set/get IP multicast loopback */
 #define	IP_ADD_MEMBERSHIP	12   /* ip_mreq; add an IP group membership */
 #define	IP_DROP_MEMBERSHIP	13   /* ip_mreq; drop an IP group membership */
-
-/* 14-17 left empty for future compatibility with FreeBSD */
-
 #define IP_PORTRANGE		19   /* int; range to choose for unspec port */
 #define IP_AUTH_LEVEL		20   /* int; authentication used */
 #define IP_ESP_TRANS_LEVEL	21   /* int; transport encryption */
@@ -829,6 +824,8 @@ in_cksum_addword(u_int16_t a, u_int16_t b)
 	return (sum);
 }
 
+extern	   int inetctlerrmap[];
+extern	   struct ifqueue ipintrq;	/* ip packet input queue */
 extern	   struct in_addr zeroin_addr;
 
 int	   in_broadcast(struct in_addr, struct ifnet *, u_int);
@@ -837,10 +834,13 @@ int	   in_cksum(struct mbuf *, int);
 int	   in4_cksum(struct mbuf *, u_int8_t, int, int);
 void	   in_delayed_cksum(struct mbuf *);
 int	   in_localaddr(struct in_addr, u_int);
-void	   in_socktrim(struct sockaddr_in *);
-char	  *inet_ntoa(struct in_addr);
 void	   in_proto_cksum_out(struct mbuf *, struct ifnet *);
 void	   in_ifdetach(struct ifnet *);
+int	   in_mask2len(struct in_addr *);
+
+char	  *inet_ntoa(struct in_addr);
+int	   inet_nat64(int, const void *, void *, const void *, u_int8_t);
+int	   inet_nat46(int, const void *, void *, const void *, u_int8_t);
 
 #define	in_hosteq(s,t)	((s).s_addr == (t).s_addr)
 #define	in_nullhost(x)	((x).s_addr == INADDR_ANY)

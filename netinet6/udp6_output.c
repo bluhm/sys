@@ -1,4 +1,4 @@
-/*	$OpenBSD: udp6_output.c,v 1.20 2013/10/17 16:27:47 bluhm Exp $	*/
+/*	$OpenBSD: udp6_output.c,v 1.23 2013/10/23 19:57:50 deraadt Exp $	*/
 /*	$KAME: udp6_output.c,v 1.21 2001/02/07 11:51:54 itojun Exp $	*/
 
 /*
@@ -57,8 +57,6 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- *	@(#)udp_var.h	8.1 (Berkeley) 6/10/93
  */
 
 #include <sys/param.h>
@@ -93,50 +91,31 @@
  * UDP protocol inplementation.
  * Per RFC 768, August, 1980.
  */
-
-#define in6pcb		inpcb
-#define in6p_outputopts	inp_outputopts6
-#define in6p_socket	inp_socket
-#define in6p_faddr	inp_faddr6
-#define in6p_laddr	inp_laddr6
-#define in6p_fport	inp_fport
-#define in6p_lport	inp_lport
-#define in6p_flags	inp_flags
-#define in6p_moptions	inp_moptions6
-#define in6p_route	inp_route6
-#define in6p_flowinfo	inp_flowinfo
-#define udp6stat	udpstat
-#define udp6s_opackets	udps_opackets
-
 int
-udp6_output(struct in6pcb *in6p, struct mbuf *m, struct mbuf *addr6, 
+udp6_output(struct inpcb *in6p, struct mbuf *m, struct mbuf *addr6, 
 	struct mbuf *control)
 {
 	u_int32_t ulen = m->m_pkthdr.len;
 	u_int32_t plen = sizeof(struct udphdr) + ulen;
+	int error = 0, priv = 0, af, hlen, flags;
 	struct ip6_hdr *ip6;
 	struct udphdr *udp6;
-	struct	in6_addr *laddr, *faddr;
-	u_short fport;
-	int error = 0;
+	struct in6_addr *laddr, *faddr;
 	struct ip6_pktopts *optp, opt;
-	int priv;
-	int af, hlen;
-	int flags;
 	struct sockaddr_in6 tmp;
 	struct proc *p = curproc;	/* XXX */
 	struct ifnet *ifp;
+	u_short fport;
 
-	priv = 0;
-	if ((in6p->in6p_socket->so_state & SS_PRIV) != 0)
+	if ((in6p->inp_socket->so_state & SS_PRIV) != 0)
 		priv = 1;
 	if (control) {
 		if ((error = ip6_setpktopts(control, &opt,
-		    in6p->in6p_outputopts, priv, IPPROTO_UDP)) != 0)
+		    in6p->inp_outputopts6, priv, IPPROTO_UDP)) != 0)
 			goto release;
 		optp = &opt;
 	} else
-		optp = in6p->in6p_outputopts;
+		optp = in6p->inp_outputopts6;
 
 	if (addr6) {
 		/*
@@ -162,7 +141,7 @@ udp6_output(struct in6pcb *in6p, struct mbuf *m, struct mbuf *addr6,
 			goto release;
 		}
 
-		if (!IN6_IS_ADDR_UNSPECIFIED(&in6p->in6p_faddr)) {
+		if (!IN6_IS_ADDR_UNSPECIFIED(&in6p->inp_faddr6)) {
 			error = EISCONN;
 			goto release;
 		}
@@ -180,35 +159,31 @@ udp6_output(struct in6pcb *in6p, struct mbuf *m, struct mbuf *addr6,
 			goto release;
 		}
 
-		if (1)	/* we don't support IPv4 mapped address */
-		{
+		if (1) {	/* we don't support IPv4 mapped address */
 			laddr = in6_selectsrc(sin6, optp,
-					      in6p->in6p_moptions,
-					      &in6p->in6p_route,
-					      &in6p->in6p_laddr, &error,
-					      in6p->inp_rtableid);
+			    in6p->inp_moptions6, &in6p->inp_route6,
+			    &in6p->inp_laddr6, &error, in6p->inp_rtableid);
 		} else
-			laddr = &in6p->in6p_laddr;	/*XXX*/
+			laddr = &in6p->inp_laddr6;	/*XXX*/
 		if (laddr == NULL) {
 			if (error == 0)
 				error = EADDRNOTAVAIL;
 			goto release;
 		}
-		if (in6p->in6p_lport == 0 &&
+		if (in6p->inp_lport == 0 &&
 		    (error = in6_pcbsetport(laddr, in6p, p)) != 0)
 			goto release;
 	} else {
-		if (IN6_IS_ADDR_UNSPECIFIED(&in6p->in6p_faddr)) {
+		if (IN6_IS_ADDR_UNSPECIFIED(&in6p->inp_faddr6)) {
 			error = ENOTCONN;
 			goto release;
 		}
-		laddr = &in6p->in6p_laddr;
-		faddr = &in6p->in6p_faddr;
-		fport = in6p->in6p_fport;
+		laddr = &in6p->inp_laddr6;
+		faddr = &in6p->inp_faddr6;
+		fport = in6p->inp_fport;
 	}
 
-	if (1)	/* we don't support IPv4 mapped address */
-	{
+	if (1) {	/* we don't support IPv4 mapped address */
 		af = AF_INET6;
 		hlen = sizeof(struct ip6_hdr);
 	} else {
@@ -230,7 +205,7 @@ udp6_output(struct in6pcb *in6p, struct mbuf *m, struct mbuf *addr6,
 	 * Stuff checksum and output datagram.
 	 */
 	udp6 = (struct udphdr *)(mtod(m, caddr_t) + hlen);
-	udp6->uh_sport = in6p->in6p_lport; /* lport is always set in the PCB */
+	udp6->uh_sport = in6p->inp_lport; /* lport is always set in the PCB */
 	udp6->uh_dport = fport;
 	if (plen <= 0xffff)
 		udp6->uh_ulen = htons((u_short)plen);
@@ -241,7 +216,7 @@ udp6_output(struct in6pcb *in6p, struct mbuf *m, struct mbuf *addr6,
 	switch (af) {
 	case AF_INET6:
 		ip6 = mtod(m, struct ip6_hdr *);
-		ip6->ip6_flow	= in6p->in6p_flowinfo & IPV6_FLOWINFO_MASK;
+		ip6->ip6_flow	= in6p->inp_flowinfo & IPV6_FLOWINFO_MASK;
 		ip6->ip6_vfc 	&= ~IPV6_VERSION_MASK;
 		ip6->ip6_vfc 	|= IPV6_VERSION;
 #if 0				/* ip6_plen will be filled in ip6_output. */
@@ -249,29 +224,26 @@ udp6_output(struct in6pcb *in6p, struct mbuf *m, struct mbuf *addr6,
 #endif
 		ip6->ip6_nxt	= IPPROTO_UDP;
 		ifp = NULL;
-		if (in6p->in6p_route.ro_rt &&
-		    in6p->in6p_route.ro_rt->rt_flags & RTF_UP)
-			ifp = in6p->in6p_route.ro_rt->rt_ifp;
+		if (in6p->inp_route6.ro_rt &&
+		    in6p->inp_route6.ro_rt->rt_flags & RTF_UP)
+			ifp = in6p->inp_route6.ro_rt->rt_ifp;
 		ip6->ip6_hlim	= in6_selecthlim(in6p, ifp);
 		ip6->ip6_src	= *laddr;
 		ip6->ip6_dst	= *faddr;
 
-		if ((udp6->uh_sum = in6_cksum(m, IPPROTO_UDP,
-				sizeof(struct ip6_hdr), plen)) == 0) {
-			udp6->uh_sum = 0xffff;
-		}
+		m->m_pkthdr.csum_flags |= M_UDP_CSUM_OUT;
 
 		flags = 0;
-		if (in6p->in6p_flags & IN6P_MINMTU)
+		if (in6p->inp_flags & IN6P_MINMTU)
 			flags |= IPV6_MINMTU;
 
-		udp6stat.udp6s_opackets++;
+		udpstat.udps_opackets++;
 
 		/* force routing domain */
 		m->m_pkthdr.rdomain = in6p->inp_rtableid;
 
-		error = ip6_output(m, optp, &in6p->in6p_route,
-			    flags, in6p->in6p_moptions, NULL, in6p);
+		error = ip6_output(m, optp, &in6p->inp_route6,
+		    flags, in6p->inp_moptions6, NULL, in6p);
 		break;
 	case AF_INET:
 		error = EAFNOSUPPORT;

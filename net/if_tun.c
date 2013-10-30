@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_tun.c,v 1.118 2013/10/19 14:46:31 mpi Exp $	*/
+/*	$OpenBSD: if_tun.c,v 1.120 2013/10/24 11:31:43 mpi Exp $	*/
 /*	$NetBSD: if_tun.c,v 1.24 1996/05/07 02:40:48 thorpej Exp $	*/
 
 /*
@@ -65,13 +65,8 @@
 #ifdef INET
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
-#include <netinet/in_var.h>
 #include <netinet/ip.h>
 #include <netinet/if_ether.h>
-#endif
-
-#ifdef INET6
-#include <netinet6/in6_var.h>
 #endif
 
 #ifdef PIPEX

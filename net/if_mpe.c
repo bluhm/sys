@@ -1,4 +1,4 @@
-/* $OpenBSD: if_mpe.c,v 1.30 2013/10/17 16:27:41 bluhm Exp $ */
+/* $OpenBSD: if_mpe.c,v 1.32 2013/10/24 11:31:43 mpi Exp $ */
 
 /*
  * Copyright (c) 2008 Pierre-Yves Ritschard <pyr@spootnik.org>
@@ -31,13 +31,11 @@
 
 #ifdef	INET
 #include <netinet/in.h>
-#include <netinet/in_var.h>
 #include <netinet/in_systm.h>
 #include <netinet/ip.h>
 #endif
 
 #ifdef INET6
-#include <netinet6/in6_var.h>
 #include <netinet/ip6.h>
 #ifndef INET
 #include <netinet/in.h>

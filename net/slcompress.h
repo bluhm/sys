@@ -1,4 +1,4 @@
-/*	$OpenBSD: slcompress.h,v 1.7 2003/06/02 23:28:12 millert Exp $	*/
+/*	$OpenBSD: slcompress.h,v 1.9 2013/10/24 18:50:16 deraadt Exp $	*/
 /*	$NetBSD: slcompress.h,v 1.11 1997/05/17 21:12:11 christos Exp $	*/
 
 /*
@@ -109,6 +109,7 @@
 
 #define TCP_PUSH_BIT 0x10
 
+#ifdef _KERNEL
 
 /*
  * "state" data for each active tcp conversation on the wire.  This is
@@ -161,5 +162,6 @@ u_int	sl_compress_tcp(struct mbuf *,
 int	sl_uncompress_tcp(u_char **, int, u_int, struct slcompress *);
 int	sl_uncompress_tcp_core(u_char *, int, int, u_int,
   	    struct slcompress *, u_char **, u_int *);
+#endif /* _KERNEL */
 
 #endif /* _NET_SLCOMPRESS_H_ */
