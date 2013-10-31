@@ -210,7 +210,7 @@ struct rt_msghdr {
 #if defined(_KERNEL) && ! defined(SMALL_KERNEL)
 /*
  * Compatibility structures for version 4 messages.
- * Remove them after OpenBSD 5.5.
+ * Only needed for transition during OpenBSD 5.4-current.
  */
 struct rt_ometrics {
 	u_int64_t	rmx_pksent;	/* packets sent using this route */
