@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf.c,v 1.855 2013/10/28 12:09:41 mikeb Exp $ */
+/*	$OpenBSD: pf.c,v 1.857 2013/10/30 11:35:10 mpi Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -3792,6 +3792,18 @@ pf_translate(struct pf_pdesc *pd, struct pf_addr *saddr, u_int16_t sport,
 				rewrite = 1;
 			}
 		}
+		if (virtual_type == htons(ICMP6_ECHO_REQUEST)) {
+			u_int16_t icmpid = (icmp_dir == PF_IN) ? sport : dport;
+
+			if (icmpid != pd->hdr.icmp6->icmp6_id) {
+				if (pd->csum_status == PF_CSUM_UNKNOWN)
+					pf_check_proto_cksum(pd, pd->off,
+					    pd->tot_len - pd->off, pd->proto,
+					    pd->af);
+				pd->hdr.icmp6->icmp6_id = icmpid;
+				rewrite = 1;
+			}
+		}
 		break;
 #endif /* INET6 */
 
@@ -6773,10 +6785,12 @@ pf_cksum(struct pf_pdesc *pd, struct mbuf *m)
 		pd->hdr.icmp->icmp_cksum = 0;
 		m->m_pkthdr.csum_flags |= M_ICMP_CSUM_OUT;
 		break;
+#ifdef INET6
 	case IPPROTO_ICMPV6:
 		pd->hdr.icmp6->icmp6_cksum = 0;
 		m->m_pkthdr.csum_flags |= M_ICMP_CSUM_OUT;
 		break;
+#endif /* INET6 */
 	default:
 		/* nothing */
 		break;
