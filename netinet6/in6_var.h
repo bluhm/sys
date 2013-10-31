@@ -64,7 +64,7 @@
 #ifndef _NETINET6_IN6_VAR_H_
 #define _NETINET6_IN6_VAR_H_
 
-#include <sys/workq.h>
+#include <sys/task.h>
 
 /*
  * Interface address, Internet version.  One of these structures
@@ -462,7 +462,7 @@ do {								\
  * belongs to.
  */
 struct in6_multi_mship {
-	struct	workq_task wqt;		/* Allow network driver to sleep */
+	struct	task i6mm_task;		/* Allow network driver to sleep */
 	struct	in6_multi *i6mm_maddr;	/* Multicast address pointer */
 	LIST_ENTRY(in6_multi_mship) i6mm_chain;  /* multicast options chain */
 };

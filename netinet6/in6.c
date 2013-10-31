@@ -1657,10 +1657,11 @@ in6_joingroup(struct ifnet *ifp, struct in6_addr *addr, int *errorp)
 int
 in6_leavegroup(struct in6_multi_mship *imm)
 {
-	if (imm->i6mm_maddr)
-		workq_queue_task(NULL, &imm->wqt, 0, in6_leavegroup_task, imm,
+	if (imm->i6mm_maddr) {
+		task_set(&imm->i6mm_task, in6_leavegroup_task, imm,
 		    (void *)(unsigned long)imm->i6mm_maddr->in6m_ifp->if_index);
-	else 
+		task_add(systq, &imm->i6mm_task);
+	} else
 		free(imm,  M_IPMADDR);
 	return 0;
 }
