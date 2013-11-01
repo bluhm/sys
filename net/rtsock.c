@@ -1583,7 +1583,7 @@ rtmsg_4to5(struct mbuf *m, int *len)
 	if (rtm == NULL)
 		return (NULL);
 	bzero(rtm, sizeof(struct rt_msghdr));
-	m_copydata(m, 0, sizeof(struct rt_omsghdr), &ortm);
+	m_copydata(m, 0, sizeof(struct rt_omsghdr), (caddr_t)&ortm);
 	rtm->rtm_msglen = *len;
 	rtm->rtm_version = RTM_VERSION;
 	rtm->rtm_type = ortm.rtm_type;
