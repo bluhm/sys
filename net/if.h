@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.h,v 1.150 2013/10/21 15:10:29 benno Exp $	*/
+/*	$OpenBSD: if.h,v 1.152 2013/11/09 06:38:42 dlg Exp $	*/
 /*	$NetBSD: if.h,v 1.23 1996/05/07 02:40:27 thorpej Exp $	*/
 
 /*
@@ -63,7 +63,9 @@ __END_DECLS
 #include <sys/queue.h>
 #include <sys/tree.h>
 #include <altq/if_altq.h>
+#ifdef _KERNEL
 #include <net/hfsc.h>
+#endif
 
 /*
  * Structures defining a network interface, providing a packet
@@ -129,7 +131,7 @@ struct if_clonereq {
 #define MCLPOOLS	7		/* number of cluster pools */
 
 struct mclpool {
-	u_int	mcl_grown;
+	int	mcl_grown;
 	u_short	mcl_alive;
 	u_short mcl_hwm;
 	u_short mcl_cwm;
