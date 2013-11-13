@@ -332,7 +332,10 @@ ip6_input(struct mbuf *m)
 	srcrt = !IN6_ARE_ADDR_EQUAL(&odst, &ip6->ip6_dst);
 #endif
 
-	/* pf scans the header chain, do not do it twice */
+	/*
+	 * Be more secure than RFC5095 and scan for type 0 routing headers.
+	 * If pf has already scanned the header chain, do not do it twice.
+	 */
 	if (!(m->m_pkthdr.pf.flags & PF_TAG_PROCESSED) &&
 	    ip6_check_rh0hdr(m, &off)) {
 		ip6stat.ip6s_badoptions++;
