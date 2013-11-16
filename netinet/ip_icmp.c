@@ -807,18 +807,7 @@ icmp_reflect(struct mbuf *m, struct mbuf **op, struct in_ifaddr *ia)
 				printf("%d\n", opts->m_len);
 #endif
 		}
-		/*
-		 * Now strip out original options by copying rest of first
-		 * mbuf's data back, and adjust the IP length.
-		 */
-		ip->ip_len = htons(ntohs(ip->ip_len) - optlen);
-		ip->ip_hl = sizeof(struct ip) >> 2;
-		m->m_len -= optlen;
-		if (m->m_flags & M_PKTHDR)
-			m->m_pkthdr.len -= optlen;
-		optlen += sizeof(struct ip);
-		bcopy((caddr_t)ip + optlen, (caddr_t)(ip + 1),
-		    m->m_len - sizeof(struct ip));
+		ip_stripoptions(m);
 	}
 	m->m_flags &= ~(M_BCAST|M_MCAST);
 	if (op)
