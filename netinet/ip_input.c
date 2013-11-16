@@ -1354,6 +1354,7 @@ ip_stripoptions(struct mbuf *m)
 	if (m->m_flags & M_PKTHDR)
 		m->m_pkthdr.len -= olen;
 	ip->ip_hl = sizeof(struct ip) >> 2;
+	ip->ip_len = htons(ntohs(ip->ip_len) - olen);
 }
 
 int inetctlerrmap[PRC_NCMDS] = {
