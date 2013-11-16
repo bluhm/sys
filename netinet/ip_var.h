@@ -200,7 +200,7 @@ int	 ip_setmoptions(int, struct ip_moptions **, struct mbuf *, u_int);
 void	 ip_slowtimo(void);
 struct mbuf *
 	 ip_srcroute(struct mbuf *);
-void	 ip_stripoptions(struct mbuf *, struct mbuf *);
+void	 ip_stripoptions(struct mbuf *);
 int	 ip_sysctl(int *, u_int, void *, size_t *, void *, size_t);
 void	 ip_savecontrol(struct inpcb *, struct mbuf **, struct ip *,
 	    struct mbuf *);
