@@ -3534,10 +3534,8 @@ pf_create_state(struct pf_pdesc *pd, struct pf_rule *r, struct pf_rule *a,
 #if NPFSYNC > 0
 	s->sync_state = PFSYNC_S_NONE;
 #endif
-	if (act->flags & PFSTATE_SETPRIO) {
-		s->set_prio[0] = act->set_prio[0];
-		s->set_prio[1] = act->set_prio[1];
-	}
+	s->set_prio[0] = act->set_prio[0];
+	s->set_prio[1] = act->set_prio[1];
 	SLIST_INIT(&s->src_nodes);
 
 	switch (pd->proto) {
