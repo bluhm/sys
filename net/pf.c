@@ -3110,8 +3110,10 @@ pf_rule_to_actions(struct pf_rule *r, struct pf_rule_actions *a)
 		a->max_mss = r->max_mss;
 	a->flags |= (r->scrub_flags & (PFSTATE_NODF|PFSTATE_RANDOMID|
 	    PFSTATE_SETTOS|PFSTATE_SCRUB_TCP|PFSTATE_SETPRIO));
-	a->set_prio[0] = r->set_prio[0];
-	a->set_prio[1] = r->set_prio[1];
+	if (r->scrub_flags & PFSTATE_SETPRIO) {
+		a->set_prio[0] = r->set_prio[0];
+		a->set_prio[1] = r->set_prio[1];
+	}
 }
 
 #define PF_TEST_ATTRIB(t, a)			\
@@ -3532,8 +3534,10 @@ pf_create_state(struct pf_pdesc *pd, struct pf_rule *r, struct pf_rule *a,
 #if NPFSYNC > 0
 	s->sync_state = PFSYNC_S_NONE;
 #endif
-	s->set_prio[0] = act->set_prio[0];
-	s->set_prio[1] = act->set_prio[1];
+	if (act->flags & PFSTATE_SETPRIO) {
+		s->set_prio[0] = act->set_prio[0];
+		s->set_prio[1] = act->set_prio[1];
+	}
 	SLIST_INIT(&s->src_nodes);
 
 	switch (pd->proto) {
