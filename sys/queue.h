@@ -118,9 +118,13 @@ struct {								\
 	    (var) = SLIST_NEXT(var, field))
 
 #define	SLIST_FOREACH_SAFE(var, head, field, tvar)			\
-	for ((var) = SLIST_FIRST(head);				\
+	for ((var) = SLIST_FIRST(head);					\
 	    (var) && ((tvar) = SLIST_NEXT(var, field), 1);		\
 	    (var) = (tvar))
+
+#define	SLIST_FOREACH_REMOVE(var, head, field)				\
+	while (((var) = SLIST_FIRST(head)) &&				\
+	    (SLIST_REMOVE_HEAD(head, field), 1))
 
 /*
  * Singly-linked List functions.
