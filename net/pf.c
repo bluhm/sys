@@ -616,8 +616,7 @@ pf_state_rm_src_node(struct pf_state *s, struct pf_src_node *sn)
 {
 	struct pf_sn_item	*sni, *snin, *snip = NULL;
 
-	for (sni = SLIST_FIRST(&s->src_nodes); sni; sni = snin) {
-		snin = SLIST_NEXT(sni, next);
+	SLIST_FOREACH_SAFE(sni, &s->src_nodes, next, snin) {
 		if (sni->sn == sn) {
 			if (snip)
 				SLIST_REMOVE_AFTER(snip, next);
@@ -1252,8 +1251,7 @@ pf_src_tree_remove_state(struct pf_state *s)
 	u_int32_t		 timeout;
 	struct pf_sn_item	*sni;
 
-	while ((sni = SLIST_FIRST(&s->src_nodes)) != NULL) {
-		SLIST_REMOVE_HEAD(&s->src_nodes, next);
+	SLIST_FOREACH_REMOVE(sni, &s->src_nodes, next) {
 		if (s->src.tcp_est)
 			--sni->sn->conn;
 		if (--sni->sn->states <= 0) {
@@ -1319,8 +1317,7 @@ pf_free_state(struct pf_state *cur)
 	if (cur->anchor.ptr != NULL)
 		if (--cur->anchor.ptr->states_cur <= 0)
 			pf_rm_rule(NULL, cur->anchor.ptr);
-	while ((ri = SLIST_FIRST(&cur->match_rules))) {
-		SLIST_REMOVE_HEAD(&cur->match_rules, entry);
+	SLIST_FOREACH_REMOVE(ri,&cur->match_rules, entry) {
 		if (--ri->r->states_cur <= 0 &&
 		    ri->r->src_nodes <= 0)
 			pf_rm_rule(NULL, ri->r);
@@ -3449,10 +3446,8 @@ pf_test_rule(struct pf_pdesc *pd, struct pf_rule **rm, struct pf_state **sm,
 			    virtual_type, icmp_dir, pd->m);
 		}
 	} else {
-		while ((ri = SLIST_FIRST(&rules))) {
-			SLIST_REMOVE_HEAD(&rules, entry);
+		SLIST_FOREACH_REMOVE(ri, &rules, entry)
 			pool_put(&pf_rule_item_pl, ri);
-		}
 	}
 
 	/* copy back packet headers if needed */
@@ -3486,10 +3481,8 @@ pf_test_rule(struct pf_pdesc *pd, struct pf_rule **rm, struct pf_state **sm,
 	return (PF_PASS);
 
 cleanup:
-	while ((ri = SLIST_FIRST(&rules))) {
-		SLIST_REMOVE_HEAD(&rules, entry);
+	SLIST_FOREACH_REMOVE(ri, &rules, entry)
 		pool_put(&pf_rule_item_pl, ri);
-	}
 
 	return (PF_DROP);
 }
