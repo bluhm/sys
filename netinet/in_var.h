@@ -1,4 +1,4 @@
-/*	$OpenBSD: in_var.h,v 1.26 2013/10/23 15:12:42 mpi Exp $	*/
+/*	$OpenBSD: in_var.h,v 1.28 2013/11/21 16:34:33 mikeb Exp $	*/
 /*	$NetBSD: in_var.h,v 1.16 1996/02/13 23:42:15 christos Exp $	*/
 
 /*
@@ -37,6 +37,7 @@
 
 #include <sys/queue.h>
 
+#ifdef _KERNEL
 /*
  * Interface address, Internet version.  One of these structures
  * is allocated for each interface with an Internet address.
@@ -59,6 +60,7 @@ struct in_ifaddr {
 	struct  in_multi *ia_allhosts;	/* multicast address record for
 					   the allhosts multicast group */
 };
+#endif
 
 struct	in_aliasreq {
 	char	ifra_name[IFNAMSIZ];		/* if name, e.g. "en0" */
@@ -73,11 +75,6 @@ struct	in_aliasreq {
 #define	ifra_broadaddr	ifra_dstaddr
 	struct	sockaddr_in ifra_mask;
 };
-/*
- * Given a pointer to an in_ifaddr (ifaddr),
- * return a pointer to the addr as a sockaddr_in.
- */
-#define	IA_SIN(ia) (&(((struct in_ifaddr *)(ia))->ia_addr))
 
 
 #ifdef	_KERNEL
