@@ -263,7 +263,6 @@ vlan_input(struct ether_header *eh, struct mbuf *m)
 	}
 	/* From now on ether_vtag is fine */
 	tag = EVL_VLANOFTAG(m->m_pkthdr.ether_vtag);
-	m->m_pkthdr.pf.prio = EVL_PRIOFTAG(m->m_pkthdr.ether_vtag);
 
 	LIST_FOREACH(ifv, &tagh[TAG_HASH(tag)], ifv_list) {
 		if (m->m_pkthdr.rcvif == ifv->ifv_p && tag == ifv->ifv_tag &&
