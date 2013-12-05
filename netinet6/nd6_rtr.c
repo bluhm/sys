@@ -1176,33 +1176,33 @@ prelist_update(struct nd_prefix *new, struct nd_defrouter *dr, struct mbuf *m)
 	 * should reject autoconfiguration of a new address.
 	 */
 	TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
-		struct in6_ifaddr *ifa6;
+		struct in6_ifaddr *ia6;
 		int ifa_plen;
 		u_int32_t storedlifetime;
 
 		if (ifa->ifa_addr->sa_family != AF_INET6)
 			continue;
 
-		ifa6 = ifatoia6(ifa);
+		ia6 = ifatoia6(ifa);
 
 		/*
 		 * Spec is not clear here, but I believe we should concentrate
 		 * on unicast (i.e. not anycast) addresses.
 		 * XXX: other ia6_flags? detached or duplicated?
 		 */
-		if ((ifa6->ia6_flags & IN6_IFF_ANYCAST) != 0)
+		if ((ia6->ia6_flags & IN6_IFF_ANYCAST) != 0)
 			continue;
 
-		ifa_plen = in6_mask2len(&ifa6->ia_prefixmask.sin6_addr, NULL);
+		ifa_plen = in6_mask2len(&ia6->ia_prefixmask.sin6_addr, NULL);
 		if (ifa_plen != new->ndpr_plen ||
-		    !in6_are_prefix_equal(&ifa6->ia_addr.sin6_addr,
+		    !in6_are_prefix_equal(&ia6->ia_addr.sin6_addr,
 		    &new->ndpr_prefix.sin6_addr, ifa_plen))
 			continue;
 
 		if (ia6_match == NULL) /* remember the first one */
-			ia6_match = ifa6;
+			ia6_match = ia6;
 
-		if ((ifa6->ia6_flags & IN6_IFF_AUTOCONF) == 0) {
+		if ((ia6->ia6_flags & IN6_IFF_AUTOCONF) == 0) {
 			statique = 1;
 			continue;
 		}
@@ -1230,25 +1230,25 @@ prelist_update(struct nd_prefix *new, struct nd_defrouter *dr, struct mbuf *m)
 		 * See the discussion in the IETF ipngwg ML in August 2001,
 		 * with the Subject "StoredLifetime in RFC 2462".
 		 */
-		lt6_tmp = ifa6->ia6_lifetime;
+		lt6_tmp = ia6->ia6_lifetime;
 
 		/* RFC 4941 temporary addresses (privacy extension). */
-		if (ifa6->ia6_flags & IN6_IFF_PRIVACY) {
+		if (ia6->ia6_flags & IN6_IFF_PRIVACY) {
 			/* Do we still have a non-deprecated address? */
-			if ((ifa6->ia6_flags & IN6_IFF_DEPRECATED) == 0)
+			if ((ia6->ia6_flags & IN6_IFF_DEPRECATED) == 0)
 				tempaddr_preferred = 1;
 			/* Don't extend lifetime for temporary addresses. */
 			if (new->ndpr_vltime >= lt6_tmp.ia6t_vltime)
 				continue;
 			if (new->ndpr_pltime >= lt6_tmp.ia6t_pltime)
 				continue;
-		} else if ((ifa6->ia6_flags & IN6_IFF_DEPRECATED) == 0)
+		} else if ((ia6->ia6_flags & IN6_IFF_DEPRECATED) == 0)
 			/* We have a regular SLAAC address. */
 			autoconf = 1;
 
 		if (lt6_tmp.ia6t_vltime == ND6_INFINITE_LIFETIME)
 			storedlifetime = ND6_INFINITE_LIFETIME;
-		else if (time_second - ifa6->ia6_updatetime >
+		else if (time_second - ia6->ia6_updatetime >
 			 lt6_tmp.ia6t_vltime) {
 			/*
 			 * The case of "invalid" address.  We should usually
@@ -1257,7 +1257,7 @@ prelist_update(struct nd_prefix *new, struct nd_defrouter *dr, struct mbuf *m)
 			storedlifetime = 0;
 		} else
 			storedlifetime = lt6_tmp.ia6t_vltime -
-				(time_second - ifa6->ia6_updatetime);
+				(time_second - ia6->ia6_updatetime);
 		if (TWOHOUR < new->ndpr_vltime ||
 		    storedlifetime < new->ndpr_vltime) {
 			lt6_tmp.ia6t_vltime = new->ndpr_vltime;
@@ -1287,8 +1287,8 @@ prelist_update(struct nd_prefix *new, struct nd_defrouter *dr, struct mbuf *m)
 
 		in6_init_address_ltimes(pr, &lt6_tmp);
 
-		ifa6->ia6_lifetime = lt6_tmp;
-		ifa6->ia6_updatetime = time_second;
+		ia6->ia6_lifetime = lt6_tmp;
+		ia6->ia6_updatetime = time_second;
 	}
 
 	if ((!autoconf || ((ifp->if_xflags & IFXF_INET6_NOPRIVACY) == 0 &&
