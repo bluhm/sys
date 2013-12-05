@@ -1961,7 +1961,7 @@ icmp6_reflect(struct mbuf *m, size_t off)
 {
 	struct ip6_hdr *ip6;
 	struct icmp6_hdr *icmp6;
-	struct in6_ifaddr *ia;
+	struct in6_ifaddr *ia6;
 	struct in6_addr t, *src = 0;
 	int plen;
 	int type, code;
@@ -2046,13 +2046,13 @@ icmp6_reflect(struct mbuf *m, size_t off)
 	 * (for example) when we encounter an error while forwarding procedure
 	 * destined to a duplicated address of ours.
 	 */
-	TAILQ_FOREACH(ia, &in6_ifaddr, ia_list)
-		if (IN6_ARE_ADDR_EQUAL(&t, &ia->ia_addr.sin6_addr) &&
-		    (ia->ia6_flags & (IN6_IFF_ANYCAST|IN6_IFF_NOTREADY)) == 0) {
+	TAILQ_FOREACH(ia6, &in6_ifaddr, ia_list)
+		if (IN6_ARE_ADDR_EQUAL(&t, &ia6->ia_addr.sin6_addr) &&
+		    (ia6->ia6_flags & (IN6_IFF_ANYCAST|IN6_IFF_NOTREADY)) == 0) {
 			src = &t;
 			break;
 		}
-	if (ia == NULL && IN6_IS_ADDR_LINKLOCAL(&t) && (m->m_flags & M_LOOP)) {
+	if (ia6 == NULL && IN6_IS_ADDR_LINKLOCAL(&t) && (m->m_flags & M_LOOP)) {
 		/*
 		 * This is the case if the dst is our link-local address
 		 * and the sender is also ourselves.
@@ -2438,12 +2438,12 @@ icmp6_redirect_output(struct mbuf *m0, struct rtentry *rt)
 
 	{
 		/* get ip6 linklocal address for ifp(my outgoing interface). */
-		struct in6_ifaddr *ia;
-		if ((ia = in6ifa_ifpforlinklocal(ifp,
+		struct in6_ifaddr *ia6;
+		if ((ia6 = in6ifa_ifpforlinklocal(ifp,
 						 IN6_IFF_NOTREADY|
 						 IN6_IFF_ANYCAST)) == NULL)
 			goto fail;
-		ifp_ll6 = &ia->ia_addr.sin6_addr;
+		ifp_ll6 = &ia6->ia_addr.sin6_addr;
 	}
 
 	/* get ip6 linklocal address for the router. */
