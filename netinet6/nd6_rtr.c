@@ -1426,7 +1426,7 @@ void
 pfxlist_onlink_check(void)
 {
 	struct nd_prefix *pr;
-	struct in6_ifaddr *ifa;
+	struct in6_ifaddr *ia6;
 	char addr[INET6_ADDRSTRLEN];
 
 	/*
@@ -1532,11 +1532,11 @@ pfxlist_onlink_check(void)
 	 * always be attached.
 	 * The precise detection logic is same as the one for prefixes.
 	 */
-	TAILQ_FOREACH(ifa, &in6_ifaddr, ia_list) {
-		if (!(ifa->ia6_flags & IN6_IFF_AUTOCONF))
+	TAILQ_FOREACH(ia6, &in6_ifaddr, ia_list) {
+		if (!(ia6->ia6_flags & IN6_IFF_AUTOCONF))
 			continue;
 
-		if (ifa->ia6_ndpr == NULL) {
+		if (ia6->ia6_ndpr == NULL) {
 			/*
 			 * This can happen when we first configure the address
 			 * (i.e. the address exists, but the prefix does not).
@@ -1545,29 +1545,29 @@ pfxlist_onlink_check(void)
 			continue;
 		}
 
-		if (find_pfxlist_reachable_router(ifa->ia6_ndpr))
+		if (find_pfxlist_reachable_router(ia6->ia6_ndpr))
 			break;
 	}
-	if (ifa) {
-		TAILQ_FOREACH(ifa, &in6_ifaddr, ia_list) {
-			if ((ifa->ia6_flags & IN6_IFF_AUTOCONF) == 0)
+	if (ia6) {
+		TAILQ_FOREACH(ia6, &in6_ifaddr, ia_list) {
+			if ((ia6->ia6_flags & IN6_IFF_AUTOCONF) == 0)
 				continue;
 
-			if (ifa->ia6_ndpr == NULL) /* XXX: see above. */
+			if (ia6->ia6_ndpr == NULL) /* XXX: see above. */
 				continue;
 
-			if (find_pfxlist_reachable_router(ifa->ia6_ndpr))
-				ifa->ia6_flags &= ~IN6_IFF_DETACHED;
+			if (find_pfxlist_reachable_router(ia6->ia6_ndpr))
+				ia6->ia6_flags &= ~IN6_IFF_DETACHED;
 			else
-				ifa->ia6_flags |= IN6_IFF_DETACHED;
+				ia6->ia6_flags |= IN6_IFF_DETACHED;
 		}
 	}
 	else {
-		TAILQ_FOREACH(ifa, &in6_ifaddr, ia_list) {
-			if ((ifa->ia6_flags & IN6_IFF_AUTOCONF) == 0)
+		TAILQ_FOREACH(ia6, &in6_ifaddr, ia_list) {
+			if ((ia6->ia6_flags & IN6_IFF_AUTOCONF) == 0)
 				continue;
 
-			ifa->ia6_flags &= ~IN6_IFF_DETACHED;
+			ia6->ia6_flags &= ~IN6_IFF_DETACHED;
 		}
 	}
 }
