@@ -905,7 +905,7 @@ void
 purge_detached(struct ifnet *ifp)
 {
 	struct nd_prefix *pr, *pr_next;
-	struct in6_ifaddr *ia;
+	struct in6_ifaddr *ia6;
 	struct ifaddr *ifa, *ifa_next;
 
 	LIST_FOREACH_SAFE(pr, &nd_prefix, ndpr_entry, pr_next) {
@@ -925,9 +925,9 @@ purge_detached(struct ifnet *ifp)
 		TAILQ_FOREACH_SAFE(ifa, &ifp->if_addrlist, ifa_list, ifa_next) {
 			if (ifa->ifa_addr->sa_family != AF_INET6)
 				continue;
-			ia = ifatoia6(ifa);
-			if ((ia->ia6_flags & IN6_IFF_AUTOCONF) ==
-			    IN6_IFF_AUTOCONF && ia->ia6_ndpr == pr) {
+			ia6 = ifatoia6(ifa);
+			if ((ia6->ia6_flags & IN6_IFF_AUTOCONF) ==
+			    IN6_IFF_AUTOCONF && ia6->ia6_ndpr == pr) {
 				in6_purgeaddr(ifa);
 			}
 		}
