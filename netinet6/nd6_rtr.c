@@ -1801,7 +1801,7 @@ in6_ifadd(struct nd_prefix *pr, int privacy)
 	struct ifnet *ifp = pr->ndpr_ifp;
 	struct ifaddr *ifa;
 	struct in6_aliasreq ifra;
-	struct in6_ifaddr *ia, *ib;
+	struct in6_ifaddr *ia6;
 	int error, s, plen0;
 	struct in6_addr mask, rand_ifid;
 	int prefixlen = pr->ndpr_plen;
@@ -1830,7 +1830,7 @@ in6_ifadd(struct nd_prefix *pr, int privacy)
 	 */
 	ifa = &in6ifa_ifpforlinklocal(ifp, 0)->ia_ifa; /* 0 is OK? */
 	if (ifa)
-		ib = ifatoia6(ifa);
+		ia6 = ifatoia6(ifa);
 	else
 		return NULL;
 
@@ -1843,7 +1843,7 @@ in6_ifadd(struct nd_prefix *pr, int privacy)
 #endif
 
 	/* prefixlen + ifidlen must be equal to 128 */
-	plen0 = in6_mask2len(&ib->ia_prefixmask.sin6_addr, NULL);
+	plen0 = in6_mask2len(&ia6->ia_prefixmask.sin6_addr, NULL);
 	if (prefixlen != plen0) {
 		nd6log((LOG_INFO, "in6_ifadd: wrong prefixlen for %s "
 		    "(prefix=%d ifid=%d)\n",
@@ -1885,13 +1885,13 @@ in6_ifadd(struct nd_prefix *pr, int privacy)
 		    (rand_ifid.s6_addr32[3] & ~mask.s6_addr32[3]);
 	} else {
 		ifra.ifra_addr.sin6_addr.s6_addr32[0] |=
-		    (ib->ia_addr.sin6_addr.s6_addr32[0] & ~mask.s6_addr32[0]);
+		    (ia6->ia_addr.sin6_addr.s6_addr32[0] & ~mask.s6_addr32[0]);
 		ifra.ifra_addr.sin6_addr.s6_addr32[1] |=
-		    (ib->ia_addr.sin6_addr.s6_addr32[1] & ~mask.s6_addr32[1]);
+		    (ia6->ia_addr.sin6_addr.s6_addr32[1] & ~mask.s6_addr32[1]);
 		ifra.ifra_addr.sin6_addr.s6_addr32[2] |=
-		    (ib->ia_addr.sin6_addr.s6_addr32[2] & ~mask.s6_addr32[2]);
+		    (ia6->ia_addr.sin6_addr.s6_addr32[2] & ~mask.s6_addr32[2]);
 		ifra.ifra_addr.sin6_addr.s6_addr32[3] |=
-		    (ib->ia_addr.sin6_addr.s6_addr32[3] & ~mask.s6_addr32[3]);
+		    (ia6->ia_addr.sin6_addr.s6_addr32[3] & ~mask.s6_addr32[3]);
 	}
 
 	/* new prefix mask. */
@@ -1936,9 +1936,8 @@ in6_ifadd(struct nd_prefix *pr, int privacy)
 		return (NULL);	/* ifaddr must not have been allocated. */
 	}
 
-	ia = in6ifa_ifpwithaddr(ifp, &ifra.ifra_addr.sin6_addr);
-
-	return (ia);		/* this is always non-NULL */
+	/* this is always non-NULL */
+	return (in6ifa_ifpwithaddr(ifp, &ifra.ifra_addr.sin6_addr));
 }
 
 int
