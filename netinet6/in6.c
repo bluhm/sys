@@ -1935,7 +1935,7 @@ in6_ifawithscope(struct ifnet *oifp, struct in6_addr *dst, u_int rdomain)
 	int blen = -1;
 	struct ifaddr *ifa;
 	struct ifnet *ifp;
-	struct in6_ifaddr *ifa_best = NULL;
+	struct in6_ifaddr *ia6_best = NULL;
 #if NCARP > 0
 	struct sockaddr_dl *proxydl = NULL;
 #endif
@@ -1989,13 +1989,13 @@ in6_ifawithscope(struct ifnet *oifp, struct in6_addr *dst, u_int rdomain)
 			       "newaddr=%s, scope=%x, dcmp=%d, bcmp=%d, "
 			       "matchlen=%d, flgs=%x\n",
 			       inet_ntop(AF_INET6, dst, adst, sizeof(adst)),
-			       (ifa_best == NULL) ? "none" :
-			       inet_ntop(AF_INET6, &ifa_best->ia_addr.sin6_addr,
+			       (ia6_best == NULL) ? "none" :
+			       inet_ntop(AF_INET6, &ia6_best->ia_addr.sin6_addr,
 			           bestaddr, sizeof(bestaddr)),
 			       inet_ntop(AF_INET6, IFA_IN6(ifa),
 			           asrc, sizeof(asrc)),
 			       src_scope, dscopecmp,
-			       ifa_best ? IN6_ARE_SCOPE_CMP(src_scope, best_scope) : -1,
+			       ia6_best ? IN6_ARE_SCOPE_CMP(src_scope, best_scope) : -1,
 			       in6_matchlen(IFA_IN6(ifa), dst),
 			       ifatoia6(ifa)->ia6_flags);
 		}
@@ -2019,20 +2019,20 @@ in6_ifawithscope(struct ifnet *oifp, struct in6_addr *dst, u_int rdomain)
 			 * If this is the first address we find,
 			 * keep it anyway.
 			 */
-			if (ifa_best == NULL)
+			if (ia6_best == NULL)
 				goto replace;
 
 			/*
-			 * ifa_best is never NULL beyond this line except
+			 * ia6_best is never NULL beyond this line except
 			 * within the block labeled "replace".
 			 */
 
 			/*
-			 * If ifa_best has a smaller scope than dst and
+			 * If ia6_best has a smaller scope than dst and
 			 * the current address has a larger one than
-			 * (or equal to) dst, always replace ifa_best.
+			 * (or equal to) dst, always replace ia6_best.
 			 * Also, if the current address has a smaller scope
-			 * than dst, ignore it unless ifa_best also has a
+			 * than dst, ignore it unless ia6_best also has a
 			 * smaller scope.
 			 */
 			if (IN6_ARE_SCOPE_CMP(best_scope, dst_scope) < 0 &&
@@ -2060,7 +2060,7 @@ in6_ifawithscope(struct ifnet *oifp, struct in6_addr *dst, u_int rdomain)
 				 * If we have already found a non-deprecated
 				 * candidate, just ignore deprecated addresses.
 				 */
-				if ((ifa_best->ia6_flags & IN6_IFF_DEPRECATED)
+				if ((ia6_best->ia6_flags & IN6_IFF_DEPRECATED)
 				    == 0)
 					continue;
 			}
@@ -2070,7 +2070,7 @@ in6_ifawithscope(struct ifnet *oifp, struct in6_addr *dst, u_int rdomain)
 			 * to a deprecated one regardless of scopes and
 			 * address matching.
 			 */
-			if ((ifa_best->ia6_flags & IN6_IFF_DEPRECATED) &&
+			if ((ia6_best->ia6_flags & IN6_IFF_DEPRECATED) &&
 			    (ifatoia6(ifa)->ia6_flags &
 			     IN6_IFF_DEPRECATED) == 0)
 				goto replace;
@@ -2078,9 +2078,9 @@ in6_ifawithscope(struct ifnet *oifp, struct in6_addr *dst, u_int rdomain)
 			/*
 			 * At this point, we have two cases:
 			 * 1. we are looking at a non-deprecated address,
-			 *    and ifa_best is also non-deprecated.
+			 *    and ia6_best is also non-deprecated.
 			 * 2. we are looking at a deprecated address,
-			 *    and ifa_best is also deprecated.
+			 *    and ia6_best is also deprecated.
 			 * Also, we do not have to consider a case where
 			 * the scope of if_best is larger(smaller) than dst and
 			 * the scope of the current address is smaller(larger)
@@ -2090,8 +2090,8 @@ in6_ifawithscope(struct ifnet *oifp, struct in6_addr *dst, u_int rdomain)
 			 * - the scope comparison between the address and
 			 *   dst (dscopecmp)
 			 * - the scope comparison between the address and
-			 *   ifa_best (bscopecmp)
-			 * - if the address match dst longer than ifa_best
+			 *   ia6_best (bscopecmp)
+			 * - if the address match dst longer than ia6_best
 			 *   (matchcmp)
 			 * - if the address is on the outgoing I/F (outI/F)
 			 *
@@ -2156,14 +2156,14 @@ in6_ifawithscope(struct ifnet *oifp, struct in6_addr *dst, u_int rdomain)
 			if (oifp == ifp) {
 				/* Do not replace temporary autoconf addresses
 				 * with non-temporary addresses. */
-				if ((ifa_best->ia6_flags & IN6_IFF_PRIVACY) &&
+				if ((ia6_best->ia6_flags & IN6_IFF_PRIVACY) &&
 			            !(ifatoia6(ifa)->ia6_flags &
 				    IN6_IFF_PRIVACY))
 					continue;
 
 				/* Replace non-temporary autoconf addresses
 				 * with temporary addresses. */
-				if (!(ifa_best->ia6_flags & IN6_IFF_PRIVACY) &&
+				if (!(ia6_best->ia6_flags & IN6_IFF_PRIVACY) &&
 			            (ifatoia6(ifa)->ia6_flags &
 				    IN6_IFF_PRIVACY))
 					goto replace;
@@ -2179,18 +2179,18 @@ in6_ifawithscope(struct ifnet *oifp, struct in6_addr *dst, u_int rdomain)
 			continue; /* (b) */
 
 		  replace:
-			ifa_best = ifatoia6(ifa);
+			ia6_best = ifatoia6(ifa);
 			blen = tlen >= 0 ? tlen :
 				in6_matchlen(IFA_IN6(ifa), dst);
-			best_scope = in6_addrscope(&ifa_best->ia_addr.sin6_addr);
+			best_scope = in6_addrscope(&ia6_best->ia_addr.sin6_addr);
 		}
 	}
 
 	/* count statistics for future improvements */
-	if (ifa_best == NULL)
+	if (ia6_best == NULL)
 		ip6stat.ip6s_sources_none++;
 	else {
-		if (oifp == ifa_best->ia_ifp)
+		if (oifp == ia6_best->ia_ifp)
 			ip6stat.ip6s_sources_sameif[best_scope]++;
 		else
 			ip6stat.ip6s_sources_otherif[best_scope]++;
@@ -2200,11 +2200,11 @@ in6_ifawithscope(struct ifnet *oifp, struct in6_addr *dst, u_int rdomain)
 		else
 			ip6stat.ip6s_sources_otherscope[best_scope]++;
 
-		if ((ifa_best->ia6_flags & IN6_IFF_DEPRECATED) != 0)
+		if ((ia6_best->ia6_flags & IN6_IFF_DEPRECATED) != 0)
 			ip6stat.ip6s_sources_deprecated[best_scope]++;
 	}
 
-	return (ifa_best);
+	return (ia6_best);
 }
 
 /*
