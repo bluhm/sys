@@ -1629,7 +1629,7 @@ ni6_addrs(struct icmp6_nodeinfo *ni6, struct mbuf *m, struct ifnet **ifpp,
     char *subj)
 {
 	struct ifnet *ifp;
-	struct in6_ifaddr *ifa6;
+	struct in6_ifaddr *ia6;
 	struct ifaddr *ifa;
 	struct sockaddr_in6 *subj_ip6 = NULL; /* XXX pedant */
 	int addrs = 0, addrsofif, iffound = 0;
@@ -1656,11 +1656,11 @@ ni6_addrs(struct icmp6_nodeinfo *ni6, struct mbuf *m, struct ifnet **ifpp,
 		TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
 			if (ifa->ifa_addr->sa_family != AF_INET6)
 				continue;
-			ifa6 = ifatoia6(ifa);
+			ia6 = ifatoia6(ifa);
 
 			if ((niflags & NI_NODEADDR_FLAG_ALL) == 0 &&
 			    IN6_ARE_ADDR_EQUAL(&subj_ip6->sin6_addr,
-					       &ifa6->ia_addr.sin6_addr))
+					       &ia6->ia_addr.sin6_addr))
 				iffound = 1;
 
 			/*
@@ -1674,7 +1674,7 @@ ni6_addrs(struct icmp6_nodeinfo *ni6, struct mbuf *m, struct ifnet **ifpp,
 			 */
 
 			/* What do we have to do about ::1? */
-			switch (in6_addrscope(&ifa6->ia_addr.sin6_addr)) {
+			switch (in6_addrscope(&ia6->ia_addr.sin6_addr)) {
 			case __IPV6_ADDR_SCOPE_LINKLOCAL:
 				if ((niflags & NI_NODEADDR_FLAG_LINKLOCAL) == 0)
 					continue;
@@ -1695,7 +1695,7 @@ ni6_addrs(struct icmp6_nodeinfo *ni6, struct mbuf *m, struct ifnet **ifpp,
 			 * check if anycast is okay.
 			 * XXX: just experimental.  not in the spec.
 			 */
-			if ((ifa6->ia6_flags & IN6_IFF_ANYCAST) != 0 &&
+			if ((ia6->ia6_flags & IN6_IFF_ANYCAST) != 0 &&
 			    (niflags & NI_NODEADDR_FLAG_ANYCAST) == 0)
 				continue; /* we need only unicast addresses */
 
@@ -1717,7 +1717,7 @@ ni6_store_addrs(struct icmp6_nodeinfo *ni6, struct icmp6_nodeinfo *nni6,
     struct ifnet *ifp0, int resid)
 {
 	struct ifnet *ifp = ifp0 ? ifp0 : TAILQ_FIRST(&ifnet);
-	struct in6_ifaddr *ifa6;
+	struct in6_ifaddr *ia6;
 	struct ifaddr *ifa;
 	struct ifnet *ifp_dep = NULL;
 	int copied = 0, allow_deprecated = 0;
@@ -1734,9 +1734,9 @@ ni6_store_addrs(struct icmp6_nodeinfo *ni6, struct icmp6_nodeinfo *nni6,
 		TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
 			if (ifa->ifa_addr->sa_family != AF_INET6)
 				continue;
-			ifa6 = ifatoia6(ifa);
+			ia6 = ifatoia6(ifa);
 
-			if ((ifa6->ia6_flags & IN6_IFF_DEPRECATED) != 0 &&
+			if ((ia6->ia6_flags & IN6_IFF_DEPRECATED) != 0 &&
 			    allow_deprecated == 0) {
 				/*
 				 * preferred address should be put before
@@ -1749,12 +1749,12 @@ ni6_store_addrs(struct icmp6_nodeinfo *ni6, struct icmp6_nodeinfo *nni6,
 
 				continue;
 			}
-			else if ((ifa6->ia6_flags & IN6_IFF_DEPRECATED) == 0 &&
+			else if ((ia6->ia6_flags & IN6_IFF_DEPRECATED) == 0 &&
 				 allow_deprecated != 0)
 				continue; /* we now collect deprecated addrs */
 
 			/* What do we have to do about ::1? */
-			switch (in6_addrscope(&ifa6->ia_addr.sin6_addr)) {
+			switch (in6_addrscope(&ia6->ia_addr.sin6_addr)) {
 			case __IPV6_ADDR_SCOPE_LINKLOCAL:
 				if ((niflags & NI_NODEADDR_FLAG_LINKLOCAL) == 0)
 					continue;
@@ -1775,7 +1775,7 @@ ni6_store_addrs(struct icmp6_nodeinfo *ni6, struct icmp6_nodeinfo *nni6,
 			 * check if anycast is okay.
 			 * XXX: just experimental.  not in the spec.
 			 */
-			if ((ifa6->ia6_flags & IN6_IFF_ANYCAST) != 0 &&
+			if ((ia6->ia6_flags & IN6_IFF_ANYCAST) != 0 &&
 			    (niflags & NI_NODEADDR_FLAG_ANYCAST) == 0)
 				continue;
 
@@ -1808,10 +1808,10 @@ ni6_store_addrs(struct icmp6_nodeinfo *ni6, struct icmp6_nodeinfo *nni6,
 			 *
 			 * TTL must be 2^31 > TTL >= 0.
 			 */
-			if (ifa6->ia6_lifetime.ia6t_expire == 0)
+			if (ia6->ia6_lifetime.ia6t_expire == 0)
 				ltime = ND6_INFINITE_LIFETIME;
 			else {
-				time_t diff = ifa6->ia6_lifetime.ia6t_expire -
+				time_t diff = ia6->ia6_lifetime.ia6t_expire -
 				    time_second;
 
 				if (diff <= 0)
@@ -1826,10 +1826,10 @@ ni6_store_addrs(struct icmp6_nodeinfo *ni6, struct icmp6_nodeinfo *nni6,
 			cp += sizeof(u_int32_t);
 
 			/* copy the address itself */
-			bcopy(&ifa6->ia_addr.sin6_addr, cp,
+			bcopy(&ia6->ia_addr.sin6_addr, cp,
 			      sizeof(struct in6_addr));
 			/* XXX: KAME link-local hack; remove ifindex */
-			if (IN6_IS_ADDR_LINKLOCAL(&ifa6->ia_addr.sin6_addr))
+			if (IN6_IS_ADDR_LINKLOCAL(&ia6->ia_addr.sin6_addr))
 				((struct in6_addr *)cp)->s6_addr16[1] = 0;
 			cp += sizeof(struct in6_addr);
 
