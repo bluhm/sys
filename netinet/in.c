@@ -754,9 +754,10 @@ in_addprefix(struct in_ifaddr *target, int flags)
 	struct in_addr prefix, mask, p;
 	int error;
 
-	if ((flags & RTF_HOST) != 0)
+	if ((flags & RTF_HOST) != 0) {
 		prefix = target->ia_dstaddr.sin_addr;
-	else {
+		mask.s_addr = INADDR_BROADCAST;
+	} else {
 		prefix = target->ia_addr.sin_addr;
 		mask = target->ia_sockmask.sin_addr;
 		prefix.s_addr &= mask.s_addr;
