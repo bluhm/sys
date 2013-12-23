@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_urndis.c,v 1.44 2013/11/21 14:08:05 mpi Exp $ */
+/*	$OpenBSD: if_urndis.c,v 1.46 2013/12/09 15:45:29 pirofti Exp $ */
 
 /*
  * Copyright (c) 2010 Jonathan Armani <armani@openbsd.org>
@@ -985,13 +985,9 @@ urndis_tx_list_init(struct urndis_softc *sc)
 int
 urndis_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 {
-	struct urndis_softc	*sc;
-	struct ifaddr		*ifa;
-	int			 s, error;
-
-	sc = ifp->if_softc;
-	ifa = (struct ifaddr *)data;
-	error = 0;
+	struct urndis_softc	*sc = ifp->if_softc;
+	struct ifaddr		*ifa = (struct ifaddr *)data;
+	int			 s, error = 0;
 
 	if (usbd_is_dying(sc->sc_udev))
 		return (EIO);
@@ -1001,24 +997,24 @@ urndis_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 	switch(command) {
 	case SIOCSIFADDR:
 		ifp->if_flags |= IFF_UP;
-		urndis_init(sc);
-
-		switch (ifa->ifa_addr->sa_family) {
-		case AF_INET:
+		if (!(ifp->if_flags & IFF_RUNNING))
+			urndis_init(sc);
+#ifdef INET
+		if (ifa->ifa_addr->sa_family == AF_INET)
 			arp_ifinit(&sc->sc_arpcom, ifa);
-			break;
-		}
+#endif
 		break;
 
 	case SIOCSIFFLAGS:
 		if (ifp->if_flags & IFF_UP) {
-			if (!(ifp->if_flags & IFF_RUNNING))
+			if (ifp->if_flags & IFF_RUNNING)
+				error = ENETRESET;
+			else
 				urndis_init(sc);
 		} else {
 			if (ifp->if_flags & IFF_RUNNING)
 				urndis_stop(sc);
 		}
-		error = 0;
 		break;
 
 	default:
@@ -1054,14 +1050,9 @@ urndis_watchdog(struct ifnet *ifp)
 void
 urndis_init(struct urndis_softc *sc)
 {
-	struct ifnet		*ifp;
+	struct ifnet		*ifp = GET_IFP(sc);
 	int			 i, s;
 	usbd_status		 err;
-
-
-	ifp = GET_IFP(sc);
-	if (ifp->if_flags & IFF_RUNNING)
-		return;
 
 	if (urndis_ctrl_init(sc) != RNDIS_STATUS_SUCCESS)
 		return;
@@ -1363,6 +1354,7 @@ urndis_attach(struct device *parent, struct device *self, void *aux)
 	sc = (void *)self;
 	uaa = aux;
 
+	sc->sc_attached = 0;
 	sc->sc_udev = uaa->device;
 	id = usbd_get_interface_descriptor(uaa->iface);
 	sc->sc_ifaceno_ctl = id->bInterfaceNumber;
@@ -1447,14 +1439,11 @@ urndis_attach(struct device *parent, struct device *self, void *aux)
 
 	IFQ_SET_READY(&ifp->if_snd);
 
-	urndis_init(sc);
-
 	s = splnet();
 
 	if (urndis_ctrl_query(sc, OID_802_3_PERMANENT_ADDRESS, NULL, 0,
 	    &buf, &bufsz) != RNDIS_STATUS_SUCCESS) {
 		printf(": unable to get hardware address\n");
-		urndis_stop(sc);
 		splx(s);
 		return;
 	}
@@ -1466,7 +1455,6 @@ urndis_attach(struct device *parent, struct device *self, void *aux)
 	} else {
 		printf(", invalid address\n");
 		free(buf, M_TEMP);
-		urndis_stop(sc);
 		splx(s);
 		return;
 	}
@@ -1478,7 +1466,6 @@ urndis_attach(struct device *parent, struct device *self, void *aux)
 	if (urndis_ctrl_set(sc, OID_GEN_CURRENT_PACKET_FILTER, &filter,
 	    sizeof(filter)) != RNDIS_STATUS_SUCCESS) {
 		printf("%s: unable to set data filters\n", DEVNAME(sc));
-		urndis_stop(sc);
 		splx(s);
 		return;
 	}
