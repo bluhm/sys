@@ -617,6 +617,11 @@ udp_input(struct mbuf *m, ...)
 	KASSERT(sotoinpcb(inp->inp_socket) == inp);
 
 #if NPF > 0
+	if (m->m_pkthdr.pf.statekey && !m->m_pkthdr.pf.statekey->inp &&
+	    !inp->inp_pf_sk && (inp->inp_socket->so_state & SS_ISCONNECTED)) {
+		m->m_pkthdr.pf.statekey->inp = inp;
+		inp->inp_pf_sk = m->m_pkthdr.pf.statekey;
+	}
 	/* The statekey has finished finding the inp, it is no longer needed. */
 	m->m_pkthdr.pf.statekey = NULL;
 #endif
