@@ -156,6 +156,14 @@ rip_input(struct mbuf *m, ...)
 		if (inp->inp_faddr.s_addr &&
 		    inp->inp_faddr.s_addr != ip->ip_src.s_addr)
 			continue;
+#if NPF > 0
+		if (m->m_pkthdr.pf.statekey && !m->m_pkthdr.pf.statekey->inp &&
+		    !inp->inp_pf_sk && ip->ip_p != IPPROTO_ICMP &&
+		    (inp->inp_socket->so_state & SS_ISCONNECTED)) {
+			m->m_pkthdr.pf.statekey->inp = inp;
+			inp->inp_pf_sk = m->m_pkthdr.pf.statekey;
+		}
+#endif
 		if (last) {
 			struct mbuf *n;
 
