@@ -1094,6 +1094,11 @@ udp_output(struct mbuf *m, ...)
 	/* force routing domain */
 	m->m_pkthdr.rdomain = inp->inp_rtableid;
 
+#if NPF > 0
+	if (inp->inp_socket->so_state & SS_ISCONNECTED)
+		m->m_pkthdr.pf.inp = inp;
+#endif
+
 	error = ip_output(m, inp->inp_options, &inp->inp_route,
 	    (inp->inp_socket->so_options & (SO_DONTROUTE | SO_BROADCAST))
 	    |IP_IPSECFLOW, inp->inp_moptions, inp, ipsecflowinfo);
