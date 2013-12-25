@@ -285,6 +285,12 @@ rip_output(struct mbuf *m, ...)
 	/* force routing table */
 	m->m_pkthdr.ph_rtableid = inp->inp_rtableid;
 
+#if NPF > 0
+	if (inp->inp_socket->so_state & SS_ISCONNECTED &&
+	    ip->ip_p != IPPROTO_ICMP)
+		m->m_pkthdr.pf.inp = inp;
+#endif
+
 	error = ip_output(m, inp->inp_options, &inp->inp_route, flags,
 	    inp->inp_moptions, inp, 0);
 	if (error == EACCES)	/* translate pf(4) error for userland */
