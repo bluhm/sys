@@ -1346,10 +1346,7 @@ m_print(void *v,
 	struct mbuf *m = v;
 
 	(*pr)("mbuf %p\n", m);
-	(*pr)("m_type: %hi\tm_flags: %b\n", m->m_type, m->m_flags,
-	    "\20\1M_EXT\2M_PKTHDR\3M_EOR\4M_CLUSTER\5M_PROTO1\6M_VLANTAG"
-	    "\7M_LOOP\10M_FILDROP\11M_BCAST\12M_MCAST\13M_CONF\14M_AUTH"
-	    "\15M_TUNNEL\16M_ZEROIZE\17M_LINK0");
+	(*pr)("m_type: %hi\tm_flags: %b\n", m->m_type, m->m_flags, M_BITS);
 	(*pr)("m_next: %p\tm_nextpkt: %p\n", m->m_next, m->m_nextpkt);
 	(*pr)("m_data: %p\tm_len: %u\n", m->m_data, m->m_len);
 	(*pr)("m_dat: %p m_pktdat: %p\n", m->m_dat, m->m_pktdat);
