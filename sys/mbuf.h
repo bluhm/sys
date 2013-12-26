@@ -212,6 +212,13 @@ struct mbuf {
 #define	M_ICMP_CSUM_IN_OK	0x0400	/* ICMP checksum verified */
 #define	M_ICMP_CSUM_IN_BAD	0x0800	/* ICMP checksum bad */
 
+#ifdef _KERNEL
+#define MCS_BITS \
+    ("\20\1IPV4_CSUM_OUT\2TCP_CSUM_OUT\3UDP_CSUM_OUT\4IPV4_CSUM_IN_OK" \
+    "\5IPV4_CSUM_IN_BAD\6TCP_CSUM_IN_OK\7TCP_CSUM_IN_BAD\10UDP_CSUM_IN_OK" \
+    "\11UDP_CSUM_IN_BAD\12ICMP_CSUM_OUT\13ICMP_CSUM_IN_OK\14ICMP_CSUM_IN_BAD")
+#endif
+
 /* mbuf types */
 #define	MT_FREE		0	/* should be on free list */
 #define	MT_DATA		1	/* dynamic (data) allocation */
