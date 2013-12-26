@@ -1360,15 +1360,16 @@ m_print(void *v,
 		    m->m_pkthdr.csum_flags, MCS_BITS);
 		(*pr)("m_pkthdr.ether_vtag: %hu\tm_ptkhdr.rdomain: %u\n",
 		    m->m_pkthdr.ether_vtag, m->m_pkthdr.rdomain);
+		(*pr)("m_pkthdr.pf.hdr: %p\n",
+		    m->m_pkthdr.pf.hdr);
+		(*pr)("m_pkthdr.pf.statekey: %p\tm_pkthdr.pf.inp %p\n",
+		    m->m_pkthdr.pf.statekey, m->m_pkthdr.pf.inp);
+		(*pr)("m_pkthdr.pf.qid: %u\tm_pkthdr.pf.tag: %hu\n",
+		    m->m_pkthdr.pf.qid, m->m_pkthdr.pf.tag);
 		(*pr)("m_pkthdr.pf.flags: %b\n",
 		    m->m_pkthdr.pf.flags, MPF_BITS);
-		(*pr)("m_pkthdr.pf.hdr: %p\tm_pkthdr.pf.statekey: %p\n",
-		    m->m_pkthdr.pf.hdr, m->m_pkthdr.pf.statekey);
-		(*pr)("m_pkthdr.pf.qid:\t%u m_pkthdr.pf.tag: %hu\n",
-		    m->m_pkthdr.pf.qid, m->m_pkthdr.pf.tag);
-		(*pr)("m_pkthdr.pf.prio:\t%u m_pkthdr.pf.tag: %hu\n",
-		    m->m_pkthdr.pf.prio, m->m_pkthdr.pf.tag);
-		(*pr)("m_pkthdr.pf.routed: %hx\n", m->m_pkthdr.pf.routed);
+		(*pr)("m_pkthdr.pf.routed: %hhu\tm_pkthdr.pf.prio: %hhu\n",
+		    m->m_pkthdr.pf.routed, m->m_pkthdr.pf.prio);
 	}
 	if (m->m_flags & M_EXT) {
 		(*pr)("m_ext.ext_buf: %p\tm_ext.ext_size: %u\n",
