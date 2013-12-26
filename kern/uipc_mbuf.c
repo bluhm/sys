@@ -1351,8 +1351,8 @@ m_print(void *v,
 	(*pr)("m_data: %p\tm_len: %u\n", m->m_data, m->m_len);
 	(*pr)("m_dat: %p\tm_pktdat: %p\n", m->m_dat, m->m_pktdat);
 	if (m->m_flags & M_PKTHDR) {
-		(*pr)("m_pkthdr.len: %i\tm_ptkhdr.rcvif: %p\n",
-		    m->m_pkthdr.len, m->m_pkthdr.rcvif);
+		(*pr)("m_ptkhdr.rcvif: %p\tm_pkthdr.len: %i\n",
+		    m->m_pkthdr.rcvif, m->m_pkthdr.len);
 		(*pr)("m_ptkhdr.tags: %p\tm_pkthdr.tagsset: %hb\n",
 		    SLIST_FIRST(&m->m_pkthdr.tags),
 		    m->m_pkthdr.tagsset, MTAG_BITS);
