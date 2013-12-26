@@ -477,6 +477,11 @@ struct m_tag *m_tag_next(struct mbuf *, struct m_tag *);
 #define PACKET_TAG_SRCROUTE		0x1000 /* IPv4 source routing options */
 #define PACKET_TAG_TUNNEL		0x2000	/* Tunnel endpoint address */
 
+#define MTAG_BITS \
+    ("\20\1IPSEC_IN_DONE\2IPSEC_OUT_DONE\3IPSEC_IN_CRYPTO_DONE" \
+    "\4IPSEC_OUT_CRYPTO_NEEDED\5IPSEC_PENDING_TDB\6BRIDGE\7GIF\10GRE\11DLT" \
+    "\12PF_DIVERT\13PIPEX\14PF_REASSEMBLED\15SRCROUTE\16TUNNEL")
+
 /*
  * Maximum tag payload length (that is excluding the m_tag structure).
  * Please make sure to update this value when increasing the payload
