@@ -102,6 +102,12 @@ struct pkthdr_pf {
 #define	PF_TAG_REFRAGMENTED		0x40	/* refragmented ipv6 packet */
 #define	PF_TAG_PROCESSED		0x80	/* packet was checked by pf */
 
+#ifdef _KERNEL
+#define MPF_BITS \
+    ("\20\1GENERATED\3TRANSLATE_LOCALHOST\4DIVERTED\5DIVERTED_PACKET" \
+    "\6REROUTE\7REFRAGMENTED\10PROCESSED")
+#endif
+
 /* record/packet header in first mbuf of chain; valid if M_PKTHDR set */
 struct	pkthdr {
 	struct ifnet		*rcvif;		/* rcv interface */
