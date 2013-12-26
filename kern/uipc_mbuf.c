@@ -1359,9 +1359,7 @@ m_print(void *v,
 		(*pr)("m_pkthdr.csum_flags: %hx\tm_pkthdr.ether_vtag: %hu\n",
 		    m->m_pkthdr.csum_flags, m->m_pkthdr.ether_vtag);
 		(*pr)("m_pkthdr.pf.flags: %b\n",
-		    m->m_pkthdr.pf.flags, "\20\1GENERATED\2FRAGCACHE"
-		    "\3TRANSLATE_LOCALHOST\4DIVERTED\5DIVERTED_PACKET"
-		    "\6PF_TAG_REROUTE");
+		    m->m_pkthdr.pf.flags, MPF_BITS);
 		(*pr)("m_pkthdr.pf.hdr: %p\tm_pkthdr.pf.statekey: %p\n",
 		    m->m_pkthdr.pf.hdr, m->m_pkthdr.pf.statekey);
 		(*pr)("m_pkthdr.pf.qid:\t%u m_pkthdr.pf.tag: %hu\n",
