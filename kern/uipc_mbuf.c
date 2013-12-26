@@ -1357,8 +1357,8 @@ m_print(void *v,
 		    SLIST_FIRST(&m->m_pkthdr.tags), m->m_pkthdr.tagsset);
 		(*pr)("m_pkthdr.csum_flags: %b\n",
 		    m->m_pkthdr.csum_flags, MCS_BITS);
-		(*pr)("m_ptkhdr.rdomain: %u\tm_pkthdr.ether_vtag: %hu\n",
-		    m->m_pkthdr.rdomain, m->m_pkthdr.ether_vtag);
+		(*pr)("m_pkthdr.ether_vtag: %hu\tm_ptkhdr.rdomain: %u\n",
+		    m->m_pkthdr.ether_vtag, m->m_pkthdr.rdomain);
 		(*pr)("m_pkthdr.pf.flags: %b\n",
 		    m->m_pkthdr.pf.flags, MPF_BITS);
 		(*pr)("m_pkthdr.pf.hdr: %p\tm_pkthdr.pf.statekey: %p\n",
