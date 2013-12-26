@@ -1349,15 +1349,16 @@ m_print(void *v,
 	(*pr)("m_type: %hi\tm_flags: %b\n", m->m_type, m->m_flags, M_BITS);
 	(*pr)("m_next: %p\tm_nextpkt: %p\n", m->m_next, m->m_nextpkt);
 	(*pr)("m_data: %p\tm_len: %u\n", m->m_data, m->m_len);
-	(*pr)("m_dat: %p m_pktdat: %p\n", m->m_dat, m->m_pktdat);
+	(*pr)("m_dat: %p\tm_pktdat: %p\n", m->m_dat, m->m_pktdat);
 	if (m->m_flags & M_PKTHDR) {
-		(*pr)("m_pkthdr.len: %i\tm_ptkhdr.rcvif: %p\t"
-		    "m_ptkhdr.rdomain: %u\n", m->m_pkthdr.len,
-		    m->m_pkthdr.rcvif, m->m_pkthdr.rdomain);
+		(*pr)("m_pkthdr.len: %i\tm_ptkhdr.rcvif: %p\n",
+		    m->m_pkthdr.len, m->m_pkthdr.rcvif);
 		(*pr)("m_ptkhdr.tags: %p\tm_pkthdr.tagsset: %hx\n",
 		    SLIST_FIRST(&m->m_pkthdr.tags), m->m_pkthdr.tagsset);
-		(*pr)("m_pkthdr.csum_flags: %hx\tm_pkthdr.ether_vtag: %hu\n",
-		    m->m_pkthdr.csum_flags, m->m_pkthdr.ether_vtag);
+		(*pr)("m_pkthdr.csum_flags: %hx\n",
+		    m->m_pkthdr.csum_flags);
+		(*pr)("m_ptkhdr.rdomain: %u\tm_pkthdr.ether_vtag: %hu\n",
+		    m->m_pkthdr.rdomain, m->m_pkthdr.ether_vtag);
 		(*pr)("m_pkthdr.pf.flags: %b\n",
 		    m->m_pkthdr.pf.flags, MPF_BITS);
 		(*pr)("m_pkthdr.pf.hdr: %p\tm_pkthdr.pf.statekey: %p\n",
