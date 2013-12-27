@@ -59,6 +59,8 @@
  * SUCH DAMAGE.
  */
 
+#include "pf.h"
+
 #include <sys/param.h>
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
@@ -241,6 +243,11 @@ udp6_output(struct inpcb *in6p, struct mbuf *m, struct mbuf *addr6,
 
 		/* force routing domain */
 		m->m_pkthdr.rdomain = in6p->inp_rtableid;
+
+#if NPF > 0
+		if (in6p->inp_socket->so_state & SS_ISCONNECTED)
+			m->m_pkthdr.pf.inp = in6p;
+#endif
 
 		error = ip6_output(m, optp, &in6p->inp_route6,
 		    flags, in6p->inp_moptions6, NULL, in6p);
