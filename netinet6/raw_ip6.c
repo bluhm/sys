@@ -471,6 +471,11 @@ rip6_output(struct mbuf *m, ...)
 	/* force routing domain */
 	m->m_pkthdr.rdomain = in6p->inp_rtableid;
 
+#if NPF > 0
+	if (in6p->inp_socket->so_state & SS_ISCONNECTED)
+		m->m_pkthdr.pf.inp = in6p;
+#endif
+
 	error = ip6_output(m, optp, &in6p->inp_route6, flags,
 	    in6p->inp_moptions6, &oifp, in6p);
 	if (so->so_proto->pr_protocol == IPPROTO_ICMPV6) {
