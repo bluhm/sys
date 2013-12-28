@@ -1251,7 +1251,7 @@ pf_src_tree_remove_state(struct pf_state *s)
 	u_int32_t		 timeout;
 	struct pf_sn_item	*sni;
 
-	SLIST_FOREACH_REMOVE(sni, &s->src_nodes, next) {
+	SLIST_FOREACH_REMOVE(sni, &s->src_nodes, next)
 		if (s->src.tcp_est)
 			--sni->sn->conn;
 		if (--sni->sn->states <= 0) {
@@ -1317,7 +1317,7 @@ pf_free_state(struct pf_state *cur)
 	if (cur->anchor.ptr != NULL)
 		if (--cur->anchor.ptr->states_cur <= 0)
 			pf_rm_rule(NULL, cur->anchor.ptr);
-	SLIST_FOREACH_REMOVE(ri,&cur->match_rules, entry) {
+	SLIST_FOREACH_REMOVE(ri,&cur->match_rules, entry)
 		if (--ri->r->states_cur <= 0 &&
 		    ri->r->src_nodes <= 0)
 			pf_rm_rule(NULL, ri->r);
@@ -3448,6 +3448,7 @@ pf_test_rule(struct pf_pdesc *pd, struct pf_rule **rm, struct pf_state **sm,
 	} else {
 		SLIST_FOREACH_REMOVE(ri, &rules, entry)
 			pool_put(&pf_rule_item_pl, ri);
+		}
 	}
 
 	/* copy back packet headers if needed */
@@ -3483,6 +3484,7 @@ pf_test_rule(struct pf_pdesc *pd, struct pf_rule **rm, struct pf_state **sm,
 cleanup:
 	SLIST_FOREACH_REMOVE(ri, &rules, entry)
 		pool_put(&pf_rule_item_pl, ri);
+	}
 
 	return (PF_DROP);
 }
