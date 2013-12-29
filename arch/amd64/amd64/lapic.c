@@ -76,7 +76,7 @@ void lapic_hwmask(struct pic *, int);
 void lapic_hwunmask(struct pic *, int);
 void lapic_setup(struct pic *, struct cpu_info *, int, int, int);
 
-void wait_next_cycle(void);
+int wait_next_cycle(void);
 
 extern char idt_allocmap[];
 
@@ -307,7 +307,7 @@ lapic_initclocks(void)
 extern int gettick(void);	/* XXX put in header file */
 extern u_long rtclock_tval; /* XXX put in header file */
 
-void
+int
 wait_next_cycle(void)
 {
 	unsigned int tick, tlast;
@@ -316,7 +316,7 @@ wait_next_cycle(void)
 	for (;;) {
 		tick = gettick();
 		if (tick > tlast)
-			return;
+			return (tick);
 		tlast = tick;
 	}
 }
@@ -338,7 +338,7 @@ lapic_calibrate_timer(struct cpu_info *ci)
 	unsigned int startapic, endapic;
 	u_int64_t dtick, dapic, tmp;
 	long rf = read_rflags();
-	int i;
+	int i, t;
 
 	if (mp_verbose)
 		printf("%s: calibrating local timer\n", ci->ci_dev->dv_xname);
@@ -360,10 +360,12 @@ lapic_calibrate_timer(struct cpu_info *ci)
 
 	/* wait the next hz cycles */
 	for (i = 0; i < hz; i++)
-		wait_next_cycle();
+		t = wait_next_cycle();
 
 	endapic = lapic_gettick();
 	write_rflags(rf);
+
+	printf("%s: cycle tick %d\n", t);
 
 	dtick = hz * rtclock_tval;
 	dapic = startapic-endapic;
