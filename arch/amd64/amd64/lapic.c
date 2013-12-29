@@ -80,6 +80,7 @@ void lapic_setup(struct pic *, struct cpu_info *, int, int, int);
 
 unsigned int wait_next_cycle(void);
 unsigned int wait_lapic_cycle(void);
+void lapic_measure_timer(void);
 
 extern char idt_allocmap[];
 
@@ -352,11 +353,10 @@ wait_lapic_cycle(void)
 void
 lapic_calibrate_timer(struct cpu_info *ci)
 {
-	mc_todregs rtclk;
 	unsigned int startapic, endapic, cycletick;
 	u_int64_t dtick, dapic, tmp;
 	long rf = read_rflags();
-	int i, j;
+	int i;
 
 	if (mp_verbose)
 		printf("%s: calibrating local timer\n", ci->ci_dev->dv_xname);
@@ -443,6 +443,20 @@ lapic_calibrate_timer(struct cpu_info *ci)
 		initclock_func = lapic_initclocks;
 	}
 
+	lapic_measure_timer();
+}
+
+void
+lapic_measure_timer(void)
+{
+	extern int ticks;
+	mc_todregs rtclk;
+	int i, j, s;
+
+	/* wait for current cycle to finish */
+	wait_lapic_cycle();
+
+	s = splclock();
 	if (rtcget(&rtclk)) {
 		printf("WARNING: invalid time in clock chip\n");
 	} else {
@@ -450,30 +464,19 @@ lapic_calibrate_timer(struct cpu_info *ci)
 		    rtclk[MC_MONTH], rtclk[MC_DOM], rtclk[MC_HOUR],
 		    rtclk[MC_MIN], rtclk[MC_SEC]);
 	}
+	splx(s);
 
 	for (j = 0; j < 10; j++) {
-		printf("start %d\n", j);
-		disable_intr();
-
-		/* wait for current cycle to finish */
-		wait_lapic_cycle();
-
-		startapic = lapic_gettick();
+		printf("start %d, ticks %d\n", j, ticks);
 
 		/* wait the next hz cycles */
 		for (i = 0; i < hz; i++)
-			cycletick = wait_lapic_cycle();
+			wait_lapic_cycle();
 
-		endapic = lapic_gettick();
-		write_rflags(rf);
-		printf("stop %d\n", j);
-
-		dapic = startapic-endapic;
-
-		printf("%s: cycle tick %d, dapic %llu, start %u, end %u\n",
-		    ci->ci_dev->dv_xname, cycletick, dapic, startapic, endapic);
+		printf("stop %d, ticks %d\n", j, ticks);
 	}
 
+	s = splclock();
 	if (rtcget(&rtclk)) {
 		printf("WARNING: invalid time in clock chip\n");
 	} else {
@@ -481,6 +484,7 @@ lapic_calibrate_timer(struct cpu_info *ci)
 		    rtclk[MC_MONTH], rtclk[MC_DOM], rtclk[MC_HOUR],
 		    rtclk[MC_MIN], rtclk[MC_SEC]);
 	}
+	splx(s);
 }
 
 /*
