@@ -351,6 +351,7 @@ lapic_calibrate_timer(struct cpu_info *ci)
 	i82489_writereg(LAPIC_DCR_TIMER, LAPIC_DCRT_DIV1);
 	i82489_writereg(LAPIC_ICR_TIMER, 0x80000000);
 
+	printf("start\n");
 	disable_intr();
 
 	/* wait for current cycle to finish */
@@ -364,6 +365,7 @@ lapic_calibrate_timer(struct cpu_info *ci)
 
 	endapic = lapic_gettick();
 	write_rflags(rf);
+	printf("stop\n");
 
 	dtick = hz * rtclock_tval;
 	dapic = startapic-endapic;
@@ -422,6 +424,29 @@ lapic_calibrate_timer(struct cpu_info *ci)
 		delay_func = lapic_delay;
 		initclock_func = lapic_initclocks;
 	}
+
+	printf("start\n");
+	disable_intr();
+
+	/* wait for current cycle to finish */
+	wait_next_cycle();
+
+	startapic = lapic_gettick();
+
+	/* wait the next hz cycles */
+	for (i = 0; i < hz; i++)
+		cycletick = wait_next_cycle();
+
+	endapic = lapic_gettick();
+	write_rflags(rf);
+	printf("stop\n");
+
+	dtick = hz * rtclock_tval;
+	dapic = startapic-endapic;
+
+	printf("%s: cycle tick %d, dtick %llu, dapic %llu\n",
+	    ci->ci_dev->dv_xname, cycletick, dtick, dapic);
+
 }
 
 /*
