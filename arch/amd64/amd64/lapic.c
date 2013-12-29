@@ -67,7 +67,7 @@ struct evcount ipi_count;
 #endif
 
 void	lapic_delay(int);
-static u_int32_t lapic_gettick(void);
+u_int32_t lapic_gettick(void);
 void	lapic_clockintr(void *, struct intrframe);
 void	lapic_initclocks(void);
 void	lapic_map(paddr_t);
@@ -250,7 +250,7 @@ lapic_boot_init(paddr_t lapic_base)
 #endif
 }
 
-static __inline u_int32_t
+u_int32_t
 lapic_gettick(void)
 {
 	return i82489_readreg(LAPIC_CCR_TIMER);
@@ -305,7 +305,7 @@ lapic_initclocks(void)
 extern int gettick(void);	/* XXX put in header file */
 extern u_long rtclock_tval; /* XXX put in header file */
 
-static __inline void
+void
 wait_next_cycle(void)
 {
 	unsigned int tick, tlast;
