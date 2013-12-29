@@ -88,6 +88,9 @@ struct socket {
 	off_t	so_splicemax;		/* maximum number of bytes to splice */
 	struct	timeval so_idletv;	/* idle timeout */
 	struct	timeout so_idleto;
+	struct	timeval so_ratetv;	/* last splicing time for rate limit */
+	struct	timeout so_rateto;
+	u_long	so_splicerate;		/* octets per second rate limit */
 /*
  * Variables for socket buffering.
  */
