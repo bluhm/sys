@@ -365,7 +365,7 @@ lapic_calibrate_timer(struct cpu_info *ci)
 	endapic = lapic_gettick();
 	write_rflags(rf);
 
-	printf("%s: cycle tick %d\n", t);
+	printf("%s: cycle tick %d\n", ci->ci_dev->dv_xname, t);
 
 	dtick = hz * rtclock_tval;
 	dapic = startapic-endapic;
