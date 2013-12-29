@@ -54,6 +54,8 @@
 #include <machine/i82489var.h>
 
 #include <dev/ic/i8253reg.h>
+#include <dev/ic/mc146818reg.h>
+int rtcget(mc_todregs *);
 
 #include "ioapic.h"
 
@@ -335,6 +337,7 @@ wait_next_cycle(void)
 void
 lapic_calibrate_timer(struct cpu_info *ci)
 {
+	mc_todregs rtclk;
 	unsigned int startapic, endapic, cycletick;
 	u_int64_t dtick, dapic, tmp;
 	long rf = read_rflags();
@@ -425,6 +428,14 @@ lapic_calibrate_timer(struct cpu_info *ci)
 		initclock_func = lapic_initclocks;
 	}
 
+	if (rtcget(&rtclk)) {
+		printf("WARNING: invalid time in clock chip\n");
+	} else {
+		printf("readclock: %x/%x/%x %x:%x:%x\n", rtclk[MC_YEAR],
+		    rtclk[MC_MONTH], rtclk[MC_DOM], rtclk[MC_HOUR],
+		    rtclk[MC_MIN], rtclk[MC_SEC]);
+	}
+
 	for (j = 0; j < 10; j++) {
 		printf("start %d\n", j);
 		disable_intr();
@@ -447,6 +458,14 @@ lapic_calibrate_timer(struct cpu_info *ci)
 
 		printf("%s: cycle tick %d, dtick %llu, dapic %llu\n",
 		    ci->ci_dev->dv_xname, cycletick, dtick, dapic);
+	}
+
+	if (rtcget(&rtclk)) {
+		printf("WARNING: invalid time in clock chip\n");
+	} else {
+		printf("readclock: %x/%x/%x %x:%x:%x\n", rtclk[MC_YEAR],
+		    rtclk[MC_MONTH], rtclk[MC_DOM], rtclk[MC_HOUR],
+		    rtclk[MC_MIN], rtclk[MC_SEC]);
 	}
 }
 
