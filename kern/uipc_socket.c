@@ -54,7 +54,7 @@
 
 void	sbsync(struct sockbuf *, struct mbuf *);
 
-int	sosplice(struct socket *, int, off_t, struct timeval *);
+int	sosplice(struct socket *, int, off_t, struct timeval *, u_long);
 void	sounsplice(struct socket *, struct socket *, int);
 void	soidle(void *);
 int	somove(struct socket *, int);
@@ -1033,7 +1033,7 @@ sorflush(struct socket *so)
 
 #ifdef SOCKET_SPLICE
 int
-sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
+sosplice(struct socket *so, int fd, off_t max, struct timeval *tv, u_long rate)
 {
 	struct file	*fp;
 	struct socket	*sosp;
@@ -1601,17 +1601,24 @@ sosetopt(struct socket *so, int level, int optname, struct mbuf *m0)
 #ifdef SOCKET_SPLICE
 		case SO_SPLICE:
 			if (m == NULL) {
-				error = sosplice(so, -1, 0, NULL);
+				error = sosplice(so, -1, 0, NULL, 0);
 			} else if (m->m_len < sizeof(int)) {
 				error = EINVAL;
 				goto bad;
+			} else if (m->m_len < offsetof(struct splice, sp_rate)) {
+				error = sosplice(so, *mtod(m, int *), 0, NULL, 0);
 			} else if (m->m_len < sizeof(struct splice)) {
-				error = sosplice(so, *mtod(m, int *), 0, NULL);
+				error = sosplice(so,
+				    mtod(m, struct splice *)->sp_fd,
+				    mtod(m, struct splice *)->sp_max,
+				   &mtod(m, struct splice *)->sp_idle,
+				    0);
 			} else {
 				error = sosplice(so,
 				    mtod(m, struct splice *)->sp_fd,
 				    mtod(m, struct splice *)->sp_max,
-				   &mtod(m, struct splice *)->sp_idle);
+				   &mtod(m, struct splice *)->sp_idle,
+				    mtod(m, struct splice *)->sp_rate);
 			}
 			break;
 #endif /* SOCKET_SPLICE */
