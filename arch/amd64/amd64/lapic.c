@@ -76,6 +76,8 @@ void lapic_hwmask(struct pic *, int);
 void lapic_hwunmask(struct pic *, int);
 void lapic_setup(struct pic *, struct cpu_info *, int, int, int);
 
+void wait_next_cycle(void);
+
 extern char idt_allocmap[];
 
 struct pic local_pic = {
