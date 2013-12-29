@@ -139,6 +139,7 @@ struct	splice {
 	int	sp_fd;			/* drain socket file descriptor */
 	off_t	sp_max;			/* if set, maximum bytes to splice */
 	struct	timeval	sp_idle;	/* idle timeout */
+	u_long	sp_rate;		/* octets per second rate limit */
 };
 #endif /* __BSD_VISIBLE */
 
