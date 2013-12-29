@@ -338,7 +338,7 @@ lapic_calibrate_timer(struct cpu_info *ci)
 	unsigned int startapic, endapic, cycletick;
 	u_int64_t dtick, dapic, tmp;
 	long rf = read_rflags();
-	int i;
+	int i, j;
 
 	if (mp_verbose)
 		printf("%s: calibrating local timer\n", ci->ci_dev->dv_xname);
@@ -425,28 +425,29 @@ lapic_calibrate_timer(struct cpu_info *ci)
 		initclock_func = lapic_initclocks;
 	}
 
-	printf("start\n");
-	disable_intr();
+	for (j = 0; j < 10; j++) {
+		printf("start %d\n", j);
+		disable_intr();
 
-	/* wait for current cycle to finish */
-	wait_next_cycle();
+		/* wait for current cycle to finish */
+		wait_next_cycle();
 
-	startapic = lapic_gettick();
+		startapic = lapic_gettick();
 
-	/* wait the next hz cycles */
-	for (i = 0; i < hz; i++)
-		cycletick = wait_next_cycle();
+		/* wait the next hz cycles */
+		for (i = 0; i < hz; i++)
+			cycletick = wait_next_cycle();
 
-	endapic = lapic_gettick();
-	write_rflags(rf);
-	printf("stop\n");
+		endapic = lapic_gettick();
+		write_rflags(rf);
+		printf("stop %d\n", j);
 
-	dtick = hz * rtclock_tval;
-	dapic = startapic-endapic;
+		dtick = hz * rtclock_tval;
+		dapic = startapic-endapic;
 
-	printf("%s: cycle tick %d, dtick %llu, dapic %llu\n",
-	    ci->ci_dev->dv_xname, cycletick, dtick, dapic);
-
+		printf("%s: cycle tick %d, dtick %llu, dapic %llu\n",
+		    ci->ci_dev->dv_xname, cycletick, dtick, dapic);
+	}
 }
 
 /*
