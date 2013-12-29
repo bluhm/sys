@@ -79,6 +79,7 @@ void lapic_hwunmask(struct pic *, int);
 void lapic_setup(struct pic *, struct cpu_info *, int, int, int);
 
 unsigned int wait_next_cycle(void);
+unsigned int wait_lapic_cycle(void);
 
 extern char idt_allocmap[];
 
@@ -323,6 +324,20 @@ wait_next_cycle(void)
 	}
 }
 
+unsigned int
+wait_lapic_cycle(void)
+{
+	unsigned int tick, tlast;
+
+	tlast = UINT_MAX;
+	for (;;) {
+		tick = lapic_gettick();
+		if (tick > tlast)
+			return (tick);
+		tlast = tick;
+	}
+}
+
 /*
  * Calibrate the local apic count-down timer (which is running at
  * bus-clock speed) vs. the i8254 counter/timer (which is running at
@@ -441,23 +456,22 @@ lapic_calibrate_timer(struct cpu_info *ci)
 		disable_intr();
 
 		/* wait for current cycle to finish */
-		wait_next_cycle();
+		wait_lapic_cycle();
 
 		startapic = lapic_gettick();
 
 		/* wait the next hz cycles */
 		for (i = 0; i < hz; i++)
-			cycletick = wait_next_cycle();
+			cycletick = wait_lapic_cycle();
 
 		endapic = lapic_gettick();
 		write_rflags(rf);
 		printf("stop %d\n", j);
 
-		dtick = hz * rtclock_tval;
 		dapic = startapic-endapic;
 
-		printf("%s: cycle tick %d, dtick %llu, dapic %llu\n",
-		    ci->ci_dev->dv_xname, cycletick, dtick, dapic);
+		printf("%s: cycle tick %d, dapic %llu, start %u, end %u\n",
+		    ci->ci_dev->dv_xname, cycletick, dapic, startapic, endapic);
 	}
 
 	if (rtcget(&rtclk)) {
