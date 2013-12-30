@@ -1123,11 +1123,13 @@ sosplice(struct socket *so, int fd, off_t max, struct timeval *tv, u_long rate)
 	else
 		timerclear(&so->so_idletv);
 	timeout_set(&so->so_idleto, soidle, so);
-	if (rate)
+	if (rate) {
 		so->so_splicerate = rate;
-	else
+		getmicrouptime(&so->so_ratetv);
+	} else {
 		so->so_splicerate = 0;
-	timerclear(&so->so_ratetv);
+		timerclear(&so->so_ratetv);
+	}
 	timeout_set(&so->so_rateto, sorate, so);
 
 	/*
@@ -1195,8 +1197,10 @@ sorate(void *arg)
 int
 somove(struct socket *so, int wait)
 {
+	struct timeval	 splicetv;
 	struct socket	*sosp = so->so_sp->ssp_socket;
 	struct mbuf	*m, **mp, *nextrecord;
+	long long	 usec;
 	u_long		 len, off, oobmark;
 	long		 space;
 	int		 error = 0, maxreached = 0;
@@ -1243,6 +1247,19 @@ somove(struct socket *so, int wait)
 		if (space < sosp->so_snd.sb_lowat)
 			goto release;
 		len = space;
+	}
+	if (so->so_splicerate) {
+		getmicrouptime(&splicetv);
+		space = so->so_splicerate *
+		    (splicetv.tv_sec - so->so_ratetv.tv_sec) +
+		    so->so_splicerate *
+		    (splicetv.tv_usec - so->so_ratetv.tv_usec) / 1000000;
+		if (space < len) {
+			maxreached = 0;
+			if (space < sosp->so_snd.sb_lowat)
+				goto release;
+			len = space;
+		}
 	}
 	sosp->so_state |= SS_ISSENDING;
 
@@ -1339,8 +1356,22 @@ somove(struct socket *so, int wait)
 	SBLASTRECORDCHK(&so->so_rcv, "somove 3");
 	SBLASTMBUFCHK(&so->so_rcv, "somove 3");
 	SBCHECK(&so->so_rcv);
-	if (m == NULL)
+	if (m == NULL) {
+		if (so->so_splicerate && so->so_rcv.sb_mb) {
+			timersub(&so->so_ratetv, &splicetv, &splicetv);
+			usec = 1000000LL * so->so_rcv.sb_mb->m_len /
+			    so->so_splicerate;
+			splicetv.tv_sec += usec / 1000000;
+			splicetv.tv_usec += usec % 1000000;
+			if (splicetv.tv_usec >= 1000000) {
+				splicetv.tv_sec++;
+				splicetv.tv_usec -= 1000000;
+			}
+			if (timerisset(&splicetv) && splicetv.tv_sec >= 0)
+				timeout_add_tv(&so->so_rateto, &splicetv);
+		}
 		goto release;
+	}
 	m->m_nextpkt = NULL;
 	if (m->m_flags & M_PKTHDR) {
 		m_tag_delete_chain(m);
@@ -1428,6 +1459,8 @@ somove(struct socket *so, int wait)
 		goto release;
 	}
 	so->so_splicelen += len;
+	if (so->so_splicerate)
+		so->so_ratetv = splicetv;
 
 	/* Move several packets if possible. */
 	if (!maxreached && nextrecord)
