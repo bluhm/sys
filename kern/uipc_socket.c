@@ -53,7 +53,7 @@
 
 void	sbsync(struct sockbuf *, struct mbuf *);
 
-int	sosplice(struct socket *, int, off_t, struct timeval *, u_long);
+int	sosplice(struct socket *, int, off_t, struct timeval *, off_t);
 void	sounsplice(struct socket *, struct socket *, int);
 void	soidle(void *);
 void	sorate(void *);
@@ -1041,7 +1041,7 @@ sorflush(struct socket *so)
 #define so_idleto	so_sp->ssp_idleto
 
 int
-sosplice(struct socket *so, int fd, off_t max, struct timeval *tv, u_long rate)
+sosplice(struct socket *so, int fd, off_t max, struct timeval *tv, off_t rate)
 {
 	struct file	*fp;
 	struct socket	*sosp;
@@ -1255,9 +1255,9 @@ somove(struct socket *so, int wait)
 	}
 	if (so->so_splicerate) {
 		getmicrouptime(&splicetv);
-		space = (unsigned long long)so->so_splicerate *
+		space = so->so_splicerate *
 		    (splicetv.tv_sec - so->so_ratetv.tv_sec) +
-		    (unsigned long long)so->so_splicerate *
+		    so->so_splicerate *
 		    (splicetv.tv_usec - so->so_ratetv.tv_usec) / 1000000;
 		if (space < len) {
 			maxreached = 0;
