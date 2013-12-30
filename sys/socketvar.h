@@ -91,9 +91,9 @@ struct socket {
 		off_t	ssp_max;		/* maximum number of bytes */
 		struct	timeval ssp_idletv;	/* idle timeout */
 		struct	timeout ssp_idleto;
+		off_t	so_splicerate;		/* octets/second rate limit */
 		struct	timeval so_ratetv;	/* last splicing time */
 		struct	timeout so_rateto;
-		u_long	so_splicerate;		/* octets/second rate limit */
 	} *so_sp;
 /*
  * Variables for socket buffering.
