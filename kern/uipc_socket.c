@@ -1156,6 +1156,7 @@ sounsplice(struct socket *so, struct socket *sosp, int wakeup)
 	splsoftassert(IPL_SOFTNET);
 
 	timeout_del(&so->so_idleto);
+	timeout_del(&so->so_rateto);
 	sosp->so_snd.sb_flagsintr &= ~SB_SPLICE;
 	so->so_rcv.sb_flagsintr &= ~SB_SPLICE;
 	so->so_sp->ssp_socket = sosp->so_sp->ssp_soback = NULL;
