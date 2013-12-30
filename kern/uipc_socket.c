@@ -1226,6 +1226,9 @@ somove(struct socket *so, int wait)
 	if ((sosp->so_state & SS_ISCONNECTED) == 0)
 		goto release;
 
+	/* shortcut */
+	if (so->so_rcv.sb_mb == NULL)
+		goto release;
 	/* Calculate how many bytes can be copied now. */
 	len = so->so_rcv.sb_datacc;
 	if (so->so_splicemax) {
