@@ -1230,7 +1230,7 @@ somove(struct socket *so, int wait)
 	if ((sosp->so_state & SS_ISCONNECTED) == 0)
 		goto release;
 
-	/* shortcut */
+	/* Shortcut to avoid length and space calculation. */
 	if (so->so_rcv.sb_mb == NULL)
 		goto release;
 	/* Calculate how many bytes can be copied now. */
