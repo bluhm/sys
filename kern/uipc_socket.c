@@ -1252,9 +1252,9 @@ somove(struct socket *so, int wait)
 	}
 	if (so->so_splicerate) {
 		getmicrouptime(&splicetv);
-		space = so->so_splicerate *
+		space = (unsigned long long)so->so_splicerate *
 		    (splicetv.tv_sec - so->so_ratetv.tv_sec) +
-		    so->so_splicerate *
+		    (unsigned long long)so->so_splicerate *
 		    (splicetv.tv_usec - so->so_ratetv.tv_usec) / 1000000;
 		if (space < len) {
 			maxreached = 0;
