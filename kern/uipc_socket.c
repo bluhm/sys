@@ -80,12 +80,14 @@ int	somaxconn = SOMAXCONN;
 int	sominconn = SOMINCONN;
 
 struct pool socket_pool;
+struct taskq *soplice_taskq;
 
 void
 soinit(void)
 {
 
 	pool_init(&socket_pool, sizeof(struct socket), 0, 0, 0, "sockpl", NULL);
+	soplice_taskq = taskq_create("sosplice", 1, IPL_SOFTNET);
 }
 
 /*
