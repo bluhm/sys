@@ -1203,9 +1203,8 @@ somove(struct socket *so, int wait)
 	struct timeval	 splicetv;
 	struct socket	*sosp = so->so_sp->ssp_socket;
 	struct mbuf	*m, **mp, *nextrecord;
-	long long	 usec;
+	long long	 space, usec;
 	u_long		 len, off, oobmark;
-	long long	 space;
 	int		 error = 0, maxreached = 0;
 	short		 state;
 
