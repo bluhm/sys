@@ -57,6 +57,7 @@ void	sbsync(struct sockbuf *, struct mbuf *);
 int	sosplice(struct socket *, int, off_t, struct timeval *);
 void	sounsplice(struct socket *, struct socket *, int);
 void	soidle(void *);
+void	sotask(void *, void *);
 int	somove(struct socket *, int);
 
 void	filt_sordetach(struct knote *kn);
@@ -1118,6 +1119,7 @@ sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
 	else
 		timerclear(&so->so_idletv);
 	timeout_set(&so->so_idleto, soidle, so);
+	task_set(&so->so_splicetask, sotask, so, NULL);
 
 	/*
 	 * To prevent softnet interrupt from calling somove() while
@@ -1159,6 +1161,24 @@ soidle(void *arg)
 	if (so->so_splice) {
 		so->so_error = ETIMEDOUT;
 		sounsplice(so, so->so_splice, 1);
+	}
+	splx(s);
+}
+
+void
+sotask(void *arg1, void *arg2)
+{
+	struct socket *so = arg1;
+	int s;
+
+	s = splsoftnet();
+	if (so->so_rcv.sb_flagsintr & SB_SPLICE) {
+		/*
+		 * We may not sleep here as sofree() and unsplice() may be
+		 * called from softnet interrupt context.  This would remove
+		 * the socket during somove().
+		 */
+		(void) somove(so, M_DONTWAIT);
 	}
 	splx(s);
 }
