@@ -1381,17 +1381,9 @@ somove(struct socket *so, int wait)
 	SBCHECK(&so->so_rcv);
 	if (m == NULL) {
 		if (so->so_splicerate && so->so_rcv.sb_mb) {
-			timersub(&so->so_ratetv, &splicetv, &splicetv);
 			usec = 1000000LL * so->so_rcv.sb_mb->m_len /
 			    so->so_splicerate;
-			splicetv.tv_sec += usec / 1000000;
-			splicetv.tv_usec += usec % 1000000;
-			if (splicetv.tv_usec >= 1000000) {
-				splicetv.tv_sec++;
-				splicetv.tv_usec -= 1000000;
-			}
-			if (timerisset(&splicetv) && splicetv.tv_sec >= 0)
-				timeout_add_tv(&so->so_rateto, &splicetv);
+			timeout_add_usec(&so->so_rateto, usec);
 		}
 		goto release;
 	}
