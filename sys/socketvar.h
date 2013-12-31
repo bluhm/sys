@@ -34,6 +34,7 @@
 
 #include <sys/selinfo.h>			/* for struct selinfo */
 #include <sys/queue.h>
+#include <sys/task.h>
 #include <sys/timeout.h>
 
 #ifndef	_SOCKLEN_T_DEFINED_
@@ -88,6 +89,7 @@ struct socket {
 	off_t	so_splicemax;		/* maximum number of bytes to splice */
 	struct	timeval so_idletv;	/* idle timeout */
 	struct	timeout so_idleto;
+	struct	task so_splicetask;	/* task for somove */
 /*
  * Variables for socket buffering.
  */
