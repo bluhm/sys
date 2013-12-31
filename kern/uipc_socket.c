@@ -82,14 +82,14 @@ int	somaxconn = SOMAXCONN;
 int	sominconn = SOMINCONN;
 
 struct pool socket_pool;
-struct taskq *soplice_taskq;
+struct taskq *sosplice_taskq;
 
 void
 soinit(void)
 {
 
 	pool_init(&socket_pool, sizeof(struct socket), 0, 0, 0, "sockpl", NULL);
-	soplice_taskq = taskq_create("sosplice", 1, IPL_SOFTNET);
+	sosplice_taskq = taskq_create("sosplice", 1, IPL_SOFTNET);
 }
 
 /*
@@ -1143,6 +1143,7 @@ sounsplice(struct socket *so, struct socket *sosp, int wakeup)
 {
 	splsoftassert(IPL_SOFTNET);
 
+	task_del(sosplice_taskq, &so->so_splicetask);
 	timeout_del(&so->so_idleto);
 	sosp->so_snd.sb_flagsintr &= ~SB_SPLICE;
 	so->so_rcv.sb_flagsintr &= ~SB_SPLICE;
@@ -1452,7 +1453,7 @@ sorwakeup(struct socket *so)
 {
 #ifdef SOCKET_SPLICE
 	if (so->so_rcv.sb_flagsintr & SB_SPLICE)
-		(void) somove(so, M_DONTWAIT);
+		task_add(sosplice_taskq, &so->so_splicetask);
 	if (so->so_splice)
 		return;
 #endif
@@ -1466,7 +1467,7 @@ sowwakeup(struct socket *so)
 {
 #ifdef SOCKET_SPLICE
 	if (so->so_snd.sb_flagsintr & SB_SPLICE)
-		(void) somove(so->so_spliceback, M_DONTWAIT);
+		task_add(sosplice_taskq, &so->so_spliceback->so_splicetask);
 #endif
 	sowakeup(so, &so->so_snd);
 }
