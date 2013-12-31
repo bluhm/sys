@@ -1194,6 +1194,24 @@ sotask(void *arg1, void *arg2)
 	yield();
 }
 
+void
+sotask(void *arg1, void *arg2)
+{
+	struct socket *so = arg1;
+	int s;
+
+	s = splsoftnet();
+	if (so->so_rcv.sb_flagsintr & SB_SPLICE) {
+		/*
+		 * We may not sleep here as sofree() and unsplice() may be
+		 * called from softnet interrupt context.  This would remove
+		 * the socket during somove().
+		 */
+		(void) somove(so, M_DONTWAIT);
+	}
+	splx(s);
+}
+
 /*
  * Move data from receive buffer of spliced source socket to send
  * buffer of drain socket.  Try to move as much as possible in one
