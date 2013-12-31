@@ -1260,6 +1260,10 @@ somove(struct socket *so, int wait)
 		    (splicetv.tv_sec - so->so_ratetv.tv_sec) +
 		    so->so_splicerate *
 		    (splicetv.tv_usec - so->so_ratetv.tv_usec) / 1000000;
+		if (space <= 0) {
+			maxreached = 0;
+			goto release;
+		}
 		if (space < len) {
 			maxreached = 0;
 			len = space;
