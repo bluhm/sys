@@ -1209,7 +1209,7 @@ somove(struct socket *so, int wait)
 	struct mbuf	*m, **mp, *nextrecord;
 	long long	 usec;
 	u_long		 len, off, oobmark;
-	long		 space;
+	long long	 space;
 	int		 error = 0, maxreached = 0;
 	short		 state;
 
