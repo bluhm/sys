@@ -1229,7 +1229,7 @@ somove(struct socket *so, int wait)
 		goto release;
 
 	/* Shortcut to avoid length and space calculation. */
-	if (so->so_rcv.sb_mb == NULL)
+	if (so->so_rcv.sb_mb == NULL || timeout_pending(&so->so_rateto))
 		goto release;
 	/* Calculate how many bytes can be copied now. */
 	len = so->so_rcv.sb_datacc;
@@ -1361,8 +1361,7 @@ somove(struct socket *so, int wait)
 	SBLASTMBUFCHK(&so->so_rcv, "somove 3");
 	SBCHECK(&so->so_rcv);
 	if (m == NULL) {
-		if (so->so_splicerate && so->so_rcv.sb_mb &&
-		    !timeout_pending(&so->so_rateto)) {
+		if (so->so_splicerate && so->so_rcv.sb_mb) {
 			timersub(&so->so_ratetv, &splicetv, &splicetv);
 			usec = 1000000LL * so->so_rcv.sb_mb->m_len /
 			    so->so_splicerate;
