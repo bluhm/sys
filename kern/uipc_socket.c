@@ -1262,9 +1262,9 @@ somove(struct socket *so, int wait)
 		    (splicetv.tv_usec - so->so_ratetv.tv_usec) / 1000000;
 		if (space <= 0) {
 			maxreached = 0;
-			usec = 1000000LL * so->so_rcv.sb_mb->m_len /
+			usec = 1100000LL * so->so_rcv.sb_mb->m_len /
 			    so->so_splicerate;
-			timeout_add_usec(&so->so_rateto, usec);
+			timeout_add(&so->so_rateto, usec / tick || 1);
 			goto release;
 		}
 		if (space < len) {
@@ -1369,9 +1369,9 @@ somove(struct socket *so, int wait)
 	SBCHECK(&so->so_rcv);
 	if (m == NULL) {
 		if (so->so_splicerate && so->so_rcv.sb_mb) {
-			usec = 1000000LL * so->so_rcv.sb_mb->m_len /
+			usec = 1100000LL * so->so_rcv.sb_mb->m_len /
 			    so->so_splicerate;
-			timeout_add_usec(&so->so_rateto, usec);
+			timeout_add(&so->so_rateto, usec / tick || 1);
 		}
 		goto release;
 	}
