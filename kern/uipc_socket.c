@@ -1188,6 +1188,9 @@ sotask(void *arg1, void *arg2)
 		(void) somove(so, M_DONTWAIT);
 	}
 	splx(s);
+
+	/* Avoid user land starvation. */
+	yield();
 }
 
 /*
