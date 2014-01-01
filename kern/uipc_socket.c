@@ -1171,7 +1171,7 @@ int
 somove(struct socket *so, int wait)
 {
 	struct socket	*sosp = so->so_splice;
-	struct mbuf	*m, **mp, *nextrecord;
+	struct mbuf	*m, **mp, *nextrecord = NULL;
 	u_long		 len, off, oobmark;
 	long		 space;
 	int		 error = 0, maxreached = 0;
@@ -1405,7 +1405,7 @@ somove(struct socket *so, int wait)
 	so->so_splicelen += len;
 
 	/* Move several packets if possible. */
-	if (!maxreached && so->so_rcv.sb_mb)
+	if (!maxreached && nextrecord)
 		goto nextpkt;
 
  release:
