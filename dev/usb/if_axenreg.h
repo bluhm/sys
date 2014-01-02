@@ -20,7 +20,7 @@
 #define AXEN_REV_UA2		1
 
 
-/* recieve header */
+/* receive header */
 /* 
  *                     +-multicast/broadcast
  *                     |    +-rx_ok
