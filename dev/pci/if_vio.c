@@ -945,7 +945,7 @@ vio_populate_rx_mbufs(struct vio_softc *sc)
 	}
 	if (ndone > 0)
 		virtio_notify(vsc, vq);
-	if (vq->vq_num > (uint16_t)(vq->vq_avail_idx - vq->vq_used_idx))
+	if (vq->vq_used_idx != vq->vq_avail_idx)
 		timeout_del(&sc->sc_rxtick);
 	else
 		timeout_add_sec(&sc->sc_rxtick, 1);
