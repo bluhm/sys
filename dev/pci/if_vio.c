@@ -1037,8 +1037,12 @@ void
 vio_rxtick(void *arg)
 {
 	struct virtqueue *vq = arg;
-	int s = splnet();
-	vio_rx_intr(vq);
+	struct virtio_softc *vsc = vq->vq_owner;
+	struct vio_softc *sc = (struct vio_softc *)vsc->sc_child;
+	int s;
+
+	s = splnet();
+	vio_populate_rx_mbufs(sc);
 	splx(s);
 }
 
