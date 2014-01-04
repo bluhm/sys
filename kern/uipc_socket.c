@@ -1183,7 +1183,7 @@ sotask(void *arg1, void *arg2)
 	int s;
 
 	s = splsoftnet();
-	if (so->so_splice) {
+	if (so->so_rcv.sb_flagsintr & SB_SPLICE) {
 		/*
 		 * We may not sleep here as sofree() and unsplice() may be
 		 * called from softnet interrupt context.  This would remove
@@ -1481,8 +1481,12 @@ void
 sorwakeup(struct socket *so)
 {
 #ifdef SOCKET_SPLICE
-	if (so->so_rcv.sb_flagsintr & SB_SPLICE)
-		task_add(sosplice_taskq, &so->so_sp->ssp_task);
+	if (so->so_rcv.sb_flagsintr & SB_SPLICE) {
+		if (so->so_proto->pr_flags & PR_WANTRCVD)
+			task_add(sosplice_taskq, &so->so_splicetask);
+		else
+			(void) somove(so, M_DONTWAIT);
+	}
 	if (isspliced(so))
 		return;
 #endif
@@ -1496,8 +1500,7 @@ sowwakeup(struct socket *so)
 {
 #ifdef SOCKET_SPLICE
 	if (so->so_snd.sb_flagsintr & SB_SPLICE)
-		task_add(sosplice_taskq, &so->so_sp->ssp_soback->so_sp->
-		    ssp_task);
+		task_add(sosplice_taskq, &so->so_sp->ssp_soback->so_splicetask);
 #endif
 	sowakeup(so, &so->so_snd);
 }
