@@ -411,6 +411,7 @@ struct	tcpstat {
 	u_int64_t tcps_rcvgoodsig;	/* rcvd good TCP signatures */
 	u_int32_t tcps_inhwcsum;	/* input hardware-checksummed packets */
 	u_int32_t tcps_outhwcsum;	/* output hardware-checksummed packets */
+	u_int32_t tcps_injection;	/* sequence injection attack detected */
 
 	/* ECN stats */
 	u_int32_t tcps_ecn_accepts;	/* ecn connections accepted */
