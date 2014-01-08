@@ -1171,7 +1171,7 @@ int
 somove(struct socket *so, int wait)
 {
 	struct socket	*sosp = so->so_splice;
-	struct mbuf	*m, **mp, *nextrecord = NULL;
+	struct mbuf	*m, **mp, *nextrecord;
 	u_long		 len, off, oobmark;
 	long		 space;
 	int		 error = 0, maxreached = 0;
