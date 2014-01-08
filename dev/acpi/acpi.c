@@ -1,4 +1,4 @@
-/* $OpenBSD: acpi.c,v 1.249 2013/12/16 19:11:52 kettenis Exp $ */
+/* $OpenBSD: acpi.c,v 1.251 2013/12/24 13:23:21 kettenis Exp $ */
 /*
  * Copyright (c) 2005 Thorsten Lockert <tholo@sigmasoft.com>
  * Copyright (c) 2005 Jordan Hargrave <jordan@openbsd.org>
@@ -30,7 +30,6 @@
 #include <sys/workq.h>
 #include <sys/sched.h>
 #include <sys/reboot.h>
-#include <sys/sysctl.h>
 
 #ifdef HIBERNATE
 #include <sys/hibernate.h>
@@ -94,6 +93,7 @@ int	acpi_foundprt(struct aml_node *, void *);
 struct acpi_q *acpi_maptable(struct acpi_softc *, paddr_t, const char *,
 	    const char *, const char *, int);
 
+int	acpi_enable(struct acpi_softc *);
 void	acpi_init_states(struct acpi_softc *);
 
 void 	acpi_gpe_task(void *, int);
@@ -702,7 +702,6 @@ acpi_attach(struct device *parent, struct device *self, void *aux)
 	struct acpi_rsdp *rsdp;
 	struct acpi_q *entry;
 	struct acpi_dsdt *p_dsdt;
-	int idx;
 #ifndef SMALL_KERNEL
 	int wakeup_dev_ct;
 	struct acpi_wakeq *wentry;
@@ -771,7 +770,7 @@ acpi_attach(struct device *parent, struct device *self, void *aux)
 	/*
 	 * Check if we are able to enable ACPI control
 	 */
-	if (!sc->sc_fadt->smi_cmd ||
+	if (sc->sc_fadt->smi_cmd &&
 	    (!sc->sc_fadt->acpi_enable && !sc->sc_fadt->acpi_disable)) {
 		printf(", ACPI control unavailable\n");
 		return;
@@ -857,14 +856,12 @@ acpi_attach(struct device *parent, struct device *self, void *aux)
 	 * This may prevent thermal control on some systems where
 	 * that actually does work
 	 */
-	acpi_write_pmreg(sc, ACPIREG_SMICMD, 0, sc->sc_fadt->acpi_enable);
-	idx = 0;
-	do {
-		if (idx++ > ACPIEN_RETRIES) {
+	if (sc->sc_fadt->smi_cmd) {
+		if (acpi_enable(sc)) {
 			printf(", can't enable ACPI\n");
 			return;
 		}
-	} while (!(acpi_read_pmreg(sc, ACPIREG_PM1_CNT, 0) & ACPI_PM1_SCI_EN));
+	}
 
 	printf("\n%s: tables", DEVNAME(sc));
 	SIMPLEQ_FOREACH(entry, &sc->sc_tables, q_next) {
@@ -1352,6 +1349,22 @@ acpi_map_pmregs(struct acpi_softc *sc)
 			sc->sc_pmregs[reg].access = min(access, 4);
 		}
 	}
+}
+
+int
+acpi_enable(struct acpi_softc *sc)
+{
+	int idx;
+
+	acpi_write_pmreg(sc, ACPIREG_SMICMD, 0, sc->sc_fadt->acpi_enable);
+	idx = 0;
+	do {
+		if (idx++ > ACPIEN_RETRIES) {
+			return ETIMEDOUT;
+		}
+	} while (!(acpi_read_pmreg(sc, ACPIREG_PM1_CNT, 0) & ACPI_PM1_SCI_EN));
+
+	return 0;
 }
 
 void
@@ -2085,7 +2098,6 @@ acpi_indicator(struct acpi_softc *sc, int led_state)
 int
 acpi_sleep_state(struct acpi_softc *sc, int state)
 {
-	extern int perflevel;
 	int error = ENXIO;
 	int s;
 
@@ -2185,10 +2197,6 @@ fail_quiesce:
 #if NWSDISPLAY > 0
 	wsdisplay_resume();
 #endif /* NWSDISPLAY > 0 */
-
-	/* Restore hw.setperf */
-	if (cpu_setperf != NULL)
-		cpu_setperf(perflevel);
 
 	acpi_record_event(sc, APM_NORMAL_RESUME);
 	acpi_indicator(sc, ACPI_SST_WORKING);

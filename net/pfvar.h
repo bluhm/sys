@@ -1,4 +1,4 @@
-/*	$OpenBSD: pfvar.h,v 1.392 2013/11/19 17:30:08 mikeb Exp $ */
+/*	$OpenBSD: pfvar.h,v 1.395 2014/01/03 12:48:58 pelikan Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -435,9 +435,9 @@ struct pf_osfp_entry {
 #define PF_OSFP_GENERIC		0x002		/* generic signature */
 #define PF_OSFP_NODETAIL	0x004		/* no p0f details */
 #define PF_OSFP_LEN	32
-	char			fp_class_nm[PF_OSFP_LEN];
-	char			fp_version_nm[PF_OSFP_LEN];
-	char			fp_subtype_nm[PF_OSFP_LEN];
+	u_char			fp_class_nm[PF_OSFP_LEN];
+	u_char			fp_version_nm[PF_OSFP_LEN];
+	u_char			fp_subtype_nm[PF_OSFP_LEN];
 };
 #define PF_OSFP_ENTRY_EQ(a, b) \
     ((a)->fp_os == (b)->fp_os && \
@@ -1792,6 +1792,9 @@ extern int			 altqs_inactive_open;
 extern u_int32_t		 ticket_pabuf;
 extern struct pf_altqqueue	*pf_altqs_active;
 extern struct pf_altqqueue	*pf_altqs_inactive;
+extern int			 pf_free_queues(struct pf_queuehead *,
+				    struct ifnet *);
+extern int			 pf_remove_queues(struct ifnet *);
 extern int			 pf_tbladdr_setup(struct pf_ruleset *,
 				    struct pf_addr_wrap *);
 extern void			 pf_tbladdr_remove(struct pf_addr_wrap *);
@@ -1801,6 +1804,8 @@ extern struct pool		 pf_src_tree_pl, pf_sn_item_pl, pf_rule_pl;
 extern struct pool		 pf_state_pl, pf_state_key_pl, pf_state_item_pl,
 				    pf_altq_pl, pf_rule_item_pl, pf_queue_pl;
 extern struct pool		 pf_state_scrub_pl;
+extern struct pool		 hfsc_class_pl, hfsc_classq_pl,
+				    hfsc_internal_sc_pl;
 extern void			 pf_purge_thread(void *);
 extern void			 pf_purge_expired_src_nodes(int);
 extern void			 pf_purge_expired_states(u_int32_t);
