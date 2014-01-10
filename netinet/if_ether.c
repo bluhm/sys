@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ether.c,v 1.114 2013/12/31 03:24:44 tedu Exp $	*/
+/*	$OpenBSD: if_ether.c,v 1.116 2014/01/09 21:57:52 tedu Exp $	*/
 /*	$NetBSD: if_ether.c,v 1.31 1996/05/11 12:59:58 mycroft Exp $	*/
 
 /*
@@ -253,9 +253,10 @@ arp_rtrequest(int req, struct rtentry *rt)
 			 * interface.
 			 */
 			rt->rt_expire = 0;
-			Bcopy(((struct arpcom *)rt->rt_ifp)->ac_enaddr,
-			    LLADDR(SDL(gate)),
-			    SDL(gate)->sdl_alen = ETHER_ADDR_LEN);
+			SDL(gate)->sdl_alen = ETHER_ADDR_LEN;
+			memcpy(LLADDR(SDL(gate)),
+			    ((struct arpcom *)rt->rt_ifp)->ac_enaddr,
+			    ETHER_ADDR_LEN);
 			if (useloopback)
 				rt->rt_ifp = lo0ifp;
 			/*
@@ -309,7 +310,7 @@ arprequest(struct ifnet *ifp, u_int32_t *sip, u_int32_t *tip, u_int8_t *enaddr)
 	MH_ALIGN(m, sizeof(*ea));
 	ea = mtod(m, struct ether_arp *);
 	eh = (struct ether_header *)sa.sa_data;
-	bzero((caddr_t)ea, sizeof (*ea));
+	memset(ea, 0, sizeof(*ea));
 	memcpy(eh->ether_dhost, etherbroadcastaddr, sizeof(eh->ether_dhost));
 	eh->ether_type = htons(ETHERTYPE_ARP);	/* if_output will not swap */
 	ea->arp_hrd = htons(ARPHRD_ETHER);
@@ -613,10 +614,10 @@ in_arpinput(struct mbuf *m)
 		enaddr = ac->ac_enaddr;
 	myaddr = ifatoia(ifa)->ia_addr.sin_addr;
 
-	if (!bcmp((caddr_t)ea->arp_sha, enaddr, sizeof (ea->arp_sha)))
+	if (!memcmp(ea->arp_sha, enaddr, sizeof(ea->arp_sha)))
 		goto out;	/* it's from me, ignore it. */
 	if (ETHER_IS_MULTICAST(&ea->arp_sha[0]))
-		if (!bcmp((caddr_t)ea->arp_sha, (caddr_t)etherbroadcastaddr,
+		if (!memcmp(ea->arp_sha, etherbroadcastaddr,
 		    sizeof (ea->arp_sha))) {
 			inet_ntop(AF_INET, &isaddr, addr, sizeof(addr));
 			log(LOG_ERR, "arp: ether address is broadcast for "
@@ -635,7 +636,7 @@ in_arpinput(struct mbuf *m)
 	    rtable_l2(m->m_pkthdr.rdomain));
 	if (la && (rt = la->la_rt) && (sdl = SDL(rt->rt_gateway))) {
 		if (sdl->sdl_alen) {
-		    if (bcmp(ea->arp_sha, LLADDR(sdl), sdl->sdl_alen)) {
+		    if (memcmp(ea->arp_sha, LLADDR(sdl), sdl->sdl_alen)) {
 			if (rt->rt_flags & RTF_PERMANENT_ARP) {
 				inet_ntop(AF_INET, &isaddr, addr, sizeof(addr));
 				log(LOG_WARNING,
@@ -780,7 +781,7 @@ arptfree(struct llinfo_arp *la)
 		rt->rt_flags &= ~RTF_REJECT;
 		return;
 	}
-	bzero(&info, sizeof(info));
+	memset(&info, 0, sizeof(info));
 	info.rti_info[RTAX_DST] = rt_key(rt);
 	info.rti_info[RTAX_NETMASK] = rt_mask(rt);
 
@@ -799,7 +800,7 @@ arplookup(u_int32_t addr, int create, int proxy, u_int tableid)
 	struct rtentry *rt;
 	struct sockaddr_inarp sin;
 
-	bzero(&sin, sizeof(sin));
+	memset(&sin, 0, sizeof(sin));
 	sin.sin_len = sizeof(sin);
 	sin.sin_family = AF_INET;
 	sin.sin_addr.s_addr = addr;
@@ -815,7 +816,7 @@ arplookup(u_int32_t addr, int create, int proxy, u_int tableid)
 			    (rt->rt_flags & RTF_CLONED) != 0) {
 				struct rt_addrinfo info;
 
-				bzero(&info, sizeof(info));
+				memset(&info, 0, sizeof(info));
 				info.rti_info[RTAX_DST] = rt_key(rt);
 				info.rti_info[RTAX_GATEWAY] = rt->rt_gateway;
 				info.rti_info[RTAX_NETMASK] = rt_mask(rt);
@@ -847,7 +848,7 @@ arpproxy(struct in_addr in, u_int rdomain)
 		if (ifp->if_rdomain != rdomain)
 			continue;
 
-		if (!bcmp(LLADDR((struct sockaddr_dl *)la->la_rt->rt_gateway),
+		if (!memcmp(LLADDR((struct sockaddr_dl *)la->la_rt->rt_gateway),
 		    LLADDR((struct sockaddr_dl *)ifp->if_lladdr->ifa_addr),
 		    ETHER_ADDR_LEN)) {
 		    	found = 1;
@@ -944,7 +945,7 @@ in_revarpinput(struct mbuf *m)
 		goto out;
 	if (revarp_finished)
 		goto wake;
-	if (bcmp(ar->arp_tha, ((struct arpcom *)ifp)->ac_enaddr,
+	if (memcmp(ar->arp_tha, ((struct arpcom *)ifp)->ac_enaddr,
 	    sizeof(ar->arp_tha)))
 		goto out;
 	memcpy(&revarp_srvip, ar->arp_spa, sizeof(revarp_srvip));
@@ -978,7 +979,7 @@ revarprequest(struct ifnet *ifp)
 	MH_ALIGN(m, sizeof(*ea));
 	ea = mtod(m, struct ether_arp *);
 	eh = (struct ether_header *)sa.sa_data;
-	bzero((caddr_t)ea, sizeof(*ea));
+	memset(ea, 0, sizeof(*ea));
 	memcpy(eh->ether_dhost, etherbroadcastaddr, sizeof(eh->ether_dhost));
 	eh->ether_type = htons(ETHERTYPE_REVARP);
 	ea->arp_hrd = htons(ARPHRD_ETHER);
