@@ -830,6 +830,8 @@ in_scrubprefix(struct in_ifaddr *target)
 	}
 
 	TAILQ_FOREACH(ia, &in_ifaddr, ia_list) {
+		if (ia->ia_ifp->if_rdomain != target->ia_ifp->if_rdomain)
+			continue;
 		if (rtinitflags(ia)) {
 			p = ia->ia_dstaddr.sin_addr;
 			m.s_addr = INADDR_BROADCAST;
@@ -838,9 +840,6 @@ in_scrubprefix(struct in_ifaddr *target)
 			m = ia->ia_sockmask.sin_addr;
 			p.s_addr &= m.s_addr;
 		}
-
-		if (ia->ia_ifp->if_rdomain != target->ia_ifp->if_rdomain)
-			continue;
 		if (prefix.s_addr != p.s_addr ||
 		    mask.s_addr != m.s_addr)
 			continue;
