@@ -825,7 +825,6 @@ in_addprefix(struct in_ifaddr *ia0)
 	TAILQ_FOREACH(ia, &in_ifaddr, ia_list) {
 		if (ia->ia_ifp->if_rdomain != ia0->ia_ifp->if_rdomain)
 			continue;
-
 		if ((ia->ia_ifp->if_flags & (IFF_LOOPBACK | IFF_POINTOPOINT)))
 			continue;
 
@@ -887,8 +886,20 @@ in_scrubprefix(struct in_ifaddr *ia0)
 	TAILQ_FOREACH(ia, &in_ifaddr, ia_list) {
 		if (ia->ia_ifp->if_rdomain != ia0->ia_ifp->if_rdomain)
 			continue;
+<<<<<<< HEAD
 
 		if ((ia->ia_ifp->if_flags & (IFF_LOOPBACK | IFF_POINTOPOINT)))
+=======
+		if (rtinitflags(ia)) {
+			p = ia->ia_dstaddr.sin_addr;
+			m.s_addr = INADDR_BROADCAST;
+		} else {
+			p = ia->ia_addr.sin_addr;
+			m = ia->ia_sockmask.sin_addr;
+			p.s_addr &= m.s_addr;
+		}
+		if (prefix.s_addr != p.s_addr || mask.s_addr != m.s_addr)
+>>>>>>> unify loop
 			continue;
 
 		if ((ia->ia_flags & IFA_ROUTE) != 0)
