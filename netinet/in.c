@@ -751,7 +751,7 @@ int
 in_addprefix(struct in_ifaddr *target, int flags)
 {
 	struct in_ifaddr *ia;
-	struct in_addr prefix, mask, p;
+	struct in_addr prefix, mask, p, m;
 	int error;
 
 	if (rtinitflags(target)) {
@@ -768,15 +768,14 @@ in_addprefix(struct in_ifaddr *target, int flags)
 			continue;
 		if (rtinitflags(ia)) {
 			p = ia->ia_dstaddr.sin_addr;
-			if (prefix.s_addr != p.s_addr)
-				continue;
+			m.s_addr = INADDR_BROADCAST;
 		} else {
 			p = ia->ia_addr.sin_addr;
-			p.s_addr &= ia->ia_sockmask.sin_addr.s_addr;
-			if (prefix.s_addr != p.s_addr ||
-			    mask.s_addr != ia->ia_sockmask.sin_addr.s_addr)
-				continue;
+			m = ia->ia_sockmask.sin_addr;
+			p.s_addr &= m.s_addr;
 		}
+		if (prefix.s_addr != p.s_addr || mask.s_addr != m.s_addr)
+			continue;
 		if ((ia->ia_flags & IFA_ROUTE) == 0)
 			continue;
 #if NCARP > 0
@@ -840,8 +839,7 @@ in_scrubprefix(struct in_ifaddr *target)
 			m = ia->ia_sockmask.sin_addr;
 			p.s_addr &= m.s_addr;
 		}
-		if (prefix.s_addr != p.s_addr ||
-		    mask.s_addr != m.s_addr)
+		if (prefix.s_addr != p.s_addr || mask.s_addr != m.s_addr)
 			continue;
 		/*
 		 * if we got a matching prefix route, move IFA_ROUTE to him
