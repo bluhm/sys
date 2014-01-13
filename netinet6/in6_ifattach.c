@@ -1,4 +1,4 @@
-/*	$OpenBSD: in6_ifattach.c,v 1.66 2014/01/07 16:34:05 stsp Exp $	*/
+/*	$OpenBSD: in6_ifattach.c,v 1.67 2014/01/13 23:03:52 bluhm Exp $	*/
 /*	$KAME: in6_ifattach.c,v 1.124 2001/07/18 08:32:51 jinmei Exp $	*/
 
 /*
