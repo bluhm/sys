@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_oce.c,v 1.71 2013/08/23 19:16:17 mikeb Exp $	*/
+/*	$OpenBSD: if_oce.c,v 1.74 2014/01/20 17:21:22 chris Exp $	*/
 
 /*
  * Copyright (c) 2012 Mike Belopuhov
@@ -586,7 +586,7 @@ oce_attach(struct device *parent, struct device *self, void *aux)
 		printf(": failed to fetch MAC address\n");
 		goto fail_2;
 	}
-	bcopy(sc->sc_macaddr, sc->sc_ac.ac_enaddr, ETHER_ADDR_LEN);
+	memcpy(sc->sc_ac.ac_enaddr, sc->sc_macaddr, ETHER_ADDR_LEN);
 
 	if (oce_pkt_pool == NULL) {
 		oce_pkt_pool = malloc(sizeof(struct pool), M_DEVBUF, M_NOWAIT);
@@ -931,7 +931,7 @@ oce_iff(struct oce_softc *sc)
 	} else {
 		ETHER_FIRST_MULTI(step, &sc->sc_ac, enm);
 		while (enm != NULL) {
-			bcopy(enm->enm_addrlo, multi[naddr++], ETHER_ADDR_LEN);
+			memcpy(multi[naddr++], enm->enm_addrlo, ETHER_ADDR_LEN);
 			ETHER_NEXT_MULTI(step, enm);
 		}
 		oce_update_mcast(sc, multi, naddr);
@@ -1133,7 +1133,7 @@ oce_stop(struct oce_softc *sc)
 		oce_drain_eq(eq);
 	OCE_RQ_FOREACH(sc, rq, i) {
 		/* destroy the work queue in the firmware */
-		bzero(&cmd, sizeof(cmd));
+		memset(&cmd, 0, sizeof(cmd));
 		cmd.params.req.rq_id = htole16(rq->id);
 		oce_cmd(sc, SUBSYS_NIC, OPCODE_NIC_DELETE_RQ,
 		    OCE_MBX_VER_V0, &cmd, sizeof(cmd));
@@ -1241,7 +1241,7 @@ oce_encap(struct oce_softc *sc, struct mbuf **mpp, int wqidx)
 
 	/* TX work queue entry for the header */
 	nhe = oce_ring_get(wq->ring);
-	bzero(nhe, sizeof(*nhe));
+	memset(nhe, 0, sizeof(*nhe));
 
 	nhe->u0.s.complete = 1;
 	nhe->u0.s.event = 1;
@@ -1279,7 +1279,7 @@ oce_encap(struct oce_softc *sc, struct mbuf **mpp, int wqidx)
 	/* TX work queue entries for data chunks */
 	for (i = 0; i < pkt->nsegs; i++) {
 		nfe = oce_ring_get(wq->ring);
-		bzero(nfe, sizeof(*nfe));
+		memset(nfe, 0, sizeof(*nfe));
 		nfe->u0.s.frag_pa_hi = ADDR_HI(pkt->map->dm_segs[i].ds_addr);
 		nfe->u0.s.frag_pa_lo = ADDR_LO(pkt->map->dm_segs[i].ds_addr);
 		nfe->u0.s.frag_len = pkt->map->dm_segs[i].ds_len;
@@ -1287,7 +1287,7 @@ oce_encap(struct oce_softc *sc, struct mbuf **mpp, int wqidx)
 	}
 	if (nwqe > (pkt->nsegs + 1)) {
 		nfe = oce_ring_get(wq->ring);
-		bzero(nfe, sizeof(*nfe));
+		memset(nfe, 0, sizeof(*nfe));
 		wq->ring->nused++;
 		pkt->nsegs++;
 	}
@@ -2055,7 +2055,7 @@ oce_destroy_wq(struct oce_wq *wq)
 	struct oce_pkt *pkt;
 
 	if (wq->id >= 0) {
-		bzero(&cmd, sizeof(cmd));
+		memset(&cmd, 0, sizeof(cmd));
 		cmd.params.req.wq_id = htole16(wq->id);
 		oce_cmd(sc, SUBSYS_NIC, OPCODE_NIC_DELETE_WQ, OCE_MBX_VER_V0,
 		    &cmd, sizeof(cmd));
@@ -2161,7 +2161,7 @@ oce_destroy_rq(struct oce_rq *rq)
 	struct oce_pkt *pkt;
 
 	if (rq->id >= 0) {
-		bzero(&cmd, sizeof(cmd));
+		memset(&cmd, 0, sizeof(cmd));
 		cmd.params.req.rq_id = htole16(rq->id);
 		oce_cmd(sc, SUBSYS_NIC, OPCODE_NIC_DELETE_RQ, OCE_MBX_VER_V0,
 		    &cmd, sizeof(cmd));
@@ -2243,7 +2243,7 @@ oce_destroy_eq(struct oce_eq *eq)
 	struct oce_softc *sc = eq->sc;
 
 	if (eq->id >= 0) {
-		bzero(&cmd, sizeof(cmd));
+		memset(&cmd, 0, sizeof(cmd));
 		cmd.params.req.id = htole16(eq->id);
 		oce_cmd(sc, SUBSYS_COMMON, OPCODE_COMMON_DESTROY_EQ,
 		    OCE_MBX_VER_V0, &cmd, sizeof(cmd));
@@ -2323,7 +2323,7 @@ oce_destroy_mq(struct oce_mq *mq)
 	struct oce_softc *sc = mq->sc;
 
 	if (mq->id >= 0) {
-		bzero(&cmd, sizeof(cmd));
+		memset(&cmd, 0, sizeof(cmd));
 		cmd.params.req.id = htole16(mq->id);
 		oce_cmd(sc, SUBSYS_COMMON, OPCODE_COMMON_DESTROY_MQ,
 		    OCE_MBX_VER_V0, &cmd, sizeof(cmd));
@@ -2387,7 +2387,7 @@ oce_destroy_cq(struct oce_cq *cq)
 	struct oce_softc *sc = cq->sc;
 
 	if (cq->id >= 0) {
-		bzero(&cmd, sizeof(cmd));
+		memset(&cmd, 0, sizeof(cmd));
 		cmd.params.req.id = htole16(cq->id);
 		oce_cmd(sc, SUBSYS_COMMON, OPCODE_COMMON_DESTROY_CQ,
 		    OCE_MBX_VER_V0, &cmd, sizeof(cmd));
@@ -2433,7 +2433,7 @@ oce_dma_alloc(struct oce_softc *sc, bus_size_t size, struct oce_dma_mem *dma)
 {
 	int rc;
 
-	bzero(dma, sizeof(struct oce_dma_mem));
+	memset(dma, 0, sizeof(struct oce_dma_mem));
 
 	dma->tag = sc->sc_dmat;
 	rc = bus_dmamap_create(dma->tag, size, 1, size, 0, BUS_DMA_NOWAIT,
@@ -2705,7 +2705,7 @@ oce_init_fw(struct oce_softc *sc)
 		if ((reg & MPU_EP_SEM_STAGE_MASK) == POST_STAGE_ARMFW_READY) {
 			/* reset FW */
 			if (ISSET(sc->sc_flags, OCE_F_RESET_RQD)) {
-				bzero(&cmd, sizeof(cmd));
+				memset(&cmd, 0, sizeof(cmd));
 				err = oce_cmd(sc, SUBSYS_COMMON,
 				    OPCODE_COMMON_FUNCTION_RESET,
 				    OCE_MBX_VER_V0, &cmd, sizeof(cmd));
@@ -2812,20 +2812,20 @@ oce_cmd(struct oce_softc *sc, int subsys, int opcode, int version,
 
 	oce_dma_sync(&sc->sc_mbx, BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
 
-	bzero(mbx, sizeof(struct oce_mbx));
+	memset(mbx, 0, sizeof(struct oce_mbx));
 
 	mbx->payload_length = length;
 
 	if (epayload) {
 		mbx->flags = OCE_MBX_F_SGE;
 		oce_dma_sync(&sc->sc_pld, BUS_DMASYNC_PREREAD);
-		bcopy(payload, epayload, length);
+		memcpy(epayload, payload, length);
 		mbx->pld.sgl[0].addr = OCE_MEM_DVA(&sc->sc_pld);
 		mbx->pld.sgl[0].length = length;
 		hdr = (struct mbx_hdr *)epayload;
 	} else {
 		mbx->flags = OCE_MBX_F_EMBED;
-		bcopy(payload, mbx->pld.data, length);
+		memcpy(mbx->pld.data, payload, length);
 		hdr = (struct mbx_hdr *)&mbx->pld.data;
 	}
 
@@ -2845,9 +2845,9 @@ oce_cmd(struct oce_softc *sc, int subsys, int opcode, int version,
 	if (err == 0) {
 		if (epayload) {
 			oce_dma_sync(&sc->sc_pld, BUS_DMASYNC_POSTWRITE);
-			bcopy(epayload, payload, length);
+			memcpy(payload, epayload, length);
 		} else
-			bcopy(&mbx->pld.data, payload, length);
+			memcpy(payload, &mbx->pld.data, length);
 	} else
 		printf("%s: mailbox timeout, subsys %d op %d ver %d "
 		    "%spayload lenght %d\n", sc->sc_dev.dv_xname, subsys,
@@ -2872,7 +2872,7 @@ oce_first_mcc(struct oce_softc *sc)
 	struct mbx_get_common_fw_version *cmd;
 
 	mbx = oce_ring_get(mq->ring);
-	bzero(mbx, sizeof(struct oce_mbx));
+	memset(mbx, 0, sizeof(struct oce_mbx));
 
 	cmd = (struct mbx_get_common_fw_version *)&mbx->pld.data;
 
@@ -2896,7 +2896,7 @@ oce_get_fw_config(struct oce_softc *sc)
 	struct mbx_common_query_fw_config cmd;
 	int err;
 
-	bzero(&cmd, sizeof(cmd));
+	memset(&cmd, 0, sizeof(cmd));
 
 	err = oce_cmd(sc, SUBSYS_COMMON, OPCODE_COMMON_QUERY_FIRMWARE_CONFIG,
 	    OCE_MBX_VER_V0, &cmd, sizeof(cmd));
@@ -2915,7 +2915,7 @@ oce_check_native_mode(struct oce_softc *sc)
 	struct mbx_common_set_function_cap cmd;
 	int err;
 
-	bzero(&cmd, sizeof(cmd));
+	memset(&cmd, 0, sizeof(cmd));
 
 	cmd.params.req.valid_capability_flags = CAP_SW_TIMESTAMPS |
 	    CAP_BE3_NATIVE_ERX_API;
@@ -2962,13 +2962,13 @@ oce_create_iface(struct oce_softc *sc, uint8_t *macaddr)
 	if (sc->sc_rss_enable)
 		caps_en |= MBX_RX_IFACE_RSS;
 
-	bzero(&cmd, sizeof(cmd));
+	memset(&cmd, 0, sizeof(cmd));
 
 	cmd.params.req.version = 0;
 	cmd.params.req.cap_flags = htole32(caps);
 	cmd.params.req.enable_flags = htole32(caps_en);
 	if (macaddr != NULL) {
-		bcopy(macaddr, &cmd.params.req.mac_addr[0], ETHER_ADDR_LEN);
+		memcpy(&cmd.params.req.mac_addr[0], macaddr, ETHER_ADDR_LEN);
 		cmd.params.req.mac_invalid = 0;
 	} else
 		cmd.params.req.mac_invalid = 1;
@@ -3001,7 +3001,7 @@ oce_config_vlan(struct oce_softc *sc, struct normal_vlan *vtags, int nvtags,
 {
 	struct mbx_common_config_vlan cmd;
 
-	bzero(&cmd, sizeof(cmd));
+	memset(&cmd, 0, sizeof(cmd));
 
 	cmd.params.req.if_id = sc->sc_if_id;
 	cmd.params.req.promisc = promisc;
@@ -3009,7 +3009,7 @@ oce_config_vlan(struct oce_softc *sc, struct normal_vlan *vtags, int nvtags,
 	cmd.params.req.num_vlans = nvtags;
 
 	if (!promisc)
-		bcopy(vtags, cmd.params.req.tags.normal_vlans,
+		memcpy(cmd.params.req.tags.normal_vlans, vtags,
 			nvtags * sizeof(struct normal_vlan));
 
 	return (oce_cmd(sc, SUBSYS_COMMON, OPCODE_COMMON_CONFIG_IFACE_VLAN,
@@ -3028,7 +3028,7 @@ oce_set_flow_control(struct oce_softc *sc, uint flags)
 	struct mbx_common_get_set_flow_control cmd;
 	int err;
 
-	bzero(&cmd, sizeof(cmd));
+	memset(&cmd, 0, sizeof(cmd));
 
 	cmd.rx_flow_control = flags & IFM_ETH_RXPAUSE ? 1 : 0;
 	cmd.tx_flow_control = flags & IFM_ETH_TXPAUSE ? 1 : 0;
@@ -3038,7 +3038,7 @@ oce_set_flow_control(struct oce_softc *sc, uint flags)
 	if (err)
 		return (err);
 
-	bzero(&cmd, sizeof(cmd));
+	memset(&cmd, 0, sizeof(cmd));
 
 	err = oce_cmd(sc, SUBSYS_COMMON, OPCODE_COMMON_GET_FLOW_CONTROL,
 	    OCE_MBX_VER_V0, &cmd, sizeof(cmd));
@@ -3065,7 +3065,7 @@ oce_config_rss(struct oce_softc *sc, int enable)
 	uint8_t *tbl = &cmd.params.req.cputable;
 	int i, j;
 
-	bzero(&cmd, sizeof(cmd));
+	memset(&cmd, 0, sizeof(cmd));
 
 	if (enable)
 		cmd.params.req.enable_rss = RSS_ENABLE_IPV4 | RSS_ENABLE_IPV6 |
@@ -3112,9 +3112,9 @@ oce_update_mcast(struct oce_softc *sc,
 {
 	struct mbx_set_common_iface_multicast cmd;
 
-	bzero(&cmd, sizeof(cmd));
+	memset(&cmd, 0, sizeof(cmd));
 
-	bcopy(&multi[0], &cmd.params.req.mac[0], naddr * ETHER_ADDR_LEN);
+	memcpy(&cmd.params.req.mac[0], &multi[0], naddr * ETHER_ADDR_LEN);
 	cmd.params.req.num_mac = htole16(naddr);
 	cmd.params.req.if_id = sc->sc_if_id;
 
@@ -3137,7 +3137,7 @@ oce_set_promisc(struct oce_softc *sc, int enable)
 	struct mbx_set_common_iface_rx_filter cmd;
 	struct iface_rx_filter_ctx *req;
 
-	bzero(&cmd, sizeof(cmd));
+	memset(&cmd, 0, sizeof(cmd));
 
 	req = &cmd.params.req;
 	req->if_id = sc->sc_if_id;
@@ -3162,7 +3162,7 @@ oce_get_link_status(struct oce_softc *sc)
 	struct mbx_query_common_link_config cmd;
 	int err;
 
-	bzero(&cmd, sizeof(cmd));
+	memset(&cmd, 0, sizeof(cmd));
 
 	err = oce_cmd(sc, SUBSYS_COMMON, OPCODE_COMMON_QUERY_LINK_CONFIG,
 	    OCE_MBX_VER_V0, &cmd, sizeof(cmd));
@@ -3186,7 +3186,7 @@ oce_macaddr_set(struct oce_softc *sc)
 	uint32_t old_pmac_id = sc->sc_pmac_id;
 	int status = 0;
 
-	if (!bcmp(sc->sc_macaddr, sc->sc_ac.ac_enaddr, ETHER_ADDR_LEN))
+	if (!memcmp(sc->sc_macaddr, sc->sc_ac.ac_enaddr, ETHER_ADDR_LEN))
 		return;
 
 	status = oce_macaddr_add(sc, sc->sc_ac.ac_enaddr, &sc->sc_pmac_id);
@@ -3202,7 +3202,7 @@ oce_macaddr_get(struct oce_softc *sc, uint8_t *macaddr)
 	struct mbx_query_common_iface_mac cmd;
 	int err;
 
-	bzero(&cmd, sizeof(cmd));
+	memset(&cmd, 0, sizeof(cmd));
 
 	cmd.params.req.type = MAC_ADDRESS_TYPE_NETWORK;
 	cmd.params.req.permanent = 1;
@@ -3210,7 +3210,7 @@ oce_macaddr_get(struct oce_softc *sc, uint8_t *macaddr)
 	err = oce_cmd(sc, SUBSYS_COMMON, OPCODE_COMMON_QUERY_IFACE_MAC,
 	    OCE_MBX_VER_V0, &cmd, sizeof(cmd));
 	if (err == 0)
-		bcopy(&cmd.params.rsp.mac.mac_addr[0], macaddr,
+		memcpy(macaddr, &cmd.params.rsp.mac.mac_addr[0],
 		    ETHER_ADDR_LEN);
 	return (err);
 }
@@ -3221,10 +3221,10 @@ oce_macaddr_add(struct oce_softc *sc, uint8_t *enaddr, uint32_t *pmac)
 	struct mbx_add_common_iface_mac cmd;
 	int err;
 
-	bzero(&cmd, sizeof(cmd));
+	memset(&cmd, 0, sizeof(cmd));
 
 	cmd.params.req.if_id = htole16(sc->sc_if_id);
-	bcopy(enaddr, cmd.params.req.mac_address, ETHER_ADDR_LEN);
+	memcpy(cmd.params.req.mac_address, enaddr, ETHER_ADDR_LEN);
 
 	err = oce_cmd(sc, SUBSYS_COMMON, OPCODE_COMMON_ADD_IFACE_MAC,
 	    OCE_MBX_VER_V0, &cmd, sizeof(cmd));
@@ -3238,7 +3238,7 @@ oce_macaddr_del(struct oce_softc *sc, uint32_t pmac)
 {
 	struct mbx_del_common_iface_mac cmd;
 
-	bzero(&cmd, sizeof(cmd));
+	memset(&cmd, 0, sizeof(cmd));
 
 	cmd.params.req.if_id = htole16(sc->sc_if_id);
 	cmd.params.req.pmac_id = htole32(pmac);
@@ -3253,7 +3253,7 @@ oce_new_rq(struct oce_softc *sc, struct oce_rq *rq)
 	struct mbx_create_nic_rq cmd;
 	int err, npages;
 
-	bzero(&cmd, sizeof(cmd));
+	memset(&cmd, 0, sizeof(cmd));
 
 	npages = oce_load_ring(sc, rq->ring, &cmd.params.req.pages[0],
 	    nitems(cmd.params.req.pages));
@@ -3291,7 +3291,7 @@ oce_new_wq(struct oce_softc *sc, struct oce_wq *wq)
 	struct mbx_create_nic_wq cmd;
 	int err, npages;
 
-	bzero(&cmd, sizeof(cmd));
+	memset(&cmd, 0, sizeof(cmd));
 
 	npages = oce_load_ring(sc, wq->ring, &cmd.params.req.pages[0],
 	    nitems(cmd.params.req.pages));
@@ -3326,7 +3326,7 @@ oce_new_mq(struct oce_softc *sc, struct oce_mq *mq)
 	union oce_mq_ext_ctx *ctx;
 	int err, npages;
 
-	bzero(&cmd, sizeof(cmd));
+	memset(&cmd, 0, sizeof(cmd));
 
 	npages = oce_load_ring(sc, mq->ring, &cmd.params.req.pages[0],
 	    nitems(cmd.params.req.pages));
@@ -3359,7 +3359,7 @@ oce_new_eq(struct oce_softc *sc, struct oce_eq *eq)
 	struct mbx_create_common_eq cmd;
 	int err, npages;
 
-	bzero(&cmd, sizeof(cmd));
+	memset(&cmd, 0, sizeof(cmd));
 
 	npages = oce_load_ring(sc, eq->ring, &cmd.params.req.pages[0],
 	    nitems(cmd.params.req.pages));
@@ -3392,7 +3392,7 @@ oce_new_cq(struct oce_softc *sc, struct oce_cq *cq)
 	union oce_cq_ctx *ctx;
 	int err, npages;
 
-	bzero(&cmd, sizeof(cmd));
+	memset(&cmd, 0, sizeof(cmd));
 
 	npages = oce_load_ring(sc, cq->ring, &cmd.params.req.pages[0],
 	    nitems(cmd.params.req.pages));
@@ -3476,7 +3476,7 @@ oce_stats_be2(struct oce_softc *sc, uint64_t *rxe, uint64_t *txe)
 	struct oce_port_rxf_stats_v0 *ps;
 	int err;
 
-	bzero(&cmd, sizeof(cmd));
+	memset(&cmd, 0, sizeof(cmd));
 
 	err = oce_cmd(sc, SUBSYS_NIC, OPCODE_NIC_GET_STATS, OCE_MBX_VER_V0,
 	    &cmd, sizeof(cmd));
@@ -3515,7 +3515,7 @@ oce_stats_be3(struct oce_softc *sc, uint64_t *rxe, uint64_t *txe)
 	struct oce_port_rxf_stats_v1 *ps;
 	int err;
 
-	bzero(&cmd, sizeof(cmd));
+	memset(&cmd, 0, sizeof(cmd));
 
 	err = oce_cmd(sc, SUBSYS_NIC, OPCODE_NIC_GET_STATS, OCE_MBX_VER_V1,
 	    &cmd, sizeof(cmd));
@@ -3548,7 +3548,7 @@ oce_stats_xe(struct oce_softc *sc, uint64_t *rxe, uint64_t *txe)
 	struct oce_pport_stats *pps;
 	int err;
 
-	bzero(&cmd, sizeof(cmd));
+	memset(&cmd, 0, sizeof(cmd));
 
 	cmd.params.req.reset_stats = 0;
 	cmd.params.req.port_number = sc->sc_if_id;

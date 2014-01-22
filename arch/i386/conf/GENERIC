@@ -1,4 +1,4 @@
-#	$OpenBSD: GENERIC,v 1.763 2013/12/20 21:50:49 matthew Exp $
+#	$OpenBSD: GENERIC,v 1.765 2014/01/21 21:14:58 sf Exp $
 #
 # For further information on compiling OpenBSD kernels, see the config(8)
 # man page.
@@ -256,6 +256,8 @@ umidi*	at uhub?		# USB MIDI
 midi*	at umidi?
 ulpt*	at uhub?		# USB Printers
 umass*	at uhub?		# USB Mass Storage devices
+ubcmtp*	at uhub?		# Broadcom USB touchpad
+wsmouse* at ubcmtp? mux 0
 uhidev*	at uhub?		# Human Interface Devices
 ums*	at uhidev?		# USB mouse
 wsmouse* at ums? mux 0
@@ -791,4 +793,5 @@ virtio*		at pci? 	# Virtio PCI device
 vioblk*		at virtio?	# Virtio block device
 vio*		at virtio?	# Virtio network device
 viomb*		at virtio?	# Virtio memory ballooning device
+viornd*		at virtio?	# Virtio entropy device
 vioscsi*	at virtio?	# Virtio SCSI device
