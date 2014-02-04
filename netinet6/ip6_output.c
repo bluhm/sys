@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip6_output.c,v 1.150 2014/01/21 10:18:26 mpi Exp $	*/
+/*	$OpenBSD: ip6_output.c,v 1.153 2014/01/23 23:51:29 henning Exp $	*/
 /*	$KAME: ip6_output.c,v 1.172 2001/03/25 09:55:56 itojun Exp $	*/
 
 /*
@@ -84,6 +84,11 @@
 #include <netinet/udp.h>
 #include <netinet/tcp.h>
 
+#include <netinet/ip_var.h>
+#include <netinet/tcp_timer.h>
+#include <netinet/tcp_var.h>
+#include <netinet/udp_var.h>
+
 #include <netinet6/in6_var.h>
 #include <netinet/ip6.h>
 #include <netinet/icmp6.h>
@@ -128,7 +133,6 @@ int ip6_getpmtu(struct route_in6 *, struct route_in6 *,
 	struct ifnet *, struct in6_addr *, u_long *, int *);
 int copypktopts(struct ip6_pktopts *, struct ip6_pktopts *, int);
 void in6_delayed_cksum(struct mbuf *, u_int8_t);
-void in6_proto_cksum_out(struct mbuf *, struct ifnet *);
 
 /* Context for non-repeating IDs */
 struct idgen32_ctx ip6_id_ctx;
@@ -3211,7 +3215,7 @@ in6_delayed_cksum(struct mbuf *m, u_int8_t nxt)
 	if (offset <= 0 || nxtp != nxt)
 		/* If the desired next protocol isn't found, punt. */
 		return;
-	csum = (u_int16_t)(in6_cksum(m, nxt, offset, m->m_pkthdr.len - offset));
+	csum = (u_int16_t)(in6_cksum(m, 0, offset, m->m_pkthdr.len - offset));
 
 	switch (nxt) {
 	case IPPROTO_TCP:
@@ -3238,15 +3242,40 @@ in6_delayed_cksum(struct mbuf *m, u_int8_t nxt)
 void
 in6_proto_cksum_out(struct mbuf *m, struct ifnet *ifp)
 {
+	/* some hw and in6_delayed_cksum need the pseudo header cksum */
+	if (m->m_pkthdr.csum_flags &
+	    (M_TCP_CSUM_OUT|M_UDP_CSUM_OUT|M_ICMP_CSUM_OUT)) {
+		struct ip6_hdr *ip6;
+		int nxt, offset;
+		u_int16_t csum;
+
+		ip6 = mtod(m, struct ip6_hdr *);
+		offset = ip6_lasthdr(m, 0, IPPROTO_IPV6, &nxt);
+		csum = in6_cksum_phdr(&ip6->ip6_src, &ip6->ip6_dst,
+		    htonl(m->m_pkthdr.len - offset), htonl(nxt));
+		if (nxt == IPPROTO_TCP)
+			offset += offsetof(struct tcphdr, th_sum);
+		else if (nxt == IPPROTO_UDP)
+			offset += offsetof(struct udphdr, uh_sum);
+		else if (nxt == IPPROTO_ICMPV6)
+			offset += offsetof(struct icmp6_hdr, icmp6_cksum);
+		if ((offset + sizeof(u_int16_t)) > m->m_len)
+			m_copyback(m, offset, sizeof(csum), &csum, M_NOWAIT);
+		else
+			*(u_int16_t *)(mtod(m, caddr_t) + offset) = csum;
+	}
+
 	if (m->m_pkthdr.csum_flags & M_TCP_CSUM_OUT) {
 		if (!ifp || !(ifp->if_capabilities & IFCAP_CSUM_TCPv6) ||
 		    ifp->if_bridgeport != NULL) {
+			tcpstat.tcps_outswcsum++;
 			in6_delayed_cksum(m, IPPROTO_TCP);
 			m->m_pkthdr.csum_flags &= ~M_TCP_CSUM_OUT; /* Clear */
 		}
 	} else if (m->m_pkthdr.csum_flags & M_UDP_CSUM_OUT) {
 		if (!ifp || !(ifp->if_capabilities & IFCAP_CSUM_UDPv6) ||
 		    ifp->if_bridgeport != NULL) {
+			udpstat.udps_outswcsum++;
 			in6_delayed_cksum(m, IPPROTO_UDP);
 			m->m_pkthdr.csum_flags &= ~M_UDP_CSUM_OUT; /* Clear */
 		}

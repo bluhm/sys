@@ -1,4 +1,4 @@
-/*	$OpenBSD: route.h,v 1.85 2014/01/20 22:44:41 claudio Exp $	*/
+/*	$OpenBSD: route.h,v 1.87 2014/01/23 10:16:30 mpi Exp $	*/
 /*	$NetBSD: route.h,v 1.9 1996/02/13 22:00:49 christos Exp $	*/
 
 /*
@@ -104,7 +104,6 @@ struct rtentry {
 	int	rt_refcnt;		/* # held references */
 	struct	ifnet *rt_ifp;		/* the answer: interface to use */
 	struct	ifaddr *rt_ifa;		/* the answer: interface addr to use */
-	struct	sockaddr *rt_genmask;	/* for generation of cloned routes */
 	caddr_t	rt_llinfo;		/* pointer to link level info cache or
 					   to an MPLS structure */ 
 	struct	rt_kmetrics rt_rmx;	/* metrics used by rx'ing protocols */
@@ -372,6 +371,7 @@ void	 rt_ifmsg(struct ifnet *);
 void	 rt_ifannouncemsg(struct ifnet *, int);
 void	 rt_maskedcopy(struct sockaddr *,
 	    struct sockaddr *, struct sockaddr *);
+void	 rt_sendmsg(struct rtentry *, int, u_int);
 void	 rt_missmsg(int, struct rt_addrinfo *, int, struct ifnet *, int,
 	    u_int);
 void	 rt_newaddrmsg(int, struct ifaddr *, int, struct rtentry *);

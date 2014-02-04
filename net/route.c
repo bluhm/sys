@@ -1,4 +1,4 @@
-/*	$OpenBSD: route.c,v 1.149 2014/01/10 14:29:08 tedu Exp $	*/
+/*	$OpenBSD: route.c,v 1.151 2014/01/23 10:16:30 mpi Exp $	*/
 /*	$NetBSD: route.c,v 1.14 1996/02/13 22:00:46 christos Exp $	*/
 
 /*
@@ -345,17 +345,7 @@ rtalloc1(struct sockaddr *dst, int flags, u_int tableid)
 				goto miss;
 			}
 			/* Inform listeners of the new route */
-			bzero(&info, sizeof(info));
-			info.rti_info[RTAX_DST] = rt_key(rt);
-			info.rti_info[RTAX_NETMASK] = rt_mask(rt);
-			info.rti_info[RTAX_GATEWAY] = rt->rt_gateway;
-			if (rt->rt_ifp != NULL) {
-				info.rti_info[RTAX_IFP] =
-				    TAILQ_FIRST(&rt->rt_ifp->if_addrlist)->ifa_addr;
-				info.rti_info[RTAX_IFA] = rt->rt_ifa->ifa_addr;
-			}
-			rt_missmsg(RTM_ADD, &info, rt->rt_flags,
-			    rt->rt_ifp, 0, tableid);
+			rt_sendmsg(rt, RTM_ADD, tableid);
 		} else
 			rt->rt_refcnt++;
 	} else {
@@ -409,6 +399,24 @@ rtfree(struct rtentry *rt)
 		free(rt_key(rt), M_RTABLE);
 		pool_put(&rtentry_pool, rt);
 	}
+}
+
+void
+rt_sendmsg(struct rtentry *rt, int cmd, u_int rtableid)
+{
+	struct rt_addrinfo info;
+
+	bzero(&info, sizeof(info));
+	info.rti_info[RTAX_DST] = rt_key(rt);
+	info.rti_info[RTAX_GATEWAY] = rt->rt_gateway;
+	info.rti_info[RTAX_NETMASK] = rt_mask(rt);
+	if (rt->rt_ifp != NULL) {
+		info.rti_info[RTAX_IFP] =
+		    TAILQ_FIRST(&rt->rt_ifp->if_addrlist)->ifa_addr;
+		info.rti_info[RTAX_IFA] = rt->rt_ifa->ifa_addr;
+	}
+
+	rt_missmsg(cmd, &info, rt->rt_flags, rt->rt_ifp, 0, rtableid);
 }
 
 void
@@ -813,8 +821,7 @@ rtrequest1(int req, struct rt_addrinfo *info, u_int8_t prio,
 		info->rti_flags = rt->rt_flags & ~(RTF_CLONING | RTF_STATIC);
 		info->rti_flags |= RTF_CLONED;
 		info->rti_info[RTAX_GATEWAY] = rt->rt_gateway;
-		if ((info->rti_info[RTAX_NETMASK] = rt->rt_genmask) == NULL)
-			info->rti_flags |= RTF_HOST;
+		info->rti_flags |= RTF_HOST;
 		info->rti_info[RTAX_LABEL] =
 		    rtlabel_id2sa(rt->rt_labelid, &sa_rl2);
 		/* FALLTHROUGH */

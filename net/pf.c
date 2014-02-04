@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf.c,v 1.864 2014/01/20 02:57:49 henning Exp $ */
+/*	$OpenBSD: pf.c,v 1.868 2014/01/25 03:39:00 lteo Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -1118,7 +1118,7 @@ pf_state_export(struct pfsync_state *sp, struct pf_state *st)
 
 	/* copy from state */
 	strlcpy(sp->ifname, st->kif->pfik_name, sizeof(sp->ifname));
-	bcopy(&st->rt_addr, &sp->rt_addr, sizeof(sp->rt_addr));
+	memcpy(&sp->rt_addr, &st->rt_addr, sizeof(sp->rt_addr));
 	sp->creation = htonl(time_uptime - st->creation);
 	expire = pf_state_expires(st);
 	if (expire <= time_uptime)
@@ -2419,7 +2419,7 @@ pf_send_tcp(const struct pf_rule *r, sa_family_t af,
 		opt[0] = TCPOPT_MAXSEG;
 		opt[1] = 4;
 		HTONS(mss);
-		bcopy((caddr_t)&mss, (caddr_t)(opt + 2), 2);
+		memcpy((opt + 2), &mss, 2);
 	}
 
 	switch (af) {
@@ -2452,8 +2452,8 @@ pf_send_tcp(const struct pf_rule *r, sa_family_t af,
 			ro.ro_rt = &rt;
 			ro.ro_dst.sa_len = sizeof(ro.ro_dst);
 			ro.ro_dst.sa_family = pseudo_AF_HDRCMPLT;
-			bcopy(eh->ether_dhost, e->ether_shost, ETHER_ADDR_LEN);
-			bcopy(eh->ether_shost, e->ether_dhost, ETHER_ADDR_LEN);
+			memcpy(e->ether_shost, eh->ether_dhost, ETHER_ADDR_LEN);
+			memcpy(e->ether_dhost, eh->ether_shost, ETHER_ADDR_LEN);
 			e->ether_type = eh->ether_type;
 			ip_output(m, (void *)NULL, &ro, IP_ROUTETOETHER,
 			    (void *)NULL, (void *)NULL);
@@ -2958,7 +2958,7 @@ pf_get_mss(struct pf_pdesc *pd)
 			--hlen;
 			break;
 		case TCPOPT_MAXSEG:
-			bcopy((caddr_t)(opt + 2), (caddr_t)&mss, 2);
+			memcpy(&mss, (opt + 2), 2);
 			NTOHS(mss);
 			/* FALLTHROUGH */
 		default:
@@ -3516,7 +3516,7 @@ pf_create_state(struct pf_pdesc *pd, struct pf_rule *r, struct pf_rule *a,
 	s->rule.ptr = r;
 	s->anchor.ptr = a;
 	s->natrule.ptr = nr;
-	bcopy(rules, &s->match_rules, sizeof(s->match_rules));
+	memcpy(&s->match_rules, rules, sizeof(s->match_rules));
 	STATE_INC_COUNTERS(s);
 	if (r->allow_opts)
 		s->state_flags |= PFSTATE_ALLOWOPTS;
@@ -5653,16 +5653,12 @@ pf_route(struct mbuf **m, struct pf_rule *r, int dir, struct ifnet *oifp,
 
 	if (ntohs(ip->ip_len) <= ifp->if_mtu) {
 		ip->ip_sum = 0;
-		if (ifp->if_capabilities & IFCAP_CSUM_IPv4) {
+		if (ifp->if_capabilities & IFCAP_CSUM_IPv4)
 			m0->m_pkthdr.csum_flags |= M_IPV4_CSUM_OUT;
-			ipstat.ips_outhwcsum++;
-		} else
+		else {
+			ipstat.ips_outswcsum++;
 			ip->ip_sum = in_cksum(m0, ip->ip_hl << 2);
-		/* Update relevant hardware checksum stats for TCP/UDP */
-		if (m0->m_pkthdr.csum_flags & M_TCP_CSUM_OUT)
-			tcpstat.tcps_outhwcsum++;
-		else if (m0->m_pkthdr.csum_flags & M_UDP_CSUM_OUT)
-			udpstat.udps_outhwcsum++;
+		}
 		error = (*ifp->if_output)(ifp, m0, sintosa(dst), NULL);
 		goto done;
 	}
@@ -5879,26 +5875,21 @@ pf_check_proto_cksum(struct pf_pdesc *pd, int off, int len, u_int8_t p,
 		pd->csum_status = PF_CSUM_BAD;
 		return (1);
 	}
+
+	/* need to do it in software */
+	if (p == IPPROTO_TCP)
+		tcpstat.tcps_inswcsum++;
+	else if (p == IPPROTO_UDP)
+		udpstat.udps_inswcsum++;
+	
 	switch (af) {
 #ifdef INET
 	case AF_INET:
-		if (p == IPPROTO_ICMP) {
-			if (pd->m->m_len < off) {
-				pd->csum_status = PF_CSUM_BAD;
-				return (1);
-			}
-			pd->m->m_data += off;
-			pd->m->m_len -= off;
-			sum = in_cksum(pd->m, len);
-			pd->m->m_data -= off;
-			pd->m->m_len += off;
-		} else {
-			if (pd->m->m_len < sizeof(struct ip)) {
-				pd->csum_status = PF_CSUM_BAD;
-				return (1);
-			}
-			sum = in4_cksum(pd->m, p, off, len);
+		if (pd->m->m_len < sizeof(struct ip)) {
+			pd->csum_status = PF_CSUM_BAD;
+			return (1);
 		}
+		sum = in4_cksum(pd->m, (p == IPPROTO_ICMP ? 0 : p), off, len);
 		break;
 #endif /* INET */
 #ifdef INET6

@@ -1,4 +1,4 @@
-/* $OpenBSD: acpi_wakecode.S,v 1.25 2014/01/16 19:32:26 brad Exp $ */
+/* $OpenBSD: acpi_wakecode.S,v 1.27 2014/02/01 07:10:33 mlarkin Exp $ */
 /*
  * Copyright (c) 2001 Takanori Watanabe <takawata@jp.freebsd.org>
  * Copyright (c) 2001 Mitsuru IWASAKI <iwasaki@jp.freebsd.org>
@@ -394,7 +394,7 @@ _ACPI_TRMP_LABEL(hibernate_resume_vector_2)
 	/* Get out of 64 bit CS */
 	lgdtq	tmp_gdt6416
 
-	rex64	ljmpq	*(hibernate_indirect_16)
+	rex64	ljmp	*(hibernate_indirect_16)
 _ACPI_TRMP_LABEL(hibernate_indirect_16)
 	.quad	hibernate_resume_vector_3
 	.word	0x18
@@ -432,7 +432,7 @@ _ACPI_TRMP_LABEL(hibernate_resume_vector_2b)
 	/* Get out of 64 bit CS */
 	lgdtq	tmp_gdt6416
 
-	rex64	ljmpq	*(hibernate_indirect_16b)
+	rex64	ljmp	*(hibernate_indirect_16b)
 _ACPI_TRMP_LABEL(hibernate_indirect_16b)
 	.quad	hibernate_resume_vector_3b
 	.word	0x18
@@ -494,8 +494,7 @@ NENTRY(hibernate_switch_stack_machdep)
 	ret
 
 NENTRY(hibernate_flush)
-	movq	$HIBERNATE_PML4T, %rax
-	movq	%rax, %cr3
+	invlpg	HIBERNATE_INFLATE_PAGE
 	ret
 #endif /* HIBERNATE */
 
