@@ -638,9 +638,9 @@ in_ifinit(struct ifnet *ifp, struct in_ifaddr *ia, struct sockaddr_in *sin,
 	 * Always remove the address from the tree to make sure its
 	 * position gets updated in case the key changes.
 	 */
-	s = splnet();
 	if (!newaddr)
 		ifa_del(ifp, &ia->ia_ifa);
+	s = splnet();
 	oldaddr = ia->ia_addr;
 	ia->ia_addr = *sin;
 
