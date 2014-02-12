@@ -686,17 +686,8 @@ report:
 			info.rti_info[RTAX_DST] = rt_key(rt);
 			info.rti_info[RTAX_GATEWAY] = rt->rt_gateway;
 			info.rti_info[RTAX_NETMASK] = rt_mask(rt);
-
-			if (rt->rt_labelid) {
-				bzero(&sa_rt, sizeof(sa_rt));
-				sa_rt.sr_len = sizeof(sa_rt);
-				label = rtlabel_id2name(rt->rt_labelid);
-				if (label != NULL)
-					strlcpy(sa_rt.sr_label, label,
-					    sizeof(sa_rt.sr_label));
-				info.rti_info[RTAX_LABEL] =
-				    (struct sockaddr *)&sa_rt;
-			}
+			info.rti_info[RTAX_LABEL] =
+			    rtlabel_id2sa(rt->rt_labelid, &sa_rt);
 #ifdef MPLS
 			if (rt->rt_flags & RTF_MPLS) {
 				bzero(&sa_mpls, sizeof(sa_mpls));
@@ -1272,17 +1263,7 @@ sysctl_dumpentry(struct radix_node *rn, void *v, u_int id)
 		if (rt->rt_ifp->if_flags & IFF_POINTOPOINT)
 			info.rti_info[RTAX_BRD] = rt->rt_ifa->ifa_dstaddr;
 	}
-	if (rt->rt_labelid) {
-		bzero(&sa_rt, sizeof(sa_rt));
-		sa_rt.sr_len = sizeof(sa_rt);
-		label = rtlabel_id2name(rt->rt_labelid);
-		if (label != NULL) {
-			strlcpy(sa_rt.sr_label, label,
-			    sizeof(sa_rt.sr_label));
-			info.rti_info[RTAX_LABEL] =
-			    (struct sockaddr *)&sa_rt;
-		}
-	}
+	info.rti_info[RTAX_LABEL] = rtlabel_id2sa(rt->rt_labelid, &sa_rt);
 #ifdef MPLS
 	if (rt->rt_flags & RTF_MPLS) {
 		bzero(&sa_mpls, sizeof(sa_mpls));
