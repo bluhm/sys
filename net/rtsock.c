@@ -450,7 +450,6 @@ route_output(struct mbuf *m, ...)
 #ifdef MPLS
 	struct sockaddr_mpls	 sa_mpls, *psa_mpls;
 #endif
-	const char		*label;
 	va_list			 ap;
 	u_int			 tableid;
 	u_int8_t		 prio;
@@ -1248,7 +1247,6 @@ sysctl_dumpentry(struct radix_node *rn, void *v, u_int id)
 	struct sockaddr_mpls	 sa_mpls;
 #endif
 	struct sockaddr_rtlabel	 sa_rt;
-	const char		*label;
 
 	if (w->w_op == NET_RT_FLAGS && !(rt->rt_flags & w->w_arg))
 		return 0;
