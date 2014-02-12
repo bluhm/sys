@@ -1,4 +1,4 @@
-/*	$OpenBSD: route.c,v 1.151 2014/01/23 10:16:30 mpi Exp $	*/
+/*	$OpenBSD: route.c,v 1.153 2014/02/12 12:50:13 mpi Exp $	*/
 /*	$NetBSD: route.c,v 1.14 1996/02/13 22:00:46 christos Exp $	*/
 
 /*
@@ -130,8 +130,6 @@
 
 struct ifaddr	*encap_findgwifa(struct sockaddr *, u_int);
 #endif
-
-#define	SA(p) ((struct sockaddr *)(p))
 
 struct	route_cb	   route_cb;
 struct	rtstat		   rtstat;
@@ -1119,13 +1117,9 @@ rtinit(struct ifaddr *ifa, int cmd, int flags)
 	info.rti_info[RTAX_LABEL] =
 	    rtlabel_id2sa(ifa->ifa_ifp->if_rtlabelid, &sa_rl);
 
-	/*
-	 * XXX here, it seems that we are assuming that ifa_netmask is NULL
-	 * for RTF_HOST.  bsdi4 passes NULL explicitly (via intermediate
-	 * variable) when RTF_HOST is 1.  still not sure if i can safely
-	 * change it to meet bsdi4 behavior.
-	 */
-	info.rti_info[RTAX_NETMASK] = ifa->ifa_netmask;
+	if ((flags & RTF_HOST) == 0)
+		info.rti_info[RTAX_NETMASK] = ifa->ifa_netmask;
+
 	error = rtrequest1(cmd, &info, RTP_CONNECTED, &nrt, rtableid);
 	if (cmd == RTM_DELETE) {
 		if (error == 0 && (rt = nrt) != NULL) {
