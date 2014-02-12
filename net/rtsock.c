@@ -446,7 +446,7 @@ route_output(struct mbuf *m, ...)
 	struct ifaddr		*ifa = NULL;
 	struct socket		*so;
 	struct rawcb		*rp = NULL;
-	struct sockaddr_rtlabel	 sa_rt;
+	struct sockaddr_rtlabel	 sa_rl;
 #ifdef MPLS
 	struct sockaddr_mpls	 sa_mpls, *psa_mpls;
 #endif
@@ -686,7 +686,7 @@ report:
 			info.rti_info[RTAX_GATEWAY] = rt->rt_gateway;
 			info.rti_info[RTAX_NETMASK] = rt_mask(rt);
 			info.rti_info[RTAX_LABEL] =
-			    rtlabel_id2sa(rt->rt_labelid, &sa_rt);
+			    rtlabel_id2sa(rt->rt_labelid, &sa_rl);
 #ifdef MPLS
 			if (rt->rt_flags & RTF_MPLS) {
 				bzero(&sa_mpls, sizeof(sa_mpls));
@@ -1246,7 +1246,7 @@ sysctl_dumpentry(struct radix_node *rn, void *v, u_int id)
 #ifdef MPLS
 	struct sockaddr_mpls	 sa_mpls;
 #endif
-	struct sockaddr_rtlabel	 sa_rt;
+	struct sockaddr_rtlabel	 sa_rl;
 
 	if (w->w_op == NET_RT_FLAGS && !(rt->rt_flags & w->w_arg))
 		return 0;
@@ -1261,7 +1261,7 @@ sysctl_dumpentry(struct radix_node *rn, void *v, u_int id)
 		if (rt->rt_ifp->if_flags & IFF_POINTOPOINT)
 			info.rti_info[RTAX_BRD] = rt->rt_ifa->ifa_dstaddr;
 	}
-	info.rti_info[RTAX_LABEL] = rtlabel_id2sa(rt->rt_labelid, &sa_rt);
+	info.rti_info[RTAX_LABEL] = rtlabel_id2sa(rt->rt_labelid, &sa_rl);
 #ifdef MPLS
 	if (rt->rt_flags & RTF_MPLS) {
 		bzero(&sa_mpls, sizeof(sa_mpls));
