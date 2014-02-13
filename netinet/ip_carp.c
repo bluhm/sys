@@ -444,17 +444,6 @@ carp_setroute(struct carp_softc *sc, int cmd)
 			    ifa->ifa_netmask, sc->sc_if.if_rdomain);
 			nr_ourif = (rt && rt->rt_ifp == &sc->sc_if);
 
-			/* Restore the route label */
-			memset(&sa_rl, 0, sizeof(sa_rl));
-			if (rt && rt->rt_labelid) {
-				sa_rl.sr_len = sizeof(sa_rl);
-				sa_rl.sr_family = AF_UNSPEC;
-				label = rtlabel_id2name(rt->rt_labelid);
-				if (label != NULL)
-					strlcpy(sa_rl.sr_label, label,
-					    sizeof(sa_rl.sr_label));
-			}
-
 			switch (cmd) {
 			case RTM_ADD:
 				if (hr_otherif) {
@@ -491,8 +480,11 @@ carp_setroute(struct carp_softc *sc, int cmd)
 					info.rti_info[RTAX_DST] = &sa;
 					info.rti_info[RTAX_GATEWAY] = ifa->ifa_addr;
 					info.rti_info[RTAX_NETMASK] = ifa->ifa_netmask;
-					info.rti_info[RTAX_LABEL] =
-					    (struct sockaddr *)&sa_rl;
+					/* Restore the route label */
+					if (rt)
+						info.rti_info[RTAX_LABEL] =
+						    rtlabel_id2sa(
+						    rt->rt_labelid, &sa_rl);
 					error = rtrequest1(RTM_ADD, &info,
 					    RTP_CONNECTED, NULL, 
 					    sc->sc_if.if_rdomain);
