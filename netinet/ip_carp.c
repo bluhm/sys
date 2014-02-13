@@ -416,7 +416,6 @@ carp_setroute(struct carp_softc *sc, int cmd)
 			struct rt_addrinfo info;
 			int hr_otherif, nr_ourif;
 			struct sockaddr_rtlabel	sa_rl;
-			const char *label;
 
 			/* Remove the existing host route, if any */
 			memset(&info, 0, sizeof(info));
