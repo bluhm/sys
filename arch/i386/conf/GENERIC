@@ -1,4 +1,4 @@
-#	$OpenBSD: GENERIC,v 1.767 2014/02/19 05:32:57 jmatthew Exp $
+#	$OpenBSD: GENERIC,v 1.769 2014/03/08 18:28:23 kettenis Exp $
 #
 # For further information on compiling OpenBSD kernels, see the config(8)
 # man page.
@@ -377,8 +377,10 @@ agp*		at viaagp?	# AGP bridges
 
 #option		DRMDEBUG
 inteldrm*	at vga?		# Intel i915, i945 DRM driver
+drm0		at inteldrm? console 1
 drm*		at inteldrm?
 radeondrm*	at pci? 	# ATI Radeon DRM driver
+drm0		at radeondrm? console 1
 drm*		at radeondrm?
 wsdisplay0	at radeondrm? console 1
 wsdisplay*	at radeondrm?
@@ -457,9 +459,10 @@ ciss*	at pci?			# Compaq Smart ARRAY [56]* RAID controllers
 iha*	at pci?			# Initio Ultra/UltraWide SCSI controllers
 ips*	at pci?			# IBM ServeRAID controllers
 isp*	at pci?			# Qlogic ISP [12]0x0 SCSI/FibreChannel
-#qla*	at pci?			# Qlogic ISP 2[123]xx FibreChannel
-qle*	at pci?			# Qlogic ISP 2[45]xx FibreChannel
-#qli*	at pci?			# Qlogic 4010 & 4022 iSCSI
+qlw*	at pci?			# QLogic ISP SCSI
+#qla*	at pci?			# QLogic ISP 2[123]xx FibreChannel
+qle*	at pci?			# QLogic ISP 2[45]xx FibreChannel
+#qli*	at pci?			# QLogic 4010 & 4022 iSCSI
 aic0	at isa? port 0x340 irq 11 # Adaptec 152[02] SCSI controllers
 aic*	at pcmcia?		# PCMCIA based aic SCSI controllers
 aic*	at isapnp?		# isapnp configured aic SCSI controllers
