@@ -585,8 +585,11 @@ tcp_input(struct mbuf *m, ...)
 	 * Locate pcb for segment.
 	 */
 #if NPF > 0
-	if (m->m_pkthdr.pf.statekey)
+	if (m->m_pkthdr.pf.statekey) {
 		inp = m->m_pkthdr.pf.statekey->inp;
+		if (inp && inp->inp_pf_sk)
+			KASSERT(m->m_pkthdr.pf.statekey == inp->inp_pf_sk);
+}
 #endif
 findpcb:
 	if (inp == NULL) {
