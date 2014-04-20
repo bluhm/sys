@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ethersubr.c,v 1.162 2014/02/17 14:48:48 mpi Exp $	*/
+/*	$OpenBSD: if_ethersubr.c,v 1.165 2014/04/14 09:06:42 mpi Exp $	*/
 /*	$NetBSD: if_ethersubr.c,v 1.19 1996/05/07 02:40:30 thorpej Exp $	*/
 
 /*
@@ -211,10 +211,10 @@ ether_output(struct ifnet *ifp0, struct mbuf *m0, struct sockaddr *dst,
 	struct ifnet *ifp = ifp0;
 
 #ifdef DIAGNOSTIC
-	if (ifp->if_rdomain != rtable_l2(m->m_pkthdr.rdomain)) {
+	if (ifp->if_rdomain != rtable_l2(m->m_pkthdr.ph_rtableid)) {
 		printf("%s: trying to send packet on wrong domain. "
 		    "if %d vs. mbuf %d, AF %d\n", ifp->if_xname,
-		    ifp->if_rdomain, rtable_l2(m->m_pkthdr.rdomain),
+		    ifp->if_rdomain, rtable_l2(m->m_pkthdr.ph_rtableid),
 		    dst->sa_family);
 	}
 #endif
@@ -228,14 +228,6 @@ ether_output(struct ifnet *ifp0, struct mbuf *m0, struct sockaddr *dst,
 
 #if NCARP > 0
 	if (ifp->if_type == IFT_CARP) {
-		struct ifaddr *ifa;
-
-		/* loop back if this is going to the carp interface */
-		if (dst != NULL && LINK_STATE_IS_UP(ifp0->if_link_state) &&
-		    (ifa = ifa_ifwithaddr(dst, ifp->if_rdomain)) != NULL &&
-		    ifa->ifa_ifp == ifp0)
-			return (looutput(ifp0, m, dst, rt0));
-
 		ifp = ifp->if_carpdev;
 		ac = (struct arpcom *)ifp;
 
@@ -250,7 +242,7 @@ ether_output(struct ifnet *ifp0, struct mbuf *m0, struct sockaddr *dst,
 	if ((rt = rt0) != NULL) {
 		if ((rt->rt_flags & RTF_UP) == 0) {
 			if ((rt0 = rt = rtalloc1(dst, RT_REPORT,
-			    m->m_pkthdr.rdomain)) != NULL)
+			    m->m_pkthdr.ph_rtableid)) != NULL)
 				rt->rt_refcnt--;
 			else
 				senderr(EHOSTUNREACH);
@@ -390,7 +382,8 @@ ether_output(struct ifnet *ifp0, struct mbuf *m0, struct sockaddr *dst,
 				goto bad;
 			}
 #endif
-			if (!bcmp(&ifp->if_bridgeport, mtag + 1, sizeof(caddr_t)))
+			if (!memcmp(&ifp->if_bridgeport, mtag + 1,
+			    sizeof(caddr_t)))
 				break;
 		}
 		if (mtag == NULL) {
@@ -461,8 +454,8 @@ ether_input(struct ifnet *ifp0, struct ether_header *eh, struct mbuf *m)
 
 	m_cluncount(m, 1);
 
-	/* mark incoming routing domain */
-	m->m_pkthdr.rdomain = ifp->if_rdomain;
+	/* mark incoming routing table */
+	m->m_pkthdr.ph_rtableid = ifp->if_rdomain;
 
 	if (eh == NULL) {
 		eh = mtod(m, struct ether_header *);
@@ -501,7 +494,7 @@ ether_input(struct ifnet *ifp0, struct ether_header *eh, struct mbuf *m)
 			}
 		}
 
-		if (bcmp((caddr_t)etherbroadcastaddr, (caddr_t)eh->ether_dhost,
+		if (memcmp(etherbroadcastaddr, eh->ether_dhost,
 		    sizeof(etherbroadcastaddr)) == 0)
 			m->m_flags |= M_BCAST;
 		else
@@ -590,8 +583,7 @@ ether_input(struct ifnet *ifp0, struct ether_header *eh, struct mbuf *m)
 	 */
 	if ((m->m_flags & (M_BCAST|M_MCAST)) == 0 &&
 	    ((ifp->if_flags & IFF_PROMISC) || (ifp0->if_flags & IFF_PROMISC))) {
-		if (bcmp(ac->ac_enaddr, (caddr_t)eh->ether_dhost,
-		    ETHER_ADDR_LEN)) {
+		if (memcmp(ac->ac_enaddr, eh->ether_dhost, ETHER_ADDR_LEN)) {
 			m_freem(m);
 			return;
 		}
@@ -1039,7 +1031,7 @@ ether_addmulti(struct ifreq *ifr, struct arpcom *ac)
 	enm->enm_refcount = 1;
 	LIST_INSERT_HEAD(&ac->ac_multiaddrs, enm, enm_list);
 	ac->ac_multicnt++;
-	if (bcmp(addrlo, addrhi, ETHER_ADDR_LEN) != 0)
+	if (memcmp(addrlo, addrhi, ETHER_ADDR_LEN) != 0)
 		ac->ac_multirangecnt++;
 	splx(s);
 	/*
@@ -1087,7 +1079,7 @@ ether_delmulti(struct ifreq *ifr, struct arpcom *ac)
 	LIST_REMOVE(enm, enm_list);
 	free(enm, M_IFMADDR);
 	ac->ac_multicnt--;
-	if (bcmp(addrlo, addrhi, ETHER_ADDR_LEN) != 0)
+	if (memcmp(addrlo, addrhi, ETHER_ADDR_LEN) != 0)
 		ac->ac_multirangecnt--;
 	splx(s);
 	/*

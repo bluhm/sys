@@ -1,4 +1,4 @@
-/*	$OpenBSD: nd6_nbr.c,v 1.75 2014/01/24 12:20:22 naddy Exp $	*/
+/*	$OpenBSD: nd6_nbr.c,v 1.77 2014/04/14 09:06:42 mpi Exp $	*/
 /*	$KAME: nd6_nbr.c,v 1.61 2001/02/10 16:06:14 jinmei Exp $	*/
 
 /*
@@ -219,7 +219,7 @@ nd6_ns_input(struct mbuf *m, int off, int icmp6len)
 		tsin6.sin6_family = AF_INET6;
 		tsin6.sin6_addr = taddr6;
 
-		rt = rtalloc1(sin6tosa(&tsin6), 0, m->m_pkthdr.rdomain);
+		rt = rtalloc1(sin6tosa(&tsin6), 0, m->m_pkthdr.ph_rtableid);
 		if (rt && (rt->rt_flags & RTF_ANNOUNCE) != 0 &&
 		    rt->rt_gateway->sa_family == AF_LINK) {
 			/*
@@ -384,7 +384,7 @@ nd6_ns_output(struct ifnet *ifp, struct in6_addr *daddr6,
 	if (m == NULL)
 		return;
 	m->m_pkthdr.rcvif = NULL;
-	m->m_pkthdr.rdomain = ifp->if_rdomain;
+	m->m_pkthdr.ph_rtableid = ifp->if_rdomain;
 
 	if (daddr6 == NULL || IN6_IS_ADDR_MULTICAST(daddr6)) {
 		m->m_flags |= M_MCAST;
@@ -457,7 +457,7 @@ nd6_ns_output(struct ifnet *ifp, struct in6_addr *daddr6,
 
 			bcopy(&dst_sa, &ro.ro_dst, sizeof(dst_sa));
 			src0 = in6_selectsrc(&dst_sa, NULL, NULL, &ro, NULL,
-			    &error, m->m_pkthdr.rdomain);
+			    &error, m->m_pkthdr.ph_rtableid);
 			if (src0 == NULL) {
 				char addr[INET6_ADDRSTRLEN];
 
@@ -570,9 +570,6 @@ nd6_na_input(struct mbuf *m, int off, int icmp6len)
 	struct rtentry *rt;
 	struct sockaddr_dl *sdl;
 	union nd_opts ndopts;
-#if NCARP > 0
-	struct sockaddr_dl *proxydl = NULL;
-#endif
 	char addr[INET6_ADDRSTRLEN], addr0[INET6_ADDRSTRLEN];
 
 	if (ip6->ip6_hlim != 255) {
@@ -632,11 +629,6 @@ nd6_na_input(struct mbuf *m, int off, int icmp6len)
 	}
 
 	ifa = &in6ifa_ifpwithaddr(ifp, &taddr6)->ia_ifa;
-#if NCARP > 0
-	if (ifp->if_type == IFT_CARP && ifa &&
-	    !carp_iamatch6(ifp, lladdr, &proxydl))
-		ifa = NULL;
-#endif
 
 	/*
 	 * Target address matches one of my interface address.
@@ -652,8 +644,18 @@ nd6_na_input(struct mbuf *m, int off, int icmp6len)
 		goto freeit;
 	}
 
-	/* Just for safety, maybe unnecessary. */
 	if (ifa) {
+#if NCARP > 0
+		struct sockaddr_dl *proxydl = NULL;
+
+		/*
+		 * Ignore NAs silently for carp addresses if we're not
+		 * the CARP master.
+		 */
+		if (ifp->if_type == IFT_CARP &&
+		    !carp_iamatch6(ifp, lladdr, &proxydl))
+			goto freeit;
+#endif
 		log(LOG_ERR,
 		    "nd6_na_input: duplicate IP6 address %s\n",
 		    inet_ntop(AF_INET6, &taddr6, addr, sizeof(addr)));
@@ -925,7 +927,7 @@ nd6_na_output(struct ifnet *ifp, struct in6_addr *daddr6,
 	if (m == NULL)
 		return;
 	m->m_pkthdr.rcvif = NULL;
-	m->m_pkthdr.rdomain = ifp->if_rdomain;
+	m->m_pkthdr.ph_rtableid = ifp->if_rdomain;
 
 	if (IN6_IS_ADDR_MULTICAST(daddr6)) {
 		m->m_flags |= M_MCAST;
@@ -967,7 +969,7 @@ nd6_na_output(struct ifnet *ifp, struct in6_addr *daddr6,
 	 */
 	bcopy(&dst_sa, &ro.ro_dst, sizeof(dst_sa));
 	src0 = in6_selectsrc(&dst_sa, NULL, NULL, &ro, NULL, &error,
-	    m->m_pkthdr.rdomain);
+	    m->m_pkthdr.ph_rtableid);
 	if (src0 == NULL) {
 		char addr[INET6_ADDRSTRLEN];
 

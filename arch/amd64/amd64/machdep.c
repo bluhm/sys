@@ -1,4 +1,4 @@
-/*	$OpenBSD: machdep.c,v 1.173 2014/01/05 20:23:56 mlarkin Exp $	*/
+/*	$OpenBSD: machdep.c,v 1.177 2014/03/29 18:09:28 guenther Exp $	*/
 /*	$NetBSD: machdep.c,v 1.3 2003/05/07 22:58:18 fvdl Exp $	*/
 
 /*-
@@ -543,7 +543,7 @@ sendsig(sig_t catcher, int sig, int mask, u_long code, int type,
 {
 	struct proc *p = curproc;
 	struct trapframe *tf = p->p_md.md_regs;
-	struct sigacts * psp = p->p_sigacts;
+	struct sigacts *psp = p->p_p->ps_sigacts;
 	struct sigcontext ksc;
 	siginfo_t ksi;
 	register_t sp, scp, sip;
@@ -608,7 +608,7 @@ sendsig(sig_t catcher, int sig, int mask, u_long code, int type,
 	tf->tf_rsi = sip;
 	tf->tf_rdx = scp;
 
-	tf->tf_rip = (u_int64_t)p->p_sigcode;
+	tf->tf_rip = (u_int64_t)p->p_p->ps_sigcode;
 	tf->tf_cs = GSEL(GUCODE_SEL, SEL_UPL);
 	tf->tf_rflags &= ~(PSL_T|PSL_D|PSL_VM|PSL_AC);
 	tf->tf_rsp = scp;
@@ -745,6 +745,8 @@ struct pcb dumppcb;
 void
 boot(int howto)
 {
+	struct device *mainbus;
+
 	if (howto & RB_POWERDOWN)
 		lid_suspend = 0;
 
@@ -788,8 +790,9 @@ boot(int howto)
 
 haltsys:
 	doshutdownhooks();
-	if (!TAILQ_EMPTY(&alldevs))
-		config_suspend(TAILQ_FIRST(&alldevs), DVACT_POWERDOWN);
+	mainbus = device_mainbus();
+	if (mainbus != NULL)
+		config_suspend(mainbus, DVACT_POWERDOWN);
 
 #ifdef MULTIPROCESSOR
 	x86_broadcast_ipi(X86_IPI_HALT);
@@ -1650,7 +1653,7 @@ cpu_reset(void)
 	 * invalid and causing a fault.
 	 */
 	memset((caddr_t)idt, 0, NIDT * sizeof(idt[0]));
-	__asm __volatile("divl %0,%1" : : "q" (0), "a" (0)); 
+	__asm volatile("divl %0,%1" : : "q" (0), "a" (0)); 
 
 #if 0
 	/*

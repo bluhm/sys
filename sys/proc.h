@@ -1,4 +1,4 @@
-/*	$OpenBSD: proc.h,v 1.177 2014/02/12 05:47:36 guenther Exp $	*/
+/*	$OpenBSD: proc.h,v 1.183 2014/03/31 22:20:15 matthew Exp $	*/
 /*	$NetBSD: proc.h,v 1.44 1996/04/22 01:23:21 christos Exp $	*/
 
 /*-
@@ -154,7 +154,7 @@ struct process {
 	 * pid semantics we have right now, it's unavoidable.
 	 */
 	struct	proc *ps_mainproc;
-	struct	pcred *ps_cred;		/* Process owner's identity. */
+	struct	ucred *ps_ucred;	/* Process owner's identity. */
 
 	LIST_ENTRY(process) ps_list;	/* List of all processes. */
 	TAILQ_HEAD(,proc) ps_threads;	/* Threads in this process. */
@@ -164,6 +164,7 @@ struct process {
 	LIST_ENTRY(process) ps_sibling;	/* List of sibling processes. */
 	LIST_HEAD(, process) ps_children;/* Pointer to list of children. */
 
+	struct	sigacts *ps_sigacts;	/* Signal actions, state */
 	struct	vnode *ps_textvp;	/* Vnode of executable. */
 
 /* The following fields are all zeroed upon creation in process_new. */
@@ -192,9 +193,10 @@ struct process {
 
 /* The following fields are all copied upon creation in process_new. */
 #define	ps_startcopy	ps_limit
-
 	struct	plimit *ps_limit;	/* Process limits. */
 	struct	pgrp *ps_pgrp;		/* Pointer to process group. */
+	struct	emul *ps_emul;		/* Emulation information */
+	vaddr_t	ps_sigcode;		/* User pointer to the signal code */
 	u_int	ps_rtableid;		/* Process routing table/domain. */
 	char	ps_nice;		/* Process "nice" value. */
 
@@ -209,11 +211,10 @@ struct process {
 
 /* End area that is copied on creation. */
 #define ps_endcopy	ps_refcnt
+	int	ps_refcnt;		/* Number of references. */
 
 	struct	timespec ps_start;	/* starting time. */
 	struct	timeout ps_realit_to;	/* real-time itimer trampoline. */
-
-	int	ps_refcnt;		/* Number of references. */
 };
 
 #define	ps_pid		ps_mainproc->p_pid
@@ -246,7 +247,7 @@ struct process {
     ("\20\01CONTROLT\02EXEC\03INEXEC\04EXITING\05SUGID" \
      "\06SUGIDEXEC\07PPWAIT\010ISPWAIT\011PROFIL\012TRACED" \
      "\013WAITED\014COREDUMP\015SINGLEEXIT\016SINGLEUNWIND" \
-     "\017NOZOMBIE\018STOPPED")
+     "\017NOZOMBIE\020STOPPED")
 
 
 struct proc {
@@ -259,9 +260,7 @@ struct proc {
 	/* substructures: */
 	struct	filedesc *p_fd;		/* Ptr to open files structure. */
 	struct	vmspace *p_vmspace;	/* Address space. */
-	struct	sigacts *p_sigacts;	/* Signal actions, state */
-#define	p_cred		p_p->ps_cred
-#define	p_ucred		p_cred->pc_ucred
+#define	p_ucred		p_p->ps_ucred
 #define	p_rlimit	p_p->ps_limit->pl_rlimit
 
 	int	p_flag;			/* P_* flags. */
@@ -275,7 +274,6 @@ struct proc {
 
 /* The following fields are all zeroed upon creation in fork. */
 #define	p_startzero	p_dupfd
-
 	int	p_dupfd;	 /* Sideways return value from filedescopen. XXX */
 
 	int	p_sigwait;	/* signal handled by sigwait() */
@@ -293,7 +291,7 @@ struct proc {
 	u_int	p_uticks;		/* Statclock hits in user mode. */
 	u_int	p_sticks;		/* Statclock hits in system mode. */
 	u_int	p_iticks;		/* Statclock hits processing intr. */
-	struct	cpu_info * __volatile p_cpu; /* CPU we're running on. */
+	struct	cpu_info * volatile p_cpu; /* CPU we're running on. */
 
 	struct	rusage p_ru;		/* Statistics */
 	struct	tusage p_tu;		/* accumulated times. */
@@ -311,7 +309,6 @@ struct proc {
 
 /* The following fields are all copied upon creation in fork. */
 #define	p_startcopy	p_sigmask
-
 	sigset_t p_sigmask;	/* Current signal mask. */
 
 	u_char	p_priority;	/* Process priority. */
@@ -324,16 +321,13 @@ struct proc {
 # define TCB_GET(p)		((p)->p_tcb)
 #endif
 
-	struct	emul *p_emul;		/* Emulation information */
 	struct	sigaltstack p_sigstk;	/* sp & on stack state variable */
-	vaddr_t	p_sigcode;		/* user pointer to the signal code. */
 
 	u_long	p_prof_addr;	/* tmp storage for profiling addr until AST */
 	u_long	p_prof_ticks;	/* tmp storage for profiling ticks until AST */
 
 /* End area that is copied on creation. */
 #define	p_endcopy	p_addr
-
 	struct	user *p_addr;	/* Kernel virtual addr of u-area */
 	struct	mdproc p_md;	/* Any machine-dependent fields. */
 
@@ -386,21 +380,6 @@ struct proc {
      "\034SUSPSIG\035SOFTDEP\037CPUPEG")
 
 #define	THREAD_PID_OFFSET	1000000
-
-/*
- * MOVE TO ucred.h?
- *
- * Shareable process credentials (always resident).  This includes a reference
- * to the current user credentials as well as real and saved ids that may be
- * used to change ids.
- */
-struct	pcred {
-	struct	ucred *pc_ucred;	/* Current credentials. */
-	uid_t	p_ruid;			/* Real user id. */
-	uid_t	p_svuid;		/* Saved effective user id. */
-	gid_t	p_rgid;			/* Real group id. */
-	gid_t	p_svgid;		/* Saved effective group id. */
-};
 
 #ifdef _KERNEL
 
@@ -477,7 +456,6 @@ extern struct pool rusage_pool;		/* memory pool for zombies */
 extern struct pool ucred_pool;		/* memory pool for ucreds */
 extern struct pool session_pool;	/* memory pool for sessions */
 extern struct pool pgrp_pool;		/* memory pool for pgrps */
-extern struct pool pcred_pool;		/* memory pool for pcreds */
 
 int	ispidtaken(pid_t);
 pid_t	allocpid(void);

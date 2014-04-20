@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_carp.c,v 1.222 2014/02/13 10:31:42 mpi Exp $	*/
+/*	$OpenBSD: ip_carp.c,v 1.226 2014/04/14 09:06:42 mpi Exp $	*/
 
 /*
  * Copyright (c) 2002 Michael Shalayeff. All rights reserved.
@@ -429,8 +429,8 @@ carp_setroute(struct carp_softc *sc, int cmd)
 
 			/* Check for our address on another interface */
 			/* XXX cries for proper API */
-			rnh = rt_gettable(ifa->ifa_addr->sa_family,
-			    sc->sc_if.if_rdomain);
+			rnh = rtable_get(sc->sc_if.if_rdomain,
+			    ifa->ifa_addr->sa_family);
 			rn = rnh->rnh_matchaddr(ifa->ifa_addr, rnh);
 			rt = (struct rtentry *)rn;
 			hr_otherif = (rt && rt->rt_ifp != &sc->sc_if &&
@@ -459,7 +459,6 @@ carp_setroute(struct carp_softc *sc, int cmd)
 			case RTM_ADD:
 				if (hr_otherif) {
 					ifa->ifa_rtrequest = NULL;
-					ifa->ifa_flags &= ~RTF_CLONING;
 					memset(&info, 0, sizeof(info));
 					info.rti_info[RTAX_DST] = ifa->ifa_addr;
 					info.rti_info[RTAX_GATEWAY] = ifa->ifa_addr;
@@ -485,7 +484,6 @@ carp_setroute(struct carp_softc *sc, int cmd)
 					}
 
 					ifa->ifa_rtrequest = arp_rtrequest;
-					ifa->ifa_flags |= RTF_CLONING;
 
 					memset(&info, 0, sizeof(info));
 					info.rti_info[RTAX_DST] = &sa;
@@ -1135,7 +1133,7 @@ carp_send_ad(void *v)
 		len = sizeof(*ip) + sizeof(ch);
 		m->m_pkthdr.len = len;
 		m->m_pkthdr.rcvif = NULL;
-		m->m_pkthdr.rdomain = sc->sc_if.if_rdomain;
+		m->m_pkthdr.ph_rtableid = sc->sc_if.if_rdomain;
 		m->m_pkthdr.pf.prio = CARP_IFQ_PRIO;
 		m->m_len = len;
 		MH_ALIGN(m, m->m_len);
@@ -1227,7 +1225,7 @@ carp_send_ad(void *v)
 		m->m_pkthdr.len = len;
 		m->m_pkthdr.rcvif = NULL;
 		m->m_pkthdr.pf.prio = CARP_IFQ_PRIO;
-		m->m_pkthdr.rdomain = sc->sc_if.if_rdomain;
+		m->m_pkthdr.ph_rtableid = sc->sc_if.if_rdomain;
 		m->m_len = len;
 		MH_ALIGN(m, m->m_len);
 		m->m_flags |= M_MCAST;
@@ -2003,12 +2001,14 @@ carp_addr_updated(void *v)
 int
 carp_set_addr(struct carp_softc *sc, struct sockaddr_in *sin)
 {
-	struct ifnet *ifp = sc->sc_carpdev;
+	struct ifnet *ifp = NULL;
+	struct in_addr *in = &sin->sin_addr;
+	struct ifaddr *ifa;
 	struct in_ifaddr *ia;
 	int error = 0;
 
 	/* XXX is this necessary? */
-	if (sin->sin_addr.s_addr == 0) {
+	if (in->s_addr == INADDR_ANY) {
 		if (!(sc->sc_if.if_flags & IFF_UP))
 			carp_set_state_all(sc, INIT);
 		if (sc->sc_naddrs)
@@ -2018,24 +2018,29 @@ carp_set_addr(struct carp_softc *sc, struct sockaddr_in *sin)
 	}
 
 	/* we have to do this by hand to ensure we don't match on ourselves */
-	TAILQ_FOREACH(ia, &in_ifaddr, ia_list) {
+	TAILQ_FOREACH(ifp, &ifnet, if_list) {
 		/* and, yeah, we need a multicast-capable iface too */
-		if (ia->ia_ifp != &sc->sc_if &&
-		    ia->ia_ifp->if_type != IFT_CARP &&
-		    (ia->ia_ifp->if_flags & IFF_MULTICAST) &&
-		    ia->ia_ifp->if_rdomain == sc->sc_if.if_rdomain &&
-		    (sin->sin_addr.s_addr & ia->ia_netmask) == ia->ia_net)
-			break;
-	}
+		if ((ifp->if_type == IFT_CARP) ||
+		    (ifp->if_flags & IFF_MULTICAST) == 0 ||
+		    (ifp->if_rdomain != sc->sc_if.if_rdomain))
+			continue;
 
-	if (ia) {
-		if (ifp) {
-			if (ifp != ia->ia_ifp)
-				return (EADDRNOTAVAIL);
-		} else {
-			ifp = ia->ia_ifp;
+		TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
+			if (ifa->ifa_addr->sa_family != AF_INET)
+				continue;
+
+			ia = ifatoia(ifa);
+			if ((in->s_addr & ia->ia_netmask) == ia->ia_net)
+				goto found;
 		}
 	}
+
+found:
+	if (ifp == NULL)
+		ifp = sc->sc_carpdev;
+
+	if (sc->sc_carpdev != NULL && ifp != sc->sc_carpdev)
+		return (EADDRNOTAVAIL);
 
 	if ((error = carp_set_ifp(sc, ifp)))
 		return (error);
@@ -2082,8 +2087,9 @@ int
 carp_set_addr6(struct carp_softc *sc, struct sockaddr_in6 *sin6)
 {
 	struct ifnet *ifp = sc->sc_carpdev;
+	struct ifaddr *ifa;
 	struct in6_ifaddr *ia6;
-	int error = 0;
+	int i, error = 0;
 
 	if (IN6_IS_ADDR_UNSPECIFIED(&sin6->sin6_addr)) {
 		if (!(sc->sc_if.if_flags & IFF_UP))
@@ -2095,33 +2101,37 @@ carp_set_addr6(struct carp_softc *sc, struct sockaddr_in6 *sin6)
 	}
 
 	/* we have to do this by hand to ensure we don't match on ourselves */
-	TAILQ_FOREACH(ia6, &in6_ifaddr, ia_list) {
-		int i;
-
-		for (i = 0; i < 4; i++) {
-			if ((sin6->sin6_addr.s6_addr32[i] &
-			    ia6->ia_prefixmask.sin6_addr.s6_addr32[i]) !=
-			    (ia6->ia_addr.sin6_addr.s6_addr32[i] &
-			    ia6->ia_prefixmask.sin6_addr.s6_addr32[i]))
-				break;
-		}
+	TAILQ_FOREACH(ifp, &ifnet, if_list) {
 		/* and, yeah, we need a multicast-capable iface too */
-		if (ia6->ia_ifp != &sc->sc_if &&
-		    ia6->ia_ifp->if_type != IFT_CARP &&
-		    (ia6->ia_ifp->if_flags & IFF_MULTICAST) &&
-		    ia6->ia_ifp->if_rdomain == sc->sc_if.if_rdomain &&
-		    (i == 4))
-			break;
-	}
+		if ((ifp->if_type == IFT_CARP) ||
+		    (ifp->if_flags & IFF_MULTICAST) == 0 ||
+		    (ifp->if_rdomain != sc->sc_if.if_rdomain))
+			continue;
 
-	if (ia6) {
-		if (sc->sc_carpdev) {
-			if (sc->sc_carpdev != ia6->ia_ifp)
-				return (EADDRNOTAVAIL);
-		} else {
-			ifp = ia6->ia_ifp;
+		TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
+			if (ifa->ifa_addr->sa_family != AF_INET6)
+				continue;
+
+			ia6 = ifatoia6(ifa);
+			for (i = 0; i < 4; i++) {
+				if ((sin6->sin6_addr.s6_addr32[i] &
+				    ia6->ia_prefixmask.sin6_addr.s6_addr32[i]) !=
+				    (ia6->ia_addr.sin6_addr.s6_addr32[i] &
+				    ia6->ia_prefixmask.sin6_addr.s6_addr32[i]))
+					break;
+			}
+
+			if (i == 4)
+				goto found;
 		}
 	}
+
+found:
+	if (ifp == NULL)
+		ifp = sc->sc_carpdev;
+
+	if (sc->sc_carpdev != NULL && ifp != sc->sc_carpdev)
+		return (EADDRNOTAVAIL);
 
 	if ((error = carp_set_ifp(sc, ifp)))
 		return (error);
@@ -2210,7 +2220,6 @@ carp_ioctl(struct ifnet *ifp, u_long cmd, caddr_t addr)
 			 * request so that the routes are setup correctly.
 			 */
 			ifa->ifa_rtrequest = arp_rtrequest;
-			ifa->ifa_flags |= RTF_CLONING;
 
 			error = carp_set_addr(sc, satosin(ifa->ifa_addr));
 			break;

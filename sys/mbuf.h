@@ -1,4 +1,4 @@
-/*	$OpenBSD: mbuf.h,v 1.172 2014/01/19 03:04:54 claudio Exp $	*/
+/*	$OpenBSD: mbuf.h,v 1.175 2014/04/14 09:06:42 mpi Exp $	*/
 /*	$NetBSD: mbuf.h,v 1.19 1996/02/09 18:25:14 christos Exp $	*/
 
 /*
@@ -111,13 +111,14 @@ struct pkthdr_pf {
 /* record/packet header in first mbuf of chain; valid if M_PKTHDR set */
 struct	pkthdr {
 	struct ifnet		*rcvif;		/* rcv interface */
-	SLIST_HEAD(packet_tags, m_tag) tags; /* list of packet tags */
+	SLIST_HEAD(packet_tags, m_tag) tags;	/* list of packet tags */
 	int			 len;		/* total packet length */
 	u_int16_t		 tagsset;	/* mtags attached */
 	u_int16_t		 pad;
 	u_int16_t		 csum_flags;	/* checksum flags */
 	u_int16_t		 ether_vtag;	/* Ethernet 802.1p+Q vlan tag */
-	u_int			 rdomain;	/* routing domain id */
+	u_int			 ph_rtableid;	/* routing table id */
+	void			*ph_cookie;	/* additional data */
 	struct pkthdr_pf	 pf;
 };
 
@@ -129,7 +130,7 @@ struct mbuf_ext {
 	void	*ext_arg;		/* argument for ext_free */
 	u_int	ext_size;		/* size of buffer, for ext_free */
 	int	ext_type;
-	struct ifnet* ext_ifp;
+	u_short	ext_ifidx;		/* index of the interface */
 	int	ext_backend;		/* backend pool the storage came from */
 	struct mbuf *ext_nextref;
 	struct mbuf *ext_prevref;

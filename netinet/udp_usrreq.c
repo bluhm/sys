@@ -1,4 +1,4 @@
-/*	$OpenBSD: udp_usrreq.c,v 1.174 2014/01/24 18:54:58 henning Exp $	*/
+/*	$OpenBSD: udp_usrreq.c,v 1.181 2014/04/16 13:04:38 mpi Exp $	*/
 /*	$NetBSD: udp_usrreq.c,v 1.28 1996/03/16 23:54:03 christos Exp $	*/
 
 /*
@@ -406,10 +406,11 @@ udp_input(struct mbuf *m, ...)
 	if ((ip6 && IN6_IS_ADDR_MULTICAST(&ip6->ip6_dst)) ||
 	    (ip && IN_MULTICAST(ip->ip_dst.s_addr)) ||
 	    (ip && in_broadcast(ip->ip_dst, m->m_pkthdr.rcvif,
-	    m->m_pkthdr.rdomain))) {
+	    m->m_pkthdr.ph_rtableid))) {
 #else /* INET6 */
 	if (IN_MULTICAST(ip->ip_dst.s_addr) ||
-	    in_broadcast(ip->ip_dst, m->m_pkthdr.rcvif, m->m_pkthdr.rdomain)) {
+	    in_broadcast(ip->ip_dst, m->m_pkthdr.rcvif,
+		m->m_pkthdr.ph_rtableid)) {
 #endif /* INET6 */
 		struct inpcb *last;
 		/*
@@ -446,7 +447,7 @@ udp_input(struct mbuf *m, ...)
 				continue;
 #endif
 			if (rtable_l2(inp->inp_rtableid) !=
-			    rtable_l2(m->m_pkthdr.rdomain))
+			    rtable_l2(m->m_pkthdr.ph_rtableid))
 				continue;
 			if (inp->inp_lport != uh->uh_dport)
 				continue;
@@ -563,11 +564,11 @@ udp_input(struct mbuf *m, ...)
 		if (ip6)
 			inp = in6_pcbhashlookup(&udbtable, &ip6->ip6_src,
 			    uh->uh_sport, &ip6->ip6_dst, uh->uh_dport,
-			    m->m_pkthdr.rdomain);
+			    m->m_pkthdr.ph_rtableid);
 		else
 #endif /* INET6 */
 		inp = in_pcbhashlookup(&udbtable, ip->ip_src, uh->uh_sport,
-		    ip->ip_dst, uh->uh_dport, m->m_pkthdr.rdomain);
+		    ip->ip_dst, uh->uh_dport, m->m_pkthdr.ph_rtableid);
 #if NPF > 0
 		if (m->m_pkthdr.pf.statekey && inp) {
 			m->m_pkthdr.pf.statekey->inp = inp;
@@ -584,12 +585,12 @@ udp_input(struct mbuf *m, ...)
 		if (ip6) {
 			inp = in6_pcblookup_listen(&udbtable,
 			    &ip6->ip6_dst, uh->uh_dport, inpl_reverse, m,
-			    m->m_pkthdr.rdomain);
+			    m->m_pkthdr.ph_rtableid);
 		} else
 #endif /* INET6 */
 		inp = in_pcblookup_listen(&udbtable,
 		    ip->ip_dst, uh->uh_dport, inpl_reverse, m,
-		    m->m_pkthdr.rdomain);
+		    m->m_pkthdr.ph_rtableid);
 		if (inp == 0) {
 			udpstat.udps_noport++;
 			if (m->m_flags & (M_BCAST | M_MCAST)) {
@@ -967,11 +968,12 @@ udp_output(struct mbuf *m, ...)
 {
 	struct inpcb *inp;
 	struct mbuf *addr, *control;
+	struct sockaddr_in *sin = NULL;
 	struct udpiphdr *ui;
 	u_int32_t ipsecflowinfo = 0;
 	int len = m->m_pkthdr.len;
-	struct in_addr laddr;
-	int s = 0, error = 0;
+	struct in_addr *laddr;
+	int error = 0;
 	va_list ap;
 
 	va_start(ap, m);
@@ -995,25 +997,47 @@ udp_output(struct mbuf *m, ...)
 	}
 
 	if (addr) {
-		laddr = inp->inp_laddr;
+		sin = mtod(addr, struct sockaddr_in *);
+
+		if (addr->m_len != sizeof(*sin)) {
+			error = EINVAL;
+			goto release;
+		}
+		if (sin->sin_family != AF_INET) {
+			error = EAFNOSUPPORT;
+			goto release;
+		}
+		if (sin->sin_port == 0) {
+			error = EADDRNOTAVAIL;
+			goto release;
+		}
+
 		if (inp->inp_faddr.s_addr != INADDR_ANY) {
 			error = EISCONN;
 			goto release;
 		}
-		/*
-		 * Must block input while temporarily connected.
-		 */
-		s = splsoftnet();
-		error = in_pcbconnect(inp, addr);
-		if (error) {
-			splx(s);
+
+		laddr = in_selectsrc(sin, inp->inp_moptions, &inp->inp_route,
+		    &inp->inp_laddr, &error, inp->inp_rtableid);
+		if (laddr == NULL) {
+			if (error == 0)
+				error = EADDRNOTAVAIL;
 			goto release;
+		}
+
+		if (inp->inp_lport == 0) {
+			int s = splsoftnet();
+			error = in_pcbbind(inp, NULL, curproc);
+			splx(s);
+			if (error)
+				goto release;
 		}
 	} else {
 		if (inp->inp_faddr.s_addr == INADDR_ANY) {
 			error = ENOTCONN;
 			goto release;
 		}
+		laddr = &inp->inp_laddr;
 	}
 
 #ifdef IPSEC
@@ -1028,7 +1052,7 @@ udp_output(struct mbuf *m, ...)
 		 */
 		if (control->m_next) {
 			error = EINVAL;
-			goto bail;
+			goto release;
 		}
 
 		clen = control->m_len;
@@ -1036,13 +1060,13 @@ udp_output(struct mbuf *m, ...)
 		do {
 			if (clen < CMSG_LEN(0)) {
 				error = EINVAL;
-				goto bail;
+				goto release;
 			}
 			cm = (struct cmsghdr *)cmsgs;
 			if (cm->cmsg_len < CMSG_LEN(0) ||
 			    CMSG_ALIGN(cm->cmsg_len) > clen) {
 				error = EINVAL;
-				goto bail;
+				goto release;
 			}
 			if (cm->cmsg_len == CMSG_LEN(sizeof(ipsecflowinfo)) &&
 			    cm->cmsg_level == IPPROTO_IP &&
@@ -1073,10 +1097,10 @@ udp_output(struct mbuf *m, ...)
 	bzero(ui->ui_x1, sizeof ui->ui_x1);
 	ui->ui_pr = IPPROTO_UDP;
 	ui->ui_len = htons((u_int16_t)len + sizeof (struct udphdr));
-	ui->ui_src = inp->inp_laddr;
-	ui->ui_dst = inp->inp_faddr;
+	ui->ui_src = *laddr;
+	ui->ui_dst = sin ? sin->sin_addr : inp->inp_faddr;
 	ui->ui_sport = inp->inp_lport;
-	ui->ui_dport = inp->inp_fport;
+	ui->ui_dport = sin ? sin->sin_port : inp->inp_fport;
 	ui->ui_ulen = ui->ui_len;
 	((struct ip *)ui)->ip_len = htons(sizeof (struct udpiphdr) + len);
 	((struct ip *)ui)->ip_ttl = inp->inp_ip.ip_ttl;
@@ -1086,30 +1110,23 @@ udp_output(struct mbuf *m, ...)
 
 	udpstat.udps_opackets++;
 
-	/* force routing domain */
-	m->m_pkthdr.rdomain = inp->inp_rtableid;
+	/* force routing table */
+	m->m_pkthdr.ph_rtableid = inp->inp_rtableid;
 
 	error = ip_output(m, inp->inp_options, &inp->inp_route,
-	    (inp->inp_socket->so_options & (SO_DONTROUTE | SO_BROADCAST))
-	    |IP_IPSECFLOW, inp->inp_moptions, inp, ipsecflowinfo);
+	    (inp->inp_socket->so_options & SO_BROADCAST) | IP_IPSECFLOW,
+	    inp->inp_moptions, inp, ipsecflowinfo);
 	if (error == EACCES)	/* translate pf(4) error for userland */
 		error = EHOSTUNREACH;
 
 bail:
-	if (addr) {
-		inp->inp_laddr = laddr;
-		in_pcbdisconnect(inp);
-		splx(s);
-	}
 	if (control)
 		m_freem(control);
 	return (error);
 
 release:
 	m_freem(m);
-	if (control)
-		m_freem(control);
-	return (error);
+	goto bail;
 }
 
 /*ARGSUSED*/

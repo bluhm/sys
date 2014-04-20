@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_pppx.c,v 1.26 2013/10/19 14:46:30 mpi Exp $ */
+/*	$OpenBSD: if_pppx.c,v 1.29 2014/04/08 04:26:53 miod Exp $ */
 
 /*
  * Copyright (c) 2010 Claudio Jeker <claudio@openbsd.org>
@@ -256,6 +256,7 @@ pppxopen(dev_t dev, int flags, int mode, struct proc *p)
 
 	pxd = malloc(sizeof(*pxd), M_DEVBUF, M_WAITOK | M_ZERO);
 
+	pxd->pxd_unit = minor(dev);
 	mtx_init(&pxd->pxd_rsel_mtx, IPL_NET);
 	mtx_init(&pxd->pxd_wsel_mtx, IPL_NET);
 	LIST_INIT(&pxd->pxd_pxis);

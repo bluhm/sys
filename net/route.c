@@ -1,4 +1,4 @@
-/*	$OpenBSD: route.c,v 1.153 2014/02/12 12:50:13 mpi Exp $	*/
+/*	$OpenBSD: route.c,v 1.161 2014/04/11 00:06:30 krw Exp $	*/
 /*	$NetBSD: route.c,v 1.14 1996/02/13 22:00:46 christos Exp $	*/
 
 /*
@@ -115,6 +115,7 @@
 #include <sys/pool.h>
 
 #include <net/if.h>
+#include <net/if_dl.h>
 #include <net/route.h>
 #include <net/raw_cb.h>
 
@@ -144,6 +145,7 @@ int			rttrash;	/* routes not in table but not freed */
 struct pool		rtentry_pool;	/* pool for rtentry structures */
 struct pool		rttimer_pool;	/* pool for rttimer structures */
 
+void	rt_timer_init(void);
 int	rtable_init(struct radix_node_head ***, u_int);
 int	rtflushclone1(struct radix_node *, void *, u_int);
 void	rtflushclone(struct radix_node_head *, struct rtentry *);
@@ -259,6 +261,14 @@ rtable_add(u_int id)
 	return (rtable_init(&rt_tables[id], id));
 }
 
+struct radix_node_head *
+rtable_get(u_int id, sa_family_t af)
+{
+	if (id > rtbl_id_max)
+		return (NULL);
+	return (rt_tables[id] ? rt_tables[id][af2rtafidx[af]] : NULL);
+}
+
 u_int
 rtable_l2(u_int id)
 {
@@ -325,7 +335,7 @@ rtalloc1(struct sockaddr *dst, int flags, u_int tableid)
 	bzero(&info, sizeof(info));
 	info.rti_info[RTAX_DST] = dst;
 
-	rnh = rt_gettable(dst->sa_family, tableid);
+	rnh = rtable_get(tableid, dst->sa_family);
 	if (rnh && (rn = rnh->rnh_matchaddr((caddr_t)dst, rnh)) &&
 	    ((rn->rn_flags & RNF_ROOT) == 0)) {
 		newrt = rt = (struct rtentry *)rn;
@@ -409,8 +419,7 @@ rt_sendmsg(struct rtentry *rt, int cmd, u_int rtableid)
 	info.rti_info[RTAX_GATEWAY] = rt->rt_gateway;
 	info.rti_info[RTAX_NETMASK] = rt_mask(rt);
 	if (rt->rt_ifp != NULL) {
-		info.rti_info[RTAX_IFP] =
-		    TAILQ_FIRST(&rt->rt_ifp->if_addrlist)->ifa_addr;
+		info.rti_info[RTAX_IFP] =(struct sockaddr *)rt->rt_ifp->if_sadl;
 		info.rti_info[RTAX_IFA] = rt->rt_ifa->ifa_addr;
 	}
 
@@ -675,11 +684,12 @@ rt_getifa(struct rt_addrinfo *info, u_int rtid)
 	 * ifp may be specified by sockaddr_dl when protocol address
 	 * is ambiguous
 	 */
-	if (info->rti_ifp == NULL && info->rti_info[RTAX_IFP] != NULL
-	    && info->rti_info[RTAX_IFP]->sa_family == AF_LINK &&
-	    (ifa = ifa_ifwithnet((struct sockaddr *)info->rti_info[RTAX_IFP],
-	    rtid)) != NULL)
-		info->rti_ifp = ifa->ifa_ifp;
+	if (info->rti_ifp == NULL && info->rti_info[RTAX_IFP] != NULL) {
+		struct sockaddr_dl *sdl;
+
+		sdl = (struct sockaddr_dl *)info->rti_info[RTAX_IFP];
+		info->rti_ifp = if_get(sdl->sdl_index);
+	}
 
 	if (info->rti_ifa == NULL && info->rti_info[RTAX_IFA] != NULL)
 		info->rti_ifa = ifa_ifwithaddr(info->rti_info[RTAX_IFA], rtid);
@@ -729,7 +739,7 @@ rtrequest1(int req, struct rt_addrinfo *info, u_int8_t prio,
 #endif
 #define senderr(x) { error = x ; goto bad; }
 
-	if ((rnh = rt_gettable(info->rti_info[RTAX_DST]->sa_family, tableid)) ==
+	if ((rnh = rtable_get(tableid, info->rti_info[RTAX_DST]->sa_family)) ==
 	    NULL)
 		senderr(EAFNOSUPPORT);
 	if (info->rti_flags & RTF_HOST)
@@ -1068,74 +1078,31 @@ rt_maskedcopy(struct sockaddr *src, struct sockaddr *dst,
 		bzero((caddr_t)cp2, (unsigned)(cplim2 - cp2));
 }
 
-/*
- * Set up a routing table entry, normally
- * for an interface.
- */
 int
-rtinit(struct ifaddr *ifa, int cmd, int flags)
+rt_ifa_add(struct ifaddr *ifa, int flags, struct sockaddr *dst)
 {
-	struct rtentry		*rt;
-	struct sockaddr		*dst, *deldst;
-	struct mbuf		*m = NULL;
-	struct rtentry		*nrt = NULL;
-	int			 error;
-	struct rt_addrinfo	 info;
+	struct rtentry		*rt, *nrt = NULL;
 	struct sockaddr_rtlabel	 sa_rl;
+	struct rt_addrinfo	 info;
 	u_short			 rtableid = ifa->ifa_ifp->if_rdomain;
+	int			 error;
 
-	dst = flags & RTF_HOST ? ifa->ifa_dstaddr : ifa->ifa_addr;
-	if (cmd == RTM_DELETE) {
-		if ((flags & RTF_HOST) == 0 && ifa->ifa_netmask) {
-			m = m_get(M_DONTWAIT, MT_SONAME);
-			if (m == NULL)
-				return (ENOBUFS);
-			deldst = mtod(m, struct sockaddr *);
-			rt_maskedcopy(dst, deldst, ifa->ifa_netmask);
-			dst = deldst;
-		}
-		if ((rt = rtalloc1(dst, 0, rtableid)) != NULL) {
-			rt->rt_refcnt--;
-			/* try to find the right route */
-			while (rt && rt->rt_ifa != ifa)
-				rt = (struct rtentry *)
-				    ((struct radix_node *)rt)->rn_dupedkey;
-			if (!rt) {
-				if (m != NULL)
-					(void) m_free(m);
-				return (flags & RTF_HOST ? EHOSTUNREACH
-							: ENETUNREACH);
-			}
-		}
-	}
-	bzero(&info, sizeof(info));
+	memset(&info, 0, sizeof(info));
 	info.rti_ifa = ifa;
-	info.rti_flags = flags | ifa->ifa_flags;
+	info.rti_flags = flags;
 	info.rti_info[RTAX_DST] = dst;
-	if (cmd == RTM_ADD)
-		info.rti_info[RTAX_GATEWAY] = ifa->ifa_addr;
+	info.rti_info[RTAX_GATEWAY] = ifa->ifa_addr;
 	info.rti_info[RTAX_LABEL] =
 	    rtlabel_id2sa(ifa->ifa_ifp->if_rtlabelid, &sa_rl);
 
 	if ((flags & RTF_HOST) == 0)
 		info.rti_info[RTAX_NETMASK] = ifa->ifa_netmask;
 
-	error = rtrequest1(cmd, &info, RTP_CONNECTED, &nrt, rtableid);
-	if (cmd == RTM_DELETE) {
-		if (error == 0 && (rt = nrt) != NULL) {
-			rt_newaddrmsg(cmd, ifa, error, nrt);
-			if (rt->rt_refcnt <= 0) {
-				rt->rt_refcnt++;
-				rtfree(rt);
-			}
-		}
-		if (m != NULL)
-			(void) m_free(m);
-	}
-	if (cmd == RTM_ADD && error == 0 && (rt = nrt) != NULL) {
+	error = rtrequest1(RTM_ADD, &info, RTP_CONNECTED, &nrt, rtableid);
+	if (error == 0 && (rt = nrt) != NULL) {
 		rt->rt_refcnt--;
 		if (rt->rt_ifa != ifa) {
-			printf("rtinit: wrong ifa (%p) was (%p)\n",
+			printf("%s: wrong ifa (%p) was (%p)\n", __func__,
 			    ifa, rt->rt_ifa);
 			if (rt->rt_ifa->ifa_rtrequest)
 				rt->rt_ifa->ifa_rtrequest(RTM_DELETE, rt);
@@ -1146,9 +1113,107 @@ rtinit(struct ifaddr *ifa, int cmd, int flags)
 			if (ifa->ifa_rtrequest)
 				ifa->ifa_rtrequest(RTM_ADD, rt);
 		}
-		rt_newaddrmsg(cmd, ifa, error, nrt);
+		rt_newaddrmsg(RTM_ADD, ifa, error, nrt);
 	}
 	return (error);
+}
+
+int
+rt_ifa_del(struct ifaddr *ifa, int flags, struct sockaddr *dst)
+{
+	struct rtentry		*rt, *nrt = NULL;
+	struct mbuf		*m = NULL;
+	struct sockaddr		*deldst;
+	struct rt_addrinfo	 info;
+	struct sockaddr_rtlabel	 sa_rl;
+	u_short			 rtableid = ifa->ifa_ifp->if_rdomain;
+	int			 error;
+
+	if ((flags & RTF_HOST) == 0 && ifa->ifa_netmask) {
+		m = m_get(M_DONTWAIT, MT_SONAME);
+		if (m == NULL)
+			return (ENOBUFS);
+		deldst = mtod(m, struct sockaddr *);
+		rt_maskedcopy(dst, deldst, ifa->ifa_netmask);
+		dst = deldst;
+	}
+	if ((rt = rtalloc1(dst, 0, rtableid)) != NULL) {
+		rt->rt_refcnt--;
+		/* try to find the right route */
+		while (rt && rt->rt_ifa != ifa)
+			rt = (struct rtentry *)
+			    ((struct radix_node *)rt)->rn_dupedkey;
+		if (!rt) {
+			if (m != NULL)
+				(void) m_free(m);
+			return (flags & RTF_HOST ? EHOSTUNREACH
+						: ENETUNREACH);
+		}
+	}
+
+	memset(&info, 0, sizeof(info));
+	info.rti_ifa = ifa;
+	info.rti_flags = flags;
+	info.rti_info[RTAX_DST] = dst;
+	info.rti_info[RTAX_LABEL] =
+	    rtlabel_id2sa(ifa->ifa_ifp->if_rtlabelid, &sa_rl);
+
+	if ((flags & RTF_HOST) == 0)
+		info.rti_info[RTAX_NETMASK] = ifa->ifa_netmask;
+
+	error = rtrequest1(RTM_DELETE, &info, RTP_CONNECTED, &nrt, rtableid);
+	if (error == 0 && (rt = nrt) != NULL) {
+		rt_newaddrmsg(RTM_DELETE, ifa, error, nrt);
+		if (rt->rt_refcnt <= 0) {
+			rt->rt_refcnt++;
+			rtfree(rt);
+		}
+	}
+	if (m != NULL)
+		m_free(m);
+
+	return (error);
+}
+
+/*
+ * Add ifa's address as a loopback rtentry.
+ */
+void
+rt_ifa_addloop(struct ifaddr *ifa)
+{
+	struct rtentry *rt;
+
+	/* If there is no loopback entry, allocate one. */
+	rt = rtalloc1(ifa->ifa_addr, 0, ifa->ifa_ifp->if_rdomain);
+	if (rt == NULL || (rt->rt_flags & RTF_HOST) == 0 ||
+	    (rt->rt_ifp->if_flags & IFF_LOOPBACK) == 0)
+		rt_ifa_add(ifa, RTF_UP| RTF_HOST | RTF_LLINFO, ifa->ifa_addr);
+	if (rt)
+		rt->rt_refcnt--;
+}
+
+/*
+ * Remove loopback rtentry of ifa's addresss if it exists.
+ */
+void
+rt_ifa_delloop(struct ifaddr *ifa)
+{
+	struct rtentry *rt;
+
+	/*
+	 * Before deleting, check if a corresponding loopbacked host
+	 * route surely exists.  With this check, we can avoid to
+	 * delete an interface direct route whose destination is same
+	 * as the address being removed.  This can happen when removing
+	 * a subnet-router anycast address on an interface attached
+	 * to a shared medium.
+	 */
+	rt = rtalloc1(ifa->ifa_addr, 0, ifa->ifa_ifp->if_rdomain);
+	if (rt != NULL && (rt->rt_flags & RTF_HOST) != 0 &&
+	    (rt->rt_ifp->if_flags & IFF_LOOPBACK) != 0)
+		rt_ifa_del(ifa,  RTF_HOST | RTF_LLINFO,  ifa->ifa_addr);
+	if (rt)
+		rt->rt_refcnt--;
 }
 
 /*
@@ -1225,15 +1290,14 @@ rt_timer_queue_change(struct rttimer_queue *rtq, long timeout)
 }
 
 void
-rt_timer_queue_destroy(struct rttimer_queue *rtq, int destroy)
+rt_timer_queue_destroy(struct rttimer_queue *rtq)
 {
 	struct rttimer	*r;
 
 	while ((r = TAILQ_FIRST(&rtq->rtq_head)) != NULL) {
 		LIST_REMOVE(r, rtt_link);
 		TAILQ_REMOVE(&rtq->rtq_head, r, rtt_next);
-		if (destroy)
-			RTTIMER_CALLOUT(r);
+		RTTIMER_CALLOUT(r);
 		pool_put(&rttimer_pool, r);
 		if (rtq->rtq_count > 0)
 			rtq->rtq_count--;
@@ -1246,7 +1310,7 @@ rt_timer_queue_destroy(struct rttimer_queue *rtq, int destroy)
 }
 
 unsigned long
-rt_timer_count(struct rttimer_queue *rtq)
+rt_timer_queue_count(struct rttimer_queue *rtq)
 {
 	return (rtq->rtq_count);
 }
@@ -1311,20 +1375,12 @@ rt_timer_add(struct rtentry *rt, void (*func)(struct rtentry *,
 	return (0);
 }
 
-struct radix_node_head *
-rt_gettable(sa_family_t af, u_int id)
-{
-	if (id > rtbl_id_max)
-		return (NULL);
-	return (rt_tables[id] ? rt_tables[id][af2rtafidx[af]] : NULL);
-}
-
 struct rtentry *
 rt_lookup(struct sockaddr *dst, struct sockaddr *mask, u_int tableid)
 {
 	struct radix_node_head	*rnh;
 
-	if ((rnh = rt_gettable(dst->sa_family, tableid)) == NULL)
+	if ((rnh = rtable_get(tableid, dst->sa_family)) == NULL)
 		return (NULL);
 
 	return ((struct rtentry *)rnh->rnh_lookup(dst, mask, rnh));
@@ -1463,7 +1519,7 @@ rt_if_remove(struct ifnet *ifp)
 
 	for (tid = 0; tid <= rtbl_id_max; tid++) {
 		for (i = 1; i <= AF_MAX; i++) {
-			if ((rnh = rt_gettable(i, tid)) != NULL)
+			if ((rnh = rtable_get(tid, i)) != NULL)
 				while ((*rnh->rnh_walktree)(rnh,
 				    rt_if_remove_rtdelete, ifp) == EAGAIN)
 					;	/* nothing */
@@ -1511,7 +1567,7 @@ rt_if_track(struct ifnet *ifp)
 
 	for (tid = 0; tid <= rtbl_id_max; tid++) {
 		for (i = 1; i <= AF_MAX; i++) {
-			if ((rnh = rt_gettable(i, tid)) != NULL) {
+			if ((rnh = rtable_get(tid, i)) != NULL) {
 				if (!rn_mpath_capable(rnh))
 					continue;
 				while ((*rnh->rnh_walktree)(rnh,

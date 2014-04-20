@@ -1,4 +1,4 @@
-/*	$OpenBSD: raw_ip.c,v 1.67 2013/12/20 02:04:08 krw Exp $	*/
+/*	$OpenBSD: raw_ip.c,v 1.71 2014/04/14 09:06:42 mpi Exp $	*/
 /*	$NetBSD: raw_ip.c,v 1.25 1996/02/18 18:58:33 christos Exp $	*/
 
 /*
@@ -135,7 +135,7 @@ rip_input(struct mbuf *m, ...)
 			continue;
 #endif
 		if (rtable_l2(inp->inp_rtableid) !=
-		    rtable_l2(m->m_pkthdr.rdomain))
+		    rtable_l2(m->m_pkthdr.ph_rtableid))
 			continue;
 
 		if (inp->inp_ip.ip_p && inp->inp_ip.ip_p != ip->ip_p)
@@ -218,7 +218,7 @@ rip_output(struct mbuf *m, ...)
 	va_end(ap);
 
 	inp = sotoinpcb(so);
-	flags = (so->so_options & SO_DONTROUTE) | IP_ALLOWBROADCAST;
+	flags = IP_ALLOWBROADCAST;
 
 	/*
 	 * If the user handed us a complete IP packet, use it.
@@ -274,8 +274,8 @@ rip_output(struct mbuf *m, ...)
 	 *             ip_output should be guarded against v6/v4 problems.
 	 */
 #endif
-	/* force routing domain */
-	m->m_pkthdr.rdomain = inp->inp_rtableid;
+	/* force routing table */
+	m->m_pkthdr.ph_rtableid = inp->inp_rtableid;
 
 	error = ip_output(m, inp->inp_options, &inp->inp_route, flags,
 	    inp->inp_moptions, inp);

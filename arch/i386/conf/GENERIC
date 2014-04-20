@@ -1,4 +1,4 @@
-#	$OpenBSD: GENERIC,v 1.769 2014/03/08 18:28:23 kettenis Exp $
+#	$OpenBSD: GENERIC,v 1.775 2014/04/07 22:20:43 andre Exp $
 #
 # For further information on compiling OpenBSD kernels, see the config(8)
 # man page.
@@ -209,6 +209,7 @@ cbb*		at pci?
 cardslot*	at cbb?
 
 # USB Controllers
+#xhci*	at pci?				# eXtensible Host Controller
 ehci*	at pci?				# Enhanced Host Controller
 ehci*	at cardbus?			# Enhanced Host Controller
 uhci*	at pci?				# Universal Host Controller (Intel)
@@ -217,6 +218,7 @@ ohci*	at pci?				# Open Host Controller
 ohci*	at cardbus?			# Open Host Controller
 
 # USB bus support
+#usb*	at xhci?
 usb*	at ehci?
 usb*	at uhci?
 usb*	at ohci?
@@ -270,9 +272,11 @@ ucom*	at ucycom?
 uticom* at uhub?		# TI serial
 ucom*	at uticom?
 uhid*	at uhidev?		# USB generic HID support
+upd*	at uhidev?		# USB Power Devices sensors
 aue*	at uhub?		# ADMtek AN986 Pegasus Ethernet
 atu*	at uhub?		# Atmel AT76c50x based 802.11b
 axe*	at uhub?		# ASIX Electronics AX88172 USB Ethernet
+axen*	at uhub?		# ASIX Electronics AX88179 USB Ethernet
 cue*	at uhub?		# CATC USB-EL1201A based Ethernet
 kue*	at uhub?		# Kawasaki KL5KUSB101B based Ethernet
 smsc*	at uhub?		# SMSC LAN95xx Ethernet
@@ -458,9 +462,8 @@ cac*	at eisa?
 ciss*	at pci?			# Compaq Smart ARRAY [56]* RAID controllers
 iha*	at pci?			# Initio Ultra/UltraWide SCSI controllers
 ips*	at pci?			# IBM ServeRAID controllers
-isp*	at pci?			# Qlogic ISP [12]0x0 SCSI/FibreChannel
 qlw*	at pci?			# QLogic ISP SCSI
-#qla*	at pci?			# QLogic ISP 2[123]xx FibreChannel
+qla*	at pci?			# QLogic ISP 2[123]xx FibreChannel
 qle*	at pci?			# QLogic ISP 2[45]xx FibreChannel
 #qli*	at pci?			# QLogic 4010 & 4022 iSCSI
 aic0	at isa? port 0x340 irq 11 # Adaptec 152[02] SCSI controllers
@@ -488,6 +491,12 @@ ch*	at scsibus?		# SCSI autochangers
 safte*	at scsibus?		# SCSI accessed fault-tolerant enclosures
 ses*	at scsibus?		# SCSI enclosure services
 uk*	at scsibus?		# unknown SCSI
+
+mpath0	at root
+#emc*	at scsibus?
+hds*	at scsibus?
+rdac*	at scsibus?
+sym*	at scsibus?
 
 fdc0	at isa? port 0x3f0 irq 6 drq 2	# standard PC floppy controllers
 #fdc1	at isa? port 0x370

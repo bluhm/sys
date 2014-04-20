@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_output.c,v 1.257 2014/01/23 23:51:29 henning Exp $	*/
+/*	$OpenBSD: ip_output.c,v 1.261 2014/04/14 09:06:42 mpi Exp $	*/
 /*	$NetBSD: ip_output.c,v 1.28 1996/02/13 23:43:07 christos Exp $	*/
 
 /*
@@ -182,7 +182,7 @@ ip_output(struct mbuf *m0, struct mbuf *opt, struct route *ro, int flags,
 		 */
 		if (ro->ro_rt && ((ro->ro_rt->rt_flags & RTF_UP) == 0 ||
 		    dst->sin_addr.s_addr != ip->ip_dst.s_addr ||
-		    ro->ro_tableid != m->m_pkthdr.rdomain)) {
+		    ro->ro_tableid != m->m_pkthdr.ph_rtableid)) {
 			RTFREE(ro->ro_rt);
 			ro->ro_rt = (struct rtentry *)0;
 		}
@@ -191,26 +191,10 @@ ip_output(struct mbuf *m0, struct mbuf *opt, struct route *ro, int flags,
 			dst->sin_family = AF_INET;
 			dst->sin_len = sizeof(*dst);
 			dst->sin_addr = ip->ip_dst;
-			ro->ro_tableid = m->m_pkthdr.rdomain;
+			ro->ro_tableid = m->m_pkthdr.ph_rtableid;
 		}
 
-		/*
-		 * If routing to interface only, short-circuit routing lookup.
-		 */
-		if (flags & IP_ROUTETOIF) {
-			if ((ia = ifatoia(ifa_ifwithdstaddr(sintosa(dst),
-			    m->m_pkthdr.rdomain))) == 0 &&
-			    (ia = ifatoia(ifa_ifwithnet(sintosa(dst),
-			    m->m_pkthdr.rdomain))) == 0) {
-				ipstat.ips_noroute++;
-				error = ENETUNREACH;
-				goto bad;
-			}
-
-			ifp = ia->ia_ifp;
-			mtu = ifp->if_mtu;
-			ip->ip_ttl = 1;
-		} else if ((IN_MULTICAST(ip->ip_dst.s_addr) ||
+		if ((IN_MULTICAST(ip->ip_dst.s_addr) ||
 		    (ip->ip_dst.s_addr == INADDR_BROADCAST)) &&
 		    imo != NULL && imo->imo_multicast_ifp != NULL) {
 			ifp = imo->imo_multicast_ifp;
@@ -348,7 +332,7 @@ reroute:
 		 */
 		if (ro->ro_rt && ((ro->ro_rt->rt_flags & RTF_UP) == 0 ||
 		    dst->sin_addr.s_addr != ip->ip_dst.s_addr ||
-		    ro->ro_tableid != m->m_pkthdr.rdomain)) {
+		    ro->ro_tableid != m->m_pkthdr.ph_rtableid)) {
 			RTFREE(ro->ro_rt);
 			ro->ro_rt = (struct rtentry *)0;
 		}
@@ -357,26 +341,10 @@ reroute:
 			dst->sin_family = AF_INET;
 			dst->sin_len = sizeof(*dst);
 			dst->sin_addr = ip->ip_dst;
-			ro->ro_tableid = m->m_pkthdr.rdomain;
+			ro->ro_tableid = m->m_pkthdr.ph_rtableid;
 		}
 
-		/*
-		 * If routing to interface only, short-circuit routing lookup.
-		 */
-		if (flags & IP_ROUTETOIF) {
-			if ((ia = ifatoia(ifa_ifwithdstaddr(sintosa(dst),
-			    m->m_pkthdr.rdomain))) == 0 &&
-			    (ia = ifatoia(ifa_ifwithnet(sintosa(dst),
-			    m->m_pkthdr.rdomain))) == 0) {
-				ipstat.ips_noroute++;
-				error = ENETUNREACH;
-				goto bad;
-			}
-
-			ifp = ia->ia_ifp;
-			mtu = ifp->if_mtu;
-			ip->ip_ttl = 1;
-		} else if ((IN_MULTICAST(ip->ip_dst.s_addr) ||
+		if ((IN_MULTICAST(ip->ip_dst.s_addr) ||
 		    (ip->ip_dst.s_addr == INADDR_BROADCAST)) &&
 		    imo != NULL && imo->imo_multicast_ifp != NULL) {
 			ifp = imo->imo_multicast_ifp;
@@ -521,7 +489,7 @@ reroute:
 	 * this check.
 	 */
 	if ((sproto == 0) && (in_broadcast(dst->sin_addr, ifp,
-	    m->m_pkthdr.rdomain))) {
+	    m->m_pkthdr.ph_rtableid))) {
 		if ((ifp->if_flags & IFF_BROADCAST) == 0) {
 			error = EADDRNOTAVAIL;
 			goto bad;
@@ -554,7 +522,7 @@ sendit:
 	 * Check if the packet needs encapsulation.
 	 */
 	if (sproto != 0) {
-		tdb = gettdb(rtable_l2(m->m_pkthdr.rdomain),
+		tdb = gettdb(rtable_l2(m->m_pkthdr.ph_rtableid),
 		    sspi, &sdst, sproto);
 		if (tdb == NULL) {
 			DPRINTF(("ip_output: unknown TDB"));
@@ -610,7 +578,7 @@ sendit:
 				rt = NULL;
 			else if (rt == NULL || (rt->rt_flags & RTF_HOST) == 0) {
 				rt = icmp_mtudisc_clone(ip->ip_dst,
-				    m->m_pkthdr.rdomain);
+				    m->m_pkthdr.ph_rtableid);
 				rt_mtucloned = 1;
 			}
 			DPRINTF(("ip_output: spi %08x mtu %d rt %p cloned %d\n",
@@ -620,7 +588,7 @@ sendit:
 				if (ro && ro->ro_rt != NULL) {
 					RTFREE(ro->ro_rt);
 					ro->ro_rt = rtalloc1(&ro->ro_dst, RT_REPORT,
-					    m->m_pkthdr.rdomain);
+					    m->m_pkthdr.ph_rtableid);
 				}
 				if (rt_mtucloned)
 					rtfree(rt);
@@ -752,7 +720,7 @@ sendit:
 		ipstat.ips_fragmented++;
 
 done:
-	if (ro == &iproute && (flags & IP_ROUTETOIF) == 0 && ro->ro_rt)
+	if (ro == &iproute && ro->ro_rt)
 		RTFREE(ro->ro_rt);
 	return (error);
 bad:
@@ -810,9 +778,9 @@ ip_fragment(struct mbuf *m, struct ifnet *ifp, u_long mtu)
 		m->m_data += max_linkhdr;
 		mhip = mtod(m, struct ip *);
 		*mhip = *ip;
-		/* we must inherit MCAST and BCAST flags and rdomain */
+		/* we must inherit MCAST and BCAST flags and routing table */
 		m->m_flags |= m0->m_flags & (M_MCAST|M_BCAST);
-		m->m_pkthdr.rdomain = m0->m_pkthdr.rdomain;
+		m->m_pkthdr.ph_rtableid = m0->m_pkthdr.ph_rtableid;
 		if (hlen > sizeof (struct ip)) {
 			mhlen = ip_optcopy(ip, mhip) + sizeof (struct ip);
 			mhip->ip_hl = mhlen >> 2;

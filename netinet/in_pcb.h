@@ -1,4 +1,4 @@
-/*	$OpenBSD: in_pcb.h,v 1.82 2013/12/20 02:04:08 krw Exp $	*/
+/*	$OpenBSD: in_pcb.h,v 1.84 2014/04/16 13:04:38 mpi Exp $	*/
 /*	$NetBSD: in_pcb.h,v 1.14 1996/02/13 23:42:00 christos Exp $	*/
 
 /*
@@ -283,8 +283,9 @@ void	 in_rtchange(struct inpcb *, int);
 void	 in_setpeeraddr(struct inpcb *, struct mbuf *);
 void	 in_setsockaddr(struct inpcb *, struct mbuf *);
 int	 in_baddynamic(u_int16_t, u_int16_t);
-extern struct sockaddr_in *in_selectsrc(struct sockaddr_in *,
-	struct route *, int, struct ip_moptions *, int *, u_int);
+struct in_addr *
+	in_selectsrc(struct sockaddr_in *, struct ip_moptions *,
+	    struct route *, struct in_addr *, int *, u_int);
 struct rtentry *
 	in_pcbrtentry(struct inpcb *);
 

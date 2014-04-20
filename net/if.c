@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.c,v 1.280 2014/02/04 01:04:03 tedu Exp $	*/
+/*	$OpenBSD: if.c,v 1.283 2014/04/10 13:47:21 mpi Exp $	*/
 /*	$NetBSD: if.c,v 1.35 1996/05/07 05:26:04 thorpej Exp $	*/
 
 /*
@@ -76,6 +76,7 @@
 #include <sys/socket.h>
 #include <sys/socketvar.h>
 #include <sys/timeout.h>
+#include <sys/tree.h>
 #include <sys/protosw.h>
 #include <sys/kernel.h>
 #include <sys/ioctl.h>
@@ -152,12 +153,21 @@ int	if_group_egress_build(void);
 
 void	if_link_state_change_task(void *, void *);
 
+struct ifaddr_item {
+	RB_ENTRY(ifaddr_item)	 ifai_entry;
+	struct sockaddr		*ifai_addr;
+	struct ifaddr		*ifai_ifa;
+	struct ifaddr_item	*ifai_next;
+	u_int			 ifai_rdomain;
+};
+
 int	ifai_cmp(struct ifaddr_item *,  struct ifaddr_item *);
 void	ifa_item_insert(struct sockaddr *, struct ifaddr *, struct ifnet *);
 void	ifa_item_remove(struct sockaddr *, struct ifaddr *, struct ifnet *);
 #ifndef SMALL_KERNEL
 void	ifa_print_rb(void);
 #endif
+
 RB_HEAD(ifaddr_items, ifaddr_item) ifaddr_items = RB_INITIALIZER(&ifaddr_items);
 RB_PROTOTYPE(ifaddr_items, ifaddr_item, ifai_entry, ifai_cmp);
 RB_GENERATE(ifaddr_items, ifaddr_item, ifai_entry, ifai_cmp);
@@ -358,13 +368,11 @@ if_free_sadl(struct ifnet *ifp)
 		return;
 
 	s = splnet();
-	rtinit(ifa, RTM_DELETE, 0);
-#if 0
+	rt_ifa_del(ifa, 0, ifa->ifa_addr);
 	ifa_del(ifp, ifa);
+	ifafree(ifp->if_lladdr);
 	ifp->if_lladdr = NULL;
-#endif
 	ifp->if_sadl = NULL;
-
 	splx(s);
 }
 
@@ -492,8 +500,6 @@ nettxintr(void)
 /*
  * Detach an interface from everything in the kernel.  Also deallocate
  * private resources.
- * XXX So far only the INET protocol family has been looked over
- * wrt resource usage that needs to be decoupled.
  */
 void
 if_detach(struct ifnet *ifp)
@@ -587,27 +593,22 @@ do { \
 	if (ISSET(ifp->if_xflags, IFXF_TXREADY))
 		TAILQ_REMOVE(&iftxlist, ifp, if_txlist);
 
-	/*
-	 * Deallocate private resources.
-	 */
-	while ((ifa = TAILQ_FIRST(&ifp->if_addrlist)) != NULL) {
-		ifa_del(ifp, ifa);
-		/* XXX if_free_sadl needs this */
-		if (ifa == ifp->if_lladdr)
-			continue;
-
-		ifa->ifa_ifp = NULL;
-		ifafree(ifa);
-	}
-
 	while ((ifg = TAILQ_FIRST(&ifp->if_groups)) != NULL)
 		if_delgroup(ifp, ifg->ifgl_group->ifg_group);
 
 	if_free_sadl(ifp);
 
-	ifp->if_lladdr->ifa_ifp = NULL;
-	ifafree(ifp->if_lladdr);
-	ifp->if_lladdr = NULL;
+	/* We should not have any address left at this point. */
+	if (!TAILQ_EMPTY(&ifp->if_addrlist)) {
+#ifdef DIAGNOSTIC
+		printf("%s: address list non empty\n", ifp->if_xname);
+#endif
+		while ((ifa = TAILQ_FIRST(&ifp->if_addrlist)) != NULL) {
+			ifa_del(ifp, ifa);
+			ifa->ifa_ifp = NULL;
+			ifafree(ifa);
+		}
+	}
 
 	free(ifp->if_addrhooks, M_TEMP);
 	free(ifp->if_linkstatehooks, M_TEMP);

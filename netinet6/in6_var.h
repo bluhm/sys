@@ -1,4 +1,4 @@
-/*	$OpenBSD: in6_var.h,v 1.47 2014/01/21 10:18:26 mpi Exp $	*/
+/*	$OpenBSD: in6_var.h,v 1.49 2014/04/03 08:22:10 mpi Exp $	*/
 /*	$KAME: in6_var.h,v 1.55 2001/02/16 12:49:45 itojun Exp $	*/
 
 /*
@@ -99,7 +99,7 @@ struct in6_ifextra {
 struct	in6_ifaddr {
 	struct	ifaddr ia_ifa;		/* protocol-independent info */
 #define	ia_ifp		ia_ifa.ifa_ifp
-#define ia_flags	ia_ifa.ifa_flags
+#define	ia_flags	ia_ifa.ifa_flags
 
 	struct	sockaddr_in6 ia_addr;	/* interface address */
 	struct	sockaddr_in6 ia_net;	/* network number of interface */
@@ -524,8 +524,6 @@ int	in6_matchlen(struct in6_addr *, struct in6_addr *);
 int	in6_are_prefix_equal(struct in6_addr *, struct in6_addr *, int);
 void	in6_prefixlen2mask(struct in6_addr *, int);
 void	in6_purgeprefix(struct ifnet *);
-void	in6_ifaddloop(struct ifaddr *);
-void	in6_ifremloop(struct ifaddr *);
 #endif /* _KERNEL */
 
 #endif /* _NETINET6_IN6_VAR_H_ */

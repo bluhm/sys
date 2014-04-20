@@ -1,4 +1,4 @@
-/*	$OpenBSD: uipc_mbuf.c,v 1.178 2014/01/19 03:04:54 claudio Exp $	*/
+/*	$OpenBSD: uipc_mbuf.c,v 1.181 2014/04/14 09:06:41 mpi Exp $	*/
 /*	$NetBSD: uipc_mbuf.c,v 1.15.4.1 1996/06/13 17:11:44 cgd Exp $	*/
 
 /*
@@ -88,7 +88,6 @@
 #include <net/if.h>
 
 
-#include <uvm/uvm.h>
 #include <uvm/uvm_extern.h>
 
 #ifdef DDB
@@ -402,15 +401,18 @@ void
 m_cluncount(struct mbuf *m, int all)
 {
 	struct mbuf_ext *me;
+	struct ifnet *ifp;
 
 	do {
 		me = &m->m_ext;
 		if (((m->m_flags & (M_EXT|M_CLUSTER)) != (M_EXT|M_CLUSTER)) ||
-		    (me->ext_ifp == NULL))
+		    (me->ext_ifidx == 0))
 			continue;
 
-		me->ext_ifp->if_data.ifi_mclpool[me->ext_backend].mcl_alive--;
-		me->ext_ifp = NULL;
+		ifp = if_get(me->ext_ifidx);
+		if (ifp != NULL)
+			ifp->if_data.ifi_mclpool[me->ext_backend].mcl_alive--;
+		me->ext_ifidx = 0;
 	} while (all && (m = m->m_next));
 }
 
@@ -460,7 +462,10 @@ m_clget(struct mbuf *m, int how, struct ifnet *ifp, u_int pktlen)
 	m->m_ext.ext_free = NULL;
 	m->m_ext.ext_arg = NULL;
 	m->m_ext.ext_backend = pi;
-	m->m_ext.ext_ifp = ifp;
+	if (ifp != NULL)
+		m->m_ext.ext_ifidx = ifp->if_index;
+	else
+		m->m_ext.ext_ifidx = 0;
 	MCLINITREFERENCE(m);
 	return (m);
 }
@@ -1357,8 +1362,8 @@ m_print(void *v,
 		    m->m_pkthdr.tagsset, MTAG_BITS);
 		(*pr)("m_pkthdr.csum_flags: %hb\n",
 		    m->m_pkthdr.csum_flags, MCS_BITS);
-		(*pr)("m_pkthdr.ether_vtag: %hu\tm_ptkhdr.rdomain: %u\n",
-		    m->m_pkthdr.ether_vtag, m->m_pkthdr.rdomain);
+		(*pr)("m_pkthdr.ether_vtag: %hu\tm_ptkhdr.ph_rtableid: %u\n",
+		    m->m_pkthdr.ether_vtag, m->m_pkthdr.ph_rtableid);
 		(*pr)("m_pkthdr.pf.hdr: %p\n",
 		    m->m_pkthdr.pf.hdr);
 		(*pr)("m_pkthdr.pf.statekey: %p\tm_pkthdr.pf.inp %p\n",
@@ -1375,7 +1380,7 @@ m_print(void *v,
 		    m->m_ext.ext_buf, m->m_ext.ext_size);
 		(*pr)("m_ext.ext_type: %x\tm_ext.ext_backend: %i\n",
 		    m->m_ext.ext_type, m->m_ext.ext_backend);
-		(*pr)("m_ext.ext_ifp: %p\n", m->m_ext.ext_ifp);
+		(*pr)("m_ext.ext_ifidx: %u\n", m->m_ext.ext_ifidx);
 		(*pr)("m_ext.ext_free: %p\tm_ext.ext_arg: %p\n",
 		    m->m_ext.ext_free, m->m_ext.ext_arg);
 		(*pr)("m_ext.ext_nextref: %p\tm_ext.ext_prevref: %p\n",

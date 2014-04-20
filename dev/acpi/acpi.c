@@ -1,4 +1,4 @@
-/* $OpenBSD: acpi.c,v 1.253 2014/02/21 23:48:38 deraadt Exp $ */
+/* $OpenBSD: acpi.c,v 1.256 2014/04/13 14:43:01 mlarkin Exp $ */
 /*
  * Copyright (c) 2005 Thorsten Lockert <tholo@sigmasoft.com>
  * Copyright (c) 2005 Jordan Hargrave <jordan@openbsd.org>
@@ -2098,6 +2098,7 @@ acpi_indicator(struct acpi_softc *sc, int led_state)
 int
 acpi_sleep_state(struct acpi_softc *sc, int state)
 {
+	struct device *mainbus = device_mainbus();
 	int error = ENXIO;
 	int s;
 
@@ -2125,10 +2126,11 @@ acpi_sleep_state(struct acpi_softc *sc, int state)
 #if NWSDISPLAY > 0
 	wsdisplay_suspend();
 #endif /* NWSDISPLAY > 0 */
-	bufq_quiesce();
 
-	if (config_suspend(TAILQ_FIRST(&alldevs), DVACT_QUIESCE))
+	if (config_suspend(mainbus, DVACT_QUIESCE))
 		goto fail_quiesce;
+
+	bufq_quiesce();
 
 #ifdef MULTIPROCESSOR
 	acpi_sleep_mp();
@@ -2140,7 +2142,7 @@ acpi_sleep_state(struct acpi_softc *sc, int state)
 	disable_intr();	/* PSL_I for resume; PIC/APIC broken until repair */
 	cold = 1;	/* Force other code to delay() instead of tsleep() */
 
-	if (config_suspend(TAILQ_FIRST(&alldevs), DVACT_SUSPEND) != 0)
+	if (config_suspend(mainbus, DVACT_SUSPEND) != 0)
 		goto fail_suspend;
 	acpi_sleep_clocks(sc, state);
 
@@ -2172,7 +2174,7 @@ acpi_sleep_state(struct acpi_softc *sc, int state)
 	acpi_resume_cpu(sc);
 
 fail_pts:
-	config_suspend(TAILQ_FIRST(&alldevs), DVACT_RESUME);
+	config_suspend(mainbus, DVACT_RESUME);
 
 fail_suspend:
 	cold = 0;
@@ -2189,10 +2191,10 @@ fail_suspend:
 	acpi_resume_mp();
 #endif
 
-fail_quiesce:
 	bufq_restart();
 
-	config_suspend(TAILQ_FIRST(&alldevs), DVACT_WAKEUP);
+fail_quiesce:
+	config_suspend(mainbus, DVACT_WAKEUP);
 
 #if NWSDISPLAY > 0
 	wsdisplay_resume();
@@ -2290,7 +2292,7 @@ acpi_thread(void *arg)
 	while (thread->running) {
 		s = spltty();
 		while (sc->sc_threadwaiting) {
-			dnprintf(10, "acpi going to sleep...\n");
+			dnprintf(10, "acpi thread going to sleep...\n");
 			rw_exit_write(&sc->sc_lck);
 			tsleep(sc, PWAIT, "acpi0", 0);
 			rw_enter_write(&sc->sc_lck);

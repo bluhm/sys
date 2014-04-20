@@ -1,4 +1,4 @@
-/*      $OpenBSD: ip_divert.c,v 1.16 2014/01/09 06:29:06 tedu Exp $ */
+/*      $OpenBSD: ip_divert.c,v 1.20 2014/04/14 09:06:42 mpi Exp $ */
 
 /*
  * Copyright (c) 2009 Michele Marchetto <michele@openbsd.org>
@@ -100,7 +100,7 @@ divert_output(struct mbuf *m, ...)
 
 	m->m_pkthdr.rcvif = NULL;
 	m->m_nextpkt = NULL;
-	m->m_pkthdr.rdomain = inp->inp_rtableid;
+	m->m_pkthdr.ph_rtableid = inp->inp_rtableid;
 
 	if (control)
 		m_freem(control);
@@ -166,7 +166,7 @@ divert_output(struct mbuf *m, ...)
 
 	if (sin->sin_addr.s_addr != INADDR_ANY) {
 		ipaddr.sin_addr = sin->sin_addr;
-		ifa = ifa_ifwithaddr(sintosa(&ipaddr), m->m_pkthdr.rdomain);
+		ifa = ifa_ifwithaddr(sintosa(&ipaddr), m->m_pkthdr.ph_rtableid);
 		if (ifa == NULL) {
 			error = EADDRNOTAVAIL;
 			goto fail;
@@ -180,10 +180,8 @@ divert_output(struct mbuf *m, ...)
 		schednetisr(NETISR_IP);
 		splx(s);
 	} else {
-		error = ip_output(m, (void *)NULL, &inp->inp_route,
-		    ((so->so_options & SO_DONTROUTE) ? IP_ROUTETOIF : 0)
-		    | IP_ALLOWBROADCAST | IP_RAWOUTPUT, (void *)NULL,
-		    (void *)NULL);
+		error = ip_output(m, NULL, &inp->inp_route,
+		    IP_ALLOWBROADCAST | IP_RAWOUTPUT, NULL, NULL);
 		if (error == EACCES)	/* translate pf(4) error for userland */
 			error = EHOSTUNREACH;
 	}

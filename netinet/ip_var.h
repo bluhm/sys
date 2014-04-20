@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_var.h,v 1.51 2014/01/23 23:51:29 henning Exp $	*/
+/*	$OpenBSD: ip_var.h,v 1.55 2014/04/07 10:04:17 mpi Exp $	*/
 /*	$NetBSD: ip_var.h,v 1.16 1996/02/13 23:43:20 christos Exp $	*/
 
 /*
@@ -140,7 +140,6 @@ struct ipq {
 /* flags passed to ip_output as last parameter */
 #define	IP_FORWARDING		0x1		/* most of ip header exists */
 #define	IP_RAWOUTPUT		0x2		/* raw ip header exists */
-#define	IP_ROUTETOIF		SO_DONTROUTE	/* bypass routing tables */
 #define	IP_ALLOWBROADCAST	SO_BROADCAST	/* can send broadcast packets */
 #define	IP_MTUDISC		0x0800		/* pmtu discovery, set DF */
 #define IP_ROUTETOETHER		0x1000		/* ether addresses given */
@@ -176,10 +175,8 @@ struct route;
 struct inpcb;
 
 int	 ip_ctloutput(int, struct socket *, int, int, struct mbuf **);
-int	 ip_dooptions(struct mbuf *);
 void	 ip_drain(void);
 void	 ip_flush(void);
-void	 ip_forward(struct mbuf *, int);
 int	 ip_fragment(struct mbuf *, struct ifnet *, u_long);
 void	 ip_freef(struct ipq *);
 void	 ip_freemoptions(struct ip_moptions *);
