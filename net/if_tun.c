@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_tun.c,v 1.122 2014/04/14 09:06:42 mpi Exp $	*/
+/*	$OpenBSD: if_tun.c,v 1.124 2014/04/22 14:41:03 mpi Exp $	*/
 /*	$NetBSD: if_tun.c,v 1.24 1996/05/07 02:40:48 thorpej Exp $	*/
 
 /*
@@ -1090,9 +1090,6 @@ filt_tunwrite(struct knote *kn, long hint)
 
 /*
  * Start packet transmission on the interface.
- * when the interface queue is rate-limited by ALTQ or TBR,
- * if_start is needed to drain packets from the queue in order
- * to notify readers when outgoing packets become ready.
  * In layer 2 mode this function is called from ether_output.
  */
 void
@@ -1102,11 +1099,6 @@ tunstart(struct ifnet *ifp)
 	struct mbuf		*m;
 
 	splassert(IPL_NET);
-
-	if (!(tp->tun_flags & TUN_LAYER2) &&
-	    !ALTQ_IS_ENABLED(&ifp->if_snd) &&
-	    !TBR_IS_ENABLED(&ifp->if_snd))
-		return;
 
 	IFQ_POLL(&ifp->if_snd, m);
 	if (m != NULL) {

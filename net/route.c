@@ -1,4 +1,4 @@
-/*	$OpenBSD: route.c,v 1.161 2014/04/11 00:06:30 krw Exp $	*/
+/*	$OpenBSD: route.c,v 1.164 2014/04/25 10:41:09 mpi Exp $	*/
 /*	$NetBSD: route.c,v 1.14 1996/02/13 22:00:46 christos Exp $	*/
 
 /*
@@ -150,6 +150,9 @@ int	rtable_init(struct radix_node_head ***, u_int);
 int	rtflushclone1(struct radix_node *, void *, u_int);
 void	rtflushclone(struct radix_node_head *, struct rtentry *);
 int	rt_if_remove_rtdelete(struct radix_node *, void *, u_int);
+
+struct	ifaddr *ifa_ifwithroute(int, struct sockaddr *, struct sockaddr *,
+		    u_int);
 
 #define	LABELID_MAX	50000
 
@@ -650,8 +653,17 @@ ifa_ifwithroute(int flags, struct sockaddr *dst, struct sockaddr *gateway,
 		 */
 		ifa = ifa_ifwithdstaddr(gateway, rtableid);
 	}
-	if (ifa == NULL)
-		ifa = ifa_ifwithnet(gateway, rtableid);
+	if (ifa == NULL) {
+		if (gateway->sa_family == AF_LINK) {
+			struct sockaddr_dl *sdl = (struct sockaddr_dl *)gateway;
+			struct ifnet *ifp = if_get(sdl->sdl_index);
+
+			if (ifp != NULL)
+				ifa = ifp->if_lladdr;
+		} else {
+			ifa = ifa_ifwithnet(gateway, rtableid);
+		}
+	}
 	if (ifa == NULL) {
 		struct rtentry	*rt = rtalloc1(gateway, 0, rtable_l2(rtableid));
 		if (rt == NULL)
@@ -679,16 +691,17 @@ int
 rt_getifa(struct rt_addrinfo *info, u_int rtid)
 {
 	struct ifaddr	*ifa;
+	struct ifnet	*ifp = NULL;
 
 	/*
 	 * ifp may be specified by sockaddr_dl when protocol address
 	 * is ambiguous
 	 */
-	if (info->rti_ifp == NULL && info->rti_info[RTAX_IFP] != NULL) {
+	if (info->rti_info[RTAX_IFP] != NULL) {
 		struct sockaddr_dl *sdl;
 
 		sdl = (struct sockaddr_dl *)info->rti_info[RTAX_IFP];
-		info->rti_ifp = if_get(sdl->sdl_index);
+		ifp = if_get(sdl->sdl_index);
 	}
 
 	if (info->rti_ifa == NULL && info->rti_info[RTAX_IFA] != NULL)
@@ -701,8 +714,8 @@ rt_getifa(struct rt_addrinfo *info, u_int rtid)
 			if ((sa = info->rti_info[RTAX_GATEWAY]) == NULL)
 				sa = info->rti_info[RTAX_DST];
 
-		if (sa != NULL && info->rti_ifp != NULL)
-			info->rti_ifa = ifaof_ifpforaddr(sa, info->rti_ifp);
+		if (sa != NULL && ifp != NULL)
+			info->rti_ifa = ifaof_ifpforaddr(sa, ifp);
 		else if (info->rti_info[RTAX_DST] != NULL &&
 		    info->rti_info[RTAX_GATEWAY] != NULL)
 			info->rti_ifa = ifa_ifwithroute(info->rti_flags,
@@ -716,9 +729,6 @@ rt_getifa(struct rt_addrinfo *info, u_int rtid)
 
 	if ((ifa = info->rti_ifa) == NULL)
 		return (ENETUNREACH);
-
-	if (info->rti_ifp == NULL)
-		info->rti_ifp = ifa->ifa_ifp;
 
 	return (0);
 }
@@ -816,8 +826,10 @@ rtrequest1(int req, struct rt_addrinfo *info, u_int8_t prio,
 			info->rti_ifa = rt->rt_ifa;
 		} else {
 			/*
-			 * The interface address at the cloning route
-			 * is not longer referenced by an interface.
+			 * The address of the cloning route is not longer
+			 * configured on an interface, but its descriptor
+			 * is still there because of reference counting.
+			 *
 			 * Try to find a similar active address and use
 			 * it for the cloned route.  The cloning route
 			 * will get the new address and interface later.
@@ -825,7 +837,6 @@ rtrequest1(int req, struct rt_addrinfo *info, u_int8_t prio,
 			info->rti_ifa = NULL;
 			info->rti_info[RTAX_IFA] = rt->rt_ifa->ifa_addr;
 		}
-		info->rti_ifp = rt->rt_ifp;
 		info->rti_flags = rt->rt_flags & ~(RTF_CLONING | RTF_STATIC);
 		info->rti_flags |= RTF_CLONED;
 		info->rti_info[RTAX_GATEWAY] = rt->rt_gateway;

@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.c,v 1.283 2014/04/10 13:47:21 mpi Exp $	*/
+/*	$OpenBSD: if.c,v 1.286 2014/04/22 12:35:00 mpi Exp $	*/
 /*	$NetBSD: if.c,v 1.35 1996/05/07 05:26:04 thorpej Exp $	*/
 
 /*
@@ -282,13 +282,6 @@ if_attachsetup(struct ifnet *ifp)
 
 	if (ifp->if_snd.ifq_maxlen == 0)
 		IFQ_SET_MAXLEN(&ifp->if_snd, IFQ_MAXLEN);
-#ifdef ALTQ
-	ifp->if_snd.altq_type = 0;
-	ifp->if_snd.altq_disc = NULL;
-	ifp->if_snd.altq_flags &= ALTQF_CANTCHANGE;
-	ifp->if_snd.altq_tbr  = NULL;
-	ifp->if_snd.altq_ifp  = ifp;
-#endif
 
 	if (domains)
 		if_attachdomain1(ifp);
@@ -535,12 +528,6 @@ if_detach(struct ifnet *ifp)
 
 #if NBPFILTER > 0
 	bpfdetach(ifp);
-#endif
-#ifdef ALTQ
-	if (ALTQ_IS_ENABLED(&ifp->if_snd))
-		altq_disable(&ifp->if_snd);
-	if (ALTQ_IS_ATTACHED(&ifp->if_snd))
-		altq_detach(&ifp->if_snd);
 #endif
 	rt_if_remove(ifp);
 #ifdef INET
@@ -904,27 +891,21 @@ ifa_ifwithdstaddr(struct sockaddr *addr, u_int rdomain)
  * is most specific found.
  */
 struct ifaddr *
-ifa_ifwithnet(struct sockaddr *addr, u_int rdomain)
+ifa_ifwithnet(struct sockaddr *sa, u_int rtableid)
 {
 	struct ifnet *ifp;
-	struct ifaddr *ifa;
-	struct ifaddr *ifa_maybe = 0;
-	u_int af = addr->sa_family;
-	char *addr_data = addr->sa_data, *cplim;
+	struct ifaddr *ifa, *ifa_maybe = NULL;
+	char *cplim, *addr_data = sa->sa_data;
+	u_int rdomain;
 
-	rdomain = rtable_l2(rdomain);
-	if (af == AF_LINK) {
-		struct sockaddr_dl *sdl = (struct sockaddr_dl *)addr;
-		if (sdl->sdl_index && (ifp = if_get(sdl->sdl_index)) != NULL)
-			return (ifp->if_lladdr);
-	}
+	rdomain = rtable_l2(rtableid);
 	TAILQ_FOREACH(ifp, &ifnet, if_list) {
 		if (ifp->if_rdomain != rdomain)
 			continue;
 		TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
 			char *cp, *cp2, *cp3;
 
-			if (ifa->ifa_addr->sa_family != af ||
+			if (ifa->ifa_addr->sa_family != sa->sa_family ||
 			    ifa->ifa_netmask == 0)
 				next: continue;
 			cp = addr_data;
@@ -1515,6 +1496,11 @@ ifioctl(struct socket *so, u_long cmd, caddr_t data, struct proc *p)
 #ifdef INET
 			in_ifdetach(ifp);
 #endif
+			/*
+			 * Remove sadl from ifa RB tree because rdomain is part
+			 * of the lookup key and re-add it after the switch.
+			 */
+			ifa_del(ifp, ifp->if_lladdr);
 			splx(s);
 		}
 
@@ -1525,6 +1511,9 @@ ifioctl(struct socket *so, u_long cmd, caddr_t data, struct proc *p)
 
 		/* Add interface to the specified rdomain */
 		ifp->if_rdomain = ifr->ifr_rdomainid;
+
+		/* re-add sadl to the ifa RB tree in new rdomain */
+		ifa_add(ifp, ifp->if_lladdr);
 		break;
 
 	case SIOCAIFGROUP:

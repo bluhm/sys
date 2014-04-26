@@ -1,4 +1,4 @@
-/*	$OpenBSD: pipex.c,v 1.48 2013/11/11 09:15:34 mpi Exp $	*/
+/*	$OpenBSD: pipex.c,v 1.50 2014/04/21 12:22:25 henning Exp $	*/
 
 /*-
  * Copyright (c) 2009 Internet Initiative Japan Inc.
@@ -95,8 +95,8 @@ struct pipex_hash_head
 
 struct radix_node_head pipex_rd_head4;
 struct radix_node_head pipex_rd_head6;
-int pipex_rd_head4_initialized = 0;
-int pipex_rd_head6_initialized = 0;
+int pipex_rd_head4_initialized;
+int pipex_rd_head6_initialized;
 struct timeout pipex_timer_ch; 		/* callout timer context */
 int pipex_prune = 1;			/* walk list every seconds */
 
@@ -1558,7 +1558,7 @@ pipex_pptp_output(struct mbuf *m0, struct pipex_session *session,
 	gre->flags = htons(gre->flags);
 
 	m0->m_pkthdr.rcvif = session->pipex_iface->ifnet_this;
-	if (ip_output(m0, NULL, NULL, 0, NULL, NULL) != 0) {
+	if (ip_output(m0, NULL, NULL, 0, NULL, NULL, 0) != 0) {
 		PIPEX_DBG((session, LOG_DEBUG, "ip_output failed."));
 		goto drop;
 	}
@@ -1996,7 +1996,7 @@ pipex_l2tp_output(struct mbuf *m0, struct pipex_session *session)
 		ip->ip_ttl = MAXTTL;
 		ip->ip_tos = 0;
 
-		if (ip_output(m0, NULL, NULL, IP_IPSECFLOW, NULL, NULL,
+		if (ip_output(m0, NULL, NULL, 0, NULL, NULL,
 		    session->proto.l2tp.ipsecflowinfo) != 0) {
 			PIPEX_DBG((session, LOG_DEBUG, "ip_output failed."));
 			goto drop;

@@ -1,4 +1,4 @@
-/*	$OpenBSD: in.h,v 1.102 2014/01/23 01:10:42 naddy Exp $	*/
+/*	$OpenBSD: in.h,v 1.108 2014/04/25 09:44:38 mpi Exp $	*/
 /*	$NetBSD: in.h,v 1.20 1996/02/13 23:41:47 christos Exp $	*/
 
 /*
@@ -43,12 +43,12 @@
 #ifndef _KERNEL
 #include <sys/types.h>
 #include <machine/endian.h>
-#endif
+#endif /* _KERNEL */
 
 #ifndef	_SA_FAMILY_T_DEFINED_
 #define	_SA_FAMILY_T_DEFINED_
 typedef	__sa_family_t	sa_family_t;	/* sockaddr address family type */
-#endif
+#endif /* _SA_FAMILY_T_DEFINED_ */
 
 /*
  * Protocols
@@ -91,7 +91,6 @@ typedef	__sa_family_t	sa_family_t;	/* sockaddr address family type */
 
 /* Only used internally, so it can be outside the range of valid IP protocols */
 #define	IPPROTO_DIVERT		258		/* Divert sockets */
-
 
 /*
  * From FreeBSD:
@@ -152,7 +151,7 @@ typedef	__sa_family_t	sa_family_t;	/* sockaddr address family type */
 struct in_addr {
 	in_addr_t s_addr;
 };
-#endif
+#endif /* _IN_ADDR_DECLARED */
 
 /* last return value of *_input(), meaning "all job for this pkt is done".  */
 #define	IPPROTO_DONE		257
@@ -170,7 +169,7 @@ struct in_addr {
 #define	__IPADDR(x)	((u_int32_t) htonl((u_int32_t)(x)))
 #else
 #define	__IPADDR(x)	((u_int32_t)(x))
-#endif
+#endif /* _KERNEL */
 
 #define	IN_CLASSA(i)		(((u_int32_t)(i) & __IPADDR(0x80000000)) == \
 				 __IPADDR(0x00000000))
@@ -226,7 +225,7 @@ struct in_addr {
 #define	INADDR_BROADCAST	__IPADDR(0xffffffff)	/* must be masked */
 #ifndef _KERNEL
 #define	INADDR_NONE		__IPADDR(0xffffffff)	/* -1 return */
-#endif
+#endif /* _KERNEL */
 
 #define	INADDR_UNSPEC_GROUP	__IPADDR(0xe0000000)	/* 224.0.0.0 */
 #define	INADDR_ALLHOSTS_GROUP	__IPADDR(0xe0000001)	/* 224.0.0.1 */
@@ -261,7 +260,7 @@ struct ip_opts {
 	int8_t		Ip_opts[40];	/* cannot have same name as class */
 #else
 	int8_t		ip_opts[40];	/* actually variable in size */
-#endif
+#endif /* defined(__cplusplus) */
 };
 
 /*
@@ -361,7 +360,7 @@ struct ip_mreq {
  */
 #ifndef INET_ADDRSTRLEN
 #define INET_ADDRSTRLEN		16
-#endif
+#endif /* INET_ADDRSTRLEN */
 
 
 #if __BSD_VISIBLE
@@ -641,9 +640,6 @@ struct ip_mreq {
 #define	IPCTL_FORWARDING	1	/* act as router */
 #define	IPCTL_SENDREDIRECTS	2	/* may send redirects when forwarding */
 #define	IPCTL_DEFTTL		3	/* default TTL */
-#ifdef notyet
-#define	IPCTL_DEFMTU		4	/* default MTU */
-#endif
 #define	IPCTL_SOURCEROUTE	5	/* may perform source routes */
 #define	IPCTL_DIRECTEDBCAST	6	/* default broadcast behavior */
 #define IPCTL_IPPORT_FIRSTAUTO	7
@@ -652,9 +648,6 @@ struct ip_mreq {
 #define IPCTL_IPPORT_HILASTAUTO	10
 #define	IPCTL_IPPORT_MAXQUEUE	11
 #define	IPCTL_ENCDEBUG		12
-#ifdef notdef	/*obsolete*/
-#define IPCTL_GIF_TTL		13	/* default TTL for gif encap packet */
-#endif
 #define IPCTL_IPSEC_EXPIRE_ACQUIRE 14   /* How long to wait for key mgmt. */
 #define IPCTL_IPSEC_EMBRYONIC_SA_TIMEOUT	15 /* new SA lifetime */
 #define IPCTL_IPSEC_REQUIRE_PFS 16
@@ -767,63 +760,16 @@ struct ip_mreq {
 #undef __KAME_NETINET_IN_H_INCLUDED_
 
 #ifndef _KERNEL
-
 #if __BSD_VISIBLE
 __BEGIN_DECLS
 int	   bindresvport(int, struct sockaddr_in *);
 struct sockaddr;
 int	   bindresvport_sa(int, struct sockaddr *);
 __END_DECLS
-#endif
+#endif /* __BSD_VISIBLE */
+#endif /* !_KERNEL */
 
-#else
-/*
- * in_cksum_phdr:
- *
- *	Compute significant parts of the IPv4 checksum pseudo-header
- *	for use in a delayed TCP/UDP checksum calculation.
- *
- *	Args:
- *
- *		src		Source IP address
- *		dst		Destination IP address
- *		lenproto	htons(proto-hdr-len + proto-number)
- */
-static __inline u_int16_t __attribute__((__unused__))
-in_cksum_phdr(u_int32_t src, u_int32_t dst, u_int32_t lenproto)
-{
-	u_int32_t sum;
-
-	sum = lenproto +
-	      (u_int16_t)(src >> 16) +
-	      (u_int16_t)(src /*& 0xffff*/) +
-	      (u_int16_t)(dst >> 16) +
-	      (u_int16_t)(dst /*& 0xffff*/);
-
-	sum = (u_int16_t)(sum >> 16) + (u_int16_t)(sum /*& 0xffff*/);
-
-	if (sum > 0xffff)
-		sum -= 0xffff;
-
-	return (sum);
-}
-
-/*
- * in_cksum_addword:
- *
- *	Add the two 16-bit network-order values, carry, and return.
- */
-static __inline u_int16_t __attribute__((__unused__))
-in_cksum_addword(u_int16_t a, u_int16_t b)
-{
-	u_int32_t sum = a + b;
-
-	if (sum > 0xffff)
-		sum -= 0xffff;
-
-	return (sum);
-}
-
+#ifdef _KERNEL
 extern	   int inetctlerrmap[];
 extern	   struct ifqueue ipintrq;	/* ip packet input queue */
 extern	   struct in_addr zeroin_addr;
@@ -832,7 +778,6 @@ int	   in_broadcast(struct in_addr, struct ifnet *, u_int);
 int	   in_canforward(struct in_addr);
 int	   in_cksum(struct mbuf *, int);
 int	   in4_cksum(struct mbuf *, u_int8_t, int, int);
-int	   in_localaddr(struct in_addr, u_int);
 void	   in_proto_cksum_out(struct mbuf *, struct ifnet *);
 void	   in_ifdetach(struct ifnet *);
 int	   in_mask2len(struct in_addr *);

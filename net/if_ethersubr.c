@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ethersubr.c,v 1.165 2014/04/14 09:06:42 mpi Exp $	*/
+/*	$OpenBSD: if_ethersubr.c,v 1.172 2014/04/22 12:07:20 henning Exp $	*/
 /*	$NetBSD: if_ethersubr.c,v 1.19 1996/05/07 02:40:30 thorpej Exp $	*/
 
 /*
@@ -155,6 +155,8 @@ u_char etherbroadcastaddr[ETHER_ADDR_LEN] =
     { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
 #define senderr(e) { error = (e); goto bad;}
 
+static inline int	ether_addheader(struct mbuf **, struct ifnet *,
+			   u_int16_t, u_char *, u_char *);
 
 int
 ether_ioctl(struct ifnet *ifp, struct arpcom *arp, u_long cmd, caddr_t data)
@@ -190,6 +192,51 @@ ether_ioctl(struct ifnet *ifp, struct arpcom *arp, u_long cmd, caddr_t data)
 	return (error);
 }
 
+static inline int
+ether_addheader(struct mbuf **m, struct ifnet *ifp, u_int16_t etype,
+    u_char *esrc, u_char *edst)
+{
+	struct ether_header *eh;
+
+#if NVLAN > 0
+	if ((*m)->m_flags & M_VLANTAG) {
+		struct ifvlan	*ifv = ifp->if_softc;
+		struct ifnet	*p = ifv->ifv_p;
+
+		/* should we use the tx tagging hw offload at all? */
+		if ((p->if_capabilities & IFCAP_VLAN_HWTAGGING) &&
+		    (ifv->ifv_type == ETHERTYPE_VLAN)) {
+			(*m)->m_pkthdr.ether_vtag = ifv->ifv_tag +
+			    ((*m)->m_pkthdr.pf.prio << EVL_PRIO_BITS);
+			/* don't return, need to add regular ethernet header */
+		} else {
+			struct ether_vlan_header	*evh;
+
+			M_PREPEND(*m, sizeof(*evh), M_DONTWAIT);
+			if (*m == NULL)
+				return (-1);
+			evh = mtod(*m, struct ether_vlan_header *);
+			memcpy(evh->evl_dhost, edst, sizeof(evh->evl_dhost));
+			memcpy(evh->evl_shost, esrc, sizeof(evh->evl_shost));
+			evh->evl_proto = etype;
+			evh->evl_encap_proto = htons(ifv->ifv_type);
+			evh->evl_tag = htons(ifv->ifv_tag +
+			    ((*m)->m_pkthdr.pf.prio << EVL_PRIO_BITS));
+			(*m)->m_flags &= ~M_VLANTAG;
+			return (0);
+		}
+	}
+#endif /* NVLAN > 0 */
+	M_PREPEND(*m, ETHER_HDR_LEN, M_DONTWAIT);
+	if (*m == NULL)
+		return (-1);
+	eh = mtod(*m, struct ether_header *);
+	eh->ether_type = etype;
+	memcpy(eh->ether_dhost, edst, sizeof(eh->ether_dhost));
+	memcpy(eh->ether_shost, esrc, sizeof(eh->ether_shost));
+	return (0);
+}
+
 /*
  * Ethernet output routine.
  * Encapsulate a packet of type family for the local net.
@@ -200,11 +247,12 @@ ether_output(struct ifnet *ifp0, struct mbuf *m0, struct sockaddr *dst,
     struct rtentry *rt0)
 {
 	u_int16_t etype;
-	int s, len, error = 0, hdrcmplt = 0;
-	u_char edst[ETHER_ADDR_LEN], esrc[ETHER_ADDR_LEN];
+	int s, len, error = 0;
+	u_char edst[ETHER_ADDR_LEN];
+	u_char *esrc;
 	struct mbuf *m = m0;
 	struct rtentry *rt;
-	struct mbuf *mcopy = (struct mbuf *)0;
+	struct mbuf *mcopy = NULL;
 	struct ether_header *eh;
 	struct arpcom *ac = (struct arpcom *)ifp0;
 	short mflags;
@@ -249,7 +297,7 @@ ether_output(struct ifnet *ifp0, struct mbuf *m0, struct sockaddr *dst,
 		}
 
 		if (rt->rt_flags & RTF_GATEWAY) {
-			if (rt->rt_gwroute == 0)
+			if (rt->rt_gwroute == NULL)
 				goto lookup;
 			if (((rt = rt->rt_gwroute)->rt_flags & RTF_UP) == 0) {
 				rtfree(rt);
@@ -266,6 +314,7 @@ ether_output(struct ifnet *ifp0, struct mbuf *m0, struct sockaddr *dst,
 			    time_second < rt->rt_rmx.rmx_expire)
 				senderr(rt == rt0 ? EHOSTDOWN : EHOSTUNREACH);
 	}
+	esrc = ac->ac_enaddr;
 	switch (dst->sa_family) {
 
 #ifdef INET
@@ -319,9 +368,8 @@ ether_output(struct ifnet *ifp0, struct mbuf *m0, struct sockaddr *dst,
 		break;
 #endif /* MPLS */
 	case pseudo_AF_HDRCMPLT:
-		hdrcmplt = 1;
 		eh = (struct ether_header *)dst->sa_data;
-		memcpy(esrc, eh->ether_shost, sizeof(esrc));
+		esrc = eh->ether_shost;
 		/* FALLTHROUGH */
 
 	case AF_UNSPEC:
@@ -341,25 +389,13 @@ ether_output(struct ifnet *ifp0, struct mbuf *m0, struct sockaddr *dst,
 	if (mcopy)
 		(void) looutput(ifp, mcopy, dst, rt);
 
-	/*
-	 * Add local net header.  If no space in first mbuf,
-	 * allocate another.
-	 */
-	M_PREPEND(m, ETHER_HDR_LEN, M_DONTWAIT);
-	if (m == 0)
-		senderr(ENOBUFS);
-	eh = mtod(m, struct ether_header *);
-	eh->ether_type = etype;
-	memcpy(eh->ether_dhost, edst, sizeof(edst));
-	if (hdrcmplt)
-		memcpy(eh->ether_shost, esrc, sizeof(eh->ether_shost));
-	else
-		memcpy(eh->ether_shost, ac->ac_enaddr, sizeof(eh->ether_shost));
-
 #if NCARP > 0
 	if (ifp0 != ifp && ifp0->if_type == IFT_CARP)
-	    carp_rewrite_lladdr(ifp0, eh->ether_shost);
+		esrc = carp_get_srclladdr(ifp0, esrc);
 #endif
+
+	if (ether_addheader(&m, ifp, etype, esrc, edst) == -1)
+		senderr(ENOBUFS);
 
 #if NBRIDGE > 0
 	/*
@@ -685,7 +721,7 @@ decapsulate:
 					m_adj(m, etype - m->m_pkthdr.len);
 				m_adj(m, 6);
 				M_PREPEND(m, sizeof(*eh), M_DONTWAIT);
-				if (m == 0)
+				if (m == NULL)
 					goto done;
 				*mtod(m, struct ether_header *) = *eh;
 				goto decapsulate;

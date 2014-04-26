@@ -1,4 +1,4 @@
-/*	$OpenBSD: uipc_mbuf.c,v 1.181 2014/04/14 09:06:41 mpi Exp $	*/
+/*	$OpenBSD: uipc_mbuf.c,v 1.183 2014/04/22 14:41:03 mpi Exp $	*/
 /*	$NetBSD: uipc_mbuf.c,v 1.15.4.1 1996/06/13 17:11:44 cgd Exp $	*/
 
 /*
@@ -222,8 +222,8 @@ m_get(int nowait, int type)
 	splx(s);
 	if (m) {
 		m->m_type = type;
-		m->m_next = (struct mbuf *)NULL;
-		m->m_nextpkt = (struct mbuf *)NULL;
+		m->m_next = NULL;
+		m->m_nextpkt = NULL;
 		m->m_data = m->m_dat;
 		m->m_flags = 0;
 	}
@@ -249,8 +249,8 @@ m_gethdr(int nowait, int type)
 		m->m_type = type;
 
 		/* keep in sync with m_inithdr */
-		m->m_next = (struct mbuf *)NULL;
-		m->m_nextpkt = (struct mbuf *)NULL;
+		m->m_next = NULL;
+		m->m_nextpkt = NULL;
 		m->m_data = m->m_pktdat;
 		m->m_flags = M_PKTHDR;
 		bzero(&m->m_pkthdr, sizeof(m->m_pkthdr));
@@ -263,8 +263,8 @@ struct mbuf *
 m_inithdr(struct mbuf *m)
 {
 	/* keep in sync with m_gethdr */
-	m->m_next = (struct mbuf *)NULL;
-	m->m_nextpkt = (struct mbuf *)NULL;
+	m->m_next = NULL;
+	m->m_nextpkt = NULL;
 	m->m_data = m->m_pktdat;
 	m->m_flags = M_PKTHDR;
 	bzero(&m->m_pkthdr, sizeof(m->m_pkthdr));
@@ -596,7 +596,6 @@ m_defrag(struct mbuf *m, int how)
 		memcpy(m->m_data, m0->m_data, m0->m_len);
 	}
 	m->m_pkthdr.len = m->m_len = m0->m_len;
-	m->m_pkthdr.pf.hdr = NULL;	/* altq will cope */
 
 	m0->m_flags &= ~(M_EXT|M_CLUSTER);	/* cluster is gone */
 	m_free(m0);
@@ -1364,8 +1363,6 @@ m_print(void *v,
 		    m->m_pkthdr.csum_flags, MCS_BITS);
 		(*pr)("m_pkthdr.ether_vtag: %hu\tm_ptkhdr.ph_rtableid: %u\n",
 		    m->m_pkthdr.ether_vtag, m->m_pkthdr.ph_rtableid);
-		(*pr)("m_pkthdr.pf.hdr: %p\n",
-		    m->m_pkthdr.pf.hdr);
 		(*pr)("m_pkthdr.pf.statekey: %p\tm_pkthdr.pf.inp %p\n",
 		    m->m_pkthdr.pf.statekey, m->m_pkthdr.pf.inp);
 		(*pr)("m_pkthdr.pf.qid: %u\tm_pkthdr.pf.tag: %hu\n",
