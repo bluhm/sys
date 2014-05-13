@@ -1,4 +1,4 @@
-/*	$OpenBSD: nd6.c,v 1.114 2014/04/14 09:06:42 mpi Exp $	*/
+/*	$OpenBSD: nd6.c,v 1.116 2014/05/07 08:14:59 mpi Exp $	*/
 /*	$KAME: nd6.c,v 1.280 2002/06/08 19:52:07 itojun Exp $	*/
 
 /*
@@ -72,7 +72,6 @@ int	nd6_prune	= 1;	/* walk list every 1 seconds */
 int	nd6_delay	= 5;	/* delay first probe time 5 second */
 int	nd6_umaxtries	= 3;	/* maximum unicast query */
 int	nd6_mmaxtries	= 3;	/* maximum multicast query */
-int	nd6_useloopback = 1;	/* use loopback interface for local traffic */
 int	nd6_gctimer	= (60 * 60 * 24); /* 1 day: garbage collection timer */
 
 /* preventing too many loops in ND option parsing */
@@ -1157,21 +1156,26 @@ nd6_rtrequest(int req, struct rtentry *rt)
 				memcpy(LLADDR(SDL(gate)), macp, ifp->if_addrlen);
 				SDL(gate)->sdl_alen = ifp->if_addrlen;
 			}
-			if (nd6_useloopback) {
-				rt->rt_ifp = lo0ifp;	/*XXX*/
-				/*
-				 * Make sure rt_ifa be equal to the ifaddr
-				 * corresponding to the address.
-				 * We need this because when we refer
-				 * rt_ifa->ia6_flags in ip6_input, we assume
-				 * that the rt_ifa points to the address instead
-				 * of the loopback address.
-				 */
-				if (ifa != rt->rt_ifa) {
-					ifafree(rt->rt_ifa);
-					ifa->ifa_refcnt++;
-					rt->rt_ifa = ifa;
-				}
+
+			/*
+			 * XXX Since lo0 is in the default rdomain we
+			 * should not (ab)use it for any route related
+			 * to an interface of a different rdomain.
+			 */
+			rt->rt_ifp = lo0ifp;
+
+			/*
+			 * Make sure rt_ifa be equal to the ifaddr
+			 * corresponding to the address.
+			 * We need this because when we refer
+			 * rt_ifa->ia6_flags in ip6_input, we assume
+			 * that the rt_ifa points to the address instead
+			 * of the loopback address.
+			 */
+			if (ifa != rt->rt_ifa) {
+				ifafree(rt->rt_ifa);
+				ifa->ifa_refcnt++;
+				rt->rt_ifa = ifa;
 			}
 		} else if (rt->rt_flags & RTF_ANNOUNCE) {
 			nd6_llinfo_settimer(ln, -1);

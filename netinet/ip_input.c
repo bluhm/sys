@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_input.c,v 1.231 2014/04/21 12:22:26 henning Exp $	*/
+/*	$OpenBSD: ip_input.c,v 1.233 2014/05/10 12:30:27 claudio Exp $	*/
 /*	$NetBSD: ip_input.c,v 1.30 1996/03/16 23:53:58 christos Exp $	*/
 
 /*
@@ -238,12 +238,6 @@ ipv4_input(struct mbuf *m)
 
 	ifp = m->m_pkthdr.rcvif;
 
-	/*
-	 * If no IP addresses have been set yet but the interfaces
-	 * are receiving, can't do anything with incoming packets yet.
-	 */
-	if (TAILQ_EMPTY(&in_ifaddr))
-		goto bad;
 	ipstat.ips_total++;
 	if (m->m_len < sizeof (struct ip) &&
 	    (m = m_pullup(m, sizeof (struct ip))) == NULL) {
@@ -585,7 +579,7 @@ found:
          */
         if ((ip->ip_p == IPPROTO_ESP) || (ip->ip_p == IPPROTO_AH) ||
 	    (ip->ip_p == IPPROTO_IPCOMP))
-          goto skipipsec;
+        	goto skipipsec;
 
 	/*
 	 * If the protected packet was tunneled, then we need to
@@ -596,7 +590,7 @@ found:
 	 * to deal with that).
 	 */
 	if ((ip->ip_p == IPPROTO_IPIP) || (ip->ip_p == IPPROTO_IPV6))
-	  goto skipipsec;
+		goto skipipsec;
 
 	/*
 	 * If the protected packet is TCP or UDP, we'll do the
@@ -604,7 +598,7 @@ found:
 	 * check for bypass sockets.
 	 */
 	if ((ip->ip_p == IPPROTO_TCP) || (ip->ip_p == IPPROTO_UDP))
-	  goto skipipsec;
+		goto skipipsec;
 
 	/*
 	 * IPsec policy check for local-delivery packets. Look at the
