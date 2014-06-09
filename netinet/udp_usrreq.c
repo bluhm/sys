@@ -556,7 +556,7 @@ udp_input(struct mbuf *m, ...)
 	/*
 	 * Locate pcb for datagram.
 	 */
-#if NPF > 0
+#if 0
 	if (m->m_pkthdr.pf.statekey) {
 		inp = m->m_pkthdr.pf.statekey->inp;
 		if (inp && inp->inp_pf_sk)
