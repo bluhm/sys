@@ -1,4 +1,4 @@
-/*	$OpenBSD: pipex.c,v 1.50 2014/04/21 12:22:25 henning Exp $	*/
+/*	$OpenBSD: pipex.c,v 1.53 2014/06/13 06:47:09 yasuoka Exp $	*/
 
 /*-
  * Copyright (c) 2009 Internet Initiative Japan Inc.
@@ -1040,9 +1040,13 @@ pipex_ppp_input(struct mbuf *m0, struct pipex_session *session, int decrypted)
 
 	proto = pipex_ppp_proto(m0, session, 0, &hlen);
 #ifdef PIPEX_MPPE
-	if (pipex_session_is_mppe_accepted(session) && proto == PPP_COMP) {
+	if (proto == PPP_COMP) {
 		if (decrypted)
 			goto drop;
+
+		/* checked this on ppp_common_input() already. */
+		KASSERT(pipex_session_is_mppe_accepted(session));
+
 		m_adj(m0, hlen);
 		pipex_mppe_input(m0, session);
 		return;
@@ -1103,10 +1107,9 @@ pipex_ppp_input(struct mbuf *m0, struct pipex_session *session, int decrypted)
 	default:
 		if (decrypted)
 			goto drop;
-		KASSERT(session->protocol == PIPEX_PROTO_PPPOE);
-		/* will be proccessed by userland */
-		m_freem(m0);
-		return;
+		/* protocol must be checked on pipex_common_input() already */
+		KASSERT(0);
+		goto drop;
 	}
 
 	return;
@@ -1307,6 +1310,9 @@ pipex_common_input(struct pipex_session *session, struct mbuf *m0, int hlen,
 		break;
 
 	case PPP_COMP:
+		if (pipex_session_is_mppe_accepted(session))
+			break;
+		goto not_ours;
 #endif
 	case PPP_IP:
 #ifdef INET6
@@ -2832,6 +2838,8 @@ adjust_tcp_mss(struct mbuf *m0, int mtu)
 	if ((th->th_flags & TH_SYN) == 0)
 		goto handled;
 
+	lpktp = MIN(th->th_off << 4, lpktp);
+
 	pktp += sizeof(struct tcphdr);
 	lpktp -= sizeof(struct tcphdr);
 	while (lpktp >= TCPOLEN_MAXSEG) {
@@ -2860,7 +2868,9 @@ adjust_tcp_mss(struct mbuf *m0, int mtu)
 			break;
 		default:
 			GETCHAR(optlen, pktp);
-			pktp += 2 - optlen;
+			if (optlen < 2)	/* packet is broken */
+				goto drop;
+			pktp += optlen - 2;
 			lpktp -= optlen;
 			break;
 		}
