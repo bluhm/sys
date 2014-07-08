@@ -1,4 +1,4 @@
-/*	$OpenBSD: pfvar.h,v 1.399 2014/04/22 14:41:03 mpi Exp $ */
+/*	$OpenBSD: pfvar.h,v 1.401 2014/07/02 13:02:08 mikeb Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -1840,7 +1840,7 @@ struct pf_state_key *pf_alloc_state_key(int);
 void	pf_pkt_addr_changed(struct mbuf *);
 int	pf_state_key_attach(struct pf_state_key *, struct pf_state *, int);
 int	pf_translate(struct pf_pdesc *, struct pf_addr *, u_int16_t,
-	    struct pf_addr *, u_int16_t, u_int16_t, int, struct mbuf *);
+	    struct pf_addr *, u_int16_t, u_int16_t, int);
 int	pf_translate_af(struct pf_pdesc *);
 void	pf_route(struct mbuf **, struct pf_rule *, int,
 	    struct ifnet *, struct pf_state *);
@@ -1934,9 +1934,9 @@ extern struct pf_pool_limit	pf_pool_limits[PF_LIMIT_MAX];
 
 #endif /* _KERNEL */
 
-extern struct pf_anchor_global  pf_anchors;
-extern struct pf_anchor        pf_main_anchor;
-#define pf_main_ruleset	pf_main_anchor.ruleset
+extern struct pf_anchor_global	pf_anchors;
+extern struct pf_anchor		pf_main_anchor;
+#define pf_main_ruleset		pf_main_anchor.ruleset
 
 /* these ruleset functions can be linked into userland programs (pfctl) */
 void			 pf_init_ruleset(struct pf_ruleset *);

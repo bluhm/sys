@@ -1,4 +1,4 @@
-/*	$OpenBSD: in6_ifattach.c,v 1.70 2014/06/03 13:32:24 mpi Exp $	*/
+/*	$OpenBSD: in6_ifattach.c,v 1.72 2014/07/01 19:37:07 benno Exp $	*/
 /*	$KAME: in6_ifattach.c,v 1.124 2001/07/18 08:32:51 jinmei Exp $	*/
 
 /*
@@ -578,17 +578,6 @@ in6_ifattach(struct ifnet *ifp)
 	}
 
 	/*
-	 * quirks based on interface type
-	 */
-	switch (ifp->if_type) {
-	/* we attach a link-local address when a vhid is assigned */
-	case IFT_CARP:
-		return;
-	default:
-		break;
-	}
-
-	/*
 	 * usually, we require multicast capability to the interface
 	 */
 	if ((ifp->if_flags & IFF_MULTICAST) == 0) {
@@ -648,6 +637,7 @@ in6_ifdetach(struct ifnet *ifp)
 		if (ifa->ifa_addr->sa_family != AF_INET6)
 			continue;
 		in6_purgeaddr(ifa);
+		dohooks(ifp->if_addrhooks, 0);
 	}
 
 	/*

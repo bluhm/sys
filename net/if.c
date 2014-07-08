@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.c,v 1.290 2014/06/07 11:04:14 henning Exp $	*/
+/*	$OpenBSD: if.c,v 1.292 2014/06/26 13:08:25 mpi Exp $	*/
 /*	$NetBSD: if.c,v 1.35 1996/05/07 05:26:04 thorpej Exp $	*/
 
 /*
@@ -422,6 +422,9 @@ if_attach(struct ifnet *ifp)
 		TAILQ_INSERT_BEFORE(before, ifp, if_list);
 #else
 	TAILQ_INSERT_TAIL(&ifnet, ifp, if_list);
+#endif
+#ifdef INET6
+	ifp->if_xflags |= IFXF_NOINET6;
 #endif
 
 	m_clinitifp(ifp);
@@ -2358,6 +2361,7 @@ ifnewlladdr(struct ifnet *ifp)
 		ifa = &in6ifa_ifpforlinklocal(ifp, 0)->ia_ifa;
 		if (ifa) {
 			in6_purgeaddr(ifa);
+			dohooks(ifp->if_addrhooks, 0);
 			in6_ifattach_linklocal(ifp, NULL);
 			if (in6if_do_dad(ifp)) {
 				ifa = &in6ifa_ifpforlinklocal(ifp, 0)->ia_ifa;
