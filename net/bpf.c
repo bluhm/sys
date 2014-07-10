@@ -1,9 +1,10 @@
-/*	$OpenBSD: bpf.c,v 1.93 2014/04/23 10:50:18 jca Exp $	*/
+/*	$OpenBSD: bpf.c,v 1.101 2014/07/10 11:48:14 henning Exp $	*/
 /*	$NetBSD: bpf.c,v 1.33 1997/02/21 23:59:35 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1990, 1991, 1993
  *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 2010, 2014 Henning Brauer <henning@openbsd.org>
  *
  * This code is derived from the Stanford/CMU enet packet filter,
  * (net/enet.c) distributed as part of 4.3BSD, and code contributed
@@ -64,11 +65,6 @@
 #include <net/if_vlan_var.h>
 #endif
 
-#include "pflog.h"
-#if NPFLOG > 0
-#include <net/if_pflog.h>
-#endif
-
 #define BPF_BUFSIZE 32768
 
 #define PRINET  26			/* interruptible */
@@ -92,7 +88,10 @@ LIST_HEAD(, bpf_d) bpf_d_list;
 void	bpf_allocbufs(struct bpf_d *);
 void	bpf_freed(struct bpf_d *);
 void	bpf_ifname(struct ifnet *, struct ifreq *);
+void	_bpf_mtap(caddr_t, struct mbuf *, u_int,
+	    void (*)(const void *, void *, size_t));
 void	bpf_mcopy(const void *, void *, size_t);
+void	bpf_mcopy_stripvlan(const void *, void *, size_t);
 int	bpf_movein(struct uio *, u_int, struct mbuf **,
 	    struct sockaddr *, struct bpf_insn *);
 void	bpf_attachd(struct bpf_d *, struct bpf_if *);
@@ -164,6 +163,11 @@ bpf_movein(struct uio *uio, u_int linktype, struct mbuf **mp,
 		hlen = 0;
 		break;
 
+	case DLT_LOOP:
+		sockp->sa_family = AF_UNSPEC;
+		hlen = sizeof(u_int32_t);
+		break;
+
 	default:
 		return (EIO);
 	}
@@ -173,7 +177,7 @@ bpf_movein(struct uio *uio, u_int linktype, struct mbuf **mp,
 	len = uio->uio_resid;
 
 	MGETHDR(m, M_WAIT, MT_DATA);
-	m->m_pkthdr.rcvif = 0;
+	m->m_pkthdr.rcvif = NULL;
 	m->m_pkthdr.len = len - hlen;
 
 	if (len > MHLEN) {
@@ -204,7 +208,15 @@ bpf_movein(struct uio *uio, u_int linktype, struct mbuf **mp,
 	 * Make room for link header, and copy it to sockaddr
 	 */
 	if (hlen != 0) {
-		bcopy(m->m_data, sockp->sa_data, hlen);
+		if (linktype == DLT_LOOP) {
+			u_int32_t af;
+
+			/* the link header indicates the address family */
+			KASSERT(hlen == sizeof(u_int32_t));
+			memcpy(&af, m->m_data, hlen);
+			sockp->sa_family = ntohl(af);
+		} else
+			memcpy(sockp->sa_data, m->m_data, hlen);
 		m->m_len -= hlen;
 		m->m_data += hlen; /* XXX */
 	}
@@ -283,7 +295,7 @@ bpf_detachd(struct bpf_d *d)
 		 * Let the driver know that there are no more listeners.
 		 */
 		*d->bd_bif->bif_driverp = 0;
-	d->bd_bif = 0;
+	d->bd_bif = NULL;
 }
 
 /*
@@ -370,7 +382,7 @@ bpfread(dev_t dev, struct uio *uio, int ioflag)
 	int s;
 
 	d = bpfilter_lookup(minor(dev));
-	if (d->bd_bif == 0)
+	if (d->bd_bif == NULL)
 		return (ENXIO);
 
 	/*
@@ -470,7 +482,7 @@ bpfread(dev_t dev, struct uio *uio, int ioflag)
 
 	s = splnet();
 	d->bd_fbuf = d->bd_hbuf;
-	d->bd_hbuf = 0;
+	d->bd_hbuf = NULL;
 	d->bd_hlen = 0;
 
 	D_PUT(d);
@@ -506,7 +518,7 @@ bpfwrite(dev_t dev, struct uio *uio, int ioflag)
 	struct sockaddr_storage dst;
 
 	d = bpfilter_lookup(minor(dev));
-	if (d->bd_bif == 0)
+	if (d->bd_bif == NULL)
 		return (ENXIO);
 
 	ifp = d->bd_bif->bif_ifp;
@@ -529,12 +541,11 @@ bpfwrite(dev_t dev, struct uio *uio, int ioflag)
 
 	m->m_pkthdr.ph_rtableid = ifp->if_rdomain;
 
-	if (d->bd_hdrcmplt)
+	if (d->bd_hdrcmplt && dst.ss_family == AF_UNSPEC)
 		dst.ss_family = pseudo_AF_HDRCMPLT;
 
 	s = splsoftnet();
-	error = (*ifp->if_output)(ifp, m, (struct sockaddr *)&dst,
-	    (struct rtentry *)0);
+	error = (*ifp->if_output)(ifp, m, (struct sockaddr *)&dst, NULL);
 	splx(s);
 	/*
 	 * The driver frees the mbuf.
@@ -552,7 +563,7 @@ bpf_reset_d(struct bpf_d *d)
 	if (d->bd_hbuf) {
 		/* Free the hold buffer. */
 		d->bd_fbuf = d->bd_hbuf;
-		d->bd_hbuf = 0;
+		d->bd_hbuf = NULL;
 	}
 	d->bd_slen = 0;
 	d->bd_hlen = 0;
@@ -646,7 +657,7 @@ bpfioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct proc *p)
 	 * Set buffer length.
 	 */
 	case BIOCSBLEN:
-		if (d->bd_bif != 0)
+		if (d->bd_bif != NULL)
 			error = EINVAL;
 		else {
 			u_int size = *(u_int *)addr;
@@ -686,7 +697,7 @@ bpfioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct proc *p)
 	 * Put interface into promiscuous mode.
 	 */
 	case BIOCPROMISC:
-		if (d->bd_bif == 0) {
+		if (d->bd_bif == NULL) {
 			/*
 			 * No interface attached yet.
 			 */
@@ -716,7 +727,7 @@ bpfioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct proc *p)
 	 * Get device parameters.
 	 */
 	case BIOCGDLT:
-		if (d->bd_bif == 0)
+		if (d->bd_bif == NULL)
 			error = EINVAL;
 		else
 			*(u_int *)addr = d->bd_bif->bif_dlt;
@@ -736,7 +747,7 @@ bpfioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct proc *p)
 	 * Set interface name.
 	 */
 	case BIOCGETIF:
-		if (d->bd_bif == 0)
+		if (d->bd_bif == NULL)
 			error = EINVAL;
 		else
 			bpf_ifname(d->bd_bif->bif_ifp, (struct ifreq *)addr);
@@ -897,13 +908,12 @@ bpf_setf(struct bpf_d *d, struct bpf_program *fp, int wf)
 			return (EINVAL);
 		s = splnet();
 		if (wf)
-			d->bd_wfilter = 0;
+			d->bd_wfilter = NULL;
 		else
-			d->bd_rfilter = 0;
+			d->bd_rfilter = NULL;
 		bpf_reset_d(d);
 		splx(s);
-		if (old != 0)
-			free((caddr_t)old, M_DEVBUF);
+		free(old, M_DEVBUF);
 		return (0);
 	}
 	flen = fp->bf_len;
@@ -921,12 +931,11 @@ bpf_setf(struct bpf_d *d, struct bpf_program *fp, int wf)
 			d->bd_rfilter = fcode;
 		bpf_reset_d(d);
 		splx(s);
-		if (old != 0)
-			free((caddr_t)old, M_DEVBUF);
+		free(old, M_DEVBUF);
 
 		return (0);
 	}
-	free((caddr_t)fcode, M_DEVBUF);
+	free(fcode, M_DEVBUF);
 	return (EINVAL);
 }
 
@@ -944,16 +953,13 @@ bpf_setif(struct bpf_d *d, struct ifreq *ifr)
 	/*
 	 * Look through attached interfaces for the named one.
 	 */
-	for (bp = bpf_iflist; bp != 0; bp = bp->bif_next) {
+	for (bp = bpf_iflist; bp != NULL; bp = bp->bif_next) {
 		struct ifnet *ifp = bp->bif_ifp;
 
-		if (ifp == 0 ||
+		if (ifp == NULL ||
 		    strcmp(ifp->if_xname, ifr->ifr_name) != 0)
 			continue;
 
-		/*
-		 * We found the requested interface.
-		 */
 		if (candidate == NULL || candidate->bif_dlt > bp->bif_dlt)
 			candidate = bp;
 	}
@@ -964,7 +970,7 @@ bpf_setif(struct bpf_d *d, struct ifreq *ifr)
 		 * If we're already attached to requested interface,
 		 * just flush the buffer.
 		 */
-		if (d->bd_sbuf == 0)
+		if (d->bd_sbuf == NULL)
 			bpf_allocbufs(d);
 		s = splnet();
 		if (candidate != d->bd_bif) {
@@ -1116,7 +1122,7 @@ bpf_tap(caddr_t arg, u_char *pkt, u_int pktlen, u_int direction)
 	 * interfaces shared any data.  This is not the case.
 	 */
 	bp = (struct bpf_if *)arg;
-	for (d = bp->bif_dlist; d != 0; d = d->bd_next) {
+	for (d = bp->bif_dlist; d != NULL; d = d->bd_next) {
 		++d->bd_rcount;
 		if ((direction & d->bd_dirfilt) != 0)
 			slen = 0;
@@ -1159,10 +1165,51 @@ bpf_mcopy(const void *src_arg, void *dst_arg, size_t len)
 }
 
 /*
- * Incoming linkage from device drivers, when packet is in an mbuf chain.
+ * Copy an ethernet frame from an mbuf chain into a buffer, strip the
+ * vlan header bits
  */
 void
-bpf_mtap(caddr_t arg, struct mbuf *m, u_int direction)
+bpf_mcopy_stripvlan(const void *src_arg, void *dst_arg, size_t len)
+{
+#if NVLAN > 0
+	const struct mbuf		*m;
+	u_int				 count, copied = 0, hdrdone = 0;
+	u_char				*dst;
+	struct ether_vlan_header	*evh;
+
+	m = src_arg;
+	dst = dst_arg;
+	evh = dst_arg;
+	while (len > 0) {
+		if (m == 0)
+			panic("bpf_mcopy_stripvlan");
+		count = min(m->m_len, len);
+		bcopy(mtod(m, caddr_t), (caddr_t)dst, count);
+		m = m->m_next;
+		dst += count;
+		len -= count;
+		copied += count;
+		if (!hdrdone && copied >= sizeof(struct ether_vlan_header) &&
+		    (ntohs(evh->evl_encap_proto) == ETHERTYPE_VLAN ||
+		    ntohs(evh->evl_encap_proto) == ETHERTYPE_QINQ)) {
+			/* move up by 4 bytes, overwrite encap_proto + tag */
+			memmove(&evh->evl_encap_proto, &evh->evl_proto, copied -
+			    offsetof(struct ether_vlan_header, evl_proto));
+			dst -= (offsetof(struct ether_vlan_header, evl_proto) -
+			    offsetof(struct ether_vlan_header,
+			    evl_encap_proto)); /* long expression for "4" */
+			hdrdone = 1;
+		}
+	}
+#endif
+}
+
+/*
+ * like bpf_mtap, but copy fn can be given. used by various bpf_mtap*
+ */
+void
+_bpf_mtap(caddr_t arg, struct mbuf *m, u_int direction,
+    void (*cpfn)(const void *, void *, size_t))
 {
 	struct bpf_if *bp = (struct bpf_if *)arg;
 	struct bpf_d *d;
@@ -1174,11 +1221,14 @@ bpf_mtap(caddr_t arg, struct mbuf *m, u_int direction)
 	if (m == NULL)
 		return;
 
+	if (cpfn == NULL)
+		cpfn = bpf_mcopy;
+
 	pktlen = 0;
-	for (m0 = m; m0 != 0; m0 = m0->m_next)
+	for (m0 = m; m0 != NULL; m0 = m0->m_next)
 		pktlen += m0->m_len;
 
-	for (d = bp->bif_dlist; d != 0; d = d->bd_next) {
+	for (d = bp->bif_dlist; d != NULL; d = d->bd_next) {
 		++d->bd_rcount;
 		if ((direction & d->bd_dirfilt) != 0)
 			slen = 0;
@@ -1191,10 +1241,26 @@ bpf_mtap(caddr_t arg, struct mbuf *m, u_int direction)
 
 		if (!gottime++)
 			microtime(&tv);
-		bpf_catchpacket(d, (u_char *)m, pktlen, slen, bpf_mcopy, &tv);
+		bpf_catchpacket(d, (u_char *)m, pktlen, slen, cpfn, &tv);
 		if (d->bd_fildrop)
 			m->m_flags |= M_FILDROP;
 	}
+}
+
+/*
+ * Incoming linkage from device drivers, when packet is in an mbuf chain.
+ */
+void
+bpf_mtap(caddr_t arg, struct mbuf *m, u_int direction)
+{
+	_bpf_mtap(arg, m, direction, NULL);
+}
+
+/* like bpf_mtap, but strip the vlan header, leave regular ethernet hdr */
+void
+bpf_mtap_stripvlan(caddr_t arg, struct mbuf *m, u_int direction)
+{
+	_bpf_mtap(arg, m, direction, bpf_mcopy_stripvlan);
 }
 
 /*
@@ -1208,17 +1274,23 @@ bpf_mtap(caddr_t arg, struct mbuf *m, u_int direction)
  */
 void
 bpf_mtap_hdr(caddr_t arg, caddr_t data, u_int dlen, struct mbuf *m,
-    u_int direction)
+    u_int direction, void (*cpfn)(const void *, void *, size_t))
 {
-	struct m_hdr mh;
+	struct m_hdr	 mh;
+	struct mbuf	*m0;
 
-	mh.mh_flags = 0;
-	mh.mh_next = m;
-	mh.mh_len = dlen;
-	mh.mh_data = data;
+	if (dlen > 0) {
+		mh.mh_flags = 0;
+		mh.mh_next = m;
+		mh.mh_len = dlen;
+		mh.mh_data = data;
+		m0 = (struct mbuf *)&mh;
+	} else 
+		m0 = m;
 
-	bpf_mtap(arg, (struct mbuf *) &mh, direction);
-	m->m_flags |= mh.mh_flags & M_FILDROP;
+	_bpf_mtap(arg, m0, direction, cpfn);
+	if (m0 != m)
+		m->m_flags |= m0->m_flags & M_FILDROP;
 }
 
 /*
@@ -1233,17 +1305,10 @@ bpf_mtap_hdr(caddr_t arg, caddr_t data, u_int dlen, struct mbuf *m,
 void
 bpf_mtap_af(caddr_t arg, u_int32_t af, struct mbuf *m, u_int direction)
 {
-	struct m_hdr mh;
 	u_int32_t    afh;
 
-	mh.mh_flags = 0;
-	mh.mh_next = m;
-	mh.mh_len = 4;
 	afh = htonl(af);
-	mh.mh_data = (caddr_t)&afh;
-
-	bpf_mtap(arg, (struct mbuf *) &mh, direction);
-	m->m_flags |= mh.mh_flags & M_FILDROP;
+	bpf_mtap_hdr(arg, (caddr_t)&afh, 4, m, direction, NULL);
 }
 
 /*
@@ -1259,7 +1324,6 @@ void
 bpf_mtap_ether(caddr_t arg, struct mbuf *m, u_int direction)
 {
 #if NVLAN > 0
-	struct m_hdr mh;
 	struct ether_vlan_header evh;
 
 	if ((m->m_flags & M_VLANTAG) == 0)
@@ -1277,62 +1341,12 @@ bpf_mtap_ether(caddr_t arg, struct mbuf *m, u_int direction)
 	m->m_len -= ETHER_HDR_LEN;
 	m->m_data += ETHER_HDR_LEN;
 
-	mh.mh_flags = 0;
-	mh.mh_next = m;
-	mh.mh_len = sizeof(evh);
-	mh.mh_data = (caddr_t)&evh;
-
-	bpf_mtap(arg, (struct mbuf *) &mh, direction);
-	m->m_flags |= mh.mh_flags & M_FILDROP;
+	bpf_mtap_hdr(arg, (caddr_t)&evh, sizeof(evh), m, direction, NULL);
 
 	m->m_len += ETHER_HDR_LEN;
 	m->m_data -= ETHER_HDR_LEN;
 #endif
 }
-
-void
-bpf_mtap_pflog(caddr_t arg, caddr_t data, struct mbuf *m)
-{
-#if NPFLOG > 0
-	struct m_hdr mh;
-	struct bpf_if *bp = (struct bpf_if *)arg;
-	struct bpf_d *d;
-	size_t pktlen, slen;
-	struct mbuf *m0;
-	struct timeval tv;
-	int gottime = 0;
-
-	if (m == NULL)
-		return;
-
-	mh.mh_flags = 0;
-	mh.mh_next = m;
-	mh.mh_len = PFLOG_HDRLEN;
-	mh.mh_data = data;
-
-	pktlen = mh.mh_len;
-	for (m0 = m; m0 != 0; m0 = m0->m_next)
-		pktlen += m0->m_len;
-
-	for (d = bp->bif_dlist; d != 0; d = d->bd_next) {
-		++d->bd_rcount;
-		if ((BPF_DIRECTION_OUT & d->bd_dirfilt) != 0)
-			slen = 0;
-		else
-			slen = bpf_filter(d->bd_rfilter, (u_char *)&mh,
-			    pktlen, 0);
-
-		if (slen == 0)
-			continue;
-
-		if (!gottime++)
-			microtime(&tv);
-		bpf_catchpacket(d, (u_char *)&mh, pktlen, slen, pflog_bpfcopy,
-		    &tv);
-	}
-#endif
-}
-
 
 /*
  * Move the packet data from interface memory (pkt) into the
@@ -1370,7 +1384,7 @@ bpf_catchpacket(struct bpf_d *d, u_char *pkt, size_t pktlen, size_t snaplen,
 		 * Rotate the buffers if we can, then wakeup any
 		 * pending reads.
 		 */
-		if (d->bd_fbuf == 0) {
+		if (d->bd_fbuf == NULL) {
 			/*
 			 * We haven't completed the previous read yet,
 			 * so drop the packet.
@@ -1441,17 +1455,11 @@ bpf_freed(struct bpf_d *d)
 	if (--d->bd_ref > 0)
 		return;
 
-	if (d->bd_sbuf != 0) {
-		free(d->bd_sbuf, M_DEVBUF);
-		if (d->bd_hbuf != 0)
-			free(d->bd_hbuf, M_DEVBUF);
-		if (d->bd_fbuf != 0)
-			free(d->bd_fbuf, M_DEVBUF);
-	}
-	if (d->bd_rfilter)
-		free((caddr_t)d->bd_rfilter, M_DEVBUF);
-	if (d->bd_wfilter)
-		free((caddr_t)d->bd_wfilter, M_DEVBUF);
+	free(d->bd_sbuf, M_DEVBUF);
+	free(d->bd_hbuf, M_DEVBUF);
+	free(d->bd_fbuf, M_DEVBUF);
+	free(d->bd_rfilter, M_DEVBUF);
+	free(d->bd_wfilter, M_DEVBUF);
 
 	bpfilter_destroy(d);
 }
@@ -1465,11 +1473,9 @@ void
 bpfattach(caddr_t *driverp, struct ifnet *ifp, u_int dlt, u_int hdrlen)
 {
 	struct bpf_if *bp;
-	bp = (struct bpf_if *)malloc(sizeof(*bp), M_DEVBUF, M_NOWAIT);
 
-	if (bp == 0)
+	if ((bp = malloc(sizeof(*bp), M_DEVBUF, M_NOWAIT)) == NULL)
 		panic("bpfattach");
-
 	bp->bif_dlist = 0;
 	bp->bif_driverp = (struct bpf_if **)driverp;
 	bp->bif_ifp = ifp;

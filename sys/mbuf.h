@@ -1,4 +1,4 @@
-/*	$OpenBSD: mbuf.h,v 1.176 2014/04/22 14:41:03 mpi Exp $	*/
+/*	$OpenBSD: mbuf.h,v 1.179 2014/07/09 13:05:45 dlg Exp $	*/
 /*	$NetBSD: mbuf.h,v 1.19 1996/02/09 18:25:14 christos Exp $	*/
 
 /*
@@ -126,11 +126,8 @@ struct mbuf_ext {
 	caddr_t	ext_buf;		/* start of buffer */
 					/* free routine if not the usual */
 	void	(*ext_free)(caddr_t, u_int, void *);
-	void	*ext_arg;		/* argument for ext_free */
+	void	*ext_arg;
 	u_int	ext_size;		/* size of buffer, for ext_free */
-	int	ext_type;
-	u_short	ext_ifidx;		/* index of the interface */
-	int	ext_backend;		/* backend pool the storage came from */
 	struct mbuf *ext_nextref;
 	struct mbuf *ext_prevref;
 #ifdef DEBUG
@@ -302,7 +299,6 @@ struct mbuf {
 	(m)->m_ext.ext_size = (size);					\
 	(m)->m_ext.ext_free = (free);					\
 	(m)->m_ext.ext_arg = (arg);					\
-	(m)->m_ext.ext_type = (type);					\
 	MCLINITREFERENCE(m);						\
 } while (/* CONSTCOND */ 0)
 
@@ -432,11 +428,6 @@ struct  mbuf *m_getptr(struct mbuf *, int, int *);
 int	m_leadingspace(struct mbuf *);
 int	m_trailingspace(struct mbuf *);
 struct mbuf *m_clget(struct mbuf *, int, struct ifnet *, u_int);
-void	m_clsetwms(struct ifnet *, u_int, u_int, u_int);
-int	m_cldrop(struct ifnet *, int);
-void	m_clcount(struct ifnet *, int);
-void	m_cluncount(struct mbuf *, int);
-void	m_clinitifp(struct ifnet *);
 void	m_adj(struct mbuf *, int);
 int	m_copyback(struct mbuf *, int, int, const void *, int);
 void	m_freem(struct mbuf *);
