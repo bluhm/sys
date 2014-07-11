@@ -703,6 +703,9 @@ pf_refragment6(struct mbuf **m0, struct m_tag *mtag, int dir)
 	mtag = NULL;
 	ftag = NULL;
 
+	/* Checksum must be calculated for the whole packet */
+	in6_proto_cksum_out(m, NULL);
+
 	if (extoff) {
 		int off;
 
