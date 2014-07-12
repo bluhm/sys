@@ -1,4 +1,4 @@
-/*	$OpenBSD: bpf.c,v 1.101 2014/07/10 11:48:14 henning Exp $	*/
+/*	$OpenBSD: bpf.c,v 1.103 2014/07/12 18:44:22 tedu Exp $	*/
 /*	$NetBSD: bpf.c,v 1.33 1997/02/21 23:59:35 thorpej Exp $	*/
 
 /*
@@ -913,7 +913,7 @@ bpf_setf(struct bpf_d *d, struct bpf_program *fp, int wf)
 			d->bd_rfilter = NULL;
 		bpf_reset_d(d);
 		splx(s);
-		free(old, M_DEVBUF);
+		free(old, M_DEVBUF, 0);
 		return (0);
 	}
 	flen = fp->bf_len;
@@ -931,11 +931,11 @@ bpf_setf(struct bpf_d *d, struct bpf_program *fp, int wf)
 			d->bd_rfilter = fcode;
 		bpf_reset_d(d);
 		splx(s);
-		free(old, M_DEVBUF);
+		free(old, M_DEVBUF, 0);
 
 		return (0);
 	}
-	free(fcode, M_DEVBUF);
+	free(fcode, M_DEVBUF, 0);
 	return (EINVAL);
 }
 
@@ -1308,7 +1308,7 @@ bpf_mtap_af(caddr_t arg, u_int32_t af, struct mbuf *m, u_int direction)
 	u_int32_t    afh;
 
 	afh = htonl(af);
-	bpf_mtap_hdr(arg, (caddr_t)&afh, 4, m, direction, NULL);
+	bpf_mtap_hdr(arg, (caddr_t)&afh, sizeof(afh), m, direction, NULL);
 }
 
 /*
@@ -1455,11 +1455,11 @@ bpf_freed(struct bpf_d *d)
 	if (--d->bd_ref > 0)
 		return;
 
-	free(d->bd_sbuf, M_DEVBUF);
-	free(d->bd_hbuf, M_DEVBUF);
-	free(d->bd_fbuf, M_DEVBUF);
-	free(d->bd_rfilter, M_DEVBUF);
-	free(d->bd_wfilter, M_DEVBUF);
+	free(d->bd_sbuf, M_DEVBUF, 0);
+	free(d->bd_hbuf, M_DEVBUF, 0);
+	free(d->bd_fbuf, M_DEVBUF, 0);
+	free(d->bd_rfilter, M_DEVBUF, 0);
+	free(d->bd_wfilter, M_DEVBUF, 0);
 
 	bpfilter_destroy(d);
 }
@@ -1528,7 +1528,7 @@ bpfdetach(struct ifnet *ifp)
 					}
 			}
 
-			free(bp, M_DEVBUF);
+			free(bp, M_DEVBUF, 0);
 		} else
 			pbp = &bp->bif_next;
 	}
@@ -1599,7 +1599,7 @@ void
 bpfilter_destroy(struct bpf_d *bd)
 {
 	LIST_REMOVE(bd, bd_list);
-	free(bd, M_DEVBUF);
+	free(bd, M_DEVBUF, 0);
 }
 
 /*
