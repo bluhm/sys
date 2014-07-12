@@ -1,4 +1,4 @@
-/*	$OpenBSD: in6_proto.c,v 1.70 2014/07/09 08:07:53 benno Exp $	*/
+/*	$OpenBSD: in6_proto.c,v 1.72 2014/07/11 16:39:06 henning Exp $	*/
 /*	$KAME: in6_proto.c,v 1.66 2000/10/10 15:35:47 itojun Exp $	*/
 
 /*
@@ -275,7 +275,6 @@ int	ip6_multipath = 0;	/* no using multipath routes unless ... */
 int	ip6_sendredirects = 1;
 int	ip6_defhlim = IPV6_DEFHLIM;
 int	ip6_defmcasthlim = IPV6_DEFAULT_MULTICAST_HOPS;
-int	ip6_accept_rtadv = 0;	/* enabling forwarding and rtadv concurrently is dangerous */
 int	ip6_maxfragpackets = 200;
 int	ip6_maxfrags = 200;
 int	ip6_log_interval = 5;
@@ -308,5 +307,4 @@ u_long	rip6_recvspace = RIPV6RCVQ;
 int	icmp6_rediraccept = 0;		/* don't process redirects by default */
 int	icmp6_redirtimeout = 10 * 60;	/* 10 minutes */
 int	icmp6errppslim = 100;		/* 100pps */
-int	icmp6_nodeinfo = 0;		/* enable/disable NI response */
 int	ip6_mtudisc_timeout = IPMTUDISCTIMEOUT;

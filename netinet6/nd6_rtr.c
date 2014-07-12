@@ -1,4 +1,4 @@
-/*	$OpenBSD: nd6_rtr.c,v 1.80 2014/03/27 10:39:23 mpi Exp $	*/
+/*	$OpenBSD: nd6_rtr.c,v 1.82 2014/07/11 16:39:06 henning Exp $	*/
 /*	$KAME: nd6_rtr.c,v 1.97 2001/02/07 11:09:13 itojun Exp $	*/
 
 /*
@@ -108,8 +108,8 @@ nd6_rs_input(struct mbuf *m, int off, int icmp6len)
 	union nd_opts ndopts;
 	char src[INET6_ADDRSTRLEN], dst[INET6_ADDRSTRLEN];
 
-	/* If I'm not a router, ignore it. */
-	if (ip6_accept_rtadv != 0 || !ip6_forwarding)
+	/* If I'm not a router, ignore it. XXX - too restrictive? */
+	if (!ip6_forwarding || (ifp->if_xflags & IFXF_AUTOCONF6))
 		goto freeit;
 
 	/* Sanity checks */
@@ -195,12 +195,8 @@ nd6_ra_input(struct mbuf *m, int off, int icmp6len)
 	struct nd_defrouter *dr;
 	char src[INET6_ADDRSTRLEN], dst[INET6_ADDRSTRLEN];
 
-	/*
-	 * We only accept RAs only when
-	 * the system-wide variable allows the acceptance, and
-	 * per-interface variable allows RAs on the receiving interface.
-	 */
-	if (ip6_accept_rtadv == 0)
+	/* We accept RAs only if inet6 autoconf is enabled  */
+	if (!(ifp->if_xflags & IFXF_AUTOCONF6))
 		goto freeit;
 	if (!(ndi->flags & ND6_IFF_ACCEPT_RTADV))
 		goto freeit;
@@ -485,7 +481,8 @@ defrtrlist_del(struct nd_defrouter *dr)
 	 * Flush all the routing table entries that use the router
 	 * as a next hop.
 	 */
-	if (!ip6_forwarding && ip6_accept_rtadv) /* XXX: better condition? */
+	/* XXX: better condition? */
+	if (!ip6_forwarding && (dr->ifp->if_xflags & IFXF_AUTOCONF6))
 		rt6_flush(&dr->rtaddr, dr->ifp);
 
 	if (dr->installed) {
@@ -623,10 +620,11 @@ defrouter_select(void)
 	 * if the node is not an autoconfigured host, we explicitly exclude
 	 * such cases here for safety.
 	 */
-	if (ip6_forwarding || !ip6_accept_rtadv) {
+	/* XXX too strict? */
+	if (ip6_forwarding) {
 		nd6log((LOG_WARNING,
-		    "defrouter_select: called unexpectedly (forwarding=%d, "
-		    "accept_rtadv=%d)\n", ip6_forwarding, ip6_accept_rtadv));
+		    "defrouter_select: called unexpectedly (forwarding=%d)\n",
+		    ip6_forwarding));
 		splx(s);
 		return;
 	}
@@ -646,6 +644,8 @@ defrouter_select(void)
 	 * the ordering rule of the list described in defrtrlist_update().
 	 */
 	TAILQ_FOREACH(dr, &nd_defrouter, dr_entry) {
+		if (!(dr->ifp->if_xflags & IFXF_AUTOCONF6))
+			continue;
 		if (!selected_dr &&
 		    (rt = nd6_lookup(&dr->rtaddr, 0, dr->ifp,
 		     dr->ifp->if_rdomain)) &&
@@ -782,7 +782,7 @@ defrtrlist_update(struct nd_defrouter *new)
 	/* entry does not exist */
 	if (new->rtlifetime == 0) {
 		/* flush all possible redirects */
-		if (!ip6_forwarding && ip6_accept_rtadv)
+		if (!ip6_forwarding && (new->ifp->if_xflags & IFXF_AUTOCONF6))
 			rt6_flush(&new->rtaddr, new->ifp);
 		splx(s);
 		return (NULL);
@@ -941,6 +941,8 @@ nd6_prelist_add(struct nd_prefix *pr, struct nd_defrouter *dr,
 	for (i = 0; i < 4; i++)
 		new->ndpr_prefix.sin6_addr.s6_addr32[i] &=
 		    new->ndpr_mask.s6_addr32[i];
+
+	task_set(&new->ndpr_task, nd6_addr_add, new, NULL);
 
 	s = splsoftnet();
 	/* link ndpr_entry to nd_prefix list */
@@ -1277,9 +1279,11 @@ prelist_update(struct nd_prefix *new, struct nd_defrouter *dr, struct mbuf *m)
 		 * 4941 temporary address. And the valid prefix lifetime is
 		 * non-zero. And there is no static address in the same prefix.
 		 * Create new addresses in process context.
+		 * Increment prefix refcount to ensure the prefix is not
+		 * removed before the task is done.
 		 */
 		pr->ndpr_refcnt++;
-		if (workq_add_task(NULL, 0, nd6_addr_add, pr, NULL))
+		if (task_add(systq, &pr->ndpr_task) == 0)
 			pr->ndpr_refcnt--;
 	}
 
@@ -1293,51 +1297,12 @@ nd6_addr_add(void *prptr, void *arg2)
 {
 	struct nd_prefix *pr = (struct nd_prefix *)prptr;
 	struct in6_ifaddr *ia6 = NULL;
-	struct ifaddr *ifa;
-	int ifa_plen, autoconf, privacy, s;
+	int autoconf, privacy, s;
 
 	s = splsoftnet();
 
 	autoconf = 1;
 	privacy = (pr->ndpr_ifp->if_xflags & IFXF_INET6_NOPRIVACY) == 0;
-
-	/* Because prelist_update() runs in interrupt context it may run
-	 * again before this work queue task is run, causing multiple work
-	 * queue tasks to be scheduled all of which add addresses for the
-	 * same prefix. So check again if a non-deprecated address has already
-	 * been autoconfigured for this prefix. */
-	TAILQ_FOREACH(ifa, &pr->ndpr_ifp->if_addrlist, ifa_list) {
-		if (ifa->ifa_addr->sa_family != AF_INET6)
-			continue;
-
-		ia6 = ifatoia6(ifa);
-
-		/*
-		 * Spec is not clear here, but I believe we should concentrate
-		 * on unicast (i.e. not anycast) addresses.
-		 * XXX: other ia6_flags? detached or duplicated?
-		 */
-		if ((ia6->ia6_flags & IN6_IFF_ANYCAST) != 0)
-			continue;
-
-		if ((ia6->ia6_flags & IN6_IFF_AUTOCONF) == 0)
-			continue;
-
-		if ((ia6->ia6_flags & IN6_IFF_DEPRECATED) != 0)
-			continue;
-
-		ifa_plen = in6_mask2len(&ia6->ia_prefixmask.sin6_addr, NULL);
-		if (ifa_plen == pr->ndpr_plen &&
-		    in6_are_prefix_equal(&ia6->ia_addr.sin6_addr,
-		    &pr->ndpr_prefix.sin6_addr, ifa_plen)) {
-			if ((ia6->ia6_flags & IN6_IFF_PRIVACY) == 0)
-				autoconf = 0;
-			else
-				privacy = 0;
-			if (!autoconf && !privacy)
-				break;
-		}
-	}
 
 	if (autoconf && (ia6 = in6_ifadd(pr, 0)) != NULL) {
 		ia6->ia6_ndpr = pr;
@@ -1359,6 +1324,7 @@ nd6_addr_add(void *prptr, void *arg2)
 	if (autoconf || privacy)
 		pfxlist_onlink_check();
 
+	/* Decrement prefix refcount now that the task is done. */
 	pr->ndpr_refcnt--;
 
 	splx(s);
