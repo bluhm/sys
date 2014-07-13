@@ -5276,7 +5276,9 @@ addlog("\n");
 				m_copyback(pd->m, pd->off,
 				    sizeof(struct icmp6_hdr), pd->hdr.icmp6,
 				    M_NOWAIT);
-				m_copyback(pd->m, pd2.off,
+				m_copyback(pd2.m, ipoff2, sizeof(h2_6), &h2_6,
+				    M_NOWAIT);
+				m_copyback(pd2.m, pd2.off,
 				    sizeof(struct icmp6_hdr), &iih, M_NOWAIT);
 				copyback = 1;
 			}
