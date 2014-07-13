@@ -4506,6 +4506,7 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **state,
 
 	struct pf_state_key_cmp key;
 
+log(LOG_DEBUG, "pf_test_state_icmp: I was here\n");
 	switch (pd->proto) {
 #ifdef INET
 	case IPPROTO_ICMP:
@@ -4646,6 +4647,7 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **state,
 #endif /* INET && INET6 */
 		}
 	} else {
+log(LOG_DEBUG, "pf_test_state_icmp: I was in else\n");
 		/*
 		 * ICMP error message in response to a TCP/UDP packet.
 		 * Extract the inner TCP/UDP header and search for that state.
@@ -5139,6 +5141,7 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **state,
 		case IPPROTO_ICMPV6: {
 			struct icmp6_hdr	iih;
 
+log(LOG_DEBUG, "pf_test_state_icmp: I was in icmpv6\n");
 			if (pd2.af != AF_INET6) {
 				REASON_SET(reason, PFRES_NORM);
 				return (PF_DROP);
@@ -5169,6 +5172,8 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **state,
 					return (ret);
 			}
 
+log(LOG_DEBUG, "pf_test_state_icmp: wire key %p, stack key %p\n",
+    (*state)->key[PF_SK_WIRE], (*state)->key[PF_SK_STACK]);
 			/* translate source/destination address, if necessary */
 			if ((*state)->key[PF_SK_WIRE] !=
 			    (*state)->key[PF_SK_STACK]) {
@@ -5221,11 +5226,22 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **state,
 				}
 #endif /* INET */
 
+log(LOG_DEBUG, "pf_test_state_icmp: change src");
+addlog(" inner ");
+pf_print_host(pd2.src, (virtual_type == htons(ICMP6_ECHO_REQUEST))
+    ? iih.icmp6_id : 0, AF_INET6);
+addlog(" outer ");
+pf_print_host(daddr, 0, AF_INET6);
+addlog(" new ");
+pf_print_host(&nk->addr[pd2.sidx], (virtual_type == htons(ICMP6_ECHO_REQUEST))
+    ? nk->port[iidx] : 0, AF_INET6);
+addlog("\n");
 				if (PF_ANEQ(pd2.src,
 				    &nk->addr[pd2.sidx], pd2.af) ||
 				    ((virtual_type ==
 				    htons(ICMP6_ECHO_REQUEST)) &&
 				    nk->port[pd2.sidx] != iih.icmp6_id))
+{
 					pf_change_icmp(pd, pd2.src,
 					    (virtual_type ==
 					    htons(ICMP6_ECHO_REQUEST))
@@ -5234,6 +5250,7 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **state,
 					    (virtual_type ==
 					    htons(ICMP6_ECHO_REQUEST))
 					    ? nk->port[iidx] : 0, AF_INET6);
+}
 
 				if (PF_ANEQ(pd2.dst, &nk->addr[pd2.didx],
 				    pd2.af) || pd2.rdomain != nk->rdomain)
@@ -5242,9 +5259,19 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **state,
 
 				if (PF_ANEQ(pd2.dst,
 				    &nk->addr[pd2.didx], pd2.af))
+{
+log(LOG_DEBUG, "pf_test_state_icmp: change dst");
+addlog(" inner ");
+pf_print_host(pd2.dst, 0, AF_INET6);
+addlog(" outer ");
+pf_print_host(saddr, 0, AF_INET6);
+addlog(" new ");
+pf_print_host(&nk->addr[pd2.didx], 0, AF_INET6);
+addlog("\n");
 					pf_change_icmp(pd, pd2.dst, NULL,
 					    saddr, &nk->addr[pd2.didx], 0,
 					    AF_INET6);
+}
 
 				m_copyback(pd->m, pd->off,
 				    sizeof(struct icmp6_hdr), pd->hdr.icmp6,
