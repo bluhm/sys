@@ -1,4 +1,4 @@
-/*	$OpenBSD: machdep.c,v 1.185 2014/07/11 22:28:05 uebayasi Exp $	*/
+/*	$OpenBSD: machdep.c,v 1.188 2014/07/13 22:53:38 uebayasi Exp $	*/
 /*	$NetBSD: machdep.c,v 1.3 2003/05/07 22:58:18 fvdl Exp $	*/
 
 /*-
@@ -773,10 +773,9 @@ boot(int howto)
 	delay(4*1000000);	/* XXX */
 
 	uvm_shutdown();
-	splhigh();		/* Disable interrupts. */
+	splhigh();
 	cold = 1;
 
-	/* Do a dump if requested. */
 	if (howto & RB_DUMP)
 		dumpsys();
 
@@ -813,7 +812,7 @@ haltsys:
 		delay(cpureset_delay * 1000);
 	cpu_reset();
 	for(;;) ;
-	/*NOTREACHED*/
+	/* NOTREACHED */
 }
 
 /*
@@ -1862,7 +1861,7 @@ getbootinfo(char *bootinfo, int bootinfo_size)
 				int unit = minor(cdp->consdev);
 				int consaddr = cdp->consaddr;
 				if (consaddr == -1 && unit >= 0 &&
-				    unit < (sizeof(ports)/sizeof(ports[0])))
+				    unit < nitems(ports))
 					consaddr = ports[unit];
 				if (major(cdp->consdev) == 8 &&
 				    consaddr != -1) {
