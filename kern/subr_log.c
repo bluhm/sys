@@ -349,6 +349,7 @@ sys_sendsyslog(struct proc *p, void *v, register_t *retval)
 	struct iovec aiov;
 	struct uio auio;
 	struct file *f;
+	size_t len;
 	int error;
 
 	if (syslogf == NULL)
@@ -374,12 +375,15 @@ sys_sendsyslog(struct proc *p, void *v, register_t *retval)
 	}
 #endif
 
+	len = aiov.iov_len;
 	error = sosend(f->f_data, NULL, &auio, NULL, NULL, 0);
+	if (error == 0)
+		len -= auio.uio_resid;
 
 #ifdef KTRACE
 	if (ktriov != NULL) {
 		if (error == 0)
-			ktrgenio(p, 0, UIO_WRITE, ktriov, aiov.iov_len);
+			ktrgenio(p, -1, UIO_WRITE, ktriov, len);
 		free(ktriov, M_TEMP, 0);
 	}
 #endif
