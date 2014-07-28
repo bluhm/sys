@@ -375,7 +375,7 @@ sys_sendsyslog(struct proc *p, void *v, register_t *retval)
 	}
 #endif
 
-	len = aiov.iov_len;
+	len = auio.uio_resid;
 	error = sosend(f->f_data, NULL, &auio, NULL, NULL, 0);
 	if (error == 0)
 		len -= auio.uio_resid;
