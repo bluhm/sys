@@ -1481,14 +1481,14 @@ coredump(struct proc *p)
 	    p->p_rlimit[RLIMIT_CORE].rlim_cur)
 		return (EFBIG);
 
-	if (nosuidcoredump == 3) {
+	if (incrash && nosuidcoredump == 3) {
 		/*
 		 * If the program directory does not exist, dumps of
 		 * that core will silently fail.
 		 */
 		len = snprintf(name, sizeof(name), "%s/%s/%u.core",
 		    dir, p->p_comm, p->p_pid);
-	} else if (nosuidcoredump == 2)
+	} else if (incrash && nosuidcoredump == 2)
 		len = snprintf(name, sizeof(name), "%s/%s.core",
 		    dir, p->p_comm);
 	else
