@@ -1,4 +1,4 @@
-/*	$OpenBSD: route.c,v 1.175 2014/07/29 12:18:41 mpi Exp $	*/
+/*	$OpenBSD: route.c,v 1.177 2014/08/12 13:52:08 mpi Exp $	*/
 /*	$NetBSD: route.c,v 1.14 1996/02/13 22:00:46 christos Exp $	*/
 
 /*
@@ -132,7 +132,6 @@
 struct ifaddr	*encap_findgwifa(struct sockaddr *, u_int);
 #endif
 
-struct	route_cb	   route_cb;
 struct	rtstat		   rtstat;
 struct	radix_node_head	***rt_tables;
 u_int8_t		   af2rtafidx[AF_MAX+1];
@@ -786,6 +785,14 @@ rtrequest1(int req, struct rt_addrinfo *info, u_int8_t prio,
 				senderr(ESRCH);
 		}
 #endif
+
+		/*
+		 * Since RTP_LOCAL cannot be set by userland, make
+		 * sure that local routes are only modified by the
+		 * kernel.
+		 */
+		if (rt->rt_flags & RTF_LOCAL && prio != RTP_LOCAL)
+			senderr(EINVAL);
 
 		if ((rn = rnh->rnh_deladdr(info->rti_info[RTAX_DST],
 		    info->rti_info[RTAX_NETMASK], rnh, rn)) == NULL)

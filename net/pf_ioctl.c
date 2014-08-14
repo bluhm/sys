@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf_ioctl.c,v 1.274 2014/07/22 11:06:09 mpi Exp $ */
+/*	$OpenBSD: pf_ioctl.c,v 1.276 2014/08/12 15:29:33 mikeb Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -307,24 +307,29 @@ pf_rm_rule(struct pf_rulequeue *rulequeue, struct pf_rule *rule)
 }
 
 void
-pf_purge_rule(struct pf_ruleset *ruleset, struct pf_rule *rule)
+pf_purge_rule(struct pf_ruleset *ruleset, struct pf_rule *rule,
+    struct pf_ruleset *aruleset, struct pf_rule *arule)
 {
-	u_int32_t		 nr;
+	u_int32_t		 nr = 0;
 
-	if (ruleset == NULL || ruleset->anchor == NULL)
-		return;
+	KASSERT(ruleset != NULL && rule != NULL);
 
 	pf_rm_rule(ruleset->rules.active.ptr, rule);
 	ruleset->rules.active.rcount--;
-
-	nr = 0;
 	TAILQ_FOREACH(rule, ruleset->rules.active.ptr, entries)
 		rule->nr = nr++;
-
 	ruleset->rules.active.ticket++;
-
 	pf_calc_skip_steps(ruleset->rules.active.ptr);
-	pf_remove_if_empty_ruleset(ruleset);
+
+	/* remove the parent anchor rule */
+	if (nr == 0 && arule && aruleset) {
+		pf_rm_rule(aruleset->rules.active.ptr, arule);
+		aruleset->rules.active.rcount--;
+		TAILQ_FOREACH(rule, aruleset->rules.active.ptr, entries)
+			rule->nr = nr++;
+		aruleset->rules.active.ticket++;
+		pf_calc_skip_steps(aruleset->rules.active.ptr);
+	}
 }
 
 u_int16_t

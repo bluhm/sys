@@ -1,4 +1,4 @@
-/*	$OpenBSD: rtsock.c,v 1.150 2014/07/29 12:18:41 mpi Exp $	*/
+/*	$OpenBSD: rtsock.c,v 1.152 2014/08/12 13:52:08 mpi Exp $	*/
 /*	$NetBSD: rtsock.c,v 1.18 1996/03/29 00:32:10 cgd Exp $	*/
 
 /*
@@ -108,6 +108,15 @@ struct routecb {
 	u_int		rtableid;
 };
 #define	sotoroutecb(so)	((struct routecb *)(so)->so_pcb)
+
+struct route_cb {
+	int		ip_count;
+	int		ip6_count;
+	int		mpls_count;
+	int		any_count;
+};
+
+struct route_cb route_cb;
 
 /*
  * These flags and timeout are used for indicating to userland (via a 
@@ -533,13 +542,20 @@ route_output(struct mbuf *m, ...)
 	}
 
 
+	/* Do not let userland play with kernel-only flags. */
+	if ((rtm->rtm_flags & (RTF_LOCAL|RTF_BROADCAST)) != 0) {
+		error = EINVAL;
+		goto fail;
+	}
+
 	/* make sure that kernel-only bits are not set */
 	rtm->rtm_priority &= RTP_MASK;
 	rtm->rtm_flags &= ~(RTF_DONE|RTF_CLONED);
 	rtm->rtm_fmask &= RTF_FMASK;
 
 	if (rtm->rtm_priority != 0) {
-		if (rtm->rtm_priority > RTP_MAX) {
+		if (rtm->rtm_priority > RTP_MAX ||
+		    rtm->rtm_priority == RTP_LOCAL) {
 			error = EINVAL;
 			goto fail;
 		}
