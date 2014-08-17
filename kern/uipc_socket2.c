@@ -756,6 +756,8 @@ sbappendcontrol(struct sockbuf *sb, struct mbuf *m0, struct mbuf *control)
 	if (space > sbspace(sb)) {
 		printf("sbappendcontrol: space %d > sbspace(sb) %ld\n",
 		    space, sbspace(sb));
+		printf("sbspace: hiwat %lu, cc %lu, mbmax %lu, mbcnt %lu\n",
+		    sb->sb_hiwat, sb->sb_cc, sb->sb_mbmax, sb->sb_mbcnt);
 		return (0);
 	}
 	n->m_next = m0;			/* concatenate data to control */
