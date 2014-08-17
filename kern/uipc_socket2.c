@@ -698,13 +698,19 @@ sbappendaddr(struct sockbuf *sb, struct sockaddr *asa, struct mbuf *m0,
 		if (n->m_next == NULL)	/* keep pointer to last control buf */
 			break;
 	}
-	if (space > sbspace(sb))
+	if (space > sbspace(sb)) {
+		printf("sbappendaddr: space > sbspace(sb)\n");
 		return (0);
-	if (asa->sa_len > MLEN)
+	}
+	if (asa->sa_len > MLEN) {
+		printf("sbappendaddr: asa->sa_len > MLEN");
 		return (0);
+	}
 	MGET(m, M_DONTWAIT, MT_SONAME);
-	if (m == NULL)
+	if (m == NULL) {
+		printf("sbappendaddr: m == NULL");
 		return (0);
+	}
 	m->m_len = asa->sa_len;
 	bcopy(asa, mtod(m, caddr_t), asa->sa_len);
 	if (n)
