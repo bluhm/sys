@@ -699,11 +699,13 @@ sbappendaddr(struct sockbuf *sb, struct sockaddr *asa, struct mbuf *m0,
 			break;
 	}
 	if (space > sbspace(sb)) {
-		printf("sbappendaddr: space > sbspace(sb)\n");
+		printf("sbappendaddr: space %d > sbspace(sb) %ld\n",
+		    space, sbspace(sb));
 		return (0);
 	}
 	if (asa->sa_len > MLEN) {
-		printf("sbappendaddr: asa->sa_len > MLEN\n");
+		printf("sbappendaddr: asa->sa_len %u > MLEN %zu\n",
+		    asa->sa_len, MLEN);
 		return (0);
 	}
 	MGET(m, M_DONTWAIT, MT_SONAME);
@@ -752,7 +754,8 @@ sbappendcontrol(struct sockbuf *sb, struct mbuf *m0, struct mbuf *control)
 	for (m = m0; m; m = m->m_next)
 		space += m->m_len;
 	if (space > sbspace(sb)) {
-		printf("sbappendcontrol: space > sbspace(sb)\n");
+		printf("sbappendcontrol: space %d > sbspace(sb) %ld\n",
+		    space, sbspace(sb));
 		return (0);
 	}
 	n->m_next = m0;			/* concatenate data to control */
