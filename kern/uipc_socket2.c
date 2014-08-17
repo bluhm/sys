@@ -703,12 +703,12 @@ sbappendaddr(struct sockbuf *sb, struct sockaddr *asa, struct mbuf *m0,
 		return (0);
 	}
 	if (asa->sa_len > MLEN) {
-		printf("sbappendaddr: asa->sa_len > MLEN");
+		printf("sbappendaddr: asa->sa_len > MLEN\n");
 		return (0);
 	}
 	MGET(m, M_DONTWAIT, MT_SONAME);
 	if (m == NULL) {
-		printf("sbappendaddr: m == NULL");
+		printf("sbappendaddr: m == NULL\n");
 		return (0);
 	}
 	m->m_len = asa->sa_len;
