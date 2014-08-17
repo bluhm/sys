@@ -701,6 +701,8 @@ sbappendaddr(struct sockbuf *sb, struct sockaddr *asa, struct mbuf *m0,
 	if (space > sbspace(sb)) {
 		printf("sbappendaddr: space %d > sbspace(sb) %ld\n",
 		    space, sbspace(sb));
+		printf("sbspace: hiwat %lu, cc %lu, mbmax %lu, mbcnt %lu\n",
+		    sb->sb_hiwat, sb->sb_cc, sb->sb_mbmax, sb->sb_mbcnt);
 		return (0);
 	}
 	if (asa->sa_len > MLEN) {
