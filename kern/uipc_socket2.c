@@ -751,8 +751,10 @@ sbappendcontrol(struct sockbuf *sb, struct mbuf *m0, struct mbuf *control)
 	n = m;			/* save pointer to last control buffer */
 	for (m = m0; m; m = m->m_next)
 		space += m->m_len;
-	if (space > sbspace(sb))
+	if (space > sbspace(sb)) {
+		printf("sbappendcontrol: space > sbspace(sb)\n");
 		return (0);
+	}
 	n->m_next = m0;			/* concatenate data to control */
 
 	SBLASTRECORDCHK(sb, "sbappendcontrol 1");
