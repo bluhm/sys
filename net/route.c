@@ -835,21 +835,9 @@ rtrequest1(int req, struct rt_addrinfo *info, u_int8_t prio,
 			senderr(EINVAL);
 		if ((rt->rt_flags & RTF_CLONING) == 0)
 			senderr(EINVAL);
-		if (rt->rt_ifa->ifa_ifp) {
-			info->rti_ifa = rt->rt_ifa;
-		} else {
-			/*
-			 * The address of the cloning route is not longer
-			 * configured on an interface, but its descriptor
-			 * is still there because of reference counting.
-			 *
-			 * Try to find a similar active address and use
-			 * it for the cloned route.  The cloning route
-			 * will get the new address and interface later.
-			 */
-			info->rti_ifa = NULL;
-			info->rti_info[RTAX_IFA] = rt->rt_ifa->ifa_addr;
-		}
+		if (rt->rt_ifa->ifa_ifp == NULL)
+			senderr(EAGAIN);
+		info->rti_ifa = rt->rt_ifa;
 		info->rti_flags = rt->rt_flags & ~(RTF_CLONING | RTF_STATIC);
 		info->rti_flags |= RTF_CLONED;
 		info->rti_info[RTAX_GATEWAY] = rt->rt_gateway;
@@ -952,25 +940,6 @@ rtrequest1(int req, struct rt_addrinfo *info, u_int8_t prio,
 		rt->rt_ifa = ifa;
 		rt->rt_ifp = ifa->ifa_ifp;
 		if (req == RTM_RESOLVE) {
-			/*
-			 * If the ifa of the cloning route was stale, a
-			 * successful lookup for an ifa with the same address
-			 * has been made.  Use this ifa also for the cloning
-			 * route.
-			 */
-			if ((*ret_nrt)->rt_ifa->ifa_ifp == NULL) {
-				printf("rtrequest1 RTM_RESOLVE: wrong ifa (%p) "
-				    "was (%p)\n", ifa, (*ret_nrt)->rt_ifa);
-				if ((*ret_nrt)->rt_ifa->ifa_rtrequest)
-					(*ret_nrt)->rt_ifa->ifa_rtrequest(
-					    RTM_DELETE, *ret_nrt);
-				ifafree((*ret_nrt)->rt_ifa);
-				(*ret_nrt)->rt_ifa = ifa;
-				(*ret_nrt)->rt_ifp = ifa->ifa_ifp;
-				ifa->ifa_refcnt++;
-				if (ifa->ifa_rtrequest)
-					ifa->ifa_rtrequest(RTM_ADD, *ret_nrt);
-			}
 			/*
 			 * Copy both metrics and a back pointer to the cloned
 			 * route's parent.
