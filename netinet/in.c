@@ -612,12 +612,6 @@ in_ifinit(struct ifnet *ifp, struct in_ifaddr *ia, struct sockaddr_in *sin,
 	struct sockaddr_in oldaddr;
 	int s, error = 0;
 
-	/*
-	 * How should a packet be routed during
-	 * an address change--and is it safe?
-	 * Is the "ifp" even in a consistent state?
-	 * Be safe for now.
-	 */
 	splsoftassert(IPL_SOFTNET);
 
 	if (newaddr)
