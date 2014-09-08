@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ether.c,v 1.134 2014/08/19 12:49:41 mpi Exp $	*/
+/*	$OpenBSD: if_ether.c,v 1.136 2014/09/03 08:53:54 mpi Exp $	*/
 /*	$NetBSD: if_ether.c,v 1.31 1996/05/11 12:59:58 mycroft Exp $	*/
 
 /*
@@ -641,7 +641,8 @@ in_arpinput(struct mbuf *m)
 	if (la && (rt = la->la_rt) && (sdl = SDL(rt->rt_gateway))) {
 		if (sdl->sdl_alen) {
 		    if (memcmp(ea->arp_sha, LLADDR(sdl), sdl->sdl_alen)) {
-			if (rt->rt_flags & RTF_PERMANENT_ARP) {
+			if (rt->rt_flags &
+			    (RTF_PERMANENT_ARP|RTF_LOCAL|RTF_BROADCAST)) {
 				inet_ntop(AF_INET, &isaddr, addr, sizeof(addr));
 				log(LOG_WARNING,
 				   "arp: attempt to overwrite permanent "

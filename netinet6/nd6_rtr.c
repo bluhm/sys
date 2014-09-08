@@ -1,4 +1,4 @@
-/*	$OpenBSD: nd6_rtr.c,v 1.83 2014/07/12 18:44:23 tedu Exp $	*/
+/*	$OpenBSD: nd6_rtr.c,v 1.86 2014/09/08 09:32:04 stsp Exp $	*/
 /*	$KAME: nd6_rtr.c,v 1.97 2001/02/07 11:09:13 itojun Exp $	*/
 
 /*
@@ -32,6 +32,7 @@
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/timeout.h>
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
 #include <sys/socket.h>
@@ -170,6 +171,106 @@ nd6_rs_input(struct mbuf *m, int off, int icmp6len)
 	m_freem(m);
 }
 
+void
+nd6_rs_output(struct ifnet* ifp, struct in6_ifaddr *ia6)
+{
+	struct mbuf *m;
+	struct ip6_hdr *ip6;
+	struct nd_router_solicit *rs;
+	struct ip6_moptions im6o;
+	caddr_t mac;
+	int icmp6len, maxlen, s;
+
+	KASSERT(ia6 != NULL);
+	KASSERT(ifp->if_flags & IFF_RUNNING);
+	KASSERT(ifp->if_xflags & IFXF_AUTOCONF6);
+	KASSERT(!(ia6->ia6_flags & IN6_IFF_TENTATIVE));
+
+	maxlen = sizeof(*ip6) + sizeof(*rs);
+	maxlen += (sizeof(struct nd_opt_hdr) + ifp->if_addrlen + 7) & ~7;
+
+	MGETHDR(m, M_DONTWAIT, MT_DATA);
+	if (m && max_linkhdr + maxlen >= MHLEN) {
+		MCLGET(m, M_DONTWAIT);
+		if ((m->m_flags & M_EXT) == 0) {
+			m_free(m);
+			m = NULL;
+		}
+	}
+	if (m == NULL)
+		return;
+
+	m->m_pkthdr.rcvif = NULL;
+	m->m_pkthdr.ph_rtableid = ifp->if_rdomain;
+	m->m_flags |= M_MCAST;
+	m->m_pkthdr.csum_flags |= M_ICMP_CSUM_OUT;
+
+	im6o.im6o_multicast_ifp = ifp;
+	im6o.im6o_multicast_hlim = 255;
+	im6o.im6o_multicast_loop = 0;
+
+	icmp6len = sizeof(*rs);
+	m->m_pkthdr.len = m->m_len = sizeof(*ip6) + icmp6len;
+	m->m_data += max_linkhdr;	/* or MH_ALIGN() equivalent? */
+
+	/* fill neighbor solicitation packet */
+	ip6 = mtod(m, struct ip6_hdr *);
+	ip6->ip6_flow = 0;
+	ip6->ip6_vfc &= ~IPV6_VERSION_MASK;
+	ip6->ip6_vfc |= IPV6_VERSION;
+	/* ip6->ip6_plen will be set later */
+	ip6->ip6_nxt = IPPROTO_ICMPV6;
+	ip6->ip6_hlim = 255;
+	
+	ip6->ip6_dst = in6addr_linklocal_allrouters;
+
+	ip6->ip6_src = ia6->ia_addr.sin6_addr;
+
+	rs = (struct nd_router_solicit *)(ip6 + 1);
+	rs->nd_rs_type = ND_ROUTER_SOLICIT;
+	rs->nd_rs_code = 0;
+	rs->nd_rs_cksum = 0;
+	rs->nd_rs_reserved = 0;
+
+	if ((mac = nd6_ifptomac(ifp))) {
+		int optlen = sizeof(struct nd_opt_hdr) + ifp->if_addrlen;
+		struct nd_opt_hdr *nd_opt = (struct nd_opt_hdr *)(rs + 1);
+		/* 8 byte alignments... */
+		optlen = (optlen + 7) & ~7;
+
+		m->m_pkthdr.len += optlen;
+		m->m_len += optlen;
+		icmp6len += optlen;
+		bzero((caddr_t)nd_opt, optlen);
+		nd_opt->nd_opt_type = ND_OPT_SOURCE_LINKADDR;
+		nd_opt->nd_opt_len = optlen >> 3;
+		bcopy(mac, (caddr_t)(nd_opt + 1), ifp->if_addrlen);
+	}
+
+	ip6->ip6_plen = htons((u_short)icmp6len);
+
+	s = splsoftnet();
+	ip6_output(m, NULL, NULL, 0, &im6o, NULL, NULL);
+	splx(s);
+
+	icmp6_ifstat_inc(ifp, ifs6_out_msg);
+	icmp6_ifstat_inc(ifp, ifs6_out_routersolicit);
+	icmp6stat.icp6s_outhist[ND_ROUTER_SOLICIT]++;
+}
+
+void
+nd6_rs_dev_state(void *arg)
+{
+	struct ifnet *ifp;
+
+	ifp = (struct ifnet *) arg;
+
+	if (LINK_STATE_IS_UP(ifp->if_link_state) &&
+	    ifp->if_flags & IFF_RUNNING)
+		/* start quick timer, will exponentially back off */
+		nd6_rs_output_set_timo(ND6_RS_OUTPUT_QUICK_INTERVAL);
+}
+
 /*
  * Receive Router Advertisement Message.
  *
@@ -200,6 +301,10 @@ nd6_ra_input(struct mbuf *m, int off, int icmp6len)
 		goto freeit;
 	if (!(ndi->flags & ND6_IFF_ACCEPT_RTADV))
 		goto freeit;
+
+	if (nd6_rs_output_timeout != ND6_RS_OUTPUT_INTERVAL)
+		/* we saw a RA, stop quick timer */
+		nd6_rs_output_set_timo(ND6_RS_OUTPUT_INTERVAL);
 
 	if (ip6->ip6_hlim != 255) {
 		nd6log((LOG_ERR,
@@ -1296,13 +1401,51 @@ void
 nd6_addr_add(void *prptr, void *arg2)
 {
 	struct nd_prefix *pr = (struct nd_prefix *)prptr;
-	struct in6_ifaddr *ia6 = NULL;
-	int autoconf, privacy, s;
+	struct in6_ifaddr *ia6;
+	struct ifaddr *ifa;
+	int ifa_plen, autoconf, privacy, s;
 
 	s = splsoftnet();
 
 	autoconf = 1;
 	privacy = (pr->ndpr_ifp->if_xflags & IFXF_INET6_NOPRIVACY) == 0;
+
+	/* 
+	 * Check again if a non-deprecated address has already
+	 * been autoconfigured for this prefix.
+	 */
+	TAILQ_FOREACH(ifa, &pr->ndpr_ifp->if_addrlist, ifa_list) {
+		if (ifa->ifa_addr->sa_family != AF_INET6)
+			continue;
+
+		ia6 = ifatoia6(ifa);
+
+		/*
+		 * Spec is not clear here, but I believe we should concentrate
+		 * on unicast (i.e. not anycast) addresses.
+		 * XXX: other ia6_flags? detached or duplicated?
+		 */
+		if ((ia6->ia6_flags & IN6_IFF_ANYCAST) != 0)
+			continue;
+
+		if ((ia6->ia6_flags & IN6_IFF_AUTOCONF) == 0)
+			continue;
+
+		if ((ia6->ia6_flags & IN6_IFF_DEPRECATED) != 0)
+			continue;
+
+		ifa_plen = in6_mask2len(&ia6->ia_prefixmask.sin6_addr, NULL);
+		if (ifa_plen == pr->ndpr_plen &&
+		    in6_are_prefix_equal(&ia6->ia_addr.sin6_addr,
+		    &pr->ndpr_prefix.sin6_addr, ifa_plen)) {
+			if ((ia6->ia6_flags & IN6_IFF_PRIVACY) == 0)
+				autoconf = 0;
+			else
+				privacy = 0;
+			if (!autoconf && !privacy)
+				break;
+		}
+	}
 
 	if (autoconf && (ia6 = in6_ifadd(pr, 0)) != NULL) {
 		ia6->ia6_ndpr = pr;

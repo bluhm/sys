@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ix.c,v 1.97 2014/08/20 10:06:31 mikeb Exp $	*/
+/*	$OpenBSD: if_ix.c,v 1.100 2014/09/08 02:39:57 chris Exp $	*/
 
 /******************************************************************************
 
@@ -73,6 +73,7 @@ const struct pci_matchid ixgbe_devices[] = {
 	{ PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82599_SFP_EM },
 	{ PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82599_SFP_SF2 },
 	{ PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82599_SFP_FCOE },
+	{ PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82599EN_SFP },
 	{ PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_X540T },
 };
 
@@ -258,7 +259,7 @@ ixgbe_attach(struct device *parent, struct device *self, void *aux)
 		    "please contact your Intel or hardware representative "
 		    "who provided you with this hardware.\n");
 	} else if (error == IXGBE_ERR_SFP_NOT_SUPPORTED) {
-		printf("Unsupported SFP+ Module\n");
+		printf(": Unsupported SFP+ Module\n");
 	}
 
 	if (error) {
@@ -1380,6 +1381,7 @@ ixgbe_identify_hardware(struct ix_softc *sc)
 	case PCI_PRODUCT_INTEL_82598_BX:
 		sc->hw.mac.type = ixgbe_mac_82598EB;
 		break;
+	case PCI_PRODUCT_INTEL_82599EN_SFP:
 	case PCI_PRODUCT_INTEL_82599_SFP:
 	case PCI_PRODUCT_INTEL_82599_SFP_EM:
 	case PCI_PRODUCT_INTEL_82599_SFP_FCOE:
@@ -2599,11 +2601,11 @@ ixgbe_rxfill(struct rx_ring *rxr)
 		if (ixgbe_get_buf(rxr, i) != 0)
 			break;
 
+		rxr->last_desc_filled = i;
 		post = 1;
 	}
-	if_rxr_put(&rxr->rx_ring, slots);
 
-	rxr->last_desc_filled = i;
+	if_rxr_put(&rxr->rx_ring, slots);
 
 	return (post);
 }

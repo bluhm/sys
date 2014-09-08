@@ -1,4 +1,4 @@
-/*	$OpenBSD: uipc_socket.c,v 1.130 2014/07/13 15:52:38 tedu Exp $	*/
+/*	$OpenBSD: uipc_socket.c,v 1.132 2014/09/08 06:24:13 jsg Exp $	*/
 /*	$NetBSD: uipc_socket.c,v 1.21 1996/02/04 02:17:52 christos Exp $	*/
 
 /*
@@ -49,7 +49,6 @@
 #include <sys/signalvar.h>
 #include <sys/resourcevar.h>
 #include <net/if.h>
-#include <net/route.h>
 #include <sys/pool.h>
 
 void	sbsync(struct sockbuf *, struct mbuf *);
@@ -777,7 +776,7 @@ dontblock:
 				    mtod(cm, struct cmsghdr *)->cmsg_type ==
 				    SCM_RIGHTS)
 				   error = (*pr->pr_domain->dom_externalize)(cm,
-				       controllen);
+				       controllen, flags);
 				*controlp = cm;
 			} else {
 				/*

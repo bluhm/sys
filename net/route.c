@@ -1,4 +1,4 @@
-/*	$OpenBSD: route.c,v 1.180 2014/08/21 10:07:07 mpi Exp $	*/
+/*	$OpenBSD: route.c,v 1.182 2014/09/03 08:51:01 mpi Exp $	*/
 /*	$NetBSD: route.c,v 1.14 1996/02/13 22:00:46 christos Exp $	*/
 
 /*
@@ -791,7 +791,7 @@ rtrequest1(int req, struct rt_addrinfo *info, u_int8_t prio,
 		 * sure that local routes are only modified by the
 		 * kernel.
 		 */
-		if ((rt->rt_flags & (RTF_LOCAL | RTF_BROADCAST)) &&
+		if ((rt->rt_flags & (RTF_LOCAL|RTF_BROADCAST)) &&
 		    prio != RTP_LOCAL)
 			senderr(EINVAL);
 
@@ -1236,16 +1236,9 @@ rt_ifa_addloop(struct ifaddr *ifa)
 	/* If there is no loopback entry, allocate one. */
 	rt = rtalloc1(ifa->ifa_addr, 0, ifa->ifa_ifp->if_rdomain);
 	if (rt == NULL || (rt->rt_flags & RTF_HOST) == 0 ||
-	    (rt->rt_ifp->if_flags & IFF_LOOPBACK) == 0) {
+	    (rt->rt_ifp->if_flags & IFF_LOOPBACK) == 0)
 		rt_ifa_add(ifa, RTF_UP| RTF_HOST | RTF_LLINFO | RTF_LOCAL,
 		    ifa->ifa_addr);
-
-		if ((ifa->ifa_ifp->if_flags & IFF_BROADCAST) &&
-		    ifa->ifa_broadaddr)
-			rt_ifa_add(ifa, RTF_UP | RTF_HOST | RTF_LLINFO |
-			    RTF_BROADCAST, ifa->ifa_broadaddr);
-
-	}
 	if (rt)
 		rt->rt_refcnt--;
 }
@@ -1288,15 +1281,9 @@ rt_ifa_delloop(struct ifaddr *ifa)
 	 */
 	rt = rtalloc1(ifa->ifa_addr, 0, ifa->ifa_ifp->if_rdomain);
 	if (rt != NULL && (rt->rt_flags & RTF_HOST) != 0 &&
-	    (rt->rt_ifp->if_flags & IFF_LOOPBACK) != 0) {
+	    (rt->rt_ifp->if_flags & IFF_LOOPBACK) != 0)
 		rt_ifa_del(ifa,  RTF_HOST | RTF_LLINFO | RTF_LOCAL,
 		    ifa->ifa_addr);
-
-		if ((ifa->ifa_ifp->if_flags & IFF_BROADCAST) &&
-		    ifa->ifa_broadaddr)
-			rt_ifa_del(ifa, RTF_HOST | RTF_LLINFO | RTF_BROADCAST,
-			    ifa->ifa_broadaddr);
-	}
 	if (rt)
 		rt->rt_refcnt--;
 }

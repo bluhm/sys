@@ -1,4 +1,4 @@
-/*	$OpenBSD: acx.c,v 1.104 2014/07/22 13:12:11 mpi Exp $ */
+/*	$OpenBSD: acx.c,v 1.106 2014/09/08 07:21:40 kettenis Exp $ */
 
 /*
  * Copyright (c) 2006 Jonathan Gray <jsg@openbsd.org>
@@ -97,7 +97,8 @@
 #include <sys/socket.h>
 #include <sys/sockio.h>
 #include <sys/ioctl.h>
-#include <sys/types.h>
+#include <sys/errno.h>
+#include <sys/device.h>
 
 #include <machine/bus.h>
 #include <machine/endian.h>
@@ -121,10 +122,6 @@
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_amrr.h>
 #include <net80211/ieee80211_radiotap.h>
-
-#include <dev/pci/pcireg.h>
-#include <dev/pci/pcivar.h>
-#include <dev/pci/pcidevs.h>
 
 #include <dev/ic/acxvar.h>
 #include <dev/ic/acxreg.h>

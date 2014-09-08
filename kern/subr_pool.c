@@ -1,4 +1,4 @@
-/*	$OpenBSD: subr_pool.c,v 1.147 2014/08/20 00:00:46 dlg Exp $	*/
+/*	$OpenBSD: subr_pool.c,v 1.151 2014/09/08 00:00:05 dlg Exp $	*/
 /*	$NetBSD: subr_pool.c,v 1.61 2001/09/26 07:14:56 chs Exp $	*/
 
 /*-
@@ -84,7 +84,6 @@ struct pool_item_header {
 	int			ph_nmissing;	/* # of chunks in use */
 	caddr_t			ph_page;	/* this page's address */
 	caddr_t			ph_colored;	/* page's colored address */
-	int			ph_pagesize;
 	int			ph_magic;
 };
 
@@ -103,6 +102,8 @@ int	pool_debug = 0;
 #define	POOL_NEEDS_CATCHUP(pp)						\
 	((pp)->pr_nitems < (pp)->pr_minitems)
 
+#define POOL_INPGHDR(pp) ((pp)->pr_phoffset != 0)
+
 int	 pool_catchup(struct pool *);
 void	 pool_prime_page(struct pool *, caddr_t, struct pool_item_header *);
 void	 pool_update_curpage(struct pool *);
@@ -119,21 +120,35 @@ void	*pool_allocator_alloc(struct pool *, int, int *);
 void	 pool_allocator_free(struct pool *, void *);
 
 /*
- * XXX - quick hack. For pools with large items we want to use a special
- *       allocator. For now, instead of having the allocator figure out
- *       the allocation size from the pool (which can be done trivially
- *       with round_page(pr_itemsperpage * pr_size)) which would require
- *	 lots of changes everywhere, we just create allocators for each
- *	 size. We limit those to 128 pages.
+ * The default pool allocator.
  */
-#define POOL_LARGE_MAXPAGES 128
-struct pool_allocator pool_allocator_large[POOL_LARGE_MAXPAGES];
-struct pool_allocator pool_allocator_large_ni[POOL_LARGE_MAXPAGES];
+void	*pool_page_alloc(struct pool *, int, int *);
+void	pool_page_free(struct pool *, void *);
+
+/*
+ * safe for interrupts, name preserved for compat this is the default
+ * allocator
+ */
+struct pool_allocator pool_allocator_nointr = {
+	pool_page_alloc,
+	pool_page_free
+};
+
 void	*pool_large_alloc(struct pool *, int, int *);
 void	pool_large_free(struct pool *, void *);
+
+struct pool_allocator pool_allocator_large = {
+	pool_large_alloc,
+	pool_large_free
+};
+
 void	*pool_large_alloc_ni(struct pool *, int, int *);
 void	pool_large_free_ni(struct pool *, void *);
 
+struct pool_allocator pool_allocator_large_ni = {
+	pool_large_alloc_ni,
+	pool_large_free_ni
+};
 
 #ifdef DDB
 void	 pool_print_pagelist(struct pool_pagelist *, int (*)(const char *, ...)
@@ -170,10 +185,10 @@ pr_find_pagehead(struct pool *pp, void *v)
 {
 	struct pool_item_header *ph, key;
 
-	if ((pp->pr_roflags & PR_PHINPAGE) != 0) {
+	if (POOL_INPGHDR(pp)) {
 		caddr_t page;
 
-		page = (caddr_t)((vaddr_t)v & pp->pr_alloc->pa_pagemask);
+		page = (caddr_t)((vaddr_t)v & pp->pr_pgmask);
 
 		return ((struct pool_item_header *)(page + pp->pr_phoffset));
 	}
@@ -186,7 +201,7 @@ pr_find_pagehead(struct pool *pp, void *v)
 	}
 
 	KASSERT(ph->ph_page <= (caddr_t)v);
-	if (ph->ph_page + ph->ph_pagesize <= (caddr_t)v) {
+	if (ph->ph_page + pp->pr_pgsize <= (caddr_t)v) {
 		panic("pr_find_pagehead: %s: incorrect page",
 		    pp->pr_wchan);
 	}
@@ -221,7 +236,7 @@ pr_rmpage(struct pool *pp, struct pool_item_header *ph,
 	 * Unlink a page from the pool and release it (or queue it for release).
 	 */
 	LIST_REMOVE(ph, ph_pagelist);
-	if ((pp->pr_roflags & PR_PHINPAGE) == 0)
+	if (!POOL_INPGHDR(pp))
 		RB_REMOVE(phtree, &pp->pr_phtree, ph);
 	pp->pr_npages--;
 	pp->pr_npagefree++;
@@ -231,7 +246,7 @@ pr_rmpage(struct pool *pp, struct pool_item_header *ph,
 		LIST_INSERT_HEAD(pq, ph, ph_pagelist);
 	} else {
 		pool_allocator_free(pp, ph->ph_page);
-		if ((pp->pr_roflags & PR_PHINPAGE) == 0)
+		if (!POOL_INPGHDR(pp))
 			pool_put(&phpool, ph);
 	}
 }
@@ -246,57 +261,17 @@ void
 pool_init(struct pool *pp, size_t size, u_int align, u_int ioff, int flags,
     const char *wchan, struct pool_allocator *palloc)
 {
-	int off, slack;
+	int off = 0, space;
+	unsigned int pgsize = PAGE_SIZE, items;
 #ifdef DIAGNOSTIC
 	struct pool *iter;
+	KASSERT(ioff == 0);
 #endif
 
 #ifdef MALLOC_DEBUG
-	if ((flags & PR_DEBUG) && (ioff != 0 || align != 0))
+	if ((flags & PR_DEBUG) && align != 0)
 		flags &= ~PR_DEBUG;
 #endif
-	/*
-	 * Check arguments and construct default values.
-	 */
-	if (palloc == NULL) {
-		if (size > PAGE_SIZE) {
-			int psize;
-
-			/*
-			 * XXX - should take align into account as well.
-			 */
-			if (size == round_page(size))
-				psize = size / PAGE_SIZE;
-			else
-				psize = PAGE_SIZE / roundup(size % PAGE_SIZE,
-				    1024);
-			if (psize > POOL_LARGE_MAXPAGES)
-				psize = POOL_LARGE_MAXPAGES;
-			if (flags & PR_WAITOK)
-				palloc = &pool_allocator_large_ni[psize-1];
-			else
-				palloc = &pool_allocator_large[psize-1];
-			if (palloc->pa_pagesz == 0) {
-				palloc->pa_pagesz = psize * PAGE_SIZE;
-				if (flags & PR_WAITOK) {
-					palloc->pa_alloc = pool_large_alloc_ni;
-					palloc->pa_free = pool_large_free_ni;
-				} else {
-					palloc->pa_alloc = pool_large_alloc;
-					palloc->pa_free = pool_large_free;
-				}
-			}
-		} else {
-			palloc = &pool_allocator_nointr;
-		}
-	}
-	if (palloc->pa_pagesz == 0) {
-		palloc->pa_pagesz = PAGE_SIZE;
-	}
-	if (palloc->pa_pagemask == 0) {
-		palloc->pa_pagemask = ~(palloc->pa_pagesz - 1);
-		palloc->pa_pageshift = ffs(palloc->pa_pagesz) - 1;
-	}
 
 	if (align == 0)
 		align = ALIGN(1);
@@ -305,15 +280,40 @@ pool_init(struct pool *pp, size_t size, u_int align, u_int ioff, int flags,
 		size = sizeof(struct pool_item);
 
 	size = roundup(size, align);
-#ifdef DIAGNOSTIC
-	if (size > palloc->pa_pagesz)
-		panic("pool_init: pool item size (%lu) too large",
-		    (u_long)size);
-#endif
+
+	if (palloc == NULL) {
+		while (size > pgsize)
+			pgsize <<= 1;
+
+		if (pgsize > PAGE_SIZE) {
+			palloc = ISSET(flags, PR_WAITOK) ?
+			    &pool_allocator_large_ni : &pool_allocator_large;
+		} else
+			palloc = &pool_allocator_nointr;
+	} else
+		pgsize = palloc->pa_pagesz ? palloc->pa_pagesz : PAGE_SIZE;
+
+	items = pgsize / size;
+
+	/*
+	 * Decide whether to put the page header off page to avoid
+	 * wasting too large a part of the page. Off-page page headers
+	 * go into an RB tree, so we can match a returned item with
+	 * its header based on the page address.
+	 */
+	if (pgsize - (size * items) > sizeof(struct pool_item_header)) {
+		off = pgsize - sizeof(struct pool_item_header);
+	} else if (sizeof(struct pool_item_header) * 2 >= size) {
+		off = pgsize - sizeof(struct pool_item_header);
+		items = off / size;
+	}
+
+	KASSERT(items > 0);
 
 	/*
 	 * Initialize the pool structure.
 	 */
+	memset(pp, 0, sizeof(*pp));
 	LIST_INIT(&pp->pr_emptypages);
 	LIST_INIT(&pp->pr_fullpages);
 	LIST_INIT(&pp->pr_partpages);
@@ -325,6 +325,10 @@ pool_init(struct pool *pp, size_t size, u_int align, u_int ioff, int flags,
 	pp->pr_roflags = flags;
 	pp->pr_flags = 0;
 	pp->pr_size = size;
+	pp->pr_pgsize = pgsize;
+	pp->pr_pgmask = ~0UL ^ (pgsize - 1);
+	pp->pr_phoffset = off;
+	pp->pr_itemsperpage = items;
 	pp->pr_align = align;
 	pp->pr_wchan = wchan;
 	pp->pr_alloc = palloc;
@@ -336,43 +340,15 @@ pool_init(struct pool *pp, size_t size, u_int align, u_int ioff, int flags,
 	pp->pr_hardlimit_ratecap.tv_usec = 0;
 	pp->pr_hardlimit_warning_last.tv_sec = 0;
 	pp->pr_hardlimit_warning_last.tv_usec = 0;
+	RB_INIT(&pp->pr_phtree);
 
 	/*
-	 * Decide whether to put the page header off page to avoid
-	 * wasting too large a part of the page. Off-page page headers
-	 * go into an RB tree, so we can match a returned item with
-	 * its header based on the page address.
-	 * We use 1/16 of the page size as the threshold (XXX: tune)
-	 */
-	if (pp->pr_size < palloc->pa_pagesz/16 && pp->pr_size < PAGE_SIZE) {
-		/* Use the end of the page for the page header */
-		pp->pr_roflags |= PR_PHINPAGE;
-		pp->pr_phoffset = off = palloc->pa_pagesz -
-		    ALIGN(sizeof(struct pool_item_header));
-	} else {
-		/* The page header will be taken from our page header pool */
-		pp->pr_phoffset = 0;
-		off = palloc->pa_pagesz;
-		RB_INIT(&pp->pr_phtree);
-	}
-
-	/*
-	 * Alignment is to take place at `ioff' within the item. This means
-	 * we must reserve up to `align - 1' bytes on the page to allow
-	 * appropriate positioning of each item.
-	 *
-	 * Silently enforce `0 <= ioff < align'.
-	 */
-	pp->pr_itemoffset = ioff = ioff % align;
-	pp->pr_itemsperpage = (off - ((align - ioff) % align)) / pp->pr_size;
-	KASSERT(pp->pr_itemsperpage != 0);
-
-	/*
-	 * Use the slack between the chunks and the page header
+	 * Use the space between the chunks and the page header
 	 * for "cache coloring".
 	 */
-	slack = off - pp->pr_itemsperpage * pp->pr_size;
-	pp->pr_maxcolor = (slack / align) * align;
+	space = POOL_INPGHDR(pp) ? pp->pr_phoffset : pp->pr_pgsize;
+	space -= pp->pr_itemsperpage * pp->pr_size;
+	pp->pr_maxcolor = (space / align) * align;
 	pp->pr_curcolor = 0;
 
 	pp->pr_nget = 0;
@@ -390,6 +366,9 @@ pool_init(struct pool *pp, size_t size, u_int align, u_int ioff, int flags,
 		pool_init(&phpool, sizeof(struct pool_item_header), 0, 0,
 		    0, "phpool", NULL);
 		pool_setipl(&phpool, IPL_HIGH);
+
+		/* make sure phpool wont "recurse" */
+		KASSERT(POOL_INPGHDR(&phpool));
 	}
 
 	/* pglistalloc/constraint parameters */
@@ -468,7 +447,7 @@ pool_alloc_item_header(struct pool *pp, caddr_t storage, int flags)
 {
 	struct pool_item_header *ph;
 
-	if ((pp->pr_roflags & PR_PHINPAGE) != 0)
+	if (POOL_INPGHDR(pp))
 		ph = (struct pool_item_header *)(storage + pp->pr_phoffset);
 	else
 		ph = pool_get(&phpool, (flags & ~(PR_WAITOK | PR_ZERO)) |
@@ -583,9 +562,7 @@ startover:
 	pool_swizzle_curpage(pp);
 	/*
 	 * The convention we use is that if `curpage' is not NULL, then
-	 * it points at a non-empty bucket. In particular, `curpage'
-	 * never points at a page header which has PR_PHINPAGE set and
-	 * has no items in its bucket.
+	 * it points at a non-empty bucket.
 	 */
 	if ((ph = pp->pr_curpage) == NULL) {
 #ifdef DIAGNOSTIC
@@ -881,7 +858,6 @@ pool_prime_page(struct pool *pp, caddr_t storage, struct pool_item_header *ph)
 	struct pool_item *pi;
 	caddr_t cp = storage;
 	unsigned int align = pp->pr_align;
-	unsigned int ioff = pp->pr_itemoffset;
 	int n;
 
 	/*
@@ -890,9 +866,8 @@ pool_prime_page(struct pool *pp, caddr_t storage, struct pool_item_header *ph)
 	LIST_INSERT_HEAD(&pp->pr_emptypages, ph, ph_pagelist);
 	XSIMPLEQ_INIT(&ph->ph_itemlist);
 	ph->ph_page = storage;
-	ph->ph_pagesize = pp->pr_alloc->pa_pagesz;
 	ph->ph_nmissing = 0;
-	if ((pp->pr_roflags & PR_PHINPAGE) == 0)
+	if (!POOL_INPGHDR(pp))
 		RB_INSERT(phtree, &pp->pr_phtree, ph);
 
 	pp->pr_nidle++;
@@ -904,11 +879,6 @@ pool_prime_page(struct pool *pp, caddr_t storage, struct pool_item_header *ph)
 	if ((pp->pr_curcolor += align) > pp->pr_maxcolor)
 		pp->pr_curcolor = 0;
 
-	/*
-	 * Adjust storage to apply alignment to `pr_itemoffset' in each item.
-	 */
-	if (ioff != 0)
-		cp = (caddr_t)(cp + (align - ioff));
 	ph->ph_colored = cp;
 
 	/*
@@ -919,8 +889,6 @@ pool_prime_page(struct pool *pp, caddr_t storage, struct pool_item_header *ph)
 
 	while (n--) {
 		pi = (struct pool_item *)cp;
-
-		KASSERT(((((vaddr_t)pi) + ioff) & (align - 1)) == 0);
 
 		/* Insert on page list */
 		XSIMPLEQ_INSERT_TAIL(&ph->ph_itemlist, pi, pi_list);
@@ -1105,7 +1073,7 @@ pool_reclaim(struct pool *pp)
 	while ((ph = LIST_FIRST(&pq)) != NULL) {
 		LIST_REMOVE(ph, ph_pagelist);
 		pool_allocator_free(pp, ph->ph_page);
-		if (pp->pr_roflags & PR_PHINPAGE)
+		if (POOL_INPGHDR(pp))
 			continue;
 		pool_put(&phpool, ph);
 	}
@@ -1180,8 +1148,8 @@ pool_print1(struct pool *pp, const char *modif,
 		modif++;
 	}
 
-	(*pr)("POOL %s: size %u, align %u, ioff %u, roflags 0x%08x\n",
-	    pp->pr_wchan, pp->pr_size, pp->pr_align, pp->pr_itemoffset,
+	(*pr)("POOL %s: size %u, align %u, roflags 0x%08x\n",
+	    pp->pr_wchan, pp->pr_size, pp->pr_align,
 	    pp->pr_roflags);
 	(*pr)("\talloc %p\n", pp->pr_alloc);
 	(*pr)("\tminitems %u, minpages %u, maxpages %u, npages %u\n",
@@ -1297,9 +1265,8 @@ pool_chk_page(struct pool *pp, struct pool_item_header *ph, int expected)
 	int n;
 	const char *label = pp->pr_wchan;
 
-	page = (caddr_t)((u_long)ph & pp->pr_alloc->pa_pagemask);
-	if (page != ph->ph_page &&
-	    (pp->pr_roflags & PR_PHINPAGE) != 0) {
+	page = (caddr_t)((u_long)ph & pp->pr_pgmask);
+	if (page != ph->ph_page && POOL_INPGHDR(pp)) {
 		printf("%s: ", label);
 		printf("pool(%p:%s): page inconsistency: page %p; "
 		    "at page head addr %p (p %p)\n",
@@ -1334,8 +1301,7 @@ pool_chk_page(struct pool *pp, struct pool_item_header *ph, int expected)
 			}
 		}
 #endif /* DIAGNOSTIC */
-		page =
-		    (caddr_t)((u_long)pi & pp->pr_alloc->pa_pagemask);
+		page = (caddr_t)((u_long)pi & pp->pr_pgmask);
 		if (page == ph->ph_page)
 			continue;
 
@@ -1469,7 +1435,7 @@ sysctl_dopool(int *name, u_int namelen, char *oldp, size_t *oldlenp)
 
 		mtx_enter(&pp->pr_mtx);
 		pi.pr_size = pp->pr_size;
-		pi.pr_pgsize = pp->pr_alloc->pa_pagesz;
+		pi.pr_pgsize = pp->pr_pgsize;
 		pi.pr_itemsperpage = pp->pr_itemsperpage;
 		pi.pr_npages = pp->pr_npages;
 		pi.pr_minpages = pp->pr_minpages;
@@ -1498,33 +1464,6 @@ done:
 
 /*
  * Pool backend allocators.
- *
- * Each pool has a backend allocator that handles allocation, deallocation
- */
-void	*pool_page_alloc(struct pool *, int, int *);
-void	pool_page_free(struct pool *, void *);
-
-/*
- * safe for interrupts, name preserved for compat this is the default
- * allocator
- */
-struct pool_allocator pool_allocator_nointr = {
-	pool_page_alloc, pool_page_free, 0,
-};
-
-/*
- * XXX - we have at least three different resources for the same allocation
- *  and each resource can be depleted. First we have the ready elements in
- *  the pool. Then we have the resource (typically a vm_map) for this
- *  allocator, then we have physical memory. Waiting for any of these can
- *  be unnecessary when any other is freed, but the kernel doesn't support
- *  sleeping on multiple addresses, so we have to fake. The caller sleeps on
- *  the pool (so that we can be awakened when an item is returned to the pool),
- *  but we set PA_WANT on the allocator. When a page is returned to
- *  the allocator and PA_WANT is set pool_allocator_free will wakeup all
- *  sleeping pools belonging to this allocator. (XXX - thundering herd).
- *  We also wake up the allocator in case someone without a pool (malloc)
- *  is sleeping waiting for this allocator.
  */
 
 void *
@@ -1538,6 +1477,16 @@ pool_allocator_alloc(struct pool *pp, int flags, int *slowdown)
 	v = pp->pr_alloc->pa_alloc(pp, flags, slowdown);
 	if (waitok)
 		mtx_enter(&pp->pr_mtx);
+
+#ifdef DIAGNOSTIC
+	if (v != NULL && POOL_INPGHDR(pp)) {
+		vaddr_t addr = (vaddr_t)v;
+		if ((addr & pp->pr_pgmask) != addr) {
+			panic("%s: %s page address %p isnt aligned to %u",
+			    __func__, pp->pr_wchan, v, pp->pr_pgsize);
+		}
+	}
+#endif
 
 	return (v);
 }
@@ -1558,28 +1507,31 @@ pool_page_alloc(struct pool *pp, int flags, int *slowdown)
 	kd.kd_waitok = (flags & PR_WAITOK);
 	kd.kd_slowdown = slowdown;
 
-	return (km_alloc(PAGE_SIZE, &kv_page, pp->pr_crange, &kd));
+	return (km_alloc(pp->pr_pgsize, &kv_page, pp->pr_crange, &kd));
 }
 
 void
 pool_page_free(struct pool *pp, void *v)
 {
-	km_free(v, PAGE_SIZE, &kv_page, pp->pr_crange);
+	km_free(v, pp->pr_pgsize, &kv_page, pp->pr_crange);
 }
 
 void *
 pool_large_alloc(struct pool *pp, int flags, int *slowdown)
 {
+	struct kmem_va_mode kv = kv_intrsafe;
 	struct kmem_dyn_mode kd = KMEM_DYN_INITIALIZER;
 	void *v;
 	int s;
+
+	if (POOL_INPGHDR(pp))
+		kv.kv_align = pp->pr_pgsize;
 
 	kd.kd_waitok = (flags & PR_WAITOK);
 	kd.kd_slowdown = slowdown;
 
 	s = splvm();
-	v = km_alloc(pp->pr_alloc->pa_pagesz, &kv_intrsafe, pp->pr_crange,
-	    &kd);
+	v = km_alloc(pp->pr_pgsize, &kv, pp->pr_crange, &kd);
 	splx(s);
 
 	return (v);
@@ -1588,26 +1540,39 @@ pool_large_alloc(struct pool *pp, int flags, int *slowdown)
 void
 pool_large_free(struct pool *pp, void *v)
 {
+	struct kmem_va_mode kv = kv_intrsafe;
 	int s;
 
+	if (POOL_INPGHDR(pp))
+		kv.kv_align = pp->pr_pgsize;
+
 	s = splvm();
-	km_free(v, pp->pr_alloc->pa_pagesz, &kv_intrsafe, pp->pr_crange);
+	km_free(v, pp->pr_pgsize, &kv, pp->pr_crange);
 	splx(s);
 }
 
 void *
 pool_large_alloc_ni(struct pool *pp, int flags, int *slowdown)
 {
+	struct kmem_va_mode kv = kv_any;
 	struct kmem_dyn_mode kd = KMEM_DYN_INITIALIZER;
+
+	if (POOL_INPGHDR(pp))
+		kv.kv_align = pp->pr_pgsize;
 
 	kd.kd_waitok = (flags & PR_WAITOK);
 	kd.kd_slowdown = slowdown;
 
-	return (km_alloc(pp->pr_alloc->pa_pagesz, &kv_any, pp->pr_crange, &kd));
+	return (km_alloc(pp->pr_pgsize, &kv, pp->pr_crange, &kd));
 }
 
 void
 pool_large_free_ni(struct pool *pp, void *v)
 {
-	km_free(v, pp->pr_alloc->pa_pagesz, &kv_any, pp->pr_crange);
+	struct kmem_va_mode kv = kv_any;
+
+	if (POOL_INPGHDR(pp))
+		kv.kv_align = pp->pr_pgsize;
+
+	km_free(v, pp->pr_pgsize, &kv, pp->pr_crange);
 }
