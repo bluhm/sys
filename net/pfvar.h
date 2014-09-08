@@ -1397,10 +1397,11 @@ struct pf_pdesc {
 
 #define REASON_SET(a, x) \
 	do { \
-		if ((void *)(a) != NULL) \
+		if ((void *)(a) != NULL) { \
 			*(a) = (x); \
-		if (x < PFRES_MAX) \
-			pf_status.counters[x]++; \
+			if (x < PFRES_MAX) \
+				pf_status.counters[x]++; \
+		} \
 	} while (0)
 
 struct pf_status {
