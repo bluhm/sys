@@ -1,4 +1,4 @@
-/*	$OpenBSD: bpf.c,v 1.103 2014/07/12 18:44:22 tedu Exp $	*/
+/*	$OpenBSD: bpf.c,v 1.109 2014/09/23 00:26:11 dlg Exp $	*/
 /*	$NetBSD: bpf.c,v 1.33 1997/02/21 23:59:35 thorpej Exp $	*/
 
 /*
@@ -52,6 +52,7 @@
 #include <sys/poll.h>
 #include <sys/kernel.h>
 #include <sys/sysctl.h>
+#include <sys/rwlock.h>
 
 #include <net/if.h>
 #include <net/bpf.h>
@@ -108,6 +109,8 @@ int	bpf_setdlt(struct bpf_d *, u_int);
 
 void	filt_bpfrdetach(struct knote *);
 int	filt_bpfread(struct knote *, long);
+
+int	bpf_sysctl_locked(int *, u_int, void *, size_t *, void *, size_t);
 
 struct bpf_d *bpfilter_lookup(int);
 struct bpf_d *bpfilter_create(int);
@@ -172,7 +175,7 @@ bpf_movein(struct uio *uio, u_int linktype, struct mbuf **mp,
 		return (EIO);
 	}
 
-	if (uio->uio_resid > MCLBYTES)
+	if (uio->uio_resid > MAXMCLBYTES)
 		return (EIO);
 	len = uio->uio_resid;
 
@@ -181,7 +184,7 @@ bpf_movein(struct uio *uio, u_int linktype, struct mbuf **mp,
 	m->m_pkthdr.len = len - hlen;
 
 	if (len > MHLEN) {
-		MCLGET(m, M_WAIT);
+		MCLGETI(m, M_WAIT, NULL, len);
 		if ((m->m_flags & M_EXT) == 0) {
 			error = ENOBUFS;
 			goto bad;
@@ -224,9 +227,7 @@ bpf_movein(struct uio *uio, u_int linktype, struct mbuf **mp,
 	/*
 	 * Prepend the data link type as a mbuf tag
 	 */
-	mtag = m_tag_get(PACKET_TAG_DLT, sizeof(u_int), M_NOWAIT);
-	if (mtag == NULL)
-		return (ENOMEM);
+	mtag = m_tag_get(PACKET_TAG_DLT, sizeof(u_int), M_WAIT);
 	*(u_int *)(mtag + 1) = linktype;
 	m_tag_prepend(m, mtag);
 
@@ -304,10 +305,6 @@ bpf_detachd(struct bpf_d *d)
 #define D_GET(d) ((d)->bd_ref++)
 #define D_PUT(d) bpf_freed(d)
 
-/*
- * bpfilterattach() is called at boot time in new systems.  We do
- * nothing here since old systems will not call this.
- */
 /* ARGSUSED */
 void
 bpfilterattach(int n)
@@ -1064,11 +1061,13 @@ bpfkqfilter(dev_t dev, struct knote *kn)
 		return (EINVAL);
 	}
 
-	kn->kn_hook = (caddr_t)((u_long)dev);
+	kn->kn_hook = d;
 
 	s = splnet();
 	D_GET(d);
 	SLIST_INSERT_HEAD(klist, kn, kn_selnext);
+	if (d->bd_rtout != -1 && d->bd_rdStart == 0)
+		d->bd_rdStart = ticks;
 	splx(s);
 
 	return (0);
@@ -1077,11 +1076,9 @@ bpfkqfilter(dev_t dev, struct knote *kn)
 void
 filt_bpfrdetach(struct knote *kn)
 {
-	dev_t dev = (dev_t)((u_long)kn->kn_hook);
-	struct bpf_d *d;
+	struct bpf_d *d = kn->kn_hook;
 	int s;
 
-	d = bpfilter_lookup(minor(dev));
 	s = splnet();
 	SLIST_REMOVE(&d->bd_sel.si_note, kn, knote, kn_selnext);
 	D_PUT(d);
@@ -1091,10 +1088,8 @@ filt_bpfrdetach(struct knote *kn)
 int
 filt_bpfread(struct knote *kn, long hint)
 {
-	dev_t dev = (dev_t)((u_long)kn->kn_hook);
-	struct bpf_d *d;
+	struct bpf_d *d = kn->kn_hook;
 
-	d = bpfilter_lookup(minor(dev));
 	kn->kn_data = d->bd_hlen;
 	if (d->bd_immediate)
 		kn->kn_data += d->bd_slen;
@@ -1536,14 +1531,11 @@ bpfdetach(struct ifnet *ifp)
 }
 
 int
-bpf_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
-    size_t newlen)
+bpf_sysctl_locked(int *name, u_int namelen, void *oldp, size_t *oldlenp,
+    void *newp, size_t newlen)
 {
 	int newval;
 	int error;
-
-	if (namelen != 1)
-		return (ENOTDIR);
 
 	switch (name[0]) {
 	case NET_BPF_BUFSIZE:
@@ -1568,6 +1560,30 @@ bpf_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		return (EOPNOTSUPP);
 	}
 	return (0);
+}
+
+int
+bpf_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
+    size_t newlen)
+{
+	static struct rwlock bpf_sysctl_lk = RWLOCK_INITIALIZER("bpfsz");
+	int flags = RW_INTR;
+	int error;
+
+	if (namelen != 1)
+		return (ENOTDIR);
+
+	flags |= (newp == NULL) ? RW_READ : RW_WRITE;
+
+	error = rw_enter(&bpf_sysctl_lk, flags);
+	if (error != 0)
+		return (error);
+
+	error = bpf_sysctl_locked(name, namelen, oldp, oldlenp, newp, newlen);
+
+	rw_exit(&bpf_sysctl_lk);
+
+	return (error);
 }
 
 struct bpf_d *

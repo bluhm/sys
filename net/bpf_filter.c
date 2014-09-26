@@ -1,4 +1,4 @@
-/*	$OpenBSD: bpf_filter.c,v 1.24 2011/02/13 22:41:10 canacar Exp $	*/
+/*	$OpenBSD: bpf_filter.c,v 1.26 2014/09/19 11:43:31 otto Exp $	*/
 /*	$NetBSD: bpf_filter.c,v 1.12 1996/02/13 22:00:00 christos Exp $	*/
 
 /*
@@ -88,10 +88,7 @@ int	bpf_m_xword(struct mbuf *, u_int32_t, int *);
 int	bpf_m_xhalf(struct mbuf *, u_int32_t, int *);
 
 int
-bpf_m_xword(m, k, err)
-	struct mbuf *m;
-	u_int32_t k;
-	int *err;
+bpf_m_xword(struct mbuf *m, u_int32_t k, int *err)
 {
 	int len;
 	u_char *cp, *np;
@@ -123,10 +120,7 @@ bpf_m_xword(m, k, err)
 }
 
 int
-bpf_m_xhalf(m, k, err)
-	struct mbuf *m;
-	u_int32_t k;
-	int *err;
+bpf_m_xhalf(struct mbuf *m, u_int32_t k, int *err)
 {
 	int len;
 	u_char *cp;
@@ -155,11 +149,7 @@ bpf_m_xhalf(m, k, err)
  * buflen is the amount of data present
  */
 u_int
-bpf_filter(pc, p, wirelen, buflen)
-	struct bpf_insn *pc;
-	u_char *p;
-	u_int wirelen;
-	u_int buflen;
+bpf_filter(struct bpf_insn *pc, u_char *p, u_int wirelen, u_int buflen)
 {
 	u_int32_t A = 0, X = 0;
 	u_int32_t k;
@@ -191,7 +181,7 @@ bpf_filter(pc, p, wirelen, buflen)
 
 		case BPF_LD|BPF_W|BPF_ABS:
 			k = pc->k;
-			if (k + sizeof(int32_t) > buflen) {
+			if (k > buflen || sizeof(int32_t) > buflen - k) {
 #ifdef _KERNEL
 				int merr;
 
@@ -210,7 +200,7 @@ bpf_filter(pc, p, wirelen, buflen)
 
 		case BPF_LD|BPF_H|BPF_ABS:
 			k = pc->k;
-			if (k + sizeof(int16_t) > buflen) {
+			if (k > buflen || sizeof(int16_t) > buflen - k) {
 #ifdef _KERNEL
 				int merr;
 
@@ -257,7 +247,7 @@ bpf_filter(pc, p, wirelen, buflen)
 
 		case BPF_LD|BPF_W|BPF_IND:
 			k = X + pc->k;
-			if (k + sizeof(int32_t) > buflen) {
+			if (k > buflen || sizeof(int32_t) > buflen - k) {
 #ifdef _KERNEL
 				int merr;
 
@@ -276,7 +266,7 @@ bpf_filter(pc, p, wirelen, buflen)
 
 		case BPF_LD|BPF_H|BPF_IND:
 			k = X + pc->k;
-			if (k + sizeof(int16_t) > buflen) {
+			if (k > buflen || sizeof(int16_t) > buflen - k) {
 #ifdef _KERNEL
 				int merr;
 
@@ -485,9 +475,7 @@ bpf_filter(pc, p, wirelen, buflen)
  * Otherwise, a bogus program could easily crash the system.
  */
 int
-bpf_validate(f, len)
-	struct bpf_insn *f;
-	int len;
+bpf_validate(struct bpf_insn *f, int len)
 {
 	u_int i, from;
 	struct bpf_insn *p;

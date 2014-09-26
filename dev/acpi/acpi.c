@@ -1,4 +1,4 @@
-/* $OpenBSD: acpi.c,v 1.267 2014/07/20 18:05:21 mlarkin Exp $ */
+/* $OpenBSD: acpi.c,v 1.272 2014/09/26 09:25:38 kettenis Exp $ */
 /*
  * Copyright (c) 2005 Thorsten Lockert <tholo@sigmasoft.com>
  * Copyright (c) 2005 Jordan Hargrave <jordan@openbsd.org>
@@ -29,6 +29,7 @@
 #include <sys/kthread.h>
 #include <sys/sched.h>
 #include <sys/reboot.h>
+#include <sys/sysctl.h>
 
 #ifdef HIBERNATE
 #include <sys/hibernate.h>
@@ -74,6 +75,7 @@ int	acpi_hasprocfvs;
 void 	acpi_pci_match(struct device *, struct pci_attach_args *);
 pcireg_t acpi_pci_min_powerstate(pci_chipset_tag_t, pcitag_t);
 void	 acpi_pci_set_powerstate(pci_chipset_tag_t, pcitag_t, int, int);
+int	acpi_pci_notify(struct aml_node *, int, void *);
 
 int	acpi_match(struct device *, void *, void *);
 void	acpi_attach(struct device *, struct device *, void *);
@@ -567,6 +569,8 @@ acpi_pci_match(struct device *dev, struct pci_attach_args *pa)
 		state = pci_get_powerstate(pa->pa_pc, pa->pa_tag);
 		acpi_pci_set_powerstate(pa->pa_pc, pa->pa_tag, state, 1);
 		acpi_pci_set_powerstate(pa->pa_pc, pa->pa_tag, state, 0);
+
+		aml_register_notify(pdev->node, NULL, acpi_pci_notify, pdev, 0);
 	}
 }
 
@@ -660,6 +664,29 @@ acpi_pci_set_powerstate(pci_chipset_tag_t pc, pcitag_t tag, int state, int pre)
 
 	}
 #endif /* NACPIPWRRES > 0 */
+}
+
+int
+acpi_pci_notify(struct aml_node *node, int ntype, void *arg)
+{
+	struct acpi_pci *pdev = arg;
+	pci_chipset_tag_t pc = NULL;
+	pcitag_t tag;
+	pcireg_t reg;
+	int offset;
+
+	/* We're only interested in Device Wake notifications. */
+	if (ntype != 2)
+		return (0);
+
+	tag = pci_make_tag(pc, pdev->bus, pdev->dev, pdev->fun);
+	if (pci_get_capability(pc, tag, PCI_CAP_PWRMGMT, &offset, 0)) {
+		/* Clear the PME Status bit if it is set. */
+		reg = pci_conf_read(pc, tag, offset + PCI_PMCSR);
+		pci_conf_write(pc, tag, offset + PCI_PMCSR, reg);
+	}
+
+	return (0);
 }
 
 void
@@ -2084,7 +2111,7 @@ acpi_indicator(struct acpi_softc *sc, int led_state)
 int
 acpi_sleep_state(struct acpi_softc *sc, int state)
 {
-	struct device *mainbus = device_mainbus();
+	extern int perflevel;
 	int error = ENXIO;
 	int s;
 
@@ -2110,18 +2137,26 @@ acpi_sleep_state(struct acpi_softc *sc, int state)
 	acpi_indicator(sc, ACPI_SST_WAKING);	/* blink */
 
 #if NWSDISPLAY > 0
+	/*
+	 * Temporarily release the lock to prevent the X server from
+	 * blocking on setting the display brightness.
+	 */
+	rw_exit_write(&sc->sc_lck);
 	wsdisplay_suspend();
+	rw_enter_write(&sc->sc_lck);
 #endif /* NWSDISPLAY > 0 */
-
-	if (config_suspend(mainbus, DVACT_QUIESCE))
-		goto fail_quiesce;
 
 #ifdef HIBERNATE
 	if (state == ACPI_STATE_S4) {
 		uvmpd_hibernate();
 		hibernate_suspend_bufcache();
+		if (hibernate_alloc())
+			goto fail_alloc;
 	}
 #endif /* HIBERNATE */
+
+	if (config_suspend_all(DVACT_QUIESCE))
+		goto fail_quiesce;
 
 	bufq_quiesce();
 
@@ -2135,7 +2170,7 @@ acpi_sleep_state(struct acpi_softc *sc, int state)
 	disable_intr();	/* PSL_I for resume; PIC/APIC broken until repair */
 	cold = 1;	/* Force other code to delay() instead of tsleep() */
 
-	if (config_suspend(mainbus, DVACT_SUSPEND) != 0)
+	if (config_suspend_all(DVACT_SUSPEND) != 0)
 		goto fail_suspend;
 	acpi_sleep_clocks(sc, state);
 
@@ -2174,7 +2209,7 @@ acpi_sleep_state(struct acpi_softc *sc, int state)
 	acpi_resume_cpu(sc);
 
 fail_pts:
-	config_suspend(mainbus, DVACT_RESUME);
+	config_suspend_all(DVACT_RESUME);
 
 fail_suspend:
 	cold = 0;
@@ -2194,21 +2229,28 @@ fail_suspend:
 	bufq_restart();
 
 fail_quiesce:
-	config_suspend(mainbus, DVACT_WAKEUP);
-
-#if NWSDISPLAY > 0
-	wsdisplay_resume();
-#endif /* NWSDISPLAY > 0 */
-
-	acpi_record_event(sc, APM_NORMAL_RESUME);
-	acpi_indicator(sc, ACPI_SST_WORKING);
+	config_suspend_all(DVACT_WAKEUP);
 
 #ifdef HIBERNATE
+fail_alloc:
 	if (state == ACPI_STATE_S4) {
 		hibernate_free();
 		hibernate_resume_bufcache();
 	}
 #endif /* HIBERNATE */
+
+#if NWSDISPLAY > 0
+	rw_exit_write(&sc->sc_lck);
+	wsdisplay_resume();
+	rw_enter_write(&sc->sc_lck);
+#endif /* NWSDISPLAY > 0 */
+
+	/* Restore hw.setperf */
+	if (cpu_setperf != NULL)
+		cpu_setperf(perflevel);
+
+	acpi_record_event(sc, APM_NORMAL_RESUME);
+	acpi_indicator(sc, ACPI_SST_WORKING);
 
 fail_tts:
 	return (error);
