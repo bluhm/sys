@@ -1,4 +1,4 @@
-/*	$OpenBSD: route.c,v 1.182 2014/09/03 08:51:01 mpi Exp $	*/
+/*	$OpenBSD: route.c,v 1.185 2014/10/02 12:21:20 mpi Exp $	*/
 /*	$NetBSD: route.c,v 1.14 1996/02/13 22:00:46 christos Exp $	*/
 
 /*
@@ -320,14 +320,6 @@ rtalloc_noclone(struct route *ro)
 		return;		/* cached route is still valid */
 	ro->ro_rt = rtalloc1(&ro->ro_dst, RT_REPORT | RT_NOCLONING,
 	    ro->ro_tableid);
-}
-
-void
-rtalloc(struct route *ro)
-{
-	if (ro->ro_rt && ro->ro_rt->rt_ifp && (ro->ro_rt->rt_flags & RTF_UP))
-		return;		/* cached route is still valid */
-	ro->ro_rt = rtalloc1(&ro->ro_dst, RT_REPORT, ro->ro_tableid);
 }
 
 struct rtentry *
@@ -1210,6 +1202,7 @@ void
 rt_ifa_addloop(struct ifaddr *ifa)
 {
 	struct rtentry *rt;
+	u_int flags = RTF_HOST|RTF_LOCAL;
 
 	/*
 	 * If the configured address correspond to the magical "any"
@@ -1233,12 +1226,13 @@ rt_ifa_addloop(struct ifaddr *ifa)
 		break;
 	}
 
+	if (!ISSET(ifa->ifa_ifp->if_flags, (IFF_LOOPBACK|IFF_POINTOPOINT)))
+		flags |= RTF_LLINFO;
+
 	/* If there is no loopback entry, allocate one. */
 	rt = rtalloc1(ifa->ifa_addr, 0, ifa->ifa_ifp->if_rdomain);
-	if (rt == NULL || (rt->rt_flags & RTF_HOST) == 0 ||
-	    (rt->rt_ifp->if_flags & IFF_LOOPBACK) == 0)
-		rt_ifa_add(ifa, RTF_UP| RTF_HOST | RTF_LLINFO | RTF_LOCAL,
-		    ifa->ifa_addr);
+	if (rt == NULL || !ISSET(rt->rt_flags, flags));
+		rt_ifa_add(ifa, RTF_UP | flags, ifa->ifa_addr);
 	if (rt)
 		rt->rt_refcnt--;
 }
@@ -1250,6 +1244,7 @@ void
 rt_ifa_delloop(struct ifaddr *ifa)
 {
 	struct rtentry *rt;
+	u_int flags = RTF_HOST|RTF_LOCAL;
 
 	/*
 	 * We do not add local routes for such address, so do not bother
@@ -1271,8 +1266,11 @@ rt_ifa_delloop(struct ifaddr *ifa)
 		break;
 	}
 
+	if (!ISSET(ifa->ifa_ifp->if_flags, (IFF_LOOPBACK|IFF_POINTOPOINT)))
+		flags |= RTF_LLINFO;
+
 	/*
-	 * Before deleting, check if a corresponding loopbacked host
+	 * Before deleting, check if a corresponding local host
 	 * route surely exists.  With this check, we can avoid to
 	 * delete an interface direct route whose destination is same
 	 * as the address being removed.  This can happen when removing
@@ -1280,10 +1278,8 @@ rt_ifa_delloop(struct ifaddr *ifa)
 	 * to a shared medium.
 	 */
 	rt = rtalloc1(ifa->ifa_addr, 0, ifa->ifa_ifp->if_rdomain);
-	if (rt != NULL && (rt->rt_flags & RTF_HOST) != 0 &&
-	    (rt->rt_ifp->if_flags & IFF_LOOPBACK) != 0)
-		rt_ifa_del(ifa,  RTF_HOST | RTF_LLINFO | RTF_LOCAL,
-		    ifa->ifa_addr);
+	if (rt != NULL && ISSET(rt->rt_flags, flags))
+		rt_ifa_del(ifa, flags, ifa->ifa_addr);
 	if (rt)
 		rt->rt_refcnt--;
 }
