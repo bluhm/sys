@@ -2061,11 +2061,8 @@ step6:
 		 * but if two URG's are pending at once, some out-of-band
 		 * data may creep in... ick.
 		 */
-		if (th->th_urp <= (u_int16_t) tlen
-#ifdef SO_OOBINLINE
-		     && (so->so_options & SO_OOBINLINE) == 0
-#endif
-		     )
+		if (th->th_urp <= (u_int16_t) tlen &&
+		    (so->so_options & SO_OOBINLINE) == 0)
 		        tcp_pulloutofband(so, th->th_urp, m, hdroptlen);
 	} else
 		/*
