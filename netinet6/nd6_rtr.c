@@ -685,7 +685,7 @@ defrouter_reset(void)
 
 	/*
 	 * XXX should we also nuke any default routers in the kernel, by
-	 * going through them by rtalloc1()?
+	 * going through them by rtalloc()?
 	 */
 }
 

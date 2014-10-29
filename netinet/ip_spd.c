@@ -244,8 +244,8 @@ ipsp_spd_lookup(struct mbuf *m, int af, int hlen, int *error, int direction,
 	re->re_tableid = rdomain;
 
 	/* Actual SPD lookup. */
-	re->re_rt = rtalloc1((struct sockaddr *)&re->re_dst, RT_REPORT,
-	    re->re_tableid);
+	re->re_rt = rtalloc((struct sockaddr *)&re->re_dst,
+	    RT_REPORT|RT_RESOLVE, re->re_tableid);
 	if (re->re_rt == NULL) {
 		/*
 		 * Return whatever the socket requirements are, there are no

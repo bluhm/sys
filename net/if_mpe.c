@@ -163,7 +163,7 @@ mpestart(struct ifnet *ifp)
 			continue;
 		}
 
-		rt = rtalloc1(sa, RT_REPORT, 0);
+		rt = rtalloc(sa, RT_REPORT|RT_RESOLVE, 0);
 		if (rt == NULL) {
 			/* no route give up */
 			m_freem(m);

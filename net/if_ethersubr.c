@@ -285,7 +285,7 @@ ether_output(struct ifnet *ifp0, struct mbuf *m0, struct sockaddr *dst,
 		senderr(ENETDOWN);
 	if ((rt = rt0) != NULL) {
 		if ((rt->rt_flags & RTF_UP) == 0) {
-			if ((rt0 = rt = rtalloc1(dst, RT_REPORT,
+			if ((rt0 = rt = rtalloc(dst, RT_REPORT|RT_RESOLVE,
 			    m->m_pkthdr.ph_rtableid)) != NULL)
 				rt->rt_refcnt--;
 			else
@@ -299,8 +299,8 @@ ether_output(struct ifnet *ifp0, struct mbuf *m0, struct sockaddr *dst,
 				rtfree(rt);
 				rt = rt0;
 			lookup:
-				rt->rt_gwroute = rtalloc1(rt->rt_gateway,
-				    RT_REPORT, ifp->if_rdomain);
+				rt->rt_gwroute = rtalloc(rt->rt_gateway,
+				    RT_REPORT|RT_RESOLVE, ifp->if_rdomain);
 				if ((rt = rt->rt_gwroute) == NULL)
 					senderr(EHOSTUNREACH);
 			}

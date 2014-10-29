@@ -392,7 +392,7 @@ rtalloc_mpath(struct sockaddr *dst, u_int32_t *srcaddrp, u_int rtableid)
 	int hash, npaths, threshold;
 #endif
 
-	rt = rtalloc1(dst, RT_REPORT, rtableid);
+	rt = rtalloc(dst, RT_REPORT|RT_RESOLVE, rtableid);
 
 	/* if the route does not exist or it is not multipath, don't care */
 	if (rt == NULL || !ISSET(rt->rt_flags, RTF_MPATH))
