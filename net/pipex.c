@@ -1,4 +1,4 @@
-/*	$OpenBSD: pipex.c,v 1.58 2014/10/21 10:52:53 yasuoka Exp $	*/
+/*	$OpenBSD: pipex.c,v 1.61 2014/10/28 09:45:37 yasuoka Exp $	*/
 
 /*-
  * Copyright (c) 2009 Internet Initiative Japan Inc.
@@ -129,7 +129,8 @@ int pipex_debug = 0;		/* systcl net.inet.ip.pipex_debug */
 void
 pipex_init(void)
 {
-	extern int max_keylen;		/* for radix.c */
+	int		 i;
+	extern int	 max_keylen;		/* for radix.c */
 
 	if (pipex_softintr != NULL)
 		return;
@@ -144,8 +145,10 @@ pipex_init(void)
 
 	if (sizeof(struct sockaddr_in) > max_keylen)
 		max_keylen = sizeof(struct sockaddr_in);
-	memset(pipex_id_hashtable, 0, sizeof(pipex_id_hashtable));
-	memset(pipex_peer_addr_hashtable, 0, sizeof(pipex_peer_addr_hashtable));
+	for (i = 0; i < nitems(pipex_id_hashtable); i++)
+		LIST_INIT(&pipex_id_hashtable[i]);
+	for (i = 0; i < nitems(pipex_peer_addr_hashtable); i++)
+		LIST_INIT(&pipex_peer_addr_hashtable[i]);
 	/* queue and softintr init */
 	IFQ_SET_MAXLEN(&pipexinq, IFQ_MAXLEN);
 	IFQ_SET_MAXLEN(&pipexoutq, IFQ_MAXLEN);
@@ -178,7 +181,7 @@ pipex_iface_init(struct pipex_iface_context *pipex_iface, struct ifnet *ifp)
 	splx(s);
 
 	/* virtual pipex_session entry for multicast */
-	session = pool_get(&pipex_session_pool, PR_WAITOK);
+	session = pool_get(&pipex_session_pool, PR_WAITOK | PR_ZERO);
 	session->is_multicast = 1;
 	session->pipex_iface = pipex_iface;
 	pipex_iface->multicast_session = session;
@@ -750,7 +753,7 @@ pipex_ppp_dequeue(void)
 				if (session->ip_forward == 0 &&
 				    session->ip6_forward == 0)
 					continue;
-				m0 = m_copym(m, 0, M_COPYALL, M_WAITOK);
+				m0 = m_copym(m, 0, M_COPYALL, M_NOWAIT);
 				if (m0 == NULL) {
 					session->stat.oerrors++;
 					continue;
@@ -910,8 +913,10 @@ pipex_output(struct mbuf *m0, int af, int off,
 	struct ip ip;
 	struct pipex_tag *tag;
 	struct m_tag *mtag;
+	struct mbuf *mret;
 
 	session = NULL;
+	mret = NULL;
 	switch (af) {
 	case AF_INET:
 		if (m0->m_pkthdr.len >= sizeof(struct ip) + off) {
@@ -936,16 +941,33 @@ pipex_output(struct mbuf *m0, int af, int off,
 				}
 			}
 
+			if (session == pipex_iface->multicast_session) {
+				mret = m0;
+				m0 = m_copym(m0, 0, M_COPYALL, M_NOWAIT);
+				if (m0 == NULL) {
+					m0 = mret;
+					mret = NULL;
+					goto drop;
+				}
+			}
+
 			if (off > 0)
 				m_adj(m0, off);
 
 			pipex_ip_output(m0, session);
-			return (NULL);
+			return (mret);
 		}
 		break;
 	}
 
 	return (m0);
+
+drop:
+	if (m0 != NULL)
+		m_freem(m0);
+	if (session != NULL)
+		session->stat.oerrors++;
+	return(NULL);
 }
 
 Static void
@@ -2019,6 +2041,7 @@ pipex_l2tp_output(struct mbuf *m0, struct pipex_session *session)
 		ip->ip_len = htons(hlen + plen);
 		ip->ip_ttl = MAXTTL;
 		ip->ip_tos = 0;
+		ip->ip_off = 0;
 
 		if (ip_output(m0, NULL, NULL, 0, NULL, NULL,
 		    session->proto.l2tp.ipsecflowinfo) != 0) {
