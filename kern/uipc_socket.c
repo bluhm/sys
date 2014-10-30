@@ -1469,6 +1469,14 @@ sorwakeup(struct socket *so)
 {
 #ifdef SOCKET_SPLICE
 	if (so->so_rcv.sb_flagsintr & SB_SPLICE) {
+		/*
+		 * TCP has a sendbuffer that can handle multiple packets
+		 * at once.  So queue the stream a bit to accumulate data.
+		 * The sosplice thread will call somove() later and send
+		 * the packets calling tcp_output() only once.
+		 * In the UDP case, send out the packets immediately.
+		 * Using a thread would make things slower.
+		 */
 		if (so->so_proto->pr_flags & PR_WANTRCVD)
 			task_add(sosplice_taskq, &so->so_splicetask);
 		else
