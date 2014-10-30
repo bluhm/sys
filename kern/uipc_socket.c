@@ -206,11 +206,15 @@ sofree(struct socket *so)
 			return;
 	}
 #ifdef SOCKET_SPLICE
-	if (issplicedback(so))
-		sounsplice(so->so_sp->sp_soback, so,
-		    so->so_sp->sp_soback != so);
-	if (isspliced(so))
-		sounsplice(so, so->so_sp->sp_socket, 0);
+	if (so->so_sp) {
+		if (issplicedback(so))
+			sounsplice(so->so_sp->sp_soback, so,
+			    so->so_sp->sp_soback != so);
+		if (isspliced(so))
+			sounsplice(so, so->so_sp->sp_socket, 0);
+		pool_put(&sosplice_pool, so->so_sp);
+		so->so_sp = NULL;
+	}
 #endif /* SOCKET_SPLICE */
 	sbrelease(&so->so_snd);
 	sorflush(so);
@@ -1049,6 +1053,8 @@ sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
 	if ((so->so_state & (SS_ISCONNECTED|SS_ISCONNECTING)) == 0 &&
 	    (so->so_proto->pr_flags & PR_CONNREQUIRED))
 		return (ENOTCONN);
+	if (so->so_sp == NULL)
+		so->so_sp = pool_get(&sosplice_pool, PR_WAITOK | PR_ZERO);
 
 	/* If no fd is given, unsplice by removing existing link. */
 	if (fd < 0) {
@@ -1074,6 +1080,8 @@ sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
 	if ((error = getsock(curproc->p_fd, fd, &fp)) != 0)
 		return (error);
 	sosp = fp->f_data;
+	if (sosp->so_sp == NULL)
+		sosp->so_sp = pool_get(&sosplice_pool, PR_WAITOK | PR_ZERO);
 
 	/* Lock both receive and send buffer. */
 	if ((error = sblock(&so->so_rcv,
