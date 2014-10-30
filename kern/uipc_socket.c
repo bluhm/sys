@@ -1206,7 +1206,7 @@ sotask(void *arg1, void *arg2)
 		 * called from softnet interrupt context.  This would remove
 		 * the socket during somove().
 		 */
-		(void) somove(so, M_DONTWAIT);
+		somove(so, M_DONTWAIT);
 	}
 	splx(s);
 
