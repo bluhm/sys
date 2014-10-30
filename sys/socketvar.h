@@ -152,6 +152,9 @@ struct socket {
  * Macros for sockets and socket buffering.
  */
 
+#define isspliced(so)		((so)->so_sp && (so)->so_sp->sp_socket)
+#define issplicedback(so)	((so)->so_sp && (so)->so_sp->sp_soback)
+
 /*
  * Do we need to notify the other side when I/O is possible?
  */
