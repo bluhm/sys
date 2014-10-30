@@ -87,8 +87,8 @@ struct socket {
 	struct sosplice {
 		struct	socket *sp_socket;	/* send data to drain socket */
 		struct	socket *sp_soback;	/* back ref to source socket */
-		off_t	sp_splicelen;		/* number of bytes spliced */
-		off_t	sp_splicemax;		/* maximum number of bytes */
+		off_t	sp_len;			/* number of bytes spliced */
+		off_t	sp_max;			/* maximum number of bytes */
 		struct	timeval sp_idletv;	/* idle timeout */
 		struct	timeout sp_idleto;
 	} *so_sp;

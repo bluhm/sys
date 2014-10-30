@@ -1023,8 +1023,8 @@ sorflush(struct socket *so)
 
 #ifdef SOCKET_SPLICE
 
-#define so_splicelen	so_sp->sp_splicelen
-#define so_splicemax	so_sp->sp_splicemax
+#define so_splicelen	so_sp->sp_len
+#define so_splicemax	so_sp->sp_max
 #define so_spliceidletv	so_sp->sp_idletv
 #define so_spliceidleto	so_sp->sp_idleto
 
