@@ -80,12 +80,19 @@ int	somaxconn = SOMAXCONN;
 int	sominconn = SOMINCONN;
 
 struct pool socket_pool;
+#ifdef SOCKET_SPLICE
+struct pool sosplice_pool;
+#endif
 
 void
 soinit(void)
 {
 
 	pool_init(&socket_pool, sizeof(struct socket), 0, 0, 0, "sockpl", NULL);
+#ifdef SOCKET_SPLICE
+	pool_init(&sosplice_pool, sizeof(struct sosplice), 0, 0, 0, "sosppl",
+	    NULL);
+#endif
 }
 
 /*
