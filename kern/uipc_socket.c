@@ -1146,7 +1146,7 @@ soidle(void *arg)
 	int s;
 
 	s = splsoftnet();
-	if (so->so_sp->sp_socket) {
+	if (so->so_rcv.sb_flagsintr & SB_SPLICE) {
 		so->so_error = ETIMEDOUT;
 		sounsplice(so, so->so_sp->sp_socket, 1);
 	}
