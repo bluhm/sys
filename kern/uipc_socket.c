@@ -1729,11 +1729,12 @@ sogetopt(struct socket *so, int level, int optname, struct mbuf **mp)
 #ifdef SOCKET_SPLICE
 		case SO_SPLICE:
 		    {
+			off_t len;
 			int s = splsoftnet();
 
 			m->m_len = sizeof(off_t);
-			memcpy(mtod(m, off_t *), &so->so_splicelen,
-			    sizeof(off_t));
+			len = isspliced(so) ? so->so_splicelen : 0,
+			memcpy(mtod(m, off_t *), &len, sizeof(off_t));
 			splx(s);
 			break;
 		    }
