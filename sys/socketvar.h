@@ -83,12 +83,12 @@ struct socket {
 	u_long	so_oobmark;		/* chars to oob mark */
 
 	struct sosplice {
-		struct	socket *so_splice;	/* send data to drain socket */
-		struct	socket *so_spliceback;	/* ref for notify and cleanup */
-		off_t	so_splicelen;		/* number of bytes spliced */
-		off_t	so_splicemax;		/* maximum number of bytes */
-		struct	timeval so_idletv;	/* idle timeout */
-		struct	timeout so_idleto;
+		struct	socket *sp_socket;	/* send data to drain socket */
+		struct	socket *sp_soback;	/* back ref to source socket */
+		off_t	sp_splicelen;		/* number of bytes spliced */
+		off_t	sp_splicemax;		/* maximum number of bytes */
+		struct	timeval sp_idletv;	/* idle timeout */
+		struct	timeout sp_idleto;
 	} *so_sp;
 /*
  * Variables for socket buffering.
