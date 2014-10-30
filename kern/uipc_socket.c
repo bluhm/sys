@@ -157,7 +157,7 @@ solisten(struct socket *so, int backlog)
 	if (so->so_state & (SS_ISCONNECTED|SS_ISCONNECTING|SS_ISDISCONNECTING))
 		return (EOPNOTSUPP);
 #ifdef SOCKET_SPLICE
-	if (so->so_sp && (so->so_sp->sp_socket || so->so_sp->sp_soback))
+	if (isspliced(so) || issplicedback(so))
 		return (EOPNOTSUPP);
 #endif /* SOCKET_SPLICE */
 	s = splsoftnet();
@@ -199,10 +199,10 @@ sofree(struct socket *so)
 			return;
 	}
 #ifdef SOCKET_SPLICE
-	if (so->so_sp && so->so_sp->sp_soback)
+	if (issplicedback(so))
 		sounsplice(so->so_sp->sp_soback, so,
 		    so->so_sp->sp_soback != so);
-	if (so->so_sp && so->so_sp->sp_socket)
+	if (isspliced(so))
 		sounsplice(so, so->so_sp->sp_socket, 0);
 #endif /* SOCKET_SPLICE */
 	sbrelease(&so->so_snd);
@@ -648,7 +648,7 @@ restart:
 
 	m = so->so_rcv.sb_mb;
 #ifdef SOCKET_SPLICE
-	if (so->so_sp && so->so_sp->sp_socket)
+	if (isspliced(so))
 		m = NULL;
 #endif /* SOCKET_SPLICE */
 	/*
@@ -670,7 +670,7 @@ restart:
 #ifdef DIAGNOSTIC
 		if (m == NULL && so->so_rcv.sb_cc)
 #ifdef SOCKET_SPLICE
-		    if (so->so_sp == NULL || so->so_sp->sp_socket == NULL)
+		    if (!isspliced(so))
 #endif /* SOCKET_SPLICE */
 			panic("receive 1");
 #endif
