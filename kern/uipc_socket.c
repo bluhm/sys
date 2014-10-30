@@ -1415,6 +1415,12 @@ somove(struct socket *so, int wait)
 		timeout_add_tv(&so->so_idleto, &so->so_idletv);
 	return (1);
 }
+
+#undef so_splicelen
+#undef so_splicemax
+#undef so_idletv
+#undef so_idleto
+
 #endif /* SOCKET_SPLICE */
 
 void
@@ -1733,7 +1739,7 @@ sogetopt(struct socket *so, int level, int optname, struct mbuf **mp)
 			int s = splsoftnet();
 
 			m->m_len = sizeof(off_t);
-			len = isspliced(so) ? so->so_splicelen : 0,
+			len = isspliced(so) ? so->so_sp->sp_len : 0,
 			memcpy(mtod(m, off_t *), &len, sizeof(off_t));
 			splx(s);
 			break;
