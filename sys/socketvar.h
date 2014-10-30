@@ -177,7 +177,7 @@ struct socket {
 
 /* can we read something from so? */
 #define	soreadable(so)	\
-    ((so)->so_splice == NULL && \
+    (((so)->so_sp == NULL || (so)->so_sp->sp_socket == NULL) && \
     ((so)->so_rcv.sb_cc >= (so)->so_rcv.sb_lowat || \
     ((so)->so_state & SS_CANTRCVMORE) || \
     (so)->so_qlen || (so)->so_error))
