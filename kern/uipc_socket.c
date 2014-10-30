@@ -1025,8 +1025,8 @@ sorflush(struct socket *so)
 
 #define so_splicelen	so_sp->sp_len
 #define so_splicemax	so_sp->sp_max
-#define so_spliceidletv	so_sp->sp_idletv
-#define so_spliceidleto	so_sp->sp_idleto
+#define so_idletv	so_sp->sp_idletv
+#define so_idleto	so_sp->sp_idleto
 
 int
 sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
@@ -1104,10 +1104,10 @@ sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
 	so->so_splicelen = 0;
 	so->so_splicemax = max;
 	if (tv)
-		so->so_spliceidletv = *tv;
+		so->so_idletv = *tv;
 	else
-		timerclear(&so->so_spliceidletv);
-	timeout_set(&so->so_spliceidleto, soidle, so);
+		timerclear(&so->so_idletv);
+	timeout_set(&so->so_idleto, soidle, so);
 
 	/*
 	 * To prevent softnet interrupt from calling somove() while
@@ -1131,7 +1131,7 @@ sounsplice(struct socket *so, struct socket *sosp, int wakeup)
 {
 	splsoftassert(IPL_SOFTNET);
 
-	timeout_del(&so->so_spliceidleto);
+	timeout_del(&so->so_idleto);
 	sosp->so_snd.sb_flagsintr &= ~SB_SPLICE;
 	so->so_rcv.sb_flagsintr &= ~SB_SPLICE;
 	so->so_sp->sp_socket = sosp->so_sp->sp_soback = NULL;
@@ -1411,8 +1411,8 @@ somove(struct socket *so, int wait)
 		sounsplice(so, sosp, 1);
 		return (0);
 	}
-	if (timerisset(&so->so_spliceidletv))
-		timeout_add_tv(&so->so_spliceidleto, &so->so_spliceidletv);
+	if (timerisset(&so->so_idletv))
+		timeout_add_tv(&so->so_idleto, &so->so_idletv);
 	return (1);
 }
 #endif /* SOCKET_SPLICE */
