@@ -82,12 +82,14 @@ struct socket {
 	uid_t	so_sigeuid;		/* euid of process who set so_pgid */
 	u_long	so_oobmark;		/* chars to oob mark */
 
-	struct	socket *so_splice;	/* send data to drain socket */
-	struct	socket *so_spliceback;	/* back ref for notify and cleanup */
-	off_t	so_splicelen;		/* number of bytes spliced so far */
-	off_t	so_splicemax;		/* maximum number of bytes to splice */
-	struct	timeval so_idletv;	/* idle timeout */
-	struct	timeout so_idleto;
+	struct sosplice {
+		struct	socket *so_splice;	/* send data to drain socket */
+		struct	socket *so_spliceback;	/* ref for notify and cleanup */
+		off_t	so_splicelen;		/* number of bytes spliced */
+		off_t	so_splicemax;		/* maximum number of bytes */
+		struct	timeval so_idletv;	/* idle timeout */
+		struct	timeout so_idleto;
+	} *so_sp;
 /*
  * Variables for socket buffering.
  */
