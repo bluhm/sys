@@ -1022,6 +1022,12 @@ sorflush(struct socket *so)
 }
 
 #ifdef SOCKET_SPLICE
+
+#define so_splicelen	so_sp->sp_splicelen
+#define so_splicemax	so_sp->sp_splicemax
+#define so_idletv	so_sp->sp_idletv
+#define so_idleto	so_sp->sp_idleto
+
 int
 sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
 {
