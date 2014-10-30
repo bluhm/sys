@@ -1423,7 +1423,7 @@ sorwakeup(struct socket *so)
 #ifdef SOCKET_SPLICE
 	if (so->so_rcv.sb_flagsintr & SB_SPLICE)
 		(void) somove(so, M_DONTWAIT);
-	if (so->so_sp && so->so_sp->sp_socket)
+	if (isspliced(so))
 		return;
 #endif
 	sowakeup(so, &so->so_rcv);
@@ -1823,7 +1823,7 @@ filt_soread(struct knote *kn, long hint)
 
 	kn->kn_data = so->so_rcv.sb_cc;
 #ifdef SOCKET_SPLICE
-	if (so->so_sp && so->so_sp->sp_socket)
+	if (isspliced(so))
 		return (0);
 #endif /* SOCKET_SPLICE */
 	if (so->so_state & SS_CANTRCVMORE) {
