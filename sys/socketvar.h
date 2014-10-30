@@ -81,7 +81,9 @@ struct socket {
 	uid_t	so_siguid;		/* uid of process who set so_pgid */
 	uid_t	so_sigeuid;		/* euid of process who set so_pgid */
 	u_long	so_oobmark;		/* chars to oob mark */
-
+/*
+ * Variables for socket splicing, allocated only when needed.
+ */
 	struct sosplice {
 		struct	socket *sp_socket;	/* send data to drain socket */
 		struct	socket *sp_soback;	/* back ref to source socket */
