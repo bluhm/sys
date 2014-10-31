@@ -1754,7 +1754,7 @@ sogetopt(struct socket *so, int level, int optname, struct mbuf **mp)
 			int s = splsoftnet();
 
 			m->m_len = sizeof(off_t);
-			len = so->so_sp ? so->so_sp->ssp_len : 0,
+			len = so->so_sp ? so->so_sp->ssp_len : 0;
 			memcpy(mtod(m, off_t *), &len, sizeof(off_t));
 			splx(s);
 			break;
