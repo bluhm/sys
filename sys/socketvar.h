@@ -85,12 +85,12 @@ struct socket {
  * Variables for socket splicing, allocated only when needed.
  */
 	struct sosplice {
-		struct	socket *sp_socket;	/* send data to drain socket */
-		struct	socket *sp_soback;	/* back ref to source socket */
-		off_t	sp_len;			/* number of bytes spliced */
-		off_t	sp_max;			/* maximum number of bytes */
-		struct	timeval sp_idletv;	/* idle timeout */
-		struct	timeout sp_idleto;
+		struct	socket *ssp_socket;	/* send data to drain socket */
+		struct	socket *ssp_soback;	/* back ref to source socket */
+		off_t	ssp_len;		/* number of bytes spliced */
+		off_t	ssp_max;		/* maximum number of bytes */
+		struct	timeval ssp_idletv;	/* idle timeout */
+		struct	timeout ssp_idleto;
 	} *so_sp;
 /*
  * Variables for socket buffering.
@@ -152,8 +152,8 @@ struct socket {
  * Macros for sockets and socket buffering.
  */
 
-#define isspliced(so)		((so)->so_sp && (so)->so_sp->sp_socket)
-#define issplicedback(so)	((so)->so_sp && (so)->so_sp->sp_soback)
+#define isspliced(so)		((so)->so_sp && (so)->so_sp->ssp_socket)
+#define issplicedback(so)	((so)->so_sp && (so)->so_sp->ssp_soback)
 
 /*
  * Do we need to notify the other side when I/O is possible?

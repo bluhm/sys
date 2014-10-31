@@ -1064,8 +1064,9 @@ fill_file(struct kinfo_file *kf, struct file *fp, struct filedesc *fdp,
 		kf->so_snd_cc = so->so_snd.sb_cc;
 		if (isspliced(so)) {
 			if (show_pointers)
-				kf->so_splice =PTRTOINT64(so->so_sp->sp_socket);
-			kf->so_splicelen = so->so_sp->sp_len;
+				kf->so_splice =
+				    PTRTOINT64(so->so_sp->ssp_socket);
+			kf->so_splicelen = so->so_sp->ssp_len;
 		} else if (issplicedback(so))
 			kf->so_splicelen = -1;
 		if (!so->so_pcb)
