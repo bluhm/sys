@@ -208,10 +208,10 @@ sofree(struct socket *so)
 #ifdef SOCKET_SPLICE
 	if (so->so_sp) {
 		if (issplicedback(so))
-			sounsplice(so->so_sp->sp_soback, so,
-			    so->so_sp->sp_soback != so);
+			sounsplice(so->so_sp->ssp_soback, so,
+			    so->so_sp->ssp_soback != so);
 		if (isspliced(so))
-			sounsplice(so, so->so_sp->sp_socket, 0);
+			sounsplice(so, so->so_sp->ssp_socket, 0);
 		pool_put(&sosplice_pool, so->so_sp);
 		so->so_sp = NULL;
 	}
@@ -1034,10 +1034,10 @@ sorflush(struct socket *so)
 
 #ifdef SOCKET_SPLICE
 
-#define so_splicelen	so_sp->sp_len
-#define so_splicemax	so_sp->sp_max
-#define so_idletv	so_sp->sp_idletv
-#define so_idleto	so_sp->sp_idleto
+#define so_splicelen	so_sp->ssp_len
+#define so_splicemax	so_sp->ssp_max
+#define so_idletv	so_sp->ssp_idletv
+#define so_idleto	so_sp->ssp_idleto
 
 int
 sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
@@ -1063,8 +1063,8 @@ sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
 		    (so->so_state & SS_NBIO) ? M_NOWAIT : M_WAITOK)) != 0)
 			return (error);
 		s = splsoftnet();
-		if (so->so_sp->sp_socket)
-			sounsplice(so, so->so_sp->sp_socket, 1);
+		if (so->so_sp->ssp_socket)
+			sounsplice(so, so->so_sp->ssp_socket, 1);
 		splx(s);
 		sbunlock(&so->so_rcv);
 		return (0);
@@ -1096,7 +1096,7 @@ sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
 	}
 	s = splsoftnet();
 
-	if (so->so_sp->sp_socket || sosp->so_sp->sp_soback) {
+	if (so->so_sp->ssp_socket || sosp->so_sp->ssp_soback) {
 		error = EBUSY;
 		goto release;
 	}
@@ -1114,8 +1114,8 @@ sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
 	}
 
 	/* Splice so and sosp together. */
-	so->so_sp->sp_socket = sosp;
-	sosp->so_sp->sp_soback = so;
+	so->so_sp->ssp_socket = sosp;
+	sosp->so_sp->ssp_soback = so;
 	so->so_splicelen = 0;
 	so->so_splicemax = max;
 	if (tv)
@@ -1149,7 +1149,7 @@ sounsplice(struct socket *so, struct socket *sosp, int wakeup)
 	timeout_del(&so->so_idleto);
 	sosp->so_snd.sb_flagsintr &= ~SB_SPLICE;
 	so->so_rcv.sb_flagsintr &= ~SB_SPLICE;
-	so->so_sp->sp_socket = sosp->so_sp->sp_soback = NULL;
+	so->so_sp->ssp_socket = sosp->so_sp->ssp_soback = NULL;
 	if (wakeup && soreadable(so))
 		sorwakeup(so);
 }
@@ -1163,7 +1163,7 @@ soidle(void *arg)
 	s = splsoftnet();
 	if (so->so_rcv.sb_flagsintr & SB_SPLICE) {
 		so->so_error = ETIMEDOUT;
-		sounsplice(so, so->so_sp->sp_socket, 1);
+		sounsplice(so, so->so_sp->ssp_socket, 1);
 	}
 	splx(s);
 }
@@ -1177,7 +1177,7 @@ soidle(void *arg)
 int
 somove(struct socket *so, int wait)
 {
-	struct socket	*sosp = so->so_sp->sp_socket;
+	struct socket	*sosp = so->so_sp->ssp_socket;
 	struct mbuf	*m, **mp, *nextrecord;
 	u_long		 len, off, oobmark;
 	long		 space;
@@ -1457,7 +1457,7 @@ sowwakeup(struct socket *so)
 {
 #ifdef SOCKET_SPLICE
 	if (so->so_snd.sb_flagsintr & SB_SPLICE)
-		(void) somove(so->so_sp->sp_soback, M_DONTWAIT);
+		(void) somove(so->so_sp->ssp_soback, M_DONTWAIT);
 #endif
 	sowakeup(so, &so->so_snd);
 }
@@ -1754,7 +1754,7 @@ sogetopt(struct socket *so, int level, int optname, struct mbuf **mp)
 			int s = splsoftnet();
 
 			m->m_len = sizeof(off_t);
-			len = so->so_sp ? so->so_sp->sp_len : 0,
+			len = so->so_sp ? so->so_sp->ssp_len : 0,
 			memcpy(mtod(m, off_t *), &len, sizeof(off_t));
 			splx(s);
 			break;
