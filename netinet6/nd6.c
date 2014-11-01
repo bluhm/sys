@@ -1715,6 +1715,12 @@ nd6_output(struct ifnet *ifp, struct ifnet *origifp, struct mbuf *m0,
 				    RT_REPORT, m->m_pkthdr.ph_rtableid);
 				if ((rt = rt->rt_gwroute) == 0)
 					senderr(EHOSTUNREACH);
+				/* the "G" test below also prevents rt == rt0 */
+				if (rt->rt_flags & RTF_GATEWAY) {
+					rt->rt_refcnt--;
+					rt0->rt_gwroute = NULL;
+					senderr(EHOSTUNREACH);
+				}
 			}
 		}
 	}
