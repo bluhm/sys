@@ -303,6 +303,12 @@ ether_output(struct ifnet *ifp0, struct mbuf *m0, struct sockaddr *dst,
 				    RT_REPORT|RT_RESOLVE, ifp->if_rdomain);
 				if ((rt = rt->rt_gwroute) == NULL)
 					senderr(EHOSTUNREACH);
+				/* the "G" test below also prevents rt == rt0 */
+				if (rt->rt_flags & RTF_GATEWAY) {
+					rt->rt_refcnt--;
+					rt0->rt_gwroute = NULL;
+					senderr(EHOSTUNREACH);
+				}
 			}
 		}
 		if (rt->rt_flags & RTF_REJECT)
