@@ -94,7 +94,6 @@ soinit(void)
 #ifdef SOCKET_SPLICE
 	pool_init(&sosplice_pool, sizeof(struct sosplice), 0, 0, 0, "sosppl",
 	    NULL);
-	sosplice_taskq = taskq_create("sosplice", 1, IPL_SOFTNET);
 #endif
 }
 
@@ -1049,6 +1048,9 @@ sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
 	struct file	*fp;
 	struct socket	*sosp;
 	int		 s, error = 0;
+
+	if (sosplice_taskq == NULL)
+		sosplice_taskq = taskq_create("sosplice", 1, IPL_SOFTNET);
 
 	if ((so->so_proto->pr_flags & PR_SPLICE) == 0)
 		return (EPROTONOSUPPORT);
