@@ -1041,6 +1041,7 @@ sorflush(struct socket *so)
 #define so_splicemax	so_sp->ssp_max
 #define so_idletv	so_sp->ssp_idletv
 #define so_idleto	so_sp->ssp_idleto
+#define so_splicetask	so_sp->ssp_task
 
 int
 sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
@@ -1461,6 +1462,7 @@ somove(struct socket *so, int wait)
 #undef so_splicemax
 #undef so_idletv
 #undef so_idleto
+#undef so_splicetask
 
 #endif /* SOCKET_SPLICE */
 
@@ -1478,7 +1480,7 @@ sorwakeup(struct socket *so)
 		 * Using a thread would make things slower.
 		 */
 		if (so->so_proto->pr_flags & PR_WANTRCVD)
-			task_add(sosplice_taskq, &so->so_splicetask);
+			task_add(sosplice_taskq, &so->so_sp->ssp_task);
 		else
 			somove(so, M_DONTWAIT);
 	}
@@ -1495,7 +1497,8 @@ sowwakeup(struct socket *so)
 {
 #ifdef SOCKET_SPLICE
 	if (so->so_snd.sb_flagsintr & SB_SPLICE)
-		task_add(sosplice_taskq, &so->so_spliceback->so_splicetask);
+		task_add(sosplice_taskq,
+		    &so->so_sp->ssp_soback->so_sp->ssp_task);
 #endif
 	sowakeup(so, &so->so_snd);
 }

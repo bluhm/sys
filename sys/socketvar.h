@@ -92,7 +92,7 @@ struct socket {
 		off_t	ssp_max;		/* maximum number of bytes */
 		struct	timeval ssp_idletv;	/* idle timeout */
 		struct	timeout ssp_idleto;
-		struct	task ss_task;		/* task for somove */
+		struct	task ssp_task;		/* task for somove */
 	} *so_sp;
 /*
  * Variables for socket buffering.
