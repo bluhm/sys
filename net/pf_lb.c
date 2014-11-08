@@ -174,14 +174,22 @@ pf_get_sport(struct pf_pdesc *pd, struct pf_rule *r,
 	    PF_SN_NAT))
 		return (1);
 
-	if (pd->proto == IPPROTO_ICMP || pd->proto == IPPROTO_ICMPV6) {
-		if (pd->ndport == htons(ICMP6_ECHO_REQUEST) ||
-		    pd->ndport == htons(ICMP_ECHO)) {
+	if (pd->proto == IPPROTO_ICMP) {
+		if (pd->ndport == htons(ICMP_ECHO)) {
 			low = 1;
 			high = 65535;
 		} else
 			return (0);	/* Don't try to modify non-echo ICMP */
 	}
+#ifdef INET6
+	if (pd->proto == IPPROTO_ICMPV6) {
+		if (pd->ndport == htons(ICMP6_ECHO_REQUEST)) {
+			low = 1;
+			high = 65535;
+		} else
+			return (0);	/* Don't try to modify non-echo ICMP */
+	}
+#endif /* INET6 */
 
 	do {
 		key.af = pd->naf;
