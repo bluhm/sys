@@ -58,6 +58,7 @@
 #include <net/if.h>
 #include <net/if_types.h>
 #include <net/bpf.h>
+#include <net/route.h>
 
 #include <netinet/in.h>
 #include <netinet/ip.h>
@@ -70,6 +71,7 @@
 #include <netinet/udp_var.h>
 #include <netinet/icmp_var.h>
 #include <netinet/if_ether.h>
+#include <netinet/in_pcb.h>
 
 #include <dev/rndvar.h>
 #include <net/pfvar.h>
@@ -82,7 +84,6 @@
 
 #ifdef INET6
 #include <netinet/ip6.h>
-#include <netinet/in_pcb.h>
 #include <netinet/icmp6.h>
 #endif /* INET6 */
 
