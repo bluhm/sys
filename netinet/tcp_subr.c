@@ -1,4 +1,4 @@
-/*	$OpenBSD: tcp_subr.c,v 1.133 2014/10/20 03:43:40 tedu Exp $	*/
+/*	$OpenBSD: tcp_subr.c,v 1.136 2014/11/06 12:05:32 mpi Exp $	*/
 /*	$NetBSD: tcp_subr.c,v 1.22 1996/02/13 23:44:00 christos Exp $	*/
 
 /*
@@ -151,13 +151,11 @@ void
 tcp_init()
 {
 	tcp_iss = 1;		/* wrong */
-	pool_init(&tcpcb_pool, sizeof(struct tcpcb), 0, 0, 0, "tcpcbpl",
-	    NULL);
-	pool_init(&tcpqe_pool, sizeof(struct tcpqent), 0, 0, 0, "tcpqepl",
-	    NULL);
+	pool_init(&tcpcb_pool, sizeof(struct tcpcb), 0, 0, 0, "tcpcb", NULL);
+	pool_init(&tcpqe_pool, sizeof(struct tcpqent), 0, 0, 0, "tcpqe", NULL);
 	pool_sethardlimit(&tcpqe_pool, tcp_reass_limit, NULL, 0);
 #ifdef TCP_SACK
-	pool_init(&sackhl_pool, sizeof(struct sackhole), 0, 0, 0, "sackhlpl",
+	pool_init(&sackhl_pool, sizeof(struct sackhole), 0, 0, 0, "sackhl",
 	    NULL);
 	pool_sethardlimit(&sackhl_pool, tcp_sackhole_limit, NULL, 0);
 #endif /* TCP_SACK */
@@ -956,7 +954,7 @@ tcp_set_iss_tsm(struct tcpcb *tp)
 		uint8_t bytes[SHA512_DIGEST_LENGTH];
 		uint32_t words[2];
 	} digest;
-
+	u_int rdomain = rtable_l2(tp->t_inpcb->inp_rtableid);
 
 	if (tcp_secret_init == 0) {
 		arc4random_buf(tcp_secret, sizeof(tcp_secret));
@@ -965,6 +963,7 @@ tcp_set_iss_tsm(struct tcpcb *tp)
 		tcp_secret_init = 1;
 	}
 	ctx = tcp_secret_ctx;
+	SHA512Update(&ctx, (char *)&rdomain, sizeof(rdomain));
 	SHA512Update(&ctx, (char *)&tp->t_inpcb->inp_lport, sizeof(u_short));
 	SHA512Update(&ctx, (char *)&tp->t_inpcb->inp_fport, sizeof(u_short));
 	if (tp->pf == AF_INET6) {
