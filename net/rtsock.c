@@ -750,9 +750,8 @@ report:
 					newgate = 1;
 				}
 			if (info.rti_info[RTAX_GATEWAY] != NULL &&
-			    rt_setgate(rt, rt_key(rt),
-			    info.rti_info[RTAX_GATEWAY], tableid)) {
-				error = EDQUOT;
+			    (error = rt_setgate(rt, rt_key(rt),
+			    info.rti_info[RTAX_GATEWAY], tableid)))
 				goto flush;
 			}
 			/*
