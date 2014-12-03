@@ -854,10 +854,10 @@ rtrequest1(int req, struct rt_addrinfo *info, u_int8_t prio,
 			prio = ifa->ifa_ifp->if_priority + RTP_STATIC;
 		rt->rt_priority = prio;	/* init routing priority */
 		LIST_INIT(&rt->rt_timer);
-		if (rt_setgate(rt, info->rti_info[RTAX_DST],
-		    info->rti_info[RTAX_GATEWAY], tableid)) {
+		if ((error = rt_setgate(rt, info->rti_info[RTAX_DST],
+		    info->rti_info[RTAX_GATEWAY], tableid))) {
 			pool_put(&rtentry_pool, rt);
-			senderr(ENOBUFS);
+			senderr(error);
 		}
 		ndst = rt_key(rt);
 		if (info->rti_info[RTAX_NETMASK] != NULL) {
@@ -1017,7 +1017,7 @@ rt_setgate(struct rtentry *rt, struct sockaddr *dst, struct sockaddr *gate,
 		old = (caddr_t)rt_key(rt);
 		new = malloc(dlen + glen, M_RTABLE, M_NOWAIT);
 		if (new == NULL)
-			return 1;
+			return (ENOBUFS);
 		rt->rt_nodes->rn_key = new;
 	} else {
 		new = rt->rt_nodes->rn_key;
