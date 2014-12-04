@@ -1,4 +1,4 @@
-/*	$OpenBSD: nd6_nbr.c,v 1.83 2014/11/10 10:46:10 mpi Exp $	*/
+/*	$OpenBSD: nd6_nbr.c,v 1.85 2014/11/20 13:54:24 mpi Exp $	*/
 /*	$KAME: nd6_nbr.c,v 1.61 2001/02/10 16:06:14 jinmei Exp $	*/
 
 /*
@@ -55,8 +55,6 @@
 #include <netinet6/ip6_var.h>
 #include <netinet6/nd6.h>
 #include <netinet/icmp6.h>
-
-#include <dev/rndvar.h>
 
 #include "carp.h"
 #if NCARP > 0
@@ -872,7 +870,7 @@ nd6_na_input(struct mbuf *m, int off, int icmp6len)
 		 * we assume ifp is not a loopback here, so just set the 2nd
 		 * argument as the 1st one.
 		 */
-		nd6_output(ifp, ifp, n, satosin6(rt_key(rt)), rt);
+		nd6_output(ifp, n, satosin6(rt_key(rt)), rt);
 		if (ln->ln_hold == n) {
 			/* n is back in ln_hold. Discard. */
 			m_freem(ln->ln_hold);

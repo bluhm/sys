@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ethersubr.c,v 1.177 2014/11/06 14:28:47 henning Exp $	*/
+/*	$OpenBSD: if_ethersubr.c,v 1.182 2014/12/04 00:01:53 tedu Exp $	*/
 /*	$NetBSD: if_ethersubr.c,v 1.19 1996/05/07 02:40:30 thorpej Exp $	*/
 
 /*
@@ -87,6 +87,7 @@ didn't get a copy, you may request one from <license@ipv6.nrl.navy.mil>.
 #include <sys/syslog.h>
 #include <sys/timeout.h>
 
+#include <crypto/siphash.h>	/* required by if_trunk.h */
 
 #include <net/if.h>
 #include <net/netisr.h>
@@ -132,9 +133,6 @@ didn't get a copy, you may request one from <license@ipv6.nrl.navy.mil>.
 #endif
 
 #ifdef INET6
-#ifndef INET
-#include <netinet/in.h>
-#endif
 #include <netinet6/in6_var.h>
 #include <netinet6/nd6.h>
 #endif
@@ -670,7 +668,12 @@ decapsulate:
 			goto done;
 
 		eh_tmp = mtod(m, struct ether_header *);
-		memcpy(eh_tmp, eh, sizeof(struct ether_header));
+		/*
+		 * danger!
+		 * eh_tmp and eh may overlap because eh
+		 * is stolen from the mbuf above.
+		 */
+		memmove(eh_tmp, eh, sizeof(struct ether_header));
 #ifdef PIPEX
 		if (pipex_enable) {
 			struct pipex_session *session;

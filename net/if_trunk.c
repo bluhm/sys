@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_trunk.c,v 1.90 2014/07/22 11:06:09 mpi Exp $	*/
+/*	$OpenBSD: if_trunk.c,v 1.93 2014/12/04 00:01:53 tedu Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006, 2007 Reyk Floeter <reyk@openbsd.org>
@@ -28,9 +28,8 @@
 #include <sys/sockio.h>
 #include <sys/systm.h>
 #include <sys/timeout.h>
-#include <sys/hash.h>
 
-#include <dev/rndvar.h>
+#include <crypto/siphash.h>
 
 #include <net/if.h>
 #include <net/if_arp.h>
@@ -346,10 +345,12 @@ trunk_port_create(struct trunk_softc *tr, struct ifnet *ifp)
 	tp->tp_iftype = ifp->if_type;
 	ifp->if_type = IFT_IEEE8023ADLAG;
 	ifp->if_tp = (caddr_t)tp;
-	tp->tp_watchdog = ifp->if_watchdog;
-	ifp->if_watchdog = trunk_port_watchdog;
 	tp->tp_ioctl = ifp->if_ioctl;
 	ifp->if_ioctl = trunk_port_ioctl;
+
+	timeout_del(ifp->if_slowtimo);
+	tp->tp_watchdog = ifp->if_watchdog;
+	ifp->if_watchdog = trunk_port_watchdog;
 
 	tp->tp_if = ifp;
 	tp->tp_trunk = tr;
@@ -466,6 +467,9 @@ trunk_port_destroy(struct trunk_port *tp)
 
 	/* Update trunk capabilities */
 	tr->tr_capabilities = trunk_capabilities(tr);
+
+	/* Reestablish watchdog timeout */
+	if_slowtimo(ifp);
 
 	return (0);
 }
@@ -966,7 +970,7 @@ trunk_enqueue(struct ifnet *ifp, struct mbuf *m)
 }
 
 u_int32_t
-trunk_hashmbuf(struct mbuf *m, u_int32_t key)
+trunk_hashmbuf(struct mbuf *m, SIPHASH_KEY *key)
 {
 	u_int16_t etype, ether_vtag;
 	u_int32_t p = 0;
@@ -980,25 +984,27 @@ trunk_hashmbuf(struct mbuf *m, u_int32_t key)
 	u_int32_t flow;
 	struct ip6_hdr *ip6, ip6buf;
 #endif
+	SIPHASH_CTX ctx;
 
+	SipHash24_Init(&ctx, key);
 	off = sizeof(*eh);
 	if (m->m_len < off)
-		return (p);
+		goto done;
 	eh = mtod(m, struct ether_header *);
 	etype = ntohs(eh->ether_type);
-	p = hash32_buf(&eh->ether_shost, ETHER_ADDR_LEN, key);
-	p = hash32_buf(&eh->ether_dhost, ETHER_ADDR_LEN, p);
+	SipHash24_Update(&ctx, &eh->ether_shost, ETHER_ADDR_LEN);
+	SipHash24_Update(&ctx, &eh->ether_dhost, ETHER_ADDR_LEN);
 
 	/* Special handling for encapsulating VLAN frames */
 	if (m->m_flags & M_VLANTAG) {
 		ether_vtag = EVL_VLANOFTAG(m->m_pkthdr.ether_vtag);
-		p = hash32_buf(&ether_vtag, sizeof(ether_vtag), p);
+		SipHash24_Update(&ctx, &ether_vtag, sizeof(ether_vtag));
 	} else if (etype == ETHERTYPE_VLAN) {
 		if ((vlan = (u_int16_t *)
 		    trunk_gethdr(m, off, EVL_ENCAPLEN, &vlanbuf)) == NULL)
 			return (p);
 		ether_vtag = EVL_VLANOFTAG(*vlan);
-		p = hash32_buf(&ether_vtag, sizeof(ether_vtag), p);
+		SipHash24_Update(&ctx, &ether_vtag, sizeof(ether_vtag));
 		etype = ntohs(vlan[1]);
 		off += EVL_ENCAPLEN;
 	}
@@ -1009,8 +1015,8 @@ trunk_hashmbuf(struct mbuf *m, u_int32_t key)
 		if ((ip = (struct ip *)
 		    trunk_gethdr(m, off, sizeof(*ip), &ipbuf)) == NULL)
 			return (p);
-		p = hash32_buf(&ip->ip_src, sizeof(struct in_addr), p);
-		p = hash32_buf(&ip->ip_dst, sizeof(struct in_addr), p);
+		SipHash24_Update(&ctx, &ip->ip_src, sizeof(struct in_addr));
+		SipHash24_Update(&ctx, &ip->ip_dst, sizeof(struct in_addr));
 		break;
 #endif
 #ifdef INET6
@@ -1018,15 +1024,16 @@ trunk_hashmbuf(struct mbuf *m, u_int32_t key)
 		if ((ip6 = (struct ip6_hdr *)
 		    trunk_gethdr(m, off, sizeof(*ip6), &ip6buf)) == NULL)
 			return (p);
-		p = hash32_buf(&ip6->ip6_src, sizeof(struct in6_addr), p);
-		p = hash32_buf(&ip6->ip6_dst, sizeof(struct in6_addr), p);
+		SipHash24_Update(&ctx, &ip6->ip6_src, sizeof(struct in6_addr));
+		SipHash24_Update(&ctx, &ip6->ip6_dst, sizeof(struct in6_addr));
 		flow = ip6->ip6_flow & IPV6_FLOWLABEL_MASK;
-		p = hash32_buf(&flow, sizeof(flow), p); /* IPv6 flow label */
+		SipHash24_Update(&ctx, &flow, sizeof(flow)); /* IPv6 flow label */
 		break;
 #endif
 	}
 
-	return (p);
+done:
+	return SipHash24_End(&ctx);
 }
 
 void
@@ -1402,7 +1409,7 @@ trunk_lb_attach(struct trunk_softc *tr)
 	tr->tr_init = NULL;
 	tr->tr_stop = NULL;
 
-	lb->lb_key = arc4random();
+	arc4random_buf(&lb->lb_key, sizeof(lb->lb_key));
 	tr->tr_psc = (caddr_t)lb;
 
 	return (0);
@@ -1460,7 +1467,7 @@ trunk_lb_start(struct trunk_softc *tr, struct mbuf *m)
 	struct trunk_port *tp = NULL;
 	u_int32_t p = 0;
 
-	p = trunk_hashmbuf(m, lb->lb_key);
+	p = trunk_hashmbuf(m, &lb->lb_key);
 	p %= tr->tr_count;
 	tp = lb->lb_ports[p];
 

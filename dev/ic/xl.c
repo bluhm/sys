@@ -1,4 +1,4 @@
-/*	$OpenBSD: xl.c,v 1.116 2014/09/14 14:17:25 jsg Exp $	*/
+/*	$OpenBSD: xl.c,v 1.118 2014/11/24 10:33:37 brad Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998, 1999
@@ -1488,6 +1488,9 @@ xl_intr(void *arg)
 		if (sc->intr_ack)
 			(*sc->intr_ack)(sc);
 
+		if (!(ifp->if_flags & IFF_RUNNING))
+			return (claimed);
+
 		if (status & XL_STAT_UP_COMPLETE)
 			xl_rxeof(sc);
 
@@ -2244,6 +2247,11 @@ xl_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 			    &mii->mii_media, command);
 		break;
 
+	case SIOCGIFRXR:
+		error = if_rxr_ioctl((struct if_rxrinfo *)ifr->ifr_data,
+		    NULL, MCLBYTES, &sc->xl_cdata.xl_rx_ring);
+		break;
+
 	default:
 		error = ether_ioctl(ifp, &sc->sc_arpcom, command, data);
 	}
@@ -2339,6 +2347,8 @@ xl_stop(struct xl_softc *sc)
 	timeout_del(&sc->xl_stsup_tmo);
 
 	ifp = &sc->sc_arpcom.ac_if;
+
+	ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
 	ifp->if_timer = 0;
 
 	CSR_WRITE_2(sc, XL_COMMAND, XL_CMD_RX_DISABLE);
@@ -2363,8 +2373,6 @@ xl_stop(struct xl_softc *sc)
 
 	if (sc->intr_ack)
 		(*sc->intr_ack)(sc);
-
-	ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
 
 	xl_freetxrx(sc);
 }

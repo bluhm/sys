@@ -1,4 +1,4 @@
-/*	$OpenBSD: bpf.c,v 1.110 2014/10/07 11:16:23 dlg Exp $	*/
+/*	$OpenBSD: bpf.c,v 1.112 2014/12/02 18:11:56 tedu Exp $	*/
 /*	$NetBSD: bpf.c,v 1.33 1997/02/21 23:59:35 thorpej Exp $	*/
 
 /*
@@ -916,8 +916,8 @@ bpf_setf(struct bpf_d *d, struct bpf_program *fp, int wf)
 	if (flen > BPF_MAXINSNS)
 		return (EINVAL);
 
+	fcode = mallocarray(flen, sizeof(*fp->bf_insns), M_DEVBUF, M_WAITOK);
 	size = flen * sizeof(*fp->bf_insns);
-	fcode = (struct bpf_insn *)malloc(size, M_DEVBUF, M_WAITOK);
 	if (copyin((caddr_t)fp->bf_insns, (caddr_t)fcode, size) == 0 &&
 	    bpf_validate(fcode, (int)flen)) {
 		s = splnet();
@@ -931,7 +931,7 @@ bpf_setf(struct bpf_d *d, struct bpf_program *fp, int wf)
 
 		return (0);
 	}
-	free(fcode, M_DEVBUF, 0);
+	free(fcode, M_DEVBUF, size);
 	return (EINVAL);
 }
 
@@ -1567,7 +1567,7 @@ void
 bpfilter_destroy(struct bpf_d *bd)
 {
 	LIST_REMOVE(bd, bd_list);
-	free(bd, M_DEVBUF, 0);
+	free(bd, M_DEVBUF, sizeof(*bd));
 }
 
 /*

@@ -1,4 +1,4 @@
-/*	$OpenBSD: nd6_rtr.c,v 1.89 2014/11/01 21:40:39 mpi Exp $	*/
+/*	$OpenBSD: nd6_rtr.c,v 1.91 2014/11/20 09:55:57 mpi Exp $	*/
 /*	$KAME: nd6_rtr.c,v 1.97 2001/02/07 11:09:13 itojun Exp $	*/
 
 /*
@@ -43,7 +43,6 @@
 #include <sys/ioctl.h>
 #include <sys/syslog.h>
 #include <sys/queue.h>
-#include <dev/rndvar.h>
 
 #include <net/if.h>
 #include <net/if_types.h>
@@ -57,8 +56,6 @@
 #include <netinet6/ip6_var.h>
 #include <netinet6/nd6.h>
 #include <netinet/icmp6.h>
-
-#include <dev/rndvar.h>
 
 #define SDL(s)	((struct sockaddr_dl *)s)
 
@@ -463,11 +460,7 @@ nd6_ra_input(struct mbuf *m, int off, int icmp6len)
 		maxmtu = (ndi->maxmtu && ndi->maxmtu < ifp->if_mtu)
 		    ? ndi->maxmtu : ifp->if_mtu;
 		if (mtu <= maxmtu) {
-			int change = (ndi->linkmtu != mtu);
-
 			ndi->linkmtu = mtu;
-			if (change) /* in6_maxmtu may change */
-				in6_setmaxmtu();
 		} else {
 			nd6log((LOG_INFO, "nd6_ra_input: bogus mtu "
 			    "mtu=%lu sent from %s; "

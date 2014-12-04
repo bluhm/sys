@@ -1,4 +1,4 @@
-/*	$OpenBSD: re.c,v 1.159 2014/10/24 23:30:05 brad Exp $	*/
+/*	$OpenBSD: re.c,v 1.163 2014/11/24 10:33:37 brad Exp $	*/
 /*	$FreeBSD: if_re.c,v 1.31 2004/09/04 07:54:05 ru Exp $	*/
 /*
  * Copyright (c) 1997, 1998-2003
@@ -33,7 +33,7 @@
  */
 
 /*
- * RealTek 8139C+/8169/8169S/8110S PCI NIC driver
+ * Realtek 8139C+/8169/8169S/8110S PCI NIC driver
  *
  * Written by Bill Paul <wpaul@windriver.com>
  * Senior Networking Software Engineer
@@ -41,7 +41,7 @@
  */
 
 /*
- * This driver is designed to support RealTek's next generation of
+ * This driver is designed to support Realtek's next generation of
  * 10/100 and 10/100/1000 PCI ethernet controllers. There are currently
  * seven devices in this family: the RTL8139C+, the RTL8169, the RTL8169S,
  * RTL8110S, the RTL8168, the RTL8111 and the RTL8101E.
@@ -96,7 +96,7 @@
  * (the 'S' stands for 'single-chip'). These devices have the same
  * programming API as the older 8169, but also have some vendor-specific
  * registers for the on-board PHY. The 8110S is a LAN-on-motherboard
- * part designed to be pin-compatible with the RealTek 8100 10/100 chip.
+ * part designed to be pin-compatible with the Realtek 8100 10/100 chip.
  * 
  * This driver takes advantage of the RX and TX checksum offload and
  * VLAN tag insertion/extraction features. It also implements TX
@@ -524,6 +524,36 @@ re_miibus_writereg(struct device *dev, int phy, int reg, int data)
 void
 re_miibus_statchg(struct device *dev)
 {
+	struct rl_softc		*sc = (struct rl_softc *)dev;
+	struct ifnet		*ifp = &sc->sc_arpcom.ac_if;
+	struct mii_data		*mii = &sc->sc_mii;
+
+	if ((ifp->if_flags & IFF_RUNNING) == 0)
+		return;
+
+	sc->rl_flags &= ~RL_FLAG_LINK;
+	if ((mii->mii_media_status & (IFM_ACTIVE | IFM_AVALID)) ==
+	    (IFM_ACTIVE | IFM_AVALID)) {
+		switch (IFM_SUBTYPE(mii->mii_media_active)) {
+		case IFM_10_T:
+		case IFM_100_TX:
+			sc->rl_flags |= RL_FLAG_LINK;
+			break;
+		case IFM_1000_T:
+			if ((sc->rl_flags & RL_FLAG_FASTETHER) != 0)
+				break;
+			sc->rl_flags |= RL_FLAG_LINK;
+			break;
+		default:
+			break;
+		}
+	}
+
+	/*
+	 * Realtek controllers do not provide an interface to
+	 * Tx/Rx MACs for resolved speed, duplex and flow-control
+	 * parameters.
+	 */
 }
 
 void
@@ -574,7 +604,7 @@ re_iff(struct rl_softc *sc)
 	}
 
 	/*
-	 * For some unfathomable reason, RealTek decided to reverse
+	 * For some unfathomable reason, Realtek decided to reverse
 	 * the order of the multicast hash registers in the PCI Express
 	 * parts. This means we have to write the hash pattern in reverse
 	 * order for those devices.
@@ -1280,7 +1310,7 @@ re_rxeof(struct rl_softc *sc)
 		 * it is 13 bits (since the max RX frame length is 16K).
 		 * Unfortunately, all 32 bits in the status word
 		 * were already used, so to make room for the extra
-		 * length bit, RealTek took out the 'frame alignment
+		 * length bit, Realtek took out the 'frame alignment
 		 * error' bit and shifted the other status bits
 		 * over one slot. The OWN, EOR, FS and LS bits are
 		 * still in the same places. We have already extracted
@@ -1469,17 +1499,10 @@ re_tick(void *xsc)
 	s = splnet();
 
 	mii_tick(mii);
-	if (sc->rl_flags & RL_FLAG_LINK) {
-		if (!(mii->mii_media_status & IFM_ACTIVE))
-			sc->rl_flags &= ~RL_FLAG_LINK;
-	} else {
-		if (mii->mii_media_status & IFM_ACTIVE &&
-		    IFM_SUBTYPE(mii->mii_media_active) != IFM_NONE) {
-			sc->rl_flags |= RL_FLAG_LINK;
-			if (!IFQ_IS_EMPTY(&ifp->if_snd))
-				re_start(ifp);
-		}
-	}
+
+	if ((sc->rl_flags & RL_FLAG_LINK) == 0)
+		re_miibus_statchg(&sc->sc_dev);
+
 	splx(s);
 
 	timeout_add_sec(&sc->timer_handle, 1);
@@ -2017,6 +2040,10 @@ re_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 	case SIOCSIFMEDIA:
 		error = ifmedia_ioctl(ifp, ifr, &sc->sc_mii.mii_media, command);
 		break;
+	case SIOCGIFRXR:
+		error = if_rxr_ioctl((struct if_rxrinfo *)ifr->ifr_data,
+		    NULL, MCLBYTES, &sc->rl_ldata.rl_rx_ring);
+ 		break;
 	default:
 		error = ether_ioctl(ifp, &sc->sc_arpcom, command, data);
 	}
@@ -2070,7 +2097,44 @@ re_stop(struct ifnet *ifp)
 
 	mii_down(&sc->sc_mii);
 
-	CSR_WRITE_1(sc, RL_COMMAND, 0x00);
+	/*
+	 * Disable accepting frames to put RX MAC into idle state.
+	 * Otherwise it's possible to get frames while stop command
+	 * execution is in progress and controller can DMA the frame
+	 * to already freed RX buffer during that period.
+	 */
+	CSR_WRITE_4(sc, RL_RXCFG, CSR_READ_4(sc, RL_RXCFG) &
+	    ~(RL_RXCFG_RX_ALLPHYS | RL_RXCFG_RX_BROAD | RL_RXCFG_RX_INDIV |
+	    RL_RXCFG_RX_MULTI));
+
+	if (sc->rl_flags & RL_FLAG_WAIT_TXPOLL) {
+		for (i = RL_TIMEOUT; i > 0; i--) {
+			if ((CSR_READ_1(sc, sc->rl_txstart) &
+			    RL_TXSTART_START) == 0)
+				break;
+			DELAY(20);
+		}
+		if (i == 0)
+			printf("%s: stopping TX poll timed out!\n",
+			    sc->sc_dev.dv_xname);
+		CSR_WRITE_1(sc, RL_COMMAND, 0x00);
+	} else if (sc->rl_flags & RL_FLAG_CMDSTOP) {
+		CSR_WRITE_1(sc, RL_COMMAND, RL_CMD_STOPREQ | RL_CMD_TX_ENB |
+		    RL_CMD_RX_ENB);
+		if (sc->rl_flags & RL_FLAG_CMDSTOP_WAIT_TXQ) {
+			for (i = RL_TIMEOUT; i > 0; i--) {
+				if ((CSR_READ_4(sc, RL_TXCFG) &
+				    RL_TXCFG_QUEUE_EMPTY) != 0)
+					break;
+				DELAY(100);
+			}
+			if (i == 0)
+				printf("%s: stopping TXQ timed out!\n",
+				    sc->sc_dev.dv_xname);
+		}
+	} else
+		CSR_WRITE_1(sc, RL_COMMAND, 0x00);
+	DELAY(1000);
 	CSR_WRITE_2(sc, RL_IMR, 0x0000);
 	CSR_WRITE_2(sc, RL_ISR, 0xFFFF);
 
@@ -2261,6 +2325,8 @@ re_wol(struct ifnet *ifp, int enable)
 			printf("%s: no auxiliary power, cannot do WOL from D3 "
 			    "(power-off) state\n", sc->sc_dev.dv_xname);
 	}
+
+	re_iff(sc);
 
 	/* Temporarily enable write to configuration registers. */
 	CSR_WRITE_1(sc, RL_EECMD, RL_EEMODE_WRITECFG);

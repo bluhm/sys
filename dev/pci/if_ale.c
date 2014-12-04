@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ale.c,v 1.31 2014/07/22 13:12:11 mpi Exp $	*/
+/*	$OpenBSD: if_ale.c,v 1.34 2014/11/27 14:52:04 brad Exp $	*/
 /*-
  * Copyright (c) 2008, Pyun YongHyeon <yongari@FreeBSD.org>
  * All rights reserved.
@@ -64,8 +64,6 @@
 #if NBPFILTER > 0
 #include <net/bpf.h>
 #endif
-
-#include <dev/rndvar.h>
 
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
@@ -1241,7 +1239,6 @@ ale_stats_update(struct ale_softc *sc)
 	stat->tx_multi_colls += smb->tx_multi_colls;
 	stat->tx_late_colls += smb->tx_late_colls;
 	stat->tx_excess_colls += smb->tx_excess_colls;
-	stat->tx_abort += smb->tx_abort;
 	stat->tx_underrun += smb->tx_underrun;
 	stat->tx_desc_underrun += smb->tx_desc_underrun;
 	stat->tx_lenerrs += smb->tx_lenerrs;
@@ -1254,17 +1251,10 @@ ale_stats_update(struct ale_softc *sc)
 
 	ifp->if_collisions += smb->tx_single_colls +
 	    smb->tx_multi_colls * 2 + smb->tx_late_colls +
-	    smb->tx_abort * HDPX_CFG_RETRY_DEFAULT;
+	    smb->tx_excess_colls * HDPX_CFG_RETRY_DEFAULT;
 
-	/*
-	 * XXX
-	 * tx_pkts_truncated counter looks suspicious. It constantly
-	 * increments with no sign of Tx errors. This may indicate
-	 * the counter name is not correct one so I've removed the
-	 * counter in output errors.
-	 */
-	ifp->if_oerrors += smb->tx_abort + smb->tx_late_colls +
-	    smb->tx_underrun;
+	ifp->if_oerrors += smb->tx_late_colls + smb->tx_excess_colls +
+	    smb->tx_underrun + smb->tx_pkts_truncated;
 
 	ifp->if_ipackets += smb->rx_frames;
 
@@ -1506,7 +1496,7 @@ ale_rxeof(struct ale_softc *sc)
 			 * reproduce this and I doubt it could be related
 			 * with FIFO overflow of hardware or activity of Tx
 			 * CMB updates. I also remember similar behaviour
-			 * seen on RealTek 8139 which uses resembling Rx
+			 * seen on Realtek 8139 which uses resembling Rx
 			 * scheme.
 			 */
 			if (aledebug)

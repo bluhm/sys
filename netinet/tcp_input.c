@@ -1,4 +1,4 @@
-/*	$OpenBSD: tcp_input.c,v 1.282 2014/11/04 15:24:40 mpi Exp $	*/
+/*	$OpenBSD: tcp_input.c,v 1.284 2014/11/20 11:05:19 mpi Exp $	*/
 /*	$NetBSD: tcp_input.c,v 1.23 1996/02/13 23:43:44 christos Exp $	*/
 
 /*
@@ -79,8 +79,6 @@
 #include <sys/timeout.h>
 #include <sys/kernel.h>
 #include <sys/pool.h>
-
-#include <dev/rndvar.h>
 
 #include <net/if.h>
 #include <net/route.h>
@@ -396,7 +394,6 @@ tcp_input(struct mbuf *m, ...)
 
 	/*
 	 * RFC1122 4.2.3.10, p. 104: discard bcast/mcast SYN
-	 * See below for AF specific multicast.
 	 */
 	if (m->m_flags & (M_BCAST|M_MCAST))
 		goto drop;
@@ -461,10 +458,6 @@ tcp_input(struct mbuf *m, ...)
 	switch (af) {
 	case AF_INET:
 		ip = mtod(m, struct ip *);
-		if (IN_MULTICAST(ip->ip_dst.s_addr) ||
-		    in_broadcast(ip->ip_dst, m->m_pkthdr.rcvif,
-		    m->m_pkthdr.ph_rtableid))
-			goto drop;
 #ifdef TCP_ECN
 		/* save ip_tos before clearing it for checksum */
 		iptos = ip->ip_tos;

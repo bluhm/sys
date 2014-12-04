@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf.c,v 1.891 2014/11/11 11:37:05 mikeb Exp $ */
+/*	$OpenBSD: pf.c,v 1.896 2014/11/20 13:54:24 mpi Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -53,7 +53,7 @@
 #include <sys/rwlock.h>
 #include <sys/syslog.h>
 
-#include <crypto/md5.h>
+#include <crypto/sha2.h>
 
 #include <net/if.h>
 #include <net/if_types.h>
@@ -76,7 +76,6 @@
 #include <netinet/if_ether.h>
 #include <netinet/ip_divert.h>
 
-#include <dev/rndvar.h>
 #include <net/pfvar.h>
 #include <net/if_pflog.h>
 #include <net/if_pflow.h>
@@ -105,7 +104,7 @@ struct pf_queuehead	*pf_queues_inactive;
 
 struct pf_status	 pf_status;
 
-MD5_CTX			 pf_tcp_secret_ctx;
+SHA2_CTX		 pf_tcp_secret_ctx;
 u_char			 pf_tcp_secret[16];
 int			 pf_tcp_secret_init;
 int			 pf_tcp_iss_off;
@@ -825,6 +824,11 @@ pf_state_key_addr_setup(struct pf_pdesc *pd, void *arg, int sidx,
 	default:
 		if (multi == PF_ICMP_MULTI_LINK) {
 			key->addr[sidx].addr32[0] = __IPV6_ADDR_INT32_MLL;
+
+			if (IN6_IS_SCOPE_EMBED(&key->addr[didx].v6))
+				key->addr[sidx].addr16[1] =
+				    key->addr[didx].addr16[1];
+
 			key->addr[sidx].addr32[1] = 0;
 			key->addr[sidx].addr32[2] = 0;
 			key->addr[sidx].addr32[3] = __IPV6_ADDR_INT32_ONE;
@@ -3031,37 +3035,41 @@ pf_set_rt_ifp(struct pf_state *s, struct pf_addr *saddr)
 u_int32_t
 pf_tcp_iss(struct pf_pdesc *pd)
 {
-	MD5_CTX ctx;
-	u_int32_t digest[4];
+	SHA2_CTX ctx;
+	union {
+		uint8_t bytes[SHA512_DIGEST_LENGTH];
+		uint32_t words[1];
+	} digest;
 
 	if (pf_tcp_secret_init == 0) {
 		arc4random_buf(pf_tcp_secret, sizeof(pf_tcp_secret));
-		MD5Init(&pf_tcp_secret_ctx);
-		MD5Update(&pf_tcp_secret_ctx, pf_tcp_secret,
+		SHA512Init(&pf_tcp_secret_ctx);
+		SHA512Update(&pf_tcp_secret_ctx, pf_tcp_secret,
 		    sizeof(pf_tcp_secret));
 		pf_tcp_secret_init = 1;
 	}
 	ctx = pf_tcp_secret_ctx;
 
-	MD5Update(&ctx, (char *)&pd->hdr.tcp->th_sport, sizeof(u_short));
-	MD5Update(&ctx, (char *)&pd->hdr.tcp->th_dport, sizeof(u_short));
+	SHA512Update(&ctx, &pd->rdomain, sizeof(pd->rdomain));
+	SHA512Update(&ctx, &pd->hdr.tcp->th_sport, sizeof(u_short));
+	SHA512Update(&ctx, &pd->hdr.tcp->th_dport, sizeof(u_short));
 	switch (pd->af) {
 #ifdef INET
 	case AF_INET:
-		MD5Update(&ctx, (char *)&pd->src->v4, sizeof(struct in_addr));
-		MD5Update(&ctx, (char *)&pd->dst->v4, sizeof(struct in_addr));
+		SHA512Update(&ctx, &pd->src->v4, sizeof(struct in_addr));
+		SHA512Update(&ctx, &pd->dst->v4, sizeof(struct in_addr));
 		break;
 #endif /* INET */
 #ifdef INET6
 	case AF_INET6:
-		MD5Update(&ctx, (char *)&pd->src->v6, sizeof(struct in6_addr));
-		MD5Update(&ctx, (char *)&pd->dst->v6, sizeof(struct in6_addr));
+		SHA512Update(&ctx, &pd->src->v6, sizeof(struct in6_addr));
+		SHA512Update(&ctx, &pd->dst->v6, sizeof(struct in6_addr));
 		break;
 #endif /* INET6 */
 	}
-	MD5Final((u_char *)digest, &ctx);
+	SHA512Final(digest.bytes, &ctx);
 	pf_tcp_iss_off += 4096;
-	return (digest[0] + tcp_iss + pf_tcp_iss_off);
+	return (digest.words[0] + tcp_iss + pf_tcp_iss_off);
 }
 
 void
@@ -5793,7 +5801,7 @@ pf_route6(struct mbuf **m, struct pf_rule *r, int dir, struct ifnet *oifp,
 	if (IN6_IS_SCOPE_EMBED(&dst->sin6_addr))
 		dst->sin6_addr.s6_addr16[1] = htons(ifp->if_index);
 	if ((u_long)m0->m_pkthdr.len <= ifp->if_mtu) {
-		nd6_output(ifp, ifp, m0, dst, NULL);
+		nd6_output(ifp, m0, dst, NULL);
 	} else {
 		in6_ifstat_inc(ifp, ifs6_in_toobig);
 		if (r->rt != PF_DUPTO)

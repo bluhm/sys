@@ -1,4 +1,4 @@
-/*	$OpenBSD: machdep.c,v 1.194 2014/11/08 03:31:58 guenther Exp $	*/
+/*	$OpenBSD: machdep.c,v 1.199 2014/12/02 18:13:10 tedu Exp $	*/
 /*	$NetBSD: machdep.c,v 1.3 2003/05/07 22:58:18 fvdl Exp $	*/
 
 /*-
@@ -108,7 +108,6 @@
 #include <machine/fpu.h>
 #include <machine/biosvar.h>
 #include <machine/mpbiosvar.h>
-#include <machine/reg.h>
 #include <machine/kcore.h>
 #include <machine/tss.h>
 
@@ -1068,7 +1067,6 @@ setregs(struct proc *p, struct exec_package *pack, u_long stack,
 
 struct gate_descriptor *idt;
 char idt_allocmap[NIDT];
-struct simplelock idt_lock;
 char *gdtstore;
 extern  struct user *proc0paddr;
 
@@ -1176,10 +1174,11 @@ cpu_init_extents(void)
 #if defined(MULTIPROCESSOR) || \
     (NACPI > 0 && !defined(SMALL_KERNEL))
 void
-map_tramps(void) {
+map_tramps(void)
+{
 	struct pmap *kmp = pmap_kernel();
 
-	pmap_kenter_pa(lo32_vaddr, lo32_paddr, VM_PROT_ALL);
+	pmap_kenter_pa(lo32_vaddr, lo32_paddr, PROT_READ | PROT_WRITE);
 
 	/*
 	 * The initial PML4 pointer must be below 4G, so if the
@@ -1192,15 +1191,18 @@ map_tramps(void) {
 	} else
 		tramp_pdirpa = kmp->pm_pdirpa;
 
+	pmap_kremove(lo32_vaddr, PAGE_SIZE);
+
 #ifdef MULTIPROCESSOR
+	/* Map trampoline code page RW (to copy code) */
 	pmap_kenter_pa((vaddr_t)MP_TRAMPOLINE,	/* virtual */
 	    (paddr_t)MP_TRAMPOLINE,	/* physical */
-	    VM_PROT_ALL);		/* protection */
+	    PROT_READ | PROT_WRITE);	/* protection */
 #endif /* MULTIPROCESSOR */
 
 	pmap_kenter_pa((vaddr_t)ACPI_TRAMPOLINE, /* virtual */
 	    (paddr_t)ACPI_TRAMPOLINE,	/* physical */
-	    VM_PROT_ALL);		/* protection */
+	    PROT_MASK);		/* protection */
 }
 #endif
 
@@ -1287,6 +1289,8 @@ init_x86_64(paddr_t first_avail)
 #ifdef MULTIPROCESSOR
 	if (avail_start < MP_TRAMPOLINE + PAGE_SIZE)
 		avail_start = MP_TRAMPOLINE + PAGE_SIZE;
+	if (avail_start < MP_TRAMP_DATA + PAGE_SIZE)
+		avail_start = MP_TRAMP_DATA + PAGE_SIZE;
 #endif
 
 #if (NACPI > 0 && !defined(SMALL_KERNEL))
@@ -1507,9 +1511,9 @@ init_x86_64(paddr_t first_avail)
 
 	pmap_growkernel(VM_MIN_KERNEL_ADDRESS + 32 * 1024 * 1024);
 
-	pmap_kenter_pa(idt_vaddr, idt_paddr, VM_PROT_READ|VM_PROT_WRITE);
+	pmap_kenter_pa(idt_vaddr, idt_paddr, PROT_READ | PROT_WRITE);
 	pmap_kenter_pa(idt_vaddr + PAGE_SIZE, idt_paddr + PAGE_SIZE,
-	    VM_PROT_READ|VM_PROT_WRITE);
+	    PROT_READ | PROT_WRITE);
 
 #if defined(MULTIPROCESSOR) || \
     (NACPI > 0 && !defined(SMALL_KERNEL))
@@ -1715,15 +1719,12 @@ idt_vec_alloc(int low, int high)
 {
 	int vec;
 
-	simple_lock(&idt_lock);
 	for (vec = low; vec <= high; vec++) {
 		if (idt_allocmap[vec] == 0) {
 			idt_allocmap[vec] = 1;
-			simple_unlock(&idt_lock);
 			return vec;
 		}
 	}
-	simple_unlock(&idt_lock);
 	return 0;
 }
 
@@ -1741,10 +1742,8 @@ idt_vec_set(int vec, void (*function)(void))
 void
 idt_vec_free(int vec)
 {
-	simple_lock(&idt_lock);
 	unsetgate(&idt[vec]);
 	idt_allocmap[vec] = 0;
-	simple_unlock(&idt_lock);
 }
 
 #ifdef DIAGNOSTIC

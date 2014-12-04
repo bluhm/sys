@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ix.c,v 1.107 2014/11/12 16:06:47 mikeb Exp $	*/
+/*	$OpenBSD: if_ix.c,v 1.111 2014/11/27 15:49:13 brad Exp $	*/
 
 /******************************************************************************
 
@@ -1414,7 +1414,6 @@ ixgbe_setup_optics(struct ix_softc *sc)
 int
 ixgbe_allocate_legacy(struct ix_softc *sc)
 {
-	struct ifnet		*ifp = &sc->arpcom.ac_if;
 	struct ixgbe_osdep	*os = &sc->osdep;
 	struct pci_attach_args	*pa = &os->os_pa;
 	const char		*intrstr = NULL;
@@ -1438,7 +1437,7 @@ ixgbe_allocate_legacy(struct ix_softc *sc)
 
 	intrstr = pci_intr_string(pc, ih);
 	sc->tag = pci_intr_establish(pc, ih, IPL_NET,
-	    ixgbe_intr, sc, ifp->if_xname);
+	    ixgbe_intr, sc, sc->dev.dv_xname);
 	if (sc->tag == NULL) {
 		printf(": couldn't establish interrupt");
 		if (intrstr != NULL)
@@ -2080,7 +2079,7 @@ ixgbe_tx_ctx_setup(struct tx_ring *txr, struct mbuf *mp,
 	 */
 #if NVLAN > 0
 	if (mp->m_flags & M_VLANTAG) {
-		vtag = htole16(mp->m_pkthdr.ether_vtag);
+		vtag = mp->m_pkthdr.ether_vtag;
 		vlan_macip_lens |= (vtag << IXGBE_ADVTXD_VLAN_SHIFT);
 	} else
 #endif
@@ -2257,7 +2256,7 @@ ixgbe_tso_setup(struct tx_ring *txr, struct mbuf *mp,
 #if NVLAN > 0
 	/* VLAN MACLEN IPLEN */
 	if (mp->m_flags & M_VLANTAG) {
-		vtag = htole16(mp->m_pkthdr.ether_vtag);
+		vtag = mp->m_pkthdr.ether_vtag;
 		vlan_macip_lens |= (vtag << IXGBE_ADVTXD_VLAN_SHIFT);
 	}
 #endif
@@ -2822,7 +2821,6 @@ ixgbe_rxeof(struct ix_queue *que)
 		eop = ((staterr & IXGBE_RXD_STAT_EOP) != 0);
 
 		if (staterr & IXGBE_RXDADV_ERR_FRAME_ERR_MASK) {
-			ifp->if_ierrors++;
 			sc->dropped_pkts++;
 
 			if (rxbuf->fmp) {
@@ -3323,14 +3321,7 @@ ixgbe_update_stats_counters(struct ix_softc *sc)
 	sc->stats.bptc += IXGBE_READ_REG(hw, IXGBE_BPTC);
 #endif
 
-#if 0
 	/* Fill out the OS statistics structure */
-	ifp->if_ipackets = sc->stats.gprc;
-	ifp->if_opackets = sc->stats.gptc;
-	ifp->if_ibytes = sc->stats.gorc;
-	ifp->if_obytes = sc->stats.gotc;
-	ifp->if_imcasts = sc->stats.mprc;
-#endif
 	ifp->if_collisions = 0;
 	ifp->if_oerrors = sc->watchdog_events;
 	ifp->if_ierrors = total_missed_rx + sc->stats.crcerrs + sc->stats.rlec;

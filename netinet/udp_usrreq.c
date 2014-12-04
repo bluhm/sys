@@ -1,4 +1,4 @@
-/*	$OpenBSD: udp_usrreq.c,v 1.191 2014/11/09 22:05:08 bluhm Exp $	*/
+/*	$OpenBSD: udp_usrreq.c,v 1.194 2014/11/25 12:13:59 mpi Exp $	*/
 /*	$NetBSD: udp_usrreq.c,v 1.28 1996/03/16 23:54:03 christos Exp $	*/
 
 /*
@@ -95,9 +95,6 @@
 #endif
 
 #ifdef INET6
-#ifndef INET
-#include <netinet/in.h>
-#endif
 #include <netinet6/in6_var.h>
 #include <netinet6/ip6_var.h>
 #include <netinet6/ip6protosw.h>
@@ -400,16 +397,7 @@ udp_input(struct mbuf *m, ...)
 	}
 #endif
 
-#ifdef INET6
-	if ((ip6 && IN6_IS_ADDR_MULTICAST(&ip6->ip6_dst)) ||
-	    (ip && IN_MULTICAST(ip->ip_dst.s_addr)) ||
-	    (ip && in_broadcast(ip->ip_dst, m->m_pkthdr.rcvif,
-	    m->m_pkthdr.ph_rtableid))) {
-#else /* INET6 */
-	if (IN_MULTICAST(ip->ip_dst.s_addr) ||
-	    in_broadcast(ip->ip_dst, m->m_pkthdr.rcvif,
-		m->m_pkthdr.ph_rtableid)) {
-#endif /* INET6 */
+	if (m->m_flags & (M_BCAST|M_MCAST)) {
 		struct inpcb *last;
 		/*
 		 * Deliver a multicast or broadcast datagram to *all* sockets
@@ -807,12 +795,10 @@ udp6_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *d)
 		cmdarg = NULL;
 		/* XXX: translate addresses into internal form */
 		sa6 = *(struct sockaddr_in6 *)sa;
-#ifndef SCOPEDROUTING
 		if (in6_embedscope(&sa6.sin6_addr, &sa6, NULL, NULL)) {
 			/* should be impossible */
 			return;
 		}
-#endif
 	}
 
 	if (ip6cp && ip6cp->ip6c_finaldst) {
@@ -823,21 +809,17 @@ udp6_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *d)
 		/* XXX: assuming M is valid in this case */
 		sa6.sin6_scope_id = in6_addr2scopeid(m->m_pkthdr.rcvif,
 		    ip6cp->ip6c_finaldst);
-#ifndef SCOPEDROUTING
 		if (in6_embedscope(ip6cp->ip6c_finaldst, &sa6, NULL, NULL)) {
 			/* should be impossible */
 			return;
 		}
-#endif
 	} else {
 		/* XXX: translate addresses into internal form */
 		sa6 = *(struct sockaddr_in6 *)sa;
-#ifndef SCOPEDROUTING
 		if (in6_embedscope(&sa6.sin6_addr, &sa6, NULL, NULL)) {
 			/* should be impossible */
 			return;
 		}
-#endif
 	}
 
 	if (ip6) {
@@ -860,12 +842,10 @@ udp6_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *d)
 		sa6_src.sin6_addr = ip6->ip6_src;
 		sa6_src.sin6_scope_id = in6_addr2scopeid(m->m_pkthdr.rcvif,
 		    &ip6->ip6_src);
-#ifndef SCOPEDROUTING
 		if (in6_embedscope(&sa6_src.sin6_addr, &sa6_src, NULL, NULL)) {
 			/* should be impossible */
 			return;
 		}
-#endif
 
 		if (cmd == PRC_MSGSIZE) {
 			int valid = 0;

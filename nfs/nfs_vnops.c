@@ -1,4 +1,4 @@
-/*	$OpenBSD: nfs_vnops.c,v 1.153 2014/09/14 14:17:26 jsg Exp $	*/
+/*	$OpenBSD: nfs_vnops.c,v 1.157 2014/12/03 04:16:58 tedu Exp $	*/
 /*	$NetBSD: nfs_vnops.c,v 1.62.4.1 1996/07/08 20:26:52 jtc Exp $	*/
 
 /*
@@ -57,7 +57,6 @@
 #include <sys/dirent.h>
 #include <sys/fcntl.h>
 #include <sys/lockf.h>
-#include <sys/hash.h>
 #include <sys/queue.h>
 #include <sys/specdev.h>
 #include <sys/unistd.h>
@@ -75,8 +74,6 @@
 
 #include <net/if.h>
 #include <netinet/in.h>
-
-#include <dev/rndvar.h>
 
 void nfs_cache_enter(struct vnode *, struct vnode *, struct componentname *);
 
@@ -2039,7 +2036,7 @@ nfs_readdir(void *v)
 		}
 	} while (!error && !done && !eof && cnt--);
 
-	free(data, M_TEMP, 0);
+	free(data, M_TEMP, NFS_DIRBLKSIZ);
 	data = NULL;
 
 	uio->uio_offset = newoff;
@@ -2498,7 +2495,7 @@ nfs_sillyrename(struct vnode *dvp, struct vnode *vp, struct componentname *cnp)
 
 	cache_purge(dvp);
 	np = VTONFS(vp);
-	sp = malloc(sizeof(struct sillyrename), M_NFSREQ, M_WAITOK);
+	sp = malloc(sizeof(*sp), M_NFSREQ, M_WAITOK);
 	sp->s_cred = crdup(cnp->cn_cred);
 	sp->s_dvp = dvp;
 	vref(dvp);
@@ -2537,7 +2534,7 @@ nfs_sillyrename(struct vnode *dvp, struct vnode *vp, struct componentname *cnp)
 bad:
 	vrele(sp->s_dvp);
 	crfree(sp->s_cred);
-	free(sp, M_NFSREQ, 0);
+	free(sp, M_NFSREQ, sizeof(*sp));
 	return (error);
 }
 

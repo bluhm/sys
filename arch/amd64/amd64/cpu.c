@@ -1,4 +1,4 @@
-/*	$OpenBSD: cpu.c,v 1.66 2014/10/09 03:59:58 tedu Exp $	*/
+/*	$OpenBSD: cpu.c,v 1.71 2014/12/02 18:13:10 tedu Exp $	*/
 /* $NetBSD: cpu.c,v 1.1 2003/04/26 18:39:26 fvdl Exp $ */
 
 /*-
@@ -170,9 +170,8 @@ replacesmap(void)
 
 		pmap_extract(pmap_kernel(), kva, &pa1);
 		pmap_extract(pmap_kernel(), kva + PAGE_SIZE, &pa2);
-		pmap_kenter_pa(nva, pa1, VM_PROT_READ | VM_PROT_WRITE);
-		pmap_kenter_pa(nva + PAGE_SIZE, pa2, VM_PROT_READ | 
-		    VM_PROT_WRITE);
+		pmap_kenter_pa(nva, pa1, PROT_READ | PROT_WRITE);
+		pmap_kenter_pa(nva + PAGE_SIZE, pa2, PROT_READ | PROT_WRITE);
 		pmap_update(pmap_kernel());
 
 		/* replace 3 byte nops with stac/clac instructions */
@@ -444,8 +443,6 @@ cpu_attach(struct device *parent, struct device *self, void *aux)
 	ci->ci_cpuid = 0;	/* False for APs, but they're not used anyway */
 #endif
 	ci->ci_func = caa->cpu_func;
-
-	simple_lock_init(&ci->ci_slock);
 
 #if defined(MULTIPROCESSOR)
 	/*
@@ -794,6 +791,8 @@ cpu_copy_trampoline(void)
 	 */
 	extern u_char cpu_spinup_trampoline[];
 	extern u_char cpu_spinup_trampoline_end[];
+	extern u_char mp_tramp_data_start[];
+	extern u_char mp_tramp_data_end[];
 
 	extern u_int32_t mp_pdirpa;
 	extern paddr_t tramp_pdirpa;
@@ -802,11 +801,21 @@ cpu_copy_trampoline(void)
 	    cpu_spinup_trampoline,
 	    cpu_spinup_trampoline_end-cpu_spinup_trampoline);
 
+	pmap_kenter_pa(MP_TRAMP_DATA, MP_TRAMP_DATA,
+		PROT_READ | PROT_WRITE);
+	memcpy((caddr_t)MP_TRAMP_DATA,
+		mp_tramp_data_start,
+		mp_tramp_data_end - mp_tramp_data_start);
+
 	/*
-	 * We need to patch this after we copy the trampoline,
-	 * the symbol points into the copied trampoline.
+	 * We need to patch this after we copy the tramp data,
+	 * the symbol points into the copied tramp data page.
 	 */
 	mp_pdirpa = tramp_pdirpa;
+
+	/* Remap the trampoline RX */
+	pmap_kenter_pa(MP_TRAMPOLINE, MP_TRAMPOLINE,
+		PROT_READ | PROT_EXEC);
 }
 
 
@@ -833,7 +842,7 @@ mp_cpu_start(struct cpu_info *ci)
 	dwordptr[0] = 0;
 	dwordptr[1] = MP_TRAMPOLINE >> 4;
 
-	pmap_kenter_pa(0, 0, VM_PROT_READ|VM_PROT_WRITE);
+	pmap_kenter_pa(0, 0, PROT_READ | PROT_WRITE);
 	memcpy((u_int8_t *) 0x467, dwordptr, 4);
 	pmap_kremove(0, PAGE_SIZE);
 
@@ -889,14 +898,11 @@ cpu_init_msrs(struct cpu_info *ci)
 	    ((uint64_t)GSEL(GUCODE32_SEL, SEL_UPL) << 48));
 	wrmsr(MSR_LSTAR, (uint64_t)Xsyscall);
 	wrmsr(MSR_CSTAR, (uint64_t)Xsyscall32);
-	wrmsr(MSR_SFMASK, PSL_NT|PSL_T|PSL_I|PSL_C);
+	wrmsr(MSR_SFMASK, PSL_NT|PSL_T|PSL_I|PSL_C|PSL_D);
 
 	wrmsr(MSR_FSBASE, 0);
 	wrmsr(MSR_GSBASE, (u_int64_t)ci);
 	wrmsr(MSR_KERNELGSBASE, 0);
-
-	if (cpu_feature & CPUID_NXE)
-		wrmsr(MSR_EFER, rdmsr(MSR_EFER) | EFER_NXE);
 }
 
 void

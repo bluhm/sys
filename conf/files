@@ -1,4 +1,4 @@
-#	$OpenBSD: files,v 1.583 2014/10/20 00:38:50 tedu Exp $
+#	$OpenBSD: files,v 1.590 2014/12/03 18:16:50 deraadt Exp $
 #	$NetBSD: files,v 1.87 1996/05/19 17:17:50 jonathan Exp $
 
 #	@(#)files.newconf	7.5 (Berkeley) 5/10/93
@@ -73,7 +73,7 @@ define	wlan
 define	ncr5380sbc	# NCR 5380 SCSI Bus Controller
 define	ncr53c7xx	# NCR 53c7xx SCSI Bus Controller
 define	dp8390nic	# 8390-family Ethernet controllers
-define	rtl80x9		# RealTek 8019/8029 NE2000-compatible
+define	rtl80x9		# Realtek 8019/8029 NE2000-compatible
 define	dl10019		# DL10019/10022-family Ethernet controllers
 define	ax88190		# AX88190-family Ethernet controllers
 
@@ -293,7 +293,7 @@ file	dev/ic/fxp.c			fxp
 device	mtd: ether, ifnet, ifmedia, mii
 file	dev/ic/mtd8xx.c			mtd
 
-# RealTek 8129/8139
+# Realtek 8129/8139
 device	rl: ether, ifnet, ifmedia, mii
 file	dev/ic/rtl81x9.c		rl
 
@@ -683,7 +683,7 @@ file kern/kern_proc.c
 file kern/kern_prot.c
 file kern/kern_resource.c
 file kern/kern_sched.c
-file kern/kern_sensors.c		!small_kernel
+file kern/kern_sensors.c
 file kern/kern_sig.c
 file kern/kern_subr.c
 file kern/kern_sysctl.c
@@ -852,7 +852,7 @@ file netinet/ip_ah.c			inet & ipsec
 file netinet/ip_carp.c			carp			needs-count
 file netinet/ip_ipcomp.c		inet & ipsec
 file crypto/rijndael.c			(inet & ipsec) | crypto | uvm_swap_encrypt | wlan
-file crypto/md5.c
+file crypto/md5.c			
 file crypto/rmd160.c			(inet & ipsec) | crypto
 file crypto/sha1.c			(inet & ipsec) | crypto | carp | wlan
 file crypto/sha2.c
@@ -873,6 +873,7 @@ file crypto/hmac.c			wlan | (softraid & crypto)
 file crypto/gmac.c			(inet & ipsec) | crypto
 file crypto/key_wrap.c			wlan
 file crypto/idgen.c			inet6 | nfsclient | nfsserver
+file crypto/siphash.c
 file netmpls/mpls_input.c		mpls
 file netmpls/mpls_output.c		mpls
 file netmpls/mpls_proto.c		mpls

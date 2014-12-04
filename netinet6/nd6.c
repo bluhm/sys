@@ -1,4 +1,4 @@
-/*	$OpenBSD: nd6.c,v 1.124 2014/11/01 21:40:39 mpi Exp $	*/
+/*	$OpenBSD: nd6.c,v 1.127 2014/11/20 13:54:24 mpi Exp $	*/
 /*	$KAME: nd6.c,v 1.280 2002/06/08 19:52:07 itojun Exp $	*/
 
 /*
@@ -45,7 +45,6 @@
 #include <sys/syslog.h>
 #include <sys/queue.h>
 #include <sys/task.h>
-#include <dev/rndvar.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -200,9 +199,6 @@ nd6_setmtu0(struct ifnet *ifp, struct nd_ifinfo *ndi)
 		    "new link MTU on %s (%lu) is too small for IPv6\n",
 		    ifp->if_xname, (unsigned long)ndi->maxmtu);
 	}
-
-	if (ndi->maxmtu > in6_maxmtu)
-		in6_setmaxmtu(); /* check all interfaces just in case */
 }
 
 void
@@ -1489,8 +1485,7 @@ fail:
 				 * we assume ifp is not a p2p here, so just
 				 * set the 2nd argument as the 1st one.
 				 */
-				nd6_output(ifp, ifp, n,
-				    satosin6(rt_key(rt)), rt);
+				nd6_output(ifp, n, satosin6(rt_key(rt)), rt);
 				if (ln->ln_hold == n) {
 					/* n is back in ln_hold. Discard. */
 					m_freem(ln->ln_hold);
@@ -1651,8 +1646,8 @@ nd6_rs_output_timo(void *ignored_arg)
 
 #define senderr(e) { error = (e); goto bad;}
 int
-nd6_output(struct ifnet *ifp, struct ifnet *origifp, struct mbuf *m0, 
-    struct sockaddr_in6 *dst, struct rtentry *rt0)
+nd6_output(struct ifnet *ifp, struct mbuf *m0, struct sockaddr_in6 *dst,
+    struct rtentry *rt0)
 {
 	struct mbuf *m = m0;
 	struct rtentry *rt = rt0;
@@ -1827,17 +1822,6 @@ nd6_output(struct ifnet *ifp, struct ifnet *origifp, struct mbuf *m0,
 	mtag = m_tag_find(m, PACKET_TAG_IPSEC_OUT_CRYPTO_NEEDED, NULL);
 #endif /* IPSEC */
 
-	if ((ifp->if_flags & IFF_LOOPBACK) != 0) {
-#ifdef IPSEC
-		if (mtag != NULL) {
-			/* Tell IPsec to do its own crypto. */
-			ipsp_skipcrypto_unmark((struct tdb_ident *)(mtag + 1));
-			error = EACCES;
-			goto bad;
-		}
-#endif /* IPSEC */
-		return ((*ifp->if_output)(origifp, m, sin6tosa(dst), rt));
-	}
 #ifdef IPSEC
 	if (mtag != NULL) {
 		/* Tell IPsec to do its own crypto. */

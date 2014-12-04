@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.c,v 1.303 2014/11/03 11:02:08 mpi Exp $	*/
+/*	$OpenBSD: if.c,v 1.305 2014/12/01 15:06:54 mikeb Exp $	*/
 /*	$NetBSD: if.c,v 1.35 1996/05/07 05:26:04 thorpej Exp $	*/
 
 /*
@@ -135,7 +135,6 @@ void	if_attach_common(struct ifnet *);
 void	if_detach_queues(struct ifnet *, struct ifqueue *);
 void	if_detached_start(struct ifnet *);
 int	if_detached_ioctl(struct ifnet *, u_long, caddr_t);
-void	if_detached_watchdog(struct ifnet *);
 
 int	if_getgroup(caddr_t, struct ifnet *);
 int	if_getgroupmembers(caddr_t);
@@ -171,12 +170,8 @@ int	net_livelocked(void);
 void
 ifinit()
 {
-	static struct timeout if_slowtim;
-
-	timeout_set(&if_slowtim, if_slowtimo, &if_slowtim);
 	timeout_set(&net_tick_to, net_tick, &net_tick_to);
 
-	if_slowtimo(&if_slowtim);
 	net_tick(&net_tick_to);
 }
 
@@ -271,6 +266,9 @@ if_attachsetup(struct ifnet *ifp)
 #if NPF > 0
 	pfi_attach_ifnet(ifp);
 #endif
+
+	timeout_set(ifp->if_slowtimo, if_slowtimo, ifp);
+	if_slowtimo(ifp);
 
 	/* Announce the interface. */
 	rt_ifannouncemsg(ifp, IFAN_ARRIVAL);
@@ -428,6 +426,9 @@ if_attach_common(struct ifnet *ifp)
 	ifp->if_detachhooks = malloc(sizeof(*ifp->if_detachhooks),
 	    M_TEMP, M_WAITOK);
 	TAILQ_INIT(ifp->if_detachhooks);
+
+	ifp->if_slowtimo = malloc(sizeof(*ifp->if_slowtimo), M_TEMP,
+	    M_WAITOK|M_ZERO);
 }
 
 void
@@ -483,7 +484,7 @@ if_detach(struct ifnet *ifp)
 	ifp->if_flags &= ~IFF_OACTIVE;
 	ifp->if_start = if_detached_start;
 	ifp->if_ioctl = if_detached_ioctl;
-	ifp->if_watchdog = if_detached_watchdog;
+	ifp->if_watchdog = NULL;
 
 	/*
 	 * Call detach hooks from head to tail.  To make sure detach
@@ -491,6 +492,9 @@ if_detach(struct ifnet *ifp)
 	 * the hooks have to be added to the head!
 	 */
 	dohooks(ifp->if_detachhooks, HOOK_REMOVE | HOOK_FREE);
+
+	/* Remove the watchdog timeout */
+	timeout_del(ifp->if_slowtimo);
 
 #if NBRIDGE > 0
 	/* Remove the interface from any bridge it is part of.  */
@@ -578,6 +582,8 @@ do { \
 	free(ifp->if_addrhooks, M_TEMP, 0);
 	free(ifp->if_linkstatehooks, M_TEMP, 0);
 	free(ifp->if_detachhooks, M_TEMP, 0);
+
+	free(ifp->if_slowtimo, M_TEMP, sizeof(*ifp->if_slowtimo));
 
 	for (dp = domains; dp; dp = dp->dom_next) {
 		if (dp->dom_ifdetach && ifp->if_afdata[dp->dom_family])
@@ -812,7 +818,7 @@ if_congestion_clear(void *arg)
 	struct timeout *to = ifq->ifq_congestion;
 
 	ifq->ifq_congestion = NULL;
-	free(to, M_TEMP, 0);
+	free(to, M_TEMP, sizeof(*to));
 }
 
 #define	equal(a1, a2)	\
@@ -1162,25 +1168,22 @@ if_link_state_change_task(void *arg, void *unused)
 }
 
 /*
- * Handle interface watchdog timer routines.  Called
- * from softclock, we decrement timers (if set) and
+ * Handle interface watchdog timer routine.  Called
+ * from softclock, we decrement timer (if set) and
  * call the appropriate interface routine on expiration.
  */
 void
 if_slowtimo(void *arg)
 {
-	struct timeout *to = (struct timeout *)arg;
-	struct ifnet *ifp;
+	struct ifnet *ifp = arg;
 	int s = splnet();
 
-	TAILQ_FOREACH(ifp, &ifnet, if_list) {
-		if (ifp->if_timer == 0 || --ifp->if_timer)
-			continue;
-		if (ifp->if_watchdog)
+	if (ifp->if_watchdog) {
+		if (ifp->if_timer > 0 && --ifp->if_timer == 0)
 			(*ifp->if_watchdog)(ifp);
+		timeout_add(ifp->if_slowtimo, hz / IFNET_SLOWHZ);
 	}
 	splx(s);
-	timeout_add(to, hz / IFNET_SLOWHZ);
 }
 
 /*
@@ -1826,12 +1829,6 @@ if_detached_ioctl(struct ifnet *ifp, u_long a, caddr_t b)
 	return ENODEV;
 }
 
-void
-if_detached_watchdog(struct ifnet *ifp)
-{
-	/* nothing */
-}
-
 /*
  * Create interface group without members
  */
@@ -1877,7 +1874,7 @@ if_addgroup(struct ifnet *ifp, const char *groupname)
 		return (ENOMEM);
 
 	if ((ifgm = malloc(sizeof(*ifgm), M_TEMP, M_NOWAIT)) == NULL) {
-		free(ifgl, M_TEMP, 0);
+		free(ifgl, M_TEMP, sizeof(*ifgl));
 		return (ENOMEM);
 	}
 
@@ -1886,8 +1883,8 @@ if_addgroup(struct ifnet *ifp, const char *groupname)
 			break;
 
 	if (ifg == NULL && (ifg = if_creategroup(groupname)) == NULL) {
-		free(ifgl, M_TEMP, 0);
-		free(ifgm, M_TEMP, 0);
+		free(ifgl, M_TEMP, sizeof(*ifgl));
+		free(ifgm, M_TEMP, sizeof(*ifgm));
 		return (ENOMEM);
 	}
 
@@ -1928,7 +1925,7 @@ if_delgroup(struct ifnet *ifp, const char *groupname)
 
 	if (ifgm != NULL) {
 		TAILQ_REMOVE(&ifgl->ifgl_group->ifg_members, ifgm, ifgm_next);
-		free(ifgm, M_TEMP, 0);
+		free(ifgm, M_TEMP, sizeof(*ifgm));
 	}
 
 	if (--ifgl->ifgl_group->ifg_refcnt == 0) {
@@ -1939,7 +1936,7 @@ if_delgroup(struct ifnet *ifp, const char *groupname)
 		free(ifgl->ifgl_group, M_TEMP, 0);
 	}
 
-	free(ifgl, M_TEMP, 0);
+	free(ifgl, M_TEMP, sizeof(*ifgl));
 
 #if NPF > 0
 	pfi_group_change(groupname);

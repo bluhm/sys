@@ -1,4 +1,4 @@
-/* $OpenBSD: acpi_wakecode.S,v 1.30 2014/10/16 17:37:42 mlarkin Exp $ */
+/* $OpenBSD: acpi_wakecode.S,v 1.34 2014/12/01 04:33:00 mlarkin Exp $ */
 /*
  * Copyright (c) 2001 Takanori Watanabe <takawata@jp.freebsd.org>
  * Copyright (c) 2001 Mitsuru IWASAKI <iwasaki@jp.freebsd.org>
@@ -67,7 +67,7 @@
  *
  * We wakeup in real mode, at some phys addr based on the ACPI
  * specification (cs = phys>>8, ip = phys & 0xF). For example,
- * if our phys addr is 0x11000, we'd have cs=0x1100,ip=0
+ * if our phys addr is 0x13000, we'd have cs=0x1300,ip=0
  *
  * The wakeup code needs to do the following:
  *     1. Reenable the video display
@@ -192,24 +192,16 @@ _C_LABEL(acpi_protected_mode_resume):
 	mov	%eax,%cr4
 
 	/*
-	 * Stash away our previously saved EFER in EBX.
-	 * We have to make sure we don't write to any
-	 * of the EFER reserved bits, so we zero those
-	 * out here.
-	 */
-	movl	acpi_saved_efer, %ebx
-	andl 	$(EFER_LME | EFER_LMA | EFER_NXE | EFER_SCE), %ebx	
-
-	/*
 	 * Set up a temporary long mode GDT describing 2
 	 * segments, one for code and one for data.
 	 */
 	lgdt 	tmp_gdt64	
 
-	/* Prepare to enter long mode by enabling LME in EFER */
+	/* Restore saved EFER (LME, NXE, etc) */
 	movl	$MSR_EFER, %ecx
 	rdmsr
-	orl	$EFER_LME, %eax
+	movl	acpi_saved_efer, %eax
+	andl 	$(EFER_LME | EFER_NXE | EFER_SCE), %eax	
 	wrmsr
 
 	/* Reenable paging using temporary cr3 */
@@ -238,14 +230,10 @@ _C_LABEL(acpi_protected_mode_resume):
 	.align 16
 _ACPI_TRMP_LABEL(acpi_long_mode_trampoline)
 _C_LABEL(acpi_long_mode_resume):
-	/* Restore the stashed copy of EFER we set aside earlier */	
-	movl	%ebx, %eax
-	movl	$MSR_EFER, %ecx
-	wrmsr
 
 	/* Load GDT based on our saved copy */
 	lgdt	acpi_saved_gdt
-	
+
 	/* Reset segment registers */
 	movw    $GSEL(GDATA_SEL, SEL_KPL),%ax
 	movw    %ax,%ds
@@ -383,7 +371,7 @@ _ACPI_TRMP_OFFSET(hibernate_resume_vector_3)
 	movl	%eax, %cr0
 
 	/* Set up real mode segment selectors */
-	movw	$0x1100, %ax
+	movw	$(ACPI_TRAMPOLINE >> 4), %ax
 	movw	%ax, %ds
 	movw	%ax, %es
 	movw	%ax, %fs
@@ -392,7 +380,7 @@ _ACPI_TRMP_OFFSET(hibernate_resume_vector_3)
 	lidtl	clean_idt
 
 	/* Jump to the S3 resume vector */
-	ljmp	$0x1100, $acpi_s3_vector_real
+	ljmp	$(ACPI_TRAMPOLINE >> 4), $acpi_s3_vector_real
 
 NENTRY(hibernate_drop_to_real_mode)
 	.code64
@@ -421,7 +409,7 @@ _ACPI_TRMP_OFFSET(hibernate_resume_vector_3b)
 	movl	%eax, %cr0
 
 	/* Set up real mode segment selectors */
-	movw	$0x1100, %ax
+	movw	$(ACPI_TRAMPOLINE >> 4), %ax
 	movw	%ax, %ds
 	movw	%ax, %es
 	movw	%ax, %fs
@@ -429,11 +417,11 @@ _ACPI_TRMP_OFFSET(hibernate_resume_vector_3b)
 	movl	$0x0FFE, %esp
 	lidtl	clean_idt
 
-	ljmp	$0x1100, $hib_hlt_real
+	ljmp	$(ACPI_TRAMPOLINE >> 4), $hib_hlt_real
 
 _ACPI_TRMP_OFFSET(hib_hlt_real)
 	hlt
-	ljmp 	$0x1100, $hib_hlt_real
+	ljmp 	$(ACPI_TRAMPOLINE >> 4), $hib_hlt_real
 
 	.code64
 	/* Switch to hibernate resume pagetable */
@@ -522,56 +510,6 @@ _ACPI_TRMP_OFFSET(clean_idt)
 	.long	0
 	.word	0
 
-	/*
-	 * gdt_16 is the gdt used when returning to real mode for bios
-	 * reads/writes (sets up a 16 bit segment)
-	 */
-	.align 8
-_ACPI_TRMP_LABEL(gdt_16)
-	.word   gdt_16_end - gdt_16_table
-	.long   gdt_16_table
-
-	.align 8
-_ACPI_TRMP_LABEL(gdt_16_table)
-	/*
-	 * null
-	 */
-	.word   0, 0
-	.byte   0, 0, 0, 0
-	/*
-	 * Code
-	 * Limit: 0xffffffff
-	 * Base: 0x00000000
-	 * Descriptor Type: Code
-	 * Segment Type: CRA
-	 * Present: True
-	 * Priv: 0
-	 * AVL: False
-	 * 64-bit: False
-	 * 32-bit: False
-	 *
-	 */
-	.word   0xffff, 0
-	.byte   0, 0x9f, 0x8f, 0
-
-	/*
-	 * Data
-	 * Limit: 0xffffffff
-	 * Base: 0x00000000
-	 * Descriptor Type:
-	 * Segment Type: W
-	 * Present: True
-	 * Priv: 0
-	 * AVL: False
-	 * 64-bit: False
-	 * 32-bit: False
-	 *
-	 */
-	.word   0xffff, 0
-	.byte   0, 0x93, 0x8f, 0
-
-_ACPI_TRMP_LABEL(gdt_16_end)
-
 	.align 8
 _ACPI_TRMP_LABEL(tmp_gdt64)
 	.word 	tmp_gdt64_end - tmp_gdtable64
@@ -594,7 +532,8 @@ _ACPI_TRMP_LABEL(tmp_gdtable6416)
 	.quad	0x0000000000000000
 	.quad	0x00af9a000000ffff
 	.quad	0x00cf92000000ffff
-	.quad   0x00009a0110000fff
+	.word	0x0fff, (ACPI_TRAMPOLINE % 0x10000)
+	.byte	(ACPI_TRAMPOLINE >> 16), 0x9a, 0, 0
 _ACPI_TRMP_LABEL(tmp_gdt6416_end)
 
 	.align 8

@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_sysctl.c,v 1.269 2014/11/03 17:20:46 bluhm Exp $	*/
+/*	$OpenBSD: kern_sysctl.c,v 1.272 2014/11/19 21:17:37 tedu Exp $	*/
 /*	$NetBSD: kern_sysctl.c,v 1.17 1996/05/20 17:49:05 mrg Exp $	*/
 
 /*-
@@ -167,8 +167,6 @@ sys___sysctl(struct proc *p, void *v, register_t *retval)
 	switch (name[0]) {
 	case CTL_KERN:
 		fn = kern_sysctl;
-		if (name[1] == KERN_VNODE)	/* XXX */
-			dolock = 0;
 		break;
 	case CTL_HW:
 		fn = hw_sysctl;
@@ -214,7 +212,7 @@ sys___sysctl(struct proc *p, void *v, register_t *retval)
 				return (ENOMEM);
 			}
 			error = uvm_vslock(p, SCARG(uap, old), oldlen,
-			    VM_PROT_READ|VM_PROT_WRITE);
+			    PROT_READ | PROT_WRITE);
 			if (error) {
 				rw_exit_write(&sysctl_lock);
 				return (error);
@@ -355,8 +353,6 @@ kern_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		TIMESPEC_TO_TIMEVAL(&bt, &boottime);
 		return (sysctl_rdstruct(oldp, oldlenp, newp, &bt, sizeof bt));
 	  }
-	case KERN_VNODE:
-		return (sysctl_vnode(oldp, oldlenp, p));
 #ifndef SMALL_KERNEL
 	case KERN_PROC:
 		return (sysctl_doproc(name + 1, namelen - 1, oldp, oldlenp));
