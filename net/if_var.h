@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_var.h,v 1.13 2014/12/01 15:06:54 mikeb Exp $	*/
+/*	$OpenBSD: if_var.h,v 1.15 2014/12/08 10:46:14 mpi Exp $	*/
 /*	$NetBSD: if.h,v 1.23 1996/05/07 02:40:27 thorpej Exp $	*/
 
 /*
@@ -167,7 +167,6 @@ struct ifnet {				/* and the entries */
 					/* timer routine */
 	void	(*if_watchdog)(struct ifnet *);
 	int	(*if_wol)(struct ifnet *, int);
-	struct	ifaddr *if_lladdr;	/* pointer to link-level address */
 	struct	ifqueue if_snd;		/* output queue */
 	struct sockaddr_dl *if_sadl;	/* pointer to our sockaddr_dl */
 
@@ -398,31 +397,6 @@ void	ether_input(struct ifnet *, struct ether_header *, struct mbuf *);
 int	ether_output(struct ifnet *,
 	    struct mbuf *, struct sockaddr *, struct rtentry *);
 char	*ether_sprintf(u_char *);
-
-void	if_alloc_sadl(struct ifnet *);
-void	if_free_sadl(struct ifnet *);
-void	if_attach(struct ifnet *);
-void	if_attachdomain(void);
-void	if_attachtail(struct ifnet *);
-void	if_attachhead(struct ifnet *);
-void	if_detach(struct ifnet *);
-void	if_down(struct ifnet *);
-void	if_downall(void);
-void	if_link_state_change(struct ifnet *);
-void	if_slowtimo(void *);
-void	if_up(struct ifnet *);
-int	ifconf(u_long, caddr_t);
-void	ifinit(void);
-int	ifioctl(struct socket *, u_long, caddr_t, struct proc *);
-int	ifpromisc(struct ifnet *, int);
-struct	ifg_group *if_creategroup(const char *);
-int	if_addgroup(struct ifnet *, const char *);
-int	if_delgroup(struct ifnet *, const char *);
-void	if_group_routechange(struct sockaddr *, struct sockaddr *);
-struct	ifnet *ifunit(const char *);
-struct	ifnet *if_get(unsigned int);
-void	if_start(struct ifnet *);
-void	ifnewlladdr(struct ifnet *);
 
 struct	ifaddr *ifa_ifwithaddr(struct sockaddr *, u_int);
 struct	ifaddr *ifa_ifwithdstaddr(struct sockaddr *, u_int);

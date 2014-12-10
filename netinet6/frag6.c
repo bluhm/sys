@@ -1,4 +1,4 @@
-/*	$OpenBSD: frag6.c,v 1.57 2014/11/18 02:37:31 tedu Exp $	*/
+/*	$OpenBSD: frag6.c,v 1.59 2014/12/08 10:51:00 mpi Exp $	*/
 /*	$KAME: frag6.c,v 1.40 2002/05/27 21:40:31 itojun Exp $	*/
 
 /*
@@ -43,6 +43,7 @@
 #include <sys/syslog.h>
 
 #include <net/if.h>
+#include <net/if_var.h>
 #include <net/route.h>
 
 #include <netinet/in.h>
@@ -172,8 +173,8 @@ frag6_input(struct mbuf **mp, int *offp, int proto)
 	int fragoff, frgpartlen;	/* must be larger than u_int16_t */
 	struct ifnet *dstifp;
 #ifdef IN6_IFSTAT_STRICT
-	struct route_in6 ro;
-	struct sockaddr_in6 *dst;
+	struct sockaddr_in6 dst;
+	struct rtentry *rt;
 #endif
 	u_int8_t ecn, ecn0;
 
@@ -185,21 +186,19 @@ frag6_input(struct mbuf **mp, int *offp, int proto)
 	dstifp = NULL;
 #ifdef IN6_IFSTAT_STRICT
 	/* find the destination interface of the packet. */
-	bzero(&ro, sizeof(ro));
-	ro.ro_tableid = m->m_pkthdr.ph_rtableid;
-	dst = &ro.ro_dst;
-	dst->sin6_family = AF_INET6;
-	dst->sin6_len = sizeof(struct sockaddr_in6);
-	dst->sin6_addr = ip6->ip6_dst;
+	memset(&dst, 0, sizeof(dst));
+	dst.sin6_family = AF_INET6;
+	dst.sin6_len = sizeof(struct sockaddr_in6);
+	dst.sin6_addr = ip6->ip6_dst;
 
-	ro.ro_rt = rtalloc_mpath(sin6tosa(&ro.ro_dst),
-	    &ip6->ip6_src.s6_addr32[0], ro.ro_tableid);
+	rt = rtalloc_mpath(sin6tosa(&dst), &ip6->ip6_src.s6_addr32[0],
+	    m->m_pkthdr.ph_rtableid);
 
-	if (ro.ro_rt != NULL && ro.ro_rt->rt_ifa != NULL)
-		dstifp = ifatoia6(ro.ro_rt->rt_ifa)->ia_ifp;
-	if (ro.ro_rt != NULL) {
-		rtfree(ro.ro_rt);
-		ro.ro_rt = NULL;
+	if (rt != NULL) {
+		if (rt->rt_ifa != NULL)
+			dstifp = ifatoia6(rt->rt_ifa)->ia_ifp;
+		rtfree(rt);
+		rt = NULL;
 	}
 #else
 	/* we are violating the spec, this is not the destination interface */
