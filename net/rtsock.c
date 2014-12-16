@@ -753,7 +753,6 @@ report:
 			    (error = rt_setgate(rt, rt_key(rt),
 			    info.rti_info[RTAX_GATEWAY], tableid)))
 				goto flush;
-			}
 			/*
 			 * new gateway could require new ifaddr, ifp;
 			 * flags may also be different; ifp may be specified
