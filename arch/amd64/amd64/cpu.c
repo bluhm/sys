@@ -1,4 +1,4 @@
-/*	$OpenBSD: cpu.c,v 1.71 2014/12/02 18:13:10 tedu Exp $	*/
+/*	$OpenBSD: cpu.c,v 1.74 2014/12/15 01:53:45 tedu Exp $	*/
 /* $NetBSD: cpu.c,v 1.1 2003/04/26 18:39:26 fvdl Exp $ */
 
 /*-
@@ -175,7 +175,7 @@ replacesmap(void)
 		pmap_update(pmap_kernel());
 
 		/* replace 3 byte nops with stac/clac instructions */
-		bcopy(ireplace[i].saddr, (void *)(nva + po), 3);
+		memcpy((void *)(nva + po), ireplace[i].saddr, 3);
 	}
 
 	km_free((void *)nva, 2 * PAGE_SIZE, &kv_any, &kp_none);
@@ -334,8 +334,6 @@ cpu_init_mwait(struct cpu_softc *sc)
 	if ((cpu_ecxfeature & CPUIDECX_MWAIT) == 0)
 		return;
 
-	return;
-
 	/* get the monitor granularity */
 	CPUID(0x5, smallest, largest, extensions, c_substates);
 	smallest &= 0xffff;
@@ -361,6 +359,8 @@ cpu_init_mwait(struct cpu_softc *sc)
 	else
 		mwait_size = largest;
 	printf("\n");
+	/* XXX disable mwait: ACPI says not to use it on too many systems */
+	mwait_size = 0;
 }
 
 void
