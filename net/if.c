@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.c,v 1.306 2014/12/08 10:46:14 mpi Exp $	*/
+/*	$OpenBSD: if.c,v 1.308 2014/12/18 15:29:30 krw Exp $	*/
 /*	$NetBSD: if.c,v 1.35 1996/05/07 05:26:04 thorpej Exp $	*/
 
 /*
@@ -79,7 +79,7 @@
 #include <sys/ioctl.h>
 #include <sys/domain.h>
 #include <sys/sysctl.h>
-#include <sys/workq.h>
+#include <sys/task.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -270,6 +270,9 @@ if_attachsetup(struct ifnet *ifp)
 	timeout_set(ifp->if_slowtimo, if_slowtimo, ifp);
 	if_slowtimo(ifp);
 
+	task_set(ifp->if_linkstatetask, if_link_state_change_task,
+	    ifp, NULL);
+
 	/* Announce the interface. */
 	rt_ifannouncemsg(ifp, IFAN_ARRIVAL);
 }
@@ -410,6 +413,8 @@ if_attach_common(struct ifnet *ifp)
 
 	ifp->if_slowtimo = malloc(sizeof(*ifp->if_slowtimo), M_TEMP,
 	    M_WAITOK|M_ZERO);
+	ifp->if_linkstatetask = malloc(sizeof(*ifp->if_linkstatetask),
+	    M_TEMP, M_WAITOK|M_ZERO);
 }
 
 void
@@ -477,6 +482,9 @@ if_detach(struct ifnet *ifp)
 	/* Remove the watchdog timeout */
 	timeout_del(ifp->if_slowtimo);
 
+	/* Remove the link state task */
+	task_del(systq, ifp->if_linkstatetask);
+
 #if NBRIDGE > 0
 	/* Remove the interface from any bridge it is part of.  */
 	if (ifp->if_bridgeport)
@@ -533,11 +541,6 @@ do { \
 #endif
 #undef IF_DETACH_QUEUES
 
-	/*
-	 * XXX transient ifp refs?  inpcb.ip_moptions.imo_multicast_ifp?
-	 * Other network stacks than INET?
-	 */
-
 	/* Remove the interface from the list of all interfaces.  */
 	TAILQ_REMOVE(&ifnet, ifp, if_list);
 	if (ISSET(ifp->if_xflags, IFXF_TXREADY))
@@ -565,6 +568,7 @@ do { \
 	free(ifp->if_detachhooks, M_TEMP, 0);
 
 	free(ifp->if_slowtimo, M_TEMP, sizeof(*ifp->if_slowtimo));
+	free(ifp->if_linkstatetask, M_TEMP, sizeof(*ifp->if_linkstatetask));
 
 	for (dp = domains; dp; dp = dp->dom_next) {
 		if (dp->dom_ifdetach && ifp->if_afdata[dp->dom_family])
@@ -1122,9 +1126,8 @@ if_up(struct ifnet *ifp)
 void
 if_link_state_change(struct ifnet *ifp)
 {
-	/* try to put the routing table update task on syswq */
-	workq_add_task(NULL, 0, if_link_state_change_task,
-	    (void *)((unsigned long)ifp->if_index), NULL);
+	/* put the routing table update task on systq */
+	task_add(systq, ifp->if_linkstatetask);
 }
 
 /*
@@ -1133,18 +1136,15 @@ if_link_state_change(struct ifnet *ifp)
 void
 if_link_state_change_task(void *arg, void *unused)
 {
-	unsigned int index = (unsigned long)arg;
-	struct ifnet *ifp;
+	struct ifnet *ifp = arg;
 	int s;
 
 	s = splsoftnet();
-	if ((ifp = if_get(index)) != NULL) {
-		rt_ifmsg(ifp);
+	rt_ifmsg(ifp);
 #ifndef SMALL_KERNEL
-		rt_if_track(ifp);
+	rt_if_track(ifp);
 #endif
-		dohooks(ifp->if_linkstatehooks, 0);
-	}
+	dohooks(ifp->if_linkstatehooks, 0);
 	splx(s);
 }
 

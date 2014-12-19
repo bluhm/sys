@@ -1,4 +1,4 @@
-/*	$OpenBSD: subr_pool.c,v 1.169 2014/12/04 03:12:05 dlg Exp $	*/
+/*	$OpenBSD: subr_pool.c,v 1.172 2014/12/19 02:49:07 dlg Exp $	*/
 /*	$NetBSD: subr_pool.c,v 1.61 2001/09/26 07:14:56 chs Exp $	*/
 
 /*-
@@ -74,7 +74,7 @@ struct pool phpool;
 
 struct pool_item_header {
 	/* Page headers */
-	LIST_ENTRY(pool_item_header)
+	TAILQ_ENTRY(pool_item_header)
 				ph_pagelist;	/* pool page list */
 	XSIMPLEQ_HEAD(,pool_item) ph_itemlist;	/* chunk list for this page */
 	RB_ENTRY(pool_item_header)
@@ -82,6 +82,7 @@ struct pool_item_header {
 	int			ph_nmissing;	/* # of chunks in use */
 	caddr_t			ph_page;	/* this page's address */
 	u_long			ph_magic;
+	int			ph_tick;
 };
 #define POOL_MAGICBIT (1 << 3) /* keep away from perturbed low bits */
 #define POOL_PHPOISON(ph) ISSET((ph)->ph_magic, POOL_MAGICBIT)
@@ -263,9 +264,9 @@ pool_init(struct pool *pp, size_t size, u_int align, u_int ioff, int flags,
 	 * Initialize the pool structure.
 	 */
 	memset(pp, 0, sizeof(*pp));
-	LIST_INIT(&pp->pr_emptypages);
-	LIST_INIT(&pp->pr_fullpages);
-	LIST_INIT(&pp->pr_partpages);
+	TAILQ_INIT(&pp->pr_emptypages);
+	TAILQ_INIT(&pp->pr_fullpages);
+	TAILQ_INIT(&pp->pr_partpages);
 	pp->pr_curpage = NULL;
 	pp->pr_npages = 0;
 	pp->pr_minitems = 0;
@@ -375,14 +376,14 @@ pool_destroy(struct pool *pp)
 	rw_exit_write(&pool_lock);
 
 	/* Remove all pages */
-	while ((ph = LIST_FIRST(&pp->pr_emptypages)) != NULL) {
+	while ((ph = TAILQ_FIRST(&pp->pr_emptypages)) != NULL) {
 		mtx_enter(&pp->pr_mtx);
 		pool_p_remove(pp, ph);
 		mtx_leave(&pp->pr_mtx);
 		pool_p_free(pp, ph);
 	}
-	KASSERT(LIST_EMPTY(&pp->pr_fullpages));
-	KASSERT(LIST_EMPTY(&pp->pr_partpages));
+	KASSERT(TAILQ_EMPTY(&pp->pr_fullpages));
+	KASSERT(TAILQ_EMPTY(&pp->pr_partpages));
 }
 
 void
@@ -591,8 +592,8 @@ pool_do_get(struct pool *pp, int flags, int *slowdown)
 		 * This page was previously empty.  Move it to the list of
 		 * partially-full pages.  This page is already curpage.
 		 */
-		LIST_REMOVE(ph, ph_pagelist);
-		LIST_INSERT_HEAD(&pp->pr_partpages, ph, ph_pagelist);
+		TAILQ_REMOVE(&pp->pr_emptypages, ph, ph_pagelist);
+		TAILQ_INSERT_TAIL(&pp->pr_partpages, ph, ph_pagelist);
 
 		pp->pr_nidle--;
 	}
@@ -602,8 +603,8 @@ pool_do_get(struct pool *pp, int flags, int *slowdown)
 		 * This page is now full.  Move it to the full list
 		 * and select a new current page.
 		 */
-		LIST_REMOVE(ph, ph_pagelist);
-		LIST_INSERT_HEAD(&pp->pr_fullpages, ph, ph_pagelist);
+		TAILQ_REMOVE(&pp->pr_partpages, ph, ph_pagelist);
+		TAILQ_INSERT_TAIL(&pp->pr_fullpages, ph, ph_pagelist);
 		pool_update_curpage(pp);
 	}
 
@@ -620,6 +621,7 @@ pool_put(struct pool *pp, void *v)
 {
 	struct pool_item *pi = v;
 	struct pool_item_header *ph, *freeph = NULL;
+	extern int ticks;
 
 #ifdef DIAGNOSTIC
 	if (v == NULL)
@@ -654,8 +656,8 @@ pool_put(struct pool *pp, void *v)
 		 * The page was previously completely full, move it to the
 		 * partially-full list.
 		 */
-		LIST_REMOVE(ph, ph_pagelist);
-		LIST_INSERT_HEAD(&pp->pr_partpages, ph, ph_pagelist);
+		TAILQ_REMOVE(&pp->pr_fullpages, ph, ph_pagelist);
+		TAILQ_INSERT_TAIL(&pp->pr_partpages, ph, ph_pagelist);
 	}
 
 	if (ph->ph_nmissing == 0) {
@@ -664,8 +666,9 @@ pool_put(struct pool *pp, void *v)
 	 	 */
 		pp->pr_nidle++;
 
-		LIST_REMOVE(ph, ph_pagelist);
-		LIST_INSERT_HEAD(&pp->pr_emptypages, ph, ph_pagelist);
+		ph->ph_tick = ticks;
+		TAILQ_REMOVE(&pp->pr_partpages, ph, ph_pagelist);
+		TAILQ_INSERT_TAIL(&pp->pr_emptypages, ph, ph_pagelist);
 		pool_update_curpage(pp);
 	}
 
@@ -674,8 +677,11 @@ pool_put(struct pool *pp, void *v)
 
 	/* is it time to free a page? */
 	if (pp->pr_nidle > pp->pr_maxpages &&
-	    (freeph = LIST_FIRST(&pp->pr_emptypages)) != NULL)
+	    (ph = TAILQ_FIRST(&pp->pr_emptypages)) != NULL &&
+	    (ticks - ph->ph_tick) > hz) {
+		freeph = ph;
 		pool_p_remove(pp, freeph);
+	}
 	mtx_leave(&pp->pr_mtx);
 
 	if (freeph != NULL)
@@ -692,7 +698,7 @@ pool_put(struct pool *pp, void *v)
 int
 pool_prime(struct pool *pp, int n)
 {
-	struct pool_pagelist pl = LIST_HEAD_INITIALIZER(pl);
+	struct pool_pagelist pl = TAILQ_HEAD_INITIALIZER(pl);
 	struct pool_item_header *ph;
 	int newpages;
 
@@ -705,12 +711,12 @@ pool_prime(struct pool *pp, int n)
 		if (ph == NULL) /* or slowdown? */
 			break;
 
-		LIST_INSERT_HEAD(&pl, ph, ph_pagelist);
+		TAILQ_INSERT_TAIL(&pl, ph, ph_pagelist);
 	}
 
 	mtx_enter(&pp->pr_mtx);
-	while ((ph = LIST_FIRST(&pl)) != NULL) {
-		LIST_REMOVE(ph, ph_pagelist);
+	while ((ph = TAILQ_FIRST(&pl)) != NULL) {
+		TAILQ_REMOVE(&pl, ph, ph_pagelist);
 		pool_p_insert(pp, ph);
 	}
 	mtx_leave(&pp->pr_mtx);
@@ -819,7 +825,7 @@ pool_p_insert(struct pool *pp, struct pool_item_header *ph)
 	if (pp->pr_curpage == NULL)
 		pp->pr_curpage = ph;
 
-	LIST_INSERT_HEAD(&pp->pr_emptypages, ph, ph_pagelist);
+	TAILQ_INSERT_TAIL(&pp->pr_emptypages, ph, ph_pagelist);
 	if (!POOL_INPGHDR(pp))
 		RB_INSERT(phtree, &pp->pr_phtree, ph);
 
@@ -843,7 +849,7 @@ pool_p_remove(struct pool *pp, struct pool_item_header *ph)
 
 	if (!POOL_INPGHDR(pp))
 		RB_REMOVE(phtree, &pp->pr_phtree, ph);
-	LIST_REMOVE(ph, ph_pagelist);
+	TAILQ_REMOVE(&pp->pr_emptypages, ph, ph_pagelist);
 
 	pool_update_curpage(pp);
 }
@@ -851,9 +857,9 @@ pool_p_remove(struct pool *pp, struct pool_item_header *ph)
 void
 pool_update_curpage(struct pool *pp)
 {
-	pp->pr_curpage = LIST_FIRST(&pp->pr_partpages);
+	pp->pr_curpage = TAILQ_LAST(&pp->pr_partpages, pool_pagelist);
 	if (pp->pr_curpage == NULL) {
-		pp->pr_curpage = LIST_FIRST(&pp->pr_emptypages);
+		pp->pr_curpage = TAILQ_LAST(&pp->pr_emptypages, pool_pagelist);
 	}
 }
 
@@ -919,11 +925,11 @@ int
 pool_reclaim(struct pool *pp)
 {
 	struct pool_item_header *ph, *phnext;
-	struct pool_pagelist pl = LIST_HEAD_INITIALIZER(pl);
+	struct pool_pagelist pl = TAILQ_HEAD_INITIALIZER(pl);
 
 	mtx_enter(&pp->pr_mtx);
-	for (ph = LIST_FIRST(&pp->pr_emptypages); ph != NULL; ph = phnext) {
-		phnext = LIST_NEXT(ph, ph_pagelist);
+	for (ph = TAILQ_FIRST(&pp->pr_emptypages); ph != NULL; ph = phnext) {
+		phnext = TAILQ_NEXT(ph, ph_pagelist);
 
 		/* Check our minimum page claim */
 		if (pp->pr_npages <= pp->pr_minpages)
@@ -938,15 +944,15 @@ pool_reclaim(struct pool *pp)
 			break;
 
 		pool_p_remove(pp, ph);
-		LIST_INSERT_HEAD(&pl, ph, ph_pagelist);
+		TAILQ_INSERT_TAIL(&pl, ph, ph_pagelist);
 	}
 	mtx_leave(&pp->pr_mtx);
 
-	if (LIST_EMPTY(&pl))
+	if (TAILQ_EMPTY(&pl))
 		return (0);
 
-	while ((ph = LIST_FIRST(&pl)) != NULL) {
-		LIST_REMOVE(ph, ph_pagelist);
+	while ((ph = TAILQ_FIRST(&pl)) != NULL) {
+		TAILQ_REMOVE(&pl, ph, ph_pagelist);
 		pool_p_free(pp, ph);
 	}
 
@@ -990,7 +996,7 @@ pool_print_pagelist(struct pool_pagelist *pl,
 	struct pool_item_header *ph;
 	struct pool_item *pi;
 
-	LIST_FOREACH(ph, pl, ph_pagelist) {
+	TAILQ_FOREACH(ph, pl, ph_pagelist) {
 		(*pr)("\t\tpage %p, nmissing %d\n",
 		    ph->ph_page, ph->ph_nmissing);
 		XSIMPLEQ_FOREACH(pi, &ph->ph_itemlist, pi_list) {
@@ -1033,13 +1039,13 @@ pool_print1(struct pool *pp, const char *modif,
 	if (print_pagelist == 0)
 		return;
 
-	if ((ph = LIST_FIRST(&pp->pr_emptypages)) != NULL)
+	if ((ph = TAILQ_FIRST(&pp->pr_emptypages)) != NULL)
 		(*pr)("\n\tempty page list:\n");
 	pool_print_pagelist(&pp->pr_emptypages, pr);
-	if ((ph = LIST_FIRST(&pp->pr_fullpages)) != NULL)
+	if ((ph = TAILQ_FIRST(&pp->pr_fullpages)) != NULL)
 		(*pr)("\n\tfull page list:\n");
 	pool_print_pagelist(&pp->pr_fullpages, pr);
-	if ((ph = LIST_FIRST(&pp->pr_partpages)) != NULL)
+	if ((ph = TAILQ_FIRST(&pp->pr_partpages)) != NULL)
 		(*pr)("\n\tpartial-page list:\n");
 	pool_print_pagelist(&pp->pr_partpages, pr);
 
@@ -1203,11 +1209,11 @@ pool_chk(struct pool *pp)
 	struct pool_item_header *ph;
 	int r = 0;
 
-	LIST_FOREACH(ph, &pp->pr_emptypages, ph_pagelist)
+	TAILQ_FOREACH(ph, &pp->pr_emptypages, ph_pagelist)
 		r += pool_chk_page(pp, ph, pp->pr_itemsperpage);
-	LIST_FOREACH(ph, &pp->pr_fullpages, ph_pagelist)
+	TAILQ_FOREACH(ph, &pp->pr_fullpages, ph_pagelist)
 		r += pool_chk_page(pp, ph, 0);
-	LIST_FOREACH(ph, &pp->pr_partpages, ph_pagelist)
+	TAILQ_FOREACH(ph, &pp->pr_partpages, ph_pagelist)
 		r += pool_chk_page(pp, ph, -1);
 
 	return (r);
@@ -1226,7 +1232,7 @@ pool_walk(struct pool *pp, int full,
 	caddr_t cp;
 	int n;
 
-	LIST_FOREACH(ph, &pp->pr_fullpages, ph_pagelist) {
+	TAILQ_FOREACH(ph, &pp->pr_fullpages, ph_pagelist) {
 		cp = ph->ph_page;
 		n = ph->ph_nmissing;
 
@@ -1236,7 +1242,7 @@ pool_walk(struct pool *pp, int full,
 		}
 	}
 
-	LIST_FOREACH(ph, &pp->pr_partpages, ph_pagelist) {
+	TAILQ_FOREACH(ph, &pp->pr_partpages, ph_pagelist) {
 		cp = ph->ph_page;
 		n = ph->ph_nmissing;
 

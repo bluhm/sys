@@ -1437,10 +1437,10 @@ phyint_send(struct ip6_hdr *ip6, struct mif6 *mifp, struct mbuf *m)
 	if (m->m_pkthdr.rcvif == NULL) {
 		struct ip6_moptions im6o;
 
-		im6o.im6o_multicast_ifp = ifp;
+		im6o.im6o_ifidx = ifp->if_index;
 		/* XXX: ip6_output will override ip6->ip6_hlim */
-		im6o.im6o_multicast_hlim = ip6->ip6_hlim;
-		im6o.im6o_multicast_loop = 1;
+		im6o.im6o_hlim = ip6->ip6_hlim;
+		im6o.im6o_loop = 1;
 		error = ip6_output(mb_copy, NULL, &ro, IPV6_FORWARDING, &im6o,
 		    NULL, NULL);
 
