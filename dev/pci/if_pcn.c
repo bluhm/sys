@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_pcn.c,v 1.31 2014/12/08 16:21:38 brad Exp $	*/
+/*	$OpenBSD: if_pcn.c,v 1.33 2014/12/22 02:28:52 tedu Exp $	*/
 /*	$NetBSD: if_pcn.c,v 1.26 2005/05/07 09:15:44 is Exp $	*/
 
 /*
@@ -78,14 +78,13 @@
 #include <sys/errno.h>
 #include <sys/device.h>
 #include <sys/queue.h>
+#include <sys/endian.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
 
-#ifdef INET
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
-#endif
 
 #include <net/if_media.h>
 
@@ -95,7 +94,6 @@
 
 #include <machine/bus.h>
 #include <machine/intr.h>
-#include <machine/endian.h>
 
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
@@ -1057,10 +1055,8 @@ pcn_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		ifp->if_flags |= IFF_UP;
 		if (!(ifp->if_flags & IFF_RUNNING))
 			pcn_init(ifp);
-#ifdef INET
 		if (ifa->ifa_addr->sa_family == AF_INET)
 			arp_ifinit(&sc->sc_arpcom, ifa);
-#endif
 		break;
 
 	case SIOCSIFFLAGS:

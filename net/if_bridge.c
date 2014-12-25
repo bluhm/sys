@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_bridge.c,v 1.229 2014/12/04 16:16:20 mikeb Exp $	*/
+/*	$OpenBSD: if_bridge.c,v 1.231 2014/12/22 03:38:01 tedu Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 Jason L. Wright (jason@thought.net)
@@ -46,18 +46,18 @@
 #include <sys/errno.h>
 #include <sys/kernel.h>
 
+#include <crypto/siphash.h>
+
 #include <net/if.h>
 #include <net/if_types.h>
 #include <net/if_llc.h>
 #include <net/netisr.h>
 
-#ifdef INET
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <netinet/ip_var.h>
 #include <netinet/if_ether.h>
 #include <netinet/ip_icmp.h>
-#endif
 
 #ifdef IPSEC
 #include <netinet/ip_ipsp.h>
@@ -143,10 +143,8 @@ struct mbuf *bridge_ip(struct bridge_softc *, int, struct ifnet *,
 int	bridge_ifenqueue(struct bridge_softc *, struct ifnet *, struct mbuf *);
 void	bridge_fragment(struct bridge_softc *, struct ifnet *,
     struct ether_header *, struct mbuf *);
-#ifdef INET
 void	bridge_send_icmp_err(struct bridge_softc *, struct ifnet *,
     struct ether_header *, struct mbuf *, int, struct llc *, int, int, int);
-#endif
 #ifdef IPSEC
 int bridge_ipsec(struct bridge_softc *, struct ifnet *,
     struct ether_header *, int, struct llc *,
@@ -201,7 +199,7 @@ bridge_clone_create(struct if_clone *ifc, int unit)
 	TAILQ_INIT(&sc->sc_spanlist);
 	for (i = 0; i < BRIDGE_RTABLE_SIZE; i++)
 		LIST_INIT(&sc->sc_rts[i]);
-	sc->sc_hashkey = arc4random();
+	arc4random_buf(&sc->sc_hashkey, sizeof(sc->sc_hashkey));
 	ifp = &sc->sc_if;
 	snprintf(ifp->if_xname, sizeof ifp->if_xname, "%s%d", ifc->ifc_name,
 	    unit);
@@ -1595,7 +1593,6 @@ bridge_localbroadcast(struct bridge_softc *sc, struct ifnet *ifp,
 	struct mbuf *m1;
 	u_int16_t etype;
 
-#ifdef INET
 	/*
 	 * quick optimisation, don't send packets up the stack if no
 	 * corresponding address has been specified.
@@ -1610,7 +1607,6 @@ bridge_localbroadcast(struct bridge_softc *sc, struct ifnet *ifp,
 		if (ifa == NULL)
 			return;
 	}
-#endif
 
 	m1 = m_copym2(m, 0, M_COPYALL, M_DONTWAIT);
 	if (m1 == NULL) {
@@ -1811,39 +1807,11 @@ fail:
 	return (NULL);
 }
 
-/*
- * The following hash function is adapted from 'Hash Functions' by Bob Jenkins
- * ("Algorithm Alley", Dr. Dobbs Journal, September 1997).
- * "You may use this code any way you wish, private, educational, or
- *  commercial.  It's free."
- */
-#define	mix(a,b,c) \
-	do {						\
-		a -= b; a -= c; a ^= (c >> 13);		\
-		b -= c; b -= a; b ^= (a << 8);		\
-		c -= a; c -= b; c ^= (b >> 13);		\
-		a -= b; a -= c; a ^= (c >> 12);		\
-		b -= c; b -= a; b ^= (a << 16);		\
-		c -= a; c -= b; c ^= (b >> 5);		\
-		a -= b; a -= c; a ^= (c >> 3);		\
-		b -= c; b -= a; b ^= (a << 10);		\
-		c -= a; c -= b; c ^= (b >> 15);		\
-	} while (0)
-
 u_int32_t
 bridge_hash(struct bridge_softc *sc, struct ether_addr *addr)
 {
-	u_int32_t a = 0x9e3779b9, b = 0x9e3779b9, c = sc->sc_hashkey;
-
-	b += addr->ether_addr_octet[5] << 8;
-	b += addr->ether_addr_octet[4];
-	a += addr->ether_addr_octet[3] << 24;
-	a += addr->ether_addr_octet[2] << 16;
-	a += addr->ether_addr_octet[1] << 8;
-	a += addr->ether_addr_octet[0];
-
-	mix(a, b, c);
-	return (c & BRIDGE_RTABLE_MASK);
+	return SipHash24((SIPHASH_KEY *)sc->sc_hashkey, addr, ETHER_ADDR_LEN) &
+	    BRIDGE_RTABLE_MASK;
 }
 
 void
@@ -2203,9 +2171,7 @@ bridge_ipsec(struct bridge_softc *sc, struct ifnet *ifp,
 	u_int16_t cpi;
 	int error, off, s;
 	u_int8_t proto = 0;
-#ifdef INET
 	struct ip *ip;
-#endif /* INET */
 #ifdef INET6
 	struct ip6_hdr *ip6;
 #endif /* INET6 */
@@ -2215,7 +2181,6 @@ bridge_ipsec(struct bridge_softc *sc, struct ifnet *ifp,
 
 	if (dir == BRIDGE_IN) {
 		switch (af) {
-#ifdef INET
 		case AF_INET:
 			if (m->m_pkthdr.len - hlen < 2 * sizeof(u_int32_t))
 				break;
@@ -2247,7 +2212,6 @@ bridge_ipsec(struct bridge_softc *sc, struct ifnet *ifp,
 				spi = ntohl(htons(cpi));
 			}
 			break;
-#endif /* INET */
 #ifdef INET6
 		case AF_INET6:
 			if (m->m_pkthdr.len - hlen < 2 * sizeof(u_int32_t))
@@ -2596,14 +2560,9 @@ bridge_fragment(struct bridge_softc *sc, struct ifnet *ifp,
 	struct mbuf *m0;
 	int s, error = 0;
 	int hassnap = 0;
-#ifdef INET
 	u_int16_t etype;
 	struct ip *ip;
-#endif
 
-#ifndef INET
-	goto dropit;
-#else
 	etype = ntohs(eh->ether_type);
 #if NVLAN > 0
 	if ((m->m_flags & M_VLANTAG) || etype == ETHERTYPE_VLAN ||
@@ -2699,7 +2658,6 @@ bridge_fragment(struct bridge_softc *sc, struct ifnet *ifp,
 		ipstat.ips_fragmented++;
 
 	return;
-#endif /* INET */
  dropit:
 	if (m != NULL)
 		m_freem(m);
@@ -2777,7 +2735,6 @@ bridge_ifenqueue(struct bridge_softc *sc, struct ifnet *ifp, struct mbuf *m)
 	return (0);
 }
 
-#ifdef INET
 void
 bridge_send_icmp_err(struct bridge_softc *sc, struct ifnet *ifp,
     struct ether_header *eh, struct mbuf *n, int hassnap, struct llc *llc,
@@ -2850,7 +2807,6 @@ bridge_send_icmp_err(struct bridge_softc *sc, struct ifnet *ifp,
  dropit:
 	m_freem(n);
 }
-#endif
 
 struct sockaddr *
 bridge_tunnel(struct mbuf *m)

@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_cnmac.c,v 1.19 2014/08/11 19:00:50 miod Exp $	*/
+/*	$OpenBSD: if_cnmac.c,v 1.21 2014/12/22 02:26:53 tedu Exp $	*/
 
 /*
  * Copyright (c) 2007 Internet Initiative Japan, Inc.
@@ -49,6 +49,7 @@
 #include <sys/stdint.h> /* uintptr_t */
 #include <sys/sysctl.h>
 #include <sys/syslog.h>
+#include <sys/endian.h>
 #ifdef MBUF_TIMESTAMP
 #include <sys/time.h>
 #endif
@@ -65,7 +66,6 @@
 
 #include <machine/bus.h>
 #include <machine/intr.h>
-#include <machine/endian.h>
 #include <machine/octeonvar.h>
 #include <machine/octeon_model.h>
 
@@ -758,10 +758,8 @@ octeon_eth_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		ifp->if_flags |= IFF_UP;
 		if (!(ifp->if_flags & IFF_RUNNING))
 			octeon_eth_init(ifp);
-#ifdef INET
 		if (ifa->ifa_addr->sa_family == AF_INET)
 			arp_ifinit(&sc->sc_arpcom, ifa);
-#endif
 		break;
 
 	case SIOCSIFFLAGS:

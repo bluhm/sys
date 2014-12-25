@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ral.c,v 1.128 2014/07/13 15:52:49 mpi Exp $	*/
+/*	$OpenBSD: if_ral.c,v 1.130 2014/12/22 02:28:52 tedu Exp $	*/
 
 /*-
  * Copyright (c) 2005, 2006
@@ -33,9 +33,9 @@
 #include <sys/timeout.h>
 #include <sys/conf.h>
 #include <sys/device.h>
+#include <sys/endian.h>
 
 #include <machine/bus.h>
-#include <machine/endian.h>
 #include <machine/intr.h>
 
 #if NBPFILTER > 0
@@ -1331,10 +1331,8 @@ ural_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 	case SIOCSIFADDR:
 		ifa = (struct ifaddr *)data;
 		ifp->if_flags |= IFF_UP;
-#ifdef INET
 		if (ifa->ifa_addr->sa_family == AF_INET)
 			arp_ifinit(&ic->ic_ac, ifa);
-#endif
 		/* FALLTHROUGH */
 	case SIOCSIFFLAGS:
 		if (ifp->if_flags & IFF_UP) {
