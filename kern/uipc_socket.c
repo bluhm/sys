@@ -1042,6 +1042,9 @@ sorflush(struct socket *so)
 #define so_splicemax	so_sp->ssp_max
 #define so_idletv	so_sp->ssp_idletv
 #define so_idleto	so_sp->ssp_idleto
+#define so_rate		so_sp->ssp_rate
+#define so_ratetv	so_sp->ssp_ratetv
+#define so_rateto	so_sp->ssp_rateto
 
 int
 sosplice(struct socket *so, int fd, off_t max, struct timeval *tv, off_t rate)
