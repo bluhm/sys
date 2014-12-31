@@ -1039,6 +1039,7 @@ sorflush(struct socket *so)
 #define so_splicemax	so_sp->ssp_max
 #define so_idletv	so_sp->ssp_idletv
 #define so_idleto	so_sp->ssp_idleto
+#define so_splicetask	so_sp->ssp_task
 
 int
 sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
@@ -1457,11 +1458,6 @@ somove(struct socket *so, int wait)
 		timeout_add_tv(&so->so_idleto, &so->so_idletv);
 	return (1);
 }
-
-#undef so_splicelen
-#undef so_splicemax
-#undef so_idletv
-#undef so_idleto
 
 #endif /* SOCKET_SPLICE */
 
