@@ -1182,28 +1182,7 @@ sotask(void *arg1, void *arg2)
 	int s;
 
 	s = splsoftnet();
-	if (so->so_splice) {
-		/*
-		 * We may not sleep here as sofree() and unsplice() may be
-		 * called from softnet interrupt context.  This would remove
-		 * the socket during somove().
-		 */
-		somove(so, M_DONTWAIT);
-	}
-	splx(s);
-
-	/* Avoid user land starvation. */
-	yield();
-}
-
-void
-sotask(void *arg1, void *arg2)
-{
-	struct socket *so = arg1;
-	int s;
-
-	s = splsoftnet();
-	if (so->so_splice) {
+	if (so->so_rcv.sb_flagsintr & SB_SPLICE) {
 		/*
 		 * We may not sleep here as sofree() and unsplice() may be
 		 * called from softnet interrupt context.  This would remove
