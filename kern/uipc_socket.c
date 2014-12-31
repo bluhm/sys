@@ -1498,11 +1498,6 @@ somove(struct socket *so, int wait)
 	return (1);
 }
 
-#undef so_splicelen
-#undef so_splicemax
-#undef so_idletv
-#undef so_idleto
-
 #endif /* SOCKET_SPLICE */
 
 void
