@@ -391,6 +391,11 @@ sys_sendsyslog(struct proc *p, void *v, register_t *retval)
 
 	len = auio.uio_resid;
 	error = sosend(f->f_data, NULL, &auio, NULL, NULL, 0);
+#ifndef SMALL_KERNEL
+	if (error) {
+		log(LOG_ERR, "send message to syslog failed: %d\n", error);
+	}
+#endif
 	if (error == 0)
 		len -= auio.uio_resid;
 
