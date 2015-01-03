@@ -411,7 +411,8 @@ sys_sendsyslog(struct proc *p, void *v, register_t *retval)
 #ifndef SMALL_KERNEL
 	if (error) {
 		if (!failed && ratecheck(&lasttime, &mininterval))
-			log(LOG_ERR, "send message to syslog error: %d\n", error);
+			log(LOG_ERR, "send message to syslog error: %d\n",	
+			    error);
 		else
 			failed++;
 	}
