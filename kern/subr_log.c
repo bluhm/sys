@@ -350,7 +350,7 @@ sys_sendsyslog(struct proc *p, void *v, register_t *retval)
 #ifndef SMALL_KERNEL
 	const struct timeval mininterval = { 30, 0 };
 	static struct timeval lasttime;
-	static unsigned int repeated;
+	static unsigned int failed;
 #endif
 	struct iovec aiov;
 	struct uio auio;
@@ -358,6 +358,18 @@ sys_sendsyslog(struct proc *p, void *v, register_t *retval)
 	size_t len;
 	int error;
 
+#ifndef SMALL_KERNEL
+	if (syslogf == NULL)
+		failed++;
+	if (failed && ratecheck(&lasttime, &mininterval)) {
+		if (failed > 1)
+			log(LOG_ERR, "send message to syslog failed %u times\n",
+			    failed);
+		else
+			log(LOG_ERR, "send message to syslog failed\n"),
+		failed = 0;
+	}
+#endif
 	if (syslogf == NULL)
 		return (ENOTCONN);
 	f = syslogf;
@@ -385,16 +397,12 @@ sys_sendsyslog(struct proc *p, void *v, register_t *retval)
 	len = auio.uio_resid;
 	error = sosend(f->f_data, NULL, &auio, NULL, NULL, 0);
 #ifndef SMALL_KERNEL
-	if (ratecheck(&lasttime, &mininterval)) {
-		if (repeated) {
-			log(LOG_ERR, "send message to syslog failed %u times\n",
-			    repeated);
-			repeated = 0;
-		} else if (error)
-			log(LOG_ERR, "send message to syslog error: %d\n",
-			    error);
-	} else if (error)
-		repeated++;
+	if (error) {
+		if (!failed && ratecheck(&lasttime, &mininterval))
+			log(LOG_ERR, "send message to syslog error: %d\n", error);
+		else
+			failed++;
+	}
 #endif
 	if (error == 0)
 		len -= auio.uio_resid;
