@@ -347,6 +347,11 @@ sys_sendsyslog(struct proc *p, void *v, register_t *retval)
 	struct iovec *ktriov = NULL;
 	int iovlen;
 #endif
+#ifndef SMALL_KERNEL
+	const struct timeval mininterval = { 30, 0 };
+	static struct timeval lasttime;
+	static unsigned int repeated;
+#endif
 	struct iovec aiov;
 	struct uio auio;
 	struct file *f;
@@ -380,9 +385,16 @@ sys_sendsyslog(struct proc *p, void *v, register_t *retval)
 	len = auio.uio_resid;
 	error = sosend(f->f_data, NULL, &auio, NULL, NULL, 0);
 #ifndef SMALL_KERNEL
-	if (error) {
-		log(LOG_ERR, "send message to syslog failed: %d\n", error);
-	}
+	if (ratecheck(&lasttime, &mininterval)) {
+		if (repeated) {
+			log(LOG_ERR, "send message to syslog failed %u times\n",
+			    repeated);
+			repeated = 0;
+		} else if (error)
+			log(LOG_ERR, "send message to syslog error: %d\n",
+			    error);
+	} else if (error)
+		repeated++;
 #endif
 	if (error == 0)
 		len -= auio.uio_resid;
