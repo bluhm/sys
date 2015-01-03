@@ -369,20 +369,10 @@ sys_sendsyslog(struct proc *p, void *v, register_t *retval)
 	size_t len;
 	int error;
 
-#ifndef SMALL_KERNEL
-	if (syslogf == NULL)
-		failed++;
-	if (failed && ratecheck(&lasttime, &mininterval)) {
-		if (failed > 1)
-			log(LOG_ERR, "send message to syslog failed %u times\n",
-			    failed);
-		else
-			log(LOG_ERR, "send message to syslog failed\n");
-		failed = 0;
+	if (syslogf == NULL) {
+		error = ENOTCONN;
+		goto out;
 	}
-#endif
-	if (syslogf == NULL)
-		return (ENOTCONN);
 	f = syslogf;
 	FREF(f);
 
@@ -407,15 +397,6 @@ sys_sendsyslog(struct proc *p, void *v, register_t *retval)
 
 	len = auio.uio_resid;
 	error = sosend(f->f_data, NULL, &auio, NULL, NULL, 0);
-#ifndef SMALL_KERNEL
-	if (error) {
-		if (!failed && ratecheck(&lasttime, &mininterval))
-			log(LOG_ERR, "send message to syslog error: %d\n",	
-			    error);
-		else
-			failed++;
-	}
-#endif
 	if (error == 0)
 		len -= auio.uio_resid;
 
@@ -427,5 +408,19 @@ sys_sendsyslog(struct proc *p, void *v, register_t *retval)
 	}
 #endif
 	FRELE(f, p);
-	return error;
+
+ out:
+#ifndef SMALL_KERNEL
+	if (error)
+		failed++;
+	if (failed && ratecheck(&lasttime, &mininterval)) {
+		if (failed == 1)
+			log(LOG_ERR, "send message to syslog failed\n");
+		else
+			log(LOG_ERR, "send message to syslog failed %u times\n",
+			    failed);
+		failed = 0;
+	}
+#endif
+	return (error);
 }
