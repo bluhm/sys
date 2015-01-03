@@ -377,7 +377,7 @@ sys_sendsyslog(struct proc *p, void *v, register_t *retval)
 			log(LOG_ERR, "send message to syslog failed %u times\n",
 			    failed);
 		else
-			log(LOG_ERR, "send message to syslog failed\n"),
+			log(LOG_ERR, "send message to syslog failed\n");
 		failed = 0;
 	}
 #endif
