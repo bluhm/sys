@@ -347,14 +347,14 @@ sys_sendsyslog(struct proc *p, void *v, register_t *retval)
 	struct iovec *ktriov = NULL;
 	int iovlen;
 #endif
-#ifndef SMALL_KERNEL
-	static unsigned int failed;
-#endif
 	struct iovec aiov;
 	struct uio auio;
 	struct file *f;
 	size_t len;
 	int error;
+#ifndef SMALL_KERNEL
+	static unsigned int failed;
+#endif
 
 	if (syslogf == NULL) {
 		error = ENOTCONN;
