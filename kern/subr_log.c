@@ -348,8 +348,6 @@ sys_sendsyslog(struct proc *p, void *v, register_t *retval)
 	int iovlen;
 #endif
 #ifndef SMALL_KERNEL
-	const struct timeval mininterval = { 30, 0 };
-	static struct timeval lasttime;
 	static unsigned int failed;
 #endif
 	struct iovec aiov;
@@ -400,14 +398,14 @@ sys_sendsyslog(struct proc *p, void *v, register_t *retval)
 
  out:
 #ifndef SMALL_KERNEL
-	if (error)
-		failed++;
-	if (failed && ratecheck(&lasttime, &mininterval)) {
-		if (failed == 1)
+	if (error) {
+		if (failed == 0)
 			log(LOG_ERR, "send message to syslog failed\n");
-		else
-			log(LOG_ERR, "send message to syslog failed %u times\n",
-			    failed);
+		failed++;
+	} else {
+		if (failed > 1)
+			log(LOG_ERR, "send message to syslog failed "
+			    "%u more times\n", failed - 1);
 		failed = 0;
 	}
 #endif
