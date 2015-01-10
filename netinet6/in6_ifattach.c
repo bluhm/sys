@@ -1,4 +1,4 @@
-/*	$OpenBSD: in6_ifattach.c,v 1.78 2014/12/04 00:02:15 tedu Exp $	*/
+/*	$OpenBSD: in6_ifattach.c,v 1.80 2015/01/08 17:21:01 florian Exp $	*/
 /*	$KAME: in6_ifattach.c,v 1.124 2001/07/18 08:32:51 jinmei Exp $	*/
 
 /*
@@ -690,5 +690,6 @@ in6_ifdetach(struct ifnet *ifp)
 		if (RS_LHCOOKIE(ifp) != NULL)
 			hook_disestablish(ifp->if_linkstatehooks,
 			    RS_LHCOOKIE(ifp));
+		ifp->if_xflags &= ~IFXF_AUTOCONF6;
 	}
 }
