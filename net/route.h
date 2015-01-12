@@ -357,9 +357,9 @@ void	 rt_ifannouncemsg(struct ifnet *, int);
 void	 rt_maskedcopy(struct sockaddr *,
 	    struct sockaddr *, struct sockaddr *);
 void	 rt_sendmsg(struct rtentry *, int, u_int);
+void	 rt_sendaddrmsg(struct rtentry *, int);
 void	 rt_missmsg(int, struct rt_addrinfo *, int, struct ifnet *, int,
 	    u_int);
-void	 rt_newaddrmsg(int, struct ifaddr *, int, struct rtentry *);
 int	 rt_setgate(struct rtentry *, struct sockaddr *,
 	    struct sockaddr *, u_int);
 int	 rt_checkgate(struct ifnet *, struct rtentry *, struct sockaddr *,
