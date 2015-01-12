@@ -71,6 +71,7 @@ struct ieee80211com_head ieee80211com_head =
 
 void ieee80211_setbasicrates(struct ieee80211com *);
 int ieee80211_findrate(struct ieee80211com *, enum ieee80211_phymode, int);
+void ieee80211_periodic_checks(void *);
 
 void
 ieee80211_ifattach(struct ifnet *ifp)
@@ -143,6 +144,9 @@ ieee80211_ifattach(struct ifnet *ifp)
 	ic->ic_bmisstimeout = 7*ic->ic_lintval;	/* default 7 beacons */
 	ic->ic_dtim_period = 1;	/* all TIMs are DTIMs */
 
+ 	ic->ic_check_intvl = 1;	/* run periodic checks every second */
+ 	timeout_set(&ic->ic_periodic_checks, ieee80211_periodic_checks, ic);
+
 	LIST_INSERT_HEAD(&ieee80211com_head, ic, ic_list);
 	ieee80211_node_attach(ifp);
 	ieee80211_proto_attach(ifp);
@@ -156,6 +160,7 @@ ieee80211_ifdetach(struct ifnet *ifp)
 {
 	struct ieee80211com *ic = (void *)ifp;
 
+ 	timeout_del(&ic->ic_periodic_checks);
 	ieee80211_proto_detach(ifp);
 	ieee80211_crypto_detach(ifp);
 	ieee80211_node_detach(ifp);
@@ -778,6 +783,37 @@ ieee80211_next_mode(struct ifnet *ifp)
 	ieee80211_setmode(ic, ic->ic_curmode);
 
 	return (ic->ic_curmode);
+}
+
+/*
+ * Run periodically while in IEEE80211_S_RUN state to perform some checks
+ */
+void
+ieee80211_periodic_checks(void *arg)
+{
+	struct ieee80211com *ic = (struct ieee80211com *)arg;
+	struct ieee80211_node *ni;
+
+	if ((ni = ic->ic_bss) != NULL) {
+		ni->ni_beaconmiss += ic->ic_check_intvl;
+
+		/*
+		 * I know it's wrong to interpret ic_bmisstimeout this way,
+		 * but 0.7 secs seems far too short to timeout an association.
+		 *
+		 * 7 secs look much better ...
+		 */
+		if (ni->ni_beaconmiss > (ic->ic_bmisstimeout / ic->ic_lintval)) {
+			if (ic->ic_if.if_flags & IFF_DEBUG) {
+				printf("beacon timeout from SSID ");
+				ieee80211_print_essid(ni->ni_essid, ni->ni_esslen);
+				printf(" at %s\n", ether_sprintf(ni->ni_macaddr));
+			}
+			ieee80211_new_state(ic, IEEE80211_S_SCAN, -1);
+		}
+	}
+	if (ic->ic_state == IEEE80211_S_RUN)
+		timeout_add_sec(&ic->ic_periodic_checks, ic->ic_check_intvl);
 }
 
 /*

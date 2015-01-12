@@ -775,6 +775,11 @@ ieee80211_newstate(struct ieee80211com *ic, enum ieee80211_state nstate,
 	ni = ic->ic_bss;			/* NB: no reference held */
 	if (ostate == IEEE80211_S_RUN)
 		ieee80211_set_link_state(ic, LINK_STATE_DOWN);
+	if (nstate == IEEE80211_S_RUN)
+		timeout_add_sec(&ic->ic_periodic_checks, ic->ic_check_intvl);
+	else
+		timeout_del(&ic->ic_periodic_checks);
+
 	switch (nstate) {
 	case IEEE80211_S_INIT:
 		/*

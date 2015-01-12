@@ -307,6 +307,9 @@ struct ieee80211com {
 	struct ieee80211_defrag	ic_defrag[IEEE80211_DEFRAG_SIZE];
 	int			ic_defrag_cur;
 
+	struct timeout		ic_periodic_checks;
+	int			ic_check_intvl;
+
 	u_int8_t		*ic_tim_bitmap;
 	u_int			ic_tim_len;
 	u_int			ic_tim_mcast_pending;

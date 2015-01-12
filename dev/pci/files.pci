@@ -577,6 +577,11 @@ device	iwn: ifnet, wlan, firmload
 attach	iwn at pci
 file	dev/pci/if_iwn.c		iwn
 
+# Intel Wireless WiFi Link 4965AGN
+device	iwm: ifnet, wlan, firmload
+attach	iwm at pci
+file	dev/pci/if_iwm.c		iwm
+
 # C-Media CMI8x38 Audio Chip
 device	cmpci {}: audio, auconv, mulaw
 attach	cmpci at pci

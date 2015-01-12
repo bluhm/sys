@@ -298,11 +298,6 @@ ieee80211_input(struct ifnet *ifp, struct mbuf *m, struct ieee80211_node *ni,
 		}
 		*orxseq = nrxseq;
 	}
-	if (ic->ic_state != IEEE80211_S_SCAN) {
-		ni->ni_rssi = rxi->rxi_rssi;
-		ni->ni_rstamp = rxi->rxi_tstamp;
-		ni->ni_inact = 0;
-	}
 
 #ifndef IEEE80211_STA_ONLY
 	if (ic->ic_opmode == IEEE80211_M_HOSTAP &&
@@ -1499,6 +1494,19 @@ ieee80211_recv_probe_resp(struct ieee80211com *ic, struct mbuf *m,
 		ic->ic_stats.is_rx_chanmismatch++;
 		return;
 	}
+
+	if (ic->ic_state != IEEE80211_S_SCAN) {
+		ni->ni_rssi = rxi->rxi_rssi;
+		ni->ni_rstamp = rxi->rxi_tstamp;
+		ni->ni_inact = 0;
+		if (ic->ic_if.if_flags & IFF_DEBUG) {
+			printf("got beacon for node %p from SSID ", ni);
+			ieee80211_print_essid(ni->ni_essid, ni->ni_esslen);
+			printf(" at %s\n", ether_sprintf(ni->ni_macaddr));
+		}
+		ni->ni_beaconmiss = 0;
+	}
+
 	/*
 	 * Use mac, channel and rssi so we collect only the
 	 * best potential AP with the equal bssid while scanning.
@@ -1625,6 +1633,7 @@ ieee80211_recv_probe_resp(struct ieee80211com *ic, struct mbuf *m,
 	ni->ni_rssi = rxi->rxi_rssi;
 	ni->ni_rstamp = rxi->rxi_tstamp;
 	memcpy(ni->ni_tstamp, tstamp, sizeof(ni->ni_tstamp));
+	ni->ni_beaconmiss = 0;
 	ni->ni_intval = bintval;
 	ni->ni_capinfo = capinfo;
 	/* XXX validate channel # */
