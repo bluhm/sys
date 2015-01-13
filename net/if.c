@@ -1306,10 +1306,11 @@ ifioctl(struct socket *so, u_long cmd, caddr_t data, struct proc *p)
 
 #ifdef INET6
 		if (ISSET(ifr->ifr_flags, IFXF_AUTOCONF6)) {
-			s = splsoftnet();
-			if (in6ifa_ifpforlinklocal(ifp, 0) == NULL)
+			if (in6ifa_ifpforlinklocal(ifp, 0) == NULL) {
+				s = splsoftnet();
 				in6_ifattach(ifp);
-			splx(s);
+				splx(s);
+			}
 		}
 
 		if (ifr->ifr_flags & IFXF_AUTOCONF6)
