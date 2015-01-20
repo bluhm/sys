@@ -650,7 +650,6 @@ ifa_ifwithroute(int flags, struct sockaddr *dst, struct sockaddr *gateway,
 int
 rt_getifa(struct rt_addrinfo *info, u_int rtid)
 {
-	struct ifaddr	*ifa;
 	struct ifnet	*ifp = NULL;
 
 	/*
@@ -701,7 +700,7 @@ rt_getifa(struct rt_addrinfo *info, u_int rtid)
 			    sa, sa, rtid);
 	}
 
-	if ((ifa = info->rti_ifa) == NULL)
+	if (info->rti_ifa == NULL)
 		return (ENETUNREACH);
 
 	return (0);
