@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_ipsp.h,v 1.158 2014/12/23 03:24:08 tedu Exp $	*/
+/*	$OpenBSD: ip_ipsp.h,v 1.160 2015/01/19 18:36:51 deraadt Exp $	*/
 /*
  * The authors of this code are John Ioannidis (ji@tla.org),
  * Angelos D. Keromytis (kermit@csd.uch.gr),
@@ -45,8 +45,10 @@ struct m_tag;
 /* IPSP global definitions. */
 
 #include <sys/types.h>
-#include <sys/queue.h>
+#ifdef _KERNEL
 #include <sys/timeout.h>
+#endif
+#include <sys/queue.h>
 #include <netinet/in.h>
 
 union sockaddr_union {
@@ -132,6 +134,8 @@ struct sockaddr_encap {
 
 #define	IPSP_DIRECTION_IN	0x1
 #define	IPSP_DIRECTION_OUT	0x2
+
+#ifdef _KERNEL
 
 #define	sen_data		Sen.Data
 #define	sen_ip_src		Sen.Sip4.Src
@@ -376,6 +380,8 @@ struct tdb {				/* tunnel descriptor block */
 	TAILQ_HEAD(tdb_policy_head, ipsec_policy)	tdb_policy_head;
 	TAILQ_ENTRY(tdb)	tdb_sync_entry;
 };
+
+#endif /* _KERNEL */
 
 struct tdb_ident {
 	u_int32_t spi;

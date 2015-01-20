@@ -1,4 +1,4 @@
-/*	$OpenBSD: re.c,v 1.168 2015/01/15 23:06:08 brad Exp $	*/
+/*	$OpenBSD: re.c,v 1.171 2015/01/20 04:46:11 brad Exp $	*/
 /*	$FreeBSD: if_re.c,v 1.31 2004/09/04 07:54:05 ru Exp $	*/
 /*
  * Copyright (c) 1997, 1998-2003
@@ -873,7 +873,7 @@ re_attach(struct rl_softc *sc, const char *intrstr)
 		re_read_eeprom(sc, (caddr_t)as, RL_EE_EADDR, 3);
 		for (i = 0; i < ETHER_ADDR_LEN / 2; i++)
 			as[i] = letoh16(as[i]);
-		bcopy(as, eaddr, sizeof(eaddr));
+		bcopy(as, eaddr, ETHER_ADDR_LEN);
 
 #ifdef __armish__
 		/*
@@ -1562,12 +1562,6 @@ re_intr(void *arg)
 			re_init(ifp);
 			claimed = 1;
 		}
-
-		if (status & RL_ISR_LINKCHG) {
-			timeout_del(&sc->timer_handle);
-			re_tick(sc);
-			claimed = 1;
-		}
 	}
 
 	if (sc->rl_imtype == RL_IMTYPE_SIM) {
@@ -1598,8 +1592,7 @@ re_intr(void *arg)
 		}
 	}
 
-	if (tx)
-		re_start(ifp);
+	re_start(ifp);
 
 	CSR_WRITE_2(sc, RL_IMR, sc->rl_intrs);
 
@@ -1980,8 +1973,6 @@ re_init(struct ifnet *ifp)
 			CSR_WRITE_2(sc, RL_MAXRXPKTLEN, 16383);
 	}
 
-	mii_mediachg(&sc->sc_mii);
-
 	CSR_WRITE_1(sc, sc->rl_cfg1, CSR_READ_1(sc, sc->rl_cfg1) |
 	    RL_CFG1_DRVLOAD);
 
@@ -1991,6 +1982,7 @@ re_init(struct ifnet *ifp)
 	splx(s);
 
 	sc->rl_flags &= ~RL_FLAG_LINK;
+	mii_mediachg(&sc->sc_mii);
 
 	timeout_add_sec(&sc->timer_handle, 1);
 
