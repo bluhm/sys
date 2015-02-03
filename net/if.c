@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.c,v 1.312 2015/01/14 00:37:19 bluhm Exp $	*/
+/*	$OpenBSD: if.c,v 1.315 2015/01/27 10:31:19 mpi Exp $	*/
 /*	$NetBSD: if.c,v 1.35 1996/05/07 05:26:04 thorpej Exp $	*/
 
 /*
@@ -142,7 +142,7 @@ struct if_clone	*if_clone_lookup(const char *, int *);
 void	if_congestion_clear(void *);
 int	if_group_egress_build(void);
 
-void	if_link_state_change_task(void *, void *);
+void	if_link_state_change_task(void *);
 
 #ifdef DDB
 void	ifa_print_all(void);
@@ -265,8 +265,7 @@ if_attachsetup(struct ifnet *ifp)
 	timeout_set(ifp->if_slowtimo, if_slowtimo, ifp);
 	if_slowtimo(ifp);
 
-	task_set(ifp->if_linkstatetask, if_link_state_change_task,
-	    ifp, NULL);
+	task_set(ifp->if_linkstatetask, if_link_state_change_task, ifp);
 
 	/* Announce the interface. */
 	rt_ifannouncemsg(ifp, IFAN_ARRIVAL);
@@ -1119,7 +1118,7 @@ if_link_state_change(struct ifnet *ifp)
  * Process a link state change.
  */
 void
-if_link_state_change_task(void *arg, void *unused)
+if_link_state_change_task(void *arg)
 {
 	struct ifnet *ifp = arg;
 	int s;
@@ -1203,7 +1202,9 @@ ifioctl(struct socket *so, u_long cmd, caddr_t data, struct proc *p)
 	switch (cmd) {
 
 	case SIOCGIFCONF:
+#ifdef COMPAT_LINUX
 	case OSIOCGIFCONF:
+#endif
 		return (ifconf(cmd, data));
 	}
 	ifr = (struct ifreq *)data;
@@ -1237,10 +1238,9 @@ ifioctl(struct socket *so, u_long cmd, caddr_t data, struct proc *p)
 #ifdef INET6
 		case AF_INET6:
 			s = splsoftnet();
-			if (cmd == SIOCIFAFATTACH) {
-				if (in6ifa_ifpforlinklocal(ifp, 0) == NULL)
-					in6_ifattach(ifp);
-			} else
+			if (cmd == SIOCIFAFATTACH)
+				in6_ifattach(ifp);
+			else
 				in6_ifdetach(ifp);
 			splx(s);
 			return (0);
@@ -1306,15 +1306,10 @@ ifioctl(struct socket *so, u_long cmd, caddr_t data, struct proc *p)
 
 #ifdef INET6
 		if (ISSET(ifr->ifr_flags, IFXF_AUTOCONF6)) {
-			if (in6ifa_ifpforlinklocal(ifp, 0) == NULL) {
-				s = splsoftnet();
-				in6_ifattach(ifp);
-				splx(s);
-			}
+			s = splsoftnet();
+			in6_ifattach(ifp);
+			splx(s);
 		}
-
-		if (ifr->ifr_flags & IFXF_AUTOCONF6)
-			nd6_rs_output_set_timo(ND6_RS_OUTPUT_QUICK_INTERVAL);
 
 		if ((ifr->ifr_flags & IFXF_AUTOCONF6) &&
 		    !(ifp->if_xflags & IFXF_AUTOCONF6)) {
@@ -1603,61 +1598,9 @@ ifioctl(struct socket *so, u_long cmd, caddr_t data, struct proc *p)
 	default:
 		if (so->so_proto == 0)
 			return (EOPNOTSUPP);
-#if !defined(COMPAT_43) && !defined(COMPAT_LINUX)
 		error = ((*so->so_proto->pr_usrreq)(so, PRU_CONTROL,
 			(struct mbuf *) cmd, (struct mbuf *) data,
 			(struct mbuf *) ifp, p));
-#else
-	    {
-		u_long ocmd = cmd;
-
-		switch (cmd) {
-
-		case SIOCSIFADDR:
-		case SIOCSIFDSTADDR:
-		case SIOCSIFBRDADDR:
-		case SIOCSIFNETMASK:
-#if BYTE_ORDER != BIG_ENDIAN
-			if (ifr->ifr_addr.sa_family == 0 &&
-			    ifr->ifr_addr.sa_len < 16) {
-				ifr->ifr_addr.sa_family = ifr->ifr_addr.sa_len;
-				ifr->ifr_addr.sa_len = 16;
-			}
-#else
-			if (ifr->ifr_addr.sa_len == 0)
-				ifr->ifr_addr.sa_len = 16;
-#endif
-			break;
-
-		case OSIOCGIFADDR:
-			cmd = SIOCGIFADDR;
-			break;
-
-		case OSIOCGIFDSTADDR:
-			cmd = SIOCGIFDSTADDR;
-			break;
-
-		case OSIOCGIFBRDADDR:
-			cmd = SIOCGIFBRDADDR;
-			break;
-
-		case OSIOCGIFNETMASK:
-			cmd = SIOCGIFNETMASK;
-		}
-		error = ((*so->so_proto->pr_usrreq)(so, PRU_CONTROL,
-		    (struct mbuf *) cmd, (struct mbuf *) data,
-		    (struct mbuf *) ifp, p));
-		switch (ocmd) {
-
-		case OSIOCGIFADDR:
-		case OSIOCGIFDSTADDR:
-		case OSIOCGIFBRDADDR:
-		case OSIOCGIFNETMASK:
-			*(u_int16_t *)&ifr->ifr_addr = ifr->ifr_addr.sa_family;
-		}
-
-	    }
-#endif
 		break;
 	}
 
@@ -1700,7 +1643,7 @@ ifconf(u_long cmd, caddr_t data)
 				TAILQ_FOREACH(ifa,
 				    &ifp->if_addrlist, ifa_list) {
 					sa = ifa->ifa_addr;
-#if defined(COMPAT_43) || defined(COMPAT_LINUX)
+#ifdef COMPAT_LINUX
 					if (cmd != OSIOCGIFCONF)
 #endif
 					if (sa->sa_len > sizeof(*sa))
@@ -1731,12 +1674,11 @@ ifconf(u_long cmd, caddr_t data)
 
 				if (space < sizeof(ifr))
 					break;
-#if defined(COMPAT_43) || defined(COMPAT_LINUX)
+#ifdef COMPAT_LINUX
 				if (cmd == OSIOCGIFCONF) {
-					struct osockaddr *osa =
-					    (struct osockaddr *)&ifr.ifr_addr;
 					ifr.ifr_addr = *sa;
-					osa->sa_family = sa->sa_family;
+					*(u_int16_t *)&ifr.ifr_addr =
+					    sa->sa_family;
 					error = copyout((caddr_t)&ifr,
 					    (caddr_t)ifrp, sizeof (ifr));
 					ifrp++;
@@ -2251,19 +2193,16 @@ ifnewlladdr(struct ifnet *ifp)
 			arp_ifinit((struct arpcom *)ifp, ifa);
 	}
 #ifdef INET6
-	/* Update the link-local address. Don't do it if we're
-	 * a router to avoid confusing hosts on the network. */
+	/*
+	 * Update the link-local address.  Don't do it if we're
+	 * a router to avoid confusing hosts on the network.
+	 */
 	if (!ip6_forwarding) {
 		ifa = &in6ifa_ifpforlinklocal(ifp, 0)->ia_ifa;
 		if (ifa) {
 			in6_purgeaddr(ifa);
 			dohooks(ifp->if_addrhooks, 0);
-			in6_ifattach_linklocal(ifp, NULL);
-			if (in6if_do_dad(ifp)) {
-				ifa = &in6ifa_ifpforlinklocal(ifp, 0)->ia_ifa;
-				if (ifa)
-					nd6_dad_start(ifa, NULL);
-			}
+			in6_ifattach(ifp);
 		}
 	}
 #endif

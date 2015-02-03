@@ -1,4 +1,4 @@
-/*	$OpenBSD: in6.c,v 1.149 2015/01/10 11:43:37 mpi Exp $	*/
+/*	$OpenBSD: in6.c,v 1.152 2015/01/27 10:34:27 mpi Exp $	*/
 /*	$KAME: in6.c,v 1.372 2004/06/14 08:14:21 itojun Exp $	*/
 
 /*
@@ -71,6 +71,7 @@
 #include <sys/socket.h>
 #include <sys/socketvar.h>
 #include <sys/sockio.h>
+#include <sys/mbuf.h>
 #include <sys/systm.h>
 #include <sys/time.h>
 #include <sys/kernel.h>
@@ -477,8 +478,7 @@ in6_control(struct socket *so, u_long cmd, caddr_t data, struct ifnet *ifp)
 		 * is no link-local yet.
 		 */
  		s = splsoftnet();
-		if (in6ifa_ifpforlinklocal(ifp, 0) == NULL)
-			in6_ifattach(ifp);
+		in6_ifattach(ifp);
 		error = in6_update_ifa(ifp, ifra, ia6);
 		splx(s);
 		if (error != 0)
@@ -1374,7 +1374,8 @@ in6_ifinit(struct ifnet *ifp, struct in6_ifaddr *ia6, int newhost)
 	}
 
 	if ((ifacount <= 1 || ifp->if_type == IFT_CARP ||
-	    (ifp->if_flags & IFF_POINTOPOINT)) && ifp->if_ioctl &&
+	    (ifp->if_flags & (IFF_LOOPBACK|IFF_POINTOPOINT))) &&
+	    ifp->if_ioctl &&
 	    (error = (*ifp->if_ioctl)(ifp, SIOCSIFADDR, (caddr_t)ia6))) {
 		return (error);
 	}
