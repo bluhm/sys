@@ -1,4 +1,4 @@
-/*	$OpenBSD: uipc_mbuf.c,v 1.199 2014/12/11 19:21:57 tedu Exp $	*/
+/*	$OpenBSD: uipc_mbuf.c,v 1.201 2015/02/07 02:52:09 dlg Exp $	*/
 /*	$NetBSD: uipc_mbuf.c,v 1.15.4.1 1996/06/13 17:11:44 cgd Exp $	*/
 
 /*
@@ -1309,6 +1309,35 @@ ml_dechain(struct mbuf_list *ml)
 	return (m0);
 }
 
+struct mbuf *
+ml_filter(struct mbuf_list *ml,
+    int (*filter)(void *, const struct mbuf *), void *ctx)
+{
+	struct mbuf_list matches = MBUF_LIST_INITIALIZER();
+	struct mbuf *m, *n;
+	struct mbuf **mp;
+
+	mp = &ml->ml_head;
+
+	for (m = ml->ml_head; m != NULL; m = n) {
+		n = m->m_nextpkt;
+		if ((*filter)(ctx, m)) {
+			*mp = n;
+			ml_enqueue(&matches, m);
+		} else {
+			mp = &m->m_nextpkt;
+			ml->ml_tail = m;
+		}
+	}
+
+	/* fixup ml */
+	if (ml->ml_head == NULL)
+		ml->ml_tail = NULL;
+	ml->ml_len -= ml_len(&matches);
+
+	return (matches.ml_head); /* ml_dechain */
+}
+
 /*
  * mbuf queues
  */
@@ -1356,14 +1385,24 @@ mq_dequeue(struct mbuf_queue *mq)
 int
 mq_enlist(struct mbuf_queue *mq, struct mbuf_list *ml)
 {
-	int full;
+	struct mbuf *m;
+	int dropped = 0;
 
 	mtx_enter(&mq->mq_mtx);
-	ml_join(&mq->mq_list, ml);
-	full = mq_len(mq) >= mq->mq_maxlen;
+	if (mq_len(mq) < mq->mq_maxlen)
+		ml_join(&mq->mq_list, ml);
+	else {
+		dropped = ml_len(ml);
+		mq->mq_drops += dropped;
+	}
 	mtx_leave(&mq->mq_mtx);
 
-	return (full);
+	if (dropped) {
+		while ((m = ml_dequeue(ml)) != NULL)
+			m_freem(m);
+	}
+
+	return (dropped);
 }
 
 void
@@ -1382,6 +1421,19 @@ mq_dechain(struct mbuf_queue *mq)
 
 	mtx_enter(&mq->mq_mtx);
 	m0 = ml_dechain(&mq->mq_list);
+	mtx_leave(&mq->mq_mtx);
+
+	return (m0);
+}
+
+struct mbuf *
+mq_filter(struct mbuf_queue *mq,
+    int (*filter)(void *, const struct mbuf *), void *ctx)
+{
+	struct mbuf *m0;
+
+	mtx_enter(&mq->mq_mtx);
+	m0 = ml_filter(&mq->mq_list, filter, ctx);
 	mtx_leave(&mq->mq_mtx);
 
 	return (m0);
