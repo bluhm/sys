@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip6_input.c,v 1.136 2015/02/05 01:10:57 mpi Exp $	*/
+/*	$OpenBSD: ip6_input.c,v 1.139 2015/02/09 12:23:22 claudio Exp $	*/
 /*	$KAME: ip6_input.c,v 1.188 2001/03/29 05:34:31 itojun Exp $	*/
 
 /*
@@ -333,18 +333,6 @@ ip6_input(struct mbuf *m)
 			dst_scope = ip6->ip6_dst.s6_addr16[1];
 			ip6->ip6_dst.s6_addr16[1] = 0;
 		}
-	}
-
-	/*
-	 * If the packet has been received on a loopback interface it
-	 * can be destinated to any local address, not necessarily to
-	 * an address configured on `ifp'.
-	 */
-	if ((ifp->if_flags & IFF_LOOPBACK) == 0) {
-		if (IN6_IS_SCOPE_EMBED(&ip6->ip6_src))
-			ip6->ip6_src.s6_addr16[1] = htons(ifp->if_index);
-		if (IN6_IS_SCOPE_EMBED(&ip6->ip6_dst))
-			ip6->ip6_dst.s6_addr16[1] = htons(ifp->if_index);
 	}
 
 #if NPF > 0
@@ -1417,9 +1405,9 @@ ip6_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 #endif
 	int error, s;
 
-	/* All sysctl names at this level are terminal. */
-	if (namelen != 1)
-		return ENOTDIR;
+	/* Almost all sysctl names at this level are terminal. */
+	if (namelen != 1 && name[0] != IPV6CTL_IFQUEUE)
+		return (ENOTDIR);
 
 	switch (name[0]) {
 	case IPV6CTL_V6ONLY:
@@ -1431,19 +1419,27 @@ ip6_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 			return (EPERM);
 		return (sysctl_struct(oldp, oldlenp, newp, newlen,
 		    &ip6stat, sizeof(ip6stat)));
-	case IPV6CTL_MRTSTATS:
 #ifdef MROUTING
+	case IPV6CTL_MRTSTATS:
 		if (newp != NULL)
 			return (EPERM);
 		return (sysctl_struct(oldp, oldlenp, newp, newlen,
 		    &mrt6stat, sizeof(mrt6stat)));
-#else
-		return (EOPNOTSUPP);
-#endif
 	case IPV6CTL_MRTPROTO:
-#ifdef MROUTING
 		return sysctl_rdint(oldp, oldlenp, newp, ip6_mrtproto);
+	case IPV6CTL_MRTMIF:
+		if (newp)
+			return (EPERM);
+		return mrt6_sysctl_mif(oldp, oldlenp);
+	case IPV6CTL_MRTMFC:
+		if (newp)
+			return (EPERM);
+		return mrt6_sysctl_mfc(oldp, oldlenp);
 #else
+	case IPV6CTL_MRTSTATS:
+	case IPV6CTL_MRTPROTO:
+	case IPV6CTL_MRTMIF:
+	case IPV6CTL_MRTMFC:
 		return (EOPNOTSUPP);
 #endif
 	case IPV6CTL_MTUDISCTIMEOUT:
@@ -1456,6 +1452,9 @@ ip6_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 			splx(s);
 		}
 		return (error);
+	case IPV6CTL_IFQUEUE:
+		return (sysctl_ifq(name + 1, namelen - 1,
+		    oldp, oldlenp, newp, newlen, &ip6intrq));
 	default:
 		if (name[0] < IPV6CTL_MAXID)
 			return (sysctl_int_arr(ipv6ctl_vars, name, namelen,

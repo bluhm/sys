@@ -96,6 +96,8 @@
 #include <sys/syslog.h>
 #include <sys/sysctl.h>
 
+#include <crypto/siphash.h>
+
 #include <net/if.h>
 #include <net/if_var.h>
 
@@ -131,6 +133,7 @@ struct mrt6stat	mrt6stat;
 #define RTE_FOUND	0x2
 
 struct mf6c	*mf6ctable[MF6CTBLSIZ];
+SIPHASH_KEY	mf6chashkey;
 u_char		n6expire[MF6CTBLSIZ];
 struct mif6 mif6table[MAXMIFS];
 #ifdef MRT6DEBUG
@@ -175,10 +178,8 @@ static int pim6;
 /*
  * Hash function for a source, group entry
  */
-#define MF6CHASH(a, g) MF6CHASHMOD((a).s6_addr32[0] ^ (a).s6_addr32[1] ^ \
-				   (a).s6_addr32[2] ^ (a).s6_addr32[3] ^ \
-				   (g).s6_addr32[0] ^ (g).s6_addr32[1] ^ \
-				   (g).s6_addr32[2] ^ (g).s6_addr32[3])
+u_int32_t _mf6chash(const struct in6_addr *, const struct in6_addr *);
+#define MF6CHASH(a, g) _mf6chash(&(a), &(g))
 
 /*
  * Find a route for a given origin IPv6 address and Multicast group address.
@@ -360,6 +361,101 @@ get_mif6_cnt(struct sioc_mif_req6 *req)
 	return 0;
 }
 
+int
+mrt6_sysctl_mif(void *oldp, size_t *oldlenp)
+{
+	caddr_t where = oldp;
+	size_t needed, given;
+	struct mif6 *mifp;
+	mifi_t mifi;
+	struct mif6info minfo;
+
+	given = *oldlenp;
+	needed = 0;
+	for (mifi = 0; mifi < nummifs; mifi++) {
+		mifp = &mif6table[mifi];
+		if (mifp->m6_ifp == NULL)
+			continue;	
+
+		minfo.m6_mifi = mifi;
+		minfo.m6_flags = mifp->m6_flags;
+		minfo.m6_lcl_addr = mifp->m6_lcl_addr;
+		minfo.m6_ifindex = mifp->m6_ifp->if_index;
+		minfo.m6_pkt_in = mifp->m6_pkt_in;
+		minfo.m6_pkt_out = mifp->m6_pkt_out;
+		minfo.m6_bytes_in = mifp->m6_bytes_in;
+		minfo.m6_bytes_out = mifp->m6_bytes_out;
+		minfo.m6_rate_limit = mifp->m6_rate_limit;
+
+		needed += sizeof(minfo);
+		if (where && needed <= given) { 
+			int error;
+
+			error = copyout(&minfo, where, sizeof(minfo));
+			if (error)
+				return (error);
+			where += sizeof(minfo);
+		}
+	}
+	if (where) {
+		*oldlenp = needed;
+		if (given < needed)
+			return (ENOMEM);
+	} else
+		*oldlenp = (11 * needed) / 10;
+
+	return (0);
+}
+
+int
+mrt6_sysctl_mfc(void *oldp, size_t *oldlenp)
+{
+	caddr_t where = oldp;
+	size_t needed, given;
+	u_long i;
+	u_int64_t waitings;
+	struct mf6c *m;
+	struct mf6cinfo minfo;
+	struct rtdetq *r;
+
+	given = *oldlenp;
+	needed = 0;
+	for (i = 0; i < MF6CTBLSIZ; ++i) {
+		m = mf6ctable[i];
+		while (m) {
+			minfo.mf6c_origin = m->mf6c_origin;
+			minfo.mf6c_mcastgrp = m->mf6c_mcastgrp;
+			minfo.mf6c_parent = m->mf6c_parent;
+			minfo.mf6c_ifset = m->mf6c_ifset;
+			minfo.mf6c_pkt_cnt = m->mf6c_pkt_cnt;
+			minfo.mf6c_byte_cnt = m->mf6c_byte_cnt;
+
+			for (waitings = 0, r = m->mf6c_stall; r; r = r->next)
+				waitings++;
+			minfo.mf6c_stall_cnt = waitings;
+
+			needed += sizeof(minfo);
+			if (where && needed <= given) { 
+				int error;
+
+				error = copyout(&minfo, where, sizeof(minfo));
+				if (error)
+					return (error);
+				where += sizeof(minfo);
+			}
+			m = m->mf6c_next;
+		}
+	}
+	if (where) {
+		*oldlenp = needed;
+		if (given < needed)
+			return (ENOMEM);
+	} else
+		*oldlenp = (11 * needed) / 10;
+
+	return (0);
+}
+
 /*
  * Get PIM processiong global
  */
@@ -413,6 +509,7 @@ ip6_mrouter_init(struct socket *so, int v, int cmd)
 	ip6_mrouter_ver = cmd;
 
 	bzero((caddr_t)mf6ctable, sizeof(mf6ctable));
+	arc4random_buf(&mf6chashkey, sizeof(mf6chashkey));
 	bzero((caddr_t)n6expire, sizeof(n6expire));
 
 	pim6 = 0;/* used for stubbing out/in pim stuff */
@@ -1834,3 +1931,15 @@ pim6_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 	/* NOTREACHED */
 }
 #endif /* PIM */
+
+u_int32_t
+_mf6chash(const struct in6_addr *a, const struct in6_addr *g)
+{
+	SIPHASH_CTX ctx;
+
+	SipHash24_Init(&ctx, &mf6chashkey);
+	SipHash24_Update(&ctx, a, sizeof(*a));
+	SipHash24_Update(&ctx, g, sizeof(*g));
+
+	return (MF6CHASHMOD(SipHash24_End(&ctx)));
+}

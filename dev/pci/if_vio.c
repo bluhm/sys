@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_vio.c,v 1.22 2014/12/22 02:28:52 tedu Exp $	*/
+/*	$OpenBSD: if_vio.c,v 1.24 2015/02/09 03:09:57 dlg Exp $	*/
 
 /*
  * Copyright (c) 2012 Stefan Fritsch, Alexander Fiveg.
@@ -973,6 +973,7 @@ vio_rxeof(struct vio_softc *sc)
 	struct virtio_softc *vsc = sc->sc_virtio;
 	struct virtqueue *vq = &sc->sc_vq[VQRX];
 	struct ifnet *ifp = &sc->sc_ac.ac_if;
+	struct mbuf_list ml = MBUF_LIST_INITIALIZER();
 	struct mbuf *m, *m0 = NULL, *mlast;
 	int r = 0;
 	int slot, len, bufs_left;
@@ -988,7 +989,6 @@ vio_rxeof(struct vio_softc *sc)
 		sc->sc_rx_mbufs[slot] = NULL;
 		virtio_dequeue_commit(vq, slot);
 		if_rxr_put(&sc->sc_rx_ring, 1);
-		m->m_pkthdr.rcvif = ifp;
 		m->m_len = m->m_pkthdr.len = len;
 		m->m_pkthdr.csum_flags = 0;
 		if (m0 == NULL) {
@@ -1010,11 +1010,7 @@ vio_rxeof(struct vio_softc *sc)
 
 		if (bufs_left == 0) {
 			ifp->if_ipackets++;
-#if NBPFILTER > 0
-			if (ifp->if_bpf)
-				bpf_mtap(ifp->if_bpf, m0, BPF_DIRECTION_IN);
-#endif
-			ether_input_mbuf(ifp, m0);
+			ml_enqueue(&ml, m0);
 			m0 = NULL;
 		}
 	}
@@ -1024,6 +1020,8 @@ vio_rxeof(struct vio_softc *sc)
 		ifp->if_ierrors++;
 		m_freem(m0);
 	}
+
+	if_input(ifp, &ml);
 	return r;
 }
 
