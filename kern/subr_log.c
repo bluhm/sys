@@ -84,7 +84,7 @@ int filt_logread(struct knote *kn, long hint);
 struct filterops logread_filtops =
 	{ 1, NULL, filt_logrdetach, filt_logread};
 
-int dosendsyslog(struct proc *, const char *, size_t);
+int dosendsyslog(struct proc *, const char *, size_t, enum uio_seg);
 
 void
 initmsgbuf(caddr_t buf, size_t bufsize)
@@ -366,14 +366,16 @@ sys_sendsyslog(struct proc *p, void *v, register_t *retval)
 		    "<%d> sendsyslog dropped %d message%s, error %d",
 		    LOG_KERN|LOG_WARNING, dropped_count,
 		    dropped_count == 1 ? "" : "s", orig_error);
-		error = dosendsyslog(p, buf, MIN((size_t)len, sizeof(buf)));
+		error = dosendsyslog(p, buf, MIN((size_t)len, sizeof(buf)),
+		    UIO_SYSSPACE);
 		if (error) {
 			dropped_count++;
 			return (error);
 		}
 		dropped_count = 0;
 	}
-	error = dosendsyslog(p, SCARG(uap, buf), SCARG(uap, nbyte));
+	error = dosendsyslog(p, SCARG(uap, buf), SCARG(uap, nbyte),
+	    UIO_USERSPACE);
 	if (error) {
 		dropped_count++;
 		orig_error = error;
@@ -382,7 +384,7 @@ sys_sendsyslog(struct proc *p, void *v, register_t *retval)
 }
 
 int
-dosendsyslog(struct proc *p, const char *buf, size_t nbyte)
+dosendsyslog(struct proc *p, const char *buf, size_t nbyte, enum uio_seg sflg)
 {
 #ifdef KTRACE
 	struct iovec *ktriov = NULL;
@@ -403,7 +405,7 @@ dosendsyslog(struct proc *p, const char *buf, size_t nbyte)
 	aiov.iov_len = nbyte;
 	auio.uio_iov = &aiov;
 	auio.uio_iovcnt = 1;
-	auio.uio_segflg = UIO_USERSPACE;
+	auio.uio_segflg = sflg;
 	auio.uio_rw = UIO_WRITE;
 	auio.uio_procp = p;
 	auio.uio_offset = 0;
