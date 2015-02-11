@@ -356,8 +356,23 @@ sys_sendsyslog(struct proc *p, void *v, register_t *retval)
 		syscallarg(const void *) buf;
 		syscallarg(size_t) nbyte;
 	} */ *uap = v;
+	static int dropped_count, orig_error;
+	int error;
 
-	return dosendsyslog(p, SCARG(uap, buf), SCARG(uap, nbyte));
+	if (dropped_count) {
+		error = dosendsyslog(p, "sendsyslog failed", 17);
+		if (error) {
+			dropped_count++;
+			return (error);
+		}
+		dropped_count = 0;
+	}
+	error = dosendsyslog(p, SCARG(uap, buf), SCARG(uap, nbyte));
+	if (error) {
+		dropped_count++;
+		orig_error = error;
+	}
+	return (error);
 }
 
 int
