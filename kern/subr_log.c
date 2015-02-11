@@ -84,6 +84,8 @@ int filt_logread(struct knote *kn, long hint);
 struct filterops logread_filtops =
 	{ 1, NULL, filt_logrdetach, filt_logread};
 
+int dosendsyslog(struct proc *, const char *, size_t);
+
 void
 initmsgbuf(caddr_t buf, size_t bufsize)
 {
@@ -355,6 +357,13 @@ sys_sendsyslog(struct proc *p, void *v, register_t *retval)
 		syscallarg(const void *) buf;
 		syscallarg(size_t) nbyte;
 	} */ *uap = v;
+
+	return dosendsyslog(p, SCARG(uap, buf), SCARG(uap, nbyte));
+}
+
+int
+dosendsyslog(struct proc *p, const char *buf, size_t nbyte)
+{
 #ifdef KTRACE
 	struct iovec *ktriov = NULL;
 	int iovlen;
@@ -370,8 +379,8 @@ sys_sendsyslog(struct proc *p, void *v, register_t *retval)
 	f = syslogf;
 	FREF(f);
 
-	aiov.iov_base = (char *)SCARG(uap, buf);
-	aiov.iov_len = SCARG(uap, nbyte);
+	aiov.iov_base = (char *)buf;
+	aiov.iov_len = nbyte;
 	auio.uio_iov = &aiov;
 	auio.uio_iovcnt = 1;
 	auio.uio_segflg = UIO_USERSPACE;
