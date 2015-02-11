@@ -358,10 +358,15 @@ sys_sendsyslog(struct proc *p, void *v, register_t *retval)
 		syscallarg(size_t) nbyte;
 	} */ *uap = v;
 	static int dropped_count, orig_error;
-	int error;
+	int error, len;
+	char buf[64];
 
 	if (dropped_count) {
-		error = dosendsyslog(p, "sendsyslog failed", 17);
+		len = snprintf(buf, sizeof(buf),
+		    "<%d> sendsyslog dropped %d message%s, error %d",
+		    LOG_KERN|LOG_WARNING, dropped_count,
+		    dropped_count == 1 ? "" : "s", orig_error);
+		error = dosendsyslog(p, buf, MIN((size_t)len, sizeof(buf)));
 		if (error) {
 			dropped_count++;
 			return (error);
