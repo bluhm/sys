@@ -63,8 +63,8 @@ struct	unpcb {
 	struct	vnode *unp_vnode;	/* if associated with file */
 	ino_t	unp_ino;		/* fake inode number */
 	struct	unpcb *unp_conn;	/* control block of connected socket */
-	struct	unpcb *unp_refs;	/* referencing socket linked list */
-	struct 	unpcb *unp_nextref;	/* link in unp_refs list */
+	SLIST_HEAD(,unpcb) unp_refs;	/* referencing socket linked list */
+	SLIST_ENTRY(unpcb) unp_nextref;	/* link in unp_refs list */
 	struct	mbuf *unp_addr;		/* bound address of socket */
 	int	unp_flags;		/* this unpcb contains peer eids */
 	struct	sockpeercred unp_connid;/* id of peer process */
