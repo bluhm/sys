@@ -552,6 +552,7 @@ in6_control(struct socket *so, u_long cmd, caddr_t data, struct ifnet *ifp)
 			pr->ndpr_refcnt++;
 		}
 
+		s = splsoftnet();
 		/*
 		 * this might affect the status of autoconfigured addresses,
 		 * that is, this address might make other addresses detached.
@@ -559,6 +560,7 @@ in6_control(struct socket *so, u_long cmd, caddr_t data, struct ifnet *ifp)
 		pfxlist_onlink_check();
 
 		dohooks(ifp->if_addrhooks, 0);
+		splx(s);
 		break;
 	}
 
