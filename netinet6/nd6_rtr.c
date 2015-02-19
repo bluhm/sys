@@ -707,10 +707,10 @@ defrouter_reset(void)
 void
 defrouter_select(void)
 {
-	int s = splsoftnet();
 	struct nd_defrouter *dr, *selected_dr = NULL, *installed_dr = NULL;
 	struct rtentry *rt = NULL;
 	struct llinfo_nd6 *ln = NULL;
+	int s = splsoftnet();
 
 	/*
 	 * This function should be called only when acting as an autoconfigured
@@ -1139,12 +1139,13 @@ prelist_update(struct nd_prefix *new, struct nd_defrouter *dr, struct mbuf *m)
 	struct ifaddr *ifa;
 	struct ifnet *ifp = new->ndpr_ifp;
 	struct nd_prefix *pr;
-	int s = splsoftnet();
-	int error = 0;
+	int s, error = 0;
 	int tempaddr_preferred = 0, autoconf = 0, statique = 0;
 	int auth;
 	struct in6_addrlifetime lt6_tmp;
 	char addr[INET6_ADDRSTRLEN];
+
+	s = splsoftnet();
 
 	auth = 0;
 	if (m) {
