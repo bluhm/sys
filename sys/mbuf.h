@@ -1,4 +1,4 @@
-/*	$OpenBSD: mbuf.h,v 1.185 2015/02/07 02:30:00 dlg Exp $	*/
+/*	$OpenBSD: mbuf.h,v 1.187 2015/02/10 03:46:30 lteo Exp $	*/
 /*	$NetBSD: mbuf.h,v 1.19 1996/02/09 18:25:14 christos Exp $	*/
 
 /*
@@ -48,10 +48,9 @@
 #define	MSIZE		256		/* size of an mbuf */
 
 /*
- * Mbufs are of a single size, MSIZE (sys/param.h), which
- * includes overhead.  An mbuf may add a single "mbuf cluster" of size
- * MCLBYTES (also in sys/param.h), which has no additional overhead
- * and is used instead of the internal data area; this is done when
+ * Mbufs are of a single size, MSIZE, which includes overhead.  An mbuf may
+ * add a single "mbuf cluster" of size MCLBYTES, which has no additional
+ * overhead and is used instead of the internal data area; this is done when
  * at least MINCLSIZE of data must be stored.
  */
 
@@ -170,7 +169,6 @@ struct mbuf {
 #define	m_type		m_hdr.mh_type
 #define	m_flags		m_hdr.mh_flags
 #define	m_nextpkt	m_hdr.mh_nextpkt
-#define	m_act		m_nextpkt
 #define	m_pkthdr	M_dat.MH.MH_pkthdr
 #define	m_ext		M_dat.MH.MH_dat.MH_ext
 #define	m_pktdat	M_dat.MH.MH_dat.MH_databuf

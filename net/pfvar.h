@@ -1,4 +1,4 @@
-/*	$OpenBSD: pfvar.h,v 1.409 2015/02/07 06:27:46 pelikan Exp $ */
+/*	$OpenBSD: pfvar.h,v 1.413 2015/02/15 10:40:53 sthen Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -644,10 +644,11 @@ struct pf_rule {
 #define PF_FLUSH		0x01
 #define PF_FLUSH_GLOBAL		0x02
 	u_int8_t		 flush;
+	u_int8_t		 prio;
 	u_int8_t		 set_prio[2];
 	sa_family_t		 naf;
 	u_int8_t		 rcvifnot;
-	u_int8_t		 pad[3];
+	u_int8_t		 pad[2];
 
 	struct {
 		struct pf_addr		addr;
@@ -914,7 +915,7 @@ struct pfsync_state {
 	u_int8_t	 min_ttl;
 	u_int8_t	 set_tos;
 	u_int16_t	 state_flags;
-	u_int8_t	 pad[2];
+	u_int8_t	 set_prio[2];
 } __packed;
 
 #define PFSYNC_FLAG_SRCNODE	0x04
@@ -1433,6 +1434,8 @@ struct pf_status {
 #define PF_REASS_ENABLED	0x01
 #define PF_REASS_NODF		0x02
 
+#define PF_PRIO_ZERO		0xff		/* match "prio 0" packets */
+
 struct pf_queue_bwspec {
 	u_int		absolute;
 	u_int		percent;
@@ -1814,7 +1817,7 @@ void	pf_change_a(struct pf_pdesc *, void *, u_int32_t);
 int	pf_check_proto_cksum(struct pf_pdesc *, int, int, u_int8_t,
 	    sa_family_t);
 int	pflog_packet(struct pf_pdesc *, u_int8_t, struct pf_rule *,
-	    struct pf_rule *, struct pf_ruleset *);
+	    struct pf_rule *, struct pf_ruleset *, struct pf_rule *);
 void	pf_send_deferred_syn(struct pf_state *);
 int	pf_match_addr(u_int8_t, struct pf_addr *, struct pf_addr *,
 	    struct pf_addr *, sa_family_t);

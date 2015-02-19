@@ -1,4 +1,4 @@
-/*	$OpenBSD: bpf.c,v 1.116 2015/01/29 19:44:32 tedu Exp $	*/
+/*	$OpenBSD: bpf.c,v 1.118 2015/02/10 21:56:10 miod Exp $	*/
 /*	$NetBSD: bpf.c,v 1.33 1997/02/21 23:59:35 thorpej Exp $	*/
 
 /*
@@ -193,7 +193,7 @@ bpf_movein(struct uio *uio, u_int linktype, struct mbuf **mp,
 	m->m_len = len;
 	*mp = m;
 
-	error = uiomove(mtod(m, caddr_t), len, uio);
+	error = uiomovei(mtod(m, caddr_t), len, uio);
 	if (error)
 		goto bad;
 
@@ -475,7 +475,7 @@ bpfread(dev_t dev, struct uio *uio, int ioflag)
 	 * We know the entire buffer is transferred since
 	 * we checked above that the read buffer is bpf_bufsize bytes.
 	 */
-	error = uiomove(d->bd_hbuf, d->bd_hlen, uio);
+	error = uiomovei(d->bd_hbuf, d->bd_hlen, uio);
 
 	s = splnet();
 	d->bd_fbuf = d->bd_hbuf;
@@ -840,6 +840,14 @@ bpfioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct proc *p)
 		    (BPF_DIRECTION_IN|BPF_DIRECTION_OUT);
 		break;
 
+	case BIOCGQUEUE:	/* get queue */
+		*(u_int *)addr = d->bd_queue;
+		break;
+
+	case BIOCSQUEUE:	/* set queue */
+		d->bd_queue = *(u_int *)addr;
+		break;
+
 	case FIONBIO:		/* Non-blocking I/O */
 		if (*(int *)addr)
 			d->bd_rtout = -1;
@@ -1186,6 +1194,8 @@ _bpf_mtap(caddr_t arg, struct mbuf *m, u_int direction,
 	for (d = bp->bif_dlist; d != NULL; d = d->bd_next) {
 		++d->bd_rcount;
 		if ((direction & d->bd_dirfilt) != 0)
+			slen = 0;
+		else if (d->bd_queue && m->m_pkthdr.pf.qid != d->bd_queue)
 			slen = 0;
 		else
 			slen = bpf_filter(d->bd_rfilter, (u_char *)m,
