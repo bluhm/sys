@@ -3863,8 +3863,7 @@ sr_discipline_free(struct sr_discipline *sd)
 	free(sd->sd_meta, M_DEVBUF, 0);
 	free(sd->sd_meta_foreign, M_DEVBUF, 0);
 
-	som = &sd->sd_meta_opt;
-	SLIST_FOREACH_SAFE(omi, som, omi_link, omi_next) {
+	SLIST_FOREACH_SAFE(omi, &sd->sd_meta_opt, omi_link, omi_next) {
 		free(omi->omi_som, M_DEVBUF, 0);
 		free(omi, M_DEVBUF, 0);
 	}
