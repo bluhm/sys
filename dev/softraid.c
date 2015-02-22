@@ -263,8 +263,8 @@ sr_meta_attach(struct sr_discipline *sd, int chunk_no, int force)
 		goto bad;
 
 	/* Force chunks into correct order now that metadata is attached. */
-	SLIST_FOREACH(ch_entry, cl, src_link)
-		SLIST_REMOVE(cl, ch_entry, sr_chunk, src_link);
+	while (!SLIST_EMPTY(cl))
+		SLIST_REMOVE_HEAD(cl, src_link);
 	for (i = 0; i < chunk_no; i++) {
 		ch_entry = sd->sd_vol.sv_chunks[i];
 		chunk2 = NULL;
