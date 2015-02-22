@@ -1147,7 +1147,7 @@ sr_boot_assembly(struct sr_softc *sc)
 	struct sr_boot_volume_head bvh;
 	struct sr_boot_chunk_head bch, kdh;
 	struct sr_boot_volume	*bv, *bv1, *bv2;
-	struct sr_boot_chunk	*bc, *bcnext, *bc1, *bc2;
+	struct sr_boot_chunk	*bc, *bc1, *bc2;
 	struct sr_disk_head	sdklist;
 	struct sr_disk		*sdk;
 	struct disk		*dk;
@@ -1211,8 +1211,9 @@ sr_boot_assembly(struct sr_softc *sc)
 	/*
 	 * Create a list of volumes and associate chunks with each volume.
 	 */
-	SLIST_FOREACH_SAFE(bc, &bch, sbc_link, bcnext) {
-		SLIST_REMOVE(&bch, bc, sr_boot_chunk, sbc_link);
+	while (!SLIST_EMPTY(&bch)) {
+		bc = SLIST_FIRST(&bch);
+		SLIST_REMOVE_HEAD(&bch, sbc_link);
 		bc->sbc_chunk_id = bc->sbc_metadata->ssdi.ssd_chunk_id;
 
 		/* Handle key disks separately. */
