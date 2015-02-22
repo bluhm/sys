@@ -1211,9 +1211,7 @@ sr_boot_assembly(struct sr_softc *sc)
 	/*
 	 * Create a list of volumes and associate chunks with each volume.
 	 */
-	for (bc = SLIST_FIRST(&bch); bc != NULL; bc = bcnext) {
-
-		bcnext = SLIST_NEXT(bc, sbc_link);
+	SLIST_FOREACH_SAFE(bc, &bch, sbc_link, bcnext) {
 		SLIST_REMOVE(&bch, bc, sr_boot_chunk, sbc_link);
 		bc->sbc_chunk_id = bc->sbc_metadata->ssdi.ssd_chunk_id;
 
@@ -1466,25 +1464,20 @@ sr_boot_assembly(struct sr_softc *sc)
 	/* done with metadata */
 unwind:
 	/* Free boot volumes and associated chunks. */
-	for (bv1 = SLIST_FIRST(&bvh); bv1 != NULL; bv1 = bv2) {
-		bv2 = SLIST_NEXT(bv1, sbv_link);
-		for (bc1 = SLIST_FIRST(&bv1->sbv_chunks); bc1 != NULL;
-		    bc1 = bc2) {
-			bc2 = SLIST_NEXT(bc1, sbc_link);
+	SLIST_FOREACH_SAFE(bv1, &bvh, sbv_link, bv2) {
+		SLIST_FOREACH_SAFE(bc1, &bv1->sbv_chunks, sbc_link, bc2) {
 			free(bc1->sbc_metadata, M_DEVBUF, 0);
 			free(bc1, M_DEVBUF, 0);
 		}
 		free(bv1, M_DEVBUF, 0);
 	}
 	/* Free keydisks chunks. */
-	for (bc1 = SLIST_FIRST(&kdh); bc1 != NULL; bc1 = bc2) {
-		bc2 = SLIST_NEXT(bc1, sbc_link);
+	SLIST_FOREACH_SAFE(bc1, &kdh, sbc_link, bc2) {
 		free(bc1->sbc_metadata, M_DEVBUF, 0);
 		free(bc1, M_DEVBUF, 0);
 	}
 	/* Free unallocated chunks. */
-	for (bc1 = SLIST_FIRST(&bch); bc1 != NULL; bc1 = bc2) {
-		bc2 = SLIST_NEXT(bc1, sbc_link);
+	SLIST_FOREACH_SAFE(bc1, &bch, sbc_link, bc2) {
 		free(bc1->sbc_metadata, M_DEVBUF, 0);
 		free(bc1, M_DEVBUF, 0);
 	}
@@ -1668,10 +1661,7 @@ sr_meta_native_attach(struct sr_discipline *sd, int force)
 	/* mixed metadata versions; mark bad disks offline */
 	if (old_meta) {
 		d = 0;
-		for (ch_entry = SLIST_FIRST(cl); ch_entry != NULL;
-		    ch_entry = ch_next, d++) {
-			ch_next = SLIST_NEXT(ch_entry, src_link);
-
+		SLIST_FOREACH_SAFE(ch_entry, cl, src_link, ch_next) {
 			/* XXX do we want to read this again? */
 			if (ch_entry->src_dev_mm == NODEV)
 				panic("src_dev_mm == NODEV");
@@ -1681,6 +1671,7 @@ sr_meta_native_attach(struct sr_discipline *sd, int force)
 			if (md->ssd_ondisk != version)
 				sd->sd_vol.sv_chunks[d]->src_meta.scm_status =
 				    BIOC_SDOFFLINE;
+			d++;
 		}
 	}
 
@@ -3830,9 +3821,7 @@ sr_chunks_unwind(struct sr_softc *sc, struct sr_chunk_head *cl)
 	if (!cl)
 		return;
 
-	for (ch_entry = SLIST_FIRST(cl); ch_entry != NULL; ch_entry = ch_next) {
-		ch_next = SLIST_NEXT(ch_entry, src_link);
-
+	SLIST_FOREACH_SAFE(ch_entry, cl, src_link, ch_next) {
 		DNPRINTF(SR_D_IOCTL, "%s: sr_chunks_unwind closing: %s\n",
 		    DEVNAME(sc), ch_entry->src_devname);
 		if (ch_entry->src_vn) {
@@ -3875,8 +3864,7 @@ sr_discipline_free(struct sr_discipline *sd)
 	free(sd->sd_meta_foreign, M_DEVBUF, 0);
 
 	som = &sd->sd_meta_opt;
-	for (omi = SLIST_FIRST(som); omi != NULL; omi = omi_next) {
-		omi_next = SLIST_NEXT(omi, omi_link);
+	SLIST_FOREACH_SAFE(omi, som, omi_link, omi_next) {
 		free(omi->omi_som, M_DEVBUF, 0);
 		free(omi, M_DEVBUF, 0);
 	}
