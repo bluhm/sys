@@ -3855,8 +3855,7 @@ sr_discipline_free(struct sr_discipline *sd)
 	if (sd->sd_meta_foreign)
 		free(sd->sd_meta_foreign, M_DEVBUF, 0);
 
-	som = &sd->sd_meta_opt;
-	SLIST_FOREACH_SAFE(omi, som, omi_link, omi_next) {
+	SLIST_FOREACH_SAFE(omi, &sd->sd_meta_opt, omi_link, omi_next) {
 		if (omi->omi_som)
 			free(omi->omi_som, M_DEVBUF, 0);
 		free(omi, M_DEVBUF, 0);
