@@ -878,8 +878,7 @@ sr_crypto_read_key_disk(struct sr_discipline *sd, dev_t dev)
 	open = 0;
 
 done:
-	for (omi = SLIST_FIRST(&som); omi != NULL; omi = omi_next) {
-		omi_next = SLIST_NEXT(omi, omi_link);
+	SLIST_FOREACH_SAFE(omi, &som, omi_link, omi_next) {
 		free(omi->omi_som, M_DEVBUF, 0);
 		free(omi, M_DEVBUF, 0);
 	}
