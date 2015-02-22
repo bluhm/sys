@@ -1751,8 +1751,6 @@ sr_hotplug_unregister(struct sr_discipline *sd, void *func)
 			SLIST_REMOVE(&sr_hotplug_callbacks, mhe,
 			    sr_hotplug_list, shl_link);
 			free(mhe, M_DEVBUF, 0);
-			if (SLIST_EMPTY(&sr_hotplug_callbacks))
-				SLIST_INIT(&sr_hotplug_callbacks);
 			return;
 		}
 }
