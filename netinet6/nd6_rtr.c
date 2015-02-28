@@ -1909,7 +1909,7 @@ in6_ifadd(struct nd_prefix *pr, int privacy)
 	 * with the same interface identifier, than to have multiple addresses
 	 * with different interface identifiers.
 	 */
-	ifa = &in6ifa_ifpforlinklocal(ifp, 0)->ia_ifa; /* 0 is OK? */
+	ifa = &in6ifa_ifpforlinklocal(ifp, IN6_IFF_TENTATIVE)->ia_ifa;
 	if (ifa)
 		ia6 = ifatoia6(ifa);
 	else
