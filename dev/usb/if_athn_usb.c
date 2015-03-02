@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_athn_usb.c,v 1.26 2015/02/10 23:25:46 mpi Exp $	*/
+/*	$OpenBSD: if_athn_usb.c,v 1.33 2015/03/02 15:23:28 stsp Exp $	*/
 
 /*-
  * Copyright (c) 2011 Damien Bergamini <damien.bergamini@free.fr>
@@ -117,8 +117,6 @@ int		athn_usb_htc_msg(struct athn_usb_softc *, uint16_t, void *,
 int		athn_usb_htc_setup(struct athn_usb_softc *);
 int		athn_usb_htc_connect_svc(struct athn_usb_softc *, uint16_t,
 		    uint8_t, uint8_t, uint8_t *);
-void		athn_usb_wmieof(struct usbd_xfer *, void *,
-		    usbd_status);
 int		athn_usb_wmi_xcmd(struct athn_usb_softc *, uint16_t, void *,
 		    int, void *);
 int		athn_usb_read_rom(struct athn_softc *);
@@ -126,6 +124,7 @@ uint32_t	athn_usb_read(struct athn_softc *, uint32_t);
 void		athn_usb_write(struct athn_softc *, uint32_t, uint32_t);
 void		athn_usb_write_barrier(struct athn_softc *);
 int		athn_usb_media_change(struct ifnet *);
+void		athn_usb_next_scan(void *);
 int		athn_usb_newstate(struct ieee80211com *, enum ieee80211_state,
 		    int);
 void		athn_usb_newstate_cb(struct athn_usb_softc *, void *);
@@ -291,6 +290,8 @@ athn_usb_detach(struct device *self, int flags)
 	/* Wait for all async commands to complete. */
 	athn_usb_wait_async(usc);
 
+	usbd_ref_wait(usc->sc_udev);
+
 	/* Abort and close Tx/Rx pipes. */
 	athn_usb_close_pipes(usc);
 
@@ -348,10 +349,7 @@ athn_usb_attachhook(void *xsc)
 #endif
 	ic->ic_newstate = athn_usb_newstate;
 	ic->ic_media.ifm_change = athn_usb_media_change;
-
-	/* Firmware cannot handle more than 8 STAs. */
-	if (ic->ic_max_nnodes > AR_USB_MAX_STA)
-		ic->ic_max_nnodes = AR_USB_MAX_STA;
+	timeout_set(&sc->scan_to, athn_usb_next_scan, usc);
 
 	ops->rx_enable = athn_usb_rx_enable;
 	splx(s);
@@ -436,18 +434,26 @@ athn_usb_open_pipes(struct athn_usb_softc *usc)
 void
 athn_usb_close_pipes(struct athn_usb_softc *usc)
 {
-	if (usc->tx_data_pipe != NULL)
+	if (usc->tx_data_pipe != NULL) {
 		usbd_close_pipe(usc->tx_data_pipe);
-	if (usc->rx_data_pipe != NULL)
-		usbd_close_pipe(usc->rx_data_pipe);
-	if (usc->tx_intr_pipe != NULL)
-		usbd_close_pipe(usc->tx_intr_pipe);
-	if (usc->rx_intr_pipe != NULL) {
-		usbd_abort_pipe(usc->rx_intr_pipe);
-		usbd_close_pipe(usc->rx_intr_pipe);
+		usc->tx_data_pipe = NULL;
 	}
-	if (usc->ibuf != NULL)
+	if (usc->rx_data_pipe != NULL) {
+		usbd_close_pipe(usc->rx_data_pipe);
+		usc->rx_data_pipe = NULL;
+	}
+	if (usc->tx_intr_pipe != NULL) {
+		usbd_close_pipe(usc->tx_intr_pipe);
+		usc->tx_intr_pipe = NULL;
+	}
+	if (usc->rx_intr_pipe != NULL) {
+		usbd_close_pipe(usc->rx_intr_pipe);
+		usc->rx_intr_pipe = NULL;
+	}
+	if (usc->ibuf != NULL) {
 		free(usc->ibuf, M_USBDEV, 0);
+		usc->ibuf = NULL;
+	}
 }
 
 int
@@ -590,7 +596,6 @@ athn_usb_task(void *arg)
 		ring->queued--;
 		ring->next = (ring->next + 1) % ATHN_USB_HOST_CMD_RING_COUNT;
 	}
-	wakeup(ring);
 	splx(s);
 }
 
@@ -602,8 +607,11 @@ athn_usb_do_async(struct athn_usb_softc *usc,
 	struct athn_usb_host_cmd *cmd;
 	int s;
 
-	if (ring->queued)
+	if (ring->queued == ATHN_USB_HOST_CMD_RING_COUNT) {
+		printf("%s: host cmd queue overrun\n", usc->usb_dev.dv_xname);
 		return;	/* XXX */
+	}
+	
 	s = splusb();
 	cmd = &ring->cmd[ring->cur];
 	cmd->cb = cb;
@@ -621,8 +629,7 @@ void
 athn_usb_wait_async(struct athn_usb_softc *usc)
 {
 	/* Wait for all queued asynchronous commands to complete. */
-	while (usc->cmdq.queued > 0)
-		tsleep(&usc->cmdq, 0, "cmdq", 0);
+	usb_wait_task(usc->sc_udev, &usc->sc_task);
 }
 
 int
@@ -830,19 +837,6 @@ athn_usb_htc_connect_svc(struct athn_usb_softc *usc, uint16_t svc_id,
 	return (0);
 }
 
-void
-athn_usb_wmieof(struct usbd_xfer *xfer, void *priv,
-    usbd_status status)
-{
-	struct athn_usb_softc *usc = priv;
-
-	if (__predict_false(status == USBD_STALLED))
-		usbd_clear_endpoint_stall_async(usc->tx_intr_pipe);
-
-	usc->wmi_done = 1;
-	wakeup(&usc->wmi_done);
-}
-
 int
 athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
     int ilen, void *obuf)
@@ -851,6 +845,24 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	struct ar_htc_frame_hdr *htc;
 	struct ar_wmi_cmd_hdr *wmi;
 	int s, error;
+
+	if (usbd_is_dying(usc->sc_udev))
+		return ENXIO;
+
+	s = splusb();
+	while (usc->wait_cmd_id) {
+		/* 
+		 * The previous USB transfer is not done yet. We can't use
+		 * data->xfer until it is done or we'll cause major confusion
+		 * in the USB stack.
+		 */
+		tsleep(&usc->wait_cmd_id, 0, "athnwmx", ATHN_USB_CMD_TIMEOUT);
+		if (usbd_is_dying(usc->sc_udev)) {
+			splx(s);
+			return ENXIO;
+		}
+	}
+	splx(s);
 
 	htc = (struct ar_htc_frame_hdr *)data->buf;
 	memset(htc, 0, sizeof(*htc));
@@ -864,12 +876,11 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 
 	memcpy(&wmi[1], ibuf, ilen);
 
-	usbd_setup_xfer(data->xfer, usc->tx_intr_pipe, usc, data->buf,
+	usbd_setup_xfer(data->xfer, usc->tx_intr_pipe, NULL, data->buf,
 	    sizeof(*htc) + sizeof(*wmi) + ilen,
 	    USBD_SHORT_XFER_OK | USBD_NO_COPY, ATHN_USB_CMD_TIMEOUT,
-	    athn_usb_wmieof);
+	    NULL);
 	s = splusb();
-	usc->wmi_done = 0;
 	error = usbd_transfer(data->xfer);
 	if (__predict_false(error != USBD_IN_PROGRESS && error != 0)) {
 		splx(s);
@@ -877,12 +888,26 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	}
 	usc->obuf = obuf;
 	usc->wait_cmd_id = cmd_id;
-	/* Wait for WMI command to complete. */
-	error = tsleep(&usc->wait_cmd_id, 0, "athnwmi", hz);
+	/* 
+	 * Wait for WMI command complete interrupt. In case it does not fire
+	 * wait until the USB transfer times out to avoid racing the transfer.
+	 */
+	error = tsleep(&usc->wait_cmd_id, 0, "athnwmi", ATHN_USB_CMD_TIMEOUT);
+	if (error) {
+		if (error == EWOULDBLOCK) {
+			printf("%s: firmware command 0x%x timed out\n",
+			    usc->usb_dev.dv_xname, cmd_id);
+			error = ETIMEDOUT;
+		}
+	}
+
+	/* 
+	 * Both the WMI command and transfer are done or have timed out.
+	 * Allow other threads to enter this function and use data->xfer.
+	 */
 	usc->wait_cmd_id = 0;
-	/* Most of the time this would have complete already. */
-	while (__predict_false(!usc->wmi_done))
-		tsleep(&usc->wmi_done, 0, "athnwmi", 0);
+	wakeup(&usc->wait_cmd_id);
+
 	splx(s);
 	return (error);
 }
@@ -956,7 +981,11 @@ athn_usb_write_barrier(struct athn_softc *sc)
 int
 athn_usb_media_change(struct ifnet *ifp)
 {
+	struct athn_usb_softc *usc = (struct athn_usb_softc *)ifp->if_softc;
 	int error;
+
+	if (usbd_is_dying(usc->sc_udev))
+		return ENXIO;
 
 	error = ieee80211_media_change(ifp);
 	if (error != ENETRESET)
@@ -968,6 +997,27 @@ athn_usb_media_change(struct ifnet *ifp)
 		error = athn_usb_init(ifp);
 	}
 	return (error);
+}
+
+void
+athn_usb_next_scan(void *arg)
+{
+	struct athn_usb_softc *usc = arg;
+	struct athn_softc *sc = &usc->sc_sc;
+	struct ieee80211com *ic = &sc->sc_ic;
+	int s;
+
+	if (usbd_is_dying(usc->sc_udev))
+		return;
+
+	usbd_ref_incr(usc->sc_udev);
+
+	s = splnet();
+	if (ic->ic_state == IEEE80211_S_SCAN)
+		ieee80211_next_scan(&ic->ic_if);
+	splx(s);
+
+	usbd_ref_decr(usc->sc_udev);
 }
 
 int
@@ -992,7 +1042,9 @@ athn_usb_newstate_cb(struct athn_usb_softc *usc, void *arg)
 	struct ieee80211com *ic = &sc->sc_ic;
 	enum ieee80211_state ostate;
 	uint32_t reg, imask;
+#ifndef IEEE80211_STA_ONLY
 	uint8_t sta_index;
+#endif
 	int s, error;
 
 	timeout_del(&sc->calib_to);
@@ -1002,9 +1054,19 @@ athn_usb_newstate_cb(struct athn_usb_softc *usc, void *arg)
 	DPRINTF(("newstate %d -> %d\n", ostate, cmd->state));
 
 	if (ostate == IEEE80211_S_RUN) {
-		sta_index = ((struct athn_node *)ic->ic_bss)->sta_index;
-		(void)athn_usb_wmi_xcmd(usc, AR_WMI_CMD_NODE_REMOVE,
-		    &sta_index, sizeof(sta_index), NULL);
+#ifndef IEEE80211_STA_ONLY
+		if (ic->ic_opmode == IEEE80211_M_HOSTAP) {
+			/* XXX really needed? */
+			sta_index = ((struct athn_node *)ic->ic_bss)->sta_index;
+			(void)athn_usb_wmi_xcmd(usc, AR_WMI_CMD_NODE_REMOVE,
+			    &sta_index, sizeof(sta_index), NULL);
+		}
+#endif
+		reg = AR_READ(sc, AR_RX_FILTER);
+		reg = (reg & ~AR_RX_FILTER_MYBEACON) |
+		    AR_RX_FILTER_BEACON;
+		AR_WRITE(sc, AR_RX_FILTER, reg);
+		AR_WRITE_BARRIER(sc);
 	}
 	switch (cmd->state) {
 	case IEEE80211_S_INIT:
@@ -1014,7 +1076,8 @@ athn_usb_newstate_cb(struct athn_usb_softc *usc, void *arg)
 		/* Make the LED blink while scanning. */
 		athn_set_led(sc, !sc->led_state);
 		(void)athn_usb_switch_chan(sc, ic->ic_bss->ni_chan, NULL);
-		timeout_add_msec(&sc->scan_to, 200);
+		if (!usbd_is_dying(usc->sc_udev))
+			timeout_add_msec(&sc->scan_to, 200);
 		break;
 	case IEEE80211_S_AUTH:
 		athn_set_led(sc, 0);
@@ -1028,8 +1091,13 @@ athn_usb_newstate_cb(struct athn_usb_softc *usc, void *arg)
 		if (ic->ic_opmode == IEEE80211_M_MONITOR)
 			break;
 
-		/* Create node entry for our BSS. */
-		error = athn_usb_create_node(usc, ic->ic_bss);
+#ifndef IEEE80211_STA_ONLY
+		if (ic->ic_opmode == IEEE80211_M_HOSTAP) {
+			/* Create node entry for our BSS */
+			/* XXX really needed? breaks station mode on down/up */
+			error = athn_usb_create_node(usc, ic->ic_bss);
+		}
+#endif
 
 		athn_set_bss(sc, ic->ic_bss);
 		athn_usb_wmi_cmd(usc, AR_WMI_CMD_DISABLE_INTR);
@@ -1109,6 +1177,7 @@ athn_usb_node_leave_cb(struct athn_usb_softc *usc, void *arg)
 
 	(void)athn_usb_wmi_xcmd(usc, AR_WMI_CMD_NODE_REMOVE,
 	    &sta_index, sizeof(sta_index), NULL);
+	usc->nnodes--;
 }
 
 int
@@ -1176,6 +1245,10 @@ athn_usb_create_node(struct athn_usb_softc *usc, struct ieee80211_node *ni)
 	struct ar_htc_target_rate rate;
 	int error;
 
+	/* Firmware cannot handle more than 8 STAs. */
+	if (usc->nnodes > AR_USB_MAX_STA)
+		return ENOBUFS;
+
 	an->sta_index = IEEE80211_AID(ni->ni_associd);
 
 	/* Create node entry on target. */
@@ -1192,6 +1265,7 @@ athn_usb_create_node(struct athn_usb_softc *usc, struct ieee80211_node *ni)
 	    &sta, sizeof(sta), NULL);
 	if (error != 0)
 		return (error);
+	usc->nnodes++;
 
 	/* Setup supported rates. */
 	memset(&rate, 0, sizeof(rate));
@@ -1480,7 +1554,6 @@ athn_usb_rx_wmi_ctrl(struct athn_usb_softc *usc, uint8_t *buf, int len)
 			memcpy(usc->obuf, &wmi[1], len - sizeof(*wmi));
 		}
 		/* Notify caller of completion. */
-		usc->wait_cmd_id = 0;
 		wakeup(&usc->wait_cmd_id);
 		return;
 	}
@@ -1518,6 +1591,15 @@ athn_usb_intr(struct usbd_xfer *xfer, void *priv,
 		DPRINTF(("intr status=%d\n", status));
 		if (status == USBD_STALLED)
 			usbd_clear_endpoint_stall_async(usc->rx_intr_pipe);
+		else if (status == USBD_IOERROR) {
+			/*
+			 * The device has gone away. If async commands are
+			 * pending or running ensure the device dies ASAP
+			 * and any blocked processes are woken up.
+			 */
+			if (usc->cmdq.queued > 0)
+				usbd_deactivate(usc->sc_udev);
+		}
 		return;
 	}
 	usbd_get_xfer_status(xfer, NULL, NULL, &len, NULL);
@@ -1722,6 +1804,8 @@ athn_usb_rxeof(struct usbd_xfer *xfer, void *priv,
 {
 	struct athn_usb_rx_data *data = priv;
 	struct athn_usb_softc *usc = data->sc;
+	struct athn_softc *sc = &usc->sc_sc;
+	struct ifnet *ifp = &sc->sc_ic.ic_if;
 	struct athn_usb_rx_stream *stream = &usc->rx_stream;
 	uint8_t *buf = data->buf;
 	struct ar_stream_hdr *hdr;
@@ -1790,6 +1874,10 @@ athn_usb_rxeof(struct usbd_xfer *xfer, void *priv,
 			}
 		} else	/* Drop frames larger than MCLBYTES. */
 			m = NULL;
+
+		if (m == NULL)
+			ifp->if_ierrors++;
+
 		/*
 		 * NB: m can be NULL, in which case the next pktlen bytes
 		 * will be discarded from the Rx stream.
@@ -2048,10 +2136,16 @@ int
 athn_usb_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 {
 	struct athn_softc *sc = ifp->if_softc;
+	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ifaddr *ifa;
 	struct ifreq *ifr;
 	int s, error = 0;
+
+	if (usbd_is_dying(usc->sc_udev))
+		return ENXIO;
+
+	usbd_ref_incr(usc->sc_udev);
 
 	s = splnet();
 
@@ -2105,6 +2199,9 @@ athn_usb_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		}
 	}
 	splx(s);
+
+	usbd_ref_decr(usc->sc_udev);
+
 	return (error);
 }
 
@@ -2216,6 +2313,7 @@ athn_usb_init(struct ifnet *ifp)
 	    &sta, sizeof(sta), NULL);
 	if (error != 0)
 		goto fail;
+	usc->nnodes++;
 
 	/* Update target capabilities. */
 	memset(&hic, 0, sizeof(hic));
@@ -2298,6 +2396,7 @@ athn_usb_stop(struct ifnet *ifp)
 	sta_index = 0;
 	(void)athn_usb_wmi_xcmd(usc, AR_WMI_CMD_NODE_REMOVE,
 	    &sta_index, sizeof(sta_index), NULL);
+	usc->nnodes--;
 
 	(void)athn_usb_wmi_cmd(usc, AR_WMI_CMD_DISABLE_INTR);
 	(void)athn_usb_wmi_cmd(usc, AR_WMI_CMD_DRAIN_TXQ_ALL);
