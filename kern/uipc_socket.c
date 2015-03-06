@@ -55,7 +55,7 @@ void	sbsync(struct sockbuf *, struct mbuf *);
 int	sosplice(struct socket *, int, off_t, struct timeval *);
 void	sounsplice(struct socket *, struct socket *, int);
 void	soidle(void *);
-void	sotask(void *, void *);
+void	sotask(void *);
 int	somove(struct socket *, int);
 
 void	filt_sordetach(struct knote *kn);
@@ -1129,7 +1129,7 @@ sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
 	else
 		timerclear(&so->so_idletv);
 	timeout_set(&so->so_idleto, soidle, so);
-	task_set(&so->so_splicetask, sotask, so, NULL);
+	task_set(&so->so_splicetask, sotask, so);
 
 	/*
 	 * To prevent softnet interrupt from calling somove() while
@@ -1177,9 +1177,9 @@ soidle(void *arg)
 }
 
 void
-sotask(void *arg1, void *arg2)
+sotask(void *arg)
 {
-	struct socket *so = arg1;
+	struct socket *so = arg;
 	int s;
 
 	s = splsoftnet();
