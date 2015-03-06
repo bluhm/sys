@@ -1039,7 +1039,7 @@ sorflush(struct socket *so)
 #define so_splicemax	so_sp->ssp_max
 #define so_idletv	so_sp->ssp_idletv
 #define so_idleto	so_sp->ssp_idleto
-#define so_rate		so_sp->ssp_rate
+#define so_splicerate	so_sp->ssp_rate
 #define so_ratetv	so_sp->ssp_ratetv
 #define so_rateto	so_sp->ssp_rateto
 
@@ -1128,12 +1128,12 @@ sosplice(struct socket *so, int fd, off_t max, struct timeval *tv, off_t rate)
 		timerclear(&so->so_idletv);
 	timeout_set(&so->so_idleto, soidle, so);
 	if (rate) {
-		so->so_rate = rate;
+		so->so_splicerate = rate;
 		getmicrouptime(&so->so_ratetv);
 		/* Assume one second idle for immediate start. */
 		so->so_ratetv.tv_sec--;
 	} else {
-		so->so_rate = 0;
+		so->so_splicerate = 0;
 		timerclear(&so->so_ratetv);
 	}
 	timeout_set(&so->so_rateto, sorate, so);
@@ -1257,15 +1257,16 @@ somove(struct socket *so, int wait)
 			goto release;
 		len = space;
 	}
-	if (so->so_rate) {
+	if (so->so_splicerate) {
 		getmicrouptime(&splicetv);
-		space = so->so_rate * (splicetv.tv_sec - so->so_ratetv.tv_sec) +
-		    (so->so_rate * (splicetv.tv_usec - so->so_ratetv.tv_usec)) /
-		    1000000;
+		space = so->so_splicerate *
+		    (splicetv.tv_sec - so->so_ratetv.tv_sec) +
+		    (so->so_splicerate *
+		    (splicetv.tv_usec - so->so_ratetv.tv_usec)) / 1000000;
 		if (space <= 0) {
 			maxreached = 0;
 			usec = 1100000LL * so->so_rcv.sb_mb->m_len /
-			    so->so_rate;
+			    so->so_splicerate;
 			timeout_add(&so->so_rateto, usec / tick || 1);
 			goto release;
 		}
@@ -1370,9 +1371,9 @@ somove(struct socket *so, int wait)
 	SBLASTMBUFCHK(&so->so_rcv, "somove 3");
 	SBCHECK(&so->so_rcv);
 	if (m == NULL) {
-		if (so->so_rate && so->so_rcv.sb_mb) {
+		if (so->so_splicerate && so->so_rcv.sb_mb) {
 			usec = 1100000LL * so->so_rcv.sb_mb->m_len /
-			    so->so_rate;
+			    so->so_splicerate;
 			timeout_add(&so->so_rateto, usec / tick || 1);
 		}
 		goto release;
@@ -1464,8 +1465,8 @@ somove(struct socket *so, int wait)
 		goto release;
 	}
 	so->so_splicelen += len;
-	if (so->so_rate) {
-		usec = 1000000LL * len / so->so_rate;
+	if (so->so_splicerate) {
+		usec = 1000000LL * len / so->so_splicerate;
 		so->so_ratetv.tv_sec += usec / 1000000;
 		so->so_ratetv.tv_usec += usec % 1000000;
 		if (so->so_ratetv.tv_usec >= 1000000) {
