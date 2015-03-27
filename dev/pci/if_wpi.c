@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_wpi.c,v 1.124 2015/02/10 23:25:46 mpi Exp $	*/
+/*	$OpenBSD: if_wpi.c,v 1.126 2015/03/16 04:09:53 jsg Exp $	*/
 
 /*-
  * Copyright (c) 2006-2008
@@ -46,7 +46,6 @@
 #include <net/bpf.h>
 #endif
 #include <net/if.h>
-#include <net/if_arp.h>
 #include <net/if_dl.h>
 #include <net/if_media.h>
 #include <net/if_types.h>
@@ -2769,7 +2768,7 @@ wpi_run(struct wpi_softc *sc)
 
 	/* Start periodic calibration timer. */
 	sc->calib_cnt = 0;
-	timeout_add(&sc->calib_to, hz / 2);
+	timeout_add_msec(&sc->calib_to, 500);
 
 	/* Link LED always on while associated. */
 	wpi_set_led(sc, WPI_LED_LINK, 0, 1);

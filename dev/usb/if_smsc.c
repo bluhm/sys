@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_smsc.c,v 1.14 2014/12/22 02:28:52 tedu Exp $	*/
+/*	$OpenBSD: if_smsc.c,v 1.18 2015/03/23 22:48:51 jsg Exp $	*/
 /* $FreeBSD: src/sys/dev/usb/net/if_smsc.c,v 1.1 2012/08/15 04:03:55 gonzo Exp $ */
 /*-
  * Copyright (c) 2012
@@ -84,7 +84,6 @@
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
 
-#include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
 
 #include <dev/usb/usb.h>
@@ -261,9 +260,9 @@ smsc_miibus_readreg(struct device *dev, int phy, int reg)
 		smsc_warn_printf(sc, "MII read timeout\n");
 
 	smsc_read_reg(sc, SMSC_MII_DATA, &val);
-	smsc_unlock_mii(sc);
-	
+
 done:
+	smsc_unlock_mii(sc);
 	return (val & 0xFFFF);
 }
 
@@ -279,6 +278,7 @@ smsc_miibus_writereg(struct device *dev, int phy, int reg, int val)
 	smsc_lock_mii(sc);
 	if (smsc_wait_for_bits(sc, SMSC_MII_ADDR, SMSC_MII_BUSY) != 0) {
 		smsc_warn_printf(sc, "MII is busy\n");
+		smsc_unlock_mii(sc);
 		return;
 	}
 
@@ -1150,6 +1150,7 @@ smsc_rxeof(struct usbd_xfer *xfer, void *priv, usbd_status status)
 	u_char			*buf = c->sc_buf;
 	uint32_t		total_len;
 	uint16_t		pktlen = 0;
+	struct mbuf_list	ml = MBUF_LIST_INITIALIZER();
 	struct mbuf		*m;
 	int			s;
 	uint32_t		rxhdr;
@@ -1220,24 +1221,18 @@ smsc_rxeof(struct usbd_xfer *xfer, void *priv, usbd_status status)
 		}
 
 		ifp->if_ipackets++;
-		m->m_pkthdr.rcvif = ifp;
 		m->m_pkthdr.len = m->m_len = pktlen;
 		m_adj(m, ETHER_ALIGN);
 
 		memcpy(mtod(m, char *), buf, pktlen);
 
-		/* push the packet up */
-		s = splnet();
-#if NBPFILTER > 0
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m, BPF_DIRECTION_IN);
-#endif
-		ether_input_mbuf(ifp, m);
-
-		splx(s);
+		ml_enqueue(&ml, m);
 	} while (total_len > 0);
 
 done:
+	s = splnet();
+	if_input(ifp, &ml);
+	splx(s);
 	memset(c->sc_buf, 0, sc->sc_bufsz);
 
 	/* Setup new transfer. */

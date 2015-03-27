@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_nfe.c,v 1.108 2014/12/22 02:28:52 tedu Exp $	*/
+/*	$OpenBSD: if_nfe.c,v 1.110 2015/03/20 18:42:25 mpi Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007 Damien Bergamini <damien.bergamini@free.fr>
@@ -52,7 +52,6 @@
 #include <net/bpf.h>
 #endif
 
-#include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
 
 #include <dev/pci/pcireg.h>
@@ -647,6 +646,7 @@ nfe_rxeof(struct nfe_softc *sc)
 	struct nfe_desc32 *desc32;
 	struct nfe_desc64 *desc64;
 	struct nfe_rx_data *data;
+	struct mbuf_list ml = MBUF_LIST_INITIALIZER();
 	struct mbuf *m, *mnew;
 	bus_addr_t physaddr;
 #if NVLAN > 0
@@ -746,7 +746,6 @@ nfe_rxeof(struct nfe_softc *sc)
 
 		/* finalize mbuf */
 		m->m_pkthdr.len = m->m_len = len;
-		m->m_pkthdr.rcvif = ifp;
 
 		if ((sc->sc_flags & NFE_HW_CSUM) &&
 		    (flags & NFE_RX_IP_CSUMOK)) {
@@ -764,12 +763,8 @@ nfe_rxeof(struct nfe_softc *sc)
 		}
 #endif
 
-#if NBPFILTER > 0
-		if (ifp->if_bpf)
-			bpf_mtap_ether(ifp->if_bpf, m, BPF_DIRECTION_IN);
-#endif
 		ifp->if_ipackets++;
-		ether_input_mbuf(ifp, m);
+		ml_enqueue(&ml, m);
 
 		/* update mapping address in h/w descriptor */
 		if (sc->sc_flags & NFE_40BIT_ADDR) {
@@ -795,6 +790,7 @@ skip:		if (sc->sc_flags & NFE_40BIT_ADDR) {
 
 		sc->rxq.cur = (sc->rxq.cur + 1) % NFE_RX_RING_COUNT;
 	}
+	if_input(ifp, &ml);
 }
 
 void

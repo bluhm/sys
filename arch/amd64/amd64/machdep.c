@@ -1,4 +1,4 @@
-/*	$OpenBSD: machdep.c,v 1.206 2015/01/12 16:33:31 deraadt Exp $	*/
+/*	$OpenBSD: machdep.c,v 1.208 2015/03/25 21:05:18 kettenis Exp $	*/
 /*	$NetBSD: machdep.c,v 1.3 2003/05/07 22:58:18 fvdl Exp $	*/
 
 /*-
@@ -114,7 +114,6 @@
 #include <dev/isa/isareg.h>
 #include <machine/isa_machdep.h>
 #include <dev/ic/i8042reg.h>
-#include <amd64/isa/nvram.h>
 
 #ifdef DDB
 #include <machine/db_machdep.h>
@@ -551,10 +550,10 @@ sendsig(sig_t catcher, int sig, int mask, u_long code, int type,
 
 	if (p->p_md.md_flags & MDP_USEDFPU) {
 		fpusave_proc(p, 1);
-		sp -= sizeof(struct fxsave64);
+		sp -= fpu_save_len;
 		ksc.sc_fpstate = (struct fxsave64 *)sp;
 		if (copyout(&p->p_addr->u_pcb.pcb_savefpu.fp_fxsave,
-		    (void *)sp, sizeof(struct fxsave64)))
+		    (void *)sp, fpu_save_len))
 			sigexit(p, SIGILL);
 
 		/* Signal handlers get a completely clean FP state */
@@ -639,7 +638,7 @@ sys_sigreturn(struct proc *p, void *v, register_t *retval)
 	if (ksc.sc_fpstate) {
 		struct fxsave64 *fx = &p->p_addr->u_pcb.pcb_savefpu.fp_fxsave;
 
-		if ((error = copyin(ksc.sc_fpstate, fx, sizeof(*fx))))
+		if ((error = copyin(ksc.sc_fpstate, fx, fpu_save_len)))
 			return (error);
 		fx->fx_mxcsr &= fpu_mxcsr_mask;
 		p->p_md.md_flags |= MDP_USEDFPU;

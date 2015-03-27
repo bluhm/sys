@@ -1,4 +1,4 @@
-/*	$OpenBSD: nd6.c,v 1.131 2015/02/11 23:34:43 mpi Exp $	*/
+/*	$OpenBSD: nd6.c,v 1.133 2015/03/25 17:39:33 florian Exp $	*/
 /*	$KAME: nd6.c,v 1.280 2002/06/08 19:52:07 itojun Exp $	*/
 
 /*
@@ -610,8 +610,7 @@ nd6_purge(struct ifnet *ifp)
 		}
 	}
 
-	/* XXX: too restrictive? */
-	if (!ip6_forwarding && (ifp->if_xflags & IFXF_AUTOCONF6)) {
+	if (ifp->if_xflags & IFXF_AUTOCONF6) {
 		/* refresh default router list */
 		defrouter_select();
 	}
@@ -1574,12 +1573,8 @@ fail:
 	 * defrtrlist_update called the function as well.  However, I believe
 	 * we can compromise the overhead, since it only happens the first
 	 * time.
-	 * XXX: although defrouter_select() should not have a bad effect
-	 * for those are not autoconfigured hosts, we explicitly avoid such
-	 * cases for safety.
 	 */
-	if (do_update && ln->ln_router && !ip6_forwarding &&
-	    (ifp->if_xflags & IFXF_AUTOCONF6))
+	if (do_update && ln->ln_router && (ifp->if_xflags & IFXF_AUTOCONF6))
 		defrouter_select();
 
 	return rt;
@@ -1868,13 +1863,11 @@ nd6_storelladdr(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 		return (EINVAL);
 	}
 	sdl = SDL(rt->rt_gateway);
-	if (sdl->sdl_alen == 0) {
+	if (sdl->sdl_alen != ETHER_ADDR_LEN) {
 		char addr[INET6_ADDRSTRLEN];
-		/* this should be impossible, but we bark here for debugging */
-		printf("nd6_storelladdr: sdl_alen == 0, dst=%s, if=%s\n",
+		log(LOG_DEBUG, "%s: %s: incorrect nd6 information\n", __func__,
 		    inet_ntop(AF_INET6, &satosin6(dst)->sin6_addr,
-			addr, sizeof(addr)),
-		    ifp->if_xname);
+			addr, sizeof(addr)));
 		m_freem(m);
 		return (EINVAL);
 	}

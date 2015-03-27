@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf.c,v 1.906 2015/02/14 23:32:41 sthen Exp $ */
+/*	$OpenBSD: pf.c,v 1.909 2015/03/18 12:23:15 dlg Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -57,7 +57,6 @@
 
 #include <net/if.h>
 #include <net/if_types.h>
-#include <net/bpf.h>
 #include <net/route.h>
 #include <net/radix_mpath.h>
 
@@ -222,7 +221,6 @@ int			 pf_compare_state_keys(struct pf_state_key *,
 struct pf_state		*pf_find_state(struct pfi_kif *,
 			    struct pf_state_key_cmp *, u_int, struct mbuf *);
 int			 pf_src_connlimit(struct pf_state **);
-int			 pf_check_congestion(struct ifqueue *);
 int			 pf_match_rcvif(struct mbuf *, struct pf_rule *);
 void			 pf_step_into_anchor(int *, struct pf_ruleset **,
 			    struct pf_rule **, struct pf_rule **);
@@ -3077,7 +3075,6 @@ pf_test_rule(struct pf_pdesc *pd, struct pf_rule **rm, struct pf_state **sm,
 	struct tcphdr		*th = pd->hdr.tcp;
 	struct pf_state_key	*skw = NULL, *sks = NULL;
 	struct pf_rule_actions	 act;
-	struct ifqueue		*ifq = &ipintrq;
 	u_short			 reason;
 	int			 rewrite = 0;
 	int			 tag = -1;
@@ -3092,12 +3089,7 @@ pf_test_rule(struct pf_pdesc *pd, struct pf_rule **rm, struct pf_state **sm,
 	act.rtableid = pd->rdomain;
 	SLIST_INIT(&rules);
 
-#ifdef INET6
-	if (pd->af == AF_INET6)
-		ifq = &ip6intrq;
-#endif
-
-	if (pd->dir == PF_IN && pf_check_congestion(ifq)) {
+	if (pd->dir == PF_IN && if_congested()) {
 		REASON_SET(&reason, PFRES_CONGEST);
 		return (PF_DROP);
 	}
@@ -4280,6 +4272,7 @@ pf_test_state(struct pf_pdesc *pd, struct pf_state **state, u_short *reason)
 	int			 copyback = 0;
 	struct pf_state_peer	*src, *dst;
 	int			 action = PF_PASS;
+	struct inpcb		*inp;
 
 	key.af = pd->af;
 	key.proto = pd->virtual_proto;
@@ -4288,6 +4281,7 @@ pf_test_state(struct pf_pdesc *pd, struct pf_state **state, u_short *reason)
 	PF_ACPY(&key.addr[pd->didx], pd->dst, key.af);
 	key.port[pd->sidx] = pd->osport;
 	key.port[pd->didx] = pd->odport;
+	inp = pd->m->m_pkthdr.pf.inp;
 
 	STATE_LOOKUP(pd->kif, &key, pd->dir, *state, pd->m);
 
@@ -4316,6 +4310,7 @@ pf_test_state(struct pf_pdesc *pd, struct pf_state **state, u_short *reason)
 			(*state)->src.state = (*state)->dst.state = TCPS_CLOSED;
 			pf_unlink_state(*state);
 			*state = NULL;
+			pd->m->m_pkthdr.pf.inp = inp;
 			return (PF_DROP);
 		}
 
@@ -6638,15 +6633,6 @@ done:
 	}
 
 	return (action);
-}
-
-int
-pf_check_congestion(struct ifqueue *ifq)
-{
-	if (ifq->ifq_congestion)
-		return (1);
-	else
-		return (0);
 }
 
 void

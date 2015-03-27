@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.c,v 1.320 2015/03/03 07:54:32 brad Exp $	*/
+/*	$OpenBSD: if.c,v 1.323 2015/03/25 11:49:02 dlg Exp $	*/
 /*	$NetBSD: if.c,v 1.35 1996/05/07 05:26:04 thorpej Exp $	*/
 
 /*
@@ -83,7 +83,6 @@
 
 #include <net/if.h>
 #include <net/if_dl.h>
-#include <net/if_media.h>
 #include <net/if_types.h>
 #include <net/route.h>
 #include <net/netisr.h>
@@ -139,7 +138,6 @@ int	if_setgroupattribs(caddr_t);
 int	if_clone_list(struct if_clonereq *);
 struct if_clone	*if_clone_lookup(const char *, int *);
 
-void	if_congestion_clear(void *);
 int	if_group_egress_build(void);
 
 void	if_link_state_change_task(void *);
@@ -155,6 +153,7 @@ int if_cloners_count;
 struct timeout net_tick_to;
 void	net_tick(void *);
 int	net_livelocked(void);
+int	ifq_congestion;
 
 /*
  * Network interface utility routines.
@@ -787,33 +786,22 @@ if_clone_list(struct if_clonereq *ifcr)
 }
 
 /*
- * set queue congestion marker and register timeout to clear it
+ * set queue congestion marker
  */
 void
-if_congestion(struct ifqueue *ifq)
+if_congestion(void)
 {
-	/* Not currently needed, all callers check this */
-	if (ifq->ifq_congestion)
-		return;
+	extern int ticks;
 
-	ifq->ifq_congestion = malloc(sizeof(struct timeout), M_TEMP, M_NOWAIT);
-	if (ifq->ifq_congestion == NULL)
-		return;
-	timeout_set(ifq->ifq_congestion, if_congestion_clear, ifq);
-	timeout_add(ifq->ifq_congestion, hz / 100);
+	ifq_congestion = ticks;
 }
 
-/*
- * clear the congestion flag
- */
-void
-if_congestion_clear(void *arg)
+int
+if_congested(void)
 {
-	struct ifqueue *ifq = arg;
-	struct timeout *to = ifq->ifq_congestion;
+	extern int ticks;
 
-	ifq->ifq_congestion = NULL;
-	free(to, M_TEMP, sizeof(*to));
+	return (ticks - ifq_congestion <= (hz / 100));
 }
 
 #define	equal(a1, a2)	\
@@ -2144,6 +2132,28 @@ sysctl_ifq(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 	/* NOTREACHED */
 }
 
+int
+sysctl_niq(int *name, u_int namelen, void *oldp, size_t *oldlenp,
+    void *newp, size_t newlen, struct niqueue *niq)
+{
+	/* All sysctl names at this level are terminal. */
+	if (namelen != 1)
+		return (ENOTDIR);
+
+	switch (name[0]) {
+	case IFQCTL_LEN:
+		return (sysctl_rdint(oldp, oldlenp, newp, niq_len(niq)));
+	case IFQCTL_MAXLEN:
+		return (sysctl_int(oldp, oldlenp, newp, newlen,
+		    &niq->ni_q.mq_maxlen)); /* XXX */
+	case IFQCTL_DROPS:
+		return (sysctl_rdint(oldp, oldlenp, newp, niq_drops(niq)));
+	default:
+		return (EOPNOTSUPP);
+	}
+	/* NOTREACHED */
+}
+
 void
 ifa_add(struct ifnet *ifp, struct ifaddr *ifa)
 {
@@ -2362,4 +2372,43 @@ if_rxr_ioctl(struct if_rxrinfo *ifri, const char *name, u_int size,
 	ifr.ifr_info = *rxr;
 
 	return (if_rxr_info_ioctl(ifri, 1, &ifr));
+}
+
+/*
+ * Network stack input queues.
+ */
+
+void
+niq_init(struct niqueue *niq, u_int maxlen, u_int isr)
+{
+	mq_init(&niq->ni_q, maxlen, IPL_NET);
+	niq->ni_isr = isr;
+}
+
+int
+niq_enqueue(struct niqueue *niq, struct mbuf *m)
+{
+	int rv;
+
+	rv = mq_enqueue(&niq->ni_q, m);
+	if (rv == 0)
+		schednetisr(niq->ni_isr);
+	else
+		if_congestion();
+
+	return (rv);
+}
+
+int
+niq_enlist(struct niqueue *niq, struct mbuf_list *ml)
+{
+	int rv;
+
+	rv = mq_enlist(&niq->ni_q, ml);
+	if (rv == 0)
+		schednetisr(niq->ni_isr);
+	else
+		if_congestion();
+
+	return (rv);
 }

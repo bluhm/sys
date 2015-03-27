@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_re_pci.c,v 1.46 2015/02/19 04:58:34 dlg Exp $	*/
+/*	$OpenBSD: if_re_pci.c,v 1.48 2015/03/14 03:38:48 jsg Exp $	*/
 
 /*
  * Copyright (c) 2005 Peter Valchev <pvalchev@openbsd.org>
@@ -38,7 +38,6 @@
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
 
-#include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
 
 #include <dev/pci/pcireg.h>
@@ -130,8 +129,6 @@ re_pci_attach(struct device *parent, struct device *self, void *aux)
 	pci_chipset_tag_t	pc = pa->pa_pc;
 	pci_intr_handle_t	ih;
 	const char		*intrstr = NULL;
-	pcireg_t		reg;
-	int			rrs;
 
 	pci_set_powerstate(pa->pa_pc, pa->pa_tag, PCI_PMCSR_STATE_D0);
 
@@ -176,26 +173,8 @@ re_pci_attach(struct device *parent, struct device *self, void *aux)
 	 * PCI Express check.
 	 */
 	if (pci_get_capability(pc, pa->pa_tag, PCI_CAP_PCIEXPRESS,
-	    &sc->rl_expcap, NULL)) {
-		if (!(PCI_VENDOR(pa->pa_id) == PCI_VENDOR_REALTEK &&
-		    PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_REALTEK_RT8101E)) {
-			/* Set PCIe maximum read request size to 2048. */
-			reg = pci_conf_read(pa->pa_pc, pa->pa_tag,
-			    sc->rl_expcap + PCI_PCIE_DCSR);
-			reg &= PCI_PCIE_DCSR_MPS;
-			reg >>= 12;
-			rrs = (1 << (reg + 7));
-			if (rrs < 2048) {
-				reg = pci_conf_read(pa->pa_pc, pa->pa_tag,
-				    sc->rl_expcap + PCI_PCIE_DCSR);
-				reg = (reg & ~PCI_PCIE_DCSR_MPS) |
-				    (fls(2048) - 8) << 12;
-				pci_conf_write(pa->pa_pc, pa->pa_tag,
-				    sc->rl_expcap + PCI_PCIE_DCSR, reg);
-			}
-		}
+	    NULL, NULL))
 		sc->rl_flags |= RL_FLAG_PCIE;
-	}
 
 	if (!(PCI_VENDOR(pa->pa_id) == PCI_VENDOR_REALTEK &&
 	    PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_REALTEK_RT8139)) {

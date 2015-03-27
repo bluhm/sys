@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_var.h,v 1.20 2015/02/09 03:09:57 dlg Exp $	*/
+/*	$OpenBSD: if_var.h,v 1.22 2015/03/25 11:49:02 dlg Exp $	*/
 /*	$NetBSD: if.h,v 1.23 1996/05/07 02:40:27 thorpej Exp $	*/
 
 /*
@@ -37,6 +37,7 @@
 #define _NET_IF_VAR_H_
 
 #include <sys/queue.h>
+#include <sys/mbuf.h>
 #ifdef _KERNEL
 #include <net/hfsc.h>
 #endif
@@ -68,8 +69,6 @@
 
 #include <sys/time.h>
 
-struct mbuf;
-struct mbuf_list;
 struct proc;
 struct rtentry;
 struct socket;
@@ -108,7 +107,6 @@ struct	ifqueue {
 	int			 ifq_maxlen;
 	int			 ifq_drops;
 	struct hfsc_if		*ifq_hfsc;
-	struct timeout		*ifq_congestion;
 };
 
 /*
@@ -320,8 +318,7 @@ do {									\
 	if (IF_QFULL(ifq)) {						\
 		IF_DROP(ifq);						\
 		m_freem(m);						\
-		if (!(ifq)->ifq_congestion)				\
-			if_congestion(ifq);				\
+		if_congestion();					\
 	} else								\
 		IF_ENQUEUE(ifq, m);					\
 } while (/* CONSTCOND */0)
@@ -393,6 +390,28 @@ do {									\
 #define IF_WIRED_DEFAULT_PRIORITY	0
 #define IF_WIRELESS_DEFAULT_PRIORITY	4
 
+/*
+ * Network stack input queues.
+ */
+struct	niqueue {
+	struct mbuf_queue	ni_q;
+	u_int			ni_isr;
+};
+
+#define NIQUEUE_INITIALIZER(_len, _isr) \
+    { MBUF_QUEUE_INITIALIZER((_len), IPL_NET), (_isr) }
+
+void		niq_init(struct niqueue *, u_int, u_int);
+int		niq_enqueue(struct niqueue *, struct mbuf *);
+int		niq_enlist(struct niqueue *, struct mbuf_list *);
+
+#define niq_dequeue(_q)			mq_dequeue(&(_q)->ni_q)
+#define niq_dechain(_q)			mq_dechain(&(_q)->ni_q)
+#define niq_delist(_q, _ml)		mq_delist(&(_q)->ni_q, (_ml))
+#define niq_filter(_q, _f, _c)		mq_filter(&(_q)->ni_q, (_f), (_c))
+#define niq_len(_q)			mq_len(&(_q)->ni_q)
+#define niq_drops(_q)			mq_drops(&(_q)->ni_q)
+
 extern struct ifnet_head ifnet;
 extern struct ifnet *lo0ifp;
 
@@ -423,9 +442,10 @@ void	if_clone_detach(struct if_clone *);
 int	if_clone_create(const char *);
 int	if_clone_destroy(const char *);
 
-void	if_congestion(struct ifqueue *);
 int     sysctl_ifq(int *, u_int, void *, size_t *, void *, size_t,
 	    struct ifqueue *);
+int     sysctl_niq(int *, u_int, void *, size_t *, void *, size_t,
+	    struct niqueue *);
 
 int	loioctl(struct ifnet *, u_long, caddr_t);
 void	loopattach(int);

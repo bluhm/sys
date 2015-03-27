@@ -1,4 +1,4 @@
-/*	$OpenBSD: nd6_rtr.c,v 1.98 2015/02/19 22:24:20 bluhm Exp $	*/
+/*	$OpenBSD: nd6_rtr.c,v 1.101 2015/03/25 17:39:33 florian Exp $	*/
 /*	$KAME: nd6_rtr.c,v 1.97 2001/02/07 11:09:13 itojun Exp $	*/
 
 /*
@@ -47,7 +47,6 @@
 #include <net/if.h>
 #include <net/if_var.h>
 #include <net/if_types.h>
-#include <net/if_dl.h>
 #include <net/route.h>
 #include <net/radix.h>
 
@@ -107,7 +106,7 @@ nd6_rs_input(struct mbuf *m, int off, int icmp6len)
 	char src[INET6_ADDRSTRLEN], dst[INET6_ADDRSTRLEN];
 
 	/* If I'm not a router, ignore it. XXX - too restrictive? */
-	if (!ip6_forwarding || (ifp->if_xflags & IFXF_AUTOCONF6))
+	if (!ip6_forwarding)
 		goto freeit;
 
 	/* Sanity checks */
@@ -580,7 +579,7 @@ defrtrlist_del(struct nd_defrouter *dr)
 	 * as a next hop.
 	 */
 	/* XXX: better condition? */
-	if (!ip6_forwarding && (dr->ifp->if_xflags & IFXF_AUTOCONF6))
+	if (!ip6_forwarding)
 		rt6_flush(&dr->rtaddr, dr->ifp);
 
 	if (dr->installed) {
@@ -711,21 +710,6 @@ defrouter_select(void)
 	struct rtentry *rt = NULL;
 	struct llinfo_nd6 *ln = NULL;
 	int s = splsoftnet();
-
-	/*
-	 * This function should be called only when acting as an autoconfigured
-	 * host.  Although the remaining part of this function is not effective
-	 * if the node is not an autoconfigured host, we explicitly exclude
-	 * such cases here for safety.
-	 */
-	/* XXX too strict? */
-	if (ip6_forwarding) {
-		nd6log((LOG_WARNING,
-		    "defrouter_select: called unexpectedly (forwarding=%d)\n",
-		    ip6_forwarding));
-		splx(s);
-		return;
-	}
 
 	/*
 	 * Let's handle easy case (3) first:
@@ -880,7 +864,7 @@ defrtrlist_update(struct nd_defrouter *new)
 	/* entry does not exist */
 	if (new->rtlifetime == 0) {
 		/* flush all possible redirects */
-		if (!ip6_forwarding && (new->ifp->if_xflags & IFXF_AUTOCONF6))
+		if (new->ifp->if_xflags & IFXF_AUTOCONF6)
 			rt6_flush(&new->rtaddr, new->ifp);
 		splx(s);
 		return (NULL);
@@ -1376,12 +1360,13 @@ prelist_update(struct nd_prefix *new, struct nd_defrouter *dr, struct mbuf *m)
 	}
 
 	if ((!autoconf || ((ifp->if_xflags & IFXF_INET6_NOPRIVACY) == 0 &&
-	    !tempaddr_preferred)) && new->ndpr_vltime != 0 &&
+	     !tempaddr_preferred)) &&
+	    new->ndpr_vltime != 0 && new->ndpr_pltime != 0 &&
 	    !((ifp->if_xflags & IFXF_INET6_NOPRIVACY) && statique)) {
 		/*
 		 * There is no SLAAC address and/or there is no preferred RFC
-		 * 4941 temporary address. And the valid prefix lifetime is
-		 * non-zero. And there is no static address in the same prefix.
+		 * 4941 temporary address. And prefix lifetimes are non-zero.
+		 * And there is no static address in the same prefix.
 		 * Create new addresses in process context.
 		 * Increment prefix refcount to ensure the prefix is not
 		 * removed before the task is done.
