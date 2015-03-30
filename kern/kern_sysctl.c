@@ -1211,7 +1211,7 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 {
 	struct kinfo_file *kf;
 	struct filedesc *fdp;
-	struct file *fp;
+	struct file *fp, *nfp;
 	struct process *pr;
 	size_t buflen, elem_size, elem_count, outsize;
 	char *dp = where;
@@ -1253,12 +1253,15 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 
 	switch (op) {
 	case KERN_FILE_BYFILE:
-		LIST_FOREACH(fp, &filehead, f_list) {
+		/* Prevent 'fp' from disappearing under our feet. */
+		LIST_FOREACH_SAFE(fp, &filehead, f_list, nfp) {
 			if (fp->f_count == 0)
 				continue;
 			if (arg != 0 && fp->f_type != arg)
 				continue;
+			FREF(fp);
 			FILLIT(fp, NULL, 0, NULL, NULL);
+			FRELE(fp, p);
 		}
 		break;
 	case KERN_FILE_BYPID:
