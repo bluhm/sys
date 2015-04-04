@@ -1,4 +1,4 @@
-/*	$OpenBSD: qec.c,v 1.22 2015/03/22 12:45:59 miod Exp $	*/
+/*	$OpenBSD: qec.c,v 1.24 2015/03/30 20:30:22 miod Exp $	*/
 
 /*
  * Copyright (c) 1998 Theo de Raadt and Jason L. Wright.
@@ -47,8 +47,8 @@
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
 
-#include <sparc/autoconf.h>
-#include <sparc/cpu.h>
+#include <machine/autoconf.h>
+#include <machine/cpu.h>
 
 #include <sparc/dev/sbusvar.h>
 #include <sparc/dev/dmareg.h>
@@ -190,7 +190,8 @@ qecattach(parent, self, aux)
 
 		qec_translate(sc, &oca);
 		oca.ca_bustype = BUS_SBUS;
-		(void) config_found(&sc->sc_dev, (void *)&oca, qecprint);
+		oca.ca_dmat = ca->ca_dmat;
+		config_found(&sc->sc_dev, (void *)&oca, qecprint);
 	}
 }
 
@@ -348,8 +349,7 @@ qec_put(buf, m0)
  * we copy into clusters.
  */
 struct mbuf *
-qec_get(ifp, buf, totlen)
-	struct ifnet *ifp;
+qec_get(buf, totlen)
 	u_int8_t *buf;
 	int totlen;
 {
@@ -359,7 +359,6 @@ qec_get(ifp, buf, totlen)
 	MGETHDR(m, M_DONTWAIT, MT_DATA);
 	if (m == NULL)
 		return (NULL);
-	m->m_pkthdr.rcvif = ifp;
 	m->m_pkthdr.len = totlen;
 	pad = ALIGN(sizeof(struct ether_header)) - sizeof(struct ether_header);
 	len = MHLEN;
