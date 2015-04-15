@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.c,v 1.325 2015/04/01 04:00:55 dlg Exp $	*/
+/*	$OpenBSD: if.c,v 1.329 2015/04/10 13:58:20 dlg Exp $	*/
 /*	$NetBSD: if.c,v 1.35 1996/05/07 05:26:04 thorpej Exp $	*/
 
 /*
@@ -126,7 +126,8 @@ void	if_attachsetup(struct ifnet *);
 void	if_attachdomain1(struct ifnet *);
 void	if_attach_common(struct ifnet *);
 
-void	if_detach_queues(struct ifnet *, struct ifqueue *);
+int	if_detach_filter(void *, const struct mbuf *);
+void	if_detach_queues(struct ifnet *, struct niqueue *);
 void	if_detached_start(struct ifnet *);
 int	if_detached_ioctl(struct ifnet *, u_long, caddr_t);
 
@@ -457,8 +458,10 @@ if_input(struct ifnet *ifp, struct mbuf_list *ml)
 
 #if NBPFILTER > 0
 	if (ifp->if_bpf) {
+		KERNEL_LOCK();
 		MBUF_LIST_FOREACH(ml, m)
 			bpf_mtap_ether(ifp->if_bpf, m, BPF_DIRECTION_IN);
+		KERNEL_UNLOCK();
 	}
 #endif
 
@@ -496,7 +499,7 @@ if_input_process(void *xmq)
 
 		ifp = m->m_pkthdr.rcvif;
 		SLIST_FOREACH(ifih, &ifp->if_inputs, ifih_next) {
-			if ((*ifih->ifih_input)(ifp, NULL, m))
+			if ((*ifih->ifih_input)(m, NULL))
 				break;
 		}
 	}
@@ -519,22 +522,12 @@ nettxintr(void)
 	splx(s);
 }
 
-/*
- * Detach an interface from everything in the kernel.  Also deallocate
- * private resources.
- */
 void
-if_detach(struct ifnet *ifp)
+if_deactivate(struct ifnet *ifp)
 {
-	struct ifaddr *ifa;
-	struct ifg_list *ifg;
-	int s = splnet();
-	struct domain *dp;
+	int s;
 
-	ifp->if_flags &= ~IFF_OACTIVE;
-	ifp->if_start = if_detached_start;
-	ifp->if_ioctl = if_detached_ioctl;
-	ifp->if_watchdog = NULL;
+	s = splnet();
 
 	/*
 	 * Call detach hooks from head to tail.  To make sure detach
@@ -542,12 +535,6 @@ if_detach(struct ifnet *ifp)
 	 * the hooks have to be added to the head!
 	 */
 	dohooks(ifp->if_detachhooks, HOOK_REMOVE | HOOK_FREE);
-
-	/* Remove the watchdog timeout */
-	timeout_del(ifp->if_slowtimo);
-
-	/* Remove the link state task */
-	task_del(systq, ifp->if_linkstatetask);
 
 #if NBRIDGE > 0
 	/* Remove the interface from any bridge it is part of.  */
@@ -560,6 +547,36 @@ if_detach(struct ifnet *ifp)
 	if (ifp->if_carp && ifp->if_type != IFT_CARP)
 		carp_ifdetach(ifp);
 #endif
+
+	splx(s);
+}
+
+/*
+ * Detach an interface from everything in the kernel.  Also deallocate
+ * private resources.
+ */
+void
+if_detach(struct ifnet *ifp)
+{
+	struct ifaddr *ifa;
+	struct ifg_list *ifg;
+	struct domain *dp;
+	int s;
+
+	/* Undo pseudo-driver changes. */
+	if_deactivate(ifp);
+
+	s = splnet();
+	ifp->if_flags &= ~IFF_OACTIVE;
+	ifp->if_start = if_detached_start;
+	ifp->if_ioctl = if_detached_ioctl;
+	ifp->if_watchdog = NULL;
+
+	/* Remove the watchdog timeout */
+	timeout_del(ifp->if_slowtimo);
+
+	/* Remove the link state task */
+	task_del(systq, ifp->if_linkstatetask);
 
 #if NBPFILTER > 0
 	bpfdetach(ifp);
@@ -589,7 +606,7 @@ if_detach(struct ifnet *ifp)
 	 */
 #define IF_DETACH_QUEUES(x) \
 do { \
-	extern struct ifqueue x; \
+	extern struct niqueue x; \
 	if_detach_queues(ifp, & x); \
 } while (0)
 	IF_DETACH_QUEUES(arpintrq);
@@ -641,38 +658,31 @@ do { \
 	splx(s);
 }
 
-void
-if_detach_queues(struct ifnet *ifp, struct ifqueue *q)
+int
+if_detach_filter(void *ctx, const struct mbuf *m)
 {
-	struct mbuf *m, *prev = NULL, *next;
-	int prio;
+	struct ifnet *ifp = ctx;
 
-	for (prio = 0; prio <= IFQ_MAXPRIO; prio++) {
-		for (m = q->ifq_q[prio].head; m; m = next) {
-			next = m->m_nextpkt;
 #ifdef DIAGNOSTIC
-			if ((m->m_flags & M_PKTHDR) == 0) {
-				prev = m;
-				continue;
-			}
+	if ((m->m_flags & M_PKTHDR) == 0)
+		return (0);
 #endif
-			if (m->m_pkthdr.rcvif != ifp) {
-				prev = m;
-				continue;
-			}
 
-			if (prev)
-				prev->m_nextpkt = m->m_nextpkt;
-			else
-				q->ifq_q[prio].head = m->m_nextpkt;
-			if (q->ifq_q[prio].tail == m)
-				q->ifq_q[prio].tail = prev;
-			q->ifq_len--;
+	return (m->m_pkthdr.rcvif == ifp);
+}
 
-			m->m_nextpkt = NULL;
-			m_freem(m);
-			IF_DROP(q);
-		}
+void
+if_detach_queues(struct ifnet *ifp, struct niqueue *niq)
+{
+	struct mbuf *m0, *m;
+
+	m0 = niq_filter(niq, if_detach_filter, ifp);
+	while (m0 != NULL) {
+		m = m0;
+		m0 = m->m_nextpkt;
+
+		m->m_nextpkt = NULL;
+		m_freem(m);
 	}
 }
 

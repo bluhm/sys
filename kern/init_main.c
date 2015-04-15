@@ -1,4 +1,4 @@
-/*	$OpenBSD: init_main.c,v 1.235 2015/02/10 05:28:18 guenther Exp $	*/
+/*	$OpenBSD: init_main.c,v 1.237 2015/04/12 11:12:09 dlg Exp $	*/
 /*	$NetBSD: init_main.c,v 1.84.4.1 1996/06/02 09:08:06 mrg Exp $	*/
 
 /*
@@ -147,6 +147,7 @@ void	crypto_init(void);
 void	init_exec(void);
 void	kqueue_init(void);
 void	taskq_init(void);
+void	pool_gc_pages(void *);
 
 extern char sigcode[], esigcode[];
 #ifdef SYSCALL_DEBUG
@@ -547,6 +548,13 @@ main(void *framep)
 
 #ifndef SMALL_KERNEL
 	timeout_set(&setperf_to, setperf_auto, NULL);
+#endif
+
+	/*
+	 * Start the idle pool page garbage collector
+	 */
+#if notyet
+	pool_gc_pages(NULL);
 #endif
 
         /*

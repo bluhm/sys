@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_bridge.c,v 1.232 2015/02/06 22:10:43 benno Exp $	*/
+/*	$OpenBSD: if_bridge.c,v 1.234 2015/04/13 08:52:51 mpi Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 Jason L. Wright (jason@thought.net)
@@ -117,6 +117,8 @@ void	bridge_localbroadcast(struct bridge_softc *, struct ifnet *,
     struct ether_header *, struct mbuf *);
 void	bridge_span(struct bridge_softc *, struct ether_header *,
     struct mbuf *);
+struct mbuf *bridge_dispatch(struct bridge_iflist *, struct ifnet *,
+    struct ether_header *, struct mbuf *);
 void	bridge_stop(struct bridge_softc *);
 void	bridge_init(struct bridge_softc *);
 int	bridge_bifconf(struct bridge_softc *, struct ifbifconf *);
@@ -1299,10 +1301,10 @@ struct mbuf *
 bridge_input(struct ifnet *ifp, struct ether_header *eh, struct mbuf *m)
 {
 	struct bridge_softc *sc;
-	int s;
-	struct bridge_iflist *ifl, *srcifl;
-	struct arpcom *ac;
-	struct mbuf *mc;
+	struct bridge_iflist *ifl;
+#if NVLAN > 0
+	uint16_t etype = ntohs(eh->ether_type);
+#endif /* NVLAN > 0 */
 
 	/*
 	 * Make sure this interface is a bridge member.
@@ -1327,6 +1329,31 @@ bridge_input(struct ifnet *ifp, struct ether_header *eh, struct mbuf *m)
 #endif
 
 	bridge_span(sc, eh, m);
+
+	m = bridge_dispatch(ifl, ifp, eh, m);
+
+#if NVLAN > 0
+	if ((m != NULL) && ((m->m_flags & M_VLANTAG) ||
+	    etype == ETHERTYPE_VLAN || etype == ETHERTYPE_QINQ)) {
+		/* The bridge did not want the vlan frame either, drop it. */
+		ifp->if_noproto++;
+		m_freem(m);
+		m = NULL;
+	}
+#endif /* NVLAN > 0 */
+
+	return (m);
+}
+
+struct mbuf *
+bridge_dispatch(struct bridge_iflist *ifl, struct ifnet *ifp,
+    struct ether_header *eh, struct mbuf *m)
+{
+	struct bridge_softc *sc = ifl->bridge_sc;
+	struct bridge_iflist *srcifl;
+	struct arpcom *ac;
+	struct mbuf *mc;
+	int s;
 
 	if (m->m_flags & (M_BCAST | M_MCAST)) {
 		/*
@@ -1391,7 +1418,7 @@ bridge_input(struct ifnet *ifp, struct ether_header *eh, struct mbuf *m)
 					    BPF_DIRECTION_IN);
 #endif
 				m->m_flags |= M_PROTO1;
-				ether_input(ifl->ifp, eh, m);
+				ether_input(m, eh);
 				ifl->ifp->if_ipackets++;
 				m = NULL;
 			}
@@ -1448,7 +1475,7 @@ bridge_input(struct ifnet *ifp, struct ether_header *eh, struct mbuf *m)
 			m->m_pkthdr.ph_rtableid = ifl->ifp->if_rdomain;
 			if (ifp->if_type == IFT_GIF) {
 				m->m_flags |= M_PROTO1;
-				ether_input(ifl->ifp, eh, m);
+				ether_input(m, eh);
 				m = NULL;
 			}
 			return (m);
@@ -1624,7 +1651,7 @@ bridge_localbroadcast(struct bridge_softc *sc, struct ifnet *ifp,
 		    BPF_DIRECTION_IN);
 #endif
 
-	ether_input(ifp, NULL, m1);
+	ether_input(m1, NULL);
 	ifp->if_ipackets++;
 }
 

@@ -1,4 +1,4 @@
-/*	$OpenBSD: hfsc.c,v 1.16 2015/03/03 11:14:00 henning Exp $	*/
+/*	$OpenBSD: hfsc.c,v 1.20 2015/04/12 14:09:40 dlg Exp $	*/
 
 /*
  * Copyright (c) 2012-2013 Henning Brauer <henning@openbsd.org>
@@ -51,6 +51,7 @@
 #include <sys/errno.h>
 #include <sys/queue.h>
 #include <sys/kernel.h>
+#include <sys/timeout.h>
 
 #include <net/if.h>
 #include <net/if_var.h>
@@ -62,6 +63,145 @@
 /* need to provide dummies for hfsc-less kernels to reduce the if.h horror */
 #include "pf.h"
 #if NPF > 0
+/*
+ * kernel internal service curve representation
+ *	coordinates are given by 64 bit unsigned integers.
+ *	x-axis: unit is clock count.  for the intel x86 architecture,
+ *		the raw Pentium TSC (Timestamp Counter) value is used.
+ *		virtual time is also calculated in this time scale.
+ *	y-axis: unit is byte.
+ *
+ *	the service curve parameters are converted to the internal
+ *	representation.
+ *	the slope values are scaled to avoid overflow.
+ *	the inverse slope values as well as the y-projection of the 1st
+ *	segment are kept in order to to avoid 64-bit divide operations
+ *	that are expensive on 32-bit architectures.
+ *
+ *  note: Intel Pentium TSC never wraps around in several thousands of years.
+ *	x-axis doesn't wrap around for 1089 years with 1GHz clock.
+ *      y-axis doesn't wrap around for 4358 years with 1Gbps bandwidth.
+ */
+
+/* kernel internal representation of a service curve */
+struct hfsc_internal_sc {
+	u_int64_t	sm1;	/* scaled slope of the 1st segment */
+	u_int64_t	ism1;	/* scaled inverse-slope of the 1st segment */
+	u_int64_t	dx;	/* the x-projection of the 1st segment */
+	u_int64_t	dy;	/* the y-projection of the 1st segment */
+	u_int64_t	sm2;	/* scaled slope of the 2nd segment */
+	u_int64_t	ism2;	/* scaled inverse-slope of the 2nd segment */
+};
+
+/* runtime service curve */
+struct hfsc_runtime_sc {
+	u_int64_t	x;	/* current starting position on x-axis */
+	u_int64_t	y;	/* current starting position on x-axis */
+	u_int64_t	sm1;	/* scaled slope of the 1st segment */
+	u_int64_t	ism1;	/* scaled inverse-slope of the 1st segment */
+	u_int64_t	dx;	/* the x-projection of the 1st segment */
+	u_int64_t	dy;	/* the y-projection of the 1st segment */
+	u_int64_t	sm2;	/* scaled slope of the 2nd segment */
+	u_int64_t	ism2;	/* scaled inverse-slope of the 2nd segment */
+};
+
+struct hfsc_classq {
+	struct mbuf	*tail;	 /* Tail of packet queue */
+	int		 qlen;	 /* Queue length (in number of packets) */
+	int		 qlimit; /* Queue limit (in number of packets*) */
+};
+
+/* for TAILQ based ellist and actlist implementation */
+struct hfsc_class;
+typedef TAILQ_HEAD(hfsc_eligible, hfsc_class) hfsc_ellist_t;
+typedef TAILQ_ENTRY(hfsc_class) hfsc_elentry_t;
+typedef TAILQ_HEAD(hfsc_active, hfsc_class) hfsc_actlist_t;
+typedef TAILQ_ENTRY(hfsc_class) hfsc_actentry_t;
+#define	hfsc_ellist_first(s)		TAILQ_FIRST(s)
+#define	hfsc_actlist_first(s)		TAILQ_FIRST(s)
+#define	hfsc_actlist_last(s)		TAILQ_LAST(s, hfsc_active)
+
+struct hfsc_class {
+	u_int		cl_id;		/* class id (just for debug) */
+	u_int32_t	cl_handle;	/* class handle */
+	struct hfsc_if	*cl_hif;	/* back pointer to struct hfsc_if */
+	int		cl_flags;	/* misc flags */
+
+	struct hfsc_class *cl_parent;	/* parent class */
+	struct hfsc_class *cl_siblings;	/* sibling classes */
+	struct hfsc_class *cl_children;	/* child classes */
+
+	struct hfsc_classq cl_q;	/* class queue structure */
+/*	struct red	*cl_red;*/	/* RED state */
+	struct altq_pktattr *cl_pktattr; /* saved header used by ECN */
+
+	u_int64_t	cl_total;	/* total work in bytes */
+	u_int64_t	cl_cumul;	/* cumulative work in bytes
+					   done by real-time criteria */
+	u_int64_t	cl_d;		/* deadline */
+	u_int64_t	cl_e;		/* eligible time */
+	u_int64_t	cl_vt;		/* virtual time */
+	u_int64_t	cl_f;		/* time when this class will fit for
+					   link-sharing, max(myf, cfmin) */
+	u_int64_t	cl_myf;		/* my fit-time (as calculated from this
+					   class's own upperlimit curve) */
+	u_int64_t	cl_myfadj;	/* my fit-time adjustment
+					   (to cancel history dependence) */
+	u_int64_t	cl_cfmin;	/* earliest children's fit-time (used
+					   with cl_myf to obtain cl_f) */
+	u_int64_t	cl_cvtmin;	/* minimal virtual time among the
+					   children fit for link-sharing
+					   (monotonic within a period) */
+	u_int64_t	cl_vtadj;	/* intra-period cumulative vt
+					   adjustment */
+	u_int64_t	cl_vtoff;	/* inter-period cumulative vt offset */
+	u_int64_t	cl_cvtmax;	/* max child's vt in the last period */
+
+	u_int64_t	cl_initvt;	/* init virtual time (for debugging) */
+
+	struct hfsc_internal_sc *cl_rsc; /* internal real-time service curve */
+	struct hfsc_internal_sc *cl_fsc; /* internal fair service curve */
+	struct hfsc_internal_sc *cl_usc; /* internal upperlimit service curve */
+	struct hfsc_runtime_sc   cl_deadline; /* deadline curve */
+	struct hfsc_runtime_sc   cl_eligible; /* eligible curve */
+	struct hfsc_runtime_sc   cl_virtual;  /* virtual curve */
+	struct hfsc_runtime_sc   cl_ulimit;   /* upperlimit curve */
+
+	u_int		cl_vtperiod;	/* vt period sequence no */
+	u_int		cl_parentperiod;  /* parent's vt period seqno */
+	int		cl_nactive;	/* number of active children */
+	hfsc_actlist_t	*cl_actc;	/* active children list */
+
+	hfsc_actentry_t	cl_actlist;	/* active children list entry */
+	hfsc_elentry_t	cl_ellist;	/* eligible list entry */
+
+	struct {
+		struct hfsc_pktcntr xmit_cnt;
+		struct hfsc_pktcntr drop_cnt;
+		u_int period;
+	} cl_stats;
+};
+
+/*
+ * hfsc interface state
+ */
+struct hfsc_if {
+	struct hfsc_if		*hif_next;	/* interface state list */
+	struct ifqueue		*hif_ifq;	/* backpointer to ifq */
+	struct hfsc_class	*hif_rootclass;		/* root class */
+	struct hfsc_class	*hif_defaultclass;	/* default class */
+	struct hfsc_class	**hif_class_tbl;
+	struct hfsc_class	*hif_pollcache;	/* cache for poll operation */
+
+	u_int	hif_allocated;			/* # of slots in hif_class_tbl */
+	u_int	hif_classes;			/* # of classes in the tree */
+	u_int	hif_packets;			/* # of packets in the tree */
+	u_int	hif_classid;			/* class id sequence number */
+
+	hfsc_ellist_t *hif_eligible;			/* eligible list */
+	struct timeout hif_defer;	/* for queues that weren't ready */
+};
+
 /*
  * function prototypes
  */
@@ -119,7 +259,12 @@ void		hfsc_rtsc_min(struct hfsc_runtime_sc *,
 void		hfsc_getclstats(struct hfsc_class_stats *, struct hfsc_class *);
 struct hfsc_class	*hfsc_clh2cph(struct hfsc_if *, u_int32_t);
 
+#define	HFSC_CLK_SHIFT		8
+#define	HFSC_FREQ		(1000000 << HFSC_CLK_SHIFT)
+#define	HFSC_CLK_PER_TICK	(HFSC_FREQ / hz)
 #define	HFSC_HT_INFINITY	0xffffffffffffffffLL /* infinite time value */
+
+struct pool	hfsc_class_pl, hfsc_internal_sc_pl;
 
 u_int64_t
 hfsc_microuptime(void)
@@ -153,6 +298,15 @@ hfsc_grow_class_tbl(struct hfsc_if *hif, u_int howmany)
 	hif->hif_allocated = howmany;
 
 	free(old, M_DEVBUF, 0);
+}
+
+void
+hfsc_initialize(void)
+{
+	pool_init(&hfsc_class_pl, sizeof(struct hfsc_class), 0, 0, PR_WAITOK,
+	    "hfscclass", NULL);
+	pool_init(&hfsc_internal_sc_pl, sizeof(struct hfsc_internal_sc), 0, 0,
+	    PR_WAITOK, "hfscintsc", NULL);
 }
 
 int
@@ -296,7 +450,7 @@ hfsc_purge(struct ifqueue *ifq)
 	struct hfsc_class	*cl;
 
 	for (cl = hif->hif_rootclass; cl != NULL; cl = hfsc_nextclass(cl))
-		if (cl->cl_q->qlen > 0)
+		if (cl->cl_q.qlen > 0)
 			hfsc_purgeq(cl);
 	hif->hif_ifq->ifq_len = 0;
 }
@@ -318,13 +472,12 @@ hfsc_class_create(struct hfsc_if *hif, struct hfsc_sc *rsc,
 	}
 
 	cl = pool_get(&hfsc_class_pl, PR_WAITOK | PR_ZERO);
-	cl->cl_q = pool_get(&hfsc_classq_pl, PR_WAITOK | PR_ZERO);
 	cl->cl_actc = hfsc_actlist_alloc();
 
 	if (qlimit == 0)
 		qlimit = HFSC_DEFAULT_QLIMIT;
-	cl->cl_q->qlimit = qlimit;
-	cl->cl_q->qlen = 0;
+	cl->cl_q.qlimit = qlimit;
+	cl->cl_q.qlen = 0;
 	cl->cl_flags = flags;
 
 	if (rsc != NULL && (rsc->m1 != 0 || rsc->m2 != 0)) {
@@ -400,8 +553,6 @@ err_ret:
 		pool_put(&hfsc_internal_sc_pl, cl->cl_rsc);
 	if (cl->cl_usc != NULL)
 		pool_put(&hfsc_internal_sc_pl, cl->cl_usc);
-	if (cl->cl_q != NULL)
-		pool_put(&hfsc_classq_pl, cl->cl_q);
 	pool_put(&hfsc_class_pl, cl);
 	return (NULL);
 }
@@ -419,7 +570,7 @@ hfsc_class_destroy(struct hfsc_class *cl)
 
 	s = splnet();
 
-	if (cl->cl_q->qlen > 0)
+	if (cl->cl_q.qlen > 0)
 		hfsc_purgeq(cl);
 
 	if (cl->cl_parent != NULL) {
@@ -457,7 +608,6 @@ hfsc_class_destroy(struct hfsc_class *cl)
 		pool_put(&hfsc_internal_sc_pl, cl->cl_fsc);
 	if (cl->cl_rsc != NULL)
 		pool_put(&hfsc_internal_sc_pl, cl->cl_rsc);
-	pool_put(&hfsc_classq_pl, cl->cl_q);
 	pool_put(&hfsc_class_pl, cl);
 
 	return (0);
@@ -514,7 +664,7 @@ hfsc_enqueue(struct ifqueue *ifq, struct mbuf *m)
 	m->m_pkthdr.pf.prio = IFQ_MAXPRIO;
 
 	/* successfully queued. */
-	if (cl->cl_q->qlen == 1)
+	if (cl->cl_q.qlen == 1)
 		hfsc_set_active(cl, m->m_pkthdr.len);
 
 	return (0);
@@ -594,10 +744,10 @@ hfsc_dequeue(struct ifqueue *ifq, int remove)
 	if (realtime)
 		cl->cl_cumul += m->m_pkthdr.len;
 
-	if (cl->cl_q->qlen > 0) {
+	if (cl->cl_q.qlen > 0) {
 		if (cl->cl_rsc != NULL) {
 			/* update ed */
-			next_len = cl->cl_q->tail->m_nextpkt->m_pkthdr.len;
+			next_len = cl->cl_q.tail->m_nextpkt->m_pkthdr.len;
 
 			if (realtime)
 				hfsc_update_ed(cl, next_len);
@@ -632,17 +782,17 @@ hfsc_addq(struct hfsc_class *cl, struct mbuf *m)
 {
 	struct mbuf *m0;
 
-	if (cl->cl_q->qlen >= cl->cl_q->qlimit)
+	if (cl->cl_q.qlen >= cl->cl_q.qlimit)
 		return (-1);
 
-	if ((m0 = cl->cl_q->tail) != NULL)
+	if ((m0 = cl->cl_q.tail) != NULL)
 		m->m_nextpkt = m0->m_nextpkt;
 	else
 		m0 = m;
 
 	m0->m_nextpkt = m;
-	cl->cl_q->tail = m;
-	cl->cl_q->qlen++;
+	cl->cl_q.tail = m;
+	cl->cl_q.qlen++;
 
 	return (0);
 }
@@ -652,13 +802,13 @@ hfsc_getq(struct hfsc_class *cl)
 {
 	struct mbuf	*m, *m0;
 
-	if ((m = cl->cl_q->tail) == NULL)
+	if ((m = cl->cl_q.tail) == NULL)
 		return (NULL);
 	if ((m0 = m->m_nextpkt) != m)
 		m->m_nextpkt = m0->m_nextpkt;
 	else 
-		cl->cl_q->tail = NULL;
-	cl->cl_q->qlen--;
+		cl->cl_q.tail = NULL;
+	cl->cl_q.qlen--;
 	m0->m_nextpkt = NULL;
 	return (m0);
 }
@@ -666,9 +816,9 @@ hfsc_getq(struct hfsc_class *cl)
 struct mbuf *
 hfsc_pollq(struct hfsc_class *cl)
 {
-	if (!cl->cl_q->tail)
+	if (!cl->cl_q.tail)
 		return (NULL);
-	return (cl->cl_q->tail->m_nextpkt);
+	return (cl->cl_q.tail->m_nextpkt);
 }
 
 void
@@ -676,7 +826,7 @@ hfsc_purgeq(struct hfsc_class *cl)
 {
 	struct mbuf *m;
 
-	if (cl->cl_q->qlen == 0)
+	if (cl->cl_q.qlen == 0)
 		return;
 
 	while ((m = hfsc_getq(cl)) != NULL) {
@@ -853,7 +1003,7 @@ hfsc_update_vf(struct hfsc_class *cl, int len, u_int64_t cur_time)
 	u_int64_t f, myf_bound, delta;
 	int go_passive;
 
-	go_passive = (cl->cl_q->qlen == 0);
+	go_passive = (cl->cl_q.qlen == 0);
 
 	for (; cl->cl_parent != NULL; cl = cl->cl_parent) {
 		cl->cl_total += len;
@@ -1449,13 +1599,13 @@ hfsc_getclstats(struct hfsc_class_stats *sp, struct hfsc_class *cl)
 	sp->cur_time = hfsc_microuptime();
 	sp->machclk_freq = HFSC_FREQ;
 
-	sp->qlength = cl->cl_q->qlen;
-	sp->qlimit = cl->cl_q->qlimit;
+	sp->qlength = cl->cl_q.qlen;
+	sp->qlimit = cl->cl_q.qlimit;
 	sp->xmit_cnt = cl->cl_stats.xmit_cnt;
 	sp->drop_cnt = cl->cl_stats.drop_cnt;
 	sp->period = cl->cl_stats.period;
 
-	sp->qtype = cl->cl_q->qtype;
+	sp->qtype = 0;
 }
 
 /* convert a class handle to the corresponding class pointer */

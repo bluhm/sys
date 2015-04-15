@@ -1,4 +1,4 @@
-/*	$OpenBSD: ipsec_input.c,v 1.127 2015/03/26 12:21:37 mikeb Exp $	*/
+/*	$OpenBSD: ipsec_input.c,v 1.129 2015/04/14 14:20:01 mikeb Exp $	*/
 /*
  * The authors of this code are John Ioannidis (ji@tla.org),
  * Angelos D. Keromytis (kermit@csd.uch.gr) and
@@ -125,6 +125,9 @@ ipsec_common_input(struct mbuf *m, int skip, int protoff, int af, int sproto,
 	u_int32_t spi;
 	u_int16_t cpi;
 	int s, error;
+#ifdef ENCDEBUG
+	char buf[INET6_ADDRSTRLEN];
+#endif
 
 	IPSEC_ISTAT(espstat.esps_input, ahstat.ahs_input,
 	    ipcompstat.ipcomps_input);
@@ -232,7 +235,7 @@ ipsec_common_input(struct mbuf *m, int skip, int protoff, int af, int sproto,
 		splx(s);
 		DPRINTF(("ipsec_common_input(): could not find SA for "
 		    "packet to %s, spi %08x\n",
-		    ipsp_address(dst_address), ntohl(spi)));
+		    ipsp_address(&dst_address, buf, sizeof(buf)), ntohl(spi)));
 		m_freem(m);
 		IPSEC_ISTAT(espstat.esps_notdb, ahstat.ahs_notdb,
 		    ipcompstat.ipcomps_notdb);
@@ -241,7 +244,9 @@ ipsec_common_input(struct mbuf *m, int skip, int protoff, int af, int sproto,
 
 	if (tdbp->tdb_flags & TDBF_INVALID) {
 		splx(s);
-		DPRINTF(("ipsec_common_input(): attempted to use invalid SA %s/%08x/%u\n", ipsp_address(dst_address), ntohl(spi), tdbp->tdb_sproto));
+		DPRINTF(("ipsec_common_input(): attempted to use invalid "
+		    "SA %s/%08x/%u\n", ipsp_address(&dst_address, buf,
+		    sizeof(buf)), ntohl(spi), tdbp->tdb_sproto));
 		m_freem(m);
 		IPSEC_ISTAT(espstat.esps_invalid, ahstat.ahs_invalid,
 		    ipcompstat.ipcomps_invalid);
@@ -250,7 +255,9 @@ ipsec_common_input(struct mbuf *m, int skip, int protoff, int af, int sproto,
 
 	if (udpencap && !(tdbp->tdb_flags & TDBF_UDPENCAP)) {
 		splx(s);
-		DPRINTF(("ipsec_common_input(): attempted to use non-udpencap SA %s/%08x/%u\n", ipsp_address(dst_address), ntohl(spi), tdbp->tdb_sproto));
+		DPRINTF(("ipsec_common_input(): attempted to use non-udpencap "
+		    "SA %s/%08x/%u\n", ipsp_address(&dst_address, buf,
+		    sizeof(buf)), ntohl(spi), tdbp->tdb_sproto));
 		m_freem(m);
 		espstat.esps_udpinval++;
 		return EINVAL;
@@ -258,7 +265,9 @@ ipsec_common_input(struct mbuf *m, int skip, int protoff, int af, int sproto,
 
 	if (tdbp->tdb_xform == NULL) {
 		splx(s);
-		DPRINTF(("ipsec_common_input(): attempted to use uninitialized SA %s/%08x/%u\n", ipsp_address(dst_address), ntohl(spi), tdbp->tdb_sproto));
+		DPRINTF(("ipsec_common_input(): attempted to use uninitialized "
+		    "SA %s/%08x/%u\n", ipsp_address(&dst_address, buf,
+		    sizeof(buf)), ntohl(spi), tdbp->tdb_sproto));
 		m_freem(m);
 		IPSEC_ISTAT(espstat.esps_noxform, ahstat.ahs_noxform,
 		    ipcompstat.ipcomps_noxform);
@@ -271,8 +280,8 @@ ipsec_common_input(struct mbuf *m, int skip, int protoff, int af, int sproto,
 			splx(s);
 			DPRINTF(("ipsec_common_input(): "
 			    "no enc%u interface for SA %s/%08x/%u\n",
-			    tdbp->tdb_tap, ipsp_address(dst_address),
-			    ntohl(spi), tdbp->tdb_sproto));
+			    tdbp->tdb_tap, ipsp_address(&dst_address, buf,
+			    sizeof(buf)), ntohl(spi), tdbp->tdb_sproto));
 			m_freem(m);
 
 			IPSEC_ISTAT(espstat.esps_pdrops,
@@ -332,6 +341,10 @@ ipsec_common_input_cb(struct mbuf *m, struct tdb *tdbp, int skip, int protoff,
 	struct m_tag *mtag;
 	struct tdb_ident *tdbi;
 
+#ifdef ENCDEBUG
+	char buf[INET6_ADDRSTRLEN];
+#endif
+
 	af = tdbp->tdb_dst.sa.sa_family;
 	sproto = tdbp->tdb_sproto;
 
@@ -349,8 +362,8 @@ ipsec_common_input_cb(struct mbuf *m, struct tdb *tdbp, int skip, int protoff,
 	if (af == AF_INET) {
 		if ((m->m_len < skip) && ((m = m_pullup(m, skip)) == NULL)) {
 			DPRINTF(("ipsec_common_input_cb(): processing failed "
-			    "for SA %s/%08x\n", ipsp_address(tdbp->tdb_dst),
-			    ntohl(tdbp->tdb_spi)));
+			    "for SA %s/%08x\n", ipsp_address(&tdbp->tdb_dst,
+			    buf, sizeof(buf)), ntohl(tdbp->tdb_spi)));
 			IPSEC_ISTAT(espstat.esps_hdrops, ahstat.ahs_hdrops,
 			    ipcompstat.ipcomps_hdrops);
 			return ENOBUFS;
@@ -401,8 +414,8 @@ ipsec_common_input_cb(struct mbuf *m, struct tdb *tdbp, int skip, int protoff,
 		    (m = m_pullup(m, sizeof(struct ip6_hdr))) == NULL) {
 
 			DPRINTF(("ipsec_common_input_cb(): processing failed "
-			    "for SA %s/%08x\n", ipsp_address(tdbp->tdb_dst),
-			    ntohl(tdbp->tdb_spi)));
+			    "for SA %s/%08x\n", ipsp_address(&tdbp->tdb_dst,
+			    buf, sizeof(buf)), ntohl(tdbp->tdb_spi)));
 
 			IPSEC_ISTAT(espstat.esps_hdrops, ahstat.ahs_hdrops,
 			    ipcompstat.ipcomps_hdrops);
@@ -708,28 +721,18 @@ ah4_input(struct mbuf *m, ...)
 int
 ah4_input_cb(struct mbuf *m, ...)
 {
-	struct ifqueue *ifq = &ipintrq;
-	int s = splnet();
-
 	/*
 	 * Interface pointer is already in first mbuf; chop off the
 	 * `outer' header and reschedule.
 	 */
 
-	if (IF_QFULL(ifq)) {
-		IF_DROP(ifq);
+	if (niq_enqueue(&ipintrq, m) != 0) {
 		ahstat.ahs_qfull++;
-		splx(s);
-
-		m_freem(m);
 		DPRINTF(("ah4_input_cb(): dropped packet because of full "
 		    "IP queue\n"));
 		return ENOBUFS;
 	}
 
-	IF_ENQUEUE(ifq, m);
-	schednetisr(NETISR_IP);
-	splx(s);
 	return 0;
 }
 
@@ -764,27 +767,17 @@ esp4_input(struct mbuf *m, ...)
 int
 esp4_input_cb(struct mbuf *m, ...)
 {
-	struct ifqueue *ifq = &ipintrq;
-	int s = splnet();
-
 	/*
 	 * Interface pointer is already in first mbuf; chop off the
 	 * `outer' header and reschedule.
 	 */
-	if (IF_QFULL(ifq)) {
-		IF_DROP(ifq);
+	if (niq_enqueue(&ipintrq, m) != 0) {
 		espstat.esps_qfull++;
-		splx(s);
-
-		m_freem(m);
 		DPRINTF(("esp4_input_cb(): dropped packet because of full "
 		    "IP queue\n"));
 		return ENOBUFS;
 	}
 
-	IF_ENQUEUE(ifq, m);
-	schednetisr(NETISR_IP);
-	splx(s);
 	return 0;
 }
 
@@ -806,26 +799,15 @@ ipcomp4_input(struct mbuf *m, ...)
 int
 ipcomp4_input_cb(struct mbuf *m, ...)
 {
-	struct ifqueue *ifq = &ipintrq;
-	int s = splnet();
-
 	/*
 	 * Interface pointer is already in first mbuf; chop off the
 	 * `outer' header and reschedule.
 	 */
-	if (IF_QFULL(ifq)) {
-		IF_DROP(ifq);
+	if (niq_enqueue(&ipintrq, m) != 0) {
 		ipcompstat.ipcomps_qfull++;
-		splx(s);
-
-		m_freem(m);
 		DPRINTF(("ipcomp4_input_cb(): dropped packet because of full IP queue\n"));
 		return ENOBUFS;
 	}
-
-	IF_ENQUEUE(ifq, m);
-	schednetisr(NETISR_IP);
-	splx(s);
 
 	return 0;
 }
@@ -887,7 +869,7 @@ ipsec_common_ctlinput(u_int rdomain, int cmd, struct sockaddr *sa,
 			tdbp->tdb_mtutimeout = time_second +
 			    ip_mtudisc_timeout;
 			DPRINTF(("ipsec_common_ctlinput: "
-			    "spi %08x mtu %d adjust %d\n",
+			    "spi %08x mtu %d adjust %ld\n",
 			    ntohl(tdbp->tdb_spi), tdbp->tdb_mtu,
 			    adjust));
 		}
@@ -946,7 +928,7 @@ udpencap_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 				tdbp->tdb_mtutimeout = time_second +
 				    ip_mtudisc_timeout;
 				DPRINTF(("udpencap_ctlinput: "
-				    "spi %08x mtu %d adjust %d\n",
+				    "spi %08x mtu %d adjust %ld\n",
 				    ntohl(tdbp->tdb_spi), tdbp->tdb_mtu,
 				    adjust));
 			}

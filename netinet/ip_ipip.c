@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_ipip.c,v 1.56 2014/12/19 17:14:40 tedu Exp $ */
+/*	$OpenBSD: ip_ipip.c,v 1.58 2015/04/14 14:20:01 mikeb Exp $ */
 /*
  * The authors of this code are John Ioannidis (ji@tla.org),
  * Angelos D. Keromytis (kermit@csd.uch.gr) and
@@ -146,15 +146,14 @@ ipip_input(struct mbuf *m, int iphlen, struct ifnet *gifp, int proto)
 	struct sockaddr_in *sin;
 	struct ifnet *ifp;
 	struct ifaddr *ifa;
-	struct ifqueue *ifq = NULL;
+	struct niqueue *ifq = NULL;
 	struct ip *ipo;
 	u_int rdomain;
 #ifdef INET6
 	struct sockaddr_in6 *sin6;
 	struct ip6_hdr *ip6;
 #endif
-	int isr;
-	int mode, hlen, s;
+	int mode, hlen;
 	u_int8_t itos, otos;
 	u_int8_t v;
 	sa_family_t af;
@@ -352,13 +351,11 @@ ipip_input(struct mbuf *m, int iphlen, struct ifnet *gifp, int proto)
 	switch (proto) {
 	case IPPROTO_IPV4:
 		ifq = &ipintrq;
-		isr = NETISR_IP;
 		af = AF_INET;
 		break;
 #ifdef INET6
 	case IPPROTO_IPV6:
 		ifq = &ip6intrq;
-		isr = NETISR_IPV6;
 		af = AF_INET6;
 		break;
 #endif
@@ -374,23 +371,12 @@ ipip_input(struct mbuf *m, int iphlen, struct ifnet *gifp, int proto)
 	pf_pkt_addr_changed(m);
 #endif
 
-	s = splnet();			/* isn't it already? */
-	if (IF_QFULL(ifq)) {
-		IF_DROP(ifq);
-		m_freem(m);
+	if (niq_enqueue(ifq, m) != 0) {
 		ipipstat.ipips_qfull++;
-
-		splx(s);
-
 		DPRINTF(("ipip_input(): packet dropped because of full "
 		    "queue\n"));
 		return;
 	}
-
-	IF_ENQUEUE(ifq, m);
-	schednetisr(isr);
-	splx(s);
-	return;
 }
 
 int
@@ -405,6 +391,9 @@ ipip_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int dummy,
 #ifdef INET6
 	struct ip6_hdr *ip6, *ip6o;
 #endif /* INET6 */
+#ifdef ENCDEBUG
+	char buf[INET6_ADDRSTRLEN];
+#endif
 
 	/* XXX Deal with empty TDB source/destination addresses. */
 
@@ -419,7 +408,8 @@ ipip_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int dummy,
 
 			DPRINTF(("ipip_output(): unspecified tunnel endpoind "
 			    "address in SA %s/%08x\n",
-			    ipsp_address(tdb->tdb_dst), ntohl(tdb->tdb_spi)));
+			    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
+			    ntohl(tdb->tdb_spi)));
 
 			ipipstat.ipips_unspec++;
 			m_freem(m);
@@ -504,7 +494,8 @@ ipip_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int dummy,
 
 			DPRINTF(("ipip_output(): unspecified tunnel endpoind "
 			    "address in SA %s/%08x\n",
-			    ipsp_address(tdb->tdb_dst), ntohl(tdb->tdb_spi)));
+			    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
+			    ntohl(tdb->tdb_spi)));
 
 			ipipstat.ipips_unspec++;
 			m_freem(m);

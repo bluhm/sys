@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ethersubr.c,v 1.190 2015/03/17 14:51:27 mpi Exp $	*/
+/*	$OpenBSD: if_ethersubr.c,v 1.194 2015/04/13 08:52:51 mpi Exp $	*/
 /*	$NetBSD: if_ethersubr.c,v 1.19 1996/05/07 02:40:30 thorpej Exp $	*/
 
 /*
@@ -454,15 +454,15 @@ bad:
  * the ether header, which is provided separately.
  */
 int
-ether_input(struct ifnet *ifp0, void *hdr, struct mbuf *m)
+ether_input(struct mbuf *m, void *hdr)
 {
+	struct ifnet *ifp0, *ifp;
 	struct ether_header *eh = hdr;
-	struct ifqueue *inq;
+	struct niqueue *inq;
 	u_int16_t etype;
-	int s, llcfound = 0;
+	int llcfound = 0;
 	struct llc *l;
 	struct arpcom *ac;
-	struct ifnet *ifp = ifp0;
 #if NTRUNK > 0
 	int i = 0;
 #endif
@@ -470,7 +470,9 @@ ether_input(struct ifnet *ifp0, void *hdr, struct mbuf *m)
 	struct ether_header *eh_tmp;
 #endif
 
+
 	/* mark incoming routing table */
+	ifp = ifp0 = m->m_pkthdr.rcvif;
 	m->m_pkthdr.ph_rtableid = ifp->if_rdomain;
 
 	if (eh == NULL) {
@@ -561,16 +563,6 @@ ether_input(struct ifnet *ifp0, void *hdr, struct mbuf *m)
 	}
 #endif
 
-#if NVLAN > 0
-	if ((m->m_flags & M_VLANTAG) || etype == ETHERTYPE_VLAN ||
-	    etype == ETHERTYPE_QINQ) {
-		/* The bridge did not want the vlan frame either, drop it. */
-		ifp->if_noproto++;
-		m_freem(m);
-		return (1);
-	}
-#endif /* NVLAN > 0 */
-
 #if NCARP > 0
 	if (ifp->if_carp) {
 		if (ifp->if_type != IFT_CARP && (carp_input(ifp, eh, m) == 0))
@@ -605,22 +597,15 @@ ether_input(struct ifnet *ifp0, void *hdr, struct mbuf *m)
 		}
 	}
 
-	/*
-	 * Schedule softnet interrupt and enqueue packet within the same spl.
-	 */
-	s = splnet();
 decapsulate:
-
 	switch (etype) {
 	case ETHERTYPE_IP:
-		schednetisr(NETISR_IP);
 		inq = &ipintrq;
 		break;
 
 	case ETHERTYPE_ARP:
 		if (ifp->if_flags & IFF_NOARP)
 			goto dropanyway;
-		schednetisr(NETISR_ARP);
 		inq = &arpintrq;
 		break;
 
@@ -628,14 +613,13 @@ decapsulate:
 		if (ifp->if_flags & IFF_NOARP)
 			goto dropanyway;
 		revarpinput(m);	/* XXX queue? */
-		goto done;
+		return (1);
 
 #ifdef INET6
 	/*
 	 * Schedule IPv6 software interrupt for incoming IPv6 packet.
 	 */
 	case ETHERTYPE_IPV6:
-		schednetisr(NETISR_IPV6);
 		inq = &ip6intrq;
 		break;
 #endif /* INET6 */
@@ -643,14 +627,12 @@ decapsulate:
 	case ETHERTYPE_PPPOEDISC:
 	case ETHERTYPE_PPPOE:
 #ifndef PPPOE_SERVER
-		if (m->m_flags & (M_MCAST | M_BCAST)) {
-			m_freem(m);
-			goto done;
-		}
+		if (m->m_flags & (M_MCAST | M_BCAST))
+			goto dropanyway;
 #endif
 		M_PREPEND(m, sizeof(*eh), M_DONTWAIT);
 		if (m == NULL)
-			goto done;
+			return (1);
 
 		eh_tmp = mtod(m, struct ether_header *);
 		/*
@@ -665,7 +647,7 @@ decapsulate:
 
 			if ((session = pipex_pppoe_lookup_session(m)) != NULL) {
 				pipex_pppoe_input(m, session);
-				goto done;
+				return (1);
 			}
 		}
 #endif
@@ -673,15 +655,12 @@ decapsulate:
 			inq = &pppoediscinq;
 		else
 			inq = &pppoeinq;
-
-		schednetisr(NETISR_PPPOE);
 		break;
 #endif
 #ifdef MPLS
 	case ETHERTYPE_MPLS:
 	case ETHERTYPE_MPLS_MCAST:
 		inq = &mplsintrq;
-		schednetisr(NETISR_MPLS);
 		break;
 #endif
 	default:
@@ -700,21 +679,19 @@ decapsulate:
 				m_adj(m, 6);
 				M_PREPEND(m, sizeof(*eh), M_DONTWAIT);
 				if (m == NULL)
-					goto done;
+					return (1);
 				*mtod(m, struct ether_header *) = *eh;
 				goto decapsulate;
 			}
-			goto dropanyway;
-		dropanyway:
 		default:
-			m_freem(m);
-			goto done;
+			goto dropanyway;
 		}
 	}
 
-	IF_INPUT_ENQUEUE(inq, m);
-done:
-	splx(s);
+	niq_enqueue(inq, m);
+	return (1);
+dropanyway:
+	m_freem(m);
 	return (1);
 }
 
@@ -799,6 +776,9 @@ ether_ifdetach(struct ifnet *ifp)
 	struct arpcom *ac = (struct arpcom *)ifp;
 	struct ifih *ether_ifih;
 	struct ether_multi *enm;
+
+	/* Undo pseudo-driver changes. */
+	if_deactivate(ifp);
 
 	ether_ifih = SLIST_FIRST(&ifp->if_inputs);
 	SLIST_REMOVE_HEAD(&ifp->if_inputs, ifih_next);

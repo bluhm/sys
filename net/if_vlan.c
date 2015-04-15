@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_vlan.c,v 1.113 2015/03/31 11:47:09 dlg Exp $	*/
+/*	$OpenBSD: if_vlan.c,v 1.117 2015/04/15 09:58:44 mpi Exp $	*/
 
 /*
  * Copyright 1998 Massachusetts Institute of Technology
@@ -277,6 +277,7 @@ vlan_input(struct ether_header *eh, struct mbuf *m)
 	struct vlan_taghash	*tagh;
 	u_int			 tag;
 	u_int16_t		 etype;
+	struct ether_header	*eh1;
 
 	if (m->m_flags & M_VLANTAG) {
 		etype = ETHERTYPE_VLAN;
@@ -305,8 +306,20 @@ vlan_input(struct ether_header *eh, struct mbuf *m)
 		    etype == ifv->ifv_type)
 			break;
 	}
-	if (ifv == NULL)
-		return (1);
+
+	if (ifv == NULL) {
+#if NBRIDGE > 0
+		/*
+		 * If the packet hasn't been through its bridge(4) give
+		 * it a chance.
+		 */
+		if (ifp->if_bridgeport && (m->m_flags & M_PROTO1) == 0)
+			return (1);
+#endif
+		ifp->if_noproto++;
+		m_freem(m);
+		return (0);
+	}
 
 	if ((ifv->ifv_if.if_flags & (IFF_UP|IFF_RUNNING)) !=
 	    (IFF_UP|IFF_RUNNING)) {
@@ -351,8 +364,14 @@ vlan_input(struct ether_header *eh, struct mbuf *m)
 		}
 	}
 
+	M_PREPEND(m, sizeof(*eh1), M_DONTWAIT);
+	if (m == NULL)
+		return (-1);
+	eh1 = mtod(m, struct ether_header *);
+	memmove(eh1, eh, sizeof(*eh1));
+
 	ifv->ifv_if.if_ipackets++;
-	ether_input(&ifv->ifv_if, eh, m);
+	ether_input_mbuf(&ifv->ifv_if, m);
 
 	return (0);
 }
@@ -377,9 +396,9 @@ vlan_config(struct ifvlan *ifv, struct ifnet *p, u_int16_t tag)
 	ifv->ifv_if.if_baudrate = p->if_baudrate;
 
 	if (p->if_capabilities & IFCAP_VLAN_MTU)
-		ifv->ifv_if.if_mtu = p->if_hardmtu;
+		ifv->ifv_if.if_mtu = p->if_mtu;
 	else
-		ifv->ifv_if.if_mtu = p->if_hardmtu - EVL_ENCAPLEN;
+		ifv->ifv_if.if_mtu = p->if_mtu - EVL_ENCAPLEN;
 
 	ifv->ifv_if.if_flags = p->if_flags &
 	    (IFF_UP | IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST);
@@ -561,9 +580,9 @@ vlan_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 	case SIOCSIFMTU:
 		if (ifv->ifv_p != NULL) {
 			if (ifv->ifv_p->if_capabilities & IFCAP_VLAN_MTU)
-				p_mtu = ifv->ifv_p->if_mtu;
+				p_mtu = ifv->ifv_p->if_hardmtu;
 			else
-				p_mtu = ifv->ifv_p->if_mtu - EVL_ENCAPLEN;
+				p_mtu = ifv->ifv_p->if_hardmtu - EVL_ENCAPLEN;
 			
 			if (ifr->ifr_mtu > p_mtu || ifr->ifr_mtu < ETHERMIN)
 				error = EINVAL;
