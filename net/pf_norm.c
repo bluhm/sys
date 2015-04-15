@@ -467,9 +467,13 @@ pf_join_fragment(struct pf_fragment *frag)
 	frent = TAILQ_FIRST(&frag->fr_queue);
 	TAILQ_REMOVE(&frag->fr_queue, frent, fr_next);
 
+	/* Magic from ip_input */
 	m = frent->fe_m;
 	/* Strip off any trailing bytes */
 	m_adj(m, (frent->fe_hdrlen + frent->fe_len) - m->m_pkthdr.len);
+	m2 = m->m_next;
+	m->m_next = NULL;
+	m_cat(m, m2);
 	pool_put(&pf_frent_pl, frent);
 	pf_nfrents--;
 
