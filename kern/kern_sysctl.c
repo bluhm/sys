@@ -1211,7 +1211,7 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 {
 	struct kinfo_file *kf;
 	struct filedesc *fdp;
-	struct file *fp;
+	struct file *fp, *nfp;
 	struct process *pr;
 	size_t buflen, elem_size, elem_count, outsize;
 	char *dp = where;
@@ -1253,13 +1253,25 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 
 	switch (op) {
 	case KERN_FILE_BYFILE:
-		LIST_FOREACH(fp, &filehead, f_list) {
-			if (fp->f_count == 0)
-				continue;
-			if (arg != 0 && fp->f_type != arg)
-				continue;
-			FILLIT(fp, NULL, 0, NULL, NULL);
-		}
+		fp = LIST_FIRST(&filehead);
+                /* don't FREF when f_count == 0 to avoid race in fdrop() */
+		while (fp != NULL && fp->f_count == 0)
+			fp = LIST_NEXT(fp, f_list);
+		if (fp == NULL)
+			break;
+		FREF(fp);
+		do {
+			if (fp->f_count > 1 && /* 0, +1 for our FREF() */
+			    (arg == 0 || fp->f_type == arg))
+				FILLIT(fp, NULL, 0, NULL, NULL);
+			nfp = LIST_NEXT(fp, f_list);
+			while (nfp != NULL && nfp->f_count == 0)
+				nfp = LIST_NEXT(nfp, f_list);
+			if (nfp != NULL)
+				FREF(nfp);
+			FRELE(fp, p);
+			fp = nfp;
+		} while (fp != NULL);
 		break;
 	case KERN_FILE_BYPID:
 		/* A arg of -1 indicates all processes */
@@ -1287,13 +1299,17 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 				FILLIT(NULL, NULL, KERN_FILE_RDIR, fdp->fd_rdir, pr);
 			if (pr->ps_tracevp)
 				FILLIT(NULL, NULL, KERN_FILE_TRACE, pr->ps_tracevp, pr);
+			rw_enter_read(&fdp->fd_lock);
 			for (i = 0; i < fdp->fd_nfiles; i++) {
 				if ((fp = fdp->fd_ofiles[i]) == NULL)
 					continue;
-				if (!FILE_IS_USABLE(fp))
+				if (!FILE_IS_USABLE(fp) || fp->f_count == 0)
 					continue;
+				FREF(fp);
 				FILLIT(fp, fdp, i, NULL, pr);
+				FRELE(fp, p);
 			}
+			rw_exit_read(&fdp->fd_lock);
 		}
 		break;
 	case KERN_FILE_BYUID:
@@ -1315,13 +1331,17 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 				FILLIT(NULL, NULL, KERN_FILE_RDIR, fdp->fd_rdir, pr);
 			if (pr->ps_tracevp)
 				FILLIT(NULL, NULL, KERN_FILE_TRACE, pr->ps_tracevp, pr);
+			rw_enter_read(&fdp->fd_lock);
 			for (i = 0; i < fdp->fd_nfiles; i++) {
 				if ((fp = fdp->fd_ofiles[i]) == NULL)
 					continue;
-				if (!FILE_IS_USABLE(fp))
+				if (!FILE_IS_USABLE(fp) || fp->f_count == 0)
 					continue;
+				FREF(fp);
 				FILLIT(fp, fdp, i, NULL, pr);
+				FRELE(fp, p);
 			}
+			rw_exit_read(&fdp->fd_lock);
 		}
 		break;
 	default:
