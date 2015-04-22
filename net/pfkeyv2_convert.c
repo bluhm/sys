@@ -1,4 +1,4 @@
-/*	$OpenBSD: pfkeyv2_convert.c,v 1.48 2015/04/14 12:22:15 mikeb Exp $	*/
+/*	$OpenBSD: pfkeyv2_convert.c,v 1.50 2015/04/17 10:04:37 mikeb Exp $	*/
 /*
  * The author of this code is Angelos D. Keromytis (angelos@keromytis.org)
  *
@@ -703,17 +703,10 @@ export_address(void **p, struct sockaddr *sa)
  * Import an identity payload into the TDB.
  */
 void
-import_identity(struct tdb *tdb, struct sadb_ident *sadb_ident, int type)
+import_identity(struct ipsec_ref **ipr, struct sadb_ident *sadb_ident)
 {
-	struct ipsec_ref **ipr;
-
 	if (!sadb_ident)
 		return;
-
-	if (type == PFKEYV2_IDENTITY_SRC)
-		ipr = &tdb->tdb_srcid;
-	else
-		ipr = &tdb->tdb_dstid;
 
 	*ipr = malloc(EXTLEN(sadb_ident) - sizeof(struct sadb_ident) +
 	    sizeof(struct ipsec_ref), M_CREDENTIALS, M_WAITOK);
@@ -729,9 +722,6 @@ import_identity(struct tdb *tdb, struct sadb_ident *sadb_ident, int type)
 	case SADB_IDENTTYPE_USERFQDN:
 		(*ipr)->ref_type = IPSP_IDENTITY_USERFQDN;
 		break;
-	case SADB_X_IDENTTYPE_CONNECTION:
-		(*ipr)->ref_type = IPSP_IDENTITY_CONNECTION;
-		break;
 	default:
 		free(*ipr, M_CREDENTIALS, 0);
 		*ipr = NULL;
@@ -744,15 +734,9 @@ import_identity(struct tdb *tdb, struct sadb_ident *sadb_ident, int type)
 }
 
 void
-export_identity(void **p, struct tdb *tdb, int type)
+export_identity(void **p, struct ipsec_ref **ipr)
 {
-	struct ipsec_ref **ipr;
 	struct sadb_ident *sadb_ident = (struct sadb_ident *) *p;
-
-	if (type == PFKEYV2_IDENTITY_SRC)
-		ipr = &tdb->tdb_srcid;
-	else
-		ipr = &tdb->tdb_dstid;
 
 	sadb_ident->sadb_ident_len = (sizeof(struct sadb_ident) +
 	    PADUP((*ipr)->ref_len)) / sizeof(uint64_t);
@@ -766,9 +750,6 @@ export_identity(void **p, struct tdb *tdb, int type)
 		break;
 	case IPSP_IDENTITY_USERFQDN:
 		sadb_ident->sadb_ident_type = SADB_IDENTTYPE_USERFQDN;
-		break;
-	case IPSP_IDENTITY_CONNECTION:
-		sadb_ident->sadb_ident_type = SADB_X_IDENTTYPE_CONNECTION;
 		break;
 	}
 	*p += sizeof(struct sadb_ident);

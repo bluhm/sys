@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_ipsp.c,v 1.210 2015/04/14 14:20:01 mikeb Exp $	*/
+/*	$OpenBSD: ip_ipsp.c,v 1.213 2015/04/17 11:04:01 mikeb Exp $	*/
 /*
  * The authors of this code are John Ioannidis (ji@tla.org),
  * Angelos D. Keromytis (kermit@csd.uch.gr),
@@ -745,10 +745,6 @@ tdb_alloc(u_int rdomain)
 
 	tdbp = malloc(sizeof(*tdbp), M_TDB, M_WAITOK | M_ZERO);
 
-	/* Init Incoming SA-Binding Queues. */
-	TAILQ_INIT(&tdbp->tdb_inp_out);
-	TAILQ_INIT(&tdbp->tdb_inp_in);
-
 	TAILQ_INIT(&tdbp->tdb_policy_head);
 
 	/* Record establishment time. */
@@ -770,7 +766,6 @@ void
 tdb_free(struct tdb *tdbp)
 {
 	struct ipsec_policy *ipo;
-	struct inpcb *inp;
 
 	if (tdbp->tdb_xform) {
 		(*(tdbp->tdb_xform->xf_zeroize))(tdbp);
@@ -781,19 +776,6 @@ tdb_free(struct tdb *tdbp)
 	/* Cleanup pfsync references */
 	pfsync_delete_tdb(tdbp);
 #endif
-
-	/* Cleanup inp references. */
-	for (inp = TAILQ_FIRST(&tdbp->tdb_inp_in); inp;
-	    inp = TAILQ_FIRST(&tdbp->tdb_inp_in)) {
-		TAILQ_REMOVE(&tdbp->tdb_inp_in, inp, inp_tdb_in_next);
-		inp->inp_tdb_in = NULL;
-	}
-
-	for (inp = TAILQ_FIRST(&tdbp->tdb_inp_out); inp;
-	    inp = TAILQ_FIRST(&tdbp->tdb_inp_out)) {
-		TAILQ_REMOVE(&tdbp->tdb_inp_out, inp, inp_tdb_out_next);
-		inp->inp_tdb_out = NULL;
-	}
 
 	/* Cleanup SPD references. */
 	for (ipo = TAILQ_FIRST(&tdbp->tdb_policy_head); ipo;
@@ -863,68 +845,6 @@ tdb_init(struct tdb *tdbp, u_int16_t alg, struct ipsecinit *ii)
 	return EINVAL;
 }
 
-/*
- * Check which transformations are required.
- */
-u_int8_t
-get_sa_require(struct inpcb *inp)
-{
-	u_int8_t sareq = 0;
-
-	if (inp != NULL) {
-		sareq |= inp->inp_seclevel[SL_AUTH] >= IPSEC_LEVEL_USE ?
-		    NOTIFY_SATYPE_AUTH : 0;
-		sareq |= inp->inp_seclevel[SL_ESP_TRANS] >= IPSEC_LEVEL_USE ?
-		    NOTIFY_SATYPE_CONF : 0;
-		sareq |= inp->inp_seclevel[SL_ESP_NETWORK] >= IPSEC_LEVEL_USE ?
-		    NOTIFY_SATYPE_TUNNEL : 0;
-	} else {
-		/*
-		 * Code left for documentation purposes, these
-		 * conditions are always evaluated to false.
-		 */
-		sareq |= IPSEC_AUTH_LEVEL_DEFAULT >= IPSEC_LEVEL_USE ?
-		    NOTIFY_SATYPE_AUTH : 0;
-		sareq |= IPSEC_ESP_TRANS_LEVEL_DEFAULT >= IPSEC_LEVEL_USE ?
-		    NOTIFY_SATYPE_CONF : 0;
-		sareq |= IPSEC_ESP_NETWORK_LEVEL_DEFAULT >= IPSEC_LEVEL_USE ?
-		    NOTIFY_SATYPE_TUNNEL : 0;
-	}
-
-	return (sareq);
-}
-
-/*
- * Add an inpcb to the list of inpcb which reference this tdb directly.
- */
-void
-tdb_add_inp(struct tdb *tdb, struct inpcb *inp, int inout)
-{
-	if (inout) {
-		if (inp->inp_tdb_in) {
-			if (inp->inp_tdb_in == tdb)
-				return;
-
-			TAILQ_REMOVE(&inp->inp_tdb_in->tdb_inp_in, inp,
-			    inp_tdb_in_next);
-		}
-
-		inp->inp_tdb_in = tdb;
-		TAILQ_INSERT_TAIL(&tdb->tdb_inp_in, inp, inp_tdb_in_next);
-	} else {
-		if (inp->inp_tdb_out) {
-			if (inp->inp_tdb_out == tdb)
-				return;
-
-			TAILQ_REMOVE(&inp->inp_tdb_out->tdb_inp_out, inp,
-			    inp_tdb_out_next);
-		}
-
-		inp->inp_tdb_out = tdb;
-		TAILQ_INSERT_TAIL(&tdb->tdb_inp_out, inp, inp_tdb_out_next);
-	}
-}
-
 #ifdef ENCDEBUG
 /* Return a printable string for the address. */
 const char *
@@ -986,36 +906,6 @@ ipsp_reffree(struct ipsec_ref *ipr)
 		free(ipr, ipr->ref_malloctype, 0);
 }
 
-/* Mark a TDB as TDBF_SKIPCRYPTO. */
-void
-ipsp_skipcrypto_mark(struct tdb_ident *tdbi)
-{
-	struct tdb *tdb;
-	int s = splsoftnet();
-
-	tdb = gettdb(tdbi->rdomain, tdbi->spi, &tdbi->dst, tdbi->proto);
-	if (tdb != NULL) {
-		tdb->tdb_flags |= TDBF_SKIPCRYPTO;
-		tdb->tdb_last_marked = time_second;
-	}
-	splx(s);
-}
-
-/* Unmark a TDB as TDBF_SKIPCRYPTO. */
-void
-ipsp_skipcrypto_unmark(struct tdb_ident *tdbi)
-{
-	struct tdb *tdb;
-	int s = splsoftnet();
-
-	tdb = gettdb(tdbi->rdomain, tdbi->spi, &tdbi->dst, tdbi->proto);
-	if (tdb != NULL) {
-		tdb->tdb_flags &= ~TDBF_SKIPCRYPTO;
-		tdb->tdb_last_marked = time_second;
-	}
-	splx(s);
-}
-
 /* Return true if the two structures match. */
 int
 ipsp_ref_match(struct ipsec_ref *ref1, struct ipsec_ref *ref2)
@@ -1027,221 +917,3 @@ ipsp_ref_match(struct ipsec_ref *ref1, struct ipsec_ref *ref2)
 
 	return 1;
 }
-
-#ifdef notyet
-/*
- * Go down a chain of IPv4/IPv6/ESP/AH/IPiP chains creating an tag for each
- * IPsec header encountered. The offset where the first header, as well
- * as its type are given to us.
- */
-struct m_tag *
-ipsp_parse_headers(struct mbuf *m, int off, u_int8_t proto)
-{
-	int ipv4sa = 0, s, esphlen = 0, trail = 0, i;
-	SLIST_HEAD(packet_tags, m_tag) tags;
-	unsigned char lasteight[8];
-	struct tdb_ident *tdbi;
-	struct m_tag *mtag;
-	struct tdb *tdb;
-
-	struct ip iph;
-
-#ifdef INET6
-	struct in6_addr ip6_dst;
-#endif /* INET6 */
-
-	/* We have to start with a known network protocol. */
-	if (proto != IPPROTO_IPV4 && proto != IPPROTO_IPV6)
-		return NULL;
-
-	SLIST_INIT(&tags);
-
-	while (1) {
-		switch (proto) {
-		case IPPROTO_IPV4: /* Also IPPROTO_IPIP */
-		{
-			/*
-			 * Save the IP header (we need both the
-			 * address and ip_hl).
-			 */
-			m_copydata(m, off, sizeof(struct ip), (caddr_t) &iph);
-			ipv4sa = 1;
-			proto = iph.ip_p;
-			off += iph.ip_hl << 2;
-			break;
-		}
-
-#ifdef INET6
-		case IPPROTO_IPV6:
-		{
-			int nxtp, l;
-
-			/* Copy the IPv6 address. */
-			m_copydata(m, off + offsetof(struct ip6_hdr, ip6_dst),
-			    sizeof(struct ip6_hdr), (caddr_t) &ip6_dst);
-			ipv4sa = 0;
-
-			/*
-			 * Go down the chain of headers until we encounter a
-			 * non-option.
-			 */
-			for (l = ip6_nexthdr(m, off, proto, &nxtp); l != -1;
-			    l = ip6_nexthdr(m, off, proto, &nxtp)) {
-				off += l;
-				proto = nxtp;
-
-				/* Construct a tag. */
-				if (nxtp == IPPROTO_AH)	{
-					mtag = m_tag_get(PACKET_TAG_IPSEC_IN_CRYPTO_DONE,
-					    sizeof(struct tdb_ident),
-					    M_NOWAIT);
-
-					if (mtag == NULL)
-						return SLIST_FIRST(&tags);
-
-					tdbi = (struct tdb_ident *) (mtag + 1);
-					memset(tdbi, 0, sizeof(struct tdb_ident));
-
-					m_copydata(m, off + sizeof(u_int32_t),
-					    sizeof(u_int32_t),
-					    (caddr_t) &tdbi->spi);
-
-					tdbi->proto = IPPROTO_AH;
-					tdbi->dst.sin6.sin6_family = AF_INET6;
-					tdbi->dst.sin6.sin6_len =
-					    sizeof(struct sockaddr_in6);
-					tdbi->dst.sin6.sin6_addr = ip6_dst;
-					tdbi->rdomain =
-					    rtable_l2(m->m_pkthdr.ph_rtableid);
-					SLIST_INSERT_HEAD(&tags,
-					    mtag, m_tag_link);
-				}
-				else
-					if (nxtp == IPPROTO_IPV6)
-						m_copydata(m, off +
-						    offsetof(struct ip6_hdr,
-							ip6_dst),
-						    sizeof(struct ip6_hdr),
-						    (caddr_t) &ip6_dst);
-			}
-			break;
-		}
-#endif /* INET6 */
-
-		case IPPROTO_ESP:
-		/* Verify that this has been decrypted. */
-		{
-			union sockaddr_union su;
-			u_int32_t spi;
-
-			m_copydata(m, off, sizeof(u_int32_t), (caddr_t) &spi);
-			memset(&su, 0, sizeof(union sockaddr_union));
-
-			s = splsoftnet();
-
-			if (ipv4sa) {
-				su.sin.sin_family = AF_INET;
-				su.sin.sin_len = sizeof(struct sockaddr_in);
-				su.sin.sin_addr = iph.ip_dst;
-			}
-
-#ifdef INET6
-			if (!ipv4sa) {
-				su.sin6.sin6_family = AF_INET6;
-				su.sin6.sin6_len = sizeof(struct sockaddr_in6);
-				su.sin6.sin6_addr = ip6_dst;
-			}
-#endif /* INET6 */
-
-			tdb = gettdb(spi, &su, IPPROTO_ESP);
-			if (tdb == NULL) {
-				splx(s);
-				return SLIST_FIRST(&tags);
-			}
-
-			/* How large is the ESP header ? We use this later. */
-			esphlen = 2 * sizeof(u_int32_t) + tdb->tdb_ivlen;
-
-			/* Update the length of trailing ESP authenticators. */
-			if (tdb->tdb_authalgxform)
-				trail += tdb->tdb_authalgxform->authsize;
-
-			splx(s);
-
-			/* Copy the last 10 bytes. */
-			m_copydata(m, m->m_pkthdr.len - trail - 8, 8,
-			    lasteight);
-
-			/* Verify the self-describing padding values. */
-			if (lasteight[6] != 0) {
-				if (lasteight[6] != lasteight[5])
-					return SLIST_FIRST(&tags);
-
-				for (i = 4; lasteight[i + 1] != 1 && i >= 0;
-				    i--)
-					if (lasteight[i + 1] !=
-					    lasteight[i] + 1)
-						return SLIST_FIRST(&tags);
-			}
-		}
-		/* FALLTHROUGH */
-		case IPPROTO_AH:
-			mtag = m_tag_get(PACKET_TAG_IPSEC_IN_CRYPTO_DONE,
-			    sizeof(struct tdb_ident), M_NOWAIT);
-			if (mtag == NULL)
-				return SLIST_FIRST(&tags);
-
-			tdbi = (struct tdb_ident *) (mtag + 1);
-			memset(tdbi, 0, sizeof(struct tdb_ident));
-
-			/* Get SPI off the relevant header. */
-			if (proto == IPPROTO_AH)
-				m_copydata(m, off + sizeof(u_int32_t),
-				    sizeof(u_int32_t), (caddr_t) &tdbi->spi);
-			else /* IPPROTO_ESP */
-				m_copydata(m, off, sizeof(u_int32_t),
-				    (caddr_t) &tdbi->spi);
-
-			tdbi->proto = proto; /* AH or ESP */
-			tdbi->rdomain = rtable_l2(m->m_pkthdr.ph_rtableid);
-
-			/* Last network header was IPv4. */
-			if (ipv4sa) {
-				tdbi->dst.sin.sin_family = AF_INET;
-				tdbi->dst.sin.sin_len =
-				    sizeof(struct sockaddr_in);
-				tdbi->dst.sin.sin_addr = iph.ip_dst;
-			}
-
-#ifdef INET6
-			/* Last network header was IPv6. */
-			if (!ipv4sa) {
-				tdbi->dst.sin6.sin6_family = AF_INET6;
-				tdbi->dst.sin6.sin6_len =
-				    sizeof(struct sockaddr_in6);
-				tdbi->dst.sin6.sin6_addr = ip6_dst;
-			}
-#endif /* INET6 */
-
-			SLIST_INSERT_HEAD(&tags, mtag, m_tag_link);
-
-			/* Update next protocol/header and header offset. */
-			if (proto == IPPROTO_AH) {
-				u_int8_t foo[2];
-
-				m_copydata(m, off, 2 * sizeof(u_int8_t), foo);
-				proto = foo[0];
-				off += (foo[1] + 2) << 2;
-			} else {/* IPPROTO_ESP */
-				/* Initialized in IPPROTO_ESP case. */
-				off += esphlen;
-				proto = lasteight[7];
-			}
-			break;
-
-		default:
-			return SLIST_FIRST(&tags); /* We're done. */
-		}
-	}
-}
-#endif /* notyet */

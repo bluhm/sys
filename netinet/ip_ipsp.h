@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_ipsp.h,v 1.165 2015/04/14 14:20:01 mikeb Exp $	*/
+/*	$OpenBSD: ip_ipsp.h,v 1.169 2015/04/17 11:04:01 mikeb Exp $	*/
 /*
  * The authors of this code are John Ioannidis (ji@tla.org),
  * Angelos D. Keromytis (kermit@csd.uch.gr),
@@ -183,7 +183,6 @@ struct ipsec_acquire {
 	struct inpcb                    *ipa_pcb;
 	TAILQ_ENTRY(ipsec_acquire)	ipa_ipo_next;
 	TAILQ_ENTRY(ipsec_acquire)	ipa_next;
-	TAILQ_ENTRY(ipsec_acquire)      ipa_inp_next;
 };
 
 struct ipsec_policy {
@@ -222,7 +221,6 @@ struct ipsec_policy {
 };
 
 #define	IPSP_POLICY_NONE	0x0000	/* No flags set */
-#define	IPSP_POLICY_SOCKET	0x0001	/* Socket-attached policy */
 #define	IPSP_POLICY_STATIC	0x0002	/* Static policy */
 
 #define	IPSP_IPSEC_USE		0	/* Use if existing, don't acquire */
@@ -232,22 +230,11 @@ struct ipsec_policy {
 #define	IPSP_DENY		4	/* Deny traffic */
 #define	IPSP_IPSEC_DONTACQ	5	/* Require, but don't acquire */
 
-/* Notification types */
-#define	NOTIFY_SOFT_EXPIRE	0	/* Soft expiration of SA */
-#define	NOTIFY_HARD_EXPIRE	1	/* Hard expiration of SA */
-#define	NOTIFY_REQUEST_SA	2	/* Establish an SA */
-
-#define	NOTIFY_SATYPE_CONF	1	/* SA should do encryption */
-#define	NOTIFY_SATYPE_AUTH	2	/* SA should do authentication */
-#define	NOTIFY_SATYPE_TUNNEL	4	/* SA should use tunneling */
-#define NOTIFY_SATYPE_COMP	5       /* SA (IPCA) should use compression */
-
 /* Identity types */
 #define	IPSP_IDENTITY_NONE		0
 #define	IPSP_IDENTITY_PREFIX		1
 #define	IPSP_IDENTITY_FQDN		2
 #define	IPSP_IDENTITY_USERFQDN		3
-#define	IPSP_IDENTITY_CONNECTION	4
 
 struct tdb {				/* tunnel descriptor block */
 	/*
@@ -281,7 +268,6 @@ struct tdb {				/* tunnel descriptor block */
 #define	TDBF_SOFT_FIRSTUSE	0x00400	/* Soft expiration */
 #define	TDBF_PFS		0x00800	/* Ask for PFS from Key Mgmt. */
 #define	TDBF_TUNNELING		0x01000	/* Force IP-IP encapsulation */
-#define	TDBF_SKIPCRYPTO		0x08000	/* Skip actual crypto processing */
 #define	TDBF_USEDTUNNEL		0x10000	/* Appended a tunnel header in past */
 #define	TDBF_UDPENCAP		0x20000	/* UDP encapsulation */
 #define	TDBF_PFSYNC		0x40000	/* TDB will be synced */
@@ -358,8 +344,6 @@ struct tdb {				/* tunnel descriptor block */
 	struct sockaddr_encap   tdb_filter; /* What traffic is acceptable */
 	struct sockaddr_encap   tdb_filtermask; /* And the mask */
 
-	TAILQ_HEAD(tdb_inp_head_in, inpcb)	tdb_inp_in;
-	TAILQ_HEAD(tdb_inp_head_out, inpcb)	tdb_inp_out;
 	TAILQ_HEAD(tdb_policy_head, ipsec_policy)	tdb_policy_head;
 	TAILQ_ENTRY(tdb)	tdb_sync_entry;
 };
@@ -379,7 +363,6 @@ struct tdb_crypto {
 	u_int8_t		tc_proto;
 	int			tc_protoff;
 	int			tc_skip;
-	caddr_t			tc_ptr;
 	u_int			tc_rdomain;
 };
 
@@ -455,36 +438,12 @@ extern struct comp_algo comp_algo_deflate;
 extern TAILQ_HEAD(ipsec_policy_head, ipsec_policy) ipsec_policy_head;
 extern TAILQ_HEAD(ipsec_acquire_head, ipsec_acquire) ipsec_acquire_head;
 
-/* Check if a given tdb has encryption, authentication and/or tunneling */
-#define	TDB_ATTRIB(x) (((x)->tdb_encalgxform ? NOTIFY_SATYPE_CONF : 0) | \
-		       ((x)->tdb_authalgxform ? NOTIFY_SATYPE_AUTH : 0) | \
-		       ((x)->tdb_compalgxform ? NOTIFY_SATYPE_COMP : 0))
-
-/* Traverse spi chain and get attributes */
-
-#define	SPI_CHAIN_ATTRIB(have, TDB_DIR, TDBP)				\
-do {									\
-	int s = splsoftnet();						\
-	struct tdb *tmptdb = (TDBP);					\
-									\
-	(have) = 0;							\
-	while (tmptdb && tmptdb->tdb_xform) {				\
-	        if (tmptdb == NULL || tmptdb->tdb_flags & TDBF_INVALID)	\
-			break;						\
-		(have) |= TDB_ATTRIB(tmptdb);				\
-		tmptdb = tmptdb->TDB_DIR;				\
-	}								\
-	splx(s);							\
-} while (/* CONSTCOND */ 0)
-
 /* Misc. */
-uint8_t	get_sa_require(struct inpcb *);
 #ifdef ENCDEBUG
 const char *ipsp_address(union sockaddr_union *, char *, socklen_t);
 #endif /* ENCDEBUG */
 
 /* TDB management routines */
-void	tdb_add_inp(struct tdb *, struct inpcb *, int);
 uint32_t reserve_spi(u_int, u_int32_t, u_int32_t, union sockaddr_union *,
 		union sockaddr_union *, u_int8_t, int *);
 struct	tdb *gettdb(u_int, u_int32_t, union sockaddr_union *, u_int8_t);
@@ -584,18 +543,14 @@ struct	tdb *ipsp_spd_inp(struct mbuf *, int, int, int *, int,
 int	ipsp_is_unspecified(union sockaddr_union);
 int	ipsp_ref_match(struct ipsec_ref *, struct ipsec_ref *);
 void	ipsp_reffree(struct ipsec_ref *);
-void	ipsp_skipcrypto_mark(struct tdb_ident *);
-void	ipsp_skipcrypto_unmark(struct tdb_ident *);
 int	ipsp_aux_match(struct tdb *, struct ipsec_ref *, struct ipsec_ref *,
 	    struct sockaddr_encap *, struct sockaddr_encap *);
 
 int	ipsec_common_input(struct mbuf *, int, int, int, int, int);
-int	ipsec_common_input_cb(struct mbuf *, struct tdb *, int, int,
-	    struct m_tag *);
+int	ipsec_common_input_cb(struct mbuf *, struct tdb *, int, int);
 int	ipsec_delete_policy(struct ipsec_policy *);
 ssize_t	ipsec_hdrsz(struct tdb *);
 void	ipsec_adjust_mtu(struct mbuf *, u_int32_t);
-struct	ipsec_policy *ipsec_add_policy(struct inpcb *, int, int);
 struct	ipsec_acquire *ipsec_get_acquire(u_int32_t);
 
 #endif /* _KERNEL */

@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_carp.c,v 1.251 2015/04/15 15:16:17 mpi Exp $	*/
+/*	$OpenBSD: ip_carp.c,v 1.253 2015/04/22 06:44:17 mpi Exp $	*/
 
 /*
  * Copyright (c) 2002 Michael Shalayeff. All rights reserved.
@@ -1420,15 +1420,11 @@ carp_input(struct ifnet *ifp0, struct ether_header *eh0, struct mbuf *m)
 	struct carp_if *cif = (struct carp_if *)ifp0->if_carp;
 	struct ifnet *ifp;
 
-	M_PREPEND(m, sizeof(*eh), M_DONTWAIT);
-	if (m == NULL)
-		return (-1);
-	eh = mtod(m, struct ether_header *);
-	memmove(eh, eh0, sizeof(*eh));
+	ifp = carp_ourether(cif, eh0->ether_dhost);
+	if (ifp == NULL && (m->m_flags & (M_BCAST|M_MCAST)) == 0)
+		return (1);
 
-	if ((ifp = carp_ourether(cif, eh0->ether_dhost)))
-		;
-	else if (m->m_flags & (M_BCAST|M_MCAST)) {
+	if (ifp == NULL) {
 		struct carp_softc *vh;
 		struct mbuf *m0;
 
@@ -1442,20 +1438,30 @@ carp_input(struct ifnet *ifp0, struct ether_header *eh0, struct mbuf *m)
 			m0 = m_copym2(m, 0, M_COPYALL, M_DONTWAIT);
 			if (m0 == NULL)
 				continue;
+			M_PREPEND(m0, sizeof(*eh), M_DONTWAIT);
+			if (m0 == NULL)
+				continue;
+			eh = mtod(m0, struct ether_header *);
+			memmove(eh, eh0, sizeof(*eh));
+
 			m0->m_pkthdr.rcvif = &vh->sc_if;
 #if NBPFILTER > 0
 			if (vh->sc_if.if_bpf)
-				bpf_mtap_ether(vh->sc_if.if_bpf, m,
+				bpf_mtap_ether(vh->sc_if.if_bpf, m0,
 				    BPF_DIRECTION_IN);
 #endif
 			vh->sc_if.if_ipackets++;
 			ether_input_mbuf(&vh->sc_if, m0);
 		}
+
 		return (1);
 	}
 
-	if (ifp == NULL)
-		return (1);
+	M_PREPEND(m, sizeof(*eh), M_DONTWAIT);
+	if (m == NULL)
+		return (0);
+	eh = mtod(m, struct ether_header *);
+	memmove(eh, eh0, sizeof(*eh));
 
 	m->m_pkthdr.rcvif = ifp;
 
