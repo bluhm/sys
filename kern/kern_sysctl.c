@@ -1299,17 +1299,13 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 				FILLIT(NULL, NULL, KERN_FILE_RDIR, fdp->fd_rdir, pr);
 			if (pr->ps_tracevp)
 				FILLIT(NULL, NULL, KERN_FILE_TRACE, pr->ps_tracevp, pr);
-			rw_enter_read(&fdp->fd_lock);
 			for (i = 0; i < fdp->fd_nfiles; i++) {
 				if ((fp = fdp->fd_ofiles[i]) == NULL)
 					continue;
-				if (!FILE_IS_USABLE(fp) || fp->f_count == 0)
+				if (!FILE_IS_USABLE(fp))
 					continue;
-				FREF(fp);
 				FILLIT(fp, fdp, i, NULL, pr);
-				FRELE(fp, p);
 			}
-			rw_exit_read(&fdp->fd_lock);
 		}
 		break;
 	case KERN_FILE_BYUID:
@@ -1331,17 +1327,13 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 				FILLIT(NULL, NULL, KERN_FILE_RDIR, fdp->fd_rdir, pr);
 			if (pr->ps_tracevp)
 				FILLIT(NULL, NULL, KERN_FILE_TRACE, pr->ps_tracevp, pr);
-			rw_enter_read(&fdp->fd_lock);
 			for (i = 0; i < fdp->fd_nfiles; i++) {
 				if ((fp = fdp->fd_ofiles[i]) == NULL)
 					continue;
-				if (!FILE_IS_USABLE(fp) || fp->f_count == 0)
+				if (!FILE_IS_USABLE(fp))
 					continue;
-				FREF(fp);
 				FILLIT(fp, fdp, i, NULL, pr);
-				FRELE(fp, p);
 			}
-			rw_exit_read(&fdp->fd_lock);
 		}
 		break;
 	default:
