@@ -1,4 +1,4 @@
-/*	$OpenBSD: exec_elf.c,v 1.114 2015/04/26 05:30:42 guenther Exp $	*/
+/*	$OpenBSD: exec_elf.c,v 1.116 2015/04/30 11:15:28 jsg Exp $	*/
 
 /*
  * Copyright (c) 1996 Per Fogelstrom
@@ -552,13 +552,15 @@ ELFNAME2(exec,makecmds)(struct proc *p, struct exec_package *epp)
 
 	for (i = 0, pp = ph; i < eh->e_phnum; i++, pp++) {
 		if (pp->p_type == PT_INTERP && !interp) {
-			if (pp->p_filesz >= MAXPATHLEN)
+			if (pp->p_filesz < 2 || pp->p_filesz > MAXPATHLEN)
 				goto bad;
 			interp = pool_get(&namei_pool, PR_WAITOK);
 			if ((error = ELFNAME(read_from)(p, epp->ep_vp,
 			    pp->p_offset, interp, pp->p_filesz)) != 0) {
 				goto bad;
 			}
+			if (interp[pp->p_filesz - 1] != '\0')
+				goto bad;
 		} else if (pp->p_type == PT_LOAD) {
 			if (pp->p_filesz > pp->p_memsz) {
 				error = EINVAL;
