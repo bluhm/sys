@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_urtwn.c,v 1.44 2015/05/04 11:46:29 stsp Exp $	*/
+/*	$OpenBSD: if_urtwn.c,v 1.47 2015/05/12 11:46:15 stsp Exp $	*/
 
 /*-
  * Copyright (c) 2010 Damien Bergamini <damien.bergamini@free.fr>
@@ -126,6 +126,7 @@ static const struct usb_devno urtwn_devs[] = {
 	{ USB_VENDOR_REALTEK,	USB_PRODUCT_REALTEK_RTL8188CU_0 },
 	{ USB_VENDOR_REALTEK,	USB_PRODUCT_REALTEK_RTL8188CU_1 },
 	{ USB_VENDOR_REALTEK,	USB_PRODUCT_REALTEK_RTL8188CU_2 },
+	{ USB_VENDOR_REALTEK,	USB_PRODUCT_REALTEK_RTL8188CU_3 },
 	{ USB_VENDOR_REALTEK,	USB_PRODUCT_REALTEK_RTL8188CU_COMBO },
 	{ USB_VENDOR_REALTEK,	USB_PRODUCT_REALTEK_RTL8188CUS },
 	{ USB_VENDOR_REALTEK,	USB_PRODUCT_REALTEK_RTL8188RU },
@@ -143,6 +144,9 @@ static const struct usb_devno urtwn_devs[] = {
 	{ USB_VENDOR_TRENDNET,	USB_PRODUCT_TRENDNET_RTL8192CU },
 	{ USB_VENDOR_ZYXEL,	USB_PRODUCT_ZYXEL_RTL8192CU },
 	/* URTWN_RTL8188E */
+	{ USB_VENDOR_DLINK,	USB_PRODUCT_DLINK_DWA123D1 },
+	{ USB_VENDOR_DLINK,	USB_PRODUCT_DLINK_DWA125D1 },
+	{ USB_VENDOR_ELECOM,	USB_PRODUCT_ELECOM_WDC150SU2M },
 	{ USB_VENDOR_REALTEK,	USB_PRODUCT_REALTEK_RTL8188ETV },
 	{ USB_VENDOR_REALTEK,	USB_PRODUCT_REALTEK_RTL8188EU }
 };
@@ -184,6 +188,10 @@ void		urtwn_read_rom(struct urtwn_softc *);
 void		urtwn_r88e_read_rom(struct urtwn_softc *);
 int		urtwn_media_change(struct ifnet *);
 int		urtwn_ra_init(struct urtwn_softc *);
+int		urtwn_r92c_ra_init(struct urtwn_softc *, u_int8_t, u_int32_t,
+		    int, uint32_t, int);
+int		urtwn_r88e_ra_init(struct urtwn_softc *, u_int8_t, u_int32_t,
+		    int, uint32_t, int);
 void		urtwn_tsf_sync_enable(struct urtwn_softc *);
 void		urtwn_set_led(struct urtwn_softc *, int, int);
 void		urtwn_calib_to(void *);
@@ -301,7 +309,10 @@ urtwn_attach(struct device *parent, struct device *self, void *aux)
 		return;
 	}
 
-	if (uaa->product == USB_PRODUCT_REALTEK_RTL8188EU ||
+	if (uaa->product == USB_PRODUCT_DLINK_DWA123D1 ||
+	    uaa->product == USB_PRODUCT_DLINK_DWA125D1 ||
+	    uaa->product == USB_PRODUCT_ELECOM_WDC150SU2M ||
+	    uaa->product == USB_PRODUCT_REALTEK_RTL8188EU ||
 	    uaa->product == USB_PRODUCT_REALTEK_RTL8188ETV)
 		sc->chip |= URTWN_CHIP_88E;
 
@@ -918,12 +929,16 @@ urtwn_efuse_read(struct urtwn_softc *sc)
 		printf("\n");
 	}
 #endif
+
+	urtwn_write_1(sc, R92C_EFUSE_ACCESS, R92C_EFUSE_ACCESS_OFF);
 }
 
 void
 urtwn_efuse_switch_power(struct urtwn_softc *sc)
 {
 	uint32_t reg;
+
+	urtwn_write_1(sc, R92C_EFUSE_ACCESS, R92C_EFUSE_ACCESS_ON);
 
 	reg = urtwn_read_2(sc, R92C_SYS_ISO_CTRL);
 	if (!(reg & R92C_SYS_ISO_CTRL_PWC_EV12V)) {
@@ -1010,7 +1025,7 @@ urtwn_r88e_read_rom(struct urtwn_softc *sc)
 
 	/* Read full ROM image. */
 	memset(&sc->r88e_rom, 0xff, sizeof(sc->r88e_rom));
-	while (addr < 1024) {
+	while (addr < 512) {
 		reg = urtwn_efuse_read_1(sc, addr);
 		if (reg == 0xff)
 			break;
@@ -1035,6 +1050,8 @@ urtwn_r88e_read_rom(struct urtwn_softc *sc)
 			addr++;
 		}
 	}
+
+	urtwn_write_1(sc, R92C_EFUSE_ACCESS, R92C_EFUSE_ACCESS_OFF);
 
 	addr = 0x10;
 	for (i = 0; i < 6; i++)
@@ -1083,7 +1100,6 @@ urtwn_ra_init(struct urtwn_softc *sc)
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ieee80211_node *ni = ic->ic_bss;
 	struct ieee80211_rateset *rs = &ni->ni_rates;
-	struct r92c_fw_cmd_macid_cfg cmd;
 	uint32_t rates, basicrates;
 	uint8_t mode;
 	int maxrate, maxbasicrate, error, i, j;
@@ -1114,6 +1130,24 @@ urtwn_ra_init(struct urtwn_softc *sc)
 	DPRINTF(("mode=0x%x rates=0x%08x, basicrates=0x%08x\n",
 	    mode, rates, basicrates));
 
+	if (sc->chip & URTWN_CHIP_88E)
+		error = urtwn_r88e_ra_init(sc, mode, rates, maxrate,
+		    basicrates, maxbasicrate);
+	else
+		error = urtwn_r92c_ra_init(sc, mode, rates, maxrate,
+		    basicrates, maxbasicrate);
+
+	/* Indicate highest supported rate. */
+	ni->ni_txrate = rs->rs_nrates - 1;
+	return (error);
+}
+
+int urtwn_r92c_ra_init(struct urtwn_softc *sc, u_int8_t mode, u_int32_t rates,
+    int maxrate, uint32_t basicrates, int maxbasicrate)
+{
+	struct r92c_fw_cmd_macid_cfg cmd;
+	int error;
+
 	/* Set rates mask for group addressed frames. */
 	cmd.macid = URTWN_MACID_BC | URTWN_MACID_VALID;
 	cmd.mask = htole32(mode << 28 | basicrates);
@@ -1142,8 +1176,28 @@ urtwn_ra_init(struct urtwn_softc *sc)
 	urtwn_write_1(sc, R92C_INIDATA_RATE_SEL(URTWN_MACID_BSS),
 	    maxrate);
 
-	/* Indicate highest supported rate. */
-	ni->ni_txrate = rs->rs_nrates - 1;
+	return (0);
+}
+
+int
+urtwn_r88e_ra_init(struct urtwn_softc *sc, u_int8_t mode, u_int32_t rates,
+    int maxrate, uint32_t basicrates, int maxbasicrate)
+{
+	u_int32_t reg;
+
+	urtwn_write_1(sc, R92C_INIRTS_RATE_SEL, maxbasicrate);
+
+	reg = urtwn_read_4(sc, R92C_RRSR);
+	reg = RW(reg, R92C_RRSR_RATE_BITMAP, rates);
+	urtwn_write_4(sc, R92C_RRSR, reg);
+
+	/*
+	 * Workaround for performance problems with firmware rate adaptation:
+	 * If the AP only supports 11b rates, disable mixed B/G mode.
+	 */
+	if (mode != R92C_RAID_11B && maxrate <= 3 /* 11M */)
+		sc->sc_flags |= URTWN_FLAG_FORCE_RAID_11B;
+
 	return (0);
 }
 
@@ -1312,6 +1366,9 @@ urtwn_newstate_cb(struct urtwn_softc *sc, void *arg)
 		urtwn_write_4(sc, R92C_EDCA_VI_PARAM, 0x005e4317);
 		urtwn_write_4(sc, R92C_EDCA_BE_PARAM, 0x00105320);
 		urtwn_write_4(sc, R92C_EDCA_BK_PARAM, 0x0000a444);
+
+		/* Disable 11b-only AP workaround (see urtwn_r88e_ra_init). */
+		sc->sc_flags &= ~URTWN_FLAG_FORCE_RAID_11B;
 	}
 	switch (cmd->state) {
 	case IEEE80211_S_INIT:
@@ -1417,10 +1474,8 @@ urtwn_newstate_cb(struct urtwn_softc *sc, void *arg)
 		urtwn_write_1(sc, R92C_T2T_SIFS + 1, 10);
 
 		/* Intialize rate adaptation. */
-		if (sc->chip & URTWN_CHIP_88E)
-			ni->ni_txrate = ni->ni_rates.rs_nrates-1;
-		else
-			urtwn_ra_init(sc);
+		urtwn_ra_init(sc);
+
 		/* Turn link LED on. */
 		urtwn_set_led(sc, URTWN_LED_LINK, 1);
 
@@ -1981,7 +2036,8 @@ urtwn_tx(struct urtwn_softc *sc, struct mbuf *m, struct ieee80211_node *ni)
 #endif
 	if (!IEEE80211_IS_MULTICAST(wh->i_addr1) &&
 	    type == IEEE80211_FC0_TYPE_DATA) {
-		if (ic->ic_curmode == IEEE80211_MODE_11B)
+		if (ic->ic_curmode == IEEE80211_MODE_11B ||
+		    (sc->sc_flags & URTWN_FLAG_FORCE_RAID_11B))
 			raid = R92C_RAID_11B;
 		else
 			raid = R92C_RAID_11BG;
@@ -2311,14 +2367,12 @@ urtwn_r92c_power_on(struct urtwn_softc *sc)
 int
 urtwn_r88e_power_on(struct urtwn_softc *sc)
 {
-	uint8_t val;
 	uint32_t reg;
 	int ntries;
 
 	/* Wait for power ready bit. */
 	for (ntries = 0; ntries < 5000; ntries++) {
-		val = urtwn_read_1(sc, 0x6) & 0x2;
-		if (val == 0x2)
+		if (urtwn_read_4(sc, R92C_APS_FSMCO) & R92C_APS_FSMCO_SUS_HOST)
 			break;
 		DELAY(10);
 	}
@@ -2333,17 +2387,24 @@ urtwn_r88e_power_on(struct urtwn_softc *sc)
 	    urtwn_read_1(sc, R92C_SYS_FUNC_EN) & ~(R92C_SYS_FUNC_EN_BBRSTB |
 	    R92C_SYS_FUNC_EN_BB_GLB_RST));
 
-	urtwn_write_1(sc, 0x26, urtwn_read_1(sc, 0x26) | 0x80);
+	urtwn_write_1(sc, R92C_AFE_XTAL_CTRL + 2,
+	    urtwn_read_1(sc, R92C_AFE_XTAL_CTRL + 2) | 0x80);
 
 	/* Disable HWPDN. */
 	urtwn_write_1(sc, 0x5, urtwn_read_1(sc, 0x5) & ~0x80);
+	urtwn_write_2(sc, R92C_APS_FSMCO,
+	    urtwn_read_2(sc, R92C_APS_FSMCO) & ~R92C_APS_FSMCO_APDM_HPDN);
 
 	/* Disable WL suspend. */
-	urtwn_write_1(sc, 0x5, urtwn_read_1(sc, 0x5) & ~0x18);
+	urtwn_write_2(sc, R92C_APS_FSMCO,
+	    urtwn_read_2(sc, R92C_APS_FSMCO) &
+	    ~(R92C_APS_FSMCO_AFSM_HSUS | R92C_APS_FSMCO_AFSM_PCIE));
 
-	urtwn_write_1(sc, 0x5, urtwn_read_1(sc, 0x5) | 0x1);
+	urtwn_write_2(sc, R92C_APS_FSMCO,
+	    urtwn_read_2(sc, R92C_APS_FSMCO) | R92C_APS_FSMCO_APFM_ONMAC);
 	for (ntries = 0; ntries < 5000; ntries++) {
-		if (!(urtwn_read_1(sc, 0x5) & 0x1))
+		if (!(urtwn_read_2(sc, R92C_APS_FSMCO) &
+		    R92C_APS_FSMCO_APFM_ONMAC))
 			break;
 		DELAY(10);
 	}
@@ -2351,7 +2412,8 @@ urtwn_r88e_power_on(struct urtwn_softc *sc)
 		return (ETIMEDOUT);
 
 	/* Enable LDO normal mode. */
-	urtwn_write_1(sc, 0x23, urtwn_read_1(sc, 0x23) & ~0x10);
+	urtwn_write_1(sc, R92C_LPLDO_CTRL,
+	    urtwn_read_1(sc, R92C_LPLDO_CTRL) & ~0x10);
 
 	/* Enable MAC DMA/WMAC/SCHEDULE/SEC blocks. */
 	urtwn_write_2(sc, R92C_CR, 0);
@@ -2413,9 +2475,6 @@ urtwn_fw_reset(struct urtwn_softc *sc)
 	}
 	/* Force 8051 reset. */
 	urtwn_write_2(sc, R92C_SYS_FUNC_EN, reg & ~R92C_SYS_FUNC_EN_CPUEN);
-	urtwn_write_2(sc, R92C_SYS_FUNC_EN,
-	    urtwn_read_2(sc, R92C_SYS_FUNC_EN) |
-	    R92C_SYS_FUNC_EN_CPUEN);
 }
 
 
@@ -2505,6 +2564,10 @@ urtwn_load_firmware(struct urtwn_softc *sc)
 			urtwn_fw_reset(sc);
 		urtwn_write_1(sc, R92C_MCUFWDL, 0);
 	}
+	if (!(sc->chip & URTWN_CHIP_88E))
+		urtwn_write_2(sc, R92C_SYS_FUNC_EN,
+		    urtwn_read_2(sc, R92C_SYS_FUNC_EN) |
+		    R92C_SYS_FUNC_EN_CPUEN);
 
 	urtwn_write_1(sc, R92C_MCUFWDL,
 	    urtwn_read_1(sc, R92C_MCUFWDL) | R92C_MCUFWDL_EN);
