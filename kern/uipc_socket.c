@@ -1463,8 +1463,19 @@ void
 sorwakeup(struct socket *so)
 {
 #ifdef SOCKET_SPLICE
-	if (so->so_rcv.sb_flagsintr & SB_SPLICE)
-		softintr_schedule(so->so_softintr);
+	if (so->so_rcv.sb_flagsintr & SB_SPLICE) {
+		/*
+		 * TCP has a sendbuffer that can handle multiple packets
+		 * at once.  So queue the stream a bit to accumulate data.
+		 * The sosplice soft interrupt will call somove() later and
+		 * send the packets calling tcp_output() only once.
+		 * In the UDP case, send out the packets immediately.
+		 */
+		if (so->so_proto->pr_flags & PR_WANTRCVD)
+			softintr_schedule(so->so_softintr);
+		else
+			somove(so, M_DONTWAIT);
+	}
 	if (isspliced(so))
 		return;
 #endif
