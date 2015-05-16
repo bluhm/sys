@@ -55,6 +55,7 @@ void	sbsync(struct sockbuf *, struct mbuf *);
 int	sosplice(struct socket *, int, off_t, struct timeval *);
 void	sounsplice(struct socket *, struct socket *, int);
 void	soidle(void *);
+void	sointr(void *);
 int	somove(struct socket *, int);
 
 void	filt_sordetach(struct knote *kn);
@@ -1037,6 +1038,7 @@ sorflush(struct socket *so)
 #define so_splicemax	so_sp->ssp_max
 #define so_idletv	so_sp->ssp_idletv
 #define so_idleto	so_sp->ssp_idleto
+#define so_softintr	so_sp->ssp_softintr
 
 int
 sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
@@ -1122,6 +1124,7 @@ sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
 	else
 		timerclear(&so->so_idletv);
 	timeout_set(&so->so_idleto, soidle, so);
+	so->so_softintr = softintr_establish(IPL_SOFTNET, sointr, so);
 
 	/*
 	 * To prevent softnet interrupt from calling somove() while
@@ -1145,6 +1148,7 @@ sounsplice(struct socket *so, struct socket *sosp, int wakeup)
 {
 	splsoftassert(IPL_SOFTNET);
 
+	softintr_disestablish(so->so_softintr);
 	timeout_del(&so->so_idleto);
 	sosp->so_snd.sb_flagsintr &= ~SB_SPLICE;
 	so->so_rcv.sb_flagsintr &= ~SB_SPLICE;
@@ -1165,6 +1169,15 @@ soidle(void *arg)
 		sounsplice(so, so->so_sp->ssp_socket, 1);
 	}
 	splx(s);
+}
+
+void
+sointr(void *arg)
+{
+	struct socket *so = arg;
+
+	if (so->so_rcv.sb_flagsintr & SB_SPLICE)
+		somove(so, M_DONTWAIT);
 }
 
 /*
@@ -1430,11 +1443,6 @@ somove(struct socket *so, int wait)
 	return (1);
 }
 
-#undef so_splicelen
-#undef so_splicemax
-#undef so_idletv
-#undef so_idleto
-
 #endif /* SOCKET_SPLICE */
 
 void
@@ -1442,7 +1450,7 @@ sorwakeup(struct socket *so)
 {
 #ifdef SOCKET_SPLICE
 	if (so->so_rcv.sb_flagsintr & SB_SPLICE)
-		(void) somove(so, M_DONTWAIT);
+		softintr_schedule(so->so_softintr);
 	if (isspliced(so))
 		return;
 #endif
@@ -1456,7 +1464,7 @@ sowwakeup(struct socket *so)
 {
 #ifdef SOCKET_SPLICE
 	if (so->so_snd.sb_flagsintr & SB_SPLICE)
-		(void) somove(so->so_sp->ssp_soback, M_DONTWAIT);
+		softintr_schedule(so->so_sp->ssp_soback->so_softintr);
 #endif
 	sowakeup(so, &so->so_snd);
 }
