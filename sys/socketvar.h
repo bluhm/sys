@@ -92,6 +92,7 @@ struct socket {
 		off_t	ssp_max;		/* maximum number of bytes */
 		struct	timeval ssp_idletv;	/* idle timeout */
 		struct	timeout ssp_idleto;
+		void	*ssp_softintr;		/* softinterrupt for somove */
 	} *so_sp;
 /*
  * Variables for socket buffering.
