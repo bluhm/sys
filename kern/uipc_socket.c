@@ -1235,7 +1235,7 @@ somove(struct socket *so, int wait)
 		goto release;
 
 	/* Shortcut to avoid length and space calculation. */
-	if (so->so_rcv.sb_mb == NULL || timeout_pending(&so->so_rateto))
+	if (so->so_rcv.sb_mb == NULL)
 		goto release;
 	/* Calculate how many bytes can be copied now. */
 	len = so->so_rcv.sb_datacc;
@@ -1519,19 +1519,7 @@ sorwakeup(struct socket *so)
 {
 #ifdef SOCKET_SPLICE
 	if (so->so_rcv.sb_flagsintr & SB_SPLICE) {
-		/*
-		 * TCP has a sendbuffer that can handle multiple packets
-		 * at once.  So queue the stream a bit to accumulate data.
-		 * The sosplice timeout will call somove() later and send
-		 * the packets calling tcp_output() only once.
-		 * In the UDP case, send out the packets immediately.
-		 * Using a delay would make things slower.
-		 */
-		if (so->so_proto->pr_flags & PR_WANTRCVD) {
-			if (!timeout_pending(&so->so_rateto))
-				timeout_add(&so->so_rateto, 1);
-		} else
-			somove(so, M_DONTWAIT);
+		somove(so, M_DONTWAIT);
 	}
 	if (isspliced(so))
 		return;
