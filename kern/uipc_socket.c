@@ -1518,8 +1518,21 @@ void
 sorwakeup(struct socket *so)
 {
 #ifdef SOCKET_SPLICE
-	if (so->so_rcv.sb_flagsintr & SB_SPLICE)
-		(void) somove(so, M_DONTWAIT);
+	if (so->so_rcv.sb_flagsintr & SB_SPLICE) {
+		/*
+		 * TCP has a sendbuffer that can handle multiple packets
+		 * at once.  So queue the stream a bit to accumulate data.
+		 * The sosplice timeout will call somove() later and send
+		 * the packets calling tcp_output() only once.
+		 * In the UDP case, send out the packets immediately.
+		 * Using a delay would make things slower.
+		 */
+		if (so->so_proto->pr_flags & PR_WANTRCVD) {
+			if (!timeout_pending(&so->so_rateto))
+				timeout_add(&so->so_rateto, 1);
+		} else
+			somove(so, M_DONTWAIT);
+	}
 	if (isspliced(so))
 		return;
 #endif
@@ -1533,7 +1546,8 @@ sowwakeup(struct socket *so)
 {
 #ifdef SOCKET_SPLICE
 	if (so->so_snd.sb_flagsintr & SB_SPLICE)
-		(void) somove(so->so_sp->ssp_soback, M_DONTWAIT);
+		if (!timeout_pending(&so->so_sp->ssp_soback->so_rateto))
+			timeout_add(&so->so_sp->ssp_soback->so_rateto, 1);
 #endif
 	sowakeup(so, &so->so_snd);
 }
