@@ -1688,8 +1688,9 @@ sosetopt(struct socket *so, int level, int optname, struct mbuf *m0)
 			} else if (m->m_len < sizeof(int)) {
 				error = EINVAL;
 				goto bad;
-			} else if (m->m_len < offsetof(struct splice, sp_rate)) {
-				error = sosplice(so, *mtod(m, int *), 0, NULL, 0);
+			} else if (m->m_len < offsetof(struct splice,sp_rate)) {
+				error = sosplice(so,
+				    *mtod(m, int *), 0, NULL, 0);
 			} else if (m->m_len < sizeof(struct splice)) {
 				error = sosplice(so,
 				    mtod(m, struct splice *)->sp_fd,
