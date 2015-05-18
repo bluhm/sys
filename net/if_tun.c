@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_tun.c,v 1.139 2015/04/30 15:19:50 mpi Exp $	*/
+/*	$OpenBSD: if_tun.c,v 1.141 2015/05/15 12:40:05 mpi Exp $	*/
 /*	$NetBSD: if_tun.c,v 1.24 1996/05/07 02:40:48 thorpej Exp $	*/
 
 /*
@@ -529,7 +529,7 @@ tun_output(struct ifnet *ifp, struct mbuf *m0, struct sockaddr *dst,
     struct rtentry *rt)
 {
 	struct tun_softc	*tp = ifp->if_softc;
-	int			 s, len, error;
+	int			 s, error;
 	u_int32_t		*af;
 
 	if ((ifp->if_flags & (IFF_UP|IFF_RUNNING)) != (IFF_UP|IFF_RUNNING)) {
@@ -547,7 +547,6 @@ tun_output(struct ifnet *ifp, struct mbuf *m0, struct sockaddr *dst,
 	}
 
 	if (tp->tun_flags & TUN_LAYER2)
-		/* call ether_output and that will call tunstart at the end */
 		return (ether_output(ifp, m0, dst, rt));
 
 	M_PREPEND(m0, sizeof(*af), M_DONTWAIT);
@@ -570,16 +569,13 @@ tun_output(struct ifnet *ifp, struct mbuf *m0, struct sockaddr *dst,
 	}
 #endif
 
-	len = m0->m_pkthdr.len;
-	IFQ_ENQUEUE(&ifp->if_snd, m0, NULL, error);
+	error = if_output(ifp, m0);
 	if (error) {
-		splx(s);
 		ifp->if_collisions++;
 		return (error);
 	}
+
 	splx(s);
-	ifp->if_opackets++;
-	ifp->if_obytes += len;
 
 	tun_wakeup(tp);
 	return (0);
@@ -1091,10 +1087,6 @@ filt_tunwrite(struct knote *kn, long hint)
 	return (1);
 }
 
-/*
- * Start packet transmission on the interface.
- * In layer 2 mode this function is called from ether_output.
- */
 void
 tunstart(struct ifnet *ifp)
 {
