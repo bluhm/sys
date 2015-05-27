@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_tun.c,v 1.142 2015/05/19 15:10:59 mpi Exp $	*/
+/*	$OpenBSD: if_tun.c,v 1.144 2015/05/26 11:36:26 dlg Exp $	*/
 /*	$NetBSD: if_tun.c,v 1.24 1996/05/07 02:40:48 thorpej Exp $	*/
 
 /*
@@ -576,6 +576,7 @@ tun_output(struct ifnet *ifp, struct mbuf *m0, struct sockaddr *dst,
 		ifp->if_collisions++;
 		return (error);
 	}
+	ifp->if_opackets++;
 
 	tun_wakeup(tp);
 	return (0);
@@ -881,9 +882,6 @@ tunwrite(dev_t dev, struct uio *uio, int ioflag)
 #endif
 
 	if (tp->tun_flags & TUN_LAYER2) {
-		/* quirk to not add randomness from a virtual device */
-		atomic_setbits_int(&netisr, (1 << NETISR_RND_DONE));
-
 		s = splnet();
 		ether_input_mbuf(ifp, top);
 		splx(s);

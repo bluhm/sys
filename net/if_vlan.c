@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_vlan.c,v 1.121 2015/05/19 11:21:42 mpi Exp $	*/
+/*	$OpenBSD: if_vlan.c,v 1.127 2015/05/27 12:23:44 dlg Exp $	*/
 
 /*
  * Copyright 1998 Massachusetts Institute of Technology
@@ -80,7 +80,7 @@ u_long vlan_tagmask, svlan_tagmask;
 LIST_HEAD(vlan_taghash, ifvlan)	*vlan_tagh, *svlan_tagh;
 
 
-int	vlan_input(struct mbuf *, void *);
+int	vlan_input(struct mbuf *);
 int	vlan_output(struct ifnet *, struct mbuf *, struct sockaddr *,
 	    struct rtentry *);
 void	vlan_start(struct ifnet *ifp);
@@ -253,6 +253,7 @@ vlan_start(struct ifnet *ifp)
 			ifp->if_oerrors++;
 			continue;
 		}
+		ifp->if_opackets++;
 	}
 }
 
@@ -260,7 +261,7 @@ vlan_start(struct ifnet *ifp)
  * vlan_input() returns 1 if it has consumed the packet, 0 otherwise.
  */
 int
-vlan_input(struct mbuf *m, void *hdr)
+vlan_input(struct mbuf *m)
 {
 	struct ifvlan			*ifv;
 	struct ifnet			*ifp;
@@ -268,6 +269,7 @@ vlan_input(struct mbuf *m, void *hdr)
 	struct ether_header		*eh;
 	struct vlan_taghash		*tagh;
 	u_int				 tag;
+	struct mbuf_list		 ml = MBUF_LIST_INITIALIZER();
 	u_int16_t			 etype;
 
 	ifp = m->m_pkthdr.rcvif;
@@ -330,24 +332,6 @@ vlan_input(struct mbuf *m, void *hdr)
 	}
 
 	/*
-	 * Having found a valid vlan interface corresponding to
-	 * the given source interface and vlan tag, remove the
-	 * encapsulation.
-	 */
-	if (m->m_flags & M_VLANTAG) {
-		m->m_flags &= ~M_VLANTAG;
-	} else {
-		eh->ether_type = evl->evl_proto;
-		memmove((char *)eh + EVL_ENCAPLEN, eh, sizeof(*eh));
-		m_adj(m, EVL_ENCAPLEN);
-	}
-
-#if NBPFILTER > 0
-	if (ifv->ifv_if.if_bpf)
-		bpf_mtap_ether(ifv->ifv_if.if_bpf, m, BPF_DIRECTION_IN);
-#endif
-
-	/*
 	 * Drop promiscuously received packets if we are not in
 	 * promiscuous mode.
 	 */
@@ -361,15 +345,28 @@ vlan_input(struct mbuf *m, void *hdr)
 		}
 	}
 
+	/*
+	 * Having found a valid vlan interface corresponding to
+	 * the given source interface and vlan tag, remove the
+	 * encapsulation.
+	 */
+	if (m->m_flags & M_VLANTAG) {
+		m->m_flags &= ~M_VLANTAG;
+	} else {
+		eh->ether_type = evl->evl_proto;
+		memmove((char *)eh + EVL_ENCAPLEN, eh, sizeof(*eh));
+		m_adj(m, EVL_ENCAPLEN);
+	}
+
+	ml_enqueue(&ml, m);
+	if_input(&ifv->ifv_if, &ml);
 	ifv->ifv_if.if_ipackets++;
-	m->m_pkthdr.rcvif = &ifv->ifv_if;
-	return (0);
+	return (1);
 }
 
 int
 vlan_config(struct ifvlan *ifv, struct ifnet *p, u_int16_t tag)
 {
-	struct ifih		*vlan_ifih;
 	struct sockaddr_dl	*sdl1, *sdl2;
 	struct vlan_taghash	*tagh;
 	u_int			 flags;
@@ -380,14 +377,15 @@ vlan_config(struct ifvlan *ifv, struct ifnet *p, u_int16_t tag)
 	if (ifv->ifv_p == p && ifv->ifv_tag == tag) /* noop */
 		return (0);
 
-	/* Share an ifih between multiple vlan(4) instances. */
-	vlan_ifih = SLIST_FIRST(&p->if_inputs);
-	if (vlan_ifih->ifih_input != vlan_input) {
-		vlan_ifih = malloc(sizeof(*vlan_ifih), M_DEVBUF, M_NOWAIT);
-		if (vlan_ifih == NULL)
+	/* Can we share an ifih between multiple vlan(4) instances? */
+	ifv->ifv_ifih = SLIST_FIRST(&p->if_inputs);
+	if (ifv->ifv_ifih->ifih_input != vlan_input) {
+		ifv->ifv_ifih = malloc(sizeof(*ifv->ifv_ifih), M_DEVBUF,
+		    M_NOWAIT);
+		if (ifv->ifv_ifih == NULL)
 			return (ENOMEM);
-		vlan_ifih->ifih_input = vlan_input;
-		vlan_ifih->ifih_refcnt = 0;
+		ifv->ifv_ifih->ifih_input = vlan_input;
+		ifv->ifv_ifih->ifih_refcnt = 0;
 	}
 
 	/* Remember existing interface flags and reset the interface */
@@ -396,10 +394,13 @@ vlan_config(struct ifvlan *ifv, struct ifnet *p, u_int16_t tag)
 	ifv->ifv_p = p;
 	ifv->ifv_if.if_baudrate = p->if_baudrate;
 
-	if (p->if_capabilities & IFCAP_VLAN_MTU)
+	if (p->if_capabilities & IFCAP_VLAN_MTU) {
 		ifv->ifv_if.if_mtu = p->if_mtu;
-	else
+		ifv->ifv_if.if_hardmtu = p->if_hardmtu;
+	} else {
 		ifv->ifv_if.if_mtu = p->if_mtu - EVL_ENCAPLEN;
+		ifv->ifv_if.if_hardmtu = p->if_hardmtu - EVL_ENCAPLEN;
+	}
 
 	ifv->ifv_if.if_flags = p->if_flags &
 	    (IFF_UP | IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST);
@@ -442,10 +443,6 @@ vlan_config(struct ifvlan *ifv, struct ifnet *p, u_int16_t tag)
 
 	ifv->ifv_tag = tag;
 
-	/* Change input handler of the physical interface. */
-	if (++vlan_ifih->ifih_refcnt == 1)
-		SLIST_INSERT_HEAD(&p->if_inputs, vlan_ifih, ifih_next);
-
 	/* Register callback for physical link state changes */
 	ifv->lh_cookie = hook_establish(p->if_linkstatehooks, 1,
 	    vlan_vlandev_state, ifv);
@@ -457,7 +454,12 @@ vlan_config(struct ifvlan *ifv, struct ifnet *p, u_int16_t tag)
 	vlan_vlandev_state(ifv);
 
 	tagh = ifv->ifv_type == ETHERTYPE_QINQ ? svlan_tagh : vlan_tagh;
+
 	s = splnet();
+	/* Change input handler of the physical interface. */
+	if (++ifv->ifv_ifih->ifih_refcnt == 1)
+		SLIST_INSERT_HEAD(&p->if_inputs, ifv->ifv_ifih, ifih_next);
+
 	LIST_INSERT_HEAD(&tagh[TAG_HASH(tag)], ifv, ifv_list);
 	splx(s);
 
@@ -467,7 +469,6 @@ vlan_config(struct ifvlan *ifv, struct ifnet *p, u_int16_t tag)
 int
 vlan_unconfig(struct ifnet *ifp, struct ifnet *newp)
 {
-	struct ifih		*vlan_ifih;
 	struct sockaddr_dl	*sdl;
 	struct ifvlan		*ifv;
 	struct ifnet		*p;
@@ -485,6 +486,12 @@ vlan_unconfig(struct ifnet *ifp, struct ifnet *newp)
 
 	s = splnet();
 	LIST_REMOVE(ifv, ifv_list);
+
+	/* Restore previous input handler. */
+	if (--ifv->ifv_ifih->ifih_refcnt == 0) {
+		SLIST_REMOVE(&p->if_inputs, ifv->ifv_ifih, ifih, ifih_next);
+		free(ifv->ifv_ifih, M_DEVBUF, sizeof(*ifv->ifv_ifih));
+	}
 	splx(s);
 
 	hook_disestablish(p->if_linkstatehooks, ifv->lh_cookie);
@@ -493,14 +500,6 @@ vlan_unconfig(struct ifnet *ifp, struct ifnet *newp)
 	if (newp != NULL) {
 		ifp->if_link_state = LINK_STATE_INVALID;
 		if_link_state_change(ifp);
-	}
-
-	/* Restore previous input handler. */
-	vlan_ifih = SLIST_FIRST(&p->if_inputs);
-	KASSERT(vlan_ifih->ifih_input == vlan_input);
-	if (--vlan_ifih->ifih_refcnt == 0) {
-		SLIST_REMOVE_HEAD(&p->if_inputs, ifih_next);
-		free(vlan_ifih, M_DEVBUF, sizeof(*vlan_ifih));
 	}
 
 	/*
@@ -514,6 +513,7 @@ vlan_unconfig(struct ifnet *ifp, struct ifnet *newp)
 	/* Disconnect from parent. */
 	ifv->ifv_p = NULL;
 	ifv->ifv_if.if_mtu = ETHERMTU;
+	ifv->ifv_if.if_hardmtu = ETHERMTU;
 	ifv->ifv_flags = 0;
 
 	/* Clear our MAC address. */
@@ -566,7 +566,7 @@ vlan_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 	struct ifreq	*ifr;
 	struct ifvlan	*ifv;
 	struct vlanreq	 vlr;
-	int		 error = 0, p_mtu = 0, s;
+	int		 error = 0, s;
 
 	ifr = (struct ifreq *)data;
 	ifa = (struct ifaddr *)data;
@@ -594,12 +594,8 @@ vlan_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 
 	case SIOCSIFMTU:
 		if (ifv->ifv_p != NULL) {
-			if (ifv->ifv_p->if_capabilities & IFCAP_VLAN_MTU)
-				p_mtu = ifv->ifv_p->if_hardmtu;
-			else
-				p_mtu = ifv->ifv_p->if_hardmtu - EVL_ENCAPLEN;
-			
-			if (ifr->ifr_mtu > p_mtu || ifr->ifr_mtu < ETHERMIN)
+			if (ifr->ifr_mtu < ETHERMIN ||
+			    ifr->ifr_mtu > ifv->ifv_if.if_hardmtu)
 				error = EINVAL;
 			else
 				ifp->if_mtu = ifr->ifr_mtu;
