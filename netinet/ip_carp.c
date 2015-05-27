@@ -194,7 +194,7 @@ void	carp_hmac_generate(struct carp_vhost_entry *, u_int32_t *,
 	    unsigned char *, u_int8_t);
 int	carp_hmac_verify(struct carp_vhost_entry *, u_int32_t *,
 	    unsigned char *);
-int	carp_input(struct mbuf *, void *);
+int	carp_input(struct mbuf *);
 void	carp_proto_input_c(struct mbuf *, struct carp_header *, int,
 	    sa_family_t);
 void	carpattach(int);
@@ -1415,7 +1415,7 @@ carp_get_srclladdr(struct ifnet *ifp, u_char *esrc)
 }
 
 int
-carp_input(struct mbuf *m, void *hdr)
+carp_input(struct mbuf *m)
 {
 	struct carp_softc *sc;
 	struct ether_header *eh;
