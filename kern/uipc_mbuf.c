@@ -1266,10 +1266,11 @@ ml_enqueue(struct mbuf_list *ml, struct mbuf *m)
 void
 ml_join(struct mbuf_list *mla, struct mbuf_list *mlb)
 {
-	if (mla->ml_tail == NULL)
-		*mla = *mlb;
-	else if (mlb->ml_tail != NULL) {
-		mla->ml_tail->m_nextpkt = mlb->ml_head;
+	if (!ml_empty(mlb)) {
+		if (ml_empty(mla))
+			mla->ml_head = mlb->ml_head;
+		else
+			mla->ml_tail->m_nextpkt = mlb->ml_head;
 		mla->ml_tail = mlb->ml_tail;
 		mla->ml_len += mlb->ml_len;
 
