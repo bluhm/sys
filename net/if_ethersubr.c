@@ -490,18 +490,6 @@ ether_input(struct mbuf *m)
 	}
 #endif
 
-#if NCARP > 0
-	if (ifp->if_carp) {
-		if (ifp->if_type != IFT_CARP && (carp_input(ifp, eh, m) == 0))
-			return (1);
-		/* clear mcast if received on a carp IP balanced address */
-		else if (ifp->if_type == IFT_CARP &&
-		    m->m_flags & (M_BCAST|M_MCAST) &&
-		    carp_our_mcastaddr(ifp, (u_int8_t *)&eh->ether_dhost))
-			m->m_flags &= ~(M_BCAST|M_MCAST);
-	}
-#endif /* NCARP > 0 */
-
 	ac = (struct arpcom *)ifp;
 
 	/*
