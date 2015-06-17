@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.c,v 1.335 2015/05/26 11:39:07 mpi Exp $	*/
+/*	$OpenBSD: if.c,v 1.340 2015/06/16 11:09:39 mpi Exp $	*/
 /*	$NetBSD: if.c,v 1.35 1996/05/07 05:26:04 thorpej Exp $	*/
 
 /*
@@ -486,7 +486,7 @@ if_input(struct ifnet *ifp, struct mbuf_list *ml)
 	splassert(IPL_NET);
 
 	MBUF_LIST_FOREACH(ml, m) {
-		m->m_pkthdr.rcvif = ifp;
+		m->m_pkthdr.ph_ifidx = ifp->if_index;
 		m->m_pkthdr.ph_rtableid = ifp->if_rdomain;
 	}
 
@@ -504,13 +504,6 @@ if_input(struct ifnet *ifp, struct mbuf_list *ml)
 }
 
 void
-ether_input_mbuf(struct ifnet *ifp, struct mbuf *m)
-{
-	mq_enqueue(&if_input_queue, m);
-	task_add(softnettq, &if_input_task);
-}
-
-void
 if_input_process(void *xmq)
 {
 	struct mbuf_queue *mq = xmq;
@@ -518,7 +511,6 @@ if_input_process(void *xmq)
 	struct mbuf *m;
 	struct ifnet *ifp;
 	struct ifih *ifih;
-	int mit = 0;
 	int s;
 
 	mq_delist(mq, &ml);
@@ -530,22 +522,21 @@ if_input_process(void *xmq)
 	KERNEL_LOCK();
 	s = splnet();
 	while ((m = ml_dequeue(&ml)) != NULL) {
-		if ((++mit & 0x1f) == 0)
-			yield();
+		sched_pause();
 
-again:
+		ifp = if_get(m->m_pkthdr.ph_ifidx);
+		if (ifp == NULL) {
+			m_freem(m);
+			continue;
+		}
+
 		/*
 		 * Pass this mbuf to all input handlers of its
 		 * interface until it is consumed.
 		 */
-		ifp = m->m_pkthdr.rcvif;
 		SLIST_FOREACH(ifih, &ifp->if_inputs, ifih_next) {
 			if ((*ifih->ifih_input)(m))
 				break;
-
-			/* Pseudo-drivers might be stacked. */
-			if (ifp != m->m_pkthdr.rcvif)
-				goto again;
 		}
 	}
 	splx(s);
@@ -713,7 +704,7 @@ if_detach_filter(void *ctx, const struct mbuf *m)
 		return (0);
 #endif
 
-	return (m->m_pkthdr.rcvif == ifp);
+	return (m->m_pkthdr.ph_ifidx == ifp->if_index);
 }
 
 void
@@ -2485,4 +2476,10 @@ niq_enlist(struct niqueue *niq, struct mbuf_list *ml)
 		if_congestion();
 
 	return (rv);
+}
+
+__dead void
+unhandled_af(int af)
+{
+	panic("unhandled af %d", af);
 }

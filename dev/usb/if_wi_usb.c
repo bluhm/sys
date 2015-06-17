@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_wi_usb.c,v 1.64 2014/11/18 02:37:30 tedu Exp $ */
+/*	$OpenBSD: if_wi_usb.c,v 1.66 2015/06/12 15:47:31 mpi Exp $ */
 
 /*
  * Copyright (c) 2003 Dale Rahn. All rights reserved.
@@ -271,11 +271,11 @@ wi_usb_match(struct device *parent, void *match, void *aux)
 {
 	struct usb_attach_arg	*uaa = aux;
 
-	if (uaa->iface != NULL)
+	if (uaa->iface == NULL || uaa->configno != 1)
 		return (UMATCH_NONE);
 
 	return (wi_usb_lookup(uaa->vendor, uaa->product) != NULL ?
-		UMATCH_VENDOR_PRODUCT : UMATCH_NONE);
+		UMATCH_VENDOR_PRODUCT_CONF_IFACE : UMATCH_NONE);
 }
 
 
@@ -290,28 +290,14 @@ wi_usb_attach(struct device *parent, struct device *self, void *aux)
 	struct usb_attach_arg	*uaa = aux;
 /*	int			s; */
 	struct usbd_device	*dev = uaa->device;
-	struct usbd_interface	*iface;
-	usbd_status		err;
+	struct usbd_interface	*iface = uaa->iface;
 	usb_interface_descriptor_t	*id;
 	usb_endpoint_descriptor_t	*ed;
 	int			 i;
 
 	DPRINTFN(5,(" : wi_usb_attach: sc=%p", sc));
 
-	err = usbd_set_config_no(dev, WI_USB_CONFIG_NO, 1);
-	if (err) {
-		printf("%s: setting config no failed\n", sc->wi_usb_dev.dv_xname);
-		return;
-	}
-
 	/* XXX - any tasks? */
-
-	err = usbd_device2interface_handle(dev, WI_USB_IFACE_IDX, &iface);
-	if (err) {
-		printf("%s: getting interface handle failed\n",
-		    sc->wi_usb_dev.dv_xname);
-		return;
-	}
 
 	/* XXX - flags? */
 
@@ -1741,7 +1727,7 @@ wi_watchdog_usb(struct ifnet *ifp)
 /*
  * ioctl will always be called from a user context, 
  * therefore it is possible to sleep in the calling context
- * acquire the lock and call the real ioctl fucntion directly 
+ * acquire the lock and call the real ioctl function directly 
  */
 int
 wi_ioctl_usb(struct ifnet *ifp, u_long command, caddr_t data)

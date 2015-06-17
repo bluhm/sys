@@ -1,4 +1,4 @@
-/*	$OpenBSD: nd6_rtr.c,v 1.104 2015/05/26 12:19:52 mpi Exp $	*/
+/*	$OpenBSD: nd6_rtr.c,v 1.107 2015/06/16 11:09:40 mpi Exp $	*/
 /*	$KAME: nd6_rtr.c,v 1.97 2001/02/07 11:09:13 itojun Exp $	*/
 
 /*
@@ -88,7 +88,7 @@ extern int nd6_recalc_reachtm_interval;
 void
 nd6_rs_input(struct mbuf *m, int off, int icmp6len)
 {
-	struct ifnet *ifp = m->m_pkthdr.rcvif;
+	struct ifnet *ifp;
 	struct ip6_hdr *ip6 = mtod(m, struct ip6_hdr *);
 	struct nd_router_solicit *nd_rs;
 	struct in6_addr saddr6 = ip6->ip6_src;
@@ -105,6 +105,10 @@ nd6_rs_input(struct mbuf *m, int off, int icmp6len)
 #endif
 	union nd_opts ndopts;
 	char src[INET6_ADDRSTRLEN], dst[INET6_ADDRSTRLEN];
+
+	ifp = if_get(m->m_pkthdr.ph_ifidx);
+	if (ifp == NULL)
+		goto freeit;
 
 	/* If I'm not a router, ignore it. XXX - too restrictive? */
 	if (!ip6_forwarding)
@@ -197,7 +201,7 @@ nd6_rs_output(struct ifnet* ifp, struct in6_ifaddr *ia6)
 	if (m == NULL)
 		return;
 
-	m->m_pkthdr.rcvif = NULL;
+	m->m_pkthdr.ph_ifidx = 0;
 	m->m_pkthdr.ph_rtableid = ifp->if_rdomain;
 	m->m_flags |= M_MCAST;
 	m->m_pkthdr.csum_flags |= M_ICMP_CSUM_OUT;
@@ -218,7 +222,7 @@ nd6_rs_output(struct ifnet* ifp, struct in6_ifaddr *ia6)
 	/* ip6->ip6_plen will be set later */
 	ip6->ip6_nxt = IPPROTO_ICMPV6;
 	ip6->ip6_hlim = 255;
-	
+
 	ip6->ip6_dst = in6addr_linklocal_allrouters;
 
 	ip6->ip6_src = ia6->ia_addr.sin6_addr;
@@ -278,8 +282,8 @@ nd6_rs_dev_state(void *arg)
 void
 nd6_ra_input(struct mbuf *m, int off, int icmp6len)
 {
-	struct ifnet *ifp = m->m_pkthdr.rcvif;
-	struct nd_ifinfo *ndi = ND_IFINFO(ifp);
+	struct ifnet *ifp;
+	struct nd_ifinfo *ndi;
 	struct ip6_hdr *ip6 = mtod(m, struct ip6_hdr *);
 	struct nd_router_advert *nd_ra;
 	struct in6_addr saddr6 = ip6->ip6_src;
@@ -293,9 +297,15 @@ nd6_ra_input(struct mbuf *m, int off, int icmp6len)
 	struct nd_defrouter *dr;
 	char src[INET6_ADDRSTRLEN], dst[INET6_ADDRSTRLEN];
 
+	ifp = if_get(m->m_pkthdr.ph_ifidx);
+	if (ifp == NULL)
+		goto freeit;
+
 	/* We accept RAs only if inet6 autoconf is enabled  */
 	if (!(ifp->if_xflags & IFXF_AUTOCONF6))
 		goto freeit;
+
+	ndi = ND_IFINFO(ifp);
 	if (!(ndi->flags & ND6_IFF_ACCEPT_RTADV))
 		goto freeit;
 
@@ -420,7 +430,7 @@ nd6_ra_input(struct mbuf *m, int off, int icmp6len)
 			pr.ndpr_prefix.sin6_family = AF_INET6;
 			pr.ndpr_prefix.sin6_len = sizeof(pr.ndpr_prefix);
 			pr.ndpr_prefix.sin6_addr = pi->nd_opt_pi_prefix;
-			pr.ndpr_ifp = (struct ifnet *)m->m_pkthdr.rcvif;
+			pr.ndpr_ifp = ifp;
 
 			pr.ndpr_raf_onlink = (pi->nd_opt_pi_flags_reserved &
 			     ND_OPT_PI_FLAG_ONLINK) ? 1 : 0;
@@ -998,7 +1008,7 @@ purge_detached(struct ifnet *ifp)
 }
 
 int
-nd6_prelist_add(struct nd_prefix *pr, struct nd_defrouter *dr, 
+nd6_prelist_add(struct nd_prefix *pr, struct nd_defrouter *dr,
     struct nd_prefix **newp)
 {
 	struct nd_prefix *new = NULL;
@@ -1395,7 +1405,7 @@ nd6_addr_add(void *prptr)
 	autoconf = 1;
 	privacy = (pr->ndpr_ifp->if_xflags & IFXF_INET6_NOPRIVACY) == 0;
 
-	/* 
+	/*
 	 * Check again if a non-deprecated address has already
 	 * been autoconfigured for this prefix.
 	 */
@@ -1561,7 +1571,7 @@ pfxlist_onlink_check(void)
 	 * interfaces.  Such cases will be handled in nd6_prefix_onlink,
 	 * so we don't have to care about them.
 	 */
-	LIST_FOREACH(pr, &nd_prefix, ndpr_entry) {	
+	LIST_FOREACH(pr, &nd_prefix, ndpr_entry) {
 		int e;
 
 		if (IN6_IS_ADDR_LINKLOCAL(&pr->ndpr_prefix.sin6_addr))
@@ -1652,7 +1662,6 @@ nd6_prefix_onlink(struct nd_prefix *pr)
 	struct ifaddr *ifa;
 	struct ifnet *ifp = pr->ndpr_ifp;
 	struct sockaddr_in6 mask6;
-	struct sockaddr_dl sa_dl = { sizeof(sa_dl), AF_LINK };
 	struct nd_prefix *opr;
 	u_long rtflags;
 	int error = 0;
@@ -1725,9 +1734,6 @@ nd6_prefix_onlink(struct nd_prefix *pr)
 	bzero(&mask6, sizeof(mask6));
 	mask6.sin6_len = sizeof(mask6);
 	mask6.sin6_addr = pr->ndpr_mask;
-
-	sa_dl.sdl_type = ifp->if_type;
-	sa_dl.sdl_index = ifp->if_index;
 
 	/* rtrequest1() will probably set RTF_UP, but we're not sure. */
 	rtflags = RTF_UP;

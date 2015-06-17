@@ -1,4 +1,4 @@
-/*	$OpenBSD: raw_ip6.c,v 1.73 2015/03/04 11:10:55 mpi Exp $	*/
+/*	$OpenBSD: raw_ip6.c,v 1.75 2015/06/16 11:09:40 mpi Exp $	*/
 /*	$KAME: raw_ip6.c,v 1.69 2001/03/04 15:55:44 itojun Exp $	*/
 
 /*
@@ -223,10 +223,15 @@ rip6_input(struct mbuf **mp, int *offp, int proto)
 			m_freem(m);
 		else {
 			u_int8_t *prvnxtp = ip6_get_prevhdr(m, *offp); /* XXX */
-			in6_ifstat_inc(m->m_pkthdr.rcvif, ifs6_in_protounknown);
-			icmp6_error(m, ICMP6_PARAM_PROB,
-			    ICMP6_PARAMPROB_NEXTHEADER,
-			    prvnxtp - mtod(m, u_int8_t *));
+			struct ifnet *ifp;
+
+			ifp = if_get(m->m_pkthdr.ph_ifidx);
+			if (ifp != NULL) {
+				in6_ifstat_inc(ifp, ifs6_in_protounknown);
+				icmp6_error(m, ICMP6_PARAM_PROB,
+				    ICMP6_PARAMPROB_NEXTHEADER,
+				    prvnxtp - mtod(m, u_int8_t *));
+			}
 		}
 		ip6stat.ip6s_delivered--;
 	}
@@ -503,7 +508,7 @@ rip6_output(struct mbuf *m, ...)
  * Raw IPv6 socket option processing.
  */
 int
-rip6_ctloutput(int op, struct socket *so, int level, int optname, 
+rip6_ctloutput(int op, struct socket *so, int level, int optname,
 	struct mbuf **mp)
 {
 	struct inpcb *inp = sotoinpcb(so);
@@ -517,17 +522,17 @@ rip6_ctloutput(int op, struct socket *so, int level, int optname,
 		case IP_DIVERTFL:
 			switch (op) {
 			case PRCO_SETOPT:
-				if (*mp == 0 || (*mp)->m_len < sizeof (int)) {
+				if (*mp == NULL || (*mp)->m_len < sizeof(int)) {
 					error = EINVAL;
 					break;
 				}
 				dir = *mtod(*mp, int *);
 				if (inp->inp_divertfl > 0)
 					error = ENOTSUP;
-				else if ((dir & IPPROTO_DIVERT_RESP) || 
+				else if ((dir & IPPROTO_DIVERT_RESP) ||
 					   (dir & IPPROTO_DIVERT_INIT))
 					inp->inp_divertfl = dir;
-				else 
+				else
 					error = EINVAL;
 				break;
 
@@ -588,7 +593,7 @@ extern	u_long rip6_sendspace;
 extern	u_long rip6_recvspace;
 
 int
-rip6_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam, 
+rip6_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 	struct mbuf *control, struct proc *p)
 {
 	struct inpcb *in6p = sotoinpcb(so);
@@ -650,7 +655,7 @@ rip6_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		soisdisconnected(so);
 		/* FALLTHROUGH */
 	case PRU_DETACH:
-		if (in6p == 0)
+		if (in6p == NULL)
 			panic("rip6_detach");
 #ifdef MROUTING
 		if (so == ip6_mrouter)

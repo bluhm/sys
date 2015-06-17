@@ -1,4 +1,4 @@
-/*	$OpenBSD: nd6.c,v 1.136 2015/05/15 12:00:57 claudio Exp $	*/
+/*	$OpenBSD: nd6.c,v 1.139 2015/06/16 11:09:40 mpi Exp $	*/
 /*	$KAME: nd6.c,v 1.280 2002/06/08 19:52:07 itojun Exp $	*/
 
 /*
@@ -430,7 +430,7 @@ nd6_llinfo_timer(void *arg)
 				 * XXX: should we consider
 				 * older rcvif?
 				 */
-				m->m_pkthdr.rcvif = rt->rt_ifp;
+				m->m_pkthdr.ph_ifidx = rt->rt_ifp->if_index;
 
 				icmp6_error(m, ICMP6_DST_UNREACH,
 				    ICMP6_DST_UNREACH_ADDR, 0);
@@ -651,7 +651,6 @@ nd6_lookup(struct in6_addr *addr6, int create, struct ifnet *ifp,
 	}
 	if (!rt) {
 		if (create && ifp) {
-			struct sockaddr_dl sa_dl = { sizeof(sa_dl), AF_LINK };
 			struct rt_addrinfo info;
 			int e;
 
@@ -667,9 +666,6 @@ nd6_lookup(struct in6_addr *addr6, int create, struct ifnet *ifp,
 			if (ifa == NULL)
 				return (NULL);
 
-			sa_dl.sdl_type = ifp->if_type;
-			sa_dl.sdl_index = ifp->if_index;
-
 			/*
 			 * Create a new route.  RTF_LLINFO is necessary
 			 * to create a Neighbor Cache entry for the
@@ -679,7 +675,8 @@ nd6_lookup(struct in6_addr *addr6, int create, struct ifnet *ifp,
 			bzero(&info, sizeof(info));
 			info.rti_flags = RTF_UP | RTF_HOST | RTF_LLINFO;
 			info.rti_info[RTAX_DST] = sin6tosa(&sin6);
-			info.rti_info[RTAX_GATEWAY] = (struct sockaddr *)&sa_dl;
+			info.rti_info[RTAX_GATEWAY] =
+			    (struct sockaddr *)ifp->if_sadl;
 			if ((e = rtrequest1(RTM_ADD, &info, RTP_CONNECTED,
 			    &rt, rtableid)) != 0) {
 #if 0
@@ -1319,7 +1316,7 @@ nd6_ioctl(u_long cmd, caddr_t data, struct ifnet *ifp)
  * code - type dependent information
  */
 struct rtentry *
-nd6_cache_lladdr(struct ifnet *ifp, struct in6_addr *from, char *lladdr, 
+nd6_cache_lladdr(struct ifnet *ifp, struct in6_addr *from, char *lladdr,
     int lladdrlen, int type, int code)
 {
 	struct rtentry *rt = NULL;
@@ -1492,7 +1489,7 @@ fail:
 	 *	0	n	y	--	(3)	c   s     s
 	 *	0	y	y	n	(4)	c   s     s
 	 *	0	y	y	y	(5)	c   s     s
-	 *	1	--	n	--	(6) c	c 	c s
+	 *	1	--	n	--	(6) c	c	c s
 	 *	1	--	y	--	(7) c	c   s	c s
 	 *
 	 *					(c=clear s=set)

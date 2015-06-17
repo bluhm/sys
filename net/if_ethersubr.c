@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ethersubr.c,v 1.201 2015/05/26 11:39:07 mpi Exp $	*/
+/*	$OpenBSD: if_ethersubr.c,v 1.205 2015/06/16 11:09:39 mpi Exp $	*/
 /*	$NetBSD: if_ethersubr.c,v 1.19 1996/05/07 02:40:30 thorpej Exp $	*/
 
 /*
@@ -108,16 +108,6 @@ didn't get a copy, you may request one from <license@ipv6.nrl.navy.mil>.
 #include <net/if_bridge.h>
 #endif
 
-#include "vlan.h"
-#if NVLAN > 0
-#include <net/if_vlan_var.h>
-#endif /* NVLAN > 0 */
-
-#include "carp.h"
-#if NCARP > 0
-#include <netinet/ip_carp.h>
-#endif
-
 #include "pppoe.h"
 #if NPPPOE > 0
 #include <net/if_pppoe.h>
@@ -139,9 +129,6 @@ didn't get a copy, you may request one from <license@ipv6.nrl.navy.mil>.
 u_char etherbroadcastaddr[ETHER_ADDR_LEN] =
     { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
 #define senderr(e) { error = (e); goto bad;}
-
-static inline int	ether_addheader(struct mbuf **, struct ifnet *,
-			   u_int16_t, u_char *, u_char *);
 
 int
 ether_ioctl(struct ifnet *ifp, struct arpcom *arp, u_long cmd, caddr_t data)
@@ -177,84 +164,22 @@ ether_ioctl(struct ifnet *ifp, struct arpcom *arp, u_long cmd, caddr_t data)
 	return (error);
 }
 
-static inline int
-ether_addheader(struct mbuf **m, struct ifnet *ifp, u_int16_t etype,
-    u_char *esrc, u_char *edst)
-{
-	struct ether_header *eh;
-
-#if NVLAN > 0
-	if ((*m)->m_flags & M_VLANTAG) {
-		struct ifvlan	*ifv = ifp->if_softc;
-		struct ifnet	*p = ifv->ifv_p;
-		u_int8_t	prio = (*m)->m_pkthdr.pf.prio;
-
-		/* IEEE 802.1p has prio 0 and 1 swapped */
-		if (prio <= 1)
-			prio = !prio;
-
-#if NBRIDGE > 0
-		/*
-		 * The bridge might send on non-vlan interfaces -- which
-		 * do not need this header -- or add the vlan-header itself
-		 * in bridge_ifenqueue -- which would add a second header.
-		 */
-		if (ifp->if_bridgeport)
-			(*m)->m_flags &= ~M_VLANTAG;
-		else
-#endif
-		/* should we use the tx tagging hw offload at all? */
-		if ((p->if_capabilities & IFCAP_VLAN_HWTAGGING) &&
-		    (ifv->ifv_type == ETHERTYPE_VLAN)) {
-			(*m)->m_pkthdr.ether_vtag = ifv->ifv_tag +
-			    (prio << EVL_PRIO_BITS);
-			/* don't return, need to add regular ethernet header */
-		} else {
-			struct ether_vlan_header	*evh;
-
-			M_PREPEND(*m, sizeof(*evh), M_DONTWAIT);
-			if (*m == NULL)
-				return (-1);
-			evh = mtod(*m, struct ether_vlan_header *);
-			memcpy(evh->evl_dhost, edst, sizeof(evh->evl_dhost));
-			memcpy(evh->evl_shost, esrc, sizeof(evh->evl_shost));
-			evh->evl_proto = etype;
-			evh->evl_encap_proto = htons(ifv->ifv_type);
-			evh->evl_tag = htons(ifv->ifv_tag +
-			    (prio << EVL_PRIO_BITS));
-			(*m)->m_flags &= ~M_VLANTAG;
-			return (0);
-		}
-	}
-#endif /* NVLAN > 0 */
-	M_PREPEND(*m, ETHER_HDR_LEN, M_DONTWAIT);
-	if (*m == NULL)
-		return (-1);
-	eh = mtod(*m, struct ether_header *);
-	eh->ether_type = etype;
-	memcpy(eh->ether_dhost, edst, sizeof(eh->ether_dhost));
-	memcpy(eh->ether_shost, esrc, sizeof(eh->ether_shost));
-	return (0);
-}
-
 /*
  * Ethernet output routine.
  * Encapsulate a packet of type family for the local net.
  * Assumes that ifp is actually pointer to arpcom structure.
  */
 int
-ether_output(struct ifnet *ifp0, struct mbuf *m0, struct sockaddr *dst,
+ether_output(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst,
     struct rtentry *rt)
 {
 	u_int16_t etype;
-	int len, error = 0;
 	u_char edst[ETHER_ADDR_LEN];
 	u_char *esrc;
-	struct mbuf *m = m0;
 	struct mbuf *mcopy = NULL;
 	struct ether_header *eh;
-	struct arpcom *ac = (struct arpcom *)ifp0;
-	struct ifnet *ifp = ifp0;
+	struct arpcom *ac = (struct arpcom *)ifp;
+	int error = 0;
 
 #ifdef DIAGNOSTIC
 	if (ifp->if_rdomain != rtable_l2(m->m_pkthdr.ph_rtableid)) {
@@ -266,20 +191,6 @@ ether_output(struct ifnet *ifp0, struct mbuf *m0, struct sockaddr *dst,
 #endif
 
 	esrc = ac->ac_enaddr;
-
-#if NCARP > 0
-	if (ifp->if_type == IFT_CARP) {
-		ifp = ifp->if_carpdev;
-		ac = (struct arpcom *)ifp;
-
-		if ((ifp0->if_flags & (IFF_UP|IFF_RUNNING)) !=
-		    (IFF_UP|IFF_RUNNING))
-			senderr(ENETDOWN);
-	}
-
-	if (ifp0 != ifp && ifp0->if_type == IFT_CARP)
-		esrc = carp_get_srclladdr(ifp0, esrc);
-#endif /* NCARP > 0 */
 
 	if ((ifp->if_flags & (IFF_UP|IFF_RUNNING)) != (IFF_UP|IFF_RUNNING))
 		senderr(ENETDOWN);
@@ -358,8 +269,13 @@ ether_output(struct ifnet *ifp0, struct mbuf *m0, struct sockaddr *dst,
 	if (mcopy)
 		(void) looutput(ifp, mcopy, dst, rt);
 
-	if (ether_addheader(&m, ifp, etype, esrc, edst) == -1)
-		senderr(ENOBUFS);
+	M_PREPEND(m, sizeof(struct ether_header), M_DONTWAIT);
+	if (m == NULL)
+		return (ENOBUFS);
+	eh = mtod(m, struct ether_header *);
+	eh->ether_type = etype;
+	memcpy(eh->ether_dhost, edst, sizeof(eh->ether_dhost));
+	memcpy(eh->ether_shost, esrc, sizeof(eh->ether_shost));
 
 #if NBRIDGE > 0
 	/*
@@ -402,14 +318,7 @@ ether_output(struct ifnet *ifp0, struct mbuf *m0, struct sockaddr *dst,
 	}
 #endif
 
-	len = m->m_pkthdr.len;
-
-	error = if_output(ifp, m);
-#if NCARP > 0
-	if (!error && ifp != ifp0)
-		ifp0->if_obytes += len;
-#endif /* NCARP > 0 */
-	return (error);
+	return (if_output(ifp, m));
 bad:
 	if (m)
 		m_freem(m);
@@ -435,7 +344,8 @@ ether_input(struct mbuf *m)
 	struct ether_header *eh_tmp;
 #endif
 
-	ifp = m->m_pkthdr.rcvif;
+	ifp = if_get(m->m_pkthdr.ph_ifidx);
+	KASSERT(ifp != NULL);
 	if ((ifp->if_flags & IFF_UP) == 0) {
 		m_freem(m);
 		return (1);
@@ -484,23 +394,12 @@ ether_input(struct mbuf *m)
 			if (m == NULL)
 				return (1);
 			/* The bridge has determined it's for us. */
-			ifp = m->m_pkthdr.rcvif;
+			ifp = if_get(m->m_pkthdr.ph_ifidx);
+			KASSERT(ifp != NULL);
 			m_adj(m, ETHER_HDR_LEN);
 		}
 	}
 #endif
-
-#if NCARP > 0
-	if (ifp->if_carp) {
-		if (ifp->if_type != IFT_CARP && (carp_input(ifp, eh, m) == 0))
-			return (1);
-		/* clear mcast if received on a carp IP balanced address */
-		else if (ifp->if_type == IFT_CARP &&
-		    m->m_flags & (M_BCAST|M_MCAST) &&
-		    carp_our_mcastaddr(ifp, (u_int8_t *)&eh->ether_dhost))
-			m->m_flags &= ~(M_BCAST|M_MCAST);
-	}
-#endif /* NCARP > 0 */
 
 	ac = (struct arpcom *)ifp;
 

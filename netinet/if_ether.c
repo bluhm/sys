@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ether.c,v 1.153 2015/05/26 11:55:34 mpi Exp $	*/
+/*	$OpenBSD: if_ether.c,v 1.155 2015/06/16 11:09:40 mpi Exp $	*/
 /*	$NetBSD: if_ether.c,v 1.31 1996/05/11 12:59:58 mycroft Exp $	*/
 
 /*
@@ -260,7 +260,7 @@ arp_rtrequest(int req, struct rtentry *rt)
 		break;
 
 	case RTM_DELETE:
-		if (la == 0)
+		if (la == NULL)
 			break;
 		arp_inuse--;
 		LIST_REMOVE(la, la_list);
@@ -377,7 +377,7 @@ arpresolve(struct arpcom *ac, struct rtentry *rt0, struct mbuf *m,
 			    inet_ntop(AF_INET, &satosin(dst)->sin_addr,
 				addr, sizeof(addr)));
 	}
-	if (la == 0 || rt == 0) {
+	if (la == NULL || rt == NULL) {
 		m_freem(m);
 		return (EINVAL);
 	}
@@ -522,8 +522,8 @@ void
 in_arpinput(struct mbuf *m)
 {
 	struct ether_arp *ea;
-	struct ifnet *ifp = m->m_pkthdr.rcvif;
-	struct arpcom *ac = (struct arpcom *)ifp;
+	struct ifnet *ifp;
+	struct arpcom *ac;
 	struct ether_header *eh;
 	struct llinfo_arp *la = 0;
 	struct rtentry *rt;
@@ -539,6 +539,11 @@ in_arpinput(struct mbuf *m)
 	char addr[INET_ADDRSTRLEN];
 	int op, changed = 0;
 	unsigned int len;
+
+	ifp = if_get(m->m_pkthdr.ph_ifidx);
+	if (ifp == NULL)
+		goto out;
+	ac = (struct arpcom *)ifp;
 
 	ea = mtod(m, struct ether_arp *);
 	op = ntohs(ea->arp_op);
@@ -685,7 +690,7 @@ in_arpinput(struct mbuf *m)
 			    ac->ac_if.if_xname);
 			goto out;
 		}
- 		sdl->sdl_alen = sizeof(ea->arp_sha);
+		sdl->sdl_alen = sizeof(ea->arp_sha);
 		memcpy(LLADDR(sdl), ea->arp_sha, sizeof(ea->arp_sha));
 		if (rt->rt_expire)
 			rt->rt_expire = time_second + arpt_keep;
@@ -723,7 +728,7 @@ out:
 	} else {
 		la = arplookup(itaddr.s_addr, 0, SIN_PROXY,
 		    rtable_l2(m->m_pkthdr.ph_rtableid));
-		if (la == 0)
+		if (la == NULL)
 			goto out;
 		rt = la->la_rt;
 		if (rt->rt_ifp->if_type == IFT_CARP && ifp->if_type != IFT_CARP)
@@ -796,7 +801,7 @@ arplookup(u_int32_t addr, int create, int proxy, u_int tableid)
 	flags = (create) ? (RT_REPORT|RT_RESOLVE) : 0;
 
 	rt = rtalloc((struct sockaddr *)&sin, flags, tableid);
-	if (rt == 0)
+	if (rt == NULL)
 		return (0);
 	rt->rt_refcnt--;
 	if ((rt->rt_flags & RTF_GATEWAY) || (rt->rt_flags & RTF_LLINFO) == 0 ||
@@ -804,7 +809,7 @@ arplookup(u_int32_t addr, int create, int proxy, u_int tableid)
 		if (create) {
 			if (rt->rt_refcnt <= 0 &&
 			    (rt->rt_flags & RTF_CLONED) != 0) {
-			    	rtdeletemsg(rt, tableid);
+				rtdeletemsg(rt, tableid);
 			}
 		}
 		return (0);
@@ -833,8 +838,8 @@ arpproxy(struct in_addr in, u_int rdomain)
 		if (!memcmp(LLADDR((struct sockaddr_dl *)la->la_rt->rt_gateway),
 		    LLADDR(ifp->if_sadl),
 		    ETHER_ADDR_LEN)) {
-		    	found = 1;
-		    	break;
+			found = 1;
+			break;
 		}
 	}
 
@@ -921,7 +926,7 @@ in_revarpinput(struct mbuf *m)
 #ifdef NFSCLIENT
 	if (!revarp_in_progress)
 		goto out;
-	ifp = m->m_pkthdr.rcvif;
+	ifp = if_get(m->m_pkthdr.ph_ifidx);
 	if (ifp != revarp_ifp) /* !same interface */
 		goto out;
 	if (revarp_finished)
@@ -1029,7 +1034,7 @@ db_print_sa(struct sockaddr *sa)
 	int len;
 	u_char *p;
 
-	if (sa == 0) {
+	if (sa == NULL) {
 		db_printf("[NULL]");
 		return;
 	}
@@ -1050,7 +1055,7 @@ db_print_sa(struct sockaddr *sa)
 void
 db_print_ifa(struct ifaddr *ifa)
 {
-	if (ifa == 0)
+	if (ifa == NULL)
 		return;
 	db_printf("  ifa_addr=");
 	db_print_sa(ifa->ifa_addr);

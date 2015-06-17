@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_trunk.c,v 1.100 2015/05/26 11:39:07 mpi Exp $	*/
+/*	$OpenBSD: if_trunk.c,v 1.103 2015/06/16 11:09:39 mpi Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006, 2007 Reyk Floeter <reyk@openbsd.org>
@@ -16,9 +16,6 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include "bpfilter.h"
-#include "trunk.h"
-
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
@@ -35,9 +32,6 @@
 #include <net/if_dl.h>
 #include <net/if_media.h>
 #include <net/if_types.h>
-#if NBPFILTER > 0
-#include <net/bpf.h>
-#endif
 
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
@@ -51,6 +45,10 @@
 #include <net/if_trunk.h>
 #include <net/trunklacp.h>
 
+#include "bpfilter.h"
+#if NBPFILTER > 0
+#include <net/bpf.h>
+#endif
 
 SLIST_HEAD(__trhead, trunk_softc) trunk_list;	/* list of trunks */
 
@@ -859,17 +857,19 @@ trunk_ether_delmulti(struct trunk_softc *tr, struct ifreq *ifr)
 	if ((error = ether_delmulti(ifr, &tr->tr_ac)) != ENETRESET)
 		return (error);
 
-	if ((error = trunk_ioctl_allports(tr, SIOCDELMULTI,
-	    (caddr_t)ifr)) != 0) {
+	/* We no longer use this multicast address.  Tell parent so. */
+	error = trunk_ioctl_allports(tr, SIOCDELMULTI, (caddr_t)ifr);
+	if (error == 0) {
+		SLIST_REMOVE(&tr->tr_mc_head, mc, trunk_mc, mc_entries);
+		free(mc, M_DEVBUF, sizeof(*mc));
+	} else {
 		/* XXX At least one port failed to remove the address */
 		if (tr->tr_ifflags & IFF_DEBUG) {
 			printf("%s: failed to remove multicast address "
-			    "on all ports\n", tr->tr_ifname);
+			    "on all ports (%d)\n", tr->tr_ifname, error);
 		}
+		(void)ether_addmulti(ifr, &tr->tr_ac);
 	}
-
-	SLIST_REMOVE(&tr->tr_mc_head, mc, trunk_mc, mc_entries);
-	free(mc, M_DEVBUF, 0);
 
 	return (0);
 }
@@ -888,7 +888,7 @@ trunk_ether_purgemulti(struct trunk_softc *tr)
 		trunk_ioctl_allports(tr, SIOCDELMULTI, (caddr_t)ifr);
 
 		SLIST_REMOVE(&tr->tr_mc_head, mc, trunk_mc, mc_entries);
-		free(mc, M_DEVBUF, 0);
+		free(mc, M_DEVBUF, sizeof(*mc));
 	}
 }
 
@@ -1087,11 +1087,17 @@ trunk_input(struct mbuf *m)
 	struct trunk_port *tp;
 	struct ifnet *trifp = NULL;
 	struct ether_header *eh;
+	struct mbuf_list ml = MBUF_LIST_INITIALIZER();
 	int error;
 
-	ifp = m->m_pkthdr.rcvif;
-	eh = mtod(m, struct ether_header *);
+	ifp = if_get(m->m_pkthdr.ph_ifidx);
+	KASSERT(ifp != NULL);
+	if ((ifp->if_flags & IFF_UP) == 0) {
+		m_freem(m);
+		return (1);
+	}
 
+	eh = mtod(m, struct ether_header *);
 	if (ETHER_IS_MULTICAST(eh->ether_dhost))
 		ifp->if_imcasts++;
 
@@ -1113,11 +1119,6 @@ trunk_input(struct mbuf *m)
 		goto bad;
 	}
 
-#if NBPFILTER > 0
-	if (trifp->if_bpf && tr->tr_proto != TRUNK_PROTO_FAILOVER)
-		bpf_mtap_ether(trifp->if_bpf, m, BPF_DIRECTION_IN);
-#endif
-
 	if ((*tr->tr_input)(tr, tp, m)) {
 		/*
 		 * We stop here if the packet has been consumed
@@ -1127,9 +1128,10 @@ trunk_input(struct mbuf *m)
 		return (1);
 	}
 
+	ml_enqueue(&ml, m);
+	if_input(trifp, &ml);
 	trifp->if_ipackets++;
-	m->m_pkthdr.rcvif = trifp;
-	return (0);
+	return (1);
 
  bad:
 	if (trifp != NULL)
@@ -1363,7 +1365,6 @@ trunk_fail_start(struct trunk_softc *tr, struct mbuf *m)
 int
 trunk_fail_input(struct trunk_softc *tr, struct trunk_port *tp, struct mbuf *m)
 {
-	struct ifnet *ifp = &tr->tr_ac.ac_if;
 	struct trunk_port *tmp_tp;
 	int accept = 0;
 
@@ -1380,10 +1381,6 @@ trunk_fail_input(struct trunk_softc *tr, struct trunk_port *tp, struct mbuf *m)
 	}
 	if (!accept)
 		return (-1);
-#if NBPFILTER > 0
-	if (ifp->if_bpf)
-		bpf_mtap_ether(ifp->if_bpf, m, BPF_DIRECTION_IN);
-#endif
 
 	return (0);
 }

@@ -1,4 +1,4 @@
-/*	$OpenBSD: ipsec_input.c,v 1.131 2015/05/13 10:42:46 jsg Exp $	*/
+/*	$OpenBSD: ipsec_input.c,v 1.133 2015/06/16 11:09:40 mpi Exp $	*/
 /*
  * The authors of this code are John Ioannidis (ji@tla.org),
  * Angelos D. Keromytis (kermit@csd.uch.gr) and
@@ -119,7 +119,6 @@ ipsec_common_input(struct mbuf *m, int skip, int protoff, int af, int sproto,
 			    sproto == IPPROTO_AH ? (y)++ : (z)++)
 
 	union sockaddr_union dst_address;
-	struct timeval tv;
 	struct tdb *tdbp;
 	struct ifnet *encif;
 	u_int32_t spi;
@@ -291,22 +290,18 @@ ipsec_common_input(struct mbuf *m, int skip, int protoff, int af, int sproto,
 		}
 
 		/* XXX This conflicts with the scoped nature of IPv6 */
-		m->m_pkthdr.rcvif = encif;
+		m->m_pkthdr.ph_ifidx = encif->if_index;
 	}
 
 	/* Register first use, setup expiration timer. */
 	if (tdbp->tdb_first_use == 0) {
 		tdbp->tdb_first_use = time_second;
-
-		tv.tv_usec = 0;
-
-		tv.tv_sec = tdbp->tdb_exp_first_use + tdbp->tdb_first_use;
 		if (tdbp->tdb_flags & TDBF_FIRSTUSE)
-			timeout_add(&tdbp->tdb_first_tmo, hzto(&tv));
-
-		tv.tv_sec = tdbp->tdb_first_use + tdbp->tdb_soft_first_use;
+			timeout_add_sec(&tdbp->tdb_first_tmo,
+			    tdbp->tdb_exp_first_use);
 		if (tdbp->tdb_flags & TDBF_SOFT_FIRSTUSE)
-			timeout_add(&tdbp->tdb_sfirst_tmo, hzto(&tv));
+			timeout_add_sec(&tdbp->tdb_sfirst_tmo,
+			    tdbp->tdb_soft_first_use);
 	}
 
 	/*
@@ -1024,8 +1019,12 @@ ah6_input_cb(struct mbuf *m, int off, int protoff)
 		 * more sanity checks in header chain processing.
 		 */
 		if (m->m_pkthdr.len < off) {
+			struct ifnet *ifp;
+
 			ip6stat.ip6s_tooshort++;
-			in6_ifstat_inc(m->m_pkthdr.rcvif, ifs6_in_truncated);
+			ifp = if_get(m->m_pkthdr.ph_ifidx);
+			if (ifp != NULL)
+				in6_ifstat_inc(ifp, ifs6_in_truncated);
 			goto bad;
 		}
 		nxt = (*inet6sw[ip6_protox[nxt]].pr_input)(&m, &off, nxt);
