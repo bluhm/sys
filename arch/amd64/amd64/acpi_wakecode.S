@@ -627,12 +627,14 @@ _ACPI_TRMP_DATA_LABEL(acpi_saved_sfmask)
 	.align 4
 _ACPI_TRMP_DATA_LABEL(acpi_pdirpa)
 	.long 0
+#ifdef HIBERNATE
 _ACPI_TRMP_DATA_LABEL(hibernate_indirect_16)
 	.long	hibernate_resume_vector_3
 	.word	0x18
 _ACPI_TRMP_DATA_LABEL(hibernate_indirect_16b)
 	.long	hibernate_resume_vector_3b
 	.word	0x18
+#endif
 
 _C_LABEL(acpi_tramp_data_end):
 
