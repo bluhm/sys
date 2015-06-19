@@ -193,7 +193,6 @@
 #define NKL2_KIMG_ENTRIES	16
 
 #define NDML4_ENTRIES		1
-#define NDML3_ENTRIES		1
 #define NDML2_ENTRIES		4	/* 4GB */
 
 /*
