@@ -161,7 +161,7 @@ export	NKL3_KIMG_ENTRIES
 export	NKL2_KIMG_ENTRIES
 
 export	NDML4_ENTRIES
-export	NDML2_ENTRIES
+export	NDML3_ENTRIES
 
 export	NBPD_L2
 export	NPDPG

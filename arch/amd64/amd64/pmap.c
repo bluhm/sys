@@ -615,14 +615,14 @@ pmap_bootstrap(paddr_t first_avail, paddr_t max_pa)
 	 * operating in the lower 4GB of memory.
 	 */
 	ndmpdp = (max_pa + NBPD_L3 - 1) >> L3_SHIFT;
-	if (ndmpdp < NDML2_ENTRIES)
-		ndmpdp = NDML2_ENTRIES;		/* At least 4GB */
+	if (ndmpdp < NDML3_ENTRIES)
+		ndmpdp = NDML3_ENTRIES;		/* At least 4GB */
 
 	dmpdp = kpm->pm_pdir[PDIR_SLOT_DIRECT] & PG_FRAME;
 
 	dmpd = first_avail; first_avail += ndmpdp * PAGE_SIZE;
 
-	for (i = NDML2_ENTRIES; i < NPDPG * ndmpdp; i++) {
+	for (i = NDML3_ENTRIES; i < NPDPG * ndmpdp; i++) {
 		paddr_t pdp;
 		vaddr_t va;
 
@@ -634,7 +634,7 @@ pmap_bootstrap(paddr_t first_avail, paddr_t max_pa)
 		    PG_M | pg_nx;
 	}
 
-	for (i = NDML2_ENTRIES; i < ndmpdp; i++) {
+	for (i = NDML3_ENTRIES; i < ndmpdp; i++) {
 		paddr_t pdp;
 		vaddr_t va;
 

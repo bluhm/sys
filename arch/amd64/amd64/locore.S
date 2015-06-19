@@ -399,7 +399,7 @@ cont:
 #define PROC0_DMP2_OFF	(PROC0_DMP3_OFF + NDML4_ENTRIES * NBPG)
 #define TABLESIZE \
     ((NKL4_KIMG_ENTRIES + TABLE_L3_ENTRIES + TABLE_L2_ENTRIES + 1 + UPAGES + \
-	NDML4_ENTRIES + NDML2_ENTRIES) * NBPG)
+	NDML4_ENTRIES + NDML3_ENTRIES) * NBPG)
 
 #define fillkpt \
 1:	movl	%eax,(%ebx)	; 	/* store phys addr */ \
@@ -586,7 +586,7 @@ map_tables:
 	 */
 	leal	(PROC0_DMP2_OFF)(%esi), %ebx
 	xorl	%eax, %eax
-	movl	$(NDML2_ENTRIES * NPDPG), %ecx
+	movl	$(NDML3_ENTRIES * NPDPG), %ecx
 1:	orl	$(PG_V|PG_KW|PG_PS|PG_G), %eax
 	cmpl	$__kernel_base_phys, %eax
 	jl	store_pte
@@ -606,7 +606,7 @@ store_pte:
 	leal	(PROC0_DMP3_OFF)(%esi), %ebx
 	leal	(PROC0_DMP2_OFF)(%esi), %eax
 	orl	$(PG_V|PG_KW), %eax
-	movl	$NDML2_ENTRIES, %ecx
+	movl	$NDML3_ENTRIES, %ecx
 	fillkpt_nx
 
 	leal	(PROC0_PML4_OFF + PDIR_SLOT_DIRECT * 8)(%esi), %ebx
