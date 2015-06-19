@@ -392,10 +392,10 @@ cont:
 #define PROC0_PTP2_OFF	(PROC0_PTP3_OFF + NKL4_KIMG_ENTRIES * NBPG)
 #define PROC0_PTP1_OFF	(PROC0_PTP2_OFF + TABLE_L3_ENTRIES * NBPG)
 #define	PROC0_DMP3_OFF	(PROC0_PTP1_OFF + TABLE_L2_ENTRIES * NBPG)
-#define PROC0_DMP2_OFF	(PROC0_DMP3_OFF + NDML3_ENTRIES * NBPG)
+#define PROC0_DMP2_OFF	(PROC0_DMP3_OFF + NDML4_ENTRIES * NBPG)
 #define TABLESIZE \
     ((NKL4_KIMG_ENTRIES + TABLE_L3_ENTRIES + TABLE_L2_ENTRIES + 1 + UPAGES + \
-	NDML3_ENTRIES + NDML2_ENTRIES) * NBPG)
+	NDML4_ENTRIES + NDML2_ENTRIES) * NBPG)
 
 #define fillkpt \
 1:	movl	%eax,(%ebx)	; 	/* store phys addr */ \
@@ -605,7 +605,7 @@ store_pte:
 	leal	(PROC0_PML4_OFF + PDIR_SLOT_DIRECT * 8)(%esi), %ebx
 	leal	(PROC0_DMP3_OFF)(%esi), %eax
 	orl	$(PG_V|PG_KW), %eax
-	movl	$NDML3_ENTRIES, %ecx
+	movl	$NDML4_ENTRIES, %ecx
 	fillkpt_nx
 
 	/* Install recursive top level PDE */
