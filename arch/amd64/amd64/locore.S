@@ -423,6 +423,8 @@ cont:
 	testl	%eax,%eax
 	jz	1f
 	subl	$KERNBASE_LO,%eax	/* XXX */
+	cmpl	%eax,%edi
+	jg	1f
 	movl	%eax,%edi
 1:
 #endif
