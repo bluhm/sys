@@ -634,7 +634,7 @@ _ACPI_TRMP_DATA_LABEL(hibernate_indirect_16)
 _ACPI_TRMP_DATA_LABEL(hibernate_indirect_16b)
 	.long	hibernate_resume_vector_3b
 	.word	0x18
-#endif
+#endif /* HIBERNATE */
 
 _C_LABEL(acpi_tramp_data_end):
 
