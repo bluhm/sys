@@ -437,8 +437,7 @@ struct bridge_softc {
 extern const u_int8_t bstp_etheraddr[];
 
 void	bridge_ifdetach(struct ifnet *);
-struct mbuf *bridge_input(struct ifnet *, struct ether_header *,
-    struct mbuf *);
+struct mbuf *bridge_input(struct mbuf *);
 int	bridge_output(struct ifnet *, struct mbuf *, struct sockaddr *,
     struct rtentry *);
 void	bridge_update(struct ifnet *, struct ether_addr *, int);
