@@ -1,4 +1,4 @@
-/* $OpenBSD: acpi_wakecode.S,v 1.35 2014/12/08 07:12:37 mlarkin Exp $ */
+/* $OpenBSD: acpi_wakecode.S,v 1.36 2015/06/22 20:06:11 bluhm Exp $ */
 /*
  * Copyright (c) 2001 Takanori Watanabe <takawata@jp.freebsd.org>
  * Copyright (c) 2001 Mitsuru IWASAKI <iwasaki@jp.freebsd.org>
