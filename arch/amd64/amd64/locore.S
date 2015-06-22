@@ -423,6 +423,7 @@ cont:
 	testl	%eax,%eax
 	jz	1f
 	subl	$KERNBASE_LO,%eax	/* XXX */
+	/* If symbols finish before 2MB _end alignment, round up. */
 	cmpl	%eax,%edi
 	jg	1f
 	movl	%eax,%edi
