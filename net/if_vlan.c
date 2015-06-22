@@ -70,11 +70,6 @@
 #include <net/bpf.h>
 #endif
 
-#include "bridge.h"
-#if NBRIDGE > 0
-#include <net/if_bridge.h>
-#endif
-
 u_long vlan_tagmask, svlan_tagmask;
 
 #define TAG_HASH_SIZE		32
@@ -304,14 +299,6 @@ vlan_input(struct mbuf *m)
 	}
 
 	if (ifv == NULL) {
-#if NBRIDGE > 0
-		/*
-		 * If the packet hasn't been through its bridge(4) give
-		 * it a chance.
-		 */
-		if (ifp->if_bridgeport && (m->m_flags & M_PROTO1) == 0)
-			return (0);
-#endif
 		ifp->if_noproto++;
 		m_freem(m);
 		return (1);

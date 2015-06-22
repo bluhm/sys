@@ -103,11 +103,6 @@ didn't get a copy, you may request one from <license@ipv6.nrl.navy.mil>.
 #include <net/bpf.h>
 #endif
 
-#include "bridge.h"
-#if NBRIDGE > 0
-#include <net/if_bridge.h>
-#endif
-
 #include "pppoe.h"
 #if NPPPOE > 0
 #include <net/if_pppoe.h>
@@ -378,28 +373,6 @@ ether_input(struct mbuf *m)
 	ifp->if_ibytes += m->m_pkthdr.len + sizeof(*eh);
 
 	etype = ntohs(eh->ether_type);
-
-#if NBRIDGE > 0
-	/*
-	 * Tap the packet off here for a bridge, if configured and
-	 * active for this interface.  bridge_input returns
-	 * NULL if it has consumed the packet, otherwise, it
-	 * gets processed as normal.
-	 */
-	if (ifp->if_bridgeport) {
-		if (m->m_flags & M_PROTO1)
-			m->m_flags &= ~M_PROTO1;
-		else {
-			m = bridge_input(ifp, eh, m);
-			if (m == NULL)
-				return (1);
-			/* The bridge has determined it's for us. */
-			ifp = if_get(m->m_pkthdr.ph_ifidx);
-			KASSERT(ifp != NULL);
-			m_adj(m, ETHER_HDR_LEN);
-		}
-	}
-#endif
 
 	ac = (struct arpcom *)ifp;
 

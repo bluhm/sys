@@ -530,6 +530,15 @@ if_input_process(void *xmq)
 			continue;
 		}
 
+#if NBRIDGE > 0
+		if (ifp->if_bridgeport && (m->m_flags & M_PROTO1) == 0) {
+			m = bridge_input(m);
+			if (m == NULL)
+				continue;
+		}
+		m->m_flags &= ~M_PROTO1;	/* Loop prevention */
+#endif
+
 		/*
 		 * Pass this mbuf to all input handlers of its
 		 * interface until it is consumed.
