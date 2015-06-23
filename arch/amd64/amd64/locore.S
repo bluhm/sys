@@ -427,7 +427,7 @@ cont:
 	testl	%eax,%eax
 	jz	1f
 	subl	$KERNBASE_LO,%eax	/* XXX */
-	/* If symbols finish before 2MB _end alignment, round up. */
+	/* Page tables must be after symbols and after kernel image. */
 	cmpl	%eax,%edi
 	jg	1f
 	movl	%eax,%edi
