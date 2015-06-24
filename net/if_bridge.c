@@ -2606,10 +2606,12 @@ bridge_ifenqueue(struct bridge_softc *sc, struct ifnet *ifp, struct mbuf *m)
 {
 	int error, len;
 
+	/* Loop prevention. */
+	m->m_flags |= M_PROTO1;
+
 #if NGIF > 0
 	/* Packet needs etherip encapsulation. */
 	if (ifp->if_type == IFT_GIF) {
-		m->m_flags |= M_PROTO1;
 
 		/* Count packets input into the gif from outside */
 		ifp->if_ipackets++;

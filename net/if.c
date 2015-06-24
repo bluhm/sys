@@ -449,6 +449,19 @@ if_output(struct ifnet *ifp, struct mbuf *m)
 	int s, length, error = 0;
 	unsigned short mflags;
 
+#ifdef DIAGNOSTIC
+	if (ifp->if_rdomain != rtable_l2(m->m_pkthdr.ph_rtableid)) {
+		printf("%s: trying to send packet on wrong domain. "
+		    "if %d vs. mbuf %d\n", ifp->if_xname, ifp->if_rdomain,
+		    rtable_l2(m->m_pkthdr.ph_rtableid));
+	}
+#endif
+
+#if NBRIDGE > 0
+	if (ifp->if_bridgeport && (m->m_flags & M_PROTO1) == 0)
+		return (bridge_output(ifp, m, NULL, NULL));
+#endif
+
 	length = m->m_pkthdr.len;
 	mflags = m->m_flags;
 
