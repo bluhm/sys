@@ -460,6 +460,7 @@ if_output(struct ifnet *ifp, struct mbuf *m)
 #if NBRIDGE > 0
 	if (ifp->if_bridgeport && (m->m_flags & M_PROTO1) == 0)
 		return (bridge_output(ifp, m, NULL, NULL));
+	m->m_flags &= ~M_PROTO1;	/* Loop prevention */
 #endif
 
 	length = m->m_pkthdr.len;
