@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.c,v 1.340 2015/06/16 11:09:39 mpi Exp $	*/
+/*	$OpenBSD: if.c,v 1.345 2015/06/25 09:20:20 mpi Exp $	*/
 /*	$NetBSD: if.c,v 1.35 1996/05/07 05:26:04 thorpej Exp $	*/
 
 /*
@@ -128,8 +128,6 @@ void	if_attachsetup(struct ifnet *);
 void	if_attachdomain1(struct ifnet *);
 void	if_attach_common(struct ifnet *);
 
-int	if_detach_filter(void *, const struct mbuf *);
-void	if_detach_queues(struct ifnet *, struct niqueue *);
 void	if_detached_start(struct ifnet *);
 int	if_detached_ioctl(struct ifnet *, u_long, caddr_t);
 
@@ -449,6 +447,20 @@ if_output(struct ifnet *ifp, struct mbuf *m)
 	int s, length, error = 0;
 	unsigned short mflags;
 
+#ifdef DIAGNOSTIC
+	if (ifp->if_rdomain != rtable_l2(m->m_pkthdr.ph_rtableid)) {
+		printf("%s: trying to send packet on wrong domain. "
+		    "if %d vs. mbuf %d\n", ifp->if_xname, ifp->if_rdomain,
+		    rtable_l2(m->m_pkthdr.ph_rtableid));
+	}
+#endif
+
+#if NBRIDGE > 0
+	if (ifp->if_bridgeport && (m->m_flags & M_PROTO1) == 0)
+		return (bridge_output(ifp, m, NULL, NULL));
+	m->m_flags &= ~M_PROTO1;	/* Loop prevention */
+#endif
+
 	length = m->m_pkthdr.len;
 	mflags = m->m_flags;
 
@@ -484,6 +496,8 @@ if_input(struct ifnet *ifp, struct mbuf_list *ml)
 	struct mbuf *m;
 
 	splassert(IPL_NET);
+
+	ifp->if_ipackets += ml_len(ml);
 
 	MBUF_LIST_FOREACH(ml, m) {
 		m->m_pkthdr.ph_ifidx = ifp->if_index;
@@ -529,6 +543,15 @@ if_input_process(void *xmq)
 			m_freem(m);
 			continue;
 		}
+
+#if NBRIDGE > 0
+		if (ifp->if_bridgeport && (m->m_flags & M_PROTO1) == 0) {
+			m = bridge_input(m);
+			if (m == NULL)
+				continue;
+		}
+		m->m_flags &= ~M_PROTO1;	/* Loop prevention */
+#endif
 
 		/*
 		 * Pass this mbuf to all input handlers of its
@@ -635,23 +658,6 @@ if_detach(struct ifnet *ifp)
 	pfi_detach_ifnet(ifp);
 #endif
 
-	/*
-	 * remove packets came from ifp, from software interrupt queues.
-	 * net/netisr_dispatch.h is not usable, as some of them use
-	 * strange queue names.
-	 */
-#define IF_DETACH_QUEUES(x) \
-do { \
-	extern struct niqueue x; \
-	if_detach_queues(ifp, & x); \
-} while (0)
-	IF_DETACH_QUEUES(arpintrq);
-	IF_DETACH_QUEUES(ipintrq);
-#ifdef INET6
-	IF_DETACH_QUEUES(ip6intrq);
-#endif
-#undef IF_DETACH_QUEUES
-
 	/* Remove the interface from the list of all interfaces.  */
 	TAILQ_REMOVE(&ifnet, ifp, if_list);
 	if (ISSET(ifp->if_xflags, IFXF_TXREADY))
@@ -692,34 +698,6 @@ do { \
 
 	ifindex2ifnet[ifp->if_index] = NULL;
 	splx(s);
-}
-
-int
-if_detach_filter(void *ctx, const struct mbuf *m)
-{
-	struct ifnet *ifp = ctx;
-
-#ifdef DIAGNOSTIC
-	if ((m->m_flags & M_PKTHDR) == 0)
-		return (0);
-#endif
-
-	return (m->m_pkthdr.ph_ifidx == ifp->if_index);
-}
-
-void
-if_detach_queues(struct ifnet *ifp, struct niqueue *niq)
-{
-	struct mbuf *m0, *m;
-
-	m0 = niq_filter(niq, if_detach_filter, ifp);
-	while (m0 != NULL) {
-		m = m0;
-		m0 = m->m_nextpkt;
-
-		m->m_nextpkt = NULL;
-		m_freem(m);
-	}
 }
 
 /*
