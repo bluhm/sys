@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_de.c,v 1.121 2015/06/24 09:40:54 mpi Exp $	*/
+/*	$OpenBSD: if_de.c,v 1.123 2015/06/26 11:50:39 kettenis Exp $	*/
 /*	$NetBSD: if_de.c,v 1.58 1998/01/12 09:39:58 thorpej Exp $	*/
 
 /*-
@@ -49,6 +49,7 @@
 #include <sys/kernel.h>
 #include <sys/device.h>
 #include <sys/timeout.h>
+#include <sys/pool.h>
 
 #include <net/if.h>
 #include <net/if_media.h>
@@ -4085,7 +4086,7 @@ tulip_txput_setup(tulip_softc_t * const sc)
 	return;
     }
     bcopy(sc->tulip_setupdata, sc->tulip_setupbuf,
-	  sizeof(sc->tulip_setupbuf));
+        sizeof(sc->tulip_setupdata));
     /*
      * Clear WANTSETUP and set DOINGSETUP.  Set know that WANTSETUP is
      * set and DOINGSETUP is clear doing an XOR of the two will DTRT.
@@ -4357,18 +4358,11 @@ tulip_busdma_init(tulip_softc_t * const sc)
     int error = 0;
 
     /*
-     * Allocate dmamap for setup descriptor
+     * Allocate space and dmamap for setup descriptor
      */
-    error = bus_dmamap_create(sc->tulip_dmatag, sizeof(sc->tulip_setupbuf), 2,
-			      sizeof(sc->tulip_setupbuf), 0, BUS_DMA_NOWAIT,
-			      &sc->tulip_setupmap);
-    if (error == 0) {
-	error = bus_dmamap_load(sc->tulip_dmatag, sc->tulip_setupmap,
-				sc->tulip_setupbuf, sizeof(sc->tulip_setupbuf),
-				NULL, BUS_DMA_NOWAIT);
-	if (error)
-	    bus_dmamap_destroy(sc->tulip_dmatag, sc->tulip_setupmap);
-    }
+    error = tulip_busdma_allocmem(sc, sizeof(sc->tulip_setupdata),
+				  &sc->tulip_setupmap, &sc->tulip_setupbuf);
+
     /*
      * Allocate space and dmamap for transmit ring
      */
