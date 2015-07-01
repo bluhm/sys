@@ -1828,7 +1828,8 @@ int	pf_match_port(u_int8_t, u_int16_t, u_int16_t, u_int16_t);
 int	pf_match_uid(u_int8_t, uid_t, uid_t, uid_t);
 int	pf_match_gid(u_int8_t, gid_t, gid_t, gid_t);
 
-int	pf_refragment6(struct mbuf **, struct m_tag *mtag, int);
+int	pf_refragment6(struct mbuf **, struct m_tag *mtag, int,
+	    struct sockaddr_in6 *, struct ifnet *);
 void	pf_normalize_init(void);
 int	pf_normalize_ip(struct pf_pdesc *, u_short *);
 int	pf_normalize_ip6(struct pf_pdesc *, u_short *);
