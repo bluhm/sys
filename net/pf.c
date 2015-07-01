@@ -5607,6 +5607,7 @@ pf_route6(struct mbuf **m, struct pf_rule *r, int dir, struct ifnet *oifp,
 	struct ifnet		*ifp = NULL;
 	struct pf_addr		 naddr;
 	struct pf_src_node	*sns[PF_SN_MAX];
+	struct m_tag		*mtag;
 
 	if (m == NULL || *m == NULL || r == NULL ||
 	    (dir != PF_IN && dir != PF_OUT) || oifp == NULL)
@@ -5641,6 +5642,9 @@ pf_route6(struct mbuf **m, struct pf_rule *r, int dir, struct ifnet *oifp,
 	dst->sin6_addr = ip6->ip6_dst;
 
 	if (!r->rt) {
+		/*
+		 * XXX how we can be so sure m0 fits to wire?
+		 */
 		m0->m_pkthdr.pf.flags |= PF_TAG_GENERATED;
 		ip6_output(m0, NULL, NULL, 0, NULL, NULL, NULL);
 		return;
@@ -5681,13 +5685,16 @@ pf_route6(struct mbuf **m, struct pf_rule *r, int dir, struct ifnet *oifp,
 
 	in6_proto_cksum_out(m0, ifp);
 
-	/*
-	 * If the packet is too large for the outgoing interface,
-	 * send back an icmp6 error.
-	 */
 	if (IN6_IS_SCOPE_EMBED(&dst->sin6_addr))
 		dst->sin6_addr.s6_addr16[1] = htons(ifp->if_index);
-	if ((u_long)m0->m_pkthdr.len <= ifp->if_mtu) {
+
+	/*
+	 * If packet has been reassembled by PF earlier, we have to
+	 * use pf_refragment6() here to turn it back to fragments.
+	 */
+	if ((mtag = m_tag_find(m0, PACKET_TAG_PF_REASSEMBLED, NULL))) {
+		(void) pf_refragment6(&m0, mtag, dst, ifp);
+	} else if ((u_long)m0->m_pkthdr.len <= ifp->if_mtu) {
 		nd6_output(ifp, m0, dst, NULL);
 	} else {
 		in6_ifstat_inc(ifp, ifs6_in_toobig);
@@ -6618,7 +6625,7 @@ done:
 		struct m_tag	*mtag;
 
 		if ((mtag = m_tag_find(*m0, PACKET_TAG_PF_REASSEMBLED, NULL)))
-			action = pf_refragment6(m0, mtag);
+			action = pf_refragment6(m0, mtag, NULL, NULL);
 	}
 #endif	/* INET6 */
 	if (s && action != PF_DROP) {
