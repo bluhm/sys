@@ -6656,6 +6656,7 @@ void
 pf_pkt_addr_changed(struct mbuf *m)
 {
 	m->m_pkthdr.pf.statekey = NULL;
+	m->m_pkthdr.pf.inp = NULL;
 }
 
 void
