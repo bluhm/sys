@@ -305,13 +305,6 @@ struct mbuf {
 #define MCLGETI(m, how, ifp, l) m_clget((m), (how), (l))
 
 /*
- * MFREE(struct mbuf *m, struct mbuf *n)
- * Free a single mbuf and associated external storage.
- * Place the successor, if any, in n.
- */
-#define	MFREE(m, n) n = m_free((m))
-
-/*
  * Move just m_pkthdr from from to to,
  * remove M_PKTHDR and clean flags/tags for from.
  */

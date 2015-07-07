@@ -1025,7 +1025,7 @@ startagain:
 			} else
 				bus_space_write_multi_1(iot, ioh, txreg,
 				    data, m->m_len);
-			MFREE(m, m0);
+			m0 = m_free(m);
 			m = m0;
 		}
 	} else {
@@ -1040,7 +1040,7 @@ startagain:
 			} else
 				bus_space_write_multi_1(iot, ioh, txreg,
 				    data, m->m_len);
-			MFREE(m, m0);
+			m0 = m_free(m);
 			m = m0;
 		}
 	}

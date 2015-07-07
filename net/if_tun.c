@@ -776,7 +776,7 @@ tunread(dev_t dev, struct uio *uio, int ioflag)
 		len = min(uio->uio_resid, m0->m_len);
 		if (len != 0)
 			error = uiomovei(mtod(m0, caddr_t), len, uio);
-		MFREE(m0, m);
+		m = m_free(m0);
 		m0 = m;
 	}
 

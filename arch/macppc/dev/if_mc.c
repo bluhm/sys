@@ -850,7 +850,7 @@ maceput(struct mc_softc *sc, struct mbuf *m)
 		totlen += len;
 		bcopy(data, buff, len);
 		buff += len;
-		MFREE(m, n);
+		n = m_free(m);
 	}
 
 	if (totlen > PAGE_SIZE)

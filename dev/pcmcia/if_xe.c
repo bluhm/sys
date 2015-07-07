@@ -1135,7 +1135,7 @@ xe_start(ifp)
 		if (m->m_len & 1)
 			bus_space_write_1(bst, bsh, offset + EDP,
 			    *(mtod(m, u_int8_t *) + m->m_len - 1));
-		MFREE(m, m0);
+		m0 = m_free(m);
 		m = m0;
 	}
 	if (sc->sc_flags & XEF_MOHAWK)

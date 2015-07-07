@@ -310,7 +310,7 @@ startagain:
 			filler >>= 8;
 			filler |= m->m_data[(m->m_len & ~3) + i] << 24;
 		}
-		MFREE(m, m0);
+		m0 = m_free(m);
 		m = m0;
 	}
 

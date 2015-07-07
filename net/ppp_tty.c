@@ -642,7 +642,7 @@ pppasyncstart(struct ppp_softc *sc)
 	    }
 
 	    /* Finished with this mbuf; free it and move on. */
-	    MFREE(m, m2);
+	    m2 = m_free(m);
 	    m = m2;
 	    if (m == NULL) {
 		/* Finished a packet */

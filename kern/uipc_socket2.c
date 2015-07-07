@@ -867,12 +867,12 @@ sbdrop(struct sockbuf *sb, int len)
 		}
 		len -= m->m_len;
 		sbfree(sb, m);
-		MFREE(m, mn);
+		mn = m_free(m);
 		m = mn;
 	}
 	while (m && m->m_len == 0) {
 		sbfree(sb, m);
-		MFREE(m, mn);
+		mn = m_free(m);
 		m = mn;
 	}
 	if (m) {
@@ -907,7 +907,7 @@ sbdroprecord(struct sockbuf *sb)
 		sb->sb_mb = m->m_nextpkt;
 		do {
 			sbfree(sb, m);
-			MFREE(m, mn);
+			mn = m_free(m);
 		} while ((m = mn) != NULL);
 	}
 	SB_EMPTY_FIXUP(sb);

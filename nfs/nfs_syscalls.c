@@ -485,7 +485,7 @@ nfsrv_zapsock(struct nfssvc_sock *slp)
 		soshutdown(so, SHUT_RDWR);
 		closef(fp, NULL);
 		if (slp->ns_nam)
-			MFREE(slp->ns_nam, m);
+	    		m = m_free(slp->ns_nam);
 		m_freem(slp->ns_raw);
 		m = slp->ns_rec;
 		while (m) {

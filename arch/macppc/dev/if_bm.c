@@ -662,13 +662,13 @@ bmac_put(struct bmac_softc *sc, caddr_t buff, struct mbuf *m)
 	for (; m; m = n) {
 		len = m->m_len;
 		if (len == 0) {
-			MFREE(m, n);
+			n = m_free(m);
 			continue;
 		}
 		bcopy(mtod(m, caddr_t), buff, len);
 		buff += len;
 		tlen += len;
-		MFREE(m, n);
+		n = m_free(m);
 	}
 	if (tlen > NBPG)
 		panic("%s: putpacket packet overflow", sc->sc_dev.dv_xname);

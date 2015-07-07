@@ -526,7 +526,7 @@ cnw_transmit(sc, m0)
 			mptr += n;
 			mbytes -= n;
 		}
-		MFREE(m, m0);
+		m0 = m_free(m);
 		m = m0;
 	}
 
