@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.c,v 1.346 2015/06/29 10:32:29 dlg Exp $	*/
+/*	$OpenBSD: if.c,v 1.349 2015/07/02 15:16:57 mpi Exp $	*/
 /*	$NetBSD: if.c,v 1.35 1996/05/07 05:26:04 thorpej Exp $	*/
 
 /*
@@ -442,18 +442,10 @@ if_start(struct ifnet *ifp)
 }
 
 int
-if_output(struct ifnet *ifp, struct mbuf *m)
+if_enqueue(struct ifnet *ifp, struct mbuf *m)
 {
 	int s, length, error = 0;
 	unsigned short mflags;
-
-#ifdef DIAGNOSTIC
-	if (ifp->if_rdomain != rtable_l2(m->m_pkthdr.ph_rtableid)) {
-		printf("%s: trying to send packet on wrong domain. "
-		    "if %d vs. mbuf %d\n", ifp->if_xname, ifp->if_rdomain,
-		    rtable_l2(m->m_pkthdr.ph_rtableid));
-	}
-#endif
 
 #if NBRIDGE > 0
 	if (ifp->if_bridgeport && (m->m_flags & M_PROTO1) == 0)
@@ -549,7 +541,7 @@ if_input_process(void *xmq)
 
 #if NBRIDGE > 0
 		if (ifp->if_bridgeport && (m->m_flags & M_PROTO1) == 0) {
-			m = bridge_input(m);
+			m = bridge_input(ifp, m);
 			if (m == NULL)
 				continue;
 		}
@@ -561,7 +553,7 @@ if_input_process(void *xmq)
 		 * interface until it is consumed.
 		 */
 		SLIST_FOREACH(ifih, &ifp->if_inputs, ifih_next) {
-			if ((*ifih->ifih_input)(m))
+			if ((*ifih->ifih_input)(ifp, m))
 				break;
 		}
 	}

@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ethersubr.c,v 1.211 2015/06/29 10:32:29 dlg Exp $	*/
+/*	$OpenBSD: if_ethersubr.c,v 1.216 2015/07/02 23:15:03 dlg Exp $	*/
 /*	$NetBSD: if_ethersubr.c,v 1.19 1996/05/07 02:40:30 thorpej Exp $	*/
 
 /*
@@ -176,6 +176,14 @@ ether_output(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst,
 	struct arpcom *ac = (struct arpcom *)ifp;
 	int error = 0;
 
+#ifdef DIAGNOSTIC
+	if (ifp->if_rdomain != rtable_l2(m->m_pkthdr.ph_rtableid)) {
+		printf("%s: trying to send packet on wrong domain. "
+		    "if %d vs. mbuf %d\n", ifp->if_xname,
+		    ifp->if_rdomain, rtable_l2(m->m_pkthdr.ph_rtableid));
+	}
+#endif
+
 	esrc = ac->ac_enaddr;
 
 	if ((ifp->if_flags & (IFF_UP|IFF_RUNNING)) != (IFF_UP|IFF_RUNNING))
@@ -189,7 +197,7 @@ ether_output(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst,
 		/* If broadcasting on a simplex interface, loopback a copy */
 		if ((m->m_flags & M_BCAST) && (ifp->if_flags & IFF_SIMPLEX) &&
 		    !m->m_pkthdr.pf.routed)
-			mcopy = m_copy(m, 0, (int)M_COPYALL);
+			mcopy = m_copym(m, 0, M_COPYALL, M_NOWAIT);
 		etype = htons(ETHERTYPE_IP);
 		break;
 #ifdef INET6
@@ -263,7 +271,7 @@ ether_output(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst,
 	memcpy(eh->ether_dhost, edst, sizeof(eh->ether_dhost));
 	memcpy(eh->ether_shost, esrc, sizeof(eh->ether_shost));
 
-	return (if_output(ifp, m));
+	return (if_enqueue(ifp, m));
 bad:
 	if (m)
 		m_freem(m);
@@ -276,9 +284,8 @@ bad:
  * the ether header, which is provided separately.
  */
 int
-ether_input(struct mbuf *m)
+ether_input(struct ifnet *ifp, struct mbuf *m)
 {
-	struct ifnet *ifp;
 	struct ether_header *eh;
 	struct niqueue *inq;
 	u_int16_t etype;
@@ -288,13 +295,6 @@ ether_input(struct mbuf *m)
 #if NPPPOE > 0
 	struct ether_header *eh_tmp;
 #endif
-
-	ifp = if_get(m->m_pkthdr.ph_ifidx);
-	KASSERT(ifp != NULL);
-	if ((ifp->if_flags & IFF_UP) == 0) {
-		m_freem(m);
-		return (1);
-	}
 
 	eh = mtod(m, struct ether_header *);
 	m_adj(m, ETHER_HDR_LEN);
@@ -392,10 +392,13 @@ decapsulate:
 		if (pipex_enable) {
 			struct pipex_session *session;
 
+			KERNEL_LOCK();
 			if ((session = pipex_pppoe_lookup_session(m)) != NULL) {
 				pipex_pppoe_input(m, session);
+				KERNEL_UNLOCK();
 				return (1);
 			}
+			KERNEL_UNLOCK();
 		}
 #endif
 		if (etype == ETHERTYPE_PPPOEDISC)
