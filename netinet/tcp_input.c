@@ -1846,7 +1846,8 @@ trimthenstep6:
 			ourfinisacked = 1;
 		} else {
 			sbdrop(&so->so_snd, acked);
-			tp->snd_wnd -= acked;
+			if (tp->snd_wnd >= (unsigned long)acked)
+				tp->snd_wnd -= acked;
 			ourfinisacked = 0;
 		}
 

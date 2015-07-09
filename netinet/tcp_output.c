@@ -357,7 +357,7 @@ again:
 	}
 #endif
 
-	if (len < 0) {
+	if (len <= 0) {
 		/*
 		 * If FIN has been sent but not acked,
 		 * but we haven't been called to retransmit,
@@ -367,9 +367,16 @@ again:
 		 * to (closed) window, and set the persist timer
 		 * if it isn't already going.  If the window didn't
 		 * close completely, just wait for an ACK.
+		 *
+		 * We also do a general check here to ensure that
+		 * we will set the persist timer when we have data
+		 * to send, but a 0-byte window. This makes sure
+		 * the persist timer is set even if the packet
+		 * hits one of the "goto send" lines below.
 		 */
 		len = 0;
-		if (win == 0) {
+		if ((win == 0) && (TCPS_HAVEESTABLISHED(tp->t_state)) &&
+		    (off < (int)so->so_snd.sb_cc)) {
 			TCP_TIMER_DISARM(tp, TCPT_REXMT);
 			tp->t_rxtshift = 0;
 			tp->snd_nxt = tp->snd_una;
