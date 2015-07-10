@@ -376,7 +376,7 @@ again:
 		 */
 		len = 0;
 		if ((win == 0) && (TCPS_HAVEESTABLISHED(tp->t_state)) &&
-		    (off < (int)so->so_snd.sb_cc)) {
+		    (off < (long)so->so_snd.sb_cc)) {
 			TCP_TIMER_DISARM(tp, TCPT_REXMT);
 			tp->t_rxtshift = 0;
 			tp->snd_nxt = tp->snd_una;
