@@ -638,6 +638,7 @@ findpcb:
 		}
 	}
 	KASSERT(sotoinpcb(inp->inp_socket) == inp);
+	KASSERT(intotcpcb(inp) == NULL || intotcpcb(inp)->t_inpcb == inp);
 
 	/* Check the minimum TTL for socket. */
 	if (inp->inp_ip_minttl && inp->inp_ip_minttl > ip->ip_ttl)
@@ -646,7 +647,6 @@ findpcb:
 	tp = intotcpcb(inp);
 	if (tp == NULL)
 		goto dropwithreset_ratelim;
-	KASSERT(tp->t_inpcb == inp);
 	if (tp->t_state == TCPS_CLOSED)
 		goto drop;
 
