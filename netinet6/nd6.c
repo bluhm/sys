@@ -1,4 +1,4 @@
-/*	$OpenBSD: nd6.c,v 1.140 2015/07/09 05:45:25 mpi Exp $	*/
+/*	$OpenBSD: nd6.c,v 1.143 2015/07/16 15:31:35 mpi Exp $	*/
 /*	$KAME: nd6.c,v 1.280 2002/06/08 19:52:07 itojun Exp $	*/
 
 /*
@@ -102,11 +102,6 @@ struct timeout nd6_timer_ch;
 struct task nd6_timer_task;
 void nd6_timer_work(void *);
 
-struct timeout nd6_rs_output_timer;
-int nd6_rs_output_timeout = ND6_RS_OUTPUT_INTERVAL;
-int nd6_rs_timeout_count = 0;
-void nd6_rs_output_timo(void *);
-
 int fill_drlist(void *, size_t *, size_t);
 int fill_prlist(void *, size_t *, size_t);
 
@@ -142,7 +137,7 @@ nd6_init(void)
 	timeout_set(&nd6_slowtimo_ch, nd6_slowtimo, NULL);
 	timeout_add_sec(&nd6_slowtimo_ch, ND6_SLOWTIMER_INTERVAL);
 
-	timeout_set(&nd6_rs_output_timer, nd6_rs_output_timo, NULL);
+	nd6_rs_init();
 }
 
 struct nd_ifinfo *
@@ -1186,8 +1181,7 @@ nd6_rtrequest(int req, struct rtentry *rt)
 		nd6_llinfo_settimer(ln, -1);
 		rt->rt_llinfo = 0;
 		rt->rt_flags &= ~RTF_LLINFO;
-		if (ln->ln_hold)
-			m_freem(ln->ln_hold);
+		m_freem(ln->ln_hold);
 		free(ln, M_RTABLE, 0);
 	}
 }
@@ -1564,39 +1558,6 @@ nd6_slowtimo(void *ignored_arg)
 	splx(s);
 }
 
-void
-nd6_rs_output_set_timo(int timeout)
-{
-	nd6_rs_output_timeout = timeout;
-	timeout_add_sec(&nd6_rs_output_timer, nd6_rs_output_timeout);
-}
-
-void
-nd6_rs_output_timo(void *ignored_arg)
-{
-	struct ifnet *ifp;
-	struct in6_ifaddr *ia6;
-
-	if (nd6_rs_timeout_count == 0)
-		return;
-
-	if (nd6_rs_output_timeout < ND6_RS_OUTPUT_INTERVAL)
-		/* exponential backoff if running quick timeouts */
-		nd6_rs_output_timeout *= 2;
-	if (nd6_rs_output_timeout > ND6_RS_OUTPUT_INTERVAL)
-		nd6_rs_output_timeout = ND6_RS_OUTPUT_INTERVAL;
-
-	TAILQ_FOREACH(ifp, &ifnet, if_list) {
-		if (ISSET(ifp->if_flags, IFF_RUNNING) &&
-		    ISSET(ifp->if_xflags, IFXF_AUTOCONF6)) {
-			ia6 = in6ifa_ifpforlinklocal(ifp, IN6_IFF_TENTATIVE);
-			if (ia6 != NULL)
-				nd6_rs_output(ifp, ia6);
-		}
-	}
-	timeout_add_sec(&nd6_rs_output_timer, nd6_rs_output_timeout);
-}
-
 #define senderr(e) { error = (e); goto bad;}
 int
 nd6_output(struct ifnet *ifp, struct mbuf *m0, struct sockaddr_in6 *dst,
@@ -1719,8 +1680,7 @@ nd6_output(struct ifnet *ifp, struct mbuf *m0, struct sockaddr_in6 *dst,
 	 */
 	if (ln->ln_state == ND6_LLINFO_NOSTATE)
 		ln->ln_state = ND6_LLINFO_INCOMPLETE;
-	if (ln->ln_hold)
-		m_freem(ln->ln_hold);
+	m_freem(ln->ln_hold);
 	ln->ln_hold = m;
 	/*
 	 * If there has been no NS for the neighbor after entering the
@@ -1738,8 +1698,7 @@ nd6_output(struct ifnet *ifp, struct mbuf *m0, struct sockaddr_in6 *dst,
 	return ((*ifp->if_output)(ifp, m, sin6tosa(dst), rt));
 
   bad:
-	if (m)
-		m_freem(m);
+	m_freem(m);
 	return (error);
 }
 #undef senderr
@@ -1775,6 +1734,7 @@ nd6_storelladdr(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 	if (m->m_flags & M_MCAST) {
 		switch (ifp->if_type) {
 		case IFT_ETHER:
+		case IFT_CARP:
 			ETHER_MAP_IPV6_MULTICAST(&satosin6(dst)->sin6_addr,
 						 desten);
 			return (0);

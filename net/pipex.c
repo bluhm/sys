@@ -1,4 +1,4 @@
-/*	$OpenBSD: pipex.c,v 1.70 2015/06/16 11:09:40 mpi Exp $	*/
+/*	$OpenBSD: pipex.c,v 1.72 2015/07/16 16:12:15 mpi Exp $	*/
 
 /*-
  * Copyright (c) 2009 Internet Initiative Japan Inc.
@@ -900,8 +900,7 @@ pipex_output(struct mbuf *m0, int af, int off,
 	return (m0);
 
 drop:
-	if (m0 != NULL)
-		m_freem(m0);
+	m_freem(m0);
 	if (session != NULL)
 		session->stat.oerrors++;
 	return(NULL);
@@ -950,8 +949,7 @@ pipex_ip_output(struct mbuf *m0, struct pipex_session *session)
 
 	return;
 drop:
-	if (m0 != NULL)
-		m_freem(m0);
+	m_freem(m0);
 dropped:
 	session->stat.oerrors++;
 }
@@ -1004,8 +1002,7 @@ pipex_ppp_output(struct mbuf *m0, struct pipex_session *session, int proto)
 
 	return;
 drop:
-	if (m0 != NULL)
-		m_freem(m0);
+	m_freem(m0);
 	session->stat.oerrors++;
 }
 
@@ -1081,8 +1078,7 @@ pipex_ppp_input(struct mbuf *m0, struct pipex_session *session, int decrypted)
 
 	return;
 drop:
-	if (m0 != NULL)
-		m_freem(m0);
+	m_freem(m0);
 	session->stat.ierrors++;
 }
 
@@ -1165,8 +1161,7 @@ pipex_ip_input(struct mbuf *m0, struct pipex_session *session)
 
 	return;
 drop:
-	if (m0 != NULL)
-		m_freem(m0);
+	m_freem(m0);
 dropped:
 	session->stat.ierrors++;
 }
@@ -1361,7 +1356,7 @@ pipex_pppoe_lookup_session(struct mbuf *m0)
 
 	m_copydata(m0, sizeof(struct ether_header),
 	    sizeof(struct pipex_pppoe_header), (caddr_t)&pppoe);
-	NTOHS(pppoe.session_id);
+	pppoe.session_id = ntohs(pppoe.session_id);
 	session = pipex_lookup_by_session_id(PIPEX_PROTO_PPPOE,
 	    pppoe.session_id);
 #ifdef PIPEX_DEBUG
@@ -1732,8 +1727,7 @@ out_seq:
 
 	/* FALLTHROUGH */
 drop:
-	if (m0 != NULL)
-		m_freem(m0);
+	m_freem(m0);
 	session->stat.ierrors++;
 
 	return (NULL);
@@ -1938,7 +1932,7 @@ pipex_l2tp_output(struct mbuf *m0, struct pipex_session *session)
 		session->proto.l2tp.nr_acked = session->proto.l2tp.nr_nxt - 1;
 		seq->nr = htons(session->proto.l2tp.nr_acked);
 	}
-	HTONS(l2tp->flagsver);
+	l2tp->flagsver = htons(l2tp->flagsver);
 
 	plen += sizeof(struct udphdr);
 	udp = (struct udphdr *)(mtod(m0, caddr_t) + hlen);
@@ -2165,8 +2159,7 @@ out_seq:
 
 	/* FALLTHROUGH */
 drop:
-	if (m0 != NULL)
-		m_freem(m0);
+	m_freem(m0);
 	session->stat.ierrors++;
 
 	return (NULL);
@@ -2543,8 +2536,7 @@ pipex_mppe_input(struct mbuf *m0, struct pipex_session *session)
 
 	return;
 drop:
-	if (m0 != NULL)
-		m_freem(m0);
+	m_freem(m0);
 	session->stat.ierrors++;
 }
 
@@ -2616,8 +2608,8 @@ pipex_mppe_output(struct mbuf *m0, struct pipex_session *session,
 	if (encrypt)
 		hdr->coher_cnt |= 0x1000;
 
-	HTONS(hdr->protocol);
-	HTONS(hdr->coher_cnt);
+	hdr->protocol = htons(hdr->protocol);
+	hdr->coher_cnt = htons(hdr->coher_cnt);
 
 	/* encrypt chain */
 	for (m = m0; m; m = m->m_next) {
@@ -2674,8 +2666,7 @@ pipex_ccp_input(struct mbuf *m0, struct pipex_session *session)
 
 	return;
 drop:
-	if (m0 != NULL)
-		m_freem(m0);
+	m_freem(m0);
 	session->stat.ierrors++;
 }
 
@@ -2842,8 +2833,7 @@ handled:
 	return (m0);
 
 drop:
-	if (m0)
-		m_freem(m0);
+	m_freem(m0);
 	return (NULL);
 }
 
