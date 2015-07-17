@@ -1,4 +1,4 @@
-/*	$OpenBSD: locore.S,v 1.68 2015/06/28 18:54:54 guenther Exp $	*/
+/*	$OpenBSD: locore.S,v 1.72 2015/07/17 15:37:58 guenther Exp $	*/
 /*	$NetBSD: locore.S,v 1.13 2004/03/25 18:33:17 drochner Exp $	*/
 
 /*
@@ -167,7 +167,7 @@ _C_LABEL(lapic_isr):
 	.space  NBPG-LAPIC_ISR
 #endif
 
-	.globl	_C_LABEL(cpu_id),_C_LABEL(cpu_vendor), _C_LABEL(cpu_brand_id)
+	.globl	_C_LABEL(cpu_id),_C_LABEL(cpu_vendor)
 	.globl	_C_LABEL(cpuid_level),_C_LABEL(cpu_feature)
 	.globl	_C_LABEL(cpu_ecxfeature),_C_LABEL(ecpu_ecxfeature)
 	.globl	_C_LABEL(cpu_perf_eax)
@@ -180,8 +180,6 @@ _C_LABEL(lapic_isr):
 	.globl	_C_LABEL(biosbasemem),_C_LABEL(biosextmem)
 	.globl	_C_LABEL(bootapiver)
 	.globl	_C_LABEL(pg_nx)
-_C_LABEL(cpu):		.long	0	# are we 386, 386sx, or 486,
-					#   or Pentium, or..
 _C_LABEL(cpu_id):	.long	0	# saved from `cpuid' instruction
 _C_LABEL(cpu_feature):	.long	0	# feature flags from 'cpuid'
 					#   instruction
@@ -195,7 +193,6 @@ _C_LABEL(cpuid_level):	.long	-1	# max. level accepted by 'cpuid'
 					#   instruction
 _C_LABEL(cpu_vendor):	.space	16	# vendor string returned by `cpuid'
 					#   instruction
-_C_LABEL(cpu_brand_id):	.long	0	# brand ID from 'cpuid' instruction
 _C_LABEL(ssym):		.quad	0	# ptr to start of syms
 _C_LABEL(esym):		.quad	0	# ptr to end of syms
 _C_LABEL(atdevbase):	.quad	0	# location of start of iomem in virtual
@@ -287,8 +284,9 @@ start:	movw	$0x1234,0x472			# warm boot
 	/*
 	 * Copy the boot arguments to bootinfo[] in machdep.c.
 	 *
-	 * We are passed the size of bootinfo[] in bootinfo_size, and
-	 * we report how much data /boot passed us back in the same variable.
+	 * We are passed the size of the data /boot passed to us in
+	 * 28(%esp). We copy up to bootinfo_size bytes of data into
+	 * bootinfo and report back how much we copied in bootinfo_size.
 	 *
 	 * machdep.c can then take action if bootinfo_size >= bootinfo[]
 	 * (which would meant that we may have been passed too much data).
@@ -296,7 +294,7 @@ start:	movw	$0x1234,0x472			# warm boot
  	movl	28(%esp), %eax
 	movl	%eax, %ecx
 	cmpl	RELOC(bootinfo_size), %ecx	/* Too much? */
-	jnc	bi_size_ok
+	jb	bi_size_ok
 	movl	RELOC(bootinfo_size), %ecx	/* Only copy this much */
 bi_size_ok:
 	movl	%eax, RELOC(bootinfo_size)	/* Report full amount */
@@ -351,10 +349,6 @@ cont:
 	movl	$0x80000007,%eax
 	cpuid
 	movl	%edx,RELOC(_C_LABEL(cpu_apmi_edx))
-
-	/* Brand ID is bits 0-7 of %ebx */
-	andl	$255,%ebx
-	movl	%ebx,RELOC(cpu_brand_id)
 
 	/*
 	 * Finished with old stack; load new %esp now instead of later so we
@@ -1134,7 +1128,7 @@ NENTRY(intr_fast_exit)
 	movq	TF_RBP(%rsp),%rbp
 	movq	TF_RBX(%rsp),%rbx
 
-	testq	$SEL_UPL,TF_CS(%rsp)
+	testq	$SEL_RPL,TF_CS(%rsp)
 	je	5f
 
 	INTR_RESTORE_SELECTORS
