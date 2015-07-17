@@ -1907,6 +1907,12 @@ in6_ifawithscope(struct ifnet *oifp, struct in6_addr *dst, u_int rdomain)
 			     IN6_IFF_DEPRECATED) == 0)
 				goto replace;
 
+			/* RFC 3484 5. Rule 5: Prefer outgoing interface */
+			if (ia6_best->ia_ifp == oifp && ifp != oifp)
+				continue;
+			if (ia6_best->ia_ifp != oifp && ifp == oifp)
+				goto replace;
+
 			/*
 			 * At this point, we have two cases:
 			 * 1. we are looking at a non-deprecated address,
