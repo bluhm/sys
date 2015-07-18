@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ethersubr.c,v 1.217 2015/07/15 22:16:41 deraadt Exp $	*/
+/*	$OpenBSD: if_ethersubr.c,v 1.219 2015/07/18 00:25:06 claudio Exp $	*/
 /*	$NetBSD: if_ethersubr.c,v 1.19 1996/05/07 02:40:30 thorpej Exp $	*/
 
 /*
@@ -227,6 +227,7 @@ ether_output(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst,
 				    sizeof(edst));
 				break;
 			case AF_INET:
+			case AF_MPLS:
 				error = arpresolve(ifp, rt, m, dst, edst);
 				if (error)
 					return (error == EAGAIN ? 0 : error);
@@ -325,8 +326,10 @@ ether_input(struct ifnet *ifp, struct mbuf *m)
 
 	/*
 	 * If packet has been filtered by the bpf listener, drop it now
+	 * also HW vlan tagged packets that were not collected by vlan(4)
+	 * must be dropped now.
 	 */
-	if (m->m_flags & M_FILDROP) {
+	if (m->m_flags & (M_FILDROP | M_VLANTAG)) {
 		m_freem(m);
 		return (1);
 	}
