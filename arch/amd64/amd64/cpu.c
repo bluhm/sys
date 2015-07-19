@@ -1,4 +1,4 @@
-/*	$OpenBSD: cpu.c,v 1.85 2015/07/18 00:53:37 guenther Exp $	*/
+/*	$OpenBSD: cpu.c,v 1.88 2015/07/18 19:21:02 sf Exp $	*/
 /* $NetBSD: cpu.c,v 1.1 2003/04/26 18:39:26 fvdl Exp $ */
 
 /*-
@@ -563,8 +563,8 @@ cpu_start_secondary(struct cpu_info *ci)
 
 	ci->ci_flags |= CPUF_AP;
 
-        pmap_kenter_pa(MP_TRAMPOLINE, MP_TRAMPOLINE, PROT_READ | PROT_EXEC);
-        pmap_kenter_pa(MP_TRAMP_DATA, MP_TRAMP_DATA, PROT_READ | PROT_WRITE);
+	pmap_kenter_pa(MP_TRAMPOLINE, MP_TRAMPOLINE, PROT_READ | PROT_EXEC);
+	pmap_kenter_pa(MP_TRAMP_DATA, MP_TRAMP_DATA, PROT_READ | PROT_WRITE);
 
 	CPU_STARTUP(ci);
 
@@ -730,9 +730,6 @@ cpu_debug_dump(void)
 int
 mp_cpu_start(struct cpu_info *ci)
 {
-#if NLAPIC > 0
-	int error;
-#endif
 	unsigned short dwordptr[2];
 
 	/*
@@ -760,22 +757,17 @@ mp_cpu_start(struct cpu_info *ci)
 	 */
 
 	if (ci->ci_flags & CPUF_AP) {
-		if ((error = x86_ipi_init(ci->ci_apicid)) != 0)
-			return error;
+		x86_ipi_init(ci->ci_apicid);
 
 		delay(10000);
 
 		if (cpu_feature & CPUID_APIC) {
-			if ((error = x86_ipi(MP_TRAMPOLINE/PAGE_SIZE,
-					     ci->ci_apicid,
-					     LAPIC_DLMODE_STARTUP)) != 0)
-				return error;
+			x86_ipi(MP_TRAMPOLINE/PAGE_SIZE, ci->ci_apicid,
+			    LAPIC_DLMODE_STARTUP);
 			delay(200);
 
-			if ((error = x86_ipi(MP_TRAMPOLINE/PAGE_SIZE,
-					     ci->ci_apicid,
-					     LAPIC_DLMODE_STARTUP)) != 0)
-				return error;
+			x86_ipi(MP_TRAMPOLINE/PAGE_SIZE, ci->ci_apicid,
+			    LAPIC_DLMODE_STARTUP);
 			delay(200);
 		}
 	}

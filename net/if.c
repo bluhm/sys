@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.c,v 1.350 2015/07/16 15:31:35 mpi Exp $	*/
+/*	$OpenBSD: if.c,v 1.352 2015/07/18 16:10:03 mpi Exp $	*/
 /*	$NetBSD: if.c,v 1.35 1996/05/07 05:26:04 thorpej Exp $	*/
 
 /*
@@ -373,24 +373,8 @@ if_attachhead(struct ifnet *ifp)
 void
 if_attach(struct ifnet *ifp)
 {
-#if NCARP > 0
-	struct ifnet *before = NULL;
-#endif
-
 	if_attach_common(ifp);
-
-#if NCARP > 0
-	if (ifp->if_type != IFT_CARP)
-		TAILQ_FOREACH(before, &ifnet, if_list)
-			if (before->if_type == IFT_CARP)
-				break;
-	if (before == NULL)
-		TAILQ_INSERT_TAIL(&ifnet, ifp, if_list);
-	else
-		TAILQ_INSERT_BEFORE(before, ifp, if_list);
-#else
 	TAILQ_INSERT_TAIL(&ifnet, ifp, if_list);
-#endif
 	if_attachsetup(ifp);
 }
 
@@ -2093,7 +2077,8 @@ if_group_egress_build(void)
 	bzero(&sa_in, sizeof(sa_in));
 	sa_in.sin_len = sizeof(sa_in);
 	sa_in.sin_family = AF_INET;
-	if ((rt = rt_lookup(sintosa(&sa_in), sintosa(&sa_in), 0)) != NULL) {
+	rt = rtable_lookup(0, sintosa(&sa_in), sintosa(&sa_in));
+	if (rt != NULL) {
 		do {
 			if (rt->rt_ifp)
 				if_addgroup(rt->rt_ifp, IFG_EGRESS);
@@ -2107,7 +2092,8 @@ if_group_egress_build(void)
 
 #ifdef INET6
 	bcopy(&sa6_any, &sa_in6, sizeof(sa_in6));
-	if ((rt = rt_lookup(sin6tosa(&sa_in6), sin6tosa(&sa_in6), 0)) != NULL) {
+	rt = rtable_lookup(0, sin6tosa(&sa_in6), sin6tosa(&sa_in6));
+	if (rt != NULL) {
 		do {
 			if (rt->rt_ifp)
 				if_addgroup(rt->rt_ifp, IFG_EGRESS);
@@ -2237,7 +2223,7 @@ ifa_print_all(void)
 		}
 	}
 }
-#endif /* SMALL_KERNEL */
+#endif /* DDB */
 
 void
 ifnewlladdr(struct ifnet *ifp)

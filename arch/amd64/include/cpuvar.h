@@ -1,4 +1,4 @@
-/*	$OpenBSD: cpuvar.h,v 1.5 2015/04/19 19:45:21 sf Exp $	*/
+/*	$OpenBSD: cpuvar.h,v 1.7 2015/07/18 19:21:03 sf Exp $	*/
 /* 	$NetBSD: cpuvar.h,v 1.1 2003/03/01 18:29:28 fvdl Exp $ */
 
 /*-
@@ -88,8 +88,8 @@ struct cpu_attach_args {
 #ifdef _KERNEL
 
 #ifdef MULTIPROCESSOR
-extern int (*x86_ipi)(int,int,int);
-int x86_ipi_init(int);
+extern void (*x86_ipi)(int,int,int);
+void x86_ipi_init(int);
 #endif
 
 void identifycpu(struct cpu_info *);

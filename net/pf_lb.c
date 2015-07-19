@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf_lb.c,v 1.45 2015/07/17 18:39:55 jsg Exp $ */
+/*	$OpenBSD: pf_lb.c,v 1.47 2015/07/18 19:19:00 sashan Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -74,8 +74,14 @@
 #include <netinet/in_pcb.h>
 
 #include <net/pfvar.h>
+
+#if NPFLOG > 0
 #include <net/if_pflog.h>
+#endif	/* NPFLOG > 0 */
+
+#if NPFLOW > 0
 #include <net/if_pflow.h>
+#endif	/* NPFLOW > 0 */
 
 #if NPFSYNC > 0
 #include <net/if_pfsync.h>
@@ -113,7 +119,7 @@ pf_hash(struct pf_addr *inaddr, struct pf_addr *hash,
 		uint64_t hash64;
 		uint32_t hash32[2];
 	} h;
-#endif
+#endif	/* INET6 */
 
 	switch (af) {
 	case AF_INET:
@@ -136,6 +142,8 @@ pf_hash(struct pf_addr *inaddr, struct pf_addr *hash,
 		hash->addr32[3] = ~h.hash32[0];
 		break;
 #endif /* INET6 */
+	default:
+		unhandled_af(af);
 	}
 	return (res);
 }
@@ -366,6 +374,8 @@ pf_map_addr(sa_family_t af, struct pf_rule *r, struct pf_addr *saddr,
 			rmask = &rpool->addr.p.dyn->pfid_mask6;
 			break;
 #endif /* INET6 */
+		default:
+			unhandled_af(af);
 		}
 	} else if (rpool->addr.type == PF_ADDR_TABLE) {
 		if (!PF_POOL_DYNTYPE(rpool->opts))
@@ -430,6 +440,8 @@ pf_map_addr(sa_family_t af, struct pf_rule *r, struct pf_addr *saddr,
 					    htonl(arc4random());
 				break;
 #endif /* INET6 */
+			default:
+				unhandled_af(af);
 			}
 			PF_POOLMASK(naddr, raddr, rmask, &rpool->counter, af);
 			PF_ACPY(init_addr, naddr, af);

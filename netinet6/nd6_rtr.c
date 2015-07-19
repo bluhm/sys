@@ -1,4 +1,4 @@
-/*	$OpenBSD: nd6_rtr.c,v 1.111 2015/07/17 17:18:05 florian Exp $	*/
+/*	$OpenBSD: nd6_rtr.c,v 1.113 2015/07/18 15:51:17 mpi Exp $	*/
 /*	$KAME: nd6_rtr.c,v 1.97 2001/02/07 11:09:13 itojun Exp $	*/
 
 /*
@@ -49,7 +49,7 @@
 #include <net/if_var.h>
 #include <net/if_types.h>
 #include <net/route.h>
-#include <net/radix.h>
+#include <net/rtable.h>
 
 #include <netinet/in.h>
 #include <netinet6/in6_var.h>
@@ -72,7 +72,7 @@ void purge_detached(struct ifnet *);
 
 void in6_init_address_ltimes(struct nd_prefix *, struct in6_addrlifetime *);
 
-int rt6_deleteroute(struct radix_node *, void *, u_int);
+int rt6_deleteroute(struct rtentry *, void *, unsigned int);
 
 void nd6_addr_add(void *);
 
@@ -1073,6 +1073,52 @@ purge_detached(struct ifnet *ifp)
 			}
 		}
 	}
+}
+
+struct nd_prefix *
+nd6_prefix_add(struct ifnet *ifp, struct sockaddr_in6 *addr,
+    struct sockaddr_in6 *mask, struct in6_addrlifetime *lt, int autoconf)
+{
+	struct nd_prefix pr0, *pr;
+	int i;
+
+	/*
+	 * convert mask to prefix length (prefixmask has already
+	 * been validated in in6_update_ifa().
+	 */
+	memset(&pr0, 0, sizeof(pr0));
+	pr0.ndpr_ifp = ifp;
+	pr0.ndpr_plen = in6_mask2len(&mask->sin6_addr, NULL);
+	pr0.ndpr_prefix = *addr;
+	pr0.ndpr_mask = mask->sin6_addr;
+	/* apply the mask for safety. */
+	for (i = 0; i < 4; i++) {
+		pr0.ndpr_prefix.sin6_addr.s6_addr32[i] &=
+		    mask->sin6_addr.s6_addr32[i];
+	}
+	/*
+	 * XXX: since we don't have an API to set prefix (not address)
+	 * lifetimes, we just use the same lifetimes as addresses.
+	 * The (temporarily) installed lifetimes can be overridden by
+	 * later advertised RAs (when accept_rtadv is non 0), which is
+	 * an intended behavior.
+	 */
+	pr0.ndpr_raf_onlink = 1; /* should be configurable? */
+	pr0.ndpr_raf_auto = autoconf;
+	pr0.ndpr_vltime = lt->ia6t_vltime;
+	pr0.ndpr_pltime = lt->ia6t_pltime;
+
+	/* add the prefix if not yet. */
+	if ((pr = nd6_prefix_lookup(&pr0)) == NULL) {
+		/*
+		 * nd6_prelist_add will install the corresponding
+		 * interface route.
+		 */
+		if (nd6_prelist_add(&pr0, NULL, &pr) != 0)
+			return (NULL);
+	}
+
+	return (pr);
 }
 
 int
@@ -2138,26 +2184,24 @@ in6_init_address_ltimes(struct nd_prefix *new, struct in6_addrlifetime *lt6)
 void
 rt6_flush(struct in6_addr *gateway, struct ifnet *ifp)
 {
-	struct radix_node_head *rnh = rtable_get(ifp->if_rdomain, AF_INET6);
-	int s = splsoftnet();
+	int s;
 
 	/* We'll care only link-local addresses */
-	if (!IN6_IS_ADDR_LINKLOCAL(gateway)) {
-		splx(s);
+	if (!IN6_IS_ADDR_LINKLOCAL(gateway))
 		return;
-	}
+
 	/* XXX: hack for KAME's link-local address kludge */
 	gateway->s6_addr16[1] = htons(ifp->if_index);
 
-	rnh->rnh_walktree(rnh, rt6_deleteroute, (void *)gateway);
+	s = splsoftnet();
+	rtable_walk(ifp->if_rdomain, AF_INET6, rt6_deleteroute, gateway);
 	splx(s);
 }
 
 int
-rt6_deleteroute(struct radix_node *rn, void *arg, u_int id)
+rt6_deleteroute(struct rtentry *rt, void *arg, unsigned int id)
 {
 	struct rt_addrinfo info;
-	struct rtentry *rt = (struct rtentry *)rn;
 	struct in6_addr *gate = (struct in6_addr *)arg;
 
 	if (rt->rt_gateway == NULL || rt->rt_gateway->sa_family != AF_INET6)
