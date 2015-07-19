@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf.c,v 1.929 2015/07/18 23:11:35 sashan Exp $ */
+/*	$OpenBSD: pf.c,v 1.931 2015/07/19 05:48:11 sashan Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -1217,7 +1217,7 @@ pf_purge_expired_src_nodes(int waslocked)
 	for (cur = RB_MIN(pf_src_tree, &tree_src_tracking); cur; cur = next) {
 	next = RB_NEXT(pf_src_tree, &tree_src_tracking, cur);
 
-		if (cur->states <= 0 && cur->expire <= time_uptime) {
+		if (cur->states == 0 && cur->expire <= time_uptime) {
 			if (! locked) {
 				rw_enter_write(&pf_consistency_lock);
 				next = RB_NEXT(pf_src_tree,
@@ -1242,7 +1242,7 @@ pf_src_tree_remove_state(struct pf_state *s)
 		SLIST_REMOVE_HEAD(&s->src_nodes, next);
 		if (s->src.tcp_est)
 			--sni->sn->conn;
-		if (--sni->sn->states <= 0) {
+		if (--sni->sn->states == 0) {
 			timeout = s->rule.ptr->timeout[PFTM_SRC_NODE];
 			if (!timeout)
 				timeout =
@@ -3533,7 +3533,7 @@ pf_create_state(struct pf_pdesc *pd, struct pf_rule *r, struct pf_rule *a,
 
 	if (pd->proto == IPPROTO_TCP) {
 		if (s->state_flags & PFSTATE_SCRUB_TCP &&
-		    pf_normalize_tcp_init(pd, &s->src, &s->dst)) {
+		    pf_normalize_tcp_init(pd, &s->src)) {
 			REASON_SET(&reason, PFRES_MEMORY);
 			goto csfailed;
 		}
@@ -3803,7 +3803,7 @@ pf_tcp_track_full(struct pf_pdesc *pd, struct pf_state_peer *src,
 
 		if (((*state)->state_flags & PFSTATE_SCRUB_TCP || dst->scrub) &&
 		    src->scrub == NULL) {
-			if (pf_normalize_tcp_init(pd, src, dst)) {
+			if (pf_normalize_tcp_init(pd, src)) {
 				REASON_SET(reason, PFRES_MEMORY);
 				return (PF_DROP);
 			}
@@ -6618,7 +6618,7 @@ done:
 		struct m_tag	*mtag;
 
 		if ((mtag = m_tag_find(*m0, PACKET_TAG_PF_REASSEMBLED, NULL)))
-			action = pf_refragment6(m0, mtag, fwdir);
+			action = pf_refragment6(m0, mtag);
 	}
 #endif	/* INET6 */
 	if (s && action != PF_DROP) {
