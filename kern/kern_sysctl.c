@@ -132,8 +132,8 @@ int sysctl_sensors(int *, u_int, void *, size_t *, void *, size_t);
 int sysctl_emul(int *, u_int, void *, size_t *, void *, size_t);
 int sysctl_cptime2(int *, u_int, void *, size_t *, void *, size_t);
 
-void fill_file(struct kinfo_file *, struct file *, struct filedesc *,
-    int, struct vnode *, struct process *, struct proc *, struct socket *, int);
+void fill_file(struct kinfo_file *, struct file *, struct filedesc *, int,
+    struct vnode *, struct process *, struct proc *, struct socket *, int);
 void fill_kproc(struct process *, struct kinfo_proc *, struct proc *, int);
 
 int (*cpu_cpuspeed)(int *);
@@ -1250,16 +1250,16 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 	kf = malloc(sizeof(*kf), M_TEMP, M_WAITOK);
 
 #define FILLIT2(fp, fdp, i, vp, pr, so) do {				\
-	if (buflen >= elem_size && elem_count > 0) {		\
-		fill_file(kf, fp, fdp, i, vp, pr, p, so, show_pointers);	\
-		error = copyout(kf, dp, outsize);		\
-		if (error)					\
-			break;					\
-		dp += elem_size;				\
-		buflen -= elem_size;				\
-		elem_count--;					\
-	}							\
-	needed += elem_size;					\
+	if (buflen >= elem_size && elem_count > 0) {			\
+		fill_file(kf, fp, fdp, i, vp, pr, p, so, show_pointers);\
+		error = copyout(kf, dp, outsize);			\
+		if (error)						\
+			break;						\
+		dp += elem_size;					\
+		buflen -= elem_size;					\
+		elem_count--;						\
+	}								\
+	needed += elem_size;						\
 } while (0)
 #define FILLIT(fp, fdp, i, vp, pr) \
 	FILLIT2(fp, fdp, i, vp, pr, NULL)
@@ -1282,14 +1282,15 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 			TAILQ_FOREACH(inp, &rawcbtable.inpt_queue, inp_queue)
 				FILLSO(inp->inp_socket);
 #ifdef INET6
-			TAILQ_FOREACH(inp, &rawin6pcbtable.inpt_queue, inp_queue)
+			TAILQ_FOREACH(inp, &rawin6pcbtable.inpt_queue,
+			    inp_queue)
 				FILLSO(inp->inp_socket);
 #endif
 			splx(s);
 			break;
 		}
 		fp = LIST_FIRST(&filehead);
-                /* don't FREF when f_count == 0 to avoid race in fdrop() */
+		/* don't FREF when f_count == 0 to avoid race in fdrop() */
 		while (fp != NULL && fp->f_count == 0)
 			fp = LIST_NEXT(fp, f_list);
 		if (fp == NULL)
