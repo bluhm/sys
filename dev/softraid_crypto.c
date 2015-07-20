@@ -1,4 +1,4 @@
-/* $OpenBSD: softraid_crypto.c,v 1.118 2015/07/05 20:51:33 mlarkin Exp $ */
+/* $OpenBSD: softraid_crypto.c,v 1.120 2015/07/19 17:20:15 krw Exp $ */
 /*
  * Copyright (c) 2007 Marco Peereboom <marco@peereboom.us>
  * Copyright (c) 2008 Hans-Joerg Hoexer <hshoexer@openbsd.org>
@@ -833,7 +833,7 @@ sr_crypto_read_key_disk(struct sr_discipline *sd, dev_t dev)
 	/*
 	 * Read and validate key disk metadata.
 	 */
-	sm = malloc(SR_META_SIZE * 512, M_DEVBUF, M_WAITOK | M_ZERO);
+	sm = malloc(SR_META_SIZE * DEV_BSIZE, M_DEVBUF, M_WAITOK | M_ZERO);
 	if (sr_meta_native_read(sd, dev, sm, NULL)) {
 		sr_error(sc, "native bootprobe could not read native metadata");
 		goto done;
@@ -886,7 +886,7 @@ done:
 		free(omi, M_DEVBUF, 0);
 	}
 
-	free(sm, M_DEVBUF, SR_META_SIZE * 512);
+	free(sm, M_DEVBUF, SR_META_SIZE * DEV_BSIZE);
 
 	if (vn && open) {
 		VOP_CLOSE(vn, FREAD, NOCRED, curproc);
@@ -1151,7 +1151,6 @@ sr_crypto_dev_rw(struct sr_workunit *wu, struct sr_crypto_wu *crwu)
 	daddr_t			blk;
 
 	blk = wu->swu_blk_start;
-	blk += sd->sd_meta->ssd_data_offset;
 
 	ccb = sr_ccb_rw(sd, 0, blk, xs->datalen, xs->data, xs->flags, 0);
 	if (!ccb) {

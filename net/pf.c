@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf.c,v 1.931 2015/07/19 05:48:11 sashan Exp $ */
+/*	$OpenBSD: pf.c,v 1.933 2015/07/20 01:18:33 mcbride Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -349,7 +349,6 @@ pf_src_compare(struct pf_src_node *a, struct pf_src_node *b)
 	return (0);
 }
 
-#ifdef INET6
 void
 pf_addrcpy(struct pf_addr *dst, struct pf_addr *src, sa_family_t af)
 {
@@ -357,15 +356,18 @@ pf_addrcpy(struct pf_addr *dst, struct pf_addr *src, sa_family_t af)
 	case AF_INET:
 		dst->addr32[0] = src->addr32[0];
 		break;
+#ifdef INET6
 	case AF_INET6:
 		dst->addr32[0] = src->addr32[0];
 		dst->addr32[1] = src->addr32[1];
 		dst->addr32[2] = src->addr32[2];
 		dst->addr32[3] = src->addr32[3];
 		break;
+#endif /* INET6 */
+	default:
+		unhandled_af(af);
 	}
 }
-#endif /* INET6 */
 
 void
 pf_init_threshold(struct pf_threshold *threshold,
@@ -2682,7 +2684,6 @@ pf_step_out_of_anchor(int *depth, struct pf_ruleset **rs,
 	return (quick);
 }
 
-#ifdef INET6
 void
 pf_poolmask(struct pf_addr *naddr, struct pf_addr *raddr,
     struct pf_addr *rmask, struct pf_addr *saddr, sa_family_t af)
@@ -2692,6 +2693,7 @@ pf_poolmask(struct pf_addr *naddr, struct pf_addr *raddr,
 		naddr->addr32[0] = (raddr->addr32[0] & rmask->addr32[0]) |
 		((rmask->addr32[0] ^ 0xffffffff ) & saddr->addr32[0]);
 		break;
+#ifdef INET6
 	case AF_INET6:
 		naddr->addr32[0] = (raddr->addr32[0] & rmask->addr32[0]) |
 		((rmask->addr32[0] ^ 0xffffffff ) & saddr->addr32[0]);
@@ -2702,6 +2704,9 @@ pf_poolmask(struct pf_addr *naddr, struct pf_addr *raddr,
 		naddr->addr32[3] = (raddr->addr32[3] & rmask->addr32[3]) |
 		((rmask->addr32[3] ^ 0xffffffff ) & saddr->addr32[3]);
 		break;
+#endif /* INET6 */
+	default:
+		unhandled_af(af);
 	}
 }
 
@@ -2712,6 +2717,7 @@ pf_addr_inc(struct pf_addr *addr, sa_family_t af)
 	case AF_INET:
 		addr->addr32[0] = htonl(ntohl(addr->addr32[0]) + 1);
 		break;
+#ifdef INET6
 	case AF_INET6:
 		if (addr->addr32[3] == 0xffffffff) {
 			addr->addr32[3] = 0;
@@ -2731,9 +2737,11 @@ pf_addr_inc(struct pf_addr *addr, sa_family_t af)
 			addr->addr32[3] =
 			    htonl(ntohl(addr->addr32[3]) + 1);
 		break;
+#endif /* INET6 */
+	default:
+		unhandled_af(af);
 	}
 }
-#endif /* INET6 */
 
 int
 pf_socket_lookup(struct pf_pdesc *pd)
@@ -3068,6 +3076,7 @@ pf_test_rule(struct pf_pdesc *pd, struct pf_rule **rm, struct pf_state **sm,
 	int			 state_icmp = 0, icmp_dir = 0;
 	u_int16_t		 virtual_type, virtual_id;
 	u_int8_t		 icmptype = 0, icmpcode = 0;
+	int			 action = PF_DROP;
 
 	bzero(&act, sizeof(act));
 	bzero(sns, sizeof(sns));
@@ -3351,7 +3360,6 @@ pf_test_rule(struct pf_pdesc *pd, struct pf_rule **rm, struct pf_state **sm,
 
 	if (pd->virtual_proto != PF_VPROTO_FRAGMENT
 	    && !state_icmp && r->keep_state) {
-		int action;
 
 		if (r->rule_flag & PFRULE_SRCTRACK &&
 		    pf_insert_src_node(&sns[PF_SN_NONE], r, PF_SN_NONE, pd->af,
@@ -3370,7 +3378,7 @@ pf_test_rule(struct pf_pdesc *pd, struct pf_rule **rm, struct pf_state **sm,
 		    sm, tag, &rules, &act, sns);
 
 		if (action != PF_PASS)
-			return (action);
+			goto cleanup;
 		if (sks != skw) {
 			struct pf_state_key	*sk;
 
@@ -3428,7 +3436,7 @@ cleanup:
 		pool_put(&pf_rule_item_pl, ri);
 	}
 
-	return (PF_DROP);
+	return (action);
 }
 
 static __inline int
@@ -3451,7 +3459,6 @@ pf_create_state(struct pf_pdesc *pd, struct pf_rule *r, struct pf_rule *a,
 	s->rule.ptr = r;
 	s->anchor.ptr = a;
 	s->natrule.ptr = nr;
-	memcpy(&s->match_rules, rules, sizeof(s->match_rules));
 	if (r->allow_opts)
 		s->state_flags |= PFSTATE_ALLOWOPTS;
 	if (r->rule_flag & PFRULE_STATESLOPPY)
@@ -3580,6 +3587,11 @@ pf_create_state(struct pf_pdesc *pd, struct pf_rule *r, struct pf_rule *a,
 	} else
 		*sm = s;
 
+	/*
+	 * Make state responsible for rules it binds here.
+	 */
+	memcpy(&s->match_rules, rules, sizeof(s->match_rules));
+	bzero(rules, sizeof(*rules));
 	STATE_INC_COUNTERS(s);
 
 	if (tag > 0) {

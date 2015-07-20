@@ -1,4 +1,4 @@
-/* $OpenBSD: softraid.c,v 1.354 2015/05/29 13:48:45 krw Exp $ */
+/* $OpenBSD: softraid.c,v 1.358 2015/07/19 18:24:16 krw Exp $ */
 /*
  * Copyright (c) 2007, 2008, 2009 Marco Peereboom <marco@peereboom.us>
  * Copyright (c) 2008 Chris Kuethe <ckuethe@openbsd.org>
@@ -42,6 +42,7 @@
 #include <sys/task.h>
 #include <sys/kthread.h>
 #include <sys/dkio.h>
+#include <sys/stdint.h>
 
 #include <scsi/scsi_all.h>
 #include <scsi/scsiconf.h>
@@ -215,7 +216,7 @@ struct sr_meta_driver {
 	int			(*smd_validate)(struct sr_discipline *,
 				    struct sr_metadata *, void *);
 } smd[] = {
-	{ SR_META_OFFSET, SR_META_SIZE * 512,
+	{ SR_META_OFFSET, SR_META_SIZE * DEV_BSIZE,
 	  sr_meta_native_probe, sr_meta_native_attach, NULL,
 	  sr_meta_native_read, sr_meta_native_write, NULL },
 	{ 0, 0, NULL, NULL, NULL, NULL }
@@ -232,7 +233,8 @@ sr_meta_attach(struct sr_discipline *sd, int chunk_no, int force)
 	DNPRINTF(SR_D_META, "%s: sr_meta_attach(%d)\n", DEVNAME(sc), chunk_no);
 
 	/* in memory copy of metadata */
-	sd->sd_meta = malloc(SR_META_SIZE * 512, M_DEVBUF, M_ZERO | M_NOWAIT);
+	sd->sd_meta = malloc(SR_META_SIZE * DEV_BSIZE, M_DEVBUF,
+	    M_ZERO | M_NOWAIT);
 	if (!sd->sd_meta) {
 		sr_error(sc, "could not allocate memory for metadata");
 		goto bad;
@@ -509,7 +511,7 @@ sr_meta_clear(struct sr_discipline *sd)
 		goto done;
 	}
 
-	m = malloc(SR_META_SIZE * 512, M_DEVBUF, M_WAITOK | M_ZERO);
+	m = malloc(SR_META_SIZE * DEV_BSIZE, M_DEVBUF, M_WAITOK | M_ZERO);
 	SLIST_FOREACH(ch_entry, cl, src_link) {
 		if (sr_meta_native_write(sd, ch_entry->src_dev_mm, m, NULL)) {
 			/* XXX mark disk offline */
@@ -521,9 +523,9 @@ sr_meta_clear(struct sr_discipline *sd)
 		bzero(&ch_entry->src_meta, sizeof(ch_entry->src_meta));
 	}
 
-	bzero(sd->sd_meta, SR_META_SIZE * 512);
+	bzero(sd->sd_meta, SR_META_SIZE * DEV_BSIZE);
 
-	free(m, M_DEVBUF, SR_META_SIZE * 512);
+	free(m, M_DEVBUF, SR_META_SIZE * DEV_BSIZE);
 	rv = 0;
 done:
 	return (rv);
@@ -649,7 +651,7 @@ sr_meta_save(struct sr_discipline *sd, u_int32_t flags)
 
 	/* meta scratchpad */
 	s = &smd[sd->sd_meta_type];
-	m = malloc(SR_META_SIZE * 512, M_DEVBUF, M_ZERO | M_NOWAIT);
+	m = malloc(SR_META_SIZE * DEV_BSIZE, M_DEVBUF, M_ZERO | M_NOWAIT);
 	if (!m) {
 		printf("%s: could not allocate metadata scratch area\n",
 		    DEVNAME(sc));
@@ -726,7 +728,7 @@ restart:
 		wu.swu_dis = sd;
 		sd->sd_scsi_sync(&wu);
 	}
-	free(m, M_DEVBUF, SR_META_SIZE * 512);
+	free(m, M_DEVBUF, SR_META_SIZE * DEV_BSIZE);
 	return (0);
 bad:
 	return (1);
@@ -746,7 +748,7 @@ sr_meta_read(struct sr_discipline *sd)
 
 	DNPRINTF(SR_D_META, "%s: sr_meta_read\n", DEVNAME(sc));
 
-	sm = malloc(SR_META_SIZE * 512, M_DEVBUF, M_WAITOK | M_ZERO);
+	sm = malloc(SR_META_SIZE * DEV_BSIZE, M_DEVBUF, M_WAITOK | M_ZERO);
 	s = &smd[sd->sd_meta_type];
 	if (sd->sd_meta_type != SR_META_F_NATIVE)
 		fm = malloc(s->smd_size, M_DEVBUF, M_WAITOK | M_ZERO);
@@ -797,7 +799,7 @@ sr_meta_read(struct sr_discipline *sd)
 		cp++;
 	}
 
-	free(sm, M_DEVBUF, SR_META_SIZE * 512);
+	free(sm, M_DEVBUF, SR_META_SIZE * DEV_BSIZE);
 	free(fm, M_DEVBUF, s->smd_size);
 
 done:
@@ -1050,14 +1052,14 @@ sr_meta_native_bootprobe(struct sr_softc *sc, dev_t devno,
 	}
 	vput(vn);
 
-	/* Make sure this is a 512-byte/sector device. */
+	/* Make sure this is a DEV_BSIZE byte/sector device. */
 	if (label.d_secsize != DEV_BSIZE) {
 		DNPRINTF(SR_D_META, "%s: %s has unsupported sector size (%d)",
 		    DEVNAME(sc), devname, label.d_secsize);
 		goto done;
 	}
 
-	md = malloc(SR_META_SIZE * 512, M_DEVBUF, M_ZERO | M_NOWAIT);
+	md = malloc(SR_META_SIZE * DEV_BSIZE, M_DEVBUF, M_ZERO | M_NOWAIT);
 	if (md == NULL) {
 		sr_error(sc, "not enough memory for metadata buffer");
 		goto done;
@@ -1128,7 +1130,7 @@ sr_meta_native_bootprobe(struct sr_softc *sc, dev_t devno,
 
 done:
 	free(fake_sd, M_DEVBUF, sizeof(struct sr_discipline));
-	free(md, M_DEVBUF, SR_META_SIZE * 512);
+	free(md, M_DEVBUF, SR_META_SIZE * DEV_BSIZE);
 
 	return (rv);
 }
@@ -1548,7 +1550,7 @@ sr_meta_native_probe(struct sr_softc *sc, struct sr_chunk *ch_entry)
 	struct disklabel	label;
 	char			*devname;
 	int			error, part;
-	daddr_t			size;
+	u_int64_t		size;
 
 	DNPRINTF(SR_D_META, "%s: sr_meta_native_probe(%s)\n",
 	   DEVNAME(sc), ch_entry->src_devname);
@@ -1566,7 +1568,7 @@ sr_meta_native_probe(struct sr_softc *sc, struct sr_chunk *ch_entry)
 	}
 	memcpy(ch_entry->src_duid, label.d_uid, sizeof(ch_entry->src_duid));
 
-	/* Make sure this is a 512-byte/sector device. */
+	/* Make sure this is a DEV_BSIZE byte/sector device. */
 	if (label.d_secsize != DEV_BSIZE) {
 		sr_error(sc, "%s has unsupported sector size (%u)",
 		    devname, label.d_secsize);
@@ -1582,10 +1584,15 @@ sr_meta_native_probe(struct sr_softc *sc, struct sr_chunk *ch_entry)
 		goto unwind;
 	}
 
-	size = DL_SECTOBLK(&label, DL_GETPSIZE(&label.d_partitions[part])) -
-	    SR_DATA_OFFSET;
-	if (size <= 0) {
+	size = DL_SECTOBLK(&label, DL_GETPSIZE(&label.d_partitions[part]));
+	if (size <= SR_DATA_OFFSET) {
 		DNPRINTF(SR_D_META, "%s: %s partition too small\n", DEVNAME(sc),
+		    devname);
+		goto unwind;
+	}
+	size -= SR_DATA_OFFSET;
+	if (size > INT64_MAX) {
+		DNPRINTF(SR_D_META, "%s: %s partition too large\n", DEVNAME(sc),
 		    devname);
 		goto unwind;
 	}
@@ -1614,7 +1621,7 @@ sr_meta_native_attach(struct sr_discipline *sd, int force)
 
 	DNPRINTF(SR_D_META, "%s: sr_meta_native_attach\n", DEVNAME(sc));
 
-	md = malloc(SR_META_SIZE * 512, M_DEVBUF, M_ZERO | M_NOWAIT);
+	md = malloc(SR_META_SIZE * DEV_BSIZE, M_DEVBUF, M_ZERO | M_NOWAIT);
 	if (md == NULL) {
 		sr_error(sc, "not enough memory for metadata buffer");
 		goto bad;
@@ -1687,7 +1694,7 @@ sr_meta_native_attach(struct sr_discipline *sd, int force)
 
 	rv = 0;
 bad:
-	free(md, M_DEVBUF, SR_META_SIZE * 512);
+	free(md, M_DEVBUF, SR_META_SIZE * DEV_BSIZE);
 	return (rv);
 }
 
@@ -1701,8 +1708,8 @@ sr_meta_native_read(struct sr_discipline *sd, dev_t dev,
 	DNPRINTF(SR_D_META, "%s: sr_meta_native_read(0x%x, %p)\n",
 	    DEVNAME(sc), dev, md);
 
-	return (sr_meta_rw(sd, dev, md, SR_META_SIZE * 512, SR_META_OFFSET,
-	    B_READ));
+	return (sr_meta_rw(sd, dev, md, SR_META_SIZE * DEV_BSIZE,
+	    SR_META_OFFSET, B_READ));
 }
 
 int
@@ -1715,8 +1722,8 @@ sr_meta_native_write(struct sr_discipline *sd, dev_t dev,
 	DNPRINTF(SR_D_META, "%s: sr_meta_native_write(0x%x, %p)\n",
 	    DEVNAME(sc), dev, md);
 
-	return (sr_meta_rw(sd, dev, md, SR_META_SIZE * 512, SR_META_OFFSET,
-	    B_WRITE));
+	return (sr_meta_rw(sd, dev, md, SR_META_SIZE * DEV_BSIZE,
+	    SR_META_OFFSET, B_WRITE));
 }
 
 void
@@ -2006,7 +2013,7 @@ sr_ccb_put(struct sr_ccb *ccb)
 
 struct sr_ccb *
 sr_ccb_rw(struct sr_discipline *sd, int chunk, daddr_t blkno,
-    daddr_t len, u_int8_t *data, int xsflags, int ccbflags)
+    long len, u_int8_t *data, int xsflags, int ccbflags)
 {
 	struct sr_chunk		*sc = sd->sd_vol.sv_chunks[chunk];
 	struct sr_ccb		*ccb = NULL;
@@ -2024,7 +2031,7 @@ sr_ccb_rw(struct sr_discipline *sd, int chunk, daddr_t blkno,
 	else
 		ccb->ccb_buf.b_flags |= B_WRITE;
 
-	ccb->ccb_buf.b_blkno = blkno;
+	ccb->ccb_buf.b_blkno = blkno + sd->sd_meta->ssd_data_offset;
 	ccb->ccb_buf.b_bcount = len;
 	ccb->ccb_buf.b_bufsize = len;
 	ccb->ccb_buf.b_resid = len;
@@ -2602,7 +2609,8 @@ sr_ioctl_vol(struct sr_softc *sc, struct bioc_vol *bv)
 	int			vol = -1, rv = EINVAL;
 	struct sr_discipline	*sd;
 	struct sr_chunk		*hotspare;
-	daddr_t			rb, sz;
+	daddr_t			rb;
+	int64_t			sz;
 
 	TAILQ_FOREACH(sd, &sc->sc_dis_list, sd_link) {
 		vol++;
@@ -2884,8 +2892,18 @@ sr_hotspare(struct sr_softc *sc, dev_t dev)
 	}
 
 	/* Calculate partition size. */
-	size = DL_SECTOBLK(&label, DL_GETPSIZE(&label.d_partitions[part])) -
-	    SR_DATA_OFFSET;
+	size = DL_SECTOBLK(&label, DL_GETPSIZE(&label.d_partitions[part]));
+	if (size <= SR_DATA_OFFSET) {
+		DNPRINTF(SR_D_META, "%s: %s partition too small\n", DEVNAME(sc),
+		    devname);
+		goto fail;
+	}
+	size -= SR_DATA_OFFSET;
+	if (size > INT64_MAX) {
+		DNPRINTF(SR_D_META, "%s: %s partition too large\n", DEVNAME(sc),
+		    devname);
+		goto fail;
+	}
 
 	/*
 	 * Create and populate chunk metadata.
@@ -3106,7 +3124,8 @@ sr_rebuild_init(struct sr_discipline *sd, dev_t dev, int hotspare)
 	struct sr_meta_chunk	*meta;
 	struct disklabel	label;
 	struct vnode		*vn;
-	daddr_t			size, csize;
+	u_int64_t		size;
+	int64_t			csize;
 	char			devname[32];
 	int			rv = EINVAL, open = 0;
 	int			cid, i, part, status;
@@ -3187,8 +3206,18 @@ sr_rebuild_init(struct sr_discipline *sd, dev_t dev, int hotspare)
 	}
 
 	/* Is the partition large enough? */
-	size = DL_SECTOBLK(&label, DL_GETPSIZE(&label.d_partitions[part])) -
-	    sd->sd_meta->ssd_data_offset;
+	size = DL_SECTOBLK(&label, DL_GETPSIZE(&label.d_partitions[part]));
+	if (size <= sd->sd_meta->ssd_data_offset) {
+		sr_error(sc, "%s: %s partition too small\n", DEVNAME(sc),
+		    devname);
+		goto done;
+	}
+	size -= sd->sd_meta->ssd_data_offset;
+	if (size > INT64_MAX) {
+		sr_error(sc, "%s: %s partition too large\n", DEVNAME(sc),
+		    devname);
+		goto done;
+	}
 	if (size < csize) {
 		sr_error(sc, "%s partition too small, at least %lld bytes "
 		    "required", devname, (long long)(csize << DEV_BSHIFT));
@@ -3682,10 +3711,10 @@ sr_ioctl_installboot(struct sr_softc *sc, struct sr_discipline *sd,
 		goto done;
 	}
 
-	if (bb->bb_bootblk_size > SR_BOOT_BLOCKS_SIZE * 512)
+	if (bb->bb_bootblk_size > SR_BOOT_BLOCKS_SIZE * DEV_BSIZE)
 		goto done;
 
-	if (bb->bb_bootldr_size > SR_BOOT_LOADER_SIZE * 512)
+	if (bb->bb_bootldr_size > SR_BOOT_LOADER_SIZE * DEV_BSIZE)
 		goto done;
 
 	/* Copy in boot block. */
@@ -4031,13 +4060,13 @@ sr_raid_read_cap(struct sr_workunit *wu)
 			_lto4b(0xffffffff, rcd.addr);
 		else
 			_lto4b(addr, rcd.addr);
-		_lto4b(512, rcd.length);
+		_lto4b(DEV_BSIZE, rcd.length);
 		sr_copy_internal_data(xs, &rcd, sizeof(rcd));
 		rv = 0;
 	} else if (xs->cmd->opcode == READ_CAPACITY_16) {
 		bzero(&rcd16, sizeof(rcd16));
 		_lto8b(addr, rcd16.addr);
-		_lto4b(512, rcd16.length);
+		_lto4b(DEV_BSIZE, rcd16.length);
 		sr_copy_internal_data(xs, &rcd16, sizeof(rcd16));
 		rv = 0;
 	}
@@ -4393,7 +4422,7 @@ die:
 }
 
 void *
-sr_block_get(struct sr_discipline *sd, int length)
+sr_block_get(struct sr_discipline *sd, long length)
 {
 	return dma_alloc(length, PR_NOWAIT | PR_ZERO);
 }
@@ -4491,7 +4520,7 @@ sr_validate_stripsize(u_int32_t b)
 {
 	int			s = 0;
 
-	if (b % 512)
+	if (b % DEV_BSIZE)
 		return (-1);
 
 	while ((b & 1) == 0) {
@@ -4621,8 +4650,8 @@ void
 sr_rebuild(struct sr_discipline *sd)
 {
 	struct sr_softc		*sc = sd->sd_sc;
-	daddr_t			whole_blk, partial_blk, blk, sz, lba;
-	daddr_t			psz, rb, restart;
+	u_int64_t		sz, psz, whole_blk, partial_blk, blk, restart;
+	daddr_t			lba, rb;
 	struct sr_workunit	*wu_r, *wu_w;
 	struct scsi_xfer	xs_r, xs_w;
 	struct scsi_rw_16	*cr, *cw;
@@ -5020,6 +5049,7 @@ sr_hibernate_io(dev_t dev, daddr_t blkno, vaddr_t addr, size_t size, int op, voi
 	daddr_t key_blkno;
 	uint32_t sub_raidoff;  /* ofs of sr part in underlying dev */
 	struct disklabel dl;
+	struct partition *pp;
 	size_t i, j;
 	u_char iv[8];
 
@@ -5065,13 +5095,13 @@ sr_hibernate_io(dev_t dev, daddr_t blkno, vaddr_t addr, size_t size, int op, voi
 			return (ENOTSUP);
 		}
 
-		if (dl.d_partitions[DISKPART(my->subdev)].p_fstype != FS_RAID ||
-		    DL_GETPSIZE(&dl.d_partitions[DISKPART(my->subdev)]) == 0)
+		pp = &dl.d_partitions[DISKPART(my->subdev)];
+		if (pp->p_fstype != FS_RAID || DL_GETPSIZE(pp) == 0)
 			return (ENOTSUP);
 
 		/* Find the offset of the SR part in the underlying device */
 		sub_raidoff = my->srd->sd_meta->ssd_data_offset +
-		    DL_GETPOFFSET(&dl.d_partitions[DISKPART(my->subdev)]);
+		    DL_SECTOBLK(&dl, DL_GETPOFFSET(pp));
 		DNPRINTF(SR_D_MISC,"sr_hibernate_io: blk trans ofs: %d blks\n",
 		    sub_raidoff);
 

@@ -1,4 +1,4 @@
-/* $OpenBSD: softraid_raid6.c,v 1.65 2015/05/29 13:48:45 krw Exp $ */
+/* $OpenBSD: softraid_raid6.c,v 1.68 2015/07/19 21:06:04 krw Exp $ */
 /*
  * Copyright (c) 2009 Marco Peereboom <marco@peereboom.us>
  * Copyright (c) 2009 Jordan Hargrave <jordan@openbsd.org>
@@ -29,7 +29,6 @@
 #include <sys/rwlock.h>
 #include <sys/queue.h>
 #include <sys/fcntl.h>
-#include <sys/disklabel.h>
 #include <sys/mount.h>
 #include <sys/sensors.h>
 #include <sys/stat.h>
@@ -62,7 +61,7 @@ void	sr_raid6_set_vol_state(struct sr_discipline *);
 
 void	sr_raid6_xorp(void *, void *, int);
 void	sr_raid6_xorq(void *, void *, int, int);
-int	sr_raid6_addio(struct sr_workunit *wu, int, daddr_t, daddr_t,
+int	sr_raid6_addio(struct sr_workunit *wu, int, daddr_t, long,
 	    void *, int, int, void *, void *, int);
 void	sr_raid6_scrub(struct sr_discipline *);
 int	sr_failio(struct sr_workunit *);
@@ -379,9 +378,9 @@ sr_raid6_rw(struct sr_workunit *wu)
 	int			s, fail, i, gxinv, pxinv;
 	daddr_t			blk, lba;
 	int64_t			chunk_offs, lbaoffs, phys_offs, strip_offs;
-	int64_t			strip_no, strip_size, strip_bits;
+	int64_t			strip_no, strip_size, strip_bits, row_size;
 	int64_t			fchunk, no_chunk, chunk, qchunk, pchunk;
-	int64_t			length, datalen, row_size;
+	long			length, datalen;
 	void			*pbuf, *data, *qbuf;
 
 	/* blk and scsi error will be handled by sr_validate_io */
@@ -411,8 +410,7 @@ sr_raid6_rw(struct sr_workunit *wu)
 		strip_no = lbaoffs >> strip_bits;
 		strip_offs = lbaoffs & (strip_size - 1);
 		chunk_offs = (strip_no / no_chunk) << strip_bits;
-		phys_offs = chunk_offs + strip_offs +
-		    (sd->sd_meta->ssd_data_offset << DEV_BSHIFT);
+		phys_offs = chunk_offs + strip_offs;
 
 		/* get size remaining in this stripe */
 		length = MIN(strip_size - strip_offs, datalen);
@@ -732,7 +730,7 @@ sr_raid6_wu_done(struct sr_workunit *wu)
 
 int
 sr_raid6_addio(struct sr_workunit *wu, int chunk, daddr_t blkno,
-    daddr_t len, void *data, int xsflags, int ccbflags, void *pbuf,
+    long len, void *data, int xsflags, int ccbflags, void *pbuf,
     void *qbuf, int gn)
 {
 	struct sr_discipline	*sd = wu->swu_dis;
