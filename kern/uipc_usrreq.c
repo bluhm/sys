@@ -273,17 +273,6 @@ uipc_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		struct stat *sb = (struct stat *)m;
 
 		sb->st_blksize = so->so_snd.sb_hiwat;
-		switch (so->so_type) {
-		case SOCK_STREAM:
-		case SOCK_SEQPACKET:
-			if (unp->unp_conn != NULL) {
-				so2 = unp->unp_conn->unp_socket;
-				sb->st_blksize += so2->so_rcv.sb_cc;
-			}
-			break;
-		default:
-			break;
-		}
 		sb->st_dev = NODEV;
 		if (unp->unp_ino == 0)
 			unp->unp_ino = unp_ino++;
