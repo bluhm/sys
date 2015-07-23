@@ -109,8 +109,10 @@ uipc_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		switch (so->so_type) {
 		case SOCK_STREAM:
 		case SOCK_SEQPACKET:
-			so->so_snd.sb_mbcnt = 0;
-			so->so_snd.sb_cc = 0;
+			if (unp->unp_conn == NULL)
+				break;
+			so->so_snd.sb_mbcnt -= unp->unp_conn->unp_mbcnt;
+			so->so_snd.sb_cc -= unp->unp_conn->unp_cc;
 			break;
 		}
 		unp_detach(unp);
