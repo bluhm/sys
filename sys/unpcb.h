@@ -68,8 +68,6 @@ struct	unpcb {
 	struct	mbuf *unp_addr;		/* bound address of socket */
 	int	unp_flags;		/* this unpcb contains peer eids */
 	struct	sockpeercred unp_connid;/* id of peer process */
-	int	unp_cc;			/* copy of rcv.sb_cc */
-	int	unp_mbcnt;		/* copy of rcv.sb_mbcnt */
 	struct	timespec unp_ctime;	/* holds creation time */
 };
 

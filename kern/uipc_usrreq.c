@@ -169,10 +169,8 @@ uipc_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 			 * Adjust backpressure on sender
 			 * and wakeup any waiting to write.
 			 */
-			snd->sb_mbcnt -= unp->unp_mbcnt - rcv->sb_mbcnt;
-			unp->unp_mbcnt = rcv->sb_mbcnt;
-			snd->sb_cc -= unp->unp_cc - rcv->sb_cc;
-			unp->unp_cc = rcv->sb_cc;
+			snd->sb_mbcnt = rcv->sb_mbcnt;
+			snd->sb_cc = rcv->sb_cc;
 			sowwakeup(so2);
 #undef snd
 #undef rcv
@@ -246,11 +244,8 @@ uipc_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 				sbappendrecord(rcv, m);
 			else
 				sbappend(rcv, m);
-			snd->sb_mbcnt +=
-			    rcv->sb_mbcnt - unp->unp_conn->unp_mbcnt;
-			unp->unp_conn->unp_mbcnt = rcv->sb_mbcnt;
-			snd->sb_cc += rcv->sb_cc - unp->unp_conn->unp_cc;
-			unp->unp_conn->unp_cc = rcv->sb_cc;
+			snd->sb_mbcnt = rcv->sb_mbcnt;
+			snd->sb_cc = rcv->sb_cc;
 			sorwakeup(so2);
 			m = NULL;
 #undef snd
