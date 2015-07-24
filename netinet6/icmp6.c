@@ -1097,10 +1097,13 @@ icmp6_rip6_input(struct mbuf **mp, int off)
 			/* XXX rdomain support */
 			if ((divert = pf_find_divert(m)) == NULL)
 				continue;
+			if (IN6_IS_ADDR_UNSPECIFIED(&divert->addr.v6))
+				goto divert_reply;
 			if (!IN6_ARE_ADDR_EQUAL(&in6p->inp_laddr6,
 			    &divert->addr.v6))
 				continue;
 		} else
+ divert_reply:
 #endif
 		if (!IN6_IS_ADDR_UNSPECIFIED(&in6p->inp_laddr6) &&
 		   !IN6_ARE_ADDR_EQUAL(&in6p->inp_laddr6, &ip6->ip6_dst))
