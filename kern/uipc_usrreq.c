@@ -227,7 +227,7 @@ uipc_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 			so2 = unp->unp_conn->unp_socket;
 			/*
 			 * Send to paired receive port, and then raise
-			 * send buffer level marks to maintain backpressure.
+			 * send buffer counts to maintain backpressure.
 			 * Wake up readers.
 			 */
 			if (control) {
