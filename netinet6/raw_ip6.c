@@ -478,7 +478,8 @@ rip6_output(struct mbuf *m, ...)
 	m->m_pkthdr.ph_rtableid = in6p->inp_rtableid;
 
 #if NPF > 0
-	if (in6p->inp_socket->so_state & SS_ISCONNECTED)
+	if (in6p->inp_socket->so_state & SS_ISCONNECTED &&
+	    so->so_proto->pr_protocol != IPPROTO_ICMPV6)
 		m->m_pkthdr.pf.inp = in6p;
 #endif
 
