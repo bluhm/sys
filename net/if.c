@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.c,v 1.352 2015/07/18 16:10:03 mpi Exp $	*/
+/*	$OpenBSD: if.c,v 1.355 2015/07/21 04:21:50 jca Exp $	*/
 /*	$NetBSD: if.c,v 1.35 1996/05/07 05:26:04 thorpej Exp $	*/
 
 /*
@@ -472,8 +472,6 @@ if_input(struct ifnet *ifp, struct mbuf_list *ml)
 	struct mbuf *m;
 	size_t ibytes = 0;
 
-	splassert(IPL_NET);
-
 	MBUF_LIST_FOREACH(ml, m) {
 		m->m_pkthdr.ph_ifidx = ifp->if_index;
 		m->m_pkthdr.ph_rtableid = ifp->if_rdomain;
@@ -632,7 +630,9 @@ if_detach(struct ifnet *ifp)
 #ifdef INET6
 	in6_ifdetach(ifp);
 #endif
-
+#ifdef MPLS
+	mpls_uninstall_handler(ifp);
+#endif /* MPLS */
 #if NPF > 0
 	pfi_detach_ifnet(ifp);
 #endif
@@ -1400,6 +1400,11 @@ ifioctl(struct socket *so, u_long cmd, caddr_t data, struct proc *p)
 		if (ISSET(ifr->ifr_flags, IFXF_MPLS) &&
 		    !ISSET(ifp->if_xflags, IFXF_MPLS)) {
 			s = splnet();
+			if (mpls_install_handler(ifp) != 0) {
+				splx(s);
+				return (ENOMEM);
+			}
+
 			ifp->if_xflags |= IFXF_MPLS;
 			ifp->if_ll_output = ifp->if_output; 
 			ifp->if_output = mpls_output;
@@ -1411,6 +1416,7 @@ ifioctl(struct socket *so, u_long cmd, caddr_t data, struct proc *p)
 			ifp->if_xflags &= ~IFXF_MPLS;
 			ifp->if_output = ifp->if_ll_output; 
 			ifp->if_ll_output = NULL;
+			mpls_uninstall_handler(ifp);
 			splx(s);
 		}
 #endif	/* MPLS */
@@ -2214,10 +2220,6 @@ ifa_print_all(void)
 				    addr, sizeof(addr)));
 				break;
 #endif
-			case AF_LINK:
-				printf("%s",
-				    ether_sprintf(ifa->ifa_addr->sa_data));
-				break;
 			}
 			printf(" on %s\n", ifa->ifa_ifp->if_xname);
 		}
