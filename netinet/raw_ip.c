@@ -148,9 +148,12 @@ rip_input(struct mbuf *m, ...)
 			/* XXX rdomain support */
 			if ((divert = pf_find_divert(m)) == NULL)
 				continue;
+			if (!divert->addr.v4.s_addr)
+				goto divert_reply;
 			if (inp->inp_laddr.s_addr != divert->addr.v4.s_addr)
 				continue;
 		} else
+ divert_reply:
 #endif
 		if (inp->inp_laddr.s_addr &&
 		    inp->inp_laddr.s_addr != ip->ip_dst.s_addr)
