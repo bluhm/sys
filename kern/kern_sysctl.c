@@ -1298,11 +1298,10 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 		do {
 			if (fp->f_count > 1 && /* 0, +1 for our FREF() */
 			    (arg == 0 || fp->f_type == arg)) {
-				struct socket *so;
 				int af, skip = 0;
 				if (arg == DTYPE_SOCKET && fp->f_type == arg) {
-					so = (struct socket *)fp->f_data;
-					af = so->so_proto->pr_domain->dom_family;
+					af = ((struct socket *)fp->f_data)->
+					    so_proto->pr_domain->dom_family;
 					if (af == AF_INET || af == AF_INET6)
 						skip = 1;
 				}
