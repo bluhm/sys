@@ -1287,7 +1287,6 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 				FILLSO(inp->inp_socket);
 #endif
 			splx(s);
-			break;
 		}
 		fp = LIST_FIRST(&filehead);
 		/* don't FREF when f_count == 0 to avoid race in fdrop() */
@@ -1298,8 +1297,18 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 		FREF(fp);
 		do {
 			if (fp->f_count > 1 && /* 0, +1 for our FREF() */
-			    (arg == 0 || fp->f_type == arg))
-				FILLIT(fp, NULL, 0, NULL, NULL);
+			    (arg == 0 || fp->f_type == arg)) {
+				struct socket *so;
+				int af, skip = 0;
+				if (arg == DTYPE_SOCKET && fp->f_type == arg) {
+					so = (struct socket *)fp->f_data;
+					af = so->so_proto->pr_domain->dom_family;
+					if (af == AF_INET || af == AF_INET6)
+						skip = 1;
+				}
+				if (!skip)
+					FILLIT(fp, NULL, 0, NULL, NULL);
+			}
 			nfp = LIST_NEXT(fp, f_list);
 			while (nfp != NULL && nfp->f_count == 0)
 				nfp = LIST_NEXT(nfp, f_list);
