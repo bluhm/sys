@@ -1,4 +1,4 @@
-/* $OpenBSD: softraid.c,v 1.360 2015/07/21 03:30:51 krw Exp $ */
+/* $OpenBSD: softraid.c,v 1.362 2015/07/28 15:42:23 krw Exp $ */
 /*
  * Copyright (c) 2007, 2008, 2009 Marco Peereboom <marco@peereboom.us>
  * Copyright (c) 2008 Chris Kuethe <ckuethe@openbsd.org>
@@ -1755,15 +1755,15 @@ sr_hotplug_unregister(struct sr_discipline *sd, void *func)
 	    DEVNAME(sd->sd_sc), sd->sd_meta->ssd_devname, func);
 
 	/* make sure we are on the list yet */
-	SLIST_FOREACH(mhe, &sr_hotplug_callbacks, shl_link)
-		if (mhe->sh_hotplug == func) {
-			SLIST_REMOVE(&sr_hotplug_callbacks, mhe,
-			    sr_hotplug_list, shl_link);
-			free(mhe, M_DEVBUF, 0);
-			if (SLIST_EMPTY(&sr_hotplug_callbacks))
-				SLIST_INIT(&sr_hotplug_callbacks);
-			return;
-		}
+	SLIST_FOREACH(mhe, &sr_hotplug_callbacks, shl_link) {
+		if (mhe->sh_hotplug == func)
+			break;
+	}
+	if (mhe != NULL) {
+		SLIST_REMOVE(&sr_hotplug_callbacks, mhe,
+		    sr_hotplug_list, shl_link);
+		free(mhe, M_DEVBUF, 0);
+	}
 }
 
 void
@@ -3207,13 +3207,13 @@ sr_rebuild_init(struct sr_discipline *sd, dev_t dev, int hotspare)
 	/* Is the partition large enough? */
 	size = DL_SECTOBLK(&label, DL_GETPSIZE(&label.d_partitions[part]));
 	if (size <= sd->sd_meta->ssd_data_blkno) {
-		sr_error(sc, "%s: %s partition too small\n", DEVNAME(sc),
+		sr_error(sc, "%s: %s partition too small", DEVNAME(sc),
 		    devname);
 		goto done;
 	}
 	size -= sd->sd_meta->ssd_data_blkno;
 	if (size > INT64_MAX) {
-		sr_error(sc, "%s: %s partition too large\n", DEVNAME(sc),
+		sr_error(sc, "%s: %s partition too large", DEVNAME(sc),
 		    devname);
 		goto done;
 	}
@@ -3848,7 +3848,7 @@ void
 sr_discipline_free(struct sr_discipline *sd)
 {
 	struct sr_softc		*sc;
-	struct sr_discipline	*sdtmp1, *sdtmp2;
+	struct sr_discipline	*sdtmp1;
 	struct sr_meta_opt_head *som;
 	struct sr_meta_opt_item	*omi, *omi_next;
 
@@ -3882,12 +3882,12 @@ sr_discipline_free(struct sr_discipline *sd)
 		sc->sc_targets[sd->sd_target] = NULL;
 	}
 
-	TAILQ_FOREACH_SAFE(sdtmp1, &sc->sc_dis_list, sd_link, sdtmp2) {
-		if (sdtmp1 == sd) {
-			TAILQ_REMOVE(&sc->sc_dis_list, sd, sd_link);
+	TAILQ_FOREACH(sdtmp1, &sc->sc_dis_list, sd_link) {
+		if (sdtmp1 == sd)
 			break;
-		}
 	}
+	if (sdtmp1 != NULL)
+		TAILQ_REMOVE(&sc->sc_dis_list, sd, sd_link);
 
 	explicit_bzero(sd, sizeof *sd);
 	free(sd, M_DEVBUF, 0);
@@ -4345,7 +4345,7 @@ sr_set_chunk_state(struct sr_discipline *sd, int c, int new_state)
 die:
 		splx(s); /* XXX */
 		panic("%s: %s: %s: invalid chunk state transition "
-		    "%d -> %d\n", DEVNAME(sd->sd_sc),
+		    "%d -> %d", DEVNAME(sd->sd_sc),
 		    sd->sd_meta->ssd_devname,
 		    sd->sd_vol.sv_chunks[c]->src_meta.scmi.scm_devname,
 		    old_state, new_state);
@@ -4411,7 +4411,7 @@ sr_set_vol_state(struct sr_discipline *sd)
 	default:
 die:
 		panic("%s: %s: invalid volume state transition "
-		    "%d -> %d\n", DEVNAME(sd->sd_sc),
+		    "%d -> %d", DEVNAME(sd->sd_sc),
 		    sd->sd_meta->ssd_devname,
 		    old_state, new_state);
 		/* NOTREACHED */
