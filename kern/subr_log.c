@@ -367,7 +367,7 @@ sys_sendsyslog(struct proc *p, void *v, register_t *retval)
 		    "<%d> sendsyslog: dropped %d message%s, error %d",
 		    LOG_KERN|LOG_WARNING, dropped_count,
 		    dropped_count == 1 ? "" : "s", orig_error);
-		error = dosendsyslog(p, buf, MIN((size_t)len, sizeof(buf)),
+		error = dosendsyslog(p, buf, MIN((size_t)len, sizeof(buf) - 1),
 		    UIO_SYSSPACE);
 		if (error) {
 			dropped_count++;
