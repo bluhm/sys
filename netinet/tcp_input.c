@@ -3285,9 +3285,9 @@ u_int32_t syn_hash1, syn_hash2;
 #ifndef INET6
 #define	SYN_HASHALL(hash, src, dst) \
 do {									\
-	hash = SYN_HASH(&((struct sockaddr_in *)(src))->sin_addr,	\
-		((struct sockaddr_in *)(src))->sin_port,		\
-		((struct sockaddr_in *)(dst))->sin_port);		\
+	hash = SYN_HASH(&satosin(src)->sin_addr,			\
+		satosin(src)->sin_port,					\
+		satosin(dst)->sin_port);				\
 } while (/*CONSTCOND*/ 0)
 #else
 #define SYN_HASH6(sa, sp, dp) \
@@ -3299,14 +3299,14 @@ do {									\
 do {									\
 	switch ((src)->sa_family) {					\
 	case AF_INET:							\
-		hash = SYN_HASH(&((struct sockaddr_in *)(src))->sin_addr, \
-			((struct sockaddr_in *)(src))->sin_port,	\
-			((struct sockaddr_in *)(dst))->sin_port);	\
+		hash = SYN_HASH(&satosin(src)->sin_addr,		\
+			satosin(src)->sin_port,				\
+			satosin(dst)->sin_port);			\
 		break;							\
 	case AF_INET6:							\
-		hash = SYN_HASH6(&((struct sockaddr_in6 *)(src))->sin6_addr, \
-			((struct sockaddr_in6 *)(src))->sin6_port,	\
-			((struct sockaddr_in6 *)(dst))->sin6_port);	\
+		hash = SYN_HASH6(&satosin6(src)->sin6_addr,		\
+			satosin6(src)->sin6_port,			\
+			satosin6(dst)->sin6_port);			\
 		break;							\
 	default:							\
 		hash = 0;						\
