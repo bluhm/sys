@@ -3573,8 +3573,7 @@ syn_cache_lookup(struct sockaddr *src, struct sockaddr *dst,
 	scp = &tcp_syn_cache[hash % tcp_syn_cache_size];
 	*headp = scp;
 	s = splsoftnet();
-	for (sc = TAILQ_FIRST(&scp->sch_bucket); sc != NULL;
-	     sc = TAILQ_NEXT(sc, sc_bucketq)) {
+	TAILQ_FOREACH(sc, &scp->sch_bucket, sc_bucketq) {
 		if (sc->sc_hash != hash)
 			continue;
 		if (!bcmp(&sc->sc_src, src, src->sa_len) &&
