@@ -3542,9 +3542,7 @@ syn_cache_cleanup(struct tcpcb *tp)
 
 	s = splsoftnet();
 
-	for (sc = LIST_FIRST(&tp->t_sc); sc != NULL; sc = nsc) {
-		nsc = LIST_NEXT(sc, sc_tpq);
-
+	LIST_FOREACH_SAFE(sc, &tp->t_sc, sc_tpq, nsc) {
 #ifdef DIAGNOSTIC
 		if (sc->sc_tp != tp)
 			panic("invalid sc_tp in syn_cache_cleanup");
