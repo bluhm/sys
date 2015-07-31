@@ -3310,7 +3310,7 @@ syn_cache_rm(struct syn_cache *sc)
 	LIST_REMOVE(sc, sc_tpq);
 	sc->sc_buckethead->sch_length--;
 	timeout_del(&sc->sc_timer);
-	(*tcp_syn_cache_count)--;
+	(*sc->sc_count)--;
 }
 
 void
