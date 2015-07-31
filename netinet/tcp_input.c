@@ -3371,6 +3371,8 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 	struct syn_cache *sc2;
 	int s;
 
+	s = splsoftnet();
+
 	/*
 	 * If there are no entries in the hash table, reinitialize
 	 * the hash secrets.
@@ -3386,7 +3388,6 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 	 * Make sure that we don't overflow the per-bucket
 	 * limit or the total cache size limit.
 	 */
-	s = splsoftnet();
 	if (scp->sch_length >= tcp_syn_bucket_limit) {
 		tcpstat.tcps_sc_bucketoverflow++;
 		/*
@@ -3453,6 +3454,7 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 	/* Put it into the bucket. */
 	TAILQ_INSERT_TAIL(&scp->sch_bucket, sc, sc_bucketq);
 	scp->sch_length++;
+	sc->sc_count = tcp_syn_cache_count;
 	(*tcp_syn_cache_count)++;
 
 	tcpstat.tcps_sc_added++;
