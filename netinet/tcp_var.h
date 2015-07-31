@@ -558,9 +558,6 @@ extern	int tcp_reass_limit;	/* max entries for tcp reass queues */
 extern	int tcp_syn_cache_limit; /* max entries for compressed state engine */
 extern	int tcp_syn_bucket_limit;/* max entries per hash bucket */
 
-extern	int tcp_syn_cache_size;
-extern	struct syn_cache_head tcp_syn_cache[];
-
 int	 tcp_attach(struct socket *);
 void	 tcp_canceltimers(struct tcpcb *);
 struct tcpcb *
