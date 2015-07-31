@@ -723,10 +723,9 @@ tcp6_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *d)
 			    SEQ_GEQ(seq, tp->snd_una) &&
 			    SEQ_LT(seq, tp->snd_max))
 				notify(inp, inet6ctlerrmap[cmd]);
-		} else if (tcp_syn_cache_count &&
-		    (inet6ctlerrmap[cmd] == EHOSTUNREACH ||
-		     inet6ctlerrmap[cmd] == ENETUNREACH ||
-		     inet6ctlerrmap[cmd] == EHOSTDOWN))
+		} else if (inet6ctlerrmap[cmd] == EHOSTUNREACH ||
+		    inet6ctlerrmap[cmd] == ENETUNREACH ||
+		    inet6ctlerrmap[cmd] == EHOSTDOWN)
 			syn_cache_unreach((struct sockaddr *)sa6_src,
 			    sa, &th, rdomain);
 	} else {
@@ -841,10 +840,9 @@ tcp_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 			    SEQ_GEQ(seq, tp->snd_una) &&
 			    SEQ_LT(seq, tp->snd_max))
 				notify(inp, errno);
-		} else if (tcp_syn_cache_count &&
-		    (inetctlerrmap[cmd] == EHOSTUNREACH ||
-		     inetctlerrmap[cmd] == ENETUNREACH ||
-		     inetctlerrmap[cmd] == EHOSTDOWN)) {
+		} else if (inetctlerrmap[cmd] == EHOSTUNREACH ||
+		    inetctlerrmap[cmd] == ENETUNREACH ||
+		    inetctlerrmap[cmd] == EHOSTDOWN) {
 			struct sockaddr_in sin;
 
 			bzero(&sin, sizeof(sin));
