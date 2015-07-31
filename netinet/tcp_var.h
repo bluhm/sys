@@ -271,7 +271,7 @@ struct syn_cache {
 #define sc_route6	sc_route_u.route6
 #endif
 	long sc_win;				/* advertised window */
-	int sc_bucketidx;			/* our bucket index */
+	struct syn_cache_head *sc_buckethead;	/* our bucket index */
 	u_int32_t sc_hash;
 	u_int32_t sc_timestamp;			/* timestamp from SYN */
 	u_int32_t sc_modulate;			/* our timestamp modulator */
