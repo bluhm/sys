@@ -3260,7 +3260,7 @@ tcp_mss_adv(struct mbuf *m, int af)
 int	tcp_syn_cache_size = TCP_SYN_HASH_SIZE;
 int	tcp_syn_cache_limit = TCP_SYN_HASH_SIZE*TCP_SYN_BUCKET_SIZE;
 int	tcp_syn_bucket_limit = 3*TCP_SYN_BUCKET_SIZE;
-int	tcp_syn_cache_count;
+int	*tcp_syn_cache_count, tcp_syn_cache_count_set[2];
 struct	syn_cache_head *tcp_syn_cache, tcp_syn_cache_set[2][TCP_SYN_HASH_SIZE];
 u_int32_t *tcp_syn_hash, tcp_syn_hash_set[2][5];
 
@@ -3310,7 +3310,7 @@ syn_cache_rm(struct syn_cache *sc)
 	LIST_REMOVE(sc, sc_tpq);
 	sc->sc_buckethead->sch_length--;
 	timeout_del(&sc->sc_timer);
-	tcp_syn_cache_count--;
+	(*tcp_syn_cache_count)--;
 }
 
 void
@@ -3354,6 +3354,7 @@ syn_cache_init(void)
 		TAILQ_INIT(&tcp_syn_cache_set[0][i].sch_bucket);
 		TAILQ_INIT(&tcp_syn_cache_set[1][i].sch_bucket);
 	}
+	tcp_syn_cache_count = &tcp_syn_cache_count_set[0];
 	tcp_syn_cache = tcp_syn_cache_set[0];
 	tcp_syn_hash = tcp_syn_hash_set[0];
 
@@ -3374,7 +3375,7 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 	 * If there are no entries in the hash table, reinitialize
 	 * the hash secrets.
 	 */
-	if (tcp_syn_cache_count == 0) {
+	if (*tcp_syn_cache_count == 0) {
 		arc4random_buf(tcp_syn_hash, 5 * sizeof(u_int32_t));
 		tcpstat.tcps_sc_seedrandom++;
 	}
@@ -3405,7 +3406,7 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 #endif
 		syn_cache_rm(sc2);
 		syn_cache_put(sc2);
-	} else if (tcp_syn_cache_count >= tcp_syn_cache_limit) {
+	} else if (*tcp_syn_cache_count >= tcp_syn_cache_limit) {
 		struct syn_cache_head *scp2, *sce;
 
 		tcpstat.tcps_sc_overflowed++;
@@ -3454,7 +3455,7 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 	/* Put it into the bucket. */
 	TAILQ_INSERT_TAIL(&scp->sch_bucket, sc, sc_bucketq);
 	scp->sch_length++;
-	tcp_syn_cache_count++;
+	(*tcp_syn_cache_count)++;
 
 	tcpstat.tcps_sc_added++;
 	splx(s);
