@@ -3283,8 +3283,8 @@ int	tcp_syn_cache_size = TCP_SYN_HASH_SIZE;
 int	tcp_syn_cache_limit = TCP_SYN_HASH_SIZE*TCP_SYN_BUCKET_SIZE;
 int	tcp_syn_bucket_limit = 3*TCP_SYN_BUCKET_SIZE;
 int	tcp_syn_cache_count;
-struct	syn_cache_head tcp_syn_cache[TCP_SYN_HASH_SIZE];
-u_int32_t tcp_syn_hash[5];
+struct	syn_cache_head *tcp_syn_cache, tcp_syn_cache_set[2][TCP_SYN_HASH_SIZE];
+u_int32_t *tcp_syn_hash, tcp_syn_hash_set[2][5];
 
 #define SYN_HASH(sa, sp, dp) \
 	(((sa)->s_addr ^ tcp_syn_hash[0]) *				\
@@ -3373,8 +3373,12 @@ syn_cache_init()
 	int i;
 
 	/* Initialize the hash buckets. */
-	for (i = 0; i < tcp_syn_cache_size; i++)
-		TAILQ_INIT(&tcp_syn_cache[i].sch_bucket);
+	for (i = 0; i < tcp_syn_cache_size; i++) {
+		TAILQ_INIT(&tcp_syn_cache_set[0][i].sch_bucket);
+		TAILQ_INIT(&tcp_syn_cache_set[1][i].sch_bucket);
+	}
+	tcp_syn_cache = tcp_syn_cache_set[0];
+	tcp_syn_hash = tcp_syn_hash_set[0];
 
 	/* Initialize the syn cache pool. */
 	pool_init(&syn_cache_pool, sizeof(struct syn_cache), 0, 0, 0,
@@ -3393,7 +3397,7 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 	 * the hash secrets.
 	 */
 	if (tcp_syn_cache_count == 0)
-		arc4random_buf(tcp_syn_hash, sizeof(tcp_syn_hash));
+		arc4random_buf(tcp_syn_hash, 5 * sizeof(u_int32_t));
 
 	SYN_HASHALL(sc->sc_hash, &sc->sc_src.sa, &sc->sc_dst.sa);
 	sc->sc_bucketidx = sc->sc_hash % tcp_syn_cache_size;
