@@ -3286,9 +3286,9 @@ int	*tcp_syn_cache_count, tcp_syn_cache_count_set[2];
 struct	syn_cache_head *tcp_syn_cache, tcp_syn_cache_set[2][TCP_SYN_HASH_SIZE];
 u_int32_t *tcp_syn_hash, tcp_syn_hash_set[2][5];
 
-#define SYN_HASH(sa, sp, dp) \
-	(((sa)->s_addr ^ tcp_syn_hash[0]) *				\
-	(((((u_int32_t)(dp))<<16) + ((u_int32_t)(sp))) ^ tcp_syn_hash[4]))
+#define SYN_HASH(sa, sp, dp, rand) \
+	(((sa)->s_addr ^ (rand)[0]) *				\
+	(((((u_int32_t)(dp))<<16) + ((u_int32_t)(sp))) ^ (rand)[4]))
 #ifndef INET6
 #define	SYN_HASHALL(hash, src, dst) \
 do {									\
@@ -3297,25 +3297,25 @@ do {									\
 		satosin(dst)->sin_port);				\
 } while (/*CONSTCOND*/ 0)
 #else
-#define SYN_HASH6(sa, sp, dp) \
-	(((sa)->s6_addr32[0] ^ tcp_syn_hash[0]) *			\
-	((sa)->s6_addr32[1] ^ tcp_syn_hash[1]) *			\
-	((sa)->s6_addr32[2] ^ tcp_syn_hash[2]) *			\
-	((sa)->s6_addr32[3] ^ tcp_syn_hash[3]) *			\
-	(((((u_int32_t)(dp))<<16) + ((u_int32_t)(sp))) ^ tcp_syn_hash[4]))
+#define SYN_HASH6(sa, sp, dp, rand) \
+	(((sa)->s6_addr32[0] ^ (rand)[0]) *			\
+	((sa)->s6_addr32[1] ^ (rand)[1]) *			\
+	((sa)->s6_addr32[2] ^ (rand)[2]) *			\
+	((sa)->s6_addr32[3] ^ (rand)[3]) *			\
+	(((((u_int32_t)(dp))<<16) + ((u_int32_t)(sp))) ^ (rand)[4]))
 
-#define SYN_HASHALL(hash, src, dst) \
+#define SYN_HASHALL(hash, src, dst, rand) \
 do {									\
 	switch ((src)->sa_family) {					\
 	case AF_INET:							\
 		hash = SYN_HASH(&satosin(src)->sin_addr,		\
 			satosin(src)->sin_port,				\
-			satosin(dst)->sin_port);			\
+			satosin(dst)->sin_port, (rand));		\
 		break;							\
 	case AF_INET6:							\
 		hash = SYN_HASH6(&satosin6(src)->sin6_addr,		\
 			satosin6(src)->sin6_port,			\
-			satosin6(dst)->sin6_port);			\
+			satosin6(dst)->sin6_port, (rand));		\
 		break;							\
 	default:							\
 		hash = 0;						\
@@ -3401,7 +3401,7 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 	if (*tcp_syn_cache_count == 0)
 		arc4random_buf(tcp_syn_hash, 5 * sizeof(u_int32_t));
 
-	SYN_HASHALL(sc->sc_hash, &sc->sc_src.sa, &sc->sc_dst.sa);
+	SYN_HASHALL(sc->sc_hash, &sc->sc_src.sa, &sc->sc_dst.sa, tcp_syn_hash);
 	scp = &tcp_syn_cache[sc->sc_hash % tcp_syn_cache_size];
 	sc->sc_buckethead = scp;
 
@@ -3597,21 +3597,23 @@ syn_cache_lookup(struct sockaddr *src, struct sockaddr *dst,
 	struct syn_cache *sc;
 	struct syn_cache_head *scp;
 	u_int32_t hash;
-	int s;
+	int i, s;
 
-	SYN_HASHALL(hash, src, dst);
-
-	scp = &tcp_syn_cache[hash % tcp_syn_cache_size];
-	*headp = scp;
 	s = splsoftnet();
-	TAILQ_FOREACH(sc, &scp->sch_bucket, sc_bucketq) {
-		if (sc->sc_hash != hash)
-			continue;
-		if (!bcmp(&sc->sc_src, src, src->sa_len) &&
-		    !bcmp(&sc->sc_dst, dst, dst->sa_len) &&
-		    rtable_l2(rtableid) == rtable_l2(sc->sc_rtableid)) {
-			splx(s);
-			return (sc);
+	for (i = 0; i < 2; i++) {
+		SYN_HASHALL(hash, src, dst, tcp_syn_hash_set[i]);
+		
+		scp = &tcp_syn_cache_set[i][hash % tcp_syn_cache_size];
+		*headp = scp;
+		TAILQ_FOREACH(sc, &scp->sch_bucket, sc_bucketq) {
+			if (sc->sc_hash != hash)
+				continue;
+			if (!bcmp(&sc->sc_src, src, src->sa_len) &&
+			    !bcmp(&sc->sc_dst, dst, dst->sa_len) &&
+			    rtable_l2(rtableid) == rtable_l2(sc->sc_rtableid)) {
+				splx(s);
+				return (sc);
+			}
 		}
 	}
 	splx(s);
