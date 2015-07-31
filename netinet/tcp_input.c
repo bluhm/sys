@@ -3390,7 +3390,7 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 {
 	struct syn_cache_head *scp;
 	struct syn_cache *sc2;
-	int s;
+	int s, count;
 
 	s = splsoftnet();
 
@@ -3479,6 +3479,24 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 	(*tcp_syn_cache_count)++;
 
 	tcpstat.tcps_sc_added++;
+
+	/* If alternative syn cache is empty, switch. */
+	if (tcp_syn_cache_count == &tcp_syn_cache_count_set[0])
+		count = tcp_syn_cache_count_set[1];
+	else
+		count = tcp_syn_cache_count_set[0];
+	if (count == 0) {
+		if (tcp_syn_cache_count == &tcp_syn_cache_count_set[0]) {
+			tcp_syn_cache_count = &tcp_syn_cache_count_set[1];
+			tcp_syn_cache = tcp_syn_cache_set[1];
+			tcp_syn_hash = tcp_syn_hash_set[1];
+		} else {
+			tcp_syn_cache_count = &tcp_syn_cache_count_set[0];
+			tcp_syn_cache = tcp_syn_cache_set[0];
+			tcp_syn_hash = tcp_syn_hash_set[0];
+		}
+	}
+
 	splx(s);
 }
 
