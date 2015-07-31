@@ -3276,7 +3276,14 @@ tcp_mss_adv(struct ifnet *ifp, int af)
  * state for SYN_RECEIVED.
  */
 
+/* syn hash parameters */
+#define	TCP_SYN_HASH_SIZE	293
+#define	TCP_SYN_BUCKET_SIZE	35
+int	tcp_syn_cache_size = TCP_SYN_HASH_SIZE;
+int	tcp_syn_cache_limit = TCP_SYN_HASH_SIZE*TCP_SYN_BUCKET_SIZE;
+int	tcp_syn_bucket_limit = 3*TCP_SYN_BUCKET_SIZE;
 int	tcp_syn_cache_count;
+struct	syn_cache_head tcp_syn_cache[TCP_SYN_HASH_SIZE];
 u_int32_t syn_hash1, syn_hash2;
 
 #define SYN_HASH(sa, sp, dp) \
