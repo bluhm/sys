@@ -3284,11 +3284,11 @@ int	tcp_syn_cache_limit = TCP_SYN_HASH_SIZE*TCP_SYN_BUCKET_SIZE;
 int	tcp_syn_bucket_limit = 3*TCP_SYN_BUCKET_SIZE;
 int	tcp_syn_cache_count;
 struct	syn_cache_head tcp_syn_cache[TCP_SYN_HASH_SIZE];
-u_int32_t syn_hash1, syn_hash2;
+u_int32_t tcp_syn_hash[2];
 
 #define SYN_HASH(sa, sp, dp) \
-	((((sa)->s_addr^syn_hash1)*(((((u_int32_t)(dp))<<16) + \
-				     ((u_int32_t)(sp)))^syn_hash2)))
+    ((((sa)->s_addr^tcp_syn_hash[0])*(((((u_int32_t)(dp))<<16) +	\
+    ((u_int32_t)(sp)))^tcp_syn_hash[1])))
 #ifndef INET6
 #define	SYN_HASHALL(hash, src, dst) \
 do {									\
@@ -3298,8 +3298,8 @@ do {									\
 } while (/*CONSTCOND*/ 0)
 #else
 #define SYN_HASH6(sa, sp, dp) \
-	((((sa)->s6_addr32[0] ^ (sa)->s6_addr32[3] ^ syn_hash1) * \
-	  (((((u_int32_t)(dp))<<16) + ((u_int32_t)(sp)))^syn_hash2)) \
+	((((sa)->s6_addr32[0] ^ (sa)->s6_addr32[3] ^ tcp_syn_hash[0]) * \
+	  (((((u_int32_t)(dp))<<16) + ((u_int32_t)(sp)))^tcp_syn_hash[1])) \
 	 & 0x7fffffff)
 
 #define SYN_HASHALL(hash, src, dst) \
@@ -3391,8 +3391,8 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 	 * the hash secrets.
 	 */
 	if (tcp_syn_cache_count == 0) {
-		syn_hash1 = arc4random();
-		syn_hash2 = arc4random();
+		tcp_syn_hash[0] = arc4random();
+		tcp_syn_hash[1] = arc4random();
 	}
 
 	SYN_HASHALL(sc->sc_hash, &sc->sc_src.sa, &sc->sc_dst.sa);
