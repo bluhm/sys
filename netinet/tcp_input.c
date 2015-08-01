@@ -3709,12 +3709,11 @@ syn_cache_get(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 	switch (src->sa_family) {
 #ifdef INET6
 	case AF_INET6:
-		inp->inp_laddr6 = ((struct sockaddr_in6 *)dst)->sin6_addr;
+		inp->inp_laddr6 = satosin6(dst)->sin6_addr;
 		break;
 #endif /* INET6 */
 	case AF_INET:
-
-		inp->inp_laddr = ((struct sockaddr_in *)dst)->sin_addr;
+		inp->inp_laddr = satosin(dst)->sin_addr;
 		inp->inp_options = ip_srcroute(m);
 		if (inp->inp_options == NULL) {
 			inp->inp_options = sc->sc_ipopts;
