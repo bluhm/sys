@@ -3578,8 +3578,9 @@ syn_cache_lookup(struct sockaddr *src, struct sockaddr *dst,
 	splsoftassert(IPL_SOFTNET);
 
 	for (i = 0; i < 2; i++) {
+		if (tcp_syn_cache_count_set[i] == 0)
+			continue;
 		SYN_HASHALL(hash, src, dst, tcp_syn_hash_set[i]);
-		
 		scp = &tcp_syn_cache_set[i][hash % tcp_syn_cache_size];
 		*headp = scp;
 		TAILQ_FOREACH(sc, &scp->sch_bucket, sc_bucketq) {
