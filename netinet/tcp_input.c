@@ -3568,8 +3568,10 @@ syn_cache_lookup(struct sockaddr *src, struct sockaddr *dst,
 	u_int32_t hash;
 	int s;
 
-	SYN_HASHALL(hash, src, dst);
+	if (tcp_syn_cache_count == 0)
+		return (NULL);
 
+	SYN_HASHALL(hash, src, dst);
 	scp = &tcp_syn_cache[hash % tcp_syn_cache_size];
 	*headp = scp;
 	s = splsoftnet();
