@@ -1073,7 +1073,7 @@ fill_file(struct kinfo_file *kf, struct file *fp, struct filedesc *fdp,
 			    vp->v_mount->mnt_stat.f_mntonname,
 			    sizeof(kf->f_mntonname));
 
-		/* this may sleep, especially if the file system is NFS */
+		/* This may sleep, especially if the file system is NFS. */
 		if (VOP_GETATTR(vp, &va, p->p_ucred, p) == 0) {
 			kf->va_fileid = va.va_fileid;
 			kf->va_mode = MAKEIMODE(va.va_type, va.va_mode);
@@ -1254,7 +1254,7 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 	if (buflen >= elem_size && elem_count > 0) {			\
 		fill_file(kf, fp, fdp, i, vp, pr, p, so, show_pointers);\
 		/*							\
-		 * this cannot sleep as sys___sysctl() has called	\
+		 * This cannot sleep as sys___sysctl() has called	\
 		 * uvm_vslock() so the user memory is locked.		\
 		 */							\
 		error = copyout(kf, dp, outsize);			\
