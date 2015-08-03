@@ -1253,6 +1253,10 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 #define FILLIT2(fp, fdp, i, vp, pr, so) do {				\
 	if (buflen >= elem_size && elem_count > 0) {			\
 		fill_file(kf, fp, fdp, i, vp, pr, p, so, show_pointers);\
+		/*							\
+		 * this cannot sleep as sys___sysctl() has called	\
+		 * uvm_vslock() so the user memory is locked.		\
+		 */							\
 		error = copyout(kf, dp, outsize);			\
 		if (error)						\
 			break;						\
