@@ -1073,6 +1073,7 @@ fill_file(struct kinfo_file *kf, struct file *fp, struct filedesc *fdp,
 			    vp->v_mount->mnt_stat.f_mntonname,
 			    sizeof(kf->f_mntonname));
 
+		/* this may sleep, especially if the file system is NFS */
 		if (VOP_GETATTR(vp, &va, p->p_ucred, p) == 0) {
 			kf->va_fileid = va.va_fileid;
 			kf->va_mode = MAKEIMODE(va.va_type, va.va_mode);
