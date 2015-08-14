@@ -560,7 +560,6 @@ extern	int tcp_syn_bucket_limit;/* max entries per hash bucket */
 
 extern	int tcp_syn_cache_size;
 extern	struct syn_cache_head tcp_syn_cache[];
-extern	int tcp_syn_cache_count;
 
 int	 tcp_attach(struct socket *);
 void	 tcp_canceltimers(struct tcpcb *);
