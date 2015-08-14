@@ -5634,6 +5634,7 @@ pf_route6(struct mbuf **m, struct pf_rule *r, int dir, struct ifnet *oifp,
 	struct pf_addr		 naddr;
 	struct pf_src_node	*sns[PF_SN_MAX];
 	struct m_tag		*mtag;
+	int	snd_icmperr = (r->rt != PF_DUPTO);
 
 	if (m == NULL || *m == NULL || r == NULL ||
 	    (dir != PF_IN && dir != PF_OUT) || oifp == NULL)
@@ -5719,12 +5720,12 @@ pf_route6(struct mbuf **m, struct pf_rule *r, int dir, struct ifnet *oifp,
 	 * use pf_refragment6() here to turn it back to fragments.
 	 */
 	if ((mtag = m_tag_find(m0, PACKET_TAG_PF_REASSEMBLED, NULL))) {
-		(void) pf_refragment6(&m0, mtag, dst, ifp);
+		(void) pf_refragment6(&m0, mtag, snd_icmperr, dst, ifp);
 	} else if ((u_long)m0->m_pkthdr.len <= ifp->if_mtu) {
 		nd6_output(ifp, m0, dst, NULL);
 	} else {
 		in6_ifstat_inc(ifp, ifs6_in_toobig);
-		if (r->rt != PF_DUPTO)
+		if (snd_icmperr)
 			icmp6_error(m0, ICMP6_PACKET_TOO_BIG, 0, ifp->if_mtu);
 		else
 			goto bad;
@@ -6651,7 +6652,7 @@ done:
 		struct m_tag	*mtag;
 
 		if ((mtag = m_tag_find(*m0, PACKET_TAG_PF_REASSEMBLED, NULL)))
-			action = pf_refragment6(m0, mtag, NULL, NULL);
+			action = pf_refragment6(m0, mtag, 0, NULL, NULL);
 	}
 #endif	/* INET6 */
 	if (s && action != PF_DROP) {
