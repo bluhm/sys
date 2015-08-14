@@ -1,4 +1,4 @@
-/*	$OpenBSD: nfs_boot.c,v 1.37 2015/07/15 22:16:42 deraadt Exp $ */
+/*	$OpenBSD: nfs_boot.c,v 1.38 2015/08/14 18:07:28 bluhm Exp $ */
 /*	$NetBSD: nfs_boot.c,v 1.26 1996/05/07 02:51:25 thorpej Exp $	*/
 
 /*
