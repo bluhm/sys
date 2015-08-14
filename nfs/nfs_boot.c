@@ -182,7 +182,7 @@ nfs_boot_init(struct nfs_diskless *nd, struct proc *procp)
 	memset(&ifra, 0, sizeof(ifra));
 	bcopy(ifp->if_xname, ifra.ifra_name, sizeof(ifra.ifra_name));
 
-	sin = (struct sockaddr_in *)&ifra.ifra_addr;
+	sin = &ifra.ifra_addr;
 	sin->sin_len = sizeof(*sin);
 	sin->sin_family = AF_INET;
 	sin->sin_addr.s_addr = my_ip.s_addr;
