@@ -96,6 +96,8 @@
 #include <netinet/tcpip.h>
 #include <netinet/tcp_debug.h>
 
+#include <crypto/siphash.h>
+
 #if NPF > 0
 #include <net/pfvar.h>
 #endif
@@ -3297,44 +3299,62 @@ int	tcp_syn_cache_limit = TCP_SYN_HASH_SIZE*TCP_SYN_BUCKET_SIZE;
 int	tcp_syn_bucket_limit = 3*TCP_SYN_BUCKET_SIZE;
 int	tcp_syn_cache_count;
 struct	syn_cache_head tcp_syn_cache[TCP_SYN_HASH_SIZE];
-u_int32_t tcp_syn_hash[5];
+SIPHASH_KEY tcp_syn_cache_key;
 
-#define SYN_HASH(sa, sp, dp) \
-	(((sa)->s_addr ^ tcp_syn_hash[0]) *				\
-	(((((u_int32_t)(dp))<<16) + ((u_int32_t)(sp))) ^ tcp_syn_hash[4]))
+uint64_t	tcp_syn_hash4(const struct sockaddr_in *,
+		    const struct sockaddr_in *);
+
 #ifndef INET6
 #define	SYN_HASHALL(hash, src, dst) \
 do {									\
-	hash = SYN_HASH(&satosin(src)->sin_addr,			\
-		satosin(src)->sin_port,					\
-		satosin(dst)->sin_port);				\
+	hash = tcp_syn_hash4(satosin(src), satosin(dst));		\
 } while (/*CONSTCOND*/ 0)
 #else
-#define SYN_HASH6(sa, sp, dp) \
-	(((sa)->s6_addr32[0] ^ tcp_syn_hash[0]) *			\
-	((sa)->s6_addr32[1] ^ tcp_syn_hash[1]) *			\
-	((sa)->s6_addr32[2] ^ tcp_syn_hash[2]) *			\
-	((sa)->s6_addr32[3] ^ tcp_syn_hash[3]) *			\
-	(((((u_int32_t)(dp))<<16) + ((u_int32_t)(sp))) ^ tcp_syn_hash[4]))
+uint64_t	tcp_syn_hash6(const struct sockaddr_in6 *,
+		    const struct sockaddr_in6 *);
 
 #define SYN_HASHALL(hash, src, dst) \
 do {									\
 	switch ((src)->sa_family) {					\
 	case AF_INET:							\
-		hash = SYN_HASH(&satosin(src)->sin_addr,		\
-			satosin(src)->sin_port,				\
-			satosin(dst)->sin_port);			\
+		hash = tcp_syn_hash4(satosin(src), satosin(dst));	\
 		break;							\
 	case AF_INET6:							\
-		hash = SYN_HASH6(&satosin6(src)->sin6_addr,		\
-			satosin6(src)->sin6_port,			\
-			satosin6(dst)->sin6_port);			\
+		hash = tcp_syn_hash6(satosin6(src), satosin6(dst));	\
 		break;							\
 	default:							\
 		hash = 0;						\
 	}								\
 } while (/*CONSTCOND*/0)
+
+uint64_t
+tcp_syn_hash6(const struct sockaddr_in6 *src, const struct sockaddr_in6 *dst)
+{
+	SIPHASH_CTX ctx;
+
+	SipHash24_Init(&ctx, &tcp_syn_cache_key);
+	SipHash24_Update(&ctx, &src->sin6_family, sizeof(src->sin6_family));
+	SipHash24_Update(&ctx, &src->sin6_addr, sizeof(src->sin6_addr));
+	SipHash24_Update(&ctx, &src->sin6_port, sizeof(src->sin6_port));
+	SipHash24_Update(&ctx, &dst->sin6_port, sizeof(dst->sin6_port));
+
+	return (SipHash24_End(&ctx));
+}
 #endif /* INET6 */
+
+uint64_t
+tcp_syn_hash4(const struct sockaddr_in *src, const struct sockaddr_in *dst)
+{
+	SIPHASH_CTX ctx;
+
+	SipHash24_Init(&ctx, &tcp_syn_cache_key);
+	SipHash24_Update(&ctx, &src->sin_family, sizeof(src->sin_family));
+	SipHash24_Update(&ctx, &src->sin_addr, sizeof(src->sin_addr));
+	SipHash24_Update(&ctx, &src->sin_port, sizeof(src->sin_port));
+	SipHash24_Update(&ctx, &dst->sin_port, sizeof(dst->sin_port));
+
+	return (SipHash24_End(&ctx));
+}
 
 void
 syn_cache_rm(struct syn_cache *sc)
@@ -3407,7 +3427,7 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 	 * the hash secrets.
 	 */
 	if (tcp_syn_cache_count == 0)
-		arc4random_buf(tcp_syn_hash, sizeof(tcp_syn_hash));
+		arc4random_buf(&tcp_syn_cache_key, sizeof(tcp_syn_cache_key));
 
 	SYN_HASHALL(sc->sc_hash, &sc->sc_src.sa, &sc->sc_dst.sa);
 	sc->sc_bucketidx = sc->sc_hash % tcp_syn_cache_size;
