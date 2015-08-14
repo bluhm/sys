@@ -3566,24 +3566,21 @@ syn_cache_lookup(struct sockaddr *src, struct sockaddr *dst,
 	struct syn_cache *sc;
 	struct syn_cache_head *scp;
 	u_int32_t hash;
-	int s;
+
+	splsoftassert(IPL_SOFTNET);
 
 	SYN_HASHALL(hash, src, dst);
 
 	scp = &tcp_syn_cache[hash % tcp_syn_cache_size];
 	*headp = scp;
-	s = splsoftnet();
 	TAILQ_FOREACH(sc, &scp->sch_bucket, sc_bucketq) {
 		if (sc->sc_hash != hash)
 			continue;
 		if (!bcmp(&sc->sc_src, src, src->sa_len) &&
 		    !bcmp(&sc->sc_dst, dst, dst->sa_len) &&
-		    rtable_l2(rtableid) == rtable_l2(sc->sc_rtableid)) {
-			splx(s);
+		    rtable_l2(rtableid) == rtable_l2(sc->sc_rtableid))
 			return (sc);
-		}
 	}
-	splx(s);
 	return (NULL);
 }
 
