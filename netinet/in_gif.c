@@ -62,8 +62,8 @@ int
 in_gif_output(struct ifnet *ifp, int family, struct mbuf **m0)
 {
 	struct gif_softc *sc = (struct gif_softc*)ifp;
-	struct sockaddr_in *sin_src = (struct sockaddr_in *)sc->gif_psrc;
-	struct sockaddr_in *sin_dst = (struct sockaddr_in *)sc->gif_pdst;
+	struct sockaddr_in *sin_src = satosin(sc->gif_psrc);
+	struct sockaddr_in *sin_dst = satosin(sc->gif_pdst);
 	struct tdb tdb;
 	struct xformsw xfs;
 	int error;

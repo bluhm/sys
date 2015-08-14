@@ -1037,7 +1037,7 @@ icmp_mtudisc_timeout(struct rtentry *rt, struct rttimer *r)
 		struct sockaddr_in sa;
 		int s;
 
-		sa = *(struct sockaddr_in *)rt_key(rt);
+		sa = *satosin(rt_key(rt));
 
 		s = splsoftnet();
 		rtdeletemsg(rt, r->rtt_tableid);

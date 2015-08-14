@@ -307,8 +307,7 @@ ipip_input(struct mbuf *m, int iphlen, struct ifnet *gifp, int proto)
 					    AF_INET)
 						continue;
 
-					sin = (struct sockaddr_in *)
-					    ifa->ifa_addr;
+					sin = satosin(ifa->ifa_addr); 
 					if (sin->sin_addr.s_addr ==
 					    ipo->ip_src.s_addr)	{
 						ipipstat.ipips_spoof++;
@@ -322,8 +321,7 @@ ipip_input(struct mbuf *m, int iphlen, struct ifnet *gifp, int proto)
 					    AF_INET6)
 						continue;
 
-					sin6 = (struct sockaddr_in6 *)
-					    ifa->ifa_addr;
+					sin6 = satosin6(ifa->ifa_addr);
 					if (IN6_ARE_ADDR_EQUAL(&sin6->sin6_addr,
 					    &ip6->ip6_src)) {
 						ipipstat.ipips_spoof++;
