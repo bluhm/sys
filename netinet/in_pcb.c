@@ -668,7 +668,7 @@ in_losing(struct inpcb *inp)
 		    inp->inp_rtableid);
 		if (rt->rt_flags & RTF_DYNAMIC)
 			(void)rtrequest1(RTM_DELETE, &info, rt->rt_priority,
-				(struct rtentry **)0, inp->inp_rtableid);
+				NULL, inp->inp_rtableid);
 		/*
 		 * A new route can be allocated
 		 * the next time output is attempted.
