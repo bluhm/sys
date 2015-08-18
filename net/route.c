@@ -1,4 +1,4 @@
-/*	$OpenBSD: route.c,v 1.217 2015/07/18 15:51:16 mpi Exp $	*/
+/*	$OpenBSD: route.c,v 1.220 2015/08/17 09:50:12 mpi Exp $	*/
 /*	$NetBSD: route.c,v 1.14 1996/02/13 22:00:46 christos Exp $	*/
 
 /*
@@ -379,7 +379,8 @@ rtfree(struct rtentry *rt)
 {
 	struct ifaddr	*ifa;
 
-	KASSERT(rt != NULL);
+	if (rt == NULL)
+		return;
 
 	rt->rt_refcnt--;
 
@@ -1147,7 +1148,7 @@ int
 rt_ifa_add(struct ifaddr *ifa, int flags, struct sockaddr *dst)
 {
 	struct ifnet		*ifp = ifa->ifa_ifp;
-	struct rtentry		*rt, *nrt = NULL;
+	struct rtentry		*rt = NULL;
 	struct sockaddr_rtlabel	 sa_rl;
 	struct rt_addrinfo	 info;
 	u_short			 rtableid = ifp->if_rdomain;
@@ -1179,9 +1180,8 @@ rt_ifa_add(struct ifaddr *ifa, int flags, struct sockaddr *dst)
 	if (flags & (RTF_LOCAL|RTF_BROADCAST))
 		prio = RTP_LOCAL;
 
-	error = rtrequest1(RTM_ADD, &info, prio, &nrt, rtableid);
-	if (error == 0 && (rt = nrt) != NULL) {
-		rt->rt_refcnt--;
+	error = rtrequest1(RTM_ADD, &info, prio, &rt, rtableid);
+	if (error == 0 && rt != NULL) {
 		if (rt->rt_ifa != ifa) {
 			printf("%s: wrong ifa (%p) was (%p)\n", __func__,
 			    ifa, rt->rt_ifa);
@@ -1201,8 +1201,9 @@ rt_ifa_add(struct ifaddr *ifa, int flags, struct sockaddr *dst)
 		 * userland that a new address has been added.
 		 */
 		if (flags & RTF_LOCAL)
-			rt_sendaddrmsg(nrt, RTM_NEWADDR);
-		rt_sendmsg(nrt, RTM_ADD, rtableid);
+			rt_sendaddrmsg(rt, RTM_NEWADDR);
+		rt_sendmsg(rt, RTM_ADD, rtableid);
+		rtfree(rt);
 	}
 	return (error);
 }
