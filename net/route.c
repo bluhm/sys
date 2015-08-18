@@ -1265,7 +1265,8 @@ rt_ifa_del(struct ifaddr *ifa, int flags, struct sockaddr *dst)
 		prio = RTP_LOCAL;
 
 	error = rtrequest1(RTM_DELETE, &info, prio, &nrt, rtableid);
-	if (error == 0 && (rt = nrt) != NULL) {
+	if (error == 0) {
+		rt = nrt;
 		rt_sendmsg(nrt, RTM_DELETE, rtableid);
 		if (flags & RTF_LOCAL)
 			rt_sendaddrmsg(nrt, RTM_DELADDR);
