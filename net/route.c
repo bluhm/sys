@@ -1149,7 +1149,7 @@ int
 rt_ifa_add(struct ifaddr *ifa, int flags, struct sockaddr *dst)
 {
 	struct ifnet		*ifp = ifa->ifa_ifp;
-	struct rtentry		*rt = NULL;
+	struct rtentry		*rt;
 	struct sockaddr_rtlabel	 sa_rl;
 	struct rt_addrinfo	 info;
 	u_short			 rtableid = ifp->if_rdomain;
