@@ -1182,7 +1182,7 @@ rt_ifa_add(struct ifaddr *ifa, int flags, struct sockaddr *dst)
 		prio = RTP_LOCAL;
 
 	error = rtrequest1(RTM_ADD, &info, prio, &rt, rtableid);
-	if (error == 0 && rt != NULL) {
+	if (error == 0) {
 		if (rt->rt_ifa != ifa) {
 			printf("%s: wrong ifa (%p) was (%p)\n", __func__,
 			    ifa, rt->rt_ifa);
