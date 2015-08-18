@@ -602,7 +602,7 @@ defrouter_addreq(struct nd_defrouter *new)
 {
 	struct rt_addrinfo info;
 	struct sockaddr_in6 def, mask, gate;
-	struct rtentry *rt = NULL;
+	struct rtentry *rt;
 	int s;
 	int error;
 
