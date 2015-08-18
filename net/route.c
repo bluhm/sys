@@ -321,7 +321,8 @@ rtalloc(struct sockaddr *dst, int flags, unsigned int tableid)
 				rt->rt_refcnt++;
 				goto miss;
 			}
-			if ((rt = newrt) && (rt->rt_flags & RTF_XRESOLVE)) {
+			rt = newrt;
+			if (rt->rt_flags & RTF_XRESOLVE) {
 				msgtype = RTM_RESOLVE;
 				goto miss;
 			}
