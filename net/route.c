@@ -1213,7 +1213,7 @@ int
 rt_ifa_del(struct ifaddr *ifa, int flags, struct sockaddr *dst)
 {
 	struct ifnet		*ifp = ifa->ifa_ifp;
-	struct rtentry		*rt, *nrt = NULL;
+	struct rtentry		*rt;
 	struct mbuf		*m = NULL;
 	struct sockaddr		*deldst;
 	struct rt_addrinfo	 info;
@@ -1264,12 +1264,11 @@ rt_ifa_del(struct ifaddr *ifa, int flags, struct sockaddr *dst)
 	if (flags & (RTF_LOCAL|RTF_BROADCAST))
 		prio = RTP_LOCAL;
 
-	error = rtrequest1(RTM_DELETE, &info, prio, &nrt, rtableid);
+	error = rtrequest1(RTM_DELETE, &info, prio, &rt, rtableid);
 	if (error == 0) {
-		rt = nrt;
-		rt_sendmsg(nrt, RTM_DELETE, rtableid);
+		rt_sendmsg(rt, RTM_DELETE, rtableid);
 		if (flags & RTF_LOCAL)
-			rt_sendaddrmsg(nrt, RTM_DELADDR);
+			rt_sendaddrmsg(rt, RTM_DELADDR);
 		if (rt->rt_refcnt <= 0) {
 			rt->rt_refcnt++;
 			rtfree(rt);
