@@ -303,7 +303,9 @@ rtalloc(struct sockaddr *dst, int flags, unsigned int tableid)
 	struct rtentry		*rt;
 	struct rtentry		*newrt = 0;
 	struct rt_addrinfo	 info;
-	int			 s = splsoftnet(), err = 0, msgtype = RTM_MISS;
+	int			 s, error = 0, msgtype = RTM_MISS;
+
+	s = splsoftnet();
 
 	bzero(&info, sizeof(info));
 	info.rti_info[RTAX_DST] = dst;
@@ -312,9 +314,9 @@ rtalloc(struct sockaddr *dst, int flags, unsigned int tableid)
 	if (rt != NULL) {
 		newrt = rt;
 		if ((rt->rt_flags & RTF_CLONING) && ISSET(flags, RT_RESOLVE)) {
-			err = rtrequest1(RTM_RESOLVE, &info, RTP_DEFAULT,
+			error = rtrequest1(RTM_RESOLVE, &info, RTP_DEFAULT,
 			    &newrt, tableid);
-			if (err) {
+			if (error) {
 				newrt = rt;
 				rt->rt_refcnt++;
 				goto miss;
@@ -333,7 +335,7 @@ miss:
 		if (ISSET(flags, RT_REPORT)) {
 			bzero((caddr_t)&info, sizeof(info));
 			info.rti_info[RTAX_DST] = dst;
-			rt_missmsg(msgtype, &info, 0, NULL, err, tableid);
+			rt_missmsg(msgtype, &info, 0, NULL, error, tableid);
 		}
 	}
 	splx(s);
