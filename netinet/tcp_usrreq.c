@@ -981,9 +981,12 @@ tcp_update_sndspace(struct tcpcb *tp)
 		    tp->snd_una);
 
 	/* a writable socket must be preserved because of poll(2) semantics */
-	if (sbspace(&so->so_snd) >= so->so_snd.sb_lowat &&
-	    nmax < so->so_snd.sb_cc + so->so_snd.sb_lowat)
-		nmax = so->so_snd.sb_cc + so->so_snd.sb_lowat;
+	if (sbspace(&so->so_snd) >= so->so_snd.sb_lowat) {
+		if (nmax < so->so_snd.sb_cc + so->so_snd.sb_lowat)
+			nmax = so->so_snd.sb_cc + so->so_snd.sb_lowat;
+		if (nmax * 2 < so->so_snd.sb_mbcnt + so->so_snd.sb_lowat)
+			nmax = (so->so_snd.sb_mbcnt+so->so_snd.sb_lowat+1) / 2;
+	}
 
 	/* round to MSS boundary */
 	nmax = roundup(nmax, tp->t_maxseg);
