@@ -595,7 +595,7 @@ route_output(struct mbuf *m, ...)
 		}
 		error = rtrequest1(rtm->rtm_type, &info, prio, &saved_nrt,
 		    tableid);
-		if (error == 0 && saved_nrt) {
+		if (error == 0) {
 			rt_setmetrics(rtm->rtm_inits, &rtm->rtm_rmx,
 			    &saved_nrt->rt_rmx);
 			/* write back the priority the kernel used */
