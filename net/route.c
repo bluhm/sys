@@ -301,7 +301,7 @@ struct rtentry *
 rtalloc(struct sockaddr *dst, int flags, unsigned int tableid)
 {
 	struct rtentry		*rt;
-	struct rtentry		*newrt = 0;
+	struct rtentry		*newrt = NULL;
 	struct rt_addrinfo	 info;
 	int			 s, error = 0, msgtype = RTM_MISS;
 
