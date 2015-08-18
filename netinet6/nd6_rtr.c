@@ -1904,8 +1904,7 @@ nd6_prefix_offlink(struct nd_prefix *pr)
 		pr->ndpr_stateflags &= ~NDPRF_ONLINK;
 
 		/* report the route deletion to the routing socket. */
-		if (rt != NULL)
-			rt_sendmsg(rt, RTM_DELETE, ifp->if_rdomain);
+		rt_sendmsg(rt, RTM_DELETE, ifp->if_rdomain);
 
 		/*
 		 * There might be the same prefix on another interface,
@@ -1946,6 +1945,12 @@ nd6_prefix_offlink(struct nd_prefix *pr)
 				}
 			}
 		}
+
+		if (rt->rt_refcnt <= 0) {
+			/* XXX: we should free the entry ourselves. */
+			rt->rt_refcnt++;
+			rtfree(rt);
+		}
 	} else {
 		/* XXX: can we still set the NDPRF_ONLINK flag? */
 		nd6log((LOG_ERR,
@@ -1953,14 +1958,6 @@ nd6_prefix_offlink(struct nd_prefix *pr)
 		    "%s/%d on %s (errno = %d)\n",
 		    inet_ntop(AF_INET6,	&sa6.sin6_addr, addr, sizeof(addr)),
 		    pr->ndpr_plen, ifp->if_xname, error));
-	}
-
-	if (rt != NULL) {
-		if (rt->rt_refcnt <= 0) {
-			/* XXX: we should free the entry ourselves. */
-			rt->rt_refcnt++;
-			rtfree(rt);
-		}
 	}
 
 	return (error);
