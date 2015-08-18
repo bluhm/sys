@@ -1778,10 +1778,10 @@ nd6_prefix_onlink(struct nd_prefix *pr)
 	struct ifnet *ifp = pr->ndpr_ifp;
 	struct sockaddr_in6 mask6;
 	struct nd_prefix *opr;
-	u_long rtflags;
-	int error = 0;
-	struct rtentry *rt = NULL;
+	struct rtentry *rt;
 	char addr[INET6_ADDRSTRLEN];
+	u_long rtflags;
+	int error;
 
 	/* sanity check */
 	if ((pr->ndpr_stateflags & NDPRF_ONLINK) != 0)
@@ -1869,12 +1869,12 @@ int
 nd6_prefix_offlink(struct nd_prefix *pr)
 {
 	struct rt_addrinfo info;
-	int error = 0;
 	struct ifnet *ifp = pr->ndpr_ifp;
 	struct nd_prefix *opr;
 	struct sockaddr_in6 sa6, mask6;
-	struct rtentry *rt = NULL;
+	struct rtentry *rt;
 	char addr[INET6_ADDRSTRLEN];
+	int error;
 
 	/* sanity check */
 	if ((pr->ndpr_stateflags & NDPRF_ONLINK) == 0) {
@@ -1898,6 +1898,7 @@ nd6_prefix_offlink(struct nd_prefix *pr)
 	bzero(&info, sizeof(info));
 	info.rti_info[RTAX_DST] = sin6tosa(&sa6);
 	info.rti_info[RTAX_NETMASK] = sin6tosa(&mask6);
+
 	error = rtrequest1(RTM_DELETE, &info, RTP_CONNECTED, &rt,
 	    ifp->if_rdomain);
 	if (error == 0) {
