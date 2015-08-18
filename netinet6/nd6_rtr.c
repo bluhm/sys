@@ -705,6 +705,7 @@ defrouter_delreq(struct nd_defrouter *dr)
 	struct rt_addrinfo info;
 	struct sockaddr_in6 def, mask, gw;
 	struct rtentry *oldrt = NULL;
+	int error;
 
 #ifdef DIAGNOSTIC
 	if (!dr)
@@ -727,9 +728,9 @@ defrouter_delreq(struct nd_defrouter *dr)
 	info.rti_info[RTAX_GATEWAY] = sin6tosa(&gw);
 	info.rti_info[RTAX_NETMASK] = sin6tosa(&mask);
 
-	rtrequest1(RTM_DELETE, &info, RTP_DEFAULT, &oldrt,
+	error = rtrequest1(RTM_DELETE, &info, RTP_DEFAULT, &oldrt,
 	    dr->ifp->if_rdomain);
-	if (oldrt) {
+	if (error == 0) {
 		rt_sendmsg(oldrt, RTM_DELETE, dr->ifp->if_rdomain);
 		if (oldrt->rt_refcnt <= 0) {
 			/*
