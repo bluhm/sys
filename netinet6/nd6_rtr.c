@@ -1856,7 +1856,7 @@ nd6_prefix_onlink(struct nd_prefix *pr)
 	info.rti_info[RTAX_NETMASK] = sin6tosa(&mask6);
 
 	error = rtrequest1(RTM_ADD, &info, RTP_CONNECTED, &rt, ifp->if_rdomain);
-	if (error == 0 && rt != NULL) {
+	if (error == 0) {
 		pr->ndpr_stateflags |= NDPRF_ONLINK;
 		rt_sendmsg(rt, RTM_ADD, ifp->if_rdomain);
 		rtfree(rt);
