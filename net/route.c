@@ -513,7 +513,7 @@ create:
 			rt = NULL;
 			error = rtrequest1(RTM_ADD, &info, RTP_DEFAULT, &rt,
 			    rdomain);
-			if (rt != NULL)
+			if (error == 0)
 				flags = rt->rt_flags;
 			stat = &rtstat.rts_dynamic;
 		} else {
