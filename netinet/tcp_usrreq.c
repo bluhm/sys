@@ -1017,6 +1017,11 @@ tcp_update_rcvspace(struct tcpcb *tp)
 			    tcp_autorcvbuf_inc);
 	}
 
+	/* a readable socket must be preserved because of poll(2) semantics */
+	if (so->so_rcv.sb_cc >= so->so_rcv.sb_lowat &&
+	    nmax < so->so_snd.sb_lowat)
+		nmax = so->so_snd.sb_lowat;
+
 	if (nmax == so->so_rcv.sb_hiwat)
 		return;
 
