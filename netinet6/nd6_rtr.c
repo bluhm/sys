@@ -625,12 +625,11 @@ defrouter_addreq(struct nd_defrouter *new)
 	s = splsoftnet();
 	error = rtrequest1(RTM_ADD, &info, RTP_DEFAULT, &rt,
 	    new->ifp->if_rdomain);
-	if (rt) {
+	if (error == 0) {
 		rt_sendmsg(rt, RTM_ADD, new->ifp->if_rdomain);
 		rtfree(rt);
-	}
-	if (error == 0)
 		new->installed = 1;
+	}
 	splx(s);
 	return;
 }
