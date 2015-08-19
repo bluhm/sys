@@ -671,7 +671,7 @@ in_ouraddr(struct mbuf *m, struct ifnet *ifp, struct in_addr ina)
 	if (rt != NULL) {
 		/* only use non-stale local address, check before route free */
 		if ((rt->rt_flags & (RTF_LOCAL|RTF_BROADCAST)) &&
-		    rt->rt_ifa && rt->rt_ifa->ifa_ifp)
+		    rt->rt_ifa != NULL && rt->rt_ifa->ifa_ifp != NULL)
 			ia = ifatoia(rt->rt_ifa);
 		rtfree(rt);
 	}
