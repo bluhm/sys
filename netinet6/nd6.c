@@ -1834,9 +1834,7 @@ fill_drlist(void *oldp, size_t *oldlenp, size_t ol)
 			bzero(d, sizeof(*d));
 			d->rtaddr.sin6_family = AF_INET6;
 			d->rtaddr.sin6_len = sizeof(struct sockaddr_in6);
-			d->rtaddr.sin6_addr = dr->rtaddr;
-			in6_recoverscope(&d->rtaddr, &d->rtaddr.sin6_addr,
-			    dr->ifp);
+			in6_recoverscope(&d->rtaddr, &dr->rtaddr, dr->ifp);
 			d->flags = dr->flags;
 			d->rtlifetime = dr->rtlifetime;
 			d->expire = dr->expire;
@@ -1927,9 +1925,9 @@ fill_prlist(void *oldp, size_t *oldlenp, size_t ol)
 					continue;
 				}
 				s6 = &sin6[advrtrs];
+				bzero(s6, sizeof(*s6));
 				s6->sin6_family = AF_INET6;
 				s6->sin6_len = sizeof(struct sockaddr_in6);
-				s6->sin6_addr = pfr->router->rtaddr;
 				in6_recoverscope(s6, &pfr->router->rtaddr,
 				    pfr->router->ifp);
 				advrtrs++;
