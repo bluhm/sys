@@ -669,8 +669,14 @@ in_ouraddr(struct mbuf *m, struct ifnet *ifp, struct in_addr ina)
 	sin.sin_addr = ina;
 	rt = rtalloc(sintosa(&sin), 0, m->m_pkthdr.ph_rtableid);
 	if (rt != NULL) {
-		if (rt->rt_flags & (RTF_LOCAL|RTF_BROADCAST))
+		if (rt->rt_flags & (RTF_LOCAL|RTF_BROADCAST)) {
+			/* do not use stale address, check before route free */
+			if (rt->rt_ifa && rt->rt_ifa->ifa_ifp == NULL) {
+				rtfree(rt);
+				return (0);
+			}
 			ia = ifatoia(rt->rt_ifa);
+		}
 		rtfree(rt);
 	}
 
@@ -705,9 +711,6 @@ in_ouraddr(struct mbuf *m, struct ifnet *ifp, struct in_addr ina)
 
 		return (0);
 	}
-
-	if (ia->ia_ifp == NULL)
-		return (0);
 
 	if (ina.s_addr != ia->ia_addr.sin_addr.s_addr) {
 		/*
