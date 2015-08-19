@@ -57,6 +57,9 @@
 #ifdef INET6
 #include <netinet/ip6.h>
 #include <netinet6/ip6_var.h>
+#include <netinet6/in6_var.h>
+#include <netinet6/nd6.h>
+#include <netinet/icmp6.h>
 #endif /* INET6 */
 
 #include <net/pfvar.h>
@@ -680,7 +683,8 @@ fail:
 }
 
 int
-pf_refragment6(struct mbuf **m0, struct m_tag *mtag)
+pf_refragment6(struct mbuf **m0, struct m_tag *mtag, struct sockaddr_in6 *dst,
+    struct ifnet *ifp)
 {
 	struct mbuf		*m = *m0, *t;
 	struct pf_fragment_tag	*ftag = (struct pf_fragment_tag *)(mtag + 1);
@@ -743,10 +747,18 @@ pf_refragment6(struct mbuf **m0, struct m_tag *mtag)
 		t = m->m_nextpkt;
 		m->m_nextpkt = NULL;
 		m->m_pkthdr.pf.flags |= PF_TAG_REFRAGMENTED;
-		if (error == 0)
-			ip6_forward(m, 0);
-		else
+		if (error == 0) {
+			if (ifp == NULL) {
+				ip6_forward(m, 0);
+			} else if ((u_long)m->m_pkthdr.len <= ifp->if_mtu) {
+				nd6_output(ifp, m, dst, NULL);
+			} else {
+				in6_ifstat_inc(ifp, ifs6_in_toobig);
+				icmp6_error(m, ICMP6_PACKET_TOO_BIG, 0, ifp->if_mtu);
+			}
+		} else {
 			m_freem(m);
+		}
 	}
 
 	return (action);
