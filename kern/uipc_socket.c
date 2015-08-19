@@ -86,11 +86,12 @@ struct pool sosplice_pool;
 void
 soinit(void)
 {
-
 	pool_init(&socket_pool, sizeof(struct socket), 0, 0, 0, "sockpl", NULL);
+	pool_setipl(&socket_pool, IPL_SOFTNET);
 #ifdef SOCKET_SPLICE
 	pool_init(&sosplice_pool, sizeof(struct sosplice), 0, 0, 0, "sosppl",
 	    NULL);
+	pool_setipl(&sosplice_pool, IPL_SOFTNET);
 #endif
 }
 
