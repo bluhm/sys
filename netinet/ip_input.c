@@ -706,6 +706,9 @@ in_ouraddr(struct mbuf *m, struct ifnet *ifp, struct in_addr ina)
 		return (0);
 	}
 
+	if (ia->ia_ifp == NULL)
+		return (0);
+
 	if (ina.s_addr != ia->ia_addr.sin_addr.s_addr) {
 		/*
 		 * This matches a broadcast address on one of our interfaces.
