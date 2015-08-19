@@ -1738,8 +1738,8 @@ pipex_pptp_userland_lookup_session_ipv4(struct mbuf *m0, struct in_addr dst)
 {
 	struct sockaddr_in sin;
 
-	memset(&sin, 0, sizeof(struct sockaddr_in));
-	sin.sin_len = sizeof(struct sockaddr_in);
+	memset(&sin, 0, sizeof(sin));
+	sin.sin_len = sizeof(sin);
 	sin.sin_family = AF_INET;
 	sin.sin_addr = dst;
 
@@ -1752,8 +1752,8 @@ pipex_pptp_userland_lookup_session_ipv6(struct mbuf *m0, struct in6_addr dst)
 {
 	struct sockaddr_in6 sin6;
 
-	memset(&sin6, 0, sizeof(struct sockaddr_in6));
-	sin6.sin6_len = sizeof(struct sockaddr_in6);
+	memset(&sin6, 0, sizeof(sin6));
+	sin6.sin6_len = sizeof(sin6);
 	sin6.sin6_family = AF_INET6;
 	in6_recoverscope(&sin6, &dst, NULL);
 
@@ -2174,8 +2174,8 @@ pipex_l2tp_userland_lookup_session_ipv4(struct mbuf *m0, struct in_addr dst)
 {
 	struct sockaddr_in sin;
 
-	memset(&sin, 0, sizeof(struct sockaddr_in));
-	sin.sin_len = sizeof(struct sockaddr_in);
+	memset(&sin, 0, sizeof(sin));
+	sin.sin_len = sizeof(sin);
 	sin.sin_family = AF_INET;
 	sin.sin_addr = dst;
 
@@ -2188,8 +2188,8 @@ pipex_l2tp_userland_lookup_session_ipv6(struct mbuf *m0, struct in6_addr dst)
 {
 	struct sockaddr_in6 sin6;
 
-	memset(&sin6, 0, sizeof(struct sockaddr_in6));
-	sin6.sin6_len = sizeof(struct sockaddr_in6);
+	memset(&sin6, 0, sizeof(sin6));
+	sin6.sin6_len = sizeof(sin6);
 	sin6.sin6_family = AF_INET6;
 	in6_recoverscope(&sin6, &dst, NULL);
 
