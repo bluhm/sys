@@ -669,7 +669,7 @@ in_ouraddr(struct mbuf *m, struct ifnet *ifp, struct in_addr ina)
 	sin.sin_addr = ina;
 	rt = rtalloc(sintosa(&sin), 0, m->m_pkthdr.ph_rtableid);
 	if (rt != NULL) {
-		/* do not use stale address, check before route free */
+		/* only use non-stale local address, check before route free */
 		if ((rt->rt_flags & (RTF_LOCAL|RTF_BROADCAST)) &&
 		    rt->rt_ifa && rt->rt_ifa->ifa_ifp)
 			ia = ifatoia(rt->rt_ifa);
