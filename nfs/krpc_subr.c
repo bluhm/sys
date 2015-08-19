@@ -270,7 +270,8 @@ krpc_call(struct sockaddr_in *sa, u_int prog, u_int vers, u_int func,
 
 	MGET(m, M_WAIT, MT_SONAME);
 	sin = mtod(m, struct sockaddr_in *);
-	sin->sin_len = m->m_len = sizeof (struct sockaddr_in);
+	memset(sin, 0, sizeof(*sin));
+	sin->sin_len = m->m_len = sizeof(struct sockaddr_in);
 	sin->sin_family = AF_INET;
 	sin->sin_addr.s_addr = INADDR_ANY;
 	sin->sin_port = htons(0);
