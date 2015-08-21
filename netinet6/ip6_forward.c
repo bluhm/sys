@@ -90,6 +90,7 @@ ip6_forward(struct mbuf *m, int srcrt)
 	struct sockaddr_in6 *dst;
 	struct rtentry *rt;
 	int error = 0, type = 0, code = 0;
+	u_long mtu;
 	struct mbuf *mcopy = NULL;
 #ifdef IPSEC
 	u_int8_t sproto = 0;
@@ -280,6 +281,9 @@ reroute:
 		}
 	}
 	rt = ip6_forward_rt.ro_rt;
+	mtu = IN6_LINKMTU(rt->rt_ifp);
+	if (rt->rt_rmx.rmx_mtu && rt->rt_rmx.rmx_mtu < mtu)
+		mtu = rt->rt_rmx.rmx_mtu;
 
 	/*
 	 * Scope check: if a packet can't be delivered to its destination
@@ -434,15 +438,10 @@ reroute:
 	in6_proto_cksum_out(m, rt->rt_ifp);
 
 	/* Check the size after pf_test to give pf a chance to refragment. */
-	if (m->m_pkthdr.len > IN6_LINKMTU(rt->rt_ifp)) {
+	if (m->m_pkthdr.len > mtu) {
 		in6_ifstat_inc(rt->rt_ifp, ifs6_in_toobig);
-		if (mcopy) {
-			u_long mtu;
-
-			mtu = IN6_LINKMTU(rt->rt_ifp);
-
+		if (mcopy)
 			icmp6_error(mcopy, ICMP6_PACKET_TOO_BIG, 0, mtu);
-		}
 		m_freem(m);
 		goto freert;
 	}
