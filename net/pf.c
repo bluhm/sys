@@ -5462,10 +5462,10 @@ pf_rtlabel_match(struct pf_addr *addr, sa_family_t af, struct pf_addr_wrap *aw,
 }
 
 void
-pf_route(struct mbuf **m, struct pf_rule *r, int dir, struct ifnet *oifp,
+pf_route(struct mbuf **m0, struct pf_rule *r, int dir, struct ifnet *oifp,
     struct pf_state *s)
 {
-	struct mbuf		*m0, *m1;
+	struct mbuf		*m, *m1;
 	struct sockaddr_in	*dst, sin;
 	struct rtentry		*rt = NULL;
 	struct ip		*ip;
@@ -5475,39 +5475,39 @@ pf_route(struct mbuf **m, struct pf_rule *r, int dir, struct ifnet *oifp,
 	int			 error = 0;
 	unsigned int		 rtableid;
 
-	if (m == NULL || *m == NULL || r == NULL ||
+	if (m0 == NULL || *m0 == NULL || r == NULL ||
 	    (dir != PF_IN && dir != PF_OUT) || oifp == NULL)
 		panic("pf_route: invalid parameters");
 
-	if ((*m)->m_pkthdr.pf.routed++ > 3) {
-		m0 = *m;
-		*m = NULL;
+	if ((*m0)->m_pkthdr.pf.routed++ > 3) {
+		m = *m0;
+		*m0 = NULL;
 		goto bad;
 	}
 
 	if (r->rt == PF_DUPTO) {
-		if ((m0 = m_copym2(*m, 0, M_COPYALL, M_NOWAIT)) == NULL)
+		if ((m = m_copym2(*m0, 0, M_COPYALL, M_NOWAIT)) == NULL)
 			return;
 	} else {
 		if ((r->rt == PF_REPLYTO) == (r->direction == dir))
 			return;
-		m0 = *m;
+		m = *m0;
 	}
 
-	if (m0->m_len < sizeof(struct ip)) {
+	if (m->m_len < sizeof(struct ip)) {
 		DPFPRINTF(LOG_ERR,
-		    "pf_route: m0->m_len < sizeof(struct ip)");
+		    "pf_route: m->m_len < sizeof(struct ip)");
 		goto bad;
 	}
 
-	ip = mtod(m0, struct ip *);
+	ip = mtod(m, struct ip *);
 
 	memset(&sin, 0, sizeof(sin));
 	dst = &sin;
 	dst->sin_family = AF_INET;
 	dst->sin_len = sizeof(*dst);
 	dst->sin_addr = ip->ip_dst;
-	rtableid = m0->m_pkthdr.ph_rtableid;
+	rtableid = m->m_pkthdr.ph_rtableid;
 
 	if (!r->rt) {
 		rt = rtalloc(sintosa(dst), RT_REPORT|RT_RESOLVE, rtableid);
@@ -5522,7 +5522,7 @@ pf_route(struct mbuf **m, struct pf_rule *r, int dir, struct ifnet *oifp,
 		if (rt->rt_flags & RTF_GATEWAY)
 			dst = satosin(rt->rt_gateway);
 
-		m0->m_pkthdr.pf.flags |= PF_TAG_GENERATED;
+		m->m_pkthdr.pf.flags |= PF_TAG_GENERATED;
 	} else {
 		if (s == NULL) {
 			bzero(sns, sizeof(sns));
@@ -5550,29 +5550,29 @@ pf_route(struct mbuf **m, struct pf_rule *r, int dir, struct ifnet *oifp,
 
 
 	if (oifp != ifp) {
-		if (pf_test(AF_INET, PF_OUT, ifp, &m0) != PF_PASS)
+		if (pf_test(AF_INET, PF_OUT, ifp, &m) != PF_PASS)
 			goto bad;
-		else if (m0 == NULL)
+		else if (m == NULL)
 			goto done;
-		if (m0->m_len < sizeof(struct ip)) {
+		if (m->m_len < sizeof(struct ip)) {
 			DPFPRINTF(LOG_ERR,
-			    "pf_route: m0->m_len < sizeof(struct ip)");
+			    "pf_route: m->m_len < sizeof(struct ip)");
 			goto bad;
 		}
-		ip = mtod(m0, struct ip *);
+		ip = mtod(m, struct ip *);
 	}
 
-	in_proto_cksum_out(m0, ifp);
+	in_proto_cksum_out(m, ifp);
 
 	if (ntohs(ip->ip_len) <= ifp->if_mtu) {
 		ip->ip_sum = 0;
 		if (ifp->if_capabilities & IFCAP_CSUM_IPv4)
-			m0->m_pkthdr.csum_flags |= M_IPV4_CSUM_OUT;
+			m->m_pkthdr.csum_flags |= M_IPV4_CSUM_OUT;
 		else {
 			ipstat.ips_outswcsum++;
-			ip->ip_sum = in_cksum(m0, ip->ip_hl << 2);
+			ip->ip_sum = in_cksum(m, ip->ip_hl << 2);
 		}
-		error = (*ifp->if_output)(ifp, m0, sintosa(dst), NULL);
+		error = (*ifp->if_output)(ifp, m, sintosa(dst), NULL);
 		goto done;
 	}
 
@@ -5583,42 +5583,42 @@ pf_route(struct mbuf **m, struct pf_rule *r, int dir, struct ifnet *oifp,
 	if (ip->ip_off & htons(IP_DF)) {
 		ipstat.ips_cantfrag++;
 		if (r->rt != PF_DUPTO) {
-			icmp_error(m0, ICMP_UNREACH, ICMP_UNREACH_NEEDFRAG, 0,
+			icmp_error(m, ICMP_UNREACH, ICMP_UNREACH_NEEDFRAG, 0,
 			    ifp->if_mtu);
 			goto done;
 		} else
 			goto bad;
 	}
 
-	m1 = m0;
-	error = ip_fragment(m0, ifp, ifp->if_mtu);
+	m1 = m;
+	error = ip_fragment(m, ifp, ifp->if_mtu);
 	if (error) {
-		m0 = NULL;
+		m = NULL;
 		goto bad;
 	}
 
-	for (m0 = m1; m0; m0 = m1) {
-		m1 = m0->m_nextpkt;
-		m0->m_nextpkt = 0;
+	for (m = m1; m; m = m1) {
+		m1 = m->m_nextpkt;
+		m->m_nextpkt = 0;
 		if (error == 0)
-			error = (*ifp->if_output)(ifp, m0, sintosa(dst),
+			error = (*ifp->if_output)(ifp, m, sintosa(dst),
 			    NULL);
 		else
-			m_freem(m0);
+			m_freem(m);
 	}
 
 	if (error == 0)
 		ipstat.ips_fragmented++;
 
-done:
+ done:
 	if (r->rt != PF_DUPTO)
-		*m = NULL;
+		*m0 = NULL;
 	if (rt != NULL)
 		rtfree(rt);
 	return;
 
-bad:
-	m_freem(m0);
+ bad:
+	m_freem(m);
 	goto done;
 }
 
