@@ -6578,20 +6578,20 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 	case PF_SYNPROXY_DROP:
 		m_freem(*m0);
 	case PF_DEFER:
-		*m0 = NULL;
+		*m0 = pd.m = NULL;
 		action = PF_PASS;
 		break;
 	case PF_DIVERT:
 		switch (pd.af) {
 		case AF_INET:
 			if (!divert_packet(pd.m, pd.dir, r->divert_packet.port))
-				*m0 = NULL;
+				*m0 = pd.m = NULL;
 			break;
 #ifdef INET6
 		case AF_INET6:
 			if (!divert6_packet(pd.m, pd.dir,
 			    r->divert_packet.port))
-				*m0 = NULL;
+				*m0 = pd.m = NULL;
 			break;
 #endif /* INET6 */
 		}
@@ -6600,8 +6600,7 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 #ifdef INET6
 	case PF_AFRT:
 		if (pf_translate_af(&pd)) {
-			if (!pd.m)
-				*m0 = NULL;
+			*m0 = pd.m;
 			action = PF_DROP;
 			break;
 		}
@@ -6609,7 +6608,7 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 			pf_route(&pd, &pd.m, r, s);
 		if (pd.naf == AF_INET6)
 			pf_route6(&pd, &pd.m, r, s);
-		*m0 = NULL;
+		*m0 = pd.m = NULL;
 		action = PF_PASS;
 		break;
 #endif /* INET6 */
@@ -6635,8 +6634,10 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 	if (pf_status.reass && action == PF_PASS && *m0 && fwdir == PF_FWD) {
 		struct m_tag	*mtag;
 
-		if ((mtag = m_tag_find(*m0, PACKET_TAG_PF_REASSEMBLED, NULL)))
+		if ((mtag = m_tag_find(*m0, PACKET_TAG_PF_REASSEMBLED, NULL))) {
 			action = pf_refragment6(&pd, m0, mtag, NULL, NULL);
+			*m0 = pd.m;
+		}
 	}
 #endif	/* INET6 */
 	if (s && action != PF_DROP) {

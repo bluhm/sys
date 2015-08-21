@@ -686,7 +686,7 @@ int
 pf_refragment6(struct pf_pdesc *pd, struct mbuf **m0, struct m_tag *mtag,
     struct sockaddr_in6 *dst, struct ifnet *ifp)
 {
-	struct mbuf		*m = *m0, *t;
+	struct mbuf		*m, *t;
 	struct pf_fragment_tag	*ftag = (struct pf_fragment_tag *)(mtag + 1);
 	u_int32_t		 mtu;
 	u_int16_t		 hdrlen, extoff, maxlen;
@@ -696,27 +696,26 @@ pf_refragment6(struct pf_pdesc *pd, struct mbuf **m0, struct m_tag *mtag,
 	hdrlen = ftag->ft_hdrlen;
 	extoff = ftag->ft_extoff;
 	maxlen = ftag->ft_maxlen;
-	m_tag_delete(m, mtag);
+	m_tag_delete(pd->m, mtag);
 	mtag = NULL;
 	ftag = NULL;
 
 	/* Checksum must be calculated for the whole packet */
-	in6_proto_cksum_out(m, NULL);
+	in6_proto_cksum_out(pd->m, NULL);
 
 	if (extoff) {
 		int off;
 
 		/* Use protocol from next field of last extension header */
-		if ((m = m_getptr(m, extoff + offsetof(struct ip6_ext,
+		if ((m = m_getptr(pd->m, extoff + offsetof(struct ip6_ext,
 		    ip6e_nxt), &off)) == NULL)
 			panic("pf_refragment6: short mbuf chain");
 		proto = *(mtod(m, caddr_t) + off);
 		*(mtod(m, caddr_t) + off) = IPPROTO_FRAGMENT;
-		m = *m0;
 	} else {
 		struct ip6_hdr *hdr;
 
-		hdr = mtod(m, struct ip6_hdr *);
+		hdr = mtod(pd->m, struct ip6_hdr *);
 		proto = hdr->ip6_nxt;
 		hdr->ip6_nxt = IPPROTO_FRAGMENT;
 	}
@@ -729,14 +728,14 @@ pf_refragment6(struct pf_pdesc *pd, struct mbuf **m0, struct m_tag *mtag,
 	 * we drop the packet.
 	 */
 	mtu = hdrlen + sizeof(struct ip6_frag) + maxlen;
-	error = ip6_fragment(m, hdrlen, proto, mtu);
+	error = ip6_fragment(pd->m, hdrlen, proto, mtu);
 
-	m = (*m0)->m_nextpkt;
-	(*m0)->m_nextpkt = NULL;
+	m = pd->m->m_nextpkt;
+	pd->m->m_nextpkt = NULL;
 	if (error == 0) {
 		/* The first mbuf contains the unfragmented packet */
-		m_freem(*m0);
-		*m0 = NULL;
+		m_freem(pd->m);
+		pd->m = NULL;
 		action = PF_PASS;
 	} else {
 		/* Drop expects an mbuf to free */
