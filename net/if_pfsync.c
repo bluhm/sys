@@ -184,7 +184,7 @@ TAILQ_HEAD(pfsync_upd_reqs, pfsync_upd_req_item);
 struct pfsync_deferral {
 	TAILQ_ENTRY(pfsync_deferral)		 sd_entry;
 	struct pf_state				*sd_st;
-	struct mbuf				*sd_m;
+	struct pf_pdesc				 sd_pd;
 	struct timeout				 sd_tmo;
 };
 TAILQ_HEAD(pfsync_deferrals, pfsync_deferral);
@@ -1753,7 +1753,7 @@ pfsync_defer(struct pf_pdesc *pd, struct pf_state *st)
 	SET(st->state_flags, PFSTATE_ACK);
 
 	sd->sd_st = st;
-	sd->sd_m = pd->m;
+	sd->sd_pd = *pd;
 
 	sc->sc_deferred++;
 	TAILQ_INSERT_TAIL(&sc->sc_deferrals, sd, sd_entry);
@@ -1778,18 +1778,18 @@ pfsync_undefer(struct pfsync_deferral *sd, int drop)
 
 	CLR(sd->sd_st->state_flags, PFSTATE_ACK);
 	if (drop)
-		m_freem(sd->sd_m);
+		m_freem(sd->sd_pd.m);
 	else {
 		if (sd->sd_st->rule.ptr->rt == PF_ROUTETO) {
 			switch (sd->sd_st->key[PF_SK_WIRE]->af) {
 			case AF_INET:
-				pf_route(&sd->sd_m, sd->sd_st->rule.ptr,
+				pf_route(&sd->sd_pd.m, sd->sd_st->rule.ptr,
 				    sd->sd_st->direction, 
 				    sd->sd_st->rt_kif->pfik_ifp, sd->sd_st);
 				break;
 #ifdef INET6
 			case AF_INET6:
-				pf_route6(&sd->sd_m, sd->sd_st->rule.ptr,
+				pf_route6(&sd->sd_pd.m, sd->sd_st->rule.ptr,
 				    sd->sd_st->direction,
 				    sd->sd_st->rt_kif->pfik_ifp, sd->sd_st);
 				break;
@@ -1798,12 +1798,12 @@ pfsync_undefer(struct pfsync_deferral *sd, int drop)
 		} else {
 			switch (sd->sd_st->key[PF_SK_WIRE]->af) {
 			case AF_INET:
-				ip_output(sd->sd_m, NULL, NULL, 0, NULL, NULL,
-				    0);
+				ip_output(sd->sd_pd.m, NULL, NULL, 0, NULL,
+				    NULL, 0);
 				break;
 #ifdef INET6
 	                case AF_INET6:
-		                ip6_output(sd->sd_m, NULL, NULL, 0,
+		                ip6_output(sd->sd_pd.m, NULL, NULL, 0,
 				    NULL, NULL, NULL);
 				break;
 #endif /* INET6 */
