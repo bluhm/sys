@@ -5465,7 +5465,7 @@ void
 pf_route(struct pf_pdesc *pd, struct mbuf **m0, struct pf_rule *r,
     struct pf_state *s)
 {
-	struct mbuf		*m, *m1;
+	struct mbuf		*m = pd->m, *m1;
 	struct sockaddr_in	*dst, sin;
 	struct rtentry		*rt = NULL;
 	struct ip		*ip;
@@ -5475,24 +5475,21 @@ pf_route(struct pf_pdesc *pd, struct mbuf **m0, struct pf_rule *r,
 	int			 error = 0;
 	unsigned int		 rtableid;
 
-	if ((*m0)->m_pkthdr.pf.routed++ > 3) {
-		m = *m0;
-		*m0 = NULL;
+	if (m->m_pkthdr.pf.routed++ > 3) {
+		pd->m = NULL;
 		goto bad;
 	}
 
 	if (r->rt == PF_DUPTO) {
-		if ((m = m_copym2(*m0, 0, M_COPYALL, M_NOWAIT)) == NULL)
+		if ((m = m_copym2(m, 0, M_COPYALL, M_NOWAIT)) == NULL)
 			return;
 	} else {
 		if ((r->rt == PF_REPLYTO) == (r->direction == pd->dir))
 			return;
-		m = *m0;
 	}
 
 	if (m->m_len < sizeof(struct ip)) {
-		DPFPRINTF(LOG_ERR,
-		    "pf_route: m->m_len < sizeof(struct ip)");
+		DPFPRINTF(LOG_ERR, "pf_route: m->m_len < sizeof(struct ip)");
 		goto bad;
 	}
 
@@ -5532,12 +5529,10 @@ pf_route(struct pf_pdesc *pd, struct mbuf **m0, struct pf_rule *r,
 
 			if (!PF_AZERO(&naddr, AF_INET))
 				dst->sin_addr.s_addr = naddr.v4.s_addr;
-			ifp = r->route.kif ?
-			    r->route.kif->pfik_ifp : NULL;
+			ifp = r->route.kif ? r->route.kif->pfik_ifp : NULL;
 		} else {
 			if (!PF_AZERO(&s->rt_addr, AF_INET))
-				dst->sin_addr.s_addr =
-				    s->rt_addr.v4.s_addr;
+				dst->sin_addr.s_addr = s->rt_addr.v4.s_addr;
 			ifp = s->rt_kif ? s->rt_kif->pfik_ifp : NULL;
 		}
 	}
@@ -5607,7 +5602,7 @@ pf_route(struct pf_pdesc *pd, struct mbuf **m0, struct pf_rule *r,
 
  done:
 	if (r->rt != PF_DUPTO)
-		*m0 = NULL;
+		pd->m = NULL;
 	if (rt != NULL)
 		rtfree(rt);
 	return;
@@ -6618,6 +6613,7 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 			switch (pd.af) {
 			case AF_INET:
 				pf_route(&pd, m0, r, s);
+				*m0 = pd.m;
 				break;
 #ifdef INET6
 			case AF_INET6:
