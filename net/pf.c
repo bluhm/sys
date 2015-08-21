@@ -5462,7 +5462,7 @@ pf_rtlabel_match(struct pf_addr *addr, sa_family_t af, struct pf_addr_wrap *aw,
 }
 
 void
-pf_route(struct mbuf **m0, struct pf_rule *r, int dir, struct ifnet *oifp,
+pf_route(struct pf_pdesc *pd, struct mbuf **m0, struct pf_rule *r,
     struct pf_state *s)
 {
 	struct mbuf		*m, *m1;
@@ -5475,10 +5475,6 @@ pf_route(struct mbuf **m0, struct pf_rule *r, int dir, struct ifnet *oifp,
 	int			 error = 0;
 	unsigned int		 rtableid;
 
-	if (m0 == NULL || *m0 == NULL || r == NULL ||
-	    (dir != PF_IN && dir != PF_OUT) || oifp == NULL)
-		panic("pf_route: invalid parameters");
-
 	if ((*m0)->m_pkthdr.pf.routed++ > 3) {
 		m = *m0;
 		*m0 = NULL;
@@ -5489,7 +5485,7 @@ pf_route(struct mbuf **m0, struct pf_rule *r, int dir, struct ifnet *oifp,
 		if ((m = m_copym2(*m0, 0, M_COPYALL, M_NOWAIT)) == NULL)
 			return;
 	} else {
-		if ((r->rt == PF_REPLYTO) == (r->direction == dir))
+		if ((r->rt == PF_REPLYTO) == (r->direction == pd->dir))
 			return;
 		m = *m0;
 	}
@@ -5549,7 +5545,7 @@ pf_route(struct mbuf **m0, struct pf_rule *r, int dir, struct ifnet *oifp,
 		goto bad;
 
 
-	if (oifp != ifp) {
+	if (pd->kif->pfik_ifp != ifp) {
 		if (pf_test(AF_INET, PF_OUT, ifp, &m) != PF_PASS)
 			goto bad;
 		else if (m == NULL)
@@ -5624,7 +5620,7 @@ pf_route(struct mbuf **m0, struct pf_rule *r, int dir, struct ifnet *oifp,
 
 #ifdef INET6
 void
-pf_route6(struct mbuf **m0, struct pf_rule *r, int dir, struct ifnet *oifp,
+pf_route6(struct pf_pdesc *pd, struct mbuf **m0, struct pf_rule *r,
     struct pf_state *s)
 {
 	struct mbuf		*m;
@@ -5634,10 +5630,6 @@ pf_route6(struct mbuf **m0, struct pf_rule *r, int dir, struct ifnet *oifp,
 	struct pf_addr		 naddr;
 	struct pf_src_node	*sns[PF_SN_MAX];
 	struct m_tag		*mtag;
-
-	if (m0 == NULL || *m0 == NULL || r == NULL ||
-	    (dir != PF_IN && dir != PF_OUT) || oifp == NULL)
-		panic("pf_route6: invalid parameters");
 
 	if ((*m0)->m_pkthdr.pf.routed++ > 3) {
 		m = *m0;
@@ -5649,7 +5641,7 @@ pf_route6(struct mbuf **m0, struct pf_rule *r, int dir, struct ifnet *oifp,
 		if ((m = m_copym2(*m0, 0, M_COPYALL, M_NOWAIT)) == NULL)
 			return;
 	} else {
-		if ((r->rt == PF_REPLYTO) == (r->direction == dir))
+		if ((r->rt == PF_REPLYTO) == (r->direction == pd->dir))
 			return;
 		m = *m0;
 	}
@@ -5694,7 +5686,7 @@ pf_route6(struct mbuf **m0, struct pf_rule *r, int dir, struct ifnet *oifp,
 	if (ifp == NULL)
 		goto bad;
 
-	if (oifp != ifp) {
+	if (pd->kif->pfik_ifp != ifp) {
 		if (pf_test(AF_INET6, PF_OUT, ifp, &m) != PF_PASS)
 			goto bad;
 		else if (m == NULL)
@@ -6615,9 +6607,9 @@ done:
 			break;
 		}
 		if (pd.naf == AF_INET)
-			pf_route(&pd.m, r, dir, kif->pfik_ifp, s);
+			pf_route(&pd, &pd.m, r, s);
 		if (pd.naf == AF_INET6)
-			pf_route6(&pd.m, r, dir, kif->pfik_ifp, s);
+			pf_route6(&pd, &pd.m, r, s);
 		*m0 = NULL;
 		action = PF_PASS;
 		break;
@@ -6627,11 +6619,11 @@ done:
 		if (r->rt) {
 			switch (pd.af) {
 			case AF_INET:
-				pf_route(m0, r, pd.dir, pd.kif->pfik_ifp, s);
+				pf_route(&pd, m0, r, s);
 				break;
 #ifdef INET6
 			case AF_INET6:
-				pf_route6(m0, r, pd.dir, pd.kif->pfik_ifp, s);
+				pf_route6(&pd, m0, r, s);
 				break;
 #endif /* INET6 */
 			}
