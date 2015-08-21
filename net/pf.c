@@ -5700,7 +5700,8 @@ pf_route6(struct pf_pdesc *pd, struct pf_rule *r, struct pf_state *s)
 	 * use pf_refragment6() here to turn it back to fragments.
 	 */
 	if ((mtag = m_tag_find(m, PACKET_TAG_PF_REASSEMBLED, NULL))) {
-		pf_refragment6(&m, mtag, dst, ifp);
+		if (pf_refragment6(&m, mtag, dst, ifp) != PF_PASS)
+			goto bad;
 	} else if ((u_long)m->m_pkthdr.len <= ifp->if_mtu) {
 		nd6_output(ifp, m, dst, NULL);
 	} else {
