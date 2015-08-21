@@ -6567,22 +6567,23 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 
 	switch (action) {
 	case PF_SYNPROXY_DROP:
-		m_freem(*m0);
+		m_freem(pd.m);
+		/* FALLTHROUGH */
 	case PF_DEFER:
-		*m0 = NULL;
+		pd.m = NULL;
 		action = PF_PASS;
 		break;
 	case PF_DIVERT:
 		switch (pd.af) {
 		case AF_INET:
 			if (!divert_packet(pd.m, pd.dir, r->divert_packet.port))
-				*m0 = NULL;
+				pd.m = NULL;
 			break;
 #ifdef INET6
 		case AF_INET6:
 			if (!divert6_packet(pd.m, pd.dir,
 			    r->divert_packet.port))
-				*m0 = NULL;
+				pd.m = NULL;
 			break;
 #endif /* INET6 */
 		}
@@ -6591,8 +6592,6 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 #ifdef INET6
 	case PF_AFRT:
 		if (pf_translate_af(&pd)) {
-			if (!pd.m)
-				*m0 = NULL;
 			action = PF_DROP;
 			break;
 		}
@@ -6600,7 +6599,6 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 			pf_route(&pd, r, s);
 		if (pd.naf == AF_INET6)
 			pf_route6(&pd, r, s);
-		*m0 = NULL;
 		action = PF_PASS;
 		break;
 #endif /* INET6 */
@@ -6617,10 +6615,10 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 				break;
 #endif /* INET6 */
 			}
-			*m0 = pd.m;
 		}
 		break;
 	}
+	*m0 = pd.m;
 
 #ifdef INET6
 	/* if reassembled packet passed, create new fragments */
