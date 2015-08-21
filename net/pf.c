@@ -5698,7 +5698,7 @@ pf_route6(struct pf_pdesc *pd, struct pf_rule *r, struct pf_state *s)
 	 * use pf_refragment6() here to turn it back to fragments.
 	 */
 	if ((mtag = m_tag_find(m, PACKET_TAG_PF_REASSEMBLED, NULL))) {
-		pf_refragment6(pd, &m, mtag, dst, ifp);
+		pf_refragment6(&m, mtag, dst, ifp);
 	} else if ((u_long)m->m_pkthdr.len <= ifp->if_mtu) {
 		nd6_output(ifp, m, dst, NULL);
 	} else {
@@ -6628,7 +6628,7 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 		struct m_tag	*mtag;
 
 		if ((mtag = m_tag_find(*m0, PACKET_TAG_PF_REASSEMBLED, NULL)))
-			action = pf_refragment6(&pd, m0, mtag, NULL, NULL);
+			action = pf_refragment6(m0, mtag, NULL, NULL);
 	}
 #endif	/* INET6 */
 	if (s && action != PF_DROP) {

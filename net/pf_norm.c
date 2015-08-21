@@ -683,8 +683,8 @@ fail:
 }
 
 int
-pf_refragment6(struct pf_pdesc *pd, struct mbuf **m0, struct m_tag *mtag,
-    struct sockaddr_in6 *dst, struct ifnet *ifp)
+pf_refragment6(struct mbuf **m0, struct m_tag *mtag, struct sockaddr_in6 *dst,
+    struct ifnet *ifp)
 {
 	struct mbuf		*m = *m0, *t;
 	struct pf_fragment_tag	*ftag = (struct pf_fragment_tag *)(mtag + 1);
