@@ -6476,7 +6476,7 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 		break;
 	}
 
-done:
+ done:
 	if (action != PF_DROP) {
 		if (s) {
 			/* The non-state case is handled in pf_test_rule() */
