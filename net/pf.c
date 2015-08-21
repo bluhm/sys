@@ -5462,8 +5462,7 @@ pf_rtlabel_match(struct pf_addr *addr, sa_family_t af, struct pf_addr_wrap *aw,
 }
 
 void
-pf_route(struct pf_pdesc *pd, struct mbuf **m0, struct pf_rule *r,
-    struct pf_state *s)
+pf_route(struct pf_pdesc *pd, struct pf_rule *r, struct pf_state *s)
 {
 	struct mbuf		*m = pd->m, *m1;
 	struct sockaddr_in	*dst, sin;
@@ -5614,8 +5613,7 @@ pf_route(struct pf_pdesc *pd, struct mbuf **m0, struct pf_rule *r,
 
 #ifdef INET6
 void
-pf_route6(struct pf_pdesc *pd, struct mbuf **m0, struct pf_rule *r,
-    struct pf_state *s)
+pf_route6(struct pf_pdesc *pd, struct pf_rule *r, struct pf_state *s)
 {
 	struct mbuf		*m = pd->m;
 	struct sockaddr_in6	*dst, sin6;
@@ -5700,7 +5698,7 @@ pf_route6(struct pf_pdesc *pd, struct mbuf **m0, struct pf_rule *r,
 	 * use pf_refragment6() here to turn it back to fragments.
 	 */
 	if ((mtag = m_tag_find(m, PACKET_TAG_PF_REASSEMBLED, NULL))) {
-		(void) pf_refragment6(pd, m0, mtag, dst, ifp);
+		pf_refragment6(pd, &m, mtag, dst, ifp);
 	} else if ((u_long)m->m_pkthdr.len <= ifp->if_mtu) {
 		nd6_output(ifp, m, dst, NULL);
 	} else {
@@ -6598,9 +6596,9 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 			break;
 		}
 		if (pd.naf == AF_INET)
-			pf_route(&pd, &pd.m, r, s);
+			pf_route(&pd, r, s);
 		if (pd.naf == AF_INET6)
-			pf_route6(&pd, &pd.m, r, s);
+			pf_route6(&pd, r, s);
 		*m0 = pd.m = NULL;
 		action = PF_PASS;
 		break;
@@ -6610,11 +6608,11 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 		if (r->rt) {
 			switch (pd.af) {
 			case AF_INET:
-				pf_route(&pd, m0, r, s);
+				pf_route(&pd, r, s);
 				break;
 #ifdef INET6
 			case AF_INET6:
-				pf_route6(&pd, m0, r, s);
+				pf_route6(&pd, r, s);
 				break;
 #endif /* INET6 */
 			}

@@ -1783,13 +1783,13 @@ pfsync_undefer(struct pfsync_deferral *sd, int drop)
 		if (sd->sd_st->rule.ptr->rt == PF_ROUTETO) {
 			switch (sd->sd_st->key[PF_SK_WIRE]->af) {
 			case AF_INET:
-				pf_route(&sd->sd_pd, &sd->sd_pd.m,
-				    sd->sd_st->rule.ptr, sd->sd_st);
+				pf_route(&sd->sd_pd, sd->sd_st->rule.ptr,
+				    sd->sd_st);
 				break;
 #ifdef INET6
 			case AF_INET6:
-				pf_route6(&sd->sd_pd, &sd->sd_pd.m,
-				    sd->sd_st->rule.ptr, sd->sd_st);
+				pf_route6(&sd->sd_pd, sd->sd_st->rule.ptr,
+				    sd->sd_st);
 				break;
 #endif /* INET6 */
 			}
