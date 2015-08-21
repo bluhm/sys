@@ -5597,8 +5597,7 @@ pf_route(struct pf_pdesc *pd, struct mbuf **m0, struct pf_rule *r,
 		m1 = m->m_nextpkt;
 		m->m_nextpkt = 0;
 		if (error == 0)
-			error = (*ifp->if_output)(ifp, m, sintosa(dst),
-			    NULL);
+			error = (*ifp->if_output)(ifp, m, sintosa(dst), NULL);
 		else
 			m_freem(m);
 	}
