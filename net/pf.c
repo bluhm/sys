@@ -5624,10 +5624,10 @@ bad:
 
 #ifdef INET6
 void
-pf_route6(struct mbuf **m, struct pf_rule *r, int dir, struct ifnet *oifp,
+pf_route6(struct mbuf **m0, struct pf_rule *r, int dir, struct ifnet *oifp,
     struct pf_state *s)
 {
-	struct mbuf		*m0;
+	struct mbuf		*m;
 	struct sockaddr_in6	*dst, sin6;
 	struct ip6_hdr		*ip6;
 	struct ifnet		*ifp = NULL;
@@ -5635,31 +5635,31 @@ pf_route6(struct mbuf **m, struct pf_rule *r, int dir, struct ifnet *oifp,
 	struct pf_src_node	*sns[PF_SN_MAX];
 	struct m_tag		*mtag;
 
-	if (m == NULL || *m == NULL || r == NULL ||
+	if (m0 == NULL || *m0 == NULL || r == NULL ||
 	    (dir != PF_IN && dir != PF_OUT) || oifp == NULL)
 		panic("pf_route6: invalid parameters");
 
-	if ((*m)->m_pkthdr.pf.routed++ > 3) {
-		m0 = *m;
-		*m = NULL;
+	if ((*m0)->m_pkthdr.pf.routed++ > 3) {
+		m = *m0;
+		*m0 = NULL;
 		goto bad;
 	}
 
 	if (r->rt == PF_DUPTO) {
-		if ((m0 = m_copym2(*m, 0, M_COPYALL, M_NOWAIT)) == NULL)
+		if ((m = m_copym2(*m0, 0, M_COPYALL, M_NOWAIT)) == NULL)
 			return;
 	} else {
 		if ((r->rt == PF_REPLYTO) == (r->direction == dir))
 			return;
-		m0 = *m;
+		m = *m0;
 	}
 
-	if (m0->m_len < sizeof(struct ip6_hdr)) {
+	if (m->m_len < sizeof(struct ip6_hdr)) {
 		DPFPRINTF(LOG_ERR,
-		    "pf_route6: m0->m_len < sizeof(struct ip6_hdr)");
+		    "pf_route6: m->m_len < sizeof(struct ip6_hdr)");
 		goto bad;
 	}
-	ip6 = mtod(m0, struct ip6_hdr *);
+	ip6 = mtod(m, struct ip6_hdr *);
 
 	memset(&sin6, 0, sizeof(sin6));
 	dst = &sin6;
@@ -5668,8 +5668,8 @@ pf_route6(struct mbuf **m, struct pf_rule *r, int dir, struct ifnet *oifp,
 	dst->sin6_addr = ip6->ip6_dst;
 
 	if (!r->rt) {
-		m0->m_pkthdr.pf.flags |= PF_TAG_GENERATED;
-		ip6_output(m0, NULL, NULL, 0, NULL, NULL, NULL);
+		m->m_pkthdr.pf.flags |= PF_TAG_GENERATED;
+		ip6_output(m, NULL, NULL, 0, NULL, NULL, NULL);
 		return;
 	}
 
@@ -5695,18 +5695,18 @@ pf_route6(struct mbuf **m, struct pf_rule *r, int dir, struct ifnet *oifp,
 		goto bad;
 
 	if (oifp != ifp) {
-		if (pf_test(AF_INET6, PF_OUT, ifp, &m0) != PF_PASS)
+		if (pf_test(AF_INET6, PF_OUT, ifp, &m) != PF_PASS)
 			goto bad;
-		else if (m0 == NULL)
+		else if (m == NULL)
 			goto done;
-		if (m0->m_len < sizeof(struct ip6_hdr)) {
+		if (m->m_len < sizeof(struct ip6_hdr)) {
 			DPFPRINTF(LOG_ERR,
-			    "pf_route6: m0->m_len < sizeof(struct ip6_hdr)");
+			    "pf_route6: m->m_len < sizeof(struct ip6_hdr)");
 			goto bad;
 		}
 	}
 
-	in6_proto_cksum_out(m0, ifp);
+	in6_proto_cksum_out(m, ifp);
 
 	if (IN6_IS_SCOPE_EMBED(&dst->sin6_addr))
 		dst->sin6_addr.s6_addr16[1] = htons(ifp->if_index);
@@ -5715,22 +5715,22 @@ pf_route6(struct mbuf **m, struct pf_rule *r, int dir, struct ifnet *oifp,
 	 * If packet has been reassembled by PF earlier, we have to
 	 * use pf_refragment6() here to turn it back to fragments.
 	 */
-	if ((mtag = m_tag_find(m0, PACKET_TAG_PF_REASSEMBLED, NULL))) {
-		(void) pf_refragment6(&m0, mtag, dst, ifp);
-	} else if ((u_long)m0->m_pkthdr.len <= ifp->if_mtu) {
-		nd6_output(ifp, m0, dst, NULL);
+	if ((mtag = m_tag_find(m, PACKET_TAG_PF_REASSEMBLED, NULL))) {
+		(void) pf_refragment6(&m, mtag, dst, ifp);
+	} else if ((u_long)m->m_pkthdr.len <= ifp->if_mtu) {
+		nd6_output(ifp, m, dst, NULL);
 	} else {
 		in6_ifstat_inc(ifp, ifs6_in_toobig);
-		icmp6_error(m0, ICMP6_PACKET_TOO_BIG, 0, ifp->if_mtu);
+		icmp6_error(m, ICMP6_PACKET_TOO_BIG, 0, ifp->if_mtu);
 	}
 
-done:
+ done:
 	if (r->rt != PF_DUPTO)
-		*m = NULL;
+		*m0 = NULL;
 	return;
 
-bad:
-	m_freem(m0);
+ bad:
+	m_freem(m);
 	goto done;
 }
 #endif /* INET6 */
