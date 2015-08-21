@@ -306,7 +306,7 @@ void			pfsync_clear_states(u_int32_t, const char *);
 void			pfsync_update_tdb(struct tdb *, int);
 void			pfsync_delete_tdb(struct tdb *);
 
-int			pfsync_defer(struct pf_state *, struct mbuf *);
+int			pfsync_defer(struct pf_pdesc *, struct pf_state *);
 
 int			pfsync_up(void);
 int			pfsync_state_in_use(struct pf_state *);

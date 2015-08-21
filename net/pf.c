@@ -3429,7 +3429,7 @@ pf_test_rule(struct pf_pdesc *pd, struct pf_rule **rm, struct pf_state **sm,
 		 * firewall has to know about it to allow
 		 * replies through it.
 		 */
-		if (pfsync_defer(*sm, pd->m))
+		if (pfsync_defer(pd, *sm))
 			return (PF_DEFER);
 	}
 #endif	/* NPFSYNC > 0 */

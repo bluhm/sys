@@ -1727,7 +1727,7 @@ pfsync_insert_state(struct pf_state *st)
 }
 
 int
-pfsync_defer(struct pf_state *st, struct mbuf *m)
+pfsync_defer(struct pf_pdesc *pd, struct pf_state *st)
 {
 	struct pfsync_softc *sc = pfsyncif;
 	struct pfsync_deferral *sd;
@@ -1736,7 +1736,7 @@ pfsync_defer(struct pf_state *st, struct mbuf *m)
 
 	if (!sc->sc_defer ||
 	    ISSET(st->state_flags, PFSTATE_NOSYNC) ||
-	    m->m_flags & (M_BCAST|M_MCAST))
+	    pd->m->m_flags & (M_BCAST|M_MCAST))
 		return (0);
 
 	if (sc->sc_deferred >= 128) {
@@ -1749,11 +1749,11 @@ pfsync_defer(struct pf_state *st, struct mbuf *m)
 	if (sd == NULL)
 		return (0);
 
-	m->m_pkthdr.pf.flags |= PF_TAG_GENERATED;
+	pd->m->m_pkthdr.pf.flags |= PF_TAG_GENERATED;
 	SET(st->state_flags, PFSTATE_ACK);
 
 	sd->sd_st = st;
-	sd->sd_m = m;
+	sd->sd_m = pd->m;
 
 	sc->sc_deferred++;
 	TAILQ_INSERT_TAIL(&sc->sc_deferrals, sd, sd_entry);
