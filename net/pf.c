@@ -5654,7 +5654,7 @@ pf_route6(struct pf_pdesc *pd, struct pf_rule *r, struct pf_state *s)
 	if (!r->rt) {
 		m->m_pkthdr.pf.flags |= PF_TAG_GENERATED;
 		ip6_output(m, NULL, NULL, 0, NULL, NULL, NULL);
-		return;
+		goto done;
 	}
 
 	if (s == NULL) {
