@@ -182,10 +182,10 @@ struct pfsync_upd_req_item {
 TAILQ_HEAD(pfsync_upd_reqs, pfsync_upd_req_item);
 
 struct pfsync_deferral {
-	TAILQ_ENTRY(pfsync_deferral)		 pd_entry;
-	struct pf_state				*pd_st;
-	struct mbuf				*pd_m;
-	struct timeout				 pd_tmo;
+	TAILQ_ENTRY(pfsync_deferral)		 sd_entry;
+	struct pf_state				*sd_st;
+	struct mbuf				*sd_m;
+	struct timeout				 sd_tmo;
 };
 TAILQ_HEAD(pfsync_deferrals, pfsync_deferral);
 
@@ -353,7 +353,7 @@ int
 pfsync_clone_destroy(struct ifnet *ifp)
 {
 	struct pfsync_softc *sc = ifp->if_softc;
-	struct pfsync_deferral *pd;
+	struct pfsync_deferral *sd;
 	int s;
 
 	s = splsoftnet();
@@ -375,9 +375,9 @@ pfsync_clone_destroy(struct ifnet *ifp)
 	pfsync_drop(sc);
 
 	while (sc->sc_deferred > 0) {
-		pd = TAILQ_FIRST(&sc->sc_deferrals);
-		timeout_del(&pd->pd_tmo);
-		pfsync_undefer(pd, 0);
+		sd = TAILQ_FIRST(&sc->sc_deferrals);
+		timeout_del(&sd->sd_tmo);
+		pfsync_undefer(sd, 0);
 	}
 
 	pool_destroy(&sc->sc_pool);
@@ -1730,7 +1730,7 @@ int
 pfsync_defer(struct pf_state *st, struct mbuf *m)
 {
 	struct pfsync_softc *sc = pfsyncif;
-	struct pfsync_deferral *pd;
+	struct pfsync_deferral *sd;
 
 	splsoftassert(IPL_SOFTNET);
 
@@ -1740,26 +1740,26 @@ pfsync_defer(struct pf_state *st, struct mbuf *m)
 		return (0);
 
 	if (sc->sc_deferred >= 128) {
-		pd = TAILQ_FIRST(&sc->sc_deferrals);
-		if (timeout_del(&pd->pd_tmo))
-			pfsync_undefer(pd, 0);
+		sd = TAILQ_FIRST(&sc->sc_deferrals);
+		if (timeout_del(&sd->sd_tmo))
+			pfsync_undefer(sd, 0);
 	}
 
-	pd = pool_get(&sc->sc_pool, M_NOWAIT);
-	if (pd == NULL)
+	sd = pool_get(&sc->sc_pool, M_NOWAIT);
+	if (sd == NULL)
 		return (0);
 
 	m->m_pkthdr.pf.flags |= PF_TAG_GENERATED;
 	SET(st->state_flags, PFSTATE_ACK);
 
-	pd->pd_st = st;
-	pd->pd_m = m;
+	sd->sd_st = st;
+	sd->sd_m = m;
 
 	sc->sc_deferred++;
-	TAILQ_INSERT_TAIL(&sc->sc_deferrals, pd, pd_entry);
+	TAILQ_INSERT_TAIL(&sc->sc_deferrals, sd, sd_entry);
 
-	timeout_set(&pd->pd_tmo, pfsync_defer_tmo, pd);
-	timeout_add_msec(&pd->pd_tmo, 20);
+	timeout_set(&sd->sd_tmo, pfsync_defer_tmo, sd);
+	timeout_add_msec(&sd->sd_tmo, 20);
 
 	schednetisr(NETISR_PFSYNC);
 
@@ -1767,43 +1767,43 @@ pfsync_defer(struct pf_state *st, struct mbuf *m)
 }
 
 void
-pfsync_undefer(struct pfsync_deferral *pd, int drop)
+pfsync_undefer(struct pfsync_deferral *sd, int drop)
 {
 	struct pfsync_softc *sc = pfsyncif;
 
 	splsoftassert(IPL_SOFTNET);
 
-	TAILQ_REMOVE(&sc->sc_deferrals, pd, pd_entry);
+	TAILQ_REMOVE(&sc->sc_deferrals, sd, sd_entry);
 	sc->sc_deferred--;
 
-	CLR(pd->pd_st->state_flags, PFSTATE_ACK);
+	CLR(sd->sd_st->state_flags, PFSTATE_ACK);
 	if (drop)
-		m_freem(pd->pd_m);
+		m_freem(sd->sd_m);
 	else {
-		if (pd->pd_st->rule.ptr->rt == PF_ROUTETO) {
-			switch (pd->pd_st->key[PF_SK_WIRE]->af) {
+		if (sd->sd_st->rule.ptr->rt == PF_ROUTETO) {
+			switch (sd->sd_st->key[PF_SK_WIRE]->af) {
 			case AF_INET:
-				pf_route(&pd->pd_m, pd->pd_st->rule.ptr,
-				    pd->pd_st->direction, 
-				    pd->pd_st->rt_kif->pfik_ifp, pd->pd_st);
+				pf_route(&sd->sd_m, sd->sd_st->rule.ptr,
+				    sd->sd_st->direction, 
+				    sd->sd_st->rt_kif->pfik_ifp, sd->sd_st);
 				break;
 #ifdef INET6
 			case AF_INET6:
-				pf_route6(&pd->pd_m, pd->pd_st->rule.ptr,
-				    pd->pd_st->direction,
-				    pd->pd_st->rt_kif->pfik_ifp, pd->pd_st);
+				pf_route6(&sd->sd_m, sd->sd_st->rule.ptr,
+				    sd->sd_st->direction,
+				    sd->sd_st->rt_kif->pfik_ifp, sd->sd_st);
 				break;
 #endif /* INET6 */
 			}
 		} else {
-			switch (pd->pd_st->key[PF_SK_WIRE]->af) {
+			switch (sd->sd_st->key[PF_SK_WIRE]->af) {
 			case AF_INET:
-				ip_output(pd->pd_m, NULL, NULL, 0, NULL, NULL,
+				ip_output(sd->sd_m, NULL, NULL, 0, NULL, NULL,
 				    0);
 				break;
 #ifdef INET6
 	                case AF_INET6:
-		                ip6_output(pd->pd_m, NULL, NULL, 0,
+		                ip6_output(sd->sd_m, NULL, NULL, 0,
 				    NULL, NULL, NULL);
 				break;
 #endif /* INET6 */
@@ -1811,7 +1811,7 @@ pfsync_undefer(struct pfsync_deferral *pd, int drop)
                 }
 	}
 
-	pool_put(&sc->sc_pool, pd);
+	pool_put(&sc->sc_pool, sd);
 }
 
 void
@@ -1828,14 +1828,14 @@ void
 pfsync_deferred(struct pf_state *st, int drop)
 {
 	struct pfsync_softc *sc = pfsyncif;
-	struct pfsync_deferral *pd;
+	struct pfsync_deferral *sd;
 
 	splsoftassert(IPL_SOFTNET);
 
-	TAILQ_FOREACH(pd, &sc->sc_deferrals, pd_entry) {
-		 if (pd->pd_st == st) {
-			if (timeout_del(&pd->pd_tmo))
-				pfsync_undefer(pd, drop);
+	TAILQ_FOREACH(sd, &sc->sc_deferrals, sd_entry) {
+		 if (sd->sd_st == st) {
+			if (timeout_del(&sd->sd_tmo))
+				pfsync_undefer(sd, drop);
 			return;
 		}
 	}
