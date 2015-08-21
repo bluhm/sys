@@ -5617,7 +5617,7 @@ void
 pf_route6(struct pf_pdesc *pd, struct mbuf **m0, struct pf_rule *r,
     struct pf_state *s)
 {
-	struct mbuf		*m;
+	struct mbuf		*m = pd->m;
 	struct sockaddr_in6	*dst, sin6;
 	struct ip6_hdr		*ip6;
 	struct ifnet		*ifp = NULL;
@@ -5625,19 +5625,17 @@ pf_route6(struct pf_pdesc *pd, struct mbuf **m0, struct pf_rule *r,
 	struct pf_src_node	*sns[PF_SN_MAX];
 	struct m_tag		*mtag;
 
-	if ((*m0)->m_pkthdr.pf.routed++ > 3) {
-		m = *m0;
-		*m0 = NULL;
+	if (m->m_pkthdr.pf.routed++ > 3) {
+		pd->m = NULL;
 		goto bad;
 	}
 
 	if (r->rt == PF_DUPTO) {
-		if ((m = m_copym2(*m0, 0, M_COPYALL, M_NOWAIT)) == NULL)
+		if ((m = m_copym2(m, 0, M_COPYALL, M_NOWAIT)) == NULL)
 			return;
 	} else {
 		if ((r->rt == PF_REPLYTO) == (r->direction == pd->dir))
 			return;
-		m = *m0;
 	}
 
 	if (m->m_len < sizeof(struct ip6_hdr)) {
@@ -5712,7 +5710,7 @@ pf_route6(struct pf_pdesc *pd, struct mbuf **m0, struct pf_rule *r,
 
  done:
 	if (r->rt != PF_DUPTO)
-		*m0 = NULL;
+		pd->m = NULL;
 	return;
 
  bad:
@@ -6613,7 +6611,6 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 			switch (pd.af) {
 			case AF_INET:
 				pf_route(&pd, m0, r, s);
-				*m0 = pd.m;
 				break;
 #ifdef INET6
 			case AF_INET6:
@@ -6621,6 +6618,7 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 				break;
 #endif /* INET6 */
 			}
+			*m0 = pd.m;
 		}
 		break;
 	}
