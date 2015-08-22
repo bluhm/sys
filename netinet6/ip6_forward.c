@@ -281,9 +281,11 @@ reroute:
 		}
 	}
 	rt = ip6_forward_rt.ro_rt;
-	mtu = IN6_LINKMTU(rt->rt_ifp);
-	if (rt->rt_rmx.rmx_mtu && rt->rt_rmx.rmx_mtu < mtu)
-		mtu = rt->rt_rmx.rmx_mtu;
+	mtu = rt->rt_rmx.rmx_mtu;
+	if (mtu == 0 || mtu >= IN6_LINKMTU(rt->rt_ifp))
+		mtu = IN6_LINKMTU(rt->rt_ifp);
+	else if (mtu < IPV6_MMTU)
+		mtu = IPV6_MMTU;
 
 	/*
 	 * Scope check: if a packet can't be delivered to its destination
