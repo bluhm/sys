@@ -421,7 +421,6 @@ struct bridge_rtnode {
  */
 struct bridge_softc {
 	struct ifnet			sc_if;	/* the interface */
-	LIST_ENTRY(bridge_softc)	sc_list;	/* all bridges */
 	struct bridge_iflist		*sc_root_port;
 	u_int32_t			sc_brtmax;	/* max # addresses */
 	u_int32_t			sc_brtcnt;	/* current # addrs */

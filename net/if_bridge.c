@@ -243,7 +243,6 @@ bridge_clone_destroy(struct ifnet *ifp)
 	struct bridge_softc *sc = ifp->if_softc;
 	struct bridge_iflist *bif;
 	struct ifih *bridge_ifih;
-	int s;
 
 	bridge_stop(sc);
 	bridge_rtflush(sc, IFBF_FLUSHALL);
@@ -253,10 +252,6 @@ bridge_clone_destroy(struct ifnet *ifp)
 		TAILQ_REMOVE(&sc->sc_spanlist, bif, next);
 		free(bif, M_DEVBUF, 0);
 	}
-
-	s = splnet();
-	LIST_REMOVE(sc, sc_list);
-	splx(s);
 
 	bstp_destroy(sc->sc_stp);
 
