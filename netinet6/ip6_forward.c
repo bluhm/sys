@@ -150,6 +150,7 @@ ip6_forward(struct mbuf *m, int srcrt)
 	 */
 	mcopy = m_copym(m, 0, imin(m->m_pkthdr.len, ICMPV6_PLD_MAXLEN),
 	    M_NOWAIT);
+	mcopy->m_pkthdr.csum_flags = 0;
 
 #if NPF > 0
 reroute:
