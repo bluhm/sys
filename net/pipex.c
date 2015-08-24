@@ -1,4 +1,4 @@
-/*	$OpenBSD: pipex.c,v 1.72 2015/07/16 16:12:15 mpi Exp $	*/
+/*	$OpenBSD: pipex.c,v 1.73 2015/08/24 14:00:28 bluhm Exp $	*/
 
 /*-
  * Copyright (c) 2009 Internet Initiative Japan Inc.
