@@ -3370,6 +3370,7 @@ syn_cache_init()
 	/* Initialize the syn cache pool. */
 	pool_init(&syn_cache_pool, sizeof(struct syn_cache), 0, 0, 0,
 	    "syncache", NULL);
+	pool_setipl(&syn_cache_pool, IPL_SOFTNET);
 }
 
 void
@@ -3521,11 +3522,8 @@ void
 syn_cache_reaper(void *arg)
 {
 	struct syn_cache *sc = arg;
-	int s;
 
-	s = splsoftnet();
 	pool_put(&syn_cache_pool, (sc));
-	splx(s);
 	return;
 }
 
