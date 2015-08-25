@@ -1,4 +1,4 @@
-/*	$OpenBSD: nd6_rtr.c,v 1.118 2015/08/24 22:11:34 mpi Exp $	*/
+/*	$OpenBSD: nd6_rtr.c,v 1.120 2015/08/24 23:28:27 mpi Exp $	*/
 /*	$KAME: nd6_rtr.c,v 1.97 2001/02/07 11:09:13 itojun Exp $	*/
 
 /*
@@ -1069,52 +1069,6 @@ purge_detached(struct ifnet *ifp)
 	}
 }
 
-struct nd_prefix *
-nd6_prefix_add(struct ifnet *ifp, struct sockaddr_in6 *addr,
-    struct sockaddr_in6 *mask, struct in6_addrlifetime *lt, int autoconf)
-{
-	struct nd_prefix pr0, *pr;
-	int i;
-
-	/*
-	 * convert mask to prefix length (prefixmask has already
-	 * been validated in in6_update_ifa().
-	 */
-	memset(&pr0, 0, sizeof(pr0));
-	pr0.ndpr_ifp = ifp;
-	pr0.ndpr_plen = in6_mask2len(&mask->sin6_addr, NULL);
-	pr0.ndpr_prefix = *addr;
-	pr0.ndpr_mask = mask->sin6_addr;
-	/* apply the mask for safety. */
-	for (i = 0; i < 4; i++) {
-		pr0.ndpr_prefix.sin6_addr.s6_addr32[i] &=
-		    mask->sin6_addr.s6_addr32[i];
-	}
-	/*
-	 * XXX: since we don't have an API to set prefix (not address)
-	 * lifetimes, we just use the same lifetimes as addresses.
-	 * The (temporarily) installed lifetimes can be overridden by
-	 * later advertised RAs (when accept_rtadv is non 0), which is
-	 * an intended behavior.
-	 */
-	pr0.ndpr_raf_onlink = 1; /* should be configurable? */
-	pr0.ndpr_raf_auto = autoconf;
-	pr0.ndpr_vltime = lt->ia6t_vltime;
-	pr0.ndpr_pltime = lt->ia6t_pltime;
-
-	/* add the prefix if not yet. */
-	if ((pr = nd6_prefix_lookup(&pr0)) == NULL) {
-		/*
-		 * nd6_prelist_add will install the corresponding
-		 * interface route.
-		 */
-		if (nd6_prelist_add(&pr0, NULL, &pr) != 0)
-			return (NULL);
-	}
-
-	return (pr);
-}
-
 int
 nd6_prelist_add(struct nd_prefix *pr, struct nd_defrouter *dr,
     struct nd_prefix **newp)
@@ -1188,14 +1142,7 @@ prelist_remove(struct nd_prefix *pr)
 	/* make sure to invalidate the prefix until it is really freed. */
 	pr->ndpr_vltime = 0;
 	pr->ndpr_pltime = 0;
-#if 0
-	/*
-	 * Though these flags are now meaningless, we'd rather keep the value
-	 * not to confuse users when executing "ndp -p".
-	 */
-	pr->ndpr_raf_onlink = 0;
-	pr->ndpr_raf_auto = 0;
-#endif
+
 	if ((pr->ndpr_stateflags & NDPRF_ONLINK) != 0 &&
 	    (e = nd6_prefix_offlink(pr)) != 0) {
 		char addr[INET6_ADDRSTRLEN];
