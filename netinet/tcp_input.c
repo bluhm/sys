@@ -3282,19 +3282,10 @@ u_int32_t syn_hash1, syn_hash2;
 #define SYN_HASH(sa, sp, dp) \
 	((((sa)->s_addr^syn_hash1)*(((((u_int32_t)(dp))<<16) + \
 				     ((u_int32_t)(sp)))^syn_hash2)))
-#ifndef INET6
-#define	SYN_HASHALL(hash, src, dst) \
-do {									\
-	hash = SYN_HASH(&satosin(src)->sin_addr,			\
-		satosin(src)->sin_port,					\
-		satosin(dst)->sin_port);				\
-} while (/*CONSTCOND*/ 0)
-#else
 #define SYN_HASH6(sa, sp, dp) \
 	((((sa)->s6_addr32[0] ^ (sa)->s6_addr32[3] ^ syn_hash1) * \
 	  (((((u_int32_t)(dp))<<16) + ((u_int32_t)(sp)))^syn_hash2)) \
 	 & 0x7fffffff)
-
 #define SYN_HASHALL(hash, src, dst) \
 do {									\
 	switch ((src)->sa_family) {					\
@@ -3312,7 +3303,6 @@ do {									\
 		hash = 0;						\
 	}								\
 } while (/*CONSTCOND*/0)
-#endif /* INET6 */
 
 void
 syn_cache_rm(struct syn_cache *sc)
