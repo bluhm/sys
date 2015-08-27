@@ -542,9 +542,9 @@ nopages:
 			mp = &top;
 			if (error)
 				goto release;
-			/* after first send, do short write instead of block */
-			flags |= MSG_DONTWAIT;
 		} while (resid && space > 0);
+		/* after first send, do short write instead of block */
+		flags |= MSG_DONTWAIT;
 	} while (resid);
 
 release:
