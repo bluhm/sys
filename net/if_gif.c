@@ -432,10 +432,10 @@ gif_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 
 			/* can't configure multiple multi-dest interfaces */
 #define multidest(x) \
-	((satosin((x)))->sin_addr.s_addr == INADDR_ANY)
+	(satosin(x)->sin_addr.s_addr == INADDR_ANY)
 #ifdef INET6
 #define multidest6(x) \
-	(IN6_IS_ADDR_UNSPECIFIED(&(satosin6((x)))->sin6_addr))
+	(IN6_IS_ADDR_UNSPECIFIED(&satosin6(x)->sin6_addr))
 #endif
 			if (dst->sa_family == AF_INET &&
 			    multidest(dst) && multidest(sc2->gif_pdst)) {
