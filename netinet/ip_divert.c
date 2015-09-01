@@ -1,4 +1,4 @@
-/*      $OpenBSD: ip_divert.c,v 1.36 2015/08/14 18:07:28 bluhm Exp $ */
+/*      $OpenBSD: ip_divert.c,v 1.37 2015/09/01 21:24:04 bluhm Exp $ */
 
 /*
  * Copyright (c) 2009 Michele Marchetto <michele@openbsd.org>
