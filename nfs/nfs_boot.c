@@ -242,7 +242,7 @@ nfs_boot_getfh(struct sockaddr_in *bpsin, char *key,
 
 	/* Initialize mount args. */
 	memset(args, 0, sizeof(*args));
-	args->addr     = (struct sockaddr *)&ndmntp->ndm_saddr;
+	args->addr     = sintosa(&ndmntp->ndm_saddr);
 	args->addrlen  = args->addr->sa_len;
 	args->sotype   = SOCK_DGRAM;
 	args->fh       = ndmntp->ndm_fh;

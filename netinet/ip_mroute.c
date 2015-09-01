@@ -2201,7 +2201,7 @@ pim_input(struct mbuf *m, ...)
 			    reg_vif_num);
 		}
 		/* NB: vifp was collected above; can it change on us? */
-		looutput(vifp, m, (struct sockaddr *)&dst, NULL);
+		looutput(vifp, m, satosin(&dst), NULL);
 
 		/* prepare the register head to send to the mrouting daemon */
 		m = mcp;

@@ -225,7 +225,7 @@ divert_packet(struct mbuf *m, int dir, u_int16_t divert_port)
 
 	if (inp) {
 		sa = inp->inp_socket;
-		if (sbappendaddr(&sa->so_rcv, (struct sockaddr *)&addr, 
+		if (sbappendaddr(&sa->so_rcv, sintosa(&addr), 
 		    m, NULL) == 0) {
 			divstat.divs_fullsock++;
 			m_freem(m);

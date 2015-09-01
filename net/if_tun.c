@@ -446,12 +446,12 @@ tuninit(struct tun_softc *tp)
 		if (ifa->ifa_addr->sa_family == AF_INET6) {
 			struct sockaddr_in6 *sin;
 
-			sin = (struct sockaddr_in6 *)ifa->ifa_addr;
+			sin = satosin6(ifa->ifa_addr);
 			if (!IN6_IS_ADDR_UNSPECIFIED(&sin->sin6_addr))
 				tp->tun_flags |= TUN_IASET;
 
 			if (ifp->if_flags & IFF_POINTOPOINT) {
-				sin = (struct sockaddr_in6 *)ifa->ifa_dstaddr;
+				sin = satosin6(ifa->ifa_dstaddr);
 				if (sin &&
 				    !IN6_IS_ADDR_UNSPECIFIED(&sin->sin6_addr))
 					tp->tun_flags |= TUN_DSTADDR;

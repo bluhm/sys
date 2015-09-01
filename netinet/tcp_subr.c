@@ -850,8 +850,7 @@ tcp_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 			sin.sin_family = AF_INET;
 			sin.sin_port = th->th_sport;
 			sin.sin_addr = ip->ip_src;
-			syn_cache_unreach((struct sockaddr *)&sin,
-			    sa, th, rdomain);
+			syn_cache_unreach(sintosa(&sin), sa, th, rdomain);
 		}
 	} else
 		in_pcbnotifyall(&tcbtable, sa, rdomain, errno, notify);
