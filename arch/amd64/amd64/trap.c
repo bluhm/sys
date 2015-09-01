@@ -1,4 +1,4 @@
-/*	$OpenBSD: trap.c,v 1.46 2015/06/28 01:16:28 guenther Exp $	*/
+/*	$OpenBSD: trap.c,v 1.48 2015/09/01 08:11:02 jsg Exp $	*/
 /*	$NetBSD: trap.c,v 1.2 2003/05/04 23:51:56 fvdl Exp $	*/
 
 /*-
@@ -416,9 +416,7 @@ faultcommon:
 
 	case T_BPTFLT|T_USER:		/* bpt instruction fault */
 	case T_TRCTRAP|T_USER:		/* trace trap */
-#ifdef MATH_EMULATE
-	trace:
-#endif
+		sv.sival_ptr = (void *)frame->tf_rip;
 		KERNEL_LOCK();
 		trapsignal(p, SIGTRAP, type &~ T_USER, TRAP_BRKPT, sv);
 		KERNEL_UNLOCK();

@@ -1,4 +1,4 @@
-/*	$OpenBSD: vfs_syscalls.c,v 1.223 2015/08/22 20:18:50 deraadt Exp $	*/
+/*	$OpenBSD: vfs_syscalls.c,v 1.227 2015/08/31 16:13:11 deraadt Exp $	*/
 /*	$NetBSD: vfs_syscalls.c,v 1.71 1996/04/23 10:29:02 mycroft Exp $	*/
 
 /*
@@ -1986,9 +1986,8 @@ dofchmodat(struct proc *p, int fd, const char *path, mode_t mode, int flag)
 
 	if (mode & ~(S_IFMT | ALLPERMS))
 		return (EINVAL);
-	if ((p->p_p->ps_flags & PS_TAMED) &&
-	    (mode & (S_ISUID|S_ISGID|S_ISTXT)))
-		return (tame_fail(p, EPERM, TAME_FATTR));
+	if ((p->p_p->ps_flags & PS_TAMED))
+		mode &= ACCESSPERMS;
 	if (flag & ~AT_SYMLINK_NOFOLLOW)
 		return (EINVAL);
 
@@ -2029,9 +2028,8 @@ sys_fchmod(struct proc *p, void *v, register_t *retval)
 
 	if (mode & ~(S_IFMT | ALLPERMS))
 		return (EINVAL);
-	if ((p->p_p->ps_flags & PS_TAMED) &&
-	    (mode & (S_ISUID|S_ISGID|S_ISTXT)))
-		return (tame_fail(p, EPERM, TAME_FATTR));
+	if ((p->p_p->ps_flags & PS_TAMED))
+		mode &= ACCESSPERMS;
 
 	if ((error = getvnode(p, SCARG(uap, fd), &fp)) != 0)
 		return (error);
@@ -2104,16 +2102,21 @@ dofchownat(struct proc *p, int fd, const char *path, uid_t uid, gid_t gid,
 	if (vp->v_mount->mnt_flag & MNT_RDONLY)
 		error = EROFS;
 	else {
+		if ((p->p_p->ps_flags & PS_TAMED) &&
+		    ((uid != -1 && uid != p->p_ucred->cr_uid) ||
+		     (gid != -1 && gid != p->p_ucred->cr_gid))) {
+			error = EPERM;
+			goto out;
+		}
 		if ((uid != -1 || gid != -1) &&
-		    (suser(p, 0) || (p->p_p->ps_flags & PS_TAMED) || suid_clear)) {
+		    (suser(p, 0) || suid_clear)) {
 			error = VOP_GETATTR(vp, &vattr, p->p_ucred, p);
 			if (error)
 				goto out;
 			mode = vattr.va_mode & ~(VSUID | VSGID);
 			if (mode == vattr.va_mode)
 				mode = VNOVAL;
-		}
-		else
+		} else
 			mode = VNOVAL;
 		VATTR_NULL(&vattr);
 		vattr.va_uid = uid;
@@ -2155,16 +2158,21 @@ sys_lchown(struct proc *p, void *v, register_t *retval)
 	if (vp->v_mount->mnt_flag & MNT_RDONLY)
 		error = EROFS;
 	else {
+		if ((p->p_p->ps_flags & PS_TAMED) &&
+		    ((uid != -1 && uid != p->p_ucred->cr_uid) ||
+		     (gid != -1 && gid != p->p_ucred->cr_gid))) {
+			error = EPERM;
+			goto out;
+		}
 		if ((uid != -1 || gid != -1) &&
-		    (suser(p, 0) || (p->p_p->ps_flags & PS_TAMED) || suid_clear)) {
+		    (suser(p, 0) || suid_clear)) {
 			error = VOP_GETATTR(vp, &vattr, p->p_ucred, p);
 			if (error)
 				goto out;
 			mode = vattr.va_mode & ~(VSUID | VSGID);
 			if (mode == vattr.va_mode)
 				mode = VNOVAL;
-		}
-		else
+		} else
 			mode = VNOVAL;
 		VATTR_NULL(&vattr);
 		vattr.va_uid = uid;
@@ -2204,8 +2212,14 @@ sys_fchown(struct proc *p, void *v, register_t *retval)
 	if (vp->v_mount->mnt_flag & MNT_RDONLY)
 		error = EROFS;
 	else {
+		if ((p->p_p->ps_flags & PS_TAMED) &&
+		    ((uid != -1 && uid != p->p_ucred->cr_uid) ||
+		     (gid != -1 && gid != p->p_ucred->cr_gid))) {
+			error = EPERM;
+			goto out;
+		}
 		if ((uid != -1 || gid != -1) &&
-		    (suser(p, 0) || (p->p_p->ps_flags & PS_TAMED) || suid_clear)) {
+		    (suser(p, 0) || suid_clear)) {
 			error = VOP_GETATTR(vp, &vattr, p->p_ucred, p);
 			if (error)
 				goto out;

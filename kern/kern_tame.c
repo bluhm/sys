@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_tame.c,v 1.28 2015/08/24 06:19:39 semarie Exp $	*/
+/*	$OpenBSD: kern_tame.c,v 1.37 2015/09/01 18:26:19 deraadt Exp $	*/
 
 /*
  * Copyright (c) 2015 Nicholas Marriott <nicm@openbsd.org>
@@ -172,6 +172,10 @@ const u_int tame_syscalls[SYS_MAXSYSCALL] = {
 	[SYS_mkdir] = _TM_CPATH,
 	[SYS_mkdirat] = _TM_CPATH,
 
+	/* Classify so due to info leak */
+	[SYS_getfsstat] = _TM_RPATH,
+	/* XXX Consider statfs and fstatfs */
+
 	[SYS_utimes] = _TM_FATTR,
 	[SYS_futimes] = _TM_FATTR,
 	[SYS_utimensat] = _TM_FATTR,
@@ -185,7 +189,6 @@ const u_int tame_syscalls[SYS_MAXSYSCALL] = {
 	[SYS_fchownat] = _TM_FATTR,
 	[SYS_lchown] = _TM_FATTR,
 	[SYS_fchown] = _TM_FATTR,
-	[SYS_utimes] = _TM_FATTR,
 
 	[SYS_socket] = _TM_INET | _TM_UNIX | _TM_DNS_ACTIVE | _TM_YP_ACTIVE,
 	[SYS_connect] = _TM_INET | _TM_UNIX | _TM_DNS_ACTIVE | _TM_YP_ACTIVE,
@@ -207,13 +210,13 @@ sys_tame(struct proc *p, void *v, register_t *retval)
 {
 	struct sys_tame_args /* {
 		syscallarg(int) flags;
-		syscallarg(char **)paths;
+		syscallarg(const char **)paths;
 	} */	*uap = v;
 	int	 flags = SCARG(uap, flags);
 
 	if (flags & ~_TM_USERSET)
 		return (EINVAL);
-	
+
 	if ((p->p_p->ps_flags & PS_TAMED)) {
 		/* Already tamed, only allow reductions */
 		if (((flags | p->p_p->ps_tame) & _TM_USERSET) !=
@@ -228,10 +231,10 @@ sys_tame(struct proc *p, void *v, register_t *retval)
 	}
 
 	if (SCARG(uap, paths)) {
-		char **u = SCARG(uap, paths), *sp;
+		const char **u = SCARG(uap, paths), *sp;
 		struct whitepaths *wl;
 		char *cwdpath = NULL, *path;
-		size_t cwdpathlen, cwdlen, len, maxargs = 0;
+		size_t cwdpathlen = MAXPATHLEN * 4, cwdlen, len, maxargs = 0;
 		int i, error;
 
 		if (p->p_p->ps_tamepaths)
@@ -258,7 +261,7 @@ sys_tame(struct proc *p, void *v, register_t *retval)
 		/* Copy in */
 		for (i = 0; i < wl->wl_count; i++) {
 			char *fullpath = NULL, *builtpath = NULL, *canopath = NULL, *cwd;
-			size_t builtlen;
+			size_t builtlen = 0;
 
 			if ((error = copyin(u + i, &sp, sizeof(sp))) != 0)
 				break;
@@ -272,7 +275,6 @@ sys_tame(struct proc *p, void *v, register_t *retval)
 				if (cwdpath == NULL) {
 					char *bp, *bpend;
 
-					cwdpathlen = MAXPATHLEN * 4;
 					cwdpath = malloc(cwdpathlen, M_TEMP, M_WAITOK);
 					bp = &cwdpath[cwdpathlen];
 					bpend = bp;
@@ -281,10 +283,8 @@ sys_tame(struct proc *p, void *v, register_t *retval)
 					error = vfs_getcwd_common(p->p_fd->fd_cdir,
 					    NULL, &bp, cwdpath, cwdpathlen/2,
 					    GETCWD_CHECK_ACCESS, p);
-					if (error) {
-						printf("getcwd: %d\n", error);
+					if (error)
 						break;
-					}
 					cwd = bp;
 					cwdlen = (bpend - bp);
 				}
@@ -303,16 +303,13 @@ sys_tame(struct proc *p, void *v, register_t *retval)
 				fullpath = path;
 
 			canopath = malloc(MAXPATHLEN, M_TEMP, M_WAITOK);
-			if (canonpath(fullpath, canopath, MAXPATHLEN) != 0) {
-				free(path, M_TEMP, MAXPATHLEN);
-				free(canopath, M_TEMP, MAXPATHLEN);
-				if (builtpath)
-					free(builtpath, M_TEMP, builtlen);
-				return (tame_fail(p, EPERM, TAME_RPATH));
-			}
+			error = canonpath(fullpath, canopath, MAXPATHLEN);
 
-			if (builtpath)
-				free(builtpath, M_TEMP, builtlen);
+			free(builtpath, M_TEMP, builtlen);
+			if (error != 0) {
+				free(canopath, M_TEMP, MAXPATHLEN);
+				break;
+			}
 
 			len = strlen(canopath) + 1;
 
@@ -329,8 +326,7 @@ sys_tame(struct proc *p, void *v, register_t *retval)
 			free(canopath, M_TEMP, MAXPATHLEN);
 		}
 		free(path, M_TEMP, MAXPATHLEN);
-		if (cwdpath)
-			free(cwdpath, M_TEMP, cwdpathlen);
+		free(cwdpath, M_TEMP, cwdpathlen);
 
 		if (error) {
 			printf("%s(%d): path load error %d\n",
@@ -445,7 +441,7 @@ tame_namei(struct proc *p, char *origpath)
 	case SYS_open:
 		/* getpw* and friends need a few files */
 		if ((p->p_tamenote == TMN_RPATH) &&
-		    (p->p_p->ps_tame & _TM_GETPW)) {		    
+		    (p->p_p->ps_tame & _TM_GETPW)) {
 			if (strcmp(path, "/etc/spwd.db") == 0)
 				return (0);
 			if (strcmp(path, "/etc/pwd.db") == 0)
@@ -485,12 +481,12 @@ tame_namei(struct proc *p, char *origpath)
 		    strcmp(path, "/etc/localtime") == 0)
 			return (0);
 
-		/* /usr/share/nls/../libc.cat returns EPERM, for strerror(3). */
+		/* /usr/share/nls/../libc.cat has to succeed for strerror(3). */
 		if ((p->p_tamenote == TMN_RPATH) &&
 		    strncmp(path, "/usr/share/nls/",
 		    sizeof("/usr/share/nls/") - 1) == 0 &&
 		    strcmp(path + strlen(path) - 9, "/libc.cat") == 0)
-			return (EPERM);
+			return (0);
 		break;
 	case SYS_readlink:
 		/* Allow /etc/malloc.conf for malloc(3). */
@@ -502,7 +498,7 @@ tame_namei(struct proc *p, char *origpath)
 		/* DNS needs /etc/resolv.conf. */
 		if ((p->p_tamenote == TMN_RPATH) &&
 		    (p->p_p->ps_tame & _TM_DNSPATH)) {
-		    	if (strcmp(path, "/etc/resolv.conf") == 0) {
+			if (strcmp(path, "/etc/resolv.conf") == 0) {
 				p->p_tameafter |= TMA_DNSRESOLV;
 				return (0);
 			}
@@ -516,15 +512,14 @@ tame_namei(struct proc *p, char *origpath)
 	 */
 	if (p->p_p->ps_tamepaths) {
 		struct whitepaths *wl = p->p_p->ps_tamepaths;
-		char *fullpath = path, *builtpath = NULL, *canopath = NULL;
-		char *cwdpath = NULL, *cwd;
-		size_t cwdpathlen, cwdlen, builtlen;
+		char *fullpath, *builtpath = NULL, *canopath = NULL;
+		size_t builtlen = 0;
 		int i, error;
 
 		if (origpath[0] != '/') {
-			char *bp, *bpend;
+			char *cwdpath, *cwd, *bp, *bpend;
+			size_t cwdpathlen = MAXPATHLEN * 4, cwdlen;
 
-			cwdpathlen = MAXPATHLEN * 4;
 			cwdpath = malloc(cwdpathlen, M_TEMP, M_WAITOK);
 			bp = &cwdpath[cwdpathlen];
 			bpend = bp;
@@ -535,7 +530,6 @@ tame_namei(struct proc *p, char *origpath)
 			    GETCWD_CHECK_ACCESS, p);
 			if (error) {
 				free(cwdpath, M_TEMP, cwdpathlen);
-				printf("getcwd: %d\n", error);
 				return (error);
 			}
 			cwd = bp;
@@ -545,25 +539,27 @@ tame_namei(struct proc *p, char *origpath)
 			builtlen = cwdlen + 1 + strlen(origpath);
 			builtpath = malloc(builtlen, M_TEMP, M_WAITOK);
 			snprintf(builtpath, builtlen, "%s/%s", cwd, origpath);
+			fullpath = builtpath;
+			free(cwdpath, M_TEMP, cwdpathlen);
+
 			//printf("namei: builtpath = %s %lld strlen %lld\n", builtpath,
 			//    (long long)builtlen, (long long)strlen(builtpath));
-			fullpath = builtpath;
-		}
+		} else
+			fullpath = path;
 
 		canopath = malloc(MAXPATHLEN, M_TEMP, M_WAITOK);
-		if (canonpath(fullpath, canopath, MAXPATHLEN) != 0) {
-			if (cwdpath)
-				free(cwdpath, M_TEMP, cwdpathlen);
+		error = canonpath(fullpath, canopath, MAXPATHLEN);
+
+		free(builtpath, M_TEMP, builtlen);
+		if (error != 0) {
 			free(canopath, M_TEMP, MAXPATHLEN);
-			if (builtpath)
-				free(builtpath, M_TEMP, builtlen);
 			return (tame_fail(p, EPERM, TAME_RPATH));
 		}
 
 		//printf("namei: canopath = %s strlen %lld\n", canopath,
 		//    (long long)strlen(canopath));
 
-		error = EACCES;
+		error = ENOENT;
 		for (i = 0; i < wl->wl_count && wl->wl_paths[i].name && error; i++) {
 			if (strncmp(canopath, wl->wl_paths[i].name,
 			    wl->wl_paths[i].len - 1) == 0) {
@@ -575,13 +571,8 @@ tame_namei(struct proc *p, char *origpath)
 		}
 		if (error)
 			printf("bad path: %s\n", canopath);
-		if (cwdpath)
-			free(cwdpath, M_TEMP, cwdpathlen);
 		free(canopath, M_TEMP, MAXPATHLEN);
-		if (builtpath)
-			free(builtpath, M_TEMP, builtlen);
-		if (error)
-			return (ENOENT);	/* Don't hint why it failed */
+		return (error);			/* Don't hint why it failed */
 	}
 
 	if (p->p_p->ps_tame & _TM_RPATH)
@@ -646,7 +637,7 @@ tame_cmsg_recv(struct proc *p, void *v, int controllen)
 	if ((p->p_p->ps_tame & _TM_CMSG) == 0)
 		return tame_fail(p, EPERM, TAME_CMSG);
 
-	/* In OpenBSD, a CMSG only contains one SCM_RIGHTS.  Check it. */ 
+	/* In OpenBSD, a CMSG only contains one SCM_RIGHTS.  Check it. */
 	fdp = (int *)CMSG_DATA(cmsg);
 	nfds = (cmsg->cmsg_len - CMSG_ALIGN(sizeof(*cmsg))) /
 	    sizeof(struct file *);
@@ -681,7 +672,6 @@ tame_cmsg_recv(struct proc *p, void *v, int controllen)
 
 /*
  * When tamed, default prevents sending of a cmsg.
- * If CMSG flag is set, 
  */
 int
 tame_cmsg_send(struct proc *p, void *v, int controllen)
@@ -716,7 +706,7 @@ tame_cmsg_send(struct proc *p, void *v, int controllen)
 	if (cmsg == NULL)
 		return (0);
 
-	/* In OpenBSD, a CMSG only contains one SCM_RIGHTS.  Check it. */ 
+	/* In OpenBSD, a CMSG only contains one SCM_RIGHTS.  Check it. */
 	fdp = (int *)CMSG_DATA(cmsg);
 	nfds = (cmsg->cmsg_len - CMSG_ALIGN(sizeof(*cmsg))) /
 	    sizeof(struct file *);
@@ -760,7 +750,7 @@ tame_sysctl_check(struct proc *p, int namelen, int *name, void *new)
 
 	/* getifaddrs() */
 	if ((p->p_p->ps_tame & _TM_INET) &&
-    	    namelen == 6 &&
+	    namelen == 6 &&
 	    name[0] == CTL_NET && name[1] == PF_ROUTE &&
 	    name[2] == 0 && name[3] == 0 &&
 	    name[4] == NET_RT_IFLIST && name[5] == 0)
@@ -769,7 +759,7 @@ tame_sysctl_check(struct proc *p, int namelen, int *name, void *new)
 	/* used by arp(8).  Exposes MAC addresses known on local nets */
 	/* XXX Put into a special catagory. */
 	if ((p->p_p->ps_tame & _TM_INET) &&
-    	    namelen == 7 &&
+	    namelen == 7 &&
 	    name[0] == CTL_NET && name[1] == PF_ROUTE &&
 	    name[2] == 0 && name[3] == AF_INET &&
 	    name[4] == NET_RT_FLAGS && name[5] == RTF_LLINFO)
@@ -863,7 +853,7 @@ int
 tame_sendto_check(struct proc *p, const void *v)
 {
 	const struct sockaddr *to = v;
-		
+
 	if ((p->p_p->ps_flags & PS_TAMED) == 0)
 		return (0);
 
@@ -932,6 +922,7 @@ tame_ioctl_check(struct proc *p, long com, void *v)
 		return (EPERM);
 
 	/* tty subsystem */
+	case TIOCGETA:
 	case TIOCGPGRP:
 	case TIOCGWINSZ:	/* various programs */
 	case TIOCSTI:		/* ksh? csh? */
@@ -952,7 +943,7 @@ tame_ioctl_check(struct proc *p, long com, void *v)
 	 */
 
 	switch (com) {
-	case BIOCGSTATS:        /* bpf: tcpdump privsep on ^C */
+	case BIOCGSTATS:	/* bpf: tcpdump privsep on ^C */
 		if (fp->f_type == DTYPE_VNODE &&
 		    fp->f_ops->fo_ioctl == vn_ioctl)
 			return (0);
@@ -998,7 +989,7 @@ tame_setsockopt_check(struct proc *p, int level, int optname)
 			return (EPERM);
 		}
 		return (0);
-	case IPPROTO_TCP: 
+	case IPPROTO_TCP:
 		switch (optname) {
 		case TCP_NODELAY:
 		case TCP_MD5SIG:
@@ -1046,13 +1037,13 @@ canonpath(const char *input, char *buf, size_t bufsize)
 	/* can't canon relative paths, don't bother */
 	if (input[0] != '/') {
 		if (strlcpy(buf, input, bufsize) >= bufsize)
-			return (EINVAL);
+			return (ENAMETOOLONG);
 		return (0);
 	}
 
 	/* easiest to work with strings always ending in '/' */
 	if (snprintf(buf, bufsize, "%s/", input) >= bufsize)
-		return (EINVAL);
+		return (ENAMETOOLONG);
 
 	/* after this we will only be shortening the string. */
 	p = buf;
@@ -1075,7 +1066,7 @@ canonpath(const char *input, char *buf, size_t bufsize)
 	while (1) {
 		/* find "/../" (where's strstr when you need it?) */
 		while (p < end) {
-		    	if (p[0] == '/' && strncmp(p + 1, "../", 3) == 0)
+			if (p[0] == '/' && strncmp(p + 1, "../", 3) == 0)
 				break;
 			p++;
 		}

@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_map.c,v 1.194 2015/08/21 16:04:35 visa Exp $	*/
+/*	$OpenBSD: uvm_map.c,v 1.196 2015/09/01 05:49:37 deraadt Exp $	*/
 /*	$NetBSD: uvm_map.c,v 1.86 2000/11/27 08:40:03 chs Exp $	*/
 
 /*
@@ -3855,12 +3855,12 @@ uvm_map_checkprot(struct vm_map *map, vaddr_t start, vaddr_t end,
 vm_map_t
 uvm_map_create(pmap_t pmap, vaddr_t min, vaddr_t max, int flags)
 {
-	vm_map_t result;
+	vm_map_t map;
 
-	result = malloc(sizeof(struct vm_map), M_VMMAP, M_WAITOK);
-	result->pmap = pmap;
-	uvm_map_setup(result, min, max, flags);
-	return(result);
+	map = malloc(sizeof *map, M_VMMAP, M_WAITOK);
+	map->pmap = pmap;
+	uvm_map_setup(map, min, max, flags);
+	return (map);
 }
 
 /*
@@ -3891,7 +3891,7 @@ uvm_map_deallocate(vm_map_t map)
 	    TRUE, FALSE);
 	pmap_destroy(map->pmap);
 	KASSERT(RB_EMPTY(&map->addr));
-	free(map, M_VMMAP, 0);
+	free(map, M_VMMAP, sizeof *map);
 
 	uvm_unmap_detach(&dead, 0);
 }
@@ -4160,7 +4160,6 @@ fail:
  * => caller must not write-lock map (read OK).
  * => we may sleep while cleaning if SYNCIO [with map read-locked]
  */
-int	amap_clean_works = 1;	/* XXX for now, just in case... */
 
 int
 uvm_map_clean(struct vm_map *map, vaddr_t start, vaddr_t end, int flags)
@@ -4215,8 +4214,6 @@ uvm_map_clean(struct vm_map *map, vaddr_t start, vaddr_t end, int flags)
 		 *  - we're not deactivating or freeing pages.
 		 */
 		if (amap == NULL || (flags & (PGO_DEACTIVATE|PGO_FREE)) == 0)
-			goto flush_object;
-		if (!amap_clean_works)
 			goto flush_object;
 
 		cp_start = MAX(entry->start, start);

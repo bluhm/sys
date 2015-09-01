@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ix.c,v 1.121 2015/06/24 09:40:54 mpi Exp $	*/
+/*	$OpenBSD: if_ix.c,v 1.123 2015/09/01 07:09:55 deraadt Exp $	*/
 
 /******************************************************************************
 
@@ -303,7 +303,8 @@ err_late:
 	ixgbe_free_receive_structures(sc);
 err_out:
 	ixgbe_free_pci_resources(sc);
-	free(sc->mta, M_DEVBUF, 0);
+	free(sc->mta, M_DEVBUF, IXGBE_ETH_LENGTH_OF_ADDRESS *
+	    MAX_NUM_MULTICAST_ADDRESSES);
 }
 
 /*********************************************************************
@@ -341,7 +342,8 @@ ixgbe_detach(struct device *self, int flags)
 
 	ixgbe_free_transmit_structures(sc);
 	ixgbe_free_receive_structures(sc);
-	free(sc->mta, M_DEVBUF, 0);
+	free(sc->mta, M_DEVBUF, IXGBE_ETH_LENGTH_OF_ADDRESS *
+	    MAX_NUM_MULTICAST_ADDRESSES);
 
 	return (0);
 }
@@ -615,11 +617,10 @@ ixgbe_init(void *arg)
 	ixgbe_init_hw(&sc->hw);
 	ixgbe_initialize_transmit_units(sc);
 
-#ifdef __STRICT_ALIGNMENT
-	/* Use 4k clusters, even for jumbo frames */
-	sc->rx_mbuf_sz = 4096;
-#else
 	/* Use 2k clusters, even for jumbo frames */
+#ifdef __STRICT_ALIGNMENT
+	sc->rx_mbuf_sz = MCLBYTES + ETHER_ALIGN;
+#else
 	sc->rx_mbuf_sz = MCLBYTES;
 #endif
 
@@ -1794,10 +1795,10 @@ err_rx_desc:
 err_tx_desc:
 	for (txr = sc->tx_rings; txconf > 0; txr++, txconf--)
 		ixgbe_dma_free(sc, &txr->txdma);
-	free(sc->rx_rings, M_DEVBUF, 0);
+	free(sc->rx_rings, M_DEVBUF, sc->num_queues * sizeof(struct rx_ring));
 	sc->rx_rings = NULL;
 rx_fail:
-	free(sc->tx_rings, M_DEVBUF, 0);
+	free(sc->tx_rings, M_DEVBUF, sc->num_queues * sizeof(struct tx_ring));
 	sc->tx_rings = NULL;
 fail:
 	return (ENOMEM);
@@ -2031,7 +2032,8 @@ ixgbe_free_transmit_buffers(struct tx_ring *txr)
 	}
 
 	if (txr->tx_buffers != NULL)
-		free(txr->tx_buffers, M_DEVBUF, 0);
+		free(txr->tx_buffers, M_DEVBUF,
+		    sc->num_queues * sizeof(struct tx_ring));
 	txr->tx_buffers = NULL;
 	txr->txtag = NULL;
 }
@@ -2792,7 +2794,8 @@ ixgbe_free_receive_buffers(struct rx_ring *rxr)
 			bus_dmamap_destroy(rxr->rxdma.dma_tag, rxbuf->map);
 			rxbuf->map = NULL;
 		}
-		free(rxr->rx_buffers, M_DEVBUF, 0);
+		free(rxr->rx_buffers, M_DEVBUF,
+		    sc->num_queues * sizeof(struct rx_ring));
 		rxr->rx_buffers = NULL;
 	}
 }

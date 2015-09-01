@@ -1,4 +1,4 @@
-/*	$OpenBSD: route.c,v 1.225 2015/08/24 22:11:33 mpi Exp $	*/
+/*	$OpenBSD: route.c,v 1.228 2015/09/01 12:50:03 mpi Exp $	*/
 /*	$NetBSD: route.c,v 1.14 1996/02/13 22:00:46 christos Exp $	*/
 
 /*
@@ -173,17 +173,18 @@ rtable_alloc(void ***table, u_int id)
 {
 	void		**p;
 	struct domain	 *dom;
-	u_int8_t	  i;
+	int		  i;
 
 	if ((p = mallocarray(rtafidx_max + 1, sizeof(void *), M_RTABLE,
 	    M_NOWAIT|M_ZERO)) == NULL)
 		return (ENOMEM);
 
 	/* 2nd pass: attach */
-	for (dom = domains; dom != NULL; dom = dom->dom_next)
+	for (i = 0; (dom = domains[i]) != NULL; i++) {
 		if (dom->dom_rtattach)
 			dom->dom_rtattach(&p[af2rtafidx[dom->dom_family]],
 			    dom->dom_rtoffset);
+	}
 
 	for (i = 0; i < rtafidx_max; i++)
 		rtable_setid(p, id, i);
@@ -196,7 +197,8 @@ rtable_alloc(void ***table, u_int id)
 void
 route_init(void)
 {
-	struct domain	 *dom;
+	struct domain	*dom;
+	int		 i;
 
 	pool_init(&rtentry_pool, sizeof(struct rtentry), 0, 0, 0, "rtentry",
 	    NULL);
@@ -206,9 +208,10 @@ route_init(void)
 	rtafidx_max = 1;	/* must have NULL at index 0, so start at 1 */
 
 	/* find out how many tables to allocate */
-	for (dom = domains; dom != NULL; dom = dom->dom_next)
+	for (i = 0; (dom = domains[i]) != NULL; i++) {
 		if (dom->dom_rtattach)
 			af2rtafidx[dom->dom_family] = rtafidx_max++;
+	}
 
 	if (rtable_add(0) != 0)
 		panic("route_init rtable_add");
@@ -292,6 +295,25 @@ rtable_exists(u_int id)	/* verify table with that ID exists */
 		return (0);
 
 	if (rt_tables[id] == NULL)
+		return (0);
+
+	return (1);
+}
+
+/*
+ * Returns 1 if the (cached) ``rt'' entry is still valid, 0 otherwise.
+ */
+int
+rtisvalid(struct rtentry *rt)
+{
+	if (rt == NULL)
+		return (0);
+
+	if ((rt->rt_flags & RTF_UP) == 0)
+		return (0);
+
+	/* Routes attached to stall ifas should be freed. */
+	if (rt->rt_ifa == NULL || rt->rt_ifa->ifa_ifp == NULL)
 		return (0);
 
 	return (1);
@@ -656,19 +678,13 @@ ifa_ifwithroute(int flags, struct sockaddr *dst, struct sockaddr *gateway,
 	}
 	if (ifa == NULL) {
 		struct rtentry	*rt = rtalloc(gateway, 0, rtableid);
-		if (rt == NULL)
-			return (NULL);
 		/* The gateway must be local if the same address family. */
-		if ((rt->rt_flags & RTF_GATEWAY) &&
-		    rt_key(rt)->sa_family == dst->sa_family) {
+		if (!rtisvalid(rt) || ((rt->rt_flags & RTF_GATEWAY) &&
+		    rt_key(rt)->sa_family == dst->sa_family)) {
 			rtfree(rt);
 			return (NULL);
 		}
 		ifa = rt->rt_ifa;
-		if (ifa == NULL || ifa->ifa_ifp == NULL) {
-			rtfree(rt);
-			return (NULL);
-		}
 		rtfree(rt);
 	}
 	if (ifa->ifa_addr->sa_family != dst->sa_family) {
@@ -1229,21 +1245,6 @@ rt_ifa_del(struct ifaddr *ifa, int flags, struct sockaddr *dst)
 		deldst = mtod(m, struct sockaddr *);
 		rt_maskedcopy(dst, deldst, ifa->ifa_netmask);
 		dst = deldst;
-	}
-	if ((rt = rtalloc(dst, 0, rtableid)) != NULL) {
-		rt->rt_refcnt--;
-#ifndef ART
-		/* try to find the right route */
-		while (rt && rt->rt_ifa != ifa)
-			rt = (struct rtentry *)
-			    ((struct radix_node *)rt)->rn_dupedkey;
-		if (!rt) {
-			if (m != NULL)
-				(void) m_free(m);
-			return (flags & RTF_HOST ? EHOSTUNREACH
-						: ENETUNREACH);
-		}
-#endif
 	}
 
 	memset(&info, 0, sizeof(info));
