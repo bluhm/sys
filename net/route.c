@@ -316,6 +316,15 @@ rtisvalid(struct rtentry *rt)
 	if (rt->rt_ifa == NULL || rt->rt_ifa->ifa_ifp == NULL)
 		return (0);
 
+	/* Next hop must also be valid. */
+	if (rt->rt_flags & RTF_GATEWAY) {
+		if (rt->rt_gwroute && (rt->rt_gwroute->rt_flags & RTF_GATEWAY))
+			panic("%s: route %p has gateway route %p with gateway",
+			    __func__, rt, rt->rt_gwroute);
+		if (!rtisvalid(rt->rt_gwroute))
+			return (0);
+	}
+
 	return (1);
 }
 
