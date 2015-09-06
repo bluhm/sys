@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_pflow.c,v 1.55 2015/07/21 03:03:10 florian Exp $	*/
+/*	$OpenBSD: if_pflow.c,v 1.57 2015/09/04 20:28:12 florian Exp $	*/
 
 /*
  * Copyright (c) 2011 Florian Obser <florian@narrans.de>
@@ -151,7 +151,7 @@ pflow_clone_create(struct if_clone *ifc, int unit)
 	MGET(pflowif->send_nam, M_WAIT, MT_SONAME);
 	sin = mtod(pflowif->send_nam, struct sockaddr_in *);
 	memset(sin, 0 , sizeof(*sin));
-	sin->sin_len = m->m_len = sizeof (struct sockaddr_in);
+	sin->sin_len = pflowif->send_nam->m_len = sizeof (struct sockaddr_in);
 	sin->sin_family = AF_INET;
 	sin->sin_addr.s_addr = INADDR_ANY;
 	sin->sin_port = 0;
@@ -282,7 +282,6 @@ pflow_clone_destroy(struct ifnet *ifp)
 	error = 0;
 
 	s = splnet();
-	m_freem(sc->send_nam);
 	if (timeout_initialized(&sc->sc_tmo))
 		timeout_del(&sc->sc_tmo);
 	if (timeout_initialized(&sc->sc_tmo6))
@@ -290,6 +289,7 @@ pflow_clone_destroy(struct ifnet *ifp)
 	if (timeout_initialized(&sc->sc_tmo_tmpl))
 		timeout_del(&sc->sc_tmo_tmpl);
 	pflow_flush(sc);
+	m_freem(sc->send_nam);
 	if (sc->so != NULL) {
 		error = soclose(sc->so);
 		sc->so = NULL;
