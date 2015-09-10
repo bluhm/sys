@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip6_forward.c,v 1.80 2015/08/31 07:17:12 mpi Exp $	*/
+/*	$OpenBSD: ip6_forward.c,v 1.82 2015/09/10 09:14:59 mpi Exp $	*/
 /*	$KAME: ip6_forward.c,v 1.75 2001/06/29 12:42:13 jinmei Exp $	*/
 
 /*
@@ -115,7 +115,6 @@ ip6_forward(struct mbuf *m, int srcrt)
 	    IN6_IS_ADDR_MULTICAST(&ip6->ip6_dst) ||
 	    IN6_IS_ADDR_UNSPECIFIED(&ip6->ip6_src)) {
 		ip6stat.ip6s_cantforward++;
-		/* XXX in6_ifstat_inc(rt->rt_ifp, ifs6_in_discard) */
 		if (ip6_log_time + ip6_log_interval < time_second) {
 			ip6_log_time = time_second;
 			inet_ntop(AF_INET6, &ip6->ip6_src, src6, sizeof(src6));
@@ -132,7 +131,6 @@ ip6_forward(struct mbuf *m, int srcrt)
 	}
 
 	if (ip6->ip6_hlim <= IPV6_HLIMDEC) {
-		/* XXX in6_ifstat_inc(rt->rt_ifp, ifs6_in_discard) */
 		icmp6_error(m, ICMP6_TIME_EXCEEDED,
 				ICMP6_TIME_EXCEED_TRANSIT, 0);
 		return;
@@ -242,7 +240,6 @@ reroute:
 
 		if (ip6_forward_rt.ro_rt == NULL) {
 			ip6stat.ip6s_noroute++;
-			/* XXX in6_ifstat_inc(rt->rt_ifp, ifs6_in_noroute) */
 			if (mcopy) {
 				icmp6_error(mcopy, ICMP6_DST_UNREACH,
 					    ICMP6_DST_UNREACH_NOROUTE, 0);
@@ -270,7 +267,6 @@ reroute:
 
 		if (ip6_forward_rt.ro_rt == NULL) {
 			ip6stat.ip6s_noroute++;
-			/* XXX in6_ifstat_inc(rt->rt_ifp, ifs6_in_noroute) */
 			if (mcopy) {
 				icmp6_error(mcopy, ICMP6_DST_UNREACH,
 					    ICMP6_DST_UNREACH_NOROUTE, 0);
@@ -292,7 +288,6 @@ reroute:
 	    in6_addr2scopeid(rt->rt_ifp->if_index, &ip6->ip6_src)) {
 		ip6stat.ip6s_cantforward++;
 		ip6stat.ip6s_badscope++;
-		in6_ifstat_inc(rt->rt_ifp, ifs6_in_discard);
 
 		if (ip6_log_time + ip6_log_interval < time_second) {
 			ip6_log_time = time_second;
@@ -434,7 +429,6 @@ reroute:
 
 	/* Check the size after pf_test to give pf a chance to refragment. */
 	if (m->m_pkthdr.len > IN6_LINKMTU(rt->rt_ifp)) {
-		in6_ifstat_inc(rt->rt_ifp, ifs6_in_toobig);
 		if (mcopy) {
 			u_long mtu;
 
@@ -448,11 +442,9 @@ reroute:
 
 	error = nd6_output(rt->rt_ifp, m, dst, rt);
 	if (error) {
-		in6_ifstat_inc(rt->rt_ifp, ifs6_out_discard);
 		ip6stat.ip6s_cantforward++;
 	} else {
 		ip6stat.ip6s_forward++;
-		in6_ifstat_inc(rt->rt_ifp, ifs6_out_forward);
 		if (type)
 			ip6stat.ip6s_redirectsent++;
 		else {
