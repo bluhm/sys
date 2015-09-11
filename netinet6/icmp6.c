@@ -1283,7 +1283,7 @@ icmp6_reflect(struct mbuf *m, size_t off)
 	ip6->ip6_hlim = ip6_defhlim;
 
 	icmp6->icmp6_cksum = 0;
-	m->m_pkthdr.csum_flags |= M_ICMP_CSUM_OUT;
+	m->m_pkthdr.csum_flags = M_ICMP_CSUM_OUT;
 
 	/*
 	 * XXX option handling
@@ -1789,7 +1789,7 @@ noredhdropt:
 	ip6->ip6_plen = htons(m->m_pkthdr.len - sizeof(struct ip6_hdr));
 
 	nd_rd->nd_rd_cksum = 0;
-	m->m_pkthdr.csum_flags |= M_ICMP_CSUM_OUT;
+	m->m_pkthdr.csum_flags = M_ICMP_CSUM_OUT;
 
 	/* send the packet to outside... */
 	ip6_output(m, NULL, NULL, 0, NULL, NULL);
