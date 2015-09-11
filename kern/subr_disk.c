@@ -1,4 +1,4 @@
-/*	$OpenBSD: subr_disk.c,v 1.205 2015/09/11 08:06:48 krw Exp $	*/
+/*	$OpenBSD: subr_disk.c,v 1.211 2015/09/11 14:14:36 krw Exp $	*/
 /*	$NetBSD: subr_disk.c,v 1.17 1996/03/16 23:17:08 christos Exp $	*/
 
 /*
@@ -637,13 +637,14 @@ get_fstype(struct uuid *uuid_part)
 {
 	static int init = 0;
 	static struct uuid uuid_openbsd, uuid_msdos, uuid_chromefs,
-	    uuid_linux, uuid_hfs, uuid_unused;
+	    uuid_linux, uuid_hfs, uuid_unused, uuid_efi_system;
 	static const uint8_t gpt_uuid_openbsd[] = GPT_UUID_OPENBSD;
 	static const uint8_t gpt_uuid_msdos[] = GPT_UUID_MSDOS;
 	static const uint8_t gpt_uuid_chromerootfs[] = GPT_UUID_CHROMEROOTFS;
 	static const uint8_t gpt_uuid_linux[] = GPT_UUID_LINUX;
 	static const uint8_t gpt_uuid_hfs[] = GPT_UUID_APPLE_HFS;
 	static const uint8_t gpt_uuid_unused[] = GPT_UUID_UNUSED;
+	static const uint8_t gpt_uuid_efi_system[] = GPT_UUID_EFI_SYSTEM;
 
 	if (init == 0) {
 		uuid_dec_be(gpt_uuid_openbsd, &uuid_openbsd);
@@ -652,6 +653,7 @@ get_fstype(struct uuid *uuid_part)
 		uuid_dec_be(gpt_uuid_linux, &uuid_linux);
 		uuid_dec_be(gpt_uuid_hfs, &uuid_hfs);
 		uuid_dec_be(gpt_uuid_unused, &uuid_unused);
+		uuid_dec_be(gpt_uuid_efi_system, &uuid_efi_system);
 		init = 1;
 	}
 
@@ -667,6 +669,8 @@ get_fstype(struct uuid *uuid_part)
 		return FS_EXT2FS;
 	else if (!memcmp(uuid_part, &uuid_hfs, sizeof(struct uuid)))
 		return FS_HFS;
+	else if (!memcmp(uuid_part, &uuid_efi_system, sizeof(struct uuid)))
+		return FS_MSDOS;
 	else
 		return FS_OTHER;
 }
@@ -682,25 +686,16 @@ int
 readgptlabel(struct buf *bp, void (*strat)(struct buf *),
     struct disklabel *lp, daddr_t *partoffp, int spoofonly)
 {
-	struct gpt_header gh;
-	struct gpt_partition *gp, *gp_tmp;
-	size_t gpsz;
-	struct uuid uuid_part, uuid_openbsd;
-	struct partition *pp;
-
-	u_int64_t sector;
-	u_int64_t gptpartoff = 0, gptpartend = DL_GETBEND(lp);
-	int i, altheader = 0, error, n=0, ourpart = -1, offset;
-
 	static const u_int8_t gpt_uuid_openbsd[] = GPT_UUID_OPENBSD;
-	u_int8_t fstype;
+	struct gpt_header gh;
+	struct uuid uuid_part, uuid_openbsd;
+	struct gpt_partition *gp, *gp_tmp;
+	struct partition *pp;
+	size_t gpsz;
+	u_int64_t gptpartoff, gptpartend, sector;
+	int i, altheader = 0, error, n, offset;
 
 	uuid_dec_be(gpt_uuid_openbsd, &uuid_openbsd);
-
-	if (lp->d_secpercyl == 0)
-		return (EINVAL);	/* invalid label */
-	if (lp->d_secsize == 0)
-		return (ENOSPC);	/* disk too small */
 
 	for (sector = GPTSECTOR; ; sector = DL_GETDSIZE(lp)-1, altheader = 1) {
 		uint32_t ghsize;
@@ -816,6 +811,9 @@ readgptlabel(struct buf *bp, void (*strat)(struct buf *),
 	}
 
 	/* Find OpenBSD partition and spoof others along the way. */
+	n = 0;
+	gptpartoff = 0;
+	gptpartend = DL_GETBEND(lp);
 	for (gp_tmp = gp, i = 0; i < letoh32(gh.gh_part_num); gp_tmp++, i++) {
 		if (letoh64(gp_tmp->gp_lba_start) > letoh64(gp_tmp->gp_lba_end)
 		    || letoh64(gp_tmp->gp_lba_start) < letoh64(gh.gh_lba_start)
@@ -824,8 +822,10 @@ readgptlabel(struct buf *bp, void (*strat)(struct buf *),
 
 		uuid_dec_le(&gp_tmp->gp_type, &uuid_part);
 		if (!memcmp(&uuid_part, &uuid_openbsd, sizeof(struct uuid))) {
-			if (ourpart == -1)
-				ourpart = i; /* found it */
+			if (gptpartoff == 0) {
+				gptpartoff = letoh64(gp_tmp->gp_lba_start);
+				gptpartend = letoh64(gp_tmp->gp_lba_end) + 1;
+			}
 			continue; /* Do *NOT* spoof OpenBSD partitions! */
 		}
 
@@ -833,7 +833,6 @@ readgptlabel(struct buf *bp, void (*strat)(struct buf *),
 		 * In case the disklabel read below fails, we want to
 		 * provide a fake label in i-p.
 		 */
-		fstype = get_fstype(&uuid_part);
 
 		/*
 		 * Don't set fstype/offset/size when just looking for
@@ -848,18 +847,13 @@ readgptlabel(struct buf *bp, void (*strat)(struct buf *),
 
 		pp = &lp->d_partitions[8+n];
 		n++;
-		pp->p_fstype = fstype;
+		pp->p_fstype = get_fstype(&uuid_part);
 		DL_SETPOFFSET(pp, letoh64(gp_tmp->gp_lba_start));
 		DL_SETPSIZE(pp, letoh64(gp_tmp->gp_lba_end)
 		    - letoh64(gp_tmp->gp_lba_start) + 1);
 	}
 
-	if (ourpart != -1) {
-		/* found our OpenBSD partition, so use it */
-		gp_tmp = &gp[ourpart];
-		gptpartoff = letoh64(gp_tmp->gp_lba_start);
-		gptpartend = letoh64(gp_tmp->gp_lba_end) + 1;
-	} else
+	if (gptpartoff == 0)
 		spoofonly = 1;	/* No disklabel to read from disk. */
 
 	free(gp, M_DEVBUF, gpsz);
