@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_vlan.c,v 1.135 2015/07/20 22:16:41 rzalamena Exp $	*/
+/*	$OpenBSD: if_vlan.c,v 1.138 2015/09/10 17:32:32 dlg Exp $	*/
 
 /*
  * Copyright 1998 Massachusetts Institute of Technology
@@ -79,7 +79,7 @@ u_long vlan_tagmask, svlan_tagmask;
 LIST_HEAD(vlan_taghash, ifvlan)	*vlan_tagh, *svlan_tagh;
 
 
-int	vlan_input(struct ifnet *, struct mbuf *);
+int	vlan_input(struct ifnet *, struct mbuf *, void *);
 void	vlan_start(struct ifnet *ifp);
 int	vlan_ioctl(struct ifnet *ifp, u_long cmd, caddr_t addr);
 int	vlan_unconfig(struct ifnet *ifp, struct ifnet *newp);
@@ -172,6 +172,24 @@ vlan_ifdetach(void *ptr)
 	vlan_clone_destroy(&ifv->ifv_if);
 }
 
+static inline int
+vlan_mplstunnel(int ifidx)
+{
+#if NMPW > 0
+	struct ifnet *ifp;
+	int rv = 0;
+
+	ifp = if_get(ifidx);
+	if (ifp != NULL) {
+		rv = ifp->if_type == IFT_MPLSTUNNEL;
+		if_put(ifp);
+	}
+	return (rv);
+#else
+	return (0);
+#endif
+}
+
 void
 vlan_start(struct ifnet *ifp)
 {
@@ -206,21 +224,18 @@ vlan_start(struct ifnet *ifp)
 		if (prio <= 1)
 			prio = !prio;
 
-#if NMPW > 0
-		struct ifnet *ifpn = if_get(m->m_pkthdr.ph_ifidx);
 		/*
 		 * If this packet came from a pseudowire it means it already
 		 * has all tags it needs, so just output it.
 		 */
-		if (ifpn && ifpn->if_type == IFT_MPLSTUNNEL) {
+		if (vlan_mplstunnel(m->m_pkthdr.ph_ifidx)) {
 			/* NOTHING */
-		} else
-#endif /* NMPW */
+
 		/*
 		 * If the underlying interface cannot do VLAN tag insertion
 		 * itself, create an encapsulation header.
 		 */
-		if ((p->if_capabilities & IFCAP_VLAN_HWTAGGING) &&
+		} else if ((p->if_capabilities & IFCAP_VLAN_HWTAGGING) &&
 		    (ifv->ifv_type == ETHERTYPE_VLAN)) {
 			m->m_pkthdr.ether_vtag = ifv->ifv_tag +
 			    (prio << EVL_PRIO_BITS);
@@ -255,7 +270,7 @@ vlan_start(struct ifnet *ifp)
  * vlan_input() returns 1 if it has consumed the packet, 0 otherwise.
  */
 int
-vlan_input(struct ifnet *ifp, struct mbuf *m)
+vlan_input(struct ifnet *ifp, struct mbuf *m, void *cookie)
 {
 	struct ifvlan			*ifv;
 	struct ether_vlan_header	*evl;
@@ -357,17 +372,6 @@ vlan_config(struct ifvlan *ifv, struct ifnet *p, u_int16_t tag)
 	if (ifv->ifv_p == p && ifv->ifv_tag == tag) /* noop */
 		return (0);
 
-	/* Can we share an ifih between multiple vlan(4) instances? */
-	ifv->ifv_ifih = SLIST_FIRST(&p->if_inputs);
-	if (ifv->ifv_ifih->ifih_input != vlan_input) {
-		ifv->ifv_ifih = malloc(sizeof(*ifv->ifv_ifih), M_DEVBUF,
-		    M_NOWAIT);
-		if (ifv->ifv_ifih == NULL)
-			return (ENOMEM);
-		ifv->ifv_ifih->ifih_input = vlan_input;
-		ifv->ifv_ifih->ifih_refcnt = 0;
-	}
-
 	/* Remember existing interface flags and reset the interface */
 	flags = ifv->ifv_flags;
 	vlan_unconfig(&ifv->ifv_if, p);
@@ -436,12 +440,11 @@ vlan_config(struct ifvlan *ifv, struct ifnet *p, u_int16_t tag)
 	tagh = ifv->ifv_type == ETHERTYPE_QINQ ? svlan_tagh : vlan_tagh;
 
 	s = splnet();
-	/* Change input handler of the physical interface. */
-	if (++ifv->ifv_ifih->ifih_refcnt == 1)
-		SLIST_INSERT_HEAD(&p->if_inputs, ifv->ifv_ifih, ifih_next);
-
 	LIST_INSERT_HEAD(&tagh[TAG_HASH(tag)], ifv, ifv_list);
 	splx(s);
+
+        /* Change input handler of the physical interface. */
+	if_ih_insert(p, vlan_input, NULL);
 
 	return (0);
 }
@@ -466,13 +469,10 @@ vlan_unconfig(struct ifnet *ifp, struct ifnet *newp)
 
 	s = splnet();
 	LIST_REMOVE(ifv, ifv_list);
+	splx(s);
 
 	/* Restore previous input handler. */
-	if (--ifv->ifv_ifih->ifih_refcnt == 0) {
-		SLIST_REMOVE(&p->if_inputs, ifv->ifv_ifih, ifih, ifih_next);
-		free(ifv->ifv_ifih, M_DEVBUF, sizeof(*ifv->ifv_ifih));
-	}
-	splx(s);
+	if_ih_remove(p, vlan_input, NULL);
 
 	hook_disestablish(p->if_linkstatehooks, ifv->lh_cookie);
 	hook_disestablish(p->if_detachhooks, ifv->dh_cookie);

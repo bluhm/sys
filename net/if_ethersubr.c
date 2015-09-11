@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ethersubr.c,v 1.221 2015/07/29 00:04:03 rzalamena Exp $	*/
+/*	$OpenBSD: if_ethersubr.c,v 1.223 2015/09/10 16:41:30 mikeb Exp $	*/
 /*	$NetBSD: if_ethersubr.c,v 1.19 1996/05/07 02:40:30 thorpej Exp $	*/
 
 /*
@@ -284,7 +284,7 @@ bad:
  * the ether header, which is provided separately.
  */
 int
-ether_input(struct ifnet *ifp, struct mbuf *m)
+ether_input(struct ifnet *ifp, struct mbuf *m, void *cookie)
 {
 	struct ether_header *eh;
 	struct niqueue *inq;
@@ -492,7 +492,6 @@ void
 ether_ifattach(struct ifnet *ifp)
 {
 	struct arpcom *ac = (struct arpcom *)ifp;
-	struct ifih *ether_ifih;
 
 	/*
 	 * Any interface which provides a MAC address which is obviously
@@ -507,9 +506,7 @@ ether_ifattach(struct ifnet *ifp)
 	ifp->if_mtu = ETHERMTU;
 	ifp->if_output = ether_output;
 
-	ether_ifih = malloc(sizeof(*ether_ifih), M_DEVBUF, M_WAITOK);
-	ether_ifih->ifih_input = ether_input;
-	SLIST_INSERT_HEAD(&ifp->if_inputs, ether_ifih, ifih_next);
+	if_ih_insert(ifp, ether_input, NULL);
 
 	if (ifp->if_hardmtu == 0)
 		ifp->if_hardmtu = ETHERMTU;
@@ -526,18 +523,14 @@ void
 ether_ifdetach(struct ifnet *ifp)
 {
 	struct arpcom *ac = (struct arpcom *)ifp;
-	struct ifih *ether_ifih;
 	struct ether_multi *enm;
 
 	/* Undo pseudo-driver changes. */
 	if_deactivate(ifp);
 
-	ether_ifih = SLIST_FIRST(&ifp->if_inputs);
-	SLIST_REMOVE_HEAD(&ifp->if_inputs, ifih_next);
+	if_ih_remove(ifp, ether_input, NULL);
 
-	KASSERT(SLIST_EMPTY(&ifp->if_inputs));
-
-	free(ether_ifih, M_DEVBUF, sizeof(*ether_ifih));
+	KASSERT(SRPL_EMPTY_LOCKED(&ifp->if_inputs));
 
 	for (enm = LIST_FIRST(&ac->ac_multiaddrs);
 	    enm != NULL;

@@ -1,4 +1,4 @@
-/*	$OpenBSD: icmp6.c,v 1.164 2015/09/09 15:51:40 mpi Exp $	*/
+/*	$OpenBSD: icmp6.c,v 1.167 2015/09/11 08:17:06 claudio Exp $	*/
 /*	$KAME: icmp6.c,v 1.217 2001/06/20 15:03:29 jinmei Exp $	*/
 
 /*
@@ -908,8 +908,7 @@ icmp6_notify_error(struct mbuf *m, int off, int icmp6len, int code)
 			icmp6dst.sin6_addr = *finaldst;
 		icmp6dst.sin6_scope_id = in6_addr2scopeid(m->m_pkthdr.ph_ifidx,
 		    &icmp6dst.sin6_addr);
-		if (in6_embedscope(&icmp6dst.sin6_addr, &icmp6dst,
-				   NULL, NULL)) {
+		if (in6_embedscope(&icmp6dst.sin6_addr, &icmp6dst, NULL)) {
 			/* should be impossbile */
 			nd6log((LOG_DEBUG,
 			    "icmp6_notify_error: in6_embedscope failed\n"));
@@ -926,8 +925,7 @@ icmp6_notify_error(struct mbuf *m, int off, int icmp6len, int code)
 		icmp6src.sin6_addr = eip6->ip6_src;
 		icmp6src.sin6_scope_id = in6_addr2scopeid(m->m_pkthdr.ph_ifidx,
 		    &icmp6src.sin6_addr);
-		if (in6_embedscope(&icmp6src.sin6_addr, &icmp6src,
-				   NULL, NULL)) {
+		if (in6_embedscope(&icmp6src.sin6_addr, &icmp6src, NULL)) {
 			/* should be impossbile */
 			nd6log((LOG_DEBUG,
 			    "icmp6_notify_error: in6_embedscope failed\n"));
@@ -1061,7 +1059,7 @@ icmp6_rip6_input(struct mbuf **mp, int off)
 	rip6src.sin6_len = sizeof(struct sockaddr_in6);
 	rip6src.sin6_family = AF_INET6;
 	/* KAME hack: recover scopeid */
-	(void)in6_recoverscope(&rip6src, &ip6->ip6_src, NULL);
+	in6_recoverscope(&rip6src, &ip6->ip6_src);
 
 	TAILQ_FOREACH(in6p, &rawin6pcbtable.inpt_queue, inp_queue) {
 		if (!(in6p->inp_flags & INP_IPV6))
@@ -1216,14 +1214,14 @@ icmp6_reflect(struct mbuf *m, size_t off)
 	sa6_src.sin6_family = AF_INET6;
 	sa6_src.sin6_len = sizeof(sa6_src);
 	sa6_src.sin6_addr = ip6->ip6_dst;
-	in6_recoverscope(&sa6_src, &ip6->ip6_dst, if_get(m->m_pkthdr.ph_ifidx));
-	in6_embedscope(&ip6->ip6_dst, &sa6_src, NULL, NULL);
+	in6_recoverscope(&sa6_src, &ip6->ip6_dst);
+	in6_embedscope(&ip6->ip6_dst, &sa6_src, NULL);
 	bzero(&sa6_dst, sizeof(sa6_dst));
 	sa6_dst.sin6_family = AF_INET6;
 	sa6_dst.sin6_len = sizeof(sa6_dst);
 	sa6_dst.sin6_addr = t;
-	in6_recoverscope(&sa6_dst, &t, if_get(m->m_pkthdr.ph_ifidx));
-	in6_embedscope(&t, &sa6_dst, NULL, NULL);
+	in6_recoverscope(&sa6_dst, &t);
+	in6_embedscope(&t, &sa6_dst, NULL);
 
 	/*
 	 * If the incoming packet was addressed directly to us (i.e. unicast),
@@ -1302,7 +1300,7 @@ icmp6_reflect(struct mbuf *m, size_t off)
 #if NPF > 0
 	pf_pkt_addr_changed(m);
 #endif
-	ip6_output(m, NULL, NULL, IPV6_MINMTU, NULL, NULL, NULL);
+	ip6_output(m, NULL, NULL, IPV6_MINMTU, NULL, NULL);
 	return;
 
  bad:
@@ -1791,7 +1789,7 @@ noredhdropt:
 	m->m_pkthdr.csum_flags |= M_ICMP_CSUM_OUT;
 
 	/* send the packet to outside... */
-	ip6_output(m, NULL, NULL, 0, NULL, NULL, NULL);
+	ip6_output(m, NULL, NULL, 0, NULL, NULL);
 
 	icmp6stat.icp6s_outhist[ND_REDIRECT]++;
 

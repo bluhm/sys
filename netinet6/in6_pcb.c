@@ -1,4 +1,4 @@
-/*	$OpenBSD: in6_pcb.c,v 1.70 2015/08/22 20:18:50 deraadt Exp $	*/
+/*	$OpenBSD: in6_pcb.c,v 1.73 2015/09/11 08:22:31 guenther Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -109,6 +109,7 @@
 #include <sys/errno.h>
 #include <sys/time.h>
 #include <sys/proc.h>
+#include <sys/tame.h>
 
 #include <net/if.h>
 #include <net/if_var.h>
@@ -194,7 +195,7 @@ in6_pcbbind(struct inpcb *inp, struct mbuf *nam, struct proc *p)
 			return EAFNOSUPPORT;
 
 		/* KAME hack: embed scopeid */
-		if (in6_embedscope(&sin6->sin6_addr, sin6, inp, NULL) != 0)
+		if (in6_embedscope(&sin6->sin6_addr, sin6, inp) != 0)
 			return EINVAL;
 		/* this must be cleared for ifa_ifwithaddr() */
 		sin6->sin6_scope_id = 0;
@@ -418,7 +419,7 @@ in6_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 	sin6 = &tmp;
 
 	/* KAME hack: embed scopeid */
-	if (in6_embedscope(&sin6->sin6_addr, sin6, inp, &ifp) != 0)
+	if (in6_embedscope(&sin6->sin6_addr, sin6, inp) != 0)
 		return EINVAL;
 	/* this must be cleared for ifa_ifwithaddr() */
 	sin6->sin6_scope_id = 0;
@@ -621,7 +622,7 @@ in6_setsockaddr(struct inpcb *inp, struct mbuf *nam)
 	sin6->sin6_port = inp->inp_lport;
 	sin6->sin6_addr = inp->inp_laddr6;
 	/* KAME hack: recover scopeid */
-	(void)in6_recoverscope(sin6, &inp->inp_laddr6, NULL);
+	in6_recoverscope(sin6, &inp->inp_laddr6);
 
 	return 0;
 }
@@ -644,7 +645,7 @@ in6_setpeeraddr(struct inpcb *inp, struct mbuf *nam)
 	sin6->sin6_port = inp->inp_fport;
 	sin6->sin6_addr = inp->inp_faddr6;
 	/* KAME hack: recover scopeid */
-	(void)in6_recoverscope(sin6, &inp->inp_faddr6, NULL);
+	in6_recoverscope(sin6, &inp->inp_faddr6);
 
 	return 0;
 }

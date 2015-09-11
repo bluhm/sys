@@ -1,4 +1,4 @@
-/*	$OpenBSD: pipex.c,v 1.75 2015/09/04 08:43:39 mpi Exp $	*/
+/*	$OpenBSD: pipex.c,v 1.78 2015/09/11 08:17:06 claudio Exp $	*/
 
 /*-
  * Copyright (c) 2009 Internet Initiative Japan Inc.
@@ -1754,7 +1754,7 @@ pipex_pptp_userland_lookup_session_ipv6(struct mbuf *m0, struct in6_addr dst)
 	memset(&sin6, 0, sizeof(sin6));
 	sin6.sin6_len = sizeof(sin6);
 	sin6.sin6_family = AF_INET6;
-	in6_recoverscope(&sin6, &dst, NULL);
+	in6_recoverscope(&sin6, &dst);
 
 	return pipex_pptp_userland_lookup_session(m0, sin6tosa(&sin6));
 }
@@ -1976,10 +1976,10 @@ pipex_l2tp_output(struct mbuf *m0, struct pipex_session *session)
 		ip6->ip6_nxt = IPPROTO_UDP;
 		ip6->ip6_src = session->local.sin6.sin6_addr;
 		(void)in6_embedscope(&ip6->ip6_dst,
-		    &session->peer.sin6, NULL, NULL);
+		    &session->peer.sin6, NULL);
 		/* ip6->ip6_plen will be filled in ip6_output. */
 
-		if (ip6_output(m0, NULL, NULL, 0, NULL, NULL, NULL) != 0) {
+		if (ip6_output(m0, NULL, NULL, 0, NULL, NULL) != 0) {
 			PIPEX_DBG((session, LOG_DEBUG, "ip6_output failed."));
 			goto drop;
 		}
@@ -2190,7 +2190,7 @@ pipex_l2tp_userland_lookup_session_ipv6(struct mbuf *m0, struct in6_addr dst)
 	memset(&sin6, 0, sizeof(sin6));
 	sin6.sin6_len = sizeof(sin6);
 	sin6.sin6_family = AF_INET6;
-	in6_recoverscope(&sin6, &dst, NULL);
+	in6_recoverscope(&sin6, &dst);
 
 	return pipex_l2tp_userland_lookup_session(m0, sin6tosa(&sin6));
 }

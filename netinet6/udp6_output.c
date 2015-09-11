@@ -1,4 +1,4 @@
-/*	$OpenBSD: udp6_output.c,v 1.35 2015/06/08 22:19:28 krw Exp $	*/
+/*	$OpenBSD: udp6_output.c,v 1.37 2015/09/11 08:17:06 claudio Exp $	*/
 /*	$KAME: udp6_output.c,v 1.21 2001/02/07 11:51:54 itojun Exp $	*/
 
 /*
@@ -151,7 +151,7 @@ udp6_output(struct inpcb *in6p, struct mbuf *m, struct mbuf *addr6,
 		fport = sin6->sin6_port; /* allow 0 port */
 
 		/* KAME hack: embed scopeid */
-		if (in6_embedscope(&sin6->sin6_addr, sin6, in6p, NULL) != 0) {
+		if (in6_embedscope(&sin6->sin6_addr, sin6, in6p) != 0) {
 			error = EINVAL;
 			goto release;
 		}
@@ -232,7 +232,7 @@ udp6_output(struct inpcb *in6p, struct mbuf *m, struct mbuf *addr6,
 #endif
 
 	error = ip6_output(m, optp, &in6p->inp_route6,
-	    flags, in6p->inp_moptions6, NULL, in6p);
+	    flags, in6p->inp_moptions6, in6p);
 	goto releaseopt;
 
 release:

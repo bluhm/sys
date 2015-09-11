@@ -1,4 +1,4 @@
-/*	$OpenBSD: raw_ip6.c,v 1.81 2015/09/09 15:51:40 mpi Exp $	*/
+/*	$OpenBSD: raw_ip6.c,v 1.84 2015/09/11 08:17:06 claudio Exp $	*/
 /*	$KAME: raw_ip6.c,v 1.69 2001/03/04 15:55:44 itojun Exp $	*/
 
 /*
@@ -145,7 +145,7 @@ rip6_input(struct mbuf **mp, int *offp, int proto)
 	rip6src.sin6_len = sizeof(struct sockaddr_in6);
 	rip6src.sin6_family = AF_INET6;
 	/* KAME hack: recover scopeid */
-	(void)in6_recoverscope(&rip6src, &ip6->ip6_src, NULL);
+	in6_recoverscope(&rip6src, &ip6->ip6_src);
 
 	TAILQ_FOREACH(in6p, &rawin6pcbtable.inpt_queue, inp_queue) {
 		if (in6p->inp_socket->so_state & SS_CANTRCVMORE)
@@ -402,7 +402,7 @@ rip6_output(struct mbuf *m, ...)
 	/* KAME hack: embed scopeid */
 	origoptp = in6p->inp_outputopts6;
 	in6p->inp_outputopts6 = optp;
-	if (in6_embedscope(&ip6->ip6_dst, dstsock, in6p, &oifp) != 0) {
+	if (in6_embedscope(&ip6->ip6_dst, dstsock, in6p) != 0) {
 		error = EINVAL;
 		goto bad;
 	}
@@ -478,7 +478,7 @@ rip6_output(struct mbuf *m, ...)
 #endif
 
 	error = ip6_output(m, optp, &in6p->inp_route6, flags,
-	    in6p->inp_moptions6, NULL, in6p);
+	    in6p->inp_moptions6, in6p);
 	if (so->so_proto->pr_protocol == IPPROTO_ICMPV6) {
 		icmp6stat.icp6s_outhist[type]++;
 	} else

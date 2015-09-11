@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_mpw.c,v 1.3 2015/09/09 20:13:20 dlg Exp $ */
+/*	$OpenBSD: if_mpw.c,v 1.5 2015/09/10 16:41:30 mikeb Exp $ */
 
 /*
  * Copyright (c) 2015 Rafael Zalamena <rzalamena@openbsd.org>
@@ -62,7 +62,7 @@ int	mpw_ioctl(struct ifnet *, u_long, caddr_t);
 int	mpw_output(struct ifnet *, struct mbuf *, struct sockaddr *,
     struct rtentry *);
 void	mpw_start(struct ifnet *);
-int	mpw_input(struct ifnet *, struct mbuf *);
+int	mpw_input(struct ifnet *, struct mbuf *, void *);
 #if NVLAN > 0
 struct	mbuf *mpw_vlan_handle(struct mbuf *, struct mpw_softc *);
 #endif /* NVLAN */
@@ -82,17 +82,10 @@ mpw_clone_create(struct if_clone *ifc, int unit)
 {
 	struct mpw_softc *sc;
 	struct ifnet *ifp;
-	struct ifih *ifih;
 
 	sc = malloc(sizeof(*sc), M_DEVBUF, M_NOWAIT | M_ZERO);
 	if (sc == NULL)
 		return (ENOMEM);
-
-	ifih = malloc(sizeof(*ifih), M_DEVBUF, M_NOWAIT | M_ZERO);
-	if (ifih == NULL) {
-		free(sc, M_DEVBUF, sizeof(*sc));
-		return (ENOMEM);
-	}
 
 	ifp = &sc->sc_if;
 	snprintf(ifp->if_xname, sizeof(ifp->if_xname), "mpw%d", unit);
@@ -116,8 +109,7 @@ mpw_clone_create(struct if_clone *ifc, int unit)
 	sc->sc_smpls.smpls_len = sizeof(sc->sc_smpls);
 	sc->sc_smpls.smpls_family = AF_MPLS;
 
-	ifih->ifih_input = mpw_input;
-	SLIST_INSERT_HEAD(&ifp->if_inputs, ifih, ifih_next);
+	if_ih_insert(ifp, mpw_input, NULL);
 
 #if NBPFILTER > 0
 	bpfattach(&ifp->if_bpf, ifp, DLT_EN10MB, ETHER_HDR_LEN);
@@ -130,7 +122,6 @@ int
 mpw_clone_destroy(struct ifnet *ifp)
 {
 	struct mpw_softc *sc = ifp->if_softc;
-	struct ifih *ifih = SLIST_FIRST(&ifp->if_inputs);
 	int s;
 
 	ifp->if_flags &= ~IFF_RUNNING;
@@ -142,8 +133,7 @@ mpw_clone_destroy(struct ifnet *ifp)
 		splx(s);
 	}
 
-	SLIST_REMOVE(&ifp->if_inputs, ifih, ifih, ifih_next);
-	free(ifih, M_DEVBUF, sizeof(*ifih));
+	if_ih_remove(ifp, mpw_input, NULL);
 
 	if_detach(ifp);
 	free(sc, M_DEVBUF, sizeof(*sc));
@@ -152,7 +142,7 @@ mpw_clone_destroy(struct ifnet *ifp)
 }
 
 int
-mpw_input(struct ifnet *ifp, struct mbuf *m)
+mpw_input(struct ifnet *ifp, struct mbuf *m, void *cookie)
 {
 	/* Don't have local broadcast. */
 	m_freem(m);

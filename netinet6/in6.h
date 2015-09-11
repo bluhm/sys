@@ -1,4 +1,4 @@
-/*	$OpenBSD: in6.h,v 1.83 2015/06/08 22:19:28 krw Exp $	*/
+/*	$OpenBSD: in6.h,v 1.85 2015/09/11 07:42:35 claudio Exp $	*/
 /*	$KAME: in6.h,v 1.83 2001/03/29 02:55:07 jinmei Exp $	*/
 
 /*
@@ -436,9 +436,8 @@ int	in6_mask2len(struct in6_addr *, u_char *);
 struct inpcb;
 
 int	in6_embedscope(struct in6_addr *, const struct sockaddr_in6 *,
-	    struct inpcb *, struct ifnet **);
-int	in6_recoverscope(struct sockaddr_in6 *, const struct in6_addr *,
-	    struct ifnet *);
+	    struct inpcb *);
+void	in6_recoverscope(struct sockaddr_in6 *, const struct in6_addr *);
 void	in6_clearscope(struct in6_addr *);
 
 struct sockaddr;

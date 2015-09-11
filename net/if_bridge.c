@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_bridge.c,v 1.261 2015/09/09 12:50:08 mpi Exp $	*/
+/*	$OpenBSD: if_bridge.c,v 1.264 2015/09/10 16:41:30 mikeb Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 Jason L. Wright (jason@thought.net)
@@ -115,7 +115,7 @@
 void	bridgeattach(int);
 int	bridge_ioctl(struct ifnet *, u_long, caddr_t);
 void	bridge_start(struct ifnet *);
-void	bridge_process(struct mbuf *);
+void	bridge_process(struct ifnet *, struct mbuf *);
 void	bridgeintr_frame(struct bridge_softc *, struct ifnet *, struct mbuf *);
 void	bridge_broadcast(struct bridge_softc *, struct ifnet *,
     struct ether_header *, struct mbuf *);
@@ -183,7 +183,6 @@ int
 bridge_clone_create(struct if_clone *ifc, int unit)
 {
 	struct bridge_softc *sc;
-	struct ifih *bridge_ifih;
 	struct ifnet *ifp;
 	int i;
 
@@ -191,15 +190,8 @@ bridge_clone_create(struct if_clone *ifc, int unit)
 	if (!sc)
 		return (ENOMEM);
 
-	bridge_ifih = malloc(sizeof(*bridge_ifih), M_DEVBUF, M_NOWAIT);
-	if (bridge_ifih == NULL) {
-		free(sc, M_DEVBUF, 0);
-		return (ENOMEM);
-	}
-
 	sc->sc_stp = bstp_create(&sc->sc_if);
 	if (!sc->sc_stp) {
-		free(bridge_ifih, M_DEVBUF, sizeof(*bridge_ifih));
 		free(sc, M_DEVBUF, 0);
 		return (ENOMEM);
 	}
@@ -231,8 +223,7 @@ bridge_clone_create(struct if_clone *ifc, int unit)
 	    DLT_EN10MB, ETHER_HDR_LEN);
 #endif
 
-	bridge_ifih->ifih_input = ether_input;
-	SLIST_INSERT_HEAD(&ifp->if_inputs, bridge_ifih, ifih_next);
+	if_ih_insert(ifp, ether_input, NULL);
 
 	return (0);
 }
@@ -242,7 +233,6 @@ bridge_clone_destroy(struct ifnet *ifp)
 {
 	struct bridge_softc *sc = ifp->if_softc;
 	struct bridge_iflist *bif;
-	struct ifih *bridge_ifih;
 
 	bridge_stop(sc);
 	bridge_rtflush(sc, IFBF_FLUSHALL);
@@ -258,12 +248,9 @@ bridge_clone_destroy(struct ifnet *ifp)
 	/* Undo pseudo-driver changes. */
 	if_deactivate(ifp);
 
-	bridge_ifih = SLIST_FIRST(&ifp->if_inputs);
-	SLIST_REMOVE_HEAD(&ifp->if_inputs, ifih_next);
+	if_ih_remove(ifp, ether_input, NULL);
 
-	KASSERT(SLIST_EMPTY(&ifp->if_inputs));
-
-	free(bridge_ifih, M_DEVBUF, sizeof(*bridge_ifih));
+	KASSERT(SRPL_EMPTY_LOCKED(&ifp->if_inputs));
 
 	if_detach(ifp);
 
@@ -1095,13 +1082,24 @@ bridgeintr(void)
 {
 	struct mbuf_list ml;
 	struct mbuf *m;
+	struct ifnet *ifp;
 
 	niq_delist(&bridgeintrq, &ml);
 	if (ml_empty(&ml))
 		return;
 
-	while ((m = ml_dequeue(&ml)) != NULL)
-		bridge_process(m);
+	while ((m = ml_dequeue(&ml)) != NULL) {
+
+		ifp = if_get(m->m_pkthdr.ph_ifidx);
+		if (ifp == NULL) {
+			m_freem(m);
+			continue;
+		}
+
+		bridge_process(ifp, m);
+
+		if_put(ifp);
+	}
 }
 
 /*
@@ -1278,22 +1276,15 @@ bridge_input(struct ifnet *ifp, struct mbuf *m)
 }
 
 void
-bridge_process(struct mbuf *m)
+bridge_process(struct ifnet *ifp, struct mbuf *m)
 {
 	struct bridge_softc *sc;
 	struct bridge_iflist *ifl;
 	struct bridge_iflist *srcifl;
 	struct ether_header *eh;
-	struct ifnet *ifp;
 	struct arpcom *ac;
 	struct mbuf_list ml = MBUF_LIST_INITIALIZER();
 	struct mbuf *mc;
-
-	ifp = if_get(m->m_pkthdr.ph_ifidx);
-	if (ifp == NULL) {
-		m_freem(m);
-		return;
-	}
 
 	ifl = (struct bridge_iflist *)ifp->if_bridgeport;
 	if (ifl == NULL)
