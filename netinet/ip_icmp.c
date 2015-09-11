@@ -846,7 +846,7 @@ icmp_send(struct mbuf *m, struct mbuf *opts)
 	hlen = ip->ip_hl << 2;
 	icp = (struct icmp *)(mtod(m, caddr_t) + hlen);
 	icp->icmp_cksum = 0;
-	m->m_pkthdr.csum_flags |= M_ICMP_CSUM_OUT;
+	m->m_pkthdr.csum_flags = M_ICMP_CSUM_OUT;
 #ifdef ICMPPRINTFS
 	if (icmpprintfs) {
 		char dst[INET_ADDRSTRLEN], src[INET_ADDRSTRLEN];
