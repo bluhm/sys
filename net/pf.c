@@ -1915,8 +1915,10 @@ pf_translate_af(struct pf_pdesc *pd)
 	m_adj(pd->m, pd->off);
 
 	/* prepend a new one */
-	if ((M_PREPEND(pd->m, hlen, M_DONTWAIT)) == NULL)
+	if ((M_PREPEND(pd->m, hlen, M_DONTWAIT)) == NULL) {
+		pd->m = NULL;
 		return (-1);
+	}
 
 	switch (pd->naf) {
 	case AF_INET:
