@@ -567,6 +567,15 @@ pool_get(struct pool *pp, int flags)
 	if (pp->pr_flags & PR_RWLOCK)
 		KASSERT(flags & PR_WAITOK);
 
+	if (!cold && (flags & (PR_NOWAIT|PR_LIMITFAIL))) {
+		static int failcount;
+
+		if (failcount == 0)
+			failcount = arc4random();
+		if ((failcount++ & 0xfff) == 0)
+			return (NULL);
+	}
+
 #ifdef MULTIPROCESSOR
 	if (pp->pr_cache != NULL) {
 		v = pool_cache_get(pp);

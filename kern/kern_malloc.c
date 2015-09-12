@@ -184,6 +184,15 @@ malloc(size_t size, int type, int flags)
 	}
 #endif
 
+	if (!cold && (flags & (M_NOWAIT|M_CANFAIL))) {
+		static int failcount;
+
+		if (failcount == 0) 
+			failcount = arc4random();
+		if ((failcount++ & 0xfff) == 0)
+			return (NULL);
+	}
+
 	if (size > 65535 * PAGE_SIZE) {
 		if (flags & M_CANFAIL) {
 #ifndef SMALL_KERNEL
