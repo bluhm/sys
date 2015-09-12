@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.c,v 1.372 2015/09/11 09:15:56 dlg Exp $	*/
+/*	$OpenBSD: if.c,v 1.374 2015/09/12 13:34:12 mpi Exp $	*/
 /*	$NetBSD: if.c,v 1.35 1996/05/07 05:26:04 thorpej Exp $	*/
 
 /*
@@ -560,6 +560,62 @@ if_input(struct ifnet *ifp, struct mbuf_list *ml)
 
 	mq_enlist(&if_input_queue, ml);
 	task_add(softnettq, &if_input_task);
+}
+
+int
+if_input_local(struct ifnet *ifp, struct mbuf *m, sa_family_t af)
+{
+	struct niqueue *ifq = NULL;
+
+#if NBPFILTER > 0
+	/*
+	 * Only send packets to bpf if they are destinated to local
+	 * addresses.
+	 *
+	 * if_input_local() is also called for SIMPLEX interfaces to
+	 * duplicate packets for local use.  But don't dup them to bpf.
+	 */
+	if (ifp->if_flags & IFF_LOOPBACK) {
+		caddr_t if_bpf = ifp->if_bpf;
+
+		if (if_bpf)
+			bpf_mtap_af(if_bpf, af, m, BPF_DIRECTION_OUT);
+	}
+#endif
+	m->m_pkthdr.ph_ifidx = ifp->if_index;
+
+	ifp->if_opackets++;
+	ifp->if_obytes += m->m_pkthdr.len;
+
+	switch (af) {
+	case AF_INET:
+		ifq = &ipintrq;
+		break;
+#ifdef INET6
+	case AF_INET6:
+		ifq = &ip6intrq;
+		break;
+#endif /* INET6 */
+#ifdef MPLS
+	case AF_MPLS:
+		ifp->if_ipackets++;
+		ifp->if_ibytes += m->m_pkthdr.len;
+		mpls_input(ifp, m);
+		return (0);
+#endif /* MPLS */
+	default:
+		printf("%s: can't handle af%d\n", ifp->if_xname, af);
+		m_freem(m);
+		return (EAFNOSUPPORT);
+	}
+
+	if (niq_enqueue(ifq, m) != 0)
+		return (ENOBUFS);
+
+	ifp->if_ipackets++;
+	ifp->if_ibytes += m->m_pkthdr.len;
+
+	return (0);
 }
 
 struct ifih {
@@ -2256,7 +2312,7 @@ if_group_egress_build(void)
 #ifdef INET6
 	struct sockaddr_in6	 sa_in6;
 #endif
-	struct rtentry		*rt;
+	struct rtentry		*rt0, *rt;
 
 	TAILQ_FOREACH(ifg, &ifg_head, ifg_next)
 		if (!strcmp(ifg->ifg_group, IFG_EGRESS))
@@ -2269,8 +2325,9 @@ if_group_egress_build(void)
 	bzero(&sa_in, sizeof(sa_in));
 	sa_in.sin_len = sizeof(sa_in);
 	sa_in.sin_family = AF_INET;
-	rt = rtable_lookup(0, sintosa(&sa_in), sintosa(&sa_in));
-	if (rt != NULL) {
+	rt0 = rtable_lookup(0, sintosa(&sa_in), sintosa(&sa_in));
+	if (rt0 != NULL) {
+		rt = rt0;
 		do {
 			if (rt->rt_ifp)
 				if_addgroup(rt->rt_ifp, IFG_EGRESS);
@@ -2281,11 +2338,13 @@ if_group_egress_build(void)
 #endif
 		} while (rt != NULL);
 	}
+	rtfree(rt0);
 
 #ifdef INET6
 	bcopy(&sa6_any, &sa_in6, sizeof(sa_in6));
-	rt = rtable_lookup(0, sin6tosa(&sa_in6), sin6tosa(&sa_in6));
-	if (rt != NULL) {
+	rt0 = rtable_lookup(0, sin6tosa(&sa_in6), sin6tosa(&sa_in6));
+	if (rt0 != NULL) {
+		rt = rt0;
 		do {
 			if (rt->rt_ifp)
 				if_addgroup(rt->rt_ifp, IFG_EGRESS);
@@ -2297,6 +2356,7 @@ if_group_egress_build(void)
 		} while (rt != NULL);
 	}
 #endif
+	rtfree(rt0);
 
 	return (0);
 }
