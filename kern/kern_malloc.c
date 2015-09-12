@@ -179,6 +179,11 @@ malloc(size_t size, int type, int flags)
 		}
 	}
 
+	if (!cold && (flags & (M_NOWAIT|M_CANFAIL))) {
+		if ((arc4random() & 0xff) == 0)
+			return (NULL);
+	}
+
 #ifdef MALLOC_DEBUG
 	if (debug_malloc(size, type, flags, (void **)&va)) {
 		if ((flags & M_ZERO) && va != NULL)
