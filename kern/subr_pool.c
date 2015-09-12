@@ -493,6 +493,11 @@ pool_get(struct pool *pp, int flags)
 	void *v = NULL;
 	int slowdown = 0;
 
+	if (!cold && (flags & (PR_NOWAIT|PR_LIMITFAIL))) {
+		if ((arc4random() & 0xff) == 0)
+			return (NULL);
+	}
+
 #ifdef MULTIPROCESSOR
 	if (pp->pr_cache != NULL) {
 		v = pool_cache_get(pp);
