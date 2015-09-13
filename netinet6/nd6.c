@@ -1,4 +1,4 @@
-/*	$OpenBSD: nd6.c,v 1.150 2015/09/10 17:52:05 claudio Exp $	*/
+/*	$OpenBSD: nd6.c,v 1.152 2015/09/12 20:50:17 mpi Exp $	*/
 /*	$KAME: nd6.c,v 1.280 2002/06/08 19:52:07 itojun Exp $	*/
 
 /*
@@ -667,7 +667,7 @@ nd6_lookup(struct in6_addr *addr6, int create, struct ifnet *ifp,
 			 * called in rtrequest1 via ifa->ifa_rtrequest.
 			 */
 			bzero(&info, sizeof(info));
-			info.rti_flags = RTF_UP | RTF_HOST | RTF_LLINFO;
+			info.rti_flags = RTF_HOST | RTF_LLINFO;
 			info.rti_info[RTAX_DST] = sin6tosa(&sin6);
 			info.rti_info[RTAX_GATEWAY] =
 			    (struct sockaddr *)ifp->if_sadl;
@@ -1111,13 +1111,6 @@ nd6_rtrequest(int req, struct rtentry *rt)
 			nd6_llinfo_settimer(ln, -1);
 			ln->ln_state = ND6_LLINFO_REACHABLE;
 			ln->ln_byhint = 0;
-
-			/*
-			 * XXX Since lo0 is in the default rdomain we
-			 * should not (ab)use it for any route related
-			 * to an interface of a different rdomain.
-			 */
-			rt->rt_ifp = lo0ifp;
 
 			/*
 			 * Make sure rt_ifa be equal to the ifaddr
@@ -1699,7 +1692,7 @@ nd6_output(struct ifnet *ifp, struct mbuf *m0, struct sockaddr_in6 *dst,
 	return (0);
 
   sendpkt:
-	return ((*ifp->if_output)(ifp, m, sin6tosa(dst), rt));
+	return (if_output(ifp, m, sin6tosa(dst), rt));
 
   bad:
 	m_freem(m);

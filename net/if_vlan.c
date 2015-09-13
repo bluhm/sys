@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_vlan.c,v 1.138 2015/09/10 17:32:32 dlg Exp $	*/
+/*	$OpenBSD: if_vlan.c,v 1.140 2015/09/13 06:25:46 dlg Exp $	*/
 
 /*
  * Copyright 1998 Massachusetts Institute of Technology
