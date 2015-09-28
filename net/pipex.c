@@ -1,4 +1,4 @@
-/*	$OpenBSD: pipex.c,v 1.79 2015/09/12 20:26:07 mpi Exp $	*/
+/*	$OpenBSD: pipex.c,v 1.81 2015/09/22 10:09:19 mpi Exp $	*/
 
 /*-
  * Copyright (c) 2009 Internet Initiative Japan Inc.
@@ -446,8 +446,8 @@ pipex_add_session(struct pipex_session_req *req,
 			return (EADDRINUSE);
 		}
 
-		rn = pipex_rd_head4.rnh_addaddr(&session->ip_address,
-		    &session->ip_netmask, &pipex_rd_head4, session->ps4_rn, RTP_STATIC);
+		rn = rn_addroute(&session->ip_address, &session->ip_netmask,
+		    &pipex_rd_head4, session->ps4_rn, RTP_STATIC);
 		if (rn == NULL) {
 			splx(s);
 			pool_put(&pipex_session_pool, session);
@@ -455,9 +455,8 @@ pipex_add_session(struct pipex_session_req *req,
 		}
 	}
 	if (0) { /* NOT YET */
-		rn = pipex_rd_head6.rnh_addaddr(&session->ip6_address,
-		    &session->ip6_prefixlen, &pipex_rd_head6, session->ps6_rn,
-		    RTP_STATIC);
+		rn = rn_addroute(&session->ip6_address, &session->ip6_prefixlen,
+		    &pipex_rd_head6, session->ps6_rn, RTP_STATIC);
 		if (rn == NULL) {
 			splx(s);
 			pool_put(&pipex_session_pool, session);
@@ -614,9 +613,8 @@ pipex_destroy_session(struct pipex_session *session)
 	s = splnet();
 
 	if (!in_nullhost(session->ip_address.sin_addr)) {
-		rn = pipex_rd_head4.rnh_deladdr(&session->ip_address,
-		    &session->ip_netmask, &pipex_rd_head4,
-		    (struct radix_node *)session);
+		rn = rn_delete(&session->ip_address, &session->ip_netmask,
+		    &pipex_rd_head4, (struct radix_node *)session);
 		KASSERT(rn != NULL);
 	}
 
@@ -661,8 +659,8 @@ pipex_lookup_by_ip_address(struct in_addr addr)
 	pipex_in4mask.sin_family = AF_INET;
 	pipex_in4mask.sin_len = sizeof(pipex_in4mask);
 
-	session = (struct pipex_session *)pipex_rd_head4.rnh_lookup(
-	    &pipex_in4, &pipex_in4mask, &pipex_rd_head4);
+	session = (struct pipex_session *)rn_lookup(&pipex_in4, &pipex_in4mask,
+	    &pipex_rd_head4);
 
 #ifdef PIPEX_DEBUG
 	if (session == NULL) {
@@ -1431,7 +1429,8 @@ pipex_pppoe_output(struct mbuf *m0, struct pipex_session *session)
 	session->stat.opackets++;
 	session->stat.obytes += len;
 
-	if_output(over_ifp, m0, (struct sockaddr *)&session->peer, NULL);
+	over_ifp->if_output(over_ifp, m0, (struct sockaddr *)&session->peer,
+	    NULL);
 }
 #endif /* PIPEX_PPPOE */
 

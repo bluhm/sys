@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_sysctl.c,v 1.293 2015/09/11 15:29:47 deraadt Exp $	*/
+/*	$OpenBSD: kern_sysctl.c,v 1.295 2015/09/28 16:59:35 deraadt Exp $	*/
 /*	$NetBSD: kern_sysctl.c,v 1.17 1996/05/20 17:49:05 mrg Exp $	*/
 
 /*-
@@ -146,9 +146,9 @@ struct rwlock sysctl_lock = RWLOCK_INITIALIZER("sysctllk");
 struct rwlock sysctl_disklock = RWLOCK_INITIALIZER("sysctldlk");
 
 int
-sys___sysctl(struct proc *p, void *v, register_t *retval)
+sys_sysctl(struct proc *p, void *v, register_t *retval)
 {
-	struct sys___sysctl_args /* {
+	struct sys_sysctl_args /* {
 		syscallarg(const int *) name;
 		syscallarg(u_int) namelen;
 		syscallarg(void *) old;
@@ -256,7 +256,9 @@ char domainname[MAXHOSTNAMELEN];
 int domainnamelen;
 long hostid;
 char *disknames = NULL;
+size_t disknameslen;
 struct diskstats *diskstats = NULL;
+size_t diskstatslen;
 #ifdef INSECURE
 int securelevel = -1;
 #else
@@ -2073,14 +2075,16 @@ sysctl_diskinit(int update, struct proc *p)
 		tlen++;
 
 		if (disknames)
-			free(disknames, M_SYSCTL, 0);
+			free(disknames, M_SYSCTL, disknameslen);
 		if (diskstats)
-			free(diskstats, M_SYSCTL, 0);
+			free(diskstats, M_SYSCTL, diskstatslen);
 		diskstats = NULL;
 		disknames = NULL;
 		diskstats = mallocarray(disk_count, sizeof(struct diskstats),
 		    M_SYSCTL, M_WAITOK);
+		diskstatslen = disk_count * sizeof(struct diskstats);
 		disknames = malloc(tlen, M_SYSCTL, M_WAITOK);
+		disknameslen = tlen;
 		disknames[0] = '\0';
 
 		for (dk = TAILQ_FIRST(&disklist), i = 0, l = 0; dk;

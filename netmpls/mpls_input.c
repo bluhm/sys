@@ -1,4 +1,4 @@
-/*	$OpenBSD: mpls_input.c,v 1.48 2015/09/12 20:26:07 mpi Exp $	*/
+/*	$OpenBSD: mpls_input.c,v 1.50 2015/09/23 08:49:46 mpi Exp $	*/
 
 /*
  * Copyright (c) 2008 Claudio Jeker <claudio@openbsd.org>
@@ -182,7 +182,6 @@ do_v6:
 			goto done;
 		}
 
-		rt->rt_use++;
 		rt_mpls = (struct rt_mpls *)rt->rt_llinfo;
 
 		if (rt_mpls == NULL || (rt->rt_flags & RTF_MPLS) == 0) {
@@ -240,7 +239,7 @@ do_v6:
 			}
 #endif
 			if (ifp->if_type == IFT_MPLSTUNNEL) {
-				if_output(ifp, m, rt_key(rt), rt);
+				ifp->if_output(ifp, m, rt_key(rt), rt);
 				goto done;
 			}
 
@@ -449,7 +448,6 @@ mpls_do_error(struct mbuf *m, int type, int code, int destmtu)
 			m_freem(m);
 			return (NULL);
 		}
-		rt->rt_use++;
 		KERNEL_LOCK();
 		rtfree(rt);
 		if (icmp_reflect(m, NULL, ia)) {

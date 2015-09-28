@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_tame.c,v 1.40 2015/09/11 15:29:47 deraadt Exp $	*/
+/*	$OpenBSD: kern_tame.c,v 1.43 2015/09/28 15:40:18 semarie Exp $	*/
 
 /*
  * Copyright (c) 2015 Nicholas Marriott <nicm@openbsd.org>
@@ -73,7 +73,7 @@ const u_int tame_syscalls[SYS_MAXSYSCALL] = {
 	[SYS_clock_gettime] = TAME_SELF,
 	[SYS_getpid] = TAME_SELF,
 	[SYS_umask] = TAME_SELF,
-	[SYS___sysctl] = TAME_SELF,	/* read-only; narrow subset */
+	[SYS_sysctl] = TAME_SELF,	/* read-only; narrow subset */
 	[SYS_adjtime] = TAME_SELF,	/* read-only */
 
 	[SYS_fchdir] = TAME_SELF,	/* careful of directory fd inside jails */
@@ -218,8 +218,8 @@ static const struct {
 	{ "tmppath",		TAME_SELF | TAME_RW | TAME_TMPPATH },
 	{ "inet",		TAME_SELF | TAME_RW | TAME_INET },
 	{ "unix",		TAME_SELF | TAME_RW | TAME_UNIX },
-	{ "cmsg",		TAME_UNIX | TAME_CMSG },
-	{ "dns",		TAME_MALLOC | TAME_DNSPATH },
+	{ "cmsg",		TAME_SELF | TAME_RW | TAME_UNIX | TAME_CMSG },
+	{ "dns",		TAME_SELF | TAME_MALLOC | TAME_DNSPATH },
 	{ "ioctl",		TAME_IOCTL },
 	{ "getpw",		TAME_SELF | TAME_MALLOC | TAME_RW | TAME_GETPW },
 	{ "proc",		TAME_PROC },
@@ -626,7 +626,8 @@ tame_namei(struct proc *p, char *origpath)
 			    wl->wl_paths[i].len - 1) == 0) {
 				u_char term = canopath[wl->wl_paths[i].len - 1];
 
-				if (term == '\0' || term == '/')
+				if (term == '\0' || term == '/' ||
+				    wl->wl_paths[i].name[1] == '\0')
 					error = 0;
 			}
 		}

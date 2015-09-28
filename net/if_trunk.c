@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_trunk.c,v 1.111 2015/09/10 16:41:30 mikeb Exp $	*/
+/*	$OpenBSD: if_trunk.c,v 1.117 2015/09/28 08:24:53 mpi Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006, 2007 Reyk Floeter <reyk@openbsd.org>
@@ -60,7 +60,6 @@ int	 trunk_capabilities(struct trunk_softc *);
 void	 trunk_port_lladdr(struct trunk_port *, u_int8_t *);
 int	 trunk_port_create(struct trunk_softc *, struct ifnet *);
 int	 trunk_port_destroy(struct trunk_port *);
-void	 trunk_port_watchdog(struct ifnet *);
 void	 trunk_port_state(void *);
 void	 trunk_port_ifdetach(void *);
 int	 trunk_port_ioctl(struct ifnet *, u_long, caddr_t);
@@ -79,7 +78,6 @@ int	 trunk_input(struct ifnet *, struct mbuf *, void *);
 void	 trunk_start(struct ifnet *);
 void	 trunk_init(struct ifnet *);
 void	 trunk_stop(struct ifnet *);
-void	 trunk_watchdog(struct ifnet *);
 int	 trunk_media_change(struct ifnet *);
 void	 trunk_media_status(struct ifnet *, struct ifmediareq *);
 struct trunk_port *trunk_link_active(struct trunk_softc *,
@@ -100,9 +98,12 @@ int	 trunk_rr_input(struct trunk_softc *, struct trunk_port *,
 /* Active failover */
 int	 trunk_fail_attach(struct trunk_softc *);
 int	 trunk_fail_detach(struct trunk_softc *);
+int	 trunk_fail_port_create(struct trunk_port *);
+void	 trunk_fail_port_destroy(struct trunk_port *);
 int	 trunk_fail_start(struct trunk_softc *, struct mbuf *);
 int	 trunk_fail_input(struct trunk_softc *, struct trunk_port *,
 	    struct mbuf *);
+void	 trunk_fail_linkstate(struct trunk_port *);
 
 /* Loadbalancing */
 int	 trunk_lb_attach(struct trunk_softc *);
@@ -182,7 +183,6 @@ trunk_clone_create(struct if_clone *ifc, int unit)
 	ifp = &tr->tr_ac.ac_if;
 	ifp->if_softc = tr;
 	ifp->if_start = trunk_start;
-	ifp->if_watchdog = trunk_watchdog;
 	ifp->if_ioctl = trunk_ioctl;
 	ifp->if_flags = IFF_SIMPLEX | IFF_BROADCAST | IFF_MULTICAST;
 	ifp->if_capabilities = trunk_capabilities(tr);
@@ -343,16 +343,8 @@ trunk_port_create(struct trunk_softc *tr, struct ifnet *ifp)
 	tp->tp_iftype = ifp->if_type;
 	ifp->if_type = IFT_IEEE8023ADLAG;
 
-	/* Change input handler of the physical interface. */
-	if_ih_insert(ifp, trunk_input, NULL);
-
-	ifp->if_tp = (caddr_t)tp;
 	tp->tp_ioctl = ifp->if_ioctl;
 	ifp->if_ioctl = trunk_port_ioctl;
-
-	timeout_del(ifp->if_slowtimo);
-	tp->tp_watchdog = ifp->if_watchdog;
-	ifp->if_watchdog = trunk_port_watchdog;
 
 	tp->tp_output = ifp->if_output;
 	ifp->if_output = trunk_port_output;
@@ -394,6 +386,9 @@ trunk_port_create(struct trunk_softc *tr, struct ifnet *ifp)
 	if (tr->tr_port_create != NULL)
 		error = (*tr->tr_port_create)(tp);
 
+	/* Change input handler of the physical interface. */
+	if_ih_insert(ifp, trunk_input, tp);
+
 	return (error);
 }
 
@@ -421,6 +416,9 @@ trunk_port_destroy(struct trunk_port *tp)
 	struct trunk_port *tp_ptr;
 	struct ifnet *ifp = tp->tp_if;
 
+	/* Restore previous input handler. */
+	if_ih_remove(ifp, trunk_input, tp);
+
 	if (tr->tr_port_destroy != NULL)
 		(*tr->tr_port_destroy)(tp);
 
@@ -436,13 +434,8 @@ trunk_port_destroy(struct trunk_port *tp)
 	/* Restore interface type. */
 	ifp->if_type = tp->tp_iftype;
 
-	/* Restore previous input handler. */
-	if_ih_remove(ifp, trunk_input, NULL);
-
-	ifp->if_watchdog = tp->tp_watchdog;
 	ifp->if_ioctl = tp->tp_ioctl;
 	ifp->if_output = tp->tp_output;
-	ifp->if_tp = NULL;
 
 	hook_disestablish(ifp->if_linkstatehooks, tp->lh_cookie);
 	hook_disestablish(ifp->if_detachhooks, tp->dh_cookie);
@@ -478,28 +471,8 @@ trunk_port_destroy(struct trunk_port *tp)
 	/* Update trunk capabilities */
 	tr->tr_capabilities = trunk_capabilities(tr);
 
-	/* Reestablish watchdog timeout */
-	if_slowtimo(ifp);
-
 	return (0);
 }
-
-void
-trunk_port_watchdog(struct ifnet *ifp)
-{
-	struct trunk_port *tp;
-
-	/* Should be checked by the caller */
-	if (ifp->if_type != IFT_IEEE8023ADLAG)
-		return;
-	if ((tp = (struct trunk_port *)ifp->if_tp) == NULL ||
-	    tp->tp_trunk == NULL)
-		return;
-
-	if (tp->tp_watchdog != NULL)
-		(*tp->tp_watchdog)(ifp);
-}
-
 
 int
 trunk_port_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
@@ -513,7 +486,7 @@ trunk_port_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 
 	/* Should be checked by the caller */
 	if (ifp->if_type != IFT_IEEE8023ADLAG ||
-	    (tp = (struct trunk_port *)ifp->if_tp) == NULL ||
+	    (tp = trunk_port_get(NULL, ifp)) == NULL ||
 	    (tr = (struct trunk_softc *)tp->tp_trunk) == NULL) {
 		error = EINVAL;
 		goto fallback;
@@ -684,6 +657,15 @@ trunk_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 			error = EPROTONOSUPPORT;
 			break;
 		}
+		/*
+		 * Serialize modifications to the trunk and trunk
+		 * ports via the ifih SRP: detaching trunk_input
+		 * from the trunk port will require all currently
+		 * running trunk_input's on this port to finish
+		 * granting us an exclusive access to it.
+		 */
+		SLIST_FOREACH(tp, &tr->tr_ports, tp_entries)
+			if_ih_remove(tp->tp_if, trunk_input, tp);
 		if (tr->tr_proto != TRUNK_PROTO_NONE)
 			error = tr->tr_detach(tr);
 		if (error != 0)
@@ -698,6 +680,9 @@ trunk_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 				tr->tr_proto = trunk_protos[i].ti_proto;
 				if (tr->tr_proto != TRUNK_PROTO_NONE)
 					error = trunk_protos[i].ti_attach(tr);
+				SLIST_FOREACH(tp, &tr->tr_ports, tp_entries)
+					if_ih_insert(tp->tp_if,
+					    trunk_input, tp);
 				goto out;
 			}
 		}
@@ -1066,18 +1051,6 @@ trunk_stop(struct ifnet *ifp)
 	splx(s);
 }
 
-void
-trunk_watchdog(struct ifnet *ifp)
-{
-	struct trunk_softc *tr = (struct trunk_softc *)ifp->if_softc;
-
-	if (tr->tr_proto != TRUNK_PROTO_NONE &&
-	    (*tr->tr_watchdog)(tr) != 0) {
-		ifp->if_oerrors++;
-	}
-
-}
-
 int
 trunk_input(struct ifnet *ifp, struct mbuf *m, void *cookie)
 {
@@ -1095,8 +1068,8 @@ trunk_input(struct ifnet *ifp, struct mbuf *m, void *cookie)
 	if (ifp->if_type != IFT_IEEE8023ADLAG)
 		goto bad;
 
-	if ((tp = (struct trunk_port *)ifp->if_tp) == NULL ||
-	    (tr = (struct trunk_softc *)tp->tp_trunk) == NULL)
+	tp = (struct trunk_port *)cookie;
+	if ((tr = (struct trunk_softc *)tp->tp_trunk) == NULL)
 		goto bad;
 
 	trifp = &tr->tr_ac.ac_if;
@@ -1108,7 +1081,6 @@ trunk_input(struct ifnet *ifp, struct mbuf *m, void *cookie)
 		 * We stop here if the packet has been consumed
 		 * by the protocol routine.
 		 */
-		m_freem(m);
 		return (1);
 	}
 
@@ -1332,11 +1304,14 @@ trunk_fail_attach(struct trunk_softc *tr)
 	tr->tr_input = trunk_fail_input;
 	tr->tr_init = NULL;
 	tr->tr_stop = NULL;
-	tr->tr_port_create = NULL;
-	tr->tr_port_destroy = NULL;
-	tr->tr_linkstate = NULL;
+	tr->tr_port_create = trunk_fail_port_create;
+	tr->tr_port_destroy = trunk_fail_port_destroy;
+	tr->tr_linkstate = trunk_fail_linkstate;
 	tr->tr_req = NULL;
 	tr->tr_portreq = NULL;
+
+	/* Get primary or the next active port */
+	tr->tr_psc = (caddr_t)trunk_link_active(tr, tr->tr_primary);
 
 	return (0);
 }
@@ -1344,16 +1319,46 @@ trunk_fail_attach(struct trunk_softc *tr)
 int
 trunk_fail_detach(struct trunk_softc *tr)
 {
+	tr->tr_psc = NULL;
 	return (0);
+}
+
+int
+trunk_fail_port_create(struct trunk_port *tp)
+{
+	struct trunk_softc *tr = (struct trunk_softc *)tp->tp_trunk;
+
+	/* Get primary or the next active port */
+	tr->tr_psc = (caddr_t)trunk_link_active(tr, tr->tr_primary);
+	return (0);
+}
+
+void
+trunk_fail_port_destroy(struct trunk_port *tp)
+{
+	struct trunk_softc *tr = (struct trunk_softc *)tp->tp_trunk;
+	struct trunk_port *tp_next;
+
+	if ((caddr_t)tp == tr->tr_psc) {
+		/* Get the next active port */
+		tp_next = trunk_link_active(tr, SLIST_NEXT(tp, tp_entries));
+		if (tp_next == tp)
+			tr->tr_psc = NULL;
+		else
+			tr->tr_psc = (caddr_t)tp_next;
+	} else {
+		/* Get primary or the next active port */
+		tr->tr_psc = (caddr_t)trunk_link_active(tr, tr->tr_primary);
+	}
 }
 
 int
 trunk_fail_start(struct trunk_softc *tr, struct mbuf *m)
 {
-	struct trunk_port *tp;
+	struct trunk_port *tp = (struct trunk_port *)tr->tr_psc;
 
 	/* Use the master port if active or the next available port */
-	if ((tp = trunk_link_active(tr, tr->tr_primary)) == NULL) {
+	if (tp == NULL) {
 		m_freem(m);
 		return (ENOENT);
 	}
@@ -1364,24 +1369,18 @@ trunk_fail_start(struct trunk_softc *tr, struct mbuf *m)
 int
 trunk_fail_input(struct trunk_softc *tr, struct trunk_port *tp, struct mbuf *m)
 {
-	struct trunk_port *tmp_tp;
-	int accept = 0;
+	if ((caddr_t)tp == tr->tr_psc)
+		return (0);
+	m_freem(m);
+	return (-1);
+}
 
-	if (tp == tr->tr_primary) {
-		accept = 1;
-	} else if (tr->tr_primary->tp_link_state == LINK_STATE_DOWN) {
-		tmp_tp = trunk_link_active(tr, NULL);
-		/*
-		 * If tmp_tp is null, we've received a packet when all
-		 * our links are down. Weird, but process it anyways.
-		 */
-		if ((tmp_tp == NULL || tmp_tp == tp))
-			accept = 1;
-	}
-	if (!accept)
-		return (-1);
+void
+trunk_fail_linkstate(struct trunk_port *tp)
+{
+	struct trunk_softc *tr = (struct trunk_softc *)tp->tp_trunk;
 
-	return (0);
+	tr->tr_psc = (caddr_t)trunk_link_active(tr, tr->tr_primary);
 }
 
 /*

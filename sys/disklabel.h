@@ -1,4 +1,4 @@
-/*	$OpenBSD: disklabel.h,v 1.68 2015/09/10 16:30:23 krw Exp $	*/
+/*	$OpenBSD: disklabel.h,v 1.72 2015/09/24 19:28:33 krw Exp $	*/
 /*	$NetBSD: disklabel.h,v 1.41 1996/05/10 23:07:37 mark Exp $	*/
 
 /*
@@ -428,9 +428,6 @@ struct gpt_partition {
 	   and must be zero */
 };
 
-#define GPT_PARTSPERSEC(gh)	(DEV_BSIZE / letoh32((gh)->gh_part_size))
-#define GPT_SECOFFSET(gh, n)	((gh)->gh_part_size * n)
-
 #define GPT_UUID_UNUSED \
     { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, \
       0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }
@@ -539,9 +536,9 @@ int	 setdisklabel(struct disklabel *, struct disklabel *, u_int);
 int	 readdisklabel(dev_t, void (*)(struct buf *), struct disklabel *, int);
 int	 writedisklabel(dev_t, void (*)(struct buf *), struct disklabel *);
 int	 bounds_check_with_label(struct buf *, struct disklabel *);
+int	 readdisksector(struct buf *, void (*)(struct buf *),
+	    struct disklabel *, u_int64_t);
 int	 readdoslabel(struct buf *, void (*)(struct buf *),
-	    struct disklabel *, daddr_t *, int);
-int	 readgptlabel(struct buf *, void (*)(struct buf *),
 	    struct disklabel *, daddr_t *, int);
 #ifdef CD9660
 int iso_disklabelspoof(dev_t dev, void (*strat)(struct buf *),

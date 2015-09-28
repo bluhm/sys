@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf.c,v 1.943 2015/09/12 20:26:06 mpi Exp $ */
+/*	$OpenBSD: pf.c,v 1.945 2015/09/23 08:49:46 mpi Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -5520,7 +5520,6 @@ pf_route(struct mbuf **m, struct pf_rule *r, int dir, struct ifnet *oifp,
 		}
 
 		ifp = rt->rt_ifp;
-		rt->rt_use++;
 
 		if (rt->rt_flags & RTF_GATEWAY)
 			dst = satosin(rt->rt_gateway);
@@ -5575,7 +5574,7 @@ pf_route(struct mbuf **m, struct pf_rule *r, int dir, struct ifnet *oifp,
 			ipstat.ips_outswcsum++;
 			ip->ip_sum = in_cksum(m0, ip->ip_hl << 2);
 		}
-		error = if_output(ifp, m0, sintosa(dst), NULL);
+		error = ifp->if_output(ifp, m0, sintosa(dst), NULL);
 		goto done;
 	}
 
@@ -5604,7 +5603,7 @@ pf_route(struct mbuf **m, struct pf_rule *r, int dir, struct ifnet *oifp,
 		m1 = m0->m_nextpkt;
 		m0->m_nextpkt = 0;
 		if (error == 0)
-			error = if_output(ifp, m0, sintosa(dst), NULL);
+			error = ifp->if_output(ifp, m0, sintosa(dst), NULL);
 		else
 			m_freem(m0);
 	}

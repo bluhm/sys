@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_var.h,v 1.41 2015/09/12 20:26:06 mpi Exp $	*/
+/*	$OpenBSD: if_var.h,v 1.45 2015/09/28 08:24:53 mpi Exp $	*/
 /*	$NetBSD: if.h,v 1.23 1996/05/07 02:40:27 thorpej Exp $	*/
 
 /*
@@ -132,7 +132,6 @@ struct ifnet {				/* and the entries */
 	int	if_pcount;		/* number of promiscuous listeners */
 	caddr_t	if_bpf;			/* packet filter structure */
 	caddr_t if_bridgeport;		/* used by bridge ports */
-	caddr_t	if_tp;			/* used by trunk ports */
 	caddr_t	if_pf_kif;		/* pf interface abstraction */
 	union {
 		caddr_t	carp_s;		/* carp structure (used by !carp ifs) */
@@ -150,6 +149,7 @@ struct ifnet {				/* and the entries */
 	u_short	if_rtlabelid;		/* next route label */
 	u_int8_t if_priority;
 	struct	timeout *if_slowtimo;	/* watchdog timeout */
+	struct	task *if_watchdogtask;	/* watchdog task */
 	struct	task *if_linkstatetask; /* task to do route updates */
 
 	/* procedure handles */
@@ -329,15 +329,16 @@ do {									\
 		(err) = hfsc_enqueue(((struct ifqueue *)(ifq)), m);	\
 	else {								\
 		if (IF_QFULL((ifq))) {					\
-			m_freem((m));					\
 			(err) = ENOBUFS;				\
 		} else {						\
 			IF_ENQUEUE((ifq), (m));				\
 			(err) = 0;					\
 		}							\
 	}								\
-	if ((err))							\
+	if ((err)) {							\
+		m_freem((m));						\
 		(ifq)->ifq_drops++;					\
+	}								\
 } while (/* CONSTCOND */0)
 
 #define	IFQ_DEQUEUE(ifq, m)						\
@@ -406,8 +407,6 @@ void	if_start(struct ifnet *);
 int	if_enqueue(struct ifnet *, struct mbuf *);
 void	if_input(struct ifnet *, struct mbuf_list *);
 int	if_input_local(struct ifnet *, struct mbuf *, sa_family_t);
-int	if_output(struct ifnet *, struct mbuf *, struct sockaddr *,
-	    struct rtentry *);
 
 void	ether_ifattach(struct ifnet *);
 void	ether_ifdetach(struct ifnet *);

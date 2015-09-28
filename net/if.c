@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.c,v 1.376 2015/09/12 20:26:06 mpi Exp $	*/
+/*	$OpenBSD: if.c,v 1.381 2015/09/27 16:50:03 stsp Exp $	*/
 /*	$NetBSD: if.c,v 1.35 1996/05/07 05:26:04 thorpej Exp $	*/
 
 /*
@@ -80,7 +80,6 @@
 #include <sys/domain.h>
 #include <sys/sysctl.h>
 #include <sys/task.h>
-#include <sys/proc.h>
 #include <sys/atomic.h>
 
 #include <dev/rndvar.h>
@@ -143,6 +142,7 @@ struct if_clone	*if_clone_lookup(const char *, int *);
 
 int	if_group_egress_build(void);
 
+void	if_watchdog_task(void *);
 void	if_link_state_change_task(void *);
 
 void	if_input_process(void *);
@@ -410,6 +410,7 @@ if_attachsetup(struct ifnet *ifp)
 	pfi_attach_ifnet(ifp);
 #endif
 
+	task_set(ifp->if_watchdogtask, if_watchdog_task, ifp);
 	timeout_set(ifp->if_slowtimo, if_slowtimo, ifp);
 	if_slowtimo(ifp);
 
@@ -526,6 +527,8 @@ if_attach_common(struct ifnet *ifp)
 
 	ifp->if_slowtimo = malloc(sizeof(*ifp->if_slowtimo), M_TEMP,
 	    M_WAITOK|M_ZERO);
+	ifp->if_watchdogtask = malloc(sizeof(*ifp->if_watchdogtask),
+	    M_TEMP, M_WAITOK|M_ZERO);
 	ifp->if_linkstatetask = malloc(sizeof(*ifp->if_linkstatetask),
 	    M_TEMP, M_WAITOK|M_ZERO);
 
@@ -682,23 +685,13 @@ if_input_local(struct ifnet *ifp, struct mbuf *m, sa_family_t af)
 	return (0);
 }
 
-int
-if_output(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst,
-    struct rtentry *rt)
-{
-	if (rt != NULL && ISSET(rt->rt_flags, RTF_LOCAL))
-		return (if_input_local(lo0ifp, m, dst->sa_family));
-
-	return (ifp->if_output(ifp, m, dst, rt));
-}
-
 struct ifih {
 	struct srpl_entry	  ifih_next;
 	int			(*ifih_input)(struct ifnet *, struct mbuf *,
 				      void *);
 	void			 *ifih_cookie;
 	int			  ifih_refcnt;
-	int			  ifih_srpcnt;
+	struct refcnt		  ifih_srpcnt;
 };
 
 void	if_ih_ref(void *, void *);
@@ -728,7 +721,7 @@ if_ih_insert(struct ifnet *ifp, int (*input)(struct ifnet *, struct mbuf *,
 		ifih->ifih_input = input;
 		ifih->ifih_cookie = cookie;
 		ifih->ifih_refcnt = 1;
-		ifih->ifih_srpcnt = 0;
+		refcnt_init(&ifih->ifih_srpcnt);
 		SRPL_INSERT_HEAD_LOCKED(&ifih_rc, &ifp->if_inputs,
 		    ifih, ifih_next);
 	}
@@ -739,7 +732,7 @@ if_ih_ref(void *null, void *i)
 {
 	struct ifih *ifih = i;
 
-	atomic_inc_int(&ifih->ifih_srpcnt);
+	refcnt_take(&ifih->ifih_srpcnt);
 }
 
 void
@@ -747,17 +740,14 @@ if_ih_unref(void *null, void *i)
 {
 	struct ifih *ifih = i;
 
-	if (atomic_dec_int_nv(&ifih->ifih_srpcnt) == 0)
-		wakeup_one(&ifih->ifih_srpcnt);
+	refcnt_rele_wake(&ifih->ifih_srpcnt);
 }
 
 void
 if_ih_remove(struct ifnet *ifp, int (*input)(struct ifnet *, struct mbuf *,
     void *), void *cookie)
 {
-	struct sleep_state sls;
 	struct ifih *ifih;
-	int refs;
 
 	/* the kernel lock guarantees serialised modifications to if_inputs */
 	KERNEL_ASSERT_LOCKED();
@@ -773,13 +763,7 @@ if_ih_remove(struct ifnet *ifp, int (*input)(struct ifnet *, struct mbuf *,
 		SRPL_REMOVE_LOCKED(&ifih_rc, &ifp->if_inputs, ifih,
 		    ifih, ifih_next);
 
-		refs = ifih->ifih_srpcnt;
-		while (refs) {
-			sleep_setup(&sls, &ifih->ifih_srpcnt, PWAIT, "ifihrm");
-			refs = ifih->ifih_srpcnt;
-			sleep_finish(&sls, refs);
-		}
-
+		refcnt_finalize(&ifih->ifih_srpcnt, "ifihrm");
 		free(ifih, M_DEVBUF, sizeof(*ifih));
 	}
 }
@@ -907,8 +891,9 @@ if_detach(struct ifnet *ifp)
 	ifp->if_ioctl = if_detached_ioctl;
 	ifp->if_watchdog = NULL;
 
-	/* Remove the watchdog timeout */
+	/* Remove the watchdog timeout & task */
 	timeout_del(ifp->if_slowtimo);
+	task_del(systq, ifp->if_watchdogtask);
 
 	/* Remove the link state task */
 	task_del(systq, ifp->if_linkstatetask);
@@ -960,6 +945,7 @@ if_detach(struct ifnet *ifp)
 	free(ifp->if_detachhooks, M_TEMP, 0);
 
 	free(ifp->if_slowtimo, M_TEMP, sizeof(*ifp->if_slowtimo));
+	free(ifp->if_watchdogtask, M_TEMP, sizeof(*ifp->if_watchdogtask));
 	free(ifp->if_linkstatetask, M_TEMP, sizeof(*ifp->if_linkstatetask));
 
 	for (i = 0; (dp = domains[i]) != NULL; i++) {
@@ -1506,9 +1492,21 @@ if_slowtimo(void *arg)
 
 	if (ifp->if_watchdog) {
 		if (ifp->if_timer > 0 && --ifp->if_timer == 0)
-			(*ifp->if_watchdog)(ifp);
+			task_add(systq, ifp->if_watchdogtask);
 		timeout_add(ifp->if_slowtimo, hz / IFNET_SLOWHZ);
 	}
+	splx(s);
+}
+
+void
+if_watchdog_task(void *arg)
+{
+	struct ifnet *ifp = arg;
+	int s;
+
+	s = splnet();
+	if (ifp->if_watchdog)
+		(*ifp->if_watchdog)(ifp);
 	splx(s);
 }
 
@@ -1568,6 +1566,18 @@ if_put(struct ifnet *ifp)
 		return;
 
 	atomic_dec_int(&ifp->if_refcnt);
+}
+
+int
+if_setlladdr(struct ifnet *ifp, const uint8_t *lladdr)
+{
+	if (ifp->if_sadl == NULL)
+		return (EINVAL);
+
+	memcpy(((struct arpcom *)ifp)->ac_enaddr, lladdr, ETHER_ADDR_LEN);
+	memcpy(LLADDR(ifp->if_sadl), lladdr, ETHER_ADDR_LEN);
+
+	return (0);
 }
 
 /*
@@ -1971,11 +1981,7 @@ ifioctl(struct socket *so, u_long cmd, caddr_t data, struct proc *p)
 		case IFT_CARP:
 		case IFT_XETHER:
 		case IFT_ISO88025:
-			bcopy((caddr_t)ifr->ifr_addr.sa_data,
-			    (caddr_t)((struct arpcom *)ifp)->ac_enaddr,
-			    ETHER_ADDR_LEN);
-			bcopy((caddr_t)ifr->ifr_addr.sa_data,
-			    LLADDR(sdl), ETHER_ADDR_LEN);
+			if_setlladdr(ifp, ifr->ifr_addr.sa_data);
 			error = (*ifp->if_ioctl)(ifp, cmd, data);
 			if (error == ENOTTY)
 				error = 0;
@@ -2433,8 +2439,8 @@ if_group_egress_build(void)
 #endif
 		} while (rt != NULL);
 	}
-#endif
 	rtfree(rt0);
+#endif /* INET6 */
 
 	return (0);
 }
