@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_tame.c,v 1.44 2015/09/29 14:41:27 deraadt Exp $	*/
+/*	$OpenBSD: kern_tame.c,v 1.57 2015/10/04 17:55:21 deraadt Exp $	*/
 
 /*
  * Copyright (c) 2015 Nicholas Marriott <nicm@openbsd.org>
@@ -150,18 +150,17 @@ const u_int tame_syscalls[SYS_MAXSYSCALL] = {
 	[SYS_mquery] = TAME_MALLOC,
 	[SYS_munmap] = TAME_MALLOC,
 
-	[SYS_open] = TAME_SELF,
-	[SYS_stat] = TAME_SELF,
-	[SYS_access] = TAME_SELF,
-	[SYS_readlink] = TAME_SELF,
+	[SYS_open] = TAME_SELF,			/* further checks in namei */
+	[SYS_stat] = TAME_SELF,			/* further checks in namei */
+	[SYS_access] = TAME_SELF,		/* further checks in namei */
+	[SYS_readlink] = TAME_SELF,		/* further checks in namei */
 
 	[SYS_chdir] = TAME_RPATH,
-	[SYS___getcwd] = TAME_RPATH | TAME_WPATH,
 	[SYS_openat] = TAME_RPATH | TAME_WPATH,
 	[SYS_fstatat] = TAME_RPATH | TAME_WPATH,
 	[SYS_faccessat] = TAME_RPATH | TAME_WPATH,
 	[SYS_readlinkat] = TAME_RPATH | TAME_WPATH,
-	[SYS_lstat] = TAME_RPATH | TAME_WPATH | TAME_TMPPATH | TAME_DNSPATH,
+	[SYS_lstat] = TAME_RPATH | TAME_WPATH | TAME_TMPPATH,
 	[SYS_rename] = TAME_CPATH,
 	[SYS_rmdir] = TAME_CPATH,
 	[SYS_renameat] = TAME_CPATH,
@@ -173,7 +172,13 @@ const u_int tame_syscalls[SYS_MAXSYSCALL] = {
 	[SYS_mkdir] = TAME_CPATH,
 	[SYS_mkdirat] = TAME_CPATH,
 
-	/* Classify as RPATH, becuase these leak path information */
+	/*
+	 * Classify as RPATH|WPATH, because of path information leakage.
+	 * WPATH due to unknown use of mk*temp(3) on non-/tmp paths..
+	 */
+	[SYS___getcwd] = TAME_RPATH | TAME_WPATH,
+
+	/* Classify as RPATH, because these leak path information */
 	[SYS_getfsstat] = TAME_RPATH,
 	[SYS_statfs] = TAME_RPATH,
 	[SYS_fstatfs] = TAME_RPATH,
@@ -226,7 +231,8 @@ static const struct {
 	{ "proc",		TAME_PROC },
 	{ "cpath",		TAME_CPATH },
 	{ "abort",		TAME_ABORT },
-	{ "fattr",		TAME_FATTR }
+	{ "fattr",		TAME_FATTR },
+	{ "prot_exec",		TAME_PROTEXEC },
 };
 
 int
@@ -251,6 +257,10 @@ sys_tame(struct proc *p, void *v, register_t *retval)
 			free(rbuf, M_TEMP, MAXPATHLEN);
 			return (error);
 		}
+#ifdef KTRACE
+		if (KTRPOINT(p, KTR_STRUCT))
+			ktrstruct(p, "tamereq", rbuf, rbuflen-1);
+#endif
 
 		for (rp = rbuf; rp && *rp && error == 0; rp = pn) {
 			pn = strchr(rp, ' ');	/* find terminator */
@@ -266,8 +276,6 @@ sys_tame(struct proc *p, void *v, register_t *retval)
 				}
 			}
 			if (f == 0) {
-				printf("%s(%d): unknown req %s\n",
-				    p->p_comm, p->p_pid, rp);
 				free(rbuf, M_TEMP, MAXPATHLEN);
 				return (EINVAL);
 			}
@@ -283,8 +291,6 @@ sys_tame(struct proc *p, void *v, register_t *retval)
 		/* Already tamed, only allow reductions */
 		if (((flags | p->p_p->ps_tame) & TAME_USERSET) !=
 		    (p->p_p->ps_tame & TAME_USERSET)) {
-			printf("%s(%d): fail change %x %x\n", p->p_comm, p->p_pid,
-			    flags, p->p_p->ps_tame);
 			return (EPERM);
 		}
 
@@ -331,6 +337,10 @@ sys_tame(struct proc *p, void *v, register_t *retval)
 				break;
 			if ((error = copyinstr(sp, path, MAXPATHLEN, &len)) != 0)
 				break;
+#ifdef KTRACE
+			if (KTRPOINT(p, KTR_STRUCT))
+				ktrstruct(p, "tamepath", path, len-1);
+#endif
 
 			/* If path is relative, prepend cwd */
 			if (path[0] != '/') {
@@ -391,8 +401,6 @@ sys_tame(struct proc *p, void *v, register_t *retval)
 		free(cwdpath, M_TEMP, cwdpathlen);
 
 		if (error) {
-			printf("%s(%d): path load error %d\n",
-			    p->p_comm, p->p_pid, error);
 			for (i = 0; i < wl->wl_count; i++)
 				free(wl->wl_paths[i].name,
 				    M_TEMP, wl->wl_paths[i].len);
@@ -400,11 +408,13 @@ sys_tame(struct proc *p, void *v, register_t *retval)
 			return (error);
 		}
 		p->p_p->ps_tamepaths = wl;
+#if 0
 		printf("tame: %s(%d): paths loaded:\n", p->p_comm, p->p_pid);
 		for (i = 0; i < wl->wl_count; i++)
 			if (wl->wl_paths[i].name)
 				printf("tame: %d=%s %lld\n", i, wl->wl_paths[i].name,
 				    (long long)wl->wl_paths[i].len);
+#endif
 	}
 
 	p->p_p->ps_tame = flags;
@@ -505,7 +515,7 @@ tame_namei(struct proc *p, char *origpath)
 		if ((p->p_tamenote == TMN_RPATH) &&
 		    (p->p_p->ps_tame & TAME_GETPW)) {
 			if (strcmp(path, "/etc/spwd.db") == 0)
-				return (0);
+				return (EPERM);
 			if (strcmp(path, "/etc/pwd.db") == 0)
 				return (0);
 			if (strcmp(path, "/etc/group") == 0)
@@ -632,8 +642,6 @@ tame_namei(struct proc *p, char *origpath)
 					error = 0;
 			}
 		}
-		if (error)
-			printf("bad path: %s\n", canopath);
 		free(canopath, M_TEMP, MAXPATHLEN);
 		return (error);			/* Don't hint why it failed */
 	}
@@ -713,21 +721,18 @@ tame_cmsg_recv(struct proc *p, void *v, int controllen)
 			return tame_fail(p, EBADF, TAME_CMSG);
 
 		/* Only allow passing of sockets, pipes, and pure files */
-		printf("f_type %d\n", fp->f_type);
 		switch (fp->f_type) {
 		case DTYPE_SOCKET:
 		case DTYPE_PIPE:
 			continue;
 		case DTYPE_VNODE:
 			vp = (struct vnode *)fp->f_data;
-			printf("v_type %d\n", vp->v_type);
 			if (vp->v_type == VREG)
 				continue;
 			break;
 		default:
 			break;
 		}
-		printf("bad fd type\n");
 		return tame_fail(p, EPERM, TAME_CMSG);
 	}
 	return (0);
@@ -782,14 +787,12 @@ tame_cmsg_send(struct proc *p, void *v, int controllen)
 			return tame_fail(p, EBADF, TAME_CMSG);
 
 		/* Only allow passing of sockets, pipes, and pure files */
-		printf("f_type %d\n", fp->f_type);
 		switch (fp->f_type) {
 		case DTYPE_SOCKET:
 		case DTYPE_PIPE:
 			continue;
 		case DTYPE_VNODE:
 			vp = (struct vnode *)fp->f_data;
-			printf("v_type %d\n", vp->v_type);
 			if (vp->v_type == VREG)
 				continue;
 			break;
@@ -810,6 +813,12 @@ tame_sysctl_check(struct proc *p, int namelen, int *name, void *new)
 
 	if (new)
 		return (EFAULT);
+
+	/* setproctitle() */
+	if (namelen == 2 &&
+	    name[0] == CTL_VM &&
+	    name[1] == VM_PSSTRINGS)
+		return (0);
 
 	/* getifaddrs() */
 	if ((p->p_p->ps_tame & TAME_INET) &&
@@ -939,7 +948,8 @@ tame_socket_check(struct proc *p, int domain)
 		return (0);
 	if ((p->p_p->ps_tame & (TAME_INET | TAME_UNIX)))
 		return (0);
-	if ((p->p_p->ps_tame & TAME_DNS_ACTIVE) && domain == AF_INET)
+	if ((p->p_p->ps_tame & TAME_DNS_ACTIVE) &&
+	    (domain == AF_INET || domain == AF_INET6))
 		return (0);
 	return (EPERM);
 }
@@ -1033,7 +1043,7 @@ tame_ioctl_check(struct proc *p, long com, void *v)
 		break;
 
 	default:
-		printf("ioctl %lx\n", com);
+		printf("tame: ioctl %lx\n", com);
 		break;
 	}
 	return (EPERM);
@@ -1061,6 +1071,7 @@ tame_setsockopt_check(struct proc *p, int level, int optname)
 		case TCP_NOPUSH:
 			return (0);
 		}
+		break;
 	case IPPROTO_IP:
 		switch (optname) {
 		case IP_TOS:
@@ -1070,9 +1081,18 @@ tame_setsockopt_check(struct proc *p, int level, int optname)
 		case IP_RECVDSTADDR:
 			return (0);
 		}
+		break;
 	case IPPROTO_ICMP:
 		break;
 	case IPPROTO_IPV6:
+		switch (optname) {
+		case IPV6_UNICAST_HOPS:
+		case IPV6_RECVHOPLIMIT:
+		case IPV6_PORTRANGE:
+		case IPV6_RECVPKTINFO:
+			return (0);
+		}
+		break;
 	case IPPROTO_ICMPV6:
 		break;
 	}
