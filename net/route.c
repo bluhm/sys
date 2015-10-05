@@ -1086,11 +1086,16 @@ rtrequest1(int req, struct rt_addrinfo *info, u_int8_t prio,
 		if (error != 0 && (crt = rtalloc(ndst, 0, tableid)) != NULL) {
 			/* overwrite cloned route */
 			if ((crt->rt_flags & RTF_CLONED) != 0) {
+				struct rtentry *nrt;
+
 				rtdeletemsg(crt, tableid);
 				error = rtable_insert(tableid, ndst,
 				    info->rti_info[RTAX_NETMASK],
-				    rt->rt_priority, rt);
-				}
+				    rt->rt_priority, nrt);
+				rtfree(rt);
+				if (error == 0)
+					rt = nrt;
+			}
 			rtfree(crt);
 		}
 		if (error != 0) {
@@ -1108,10 +1113,7 @@ rtrequest1(int req, struct rt_addrinfo *info, u_int8_t prio,
 
 		if (ifa->ifa_rtrequest)
 			ifa->ifa_rtrequest(req, rt);
-		if (ret_nrt) {
-			*ret_nrt = rt;
-			rt->rt_refcnt++;
-		}
+
 		if ((rt->rt_flags & RTF_CLONING) != 0) {
 			/* clean up any cloned children */
 			rtflushclone(tableid, rt);
@@ -1119,6 +1121,11 @@ rtrequest1(int req, struct rt_addrinfo *info, u_int8_t prio,
 
 		if_group_routechange(info->rti_info[RTAX_DST],
 			info->rti_info[RTAX_NETMASK]);
+
+		if (ret_nrt != NULL)
+			*ret_nrt = rt;
+		else
+			rtfree(rt);
 		break;
 	}
 

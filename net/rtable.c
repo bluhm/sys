@@ -109,6 +109,9 @@ rtable_insert(unsigned int rtableid, struct sockaddr *dst,
 	if (rn == NULL)
 		return (ESRCH);
 
+	rt = ((struct rtentry *)rn);
+	rtref(rt);
+
 	return (0);
 }
 
@@ -418,6 +421,7 @@ rtable_insert(unsigned int rtableid, struct sockaddr *dst,
 		rt->rt_mask = msk;
 	}
 
+	rtref(rt);
 	LIST_INSERT_HEAD(&an->an_rtlist, rt, rt_next);
 
 #ifndef SMALL_KERNEL
