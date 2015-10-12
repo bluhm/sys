@@ -71,7 +71,21 @@ struct sockaddr_dl {
 
 #define LLADDR(s) ((caddr_t)((s)->sdl_data + (s)->sdl_nlen))
 
-#ifndef _KERNEL
+#ifdef _KERNEL
+
+static __inline struct sockaddr_dl *
+satosdl(struct sockaddr *sa)
+{
+	return ((struct sockaddr_dl *)(sa));
+}
+
+static __inline struct sockaddr *
+sdltosa(struct sockaddr_dl *sdl)
+{
+	return ((struct sockaddr *)(sdl));
+}
+
+#else /* _KERNEL */
 
 __BEGIN_DECLS
 char	*link_ntoa(const struct sockaddr_dl *);
