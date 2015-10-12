@@ -1031,7 +1031,7 @@ nd6_na_output(struct ifnet *ifp, struct in6_addr *daddr6,
 			mac = nd6_ifptomac(ifp);
 		} else if (sdl0->sa_family == AF_LINK) {
 			struct sockaddr_dl *sdl;
-			sdl = (struct sockaddr_dl *)sdl0;
+			sdl = satosdl(sdl0);
 			if (sdl->sdl_alen == ifp->if_addrlen)
 				mac = LLADDR(sdl);
 		}
