@@ -222,8 +222,7 @@ ether_output(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst,
 
 		switch (dst->sa_family) {
 			case AF_LINK:
-				if (satosdl(dst)->sdl_alen <
-				    sizeof(edst))
+				if (satosdl(dst)->sdl_alen < sizeof(edst))
 					senderr(EHOSTUNREACH);
 				memcpy(edst, LLADDR(satosdl(dst)),
 				    sizeof(edst));
