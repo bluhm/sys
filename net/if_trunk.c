@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_trunk.c,v 1.118 2015/09/29 10:11:40 deraadt Exp $	*/
+/*	$OpenBSD: if_trunk.c,v 1.121 2015/10/08 13:58:07 mikeb Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006, 2007 Reyk Floeter <reyk@openbsd.org>
@@ -24,6 +24,7 @@
 #include <sys/socket.h>
 #include <sys/sockio.h>
 #include <sys/systm.h>
+#include <sys/task.h>
 #include <sys/timeout.h>
 
 #include <crypto/siphash.h>
@@ -359,13 +360,13 @@ trunk_port_create(struct trunk_softc *tr, struct ifnet *ifp)
 		trunk_lladdr(&tr->tr_ac, tp->tp_lladdr);
 	}
 
-	/* Update link layer address for this port */
-	trunk_port_lladdr(tp,
-	    ((struct arpcom *)(tr->tr_primary->tp_if))->ac_enaddr);
-
 	/* Insert into the list of ports */
 	SLIST_INSERT_HEAD(&tr->tr_ports, tp, tp_entries);
 	tr->tr_count++;
+
+	/* Update link layer address for this port */
+	trunk_port_lladdr(tp,
+	    ((struct arpcom *)(tr->tr_primary->tp_if))->ac_enaddr);
 
 	/* Update trunk capabilities */
 	tr->tr_capabilities = trunk_capabilities(tr);
@@ -967,6 +968,9 @@ trunk_hashmbuf(struct mbuf *m, SIPHASH_KEY *key)
 	struct ip6_hdr *ip6, ip6buf;
 #endif
 	SIPHASH_CTX ctx;
+
+	if (m->m_pkthdr.flowid & M_FLOWID_VALID)
+		return (m->m_pkthdr.flowid & M_FLOWID_MASK);
 
 	SipHash24_Init(&ctx, key);
 	off = sizeof(*eh);

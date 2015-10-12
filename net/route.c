@@ -1,4 +1,4 @@
-/*	$OpenBSD: route.c,v 1.246 2015/10/01 22:21:48 mpi Exp $	*/
+/*	$OpenBSD: route.c,v 1.249 2015/10/07 10:50:35 mpi Exp $	*/
 /*	$NetBSD: route.c,v 1.14 1996/02/13 22:00:46 christos Exp $	*/
 
 /*
@@ -137,28 +137,30 @@
 #endif
 
 /* Give some jitter to hash, to avoid synchronization between routers. */
-static uint32_t		   rt_hashjitter;
+static uint32_t		rt_hashjitter;
 
-struct	rtstat		   rtstat;
-void			***rt_tables;
-u_int8_t		   af2rtafidx[AF_MAX+1];
-u_int8_t		   rtafidx_max;
-u_int			   rtbl_id_max = 0;
-u_int			  *rt_tab2dom;	/* rt table to domain lookup table */
+extern void	     ***rtables;
+extern unsigned int	rtables_id_max;
 
+struct rtstat		rtstat;
 int			rttrash;	/* routes not in table but not freed */
 
 struct pool		rtentry_pool;	/* pool for rtentry structures */
 struct pool		rttimer_pool;	/* pool for rttimer structures */
 
 void	rt_timer_init(void);
-int	rtable_alloc(void ***, u_int);
 int	rtflushclone1(struct rtentry *, void *, u_int);
 void	rtflushclone(unsigned int, struct rtentry *);
 int	rt_if_remove_rtdelete(struct rtentry *, void *, u_int);
 
 struct	ifaddr *ifa_ifwithroute(int, struct sockaddr *, struct sockaddr *,
 		    u_int);
+
+#ifdef DDB
+void	db_print_sa(struct sockaddr *);
+void	db_print_ifa(struct ifaddr *);
+int	db_show_rtentry(struct rtentry *, void *, unsigned int);
+#endif
 
 #define	LABELID_MAX	50000
 
@@ -171,153 +173,17 @@ struct rt_label {
 
 TAILQ_HEAD(rt_labels, rt_label)	rt_labels = TAILQ_HEAD_INITIALIZER(rt_labels);
 
-int
-rtable_alloc(void ***table, u_int id)
-{
-	void		**p;
-	struct domain	 *dom;
-	int		  i;
-
-	if ((p = mallocarray(rtafidx_max + 1, sizeof(void *), M_RTABLE,
-	    M_NOWAIT|M_ZERO)) == NULL)
-		return (ENOMEM);
-
-	/* 2nd pass: attach */
-	for (i = 0; (dom = domains[i]) != NULL; i++) {
-		if (dom->dom_rtattach)
-			dom->dom_rtattach(&p[af2rtafidx[dom->dom_family]],
-			    dom->dom_rtoffset);
-	}
-
-	for (i = 0; i < rtafidx_max; i++)
-		rtable_setid(p, id, i);
-
-	*table = (void **)p;
-
-	return (0);
-}
-
 void
 route_init(void)
 {
-	struct domain	*dom;
-	unsigned int	 keylen;
-	int		 i;
-
 	pool_init(&rtentry_pool, sizeof(struct rtentry), 0, 0, 0, "rtentry",
 	    NULL);
-
-	/*
-	 * Compute the maximum supported key length in case the routing
-	 * table backend needs it.
-	 */
-	keylen = sizeof(struct sockaddr_in);
-#ifdef INET6
-	keylen = max(keylen, (sizeof(struct sockaddr_in6)));
-#endif
-#ifdef MPLS
-	keylen = max(keylen, (sizeof(struct sockaddr_mpls)));
-#endif
-
-	rtable_init(keylen);
-
-	bzero(af2rtafidx, sizeof(af2rtafidx));
-	rtafidx_max = 1;	/* must have NULL at index 0, so start at 1 */
-
-	/* find out how many tables to allocate */
-	for (i = 0; (dom = domains[i]) != NULL; i++) {
-		if (dom->dom_rtattach)
-			af2rtafidx[dom->dom_family] = rtafidx_max++;
-	}
 
 	while (rt_hashjitter == 0)
 		rt_hashjitter = arc4random();
 
 	if (rtable_add(0) != 0)
 		panic("route_init rtable_add");
-}
-
-int
-rtable_add(u_int id)
-{
-	void	*p, *q;
-
-	splsoftassert(IPL_SOFTNET);
-
-	if (id > RT_TABLEID_MAX)
-		return (EINVAL);
-
-	if (id == 0 || id > rtbl_id_max) {
-		size_t	newlen;
-		size_t	newlen2;
-
-		if ((p = mallocarray(id + 1, sizeof(void *), M_RTABLE,
-		    M_NOWAIT|M_ZERO)) == NULL)
-			return (ENOMEM);
-		newlen = sizeof(void *) * (id+1);
-		if ((q = mallocarray(id + 1, sizeof(u_int), M_RTABLE,
-		    M_NOWAIT|M_ZERO)) == NULL) {
-			free(p, M_RTABLE, newlen);
-			return (ENOMEM);
-		}
-		newlen2 = sizeof(u_int) * (id+1);
-		if (rt_tables) {
-			bcopy(rt_tables, p, sizeof(void *) * (rtbl_id_max+1));
-			bcopy(rt_tab2dom, q, sizeof(u_int) * (rtbl_id_max+1));
-			free(rt_tables, M_RTABLE, 0);
-			free(rt_tab2dom, M_RTABLE, 0);
-		}
-		rt_tables = p;
-		rt_tab2dom = q;
-		rtbl_id_max = id;
-	}
-
-	if (rt_tables[id] != NULL)	/* already exists */
-		return (EEXIST);
-
-	rt_tab2dom[id] = 0;	/* use main table/domain by default */
-	return (rtable_alloc(&rt_tables[id], id));
-}
-
-void *
-rtable_get(u_int id, sa_family_t af)
-{
-	if (id > rtbl_id_max)
-		return (NULL);
-	return (rt_tables[id] ? rt_tables[id][af2rtafidx[af]] : NULL);
-}
-
-u_int
-rtable_l2(u_int id)
-{
-	if (id > rtbl_id_max)
-		return (0);
-	return (rt_tab2dom[id]);
-}
-
-void
-rtable_l2set(u_int id, u_int parent)
-{
-	splsoftassert(IPL_SOFTNET);
-
-	if (!rtable_exists(id) || !rtable_exists(parent))
-		return;
-	rt_tab2dom[id] = parent;
-}
-
-int
-rtable_exists(u_int id)	/* verify table with that ID exists */
-{
-	if (id > RT_TABLEID_MAX)
-		return (0);
-
-	if (id > rtbl_id_max)
-		return (0);
-
-	if (rt_tables[id] == NULL)
-		return (0);
-
-	return (1);
 }
 
 /*
@@ -1090,7 +956,7 @@ rtrequest1(int req, struct rt_addrinfo *info, u_int8_t prio,
 				error = rtable_insert(tableid, ndst,
 				    info->rti_info[RTAX_NETMASK],
 				    rt->rt_priority, rt);
-				}
+			}
 			rtfree(crt);
 		}
 		if (error != 0) {
@@ -1108,10 +974,7 @@ rtrequest1(int req, struct rt_addrinfo *info, u_int8_t prio,
 
 		if (ifa->ifa_rtrequest)
 			ifa->ifa_rtrequest(req, rt);
-		if (ret_nrt) {
-			*ret_nrt = rt;
-			rt->rt_refcnt++;
-		}
+
 		if ((rt->rt_flags & RTF_CLONING) != 0) {
 			/* clean up any cloned children */
 			rtflushclone(tableid, rt);
@@ -1119,6 +982,11 @@ rtrequest1(int req, struct rt_addrinfo *info, u_int8_t prio,
 
 		if_group_routechange(info->rti_info[RTAX_DST],
 			info->rti_info[RTAX_NETMASK]);
+
+		if (ret_nrt != NULL)
+			*ret_nrt = rt;
+		else
+			rtfree(rt);
 		break;
 	}
 
@@ -1743,7 +1611,7 @@ rt_if_remove(struct ifnet *ifp)
 	int			 i;
 	u_int			 tid;
 
-	for (tid = 0; tid <= rtbl_id_max; tid++) {
+	for (tid = 0; tid <= rtables_id_max; tid++) {
 		/* skip rtables that are not in the rdomain of the ifp */
 		if (rtable_l2(tid) != ifp->if_rdomain)
 			continue;
@@ -1788,10 +1656,10 @@ rt_if_track(struct ifnet *ifp)
 	int i;
 	u_int tid;
 
-	if (rt_tables == NULL)
+	if (rtables == NULL)
 		return;
 
-	for (tid = 0; tid <= rtbl_id_max; tid++) {
+	for (tid = 0; tid <= rtables_id_max; tid++) {
 		/* skip rtables that are not in the rdomain of the ifp */
 		if (rtable_l2(tid) != ifp->if_rdomain)
 			continue;
@@ -1848,3 +1716,88 @@ rt_if_linkstate_change(struct rtentry *rt, void *arg, u_int id)
 	return (0);
 }
 #endif
+
+#ifdef DDB
+#include <machine/db_machdep.h>
+#include <ddb/db_output.h>
+
+void
+db_print_sa(struct sockaddr *sa)
+{
+	int len;
+	u_char *p;
+
+	if (sa == NULL) {
+		db_printf("[NULL]");
+		return;
+	}
+
+	p = (u_char *)sa;
+	len = sa->sa_len;
+	db_printf("[");
+	while (len > 0) {
+		db_printf("%d", *p);
+		p++;
+		len--;
+		if (len)
+			db_printf(",");
+	}
+	db_printf("]\n");
+}
+
+void
+db_print_ifa(struct ifaddr *ifa)
+{
+	if (ifa == NULL)
+		return;
+	db_printf("  ifa_addr=");
+	db_print_sa(ifa->ifa_addr);
+	db_printf("  ifa_dsta=");
+	db_print_sa(ifa->ifa_dstaddr);
+	db_printf("  ifa_mask=");
+	db_print_sa(ifa->ifa_netmask);
+	db_printf("  flags=0x%x, refcnt=%d, metric=%d\n",
+	    ifa->ifa_flags, ifa->ifa_refcnt, ifa->ifa_metric);
+}
+
+/*
+ * Function to pass to rtalble_walk().
+ * Return non-zero error to abort walk.
+ */
+int
+db_show_rtentry(struct rtentry *rt, void *w, unsigned int id)
+{
+	db_printf("rtentry=%p", rt);
+
+	db_printf(" flags=0x%x refcnt=%d use=%llu expire=%lld rtableid=%u\n",
+	    rt->rt_flags, rt->rt_refcnt, rt->rt_use, rt->rt_expire, id);
+
+	db_printf(" key="); db_print_sa(rt_key(rt));
+	db_printf(" mask="); db_print_sa(rt_mask(rt));
+	db_printf(" gw="); db_print_sa(rt->rt_gateway);
+
+	db_printf(" ifp=%p ", rt->rt_ifp);
+	if (rt->rt_ifp)
+		db_printf("(%s)", rt->rt_ifp->if_xname);
+	else
+		db_printf("(NULL)");
+
+	db_printf(" ifa=%p\n", rt->rt_ifa);
+	db_print_ifa(rt->rt_ifa);
+
+	db_printf(" gwroute=%p llinfo=%p\n", rt->rt_gwroute, rt->rt_llinfo);
+	return (0);
+}
+
+/*
+ * Function to print all the route trees.
+ * Use this from ddb:  "call db_show_arptab"
+ */
+int
+db_show_arptab(void)
+{
+	db_printf("Route tree for AF_INET\n");
+	rtable_walk(0, AF_INET, db_show_rtentry, NULL);
+	return (0);
+}
+#endif /* DDB */

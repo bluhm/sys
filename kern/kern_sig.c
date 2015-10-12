@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_sig.c,v 1.183 2015/07/27 18:22:37 deraadt Exp $	*/
+/*	$OpenBSD: kern_sig.c,v 1.186 2015/10/10 19:12:39 deraadt Exp $	*/
 /*	$NetBSD: kern_sig.c,v 1.54 1996/04/22 01:38:32 christos Exp $	*/
 
 /*
@@ -62,6 +62,7 @@
 #include <sys/sched.h>
 #include <sys/user.h>
 #include <sys/syslog.h>
+#include <sys/pledge.h>
 
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
@@ -568,6 +569,15 @@ sys_kill(struct proc *cp, void *v, register_t *retval)
 	struct proc *p;
 	int pid = SCARG(uap, pid);
 	int signum = SCARG(uap, signum);
+
+	if (cp->p_p->ps_flags & PS_PLEDGE) {
+		/* PLEDGE_PROC is required to signal another pid */
+		if ((cp->p_p->ps_pledge & PLEDGE_PROC) ||
+		    pid == cp->p_pid || pid == 0)
+			;
+		else
+			return pledge_fail(cp, EPERM, PLEDGE_SELF);
+	}
 
 	if (((u_int)signum) >= NSIG)
 		return (EINVAL);
@@ -1517,7 +1527,7 @@ coredump(struct proc *p)
 		cred->cr_gid = 0;
 	}
 
-	p->p_tamenote = TMN_COREDUMP;
+	p->p_pledgenote = TMN_COREDUMP;
 	NDINIT(&nd, LOOKUP, NOFOLLOW, UIO_SYSSPACE, name, p);
 
 	error = vn_open(&nd, O_CREAT | FWRITE | O_NOFOLLOW, S_IRUSR | S_IWUSR);

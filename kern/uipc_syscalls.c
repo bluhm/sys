@@ -1,4 +1,4 @@
-/*	$OpenBSD: uipc_syscalls.c,v 1.110 2015/09/29 16:55:58 deraadt Exp $	*/
+/*	$OpenBSD: uipc_syscalls.c,v 1.112 2015/10/09 01:10:27 deraadt Exp $	*/
 /*	$NetBSD: uipc_syscalls.c,v 1.19 1996/02/09 19:00:48 christos Exp $	*/
 
 /*
@@ -45,7 +45,7 @@
 #include <sys/socket.h>
 #include <sys/socketvar.h>
 #include <sys/signalvar.h>
-#include <sys/tame.h>
+#include <sys/pledge.h>
 #include <sys/unpcb.h>
 #include <sys/un.h>
 #ifdef KTRACE
@@ -79,8 +79,8 @@ sys_socket(struct proc *p, void *v, register_t *retval)
 	int type = SCARG(uap, type);
 	int fd, error;
 
-	if (tame_socket_check(p, SCARG(uap, domain)))
-		return (tame_fail(p, EPERM, TAME_UNIX));
+	if (pledge_socket_check(p, SCARG(uap, domain)))
+		return (pledge_fail(p, EPERM, PLEDGE_UNIX));
 
 	fdplock(fdp);
 	error = falloc(p, &fp, &fd);
@@ -124,8 +124,8 @@ sys_bind(struct proc *p, void *v, register_t *retval)
 	struct mbuf *nam;
 	int error;
 
-	if (tame_bind_check(p, SCARG(uap, name)))
-		return (tame_fail(p, EPERM, TAME_UNIX));
+	if (pledge_bind_check(p, SCARG(uap, name)))
+		return (pledge_fail(p, EPERM, PLEDGE_UNIX));
 
 	if ((error = getsock(p, SCARG(uap, s), &fp)) != 0)
 		return (error);
@@ -322,8 +322,8 @@ sys_connect(struct proc *p, void *v, register_t *retval)
 	struct mbuf *nam = NULL;
 	int error, s;
 
-	if (tame_connect_check(p))
-		return (tame_fail(p, EPERM, TAME_UNIX));
+	if (pledge_connect_check(p))
+		return (pledge_fail(p, EPERM, PLEDGE_UNIX));
 
 	if ((error = getsock(p, SCARG(uap, s), &fp)) != 0)
 		return (error);
@@ -465,8 +465,8 @@ sys_sendto(struct proc *p, void *v, register_t *retval)
 	struct msghdr msg;
 	struct iovec aiov;
 
-	if (tame_sendto_check(p, SCARG(uap, to)))
-		return (tame_fail(p, EPERM, TAME_UNIX));
+	if (pledge_sendto_check(p, SCARG(uap, to)))
+		return (pledge_fail(p, EPERM, PLEDGE_UNIX));
 
 	msg.msg_name = (caddr_t)SCARG(uap, to);
 	msg.msg_namelen = SCARG(uap, tolen);
@@ -499,8 +499,8 @@ sys_sendmsg(struct proc *p, void *v, register_t *retval)
 		ktrmsghdr(p, &msg);
 #endif
 
-	if (tame_sendto_check(p, msg.msg_name))
-		return (tame_fail(p, EPERM, TAME_UNIX));
+	if (pledge_sendto_check(p, msg.msg_name))
+		return (pledge_fail(p, EPERM, PLEDGE_UNIX));
 
 	if (msg.msg_iovlen > IOV_MAX)
 		return (EMSGSIZE);
@@ -586,8 +586,9 @@ sendit(struct proc *p, int s, struct msghdr *mp, int flags, register_t *retsize)
 			    mp->msg_controllen);
 #endif
 
-		if (tame_cmsg_send(p, control, mp->msg_controllen)) {
+		if (pledge_cmsg_send(p, control)) {
 			m_free(control);
+			error = EPERM;
 			goto bad;
 		}
 	} else
@@ -644,8 +645,8 @@ sys_recvfrom(struct proc *p, void *v, register_t *retval)
 	struct iovec aiov;
 	int error;
 
-	if (tame_recvfrom_check(p, SCARG(uap, from)))
-		return (tame_fail(p, EPERM, TAME_UNIX));
+	if (pledge_recvfrom_check(p, SCARG(uap, from)))
+		return (pledge_fail(p, EPERM, PLEDGE_UNIX));
 
 	if (SCARG(uap, fromlenaddr)) {
 		error = copyin(SCARG(uap, fromlenaddr),
@@ -681,8 +682,8 @@ sys_recvmsg(struct proc *p, void *v, register_t *retval)
 	if (error)
 		return (error);
 
-	if (tame_recvfrom_check(p, msg.msg_name))
-		return (tame_fail(p, EPERM, TAME_UNIX));
+	if (pledge_recvfrom_check(p, msg.msg_name))
+		return (pledge_fail(p, EPERM, PLEDGE_UNIX));
 
 	if (msg.msg_iovlen > IOV_MAX)
 		return (EMSGSIZE);
@@ -820,8 +821,10 @@ recvit(struct proc *p, int s, struct msghdr *mp, caddr_t namelenp,
 					mp->msg_flags |= MSG_CTRUNC;
 					i = len;
 				}
-//				if (tame_cmsg_recv(p, control, mp->msg_controllen))
-//					goto out;
+				if (pledge_cmsg_recv(p, m)) {
+					error = EPERM;
+					goto out;
+				}
 				error = copyout(mtod(m, caddr_t), cp, i);
 				if (m->m_next)
 					i = ALIGN(i);
@@ -880,8 +883,8 @@ sys_setsockopt(struct proc *p, void *v, register_t *retval)
 	struct mbuf *m = NULL;
 	int error;
 
-	if (tame_setsockopt_check(p, SCARG(uap, level), SCARG(uap, name)))
-		return (tame_fail(p, EPERM, TAME_INET));
+	if (pledge_setsockopt_check(p, SCARG(uap, level), SCARG(uap, name)))
+		return (pledge_fail(p, EPERM, PLEDGE_INET));
 
 	if ((error = getsock(p, SCARG(uap, s), &fp)) != 0)
 		return (error);

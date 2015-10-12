@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_exec.c,v 1.166 2015/10/02 15:49:22 deraadt Exp $	*/
+/*	$OpenBSD: kern_exec.c,v 1.169 2015/10/10 14:46:15 deraadt Exp $	*/
 /*	$NetBSD: kern_exec.c,v 1.75 1996/02/09 18:59:28 christos Exp $	*/
 
 /*-
@@ -53,6 +53,7 @@
 #include <sys/signalvar.h>
 #include <sys/stat.h>
 #include <sys/conf.h>
+#include <sys/pledge.h>
 #ifdef SYSVSHM
 #include <sys/shm.h>
 #endif
@@ -279,6 +280,7 @@ sys_execve(struct proc *p, void *v, register_t *retval)
 	 * Mark this process as "leave me alone, I'm execing".
 	 */
 	atomic_setbits_int(&pr->ps_flags, PS_INEXEC);
+	p->p_pledgenote = TMN_XPATH;
 
 #if NSYSTRACE > 0
 	if (ISSET(p->p_flag, P_SYSTRACE)) {
@@ -549,6 +551,9 @@ sys_execve(struct proc *p, void *v, register_t *retval)
 		atomic_setbits_int(&pr->ps_flags, PS_SUGIDEXEC);
 	else
 		atomic_clearbits_int(&pr->ps_flags, PS_SUGIDEXEC);
+
+	atomic_clearbits_int(&pr->ps_flags, PS_PLEDGE);
+	pledge_dropwpaths(pr);
 
 	/*
 	 * deal with set[ug]id.
