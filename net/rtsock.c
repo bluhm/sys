@@ -72,6 +72,7 @@
 #include <sys/protosw.h>
 
 #include <net/if.h>
+#include <net/if_dl.h>
 #include <net/if_var.h>
 #include <net/route.h>
 #include <net/raw_cb.h>
