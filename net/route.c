@@ -613,7 +613,7 @@ ifa_ifwithroute(int flags, struct sockaddr *dst, struct sockaddr *gateway,
 	}
 	if (ifa == NULL) {
 		if (gateway->sa_family == AF_LINK) {
-			struct sockaddr_dl *sdl = (struct sockaddr_dl *)gateway;
+			struct sockaddr_dl *sdl = satosdl(gateway);
 			struct ifnet *ifp = if_get(sdl->sdl_index);
 
 			if (ifp != NULL)
@@ -657,7 +657,7 @@ rt_getifa(struct rt_addrinfo *info, u_int rtid)
 	if (info->rti_info[RTAX_IFP] != NULL) {
 		struct sockaddr_dl *sdl;
 
-		sdl = (struct sockaddr_dl *)info->rti_info[RTAX_IFP];
+		sdl = satosdl(info->rti_info[RTAX_IFP]);
 		ifp = if_get(sdl->sdl_index);
 	}
 

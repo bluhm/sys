@@ -1692,7 +1692,7 @@ icmp6_redirect_output(struct mbuf *m0, struct rtentry *rt)
 		if ((nrt != NULL) &&
 		    (nrt->rt_flags & (RTF_GATEWAY|RTF_LLINFO)) == RTF_LLINFO &&
 		    (nrt->rt_gateway->sa_family == AF_LINK) &&
-		    (sdl = (struct sockaddr_dl *)nrt->rt_gateway) &&
+		    (sdl = satosdl(nrt->rt_gateway)) &&
 		    sdl->sdl_alen) {
 			nd_opt = (struct nd_opt_hdr *)p;
 			nd_opt->nd_opt_type = ND_OPT_TARGET_LINKADDR;

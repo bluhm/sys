@@ -838,7 +838,7 @@ arpproxy(struct in_addr in, unsigned int rtableid)
 		return (0);
 
 	/* Check that arp information are correct. */
-	sdl = (struct sockaddr_dl *)rt->rt_gateway;
+	sdl = satosdl(rt->rt_gateway);
 	if (sdl->sdl_alen != ETHER_ADDR_LEN) {
 		rtfree(rt);
 		return (0);
