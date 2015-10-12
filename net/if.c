@@ -1945,7 +1945,7 @@ ifioctl(struct socket *so, u_long cmd, caddr_t data, struct proc *p)
 	case SIOCSIFLLADDR:
 		if ((error = suser(p, 0)))
 			return (error);
-		sdl = (struct sockaddr_dl *)ifp->if_sadl;
+		sdl = ifp->if_sadl;
 		if (sdl == NULL)
 			return (EINVAL);
 		if (ifr->ifr_addr.sa_len != ETHER_ADDR_LEN)
