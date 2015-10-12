@@ -144,7 +144,7 @@ get_hw_ifid(struct ifnet *ifp, struct in6_addr *in6)
 	static u_int8_t allone[8] =
 		{ 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
 
-	sdl = (struct sockaddr_dl *)ifp->if_sadl;
+	sdl = ifp->if_sadl;
 	if (sdl == NULL || sdl->sdl_alen == 0)
 		return -1;
 
