@@ -61,8 +61,6 @@
 #include <netinet/ip_carp.h>
 #endif
 
-#define SDL(s) ((struct sockaddr_dl *)s)
-
 TAILQ_HEAD(dadq_head, dadq);
 struct dadq {
 	TAILQ_ENTRY(dadq) dad_list;
@@ -242,7 +240,7 @@ nd6_ns_input(struct mbuf *m, int off, int icmp6len)
 			    IN6_IFF_NOTREADY | IN6_IFF_ANYCAST)->ia_ifa;
 			if (ifa) {
 				proxy = 1;
-				proxydl = SDL(rt->rt_gateway);
+				proxydl = satosdl(rt->rt_gateway);
 				router = 0;	/* XXX */
 			}
 		}
@@ -711,7 +709,7 @@ nd6_na_input(struct mbuf *m, int off, int icmp6len)
 	rt = nd6_lookup(&taddr6, 0, ifp, ifp->if_rdomain);
 	if ((rt == NULL) ||
 	   ((ln = (struct llinfo_nd6 *)rt->rt_llinfo) == NULL) ||
-	   ((sdl = SDL(rt->rt_gateway)) == NULL))
+	   ((sdl = satosdl(rt->rt_gateway)) == NULL))
 		goto freeit;
 
 	if (ln->ln_state == ND6_LLINFO_INCOMPLETE) {

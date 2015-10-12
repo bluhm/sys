@@ -69,8 +69,6 @@
 #include <net/if_bridge.h>
 #endif
 
-#define SDL(s) ((struct sockaddr_dl *)s)
-
 /*
  * ARP trailer negotiation.  Trailer protocol is not IP specific,
  * but ARP request/response use IP addresses.
@@ -198,7 +196,7 @@ arp_rtrequest(int req, struct rtentry *rt)
 			arprequest(ifp,
 			    &satosin(rt_key(rt))->sin_addr.s_addr,
 			    &satosin(rt_key(rt))->sin_addr.s_addr,
-			    (u_char *)LLADDR(SDL(gate)));
+			    (u_char *)LLADDR(satosdl(gate)));
 		/*FALLTHROUGH*/
 	case RTM_RESOLVE:
 		if (gate->sa_family != AF_LINK ||
@@ -207,8 +205,8 @@ arp_rtrequest(int req, struct rtentry *rt)
 			    ifp->if_xname);
 			break;
 		}
-		SDL(gate)->sdl_type = ifp->if_type;
-		SDL(gate)->sdl_index = ifp->if_index;
+		satosdl(gate)->sdl_type = ifp->if_type;
+		satosdl(gate)->sdl_index = ifp->if_index;
 		if (la != 0)
 			break; /* This happens on a route change */
 		/*
@@ -373,7 +371,7 @@ arpresolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 	}
 	if (la == NULL || rt == NULL)
 		goto bad;
-	sdl = SDL(rt->rt_gateway);
+	sdl = satosdl(rt->rt_gateway);
 	if (sdl->sdl_alen > 0 && sdl->sdl_alen != ETHER_ADDR_LEN) {
 		log(LOG_DEBUG, "%s: %s: incorrect arp information\n", __func__,
 		    inet_ntop(AF_INET, &satosin(dst)->sin_addr,
@@ -635,7 +633,7 @@ in_arpinput(struct mbuf *m)
 	}
 	rt = arplookup(isaddr.s_addr, itaddr.s_addr == myaddr.s_addr, 0,
 	    rtable_l2(m->m_pkthdr.ph_rtableid));
-	if (rt != NULL && (sdl = SDL(rt->rt_gateway)) != NULL) {
+	if (rt != NULL && (sdl = satosdl(rt->rt_gateway)) != NULL) {
 		la = (struct llinfo_arp *)rt->rt_llinfo;
 		if (sdl->sdl_alen) {
 			if (memcmp(ea->arp_sha, LLADDR(sdl), sdl->sdl_alen)) {
@@ -743,7 +741,7 @@ out:
 		if (rt->rt_ifp->if_type == IFT_CARP && ifp->if_type != IFT_CARP)
 			goto out;
 		memcpy(ea->arp_tha, ea->arp_sha, sizeof(ea->arp_sha));
-		sdl = SDL(rt->rt_gateway);
+		sdl = satosdl(rt->rt_gateway);
 		memcpy(ea->arp_sha, LLADDR(sdl), sizeof(ea->arp_sha));
 		rtfree(rt);
 	}
@@ -780,7 +778,7 @@ arptfree(struct llinfo_arp *la)
 
 	if (rt == NULL)
 		panic("arptfree");
-	if (rt->rt_refcnt > 0 && (sdl = SDL(rt->rt_gateway)) &&
+	if (rt->rt_refcnt > 0 && (sdl = satosdl(rt->rt_gateway)) &&
 	    sdl->sdl_family == AF_LINK) {
 		sdl->sdl_alen = 0;
 		la->la_asked = 0;
