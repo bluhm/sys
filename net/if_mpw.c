@@ -106,7 +106,7 @@ mpw_clone_create(struct if_clone *ifc, int unit)
 
 	sc->sc_ifa.ifa_ifp = ifp;
 	sc->sc_ifa.ifa_rtrequest = link_rtrequest;
-	sc->sc_ifa.ifa_addr = (struct sockaddr *) ifp->if_sadl;
+	sc->sc_ifa.ifa_addr = sdltosa(ifp->if_sadl);
 	sc->sc_smpls.smpls_len = sizeof(sc->sc_smpls);
 	sc->sc_smpls.smpls_family = AF_MPLS;
 

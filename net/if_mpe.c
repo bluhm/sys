@@ -106,7 +106,7 @@ mpe_clone_create(struct if_clone *ifc, int unit)
 
 	mpeif->sc_ifa.ifa_ifp = ifp;
 	mpeif->sc_ifa.ifa_rtrequest = link_rtrequest;
-	mpeif->sc_ifa.ifa_addr = (struct sockaddr *) ifp->if_sadl;
+	mpeif->sc_ifa.ifa_addr = sdltosa(ifp->if_sadl);
 	mpeif->sc_smpls.smpls_len = sizeof(mpeif->sc_smpls);
 	mpeif->sc_smpls.smpls_family = AF_MPLS;
 

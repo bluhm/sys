@@ -315,7 +315,7 @@ nd6_ns_input(struct mbuf *m, int off, int icmp6len)
 		nd6_na_output(ifp, &saddr6, &taddr6,
 		    ((anycast || proxy || !tlladdr) ? 0 : ND_NA_FLAG_OVERRIDE) |
 		    (router ? ND_NA_FLAG_ROUTER : 0),
-		    tlladdr, (struct sockaddr *)proxydl);
+		    tlladdr, sdltosa(proxydl));
 		goto freeit;
 	}
 
@@ -324,7 +324,7 @@ nd6_ns_input(struct mbuf *m, int off, int icmp6len)
 	nd6_na_output(ifp, &saddr6, &taddr6,
 	    ((anycast || proxy || !tlladdr) ? 0 : ND_NA_FLAG_OVERRIDE) |
 	    (router ? ND_NA_FLAG_ROUTER : 0) | ND_NA_FLAG_SOLICITED,
-	    tlladdr, (struct sockaddr *)proxydl);
+	    tlladdr, sdltosa(proxydl));
  freeit:
 	m_freem(m);
 	if_put(ifp);
