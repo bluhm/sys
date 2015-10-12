@@ -389,7 +389,7 @@ rt_sendmsg(struct rtentry *rt, int cmd, u_int rtableid)
 	info.rti_info[RTAX_NETMASK] = rt_mask(rt);
 	info.rti_info[RTAX_LABEL] = rtlabel_id2sa(rt->rt_labelid, &sa_rl);
 	if (rt->rt_ifp != NULL) {
-		info.rti_info[RTAX_IFP] =(struct sockaddr *)rt->rt_ifp->if_sadl;
+		info.rti_info[RTAX_IFP] = sdltosa(rt->rt_ifp->if_sadl);
 		info.rti_info[RTAX_IFA] = rt->rt_ifa->ifa_addr;
 	}
 
@@ -809,7 +809,7 @@ rtrequest1(int req, struct rt_addrinfo *info, u_int8_t prio,
 
 		info->rti_flags = rt->rt_flags & ~(RTF_CLONING | RTF_STATIC);
 		info->rti_flags |= RTF_CLONED;
-		info->rti_info[RTAX_GATEWAY] = (struct sockaddr *)&sa_dl;
+		info->rti_info[RTAX_GATEWAY] = sdltosa(&sa_dl);
 		info->rti_flags |= RTF_HOST;
 		info->rti_info[RTAX_LABEL] =
 		    rtlabel_id2sa(rt->rt_labelid, &sa_rl2);
@@ -1118,7 +1118,7 @@ rt_ifa_add(struct ifaddr *ifa, int flags, struct sockaddr *dst)
 	info.rti_flags = flags | RTF_MPATH;
 	info.rti_info[RTAX_DST] = dst;
 	if (flags & RTF_LLINFO)
-		info.rti_info[RTAX_GATEWAY] = (struct sockaddr *)ifp->if_sadl;
+		info.rti_info[RTAX_GATEWAY] = sdltosa(ifp->if_sadl);
 	else
 		info.rti_info[RTAX_GATEWAY] = ifa->ifa_addr;
 	info.rti_info[RTAX_LABEL] = rtlabel_id2sa(ifp->if_rtlabelid, &sa_rl);
