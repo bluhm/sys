@@ -58,8 +58,6 @@
 #include <netinet6/nd6.h>
 #include <netinet/icmp6.h>
 
-#define SDL(s)	((struct sockaddr_dl *)s)
-
 int rtpref(struct nd_defrouter *);
 struct nd_defrouter *defrtrlist_update(struct nd_defrouter *);
 struct in6_ifaddr *in6_ifadd(struct nd_prefix *, int);
