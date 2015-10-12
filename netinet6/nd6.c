@@ -64,8 +64,6 @@
 #define ND6_SLOWTIMER_INTERVAL (60 * 60) /* 1 hour */
 #define ND6_RECALC_REACHTM_INTERVAL (60 * 120) /* 2 hours */
 
-#define SDL(s) ((struct sockaddr_dl *)s)
-
 /* timer values */
 int	nd6_prune	= 1;	/* walk list every 1 seconds */
 int	nd6_delay	= 5;	/* delay first probe time 5 second */
@@ -1023,8 +1021,8 @@ nd6_rtrequest(int req, struct rtentry *rt)
 			    __func__, ifp->if_xname);
 			break;
 		}
-		SDL(gate)->sdl_type = ifp->if_type;
-		SDL(gate)->sdl_index = ifp->if_index;
+		satosdl(gate)->sdl_type = ifp->if_type;
+		satosdl(gate)->sdl_index = ifp->if_index;
 		if (ln != NULL)
 			break;	/* This happens on a route change */
 		/*
@@ -1360,7 +1358,7 @@ fail:
 		goto fail;
 	if (rt->rt_gateway->sa_family != AF_LINK)
 		goto fail;
-	sdl = SDL(rt->rt_gateway);
+	sdl = satosdl(rt->rt_gateway);
 
 	olladdr = (sdl->sdl_alen) ? 1 : 0;
 	if (olladdr && lladdr) {
@@ -1765,7 +1763,7 @@ nd6_storelladdr(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 		m_freem(m);
 		return (EINVAL);
 	}
-	sdl = SDL(rt->rt_gateway);
+	sdl = satosdl(rt->rt_gateway);
 	if (sdl->sdl_alen != ETHER_ADDR_LEN) {
 		char addr[INET6_ADDRSTRLEN];
 		log(LOG_DEBUG, "%s: %s: incorrect nd6 information\n", __func__,
