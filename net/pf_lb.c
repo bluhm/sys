@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf_lb.c,v 1.50 2015/10/13 19:32:31 sashan Exp $ */
+/*	$OpenBSD: pf_lb.c,v 1.51 2015/10/15 19:48:44 bluhm Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
