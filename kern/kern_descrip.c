@@ -429,6 +429,10 @@ restart:
 			*retval = ((struct socket *)fp->f_data)->so_pgid;
 			break;
 		}
+		if (fp->f_type == DTYPE_PIPE) {
+			*retval = ((struct pipe *)fp->f_data)->pipe_pgid;
+			break;
+		}
 		error = (*fp->f_ops->fo_ioctl)
 			(fp, TIOCGPGRP, (caddr_t)&tmp, p);
 		*retval = -tmp;
@@ -441,6 +445,12 @@ restart:
 			so->so_pgid = (long)SCARG(uap, arg);
 			so->so_siguid = p->p_ucred->cr_ruid;
 			so->so_sigeuid = p->p_ucred->cr_uid;
+			break;
+		}
+		if (fp->f_type == DTYPE_PIPE) {
+			struct pipe *mpipe = (struct pipe *)fp->f_data;
+
+			mpipe->pipe_pgid = (long)SCARG(uap, arg);
 			break;
 		}
 		if ((long)SCARG(uap, arg) <= 0) {
