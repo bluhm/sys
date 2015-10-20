@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_icmp.c,v 1.141 2015/09/23 08:49:46 mpi Exp $	*/
+/*	$OpenBSD: ip_icmp.c,v 1.143 2015/10/19 12:10:05 mpi Exp $	*/
 /*	$NetBSD: ip_icmp.c,v 1.19 1996/02/13 23:42:22 christos Exp $	*/
 
 /*
@@ -731,11 +731,10 @@ icmp_reflect(struct mbuf *m, struct mbuf **op, struct in_ifaddr *ia)
 		sin.sin_addr = ip->ip_dst;
 
 		rt = rtalloc(sintosa(&sin), 0, rtableid);
-		if (rt != NULL) {
-			if (rt->rt_flags & (RTF_LOCAL|RTF_BROADCAST))
-				ia = ifatoia(rt->rt_ifa);
-			rtfree(rt);
-		}
+		if (rtisvalid(rt) &&
+		    ISSET(rt->rt_flags, RTF_LOCAL|RTF_BROADCAST))
+			ia = ifatoia(rt->rt_ifa);
+		rtfree(rt);
 	}
 
 	/*
@@ -936,18 +935,14 @@ icmp_mtudisc_clone(struct in_addr dst, u_int rtableid)
 	sin.sin_addr = dst;
 
 	rt = rtalloc(sintosa(&sin), RT_REPORT|RT_RESOLVE, rtableid);
-	if (rt == NULL)
-		return (NULL);
 
 	/* Check if the route is actually usable */
-	if (rt->rt_flags & (RTF_REJECT | RTF_BLACKHOLE) ||
-	    (rt->rt_flags & RTF_UP) == 0) {
+	if (!rtisvalid(rt) || (rt->rt_flags & (RTF_REJECT|RTF_BLACKHOLE))) {
 		rtfree(rt);
 		return (NULL);
 	}
 
 	/* If we didn't get a host route, allocate one */
-
 	if ((rt->rt_flags & RTF_HOST) == 0) {
 		struct rtentry *nrt;
 		struct rt_addrinfo info;

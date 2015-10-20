@@ -1,4 +1,4 @@
-/*	$OpenBSD: in_pcb.c,v 1.181 2015/10/09 01:10:27 deraadt Exp $	*/
+/*	$OpenBSD: in_pcb.c,v 1.184 2015/10/19 12:10:05 mpi Exp $	*/
 /*	$NetBSD: in_pcb.c,v 1.25 1996/02/13 23:41:53 christos Exp $	*/
 
 /*
@@ -360,67 +360,47 @@ in_pcbbind(struct inpcb *inp, struct mbuf *nam, struct proc *p)
 		inp->inp_laddr = sin->sin_addr;
 	}
 	if (lport == 0) {
-		u_int16_t first, last;
+		u_int16_t bound_a, bound_b, first, last;
 		int count;
 
 		if (inp->inp_flags & INP_HIGHPORT) {
-			first = ipport_hifirstauto;	/* sysctl */
-			last = ipport_hilastauto;
+			bound_a = ipport_hifirstauto;	/* sysctl */
+			bound_b = ipport_hilastauto;
 		} else if (inp->inp_flags & INP_LOWPORT) {
 			if ((error = suser(p, 0)))
 				return (EACCES);
-			first = IPPORT_RESERVED-1; /* 1023 */
-			last = 600;		   /* not IPPORT_RESERVED/2 */
+			bound_a = IPPORT_RESERVED-1; /* 1023 */
+			bound_b = 600;		   /* not IPPORT_RESERVED/2 */
 		} else {
-			first = ipport_firstauto;	/* sysctl */
-			last  = ipport_lastauto;
+			bound_a = ipport_firstauto;	/* sysctl */
+			bound_b = ipport_lastauto;
+		}
+		if (bound_a < bound_b) {
+			first = bound_a;
+			last  = bound_b;
+		} else {
+			first = bound_b;
+			last  = bound_a;
 		}
 
 		/*
 		 * Simple check to ensure all ports are not used up causing
 		 * a deadlock here.
-		 *
-		 * We split the two cases (up and down) so that the direction
-		 * is not being tested on each round of the loop.
 		 */
 
-		if (first > last) {
-			/*
-			 * counting down
-			 */
-			count = first - last;
-			if (count)
-				lastport = first - arc4random_uniform(count);
+		count = last - first;
+		lastport = first + arc4random_uniform(count);
 
-			do {
-				if (count-- < 0)	/* completely used? */
-					return (EADDRNOTAVAIL);
-				--lastport;
-				if (lastport > first || lastport < last)
-					lastport = first;
-				lport = htons(lastport);
-			} while (in_baddynamic(lastport, so->so_proto->pr_protocol) ||
-			    in_pcblookup(table, &zeroin_addr, 0,
-			    &inp->inp_laddr, lport, wild, inp->inp_rtableid));
-		} else {
-			/*
-			 * counting up
-			 */
-			count = last - first;
-			if (count)
-				lastport = first + arc4random_uniform(count);
-
-			do {
-				if (count-- < 0)	/* completely used? */
-					return (EADDRNOTAVAIL);
-				++lastport;
-				if (lastport < first || lastport > last)
-					lastport = first;
-				lport = htons(lastport);
-			} while (in_baddynamic(lastport, so->so_proto->pr_protocol) ||
-			    in_pcblookup(table, &zeroin_addr, 0,
-			    &inp->inp_laddr, lport, wild, inp->inp_rtableid));
-		}
+		do {
+			if (count-- < 0)	/* completely used? */
+				return (EADDRNOTAVAIL);
+			++lastport;
+			if (lastport < first || lastport > last)
+				lastport = first;
+			lport = htons(lastport);
+		} while (in_baddynamic(lastport, so->so_proto->pr_protocol) ||
+		    in_pcblookup(table, &zeroin_addr, 0,
+		    &inp->inp_laddr, lport, wild, inp->inp_rtableid));
 	}
 	inp->inp_lport = lport;
 	in_pcbrehash(inp);
@@ -456,7 +436,7 @@ in_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 		return (EADDRNOTAVAIL);
 
 	if (pledge_dns_check(p, sin->sin_port))
-		return (pledge_fail(p, EPERM, PLEDGE_DNSPATH));
+		return (pledge_fail(p, EPERM, PLEDGE_DNS));
 
 	error = in_selectsrc(&ina, sin, inp->inp_moptions, &inp->inp_route,
 	    &inp->inp_laddr, inp->inp_rtableid);
@@ -784,7 +764,7 @@ in_pcbrtentry(struct inpcb *inp)
 	ro = &inp->inp_route;
 
 	/* check if route is still valid */
-	if (ro->ro_rt && (ro->ro_rt->rt_flags & RTF_UP) == 0) {
+	if (!rtisvalid(ro->ro_rt)) {
 		rtfree(ro->ro_rt);
 		ro->ro_rt = NULL;
 	}
@@ -877,8 +857,8 @@ in_selectsrc(struct in_addr **insrc, struct sockaddr_in *sin,
 	 * If route is known or can be allocated now,
 	 * our src addr is taken from the i/f, else punt.
 	 */
-	if (ro->ro_rt && ((ro->ro_rt->rt_flags & RTF_UP) == 0 ||
-	    (satosin(&ro->ro_dst)->sin_addr.s_addr != sin->sin_addr.s_addr))) {
+	if (!rtisvalid(ro->ro_rt) || (ro->ro_tableid != rtableid) ||
+	    (satosin(&ro->ro_dst)->sin_addr.s_addr != sin->sin_addr.s_addr)) {
 		rtfree(ro->ro_rt);
 		ro->ro_rt = NULL;
 	}

@@ -1,4 +1,4 @@
-/*	$OpenBSD: proc.h,v 1.207 2015/10/10 14:46:15 deraadt Exp $	*/
+/*	$OpenBSD: proc.h,v 1.209 2015/10/20 06:40:01 semarie Exp $	*/
 /*	$NetBSD: proc.h,v 1.44 1996/04/22 01:23:21 christos Exp $	*/
 
 /*-
@@ -334,9 +334,9 @@ struct proc {
 #define TMN_XPATH	0x00000008
 #define TMN_FATTR	0x00000010
 #define TMN_COREDUMP	0x00000020
+#define TMN_STATLIE	0x00000040
 	int	p_pledgeafter;
 #define TMA_YPLOCK	0x00000001
-#define TMA_DNSRESOLV	0x00000002
 
 #ifndef	__HAVE_MD_TCB
 	void	*p_tcb;		/* user-space thread-control-block address */

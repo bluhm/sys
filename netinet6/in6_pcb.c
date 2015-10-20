@@ -1,4 +1,4 @@
-/*	$OpenBSD: in6_pcb.c,v 1.77 2015/10/15 10:27:18 vgross Exp $	*/
+/*	$OpenBSD: in6_pcb.c,v 1.80 2015/10/19 12:11:28 mpi Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -293,7 +293,7 @@ in6_pcbsetport(struct in6_addr *laddr, struct inpcb *inp, struct proc *p)
 {
 	struct socket *so = inp->inp_socket;
 	struct inpcbtable *table = inp->inp_table;
-	u_int16_t first, last;
+	u_int16_t bound_a, bound_b, first, last;
 	u_int16_t lastport = 0;
 	u_int16_t lport = 0;
 	int count;
@@ -308,63 +308,43 @@ in6_pcbsetport(struct in6_addr *laddr, struct inpcb *inp, struct proc *p)
 		wild |= INPLOOKUP_WILDCARD;
 
 	if (inp->inp_flags & INP_HIGHPORT) {
-		first = ipport_hifirstauto;	/* sysctl */
-		last = ipport_hilastauto;
+		bound_a = ipport_hifirstauto;	/* sysctl */
+		bound_b = ipport_hilastauto;
 	} else if (inp->inp_flags & INP_LOWPORT) {
 		if ((error = suser(p, 0)))
 			return (EACCES);
-		first = IPPORT_RESERVED-1; /* 1023 */
-		last = 600;		   /* not IPPORT_RESERVED/2 */
+		bound_a = IPPORT_RESERVED-1; /* 1023 */
+		bound_b = 600;		   /* not IPPORT_RESERVED/2 */
 	} else {
-		first = ipport_firstauto;	/* sysctl */
-		last  = ipport_lastauto;
+		bound_a = ipport_firstauto;	/* sysctl */
+		bound_b = ipport_lastauto;
+	}
+	if (bound_a < bound_b) {
+		first = bound_a;
+		last  = bound_b;
+	} else {
+		first = bound_b;
+		last  = bound_a;
 	}
 
 	/*
 	 * Simple check to ensure all ports are not used up causing
 	 * a deadlock here.
-	 *
-	 * We split the two cases (up and down) so that the direction
-	 * is not being tested on each round of the loop.
 	 */
 
-	if (first > last) {
-		/*
-		 * counting down
-		 */
-		count = first - last;
-		if (count)
-			lastport = first - arc4random_uniform(count);
+	count = last - first;
+	lastport = first + arc4random_uniform(count);
 
-		do {
-			if (count-- < 0)	/* completely used? */
-				return (EADDRNOTAVAIL);
-			--lastport;
-			if (lastport > first || lastport < last)
-				lastport = first;
-			lport = htons(lastport);
-		} while (in_baddynamic(lastport, so->so_proto->pr_protocol) ||
-		    in_pcblookup(table, &zeroin6_addr, 0,
-		    &inp->inp_laddr6, lport, wild, inp->inp_rtableid));
-	} else {
-		/*
-		 * counting up
-		 */
-		count = last - first;
-		if (count)
-			lastport = first + arc4random_uniform(count);
-
-		do {
-			if (count-- < 0)	/* completely used? */
-				return (EADDRNOTAVAIL);
-			++lastport;
-			if (lastport < first || lastport > last)
-				lastport = first;
-			lport = htons(lastport);
-		} while (in_baddynamic(lastport, so->so_proto->pr_protocol) ||
-		    in_pcblookup(table, &zeroin6_addr, 0,
-		    &inp->inp_laddr6, lport, wild, inp->inp_rtableid));
-	}
+	do {
+		if (count-- < 0)	/* completely used? */
+			return (EADDRNOTAVAIL);
+		++lastport;
+		if (lastport < first || lastport > last)
+			lastport = first;
+		lport = htons(lastport);
+	} while (in_baddynamic(lastport, so->so_proto->pr_protocol) ||
+	    in_pcblookup(table, &zeroin6_addr, 0,
+	    &inp->inp_laddr6, lport, wild, inp->inp_rtableid));
 
 	inp->inp_lport = lport;
 	in_pcbrehash(inp);
@@ -404,7 +384,7 @@ in6_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 		return (EADDRNOTAVAIL);
 
 	if (pledge_dns_check(p, sin6->sin6_port))
-		return (pledge_fail(p, EPERM, PLEDGE_DNSPATH));
+		return (pledge_fail(p, EPERM, PLEDGE_DNS));
 
 	/* reject IPv4 mapped address, we have no support for it */
 	if (IN6_IS_ADDR_V4MAPPED(&sin6->sin6_addr))
@@ -436,7 +416,7 @@ in6_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 	if (error)
 		return (error);
 
-	if (inp->inp_route6.ro_rt && inp->inp_route6.ro_rt->rt_flags & RTF_UP)
+	if (rtisvalid(inp->inp_route6.ro_rt))
 		ifp = inp->inp_route6.ro_rt->rt_ifp;
 
 	inp->inp_ipv6.ip6_hlim = (u_int8_t)in6_selecthlim(inp, ifp);
