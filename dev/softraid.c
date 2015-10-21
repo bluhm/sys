@@ -3846,7 +3846,6 @@ sr_discipline_free(struct sr_discipline *sd)
 {
 	struct sr_softc		*sc;
 	struct sr_discipline	*sdtmp1;
-	struct sr_meta_opt_head *som;
 	struct sr_meta_opt_item	*omi, *omi_next;
 
 	if (!sd)
