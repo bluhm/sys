@@ -404,8 +404,11 @@ unlocked_error:
 		}
 	}
 
-	if ((rpipe->pipe_buffer.size - rpipe->pipe_buffer.cnt) >= PIPE_BUF)
+	if (rpipe->pipe_buffer.cnt > 0)
 		pipeselwakeup(rpipe);
+	if ((rpipe->pipe_buffer.size - rpipe->pipe_buffer.cnt) >= PIPE_BUF &&
+	    (rpipe->pipe_state & PIPE_EOF) == 0)
+		pipeselwakeup(rpipe->pipe_peer);
 
 	return (error);
 }
