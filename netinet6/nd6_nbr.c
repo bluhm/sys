@@ -1,4 +1,4 @@
-/*	$OpenBSD: nd6_nbr.c,v 1.96 2015/09/18 14:26:22 mpi Exp $	*/
+/*	$OpenBSD: nd6_nbr.c,v 1.97 2015/10/22 15:37:47 bluhm Exp $	*/
 /*	$KAME: nd6_nbr.c,v 1.61 2001/02/10 16:06:14 jinmei Exp $	*/
 
 /*
