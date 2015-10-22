@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_pledge.c,v 1.62 2015/10/20 18:04:03 deraadt Exp $	*/
+/*	$OpenBSD: kern_pledge.c,v 1.64 2015/10/22 11:01:43 deraadt Exp $	*/
 
 /*
  * Copyright (c) 2015 Nicholas Marriott <nicm@openbsd.org>
@@ -839,7 +839,6 @@ pledge_sysctl_check(struct proc *p, int miblen, int *mib, void *new)
 		if ((miblen == 6 || miblen == 7) &&
 		    mib[0] == CTL_NET && mib[1] == PF_ROUTE &&
 		    mib[2] == 0 &&
-		    (mib[3] == 0 || mib[3] == AF_INET6 || mib[3] == AF_INET) &&
 		    mib[4] == NET_RT_DUMP)
 			return (0);
 
@@ -1022,11 +1021,6 @@ pledge_ioctl_check(struct proc *p, long com, void *v)
 			    fp->f_type == DTYPE_VNODE && (vp->v_flag & VISTTY))
 				return (0);
 			break;
-		case TIOCSCTTY:		/* tmux etc */
-			if ((p->p_p->ps_pledge & PLEDGE_ID) &&
-			    fp->f_type == DTYPE_VNODE && (vp->v_flag & VISTTY))
-				return (0);
-			break;
 		case TIOCSPGRP:
 			if ((p->p_p->ps_pledge & PLEDGE_PROC) == 0)
 				break;
@@ -1047,6 +1041,7 @@ pledge_ioctl_check(struct proc *p, long com, void *v)
 		case TIOCSETAW:		/* cu, ... */
 		case TIOCSETAF:		/* tcsetattr TCSAFLUSH, script */
 		case TIOCFLUSH:		/* getty */
+		case TIOCSCTTY:		/* forkpty(3), login_tty(3), ... */
 			if (fp->f_type == DTYPE_VNODE && (vp->v_flag & VISTTY))
 				return (0);
 			break;
