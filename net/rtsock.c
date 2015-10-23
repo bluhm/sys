@@ -744,7 +744,12 @@ report:
 				    info.rti_info[RTAX_GATEWAY]->sa_len)) {
 					newgate = 1;
 				}
-			/* check reachable gateway before changing the route */
+			/*
+			 * Check reachable gateway before changing the route.
+			 * New gateway could require new ifaddr, ifp;
+			 * flags may also be different; ifp may be specified
+			 * by ll sockaddr when protocol address is ambiguous.
+			 */
 			if (newgate || info.rti_info[RTAX_IFP] != NULL ||
 			    info.rti_info[RTAX_IFA] != NULL) {
 				if ((error = rt_getifa(&info, tableid)) != 0)
@@ -755,11 +760,6 @@ report:
 			    (error = rt_setgate(rt, info.rti_info[RTAX_GATEWAY],
 			     tableid)))
 				goto flush;
-			/*
-			 * new gateway could require new ifaddr, ifp;
-			 * flags may also be different; ifp may be specified
-			 * by ll sockaddr when protocol address is ambiguous
-			 */
 			if (ifa) {
 				if (rt->rt_ifa != ifa) {
 					if (rt->rt_ifa->ifa_rtrequest)
