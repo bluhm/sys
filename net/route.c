@@ -396,10 +396,10 @@ rt_sendmsg(struct rtentry *rt, int cmd, u_int rtableid)
 	if (ifp != NULL) {
 		info.rti_info[RTAX_IFP] = sdltosa(ifp->if_sadl);
 		info.rti_info[RTAX_IFA] = rt->rt_ifa->ifa_addr;
-		if_put(ifp);
 	}
 
 	rt_missmsg(cmd, &info, rt->rt_flags, rt->rt_ifidx, 0, rtableid);
+	if_put(ifp);
 }
 
 void
