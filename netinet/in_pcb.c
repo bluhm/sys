@@ -635,7 +635,7 @@ in_losing(struct inpcb *inp)
 		info.rti_info[RTAX_DST] = &inp->inp_route.ro_dst;
 		info.rti_info[RTAX_GATEWAY] = rt->rt_gateway;
 		info.rti_info[RTAX_NETMASK] = rt_mask(rt);
-		rt_missmsg(RTM_LOSING, &info, rt->rt_flags, rt->rt_ifp, 0,
+		rt_missmsg(RTM_LOSING, &info, rt->rt_flags, rt->rt_ifidx, 0,
 		    inp->inp_rtableid);
 		if (rt->rt_flags & RTF_DYNAMIC)
 			(void)rtrequest1(RTM_DELETE, &info, rt->rt_priority,
