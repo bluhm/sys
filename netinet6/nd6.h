@@ -1,4 +1,4 @@
-/*	$OpenBSD: nd6.h,v 1.49 2015/08/31 10:03:47 mpi Exp $	*/
+/*	$OpenBSD: nd6.h,v 1.51 2015/10/25 11:58:11 mpi Exp $	*/
 /*	$KAME: nd6.h,v 1.95 2002/06/08 11:31:06 itojun Exp $	*/
 
 /*
@@ -56,7 +56,6 @@ struct nd_ifinfo {
 	u_int32_t retrans;		/* Retrans Timer */
 	u_int32_t flags;		/* Flags */
 	int recalctm;			/* BaseReacable re-calculation timer */
-	u_int8_t chlim;			/* CurHopLimit */
 	u_int8_t initialized; /* Flag to see the entry is initialized */
 	/* the following 3 members are for privacy extension for addrconf */
 	u_int8_t randomseed0[8]; /* upper 64 bits of MD5 digest */
@@ -273,7 +272,7 @@ void nd6_purge(struct ifnet *);
 void nd6_nud_hint(struct rtentry *, u_int);
 int nd6_resolve(struct ifnet *, struct rtentry *,
 	struct mbuf *, struct sockaddr *, u_char *);
-void nd6_rtrequest(int, struct rtentry *);
+void nd6_rtrequest(struct ifnet *, int, struct rtentry *);
 int nd6_ioctl(u_long, caddr_t, struct ifnet *);
 void nd6_cache_lladdr(struct ifnet *, struct in6_addr *, char *, int, int, int);
 int nd6_output(struct ifnet *, struct mbuf *, struct sockaddr_in6 *,

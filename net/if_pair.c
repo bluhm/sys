@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_pair.c,v 1.2 2015/10/24 11:01:39 reyk Exp $	*/
+/*	$OpenBSD: if_pair.c,v 1.4 2015/10/25 12:59:57 mpi Exp $	*/
 
 /*
  * Copyright (c) 2015 Reyk Floeter <reyk@openbsd.org>
@@ -199,7 +199,6 @@ int
 pairioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 {
 	struct pair_softc	*sc = (struct pair_softc *)ifp->if_softc;
-	struct ifaddr		*ifa = (struct ifaddr *)data;
 	struct ifreq		*ifr = (struct ifreq *)data;
 	struct if_clone		*ifc;
 	struct pair_softc	*pairedsc = ifp->if_softc;
@@ -209,8 +208,6 @@ pairioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 	switch (cmd) {
 	case SIOCSIFADDR:
 		ifp->if_flags |= IFF_UP;
-		if (ifa->ifa_addr->sa_family == AF_INET)
-			arp_ifinit(&sc->sc_ac, ifa);
 		/* FALLTHROUGH */
 
 	case SIOCSIFFLAGS:
