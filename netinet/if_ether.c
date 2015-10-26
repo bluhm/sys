@@ -510,7 +510,7 @@ in_arpinput(struct mbuf *m)
 	struct ifaddr *ifa = NULL;
 	struct sockaddr_dl *sdl;
 	struct sockaddr sa;
-	struct sockaddr_in itsin;
+	struct sockaddr_in sin;
 	struct in_addr isaddr, itaddr, myaddr;
 	struct mbuf *mh;
 	u_int8_t *enaddr = NULL;
@@ -537,6 +537,9 @@ in_arpinput(struct mbuf *m)
 
 	memcpy(&itaddr, ea->arp_tpa, sizeof(itaddr));
 	memcpy(&isaddr, ea->arp_spa, sizeof(isaddr));
+	memset(&sin, 0, sizeof(sin));
+	sin.sin_len = sizeof(sin);
+	sin.sin_family = AF_INET;
 
 	if (ETHER_IS_MULTICAST(&ea->arp_sha[0])) {
 		if (!memcmp(ea->arp_sha, etherbroadcastaddr,
@@ -549,11 +552,8 @@ in_arpinput(struct mbuf *m)
 	}
 
 	/* First try: check target against our addresses */
-	memset(&itsin, 0, sizeof(itsin));
-	itsin.sin_len = sizeof(itsin);
-	itsin.sin_family = AF_INET;
-	itsin.sin_addr = itaddr;
-	rt = rtalloc(sintosa(&itsin), 0, rdomain);
+	sin.sin_addr = itaddr;
+	rt = rtalloc(sintosa(&sin), 0, rdomain);
 	if (!rtisvalid(rt) || (rt->rt_flags & RTF_LOCAL) == 0) {
 		rtfree(rt);
 		rt = NULL;
@@ -567,19 +567,17 @@ in_arpinput(struct mbuf *m)
 #endif
 
 	/* Second try: check source against our addresses */
-	if (ifa == NULL) {
-		TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
-			if (ifa->ifa_addr->sa_family != AF_INET)
-				continue;
-
-			if (isaddr.s_addr ==
-			    ifatoia(ifa)->ia_addr.sin_addr.s_addr)
-				break;
+	if (rt == NULL) {
+		sin.sin_addr = isaddr;
+		rt = rtalloc(sintosa(&sin), 0, rdomain);
+		if (!rtisvalid(rt) || (rt->rt_flags & RTF_LOCAL) == 0) {
+			rtfree(rt);
+			rt = NULL;
 		}
 	}
 
 	/* Third try: not one of our addresses, just find a usable ia */
-	if (ifa == NULL) {
+	if (rt == NULL) {
 		TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
 			if (ifa->ifa_addr->sa_family == AF_INET)
 				break;
