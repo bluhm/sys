@@ -553,21 +553,15 @@ in_arpinput(struct mbuf *m)
 		if (itaddr.s_addr != ifatoia(ifa)->ia_addr.sin_addr.s_addr)
 			continue;
 
-#if NCARP > 0
-		if (ifp->if_type == IFT_CARP &&
-		    ((ifp->if_flags & (IFF_UP|IFF_RUNNING)) ==
-		    (IFF_UP|IFF_RUNNING))) {
-			if (op == ARPOP_REPLY)
-				break;
-			if (carp_iamatch(ifp, ea->arp_sha,
-			    &enaddr, &ether_shost))
-				break;
-			else
-				goto out;
-		}
-#endif
 		break;
 	}
+#if NCARP > 0
+	if (ifa != NULL && ifp->if_type == IFT_CARP &&
+	    (ifp->if_flags & (IFF_UP|IFF_RUNNING)) == (IFF_UP|IFF_RUNNING) &&
+	    op != ARPOP_REPLY &&
+	    !carp_iamatch(ifp, ea->arp_sha, &enaddr, &ether_shost))
+		goto out;
+#endif
 
 	/* Second try: check source against our addresses */
 	if (ifa == NULL) {
