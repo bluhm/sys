@@ -554,14 +554,12 @@ in_arpinput(struct mbuf *m)
 	itsin.sin_family = AF_INET;
 	itsin.sin_addr = itaddr;
 	rt = rtalloc(sintosa(&itsin), 0, rdomain);
-	if (rtisvalid(rt) && (rt->rt_flags & (RTF_LOCAL|RTF_BROADCAST))) {
-		ifa = rt->rt_ifa;
-	} else {
+	if (!rtisvalid(rt) || (rt->rt_flags & RTF_LOCAL) == 0) {
 		rtfree(rt);
 		rt = NULL;
 	}
 #if NCARP > 0
-	if (ifa != NULL && ifp->if_type == IFT_CARP &&
+	if (rt != NULL && ifp->if_type == IFT_CARP &&
 	    (ifp->if_flags & (IFF_UP|IFF_RUNNING)) == (IFF_UP|IFF_RUNNING) &&
 	    op != ARPOP_REPLY &&
 	    !carp_iamatch(ifp, &ethshost))
@@ -594,6 +592,7 @@ in_arpinput(struct mbuf *m)
 	if (!enaddr)
 		enaddr = ac->ac_enaddr;
 	myaddr = ifatoia(ifa)->ia_addr.sin_addr;
+	rtfree(rt);
 
 	if (!memcmp(ea->arp_sha, enaddr, sizeof(ea->arp_sha)))
 		goto out;	/* it's from me, ignore it. */
