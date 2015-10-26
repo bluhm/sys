@@ -1,4 +1,4 @@
-/*	$OpenBSD: uipc_syscalls.c,v 1.117 2015/10/20 18:04:03 deraadt Exp $	*/
+/*	$OpenBSD: uipc_syscalls.c,v 1.120 2015/10/26 12:17:03 tedu Exp $	*/
 /*	$NetBSD: uipc_syscalls.c,v 1.19 1996/02/09 19:00:48 christos Exp $	*/
 
 /*
@@ -607,13 +607,9 @@ sendit(struct proc *p, int s, struct msghdr *mp, int flags, register_t *retsize)
 		return (error);
 	so = fp->f_data;
 
-	if (mp->msg_name && mp->msg_namelen && isdnssocket(so)) {
-		error = dns_portcheck(p, so, mp->msg_name, mp->msg_namelen);
-		if (error)
-			return (error);
-	}
-	if (pledge_sendit_check(p, mp->msg_name)) {
-		error = pledge_fail(p, EPERM, PLEDGE_RW);
+	error = pledge_sendit_check(p, mp->msg_name);
+	if (error) {
+		error = pledge_fail(p, error, PLEDGE_STDIO);
 		goto bad;
 	}
 
@@ -638,6 +634,12 @@ sendit(struct proc *p, int s, struct msghdr *mp, int flags, register_t *retsize)
 		    MT_SONAME);
 		if (error)
 			goto bad;
+		if (isdnssocket(so)) {
+			error = dns_portcheck(p, so, mtod(to, caddr_t),
+			    mp->msg_namelen);
+			if (error)
+				goto bad;
+		}
 #ifdef KTRACE
 		if (KTRPOINT(p, KTR_STRUCT))
 		 	ktrsockaddr(p, mtod(to, caddr_t), mp->msg_namelen);
@@ -943,7 +945,7 @@ sys_setsockopt(struct proc *p, void *v, register_t *retval)
 
 	if ((error = getsock(p, SCARG(uap, s), &fp)) != 0)
 		return (error);
-	error = pledge_sockopt_check(p, SCARG(uap, level), SCARG(uap, name));
+	error = pledge_sockopt_check(p, 1, SCARG(uap, level), SCARG(uap, name));
 	if (error) {
 		error = pledge_fail(p, error, PLEDGE_INET);
 		goto bad;
@@ -999,7 +1001,7 @@ sys_getsockopt(struct proc *p, void *v, register_t *retval)
 
 	if ((error = getsock(p, SCARG(uap, s), &fp)) != 0)
 		return (error);
-	error = pledge_sockopt_check(p, SCARG(uap, level), SCARG(uap, name));
+	error = pledge_sockopt_check(p, 0, SCARG(uap, level), SCARG(uap, name));
 	if (error) {
 		error = pledge_fail(p, error, PLEDGE_INET);
 		goto out;
