@@ -519,7 +519,9 @@ in_arpinput(struct mbuf *m)
 #endif
 	char addr[INET_ADDRSTRLEN];
 	int op, changed = 0;
-	unsigned int len;
+	unsigned int len, rdomain;
+
+	rdomain = rtable_l2(m->m_pkthdr.ph_rtableid);
 
 	ifp = if_get(m->m_pkthdr.ph_ifidx);
 	if (ifp == NULL) {
@@ -600,7 +602,7 @@ in_arpinput(struct mbuf *m)
 		goto reply;
 	}
 	rt = arplookup(isaddr.s_addr, itaddr.s_addr == myaddr.s_addr, 0,
-	    rtable_l2(m->m_pkthdr.ph_rtableid));
+	    rdomain);
 	if (rt != NULL && (sdl = satosdl(rt->rt_gateway)) != NULL) {
 		la = (struct llinfo_arp *)rt->rt_llinfo;
 		if (sdl->sdl_alen) {
@@ -702,8 +704,7 @@ out:
 		memcpy(ea->arp_tha, ea->arp_sha, sizeof(ea->arp_sha));
 		memcpy(ea->arp_sha, enaddr, sizeof(ea->arp_sha));
 	} else {
-		rt = arplookup(itaddr.s_addr, 0, SIN_PROXY,
-		    rtable_l2(m->m_pkthdr.ph_rtableid));
+		rt = arplookup(itaddr.s_addr, 0, SIN_PROXY, rdomain);
 		if (rt == NULL)
 			goto out;
 		if (rt->rt_ifp->if_type == IFT_CARP && ifp->if_type != IFT_CARP)
