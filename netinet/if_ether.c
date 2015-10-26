@@ -507,9 +507,10 @@ in_arpinput(struct mbuf *m)
 	struct ether_header *eh;
 	struct llinfo_arp *la = NULL;
 	struct rtentry *rt = NULL;
-	struct ifaddr *ifa;
+	struct ifaddr *ifa = NULL;
 	struct sockaddr_dl *sdl;
 	struct sockaddr sa;
+	struct sockaddr_in itsin;
 	struct in_addr isaddr, itaddr, myaddr;
 	struct mbuf *mh;
 	u_int8_t *enaddr = NULL;
@@ -548,14 +549,16 @@ in_arpinput(struct mbuf *m)
 	}
 
 	/* First try: check target against our addresses */
-	TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
-		if (ifa->ifa_addr->sa_family != AF_INET)
-			continue;
-
-		if (itaddr.s_addr != ifatoia(ifa)->ia_addr.sin_addr.s_addr)
-			continue;
-
-		break;
+	memset(&itsin, 0, sizeof(itsin));
+	itsin.sin_len = sizeof(itsin);
+	itsin.sin_family = AF_INET;
+	itsin.sin_addr = itaddr;
+	rt = rtalloc(sintosa(&itsin), 0, rdomain);
+	if (rtisvalid(rt) && (rt->rt_flags & (RTF_LOCAL|RTF_BROADCAST))) {
+		ifa = rt->rt_ifa;
+	} else {
+		rtfree(rt);
+		rt = NULL;
 	}
 #if NCARP > 0
 	if (ifa != NULL && ifp->if_type == IFT_CARP &&
