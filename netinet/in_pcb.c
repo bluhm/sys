@@ -638,7 +638,7 @@ in_losing(struct inpcb *inp)
 		rt_missmsg(RTM_LOSING, &info, rt->rt_flags, rt->rt_ifidx, 0,
 		    inp->inp_rtableid);
 		if (rt->rt_flags & RTF_DYNAMIC)
-			(void)rtrequest1(RTM_DELETE, &info, rt->rt_priority,
+			(void)rtrequest(RTM_DELETE, &info, rt->rt_priority,
 			    NULL, inp->inp_rtableid);
 		/*
 		 * A new route can be allocated

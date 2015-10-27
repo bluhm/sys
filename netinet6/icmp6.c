@@ -1922,7 +1922,7 @@ icmp6_mtudisc_clone(struct sockaddr *dst, u_int rdomain)
 		info.rti_info[RTAX_GATEWAY] = rt->rt_gateway;
 
 		s = splsoftnet();
-		error = rtrequest1(RTM_ADD, &info, rt->rt_priority, &nrt,
+		error = rtrequest(RTM_ADD, &info, rt->rt_priority, &nrt,
 		    rdomain);
 		splx(s);
 		if (error) {

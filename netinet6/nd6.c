@@ -631,13 +631,13 @@ nd6_lookup(struct in6_addr *addr6, int create, struct ifnet *ifp,
 			 * Create a new route.  RTF_LLINFO is necessary
 			 * to create a Neighbor Cache entry for the
 			 * destination in nd6_rtrequest which will be
-			 * called in rtrequest1.
+			 * called in rtrequest.
 			 */
 			bzero(&info, sizeof(info));
 			info.rti_flags = RTF_HOST | RTF_LLINFO;
 			info.rti_info[RTAX_DST] = sin6tosa(&sin6);
 			info.rti_info[RTAX_GATEWAY] = sdltosa(ifp->if_sadl);
-			error = rtrequest1(RTM_ADD, &info, RTP_CONNECTED, &rt,
+			error = rtrequest(RTM_ADD, &info, RTP_CONNECTED, &rt,
 			    rtableid);
 			if (error)
 				return (NULL);

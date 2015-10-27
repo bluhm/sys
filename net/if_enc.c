@@ -98,7 +98,7 @@ enc_clone_create(struct if_clone *ifc, int unit)
 	if (unit == 0)
 		if_addgroup(ifp, ifc->ifc_name);
 	/*
-	 * enc(4) does not have a link-layer address but rtrequest1()
+	 * enc(4) does not have a link-layer address but rtrequest()
 	 * wants an ifa for every route entry.  So let's setup a fake
 	 * and empty ifa of type AF_LINK for this purpose.
 	 */

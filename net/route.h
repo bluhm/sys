@@ -393,7 +393,7 @@ int	 rtioctl(u_long, caddr_t, struct proc *);
 void	 rtredirect(struct sockaddr *, struct sockaddr *,
 			 struct sockaddr *, int, struct sockaddr *,
 			 struct rtentry **, u_int);
-int	 rtrequest1(int, struct rt_addrinfo *, u_int8_t, struct rtentry **,
+int	 rtrequest(int, struct rt_addrinfo *, u_int8_t, struct rtentry **,
 	     u_int);
 void	 rt_if_remove(struct ifnet *);
 #ifndef SMALL_KERNEL

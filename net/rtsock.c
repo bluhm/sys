@@ -597,7 +597,7 @@ route_output(struct mbuf *m, ...)
 			error = EINVAL;
 			goto flush;
 		}
-		error = rtrequest1(RTM_ADD, &info, prio, &saved_nrt, tableid);
+		error = rtrequest(RTM_ADD, &info, prio, &saved_nrt, tableid);
 		if (error == 0) {
 			rt_setmetrics(rtm->rtm_inits, &rtm->rtm_rmx,
 			    &saved_nrt->rt_rmx);
@@ -609,7 +609,7 @@ route_output(struct mbuf *m, ...)
 		}
 		break;
 	case RTM_DELETE:
-		error = rtrequest1(RTM_DELETE, &info, prio, &rt, tableid);
+		error = rtrequest(RTM_DELETE, &info, prio, &rt, tableid);
 		if (error == 0)
 			goto report;
 		break;
