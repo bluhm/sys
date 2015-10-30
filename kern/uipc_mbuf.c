@@ -253,13 +253,17 @@ m_inithdr(struct mbuf *m)
 void
 m_resethdr(struct mbuf *m)
 {
-	/* like the previous, but keep any associated data and mbufs */
-	m->m_flags = M_PKTHDR;
-	memset(&m->m_pkthdr.pf, 0, sizeof(m->m_pkthdr.pf));
-	m->m_pkthdr.pf.prio = IFQ_DEFPRIO;
+	int len = m->m_pkthdr.len;
 
-	/* also delete all mbuf tags to reset the state */
+	KASSERT(m->m_flags & M_PKTHDR);
+
+	/* delete all mbuf tags to reset the state */
 	m_tag_delete_chain(m);
+
+	/* like m_inithdr(), but keep any associated data and mbufs */
+	memset(&m->m_pkthdr, 0, sizeof(m->m_pkthdr));
+	m->m_pkthdr.pf.prio = IFQ_DEFPRIO;
+	m->m_pkthdr.len = len;
 }
 
 struct mbuf *
