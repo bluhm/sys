@@ -256,6 +256,7 @@ m_resethdr(struct mbuf *m)
 	int len = m->m_pkthdr.len;
 
 	KASSERT(m->m_flags & M_PKTHDR);
+	m->m_flags &= (M_EXT|M_PKTHDR|M_EOR|M_EXTWR|M_ZEROIZE);
 
 	/* delete all mbuf tags to reset the state */
 	m_tag_delete_chain(m);
