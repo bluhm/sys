@@ -1,4 +1,4 @@
-/*	$OpenBSD: uipc_socket.c,v 1.142 2015/08/24 14:28:25 bluhm Exp $	*/
+/*	$OpenBSD: uipc_socket.c,v 1.143 2015/10/30 19:47:40 bluhm Exp $	*/
 /*	$NetBSD: uipc_socket.c,v 1.21 1996/02/04 02:17:52 christos Exp $	*/
 
 /*
