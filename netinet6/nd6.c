@@ -1003,7 +1003,7 @@ nd6_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 		ln = pool_get(&nd6_pool, PR_NOWAIT | PR_ZERO);
 		rt->rt_llinfo = (caddr_t)ln;
 		if (ln == NULL) {
-			log(LOG_DEBUG, "%s: malloc failed\n", __func__);
+			log(LOG_DEBUG, "%s: pool get failed\n", __func__);
 			break;
 		}
 		nd6_inuse++;
