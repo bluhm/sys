@@ -1,4 +1,4 @@
-/*	$OpenBSD: vfs_syscalls.c,v 1.233 2015/10/25 20:39:54 deraadt Exp $	*/
+/*	$OpenBSD: vfs_syscalls.c,v 1.237 2015/10/28 18:41:16 deraadt Exp $	*/
 /*	$NetBSD: vfs_syscalls.c,v 1.71 1996/04/23 10:29:02 mycroft Exp $	*/
 
 /*
@@ -732,6 +732,7 @@ sys_chdir(struct proc *p, void *v, register_t *retval)
 	int error;
 	struct nameidata nd;
 
+	p->p_pledgenote = PLEDGE_RPATH;
 	NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF, UIO_USERSPACE,
 	    SCARG(uap, path), p);
 	if ((error = change_dir(&nd, p)) != 0)
@@ -759,6 +760,7 @@ sys_chroot(struct proc *p, void *v, register_t *retval)
 
 	if ((error = suser(p, 0)) != 0)
 		return (error);
+	p->p_pledgenote = PLEDGE_ID | PLEDGE_PROC | PLEDGE_RPATH;
 	NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF, UIO_USERSPACE,
 	    SCARG(uap, path), p);
 	if ((error = change_dir(&nd, p)) != 0)
@@ -1615,7 +1617,6 @@ sys_access(struct proc *p, void *v, register_t *retval)
 		syscallarg(int) amode;
 	} */ *uap = v;
 
-	p->p_pledgenote = PLEDGE_RPATH;
 	return (dofaccessat(p, AT_FDCWD, SCARG(uap, path),
 	    SCARG(uap, amode), 0));
 }
@@ -2668,7 +2669,6 @@ sys_mkdir(struct proc *p, void *v, register_t *retval)
 		syscallarg(mode_t) mode;
 	} */ *uap = v;
 
-	p->p_pledgenote = PLEDGE_CPATH | PLEDGE_RPATH;
 	return (domkdirat(p, AT_FDCWD, SCARG(uap, path), SCARG(uap, mode)));
 }
 
@@ -2693,7 +2693,7 @@ domkdirat(struct proc *p, int fd, const char *path, mode_t mode)
 	int error;
 	struct nameidata nd;
 
-	p->p_pledgenote = PLEDGE_CPATH | PLEDGE_RPATH;
+	p->p_pledgenote = PLEDGE_CPATH;
 	NDINITAT(&nd, CREATE, LOCKPARENT | STRIPSLASHES, UIO_USERSPACE,
 	    fd, path, p);
 	if ((error = namei(&nd)) != 0)
@@ -2728,7 +2728,6 @@ sys_rmdir(struct proc *p, void *v, register_t *retval)
 		syscallarg(const char *) path;
 	} */ *uap = v;
 
-	p->p_pledgenote = PLEDGE_CPATH;
 	return (dounlinkat(p, AT_FDCWD, SCARG(uap, path), AT_REMOVEDIR));
 }
 

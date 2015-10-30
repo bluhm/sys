@@ -1,4 +1,4 @@
-/*	$OpenBSD: uipc_syscalls.c,v 1.120 2015/10/26 12:17:03 tedu Exp $	*/
+/*	$OpenBSD: uipc_syscalls.c,v 1.122 2015/10/28 16:03:08 semarie Exp $	*/
 /*	$NetBSD: uipc_syscalls.c,v 1.19 1996/02/09 19:00:48 christos Exp $	*/
 
 /*
@@ -67,20 +67,6 @@ extern	struct fileops socketops;
 int	copyaddrout(struct proc *, struct mbuf *, struct sockaddr *, socklen_t,
 	    socklen_t *);
 
-/* XXX dnssocket() - temporary backwards compat */
-int
-sys_dnssocket(struct proc *p, void *v, register_t *retval)
-{
-	struct sys_socket_args /* {
-		syscallarg(int) domain;
-		syscallarg(int) type;
-		syscallarg(int) protocol;
-	} */ *uap = v;
-
-	SCARG(uap, type) |= SOCK_DNS;
-	return sys_socket(p, v, retval);
-}
-
 int
 sys_socket(struct proc *p, void *v, register_t *retval)
 {
@@ -100,7 +86,8 @@ sys_socket(struct proc *p, void *v, register_t *retval)
 		return (EINVAL);
 	error = pledge_socket_check(p, type & SOCK_DNS);
 	if (error)
-		return (pledge_fail(p, EPERM, PLEDGE_DNS));
+		return (pledge_fail(p, error,
+		    (type & SOCK_DNS) ? PLEDGE_DNS : PLEDGE_INET));
 
 	fdplock(fdp);
 	error = falloc(p, &fp, &fd);
@@ -357,13 +344,6 @@ bad:
 	splx(s);
 	FRELE(headfp, p);
 	return (error);
-}
-
-/* XXX dnsconnect() - temporary backwards compat */
-int
-sys_dnsconnect(struct proc *p, void *v, register_t *retval)
-{
-	return sys_connect(p, v, retval);
 }
 
 /* ARGSUSED */
