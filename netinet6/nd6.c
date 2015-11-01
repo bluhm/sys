@@ -84,7 +84,7 @@ int nd6_debug = 0;
 #endif
 
 struct	pool nd6_pool;		/* pool for llinfo_nd6 structures */
-static int nd6_inuse, nd6_allocated;
+int	nd6_inuse, nd6_allocated;
 
 struct llinfo_nd6 llinfo_nd6 = {&llinfo_nd6, &llinfo_nd6};
 struct nd_drhead nd_defrouter;
