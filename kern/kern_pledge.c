@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_pledge.c,v 1.92 2015/10/29 15:04:54 deraadt Exp $	*/
+/*	$OpenBSD: kern_pledge.c,v 1.97 2015/11/01 19:03:33 semarie Exp $	*/
 
 /*
  * Copyright (c) 2015 Nicholas Marriott <nicm@openbsd.org>
@@ -28,6 +28,7 @@
 #include <sys/socketvar.h>
 #include <sys/vnode.h>
 #include <sys/mbuf.h>
+#include <sys/mman.h>
 #include <sys/sysctl.h>
 #include <sys/ktrace.h>
 
@@ -66,11 +67,11 @@ const u_int pledge_syscalls[SYS_MAXSYSCALL] = {
 	/*
 	 * Minimum required 
 	 */
-	[SYS_exit] = 0xffffffff,
-	[SYS_kbind] = 0xffffffff,
-	[SYS___get_tcb] = 0xffffffff,
-	[SYS_pledge] = 0xffffffff,
-	[SYS_sendsyslog] = 0xffffffff,	/* stack protector reporting */
+	[SYS_exit] = PLEDGE_ALWAYS,
+	[SYS_kbind] = PLEDGE_ALWAYS,
+	[SYS___get_tcb] = PLEDGE_ALWAYS,
+	[SYS_pledge] = PLEDGE_ALWAYS,
+	[SYS_sendsyslog] = PLEDGE_ALWAYS,	/* stack protector reporting */
 
 	/* "getting" information about self is considered safe */
 	[SYS_getuid] = PLEDGE_STDIO,
@@ -158,6 +159,7 @@ const u_int pledge_syscalls[SYS_MAXSYSCALL] = {
 	[SYS_kevent] = PLEDGE_STDIO,
 	[SYS_kqueue] = PLEDGE_STDIO,
 	[SYS_select] = PLEDGE_STDIO,
+	[SYS_pselect] = PLEDGE_STDIO,
 
 	[SYS_fstat] = PLEDGE_STDIO,
 	[SYS_fsync] = PLEDGE_STDIO,
@@ -523,7 +525,7 @@ sys_pledge(struct proc *p, void *v, register_t *retval)
 }
 
 int
-pledge_check(struct proc *p, int code, int *tval)
+pledge_syscall(struct proc *p, int code, int *tval)
 {
 	p->p_pledgenote = p->p_pledgeafter = 0;	/* XX optimise? */
 	p->p_pledge_syscall = code;
@@ -532,8 +534,7 @@ pledge_check(struct proc *p, int code, int *tval)
 	if (code < 0 || code > SYS_MAXSYSCALL - 1)
 		return (EINVAL);
 
-	if ((p->p_p->ps_pledge == 0) &&
-	    (code == SYS_exit || code == SYS_kbind))
+	if (pledge_syscalls[code] == PLEDGE_ALWAYS)
 		return (0);
 
 	if (p->p_p->ps_pledge & pledge_syscalls[code])
@@ -584,6 +585,9 @@ pledge_namei(struct proc *p, char *origpath)
 {
 	char path[PATH_MAX];
 	int error;
+
+	if ((p->p_p->ps_flags & PS_PLEDGE) == 0)
+		return (0);
 
 	if (p->p_pledgenote == PLEDGE_COREDUMP)
 		return (0);			/* Allow a coredump */
@@ -826,7 +830,7 @@ pledge_aftersyscall(struct proc *p, int code, int error)
  * Only allow reception of safe file descriptors.
  */
 int
-pledge_recvfd_check(struct proc *p, struct file *fp)
+pledge_recvfd(struct proc *p, struct file *fp)
 {
 	struct vnode *vp = NULL;
 	char *vtypes[] = { VTYPE_NAMES };
@@ -857,7 +861,7 @@ pledge_recvfd_check(struct proc *p, struct file *fp)
  * Only allow sending of safe file descriptors.
  */
 int
-pledge_sendfd_check(struct proc *p, struct file *fp)
+pledge_sendfd(struct proc *p, struct file *fp)
 {
 	struct vnode *vp = NULL;
 	char *vtypes[] = { VTYPE_NAMES };
@@ -886,13 +890,13 @@ pledge_sendfd_check(struct proc *p, struct file *fp)
 }
 
 int
-pledge_sysctl_check(struct proc *p, int miblen, int *mib, void *new)
+pledge_sysctl(struct proc *p, int miblen, int *mib, void *new)
 {
 	if ((p->p_p->ps_flags & PS_PLEDGE) == 0)
 		return (0);
 
 	if (new)
-		return (EFAULT);
+		return pledge_fail(p, EFAULT, 0);
 
 	/* routing table observation */
 	if ((p->p_p->ps_pledge & PLEDGE_ROUTE)) {
@@ -926,9 +930,6 @@ pledge_sysctl_check(struct proc *p, int miblen, int *mib, void *new)
 			return (0);
 		if (miblen == 2 &&		/* kern.consdev */
 		    mib[0] == CTL_KERN && mib[1] == KERN_CONSDEV)
-			return (0);
-		if (miblen == 2 &&		/* kern.loadavg */
-		    mib[0] == CTL_VM && mib[1] == VM_LOADAVG)
 			return (0);
 		if (miblen == 2 &&			/* kern.cptime */
 		    mib[0] == CTL_KERN && mib[1] == KERN_CPTIME)
@@ -1020,15 +1021,18 @@ pledge_sysctl_check(struct proc *p, int miblen, int *mib, void *new)
 	if (miblen == 2 &&			/* hw.ncpu */
 	    mib[0] == CTL_HW && mib[1] == HW_NCPU)
 		return (0);
+	if (miblen == 2 &&		/* kern.loadavg / getloadavg(3) */
+	    mib[0] == CTL_VM && mib[1] == VM_LOADAVG)
+		return (0);
 
 	printf("%s(%d): sysctl %d: %d %d %d %d %d %d\n",
 	    p->p_comm, p->p_pid, miblen, mib[0], mib[1],
 	    mib[2], mib[3], mib[4], mib[5]);
-	return (EPERM);
+	return pledge_fail(p, EINVAL, 0);
 }
 
 int
-pledge_chown_check(struct proc *p, uid_t uid, gid_t gid)
+pledge_chown(struct proc *p, uid_t uid, gid_t gid)
 {
 	if ((p->p_p->ps_flags & PS_PLEDGE) == 0)
 		return (0);
@@ -1041,7 +1045,7 @@ pledge_chown_check(struct proc *p, uid_t uid, gid_t gid)
 }
 
 int
-pledge_adjtime_check(struct proc *p, const void *v)
+pledge_adjtime(struct proc *p, const void *v)
 {
 	const struct timeval *delta = v;
 
@@ -1051,12 +1055,12 @@ pledge_adjtime_check(struct proc *p, const void *v)
 	if ((p->p_p->ps_pledge & PLEDGE_SETTIME))
 		return (0);
 	if (delta)
-		return (EFAULT);
+		return (EPERM);
 	return (0);
 }
 
 int
-pledge_sendit_check(struct proc *p, const void *to)
+pledge_sendit(struct proc *p, const void *to)
 {
 	if ((p->p_p->ps_flags & PS_PLEDGE) == 0)
 		return (0);
@@ -1065,11 +1069,11 @@ pledge_sendit_check(struct proc *p, const void *to)
 		return (0);		/* may use address */
 	if (to == NULL)
 		return (0);		/* behaves just like write */
-	return (EPERM);
+	return pledge_fail(p, EPERM, PLEDGE_INET);
 }
 
 int
-pledge_ioctl_check(struct proc *p, long com, void *v)
+pledge_ioctl(struct proc *p, long com, void *v)
 {
 	struct file *fp = v;
 	struct vnode *vp = NULL;
@@ -1190,7 +1194,7 @@ pledge_ioctl_check(struct proc *p, long com, void *v)
 }
 
 int
-pledge_sockopt_check(struct proc *p, int set, int level, int optname)
+pledge_sockopt(struct proc *p, int set, int level, int optname)
 {
 	if ((p->p_p->ps_flags & PS_PLEDGE) == 0)
 		return (0);
@@ -1207,7 +1211,7 @@ pledge_sockopt_check(struct proc *p, int set, int level, int optname)
 	}
 
 	if ((p->p_p->ps_pledge & (PLEDGE_INET|PLEDGE_UNIX|PLEDGE_DNS)) == 0)
-	 	return (EINVAL);
+	 	return pledge_fail(p, EPERM, PLEDGE_INET);
 	/* In use by some service libraries */
 	switch (level) {
 	case SOL_SOCKET:
@@ -1231,18 +1235,18 @@ pledge_sockopt_check(struct proc *p, int set, int level, int optname)
 	}
 
 	if ((p->p_p->ps_pledge & (PLEDGE_INET|PLEDGE_UNIX)) == 0)
-		return (EINVAL);
+		return pledge_fail(p, EPERM, PLEDGE_INET);
 	switch (level) {
 	case SOL_SOCKET:
 		switch (optname) {
 		case SO_RTABLE:
-			return (EINVAL);
+			return pledge_fail(p, EINVAL, PLEDGE_INET);
 		}
 		return (0);
 	}
 
 	if ((p->p_p->ps_pledge & PLEDGE_INET) == 0)
-		return (EINVAL);
+		return pledge_fail(p, EPERM, PLEDGE_INET);
 	switch (level) {
 	case IPPROTO_TCP:
 		switch (optname) {
@@ -1299,11 +1303,11 @@ pledge_sockopt_check(struct proc *p, int set, int level, int optname)
 	case IPPROTO_ICMPV6:
 		break;
 	}
-	return (EPERM);
+	return pledge_fail(p, EPERM, PLEDGE_INET);
 }
 
 int
-pledge_socket_check(struct proc *p, int dns)
+pledge_socket(struct proc *p, int dns)
 {
 	if ((p->p_p->ps_flags & PS_PLEDGE) == 0)
 		return (0);
@@ -1312,11 +1316,11 @@ pledge_socket_check(struct proc *p, int dns)
 		return (0);
 	if ((p->p_p->ps_pledge & (PLEDGE_INET|PLEDGE_UNIX|PLEDGE_YPACTIVE)))
 		return (0);
-	return (EPERM);
+	return pledge_fail(p, EPERM, dns ? PLEDGE_DNS : PLEDGE_INET);
 }
 
 int
-pledge_flock_check(struct proc *p)
+pledge_flock(struct proc *p)
 {
 	if ((p->p_p->ps_flags & PS_PLEDGE) == 0)
 		return (0);
@@ -1327,7 +1331,7 @@ pledge_flock_check(struct proc *p)
 }
 
 int
-pledge_swapctl_check(struct proc *p)
+pledge_swapctl(struct proc *p)
 {
 	if ((p->p_p->ps_flags & PS_PLEDGE) == 0)
 		return (0);
@@ -1335,14 +1339,35 @@ pledge_swapctl_check(struct proc *p)
 }
 
 int
-pledge_fcntl_check(struct proc *p, int cmd)
+pledge_fcntl(struct proc *p, int cmd)
 {
 	if ((p->p_p->ps_flags & PS_PLEDGE) == 0)
 		return (0);
-	if ((p->p_p->ps_pledge & PLEDGE_PROC) == 0 &&
-	    cmd == F_SETOWN)
-		return (EPERM);
+	if ((p->p_p->ps_pledge & PLEDGE_PROC) == 0 && cmd == F_SETOWN)
+		return pledge_fail(p, EPERM, PLEDGE_PROC);
 	return (0);
+}
+
+int
+pledge_kill(struct proc *p, pid_t pid)
+{
+	if ((p->p_p->ps_flags & PS_PLEDGE) == 0)
+		return 0;
+	if (p->p_p->ps_pledge & PLEDGE_PROC)
+		return 0;
+	if (pid == 0 || pid == p->p_pid)
+		return 0;
+	return pledge_fail(p, EPERM, PLEDGE_PROC);
+}
+
+int
+pledge_protexec(struct proc *p, int prot)
+{
+	if ((p->p_p->ps_flags & PS_PLEDGE) == 0)
+		return 0;
+        if (!(p->p_p->ps_pledge & PLEDGE_PROTEXEC) && (prot & PROT_EXEC))
+		return pledge_fail(p, EPERM, PLEDGE_PROTEXEC);
+	return 0;
 }
 
 void
