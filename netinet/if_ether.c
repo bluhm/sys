@@ -126,10 +126,9 @@ arptimer(void *arg)
 
 	s = splsoftnet();
 	timeout_add_sec(to, arpt_prune);
-	for (la = LIST_FIRST(&arp_list); la != NULL; la = nla) {
+	LIST_FOREACH_SAFE(la, &arp_list, la_list, nla) {
 		struct rtentry *rt = la->la_rt;
 
-		nla = LIST_NEXT(la, la_list);
 		if (rt->rt_expire && rt->rt_expire <= time_second)
 			arptfree(rt); /* timer has expired; clear */
 	}
