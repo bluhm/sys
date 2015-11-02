@@ -564,12 +564,13 @@ in_arpinput(struct mbuf *m)
 		}
 	}
 
-	if (rt == NULL)
+	if (rt == NULL) {
 		myaddr.s_addr = INADDR_ANY;
-	else
+	} else {
 		myaddr = ifatoia(rt->rt_ifa)->ia_addr.sin_addr;
-	rtfree(rt);
-	rt = NULL;
+		rtfree(rt);
+		rt = NULL;
+	}
 
 	if (!enaddr)
 		enaddr = ac->ac_enaddr;
