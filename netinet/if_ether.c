@@ -551,8 +551,7 @@ in_arpinput(struct mbuf *m)
 #if NCARP > 0
 	if (rt != NULL && ifp->if_type == IFT_CARP &&
 	    (ifp->if_flags & (IFF_UP|IFF_RUNNING)) == (IFF_UP|IFF_RUNNING) &&
-	    op != ARPOP_REPLY &&
-	    !carp_iamatch(ifp, &ethshost))
+	    op != ARPOP_REPLY && !carp_iamatch(ifp, &ethshost))
 		goto out;
 #endif
 
