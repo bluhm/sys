@@ -565,22 +565,25 @@ in_arpinput(struct mbuf *m)
 		}
 	}
 
+	if (rt == NULL)
+		myaddr.s_addr = INADDR_ANY;
+	else
+		myaddr = ifatoia(rt->rt_ifa)->ia_addr.sin_addr;
+
 	/* Third try: not one of our addresses, just find a usable ia */
 	if (rt == NULL) {
 		TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
 			if (ifa->ifa_addr->sa_family == AF_INET)
 				break;
 		}
+		if (ifa == NULL)
+			goto out;
 	}
-
-	if (ifa == NULL)
-		goto out;
+	rtfree(rt);
+	rt = NULL;
 
 	if (!enaddr)
 		enaddr = ac->ac_enaddr;
-	myaddr = ifatoia(ifa)->ia_addr.sin_addr;
-	rtfree(rt);
-
 	if (!memcmp(ea->arp_sha, enaddr, sizeof(ea->arp_sha)))
 		goto out;	/* it's from me, ignore it. */
 
@@ -593,8 +596,8 @@ in_arpinput(struct mbuf *m)
 		goto reply;
 	}
 
-	rt = arplookup(isaddr.s_addr, itaddr.s_addr == myaddr.s_addr, 0,
-	    rdomain);
+	rt = arplookup(isaddr.s_addr, myaddr.s_addr != INADDR_ANY &&
+	    itaddr.s_addr == myaddr.s_addr, 0, rdomain);
 	if (rt != NULL && (sdl = satosdl(rt->rt_gateway)) != NULL) {
 		la = (struct llinfo_arp *)rt->rt_llinfo;
 		if (sdl->sdl_alen) {
@@ -691,7 +694,7 @@ out:
 	}
 
 	rtfree(rt);
-	if (itaddr.s_addr == myaddr.s_addr) {
+	if (myaddr.s_addr != INADDR_ANY && itaddr.s_addr == myaddr.s_addr) {
 		/* I am the target */
 		memcpy(ea->arp_tha, ea->arp_sha, sizeof(ea->arp_sha));
 		memcpy(ea->arp_sha, enaddr, sizeof(ea->arp_sha));
