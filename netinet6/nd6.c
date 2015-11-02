@@ -565,7 +565,7 @@ nd6_purge(struct ifnet *ifp)
 		struct sockaddr_dl *sdl;
 
 		rt = ln->ln_rt;
-		if (rt && rt->rt_gateway &&
+		if (rt != NULL && rt->rt_gateway != NULL &&
 		    rt->rt_gateway->sa_family == AF_LINK) {
 			sdl = satosdl(rt->rt_gateway);
 			if (sdl->sdl_index == ifp->if_index)
