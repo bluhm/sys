@@ -497,7 +497,6 @@ in_arpinput(struct mbuf *m)
 	struct ether_header *eh;
 	struct llinfo_arp *la = NULL;
 	struct rtentry *rt = NULL;
-	struct ifaddr *ifa = NULL;
 	struct sockaddr_dl *sdl;
 	struct sockaddr sa;
 	struct sockaddr_in sin;
@@ -569,16 +568,6 @@ in_arpinput(struct mbuf *m)
 		myaddr.s_addr = INADDR_ANY;
 	else
 		myaddr = ifatoia(rt->rt_ifa)->ia_addr.sin_addr;
-
-	/* Third try: not one of our addresses, just find a usable ia */
-	if (rt == NULL) {
-		TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
-			if (ifa->ifa_addr->sa_family == AF_INET)
-				break;
-		}
-		if (ifa == NULL)
-			goto out;
-	}
 	rtfree(rt);
 	rt = NULL;
 
