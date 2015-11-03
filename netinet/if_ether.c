@@ -500,14 +500,14 @@ in_arpinput(struct mbuf *m)
 	struct sockaddr_dl *sdl;
 	struct sockaddr sa;
 	struct sockaddr_in sin;
-	struct in_addr isaddr, itaddr, myaddr;
+	struct in_addr isaddr, itaddr;
 	struct mbuf *mh;
 	u_int8_t *enaddr = NULL;
 #if NCARP > 0
 	uint8_t *ethshost = NULL;
 #endif
 	char addr[INET_ADDRSTRLEN];
-	int op, changed = 0;
+	int op, changed = 0, target = 0, sender = 0;
 	unsigned int len, rdomain;
 
 	rdomain = rtable_l2(m->m_pkthdr.ph_rtableid);
@@ -543,51 +543,42 @@ in_arpinput(struct mbuf *m)
 	/* First try: check target against our addresses */
 	sin.sin_addr = itaddr;
 	rt = rtalloc(sintosa(&sin), 0, rdomain);
-	if (!rtisvalid(rt) || (rt->rt_flags & RTF_LOCAL) == 0) {
-		rtfree(rt);
-		rt = NULL;
-	}
+	if (rtisvalid(rt) && ISSET(rt->rt_flags, RTF_LOCAL) &&
+	    rt->rt_ifidx != ifp->if_index)
+		target = 1;
+	rtfree(rt);
+	rt = NULL;
+	
 #if NCARP > 0
-	if (rt != NULL && ifp->if_type == IFT_CARP &&
-	    (ifp->if_flags & (IFF_UP|IFF_RUNNING)) == (IFF_UP|IFF_RUNNING) &&
-	    op != ARPOP_REPLY && !carp_iamatch(ifp, &ethshost))
+	if (target && op == ARPOP_REQUEST && ifp->if_type == IFT_CARP &&
+	    !carp_iamatch(ifp, &ethshost))
 		goto out;
 #endif
 
-	/* Second try: check source against our addresses */
-	if (rt == NULL) {
-		sin.sin_addr = isaddr;
-		rt = rtalloc(sintosa(&sin), 0, rdomain);
-		if (!rtisvalid(rt) || (rt->rt_flags & RTF_LOCAL) == 0) {
-			rtfree(rt);
-			rt = NULL;
-		}
-	}
-
-	if (rt == NULL) {
-		myaddr.s_addr = INADDR_ANY;
-	} else {
-		myaddr = ifatoia(rt->rt_ifa)->ia_addr.sin_addr;
-		rtfree(rt);
-		rt = NULL;
-	}
+	/* Second try: check sender against our addresses */
+	sin.sin_addr = isaddr;
+	rt = rtalloc(sintosa(&sin), 0, rdomain);
+	if (rtisvalid(rt) && ISSET(rt->rt_flags, RTF_LOCAL) &&
+	    rt->rt_ifidx == ifp->if_index)
+		sender = 1;
+	rtfree(rt);
+	rt = NULL;
 
 	if (!enaddr)
 		enaddr = ac->ac_enaddr;
 	if (!memcmp(ea->arp_sha, enaddr, sizeof(ea->arp_sha)))
 		goto out;	/* it's from me, ignore it. */
 
-	if (myaddr.s_addr != INADDR_ANY && isaddr.s_addr == myaddr.s_addr) {
+	if (sender && isaddr.s_addr != INADDR_ANY) {
 		inet_ntop(AF_INET, &isaddr, addr, sizeof(addr));
 		log(LOG_ERR,
 		   "duplicate IP address %s sent from ethernet address %s\n",
 		   addr, ether_sprintf(ea->arp_sha));
-		itaddr = myaddr;
+		itaddr = isaddr;
 		goto reply;
 	}
 
-	rt = arplookup(isaddr.s_addr, myaddr.s_addr != INADDR_ANY &&
-	    itaddr.s_addr == myaddr.s_addr, 0, rdomain);
+	rt = arplookup(isaddr.s_addr, target, 0, rdomain);
 	if (rt != NULL && (sdl = satosdl(rt->rt_gateway)) != NULL) {
 		la = (struct llinfo_arp *)rt->rt_llinfo;
 		if (sdl->sdl_alen) {
@@ -684,8 +675,8 @@ out:
 	}
 
 	rtfree(rt);
-	if (myaddr.s_addr != INADDR_ANY && itaddr.s_addr == myaddr.s_addr) {
-		/* I am the target */
+	if (target) {
+		/* We are the target and already have all info for the reply */
 		memcpy(ea->arp_tha, ea->arp_sha, sizeof(ea->arp_sha));
 		memcpy(ea->arp_sha, enaddr, sizeof(ea->arp_sha));
 	} else {
