@@ -554,7 +554,7 @@ in_arpinput(struct mbuf *m)
 	sin.sin_addr = itaddr;
 	rt = rtalloc(sintosa(&sin), 0, rdomain);
 	if (rtisvalid(rt) && ISSET(rt->rt_flags, RTF_LOCAL) &&
-	    rt->rt_ifidx != ifp->if_index)
+	    rt->rt_ifidx == ifp->if_index)
 		target = 1;
 	rtfree(rt);
 	rt = NULL;
