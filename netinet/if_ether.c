@@ -578,6 +578,7 @@ in_arpinput(struct mbuf *m)
 		goto reply;
 	}
 
+	/* Do we have an ARP cache for the sender?  Create if we are target. */
 	rt = arplookup(isaddr.s_addr, target, 0, rdomain);
 	if (rt != NULL && (sdl = satosdl(rt->rt_gateway)) != NULL) {
 		la = (struct llinfo_arp *)rt->rt_llinfo;
