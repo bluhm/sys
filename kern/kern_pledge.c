@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_pledge.c,v 1.100 2015/11/02 17:53:00 semarie Exp $	*/
+/*	$OpenBSD: kern_pledge.c,v 1.104 2015/11/04 21:24:23 tedu Exp $	*/
 
 /*
  * Copyright (c) 2015 Nicholas Marriott <nicm@openbsd.org>
@@ -523,7 +523,6 @@ sys_pledge(struct proc *p, void *v, register_t *retval)
 int
 pledge_syscall(struct proc *p, int code, int *tval)
 {
-	p->p_pledgeafter = 0;	/* XX optimise? */
 	p->p_pledge_syscall = code;
 	*tval = 0;
 
@@ -600,6 +599,18 @@ pledge_namei(struct proc *p, struct nameidata *ni, char *origpath)
 	if (error)
 		return (pledge_fail(p, error, 0));
 
+	/* Blacklisted paths */
+	switch (p->p_pledge_syscall) {
+	case SYS_stat:
+	case SYS_lstat:
+	case SYS_fstatat:
+	case SYS_fstat:
+		break;
+	default:
+		if (strcmp(path, "/etc/spwd.db") == 0)
+			return (EPERM);
+	}
+
 	/* Detect what looks like a mkstemp(3) family operation */
 	if ((p->p_p->ps_pledge & PLEDGE_TMPPATH) &&
 	    (p->p_pledge_syscall == SYS_open) &&
@@ -642,8 +653,6 @@ pledge_namei(struct proc *p, struct nameidata *ni, char *origpath)
 		/* getpw* and friends need a few files */
 		if ((ni->ni_pledge == PLEDGE_RPATH) &&
 		    (p->p_p->ps_pledge & PLEDGE_GETPW)) {
-			if (strcmp(path, "/etc/spwd.db") == 0)
-				return (EPERM);
 			if (strcmp(path, "/etc/pwd.db") == 0)
 				return (0);
 			if (strcmp(path, "/etc/group") == 0)
@@ -664,7 +673,16 @@ pledge_namei(struct proc *p, struct nameidata *ni, char *origpath)
 		if ((ni->ni_pledge == PLEDGE_RPATH) &&
 		    (p->p_p->ps_pledge & PLEDGE_GETPW)) {
 			if (strcmp(path, "/var/run/ypbind.lock") == 0) {
-				p->p_pledgeafter |= PLEDGE_YPACTIVE;
+				/*
+				 * XXX
+				 * The current hack for YP support in "getpw"
+				 * is to enable some "inet" features until
+				 * next pledge call.  This is not considered
+				 * worse than pre-pledge, but is a work in
+				 * progress, needing a clever design.
+				 */
+				atomic_setbits_int(&p->p_p->ps_pledge,
+				    PLEDGE_YPACTIVE | PLEDGE_INET);
 				return (0);
 			}
 			if (strncmp(path, "/var/yp/binding/",
@@ -806,13 +824,6 @@ pledge_namei(struct proc *p, struct nameidata *ni, char *origpath)
 	}
 
 	return (0);
-}
-
-void
-pledge_aftersyscall(struct proc *p, int code, int error)
-{
-	if ((p->p_pledgeafter & PLEDGE_YPACTIVE) && error == 0)
-		atomic_setbits_int(&p->p_p->ps_pledge, PLEDGE_YPACTIVE | PLEDGE_INET);
 }
 
 /*
@@ -1062,9 +1073,8 @@ pledge_sendit(struct proc *p, const void *to)
 }
 
 int
-pledge_ioctl(struct proc *p, long com, void *v)
+pledge_ioctl(struct proc *p, long com, struct file *fp)
 {
-	struct file *fp = v;
 	struct vnode *vp = NULL;
 
 	if ((p->p_p->ps_flags & PS_PLEDGE) == 0)
@@ -1082,7 +1092,8 @@ pledge_ioctl(struct proc *p, long com, void *v)
 	}
 
 	/* fp != NULL was already checked */
-	vp = (struct vnode *)fp->f_data;
+	if (fp->f_type == DTYPE_VNODE)
+		vp = (struct vnode *)fp->f_data;
 
 	/*
 	 * Further sets of ioctl become available, but are checked a
@@ -1363,7 +1374,7 @@ pledge_kill(struct proc *p, pid_t pid)
 		return 0;
 	if (p->p_p->ps_pledge & PLEDGE_PROC)
 		return 0;
-	if (pid == 0 || pid == p->p_pid || pid == p->p_pid + THREAD_PID_OFFSET)
+	if (pid == 0 || pid == p->p_p->ps_pid || pid > THREAD_PID_OFFSET)
 		return 0;
 	return pledge_fail(p, EPERM, PLEDGE_PROC);
 }
