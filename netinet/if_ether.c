@@ -564,7 +564,7 @@ in_arpinput(struct mbuf *m)
 	rt = arplookup(isaddr.s_addr, target, 0, rdomain);
 
 	/* Check sender against our interface addresses. */
-	if (rt != NULL && ISSET(rt->rt_flags, RTF_LOCAL) &&
+	if (rtisvalid(rt) && ISSET(rt->rt_flags, RTF_LOCAL) &&
 	    rt->rt_ifidx == ifp->if_index && isaddr.s_addr != INADDR_ANY) {
 		inet_ntop(AF_INET, &isaddr, addr, sizeof(addr));
 		log(LOG_ERR,
