@@ -689,13 +689,6 @@ pledge_namei(struct proc *p, struct nameidata *ni, char *origpath)
 		    strcmp(path, "/etc/localtime") == 0)
 			return (0);
 
-		/* /usr/share/nls/../libc.cat has to succeed for strerror(3). */
-		if ((ni->ni_pledge == PLEDGE_RPATH) &&
-		    strncmp(path, "/usr/share/nls/",
-		    sizeof("/usr/share/nls/") - 1) == 0 &&
-		    strcmp(path + strlen(path) - 9, "/libc.cat") == 0)
-			return (0);
-
 		break;
 	case SYS_readlink:
 		/* Allow /etc/malloc.conf for malloc(3). */
