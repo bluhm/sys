@@ -107,7 +107,9 @@ struct pfr_walktree {
 		PFRW_GET_ADDRS,
 		PFRW_GET_ASTATS,
 		PFRW_POOL_GET,
-		PFRW_DYNADDR_UPDATE
+		PFRW_DYNADDR_UPDATE,
+		PFRW_WININFO_UPDATE,
+		PFRW_CLSTAT
 	}	 pfrw_op;
 	union {
 		struct pfr_addr		*pfrw1_addr;
@@ -115,15 +117,22 @@ struct pfr_walktree {
 		struct pfr_kentryworkq	*pfrw1_workq;
 		struct pfr_kentry	*pfrw1_kentry;
 		struct pfi_dynaddr	*pfrw1_dyn;
+		struct {
+			time_t	tzero;
+			int	negchange;
+		} 			 pfrw1_clstat;
 	}	 pfrw_1;
 	int	 pfrw_free;
 	int	 pfrw_flags;
+	struct pfr_ktable	*pfrw_kt;
 };
 #define pfrw_addr	pfrw_1.pfrw1_addr
 #define pfrw_astats	pfrw_1.pfrw1_astats
 #define pfrw_workq	pfrw_1.pfrw1_workq
 #define pfrw_kentry	pfrw_1.pfrw1_kentry
 #define pfrw_dyn	pfrw_1.pfrw1_dyn
+#define	pfrw_tzero	pfrw_1.pfrw1_clstat.tzero
+#define	pfrw_negchange	pfrw_1.pfrw1_clstat.negchange
 #define pfrw_cnt	pfrw_free
 
 #define senderr(e)	do { rv = (e); goto _bad; } while (0)
@@ -156,6 +165,8 @@ void			 pfr_remove_kentries(struct pfr_ktable *,
 			    struct pfr_kentryworkq *);
 void			 pfr_clstats_kentries(struct pfr_kentryworkq *, time_t,
 			    int);
+void			 pfr_clstats_kentries_pfrw(struct pfr_ktable *, time_t,
+			    int);
 void			 pfr_reset_feedback(struct pfr_addr *, int, int);
 void			 pfr_prepare_network(union sockaddr_union *, int, int);
 int			 pfr_route_kentry(struct pfr_ktable *,
@@ -181,6 +192,7 @@ int			 pfr_ktable_compare(struct pfr_ktable *,
 			    struct pfr_ktable *);
 void			 pfr_ktable_winfo_update(struct pfr_ktable *,
 			    struct pfr_kentry *);
+void			 pfr_ktable_winfo_update_sum(struct pfr_ktable *);
 struct pfr_ktable	*pfr_lookup_table(struct pfr_table *);
 void			 pfr_clean_node_mask(struct pfr_ktable *,
 			    struct pfr_kentryworkq *);
@@ -189,6 +201,8 @@ int			 pfr_skip_table(struct pfr_table *,
 			    struct pfr_ktable *, int);
 struct pfr_kentry	*pfr_kentry_byidx(struct pfr_ktable *, int, int);
 int			 pfr_islinklocal(sa_family_t, struct pf_addr *);
+void			 pfr_walk(struct pfr_ktable *, struct pfr_walktree *,
+			    const char *);
 
 RB_PROTOTYPE(pfr_ktablehead, pfr_ktable, pfrkt_tree, pfr_ktable_compare);
 RB_GENERATE(pfr_ktablehead, pfr_ktable, pfrkt_tree, pfr_ktable_compare);
@@ -631,7 +645,6 @@ pfr_get_astats(struct pfr_table *tbl, struct pfr_astats *addr, int *size,
 {
 	struct pfr_ktable	*kt;
 	struct pfr_walktree	 w;
-	struct pfr_kentryworkq	 workq;
 	int			 rv;
 	time_t			 tzero = time_second;
 
@@ -653,10 +666,8 @@ pfr_get_astats(struct pfr_table *tbl, struct pfr_astats *addr, int *size,
 	rv = rn_walktree(kt->pfrkt_ip4, pfr_walktree, &w);
 	if (!rv)
 		rv = rn_walktree(kt->pfrkt_ip6, pfr_walktree, &w);
-	if (!rv && (flags & PFR_FLAG_CLSTATS)) {
-		pfr_enqueue_addrs(kt, &workq, NULL, 0);
-		pfr_clstats_kentries(&workq, tzero, 0);
-	}
+	if (!rv && (flags & PFR_FLAG_CLSTATS))
+		pfr_clstats_kentries_pfrw(kt, tzero, 0);
 	if (rv)
 		return (rv);
 
@@ -954,7 +965,6 @@ pfr_remove_kentries(struct pfr_ktable *kt,
     struct pfr_kentryworkq *workq)
 {
 	struct pfr_kentry	*p;
-	struct pfr_kentryworkq   addrq;
 	int			 n = 0;
 
 	SLIST_FOREACH(p, workq, pfrke_workq) {
@@ -971,9 +981,7 @@ pfr_remove_kentries(struct pfr_ktable *kt,
 	if (kt->pfrkt_refcntcost > 0) {
 		kt->pfrkt_gcdweight = 0;
 		kt->pfrkt_maxweight = 1;
-		pfr_enqueue_addrs(kt, &addrq, NULL, 0);
-		SLIST_FOREACH(p, &addrq, pfrke_workq)
-			pfr_ktable_winfo_update(kt, p);
+		pfr_ktable_winfo_update_sum(kt);
 	}
 }
 
@@ -986,6 +994,18 @@ pfr_clean_node_mask(struct pfr_ktable *kt,
 	SLIST_FOREACH(p, workq, pfrke_workq) {
 		pfr_unroute_kentry(kt, p);
 	}
+}
+
+void
+pfr_clstats_kentries_pfrw(struct pfr_ktable *kt, time_t tzero, int negchange)
+{
+	struct pfr_walktree	w;
+
+	bzero(&w, sizeof(pfr_walktree));
+	w.pfrw_op = PFRW_CLSTAT;
+	w.pfrw_tzero = tzero;
+	w.pfrw_negchange = negchange;
+	pfr_walk(kt, &w, "pfr_clstats_kentries_pfrw");
 }
 
 void
@@ -1255,6 +1275,20 @@ pfr_walktree(struct radix_node *rn, void *arg, u_int id)
 		default:
 			unhandled_af(ke->pfrke_af);
 		}
+		break;
+	case PFRW_WININFO_UPDATE:
+		pfr_ktable_winfo_update(w->pfrw_kt, ke);
+		break;
+	case PFRW_CLSTAT:
+		s = splsoftnet();
+		if (w->pfrw_negchange)
+			ke->pfrke_flags ^= PFRKE_FLAG_NOT;
+		if (ke->pfrke_counters) {
+			pool_put(&pfr_kcounters_pl, ke->pfrke_counters);
+			ke->pfrke_counters = NULL;
+		}
+		splx(s);
+		ke->pfrke_tzero = w->pfrw_tzero;
 		break;
 	}
 	return (0);
@@ -1993,13 +2027,11 @@ pfr_clstats_ktables(struct pfr_ktableworkq *workq, time_t tzero, int recurse)
 void
 pfr_clstats_ktable(struct pfr_ktable *kt, time_t tzero, int recurse)
 {
-	struct pfr_kentryworkq	 addrq;
 	int			 s;
 
-	if (recurse) {
-		pfr_enqueue_addrs(kt, &addrq, NULL, 0);
-		pfr_clstats_kentries(&addrq, tzero, 0);
-	}
+	if (recurse)
+		pfr_clstats_kentries_pfrw(kt, tzero, 0);
+
 	s = splsoftnet();
 	bzero(kt->pfrkt_packets, sizeof(kt->pfrkt_packets));
 	bzero(kt->pfrkt_bytes, sizeof(kt->pfrkt_bytes));
@@ -2554,6 +2586,21 @@ pfr_dynaddr_update(struct pfr_ktable *kt, struct pfi_dynaddr *dyn)
 }
 
 void
+pfr_walk(struct pfr_ktable *kt, struct pfr_walktree *pfrw, const char *caller)
+{
+	if (kt->pfrkt_ip4 != NULL)
+		if (rn_walktree(kt->pfrkt_ip4, pfr_walktree, pfrw))
+			DPFPRINTF(LOG_ERR,
+			    "pfr_walk: on behalf of %s IPv4 walktree failed.",
+			    caller);
+	if (kt->pfrkt_ip6 != NULL)
+		if (rn_walktree(kt->pfrkt_ip6, pfr_walktree, pfrw))
+			DPFPRINTF(LOG_ERR,
+			    "pfr_walk: on behalf of %s IPv6 walktree failed.",
+			    caller);
+}
+
+void
 pfr_ktable_winfo_update(struct pfr_ktable *kt, struct pfr_kentry *p) {
 	/* 
 	 * If cost flag is set, 
@@ -2574,4 +2621,15 @@ pfr_ktable_winfo_update(struct pfr_ktable *kt, struct pfr_kentry *p) {
 		if (kt->pfrkt_maxweight < weight)
 			kt->pfrkt_maxweight = weight;
 	}
+}
+
+void
+pfr_ktable_winfo_update_sum(struct pfr_ktable *kt)
+{
+	struct pfr_walktree	w;
+
+	bzero(&w, sizeof(pfr_walktree));
+	w.pfrw_kt = kt;
+	w.pfrw_op = PFRW_WININFO_UPDATE;
+	pfr_walk(kt, &w, "pfr_ktable_winfo_update_sum");
 }
