@@ -90,6 +90,8 @@ int	arpt_keep = (20*60);	/* once resolved, good for 20 more minutes */
 int	arpt_down = 20;		/* once declared down, don't send for 20 secs */
 
 void arptfree(struct rtentry *);
+int arp_update(struct ifnet *, struct rtentry *, uint8_t *, struct in_addr);
+int arp_update_allowed(struct ifnet *, unsigned int);
 void arptimer(void *);
 struct rtentry *arplookup(u_int32_t, int, int, u_int);
 void in_arpinput(struct mbuf *);
@@ -495,20 +497,18 @@ in_arpinput(struct mbuf *m)
 	struct ifnet *ifp;
 	struct arpcom *ac;
 	struct ether_header *eh;
-	struct llinfo_arp *la = NULL;
 	struct rtentry *rt = NULL;
 	struct sockaddr_dl *sdl;
 	struct sockaddr sa;
 	struct sockaddr_in sin;
 	struct in_addr isaddr, itaddr;
-	struct mbuf *mh;
 	u_int8_t *enaddr = NULL;
 #if NCARP > 0
 	uint8_t *ethshost = NULL;
 #endif
 	char addr[INET_ADDRSTRLEN];
-	int op, changed = 0, target = 0;
-	unsigned int len, rdomain;
+	int op, target = 0;
+	unsigned int rdomain;
 
 	rdomain = rtable_l2(m->m_pkthdr.ph_rtableid);
 
@@ -531,8 +531,7 @@ in_arpinput(struct mbuf *m)
 	sin.sin_family = AF_INET;
 
 	if (ETHER_IS_MULTICAST(&ea->arp_sha[0])) {
-		if (!memcmp(ea->arp_sha, etherbroadcastaddr,
-		    sizeof (ea->arp_sha))) {
+		if (!memcmp(ea->arp_sha, etherbroadcastaddr, ETHER_ADDR_LEN)) {
 			inet_ntop(AF_INET, &isaddr, addr, sizeof(addr));
 			log(LOG_ERR, "arp: ether address is broadcast for "
 			    "IP address %s!\n", addr);
@@ -548,7 +547,7 @@ in_arpinput(struct mbuf *m)
 		target = 1;
 	rtfree(rt);
 	rt = NULL;
-	
+
 #if NCARP > 0
 	if (target && op == ARPOP_REQUEST && ifp->if_type == IFT_CARP &&
 	    !carp_iamatch(ifp, &ethshost))
@@ -562,100 +561,21 @@ in_arpinput(struct mbuf *m)
 
 	/* Do we have an ARP cache for the sender?  Create if we are target. */
 	rt = arplookup(isaddr.s_addr, target, 0, rdomain);
+	if (!rtisvalid(rt))
+		goto out;
 
 	/* Check sender against our interface addresses. */
-	if (rtisvalid(rt) && ISSET(rt->rt_flags, RTF_LOCAL) &&
+	if (ISSET(rt->rt_flags, RTF_LOCAL) &&
 	    rt->rt_ifidx == ifp->if_index && isaddr.s_addr != INADDR_ANY) {
 		inet_ntop(AF_INET, &isaddr, addr, sizeof(addr));
 		log(LOG_ERR,
-		   "duplicate IP address %s sent from ethernet address %s\n",
+		   "duplicate IP address %s sent from Ethernet address %s\n",
 		   addr, ether_sprintf(ea->arp_sha));
 		itaddr = isaddr;
-	} else if (rt != NULL && (sdl = satosdl(rt->rt_gateway)) != NULL) {
-		la = (struct llinfo_arp *)rt->rt_llinfo;
-		if (sdl->sdl_alen) {
-			if (memcmp(ea->arp_sha, LLADDR(sdl), sdl->sdl_alen)) {
-				if (rt->rt_flags &
-				    (RTF_PERMANENT_ARP|RTF_LOCAL)) {
-					inet_ntop(AF_INET, &isaddr, addr,
-					    sizeof(addr));
-					log(LOG_WARNING, "arp: attempt to"
-					   " overwrite permanent entry for %s"
-					   " by %s on %s\n", addr,
-					   ether_sprintf(ea->arp_sha),
-					   ifp->if_xname);
-					goto out;
-				} else if (rt->rt_ifp != ifp) {
-#if NCARP > 0
-					if (ifp->if_type != IFT_CARP)
-#endif
-					{
-						inet_ntop(AF_INET, &isaddr,
-						    addr, sizeof(addr));
-						log(LOG_WARNING, "arp: attempt"
-						   " to overwrite entry for"
-						   " %s on %s by %s on %s\n",
-						   addr, rt->rt_ifp->if_xname,
-						   ether_sprintf(ea->arp_sha),
-						   ifp->if_xname);
-					}
-					goto out;
-				} else {
-					inet_ntop(AF_INET, &isaddr, addr,
-					    sizeof(addr));
-					log(LOG_INFO, "arp info overwritten for"
-					   " %s by %s on %s\n", addr,
-					   ether_sprintf(ea->arp_sha),
-					   ifp->if_xname);
-					rt->rt_expire = 1;/* no longer static */
-				}
-			changed = 1;
-			}
-		} else if (rt->rt_ifp != ifp &&
-#if NBRIDGE > 0
-		    !SAME_BRIDGE(ifp->if_bridgeport,
-		    rt->rt_ifp->if_bridgeport) &&
-#endif
-#if NCARP > 0
-		    !(rt->rt_ifp->if_type == IFT_CARP &&
-		    rt->rt_ifp->if_carpdev == ifp) &&
-		    !(ifp->if_type == IFT_CARP &&
-		    ifp->if_carpdev == rt->rt_ifp) &&
-#endif
-		    1) {
-			inet_ntop(AF_INET, &isaddr, addr, sizeof(addr));
-			log(LOG_WARNING,
-			    "arp: attempt to add entry for %s "
-			    "on %s by %s on %s\n", addr,
-			    rt->rt_ifp->if_xname,
-			    ether_sprintf(ea->arp_sha),
-			    ifp->if_xname);
+	} else {
+		/* Update our ARP cache with the sender Ethernet address. */
+		if (arp_update(ifp, rt, ea->arp_sha, isaddr))
 			goto out;
-		}
-		sdl->sdl_alen = sizeof(ea->arp_sha);
-		memcpy(LLADDR(sdl), ea->arp_sha, sizeof(ea->arp_sha));
-		if (rt->rt_expire)
-			rt->rt_expire = time_second + arpt_keep;
-		rt->rt_flags &= ~RTF_REJECT;
-		/* Notify userland that an ARP resolution has been done. */
-		if (la->la_asked || changed)
-			rt_sendmsg(rt, RTM_RESOLVE, rt->rt_ifp->if_rdomain);
-		la->la_asked = 0;
-		while ((len = ml_len(&la->la_ml)) != 0) {
-			mh = ml_dequeue(&la->la_ml);
-			la_hold_total--;
-
-			ifp->if_output(ifp, mh, rt_key(rt), rt);
-
-			if (ml_len(&la->la_ml) == len) {
-				/* mbuf is back in queue. Discard. */
-				while ((mh = ml_dequeue(&la->la_ml)) != NULL) {
-					la_hold_total--;
-					m_freem(mh);
-				}
-				break;
-			}
-		}
 	}
 
 	if (op != ARPOP_REQUEST) {
@@ -675,8 +595,10 @@ out:
 		rt = arplookup(itaddr.s_addr, 0, SIN_PROXY, rdomain);
 		if (rt == NULL)
 			goto out;
+#if NCARP > 0
 		if (rt->rt_ifp->if_type == IFT_CARP && ifp->if_type != IFT_CARP)
 			goto out;
+#endif
 		memcpy(ea->arp_tha, ea->arp_sha, sizeof(ea->arp_sha));
 		sdl = satosdl(rt->rt_gateway);
 		memcpy(ea->arp_sha, LLADDR(sdl), sizeof(ea->arp_sha));
@@ -701,6 +623,112 @@ out:
 	ifp->if_output(ifp, m, &sa, NULL);
 	if_put(ifp);
 	return;
+}
+
+/*
+ * We only update ARP informations if the packet has been received
+ * on the same interface, CARP setup or BRIDGE, the corresponding
+ * route entry has been found.
+ */
+int
+arp_update_allowed(struct ifnet *ifp0, unsigned int ifidx)
+{
+	struct ifnet *ifp;
+	int allow = 0;
+
+	if (ifp0->if_index == ifidx)
+		return (1);
+
+#if NBRIDGE > 0 || NCARP > 0
+	ifp = if_get(ifidx);
+	KASSERT(ifp != NULL);
+
+#if NBRIDGE > 0
+	if (SAME_BRIDGE(ifp0->if_bridgeport, ifp->if_bridgeport))
+		allow = 1;
+#endif
+
+#if NCARP > 0
+	if ((ifp0->if_type == IFT_CARP && ifp0->if_carpdev == ifp) ||
+	    (ifp->if_type == IFT_CARP && ifp->if_carpdev == ifp0))
+	    	allow = 1;
+#endif
+
+	if_put(ifp);
+#endif /* NBRIDGE > 0 || NCARP > 0 */
+
+	return (allow);
+}
+
+/*
+ * Update the ARP cache of ``rt'' with the Ethernet address ``enaddr''
+ * and send possible queued packets.
+ */
+int
+arp_update(struct ifnet *ifp, struct rtentry *rt, uint8_t *enaddr,
+    struct in_addr isaddr)
+{
+	struct sockaddr_dl	*sdl = satosdl(rt->rt_gateway);
+	struct llinfo_arp	*la = (struct llinfo_arp *)rt->rt_llinfo;
+	struct mbuf		*mh;
+	unsigned int		 len;
+	int			 changed = 0;
+	char			 addr[INET_ADDRSTRLEN];
+
+	if (!arp_update_allowed(ifp, rt->rt_ifidx)) {
+		inet_ntop(AF_INET, &isaddr, addr, sizeof(addr));
+		log(LOG_WARNING, "arp: entry %s for %s received on incorrect"
+		    "ifp %s\n", ether_sprintf(enaddr), addr, ifp->if_xname);
+		return (1);
+	}
+
+	/*
+	 * If we already have an ARP cache, check if it's the same as
+	 * the received informations.
+	 */
+	if (sdl->sdl_alen && memcmp(enaddr, LLADDR(sdl), sdl->sdl_alen)) {
+		inet_ntop(AF_INET, &isaddr, addr, sizeof(addr));
+
+		if (ISSET(rt->rt_flags, RTF_PERMANENT_ARP|RTF_LOCAL)) {
+			log(LOG_WARNING, "arp: attempt to overwrite permanent "
+			    "entry for %s by %s on %s\n", addr,
+			    ether_sprintf(enaddr), ifp->if_xname);
+			return (1);
+		}
+
+		log(LOG_INFO, "arp: info overwritten for %s by %s on %s\n",
+		    addr, ether_sprintf(enaddr), ifp->if_xname);
+
+		rt->rt_expire = 1; /* no longer static */
+		changed = 1;
+	}
+
+	sdl->sdl_alen = ETHER_ADDR_LEN;
+	memcpy(LLADDR(sdl), enaddr, ETHER_ADDR_LEN);
+	if (rt->rt_expire)
+		rt->rt_expire = time_second + arpt_keep;
+	rt->rt_flags &= ~RTF_REJECT;
+
+	/* Notify userland that an ARP resolution has been done. */
+	if (la->la_asked || changed)
+		rt_sendmsg(rt, RTM_RESOLVE, ifp->if_rdomain);
+	la->la_asked = 0;
+
+	/* Send packets that were waiting for ARP informations. */
+	while ((len = ml_len(&la->la_ml)) != 0) {
+		mh = ml_dequeue(&la->la_ml);
+		la_hold_total--;
+
+		ifp->if_output(ifp, mh, rt_key(rt), rt);
+
+		if (ml_len(&la->la_ml) == len) {
+			/* mbuf is back in queue. Discard. */
+			la_hold_total -= ml_purge(&la->la_ml);
+			break;
+		}
+	}
+
+	return (0);
 }
 
 /*
