@@ -1,4 +1,4 @@
-/*	$OpenBSD: art.c,v 1.6 2015/11/04 09:50:21 mpi Exp $ */
+/*	$OpenBSD: art.c,v 1.8 2015/11/12 14:29:04 mpi Exp $ */
 
 /*
  * Copyright (c) 2015 Martin Pieuchot
@@ -30,6 +30,7 @@
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
+#include <sys/pool.h>
 #include <sys/socket.h>
 #endif
 
@@ -64,6 +65,9 @@ struct art_table {
 #define	at_refcnt	at_heap[0].count/* Refcounter (1 per different route) */
 #define	at_default	at_heap[1].node	/* Default route (was in parent heap) */
 
+/* Heap size for an ART table of stride length ``slen''. */
+#define AT_HEAPSIZE(slen)	((1 << ((slen) + 1)) * sizeof(void *))
+
 int			 art_bindex(struct art_table *, uint8_t *, int);
 void			 art_allot(struct art_table *at, int, struct art_node *,
 			     struct art_node *);
@@ -76,8 +80,13 @@ struct art_node		*art_table_delete(struct art_root *, struct art_table *,
 			     int, struct art_node *);
 void			 art_table_ref(struct art_root *, struct art_table *);
 int			 art_table_free(struct art_root *, struct art_table *);
-int			 art_table_walk(struct art_table *,
+int			 art_table_walk(struct art_root *, struct art_table *,
 			     int (*f)(struct art_node *, void *), void *);
+
+int			at_init = 0;
+struct pool		at_pool;
+struct pool		at_heap_8_pool;
+struct pool		at_heap_16_pool;
 
 /*
  * Per routing table initialization API function.
@@ -87,6 +96,16 @@ art_alloc(unsigned int rtableid, int off)
 {
 	struct art_root		*ar;
 	int			 i;
+
+	if (!at_init) {
+		at_init = 1;
+		pool_init(&at_pool, sizeof(struct art_table), 0, 0, 0,
+		    "art_table", NULL);
+		pool_init(&at_heap_8_pool, AT_HEAPSIZE(8), 0, 0, 0,
+		    "art_heap8", NULL);
+		pool_init(&at_heap_16_pool, AT_HEAPSIZE(16), 0, 0, 0,
+		    "art_heap16", NULL);
+	}
 
 	ar = malloc(sizeof(*ar), M_RTABLE, M_NOWAIT|M_ZERO);
 	if (ar == NULL)
@@ -116,12 +135,6 @@ art_alloc(unsigned int rtableid, int off)
 	}
 
 	ar->ar_off = off;
-
-	ar->ar_root = art_table_get(ar, NULL, -1);
-	if (ar->ar_root == NULL) {
-		free(ar, M_RTABLE, sizeof(*ar));
-		return (NULL);
-	}
 	ar->ar_rtableid = rtableid;
 
 	return (ar);
@@ -224,9 +237,13 @@ art_findex(struct art_table *at, uint8_t *addr)
 struct art_node *
 art_match(struct art_root *ar, uint8_t *addr)
 {
-	struct art_table	*at = ar->ar_root;
+	struct art_table	*at;
 	struct art_node		*dflt = NULL;
 	int			 j;
+
+	at = ar->ar_root;
+	if (at == NULL)
+		return (NULL);
 
 	/*
 	 * Iterate until we find a leaf.
@@ -264,11 +281,15 @@ art_match(struct art_root *ar, uint8_t *addr)
 struct art_node *
 art_lookup(struct art_root *ar, uint8_t *addr, int plen)
 {
-	struct art_table	*at = ar->ar_root;
+	struct art_table	*at;
 	struct art_node		*an;
 	int			 i, j;
 
 	KASSERT(plen >= 0 && plen <= ar->ar_alen);
+
+	at = ar->ar_root;
+	if (at == NULL)
+		return (NULL);
 
 	/* Default route */
 	if (plen == 0)
@@ -312,16 +333,23 @@ art_lookup(struct art_root *ar, uint8_t *addr, int plen)
 struct art_node *
 art_insert(struct art_root *ar, struct art_node *an, uint8_t *addr, int plen)
 {
-	struct art_table	*at = ar->ar_root;
+	struct art_table	*at;
 	int			 i, j;
 
 	KASSERT(plen >= 0 && plen <= ar->ar_alen);
 
+	at = ar->ar_root;
+	if (at == NULL) {
+		at = art_table_get(ar, NULL, -1);
+		if (at == NULL)
+			return (NULL);
+
+		ar->ar_root = at;
+	}
+
 	/* Default route */
 	if (plen == 0) {
-		if (art_check_duplicate(ar, at->at_default, an))
-			return (at->at_default);
-
+		art_table_ref(ar, at);
 		at->at_default = an;
 		return (an);
 	}
@@ -348,6 +376,7 @@ art_insert(struct art_root *ar, struct art_node *an, uint8_t *addr, int plen)
 			if (child == NULL)
 				return (NULL);
 
+			art_table_ref(ar, at);
 			at->at_heap[j].node = ASNODE(child);
 		}
 
@@ -402,18 +431,21 @@ art_table_insert(struct art_root *ar, struct art_table *at, int i,
 struct art_node *
 art_delete(struct art_root *ar, struct art_node *an, uint8_t *addr, int plen)
 {
-	struct art_table	*at = ar->ar_root;
+	struct art_table	*at;
 	struct art_node		*dflt;
 	int			 i, j;
 
 	KASSERT(plen >= 0 && plen <= ar->ar_alen);
 
+	at = ar->ar_root;
+	if (at == NULL)
+		return (NULL);
+
 	/* Default route */
 	if (plen == 0) {
 		dflt = at->at_default;
-		if (!art_check_duplicate(ar, dflt, an))
-			return (NULL);
 		at->at_default = NULL;
+		art_table_free(ar, at);
 		return (dflt);
 	}
 
@@ -494,16 +526,14 @@ art_table_ref(struct art_root *ar, struct art_table *at)
 int
 art_table_free(struct art_root *ar, struct art_table *at)
 {
-	at->at_refcnt--;
-
-	if (at->at_refcnt == 0) {
+	if (--at->at_refcnt == 0) {
 		/*
 		 * Garbage collect this table and all its parents
 		 * that are empty.
 		 */
 		do {
 			at = art_table_put(ar, at);
-		} while (at->at_refcnt == 0);
+		} while (at != NULL && --at->at_refcnt == 0);
 
 		return (1);
 	}
@@ -517,8 +547,12 @@ art_table_free(struct art_root *ar, struct art_table *at)
 int
 art_walk(struct art_root *ar, int (*f)(struct art_node *, void *), void *arg)
 {
-	struct art_table	*at = ar->ar_root;
+	struct art_table	*at;
 	int			 error;
+
+	at = ar->ar_root;
+	if (at == NULL)
+		return (0);
 
 	/*
 	 * The default route should be processed here because the root
@@ -530,19 +564,22 @@ art_walk(struct art_root *ar, int (*f)(struct art_node *, void *), void *arg)
 			return (error);
 	}
 
-	return (art_table_walk(at, f, arg));
+	return (art_table_walk(ar, at, f, arg));
 }
 
 int
-art_table_walk(struct art_table *at,
+art_table_walk(struct art_root *ar, struct art_table *at,
     int (*f)(struct art_node *, void *), void *arg)
 {
 	struct art_node		*next, *an = NULL;
 	int			 i, j, error = 0;
 	uint32_t		 maxfringe = (at->at_minfringe << 1);
 
+	/* Prevent this table to be freed while we're manipulating it. */
+	art_table_ref(ar, at);
+
 	/*
-	 * Iterate non-fringe nodes in the ``natural'' order.
+	 * Iterate non-fringe nodes in ``natural'' order.
 	 */
 	for (j = 1; j < at->at_minfringe; j += 2) {
 		/*
@@ -556,7 +593,7 @@ art_table_walk(struct art_table *at,
 			if ((an != NULL) && (an != next)) {
 				error = (*f)(an, arg);
 				if (error)
-					return (error);
+					goto out;
 			}
 		}
 	}
@@ -573,17 +610,19 @@ art_table_walk(struct art_table *at,
 		if ((an != NULL) && (an != next)) {
 			error = (*f)(an, arg);
 			if (error)
-				return (error);
+				goto out;
 		}
 
 		if (ISLEAF(at->at_heap[i]))
 			continue;
 
-		error = art_table_walk(SUBTABLE(at->at_heap[i]), f, arg);
+		error = art_table_walk(ar, SUBTABLE(at->at_heap[i]), f, arg);
 		if (error)
 			break;
 	}
 
+out:
+	art_table_free(ar, at);
 	return (error);
 }
 
@@ -597,7 +636,7 @@ struct art_table *
 art_table_get(struct art_root *ar, struct art_table *parent, int j)
 {
 	struct art_table	*at;
-	size_t			 size;
+	void			*at_heap;
 	uint32_t		 lvl;
 
 	KASSERT(j != 0 && j != 1);
@@ -610,19 +649,33 @@ art_table_get(struct art_root *ar, struct art_table *parent, int j)
 
 	KASSERT(lvl < ar->ar_nlvl);
 
-	size = sizeof(*at) + (1 << (ar->ar_bits[lvl] + 1)) * sizeof(void *);
-	at = malloc(size, M_RTABLE, M_NOWAIT|M_ZERO);
+	at = pool_get(&at_pool, PR_NOWAIT|PR_ZERO);
 	if (at == NULL)
 		return (NULL);
+
+	switch (AT_HEAPSIZE(ar->ar_bits[lvl])) {
+	case AT_HEAPSIZE(8):
+		at_heap = pool_get(&at_heap_8_pool, PR_NOWAIT|PR_ZERO);
+		break;
+	case AT_HEAPSIZE(16):
+		at_heap = pool_get(&at_heap_16_pool, PR_NOWAIT|PR_ZERO);
+		break;
+	default:
+		panic("incorrect stride length %u", ar->ar_bits[lvl]);
+	}
+
+	if (at_heap == NULL) {
+		pool_put(&at_pool, at);
+		return (NULL);
+	}
 
 	at->at_parent = parent;
 	at->at_index = j;
 	at->at_minfringe = (1 << ar->ar_bits[lvl]);
 	at->at_level = lvl;
 	at->at_bits = ar->ar_bits[lvl];
-	at->at_heap = (void *)(at + 1);
-
-	art_table_ref(ar, at);
+	at->at_heap = at_heap;
+	at->at_refcnt = 0;
 
 	if (parent != NULL) {
 		at->at_default = parent->at_heap[j].node;
@@ -642,20 +695,34 @@ struct art_table *
 art_table_put(struct art_root *ar, struct art_table *at)
 {
 	struct art_table	*parent = at->at_parent;
-	size_t			 size;
 	uint32_t		 lvl = at->at_level;
 	uint32_t		 j = at->at_index;
 
 	KASSERT(j != 0 && j != 1);
-	KASSERT(parent != NULL);
-	KASSERT(lvl == parent->at_level + 1);
+	KASSERT(parent != NULL || j == -1);
 
-	/* Give the route back to its parent. */
-	parent->at_heap[j].node = at->at_default;
-	art_table_free(ar, parent);
+	if (parent != NULL) {
+		KASSERT(lvl == parent->at_level + 1);
+		KASSERT(parent->at_refcnt >= 1);
 
-	size = sizeof(*at) + (1 << (ar->ar_bits[lvl] + 1)) * sizeof(void *);
-	free(at, M_RTABLE, size);
+		/* Give the route back to its parent. */
+		parent->at_heap[j].node = at->at_default;
+	} else {
+		ar->ar_root = NULL;
+	}
+
+	switch (AT_HEAPSIZE(ar->ar_bits[lvl])) {
+	case AT_HEAPSIZE(8):
+		pool_put(&at_heap_8_pool, at->at_heap);
+		break;
+	case AT_HEAPSIZE(16):
+		pool_put(&at_heap_16_pool, at->at_heap);
+		break;
+	default:
+		panic("incorrect stride length %u", ar->ar_bits[lvl]);
+	}
+
+	pool_put(&at_pool, at);
 
 	return (parent);
 }

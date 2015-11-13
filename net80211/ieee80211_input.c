@@ -1,4 +1,4 @@
-/*	$OpenBSD: ieee80211_input.c,v 1.138 2015/11/04 12:12:00 dlg Exp $	*/
+/*	$OpenBSD: ieee80211_input.c,v 1.140 2015/11/08 18:51:47 stsp Exp $	*/
 
 /*-
  * Copyright (c) 2001 Atsushi Onoe
@@ -1140,7 +1140,7 @@ ieee80211_parse_rsn_cipher(const u_int8_t selector[4])
 			return IEEE80211_CIPHER_WEP104;
 		}
 	} else if (memcmp(selector, IEEE80211_OUI, 3) == 0) {	/* RSN */
-		/* from IEEE Std 802.11 - Table 20da */
+		/* see 802.11-2012 Table 8-99 */
 		switch (selector[3]) {
 		case 0:	/* use group data cipher suite */
 			return IEEE80211_CIPHER_USEGROUP;
@@ -1186,7 +1186,7 @@ ieee80211_parse_rsn_akm(const u_int8_t selector[4])
 }
 
 /*
- * Parse an RSN element (see 7.3.2.25).
+ * Parse an RSN element (see 802.11-2012 8.4.2.27)
  */
 int
 ieee80211_parse_rsn_body(struct ieee80211com *ic, const u_int8_t *frm,
@@ -1221,7 +1221,9 @@ ieee80211_parse_rsn_body(struct ieee80211com *ic, const u_int8_t *frm,
 	if (frm + 4 > efrm)
 		return 0;
 	rsn->rsn_groupcipher = ieee80211_parse_rsn_cipher(frm);
-	if (rsn->rsn_groupcipher == IEEE80211_CIPHER_USEGROUP)
+	if (rsn->rsn_groupcipher == IEEE80211_CIPHER_NONE ||
+	    rsn->rsn_groupcipher == IEEE80211_CIPHER_USEGROUP ||
+	    rsn->rsn_groupcipher == IEEE80211_CIPHER_BIP)
 		return IEEE80211_STATUS_BAD_GROUP_CIPHER;
 	frm += 4;
 
@@ -1285,6 +1287,8 @@ ieee80211_parse_rsn_body(struct ieee80211com *ic, const u_int8_t *frm,
 	if (frm + 4 > efrm)
 		return 0;
 	rsn->rsn_groupmgmtcipher = ieee80211_parse_rsn_cipher(frm);
+	if (rsn->rsn_groupmgmtcipher != IEEE80211_CIPHER_BIP)
+		return IEEE80211_STATUS_BAD_GROUP_CIPHER;
 
 	return IEEE80211_STATUS_SUCCESS;
 }

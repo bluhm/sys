@@ -1,4 +1,4 @@
-/*	$OpenBSD: rtable.c,v 1.22 2015/11/06 17:55:55 mpi Exp $ */
+/*	$OpenBSD: rtable.c,v 1.24 2015/11/10 10:23:27 mpi Exp $ */
 
 /*
  * Copyright (c) 2014-2015 Martin Pieuchot
@@ -478,7 +478,7 @@ static inline uint8_t	*satoaddr(struct art_root *, struct sockaddr *);
 void
 rtable_init_backend(unsigned int keylen)
 {
-	pool_init(&an_pool, sizeof(struct art_node), 0, 0, 0, "art node", NULL);
+	pool_init(&an_pool, sizeof(struct art_node), 0, 0, 0, "art_node", NULL);
 }
 
 void *
@@ -623,6 +623,23 @@ rtable_insert(unsigned int rtableid, struct sockaddr *dst,
 	}
 #endif
 
+	/*
+	 * XXX Allocating a sockaddr for the mask per node wastes a lot
+	 * of memory, thankfully we'll get rid of that when rt_mask()
+	 * will be no more.
+	 */
+	if (mask != NULL) {
+		struct sockaddr		*msk;
+
+		msk = malloc(dst->sa_len, M_RTABLE, M_NOWAIT | M_ZERO);
+		if (msk == NULL) {
+			error = ENOMEM;
+			goto out;
+		}
+		memcpy(msk, mask, dst->sa_len);
+		rt->rt_mask = msk;
+	}
+
 	an = pool_get(&an_pool, PR_NOWAIT | PR_ZERO);
 	if (an == NULL) {
 		error = ENOBUFS;
@@ -634,6 +651,8 @@ rtable_insert(unsigned int rtableid, struct sockaddr *dst,
 
 	prev = art_insert(ar, an, addr, plen);
 	if (prev == NULL) {
+		free(rt->rt_mask, M_RTABLE, 0);
+		rt->rt_mask = NULL;
 		pool_put(&an_pool, an);
 		error = ESRCH;
 		goto out;
@@ -675,25 +694,6 @@ rtable_insert(unsigned int rtableid, struct sockaddr *dst,
 
 	rt->rt_node = an;
 	rt->rt_dest = dst;
-
-	/*
-	 * XXX Allocating a sockaddr for the mask per node wastes a lot
-	 * of memory, thankfully we'll get rid of that when rt_mask()
-	 * will be no more.
-	 */
-	if (mask != NULL) {
-		struct sockaddr		*msk;
-
-		msk = malloc(dst->sa_len, M_RTABLE, M_NOWAIT | M_ZERO);
-		if (msk == NULL) {
-			pool_put(&an_pool, an);
-			error = ENOMEM;
-			goto out;
-		}
-		memcpy(msk, mask, dst->sa_len);
-		rt->rt_mask = msk;
-	}
-
 	rtref(rt);
 	SLIST_INSERT_HEAD(&an->an_rtlist, rt, rt_next);
 
