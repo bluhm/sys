@@ -1,4 +1,4 @@
-/*	$OpenBSD: vfs_syscalls.c,v 1.239 2015/11/02 16:31:55 semarie Exp $	*/
+/*	$OpenBSD: vfs_syscalls.c,v 1.243 2015/11/18 06:57:24 deraadt Exp $	*/
 /*	$NetBSD: vfs_syscalls.c,v 1.71 1996/04/23 10:29:02 mycroft Exp $	*/
 
 /*
@@ -1796,6 +1796,7 @@ sys_pathconf(struct proc *p, void *v, register_t *retval)
 
 	NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF, UIO_USERSPACE,
 	    SCARG(uap, path), p);
+	nd.ni_pledge = PLEDGE_RPATH;
 	if ((error = namei(&nd)) != 0)
 		return (error);
 	error = VOP_PATHCONF(nd.ni_vp, SCARG(uap, name), retval);
@@ -2824,11 +2825,16 @@ sys_revoke(struct proc *p, void *v, register_t *retval)
 	struct nameidata nd;
 
 	NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, SCARG(uap, path), p);
+	nd.ni_pledge = PLEDGE_RPATH | PLEDGE_TTY;
 	if ((error = namei(&nd)) != 0)
 		return (error);
 	vp = nd.ni_vp;
 	if ((error = VOP_GETATTR(vp, &vattr, p->p_ucred, p)) != 0)
 		goto out;
+	if (!(vp->v_flag & VISTTY)) {
+		error = ENOTTY;
+		goto out;
+	}
 	if (p->p_ucred->cr_uid != vattr.va_uid &&
 	    (error = suser(p, 0)))
 		goto out;

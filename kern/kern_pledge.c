@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_pledge.c,v 1.106 2015/11/10 04:30:59 guenther Exp $	*/
+/*	$OpenBSD: kern_pledge.c,v 1.115 2015/11/18 08:24:22 semarie Exp $	*/
 
 /*
  * Copyright (c) 2015 Nicholas Marriott <nicm@openbsd.org>
@@ -114,6 +114,7 @@ const u_int pledge_syscalls[SYS_MAXSYSCALL] = {
 	[SYS_mprotect] = PLEDGE_STDIO,
 	[SYS_mquery] = PLEDGE_STDIO,
 	[SYS_munmap] = PLEDGE_STDIO,
+	[SYS_break] = PLEDGE_STDIO,
 
 	[SYS_umask] = PLEDGE_STDIO,
 
@@ -267,6 +268,8 @@ const u_int pledge_syscalls[SYS_MAXSYSCALL] = {
 
 	[SYS_chroot] = PLEDGE_ID,	/* also requires PLEDGE_PROC */
 
+	[SYS_revoke] = PLEDGE_TTY,	/* also requires PLEDGE_RPATH */
+
 	/*
 	 * Classify as RPATH|WPATH, because of path information leakage.
 	 * WPATH due to unknown use of mk*temp(3) on non-/tmp paths..
@@ -278,6 +281,7 @@ const u_int pledge_syscalls[SYS_MAXSYSCALL] = {
 	[SYS_getfsstat] = PLEDGE_RPATH,
 	[SYS_statfs] = PLEDGE_RPATH,
 	[SYS_fstatfs] = PLEDGE_RPATH,
+	[SYS_pathconf] = PLEDGE_RPATH,
 
 	[SYS_utimes] = PLEDGE_FATTR,
 	[SYS_futimes] = PLEDGE_FATTR,
@@ -976,41 +980,53 @@ pledge_sysctl(struct proc *p, int miblen, int *mib, void *new)
 	    mib[0] == CTL_HW && mib[1] == HW_SENSORS)
 		return (0);
 
-	if (miblen == 2 &&			/* getdomainname() */
+	if (miblen == 2 &&		/* getdomainname() */
 	    mib[0] == CTL_KERN && mib[1] == KERN_DOMAINNAME)
 		return (0);
-	if (miblen == 2 &&			/* gethostname() */
+	if (miblen == 2 &&		/* gethostname() */
 	    mib[0] == CTL_KERN && mib[1] == KERN_HOSTNAME)
 		return (0);
 	if (miblen == 6 &&		/* if_nameindex() */
 	    mib[0] == CTL_NET && mib[1] == PF_ROUTE &&
 	    mib[2] == 0 && mib[3] == 0 && mib[4] == NET_RT_IFNAMES)
 		return (0);
-	if (miblen == 2 &&			/* uname() */
+	if (miblen == 2 &&		/* uname() */
 	    mib[0] == CTL_KERN && mib[1] == KERN_OSTYPE)
 		return (0);
-	if (miblen == 2 &&			/* uname() */
+	if (miblen == 2 &&		/* uname() */
 	    mib[0] == CTL_KERN && mib[1] == KERN_OSRELEASE)
 		return (0);
-	if (miblen == 2 &&			/* uname() */
+	if (miblen == 2 &&		/* uname() */
 	    mib[0] == CTL_KERN && mib[1] == KERN_OSVERSION)
 		return (0);
-	if (miblen == 2 &&			/* uname() */
+	if (miblen == 2 &&		/* uname() */
 	    mib[0] == CTL_KERN && mib[1] == KERN_VERSION)
 		return (0);
-	if (miblen == 2 &&			/* kern.clockrate */
+	if (miblen == 2 &&		/* kern.clockrate */
 	    mib[0] == CTL_KERN && mib[1] == KERN_CLOCKRATE)
 		return (0);
-	if (miblen == 2 &&			/* uname() */
+	if (miblen == 2 &&		/* kern.argmax */
+	    mib[0] == CTL_KERN && mib[1] == KERN_ARGMAX)
+		return (0);
+	if (miblen == 2 &&		/* kern.ngroups */
+	    mib[0] == CTL_KERN && mib[1] == KERN_NGROUPS)
+		return (0);
+	if (miblen == 2 &&		/* kern.sysvshm */
+	    mib[0] == CTL_KERN && mib[1] == KERN_SYSVSHM)
+		return (0);
+	if (miblen == 2 &&		/* kern.posix1version */
+	    mib[0] == CTL_KERN && mib[1] == KERN_POSIX1)
+		return (0);
+	if (miblen == 2 &&		/* uname() */
 	    mib[0] == CTL_HW && mib[1] == HW_MACHINE)
 		return (0);
-	if (miblen == 2 &&			/* getpagesize() */
+	if (miblen == 2 &&		/* getpagesize() */
 	    mib[0] == CTL_HW && mib[1] == HW_PAGESIZE)
 		return (0);
-	if (miblen == 2 &&			/* setproctitle() */
+	if (miblen == 2 &&		/* setproctitle() */
 	    mib[0] == CTL_VM && mib[1] == VM_PSSTRINGS)
 		return (0);
-	if (miblen == 2 &&			/* hw.ncpu */
+	if (miblen == 2 &&		/* hw.ncpu */
 	    mib[0] == CTL_HW && mib[1] == HW_NCPU)
 		return (0);
 	if (miblen == 2 &&		/* kern.loadavg / getloadavg(3) */
@@ -1149,6 +1165,7 @@ pledge_ioctl(struct proc *p, long com, struct file *fp)
 				return (0);
 			return (ENOTTY);
 		case TIOCSWINSZ:
+		case TIOCEXT:		/* mail, libedit .. */
 		case TIOCCBRK:		/* cu */
 		case TIOCSBRK:		/* cu */
 		case TIOCCDTR:		/* cu */
@@ -1275,6 +1292,7 @@ pledge_sockopt(struct proc *p, int set, int level, int optname)
 		break;
 	case IPPROTO_IPV6:
 		switch (optname) {
+		case IPV6_TCLASS:
 		case IPV6_UNICAST_HOPS:
 		case IPV6_RECVHOPLIMIT:
 		case IPV6_PORTRANGE:
@@ -1299,16 +1317,32 @@ pledge_sockopt(struct proc *p, int set, int level, int optname)
 }
 
 int
-pledge_socket(struct proc *p, int dns)
+pledge_socket(struct proc *p, int domain, int state)
 {
-	if ((p->p_p->ps_flags & PS_PLEDGE) == 0)
-		return (0);
+	if (! ISSET(p->p_p->ps_flags, PS_PLEDGE))
+		return 0;
 
-	if (dns && (p->p_p->ps_pledge & PLEDGE_DNS))
-		return (0);
-	if ((p->p_p->ps_pledge & (PLEDGE_INET|PLEDGE_UNIX|PLEDGE_YPACTIVE)))
-		return (0);
-	return pledge_fail(p, EPERM, dns ? PLEDGE_DNS : PLEDGE_INET);
+	if (ISSET(state, SS_DNS)) {
+		if (ISSET(p->p_p->ps_pledge, PLEDGE_DNS))
+			return 0;
+		return pledge_fail(p, EPERM, PLEDGE_DNS);
+	}
+
+	switch (domain) {
+	case AF_INET:
+	case AF_INET6:
+		if (ISSET(p->p_p->ps_pledge, PLEDGE_INET) ||
+		    ISSET(p->p_p->ps_pledge, PLEDGE_YPACTIVE))
+			return 0;
+		return pledge_fail(p, EPERM, PLEDGE_INET);
+
+	case AF_UNIX:
+		if (ISSET(p->p_p->ps_pledge, PLEDGE_UNIX))
+			return 0;
+		return pledge_fail(p, EPERM, PLEDGE_UNIX);
+	}
+
+	return pledge_fail(p, EINVAL, PLEDGE_INET);
 }
 
 int

@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.c,v 1.405 2015/11/11 10:23:23 mpi Exp $	*/
+/*	$OpenBSD: if.c,v 1.407 2015/11/18 13:58:02 mpi Exp $	*/
 /*	$NetBSD: if.c,v 1.35 1996/05/07 05:26:04 thorpej Exp $	*/
 
 /*
@@ -887,8 +887,8 @@ if_detach(struct ifnet *ifp)
 	rt_if_remove(ifp);
 	rti_delete(ifp);
 #if NETHER > 0 && defined(NFSCLIENT)
-	if (ifp == revarp_ifp)
-		revarp_ifp = NULL;
+	if (ifp->if_index == revarp_ifidx)
+		revarp_ifidx = 0;
 #endif
 #ifdef MROUTING
 	vif_delete(ifp);
@@ -942,6 +942,36 @@ if_detach(struct ifnet *ifp)
 
 	if_idxmap_remove(ifp);
 	splx(s);
+}
+
+/*
+ * Returns true if ``ifp0'' is connected to the interface with index ``ifidx''.
+ */
+int
+if_isconnected(const struct ifnet *ifp0, unsigned int ifidx)
+{
+	struct ifnet *ifp;
+	int connected = 0;
+
+	ifp = if_get(ifidx);
+	if (ifp == NULL)
+		return (0);
+
+	if (ifp0->if_index == ifp->if_index)
+		connected = 1;
+
+#if NBRIDGE > 0
+	if (SAME_BRIDGE(ifp0->if_bridgeport, ifp->if_bridgeport))
+		connected = 1;
+#endif
+#if NCARP > 0
+	if ((ifp0->if_type == IFT_CARP && ifp0->if_carpdev == ifp) ||
+	    (ifp->if_type == IFT_CARP && ifp->if_carpdev == ifp0))
+	    	connected = 1;
+#endif
+
+	if_put(ifp);
+	return (connected);
 }
 
 /*
