@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_xl_pci.c,v 1.44 2015/03/14 03:38:48 jsg Exp $	*/
+/*	$OpenBSD: if_xl_pci.c,v 1.46 2015/11/24 17:11:40 mpi Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998, 1999
@@ -48,8 +48,6 @@
 #include <sys/device.h>
 
 #include <net/if.h>
-#include <net/if_dl.h>
-#include <net/if_types.h>
 #include <net/if_media.h>
 
 #include <netinet/in.h>

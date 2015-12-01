@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_iwi.c,v 1.127 2015/10/25 13:04:28 mpi Exp $	*/
+/*	$OpenBSD: if_iwi.c,v 1.131 2015/11/25 03:09:59 dlg Exp $	*/
 
 /*-
  * Copyright (c) 2004-2008
@@ -45,10 +45,8 @@
 #include <net/bpf.h>
 #endif
 #include <net/if.h>
-#include <net/if_arp.h>
 #include <net/if_dl.h>
 #include <net/if_media.h>
-#include <net/if_types.h>
 
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
@@ -1138,7 +1136,7 @@ iwi_tx_intr(struct iwi_softc *sc, struct iwi_tx_ring *txq)
 	}
 
 	sc->sc_tx_timer = 0;
-	ifp->if_flags &= ~IFF_OACTIVE;
+	ifq_clr_oactive(&ifp->if_snd);
 	(*ifp->if_start)(ifp);
 }
 
@@ -1389,15 +1387,15 @@ iwi_start(struct ifnet *ifp)
 		return;
 
 	for (;;) {
-		IFQ_POLL(&ifp->if_snd, m0);
+		if (sc->txq[0].queued + IWI_MAX_NSEG + 2 >= IWI_TX_RING_COUNT) {
+			ifq_set_oactive(&ifp->if_snd);
+			break;
+		}
+
+		IFQ_DEQUEUE(&ifp->if_snd, m0);
 		if (m0 == NULL)
 			break;
 
-		if (sc->txq[0].queued >= IWI_TX_RING_COUNT - 8) {
-			ifp->if_flags |= IFF_OACTIVE;
-			break;
-		}
-		IFQ_DEQUEUE(&ifp->if_snd, m0);
 #if NBPFILTER > 0
 		if (ifp->if_bpf != NULL)
 			bpf_mtap(ifp->if_bpf, m0, BPF_DIRECTION_OUT);
@@ -2293,7 +2291,7 @@ iwi_init(struct ifnet *ifp)
 		goto fail1;
 	}
 
-	ifp->if_flags &= ~IFF_OACTIVE;
+	ifq_clr_oactive(&ifp->if_snd);
 	ifp->if_flags |= IFF_RUNNING;
 
 	if (ic->ic_opmode != IEEE80211_M_MONITOR)
@@ -2317,7 +2315,8 @@ iwi_stop(struct ifnet *ifp, int disable)
 
 	sc->sc_tx_timer = 0;
 	ifp->if_timer = 0;
-	ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
+	ifp->if_flags &= ~IFF_RUNNING;
+	ifq_clr_oactive(&ifp->if_snd);
 
 	/* in case we were scanning, release the scan "lock" */
 	ic->ic_scan_lock = IEEE80211_SCAN_UNLOCKED;

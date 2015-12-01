@@ -1,4 +1,4 @@
-/*	$OpenBSD: fxp.c,v 1.123 2015/10/25 12:48:46 mpi Exp $	*/
+/*	$OpenBSD: fxp.c,v 1.127 2015/11/25 03:09:58 dlg Exp $	*/
 /*	$NetBSD: if_fxp.c,v 1.2 1997/06/05 02:01:55 thorpej Exp $	*/
 
 /*
@@ -50,10 +50,8 @@
 
 #include <net/if.h>
 #include <net/if_media.h>
-#include <net/if_types.h>
 
 #include <netinet/in.h>
-#include <netinet/ip.h>
 
 #if NBPFILTER > 0
 #include <net/bpf.h>
@@ -678,30 +676,33 @@ fxp_start(struct ifnet *ifp)
 	struct mbuf *m0, *m = NULL;
 	int cnt = sc->sc_cbt_cnt, seg;
 
-	if ((ifp->if_flags & (IFF_OACTIVE | IFF_RUNNING)) != IFF_RUNNING)
+	if (!(ifp->if_flags & IFF_RUNNING) || ifq_is_oactive(&ifp->if_snd))
 		return;
 
 	while (1) {
 		if (cnt >= (FXP_NTXCB - 2)) {
-			ifp->if_flags |= IFF_OACTIVE;
+			ifq_set_oactive(&ifp->if_snd);
 			break;
 		}
 
 		txs = txs->tx_next;
 
-		IFQ_POLL(&ifp->if_snd, m0);
+		m0 = ifq_deq_begin(&ifp->if_snd);
 		if (m0 == NULL)
 			break;
 
 		if (bus_dmamap_load_mbuf(sc->sc_dmat, txs->tx_map,
 		    m0, BUS_DMA_NOWAIT) != 0) {
 			MGETHDR(m, M_DONTWAIT, MT_DATA);
-			if (m == NULL)
+			if (m == NULL) {
+				ifq_deq_rollback(&ifp->if_snd, m0);
 				break;
+			}
 			if (m0->m_pkthdr.len > MHLEN) {
 				MCLGET(m, M_DONTWAIT);
 				if (!(m->m_flags & M_EXT)) {
 					m_freem(m);
+					ifq_deq_rollback(&ifp->if_snd, m0);
 					break;
 				}
 			}
@@ -710,11 +711,12 @@ fxp_start(struct ifnet *ifp)
 			if (bus_dmamap_load_mbuf(sc->sc_dmat, txs->tx_map,
 			    m, BUS_DMA_NOWAIT) != 0) {
 				m_freem(m);
+				ifq_deq_rollback(&ifp->if_snd, m0);
 				break;
 			}
 		}
 
-		IFQ_DEQUEUE(&ifp->if_snd, m0);
+		ifq_deq_commit(&ifp->if_snd, m0);
 		if (m != NULL) {
 			m_freem(m0);
 			m0 = m;
@@ -844,7 +846,7 @@ fxp_intr(void *arg)
 			sc->sc_cbt_cnt = txcnt;
 			/* Did we transmit any packets? */
 			if (sc->sc_cbt_cons != txs)
-				ifp->if_flags &= ~IFF_OACTIVE;
+				ifq_clr_oactive(&ifp->if_snd);
 			ifp->if_timer = sc->sc_cbt_cnt ? 5 : 0;
 			sc->sc_cbt_cons = txs;
 
@@ -1072,7 +1074,8 @@ fxp_stop(struct fxp_softc *sc, int drain, int softonly)
 	 * between panics, and the watchdog timer)
 	 */
 	ifp->if_timer = 0;
-	ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
+	ifp->if_flags &= ~IFF_RUNNING;
+	ifq_clr_oactive(&ifp->if_snd);
 
 	if (!softonly)
 		mii_down(&sc->sc_mii);
@@ -1424,7 +1427,7 @@ fxp_init(void *xsc)
 	mii_mediachg(&sc->sc_mii);
 
 	ifp->if_flags |= IFF_RUNNING;
-	ifp->if_flags &= ~IFF_OACTIVE;
+	ifq_clr_oactive(&ifp->if_snd);
 
 	/*
 	 * Request a software generated interrupt that will be used to 

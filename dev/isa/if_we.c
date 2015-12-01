@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_we.c,v 1.24 2015/09/11 13:02:28 stsp Exp $	*/
+/*	$OpenBSD: if_we.c,v 1.26 2015/11/24 17:11:39 mpi Exp $	*/
 /*	$NetBSD: if_we.c,v 1.11 1998/07/05 06:49:14 jonathan Exp $	*/
 
 /*-
@@ -60,8 +60,6 @@
 #include <sys/syslog.h>
 
 #include <net/if.h>
-#include <net/if_dl.h>
-#include <net/if_types.h>
 #include <net/if_media.h>
 
 #include <netinet/in.h>

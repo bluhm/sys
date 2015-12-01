@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ste.c,v 1.60 2015/10/25 13:04:28 mpi Exp $ */
+/*	$OpenBSD: if_ste.c,v 1.63 2015/11/25 03:09:59 dlg Exp $ */
 /*
  * Copyright (c) 1997, 1998, 1999
  *	Bill Paul <wpaul@ctr.columbia.edu>.  All rights reserved.
@@ -47,8 +47,6 @@
 #include <sys/timeout.h>
 
 #include <net/if.h>
-#include <net/if_dl.h>
-#include <net/if_types.h>
 
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
@@ -750,7 +748,7 @@ ste_txeof(struct ste_softc *sc)
 
 		m_freem(cur_tx->ste_mbuf);
 		cur_tx->ste_mbuf = NULL;
-		ifp->if_flags &= ~IFF_OACTIVE;
+		ifq_clr_oactive(&ifp->if_snd);
 		ifp->if_opackets++;
 
 		STE_INC(idx, STE_TX_LIST_CNT);
@@ -1115,7 +1113,7 @@ ste_init(void *xsc)
 	ste_ifmedia_upd(ifp);
 
 	ifp->if_flags |= IFF_RUNNING;
-	ifp->if_flags &= ~IFF_OACTIVE;
+	ifq_clr_oactive(&ifp->if_snd);
 
 	splx(s);
 
@@ -1133,7 +1131,8 @@ ste_stop(struct ste_softc *sc)
 
 	timeout_del(&sc->sc_stats_tmo);
 
-	ifp->if_flags &= ~(IFF_RUNNING|IFF_OACTIVE);
+	ifp->if_flags &= ~IFF_RUNNING;
+	ifq_clr_oactive(&ifp->if_snd);
 
 	CSR_WRITE_2(sc, STE_IMR, 0);
 	STE_SETBIT2(sc, STE_MACCTL1, STE_MACCTL1_TX_DISABLE);
@@ -1312,7 +1311,7 @@ ste_start(struct ifnet *ifp)
 	if (!sc->ste_link)
 		return;
 
-	if (ifp->if_flags & IFF_OACTIVE)
+	if (ifq_is_oactive(&ifp->if_snd))
 		return;
 
 	idx = sc->ste_cdata.ste_tx_prod;
@@ -1324,7 +1323,7 @@ ste_start(struct ifnet *ifp)
 		 */
 		if (STE_NEXT(idx, STE_TX_LIST_CNT) ==
 		    sc->ste_cdata.ste_tx_cons) {
-			ifp->if_flags |= IFF_OACTIVE;
+			ifq_set_oactive(&ifp->if_snd);
 			break;
 		}
 

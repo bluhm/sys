@@ -1,4 +1,4 @@
-/*	$OpenBSD: athn.c,v 1.88 2015/11/04 12:11:59 dlg Exp $	*/
+/*	$OpenBSD: athn.c,v 1.90 2015/11/25 03:09:58 dlg Exp $	*/
 
 /*-
  * Copyright (c) 2009 Damien Bergamini <damien.bergamini@free.fr>
@@ -47,7 +47,6 @@
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_media.h>
-#include <net/if_types.h>
 
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
@@ -2540,12 +2539,12 @@ athn_start(struct ifnet *ifp)
 	struct ieee80211_node *ni;
 	struct mbuf *m;
 
-	if ((ifp->if_flags & (IFF_RUNNING | IFF_OACTIVE)) != IFF_RUNNING)
+	if (!(ifp->if_flags & IFF_RUNNING) || ifq_is_oactive(&ifp->if_snd))
 		return;
 
 	for (;;) {
 		if (SIMPLEQ_EMPTY(&sc->txbufs)) {
-			ifp->if_flags |= IFF_OACTIVE;
+			ifq_set_oactive(&ifp->if_snd);
 			break;
 		}
 		/* Send pending management frames first. */
@@ -2791,7 +2790,7 @@ athn_init(struct ifnet *ifp)
 		athn_btcoex_enable(sc);
 #endif
 
-	ifp->if_flags &= ~IFF_OACTIVE;
+	ifq_clr_oactive(&ifp->if_snd);
 	ifp->if_flags |= IFF_RUNNING;
 
 #ifdef notyet
@@ -2820,7 +2819,8 @@ athn_stop(struct ifnet *ifp, int disable)
 	int qid;
 
 	ifp->if_timer = sc->sc_tx_timer = 0;
-	ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
+	ifp->if_flags &= ~IFF_RUNNING;
+	ifq_clr_oactive(&ifp->if_snd);
 
 	timeout_del(&sc->scan_to);
 	/* In case we were scanning, release the scan "lock". */

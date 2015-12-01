@@ -1,4 +1,4 @@
-/*	$OpenBSD: smc91cxx.c,v 1.42 2015/10/25 12:48:46 mpi Exp $	*/
+/*	$OpenBSD: smc91cxx.c,v 1.44 2015/11/25 03:09:58 dlg Exp $	*/
 /*	$NetBSD: smc91cxx.c,v 1.11 1998/08/08 23:51:41 mycroft Exp $	*/
 
 /*-
@@ -508,7 +508,7 @@ smc91cxx_init(sc)
 
 	/* Interface is now running, with no output active. */
 	ifp->if_flags |= IFF_RUNNING;
-	ifp->if_flags &= ~IFF_OACTIVE;
+	ifq_clr_oactive(&ifp->if_snd);
 
 	if (sc->sc_flags & SMC_FLAGS_HAS_MII) {
 		/* Start the one second clock. */
@@ -541,14 +541,14 @@ smc91cxx_start(ifp)
 	u_int8_t packetno;
 	int timo, pad;
 
-	if ((ifp->if_flags & (IFF_RUNNING|IFF_OACTIVE)) != IFF_RUNNING)
+	if (!(ifp->if_flags & IFF_RUNNING) || ifq_is_oactive(&ifp->if_snd))
 		return;
 
  again:
 	/*
 	 * Peek at the next packet.
 	 */
-	IFQ_POLL(&ifp->if_snd, m);
+	m = ifq_deq_begin(&ifp->if_snd);
 	if (m == NULL)
 		return;
 
@@ -568,7 +568,7 @@ smc91cxx_start(ifp)
 	if ((len + pad) > (ETHER_MAX_LEN - ETHER_CRC_LEN)) {
 		printf("%s: large packet discarded\n", sc->sc_dev.dv_xname);
 		ifp->if_oerrors++;
-		IFQ_DEQUEUE(&ifp->if_snd, m);
+		ifq_deq_commit(&ifp->if_snd, m);
 		m_freem(m);
 		goto readcheck;
 	}
@@ -618,8 +618,8 @@ smc91cxx_start(ifp)
 		    bus_space_read_1(bst, bsh, INTR_MASK_REG_B) | IM_ALLOC_INT);
 
 		ifp->if_timer = 5;
-		ifp->if_flags |= IFF_OACTIVE;
-
+		ifq_deq_rollback(&ifp->if_snd, m);
+		ifq_set_oactive(&ifp->if_snd);
 		return;
 	}
 
@@ -645,7 +645,7 @@ smc91cxx_start(ifp)
 	 * Get the packet from the kernel.  This will include the Ethernet
 	 * frame header, MAC address, etc.
 	 */
-	IFQ_DEQUEUE(&ifp->if_snd, m);
+	ifq_deq_commit(&ifp->if_snd, m);
 
 	/*
 	 * Push the packet out to the card.
@@ -790,7 +790,7 @@ smc91cxx_intr(arg)
 			/* XXX bound this loop! */ ;
 		bus_space_write_2(bst, bsh, MMU_CMD_REG_W, MMUCR_FREEPKT);
 
-		ifp->if_flags &= ~IFF_OACTIVE;
+		ifq_clr_oactive(&ifp->if_snd);
 		ifp->if_timer = 0;
 	}
 

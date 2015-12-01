@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_dc_pci.c,v 1.72 2015/03/14 03:38:48 jsg Exp $	*/
+/*	$OpenBSD: if_dc_pci.c,v 1.74 2015/11/24 17:11:39 mpi Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998, 1999
@@ -49,8 +49,6 @@
 #include <sys/device.h>
 
 #include <net/if.h>
-#include <net/if_dl.h>
-#include <net/if_types.h>
 
 #include <netinet/in.h>
 #include <netinet/if_ether.h>

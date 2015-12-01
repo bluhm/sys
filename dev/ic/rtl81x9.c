@@ -1,4 +1,4 @@
-/*	$OpenBSD: rtl81x9.c,v 1.92 2015/10/25 12:48:46 mpi Exp $ */
+/*	$OpenBSD: rtl81x9.c,v 1.94 2015/11/25 03:09:58 dlg Exp $ */
 
 /*
  * Copyright (c) 1997, 1998
@@ -96,7 +96,6 @@
 #include <sys/timeout.h>
 
 #include <net/if.h>
-#include <net/if_types.h>
 
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
@@ -736,7 +735,7 @@ rl_txeof(struct rl_softc *sc)
 			return;
 		}
 		RL_INC(sc->rl_cdata.last_tx);
-		ifp->if_flags &= ~IFF_OACTIVE;
+		ifq_clr_oactive(&ifp->if_snd);
 	} while (sc->rl_cdata.last_tx != sc->rl_cdata.cur_tx);
 
 	if (RL_LAST_TXMBUF(sc) == NULL)
@@ -897,7 +896,7 @@ rl_start(struct ifnet *ifp)
 	 * packets from the queue.
 	 */
 	if (RL_CUR_TXMBUF(sc) != NULL)
-		ifp->if_flags |= IFF_OACTIVE;
+		ifq_set_oactive(&ifp->if_snd);
 }
 
 void
@@ -970,7 +969,7 @@ rl_init(void *xsc)
 	CSR_WRITE_1(sc, sc->rl_cfg1, RL_CFG1_DRVLOAD|RL_CFG1_FULLDUPLEX);
 
 	ifp->if_flags |= IFF_RUNNING;
-	ifp->if_flags &= ~IFF_OACTIVE;
+	ifq_clr_oactive(&ifp->if_snd);
 
 	splx(s);
 
@@ -1075,7 +1074,8 @@ rl_stop(struct rl_softc *sc)
 
 	timeout_del(&sc->sc_tick_tmo);
 
-	ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
+	ifp->if_flags &= ~IFF_RUNNING;
+	ifq_clr_oactive(&ifp->if_snd);
 
 	CSR_WRITE_1(sc, RL_COMMAND, 0x00);
 	CSR_WRITE_2(sc, RL_IMR, 0x0000);

@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_pledge.c,v 1.115 2015/11/18 08:24:22 semarie Exp $	*/
+/*	$OpenBSD: kern_pledge.c,v 1.128 2015/11/29 03:23:19 deraadt Exp $	*/
 
 /*
  * Copyright (c) 2015 Nicholas Marriott <nicm@openbsd.org>
@@ -36,6 +36,9 @@
 #include <sys/ioctl.h>
 #include <sys/termios.h>
 #include <sys/tty.h>
+#include <sys/device.h>
+#include <sys/disklabel.h>
+#include <sys/dkio.h>
 #include <sys/mtio.h>
 #include <net/bpf.h>
 #include <net/route.h>
@@ -45,6 +48,7 @@
 #include <netinet6/in6_var.h>
 #include <netinet6/nd6.h>
 #include <netinet/tcp.h>
+#include <net/pfvar.h>
 
 #include <sys/conf.h>
 #include <sys/specdev.h>
@@ -53,6 +57,9 @@
 #include <sys/syscall.h>
 #include <sys/syscallargs.h>
 #include <sys/systm.h>
+
+#include <dev/biovar.h>
+
 #define PLEDGENAMES
 #include <sys/pledge.h>
 
@@ -74,6 +81,7 @@ const u_int pledge_syscalls[SYS_MAXSYSCALL] = {
 	[SYS___get_tcb] = PLEDGE_ALWAYS,
 	[SYS_pledge] = PLEDGE_ALWAYS,
 	[SYS_sendsyslog] = PLEDGE_ALWAYS,	/* stack protector reporting */
+	[SYS_sendsyslog2] = PLEDGE_ALWAYS,	/* stack protector reporting */
 	[SYS_thrkill] = PLEDGE_ALWAYS,		/* raise, abort, stack pro */
 
 	/* "getting" information about self is considered safe */
@@ -114,6 +122,7 @@ const u_int pledge_syscalls[SYS_MAXSYSCALL] = {
 	[SYS_mprotect] = PLEDGE_STDIO,
 	[SYS_mquery] = PLEDGE_STDIO,
 	[SYS_munmap] = PLEDGE_STDIO,
+	[SYS_msync] = PLEDGE_STDIO,
 	[SYS_break] = PLEDGE_STDIO,
 
 	[SYS_umask] = PLEDGE_STDIO,
@@ -319,6 +328,7 @@ static const struct {
 } pledgereq[] = {
 	{ "abort",		0 },	/* XXX reserve for later */
 	{ "cpath",		PLEDGE_CPATH },
+	{ "disklabel",		PLEDGE_DISKLABEL },
 	{ "dns",		PLEDGE_DNS },
 	{ "exec",		PLEDGE_EXEC },
 	{ "fattr",		PLEDGE_FATTR },
@@ -328,6 +338,7 @@ static const struct {
 	{ "inet",		PLEDGE_INET },
 	{ "ioctl",		PLEDGE_IOCTL },
 	{ "mcast",		PLEDGE_MCAST },
+	{ "pf",			PLEDGE_PF },
 	{ "proc",		PLEDGE_PROC },
 	{ "prot_exec",		PLEDGE_PROTEXEC },
 	{ "ps",			PLEDGE_PS },
@@ -629,6 +640,15 @@ pledge_namei(struct proc *p, struct nameidata *ni, char *origpath)
 		if ((ni->ni_pledge == PLEDGE_RPATH) &&
 		    strcmp(path, "/etc/localtime") == 0)
 			return (0);
+
+		/* when avoiding YP mode, getpw* functions touch this */
+		if (ni->ni_pledge == PLEDGE_RPATH &&
+		    strcmp(path, "/var/run/ypbind.lock") == 0) {
+			if (p->p_p->ps_pledge & PLEDGE_GETPW)
+				return (0);
+			else
+				return (pledge_fail(p, error, PLEDGE_GETPW));
+		}
 		break;
 	case SYS_open:
 		/* daemon(3) or other such functions */
@@ -637,8 +657,8 @@ pledge_namei(struct proc *p, struct nameidata *ni, char *origpath)
 			return (0);
 		}
 
-		/* readpassphrase(3), getpw*(3) */
-		if ((p->p_p->ps_pledge & (PLEDGE_TTY | PLEDGE_GETPW)) &&
+		/* readpassphrase(3), getpass(3) */
+		if ((p->p_p->ps_pledge & PLEDGE_TTY) &&
 		    (ni->ni_pledge & ~(PLEDGE_RPATH | PLEDGE_WPATH)) == 0 &&
 		    strcmp(path, "/dev/tty") == 0) {
 			return (0);
@@ -652,6 +672,8 @@ pledge_namei(struct proc *p, struct nameidata *ni, char *origpath)
 			if (strcmp(path, "/etc/pwd.db") == 0)
 				return (0);
 			if (strcmp(path, "/etc/group") == 0)
+				return (0);
+			if (strcmp(path, "/etc/netid") == 0)
 				return (0);
 		}
 
@@ -976,6 +998,23 @@ pledge_sysctl(struct proc *p, int miblen, int *mib, void *new)
 			return (0);
 	}
 
+	if ((p->p_p->ps_pledge & PLEDGE_DISKLABEL)) {
+		if (miblen == 2 &&		/* kern.rawpartition */
+		    mib[0] == CTL_KERN &&
+		    mib[1] == KERN_RAWPARTITION)
+			return (0);
+		if (miblen == 2 &&		/* kern.maxpartitions */
+		    mib[0] == CTL_KERN &&
+		    mib[1] == KERN_MAXPARTITIONS)
+			return (0);
+#ifdef CPU_CHR2BLK
+		if (miblen == 3 &&		/* machdep.chr2blk */
+		    mib[0] == CTL_MACHDEP &&
+		    mib[1] == CPU_CHR2BLK)
+			return (0);
+#endif /* CPU_CHR2BLK */
+	}
+
 	if (miblen >= 3 &&			/* ntpd(8) to read sensors */
 	    mib[0] == CTL_HW && mib[1] == HW_SENSORS)
 		return (0);
@@ -1135,6 +1174,55 @@ pledge_ioctl(struct proc *p, long com, struct file *fp)
 		}
 	}
 
+	if ((p->p_p->ps_pledge & PLEDGE_DISKLABEL)) {
+		switch (com) {
+		case DIOCGDINFO:
+		case DIOCGPDINFO:
+		case DIOCRLDINFO:
+		case DIOCWDINFO:
+		case BIOCDISK:
+		case BIOCINQ:
+		case BIOCINSTALLBOOT:
+		case BIOCVOL:
+			if (fp->f_type == DTYPE_VNODE &&
+			    ((vp->v_type == VCHR &&
+			    cdevsw[major(vp->v_rdev)].d_type == D_DISK) ||
+			    (vp->v_type == VBLK &&
+			    bdevsw[major(vp->v_rdev)].d_type == D_DISK)))
+				return (0);
+			break;
+		case DIOCMAP:
+			if (fp->f_type == DTYPE_VNODE &&
+			    vp->v_type == VCHR &&
+			    cdevsw[major(vp->v_rdev)].d_ioctl == diskmapioctl)
+				return (0);
+			break;
+		}
+	}
+
+	if ((p->p_p->ps_pledge & PLEDGE_PF)) {
+#ifndef SMALL_KERNEL
+		switch (com) {
+		case DIOCADDRULE:
+		case DIOCGETSTATUS:
+		case DIOCNATLOOK:
+		case DIOCRADDTABLES:
+		case DIOCRCLRADDRS:
+		case DIOCRCLRTABLES:
+		case DIOCRCLRTSTATS:
+		case DIOCRGETTSTATS:
+		case DIOCRSETADDRS:
+		case DIOCXBEGIN:
+		case DIOCXCOMMIT:
+			if ((fp->f_type == DTYPE_VNODE) &&
+			    (vp->v_type == VCHR) &&
+			    (cdevsw[major(vp->v_rdev)].d_open == pfopen))
+				return (0);
+			break;
+		}
+#endif /* !SMALL_KERNEL */
+	}
+
 	if ((p->p_p->ps_pledge & PLEDGE_TTY)) {
 		switch (com) {
 #if NPTY > 0
@@ -1220,7 +1308,7 @@ pledge_sockopt(struct proc *p, int set, int level, int optname)
 	}
 
 	if ((p->p_p->ps_pledge & (PLEDGE_INET|PLEDGE_UNIX|PLEDGE_DNS)) == 0)
-	 	return pledge_fail(p, EPERM, PLEDGE_INET);
+		return pledge_fail(p, EPERM, PLEDGE_INET);
 	/* In use by some service libraries */
 	switch (level) {
 	case SOL_SOCKET:
@@ -1276,6 +1364,7 @@ pledge_sockopt(struct proc *p, int set, int level, int optname)
 		case IP_TOS:
 		case IP_TTL:
 		case IP_MINTTL:
+		case IP_IPDEFTTL:
 		case IP_PORTRANGE:
 		case IP_RECVDSTADDR:
 		case IP_RECVDSTPORT:
@@ -1329,6 +1418,8 @@ pledge_socket(struct proc *p, int domain, int state)
 	}
 
 	switch (domain) {
+	case -1:		/* accept on any domain */
+		return (0);
 	case AF_INET:
 	case AF_INET6:
 		if (ISSET(p->p_p->ps_pledge, PLEDGE_INET) ||
@@ -1410,7 +1501,7 @@ pledge_protexec(struct proc *p, int prot)
 {
 	if ((p->p_p->ps_flags & PS_PLEDGE) == 0)
 		return 0;
-        if (!(p->p_p->ps_pledge & PLEDGE_PROTEXEC) && (prot & PROT_EXEC))
+	if (!(p->p_p->ps_pledge & PLEDGE_PROTEXEC) && (prot & PROT_EXEC))
 		return pledge_fail(p, EPERM, PLEDGE_PROTEXEC);
 	return 0;
 }

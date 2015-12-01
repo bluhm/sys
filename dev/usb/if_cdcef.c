@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_cdcef.c,v 1.38 2015/10/25 12:11:56 mpi Exp $	*/
+/*	$OpenBSD: if_cdcef.c,v 1.41 2015/11/25 03:10:00 dlg Exp $	*/
 
 /*
  * Copyright (c) 2007 Dale Rahn <drahn@openbsd.org>
@@ -274,10 +274,10 @@ cdcef_start(struct ifnet *ifp)
 	struct cdcef_softc	*sc = ifp->if_softc;
 	struct mbuf		*m_head = NULL;
 
-	if(ifp->if_flags & IFF_OACTIVE)
+	if (ifq_is_oactive(&ifp->if_snd))
 		return;
 
-	IFQ_POLL(&ifp->if_snd, m_head);
+	m_head = ifq_deq_begin(&ifp->if_snd);
 	if (m_head == NULL) {
 		return;
 	}
@@ -287,24 +287,25 @@ cdcef_start(struct ifnet *ifp)
 		 * drop packet because receiver is not listening,
 		 * or if packet is larger than xmit buffer
 		 */
-		IFQ_DEQUEUE(&ifp->if_snd, m_head);
+		ifq_deq_commit(&ifp->if_snd, m_head);
 		m_freem(m_head);
 		return;
 	}
 
 	if (cdcef_encap(sc, m_head, 0)) {
-		ifp->if_flags |= IFF_OACTIVE;
+		ifq_deq_rollback(&ifp->if_snd, m_head);
+		ifq_set_oactive(&ifp->if_snd);
 		return;
 	}
 
-	IFQ_DEQUEUE(&ifp->if_snd, m_head);
+	ifq_deq_commit(&ifp->if_snd, m_head);
 
 #if NBPFILTER > 0
 	if (ifp->if_bpf)
 		bpf_mtap(ifp->if_bpf, m_head, BPF_DIRECTION_OUT);
 #endif
 					
-	ifp->if_flags |= IFF_OACTIVE;
+	ifq_set_oactive(&ifp->if_snd);
 
 	ifp->if_timer = 6;
 }
@@ -324,7 +325,7 @@ cdcef_txeof(struct usbf_xfer *xfer, void *priv,
 #endif
 
 	ifp->if_timer = 0;
-	ifp->if_flags &= ~IFF_OACTIVE;
+	ifq_clr_oactive(&ifp->if_snd);
 
 	if (sc->sc_xmit_mbuf != NULL) {
 		m_freem(sc->sc_xmit_mbuf);
@@ -503,7 +504,7 @@ cdcef_watchdog(struct ifnet *ifp)
 
 	s = splusb();
 	ifp->if_timer = 0;
-	ifp->if_flags &= ~IFF_OACTIVE;
+	ifq_clr_oactive(&ifp->if_snd);
 
 	/* cancel receive pipe? */
 	usbf_abort_pipe(sc->sc_pipe_in); /* in is tx pipe */
@@ -519,7 +520,7 @@ cdcef_init(struct cdcef_softc *sc)
 	s = splnet();
 
 	ifp->if_flags |= IFF_RUNNING;
-	ifp->if_flags &= ~IFF_OACTIVE;
+	ifq_clr_oactive(&ifp->if_snd);
 
 	splx(s);
 }
@@ -554,7 +555,8 @@ cdcef_stop(struct cdcef_softc *sc)
 	struct ifnet    *ifp = GET_IFP(sc);
 
 	ifp->if_timer = 0;
-	ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
+	ifp->if_flags &= ~IFF_RUNNING;
+	ifq_clr_oactive(&ifp->if_snd);
 
 	/* cancel receive pipe? */
 

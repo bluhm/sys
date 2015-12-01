@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_smsc.c,v 1.21 2015/10/25 12:11:56 mpi Exp $	*/
+/*	$OpenBSD: if_smsc.c,v 1.25 2015/11/25 03:10:00 dlg Exp $	*/
 /* $FreeBSD: src/sys/dev/usb/net/if_smsc.c,v 1.1 2012/08/15 04:03:55 gonzo Exp $ */
 /*-
  * Copyright (c) 2012
@@ -59,7 +59,6 @@
  */
 
 #include "bpfilter.h"
-#include "vlan.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -74,7 +73,6 @@
 #include <machine/bus.h>
 
 #include <net/if.h>
-#include <net/if_dl.h>
 #include <net/if_media.h>
 
 #if NBPFILTER > 0
@@ -591,7 +589,7 @@ smsc_init(void *xsc)
 
 	/* Indicate we are up and running. */
 	ifp->if_flags |= IFF_RUNNING;
-	ifp->if_flags &= ~IFF_OACTIVE;
+	ifq_clr_oactive(&ifp->if_snd);
 
 	timeout_add_sec(&sc->sc_stat_ch, 1);
 
@@ -606,25 +604,26 @@ smsc_start(struct ifnet *ifp)
 
 	/* Don't send anything if there is no link or controller is busy. */
 	if ((sc->sc_flags & SMSC_FLAG_LINK) == 0 ||
-		(ifp->if_flags & IFF_OACTIVE) != 0) {
+		ifq_is_oactive(&ifp->if_snd)) {
 		return;
 	}
 
-	IFQ_POLL(&ifp->if_snd, m_head);
+	m_head = ifq_deq_begin(&ifp->if_snd);
 	if (m_head == NULL)
 		return;
 
 	if (smsc_encap(sc, m_head, 0)) {
-		ifp->if_flags |= IFF_OACTIVE;
+		ifq_deq_rollback(&ifp->if_snd, m_head);
+		ifq_set_oactive(&ifp->if_snd);
 		return;
 	}
-	IFQ_DEQUEUE(&ifp->if_snd, m_head);
+	ifq_deq_commit(&ifp->if_snd, m_head);
 
 #if NBPFILTER > 0
 	if (ifp->if_bpf)
 		bpf_mtap(ifp->if_bpf, m_head, BPF_DIRECTION_OUT);
 #endif
-	ifp->if_flags |= IFF_OACTIVE;
+	ifq_set_oactive(&ifp->if_snd);
 }
 
 void
@@ -652,7 +651,8 @@ smsc_stop(struct smsc_softc *sc)
 
 	ifp = &sc->sc_ac.ac_if;
 	ifp->if_timer = 0;
-	ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
+	ifp->if_flags &= ~IFF_RUNNING;
+	ifq_clr_oactive(&ifp->if_snd);
 
 	timeout_del(&sc->sc_stat_ch);
 
@@ -1264,7 +1264,7 @@ smsc_txeof(struct usbd_xfer *xfer, void *priv, usbd_status status)
 	}
 
 	ifp->if_timer = 0;
-	ifp->if_flags &= ~IFF_OACTIVE;
+	ifq_clr_oactive(&ifp->if_snd);
 
 	m_freem(c->sc_mbuf);
 	c->sc_mbuf = NULL;

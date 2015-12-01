@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_sis.c,v 1.128 2015/10/25 13:04:28 mpi Exp $ */
+/*	$OpenBSD: if_sis.c,v 1.132 2015/11/25 03:09:59 dlg Exp $ */
 /*
  * Copyright (c) 1997, 1998, 1999
  *	Bill Paul <wpaul@ctr.columbia.edu>.  All rights reserved.
@@ -72,8 +72,6 @@
 #include <sys/timeout.h>
 
 #include <net/if.h>
-#include <net/if_dl.h>
-#include <net/if_types.h>
 
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
@@ -1506,7 +1504,7 @@ sis_txeof(struct sis_softc *sc)
 	if (idx != sc->sis_cdata.sis_tx_cons) {
 		/* we freed up some buffers */
 		sc->sis_cdata.sis_tx_cons = idx;
-		ifp->if_flags &= ~IFF_OACTIVE;
+		ifq_clr_oactive(&ifp->if_snd);
 	}
 
 	ifp->if_timer = (sc->sis_cdata.sis_tx_cnt == 0) ? 0 : 5;
@@ -1673,21 +1671,22 @@ sis_start(struct ifnet *ifp)
 
 	idx = sc->sis_cdata.sis_tx_prod;
 
-	if (ifp->if_flags & IFF_OACTIVE)
+	if (ifq_is_oactive(&ifp->if_snd))
 		return;
 
 	while(sc->sis_ldata->sis_tx_list[idx].sis_mbuf == NULL) {
-		IFQ_POLL(&ifp->if_snd, m_head);
+		m_head = ifq_deq_begin(&ifp->if_snd);
 		if (m_head == NULL)
 			break;
 
 		if (sis_encap(sc, m_head, &idx)) {
-			ifp->if_flags |= IFF_OACTIVE;
+			ifq_deq_rollback(&ifp->if_snd, m_head);
+			ifq_set_oactive(&ifp->if_snd);
 			break;
 		}
 
 		/* now we are committed to transmit the packet */
-		IFQ_DEQUEUE(&ifp->if_snd, m_head);
+		ifq_deq_commit(&ifp->if_snd, m_head);
 
 		queued++;
 
@@ -1839,7 +1838,7 @@ sis_init(void *xsc)
 
 	sc->sis_stopped = 0;
 	ifp->if_flags |= IFF_RUNNING;
-	ifp->if_flags &= ~IFF_OACTIVE;
+	ifq_clr_oactive(&ifp->if_snd);
 
 	splx(s);
 
@@ -1980,7 +1979,8 @@ sis_stop(struct sis_softc *sc)
 
 	timeout_del(&sc->sis_timeout);
 
-	ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
+	ifp->if_flags &= ~IFF_RUNNING;
+	ifq_clr_oactive(&ifp->if_snd);
 	sc->sis_stopped = 1;
 
 	CSR_WRITE_4(sc, SIS_IER, 0);

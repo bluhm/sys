@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_vio.c,v 1.34 2015/10/25 13:04:28 mpi Exp $	*/
+/*	$OpenBSD: if_vio.c,v 1.39 2015/11/25 03:09:59 dlg Exp $	*/
 
 /*
  * Copyright (c) 2012 Stefan Fritsch, Alexander Fiveg.
@@ -42,9 +42,7 @@
 #include <dev/pci/virtiovar.h>
 
 #include <net/if.h>
-#include <net/if_dl.h>
 #include <net/if_media.h>
-#include <net/if_types.h>
 
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
@@ -53,7 +51,6 @@
 #include <netinet/udp.h>
 
 #if NVLAN > 0
-#include <net/if_types.h>
 #include <net/if_vlan_var.h>
 #endif
 
@@ -679,7 +676,7 @@ vio_init(struct ifnet *ifp)
 	    sc->sc_vq[VQRX].vq_num);
 	vio_populate_rx_mbufs(sc);
 	ifp->if_flags |= IFF_RUNNING;
-	ifp->if_flags &= ~IFF_OACTIVE;
+	ifq_clr_oactive(&ifp->if_snd);
 	vio_iff(sc);
 	vio_link_state(ifp);
 	return 0;
@@ -693,7 +690,8 @@ vio_stop(struct ifnet *ifp, int disable)
 
 	timeout_del(&sc->sc_txtick);
 	timeout_del(&sc->sc_rxtick);
-	ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
+	ifp->if_flags &= ~IFF_RUNNING;
+	ifq_clr_oactive(&ifp->if_snd);
 	/* only way to stop I/O and DMA is resetting... */
 	virtio_reset(vsc);
 	vio_rxeof(sc);
@@ -728,7 +726,7 @@ vio_start(struct ifnet *ifp)
 
 	vio_txeof(vq);
 
-	if ((ifp->if_flags & (IFF_RUNNING|IFF_OACTIVE)) != IFF_RUNNING)
+	if (!(ifp->if_flags & IFF_RUNNING) || ifq_is_oactive(&ifp->if_snd))
 		return;
 	if (IFQ_IS_EMPTY(&ifp->if_snd))
 		return;
@@ -738,13 +736,14 @@ again:
 		int slot, r;
 		struct virtio_net_hdr *hdr;
 
-		IFQ_POLL(&ifp->if_snd, m);
+		m = ifq_deq_begin(&ifp->if_snd);
 		if (m == NULL)
 			break;
 
 		r = virtio_enqueue_prep(vq, &slot);
 		if (r == EAGAIN) {
-			ifp->if_flags |= IFF_OACTIVE;
+			ifq_deq_rollback(&ifp->if_snd, m);
+			ifq_set_oactive(&ifp->if_snd);
 			break;
 		}
 		if (r != 0)
@@ -780,7 +779,7 @@ again:
 		r = vio_encap(sc, slot, m);
 		if (r != 0) {
 			virtio_enqueue_abort(vq, slot);
-			IFQ_DEQUEUE(&ifp->if_snd, m);
+			ifq_deq_commit(&ifp->if_snd, m);
 			m_freem(m);
 			ifp->if_oerrors++;
 			continue;
@@ -790,11 +789,12 @@ again:
 		if (r != 0) {
 			bus_dmamap_unload(vsc->sc_dmat,
 			    sc->sc_tx_dmamaps[slot]);
+			ifq_deq_rollback(&ifp->if_snd, m);
 			sc->sc_tx_mbufs[slot] = NULL;
-			ifp->if_flags |= IFF_OACTIVE;
+			ifq_set_oactive(&ifp->if_snd);
 			break;
 		}
-		IFQ_DEQUEUE(&ifp->if_snd, m);
+		ifq_deq_commit(&ifp->if_snd, m);
 
 		bus_dmamap_sync(vsc->sc_dmat, sc->sc_tx_dmamaps[slot], 0,
 		    sc->sc_tx_dmamaps[slot]->dm_mapsize, BUS_DMASYNC_PREWRITE);
@@ -809,7 +809,7 @@ again:
 			bpf_mtap(ifp->if_bpf, m, BPF_DIRECTION_OUT);
 #endif
 	}
-	if (ifp->if_flags & IFF_OACTIVE) {
+	if (ifq_is_oactive(&ifp->if_snd)) {
 		int r;
 		if (vsc->sc_features & VIRTIO_F_RING_EVENT_IDX)
 			r = virtio_postpone_intr_smart(&sc->sc_vq[VQTX]);
@@ -1159,7 +1159,7 @@ vio_txeof(struct virtqueue *vq)
 	}
 
 	if (r) {
-		ifp->if_flags &= ~IFF_OACTIVE;
+		ifq_clr_oactive(&ifp->if_snd);
 		virtio_stop_vq_intr(vsc, &sc->sc_vq[VQTX]);
 	}
 	if (vq->vq_used_idx == vq->vq_avail_idx)

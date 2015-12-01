@@ -1,4 +1,4 @@
-/*	$OpenBSD: rt2661.c,v 1.84 2015/11/04 12:11:59 dlg Exp $	*/
+/*	$OpenBSD: rt2661.c,v 1.88 2015/11/25 03:09:58 dlg Exp $	*/
 
 /*-
  * Copyright (c) 2006
@@ -46,7 +46,6 @@
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_media.h>
-#include <net/if_types.h>
 
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
@@ -1151,7 +1150,7 @@ rt2661_tx_dma_intr(struct rt2661_softc *sc, struct rt2661_tx_ring *txq)
 		if (sc->txq[0].queued < RT2661_TX_RING_COUNT - 1)
 			sc->sc_flags &= ~RT2661_DATA_OACTIVE;
 		if (!(sc->sc_flags & (RT2661_MGT_OACTIVE|RT2661_DATA_OACTIVE)))
-			ifp->if_flags &= ~IFF_OACTIVE;
+			ifq_clr_oactive(&ifp->if_snd);
 		rt2661_start(ifp);
 	}
 }
@@ -1929,18 +1928,19 @@ rt2661_start(struct ifnet *ifp)
 	 * net80211 may still try to send management frames even if the
 	 * IFF_RUNNING flag is not set...
 	 */
-	if ((ifp->if_flags & (IFF_RUNNING | IFF_OACTIVE)) != IFF_RUNNING)
+	if (!(ifp->if_flags & IFF_RUNNING) || ifq_is_oactive(&ifp->if_snd))
 		return;
 
 	for (;;) {
-		m0 = mq_dequeue(&ic->ic_mgtq);
-		if (m0 != NULL) {
+		if (mq_len(&ic->ic_mgtq) > 0) {
 			if (sc->mgtq.queued >= RT2661_MGT_RING_COUNT) {
-				ifp->if_flags |= IFF_OACTIVE;
-				mq_requeue(&ic->ic_mgtq, m0);
+				ifq_set_oactive(&ifp->if_snd);
 				break;
 			}
 
+			m0 = mq_dequeue(&ic->ic_mgtq);
+			if (m0 == NULL)
+				continue;
 			ni = m0->m_pkthdr.ph_cookie;
 #if NBPFILTER > 0
 			if (ic->ic_rawbpf != NULL)
@@ -1950,17 +1950,17 @@ rt2661_start(struct ifnet *ifp)
 				break;
 
 		} else {
-			if (ic->ic_state != IEEE80211_S_RUN)
-				break;
-			IFQ_POLL(&ifp->if_snd, m0);
-			if (m0 == NULL)
-				break;
 			if (sc->txq[0].queued >= RT2661_TX_RING_COUNT - 1) {
-				/* there is no place left in this ring */
-				ifp->if_flags |= IFF_OACTIVE;
+				ifq_set_oactive(&ifp->if_snd);
 				break;
 			}
+
+			if (ic->ic_state != IEEE80211_S_RUN)
+				break;
+
 			IFQ_DEQUEUE(&ifp->if_snd, m0);
+			if (m0 == NULL)
+				break;
 #if NBPFILTER > 0
 			if (ifp->if_bpf != NULL)
 				bpf_mtap(ifp->if_bpf, m0, BPF_DIRECTION_OUT);
@@ -2707,8 +2707,8 @@ rt2661_init(struct ifnet *ifp)
 	/* kick Rx */
 	RAL_WRITE(sc, RT2661_RX_CNTL_CSR, 1);
 
-	ifp->if_flags &= ~IFF_OACTIVE;
 	ifp->if_flags |= IFF_RUNNING;
+	ifq_clr_oactive(&ifp->if_snd);
 
 	if (ic->ic_opmode != IEEE80211_M_MONITOR)
 		ieee80211_new_state(ic, IEEE80211_S_SCAN, -1);
@@ -2728,7 +2728,8 @@ rt2661_stop(struct ifnet *ifp, int disable)
 
 	sc->sc_tx_timer = 0;
 	ifp->if_timer = 0;
-	ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
+	ifp->if_flags &= ~IFF_RUNNING;
+	ifq_clr_oactive(&ifp->if_snd);
 
 	ieee80211_new_state(ic, IEEE80211_S_INIT, -1);	/* free all nodes */
 	rt2661_amrr_node_free_all(sc);

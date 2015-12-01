@@ -1,4 +1,4 @@
-/*	$OpenBSD: mbuf.h,v 1.202 2015/11/13 10:12:39 mpi Exp $	*/
+/*	$OpenBSD: mbuf.h,v 1.205 2015/11/21 11:46:25 mpi Exp $	*/
 /*	$NetBSD: mbuf.h,v 1.19 1996/02/09 18:25:14 christos Exp $	*/
 
 /*
@@ -392,6 +392,21 @@ struct mbstat {
 	u_short	m_mtypes[256];	/* type specific mbuf allocations */
 };
 
+#include <sys/mutex.h>
+
+struct mbuf_list {
+	struct mbuf		*ml_head;
+	struct mbuf		*ml_tail;
+	u_int			ml_len;
+};
+
+struct mbuf_queue {
+	struct mutex		mq_mtx;
+	struct mbuf_list	mq_list;
+	u_int			mq_maxlen;
+	u_int			mq_drops;
+};
+
 #ifdef	_KERNEL
 
 extern	struct mbstat mbstat;
@@ -474,20 +489,11 @@ struct m_tag *m_tag_next(struct mbuf *, struct m_tag *);
  * mbuf lists
  */
 
-#include <sys/mutex.h>
-
-struct mbuf_list {
-	struct mbuf		*ml_head;
-	struct mbuf		*ml_tail;
-	u_int			ml_len;
-};
-
 #define MBUF_LIST_INITIALIZER() { NULL, NULL, 0 }
 
 void			ml_init(struct mbuf_list *);
 void			ml_enqueue(struct mbuf_list *, struct mbuf *);
 struct mbuf *		ml_dequeue(struct mbuf_list *);
-void			ml_requeue(struct mbuf_list *, struct mbuf *);
 void			ml_enlist(struct mbuf_list *, struct mbuf_list *);
 struct mbuf *		ml_dechain(struct mbuf_list *);
 struct mbuf *		ml_filter(struct mbuf_list *,
@@ -497,19 +503,17 @@ unsigned int		ml_purge(struct mbuf_list *);
 #define	ml_len(_ml)		((_ml)->ml_len)
 #define	ml_empty(_ml)		((_ml)->ml_len == 0)
 
-#define MBUF_LIST_FOREACH(_ml, _m) \
-	for ((_m) = (_ml)->ml_head; (_m) != NULL; (_m) = (_m)->m_nextpkt)
+#define MBUF_LIST_FIRST(_ml)	((_ml)->ml_head)
+#define MBUF_LIST_NEXT(_m)	((_m)->m_nextpkt)
+
+#define MBUF_LIST_FOREACH(_ml, _m)					\
+	for ((_m) = MBUF_LIST_FIRST(_ml);				\
+	    (_m) != NULL;						\
+	    (_m) = MBUF_LIST_NEXT(_m))
 
 /*
  * mbuf queues
  */
-
-struct mbuf_queue {
-	struct mutex		mq_mtx;
-	struct mbuf_list	mq_list;
-	u_int			mq_maxlen;
-	u_int			mq_drops;
-};
 
 #define MBUF_QUEUE_INITIALIZER(_maxlen, _ipl) \
     { MUTEX_INITIALIZER(_ipl), MBUF_LIST_INITIALIZER(), (_maxlen), 0 }
@@ -517,7 +521,6 @@ struct mbuf_queue {
 void			mq_init(struct mbuf_queue *, u_int, int);
 int			mq_enqueue(struct mbuf_queue *, struct mbuf *);
 struct mbuf *		mq_dequeue(struct mbuf_queue *);
-int			mq_requeue(struct mbuf_queue *, struct mbuf *);
 int			mq_enlist(struct mbuf_queue *, struct mbuf_list *);
 void			mq_delist(struct mbuf_queue *, struct mbuf_list *);
 struct mbuf *		mq_dechain(struct mbuf_queue *);

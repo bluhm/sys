@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_pcn.c,v 1.38 2015/10/25 13:04:28 mpi Exp $	*/
+/*	$OpenBSD: if_pcn.c,v 1.40 2015/11/25 03:09:59 dlg Exp $	*/
 /*	$NetBSD: if_pcn.c,v 1.26 2005/05/07 09:15:44 is Exp $	*/
 
 /*
@@ -817,7 +817,7 @@ pcn_start(struct ifnet *ifp)
 	bus_dmamap_t dmamap;
 	int error, nexttx, lasttx = -1, ofree, seg;
 
-	if ((ifp->if_flags & (IFF_RUNNING|IFF_OACTIVE)) != IFF_RUNNING)
+	if (!(ifp->if_flags & IFF_RUNNING) || ifq_is_oactive(&ifp->if_snd))
 		return;
 
 	/*
@@ -833,14 +833,16 @@ pcn_start(struct ifnet *ifp)
 	 */
 	for (;;) {
 		/* Grab a packet off the queue. */
-		IFQ_POLL(&ifp->if_snd, m0);
+		m0 = ifq_deq_begin(&ifp->if_snd);
 		if (m0 == NULL)
 			break;
 		m = NULL;
 
 		/* Get a work queue entry. */
-		if (sc->sc_txsfree == 0)
+		if (sc->sc_txsfree == 0) {
+			ifq_deq_rollback(&ifp->if_snd, m0);
 			break;
+		}
 
 		txs = &sc->sc_txsoft[sc->sc_txsnext];
 		dmamap = txs->txs_dmamap;
@@ -854,11 +856,14 @@ pcn_start(struct ifnet *ifp)
 		if (bus_dmamap_load_mbuf(sc->sc_dmat, dmamap, m0,
 		    BUS_DMA_WRITE|BUS_DMA_NOWAIT) != 0) {
 			MGETHDR(m, M_DONTWAIT, MT_DATA);
-			if (m == NULL)
+			if (m == NULL) {
+				ifq_deq_rollback(&ifp->if_snd, m0);
 				break;
+			}
 			if (m0->m_pkthdr.len > MHLEN) {
 				MCLGET(m, M_DONTWAIT);
 				if ((m->m_flags & M_EXT) == 0) {
+					ifq_deq_rollback(&ifp->if_snd, m0);
 					m_freem(m);
 					break;
 				}
@@ -867,8 +872,10 @@ pcn_start(struct ifnet *ifp)
 			m->m_pkthdr.len = m->m_len = m0->m_pkthdr.len;
 			error = bus_dmamap_load_mbuf(sc->sc_dmat, dmamap,
 			    m, BUS_DMA_WRITE|BUS_DMA_NOWAIT);
-			if (error)
+			if (error) {
+				ifq_deq_rollback(&ifp->if_snd, m0);
 				break;
+			}
 		}
 
 		/*
@@ -888,14 +895,15 @@ pcn_start(struct ifnet *ifp)
 			 * XXX We could allocate an mbuf and copy, but
 			 * XXX is it worth it?
 			 */
-			ifp->if_flags |= IFF_OACTIVE;
+			ifq_set_oactive(&ifp->if_snd);
 			bus_dmamap_unload(sc->sc_dmat, dmamap);
 			if (m != NULL)
 				m_freem(m);
+			ifq_deq_rollback(&ifp->if_snd, m0);
 			break;
 		}
 
-		IFQ_DEQUEUE(&ifp->if_snd, m0);
+		ifq_deq_commit(&ifp->if_snd, m0);
 		if (m != NULL) {
 			m_freem(m0);
 			m0 = m;
@@ -996,7 +1004,7 @@ pcn_start(struct ifnet *ifp)
 
 	if (sc->sc_txsfree == 0 || sc->sc_txfree == 0) {
 		/* No more slots left; notify upper layer. */
-		ifp->if_flags |= IFF_OACTIVE;
+		ifq_set_oactive(&ifp->if_snd);
 	}
 
 	if (sc->sc_txfree != ofree) {
@@ -1192,7 +1200,7 @@ pcn_txintr(struct pcn_softc *sc)
 	uint32_t tmd1, tmd2, tmd;
 	int i, j;
 
-	ifp->if_flags &= ~IFF_OACTIVE;
+	ifq_clr_oactive(&ifp->if_snd);
 
 	/*
 	 * Go through our Tx list and free mbufs for those
@@ -1679,7 +1687,7 @@ pcn_init(struct ifnet *ifp)
 
 	/* ...all done! */
 	ifp->if_flags |= IFF_RUNNING;
-	ifp->if_flags &= ~IFF_OACTIVE;
+	ifq_clr_oactive(&ifp->if_snd);
 
  out:
 	if (error)
@@ -1729,7 +1737,8 @@ pcn_stop(struct ifnet *ifp, int disable)
 	}
 
 	/* Mark the interface as down and cancel the watchdog timer. */
-	ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
+	ifp->if_flags &= ~IFF_RUNNING;
+	ifq_clr_oactive(&ifp->if_snd);
 	ifp->if_timer = 0;
 
 	/* Stop the chip. */

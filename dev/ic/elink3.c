@@ -1,4 +1,4 @@
-/*	$OpenBSD: elink3.c,v 1.88 2015/10/25 12:48:46 mpi Exp $	*/
+/*	$OpenBSD: elink3.c,v 1.92 2015/11/25 11:20:38 mpi Exp $	*/
 /*	$NetBSD: elink3.c,v 1.32 1997/05/14 00:22:00 thorpej Exp $	*/
 
 /*
@@ -46,8 +46,6 @@
 #include <sys/device.h>
 
 #include <net/if.h>
-#include <net/if_types.h>
-#include <net/netisr.h>
 #include <net/if_media.h>
 
 #include <netinet/in.h>
@@ -662,7 +660,7 @@ epinit(struct ep_softc *sc)
 
 	/* Interface is now `running', with no output active. */
 	ifp->if_flags |= IFF_RUNNING;
-	ifp->if_flags &= ~IFF_OACTIVE;
+	ifq_clr_oactive(&ifp->if_snd);
 
 	/* Attempt to start output, if any. */
 	epstart(ifp);
@@ -949,12 +947,12 @@ epstart(struct ifnet *ifp)
 	int sh, len, pad, txreg;
 
 	/* Don't transmit if interface is busy or not running */
-	if ((ifp->if_flags & (IFF_RUNNING | IFF_OACTIVE)) != IFF_RUNNING)
+	if (!(ifp->if_flags & IFF_RUNNING) || ifq_is_oactive(&ifp->if_snd))
 		return;
 
 startagain:
 	/* Sneak a peek at the next packet */
-	IFQ_POLL(&ifp->if_snd, m0);
+	m0 = ifq_deq_begin(&ifp->if_snd);
 	if (m0 == NULL)
 		return;
 
@@ -973,7 +971,7 @@ startagain:
 	if (len + pad > ETHER_MAX_LEN) {
 		/* packet is obviously too large: toss it */
 		++ifp->if_oerrors;
-		IFQ_DEQUEUE(&ifp->if_snd, m0);
+		ifq_deq_commit(&ifp->if_snd, m0);
 		m_freem(m0);
 		goto readcheck;
 	}
@@ -983,14 +981,15 @@ startagain:
 		bus_space_write_2(iot, ioh, EP_COMMAND,
 		    SET_TX_AVAIL_THRESH | ((len + pad + 4) >> sc->txashift));
 		/* not enough room in FIFO */
-		ifp->if_flags |= IFF_OACTIVE;
+		ifq_deq_rollback(&ifp->if_snd, m0);
+		ifq_set_oactive(&ifp->if_snd);
 		return;
 	} else {
 		bus_space_write_2(iot, ioh, EP_COMMAND,
 		    SET_TX_AVAIL_THRESH | EP_THRESH_DISABLE);
 	}
 
-	IFQ_DEQUEUE(&ifp->if_snd, m0);
+	ifq_deq_commit(&ifp->if_snd, m0);
 	if (m0 == NULL)
 		return;
 
@@ -1182,7 +1181,7 @@ eptxstat(struct ep_softc *sc)
 		} else if (i & TXS_MAX_COLLISION) {
 			++sc->sc_arpcom.ac_if.if_collisions;
 			bus_space_write_2(iot, ioh, EP_COMMAND, TX_ENABLE);
-			sc->sc_arpcom.ac_if.if_flags &= ~IFF_OACTIVE;
+			ifq_clr_oactive(&sc->sc_arpcom.ac_if.if_snd);
 		} else
 			sc->tx_succ_ok = (sc->tx_succ_ok+1) & 127;
 	}
@@ -1220,7 +1219,7 @@ epintr(void *arg)
 		if (status & S_RX_COMPLETE)
 			epread(sc);
 		if (status & S_TX_AVAIL) {
-			ifp->if_flags &= ~IFF_OACTIVE;
+			ifq_clr_oactive(&ifp->if_snd);
 			epstart(ifp);
 		}
 		if (status & S_CARD_FAILURE) {
@@ -1490,7 +1489,8 @@ epstop(struct ep_softc *sc)
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
 
-	ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
+	ifp->if_flags &= ~IFF_RUNNING;
+	ifq_clr_oactive(&ifp->if_snd);
 
 	if (sc->ep_flags & EP_FLAGS_MII) {
 		mii_down(&sc->sc_mii);

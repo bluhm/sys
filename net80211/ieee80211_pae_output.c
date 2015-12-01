@@ -1,4 +1,4 @@
-/*	$OpenBSD: ieee80211_pae_output.c,v 1.24 2015/10/12 13:17:58 dlg Exp $	*/
+/*	$OpenBSD: ieee80211_pae_output.c,v 1.26 2015/11/25 03:10:00 dlg Exp $	*/
 
 /*-
  * Copyright (c) 2007,2008 Damien Bergamini <damien.bergamini@free.fr>
@@ -34,7 +34,6 @@
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_media.h>
-#include <net/if_arp.h>
 #include <net/if_llc.h>
 
 #include <netinet/in.h>
@@ -129,7 +128,7 @@ ieee80211_send_eapol_key(struct ieee80211com *ic, struct mbuf *m,
 	IFQ_ENQUEUE(&ifp->if_snd, m, error);
 	if (error == 0) {
 		ifp->if_obytes += len;
-		if ((ifp->if_flags & IFF_OACTIVE) == 0)
+		if (!ifq_is_oactive(&ifp->if_snd))
 			(*ifp->if_start)(ifp);
 	}
 	splx(s);

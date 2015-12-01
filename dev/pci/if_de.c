@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_de.c,v 1.126 2015/11/04 00:10:50 dlg Exp $	*/
+/*	$OpenBSD: if_de.c,v 1.132 2015/11/25 11:20:38 mpi Exp $	*/
 /*	$NetBSD: if_de.c,v 1.58 1998/01/12 09:39:58 thorpej Exp $	*/
 
 /*-
@@ -53,9 +53,6 @@
 
 #include <net/if.h>
 #include <net/if_media.h>
-#include <net/if_types.h>
-#include <net/if_dl.h>
-#include <net/netisr.h>
 
 #include "bpfilter.h"
 #if NBPFILTER > 0
@@ -412,7 +409,7 @@ tulip_linkup(tulip_softc_t * const sc, tulip_media_t media)
     if ((sc->tulip_flags & TULIP_LINKUP) == 0)
 	sc->tulip_flags |= TULIP_PRINTLINKUP;
     sc->tulip_flags |= TULIP_LINKUP;
-    sc->tulip_if.if_flags &= ~IFF_OACTIVE;
+    ifq_clr_oactive(&sc->tulip_if.if_snd);
     if (sc->tulip_media != media) {
 #ifdef TULIP_DEBUG
 	sc->tulip_dbg.dbg_last_media = sc->tulip_media;
@@ -620,7 +617,7 @@ tulip_media_poll(tulip_softc_t * const sc, tulip_mediapoll_event_t event)
     }
 
     if (event == TULIP_MEDIAPOLL_START) {
-	sc->tulip_if.if_flags |= IFF_OACTIVE;
+	ifq_set_oactive(&sc->tulip_if.if_snd);
 	if (sc->tulip_probe_state != TULIP_PROBE_INACTIVE)
 	    return;
 	sc->tulip_probe_mediamask = 0;
@@ -969,7 +966,7 @@ tulip_21041_media_poll(tulip_softc_t * const sc, const tulip_mediapoll_event_t e
      * restart the probe (and reset the tulip to a known state).
      */
     if (event == TULIP_MEDIAPOLL_START) {
-	sc->tulip_if.if_flags |= IFF_OACTIVE;
+	ifq_set_oactive(&sc->tulip_if.if_snd);
 	sc->tulip_cmdmode &= ~(TULIP_CMD_FULLDUPLEX|TULIP_CMD_RXRUN);
 	TULIP_CSR_WRITE(sc, csr_command, sc->tulip_cmdmode);
 	sc->tulip_probe_state = TULIP_PROBE_MEDIATEST;
@@ -3037,7 +3034,7 @@ tulip_reset(tulip_softc_t * const sc)
     if (!inreset) {
 	sc->tulip_flags |= TULIP_INRESET;
 	sc->tulip_flags &= ~(TULIP_NEEDRESET|TULIP_RXBUFSLOW);
-	sc->tulip_if.if_flags &= ~IFF_OACTIVE;
+	ifq_clr_oactive(&sc->tulip_if.if_snd);
 	sc->tulip_if.if_start = tulip_ifstart;
     }
 
@@ -3160,7 +3157,7 @@ tulip_init(tulip_softc_t * const sc)
 	    sc->tulip_cmdmode |= TULIP_CMD_RXRUN;
 	    sc->tulip_intrmask |= TULIP_STS_RXSTOPPED;
 	} else {
-	    sc->tulip_if.if_flags |= IFF_OACTIVE;
+	    ifq_set_oactive(&sc->tulip_if.if_snd);
 	    sc->tulip_cmdmode &= ~TULIP_CMD_RXRUN;
 	    sc->tulip_intrmask &= ~TULIP_STS_RXSTOPPED;
 	}
@@ -3259,9 +3256,6 @@ tulip_rx_intr(tulip_softc_t * const sc)
 		TULIP_RXMAP_POSTSYNC(sc, map);
 		bus_dmamap_unload(sc->tulip_dmatag, map);
 		tulip_free_rxmap(sc, map);
-#if defined(DIAGNOSTIC)
-		TULIP_SETCTX(me, NULL);
-#endif
 		me->m_len = TULIP_RX_BUFLEN;
 		last_offset += TULIP_RX_BUFLEN;
 		me->m_next = ml_dequeue(&sc->tulip_rxq);
@@ -3282,9 +3276,6 @@ tulip_rx_intr(tulip_softc_t * const sc)
 			    BUS_DMASYNC_POSTREAD|BUS_DMASYNC_POSTWRITE);
 	    bus_dmamap_unload(sc->tulip_dmatag, map);
 	    tulip_free_rxmap(sc, map);
-#if defined(DIAGNOSTIC)
-	    TULIP_SETCTX(me, NULL);
-#endif
 	    sc->tulip_flags |= TULIP_RXACT;
 	    accept = 1;
 	} else {
@@ -3320,9 +3311,6 @@ tulip_rx_intr(tulip_softc_t * const sc)
 	    map = TULIP_GETCTX(me, bus_dmamap_t);
 	    bus_dmamap_unload(sc->tulip_dmatag, map);
 	    tulip_free_rxmap(sc, map);
-#if defined(DIAGNOSTIC)
-	    TULIP_SETCTX(me, NULL);
-#endif
 	}
 #if defined(TULIP_DEBUG)
 	cnt++;
@@ -3561,7 +3549,7 @@ tulip_tx_intr(tulip_softc_t * const sc)
 	    ri->ri_nextin = ri->ri_first;
 
 	if ((sc->tulip_flags & TULIP_TXPROBE_ACTIVE) == 0)
-	    sc->tulip_if.if_flags &= ~IFF_OACTIVE;
+	    ifq_clr_oactive(&sc->tulip_if.if_snd);
     }
     /*
      * If nothing left to transmit, disable the timer.
@@ -3800,12 +3788,7 @@ tulip_txput(tulip_softc_t * const sc, struct mbuf *m, int notonqueue)
     int segcnt, freedescs;
     u_int32_t d_status;
     bus_dmamap_t map;
-    int error;
     struct ifnet *ifp = &sc->tulip_if;
-#ifdef DIAGNOSTIC
-    struct mbuf *ombuf = m;
-#endif
-    int compressed = 0;
 
 #if defined(TULIP_DEBUG)
     if ((sc->tulip_cmdmode & TULIP_CMD_TXRUN) == 0) {
@@ -3858,47 +3841,24 @@ tulip_txput(tulip_softc_t * const sc, struct mbuf *m, int notonqueue)
 #endif
 	goto finish;
     }
-    error = bus_dmamap_load_mbuf(sc->tulip_dmatag, map, m, BUS_DMA_NOWAIT);
-    if (error != 0) {
-	if (error == EFBIG) {
-	    /*
-	     * The packet exceeds the number of transmit buffer
-	     * entries that we can use for one packet, so we have
-	     * to recopy it into one mbuf and then try again.
-	     */
-	    struct mbuf *tmp;
-	    if (!notonqueue) {
-#ifdef DIAGNOSTIC
-		if (IFQ_IS_EMPTY(&ifp->if_snd))
-			panic("%s: if_snd queue empty", ifp->if_xname);
-#endif
-		IFQ_DEQUEUE(&ifp->if_snd, tmp);
-#ifdef DIAGNOSTIC
-		if (tmp != ombuf)
-		    panic("tulip_txput: different mbuf dequeued!");
-#endif
-	    }
-	    compressed = 1;
-	    m = tulip_mbuf_compress(m);
-	    if (m == NULL) {
-#if defined(TULIP_DEBUG)
-		sc->tulip_dbg.dbg_txput_finishes[2]++;
-#endif
-		tulip_free_txmap(sc, map);
-		goto finish;
-	    }
-	    error = bus_dmamap_load_mbuf(sc->tulip_dmatag, map, m, BUS_DMA_NOWAIT);
-	}
-	if (error != 0) {
-	    printf(TULIP_PRINTF_FMT ": unable to load tx map, "
-		   "error = %d\n", TULIP_PRINTF_ARGS, error);
-#if defined(TULIP_DEBUG)
-	    sc->tulip_dbg.dbg_txput_finishes[3]++;
-#endif
-	    tulip_free_txmap(sc, map);
-	    goto finish;
-	}
+    switch (bus_dmamap_load_mbuf(sc->tulip_dmatag, map, m, BUS_DMA_NOWAIT)) {
+    case 0:
+	break;
+    case EFBIG:
+	/*
+	 * The packet exceeds the number of transmit buffer
+	 * entries that we can use for one packet, so we have
+	 * to recopy it into one mbuf and then try again.
+	 */
+	if (m_defrag(m, M_DONTWAIT) == 0 &&
+	  bus_dmamap_load_mbuf(sc->tulip_dmatag, map, m, BUS_DMA_NOWAIT) == 0)
+	    break;
+	/* FALLTHROUGH */
+    default:
+	tulip_free_txmap(sc, map);
+        goto finish;
     }
+
     if ((freedescs -= (map->dm_nsegs + 1) / 2) <= 0
 	    /*
 	     * See if there's any unclaimed space in the transmit ring.
@@ -3942,26 +3902,16 @@ tulip_txput(tulip_softc_t * const sc, struct mbuf *m, int notonqueue)
 	    nextout = ri->ri_first;
     }
     TULIP_TXMAP_PRESYNC(sc, map);
-    TULIP_SETCTX(m, map);
-    map = NULL;
 
     /*
      * The descriptors have been filled in.  Now get ready
      * to transmit.
      */
-    if (!compressed && !notonqueue) {
-	/* remove the mbuf from the queue */
-	struct mbuf *tmp;
-#ifdef DIAGNOSTIC
-	if (IFQ_IS_EMPTY(&ifp->if_snd))
-	    panic("%s: if_snd queue empty", ifp->if_xname);
-#endif
-	IFQ_DEQUEUE(&ifp->if_snd, tmp);
-#ifdef DIAGNOSTIC
-	if (tmp != ombuf)
-	    panic("tulip_txput: different mbuf dequeued!");
-#endif
-    }
+    if (!notonqueue)
+	ifq_deq_commit(&ifp->if_snd, m);
+
+    TULIP_SETCTX(m, map);
+    map = NULL;
 
     ml_enqueue(&sc->tulip_txq, m);
     m = NULL;
@@ -4008,7 +3958,7 @@ tulip_txput(tulip_softc_t * const sc, struct mbuf *m, int notonqueue)
 
     if (sc->tulip_flags & TULIP_TXPROBE_ACTIVE) {
 	TULIP_CSR_WRITE(sc, csr_txpoll, 1);
-	sc->tulip_if.if_flags |= IFF_OACTIVE;
+	ifq_set_oactive(&sc->tulip_if.if_snd);
 	sc->tulip_if.if_start = tulip_ifstart;
 	TULIP_PERFEND(txput);
 	return (NULL);
@@ -4038,7 +3988,7 @@ tulip_txput(tulip_softc_t * const sc, struct mbuf *m, int notonqueue)
     sc->tulip_dbg.dbg_txput_finishes[6]++;
 #endif
     if (sc->tulip_flags & (TULIP_WANTTXSTART|TULIP_DOINGSETUP)) {
-	sc->tulip_if.if_flags |= IFF_OACTIVE;
+	ifq_set_oactive(&sc->tulip_if.if_snd);
 	sc->tulip_if.if_start = tulip_ifstart;
 	if ((sc->tulip_intrmask & TULIP_STS_TXINTR) == 0) {
 	    sc->tulip_intrmask |= TULIP_STS_TXINTR;
@@ -4198,21 +4148,21 @@ tulip_ifstart(struct ifnet * const ifp)
 {
     TULIP_PERFSTART(ifstart)
     tulip_softc_t * const sc = TULIP_IFP_TO_SOFTC(ifp);
+    struct mbuf *m, *m0;
 
     if (sc->tulip_if.if_flags & IFF_RUNNING) {
 
 	if ((sc->tulip_flags & (TULIP_WANTSETUP|TULIP_TXPROBE_ACTIVE)) == TULIP_WANTSETUP)
 	    tulip_txput_setup(sc);
 
-	while (!IFQ_IS_EMPTY(&sc->tulip_if.if_snd)) {
-	    struct mbuf *m, *m0;
-	    IFQ_POLL(&sc->tulip_if.if_snd, m);
+        for (;;) {
+	    m = ifq_deq_begin(&sc->tulip_if.if_snd);
 	    if (m == NULL)
 		break;
-	    if ((m0 = tulip_txput(sc, m, 0)) != NULL) {
-		if (m0 != m)
-		    /* should not happen */
-		    printf("tulip_if_start: txput failed!\n");
+            m0 = tulip_txput(sc, m, 0);
+            if (m0 != NULL) {
+		KASSERT(m == m0);
+                ifq_deq_rollback(&sc->tulip_if.if_snd, m);
 		break;
 	    }
 	}

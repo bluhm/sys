@@ -1,4 +1,4 @@
-/*	$OpenBSD: pgt.c,v 1.79 2015/10/25 12:48:46 mpi Exp $  */
+/*	$OpenBSD: pgt.c,v 1.84 2015/11/25 03:09:58 dlg Exp $  */
 
 /*
  * Copyright (c) 2006 Claudio Jeker <claudio@openbsd.org>
@@ -63,11 +63,8 @@
 #include <machine/intr.h>
 
 #include <net/if.h>
-#include <net/if_arp.h>
-#include <net/if_dl.h>
 #include <net/if_llc.h>
 #include <net/if_media.h>
-#include <net/if_types.h>
 
 #if NBPFILTER > 0
 #include <net/bpf.h>
@@ -551,7 +548,8 @@ trying_again:
 			    ic->ic_opmode != IEEE80211_M_MONITOR);
 	}
 
-	ic->ic_if.if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
+	ic->ic_if.if_flags &= ~IFF_RUNNING;
+	ifq_clr_oactive(&ic->ic_if.if_snd);
 	ieee80211_new_state(&sc->sc_ic, IEEE80211_S_INIT, -1);
 }
 
@@ -749,8 +747,8 @@ pgt_update_intr(struct pgt_softc *sc, int hack)
 			if (qdirty > npend) {
 				if (pgt_queue_is_data(pqs[i])) {
 					sc->sc_ic.ic_if.if_timer = 0;
-					sc->sc_ic.ic_if.if_flags &=
-					    ~IFF_OACTIVE;
+					ifq_clr_oactive(
+					    &sc->sc_ic.ic_if.if_snd);
 				}
 				while (qdirty-- > npend)
 					pgt_txdone(sc, pqs[i]);
@@ -2120,15 +2118,17 @@ pgt_start(struct ifnet *ifp)
 	for (; sc->sc_dirtyq_count[PGT_QUEUE_DATA_LOW_TX] <
 	    PGT_QUEUE_FULL_THRESHOLD && !IFQ_IS_EMPTY(&ifp->if_snd);) {
 		pd = TAILQ_FIRST(&sc->sc_freeq[PGT_QUEUE_DATA_LOW_TX]);
-		IFQ_POLL(&ifp->if_snd, m);
+		m = ifq_deq_begin(&ifp->if_snd);
 		if (m == NULL)
 			break;
 		if (m->m_pkthdr.len <= PGT_FRAG_SIZE) {
 			error = pgt_load_tx_desc_frag(sc,
 			    PGT_QUEUE_DATA_LOW_TX, pd);
-			if (error)
+			if (error) {
+				ifq_deq_rollback(&ifp->if_snd, m);
 				break;
-			IFQ_DEQUEUE(&ifp->if_snd, m);
+			}
+			ifq_deq_commit(&ifp->if_snd, m);
 			m_copydata(m, 0, m->m_pkthdr.len, pd->pd_mem);
 			pgt_desc_transmit(sc, PGT_QUEUE_DATA_LOW_TX,
 			    pd, m->m_pkthdr.len, 0);
@@ -2142,8 +2142,10 @@ pgt_start(struct ifnet *ifp)
 			 * even support a full two.)
 			 */
 			if (sc->sc_dirtyq_count[PGT_QUEUE_DATA_LOW_TX] + 2 >
-			    PGT_QUEUE_FULL_THRESHOLD)
+			    PGT_QUEUE_FULL_THRESHOLD) {
+				ifq_deq_rollback(&ifp->if_snd, m);
 				break;
+			}
 			pd2 = TAILQ_NEXT(pd, pd_link);
 			error = pgt_load_tx_desc_frag(sc,
 			    PGT_QUEUE_DATA_LOW_TX, pd);
@@ -2157,9 +2159,11 @@ pgt_start(struct ifnet *ifp)
 					    pd_link);
 				}
 			}
-			if (error)
+			if (error) {
+				ifq_deq_rollback(&ifp->if_snd, m);
 				break;
-			IFQ_DEQUEUE(&ifp->if_snd, m);
+			}
+			ifq_deq_commit(&ifp->if_snd, m);
 			m_copydata(m, 0, PGT_FRAG_SIZE, pd->pd_mem);
 			pgt_desc_transmit(sc, PGT_QUEUE_DATA_LOW_TX,
 			    pd, PGT_FRAG_SIZE, 1);
@@ -2168,7 +2172,7 @@ pgt_start(struct ifnet *ifp)
 			pgt_desc_transmit(sc, PGT_QUEUE_DATA_LOW_TX,
 			    pd2, m->m_pkthdr.len - PGT_FRAG_SIZE, 0);
 		} else {
-			IFQ_DEQUEUE(&ifp->if_snd, m);
+			ifq_deq_commit(&ifp->if_snd, m);
 			ifp->if_oerrors++;
 			m_freem(m);
 			m = NULL;
@@ -2521,7 +2525,7 @@ pgt_init(struct ifnet *ifp)
 		    ic->ic_opmode != IEEE80211_M_MONITOR);
 
 	ifp->if_flags |= IFF_RUNNING;
-	ifp->if_flags &= ~IFF_OACTIVE;
+	ifq_clr_oactive(&ifp->if_snd);
 
 	/* Begin background scanning */
 	ieee80211_new_state(&sc->sc_ic, IEEE80211_S_SCAN, -1);

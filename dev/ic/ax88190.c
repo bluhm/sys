@@ -1,4 +1,4 @@
-/*	$OpenBSD: ax88190.c,v 1.6 2015/03/14 03:38:47 jsg Exp $	*/
+/*	$OpenBSD: ax88190.c,v 1.8 2015/11/24 17:11:39 mpi Exp $	*/
 /*	$NetBSD$	*/
 
 /*-
@@ -36,8 +36,6 @@
 #include <sys/socket.h>
 
 #include <net/if.h>
-#include <net/if_dl.h>
-#include <net/if_types.h>
 #include <net/if_media.h>
 
 #include <netinet/in.h>

@@ -1,4 +1,4 @@
-/*	$OpenBSD: ar5008.c,v 1.30 2015/11/04 12:11:59 dlg Exp $	*/
+/*	$OpenBSD: ar5008.c,v 1.34 2015/11/25 03:09:58 dlg Exp $	*/
 
 /*-
  * Copyright (c) 2009 Damien Bergamini <damien.bergamini@free.fr>
@@ -44,10 +44,7 @@
 #include <net/bpf.h>
 #endif
 #include <net/if.h>
-#include <net/if_arp.h>
-#include <net/if_dl.h>
 #include <net/if_media.h>
-#include <net/if_types.h>
 
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
@@ -1035,7 +1032,7 @@ ar5008_tx_intr(struct athn_softc *sc)
 			while (ar5008_tx_process(sc, qid) == 0);
 	}
 	if (!SIMPLEQ_EMPTY(&sc->txbufs)) {
-		ifp->if_flags &= ~IFF_OACTIVE;
+		ifq_clr_oactive(&ifp->if_snd);
 		ifp->if_start(ifp);
 	}
 }

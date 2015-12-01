@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_tun.c,v 1.159 2015/10/25 12:05:40 mpi Exp $	*/
+/*	$OpenBSD: if_tun.c,v 1.163 2015/11/20 12:20:30 mpi Exp $	*/
 /*	$NetBSD: if_tun.c,v 1.24 1996/05/07 02:40:48 thorpej Exp $	*/
 
 /*
@@ -435,7 +435,6 @@ tun_init(struct tun_softc *tp)
 	TUNDEBUG(("%s: tun_init\n", ifp->if_xname));
 
 	ifp->if_flags |= IFF_UP | IFF_RUNNING;
-	ifp->if_flags &= ~IFF_OACTIVE; /* we are never active */
 
 	tp->tun_flags &= ~(TUN_IASET|TUN_DSTADDR|TUN_BRDADDR);
 	TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
@@ -685,10 +684,11 @@ tun_dev_ioctl(struct tun_softc *tp, u_long cmd, caddr_t data, int flag,
 			tp->tun_flags &= ~TUN_ASYNC;
 		break;
 	case FIONREAD:
-		IFQ_POLL(&tp->tun_if.if_snd, m);
-		if (m != NULL)
+		m = ifq_deq_begin(&tp->tun_if.if_snd);
+		if (m != NULL) {
 			*(int *)data = m->m_pkthdr.len;
-		else
+			ifq_deq_rollback(&tp->tun_if.if_snd, m);
+		} else
 			*(int *)data = 0;
 		break;
 	case TIOCSPGRP:
@@ -759,39 +759,39 @@ tapread(dev_t dev, struct uio *uio, int ioflag)
 int
 tun_dev_read(struct tun_softc *tp, struct uio *uio, int ioflag)
 {
-	struct ifnet		*ifp;
+	struct ifnet		*ifp = &tp->tun_if;
 	struct mbuf		*m, *m0;
+	unsigned int		 ifidx;
 	int			 error = 0, len, s;
-	unsigned int		ifindex;
 
-	ifp = if_ref(&tp->tun_if);
-	ifindex = ifp->if_index;
-	TUNDEBUG(("%s: read\n", ifp->if_xname));
-	if ((tp->tun_flags & TUN_READY) != TUN_READY) {
-		TUNDEBUG(("%s: not ready %#x\n", ifp->if_xname, tp->tun_flags));
-		if_put(ifp);
+	if ((tp->tun_flags & TUN_READY) != TUN_READY)
 		return (EHOSTDOWN);
-	}
 
+	ifidx = ifp->if_index;
 	tp->tun_flags &= ~TUN_RWAIT;
 
 	s = splnet();
 	do {
+		struct ifnet *ifp1;
+		int destroyed;
+
 		while ((tp->tun_flags & TUN_READY) != TUN_READY) {
-			if_put(ifp);
 			if ((error = tsleep((caddr_t)tp,
 			    (PZERO + 1)|PCATCH, "tunread", 0)) != 0) {
 				splx(s);
 				return (error);
 			}
-			if ((ifp = if_get(ifindex)) == NULL) {
+			/* Make sure the interface still exists. */
+			ifp1 = if_get(ifidx);
+			destroyed = (ifp1 == NULL);
+			if_put(ifp1);
+			if (destroyed) {
 				splx(s);
 				return (ENXIO);
 			}
 		}
 		IFQ_DEQUEUE(&ifp->if_snd, m0);
 		if (m0 == NULL) {
-			if_put(ifp);
 			if (tp->tun_flags & TUN_NBIO && ioflag & IO_NDELAY) {
 				splx(s);
 				return (EWOULDBLOCK);
@@ -802,13 +802,25 @@ tun_dev_read(struct tun_softc *tp, struct uio *uio, int ioflag)
 				splx(s);
 				return (error);
 			}
-			if ((ifp = if_get(ifindex)) == NULL) {
+			/* Make sure the interface still exists. */
+			ifp1 = if_get(ifidx);
+			destroyed = (ifp1 == NULL);
+			if_put(ifp1);
+			if (destroyed) {
 				splx(s);
 				return (ENXIO);
 			}
 		}
 	} while (m0 == NULL);
 	splx(s);
+
+	if (tp->tun_flags & TUN_LAYER2) {
+#if NBPFILTER > 0
+		if (ifp->if_bpf)
+			bpf_mtap(ifp->if_bpf, m0, BPF_DIRECTION_OUT);
+#endif
+		ifp->if_opackets++;
+	}
 
 	while (m0 != NULL && uio->uio_resid > 0 && error == 0) {
 		len = min(uio->uio_resid, m0->m_len);
@@ -825,7 +837,6 @@ tun_dev_read(struct tun_softc *tp, struct uio *uio, int ioflag)
 	if (error)
 		ifp->if_oerrors++;
 
-	if_put(ifp);
 	return (error);
 }
 
@@ -1007,7 +1018,7 @@ tun_dev_poll(struct tun_softc *tp, int events, struct proc *p)
 {
 	int			 revents, s;
 	struct ifnet		*ifp;
-	struct mbuf		*m;
+	unsigned int		 len;
 
 	ifp = &tp->tun_if;
 	revents = 0;
@@ -1015,10 +1026,9 @@ tun_dev_poll(struct tun_softc *tp, int events, struct proc *p)
 	TUNDEBUG(("%s: tunpoll\n", ifp->if_xname));
 
 	if (events & (POLLIN | POLLRDNORM)) {
-		IFQ_POLL(&ifp->if_snd, m);
-		if (m != NULL) {
-			TUNDEBUG(("%s: tunselect q=%d\n", ifp->if_xname,
-			    IFQ_LEN(ifp->if_snd)));
+		len = IFQ_LEN(&ifp->if_snd);
+		if (len > 0) {
+			TUNDEBUG(("%s: tunselect q=%d\n", ifp->if_xname, len));
 			revents |= events & (POLLIN | POLLRDNORM);
 		} else {
 			TUNDEBUG(("%s: tunpoll waiting\n", ifp->if_xname));
@@ -1068,10 +1078,7 @@ tun_dev_kqfilter(struct tun_softc *tp, struct knote *kn)
 	struct ifnet		*ifp;
 
 	ifp = &tp->tun_if;
-
-	s = splnet();
 	TUNDEBUG(("%s: tunkqfilter\n", ifp->if_xname));
-	splx(s);
 
 	switch (kn->kn_filter) {
 		case EVFILT_READ:
@@ -1114,7 +1121,7 @@ filt_tunread(struct knote *kn, long hint)
 	int			 s;
 	struct tun_softc	*tp;
 	struct ifnet		*ifp;
-	struct mbuf		*m;
+	unsigned int		 len;
 
 	if (kn->kn_status & KN_DETACHED) {
 		kn->kn_data = 0;
@@ -1125,10 +1132,10 @@ filt_tunread(struct knote *kn, long hint)
 	ifp = &tp->tun_if;
 
 	s = splnet();
-	IFQ_POLL(&ifp->if_snd, m);
-	if (m != NULL) {
+	len = IFQ_LEN(&ifp->if_snd);
+	if (len > 0) {
 		splx(s);
-		kn->kn_data = IFQ_LEN(&ifp->if_snd);
+		kn->kn_data = len;
 
 		TUNDEBUG(("%s: tunkqread q=%d\n", ifp->if_xname,
 		    IFQ_LEN(&ifp->if_snd)));
@@ -1175,21 +1182,11 @@ void
 tun_start(struct ifnet *ifp)
 {
 	struct tun_softc	*tp = ifp->if_softc;
-	struct mbuf		*m;
 
 	splassert(IPL_NET);
 
-	IFQ_POLL(&ifp->if_snd, m);
-	if (m != NULL) {
-		if (tp->tun_flags & TUN_LAYER2) {
-#if NBPFILTER > 0
-			if (ifp->if_bpf)
-				bpf_mtap(ifp->if_bpf, m, BPF_DIRECTION_OUT);
-#endif
-			ifp->if_opackets++;
-		}
+	if (IFQ_LEN(&ifp->if_snd))
 		tun_wakeup(tp);
-	}
 }
 
 void

@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_rl_cardbus.c,v 1.28 2014/12/19 22:44:58 guenther Exp $ */
+/*	$OpenBSD: if_rl_cardbus.c,v 1.30 2015/11/24 17:11:39 mpi Exp $ */
 /*	$NetBSD: if_rl_cardbus.c,v 1.3.8.3 2001/11/14 19:14:02 nathanw Exp $	*/
 
 /*
@@ -49,10 +49,8 @@
 #include <sys/timeout.h>
 #include <sys/device.h>
 #include <sys/endian.h>
- 
+
 #include <net/if.h>
-#include <net/if_dl.h>
-#include <net/if_types.h>
 #include <net/if_media.h>
 
 #if NBPFILTER > 0

@@ -1,4 +1,4 @@
-/*	$OpenBSD: ti.c,v 1.19 2015/11/14 17:54:57 mpi Exp $	*/
+/*	$OpenBSD: ti.c,v 1.22 2015/11/25 03:09:58 dlg Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998, 1999
@@ -85,7 +85,6 @@
 #include <sys/queue.h>
 
 #include <net/if.h>
-#include <net/if_types.h>
 
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
@@ -1670,7 +1669,7 @@ ti_txeof_tigon1(struct ti_softc *sc)
 	}
 
 	if (!active)
-		ifp->if_flags &= ~IFF_OACTIVE;
+		ifq_clr_oactive(&ifp->if_snd);
 }
 
 void
@@ -1714,7 +1713,7 @@ ti_txeof_tigon2(struct ti_softc *sc)
 	}
 
 	if (cur_tx != NULL)
-		ifp->if_flags &= ~IFF_OACTIVE;
+		ifq_clr_oactive(&ifp->if_snd);
 }
 
 int
@@ -1961,7 +1960,7 @@ ti_start(struct ifnet *ifp)
 	prodidx = sc->ti_tx_saved_prodidx;
 
 	while(sc->ti_cdata.ti_tx_chain[prodidx] == NULL) {
-		IFQ_POLL(&ifp->if_snd, m_head);
+		m_head = ifq_deq_begin(&ifp->if_snd);
 		if (m_head == NULL)
 			break;
 
@@ -1976,12 +1975,13 @@ ti_start(struct ifnet *ifp)
 			error = ti_encap_tigon2(sc, m_head, &prodidx);
 
 		if (error) {
-			ifp->if_flags |= IFF_OACTIVE;
+			ifq_deq_rollback(&ifp->if_snd, m_head);
+			ifq_set_oactive(&ifp->if_snd);
 			break;
 		}
 
 		/* now we are committed to transmit the packet */
-		IFQ_DEQUEUE(&ifp->if_snd, m_head);
+		ifq_deq_commit(&ifp->if_snd, m_head);
 		pkts++;
 
 		/*
@@ -2087,7 +2087,7 @@ ti_init2(struct ti_softc *sc)
 	CSR_WRITE_4(sc, TI_MB_HOSTINTR, 0);
 
 	ifp->if_flags |= IFF_RUNNING;
-	ifp->if_flags &= ~IFF_OACTIVE;
+	ifq_clr_oactive(&ifp->if_snd);
 
 	/*
 	 * Make sure to set media properly. We have to do this
@@ -2289,7 +2289,8 @@ ti_stop(struct ti_softc *sc)
 
 	ifp = &sc->arpcom.ac_if;
 
-	ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
+	ifp->if_flags &= ~IFF_RUNNING;
+	ifq_clr_oactive(&ifp->if_snd);
 
 	/* Disable host interrupts. */
 	CSR_WRITE_4(sc, TI_MB_HOSTINTR, 1);

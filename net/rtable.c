@@ -1,4 +1,4 @@
-/*	$OpenBSD: rtable.c,v 1.24 2015/11/10 10:23:27 mpi Exp $ */
+/*	$OpenBSD: rtable.c,v 1.28 2015/11/29 16:02:18 mpi Exp $ */
 
 /*
  * Copyright (c) 2014-2015 Martin Pieuchot
@@ -26,28 +26,119 @@
 #include <sys/pool.h>
 #include <sys/queue.h>
 #include <sys/domain.h>
+#include <sys/srp.h>
 #endif
 
 #include <net/rtable.h>
 #include <net/route.h>
 
+/*
+ * Structures used by rtable_get() to retrieve the corresponding
+ * routing table for a given pair of ``af'' and ``rtableid''.
+ *
+ * Note that once allocated routing table heads are never freed.
+ * This way we do not need to reference count them.
+ *
+ *	afmap		    rtmap/dommp
+ *   -----------          ---------     -----
+ *   |   0     |--------> | 0 | 0 | ... | 0 |	Array mapping rtableid (=index)
+ *   -----------          ---------     -----   to rdomain (=value).
+ *   | AF_INET |.
+ *   ----------- `.       .---------.     .---------.
+ *       ...	   `----> | rtable0 | ... | rtableN |	Array of pointers for
+ *   -----------          '---------'     '---------'	IPv4 routing tables
+ *   | AF_MPLS |            			 	indexed by ``rtableid''.
+ *   -----------
+ */
+struct srp	  *afmap;
 uint8_t		   af2idx[AF_MAX+1];	/* To only allocate supported AF */
 uint8_t		   af2idx_max;
 
-union rtmap {
-	void		**tbl;
-	unsigned int	 *dom;
+/* Array of routing table pointers. */
+struct rtmap {
+	unsigned int	   limit;
+	void		 **tbl;
 };
 
-union rtmap	  *rtmap;		/* Array of per domain routing table */
-unsigned int	   rtables_id_max;
+/* Array of rtableid -> rdomain mapping. */
+struct dommp {
+	unsigned int	   limit;
+	unsigned int	  *dom;
+};
+
+unsigned int	   rtmap_limit = 0;
+
+void		   rtmap_init(void);
+void		   rtmap_grow(unsigned int, sa_family_t);
+void		   rtmap_dtor(void *, void *);
+
+struct srp_gc	   rtmap_gc = SRP_GC_INITIALIZER(rtmap_dtor, NULL);
 
 void		   rtable_init_backend(unsigned int);
 void		  *rtable_alloc(unsigned int, sa_family_t, unsigned int);
-void		   rtable_free(unsigned int);
-void		   rtable_grow(unsigned int, sa_family_t);
 void		  *rtable_get(unsigned int, sa_family_t);
-void		   rtable_put(void *);
+
+void
+rtmap_init(void)
+{
+	struct domain	*dp;
+	int		 i;
+
+	/* Start with a single table for every domain that requires it. */
+	for (i = 0; (dp = domains[i]) != NULL; i++) {
+		if (dp->dom_rtoffset == 0)
+			continue;
+
+		rtmap_grow(1, dp->dom_family);
+	}
+
+	/* Initialize the rtableid->rdomain mapping table. */
+	rtmap_grow(1, 0);
+
+	rtmap_limit = 1;
+}
+
+/*
+ * Grow the size of the array of routing table for AF ``af'' to ``nlimit''.
+ */
+void
+rtmap_grow(unsigned int nlimit, sa_family_t af)
+{
+	struct rtmap	*map, *nmap;
+	int		 i;
+
+	KERNEL_ASSERT_LOCKED();
+
+	KASSERT(nlimit > rtmap_limit);
+
+	nmap = malloc(sizeof(*nmap), M_RTABLE, M_WAITOK);
+	nmap->limit = nlimit;
+	nmap->tbl = mallocarray(nlimit, sizeof(*nmap[0].tbl), M_RTABLE,
+	    M_WAITOK|M_ZERO);
+
+	map = srp_get_locked(&afmap[af2idx[af]]);
+	if (map != NULL) {
+		KASSERT(map->limit == rtmap_limit);
+
+		for (i = 0; i < map->limit; i++)
+			nmap->tbl[i] = map->tbl[i];
+	}
+
+	srp_update_locked(&rtmap_gc, &afmap[af2idx[af]], nmap);
+}
+
+void
+rtmap_dtor(void *null, void *xmap)
+{
+	struct rtmap	*map = xmap;
+
+	/*
+	 * doesnt need to be serialized since this is the last reference
+	 * to this map. there's nothing to race against.
+	 */
+	free(map->tbl, M_RTABLE, map->limit * sizeof(*map[0].tbl));
+	free(map, M_RTABLE, sizeof(*map));
+}
 
 void
 rtable_init(void)
@@ -65,58 +156,38 @@ rtable_init(void)
 	 * table backend needs it.
 	 */
 	for (i = 0; (dp = domains[i]) != NULL; i++) {
-		if (dp->dom_rtoffset)
-			af2idx[dp->dom_family] = af2idx_max++;
+		if (dp->dom_rtoffset == 0)
+			continue;
+
+		af2idx[dp->dom_family] = af2idx_max++;
 		if (dp->dom_rtkeylen > keylen)
 			keylen = dp->dom_rtkeylen;
 
 	}
-
-	rtables_id_max = 0;
-	rtmap = mallocarray(af2idx_max + 1, sizeof(*rtmap), M_RTABLE, M_WAITOK);
-
-	/* Start with a single table for every domain that requires it. */
-	for (i = 0; i < af2idx_max + 1; i++) {
-		rtmap[i].tbl = mallocarray(1, sizeof(rtmap[0].tbl),
-		    M_RTABLE, M_WAITOK|M_ZERO);
-	}
-
 	rtable_init_backend(keylen);
-}
 
-void
-rtable_grow(unsigned int id, sa_family_t af)
-{
-	void		**tbl, **ntbl;
-	int		  i;
+	/*
+	 * Allocate AF-to-id table now that we now how many AFs this
+	 * kernel supports.
+	 */
+	afmap = mallocarray(af2idx_max + 1, sizeof(*afmap), M_RTABLE,
+	    M_WAITOK|M_ZERO);
 
-	KASSERT(id > rtables_id_max);
-
-	KERNEL_ASSERT_LOCKED();
-
-	tbl = rtmap[af2idx[af]].tbl;
-	ntbl = mallocarray(id + 1, sizeof(rtmap[0].tbl), M_RTABLE, M_WAITOK);
-
-	for (i = 0; i < rtables_id_max + 1; i++)
-		ntbl[i] = tbl[i];
-
-	while (i < id + 1) {
-		ntbl[i] = NULL;
-		i++;
-	}
-
-	rtmap[af2idx[af]].tbl = ntbl;
-	free(tbl, M_RTABLE, (rtables_id_max + 1) * sizeof(rtmap[0].tbl));
+	rtmap_init();
 }
 
 int
 rtable_add(unsigned int id)
 {
-	struct domain	 *dp;
-	void		 *rtbl;
-	sa_family_t	  af;
-	unsigned int	  off;
-	int		  i;
+	struct domain	*dp;
+	void		*tbl;
+	struct rtmap	*map;
+	struct dommp	*dmm;
+	sa_family_t	 af;
+	unsigned int	 off;
+	int		 i;
+
+	KERNEL_ASSERT_LOCKED();
 
 	if (id > RT_TABLEID_MAX)
 		return (EINVAL);
@@ -131,65 +202,45 @@ rtable_add(unsigned int id)
 		af = dp->dom_family;
 		off = dp->dom_rtoffset;
 
-		if (id > rtables_id_max)
-			rtable_grow(id, af);
+		if (id >= rtmap_limit)
+			rtmap_grow(id + 1, af);
 
-		rtbl = rtable_alloc(id, af, off);
-		if (rtbl == NULL)
+		tbl = rtable_alloc(id, af, off);
+		if (tbl == NULL)
 			return (ENOMEM);
 
-		rtmap[af2idx[af]].tbl[id] = rtbl;
+		map = srp_get_locked(&afmap[af2idx[af]]);
+		map->tbl[id] = tbl;
 	}
 
 	/* Reflect possible growth. */
-	if (id > rtables_id_max) {
-		rtable_grow(id, 0);
-		rtables_id_max = id;
+	if (id >= rtmap_limit) {
+		rtmap_grow(id + 1, 0);
+		rtmap_limit = id + 1;
 	}
 
 	/* Use main rtable/rdomain by default. */
-	rtmap[0].dom[id] = 0;
-
+	dmm = srp_get_locked(&afmap[0]);
+	dmm->dom[id] = 0;
 
 	return (0);
-}
-
-void
-rtable_del(unsigned int id)
-{
-	struct domain	 *dp;
-	sa_family_t	  af;
-	int		  i;
-
-	if (id > rtables_id_max || !rtable_exists(id))
-		return;
-
-	for (i = 0; (dp = domains[i]) != NULL; i++) {
-		if (dp->dom_rtoffset == 0)
-			continue;
-
-		af = dp->dom_family;
-
-		rtable_free(id);
-		rtmap[af2idx[af]].tbl[id] = NULL;
-	}
 }
 
 void *
 rtable_get(unsigned int rtableid, sa_family_t af)
 {
-	if (af >= nitems(af2idx) || rtableid > rtables_id_max)
+	struct rtmap	*map;
+	void		*tbl = NULL;
+
+	if (af >= nitems(af2idx) || af2idx[af] == 0)
 		return (NULL);
 
-	if (af2idx[af] == 0 || rtmap[af2idx[af]].tbl == NULL)
-		return (NULL);
+	map = srp_enter(&afmap[af2idx[af]]);
+	if (rtableid < map->limit)
+		tbl = map->tbl[rtableid];
+	srp_leave(&afmap[af2idx[af]], map);
 
-	return (rtmap[af2idx[af]].tbl[rtableid]);
-}
-
-void
-rtable_put(void *tbl)
-{
+	return (tbl);
 }
 
 int
@@ -197,10 +248,7 @@ rtable_exists(unsigned int rtableid)
 {
 	struct domain	*dp;
 	void		*tbl;
-	int		 i, exist = 0;
-
-	if (rtableid > rtables_id_max)
-		return (0);
+	int		 i;
 
 	for (i = 0; (dp = domains[i]) != NULL; i++) {
 		if (dp->dom_rtoffset == 0)
@@ -208,32 +256,38 @@ rtable_exists(unsigned int rtableid)
 
 		tbl = rtable_get(rtableid, dp->dom_family);
 		if (tbl != NULL)
-			exist = 1;
-		rtable_put(tbl);
-
-		if (exist)
-			break;
+			return (1);
 	}
 
-	return (exist);
+	return (0);
 }
 
 unsigned int
 rtable_l2(unsigned int rtableid)
 {
-	if (rtableid > rtables_id_max)
-		return (0);
+	struct dommp	*dmm;
+	unsigned int	 rdomain = 0;
 
-	return (rtmap[0].dom[rtableid]);
+	dmm = srp_enter(&afmap[0]);
+	if (rtableid < dmm->limit)
+		rdomain = dmm->dom[rtableid];
+	srp_leave(&afmap[0], dmm);
+
+	return (rdomain);
 }
 
 void
-rtable_l2set(unsigned int rtableid, unsigned int parent)
+rtable_l2set(unsigned int rtableid, unsigned int rdomain)
 {
-	if (!rtable_exists(rtableid) || !rtable_exists(parent))
+	struct dommp	*dmm;
+
+	KERNEL_ASSERT_LOCKED();
+
+	if (!rtable_exists(rtableid) || !rtable_exists(rdomain))
 		return;
 
-	rtmap[0].dom[rtableid] = parent;
+	dmm = srp_get_locked(&afmap[0]);
+	dmm->dom[rtableid] = rdomain;
 }
 
 #ifndef ART
@@ -258,18 +312,13 @@ rtable_alloc(unsigned int rtableid, sa_family_t af, unsigned int off)
 	return (rnh);
 }
 
-void
-rtable_free(unsigned int rtableid)
-{
-}
-
 struct rtentry *
 rtable_lookup(unsigned int rtableid, struct sockaddr *dst,
     struct sockaddr *mask, struct sockaddr *gateway, uint8_t prio)
 {
 	struct radix_node_head	*rnh;
 	struct radix_node	*rn;
-	struct rtentry		*rt = NULL;
+	struct rtentry		*rt;
 
 	rnh = rtable_get(rtableid, dst->sa_family);
 	if (rnh == NULL)
@@ -277,7 +326,7 @@ rtable_lookup(unsigned int rtableid, struct sockaddr *dst,
 
 	rn = rn_lookup(dst, mask, rnh);
 	if (rn == NULL || (rn->rn_flags & RNF_ROOT) != 0)
-		goto out;
+		return (NULL);
 
 	rt = ((struct rtentry *)rn);
 
@@ -285,14 +334,11 @@ rtable_lookup(unsigned int rtableid, struct sockaddr *dst,
 	if (rnh->rnh_multipath) {
 		rt = rt_mpath_matchgate(rt, gateway, prio);
 		if (rt == NULL)
-			goto out;
+			return (NULL);
 	}
 #endif /* !SMALL_KERNEL */
 
 	rtref(rt);
-
-out:
-	rtable_put(rnh);
 	return (rt);
 }
 
@@ -301,7 +347,7 @@ rtable_match(unsigned int rtableid, struct sockaddr *dst)
 {
 	struct radix_node_head	*rnh;
 	struct radix_node	*rn;
-	struct rtentry		*rt = NULL;
+	struct rtentry		*rt;
 
 	rnh = rtable_get(rtableid, dst->sa_family);
 	if (rnh == NULL)
@@ -309,13 +355,11 @@ rtable_match(unsigned int rtableid, struct sockaddr *dst)
 
 	rn = rn_match(dst, rnh);
 	if (rn == NULL || (rn->rn_flags & RNF_ROOT) != 0)
-		goto out;
+		return (NULL);
 
 	rt = ((struct rtentry *)rn);
 	rtref(rt);
 
-out:
-	rtable_put(rnh);
 	return (rt);
 }
 
@@ -326,7 +370,6 @@ rtable_insert(unsigned int rtableid, struct sockaddr *dst,
 {
 	struct radix_node_head	*rnh;
 	struct radix_node	*rn = (struct radix_node *)rt;
-	int			 error = 0;
 
 	rnh = rtable_get(rtableid, dst->sa_family);
 	if (rnh == NULL)
@@ -337,24 +380,19 @@ rtable_insert(unsigned int rtableid, struct sockaddr *dst,
 		/* Do not permit exactly the same dst/mask/gw pair. */
 		if (rt_mpath_conflict(rnh, dst, mask, gateway, prio,
 	    	    ISSET(rt->rt_flags, RTF_MPATH))) {
-			error = EEXIST;
-			goto out;
+			return (EEXIST);
 		}
 	}
-#endif
+#endif /* SMALL_KERNEL */
 
 	rn = rn_addroute(dst, mask, rnh, rn, prio);
-	if (rn == NULL) {
-		error = ESRCH;
-		goto out;
-	}
+	if (rn == NULL)
+		return (ESRCH);
 
 	rt = ((struct rtentry *)rn);
 	rtref(rt);
 
-out:
-	rtable_put(rnh);
-	return (error);
+	return (0);
 }
 
 int
@@ -363,17 +401,14 @@ rtable_delete(unsigned int rtableid, struct sockaddr *dst,
 {
 	struct radix_node_head	*rnh;
 	struct radix_node	*rn = (struct radix_node *)rt;
-	int			 error = 0;
 
 	rnh = rtable_get(rtableid, dst->sa_family);
 	if (rnh == NULL)
 		return (EAFNOSUPPORT);
 
 	rn = rn_delete(dst, mask, rnh, rn);
-	if (rn == NULL) {
-		error = ESRCH;
-		goto out;
-	}
+	if (rn == NULL)
+		return (ESRCH);
 
 	if (rn->rn_flags & (RNF_ACTIVE | RNF_ROOT))
 		panic("active node flags=%x", rn->rn_flags);
@@ -381,9 +416,7 @@ rtable_delete(unsigned int rtableid, struct sockaddr *dst,
 	rt = ((struct rtentry *)rn);
 	rtfree(rt);
 
-out:
-	rtable_put(rnh);
-	return (error);
+	return (0);
 }
 
 int
@@ -392,16 +425,12 @@ rtable_walk(unsigned int rtableid, sa_family_t af,
 {
 	struct radix_node_head	*rnh;
 	int (*f)(struct radix_node *, void *, unsigned int) = (void *)func;
-	int error;
 
 	rnh = rtable_get(rtableid, af);
 	if (rnh == NULL)
 		return (EAFNOSUPPORT);
 
-	error = rn_walktree(rnh, f, arg);
-
-	rtable_put(rnh);
-	return (error);
+	return (rn_walktree(rnh, f, arg));
 }
 
 #ifndef SMALL_KERNEL
@@ -416,8 +445,6 @@ rtable_mpath_capable(unsigned int rtableid, sa_family_t af)
 		return (0);
 
 	mpath = rnh->rnh_multipath;
-
-	rtable_put(rnh);
 	return (mpath);
 }
 
@@ -470,14 +497,20 @@ rtable_mpath_next(struct rtentry *rt)
 
 #else /* ART */
 
-struct pool		an_pool;	/* pool for ART node structures */
+struct pool		 an_pool;	/* pool for ART node structures */
 
 static inline int	 satoplen(struct art_root *, struct sockaddr *);
 static inline uint8_t	*satoaddr(struct art_root *, struct sockaddr *);
 
+void	rtentry_ref(void *, void *);
+void	rtentry_unref(void *, void *);
+
+struct srpl_rc rt_rc = SRPL_RC_INITIALIZER(rtentry_ref, rtentry_unref, NULL);
+
 void
 rtable_init_backend(unsigned int keylen)
 {
+	art_init();
 	pool_init(&an_pool, sizeof(struct art_node), 0, 0, 0, "art_node", NULL);
 }
 
@@ -487,18 +520,14 @@ rtable_alloc(unsigned int rtableid, sa_family_t af, unsigned int off)
 	return (art_alloc(rtableid, off));
 }
 
-void
-rtable_free(unsigned int rtableid)
-{
-}
-
 struct rtentry *
 rtable_lookup(unsigned int rtableid, struct sockaddr *dst,
     struct sockaddr *mask, struct sockaddr *gateway, uint8_t prio)
 {
 	struct art_root			*ar;
 	struct art_node			*an;
-	struct rtentry			*rt = NULL;
+	struct rtentry			*rt;
+	struct srpl_iter		 i;
 	uint8_t				*addr;
 	int				 plen;
 
@@ -512,23 +541,23 @@ rtable_lookup(unsigned int rtableid, struct sockaddr *dst,
 	if (mask == NULL) {
 		an = art_match(ar, addr);
 		if (an == NULL)
-			goto out;
+			return (NULL);
 	} else {
 		plen = satoplen(ar, mask);
 		if (plen == -1)
-			goto out;
+			return (NULL);
 
 		an = art_lookup(ar, addr, plen);
 		/* Make sure we've got a perfect match. */
 		if (an == NULL || an->an_plen != plen ||
 		    memcmp(an->an_dst, dst, dst->sa_len))
-			goto out;
+			return (NULL);
 	}
 
 #ifdef SMALL_KERNEL
-	rt = SLIST_FIRST(&an->an_rtlist);
+	rt = SRPL_ENTER(&an->an_rtlist, &i);
 #else
-	SLIST_FOREACH(rt, &an->an_rtlist, rt_next) {
+	SRPL_FOREACH(rt, &an->an_rtlist, &i, rt_next) {
 		if (prio != RTP_ANY &&
 		    (rt->rt_priority & RTP_MASK) != (prio & RTP_MASK))
 			continue;
@@ -540,14 +569,15 @@ rtable_lookup(unsigned int rtableid, struct sockaddr *dst,
 		    memcmp(rt->rt_gateway, gateway, gateway->sa_len) == 0)
 			break;
 	}
-	if (rt == NULL)
-		goto out;
+	if (rt == NULL) {
+		SRPL_LEAVE(&i, rt);
+		return (NULL);
+	}
 #endif /* SMALL_KERNEL */
 
 	rtref(rt);
+	SRPL_LEAVE(&i, rt);
 
-out:
-	rtable_put(ar);
 	return (rt);
 }
 
@@ -556,7 +586,8 @@ rtable_match(unsigned int rtableid, struct sockaddr *dst)
 {
 	struct art_root			*ar;
 	struct art_node			*an;
-	struct rtentry			*rt = NULL;
+	struct rtentry			*rt;
+	struct srpl_iter		 i;
 	uint8_t				*addr;
 
 	ar = rtable_get(rtableid, dst->sa_family);
@@ -566,13 +597,12 @@ rtable_match(unsigned int rtableid, struct sockaddr *dst)
 	addr = satoaddr(ar, dst);
 	an = art_match(ar, addr);
 	if (an == NULL)
-		goto out;
+		return (NULL);
 
-	rt = SLIST_FIRST(&an->an_rtlist);
+	rt = SRPL_ENTER(&an->an_rtlist, &i);
 	rtref(rt);
+	SRPL_LEAVE(&i, rt);
 
-out:
-	rtable_put(ar);
 	return (rt);
 }
 
@@ -583,11 +613,13 @@ rtable_insert(unsigned int rtableid, struct sockaddr *dst,
 {
 #ifndef SMALL_KERNEL
 	struct rtentry			*mrt;
-#endif
+#endif /* SMALL_KERNEL */
 	struct art_root			*ar;
 	struct art_node			*an, *prev;
 	uint8_t				*addr;
-	int				 plen, error = 0;
+	int				 plen;
+
+	KERNEL_ASSERT_LOCKED();
 
 	ar = rtable_get(rtableid, dst->sa_family);
 	if (ar == NULL)
@@ -595,10 +627,8 @@ rtable_insert(unsigned int rtableid, struct sockaddr *dst,
 
 	addr = satoaddr(ar, dst);
 	plen = satoplen(ar, mask);
-	if (plen == -1) {
-		error = EINVAL;
-		goto out;
-	}
+	if (plen == -1)
+		return (EINVAL);
 
 #ifndef SMALL_KERNEL
 	/* Do not permit exactly the same dst/mask/gw pair. */
@@ -608,7 +638,7 @@ rtable_insert(unsigned int rtableid, struct sockaddr *dst,
 	    	struct rtentry	*mrt;
 		int		 mpathok = ISSET(rt->rt_flags, RTF_MPATH);
 
-		SLIST_FOREACH(mrt, &an->an_rtlist, rt_next) {
+		SRPL_FOREACH_LOCKED(mrt, &an->an_rtlist, rt_next) {
 			if (prio != RTP_ANY &&
 			    (mrt->rt_priority & RTP_MASK) != (prio & RTP_MASK))
 				continue;
@@ -616,12 +646,11 @@ rtable_insert(unsigned int rtableid, struct sockaddr *dst,
 			if (!mpathok ||
 			    (mrt->rt_gateway->sa_len == gateway->sa_len &&
 			    !memcmp(mrt->rt_gateway, gateway, gateway->sa_len))){
-			    	error = EEXIST;
-			    	goto out;
+			    	return (EEXIST);
 			}
 		}
 	}
-#endif
+#endif /* SMALL_KERNEL */
 
 	/*
 	 * XXX Allocating a sockaddr for the mask per node wastes a lot
@@ -632,30 +661,26 @@ rtable_insert(unsigned int rtableid, struct sockaddr *dst,
 		struct sockaddr		*msk;
 
 		msk = malloc(dst->sa_len, M_RTABLE, M_NOWAIT | M_ZERO);
-		if (msk == NULL) {
-			error = ENOMEM;
-			goto out;
-		}
+		if (msk == NULL)
+			return (ENOMEM);
 		memcpy(msk, mask, dst->sa_len);
 		rt->rt_mask = msk;
 	}
 
 	an = pool_get(&an_pool, PR_NOWAIT | PR_ZERO);
-	if (an == NULL) {
-		error = ENOBUFS;
-		goto out;
-	}
+	if (an == NULL)
+		return (ENOBUFS);
 
 	an->an_dst = dst;
 	an->an_plen = plen;
+	SRPL_INIT(&an->an_rtlist);
 
 	prev = art_insert(ar, an, addr, plen);
 	if (prev == NULL) {
 		free(rt->rt_mask, M_RTABLE, 0);
 		rt->rt_mask = NULL;
 		pool_put(&an_pool, an);
-		error = ESRCH;
-		goto out;
+		return (ESRCH);
 	}
 
 	if (prev == an) {
@@ -665,7 +690,7 @@ rtable_insert(unsigned int rtableid, struct sockaddr *dst,
 #ifndef SMALL_KERNEL
 		an = prev;
 
-		mrt = SLIST_FIRST(&an->an_rtlist);
+		mrt = SRPL_FIRST_LOCKED(&an->an_rtlist);
 		KASSERT(mrt != NULL);
 		KASSERT((rt->rt_flags & RTF_MPATH) || mrt->rt_priority != prio);
 
@@ -679,7 +704,7 @@ rtable_insert(unsigned int rtableid, struct sockaddr *dst,
 			 * the same gateway.
 			 */
 			rt->rt_flags &= ~RTF_MPATH;
-			SLIST_FOREACH(mrt, &an->an_rtlist, rt_next) {
+			SRPL_FOREACH_LOCKED(mrt, &an->an_rtlist, rt_next) {
 				if (mrt->rt_priority == prio) {
 					mrt->rt_flags |= RTF_MPATH;
 					rt->rt_flags |= RTF_MPATH;
@@ -687,24 +712,21 @@ rtable_insert(unsigned int rtableid, struct sockaddr *dst,
 			}
 		}
 #else
-		error = EEXIST;
-		goto out;
+		return (EEXIST);
 #endif /* SMALL_KERNEL */
 	}
 
 	rt->rt_node = an;
 	rt->rt_dest = dst;
 	rtref(rt);
-	SLIST_INSERT_HEAD(&an->an_rtlist, rt, rt_next);
+	SRPL_INSERT_HEAD_LOCKED(&rt_rc, &an->an_rtlist, rt, rt_next);
 
 #ifndef SMALL_KERNEL
 	/* Put newly inserted entry at the right place. */
 	rtable_mpath_reprio(rt, rt->rt_priority);
 #endif /* SMALL_KERNEL */
 
-out:
-	rtable_put(ar);
-	return (error);
+	return (0);
 }
 
 int
@@ -714,27 +736,30 @@ rtable_delete(unsigned int rtableid, struct sockaddr *dst,
 	struct art_root			*ar;
 	struct art_node			*an = rt->rt_node;
 	uint8_t				*addr;
-	int				 plen, error = 0;
+	int				 plen;
 #ifndef SMALL_KERNEL
 	struct rtentry			*mrt;
 	int				 npaths = 0;
+
+	KERNEL_ASSERT_LOCKED();
 
 	/*
 	 * If other multipath route entries are still attached to
 	 * this ART node we only have to unlink it.
 	 */
-	SLIST_FOREACH(mrt, &an->an_rtlist, rt_next)
+	SRPL_FOREACH_LOCKED(mrt, &an->an_rtlist, rt_next)
 		npaths++;
 
 	if (npaths > 1) {
 		free(rt->rt_mask, M_RTABLE, 0);
 		rt->rt_mask = NULL;
 		rt->rt_node = NULL;
-		SLIST_REMOVE(&an->an_rtlist, rt, rtentry, rt_next);
-		KASSERT(rt->rt_refcnt >= 1);
+		KASSERT(rt->rt_refcnt >= 2);
+		SRPL_REMOVE_LOCKED(&rt_rc, &an->an_rtlist, rt, rtentry,
+		    rt_next);
 		rtfree(rt);
 
-		mrt = SLIST_FIRST(&an->an_rtlist);
+		mrt = SRPL_FIRST_LOCKED(&an->an_rtlist);
 		an->an_dst = mrt->rt_dest;
 		if (npaths == 2)
 			mrt->rt_flags &= ~RTF_MPATH;
@@ -751,15 +776,13 @@ rtable_delete(unsigned int rtableid, struct sockaddr *dst,
 		panic("destination do not match");
 	if (mask != NULL && an->an_plen != satoplen(ar, mask))
 		panic("mask do not match");
-#endif
+#endif /* DIAGNOSTIC */
 
 	addr = satoaddr(ar, an->an_dst);
 	plen = an->an_plen;
 
-	if (art_delete(ar, an, addr, plen) == NULL) {
-		error = ESRCH;
-		goto out;
-	}
+	if (art_delete(ar, an, addr, plen) == NULL)
+		return (ESRCH);
 
 	/*
 	 * XXX Is it safe to free the mask now?  Are we sure rt_mask()
@@ -768,14 +791,12 @@ rtable_delete(unsigned int rtableid, struct sockaddr *dst,
 	free(rt->rt_mask, M_RTABLE, 0);
 	rt->rt_node = NULL;
 	rt->rt_mask = NULL;
-	SLIST_REMOVE(&an->an_rtlist, rt, rtentry, rt_next);
-	KASSERT(rt->rt_refcnt >= 1);
+	KASSERT(rt->rt_refcnt >= 2);
+	SRPL_REMOVE_LOCKED(&rt_rc, &an->an_rtlist, rt, rtentry, rt_next);
 	rtfree(rt);
 
 	pool_put(&an_pool, an);
-out:
-	rtable_put(ar);
-	return (error);
+	return (0);
 }
 
 struct rtable_walk_cookie {
@@ -794,7 +815,9 @@ rtable_walk_helper(struct art_node *an, void *xrwc)
 	struct rtentry			*rt, *nrt;
 	int				 error = 0;
 
-	SLIST_FOREACH_SAFE(rt, &an->an_rtlist, rt_next, nrt) {
+	KERNEL_ASSERT_LOCKED();
+
+	SRPL_FOREACH_SAFE_LOCKED(rt, &an->an_rtlist, rt_next, nrt) {
 		if ((error = (*rwc->rwc_func)(rt, rwc->rwc_arg, rwc->rwc_rid)))
 			break;
 	}
@@ -808,7 +831,6 @@ rtable_walk(unsigned int rtableid, sa_family_t af,
 {
 	struct art_root			*ar;
 	struct rtable_walk_cookie	 rwc;
-	int				 error;
 
 	ar = rtable_get(rtableid, af);
 	if (ar == NULL)
@@ -818,10 +840,7 @@ rtable_walk(unsigned int rtableid, sa_family_t af,
 	rwc.rwc_arg = arg;
 	rwc.rwc_rid = rtableid;
 
-	error = art_walk(ar, rtable_walk_helper, &rwc);
-
-	rtable_put(ar);
-	return (error);
+	return (art_walk(ar, rtable_walk_helper, &rwc));
 }
 
 #ifndef SMALL_KERNEL
@@ -837,22 +856,24 @@ rtable_mpath_select(struct rtentry *rt, uint32_t hash)
 {
 	struct art_node			*an = rt->rt_node;
 	struct rtentry			*mrt;
+	struct srpl_iter		 i;
 	int				 npaths, threshold;
 
 	npaths = 0;
-	SLIST_FOREACH(mrt, &an->an_rtlist, rt_next) {
+	SRPL_FOREACH(mrt, &an->an_rtlist, &i, rt_next) {
 		/* Only count nexthops with the same priority. */
 		if (mrt->rt_priority == rt->rt_priority)
 			npaths++;
 	}
+	SRPL_LEAVE(&i, mrt);
 
 	threshold = (0xffff / npaths) + 1;
 
-	mrt = SLIST_FIRST(&an->an_rtlist);
+	mrt = SRPL_ENTER(&an->an_rtlist, &i);
 	while (hash > threshold && mrt != NULL) {
 		if (mrt->rt_priority == rt->rt_priority)
 			hash -= threshold;
-		mrt = SLIST_NEXT(mrt, rt_next);
+		mrt = SRPL_NEXT(&i, mrt, rt_next);
 	}
 
 	if (mrt != NULL) {
@@ -860,6 +881,7 @@ rtable_mpath_select(struct rtentry *rt, uint32_t hash)
 		rtfree(rt);
 		rt = mrt;
 	}
+	SRPL_LEAVE(&i, mrt);
 
 	return (rt);
 }
@@ -870,38 +892,57 @@ rtable_mpath_reprio(struct rtentry *rt, uint8_t prio)
 	struct art_node			*an = rt->rt_node;
 	struct rtentry			*mrt, *prt;
 
-	SLIST_REMOVE(&an->an_rtlist, rt, rtentry, rt_next);
+	KERNEL_ASSERT_LOCKED();
+
+	SRPL_REMOVE_LOCKED(&rt_rc, &an->an_rtlist, rt, rtentry, rt_next);
 	rt->rt_priority = prio;
 
-	if ((mrt = SLIST_FIRST(&an->an_rtlist)) != NULL) {
+	if ((mrt = SRPL_FIRST_LOCKED(&an->an_rtlist)) != NULL) {
 		/*
 		 * Select the order of the MPATH routes.
 		 */
-		while (SLIST_NEXT(mrt, rt_next) != NULL) {
+		while (SRPL_NEXT_LOCKED(mrt, rt_next) != NULL) {
 			if (mrt->rt_priority > prio)
 				break;
 		    	prt = mrt;
-			mrt = SLIST_NEXT(mrt, rt_next);
+			mrt = SRPL_NEXT_LOCKED(mrt, rt_next);
 		}
 
 		if (mrt->rt_priority > prio) {
 			/* prt -> rt -> mrt */
-			SLIST_INSERT_AFTER(prt, rt, rt_next);
+			SRPL_INSERT_AFTER_LOCKED(&rt_rc, prt, rt, rt_next);
 		} else {
 			/* prt -> mrt -> rt */
-			SLIST_INSERT_AFTER(mrt, rt, rt_next);
+			SRPL_INSERT_AFTER_LOCKED(&rt_rc, mrt, rt, rt_next);
 		}
 	} else {
-		SLIST_INSERT_HEAD(&an->an_rtlist, rt, rt_next);
+		SRPL_INSERT_HEAD_LOCKED(&rt_rc, &an->an_rtlist, rt, rt_next);
 	}
 }
 
 struct rtentry *
 rtable_mpath_next(struct rtentry *rt)
 {
-	return (SLIST_NEXT(rt, rt_next));
+	KERNEL_ASSERT_LOCKED();
+	return (SRPL_NEXT_LOCKED(rt, rt_next));
 }
 #endif /* SMALL_KERNEL */
+
+void
+rtentry_ref(void *null, void *xrt)
+{
+	struct rtentry *rt = xrt;
+
+	rtref(rt);
+}
+
+void
+rtentry_unref(void *null, void *xrt)
+{
+	struct rtentry *rt = xrt;
+
+	rtfree(rt);
+}
 
 /*
  * Return a pointer to the address (key).  This is an heritage from the
@@ -993,7 +1034,7 @@ out:
 		if (*ap != 0x00)
 			return (-1);
 	}
-#endif
+#endif /* DIAGNOSTIC */
 
 	return (plen);
 }

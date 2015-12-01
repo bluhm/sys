@@ -1,4 +1,4 @@
-/*	$OpenBSD: hme.c,v 1.75 2015/10/25 12:48:46 mpi Exp $	*/
+/*	$OpenBSD: hme.c,v 1.78 2015/11/25 03:09:58 dlg Exp $	*/
 /*	$NetBSD: hme.c,v 1.21 2001/07/07 15:59:37 thorpej Exp $	*/
 
 /*-
@@ -35,7 +35,6 @@
  */
 
 #include "bpfilter.h"
-#include "vlan.h"
 
 #undef HMEDEBUG
 
@@ -383,7 +382,8 @@ hme_stop(struct hme_softc *sc, int softonly)
 	/*
 	 * Mark the interface down and cancel the watchdog timer.
 	 */
-	ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
+	ifp->if_flags &= ~IFF_RUNNING;
+	ifq_clr_oactive(&ifp->if_snd);
 	ifp->if_timer = 0;
 
 	if (!softonly) {
@@ -624,7 +624,7 @@ hme_init(struct hme_softc *sc)
 	timeout_add_sec(&sc->sc_tick_ch, 1);
 
 	ifp->if_flags |= IFF_RUNNING;
-	ifp->if_flags &= ~IFF_OACTIVE;
+	ifq_clr_oactive(&ifp->if_snd);
 
 	hme_start(ifp);
 }
@@ -640,11 +640,11 @@ hme_start(struct ifnet *ifp)
 	u_int32_t frag, cur, i;
 	int error;
 
-	if ((ifp->if_flags & (IFF_RUNNING | IFF_OACTIVE)) != IFF_RUNNING)
+	if (!(ifp->if_flags & IFF_RUNNING) || ifq_is_oactive(&ifp->if_snd))
 		return;
 
 	while (sc->sc_txd[sc->sc_tx_prod].sd_mbuf == NULL) {
-		IFQ_POLL(&ifp->if_snd, m);
+		m = ifq_deq_begin(&ifp->if_snd);
 		if (m == NULL)
 			break;
 
@@ -672,12 +672,13 @@ hme_start(struct ifnet *ifp)
 
 		if ((HME_TX_RING_SIZE - (sc->sc_tx_cnt + map->dm_nsegs)) < 5) {
 			bus_dmamap_unload(sc->sc_dmatag, map);
-			ifp->if_flags |= IFF_OACTIVE;
+			ifq_deq_rollback(&ifp->if_snd, m);
+			ifq_set_oactive(&ifp->if_snd);
 			break;
 		}
 
 		/* We are now committed to transmitting the packet. */
-		IFQ_DEQUEUE(&ifp->if_snd, m);
+		ifq_deq_commit(&ifp->if_snd, m);
 
 #if NBPFILTER > 0
 		/*
@@ -732,7 +733,7 @@ hme_start(struct ifnet *ifp)
 	return;
 
  drop:
-	IFQ_DEQUEUE(&ifp->if_snd, m);
+	ifq_deq_commit(&ifp->if_snd, m);
 	m_freem(m);
 	ifp->if_oerrors++;
 }
@@ -761,7 +762,7 @@ hme_tint(struct hme_softc *sc)
 		if (txflags & HME_XD_OWN)
 			break;
 
-		ifp->if_flags &= ~IFF_OACTIVE;
+		ifq_clr_oactive(&ifp->if_snd);
 		if (txflags & HME_XD_EOP)
 			ifp->if_opackets++;
 

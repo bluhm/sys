@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_upgt.c,v 1.72 2015/11/11 10:07:25 mpi Exp $ */
+/*	$OpenBSD: if_upgt.c,v 1.75 2015/11/25 03:10:00 dlg Exp $ */
 
 /*
  * Copyright (c) 2007 Marcus Glocker <mglocker@openbsd.org>
@@ -35,10 +35,8 @@
 #include <net/bpf.h>
 #endif
 #include <net/if.h>
-#include <net/if_arp.h>
 #include <net/if_dl.h>
 #include <net/if_media.h>
-#include <net/if_types.h>
 
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
@@ -1216,7 +1214,7 @@ upgt_init(struct ifnet *ifp)
 	upgt_setup_rates(sc);
 
 	ifp->if_flags |= IFF_RUNNING;
-	ifp->if_flags &= ~IFF_OACTIVE;
+	ifq_clr_oactive(&ifp->if_snd);
 
 	upgt_set_macfilter(sc, IEEE80211_S_SCAN);
 
@@ -1239,7 +1237,8 @@ upgt_stop(struct upgt_softc *sc)
 
 	/* device down */
 	ifp->if_timer = 0;
-	ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
+	ifp->if_flags &= ~IFF_RUNNING;
+	ifq_clr_oactive(&ifp->if_snd);
 
 	upgt_set_led(sc, UPGT_LED_OFF);
 
@@ -1369,7 +1368,7 @@ upgt_start(struct ifnet *ifp)
 	int i;
 
 	/* don't transmit packets if interface is busy or down */
-	if ((ifp->if_flags & (IFF_RUNNING | IFF_OACTIVE)) != IFF_RUNNING)
+	if (!(ifp->if_flags & IFF_RUNNING) || ifq_is_oactive(&ifp->if_snd))
 		return;
 
 	DPRINTF(2, "%s: %s\n", sc->sc_dev.dv_xname, __func__);
@@ -1429,7 +1428,7 @@ upgt_start(struct ifnet *ifp)
 		    sc->sc_dev.dv_xname, sc->tx_queued);
 		/* process the TX queue in process context */
 		ifp->if_timer = 5;
-		ifp->if_flags |= IFF_OACTIVE;
+		ifq_set_oactive(&ifp->if_snd);
 		usb_rem_task(sc->sc_udev, &sc->sc_task_tx);
 		usb_add_task(sc->sc_udev, &sc->sc_task_tx);
 	}
@@ -1631,7 +1630,7 @@ upgt_tx_done(struct upgt_softc *sc, uint8_t *data)
 	if (sc->tx_queued == 0) {
 		/* TX queued was processed, continue */
 		ifp->if_timer = 0;
-		ifp->if_flags &= ~IFF_OACTIVE;
+		ifq_clr_oactive(&ifp->if_snd);
 		upgt_start(ifp);
 	}
 

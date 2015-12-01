@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_wi_hostap.c,v 1.48 2015/11/04 12:22:01 dlg Exp $	*/
+/*	$OpenBSD: if_wi_hostap.c,v 1.51 2015/11/24 17:11:39 mpi Exp $	*/
 
 /*
  * Copyright (c) 2002
@@ -56,10 +56,7 @@
 #include <machine/bus.h>
 
 #include <net/if.h>
-#include <net/if_arp.h>
-#include <net/if_dl.h>
 #include <net/if_media.h>
-#include <net/if_types.h>
 
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
