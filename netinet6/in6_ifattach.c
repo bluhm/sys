@@ -547,7 +547,7 @@ in6_ifdetach(struct ifnet *ifp)
 	sin6.sin6_addr.s6_addr16[1] = htons(ifp->if_index);
 	rt = rtalloc(sin6tosa(&sin6), 0, ifp->if_rdomain);
 	if (rt && rt->rt_ifidx == ifp->if_index) {
-		rtdeletemsg(rt, ifp->if_rdomain);
+		rtdeletemsg(rt, ifp, ifp->if_rdomain);
 		rtfree(rt);
 	}
 
@@ -559,7 +559,7 @@ in6_ifdetach(struct ifnet *ifp)
 	sin6.sin6_addr.s6_addr16[1] = htons(ifp->if_index);
 	rt = rtalloc(sin6tosa(&sin6), 0, ifp->if_rdomain);
 	if (rt && rt->rt_ifidx == ifp->if_index) {
-		rtdeletemsg(rt, ifp->if_rdomain);
+		rtdeletemsg(rt, ifp, ifp->if_rdomain);
 		rtfree(rt);
 	}
 
