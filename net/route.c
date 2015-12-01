@@ -615,11 +615,10 @@ out:
  * Delete a route and generate a message
  */
 int
-rtdeletemsg(struct rtentry *rt, u_int tableid)
+rtdeletemsg(struct rtentry *rt, struct ifnet *ifp, u_int tableid)
 {
 	int			error;
 	struct rt_addrinfo	info;
-	unsigned int		ifidx;
 
 	/*
 	 * Request the new route so that the entry is not actually
@@ -631,9 +630,10 @@ rtdeletemsg(struct rtentry *rt, u_int tableid)
 	info.rti_info[RTAX_NETMASK] = rt_mask(rt);
 	info.rti_info[RTAX_GATEWAY] = rt->rt_gateway;
 	info.rti_flags = rt->rt_flags;
-	ifidx = rt->rt_ifidx;
+	KASSERT(rt->rt_ifidx == ifp->if_index);
 	error = rtrequest(RTM_DELETE, &info, rt->rt_priority, &rt, tableid);
-	rt_missmsg(RTM_DELETE, &info, info.rti_flags, ifidx, error, tableid);
+	rt_missmsg(RTM_DELETE, &info, info.rti_flags, ifp->if_index, error,
+	    tableid);
 	if (error == 0)
 		rtfree(rt);
 	return (error);
@@ -655,8 +655,14 @@ rtflushclone1(struct rtentry *rt, void *arg, u_int id)
 	struct rtentry *parent = arg;
 
 	if ((rt->rt_flags & RTF_CLONED) != 0 && (rt->rt_parent == parent ||
-	    rtequal(rt->rt_parent, parent)))
-		rtdeletemsg(rt, id);
+	    rtequal(rt->rt_parent, parent))) {
+		struct ifnet *ifp;
+
+		ifp = if_get(rt->rt_ifidx);
+		KASSERT(ifp != NULL);
+		rtdeletemsg(rt, ifp, id);
+		if_put(ifp);
+	}
 	return 0;
 }
 
@@ -1043,7 +1049,12 @@ rtrequest(int req, struct rt_addrinfo *info, u_int8_t prio,
 		if (error != 0 && (crt = rtalloc(ndst, 0, tableid)) != NULL) {
 			/* overwrite cloned route */
 			if ((crt->rt_flags & RTF_CLONED) != 0) {
-				rtdeletemsg(crt, tableid);
+				struct ifnet *cifp;
+
+				cifp = if_get(crt->rt_ifidx);
+				KASSERT(cifp != NULL);
+				rtdeletemsg(crt, cifp, tableid);
+				if_put(cifp);
 				error = rtable_insert(tableid, ndst,
 				    info->rti_info[RTAX_NETMASK],
 				    info->rti_info[RTAX_GATEWAY],
@@ -1670,7 +1681,7 @@ rt_if_remove_rtdelete(struct rtentry *rt, void *vifp, u_int id)
 	if (rt->rt_ifidx == ifp->if_index) {
 		int	cloning = (rt->rt_flags & RTF_CLONING);
 
-		if (rtdeletemsg(rt, id) == 0 && cloning)
+		if (rtdeletemsg(rt, ifp, id) == 0 && cloning)
 			return (EAGAIN);
 	}
 
@@ -1727,7 +1738,7 @@ rt_if_linkstate_change(struct rtentry *rt, void *arg, u_int id)
 			 * clone a new route from a better source.
 			 */
 			if (rt->rt_flags & RTF_CLONED) {
-				rtdeletemsg(rt, id);
+				rtdeletemsg(rt, ifp, id);
 				return (0);
 			}
 			/* take route down */

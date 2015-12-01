@@ -401,7 +401,7 @@ void	 rt_if_remove(struct ifnet *);
 void	 rt_if_track(struct ifnet *);
 int	 rt_if_linkstate_change(struct rtentry *, void *, u_int);
 #endif
-int	 rtdeletemsg(struct rtentry *, u_int);
+int	 rtdeletemsg(struct rtentry *, struct ifnet *, u_int);
 #endif /* _KERNEL */
 
 #endif /* _NET_ROUTE_H_ */

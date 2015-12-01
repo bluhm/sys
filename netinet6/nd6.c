@@ -833,7 +833,7 @@ nd6_free(struct rtentry *rt, int gc)
 	 * caches, and disable the route entry not to be used in already
 	 * cached routes.
 	 */
-	rtdeletemsg(rt, ifp->if_rdomain);
+	rtdeletemsg(rt, ifp, ifp->if_rdomain);
 	splx(s);
 
 	if_put(ifp);
