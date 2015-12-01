@@ -621,10 +621,6 @@ rtdeletemsg(struct rtentry *rt, struct ifnet *ifp, u_int tableid)
 	int			error;
 	struct rt_addrinfo	info;
 
-	splsoftassert(IPL_SOFTNET);
-
-	if (!rtable_exists(tableid))
-		return (EAFNOSUPPORT);
 	/*
 	 * Request the new route so that the entry is not actually
 	 * deleted.  That will allow the information being reported to
@@ -816,6 +812,10 @@ rtrequest_delete(struct rt_addrinfo *info, u_int8_t prio, struct ifnet *ifp,
 	struct rtentry		*rt;
 	int			 error;
 
+	splsoftassert(IPL_SOFTNET);
+
+	if (!rtable_exists(tableid))
+		return (EAFNOSUPPORT);
 	rt = rtable_lookup(tableid, info->rti_info[RTAX_DST],
 	    info->rti_info[RTAX_NETMASK], info->rti_info[RTAX_GATEWAY], prio);
 	if (rt == NULL)
@@ -1282,7 +1282,7 @@ rt_ifa_del(struct ifaddr *ifa, int flags, struct sockaddr *dst)
 	if (flags & RTF_CONNECTED)
 		prio = RTP_CONNECTED;
 
-	error = rtrequest(RTM_DELETE, &info, prio, &rt, rtableid);
+	error = rtrequest_delete(&info, prio, ifp, &rt, rtableid);
 	if (error == 0) {
 		rt_sendmsg(rt, RTM_DELETE, rtableid);
 		if (flags & RTF_LOCAL)
