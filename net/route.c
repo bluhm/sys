@@ -153,9 +153,10 @@ int	rtflushclone1(struct rtentry *, void *, u_int);
 void	rtflushclone(unsigned int, struct rtentry *);
 int	rt_if_remove_rtdelete(struct rtentry *, void *, u_int);
 struct rtentry *rt_match(struct sockaddr *, uint32_t *, int, unsigned int);
-
 struct	ifaddr *ifa_ifwithroute(int, struct sockaddr *, struct sockaddr *,
 		    u_int);
+int	rtrequest_delete(struct rt_addrinfo *, u_int8_t, struct ifnet *,
+	    struct rtentry **, u_int);
 
 #ifdef DDB
 void	db_print_sa(struct sockaddr *);
@@ -804,6 +805,71 @@ rt_getifa(struct rt_addrinfo *info, u_int rtid)
 }
 
 int
+rtrequest_delete(struct rt_addrinfo *info, u_int8_t prio, struct ifnet *ifp,
+    struct rtentry **ret_nrt, u_int tableid)
+{
+	struct rtentry		*rt;
+	int			 error;
+
+	rt = rtable_lookup(tableid, info->rti_info[RTAX_DST],
+	    info->rti_info[RTAX_NETMASK], info->rti_info[RTAX_GATEWAY], prio);
+	if (rt == NULL)
+		return (ESRCH);
+#ifndef SMALL_KERNEL
+	/*
+	 * If we got multipath routes, we require users to specify
+	 * a matching gateway.
+	 */
+	if ((rt->rt_flags & RTF_MPATH) &&
+	    info->rti_info[RTAX_GATEWAY] == NULL) {
+		rtfree(rt);
+		return (ESRCH);
+	}
+#endif
+
+	/*
+	 * Since RTP_LOCAL cannot be set by userland, make
+	 * sure that local routes are only modified by the
+	 * kernel.
+	 */
+	if ((rt->rt_flags & (RTF_LOCAL|RTF_BROADCAST)) &&
+	    prio != RTP_LOCAL) {
+		rtfree(rt);
+		return (EINVAL);
+	}
+
+	error = rtable_delete(tableid, info->rti_info[RTAX_DST],
+	    info->rti_info[RTAX_NETMASK], prio, rt);
+	if (error != 0) {
+		rtfree(rt);
+		return (ESRCH);
+	}
+
+	/* clean up any cloned children */
+	if ((rt->rt_flags & RTF_CLONING) != 0)
+		rtflushclone(tableid, rt);
+
+	rtfree(rt->rt_gwroute);
+	rt->rt_gwroute = NULL;
+
+	rtfree(rt->rt_parent);
+	rt->rt_parent = NULL;
+
+	rt->rt_flags &= ~RTF_UP;
+
+	ifp->if_rtrequest(ifp, RTM_DELETE, rt);
+
+	atomic_inc_int(&rttrash);
+
+	if (ret_nrt != NULL)
+		*ret_nrt = rt;
+	else
+		rtfree(rt);
+
+	return (0);
+}
+
+int
 rtrequest(int req, struct rt_addrinfo *info, u_int8_t prio,
     struct rtentry **ret_nrt, u_int tableid)
 {
@@ -826,64 +892,12 @@ rtrequest(int req, struct rt_addrinfo *info, u_int8_t prio,
 		info->rti_info[RTAX_NETMASK] = NULL;
 	switch (req) {
 	case RTM_DELETE:
-		rt = rtable_lookup(tableid, info->rti_info[RTAX_DST],
- 		    info->rti_info[RTAX_NETMASK], info->rti_info[RTAX_GATEWAY],
- 		    prio);
-		if (rt == NULL)
-			return (ESRCH);
-#ifndef SMALL_KERNEL
-		/*
-		 * If we got multipath routes, we require users to specify
-		 * a matching gateway.
-		 */
-		if ((rt->rt_flags & RTF_MPATH) &&
-		    info->rti_info[RTAX_GATEWAY] == NULL) {
-		    	rtfree(rt);
-			return (ESRCH);
-		}
-#endif
-
-		/*
-		 * Since RTP_LOCAL cannot be set by userland, make
-		 * sure that local routes are only modified by the
-		 * kernel.
-		 */
-		if ((rt->rt_flags & (RTF_LOCAL|RTF_BROADCAST)) &&
-		    prio != RTP_LOCAL) {
-		    	rtfree(rt);
-			return (EINVAL);
-		}
-
-		error = rtable_delete(tableid, info->rti_info[RTAX_DST],
-		    info->rti_info[RTAX_NETMASK], prio, rt);
-		if (error != 0) {
-		    	rtfree(rt);
-			return (ESRCH);
-		}
-
-		/* clean up any cloned children */
-		if ((rt->rt_flags & RTF_CLONING) != 0)
-			rtflushclone(tableid, rt);
-
-		rtfree(rt->rt_gwroute);
-		rt->rt_gwroute = NULL;
-
-		rtfree(rt->rt_parent);
-		rt->rt_parent = NULL;
-
-		rt->rt_flags &= ~RTF_UP;
-
 		ifp = if_get(rt->rt_ifidx);
 		KASSERT(ifp != NULL);
-		ifp->if_rtrequest(ifp, RTM_DELETE, rt);
+		error = rtrequest_delete(info, prio, ifp, ret_nrt, tableid);
 		if_put(ifp);
-
-		atomic_inc_int(&rttrash);
-
-		if (ret_nrt != NULL)
-			*ret_nrt = rt;
-		else
-			rtfree(rt);
+		if (error)
+			return (error);
 		break;
 
 	case RTM_RESOLVE:
