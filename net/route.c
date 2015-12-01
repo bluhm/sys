@@ -856,7 +856,13 @@ rtrequest_delete(struct rt_addrinfo *info, u_int8_t prio, struct ifnet *ifp,
 
 	rt->rt_flags &= ~RTF_UP;
 
-	ifp->if_rtrequest(ifp, RTM_DELETE, rt);
+	if (ifp == NULL) {
+		ifp = if_get(rt->rt_ifidx);
+		KASSERT(ifp != NULL);
+		ifp->if_rtrequest(ifp, RTM_DELETE, rt);
+		if_put(ifp);
+	} else
+		ifp->if_rtrequest(ifp, RTM_DELETE, rt);
 
 	atomic_inc_int(&rttrash);
 
@@ -891,10 +897,7 @@ rtrequest(int req, struct rt_addrinfo *info, u_int8_t prio,
 		info->rti_info[RTAX_NETMASK] = NULL;
 	switch (req) {
 	case RTM_DELETE:
-		ifp = if_get(rt->rt_ifidx);
-		KASSERT(ifp != NULL);
-		error = rtrequest_delete(info, prio, ifp, ret_nrt, tableid);
-		if_put(ifp);
+		error = rtrequest_delete(info, prio, NULL, ret_nrt, tableid);
 		if (error)
 			return (error);
 		break;
