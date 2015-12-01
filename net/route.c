@@ -867,8 +867,10 @@ rtrequest_delete(struct rt_addrinfo *info, u_int8_t prio, struct ifnet *ifp,
 		KASSERT(ifp != NULL);
 		ifp->if_rtrequest(ifp, RTM_DELETE, rt);
 		if_put(ifp);
-	} else
+	} else {
+		KASSERT(ifp->if_index == rt->rt_ifidx);
 		ifp->if_rtrequest(ifp, RTM_DELETE, rt);
+	}
 
 	atomic_inc_int(&rttrash);
 
