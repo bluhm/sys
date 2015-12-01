@@ -685,7 +685,7 @@ arptfree(struct rtentry *rt)
 		la->la_asked = 0;
 	}
 
-	rtdeletemsg(rt, ifp->if_rdomain);
+	rtdeletemsg(rt, ifp, ifp->if_rdomain);
 	if_put(ifp);
 }
 
