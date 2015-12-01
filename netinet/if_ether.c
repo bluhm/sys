@@ -693,7 +693,7 @@ arptfree(struct rtentry *rt)
 		la->la_asked = 0;
 	}
 
-	rtdeletemsg(rt, ifp->if_rdomain);
+	rtdeletemsg(rt, ifp, ifp->if_rdomain);
 	if_put(ifp);
 }
 
@@ -719,8 +719,14 @@ arplookup(u_int32_t addr, int create, int proxy, u_int tableid)
 		return (NULL);
 	if ((rt->rt_flags & RTF_GATEWAY) || (rt->rt_flags & RTF_LLINFO) == 0 ||
 	    rt->rt_gateway->sa_family != AF_LINK) {
-		if (create && (rt->rt_flags & RTF_CLONED))
-			rtdeletemsg(rt, tableid);
+		if (create && (rt->rt_flags & RTF_CLONED)) {
+			struct ifnet *ifp;
+
+			ifp = if_get(rt->rt_ifidx);
+			KASSERT(ifp != NULL);
+			rtdeletemsg(rt, ifp, tableid);
+			if_put(ifp);
+		}
 		rtfree(rt);
 		return (NULL);
 	}
