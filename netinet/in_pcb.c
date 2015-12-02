@@ -518,8 +518,7 @@ in_pcbdetach(struct inpcb *inp)
 				break;
 			}
 		/* pf_unlink_state() may have detached the state */
-		if (inp->inp_pf_sk)
-			inp->inp_pf_sk->inp = NULL;
+		pf_inp_unchain(inp);
 	}
 #endif
 	s = splnet();
