@@ -60,7 +60,7 @@ int		 rtable_insert(unsigned int, struct sockaddr *,
 		     struct sockaddr *, struct sockaddr *, uint8_t,
 		     struct rtentry *);
 int		 rtable_delete(unsigned int, struct sockaddr *,
-		     struct sockaddr *, uint8_t, struct rtentry *);
+		     struct sockaddr *, struct rtentry *);
 int		 rtable_walk(unsigned int, sa_family_t,
 		     int (*)(struct rtentry *, void *, unsigned int), void *);
 

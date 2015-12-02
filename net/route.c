@@ -832,7 +832,7 @@ rtrequest_delete(struct rt_addrinfo *info, u_int8_t prio, struct ifnet *ifp,
 	}
 
 	error = rtable_delete(tableid, info->rti_info[RTAX_DST],
-	    info->rti_info[RTAX_NETMASK], prio, rt);
+	    info->rti_info[RTAX_NETMASK], rt);
 	if (error != 0) {
 		rtfree(rt);
 		return (ESRCH);
