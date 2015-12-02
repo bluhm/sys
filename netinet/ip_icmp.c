@@ -1046,16 +1046,12 @@ icmp_mtudisc_timeout(struct rtentry *rt, struct rttimer *r)
 	    (RTF_DYNAMIC | RTF_HOST)) {
 		void *(*ctlfunc)(int, struct sockaddr *, u_int, void *);
 		struct sockaddr_in sin;
-		struct ifnet *ifp;
 		int s;
 
 		sin = *satosin(rt_key(rt));
 
 		s = splsoftnet();
-		ifp = if_get(rt->rt_ifidx);
-		KASSERT(ifp != NULL);
-		rtdeletemsg(rt, ifp, r->rtt_tableid);
-		if_put(ifp);
+		rtdeletemsg(rt, NULL, r->rtt_tableid);
 
 		/* Notify TCP layer of increased Path MTU estimate */
 		ctlfunc = inetsw[ip_protox[IPPROTO_TCP]].pr_ctlinput;
@@ -1094,14 +1090,10 @@ icmp_redirect_timeout(struct rtentry *rt, struct rttimer *r)
 
 	if ((rt->rt_flags & (RTF_DYNAMIC | RTF_HOST)) ==
 	    (RTF_DYNAMIC | RTF_HOST)) {
-		struct ifnet *ifp;
 		int s;
 
 		s = splsoftnet();
-		ifp = if_get(rt->rt_ifidx);
-		KASSERT(ifp != NULL);
-		rtdeletemsg(rt, ifp, r->rtt_tableid);
-		if_put(ifp);
+		rtdeletemsg(rt, NULL, r->rtt_tableid);
 		splx(s);
 	}
 }
