@@ -78,7 +78,6 @@
 #include <sys/socketvar.h>
 #include <sys/kernel.h>
 
-#include <net/if.h>
 #include <net/route.h>
 
 #include <netinet/in.h>
@@ -93,10 +92,6 @@
 #include <netinet/tcp_var.h>
 #include <netinet/tcpip.h>
 #include <netinet/tcp_debug.h>
-
-#if NPF > 0
-#include <net/pfvar.h>
-#endif
 
 #ifdef notyet
 extern struct mbuf *m_copypack();
@@ -1080,7 +1075,8 @@ send:
 	m->m_pkthdr.ph_rtableid = tp->t_inpcb->inp_rtableid;
 
 #if NPF > 0
-	pf_inp_enter(m, tp->t_inpcb);
+	if (so->so_state & SS_ISCONNECTED)
+		m->m_pkthdr.pf.inp = tp->t_inpcb;
 #endif
 
 	switch (tp->pf) {
