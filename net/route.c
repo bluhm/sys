@@ -803,8 +803,8 @@ int
 rtrequest_delete(struct rt_addrinfo *info, u_int8_t prio, struct ifnet *ifp,
     struct rtentry **ret_nrt, u_int tableid)
 {
-	struct rtentry		*rt;
-	int			 error;
+	struct rtentry	*rt;
+	int		 error;
 
 	splsoftassert(IPL_SOFTNET);
 
