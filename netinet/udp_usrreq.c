@@ -581,7 +581,7 @@ udp_input(struct mbuf *m, ...)
 	KASSERT(sotoinpcb(inp->inp_socket) == inp);
 
 #if NPF > 0
-	pf_inp_link(m, inp);
+	pf_inp_chain(m, inp);
 #endif
 
 #ifdef IPSEC
