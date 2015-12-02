@@ -580,11 +580,7 @@ tcp_input(struct mbuf *m, ...)
 	 * Locate pcb for segment.
 	 */
 #if NPF > 0
-	if (m->m_pkthdr.pf.statekey) {
-		inp = m->m_pkthdr.pf.statekey->inp;
-		if (inp && inp->inp_pf_sk)
-			KASSERT(m->m_pkthdr.pf.statekey == inp->inp_pf_sk);
-	}
+	inp = pf_inp_lookup(m);
 #endif
 findpcb:
 	if (inp == NULL) {
@@ -602,12 +598,6 @@ findpcb:
 			    m->m_pkthdr.ph_rtableid);
 			break;
 		}
-#if NPF > 0
-		if (m->m_pkthdr.pf.statekey && inp) {
-			m->m_pkthdr.pf.statekey->inp = inp;
-			inp->inp_pf_sk = m->m_pkthdr.pf.statekey;
-		}
-#endif
 	}
 	if (inp == NULL) {
 		int	inpl_reverse = 0;
@@ -880,13 +870,7 @@ findpcb:
 #endif
 
 #if NPF > 0
-	if (m->m_pkthdr.pf.statekey && !m->m_pkthdr.pf.statekey->inp &&
-	    !inp->inp_pf_sk) {
-		m->m_pkthdr.pf.statekey->inp = inp;
-		inp->inp_pf_sk = m->m_pkthdr.pf.statekey;
-	}
-	/* The statekey has finished finding the inp, it is no longer needed. */
-	m->m_pkthdr.pf.statekey = NULL;
+	pf_inp_link(m, inp);
 #endif
 
 #ifdef IPSEC
