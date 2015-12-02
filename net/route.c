@@ -614,6 +614,7 @@ rtdeletemsg(struct rtentry *rt, struct ifnet *ifp, u_int tableid)
 {
 	int			error;
 	struct rt_addrinfo	info;
+	unsigned int		ifidx;
 
 	/*
 	 * Request the new route so that the entry is not actually
@@ -626,10 +627,9 @@ rtdeletemsg(struct rtentry *rt, struct ifnet *ifp, u_int tableid)
 		info.rti_info[RTAX_NETMASK] = rt_mask(rt);
 	info.rti_info[RTAX_GATEWAY] = rt->rt_gateway;
 	info.rti_flags = rt->rt_flags;
-	KASSERT(rt->rt_ifidx == ifp->if_index);
+	ifidx = rt->rt_ifidx;
 	error = rtrequest_delete(&info, rt->rt_priority, ifp, &rt, tableid);
-	rt_missmsg(RTM_DELETE, &info, info.rti_flags, ifp->if_index, error,
-	    tableid);
+	rt_missmsg(RTM_DELETE, &info, info.rti_flags, ifidx, error, tableid);
 	if (error == 0)
 		rtfree(rt);
 	return (error);
@@ -651,14 +651,8 @@ rtflushclone1(struct rtentry *rt, void *arg, u_int id)
 	struct rtentry *parent = arg;
 
 	if ((rt->rt_flags & RTF_CLONED) != 0 && (rt->rt_parent == parent ||
-	    rtequal(rt->rt_parent, parent))) {
-		struct ifnet *ifp;
-
-		ifp = if_get(rt->rt_ifidx);
-		KASSERT(ifp != NULL);
-		rtdeletemsg(rt, ifp, id);
-		if_put(ifp);
-	}
+	    rtequal(rt->rt_parent, parent)))
+		rtdeletemsg(rt, NULL, id);
 	return 0;
 }
 
@@ -1067,12 +1061,7 @@ rtrequest(int req, struct rt_addrinfo *info, u_int8_t prio,
 		if (error != 0 && (crt = rtalloc(ndst, 0, tableid)) != NULL) {
 			/* overwrite cloned route */
 			if ((crt->rt_flags & RTF_CLONED) != 0) {
-				struct ifnet *cifp;
-
-				cifp = if_get(crt->rt_ifidx);
-				KASSERT(cifp != NULL);
-				rtdeletemsg(crt, cifp, tableid);
-				if_put(cifp);
+				rtdeletemsg(crt, NULL, tableid);
 				error = rtable_insert(tableid, ndst,
 				    info->rti_info[RTAX_NETMASK],
 				    info->rti_info[RTAX_GATEWAY],

@@ -1021,9 +1021,9 @@ icmp6_mtudisc_update(struct ip6ctlparam *ip6cp, int validated)
 	if (rt != NULL && ISSET(rt->rt_flags, RTF_HOST) &&
 	    !(rt->rt_rmx.rmx_locks & RTV_MTU) &&
 	    (rt->rt_rmx.rmx_mtu > mtu || rt->rt_rmx.rmx_mtu == 0)) {
-		struct ifnet *ifp;
+	    	struct ifnet *ifp;
 
-		ifp = if_get(rt->rt_ifidx);
+	    	ifp = if_get(rt->rt_ifidx);
 		if (ifp != NULL && mtu < ifp->if_mtu) {
 			icmp6stat.icp6s_pmtuchg++;
 			rt->rt_rmx.rmx_mtu = mtu;
@@ -1956,14 +1956,10 @@ icmp6_mtudisc_timeout(struct rtentry *rt, struct rttimer *r)
 		panic("icmp6_mtudisc_timeout: bad route to timeout");
 	if ((rt->rt_flags & (RTF_DYNAMIC | RTF_HOST)) ==
 	    (RTF_DYNAMIC | RTF_HOST)) {
-		struct ifnet *ifp;
 		int s;
 
 		s = splsoftnet();
-		ifp = if_get(rt->rt_ifidx);
-		KASSERT(ifp != NULL);
-		rtdeletemsg(rt, ifp, r->rtt_tableid);
-		if_put(ifp);
+		rtdeletemsg(rt, NULL, r->rtt_tableid);
 		splx(s);
 	} else {
 		if (!(rt->rt_rmx.rmx_locks & RTV_MTU))
@@ -1978,14 +1974,10 @@ icmp6_redirect_timeout(struct rtentry *rt, struct rttimer *r)
 		panic("icmp6_redirect_timeout: bad route to timeout");
 	if ((rt->rt_flags & (RTF_GATEWAY | RTF_DYNAMIC | RTF_HOST)) ==
 	    (RTF_GATEWAY | RTF_DYNAMIC | RTF_HOST)) {
-		struct ifnet *ifp;
 		int s;
 
 		s = splsoftnet();
-		ifp = if_get(rt->rt_ifidx);
-		KASSERT(ifp != NULL);
-		rtdeletemsg(rt, ifp, r->rtt_tableid);
-		if_put(ifp);
+		rtdeletemsg(rt, NULL, r->rtt_tableid);
 		splx(s);
 	}
 }
