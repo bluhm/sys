@@ -6728,6 +6728,30 @@ pf_pkt_addr_changed(struct mbuf *m)
 	m->m_pkthdr.pf.inp = NULL;
 }
 
+struct inpcb *
+pf_inp_lookup(struct mbuf *m) {
+	struct inpcb *inp = NULL;
+
+	if (m->m_pkthdr.pf.statekey) {
+		inp = m->m_pkthdr.pf.statekey->inp;
+		if (inp && inp->inp_pf_sk)
+			KASSERT(m->m_pkthdr.pf.statekey == inp->inp_pf_sk);
+	}
+	return (inp);
+}
+
+void
+pf_inp_link(struct mbuf *m, struct inpcb *inp) {
+	if (m->m_pkthdr.pf.statekey && inp &&
+	    !m->m_pkthdr.pf.statekey->inp && !inp->inp_pf_sk &&
+	    (inp->inp_socket->so_state & SS_ISCONNECTED)) {
+		m->m_pkthdr.pf.statekey->inp = inp;
+		inp->inp_pf_sk = m->m_pkthdr.pf.statekey;
+	}
+	/* The statekey has finished finding the inp, it is no longer needed. */
+	m->m_pkthdr.pf.statekey = NULL;
+}
+
 #if NPFLOG > 0
 void
 pf_log_matches(struct pf_pdesc *pd, struct pf_rule *rm, struct pf_rule *am,
