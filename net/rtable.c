@@ -1,4 +1,4 @@
-/*	$OpenBSD: rtable.c,v 1.30 2015/12/02 11:09:01 mpi Exp $ */
+/*	$OpenBSD: rtable.c,v 1.31 2015/12/02 16:49:58 bluhm Exp $ */
 
 /*
  * Copyright (c) 2014-2015 Martin Pieuchot
