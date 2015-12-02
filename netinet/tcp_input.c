@@ -871,7 +871,7 @@ findpcb:
 
 #if NPF > 0
 	if (inp->inp_socket->so_state & SS_ISCONNECTED)
-		pf_inp_chain(m, inp);
+		pf_inp_link(m, inp);
 #endif
 
 #ifdef IPSEC
@@ -1279,7 +1279,7 @@ trimthenstep6:
 			 * has already been linked to the socket.  Remove the
 			 * link between old socket and new state.
 			 */
-			pf_inp_unchain(inp);
+			pf_inp_unlink(inp);
 #endif
 			/*
 			* Advance the iss by at least 32768, but
