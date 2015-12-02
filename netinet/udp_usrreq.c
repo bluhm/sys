@@ -582,7 +582,7 @@ udp_input(struct mbuf *m, ...)
 
 #if NPF > 0
 	if (inp->inp_socket->so_state & SS_ISCONNECTED)
-		pf_inp_chain(m, inp);
+		pf_inp_link(m, inp);
 #endif
 
 #ifdef IPSEC
