@@ -1014,9 +1014,8 @@ pf_find_state(struct pfi_kif *kif, struct pf_state_key_cmp *key, u_int dir,
 		    kif, dir) == 0) {
 			m->m_pkthdr.pf.statekey->reverse = sk;
 			sk->reverse = m->m_pkthdr.pf.statekey;
-		} else if (dir == PF_OUT && m->m_pkthdr.pf.inp && !sk->inp) {
-			m->m_pkthdr.pf.inp->inp_pf_sk = sk;
-			sk->inp = m->m_pkthdr.pf.inp;
+		} else if (dir == PF_OUT) {
+			pf_sk_link(m, sk);
 		}
 	}
 
@@ -6550,12 +6549,8 @@ done:
 		pd.m->m_pkthdr.pf.qid = qid;
 	if (pd.dir == PF_IN && s && s->key[PF_SK_STACK])
 		pd.m->m_pkthdr.pf.statekey = s->key[PF_SK_STACK];
-	if (pd.dir == PF_OUT &&
-	    pd.m->m_pkthdr.pf.inp && !pd.m->m_pkthdr.pf.inp->inp_pf_sk &&
-	    s && s->key[PF_SK_STACK] && !s->key[PF_SK_STACK]->inp) {
-		pd.m->m_pkthdr.pf.inp->inp_pf_sk = s->key[PF_SK_STACK];
-		s->key[PF_SK_STACK]->inp = pd.m->m_pkthdr.pf.inp;
-	}
+	if (pd.dir == PF_OUT && s)
+		pf_sk_link(pd.m, s->key[PF_SK_STACK]);
 
 	if (s) {
 		pd.m->m_pkthdr.ph_flowid = M_FLOWID_VALID |
@@ -6749,8 +6744,9 @@ pf_inp_link(struct mbuf *m, struct inpcb *inp)
 		m->m_pkthdr.pf.statekey->inp = inp;
 		inp->inp_pf_sk = m->m_pkthdr.pf.statekey;
 	}
-	/* The statekey has finished finding the inp, it is no longer needed. */
+	/* Statekey and inp are linked, mbuf pointers are no longer needed. */
 	m->m_pkthdr.pf.statekey = NULL;
+	m->m_pkthdr.pf.inp = NULL;
 }
 
 void
@@ -6760,6 +6756,20 @@ pf_inp_unlink(struct inpcb *inp)
 		inp->inp_pf_sk->inp = NULL;
 		inp->inp_pf_sk = NULL;
 	}
+}
+
+void
+pf_sk_link(struct mbuf *m, struct pf_state_key *sk)
+{
+	if (m->m_pkthdr.pf.inp && sk &&
+	    !m->m_pkthdr.pf.inp->inp_pf_sk && !sk->inp) {
+		m->m_pkthdr.pf.inp->inp_pf_sk = sk;
+		sk->inp = m->m_pkthdr.pf.inp;
+
+	}
+	/* Statekey and inp are linked, mbuf pointers are no longer needed. */
+	m->m_pkthdr.pf.statekey = NULL;
+	m->m_pkthdr.pf.inp = NULL;
 }
 
 #if NPFLOG > 0
