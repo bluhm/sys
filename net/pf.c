@@ -6741,6 +6741,12 @@ pf_inp_lookup(struct mbuf *m) {
 }
 
 void
+pf_inp_enter(struct mbuf *m, struct inpcb *inp) {
+	if (inp->inp_socket->so_state & SS_ISCONNECTED)
+		m->m_pkthdr.pf.inp = inp;
+}
+
+void
 pf_inp_link(struct mbuf *m, struct inpcb *inp) {
 	if (m->m_pkthdr.pf.statekey && inp &&
 	    !m->m_pkthdr.pf.statekey->inp && !inp->inp_pf_sk &&
