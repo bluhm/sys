@@ -989,7 +989,7 @@ struct pf_state *
 pf_find_state(struct pfi_kif *kif, struct pf_state_key_cmp *key, u_int dir,
     struct mbuf *m)
 {
-	struct pf_state_key	*sk;
+	struct pf_state_key	*sk = NULL;
 	struct pf_state_item	*si;
 
 	pf_status.fcounters[FCNT_STATE_SEARCH]++;
@@ -999,13 +999,13 @@ pf_find_state(struct pfi_kif *kif, struct pf_state_key_cmp *key, u_int dir,
 		addlog("\n");
 	}
 
-	if (dir == PF_OUT && m->m_pkthdr.pf.statekey &&
-	    m->m_pkthdr.pf.statekey->reverse)
-		sk = m->m_pkthdr.pf.statekey->reverse;
-	else if (dir == PF_OUT && m->m_pkthdr.pf.inp &&
-	    m->m_pkthdr.pf.inp->inp_pf_sk)
-		sk = m->m_pkthdr.pf.inp->inp_pf_sk;
-	else {
+	if (dir == PF_OUT) {
+		if (m->m_pkthdr.pf.statekey && m->m_pkthdr.pf.statekey->reverse)
+			sk = m->m_pkthdr.pf.statekey->reverse;
+		else
+			sk = pf_sk_lookup(m);
+	}
+	if (sk == NULL) {
 		if ((sk = RB_FIND(pf_state_tree, &pf_statetbl,
 		    (struct pf_state_key *)key)) == NULL)
 			return (NULL);
@@ -6756,6 +6756,19 @@ pf_inp_unlink(struct inpcb *inp)
 		inp->inp_pf_sk->inp = NULL;
 		inp->inp_pf_sk = NULL;
 	}
+}
+
+struct pf_state_key *
+pf_sk_lookup(struct mbuf *m)
+{
+	struct pf_state_key *sk = NULL;
+
+	if (m->m_pkthdr.pf.inp) {
+		sk = m->m_pkthdr.pf.inp->inp_pf_sk;
+		if (sk && sk->inp)
+			KASSERT(m->m_pkthdr.pf.inp == sk->inp);
+	}
+	return (sk);
 }
 
 void
