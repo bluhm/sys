@@ -402,7 +402,7 @@ rtable_insert(unsigned int rtableid, struct sockaddr *dst,
 
 int
 rtable_delete(unsigned int rtableid, struct sockaddr *dst,
-    struct sockaddr *mask, uint8_t prio, struct rtentry *rt)
+    struct sockaddr *mask, struct rtentry *rt)
 {
 	struct radix_node_head	*rnh;
 	struct radix_node	*rn = (struct radix_node *)rt;
@@ -745,7 +745,7 @@ rtable_insert(unsigned int rtableid, struct sockaddr *dst,
 
 int
 rtable_delete(unsigned int rtableid, struct sockaddr *dst,
-    struct sockaddr *mask, uint8_t prio, struct rtentry *rt)
+    struct sockaddr *mask, struct rtentry *rt)
 {
 	struct art_root			*ar;
 	struct art_node			*an = rt->rt_node;
