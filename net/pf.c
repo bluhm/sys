@@ -6745,8 +6745,7 @@ void
 pf_inp_chain(struct mbuf *m, struct inpcb *inp)
 {
 	if (m->m_pkthdr.pf.statekey && inp &&
-	    !m->m_pkthdr.pf.statekey->inp && !inp->inp_pf_sk &&
-	    (inp->inp_socket->so_state & SS_ISCONNECTED)) {
+	    !m->m_pkthdr.pf.statekey->inp && !inp->inp_pf_sk) {
 		m->m_pkthdr.pf.statekey->inp = inp;
 		inp->inp_pf_sk = m->m_pkthdr.pf.statekey;
 	}
