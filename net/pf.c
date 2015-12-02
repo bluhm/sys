@@ -6742,7 +6742,7 @@ pf_inp_lookup(struct mbuf *m)
 }
 
 void
-pf_inp_chain(struct mbuf *m, struct inpcb *inp)
+pf_inp_link(struct mbuf *m, struct inpcb *inp)
 {
 	if (m->m_pkthdr.pf.statekey && inp &&
 	    !m->m_pkthdr.pf.statekey->inp && !inp->inp_pf_sk) {
@@ -6754,7 +6754,7 @@ pf_inp_chain(struct mbuf *m, struct inpcb *inp)
 }
 
 void
-pf_inp_unchain(struct inpcb *inp)
+pf_inp_unlink(struct inpcb *inp)
 {
 	if (inp->inp_pf_sk) {
 		inp->inp_pf_sk->inp = NULL;

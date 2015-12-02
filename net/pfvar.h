@@ -1755,8 +1755,8 @@ int	pf_socket_lookup(struct pf_pdesc *);
 struct pf_state_key *pf_alloc_state_key(int);
 void	pf_pkt_addr_changed(struct mbuf *);
 struct inpcb *pf_inp_lookup(struct mbuf *);
-void	pf_inp_chain(struct mbuf *, struct inpcb *);
-void	pf_inp_unchain(struct inpcb *);
+void	pf_inp_link(struct mbuf *, struct inpcb *);
+void	pf_inp_unlink(struct inpcb *);
 int	pf_state_key_attach(struct pf_state_key *, struct pf_state *, int);
 int	pf_translate(struct pf_pdesc *, struct pf_addr *, u_int16_t,
 	    struct pf_addr *, u_int16_t, u_int16_t, int);
