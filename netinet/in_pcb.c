@@ -530,8 +530,7 @@ in_pcbdetach(struct inpcb *inp)
 	if (inp->inp_pf_sk) {
 		pf_remove_divert_state(inp->inp_pf_sk);
 		/* pf_remove_divert_state() may have detached the state */
-		if (inp->inp_pf_sk)
-			inp->inp_pf_sk->inp = NULL;
+		pf_inp_unchain(inp);
 	}
 #endif
 	s = splnet();

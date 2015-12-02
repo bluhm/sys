@@ -6747,7 +6747,7 @@ pf_inp_enter(struct mbuf *m, struct inpcb *inp) {
 }
 
 void
-pf_inp_link(struct mbuf *m, struct inpcb *inp) {
+pf_inp_chain(struct mbuf *m, struct inpcb *inp) {
 	if (m->m_pkthdr.pf.statekey && inp &&
 	    !m->m_pkthdr.pf.statekey->inp && !inp->inp_pf_sk &&
 	    (inp->inp_socket->so_state & SS_ISCONNECTED)) {
@@ -6756,6 +6756,14 @@ pf_inp_link(struct mbuf *m, struct inpcb *inp) {
 	}
 	/* The statekey has finished finding the inp, it is no longer needed. */
 	m->m_pkthdr.pf.statekey = NULL;
+}
+
+void
+pf_inp_unchain(struct inpcb *inp) {
+	if (inp->inp_pf_sk) {
+		inp->inp_pf_sk->inp = NULL;
+		inp->inp_pf_sk = NULL;
+	}
 }
 
 #if NPFLOG > 0
