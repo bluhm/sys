@@ -592,7 +592,7 @@ rtable_lookup(unsigned int rtableid, struct sockaddr *dst,
 }
 
 struct rtentry *
-rtable_match(unsigned int rtableid, struct sockaddr *dst)
+rtable_match(unsigned int rtableid, struct sockaddr *dst, uint32_t *src)
 {
 	struct art_root			*ar;
 	struct art_node			*an;
