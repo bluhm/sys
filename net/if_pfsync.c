@@ -752,7 +752,7 @@ pfsync_in_clr(caddr_t buf, int len, int count, int flags)
 			if (st->creatorid == creatorid &&
 			    ((kif && st->kif == kif) || !kif)) {
 				SET(st->state_flags, PFSTATE_NOSYNC);
-				pf_unlink_state(st);
+				pf_remove_state(st);
 			}
 		}
 	}
@@ -1056,7 +1056,7 @@ pfsync_in_del(caddr_t buf, int len, int count, int flags)
 			continue;
 		}
 		SET(st->state_flags, PFSTATE_NOSYNC);
-		pf_unlink_state(st);
+		pf_remove_state(st);
 	}
 
 	return (0);
@@ -1083,7 +1083,7 @@ pfsync_in_del_c(caddr_t buf, int len, int count, int flags)
 		}
 
 		SET(st->state_flags, PFSTATE_NOSYNC);
-		pf_unlink_state(st);
+		pf_remove_state(st);
 	}
 
 	return (0);

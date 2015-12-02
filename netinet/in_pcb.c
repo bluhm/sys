@@ -528,8 +528,8 @@ in_pcbdetach(struct inpcb *inp)
 		ip_freemoptions(inp->inp_moptions);
 #if NPF > 0
 	if (inp->inp_pf_sk) {
-		pf_unlink_divert_state(inp->inp_pf_sk);
-		/* pf_unlink_divert_state() may have detached the state */
+		pf_remove_divert_state(inp->inp_pf_sk);
+		/* pf_remove_divert_state() may have detached the state */
 		if (inp->inp_pf_sk)
 			inp->inp_pf_sk->inp = NULL;
 	}
