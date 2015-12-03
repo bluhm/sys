@@ -383,7 +383,7 @@ pppxwrite(dev_t dev, struct uio *uio, int ioflag)
 		return (EAFNOSUPPORT);
 	}
 
-	if (niq_enqueue(ifq, m) != 0)
+	if (niq_enqueue(ifq, top) != 0)
 		return (ENOBUFS);
 
 	return (error);
