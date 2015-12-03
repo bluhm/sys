@@ -870,8 +870,7 @@ findpcb:
 #endif
 
 #if NPF > 0
-	if (inp->inp_socket->so_state & SS_ISCONNECTED)
-		pf_inp_link(m, inp);
+	pf_inp_link(m, inp);
 #endif
 
 #ifdef IPSEC
