@@ -1,4 +1,4 @@
-/*	$OpenBSD: pfvar.h,v 1.424 2015/12/02 16:00:42 sashan Exp $ */
+/*	$OpenBSD: pfvar.h,v 1.425 2015/12/03 09:49:15 bluhm Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
