@@ -1075,8 +1075,7 @@ send:
 	m->m_pkthdr.ph_rtableid = tp->t_inpcb->inp_rtableid;
 
 #if NPF > 0
-	if (so->so_state & SS_ISCONNECTED)
-		m->m_pkthdr.pf.inp = tp->t_inpcb;
+	m->m_pkthdr.pf.inp = tp->t_inpcb;
 #endif
 
 	switch (tp->pf) {
