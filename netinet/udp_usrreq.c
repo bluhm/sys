@@ -528,7 +528,7 @@ udp_input(struct mbuf *m, ...)
 	 * Locate pcb for datagram.
 	 */
 #if NPF > 0 && 0  /* currently disabled */
-	inp = pf_inp_lookup();
+	inp = pf_inp_lookup(m);
 #endif
 	if (inp == NULL) {
 #ifdef INET6
