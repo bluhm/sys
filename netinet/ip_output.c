@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_output.c,v 1.311 2015/12/02 20:50:20 markus Exp $	*/
+/*	$OpenBSD: ip_output.c,v 1.314 2015/12/03 21:29:58 sashan Exp $	*/
 /*	$NetBSD: ip_output.c,v 1.28 1996/02/13 23:43:07 christos Exp $	*/
 
 /*
@@ -72,18 +72,19 @@
 #endif
 #endif /* IPSEC */
 
-struct mbuf *ip_insertoptions(struct mbuf *, struct mbuf *, int *);
 void ip_mloopback(struct ifnet *, struct mbuf *, struct sockaddr_in *);
 static __inline u_int16_t __attribute__((__unused__))
     in_cksum_phdr(u_int32_t, u_int32_t, u_int32_t);
 void in_delayed_cksum(struct mbuf *);
 
+#ifdef IPSEC
 struct tdb *
 ip_output_ipsec_lookup(struct mbuf *m, int hlen, int *error, struct inpcb *inp,
     int ipsecflowinfo);
 int
 ip_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct ifnet *ifp,
     struct route *ro);
+#endif /* IPSEC */
 
 /*
  * IP output.  The packet in mbuf chain m contains a skeletal IP
@@ -1368,13 +1369,12 @@ ip_setmoptions(int optname, struct ip_moptions **imop, struct mbuf *m,
 		sin.sin_family = AF_INET;
 		sin.sin_addr = addr;
 		ia = ifatoia(ifa_ifwithaddr(sintosa(&sin), rtableid));
-		if (ia && in_hosteq(sin.sin_addr, ia->ia_addr.sin_addr))
-			ifp = ia->ia_ifp;
-		if (ifp == NULL || (ifp->if_flags & IFF_MULTICAST) == 0) {
+		if (ia == NULL ||
+		    (ia->ia_ifp->if_flags & IFF_MULTICAST) == 0) {
 			error = EADDRNOTAVAIL;
 			break;
 		}
-		imo->imo_ifidx = ifp->if_index;
+		imo->imo_ifidx = ia->ia_ifp->if_index;
 		break;
 
 	case IP_MULTICAST_TTL:
@@ -1542,12 +1542,11 @@ ip_setmoptions(int optname, struct ip_moptions **imop, struct mbuf *m,
 			sin.sin_family = AF_INET;
 			sin.sin_addr = mreq->imr_interface;
 			ia = ifatoia(ifa_ifwithaddr(sintosa(&sin), rtableid));
-			if (ia && in_hosteq(sin.sin_addr, ia->ia_addr.sin_addr))
-				ifp = ia->ia_ifp;
-			else {
+			if (ia == NULL) {
 				error = EADDRNOTAVAIL;
 				break;
 			}
+			ifp = ia->ia_ifp;
 		}
 		/*
 		 * Find the membership in the membership array.

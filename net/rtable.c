@@ -1,4 +1,4 @@
-/*	$OpenBSD: rtable.c,v 1.31 2015/12/02 16:49:58 bluhm Exp $ */
+/*	$OpenBSD: rtable.c,v 1.33 2015/12/04 13:42:48 mpi Exp $ */
 
 /*
  * Copyright (c) 2014-2015 Martin Pieuchot
@@ -348,15 +348,16 @@ rtable_match(unsigned int rtableid, struct sockaddr *dst, uint32_t *src)
 {
 	struct radix_node_head	*rnh;
 	struct radix_node	*rn;
-	struct rtentry		*rt;
+	struct rtentry		*rt = NULL;
 
 	rnh = rtable_get(rtableid, dst->sa_family);
 	if (rnh == NULL)
 		return (NULL);
 
+	KERNEL_LOCK();
 	rn = rn_match(dst, rnh);
 	if (rn == NULL || (rn->rn_flags & RNF_ROOT) != 0)
-		return (NULL);
+		goto out;
 
 	rt = ((struct rtentry *)rn);
 	rtref(rt);
@@ -364,7 +365,8 @@ rtable_match(unsigned int rtableid, struct sockaddr *dst, uint32_t *src)
 #ifndef SMALL_KERNEL
 	rt = rtable_mpath_select(rt, src);
 #endif /* SMALL_KERNEL */
-
+out:
+	KERNEL_UNLOCK();
 	return (rt);
 }
 
@@ -509,7 +511,6 @@ rtable_mpath_next(struct rtentry *rt)
 
 struct pool		 an_pool;	/* pool for ART node structures */
 
-static inline int	 satoplen(struct art_root *, struct sockaddr *);
 static inline uint8_t	*satoaddr(struct art_root *, struct sockaddr *);
 
 void	rtentry_ref(void *, void *);
@@ -553,7 +554,7 @@ rtable_lookup(unsigned int rtableid, struct sockaddr *dst,
 		if (an == NULL)
 			return (NULL);
 	} else {
-		plen = satoplen(ar, mask);
+		plen = rtable_satoplen(dst->sa_family, mask);
 		if (plen == -1)
 			return (NULL);
 
@@ -596,7 +597,7 @@ rtable_match(unsigned int rtableid, struct sockaddr *dst, uint32_t *src)
 {
 	struct art_root			*ar;
 	struct art_node			*an;
-	struct rtentry			*rt;
+	struct rtentry			*rt = NULL;
 	struct srpl_iter		 i;
 	uint8_t				*addr;
 
@@ -605,9 +606,11 @@ rtable_match(unsigned int rtableid, struct sockaddr *dst, uint32_t *src)
 		return (NULL);
 
 	addr = satoaddr(ar, dst);
+
+	KERNEL_LOCK();
 	an = art_match(ar, addr);
 	if (an == NULL)
-		return (NULL);
+		goto out;
 
 	rt = SRPL_ENTER(&an->an_rtlist, &i);
 	rtref(rt);
@@ -616,7 +619,8 @@ rtable_match(unsigned int rtableid, struct sockaddr *dst, uint32_t *src)
 #ifndef SMALL_KERNEL
 	rt = rtable_mpath_select(rt, src);
 #endif /* SMALL_KERNEL */
-
+out:
+	KERNEL_UNLOCK();
 	return (rt);
 }
 
@@ -640,7 +644,7 @@ rtable_insert(unsigned int rtableid, struct sockaddr *dst,
 		return (EAFNOSUPPORT);
 
 	addr = satoaddr(ar, dst);
-	plen = satoplen(ar, mask);
+	plen = rtable_satoplen(dst->sa_family, mask);
 	if (plen == -1)
 		return (EINVAL);
 
@@ -666,21 +670,6 @@ rtable_insert(unsigned int rtableid, struct sockaddr *dst,
 	}
 #endif /* SMALL_KERNEL */
 
-	/*
-	 * XXX Allocating a sockaddr for the mask per node wastes a lot
-	 * of memory, thankfully we'll get rid of that when rt_mask()
-	 * will be no more.
-	 */
-	if (mask != NULL) {
-		struct sockaddr		*msk;
-
-		msk = malloc(dst->sa_len, M_RTABLE, M_NOWAIT | M_ZERO);
-		if (msk == NULL)
-			return (ENOMEM);
-		memcpy(msk, mask, dst->sa_len);
-		rt->rt_mask = msk;
-	}
-
 	an = pool_get(&an_pool, PR_NOWAIT | PR_ZERO);
 	if (an == NULL)
 		return (ENOBUFS);
@@ -691,8 +680,6 @@ rtable_insert(unsigned int rtableid, struct sockaddr *dst,
 
 	prev = art_insert(ar, an, addr, plen);
 	if (prev == NULL) {
-		free(rt->rt_mask, M_RTABLE, 0);
-		rt->rt_mask = NULL;
 		pool_put(&an_pool, an);
 		return (ESRCH);
 	}
@@ -765,8 +752,6 @@ rtable_delete(unsigned int rtableid, struct sockaddr *dst,
 		npaths++;
 
 	if (npaths > 1) {
-		free(rt->rt_mask, M_RTABLE, 0);
-		rt->rt_mask = NULL;
 		rt->rt_node = NULL;
 		KASSERT(rt->rt_refcnt >= 2);
 		SRPL_REMOVE_LOCKED(&rt_rc, &an->an_rtlist, rt, rtentry,
@@ -788,7 +773,7 @@ rtable_delete(unsigned int rtableid, struct sockaddr *dst,
 #ifdef DIAGNOSTIC
 	if (memcmp(dst, an->an_dst, dst->sa_len))
 		panic("destination do not match");
-	if (mask != NULL && an->an_plen != satoplen(ar, mask))
+	if (mask && an->an_plen != rtable_satoplen(dst->sa_family, mask))
 		panic("mask do not match");
 #endif /* DIAGNOSTIC */
 
@@ -798,13 +783,7 @@ rtable_delete(unsigned int rtableid, struct sockaddr *dst,
 	if (art_delete(ar, an, addr, plen) == NULL)
 		return (ESRCH);
 
-	/*
-	 * XXX Is it safe to free the mask now?  Are we sure rt_mask()
-	 * is only used when entries are in the table?
-	 */
-	free(rt->rt_mask, M_RTABLE, 0);
 	rt->rt_node = NULL;
-	rt->rt_mask = NULL;
 	KASSERT(rt->rt_refcnt >= 2);
 	SRPL_REMOVE_LOCKED(&rt_rc, &an->an_rtlist, rt, rtentry, rt_next);
 	rtfree(rt);
@@ -981,19 +960,32 @@ satoaddr(struct art_root *at, struct sockaddr *sa)
 {
 	return (((uint8_t *)sa) + at->ar_off);
 }
+#endif /* ART */
 
 /*
  * Return the prefix length of a mask.
  */
-static inline int
-satoplen(struct art_root *ar, struct sockaddr *mask)
+int
+rtable_satoplen(sa_family_t af, struct sockaddr *mask)
 {
-	uint8_t				*ap, *ep;
-	int				 skip, mlen, plen = 0;
+	struct domain	*dp;
+	uint8_t		*ap, *ep;
+	int		 mlen, plen = 0;
+	int		 i;
+
+	for (i = 0; (dp = domains[i]) != NULL; i++) {
+		if (dp->dom_rtoffset == 0)
+			continue;
+
+		if (af == dp->dom_family)
+			break;
+	}
+	if (dp == NULL)
+		return (-1);
 
 	/* Host route */
 	if (mask == NULL)
-		return (ar->ar_alen);
+		return (dp->dom_maxplen);
 
 	mlen = mask->sa_len;
 
@@ -1001,9 +993,7 @@ satoplen(struct art_root *ar, struct sockaddr *mask)
 	if (mlen == 0)
 		return (0);
 
-	skip = ar->ar_off;
-
-	ap = (uint8_t *)((uint8_t *)mask) + skip;
+	ap = (uint8_t *)((uint8_t *)mask) + dp->dom_rtoffset;
 	ep = (uint8_t *)((uint8_t *)mask) + mlen;
 	if (ap > ep)
 		return (-1);
@@ -1065,4 +1055,3 @@ out:
 
 	return (plen);
 }
-#endif /* ART */

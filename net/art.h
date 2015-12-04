@@ -1,4 +1,4 @@
-/* $OpenBSD: art.h,v 1.7 2015/11/29 16:02:18 mpi Exp $ */
+/* $OpenBSD: art.h,v 1.9 2015/12/04 14:15:27 mpi Exp $ */
 
 /*
  * Copyright (c) 2015 Martin Pieuchot
@@ -19,7 +19,7 @@
 #ifndef _NET_ART_H_
 #define _NET_ART_H_
 
-#define ART_MAXLVL	16	/* We currently use 16 levels for IPv6. */
+#define ART_MAXLVL	32	/* We currently use 32 levels for IPv6. */
 
 /*
  * Root of the ART tables, equivalent to the radix head.
@@ -45,8 +45,7 @@ struct rtentry;
 struct art_node {
 	struct sockaddr		*an_dst;	/* Destination address (key) */
 	int			 an_plen;	/* Prefix length */
-
-	struct srpl		 an_rtlist;	/* Route related to this node */
+	SRPL_HEAD(, rtentry)	 an_rtlist;	/* Route related to this node */
 };
 
 void		 art_init(void);

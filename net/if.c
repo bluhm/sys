@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.c,v 1.418 2015/12/03 12:22:51 dlg Exp $	*/
+/*	$OpenBSD: if.c,v 1.421 2015/12/04 11:50:01 mpi Exp $	*/
 /*	$NetBSD: if.c,v 1.35 1996/05/07 05:26:04 thorpej Exp $	*/
 
 /*
@@ -626,8 +626,12 @@ if_enqueue(struct ifnet *ifp, struct mbuf *m)
 	unsigned short mflags;
 
 #if NBRIDGE > 0
-	if (ifp->if_bridgeport && (m->m_flags & M_PROTO1) == 0)
-		return (bridge_output(ifp, m, NULL, NULL));
+	if (ifp->if_bridgeport && (m->m_flags & M_PROTO1) == 0) {
+		KERNEL_LOCK();
+		error = bridge_output(ifp, m, NULL, NULL);
+		KERNEL_UNLOCK();
+		return (error);
+	}
 #endif
 
 	length = m->m_pkthdr.len;
@@ -740,7 +744,7 @@ if_input_local(struct ifnet *ifp, struct mbuf *m, sa_family_t af)
 }
 
 struct ifih {
-	struct srpl_entry	  ifih_next;
+	SRPL_ENTRY(ifih)	  ifih_next;
 	int			(*ifih_input)(struct ifnet *, struct mbuf *,
 				      void *);
 	void			 *ifih_cookie;
@@ -1219,13 +1223,6 @@ ifa_ifwithaddr(struct sockaddr *addr, u_int rtableid)
 				continue;
 
 			if (equal(addr, ifa->ifa_addr))
-				return (ifa);
-
-			/* IPv6 doesn't have broadcast */
-			if ((ifp->if_flags & IFF_BROADCAST) &&
-			    ifa->ifa_broadaddr &&
-			    ifa->ifa_broadaddr->sa_len != 0 &&
-			    equal(ifa->ifa_broadaddr, addr))
 				return (ifa);
 		}
 	}
