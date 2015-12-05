@@ -1753,6 +1753,7 @@ int	pf_rtlabel_match(struct pf_addr *, sa_family_t, struct pf_addr_wrap *,
 	    int);
 int	pf_socket_lookup(struct pf_pdesc *);
 struct pf_state_key *pf_alloc_state_key(int);
+int	pf_ouraddr(struct mbuf *);
 void	pf_pkt_addr_changed(struct mbuf *);
 struct inpcb *pf_inp_lookup(struct mbuf *);
 void	pf_inp_link(struct mbuf *, struct inpcb *);

@@ -581,20 +581,16 @@ in_ouraddr(struct mbuf *m, struct ifnet *ifp, struct in_addr ina)
 	struct rtentry		*rt;
 	struct sockaddr_in	 sin;
 	int			 match = 0;
+
 #if NPF > 0
-	struct pf_state_key	*key;
-
-	if (m->m_pkthdr.pf.flags & PF_TAG_DIVERTED)
+	switch (pf_ouraddr(m)) {
+	case 0:
+		return (0);
+	case 1:
 		return (1);
-
-	key = m->m_pkthdr.pf.statekey;
-	if (key != NULL) {
-		if (key->inp != NULL)
-			return (1);
-
-		/* If we have linked state keys it is certainly forwarded. */
-		if (key->reverse != NULL)
-			return (0);
+	default:
+		/* pf does not know it */
+		break;
 	}
 #endif
 

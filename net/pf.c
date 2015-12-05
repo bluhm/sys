@@ -6717,6 +6717,27 @@ pf_cksum(struct pf_pdesc *pd, struct mbuf *m)
 	}
 }
 
+int
+pf_ouraddr(struct mbuf *m)
+{
+	struct pf_state_key	*sk;
+
+	if (m->m_pkthdr.pf.flags & PF_TAG_DIVERTED)
+		return (1);
+
+	sk = m->m_pkthdr.pf.statekey;
+	if (sk != NULL) {
+		if (sk->inp != NULL)
+			return (1);
+
+		/* If we have linked state keys it is certainly forwarded. */
+		if (sk->reverse != NULL)
+			return (0);
+	}
+
+	return (-1);
+}
+
 /*
  * must be called whenever any addressing information such as
  * address, port, protocol has changed
