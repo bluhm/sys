@@ -622,9 +622,11 @@ rtdeletemsg(struct rtentry *rt, struct ifnet *ifp, unsigned int rtableid)
 
 	KASSERT(rt->rt_ifidx == ifp->if_index);
 
+	rtref(rt);
 	error = rt_delete(rt, ifp, rtableid);
 	if (error == 0)
 		rt_sendmsg(rt, RTM_DELETE, rtableid);
+	rtfree(rt);
 
 	return (error);
 }
@@ -658,11 +660,8 @@ rtflushclone1(struct rtentry *rt, void *arg, u_int id)
 	if (ifp == NULL)
 		return 0;
 
-	if (ISSET(rt->rt_flags, RTF_CLONED) && rtequal(rt->rt_parent, parent)) {
-		rtref(rt);
+	if (ISSET(rt->rt_flags, RTF_CLONED) && rtequal(rt->rt_parent, parent))
 		rtdeletemsg(rt, ifp, id);
-		rtfree(rt);
-	}
 
 	if_put(ifp);
 	return 0;
@@ -1710,12 +1709,9 @@ rt_if_remove_rtdelete(struct rtentry *rt, void *vifp, u_int id)
 	struct ifnet	*ifp = vifp;
 
 	if (rt->rt_ifidx == ifp->if_index) {
-		int	error, cloning = ISSET(rt->rt_flags, RTF_CLONING);
+		int	cloning = ISSET(rt->rt_flags, RTF_CLONING);
 
-		rtref(rt);
-		error = rtdeletemsg(rt, ifp, id);
-		rtfree(rt);
-		if (error == 0 && cloning)
+		if (rtdeletemsg(rt, ifp, id) == 0 && cloning)
 			return (EAGAIN);
 	}
 
@@ -1773,9 +1769,7 @@ rt_if_linkstate_change(struct rtentry *rt, void *arg, u_int id)
 			 * clone a new route from a better source.
 			 */
 			if (rt->rt_flags & RTF_CLONED) {
-				rtref(rt);
 				rtdeletemsg(rt, ifp, id);
-				rtfree(rt);
 				return (0);
 			}
 			/* take route down */
