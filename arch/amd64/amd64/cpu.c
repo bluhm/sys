@@ -1,4 +1,4 @@
-/*	$OpenBSD: cpu.c,v 1.91 2015/11/23 22:57:12 deraadt Exp $	*/
+/*	$OpenBSD: cpu.c,v 1.93 2015/12/06 03:14:55 dlg Exp $	*/
 /* $NetBSD: cpu.c,v 1.1 2003/04/26 18:39:26 fvdl Exp $ */
 
 /*-
@@ -91,6 +91,7 @@
 #include <machine/segments.h>
 #include <machine/gdt.h>
 #include <machine/pio.h>
+#include <machine/vmmvar.h>
 
 #if NLAPIC > 0
 #include <machine/apicvar.h>
@@ -515,6 +516,12 @@ cpu_init(struct cpu_info *ci)
 		CPUID_LEAF(0xd, 0, eax, ebx, ecx, edx);
 		fpu_save_len = ebx;
 	}
+
+#if NVMM > 0
+	/* Re-enable VMM if needed */
+	if (ci->ci_flags & CPUF_VMM)
+		start_vmm_on_cpu(ci);
+#endif /* NVMM > 0 */
 
 #ifdef MULTIPROCESSOR
 	ci->ci_flags |= CPUF_RUNNING;

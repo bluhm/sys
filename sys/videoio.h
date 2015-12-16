@@ -1,4 +1,4 @@
-/*	$OpenBSD: videoio.h,v 1.9 2015/11/21 07:46:21 feinerer Exp $	*/
+/*	$OpenBSD: videoio.h,v 1.11 2015/12/15 17:01:44 feinerer Exp $	*/
 /*
  *  Video for Linux Two header file
  *

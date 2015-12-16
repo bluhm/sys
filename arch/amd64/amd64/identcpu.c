@@ -1,4 +1,4 @@
-/*	$OpenBSD: identcpu.c,v 1.67 2015/11/23 22:57:12 deraadt Exp $	*/
+/*	$OpenBSD: identcpu.c,v 1.70 2015/12/12 12:33:49 reyk Exp $	*/
 /*	$NetBSD: identcpu.c,v 1.1 2003/04/26 18:39:28 fvdl Exp $	*/
 
 /*
@@ -162,6 +162,7 @@ const struct {
 	{ CPUIDECX_TOPEXT,	"TOPEXT" },
 }, cpu_seff0_ebxfeatures[] = {
 	{ SEFF0EBX_FSGSBASE,	"FSGSBASE" },
+	{ SEFF0EBX_SGX,		"SGX" },
 	{ SEFF0EBX_BMI1,	"BMI1" },
 	{ SEFF0EBX_HLE,		"HLE" },
 	{ SEFF0EBX_AVX2,	"AVX2" },
@@ -170,11 +171,27 @@ const struct {
 	{ SEFF0EBX_ERMS,	"ERMS" },
 	{ SEFF0EBX_INVPCID,	"INVPCID" },
 	{ SEFF0EBX_RTM,		"RTM" },
+	{ SEFF0EBX_PQM,		"PQM" },
+	{ SEFF0EBX_MPX,		"MPX" },
+	{ SEFF0EBX_AVX512F,	"AVX512F" },
+	{ SEFF0EBX_AVX512DQ,	"AVX512DQ" },
 	{ SEFF0EBX_RDSEED,	"RDSEED" },
 	{ SEFF0EBX_ADX,		"ADX" },
 	{ SEFF0EBX_SMAP,	"SMAP" },
+	{ SEFF0EBX_AVX512IFMA,	"AVX512IFMA" },
+	{ SEFF0EBX_PCOMMIT,	"PCOMMIT" },
+	{ SEFF0EBX_CLFLUSHOPT,	"CLFLUSHOPT" },
+	{ SEFF0EBX_CLWB,	"CLWB" },
+	{ SEFF0EBX_PT,		"PT" },
+	{ SEFF0EBX_AVX512PF,	"AVX512PF" },
+	{ SEFF0EBX_AVX512ER,	"AVX512ER" },
+	{ SEFF0EBX_AVX512CD,	"AVX512CD" },
+	{ SEFF0EBX_SHA,		"SHA" },
+	{ SEFF0EBX_AVX512BW,	"AVX512BW" },
+	{ SEFF0EBX_AVX512VL,	"AVX512VL" },
 }, cpu_seff0_ecxfeatures[] = {
 	{ SEFF0ECX_PREFETCHWT1,	"PREFETCHWT1" },
+	{ SEFF0ECX_AVX512VBMI,	"AVX512VBMI" },
 	{ SEFF0ECX_PKU,		"PKU" },
 }, cpu_tpm_eaxfeatures[] = {
 	{ TPM_SENSOR,		"SENSOR" },
@@ -545,12 +562,15 @@ identifycpu(struct cpu_info *ci)
 				printf(",%s", cpu_seff0_ecxfeatures[i].str);
 	}
 
-	if (!strcmp(cpu_vendor, "GenuineIntel") && cpuid_level >= 0x06 ) {
+	if (!strcmp(cpu_vendor, "GenuineIntel") && cpuid_level >= 0x06) {
 		CPUID(0x06, ci->ci_feature_tpmflags, dummy, dummy, dummy);
 		for (i = 0; i < nitems(cpu_tpm_eaxfeatures); i++)
 			if (ci->ci_feature_tpmflags &
 			    cpu_tpm_eaxfeatures[i].bit)
 				printf(",%s", cpu_tpm_eaxfeatures[i].str);
+	} else if (!strcmp(cpu_vendor, "AuthenticAMD")) {
+		if (ci->ci_family >= 0x12)
+			ci->ci_feature_tpmflags |= TPM_ARAT;
 	}
 
 	printf("\n");
@@ -584,11 +604,6 @@ identifycpu(struct cpu_info *ci)
 
 		if (cpu_ecxfeature & CPUIDECX_RDRAND)
 			has_rdrand = 1;
-
-#if NPVBUS > 0
-		if (cpu_ecxfeature & CPUIDECX_HV)
-			has_hv_cpuid = 1;
-#endif
 
 		if (ci->ci_feature_sefflags_ebx & SEFF0EBX_SMAP)
 			replacesmap();

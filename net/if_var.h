@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_var.h,v 1.63 2015/12/03 21:11:53 sashan Exp $	*/
+/*	$OpenBSD: if_var.h,v 1.68 2015/12/09 15:05:51 mpi Exp $	*/
 /*	$NetBSD: if.h,v 1.23 1996/05/07 02:40:27 thorpej Exp $	*/
 
 /*
@@ -36,10 +36,16 @@
 #ifndef _NET_IF_VAR_H_
 #define _NET_IF_VAR_H_
 
+#ifdef _KERNEL
+
 #include <sys/queue.h>
 #include <sys/mbuf.h>
 #include <sys/srp.h>
 #include <sys/refcnt.h>
+#include <sys/task.h>
+#include <sys/time.h>
+
+#include <net/ifq.h>
 
 /*
  * Structures defining a network interface, providing a packet
@@ -66,11 +72,8 @@
  * interfaces.  These routines live in the files if.c and route.c
  */
 
-#include <sys/time.h>
-
 struct rtentry;
 struct timeout;
-struct arpcom;
 struct ifnet;
 struct task;
 
@@ -88,35 +91,6 @@ struct if_clone {
 
 #define	IF_CLONE_INITIALIZER(name, create, destroy)			\
 	{ { 0 }, name, sizeof(name) - 1, create, destroy }
-
-/*
- * Structure defining the send queue for a network interface.
- */
-
-struct ifqueue;
-
-struct ifq_ops {
-	void			*(*ifqop_alloc)(void *);
-	void			 (*ifqop_free)(void *);
-	int			 (*ifqop_enq)(struct ifqueue *, struct mbuf *);
-	struct mbuf 		*(*ifqop_deq_begin)(struct ifqueue *, void **);
-	void			 (*ifqop_deq_commit)(struct ifqueue *,
-				    struct mbuf *, void *);
-	void	 		 (*ifqop_purge)(struct ifqueue *,
-				    struct mbuf_list *);
-};
-
-struct ifqueue {
-	struct mutex		 ifq_mtx;
-	uint64_t		 ifq_drops;
-	const struct ifq_ops	*ifq_ops;
-	void			*ifq_q;
-	unsigned int		 ifq_len;
-	unsigned int		 ifq_serializer;
-	unsigned int		 ifq_oactive;
-
-	unsigned int		 ifq_maxlen;
-};
 
 /*
  * Structure defining a queue for a network interface.
@@ -175,8 +149,6 @@ struct ifnet {				/* and the entries */
 	void	(*if_start)(struct ifnet *);
 					/* ioctl routine */
 	int	(*if_ioctl)(struct ifnet *, u_long, caddr_t);
-					/* stop routine */
-	int	(*if_stop)(struct ifnet *, int);
 					/* timer routine */
 	void	(*if_watchdog)(struct ifnet *);
 	int	(*if_wol)(struct ifnet *, int);
@@ -261,49 +233,6 @@ struct ifg_list {
 	TAILQ_ENTRY(ifg_list)	 ifgl_next;
 };
 
-#ifdef _KERNEL
-/*
- * Interface send queues.
- */
-
-void		 ifq_init(struct ifqueue *);
-void		 ifq_attach(struct ifqueue *, const struct ifq_ops *, void *);
-void		 ifq_destroy(struct ifqueue *);
-int		 ifq_enqueue_try(struct ifqueue *, struct mbuf *);
-int		 ifq_enqueue(struct ifqueue *, struct mbuf *);
-struct mbuf	*ifq_deq_begin(struct ifqueue *);
-void		 ifq_deq_commit(struct ifqueue *, struct mbuf *);
-void		 ifq_deq_rollback(struct ifqueue *, struct mbuf *);
-struct mbuf	*ifq_dequeue(struct ifqueue *);
-unsigned int	 ifq_purge(struct ifqueue *);
-void		*ifq_q_enter(struct ifqueue *, const struct ifq_ops *);
-void		 ifq_q_leave(struct ifqueue *, void *);
-
-#define	ifq_len(_ifq)			((_ifq)->ifq_len)
-#define	ifq_empty(_ifq)			(ifq_len(_ifq) == 0)
-#define	ifq_set_maxlen(_ifq, _l)	((_ifq)->ifq_maxlen = (_l))
-
-static inline void
-ifq_set_oactive(struct ifqueue *ifq)
-{
-	ifq->ifq_oactive = 1;
-}
-
-static inline void
-ifq_clr_oactive(struct ifqueue *ifq)
-{
-	ifq->ifq_oactive = 0;
-}
-
-static inline unsigned int
-ifq_is_oactive(struct ifqueue *ifq)
-{
-	return (ifq->ifq_oactive);
-}
-
-extern const struct ifq_ops * const ifq_priq_ops;
-
-#define	IFQ_MAXLEN	256
 #define	IFNET_SLOWHZ	1		/* granularity is 1 second */
 
 /*
@@ -371,15 +300,6 @@ void	if_input(struct ifnet *, struct mbuf_list *);
 int	if_input_local(struct ifnet *, struct mbuf *, sa_family_t);
 void	if_rtrequest_dummy(struct ifnet *, int, struct rtentry *);
 void	p2p_rtrequest(struct ifnet *, int, struct rtentry *);
-
-void	ether_ifattach(struct ifnet *);
-void	ether_ifdetach(struct ifnet *);
-int	ether_ioctl(struct ifnet *, struct arpcom *, u_long, caddr_t);
-int	ether_input(struct ifnet *, struct mbuf *, void *);
-int	ether_output(struct ifnet *,
-	    struct mbuf *, struct sockaddr *, struct rtentry *);
-void	ether_rtrequest(struct ifnet *, int, struct rtentry *);
-char	*ether_sprintf(u_char *);
 
 struct	ifaddr *ifa_ifwithaddr(struct sockaddr *, u_int);
 struct	ifaddr *ifa_ifwithdstaddr(struct sockaddr *, u_int);

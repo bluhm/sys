@@ -1,4 +1,4 @@
-/*	$OpenBSD: ieee80211_input.c,v 1.142 2015/11/15 11:14:17 stsp Exp $	*/
+/*	$OpenBSD: ieee80211_input.c,v 1.145 2015/12/12 13:56:10 stsp Exp $	*/
 
 /*-
  * Copyright (c) 2001 Atsushi Onoe
@@ -280,6 +280,43 @@ ieee80211_input(struct ifnet *ifp, struct mbuf *m, struct ieee80211_node *ni,
 		tid = 0;
 	}
 
+#ifndef IEEE80211_NO_HT
+	if (type == IEEE80211_FC0_TYPE_DATA && hasqos &&
+	    !(rxi->rxi_flags & IEEE80211_RXI_AMPDU_DONE)) {
+		int ba_state = ni->ni_rx_ba[tid].ba_state;
+
+		/* 
+		 * If Block Ack was explicitly requested, check
+		 * if we have a BA agreement for this RA/TID.
+		 */
+		if ((qos & IEEE80211_QOS_ACK_POLICY_MASK) ==
+		    IEEE80211_QOS_ACK_POLICY_BA &&
+		    ba_state != IEEE80211_BA_AGREED) {
+			DPRINTF(("no BA agreement for %s, TID %d\n",
+			    ether_sprintf(ni->ni_macaddr), tid));
+			/* send a DELBA with reason code UNKNOWN-BA */
+			IEEE80211_SEND_ACTION(ic, ni,
+			    IEEE80211_CATEG_BA, IEEE80211_ACTION_DELBA,
+			    IEEE80211_REASON_SETUP_REQUIRED << 16 | tid);
+			goto err;
+		}
+
+		/* 
+		 * Check if we have an explicit or implicit
+		 * Block Ack Request for a valid BA agreement.
+		 */
+		if (ba_state == IEEE80211_BA_AGREED &&
+		    ((qos & IEEE80211_QOS_ACK_POLICY_MASK) ==
+		    IEEE80211_QOS_ACK_POLICY_BA ||
+		    (qos & IEEE80211_QOS_ACK_POLICY_MASK) ==
+		    IEEE80211_QOS_ACK_POLICY_NORMAL)) {
+			/* go through A-MPDU reordering */
+			ieee80211_input_ba(ifp, m, ni, tid, rxi);
+			return;	/* don't free m! */
+		}
+	}
+#endif
+
 	/* duplicate detection (see 9.2.9) */
 	if (ieee80211_has_seq(wh) &&
 	    ic->ic_state != IEEE80211_S_SCAN) {
@@ -430,27 +467,6 @@ ieee80211_input(struct ifnet *ifp, struct mbuf *m, struct ieee80211_node *ni,
 			goto out;
 		}
 
-#ifndef IEEE80211_NO_HT
-		if (!(rxi->rxi_flags & IEEE80211_RXI_AMPDU_DONE) &&
-		    hasqos && (qos & IEEE80211_QOS_ACK_POLICY_MASK) ==
-		    IEEE80211_QOS_ACK_POLICY_BA) {
-			/* check if we have a BA agreement for this RA/TID */
-			if (ni->ni_rx_ba[tid].ba_state !=
-			    IEEE80211_BA_AGREED) {
-				DPRINTF(("no BA agreement for %s, TID %d\n",
-				    ether_sprintf(ni->ni_macaddr), tid));
-				/* send a DELBA with reason code UNKNOWN-BA */
-				IEEE80211_SEND_ACTION(ic, ni,
-				    IEEE80211_CATEG_BA, IEEE80211_ACTION_DELBA,
-				    IEEE80211_REASON_SETUP_REQUIRED << 16 |
-				    tid);
-				goto err;
-			}
-			/* go through A-MPDU reordering */
-			ieee80211_input_ba(ifp, m, ni, tid, rxi);
-			return;	/* don't free m! */
-		}
-#endif
 		if ((ic->ic_flags & IEEE80211_F_WEPON) ||
 		    ((ic->ic_flags & IEEE80211_F_RSNON) &&
 		     (ni->ni_flags & IEEE80211_NODE_RXPROT))) {
@@ -1045,6 +1061,13 @@ ieee80211_amsdu_decap(struct ieee80211com *ic, struct mbuf *m,
 			len -= LLC_SNAPFRAMELEN;
 		}
 		len += ETHER_HDR_LEN;
+		if (len > m->m_pkthdr.len) {
+			/* stop processing A-MSDU subframes */
+			DPRINTF(("A-MSDU subframe too long (%d)\n", len));
+			ic->ic_stats.is_rx_decap++;
+			m_freem(m);
+			break;
+		}
 
 		/* "detach" our A-MSDU subframe from the others */
 		n = m_split(m, len, M_NOWAIT);
@@ -1056,6 +1079,10 @@ ieee80211_amsdu_decap(struct ieee80211com *ic, struct mbuf *m,
 		}
 		ieee80211_deliver_data(ic, m, ni);
 
+		if (n->m_len == 0) {
+			m_freem(n);
+			break;
+		}
 		m = n;
 		/* remove padding */
 		pad = ((len + 3) & ~3) - len;
@@ -1569,10 +1596,13 @@ ieee80211_recv_probe_resp(struct ieee80211com *ic, struct mbuf *m,
 	 */
 	if (ni->ni_flags & IEEE80211_NODE_QOS) {
 		/* always prefer EDCA IE over Wi-Fi Alliance WMM IE */
-		if (edcaie != NULL)
-			ieee80211_parse_edca_params(ic, edcaie);
-		else if (wmmie != NULL)
-			ieee80211_parse_wmm_params(ic, wmmie);
+		if ((edcaie != NULL &&
+		     ieee80211_parse_edca_params(ic, edcaie) == 0) ||
+		    (wmmie != NULL &&
+		     ieee80211_parse_wmm_params(ic, wmmie) == 0))
+			ni->ni_flags |= IEEE80211_NODE_QOS;
+		else
+			ni->ni_flags &= ~IEEE80211_NODE_QOS;
 	}
 
 	if (ic->ic_state == IEEE80211_S_SCAN
@@ -2449,6 +2479,7 @@ ieee80211_recv_addba_req(struct ieee80211com *ic, struct mbuf *m,
 		ba->ba_timeout_val = IEEE80211_BA_MIN_TIMEOUT;
 	else if (ba->ba_timeout_val > IEEE80211_BA_MAX_TIMEOUT)
 		ba->ba_timeout_val = IEEE80211_BA_MAX_TIMEOUT;
+	ba->ba_ni = ni;
 	timeout_set(&ba->ba_to, ieee80211_rx_ba_timeout, ba);
 	ba->ba_winsize = bufsz;
 	if (ba->ba_winsize == 0 || ba->ba_winsize > IEEE80211_BA_MAX_WINSZ)
@@ -2465,7 +2496,7 @@ ieee80211_recv_addba_req(struct ieee80211com *ic, struct mbuf *m,
 	ba->ba_head = 0;
 
 	/* notify drivers of this new Block Ack agreement */
-	if (ic->ic_ampdu_rx_start != NULL &&
+	if (ic->ic_ampdu_rx_start == NULL ||
 	    ic->ic_ampdu_rx_start(ic, ni, tid) != 0) {
 		/* driver failed to setup, rollback */
 		free(ba->ba_buf, M_DEVBUF, 0);
