@@ -159,8 +159,7 @@ struct sockaddr *rt_plentosa(sa_family_t, int, struct sockaddr_in6 *);
 
 struct	ifaddr *ifa_ifwithroute(int, struct sockaddr *, struct sockaddr *,
 		    u_int);
-int	rtrequest_delete(struct rt_addrinfo *, u_int8_t, struct ifnet *,
-	    struct rtentry **, u_int);
+int	rt_delete(struct rtentry *, struct ifnet *, unsigned int);
 
 #ifdef DDB
 void	db_print_sa(struct sockaddr *);
@@ -613,38 +612,29 @@ out:
 }
 
 /*
- * Delete a route and generate a message
+ * Delete a route and generate a message.  The caller must hold a reference
+ * on ``rt''.
  */
 int
-rtdeletemsg(struct rtentry *rt, struct ifnet *ifp, u_int tableid)
+rtdeletemsg(struct rtentry *rt, struct ifnet *ifp, unsigned int rtableid)
 {
 	int			error;
-	struct rt_addrinfo	info;
-	unsigned int		ifidx;
-	struct sockaddr_in6	sa_mask;
 
-	/*
-	 * Request the new route so that the entry is not actually
-	 * deleted.  That will allow the information being reported to
-	 * be accurate (and consistent with route_output()).
-	 */
-	bzero((caddr_t)&info, sizeof(info));
-	info.rti_info[RTAX_DST] = rt_key(rt);
-	if (!ISSET(rt->rt_flags, RTF_HOST))
-		info.rti_info[RTAX_NETMASK] = rt_plen2mask(rt, &sa_mask);
-	info.rti_info[RTAX_GATEWAY] = rt->rt_gateway;
-	info.rti_flags = rt->rt_flags;
-	ifidx = rt->rt_ifidx;
-	error = rtrequest_delete(&info, rt->rt_priority, ifp, &rt, tableid);
-	rt_missmsg(RTM_DELETE, &info, info.rti_flags, ifidx, error, tableid);
+	KASSERT(rt->rt_ifidx == ifp->if_index);
+
+	error = rt_delete(rt, ifp, rtableid);
 	if (error == 0)
-		rtfree(rt);
+		rt_sendmsg(rt, RTM_DELETE, rtableid);
+
 	return (error);
 }
 
 static inline int
 rtequal(struct rtentry *a, struct rtentry *b)
 {
+	if (a == b)
+		return 1;
+
 	if (memcmp(rt_key(a), rt_key(b), rt_key(a)->sa_len) == 0 &&
 	    rt_plen(a) == rt_plen(b))
 		return 1;
@@ -656,10 +646,25 @@ int
 rtflushclone1(struct rtentry *rt, void *arg, u_int id)
 {
 	struct rtentry *parent = arg;
+	struct ifnet *ifp;
 
-	if ((rt->rt_flags & RTF_CLONED) != 0 && (rt->rt_parent == parent ||
-	    rtequal(rt->rt_parent, parent)))
-		rtdeletemsg(rt, NULL, id);
+	ifp = if_get(rt->rt_ifidx);
+
+	/*
+	 * This happens when an interface with a RTF_CLONING route is
+	 * being detached.  In this case it's safe to bail because all
+	 * the routes are being purged by rt_if_remove().
+	 */
+	if (ifp == NULL)
+		return 0;
+
+	if (ISSET(rt->rt_flags, RTF_CLONED) && rtequal(rt->rt_parent, parent)) {
+		rtref(rt);
+		rtdeletemsg(rt, ifp, id);
+		rtfree(rt);
+	}
+
+	if_put(ifp);
 	return 0;
 }
 
@@ -801,53 +806,20 @@ rt_getifa(struct rt_addrinfo *info, u_int rtid)
 }
 
 int
-rtrequest_delete(struct rt_addrinfo *info, u_int8_t prio, struct ifnet *ifp,
-    struct rtentry **ret_nrt, u_int tableid)
+rt_delete(struct rtentry *rt, struct ifnet *ifp, unsigned int rtableid)
 {
-	struct rtentry	*rt;
-	int		 error;
+	struct sockaddr_in6	 sa_mask;
+
+	KASSERT(ifp->if_index == rt->rt_ifidx);
 
 	splsoftassert(IPL_SOFTNET);
 
-	if (!rtable_exists(tableid))
-		return (EAFNOSUPPORT);
-	rt = rtable_lookup(tableid, info->rti_info[RTAX_DST],
-	    info->rti_info[RTAX_NETMASK], info->rti_info[RTAX_GATEWAY], prio);
-	if (rt == NULL)
+	if (rtable_delete(rtableid, rt_key(rt), rt_plen2mask(rt, &sa_mask), rt))
 		return (ESRCH);
-#ifndef SMALL_KERNEL
-	/*
-	 * If we got multipath routes, we require users to specify
-	 * a matching gateway.
-	 */
-	if ((rt->rt_flags & RTF_MPATH) &&
-	    info->rti_info[RTAX_GATEWAY] == NULL) {
-		rtfree(rt);
-		return (ESRCH);
-	}
-#endif
-
-	/*
-	 * Since RTP_LOCAL cannot be set by userland, make
-	 * sure that local routes are only modified by the
-	 * kernel.
-	 */
-	if ((rt->rt_flags & (RTF_LOCAL|RTF_BROADCAST)) &&
-	    prio != RTP_LOCAL) {
-		rtfree(rt);
-		return (EINVAL);
-	}
-
-	error = rtable_delete(tableid, info->rti_info[RTAX_DST],
-	    info->rti_info[RTAX_NETMASK], rt);
-	if (error != 0) {
-		rtfree(rt);
-		return (ESRCH);
-	}
 
 	/* clean up any cloned children */
 	if ((rt->rt_flags & RTF_CLONING) != 0)
-		rtflushclone(tableid, rt);
+		rtflushclone(rtableid, rt);
 
 	rtfree(rt->rt_gwroute);
 	rt->rt_gwroute = NULL;
@@ -857,22 +829,9 @@ rtrequest_delete(struct rt_addrinfo *info, u_int8_t prio, struct ifnet *ifp,
 
 	rt->rt_flags &= ~RTF_UP;
 
-	if (ifp == NULL) {
-		ifp = if_get(rt->rt_ifidx);
-		KASSERT(ifp != NULL);
-		ifp->if_rtrequest(ifp, RTM_DELETE, rt);
-		if_put(ifp);
-	} else {
-		KASSERT(ifp->if_index == rt->rt_ifidx);
-		ifp->if_rtrequest(ifp, RTM_DELETE, rt);
-	}
+	ifp->if_rtrequest(ifp, RTM_DELETE, rt);
 
 	atomic_inc_int(&rttrash);
-
-	if (ret_nrt != NULL)
-		*ret_nrt = rt;
-	else
-		rtfree(rt);
 
 	return (0);
 }
@@ -900,9 +859,50 @@ rtrequest(int req, struct rt_addrinfo *info, u_int8_t prio,
 		info->rti_info[RTAX_NETMASK] = NULL;
 	switch (req) {
 	case RTM_DELETE:
-		error = rtrequest_delete(info, prio, NULL, ret_nrt, tableid);
-		if (error)
+		rt = rtable_lookup(tableid, info->rti_info[RTAX_DST],
+		    info->rti_info[RTAX_NETMASK],
+		    info->rti_info[RTAX_GATEWAY], prio);
+		if (rt == NULL)
+			return (ESRCH);
+
+#ifndef SMALL_KERNEL
+		/*
+		 * If we got multipath routes, we require users to specify
+		 * a matching gateway.
+		 */
+		if (ISSET(rt->rt_flags, RTF_MPATH) &&
+		    info->rti_info[RTAX_GATEWAY] == NULL) {
+			rtfree(rt);
+			return (ESRCH);
+		}
+#endif
+
+		/*
+		 * Since RTP_LOCAL cannot be set by userland, make
+		 * sure that local routes are only modified by the
+		 * kernel.
+		 */
+		if (ISSET(rt->rt_flags, RTF_LOCAL|RTF_BROADCAST) &&
+		    prio != RTP_LOCAL) {
+			rtfree(rt);
+			return (EINVAL);
+		}
+
+		ifp = if_get(rt->rt_ifidx);
+		KASSERT(ifp != NULL);
+		error = rt_delete(rt, ifp, tableid);
+		if_put(ifp);
+
+		if (error) {
+			rtfree(rt);
 			return (error);
+		}
+
+		if (ret_nrt != NULL)
+			*ret_nrt = rt;
+		else
+			rtfree(rt);
+
 		break;
 
 	case RTM_RESOLVE:
@@ -1067,7 +1067,7 @@ rtrequest(int req, struct rt_addrinfo *info, u_int8_t prio,
 		if (error != 0 && (crt = rtalloc(ndst, 0, tableid)) != NULL) {
 			/* overwrite cloned route */
 			if ((crt->rt_flags & RTF_CLONED) != 0) {
-				rtdeletemsg(crt, NULL, tableid);
+				rtdeletemsg(crt, ifp, tableid);
 				error = rtable_insert(tableid, ndst,
 				    info->rti_info[RTAX_NETMASK],
 				    info->rti_info[RTAX_GATEWAY],
@@ -1235,8 +1235,8 @@ rt_ifa_del(struct ifaddr *ifa, int flags, struct sockaddr *dst)
 	struct rtentry		*rt;
 	struct mbuf		*m = NULL;
 	struct sockaddr		*deldst;
-	struct rt_addrinfo	 info;
-	struct sockaddr_rtlabel	 sa_rl;
+	struct sockaddr		*mask = NULL;
+	struct sockaddr		*gateway = NULL;
 	unsigned int		 rtableid = ifp->if_rdomain;
 	uint8_t			 prio = ifp->if_priority + RTP_STATIC;
 	int			 error;
@@ -1256,16 +1256,10 @@ rt_ifa_del(struct ifaddr *ifa, int flags, struct sockaddr *dst)
 		dst = deldst;
 	}
 
-	memset(&info, 0, sizeof(info));
-	info.rti_ifa = ifa;
-	info.rti_flags = flags;
-	info.rti_info[RTAX_DST] = dst;
 	if ((flags & RTF_LLINFO) == 0)
-		info.rti_info[RTAX_GATEWAY] = ifa->ifa_addr;
-	info.rti_info[RTAX_LABEL] = rtlabel_id2sa(ifp->if_rtlabelid, &sa_rl);
-
+		gateway = ifa->ifa_addr;
 	if ((flags & RTF_HOST) == 0)
-		info.rti_info[RTAX_NETMASK] = ifa->ifa_netmask;
+		mask = ifa->ifa_netmask;
 
 	if (flags & (RTF_LOCAL|RTF_BROADCAST))
 		prio = RTP_LOCAL;
@@ -1273,13 +1267,32 @@ rt_ifa_del(struct ifaddr *ifa, int flags, struct sockaddr *dst)
 	if (flags & RTF_CONNECTED)
 		prio = RTP_CONNECTED;
 
-	error = rtrequest_delete(&info, prio, ifp, &rt, rtableid);
-	if (error == 0) {
-		rt_sendmsg(rt, RTM_DELETE, rtableid);
-		if (flags & RTF_LOCAL)
-			rt_sendaddrmsg(rt, RTM_DELADDR);
+	rt = rtable_lookup(rtableid, dst, mask, gateway, prio);
+	if (rt == NULL)
+		return (ESRCH);
+
+#ifndef SMALL_KERNEL
+	/*
+	 * If we got multipath routes, we require users to specify
+	 * a matching gateway.
+	 */
+	if (ISSET(rt->rt_flags, RTF_MPATH) && gateway == NULL) {
 		rtfree(rt);
+		return (ESRCH);
 	}
+#endif
+
+	/* Make sure that's the route the caller want to delete. */
+	if (rt->rt_ifidx != ifp->if_index) {
+		rtfree(rt);
+		return (ESRCH);
+	}
+
+	error = rtdeletemsg(rt, ifp, rtableid);
+	if (error == 0 && (flags & RTF_LOCAL))
+		rt_sendaddrmsg(rt, RTM_DELADDR);
+	rtfree(rt);
+
 	if (m != NULL)
 		m_free(m);
 
@@ -1691,9 +1704,12 @@ rt_if_remove_rtdelete(struct rtentry *rt, void *vifp, u_int id)
 	struct ifnet	*ifp = vifp;
 
 	if (rt->rt_ifidx == ifp->if_index) {
-		int	cloning = (rt->rt_flags & RTF_CLONING);
+		int	error, cloning = ISSET(rt->rt_flags, RTF_CLONING);
 
-		if (rtdeletemsg(rt, ifp, id) == 0 && cloning)
+		rtref(rt);
+		error = rtdeletemsg(rt, ifp, id);
+		rtfree(rt);
+		if (error == 0 && cloning)
 			return (EAGAIN);
 	}
 
@@ -1751,7 +1767,9 @@ rt_if_linkstate_change(struct rtentry *rt, void *arg, u_int id)
 			 * clone a new route from a better source.
 			 */
 			if (rt->rt_flags & RTF_CLONED) {
+				rtref(rt);
 				rtdeletemsg(rt, ifp, id);
+				rtfree(rt);
 				return (0);
 			}
 			/* take route down */
