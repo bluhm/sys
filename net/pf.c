@@ -6850,6 +6850,11 @@ pf_pkt_unlink_state_key(struct mbuf *m)
 	m->m_pkthdr.pf.statekey = NULL;
 }
 
+void pf_pkt_state_key_ref(struct mbuf *m)
+{
+	pf_state_key_ref(m->m_pkthdr.pf.statekey);
+}
+
 void
 pf_inpcb_unlink_state_key(struct inpcb *inp)
 {

@@ -1215,6 +1215,10 @@ m_dup_pkthdr(struct mbuf *to, struct mbuf *from, int wait)
 	to->m_flags |= (from->m_flags & M_COPYFLAGS);
 	to->m_pkthdr = from->m_pkthdr;
 
+#if NPF > 0
+	pf_pkt_state_key_ref(to);
+#endif /* NPF > 0 */
+
 	SLIST_INIT(&to->m_pkthdr.ph_tags);
 
 	if ((error = m_tag_copy_chain(to, from, wait)) != 0)
