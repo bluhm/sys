@@ -59,6 +59,8 @@
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
 
+#include <dev/cons.h>
+
 #define LOG_RDPRI	(PZERO + 1)
 
 #define LOG_ASYNC	0x04
@@ -76,7 +78,7 @@ int	log_open;			/* also used in log() */
 int	msgbufmapped;			/* is the message buffer mapped */
 struct	msgbuf *msgbufp;		/* the mapped buffer, itself. */
 struct	msgbuf *consbufp;		/* console message buffer. */
-struct file *syslogf;
+struct	file *syslogf;
 
 void filt_logrdetach(struct knote *kn);
 int filt_logread(struct knote *kn, long hint);
@@ -380,7 +382,7 @@ sys_sendsyslog2(struct proc *p, void *v, register_t *retval)
 		    LOG_KERN|LOG_WARNING, dropped_count,
 		    dropped_count == 1 ? "" : "s", orig_error);
 		error = dosendsyslog(p, buf, MIN((size_t)len, sizeof(buf) - 1),
-		    SCARG(uap, flags), UIO_SYSSPACE);
+		    0, UIO_SYSSPACE);
 		if (error) {
 			dropped_count++;
 			return (error);
@@ -391,7 +393,7 @@ sys_sendsyslog2(struct proc *p, void *v, register_t *retval)
 	error = dosendsyslog(p, SCARG(uap, buf), SCARG(uap, nbyte),
 	    SCARG(uap, flags), UIO_USERSPACE);
 #ifndef SMALL_KERNEL
-	if (error && error != ENOTCONN) {
+	if (error) {
 		dropped_count++;
 		orig_error = error;
 	}
@@ -407,31 +409,15 @@ dosendsyslog(struct proc *p, const char *buf, size_t nbyte, int flags,
 	struct iovec *ktriov = NULL;
 	int iovlen;
 #endif
-	extern struct tty *constty;
 	struct iovec aiov;
 	struct uio auio;
-	struct file *f;
 	size_t len;
 	int error;
 
-	if (syslogf == NULL) {
-		if (constty && (flags & LOG_CONS)) {
-			int i;
-
-			/* Skip syslog prefix */
-			if (nbyte >= 4 && buf[0] == '<' &&
-			    buf[3] == '>') {
-				buf += 4;
-				nbyte -= 4;
-			}
-			for (i = 0; i < nbyte; i++)
-				tputchar(buf[i], constty);
-			tputchar('\n', constty);
-		}
+	if (syslogf == NULL && (flags & LOG_CONS) == 0)
 		return (ENOTCONN);
-	}
-	f = syslogf;
-	FREF(f);
+	if (syslogf)
+		FREF(syslogf);
 
 	aiov.iov_base = (char *)buf;
 	aiov.iov_len = nbyte;
@@ -453,7 +439,10 @@ dosendsyslog(struct proc *p, const char *buf, size_t nbyte, int flags,
 #endif
 
 	len = auio.uio_resid;
-	error = sosend(f->f_data, NULL, &auio, NULL, NULL, 0);
+	if (syslogf)
+		error = sosend(syslogf->f_data, NULL, &auio, NULL, NULL, 0);
+	else
+		error = cnwrite(0, &auio, 0);
 	if (error == 0)
 		len -= auio.uio_resid;
 
@@ -464,6 +453,9 @@ dosendsyslog(struct proc *p, const char *buf, size_t nbyte, int flags,
 		free(ktriov, M_TEMP, iovlen);
 	}
 #endif
-	FRELE(f, p);
+	if (syslogf)
+		FRELE(syslogf, p);
+	else
+		error = ENOTCONN;
 	return error;
 }
