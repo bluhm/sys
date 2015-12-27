@@ -441,8 +441,10 @@ dosendsyslog(struct proc *p, const char *buf, size_t nbyte, int flags,
 	len = auio.uio_resid;
 	if (syslogf)
 		error = sosend(syslogf->f_data, NULL, &auio, NULL, NULL, 0);
-	else
+	else {
 		error = cnwrite(0, &auio, 0);
+		cnputc('\n');
+	}
 	if (error == 0)
 		len -= auio.uio_resid;
 
