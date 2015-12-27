@@ -383,11 +383,8 @@ sys_sendsyslog2(struct proc *p, void *v, register_t *retval)
 		    dropped_count == 1 ? "" : "s", orig_error);
 		error = dosendsyslog(p, buf, MIN((size_t)len, sizeof(buf) - 1),
 		    0, UIO_SYSSPACE);
-		if (error) {
-			dropped_count++;
-			return (error);
-		}
-		dropped_count = 0;
+		if (error == 0)
+			dropped_count = 0;
 	}
 #endif
 	error = dosendsyslog(p, SCARG(uap, buf), SCARG(uap, nbyte),
