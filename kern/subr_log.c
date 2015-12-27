@@ -443,8 +443,8 @@ dosendsyslog(struct proc *p, const char *buf, size_t nbyte, int flags,
 	if (error == 0)
 		len -= auio.uio_resid;
 	if (syslogf == NULL) {
-		aiov.iov_base = "\n";
-		aiov.iov_len = 1;
+		aiov.iov_base = "\r\n";
+		aiov.iov_len = 2;
 		auio.uio_iov = &aiov;
 		auio.uio_iovcnt = 1;
 		auio.uio_segflg = UIO_SYSSPACE;
