@@ -466,5 +466,5 @@ dosendsyslog(struct proc *p, const char *buf, size_t nbyte, int flags,
 		FRELE(syslogf, p);
 	else
 		error = ENOTCONN;
-	return error;
+	return (error);
 }
