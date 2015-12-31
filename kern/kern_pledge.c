@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_pledge.c,v 1.136 2015/12/06 17:50:21 deraadt Exp $	*/
+/*	$OpenBSD: kern_pledge.c,v 1.140 2015/12/27 16:36:07 tb Exp $	*/
 
 /*
  * Copyright (c) 2015 Nicholas Marriott <nicm@openbsd.org>
@@ -40,6 +40,7 @@
 #include <sys/disklabel.h>
 #include <sys/dkio.h>
 #include <sys/mtio.h>
+#include <sys/audioio.h>
 #include <net/bpf.h>
 #include <net/route.h>
 #include <net/if.h>
@@ -63,6 +64,7 @@
 #define PLEDGENAMES
 #include <sys/pledge.h>
 
+#include "audio.h"
 #include "pty.h"
 
 int pledgereq_flags(const char *req);
@@ -1170,6 +1172,23 @@ pledge_ioctl(struct proc *p, long com, struct file *fp)
 				return (0);
 			break;
 		}
+	}
+
+	if ((p->p_p->ps_pledge & PLEDGE_AUDIO)) {
+#if NAUDIO > 0
+		switch (com) {
+		case AUDIO_GETPOS:
+		case AUDIO_SETINFO:
+		case AUDIO_GETINFO:
+		case AUDIO_GETENC:
+		case AUDIO_SETFD:
+		case AUDIO_GETPROPS:
+			if (fp->f_type == DTYPE_VNODE &&
+			    vp->v_type == VCHR &&
+			    cdevsw[major(vp->v_rdev)].d_open == audioopen)
+				return (0);
+		}
+#endif /* NAUDIO > 0 */
 	}
 
 	if ((p->p_p->ps_pledge & PLEDGE_DISKLABEL)) {
