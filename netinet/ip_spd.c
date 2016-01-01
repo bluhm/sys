@@ -318,12 +318,14 @@ ipsp_spd_lookup(struct mbuf *m, int af, int hlen, int *error, int direction,
 
 	/* Check for non-specific destination in the policy. */
 	switch (ipo->ipo_dst.sa.sa_family) {
+	case AF_UNSPEC:
+		dignore = 1;
+		break;
 	case AF_INET:
 		if ((ipo->ipo_dst.sin.sin_addr.s_addr == INADDR_ANY) ||
 		    (ipo->ipo_dst.sin.sin_addr.s_addr == INADDR_BROADCAST))
 			dignore = 1;
 		break;
-
 #ifdef INET6
 	case AF_INET6:
 		if ((IN6_IS_ADDR_UNSPECIFIED(&ipo->ipo_dst.sin6.sin6_addr)) ||
@@ -336,11 +338,13 @@ ipsp_spd_lookup(struct mbuf *m, int af, int hlen, int *error, int direction,
 
 	/* Likewise for source. */
 	switch (ipo->ipo_src.sa.sa_family) {
+	case AF_UNSPEC:
+		signore = 1;
+		break;
 	case AF_INET:
 		if (ipo->ipo_src.sin.sin_addr.s_addr == INADDR_ANY)
 			signore = 1;
 		break;
-
 #ifdef INET6
 	case AF_INET6:
 		if (IN6_IS_ADDR_UNSPECIFIED(&ipo->ipo_src.sin6.sin6_addr))
