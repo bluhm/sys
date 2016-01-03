@@ -422,7 +422,7 @@ dosendsyslog(struct proc *p, const char *buf, size_t nbyte, int flags,
 		 * LOG_PRIMASK | LOG_FACMASK is 0x03ff, so at most 4
 		 * decimal digits may appear in priority as <1023>.
 		 */
-		len = ulmin(nbyte, sizeof(pri));
+		len = MIN(nbyte, sizeof(pri));
 		if (sflg == UIO_USERSPACE) {
 			if ((error = copyin(buf, pri, len)))
 				return (error);
