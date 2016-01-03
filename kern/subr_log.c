@@ -438,7 +438,7 @@ dosendsyslog(struct proc *p, const char *buf, size_t nbyte, int flags,
 				/* There must be at least one digit <0>. */
 				if (i >= 3) {
 					buf += i;
-					nbyte =- i;
+					nbyte -= i;
 				}
 			}
 		}
