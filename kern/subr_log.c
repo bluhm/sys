@@ -406,7 +406,7 @@ dosendsyslog(struct proc *p, const char *buf, size_t nbyte, int flags,
 	struct iovec *ktriov = NULL;
 	int iovlen;
 #endif
-	unsigned char pri[6];
+	char pri[6];
 	struct iovec aiov;
 	struct uio auio;
 	size_t i, len;
