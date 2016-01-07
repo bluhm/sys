@@ -1,4 +1,4 @@
-/*	$OpenBSD: subr_log.c,v 1.35 2016/01/01 19:15:00 bluhm Exp $	*/
+/*	$OpenBSD: subr_log.c,v 1.36 2016/01/07 12:27:07 bluhm Exp $	*/
 /*	$NetBSD: subr_log.c,v 1.11 1996/03/30 22:24:44 christos Exp $	*/
 
 /*
