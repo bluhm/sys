@@ -1511,6 +1511,7 @@ if_put(struct ifnet *ifp)
 	if (ifp == NULL)
 		return;
 
+	KASSERT(ifp->if_refcnt.refs > 0);
 	refcnt_rele_wake(&ifp->if_refcnt);
 }
 
