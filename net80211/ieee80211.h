@@ -1,4 +1,4 @@
-/*	$OpenBSD: ieee80211.h,v 1.54 2015/11/15 01:05:25 stsp Exp $	*/
+/*	$OpenBSD: ieee80211.h,v 1.56 2016/01/06 19:56:50 stsp Exp $	*/
 /*	$NetBSD: ieee80211.h,v 1.6 2004/04/30 23:51:53 dyoung Exp $	*/
 
 /*-
@@ -516,6 +516,16 @@ enum {
 #define IEEE80211_BA_TID_INFO_SHIFT	12
 
 /*
+ * ADDBA Parameter Set field (see 802.11-2012 8.4.1.14 Figure 8-48).
+ */
+#define IEEE80211_ADDBA_AMSDU		0x0001 /* A-MSDU in A-MPDU supported */
+#define IEEE80211_ADDBA_BA_POLICY	0x0002 /* 1=immediate BA 0=delayed BA */
+#define IEEE80211_ADDBA_TID_MASK	0x003c
+#define IEEE80211_ADDBA_TID_SHIFT	2
+#define IEEE80211_ADDBA_BUFSZ_MASK	0xffc0
+#define IEEE80211_ADDBA_BUFSZ_SHIFT	6
+
+/*
  * DELBA Parameter Set field (see 802.11-2012 8.4.1.16 Figure 8-50).
  */
 #define IEEE80211_DELBA_INITIATOR	0x0800
@@ -578,6 +588,14 @@ enum {
  */
 #define IEEE80211_AMPDU_PARAM_LE	0x03
 #define IEEE80211_AMPDU_PARAM_SS	0x1c
+#define IEEE80211_AMPDU_PARAM_SS_NONE	(0 << 2)
+#define IEEE80211_AMPDU_PARAM_SS_0_25	(1 << 2)
+#define IEEE80211_AMPDU_PARAM_SS_0_5	(2 << 2)
+#define IEEE80211_AMPDU_PARAM_SS_1	(3 << 2)
+#define IEEE80211_AMPDU_PARAM_SS_2	(4 << 2)
+#define IEEE80211_AMPDU_PARAM_SS_4	(5 << 2)
+#define IEEE80211_AMPDU_PARAM_SS_8	(6 << 2)
+#define IEEE80211_AMPDU_PARAM_SS_16	(7 << 2)
 /* bits 5-7 reserved */
 
 /*

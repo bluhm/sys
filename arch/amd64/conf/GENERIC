@@ -1,4 +1,4 @@
-#	$OpenBSD: GENERIC,v 1.406 2015/12/31 13:06:49 kettenis Exp $
+#	$OpenBSD: GENERIC,v 1.411 2016/01/12 01:11:15 jcs Exp $
 #
 # For further information on compiling OpenBSD kernels, see the config(8)
 # man page.
@@ -61,6 +61,7 @@ acpivideo*	at acpi?
 acpivout*	at acpivideo?
 acpipwrres*	at acpi?
 aibs*		at acpi?
+sdhc*		at acpi?
 
 mpbios0		at bios0
 
@@ -69,6 +70,7 @@ ipmi0	at mainbus? disable	# IPMI
 vmt0	at pvbus?		# VMware Tools
 
 #xen0	at pvbus?		# Xen HVM domU
+#xnf*	at xen?			# Xen Netfront
 
 option		PCIVERBOSE
 option		USBVERBOSE
@@ -123,6 +125,8 @@ nviic*	at pci?			# NVIDIA nForce2/3/4 SMBus controller
 iic*	at nviic?
 amdpm*	at pci?			# AMD-7xx/8111 and NForce SMBus controller
 iic*	at amdpm?
+dwiic*	at acpi?		# DesignWare Synopsys i2c controller
+iic*	at dwiic?
 
 itherm*	at pci?			# Intel 3400 Thermal Sensor
 adc*	at iic?			# Analog Devices AD7416/AD7417/7418
@@ -146,6 +150,9 @@ spdmem*	at iic?			# SPD memory eeproms
 sdtemp*	at iic?			# SO-DIMM (JC-42.4) temperature
 wbng*	at iic?			# Winbond W83793G
 nvt*	at iic?			# Novoton W83795G
+ihidev*	at iic?			# HID-over-i2c
+ims*	at ihidev?		# i2c mouse/trackpad
+wsmouse* at ims? mux 0
 
 skgpio0 at isa? port 0x680	# Soekris net6501 GPIO and LEDs
 gpio* at skgpio?
@@ -183,6 +190,7 @@ usb*	at ohci?
 uhub*	at usb?			# USB Hubs
 uhub*	at uhub?		# USB Hubs
 ualea*	at uhub?		# Araneus Alea II TRNG
+uonerng* at uhub?		# Moonbase Otago OneRNG
 umodem*	at uhub?		# USB Modems/Serial
 ucom*	at umodem?
 uvisor*	at uhub?		# Handspring Visor
@@ -313,12 +321,12 @@ agp*		at intagp?
 drm0		at inteldrm? console 1
 drm*		at inteldrm?
 wsdisplay0	at inteldrm? console 1
-wsdisplay*	at inteldrm?
+wsdisplay*	at inteldrm? mux -1
 radeondrm*	at pci? 	# ATI Radeon DRM driver
 drm0		at radeondrm? console 1
 drm*		at radeondrm?
 wsdisplay0	at radeondrm? console 1
-wsdisplay*	at radeondrm?
+wsdisplay*	at radeondrm? mux -1
 
 pcppi0		at isa?
 

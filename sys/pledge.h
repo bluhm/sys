@@ -1,4 +1,4 @@
-/*	$OpenBSD: pledge.h,v 1.24 2015/12/06 17:50:21 deraadt Exp $	*/
+/*	$OpenBSD: pledge.h,v 1.27 2016/01/09 06:13:44 semarie Exp $	*/
 
 /*
  * Copyright (c) 2015 Nicholas Marriott <nicm@openbsd.org>
@@ -50,11 +50,12 @@
 #define PLEDGE_MCAST	0x0000000000200000ULL	/* multicast joins */
 #define PLEDGE_VMINFO	0x0000000000400000ULL	/* vminfo listings */
 #define PLEDGE_PS	0x0000000000800000ULL	/* ps listings */
-#define PLEDGE_COREDUMP	0x0000000001000000ULL	/* generates coredump (default) */
 #define PLEDGE_DISKLABEL 0x0000000002000000ULL	/* disklabels */
 #define PLEDGE_PF	0x0000000004000000ULL	/* pf ioctls */
 #define PLEDGE_AUDIO	0x0000000008000000ULL	/* audio ioctls */
 #define PLEDGE_DPATH	0x0000000010000000ULL	/* mknod & mkfifo */
+#define PLEDGE_DRM	0x0000000020000000ULL	/* drm ioctls */
+#define PLEDGE_VMM	0x0000000040000000ULL	/* vmm ioctls */
 
 /*
  * Bits outside PLEDGE_USERSET are used by the kernel itself
@@ -93,11 +94,12 @@ static struct {
 	{ PLEDGE_MCAST,		"mcast" },
 	{ PLEDGE_VMINFO,	"vminfo" },
 	{ PLEDGE_PS,		"ps" },
-	{ PLEDGE_COREDUMP,	"coredump" },
 	{ PLEDGE_DISKLABEL,	"disklabel" },
 	{ PLEDGE_PF,		"pf" },
 	{ PLEDGE_AUDIO,		"audio" },
 	{ PLEDGE_DPATH,		"dpath" },
+	{ PLEDGE_DRM,		"drm" },
+	{ PLEDGE_VMM,		"vmm" },
 	{ 0, NULL },
 };
 #endif
@@ -119,6 +121,8 @@ int	pledge_sendit(struct proc *p, const void *to);
 int	pledge_sockopt(struct proc *p, int set, int level, int optname);
 int	pledge_socket(struct proc *p, int domain, int state);
 int	pledge_ioctl(struct proc *p, long com, struct file *);
+int	pledge_ioctl_drm(struct proc *p, long com, dev_t device);
+int	pledge_ioctl_vmm(struct proc *p, long com);
 int	pledge_flock(struct proc *p);
 int	pledge_fcntl(struct proc *p, int cmd);
 int	pledge_swapctl(struct proc *p);

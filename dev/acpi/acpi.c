@@ -1,4 +1,4 @@
-/* $OpenBSD: acpi.c,v 1.297 2015/11/23 00:10:53 reyk Exp $ */
+/* $OpenBSD: acpi.c,v 1.302 2016/01/12 07:42:39 kettenis Exp $ */
 /*
  * Copyright (c) 2005 Thorsten Lockert <tholo@sigmasoft.com>
  * Copyright (c) 2005 Jordan Hargrave <jordan@openbsd.org>
@@ -82,6 +82,7 @@ int	acpi_submatch(struct device *, void *, void *);
 int	acpi_print(void *, const char *);
 
 void	acpi_map_pmregs(struct acpi_softc *);
+void	acpi_unmap_pmregs(struct acpi_softc *);
 
 int	acpi_loadtables(struct acpi_softc *, struct acpi_rsdp *);
 
@@ -852,6 +853,7 @@ acpi_attach(struct device *parent, struct device *self, void *aux)
 	struct device *dev;
 #endif /* SMALL_KERNEL */
 	paddr_t facspa;
+	uint16_t pm1;
 	int s;
 
 	sc->sc_iot = ba->ba_iot;
@@ -910,11 +912,24 @@ acpi_attach(struct device *parent, struct device *self, void *aux)
 	}
 
 	/*
-	 * Check if we are able to enable ACPI control
+	 * A bunch of things need to be done differently for
+	 * Hardware-reduced ACPI.
 	 */
-	if (sc->sc_fadt->smi_cmd &&
+	if (sc->sc_fadt->hdr_revision >= 5 &&
+	    sc->sc_fadt->flags & FADT_HW_REDUCED_ACPI)
+		sc->sc_hw_reduced = 1;
+
+	/* Map Power Management registers */
+	acpi_map_pmregs(sc);
+
+	/*
+	 * Check if we can and need to enable ACPI control.
+	 */
+	pm1 = acpi_read_pmreg(sc, ACPIREG_PM1_CNT, 0);
+	if ((pm1 & ACPI_PM1_SCI_EN) == 0 && sc->sc_fadt->smi_cmd &&
 	    (!sc->sc_fadt->acpi_enable && !sc->sc_fadt->acpi_disable)) {
 		printf(", ACPI control unavailable\n");
+		acpi_unmap_pmregs(sc);
 		return;
 	}
 
@@ -975,9 +990,6 @@ acpi_attach(struct device *parent, struct device *self, void *aux)
 	acpi_init_pm(sc);
 #endif /* SMALL_KERNEL */
 
-	/* Map Power Management registers */
-	acpi_map_pmregs(sc);
-
 	/* Initialize GPE handlers */
 	s = spltty();
 	acpi_init_gpes(sc);
@@ -997,7 +1009,7 @@ acpi_attach(struct device *parent, struct device *self, void *aux)
 	 * This may prevent thermal control on some systems where
 	 * that actually does work
 	 */
-	if (sc->sc_fadt->smi_cmd) {
+	if ((pm1 & ACPI_PM1_SCI_EN) == 0 && sc->sc_fadt->smi_cmd) {
 		if (acpi_enable(sc)) {
 			printf(", can't enable ACPI\n");
 			return;
@@ -1027,7 +1039,7 @@ acpi_attach(struct device *parent, struct device *self, void *aux)
 	/*
 	 * ACPI is enabled now -- attach timer
 	 */
-	{
+	if (!sc->sc_hw_reduced) {
 		struct acpi_attach_args aaa;
 
 		memset(&aaa, 0, sizeof(aaa));
@@ -1262,6 +1274,31 @@ acpi_read_pmreg(struct acpi_softc *sc, int reg, int offset)
 	bus_size_t size;
 	int regval;
 
+	/*
+	 * For Hardware-reduced ACPI we emulate PM1B_CNT to reflect
+	 * that the system is always in ACPI mode.
+	 */
+	if (sc->sc_hw_reduced && reg == ACPIREG_PM1B_CNT) {
+		KASSERT(offset == 0);
+		return ACPI_PM1_SCI_EN;
+	}
+
+	/*
+	 * For Hardware-reduced ACPI we also emulate PM1A_STS using
+	 * SLEEP_STATUS_REG.
+	 */
+	if (sc->sc_hw_reduced && reg == ACPIREG_PM1A_STS) {
+		uint8_t value;
+
+		KASSERT(offset == 0);
+		acpi_gasio(sc, ACPI_IOREAD,
+		    sc->sc_fadt->sleep_status_reg.address_space_id,
+		    sc->sc_fadt->sleep_status_reg.address,
+		    sc->sc_fadt->sleep_status_reg.register_bit_width / 8,
+		    sc->sc_fadt->sleep_status_reg.access_size, &value);
+		return ((int)value << 8);
+	}
+
 	/* Special cases: 1A/1B blocks can be OR'ed together */
 	switch (reg) {
 	case ACPIREG_PM1_EN:
@@ -1323,6 +1360,38 @@ acpi_write_pmreg(struct acpi_softc *sc, int reg, int offset, int regval)
 {
 	bus_space_handle_t ioh;
 	bus_size_t size;
+
+	/*
+	 * For Hardware-reduced ACPI we also emulate PM1A_STS using
+	 * SLEEP_STATUS_REG.
+	 */
+	if (sc->sc_hw_reduced && reg == ACPIREG_PM1A_STS) {
+		uint8_t value = (regval >> 8);
+
+		KASSERT(offset == 0);
+		acpi_gasio(sc, ACPI_IOWRITE,
+		    sc->sc_fadt->sleep_status_reg.address_space_id,
+		    sc->sc_fadt->sleep_status_reg.address,
+		    sc->sc_fadt->sleep_status_reg.register_bit_width / 8,
+		    sc->sc_fadt->sleep_status_reg.access_size, &value);
+		return;
+	}
+
+	/*
+	 * For Hardware-reduced ACPI we also emulate PM1A_CNT using
+	 * SLEEP_CONTROL_REG.
+	 */
+	if (sc->sc_hw_reduced && reg == ACPIREG_PM1A_CNT) {
+		uint8_t value = (regval >> 8);
+
+		KASSERT(offset == 0);
+		acpi_gasio(sc, ACPI_IOWRITE,
+		    sc->sc_fadt->sleep_control_reg.address_space_id,
+		    sc->sc_fadt->sleep_control_reg.address,
+		    sc->sc_fadt->sleep_control_reg.register_bit_width / 8,
+		    sc->sc_fadt->sleep_control_reg.access_size, &value);
+		return;
+	}
 
 	/* Special cases: 1A/1B blocks can be written with same value */
 	switch (reg) {
@@ -1389,6 +1458,10 @@ acpi_map_pmregs(struct acpi_softc *sc)
 	bus_size_t size, access;
 	const char *name;
 	int reg;
+
+	/* Registers don't exist on Hardware-reduced ACPI. */
+	if (sc->sc_hw_reduced)
+		return;
 
 	for (reg = 0; reg < ACPIREG_MAXREG; reg++) {
 		size = 0;
@@ -1494,6 +1567,18 @@ acpi_map_pmregs(struct acpi_softc *sc)
 			sc->sc_pmregs[reg].addr = addr;
 			sc->sc_pmregs[reg].access = min(access, 4);
 		}
+	}
+}
+
+void
+acpi_unmap_pmregs(struct acpi_softc *sc)
+{
+	int reg;
+
+	for (reg = 0; reg < ACPIREG_MAXREG; reg++) {
+		if (sc->sc_pmregs[reg].size && sc->sc_pmregs[reg].addr)
+			bus_space_unmap(sc->sc_iot, sc->sc_pmregs[reg].ioh,
+			    sc->sc_pmregs[reg].size);
 	}
 }
 
@@ -2624,15 +2709,12 @@ acpi_foundsony(struct aml_node *node, void *arg)
 #ifndef SMALL_KERNEL
 
 int
-acpi_foundhid(struct aml_node *node, void *arg)
+acpi_parsehid(struct aml_node *node, void *arg, char *outcdev, char *outdev,
+    size_t devlen)
 {
 	struct acpi_softc	*sc = (struct acpi_softc *)arg;
-	struct device		*self = (struct device *)arg;
-	const char		*dev;
-	char			 cdev[16];
 	struct aml_value	 res;
-	struct acpi_attach_args	 aaa;
-	int			 i;
+	const char		*dev;
 
 	/* NB aml_eisaid returns a static buffer, this must come first */
 	if (aml_evalname(acpi_softc, node->parent, "_CID", 0, NULL, &res) == 0) {
@@ -2647,17 +2729,17 @@ acpi_foundhid(struct aml_node *node, void *arg)
 			dev = "unknown";
 			break;
 		}
-		strlcpy(cdev, dev, sizeof(cdev));
+		strlcpy(outcdev, dev, devlen);
 		aml_freevalue(&res);
-		
-		dnprintf(10, "compatible with device: %s\n", cdev);
+
+		dnprintf(10, "compatible with device: %s\n", outcdev);
 	} else {
-		cdev[0] = '\0';
+		outcdev[0] = '\0';
 	}
 
 	dnprintf(10, "found hid device: %s ", node->parent->name);
 	if (aml_evalnode(sc, node, 0, NULL, &res) != 0)
-		return 0;
+		return (1);
 
 	switch (res.type) {
 	case AML_OBJTYPE_STRING:
@@ -2672,34 +2754,62 @@ acpi_foundhid(struct aml_node *node, void *arg)
 	}
 	dnprintf(10, "	device: %s\n", dev);
 
+	strlcpy(outdev, dev, devlen);
+
+	aml_freevalue(&res);
+
+	return (0);
+}
+
+int
+acpi_foundhid(struct aml_node *node, void *arg)
+{
+	struct acpi_softc	*sc = (struct acpi_softc *)arg;
+	struct device		*self = (struct device *)arg;
+	char		 	 cdev[16];
+	char		 	 dev[16];
+	struct acpi_attach_args	 aaa;
+	int			 i;
+
+	if (acpi_parsehid(node, arg, cdev, dev, 16) != 0)
+		return (0);
+
 	memset(&aaa, 0, sizeof(aaa));
 	aaa.aaa_iot = sc->sc_iot;
 	aaa.aaa_memt = sc->sc_memt;
 	aaa.aaa_node = node->parent;
 	aaa.aaa_dev = dev;
 
-	if (!strcmp(dev, ACPI_DEV_AC))
+	if (!strcmp(dev, ACPI_DEV_AC)) {
 		aaa.aaa_name = "acpiac";
-	else if (!strcmp(dev, ACPI_DEV_CMB))
+	} else if (!strcmp(dev, ACPI_DEV_CMB)) {
 		aaa.aaa_name = "acpibat";
-	else if (!strcmp(dev, ACPI_DEV_LD) ||
+	} else if (!strcmp(dev, ACPI_DEV_LD) ||
 	    !strcmp(dev, ACPI_DEV_PBD) ||
-	    !strcmp(dev, ACPI_DEV_SBD))
+	    !strcmp(dev, ACPI_DEV_SBD)) {
 		aaa.aaa_name = "acpibtn";
-	else if (!strcmp(dev, ACPI_DEV_ASUS) || !strcmp(dev, ACPI_DEV_ASUS1)) {
+	} else if (!strcmp(dev, ACPI_DEV_ASUS) ||
+	    !strcmp(dev, ACPI_DEV_ASUS1)) {
 		aaa.aaa_name = "acpiasus";
 		acpi_asus_enabled = 1;
 	} else if (!strcmp(dev, ACPI_DEV_IBM) ||
 	    !strcmp(dev, ACPI_DEV_LENOVO)) {
 		aaa.aaa_name = "acpithinkpad";
 		acpi_thinkpad_enabled = 1;
-	} else if (!strcmp(dev, ACPI_DEV_ASUSAIBOOSTER))
+	} else if (!strcmp(dev, ACPI_DEV_ASUSAIBOOSTER)) {
 		aaa.aaa_name = "aibs";
-	else if (!strcmp(dev, ACPI_DEV_TOSHIBA_LIBRETTO) ||
+	} else if (!strcmp(dev, ACPI_DEV_TOSHIBA_LIBRETTO) ||
 	    !strcmp(dev, ACPI_DEV_TOSHIBA_DYNABOOK) ||
 	    !strcmp(dev, ACPI_DEV_TOSHIBA_SPA40)) {
 		aaa.aaa_name = "acpitoshiba";
 		acpi_toshiba_enabled = 1;
+	} else if (!strcmp(dev, "80860F14") || !strcmp(dev, "PNP0FFF")) {
+		aaa.aaa_name = "sdhc";
+	} else if (!strcmp(dev, ACPI_DEV_DWIIC1) ||
+	    !strcmp(dev, ACPI_DEV_DWIIC2) ||
+	    !strcmp(dev, ACPI_DEV_DWIIC3) ||
+	    !strcmp(dev, ACPI_DEV_DWIIC4)) {
+		aaa.aaa_name = "dwiic";
 	}
 
 	if (!strcmp(cdev, ACPI_DEV_MOUSE)) {
@@ -2714,9 +2824,7 @@ acpi_foundhid(struct aml_node *node, void *arg)
 	if (aaa.aaa_name)
 		config_found(self, &aaa, acpi_print);
 
-	aml_freevalue(&res);
-
-	return 0;
+	return (0);
 }
 
 int

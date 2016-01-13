@@ -1,4 +1,4 @@
-/*	$OpenBSD: ieee80211_node.c,v 1.94 2015/12/18 13:27:00 sthen Exp $	*/
+/*	$OpenBSD: ieee80211_node.c,v 1.97 2016/01/07 23:22:31 stsp Exp $	*/
 /*	$NetBSD: ieee80211_node.c,v 1.14 2004/05/09 09:18:47 dyoung Exp $	*/
 
 /*-
@@ -68,21 +68,15 @@ u_int8_t ieee80211_node_getrssi(struct ieee80211com *,
 void ieee80211_setup_node(struct ieee80211com *, struct ieee80211_node *,
     const u_int8_t *);
 void ieee80211_free_node(struct ieee80211com *, struct ieee80211_node *);
-#ifndef IEEE80211_NO_HT
 void ieee80211_ba_del(struct ieee80211_node *);
-#endif
 struct ieee80211_node *ieee80211_alloc_node_helper(struct ieee80211com *);
 void ieee80211_node_cleanup(struct ieee80211com *, struct ieee80211_node *);
 void ieee80211_needs_auth(struct ieee80211com *, struct ieee80211_node *);
 #ifndef IEEE80211_STA_ONLY
-#ifndef IEEE80211_NO_HT
 void ieee80211_node_join_ht(struct ieee80211com *, struct ieee80211_node *);
-#endif
 void ieee80211_node_join_rsn(struct ieee80211com *, struct ieee80211_node *);
 void ieee80211_node_join_11g(struct ieee80211com *, struct ieee80211_node *);
-#ifndef IEEE80211_NO_HT
 void ieee80211_node_leave_ht(struct ieee80211com *, struct ieee80211_node *);
-#endif
 void ieee80211_node_leave_rsn(struct ieee80211com *, struct ieee80211_node *);
 void ieee80211_node_leave_11g(struct ieee80211com *, struct ieee80211_node *);
 void ieee80211_inact_timeout(void *);
@@ -637,14 +631,6 @@ ieee80211_end_scan(struct ifnet *ifp)
 	(*ic->ic_node_copy)(ic, ic->ic_bss, selbs);
 	ni = ic->ic_bss;
 
-	/*
-	 * Set the erp state (mostly the slot time) to deal with
-	 * the auto-select case; this should be redundant if the
-	 * mode is locked.
-	 */
-	ic->ic_curmode = ieee80211_chan2mode(ic, ni->ni_chan);
-	ieee80211_reset_erp(ic);
-
 	if (ic->ic_flags & IEEE80211_F_RSNON)
 		ieee80211_choose_rsnparams(ic);
 	else if (ic->ic_flags & IEEE80211_F_WEPON)
@@ -760,9 +746,7 @@ ieee80211_node_cleanup(struct ieee80211com *ic, struct ieee80211_node *ni)
 		free(ni->ni_rsnie, M_DEVBUF, 0);
 		ni->ni_rsnie = NULL;
 	}
-#ifndef IEEE80211_NO_HT
 	ieee80211_ba_del(ni);
-#endif
 }
 
 void
@@ -1071,7 +1055,6 @@ ieee80211_find_node_for_beacon(struct ieee80211com *ic,
 	return (keep);
 }
 
-#ifndef IEEE80211_NO_HT
 void
 ieee80211_ba_del(struct ieee80211_node *ni)
 {
@@ -1079,23 +1062,24 @@ ieee80211_ba_del(struct ieee80211_node *ni)
 
 	for (tid = 0; tid < nitems(ni->ni_rx_ba); tid++) {
 		struct ieee80211_rx_ba *ba = &ni->ni_rx_ba[tid];
-		if (ba->ba_state == IEEE80211_BA_AGREED) {
+		if (ba->ba_state != IEEE80211_BA_INIT) {
 			if (timeout_pending(&ba->ba_to))
 				timeout_del(&ba->ba_to);
+			if (timeout_pending(&ba->ba_gap_to))
+				timeout_del(&ba->ba_gap_to);
 			ba->ba_state = IEEE80211_BA_INIT;
 		}
 	}
 
 	for (tid = 0; tid < nitems(ni->ni_tx_ba); tid++) {
 		struct ieee80211_tx_ba *ba = &ni->ni_tx_ba[tid];
-		if (ba->ba_state == IEEE80211_BA_AGREED) {
+		if (ba->ba_state != IEEE80211_BA_INIT) {
 			if (timeout_pending(&ba->ba_to))
 				timeout_del(&ba->ba_to);
 			ba->ba_state = IEEE80211_BA_INIT;
 		}
 	}
 }
-#endif
 
 void
 ieee80211_free_node(struct ieee80211com *ic, struct ieee80211_node *ni)
@@ -1111,9 +1095,7 @@ ieee80211_free_node(struct ieee80211com *ic, struct ieee80211_node *ni)
 	timeout_del(&ni->ni_sa_query_to);
 	IEEE80211_AID_CLR(ni->ni_associd, ic->ic_aid_bitmap);
 #endif
-#ifndef IEEE80211_NO_HT
 	ieee80211_ba_del(ni);
-#endif
 	RB_REMOVE(ieee80211_tree, &ic->ic_tree, ni);
 	ic->ic_nnodes--;
 #ifndef IEEE80211_STA_ONLY
@@ -1290,7 +1272,6 @@ ieee80211_iterate_nodes(struct ieee80211com *ic, ieee80211_iter_func *f,
 }
 
 
-#ifndef IEEE80211_NO_HT
 /*
  * Install received HT caps information in the node's state block.
  */
@@ -1342,7 +1323,6 @@ ieee80211_setup_htop(struct ieee80211_node *ni, const uint8_t *data,
 
 	memcpy(ni->ni_basic_mcs, &data[6], sizeof(ni->ni_basic_mcs));
 }
-#endif /* IEEE80211_NO_HT */
 
 /*
  * Install received rate set information in the node's state block.
@@ -1417,7 +1397,6 @@ ieee80211_needs_auth(struct ieee80211com *ic, struct ieee80211_node *ni)
 	 */
 }
 
-#ifndef IEEE80211_NO_HT
 /*
  * Handle an HT STA joining an HT network.
  */
@@ -1426,7 +1405,6 @@ ieee80211_node_join_ht(struct ieee80211com *ic, struct ieee80211_node *ni)
 {
 	/* TBD */
 }
-#endif	/* !IEEE80211_NO_HT */
 
 /*
  * Handle a station joining an RSN network.
@@ -1558,11 +1536,9 @@ ieee80211_node_join(struct ieee80211com *ic, struct ieee80211_node *ni,
 	} else
 		ieee80211_node_join_rsn(ic, ni);
 
-#ifndef IEEE80211_NO_HT
 	ieee80211_ht_negotiate(ic, ni);
 	if (ni->ni_flags & IEEE80211_NODE_HT)
 		ieee80211_node_join_ht(ic, ni);
-#endif
 
 #if NBRIDGE > 0
 	/*
@@ -1575,7 +1551,6 @@ ieee80211_node_join(struct ieee80211com *ic, struct ieee80211_node *ni,
 #endif
 }
 
-#ifndef IEEE80211_NO_HT
 /*
  * Handle an HT STA leaving an HT network.
  */
@@ -1597,7 +1572,6 @@ ieee80211_node_leave_ht(struct ieee80211com *ic, struct ieee80211_node *ni)
 		}
 	}
 }
-#endif	/* !IEEE80211_NO_HT */
 
 /*
  * Handle a station leaving an RSN network.
@@ -1711,10 +1685,8 @@ ieee80211_node_leave(struct ieee80211com *ic, struct ieee80211_node *ni)
 	if (ic->ic_curmode == IEEE80211_MODE_11G)
 		ieee80211_node_leave_11g(ic, ni);
 
-#ifndef IEEE80211_NO_HT
 	if (ni->ni_flags & IEEE80211_NODE_HT)
 		ieee80211_node_leave_ht(ic, ni);
-#endif
 
 	if (ic->ic_node_leave != NULL)
 		(*ic->ic_node_leave)(ic, ni);

@@ -1,4 +1,4 @@
-/*	$OpenBSD: ieee80211_node.h,v 1.50 2015/12/12 11:25:46 stsp Exp $	*/
+/*	$OpenBSD: ieee80211_node.h,v 1.52 2016/01/07 23:22:31 stsp Exp $	*/
 /*	$NetBSD: ieee80211_node.h,v 1.9 2004/04/30 22:57:32 dyoung Exp $	*/
 
 /*-
@@ -112,18 +112,21 @@ struct ieee80211_tx_ba {
 	struct ieee80211_node	*ba_ni;	/* backpointer for callbacks */
 	struct timeout		ba_to;
 	int			ba_timeout_val;
-#define IEEE80211_BA_MIN_TIMEOUT	(10 * 1000 * 1000)	/* 10 sec */
-#define IEEE80211_BA_MAX_TIMEOUT	(60 * 1000 * 1000)	/* 60 sec */
+#define IEEE80211_BA_MIN_TIMEOUT	(1000 * 1000)	/* 1 sec */
+#define IEEE80211_BA_MAX_TIMEOUT	(5000 * 1000)	/* 5 sec */
 
 	int			ba_state;
 #define IEEE80211_BA_INIT	0
 #define IEEE80211_BA_REQUESTED	1
 #define IEEE80211_BA_AGREED	2
 
+	/* These values are IEEE802.11 frame sequence numbers (0x0-0xfff) */
 	u_int16_t		ba_winstart;
 	u_int16_t		ba_winend;
+
+	/* Number of A-MPDU subframes in reorder buffer. */
 	u_int16_t		ba_winsize;
-#define IEEE80211_BA_MAX_WINSZ	128	/* maximum we will accept */
+#define IEEE80211_BA_MAX_WINSZ	64	/* corresponds to maximum ADDBA BUFSZ */
 
 	u_int8_t		ba_token;
 };
@@ -141,6 +144,8 @@ struct ieee80211_rx_ba {
 	u_int16_t		ba_winend;
 	u_int16_t		ba_winsize;
 	u_int16_t		ba_head;
+	struct timeout		ba_gap_to;
+#define IEEE80211_BA_GAP_TIMEOUT	500 /* msec */
 };
 
 /*
@@ -220,7 +225,6 @@ struct ieee80211_node {
 	struct timeout		ni_sa_query_to;
 	int			ni_sa_query_count;
 
-#ifndef IEEE80211_NO_HT
 	/* HT capabilities */
 	uint16_t		ni_htcaps;
 	uint8_t			ni_ampdu_param;
@@ -243,7 +247,6 @@ struct ieee80211_node {
 	struct ieee80211_rx_ba	ni_rx_ba[IEEE80211_NUM_TID];
 
 	int			ni_txmcs;	/* current MCS used for TX */
-#endif
 
 	/* others */
 	u_int16_t		ni_associd;	/* assoc response */
@@ -348,12 +351,10 @@ extern	void ieee80211_iterate_nodes(struct ieee80211com *ic,
 		ieee80211_iter_func *, void *);
 extern	void ieee80211_clean_cached(struct ieee80211com *ic);
 extern	void ieee80211_clean_nodes(struct ieee80211com *, int);
-#ifndef IEEE80211_NO_HT
 void ieee80211_setup_htcaps(struct ieee80211_node *, const uint8_t *,
     uint8_t);
 void ieee80211_setup_htop(struct ieee80211_node *, const uint8_t *,
     uint8_t);
-#endif 
 extern	int ieee80211_setup_rates(struct ieee80211com *,
 	    struct ieee80211_node *, const u_int8_t *, const u_int8_t *, int);
 extern  int ieee80211_iserp_sta(const struct ieee80211_node *);
