@@ -613,6 +613,7 @@ refcnt_take(struct refcnt *r)
 int
 refcnt_rele(struct refcnt *r)
 {
+	KASSERT(r->refs > 0);
 	return (atomic_dec_int_nv(&r->refs) == 0);
 }
 
