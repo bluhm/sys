@@ -272,7 +272,7 @@ drop:
 	}
 discard:
 	if (so->so_state & SS_NOFDREF)
-		panic("soclose: NOFDREF");
+		panic("soclose NOFDREF: so %p, so_type %d", so, so->so_type);
 	so->so_state |= SS_NOFDREF;
 	sofree(so);
 	splx(s);
@@ -298,7 +298,7 @@ soaccept(struct socket *so, struct mbuf *nam)
 	int error = 0;
 
 	if ((so->so_state & SS_NOFDREF) == 0)
-		panic("soaccept: !NOFDREF");
+		panic("soaccept !NOFDREF: so %p, so_type %d", so, so->so_type);
 	so->so_state &= ~SS_NOFDREF;
 	if ((so->so_state & SS_ISDISCONNECTED) == 0 ||
 	    (so->so_proto->pr_flags & PR_ABRTACPTDIS) == 0)
@@ -679,7 +679,8 @@ restart:
 #ifdef SOCKET_SPLICE
 		    if (!isspliced(so))
 #endif /* SOCKET_SPLICE */
-			panic("receive 1, sb_cc %lu", so->so_rcv.sb_cc);
+			panic("receive 1: so %p, so_type %d, sb_cc %lu",
+			    so, so->so_type, so->so_rcv.sb_cc);
 #endif
 		if (so->so_error) {
 			if (m)
@@ -743,7 +744,8 @@ dontblock:
 	if (pr->pr_flags & PR_ADDR) {
 #ifdef DIAGNOSTIC
 		if (m->m_type != MT_SONAME)
-			panic("receive 1a, m_type %d", m->m_type);
+			panic("receive 1a: so %p, so_type %d, m %p, m_type %d",
+			    so, so->so_type, m, m->m_type);
 #endif
 		orig_resid = 0;
 		if (flags & MSG_PEEK) {
@@ -827,7 +829,8 @@ dontblock:
 			break;
 #ifdef DIAGNOSTIC
 		else if (m->m_type != MT_DATA && m->m_type != MT_HEADER)
-			panic("receive 3, m_type %d", m->m_type);
+			panic("receive 3: so %p, so_type %d, m %p, m_type %d",
+			    so, so->so_type, m, m->m_type);
 #endif
 		so->so_state &= ~SS_RCVATMARK;
 		len = uio->uio_resid;
@@ -1235,7 +1238,8 @@ somove(struct socket *so, int wait)
 	if (so->so_proto->pr_flags & PR_ADDR) {
 #ifdef DIAGNOSTIC
 		if (m->m_type != MT_SONAME)
-			panic("somove soname, m_type %d", m->m_type);
+			panic("somove soname: so %p, so_type %d, m %p, "
+			    "m_type %d", so, so->so_type, m, m->m_type);
 #endif
 		m = m->m_next;
 	}
@@ -1251,7 +1255,8 @@ somove(struct socket *so, int wait)
 
 	if (so->so_proto->pr_flags & PR_ATOMIC) {
 		if ((m->m_flags & M_PKTHDR) == 0)
-			panic("somove !pkthdr");
+			panic("somove !PKTHDR: so %p, so_type %d, m %p, "
+			    "m_type %d", so, so->so_type, m, m->m_type);
 		if (sosp->so_snd.sb_hiwat < m->m_pkthdr.len) {
 			error = EMSGSIZE;
 			goto release;
@@ -1293,7 +1298,8 @@ somove(struct socket *so, int wait)
 
 #ifdef DIAGNOSTIC
 		if ((*mp)->m_type != MT_DATA && (*mp)->m_type != MT_HEADER)
-			panic("somove type, m_type %d", (*mp)->m_type);
+			panic("somove type: so %p, so_type %d, m %p, "
+			    "m_type %d", so, so->so_type, *mp, (*mp)->m_type);
 #endif
 		if ((*mp)->m_len > size) {
 			if (!maxreached || (*mp = m_copym(
