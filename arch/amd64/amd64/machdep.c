@@ -1426,7 +1426,7 @@ init_x86_64(paddr_t first_avail)
 	pmap_kenter_pa(comconsaddr, 0x9171d000, PROT_READ|PROT_WRITE);
 
 	comconsunit = 0;
-	comconsiot = X86_BUS_SPACE_IO;
+	comconsiot = X86_BUS_SPACE_MEM;
 	comconsioh = comconsaddr;
 	comconsrate = B115200;
 	comconsfreq = COM_FREQ;
