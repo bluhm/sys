@@ -1253,10 +1253,12 @@ init_x86_64(paddr_t first_avail)
 
 	x86_bus_space_init();
 
+#if 0
 	/*
 	 * Attach the glass console early in case we need to display a panic.
 	 */
 	cninit();
+#endif
 
 	/*
 	 * Initialize PAGE_SIZE-dependent variables.
@@ -1414,7 +1416,27 @@ init_x86_64(paddr_t first_avail)
 
 	/* Make sure the end of the space used by the kernel is rounded. */
 	first_avail = round_page(first_avail);
+	comconsaddr = first_avail;
+	first_avail += PAGE_SIZE;
 	kern_end = KERNBASE + first_avail;
+
+	/*
+	 * Attach the glass console early in case we need to display a panic.
+	 */
+	pmap_kenter_pa(comconsaddr, 0x9171d000, VM_PROT_READ|VM_PROT_WRITE);
+
+	comconsunit = 0;
+	comconsiot = X86_BUS_SPACE_IO;
+	comconsioh = comconsaddr;
+	comconsrate = B115200;
+	comconsfreq = COM_FREQ;
+
+	static struct consdev comcons = {
+		NULL, NULL, comcngetc, comcnputc, comcnpollc, NULL,
+		NODEV, CN_LOWPRI
+	};
+
+	cn_tab = &comcons;
 
 	/*
 	 * Now, load the memory clusters (which have already been
@@ -1455,11 +1477,9 @@ init_x86_64(paddr_t first_avail)
 		}
 	}
 
-#if DEBUG_MEMLOAD
 	printf("avail_start = 0x%lx\n", avail_start);
 	printf("avail_end = 0x%lx\n", avail_end);
 	printf("first_avail = 0x%lx\n", first_avail);
-#endif
 
 	/*
 	 * Steal memory for the message buffer (at end of core).
@@ -1909,8 +1929,10 @@ getbootinfo(char *bootinfo, int bootinfo_size)
 			break;
 		}
 	}
+#if 0
 	if (docninit > 0)
 		cninit();
+#endif
 #ifdef BOOTINFO_DEBUG
 	printf("\n");
 #endif
