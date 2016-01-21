@@ -1423,7 +1423,7 @@ init_x86_64(paddr_t first_avail)
 	/*
 	 * Attach the glass console early in case we need to display a panic.
 	 */
-	pmap_kenter_pa(comconsaddr, 0x9171d000, VM_PROT_READ|VM_PROT_WRITE);
+	pmap_kenter_pa(comconsaddr, 0x9171d000, PROT_READ|PROT_WRITE);
 
 	comconsunit = 0;
 	comconsiot = X86_BUS_SPACE_IO;
