@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_pledge.c,v 1.146 2016/01/09 06:13:43 semarie Exp $	*/
+/*	$OpenBSD: kern_pledge.c,v 1.148 2016/01/19 07:31:48 ratchov Exp $	*/
 
 /*
  * Copyright (c) 2015 Nicholas Marriott <nicm@openbsd.org>
@@ -279,6 +279,7 @@ const uint64_t pledge_syscalls[SYS_MAXSYSCALL] = {
 	[SYS_faccessat] = PLEDGE_RPATH | PLEDGE_WPATH,
 	[SYS_readlinkat] = PLEDGE_RPATH | PLEDGE_WPATH,
 	[SYS_lstat] = PLEDGE_RPATH | PLEDGE_WPATH | PLEDGE_TMPPATH,
+	[SYS_truncate] = PLEDGE_WPATH,
 	[SYS_rename] = PLEDGE_CPATH,
 	[SYS_rmdir] = PLEDGE_CPATH,
 	[SYS_renameat] = PLEDGE_CPATH,
@@ -1149,8 +1150,11 @@ pledge_ioctl(struct proc *p, long com, struct file *fp)
 	}
 
 	/* fp != NULL was already checked */
-	if (fp->f_type == DTYPE_VNODE)
+	if (fp->f_type == DTYPE_VNODE) {
 		vp = fp->f_data;
+		if (vp->v_type == VBAD)
+			return (ENOTTY);
+	}
 
 	/*
 	 * Further sets of ioctl become available, but are checked a
