@@ -1,4 +1,4 @@
-/*	$OpenBSD: usb.c,v 1.108 2015/09/01 10:00:26 mpi Exp $	*/
+/*	$OpenBSD: usb.c,v 1.109 2016/01/22 13:31:47 bluhm Exp $	*/
 /*	$NetBSD: usb.c,v 1.77 2003/01/01 00:10:26 thorpej Exp $	*/
 
 /*
