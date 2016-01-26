@@ -1909,6 +1909,14 @@ getbootinfo(char *bootinfo, int bootinfo_size)
 			break;
 		}
 	}
+
+	comconsunit = 0;
+	comconsaddr = 0x3f8;
+	comconsrate = 115200;
+	comconsiot = X86_BUS_SPACE_IO;
+	/* Probe the serial port this time. */
+	docninit++;
+
 	if (docninit > 0)
 		cninit();
 #ifdef BOOTINFO_DEBUG
