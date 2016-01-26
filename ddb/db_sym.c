@@ -1,28 +1,28 @@
-/*	$OpenBSD: db_sym.c,v 1.39 2015/12/23 01:39:02 mmcc Exp $	*/
+/*	$OpenBSD: db_sym.c,v 1.41 2016/01/25 14:50:13 mpi Exp $	*/
 /*	$NetBSD: db_sym.c,v 1.24 2000/08/11 22:50:47 tv Exp $	*/
 
-/* 
+/*
  * Mach Operating System
  * Copyright (c) 1993,1992,1991,1990 Carnegie Mellon University
  * All Rights Reserved.
- * 
+ *
  * Permission to use, copy, modify and distribute this software and its
  * documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
+ *
  * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
  * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND FOR
  * ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
- * 
+ *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
  *  School of Computer Science
  *  Carnegie Mellon University
  *  Pittsburgh PA 15213-3890
- * 
+ *
  * any improvements or extensions that they make and grant Carnegie Mellon
  * the rights to redistribute these changes.
  */
@@ -82,38 +82,6 @@ int		X_db_sym_numargs(db_symtab_t *, db_sym_t, int *,
  * table.  Note that if initializing the master symbol table fails,
  * no other symbol tables can be loaded.
  */
-#if 0
-void
-ddb_init(int symsize, void *vss, void *vse)
-{
-	const db_symformat_t **symf;
-	const char *name = "bsd";
-
-	if (symsize <= 0) {
-		printf(" [ no symbols available ]\n");
-		return;
-	}
-
-	/*
-	 * Do this check now for the master symbol table to avoid printing
-	 * the message N times.
-	 */
-	if (ALIGNED_POINTER(vss, long) == 0) {
-		printf("[ %s symbol table has bad start address %p ]\n",
-		    name, vss);
-		return;
-	}
-
-	for (symf = db_symformats; *symf != NULL; symf++) {
-		db_symformat = *symf;
-		if (X_db_sym_init(symsize, vss, vse, name) == TRUE)
-			return;
-	}
-
-	db_symformat = NULL;
-	printf("[ no symbol table formats found ]\n");
-}
-#else
 void
 ddb_init(void)
 {
@@ -154,7 +122,6 @@ ddb_init(void)
 	db_symformat = NULL;
 	printf("[ no symbol table formats found ]\n");
 }
-#endif
 
 /*
  * Add symbol table, with given name, to list of symbol tables.
@@ -295,7 +262,7 @@ db_lookup(char *symstr)
 	 * Return on first match.
 	 */
 	for (i = symtab_start; i < symtab_end; i++) {
-		if (db_symtabs[i].name && 
+		if (db_symtabs[i].name &&
 		    (sp = X_db_lookup(&db_symtabs[i], symstr))) {
 			db_last_symtab = &db_symtabs[i];
 			return sp;
@@ -328,7 +295,7 @@ db_sift(db_symtab_t *stab, db_sym_t sym, char *name, char *suffix, int prefix,
 
 	find = dsa->symstr;	/* String we're looking for. */
 	p = name;		/* String we're searching within. */
-	
+
 	/* Matching algorithm cribbed from strstr(), which is not
 	   in the kernel. */
 	if ((c = *find++) != 0) {
@@ -584,7 +551,7 @@ X_db_symbol_values(db_symtab_t *stab, db_sym_t sym, char **namep,
     db_expr_t *valuep)
 {
 
-	if (db_symformat != NULL) 
+	if (db_symformat != NULL)
 		(*db_symformat->sym_value)(stab, sym, namep, valuep);
 }
 
