@@ -461,7 +461,7 @@ main(void *framep)
 	 * secondary processors, yet.
 	 */
 	while (config_pending) {
-		printf("config pending\n");
+		printf("config_pending: %d\n", config_pending);
 		(void) tsleep((void *)&config_pending, PWAIT, "cfpend", 0);
 	}
 
