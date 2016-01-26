@@ -377,27 +377,32 @@ main(void *framep)
 	msginit();
 #endif
 
+	printf("pseudo-devices\n");
 	/* Attach pseudo-devices. */
 	for (pdev = pdevinit; pdev->pdev_attach != NULL; pdev++)
 		if (pdev->pdev_count > 0)
 			(*pdev->pdev_attach)(pdev->pdev_count);
 
 #ifdef CRYPTO
+	printf("crypto\n");
 	crypto_init();
 	swcr_init();
 #endif /* CRYPTO */
 
+	printf("rtable\n");
 	rtable_init();
 
 	/*
 	 * Initialize protocols.  Block reception of incoming packets
 	 * until everything is ready.
 	 */
+	printf("netisr\n");
 	s = splnet();
 	netisr_init();
 	domaininit();
 	splx(s);
 
+	printf("consbuf\n");
 	initconsbuf();
 
 #ifdef GPROF
@@ -415,9 +420,11 @@ main(void *framep)
 #endif
 
 	/* init exec and emul */
+	printf("exec\n");
 	init_exec();
 
 	/* Start the scheduler */
+	printf("scheduler\n");
 	scheduler_start();
 
 	/*
@@ -444,6 +451,7 @@ main(void *framep)
 	 * Create any kernel threads whose creation was deferred because
 	 * initprocess had not yet been created.
 	 */
+	printf("kthread\n");
 	kthread_run_deferred_queue();
 
 	/*
@@ -452,19 +460,25 @@ main(void *framep)
 	 * need to lock this semaphore, since we haven't booted any
 	 * secondary processors, yet.
 	 */
-	while (config_pending)
+	while (config_pending) {
+		printf("config pending\n");
 		(void) tsleep((void *)&config_pending, PWAIT, "cfpend", 0);
+	}
 
+	printf("startuphooks\n");
 	dostartuphooks();
 
 #if NVSCSI > 0
+	printf("vscsi\n");
 	config_rootfound("vscsi", NULL);
 #endif
 #if NSOFTRAID > 0
+	printf("softraid\n");
 	config_rootfound("softraid", NULL);
 #endif
 
 	/* Configure root/swap devices */
+	printf("diskconf\n");
 	diskconf();
 
 	if (mountroot == NULL || ((*mountroot)() != 0))
