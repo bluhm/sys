@@ -1001,6 +1001,10 @@ sd_ioctl_inquiry(struct sd_softc *sc, struct dk_inquiry *di)
 
 	vpd = dma_alloc(sizeof(*vpd), PR_WAITOK | PR_ZERO);
 
+	if (sc->flags & SDF_DYING) {
+		dma_free(vpd, sizeof(*vpd));
+		return (ENXIO);
+	}
 	sc_link = sc->sc_link;
 
 	bzero(di, sizeof(struct dk_inquiry));
