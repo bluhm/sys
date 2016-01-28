@@ -1603,6 +1603,8 @@ sd_vpd_block_limits(struct sd_softc *sc, int flags)
 	if (pg == NULL)
 		return (ENOMEM);
 
+	if (sc->flags & SDF_DYING)
+		goto die;
 	rv = scsi_inquire_vpd(sc->sc_link, pg, sizeof(*pg),
 	    SI_PG_DISK_LIMITS, flags);
 	if (rv != 0)
@@ -1617,6 +1619,10 @@ sd_vpd_block_limits(struct sd_softc *sc, int flags)
  done:
 	dma_free(pg, sizeof(*pg));
 	return (rv);
+
+ die:
+	dma_free(pg, sizeof(*pg));
+	return (ENXIO);
 }
 
 int
@@ -1630,6 +1636,8 @@ sd_vpd_thin(struct sd_softc *sc, int flags)
 	if (pg == NULL)
 		return (ENOMEM);
 
+	if (sc->flags & SDF_DYING)
+		goto die;
 	rv = scsi_inquire_vpd(sc->sc_link, pg, sizeof(*pg),
 	    SI_PG_DISK_THIN, flags);
 	if (rv != 0)
@@ -1648,6 +1656,10 @@ sd_vpd_thin(struct sd_softc *sc, int flags)
  done:
 	dma_free(pg, sizeof(*pg));
 	return (rv);
+
+ die:
+	dma_free(pg, sizeof(*pg));
+	return (ENXIO);
 }
 
 int
@@ -1699,6 +1711,10 @@ sd_get_parms(struct sd_softc *sc, struct disk_parms *dp, int flags)
 	buf = dma_alloc(sizeof(*buf), PR_NOWAIT);
 	if (buf == NULL)
 		goto validate;
+ 
+	if (sc->flags & SDF_DYING)
+		goto die;
+	sc_link = sc->sc_link;
 
 	sc_link = sc->sc_link;
 
@@ -1708,6 +1724,8 @@ sd_get_parms(struct sd_softc *sc, struct disk_parms *dp, int flags)
 	 */
 	err = scsi_do_mode_sense(sc_link, 0, buf, (void **)&page0,
 	    NULL, NULL, NULL, 1, flags | SCSI_SILENT, &big);
+	if (sc->flags & SDF_DYING)
+		goto die;
 	if (err == 0) {
 		if (big && buf->hdr_big.dev_spec & SMH_DSP_WRITE_PROT)
 			SET(sc_link->flags, SDEV_READONLY);
@@ -1764,6 +1782,8 @@ sd_get_parms(struct sd_softc *sc, struct disk_parms *dp, int flags)
 			if (heads * cyls > 0)
 				sectors = dp->disksize / (heads * cyls);
 		} else {
+			if (sc->flags & SDF_DYING)
+				goto die;
 			err = scsi_do_mode_sense(sc_link,
 			    PAGE_FLEX_GEOMETRY, buf, (void **)&flex, NULL, NULL,
 			    &secsize, sizeof(*flex) - 4,
@@ -1782,7 +1802,7 @@ sd_get_parms(struct sd_softc *sc, struct disk_parms *dp, int flags)
 		break;
 	}
 
-validate:
+ validate:
 	if (buf)
 		dma_free(buf, sizeof(*buf));
 
@@ -1839,6 +1859,10 @@ validate:
 	}
 
 	return (SDGP_RESULT_OK);
+
+ die:
+	dma_free(buf, sizeof(*buf));
+	return (SDGP_RESULT_OFFLINE);
 }
 
 void
