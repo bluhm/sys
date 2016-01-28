@@ -1190,8 +1190,7 @@ int
 sd_interpret_sense(struct scsi_xfer *xs)
 {
 	struct scsi_sense_data *sense = &xs->sense;
-	struct scsi_link *sc_link = xs->sc_link;
-	struct sd_softc *sc = sc_link->device_softc;
+	struct scsi_link *link = xs->sc_link;
 	u_int8_t serr = sense->error_code & SSD_ERRCODE;
 	int retval;
 
@@ -1199,7 +1198,7 @@ sd_interpret_sense(struct scsi_xfer *xs)
 	 * Let the generic code handle everything except a few categories of
 	 * LUN not ready errors on open devices.
 	 */
-	if (((sc_link->flags & SDEV_OPEN) == 0) ||
+	if (((link->flags & SDEV_OPEN) == 0) ||
 	    (serr != SSD_ERRCODE_CURRENT && serr != SSD_ERRCODE_DEFERRED) ||
 	    ((sense->flags & SSD_KEY) != SKEY_NOT_READY) ||
 	    (sense->extra_len < 6))
@@ -1210,13 +1209,13 @@ sd_interpret_sense(struct scsi_xfer *xs)
 
 	switch (ASC_ASCQ(sense)) {
 	case SENSE_NOT_READY_BECOMING_READY:
-		SC_DEBUG(sc_link, SDEV_DB1, ("becoming ready.\n"));
+		SC_DEBUG(link, SDEV_DB1, ("becoming ready.\n"));
 		retval = scsi_delay(xs, 5);
 		break;
 
 	case SENSE_NOT_READY_INIT_REQUIRED:
-		SC_DEBUG(sc_link, SDEV_DB1, ("spinning up\n"));
-		retval = scsi_start(sc->sc_link, SSS_START,
+		SC_DEBUG(link, SDEV_DB1, ("spinning up\n"));
+		retval = scsi_start(link, SSS_START,
 		    SCSI_IGNORE_ILLEGAL_REQUEST | SCSI_NOSLEEP);
 		if (retval == 0)
 			retval = ERESTART;
@@ -1224,7 +1223,7 @@ sd_interpret_sense(struct scsi_xfer *xs)
 			/* Can't issue the command. Fall back on a delay. */
 			retval = scsi_delay(xs, 5);
 		else
-			SC_DEBUG(sc_link, SDEV_DB1, ("spin up failed (%#x)\n",
+			SC_DEBUG(link, SDEV_DB1, ("spin up failed (%#x)\n",
 			    retval));
 		break;
 
