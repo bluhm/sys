@@ -1115,9 +1115,14 @@ int
 sdgetdisklabel(dev_t dev, struct sd_softc *sc, struct disklabel *lp,
     int spoofonly)
 {
+	struct scsi_link *sc_link;
 	size_t len;
 	char packname[sizeof(lp->d_packname) + 1];
 	char product[17], vendor[9];
+
+	if (sc->flags & SDF_DYING)
+		return (ENXIO);
+	sc_link = sc->sc_link;
 
 	bzero(lp, sizeof(struct disklabel));
 
@@ -1132,7 +1137,7 @@ sdgetdisklabel(dev_t dev, struct sd_softc *sc, struct disklabel *lp,
 	}
 
 	lp->d_type = DTYPE_SCSI;
-	if ((sc->sc_link->inqdata.device & SID_TYPE) == T_OPTICAL)
+	if ((sc_link->inqdata.device & SID_TYPE) == T_OPTICAL)
 		strncpy(lp->d_typename, "SCSI optical",
 		    sizeof(lp->d_typename));
 	else
@@ -1144,8 +1149,8 @@ sdgetdisklabel(dev_t dev, struct sd_softc *sc, struct disklabel *lp,
 	 * then leave out '<vendor> ' and use only as much of '<product>' as
 	 * does fit.
 	 */
-	viscpy(vendor, sc->sc_link->inqdata.vendor, 8);
-	viscpy(product, sc->sc_link->inqdata.product, 16);
+	viscpy(vendor, sc_link->inqdata.vendor, 8);
+	viscpy(product, sc_link->inqdata.product, 16);
 	len = snprintf(packname, sizeof(packname), "%s %s", vendor, product);
 	if (len > sizeof(lp->d_packname)) {
 		strlcpy(packname, product, sizeof(packname));
