@@ -860,6 +860,7 @@ sdwrite(dev_t dev, struct uio *uio, int ioflag)
 int
 sdioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct proc *p)
 {
+	struct scsi_link *sc_link;
 	struct sd_softc *sc;
 	struct disklabel *lp;
 	int error = 0;
@@ -872,13 +873,14 @@ sdioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct proc *p)
 		device_unref(&sc->sc_dev);
 		return (ENXIO);
 	}
+	sc_link = sc->sc_link;
 
-	SC_DEBUG(sc->sc_link, SDEV_DB2, ("sdioctl 0x%lx\n", cmd));
+	SC_DEBUG(sc_link, SDEV_DB2, ("sdioctl 0x%lx\n", cmd));
 
 	/*
 	 * If the device is not valid.. abandon ship
 	 */
-	if ((sc->sc_link->flags & SDEV_MEDIA_LOADED) == 0) {
+	if ((sc_link->flags & SDEV_MEDIA_LOADED) == 0) {
 		switch (cmd) {
 		case DIOCLOCK:
 		case DIOCEJECT:
@@ -889,7 +891,7 @@ sdioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct proc *p)
 				break;
 		/* FALLTHROUGH */
 		default:
-			if ((sc->sc_link->flags & SDEV_OPEN) == 0) {
+			if ((sc_link->flags & SDEV_OPEN) == 0) {
 				error = ENODEV;
 				goto exit;
 			} else {
@@ -943,7 +945,7 @@ sdioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct proc *p)
 		goto exit;
 
 	case DIOCLOCK:
-		error = scsi_prevent(sc->sc_link,
+		error = scsi_prevent(sc_link,
 		    (*(int *)addr) ? PR_PREVENT : PR_ALLOW, 0);
 		goto exit;
 
@@ -954,15 +956,15 @@ sdioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct proc *p)
 		}
 		/* FALLTHROUGH */
 	case DIOCEJECT:
-		if ((sc->sc_link->flags & SDEV_REMOVABLE) == 0) {
+		if ((sc_link->flags & SDEV_REMOVABLE) == 0) {
 			error = ENOTTY;
 			goto exit;
 		}
-		sc->sc_link->flags |= SDEV_EJECTING;
+		sc_link->flags |= SDEV_EJECTING;
 		goto exit;
 
 	case DIOCINQ:
-		error = scsi_do_ioctl(sc->sc_link, cmd, addr, flag);
+		error = scsi_do_ioctl(sc_link, cmd, addr, flag);
 		if (error == ENOTTY)
 			error = sd_ioctl_inquiry(sc,
 			    (struct dk_inquiry *)addr);
@@ -983,7 +985,7 @@ sdioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct proc *p)
 			error = ENOTTY;
 			goto exit;
 		}
-		error = scsi_do_ioctl(sc->sc_link, cmd, addr, flag);
+		error = scsi_do_ioctl(sc_link, cmd, addr, flag);
 	}
 
  exit:
