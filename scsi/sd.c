@@ -1246,32 +1246,34 @@ sdsize(dev_t dev)
 	sc = sdlookup(DISKUNIT(dev));
 	if (sc == NULL)
 		return -1;
-	if (sc->flags & SDF_DYING) {
-		size = -1;
-		goto exit;
-	}
+	if (sc->flags & SDF_DYING)
+		goto die;
 
 	part = DISKPART(dev);
 	omask = sc->sc_dk.dk_openmask & (1 << part);
 
-	if (omask == 0 && sdopen(dev, 0, S_IFBLK, NULL) != 0) {
-		size = -1;
-		goto exit;
-	}
+	if (omask == 0 && sdopen(dev, 0, S_IFBLK, NULL) != 0)
+		goto die;
 
 	lp = sc->sc_dk.dk_label;
+	if (sc->flags & SDF_DYING)
+		goto die;
 	if ((sc->sc_link->flags & SDEV_MEDIA_LOADED) == 0)
 		size = -1;
 	else if (lp->d_partitions[part].p_fstype != FS_SWAP)
 		size = -1;
 	else
 		size = DL_SECTOBLK(lp, DL_GETPSIZE(&lp->d_partitions[part]));
-	if (omask == 0 && sdclose(dev, 0, S_IFBLK, NULL) != 0)
-		size = -1;
 
- exit:
+	if (omask == 0 && sdclose(dev, 0, S_IFBLK, NULL) != 0)
+		goto die;
+
 	device_unref(&sc->sc_dev);
 	return size;
+
+ die:
+	device_unref(&sc->sc_dev);
+	return -1;
 }
 
 /* #define SD_DUMP_NOT_TRUSTED if you just want to watch */
@@ -1416,6 +1418,8 @@ sd_read_cap_10(struct sd_softc *sc, int flags)
 	if (rdcap == NULL)
 		return (ENOMEM);
 
+	if (sc->flags & SDF_DYING)
+		goto die;
 	xs = scsi_xs_get(sc->sc_link, flags | SCSI_DATA_IN | SCSI_SILENT);
 	if (xs == NULL)
 		goto done;
@@ -1441,6 +1445,10 @@ sd_read_cap_10(struct sd_softc *sc, int flags)
  done:
 	dma_free(rdcap, sizeof(*rdcap));
 	return (rv);
+
+ die:
+	dma_free(rdcap, sizeof(*rdcap));
+	return (ENXIO);
 }
 
 int
@@ -1458,6 +1466,8 @@ sd_read_cap_16(struct sd_softc *sc, int flags)
 	if (rdcap == NULL)
 		return (ENOMEM);
 
+	if (sc->flags & SDF_DYING)
+		goto die;
 	xs = scsi_xs_get(sc->sc_link, flags | SCSI_DATA_IN | SCSI_SILENT);
 	if (xs == NULL)
 		goto done;
@@ -1493,6 +1503,10 @@ sd_read_cap_16(struct sd_softc *sc, int flags)
  done:
 	dma_free(rdcap, sizeof(*rdcap));
 	return (rv);
+
+ die:
+	dma_free(rdcap, sizeof(*rdcap));
+	return (ENXIO);
 }
 
 int
@@ -1500,6 +1514,8 @@ sd_size(struct sd_softc *sc, int flags)
 {
 	int rv;
 
+	if (sc->flags & SDF_DYING)
+		return (ENXIO);
 	if (SCSISPC(sc->sc_link->inqdata.version) >= 3) {
 		rv = sd_read_cap_16(sc, flags);
 		if (rv != 0)
@@ -1527,6 +1543,8 @@ sd_thin_pages(struct sd_softc *sc, int flags)
 	if (pg == NULL)
 		return (ENOMEM);
 
+	if (sc->flags & SDF_DYING)
+		goto die;
 	rv = scsi_inquire_vpd(sc->sc_link, pg, sizeof(*pg),
 	    SI_PG_SUPPORTED, flags);
 	if (rv != 0)
@@ -1540,6 +1558,8 @@ sd_thin_pages(struct sd_softc *sc, int flags)
 	if (pg == NULL)
 		return (ENOMEM);
 
+	if (sc->flags & SDF_DYING)
+		goto die;
 	rv = scsi_inquire_vpd(sc->sc_link, pg, sizeof(*pg) + len,
 	    SI_PG_SUPPORTED, flags);
 	if (rv != 0)
@@ -1566,6 +1586,10 @@ sd_thin_pages(struct sd_softc *sc, int flags)
  done:
 	dma_free(pg, sizeof(*pg) + len);
 	return (rv);
+
+ die:
+	dma_free(pg, sizeof(*pg) + len);
+	return (ENXIO);
 }
 
 int
