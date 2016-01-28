@@ -1872,6 +1872,8 @@ sd_flush(struct sd_softc *sc, int flags)
 	struct scsi_xfer *xs;
 	struct scsi_synchronize_cache *cmd;
 
+	if (sc->flags & SDF_DYING)
+		return;
 	sc_link = sc->sc_link;
 
 	if (sc_link->quirks & SDEV_NOSYNCCACHE)
