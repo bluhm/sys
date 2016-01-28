@@ -199,7 +199,7 @@ sdattach(struct device *parent, struct device *self, void *aux)
 	    &sc->sc_xsh);
 
 	/* Spin up non-UMASS devices ready or not. */
-	if ((sc->sc_link->flags & SDEV_UMASS) == 0)
+	if ((sc_link->flags & SDEV_UMASS) == 0)
 		scsi_start(sc_link, SSS_START, sd_autoconf);
 
 	/*
@@ -996,21 +996,27 @@ sdioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct proc *p)
 int
 sd_ioctl_inquiry(struct sd_softc *sc, struct dk_inquiry *di)
 {
+	struct scsi_link *sc_link;
 	struct scsi_vpd_serial *vpd;
 
 	vpd = dma_alloc(sizeof(*vpd), PR_WAITOK | PR_ZERO);
 
+	if (sc->flags & SDF_DYING) {
+		dma_free(vpd, sizeof(*vpd));
+		return (ENXIO);
+	}
+	sc_link = sc->sc_link;
+
 	bzero(di, sizeof(struct dk_inquiry));
-	scsi_strvis(di->vendor, sc->sc_link->inqdata.vendor,
-	    sizeof(sc->sc_link->inqdata.vendor));
-	scsi_strvis(di->product, sc->sc_link->inqdata.product,
-	    sizeof(sc->sc_link->inqdata.product));
-	scsi_strvis(di->revision, sc->sc_link->inqdata.revision,
-	    sizeof(sc->sc_link->inqdata.revision));
+	scsi_strvis(di->vendor, sc_link->inqdata.vendor,
+	    sizeof(sc_link->inqdata.vendor));
+	scsi_strvis(di->product, sc_link->inqdata.product,
+	    sizeof(sc_link->inqdata.product));
+	scsi_strvis(di->revision, sc_link->inqdata.revision,
+	    sizeof(sc_link->inqdata.revision));
 
 	/* the serial vpd page is optional */
-	if (scsi_inquire_vpd(sc->sc_link, vpd, sizeof(*vpd),
-	    SI_PG_SERIAL, 0) == 0)
+	if (scsi_inquire_vpd(sc_link, vpd, sizeof(*vpd), SI_PG_SERIAL, 0) == 0)
 		scsi_strvis(di->serial, vpd->serial, sizeof(vpd->serial));
 	else
 		strlcpy(di->serial, "(unknown)", sizeof(vpd->serial));
