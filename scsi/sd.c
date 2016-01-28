@@ -440,14 +440,14 @@ sdopen(dev_t dev, int flag, int fmt, struct proc *p)
 		SC_DEBUG(sc_link, SDEV_DB3, ("Disklabel loaded\n"));
 	}
 
-out:
+ out:
 	if ((error = disk_openpart(&sc->sc_dk, part, fmt, 1)) != 0)
 		goto bad;
 
 	SC_DEBUG(sc_link, SDEV_DB3, ("open complete\n"));
 
 	/* It's OK to fall through because dk_openmask is now non-zero. */
-bad:
+ bad:
 	if (sc->sc_dk.dk_openmask == 0) {
 		if (sc->flags & SDF_DYING)
 			goto die;
@@ -464,7 +464,7 @@ bad:
 	device_unref(&sc->sc_dev);
 	return (error);
 
-die:
+ die:
 	disk_unlock(&sc->sc_dk);
 	device_unref(&sc->sc_dev);
 	return (ENXIO);
@@ -477,6 +477,7 @@ die:
 int
 sdclose(dev_t dev, int flag, int fmt, struct proc *p)
 {
+	struct scsi_link *sc_link;
 	struct sd_softc *sc;
 	int part = DISKPART(dev);
 
@@ -487,6 +488,7 @@ sdclose(dev_t dev, int flag, int fmt, struct proc *p)
 		device_unref(&sc->sc_dev);
 		return (ENXIO);
 	}
+	sc_link = sc->sc_link;
 
 	disk_lock_nointr(&sc->sc_dk);
 
@@ -496,15 +498,21 @@ sdclose(dev_t dev, int flag, int fmt, struct proc *p)
 		if ((sc->flags & SDF_DIRTY) != 0)
 			sd_flush(sc, 0);
 
-		if ((sc->sc_link->flags & SDEV_REMOVABLE) != 0)
-			scsi_prevent(sc->sc_link, PR_ALLOW,
+		if (sc->flags & SDF_DYING)
+			goto die;
+		if ((sc_link->flags & SDEV_REMOVABLE) != 0)
+			scsi_prevent(sc_link, PR_ALLOW,
 			    SCSI_IGNORE_ILLEGAL_REQUEST |
 			    SCSI_IGNORE_NOT_READY | SCSI_SILENT);
-		sc->sc_link->flags &= ~(SDEV_OPEN | SDEV_MEDIA_LOADED);
+		if (sc->flags & SDF_DYING)
+			goto die;
+		sc_link->flags &= ~(SDEV_OPEN | SDEV_MEDIA_LOADED);
 
-		if (sc->sc_link->flags & SDEV_EJECTING) {
-			scsi_start(sc->sc_link, SSS_STOP|SSS_LOEJ, 0);
-			sc->sc_link->flags &= ~SDEV_EJECTING;
+		if (sc_link->flags & SDEV_EJECTING) {
+			scsi_start(sc_link, SSS_STOP|SSS_LOEJ, 0);
+			if (sc->flags & SDF_DYING)
+				goto die;
+			sc_link->flags &= ~SDEV_EJECTING;
 		}
 
 		timeout_del(&sc->sc_timeout);
@@ -514,6 +522,11 @@ sdclose(dev_t dev, int flag, int fmt, struct proc *p)
 	disk_unlock(&sc->sc_dk);
 	device_unref(&sc->sc_dev);
 	return 0;
+
+ die:
+	disk_unlock(&sc->sc_dk);
+	device_unref(&sc->sc_dev);
+	return (ENXIO);
 }
 
 /*
@@ -524,6 +537,7 @@ sdclose(dev_t dev, int flag, int fmt, struct proc *p)
 void
 sdstrategy(struct buf *bp)
 {
+	struct scsi_link *sc_link;
 	struct sd_softc *sc;
 	int s;
 
@@ -536,14 +550,15 @@ sdstrategy(struct buf *bp)
 		bp->b_error = ENXIO;
 		goto bad;
 	}
+	sc_link = sc->sc_link;
 
-	SC_DEBUG(sc->sc_link, SDEV_DB2, ("sdstrategy: %ld bytes @ blk %lld\n",
+	SC_DEBUG(sc_link, SDEV_DB2, ("sdstrategy: %ld bytes @ blk %lld\n",
 	    bp->b_bcount, (long long)bp->b_blkno));
 	/*
 	 * If the device has been made invalid, error out
 	 */
-	if ((sc->sc_link->flags & SDEV_MEDIA_LOADED) == 0) {
-		if (sc->sc_link->flags & SDEV_OPEN)
+	if ((sc_link->flags & SDEV_MEDIA_LOADED) == 0) {
+		if (sc_link->flags & SDEV_OPEN)
 			bp->b_error = EIO;
 		else
 			bp->b_error = ENODEV;
@@ -790,12 +805,18 @@ retry:
 void
 sdminphys(struct buf *bp)
 {
+	struct scsi_link *sc_link;
 	struct sd_softc *sc;
 	long max;
 
 	sc = sdlookup(DISKUNIT(bp->b_dev));
 	if (sc == NULL)
 		return;  /* XXX - right way to fail this? */
+	if (sc->flags & SDF_DYING) {
+		device_unref(&sc->sc_dev);
+		return;
+	}
+	sc_link = sc->sc_link;
 
 	/*
 	 * If the device is ancient, we want to make sure that
@@ -815,7 +836,7 @@ sdminphys(struct buf *bp)
 			bp->b_bcount = max;
 	}
 
-	(*sc->sc_link->adapter->scsi_minphys)(bp, sc->sc_link);
+	(*sc_link->adapter->scsi_minphys)(bp, sc_link);
 
 	device_unref(&sc->sc_dev);
 }
