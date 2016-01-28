@@ -1866,11 +1866,15 @@ sd_get_parms(struct sd_softc *sc, struct disk_parms *dp, int flags)
 void
 sd_flush(struct sd_softc *sc, int flags)
 {
-	struct scsi_link *link = sc->sc_link;
+	struct scsi_link *sc_link;
 	struct scsi_xfer *xs;
 	struct scsi_synchronize_cache *cmd;
 
-	if (link->quirks & SDEV_NOSYNCCACHE)
+	if (sc->flags & SDF_DYING)
+		return;
+	sc_link = sc->sc_link;
+
+	if (sc_link->quirks & SDEV_NOSYNCCACHE)
 		return;
 
 	/*
@@ -1879,9 +1883,9 @@ sd_flush(struct sd_softc *sc, int flags)
 	 * that the command is not supported by the device.
 	 */
 
-	xs = scsi_xs_get(link, flags);
+	xs = scsi_xs_get(sc_link, flags);
 	if (xs == NULL) {
-		SC_DEBUG(link, SDEV_DB1, ("cache sync failed to get xs\n"));
+		SC_DEBUG(sc_link, SDEV_DB1, ("cache sync failed to get xs\n"));
 		return;
 	}
 
@@ -1895,7 +1899,7 @@ sd_flush(struct sd_softc *sc, int flags)
 	if (scsi_xs_sync(xs) == 0)
 		sc->flags &= ~SDF_DIRTY;
 	else
-		SC_DEBUG(link, SDEV_DB1, ("cache sync failed\n"));
+		SC_DEBUG(sc_link, SDEV_DB1, ("cache sync failed\n"));
 
 	scsi_xs_put(xs);
 }
