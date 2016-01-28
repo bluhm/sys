@@ -1603,6 +1603,8 @@ sd_vpd_block_limits(struct sd_softc *sc, int flags)
 	if (pg == NULL)
 		return (ENOMEM);
 
+	if (sc->flags & SDF_DYING)
+		goto die;
 	rv = scsi_inquire_vpd(sc->sc_link, pg, sizeof(*pg),
 	    SI_PG_DISK_LIMITS, flags);
 	if (rv != 0)
@@ -1617,6 +1619,10 @@ sd_vpd_block_limits(struct sd_softc *sc, int flags)
  done:
 	dma_free(pg, sizeof(*pg));
 	return (rv);
+
+ die:
+	dma_free(pg, sizeof(*pg));
+	return (ENXIO);
 }
 
 int
@@ -1630,6 +1636,8 @@ sd_vpd_thin(struct sd_softc *sc, int flags)
 	if (pg == NULL)
 		return (ENOMEM);
 
+	if (sc->flags & SDF_DYING)
+		goto die;
 	rv = scsi_inquire_vpd(sc->sc_link, pg, sizeof(*pg),
 	    SI_PG_DISK_THIN, flags);
 	if (rv != 0)
@@ -1648,6 +1656,10 @@ sd_vpd_thin(struct sd_softc *sc, int flags)
  done:
 	dma_free(pg, sizeof(*pg));
 	return (rv);
+
+ die:
+	dma_free(pg, sizeof(*pg));
+	return (ENXIO);
 }
 
 int
@@ -1679,6 +1691,7 @@ sd_thin_params(struct sd_softc *sc, int flags)
 int
 sd_get_parms(struct sd_softc *sc, struct disk_parms *dp, int flags)
 {
+	struct scsi_link *sc_link;
 	union scsi_mode_sense_buf *buf = NULL;
 	struct page_rigid_geometry *rigid = NULL;
 	struct page_flex_geometry *flex = NULL;
@@ -1698,20 +1711,26 @@ sd_get_parms(struct sd_softc *sc, struct disk_parms *dp, int flags)
 	buf = dma_alloc(sizeof(*buf), PR_NOWAIT);
 	if (buf == NULL)
 		goto validate;
+ 
+	if (sc->flags & SDF_DYING)
+		goto die;
+	sc_link = sc->sc_link;
 
 	/*
 	 * Ask for page 0 (vendor specific) mode sense data to find
 	 * READONLY info. The only thing USB devices will ask for.
 	 */
-	err = scsi_do_mode_sense(sc->sc_link, 0, buf, (void **)&page0,
+	err = scsi_do_mode_sense(sc_link, 0, buf, (void **)&page0,
 	    NULL, NULL, NULL, 1, flags | SCSI_SILENT, &big);
+	if (sc->flags & SDF_DYING)
+		goto die;
 	if (err == 0) {
 		if (big && buf->hdr_big.dev_spec & SMH_DSP_WRITE_PROT)
-			SET(sc->sc_link->flags, SDEV_READONLY);
+			SET(sc_link->flags, SDEV_READONLY);
 		else if (!big && buf->hdr.dev_spec & SMH_DSP_WRITE_PROT)
-			SET(sc->sc_link->flags, SDEV_READONLY);
+			SET(sc_link->flags, SDEV_READONLY);
 		else
-			CLR(sc->sc_link->flags, SDEV_READONLY);
+			CLR(sc_link->flags, SDEV_READONLY);
 	}
 
 	/*
@@ -1719,17 +1738,17 @@ sd_get_parms(struct sd_softc *sc, struct disk_parms *dp, int flags)
 	 * don't have a meaningful geometry anyway, so just fake it if
 	 * scsi_size() worked.
 	 */
-	if ((sc->sc_link->flags & SDEV_UMASS) && (dp->disksize > 0))
+	if ((sc_link->flags & SDEV_UMASS) && (dp->disksize > 0))
 		goto validate;
 
-	switch (sc->sc_link->inqdata.device & SID_TYPE) {
+	switch (sc_link->inqdata.device & SID_TYPE) {
 	case T_OPTICAL:
 		/* No more information needed or available. */
 		break;
 
 	case T_RDIRECT:
 		/* T_RDIRECT supports only PAGE_REDUCED_GEOMETRY (6). */
-		err = scsi_do_mode_sense(sc->sc_link, PAGE_REDUCED_GEOMETRY,
+		err = scsi_do_mode_sense(sc_link, PAGE_REDUCED_GEOMETRY,
 		    buf, (void **)&reduced, NULL, NULL, &secsize,
 		    sizeof(*reduced), flags | SCSI_SILENT, NULL);
 		if (!err && reduced &&
@@ -1749,9 +1768,9 @@ sd_get_parms(struct sd_softc *sc, struct disk_parms *dp, int flags)
 		 * so accept the page. The extra bytes will be zero and RPM will
 		 * end up with the default value of 3600.
 		 */
-		if (((sc->sc_link->flags & SDEV_ATAPI) == 0) ||
-		    ((sc->sc_link->flags & SDEV_REMOVABLE) == 0))
-			err = scsi_do_mode_sense(sc->sc_link,
+		if (((sc_link->flags & SDEV_ATAPI) == 0) ||
+		    ((sc_link->flags & SDEV_REMOVABLE) == 0))
+			err = scsi_do_mode_sense(sc_link,
 			    PAGE_RIGID_GEOMETRY, buf, (void **)&rigid, NULL,
 			    NULL, &secsize, sizeof(*rigid) - 4,
 			    flags | SCSI_SILENT, NULL);
@@ -1761,7 +1780,9 @@ sd_get_parms(struct sd_softc *sc, struct disk_parms *dp, int flags)
 			if (heads * cyls > 0)
 				sectors = dp->disksize / (heads * cyls);
 		} else {
-			err = scsi_do_mode_sense(sc->sc_link,
+			if (sc->flags & SDF_DYING)
+				goto die;
+			err = scsi_do_mode_sense(sc_link,
 			    PAGE_FLEX_GEOMETRY, buf, (void **)&flex, NULL, NULL,
 			    &secsize, sizeof(*flex) - 4,
 			    flags | SCSI_SILENT, NULL);
@@ -1779,7 +1800,7 @@ sd_get_parms(struct sd_softc *sc, struct disk_parms *dp, int flags)
 		break;
 	}
 
-validate:
+ validate:
 	if (buf)
 		dma_free(buf, sizeof(*buf));
 
@@ -1836,6 +1857,10 @@ validate:
 	}
 
 	return (SDGP_RESULT_OK);
+
+ die:
+	dma_free(buf, sizeof(*buf));
+	return (SDGP_RESULT_OFFLINE);
 }
 
 void
