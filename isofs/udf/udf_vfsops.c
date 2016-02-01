@@ -476,10 +476,8 @@ udf_unmount(struct mount *mp, int mntflags, struct proc *p)
 
 	vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY, p);
 	vinvalbuf(devvp, V_SAVE, NOCRED, p, 0, 0);
-	error = VOP_CLOSE(devvp, FREAD, NOCRED, p);
+	VOP_CLOSE(devvp, FREAD, NOCRED, p);
 	VOP_UNLOCK(devvp, 0, p);
-	if (error)
-		return (error);
 
 	devvp->v_specmountpoint = NULL;
 	vrele(devvp);
@@ -495,7 +493,7 @@ udf_unmount(struct mount *mp, int mntflags, struct proc *p)
 
 	free(ump, M_UDFMOUNT, 0);
 
-	mp->mnt_data = (qaddr_t)0;
+	mp->mnt_data = NULL;
 	mp->mnt_flag &= ~MNT_LOCAL;
 
 	return (0);
