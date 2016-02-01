@@ -167,7 +167,7 @@ fusefs_unmount(struct mount *mp, int mntflags, struct proc *p)
 	free(fmp, M_FUSEFS, 0);
 	mp->mnt_data = NULL;
 
-	return (error);
+	return (0);
 }
 
 int
