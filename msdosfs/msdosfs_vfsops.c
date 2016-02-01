@@ -590,7 +590,7 @@ error_exit:
 		if (pmp->pm_inusemap)
 			free(pmp->pm_inusemap, M_MSDOSFSFAT, 0);
 		free(pmp, M_MSDOSFSMNT, 0);
-		mp->mnt_data = (qaddr_t)0;
+		mp->mnt_data = NULL;
 	}
 	return (error);
 }
