@@ -456,7 +456,7 @@ out:
 
 	if (isomp) {
 		free((caddr_t)isomp, M_ISOFSMNT, 0);
-		mp->mnt_data = (qaddr_t)0;
+		mp->mnt_data = NULL;
 	}
 	return (error);
 }
