@@ -476,10 +476,8 @@ udf_unmount(struct mount *mp, int mntflags, struct proc *p)
 
 	vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY, p);
 	vinvalbuf(devvp, V_SAVE, NOCRED, p, 0, 0);
-	error = VOP_CLOSE(devvp, FREAD, NOCRED, p);
+	VOP_CLOSE(devvp, FREAD, NOCRED, p);
 	VOP_UNLOCK(devvp, p);
-	if (error)
-		return (error);
 
 	devvp->v_specmountpoint = NULL;
 	vrele(devvp);
