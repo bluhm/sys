@@ -702,6 +702,7 @@ nfs_unmount(struct mount *mp, int mntflags, struct proc *p)
 	m_freem(nmp->nm_nam);
 	timeout_del(&nmp->nm_rtimeout);
 	free(nmp, M_NFSMNT, sizeof(*nmp));
+	mp->mnt_data = NULL;
 	return (0);
 }
 
