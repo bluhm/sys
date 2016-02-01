@@ -626,14 +626,14 @@ msdosfs_unmount(struct mount *mp, int mntflags,struct proc *p)
 	vprint("msdosfs_umount(): just before calling VOP_CLOSE()\n", vp);
 #endif
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, p);
-	error = VOP_CLOSE(vp,
-	   pmp->pm_flags & MSDOSFSMNT_RONLY ? FREAD : FREAD|FWRITE, NOCRED, p);
+	VOP_CLOSE(vp, pmp->pm_flags & MSDOSFSMNT_RONLY ? FREAD : FREAD|FWRITE,
+	    NOCRED, p);
 	vput(vp);
 	free(pmp->pm_inusemap, M_MSDOSFSFAT, 0);
 	free(pmp, M_MSDOSFSMNT, 0);
 	mp->mnt_data = NULL;
 	mp->mnt_flag &= ~MNT_LOCAL;
-	return (error);
+	return (0);
 }
 
 int
