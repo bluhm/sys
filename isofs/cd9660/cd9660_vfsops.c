@@ -585,12 +585,12 @@ cd9660_unmount(mp, mntflags, p)
 
 	isomp->im_devvp->v_specmountpoint = NULL;
 	vn_lock(isomp->im_devvp, LK_EXCLUSIVE | LK_RETRY, p);
-	error = VOP_CLOSE(isomp->im_devvp, FREAD, NOCRED, p);
+	VOP_CLOSE(isomp->im_devvp, FREAD, NOCRED, p);
 	vput(isomp->im_devvp);
 	free((caddr_t)isomp, M_ISOFSMNT, 0);
-	mp->mnt_data = (qaddr_t)0;
+	mp->mnt_data = NULL;
 	mp->mnt_flag &= ~MNT_LOCAL;
-	return (error);
+	return (0);
 }
 
 /*
