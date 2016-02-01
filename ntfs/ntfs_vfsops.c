@@ -522,10 +522,7 @@ ntfs_unmount(struct mount *mp, int mntflags, struct proc *p)
 	/* lock the device vnode before calling VOP_CLOSE() */
 	VOP_LOCK(ntmp->ntm_devvp, LK_EXCLUSIVE | LK_RETRY, p);
 	vinvalbuf(ntmp->ntm_devvp, V_SAVE, NOCRED, p, 0, 0);
-
-	error = VOP_CLOSE(ntmp->ntm_devvp, ronly ? FREAD : FREAD|FWRITE,
-		NOCRED, p);
-
+	VOP_CLOSE(ntmp->ntm_devvp, ronly ? FREAD : FREAD|FWRITE, NOCRED, p);
 	vput(ntmp->ntm_devvp);
 
 	/* free the toupper table, if this has been last mounted ntfs volume */
@@ -536,7 +533,7 @@ ntfs_unmount(struct mount *mp, int mntflags, struct proc *p)
 	free(ntmp, M_NTFSMNT, 0);
 	mp->mnt_data = NULL;
 	mp->mnt_flag &= ~MNT_LOCAL;
-	return (error);
+	return (0);
 }
 
 int
