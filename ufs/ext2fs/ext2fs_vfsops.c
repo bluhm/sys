@@ -602,7 +602,7 @@ out:
 	if (ump) {
 		free(ump->um_e2fs, M_UFSMNT, sizeof *ump->um_e2fs);
 		free(ump, M_UFSMNT, sizeof *ump);
-		mp->mnt_data = (qaddr_t)0;
+		mp->mnt_data = NULL;
 	}
 	return (error);
 }
