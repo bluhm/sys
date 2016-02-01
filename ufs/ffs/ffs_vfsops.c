@@ -1022,15 +1022,15 @@ ffs_unmount(struct mount *mp, int mntflags, struct proc *p)
 
 	vn_lock(ump->um_devvp, LK_EXCLUSIVE | LK_RETRY, p);
 	vinvalbuf(ump->um_devvp, V_SAVE, NOCRED, p, 0, 0);
-	error = VOP_CLOSE(ump->um_devvp, fs->fs_ronly ? FREAD : FREAD|FWRITE,
-		NOCRED, p);
+	VOP_CLOSE(ump->um_devvp, fs->fs_ronly ? FREAD : FREAD|FWRITE,
+	    NOCRED, p);
 	vput(ump->um_devvp);
 	free(fs->fs_csp, M_UFSMNT, 0);
 	free(fs, M_UFSMNT, fs->fs_sbsize);
 	free(ump, M_UFSMNT, sizeof(*ump));
-	mp->mnt_data = (qaddr_t)0;
+	mp->mnt_data = NULL;
 	mp->mnt_flag &= ~MNT_LOCAL;
-	return (error);
+	return (0);
 }
 
 /*
