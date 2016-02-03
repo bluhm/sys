@@ -341,12 +341,12 @@ sdopen(dev_t dev, int flag, int fmt, struct proc *p)
 	sc = sdlookup(unit);
 	if (sc == NULL)
 		return (ENXIO);
-	sc_link = sc->sc_link;
-
 	if (sc->flags & SDF_DYING) {
 		device_unref(&sc->sc_dev);
 		return (ENXIO);
 	}
+	sc_link = sc->sc_link;
+
 	if (ISSET(flag, FWRITE) && ISSET(sc_link->flags, SDEV_READONLY)) {
 		device_unref(&sc->sc_dev);
 		return (EACCES);
@@ -781,6 +781,10 @@ sdminphys(struct buf *bp)
 	sc = sdlookup(DISKUNIT(bp->b_dev));
 	if (sc == NULL)
 		return;  /* XXX - right way to fail this? */
+	if (sc->flags & SDF_DYING) {
+		device_unref(&sc->sc_dev);
+		return;
+	}
 	sc_link = sc->sc_link;
 
 	/*
@@ -1195,18 +1199,14 @@ sdsize(dev_t dev)
 	sc = sdlookup(DISKUNIT(dev));
 	if (sc == NULL)
 		return -1;
-	if (sc->flags & SDF_DYING) {
-		size = -1;
-		goto exit;
-	}
+	if (sc->flags & SDF_DYING)
+		goto die;
 
 	part = DISKPART(dev);
 	omask = sc->sc_dk.dk_openmask & (1 << part);
 
-	if (omask == 0 && sdopen(dev, 0, S_IFBLK, NULL) != 0) {
-		size = -1;
-		goto exit;
-	}
+	if (omask == 0 && sdopen(dev, 0, S_IFBLK, NULL) != 0)
+		goto die;
 
 	lp = sc->sc_dk.dk_label;
 	if ((sc->sc_link->flags & SDEV_MEDIA_LOADED) == 0)
@@ -1215,12 +1215,16 @@ sdsize(dev_t dev)
 		size = -1;
 	else
 		size = DL_SECTOBLK(lp, DL_GETPSIZE(&lp->d_partitions[part]));
-	if (omask == 0 && sdclose(dev, 0, S_IFBLK, NULL) != 0)
-		size = -1;
 
- exit:
+	if (omask == 0 && sdclose(dev, 0, S_IFBLK, NULL) != 0)
+		goto die;
+
 	device_unref(&sc->sc_dev);
 	return size;
+
+ die:
+	device_unref(&sc->sc_dev);
+	return -1;
 }
 
 /* #define SD_DUMP_NOT_TRUSTED if you just want to watch */
