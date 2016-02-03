@@ -1633,6 +1633,8 @@ sd_get_parms(struct sd_softc *sc, struct disk_parms *dp, int flags)
 	 */
 	err = scsi_do_mode_sense(sc_link, 0, buf, (void **)&page0,
 	    NULL, NULL, NULL, 1, flags | SCSI_SILENT, &big);
+	if (sc->flags & SDF_DYING)
+		goto die;
 	if (err == 0) {
 		if (big && buf->hdr_big.dev_spec & SMH_DSP_WRITE_PROT)
 			SET(sc_link->flags, SDEV_READONLY);
