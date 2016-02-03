@@ -1113,8 +1113,6 @@ sdgetdisklabel(dev_t dev, struct sd_softc *sc, struct disklabel *lp,
 	char packname[sizeof(lp->d_packname) + 1];
 	char product[17], vendor[9];
 
-	if (sc->flags & SDF_DYING)
-		return (ENXIO);
 	link = sc->sc_link;
 
 	bzero(lp, sizeof(struct disklabel));
