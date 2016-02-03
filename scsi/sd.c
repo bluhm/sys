@@ -1036,6 +1036,8 @@ sd_ioctl_cache(struct sd_softc *sc, long cmd, struct dk_cache *dkc)
 	int big;
 	int rv;
 
+	if (sc->flags & SDF_DYING)
+		return (ENXIO);
 	link = sc->sc_link;
 
 	if (ISSET(link->flags, SDEV_UMASS))
@@ -1491,6 +1493,8 @@ sd_size(struct sd_softc *sc, int flags)
 {
 	int rv;
 
+	if (sc->flags & SDF_DYING)
+		return (ENXIO);
 	if (SCSISPC(sc->sc_link->inqdata.version) >= 3) {
 		rv = sd_read_cap_16(sc, flags);
 		if (rv != 0)
