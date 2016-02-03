@@ -1111,6 +1111,8 @@ sdgetdisklabel(dev_t dev, struct sd_softc *sc, struct disklabel *lp,
 	char packname[sizeof(lp->d_packname) + 1];
 	char product[17], vendor[9];
 
+	if (sc->flags & SDF_DYING)
+		return (ENXIO);
 	link = sc->sc_link;
 
 	bzero(lp, sizeof(struct disklabel));
@@ -1813,6 +1815,8 @@ sd_flush(struct sd_softc *sc, int flags)
 	struct scsi_xfer *xs;
 	struct scsi_synchronize_cache *cmd;
 
+	if (sc->flags & SDF_DYING)
+		return;
 	link = sc->sc_link;
 
 	if (link->quirks & SDEV_NOSYNCCACHE)
