@@ -1711,7 +1711,7 @@ sd_get_parms(struct sd_softc *sc, struct disk_parms *dp, int flags)
 	buf = dma_alloc(sizeof(*buf), PR_NOWAIT);
 	if (buf == NULL)
 		goto validate;
- 
+
 	if (sc->flags & SDF_DYING)
 		goto die;
 	sc_link = sc->sc_link;
