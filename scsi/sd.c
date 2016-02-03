@@ -1716,8 +1716,6 @@ sd_get_parms(struct sd_softc *sc, struct disk_parms *dp, int flags)
 		goto die;
 	sc_link = sc->sc_link;
 
-	sc_link = sc->sc_link;
-
 	/*
 	 * Ask for page 0 (vendor specific) mode sense data to find
 	 * READONLY info. The only thing USB devices will ask for.
