@@ -230,6 +230,9 @@ typedef int	boolean_t;
 
 #define MAX_NUM_MULTICAST_ADDRESSES	128
 
+#define PCICFG_DESC_RING_STATUS		0xe4
+#define FLUSH_DESC_REQUIRED		0x100
+
 /*
  * TDBA/RDBA should be aligned on 16 byte boundary. But TDLEN/RDLEN should be
  * multiple of 128 bytes. So we align TDBA/RDBA on 128 byte boundary. This will
@@ -319,6 +322,7 @@ struct em_softc {
 	struct em_osdep	osdep;
 	struct ifmedia	media;
 	int		io_rid;
+	int		legacy_irq;
 
 	void		*sc_intrhand;
 	struct timeout	em_intr_enable;
