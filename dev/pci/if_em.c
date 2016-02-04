@@ -3144,15 +3144,15 @@ em_flush_tx_ring(struct em_softc *sc)
 	uint16_t		 size = 512;
 	struct em_tx_desc	*txd;
 
-	KASSERT(sc->tx_desc_base != NULL);
+	KASSERT(sc->sc_tx_desc_ring != NULL);
 
 	tctl = EM_READ_REG(&sc->hw, E1000_TCTL);
 	EM_WRITE_REG(&sc->hw, E1000_TCTL, tctl | E1000_TCTL_EN);
 
-	KASSERT(EM_READ_REG(&sc->hw, E1000_TDT) == sc->next_avail_tx_desc);
+	KASSERT(EM_READ_REG(&sc->hw, E1000_TDT) == sc->sc_tx_desc_head);
 
-	txd = &sc->tx_desc_base[sc->next_avail_tx_desc];
-	txd->buffer_addr = sc->txdma.dma_map->dm_segs[0].ds_addr;
+	txd = &sc->sc_tx_desc_ring[sc->sc_tx_desc_head];
+	txd->buffer_addr = addr;
 	txd->lower.data = htole32(txd_lower | size);
 	txd->upper.data = 0;
 
@@ -3160,10 +3160,10 @@ em_flush_tx_ring(struct em_softc *sc)
 	bus_space_barrier(sc->osdep.mem_bus_space_tag,
 	    sc->osdep.mem_bus_space_handle, 0, 0, BUS_SPACE_BARRIER_WRITE);
 
-	if (++sc->next_avail_tx_desc == sc->num_tx_desc)
-		sc->next_avail_tx_desc = 0;
+	if (++sc->sc_tx_desc_head == sc->sc_tx_slots)
+		sc->sc_tx_desc_head = 0;
 
-	EM_WRITE_REG(&sc->hw, E1000_TDT, sc->next_avail_tx_desc);
+	EM_WRITE_REG(&sc->hw, E1000_TDT, sc->sc_tx_desc_head);
 	bus_space_barrier(sc->osdep.mem_bus_space_tag, sc->osdep.mem_bus_space_handle,
 	    0, 0, BUS_SPACE_BARRIER_READ|BUS_SPACE_BARRIER_WRITE);
 	usec_delay(250);
