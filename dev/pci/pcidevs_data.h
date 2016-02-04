@@ -10964,6 +10964,22 @@ static const struct pci_known_product pci_known_products[] = {
 	    "HD Graphics",
 	},
 	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_I219_LM,
+	    "I219_LM",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_I219_V,
+	    "I219_V",
+	},
+	{
+	    PCI_VENDOR_INTLE, PCI_PRODUCT_INTLE_I219_LM2,
+	    "I219_LM2",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_I219_V2,
+	    "I219_V2",
+	},
+	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_CORE5G_HB_1,
 	    "Core 5G Host",
 	},
