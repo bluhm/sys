@@ -10952,18 +10952,6 @@ static const struct pci_known_product pci_known_products[] = {
 	    "I218-V",
 	},
 	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_X557_AT2,
-	    "X557-AT2",
-	},
-	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_CORE5G_H_PCIE_X16,
-	    "Core 5G PCIE",
-	},
-	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_CORE5G_M_GT1_1,
-	    "HD Graphics",
-	},
-	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_I219_LM,
 	    "I219_LM",
 	},
@@ -10978,6 +10966,18 @@ static const struct pci_known_product pci_known_products[] = {
 	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_I219_V2,
 	    "I219_V2",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_X557_AT2,
+	    "X557-AT2",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_CORE5G_H_PCIE_X16,
+	    "Core 5G PCIE",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_CORE5G_M_GT1_1,
+	    "HD Graphics",
 	},
 	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_CORE5G_HB_1,
