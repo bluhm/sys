@@ -1,4 +1,4 @@
-/*	$OpenBSD: ieee80211_input.c,v 1.155 2016/02/01 18:43:22 stsp Exp $	*/
+/*	$OpenBSD: ieee80211_input.c,v 1.168 2016/02/12 10:12:42 stsp Exp $	*/
 
 /*-
  * Copyright (c) 2001 Atsushi Onoe
@@ -192,7 +192,7 @@ ieee80211_input_print(struct ieee80211com *ic,  struct ifnet *ifp,
 		break;
 	}
 #ifdef IEEE80211_DEBUG
-	doprint += ieee80211_debug;
+	doprint += (ieee80211_debug > 1);
 #endif
 	if (!doprint)
 		return;
@@ -257,6 +257,7 @@ ieee80211_input(struct ifnet *ifp, struct mbuf *m, struct ieee80211_node *ni,
 
 	dir = wh->i_fc[1] & IEEE80211_FC1_DIR_MASK;
 	type = wh->i_fc[0] & IEEE80211_FC0_TYPE_MASK;
+	subtype = wh->i_fc[0] & IEEE80211_FC0_SUBTYPE_MASK;
 
 	if (type != IEEE80211_FC0_TYPE_CTL) {
 		hdrlen = ieee80211_get_hdrlen(wh);
@@ -275,6 +276,7 @@ ieee80211_input(struct ifnet *ifp, struct mbuf *m, struct ieee80211_node *ni,
 	}
 
 	if (type == IEEE80211_FC0_TYPE_DATA && hasqos &&
+	    (subtype & IEEE80211_FC0_SUBTYPE_NODATA) == 0 &&
 	    !(rxi->rxi_flags & IEEE80211_RXI_AMPDU_DONE)) {
 		int ba_state = ni->ni_rx_ba[tid].ba_state;
 
@@ -508,8 +510,6 @@ ieee80211_input(struct ifnet *ifp, struct mbuf *m, struct ieee80211_node *ni,
 			goto out;
 		}
 #endif
-		subtype = wh->i_fc[0] & IEEE80211_FC0_SUBTYPE_MASK;
-
 		/* drop frames without interest */
 		if (ic->ic_state == IEEE80211_S_SCAN) {
 			if (subtype != IEEE80211_FC0_SUBTYPE_BEACON &&
@@ -564,7 +564,6 @@ ieee80211_input(struct ifnet *ifp, struct mbuf *m, struct ieee80211_node *ni,
 
 	case IEEE80211_FC0_TYPE_CTL:
 		ic->ic_stats.is_rx_ctl++;
-		subtype = wh->i_fc[0] & IEEE80211_FC0_SUBTYPE_MASK;
 		switch (subtype) {
 #ifndef IEEE80211_STA_ONLY
 		case IEEE80211_FC0_SUBTYPE_PS_POLL:
@@ -708,14 +707,47 @@ ieee80211_input_ba(struct ieee80211com *ic, struct mbuf *m,
 		timeout_add_usec(&ba->ba_to, ba->ba_timeout_val);
 
 	if (SEQ_LT(sn, ba->ba_winstart)) {	/* SN < WinStartB */
-		ifp->if_ierrors++;
+		ic->ic_stats.is_rx_dup++;
 		m_freem(m);	/* discard the MPDU */
 		return;
 	}
 	if (SEQ_LT(ba->ba_winend, sn)) {	/* WinEndB < SN */
+		/* 
+		 * If this frame would move the window outside the range of
+		 * winend + winsize, drop it. This is likely a fluke and the
+		 * next frame will fit into the window again. Allowing the
+		 * window to be moved too far ahead makes us drop frames
+		 * until their sequence numbers catch up with the new window.
+		 *
+		 * However, if the window really did move arbitrarily, we must
+		 * allow it to move forward. We try to detect this condition
+		 * by counting missed consecutive frames.
+		 */
 		count = (sn - ba->ba_winend) & 0xfff;
-		if (count > ba->ba_winsize)	/* no overlap */
-			count = ba->ba_winsize;
+#ifdef DIAGNOSTIC
+		if ((ifp->if_flags & IFF_DEBUG) && count > 1)
+			printf("%s: received frame with bad sequence number "
+			    "%d, expecting %d:%d\n", __func__,
+			    sn, ba->ba_winstart, ba->ba_winend);
+#endif
+		if (count > ba->ba_winsize) {
+			if (ba->ba_winmiss < IEEE80211_BA_MAX_WINMISS) { 
+				if (ba->ba_missedsn == sn - 1)
+					ba->ba_winmiss++;
+				else
+					ba->ba_winmiss = 0;
+				ba->ba_missedsn = sn;
+				ifp->if_ierrors++;
+				m_freem(m);	/* discard the MPDU */
+				return;
+			}
+
+			/* It appears the window has moved for real. */
+			ba->ba_winmiss = 0;
+			ba->ba_missedsn = 0;
+
+			count = ba->ba_winsize;	/* no overlap */
+		}
 		while (count-- > 0) {
 			/* gaps may exist */
 			if (ba->ba_buf[ba->ba_head].m != NULL) {
@@ -1557,7 +1589,7 @@ ieee80211_recv_probe_resp(struct ieee80211com *ic, struct mbuf *m,
 		return;
 
 #ifdef IEEE80211_DEBUG
-	if (ieee80211_debug &&
+	if (ieee80211_debug > 1 &&
 	    (ni == NULL || ic->ic_state == IEEE80211_S_SCAN)) {
 		printf("%s: %s%s on chan %u (bss chan %u) ",
 		    __func__, (ni == NULL ? "new " : ""),
@@ -2502,6 +2534,9 @@ ieee80211_recv_addba_req(struct ieee80211com *ic, struct mbuf *m,
 	ba->ba_winsize = bufsz;
 	if (ba->ba_winsize == 0 || ba->ba_winsize > IEEE80211_BA_MAX_WINSZ)
 		ba->ba_winsize = IEEE80211_BA_MAX_WINSZ;
+	ba->ba_params = (params & IEEE80211_ADDBA_BA_POLICY);
+	ba->ba_params |= ((ba->ba_winsize << IEEE80211_ADDBA_BUFSZ_SHIFT) |
+	    (tid << IEEE80211_ADDBA_TID_SHIFT) | IEEE80211_ADDBA_AMSDU);
 	ba->ba_winstart = ssn;
 	ba->ba_winend = (ba->ba_winstart + ba->ba_winsize - 1) & 0xfff;
 	/* allocate and setup our reordering buffer */

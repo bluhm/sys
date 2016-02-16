@@ -1,4 +1,4 @@
-/*	$OpenBSD: ieee80211_output.c,v 1.108 2016/01/21 20:33:20 stsp Exp $	*/
+/*	$OpenBSD: ieee80211_output.c,v 1.110 2016/02/05 19:11:31 stsp Exp $	*/
 /*	$NetBSD: ieee80211_output.c,v 1.13 2004/05/31 11:02:55 dyoung Exp $	*/
 
 /*-
@@ -94,6 +94,9 @@ struct	mbuf *ieee80211_get_addba_resp(struct ieee80211com *,
 struct	mbuf *ieee80211_get_delba(struct ieee80211com *,
 	    struct ieee80211_node *, u_int8_t, u_int8_t, u_int16_t);
 uint8_t *ieee80211_add_wme_info(uint8_t *, struct ieee80211com *);
+#ifndef IEEE80211_STA_ONLY
+uint8_t *ieee80211_add_wme_param(uint8_t *, struct ieee80211com *);
+#endif
 struct	mbuf *ieee80211_get_sa_query(struct ieee80211com *,
 	    struct ieee80211_node *, u_int8_t);
 struct	mbuf *ieee80211_get_action(struct ieee80211com *,
@@ -270,6 +273,7 @@ ieee80211_mgmt_output(struct ifnet *ifp, struct ieee80211_node *ni,
  * 11A		15	1023
  * 11B  	31	1023
  * 11G		15*	1023	(*) aCWmin(1)
+ * 11N		15	1023
  */
 #if 0
 static const struct ieee80211_edca_ac_params
@@ -287,6 +291,12 @@ static const struct ieee80211_edca_ac_params
 		[EDCA_AC_VO] = { 2,  3, 2,  47 }
 	},
 	[IEEE80211_MODE_11G] = {
+		[EDCA_AC_BK] = { 4, 10, 7,   0 },
+		[EDCA_AC_BE] = { 4, 10, 3,   0 },
+		[EDCA_AC_VI] = { 3,  4, 2,  94 },
+		[EDCA_AC_VO] = { 2,  3, 2,  47 }
+	},
+	[IEEE80211_MODE_11N] = {
 		[EDCA_AC_BK] = { 4, 10, 7,   0 },
 		[EDCA_AC_BE] = { 4, 10, 3,   0 },
 		[EDCA_AC_VI] = { 3,  4, 2,  94 },
@@ -311,6 +321,12 @@ static const struct ieee80211_edca_ac_params
 		[EDCA_AC_VO] = { 2,  3, 1,  47 }
 	},
 	[IEEE80211_MODE_11G] = {
+		[EDCA_AC_BK] = { 4, 10, 7,   0 },
+		[EDCA_AC_BE] = { 4,  6, 3,   0 },
+		[EDCA_AC_VI] = { 3,  4, 1,  94 },
+		[EDCA_AC_VO] = { 2,  3, 1,  47 }
+	},
+	[IEEE80211_MODE_11N] = {
 		[EDCA_AC_BK] = { 4, 10, 7,   0 },
 		[EDCA_AC_BE] = { 4,  6, 3,   0 },
 		[EDCA_AC_VI] = { 3,  4, 1,  94 },
@@ -832,6 +848,42 @@ ieee80211_add_wme_info(uint8_t *frm, struct ieee80211com *ic)
 
 	return frm;
 }
+
+#ifndef IEEE80211_STA_ONLY
+/*
+ * Add a Wifi-Alliance WMM (aka WME) parameter element to a frame.
+ */
+uint8_t *
+ieee80211_add_wme_param(uint8_t *frm, struct ieee80211com *ic)
+{
+	const struct ieee80211_edca_ac_params *edca;
+	int aci;
+
+	*frm++ = IEEE80211_ELEMID_VENDOR;
+	*frm++ = 24;
+	memcpy(frm, MICROSOFT_OUI, 3); frm += 3;
+	*frm++ = 2; /* OUI type */
+	*frm++ = 1; /* OUI subtype */
+	*frm++ = 1; /* version */
+	*frm++ = 0; /* info */
+	*frm++ = 0; /* reserved */
+
+	/* setup AC Parameter Records */
+	edca = ieee80211_qap_edca_table[ic->ic_curmode];
+	for (aci = 0; aci < EDCA_NUM_AC; aci++) {
+		const struct ieee80211_edca_ac_params *ac = &edca[aci];
+
+		*frm++ = (aci << 5) | ((ac->ac_acm & 0x1) << 4) |
+			 (ac->ac_aifsn & 0xf);
+		*frm++ = (ac->ac_ecwmax << 4) |
+			 (ac->ac_ecwmin & 0xf);
+		LE_WRITE_2(frm, ac->ac_txoplimit); frm += 2;
+	}
+
+	return frm;
+}
+#endif
+
 /*
  * Add an RSN element to a frame (see 802.11-2012 8.4.2.27)
  */
@@ -1414,7 +1466,6 @@ ieee80211_get_addba_req(struct ieee80211com *ic, struct ieee80211_node *ni,
 	struct ieee80211_tx_ba *ba = &ni->ni_tx_ba[tid];
 	struct mbuf *m;
 	u_int8_t *frm;
-	u_int16_t params;
 
 	m = ieee80211_getmgmt(M_DONTWAIT, MT_DATA, 9);
 	if (m == NULL)
@@ -1424,12 +1475,7 @@ ieee80211_get_addba_req(struct ieee80211com *ic, struct ieee80211_node *ni,
 	*frm++ = IEEE80211_CATEG_BA;
 	*frm++ = IEEE80211_ACTION_ADDBA_REQ;
 	*frm++ = ba->ba_token;
-	params = ba->ba_winsize << IEEE80211_ADDBA_BUFSZ_SHIFT |
-	    tid << IEEE80211_ADDBA_TID_SHIFT |
-	    IEEE80211_ADDBA_AMSDU;
-	if ((ic->ic_htcaps & IEEE80211_HTCAP_DELAYEDBA) == 0)
-		params |= IEEE80211_ADDBA_BA_POLICY; /* use immediate BA */
-	LE_WRITE_2(frm, params); frm += 2;
+	LE_WRITE_2(frm, ba->ba_params); frm += 2;
 	LE_WRITE_2(frm, ba->ba_timeout_val / IEEE80211_DUR_TU); frm += 2;
 	LE_WRITE_2(frm, ba->ba_winstart); frm += 2;
 
@@ -1465,9 +1511,10 @@ ieee80211_get_addba_resp(struct ieee80211com *ic, struct ieee80211_node *ni,
 	*frm++ = IEEE80211_ACTION_ADDBA_RESP;
 	*frm++ = token;
 	LE_WRITE_2(frm, status); frm += 2;
-	params = tid << 2 | IEEE80211_BA_ACK_POLICY;
 	if (status == 0)
-		params |= ba->ba_winsize << 6;
+		params = ba->ba_params;
+	else
+		params = tid << IEEE80211_ADDBA_TID_SHIFT;
 	LE_WRITE_2(frm, params); frm += 2;
 	if (status == 0)
 		LE_WRITE_2(frm, ba->ba_timeout_val / IEEE80211_DUR_TU);

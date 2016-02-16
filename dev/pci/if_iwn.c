@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_iwn.c,v 1.158 2016/01/25 11:27:11 stsp Exp $	*/
+/*	$OpenBSD: if_iwn.c,v 1.163 2016/02/07 23:56:19 tb Exp $	*/
 
 /*-
  * Copyright (c) 2007-2010 Damien Bergamini <damien.bergamini@free.fr>
@@ -460,8 +460,7 @@ iwn_attach(struct device *parent, struct device *self, void *aux)
 	ic->ic_htxcaps = 0;
 	ic->ic_txbfcaps = 0;
 	ic->ic_aselcaps = 0;
-	ic->ic_ampdu_params = IEEE80211_AMPDU_PARAM_SS_4;
-
+	ic->ic_ampdu_params = (IEEE80211_AMPDU_PARAM_SS_4 | 0x3 /* 64k */);
 #ifdef notyet
 	if (sc->sc_flags & IWN_FLAG_HAS_11N) {
 		/* Set HT capabilities. */
@@ -1844,6 +1843,7 @@ iwn_ccmp_decap(struct iwn_softc *sc, struct mbuf *m, struct ieee80211_node *ni)
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ieee80211_key *k = &ni->ni_pairwise_key;
 	struct ieee80211_frame *wh;
+	struct ieee80211_rx_ba *ba;
 	uint64_t pn, *prsc;
 	uint8_t *ivp;
 	uint8_t tid;
@@ -1860,6 +1860,7 @@ iwn_ccmp_decap(struct iwn_softc *sc, struct mbuf *m, struct ieee80211_node *ni)
 	}
 	hasqos = ieee80211_has_qos(wh);
 	tid = hasqos ? ieee80211_get_qos(wh) & IEEE80211_QOS_TID : 0;
+	ba = hasqos ? &ni->ni_rx_ba[tid] : NULL;
 	prsc = &k->k_rsc[tid];
 
 	/* Extract the 48-bit PN from the CCMP header. */
@@ -1870,7 +1871,7 @@ iwn_ccmp_decap(struct iwn_softc *sc, struct mbuf *m, struct ieee80211_node *ni)
 	     (uint64_t)ivp[6] << 32 |
 	     (uint64_t)ivp[7] << 40;
 	if (pn <= *prsc) {
-		if (hasqos && (sc->last_rx_valid & IWN_LAST_RX_AMPDU)) {
+		if (hasqos && ba->ba_state == IEEE80211_BA_AGREED) {
 			/*
 			 * This is an A-MPDU subframe.
 			 * Such frames may be received out of order due to
@@ -2008,7 +2009,15 @@ iwn_rx_done(struct iwn_softc *sc, struct iwn_rx_desc *desc,
 		return;
 	}
 	/* Discard frames that are too short. */
-	if (len < sizeof (*wh)) {
+	if (ic->ic_opmode == IEEE80211_M_MONITOR) {
+		/* Allow control frames in monitor mode. */
+		if (len < sizeof (struct ieee80211_frame_cts)) {
+			DPRINTF(("frame too short: %d\n", len));
+			ic->ic_stats.is_rx_tooshort++;
+			ifp->if_ierrors++;
+			return;
+		}
+	} else if (len < sizeof (*wh)) {
 		DPRINTF(("frame too short: %d\n", len));
 		ic->ic_stats.is_rx_tooshort++;
 		ifp->if_ierrors++;
@@ -2058,12 +2067,24 @@ iwn_rx_done(struct iwn_softc *sc, struct iwn_rx_desc *desc,
 	m->m_data = head;
 	m->m_pkthdr.len = m->m_len = len;
 
-	/* Grab a reference to the source node. */
+	/* 
+	 * Grab a reference to the source node. Note that control frames are
+	 * shorter than struct ieee80211_frame but ieee80211_find_rxnode()
+	 * is being careful about control frames.
+	 */
 	wh = mtod(m, struct ieee80211_frame *);
+	if (len < sizeof (*wh) &&
+	   (wh->i_fc[0] & IEEE80211_FC0_TYPE_MASK) != IEEE80211_FC0_TYPE_CTL) {
+		ic->ic_stats.is_rx_tooshort++;
+		ifp->if_ierrors++;
+		m_freem(m);
+		return;
+	}
 	ni = ieee80211_find_rxnode(ic, wh);
 
 	rxi.rxi_flags = 0;
-	if ((wh->i_fc[1] & IEEE80211_FC1_PROTECTED) &&
+	if (((wh->i_fc[0] & IEEE80211_FC0_TYPE_MASK) != IEEE80211_FC0_TYPE_CTL)
+	    && (wh->i_fc[1] & IEEE80211_FC1_PROTECTED) &&
 	    !IEEE80211_IS_MULTICAST(wh->i_addr1) &&
 	    (ni->ni_flags & IEEE80211_NODE_RXPROT) &&
 	    ni->ni_pairwise_key.k_cipher == IEEE80211_CIPHER_CCMP) {
@@ -3398,7 +3419,7 @@ iwn_set_link_quality(struct iwn_softc *sc, struct ieee80211_node *ni)
 			/* XXX set correct ant mask for MIMO rates here */
 			linkq.retry[i].rflags |= IWN_RFLAG_ANT(txant);
 
-			if (i++ >= IWN_MAX_TX_RETRIES)
+			if (++i >= IWN_MAX_TX_RETRIES)
 				break;
 		}
 
@@ -4920,10 +4941,15 @@ iwn_run(struct iwn_softc *sc)
 	memset(&node, 0, sizeof node);
 	IEEE80211_ADDR_COPY(node.macaddr, ni->ni_macaddr);
 	node.id = IWN_ID_BSS;
-#ifdef notyet
-	node.htflags = htole32(IWN_AMDPU_SIZE_FACTOR(3) |
-	    IWN_AMDPU_DENSITY(5));	/* 2us */
-#endif
+	if (ni->ni_flags & IEEE80211_NODE_HT) {
+		node.htmask = (IWN_AMDPU_SIZE_FACTOR_MASK |
+		    IWN_AMDPU_DENSITY_MASK);
+		node.htflags = htole32(
+		    IWN_AMDPU_SIZE_FACTOR(
+			(ic->ic_ampdu_params & IEEE80211_AMPDU_PARAM_LE)) |
+		    IWN_AMDPU_DENSITY(
+			(ic->ic_ampdu_params & IEEE80211_AMPDU_PARAM_SS) >> 2));
+	}
 	DPRINTF(("adding BSS node\n"));
 	error = ops->add_node(sc, &node, 1);
 	if (error != 0) {
@@ -5070,10 +5096,15 @@ iwn_update_htprot(struct ieee80211com *ic, struct ieee80211_node *ni)
 	memset(&node, 0, sizeof node);
 	IEEE80211_ADDR_COPY(node.macaddr, ni->ni_macaddr);
 	node.id = IWN_ID_BSS;
-#ifdef notyet
-	node.htflags = htole32(IWN_AMDPU_SIZE_FACTOR(3) |
-	    IWN_AMDPU_DENSITY(5));	/* 2us */
-#endif
+	if (ni->ni_flags & IEEE80211_NODE_HT) {
+		node.htmask = (IWN_AMDPU_SIZE_FACTOR_MASK |
+		    IWN_AMDPU_DENSITY_MASK);
+		node.htflags = htole32(
+		    IWN_AMDPU_SIZE_FACTOR(
+			(ic->ic_ampdu_params & IEEE80211_AMPDU_PARAM_LE)) |
+		    IWN_AMDPU_DENSITY(
+			(ic->ic_ampdu_params & IEEE80211_AMPDU_PARAM_SS) >> 2));
+	}
 	error = ops->add_node(sc, &node, 1);
 	if (error != 0) {
 		printf("%s: could not add BSS node\n", sc->sc_dev.dv_xname);
@@ -5095,6 +5126,15 @@ iwn_update_htprot(struct ieee80211com *ic, struct ieee80211_node *ni)
 	sc->calib.state = IWN_CALIB_STATE_ASSOC;
 	sc->calib_cnt = 0;
 	timeout_add_msec(&sc->calib_to, 500);
+
+	if ((ni->ni_flags & IEEE80211_NODE_RXPROT) &&
+	    ni->ni_pairwise_key.k_cipher == IEEE80211_CIPHER_CCMP) {
+		if ((error = iwn_set_key(ic, ni, &ni->ni_pairwise_key)) != 0) {
+			printf("%s: could not set pairwise ccmp key\n",
+			    sc->sc_dev.dv_xname);
+			return;
+		}
+	}
 }
 
 /*

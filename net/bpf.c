@@ -1,4 +1,4 @@
-/*	$OpenBSD: bpf.c,v 1.132 2016/01/07 05:31:17 guenther Exp $	*/
+/*	$OpenBSD: bpf.c,v 1.135 2016/02/12 18:56:12 stefan Exp $	*/
 /*	$NetBSD: bpf.c,v 1.33 1997/02/21 23:59:35 thorpej Exp $	*/
 
 /*
@@ -212,7 +212,7 @@ bpf_movein(struct uio *uio, u_int linktype, struct mbuf **mp,
 	m->m_len = len;
 	*mp = m;
 
-	error = uiomovei(mtod(m, caddr_t), len, uio);
+	error = uiomove(mtod(m, caddr_t), len, uio);
 	if (error)
 		goto bad;
 
@@ -488,7 +488,7 @@ bpfread(dev_t dev, struct uio *uio, int ioflag)
 	 * We know the entire buffer is transferred since
 	 * we checked above that the read buffer is bpf_bufsize bytes.
 	 */
-	error = uiomovei(d->bd_hbuf, d->bd_hlen, uio);
+	error = uiomove(d->bd_hbuf, d->bd_hlen, uio);
 
 	s = splnet();
 	d->bd_fbuf = d->bd_hbuf;
@@ -1143,6 +1143,10 @@ bpf_tap(caddr_t arg, u_char *pkt, u_int pktlen, u_int direction)
 	size_t slen;
 	struct timeval tv;
 	int drop = 0, gottime = 0;
+	int s;
+
+	if (bp == NULL)
+		return (0);
 
 	SRPL_FOREACH(d, &bp->bif_dlist, &i, bd_next) {
 		atomic_inc_long(&d->bd_rcount);
@@ -1165,10 +1169,12 @@ bpf_tap(caddr_t arg, u_char *pkt, u_int pktlen, u_int direction)
 				microtime(&tv);
 
 			KERNEL_LOCK();
+			s = splnet();
 			if (d->bd_bif != NULL) {
 				bpf_catchpacket(d, pkt, pktlen, slen,
 				    bcopy, &tv);
 			}
+			splx(s);
 			KERNEL_UNLOCK();
 
 			if (d->bd_fildrop)
@@ -1218,12 +1224,16 @@ _bpf_mtap(caddr_t arg, struct mbuf *m, u_int direction,
 	struct mbuf *m0;
 	struct timeval tv;
 	int gottime = 0;
+	int s;
 
 	if (m == NULL)
 		return;
 
 	if (cpfn == NULL)
 		cpfn = bpf_mcopy;
+
+	if (bp == NULL)
+		return;
 
 	pktlen = 0;
 	for (m0 = m; m0 != NULL; m0 = m0->m_next)
@@ -1252,10 +1262,12 @@ _bpf_mtap(caddr_t arg, struct mbuf *m, u_int direction,
 				microtime(&tv);
 
 			KERNEL_LOCK();
+			s = splnet();
 			if (d->bd_bif != NULL) {
 				bpf_catchpacket(d, (u_char *)m, pktlen, slen,
 				    cpfn, &tv);
 			}
+			splx(s);
 			KERNEL_UNLOCK();
 
 			if (d->bd_fildrop)
