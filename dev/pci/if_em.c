@@ -3152,7 +3152,7 @@ em_flush_tx_ring(struct em_softc *sc)
 	KASSERT(EM_READ_REG(&sc->hw, E1000_TDT) == sc->sc_tx_desc_head);
 
 	txd = &sc->sc_tx_desc_ring[sc->sc_tx_desc_head];
-	txd->buffer_addr = addr;
+	txd->buffer_addr = sc->sc_tx_dma.dma_map->dm_segs[0].ds_addr;
 	txd->lower.data = htole32(txd_lower | size);
 	txd->upper.data = 0;
 
