@@ -3133,7 +3133,7 @@ em_disable_aspm(struct em_softc *sc)
  * em_flush_tx_ring - remove all descriptors from the tx_ring
  *
  * We want to clear all pending descriptors from the TX ring.
- * zeroing happens when the HW reads the regs. We  assign the ring itself as
+ * zeroing happens when the HW reads the regs. We assign the ring itself as
  * the data of the next descriptor. We don't care about the data we are about
  * to reset the HW.
  */
