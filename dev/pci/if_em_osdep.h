@@ -31,7 +31,7 @@ POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
-/* $OpenBSD: if_em_osdep.h,v 1.12 2011/10/05 02:52:10 jsg Exp $ */
+/* $OpenBSD: if_em_osdep.h,v 1.13 2016/02/18 14:24:39 bluhm Exp $ */
 /* $FreeBSD: if_em_osdep.h,v 1.11 2003/05/02 21:17:08 pdeuskar Exp $ */
 
 #ifndef _EM_OPENBSD_OS_H_

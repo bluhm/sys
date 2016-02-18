@@ -31,7 +31,7 @@
 
 *******************************************************************************/
 
-/* $OpenBSD: if_em_hw.c,v 1.90 2015/12/14 03:04:10 mmcc Exp $ */
+/* $OpenBSD: if_em_hw.c,v 1.91 2016/02/18 14:24:39 bluhm Exp $ */
 /*
  * if_em_hw.c Shared functions for accessing and configuring the MAC
  */
