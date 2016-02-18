@@ -152,31 +152,37 @@ struct em_osdep
 
 #define E1000_READ_ICH_FLASH_REG(hw, reg) \
 	bus_space_read_4(((struct em_osdep *)(hw)->back)->flash_bus_space_tag, \
-			 ((struct em_osdep *)(hw)->back)->flash_bus_space_handle, ((struct em_osdep *)(hw)->back)->em_flashoffset + reg)
+			 ((struct em_osdep *)(hw)->back)->flash_bus_space_handle, \
+			 ((struct em_osdep *)(hw)->back)->em_flashoffset + reg)
 
 #define E1000_READ_ICH_FLASH_REG16(hw, reg) \
 	bus_space_read_2(((struct em_osdep *)(hw)->back)->flash_bus_space_tag, \
-			 ((struct em_osdep *)(hw)->back)->flash_bus_space_handle, ((struct em_osdep *)(hw)->back)->em_flashoffset + reg)
+			 ((struct em_osdep *)(hw)->back)->flash_bus_space_handle, \
+			 ((struct em_osdep *)(hw)->back)->em_flashoffset + reg)
 
 #define E1000_READ_ICH_FLASH_REG32(hw, reg) \
 	bus_space_read_4(((struct em_osdep *)(hw)->back)->flash_bus_space_tag, \
-			 ((struct em_osdep *)(hw)->back)->flash_bus_space_handle, ((struct em_osdep *)(hw)->back)->em_flashoffset + reg)
+			 ((struct em_osdep *)(hw)->back)->flash_bus_space_handle, \
+			 ((struct em_osdep *)(hw)->back)->em_flashoffset + reg)
 
 
 #define E1000_WRITE_ICH_FLASH_REG8(hw, reg, value) \
 	bus_space_write_1(((struct em_osdep *)(hw)->back)->flash_bus_space_tag, \
 			  ((struct em_osdep *)(hw)->back)->flash_bus_space_handle, \
-			   ((struct em_osdep *)(hw)->back)->em_flashoffset + reg, value)
+			  ((struct em_osdep *)(hw)->back)->em_flashoffset + reg, \
+			  value)
 
 #define E1000_WRITE_ICH_FLASH_REG16(hw, reg, value) \
 	bus_space_write_2(((struct em_osdep *)(hw)->back)->flash_bus_space_tag, \
 			  ((struct em_osdep *)(hw)->back)->flash_bus_space_handle, \
-			   ((struct em_osdep *)(hw)->back)->em_flashoffset + reg, value)
+			  ((struct em_osdep *)(hw)->back)->em_flashoffset + reg, \
+			  value)
 
 #define E1000_WRITE_ICH_FLASH_REG32(hw, reg, value) \
 	bus_space_write_4(((struct em_osdep *)(hw)->back)->flash_bus_space_tag, \
 			  ((struct em_osdep *)(hw)->back)->flash_bus_space_handle, \
-			   ((struct em_osdep *)(hw)->back)->em_flashoffset + reg, value)
+			  ((struct em_osdep *)(hw)->back)->em_flashoffset + reg, \
+			  value)
 
 #define em_io_read(hw, port) \
 	bus_space_read_4(((struct em_osdep *)(hw)->back)->io_bus_space_tag, \
