@@ -1,4 +1,4 @@
-/*	$OpenBSD: in6.c,v 1.183 2016/01/21 11:23:48 mpi Exp $	*/
+/*	$OpenBSD: in6.c,v 1.186 2016/03/03 12:57:15 jca Exp $	*/
 /*	$KAME: in6.c,v 1.372 2004/06/14 08:14:21 itojun Exp $	*/
 
 /*
@@ -200,19 +200,6 @@ in6_control(struct socket *so, u_long cmd, caddr_t data, struct ifnet *ifp)
 	}
 
 	switch (cmd) {
-	case SIOCSIFPREFIX_IN6:
-	case SIOCDIFPREFIX_IN6:
-	case SIOCAIFPREFIX_IN6:
-	case SIOCCIFPREFIX_IN6:
-	case SIOCSGIFPREFIX_IN6:
-	case SIOCGIFPREFIX_IN6:
-		log(LOG_NOTICE,
-		    "prefix ioctls are now invalidated. "
-		    "please use ifconfig.\n");
-		return (EOPNOTSUPP);
-	}
-
-	switch (cmd) {
 	case SIOCALIFADDR:
 	case SIOCDLIFADDR:
 		if (!privileged)
@@ -239,10 +226,7 @@ in6_control(struct socket *so, u_long cmd, caddr_t data, struct ifnet *ifp)
 	case SIOCSIFPHYADDR_IN6:
 		sa6 = &ifra->ifra_addr;
 		break;
-	case SIOCSIFADDR_IN6:
 	case SIOCGIFADDR_IN6:
-	case SIOCSIFDSTADDR_IN6:
-	case SIOCSIFNETMASK_IN6:
 	case SIOCGIFDSTADDR_IN6:
 	case SIOCGIFNETMASK_IN6:
 	case SIOCDIFADDR_IN6:
@@ -253,7 +237,6 @@ in6_control(struct socket *so, u_long cmd, caddr_t data, struct ifnet *ifp)
 	case SIOCSPFXFLUSH_IN6:
 	case SIOCSRTRFLUSH_IN6:
 	case SIOCGIFALIFETIME_IN6:
-	case SIOCSIFALIFETIME_IN6:
 	case SIOCGIFSTAT_IN6:
 	case SIOCGIFSTAT_ICMP6:
 		sa6 = &ifr->ifr_addr;
@@ -293,15 +276,6 @@ in6_control(struct socket *so, u_long cmd, caddr_t data, struct ifnet *ifp)
 		ia6 = NULL;
 
 	switch (cmd) {
-	case SIOCSIFADDR_IN6:
-	case SIOCSIFDSTADDR_IN6:
-	case SIOCSIFNETMASK_IN6:
-		/*
-		 * Since IPv6 allows a node to assign multiple addresses
-		 * on a single interface, SIOCSIFxxx ioctls are deprecated.
-		 */
-		return (EINVAL);
-
 	case SIOCDIFADDR_IN6:
 		/*
 		 * for IPv4, we look for existing in_ifaddr here to allow
@@ -337,26 +311,6 @@ in6_control(struct socket *so, u_long cmd, caddr_t data, struct ifnet *ifp)
 		if (ia6 == NULL)
 			return (EADDRNOTAVAIL);
 		break;
-	case SIOCSIFALIFETIME_IN6:
-	    {
-		struct in6_addrlifetime *lt;
-
-		if (!privileged)
-			return (EPERM);
-		if (ia6 == NULL)
-			return (EADDRNOTAVAIL);
-		/* sanity for overflow - beware unsigned */
-		lt = &ifr->ifr_ifru.ifru_lifetime;
-		if (lt->ia6t_vltime != ND6_INFINITE_LIFETIME
-		 && lt->ia6t_vltime + time_second < time_second) {
-			return EINVAL;
-		}
-		if (lt->ia6t_pltime != ND6_INFINITE_LIFETIME
-		 && lt->ia6t_pltime + time_second < time_second) {
-			return EINVAL;
-		}
-		break;
-	    }
 	}
 
 	switch (cmd) {
@@ -425,21 +379,6 @@ in6_control(struct socket *so, u_long cmd, caddr_t data, struct ifnet *ifp)
 			} else
 				retlt->ia6t_preferred = maxexpire;
 		}
-		break;
-
-	case SIOCSIFALIFETIME_IN6:
-		ia6->ia6_lifetime = ifr->ifr_ifru.ifru_lifetime;
-		/* for sanity */
-		if (ia6->ia6_lifetime.ia6t_vltime != ND6_INFINITE_LIFETIME) {
-			ia6->ia6_lifetime.ia6t_expire =
-				time_second + ia6->ia6_lifetime.ia6t_vltime;
-		} else
-			ia6->ia6_lifetime.ia6t_expire = 0;
-		if (ia6->ia6_lifetime.ia6t_pltime != ND6_INFINITE_LIFETIME) {
-			ia6->ia6_lifetime.ia6t_preferred =
-				time_second + ia6->ia6_lifetime.ia6t_pltime;
-		} else
-			ia6->ia6_lifetime.ia6t_preferred = 0;
 		break;
 
 	case SIOCAIFADDR_IN6:

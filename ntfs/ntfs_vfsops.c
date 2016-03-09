@@ -1,4 +1,4 @@
-/*	$OpenBSD: ntfs_vfsops.c,v 1.44 2015/03/14 03:38:52 jsg Exp $	*/
+/*	$OpenBSD: ntfs_vfsops.c,v 1.46 2016/03/05 20:40:05 natano Exp $	*/
 /*	$NetBSD: ntfs_vfsops.c,v 1.7 2003/04/24 07:50:19 christos Exp $	*/
 
 /*-
@@ -436,7 +436,6 @@ ntfs_mountfs(struct vnode *devvp, struct mount *mp, struct ntfs_args *argsp,
 
 	mp->mnt_stat.f_fsid.val[0] = dev;
 	mp->mnt_stat.f_fsid.val[1] = mp->mnt_vfc->vfc_typenum;
-	mp->mnt_maxsymlinklen = 0;
 	mp->mnt_flag |= MNT_LOCAL;
 	devvp->v_specmountpoint = mp;
 	return (0);
@@ -619,8 +618,8 @@ ntfs_statfs(struct mount *mp, struct statfs *sbp, struct proc *p)
 	if (sbp != &mp->mnt_stat) {
 		bcopy(mp->mnt_stat.f_mntonname, sbp->f_mntonname, MNAMELEN);
 		bcopy(mp->mnt_stat.f_mntfromname, sbp->f_mntfromname, MNAMELEN);
-		bcopy(&mp->mnt_stat.mount_info.msdosfs_args,
-		    &sbp->mount_info.msdosfs_args, sizeof(struct msdosfs_args));
+		bcopy(&mp->mnt_stat.mount_info.ntfs_args,
+		    &sbp->mount_info.ntfs_args, sizeof(struct ntfs_args));
 	}
 	strncpy(sbp->f_fstypename, mp->mnt_vfc->vfc_name, MFSNAMELEN);
 

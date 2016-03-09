@@ -1,4 +1,4 @@
-/*	$OpenBSD: proc.h,v 1.213 2015/12/06 17:50:21 deraadt Exp $	*/
+/*	$OpenBSD: proc.h,v 1.217 2016/03/09 13:38:50 mpi Exp $	*/
 /*	$NetBSD: proc.h,v 1.44 1996/04/22 01:23:21 christos Exp $	*/
 
 /*-
@@ -245,7 +245,7 @@ struct process {
 #define	PS_ISPWAIT	0x00000080	/* Is parent of PPWAIT child. */
 #define	PS_PROFIL	0x00000100	/* Has started profiling. */
 #define	PS_TRACED	0x00000200	/* Being ptraced. */
-#define	PS_WAITED	0x00000400	/* Stopped proc has waited for. */
+#define	PS_WAITED	0x00000400	/* Stopped proc was waited for. */
 #define	PS_COREDUMP	0x00000800	/* Busy coredumping */
 #define	PS_SINGLEEXIT	0x00001000	/* Other threads must die. */
 #define	PS_SINGLEUNWIND	0x00002000	/* Other threads must unwind. */
@@ -255,7 +255,7 @@ struct process {
 #define	PS_EMBRYO	0x00020000	/* New process, not yet fledged */
 #define	PS_ZOMBIE	0x00040000	/* Dead and ready to be waited for */
 #define	PS_NOBROADCASTKILL 0x00080000	/* Process excluded from kill -1. */
-#define PS_PLEDGE	0x00100000	/* Has called pledge(2) */
+#define	PS_PLEDGE	0x00100000	/* Has called pledge(2) */
 
 #define	PS_BITS \
     ("\20" "\01CONTROLT" "\02EXEC" "\03INEXEC" "\04EXITING" "\05SUGID" \
@@ -323,7 +323,7 @@ struct proc {
 	sigset_t p_sigmask;	/* Current signal mask. */
 
 	u_char	p_priority;	/* Process priority. */
-	u_char	p_usrpri;	/* User-priority based on p_cpu and ps_nice. */
+	u_char	p_usrpri;	/* User-priority based on p_estcpu and ps_nice. */
 	char	p_comm[MAXCOMLEN+1];
 
 	int	p_pledge_syscall;	/* Cache of current syscall */
@@ -409,9 +409,9 @@ struct uidinfo *uid_find(uid_t);
 /*
  * We use process IDs <= PID_MAX; PID_MAX + 1 must also fit in a pid_t,
  * as it is used to represent "no process group".
- * We set PID_MAX to (SHRT_MAX - 1) so we don't break sys/compat.
+ * We set PID_MAX to 99999 to keep it in 5 columns in ps
  */
-#define	PID_MAX		32766
+#define	PID_MAX		99999
 #define	NO_PID		(PID_MAX+1)
 
 #define SESS_LEADER(pr)	((pr)->ps_session->s_leader == (pr))
@@ -531,9 +531,6 @@ int	single_thread_check(struct proc *, int);
 void	child_return(void *);
 
 int	proc_cansugid(struct proc *);
-void	proc_finish_wait(struct proc *, struct proc *);
-void	process_zap(struct process *);
-void	proc_free(struct proc *);
 
 struct sleep_state {
 	int sls_s;

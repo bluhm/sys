@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_urtwn.c,v 1.58 2016/01/05 18:41:16 stsp Exp $	*/
+/*	$OpenBSD: if_urtwn.c,v 1.61 2016/03/07 19:41:50 stsp Exp $	*/
 
 /*-
  * Copyright (c) 2010 Damien Bergamini <damien.bergamini@free.fr>
@@ -54,7 +54,174 @@
 #include <dev/usb/usbdi_util.h>
 #include <dev/usb/usbdevs.h>
 
-#include <dev/usb/if_urtwnreg.h>
+#include <dev/ic/r92creg.h>
+
+/* Maximum number of output pipes is 3. */
+#define R92C_MAX_EPOUT	3
+
+#define R92C_PUBQ_NPAGES	231
+#define R92C_TXPKTBUF_COUNT	256
+#define R92C_TX_PAGE_COUNT	248
+#define R92C_TX_PAGE_BOUNDARY	(R92C_TX_PAGE_COUNT + 1)
+#define R88E_TXPKTBUF_COUNT	177
+#define R88E_TX_PAGE_COUNT	169
+#define R88E_TX_PAGE_BOUNDARY	(R88E_TX_PAGE_COUNT + 1)
+
+/* USB Requests. */
+#define R92C_REQ_REGS	0x05
+
+/*
+ * Driver definitions.
+ */
+#define URTWN_RX_LIST_COUNT		1
+#define URTWN_TX_LIST_COUNT		8
+#define URTWN_HOST_CMD_RING_COUNT	32
+
+#define URTWN_RXBUFSZ	(16 * 1024)
+#define URTWN_TXBUFSZ	(sizeof(struct r92c_tx_desc_usb) + IEEE80211_MAX_LEN)
+
+#define URTWN_RIDX_COUNT	28
+
+#define URTWN_TX_TIMEOUT	5000	/* ms */
+
+#define URTWN_LED_LINK	0
+#define URTWN_LED_DATA	1
+
+struct urtwn_rx_radiotap_header {
+	struct ieee80211_radiotap_header wr_ihdr;
+	uint8_t		wr_flags;
+	uint8_t		wr_rate;
+	uint16_t	wr_chan_freq;
+	uint16_t	wr_chan_flags;
+	uint8_t		wr_dbm_antsignal;
+} __packed;
+
+#define URTWN_RX_RADIOTAP_PRESENT			\
+	(1 << IEEE80211_RADIOTAP_FLAGS |		\
+	 1 << IEEE80211_RADIOTAP_RATE |			\
+	 1 << IEEE80211_RADIOTAP_CHANNEL |		\
+	 1 << IEEE80211_RADIOTAP_DBM_ANTSIGNAL)
+
+struct urtwn_tx_radiotap_header {
+	struct ieee80211_radiotap_header wt_ihdr;
+	uint8_t		wt_flags;
+	uint16_t	wt_chan_freq;
+	uint16_t	wt_chan_flags;
+} __packed;
+
+#define URTWN_TX_RADIOTAP_PRESENT			\
+	(1 << IEEE80211_RADIOTAP_FLAGS |		\
+	 1 << IEEE80211_RADIOTAP_CHANNEL)
+
+struct urtwn_softc;
+
+struct urtwn_rx_data {
+	struct urtwn_softc	*sc;
+	struct usbd_xfer	*xfer;
+	uint8_t			*buf;
+};
+
+struct urtwn_tx_data {
+	struct urtwn_softc		*sc;
+	struct usbd_pipe		*pipe;
+	struct usbd_xfer		*xfer;
+	uint8_t				*buf;
+	TAILQ_ENTRY(urtwn_tx_data)	next;
+};
+
+struct urtwn_host_cmd {
+	void	(*cb)(struct urtwn_softc *, void *);
+	uint8_t	data[256];
+};
+
+struct urtwn_cmd_newstate {
+	enum ieee80211_state	state;
+	int			arg;
+};
+
+struct urtwn_cmd_key {
+	struct ieee80211_key	key;
+	uint16_t		associd;
+};
+
+struct urtwn_host_cmd_ring {
+	struct urtwn_host_cmd	cmd[URTWN_HOST_CMD_RING_COUNT];
+	int			cur;
+	int			next;
+	int			queued;
+};
+
+struct urtwn_softc {
+	struct device			sc_dev;
+	struct ieee80211com		sc_ic;
+	int				(*sc_newstate)(struct ieee80211com *,
+					    enum ieee80211_state, int);
+	struct usbd_device		*sc_udev;
+	struct usbd_interface		*sc_iface;
+	struct usb_task			sc_task;
+	struct timeout			scan_to;
+	struct timeout			calib_to;
+	struct usbd_pipe		*rx_pipe;
+	struct usbd_pipe		*tx_pipe[R92C_MAX_EPOUT];
+	int				ac2idx[EDCA_NUM_AC];
+	u_int				sc_flags;
+#define URTWN_FLAG_CCK_HIPWR		0x01
+#define URTWN_FLAG_FORCE_RAID_11B	0x02
+
+	u_int				chip;
+#define	URTWN_CHIP_92C		0x01
+#define	URTWN_CHIP_92C_1T2R	0x02
+#define	URTWN_CHIP_UMC		0x04
+#define	URTWN_CHIP_UMC_A_CUT	0x08
+#define	URTWN_CHIP_88E		0x10
+
+	void				(*sc_rf_write)(struct urtwn_softc *,
+					    int, uint8_t, uint32_t);
+	int				(*sc_power_on)(struct urtwn_softc *);
+	int				(*sc_dma_init)(struct urtwn_softc *);
+
+	uint8_t				board_type;
+	uint8_t				regulatory;
+	uint8_t				pa_setting;
+	int				avg_pwdb;
+	int				thcal_state;
+	int				thcal_lctemp;
+	int				ntxchains;
+	int				nrxchains;
+	int				ledlink;
+
+	int				sc_tx_timer;
+	struct urtwn_host_cmd_ring	cmdq;
+	int				fwcur;
+	struct urtwn_rx_data		rx_data[URTWN_RX_LIST_COUNT];
+	struct urtwn_tx_data		tx_data[URTWN_TX_LIST_COUNT];
+	TAILQ_HEAD(, urtwn_tx_data)	tx_free_list;
+	struct r92c_rom			rom;
+	uint8_t				r88e_rom[512];
+	uint8_t				cck_tx_pwr[6];
+	uint8_t				ht40_tx_pwr[5];
+	int8_t				bw20_tx_pwr_diff;
+	int8_t				ofdm_tx_pwr_diff;
+
+	uint32_t			rf_chnlbw[R92C_MAX_CHAINS];
+#if NBPFILTER > 0
+	caddr_t				sc_drvbpf;
+
+	union {
+		struct urtwn_rx_radiotap_header th;
+		uint8_t	pad[64];
+	}				sc_rxtapu;
+#define sc_rxtap	sc_rxtapu.th
+	int				sc_rxtap_len;
+
+	union {
+		struct urtwn_tx_radiotap_header th;
+		uint8_t	pad[64];
+	}				sc_txtapu;
+#define sc_txtap	sc_txtapu.th
+	int				sc_txtap_len;
+#endif
+};
 
 #ifdef URTWN_DEBUG
 #define DPRINTF(x)	do { if (urtwn_debug) printf x; } while (0)
@@ -1138,7 +1305,7 @@ int urtwn_r92c_ra_init(struct urtwn_softc *sc, u_int8_t mode, u_int32_t rates,
 	int error;
 
 	/* Set rates mask for group addressed frames. */
-	cmd.macid = URTWN_MACID_BC | URTWN_MACID_VALID;
+	cmd.macid = R92C_MACID_BC | R92C_MACID_VALID;
 	cmd.mask = htole32(mode << 28 | basicrates);
 	error = urtwn_fw_cmd(sc, R92C_CMD_MACID_CONFIG, &cmd, sizeof(cmd));
 	if (error != 0) {
@@ -1148,11 +1315,11 @@ int urtwn_r92c_ra_init(struct urtwn_softc *sc, u_int8_t mode, u_int32_t rates,
 	}
 	/* Set initial MRR rate. */
 	DPRINTF(("maxbasicrate=%d\n", maxbasicrate));
-	urtwn_write_1(sc, R92C_INIDATA_RATE_SEL(URTWN_MACID_BC),
+	urtwn_write_1(sc, R92C_INIDATA_RATE_SEL(R92C_MACID_BC),
 	    maxbasicrate);
 
 	/* Set rates mask for unicast frames. */
-	cmd.macid = URTWN_MACID_BSS | URTWN_MACID_VALID;
+	cmd.macid = R92C_MACID_BSS | R92C_MACID_VALID;
 	cmd.mask = htole32(mode << 28 | rates);
 	error = urtwn_fw_cmd(sc, R92C_CMD_MACID_CONFIG, &cmd, sizeof(cmd));
 	if (error != 0) {
@@ -1162,7 +1329,7 @@ int urtwn_r92c_ra_init(struct urtwn_softc *sc, u_int8_t mode, u_int32_t rates,
 	}
 	/* Set initial MRR rate. */
 	DPRINTF(("maxrate=%d\n", maxrate));
-	urtwn_write_1(sc, R92C_INIDATA_RATE_SEL(URTWN_MACID_BSS),
+	urtwn_write_1(sc, R92C_INIDATA_RATE_SEL(R92C_MACID_BSS),
 	    maxrate);
 
 	return (0);
@@ -1745,16 +1912,16 @@ urtwn_rx_frame(struct urtwn_softc *sc, uint8_t *buf, int pktlen)
 	struct ieee80211_rxinfo rxi;
 	struct ieee80211_frame *wh;
 	struct ieee80211_node *ni;
-	struct r92c_rx_stat *stat;
+	struct r92c_rx_desc_usb *rxd;
 	uint32_t rxdw0, rxdw3;
 	struct mbuf *m;
 	uint8_t rate;
 	int8_t rssi = 0;
 	int s, infosz;
 
-	stat = (struct r92c_rx_stat *)buf;
-	rxdw0 = letoh32(stat->rxdw0);
-	rxdw3 = letoh32(stat->rxdw3);
+	rxd = (struct r92c_rx_desc_usb *)buf;
+	rxdw0 = letoh32(rxd->rxdw0);
+	rxdw3 = letoh32(rxd->rxdw3);
 
 	if (__predict_false(rxdw0 & (R92C_RXDW0_CRCERR | R92C_RXDW0_ICVERR))) {
 		/*
@@ -1775,9 +1942,9 @@ urtwn_rx_frame(struct urtwn_softc *sc, uint8_t *buf, int pktlen)
 	/* Get RSSI from PHY status descriptor if present. */
 	if (infosz != 0 && (rxdw0 & R92C_RXDW0_PHYST)) {
 		if (sc->chip & URTWN_CHIP_88E)
-			rssi = urtwn_r88e_get_rssi(sc, rate, &stat[1]);
+			rssi = urtwn_r88e_get_rssi(sc, rate, &rxd[1]);
 		else
-			rssi = urtwn_get_rssi(sc, rate, &stat[1]);
+			rssi = urtwn_get_rssi(sc, rate, &rxd[1]);
 		/* Update our average RSSI. */
 		urtwn_update_avgrssi(sc, rate, rssi);
 	}
@@ -1799,7 +1966,7 @@ urtwn_rx_frame(struct urtwn_softc *sc, uint8_t *buf, int pktlen)
 		}
 	}
 	/* Finalize mbuf. */
-	wh = (struct ieee80211_frame *)((uint8_t *)&stat[1] + infosz);
+	wh = (struct ieee80211_frame *)((uint8_t *)&rxd[1] + infosz);
 	memcpy(mtod(m, uint8_t *), wh, pktlen);
 	m->m_pkthdr.len = m->m_len = pktlen;
 
@@ -1863,7 +2030,7 @@ urtwn_rxeof(struct usbd_xfer *xfer, void *priv,
 {
 	struct urtwn_rx_data *data = priv;
 	struct urtwn_softc *sc = data->sc;
-	struct r92c_rx_stat *stat;
+	struct r92c_rx_desc_usb *rxd;
 	uint32_t rxdw0;
 	uint8_t *buf;
 	int len, totlen, pktlen, infosz, npkts;
@@ -1878,23 +2045,23 @@ urtwn_rxeof(struct usbd_xfer *xfer, void *priv,
 	}
 	usbd_get_xfer_status(xfer, NULL, NULL, &len, NULL);
 
-	if (__predict_false(len < sizeof(*stat))) {
+	if (__predict_false(len < sizeof(*rxd))) {
 		DPRINTF(("xfer too short %d\n", len));
 		goto resubmit;
 	}
 	buf = data->buf;
 
 	/* Get the number of encapsulated frames. */
-	stat = (struct r92c_rx_stat *)buf;
-	npkts = MS(letoh32(stat->rxdw2), R92C_RXDW2_PKTCNT);
+	rxd = (struct r92c_rx_desc_usb *)buf;
+	npkts = MS(letoh32(rxd->rxdw2), R92C_RXDW2_PKTCNT);
 	DPRINTFN(6, ("Rx %d frames in one chunk\n", npkts));
 
 	/* Process all of them. */
 	while (npkts-- > 0) {
-		if (__predict_false(len < sizeof(*stat)))
+		if (__predict_false(len < sizeof(*rxd)))
 			break;
-		stat = (struct r92c_rx_stat *)buf;
-		rxdw0 = letoh32(stat->rxdw0);
+		rxd = (struct r92c_rx_desc_usb *)buf;
+		rxdw0 = letoh32(rxd->rxdw0);
 
 		pktlen = MS(rxdw0, R92C_RXDW0_PKTLEN);
 		if (__predict_false(pktlen == 0))
@@ -1903,7 +2070,7 @@ urtwn_rxeof(struct usbd_xfer *xfer, void *priv,
 		infosz = MS(rxdw0, R92C_RXDW0_INFOSZ) * 8;
 
 		/* Make sure everything fits in xfer. */
-		totlen = sizeof(*stat) + infosz + pktlen;
+		totlen = sizeof(*rxd) + infosz + pktlen;
 		if (__predict_false(totlen > len))
 			break;
 
@@ -1962,7 +2129,7 @@ urtwn_tx(struct urtwn_softc *sc, struct mbuf *m, struct ieee80211_node *ni)
 	struct ieee80211_frame *wh;
 	struct ieee80211_key *k = NULL;
 	struct urtwn_tx_data *data;
-	struct r92c_tx_desc *txd;
+	struct r92c_tx_desc_usb *txd;
 	struct usbd_pipe *pipe;
 	uint16_t qos, sum;
 	uint8_t raid, type, tid, qid;
@@ -1996,7 +2163,7 @@ urtwn_tx(struct urtwn_softc *sc, struct mbuf *m, struct ieee80211_node *ni)
 	TAILQ_REMOVE(&sc->tx_free_list, data, next);
 
 	/* Fill Tx descriptor. */
-	txd = (struct r92c_tx_desc *)data->buf;
+	txd = (struct r92c_tx_desc_usb *)data->buf;
 	memset(txd, 0, sizeof(*txd));
 
 	txd->txdw0 |= htole32(
@@ -2032,13 +2199,13 @@ urtwn_tx(struct urtwn_softc *sc, struct mbuf *m, struct ieee80211_node *ni)
 			raid = R92C_RAID_11BG;
 		if (sc->chip & URTWN_CHIP_88E) {
 			txd->txdw1 |= htole32(
-			    SM(R88E_TXDW1_MACID, URTWN_MACID_BSS) |
+			    SM(R88E_TXDW1_MACID, R92C_MACID_BSS) |
 			    SM(R92C_TXDW1_QSEL, R92C_TXDW1_QSEL_BE) |
 			    SM(R92C_TXDW1_RAID, raid));
 			txd->txdw2 |= htole32(R88E_TXDW2_AGGBK);
 		} else {
 			txd->txdw1 |= htole32(
-			    SM(R92C_TXDW1_MACID, URTWN_MACID_BSS) |
+			    SM(R92C_TXDW1_MACID, R92C_MACID_BSS) |
 			    SM(R92C_TXDW1_QSEL, R92C_TXDW1_QSEL_BE) |
 			    SM(R92C_TXDW1_RAID, raid) | R92C_TXDW1_AGGBK);
 		}
@@ -2771,7 +2938,7 @@ urtwn_mac_init(struct urtwn_softc *sc)
 void
 urtwn_bb_init(struct urtwn_softc *sc)
 {
-	const struct urtwn_bb_prog *prog;
+	const struct r92c_bb_prog *prog;
 	uint32_t reg;
 	uint8_t crystalcap;
 	int i;
@@ -2889,7 +3056,7 @@ urtwn_bb_init(struct urtwn_softc *sc)
 void
 urtwn_rf_init(struct urtwn_softc *sc)
 {
-	const struct urtwn_rf_prog *prog;
+	const struct r92c_rf_prog *prog;
 	uint32_t reg, type;
 	int i, j, idx, off;
 
@@ -3095,7 +3262,7 @@ urtwn_get_txpower(struct urtwn_softc *sc, int chain,
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct r92c_rom *rom = &sc->rom;
 	uint16_t cckpow, ofdmpow, htpow, diff, max;
-	const struct urtwn_txpwr *base;
+	const struct r92c_txpwr *base;
 	int ridx, chan, group;
 
 	/* Determine channel group. */
@@ -3193,7 +3360,7 @@ urtwn_r88e_get_txpower(struct urtwn_softc *sc, int chain,
 {
 	struct ieee80211com *ic = &sc->sc_ic;
 	uint16_t cckpow, ofdmpow, bw20pow, htpow;
-	const struct urtwn_r88e_txpwr *base;
+	const struct r88e_txpwr *base;
 	int ridx, chan, group;
 
 	/* Determine channel group. */

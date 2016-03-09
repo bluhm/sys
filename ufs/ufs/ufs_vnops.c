@@ -1,4 +1,4 @@
-/*	$OpenBSD: ufs_vnops.c,v 1.124 2016/02/04 12:45:03 mikeb Exp $	*/
+/*	$OpenBSD: ufs_vnops.c,v 1.126 2016/02/27 18:50:38 natano Exp $	*/
 /*	$NetBSD: ufs_vnops.c,v 1.18 1996/05/11 18:28:04 mycroft Exp $	*/
 
 /*
@@ -1189,7 +1189,7 @@ ufs_mkdir(void *v)
 	/* 
 	 * Initialize directory with "." and ".." from static template.
 	 */
-	if (dvp->v_mount->mnt_maxsymlinklen > 0)
+	if (dp->i_ump->um_maxsymlinklen > 0)
 		dtp = &mastertemplate;
 	else
 		dtp = (struct dirtemplate *)&omastertemplate;
@@ -1385,9 +1385,9 @@ ufs_symlink(void *v)
 		return (error);
 	VN_KNOTE(ap->a_dvp, NOTE_WRITE);
 	vp = *vpp;
+	ip = VTOI(vp);
 	len = strlen(ap->a_target);
-	if (len < vp->v_mount->mnt_maxsymlinklen) {
-		ip = VTOI(vp);
+	if (len < ip->i_ump->um_maxsymlinklen) {
 		memcpy(SHORTLINK(ip), ap->a_target, len);
 		DIP_ASSIGN(ip, size, len);
 		ip->i_flag |= IN_CHANGE | IN_UPDATE;
@@ -1422,7 +1422,7 @@ ufs_readdir(void *v)
 	size_t count, entries;
 	int readcnt, error;
 #if (BYTE_ORDER == LITTLE_ENDIAN)
-	int ofmt = ap->a_vp->v_mount->mnt_maxsymlinklen <= 0;
+	int ofmt = VTOI(ap->a_vp)->i_ump->um_maxsymlinklen == 0;
 #endif
 
 	if (uio->uio_rw != UIO_READ)
@@ -1491,7 +1491,7 @@ ufs_readdir(void *v)
 		memset(u.dn.d_name + u.dn.d_namlen, 0, u.dn.d_reclen
 		    - u.dn.d_namlen - offsetof(struct dirent, d_name));
 
-		error = uiomovei(&u.dn, u.dn.d_reclen, uio);
+		error = uiomove(&u.dn, u.dn.d_reclen, uio);
 		dp = (struct direct *)((char *)dp + dp->d_reclen);
 	}
 
@@ -1519,12 +1519,12 @@ ufs_readlink(void *v)
 	struct vop_readlink_args *ap = v;
 	struct vnode *vp = ap->a_vp;
 	struct inode *ip = VTOI(vp);
-	int isize;
+	u_int64_t isize;
 
 	isize = DIP(ip, size);
-	if (isize < vp->v_mount->mnt_maxsymlinklen ||
-	    (vp->v_mount->mnt_maxsymlinklen == 0 && DIP(ip, blocks) == 0)) {
-		return (uiomovei((char *)SHORTLINK(ip), isize, ap->a_uio));
+	if (isize < ip->i_ump->um_maxsymlinklen ||
+	    (ip->i_ump->um_maxsymlinklen == 0 && DIP(ip, blocks) == 0)) {
+		return (uiomove((char *)SHORTLINK(ip), isize, ap->a_uio));
 	}
 	return (VOP_READ(vp, ap->a_uio, 0, ap->a_cred));
 }

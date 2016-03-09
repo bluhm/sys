@@ -1,4 +1,4 @@
-/*	$OpenBSD: route.c,v 1.293 2015/12/21 10:51:55 mpi Exp $	*/
+/*	$OpenBSD: route.c,v 1.296 2016/03/07 18:44:00 naddy Exp $	*/
 /*	$NetBSD: route.c,v 1.14 1996/02/13 22:00:46 christos Exp $	*/
 
 /*
@@ -283,9 +283,8 @@ struct rtentry *_rtalloc(struct sockaddr *, uint32_t *, int, unsigned int);
 } while (0)
 
 int
-rt_hash(struct rtentry *rt, uint32_t *src)
+rt_hash(struct rtentry *rt, struct sockaddr *dst, uint32_t *src)
 {
-	struct sockaddr *dst = rt_key(rt);
 	uint32_t a, b, c;
 
 	if (src == NULL || !rtisvalid(rt) || !ISSET(rt->rt_flags, RTF_MPATH))
@@ -390,7 +389,8 @@ _rtalloc(struct sockaddr *dst, uint32_t *src, int flags, unsigned int rtableid)
 	 * this behavior.  But it is safe since rt_checkgate() wont
 	 * allow us to us this route later on.
 	 */
-	nhrt = rt_match(rt->rt_gateway, NULL, flags | RT_RESOLVE, rtableid);
+	nhrt = rt_match(rt->rt_gateway, NULL, flags | RT_RESOLVE,
+	    rtable_l2(rtableid));
 	if (nhrt == NULL)
 		return (rt);
 
@@ -1441,7 +1441,7 @@ static int			rt_init_done = 0;
  */
 
 void
-rt_timer_init()
+rt_timer_init(void)
 {
 	static struct timeout	rt_timer_timeout;
 

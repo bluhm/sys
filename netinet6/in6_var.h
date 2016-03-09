@@ -1,4 +1,4 @@
-/*	$OpenBSD: in6_var.h,v 1.59 2016/01/21 11:23:48 mpi Exp $	*/
+/*	$OpenBSD: in6_var.h,v 1.62 2016/03/03 12:57:15 jca Exp $	*/
 /*	$KAME: in6_var.h,v 1.55 2001/02/16 12:49:45 itojun Exp $	*/
 
 /*
@@ -269,91 +269,6 @@ struct	in6_aliasreq {
 	struct in6_addrlifetime ifra_lifetime;
 };
 
-/* prefix type macro */
-#define IN6_PREFIX_ND	1
-#define IN6_PREFIX_RR	2
-
-/*
- * prefix related flags passed between kernel(NDP related part) and
- * userland command(ifconfig) and daemon(rtadvd).
- */
-struct prf_ra {
-	u_int onlink : 1;
-	u_int autonomous : 1;
-	u_int router : 1;
-	u_int reserved : 5;
-};
-
-struct in6_prflags {
-	struct prf_ra prf_ra;
-	u_char prf_reserved1;
-	u_short prf_reserved2;
-	/* want to put this on 4byte offset */
-	struct prf_rr {
-		u_int decrvalid : 1;
-		u_int decrprefd : 1;
-		u_int reserved : 6;
-	} prf_rr;
-	u_char prf_reserved3;
-	u_short prf_reserved4;
-};
-
-struct  in6_prefixreq {
-	char	ipr_name[IFNAMSIZ];
-	u_char	ipr_origin;
-	u_char	ipr_plen;
-	u_int32_t ipr_vltime;
-	u_int32_t ipr_pltime;
-	struct in6_prflags ipr_flags;
-	struct	sockaddr_in6 ipr_prefix;
-};
-
-#define PR_ORIG_RA	0
-#define PR_ORIG_RR	1
-#define PR_ORIG_STATIC	2
-#define PR_ORIG_KERNEL	3
-
-#define ipr_raf_onlink		ipr_flags.prf_ra.onlink
-#define ipr_raf_auto		ipr_flags.prf_ra.autonomous
-
-#define ipr_statef_onlink	ipr_flags.prf_state.onlink
-
-#define ipr_rrf_decrvalid	ipr_flags.prf_rr.decrvalid
-#define ipr_rrf_decrprefd	ipr_flags.prf_rr.decrprefd
-
-struct	in6_rrenumreq {
-	char	irr_name[IFNAMSIZ];
-	u_char	irr_origin;
-	u_char	irr_m_len;	/* match len for matchprefix */
-	u_char	irr_m_minlen;	/* minlen for matching prefix */
-	u_char	irr_m_maxlen;	/* maxlen for matching prefix */
-	u_char	irr_u_uselen;	/* uselen for adding prefix */
-	u_char	irr_u_keeplen;	/* keeplen from matching prefix */
-	struct irr_raflagmask {
-		u_int onlink : 1;
-		u_int autonomous : 1;
-		u_int reserved : 6;
-	} irr_raflagmask;
-	u_int32_t irr_vltime;
-	u_int32_t irr_pltime;
-	struct in6_prflags irr_flags;
-	struct	sockaddr_in6 irr_matchprefix;
-	struct	sockaddr_in6 irr_useprefix;
-};
-
-#define irr_raf_mask_onlink	irr_raflagmask.onlink
-#define irr_raf_mask_auto	irr_raflagmask.autonomous
-#define irr_raf_mask_reserved	irr_raflagmask.reserved
-
-#define irr_raf_onlink		irr_flags.prf_ra.onlink
-#define irr_raf_auto		irr_flags.prf_ra.autonomous
-
-#define irr_statef_onlink	irr_flags.prf_state.onlink
-
-#define irr_rrf			irr_flags.prf_rr
-#define irr_rrf_decrvalid	irr_flags.prf_rr.decrvalid
-#define irr_rrf_decrprefd	irr_flags.prf_rr.decrprefd
-
 /*
  * Given a pointer to an in6_ifaddr (ifaddr),
  * return a pointer to the addr as a sockaddr_in6
@@ -374,17 +289,7 @@ struct	in6_rrenumreq {
 	(((d)->s6_addr32[3] ^ (a)->s6_addr32[3]) & (m)->s6_addr32[3]) == 0 )
 #endif /* _KERNEL */
 
-#define SIOCSIFADDR_IN6		 _IOW('i', 12, struct in6_ifreq)
 #define SIOCGIFADDR_IN6		_IOWR('i', 33, struct in6_ifreq)
-
-#ifdef _KERNEL
-/*
- * SIOCSxxx ioctls should be unused (see comments in in6.c), but
- * we do not shift numbers for binary compatibility.
- */
-#define SIOCSIFDSTADDR_IN6	 _IOW('i', 14, struct in6_ifreq)
-#define SIOCSIFNETMASK_IN6	 _IOW('i', 22, struct in6_ifreq)
-#endif /* _KERNEL */
 
 #define SIOCGIFDSTADDR_IN6	_IOWR('i', 34, struct in6_ifreq)
 #define SIOCGIFNETMASK_IN6	_IOWR('i', 37, struct in6_ifreq)
@@ -405,20 +310,10 @@ struct	in6_rrenumreq {
 #define SIOCSRTRFLUSH_IN6	_IOWR('i', 80, struct in6_ifreq)
 
 #define SIOCGIFALIFETIME_IN6	_IOWR('i', 81, struct in6_ifreq)
-#define SIOCSIFALIFETIME_IN6	_IOWR('i', 82, struct in6_ifreq)
 #define SIOCGIFSTAT_IN6		_IOWR('i', 83, struct in6_ifreq)
 #define SIOCGIFSTAT_ICMP6	_IOWR('i', 84, struct in6_ifreq)
 
 #define SIOCSIFINFO_FLAGS	_IOWR('i', 87, struct in6_ndireq) /* XXX */
-
-#define SIOCSIFPREFIX_IN6	_IOW('i', 100, struct in6_prefixreq) /* set */
-#define SIOCGIFPREFIX_IN6	_IOWR('i', 101, struct in6_prefixreq) /* get */
-#define SIOCDIFPREFIX_IN6	_IOW('i', 102, struct in6_prefixreq) /* del */
-#define SIOCAIFPREFIX_IN6	_IOW('i', 103, struct in6_rrenumreq) /* add */
-#define SIOCCIFPREFIX_IN6	_IOW('i', 104, \
-				     struct in6_rrenumreq) /* change */
-#define SIOCSGIFPREFIX_IN6	_IOW('i', 105, \
-				     struct in6_rrenumreq) /* set global */
 
 #define SIOCGETSGCNT_IN6	_IOWR('u', 106, \
 				      struct sioc_sg_req6) /* get s,g pkt cnt */
