@@ -366,8 +366,10 @@ sdopen(dev_t dev, int flag, int fmt, struct proc *p)
 		 * If any partition is open, but the disk has been invalidated,
 		 * disallow further opens of non-raw partition.
 		 */
-		if (sc->flags & SDF_DYING)
+		if (sc->flags & SDF_DYING) {
+			error = ENXIO;
 			goto die;
+		}
 		if ((sc_link->flags & SDEV_MEDIA_LOADED) == 0) {
 			if (rawopen)
 				goto out;
@@ -376,8 +378,10 @@ sdopen(dev_t dev, int flag, int fmt, struct proc *p)
 		}
 	} else {
 		/* Spin up non-UMASS devices ready or not. */
-		if (sc->flags & SDF_DYING)
+		if (sc->flags & SDF_DYING) {
+			error = ENXIO;
 			goto die;
+		}
 		if ((sc_link->flags & SDEV_UMASS) == 0)
 			scsi_start(sc_link, SSS_START, (rawopen ? SCSI_SILENT :
 			    0) | SCSI_IGNORE_ILLEGAL_REQUEST |
@@ -389,8 +393,10 @@ sdopen(dev_t dev, int flag, int fmt, struct proc *p)
 		 * device returns "Initialization command required." and causes
 		 * a loop of scsi_start() calls.
 		 */
-		if (sc->flags & SDF_DYING)
+		if (sc->flags & SDF_DYING) {
+			error = ENXIO;
 			goto die;
+		}
 		sc_link->flags |= SDEV_OPEN;
 
 		/*
@@ -405,8 +411,10 @@ sdopen(dev_t dev, int flag, int fmt, struct proc *p)
 		}
 
 		/* Check that it is still responding and ok. */
-		if (sc->flags & SDF_DYING)
+		if (sc->flags & SDF_DYING) {
+			error = ENXIO;
 			goto die;
+		}
 		error = scsi_test_unit_ready(sc_link,
 		    TEST_READY_RETRIES, SCSI_SILENT |
 		    SCSI_IGNORE_ILLEGAL_REQUEST | SCSI_IGNORE_MEDIA_CHANGE);
@@ -419,13 +427,17 @@ sdopen(dev_t dev, int flag, int fmt, struct proc *p)
 		}
 
 		/* Load the physical device parameters. */
-		if (sc->flags & SDF_DYING)
+		if (sc->flags & SDF_DYING) {
+			error = ENXIO;
 			goto die;
+		}
 		sc_link->flags |= SDEV_MEDIA_LOADED;
 		if (sd_get_parms(sc, &sc->params, (rawopen ? SCSI_SILENT : 0))
 		    == SDGP_RESULT_OFFLINE) {
-			if (sc->flags & SDF_DYING)
+			if (sc->flags & SDF_DYING) {
+				error = ENXIO;
 				goto die;
+			}
 			sc_link->flags &= ~SDEV_MEDIA_LOADED;
 			error = ENXIO;
 			goto bad;
@@ -440,34 +452,34 @@ sdopen(dev_t dev, int flag, int fmt, struct proc *p)
 		SC_DEBUG(sc_link, SDEV_DB3, ("Disklabel loaded\n"));
 	}
 
- out:
+out:
 	if ((error = disk_openpart(&sc->sc_dk, part, fmt, 1)) != 0)
 		goto bad;
 
 	SC_DEBUG(sc_link, SDEV_DB3, ("open complete\n"));
 
 	/* It's OK to fall through because dk_openmask is now non-zero. */
- bad:
+bad:
 	if (sc->sc_dk.dk_openmask == 0) {
-		if (sc->flags & SDF_DYING)
+		if (sc->flags & SDF_DYING) {
+			error = ENXIO;
 			goto die;
+		}
 		if ((sc_link->flags & SDEV_REMOVABLE) != 0)
 			scsi_prevent(sc_link, PR_ALLOW, SCSI_SILENT |
 			    SCSI_IGNORE_ILLEGAL_REQUEST |
 			    SCSI_IGNORE_MEDIA_CHANGE);
-		if (sc->flags & SDF_DYING)
+		if (sc->flags & SDF_DYING) {
+			error = ENXIO;
 			goto die;
+		}
 		sc_link->flags &= ~(SDEV_OPEN | SDEV_MEDIA_LOADED);
 	}
 
+die:
 	disk_unlock(&sc->sc_dk);
 	device_unref(&sc->sc_dev);
 	return (error);
-
- die:
-	disk_unlock(&sc->sc_dk);
-	device_unref(&sc->sc_dev);
-	return (ENXIO);
 }
 
 /*
