@@ -1,4 +1,4 @@
-/*	$OpenBSD: sd.c,v 1.263 2016/02/03 21:42:12 bluhm Exp $	*/
+/*	$OpenBSD: sd.c,v 1.264 2016/03/12 00:48:44 bluhm Exp $	*/
 /*	$NetBSD: sd.c,v 1.111 1997/04/02 02:29:41 mycroft Exp $	*/
 
 /*-
