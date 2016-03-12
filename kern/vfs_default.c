@@ -1,4 +1,4 @@
-/*	$OpenBSD: vfs_default.c,v 1.41 2015/03/14 03:38:51 jsg Exp $  */
+/*	$OpenBSD: vfs_default.c,v 1.42 2016/03/12 00:27:15 bluhm Exp $  */
 
 /*
  * Portions of this code are:
