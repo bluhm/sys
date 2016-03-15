@@ -1237,14 +1237,18 @@ sdsize(dev_t dev)
 	sc = sdlookup(DISKUNIT(dev));
 	if (sc == NULL)
 		return -1;
-	if (sc->flags & SDF_DYING)
-		goto die;
+	if (sc->flags & SDF_DYING) {
+		size = -1;
+		goto exit;
+	}
 
 	part = DISKPART(dev);
 	omask = sc->sc_dk.dk_openmask & (1 << part);
 
-	if (omask == 0 && sdopen(dev, 0, S_IFBLK, NULL) != 0)
-		goto die;
+	if (omask == 0 && sdopen(dev, 0, S_IFBLK, NULL) != 0) {
+		size = -1;
+		goto exit;
+	}
 
 	lp = sc->sc_dk.dk_label;
 	if ((sc->sc_link->flags & SDEV_MEDIA_LOADED) == 0)
@@ -1253,16 +1257,12 @@ sdsize(dev_t dev)
 		size = -1;
 	else
 		size = DL_SECTOBLK(lp, DL_GETPSIZE(&lp->d_partitions[part]));
-
 	if (omask == 0 && sdclose(dev, 0, S_IFBLK, NULL) != 0)
-		goto die;
+		size = -1;
 
+ exit:
 	device_unref(&sc->sc_dev);
 	return size;
-
- die:
-	device_unref(&sc->sc_dev);
-	return -1;
 }
 
 /* #define SD_DUMP_NOT_TRUSTED if you just want to watch */
