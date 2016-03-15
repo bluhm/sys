@@ -269,12 +269,12 @@ sdattach(struct device *parent, struct device *self, void *aux)
 int
 sdactivate(struct device *self, int act)
 {
-	struct scsi_link *sc_link;
+	struct scsi_link *link;
 	struct sd_softc *sc = (struct sd_softc *)self;
 
 	if (sc->flags & SDF_DYING)
 		return (ENXIO);
-	sc_link = sc->sc_link;
+	link = sc->sc_link;
 
 	switch (act) {
 	case DVACT_SUSPEND:
@@ -295,12 +295,12 @@ sdactivate(struct device *self, int act)
 		if ((sc->flags & SDF_DIRTY) != 0)
 			sd_flush(sc, SCSI_AUTOCONF);
 		if (boothowto & RB_POWERDOWN)
-			scsi_start(sc_link, SSS_STOP,
+			scsi_start(link, SSS_STOP,
 			    SCSI_IGNORE_ILLEGAL_REQUEST |
 			    SCSI_IGNORE_NOT_READY | SCSI_AUTOCONF);
 		break;
 	case DVACT_RESUME:
-		scsi_start(sc_link, SSS_START,
+		scsi_start(link, SSS_START,
 		    SCSI_IGNORE_ILLEGAL_REQUEST | SCSI_AUTOCONF);
 		break;
 	case DVACT_DEACTIVATE:
