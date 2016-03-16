@@ -304,8 +304,9 @@ sdactivate(struct device *self, int act)
 		    SCSI_IGNORE_ILLEGAL_REQUEST | SCSI_AUTOCONF);
 		break;
 	case DVACT_DEACTIVATE:
-		sc->flags |= SDF_DYING;
+		timeout_del(&sc->sc_timeout);
 		scsi_xsh_del(&sc->sc_xsh);
+		sc->flags |= SDF_DYING;
 		break;
 	}
 	return (0);
