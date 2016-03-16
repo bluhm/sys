@@ -514,14 +514,20 @@ sdclose(dev_t dev, int flag, int fmt, struct proc *p)
 		if ((sc->flags & SDF_DIRTY) != 0)
 			sd_flush(sc, 0);
 
+		if (sc->flags & SDF_DYING)
+			goto die;
 		if ((link->flags & SDEV_REMOVABLE) != 0)
 			scsi_prevent(link, PR_ALLOW,
 			    SCSI_IGNORE_ILLEGAL_REQUEST |
 			    SCSI_IGNORE_NOT_READY | SCSI_SILENT);
+		if (sc->flags & SDF_DYING)
+			goto die;
 		link->flags &= ~(SDEV_OPEN | SDEV_MEDIA_LOADED);
 
 		if (link->flags & SDEV_EJECTING) {
 			scsi_start(link, SSS_STOP|SSS_LOEJ, 0);
+			if (sc->flags & SDF_DYING)
+				goto die;
 			link->flags &= ~SDEV_EJECTING;
 		}
 
@@ -532,6 +538,11 @@ sdclose(dev_t dev, int flag, int fmt, struct proc *p)
 	disk_unlock(&sc->sc_dk);
 	device_unref(&sc->sc_dev);
 	return 0;
+
+ die:
+	disk_unlock(&sc->sc_dk);
+	device_unref(&sc->sc_dev);
+	return (ENXIO);
 }
 
 /*
