@@ -532,10 +532,10 @@ ntfs_unmount(struct mount *mp, int mntflags, struct proc *p)
 	ntfs_toupper_unuse(p);
 
 	DPRINTF("ntfs_unmount: freeing memory...\n");
-	mp->mnt_data = NULL;
-	mp->mnt_flag &= ~MNT_LOCAL;
 	free(ntmp->ntm_ad, M_NTFSMNT, 0);
 	free(ntmp, M_NTFSMNT, 0);
+	mp->mnt_data = NULL;
+	mp->mnt_flag &= ~MNT_LOCAL;
 	return (error);
 }
 

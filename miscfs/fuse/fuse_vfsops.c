@@ -165,6 +165,7 @@ fusefs_unmount(struct mount *mp, int mntflags, struct proc *p)
 	fuse_device_cleanup(fmp->dev, NULL);
 	fuse_device_set_fmp(fmp, 0);
 	free(fmp, M_FUSEFS, 0);
+	mp->mnt_data = NULL;
 
 	return (error);
 }

@@ -1033,7 +1033,7 @@ ffs_unmount(struct mount *mp, int mntflags, struct proc *p)
 	free(fs->fs_csp, M_UFSMNT, 0);
 	free(fs, M_UFSMNT, fs->fs_sbsize);
 	free(ump, M_UFSMNT, sizeof(*ump));
-	mp->mnt_data = (qaddr_t)0;
+	mp->mnt_data = NULL;
 	mp->mnt_flag &= ~MNT_LOCAL;
 	return (error);
 }

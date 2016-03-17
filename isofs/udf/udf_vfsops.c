@@ -495,7 +495,7 @@ udf_unmount(struct mount *mp, int mntflags, struct proc *p)
 
 	free(ump, M_UDFMOUNT, 0);
 
-	mp->mnt_data = (qaddr_t)0;
+	mp->mnt_data = NULL;
 	mp->mnt_flag &= ~MNT_LOCAL;
 
 	return (0);

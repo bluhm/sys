@@ -456,7 +456,7 @@ out:
 
 	if (isomp) {
 		free((caddr_t)isomp, M_ISOFSMNT, 0);
-		mp->mnt_data = (qaddr_t)0;
+		mp->mnt_data = NULL;
 	}
 	return (error);
 }
@@ -588,7 +588,7 @@ cd9660_unmount(mp, mntflags, p)
 	error = VOP_CLOSE(isomp->im_devvp, FREAD, NOCRED, p);
 	vput(isomp->im_devvp);
 	free((caddr_t)isomp, M_ISOFSMNT, 0);
-	mp->mnt_data = (qaddr_t)0;
+	mp->mnt_data = NULL;
 	mp->mnt_flag &= ~MNT_LOCAL;
 	return (error);
 }

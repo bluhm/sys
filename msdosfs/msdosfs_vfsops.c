@@ -590,7 +590,7 @@ error_exit:
 		if (pmp->pm_inusemap)
 			free(pmp->pm_inusemap, M_MSDOSFSFAT, 0);
 		free(pmp, M_MSDOSFSMNT, 0);
-		mp->mnt_data = (qaddr_t)0;
+		mp->mnt_data = NULL;
 	}
 	return (error);
 }
@@ -631,7 +631,7 @@ msdosfs_unmount(struct mount *mp, int mntflags,struct proc *p)
 	vput(vp);
 	free(pmp->pm_inusemap, M_MSDOSFSFAT, 0);
 	free(pmp, M_MSDOSFSMNT, 0);
-	mp->mnt_data = (qaddr_t)0;
+	mp->mnt_data = NULL;
 	mp->mnt_flag &= ~MNT_LOCAL;
 	return (error);
 }
