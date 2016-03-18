@@ -1071,8 +1071,10 @@ sd_ioctl_cache(struct sd_softc *sc, long cmd, struct dk_cache *dkc)
 	if (buf == NULL)
 		return (ENOMEM);
 
-	if (sc->flags & SDF_DYING)
-		goto die;
+	if (sc->flags & SDF_DYING) {
+		rv = ENXIO;
+		goto done;
+	}
 	rv = scsi_do_mode_sense(link, PAGE_CACHING_MODE,
 	    buf, (void **)&mode, NULL, NULL, NULL,
 	    sizeof(*mode) - 4, scsi_autoconf | SCSI_SILENT, &big);
@@ -1107,8 +1109,10 @@ sd_ioctl_cache(struct sd_softc *sc, long cmd, struct dk_cache *dkc)
 		else
 			SET(mode->flags, PG_CACHE_FL_RCD);
 
-		if (sc->flags & SDF_DYING)
-			goto die;
+		if (sc->flags & SDF_DYING) {
+			rv = ENXIO;
+			goto done;
+		}
 		if (big) {
 			rv = scsi_mode_select_big(link, SMS_PF,
 			    &buf->hdr_big, scsi_autoconf | SCSI_SILENT, 20000);
@@ -1119,13 +1123,9 @@ sd_ioctl_cache(struct sd_softc *sc, long cmd, struct dk_cache *dkc)
 		break;
 	}
 
- done:
+done:
 	dma_free(buf, sizeof(*buf));
 	return (rv);
-
- die:
-	dma_free(buf, sizeof(*buf));
-	return (ENXIO);
 }
 
 /*
