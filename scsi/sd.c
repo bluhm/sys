@@ -923,13 +923,13 @@ sdioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct proc *p)
 	switch (cmd) {
 	case DIOCRLDINFO:
 		lp = malloc(sizeof(*lp), M_TEMP, M_WAITOK);
-		sdgetdisklabel(dev, sc, lp, 0);
+		error = sdgetdisklabel(dev, sc, lp, 0);
 		memcpy(sc->sc_dk.dk_label, lp, sizeof(*lp));
 		free(lp, M_TEMP, sizeof(*lp));
 		goto exit;
 
 	case DIOCGPDINFO:
-		sdgetdisklabel(dev, sc, (struct disklabel *)addr, 1);
+		error = sdgetdisklabel(dev, sc, (struct disklabel *)addr, 1);
 		goto exit;
 
 	case DIOCGDINFO:
