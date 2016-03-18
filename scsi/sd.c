@@ -1486,8 +1486,10 @@ sd_read_cap_16(struct sd_softc *sc, int flags)
 	if (rdcap == NULL)
 		return (ENOMEM);
 
-	if (sc->flags & SDF_DYING)
-		goto die;
+	if (sc->flags & SDF_DYING) {
+		rv = ENXIO;
+		goto done;
+	}
 	xs = scsi_xs_get(sc->sc_link, flags | SCSI_DATA_IN | SCSI_SILENT);
 	if (xs == NULL)
 		goto done;
@@ -1523,10 +1525,6 @@ sd_read_cap_16(struct sd_softc *sc, int flags)
  done:
 	dma_free(rdcap, sizeof(*rdcap));
 	return (rv);
-
- die:
-	dma_free(rdcap, sizeof(*rdcap));
-	return (ENXIO);
 }
 
 int
