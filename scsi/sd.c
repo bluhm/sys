@@ -1621,8 +1621,10 @@ sd_vpd_block_limits(struct sd_softc *sc, int flags)
 	if (pg == NULL)
 		return (ENOMEM);
 
-	if (sc->flags & SDF_DYING)
-		goto die;
+	if (sc->flags & SDF_DYING) {
+		rv = ENXIO;
+		goto done;
+	}
 	rv = scsi_inquire_vpd(sc->sc_link, pg, sizeof(*pg),
 	    SI_PG_DISK_LIMITS, flags);
 	if (rv != 0)
@@ -1637,10 +1639,6 @@ sd_vpd_block_limits(struct sd_softc *sc, int flags)
  done:
 	dma_free(pg, sizeof(*pg));
 	return (rv);
-
- die:
-	dma_free(pg, sizeof(*pg));
-	return (ENXIO);
 }
 
 int
