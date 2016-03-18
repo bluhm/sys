@@ -1814,7 +1814,7 @@ sd_get_parms(struct sd_softc *sc, struct disk_parms *dp, int flags)
 		break;
 	}
 
- validate:
+validate:
 	if (buf)
 		dma_free(buf, sizeof(*buf));
 
@@ -1872,7 +1872,7 @@ sd_get_parms(struct sd_softc *sc, struct disk_parms *dp, int flags)
 
 	return (SDGP_RESULT_OK);
 
- die:
+die:
 	dma_free(buf, sizeof(*buf));
 	return (SDGP_RESULT_OFFLINE);
 }
