@@ -451,7 +451,7 @@ sdopen(dev_t dev, int flag, int fmt, struct proc *p)
 
 		/* Load the partition info if not already loaded. */
 		error = sdgetdisklabel(dev, sc, sc->sc_dk.dk_label, 0);
-		if (error == EIO || error == ENXIO)
+		if (error)
 			goto bad;
 		SC_DEBUG(link, SDEV_DB3, ("Disklabel loaded\n"));
 	}
