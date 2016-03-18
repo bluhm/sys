@@ -450,10 +450,9 @@ sdopen(dev_t dev, int flag, int fmt, struct proc *p)
 		SC_DEBUG(link, SDEV_DB3, ("Params loaded\n"));
 
 		/* Load the partition info if not already loaded. */
-		if (sdgetdisklabel(dev, sc, sc->sc_dk.dk_label, 0) == EIO) {
-			error = EIO;
+		error = sdgetdisklabel(dev, sc, sc->sc_dk.dk_label, 0);
+		if (error)
 			goto bad;
-		}
 		SC_DEBUG(link, SDEV_DB3, ("Disklabel loaded\n"));
 	}
 
