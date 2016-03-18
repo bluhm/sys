@@ -1561,8 +1561,10 @@ sd_thin_pages(struct sd_softc *sc, int flags)
 	if (pg == NULL)
 		return (ENOMEM);
 
-	if (sc->flags & SDF_DYING)
-		goto die;
+	if (sc->flags & SDF_DYING) {
+		rv = ENXIO;
+		goto done;
+	}
 	rv = scsi_inquire_vpd(sc->sc_link, pg, sizeof(*pg),
 	    SI_PG_SUPPORTED, flags);
 	if (rv != 0)
@@ -1576,8 +1578,10 @@ sd_thin_pages(struct sd_softc *sc, int flags)
 	if (pg == NULL)
 		return (ENOMEM);
 
-	if (sc->flags & SDF_DYING)
-		goto die;
+	if (sc->flags & SDF_DYING) {
+		rv = ENXIO;
+		goto done;
+	}
 	rv = scsi_inquire_vpd(sc->sc_link, pg, sizeof(*pg) + len,
 	    SI_PG_SUPPORTED, flags);
 	if (rv != 0)
@@ -1604,10 +1608,6 @@ sd_thin_pages(struct sd_softc *sc, int flags)
  done:
 	dma_free(pg, sizeof(*pg) + len);
 	return (rv);
-
- die:
-	dma_free(pg, sizeof(*pg) + len);
-	return (ENXIO);
 }
 
 int
