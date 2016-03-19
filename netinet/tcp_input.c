@@ -3268,9 +3268,6 @@ struct syn_cache_set {
 } tcp_syn_cache[2];
 int tcp_syn_cache_active;
 
-int	*tcp_syn_cache_count, tcp_syn_cache_count_set[2];
-u_int32_t *tcp_syn_hash, tcp_syn_hash_set[2][5];
-
 #define SYN_HASH(sa, sp, dp, rand) \
 	(((sa)->s_addr ^ (rand)[0]) *				\
 	(((((u_int32_t)(dp))<<16) + ((u_int32_t)(sp))) ^ (rand)[4]))
@@ -3361,7 +3358,6 @@ syn_cache_init(void)
 		TAILQ_INIT(&tcp_syn_cache[0].scs_buckethead[i].sch_bucket);
 		TAILQ_INIT(&tcp_syn_cache[1].scs_buckethead[i].sch_bucket);
 	}
-	tcp_syn_hash = tcp_syn_hash_set[0];
 
 	/* Initialize the syn cache pool. */
 	pool_init(&syn_cache_pool, sizeof(struct syn_cache), 0, 0, 0,
@@ -3384,9 +3380,10 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 	 * the hash secrets.
 	 */
 	if (set->scs_count == 0)
-		arc4random_buf(tcp_syn_hash, 5 * sizeof(u_int32_t));
+		arc4random_buf(set->scs_random, sizeof(set->scs_random));
 
-	SYN_HASHALL(sc->sc_hash, &sc->sc_src.sa, &sc->sc_dst.sa, tcp_syn_hash);
+	SYN_HASHALL(sc->sc_hash, &sc->sc_src.sa, &sc->sc_dst.sa,
+	    set->scs_random);
 	scp = &set->scs_buckethead[sc->sc_hash % tcp_syn_cache_size];
 	sc->sc_buckethead = scp;
 
@@ -3468,11 +3465,6 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 	/* If alternative syn cache is empty, switch. */
 	if (tcp_syn_cache[!tcp_syn_cache_active].scs_count == 0) {
 		tcp_syn_cache_active = !tcp_syn_cache_active;
-		if (tcp_syn_cache_count == &tcp_syn_cache_count_set[0]) {
-			tcp_syn_hash = tcp_syn_hash_set[1];
-		} else {
-			tcp_syn_hash = tcp_syn_hash_set[0];
-		}
 	}
 
 	splx(s);
@@ -3581,7 +3573,7 @@ syn_cache_lookup(struct sockaddr *src, struct sockaddr *dst,
 		set = &tcp_syn_cache[i];
 		if (set->scs_count == 0)
 			continue;
-		SYN_HASHALL(hash, src, dst, tcp_syn_hash_set[i]);
+		SYN_HASHALL(hash, src, dst, set->scs_random);
 		scp = &set->scs_buckethead[hash % tcp_syn_cache_size];
 		*headp = scp;
 		TAILQ_FOREACH(sc, &scp->sch_bucket, sc_bucketq) {
