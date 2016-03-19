@@ -3260,6 +3260,13 @@ tcp_mss_adv(struct mbuf *m, int af)
 int	tcp_syn_cache_size = TCP_SYN_HASH_SIZE;
 int	tcp_syn_cache_limit = TCP_SYN_HASH_SIZE*TCP_SYN_BUCKET_SIZE;
 int	tcp_syn_bucket_limit = 3*TCP_SYN_BUCKET_SIZE;
+
+struct syn_cache_set {
+        struct		syn_cache_head scs_hash[TCP_SYN_HASH_SIZE];
+        int		scs_count;
+        u_int32_t	scs_random[5];
+};
+
 int	*tcp_syn_cache_count, tcp_syn_cache_count_set[2];
 struct	syn_cache_head *tcp_syn_cache, tcp_syn_cache_set[2][TCP_SYN_HASH_SIZE];
 u_int32_t *tcp_syn_hash, tcp_syn_hash_set[2][5];
