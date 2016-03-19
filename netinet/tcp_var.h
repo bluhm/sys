@@ -441,7 +441,7 @@ struct	tcpstat {
 	u_int64_t tcps_sc_dropped;	/* # of SYNs dropped (no route/mem) */
 	u_int64_t tcps_sc_collisions;	/* # of hash collisions */
 	u_int64_t tcps_sc_retransmitted;/* # of retransmissions */
-	u_int64_t tcps_sc_seedrandom;	/* # of switch and seed with random */
+	u_int64_t tcps_sc_seedrandom;	/* # of syn cache seeds with random */
 
 	u_int64_t tcps_conndrained;	/* # of connections drained */
 
