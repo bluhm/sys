@@ -272,7 +272,7 @@ struct syn_cache {
 #endif
 	long sc_win;				/* advertised window */
 	struct syn_cache_head *sc_buckethead;	/* our bucket index */
-	int *sc_count;				/* this syn cache counter */
+	struct syn_cache_set *sc_set;		/* our syn cache set */
 	u_int32_t sc_hash;
 	u_int32_t sc_timestamp;			/* timestamp from SYN */
 	u_int32_t sc_modulate;			/* our timestamp modulator */

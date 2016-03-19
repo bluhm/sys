@@ -3317,7 +3317,7 @@ syn_cache_rm(struct syn_cache *sc)
 	LIST_REMOVE(sc, sc_tpq);
 	sc->sc_buckethead->sch_length--;
 	timeout_del(&sc->sc_timer);
-	(*sc->sc_count)--;
+	sc->sc_set->scs_count--;
 }
 
 void
@@ -3361,7 +3361,6 @@ syn_cache_init(void)
 		TAILQ_INIT(&tcp_syn_cache[0].scs_buckethead[i].sch_bucket);
 		TAILQ_INIT(&tcp_syn_cache[1].scs_buckethead[i].sch_bucket);
 	}
-	tcp_syn_cache_count = &tcp_syn_cache_count_set[0];
 	tcp_syn_hash = tcp_syn_hash_set[0];
 
 	/* Initialize the syn cache pool. */
@@ -3376,7 +3375,7 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 	struct syn_cache_set *set = &tcp_syn_cache[tcp_syn_cache_active];
 	struct syn_cache_head *scp;
 	struct syn_cache *sc2;
-	int s, count;
+	int s;
 
 	s = splsoftnet();
 
@@ -3384,7 +3383,7 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 	 * If there are no entries in the hash table, reinitialize
 	 * the hash secrets.
 	 */
-	if (*tcp_syn_cache_count == 0)
+	if (set->scs_count == 0)
 		arc4random_buf(tcp_syn_hash, 5 * sizeof(u_int32_t));
 
 	SYN_HASHALL(sc->sc_hash, &sc->sc_src.sa, &sc->sc_dst.sa, tcp_syn_hash);
@@ -3412,7 +3411,7 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 #endif
 		syn_cache_rm(sc2);
 		syn_cache_put(sc2);
-	} else if (*tcp_syn_cache_count >= tcp_syn_cache_limit) {
+	} else if (set->scs_count >= tcp_syn_cache_limit) {
 		struct syn_cache_head *scp2, *sce;
 
 		tcpstat.tcps_sc_overflowed++;
@@ -3461,23 +3460,17 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 	/* Put it into the bucket. */
 	TAILQ_INSERT_TAIL(&scp->sch_bucket, sc, sc_bucketq);
 	scp->sch_length++;
-	sc->sc_count = tcp_syn_cache_count;
-	(*tcp_syn_cache_count)++;
+	sc->sc_set = set;
+	set->scs_count++;
 
 	tcpstat.tcps_sc_added++;
 
 	/* If alternative syn cache is empty, switch. */
-	if (tcp_syn_cache_count == &tcp_syn_cache_count_set[0])
-		count = tcp_syn_cache_count_set[1];
-	else
-		count = tcp_syn_cache_count_set[0];
-	if (count == 0) {
-		tcp_syn_cache_active = ! tcp_syn_cache_active;
+	if (tcp_syn_cache[!tcp_syn_cache_active].scs_count == 0) {
+		tcp_syn_cache_active = !tcp_syn_cache_active;
 		if (tcp_syn_cache_count == &tcp_syn_cache_count_set[0]) {
-			tcp_syn_cache_count = &tcp_syn_cache_count_set[1];
 			tcp_syn_hash = tcp_syn_hash_set[1];
 		} else {
-			tcp_syn_cache_count = &tcp_syn_cache_count_set[0];
 			tcp_syn_hash = tcp_syn_hash_set[0];
 		}
 	}
@@ -3586,7 +3579,7 @@ syn_cache_lookup(struct sockaddr *src, struct sockaddr *dst,
 
 	for (i = 0; i < 2; i++) {
 		set = &tcp_syn_cache[i];
-		if (tcp_syn_cache_count_set[i] == 0)
+		if (set->scs_count == 0)
 			continue;
 		SYN_HASHALL(hash, src, dst, tcp_syn_hash_set[i]);
 		scp = &set->scs_buckethead[hash % tcp_syn_cache_size];
