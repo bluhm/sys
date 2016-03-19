@@ -3371,8 +3371,10 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 	 * If there are no entries in the hash table, reinitialize
 	 * the hash secrets.
 	 */
-	if (tcp_syn_cache_count == 0)
+	if (tcp_syn_cache_count == 0) {
 		arc4random_buf(tcp_syn_hash, sizeof(tcp_syn_hash));
+		tcpstat.tcps_sc_seedrandom++;
+	}
 
 	SYN_HASHALL(sc->sc_hash, &sc->sc_src.sa, &sc->sc_dst.sa);
 	sc->sc_bucketidx = sc->sc_hash % tcp_syn_cache_size;
