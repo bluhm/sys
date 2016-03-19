@@ -3379,8 +3379,10 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 	 * If there are no entries in the hash table, reinitialize
 	 * the hash secrets.
 	 */
-	if (set->scs_count == 0)
+	if (set->scs_count == 0) {
 		arc4random_buf(set->scs_random, sizeof(set->scs_random));
+		tcpstat.tcps_sc_seedrandom++;
+	}
 
 	SYN_HASHALL(sc->sc_hash, &sc->sc_src.sa, &sc->sc_dst.sa,
 	    set->scs_random);
