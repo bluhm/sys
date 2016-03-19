@@ -3272,11 +3272,11 @@ int tcp_syn_cache_active;
 	(((sa)->s_addr ^ (rand)[0]) *				\
 	(((((u_int32_t)(dp))<<16) + ((u_int32_t)(sp))) ^ (rand)[4]))
 #ifndef INET6
-#define	SYN_HASHALL(hash, src, dst) \
+#define	SYN_HASHALL(hash, src, dst, rand) \
 do {									\
 	hash = SYN_HASH(&satosin(src)->sin_addr,			\
 		satosin(src)->sin_port,					\
-		satosin(dst)->sin_port);				\
+		satosin(dst)->sin_port, (rand));			\
 } while (/*CONSTCOND*/ 0)
 #else
 #define SYN_HASH6(sa, sp, dp, rand) \
