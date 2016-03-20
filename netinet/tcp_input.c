@@ -3468,8 +3468,12 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 
 	tcpstat.tcps_sc_added++;
 
-	/* If alternative syn cache is empty, switch. */
-	if (tcp_syn_cache[!tcp_syn_cache_active].scs_count == 0)
+	/*
+	 * If the active cache has been used more than 100000 times and
+	 * the alternative syn cache is empty, exchange them.
+	 */
+	if (set->scs_use <= 0 &&
+	    tcp_syn_cache[!tcp_syn_cache_active].scs_count == 0)
 		tcp_syn_cache_active = !tcp_syn_cache_active;
 
 	splx(s);
