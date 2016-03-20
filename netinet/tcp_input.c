@@ -3260,6 +3260,7 @@ tcp_mss_adv(struct mbuf *m, int af)
 int	tcp_syn_cache_size = TCP_SYN_HASH_SIZE;
 int	tcp_syn_cache_limit = TCP_SYN_HASH_SIZE*TCP_SYN_BUCKET_SIZE;
 int	tcp_syn_bucket_limit = 3*TCP_SYN_BUCKET_SIZE;
+int	tcp_syn_use_limit = 1000000;
 
 struct syn_cache_set {
         struct		syn_cache_head scs_buckethead[TCP_SYN_HASH_SIZE];
@@ -3379,11 +3380,11 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 	/*
 	 * If there are no entries in the hash table, reinitialize
 	 * the hash secrets.  To avoid useless cache swaps and
-	 * and reinitialization, use it for 100000 times.
+	 * and reinitialization, use it until the limit is reached.
 	 */
 	if (set->scs_count == 0 && set->scs_use <= 0) {
 		arc4random_buf(set->scs_random, sizeof(set->scs_random));
-		set->scs_use = 100000;
+		set->scs_use = tcp_syn_use_limit;
 		tcpstat.tcps_sc_seedrandom++;
 	}
 
@@ -3469,8 +3470,8 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 	tcpstat.tcps_sc_added++;
 
 	/*
-	 * If the active cache has been used more than 100000 times and
-	 * the alternative syn cache is empty, exchange them.
+	 * If the active cache has exceeded its use limit and
+	 * the alternative syn cache is empty, exchange their roles.
 	 */
 	if (set->scs_use <= 0 &&
 	    tcp_syn_cache[!tcp_syn_cache_active].scs_count == 0)
