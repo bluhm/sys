@@ -3570,7 +3570,7 @@ struct syn_cache *
 syn_cache_lookup(struct sockaddr *src, struct sockaddr *dst,
     struct syn_cache_head **headp, u_int rtableid)
 {
-	struct syn_cache_set *set;
+	struct syn_cache_set *sets[2];
 	struct syn_cache *sc;
 	struct syn_cache_head *scp;
 	u_int32_t hash;
@@ -3578,12 +3578,13 @@ syn_cache_lookup(struct sockaddr *src, struct sockaddr *dst,
 
 	splsoftassert(IPL_SOFTNET);
 
+	sets[0] = &tcp_syn_cache[tcp_syn_cache_active];
+	sets[1] = &tcp_syn_cache[!tcp_syn_cache_active];
 	for (i = 0; i < 2; i++) {
-		set = &tcp_syn_cache[i];
-		if (set->scs_count == 0)
+		if (sets[i]->scs_count == 0)
 			continue;
-		SYN_HASHALL(hash, src, dst, set->scs_random);
-		scp = &set->scs_buckethead[hash % tcp_syn_cache_size];
+		SYN_HASHALL(hash, src, dst, sets[i]->scs_random);
+		scp = &sets[i]->scs_buckethead[hash % tcp_syn_cache_size];
 		*headp = scp;
 		TAILQ_FOREACH(sc, &scp->sch_bucket, sc_bucketq) {
 			if (sc->sc_hash != hash)
