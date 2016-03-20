@@ -3264,6 +3264,7 @@ int	tcp_syn_bucket_limit = 3*TCP_SYN_BUCKET_SIZE;
 struct syn_cache_set {
         struct		syn_cache_head scs_buckethead[TCP_SYN_HASH_SIZE];
         int		scs_count;
+        int		scs_use;
         u_int32_t	scs_random[5];
 } tcp_syn_cache[2];
 int tcp_syn_cache_active;
@@ -3377,10 +3378,12 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 
 	/*
 	 * If there are no entries in the hash table, reinitialize
-	 * the hash secrets.
+	 * the hash secrets.  To avoid useless cache swaps and
+	 * and reinitialization, use it for 100000 times.
 	 */
-	if (set->scs_count == 0) {
+	if (set->scs_count == 0 && set->scs_use <= 0) {
 		arc4random_buf(set->scs_random, sizeof(set->scs_random));
+		set->scs_use = 100000;
 		tcpstat.tcps_sc_seedrandom++;
 	}
 
@@ -3461,6 +3464,7 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 	scp->sch_length++;
 	sc->sc_set = set;
 	set->scs_count++;
+	set->scs_use--;
 
 	tcpstat.tcps_sc_added++;
 
