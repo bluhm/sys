@@ -3260,7 +3260,7 @@ tcp_mss_adv(struct mbuf *m, int af)
 int	tcp_syn_cache_size = TCP_SYN_HASH_SIZE;
 int	tcp_syn_cache_limit = TCP_SYN_HASH_SIZE*TCP_SYN_BUCKET_SIZE;
 int	tcp_syn_bucket_limit = 3*TCP_SYN_BUCKET_SIZE;
-int	tcp_syn_use_limit = 1000000;
+int	tcp_syn_use_limit = 100000;
 
 struct syn_cache_set {
         struct		syn_cache_head scs_buckethead[TCP_SYN_HASH_SIZE];
