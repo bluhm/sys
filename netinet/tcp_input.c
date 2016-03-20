@@ -3471,7 +3471,7 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 
 	/*
 	 * If the active cache has exceeded its use limit and
-	 * the alternative syn cache is empty, exchange their roles.
+	 * the passive syn cache is empty, exchange their roles.
 	 */
 	if (set->scs_use <= 0 &&
 	    tcp_syn_cache[!tcp_syn_cache_active].scs_count == 0)
@@ -3579,6 +3579,7 @@ syn_cache_lookup(struct sockaddr *src, struct sockaddr *dst,
 
 	splsoftassert(IPL_SOFTNET);
 
+	/* Check the active cache first, the passive cache is likely emtpy. */
 	sets[0] = &tcp_syn_cache[tcp_syn_cache_active];
 	sets[1] = &tcp_syn_cache[!tcp_syn_cache_active];
 	for (i = 0; i < 2; i++) {
