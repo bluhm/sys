@@ -1,4 +1,4 @@
-/*	$OpenBSD: pipex.c,v 1.85 2016/03/04 22:38:23 sashan Exp $	*/
+/*	$OpenBSD: pipex.c,v 1.87 2016/03/22 23:53:01 dlg Exp $	*/
 
 /*-
  * Copyright (c) 2009 Internet Initiative Japan Inc.
@@ -2568,10 +2568,10 @@ pipex_mppe_output(struct mbuf *m0, struct pipex_session *session,
 	 */
 	for (m = m0; m != NULL; m = m->m_next) {
 		if (M_READONLY(m)) {
-			m = m_copym2(m0, 0, M_COPYALL, M_NOWAIT);
+			m = m_dup_pkt(m0, max_linkhdr, M_NOWAIT);
+			m_freem(m0);
 			if (m == NULL)
 				goto drop;
-			m_freem(m0);
 			m0 = m;
 			break;
 		}
