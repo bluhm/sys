@@ -585,7 +585,7 @@ cd9660_unmount(mp, mntflags, p)
 
 	isomp->im_devvp->v_specmountpoint = NULL;
 	vn_lock(isomp->im_devvp, LK_EXCLUSIVE | LK_RETRY, p);
-	VOP_CLOSE(isomp->im_devvp, FREAD, NOCRED, p);
+	(void)VOP_CLOSE(isomp->im_devvp, FREAD, NOCRED, p);
 	vput(isomp->im_devvp);
 	free((caddr_t)isomp, M_ISOFSMNT, 0);
 	mp->mnt_data = NULL;
