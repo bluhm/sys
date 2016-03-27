@@ -478,7 +478,8 @@ struct	tcpstat {
 #define	TCPCTL_SACKHOLE_LIMIT  20 /* max entries for tcp sack queues */
 #define	TCPCTL_STATS	       21 /* TCP statistics */
 #define	TCPCTL_ALWAYS_KEEPALIVE 22 /* assume SO_KEEPALIVE is always set */
-#define	TCPCTL_MAXID	       23
+#define	TCPCTL_SYN_USE_LIMIT   23 /* number of uses before reseeding hash */
+#define	TCPCTL_MAXID	       24
 
 #define	TCPCTL_NAMES { \
 	{ 0, 0 }, \
@@ -503,7 +504,8 @@ struct	tcpstat {
 	{ "drop", 	CTLTYPE_STRUCT }, \
 	{ "sackholelimit", 	CTLTYPE_INT }, \
 	{ "stats",	CTLTYPE_STRUCT }, \
-	{ "always_keepalive",	CTLTYPE_INT } \
+	{ "always_keepalive",	CTLTYPE_INT }, \
+	{ "synuselimit", 	CTLTYPE_INT }, \
 }
 
 #define	TCPCTL_VARS { \
@@ -528,7 +530,9 @@ struct	tcpstat {
 	NULL, \
 	NULL, \
 	NULL, \
-	NULL \
+	NULL, \
+	NULL, \
+	&tcp_syn_use_limit \
 }
 
 struct tcp_ident_mapping {
@@ -559,6 +563,7 @@ extern	int tcp_reass_limit;	/* max entries for tcp reass queues */
 
 extern	int tcp_syn_cache_limit; /* max entries for compressed state engine */
 extern	int tcp_syn_bucket_limit;/* max entries per hash bucket */
+extern	int tcp_syn_use_limit;   /* number of uses before reseeding hash */
 
 int	 tcp_attach(struct socket *);
 void	 tcp_canceltimers(struct tcpcb *);
