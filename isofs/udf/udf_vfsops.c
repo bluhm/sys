@@ -1,4 +1,4 @@
-/*	$OpenBSD: udf_vfsops.c,v 1.48 2016/03/19 12:04:15 natano Exp $	*/
+/*	$OpenBSD: udf_vfsops.c,v 1.49 2016/03/27 11:39:37 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 Scott Long <scottl@freebsd.org>

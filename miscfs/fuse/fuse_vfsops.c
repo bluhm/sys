@@ -1,4 +1,4 @@
-/* $OpenBSD: fuse_vfsops.c,v 1.19 2016/03/17 18:52:31 bluhm Exp $ */
+/* $OpenBSD: fuse_vfsops.c,v 1.20 2016/03/27 11:39:37 bluhm Exp $ */
 /*
  * Copyright (c) 2012-2013 Sylvestre Gallon <ccna.syl@gmail.com>
  *
