@@ -251,6 +251,10 @@ struct tcp_opt_info {
 /*
  * Data for the TCP compressed state engine.
  */
+
+#define	TCP_SYN_HASH_SIZE	293
+#define	TCP_SYN_BUCKET_SIZE	35
+
 union syn_cache_sa {
 	struct sockaddr sa;
 	struct sockaddr_in sin;
@@ -309,6 +313,13 @@ struct syn_cache {
 struct syn_cache_head {
 	TAILQ_HEAD(, syn_cache) sch_bucket;	/* bucket entries */
 	u_short sch_length;			/* # entries in bucket */
+};
+
+struct syn_cache_set {
+        struct		syn_cache_head scs_buckethead[TCP_SYN_HASH_SIZE];
+        int		scs_count;
+        int		scs_use;
+        u_int32_t	scs_random[5];
 };
 
 #endif /* _KERNEL */
@@ -564,6 +575,7 @@ extern	int tcp_reass_limit;	/* max entries for tcp reass queues */
 extern	int tcp_syn_cache_limit; /* max entries for compressed state engine */
 extern	int tcp_syn_bucket_limit;/* max entries per hash bucket */
 extern	int tcp_syn_use_limit;   /* number of uses before reseeding hash */
+extern	struct syn_cache_set tcp_syn_cache[];
 
 int	 tcp_attach(struct socket *);
 void	 tcp_canceltimers(struct tcpcb *);
