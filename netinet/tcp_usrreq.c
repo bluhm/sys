@@ -939,6 +939,10 @@ tcp_sysctl(name, namelen, oldp, oldlenp, newp, newlen)
 		if (error)
 			return (error);
 		if (newp != NULL) {
+			/*
+			 * Global tcp_syn_use_limit is used when reseeding the
+			 * syn cache.  Also update the value in active cache.
+			 */
 			if (tcp_syn_cache[0].scs_use > tcp_syn_use_limit)
 				tcp_syn_cache[0].scs_use = tcp_syn_use_limit;
 			if (tcp_syn_cache[1].scs_use > tcp_syn_use_limit)
