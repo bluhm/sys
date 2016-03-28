@@ -938,6 +938,12 @@ tcp_sysctl(name, namelen, oldp, oldlenp, newp, newlen)
 		    &tcp_syn_use_limit);
 		if (error)
 			return (error);
+		if (newp != NULL) {
+			if (tcp_syn_cache[0].scs_use > tcp_syn_use_limit)
+				tcp_syn_cache[0].scs_use = tcp_syn_use_limit;
+			if (tcp_syn_cache[1].scs_use > tcp_syn_use_limit)
+				tcp_syn_cache[1].scs_use = tcp_syn_use_limit;
+		}
 		return (0);
 
 	default:
