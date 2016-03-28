@@ -532,7 +532,7 @@ struct	tcpstat {
 	NULL, \
 	NULL, \
 	NULL, \
-	&tcp_syn_use_limit \
+	NULL \
 }
 
 struct tcp_ident_mapping {

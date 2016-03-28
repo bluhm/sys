@@ -933,6 +933,13 @@ tcp_sysctl(name, namelen, oldp, oldlenp, newp, newlen)
 		return (sysctl_struct(oldp, oldlenp, newp, newlen,
 		    &tcpstat, sizeof(tcpstat)));
 
+	case TCPCTL_SYN_USE_LIMIT:
+		error = sysctl_int(oldp, oldlenp, newp, newlen,
+		    &tcp_syn_use_limit);
+		if (error)
+			return (error);
+		return (0);
+
 	default:
 		if (name[0] < TCPCTL_MAXID)
 			return (sysctl_int_arr(tcpctl_vars, name, namelen,
