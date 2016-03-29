@@ -338,9 +338,12 @@ void
 filt_timerexpire(void *knx)
 {
 	struct knote *kn = knx;
+	int s;
 
 	kn->kn_data++;
+	s = splhigh();
 	KNOTE_ACTIVATE(kn);
+	splx(s);
 
 	if ((kn->kn_flags & EV_ONESHOT) == 0)
 		filt_timer_timeout_add(kn);
@@ -954,7 +957,11 @@ kqueue_wakeup(struct kqueue *kq)
 void
 knote_activate(struct knote *kn)
 {
+	int s;
+
+	s = splhigh();
 	KNOTE_ACTIVATE(kn);
+	splx(s);
 }
 
 /*
@@ -964,10 +971,14 @@ void
 knote(struct klist *list, long hint)
 {
 	struct knote *kn, *kn0;
+	int s;
 
-	SLIST_FOREACH_SAFE(kn, list, kn_selnext, kn0)
+	SLIST_FOREACH_SAFE(kn, list, kn_selnext, kn0) {
+		s = splhigh();
 		if (kn->kn_fop->f_event(kn, hint))
 			KNOTE_ACTIVATE(kn);
+		splx(s);
+	}
 }
 
 /*
