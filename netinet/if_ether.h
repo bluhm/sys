@@ -148,7 +148,6 @@ struct sockaddr_inarp {
  * IP and ethernet specific routing flags
  */
 #define	RTF_USETRAILERS	  RTF_PROTO1	/* use trailers */
-#define	RTF_ANNOUNCE	  RTF_PROTO2	/* announce new arp entry */
 #define	RTF_PERMANENT_ARP RTF_PROTO3    /* only manual overwrite of entry */
 
 #ifdef _KERNEL

@@ -35,11 +35,6 @@
 
 #include <sys/task.h>
 
-/* see net/route.h, or net/if_inarp.h */
-#ifndef RTF_ANNOUNCE
-#define RTF_ANNOUNCE	RTF_PROTO2
-#endif
-
 #define ND6_LLINFO_PURGE	-3
 #define ND6_LLINFO_NOSTATE	-2
 #define ND6_LLINFO_INCOMPLETE	0

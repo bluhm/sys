@@ -698,8 +698,20 @@ arplookup(u_int32_t addr, int create, int proxy, u_int tableid)
 	}
 
 	if (proxy && !ISSET(rt->rt_flags, RTF_ANNOUNCE)) {
+		struct rtentry *mrt = NULL;
+#ifdef ART
+		mrt = rt;
+		KERNEL_LOCK();
+		while ((mrt = rtable_mpath_next(mrt)) != NULL) {
+			if (ISSET(mrt->rt_flags, RTF_ANNOUNCE)) {
+				rtref(mrt);
+				break;
+			}
+		}
+		KERNEL_UNLOCK();
+#endif /* ART */
 		rtfree(rt);
-		return (NULL);
+		return (mrt);
 	}
 
 	return (rt);

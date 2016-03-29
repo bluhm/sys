@@ -136,6 +136,7 @@ struct rtentry {
 #define RTF_BLACKHOLE	0x1000		/* just discard pkts (during updates) */
 #define RTF_PROTO3	0x2000		/* protocol specific routing flag */
 #define RTF_PROTO2	0x4000		/* protocol specific routing flag */
+#define RTF_ANNOUNCE	RTF_PROTO2	/* announce L2 entry */
 #define RTF_PROTO1	0x8000		/* protocol specific routing flag */
 #define RTF_CLONED	0x10000		/* this is a cloned route */
 #define RTF_MPATH	0x40000		/* multipath route or operation */
