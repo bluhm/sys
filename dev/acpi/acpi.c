@@ -1,4 +1,4 @@
-/* $OpenBSD: acpi.c,v 1.305 2016/01/17 09:04:18 jsg Exp $ */
+/* $OpenBSD: acpi.c,v 1.308 2016/03/29 18:04:09 kettenis Exp $ */
 /*
  * Copyright (c) 2005 Thorsten Lockert <tholo@sigmasoft.com>
  * Copyright (c) 2005 Jordan Hargrave <jordan@openbsd.org>
@@ -120,10 +120,6 @@ int	acpi_add_device(struct aml_node *node, void *arg);
 
 void	acpi_thread(void *);
 void	acpi_create_thread(void *);
-
-int	acpi_thinkpad_enabled;
-int	acpi_toshiba_enabled;
-int	acpi_asus_enabled;
 
 #ifndef SMALL_KERNEL
 
@@ -1097,10 +1093,8 @@ acpi_attach(struct device *parent, struct device *self, void *aux)
 	/* attach docks */
 	aml_find_node(&aml_root, "_DCK", acpi_founddock, sc);
 
-	/* attach video only if this is not a thinkpad or toshiba */
-	if (!acpi_thinkpad_enabled && !acpi_toshiba_enabled &&
-	    !acpi_asus_enabled)
-		aml_find_node(&aml_root, "_DOS", acpi_foundvideo, sc);
+	/* attach video */
+	aml_find_node(&aml_root, "_DOS", acpi_foundvideo, sc);
 
 	/* create list of devices we want to query when APM comes in */
 	SLIST_INIT(&sc->sc_ac);
@@ -1155,6 +1149,8 @@ acpi_print(void *aux, const char *pnp)
 	if (pnp) {
 		if (aa->aaa_name)
 			printf("%s at %s", aa->aaa_name, pnp);
+		else if (aa->aaa_dev)
+			printf("\"%s\" at %s", aa->aaa_dev, pnp);
 		else
 			return (QUIET);
 	}
@@ -2765,6 +2761,7 @@ acpi_foundhid(struct aml_node *node, void *arg)
 	char		 	 cdev[16];
 	char		 	 dev[16];
 	struct acpi_attach_args	 aaa;
+	int64_t			 sta;
 #ifndef SMALL_KERNEL
 	int			 i;
 #endif
@@ -2772,44 +2769,17 @@ acpi_foundhid(struct aml_node *node, void *arg)
 	if (acpi_parsehid(node, arg, cdev, dev, 16) != 0)
 		return (0);
 
+	if (aml_evalinteger(sc, node->parent, "_STA", 0, NULL, &sta))
+		sta = STA_PRESENT | STA_ENABLED | STA_DEV_OK | 0x1000;
+
+	if ((sta & STA_PRESENT) == 0)
+		return 0;
+
 	memset(&aaa, 0, sizeof(aaa));
 	aaa.aaa_iot = sc->sc_iot;
 	aaa.aaa_memt = sc->sc_memt;
 	aaa.aaa_node = node->parent;
 	aaa.aaa_dev = dev;
-
-	if (!strcmp(dev, ACPI_DEV_AC)) {
-		aaa.aaa_name = "acpiac";
-	} else if (!strcmp(dev, ACPI_DEV_CMB)) {
-		aaa.aaa_name = "acpibat";
-	} else if (!strcmp(dev, ACPI_DEV_LD) ||
-	    !strcmp(dev, ACPI_DEV_PBD) ||
-	    !strcmp(dev, ACPI_DEV_SBD)) {
-		aaa.aaa_name = "acpibtn";
-	} else if (!strcmp(dev, ACPI_DEV_ASUS) ||
-	    !strcmp(dev, ACPI_DEV_ASUS1)) {
-		aaa.aaa_name = "acpiasus";
-		acpi_asus_enabled = 1;
-	} else if (!strcmp(dev, ACPI_DEV_IBM) ||
-	    !strcmp(dev, ACPI_DEV_LENOVO)) {
-		aaa.aaa_name = "acpithinkpad";
-		acpi_thinkpad_enabled = 1;
-	} else if (!strcmp(dev, ACPI_DEV_ASUSAIBOOSTER)) {
-		aaa.aaa_name = "aibs";
-	} else if (!strcmp(dev, ACPI_DEV_TOSHIBA_LIBRETTO) ||
-	    !strcmp(dev, ACPI_DEV_TOSHIBA_DYNABOOK) ||
-	    !strcmp(dev, ACPI_DEV_TOSHIBA_SPA40)) {
-		aaa.aaa_name = "acpitoshiba";
-		acpi_toshiba_enabled = 1;
-	} else if (!strcmp(dev, "80860F14") || !strcmp(dev, "PNP0FFF")) {
-		aaa.aaa_name = "sdhc";
-	} else if (!strcmp(dev, ACPI_DEV_DWIIC1) ||
-	    !strcmp(dev, ACPI_DEV_DWIIC2) ||
-	    !strcmp(dev, ACPI_DEV_DWIIC3) ||
-	    !strcmp(dev, ACPI_DEV_DWIIC4) ||
-	    !strcmp(dev, ACPI_DEV_DWIIC5)) {
-		aaa.aaa_name = "dwiic";
-	}
 
 #ifndef SMALL_KERNEL
 	if (!strcmp(cdev, ACPI_DEV_MOUSE)) {
@@ -2822,8 +2792,7 @@ acpi_foundhid(struct aml_node *node, void *arg)
 	}
 #endif
 
-	if (aaa.aaa_name)
-		config_found(self, &aaa, acpi_print);
+	config_found(self, &aaa, acpi_print);
 
 	return (0);
 }
