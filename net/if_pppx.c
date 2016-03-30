@@ -531,13 +531,14 @@ filt_pppx_rdetach(struct knote *kn)
 {
 	struct pppx_dev *pxd = (struct pppx_dev *)kn->kn_hook;
 	struct klist *klist = &pxd->pxd_rsel.si_note;
+	int s = splhigh();
 
-	if (ISSET(kn->kn_status, KN_DETACHED))
-		return;
-
-	mtx_enter(&pxd->pxd_rsel_mtx);
-	SLIST_REMOVE(klist, kn, knote, kn_selnext);
-	mtx_leave(&pxd->pxd_rsel_mtx);
+	if (!ISSET(kn->kn_status, KN_DETACHED)) {
+		mtx_enter(&pxd->pxd_rsel_mtx);
+		SLIST_REMOVE(klist, kn, knote, kn_selnext);
+		mtx_leave(&pxd->pxd_rsel_mtx);
+	}
+	splx(s);
 }
 
 int
@@ -560,13 +561,14 @@ filt_pppx_wdetach(struct knote *kn)
 {
 	struct pppx_dev *pxd = (struct pppx_dev *)kn->kn_hook;
 	struct klist *klist = &pxd->pxd_wsel.si_note;
+	int s = splhigh();
 
-	if (ISSET(kn->kn_status, KN_DETACHED))
-		return;
-
-	mtx_enter(&pxd->pxd_wsel_mtx);
-	SLIST_REMOVE(klist, kn, knote, kn_selnext);
-	mtx_leave(&pxd->pxd_wsel_mtx);
+	if (!ISSET(kn->kn_status, KN_DETACHED)) {
+		mtx_enter(&pxd->pxd_wsel_mtx);
+		SLIST_REMOVE(klist, kn, knote, kn_selnext);
+		mtx_leave(&pxd->pxd_wsel_mtx);
+	}
+	splx(s);
 }
 
 int
