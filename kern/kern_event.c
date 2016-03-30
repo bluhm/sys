@@ -1067,6 +1067,7 @@ void
 knote_drop(struct knote *kn, struct proc *p, struct filedesc *fdp)
 {
 	struct klist *list;
+	int s;
 
 	if (kn->kn_fop->f_isfd)
 		list = &fdp->fd_knlist[kn->kn_id];
@@ -1074,8 +1075,10 @@ knote_drop(struct knote *kn, struct proc *p, struct filedesc *fdp)
 		list = &fdp->fd_knhash[KN_HASH(kn->kn_id, fdp->fd_knhashmask)];
 
 	SLIST_REMOVE(list, kn, knote, kn_link);
+	s = splhigh();
 	if (kn->kn_status & KN_QUEUED)
 		knote_dequeue(kn);
+	splx(s);
 	if (kn->kn_fop->f_isfd)
 		FRELE(kn->kn_fp, p);
 	knote_free(kn);
@@ -1100,14 +1103,13 @@ void
 knote_dequeue(struct knote *kn)
 {
 	struct kqueue *kq = kn->kn_kq;
-	int s = splhigh();
 
+	splassert(IPL_HIGH);
 	KASSERT(kn->kn_status & KN_QUEUED);
 
 	TAILQ_REMOVE(&kq->kq_head, kn, kn_tqe);
 	kn->kn_status &= ~KN_QUEUED;
 	kq->kq_count--;
-	splx(s);
 }
 
 void
