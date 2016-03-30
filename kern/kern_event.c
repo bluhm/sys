@@ -1117,6 +1117,8 @@ klist_invalidate(struct klist *list)
 {
 	struct knote *kn;
 
+	splassert(IPL_HIGH);
+
 	SLIST_FOREACH(kn, list, kn_selnext) {
 		kn->kn_status |= KN_DETACHED;
 		kn->kn_flags |= EV_EOF | EV_ONESHOT;
