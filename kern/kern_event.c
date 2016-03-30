@@ -664,19 +664,21 @@ kqueue_register(struct kqueue *kq, struct kevent *kev, struct proc *p)
 		goto done;
 	}
 
-	if ((kev->flags & EV_DISABLE) &&
-	    ((kn->kn_status & KN_DISABLED) == 0)) {
+	if (kev->flags & EV_DISABLE) {
 		s = splhigh();
-		kn->kn_status |= KN_DISABLED;
+		if ((kn->kn_status & KN_DISABLED) == 0)
+			kn->kn_status |= KN_DISABLED;
 		splx(s);
 	}
 
-	if ((kev->flags & EV_ENABLE) && (kn->kn_status & KN_DISABLED)) {
+	if (kev->flags & EV_ENABLE) {
 		s = splhigh();
-		kn->kn_status &= ~KN_DISABLED;
-		if ((kn->kn_status & KN_ACTIVE) &&
-		    ((kn->kn_status & KN_QUEUED) == 0))
-			knote_enqueue(kn);
+		if  (kn->kn_status & KN_DISABLED) {
+			kn->kn_status &= ~KN_DISABLED;
+			if ((kn->kn_status & KN_ACTIVE) &&
+			    ((kn->kn_status & KN_QUEUED) == 0))
+				knote_enqueue(kn);
+		}
 		splx(s);
 	}
 
