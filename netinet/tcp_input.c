@@ -3396,8 +3396,7 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 		 * Someone might attack our bucket hash function.  Reseed
 		 * with random as soon as the passive syn cache gets empty.
 		 */
-		if (set->scs_use > 0)
-			set->scs_use = 0;
+		set->scs_use = 0;
 		/*
 		 * The bucket is full.  Toss the oldest element in the
 		 * bucket.  This will be the first entry in the bucket.
