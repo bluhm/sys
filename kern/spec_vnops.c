@@ -1,4 +1,4 @@
-/*	$OpenBSD: spec_vnops.c,v 1.86 2016/03/19 12:04:15 natano Exp $	*/
+/*	$OpenBSD: spec_vnops.c,v 1.88 2016/04/01 11:51:55 mikeb Exp $	*/
 /*	$NetBSD: spec_vnops.c,v 1.29 1996/04/22 01:42:38 christos Exp $	*/
 
 /*
