@@ -1,4 +1,4 @@
-/*	$OpenBSD: bpf.h,v 1.52 2016/03/30 12:51:10 dlg Exp $	*/
+/*	$OpenBSD: bpf.h,v 1.55 2016/04/03 01:37:26 dlg Exp $	*/
 /*	$NetBSD: bpf.h,v 1.15 1996/12/13 07:57:33 mikel Exp $	*/
 
 /*
@@ -263,13 +263,29 @@ struct bpf_dltlist {
 };
 
 /*
+ * Load operations for _bpf_filter to use against the packet pointer.
+ */
+struct bpf_ops {
+	u_int32_t	(*ldw)(const void *, u_int32_t, int *);
+	u_int32_t	(*ldh)(const void *, u_int32_t, int *);
+	u_int32_t	(*ldb)(const void *, u_int32_t, int *);
+};
+
+/*
  * Macros for insn array initializers.
  */
 #define BPF_STMT(code, k) { (u_int16_t)(code), 0, 0, k }
 #define BPF_JUMP(code, k, jt, jf) { (u_int16_t)(code), jt, jf, k }
 
+u_int	 bpf_filter(const struct bpf_insn *, const u_char *, u_int, u_int)
+	    __bounded((__buffer__, 2, 4));
+
+u_int	 _bpf_filter(const struct bpf_insn *, const struct bpf_ops *,
+	     const void *, u_int);
+
 #ifdef _KERNEL
 struct ifnet;
+struct mbuf;
 
 int	 bpf_validate(struct bpf_insn *, int);
 int	 bpf_tap(caddr_t, u_char *, u_int, u_int);
@@ -281,7 +297,8 @@ int	 bpf_mtap_ether(caddr_t, struct mbuf *, u_int);
 void	 bpfattach(caddr_t *, struct ifnet *, u_int, u_int);
 void	 bpfdetach(struct ifnet *);
 void	 bpfilterattach(int);
-u_int	 bpf_filter(struct bpf_insn *, u_char *, u_int, u_int);
+
+u_int	 bpf_mfilter(const struct bpf_insn *, const struct mbuf *, u_int);
 #endif /* _KERNEL */
 
 /*
