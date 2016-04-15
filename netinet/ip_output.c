@@ -1050,6 +1050,7 @@ ip_ctloutput(int op, struct socket *so, int level, int optname,
 				break;
 			}
 			inp->inp_rtableid = rtid;
+			in_pcbrehash(inp);
 			break;
 		case IP_PIPEX:
 			if (m != NULL && m->m_len == sizeof(int))
