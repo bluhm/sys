@@ -1,4 +1,4 @@
-/*	$OpenBSD: in_pcb.c,v 1.198 2016/03/26 21:56:04 mpi Exp $	*/
+/*	$OpenBSD: in_pcb.c,v 1.205 2016/04/13 06:06:04 vgross Exp $	*/
 /*	$NetBSD: in_pcb.c,v 1.25 1996/02/13 23:41:53 christos Exp $	*/
 
 /*
@@ -286,6 +286,7 @@ in_pcbbind(struct inpcb *inp, struct mbuf *nam, struct proc *p)
 	struct socket *so = inp->inp_socket;
 	u_int16_t lport = 0;
 	int wild = 0;
+	void *laddr = &zeroin46_addr;
 	int error;
 
 	if (inp->inp_lport)
@@ -296,16 +297,17 @@ in_pcbbind(struct inpcb *inp, struct mbuf *nam, struct proc *p)
 	     (so->so_options & SO_ACCEPTCONN) == 0))
 		wild = INPLOOKUP_WILDCARD;
 
-	if (nam) {
-		switch (sotopf(so)) {
+	switch (sotopf(so)) {
 #ifdef INET6
-		case PF_INET6: {
-			struct sockaddr_in6 *sin6;
-			if (TAILQ_EMPTY(&in6_ifaddr))
-				return (EADDRNOTAVAIL);
-			if (!IN6_IS_ADDR_UNSPECIFIED(&inp->inp_laddr6))
-				return (EINVAL);
+	case PF_INET6:
+		if (TAILQ_EMPTY(&in6_ifaddr))
+			return (EADDRNOTAVAIL);
+		if (!IN6_IS_ADDR_UNSPECIFIED(&inp->inp_laddr6))
+			return (EINVAL);
+		wild |= INPLOOKUP_IPV6;
 
+		if (nam) {
+			struct sockaddr_in6 *sin6;
 			sin6 = mtod(nam, struct sockaddr_in6 *);
 			if (nam->m_len != sizeof(struct sockaddr_in6))
 				return (EINVAL);
@@ -314,16 +316,17 @@ in_pcbbind(struct inpcb *inp, struct mbuf *nam, struct proc *p)
 
 			if ((error = in6_pcbaddrisavail(inp, sin6, wild, p)))
 				return (error);
-			inp->inp_laddr6 = sin6->sin6_addr;
+			laddr = &sin6->sin6_addr;
 			lport = sin6->sin6_port;
-			break;
 		}
+		break;
 #endif
-		case PF_INET: {
-			struct sockaddr_in *sin;
-			if (inp->inp_laddr.s_addr != INADDR_ANY)
-				return (EINVAL);
+	case PF_INET:
+		if (inp->inp_laddr.s_addr != INADDR_ANY)
+			return (EINVAL);
 
+		if (nam) {
+			struct sockaddr_in *sin;
 			sin = mtod(nam, struct sockaddr_in *);
 			if (nam->m_len != sizeof(*sin))
 				return (EINVAL);
@@ -332,18 +335,33 @@ in_pcbbind(struct inpcb *inp, struct mbuf *nam, struct proc *p)
 
 			if ((error = in_pcbaddrisavail(inp, sin, wild, p)))
 				return (error);
-			inp->inp_laddr = sin->sin_addr;
+			laddr = &sin->sin_addr;
 			lport = sin->sin_port;
-			break;
 		}
-		default:
-			return (EINVAL);
-		}
+		break;
+	default:
+		return (EINVAL);
 	}
 
-	if (lport == 0)
-		if ((error = in_pcbpickport(&lport, wild, inp, p)))
+	if (lport == 0) {
+		if ((error = in_pcbpickport(&lport, laddr, wild, inp, p)))
 			return (error);
+	} else {
+		if (ntohs(lport) < IPPORT_RESERVED && (error = suser(p, 0)))
+			return (EACCES);
+	}
+	if (nam) {
+		switch (sotopf(so)) {
+#ifdef INET6
+		case PF_INET6:
+			inp->inp_laddr6 = *(struct in6_addr *)laddr;
+			break;
+#endif
+		case PF_INET:
+			inp->inp_laddr = *(struct in_addr *)laddr;
+			break;
+		}
+	}
 	inp->inp_lport = lport;
 	in_pcbrehash(inp);
 	return (0);
@@ -357,7 +375,6 @@ in_pcbaddrisavail(struct inpcb *inp, struct sockaddr_in *sin, int wild,
 	struct inpcbtable *table = inp->inp_table;
 	u_int16_t lport = sin->sin_port;
 	int reuseport = (so->so_options & SO_REUSEPORT);
-	int error;
 
 	if (IN_MULTICAST(sin->sin_addr.s_addr)) {
 		/*
@@ -397,19 +414,14 @@ in_pcbaddrisavail(struct inpcb *inp, struct sockaddr_in *sin, int wild,
 	if (lport) {
 		struct inpcb *t;
 
-		/* GROSS */
-		if (ntohs(lport) < IPPORT_RESERVED &&
-		    (error = suser(p, 0)))
-			return (EACCES);
 		if (so->so_euid) {
-			t = in_pcblookup(table, &zeroin_addr, 0,
-			    &sin->sin_addr, lport, INPLOOKUP_WILDCARD,
-			    inp->inp_rtableid);
+			t = in_pcblookup_local(table, &sin->sin_addr, lport,
+			    INPLOOKUP_WILDCARD, inp->inp_rtableid);
 			if (t && (so->so_euid != t->inp_socket->so_euid))
 				return (EADDRINUSE);
 		}
-		t = in_pcblookup(table, &zeroin_addr, 0,
-		    &sin->sin_addr, lport, wild, inp->inp_rtableid);
+		t = in_pcblookup_local(table, &sin->sin_addr, lport,
+		    wild, inp->inp_rtableid);
 		if (t && (reuseport & t->inp_socket->so_options) == 0)
 			return (EADDRINUSE);
 	}
@@ -418,12 +430,12 @@ in_pcbaddrisavail(struct inpcb *inp, struct sockaddr_in *sin, int wild,
 }
 
 int
-in_pcbpickport(u_int16_t *lport, int wild, struct inpcb *inp, struct proc *p)
+in_pcbpickport(u_int16_t *lport, void *laddr, int wild, struct inpcb *inp,
+    struct proc *p)
 {
 	struct socket *so = inp->inp_socket;
 	struct inpcbtable *table = inp->inp_table;
 	u_int16_t first, last, lower, higher, candidate, localport;
-	void *laddr;
 	int count;
 
 	if (inp->inp_flags & INP_HIGHPORT) {
@@ -453,10 +465,6 @@ in_pcbpickport(u_int16_t *lport, int wild, struct inpcb *inp, struct proc *p)
 
 	count = higher - lower;
 	candidate = lower + arc4random_uniform(count);
-	if (sotopf(so) == PF_INET6)
-		laddr = &inp->inp_laddr6;
-	else
-		laddr = &inp->inp_laddr;
 
 	do {
 		if (count-- < 0) 	/* completely used? */
@@ -466,8 +474,8 @@ in_pcbpickport(u_int16_t *lport, int wild, struct inpcb *inp, struct proc *p)
 			candidate = lower;
 		localport = htons(candidate);
 	} while (in_baddynamic(localport, so->so_proto->pr_protocol) ||
-	    in_pcblookup(table, &zeroin46_addr, 0,
-	    laddr, localport, wild, inp->inp_rtableid));
+	    in_pcblookup_local(table, laddr, localport, wild,
+	    inp->inp_rtableid));
 	*lport = localport;
 
 	return (0);
@@ -725,14 +733,16 @@ in_rtchange(struct inpcb *inp, int errno)
 }
 
 struct inpcb *
-in_pcblookup(struct inpcbtable *table, void *faddrp, u_int fport_arg,
-    void *laddrp, u_int lport_arg, int flags, u_int rdomain)
+in_pcblookup_local(struct inpcbtable *table, void *laddrp, u_int lport_arg,
+    int flags, u_int rdomain)
 {
 	struct inpcb *inp, *match = NULL;
 	int matchwild = 3, wildcard;
-	u_int16_t fport = fport_arg, lport = lport_arg;
-	struct in_addr faddr = *(struct in_addr *)faddrp;
+	u_int16_t lport = lport_arg;
 	struct in_addr laddr = *(struct in_addr *)laddrp;
+#ifdef INET6
+	struct in6_addr *laddr6 = (struct in6_addr *)laddrp;
+#endif
 	struct inpcbhead *head;
 
 	rdomain = rtable_l2(rdomain);	/* convert passed rtableid to rdomain */
@@ -744,60 +754,40 @@ in_pcblookup(struct inpcbtable *table, void *faddrp, u_int fport_arg,
 			continue;
 		wildcard = 0;
 #ifdef INET6
-		if (flags & INPLOOKUP_IPV6) {
-			struct in6_addr *laddr6 = (struct in6_addr *)laddrp;
-			struct in6_addr *faddr6 = (struct in6_addr *)faddrp;
-
-			if (!(inp->inp_flags & INP_IPV6))
+		if (ISSET(flags, INPLOOKUP_IPV6)) {
+			if (!ISSET(inp->inp_flags, INP_IPV6))
 				continue;
 
-			if (!IN6_IS_ADDR_UNSPECIFIED(&inp->inp_laddr6)) {
-				if (IN6_IS_ADDR_UNSPECIFIED(laddr6))
+			if (!IN6_IS_ADDR_UNSPECIFIED(&inp->inp_faddr6))
+				wildcard++;
+
+			if (!IN6_ARE_ADDR_EQUAL(&inp->inp_laddr6, laddr6)) {
+				if (IN6_IS_ADDR_UNSPECIFIED(&inp->inp_laddr6) ||
+				    IN6_IS_ADDR_UNSPECIFIED(laddr6))
 					wildcard++;
-				else if (!IN6_ARE_ADDR_EQUAL(&inp->inp_laddr6, laddr6))
+				else
 					continue;
-			} else {
-				if (!IN6_IS_ADDR_UNSPECIFIED(laddr6))
-					wildcard++;
 			}
 
-			if (!IN6_IS_ADDR_UNSPECIFIED(&inp->inp_faddr6)) {
-				if (IN6_IS_ADDR_UNSPECIFIED(faddr6))
-					wildcard++;
-				else if (!IN6_ARE_ADDR_EQUAL(&inp->inp_faddr6,
-				    faddr6) || inp->inp_fport != fport)
-					continue;
-			} else {
-				if (!IN6_IS_ADDR_UNSPECIFIED(faddr6))
-					wildcard++;
-			}
 		} else
 #endif /* INET6 */
 		{
 #ifdef INET6
-			if (inp->inp_flags & INP_IPV6)
+			if (ISSET(inp->inp_flags, INP_IPV6))
 				continue;
 #endif /* INET6 */
 
-			if (inp->inp_faddr.s_addr != INADDR_ANY) {
-				if (faddr.s_addr == INADDR_ANY)
+			if (inp->inp_faddr.s_addr != INADDR_ANY)
+				wildcard++;
+
+			if (inp->inp_laddr.s_addr != laddr.s_addr) {
+				if (inp->inp_laddr.s_addr == INADDR_ANY ||
+				    laddr.s_addr == INADDR_ANY)
 					wildcard++;
-				else if (inp->inp_faddr.s_addr != faddr.s_addr ||
-				    inp->inp_fport != fport)
+				else
 					continue;
-			} else {
-				if (faddr.s_addr != INADDR_ANY)
-					wildcard++;
 			}
-			if (inp->inp_laddr.s_addr != INADDR_ANY) {
-				if (laddr.s_addr == INADDR_ANY)
-					wildcard++;
-				else if (inp->inp_laddr.s_addr != laddr.s_addr)
-					continue;
-			} else {
-				if (laddr.s_addr != INADDR_ANY)
-					wildcard++;
-			}
+
 		}
 		if ((!wildcard || (flags & INPLOOKUP_WILDCARD)) &&
 		    wildcard < matchwild) {
@@ -915,7 +905,7 @@ in_selectsrc(struct in_addr **insrc, struct sockaddr_in *sin,
 		rtfree(ro->ro_rt);
 		ro->ro_rt = NULL;
 	}
-	if ((ro->ro_rt == NULL)) {
+	if (ro->ro_rt == NULL) {
 		/* No route yet, so try to acquire one */
 		ro->ro_dst.sa_family = AF_INET;
 		ro->ro_dst.sa_len = sizeof(struct sockaddr_in);

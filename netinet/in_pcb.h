@@ -1,4 +1,4 @@
-/*	$OpenBSD: in_pcb.h,v 1.96 2016/03/23 15:50:36 vgross Exp $	*/
+/*	$OpenBSD: in_pcb.h,v 1.98 2016/04/11 21:24:29 vgross Exp $	*/
 /*	$NetBSD: in_pcb.h,v 1.14 1996/02/13 23:42:00 christos Exp $	*/
 
 /*
@@ -271,8 +271,7 @@ int	 in6_setpeeraddr(struct inpcb *, struct mbuf *);
 #endif /* INET6 */
 void	 in_pcbinit(struct inpcbtable *, int);
 struct inpcb *
-	 in_pcblookup(struct inpcbtable *, void *, u_int, void *,
-	    u_int, int, u_int);
+	 in_pcblookup_local(struct inpcbtable *, void *, u_int, int, u_int);
 void	 in_pcbnotifyall(struct inpcbtable *, struct sockaddr *,
 	    u_int, int, void (*)(struct inpcb *, int));
 void	 in_pcbrehash(struct inpcb *);
@@ -290,6 +289,6 @@ int	in6_pcbnotify(struct inpcbtable *, struct sockaddr_in6 *,
 	u_int, const struct sockaddr_in6 *, u_int, u_int, int, void *,
 	void (*)(struct inpcb *, int));
 int	in6_selecthlim(struct inpcb *);
-int	in_pcbpickport(u_int16_t *, int, struct inpcb *, struct proc *);
+int	in_pcbpickport(u_int16_t *, void *, int, struct inpcb *, struct proc *);
 #endif /* _KERNEL */
 #endif /* _NETINET_IN_PCB_H_ */

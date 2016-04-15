@@ -1,4 +1,4 @@
-/*	$OpenBSD: mbuf.h,v 1.209 2016/03/29 10:34:42 sashan Exp $	*/
+/*	$OpenBSD: mbuf.h,v 1.212 2016/04/15 05:05:21 dlg Exp $	*/
 /*	$NetBSD: mbuf.h,v 1.19 1996/02/09 18:25:14 christos Exp $	*/
 
 /*
@@ -34,9 +34,6 @@
 
 #ifndef _SYS_MBUF_H_
 #define _SYS_MBUF_H_
-
-#include <sys/malloc.h>
-#include <sys/queue.h>
 
 /*
  * Constants related to network buffer management.
@@ -242,6 +239,7 @@ struct mbuf {
 #define M_FLOWID_MASK	0x7fff	/* flow id to map to path */
 
 /* flags to m_get/MGET */
+#include <sys/malloc.h>
 #define	M_DONTWAIT	M_NOWAIT
 #define	M_WAIT		M_WAITOK
 
@@ -441,7 +439,8 @@ void	m_extref(struct mbuf *, struct mbuf *);
 void	m_extfree_pool(caddr_t, u_int, void *);
 void	m_adj(struct mbuf *, int);
 int	m_copyback(struct mbuf *, int, int, const void *, int);
-void	m_freem(struct mbuf *);
+struct mbuf *m_freem(struct mbuf *);
+void	m_purge(struct mbuf *);
 void	m_reclaim(void *, int);
 void	m_copydata(struct mbuf *, int, int, caddr_t);
 void	m_cat(struct mbuf *, struct mbuf *);
@@ -498,8 +497,6 @@ void			ml_enqueue(struct mbuf_list *, struct mbuf *);
 struct mbuf *		ml_dequeue(struct mbuf_list *);
 void			ml_enlist(struct mbuf_list *, struct mbuf_list *);
 struct mbuf *		ml_dechain(struct mbuf_list *);
-struct mbuf *		ml_filter(struct mbuf_list *,
-			    int (*)(void *, const struct mbuf *), void *);
 unsigned int		ml_purge(struct mbuf_list *);
 
 #define	ml_len(_ml)		((_ml)->ml_len)
@@ -526,8 +523,6 @@ struct mbuf *		mq_dequeue(struct mbuf_queue *);
 int			mq_enlist(struct mbuf_queue *, struct mbuf_list *);
 void			mq_delist(struct mbuf_queue *, struct mbuf_list *);
 struct mbuf *		mq_dechain(struct mbuf_queue *);
-struct mbuf *		mq_filter(struct mbuf_queue *,
-			    int (*)(void *, const struct mbuf *), void *);
 unsigned int		mq_purge(struct mbuf_queue *);
 
 #define	mq_len(_mq)		ml_len(&(_mq)->mq_list)

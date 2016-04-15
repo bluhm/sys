@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_myx.c,v 1.92 2015/12/11 16:07:02 mpi Exp $	*/
+/*	$OpenBSD: if_myx.c,v 1.94 2016/04/13 11:36:00 mpi Exp $	*/
 
 /*
  * Copyright (c) 2007 Reyk Floeter <reyk@openbsd.org>
@@ -515,7 +515,6 @@ myx_attachhook(struct device *self)
 	ifp->if_hardmtu = 9000;
 	strlcpy(ifp->if_xname, DEVNAME(sc), IFNAMSIZ);
 	IFQ_SET_MAXLEN(&ifp->if_snd, 1);
-	IFQ_SET_READY(&ifp->if_snd);
 
 	ifp->if_capabilities = IFCAP_VLAN_MTU;
 #if 0
@@ -1036,7 +1035,6 @@ myx_up(struct myx_softc *sc)
 	sc->sc_tx_nsegs = min(16, sc->sc_tx_ring_count / 4); /* magic */
 	sc->sc_tx_count = 0;
 	IFQ_SET_MAXLEN(&ifp->if_snd, sc->sc_tx_ring_count - 1);
-	IFQ_SET_READY(&ifp->if_snd);
 
 	/* Allocate Interrupt Queue */
 

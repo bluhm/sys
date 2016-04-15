@@ -1,4 +1,4 @@
-/*	$OpenBSD: in6_pcb.c,v 1.90 2016/03/30 13:02:22 vgross Exp $	*/
+/*	$OpenBSD: in6_pcb.c,v 1.92 2016/04/11 21:24:29 vgross Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -158,7 +158,6 @@ in6_pcbaddrisavail(struct inpcb *inp, struct sockaddr_in6 *sin6, int wild,
 	struct inpcbtable *table = inp->inp_table;
 	u_short lport = sin6->sin6_port;
 	int reuseport = (so->so_options & SO_REUSEPORT);
-	int error;
 
 	wild |= INPLOOKUP_IPV6;
 	/* KAME hack: embed scopeid */
@@ -217,28 +216,15 @@ in6_pcbaddrisavail(struct inpcb *inp, struct sockaddr_in6 *sin6, int wild,
 	if (lport) {
 		struct inpcb *t;
 
-		/*
-		 * Question:  Do we wish to continue the Berkeley
-		 * tradition of ports < IPPORT_RESERVED be only for
-		 * root?
-		 * Answer: For now yes, but IMHO, it should be REMOVED!
-		 * OUCH: One other thing, is there no better way of
-		 * finding a process for a socket instead of using
-		 * curproc?  (Marked with BSD's {in,}famous XXX ?
-		 */
-		if (ntohs(lport) < IPPORT_RESERVED && (error = suser(p, 0)))
-			return error;
 		if (so->so_euid) {
-			t = in_pcblookup(table,
-			    (struct in_addr *)&zeroin6_addr, 0,
+			t = in_pcblookup_local(table,
 			    (struct in_addr *)&sin6->sin6_addr, lport,
 			    INPLOOKUP_WILDCARD | INPLOOKUP_IPV6,
 			    inp->inp_rtableid);
 			if (t && (so->so_euid != t->inp_socket->so_euid))
 				return (EADDRINUSE);
 		}
-		t = in_pcblookup(table,
-		    (struct in_addr *)&zeroin6_addr, 0,
+		t = in_pcblookup_local(table,
 		    (struct in_addr *)&sin6->sin6_addr, lport,
 		    wild, inp->inp_rtableid);
 		if (t && (reuseport & t->inp_socket->so_options) == 0)

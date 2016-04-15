@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_amap.c,v 1.63 2016/03/27 09:51:37 stefan Exp $	*/
+/*	$OpenBSD: uvm_amap.c,v 1.65 2016/04/12 16:47:33 stefan Exp $	*/
 /*	$NetBSD: uvm_amap.c,v 1.27 2000/11/25 06:27:59 chs Exp $	*/
 
 /*
@@ -65,7 +65,7 @@ static char amap_slot_pool_names[UVM_AMAP_CHUNK][13];
  * local functions
  */
 
-static struct vm_amap *amap_alloc1(int, int, int);
+static struct vm_amap *amap_alloc1(int, int);
 static __inline void amap_list_insert(struct vm_amap *);
 static __inline void amap_list_remove(struct vm_amap *);   
 
@@ -177,7 +177,7 @@ amap_init(void)
  *	init the overlay.
  */
 static inline struct vm_amap *
-amap_alloc1(int slots, int padslots, int waitf)
+amap_alloc1(int slots, int waitf)
 {
 	struct vm_amap *amap;
 	int totalslots;
@@ -187,7 +187,7 @@ amap_alloc1(int slots, int padslots, int waitf)
 	if (amap == NULL)
 		return(NULL);
 
-	totalslots = slots + padslots;
+	totalslots = slots;
 	KASSERT(totalslots > 0);
 
 	if (totalslots > UVM_AMAP_CHUNK)
@@ -233,15 +233,14 @@ fail1:
  * => reference count to new amap is set to one
  */
 struct vm_amap *
-amap_alloc(vaddr_t sz, vaddr_t padsz, int waitf)
+amap_alloc(vaddr_t sz, int waitf)
 {
 	struct vm_amap *amap;
-	int slots, padslots;
+	int slots;
 
 	AMAP_B2SLOT(slots, sz);		/* load slots */
-	AMAP_B2SLOT(padslots, padsz);
 
-	amap = amap_alloc1(slots, padslots, waitf);
+	amap = amap_alloc1(slots, waitf);
 	if (amap) {
 		memset(amap->am_anon, 0,
 		    amap->am_maxslot * sizeof(struct vm_anon *));
@@ -361,7 +360,7 @@ amap_copy(struct vm_map *map, struct vm_map_entry *entry, int waitf,
 		}
 
 		entry->aref.ar_pageoff = 0;
-		entry->aref.ar_amap = amap_alloc(entry->end - entry->start, 0,
+		entry->aref.ar_amap = amap_alloc(entry->end - entry->start,
 		    waitf);
 		if (entry->aref.ar_amap != NULL)
 			entry->etype &= ~UVM_ET_NEEDSCOPY;
@@ -381,7 +380,7 @@ amap_copy(struct vm_map *map, struct vm_map_entry *entry, int waitf,
 
 	/* looks like we need to copy the map. */
 	AMAP_B2SLOT(slots, entry->end - entry->start);
-	amap = amap_alloc1(slots, 0, waitf);
+	amap = amap_alloc1(slots, waitf);
 	if (amap == NULL)
 		return;
 	srcamap = entry->aref.ar_amap;
@@ -734,20 +733,10 @@ amap_swap_off(int startslot, int endslot)
 {
 	struct vm_amap *am;
 	struct vm_amap *am_next;
-	struct vm_amap marker_prev;
-	struct vm_amap marker_next;
 	boolean_t rv = FALSE;
-
-#if defined(DIAGNOSTIC)
-	memset(&marker_prev, 0, sizeof(marker_prev));
-	memset(&marker_next, 0, sizeof(marker_next));
-#endif /* defined(DIAGNOSTIC) */
 
 	for (am = LIST_FIRST(&amap_list); am != NULL && !rv; am = am_next) {
 		int i;
-
-		LIST_INSERT_BEFORE(am, &marker_prev, am_list);
-		LIST_INSERT_AFTER(am, &marker_next, am_list);
 
 		for (i = 0; i < am->am_nused; i++) {
 			int slot;
@@ -767,23 +756,14 @@ amap_swap_off(int startslot, int endslot)
 			rv = uvm_anon_pagein(anon);
 
 			am->am_flags &= ~AMAP_SWAPOFF;
-			if (amap_refs(am) == 0) {
-				amap_wipeout(am);
-				am = NULL;
+			if (rv || amap_refs(am) == 0)
 				break;
-			}
-			if (rv) {
-				break;
-			}
 			i = 0;
 		}
 
-		KASSERT(LIST_NEXT(&marker_prev, am_list) == &marker_next ||
-		    LIST_NEXT(LIST_NEXT(&marker_prev, am_list), am_list) ==
-		    &marker_next);
-		am_next = LIST_NEXT(&marker_next, am_list);
-		LIST_REMOVE(&marker_prev, am_list);
-		LIST_REMOVE(&marker_next, am_list);
+		am_next = LIST_NEXT(am, am_list);
+		if (amap_refs(am) == 0)
+			amap_wipeout(am);
 	}
 
 	return rv;
