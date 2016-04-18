@@ -1049,6 +1049,10 @@ ip_ctloutput(int op, struct socket *so, int level, int optname,
 				error = EINVAL;
 				break;
 			}
+			if (inp->inp_lport) {
+				error = EADDRINUSE;
+				break;
+			}
 			inp->inp_rtableid = rtid;
 			in_pcbrehash(inp);
 			break;
