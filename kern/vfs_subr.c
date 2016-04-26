@@ -1,4 +1,4 @@
-/*	$OpenBSD: vfs_subr.c,v 1.244 2016/04/07 09:58:11 natano Exp $	*/
+/*	$OpenBSD: vfs_subr.c,v 1.246 2016/04/26 18:23:07 natano Exp $	*/
 /*	$NetBSD: vfs_subr.c,v 1.53 1996/04/22 01:39:13 christos Exp $	*/
 
 /*
@@ -2163,8 +2163,8 @@ vfs_vnode_print(void *v, int full,
 	struct vnode *vp = v;
 
 	(*pr)("tag %s(%d) type %s(%d) mount %p typedata %p\n",
-	      vp->v_tag > nitems(vtags)? "<unk>":vtags[vp->v_tag], vp->v_tag,
-	      vp->v_type > nitems(vtypes)? "<unk>":vtypes[vp->v_type],
+	      vp->v_tag >= nitems(vtags)? "<unk>":vtags[vp->v_tag], vp->v_tag,
+	      vp->v_type >= nitems(vtypes)? "<unk>":vtypes[vp->v_type],
 	      vp->v_type, vp->v_mount, vp->v_mountedhere);
 
 	(*pr)("data %p usecount %d writecount %d holdcnt %d numoutput %d\n",
@@ -2276,6 +2276,6 @@ copy_statfs_info(struct statfs *sbp, const struct mount *mp)
 	memcpy(sbp->f_mntonname, mp->mnt_stat.f_mntonname, MNAMELEN);
 	memcpy(sbp->f_mntfromname, mp->mnt_stat.f_mntfromname, MNAMELEN);
 	memcpy(sbp->f_mntfromspec, mp->mnt_stat.f_mntfromspec, MNAMELEN);
-	memcpy(&sbp->mount_info.ufs_args, &mp->mnt_stat.mount_info.ufs_args,
-	    sizeof(struct ufs_args));
+	memcpy(&sbp->mount_info, &mp->mnt_stat.mount_info,
+	    sizeof(union mount_info));
 }

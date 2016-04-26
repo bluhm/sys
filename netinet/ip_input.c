@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_input.c,v 1.270 2016/04/15 11:18:40 mpi Exp $	*/
+/*	$OpenBSD: ip_input.c,v 1.274 2016/04/25 12:33:48 mpi Exp $	*/
 /*	$NetBSD: ip_input.c,v 1.30 1996/03/16 23:53:58 christos Exp $	*/
 
 /*
@@ -197,8 +197,6 @@ ip_init(void)
 	mq_init(&ipsend_mq, 64, IPL_SOFTNET);
 }
 
-struct	route ipforward_rt;
-
 void
 ipintr(void)
 {
@@ -228,6 +226,9 @@ ipv4_input(struct mbuf *m)
 	struct ifnet *ifp;
 	struct ip *ip;
 	int hlen, len;
+#if defined(MROUTING) || defined(IPSEC)
+	int rv;
+#endif
 	in_addr_t pfrdr = 0;
 
 	ifp = if_get(m->m_pkthdr.ph_ifidx);
@@ -355,8 +356,6 @@ ipv4_input(struct mbuf *m)
 
 #ifdef MROUTING
 		if (ipmforwarding && ip_mrouter) {
-			int rv;
-
 			if (m->m_flags & M_EXT) {
 				if ((m = m_pullup(m, hlen)) == NULL) {
 					ipstat.ips_toosmall++;
@@ -430,7 +429,10 @@ ipv4_input(struct mbuf *m)
 	}
 #ifdef IPSEC
 	if (ipsec_in_use) {
-		if (ip_input_ipsec_fwd_check(m, hlen) != 0) {
+		KERNEL_LOCK();
+		rv = ip_input_ipsec_fwd_check(m, hlen);
+		KERNEL_UNLOCK();
+		if (rv != 0) {
 			ipstat.ips_cantforward++;
 			goto bad;
 		}
@@ -968,10 +970,6 @@ ip_slowtimo(void)
 			ip_freef(fp);
 		}
 	}
-	if (ipforward_rt.ro_rt) {
-		rtfree(ipforward_rt.ro_rt);
-		ipforward_rt.ro_rt = NULL;
-	}
 	splx(s);
 }
 
@@ -1027,6 +1025,7 @@ ip_dooptions(struct mbuf *m, struct ifnet *ifp)
 	cp = (u_char *)(ip + 1);
 	cnt = (ip->ip_hl << 2) - sizeof (struct ip);
 
+	KERNEL_LOCK();
 	for (; cnt > 0; cnt -= optlen, cp += optlen) {
 		opt = cp[IPOPT_OPTVAL];
 		if (opt == IPOPT_EOL)
@@ -1240,12 +1239,14 @@ ip_dooptions(struct mbuf *m, struct ifnet *ifp)
 			ipt.ipt_ptr += sizeof(u_int32_t);
 		}
 	}
+	KERNEL_UNLOCK();
 	if (forward && ipforwarding) {
 		ip_forward(m, ifp, 1);
 		return (1);
 	}
 	return (0);
 bad:
+	KERNEL_UNLOCK();
 	icmp_error(m, type, code, 0, 0);
 	ipstat.ips_badoptions++;
 	return (1);
@@ -1392,8 +1393,8 @@ ip_forward(struct mbuf *m, struct ifnet *ifp, int srcrt)
 	struct ip *ip = mtod(m, struct ip *);
 	struct sockaddr_in *sin;
 	struct rtentry *rt;
+	struct route ro;
 	int error, type = 0, code = 0, destmtu = 0, fake = 0, len;
-	u_int rtableid = 0;
 	u_int32_t dest;
 
 	dest = 0;
@@ -1407,28 +1408,18 @@ ip_forward(struct mbuf *m, struct ifnet *ifp, int srcrt)
 		return;
 	}
 
-	rtableid = m->m_pkthdr.ph_rtableid;
 
-	sin = satosin(&ipforward_rt.ro_dst);
-	if ((rt = ipforward_rt.ro_rt) == NULL ||
-	    ip->ip_dst.s_addr != sin->sin_addr.s_addr ||
-	    rtableid != ipforward_rt.ro_tableid) {
-		if (ipforward_rt.ro_rt) {
-			rtfree(ipforward_rt.ro_rt);
-			ipforward_rt.ro_rt = NULL;
-		}
-		sin->sin_family = AF_INET;
-		sin->sin_len = sizeof(*sin);
-		sin->sin_addr = ip->ip_dst;
-		ipforward_rt.ro_tableid = rtableid;
+	sin = satosin(&ro.ro_dst);
+	memset(sin, 0, sizeof(*sin));
+	sin->sin_family = AF_INET;
+	sin->sin_len = sizeof(*sin);
+	sin->sin_addr = ip->ip_dst;
 
-		ipforward_rt.ro_rt = rtalloc_mpath(&ipforward_rt.ro_dst,
-		    &ip->ip_src.s_addr, ipforward_rt.ro_tableid);
-		if (ipforward_rt.ro_rt == 0) {
-			icmp_error(m, ICMP_UNREACH, ICMP_UNREACH_HOST, dest, 0);
-			return;
-		}
-		rt = ipforward_rt.ro_rt;
+	rt = rtalloc_mpath(sintosa(sin), &ip->ip_src.s_addr,
+	    m->m_pkthdr.ph_rtableid);
+	if (rt == NULL) {
+		icmp_error(m, ICMP_UNREACH, ICMP_UNREACH_HOST, dest, 0);
+		return;
 	}
 
 	/*
@@ -1480,7 +1471,9 @@ ip_forward(struct mbuf *m, struct ifnet *ifp, int srcrt)
 		}
 	}
 
-	error = ip_output(m, NULL, &ipforward_rt,
+	ro.ro_rt = rt;
+	ro.ro_tableid = m->m_pkthdr.ph_rtableid;
+	error = ip_output(m, NULL, &ro,
 	    (IP_FORWARDING | (ip_directedbcast ? IP_ALLOWBROADCAST : 0)),
 	    NULL, NULL, 0);
 	if (error)
@@ -1493,7 +1486,7 @@ ip_forward(struct mbuf *m, struct ifnet *ifp, int srcrt)
 			goto freecopy;
 	}
 	if (!fake)
-		goto freert;
+		goto freecopy;
 
 	switch (error) {
 
@@ -1515,9 +1508,7 @@ ip_forward(struct mbuf *m, struct ifnet *ifp, int srcrt)
 		code = ICMP_UNREACH_NEEDFRAG;
 
 #ifdef IPSEC
-		if (ipforward_rt.ro_rt) {
-			struct rtentry *rt = ipforward_rt.ro_rt;
-
+		if (rt != NULL) {
 			if (rt->rt_rmx.rmx_mtu)
 				destmtu = rt->rt_rmx.rmx_mtu;
 			else {
@@ -1553,18 +1544,10 @@ ip_forward(struct mbuf *m, struct ifnet *ifp, int srcrt)
 	if (mcopy)
 		icmp_error(mcopy, type, code, dest, destmtu);
 
- freecopy:
+freecopy:
 	if (fake)
 		m_tag_delete_chain(&mfake);
- freert:
-#ifndef SMALL_KERNEL
-	if (ipmultipath && ipforward_rt.ro_rt &&
-	    (ipforward_rt.ro_rt->rt_flags & RTF_MPATH)) {
-		rtfree(ipforward_rt.ro_rt);
-		ipforward_rt.ro_rt = NULL;
-	}
-#endif
-	return;
+	rtfree(rt);
 }
 
 int
