@@ -1425,7 +1425,7 @@ do { \
 					break;
 				}
 				if (inp->inp_lport) {
-					error = EADDRINUSE;
+					error = EBUSY;
 					break;
 				}
 				inp->inp_rtableid = rtid;

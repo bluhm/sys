@@ -1050,7 +1050,7 @@ ip_ctloutput(int op, struct socket *so, int level, int optname,
 				break;
 			}
 			if (inp->inp_lport) {
-				error = EADDRINUSE;
+				error = EBUSY;
 				break;
 			}
 			inp->inp_rtableid = rtid;
