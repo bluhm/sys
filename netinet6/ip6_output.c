@@ -1424,7 +1424,12 @@ do { \
 					error = EINVAL;
 					break;
 				}
+				if (inp->inp_lport) {
+					error = EADDRINUSE;
+					break;
+				}
 				inp->inp_rtableid = rtid;
+				in_pcbrehash(inp);
 				break;
 			case IPV6_PIPEX:
 				if (m != NULL && m->m_len == sizeof(int))
