@@ -1,4 +1,4 @@
-/*	$OpenBSD: ieee80211_input.c,v 1.171 2016/04/15 03:04:27 dlg Exp $	*/
+/*	$OpenBSD: ieee80211_input.c,v 1.174 2016/04/28 15:00:27 stsp Exp $	*/
 
 /*-
  * Copyright (c) 2001 Atsushi Onoe
@@ -67,6 +67,8 @@ void	ieee80211_input_ba_flush(struct ieee80211com *, struct ieee80211_node *,
 void	ieee80211_input_ba_gap_timeout(void *arg);
 void	ieee80211_ba_move_window(struct ieee80211com *,
 	    struct ieee80211_node *, u_int8_t, u_int16_t);
+void	ieee80211_input_ba_seq(struct ieee80211com *,
+	    struct ieee80211_node *, uint8_t, uint16_t);
 struct	mbuf *ieee80211_align_mbuf(struct mbuf *);
 void	ieee80211_decap(struct ieee80211com *, struct mbuf *,
 	    struct ieee80211_node *, int);
@@ -707,30 +709,18 @@ ieee80211_input_ba(struct ieee80211com *ic, struct mbuf *m,
 		timeout_add_usec(&ba->ba_to, ba->ba_timeout_val);
 
 	if (SEQ_LT(sn, ba->ba_winstart)) {	/* SN < WinStartB */
-		ic->ic_stats.is_rx_dup++;
+		ic->ic_stats.is_ht_rx_frame_below_ba_winstart++;
 		m_freem(m);	/* discard the MPDU */
 		return;
 	}
 	if (SEQ_LT(ba->ba_winend, sn)) {	/* WinEndB < SN */
-		/* 
-		 * If this frame would move the window outside the range of
-		 * winend + winsize, drop it. This is likely a fluke and the
-		 * next frame will fit into the window again. Allowing the
-		 * window to be moved too far ahead makes us drop frames
-		 * until their sequence numbers catch up with the new window.
-		 *
-		 * However, if the window really did move arbitrarily, we must
-		 * allow it to move forward. We try to detect this condition
-		 * by counting missed consecutive frames.
-		 */
+		ic->ic_stats.is_ht_rx_frame_above_ba_winend++;
 		count = (sn - ba->ba_winend) & 0xfff;
-#ifdef DIAGNOSTIC
-		if ((ifp->if_flags & IFF_DEBUG) && count > 1)
-			printf("%s: received frame with bad sequence number "
-			    "%d, expecting %d:%d\n", __func__,
-			    sn, ba->ba_winstart, ba->ba_winend);
-#endif
 		if (count > ba->ba_winsize) {
+			/* 
+			 * Check whether we're consistently behind the window,
+			 * and let the window move forward if neccessary.
+			 */
 			if (ba->ba_winmiss < IEEE80211_BA_MAX_WINMISS) { 
 				if (ba->ba_missedsn == sn - 1)
 					ba->ba_winmiss++;
@@ -743,32 +733,27 @@ ieee80211_input_ba(struct ieee80211com *ic, struct mbuf *m,
 			}
 
 			/* It appears the window has moved for real. */
+			ic->ic_stats.is_ht_rx_ba_window_jump++;
 			ba->ba_winmiss = 0;
 			ba->ba_missedsn = 0;
-
-			count = ba->ba_winsize;	/* no overlap */
+			ieee80211_ba_move_window(ic, ni, tid, sn);
+		} else {
+			ic->ic_stats.is_ht_rx_ba_window_slide++;
+			ieee80211_input_ba_seq(ic, ni, tid,
+			    ba->ba_winstart + count);
+			ieee80211_input_ba_flush(ic, ni, ba);
 		}
-		while (count-- > 0) {
-			/* gaps may exist */
-			if (ba->ba_buf[ba->ba_head].m != NULL) {
-				ieee80211_input(ifp, ba->ba_buf[ba->ba_head].m,
-				    ni, &ba->ba_buf[ba->ba_head].rxi);
-				ba->ba_buf[ba->ba_head].m = NULL;
-			}
-			ba->ba_head = (ba->ba_head + 1) %
-			    IEEE80211_BA_MAX_WINSZ;
-		}
-		/* move window forward */
-		ba->ba_winend = sn;
-		ba->ba_winstart = (sn - ba->ba_winsize + 1) & 0xfff;
 	}
 	/* WinStartB <= SN <= WinEndB */
 
+	ba->ba_winmiss = 0;
+	ba->ba_missedsn = 0;
 	idx = (sn - ba->ba_winstart) & 0xfff;
 	idx = (ba->ba_head + idx) % IEEE80211_BA_MAX_WINSZ;
 	/* store the received MPDU in the buffer */
 	if (ba->ba_buf[idx].m != NULL) {
 		ifp->if_ierrors++;
+		ic->ic_stats.is_ht_rx_ba_no_buf++;
 		m_freem(m);
 		return;
 	}
@@ -783,6 +768,39 @@ ieee80211_input_ba(struct ieee80211com *ic, struct mbuf *m,
 		timeout_del(&ba->ba_gap_to);
 
 	ieee80211_input_ba_flush(ic, ni, ba);
+}
+
+/* 
+ * Forward buffered frames with sequence number lower than max_seq.
+ * See 802.11-2012 9.21.7.6.2 b.
+ */
+void
+ieee80211_input_ba_seq(struct ieee80211com *ic, struct ieee80211_node *ni,
+    uint8_t tid, uint16_t max_seq)
+{
+	struct ifnet *ifp = &ic->ic_if;
+	struct ieee80211_rx_ba *ba = &ni->ni_rx_ba[tid];
+	struct ieee80211_frame *wh;
+	uint16_t seq;
+	int i = 0;
+
+	while (i++ < ba->ba_winsize) {
+		/* gaps may exist */
+		if (ba->ba_buf[ba->ba_head].m != NULL) {
+			wh = mtod(ba->ba_buf[ba->ba_head].m,
+			    struct ieee80211_frame *);
+			KASSERT(ieee80211_has_seq(wh));
+			seq = letoh16(*(u_int16_t *)wh->i_seq) >>
+			    IEEE80211_SEQ_SEQ_SHIFT;
+			if (!SEQ_LT(seq, max_seq))
+				return;
+			ieee80211_input(ifp, ba->ba_buf[ba->ba_head].m,
+			    ni, &ba->ba_buf[ba->ba_head].rxi);
+			ba->ba_buf[ba->ba_head].m = NULL;
+		} else
+			ic->ic_stats.is_ht_rx_ba_frame_lost++;
+		ba->ba_head = (ba->ba_head + 1) % IEEE80211_BA_MAX_WINSZ;
+	}
 }
 
 /* Flush a consecutive sequence of frames from the reorder buffer. */
@@ -820,6 +838,8 @@ ieee80211_input_ba_gap_timeout(void *arg)
 	struct ieee80211com *ic = ni->ni_ic;
 	int s, skipped;
 
+	ic->ic_stats.is_ht_rx_ba_window_gap_timeout++;
+
 	s = splnet();
 
 	skipped = 0;
@@ -828,6 +848,7 @@ ieee80211_input_ba_gap_timeout(void *arg)
 		ba->ba_head = (ba->ba_head + 1) % IEEE80211_BA_MAX_WINSZ;
 		ba->ba_winstart = (ba->ba_winstart + 1) & 0xfff;
 		skipped++;
+		ic->ic_stats.is_ht_rx_ba_frame_lost++;
 	}
 	if (skipped > 0)
 		ba->ba_winend = (ba->ba_winstart + ba->ba_winsize - 1) & 0xfff;
@@ -861,7 +882,8 @@ ieee80211_ba_move_window(struct ieee80211com *ic, struct ieee80211_node *ni,
 			ieee80211_input(ifp, ba->ba_buf[ba->ba_head].m, ni,
 			    &ba->ba_buf[ba->ba_head].rxi);
 			ba->ba_buf[ba->ba_head].m = NULL;
-		}
+		} else
+			ic->ic_stats.is_ht_rx_ba_frame_lost++;
 		ba->ba_head = (ba->ba_head + 1) % IEEE80211_BA_MAX_WINSZ;
 	}
 	/* move window forward */
@@ -1580,6 +1602,7 @@ ieee80211_recv_probe_resp(struct ieee80211com *ic, struct mbuf *m,
 				DPRINTF(("[%s] htprot change: was %d, now %d\n",
 				    ether_sprintf((u_int8_t *)wh->i_addr2),
 				    htprot_last, htprot));
+				ic->ic_stats.is_ht_prot_change++;
 				ic->ic_bss->ni_htop1 = ni->ni_htop1;
 				ic->ic_update_htprot(ic, ic->ic_bss);
 			}
@@ -2491,6 +2514,7 @@ ieee80211_recv_addba_req(struct ieee80211com *ic, struct mbuf *m,
 		goto resp;
 	}
 	ba->ba_state = IEEE80211_BA_AGREED;
+	ic->ic_stats.is_ht_rx_ba_agreements++;
 	/* start Block Ack inactivity timer */
 	if (ba->ba_timeout_val != 0)
 		timeout_add_usec(&ba->ba_to, ba->ba_timeout_val);
@@ -2561,6 +2585,7 @@ ieee80211_recv_addba_resp(struct ieee80211com *ic, struct mbuf *m,
 	}
 	/* MLME-ADDBA.confirm(Success) */
 	ba->ba_state = IEEE80211_BA_AGREED;
+	ic->ic_stats.is_ht_tx_ba_agreements++;
 
 	/* notify drivers of this new Block Ack agreement */
 	if (ic->ic_ampdu_tx_start != NULL)
