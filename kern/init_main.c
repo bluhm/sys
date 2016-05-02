@@ -581,8 +581,10 @@ check_console(struct proc *p)
 			printf("warning: /dev/console does not exist\n");
 		else
 			printf("warning: /dev/console error %d\n", error);
-	} else
-		vrele(nd.ni_vp);
+		return;
+	}
+
+	vrele(nd.ni_vp);
 }
 
 /*
