@@ -120,7 +120,7 @@ struct	proc *reaperproc;
 
 extern	struct user *proc0paddr;
 
-struct	vnode *rootvp, *swapdev_vp;
+struct	vnode *rootvp, *swapdev_vp, *consolevp;
 int	boothowto;
 struct	timespec boottime;
 int	ncpus =  1;
@@ -133,7 +133,7 @@ long	__guard_local __attribute__((section(".openbsd.randomdata")));
 
 /* XXX return int so gcc -Werror won't complain */
 int	main(void *);
-void	check_console(struct proc *);
+void	open_console(struct proc *);
 void	start_init(void *);
 void	start_cleaner(void *);
 void	start_update(void *);
@@ -569,13 +569,14 @@ static char *initpaths[] = {
 };
 
 void
-check_console(struct proc *p)
+open_console(struct proc *p)
 {
 	struct nameidata nd;
+	struct vnode *vp;
 	int error;
 
 	NDINIT(&nd, LOOKUP, FOLLOW, UIO_SYSSPACE, "/dev/console", p);
-	error = namei(&nd);
+	error = vn_open(&nd, FWRITE, 0);
 	if (error) {
 		if (error == ENOENT)
 			printf("warning: /dev/console does not exist\n");
@@ -583,8 +584,10 @@ check_console(struct proc *p)
 			printf("warning: /dev/console error %d\n", error);
 		return;
 	}
+	vp = nd.ni_vp;
+	VOP_UNLOCK(vp, p);
 
-	vrele(nd.ni_vp);
+	consolevp = vp;
 }
 
 /*
@@ -617,7 +620,7 @@ start_init(void *arg)
 	while (start_init_exec == 0)
 		(void) tsleep((void *)&start_init_exec, PWAIT, "initexec", 0);
 
-	check_console(p);
+	open_console(p);
 
 	/* process 0 ignores SIGCHLD, but we can't */
 	p->p_p->ps_sigacts->ps_flags = 0;
