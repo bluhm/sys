@@ -415,7 +415,7 @@ dosendsyslog(struct proc *p, const char *buf, size_t nbyte, int flags,
 
 	if (syslogf)
 		FREF(syslogf);
-	else if ((flags & LOG_CONS) == 0)
+	else if (!ISSET(flags, LOG_CONS) || consolevp == NULL)
 		return (ENOTCONN);
 	else {
 		/*
