@@ -49,6 +49,7 @@
 #include <sys/proc.h>
 #include <sys/resourcevar.h>
 #include <sys/signalvar.h>
+#include <sys/specdev.h>
 #include <sys/systm.h>
 #include <sys/namei.h>
 #include <sys/vnode.h>
@@ -587,6 +588,11 @@ open_console(struct proc *p)
 	}
 	vp = nd.ni_vp;
 	VOP_UNLOCK(vp, p);
+	if (vp->v_type != VCHR || cdevsw[major(vp->v_rdev)].d_type != D_TTY) {
+		printf("warning: /dev/console is not a tty device\n");
+		vn_close(vp, FWRITE, p->p_ucred, p);
+		return;
+	}
 
 	consolevp = vp;
 }
