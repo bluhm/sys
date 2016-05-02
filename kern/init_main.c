@@ -49,7 +49,6 @@
 #include <sys/proc.h>
 #include <sys/resourcevar.h>
 #include <sys/signalvar.h>
-#include <sys/specdev.h>
 #include <sys/systm.h>
 #include <sys/namei.h>
 #include <sys/vnode.h>
