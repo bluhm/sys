@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_spppsubr.c,v 1.150 2016/04/18 14:38:09 mikeb Exp $	*/
+/*	$OpenBSD: if_spppsubr.c,v 1.152 2016/05/02 22:15:49 jmatthew Exp $	*/
 /*
  * Synchronous PPP link level subroutines.
  *
@@ -4094,7 +4094,7 @@ sppp_keepalive(void *dummy)
 		}
 		if (sp->pp_alivecnt < MAXALIVECNT)
 			++sp->pp_alivecnt;
-		else if (sp->pp_phase >= PHASE_AUTHENTICATE) {
+		if (sp->pp_phase >= PHASE_AUTHENTICATE) {
 			u_int32_t nmagic = htonl(sp->lcp.magic);
 			sp->lcp.echoid = ++sp->pp_seq;
 			sppp_cp_send (sp, PPP_LCP, ECHO_REQ,
@@ -4171,9 +4171,7 @@ sppp_update_gw(struct ifnet *ifp)
 
 	/* update routing table */
 	for (tid = 0; tid <= RT_TABLEID_MAX; tid++) {
-		while (rtable_walk(tid, AF_INET, sppp_update_gw_walker,
-		    ifp) == EAGAIN)
-			;	/* nothing */
+		rtable_walk(tid, AF_INET, sppp_update_gw_walker, ifp);
 	}
 }
 

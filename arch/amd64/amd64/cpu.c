@@ -1,4 +1,4 @@
-/*	$OpenBSD: cpu.c,v 1.96 2016/03/17 13:18:47 mpi Exp $	*/
+/*	$OpenBSD: cpu.c,v 1.98 2016/05/03 08:30:15 kettenis Exp $	*/
 /* $NetBSD: cpu.c,v 1.1 2003/04/26 18:39:26 fvdl Exp $ */
 
 /*-
