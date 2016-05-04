@@ -185,6 +185,11 @@ rip6_input(struct mbuf **mp, int *offp, int proto, int af)
 				continue;
 			}
 		}
+#if NPF > 0
+		if ((in6p->inp_socket->so_state & SS_ISCONNECTED) &&
+		    proto != IPPROTO_ICMPV6)
+			pf_inp_link(m, in6p);
+#endif
 		if (last) {
 			struct	mbuf *n;
 			if ((n = m_copym(m, 0, M_COPYALL, M_NOWAIT)) != NULL) {
