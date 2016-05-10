@@ -1,4 +1,4 @@
-/*	$OpenBSD: locore.S,v 1.76 2016/02/26 02:23:07 mlarkin Exp $	*/
+/*	$OpenBSD: locore.S,v 1.78 2016/05/10 18:39:42 deraadt Exp $	*/
 /*	$NetBSD: locore.S,v 1.13 2004/03/25 18:33:17 drochner Exp $	*/
 
 /*
@@ -763,6 +763,8 @@ NENTRY(sigcode)
 	pushq	%rdi			/* fake return address */
 	movq	$SYS_sigreturn,%rax
 	syscall
+	.globl  _C_LABEL(sigcoderet)
+_C_LABEL(sigcoderet):
 	movq	$SYS_exit,%rax
 	syscall
 	.globl	_C_LABEL(esigcode)
@@ -1180,5 +1182,5 @@ _C_LABEL(codepatch_end):
 	.align	NBPG
 	.globl	_C_LABEL(xen_hypercall_page)
 _C_LABEL(xen_hypercall_page):
-	.skip	0x1000, 0x90	/* Fill with NOPs */
+	.skip	0x1000, 0xcc	/* Fill with int3 */
 #endif /* NXEN > 0 */

@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.c,v 1.430 2016/05/03 14:52:39 mpi Exp $	*/
+/*	$OpenBSD: if.c,v 1.432 2016/05/10 06:37:15 dlg Exp $	*/
 /*	$NetBSD: if.c,v 1.35 1996/05/07 05:26:04 thorpej Exp $	*/
 
 /*
@@ -618,7 +618,8 @@ if_input(struct ifnet *ifp, struct mbuf_list *ml)
 	if_bpf = ifp->if_bpf;
 	if (if_bpf) {
 		MBUF_LIST_FOREACH(ml, m)
-			bpf_mtap_ether(if_bpf, m, BPF_DIRECTION_IN);
+			if (bpf_mtap_ether(if_bpf, m, BPF_DIRECTION_IN) != 0)
+				m->m_flags |= M_FILDROP;
 	}
 #endif
 
@@ -1668,7 +1669,7 @@ ifioctl(struct socket *so, u_long cmd, caddr_t data, struct proc *p)
 		break;
 
 	case SIOCGIFXFLAGS:
-		ifr->ifr_flags = ifp->if_xflags;
+		ifr->ifr_flags = ifp->if_xflags & ~IFXF_MPSAFE;
 		break;
 
 	case SIOCGIFMETRIC:

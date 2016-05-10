@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_map.c,v 1.211 2016/04/04 16:34:16 stefan Exp $	*/
+/*	$OpenBSD: uvm_map.c,v 1.213 2016/05/08 16:29:57 stefan Exp $	*/
 /*	$NetBSD: uvm_map.c,v 1.86 2000/11/27 08:40:03 chs Exp $	*/
 
 /*
@@ -161,8 +161,6 @@ void			 uvm_map_addr_augment(struct vm_map_entry*);
 static __inline void	 uvm_mapent_copy(struct vm_map_entry*,
 			    struct vm_map_entry*);
 static int		 uvm_mapentry_addrcmp(struct vm_map_entry*,
-			    struct vm_map_entry*);
-static int		 uvm_mapentry_freecmp(struct vm_map_entry*,
 			    struct vm_map_entry*);
 void			 uvm_mapent_free_insert(struct vm_map*,
 			    struct uvm_addr_state*, struct vm_map_entry*);
@@ -337,24 +335,6 @@ static __inline int
 uvm_mapentry_addrcmp(struct vm_map_entry *e1, struct vm_map_entry *e2)
 {
 	return e1->start < e2->start ? -1 : e1->start > e2->start;
-}
-
-/*
- * Tree describing free memory.
- *
- * Free memory is indexed (so we can use array semantics in O(log N).
- * Free memory is ordered by size (so we can reduce fragmentation).
- *
- * The address range in the tree can be limited, having part of the
- * free memory not in the free-memory tree. Only free memory in the
- * tree will be considered during 'any address' allocations.
- */
-
-static __inline int
-uvm_mapentry_freecmp(struct vm_map_entry *e1, struct vm_map_entry *e2)
-{
-	int cmp = e1->fspace < e2->fspace ? -1 : e1->fspace > e2->fspace;
-	return cmp ? cmp : uvm_mapentry_addrcmp(e1, e2);
 }
 
 /*
@@ -1084,7 +1064,7 @@ uvm_mapanon(struct vm_map *map, vaddr_t *addr, vsize_t sz,
 	if (flags & UVM_FLAG_OVERLAY) {
 		KERNEL_LOCK();
 		entry->aref.ar_pageoff = 0;
-		entry->aref.ar_amap = amap_alloc(sz, M_WAITOK);
+		entry->aref.ar_amap = amap_alloc(sz, M_WAITOK, 0);
 		KERNEL_UNLOCK();
 	}
 
@@ -1340,7 +1320,7 @@ uvm_map(struct vm_map *map, vaddr_t *addr, vsize_t sz,
 	}
 	if (flags & UVM_FLAG_OVERLAY) {
 		entry->aref.ar_pageoff = 0;
-		entry->aref.ar_amap = amap_alloc(sz, M_WAITOK);
+		entry->aref.ar_amap = amap_alloc(sz, M_WAITOK, 0);
 	}
 
 	/* Update map and process statistics. */
