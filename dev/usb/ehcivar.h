@@ -46,7 +46,6 @@ struct ehci_soft_qh {
 	struct ehci_qh qh;
 	struct ehci_soft_qh *next;
 	struct ehci_soft_qh *prev;
-	struct ehci_soft_qtd *sqtd;
 	ehci_physaddr_t physaddr;
 	struct usb_dma dma;             /* QH's DMA infos */
 	int offs;                       /* QH's offset in struct usb_dma */
