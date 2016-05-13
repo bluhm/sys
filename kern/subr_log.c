@@ -412,7 +412,6 @@ dosendsyslog(struct proc *p, const char *buf, size_t nbyte, int flags,
 	struct uio auio;
 	size_t i, len;
 	int error;
-	extern struct vnode *cn_devvp;
 
 	if (syslogf)
 		FREF(syslogf);
