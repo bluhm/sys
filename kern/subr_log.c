@@ -407,11 +407,13 @@ dosendsyslog(struct proc *p, const char *buf, size_t nbyte, int flags,
 	struct iovec *ktriov = NULL;
 	int iovlen;
 #endif
-	char pri[6];
+	char pri[6], *kbuf;
 	struct iovec aiov;
 	struct uio auio;
 	size_t i, len;
 	int error;
+	extern struct vnode *cn_devvp;
+	extern struct tty *constty;
 
 	if (syslogf)
 		FREF(syslogf);
@@ -467,21 +469,42 @@ dosendsyslog(struct proc *p, const char *buf, size_t nbyte, int flags,
 	len = auio.uio_resid;
 	if (syslogf)
 		error = sosend(syslogf->f_data, NULL, &auio, NULL, NULL, 0);
-	else
-		error = cnwrite(0, &auio, 0);
+	else {
+		if (cn_devvp == NULLVP) {
+			if (sflg == UIO_USERSPACE) {
+				kbuf = malloc(len, M_TEMP, M_WAITOK);
+				error = copyin(aiov.iov_base, kbuf, len);
+			} else {
+				kbuf = aiov.iov_base;
+				error = 0;
+			}
+			if (error == 0)
+				for (i = 0; i < len; i++) {
+					tputchar(kbuf[i], constty);
+					auio.uio_resid--;
+				}
+			if (sflg == UIO_USERSPACE)
+				free(kbuf, M_TEMP, len);
+		} else
+			error = cnwrite(0, &auio, 0);
+	}
 	if (error == 0)
 		len -= auio.uio_resid;
 	if (syslogf == NULL) {
-		aiov.iov_base = "\r\n";
-		aiov.iov_len = 2;
-		auio.uio_iov = &aiov;
-		auio.uio_iovcnt = 1;
-		auio.uio_segflg = UIO_SYSSPACE;
-		auio.uio_rw = UIO_WRITE;
-		auio.uio_procp = p;
-		auio.uio_offset = 0;
-		auio.uio_resid = aiov.iov_len;
-		cnwrite(0, &auio, 0);
+		if (cn_devvp == NULLVP) {
+			tputchar('\n', constty);
+		} else {
+			aiov.iov_base = "\r\n";
+			aiov.iov_len = 2;
+			auio.uio_iov = &aiov;
+			auio.uio_iovcnt = 1;
+			auio.uio_segflg = UIO_SYSSPACE;
+			auio.uio_rw = UIO_WRITE;
+			auio.uio_procp = p;
+			auio.uio_offset = 0;
+			auio.uio_resid = aiov.iov_len;
+			cnwrite(0, &auio, 0);
+		}
 	}
 
 #ifdef KTRACE
