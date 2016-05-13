@@ -1789,7 +1789,7 @@ loop:
 
 			/* duplicate /dev/console output into console buffer */
 			if (consbufp && cn_tab &&
-			    cn_tab->cn_dev == tp->t_dev && tp->t_gen <= 1) {
+			    cn_tab->cn_dev == tp->t_dev && tp->t_gen == 0) {
 				int i;
 				for (i = 0; i < cc; i++) {
 					char c = cp[i];
