@@ -413,7 +413,6 @@ dosendsyslog(struct proc *p, const char *buf, size_t nbyte, int flags,
 	size_t i, len;
 	int error;
 	extern struct vnode *cn_devvp;
-	extern struct tty *constty;
 
 	if (syslogf)
 		FREF(syslogf);
@@ -480,7 +479,7 @@ dosendsyslog(struct proc *p, const char *buf, size_t nbyte, int flags,
 			}
 			if (error == 0)
 				for (i = 0; i < len; i++) {
-					tputchar(kbuf[i], constty);
+					cnputc(kbuf[i]);
 					auio.uio_resid--;
 				}
 			if (sflg == UIO_USERSPACE)
@@ -492,7 +491,7 @@ dosendsyslog(struct proc *p, const char *buf, size_t nbyte, int flags,
 		len -= auio.uio_resid;
 	if (syslogf == NULL) {
 		if (cn_devvp == NULLVP) {
-			tputchar('\n', constty);
+			cnputc('\n');
 		} else {
 			aiov.iov_base = "\r\n";
 			aiov.iov_len = 2;
