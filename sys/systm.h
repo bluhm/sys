@@ -99,8 +99,6 @@ extern struct vnode *rootvp;	/* vnode equivalent to above */
 extern dev_t swapdev;		/* swapping device */
 extern struct vnode *swapdev_vp;/* vnode equivalent to above */
 
-extern struct vnode *consolevp; /* vnode of console tty device */
-
 struct proc;
 struct process;
 #define curproc curcpu()->ci_curproc
