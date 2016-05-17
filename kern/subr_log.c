@@ -181,6 +181,7 @@ logread(dev_t dev, struct uio *uio, int flag)
 {
 	struct msgbuf *mbp = msgbufp;
 	size_t l;
+	char buf[64];
 	int s;
 	int error = 0;
 
@@ -200,6 +201,16 @@ logread(dev_t dev, struct uio *uio, int flag)
 	}
 	splx(s);
 	logsoftc.sc_state &= ~LOG_RDWAIT;
+
+	if (mbp->msg_bufx + 1 ==
+	    (mbp->msg_bufr == 0 ? mbp->msg_bufs : mbp->msg_bufr)) {
+		l = ulmin(sizeof(buf), snprintf(buf, sizeof(buf),
+		    "<%d>klog: buffer overflow, discarding data\n",
+		    LOG_KERN|LOG_WARNING) - 1);
+		error = uiomove(buf, l, uio);
+		if (error)
+			return (error);
+	}
 
 	while (uio->uio_resid > 0) {
 		if (mbp->msg_bufx >= mbp->msg_bufr)
