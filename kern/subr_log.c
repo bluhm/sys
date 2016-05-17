@@ -467,7 +467,10 @@ dosendsyslog(struct proc *p, const char *buf, size_t nbyte, int flags,
 	len = auio.uio_resid;
 	if (syslogf)
 		error = sosend(syslogf->f_data, NULL, &auio, NULL, NULL, 0);
-	else if (cn_devvp == NULLVP) {
+	else if (cn_devvp)
+		error = cnwrite(0, &auio, 0);
+	else {
+		/* XXX console redirection breaks down... */
 		if (sflg == UIO_USERSPACE) {
 			kbuf = malloc(len, M_TEMP, M_WAITOK);
 			error = copyin(aiov.iov_base, kbuf, len);
@@ -484,17 +487,14 @@ dosendsyslog(struct proc *p, const char *buf, size_t nbyte, int flags,
 			}
 		if (sflg == UIO_USERSPACE)
 			free(kbuf, M_TEMP, len);
-	} else
-		error = cnwrite(0, &auio, 0);
+	}
 
 	if (error == 0)
 		len -= auio.uio_resid;
 
 	if (syslogf)
 		;
-	else if (cn_devvp == NULLVP)
-		cnputc('\n');
-	else {
+	else if (cn_devvp)
 		aiov.iov_base = "\r\n";
 		aiov.iov_len = 2;
 		auio.uio_iov = &aiov;
@@ -505,7 +505,8 @@ dosendsyslog(struct proc *p, const char *buf, size_t nbyte, int flags,
 		auio.uio_offset = 0;
 		auio.uio_resid = aiov.iov_len;
 		cnwrite(0, &auio, 0);
-	}
+	} else
+		cnputc('\n');
 
 #ifdef KTRACE
 	if (ktriov != NULL) {
