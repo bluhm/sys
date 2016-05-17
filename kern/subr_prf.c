@@ -99,7 +99,6 @@ struct mutex kprintf_mutex = MUTEX_INITIALIZER(IPL_HIGH);
  * globals
  */
 
-extern struct	tty *constty;	/* pointer to console "window" tty */
 extern	int log_open;	/* subr_log: is /dev/klog open? */
 const	char *panicstr; /* arg to first call to panic (used as a flag
 			   to indicate that panic has already been called). */
