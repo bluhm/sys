@@ -446,6 +446,8 @@ iso_mountfs(devvp, mp, p, argp)
 
 	return (0);
 out:
+	if (devvp->v_specinfo)
+		devvp->v_specmountpoint = NULL;
 	if (bp)
 		brelse(bp);
 	if (supbp)

@@ -450,7 +450,8 @@ out1:
 		DPRINTF("ntfs_mountfs: vflush failed\n");
 
 out:
-	devvp->v_specmountpoint = NULL;
+	if (devvp->v_specinfo)
+		devvp->v_specmountpoint = NULL;
 	if (bp)
 		brelse(bp);
 
