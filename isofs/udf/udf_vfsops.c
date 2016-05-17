@@ -449,6 +449,8 @@ bail:
 		mp->mnt_data = NULL;
 		mp->mnt_flag &= ~MNT_LOCAL;
 	}
+	if (devvp->v_specinfo)
+		devvp->v_specmountpoint = NULL;
 	if (bp != NULL)
 		brelse(bp);
 
