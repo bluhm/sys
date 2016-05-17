@@ -477,6 +477,8 @@ dosendsyslog(struct proc *p, const char *buf, size_t nbyte, int flags,
 		}
 		if (error == 0)
 			for (i = 0; i < len; i++) {
+				if (kbuf[i] = '\0')
+					break;
 				cnputc(kbuf[i]);
 				auio.uio_resid--;
 			}
