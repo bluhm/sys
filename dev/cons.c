@@ -50,9 +50,8 @@
 
 #include <dev/cons.h>
 
-struct	tty *constty = NULL;	/* virtual console output device */
-struct	vnode *cn_devvp;	/* vnode for underlying device. */
-extern struct consdev *cn_tab;	/* physical console device info */
+struct	tty *constty = NULL;		/* virtual console output device */
+struct	vnode *cn_devvp = NULLVP;	/* vnode for underlying device. */
 
 int
 cnopen(dev_t dev, int flag, int mode, struct proc *p)

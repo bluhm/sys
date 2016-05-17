@@ -70,6 +70,8 @@ struct consdev {
 
 extern	struct consdev constab[];
 extern	struct consdev *cn_tab;
+extern	struct tty *constty;
+extern	struct vnode *cn_devvp;
 
 struct knote;
 

@@ -201,8 +201,6 @@ ttyopen(dev_t device, struct tty *tp, struct proc *p)
 int
 ttyclose(struct tty *tp)
 {
-	extern struct tty *constty;	/* Temporary virtual console. */
-
 	if (constty == tp)
 		constty = NULL;
 
@@ -719,7 +717,6 @@ ttyoutput(int c, struct tty *tp)
 int
 ttioctl(struct tty *tp, u_long cmd, caddr_t data, int flag, struct proc *p)
 {
-	extern struct tty *constty;	/* Temporary virtual console. */
 	extern int nlinesw;
 	struct process *pr = p->p_p;
 	int s, error;
