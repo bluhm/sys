@@ -596,6 +596,8 @@ ext2fs_mountfs(struct vnode *devvp, struct mount *mp, struct proc *p)
 	devvp->v_specmountpoint = mp;
 	return (0);
 out:
+	if (devvp->v_specinfo)
+		devvp->v_specmountpoint = NULL;
 	if (bp)
 		brelse(bp);
 	vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY, p);
