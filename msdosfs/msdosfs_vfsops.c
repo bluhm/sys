@@ -583,7 +583,8 @@ msdosfs_mountfs(struct vnode *devvp, struct mount *mp, struct proc *p,
 	return (0);
 
 error_exit:
-	devvp->v_specmountpoint = NULL;
+	if (devvp->v_specinfo)
+		devvp->v_specmountpoint = NULL;
 	if (bp)
 		brelse(bp);
 
