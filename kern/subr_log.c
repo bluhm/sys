@@ -205,8 +205,8 @@ logread(dev_t dev, struct uio *uio, int flag)
 	if (mbp->msg_bufx + 1 ==
 	    (mbp->msg_bufr == 0 ? mbp->msg_bufs : mbp->msg_bufr)) {
 		l = ulmin(sizeof(buf), snprintf(buf, sizeof(buf),
-		    "<%d>klog: buffer overflow, discarding data\n",
-		    LOG_KERN|LOG_WARNING) - 1);
+		    "<%d>klog buffer overflow, discarding data\n",
+		    LOG_KERN|LOG_WARNING));
 		error = uiomove(buf, l, uio);
 		if (error)
 			return (error);
