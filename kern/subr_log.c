@@ -467,7 +467,7 @@ dosendsyslog(struct proc *p, const char *buf, size_t nbyte, int flags,
 	len = auio.uio_resid;
 	if (syslogf)
 		error = sosend(syslogf->f_data, NULL, &auio, NULL, NULL, 0);
-	else if (cn_devvp)
+	else if (constty || cn_devvp)
 		error = cnwrite(0, &auio, 0);
 	else {
 		/* XXX console redirection breaks down... */
@@ -494,7 +494,7 @@ dosendsyslog(struct proc *p, const char *buf, size_t nbyte, int flags,
 
 	if (syslogf)
 		;
-	else if (cn_devvp) {
+	else if (constty || cn_devvp) {
 		aiov.iov_base = "\r\n";
 		aiov.iov_len = 2;
 		auio.uio_iov = &aiov;
