@@ -1,4 +1,4 @@
-/*	$OpenBSD: bpf.c,v 1.139 2016/04/14 08:27:24 natano Exp $	*/
+/*	$OpenBSD: bpf.c,v 1.141 2016/05/18 03:46:03 dlg Exp $	*/
 /*	$NetBSD: bpf.c,v 1.33 1997/02/21 23:59:35 thorpej Exp $	*/
 
 /*
@@ -93,7 +93,7 @@ LIST_HEAD(, bpf_d) bpf_d_list;
 void	bpf_allocbufs(struct bpf_d *);
 void	bpf_freed(struct bpf_d *);
 void	bpf_ifname(struct ifnet *, struct ifreq *);
-int	_bpf_mtap(caddr_t, struct mbuf *, u_int,
+int	_bpf_mtap(caddr_t, const struct mbuf *, u_int,
 	    void (*)(const void *, void *, size_t));
 void	bpf_mcopy(const void *, void *, size_t);
 int	bpf_movein(struct uio *, u_int, struct mbuf **,
@@ -1134,7 +1134,7 @@ int
 bpf_tap(caddr_t arg, u_char *pkt, u_int pktlen, u_int direction)
 {
 	struct bpf_if *bp = (struct bpf_if *)arg;
-	struct srpl_iter i;
+	struct srp_ref sr;
 	struct bpf_d *d;
 	size_t slen;
 	struct timeval tv;
@@ -1144,20 +1144,21 @@ bpf_tap(caddr_t arg, u_char *pkt, u_int pktlen, u_int direction)
 	if (bp == NULL)
 		return (0);
 
-	SRPL_FOREACH(d, &bp->bif_dlist, &i, bd_next) {
+	SRPL_FOREACH(d, &sr, &bp->bif_dlist, bd_next) {
 		atomic_inc_long(&d->bd_rcount);
 
 		if ((direction & d->bd_dirfilt) != 0)
 			slen = 0;
 		else {
+			struct srp_ref sr;
 			struct bpf_program *bf;
 			struct bpf_insn *fcode = NULL;
 
-			bf = srp_enter(&d->bd_rfilter);
+			bf = srp_enter(&sr, &d->bd_rfilter);
 			if (bf != NULL)
 				fcode = bf->bf_insns;
 			slen = bpf_filter(fcode, pkt, pktlen, pktlen);
-			srp_leave(&d->bd_rfilter, bf);
+			srp_leave(&sr);
 		}
 
 		if (slen > 0) {
@@ -1177,7 +1178,7 @@ bpf_tap(caddr_t arg, u_char *pkt, u_int pktlen, u_int direction)
 				drop = 1;
 		}
 	}
-	SRPL_LEAVE(&i, d);
+	SRPL_LEAVE(&sr);
 
 	return (drop);
 }
@@ -1210,14 +1211,14 @@ bpf_mcopy(const void *src_arg, void *dst_arg, size_t len)
  * like bpf_mtap, but copy fn can be given. used by various bpf_mtap*
  */
 int
-_bpf_mtap(caddr_t arg, struct mbuf *m, u_int direction,
+_bpf_mtap(caddr_t arg, const struct mbuf *m, u_int direction,
     void (*cpfn)(const void *, void *, size_t))
 {
 	struct bpf_if *bp = (struct bpf_if *)arg;
-	struct srpl_iter i;
+	struct srp_ref sr;
 	struct bpf_d *d;
 	size_t pktlen, slen;
-	struct mbuf *m0;
+	const struct mbuf *m0;
 	struct timeval tv;
 	int gottime = 0;
 	int drop = 0;
@@ -1236,20 +1237,21 @@ _bpf_mtap(caddr_t arg, struct mbuf *m, u_int direction,
 	for (m0 = m; m0 != NULL; m0 = m0->m_next)
 		pktlen += m0->m_len;
 
-	SRPL_FOREACH(d, &bp->bif_dlist, &i, bd_next) {
+	SRPL_FOREACH(d, &sr, &bp->bif_dlist, bd_next) {
 		atomic_inc_long(&d->bd_rcount);
 
 		if ((direction & d->bd_dirfilt) != 0)
 			slen = 0;
 		else {
+			struct srp_ref bsr;
 			struct bpf_program *bf;
 			struct bpf_insn *fcode = NULL;
 
-			bf = srp_enter(&d->bd_rfilter);
+			bf = srp_enter(&bsr, &d->bd_rfilter);
 			if (bf != NULL)
 				fcode = bf->bf_insns;
 			slen = bpf_mfilter(fcode, m, pktlen);
-			srp_leave(&d->bd_rfilter, bf);
+			srp_leave(&bsr);
 		}
 
 		if (slen > 0) {
@@ -1269,10 +1271,7 @@ _bpf_mtap(caddr_t arg, struct mbuf *m, u_int direction,
 				drop = 1;
 		}
 	}
-	SRPL_LEAVE(&i, d);
-
-	if (drop)
-		m->m_flags |= M_FILDROP;
+	SRPL_LEAVE(&sr);
 
 	return (drop);
 }
@@ -1281,7 +1280,7 @@ _bpf_mtap(caddr_t arg, struct mbuf *m, u_int direction,
  * Incoming linkage from device drivers, when packet is in an mbuf chain.
  */
 int
-bpf_mtap(caddr_t arg, struct mbuf *m, u_int direction)
+bpf_mtap(caddr_t arg, const struct mbuf *m, u_int direction)
 {
 	return _bpf_mtap(arg, m, direction, NULL);
 }
@@ -1296,28 +1295,22 @@ bpf_mtap(caddr_t arg, struct mbuf *m, u_int direction)
  * it or keep a pointer to it.
  */
 int
-bpf_mtap_hdr(caddr_t arg, caddr_t data, u_int dlen, struct mbuf *m,
+bpf_mtap_hdr(caddr_t arg, caddr_t data, u_int dlen, const struct mbuf *m,
     u_int direction, void (*cpfn)(const void *, void *, size_t))
 {
-	struct m_hdr	 mh;
-	struct mbuf	*m0;
-	int		drop;
+	struct m_hdr mh;
+	const struct mbuf *m0;
 
 	if (dlen > 0) {
 		mh.mh_flags = 0;
-		mh.mh_next = m;
+		mh.mh_next = (struct mbuf *)m;
 		mh.mh_len = dlen;
 		mh.mh_data = data;
 		m0 = (struct mbuf *)&mh;
 	} else 
 		m0 = m;
 
-	drop = _bpf_mtap(arg, m0, direction, cpfn);
-
-	if (m0 != m)
-		m->m_flags |= m0->m_flags & M_FILDROP;
-
-	return (drop);
+	return _bpf_mtap(arg, m0, direction, cpfn);
 }
 
 /*
@@ -1330,7 +1323,7 @@ bpf_mtap_hdr(caddr_t arg, caddr_t data, u_int dlen, struct mbuf *m,
  * it or keep a pointer to it.
  */
 int
-bpf_mtap_af(caddr_t arg, u_int32_t af, struct mbuf *m, u_int direction)
+bpf_mtap_af(caddr_t arg, u_int32_t af, const struct mbuf *m, u_int direction)
 {
 	u_int32_t    afh;
 
@@ -1350,7 +1343,7 @@ bpf_mtap_af(caddr_t arg, u_int32_t af, struct mbuf *m, u_int direction)
  * it or keep a pointer to it.
  */
 int
-bpf_mtap_ether(caddr_t arg, struct mbuf *m, u_int direction)
+bpf_mtap_ether(caddr_t arg, const struct mbuf *m, u_int direction)
 {
 #if NVLAN > 0
 	struct ether_vlan_header evh;
