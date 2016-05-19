@@ -1667,12 +1667,6 @@ nd6_storelladdr(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 		}
 	}
 
-	if (rt0 == NULL) {
-		/* this could happen, if we could not allocate memory */
-		m_freem(m);
-		return (ENOMEM);
-	}
-
 	error = rt_checkgate(rt0, &rt);
 	if (error) {
 		m_freem(m);

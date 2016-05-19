@@ -294,39 +294,28 @@ arpresolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 		return (0);
 	}
 
-	if (rt0 != NULL) {
-		error = rt_checkgate(rt0, &rt);
-		if (error) {
-			m_freem(m);
-			return (error);
-		}
-
-		if ((rt->rt_flags & RTF_LLINFO) == 0) {
-			log(LOG_DEBUG, "%s: %s: route contains no arp"
-			    " information\n", __func__, inet_ntop(AF_INET,
-				&satosin(rt_key(rt))->sin_addr, addr,
-				sizeof(addr)));
-			m_freem(m);
-			return (EINVAL);
-		}
-
-		la = (struct llinfo_arp *)rt->rt_llinfo;
-		if (la == NULL)
-			log(LOG_DEBUG, "%s: %s: route without link "
-			    "local address\n", __func__, inet_ntop(AF_INET,
-				&satosin(dst)->sin_addr, addr, sizeof(addr)));
-	} else {
-		rt = arplookup(&satosin(dst)->sin_addr, 1, 0, ifp->if_rdomain);
-		if (rt != NULL) {
-		    	created = 1;
-			la = ((struct llinfo_arp *)rt->rt_llinfo);
-		}
-		if (la == NULL)
-			log(LOG_DEBUG, "%s: %s: can't allocate llinfo\n",
-			    __func__,
-			    inet_ntop(AF_INET, &satosin(dst)->sin_addr,
-				addr, sizeof(addr)));
+	error = rt_checkgate(rt0, &rt);
+	if (error) {
+		m_freem(m);
+		return (error);
 	}
+
+	if ((rt->rt_flags & RTF_LLINFO) == 0) {
+		log(LOG_DEBUG, "%s: %s: route contains no arp"
+		    " information\n", __func__, inet_ntop(AF_INET,
+			&satosin(rt_key(rt))->sin_addr, addr,
+			sizeof(addr)));
+		m_freem(m);
+		return (EINVAL);
+	}
+
+	la = (struct llinfo_arp *)rt->rt_llinfo;
+	if (la == NULL) {
+		inet_ntop(AF_INET, &satosin(dst)->sin_addr, addr, sizeof(addr));
+		log(LOG_DEBUG, "%s: %s: route without link local address\n",
+		    __func__, addr);
+	}
+
 	if (la == NULL || rt == NULL)
 		goto bad;
 	sdl = satosdl(rt->rt_gateway);
