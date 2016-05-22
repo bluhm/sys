@@ -1,4 +1,4 @@
-/*	$OpenBSD: msdosfs_vfsops.c,v 1.77 2016/04/26 18:37:03 natano Exp $	*/
+/*	$OpenBSD: msdosfs_vfsops.c,v 1.78 2016/05/22 20:27:04 bluhm Exp $	*/
 /*	$NetBSD: msdosfs_vfsops.c,v 1.48 1997/10/18 02:54:57 briggs Exp $	*/
 
 /*-
