@@ -1507,20 +1507,15 @@ nd6_output(struct ifnet *ifp, struct mbuf *m0, struct sockaddr_in6 *dst,
 	struct mbuf *m = m0;
 	struct rtentry *rt = rt0;
 	struct llinfo_nd6 *ln = NULL;
-	int created = 0, error = 0;
+	int error = 0;
 
 	if (IN6_IS_ADDR_MULTICAST(&dst->sin6_addr))
 		goto sendpkt;
 
-	/*
-	 * next hop determination.
-	 */
-	if (rt0 != NULL) {
-		error = rt_checkgate(rt0, &rt);
-		if (error) {
-			m_freem(m);
-			return (error);
-		}
+	error = rt_checkgate(rt0, &rt);
+	if (error) {
+		m_freem(m);
+		return (error);
 	}
 
 	if (nd6_need_cache(ifp) == 0)
@@ -1532,42 +1527,17 @@ nd6_output(struct ifnet *ifp, struct mbuf *m0, struct sockaddr_in6 *dst,
 	 * At this point, the destination of the packet must be a unicast
 	 * or an anycast address(i.e. not a multicast).
 	 */
-
-	/* Look up the neighbor cache for the nexthop */
-	if (rt != NULL && (rt->rt_flags & RTF_LLINFO) != 0)
-		ln = (struct llinfo_nd6 *)rt->rt_llinfo;
-	else {
-		/*
-		 * Since nd6_is_addr_neighbor() internally calls nd6_lookup(),
-		 * the condition below is not very efficient.  But we believe
-		 * it is tolerable, because this should be a rare case.
-		 */
-		if (nd6_is_addr_neighbor(dst, ifp)) {
-			rt = nd6_lookup(&dst->sin6_addr, 1, ifp,
-			    ifp->if_rdomain);
-			if (rt != NULL) {
-				created = 1;
-				ln = (struct llinfo_nd6 *)rt->rt_llinfo;
-			}
-		}
+	if (!ISSET(rt->rt_flags, RTF_LLINFO)) {
+		char addr[INET6_ADDRSTRLEN];
+		log(LOG_DEBUG, "%s: %s: route contains no ND information\n",
+		    __func__, inet_ntop(AF_INET6,
+		    &satosin6(rt_key(rt))->sin6_addr, addr, sizeof(addr)));
+		m_freem(m);
+		return (EINVAL);
 	}
-	if (ln == NULL || rt == NULL) {
-		if ((ND_IFINFO(ifp)->flags & ND6_IFF_PERFORMNUD) == 0) {
-			char addr[INET6_ADDRSTRLEN];
 
-			log(LOG_DEBUG, "%s: can't allocate llinfo for %s "
-			    "(ln=%p, rt=%p)\n", __func__,
-			    inet_ntop(AF_INET6, &dst->sin6_addr,
-				addr, sizeof(addr)),
-			    ln, rt);
-			m_freem(m);
-			if (created)
-				rtfree(rt);
-			return (EIO);	/* XXX: good error? */
-		}
-
-		goto sendpkt;	/* send anyway */
-	}
+	ln = (struct llinfo_nd6 *)rt->rt_llinfo;
+	KASSERT(ln != NULL);
 
 	/*
 	 * Move this entry to the head of the queue so that it is less likely
@@ -1617,14 +1587,10 @@ nd6_output(struct ifnet *ifp, struct mbuf *m0, struct sockaddr_in6 *dst,
 		    (long)ND_IFINFO(ifp)->retrans * hz / 1000);
 		nd6_ns_output(ifp, NULL, &dst->sin6_addr, ln, 0);
 	}
-	if (created)
-		rtfree(rt);
 	return (0);
 
   sendpkt:
 	error = ifp->if_output(ifp, m, sin6tosa(dst), rt);
-	if (created)
-		rtfree(rt);
 	return (error);
 }
 
