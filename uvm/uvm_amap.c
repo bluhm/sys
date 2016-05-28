@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_amap.c,v 1.69 2016/05/22 16:18:26 stefan Exp $	*/
+/*	$OpenBSD: uvm_amap.c,v 1.71 2016/05/26 13:37:26 stefan Exp $	*/
 /*	$NetBSD: uvm_amap.c,v 1.27 2000/11/25 06:27:59 chs Exp $	*/
 
 /*
@@ -57,8 +57,6 @@ struct pool uvm_amap_chunk_pool;
 LIST_HEAD(, vm_amap) amap_list;
 
 static char amap_small_pool_names[UVM_AMAP_CHUNK][9];
-
-#define MALLOC_SLOT_UNIT (2 * sizeof(int) + sizeof(struct vm_anon *))
 
 /*
  * local functions
@@ -322,7 +320,7 @@ amap_alloc1(int slots, int waitf, int lazyalloc)
 	amap->am_buckets = NULL;
 
 	buckets = howmany(chunks, chunkperbucket);
-	amap->am_buckets = mallocarray(buckets, sizeof(amap->am_buckets),
+	amap->am_buckets = mallocarray(buckets, sizeof(*amap->am_buckets),
 	    M_UVMAMAP, waitf | (lazyalloc ? M_ZERO : 0));
 	if (amap->am_buckets == NULL)
 		goto fail1;
@@ -1024,11 +1022,11 @@ amap_lookups(struct vm_aref *aref, vaddr_t offset,
 
 		chunk = amap_chunk_get(amap, lcv, 0, PR_NOWAIT);
 		if (chunk == NULL)
-			memset(&anons[i], 0, n * sizeof(*anons[i]));
+			memset(&anons[i], 0, n * sizeof(*anons));
 		else
 			memcpy(&anons[i],
 			    &chunk->ac_anon[UVM_AMAP_SLOTIDX(lcv)],
-			    n * sizeof(*anons[i]));
+			    n * sizeof(*anons));
 	}
 }
 

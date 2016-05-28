@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ether.c,v 1.207 2016/05/18 20:15:14 mpi Exp $	*/
+/*	$OpenBSD: if_ether.c,v 1.209 2016/05/23 09:23:43 mpi Exp $	*/
 /*	$NetBSD: if_ether.c,v 1.31 1996/05/11 12:59:58 mycroft Exp $	*/
 
 /*
@@ -80,7 +80,7 @@ int	arpt_down = 20;		/* once declared down, don't send for 20 secs */
 
 void arptfree(struct rtentry *);
 void arptimer(void *);
-struct rtentry *arplookup(u_int32_t, int, int, u_int);
+struct rtentry *arplookup(struct in_addr *, int, int, unsigned int);
 void in_arpinput(struct ifnet *, struct mbuf *);
 void in_revarpinput(struct ifnet *, struct mbuf *);
 int arpcache(struct ifnet *, struct ether_arp *, struct rtentry *);
@@ -316,8 +316,7 @@ arpresolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 			    "local address\n", __func__, inet_ntop(AF_INET,
 				&satosin(dst)->sin_addr, addr, sizeof(addr)));
 	} else {
-		rt = arplookup(satosin(dst)->sin_addr.s_addr, 1, 0,
-		    ifp->if_rdomain);
+		rt = arplookup(&satosin(dst)->sin_addr, 1, 0, ifp->if_rdomain);
 		if (rt != NULL) {
 		    	created = 1;
 			la = ((struct llinfo_arp *)rt->rt_llinfo);
@@ -500,16 +499,15 @@ in_arpinput(struct ifnet *ifp, struct mbuf *m)
 		goto out;
 #endif
 
-	/* Do we have an ARP cache for the sender?  Create if we are target. */
-	rt = arplookup(isaddr.s_addr, target, 0, rdomain);
+	/* Do we have an ARP cache for the sender? Create if we are target. */
+	rt = arplookup(&isaddr, target, 0, rdomain);
 
 	/* Check sender against our interface addresses. */
 	if (rtisvalid(rt) && ISSET(rt->rt_flags, RTF_LOCAL) &&
 	    rt->rt_ifidx == ifp->if_index && isaddr.s_addr != INADDR_ANY) {
 		inet_ntop(AF_INET, &isaddr, addr, sizeof(addr));
-		log(LOG_ERR,
-		   "duplicate IP address %s sent from ethernet address %s\n",
-		   addr, ether_sprintf(ea->arp_sha));
+		log(LOG_ERR, "duplicate IP address %s sent from ethernet "
+		    "address %s\n", addr, ether_sprintf(ea->arp_sha));
 		itaddr = isaddr;
 	} else if (rt != NULL) {
 		if (arpcache(ifp, ea, rt))
@@ -527,7 +525,7 @@ in_arpinput(struct ifnet *ifp, struct mbuf *m)
 	} else {
 		struct sockaddr_dl *sdl;
 
-		rt = arplookup(itaddr.s_addr, 0, SIN_PROXY, rdomain);
+		rt = arplookup(&itaddr, 0, SIN_PROXY, rdomain);
 		if (rt == NULL)
 			goto out;
 		/* protect from possible duplicates only owner should respond */
@@ -676,7 +674,7 @@ arptfree(struct rtentry *rt)
  * Lookup or enter a new address in arptab.
  */
 struct rtentry *
-arplookup(u_int32_t addr, int create, int proxy, u_int tableid)
+arplookup(struct in_addr *inp, int create, int proxy, u_int tableid)
 {
 	struct rtentry *rt;
 	struct sockaddr_inarp sin;
@@ -685,7 +683,7 @@ arplookup(u_int32_t addr, int create, int proxy, u_int tableid)
 	memset(&sin, 0, sizeof(sin));
 	sin.sin_len = sizeof(sin);
 	sin.sin_family = AF_INET;
-	sin.sin_addr.s_addr = addr;
+	sin.sin_addr.s_addr = inp->s_addr;
 	sin.sin_other = proxy ? SIN_PROXY : 0;
 	flags = (create) ? RT_RESOLVE : 0;
 
@@ -728,7 +726,7 @@ arpproxy(struct in_addr in, unsigned int rtableid)
 	struct ifnet *ifp;
 	int found = 0;
 
-	rt = arplookup(in.s_addr, 0, SIN_PROXY, rtableid);
+	rt = arplookup(&in, 0, SIN_PROXY, rtableid);
 	if (!rtisvalid(rt)) {
 		rtfree(rt);
 		return (0);

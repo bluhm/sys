@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvideo.c,v 1.186 2016/05/20 19:25:53 mglocker Exp $ */
+/*	$OpenBSD: uvideo.c,v 1.188 2016/05/28 06:26:49 mglocker Exp $ */
 
 /*
  * Copyright (c) 2008 Robert Nagy <robert@openbsd.org>
@@ -1223,11 +1223,10 @@ uvideo_vs_set_alt(struct uvideo_softc *sc, struct usbd_interface *ifaceh,
 	const usb_descriptor_t *desc;
 	usb_interface_descriptor_t *id;
 	usb_endpoint_descriptor_t *ed;
-	int i, diff, best_diff = INT_MAX;
+	int diff, best_diff = INT_MAX;
 	usbd_status error;
 	uint32_t psize;
 
-	i = 0;
 	usbd_desc_iter_init(sc->sc_udev, &iter);
 	desc = usbd_desc_iter_next(&iter);
 	while (desc) {
@@ -1245,7 +1244,6 @@ uvideo_vs_set_alt(struct uvideo_softc *sc, struct usbd_interface *ifaceh,
 		if (desc->bDescriptorType != UDESC_ENDPOINT)
 			goto next;
 		ed = (usb_endpoint_descriptor_t *)(uint8_t *)desc;
-		i++;
 
 		/* save endpoint with requested bandwidth */
 		psize = UGETW(ed->wMaxPacketSize);
@@ -1271,10 +1269,10 @@ next:
 	    sc->sc_vs_cur->curalt, sc->sc_vs_cur->psize, max_packet_size);
 
 	/* set alternate video stream interface */
-	error = usbd_set_interface(ifaceh, i);
+	error = usbd_set_interface(ifaceh, sc->sc_vs_cur->curalt);
 	if (error) {
 		printf("%s: could not set alternate interface %d!\n",
-		    DEVNAME(sc), i);
+		    DEVNAME(sc), sc->sc_vs_cur->curalt);
 		return (USBD_INVAL);
 	}
 
@@ -1819,19 +1817,17 @@ uvideo_vs_open(struct uvideo_softc *sc)
 		return (error);
 	}
 
-	ed = usbd_interface2endpoint_descriptor(sc->sc_vs_cur->ifaceh, 0);
+	/* double check if we can access the selected endpoint descriptor */
+	ed = usbd_get_endpoint_descriptor(sc->sc_vs_cur->ifaceh,
+	    sc->sc_vs_cur->endpoint);
 	if (ed == NULL) {
 		printf("%s: no endpoint descriptor for VS iface\n",
 		    DEVNAME(sc));
 		return (USBD_INVAL);
 	}
-	DPRINTF(1, "%s: open pipe for ", DEVNAME(sc));
-	DPRINTF(1, "bEndpointAddress=0x%02x (0x%02x), wMaxPacketSize=%d (%d)\n",
-	    ed->bEndpointAddress,
-	    sc->sc_vs_cur->endpoint,
-	    UGETW(ed->wMaxPacketSize),
-	    sc->sc_vs_cur->psize);
 
+	DPRINTF(1, "%s: open pipe for bEndpointAddress=0x%02x",
+	    DEVNAME(sc), sc->sc_vs_cur->endpoint);
 	error = usbd_open_pipe(
 	    sc->sc_vs_cur->ifaceh,
 	    sc->sc_vs_cur->endpoint,

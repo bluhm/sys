@@ -1,4 +1,4 @@
-/*	$OpenBSD: sysctl.h,v 1.161 2016/05/10 01:33:03 deraadt Exp $	*/
+/*	$OpenBSD: sysctl.h,v 1.163 2016/05/27 19:45:04 deraadt Exp $	*/
 /*	$NetBSD: sysctl.h,v 1.16 1996/04/09 20:55:36 cgd Exp $	*/
 
 /*
@@ -131,7 +131,7 @@ struct ctlname {
 #define	KERN_SOMAXCONN		28	/* int: listen queue maximum */
 #define	KERN_SOMINCONN		29	/* int: half-open controllable param */
 #define	KERN_USERMOUNT		30	/* int: users may mount filesystems */
-#define	KERN_RND		31	/* struct: rnd(4) statistics */
+/* was KERN_RND	31			*/
 #define	KERN_NOSUIDCOREDUMP	32	/* int: no setuid coredumps ever */ 
 #define	KERN_FSYNC		33	/* int: file synchronization support */
 #define	KERN_SYSVMSG		34	/* int: SysV message queue suppoprt */
@@ -152,7 +152,7 @@ struct ctlname {
 #define	KERN_POOL		49	/* struct: pool information */
 #define	KERN_STACKGAPRANDOM	50	/* int: stackgap_random */
 #define	KERN_SYSVIPC_INFO	51	/* struct: SysV sem/shm/msg info */
-/* was KERN_USERCRYPTO	52	*/
+/* was KERN_USERCRYPTO		52	*/
 /* was KERN_CRYPTODEVALLOWSOFT	53	*/
 #define KERN_SPLASSERT		54	/* int: splassert */
 #define KERN_PROC_ARGS		55	/* node: proc args and env */
@@ -174,7 +174,7 @@ struct ctlname {
 #define	KERN_CPTIME2		71	/* array: cp_time2 */
 #define	KERN_CACHEPCT		72	/* buffer cache % of physmem */
 #define	KERN_FILE		73	/* struct: file entries */
-/* was KERN_RTHREADS	74	*/
+#define	KERN_WXABORT		74	/* int: w^x sigabrt & core */
 #define	KERN_CONSDEV		75	/* dev_t: console terminal device */
 #define	KERN_NETLIVELOCKS	76	/* int: number of network livelocks */
 #define	KERN_POOL_DEBUG		77	/* int: enable pool_debug */
@@ -261,7 +261,7 @@ struct ctlname {
  	{ "cp_time2", CTLTYPE_STRUCT }, \
 	{ "bufcachepercent", CTLTYPE_INT }, \
 	{ "file", CTLTYPE_STRUCT }, \
-	{ "gap", 0 }, \
+	{ "wxabort", CTLTYPE_INT }, \
 	{ "consdev", CTLTYPE_STRUCT }, \
 	{ "netlivelocks", CTLTYPE_INT }, \
 	{ "pool_debug", CTLTYPE_INT }, \
