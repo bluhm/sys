@@ -744,7 +744,7 @@ pf_refragment6(struct mbuf **m0, struct m_tag *mtag, struct sockaddr_in6 *dst,
 		action = PF_DROP;
 	}
 
-	if (ifp == NULL) {
+	if (ifp != NULL) {
 		rt = rtalloc(sin6tosa(dst), RT_RESOLVE,
 		    m->m_pkthdr.ph_rtableid);
 		if (rt == NULL) {
