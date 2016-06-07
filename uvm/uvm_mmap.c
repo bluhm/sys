@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_mmap.c,v 1.126 2016/05/27 19:45:04 deraadt Exp $	*/
+/*	$OpenBSD: uvm_mmap.c,v 1.132 2016/06/04 16:43:43 sthen Exp $	*/
 /*	$NetBSD: uvm_mmap.c,v 1.49 2001/02/18 21:19:08 chs Exp $	*/
 
 /*
@@ -312,30 +312,32 @@ int	uvm_wxabort;
  * W^X violations are only allowed on permitted filesystems.
  */
 static inline int
-uvm_wxcheck(struct proc *p)
+uvm_wxcheck(struct proc *p, char *call)
 {
 #if (defined(__mips64__) || defined(__hppa))
 	/* XXX got/plt repairs still needed */
 	return 0;
 #endif
-	int mpwx = (p->p_p->ps_textvp->v_mount &&
+	int wxallowed = (p->p_p->ps_textvp->v_mount &&
 	    (p->p_p->ps_textvp->v_mount->mnt_flag & MNT_WXALLOWED));
 
-	if (!mpwx) {
+	if (wxallowed && (p->p_p->ps_flags & PS_WXNEEDED))
+		return (0);
+
+	/* Report W^X failures, and potentially SIGABRT */
+	if (p->p_p->ps_wxcounter++ == 0)
+		log(LOG_NOTICE, "%s(%d): %s W^X violation\n",
+		    p->p_comm, p->p_pid, call);
+	if (!wxallowed || uvm_wxabort) {
 		struct sigaction sa;
 
-		log(LOG_NOTICE, "%s(%d): mmap W^X violation\n",
-		    p->p_comm, p->p_pid);
-		if (uvm_wxabort) {
-			/* Send uncatchable SIGABRT for coredump */
-			memset(&sa, 0, sizeof sa);
-			sa.sa_handler = SIG_DFL;
-			setsigvec(p, SIGABRT, &sa);
-			psignal(p, SIGABRT);
-		}
-		return (ENOTSUP);
+		/* Send uncatchable SIGABRT for coredump */
+		memset(&sa, 0, sizeof sa);
+		sa.sa_handler = SIG_DFL;
+		setsigvec(p, SIGABRT, &sa);
+		psignal(p, SIGABRT);
 	}
-	return (0);
+	return (0);		/* ENOTSUP later */
 }
 
 /*
@@ -379,19 +381,16 @@ sys_mmap(struct proc *p, void *v, register_t *retval)
 	pos = SCARG(uap, pos);
 
 	/*
-	 * Fixup the old deprecated MAP_COPY into MAP_PRIVATE, and
-	 * validate the flags.
+	 * Validate the flags.
 	 */
 	if ((prot & PROT_MASK) != prot)
 		return (EINVAL);
 	if ((prot & (PROT_WRITE | PROT_EXEC)) == (PROT_WRITE | PROT_EXEC) &&
-	    (error = uvm_wxcheck(p)))
+	    (error = uvm_wxcheck(p, "mmap")))
 		return (error);
 
 	if ((flags & MAP_FLAGMASK) != flags)
 		return (EINVAL);
-	if (flags & MAP_OLDCOPY)
-		flags = (flags & MAP_OLDCOPY) | MAP_PRIVATE;
 	if ((flags & (MAP_SHARED|MAP_PRIVATE)) == (MAP_SHARED|MAP_PRIVATE))
 		return (EINVAL);
 	if ((flags & (MAP_FIXED|__MAP_NOREPLACE)) == __MAP_NOREPLACE)
@@ -527,8 +526,9 @@ sys_mmap(struct proc *p, void *v, register_t *retval)
 		}
 		if ((flags & MAP_ANON) != 0 ||
 		    ((flags & MAP_PRIVATE) != 0 && (prot & PROT_WRITE) != 0)) {
-			if (size >
-			    (p->p_rlimit[RLIMIT_DATA].rlim_cur - ptoa(p->p_vmspace->vm_dused))) {
+			if (p->p_rlimit[RLIMIT_DATA].rlim_cur < size ||
+			    p->p_rlimit[RLIMIT_DATA].rlim_cur - size <
+			    ptoa(p->p_vmspace->vm_dused)) {
 				error = ENOMEM;
 				goto out;
 			}
@@ -546,8 +546,9 @@ is_anon:	/* label for SunOS style /dev/zero */
 
 		if ((flags & MAP_ANON) != 0 ||
 		    ((flags & MAP_PRIVATE) != 0 && (prot & PROT_WRITE) != 0)) {
-			if (size >
-			    (p->p_rlimit[RLIMIT_DATA].rlim_cur - ptoa(p->p_vmspace->vm_dused))) {
+			if (p->p_rlimit[RLIMIT_DATA].rlim_cur < size ||
+			    p->p_rlimit[RLIMIT_DATA].rlim_cur - size <
+			    ptoa(p->p_vmspace->vm_dused)) {
 				return ENOMEM;
 			}
 		}
@@ -702,7 +703,7 @@ sys_mprotect(struct proc *p, void *v, register_t *retval)
 	if ((prot & PROT_MASK) != prot)
 		return (EINVAL);
 	if ((prot & (PROT_WRITE | PROT_EXEC)) == (PROT_WRITE | PROT_EXEC) &&
-	    (error = uvm_wxcheck(p)))
+	    (error = uvm_wxcheck(p, "mprotect")))
 		return (error);
 
 	error = pledge_protexec(p, prot);

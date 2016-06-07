@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_carp.c,v 1.289 2016/05/18 03:46:03 dlg Exp $	*/
+/*	$OpenBSD: ip_carp.c,v 1.291 2016/06/06 07:01:37 mpi Exp $	*/
 
 /*
  * Copyright (c) 2002 Michael Shalayeff. All rights reserved.
@@ -78,6 +78,10 @@
 #include "bpfilter.h"
 #if NBPFILTER > 0
 #include <net/bpf.h>
+#endif
+
+#if NVLAN > 0
+#include <net/if_vlan_var.h>
 #endif
 
 #include <netinet/ip_carp.h>
@@ -1317,7 +1321,7 @@ carp_update_lsmask(struct carp_softc *sc)
 }
 
 int
-carp_iamatch(struct ifnet *ifp, uint8_t *enaddr)
+carp_iamatch(struct ifnet *ifp)
 {
 	struct carp_softc *sc = ifp->if_softc;
 	struct carp_vhost_entry *vhe;
@@ -1325,14 +1329,8 @@ carp_iamatch(struct ifnet *ifp, uint8_t *enaddr)
 	int match = 0;
 
 	vhe = SRPL_ENTER(&sr, &sc->carp_vhosts); /* head */
-	if (vhe->state == MASTER) {
-		if (sc->sc_balancing == CARP_BAL_IPSTEALTH ||
-		    sc->sc_balancing == CARP_BAL_IP) {
-		    	struct arpcom *ac = (struct arpcom *)sc->sc_carpdev;
-			memcpy(enaddr, ac->ac_enaddr, ETHER_ADDR_LEN);
-		}
+	if (vhe->state == MASTER)
 		match = 1;
-	}
 	SRPL_LEAVE(&sr);
 
 	return (match);
@@ -1398,6 +1396,15 @@ carp_input(struct ifnet *ifp0, struct mbuf *m, void *cookie)
 	struct carp_if *cif;
 	struct carp_softc *sc;
 	struct srp_ref sr;
+
+#if NVLAN > 0
+	/*
+	 * If the underlying interface removed the VLAN header itself,
+	 * it's not for us.
+	 */
+	if (ISSET(m->m_flags, M_VLANTAG))
+		return (0);
+#endif
 
 	eh = mtod(m, struct ether_header *);
 	cif = (struct carp_if *)cookie;

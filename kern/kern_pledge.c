@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_pledge.c,v 1.167 2016/05/27 16:33:55 deraadt Exp $	*/
+/*	$OpenBSD: kern_pledge.c,v 1.170 2016/06/07 01:31:54 tedu Exp $	*/
 
 /*
  * Copyright (c) 2015 Nicholas Marriott <nicm@openbsd.org>
@@ -108,7 +108,6 @@ const uint64_t pledge_syscalls[SYS_MAXSYSCALL] = {
 	[SYS___get_tcb] = PLEDGE_ALWAYS,
 	[SYS_pledge] = PLEDGE_ALWAYS,
 	[SYS_sendsyslog] = PLEDGE_ALWAYS,	/* stack protector reporting */
-	[SYS_osendsyslog] = PLEDGE_ALWAYS,	/* obsolete sendsyslog */
 	[SYS_thrkill] = PLEDGE_ALWAYS,		/* raise, abort, stack pro */
 	[SYS_utrace] = PLEDGE_ALWAYS,		/* ltrace(1) from ld.so */
 
@@ -231,7 +230,6 @@ const uint64_t pledge_syscalls[SYS_MAXSYSCALL] = {
 	 * Can kill self with "stdio".  Killing another pid
 	 * requires "proc"
 	 */
-	[SYS_o58_kill] = PLEDGE_STDIO,
 	[SYS_kill] = PLEDGE_STDIO,
 
 	/*
@@ -1601,7 +1599,7 @@ canonpath(const char *input, char *buf, size_t bufsize)
 			p += 3;
 			if (q != buf)	/* "/../" at start of buf */
 				while (*--q != '/')
-					;
+					continue;
 
 		} else {
 			*q++ = *p++;

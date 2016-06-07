@@ -1,4 +1,4 @@
-/*	$OpenBSD: srp.h,v 1.9 2016/05/18 03:58:13 dlg Exp $ */
+/*	$OpenBSD: srp.h,v 1.11 2016/06/07 07:53:33 mpi Exp $ */
 
 /*
  * Copyright (c) 2014 Jonathan Matthew <jmatthew@openbsd.org>
@@ -31,6 +31,8 @@ struct srp {
 	void			*ref;
 };
 
+#define SRP_INITIALIZER() { NULL }
+
 struct srp_hazard {
 	struct srp		*sh_p;
 	void			*sh_v;
@@ -41,39 +43,14 @@ struct srp_ref {
 } __upunused;
 
 #define SRP_HAZARD_NUM 16
-	
+
 struct srp_gc {
 	void			(*srp_gc_dtor)(void *, void *);
 	void			*srp_gc_cookie;
 	struct refcnt		srp_gc_refcnt;
 };
 
-#ifdef _KERNEL
-
-#define SRP_INITIALIZER() { NULL }
 #define SRP_GC_INITIALIZER(_d, _c) { (_d), (_c), REFCNT_INITIALIZER() }
-
-void		 srp_startup(void);
-void		 srp_gc_init(struct srp_gc *, void (*)(void *, void *), void *);
-void		 srp_update_locked(struct srp_gc *, struct srp *, void *);
-void		*srp_get_locked(struct srp *);
-void		 srp_gc_finalize(struct srp_gc *);
-
-void		 srp_init(struct srp *);
-
-#ifdef MULTIPROCESSOR
-void		 srp_update(struct srp_gc *, struct srp *, void *);
-void		*srp_enter(struct srp_ref *, struct srp *);
-void		*srp_follow(struct srp_ref *, struct srp *);
-void		 srp_leave(struct srp_ref *);
-#else /* MULTIPROCESSOR */
-#define srp_update(_gc, _srp, _v)	srp_update_locked((_gc), (_srp), (_v))
-#define srp_enter(_sr, _srp)		((_srp)->ref)
-#define srp_follow(_sr, _srp)		((_srp)->ref)
-#define srp_leave(_sr)			do { } while (0)
-#endif /* MULTIPROCESSOR */
-
-#endif /* _KERNEL */
 
 /*
  * singly linked list built by following srps
@@ -85,16 +62,42 @@ struct srpl_rc {
 };
 #define srpl_cookie		srpl_gc.srp_gc_cookie
 
+#define SRPL_RC_INITIALIZER(_r, _u, _c) { _r, SRP_GC_INITIALIZER(_u, _c) }
+
 struct srpl {
 	struct srp		sl_head;
 };
 
 #ifdef _KERNEL
 
+void		 srp_startup(void);
+void		 srp_gc_init(struct srp_gc *, void (*)(void *, void *), void *);
+void		*srp_swap_locked(struct srp *, void *);
+void		 srp_update_locked(struct srp_gc *, struct srp *, void *);
+void		*srp_get_locked(struct srp *);
+void		 srp_gc_finalize(struct srp_gc *);
+
+void		 srp_init(struct srp *);
+
+#ifdef MULTIPROCESSOR
+void		*srp_swap(struct srp *, void *);
+void		 srp_update(struct srp_gc *, struct srp *, void *);
+void		 srp_finalize(void *, const char *);
+void		*srp_enter(struct srp_ref *, struct srp *);
+void		*srp_follow(struct srp_ref *, struct srp *);
+void		 srp_leave(struct srp_ref *);
+#else /* MULTIPROCESSOR */
+#define srp_swap(_srp, _v)		srp_swap_locked((_srp), (_v))
+#define srp_update(_gc, _srp, _v)	srp_update_locked((_gc), (_srp), (_v))
+#define srp_finalize(_v, _wchan)	((void)0)
+#define srp_enter(_sr, _srp)		((_srp)->ref)
+#define srp_follow(_sr, _srp)		((_srp)->ref)
+#define srp_leave(_sr)			do { } while (0)
+#endif /* MULTIPROCESSOR */
+
+
 void		srpl_rc_init(struct srpl_rc *, void (*)(void *, void *),
 		    void (*)(void *, void *), void *);
-
-#define SRPL_RC_INITIALIZER(_r, _u, _c) { _r, SRP_GC_INITIALIZER(_u, _c) }
 
 #define SRPL_INIT(_sl)			srp_init(&(_sl)->sl_head)
 

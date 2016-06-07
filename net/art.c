@@ -1,4 +1,4 @@
-/*	$OpenBSD: art.c,v 1.14 2016/04/13 08:04:14 mpi Exp $ */
+/*	$OpenBSD: art.c,v 1.18 2016/06/03 03:59:43 dlg Exp $ */
 
 /*
  * Copyright (c) 2015 Martin Pieuchot
@@ -31,6 +31,7 @@
 #include <sys/systm.h>
 #include <sys/malloc.h>
 #include <sys/pool.h>
+#include <sys/task.h>
 #include <sys/socket.h>
 #endif
 
@@ -82,18 +83,36 @@ void			 art_table_ref(struct art_root *, struct art_table *);
 int			 art_table_free(struct art_root *, struct art_table *);
 int			 art_table_walk(struct art_root *, struct art_table *,
 			     int (*f)(struct art_node *, void *), void *);
+void			 art_table_gc(void *);
+void			 art_gc(void *);
 
 struct pool		an_pool, at_pool, at_heap_4_pool, at_heap_8_pool;
+
+struct art_table	*art_table_gc_list = NULL;
+struct mutex		 art_table_gc_mtx = MUTEX_INITIALIZER(IPL_SOFTNET);
+struct task		 art_table_gc_task =
+			     TASK_INITIALIZER(art_table_gc, NULL);
+
+struct art_node		*art_node_gc_list = NULL;
+struct mutex		 art_node_gc_mtx = MUTEX_INITIALIZER(IPL_SOFTNET);
+struct task		 art_node_gc_task = TASK_INITIALIZER(art_gc, NULL);
 
 void
 art_init(void)
 {
 	pool_init(&an_pool, sizeof(struct art_node), 0, 0, 0, "art_node", NULL);
+	pool_setipl(&an_pool, IPL_SOFTNET);
+
 	pool_init(&at_pool, sizeof(struct art_table), 0, 0, 0, "art_table",
 	    NULL);
+	pool_setipl(&at_pool, IPL_SOFTNET);
+
 	pool_init(&at_heap_4_pool, AT_HEAPSIZE(4), 0, 0, 0, "art_heap4", NULL);
+	pool_setipl(&at_heap_4_pool, IPL_SOFTNET);
+
 	pool_init(&at_heap_8_pool, AT_HEAPSIZE(8), 0, 0, 0, "art_heap8",
 	    &pool_allocator_single);
+	pool_setipl(&at_heap_8_pool, IPL_SOFTNET);
 }
 
 /*
@@ -490,10 +509,6 @@ art_table_delete(struct art_root *ar, struct art_table *at, int i,
 	KASSERT(prev == node);
 #endif
 
-	/* We are removing an entry from this table. */
-	if (art_table_free(ar, at))
-		return (node);
-
 	/* Get the next most specific route for the index `i'. */
 	if ((i >> 1) > 1)
 		next = at->at_heap[i >> 1].node;
@@ -511,6 +526,9 @@ art_table_delete(struct art_root *ar, struct art_table *at, int i,
 		SUBTABLE(at->at_heap[i])->at_default = next;
 	else
 		at->at_heap[i].node = next;
+
+	/* We have removed an entry from this table. */
+	art_table_free(ar, at);
 
 	return (node);
 }
@@ -709,20 +727,44 @@ art_table_put(struct art_root *ar, struct art_table *at)
 		ar->ar_root = NULL;
 	}
 
-	switch (AT_HEAPSIZE(at->at_bits)) {
-	case AT_HEAPSIZE(4):
-		pool_put(&at_heap_4_pool, at->at_heap);
-		break;
-	case AT_HEAPSIZE(8):
-		pool_put(&at_heap_8_pool, at->at_heap);
-		break;
-	default:
-		panic("incorrect stride length %u", at->at_bits);
-	}
+	mtx_enter(&art_table_gc_mtx);
+	at->at_parent = art_table_gc_list;
+	art_table_gc_list = at;
+	mtx_leave(&art_table_gc_mtx);
 
-	pool_put(&at_pool, at);
+	task_add(systqmp, &art_table_gc_task);
 
 	return (parent);
+}
+
+void
+art_table_gc(void *null)
+{
+	struct art_table *at, *next;
+
+	mtx_enter(&art_table_gc_mtx);
+	at = art_table_gc_list;
+	art_table_gc_list = NULL;
+	mtx_leave(&art_table_gc_mtx);
+
+	while (at != NULL) {
+		next = at->at_parent;
+
+		switch (AT_HEAPSIZE(at->at_bits)) {
+		case AT_HEAPSIZE(4):
+			pool_put(&at_heap_4_pool, at->at_heap);
+			break;
+		case AT_HEAPSIZE(8):
+			pool_put(&at_heap_8_pool, at->at_heap);
+			break;
+		default:
+			panic("incorrect stride length %u", at->at_bits);
+		}
+
+		pool_put(&at_pool, at);
+
+		at = next;
+	}
 }
 
 /*
@@ -803,6 +845,7 @@ art_get(struct sockaddr *dst, uint8_t plen)
 
 	an->an_dst = dst;
 	an->an_plen = plen;
+	SRPL_INIT(&an->an_rtlist);
 
 	return (an);
 }
@@ -810,5 +853,31 @@ art_get(struct sockaddr *dst, uint8_t plen)
 void
 art_put(struct art_node *an)
 {
-	pool_put(&an_pool, an);
+	KASSERT(SRPL_EMPTY_LOCKED(&an->an_rtlist));
+
+	mtx_enter(&art_node_gc_mtx);
+	an->an_gc = art_node_gc_list;
+	art_node_gc_list = an;
+	mtx_leave(&art_node_gc_mtx);
+
+	task_add(systqmp, &art_node_gc_task);
+}
+
+void
+art_gc(void *null)
+{
+	struct art_node		*an, *next;
+
+	mtx_enter(&art_node_gc_mtx);
+	an = art_node_gc_list;
+	art_node_gc_list = NULL;
+	mtx_leave(&art_node_gc_mtx);
+
+	while (an != NULL) {
+		next = an->an_gc;
+
+		pool_put(&an_pool, an);
+
+		an = next;
+	}
 }

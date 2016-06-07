@@ -1,4 +1,4 @@
-/*	$OpenBSD: nd6.c,v 1.179 2016/05/17 08:29:14 mpi Exp $	*/
+/*	$OpenBSD: nd6.c,v 1.184 2016/06/06 10:16:23 sthen Exp $	*/
 /*	$KAME: nd6.c,v 1.280 2002/06/08 19:52:07 itojun Exp $	*/
 
 /*
@@ -304,25 +304,18 @@ skip1:
  * ND6 timer routine to handle ND6 entries
  */
 void
-nd6_llinfo_settimer(struct llinfo_nd6 *ln, long tick)
+nd6_llinfo_settimer(struct llinfo_nd6 *ln, int secs)
 {
 	int s;
 
 	s = splsoftnet();
 
-	if (tick < 0) {
+	if (secs < 0) {
 		ln->ln_expire = 0;
-		ln->ln_ntick = 0;
 		timeout_del(&ln->ln_timer_ch);
 	} else {
-		ln->ln_expire = time_second + tick / hz;
-		if (tick > INT_MAX) {
-			ln->ln_ntick = tick - INT_MAX;
-			timeout_add(&ln->ln_timer_ch, INT_MAX);
-		} else {
-			ln->ln_ntick = 0;
-			timeout_add(&ln->ln_timer_ch, tick);
-		}
+		ln->ln_expire = time_uptime + secs;
+		timeout_add_sec(&ln->ln_timer_ch, secs);
 	}
 
 	splx(s);
@@ -341,18 +334,6 @@ nd6_llinfo_timer(void *arg)
 	s = splsoftnet();
 
 	ln = (struct llinfo_nd6 *)arg;
-
-	if (ln->ln_ntick > 0) {
-		if (ln->ln_ntick > INT_MAX) {
-			ln->ln_ntick -= INT_MAX;
-			nd6_llinfo_settimer(ln, INT_MAX);
-		} else {
-			ln->ln_ntick = 0;
-			nd6_llinfo_settimer(ln, ln->ln_ntick);
-		}
-		splx(s);
-		return;
-	}
 
 	if ((rt = ln->ln_rt) == NULL)
 		panic("ln->ln_rt == NULL");
@@ -374,7 +355,7 @@ nd6_llinfo_timer(void *arg)
 	case ND6_LLINFO_INCOMPLETE:
 		if (ln->ln_asked < nd6_mmaxtries) {
 			ln->ln_asked++;
-			nd6_llinfo_settimer(ln, (long)ndi->retrans * hz / 1000);
+			nd6_llinfo_settimer(ln, ndi->retrans / 1000);
 			nd6_ns_output(ifp, NULL, &dst->sin6_addr, ln, 0);
 		} else {
 			struct mbuf *m = ln->ln_hold;
@@ -404,7 +385,7 @@ nd6_llinfo_timer(void *arg)
 	case ND6_LLINFO_REACHABLE:
 		if (!ND6_LLINFO_PERMANENT(ln)) {
 			ln->ln_state = ND6_LLINFO_STALE;
-			nd6_llinfo_settimer(ln, (long)nd6_gctimer * hz);
+			nd6_llinfo_settimer(ln, nd6_gctimer);
 		}
 		break;
 
@@ -422,18 +403,18 @@ nd6_llinfo_timer(void *arg)
 			/* We need NUD */
 			ln->ln_asked = 1;
 			ln->ln_state = ND6_LLINFO_PROBE;
-			nd6_llinfo_settimer(ln, (long)ndi->retrans * hz / 1000);
+			nd6_llinfo_settimer(ln, ndi->retrans / 1000);
 			nd6_ns_output(ifp, &dst->sin6_addr,
 			    &dst->sin6_addr, ln, 0);
 		} else {
 			ln->ln_state = ND6_LLINFO_STALE; /* XXX */
-			nd6_llinfo_settimer(ln, (long)nd6_gctimer * hz);
+			nd6_llinfo_settimer(ln, nd6_gctimer);
 		}
 		break;
 	case ND6_LLINFO_PROBE:
 		if (ln->ln_asked < nd6_umaxtries) {
 			ln->ln_asked++;
-			nd6_llinfo_settimer(ln, (long)ndi->retrans * hz / 1000);
+			nd6_llinfo_settimer(ln, ndi->retrans / 1000);
 			nd6_ns_output(ifp, &dst->sin6_addr,
 			    &dst->sin6_addr, ln, 0);
 		} else {
@@ -770,11 +751,11 @@ nd6_free(struct rtentry *rt, int gc)
 			 * XXX: the check for ln_state would be redundant,
 			 *      but we intentionally keep it just in case.
 			 */
-			if (dr->expire > time_second * hz) {
+			if (dr->expire > time_second) {
 				nd6_llinfo_settimer(ln,
-				    dr->expire - time_second * hz);
+				    dr->expire - time_second);
 			} else
-				nd6_llinfo_settimer(ln, (long)nd6_gctimer * hz);
+				nd6_llinfo_settimer(ln, nd6_gctimer);
 			splx(s);
 			if_put(ifp);
 			return (TAILQ_NEXT(ln, ln_list));
@@ -879,7 +860,7 @@ nd6_nud_hint(struct rtentry *rt)
 
 	ln->ln_state = ND6_LLINFO_REACHABLE;
 	if (!ND6_LLINFO_PERMANENT(ln))
-		nd6_llinfo_settimer(ln, (long)ND_IFINFO(ifp)->reachable * hz);
+		nd6_llinfo_settimer(ln, ND_IFINFO(ifp)->reachable);
 out:
 	if_put(ifp);
 }
@@ -1196,6 +1177,7 @@ nd6_ioctl(u_long cmd, caddr_t data, struct ifnet *ifp)
 	{
 		struct llinfo_nd6 *ln;
 		struct in6_addr nb_addr = nbi->addr; /* make local for safety */
+		time_t expire;
 
 		/*
 		 * XXX: KAME specific hack for scoped addresses
@@ -1218,10 +1200,16 @@ nd6_ioctl(u_long cmd, caddr_t data, struct ifnet *ifp)
 			splx(s);
 			break;
 		}
+		expire = ln->ln_expire;
+		if (expire != 0) {
+			expire -= time_uptime;
+			expire += time_second;
+		}
+
 		nbi->state = ln->ln_state;
 		nbi->asked = ln->ln_asked;
 		nbi->isrouter = ln->ln_router;
-		nbi->expire = ln->ln_expire;
+		nbi->expire = expire;
 		rtfree(rt);
 		splx(s);
 
@@ -1369,7 +1357,7 @@ fail:
 			 * we must set the timer now, although it is actually
 			 * meaningless.
 			 */
-			nd6_llinfo_settimer(ln, (long)nd6_gctimer * hz);
+			nd6_llinfo_settimer(ln, nd6_gctimer);
 
 			if (ln->ln_hold) {
 				struct mbuf *n = ln->ln_hold;
@@ -1507,24 +1495,19 @@ nd6_output(struct ifnet *ifp, struct mbuf *m0, struct sockaddr_in6 *dst,
 	struct mbuf *m = m0;
 	struct rtentry *rt = rt0;
 	struct llinfo_nd6 *ln = NULL;
-	int created = 0, error = 0;
+	int error = 0;
 
 	if (IN6_IS_ADDR_MULTICAST(&dst->sin6_addr))
 		goto sendpkt;
 
-	/*
-	 * next hop determination.
-	 */
-	if (rt0 != NULL) {
-		error = rt_checkgate(rt0, &rt);
-		if (error) {
-			m_freem(m);
-			return (error);
-		}
-	}
-
 	if (nd6_need_cache(ifp) == 0)
 		goto sendpkt;
+
+	error = rt_checkgate(rt0, &rt);
+	if (error) {
+		m_freem(m);
+		return (error);
+	}
 
 	/*
 	 * Address resolution or Neighbor Unreachability Detection
@@ -1532,42 +1515,17 @@ nd6_output(struct ifnet *ifp, struct mbuf *m0, struct sockaddr_in6 *dst,
 	 * At this point, the destination of the packet must be a unicast
 	 * or an anycast address(i.e. not a multicast).
 	 */
-
-	/* Look up the neighbor cache for the nexthop */
-	if (rt != NULL && (rt->rt_flags & RTF_LLINFO) != 0)
-		ln = (struct llinfo_nd6 *)rt->rt_llinfo;
-	else {
-		/*
-		 * Since nd6_is_addr_neighbor() internally calls nd6_lookup(),
-		 * the condition below is not very efficient.  But we believe
-		 * it is tolerable, because this should be a rare case.
-		 */
-		if (nd6_is_addr_neighbor(dst, ifp)) {
-			rt = nd6_lookup(&dst->sin6_addr, 1, ifp,
-			    ifp->if_rdomain);
-			if (rt != NULL) {
-				created = 1;
-				ln = (struct llinfo_nd6 *)rt->rt_llinfo;
-			}
-		}
+	if (!ISSET(rt->rt_flags, RTF_LLINFO)) {
+		char addr[INET6_ADDRSTRLEN];
+		log(LOG_DEBUG, "%s: %s: route contains no ND information\n",
+		    __func__, inet_ntop(AF_INET6,
+		    &satosin6(rt_key(rt))->sin6_addr, addr, sizeof(addr)));
+		m_freem(m);
+		return (EINVAL);
 	}
-	if (ln == NULL || rt == NULL) {
-		if ((ND_IFINFO(ifp)->flags & ND6_IFF_PERFORMNUD) == 0) {
-			char addr[INET6_ADDRSTRLEN];
 
-			log(LOG_DEBUG, "%s: can't allocate llinfo for %s "
-			    "(ln=%p, rt=%p)\n", __func__,
-			    inet_ntop(AF_INET6, &dst->sin6_addr,
-				addr, sizeof(addr)),
-			    ln, rt);
-			m_freem(m);
-			if (created)
-				rtfree(rt);
-			return (EIO);	/* XXX: good error? */
-		}
-
-		goto sendpkt;	/* send anyway */
-	}
+	ln = (struct llinfo_nd6 *)rt->rt_llinfo;
+	KASSERT(ln != NULL);
 
 	/*
 	 * Move this entry to the head of the queue so that it is less likely
@@ -1587,7 +1545,7 @@ nd6_output(struct ifnet *ifp, struct mbuf *m0, struct sockaddr_in6 *dst,
 	if (ln->ln_state == ND6_LLINFO_STALE) {
 		ln->ln_asked = 0;
 		ln->ln_state = ND6_LLINFO_DELAY;
-		nd6_llinfo_settimer(ln, nd6_delay * hz);
+		nd6_llinfo_settimer(ln, nd6_delay);
 	}
 
 	/*
@@ -1613,18 +1571,13 @@ nd6_output(struct ifnet *ifp, struct mbuf *m0, struct sockaddr_in6 *dst,
 	 */
 	if (!ND6_LLINFO_PERMANENT(ln) && ln->ln_asked == 0) {
 		ln->ln_asked++;
-		nd6_llinfo_settimer(ln,
-		    (long)ND_IFINFO(ifp)->retrans * hz / 1000);
+		nd6_llinfo_settimer(ln, ND_IFINFO(ifp)->retrans / 1000);
 		nd6_ns_output(ifp, NULL, &dst->sin6_addr, ln, 0);
 	}
-	if (created)
-		rtfree(rt);
 	return (0);
 
   sendpkt:
 	error = ifp->if_output(ifp, m, sin6tosa(dst), rt);
-	if (created)
-		rtfree(rt);
 	return (error);
 }
 
@@ -1665,12 +1618,6 @@ nd6_storelladdr(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 			m_freem(m);
 			return (EINVAL);
 		}
-	}
-
-	if (rt0 == NULL) {
-		/* this could happen, if we could not allocate memory */
-		m_freem(m);
-		return (ENOMEM);
 	}
 
 	error = rt_checkgate(rt0, &rt);
