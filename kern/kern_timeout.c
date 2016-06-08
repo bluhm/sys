@@ -256,6 +256,8 @@ timeout_add_msec(struct timeout *to, int msecs)
 	to_ticks = (long long)msecs * 1000 / tick;
 	if (to_ticks > INT_MAX)
 		to_ticks = INT_MAX;
+	if (msecs > 0 && to_ticks == 0)
+		to_ticks = 1;
 
 	return (timeout_add(to, (int)to_ticks));
 }
