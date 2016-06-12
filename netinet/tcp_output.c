@@ -732,6 +732,9 @@ send:
 				goto out;
 			}
 		}
+		if (so->so_snd.sb_mb->m_flags & M_PKTHDR)
+			m->m_pkthdr.ph_loop =
+			    so->so_snd.sb_mb->m_pkthdr.ph_loop;
 #endif
 		/*
 		 * If we're sending everything we've got, set PUSH.
