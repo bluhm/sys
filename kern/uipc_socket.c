@@ -1258,8 +1258,8 @@ somove(struct socket *so, int wait)
 	}
 
 	/*
-	 * By splicing sockets connected to localhost, user land may create
-	 * loops.  Dissolve splicing with error if loop is detected by counter.
+	 * By splicing sockets connected to localhost, userland might create a
+	 * loop.  Dissolve splicing with error if loop is detected by counter.
 	 */
 	if ((m->m_flags & M_PKTHDR) && --m->m_pkthdr.ph_loop == 0) {
 		error = ELOOP;
