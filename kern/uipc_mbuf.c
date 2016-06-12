@@ -1319,7 +1319,8 @@ m_print(void *v,
 		(*pr)("m_ptkhdr.ph_tags: %p\tm_pkthdr.ph_tagsset: %b\n",
 		    SLIST_FIRST(&m->m_pkthdr.ph_tags),
 		    m->m_pkthdr.ph_tagsset, MTAG_BITS);
-		(*pr)("m_pkthdr.ph_flowid: %u\n", m->m_pkthdr.ph_flowid);
+		(*pr)("m_pkthdr.ph_flowid: %u\tm_pkthdr.ph_loop: %u\n",
+		    m->m_pkthdr.ph_flowid, m->m_pkthdr.ph_loop);
 		(*pr)("m_pkthdr.csum_flags: %b\n",
 		    m->m_pkthdr.csum_flags, MCS_BITS);
 		(*pr)("m_pkthdr.ether_vtag: %u\tm_ptkhdr.ph_rtableid: %u\n",
