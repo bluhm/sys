@@ -1965,7 +1965,7 @@ so_print(void *v,
 		    (unsigned long long)so->so_sp->ssp_len);
 		(*pr)("\tssp_max: %lld\n",
 		    (unsigned long long)so->so_sp->ssp_max);
-		(*pr)("\tssp_idletv: %lld %ldn", so->so_sp->ssp_idletv.tv_sec,
+		(*pr)("\tssp_idletv: %lld %ld\n", so->so_sp->ssp_idletv.tv_sec,
 		    so->so_sp->ssp_idletv.tv_usec);
 		(*pr)("\tssp_idleto: %spending (@%i)\n",
 		    timeout_pending(&so->so_sp->ssp_idleto) ? "" : "not ",
