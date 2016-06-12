@@ -1199,7 +1199,7 @@ somove(struct socket *so, int wait)
 		goto release;
 	}
 	if (sosp->so_error && sosp->so_error != ETIMEDOUT &&
-	    sosp->so_error != EFBIG) {
+	    sosp->so_error != EFBIG && sosp->so_error != ELOOP) {
 		error = sosp->so_error;
 		goto release;
 	}
@@ -1255,6 +1255,15 @@ somove(struct socket *so, int wait)
 			(so->so_proto->pr_usrreq)(so, PRU_RCVD, NULL,
 			    NULL, NULL, NULL);
 		goto nextpkt;
+	}
+
+	/*
+	 * By splicing sockets connected to localhost, user land may create
+	 * loops.  Dissolve splicing with error if loop is detected by counter.
+	 */
+	if ((m->m_flags & M_PKTHDR) && --m->m_pkthdr.ph_loop == 0) {
+		error = ELOOP;
+		goto release;
 	}
 
 	if (so->so_proto->pr_flags & PR_ATOMIC) {
