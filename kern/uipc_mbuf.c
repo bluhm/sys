@@ -265,6 +265,7 @@ void
 m_resethdr(struct mbuf *m)
 {
 	int len = m->m_pkthdr.len;
+	u_int16_t loop = m->m_pkthdr.ph_loop;
 
 	KASSERT(m->m_flags & M_PKTHDR);
 	m->m_flags &= (M_EXT|M_PKTHDR|M_EOR|M_EXTWR|M_ZEROIZE);
@@ -280,6 +281,7 @@ m_resethdr(struct mbuf *m)
 	memset(&m->m_pkthdr, 0, sizeof(m->m_pkthdr));
 	m->m_pkthdr.pf.prio = IFQ_DEFPRIO;
 	m->m_pkthdr.len = len;
+	m->m_pkthdr.ph_loop = loop;
 }
 
 struct mbuf *
