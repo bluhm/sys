@@ -1,4 +1,4 @@
-/*	$OpenBSD: exec_elf.c,v 1.124 2016/05/30 21:31:29 deraadt Exp $	*/
+/*	$OpenBSD: exec_elf.c,v 1.126 2016/06/11 21:04:08 kettenis Exp $	*/
 
 /*
  * Copyright (c) 1996 Per Fogelstrom
@@ -236,9 +236,16 @@ ELFNAME(load_psection)(struct exec_vmcmd_set *vcset, struct vnode *vp,
 	}
 	bdiff = ph->p_vaddr - trunc_page(ph->p_vaddr);
 
+	/*
+	 * Enforce W^X and map W|X segments without X permission
+	 * initially.  The dynamic linker will make these read-only
+	 * and add back X permission after relocation processing.
+	 * Static executables with W|X segments will probably crash.
+	 */
 	*prot |= (ph->p_flags & PF_R) ? PROT_READ : 0;
 	*prot |= (ph->p_flags & PF_W) ? PROT_WRITE : 0;
-	*prot |= (ph->p_flags & PF_X) ? PROT_EXEC : 0;
+	if ((ph->p_flags & PF_W) == 0)
+		*prot |= (ph->p_flags & PF_X) ? PROT_EXEC : 0;
 
 	msize = ph->p_memsz + diff;
 	offset = ph->p_offset - bdiff;
@@ -869,6 +876,7 @@ int
 ELFNAME(os_pt_note)(struct proc *p, struct exec_package *epp, Elf_Ehdr *eh,
 	char *os_name, size_t name_size, size_t desc_size)
 {
+	char pathbuf[MAXPATHLEN];
 	Elf_Phdr *hph, *ph;
 	Elf_Note *np = NULL;
 	size_t phsize;
@@ -886,9 +894,11 @@ ELFNAME(os_pt_note)(struct proc *p, struct exec_package *epp, Elf_Ehdr *eh,
 			    (epp->ep_vp->v_mount->mnt_flag & MNT_WXALLOWED));
 			
 			if (!wxallowed) {
+				error = copyinstr(epp->ep_name, &pathbuf,
+				    sizeof(pathbuf), NULL);
 				log(LOG_NOTICE,
 				    "%s(%d): W^X binary outside wxallowed mountpoint\n",
-				    epp->ep_name, p->p_pid);
+				    error ? "" : pathbuf, p->p_pid);
 				error = ENOEXEC;
 				goto out1;
 			}
