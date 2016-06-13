@@ -129,7 +129,7 @@ struct	pkthdr {
 	u_int16_t		 ether_vtag;	/* Ethernet 802.1p+Q vlan tag */
 	u_int			 ph_rtableid;	/* routing table id */
 	u_int			 ph_ifidx;	/* rcv interface index */
-	u_int8_t		 ph_loop;	/* mbuf is looping in kernel */
+	u_int8_t		 ph_loopcnt;	/* mbuf is looping in kernel */
 	struct pkthdr_pf	 pf;
 };
 

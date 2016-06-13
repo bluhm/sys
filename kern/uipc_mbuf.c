@@ -265,7 +265,7 @@ void
 m_resethdr(struct mbuf *m)
 {
 	int len = m->m_pkthdr.len;
-	u_int8_t loop = m->m_pkthdr.ph_loop;
+	u_int8_t loopcnt = m->m_pkthdr.ph_loopcnt;
 
 	KASSERT(m->m_flags & M_PKTHDR);
 	m->m_flags &= (M_EXT|M_PKTHDR|M_EOR|M_EXTWR|M_ZEROIZE);
@@ -281,7 +281,7 @@ m_resethdr(struct mbuf *m)
 	memset(&m->m_pkthdr, 0, sizeof(m->m_pkthdr));
 	m->m_pkthdr.pf.prio = IFQ_DEFPRIO;
 	m->m_pkthdr.len = len;
-	m->m_pkthdr.ph_loop = loop;
+	m->m_pkthdr.ph_loopcnt = loopcnt;
 }
 
 struct mbuf *
@@ -1321,8 +1321,8 @@ m_print(void *v,
 		(*pr)("m_ptkhdr.ph_tags: %p\tm_pkthdr.ph_tagsset: %b\n",
 		    SLIST_FIRST(&m->m_pkthdr.ph_tags),
 		    m->m_pkthdr.ph_tagsset, MTAG_BITS);
-		(*pr)("m_pkthdr.ph_flowid: %u\tm_pkthdr.ph_loop: %u\n",
-		    m->m_pkthdr.ph_flowid, m->m_pkthdr.ph_loop);
+		(*pr)("m_pkthdr.ph_flowid: %u\tm_pkthdr.ph_loopcnt: %u\n",
+		    m->m_pkthdr.ph_flowid, m->m_pkthdr.ph_loopcnt);
 		(*pr)("m_pkthdr.csum_flags: %b\n",
 		    m->m_pkthdr.csum_flags, MCS_BITS);
 		(*pr)("m_pkthdr.ether_vtag: %u\tm_ptkhdr.ph_rtableid: %u\n",
