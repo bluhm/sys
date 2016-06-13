@@ -737,13 +737,21 @@ usbioctl(dev_t devt, u_long cmd, caddr_t data, int flag, struct proc *p)
 	case USB_DEVICE_GET_CDESC:
 	{
 		struct usb_device_cdesc *udc = (struct usb_device_cdesc *)data;
+		struct usbd_device *dev;
 		int addr = udc->udc_addr;
 		struct usb_task udc_task;
+		int i, nifaces;
 
 		if (addr < 1 || addr >= USB_MAX_DEVICES)
 			return (EINVAL);
 		if (sc->sc_bus->devices[addr] == NULL)
 			return (ENXIO);
+		dev = sc->sc_bus->devices[addr];
+		nifaces = dev->cdesc->bNumInterface;
+		for (i = 0; i < nifaces; i++) {
+			if (usbd_iface_claimed(dev, i))
+				return (EBUSY);
+		}
 
 		udc->udc_bus = unit;
 
