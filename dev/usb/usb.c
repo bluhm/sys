@@ -760,6 +760,7 @@ usbioctl(dev_t devt, u_long cmd, caddr_t data, int flag, struct proc *p)
 	case USB_DEVICE_GET_FDESC:
 	{
 		struct usb_device_fdesc *udf = (struct usb_device_fdesc *)data;
+		struct usbd_device *dev;
 		int addr = udf->udf_addr;
 		struct usb_task udf_task;
 		struct usb_device_fdesc save_udf;
@@ -767,12 +768,18 @@ usbioctl(dev_t devt, u_long cmd, caddr_t data, int flag, struct proc *p)
 		struct iovec iov;
 		struct uio uio;
 		size_t len;
-		int error;
+		int i, nifaces, error;
 
 		if (addr < 1 || addr >= USB_MAX_DEVICES)
 			return (EINVAL);
 		if (sc->sc_bus->devices[addr] == NULL)
 			return (ENXIO);
+		dev = sc->sc_bus->devices[addr];
+		nifaces = dev->cdesc->bNumInterface;
+		for (i = 0; i < nifaces; i++) {
+			if (usbd_iface_claimed(dev, i))
+				return (EBUSY);
+		}
 
 		udf->udf_bus = unit;
 
