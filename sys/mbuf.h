@@ -127,9 +127,9 @@ struct	pkthdr {
 	u_int16_t		 ph_flowid;	/* pseudo unique flow id */
 	u_int16_t		 csum_flags;	/* checksum flags */
 	u_int16_t		 ether_vtag;	/* Ethernet 802.1p+Q vlan tag */
-	u_int16_t		 ph_loop;	/* mbuf is looping in kernel */
 	u_int			 ph_rtableid;	/* routing table id */
 	u_int			 ph_ifidx;	/* rcv interface index */
+	u_int8_t		 ph_loop;	/* mbuf is looping in kernel */
 	struct pkthdr_pf	 pf;
 };
 
@@ -493,7 +493,7 @@ struct m_tag *m_tag_next(struct mbuf *, struct m_tag *);
 #define PACKET_TAG_MAXSIZE		52
 
 /* Detect mbufs looping in the kernel when spliced too often. */
-#define M_MAXLOOP	256
+#define M_MAXLOOP	128
 
 /*
  * mbuf lists
