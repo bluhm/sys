@@ -155,6 +155,7 @@ msgbuf_putchar(struct msgbuf *mbp, const char c)
 	if (mbp->msg_bufr == mbp->msg_bufx) {
 		if (++mbp->msg_bufr >= mbp->msg_bufs)
 			mbp->msg_bufr = 0;
+		mbp->msg_bufd++;
 	}
 	splx(s);
 }
@@ -202,14 +203,15 @@ logread(dev_t dev, struct uio *uio, int flag)
 	}
 	logsoftc.sc_state &= ~LOG_RDWAIT;
 
-	if (mbp->msg_bufx + 1 ==
-	    (mbp->msg_bufr == 0 ? mbp->msg_bufs : mbp->msg_bufr)) {
-		l = ulmin(sizeof(buf), snprintf(buf, sizeof(buf),
-		    "<%d>klog buffer overflow, discarding data\n",
-		    LOG_KERN|LOG_WARNING));
-		error = uiomove(buf, l, uio);
+	if (mbp->msg_bufd > 0) {
+		l = snprintf(buf, sizeof(buf),
+		    "<%d>klog: dropped %ld byte%s, buffer overflow\n",
+		    LOG_KERN|LOG_WARNING, mbp->msg_bufd,
+                    mbp->msg_bufd == 1 ? "" : "s");
+		error = uiomove(buf, ulmin(l, sizeof(buf) - 1), uio);
 		if (error)
 			return (error);
+		mbp->msg_bufd = 0;
 	}
 
 	while (uio->uio_resid > 0) {
