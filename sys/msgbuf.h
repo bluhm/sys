@@ -39,6 +39,7 @@ struct	msgbuf {
 	long	msg_bufr;		/* read pointer */
 	long	msg_bufs;		/* real msg_bufc size (bytes) */
 	long	msg_bufl;		/* # chars, <= msg_bufs */
+	long	msg_bufd;		/* number of dropped chars */
 	char	msg_bufc[1];		/* buffer */
 };
 #ifdef _KERNEL
