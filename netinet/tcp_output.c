@@ -1,4 +1,4 @@
-/*	$OpenBSD: tcp_output.c,v 1.116 2015/12/05 10:52:26 tedu Exp $	*/
+/*	$OpenBSD: tcp_output.c,v 1.117 2016/06/13 21:24:43 bluhm Exp $	*/
 /*	$NetBSD: tcp_output.c,v 1.16 1997/06/03 16:17:09 kml Exp $	*/
 
 /*
