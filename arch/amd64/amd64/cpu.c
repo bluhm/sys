@@ -901,7 +901,7 @@ rdrand(void *v)
 	add_true_randomness(t.u32[1]);
 
 	if (tmo)
-		timeout_add_msec(tmo, 100);
+		timeout_add_msec(tmo, 10);
 }
 
 int
