@@ -210,7 +210,6 @@ timeout_add_tv(struct timeout *to, const struct timeval *tv)
 	if (to_ticks == 0 && tv->tv_usec > 0)
 		to_ticks = 1;
 
-
 	return (timeout_add(to, (int)to_ticks));
 }
 
