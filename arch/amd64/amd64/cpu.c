@@ -881,7 +881,6 @@ rdrand(void *v)
 		uint32_t u32[2];
 	} r, t;
 	uint8_t valid = 0;
-	static int count;
 
 	if (has_rdseed)
 		__asm volatile(
@@ -901,11 +900,8 @@ rdrand(void *v)
 	add_true_randomness(t.u32[0]);
 	add_true_randomness(t.u32[1]);
 
-	if (count % 100 == 0)
-		printf("%s: count %d\n", __func__, count);
-	count++;
 	if (tmo)
-		timeout_add_msec(tmo, 10);
+		timeout_add_msec(tmo, 100);
 }
 
 int
