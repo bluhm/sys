@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_timeout.c,v 1.45 2016/03/20 07:56:08 uebayasi Exp $	*/
+/*	$OpenBSD: kern_timeout.c,v 1.46 2016/06/14 15:58:03 bluhm Exp $	*/
 /*
  * Copyright (c) 2001 Thomas Nordin <nordin@openbsd.org>
  * Copyright (c) 2000-2001 Artur Grabowski <art@openbsd.org>
