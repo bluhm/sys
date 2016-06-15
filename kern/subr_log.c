@@ -184,7 +184,6 @@ logclose(dev_t dev, int flag, int mode, struct proc *p)
 int
 logread(dev_t dev, struct uio *uio, int flag)
 {
-	char buf[64];
 	struct msgbuf *mbp = msgbufp;
 	size_t l;
 	int s, error = 0;
@@ -203,7 +202,10 @@ logread(dev_t dev, struct uio *uio, int flag)
 	}
 	logsoftc.sc_state &= ~LOG_RDWAIT;
 
+#ifndef SMALL_KERNEL
 	if (mbp->msg_bufd > 0) {
+		char buf[64];
+
 		l = snprintf(buf, sizeof(buf),
 		    "<%d>klog: dropped %ld byte%s, message buffer full\n",
 		    LOG_KERN|LOG_WARNING, mbp->msg_bufd,
@@ -213,6 +215,7 @@ logread(dev_t dev, struct uio *uio, int flag)
 			return (error);
 		mbp->msg_bufd = 0;
 	}
+#endif
 
 	while (uio->uio_resid > 0) {
 		if (mbp->msg_bufx >= mbp->msg_bufr)
