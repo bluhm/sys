@@ -205,7 +205,7 @@ logread(dev_t dev, struct uio *uio, int flag)
 
 	if (mbp->msg_bufd > 0) {
 		l = snprintf(buf, sizeof(buf),
-		    "<%d>klog: dropped %ld byte%s, buffer overflow\n",
+		    "<%d>klog: dropped %ld byte%s, message buffer full\n",
 		    LOG_KERN|LOG_WARNING, mbp->msg_bufd,
                     mbp->msg_bufd == 1 ? "" : "s");
 		error = uiomove(buf, ulmin(l, sizeof(buf) - 1), uio);
