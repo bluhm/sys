@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf.c,v 1.975 2016/06/07 01:31:54 tedu Exp $ */
+/*	$OpenBSD: pf.c,v 1.977 2016/06/15 11:49:34 mpi Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -3650,7 +3650,7 @@ pf_create_state(struct pf_pdesc *pd, struct pf_rule *r, struct pf_rule *a,
 		if (act->rtableid >= 0)
 			rtid = act->rtableid;
 		s->src.state = PF_TCPS_PROXY_SRC;
-		s->src.seqhi = htonl(arc4random());
+		s->src.seqhi = arc4random();
 		/* Find mss option */
 		mss = pf_get_mss(pd);
 		mss = pf_calc_mss(pd->src, pd->af, rtid, mss);
@@ -4271,7 +4271,7 @@ pf_synproxy(struct pf_pdesc *pd, struct pf_state **state, u_short *reason)
 			}
 			(*state)->src.max_win = MAX(ntohs(th->th_win), 1);
 			if ((*state)->dst.seqhi == 1)
-				(*state)->dst.seqhi = htonl(arc4random());
+				(*state)->dst.seqhi = arc4random();
 			pf_send_tcp((*state)->rule.ptr, pd->af,
 			    &sk->addr[pd->sidx], &sk->addr[pd->didx],
 			    sk->port[pd->sidx], sk->port[pd->didx],
@@ -5762,7 +5762,7 @@ pf_route6(struct mbuf **m, struct pf_rule *r, int dir, struct ifnet *oifp,
 			ip6stat.ip6s_noroute++;
 			goto bad;
 		}
-		nd6_output(ifp, m0, dst, rt);
+		ifp->if_output(ifp, m0, sin6tosa(dst), rt);
 		rtfree(rt);
 	} else {
 		icmp6_error(m0, ICMP6_PACKET_TOO_BIG, 0, ifp->if_mtu);

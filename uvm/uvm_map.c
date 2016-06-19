@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_map.c,v 1.215 2016/06/05 08:35:57 stefan Exp $	*/
+/*	$OpenBSD: uvm_map.c,v 1.217 2016/06/17 10:48:25 dlg Exp $	*/
 /*	$NetBSD: uvm_map.c,v 1.86 2000/11/27 08:40:03 chs Exp $	*/
 
 /*
@@ -1357,7 +1357,10 @@ unlock:
 	 * uvm_map_mkentry may also create dead entries, when it attempts to
 	 * destroy free-space entries.
 	 */
-	uvm_unmap_detach(&dead, 0);
+	if (map->flags & VM_MAP_INTRSAFE)
+		uvm_unmap_detach_intrsafe(&dead);
+	else
+		uvm_unmap_detach(&dead, 0);
 out:
 	if (new)
 		uvm_mapent_free(new);
@@ -2787,11 +2790,13 @@ uvm_map_init(void)
 	/* initialize the map-related pools. */
 	pool_init(&uvm_vmspace_pool, sizeof(struct vmspace),
 	    0, 0, PR_WAITOK, "vmsppl", NULL);
+	pool_setipl(&uvm_vmspace_pool, IPL_NONE);
 	pool_init(&uvm_map_entry_pool, sizeof(struct vm_map_entry),
 	    0, 0, PR_WAITOK, "vmmpepl", NULL);
 	pool_setipl(&uvm_map_entry_pool, IPL_VM);
 	pool_init(&uvm_map_entry_kmem_pool, sizeof(struct vm_map_entry),
 	    0, 0, 0, "vmmpekpl", NULL);
+	pool_setipl(&uvm_map_entry_kmem_pool, IPL_NONE);
 	pool_sethiwat(&uvm_map_entry_pool, 8192);
 
 	uvm_addr_init();

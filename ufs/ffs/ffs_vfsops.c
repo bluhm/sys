@@ -1,4 +1,4 @@
-/*	$OpenBSD: ffs_vfsops.c,v 1.158 2016/05/23 09:31:28 natano Exp $	*/
+/*	$OpenBSD: ffs_vfsops.c,v 1.160 2016/06/19 11:54:34 natano Exp $	*/
 /*	$NetBSD: ffs_vfsops.c,v 1.19 1996/02/09 22:22:26 christos Exp $	*/
 
 /*
@@ -1295,7 +1295,7 @@ retry:
 	vp->v_flag |= VLOCKSWORK;
 #endif
 	ip = pool_get(&ffs_ino_pool, PR_WAITOK|PR_ZERO);
-	lockinit(&ip->i_lock, PINOD, "inode", 0, 0);
+	rrw_init(&ip->i_lock, "inode");
 	ip->i_ump = ump;
 	vref(ip->i_devvp);
 	vp->v_data = ip;
@@ -1522,11 +1522,14 @@ ffs_init(struct vfsconf *vfsp)
 
 	pool_init(&ffs_ino_pool, sizeof(struct inode), 0, 0, PR_WAITOK,
 	    "ffsino", NULL);
+	pool_setipl(&ffs_ino_pool, IPL_NONE);
 	pool_init(&ffs_dinode1_pool, sizeof(struct ufs1_dinode), 0, 0,
 	    PR_WAITOK, "dino1pl", NULL);
+	pool_setipl(&ffs_dinode1_pool, IPL_NONE);
 #ifdef FFS2
 	pool_init(&ffs_dinode2_pool, sizeof(struct ufs2_dinode), 0, 0,
 	    PR_WAITOK, "dino2pl", NULL);
+	pool_setipl(&ffs_dinode2_pool, IPL_NONE);
 #endif
 
 	softdep_initialize();

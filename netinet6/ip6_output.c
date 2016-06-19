@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip6_output.c,v 1.207 2016/05/19 11:34:40 jca Exp $	*/
+/*	$OpenBSD: ip6_output.c,v 1.209 2016/06/15 13:49:43 florian Exp $	*/
 /*	$KAME: ip6_output.c,v 1.172 2001/03/25 09:55:56 itojun Exp $	*/
 
 /*
@@ -692,7 +692,7 @@ reroute:
 	 * transmit packet without fragmentation
 	 */
 	if (dontfrag || (!alwaysfrag && tlen <= mtu)) {	/* case 1-a and 2-a */
-		error = nd6_output(ifp, m, dst, ro->ro_rt);
+		error = ifp->if_output(ifp, m, sin6tosa(dst), ro->ro_rt);
 		goto done;
 	}
 
@@ -767,7 +767,8 @@ reroute:
 		m->m_nextpkt = 0;
 		if (error == 0) {
 			ip6stat.ip6s_ofragments++;
-			error = nd6_output(ifp, m, dst, ro->ro_rt);
+			error = ifp->if_output(ifp, m, sin6tosa(dst),
+			    ro->ro_rt);
 		} else
 			m_freem(m);
 	}
@@ -2881,21 +2882,21 @@ ip6_output_ipsec_lookup(struct mbuf *m, int *error, struct inpcb *inp)
 	tdb = ipsp_spd_lookup(m, AF_INET6, sizeof(struct ip6_hdr),
 	    error, IPSP_DIRECTION_OUT, NULL, inp, 0);
 
-	if (tdb != NULL) {
-		/* Loop detection */
-		for (mtag = m_tag_first(m); mtag != NULL;
-		    mtag = m_tag_next(m, mtag)) {
-			if (mtag->m_tag_id != PACKET_TAG_IPSEC_OUT_DONE)
-				continue;
-			tdbi = (struct tdb_ident *)(mtag + 1);
-			if (tdbi->spi == tdb->tdb_spi &&
-			    tdbi->proto == tdb->tdb_sproto &&
-			    tdbi->rdomain == tdb->tdb_rdomain &&
-			    !bcmp(&tdbi->dst, &tdb->tdb_dst,
-			    sizeof(union sockaddr_union)))
-				tdb = NULL;
+	if (tdb == NULL)
+		return NULL;
+	/* Loop detection */
+	for (mtag = m_tag_first(m); mtag != NULL; mtag = m_tag_next(m, mtag)) {
+		if (mtag->m_tag_id != PACKET_TAG_IPSEC_OUT_DONE)
+			continue;
+		tdbi = (struct tdb_ident *)(mtag + 1);
+		if (tdbi->spi == tdb->tdb_spi &&
+		    tdbi->proto == tdb->tdb_sproto &&
+		    tdbi->rdomain == tdb->tdb_rdomain &&
+		    !memcmp(&tdbi->dst, &tdb->tdb_dst,
+		    sizeof(union sockaddr_union))) {
+			/* no IPsec needed */
+			return NULL;
 		}
-		/* We need to do IPsec */
 	}
 	return tdb;
 }

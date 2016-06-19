@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvideo.c,v 1.189 2016/06/01 12:58:59 mglocker Exp $ */
+/*	$OpenBSD: uvideo.c,v 1.192 2016/06/17 07:59:16 mglocker Exp $ */
 
 /*
  * Copyright (c) 2008 Robert Nagy <robert@openbsd.org>
@@ -123,7 +123,6 @@ int		uvideo_match(struct device *, void *, void *);
 void		uvideo_attach(struct device *, struct device *, void *);
 void		uvideo_attach_hook(struct device *);
 int		uvideo_detach(struct device *, int);
-int		uvideo_activate(struct device *, int);
 
 usbd_status	uvideo_vc_parse_desc(struct uvideo_softc *);
 usbd_status	uvideo_vc_parse_desc_header(struct uvideo_softc *,
@@ -265,11 +264,7 @@ struct cfdriver uvideo_cd = {
 };
 
 const struct cfattach uvideo_ca = {
-	sizeof(struct uvideo_softc),
-	uvideo_match,
-	uvideo_attach,
-	uvideo_detach,
-	uvideo_activate,
+	sizeof(struct uvideo_softc), uvideo_match, uvideo_attach, uvideo_detach
 };
 
 struct video_hw_if uvideo_hw_if = {
@@ -608,25 +603,6 @@ uvideo_detach(struct device *self, int flags)
 
 	if (sc->sc_videodev != NULL)
 		rv = config_detach(sc->sc_videodev, flags);
-
-	return (rv);
-}
-
-int
-uvideo_activate(struct device *self, int act)
-{
-	struct uvideo_softc *sc = (struct uvideo_softc *) self;
-	int rv = 0;
-
-	DPRINTF(1, "uvideo_activate: sc=%p\n", sc);
-
-	switch (act) {
-	case DVACT_DEACTIVATE:
-		if (sc->sc_videodev != NULL)
-			config_deactivate(sc->sc_videodev);
-		usbd_deactivate(sc->sc_udev);
-		break;
-	}
 
 	return (rv);
 }
@@ -1823,7 +1799,7 @@ uvideo_vs_open(struct uvideo_softc *sc)
 		return (USBD_INVAL);
 	}
 
-	DPRINTF(1, "%s: open pipe for bEndpointAddress=0x%02x",
+	DPRINTF(1, "%s: open pipe for bEndpointAddress=0x%02x\n",
 	    DEVNAME(sc), sc->sc_vs_cur->endpoint);
 	error = usbd_open_pipe(
 	    sc->sc_vs_cur->ifaceh,
@@ -1859,7 +1835,7 @@ uvideo_vs_close(struct uvideo_softc *sc)
 {
 	if (sc->sc_vs_cur->bulk_running == 1) {
 		sc->sc_vs_cur->bulk_running = 0;
-		(void)tsleep(&sc->sc_vs_cur->bulk_running, 0, "vid_close", 0);
+		usbd_ref_wait(sc->sc_udev);
 	}
 
 	if (sc->sc_vs_cur->pipeh) {
@@ -1934,6 +1910,7 @@ uvideo_vs_start_bulk_thread(void *arg)
 	usbd_status error;
 	int size;
 
+	usbd_ref_incr(sc->sc_udev);
 	while (sc->sc_vs_cur->bulk_running) {
 		size = UGETDW(sc->sc_desc_probe.dwMaxPayloadTransferSize);
 
@@ -1958,7 +1935,7 @@ uvideo_vs_start_bulk_thread(void *arg)
 		(void)sc->sc_decode_stream_header(sc,
 		    sc->sc_vs_cur->bxfer.buf, size);
 	}
-	wakeup(&sc->sc_vs_cur->bulk_running);
+	usbd_ref_decr(sc->sc_udev);
 
 	kthread_exit(0);
 }

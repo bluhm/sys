@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf_norm.c,v 1.186 2016/05/31 07:35:36 mpi Exp $ */
+/*	$OpenBSD: pf_norm.c,v 1.188 2016/06/15 11:49:34 mpi Exp $ */
 
 /*
  * Copyright 2001 Niels Provos <provos@citi.umich.edu>
@@ -761,7 +761,7 @@ pf_refragment6(struct mbuf **m0, struct m_tag *mtag, struct sockaddr_in6 *dst,
 			if (ifp == NULL) {
 				ip6_forward(m, 0);
 			} else if ((u_long)m->m_pkthdr.len <= ifp->if_mtu) {
-				nd6_output(ifp, m, dst, rt);
+				ifp->if_output(ifp, m, sin6tosa(dst), rt);
 			} else {
 				icmp6_error(m, ICMP6_PACKET_TOO_BIG, 0,
 				    ifp->if_mtu);
@@ -963,8 +963,7 @@ pf_normalize_tcp_init(struct pf_pdesc *pd, struct pf_state_peer *src)
 				if (opt[1] >= TCPOLEN_TIMESTAMP) {
 					src->scrub->pfss_flags |=
 					    PFSS_TIMESTAMP;
-					src->scrub->pfss_ts_mod =
-					    htonl(arc4random());
+					src->scrub->pfss_ts_mod = arc4random();
 
 					/* note PFSS_PAWS not set yet */
 					memcpy(&tsval, &opt[2],
