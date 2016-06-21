@@ -671,7 +671,9 @@ pf_state_key_attach(struct pf_state_key *sk, struct pf_state *s, int idx)
 			     si->s->direction != s->direction))) {
 				if (sk->proto == IPPROTO_TCP &&
 				    si->s->src.state >= TCPS_FIN_WAIT_2 &&
-				    si->s->dst.state >= TCPS_FIN_WAIT_2) {
+				    si->s->dst.state >= TCPS_FIN_WAIT_2 &&
+				    ((si->s->state_flags & PFSTATE_SLOPPY) ||
+				    SEQ_GT(s->src.seqlo, si->s->src.seqlo))) {
 					si->s->src.state = si->s->dst.state =
 					    TCPS_CLOSED;
 					/* remove late or sks can go away */
