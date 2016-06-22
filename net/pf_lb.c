@@ -156,6 +156,8 @@ pf_get_sport(struct pf_pdesc *pd, struct pf_rule *r,
 	struct pf_addr		init_addr;
 	u_int16_t		cut;
 	int			dir = (pd->dir == PF_IN) ? PF_OUT : PF_IN;
+	int			sidx = pd->sidx;
+	int			didx = pd->didx;
 
 	bzero(&init_addr, sizeof(init_addr));
 	if (pf_map_addr(pd->naf, r, &pd->nsaddr, naddr, &init_addr, sn, &r->nat,
@@ -183,9 +185,9 @@ pf_get_sport(struct pf_pdesc *pd, struct pf_rule *r,
 		key.af = pd->naf;
 		key.proto = pd->proto;
 		key.rdomain = pd->rdomain;
-		PF_ACPY(&key.addr[pd->didx], &pd->ndaddr, key.af);
-		PF_ACPY(&key.addr[pd->sidx], naddr, key.af);
-		key.port[pd->didx] = pd->ndport;
+		PF_ACPY(&key.addr[didx], &pd->ndaddr, key.af);
+		PF_ACPY(&key.addr[sidx], naddr, key.af);
+		key.port[didx] = pd->ndport;
 
 		/*
 		 * port search; start random, step;
@@ -195,19 +197,19 @@ pf_get_sport(struct pf_pdesc *pd, struct pf_rule *r,
 		    pd->proto == IPPROTO_ICMP || pd->proto == IPPROTO_ICMPV6)) {
 			/* XXX bug: icmp states dont use the id on both
 			 * XXX sides (traceroute -I through nat) */
-			key.port[pd->sidx] = pd->nsport;
+			key.port[sidx] = pd->nsport;
 			if (pf_find_state_all(&key, dir, NULL) == NULL) {
 				*nport = pd->nsport;
 				return (0);
 			}
 		} else if (low == 0 && high == 0) {
-			key.port[pd->sidx] = pd->nsport;
+			key.port[sidx] = pd->nsport;
 			if (pf_find_state_all(&key, dir, NULL) == NULL) {
 				*nport = pd->nsport;
 				return (0);
 			}
 		} else if (low == high) {
-			key.port[pd->sidx] = htons(low);
+			key.port[sidx] = htons(low);
 			if (pf_find_state_all(&key, dir, NULL) == NULL) {
 				*nport = htons(low);
 				return (0);
@@ -224,7 +226,7 @@ pf_get_sport(struct pf_pdesc *pd, struct pf_rule *r,
 			cut = arc4random_uniform(1 + high - low) + low;
 			/* low <= cut <= high */
 			for (tmp = cut; tmp <= high; ++(tmp)) {
-				key.port[pd->sidx] = htons(tmp);
+				key.port[sidx] = htons(tmp);
 				if (pf_find_state_all(&key, dir, NULL) ==
 				    NULL && !in_baddynamic(tmp, pd->proto)) {
 					*nport = htons(tmp);
@@ -232,7 +234,7 @@ pf_get_sport(struct pf_pdesc *pd, struct pf_rule *r,
 				}
 			}
 			for (tmp = cut - 1; tmp >= low; --(tmp)) {
-				key.port[pd->sidx] = htons(tmp);
+				key.port[sidx] = htons(tmp);
 				if (pf_find_state_all(&key, dir, NULL) ==
 				    NULL && !in_baddynamic(tmp, pd->proto)) {
 					*nport = htons(tmp);
