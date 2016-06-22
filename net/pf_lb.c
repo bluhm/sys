@@ -155,6 +155,7 @@ pf_get_sport(struct pf_pdesc *pd, struct pf_rule *r,
 	struct pf_state_key_cmp	key;
 	struct pf_addr		init_addr;
 	u_int16_t		cut;
+	int			dir = (pd->dir == PF_IN) ? PF_OUT : PF_IN;
 
 	bzero(&init_addr, sizeof(init_addr));
 	if (pf_map_addr(pd->naf, r, &pd->nsaddr, naddr, &init_addr, sn, &r->nat,
@@ -195,19 +196,19 @@ pf_get_sport(struct pf_pdesc *pd, struct pf_rule *r,
 			/* XXX bug: icmp states dont use the id on both
 			 * XXX sides (traceroute -I through nat) */
 			key.port[1] = pd->nsport;
-			if (pf_find_state_all(&key, PF_IN, NULL) == NULL) {
+			if (pf_find_state_all(&key, dir, NULL) == NULL) {
 				*nport = pd->nsport;
 				return (0);
 			}
 		} else if (low == 0 && high == 0) {
 			key.port[1] = pd->nsport;
-			if (pf_find_state_all(&key, PF_IN, NULL) == NULL) {
+			if (pf_find_state_all(&key, dir, NULL) == NULL) {
 				*nport = pd->nsport;
 				return (0);
 			}
 		} else if (low == high) {
 			key.port[1] = htons(low);
-			if (pf_find_state_all(&key, PF_IN, NULL) == NULL) {
+			if (pf_find_state_all(&key, dir, NULL) == NULL) {
 				*nport = htons(low);
 				return (0);
 			}
@@ -224,7 +225,7 @@ pf_get_sport(struct pf_pdesc *pd, struct pf_rule *r,
 			/* low <= cut <= high */
 			for (tmp = cut; tmp <= high; ++(tmp)) {
 				key.port[1] = htons(tmp);
-				if (pf_find_state_all(&key, PF_IN, NULL) ==
+				if (pf_find_state_all(&key, dir, NULL) ==
 				    NULL && !in_baddynamic(tmp, pd->proto)) {
 					*nport = htons(tmp);
 					return (0);
@@ -232,7 +233,7 @@ pf_get_sport(struct pf_pdesc *pd, struct pf_rule *r,
 			}
 			for (tmp = cut - 1; tmp >= low; --(tmp)) {
 				key.port[1] = htons(tmp);
-				if (pf_find_state_all(&key, PF_IN, NULL) ==
+				if (pf_find_state_all(&key, dir, NULL) ==
 				    NULL && !in_baddynamic(tmp, pd->proto)) {
 					*nport = htons(tmp);
 					return (0);
