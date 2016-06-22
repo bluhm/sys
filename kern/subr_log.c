@@ -212,7 +212,7 @@ logread(dev_t dev, struct uio *uio, int flag)
                     mbp->msg_bufd == 1 ? "" : "s");
 		error = uiomove(buf, ulmin(l, sizeof(buf) - 1), uio);
 		if (error)
-			return (error);
+			goto out;
 		mbp->msg_bufd = 0;
 	}
 #endif
