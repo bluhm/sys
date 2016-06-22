@@ -1095,6 +1095,17 @@ pf_find_state_all(struct pf_state_key_cmp *key, u_int dir, int *more)
 			if (dir == PF_INOUT ||
 			    (sk == (dir == PF_IN ? si->s->key[PF_SK_WIRE] :
 			    si->s->key[PF_SK_STACK]))) {
+				if (pf_status.debug >= LOG_DEBUG) {
+					log(LOG_DEBUG,
+					    "pf: found %s state on %s: ",
+					    (dir == PF_IN) ? "wire" :
+					    (dir == PF_OUT) ? "stack" : "any",
+					    si->s->kif->pfik_name);
+					pf_print_state_parts(si->s,
+					    (dir != PF_OUT) ?  sk : NULL,
+					    (dir != PF_IN) ?  sk : NULL);
+					addlog("\n");
+				}
 				if (more == NULL)
 					return (si->s);
 
