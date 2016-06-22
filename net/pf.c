@@ -1076,6 +1076,18 @@ pf_find_state_all(struct pf_state_key_cmp *key, u_int dir, int *more)
 
 	pf_status.fcounters[FCNT_STATE_SEARCH]++;
 
+	if (pf_status.debug >= LOG_DEBUG) {
+		log(LOG_DEBUG,
+		    "pf: find state all dir=%s, af=%u, key0: ",
+		    dir == PF_IN ? "in" : dir == PF_OUT ? "out" : "any",
+		    key->af);
+		pf_print_host(&key->addr[0], key->port[0], key->af);
+		addlog(", key1: ");
+		pf_print_host(&key->addr[1], key->port[1], key->af);
+		addlog(", proto=%u", key->proto);
+		addlog("\n");
+	}
+
 	sk = RB_FIND(pf_state_tree, &pf_statetbl, (struct pf_state_key *)key);
 
 	if (sk != NULL) {
