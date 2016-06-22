@@ -155,9 +155,9 @@ pf_get_sport(struct pf_pdesc *pd, struct pf_rule *r,
 	struct pf_state_key_cmp	key;
 	struct pf_addr		init_addr;
 	u_int16_t		cut;
-	int			dir = (pd->dir == PF_IN) ? PF_OUT : PF_IN;
-	int			sidx = pd->sidx;
-	int			didx = pd->didx;
+	int			dir = pd->dir == PF_IN ? PF_OUT : PF_IN;
+	int			sidx = pd->af == pd->naf ? pd->sidx : pd->didx;
+	int			didx = pd->af == pd->naf ? pd->didx : pd->sidx;
 
 	bzero(&init_addr, sizeof(init_addr));
 	if (pf_map_addr(pd->naf, r, &pd->nsaddr, naddr, &init_addr, sn, &r->nat,
