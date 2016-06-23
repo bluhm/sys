@@ -378,15 +378,16 @@ sys_sendsyslog(struct proc *p, void *v, register_t *retval)
 	} */ *uap = v;
 	int error;
 	static int dropped_count, orig_error;
-	int len;
-	char buf[64];
 
 	if (dropped_count) {
-		len = snprintf(buf, sizeof(buf),
+		size_t l;
+		char buf[64];
+
+		l = snprintf(buf, sizeof(buf),
 		    "<%d>sendsyslog: dropped %d message%s, error %d",
 		    LOG_KERN|LOG_WARNING, dropped_count,
 		    dropped_count == 1 ? "" : "s", orig_error);
-		error = dosendsyslog(p, buf, MIN((size_t)len, sizeof(buf) - 1),
+		error = dosendsyslog(p, buf, ulmin(l, sizeof(buf) - 1),
 		    0, UIO_SYSSPACE);
 		if (error == 0)
 			dropped_count = 0;
