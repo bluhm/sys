@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_iwm.c,v 1.88 2016/06/19 12:05:25 stsp Exp $	*/
+/*	$OpenBSD: if_iwm.c,v 1.92 2016/06/22 11:32:12 stsp Exp $	*/
 
 /*
  * Copyright (c) 2014, 2016 genua gmbh <info@genua.de>
@@ -2161,7 +2161,7 @@ iwm_send_phy_db_cmd(struct iwm_softc *sc, uint16_t type,
 	struct iwm_phy_db_cmd phy_db_cmd;
 	struct iwm_host_cmd cmd = {
 		.id = IWM_PHY_DB_CMD,
-		.flags = IWM_CMD_SYNC,
+		.flags = IWM_CMD_ASYNC,
 	};
 
 	DPRINTFN(10, ("Sending PHY-DB hcmd of type %d, of length %d\n", type, length));
@@ -4376,7 +4376,8 @@ iwm_tx_fill_cmd(struct iwm_softc *sc, struct iwm_node *in,
 	tx->rts_retry_limit = IWM_RTS_DFAULT_RETRY_LIMIT;
 	tx->data_retry_limit = IWM_DEFAULT_TX_RETRY;
 
-	if (type != IEEE80211_FC0_TYPE_DATA) {
+	if (IEEE80211_IS_MULTICAST(wh->i_addr1) ||
+	    type != IEEE80211_FC0_TYPE_DATA) {
 		/* for non-data, use the lowest supported rate */
 		ridx = (IEEE80211_IS_CHAN_5GHZ(ni->ni_chan)) ?
 		    IWM_RIDX_OFDM : IWM_RIDX_CCK;
@@ -4393,7 +4394,8 @@ iwm_tx_fill_cmd(struct iwm_softc *sc, struct iwm_node *in,
 			ridx = iwm_mcs2ridx[ni->ni_txmcs];
 			return &iwm_rates[ridx];
 		}
-		ridx = 0;
+		ridx = (IEEE80211_IS_CHAN_5GHZ(ni->ni_chan)) ?
+		    IWM_RIDX_OFDM : IWM_RIDX_CCK;
 		for (i = 0; i < nrates; i++) {
 			if (iwm_rates[i].rate == (ni->ni_txrate &
 			    IEEE80211_RATE_VAL)) {
@@ -5723,58 +5725,14 @@ iwm_mvm_mac_ctxt_cmd_fill_sta(struct iwm_softc *sc, struct iwm_node *in,
 	struct iwm_mac_data_sta *ctxt_sta, int force_assoc_off)
 {
 	struct ieee80211_node *ni = &in->in_ni;
-	unsigned dtim_period, dtim_count;
 	struct ieee80211com *ic = &sc->sc_ic;
 
-	/* will this work? */
-	dtim_period = ic->ic_dtim_period;
-	dtim_count = ic->ic_dtim_count;
-	DPRINTF(("dtim %d %d\n", dtim_period, dtim_count));
-
-	/* We need the dtim_period to set the MAC as associated */
-	if (in->in_assoc && dtim_period && !force_assoc_off) {
-		uint64_t tsf;
-		uint32_t dtim_offs;
-
-		/*
-		 * The DTIM count counts down, so when it is N that means N
-		 * more beacon intervals happen until the DTIM TBTT. Therefore
-		 * add this to the current time. If that ends up being in the
-		 * future, the firmware will handle it.
-		 *
-		 * Also note that the system_timestamp (which we get here as
-		 * "sync_device_ts") and TSF timestamp aren't at exactly the
-		 * same offset in the frame -- the TSF is at the first symbol
-		 * of the TSF, the system timestamp is at signal acquisition
-		 * time. This means there's an offset between them of at most
-		 * a few hundred microseconds (24 * 8 bits + PLCP time gives
-		 * 384us in the longest case), this is currently not relevant
-		 * as the firmware wakes up around 2ms before the TBTT.
-		 */
-		dtim_offs = dtim_count * ni->ni_intval;
-		/* convert TU to usecs */
-		dtim_offs *= 1024;
-
-		/* XXX: byte order? */
-		memcpy(&tsf, ni->ni_tstamp, sizeof(tsf));
-
-		ctxt_sta->dtim_tsf = htole64(tsf + dtim_offs);
-		ctxt_sta->dtim_time = htole64(ni->ni_rstamp + dtim_offs);
-
-		DPRINTF(("DTIM TBTT is 0x%llx/0x%x, offset %d\n",
-		    (long long)le64toh(ctxt_sta->dtim_tsf),
-		    le32toh(ctxt_sta->dtim_time), dtim_offs));
-
-		ctxt_sta->is_assoc = htole32(1);
-	} else {
-		ctxt_sta->is_assoc = htole32(0);
-	}
-
+	ctxt_sta->is_assoc = htole32(0);
 	ctxt_sta->bi = htole32(ni->ni_intval);
 	ctxt_sta->bi_reciprocal = htole32(iwm_mvm_reciprocal(ni->ni_intval));
-	ctxt_sta->dtim_interval = htole32(ni->ni_intval * dtim_period);
+	ctxt_sta->dtim_interval = htole32(ni->ni_intval * ic->ic_dtim_period);
 	ctxt_sta->dtim_reciprocal =
-	    htole32(iwm_mvm_reciprocal(ni->ni_intval * dtim_period));
+	    htole32(iwm_mvm_reciprocal(ni->ni_intval * ic->ic_dtim_period));
 
 	/* 10 = CONN_MAX_LISTEN_INTERVAL */
 	ctxt_sta->listen_interval = htole32(10);
@@ -6124,7 +6082,7 @@ iwm_setrates(struct iwm_node *in)
 	struct iwm_softc *sc = IC2IFP(ic)->if_softc;
 	struct iwm_lq_cmd *lq = &in->in_lq;
 	struct ieee80211_rateset *rs = &ni->ni_rates;
-	int i, ridx, j, tab = 0;
+	int i, ridx, ridx_min, j, tab = 0;
 	struct iwm_host_cmd cmd = {
 		.id = IWM_LQ_CMD,
 		.len = { sizeof(in->in_lq), },
@@ -6148,7 +6106,9 @@ iwm_setrates(struct iwm_node *in)
 	 * legacy/HT are assumed to be marked with an 'invalid' PLCP value.
 	 */
 	j = 0;
-	for (ridx = IWM_RIDX_MAX; ridx >= 0; ridx--) {
+	ridx_min = (IEEE80211_IS_CHAN_5GHZ(ni->ni_chan)) ?
+	    IWM_RIDX_OFDM : IWM_RIDX_CCK;
+	for (ridx = IWM_RIDX_MAX; ridx >= ridx_min; ridx--) {
 		if (j >= nitems(lq->rs_table))
 			break;
 		tab = 0;
@@ -6877,6 +6837,7 @@ iwm_stop(struct ifnet *ifp, int disable)
 {
 	struct iwm_softc *sc = ifp->if_softc;
 	struct ieee80211com *ic = &sc->sc_ic;
+	struct iwm_node *in = (void *)ic->ic_bss;
 
 	sc->sc_flags &= ~IWM_FLAG_HW_INITED;
 	sc->sc_flags |= IWM_FLAG_STOPPED;
@@ -6884,6 +6845,9 @@ iwm_stop(struct ifnet *ifp, int disable)
 	ic->ic_scan_lock = IEEE80211_SCAN_UNLOCKED;
 	ifp->if_flags &= ~IFF_RUNNING;
 	ifq_clr_oactive(&ifp->if_snd);
+
+	in->in_phyctxt = NULL;
+	in->in_assoc = 0;
 
 	task_del(systq, &sc->init_task);
 	task_del(sc->sc_nswq, &sc->newstate_task);
