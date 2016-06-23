@@ -202,7 +202,6 @@ logread(dev_t dev, struct uio *uio, int flag)
 	}
 	logsoftc.sc_state &= ~LOG_RDWAIT;
 
-#ifndef SMALL_KERNEL
 	if (mbp->msg_bufd > 0) {
 		char buf[64];
 
@@ -215,7 +214,6 @@ logread(dev_t dev, struct uio *uio, int flag)
 			goto out;
 		mbp->msg_bufd = 0;
 	}
-#endif
 
 	while (uio->uio_resid > 0) {
 		if (mbp->msg_bufx >= mbp->msg_bufr)
