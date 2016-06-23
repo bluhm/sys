@@ -377,7 +377,6 @@ sys_sendsyslog(struct proc *p, void *v, register_t *retval)
 		syscallarg(int) flags;
 	} */ *uap = v;
 	int error;
-#ifndef SMALL_KERNEL
 	static int dropped_count, orig_error;
 	int len;
 	char buf[64];
@@ -392,15 +391,12 @@ sys_sendsyslog(struct proc *p, void *v, register_t *retval)
 		if (error == 0)
 			dropped_count = 0;
 	}
-#endif
 	error = dosendsyslog(p, SCARG(uap, buf), SCARG(uap, nbyte),
 	    SCARG(uap, flags), UIO_USERSPACE);
-#ifndef SMALL_KERNEL
 	if (error) {
 		dropped_count++;
 		orig_error = error;
 	}
-#endif
 	return (error);
 }
 
