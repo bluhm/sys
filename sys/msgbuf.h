@@ -33,7 +33,7 @@
  */
 
 struct	msgbuf {
-#define	MSG_MAGIC	0x063061
+#define	MSG_MAGIC	0x063062
 	long	msg_magic;
 	long	msg_bufx;		/* write pointer */
 	long	msg_bufr;		/* read pointer */
