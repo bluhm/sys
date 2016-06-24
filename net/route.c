@@ -153,6 +153,7 @@ struct pool		rtentry_pool;	/* pool for rtentry structures */
 struct pool		rttimer_pool;	/* pool for rttimer structures */
 
 void	rt_timer_init(void);
+void	rt_setgwroute(struct rtentry *, u_int);
 int	rtflushclone1(struct rtentry *, void *, u_int);
 void	rtflushclone(unsigned int, struct rtentry *);
 int	rt_if_remove_rtdelete(struct rtentry *, void *, u_int);
@@ -368,7 +369,7 @@ rtalloc(struct sockaddr *dst, int flags, unsigned int rtableid)
 struct rtentry *
 _rtalloc(struct sockaddr *dst, uint32_t *src, int flags, unsigned int rtableid)
 {
-	struct rtentry *rt, *nhrt;
+	struct rtentry *rt;
 
 	rt = rt_match(dst, src, flags, rtableid);
 
@@ -379,6 +380,16 @@ _rtalloc(struct sockaddr *dst, uint32_t *src, int flags, unsigned int rtableid)
 	/* Nothing to do if the next hop is valid. */
 	if (rtisvalid(rt->rt_gwroute))
 		return (rt);
+
+	rt_setgwroute(rt, rtableid);
+
+	return (rt);
+}
+
+void
+rt_setgwroute(struct rtentry *rt, u_int rtableid)
+{
+	struct rtentry *nhrt;
 
 	rtfree(rt->rt_gwroute);
 	rt->rt_gwroute = NULL;
@@ -391,10 +402,9 @@ _rtalloc(struct sockaddr *dst, uint32_t *src, int flags, unsigned int rtableid)
 	 * this behavior.  But it is safe since rt_checkgate() wont
 	 * allow us to us this route later on.
 	 */
-	nhrt = rt_match(rt->rt_gateway, NULL, flags | RT_RESOLVE,
-	    rtable_l2(rtableid));
+	nhrt = rt_match(rt->rt_gateway, NULL, RT_RESOLVE, rtable_l2(rtableid));
 	if (nhrt == NULL)
-		return (rt);
+		return;
 
 	/*
 	 * Next hop must be reachable, this also prevents rtentry
@@ -402,13 +412,13 @@ _rtalloc(struct sockaddr *dst, uint32_t *src, int flags, unsigned int rtableid)
 	 */
 	if (ISSET(nhrt->rt_flags, RTF_CLONING|RTF_GATEWAY)) {
 		rtfree(nhrt);
-		return (rt);
+		return;
 	}
 
 	/* Next hop entry must be UP and on the same interface. */
 	if (!ISSET(nhrt->rt_flags, RTF_UP) || nhrt->rt_ifidx != rt->rt_ifidx) {
 		rtfree(nhrt);
-		return (rt);
+		return;
 	}
 
 	/*
@@ -423,8 +433,6 @@ _rtalloc(struct sockaddr *dst, uint32_t *src, int flags, unsigned int rtableid)
 	 * do the magic for us.
 	 */
 	rt->rt_gwroute = nhrt;
-
-	return (rt);
 }
 
 void
