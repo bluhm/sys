@@ -1192,8 +1192,8 @@ rt_setgate(struct rtentry *rt, struct sockaddr *gate, u_int rtableid)
 	}
 	memmove(rt->rt_gateway, gate, glen);
 
-	rtfree(rt->rt_gwroute);
-	rt->rt_gwroute = NULL;
+	if (ISSET(rt->rt_flags, RTF_GATEWAY))
+		rt_setgwroute(rt, rtableid);
 
 	return (0);
 }
