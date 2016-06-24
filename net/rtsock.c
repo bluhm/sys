@@ -748,7 +748,8 @@ report:
 				ifa = info.rti_ifa;
 			}
 			if (info.rti_info[RTAX_GATEWAY] != NULL && (error =
-			    rt_setgate(rt, info.rti_info[RTAX_GATEWAY])))
+			    rt_setgate(rt, info.rti_info[RTAX_GATEWAY],
+			    tableid)))
 				goto flush;
 			if (ifa) {
 				if (rt->rt_ifa != ifa) {

@@ -601,7 +601,7 @@ create:
 			flags |= RTF_MODIFIED;
 			prio = rt->rt_priority;
 			stat = &rtstat.rts_newgateway;
-			rt_setgate(rt, gateway);
+			rt_setgate(rt, gateway, rdomain);
 		}
 	} else
 		error = EHOSTUNREACH;
@@ -1094,7 +1094,8 @@ rtrequest(int req, struct rt_addrinfo *info, u_int8_t prio,
 		 * the routing table because the radix MPATH code use
 		 * it to (re)order routes.
 		 */
-		if ((error = rt_setgate(rt, info->rti_info[RTAX_GATEWAY]))) {
+		if ((error = rt_setgate(rt, info->rti_info[RTAX_GATEWAY],
+		    tableid))) {
 			ifafree(ifa);
 			rtfree(rt->rt_parent);
 			rtfree(rt->rt_gwroute);
@@ -1154,7 +1155,7 @@ rtrequest(int req, struct rt_addrinfo *info, u_int8_t prio,
 }
 
 int
-rt_setgate(struct rtentry *rt, struct sockaddr *gate)
+rt_setgate(struct rtentry *rt, struct sockaddr *gate, u_int rtableid)
 {
 	int glen = ROUNDUP(gate->sa_len);
 	struct sockaddr *sa;
