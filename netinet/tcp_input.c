@@ -3627,7 +3627,7 @@ syn_cache_get(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 {
 	struct syn_cache *sc;
 	struct syn_cache_head *scp;
-	struct inpcb *inp = NULL;
+	struct inpcb *inp, *oldinp;
 	struct tcpcb *tp = NULL;
 	struct mbuf *am;
 	int s;
@@ -3670,7 +3670,8 @@ syn_cache_get(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 	if (so == NULL)
 		goto resetandabort;
 
-	inp = sotoinpcb(oso);
+	oldinp = sotoinpcb(oso);
+	inp = sotoinpcb(so);
 
 #ifdef IPSEC
 	/*
@@ -3678,30 +3679,18 @@ syn_cache_get(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 	 * from the old pcb. Ditto for any other
 	 * IPsec-related information.
 	 */
-	{
-	  struct inpcb *newinp = sotoinpcb(so);
-	  memcpy(newinp->inp_seclevel, inp->inp_seclevel,
-	      sizeof(inp->inp_seclevel));
-	}
+	memcpy(inp->inp_seclevel, oldinp->inp_seclevel,
+	    sizeof(oldinp->inp_seclevel));
 #endif /* IPSEC */
 #ifdef INET6
 	/*
 	 * inp still has the OLD in_pcb stuff, set the
 	 * v6-related flags on the new guy, too.
 	 */
-	{
-	  int flags = inp->inp_flags;
-	  struct inpcb *oldinpcb = inp;
-
-	  inp = sotoinpcb(so);
-	  inp->inp_flags |= (flags & INP_IPV6);
-	  if ((inp->inp_flags & INP_IPV6) != 0) {
-	    inp->inp_ipv6.ip6_hlim =
-	      oldinpcb->inp_ipv6.ip6_hlim;
-	  }
+	inp->inp_flags |= (oldinp->inp_flags & INP_IPV6);
+	if (ISSET(inp->inp_flags, INP_IPV6)) {
+		inp->inp_ipv6.ip6_hlim = oldinp->inp_ipv6.ip6_hlim;
 	}
-#else /* INET6 */
-	inp = sotoinpcb(so);
 #endif /* INET6 */
 
 #if NPF > 0
