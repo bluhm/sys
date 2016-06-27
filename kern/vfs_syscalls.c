@@ -1,4 +1,4 @@
-/*	$OpenBSD: vfs_syscalls.c,v 1.256 2016/06/01 22:54:45 millert Exp $	*/
+/*	$OpenBSD: vfs_syscalls.c,v 1.259 2016/06/27 04:26:41 semarie Exp $	*/
 /*	$NetBSD: vfs_syscalls.c,v 1.71 1996/04/23 10:29:02 mycroft Exp $	*/
 
 /*
@@ -1254,7 +1254,8 @@ domknodat(struct proc *p, int fd, const char *path, mode_t mode, dev_t dev)
 			break;
 		case S_IFIFO:
 #ifndef FIFO
-			return (EOPNOTSUPP);
+			error = EOPNOTSUPP;
+			break;
 #else
 			if (dev == 0) {
 				vattr.va_type = VFIFO;
@@ -2331,13 +2332,17 @@ dovutimens(struct proc *p, struct vnode *vp, struct timespec ts[2])
 	}
 
 	if (ts[0].tv_nsec != UTIME_OMIT) {
-		if (ts[0].tv_nsec < 0 || ts[0].tv_nsec >= 1000000000)
+		if (ts[0].tv_nsec < 0 || ts[0].tv_nsec >= 1000000000) {
+			vrele(vp);
 			return (EINVAL);
+		}
 		vattr.va_atime = ts[0];
 	}
 	if (ts[1].tv_nsec != UTIME_OMIT) {
-		if (ts[1].tv_nsec < 0 || ts[1].tv_nsec >= 1000000000)
+		if (ts[1].tv_nsec < 0 || ts[1].tv_nsec >= 1000000000) {
+			vrele(vp);
 			return (EINVAL);
+		}
 		vattr.va_mtime = ts[1];
 	}
 
@@ -2795,8 +2800,10 @@ sys_revoke(struct proc *p, void *v, register_t *retval)
 		return (error);
 	vp = nd.ni_vp;
 	if (vp->v_type != VCHR || (u_int)major(vp->v_rdev) >= nchrdev ||
-	    cdevsw[major(vp->v_rdev)].d_type != D_TTY)
-		return (ENOTTY);
+	    cdevsw[major(vp->v_rdev)].d_type != D_TTY) {
+		error = ENOTTY;
+		goto out;
+	}
 	if ((error = VOP_GETATTR(vp, &vattr, p->p_ucred, p)) != 0)
 		goto out;
 	if (p->p_ucred->cr_uid != vattr.va_uid &&
