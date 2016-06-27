@@ -633,8 +633,17 @@ findpcb:
 	KASSERT(intotcpcb(inp) == NULL || intotcpcb(inp)->t_inpcb == inp);
 
 	/* Check the minimum TTL for socket. */
-	if (inp->inp_ip_minttl && inp->inp_ip_minttl > ip->ip_ttl)
-		goto drop;
+	switch (af) {
+	case AF_INET:
+		if (inp->inp_ip_minttl && inp->inp_ip_minttl > ip->ip_ttl)
+			goto drop;
+#ifdef INET6
+	case AF_INET6:
+		if (inp->inp_ip6_minhlim && inp->inp_ip6_minhlim > ip6->ip6_hlim)
+			goto drop;
+		break;
+#endif
+	}
 
 	tp = intotcpcb(inp);
 	if (tp == NULL)
