@@ -3688,7 +3688,7 @@ syn_cache_get(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 	 * v6-related flags on the new guy, too.
 	 */
 	inp->inp_flags |= (oldinp->inp_flags & INP_IPV6);
-	if (ISSET(inp->inp_flags, INP_IPV6)) {
+	if (inp->inp_flags & INP_IPV6) {
 		inp->inp_ipv6.ip6_hlim = oldinp->inp_ipv6.ip6_hlim;
 	}
 #endif /* INET6 */
