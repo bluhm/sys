@@ -132,6 +132,7 @@ struct inpcb {
 #define SL_ESP_NETWORK    2             /* ESP network (encapsulation) level */
 #define SL_IPCOMP         3             /* Compression level */
 	u_char	inp_ip_minttl;		/* minimum TTL or drop */
+#define inp_ip6_minhlim inp_ip_minttl	/* minimum Hop Limit or drop */
 #define	inp_flowinfo	inp_hu.hu_ipv6.ip6_flow
 
 	int	inp_cksum6;

@@ -346,6 +346,7 @@ struct route_in6 {
 #define IPV6_PIPEX		63   /* bool; using PIPEX */
 
 #define IPV6_RECVDSTPORT	64   /* bool; receive IP dst port w/dgram */
+#define IPV6_MINHOPCOUNT	65   /* int; minimum recv hop limit */
 
 #define IPV6_RTABLE		0x1021	/* int; routing table, see SO_RTABLE */
 
