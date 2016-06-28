@@ -980,6 +980,7 @@ icmp6_mtudisc_update(struct ip6ctlparam *ip6cp, int validated)
 	u_int mtu = ntohl(icmp6->icmp6_mtu);
 	struct rtentry *rt = NULL;
 	struct sockaddr_in6 sin6;
+	int locked = 0;
 
 	/*
 	 * The MTU may not be less then the minimal IPv6 MTU except for the
@@ -1028,11 +1029,12 @@ icmp6_mtudisc_update(struct ip6ctlparam *ip6cp, int validated)
 	    	ifp = if_get(rt->rt_ifidx);
 		if (ifp != NULL && mtu < ifp->if_mtu) {
 			icmp6stat.icp6s_pmtuchg++;
+			locked = 1;
+			rt->rt_rmx.rmx_locks |= RTV_MTU;
 			rt->rt_rmx.rmx_mtu = mtu;
 		}
 		if_put(ifp);
 	}
-	rtfree(rt);
 
 	/*
 	 * Notify protocols that the MTU for this destination
@@ -1041,6 +1043,10 @@ icmp6_mtudisc_update(struct ip6ctlparam *ip6cp, int validated)
 	for (mc = LIST_FIRST(&icmp6_mtudisc_callbacks); mc != NULL;
 	     mc = LIST_NEXT(mc, mc_list))
 		(*mc->mc_func)(&sin6, m->m_pkthdr.ph_rtableid);
+
+	if (locked)
+		rt->rt_rmx.rmx_locks &= ~RTV_MTU;
+	rtfree(rt);
 }
 
 /*
