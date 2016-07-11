@@ -1,4 +1,4 @@
-/*	$OpenBSD: in6_src.c,v 1.74 2016/06/30 12:36:27 mpi Exp $	*/
+/*	$OpenBSD: in6_src.c,v 1.76 2016/07/05 10:17:14 mpi Exp $	*/
 /*	$KAME: in6_src.c,v 1.36 2001/02/06 04:08:17 itojun Exp $	*/
 
 /*
@@ -130,8 +130,8 @@ in6_selectsrc(struct in6_addr **in6src, struct sockaddr_in6 *dstsock,
 		if_put(ifp); /* put reference from in6_selectif */
 
 		ia6 = ifatoia6(ifa_ifwithaddr(sin6tosa(&sa6), rtableid));
-		if (ia6 == NULL ||
-		    (ia6->ia6_flags & (IN6_IFF_ANYCAST | IN6_IFF_NOTREADY)))
+		if (ia6 == NULL || (ia6->ia6_flags &
+		     (IN6_IFF_ANYCAST|IN6_IFF_TENTATIVE|IN6_IFF_DUPLICATED)))
 			return (EADDRNOTAVAIL);
 
 		pi->ipi6_addr = sa6.sin6_addr; /* XXX: this overrides pi */
@@ -257,11 +257,8 @@ in6_selectsrc(struct in6_addr **in6src, struct sockaddr_in6 *dstsock,
 				ia6 = in6_ifawithscope(ifp, dst, rtableid);
 				if_put(ifp);
 			}
-			if (ia6 == NULL) { /* xxx scope error ?*/
-				*in6src =
-				    &satosin6(ro->ro_rt->rt_addr)->sin6_addr;
-				return (0);
-			}
+			if (ia6 == NULL) /* xxx scope error ?*/
+				ia6 = ifatoia6(ro->ro_rt->rt_ifa);
 		}
 		if (ia6 == NULL)
 			return (EHOSTUNREACH);	/* no route */
