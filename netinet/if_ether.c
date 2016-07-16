@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ether.c,v 1.217 2016/07/11 09:23:06 mpi Exp $	*/
+/*	$OpenBSD: if_ether.c,v 1.220 2016/07/14 14:01:40 mpi Exp $	*/
 /*	$NetBSD: if_ether.c,v 1.31 1996/05/11 12:59:58 mycroft Exp $	*/
 
 /*
@@ -86,6 +86,8 @@ void in_revarpinput(struct ifnet *, struct mbuf *);
 int arpcache(struct ifnet *, struct ether_arp *, struct rtentry *);
 void arpreply(struct ifnet *, struct mbuf *, struct in_addr *, uint8_t *);
 
+struct niqueue arpinq = NIQUEUE_INITIALIZER(50, NETISR_ARP);
+
 LIST_HEAD(, llinfo_arp) arp_list;
 struct	pool arp_pool;		/* pool for llinfo_arp structures */
 int	arp_maxtries = 5;
@@ -139,7 +141,7 @@ arp_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 		timeout_add_sec(&arptimer_to, 1);
 	}
 
-	if (rt->rt_flags & (RTF_GATEWAY|RTF_BROADCAST))
+	if (ISSET(rt->rt_flags, RTF_GATEWAY|RTF_BROADCAST|RTF_MULTICAST))
 		return;
 
 	switch (req) {
@@ -209,7 +211,7 @@ arp_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 		if (la == NULL)
 			break;
 		LIST_REMOVE(la, la_list);
-		rt->rt_llinfo = 0;
+		rt->rt_llinfo = NULL;
 		rt->rt_flags &= ~RTF_LLINFO;
 		la_hold_total -= ml_purge(&la->la_ml);
 		pool_put(&arp_pool, la);
@@ -438,7 +440,28 @@ arpinput(struct ifnet *ifp, struct mbuf *m)
 	if (m->m_len < len && (m = m_pullup(m, len)) == NULL)
 		return;
 
-	in_arpinput(ifp, m);
+	niq_enqueue(&arpinq, m);
+}
+
+void
+arpintr(void)
+{
+	struct mbuf_list ml;
+	struct mbuf *m;
+	struct ifnet *ifp;
+
+	niq_delist(&arpinq, &ml);
+
+	while ((m = ml_dequeue(&ml)) != NULL) {
+		ifp = if_get(m->m_pkthdr.ph_ifidx);
+
+		if (ifp != NULL)
+			in_arpinput(ifp, m);
+		else
+			m_freem(m);
+
+		if_put(ifp);
+	}
 }
 
 /*
@@ -507,7 +530,12 @@ in_arpinput(struct ifnet *ifp, struct mbuf *m)
 		    "address %s\n", addr, ether_sprintf(ea->arp_sha));
 		itaddr = isaddr;
 	} else if (rt != NULL) {
-		if (arpcache(ifp, ea, rt))
+		int error;
+
+		KERNEL_LOCK();
+		error = arpcache(ifp, ea, rt);
+		KERNEL_UNLOCK();
+		if (error)
 			goto out;
 	}
 
@@ -549,7 +577,15 @@ arpcache(struct ifnet *ifp, struct ether_arp *ea, struct rtentry *rt)
 	unsigned int len;
 	int changed = 0;
 
+	KERNEL_ASSERT_LOCKED();
 	KASSERT(sdl != NULL);
+
+	/*
+	 * This can happen if the entry has been deleted by another CPU
+	 * after we found it.
+	 */
+	if (la == NULL)
+		return (0);
 
 	if (sdl->sdl_alen > 0) {
 		if (memcmp(ea->arp_sha, LLADDR(sdl), sdl->sdl_alen)) {
@@ -788,7 +824,7 @@ in_revarpinput(struct ifnet *ifp, struct mbuf *m)
 	switch (op) {
 	case ARPOP_REQUEST:
 	case ARPOP_REPLY:	/* per RFC */
-		in_arpinput(ifp, m);
+		niq_enqueue(&arpinq, m);
 		return;
 	case ARPOP_REVREPLY:
 		break;

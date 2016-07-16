@@ -1,4 +1,4 @@
-/*	$OpenBSD: vioscsi.c,v 1.3 2015/03/14 03:38:49 jsg Exp $	*/
+/*	$OpenBSD: vioscsi.c,v 1.5 2016/07/14 12:44:53 sf Exp $	*/
 /*
  * Copyright (c) 2013 Google Inc.
  *
@@ -112,7 +112,6 @@ vioscsi_attach(struct device *parent, struct device *self, void *aux)
 	}
 	vsc->sc_child = &sc->sc_dev;
 	vsc->sc_ipl = IPL_BIO;
-	vsc->sc_intrhand = virtio_vq_intr;
 
 	// TODO(matthew): Negotiate hotplug.
 
@@ -251,7 +250,7 @@ vioscsi_scsi_cmd(struct scsi_xfer *xs)
 		DPRINTF("vioscsi_scsi_cmd: polling...\n");
 		int timeout = 1000;
 		do {
-			vsc->sc_ops->intr(vsc);
+			virtio_poll_intr(vsc);
 			if (vr->vr_xs != xs)
 				break;
 			delay(1000);

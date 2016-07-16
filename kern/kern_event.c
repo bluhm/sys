@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_event.c,v 1.72 2016/05/13 19:05:07 tedu Exp $	*/
+/*	$OpenBSD: kern_event.c,v 1.74 2016/07/14 05:55:08 guenther Exp $	*/
 
 /*-
  * Copyright (c) 1999,2000,2001 Jonathan Lemon <jlemon@FreeBSD.org>
@@ -215,6 +215,9 @@ filt_procattach(struct knote *kn)
 	if ((curproc->p_p->ps_flags & PS_PLEDGE) &&
 	    (curproc->p_p->ps_pledge & PLEDGE_PROC) == 0)
 		return pledge_fail(curproc, EPERM, PLEDGE_PROC);
+
+	if (kn->kn_id > PID_MAX)
+		return ESRCH;
 
 	pr = prfind(kn->kn_id);
 	if (pr == NULL)
@@ -572,6 +575,8 @@ kqueue_register(struct kqueue *kq, struct kevent *kev, struct proc *p)
 
 	if (fops->f_isfd) {
 		/* validate descriptor */
+		if (kev->ident > INT_MAX)
+			return (EBADF);
 		if ((fp = fd_getfile(fdp, kev->ident)) == NULL)
 			return (EBADF);
 		FREF(fp);

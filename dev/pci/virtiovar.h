@@ -1,4 +1,4 @@
-/*	$OpenBSD: virtiovar.h,v 1.6 2015/12/05 19:40:34 sf Exp $	*/
+/*	$OpenBSD: virtiovar.h,v 1.8 2016/07/14 12:44:53 sf Exp $	*/
 /*	$NetBSD: virtiovar.h,v 1.1 2011/10/30 12:12:21 hannken Exp $	*/
 
 /*
@@ -148,7 +148,7 @@ struct virtio_ops {
 	void		(*setup_queue)(struct virtio_softc *, uint16_t, uint32_t);
 	void		(*set_status)(struct virtio_softc *, int);
 	uint32_t	(*neg_features)(struct virtio_softc *, uint32_t, const struct virtio_feature_name *);
-	int		(*intr)(void *);
+	int		(*poll_intr)(void *);
 };
 
 #define VIRTIO_CHILD_ERROR	((void*)1)
@@ -172,8 +172,6 @@ struct virtio_softc {
 						 */
 	int			(*sc_config_change)(struct virtio_softc*);
 						/* set by child */
-	int			(*sc_intrhand)(struct virtio_softc*);
-						/* set by child */
 };
 
 /* public interface */
@@ -188,6 +186,7 @@ struct virtio_softc {
 #define	virtio_read_queue_size(sc, i)		(sc)->sc_ops->read_queue_size(sc, i)
 #define	virtio_setup_queue(sc, i, v)		(sc)->sc_ops->setup_queue(sc, i, v)
 #define	virtio_negotiate_features(sc, f, n)	(sc)->sc_ops->neg_features(sc, f, n)
+#define	virtio_poll_intr(sc)			(sc)->sc_ops->poll_intr(sc)
 
 int virtio_alloc_vq(struct virtio_softc*, struct virtqueue*, int, int, int,
 		    const char*);
@@ -210,7 +209,7 @@ int virtio_dequeue(struct virtio_softc*, struct virtqueue*, int *, int *);
 int virtio_dequeue_commit(struct virtqueue*, int);
 
 int virtio_intr(void *arg);
-int virtio_vq_intr(struct virtio_softc *);
+int virtio_check_vqs(struct virtio_softc *);
 void virtio_stop_vq_intr(struct virtio_softc *, struct virtqueue *);
 int virtio_start_vq_intr(struct virtio_softc *, struct virtqueue *);
 
