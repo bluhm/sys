@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip6_input.c,v 1.163 2016/07/14 14:39:12 mpi Exp $	*/
+/*	$OpenBSD: ip6_input.c,v 1.164 2016/07/18 19:50:49 bluhm Exp $	*/
 /*	$KAME: ip6_input.c,v 1.188 2001/03/29 05:34:31 itojun Exp $	*/
 
 /*
@@ -419,7 +419,7 @@ ip6_input(struct mbuf *m)
 	    !ISSET(ip6_forward_rt.ro_rt->rt_flags, RTF_MPATH) &&
 	    IN6_ARE_ADDR_EQUAL(&ip6->ip6_dst,
 			       &ip6_forward_rt.ro_dst.sin6_addr) &&
-	     m->m_pkthdr.ph_rtableid == ip6_forward_rt.ro_tableid)
+	    m->m_pkthdr.ph_rtableid == ip6_forward_rt.ro_tableid)
 		ip6stat.ip6s_forward_cachehit++;
 	else {
 		if (ip6_forward_rt.ro_rt) {
