@@ -316,7 +316,8 @@ struct syn_cache_head {
 };
 
 struct syn_cache_set {
-        struct		syn_cache_head scs_buckethead[TCP_SYN_HASH_SIZE];
+        struct		syn_cache_head *scs_buckethead;
+	int		scs_size;
         int		scs_count;
         int		scs_use;
         u_int32_t	scs_random[5];

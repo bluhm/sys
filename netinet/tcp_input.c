@@ -3360,6 +3360,12 @@ syn_cache_init(void)
 	int i;
 
 	/* Initialize the hash buckets. */
+	tcp_syn_cache[0].scs_size = tcp_syn_cache_size;
+	tcp_syn_cache[1].scs_size = tcp_syn_cache_size;
+	tcp_syn_cache[0].scs_buckethead = mallocarray(tcp_syn_cache_size,
+	    sizeof(struct syn_cache_head *), M_CACHE, M_WAITOK);
+	tcp_syn_cache[1].scs_buckethead = mallocarray(tcp_syn_cache_size,
+	    sizeof(struct syn_cache_head *), M_CACHE, M_WAITOK);
 	for (i = 0; i < tcp_syn_cache_size; i++) {
 		TAILQ_INIT(&tcp_syn_cache[0].scs_buckethead[i].sch_bucket);
 		TAILQ_INIT(&tcp_syn_cache[1].scs_buckethead[i].sch_bucket);
@@ -3394,7 +3400,7 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 
 	SYN_HASHALL(sc->sc_hash, &sc->sc_src.sa, &sc->sc_dst.sa,
 	    set->scs_random);
-	scp = &set->scs_buckethead[sc->sc_hash % tcp_syn_cache_size];
+	scp = &set->scs_buckethead[sc->sc_hash % set->scs_size];
 	sc->sc_buckethead = scp;
 
 	/*
@@ -3437,7 +3443,7 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 		 */
 		scp2 = scp;
 		if (TAILQ_EMPTY(&scp2->sch_bucket)) {
-			sce = &set->scs_buckethead[tcp_syn_cache_size];
+			sce = &set->scs_buckethead[set->scs_size];
 			for (++scp2; scp2 != scp; scp2++) {
 				if (scp2 >= sce)
 					scp2 = &set->scs_buckethead[0];
@@ -3595,7 +3601,7 @@ syn_cache_lookup(struct sockaddr *src, struct sockaddr *dst,
 		if (sets[i]->scs_count == 0)
 			continue;
 		SYN_HASHALL(hash, src, dst, sets[i]->scs_random);
-		scp = &sets[i]->scs_buckethead[hash % tcp_syn_cache_size];
+		scp = &sets[i]->scs_buckethead[hash % sets[i]->scs_size];
 		*headp = scp;
 		TAILQ_FOREACH(sc, &scp->sch_bucket, sc_bucketq) {
 			if (sc->sc_hash != hash)
