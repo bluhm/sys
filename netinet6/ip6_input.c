@@ -375,7 +375,7 @@ ip6_input(struct mbuf *m)
 		goto hbhcheck;
 	}
 
-	if (m->m_pkthdr.pf.flags & PF_TAG_DIVERTED) {
+	if (pf_ouraddr(m) == 1) {
 		ours = 1;
 		goto hbhcheck;
 	}
