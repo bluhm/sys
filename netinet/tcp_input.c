@@ -3363,9 +3363,9 @@ syn_cache_init(void)
 	tcp_syn_cache[0].scs_size = tcp_syn_cache_size;
 	tcp_syn_cache[1].scs_size = tcp_syn_cache_size;
 	tcp_syn_cache[0].scs_buckethead = mallocarray(tcp_syn_cache_size,
-	    sizeof(struct syn_cache_head *), M_CACHE, M_WAITOK);
+	    sizeof(struct syn_cache_head), M_CACHE, M_WAITOK);
 	tcp_syn_cache[1].scs_buckethead = mallocarray(tcp_syn_cache_size,
-	    sizeof(struct syn_cache_head *), M_CACHE, M_WAITOK);
+	    sizeof(struct syn_cache_head), M_CACHE, M_WAITOK);
 	for (i = 0; i < tcp_syn_cache_size; i++) {
 		TAILQ_INIT(&tcp_syn_cache[0].scs_buckethead[i].sch_bucket);
 		TAILQ_INIT(&tcp_syn_cache[1].scs_buckethead[i].sch_bucket);
