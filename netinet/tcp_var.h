@@ -579,6 +579,7 @@ extern	int tcp_do_rfc3390;	/* RFC3390 Increasing TCP's Initial Window */
 extern	struct pool tcpqe_pool;
 extern	int tcp_reass_limit;	/* max entries for tcp reass queues */
 
+extern	int tcp_syn_cache_size;  /* adjustable size of the hash array */
 extern	int tcp_syn_cache_limit; /* max entries for compressed state engine */
 extern	int tcp_syn_bucket_limit;/* max entries per hash bucket */
 extern	int tcp_syn_use_limit;   /* number of uses before reseeding hash */

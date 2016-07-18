@@ -956,6 +956,24 @@ tcp_sysctl(name, namelen, oldp, oldlenp, newp, newlen)
 		}
 		return (0);
 
+	case TCPCTL_SYN_HASH_SIZE:
+		error = sysctl_int(oldp, oldlenp, newp, newlen,
+		    &tcp_syn_cache_size);
+		if (error)
+			return (error);
+		if (newp != NULL) {
+			/*
+			 * If global hash size has been changed, switch sets as
+			 * soon as possible.  Then the actual hash array will
+			 * be reallocated.
+			 */
+			if (tcp_syn_cache[0].scs_size != tcp_syn_cache_size)
+				tcp_syn_cache[0].scs_use = 0;
+			if (tcp_syn_cache[1].scs_size != tcp_syn_cache_size)
+				tcp_syn_cache[1].scs_use = 0;
+		}
+		return (0);
+
 	default:
 		if (name[0] < TCPCTL_MAXID)
 			return (sysctl_int_arr(tcpctl_vars, name, namelen,
