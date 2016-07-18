@@ -4353,7 +4353,9 @@ pf_test_state(struct pf_pdesc *pd, struct pf_state **state, u_short *reason)
 			return (action); 
 		if (((pd->hdr.tcp->th_flags & (TH_SYN|TH_ACK)) == TH_SYN) &&
 		    dst->state >= TCPS_FIN_WAIT_2 &&
-		    src->state >= TCPS_FIN_WAIT_2) {
+		    src->state >= TCPS_FIN_WAIT_2 &&
+		    (((*state)->state_flags & PFSTATE_SLOPPY) ||
+		    SEQ_GT(pd->hdr.tcp->th_seq, (*state)->src.seqlo))) {
 			if (pf_status.debug >= LOG_NOTICE) {
 				log(LOG_NOTICE, "pf: state reuse ");
 				pf_print_state(*state);
