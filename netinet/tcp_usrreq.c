@@ -958,7 +958,7 @@ tcp_sysctl(name, namelen, oldp, oldlenp, newp, newlen)
 
 	case TCPCTL_SYN_HASH_SIZE:
 		error = sysctl_int(oldp, oldlenp, newp, newlen,
-		    &tcp_syn_cache_size);
+		    &tcp_syn_hash_size);
 		if (error)
 			return (error);
 		if (newp != NULL) {
@@ -967,9 +967,9 @@ tcp_sysctl(name, namelen, oldp, oldlenp, newp, newlen)
 			 * soon as possible.  Then the actual hash array will
 			 * be reallocated.
 			 */
-			if (tcp_syn_cache[0].scs_size != tcp_syn_cache_size)
+			if (tcp_syn_cache[0].scs_size != tcp_syn_hash_size)
 				tcp_syn_cache[0].scs_use = 0;
-			if (tcp_syn_cache[1].scs_size != tcp_syn_cache_size)
+			if (tcp_syn_cache[1].scs_size != tcp_syn_hash_size)
 				tcp_syn_cache[1].scs_use = 0;
 		}
 		return (0);

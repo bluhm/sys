@@ -3266,7 +3266,7 @@ tcp_mss_adv(struct mbuf *m, int af)
  */
 
 /* syn hash parameters */
-int	tcp_syn_cache_size = TCP_SYN_HASH_SIZE;
+int	tcp_syn_hash_size = TCP_SYN_HASH_SIZE;
 int	tcp_syn_cache_limit = TCP_SYN_HASH_SIZE*TCP_SYN_BUCKET_SIZE;
 int	tcp_syn_bucket_limit = 3*TCP_SYN_BUCKET_SIZE;
 int	tcp_syn_use_limit = 100000;
@@ -3360,13 +3360,13 @@ syn_cache_init(void)
 	int i;
 
 	/* Initialize the hash buckets. */
-	tcp_syn_cache[0].scs_buckethead = mallocarray(tcp_syn_cache_size,
+	tcp_syn_cache[0].scs_buckethead = mallocarray(tcp_syn_hash_size,
 	    sizeof(struct syn_cache_head), M_CACHE, M_WAITOK);
-	tcp_syn_cache[1].scs_buckethead = mallocarray(tcp_syn_cache_size,
+	tcp_syn_cache[1].scs_buckethead = mallocarray(tcp_syn_hash_size,
 	    sizeof(struct syn_cache_head), M_CACHE, M_WAITOK);
-	tcp_syn_cache[0].scs_size = tcp_syn_cache_size;
-	tcp_syn_cache[1].scs_size = tcp_syn_cache_size;
-	for (i = 0; i < tcp_syn_cache_size; i++) {
+	tcp_syn_cache[0].scs_size = tcp_syn_hash_size;
+	tcp_syn_cache[1].scs_size = tcp_syn_hash_size;
+	for (i = 0; i < tcp_syn_hash_size; i++) {
 		TAILQ_INIT(&tcp_syn_cache[0].scs_buckethead[i].sch_bucket);
 		TAILQ_INIT(&tcp_syn_cache[1].scs_buckethead[i].sch_bucket);
 	}
@@ -3393,15 +3393,15 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 	 * reinitialization, use it until the limit is reached.
 	 */
 	if (set->scs_count == 0 && set->scs_use <= 0) {
-		if (set->scs_size != tcp_syn_cache_size) {
+		if (set->scs_size != tcp_syn_hash_size) {
 			struct syn_cache_head *newhead;
 
-			newhead = mallocarray(tcp_syn_cache_size,
+			newhead = mallocarray(tcp_syn_hash_size,
 			    sizeof(struct syn_cache_head), M_CACHE, M_NOWAIT);
 			if (newhead != NULL) {
 				free(set->scs_buckethead, M_CACHE,
 				    set->scs_size);
-				set->scs_size = tcp_syn_cache_size;
+				set->scs_size = tcp_syn_hash_size;
 				set->scs_buckethead = newhead;
 			}
 		}
