@@ -3361,9 +3361,9 @@ syn_cache_init(void)
 
 	/* Initialize the hash buckets. */
 	tcp_syn_cache[0].scs_buckethead = mallocarray(tcp_syn_hash_size,
-	    sizeof(struct syn_cache_head), M_PCB, M_WAITOK|M_ZERO);
+	    sizeof(struct syn_cache_head), M_SYNCACHE, M_WAITOK|M_ZERO);
 	tcp_syn_cache[1].scs_buckethead = mallocarray(tcp_syn_hash_size,
-	    sizeof(struct syn_cache_head), M_PCB, M_WAITOK|M_ZERO);
+	    sizeof(struct syn_cache_head), M_SYNCACHE, M_WAITOK|M_ZERO);
 	tcp_syn_cache[0].scs_size = tcp_syn_hash_size;
 	tcp_syn_cache[1].scs_size = tcp_syn_hash_size;
 	for (i = 0; i < tcp_syn_hash_size; i++) {
@@ -3397,12 +3397,13 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 		set->scs_use = tcp_syn_use_limit;
 		if (set->scs_size != tcp_syn_hash_size) {
 			scp = mallocarray(tcp_syn_hash_size, sizeof(struct
-			    syn_cache_head), M_PCB, M_NOWAIT|M_ZERO);
+			    syn_cache_head), M_SYNCACHE, M_NOWAIT|M_ZERO);
 			if (scp == NULL) {
 				/* Try again next time. */
 				set->scs_use = 0;
 			} else {
-				free(set->scs_buckethead, M_PCB, set->scs_size *
+				free(set->scs_buckethead, M_SYNCACHE,
+				    set->scs_size *
 				    sizeof(struct syn_cache_head));
 				set->scs_buckethead = scp;
 				set->scs_size = tcp_syn_hash_size;
