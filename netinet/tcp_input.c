@@ -3401,8 +3401,8 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 			if (newhead != NULL) {
 				free(set->scs_buckethead, M_CACHE,
 				    set->scs_size);
-				set->scs_size = tcp_syn_hash_size;
 				set->scs_buckethead = newhead;
+				set->scs_size = tcp_syn_hash_size;
 			}
 		}
 		arc4random_buf(set->scs_random, sizeof(set->scs_random));
