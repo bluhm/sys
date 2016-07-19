@@ -931,12 +931,16 @@ send:
 
 		tdb = gettdbbysrcdst(rtable_l2(tp->t_inpcb->inp_rtableid),
 		    0, &src, &dst, IPPROTO_TCP);
-		if (tdb == NULL)
+		if (tdb == NULL) {
+			m_freem(m);
 			return (EPERM);
+		}
 
 		if (tcp_signature(tdb, tp->pf, m, th, iphlen, 0,
-		    mtod(m, caddr_t) + hdrlen - optlen + sigoff) < 0)
+		    mtod(m, caddr_t) + hdrlen - optlen + sigoff) < 0) {
+			m_freem(m);
 			return (EINVAL);
+		}
 	}
 #endif /* TCP_SIGNATURE */
 
