@@ -587,6 +587,7 @@ extern	int tcp_syn_cache_limit; /* max entries for compressed state engine */
 extern	int tcp_syn_bucket_limit;/* max entries per hash bucket */
 extern	int tcp_syn_use_limit;   /* number of uses before reseeding hash */
 extern	struct syn_cache_set tcp_syn_cache[];
+extern	int tcp_syn_cache_active; /* active syn cache, may be 0 or 1 */
 
 int	 tcp_attach(struct socket *);
 void	 tcp_canceltimers(struct tcpcb *);
