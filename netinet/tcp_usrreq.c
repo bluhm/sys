@@ -936,6 +936,13 @@ tcp_sysctl(name, namelen, oldp, oldlenp, newp, newlen)
 	case TCPCTL_STATS:
 		if (newp != NULL)
 			return (EPERM);
+		{
+			struct syn_cache_set *set =
+			    &tcp_syn_cache[tcp_syn_cache_active];
+			tcpstat.tcps_sc_size = set->scs_size;
+			tcpstat.tcps_sc_count = set->scs_count;
+			tcpstat.tcps_sc_use = set->scs_use;
+		}
 		return (sysctl_struct(oldp, oldlenp, newp, newlen,
 		    &tcpstat, sizeof(tcpstat)));
 
