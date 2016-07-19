@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_iwm.c,v 1.92 2016/06/22 11:32:12 stsp Exp $	*/
+/*	$OpenBSD: if_iwm.c,v 1.95 2016/07/18 13:10:35 stsp Exp $	*/
 
 /*
  * Copyright (c) 2014, 2016 genua gmbh <info@genua.de>
@@ -4381,6 +4381,7 @@ iwm_tx_fill_cmd(struct iwm_softc *sc, struct iwm_node *in,
 		/* for non-data, use the lowest supported rate */
 		ridx = (IEEE80211_IS_CHAN_5GHZ(ni->ni_chan)) ?
 		    IWM_RIDX_OFDM : IWM_RIDX_CCK;
+		tx->data_retry_limit = IWM_MGMT_DFAULT_RETRY_LIMIT;
 	} else if (ic->ic_fixed_mcs != -1) {
 		ridx = sc->sc_fixed_ridx;
 	} else if (ic->ic_fixed_rate != -1) {
@@ -4516,7 +4517,7 @@ iwm_tx(struct iwm_softc *sc, struct mbuf *m, struct ieee80211_node *ni, int ac)
 		flags |= IWM_TX_CMD_FLG_ACK;
 	}
 
-	if (type != IEEE80211_FC0_TYPE_DATA
+	if (type == IEEE80211_FC0_TYPE_DATA
 	    && (totlen + IEEE80211_CRC_LEN > ic->ic_rtsthreshold)
 	    && !IEEE80211_IS_MULTICAST(wh->i_addr1)) {
 		flags |= IWM_TX_CMD_FLG_PROT_REQUIRE;
@@ -6154,7 +6155,11 @@ iwm_setrates(struct iwm_node *in)
 
 	lq->agg_time_limit = htole16(4000);	/* 4ms */
 	lq->agg_disable_start_th = 3;
+#ifdef notyet
 	lq->agg_frame_cnt_limit = 0x3f;
+#else
+	lq->agg_frame_cnt_limit = 1; /* tx agg disabled */
+#endif
 
 	cmd.data[0] = &in->in_lq;
 	if (iwm_send_cmd(sc, &cmd) != 0) {
