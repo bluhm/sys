@@ -962,7 +962,7 @@ tcp_sysctl(name, namelen, oldp, oldlenp, newp, newlen)
 		if (error)
 			return (error);
 		if (nval != tcp_syn_hash_size) {
-			if (nval < 1 || nval > 10000000)
+			if (nval < 1 || nval > 1000000)
 				return (EINVAL);
 			/*
 			 * If global hash size has been changed, switch sets as
