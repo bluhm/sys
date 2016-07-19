@@ -3360,12 +3360,12 @@ syn_cache_init(void)
 	int i;
 
 	/* Initialize the hash buckets. */
-	tcp_syn_cache[0].scs_size = tcp_syn_cache_size;
-	tcp_syn_cache[1].scs_size = tcp_syn_cache_size;
 	tcp_syn_cache[0].scs_buckethead = mallocarray(tcp_syn_cache_size,
 	    sizeof(struct syn_cache_head), M_CACHE, M_WAITOK);
 	tcp_syn_cache[1].scs_buckethead = mallocarray(tcp_syn_cache_size,
 	    sizeof(struct syn_cache_head), M_CACHE, M_WAITOK);
+	tcp_syn_cache[0].scs_size = tcp_syn_cache_size;
+	tcp_syn_cache[1].scs_size = tcp_syn_cache_size;
 	for (i = 0; i < tcp_syn_cache_size; i++) {
 		TAILQ_INIT(&tcp_syn_cache[0].scs_buckethead[i].sch_bucket);
 		TAILQ_INIT(&tcp_syn_cache[1].scs_buckethead[i].sch_bucket);
@@ -3393,6 +3393,18 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 	 * reinitialization, use it until the limit is reached.
 	 */
 	if (set->scs_count == 0 && set->scs_use <= 0) {
+		if (set->scs_size != tcp_syn_cache_size) {
+			struct syn_cache_head *newhead;
+
+			newhead = mallocarray(tcp_syn_cache_size,
+			    sizeof(struct syn_cache_head), M_CACHE, M_NOWAIT);
+			if (newhead != NULL) {
+				free(set->scs_buckethead, M_CACHE,
+				    set->scs_size);
+				set->scs_size = tcp_syn_cache_size;
+				set->scs_buckethead = newhead;
+			}
+		}
 		arc4random_buf(set->scs_random, sizeof(set->scs_random));
 		set->scs_use = tcp_syn_use_limit;
 		tcpstat.tcps_sc_seedrandom++;
