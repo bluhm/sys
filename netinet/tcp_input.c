@@ -3391,12 +3391,17 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 	 * If there are no entries in the hash table, reinitialize
 	 * the hash secrets.  To avoid useless cache swaps and
 	 * reinitialization, use it until the limit is reached.
+	 * An emtpy cache is also the oportunity to resize the hash.
 	 */
 	if (set->scs_count == 0 && set->scs_use <= 0) {
+		set->scs_use = tcp_syn_use_limit;
 		if (set->scs_size != tcp_syn_hash_size) {
 			scp = mallocarray(tcp_syn_hash_size, sizeof(struct
 			    syn_cache_head), M_PCB, M_NOWAIT|M_ZERO);
-			if (scp != NULL) {
+			if (scp == NULL) {
+				/* Try again next time. */
+				set->scs_use = 0;
+			} else {
 				free(set->scs_buckethead, M_PCB, set->scs_size *
 				    sizeof(struct syn_cache_head));
 				set->scs_buckethead = scp;
@@ -3406,7 +3411,6 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 			}
 		}
 		arc4random_buf(set->scs_random, sizeof(set->scs_random));
-		set->scs_use = tcp_syn_use_limit;
 		tcpstat.tcps_sc_seedrandom++;
 	}
 
