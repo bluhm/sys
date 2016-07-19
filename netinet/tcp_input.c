@@ -3383,7 +3383,7 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 	struct syn_cache_set *set = &tcp_syn_cache[tcp_syn_cache_active];
 	struct syn_cache_head *scp;
 	struct syn_cache *sc2;
-	int s;
+	int i, s;
 
 	s = splsoftnet();
 
@@ -3394,15 +3394,15 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 	 */
 	if (set->scs_count == 0 && set->scs_use <= 0) {
 		if (set->scs_size != tcp_syn_hash_size) {
-			struct syn_cache_head *newhead;
-
-			newhead = mallocarray(tcp_syn_hash_size,
+			scp = mallocarray(tcp_syn_hash_size,
 			    sizeof(struct syn_cache_head), M_CACHE, M_NOWAIT);
-			if (newhead != NULL) {
+			if (scp != NULL) {
 				free(set->scs_buckethead, M_CACHE,
 				    set->scs_size);
-				set->scs_buckethead = newhead;
+				set->scs_buckethead = scp;
 				set->scs_size = tcp_syn_hash_size;
+				for (i = 0; i < tcp_syn_hash_size; i++)
+					TAILQ_INIT(&scp[i].sch_bucket);
 			}
 		}
 		arc4random_buf(set->scs_random, sizeof(set->scs_random));
