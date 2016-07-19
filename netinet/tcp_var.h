@@ -454,6 +454,9 @@ struct	tcpstat {
 	u_int64_t tcps_sc_collisions;	/* # of hash collisions */
 	u_int64_t tcps_sc_retransmitted;/* # of retransmissions */
 	u_int64_t tcps_sc_seedrandom;	/* # of syn cache seeds with random */
+	u_int64_t tcps_sc_size;		/* hash buckets in current syn cache */
+	u_int64_t tcps_sc_count;	/* # of entries in current syn cache */
+	u_int64_t tcps_sc_use;		/* use counter of current syn cache */
 
 	u_int64_t tcps_conndrained;	/* # of connections drained */
 
