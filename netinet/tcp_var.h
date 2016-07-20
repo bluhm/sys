@@ -454,9 +454,12 @@ struct	tcpstat {
 	u_int64_t tcps_sc_collisions;	/* # of hash collisions */
 	u_int64_t tcps_sc_retransmitted;/* # of retransmissions */
 	u_int64_t tcps_sc_seedrandom;	/* # of syn cache seeds with random */
-	u_int64_t tcps_sc_size;		/* hash buckets in current syn cache */
-	u_int64_t tcps_sc_count;	/* # of entries in current syn cache */
-	u_int64_t tcps_sc_use;		/* use counter of current syn cache */
+	u_int64_t tcps_sc_hash_size;	/* hash buckets in current syn cache */
+	u_int64_t tcps_sc_entry_count;	/* # of entries in current syn cache */
+	u_int64_t tcps_sc_entry_limit;	/* limit of syn cache entries */
+	u_int64_t tcps_sc_bucket_maxlen;/* maximum # of entries in any bucket */
+	u_int64_t tcps_sc_bucket_limit;	/* limit of syn cache bucket list */
+	u_int64_t tcps_sc_uses_left;	/* use counter of current syn cache */
 
 	u_int64_t tcps_conndrained;	/* # of connections drained */
 
