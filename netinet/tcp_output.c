@@ -204,7 +204,7 @@ tcp_output(struct tcpcb *tp)
 {
 	struct socket *so = tp->t_inpcb->inp_socket;
 	long len, win, txmaxseg;
-	int off, flags, error = 0, output_error;
+	int off, flags, error = 0;
 	struct mbuf_list ml = MBUF_LIST_INITIALIZER();
 	struct mbuf *m;
 	struct tcphdr *th;
@@ -1158,23 +1158,28 @@ send:
 		goto again;
 
  out:
-	switch (tp->pf) {
-	case 0:	/*default to PF_INET*/
-	case AF_INET:
-		output_error = ip_output_ml(&ml, tp->t_inpcb->inp_options,
-			&tp->t_inpcb->inp_route,
-			(ip_mtudisc ? IP_MTUDISC : 0), NULL, tp->t_inpcb, 0);
-		break;
+	if (!ml_empty(&ml)) {
+		int outerr;
+
+		switch (tp->pf) {
+		case 0:	/*default to PF_INET*/
+		case AF_INET:
+			outerr = ip_output_ml(&ml,
+			    tp->t_inpcb->inp_options, &tp->t_inpcb->inp_route,
+			    (ip_mtudisc ? IP_MTUDISC : 0), NULL, tp->t_inpcb,
+			    0);
+			break;
 #ifdef INET6
-	case AF_INET6:
-		output_error = ip6_output_ml(&ml, tp->t_inpcb->inp_outputopts6,
-			  &tp->t_inpcb->inp_route6,
-			  0, NULL, tp->t_inpcb);
-		break;
+		case AF_INET6:
+			outerr = ip6_output_ml(&ml,
+			    tp->t_inpcb->inp_outputopts6,
+			    &tp->t_inpcb->inp_route6, 0, NULL, tp->t_inpcb);
+			break;
 #endif /* INET6 */
+		}
+		if (error == 0)
+			error = outerr;
 	}
-	if (error == 0)
-		error = output_error;
 	if (error == 0)
 		return (0);
 	if (error == ENOBUFS) {
