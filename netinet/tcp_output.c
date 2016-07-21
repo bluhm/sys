@@ -203,7 +203,7 @@ tcp_output(struct tcpcb *tp)
 {
 	struct socket *so = tp->t_inpcb->inp_socket;
 	long len, win, txmaxseg;
-	int off, flags, error;
+	int off, flags, error = 0, output_error;
 	struct mbuf_list ml = MBUF_LIST_INITIALIZER();
 	struct mbuf *m;
 	struct tcphdr *th;
@@ -473,7 +473,7 @@ again:
 	    TCP_TIMER_ISARMED(tp, TCPT_REXMT) == 0 &&
 	    TCP_TIMER_ISARMED(tp, TCPT_PERSIST) == 0) {
 		TCP_TIMER_ARM(tp, TCPT_REXMT, tp->t_rxtcur);
-		return (0);
+		goto out;
 	}
 #endif /* TCP_SACK */
 
@@ -508,7 +508,7 @@ again:
 	/*
 	 * No reason to send a segment, just return.
 	 */
-	return (0);
+	goto out;
 
 send:
 	/*
@@ -533,7 +533,8 @@ send:
 		break;
 #endif /* INET6 */
 	default:
-		return (EPFNOSUPPORT);
+		error = EPFNOSUPPORT;
+		goto out;
 	}
 
 	if (flags & TH_SYN) {
@@ -931,13 +932,15 @@ send:
 		    0, &src, &dst, IPPROTO_TCP);
 		if (tdb == NULL) {
 			m_freem(m);
-			return (EPERM);
+			error = EPERM;
+			goto out;
 		}
 
 		if (tcp_signature(tdb, tp->pf, m, th, iphlen, 0,
 		    mtod(m, caddr_t) + hdrlen - optlen + sigoff) < 0) {
 			m_freem(m);
-			return (EINVAL);
+			error = EINVAL;
+			goto out;
 		}
 	}
 #endif /* TCP_SIGNATURE */
@@ -1144,7 +1147,6 @@ send:
 	tp->last_ack_sent = tp->rcv_nxt;
 	tp->t_flags &= ~TF_ACKNOW;
 	TCP_CLEAR_DELACK(tp);
-	sendalot = 0;  /* XXX */
 #if defined(TCP_SACK)
 	if (sendalot && --maxburst)
 #else
@@ -1152,25 +1154,26 @@ send:
 #endif
 		goto again;
 
+ out:
 	switch (tp->pf) {
 	case 0:	/*default to PF_INET*/
 	case AF_INET:
-		error = ip_output_ml(&ml, tp->t_inpcb->inp_options,
+		output_error = ip_output_ml(&ml, tp->t_inpcb->inp_options,
 			&tp->t_inpcb->inp_route,
 			(ip_mtudisc ? IP_MTUDISC : 0), NULL, tp->t_inpcb, 0);
 		break;
 #ifdef INET6
 	case AF_INET6:
-		error = ip6_output_ml(&ml, tp->t_inpcb->inp_outputopts6,
+		output_error = ip6_output_ml(&ml, tp->t_inpcb->inp_outputopts6,
 			  &tp->t_inpcb->inp_route6,
 			  0, NULL, tp->t_inpcb);
 		break;
 #endif /* INET6 */
 	}
-
+	if (error == 0)
+		error = output_error;
 	if (error == 0)
 		return (0);
-out:
 	if (error == ENOBUFS) {
 		/*
 		 * If the interface queue is full, or IP cannot
