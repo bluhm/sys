@@ -205,6 +205,7 @@ tcp_output(struct tcpcb *tp)
 	struct socket *so = tp->t_inpcb->inp_socket;
 	long len, win, txmaxseg;
 	int off, flags, error;
+	struct mbuf_list ml = MBUF_LIST_INITIALIZER();
 	struct mbuf *m;
 	struct tcphdr *th;
 	u_int32_t optbuf[howmany(MAX_TCPOPTLEN, sizeof(u_int32_t))];
@@ -1120,6 +1121,8 @@ send:
 #endif /* INET6 */
 	}
 
+	ml_enqueue(&ml, m);
+
 #if defined(TCP_SACK) && defined(TCP_FACK)
 	/* Update snd_awnd to reflect the new data that was sent.  */
 	tp->snd_awnd = tcp_seq_subtract(tp->snd_max, tp->snd_fack) +
@@ -1155,13 +1158,13 @@ send:
 	switch (tp->pf) {
 	case 0:	/*default to PF_INET*/
 	case AF_INET:
-		error = ip_output(m, tp->t_inpcb->inp_options,
+		error = ip_output_ml(&ml, tp->t_inpcb->inp_options,
 			&tp->t_inpcb->inp_route,
 			(ip_mtudisc ? IP_MTUDISC : 0), NULL, tp->t_inpcb, 0);
 		break;
 #ifdef INET6
 	case AF_INET6:
-		error = ip6_output(m, tp->t_inpcb->inp_outputopts6,
+		error = ip6_output_ml(&ml, tp->t_inpcb->inp_outputopts6,
 			  &tp->t_inpcb->inp_route6,
 			  0, NULL, tp->t_inpcb);
 		break;
