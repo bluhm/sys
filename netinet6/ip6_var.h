@@ -261,8 +261,10 @@ int	ip6_sysctl(int *, u_int, void *, size_t *, void *, size_t);
 void	ip6_forward(struct mbuf *, int);
 
 void	ip6_mloopback(struct ifnet *, struct mbuf *, struct sockaddr_in6 *);
-int	ip6_output(struct mbuf *, struct ip6_pktopts *, struct route_in6 *, int,
-	    struct ip6_moptions *, struct inpcb *);
+int	ip6_output_ml(struct mbuf_list *, struct ip6_pktopts *,
+	    struct route_in6 *, int, struct ip6_moptions *, struct inpcb *);
+int	ip6_output(struct mbuf *, struct ip6_pktopts *,
+	    struct route_in6 *, int, struct ip6_moptions *, struct inpcb *);
 int	ip6_fragment(struct mbuf *, int, u_char, u_long);
 int	ip6_ctloutput(int, struct socket *, int, int, struct mbuf **);
 int	ip6_raw_ctloutput(int, struct socket *, int, int, struct mbuf **);
