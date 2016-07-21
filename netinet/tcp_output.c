@@ -1131,40 +1131,8 @@ send:
 		tp->retran_data;
 #endif /* defined(TCP_SACK) && defined(TCP_FACK) */
 
-	if (error) {
-out:
-		if (error == ENOBUFS) {
-			/*
-			 * If the interface queue is full, or IP cannot
-			 * get an mbuf, trigger TCP slow start.
-			 */
-			tp->snd_cwnd = tp->t_maxseg;
-			return (0);
-		}
-		if (error == EMSGSIZE) {
-			/*
-			 * ip_output() will have already fixed the route
-			 * for us.  tcp_mtudisc() will, as its last action,
-			 * initiate retransmission, so it is important to
-			 * not do so here.
-			 */
-			tcp_mtudisc(tp->t_inpcb, -1);
-			return (0);
-		}
-		if (error == EACCES)	/* translate pf(4) error for userland */
-			error = EHOSTUNREACH;
-		if ((error == EHOSTUNREACH || error == ENETDOWN) &&
-		    TCPS_HAVERCVDSYN(tp->t_state)) {
-			tp->t_softerror = error;
-			return (0);
-		}
-
-		/* Restart the delayed ACK timer, if necessary. */
-		if (tp->t_flags & TF_DELACK)
-			TCP_RESTART_DELACK(tp);
-
-		return (error);
-	}
+	if (error)
+		goto out;
 
 	if (packetlen > tp->t_pmtud_mtu_sent)
 		tp->t_pmtud_mtu_sent = packetlen;
@@ -1191,6 +1159,39 @@ out:
 #endif
 		goto again;
 	return (0);
+
+out:
+	if (error == ENOBUFS) {
+		/*
+		 * If the interface queue is full, or IP cannot
+		 * get an mbuf, trigger TCP slow start.
+		 */
+		tp->snd_cwnd = tp->t_maxseg;
+		return (0);
+	}
+	if (error == EMSGSIZE) {
+		/*
+		 * ip_output() will have already fixed the route
+		 * for us.  tcp_mtudisc() will, as its last action,
+		 * initiate retransmission, so it is important to
+		 * not do so here.
+		 */
+		tcp_mtudisc(tp->t_inpcb, -1);
+		return (0);
+	}
+	if (error == EACCES)	/* translate pf(4) error for userland */
+		error = EHOSTUNREACH;
+	if ((error == EHOSTUNREACH || error == ENETDOWN) &&
+	    TCPS_HAVERCVDSYN(tp->t_state)) {
+		tp->t_softerror = error;
+		return (0);
+	}
+
+	/* Restart the delayed ACK timer, if necessary. */
+	if (tp->t_flags & TF_DELACK)
+		TCP_RESTART_DELACK(tp);
+
+	return (error);
 }
 
 void
