@@ -86,7 +86,7 @@ ip_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct ifnet *ifp,
     struct route *ro);
 #endif /* IPSEC */
 
-u_long ip_out_listlen;  /* statistics about mbuf list length */
+u_int ip_out_listlen;  /* statistics about mbuf list length */
 
 int
 ip_output_ml(struct mbuf_list *ml, struct mbuf *opt, struct route *ro,
@@ -95,16 +95,19 @@ ip_output_ml(struct mbuf_list *ml, struct mbuf *opt, struct route *ro,
 {
 	struct mbuf *m;
 	int error = 0;
-	static u_long calls, len;
+	static u_int calls, len;
 
-	calls++;
+	if (calls++ == 256) {
+		ip_out_listlen = (len << 8) / calls;
+		calls = 1;
+		len = 0;
+	}
 	while ((m = ml_dequeue(ml)) != NULL) {
 		len++;
 		error = ip_output(m, opt, ro, flags, imo, inp, ipsecflowinfo);
 		if (error)
 			break;
 	}
-	ip_out_listlen = (len << 8) / calls;
 	ml_purge(ml);
 	return (error);
 }
