@@ -86,6 +86,23 @@ ip_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct ifnet *ifp,
     struct route *ro);
 #endif /* IPSEC */
 
+int
+ip_output_ml(struct mbuf_list *ml, struct mbuf *opt, struct route *ro,
+    int flags, struct ip_moptions *imo, struct inpcb *inp,
+    u_int32_t ipsecflowinfo)
+{
+	struct mbuf *m;
+	int error = 0;
+
+	while ((m = ml_dequeue(ml)) != NULL) {
+		error = ip_output(m, opt, ro, flags, imo, inp, ipsecflowinfo);
+		if (error)
+			break;
+	}
+	ml_purge(ml);
+	return (error);
+}
+
 /*
  * IP output.  The packet in mbuf chain m contains a skeletal IP
  * header (with len, off, ttl, proto, tos, src, dst).
