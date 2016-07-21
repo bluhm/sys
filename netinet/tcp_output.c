@@ -1101,10 +1101,6 @@ send:
 				ip->ip_tos |= IPTOS_ECN_ECT0;
 #endif
 		}
-		error = ip_output(m, tp->t_inpcb->inp_options,
-			&tp->t_inpcb->inp_route,
-			(ip_mtudisc ? IP_MTUDISC : 0), NULL, tp->t_inpcb, 0);
-		break;
 #ifdef INET6
 	case AF_INET6:
 		{
@@ -1121,10 +1117,6 @@ send:
 				ip6->ip6_flow |= htonl(IPTOS_ECN_ECT0 << 20);
 #endif
 		}
-		error = ip6_output(m, tp->t_inpcb->inp_outputopts6,
-			  &tp->t_inpcb->inp_route6,
-			  0, NULL, tp->t_inpcb);
-		break;
 #endif /* INET6 */
 	}
 
@@ -1133,9 +1125,6 @@ send:
 	tp->snd_awnd = tcp_seq_subtract(tp->snd_max, tp->snd_fack) +
 		tp->retran_data;
 #endif /* defined(TCP_SACK) && defined(TCP_FACK) */
-
-	if (error)
-		goto out;
 
 	if (packetlen > tp->t_pmtud_mtu_sent)
 		tp->t_pmtud_mtu_sent = packetlen;
