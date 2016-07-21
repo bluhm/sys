@@ -1152,14 +1152,32 @@ send:
 	tp->last_ack_sent = tp->rcv_nxt;
 	tp->t_flags &= ~TF_ACKNOW;
 	TCP_CLEAR_DELACK(tp);
+	sendalot = 0;  /* XXX */
 #if defined(TCP_SACK)
 	if (sendalot && --maxburst)
 #else
 	if (sendalot)
 #endif
 		goto again;
-	return (0);
 
+	switch (tp->pf) {
+	case 0:	/*default to PF_INET*/
+	case AF_INET:
+		error = ip_output(m, tp->t_inpcb->inp_options,
+			&tp->t_inpcb->inp_route,
+			(ip_mtudisc ? IP_MTUDISC : 0), NULL, tp->t_inpcb, 0);
+		break;
+#ifdef INET6
+	case AF_INET6:
+		error = ip6_output(m, tp->t_inpcb->inp_outputopts6,
+			  &tp->t_inpcb->inp_route6,
+			  0, NULL, tp->t_inpcb);
+		break;
+#endif /* INET6 */
+	}
+
+	if (error == 0)
+		return (0);
 out:
 	if (error == ENOBUFS) {
 		/*
