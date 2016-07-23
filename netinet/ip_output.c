@@ -99,14 +99,6 @@ ip_output(struct mbuf *m, struct mbuf *opt, struct route *ro,
 	return (ip_output_ml(&ml, opt, ro, flags, imo, inp, ipsecflowinfo));
 }
 
-#define MBUF_LIST_FOREACH_SAFE(_ml, _m, _n, _p)				\
-	for ((_m) = MBUF_LIST_FIRST(_ml), (_p) = &MBUF_LIST_FIRST(_ml);	\
-	    (_m) != NULL && ((_n) = MBUF_LIST_NEXT(_m), 1);		\
-	    *(_p) = (_m) ? (_m) : (_n),					\
-	    (_p) = (_m) ? &MBUF_LIST_NEXT(_m) : (_p),			\
-	    (_m) = (_n))
-
-
 /*
  * IP output.  The packet in mbuf chain m contains a skeletal IP
  * header (with len, off, ttl, proto, tos, src, dst).
@@ -120,7 +112,7 @@ ip_output_ml(struct mbuf_list *ml, struct mbuf *opt, struct route *ro,
 {
 	struct ip *ip;
 	struct ifnet *ifp = NULL;
-	struct mbuf *m, *n, **p;
+	struct mbuf *m, *n;
 	int hlen = sizeof (struct ip);
 	int len, error = 0;
 	struct route iproute;
@@ -153,9 +145,13 @@ ip_output_ml(struct mbuf_list *ml, struct mbuf *opt, struct route *ro,
 	}
 #endif
 	if (opt) {
-		MBUF_LIST_FOREACH_SAFE(ml, m, n, p)
+		for (m = ml_dechain(ml); m; m = n) {
+			n = m->m_nextpkt;
+			m->m_nextpkt = NULL;
 			m = ip_insertoptions(m, opt, &len);
-		hlen = len;
+			hlen = len;
+			ml_enqueue(ml, m);
+		}
 	}
 
 	/*
@@ -469,13 +465,14 @@ sendit:
 	 * Packet filter
 	 */
 #if NPF > 0
-	MBUF_LIST_FOREACH_SAFE(ml, m, n, p) {
+	for (m = ml_dechain(ml); m != NULL; m = n) {
+		n = m->m_nextpkt;
+		m->m_nextpkt = NULL;
 		if (pf_test(AF_INET, PF_OUT, ifp, &m) != PF_PASS) {
 			error = EACCES;
-			*p = n;
 			m_freem(m);
-			goto bad;
-		}
+		} else if (m != NULL)
+			ml_enqueue(ml, m);
 	}
 	if (ml_empty(ml))
 		goto done;
@@ -509,7 +506,10 @@ sendit:
 	/*
 	 * If small enough for interface, can just send directly.
 	 */
-	MBUF_LIST_FOREACH_SAFE(ml, m, n, p) {
+	for (m = ml_dechain(ml); m != NULL; m = n) {
+		n = m->m_nextpkt;
+		m->m_nextpkt = NULL;
+		ip = mtod(m, struct ip *);
 		if (ntohs(ip->ip_len) <= mtu) {
 			ip->ip_sum = 0;
 			if ((ifp->if_capabilities & IFCAP_CSUM_IPv4) &&
@@ -521,8 +521,8 @@ sendit:
 			}
 
 			error = ifp->if_output(ifp, m, sintosa(dst), ro->ro_rt);
-			m = NULL;
-		}
+		} else
+			ml_enqueue(ml, m);
 	}
 	if (ml_empty(ml))
 		goto done;
@@ -558,8 +558,6 @@ sendit:
 	}
 
 	while ((m = ml_dequeue(ml)) != NULL) {
-		struct mbuf *n;
-
 		error = ip_fragment(m, ifp, mtu);
 		if (error) {
 			m_freem(m);
