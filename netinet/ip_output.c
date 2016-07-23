@@ -536,8 +536,7 @@ sendit:
 	if (ip->ip_off & htons(IP_DF)) {
 #ifdef IPSEC
 		if (ip_mtudisc)
-			MBUF_LIST_FOREACH(ml, m)
-				ipsec_adjust_mtu(m, ifp->if_mtu);
+			ipsec_adjust_mtu(m, ifp->if_mtu);
 #endif
 		error = EMSGSIZE;
 		/*
