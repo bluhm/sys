@@ -505,28 +505,28 @@ sendit:
 	/*
 	 * If small enough for interface, can just send directly.
 	 */
-	for (m = ml_dechain(ml); m != NULL; m = n) {
-		n = m->m_nextpkt;
-		m->m_nextpkt = NULL;
-		ip = mtod(m, struct ip *);
-		if (ntohs(ip->ip_len) <= mtu) {
-			ip->ip_sum = 0;
-			if ((ifp->if_capabilities & IFCAP_CSUM_IPv4) &&
-			    (ifp->if_bridgeport == NULL))
+	if (ntohs(ip->ip_len) <= mtu) {
+		if ((ifp->if_capabilities & IFCAP_CSUM_IPv4) &&
+		    (ifp->if_bridgeport == NULL))
+			MBUF_LIST_FOREACH(ml, m) {
+				ip->ip_sum = 0;
 				m->m_pkthdr.csum_flags |= M_IPV4_CSUM_OUT;
-			else {
-				ipstat.ips_outswcsum++;
+			}
+		else {
+			MBUF_LIST_FOREACH(ml, m) {
+				ip->ip_sum = 0;
 				ip->ip_sum = in_cksum(m, hlen);
 			}
+			ipstat.ips_outswcsum += ml_len(ml);
+		}
 
+		while ((m = ml_dequeue(ml)) != NULL) {
 			error = ifp->if_output(ifp, m, sintosa(dst), ro->ro_rt);
-		} else
-			ml_enqueue(ml, m);
-	}
-	if (ml_empty(ml))
+			if (error)
+				goto bad;
+		}
 		goto done;
-	m = MBUF_LIST_FIRST(ml);
-	ip = mtod(m, struct ip *);
+	}
 
 	/*
 	 * Too large for interface; fragment if possible.
