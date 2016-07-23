@@ -89,28 +89,23 @@ ip_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct ifnet *ifp,
 u_int ip_out_listlen;  /* statistics about mbuf list length */
 
 int
-ip_output_ml(struct mbuf_list *ml, struct mbuf *opt, struct route *ro,
+ip_output(struct mbuf *m, struct mbuf *opt, struct route *ro,
     int flags, struct ip_moptions *imo, struct inpcb *inp,
     u_int32_t ipsecflowinfo)
 {
-	struct mbuf *m;
-	int error = 0;
-	static u_int calls, len;
+	struct mbuf_list ml = MBUF_LIST_INITIALIZER();
 
-	if (calls++ == 256) {
-		ip_out_listlen = (len << 8) / calls;
-		calls = 1;
-		len = 0;
-	}
-	while ((m = ml_dequeue(ml)) != NULL) {
-		len++;
-		error = ip_output(m, opt, ro, flags, imo, inp, ipsecflowinfo);
-		if (error)
-			break;
-	}
-	ml_purge(ml);
-	return (error);
+	ml_enqueue(&ml, m);
+	return (ip_output_ml(&ml, opt, ro, flags, imo, inp, ipsecflowinfo));
 }
+
+#define MBUF_LIST_FOREACH_SAFE(_ml, _m, _n, _p)				\
+	for ((_m) = MBUF_LIST_FIRST(_ml), (_p) = &MBUF_LIST_FIRST(_ml);	\
+	    (_m) != NULL && ((_n) = MBUF_LIST_NEXT(_m), 1);		\
+	    *(_p) = (_m) ? (_m) : (_n),					\
+	    (_p) = (_m) ? &MBUF_LIST_NEXT(_m) : (_p),			\
+	    (_m) = (_n))
+
 
 /*
  * IP output.  The packet in mbuf chain m contains a skeletal IP
@@ -119,12 +114,13 @@ ip_output_ml(struct mbuf_list *ml, struct mbuf *opt, struct route *ro,
  * The mbuf opt, if present, will not be freed.
  */
 int
-ip_output(struct mbuf *m0, struct mbuf *opt, struct route *ro, int flags,
-    struct ip_moptions *imo, struct inpcb *inp, u_int32_t ipsecflowinfo)
+ip_output_ml(struct mbuf_list *ml, struct mbuf *opt, struct route *ro,
+    int flags, struct ip_moptions *imo, struct inpcb *inp,
+    u_int32_t ipsecflowinfo)
 {
 	struct ip *ip;
 	struct ifnet *ifp = NULL;
-	struct mbuf *m = m0;
+	struct mbuf *m, *n, **p;
 	int hlen = sizeof (struct ip);
 	int len, error = 0;
 	struct route iproute;
@@ -134,6 +130,14 @@ ip_output(struct mbuf *m0, struct mbuf *opt, struct route *ro, int flags,
 #if defined(MROUTING)
 	int rv;
 #endif
+	static u_int mlcalls, mllen;
+
+	if (mlcalls++ == 256) {
+		ip_out_listlen = (mllen << 8) / mlcalls;
+		mlcalls = 1;
+		mllen = 0;
+	}
+	mllen += ml_len(ml);
 
 	NET_ASSERT_LOCKED();
 
@@ -143,26 +147,34 @@ ip_output(struct mbuf *m0, struct mbuf *opt, struct route *ro, int flags,
 #endif /* IPSEC */
 
 #ifdef	DIAGNOSTIC
-	if ((m->m_flags & M_PKTHDR) == 0)
-		panic("ip_output no HDR");
+	MBUF_LIST_FOREACH(ml, m) {
+		if ((m->m_flags & M_PKTHDR) == 0)
+			panic("ip_output no HDR");
+	}
 #endif
 	if (opt) {
-		m = ip_insertoptions(m, opt, &len);
+		MBUF_LIST_FOREACH_SAFE(ml, m, n, p)
+			m = ip_insertoptions(m, opt, &len);
 		hlen = len;
 	}
-
-	ip = mtod(m, struct ip *);
 
 	/*
 	 * Fill in IP header.
 	 */
 	if ((flags & (IP_FORWARDING|IP_RAWOUTPUT)) == 0) {
-		ip->ip_v = IPVERSION;
-		ip->ip_off &= htons(IP_DF);
-		ip->ip_id = htons(ip_randomid());
-		ip->ip_hl = hlen >> 2;
-		ipstat_inc(ips_localout);
+		MBUF_LIST_FOREACH(ml, m) {
+			ip = mtod(m, struct ip *);
+			ip->ip_v = IPVERSION;
+			ip->ip_off &= htons(IP_DF);
+			ip->ip_id = htons(ip_randomid());
+			ip->ip_hl = hlen >> 2;
+			ipstat_inc(ips_localout);
+		}
+		m = MBUF_LIST_FIRST(ml);
+		ip = mtod(m, struct ip *);
 	} else {
+		m = MBUF_LIST_FIRST(ml);
+		ip = mtod(m, struct ip *);
 		hlen = ip->ip_hl << 2;
 	}
 
@@ -253,8 +265,14 @@ reroute:
 			dst = satosin(ro->ro_rt->rt_gateway);
 
 		/* Set the source IP address */
-		if (ip->ip_src.s_addr == INADDR_ANY && ia)
-			ip->ip_src = ia->ia_addr.sin_addr;
+		if (ip->ip_src.s_addr == INADDR_ANY && ia) {
+			MBUF_LIST_FOREACH(ml, m) {
+				ip = mtod(m, struct ip *);
+				ip->ip_src = ia->ia_addr.sin_addr;
+			}
+			m = MBUF_LIST_FIRST(ml);
+			ip = mtod(m, struct ip *);
+		}
 	}
 
 #ifdef IPSEC
@@ -268,15 +286,15 @@ reroute:
 			/* Should silently drop packet */
 			if (error == -EINVAL)
 				error = 0;
-			m_freem(m);
-			goto done;
+			goto bad;
 		}
 		if (tdb != NULL) {
 			/*
 			 * If it needs TCP/UDP hardware-checksumming, do the
 			 * computation now.
 			 */
-			in_proto_cksum_out(m, NULL);
+			MBUF_LIST_FOREACH(ml, m)
+				in_proto_cksum_out(m, NULL);
 		}
 	}
 #endif /* IPSEC */
@@ -284,8 +302,9 @@ reroute:
 	if (IN_MULTICAST(ip->ip_dst.s_addr) ||
 	    (ip->ip_dst.s_addr == INADDR_BROADCAST)) {
 
-		m->m_flags |= (ip->ip_dst.s_addr == INADDR_BROADCAST) ?
-			M_BCAST : M_MCAST;
+		MBUF_LIST_FOREACH(ml, m)
+			m->m_flags |= (ip->ip_dst.s_addr == INADDR_BROADCAST) ?
+			    M_BCAST : M_MCAST;
 
 		/*
 		 * IP destination address is multicast.  Make sure "dst"
@@ -297,10 +316,15 @@ reroute:
 		/*
 		 * See if the caller provided any multicast options
 		 */
-		if (imo != NULL)
-			ip->ip_ttl = imo->imo_ttl;
-		else
-			ip->ip_ttl = IP_DEFAULT_MULTICAST_TTL;
+		MBUF_LIST_FOREACH(ml, m) {
+			ip = mtod(m, struct ip *);
+			if (imo != NULL)
+				ip->ip_ttl = imo->imo_ttl;
+			else
+				ip->ip_ttl = IP_DEFAULT_MULTICAST_TTL;
+		}
+		m = MBUF_LIST_FIRST(ml);
+		ip = mtod(m, struct ip *);
 
 		/*
 		 * if we don't know the outgoing ifp yet, we can't generate
@@ -445,13 +469,17 @@ sendit:
 	 * Packet filter
 	 */
 #if NPF > 0
-	if (pf_test(AF_INET, PF_OUT, ifp, &m) != PF_PASS) {
-		error = EACCES;
-		m_freem(m);
-		goto done;
+	MBUF_LIST_FOREACH_SAFE(ml, m, n, p) {
+		if (pf_test(AF_INET, PF_OUT, ifp, &m) != PF_PASS) {
+			error = EACCES;
+			*p = n;
+			m_freem(m);
+			goto bad;
+		}
 	}
-	if (m == NULL)
+	if (ml_empty(ml))
 		goto done;
+	m = MBUF_LIST_FIRST(ml);
 	ip = mtod(m, struct ip *);
 	hlen = ip->ip_hl << 2;
 	if ((m->m_pkthdr.pf.flags & (PF_TAG_REROUTE | PF_TAG_GENERATED)) ==
@@ -467,33 +495,39 @@ sendit:
 		goto reroute;
 	}
 #endif
-	in_proto_cksum_out(m, ifp);
+	MBUF_LIST_FOREACH(ml, m)
+		in_proto_cksum_out(m, ifp);
 
 #ifdef IPSEC
 	if (ipsec_in_use && (flags & IP_FORWARDING) && (ipforwarding == 2) &&
 	    (m_tag_find(m, PACKET_TAG_IPSEC_IN_DONE, NULL) == NULL)) {
 		error = EHOSTUNREACH;
-		m_freem(m);
-		goto done;
+		goto bad;
 	}
 #endif
 
 	/*
 	 * If small enough for interface, can just send directly.
 	 */
-	if (ntohs(ip->ip_len) <= mtu) {
-		ip->ip_sum = 0;
-		if ((ifp->if_capabilities & IFCAP_CSUM_IPv4) &&
-		    (ifp->if_bridgeport == NULL))
-			m->m_pkthdr.csum_flags |= M_IPV4_CSUM_OUT;
-		else {
-			ipstat_inc(ips_outswcsum);
-			ip->ip_sum = in_cksum(m, hlen);
-		}
+	MBUF_LIST_FOREACH_SAFE(ml, m, n, p) {
+		if (ntohs(ip->ip_len) <= mtu) {
+			ip->ip_sum = 0;
+			if ((ifp->if_capabilities & IFCAP_CSUM_IPv4) &&
+			    (ifp->if_bridgeport == NULL))
+				m->m_pkthdr.csum_flags |= M_IPV4_CSUM_OUT;
+			else {
+				ipstat_inc(ips_outswcsum);
+				ip->ip_sum = in_cksum(m, hlen);
+			}
 
-		error = ifp->if_output(ifp, m, sintosa(dst), ro->ro_rt);
-		goto done;
+			error = ifp->if_output(ifp, m, sintosa(dst), ro->ro_rt);
+			m = NULL;
+		}
 	}
+	if (ml_empty(ml))
+		goto done;
+	m = MBUF_LIST_FIRST(ml);
+	ip = mtod(m, struct ip *);
 
 	/*
 	 * Too large for interface; fragment if possible.
@@ -502,7 +536,8 @@ sendit:
 	if (ip->ip_off & htons(IP_DF)) {
 #ifdef IPSEC
 		if (ip_mtudisc)
-			ipsec_adjust_mtu(m, ifp->if_mtu);
+			MBUF_LIST_FOREACH(ml, m)
+				ipsec_adjust_mtu(m, ifp->if_mtu);
 #endif
 		error = EMSGSIZE;
 		/*
@@ -522,23 +557,27 @@ sendit:
 		goto bad;
 	}
 
-	error = ip_fragment(m, ifp, mtu);
-	if (error) {
-		m = m0 = NULL;
-		goto bad;
-	}
+	while ((m = ml_dequeue(ml)) != NULL) {
+		struct mbuf *n;
 
-	for (; m; m = m0) {
-		m0 = m->m_nextpkt;
-		m->m_nextpkt = 0;
-		if (error == 0)
-			error = ifp->if_output(ifp, m, sintosa(dst), ro->ro_rt);
-		else
+		error = ip_fragment(m, ifp, mtu);
+		if (error) {
 			m_freem(m);
-	}
+			goto bad;
+		}
 
-	if (error == 0)
-		ipstat_inc(ips_fragmented);
+		for (; m; m = n) {
+			n = m->m_nextpkt;
+			m->m_nextpkt = NULL;
+			if (error == 0)
+				error = ifp->if_output(ifp, m, sintosa(dst),
+				    ro->ro_rt);
+			else
+				m_freem(m);
+		}
+		if (error == 0)
+			ipstat_inc(ips_fragmented);
+	}
 
 done:
 	if (ro == &iproute && ro->ro_rt)
@@ -546,7 +585,7 @@ done:
 	if_put(ifp);
 	return (error);
 bad:
-	m_freem(m0);
+	ml_purge(ml);
 	goto done;
 }
 
