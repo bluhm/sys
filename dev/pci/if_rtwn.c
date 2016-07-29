@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_rtwn.c,v 1.22 2016/06/17 10:53:55 stsp Exp $	*/
+/*	$OpenBSD: if_rtwn.c,v 1.24 2016/07/26 13:00:28 stsp Exp $	*/
 
 /*-
  * Copyright (c) 2010 Damien Bergamini <damien.bergamini@free.fr>
@@ -742,16 +742,20 @@ uint16_t
 rtwn_pci_read_2(void *cookie, uint16_t addr)
 {
 	struct rtwn_pci_softc *sc = cookie;
+	uint16_t val;
 
-	return bus_space_read_2(sc->sc_st, sc->sc_sh, addr);
+	val = bus_space_read_2(sc->sc_st, sc->sc_sh, addr);
+	return le16toh(val);
 }
 
 uint32_t
 rtwn_pci_read_4(void *cookie, uint16_t addr)
 {
 	struct rtwn_pci_softc *sc = cookie;
+	uint32_t val;
 
-	return bus_space_read_4(sc->sc_st, sc->sc_sh, addr);
+	val = bus_space_read_4(sc->sc_st, sc->sc_sh, addr);
+	return le32toh(val);
 }
 
 void
@@ -985,7 +989,10 @@ rtwn_tx(void *cookie, struct mbuf *m, struct ieee80211_node *ni)
 		    SM(R92C_TXDW1_RAID, raid) |
 		    R92C_TXDW1_AGGBK);
 
-		if (ic->ic_flags & IEEE80211_F_USEPROT) {
+		if (m->m_pkthdr.len + IEEE80211_CRC_LEN > ic->ic_rtsthreshold) {
+			txd->txdw4 |= htole32(R92C_TXDW4_RTSEN |
+			    R92C_TXDW4_HWRTSEN);
+		} else if (ic->ic_flags & IEEE80211_F_USEPROT) {
 			if (ic->ic_protmode == IEEE80211_PROT_CTSONLY) {
 				txd->txdw4 |= htole32(R92C_TXDW4_CTS2SELF |
 				    R92C_TXDW4_HWRTSEN);
