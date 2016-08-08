@@ -184,18 +184,19 @@ ether_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
  * Assumes that ifp is actually pointer to arpcom structure.
  */
 int
-ether_output(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst,
+ether_output_ml(struct ifnet *ifp, struct mbuf_list *ml, struct sockaddr *dst,
     struct rtentry *rt)
 {
 	u_int16_t etype;
 	u_char edst[ETHER_ADDR_LEN];
 	u_char *esrc;
-	struct mbuf *mcopy = NULL;
+	struct mbuf *m, *mcopy = NULL;
 	struct ether_header *eh;
 	struct arpcom *ac = (struct arpcom *)ifp;
 	sa_family_t af = dst->sa_family;
 	int error = 0;
 
+	m = MBUF_LIST_FIRST(ml);
 	KASSERT(rt != NULL || ISSET(m->m_flags, M_MCAST|M_BCAST) ||
 		af == AF_UNSPEC || af == pseudo_AF_HDRCMPLT);
 
@@ -298,6 +299,16 @@ ether_output(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst,
 bad:
 	m_freem(m);
 	return (error);
+}
+
+int
+ether_output(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst,
+    struct rtentry *rt)
+{
+	struct mbuf_list ml = MBUF_LIST_INITIALIZER();
+
+	ml_enqueue(&ml, m);
+	return (ether_output_ml(ifp, &ml, dst, rt));
 }
 
 /*
@@ -522,7 +533,7 @@ ether_ifattach(struct ifnet *ifp)
 	ifp->if_addrlen = ETHER_ADDR_LEN;
 	ifp->if_hdrlen = ETHER_HDR_LEN;
 	ifp->if_mtu = ETHERMTU;
-	ifp->if_output = ether_output;
+	ifp->if_output_ml = ether_output_ml;
 	ifp->if_rtrequest = ether_rtrequest;
 
 	if_ih_insert(ifp, ether_input, NULL);
