@@ -520,11 +520,9 @@ sendit:
 			ipstat.ips_outswcsum += ml_len(ml);
 		}
 
-		while ((m = ml_dequeue(ml)) != NULL) {
-			error = ifp->if_output(ifp, m, sintosa(dst), ro->ro_rt);
-			if (error)
-				goto bad;
-		}
+		error = ifp->if_output_ml(ifp, ml, sintosa(dst), ro->ro_rt);
+		if (error)
+			goto bad;
 		goto done;
 	}
 
