@@ -400,7 +400,8 @@ statclock(struct clockframe *frame)
 	spc->spc_pscnt = psdiv;
 
 	if (p != NULL) {
-		p->p_cpticks++;
+		if (p != spc->spc_idleproc)
+			p->p_cpticks++;
 		/*
 		 * If no schedclock is provided, call it here at ~~12-25 Hz;
 		 * ~~16 Hz is best

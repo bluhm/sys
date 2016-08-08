@@ -328,17 +328,16 @@ main(void *framep)
 	 */
 	(void)chgproccnt(0, 1);
 
-	/* Initialize run queues */
-	sched_init_runqueues();
 	sleep_queue_init();
-	sched_init_cpu(curcpu());
-	p->p_cpu->ci_randseed = (arc4random() & 0x7fffffff) + 1;
 
 	/* Initialize task queues */
 	taskq_init();
 
 	/* Initialize the interface/address trees */
 	ifinit();
+
+	/* Initialize the scheduler */
+	sched_init();
 
 	/* Lock the kernel on behalf of proc0. */
 	KERNEL_LOCK();

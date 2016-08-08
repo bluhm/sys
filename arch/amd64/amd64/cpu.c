@@ -253,7 +253,7 @@ cpu_idle_mwait_cycle(void)
 		panic("idle with interrupts blocked!");
 
 	/* something already queued? */
-	if (!cpu_is_idle(ci))
+	if (want_resched(ci))
 		return;
 
 	/*
@@ -267,7 +267,7 @@ cpu_idle_mwait_cycle(void)
 	 * the check in sched_idle() and here.
 	 */
 	atomic_setbits_int(&ci->ci_mwait, MWAIT_IDLING | MWAIT_ONLY);
-	if (cpu_is_idle(ci)) {
+	if (!want_resched(ci)) {
 		monitor(&ci->ci_mwait, 0, 0);
 		if ((ci->ci_mwait & MWAIT_IDLING) == MWAIT_IDLING)
 			mwait(0, 0);

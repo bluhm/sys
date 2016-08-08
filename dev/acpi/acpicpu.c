@@ -1188,7 +1188,7 @@ acpicpu_idle(void)
 #endif
 
 		/* something already queued? */
-		if (!cpu_is_idle(ci))
+		if (want_resched(ci))
 			return;
 
 		/*
@@ -1204,7 +1204,7 @@ acpicpu_idle(void)
 		hints = (unsigned)best->address;
 		microuptime(&start);
 		atomic_setbits_int(&ci->ci_mwait, MWAIT_IDLING);
-		if (cpu_is_idle(ci)) {
+		if (!want_resched(ci)) {
 			/* intel errata AAI65: cflush before monitor */
 			if (ci->ci_cflushsz != 0) {
 				membar_sync();

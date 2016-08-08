@@ -105,7 +105,7 @@ roundrobin(struct cpu_info *ci)
 		}
 	}
 
-	if (spc->spc_nrun)
+	if (!sched_qs_empty(ci))
 		need_resched(ci);
 }
 
@@ -300,6 +300,7 @@ yield(void)
 	SCHED_LOCK(s);
 	p->p_priority = p->p_usrpri;
 	p->p_stat = SRUN;
+	KASSERT(p->p_cpu != NULL);
 	setrunqueue(p);
 	p->p_ru.ru_nvcsw++;
 	mi_switch();
@@ -327,7 +328,7 @@ preempt(struct proc *newp)
 	SCHED_LOCK(s);
 	p->p_priority = p->p_usrpri;
 	p->p_stat = SRUN;
-	p->p_cpu = sched_choosecpu(p);
+	KASSERT(p->p_cpu != NULL);
 	setrunqueue(p);
 	p->p_ru.ru_nivcsw++;
 	mi_switch();
@@ -418,6 +419,7 @@ mi_switch(void)
 	}
 
 	clear_resched(curcpu());
+	spc->spc_curpriority = p->p_usrpri;
 
 	SCHED_ASSERT_LOCKED();
 
@@ -454,25 +456,15 @@ mi_switch(void)
 #endif
 }
 
-static __inline void
+/*
+ * If the last CPU of thread ``p'' is currently running a lower
+ * priority thread, force a reschedule.
+ */
+static inline void
 resched_proc(struct proc *p, u_char pri)
 {
-	struct cpu_info *ci;
+	struct cpu_info *ci = p->p_cpu;
 
-	/*
-	 * XXXSMP
-	 * This does not handle the case where its last
-	 * CPU is running a higher-priority process, but every
-	 * other CPU is running a lower-priority process.  There
-	 * are ways to handle this situation, but they're not
-	 * currently very pretty, and we also need to weigh the
-	 * cost of moving a process from one CPU to another.
-	 *
-	 * XXXSMP
-	 * There is also the issue of locking the other CPU's
-	 * sched state, which we currently do not do.
-	 */
-	ci = (p->p_cpu != NULL) ? p->p_cpu : curcpu();
 	if (pri < ci->ci_schedstate.spc_curpriority)
 		need_resched(ci);
 }
@@ -507,7 +499,7 @@ setrunnable(struct proc *p)
 		break;
 	}
 	p->p_stat = SRUN;
-	p->p_cpu = sched_choosecpu(p);
+	KASSERT(p->p_cpu != NULL);
 	setrunqueue(p);
 	if (p->p_slptime > 1)
 		updatepri(p);

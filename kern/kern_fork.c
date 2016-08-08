@@ -486,7 +486,7 @@ fork1(struct proc *curp, int flags, void *stack, pid_t *tidptr,
 	if ((flags & FORK_IDLE) == 0) {
 		SCHED_LOCK(s);
 		p->p_stat = SRUN;
-		p->p_cpu = sched_choosecpu_fork(curp, flags);
+		p->p_cpu = curcpu();
 		setrunqueue(p);
 		SCHED_UNLOCK(s);
 	} else

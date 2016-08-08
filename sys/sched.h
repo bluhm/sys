@@ -89,9 +89,10 @@
 
 #define	SCHED_NQS	32			/* 32 run queues. */
 
+#ifdef	_KERNEL
+
 /*
  * Per-CPU scheduler state.
- * XXX - expose to userland for now.
  */
 struct schedstate_percpu {
 	struct timespec spc_runtime;	/* time curproc started running */
@@ -102,23 +103,16 @@ struct schedstate_percpu {
 	int spc_rrticks;		/* ticks until roundrobin() */
 	int spc_pscnt;			/* prof/stat counter */
 	int spc_psdiv;			/* prof/stat divisor */	
+	unsigned int spc_npeg;		/* nb. of pegged threads on runqueue */
 	struct proc *spc_idleproc;	/* idle proc for this cpu */
 
-	u_int spc_nrun;			/* procs on the run queues */
 	fixpt_t spc_ldavg;		/* shortest load avg. for this cpu */
 
-	TAILQ_HEAD(prochead, proc) spc_qs[SCHED_NQS];
-	volatile uint32_t spc_whichqs;
-
-#ifdef notyet
-	struct proc *spc_reaper;	/* dead proc reaper */
-#endif
 	LIST_HEAD(,proc) spc_deadproc;
 
 	volatile int spc_barrier;	/* for sched_barrier() */
 };
 
-#ifdef	_KERNEL
 
 /* spc_flags */
 #define SPCF_SEENRR             0x0001  /* process has seen roundrobin() */
@@ -141,14 +135,13 @@ void roundrobin(struct cpu_info *);
 void scheduler_start(void);
 void userret(struct proc *p);
 
+void sched_init(void);
 void sched_init_cpu(struct cpu_info *);
 void sched_idle(void *);
 void sched_exit(struct proc *);
 void mi_switch(void);
 void cpu_switchto(struct proc *, struct proc *);
 struct proc *sched_chooseproc(void);
-struct cpu_info *sched_choosecpu(struct proc *);
-struct cpu_info *sched_choosecpu_fork(struct proc *parent, int);
 void cpu_idle_enter(void);
 void cpu_idle_cycle(void);
 void cpu_idle_leave(void);
@@ -163,11 +156,11 @@ void sched_start_secondary_cpus(void);
 void sched_stop_secondary_cpus(void);
 #endif
 
-#define cpu_is_idle(ci)	((ci)->ci_schedstate.spc_whichqs == 0)
-
-void sched_init_runqueues(void);
 void setrunqueue(struct proc *);
 void remrunqueue(struct proc *);
+
+extern volatile uint32_t sched_whichqs;
+#define sched_qs_empty(ci)	(sched_whichqs == 0)
 
 /* Inherit the parent's scheduler history */
 #define scheduler_fork_hook(parent, child) do {				\

@@ -266,6 +266,7 @@ sleep_finish(struct sleep_state *sls, int do_sleep)
 		mi_switch();
 	} else if (!do_sleep) {
 		unsleep(p);
+		p->p_cpu->ci_schedstate.spc_curpriority = p->p_usrpri;
 	}
 
 #ifdef DIAGNOSTIC
@@ -273,7 +274,6 @@ sleep_finish(struct sleep_state *sls, int do_sleep)
 		panic("sleep_finish !SONPROC");
 #endif
 
-	p->p_cpu->ci_schedstate.spc_curpriority = p->p_usrpri;
 	SCHED_UNLOCK(sls->sls_s);
 
 	/*

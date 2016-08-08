@@ -217,12 +217,13 @@ extern struct cpu_info *cpu_info_list;
 
 #define CPU_INFO_UNIT(ci)	((ci)->ci_dev ? (ci)->ci_dev->dv_unit : 0)
 
-/*      
+/*
  * Preempt the current process if in interrupt from user mode,
  * or after the current trap/syscall if in system mode.
  */
-extern void need_resched(struct cpu_info *);
-#define clear_resched(ci) (ci)->ci_want_resched = 0
+void need_resched(struct cpu_info *);
+#define	clear_resched(ci)	(ci)->ci_want_resched = 0
+#define	want_resched(ci)	((ci)->ci_want_resched)
 
 #if defined(MULTIPROCESSOR)
 
