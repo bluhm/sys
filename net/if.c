@@ -146,6 +146,10 @@ int	if_setgroupattribs(caddr_t);
 
 void	if_linkstate(struct ifnet *);
 void	if_linkstate_task(void *);
+int     if_output_ml(struct ifnet *, struct mbuf_list *, struct sockaddr *,
+	    struct rtentry *);
+int     if_output(struct ifnet *, struct mbuf *, struct sockaddr *,
+	    struct rtentry *);
 
 int	if_clone_list(struct if_clonereq *);
 struct if_clone	*if_clone_lookup(const char *, int *);
@@ -581,6 +585,8 @@ if_attach_common(struct ifnet *ifp)
 	ifp->if_ifqs = ifp->if_snd.ifq_ifqs;
 	ifp->if_nifqs = 1;
 
+	ifp->if_output_ml = if_output_ml;
+	ifp->if_output = if_output;
 	ifp->if_addrhooks = malloc(sizeof(*ifp->if_addrhooks),
 	    M_TEMP, M_WAITOK);
 	TAILQ_INIT(ifp->if_addrhooks);
@@ -1698,6 +1704,7 @@ if_setlladdr(struct ifnet *ifp, const uint8_t *lladdr)
 }
 
 int
+<<<<<<< HEAD
 if_setrdomain(struct ifnet *ifp, int rdomain)
 {
 	struct ifreq ifr;
@@ -1782,6 +1789,32 @@ if_setrdomain(struct ifnet *ifp, int rdomain)
 	}
 
 	return (0);
+=======
+if_output_ml(struct ifnet *ifp, struct mbuf_list * ml, struct sockaddr *dst,
+    struct rtentry *rt)
+{
+	struct mbuf *m;
+	int error;
+
+	while ((m = ml_dequeue(ml)) != NULL) {
+		error = ifp->if_output(ifp, m, dst, rt);
+		if (error) {
+			ml_purge(ml);
+			return (error);
+		}
+	}
+	return (0);
+}
+
+int
+if_output(struct ifnet *ifp, struct mbuf* m, struct sockaddr *dst,
+    struct rtentry *rt)
+{
+	struct mbuf_list ml = MBUF_LIST_INITIALIZER();
+
+	ml_enqueue(&ml, m);
+        return (ifp->if_output_ml(ifp, &ml, dst, rt));
+>>>>>>> Implement if_output_ml() and a ether_output_ml() prototype.
 }
 
 /*
