@@ -140,6 +140,8 @@ struct ifnet {				/* and the entries */
 	SRPL_HEAD(, ifih) if_inputs;	/* input routines (dequeue) */
 
 					/* output routine (enqueue) */
+	int	(*if_output_ml)(struct ifnet *, struct mbuf_list *,
+		    struct sockaddr *, struct rtentry *);
 	int	(*if_output)(struct ifnet *, struct mbuf *, struct sockaddr *,
 		     struct rtentry *);
 
