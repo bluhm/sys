@@ -1195,7 +1195,7 @@ sotask(void *arg)
 		 * called from softnet interrupt context.  This would remove
 		 * the socket during somove().
 		 */
-		(void) somove(so, M_DONTWAIT);
+		somove(so, M_DONTWAIT);
 	}
 	splx(s);
 
@@ -1494,7 +1494,7 @@ sorwakeup(struct socket *so)
 		if (so->so_proto->pr_flags & PR_WANTRCVD)
 			task_add(sosplice_taskq, &so->so_splicetask);
 		else
-			(void) somove(so, M_DONTWAIT);
+			somove(so, M_DONTWAIT);
 	}
 	if (isspliced(so))
 		return;
