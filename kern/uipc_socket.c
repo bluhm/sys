@@ -1055,6 +1055,8 @@ sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
 	if (sosplice_taskq == NULL)
 		sosplice_taskq = taskq_create("sosplice", 1, IPL_SOFTNET,
 		    TASKQ_CANTSLEEP);
+	if (sosplice_taskq == NULL)
+		return (ENOMEM);
 
 	if ((so->so_proto->pr_flags & PR_SPLICE) == 0)
 		return (EPROTONOSUPPORT);
