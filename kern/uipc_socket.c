@@ -47,8 +47,10 @@
 #include <sys/unpcb.h>
 #include <sys/socketvar.h>
 #include <sys/signalvar.h>
-#include <net/if.h>
 #include <sys/pool.h>
+
+#include <net/if.h>
+#include <net/if_var.h>
 
 #ifdef DDB
 #include <machine/db_machdep.h>
@@ -86,7 +88,6 @@ int	sominconn = SOMINCONN;
 struct pool socket_pool;
 #ifdef SOCKET_SPLICE
 struct pool sosplice_pool;
-struct taskq *sosplice_taskq;
 #endif
 
 void
@@ -1052,12 +1053,6 @@ sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
 	struct socket	*sosp;
 	int		 s, error = 0;
 
-	if (sosplice_taskq == NULL)
-		sosplice_taskq = taskq_create("sosplice", 1, IPL_SOFTNET,
-		    TASKQ_CANTSLEEP);
-	if (sosplice_taskq == NULL)
-		return (ENOMEM);
-
 	if ((so->so_proto->pr_flags & PR_SPLICE) == 0)
 		return (EPROTONOSUPPORT);
 	if (so->so_options & SO_ACCEPTCONN)
@@ -1159,7 +1154,7 @@ sounsplice(struct socket *so, struct socket *sosp, int wakeup)
 {
 	splsoftassert(IPL_SOFTNET);
 
-	task_del(sosplice_taskq, &so->so_splicetask);
+	task_del(softnettq, &so->so_splicetask);
 	timeout_del(&so->so_idleto);
 	sosp->so_snd.sb_flagsintr &= ~SB_SPLICE;
 	so->so_rcv.sb_flagsintr &= ~SB_SPLICE;
@@ -1188,6 +1183,7 @@ sotask(void *arg)
 	struct socket *so = arg;
 	int s;
 
+	KERNEL_LOCK();
 	s = splsoftnet();
 	if (so->so_rcv.sb_flagsintr & SB_SPLICE) {
 		/*
@@ -1198,9 +1194,7 @@ sotask(void *arg)
 		somove(so, M_DONTWAIT);
 	}
 	splx(s);
-
-	/* Avoid user land starvation. */
-	yield();
+	KERNEL_UNLOCK();
 }
 
 /*
@@ -1492,7 +1486,7 @@ sorwakeup(struct socket *so)
 		 * Using a thread would make things slower.
 		 */
 		if (so->so_proto->pr_flags & PR_WANTRCVD)
-			task_add(sosplice_taskq, &so->so_splicetask);
+			task_add(softnettq, &so->so_splicetask);
 		else
 			somove(so, M_DONTWAIT);
 	}
@@ -1509,7 +1503,7 @@ sowwakeup(struct socket *so)
 {
 #ifdef SOCKET_SPLICE
 	if (so->so_snd.sb_flagsintr & SB_SPLICE)
-		task_add(sosplice_taskq, &so->so_sp->ssp_soback->so_splicetask);
+		task_add(softnettq, &so->so_sp->ssp_soback->so_splicetask);
 #endif
 	sowakeup(so, &so->so_snd);
 }
