@@ -1725,7 +1725,8 @@ ipmi_attach(struct device *parent, struct device *self, void *aux)
 	c->c_sc = sc;
 	c->c_ccode = -1;
 
-	sc->sc_cmd_taskq = taskq_create("ipmicmd", 1, IPL_NONE, TASKQ_MPSAFE);
+	sc->sc_cmd_taskq = taskq_create("ipmicmd", 1, IPL_NONE, PWAIT,
+	    TASKQ_MPSAFE);
 	mtx_init(&sc->sc_cmd_mtx, IPL_NONE);
 }
 

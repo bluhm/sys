@@ -33,6 +33,7 @@ struct taskq {
 	}			 tq_state;
 	unsigned int		 tq_running;
 	unsigned int		 tq_nthreads;
+	int		 	 tq_priority;
 	unsigned int		 tq_flags;
 	const char		*tq_name;
 
@@ -44,6 +45,7 @@ struct taskq taskq_sys = {
 	TQ_S_CREATED,
 	0,
 	1,
+	PWAIT,
 	0,
 	"systq",
 	MUTEX_INITIALIZER(IPL_HIGH),
@@ -54,6 +56,7 @@ struct taskq taskq_sys_mp = {
 	TQ_S_CREATED,
 	0,
 	1,
+	PWAIT,
 	TASKQ_MPSAFE,
 	"systqmp",
 	MUTEX_INITIALIZER(IPL_HIGH),
@@ -81,7 +84,7 @@ taskq_init(void)
 }
 
 struct taskq *
-taskq_create(const char *name, unsigned int nthreads, int ipl,
+taskq_create(const char *name, unsigned int nthreads, int ipl, int priority,
     unsigned int flags)
 {
 	struct taskq *tq;
@@ -93,6 +96,7 @@ taskq_create(const char *name, unsigned int nthreads, int ipl,
 	tq->tq_state = TQ_S_CREATED;
 	tq->tq_running = 0;
 	tq->tq_nthreads = nthreads;
+	tq->tq_priority = priority;
 	tq->tq_name = name;
 	tq->tq_flags = flags;
 
@@ -253,7 +257,7 @@ taskq_next_work(struct taskq *tq, struct task *work, sleepfn tqsleep)
 			return (0);
 		}
 
-		tqsleep(tq, &tq->tq_mtx, PWAIT, "bored", 0);
+		tqsleep(tq, &tq->tq_mtx, tq->tq_priority, "bored", 0);
 	}
 
 	TAILQ_REMOVE(&tq->tq_worklist, next, t_entry);
