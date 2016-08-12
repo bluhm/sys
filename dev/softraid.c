@@ -3335,7 +3335,7 @@ sr_ioctl_createraid(struct sr_softc *sc, struct bioc_createraid *bc,
 	sd = malloc(sizeof(struct sr_discipline), M_DEVBUF, M_WAITOK | M_ZERO);
 	sd->sd_sc = sc;
 	SLIST_INIT(&sd->sd_meta_opt);
-	sd->sd_taskq = taskq_create("srdis", 1, IPL_BIO, 0);
+	sd->sd_taskq = taskq_create("srdis", 1, IPL_BIO, PWAIT, 0);
 	if (sd->sd_taskq == NULL) {
 		sr_error(sc, "could not create discipline taskq");
 		goto unwind;
