@@ -7978,10 +7978,10 @@ iwm_attach(struct device *parent, struct device *self, void *aux)
 		goto fail4;
 	}
 
-	sc->sc_eswq = taskq_create("iwmes", 1, IPL_NET, 0);
+	sc->sc_eswq = taskq_create("iwmes", 1, IPL_NET, PWAIT, 0);
 	if (sc->sc_eswq == NULL)
 		goto fail4;
-	sc->sc_nswq = taskq_create("iwmns", 1, IPL_NET, 0);
+	sc->sc_nswq = taskq_create("iwmns", 1, IPL_NET, PWAIT, 0);
 	if (sc->sc_nswq == NULL)
 		goto fail4;
 

@@ -241,7 +241,7 @@ ifinit(void)
 
 	timeout_set(&net_tick_to, net_tick, &net_tick_to);
 
-	softnettq = taskq_create("softnet", 1, IPL_NET,
+	softnettq = taskq_create("softnet", 1, IPL_NET, PWAIT,
 	    TASKQ_MPSAFE | TASKQ_CANTSLEEP);
 	if (softnettq == NULL)
 		panic("unable to create softnet taskq");
