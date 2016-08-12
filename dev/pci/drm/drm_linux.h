@@ -431,7 +431,7 @@ struct workqueue_struct;
 static inline struct workqueue_struct *
 alloc_ordered_workqueue(const char *name, int flags)
 {
-	struct taskq *tq = taskq_create(name, 1, IPL_TTY, 0);
+	struct taskq *tq = taskq_create(name, 1, IPL_TTY, PWAIT, 0);
 	return (struct workqueue_struct *)tq;
 }
 

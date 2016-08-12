@@ -624,7 +624,7 @@ qle_attach(struct device *parent, struct device *self, void *aux)
 		goto free_scratch;
 	}
 
-	sc->sc_update_taskq = taskq_create(DEVNAME(sc), 1, IPL_BIO, 0);
+	sc->sc_update_taskq = taskq_create(DEVNAME(sc), 1, IPL_BIO, PWAIT, 0);
 	task_set(&sc->sc_update_task, qle_do_update, sc);
 
 	/* wait a bit for link to come up so we can scan and attach devices */

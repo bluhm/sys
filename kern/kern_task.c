@@ -81,7 +81,7 @@ taskq_init(void)
 }
 
 struct taskq *
-taskq_create(const char *name, unsigned int nthreads, int ipl,
+taskq_create(const char *name, unsigned int nthreads, int ipl, int priority,
     unsigned int flags)
 {
 	struct taskq *tq;

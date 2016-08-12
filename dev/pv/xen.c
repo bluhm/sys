@@ -697,7 +697,7 @@ xen_intr_establish(evtchn_port_t port, xen_intr_handle_t *xih, int domain,
 
 	xi->xi_port = (evtchn_port_t)*xih;
 
-	xi->xi_taskq = taskq_create(name, 1, IPL_NET, TASKQ_MPSAFE);
+	xi->xi_taskq = taskq_create(name, 1, IPL_NET, PWAIT, TASKQ_MPSAFE);
 	if (!xi->xi_taskq) {
 		printf("%s: failed to create interrupt task for %s\n",
 		    sc->sc_dev.dv_xname, name);
