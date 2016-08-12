@@ -227,7 +227,7 @@ void
 sched_init_runqueues(void)
 {
 #ifdef MULTIPROCESSOR
-	sbartq = taskq_create("sbar", 1, IPL_NONE,
+	sbartq = taskq_create("sbar", 1, IPL_NONE, PWAIT,
 	    TASKQ_MPSAFE | TASKQ_CANTSLEEP);
 	if (sbartq == NULL)
 		panic("unable to create sbar taskq");

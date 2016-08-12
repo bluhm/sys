@@ -191,8 +191,9 @@ sensor_task_register(void *arg, void (*func)(void *), unsigned int period)
 		panic("sensor_task_register: period is 0");
 #endif
 
-	if (sensors_taskq == NULL &&
-	    (sensors_taskq = taskq_create("sensors", 1, IPL_HIGH, 0)) == NULL)
+	if (sensors_taskq == NULL)
+		sensors_taskq = taskq_create("sensors", 1, IPL_HIGH, PWAIT, 0);
+	if (sensors_taskq == NULL)
 		sensors_taskq = systq;
 
 	st = malloc(sizeof(*st), M_DEVBUF, M_NOWAIT);

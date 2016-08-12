@@ -510,8 +510,9 @@ crypto_getreq(int num)
 void
 crypto_init(void)
 {
-	crypto_taskq = taskq_create("crypto", 1, IPL_VM, 0);
-	crypto_taskq_mpsafe = taskq_create("crynlk", 1, IPL_VM|IPL_MPSAFE, 0);
+	crypto_taskq = taskq_create("crypto", 1, IPL_VM, PWAIT, 0);
+	crypto_taskq_mpsafe = taskq_create("crynlk", 1, IPL_VM|IPL_MPSAFE,
+	    PWAIT, 0);
 
 	pool_init(&cryptop_pool, sizeof(struct cryptop), 0, 0,
 	    0, "cryptop", NULL);
