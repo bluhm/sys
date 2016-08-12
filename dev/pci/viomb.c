@@ -198,7 +198,7 @@ viomb_attach(struct device *parent, struct device *self, void *aux)
 		goto err_dmamap;
 	}
 
-	sc->sc_taskq = taskq_create("viomb", 1, IPL_BIO, 0);
+	sc->sc_taskq = taskq_create("viomb", 1, IPL_BIO, PWAIT, 0);
 	if (sc->sc_taskq == NULL)
 		goto err_dmamap;
 	task_set(&sc->sc_task, viomb_worker, sc);
