@@ -254,6 +254,10 @@ uipc_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 			if (control) {
 				if (sbappendcontrol(rcv, m, control))
 					control = NULL;
+				else {
+					error = ENOBUFS;
+					break;
+				}
 			} else if (so->so_type == SOCK_SEQPACKET)
 				sbappendrecord(rcv, m);
 			else
