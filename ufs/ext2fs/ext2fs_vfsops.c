@@ -1,4 +1,4 @@
-/*	$OpenBSD: ext2fs_vfsops.c,v 1.93 2016/06/19 11:54:33 natano Exp $	*/
+/*	$OpenBSD: ext2fs_vfsops.c,v 1.95 2016/08/13 21:28:09 guenther Exp $	*/
 /*	$NetBSD: ext2fs_vfsops.c,v 1.1 1997/06/11 09:34:07 bouyer Exp $	*/
 
 /*
@@ -583,7 +583,7 @@ ext2fs_mountfs(struct vnode *devvp, struct mount *mp, struct proc *p)
 		ump->um_e2fs->e2fs_fmod = 1;
 	}
 
-	mp->mnt_data = (qaddr_t)ump;
+	mp->mnt_data = ump;
 	mp->mnt_stat.f_fsid.val[0] = (long)dev;
 	mp->mnt_stat.f_fsid.val[1] = mp->mnt_vfc->vfc_typenum;
 	mp->mnt_stat.f_namemax = MAXNAMLEN;
@@ -918,7 +918,7 @@ ext2fs_vget(struct mount *mp, ino_t ino, struct vnode **vpp)
 	 * Initialize the vnode from the inode, check for aliases.
 	 * Note that the underlying vnode may have changed.
 	 */
-	error = ext2fs_vinit(mp, &ext2fs_specvops, EXT2FS_FIFOOPS, &vp);
+	error = ext2fs_vinit(mp, &vp);
 	if (error) {
 		vput(vp);
 		*vpp = NULL;

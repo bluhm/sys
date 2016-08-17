@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_map.c,v 1.217 2016/06/17 10:48:25 dlg Exp $	*/
+/*	$OpenBSD: uvm_map.c,v 1.220 2016/08/11 01:17:33 dlg Exp $	*/
 /*	$NetBSD: uvm_map.c,v 1.86 2000/11/27 08:40:03 chs Exp $	*/
 
 /*
@@ -771,6 +771,9 @@ uvm_map_isavail(struct vm_map *map, struct uvm_addr_state *uaddr,
 	struct uvm_map_addr *atree;
 	struct vm_map_entry *i, *i_end;
 
+	if (addr + sz < addr)
+		return 0;
+
 	/*
 	 * Kernel memory above uvm_maxkaddr is considered unavailable.
 	 */
@@ -1033,6 +1036,12 @@ uvm_mapanon(struct vm_map *map, vaddr_t *addr, vsize_t sz,
 			goto unlock;
 	}
 
+	/* Double-check if selected address doesn't cause overflow. */
+	if (*addr + sz < *addr) {
+		error = ENOMEM;
+		goto unlock;
+	}
+
 	/* If we only want a query, return now. */
 	if (flags & UVM_FLAG_QUERY) {
 		error = 0;
@@ -1274,6 +1283,12 @@ uvm_map(struct vm_map *map, vaddr_t *addr, vsize_t sz,
 
 		if (error != 0)
 			goto unlock;
+	}
+
+	/* Double-check if selected address doesn't cause overflow. */
+	if (*addr + sz < *addr) {
+		error = ENOMEM;
+		goto unlock;
 	}
 
 	KASSERT((map->flags & VM_MAP_ISVMSPACE) == VM_MAP_ISVMSPACE ||
@@ -1654,25 +1669,23 @@ uvm_mapent_alloc(struct vm_map *map, int flags)
 
 	if (map->flags & VM_MAP_INTRSAFE || cold) {
 		mtx_enter(&uvm_kmapent_mtx);
-		me = uvm.kentry_free;
-		if (me == NULL) {
+		if (SLIST_EMPTY(&uvm.kentry_free)) {
 			ne = km_alloc(PAGE_SIZE, &kv_page, &kp_dirty,
 			    &kd_nowait);
 			if (ne == NULL)
 				panic("uvm_mapent_alloc: cannot allocate map "
 				    "entry");
-			for (i = 0;
-			    i < PAGE_SIZE / sizeof(struct vm_map_entry) - 1;
-			    i++)
-				RB_LEFT(&ne[i], daddrs.addr_entry) = &ne[i + 1];
-			RB_LEFT(&ne[i], daddrs.addr_entry) = NULL;
-			me = ne;
+			for (i = 0; i < PAGE_SIZE / sizeof(*ne); i++) {
+				SLIST_INSERT_HEAD(&uvm.kentry_free,
+				    &ne[i], daddrs.addr_kentry);
+			}
 			if (ratecheck(&uvm_kmapent_last_warn_time,
 			    &uvm_kmapent_warn_rate))
 				printf("uvm_mapent_alloc: out of static "
 				    "map entries\n");
 		}
-		uvm.kentry_free = RB_LEFT(me, daddrs.addr_entry);
+		me = SLIST_FIRST(&uvm.kentry_free);
+		SLIST_REMOVE_HEAD(&uvm.kentry_free, daddrs.addr_kentry);
 		uvmexp.kmapent++;
 		mtx_leave(&uvm_kmapent_mtx);
 		me->flags = UVM_MAP_STATIC;
@@ -1710,8 +1723,7 @@ uvm_mapent_free(struct vm_map_entry *me)
 {
 	if (me->flags & UVM_MAP_STATIC) {
 		mtx_enter(&uvm_kmapent_mtx);
-		RB_LEFT(me, daddrs.addr_entry) = uvm.kentry_free;
-		uvm.kentry_free = me;
+		SLIST_INSERT_HEAD(&uvm.kentry_free, me, daddrs.addr_kentry);
 		uvmexp.kmapent--;
 		mtx_leave(&uvm_kmapent_mtx);
 	} else if (me->flags & UVM_MAP_KMEM) {
@@ -2780,11 +2792,10 @@ uvm_map_init(void)
 
 	/* now set up static pool of kernel map entries ... */
 	mtx_init(&uvm_kmapent_mtx, IPL_VM);
-	uvm.kentry_free = NULL;
+	SLIST_INIT(&uvm.kentry_free);
 	for (lcv = 0 ; lcv < MAX_KMAPENT ; lcv++) {
-		RB_LEFT(&kernel_map_entry[lcv], daddrs.addr_entry) =
-		    uvm.kentry_free;
-		uvm.kentry_free = &kernel_map_entry[lcv];
+		SLIST_INSERT_HEAD(&uvm.kentry_free,
+		    &kernel_map_entry[lcv], daddrs.addr_kentry);
 	}
 
 	/* initialize the map-related pools. */

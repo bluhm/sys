@@ -1,4 +1,4 @@
-/*	$OpenBSD: bpf.c,v 1.143 2016/07/25 13:19:32 natano Exp $	*/
+/*	$OpenBSD: bpf.c,v 1.147 2016/08/15 07:20:14 mpi Exp $	*/
 /*	$NetBSD: bpf.c,v 1.33 1997/02/21 23:59:35 thorpej Exp $	*/
 
 /*
@@ -91,7 +91,6 @@ struct bpf_if	*bpf_iflist;
 LIST_HEAD(, bpf_d) bpf_d_list;
 
 void	bpf_allocbufs(struct bpf_d *);
-void	bpf_freed(struct bpf_d *);
 void	bpf_ifname(struct ifnet *, struct ifreq *);
 int	_bpf_mtap(caddr_t, const struct mbuf *, u_int,
 	    void (*)(const void *, void *, size_t));
@@ -116,13 +115,12 @@ int	filt_bpfread(struct knote *, long);
 int	bpf_sysctl_locked(int *, u_int, void *, size_t *, void *, size_t);
 
 struct bpf_d *bpfilter_lookup(int);
-struct bpf_d *bpfilter_create(int);
 
 /*
  * Reference count access to descriptor buffers
  */
-#define D_GET(d) ((d)->bd_ref++)
-#define D_PUT(d) bpf_freed(d)
+void	bpf_get(struct bpf_d *);
+void	bpf_put(struct bpf_d *);
 
 /*
  * garbage collector srps
@@ -331,23 +329,28 @@ bpfilterattach(int n)
 int
 bpfopen(dev_t dev, int flag, int mode, struct proc *p)
 {
-	struct bpf_d *d;
+	struct bpf_d *bd;
+	int unit = minor(dev);
 
-	if (minor(dev) & ((1 << CLONE_SHIFT) - 1))
+	if (unit & ((1 << CLONE_SHIFT) - 1))
 		return (ENXIO);
 
+	KASSERT(bpfilter_lookup(unit) == NULL);
+
 	/* create on demand */
-	if ((d = bpfilter_create(minor(dev))) == NULL)
+	if ((bd = malloc(sizeof(*bd), M_DEVBUF, M_NOWAIT|M_ZERO)) == NULL)
 		return (EBUSY);
 
 	/* Mark "free" and do most initialization. */
-	d->bd_bufsize = bpf_bufsize;
-	d->bd_sig = SIGIO;
+	bd->bd_unit = unit;
+	bd->bd_bufsize = bpf_bufsize;
+	bd->bd_sig = SIGIO;
 
 	if (flag & FNONBLOCK)
-		d->bd_rtout = -1;
+		bd->bd_rtout = -1;
 
-	D_GET(d);
+	bpf_get(bd);
+	LIST_INSERT_HEAD(&bpf_d_list, bd, bd_list);
 
 	return (0);
 }
@@ -368,7 +371,7 @@ bpfclose(dev_t dev, int flag, int mode, struct proc *p)
 		bpf_detachd(d);
 	bpf_wakeup(d);
 	LIST_REMOVE(d, bd_list);
-	D_PUT(d);
+	bpf_put(d);
 	splx(s);
 
 	return (0);
@@ -408,7 +411,7 @@ bpfread(dev_t dev, struct uio *uio, int ioflag)
 
 	s = splnet();
 
-	D_GET(d);
+	bpf_get(d);
 
 	/*
 	 * If there's a timeout, bd_rdStart is tagged when we start the read.
@@ -428,7 +431,7 @@ bpfread(dev_t dev, struct uio *uio, int ioflag)
 		if (d->bd_bif == NULL) {
 			/* interface is gone */
 			if (d->bd_slen == 0) {
-				D_PUT(d);
+				bpf_put(d);
 				splx(s);
 				return (EIO);
 			}
@@ -455,7 +458,7 @@ bpfread(dev_t dev, struct uio *uio, int ioflag)
 				error = EWOULDBLOCK;
 		}
 		if (error == EINTR || error == ERESTART) {
-			D_PUT(d);
+			bpf_put(d);
 			splx(s);
 			return (error);
 		}
@@ -474,7 +477,7 @@ bpfread(dev_t dev, struct uio *uio, int ioflag)
 				break;
 
 			if (d->bd_slen == 0) {
-				D_PUT(d);
+				bpf_put(d);
 				splx(s);
 				return (0);
 			}
@@ -499,7 +502,7 @@ bpfread(dev_t dev, struct uio *uio, int ioflag)
 	d->bd_hbuf = NULL;
 	d->bd_hlen = 0;
 
-	D_PUT(d);
+	bpf_put(d);
 	splx(s);
 
 	return (error);
@@ -518,8 +521,6 @@ bpf_wakeup(struct bpf_d *d)
 		    d->bd_siguid, d->bd_sigeuid);
 
 	selwakeup(&d->bd_sel);
-	/* XXX */
-	d->bd_sel.si_selpid = 0;
 }
 
 int
@@ -1093,7 +1094,7 @@ bpfkqfilter(dev_t dev, struct knote *kn)
 	kn->kn_hook = d;
 
 	s = splnet();
-	D_GET(d);
+	bpf_get(d);
 	SLIST_INSERT_HEAD(klist, kn, kn_selnext);
 	if (d->bd_rtout != -1 && d->bd_rdStart == 0)
 		d->bd_rdStart = ticks;
@@ -1110,7 +1111,7 @@ filt_bpfrdetach(struct knote *kn)
 
 	s = splnet();
 	SLIST_REMOVE(&d->bd_sel.si_note, kn, knote, kn_selnext);
-	D_PUT(d);
+	bpf_put(d);
 	splx(s);
 }
 
@@ -1168,10 +1169,7 @@ bpf_tap(caddr_t arg, u_char *pkt, u_int pktlen, u_int direction)
 
 			KERNEL_LOCK();
 			s = splnet();
-			if (d->bd_bif != NULL) {
-				bpf_catchpacket(d, pkt, pktlen, slen,
-				    bcopy, &tv);
-			}
+			bpf_catchpacket(d, pkt, pktlen, slen, bcopy, &tv);
 			splx(s);
 			KERNEL_UNLOCK();
 
@@ -1261,10 +1259,8 @@ _bpf_mtap(caddr_t arg, const struct mbuf *m, u_int direction,
 
 			KERNEL_LOCK();
 			s = splnet();
-			if (d->bd_bif != NULL) {
-				bpf_catchpacket(d, (u_char *)m, pktlen, slen,
-				    cpfn, &tv);
-			}
+			bpf_catchpacket(d, (u_char *)m, pktlen, slen, cpfn,
+			    &tv);
 			splx(s);
 			KERNEL_UNLOCK();
 
@@ -1394,7 +1390,12 @@ bpf_catchpacket(struct bpf_d *d, u_char *pkt, size_t pktlen, size_t snaplen,
 {
 	struct bpf_hdr *hp;
 	int totlen, curlen;
-	int hdrlen = d->bd_bif->bif_hdrlen;
+	int hdrlen;
+
+	if (d->bd_bif == NULL)
+		return;
+
+	hdrlen = d->bd_bif->bif_hdrlen;
 
 	/*
 	 * Figure out how many bytes to move.  If the packet is
@@ -1477,24 +1478,30 @@ bpf_allocbufs(struct bpf_d *d)
 	d->bd_hlen = 0;
 }
 
+void
+bpf_get(struct bpf_d *bd)
+{
+	bd->bd_ref++;
+}
+
 /*
  * Free buffers currently in use by a descriptor
  * when the reference count drops to zero.
  */
 void
-bpf_freed(struct bpf_d *d)
+bpf_put(struct bpf_d *bd)
 {
-	if (--d->bd_ref > 0)
+	if (--bd->bd_ref > 0)
 		return;
 
-	free(d->bd_sbuf, M_DEVBUF, 0);
-	free(d->bd_hbuf, M_DEVBUF, 0);
-	free(d->bd_fbuf, M_DEVBUF, 0);
+	free(bd->bd_sbuf, M_DEVBUF, 0);
+	free(bd->bd_hbuf, M_DEVBUF, 0);
+	free(bd->bd_fbuf, M_DEVBUF, 0);
 	KERNEL_ASSERT_LOCKED();
-	srp_update_locked(&bpf_insn_gc, &d->bd_rfilter, NULL);
-	srp_update_locked(&bpf_insn_gc, &d->bd_wfilter, NULL);
+	srp_update_locked(&bpf_insn_gc, &bd->bd_rfilter, NULL);
+	srp_update_locked(&bpf_insn_gc, &bd->bd_wfilter, NULL);
 
-	free(d, M_DEVBUF, sizeof(*d));
+	free(bd, M_DEVBUF, sizeof(*bd));
 }
 
 /*
@@ -1625,20 +1632,6 @@ bpfilter_lookup(int unit)
 	return (NULL);
 }
 
-struct bpf_d *
-bpfilter_create(int unit)
-{
-	struct bpf_d *bd;
-
-	KASSERT(bpfilter_lookup(unit) == NULL);
-
-	if ((bd = malloc(sizeof(*bd), M_DEVBUF, M_NOWAIT|M_ZERO)) != NULL) {
-		bd->bd_unit = unit;
-		LIST_INSERT_HEAD(&bpf_d_list, bd, bd_list);
-	}
-	return (bd);
-}
-
 /*
  * Get a list of available data link type of the interface.
  */
@@ -1700,13 +1693,13 @@ bpf_setdlt(struct bpf_d *d, u_int dlt)
 void
 bpf_d_ref(void *null, void *d)
 {
-	D_GET((struct bpf_d *)d);
+	bpf_get(d);
 }
 
 void
 bpf_d_unref(void *null, void *d)
 {
-	D_PUT(d);
+	bpf_put(d);
 }
 
 void
