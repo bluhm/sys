@@ -556,7 +556,7 @@ route_output(struct mbuf *m, ...)
 
 	/* make sure that kernel-only bits are not set */
 	rtm->rtm_priority &= RTP_MASK;
-	rtm->rtm_flags &= ~(RTF_DONE|RTF_CLONED);
+	rtm->rtm_flags &= ~(RTF_DONE|RTF_CLONED|RTF_CACHED);
 	rtm->rtm_fmask &= RTF_FMASK;
 
 	if (rtm->rtm_priority != 0) {
@@ -615,7 +615,27 @@ route_output(struct mbuf *m, ...)
 		}
 		break;
 	case RTM_DELETE:
-		error = rtrequest(RTM_DELETE, &info, prio, &rt, tableid);
+		if (!rtable_exists(tableid)) {
+			error = EAFNOSUPPORT;
+			goto flush;
+		}
+
+		rt = rtable_lookup(tableid, info.rti_info[RTAX_DST],
+		    info.rti_info[RTAX_NETMASK], info.rti_info[RTAX_GATEWAY],
+		    prio);
+
+		if (rt != NULL) {
+			/* Only invalidate the cache of L2 entries */
+			if (ISSET(rt->rt_flags, RTF_LLINFO)) {
+				ifp = if_get(rt->rt_ifidx);
+				KASSERT(ifp != NULL);
+				ifp->if_rtrequest(ifp, RTM_INVALIDATE, rt);
+				if_put(ifp);
+				goto report;
+			}
+		}
+
+		error = rtrequest(RTM_DELETE, &info, prio, NULL, tableid);
 		if (error == 0)
 			goto report;
 		break;
