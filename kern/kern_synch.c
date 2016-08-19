@@ -250,7 +250,21 @@ sleep_setup(struct sleep_state *sls, const volatile void *ident, int prio,
 	p->p_wchan = ident;
 	p->p_wmesg = wmesg;
 	p->p_slptime = 0;
-	p->p_priority = prio & PRIMASK;
+
+	/*
+	 * If more kernel threads than available CPUs want to run
+	 * and keep waking each other, userland will never be
+	 * scheduled because sleeping priorities are <= PUSER.
+	 *
+	 * To avoid this problem we ignore ``prio'' for kernel
+	 * threads and make them sleep at their current running
+	 * priority.
+	 */
+	if (p->p_flag & P_SYSTEM)
+		p->p_priority = p->p_usrpri;
+	else
+		p->p_priority = prio & PRIMASK;
+
 	TAILQ_INSERT_TAIL(&slpque[LOOKUP(ident)], p, p_runq);
 }
 
