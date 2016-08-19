@@ -99,6 +99,7 @@ struct walkarg {
 int	route_ctloutput(int, struct socket *, int, int, struct mbuf **);
 void	route_input(struct mbuf *m0, ...);
 int	route_arp_conflict(struct rt_addrinfo *, unsigned int);
+int	route_cleargateway(struct rtentry *, void *, unsigned int);
 
 struct mbuf	*rt_msg1(int, struct rt_addrinfo *);
 int		 rt_msg2(int, int, struct rt_addrinfo *, caddr_t,
@@ -631,6 +632,11 @@ route_output(struct mbuf *m, ...)
 				KASSERT(ifp != NULL);
 				ifp->if_rtrequest(ifp, RTM_INVALIDATE, rt);
 				if_put(ifp);
+				if (ISSET(rt->rt_flags, RTF_CACHED) &&
+				    rt->rt_ifa != NULL)
+					rtable_walk(tableid,
+					    rt->rt_ifa->ifa_addr->sa_family,
+					    route_cleargateway, rt);
 				goto report;
 			}
 		}
@@ -908,6 +914,18 @@ fail:
 		rp->rcb_proto.sp_family = PF_ROUTE;
 
 	return (error);
+}
+
+int
+route_cleargateway(struct rtentry *rt, void *arg, unsigned int rtableid)
+{
+	struct rtentry *gwrt = arg;
+
+	if (ISSET(rt->rt_flags, RTF_GATEWAY) && rt->rt_gwroute == gwrt &&
+	    !ISSET(rt->rt_locks, RTV_MTU))
+                rt->rt_mtu = 0;
+
+	return (0);
 }
 
 /*
