@@ -142,9 +142,9 @@ int	if_getgroupattribs(caddr_t);
 int	if_setgroupattribs(caddr_t);
 
 void	if_linkstate(void *);
-int     if_output_ml(struct ifnet *, struct mbuf_list *, struct sockaddr *,
+int	if_output_ml(struct ifnet *, struct mbuf_list *, struct sockaddr *,
 	    struct rtentry *);
-int     if_output(struct ifnet *, struct mbuf *, struct sockaddr *,
+int	if_output(struct ifnet *, struct mbuf *, struct sockaddr *,
 	    struct rtentry *);
 
 
@@ -522,8 +522,10 @@ if_attach_common(struct ifnet *ifp)
 
 	ifq_init(&ifp->if_snd, ifp);
 
-	ifp->if_output_ml = if_output_ml;
-	ifp->if_output = if_output;
+	if (ifp->if_output_ml == NULL)
+		ifp->if_output_ml = if_output_ml;
+	if (ifp->if_output == NULL)
+		ifp->if_output = if_output;
 	ifp->if_addrhooks = malloc(sizeof(*ifp->if_addrhooks),
 	    M_TEMP, M_WAITOK);
 	TAILQ_INIT(ifp->if_addrhooks);
@@ -1625,7 +1627,7 @@ if_output(struct ifnet *ifp, struct mbuf* m, struct sockaddr *dst,
 	struct mbuf_list ml = MBUF_LIST_INITIALIZER();
 
 	ml_enqueue(&ml, m);
-        return (ifp->if_output_ml(ifp, &ml, dst, rt));
+	return (ifp->if_output_ml(ifp, &ml, dst, rt));
 }
 
 /*
