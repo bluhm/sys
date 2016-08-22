@@ -196,7 +196,8 @@ ether_output_ml(struct ifnet *ifp, struct mbuf_list *ml, struct sockaddr *dst,
 	sa_family_t af = dst->sa_family;
 	int error = 0;
 
-	m = ml_dequeue(ml);
+	m = MBUF_LIST_FIRST(ml);
+
 	KASSERT(rt != NULL || ISSET(m->m_flags, M_MCAST|M_BCAST) ||
 		af == AF_UNSPEC || af == pseudo_AF_HDRCMPLT);
 
@@ -215,11 +216,9 @@ ether_output_ml(struct ifnet *ifp, struct mbuf_list *ml, struct sockaddr *dst,
 
 	switch (af) {
 	case AF_INET:
-		error = arpresolve(ifp, rt, m, dst, edst);
-		if (error) {
-			ml_purge(ml);
+		error = arpresolve(ifp, rt, ml, dst, edst);
+		if (error)
 			return (error == EAGAIN ? 0 : error);
-		}
 		/* If broadcasting on a simplex interface, loopback a copy */
 		if ((m->m_flags & M_BCAST) && (ifp->if_flags & IFF_SIMPLEX) &&
 		    !m->m_pkthdr.pf.routed)
@@ -230,6 +229,7 @@ ether_output_ml(struct ifnet *ifp, struct mbuf_list *ml, struct sockaddr *dst,
 	case AF_INET6:
 		error = nd6_resolve(ifp, rt, m, dst, edst);
 		if (error) {
+			/* XXX */
 			ml_purge(ml);
 			return (error == EAGAIN ? 0 : error);
 		}
@@ -255,11 +255,9 @@ ether_output_ml(struct ifnet *ifp, struct mbuf_list *ml, struct sockaddr *dst,
 				break;
 			case AF_INET:
 			case AF_MPLS:
-				error = arpresolve(ifp, rt, m, dst, edst);
-				if (error) {
-					ml_purge(ml);
+				error = arpresolve(ifp, rt, ml, dst, edst);
+				if (error)
 					return (error == EAGAIN ? 0 : error);
-				}
 				break;
 			default:
 				senderr(EHOSTUNREACH);
