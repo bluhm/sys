@@ -227,12 +227,9 @@ ether_output_ml(struct ifnet *ifp, struct mbuf_list *ml, struct sockaddr *dst,
 		break;
 #ifdef INET6
 	case AF_INET6:
-		error = nd6_resolve(ifp, rt, m, dst, edst);
-		if (error) {
-			/* XXX */
-			ml_purge(ml);
+		error = nd6_resolve(ifp, rt, ml, dst, edst);
+		if (error)
 			return (error == EAGAIN ? 0 : error);
-		}
 		etype = htons(ETHERTYPE_IPV6);
 		break;
 #endif

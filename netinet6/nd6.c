@@ -1518,12 +1518,15 @@ nd6_slowtimo(void *ignored_arg)
 }
 
 int
-nd6_resolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
+nd6_resolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf_list *ml,
     struct sockaddr *dst, u_char *desten)
 {
+	struct mbuf *m;
 	struct sockaddr_dl *sdl;
 	struct rtentry *rt;
 	struct llinfo_nd6 *ln = NULL;
+
+	m = MBUF_LIST_FIRST(ml);
 
 	if (m->m_flags & M_MCAST) {
 		ETHER_MAP_IPV6_MULTICAST(&satosin6(dst)->sin6_addr, desten);
@@ -1534,7 +1537,7 @@ nd6_resolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 
 	if (ISSET(rt->rt_flags, RTF_REJECT) &&
 	    (rt->rt_expire == 0 || time_uptime < rt->rt_expire)) {
-		m_freem(m);
+		ml_purge(ml);
 		return (rt == rt0 ? EHOSTDOWN : EHOSTUNREACH);
 	}
 
@@ -1549,14 +1552,12 @@ nd6_resolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 		log(LOG_DEBUG, "%s: %s: route contains no ND information\n",
 		    __func__, inet_ntop(AF_INET6,
 		    &satosin6(rt_key(rt))->sin6_addr, addr, sizeof(addr)));
-		m_freem(m);
-		return (EINVAL);
+		goto bad;
 	}
 
 	if (rt->rt_gateway->sa_family != AF_LINK) {
 		printf("%s: something odd happens\n", __func__);
-		m_freem(m);
-		return (EINVAL);
+		goto bad;
 	}
 
 	ln = (struct llinfo_nd6 *)rt->rt_llinfo;
@@ -1596,8 +1597,7 @@ nd6_resolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 			    __func__,
 			    inet_ntop(AF_INET6, &satosin6(dst)->sin6_addr,
 				addr, sizeof(addr)));
-			m_freem(m);
-			return (EINVAL);
+			goto bad;
 		}
 
 		bcopy(LLADDR(sdl), desten, sdl->sdl_alen);
@@ -1612,7 +1612,8 @@ nd6_resolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 	if (ln->ln_state == ND6_LLINFO_NOSTATE)
 		ln->ln_state = ND6_LLINFO_INCOMPLETE;
 	m_freem(ln->ln_hold);
-	ln->ln_hold = m;
+	ln->ln_hold = ml_dequeue(ml);
+	ml_purge(ml);
 
 	/*
 	 * If there has been no NS for the neighbor after entering the
@@ -1624,6 +1625,10 @@ nd6_resolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 		nd6_ns_output(ifp, NULL, &satosin6(dst)->sin6_addr, ln, 0);
 	}
 	return (EAGAIN);
+
+ bad:
+	ml_purge(ml);
+	return (EINVAL);
 }
 
 int

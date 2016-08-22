@@ -263,7 +263,7 @@ void nd6_nud_hint(struct rtentry *);
 void nd6_rtrequest(struct ifnet *, int, struct rtentry *);
 int nd6_ioctl(u_long, caddr_t, struct ifnet *);
 void nd6_cache_lladdr(struct ifnet *, struct in6_addr *, char *, int, int, int);
-int nd6_resolve(struct ifnet *, struct rtentry *, struct mbuf *,
+int nd6_resolve(struct ifnet *, struct rtentry *, struct mbuf_list *,
 	 struct sockaddr *, u_char *);
 int nd6_sysctl(int, void *, size_t *, void *, size_t);
 int nd6_need_cache(struct ifnet *);
