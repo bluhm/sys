@@ -196,7 +196,7 @@ ether_output_ml(struct ifnet *ifp, struct mbuf_list *ml, struct sockaddr *dst,
 	sa_family_t af = dst->sa_family;
 	int error = 0;
 
-	m = MBUF_LIST_FIRST(ml);
+	m = ml_dequeue(ml);
 	KASSERT(rt != NULL || ISSET(m->m_flags, M_MCAST|M_BCAST) ||
 		af == AF_UNSPEC || af == pseudo_AF_HDRCMPLT);
 
@@ -216,8 +216,10 @@ ether_output_ml(struct ifnet *ifp, struct mbuf_list *ml, struct sockaddr *dst,
 	switch (af) {
 	case AF_INET:
 		error = arpresolve(ifp, rt, m, dst, edst);
-		if (error)
+		if (error) {
+			ml_purge(ml);
 			return (error == EAGAIN ? 0 : error);
+		}
 		/* If broadcasting on a simplex interface, loopback a copy */
 		if ((m->m_flags & M_BCAST) && (ifp->if_flags & IFF_SIMPLEX) &&
 		    !m->m_pkthdr.pf.routed)
@@ -227,8 +229,10 @@ ether_output_ml(struct ifnet *ifp, struct mbuf_list *ml, struct sockaddr *dst,
 #ifdef INET6
 	case AF_INET6:
 		error = nd6_resolve(ifp, rt, m, dst, edst);
-		if (error)
+		if (error) {
+			ml_purge(ml);
 			return (error == EAGAIN ? 0 : error);
+		}
 		etype = htons(ETHERTYPE_IPV6);
 		break;
 #endif
@@ -252,8 +256,10 @@ ether_output_ml(struct ifnet *ifp, struct mbuf_list *ml, struct sockaddr *dst,
 			case AF_INET:
 			case AF_MPLS:
 				error = arpresolve(ifp, rt, m, dst, edst);
-				if (error)
+				if (error) {
+					ml_purge(ml);
 					return (error == EAGAIN ? 0 : error);
+				}
 				break;
 			default:
 				senderr(EHOSTUNREACH);
@@ -287,18 +293,28 @@ ether_output_ml(struct ifnet *ifp, struct mbuf_list *ml, struct sockaddr *dst,
 	if (mcopy)
 		if_input_local(ifp, mcopy, dst->sa_family);
 
-	M_PREPEND(m, sizeof(struct ether_header) + ETHER_ALIGN, M_DONTWAIT);
-	if (m == NULL)
-		return (ENOBUFS);
-	m_adj(m, ETHER_ALIGN);
-	eh = mtod(m, struct ether_header *);
-	eh->ether_type = etype;
-	memcpy(eh->ether_dhost, edst, sizeof(eh->ether_dhost));
-	memcpy(eh->ether_shost, esrc, sizeof(eh->ether_shost));
+	do {
+		M_PREPEND(m, sizeof(struct ether_header) + ETHER_ALIGN,
+		    M_DONTWAIT);
+		if (m == NULL)
+			senderr (ENOBUFS);
+		m_adj(m, ETHER_ALIGN);
+		eh = mtod(m, struct ether_header *);
+		eh->ether_type = etype;
+		memcpy(eh->ether_dhost, edst, sizeof(eh->ether_dhost));
+		memcpy(eh->ether_shost, esrc, sizeof(eh->ether_shost));
 
-	return (if_enqueue(ifp, m));
+		error = if_enqueue(ifp, m);
+		if (error) {
+			m = NULL;
+			goto bad;
+		}
+	} while ((m = ml_dequeue(ml)) != NULL);
+
+	return (0);
 bad:
 	m_freem(m);
+	ml_purge(ml);
 	return (error);
 }
 
