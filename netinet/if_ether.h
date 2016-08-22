@@ -228,7 +228,7 @@ void	arpinput(struct ifnet *, struct mbuf *);
 void	arprequest(struct ifnet *, u_int32_t *, u_int32_t *, u_int8_t *);
 void	arpwhohas(struct arpcom *, struct in_addr *);
 int	arpproxy(struct in_addr, unsigned int);
-int	arpresolve(struct ifnet *, struct rtentry *, struct mbuf *,
+int	arpresolve(struct ifnet *, struct rtentry *, struct mbuf_list *,
 	    struct sockaddr *, u_char *);
 void	arp_rtrequest(struct ifnet *, int, struct rtentry *);
 

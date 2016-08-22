@@ -305,14 +305,17 @@ arpreply(struct ifnet *ifp, struct mbuf *m, struct in_addr *sip, uint8_t *eaddr)
  * Any other return value indicates an error.
  */
 int
-arpresolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
+arpresolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf_list *ml,
     struct sockaddr *dst, u_char *desten)
 {
 	struct arpcom *ac = (struct arpcom *)ifp;
+	struct mbuf *m;
 	struct llinfo_arp *la = NULL;
 	struct sockaddr_dl *sdl;
 	struct rtentry *rt = NULL;
 	char addr[INET_ADDRSTRLEN];
+
+	m = MBUF_LIST_FIRST(ml);
 
 	if (m->m_flags & M_BCAST) {	/* broadcast */
 		memcpy(desten, etherbroadcastaddr, sizeof(etherbroadcastaddr));
@@ -327,7 +330,7 @@ arpresolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 
 	if (ISSET(rt->rt_flags, RTF_REJECT) &&
 	    (rt->rt_expire == 0 || time_uptime < rt->rt_expire)) {
-		m_freem(m);
+		ml_purge(ml);
 		return (rt == rt0 ? EHOSTDOWN : EHOSTUNREACH);
 	}
 
@@ -335,8 +338,7 @@ arpresolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 		log(LOG_DEBUG, "%s: %s: route contains no arp information\n",
 		    __func__, inet_ntop(AF_INET, &satosin(rt_key(rt))->sin_addr,
 		    addr, sizeof(addr)));
-		m_freem(m);
-		return (EINVAL);
+		goto bad;
 	}
 
 	sdl = satosdl(rt->rt_gateway);
@@ -370,16 +372,16 @@ arpresolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 	if (la_hold_total < LA_HOLD_TOTAL && la_hold_total < nmbclust / 64) {
 		struct mbuf *mh;
 
-		if (ml_len(&la->la_ml) >= LA_HOLD_QUEUE) {
+		la_hold_total += ml_len(ml);
+		ml_enlist(&la->la_ml, ml);
+		while (ml_len(&la->la_ml) > LA_HOLD_QUEUE) {
 			mh = ml_dequeue(&la->la_ml);
 			la_hold_total--;
 			m_freem(mh);
 		}
-		ml_enqueue(&la->la_ml, m);
-		la_hold_total++;
 	} else {
 		la_hold_total -= ml_purge(&la->la_ml);
-		m_freem(m);
+		ml_purge(ml);
 	}
 
 	/*
@@ -414,7 +416,7 @@ arpresolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 	return (EAGAIN);
 
 bad:
-	m_freem(m);
+	ml_purge(ml);
 	return (EINVAL);
 }
 
