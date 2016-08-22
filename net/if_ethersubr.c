@@ -291,7 +291,7 @@ ether_output_ml(struct ifnet *ifp, struct mbuf_list *ml, struct sockaddr *dst,
 	if (mcopy)
 		if_input_local(ifp, mcopy, dst->sa_family);
 
-	do {
+	while ((m = ml_dequeue(ml)) != NULL) {
 		M_PREPEND(m, sizeof(struct ether_header), M_DONTWAIT);
 		if (m == NULL)
 			senderr (ENOBUFS);
@@ -301,15 +301,12 @@ ether_output_ml(struct ifnet *ifp, struct mbuf_list *ml, struct sockaddr *dst,
 		memcpy(eh->ether_shost, esrc, sizeof(eh->ether_shost));
 
 		error = if_enqueue(ifp, m);
-		if (error) {
-			m = NULL;
+		if (error)
 			goto bad;
-		}
-	} while ((m = ml_dequeue(ml)) != NULL);
+	}
 
 	return (0);
 bad:
-	m_freem(m);
 	ml_purge(ml);
 	return (error);
 }
