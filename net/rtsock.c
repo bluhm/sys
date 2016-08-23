@@ -98,7 +98,7 @@ struct walkarg {
 
 int	route_ctloutput(int, struct socket *, int, int, struct mbuf **);
 void	route_input(struct mbuf *m0, ...);
-int	route_arp_conflict(struct rt_addrinfo *, unsigned int);
+int	route_arp_conflict(struct rtentry *, struct rt_addrinfo *);
 int	route_cleargateway(struct rtentry *, void *, unsigned int);
 
 struct mbuf	*rt_msg1(int, struct rt_addrinfo *);
@@ -602,8 +602,25 @@ route_output(struct mbuf *m, ...)
 			error = EINVAL;
 			goto flush;
 		}
-		if ((error = route_arp_conflict(&info, tableid)))
+
+		rt = rtalloc(info.rti_info[RTAX_DST], 0, tableid);
+		if ((error = route_arp_conflict(rt, &info))) {
+			rtfree(rt);
+			rt = NULL;
 			goto flush;
+		}
+
+		/*
+		 * We cannot go through a delete/create/insert cycle for
+		 * cached route because this can lead to races in the
+		 * receive path.  Instead we upade the L2 cache.
+		 */
+		if ((rt != NULL) && ISSET(rt->rt_flags, RTF_CACHED))
+			goto change;
+
+		rtfree(rt);
+		rt = NULL;
+
 		error = rtrequest(RTM_ADD, &info, prio, &saved_nrt, tableid);
 		if (error == 0) {
 			rt_setmetrics(rtm->rtm_inits, &rtm->rtm_rmx,
@@ -791,6 +808,7 @@ report:
 #endif
 				}
 			}
+change:
 			if (info.rti_info[RTAX_GATEWAY] != NULL && (error =
 			    rt_setgate(rt, info.rti_info[RTAX_GATEWAY],
 			    tableid)))
@@ -936,35 +954,32 @@ route_cleargateway(struct rtentry *rt, void *arg, unsigned int rtableid)
  * (priv) and a public one (pub).
  */
 int
-route_arp_conflict(struct rt_addrinfo *info, unsigned int tableid)
+route_arp_conflict(struct rtentry *rt, struct rt_addrinfo *info)
 {
 #if defined(ART) && !defined(SMALL_KERNEL)
-	struct rtentry	*rt;
 	int		 proxy = (info->rti_flags & RTF_ANNOUNCE);
 
 	if ((info->rti_flags & RTF_LLINFO) == 0 ||
 	    (info->rti_info[RTAX_DST]->sa_family != AF_INET))
 		return (0);
 
-	rt = rtalloc(info->rti_info[RTAX_DST], 0, tableid);
-	if (rt == NULL || !ISSET(rt->rt_flags, RTF_LLINFO)) {
-		rtfree(rt);
+	if (rt == NULL || !ISSET(rt->rt_flags, RTF_LLINFO))
 		return (0);
-	}
+
+	/* If the entry is cached, it can be updated. */
+	if (ISSET(rt->rt_flags, RTF_CACHED))
+		return (0);
 
 	/*
-	 * Same destination and both "priv" or "pub" conflict.
+	 * Same destination, not cached and both "priv" or "pub" conflict.
 	 * If a second entry exists, it always conflict.
 	 */
 	if ((ISSET(rt->rt_flags, RTF_ANNOUNCE) == proxy) ||
-	    (rtable_mpath_next(rt) != NULL)) {
-		rtfree(rt);
+	    (rtable_mpath_next(rt) != NULL))
 		return (EEXIST);
-	}
 
 	/* No conflict but an entry exist so we need to force mpath. */
 	info->rti_flags |= RTF_MPATH;
-	rtfree(rt);
 #endif /* ART && !SMALL_KERNEL */
 	return (0);
 }
