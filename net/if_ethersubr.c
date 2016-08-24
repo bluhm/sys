@@ -190,7 +190,8 @@ ether_output_ml(struct ifnet *ifp, struct mbuf_list *ml, struct sockaddr *dst,
 	u_int16_t etype;
 	u_char edst[ETHER_ADDR_LEN];
 	u_char *esrc;
-	struct mbuf *m, *mcopy = NULL;
+	struct mbuf *m, *mcopy;
+	struct mbuf_list mlcopy = MBUF_LIST_INITIALIZER();
 	struct ether_header *eh;
 	struct arpcom *ac = (struct arpcom *)ifp;
 	sa_family_t af = dst->sa_family;
@@ -222,7 +223,11 @@ ether_output_ml(struct ifnet *ifp, struct mbuf_list *ml, struct sockaddr *dst,
 		/* If broadcasting on a simplex interface, loopback a copy */
 		if ((m->m_flags & M_BCAST) && (ifp->if_flags & IFF_SIMPLEX) &&
 		    !m->m_pkthdr.pf.routed)
-			mcopy = m_copym(m, 0, M_COPYALL, M_NOWAIT);
+			MBUF_LIST_FOREACH(ml, m) {
+				mcopy = m_copym(m, 0, M_COPYALL, M_NOWAIT);
+				if (mcopy != NULL)
+					ml_enqueue(&mlcopy, mcopy);
+			}
 		etype = htons(ETHERTYPE_IP);
 		break;
 #ifdef INET6
@@ -285,7 +290,7 @@ ether_output_ml(struct ifnet *ifp, struct mbuf_list *ml, struct sockaddr *dst,
 	}
 
 	/* XXX Should we feed-back an unencrypted IPsec packet ? */
-	if (mcopy)
+	while ((mcopy = ml_dequeue(&mlcopy)) != NULL)
 		if_input_local(ifp, mcopy, dst->sa_family);
 
 	while ((m = ml_dequeue(ml)) != NULL) {
