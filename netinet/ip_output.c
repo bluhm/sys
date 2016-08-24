@@ -509,11 +509,13 @@ sendit:
 		if ((ifp->if_capabilities & IFCAP_CSUM_IPv4) &&
 		    (ifp->if_bridgeport == NULL))
 			MBUF_LIST_FOREACH(ml, m) {
+				ip = mtod(m, struct ip *);
 				ip->ip_sum = 0;
 				m->m_pkthdr.csum_flags |= M_IPV4_CSUM_OUT;
 			}
 		else {
 			MBUF_LIST_FOREACH(ml, m) {
+				ip = mtod(m, struct ip *);
 				ip->ip_sum = 0;
 				ip->ip_sum = in_cksum(m, hlen);
 			}
