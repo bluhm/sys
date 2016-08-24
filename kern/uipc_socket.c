@@ -542,14 +542,9 @@ m_getuio(struct mbuf **mp, int atomic, long space, struct uio *uio)
 
 		resid = ulmin(resid, space);
 		if (resid >= MINCLSIZE) {
-			mlen = ulmin(resid, MAXMCLBYTES);
-			MCLGETI(m, M_NOWAIT, NULL, mlen);
-
-			if ((m->m_flags & M_EXT) == 0) {
-				/* should not happen */
-				m_freem(top);
-				return (ENOBUFS);
-			}
+			MCLGETI(m, M_NOWAIT, NULL, ulmin(resid, MAXMCLBYTES));
+			if ((m->m_flags & M_EXT) == 0)
+				goto nopages;
 			mlen = m->m_ext.ext_size;
 			len = ulmin(mlen, resid);
 			/*
@@ -559,6 +554,7 @@ m_getuio(struct mbuf **mp, int atomic, long space, struct uio *uio)
 			if (atomic && top == NULL && len < mlen - max_hdr)
 				m->m_data += max_hdr;
 		} else {
+nopages:
 			len = ulmin(mlen, resid);
 			/*
 			 * For datagram protocols, leave room
