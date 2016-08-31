@@ -213,13 +213,13 @@ rtisvalid(struct rtentry *rt)
 	if (rt->rt_ifa == NULL || rt->rt_ifa->ifa_ifp == NULL)
 		return (0);
 
-#ifdef DIAGNOSTIC
 	if (ISSET(rt->rt_flags, RTF_GATEWAY)) {
+	    	if (!ISSET(rt->rt_gwroute->rt_flags, RTF_UP))
+			return (0);
+
 		KASSERT(rt->rt_gwroute != NULL);
-	    	KASSERT(ISSET(rt->rt_gwroute->rt_flags, RTF_UP));
 	    	KASSERT(!ISSET(rt->rt_gwroute->rt_flags, RTF_GATEWAY));
 	}
-#endif /* DIAGNOSTIC */
 
 	return (1);
 }
