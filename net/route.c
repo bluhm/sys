@@ -214,11 +214,10 @@ rtisvalid(struct rtentry *rt)
 		return (0);
 
 	if (ISSET(rt->rt_flags, RTF_GATEWAY)) {
-	    	if (!ISSET(rt->rt_gwroute->rt_flags, RTF_UP))
-			return (0);
-
 		KASSERT(rt->rt_gwroute != NULL);
 	    	KASSERT(!ISSET(rt->rt_gwroute->rt_flags, RTF_GATEWAY));
+	    	if (!ISSET(rt->rt_gwroute->rt_flags, RTF_UP))
+			return (0);
 	}
 
 	return (1);
