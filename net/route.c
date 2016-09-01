@@ -1,4 +1,4 @@
-/*	$OpenBSD: route.c,v 1.317 2016/08/22 16:53:59 mpi Exp $	*/
+/*	$OpenBSD: route.c,v 1.320 2016/09/01 11:26:44 mpi Exp $	*/
 /*	$NetBSD: route.c,v 1.14 1996/02/13 22:00:46 christos Exp $	*/
 
 /*
@@ -189,6 +189,7 @@ route_init(void)
 {
 	pool_init(&rtentry_pool, sizeof(struct rtentry), 0, 0, 0, "rtentry",
 	    NULL);
+	pool_setipl(&rtentry_pool, IPL_SOFTNET);
 
 	while (rt_hashjitter == 0)
 		rt_hashjitter = arc4random();
@@ -909,17 +910,6 @@ rtrequest_delete(struct rt_addrinfo *info, u_int8_t prio, struct ifnet *ifp,
 	}
 #endif
 
-	/*
-	 * Since RTP_LOCAL cannot be set by userland, make
-	 * sure that local routes are only modified by the
-	 * kernel.
-	 */
-	if ((rt->rt_flags & (RTF_LOCAL|RTF_BROADCAST)) &&
-	    (prio & RTP_MASK) != RTP_LOCAL) {
-		rtfree(rt);
-		return (EINVAL);
-	}
-
 	error = rtable_delete(tableid, info->rti_info[RTAX_DST],
 	    info->rti_info[RTAX_NETMASK], rt);
 	if (error != 0) {
@@ -927,11 +917,12 @@ rtrequest_delete(struct rt_addrinfo *info, u_int8_t prio, struct ifnet *ifp,
 		return (ESRCH);
 	}
 
-	/* clean up any cloned children */
-	if ((rt->rt_flags & RTF_CLONING) != 0)
-		rtflushclone(tableid, rt);
-
+	/* Release next hop cache before flushing cloned entries. */
 	rt_putgwroute(rt);
+
+	/* Clean up any cloned children. */
+	if (ISSET(rt->rt_flags, RTF_CLONING))
+		rtflushclone(tableid, rt);
 
 	rtfree(rt->rt_parent);
 	rt->rt_parent = NULL;
@@ -1177,11 +1168,6 @@ rtrequest(int req, struct rt_addrinfo *info, u_int8_t prio,
 			return (EEXIST);
 		}
 		ifp->if_rtrequest(ifp, req, rt);
-
-		if ((rt->rt_flags & RTF_CLONING) != 0) {
-			/* clean up any cloned children */
-			rtflushclone(tableid, rt);
-		}
 
 		if_group_routechange(info->rti_info[RTAX_DST],
 			info->rti_info[RTAX_NETMASK]);
@@ -1514,6 +1500,7 @@ rt_timer_init(void)
 
 	pool_init(&rttimer_pool, sizeof(struct rttimer), 0, 0, 0, "rttmr",
 	    NULL);
+	pool_setipl(&rttimer_pool, IPL_SOFTNET);
 
 	LIST_INIT(&rttimer_queue_head);
 	timeout_set(&rt_timer_timeout, rt_timer_timer, &rt_timer_timeout);

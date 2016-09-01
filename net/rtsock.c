@@ -1,4 +1,4 @@
-/*	$OpenBSD: rtsock.c,v 1.196 2016/08/23 13:07:26 mpi Exp $	*/
+/*	$OpenBSD: rtsock.c,v 1.199 2016/09/01 11:26:44 mpi Exp $	*/
 /*	$NetBSD: rtsock.c,v 1.18 1996/03/29 00:32:10 cgd Exp $	*/
 
 /*
@@ -603,7 +603,7 @@ route_output(struct mbuf *m, ...)
 			goto flush;
 		}
 
-		rt = rtalloc(info.rti_info[RTAX_DST], 0, tableid);
+		rt = rtable_match(tableid, info.rti_info[RTAX_DST], NULL);
 		if ((error = route_arp_conflict(rt, &info))) {
 			rtfree(rt);
 			rt = NULL;
@@ -657,6 +657,17 @@ route_output(struct mbuf *m, ...)
 			    route_cleargateway, rt);
 			goto report;
 		}
+
+		/*
+		 * Make sure that local routes are only modified by the
+		 * kernel.
+		 */
+		if ((rt != NULL) &&
+		    ISSET(rt->rt_flags, RTF_LOCAL|RTF_BROADCAST)) {
+			error = EINVAL;
+			goto report;
+		}
+
 		rtfree(rt);
 		rt = NULL;
 
@@ -675,7 +686,7 @@ route_output(struct mbuf *m, ...)
 		rt = rtable_lookup(tableid, info.rti_info[RTAX_DST],
 		    info.rti_info[RTAX_NETMASK], info.rti_info[RTAX_GATEWAY],
 		    prio);
-#ifdef SMALL_KERNEL
+#ifndef SMALL_KERNEL
 		/*
 		 * If we got multipath routes, we require users to specify
 		 * a matching gateway, except for RTM_GET.
@@ -695,6 +706,13 @@ route_output(struct mbuf *m, ...)
 		    (rtm->rtm_type == RTM_CHANGE)) {
 			rt = rtable_lookup(tableid, info.rti_info[RTAX_DST],
 			    info.rti_info[RTAX_NETMASK], NULL, prio);
+#ifndef SMALL_KERNEL
+			/* Ensure we don't pick a multipath one. */
+			if ((rt != NULL) && ISSET(rt->rt_flags, RTF_MPATH)) {
+				rtfree(rt);
+				rt = NULL;
+			}
+#endif
 		}
 
 		if (rt == NULL) {
