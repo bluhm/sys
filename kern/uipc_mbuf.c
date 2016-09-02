@@ -179,15 +179,16 @@ mbinit(void)
 void
 nmbclust_update(void)
 {
-	int i;
+	unsigned int i, n;
+
 	/*
 	 * Set the hard limit on the mclpools to the number of
 	 * mbuf clusters the kernel is to support.  Log the limit
 	 * reached message max once a minute.
 	 */
 	for (i = 0; i < nitems(mclsizes); i++) {
-		(void)pool_sethardlimit(&mclpools[i], nmbclust,
-		    mclpool_warnmsg, 60);
+		n = (unsigned long long)nmbclust * MCLBYTES / mclsizes[i];
+		(void)pool_sethardlimit(&mclpools[i], n, mclpool_warnmsg, 60);
 		/*
 		 * XXX this needs to be reconsidered.
 		 * Setting the high water mark to nmbclust is too high
@@ -195,7 +196,7 @@ nmbclust_update(void)
 		 * allocations in interrupt context don't fail or mclgeti()
 		 * drivers may end up with empty rings.
 		 */
-		pool_sethiwat(&mclpools[i], nmbclust);
+		pool_sethiwat(&mclpools[i], n);
 	}
 	pool_sethiwat(&mbpool, nmbclust);
 }
