@@ -548,6 +548,8 @@ m_getuio(struct mbuf **mp, int atomic, long space, struct uio *uio)
 		if (resid >= MINCLSIZE) {
 			MCLGETI(m, M_NOWAIT, NULL, ulmin(resid, MAXMCLBYTES));
 			if ((m->m_flags & M_EXT) == 0)
+				MCLGETI(m, M_NOWAIT, NULL, MCLBYTES);
+			if ((m->m_flags & M_EXT) == 0)
 				goto nopages;
 			mlen = m->m_ext.ext_size;
 			len = ulmin(mlen, resid);
