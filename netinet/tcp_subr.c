@@ -120,7 +120,7 @@ u_int32_t	tcp_now = 1;
 #define	TCB_INITIAL_HASH_SIZE	128
 #endif
 
-int tcp_reass_limit = NMBCLUSTERS / 2; /* hardlimit for tcpqe_pool */
+int tcp_reass_limit = NMBCLUSTERS / 8; /* hardlimit for tcpqe_pool */
 #ifdef TCP_SACK
 int tcp_sackhole_limit = 32*1024; /* hardlimit for sackhl_pool */
 #endif
