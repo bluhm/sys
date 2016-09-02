@@ -105,7 +105,7 @@ struct	pool mbpool;		/* mbuf pool */
 struct	pool mtagpool;
 
 /* mbuf cluster pools */
-u_int	mclsizes[] = {
+u_int	mclsizes[MCLPOOLS] = {
 	MCLBYTES,	/* must be at slot 0 */
 	4 * 1024,
 	8 * 1024,
