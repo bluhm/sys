@@ -116,7 +116,7 @@ struct socket {
 		short	sb_flags;	/* flags, see below */
 		u_short	sb_timeo;	/* timeout for read/write */
 	} so_rcv, so_snd;
-#define	SB_MAX		(1024*1024)	/* default for max chars in sockbuf */
+#define	SB_MAX		(2*1024*1024)	/* default for max chars in sockbuf */
 #define	SB_WAIT		0x04		/* someone is waiting for data/space */
 #define	SB_SEL		0x08		/* someone is selecting */
 #define	SB_ASYNC	0x10		/* ASYNC I/O, need signals */
