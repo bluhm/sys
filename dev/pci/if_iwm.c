@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_iwm.c,v 1.100 2016/09/01 09:47:47 stsp Exp $	*/
+/*	$OpenBSD: if_iwm.c,v 1.106 2016/09/03 11:42:12 stsp Exp $	*/
 
 /*
  * Copyright (c) 2014, 2016 genua gmbh <info@genua.de>
@@ -280,8 +280,8 @@ int	iwm_nic_tx_init(struct iwm_softc *);
 int	iwm_nic_init(struct iwm_softc *);
 int	iwm_enable_txq(struct iwm_softc *, int, int, int);
 int	iwm_post_alive(struct iwm_softc *);
-struct iwm_phy_db_entry *iwm_phy_db_get_section(struct iwm_softc *,
-					enum iwm_phy_db_section_type, uint16_t);
+struct iwm_phy_db_entry *iwm_phy_db_get_section(struct iwm_softc *, uint16_t,
+				uint16_t);
 int	iwm_phy_db_set_section(struct iwm_softc *,
 				struct iwm_calib_res_notif_phy_db *);
 int	iwm_is_valid_channel(uint16_t);
@@ -292,7 +292,7 @@ int	iwm_phy_db_get_section_data(struct iwm_softc *, uint32_t, uint8_t **,
 					uint16_t *, uint16_t);
 int	iwm_send_phy_db_cmd(struct iwm_softc *, uint16_t, uint16_t, void *);
 int	iwm_phy_db_send_all_channel_groups(struct iwm_softc *,
-		enum iwm_phy_db_section_type, uint8_t);
+		uint16_t, uint8_t);
 int	iwm_send_phy_db_data(struct iwm_softc *);
 void	iwm_mvm_te_v2_to_v1(const struct iwm_time_event_cmd_v2 *,
 				struct iwm_time_event_cmd_v1 *);
@@ -405,8 +405,6 @@ int	iwm_mvm_power_mac_update_mode(struct iwm_softc *, struct iwm_node *);
 int	iwm_mvm_power_update_device(struct iwm_softc *);
 int	iwm_mvm_enable_beacon_filter(struct iwm_softc *, struct iwm_node *);
 int	iwm_mvm_disable_beacon_filter(struct iwm_softc *);
-int	iwm_mvm_send_add_sta_cmd_status(struct iwm_softc *,
-					struct iwm_mvm_add_sta_cmd_v7 *, int *);
 int	iwm_mvm_sta_send_to_fw(struct iwm_softc *, struct iwm_node *, int);
 int	iwm_mvm_add_sta(struct iwm_softc *, struct iwm_node *);
 int	iwm_mvm_update_sta(struct iwm_softc *, struct iwm_node *);
@@ -449,7 +447,7 @@ int	iwm_newstate(struct ieee80211com *, enum ieee80211_state, int);
 void	iwm_endscan_cb(void *);
 void	iwm_mvm_fill_sf_command(struct iwm_softc *, struct iwm_sf_cfg_cmd *,
 	    struct ieee80211_node *);
-int	iwm_mvm_sf_config(struct iwm_softc *, enum iwm_sf_state);
+int	iwm_mvm_sf_config(struct iwm_softc *, int);
 int	iwm_send_bt_init_conf(struct iwm_softc *);
 int	iwm_send_update_mcc_cmd(struct iwm_softc *, const char *);
 void	iwm_mvm_tt_tx_backoff(struct iwm_softc *, uint32_t);
@@ -568,7 +566,7 @@ iwm_read_firmware(struct iwm_softc *sc, enum iwm_ucode_type ucode_type)
 	struct iwm_fw_info *fw = &sc->sc_fw;
 	struct iwm_tlv_ucode_header *uhdr;
 	struct iwm_ucode_tlv tlv;
-	enum iwm_ucode_tlv_type tlv_type;
+	uint32_t tlv_type;
 	uint8_t *data;
 	int error;
 	size_t len;
@@ -641,7 +639,7 @@ iwm_read_firmware(struct iwm_softc *sc, enum iwm_ucode_type ucode_type)
 			goto parse_out;
 		}
 
-		switch ((int)tlv_type) {
+		switch (tlv_type) {
 		case IWM_UCODE_TLV_PROBE_MAX_LEN:
 			if (tlv_len < sizeof(uint32_t)) {
 				error = EINVAL;
@@ -758,7 +756,7 @@ iwm_read_firmware(struct iwm_softc *sc, enum iwm_ucode_type ucode_type)
 			}
 			capa = (struct iwm_ucode_capa *)tlv_data;
 			idx = le32toh(capa->api_index);
-			if (idx > howmany(IWM_NUM_UCODE_TLV_CAPA, 32)) {
+			if (idx >= howmany(IWM_NUM_UCODE_TLV_CAPA, 32)) {
 				DPRINTF(("%s: unsupported API index %d\n",
 				    DEVNAME(sc), idx));
 				goto parse_out;
@@ -2001,8 +1999,7 @@ iwm_post_alive(struct iwm_softc *sc)
  * type and channel group id.
  */
 struct iwm_phy_db_entry *
-iwm_phy_db_get_section(struct iwm_softc *sc,
-	enum iwm_phy_db_section_type type, uint16_t chg_id)
+iwm_phy_db_get_section(struct iwm_softc *sc, uint16_t type, uint16_t chg_id)
 {
 	struct iwm_phy_db *phy_db = &sc->sc_phy_db;
 
@@ -2032,7 +2029,7 @@ int
 iwm_phy_db_set_section(struct iwm_softc *sc,
 	struct iwm_calib_res_notif_phy_db *phy_db_notif)
 {
-	enum iwm_phy_db_section_type type = le16toh(phy_db_notif->type);
+	uint16_t type = le16toh(phy_db_notif->type);
 	uint16_t size  = le16toh(phy_db_notif->length);
 	struct iwm_phy_db_entry *entry;
 	uint16_t chg_id = 0;
@@ -2181,7 +2178,7 @@ iwm_send_phy_db_cmd(struct iwm_softc *sc, uint16_t type,
 
 int
 iwm_phy_db_send_all_channel_groups(struct iwm_softc *sc,
-	enum iwm_phy_db_section_type type, uint8_t max_ch_groups)
+	uint16_t type, uint8_t max_ch_groups)
 {
 	uint16_t i;
 	int err;
@@ -2379,7 +2376,7 @@ iwm_mvm_protect_session(struct iwm_softc *sc, struct iwm_node *in,
 	time_cmd.duration = htole32(duration);
 	time_cmd.repeat = 1;
 	time_cmd.policy
-	    = htole32(IWM_TE_V2_NOTIF_HOST_EVENT_START |
+	    = htole16(IWM_TE_V2_NOTIF_HOST_EVENT_START |
 	        IWM_TE_V2_NOTIF_HOST_EVENT_END |
 		IWM_T2_V2_START_IMMEDIATELY);
 
@@ -2757,7 +2754,8 @@ iwm_mvm_sta_rx_agg(struct iwm_softc *sc, struct ieee80211_node *ni,
 	    IWM_STA_MODIFY_REMOVE_BA_TID;
 
 	status = IWM_ADD_STA_SUCCESS;
-	ret = iwm_mvm_send_add_sta_cmd_status(sc, &cmd, &status);
+	ret = iwm_mvm_send_cmd_pdu_status(sc, IWM_ADD_STA,
+	    sizeof(cmd), &cmd, &status);
 	if (ret)
 		return;
 
@@ -4888,14 +4886,6 @@ iwm_mvm_disable_beacon_filter(struct iwm_softc *sc)
 	return ret;
 }
 
-int
-iwm_mvm_send_add_sta_cmd_status(struct iwm_softc *sc,
-	struct iwm_mvm_add_sta_cmd_v7 *cmd, int *status)
-{
-	return iwm_mvm_send_cmd_pdu_status(sc, IWM_ADD_STA, sizeof(*cmd),
-	    cmd, status);
-}
-
 /* send station add/update command to firmware */
 int
 iwm_mvm_sta_send_to_fw(struct iwm_softc *sc, struct iwm_node *in, int update)
@@ -4955,7 +4945,8 @@ iwm_mvm_sta_send_to_fw(struct iwm_softc *sc, struct iwm_node *in, int update)
 	}
 
 	status = IWM_ADD_STA_SUCCESS;
-	ret = iwm_mvm_send_add_sta_cmd_status(sc, &add_sta_cmd, &status);
+	ret = iwm_mvm_send_cmd_pdu_status(sc, IWM_ADD_STA, sizeof(add_sta_cmd),
+	    &add_sta_cmd, &status);
 	if (ret)
 		return ret;
 
@@ -5001,7 +4992,8 @@ iwm_mvm_add_int_sta_common(struct iwm_softc *sc, struct iwm_int_sta *sta,
 	if (addr)
 		memcpy(cmd.addr, addr, ETHER_ADDR_LEN);
 
-	ret = iwm_mvm_send_add_sta_cmd_status(sc, &cmd, &status);
+	ret = iwm_mvm_send_cmd_pdu_status(sc, IWM_ADD_STA,
+	    sizeof(cmd), &cmd, &status);
 	if (ret)
 		return ret;
 
@@ -6082,7 +6074,7 @@ iwm_setrates(struct iwm_node *in)
 	struct iwm_softc *sc = IC2IFP(ic)->if_softc;
 	struct iwm_lq_cmd *lq = &in->in_lq;
 	struct ieee80211_rateset *rs = &ni->ni_rates;
-	int i, ridx, ridx_min, j, tab = 0;
+	int i, ridx, ridx_min, j, sgi_ok, tab = 0;
 	struct iwm_host_cmd cmd = {
 		.id = IWM_LQ_CMD,
 		.len = { sizeof(in->in_lq), },
@@ -6092,9 +6084,12 @@ iwm_setrates(struct iwm_node *in)
 	memset(lq, 0, sizeof(*lq));
 	lq->sta_id = IWM_STATION_ID;
 
-	/* For HT, always enable RTS/CTS to avoid excessive retries. */
-	if (ni->ni_flags & IEEE80211_NODE_HT)
+	/* For HT, enable RTS/CTS, and SGI (if supported). */
+	if (ni->ni_flags & IEEE80211_NODE_HT) {
 		lq->flags |= IWM_LQ_FLAG_USE_RTS_MSK;
+		sgi_ok = (ni->ni_htcaps & IEEE80211_HTCAP_SGI20);
+	} else
+		sgi_ok = 0;
 
 	/*
 	 * Fill the LQ rate selection table with legacy and/or HT rates
@@ -6120,6 +6115,8 @@ iwm_setrates(struct iwm_node *in)
 				if (ridx == iwm_mcs2ridx[i]) {
 					tab = iwm_rates[ridx].ht_plcp;
 					tab |= IWM_RATE_MCS_HT_MSK;
+					if (sgi_ok)
+						tab |= IWM_RATE_MCS_SGI_MSK;
 					break;
 				}
 			}
@@ -6451,7 +6448,7 @@ iwm_mvm_fill_sf_command(struct iwm_softc *sc, struct iwm_sf_cfg_cmd *sf_cmd,
 }
 
 int
-iwm_mvm_sf_config(struct iwm_softc *sc, enum iwm_sf_state new_state)
+iwm_mvm_sf_config(struct iwm_softc *sc, int new_state)
 {
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct iwm_sf_cfg_cmd sf_cmd = {
@@ -7914,7 +7911,7 @@ iwm_attach(struct device *parent, struct device *self, void *aux)
 				   IWM_CSR_GP_CNTRL_REG_FLAG_MAC_CLOCK_READY,
 				   IWM_CSR_GP_CNTRL_REG_FLAG_MAC_CLOCK_READY,
 				   25000);
-		if (ret < 0) {
+		if (!ret) {
 			printf("%s: Failed to wake up the nic\n", DEVNAME(sc));
 			return;
 		}
@@ -8000,8 +7997,7 @@ iwm_attach(struct device *parent, struct device *self, void *aux)
 	    IEEE80211_C_SHSLOT |	/* short slot time supported */
 	    IEEE80211_C_SHPREAMBLE;	/* short preamble supported */
 
-	/* No optional HT features supported for now, */
-	ic->ic_htcaps = 0;
+	ic->ic_htcaps = IEEE80211_HTCAP_SGI20;
 	ic->ic_htxcaps = 0;
 	ic->ic_txbfcaps = 0;
 	ic->ic_aselcaps = 0;

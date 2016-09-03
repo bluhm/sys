@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf_osfp.c,v 1.34 2016/07/19 13:34:12 henning Exp $ */
+/*	$OpenBSD: pf_osfp.c,v 1.36 2016/09/02 11:43:53 dlg Exp $ */
 
 /*
  * Copyright (c) 2003 Mike Frantzen <frantzen@w4g.org>
@@ -53,6 +53,7 @@ typedef struct pool pool_t;
 #define pool_get(pool, flags)	malloc(*(pool))
 #define pool_put(pool, item)	free(item)
 #define pool_init(pool, size, a, ao, f, m, p)	(*(pool)) = (size)
+#define pool_setipl(pool, ipl)	((void)0)
 
 #ifdef PFDEBUG
 #include <sys/stdarg.h>	/* for DPFPRINTF() */
@@ -289,8 +290,10 @@ pf_osfp_initialize(void)
 {
 	pool_init(&pf_osfp_entry_pl, sizeof(struct pf_osfp_entry), 0, 0,
 	    PR_WAITOK, "pfosfpen", NULL);
+	pool_setipl(&pf_osfp_entry_pl, IPL_NONE);
 	pool_init(&pf_osfp_pl, sizeof(struct pf_os_fingerprint), 0, 0,
 	    PR_WAITOK, "pfosfp", NULL);
+	pool_setipl(&pf_osfp_pl, IPL_NONE);
 	SLIST_INIT(&pf_osfp_list);
 }
 
