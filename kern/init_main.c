@@ -1,4 +1,4 @@
-/*	$OpenBSD: init_main.c,v 1.254 2016/09/02 12:17:33 tb Exp $	*/
+/*	$OpenBSD: init_main.c,v 1.256 2016/09/03 14:46:56 naddy Exp $	*/
 /*	$NetBSD: init_main.c,v 1.84.4.1 1996/06/02 09:08:06 mrg Exp $	*/
 
 /*
@@ -405,15 +405,6 @@ main(void *framep)
 	kmstartup();
 #endif
 
-#if !defined(NO_PROPOLICE)
-	if (__guard_local == 0) {
-		volatile long newguard;
-
-		arc4random_buf((void *)&newguard, sizeof newguard);
-		__guard_local = newguard;
-	}
-#endif
-
 	/* init exec and emul */
 	init_exec();
 
@@ -550,6 +541,8 @@ main(void *framep)
 #if !(defined(__m88k__) && defined(MULTIPROCESSOR))	/* XXX */
 	pool_gc_pages(NULL);
 #endif
+
+	start_periodic_resettodr();
 
         /*
          * proc0: nothing to do, back to sleep

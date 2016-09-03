@@ -1,4 +1,4 @@
-/*	$OpenBSD: specialreg.h,v 1.45 2016/07/16 06:20:24 mlarkin Exp $	*/
+/*	$OpenBSD: specialreg.h,v 1.47 2016/09/03 13:35:03 mlarkin Exp $	*/
 /*	$NetBSD: specialreg.h,v 1.1 2003/04/26 18:39:48 fvdl Exp $	*/
 /*	$NetBSD: x86/specialreg.h,v 1.2 2003/04/25 21:54:30 fvdl Exp $	*/
 
@@ -117,7 +117,7 @@
 #define	CPUID_DE	0x00000004	/* has debugging extension */
 #define	CPUID_PSE	0x00000008	/* has 4MB page size extension */
 #define	CPUID_TSC	0x00000010	/* has time stamp counter */
-#define	CPUID_MSR	0x00000020	/* has mode specific registers */
+#define	CPUID_MSR	0x00000020	/* has model specific registers */
 #define	CPUID_PAE	0x00000040	/* has phys address extension */
 #define	CPUID_MCE	0x00000080	/* has machine check exception */
 #define	CPUID_CX8	0x00000100	/* has CMPXCHG8B instruction */
@@ -156,6 +156,7 @@
 #define	CPUIDECX_TM2	0x00000100	/* thermal monitor 2 */
 #define	CPUIDECX_SSSE3	0x00000200	/* Supplemental Streaming SIMD Ext. 3 */
 #define	CPUIDECX_CNXTID	0x00000400	/* Context ID */
+#define CPUIDECX_SDBG	0x00000800	/* Silicon debug capability */
 #define	CPUIDECX_FMA3	0x00001000	/* Fused Multiply Add */
 #define	CPUIDECX_CX16	0x00002000	/* has CMPXCHG16B instruction */
 #define	CPUIDECX_XTPR	0x00004000	/* xTPR Update Control */
