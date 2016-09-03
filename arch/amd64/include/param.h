@@ -1,4 +1,4 @@
-/*	$OpenBSD: param.h,v 1.22 2013/03/26 05:04:10 deraadt Exp $	*/
+/*	$OpenBSD: param.h,v 1.23 2016/09/03 14:25:27 bluhm Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
