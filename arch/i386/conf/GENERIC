@@ -1,4 +1,4 @@
-#	$OpenBSD: GENERIC,v 1.819 2016/08/31 15:51:47 tedu Exp $
+#	$OpenBSD: GENERIC,v 1.822 2016/09/04 10:22:06 tedu Exp $
 #
 # For further information on compiling OpenBSD kernels, see the config(8)
 # man page.
@@ -423,15 +423,6 @@ lpt1	at isa? port 0x278
 lpt2	at isa? port 0x3bc
 lpt*	at puc?
 
-bha0	at isa? port 0x330		# BusLogic [57]4X SCSI controllers
-bha1	at isa? disable port 0x334	# BusLogic [57]4X SCSI controllers
-bha2	at isa? disable
-bha*	at pci?
-#bha*	at eisa?		# XXX eisa still runs in isa-compat
-aha0	at isa? port 0x330	# Adaptec 154[02] SCSI controllers
-aha1	at isa? port 0x334	# Adaptec 154[02] SCSI controllers
-aha*	at isapnp?
-ahb*	at eisa?		# Adaptec 174[024] SCSI controllers
 #ahc0	at isa?			# Adaptec 284x SCSI controllers
 ahc*	at eisa?		# Adaptec 274x, aic7770 SCSI controllers
 ahc*	at pci?			# Adaptec 2940/3940/78?? SCSI controllers
@@ -614,7 +605,6 @@ wi*	at pcmcia?			# WaveLAN IEEE 802.11DS
 an*	at pci?				# Aironet IEEE 802.11DS
 an*	at isapnp?			# Aironet IEEE 802.11DS
 an*	at pcmcia?			# Aironet IEEE 802.11DS
-#cnw*	at pcmcia?			# Xircom Netwave
 ipw*	at pci?				# Intel PRO/Wireless 2100
 iwi*	at pci?				# Intel PRO/Wireless 2200BG/2915ABG
 wpi*	at pci?				# Intel PRO/Wireless 3945ABG

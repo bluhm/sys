@@ -1,4 +1,4 @@
-#	$OpenBSD: GENERIC,v 1.430 2016/09/01 10:04:51 jcs Exp $
+#	$OpenBSD: GENERIC,v 1.432 2016/09/04 10:22:05 tedu Exp $
 #
 # For further information on compiling OpenBSD kernels, see the config(8)
 # man page.
@@ -368,7 +368,6 @@ lpt*	at puc?
 efifb0		at mainbus?		# EFI Framebuffer
 wsdisplay0	at efifb? console 1
 
-#bha*	at pci?				# BusLogic [57]4X SCSI controllers
 ahc*	at pci?				# Adaptec 2940 SCSI controllers
 jmb*	at pci?				# JMicron JMB36x controllers
 ahci*	at jmb? flags 0x0000		# flags 0x0001 to force SATA 1 (1.5Gb/s)
@@ -514,7 +513,6 @@ wi*	at pci?				# WaveLAN IEEE 802.11DS
 wi*	at pcmcia?			# WaveLAN IEEE 802.11DS
 an*	at pci?				# Aironet IEEE 802.11DS
 an*	at pcmcia?			# Aironet IEEE 802.11DS
-cnw*	at pcmcia?			# Xircom Netwave
 iwi*	at pci?				# Intel PRO/Wireless 2200BG/2915ABG
 wpi*	at pci?				# Intel PRO/Wireless 3945ABG
 iwn*	at pci?				# Intel WiFi Link 4965/5000/1000/6000
