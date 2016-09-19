@@ -1,4 +1,4 @@
-/*	$OpenBSD: vmm.c,v 1.77 2016/09/04 08:49:18 mlarkin Exp $	*/
+/*	$OpenBSD: vmm.c,v 1.85 2016/09/17 06:43:38 jsg Exp $	*/
 /*
  * Copyright (c) 2014 Mike Larkin <mlarkin@openbsd.org>
  *
@@ -40,8 +40,10 @@
 
 #include <dev/isa/isareg.h>
 
+#define VMM_DEBUG
+
 #ifdef VMM_DEBUG
-int vmm_debug = 0;
+int vmm_debug = 1;
 #define DPRINTF(x...)	do { if (vmm_debug) printf(x); } while(0)
 #else
 #define DPRINTF(x...)
@@ -332,12 +334,10 @@ vmm_attach(struct device *parent, struct device *self, void *aux)
 		sc->mode = VMM_MODE_UNKNOWN;
 	}
 
-	pool_init(&vm_pool, sizeof(struct vm), 0, 0, PR_WAITOK, "vmpool",
-	    NULL);
-	pool_setipl(&vm_pool, IPL_NONE);
-	pool_init(&vcpu_pool, sizeof(struct vcpu), 0, 0, PR_WAITOK, "vcpupl",
-	    NULL);
-	pool_setipl(&vcpu_pool, IPL_NONE);
+	pool_init(&vm_pool, sizeof(struct vm), 0, IPL_NONE, PR_WAITOK,
+	    "vmpool", NULL);
+	pool_init(&vcpu_pool, sizeof(struct vcpu), 0, IPL_NONE, PR_WAITOK,
+	    "vcpupl", NULL);
 
 	vmm_softc = sc;
 }
@@ -2898,7 +2898,7 @@ vcpu_run_vmx(struct vcpu *vcpu, struct vm_run_params *vrp)
 	int ret = 0, resume, locked, exitinfo;
 	struct region_descriptor gdt;
 	struct cpu_info *ci;
-	uint64_t exit_reason, cr3, vmcs_ptr;
+	uint64_t exit_reason, cr3, vmcs_ptr, insn_error;
 	struct schedstate_percpu *spc;
 	struct vmx_invvpid_descriptor vid;
 	uint64_t eii, procbased;
@@ -2922,7 +2922,11 @@ vcpu_run_vmx(struct vcpu *vcpu, struct vm_run_params *vrp)
 		case VMX_EXIT_HLT:
 			break;
 		case VMX_EXIT_INT_WINDOW:
-			break; 
+			break;
+		case VMX_EXIT_EXTINT:
+			break;
+		case VMX_EXIT_EPT_VIOLATION:
+			break;
 #ifdef VMM_DEBUG
 		case VMX_EXIT_TRIPLE_FAULT:
 			DPRINTF("%s: vm %d vcpu %d triple fault\n",
@@ -3165,16 +3169,34 @@ vcpu_run_vmx(struct vcpu *vcpu, struct vm_run_params *vrp)
 		} else if (ret == VMX_FAIL_LAUNCH_INVALID_VMCS) {
 			printf("vcpu_run_vmx: failed launch with invalid "
 			    "vmcs\n");
+#ifdef VMM_DEBUG
+			vmx_vcpu_dump_regs(vcpu);
+			dump_vcpu(vcpu);
+#endif /* VMM_DEBUG */
 			ret = EINVAL;
 		} else if (ret == VMX_FAIL_LAUNCH_VALID_VMCS) {
 			exit_reason = vcpu->vc_gueststate.vg_exit_reason;
 			printf("vcpu_run_vmx: failed launch with valid "
 			    "vmcs, code=%lld (%s)\n", exit_reason,
 			    vmx_instruction_error_decode(exit_reason));
+			if (vmread(VMCS_INSTRUCTION_ERROR, &insn_error)) {
+				printf("vcpu_run_vmx: can't read"
+				    " insn error field\n");
+			} else
+				printf("vcpu_run_vmx: insn error code = "
+				    "%lld\n", insn_error);
+#ifdef VMM_DEBUG
+			vmx_vcpu_dump_regs(vcpu);
+			dump_vcpu(vcpu);
+#endif /* VMM_DEBUG */
 			ret = EINVAL;
 		} else {
 			printf("vcpu_run_vmx: failed launch for unknown "
 			    "reason %d\n", ret);
+#ifdef VMM_DEBUG
+			vmx_vcpu_dump_regs(vcpu);
+			dump_vcpu(vcpu);
+#endif /* VMM_DEBUG */
 			ret = EINVAL;
 		}
 	}
@@ -3775,7 +3797,6 @@ vmx_handle_cpuid(struct vcpu *vcpu)
 		 *  direct cache access (CPUIDECX_DCA)
 		 *  x2APIC (CPUIDECX_X2APIC)
 		 *  apic deadline (CPUIDECX_DEADLINE)
-		 *  performance monitoring (CPUIDECX_PDCM)
 		 *  timestamp (CPUID_TSC)
 		 *  apic (CPUID_APIC)
 		 *  psn (CPUID_PSN)
@@ -3792,7 +3813,7 @@ vmx_handle_cpuid(struct vcpu *vcpu)
 		    CPUIDECX_VMX | CPUIDECX_DTES64 |
 		    CPUIDECX_DSCPL | CPUIDECX_SMX |
 		    CPUIDECX_CNXTID | CPUIDECX_SDBG |
-		    CPUIDECX_XTPR | CPUIDECX_PDCM |
+		    CPUIDECX_XTPR |
 		    CPUIDECX_PCID | CPUIDECX_DCA |
 		    CPUIDECX_X2APIC | CPUIDECX_DEADLINE);
 		*rdx = curcpu()->ci_feature_flags &
@@ -4177,6 +4198,10 @@ dump_vcpu(struct vcpu *vcpu)
 		CTRL_DUMP(vcpu, PROCBASED, MOV_DR_EXITING);
 		CTRL_DUMP(vcpu, PROCBASED, UNCONDITIONAL_IO_EXITING);
 		CTRL_DUMP(vcpu, PROCBASED, USE_IO_BITMAPS);
+		CTRL_DUMP(vcpu, PROCBASED, MONITOR_TRAP_FLAG);
+		CTRL_DUMP(vcpu, PROCBASED, USE_MSR_BITMAPS);
+		CTRL_DUMP(vcpu, PROCBASED, MONITOR_EXITING);
+		CTRL_DUMP(vcpu, PROCBASED, PAUSE_EXITING);
 		if (vcpu_vmx_check_cap(vcpu, IA32_VMX_PROCBASED_CTLS,
 		    IA32_VMX_ACTIVATE_SECONDARY_CONTROLS, 1)) {
 			printf("    procbased2 ctls: 0x%llx\n",
@@ -4198,12 +4223,18 @@ dump_vcpu(struct vcpu *vcpu)
 			CTRL_DUMP(vcpu, PROCBASED2, ENABLE_INVPCID);
 			CTRL_DUMP(vcpu, PROCBASED2, ENABLE_VM_FUNCTIONS);
 			CTRL_DUMP(vcpu, PROCBASED2, VMCS_SHADOWING);
+			CTRL_DUMP(vcpu, PROCBASED2, ENABLE_ENCLS_EXITING);
+			CTRL_DUMP(vcpu, PROCBASED2, RDSEED_EXITING);
+			CTRL_DUMP(vcpu, PROCBASED2, ENABLE_PML);
 			CTRL_DUMP(vcpu, PROCBASED2, EPT_VIOLATION_VE);
+			CTRL_DUMP(vcpu, PROCBASED2, CONCEAL_VMX_FROM_PT);
+			CTRL_DUMP(vcpu, PROCBASED2, ENABLE_XSAVES_XRSTORS);
+			CTRL_DUMP(vcpu, PROCBASED2, ENABLE_TSC_SCALING);
 		}
 		printf("    entry ctls: 0x%llx\n",
 		    vcpu->vc_vmx_entry_ctls);
 		printf("    true entry ctls: 0x%llx\n",
-		    vcpu->vc_vmx_true_procbased_ctls);
+		    vcpu->vc_vmx_true_entry_ctls);
 		CTRL_DUMP(vcpu, ENTRY, LOAD_DEBUG_CONTROLS);
 		CTRL_DUMP(vcpu, ENTRY, IA32E_MODE_GUEST);
 		CTRL_DUMP(vcpu, ENTRY, ENTRY_TO_SMM);
@@ -4211,6 +4242,8 @@ dump_vcpu(struct vcpu *vcpu)
 		CTRL_DUMP(vcpu, ENTRY, LOAD_IA32_PERF_GLOBAL_CTRL_ON_ENTRY);
 		CTRL_DUMP(vcpu, ENTRY, LOAD_IA32_PAT_ON_ENTRY);
 		CTRL_DUMP(vcpu, ENTRY, LOAD_IA32_EFER_ON_ENTRY);
+		CTRL_DUMP(vcpu, ENTRY, LOAD_IA32_BNDCFGS_ON_ENTRY);
+		CTRL_DUMP(vcpu, ENTRY, CONCEAL_VM_ENTRIES_FROM_PT);
 		printf("    exit ctls: 0x%llx\n",
 		    vcpu->vc_vmx_exit_ctls);
 		printf("    true exit ctls: 0x%llx\n",
@@ -4224,6 +4257,8 @@ dump_vcpu(struct vcpu *vcpu)
 		CTRL_DUMP(vcpu, EXIT, SAVE_IA32_EFER_ON_EXIT);
 		CTRL_DUMP(vcpu, EXIT, LOAD_IA32_EFER_ON_EXIT);
 		CTRL_DUMP(vcpu, EXIT, SAVE_VMX_PREEMPTION_TIMER);
+		CTRL_DUMP(vcpu, EXIT, CLEAR_IA32_BNDCFGS_ON_EXIT);
+		CTRL_DUMP(vcpu, EXIT, CONCEAL_VM_EXITS_FROM_PT);
 	}
 }
 

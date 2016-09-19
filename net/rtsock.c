@@ -1,4 +1,4 @@
-/*	$OpenBSD: rtsock.c,v 1.202 2016/09/04 09:39:01 claudio Exp $	*/
+/*	$OpenBSD: rtsock.c,v 1.205 2016/09/17 07:35:05 phessler Exp $	*/
 /*	$NetBSD: rtsock.c,v 1.18 1996/03/29 00:32:10 cgd Exp $	*/
 
 /*
@@ -885,11 +885,11 @@ change:
 
 #ifdef BFD
 			if (ISSET(rtm->rtm_flags, RTF_BFD)) {
-				if ((error = bfd_rtalloc(rt)))
+				if ((error = bfdset(rt)))
 					goto flush;
 			} else if (!ISSET(rtm->rtm_flags, RTF_BFD) &&
 			    ISSET(rtm->rtm_fmask, RTF_BFD)) {
-				bfd_rtfree(rt);
+				bfdclear(rt);
 			}
 #endif
 
@@ -995,7 +995,7 @@ route_cleargateway(struct rtentry *rt, void *arg, unsigned int rtableid)
 int
 route_arp_conflict(struct rtentry *rt, struct rt_addrinfo *info)
 {
-#if defined(ART) && !defined(SMALL_KERNEL)
+#ifdef ART
 	int		 proxy = (info->rti_flags & RTF_ANNOUNCE);
 
 	if ((info->rti_flags & RTF_LLINFO) == 0 ||
@@ -1014,12 +1014,12 @@ route_arp_conflict(struct rtentry *rt, struct rt_addrinfo *info)
 	 * If a second entry exists, it always conflict.
 	 */
 	if ((ISSET(rt->rt_flags, RTF_ANNOUNCE) == proxy) ||
-	    (rtable_mpath_next(rt) != NULL))
+	    ISSET(rt->rt_flags, RTF_MPATH))
 		return (EEXIST);
 
 	/* No conflict but an entry exist so we need to force mpath. */
 	info->rti_flags |= RTF_MPATH;
-#endif /* ART && !SMALL_KERNEL */
+#endif /* ART */
 	return (0);
 }
 
@@ -1591,7 +1591,7 @@ extern	struct domain routedomain;		/* or at least forward */
 
 struct protosw routesw[] = {
 { SOCK_RAW,	&routedomain,	0,		PR_ATOMIC|PR_ADDR|PR_WANTRCVD,
-  route_input,	route_output,	raw_ctlinput,	route_ctloutput,
+  route_input,	route_output,	0,		route_ctloutput,
   route_usrreq,
   raw_init,	0,		0,		0,
   sysctl_rtable,

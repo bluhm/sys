@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_addr.c,v 1.18 2016/09/02 16:45:12 stefan Exp $	*/
+/*	$OpenBSD: uvm_addr.c,v 1.22 2016/09/16 02:50:54 dlg Exp $	*/
 
 /*
  * Copyright (c) 2011 Ariane van der Steldt <ariane@stack.nl>
@@ -93,8 +93,9 @@ struct uaddr_pivot_state {
  * Free space comparison.
  * Compares smaller free-space before larger free-space.
  */
-static __inline int
-uvm_mapent_fspace_cmp(struct vm_map_entry *e1, struct vm_map_entry *e2)
+static inline int
+uvm_mapent_fspace_cmp(const struct vm_map_entry *e1,
+    const struct vm_map_entry *e2)
 {
 	if (e1->fspace != e2->fspace)
 		return (e1->fspace < e2->fspace ? -1 : 1);
@@ -196,14 +197,14 @@ uvm_addr_entrybyspace(struct uaddr_free_rbtree *free, vsize_t sz)
 {
 	struct vm_map_entry	*tmp, *res;
 
-	tmp = RB_ROOT(free);
+	tmp = RBT_ROOT(uaddr_free_rbtree, free);
 	res = NULL;
 	while (tmp) {
 		if (tmp->fspace >= sz) {
 			res = tmp;
-			tmp = RB_LEFT(tmp, dfree.rbtree);
+			tmp = RBT_LEFT(uaddr_free_rbtree, tmp);
 		} else if (tmp->fspace < sz)
-			tmp = RB_RIGHT(tmp, dfree.rbtree);
+			tmp = RBT_RIGHT(uaddr_free_rbtree, tmp);
 	}
 	return res;
 }
@@ -287,21 +288,16 @@ uvm_addr_fitspace(vaddr_t *min_result, vaddr_t *max_result,
 void
 uvm_addr_init(void)
 {
-	pool_init(&uaddr_pool, sizeof(struct uvm_addr_state),
-	    0, 0, PR_WAITOK, "uaddr", NULL);
-	pool_setipl(&uaddr_pool, IPL_VM);
-	pool_init(&uaddr_hint_pool, sizeof(struct uaddr_hint_state),
-	    0, 0, PR_WAITOK, "uaddrhint", NULL);
-	pool_setipl(&uaddr_hint_pool, IPL_VM);
-	pool_init(&uaddr_bestfit_pool, sizeof(struct uaddr_bestfit_state),
-	    0, 0, PR_WAITOK, "uaddrbest", NULL);
-	pool_setipl(&uaddr_bestfit_pool, IPL_VM);
-	pool_init(&uaddr_pivot_pool, sizeof(struct uaddr_pivot_state),
-	    0, 0, PR_WAITOK, "uaddrpivot", NULL);
-	pool_setipl(&uaddr_pivot_pool, IPL_VM);
-	pool_init(&uaddr_rnd_pool, sizeof(struct uaddr_rnd_state),
-	    0, 0, PR_WAITOK, "uaddrrnd", NULL);
-	pool_setipl(&uaddr_rnd_pool, IPL_VM);
+	pool_init(&uaddr_pool, sizeof(struct uvm_addr_state), 0,
+	    IPL_VM, PR_WAITOK, "uaddr", NULL);
+	pool_init(&uaddr_hint_pool, sizeof(struct uaddr_hint_state), 0,
+	    IPL_VM, PR_WAITOK, "uaddrhint", NULL);
+	pool_init(&uaddr_bestfit_pool, sizeof(struct uaddr_bestfit_state), 0,
+	    IPL_VM, PR_WAITOK, "uaddrbest", NULL);
+	pool_init(&uaddr_pivot_pool, sizeof(struct uaddr_pivot_state), 0,
+	    IPL_VM, PR_WAITOK, "uaddrpivot", NULL);
+	pool_init(&uaddr_rnd_pool, sizeof(struct uaddr_rnd_state), 0,
+	    IPL_VM, PR_WAITOK, "uaddrrnd", NULL);
 
 	uaddr_kbootstrap.uaddr_minaddr = PAGE_SIZE;
 	uaddr_kbootstrap.uaddr_maxaddr = -(vaddr_t)PAGE_SIZE;
@@ -387,8 +383,8 @@ uvm_addr_linsearch(struct vm_map *map, struct uvm_addr_state *uaddr,
 	for (entry = uvm_map_entrybyaddr(&map->addr,
 	    hint - (direction == -1 ? 1 : 0)); entry != NULL;
 	    entry = (direction == 1 ?
-	    RB_NEXT(uvm_map_addr, &map->addr, entry) :
-	    RB_PREV(uvm_map_addr, &map->addr, entry))) {
+	    RBT_NEXT(uvm_map_addr, entry) :
+	    RBT_PREV(uvm_map_addr, entry))) {
 		if (VMMAP_FREE_START(entry) > high ||
 		    VMMAP_FREE_END(entry) < low) {
 			break;
@@ -626,7 +622,7 @@ uaddr_rnd_select(struct vm_map *map, struct uvm_addr_state *uaddr,
 	/* Walk up the tree, until there is at least sufficient space. */
 	while (entry != NULL &&
 	    entry->fspace_augment < before_gap + after_gap + sz)
-		entry = RB_PARENT(entry, daddrs.addr_entry);
+		entry = RBT_PARENT(uvm_map_addr, entry);
 
 	while (entry != NULL) {
 		/* Test if this fits. */
@@ -644,20 +640,20 @@ uaddr_rnd_select(struct vm_map *map, struct uvm_addr_state *uaddr,
 			return 0;
 		}
 
-		/* RB_NEXT, but skip subtrees that cannot possible fit. */
-		next = RB_RIGHT(entry, daddrs.addr_entry);
+		/* RBT_NEXT, but skip subtrees that cannot possible fit. */
+		next = RBT_RIGHT(uvm_map_addr, entry);
 		if (next != NULL &&
 		    next->fspace_augment >= before_gap + after_gap + sz) {
 			entry = next;
-			while ((next = RB_LEFT(entry, daddrs.addr_entry)) !=
+			while ((next = RBT_LEFT(uvm_map_addr, entry)) !=
 			    NULL)
 				entry = next;
 		} else {
 do_parent:
-			next = RB_PARENT(entry, daddrs.addr_entry);
+			next = RBT_PARENT(uvm_map_addr, entry);
 			if (next == NULL)
 				entry = NULL;
-			else if (RB_LEFT(next, daddrs.addr_entry) == entry)
+			else if (RBT_LEFT(uvm_map_addr, next) == entry)
 				entry = next;
 			else {
 				entry = next;
@@ -876,7 +872,7 @@ uaddr_kbootstrap_select(struct vm_map *map, struct uvm_addr_state *uaddr,
 {
 	vaddr_t tmp;
 
-	RB_FOREACH(*entry_out, uvm_map_addr, &map->addr) {
+	RBT_FOREACH(*entry_out, uvm_map_addr, &map->addr) {
 		if (VMMAP_FREE_END(*entry_out) <= uvm_maxkaddr &&
 		    uvm_addr_fitspace(addr_out, &tmp,
 		    VMMAP_FREE_START(*entry_out), VMMAP_FREE_END(*entry_out),
@@ -918,7 +914,7 @@ uaddr_bestfit_create(vaddr_t minaddr, vaddr_t maxaddr)
 	uaddr->ubf_uaddr.uaddr_minaddr = minaddr;
 	uaddr->ubf_uaddr.uaddr_maxaddr = maxaddr;
 	uaddr->ubf_uaddr.uaddr_functions = &uaddr_bestfit_functions;
-	RB_INIT(&uaddr->ubf_free);
+	RBT_INIT(uaddr_free_rbtree, &uaddr->ubf_free);
 	return &uaddr->ubf_uaddr;
 }
 
@@ -936,7 +932,7 @@ uaddr_bestfit_insert(struct vm_map *map, struct uvm_addr_state *uaddr_p,
 	struct vm_map_entry		*rb_rv;
 
 	uaddr = (struct uaddr_bestfit_state *)uaddr_p;
-	if ((rb_rv = RB_INSERT(uaddr_free_rbtree, &uaddr->ubf_free, entry)) !=
+	if ((rb_rv = RBT_INSERT(uaddr_free_rbtree, &uaddr->ubf_free, entry)) !=
 	    NULL) {
 		panic("%s: duplicate insertion: state %p "
 		    "interting %p, colliding with %p", __func__,
@@ -951,7 +947,7 @@ uaddr_bestfit_remove(struct vm_map *map, struct uvm_addr_state *uaddr_p,
 	struct uaddr_bestfit_state	*uaddr;
 
 	uaddr = (struct uaddr_bestfit_state *)uaddr_p;
-	if (RB_REMOVE(uaddr_free_rbtree, &uaddr->ubf_free, entry) != entry)
+	if (RBT_REMOVE(uaddr_free_rbtree, &uaddr->ubf_free, entry) != entry)
 		panic("%s: entry was not in tree", __func__);
 }
 
@@ -983,7 +979,7 @@ uaddr_bestfit_select(struct vm_map *map, struct uvm_addr_state *uaddr_p,
 	while (uvm_addr_fitspace(&min, &max,
 	    VMMAP_FREE_START(entry), VMMAP_FREE_END(entry),
 	    sz, align, offset, 0, guardsz) != 0) {
-		entry = RB_NEXT(uaddr_free_rbtree, &uaddr->ubf_free, entry);
+		entry = RBT_NEXT(uaddr_free_rbtree, entry);
 		if (entry == NULL)
 			return ENOMEM;
 	}
@@ -1124,7 +1120,7 @@ uaddr_pivot_newpivot(struct vm_map *map, struct uaddr_pivot_state *uaddr,
 	 */
 	path = arc4random();
 	found = NULL;
-	entry = RB_ROOT(&uaddr->up_free);
+	entry = RBT_ROOT(uaddr_free_rbtree, &uaddr->up_free);
 	while (entry != NULL) {
 		fit_error = uvm_addr_fitspace(&min, &max,
 		    MAX(VMMAP_FREE_START(entry), minaddr),
@@ -1140,13 +1136,13 @@ uaddr_pivot_newpivot(struct vm_map *map, struct uaddr_pivot_state *uaddr,
 
 		/* Next. */
 		if (fit_error != 0)
-			entry = RB_RIGHT(entry, dfree.rbtree);
+			entry = RBT_RIGHT(uaddr_free_rbtree, entry);
 		else if	((path & 0x1) == 0) {
 			path >>= 1;
-			entry = RB_RIGHT(entry, dfree.rbtree);
+			entry = RBT_RIGHT(uaddr_free_rbtree, entry);
 		} else {
 			path >>= 1;
-			entry = RB_LEFT(entry, dfree.rbtree);
+			entry = RBT_LEFT(uaddr_free_rbtree, entry);
 		}
 	}
 	if (found == NULL)
@@ -1320,7 +1316,7 @@ uaddr_pivot_insert(struct vm_map *map, struct uvm_addr_state *uaddr_p,
 	vaddr_t				 start, end;
 
 	uaddr = (struct uaddr_pivot_state *)uaddr_p;
-	if ((rb_rv = RB_INSERT(uaddr_free_rbtree, &uaddr->up_free, entry)) !=
+	if ((rb_rv = RBT_INSERT(uaddr_free_rbtree, &uaddr->up_free, entry)) !=
 	    NULL) {
 		panic("%s: duplicate insertion: state %p "
 		    "inserting entry %p which collides with %p", __func__,
@@ -1360,7 +1356,7 @@ uaddr_pivot_remove(struct vm_map *map, struct uvm_addr_state *uaddr_p,
 	struct uaddr_pivot		*p;
 
 	uaddr = (struct uaddr_pivot_state *)uaddr_p;
-	if (RB_REMOVE(uaddr_free_rbtree, &uaddr->up_free, entry) != entry)
+	if (RBT_REMOVE(uaddr_free_rbtree, &uaddr->up_free, entry) != entry)
 		panic("%s: entry was not in tree", __func__);
 
 	/*
@@ -1394,7 +1390,7 @@ uaddr_pivot_create(vaddr_t minaddr, vaddr_t maxaddr)
 	uaddr->up_uaddr.uaddr_minaddr = minaddr;
 	uaddr->up_uaddr.uaddr_maxaddr = maxaddr;
 	uaddr->up_uaddr.uaddr_functions = &uaddr_pivot_functions;
-	RB_INIT(&uaddr->up_free);
+	RBT_INIT(uaddr_free_rbtree, &uaddr->up_free);
 	memset(uaddr->up_pivots, 0, sizeof(uaddr->up_pivots));
 
 	return &uaddr->up_uaddr;
@@ -1427,10 +1423,10 @@ uaddr_pivot_print(struct uvm_addr_state *uaddr_p, boolean_t full,
 	if (!full)
 		return;
 
-	if (RB_EMPTY(&uaddr->up_free))
+	if (RBT_EMPTY(uaddr_free_rbtree, &uaddr->up_free))
 		(*pr)("\tempty\n");
 	/* Print list of free space. */
-	RB_FOREACH(entry, uaddr_free_rbtree, &uaddr->up_free) {
+	RBT_FOREACH(entry, uaddr_free_rbtree, &uaddr->up_free) {
 		(*pr)("\t0x%lx - 0x%lx free (0x%lx bytes)\n",
 		    VMMAP_FREE_START(entry), VMMAP_FREE_END(entry),
 		    VMMAP_FREE_END(entry) - VMMAP_FREE_START(entry));
@@ -1556,6 +1552,6 @@ uaddr_stack_brk_create(vaddr_t minaddr, vaddr_t maxaddr)
 
 
 #ifndef SMALL_KERNEL
-RB_GENERATE(uaddr_free_rbtree, vm_map_entry, dfree.rbtree,
+RBT_GENERATE(uaddr_free_rbtree, vm_map_entry, dfree.rbtree,
     uvm_mapent_fspace_cmp);
 #endif /* !SMALL_KERNEL */

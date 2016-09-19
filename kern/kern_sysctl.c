@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_sysctl.c,v 1.308 2016/09/04 09:22:29 mpi Exp $	*/
+/*	$OpenBSD: kern_sysctl.c,v 1.310 2016/09/18 14:32:54 deraadt Exp $	*/
 /*	$NetBSD: kern_sysctl.c,v 1.17 1996/05/20 17:49:05 mrg Exp $	*/
 
 /*-
@@ -259,11 +259,7 @@ char *disknames = NULL;
 size_t disknameslen;
 struct diskstats *diskstats = NULL;
 size_t diskstatslen;
-#ifdef INSECURE
-int securelevel = -1;
-#else
 int securelevel;
-#endif
 
 /*
  * kernel related system variables.
@@ -414,10 +410,6 @@ kern_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		return (sysctl_int(oldp, oldlenp, newp, newlen, &somaxconn));
 	case KERN_SOMINCONN:
 		return (sysctl_int(oldp, oldlenp, newp, newlen, &sominconn));
-	case KERN_USERMOUNT: {
-		int usermount = 0;
-		return (sysctl_rdint(oldp, oldlenp, newp, usermount));
-		}
 	case KERN_ARND: {
 		char buf[512];
 

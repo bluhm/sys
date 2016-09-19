@@ -1,4 +1,4 @@
-/*	$OpenBSD: subr_pool.c,v 1.194 2016/01/15 11:21:58 dlg Exp $	*/
+/*	$OpenBSD: subr_pool.c,v 1.198 2016/09/15 02:00:16 dlg Exp $	*/
 /*	$NetBSD: subr_pool.c,v 1.61 2001/09/26 07:14:56 chs Exp $	*/
 
 /*-
@@ -79,7 +79,7 @@ struct pool_item_header {
 	TAILQ_ENTRY(pool_item_header)
 				ph_pagelist;	/* pool page list */
 	XSIMPLEQ_HEAD(,pool_item) ph_itemlist;	/* chunk list for this page */
-	RB_ENTRY(pool_item_header)
+	RBT_ENTRY(pool_item_header)
 				ph_node;	/* Off-page page headers */
 	int			ph_nmissing;	/* # of chunks in use */
 	caddr_t			ph_page;	/* this page's address */
@@ -165,8 +165,11 @@ struct task pool_gc_task = TASK_INITIALIZER(pool_gc_pages, NULL);
 int pool_wait_free = 1;
 int pool_wait_gc = 8;
 
+RBT_PROTOTYPE(phtree, pool_item_header, ph_node, phtree_compare);
+
 static inline int
-phtree_compare(struct pool_item_header *a, struct pool_item_header *b)
+phtree_compare(const struct pool_item_header *a,
+    const struct pool_item_header *b)
 {
 	vaddr_t va = (vaddr_t)a->ph_page;
 	vaddr_t vb = (vaddr_t)b->ph_page;
@@ -180,8 +183,7 @@ phtree_compare(struct pool_item_header *a, struct pool_item_header *b)
 	return (0);
 }
 
-RB_PROTOTYPE(phtree, pool_item_header, ph_node, phtree_compare);
-RB_GENERATE(phtree, pool_item_header, ph_node, phtree_compare);
+RBT_GENERATE(phtree, pool_item_header, ph_node, phtree_compare);
 
 /*
  * Return the pool page header based on page address.
@@ -200,7 +202,7 @@ pr_find_pagehead(struct pool *pp, void *v)
 	}
 
 	key.ph_page = v;
-	ph = RB_NFIND(phtree, &pp->pr_phtree, &key);
+	ph = RBT_NFIND(phtree, &pp->pr_phtree, &key);
 	if (ph == NULL)
 		panic("%s: %s: page header missing", __func__, pp->pr_wchan);
 
@@ -218,14 +220,13 @@ pr_find_pagehead(struct pool *pp, void *v)
  * static pools that must be initialized before malloc() is available.
  */
 void
-pool_init(struct pool *pp, size_t size, u_int align, u_int ioff, int flags,
+pool_init(struct pool *pp, size_t size, u_int align, int ipl, int flags,
     const char *wchan, struct pool_allocator *palloc)
 {
 	int off = 0, space;
 	unsigned int pgsize = PAGE_SIZE, items;
 #ifdef DIAGNOSTIC
 	struct pool *iter;
-	KASSERT(ioff == 0);
 #endif
 
 	if (align == 0)
@@ -292,7 +293,7 @@ pool_init(struct pool *pp, size_t size, u_int align, u_int ioff, int flags,
 	pp->pr_hardlimit_ratecap.tv_usec = 0;
 	pp->pr_hardlimit_warning_last.tv_sec = 0;
 	pp->pr_hardlimit_warning_last.tv_usec = 0;
-	RB_INIT(&pp->pr_phtree);
+	RBT_INIT(phtree, &pp->pr_phtree);
 
 	/*
 	 * Use the space between the chunks and the page header
@@ -311,15 +312,14 @@ pool_init(struct pool *pp, size_t size, u_int align, u_int ioff, int flags,
 	pp->pr_hiwat = 0;
 	pp->pr_nidle = 0;
 
-	pp->pr_ipl = -1;
-	mtx_init(&pp->pr_mtx, IPL_NONE);
-	mtx_init(&pp->pr_requests_mtx, IPL_NONE);
+	pp->pr_ipl = ipl;
+	mtx_init(&pp->pr_mtx, pp->pr_ipl);
+	mtx_init(&pp->pr_requests_mtx, pp->pr_ipl);
 	TAILQ_INIT(&pp->pr_requests);
 
 	if (phpool.pr_size == 0) {
-		pool_init(&phpool, sizeof(struct pool_item_header), 0, 0,
-		    0, "phpool", NULL);
-		pool_setipl(&phpool, IPL_HIGH);
+		pool_init(&phpool, sizeof(struct pool_item_header), 0,
+		    IPL_HIGH, 0, "phpool", NULL);
 
 		/* make sure phpool wont "recurse" */
 		KASSERT(POOL_INPGHDR(&phpool));
@@ -344,14 +344,6 @@ pool_init(struct pool *pp, size_t size, u_int align, u_int ioff, int flags,
 	SIMPLEQ_INSERT_HEAD(&pool_head, pp, pr_poollist);
 	pool_count++;
 	rw_exit_write(&pool_lock);
-}
-
-void
-pool_setipl(struct pool *pp, int ipl)
-{
-	pp->pr_ipl = ipl;
-	mtx_init(&pp->pr_mtx, ipl);
-	mtx_init(&pp->pr_requests_mtx, ipl);
 }
 
 /*
@@ -431,7 +423,6 @@ pool_get(struct pool *pp, int flags)
 
 	KASSERT(flags & (PR_WAITOK | PR_NOWAIT));
 
-
 	mtx_enter(&pp->pr_mtx);
 	if (pp->pr_nout >= pp->pr_hardlimit) {
 		if (ISSET(flags, PR_NOWAIT|PR_LIMITFAIL))
@@ -447,8 +438,8 @@ pool_get(struct pool *pp, int flags)
 
 	if (v == NULL) {
 		struct pool_get_memory mem = {
-		    MUTEX_INITIALIZER((pp->pr_ipl == -1) ?
-		    IPL_NONE : pp->pr_ipl), NULL };
+		    MUTEX_INITIALIZER(pp->pr_ipl),
+		    NULL };
 		struct pool_request pr;
 
 		pool_request_init(&pr, pool_get_done, &mem);
@@ -550,8 +541,7 @@ pool_do_get(struct pool *pp, int flags, int *slowdown)
 
 	MUTEX_ASSERT_LOCKED(&pp->pr_mtx);
 
-	if (pp->pr_ipl != -1)
-		splassert(pp->pr_ipl);
+	splassert(pp->pr_ipl);
 
 	/*
 	 * Account for this item now to avoid races if we need to give up
@@ -643,8 +633,7 @@ pool_put(struct pool *pp, void *v)
 
 	mtx_enter(&pp->pr_mtx);
 
-	if (pp->pr_ipl != -1)
-		splassert(pp->pr_ipl);
+	splassert(pp->pr_ipl);
 
 	ph = pr_find_pagehead(pp, v);
 
@@ -847,7 +836,7 @@ pool_p_insert(struct pool *pp, struct pool_item_header *ph)
 
 	TAILQ_INSERT_TAIL(&pp->pr_emptypages, ph, ph_pagelist);
 	if (!POOL_INPGHDR(pp))
-		RB_INSERT(phtree, &pp->pr_phtree, ph);
+		RBT_INSERT(phtree, &pp->pr_phtree, ph);
 
 	pp->pr_nitems += pp->pr_itemsperpage;
 	pp->pr_nidle++;
@@ -868,7 +857,7 @@ pool_p_remove(struct pool *pp, struct pool_item_header *ph)
 	pp->pr_nitems -= pp->pr_itemsperpage;
 
 	if (!POOL_INPGHDR(pp))
-		RB_REMOVE(phtree, &pp->pr_phtree, ph);
+		RBT_REMOVE(phtree, &pp->pr_phtree, ph);
 	TAILQ_REMOVE(&pp->pr_emptypages, ph, ph_pagelist);
 
 	pool_update_curpage(pp);
@@ -1325,8 +1314,7 @@ sysctl_dopool(int *name, u_int namelen, char *oldp, size_t *oldlenp)
 	case KERN_POOL_POOL:
 		memset(&pi, 0, sizeof(pi));
 
-		if (pp->pr_ipl != -1)
-			mtx_enter(&pp->pr_mtx);
+		mtx_enter(&pp->pr_mtx);
 		pi.pr_size = pp->pr_size;
 		pi.pr_pgsize = pp->pr_pgsize;
 		pi.pr_itemsperpage = pp->pr_itemsperpage;
@@ -1343,8 +1331,7 @@ sysctl_dopool(int *name, u_int namelen, char *oldp, size_t *oldlenp)
 		pi.pr_npagefree = pp->pr_npagefree;
 		pi.pr_hiwat = pp->pr_hiwat;
 		pi.pr_nidle = pp->pr_nidle;
-		if (pp->pr_ipl != -1)
-			mtx_leave(&pp->pr_mtx);
+		mtx_leave(&pp->pr_mtx);
 
 		rv = sysctl_rdstruct(oldp, oldlenp, NULL, &pi, sizeof(pi));
 		break;

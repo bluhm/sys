@@ -1,4 +1,4 @@
-/*	$OpenBSD */
+/*	$OpenBSD: subr_tree.c,v 1.5 2016/09/16 01:05:34 dlg Exp $ */
 
 /*
  * Copyright 2002 Niels Provos <provos@citi.umich.edu>
@@ -60,10 +60,10 @@ rb_e2n(const struct rb_type *t, struct rb_entry *rbe)
 	return ((void *)(addr - t->t_offset));
 }
 
-#define RBE_LEFT(_rbe)		(_rbe)->rbe_left
-#define RBE_RIGHT(_rbe)		(_rbe)->rbe_right
-#define RBE_PARENT(_rbe)	(_rbe)->rbe_parent
-#define RBE_COLOR(_rbe)		(_rbe)->rbe_color
+#define RBE_LEFT(_rbe)		(_rbe)->rbt_left
+#define RBE_RIGHT(_rbe)		(_rbe)->rbt_right
+#define RBE_PARENT(_rbe)	(_rbe)->rbt_parent
+#define RBE_COLOR(_rbe)		(_rbe)->rbt_color
 
 #define RBH_ROOT(_rbt)		(_rbt)->rbt_root
 
@@ -460,7 +460,7 @@ _rb_find(const struct rb_type *t, struct rb_tree *rbt, const void *key)
 	return (NULL);
 }
 
-/* Finds the first node greater than or equal to the search key */      \
+/* Finds the first node greater than or equal to the search key */
 void *
 _rb_nfind(const struct rb_type *t, struct rb_tree *rbt, const void *key)
 {
@@ -592,3 +592,21 @@ _rb_parent(const struct rb_type *t, void *node)
 	return (rbe == NULL ? NULL : rb_e2n(t, rbe));
 }
 
+void
+_rb_poison(const struct rb_type *t, void *node, unsigned long poison)
+{
+	struct rb_entry *rbe = rb_n2e(t, node);
+
+	RBE_PARENT(rbe) = RBE_LEFT(rbe) = RBE_RIGHT(rbe) =
+	    (struct rb_entry *)poison;
+}
+
+int
+_rb_check(const struct rb_type *t, void *node, unsigned long poison)
+{
+	struct rb_entry *rbe = rb_n2e(t, node);
+
+	return ((unsigned long)RBE_PARENT(rbe) == poison &&
+	    (unsigned long)RBE_LEFT(rbe) == poison &&
+	    (unsigned long)RBE_RIGHT(rbe) == poison);
+}

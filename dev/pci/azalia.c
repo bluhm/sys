@@ -1,4 +1,4 @@
-/*	$OpenBSD: azalia.c,v 1.227 2016/04/24 06:45:20 jsg Exp $	*/
+/*	$OpenBSD: azalia.c,v 1.229 2016/09/19 06:46:44 ratchov Exp $	*/
 /*	$NetBSD: azalia.c,v 1.20 2006/05/07 08:31:44 kent Exp $	*/
 
 /*-
@@ -249,14 +249,11 @@ int	azalia_stream_intr(stream_t *);
 
 int	azalia_open(void *, int);
 void	azalia_close(void *);
-int	azalia_query_encoding(void *, audio_encoding_t *);
 int	azalia_set_params(void *, int, int, audio_params_t *,
 	audio_params_t *);
-void	azalia_get_default_params(void *, int, struct audio_params*);
 int	azalia_round_blocksize(void *, int);
 int	azalia_halt_output(void *);
 int	azalia_halt_input(void *);
-int	azalia_getdev(void *, struct audio_device *);
 int	azalia_set_port(void *, mixer_ctrl_t *);
 int	azalia_get_port(void *, mixer_ctrl_t *);
 int	azalia_query_devinfo(void *, mixer_devinfo_t *);
@@ -270,7 +267,6 @@ int	azalia_trigger_input(void *, void *, void *, int,
 	void (*)(void *), void *, audio_params_t *);
 
 int	azalia_params2fmt(const audio_params_t *, uint16_t *);
-int	azalia_create_encodings(codec_t *);
 
 int	azalia_match_format(codec_t *, int, audio_params_t *);
 int	azalia_set_params_sub(codec_t *, int, audio_params_t *);
@@ -295,8 +291,6 @@ struct cfdriver azalia_cd = {
 struct audio_hw_if azalia_hw_if = {
 	azalia_open,
 	azalia_close,
-	NULL,			/* drain */
-	azalia_query_encoding,
 	azalia_set_params,
 	azalia_round_blocksize,
 	NULL,			/* commit_settings */
@@ -307,7 +301,6 @@ struct audio_hw_if azalia_hw_if = {
 	azalia_halt_output,
 	azalia_halt_input,
 	NULL,			/* speaker_ctl */
-	azalia_getdev,
 	NULL,			/* setfd */
 	azalia_set_port,
 	azalia_get_port,
@@ -315,11 +308,9 @@ struct audio_hw_if azalia_hw_if = {
 	azalia_allocm,
 	azalia_freem,
 	azalia_round_buffersize,
-	NULL,			/* mappage */
 	azalia_get_props,
 	azalia_trigger_output,
-	azalia_trigger_input,
-	azalia_get_default_params
+	azalia_trigger_input
 };
 
 static const char *pin_devices[16] = {
@@ -2606,12 +2597,6 @@ azalia_codec_delete(codec_t *this)
 	}
 	this->nformats = 0;
 
-	if (this->encs != NULL) {
-		free(this->encs, M_DEVBUF, 0);
-		this->encs = NULL;
-	}
-	this->nencs = 0;
-
 	if (this->opins != NULL) {
 		free(this->opins, M_DEVBUF, 0);
 		this->opins = NULL;
@@ -2650,7 +2635,7 @@ azalia_codec_construct_format(codec_t *this, int newdac, int newadc)
 	const convgroup_t *group;
 	uint32_t bits_rates;
 	int variation;
-	int nbits, c, chan, i, err;
+	int nbits, c, chan, i;
 	nid_t nid;
 
 	variation = 0;
@@ -2759,9 +2744,6 @@ azalia_codec_construct_format(codec_t *this, int newdac, int newadc)
 		}
 	}
 
-	err = azalia_create_encodings(this);
-	if (err)
-		return err;
 	return 0;
 }
 
@@ -3877,34 +3859,6 @@ azalia_close(void *v)
 }
 
 int
-azalia_query_encoding(void *v, audio_encoding_t *enc)
-{
-	azalia_t *az;
-	codec_t *codec;
-
-	az = v;
-	codec = &az->codecs[az->codecno];
-
-	if (enc->index < 0 || enc->index >= codec->nencs)
-		return (EINVAL);
-
-	*enc = codec->encs[enc->index];
-
-	return (0);
-}
-
-void
-azalia_get_default_params(void *addr, int mode, struct audio_params *params)
-{
-	params->sample_rate = 48000;
-	params->encoding = AUDIO_ENCODING_SLINEAR_LE;
-	params->precision = 16;
-	params->bps = 2;
-	params->msb = 1;
-	params->channels = 2;
-}
-
-int
 azalia_match_format(codec_t *codec, int mode, audio_params_t *par)
 {
 	int i;
@@ -3948,10 +3902,8 @@ azalia_set_params_sub(codec_t *codec, int mode, audio_params_t *par)
 	opre = par->precision;
 
 	if ((mode == AUMODE_PLAY && codec->dacs.ngroups == 0) ||
-	    (mode == AUMODE_RECORD && codec->adcs.ngroups == 0)) {
-		azalia_get_default_params(NULL, mode, par);
+	    (mode == AUMODE_RECORD && codec->adcs.ngroups == 0))
 		return 0;
-	}
 
 	i = azalia_match_format(codec, mode, par);
 	if (i == codec->nformats && (par->precision != 16 || par->encoding !=
@@ -4081,19 +4033,6 @@ azalia_halt_input(void *v)
 	DPRINTFN(1, ("%s\n", __func__));
 	az = v;
 	return azalia_stream_halt(&az->rstream);
-}
-
-int
-azalia_getdev(void *v, struct audio_device *dev)
-{
-	azalia_t *az;
-
-	az = v;
-	strlcpy(dev->name, "HD-Audio", MAX_AUDIO_DEV_LEN);
-	snprintf(dev->version, MAX_AUDIO_DEV_LEN,
-	    "%d.%d", AZ_READ_1(az, VMAJ), AZ_READ_1(az, VMIN));
-	strlcpy(dev->config, XNAME(az), MAX_AUDIO_DEV_LEN);
-	return 0;
 }
 
 int
@@ -4339,67 +4278,4 @@ azalia_params2fmt(const audio_params_t *param, uint16_t *fmt)
 	}
 	*fmt = ret;
 	return 0;
-}
-
-int
-azalia_create_encodings(codec_t *this)
-{
-	struct audio_format f;
-	int encs[16];
-	int enc, nencs;
-	int i, j;
-
-	nencs = 0;
-	for (i = 0; i < this->nformats && nencs < 16; i++) {
-		f = this->formats[i];
-		enc = f.precision << 8 | f.encoding;
-		for (j = 0; j < nencs; j++) {
-			if (encs[j] == enc)
-				break;
-		}
-		if (j < nencs)
-			continue;
-		encs[j] = enc;
-		nencs++;
-	}
-
-	if (this->encs != NULL)
-		free(this->encs, M_DEVBUF, 0);
-	this->nencs = 0;
-	this->encs = mallocarray(nencs, sizeof(struct audio_encoding),
-	    M_DEVBUF, M_NOWAIT | M_ZERO);
-	if (this->encs == NULL) {
-		printf("%s: out of memory in %s\n",
-		    XNAME(this->az), __func__);
-		return ENOMEM;
-	}
-
-	this->nencs = nencs;
-	for (i = 0; i < this->nencs; i++) {
-		this->encs[i].index = i;
-		this->encs[i].encoding = encs[i] & 0xff;
-		this->encs[i].precision = encs[i] >> 8;
-		this->encs[i].bps = AUDIO_BPS(encs[i] >> 8);
-		this->encs[i].msb = 1;
-		this->encs[i].flags = 0;
-		switch (this->encs[i].encoding) {
-		case AUDIO_ENCODING_SLINEAR_LE:
-			strlcpy(this->encs[i].name,
-			    this->encs[i].precision == 8 ?
-			    AudioEslinear : AudioEslinear_le,
-			    sizeof this->encs[i].name);
-			break;
-		case AUDIO_ENCODING_ULINEAR_LE:
-			strlcpy(this->encs[i].name,
-			    this->encs[i].precision == 8 ?
-			    AudioEulinear : AudioEulinear_le,
-			    sizeof this->encs[i].name);
-			break;
-		default:
-			DPRINTF(("%s: unknown format\n", __func__));
-			break;
-		}
-	}
-
-	return (0);
 }

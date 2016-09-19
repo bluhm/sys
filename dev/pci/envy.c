@@ -1,4 +1,4 @@
-/*	$OpenBSD: envy.c,v 1.66 2015/08/30 08:52:26 ratchov Exp $	*/
+/*	$OpenBSD: envy.c,v 1.68 2016/09/19 06:46:44 ratchov Exp $	*/
 /*
  * Copyright (c) 2007 Alexandre Ratchov <alex@caoua.org>
  *
@@ -98,7 +98,6 @@ int envy_open(void *, int);
 void envy_close(void *);
 void *envy_allocm(void *, int, size_t, int, int);
 void envy_freem(void *, void *, int);
-int envy_query_encoding(void *, struct audio_encoding *);
 int envy_set_params(void *, int, int, struct audio_params *,
     struct audio_params *);
 int envy_round_blocksize(void *, int);
@@ -109,7 +108,6 @@ int envy_trigger_input(void *, void *, void *, int,
     void (*)(void *), void *, struct audio_params *);
 int envy_halt_output(void *);
 int envy_halt_input(void *);
-int envy_getdev(void *, struct audio_device *);
 int envy_query_devinfo(void *, struct mixer_devinfo *);
 int envy_get_port(void *, struct mixer_ctrl *);
 int envy_set_port(void *, struct mixer_ctrl *);
@@ -180,8 +178,6 @@ struct cfdriver envy_cd = {
 struct audio_hw_if envy_hw_if = {
 	envy_open,		/* open */
 	envy_close,		/* close */
-	NULL,			/* drain */
-	envy_query_encoding,	/* query_encoding */
 	envy_set_params,	/* set_params */
 	envy_round_blocksize,	/* round_blocksize */
 	NULL,			/* commit_settings */
@@ -192,7 +188,6 @@ struct audio_hw_if envy_hw_if = {
 	envy_halt_output,	/* halt_output */
 	envy_halt_input,	/* halt_input */
 	NULL,			/* speaker_ctl */
-	envy_getdev,		/* getdev */
 	NULL,			/* setfd */
 	envy_set_port,		/* set_port */
 	envy_get_port,		/* get_port */
@@ -200,11 +195,9 @@ struct audio_hw_if envy_hw_if = {
 	envy_allocm,		/* malloc */
 	envy_freem,		/* free */
 	envy_round_buffersize,	/* round_buffersize */
-	NULL,			/* mappage */
 	envy_get_props,		/* get_props */
 	envy_trigger_output,	/* trigger_output */
-	envy_trigger_input,	/* trigger_input */
-	NULL
+	envy_trigger_input	/* trigger_input */
 };
 
 #if NMIDI > 0
@@ -1836,21 +1829,6 @@ envy_freem(void *self, void *addr, int type)
 }
 
 int
-envy_query_encoding(void *self, struct audio_encoding *enc)
-{
-	if (enc->index == 0) {
-		strlcpy(enc->name, AudioEslinear_le, sizeof(enc->name));
-		enc->encoding = AUDIO_ENCODING_SLINEAR_LE;
-		enc->precision = 24;
-		enc->bps = 4;
-		enc->msb = 1;
-		enc->flags = 0;
-		return 0;
-	}
-	return EINVAL;
-}
-
-int
 envy_set_params(void *self, int setmode, int usemode,
     struct audio_params *p, struct audio_params *r)
 {
@@ -2185,17 +2163,6 @@ envy_halt_input(void *self)
 		envy_pintr(sc);
 #endif
 	mtx_leave(&audio_lock);
-	return 0;
-}
-
-int
-envy_getdev(void *self, struct audio_device *dev)
-{
-	struct envy_softc *sc = (struct envy_softc *)self;
-
-	strlcpy(dev->name, sc->isht ? "Envy24HT" : "Envy24", MAX_AUDIO_DEV_LEN);
-	strlcpy(dev->version, "-", MAX_AUDIO_DEV_LEN);
-	strlcpy(dev->config, sc->card->name, MAX_AUDIO_DEV_LEN);
 	return 0;
 }
 

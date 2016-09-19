@@ -1,4 +1,4 @@
-/*	$OpenBSD: switchofp.c,v 1.2 2016/09/02 10:01:36 goda Exp $	*/
+/*	$OpenBSD: switchofp.c,v 1.5 2016/09/18 11:04:42 rzalamena Exp $	*/
 
 /*
  * Copyright (c) 2016 Kazuya GODA <goda@openbsd.org>
@@ -113,15 +113,17 @@ struct swofp_action_set {
 	struct ofp_action_header	*swas_action;
 };
 
+/* Same as total number of OFP_ACTION_ */
+#define SWOFP_ACTION_SET_MAX		18
 struct swofp_pipline_desc {
 	uint32_t			 swpld_table_id;
 	uint64_t			 swpld_cookie;
 	uint64_t			 swpld_metadata;
 	struct switch_flow_classify	*swpld_swfcl;
-	struct switch_flow_classify	*swpld_pre_swfcl;
+	struct switch_flow_classify	 swpld_pre_swfcl;
 	struct switch_fwdp_queue	 swpld_fwdp_q;
-	struct swofp_action_set		*swpld_action_set;
-	struct ofp_action_header	*swpld_set_fields; /* using for free */
+	struct swofp_action_set		 swpld_action_set[SWOFP_ACTION_SET_MAX];
+	struct ofp_action_header	*swpld_set_fields[OFP_XM_T_MAX];
 };
 
 struct swofp_ofs {
@@ -152,8 +154,6 @@ void	 swofp_forward_ofs(struct switch_softc *, struct switch_flow_classify *,
 int	 swofp_input(struct switch_softc *, struct mbuf *);
 int	 swofp_output(struct switch_softc *, struct mbuf *);
 void	 swofp_timer(void *);
-struct mbuf
-	*swofp_mbuf_align(struct mbuf *);
 
 struct ofp_oxm_class
 	*swofp_lookup_oxm_handler(struct ofp_ox_match *);
@@ -918,11 +918,20 @@ struct ofp_action_handler ofp_action_handlers[] = {
 };
 
 extern struct pool swfcl_pool;
+struct pool swpld_pool;
 
 int swofp_flow_id = 0;
 
+void
+swofp_attach(void)
+{
+	pool_init(&swpld_pool, sizeof(struct swofp_pipline_desc), 0, 0, 0,
+	    "swpld", NULL);
+}
+
+
 int
-swofp_attach(struct switch_softc *sc)
+swofp_create(struct switch_softc *sc)
 {
 	struct swofp_ofs	*swofs;
 	int			 error;
@@ -964,7 +973,7 @@ swofp_attach(struct switch_softc *sc)
 }
 
 void
-swofp_detach(struct switch_softc *sc)
+swofp_destroy(struct switch_softc *sc)
 {
 	struct swofp_ofs	*swofs = sc->sc_ofs;
 
@@ -1167,30 +1176,17 @@ swofp_pipline_desc_create(struct switch_flow_classify *swfcl)
 	struct swofp_pipline_desc	*swpld = NULL;
 	struct swofp_action_set		*swas = NULL;
 	struct ofp_action_header	*set_fields = NULL;
-	struct switch_flow_classify	*pre_swfcl = NULL;
 	int				 i;
 
-	swpld = malloc(sizeof(*swpld), M_DEVBUF, M_NOWAIT|M_ZERO);
+	swpld = pool_get(&swpld_pool, PR_NOWAIT|PR_ZERO);
 	if (swpld == NULL)
-		goto failed;
+		return (NULL);
 
-	swas = malloc((sizeof(*swas) * nitems(ofp_action_handlers)),
-	    M_DEVBUF, M_NOWAIT|M_ZERO);
-	if (swas == NULL)
-		goto failed;
-
-	set_fields = malloc((sizeof(set_fields) * OFP_XM_T_MAX),
-	    M_DEVBUF, M_NOWAIT|M_ZERO);
-	if (set_fields == NULL)
-		goto failed;
-
-	pre_swfcl = malloc(sizeof(*pre_swfcl), M_DEVBUF, M_NOWAIT|M_ZERO);
-	if (pre_swfcl == NULL)
-		goto failed;
 	/*
 	 * ofp_action_handlers is sorted by applying action-set order,
 	 * so it can be used for initializer for action-set.
 	 */
+	swas = swpld->swpld_action_set;
 	for (i = 0; i < nitems(ofp_action_handlers); i++) {
 		swas[i].swas_type = ofp_action_handlers[i].action_type;
 		if (swas[i].swas_type == OFP_ACTION_SET_FIELD)
@@ -1199,36 +1195,16 @@ swofp_pipline_desc_create(struct switch_flow_classify *swfcl)
 			swas[i].swas_action = NULL;
 	}
 
-	swpld->swpld_action_set = swas;
 	swpld->swpld_swfcl = swfcl;
-	swpld->swpld_pre_swfcl = pre_swfcl;
-	swpld->swpld_set_fields = set_fields;
 
 	return (swpld);
-
- failed:
-	free(set_fields, M_DEVBUF, (sizeof(set_fields) * OFP_XM_T_MAX));
-	free(swas, M_DEVBUF, (sizeof(*swas) * nitems(ofp_action_handlers)));
-	free(swpld, M_DEVBUF, sizeof(*swpld));
-
-	return (NULL);
 }
 
 void
 swofp_pipline_desc_destroy(struct swofp_pipline_desc *swpld)
 {
-	switch_swfcl_free(swpld->swpld_pre_swfcl);
-
-	free(swpld->swpld_pre_swfcl, M_DEVBUF,
-	    sizeof(*swpld->swpld_pre_swfcl));
-
-	free(swpld->swpld_set_fields, M_DEVBUF,
-	    (sizeof(struct ofp_action_header) * OFP_XM_T_MAX));
-
-	free(swpld->swpld_action_set, M_DEVBUF,
-	    (sizeof(struct swofp_action_set) * nitems(ofp_action_handlers)));
-
-	free(swpld, M_DEVBUF, sizeof(*swpld));
+	switch_swfcl_free(&swpld->swpld_pre_swfcl);
+	pool_put(&swpld_pool, swpld);
 }
 
 
@@ -3069,7 +3045,7 @@ swofp_action_output_controller(struct switch_softc *sc, struct mbuf *m0,
 	MGETHDR(m, M_DONTWAIT, MT_DATA);
 	if (m == NULL)
 		return (ENOBUFS);
-	if ((sizeof(*pin) + match_len) >= MINCLSIZE){
+	if ((sizeof(*pin) + match_len) >= MHLEN) {
 		MCLGET(m, M_DONTWAIT);
 		if (m == NULL)
 			return (ENOBUFS);
@@ -3134,11 +3110,14 @@ swofp_action_output_controller(struct switch_softc *sc, struct mbuf *m0,
 	    htons(m->m_pkthdr.len + ntohs(pin->pin_total_len));
 
 	if (frame_max_len) {
-		n = m_copym2(m0, 0, ntohs(pin->pin_total_len), M_DONTWAIT);
+		/* Truncate the excess packet bytes. */
+		match_len = m0->m_pkthdr.len - ntohs(pin->pin_total_len);
+		n = m_dup_pkt(m0, 0, M_DONTWAIT);
 		if (n == NULL) {
 			m_freem(m);
 			return (ENOBUFS);
 		}
+		m_adj(n, -match_len);
 		/* m_cat() doesn't update m_pkthdr.len */
 		m_cat(m, n);
 		m->m_pkthdr.len += ntohs(pin->pin_total_len);
@@ -3768,7 +3747,7 @@ struct mbuf *
 swofp_apply_set_field(struct mbuf *m, struct swofp_pipline_desc *swpld)
 {
 	return swofp_apply_set_field_ether(m, 0,
-	    swpld->swpld_pre_swfcl, swpld->swpld_swfcl);
+	    &swpld->swpld_pre_swfcl, swpld->swpld_swfcl);
 }
 
 struct mbuf *
@@ -3789,7 +3768,7 @@ swofp_action_set_field(struct switch_softc *sc, struct mbuf *m,
 		goto failed;
 
 	swfcl = swpld->swpld_swfcl;
-	pre_swfcl = swpld->swpld_pre_swfcl;
+	pre_swfcl = &swpld->swpld_pre_swfcl;
 
 	if (oxm->oxm_class == htons(OFP_OXM_C_NXM_1)) {
 		switch (OFP_OXM_GET_FIELD(oxm)) {
@@ -5025,7 +5004,7 @@ swofp_recv_packet_out(struct switch_softc *sc, struct mbuf *m)
 {
 	struct ofp_packet_out		*pout;
 	struct ofp_action_header	*ah;
-	struct mbuf			*mc = NULL;
+	struct mbuf			*mc = NULL, *mcn;
 	int				 al_start, al_len, off;
 	struct switch_flow_classify	 swfcl = {};
 	struct swofp_pipline_desc	 swpld = { .swpld_swfcl = &swfcl };
@@ -5046,13 +5025,21 @@ swofp_recv_packet_out(struct switch_softc *sc, struct mbuf *m)
 	if (pout->pout_buffer_id != OFP_CONTROLLER_MAXLEN_NO_BUFFER) {
 		/*
 		 * It's not necessary to deep copy at here because it's done
-		 * in m_pkt_dup().
+		 * in m_dup_pkt().
 		 */
 		if ((mc = m_split(m, (al_start + al_len), M_NOWAIT)) == NULL) {
 			m_freem(m);
 			return (ENOBUFS);
 		}
-		mc = swofp_mbuf_align(mc);
+
+		mcn = m_dup_pkt(mc, ETHER_ALIGN, M_NOWAIT);
+		m_freem(mc);
+		if (mcn == NULL) {
+			m_freem(m);
+			return (ENOBUFS);
+		}
+
+		mc = mcn;
 	}
 
 	TAILQ_INIT(&swpld.swpld_fwdp_q);
@@ -5246,7 +5233,7 @@ swofp_multipart_reply(struct switch_softc *sc, struct swofp_mpmsg *swmp)
 
 		if (swmp->swmp_body.ml_tail != NULL) {
 			omp->mp_flags |= htons(OFP_MP_FLAG_REPLY_MORE);
-			if ((hdr = m_copym2(swmp->swmp_hdr, 0, M_COPYALL,
+			if ((hdr = m_dup_pkt(swmp->swmp_hdr, 0,
 			    M_WAITOK)) == NULL) {
 				error = ENOBUFS;
 				goto error;
@@ -6053,23 +6040,4 @@ swofp_barrier_reply(struct switch_softc *sc, struct mbuf *m)
 	oh->oh_type = OFP_T_BARRIER_REPLY;
 
 	(void)swofp_output(sc, m);
-}
-
-struct mbuf *
-swofp_mbuf_align(struct mbuf *m)
-{
-	struct mbuf *m1, *m2;
-
-	m1 = m_copym2(m, 0, ETHER_HDR_LEN, M_DONTWAIT);
-	if (m1 == NULL)
-		return (NULL);
-	m2 = m_copym2(m, ETHER_HDR_LEN, M_COPYALL, M_DONTWAIT);
-	if (m2 == NULL) {
-		m_freem(m1);
-		return (NULL);
-	}
-	m_cat(m1, m2);
-	m_freem(m);
-
-	return (m1);
 }

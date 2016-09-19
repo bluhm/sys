@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ether.c,v 1.221 2016/08/22 16:01:52 mpi Exp $	*/
+/*	$OpenBSD: if_ether.c,v 1.224 2016/09/15 02:00:18 dlg Exp $	*/
 /*	$NetBSD: if_ether.c,v 1.31 1996/05/11 12:59:58 mycroft Exp $	*/
 
 /*
@@ -135,8 +135,8 @@ arp_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 		static struct timeout arptimer_to;
 
 		arpinit_done = 1;
-		pool_init(&arp_pool, sizeof(struct llinfo_arp), 0, 0, 0, "arp",
-		    NULL);
+		pool_init(&arp_pool, sizeof(struct llinfo_arp), 0,
+		    IPL_SOFTNET, 0, "arp", NULL);
 
 		timeout_set(&arptimer_to, arptimer, &arptimer_to);
 		timeout_add_sec(&arptimer_to, 1);
@@ -730,20 +730,15 @@ arplookup(struct in_addr *inp, int create, int proxy, u_int tableid)
 	}
 
 	if (proxy && !ISSET(rt->rt_flags, RTF_ANNOUNCE)) {
-		struct rtentry *mrt = NULL;
-#if defined(ART) && !defined(SMALL_KERNEL)
-		mrt = rt;
+#ifdef ART
 		KERNEL_LOCK();
-		while ((mrt = rtable_mpath_next(mrt)) != NULL) {
-			if (ISSET(mrt->rt_flags, RTF_ANNOUNCE)) {
-				rtref(mrt);
+		while ((rt = rtable_iterate(rt)) != NULL) {
+			if (ISSET(rt->rt_flags, RTF_ANNOUNCE)) {
 				break;
 			}
 		}
 		KERNEL_UNLOCK();
-#endif /* ART && !SMALL_KERNEL */
-		rtfree(rt);
-		return (mrt);
+#endif /* ART */
 	}
 
 	return (rt);

@@ -1,4 +1,4 @@
-/*	$OpenBSD: route.c,v 1.325 2016/09/04 15:45:42 bluhm Exp $	*/
+/*	$OpenBSD: route.c,v 1.330 2016/09/17 07:35:05 phessler Exp $	*/
 /*	$NetBSD: route.c,v 1.14 1996/02/13 22:00:46 christos Exp $	*/
 
 /*
@@ -191,9 +191,8 @@ TAILQ_HEAD(rt_labels, rt_label)	rt_labels = TAILQ_HEAD_INITIALIZER(rt_labels);
 void
 route_init(void)
 {
-	pool_init(&rtentry_pool, sizeof(struct rtentry), 0, 0, 0, "rtentry",
-	    NULL);
-	pool_setipl(&rtentry_pool, IPL_SOFTNET);
+	pool_init(&rtentry_pool, sizeof(struct rtentry), 0, IPL_SOFTNET, 0,
+	    "rtentry", NULL);
 
 	while (rt_hashjitter == 0)
 		rt_hashjitter = arc4random();
@@ -382,7 +381,6 @@ rt_setgwroute(struct rtentry *rt, u_int rtableid)
 	KERNEL_ASSERT_LOCKED();
 
 	KASSERT(ISSET(rt->rt_flags, RTF_GATEWAY));
-	KASSERT(rt->rt_gwroute == NULL);
 
 	/* If we cannot find a valid next hop bail. */
 	nhrt = rt_match(rt->rt_gateway, NULL, RT_RESOLVE, rtable_l2(rtableid));
@@ -403,6 +401,10 @@ rt_setgwroute(struct rtentry *rt, u_int rtableid)
 		rtfree(nhrt);
 		return (ELOOP);
 	}
+
+	/* Next hop is valid so remove possible old cache. */
+	rt_putgwroute(rt);
+	KASSERT(rt->rt_gwroute == NULL);
 
 	/*
 	 * If the MTU of next hop is 0, this will reset the MTU of the
@@ -878,17 +880,17 @@ rtrequest_delete(struct rt_addrinfo *info, u_int8_t prio, struct ifnet *ifp,
 	}
 #endif
 
-#ifdef BFD
-	if (ISSET(rt->rt_flags, RTF_BFD))
-		bfd_rtfree(rt);
-#endif
-
 	error = rtable_delete(tableid, info->rti_info[RTAX_DST],
 	    info->rti_info[RTAX_NETMASK], rt);
 	if (error != 0) {
 		rtfree(rt);
 		return (ESRCH);
 	}
+
+#ifdef BFD
+	if (ISSET(rt->rt_flags, RTF_BFD))
+		bfdclear(rt);
+#endif
 
 	/* Release next hop cache before flushing cloned entries. */
 	rt_putgwroute(rt);
@@ -1095,11 +1097,6 @@ rtrequest(int req, struct rt_addrinfo *info, u_int8_t prio,
 			}
 			rtfree(crt);
 		}
-#ifdef BFD
-		if (error == 0 && ISSET(rt->rt_flags, RTF_BFD))
-			error = bfd_rtalloc(rt);
-			/* XXX this code will return EEXIST at the moment */
-#endif
 		if (error != 0) {
 			ifafree(ifa);
 			rtfree(rt->rt_parent);
@@ -1139,10 +1136,8 @@ rt_setgate(struct rtentry *rt, struct sockaddr *gate, u_int rtableid)
 	}
 	memmove(rt->rt_gateway, gate, glen);
 
-	if (ISSET(rt->rt_flags, RTF_GATEWAY)) {
-		rt_putgwroute(rt);
+	if (ISSET(rt->rt_flags, RTF_GATEWAY))
 		return (rt_setgwroute(rt, rtableid));
-	}
 
 	return (0);
 }
@@ -1466,9 +1461,8 @@ rt_timer_init(void)
 	if (rt_init_done)
 		panic("rt_timer_init: already initialized");
 
-	pool_init(&rttimer_pool, sizeof(struct rttimer), 0, 0, 0, "rttmr",
-	    NULL);
-	pool_setipl(&rttimer_pool, IPL_SOFTNET);
+	pool_init(&rttimer_pool, sizeof(struct rttimer), 0, IPL_SOFTNET, 0,
+	    "rttmr", NULL);
 
 	LIST_INIT(&rttimer_queue_head);
 	timeout_set(&rt_timer_timeout, rt_timer_timer, &rt_timer_timeout);

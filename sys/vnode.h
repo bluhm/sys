@@ -1,4 +1,4 @@
-/*	$OpenBSD: vnode.h,v 1.135 2016/05/23 09:31:28 natano Exp $	*/
+/*	$OpenBSD: vnode.h,v 1.138 2016/09/16 03:40:28 dlg Exp $	*/
 /*	$NetBSD: vnode.h,v 1.38 1996/02/29 20:59:05 cgd Exp $	*/
 
 /*
@@ -80,8 +80,10 @@ enum vtagtype	{
  */
 LIST_HEAD(buflists, buf);
 
-RB_HEAD(buf_rb_bufs, buf);
-RB_HEAD(namecache_rb_cache, namecache);
+RBT_HEAD(buf_rb_bufs, buf);
+
+struct namecache;
+RBT_HEAD(namecache_rb_cache, namecache);
 
 struct uvm_vnode;
 struct vnode {
@@ -207,6 +209,7 @@ struct vattr {
 #define	VNOVAL	(-1)
 
 #ifdef _KERNEL
+RBT_PROTOTYPE(buf_rb_bufs, buf, b_rbbufs, rb_buf_compare);
 /*
  * Convert between vnode types and inode formats (since POSIX.1
  * defines mode word of stat structure in terms of inode formats).

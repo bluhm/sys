@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_aobj.c,v 1.81 2016/06/17 10:48:25 dlg Exp $	*/
+/*	$OpenBSD: uvm_aobj.c,v 1.83 2016/09/16 02:35:42 dlg Exp $	*/
 /*	$NetBSD: uvm_aobj.c,v 1.39 2001/02/18 21:19:08 chs Exp $	*/
 
 /*
@@ -797,13 +797,10 @@ uao_init(void)
 	 * NOTE: Pages for this pool must not come from a pageable
 	 * kernel map!
 	 */
-	pool_init(&uao_swhash_elt_pool, sizeof(struct uao_swhash_elt),
-	    0, 0, PR_WAITOK, "uaoeltpl", NULL);
-	pool_setipl(&uao_swhash_elt_pool, IPL_NONE);
-
-	pool_init(&uvm_aobj_pool, sizeof(struct uvm_aobj), 0, 0, PR_WAITOK,
-	    "aobjpl", NULL);
-	pool_setipl(&uvm_aobj_pool, IPL_NONE);
+	pool_init(&uao_swhash_elt_pool, sizeof(struct uao_swhash_elt), 0,
+	    IPL_NONE, PR_WAITOK, "uaoeltpl", NULL);
+	pool_init(&uvm_aobj_pool, sizeof(struct uvm_aobj), 0,
+	    IPL_NONE, PR_WAITOK, "aobjpl", NULL);
 }
 
 /*
@@ -872,7 +869,7 @@ uao_detach_locked(struct uvm_object *uobj)
 	 * Release swap resources then free the page.
  	 */
 	uvm_lock_pageq();
-	while((pg = RB_ROOT(&uobj->memt)) != NULL) {
+	while((pg = RBT_ROOT(uvm_objtree, &uobj->memt)) != NULL) {
 		if (pg->pg_flags & PG_BUSY) {
 			atomic_setbits_int(&pg->pg_flags, PG_WANTED);
 			uvm_unlock_pageq();

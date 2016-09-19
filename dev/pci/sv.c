@@ -1,4 +1,4 @@
-/*      $OpenBSD: sv.c,v 1.32 2015/05/11 06:46:22 ratchov Exp $ */
+/*      $OpenBSD: sv.c,v 1.34 2016/09/19 06:46:44 ratchov Exp $ */
 
 /*
  * Copyright (c) 1998 Constantine Paul Sapuntzakis
@@ -124,12 +124,6 @@ struct cfattach sv_ca = {
 	sizeof(struct sv_softc), sv_match, sv_attach
 };
 
-struct audio_device sv_device = {
-	"S3 SonicVibes",
-	"",
-	"sv"
-};
-
 #define ARRAY_SIZE(foo)  ((sizeof(foo)) / sizeof(foo[0]))
 
 int	sv_allocmem(struct sv_softc *, size_t, size_t, struct sv_dma *);
@@ -137,7 +131,6 @@ int	sv_freemem(struct sv_softc *, struct sv_dma *);
 
 int	sv_open(void *, int);
 void	sv_close(void *);
-int	sv_query_encoding(void *, struct audio_encoding *);
 int	sv_set_params(void *, int, int, struct audio_params *, struct audio_params *);
 int	sv_round_blocksize(void *, int);
 int	sv_dma_init_output(void *, void *, int);
@@ -146,13 +139,11 @@ int	sv_dma_output(void *, void *, int, void (*)(void *), void *);
 int	sv_dma_input(void *, void *, int, void (*)(void *), void *);
 int	sv_halt_in_dma(void *);
 int	sv_halt_out_dma(void *);
-int	sv_getdev(void *, struct audio_device *);
 int	sv_mixer_set_port(void *, mixer_ctrl_t *);
 int	sv_mixer_get_port(void *, mixer_ctrl_t *);
 int	sv_query_devinfo(void *, mixer_devinfo_t *);
 void   *sv_malloc(void *, int, size_t, int, int);
 void	sv_free(void *, void *, int);
-paddr_t	sv_mappage(void *, void *, off_t, int);
 int	sv_get_props(void *);
 
 void    sv_dumpregs(struct sv_softc *sc);
@@ -160,8 +151,6 @@ void    sv_dumpregs(struct sv_softc *sc);
 struct audio_hw_if sv_hw_if = {
 	sv_open,
 	sv_close,
-	NULL,
-	sv_query_encoding,
 	sv_set_params,
 	sv_round_blocksize,
 	NULL,
@@ -172,7 +161,6 @@ struct audio_hw_if sv_hw_if = {
 	sv_halt_out_dma,
 	sv_halt_in_dma,
 	NULL,
-	sv_getdev,
 	NULL,
 	sv_mixer_set_port,
 	sv_mixer_get_port,
@@ -180,9 +168,7 @@ struct audio_hw_if sv_hw_if = {
 	sv_malloc,
 	sv_free,
 	NULL,
-	sv_mappage,
 	sv_get_props,
-	NULL,
 	NULL,
 	NULL
 };
@@ -576,31 +562,6 @@ sv_close(void *addr)
 }
 
 int
-sv_query_encoding(void *addr, struct audio_encoding *fp)
-{
-	switch (fp->index) {
-	case 0:
-		strlcpy(fp->name, AudioEulinear, sizeof fp->name);
-		fp->encoding = AUDIO_ENCODING_ULINEAR;
-		fp->precision = 8;
-		fp->flags = 0;
-		break;
-        case 1:
-		strlcpy(fp->name, AudioEslinear_le, sizeof fp->name);
-		fp->encoding = AUDIO_ENCODING_SLINEAR_LE;
-		fp->precision = 16;
-		fp->flags = 0;
-		break;
-	default:
-		return (EINVAL);
-	}
-	fp->bps = AUDIO_BPS(fp->precision);
-	fp->msb = 1;
-
-	return (0);
-}
-
-int
 sv_set_params(void *addr, int setmode, int usemode,
     struct audio_params *p, struct audio_params *r)
 {
@@ -852,14 +813,6 @@ sv_halt_in_dma(void *addr)
 	mtx_leave(&audio_lock);
         return (0);
 }
-
-int
-sv_getdev(void *addr, struct audio_device *retp)
-{
-	*retp = sv_device;
-        return (0);
-}
-
 
 /*
  * Mixer related code is here
@@ -1355,20 +1308,6 @@ sv_free(void *addr, void *ptr, int pool)
                         return;
                 }
         }
-}
-
-paddr_t
-sv_mappage(void *addr, void *mem, off_t off, int prot)
-{
-	struct sv_softc *sc = addr;
-        struct sv_dma *p;
-
-        for (p = sc->sc_dmas; p && KERNADDR(p) != mem; p = p->next)
-		;
-	if (!p)
-		return (-1);
-	return (bus_dmamem_mmap(sc->sc_dmatag, p->segs, p->nsegs, 
-				off, prot, BUS_DMA_WAITOK));
 }
 
 int

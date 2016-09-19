@@ -1,4 +1,4 @@
-/*      $OpenBSD: auglx.c,v 1.13 2015/05/11 06:46:21 ratchov Exp $	*/
+/*      $OpenBSD: auglx.c,v 1.15 2016/09/19 06:46:44 ratchov Exp $	*/
 
 /*
  * Copyright (c) 2008 Marc Balmer <mbalmer@openbsd.org>
@@ -166,8 +166,6 @@ struct auglx_softc {
 	struct device		 sc_dev;
 	void			*sc_ih;
 
-	audio_device_t		 sc_audev;
-
 	bus_space_tag_t		 sc_iot;
 	bus_space_handle_t	 sc_ioh;
 	bus_dma_tag_t		 sc_dmat;
@@ -214,20 +212,17 @@ struct cfdriver auglx_cd = {
 
 int auglx_open(void *, int);
 void auglx_close(void *);
-int auglx_query_encoding(void *, struct audio_encoding *);
 int auglx_set_params(void *, int, int, struct audio_params *,
     struct audio_params *);
 int auglx_round_blocksize(void *, int);
 int auglx_halt_output(void *);
 int auglx_halt_input(void *);
-int auglx_getdev(void *, struct audio_device *);
 int auglx_set_port(void *, mixer_ctrl_t *);
 int auglx_get_port(void *, mixer_ctrl_t *);
 int auglx_query_devinfo(void *, mixer_devinfo_t *);
 void *auglx_allocm(void *, int, size_t, int, int);
 void auglx_freem(void *, void *, int);
 size_t auglx_round_buffersize(void *, int, size_t);
-paddr_t auglx_mappage(void *, void *, off_t, int);
 int auglx_get_props(void *);
 int auglx_trigger_output(void *, void *, void *, int, void (*)(void *),
     void *, struct audio_params *);
@@ -238,13 +233,10 @@ int auglx_alloc_prd(struct auglx_softc *, size_t, struct auglx_ring *);
 void auglx_free_prd(struct auglx_softc *sc, struct auglx_ring *bm);
 int auglx_allocmem(struct auglx_softc *, size_t, size_t, struct auglx_dma *);
 void auglx_freemem(struct auglx_softc *, struct auglx_dma *);
-void auglx_get_default_params(void *, int, struct audio_params *);
 
 struct audio_hw_if auglx_hw_if = {
 	auglx_open,
 	auglx_close,
-	NULL,			/* drain */
-	auglx_query_encoding,
 	auglx_set_params,
 	auglx_round_blocksize,
 	NULL,			/* commit_setting */
@@ -255,7 +247,6 @@ struct audio_hw_if auglx_hw_if = {
 	auglx_halt_output,
 	auglx_halt_input,
 	NULL,			/* speaker_ctl */
-	auglx_getdev,
 	NULL,			/* getfd */
 	auglx_set_port,
 	auglx_get_port,
@@ -263,11 +254,9 @@ struct audio_hw_if auglx_hw_if = {
 	auglx_allocm,
 	auglx_freem,
 	auglx_round_buffersize,
-	auglx_mappage,
 	auglx_get_props,
 	auglx_trigger_output,
-	auglx_trigger_input,
-	auglx_get_default_params
+	auglx_trigger_input
 };
 
 int	auglx_match(struct device *, void *, void *);
@@ -332,13 +321,7 @@ auglx_attach(struct device *parent, struct device *self, void *aux)
 		return;
 	}
 
-	strlcpy(sc->sc_audev.name, "CS5536 AC97", sizeof sc->sc_audev.name);
-	snprintf(sc->sc_audev.version, sizeof sc->sc_audev.version, "0x%02x",
-		 PCI_REVISION(pa->pa_class));
-	strlcpy(sc->sc_audev.config, sc->sc_dev.dv_xname,
-		sizeof sc->sc_audev.config);
-
-	printf(": %s, %s\n", intrstr, sc->sc_audev.name);
+	printf(": %s, %s\n", intrstr, "CS5536 AC97");
 
 	sc->host_if.arg = sc;
 	sc->host_if.attach = auglx_attach_codec;
@@ -476,27 +459,6 @@ auglx_close(void *v)
 {
 }
 
-
-int
-auglx_query_encoding(void *v, struct audio_encoding *aep)
-{
-	switch (aep->index) {
-	case 0:
-		strlcpy(aep->name, AudioEslinear_le, sizeof aep->name);
-		aep->encoding = AUDIO_ENCODING_SLINEAR_LE;
-		aep->precision = 16;
-		aep->flags = 0;
-		break;
-	default:
-		return EINVAL;
-	}
-	aep->bps = AUDIO_BPS(aep->precision);
-	aep->msb = 1;
-
-	return 0;
-}
-
-
 int
 auglx_set_params(void *v, int setmode, int usemode, struct audio_params *play,
     struct audio_params *rec)
@@ -581,14 +543,6 @@ auglx_halt_input(void *v)
 }
 
 int
-auglx_getdev(void *v, struct audio_device *adp)
-{
-	struct auglx_softc *sc = v;
-	*adp = sc->sc_audev;
-	return 0;
-}
-
-int
 auglx_set_port(void *v, mixer_ctrl_t *cp)
 {
 	struct auglx_softc *sc = v;
@@ -668,23 +622,6 @@ auglx_round_buffersize(void *v, int direction, size_t size)
 		size = AUGLX_DMASEG_MAX;
 
 	return size;
-}
-
-paddr_t
-auglx_mappage(void *v, void *mem, off_t off, int prot)
-{
-	struct auglx_softc *sc = v;
-	struct auglx_dma *p;
-
-	if (off < 0)
-		return -1;
-
-	for (p = sc->sc_dmas; p && p->addr != mem; p = p->next);
-	if (!p)
-		return -1;
-
-	return bus_dmamem_mmap(sc->sc_dmat, p->segs, p->nsegs,
-	    off, prot, BUS_DMA_WAITOK);
 }
 
 int
@@ -915,12 +852,6 @@ auglx_freemem(struct auglx_softc *sc, struct auglx_dma *p)
 	bus_dmamap_destroy(sc->sc_dmat, p->map);
 	bus_dmamem_unmap(sc->sc_dmat, p->addr, p->size);
 	bus_dmamem_free(sc->sc_dmat, p->segs, p->nsegs);
-}
-
-void
-auglx_get_default_params(void *addr, int mode, struct audio_params *params)
-{
-	ac97_get_default_params(params);
 }
 
 int

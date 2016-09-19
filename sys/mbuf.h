@@ -1,4 +1,4 @@
-/*	$OpenBSD: mbuf.h,v 1.217 2016/09/03 13:42:28 reyk Exp $	*/
+/*	$OpenBSD: mbuf.h,v 1.220 2016/09/17 00:38:43 deraadt Exp $	*/
 /*	$NetBSD: mbuf.h,v 1.19 1996/02/09 18:25:14 christos Exp $	*/
 
 /*
@@ -387,10 +387,6 @@ u_int mextfree_register(void (*)(caddr_t, u_int, void *));
  * pool headers (mbpool and mclpool).
  */
 struct mbstat {
-	u_long	_m_spare;	/* formerly m_mbufs */
-	u_long	_m_spare1;	/* formerly m_clusters */
-	u_long	_m_spare2;	/* spare field */
-	u_long	_m_spare3;	/* formely m_clfree - free clusters */
 	u_long	m_drops;	/* times failed to find space */
 	u_long	m_wait;		/* times waited for space */
 	u_long	m_drain;	/* times drained protocols for space */
@@ -423,7 +419,6 @@ extern	int max_protohdr;		/* largest protocol header */
 extern	int max_hdr;			/* largest link+protocol header */
 
 void	mbinit(void);
-struct	mbuf *m_copym2(struct mbuf *, int, int, int);
 struct	mbuf *m_copym(struct mbuf *, int, int, int);
 struct	mbuf *m_free(struct mbuf *);
 struct	mbuf *m_get(int, int);
@@ -436,7 +431,7 @@ struct	mbuf *m_prepend(struct mbuf *, int, int);
 struct	mbuf *m_pulldown(struct mbuf *, int, int, int *);
 struct	mbuf *m_pullup(struct mbuf *, int);
 struct	mbuf *m_split(struct mbuf *, int, int);
-struct  mbuf *m_inject(struct mbuf *, int, int, int);
+struct	mbuf *m_makespace(struct mbuf *, int, int, int *);
 struct  mbuf *m_getptr(struct mbuf *, int, int *);
 int	m_leadingspace(struct mbuf *);
 int	m_trailingspace(struct mbuf *);

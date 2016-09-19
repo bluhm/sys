@@ -1,4 +1,4 @@
-/*	$OpenBSD: bpf.h,v 1.56 2016/05/10 23:48:07 dlg Exp $	*/
+/*	$OpenBSD: bpf.h,v 1.58 2016/09/12 16:24:37 krw Exp $	*/
 /*	$NetBSD: bpf.h,v 1.15 1996/12/13 07:57:33 mikel Exp $	*/
 
 /*
@@ -150,8 +150,7 @@ struct bpf_hdr {
  * XXX fail-safe: on new machines, we just use the 'safe' sizeof.
  */
 #ifdef _KERNEL
-#if defined(__arm__) || defined(__i386__) || defined(__m68k__) || \
-    defined(__mips__) || defined(__ns32k__) || defined(__sparc__) || \
+#if defined(__arm__) || defined(__i386__) || defined(__mips__) || \
     defined(__sparc64__)
 #define SIZEOF_BPF_HDR 18
 #else
@@ -288,7 +287,6 @@ struct ifnet;
 struct mbuf;
 
 int	 bpf_validate(struct bpf_insn *, int);
-int	 bpf_tap(caddr_t, u_char *, u_int, u_int);
 int	 bpf_mtap(caddr_t, const struct mbuf *, u_int);
 int	 bpf_mtap_hdr(caddr_t, caddr_t, u_int, const struct mbuf *, u_int,
 	    void (*)(const void *, void *, size_t));

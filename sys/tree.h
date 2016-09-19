@@ -1,4 +1,4 @@
-/*	$OpenBSD: tree.h,v 1.15 2016/09/02 11:17:14 dlg Exp $	*/
+/*	$OpenBSD: tree.h,v 1.24 2016/09/15 06:07:22 dlg Exp $	*/
 /*
  * Copyright 2002 Niels Provos <provos@citi.umich.edu>
  * All rights reserved.
@@ -26,6 +26,8 @@
 
 #ifndef	_SYS_TREE_H_
 #define	_SYS_TREE_H_
+
+#include <sys/_null.h>
 
 /*
  * This file defines data structures for different types of trees:
@@ -745,7 +747,6 @@ name##_RB_MINMAX(struct name *head, int val)				\
 	    ((x) != NULL) && ((y) = name##_RB_PREV(x), 1);		\
 	     (x) = (y))
 
-#if 0 && defined(_KERNEL)
 
 /*
  * Copyright (c) 2016 David Gwynne <dlg@openbsd.org>
@@ -763,24 +764,31 @@ name##_RB_MINMAX(struct name *head, int val)				\
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <sys/param.h> /* for NULL */
-
 struct rb_type {
 	int		(*t_compare)(const void *, const void *);
 	void		(*t_augment)(void *);
-	size_t		  t_offset;	/* offset of rb_entry in type */
-};
-
-struct rb_entry {
-	struct rb_entry	 *rbe_parent;
-	struct rb_entry	 *rbe_left;
-	struct rb_entry	 *rbe_right;
-	unsigned int	  rbe_color;
+	unsigned int	  t_offset;	/* offset of rb_entry in type */
 };
 
 struct rb_tree {
 	struct rb_entry	*rbt_root;
 };
+
+struct rb_entry {
+	struct rb_entry	 *rbt_parent;
+	struct rb_entry	 *rbt_left;
+	struct rb_entry	 *rbt_right;
+	unsigned int	  rbt_color;
+};
+
+#define RBT_HEAD(_name, _type)						\
+struct _name {								\
+	struct rb_tree rbh_root;					\
+}
+
+#define RBT_ENTRY(_type)	struct rb_entry
+
+#ifdef _KERNEL
 
 static inline void
 _rb_init(struct rb_tree *rbt)
@@ -807,15 +815,10 @@ void	*_rb_left(const struct rb_type *, void *);
 void	*_rb_right(const struct rb_type *, void *);
 void	*_rb_parent(const struct rb_type *, void *);
 void	*_rb_color(const struct rb_type *, void *);
-
-#define RBT_HEAD(_name, _type)						\
-struct _name {								\
-	struct rb_tree rbh_root;					\
-}
+void	 _rb_poison(const struct rb_type *, void *, unsigned long);
+int	 _rb_check(const struct rb_type *, void *, unsigned long);
 
 #define RBT_INITIALIZER(_head)	{ { NULL } }
-
-#define RBT_ENTRY(_type)	struct rb_entry
 
 #define RBT_PROTOTYPE(_name, _type, _field, _cmp)			\
 extern const struct rb_type *const _name##_RBT_TYPE;			\
@@ -902,6 +905,18 @@ static inline struct _type *						\
 _name##_RBT_PARENT(struct _type *elm)					\
 {									\
 	return _rb_parent(_name##_RBT_TYPE, elm);			\
+}									\
+									\
+static inline void							\
+_name##_RBT_POISON(struct _type *elm, unsigned long poison)		\
+{									\
+	return _rb_poison(_name##_RBT_TYPE, elm, poison);		\
+}									\
+									\
+static inline int							\
+_name##_RBT_CHECK(struct _type *elm, unsigned long poison)		\
+{									\
+	return _rb_check(_name##_RBT_TYPE, elm, poison);		\
 }
 
 #define RBT_GENERATE_INTERNAL(_name, _type, _field, _cmp, _aug)		\
@@ -944,6 +959,8 @@ RBT_GENERATE_INTERNAL(_name, _type, _field, _cmp, _name##_RBT_AUGMENT)
 #define RBT_LEFT(_name, _elm)		_name##_RBT_LEFT(_elm)
 #define RBT_RIGHT(_name, _elm)		_name##_RBT_RIGHT(_elm)
 #define RBT_PARENT(_name, _elm)		_name##_RBT_PARENT(_elm)
+#define RBT_POISON(_name, _elm, _p)	_name##_RBT_POISON(_elm, _p)
+#define RBT_CHECK(_name, _elm, _p)	_name##_RBT_CHECK(_elm, _p)
 
 #define RBT_FOREACH(_e, _name, _head)					\
 	for ((_e) = RBT_MIN(_name, (_head));				\

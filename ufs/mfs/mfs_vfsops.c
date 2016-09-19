@@ -1,4 +1,4 @@
-/*	$OpenBSD: mfs_vfsops.c,v 1.50 2016/04/26 18:37:03 natano Exp $	*/
+/*	$OpenBSD: mfs_vfsops.c,v 1.52 2016/09/08 16:57:29 tedu Exp $	*/
 /*	$NetBSD: mfs_vfsops.c,v 1.10 1996/02/09 22:31:28 christos Exp $	*/
 
 /*
@@ -80,7 +80,6 @@ const struct vfsops mfs_vfsops = {
  *
  * mount system call
  */
-/* ARGSUSED */
 int
 mfs_mount(struct mount *mp, const char *path, void *data,
     struct nameidata *ndp, struct proc *p)
@@ -158,8 +157,6 @@ mfs_mount(struct mount *mp, const char *path, void *data,
 	return (0);
 }
 
-int	mfs_pri = PWAIT | PCATCH;		/* XXX prob. temp */
-
 /*
  * Used to grab the process and keep it in the kernel to service
  * memory filesystem I/O requests.
@@ -168,7 +165,6 @@ int	mfs_pri = PWAIT | PCATCH;		/* XXX prob. temp */
  * Copy the requested data into or out of the memory filesystem
  * address space.
  */
-/* ARGSUSED */
 int
 mfs_start(struct mount *mp, int flags, struct proc *p)
 {
@@ -204,7 +200,7 @@ mfs_start(struct mount *mp, int flags, struct proc *p)
 			sleepreturn = 0;
 			continue;
 		}
-		sleepreturn = tsleep((caddr_t)vp, mfs_pri, "mfsidl", 0);
+		sleepreturn = tsleep(vp, PWAIT | PCATCH, "mfsidl", 0);
 	}
 	return (0);
 }
@@ -212,7 +208,6 @@ mfs_start(struct mount *mp, int flags, struct proc *p)
 /*
  * check export permission, not supported
  */
-/* ARGUSED */
 int
 mfs_checkexp(struct mount *mp, struct mbuf *nam, int *exflagsp,
     struct ucred **credanonp)

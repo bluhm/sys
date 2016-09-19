@@ -1,4 +1,4 @@
-/*	$OpenBSD: vfs_syscalls.c,v 1.263 2016/07/14 15:39:40 deraadt Exp $	*/
+/*	$OpenBSD: vfs_syscalls.c,v 1.265 2016/09/10 16:53:30 natano Exp $	*/
 /*	$NetBSD: vfs_syscalls.c,v 1.71 1996/04/23 10:29:02 mycroft Exp $	*/
 
 /*
@@ -110,7 +110,6 @@ sys_mount(struct proc *p, void *v, register_t *retval)
 	int error, mntflag = 0;
 	char fstypename[MFSNAMELEN];
 	char fspath[MNAMELEN];
-	struct vattr va;
 	struct nameidata nd;
 	struct vfsconf *vfsp;
 	int flags = SCARG(uap, flags);
@@ -150,29 +149,6 @@ sys_mount(struct proc *p, void *v, register_t *retval)
 			return (EOPNOTSUPP);	/* Needs translation */
 		}
 
-		/*
-		 * Only root, or the user that did the original mount is
-		 * permitted to update it.
-		 */
-		if (mp->mnt_stat.f_owner != p->p_ucred->cr_uid &&
-		    (error = suser(p, 0))) {
-			vput(vp);
-			return (error);
-		}
-		/*
-		 * Do not allow NFS export by non-root users. Silently
-		 * enforce MNT_NOSUID and MNT_NODEV for non-root users, and
-		 * inherit MNT_NOEXEC from the mount point.
-		 */
-		if (suser(p, 0) != 0) {
-			if (flags & MNT_EXPORTED) {
-				vput(vp);
-				return (EPERM);
-			}
-			flags |= MNT_NOSUID | MNT_NODEV;
-			if (mntflag & MNT_NOEXEC)
-				flags |= MNT_NOEXEC;
-		}
 		if ((error = vfs_busy(mp, VB_READ|VB_NOWAIT)) != 0) {
 			vput(vp);
 			return (error);
@@ -181,28 +157,13 @@ sys_mount(struct proc *p, void *v, register_t *retval)
 		goto update;
 	}
 	/*
-	 * If the user is not root, ensure that they own the directory
-	 * onto which we are attempting to mount.
+	 * Do not allow disabling of permission checks unless exec and access to
+	 * device files is disabled too.
 	 */
-	if ((error = VOP_GETATTR(vp, &va, p->p_ucred, p)) ||
-	    (va.va_uid != p->p_ucred->cr_uid &&
-	    (error = suser(p, 0)))) {
+	if ((flags & MNT_NOPERM) &&
+	    (flags & (MNT_NODEV | MNT_NOEXEC)) != (MNT_NODEV | MNT_NOEXEC)) {
 		vput(vp);
-		return (error);
-	}
-	/*
-	 * Do not allow NFS export by non-root users. Silently
-	 * enforce MNT_NOSUID and MNT_NODEV for non-root users, and inherit
-	 * MNT_NOEXEC from the mount point.
-	 */
-	if (suser(p, 0) != 0) {
-		if (flags & MNT_EXPORTED) {
-			vput(vp);
-			return (EPERM);
-		}
-		flags |= MNT_NOSUID | MNT_NODEV;
-		if (vp->v_mount->mnt_flag & MNT_NOEXEC)
-			flags |= MNT_NOEXEC;
+		return (EPERM);
 	}
 	if ((error = vinvalbuf(vp, V_SAVE, p->p_ucred, p, 0, 0)) != 0) {
 		vput(vp);
@@ -253,10 +214,10 @@ update:
 		mp->mnt_flag |= MNT_WANTRDWR;
 	mp->mnt_flag &=~ (MNT_NOSUID | MNT_NOEXEC | MNT_WXALLOWED | MNT_NODEV |
 	    MNT_SYNCHRONOUS | MNT_ASYNC | MNT_SOFTDEP | MNT_NOATIME |
-	    MNT_FORCE);
+	    MNT_NOPERM | MNT_FORCE);
 	mp->mnt_flag |= flags & (MNT_NOSUID | MNT_NOEXEC | MNT_WXALLOWED |
 	    MNT_NODEV | MNT_SYNCHRONOUS | MNT_ASYNC | MNT_SOFTDEP |
-	    MNT_NOATIME | MNT_FORCE);
+	    MNT_NOATIME | MNT_NOPERM | MNT_FORCE);
 	/*
 	 * Mount the filesystem.
 	 */
@@ -374,22 +335,15 @@ sys_unmount(struct proc *p, void *v, register_t *retval)
 	int error;
 	struct nameidata nd;
 
+	if ((error = suser(p, 0)) != 0)
+		return (error);
+
 	NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF, UIO_USERSPACE,
 	    SCARG(uap, path), p);
 	if ((error = namei(&nd)) != 0)
 		return (error);
 	vp = nd.ni_vp;
 	mp = vp->v_mount;
-
-	/*
-	 * Only root, or the user that did the original mount is
-	 * permitted to unmount this filesystem.
-	 */
-	if ((mp->mnt_stat.f_owner != p->p_ucred->cr_uid) &&
-	    (error = suser(p, 0))) {
-		vput(vp);
-		return (error);
-	}
 
 	/*
 	 * Don't allow unmounting the root file system.
@@ -1221,12 +1175,6 @@ domknodat(struct proc *p, int fd, const char *path, mode_t mode, dev_t dev)
 	int error;
 	struct nameidata nd;
 
-	if (!S_ISFIFO(mode) || dev != 0) {
-		if ((error = suser(p, 0)) != 0)
-			return (error);
-		if (p->p_fd->fd_rdir)
-			return (EINVAL);
-	}
 	if (dev == VNOVAL)
 		return (EINVAL);
 	NDINITAT(&nd, CREATE, LOCKPARENT, UIO_USERSPACE, fd, path, p);
@@ -1234,6 +1182,15 @@ domknodat(struct proc *p, int fd, const char *path, mode_t mode, dev_t dev)
 	if ((error = namei(&nd)) != 0)
 		return (error);
 	vp = nd.ni_vp;
+	if (!S_ISFIFO(mode) || dev != 0) {
+		if ((nd.ni_dvp->v_mount->mnt_flag & MNT_NOPERM) == 0 &&
+		    (error = suser(p, 0)) != 0)
+			goto out;
+		if (p->p_fd->fd_rdir) {
+			error = EINVAL;
+			goto out;
+		}
+	}
 	if (vp != NULL)
 		error = EEXIST;
 	else {
@@ -1269,6 +1226,7 @@ domknodat(struct proc *p, int fd, const char *path, mode_t mode, dev_t dev)
 			break;
 		}
 	}
+out:
 	if (!error) {
 		error = VOP_MKNOD(nd.ni_dvp, &nd.ni_vp, &nd.ni_cnd, &vattr);
 	} else {
@@ -2103,6 +2061,7 @@ dofchownat(struct proc *p, int fd, const char *path, uid_t uid, gid_t gid,
 		if ((error = pledge_chown(p, uid, gid)))
 			goto out;
 		if ((uid != -1 || gid != -1) &&
+		    (vp->v_mount->mnt_flag & MNT_NOPERM) == 0 &&
 		    (suser(p, 0) || suid_clear)) {
 			error = VOP_GETATTR(vp, &vattr, p->p_ucred, p);
 			if (error)
@@ -2154,6 +2113,7 @@ sys_lchown(struct proc *p, void *v, register_t *retval)
 		if ((error = pledge_chown(p, uid, gid)))
 			goto out;
 		if ((uid != -1 || gid != -1) &&
+		    (vp->v_mount->mnt_flag & MNT_NOPERM) == 0 &&
 		    (suser(p, 0) || suid_clear)) {
 			error = VOP_GETATTR(vp, &vattr, p->p_ucred, p);
 			if (error)
@@ -2203,6 +2163,7 @@ sys_fchown(struct proc *p, void *v, register_t *retval)
 		if ((error = pledge_chown(p, uid, gid)))
 			goto out;
 		if ((uid != -1 || gid != -1) &&
+		    (vp->v_mount->mnt_flag & MNT_NOPERM) == 0 &&
 		    (suser(p, 0) || suid_clear)) {
 			error = VOP_GETATTR(vp, &vattr, p->p_ucred, p);
 			if (error)

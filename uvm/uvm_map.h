@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_map.h,v 1.56 2016/08/11 01:17:33 dlg Exp $	*/
+/*	$OpenBSD: uvm_map.h,v 1.59 2016/09/16 03:39:25 dlg Exp $	*/
 /*	$NetBSD: uvm_map.h,v 1.24 2001/02/18 21:19:08 chs Exp $	*/
 
 /*
@@ -160,12 +160,12 @@ union vm_map_object {
  */
 struct vm_map_entry {
 	union {
-		RB_ENTRY(vm_map_entry)	addr_entry; /* address tree */
+		RBT_ENTRY(vm_map_entry)	addr_entry; /* address tree */
 		SLIST_ENTRY(vm_map_entry) addr_kentry;
 	} daddrs;
 
 	union {
-		RB_ENTRY(vm_map_entry)	rbtree;	/* Link freespace tree. */
+		RBT_ENTRY(vm_map_entry)	rbtree;	/* Link freespace tree. */
 		TAILQ_ENTRY(vm_map_entry) tailq;/* Link freespace queue. */
 		TAILQ_ENTRY(vm_map_entry) deadq;/* dead entry queue */
 	} dfree;
@@ -201,9 +201,11 @@ struct vm_map_entry {
 #define	VM_MAPENT_ISWIRED(entry)	((entry)->wired_count != 0)
 
 TAILQ_HEAD(uvm_map_deadq, vm_map_entry);	/* dead entry queue */
-RB_HEAD(uvm_map_addr, vm_map_entry);
-RB_PROTOTYPE(uvm_map_addr, vm_map_entry, daddrs.addr_entry,
+RBT_HEAD(uvm_map_addr, vm_map_entry);
+#ifdef _KERNEL
+RBT_PROTOTYPE(uvm_map_addr, vm_map_entry, daddrs.addr_entry,
     uvm_mapentry_addrcmp);
+#endif
 
 /*
  *	A Map is a rbtree of map entries, kept sorted by address.

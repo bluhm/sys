@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_pledge.c,v 1.181 2016/08/31 07:22:43 ratchov Exp $	*/
+/*	$OpenBSD: kern_pledge.c,v 1.183 2016/09/17 00:42:35 tedu Exp $	*/
 
 /*
  * Copyright (c) 2015 Nicholas Marriott <nicm@openbsd.org>
@@ -65,6 +65,7 @@
 #include <sys/pledge.h>
 
 #include "audio.h"
+#include "pf.h"
 #include "pty.h"
 
 #if defined(__amd64__)
@@ -230,7 +231,6 @@ const uint64_t pledge_syscalls[SYS_MAXSYSCALL] = {
 	 * Can kill self with "stdio".  Killing another pid
 	 * requires "proc"
 	 */
-	[SYS_o58_kill] = PLEDGE_STDIO,
 	[SYS_kill] = PLEDGE_STDIO,
 
 	/*
@@ -1212,7 +1212,7 @@ pledge_ioctl(struct proc *p, long com, struct file *fp)
 	}
 
 	if ((p->p_p->ps_pledge & PLEDGE_PF)) {
-#ifndef SMALL_KERNEL
+#if NPF > 0
 		switch (com) {
 		case DIOCADDRULE:
 		case DIOCGETSTATUS:
@@ -1232,7 +1232,7 @@ pledge_ioctl(struct proc *p, long com, struct file *fp)
 				return (0);
 			break;
 		}
-#endif /* !SMALL_KERNEL */
+#endif
 	}
 
 	if ((p->p_p->ps_pledge & PLEDGE_TTY)) {

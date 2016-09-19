@@ -1,4 +1,4 @@
-/*	$OpenBSD: usb_subr.c,v 1.127 2016/09/02 11:14:17 mpi Exp $ */
+/*	$OpenBSD: usb_subr.c,v 1.130 2016/09/19 10:20:17 mpi Exp $ */
 /*	$NetBSD: usb_subr.c,v 1.103 2003/01/10 11:19:13 augustss Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/usb_subr.c,v 1.18 1999/11/17 22:33:47 n_hibma Exp $	*/
 
@@ -73,6 +73,7 @@ usbd_status	usbd_probe_and_attach(struct device *,
 
 int		usbd_printBCD(char *cp, size_t len, int bcd);
 void		usb_free_device(struct usbd_device *);
+int		usbd_parse_idesc(struct usbd_device *, struct usbd_interface *);
 
 #ifdef USBVERBOSE
 #include <dev/usb/usbdevs_data.h>
@@ -500,8 +501,7 @@ usbd_fill_iface_data(struct usbd_device *dev, int ifaceidx, int altidx)
 {
 	struct usbd_interface *ifc = &dev->ifaces[ifaceidx];
 	usb_interface_descriptor_t *idesc;
-	char *p, *end;
-	int endpt, nendpt;
+	int nendpt;
 
 	DPRINTFN(4,("%s: ifaceidx=%d altidx=%d\n", __func__, ifaceidx, altidx));
 
@@ -521,40 +521,49 @@ usbd_fill_iface_data(struct usbd_device *dev, int ifaceidx, int altidx)
 	LIST_INIT(&ifc->pipes);
 
 	if (nendpt != 0) {
-		ifc->endpoints = mallocarray(nendpt,
-		    sizeof(struct usbd_endpoint), M_USB, M_NOWAIT | M_ZERO);
+		ifc->endpoints = mallocarray(nendpt, sizeof(*ifc->endpoints),
+		    M_USB, M_NOWAIT | M_ZERO);
 		if (ifc->endpoints == NULL)
 			return (USBD_NOMEM);
 	}
 
+	if (usbd_parse_idesc(dev, ifc)) {
+		free(ifc->endpoints, M_USB, nendpt * sizeof(*ifc->endpoints));
+		ifc->endpoints = NULL;
+		return (USBD_INVAL);
+	}
+
+	return (USBD_NORMAL_COMPLETION);
+}
+
+int
+usbd_parse_idesc(struct usbd_device *dev, struct usbd_interface *ifc)
+{
+#define ed ((usb_endpoint_descriptor_t *)p)
+	char *p, *end;
+	int i;
+
 	p = (char *)ifc->idesc + ifc->idesc->bLength;
 	end = (char *)dev->cdesc + UGETW(dev->cdesc->wTotalLength);
-#define ed ((usb_endpoint_descriptor_t *)p)
-	for (endpt = 0; endpt < nendpt; endpt++) {
-		DPRINTFN(10,("%s: endpt=%d\n", __func__, endpt));
+
+	for (i = 0; i < ifc->idesc->bNumEndpoints; i++) {
 		for (; p < end; p += ed->bLength) {
-			DPRINTFN(10,("%s: p=%p end=%p len=%d type=%d\n",
-			    __func__, p, end, ed->bLength,
-			    ed->bDescriptorType));
 			if (p + ed->bLength <= end && ed->bLength != 0 &&
 			    ed->bDescriptorType == UDESC_ENDPOINT)
-				goto found;
+				break;
+
 			if (ed->bLength == 0 ||
 			    ed->bDescriptorType == UDESC_INTERFACE)
-				break;
+			    	return (-1);
 		}
-		/* passed end, or bad desc */
-		printf("%s: bad descriptor(s): %s\n", __func__,
-		    ed->bLength == 0 ? "0 length" :
-		    ed->bDescriptorType == UDESC_INTERFACE ? "iface desc" :
-		    "out of data");
-		goto bad;
-	found:
-		ifc->endpoints[endpt].edesc = ed;
+
+		if (p >= end)
+			return (-1);
+
 		if (dev->speed == USB_SPEED_HIGH) {
-			u_int mps;
-			/* Control and bulk endpoints have max packet
-			   limits. */
+			unsigned int mps;
+
+			/* Control and bulk endpoints have max packet limits. */
 			switch (UE_GET_XFERTYPE(ed->bmAttributes)) {
 			case UE_CONTROL:
 				mps = USB_2_MAX_CTRL_PACKET;
@@ -572,19 +581,15 @@ usbd_fill_iface_data(struct usbd_device *dev, int ifaceidx, int altidx)
 				break;
 			}
 		}
-		ifc->endpoints[endpt].refcnt = 0;
-		ifc->endpoints[endpt].savedtoggle = 0;
+
+		ifc->endpoints[i].edesc = ed;
+		ifc->endpoints[i].refcnt = 0;
+		ifc->endpoints[i].savedtoggle = 0;
 		p += ed->bLength;
 	}
-#undef ed
-	return (USBD_NORMAL_COMPLETION);
 
- bad:
-	if (ifc->endpoints != NULL) {
-		free(ifc->endpoints, M_USB, 0);
-		ifc->endpoints = NULL;
-	}
-	return (USBD_INVAL);
+	return (0);
+#undef ed
 }
 
 void
@@ -1018,16 +1023,34 @@ usbd_status
 usbd_new_device(struct device *parent, struct usbd_bus *bus, int depth,
 		int speed, int port, struct usbd_port *up)
 {
-	struct usbd_device *dev, *adev;
-	struct usbd_device *hub;
+	struct usbd_device *dev, *adev, *hub;
 	usb_device_descriptor_t *dd;
 	usbd_status err;
-	int addr;
-	int i;
-	int p;
+	uint32_t mps, mps0;
+	int addr, i, p;
 
 	DPRINTF(("usbd_new_device bus=%p port=%d depth=%d speed=%d\n",
 		 bus, port, depth, speed));
+
+	/*
+	 * Fixed size for ep0 max packet, FULL device variable size is
+	 * handled below.
+	 */
+	switch (speed) {
+	case USB_SPEED_LOW:
+		mps0 = 8;
+		break;
+	case USB_SPEED_HIGH:
+	case USB_SPEED_FULL:
+		mps0 = 64;
+		break;
+	case USB_SPEED_SUPER:
+		mps0 = 512;
+		break;
+	default:
+		return (USBD_INVAL);
+	}
+
 	addr = usbd_getnewaddr(bus);
 	if (addr < 0) {
 		printf("%s: No free USB addresses, new device ignored.\n",
@@ -1049,8 +1072,8 @@ usbd_new_device(struct device *parent, struct usbd_bus *bus, int depth,
 	dev->def_ep_desc.bDescriptorType = UDESC_ENDPOINT;
 	dev->def_ep_desc.bEndpointAddress = USB_CONTROL_ENDPOINT;
 	dev->def_ep_desc.bmAttributes = UE_CONTROL;
-	USETW(dev->def_ep_desc.wMaxPacketSize, USB_MAX_IPACKET);
 	dev->def_ep_desc.bInterval = 0;
+	USETW(dev->def_ep_desc.wMaxPacketSize, mps0);
 
 	dev->quirks = &usbd_no_quirk;
 	dev->address = USB_START_ADDR;
@@ -1058,6 +1081,8 @@ usbd_new_device(struct device *parent, struct usbd_bus *bus, int depth,
 	dev->depth = depth;
 	dev->powersrc = up;
 	dev->myhub = up->parent;
+	dev->speed = speed;
+	dev->langid = USBD_NOLANG;
 
 	up->device = dev;
 
@@ -1079,8 +1104,6 @@ usbd_new_device(struct device *parent, struct usbd_bus *bus, int depth,
 	} else {
 		dev->myhsport = NULL;
 	}
-	dev->speed = speed;
-	dev->langid = USBD_NOLANG;
 
 	/* Establish the default pipe. */
 	err = usbd_setup_pipe(dev, 0, &dev->def_ep, USBD_DEFAULT_INTERVAL,
@@ -1138,36 +1161,37 @@ usbd_new_device(struct device *parent, struct usbd_bus *bus, int depth,
 		return (err);
 	}
 
-	if (speed == USB_SPEED_HIGH) {
-		/* Max packet size must be 64 (sec 5.5.3). */
-		if (dd->bMaxPacketSize != USB_2_MAX_CTRL_PACKET) {
-#ifdef DIAGNOSTIC
-			printf("%s: addr=%d bad max packet size %d\n", __func__,
-			    addr, dd->bMaxPacketSize);
-#endif
-			dd->bMaxPacketSize = USB_2_MAX_CTRL_PACKET;
-		}
-	}
-
 	DPRINTF(("usbd_new_device: adding unit addr=%d, rev=%02x, class=%d, "
 		 "subclass=%d, protocol=%d, maxpacket=%d, len=%d, speed=%d\n",
 		 addr,UGETW(dd->bcdUSB), dd->bDeviceClass, dd->bDeviceSubClass,
 		 dd->bDeviceProtocol, dd->bMaxPacketSize, dd->bLength,
 		 dev->speed));
 
-	if (dd->bDescriptorType != UDESC_DEVICE) {
+	if ((dd->bDescriptorType != UDESC_DEVICE) ||
+	    (dd->bLength < USB_DEVICE_DESCRIPTOR_SIZE)) {
 		usb_free_device(dev);
 		up->device = NULL;
 		return (USBD_INVAL);
 	}
 
-	if (dd->bLength < USB_DEVICE_DESCRIPTOR_SIZE) {
-		usb_free_device(dev);
-		up->device = NULL;
-		return (USBD_INVAL);
+	mps = dd->bMaxPacketSize;
+	if (speed == USB_SPEED_SUPER) {
+		if (mps == 0xff)
+			mps = 9;
+		/* xHCI Section 4.8.2.1 */
+		mps = (1 << mps);
 	}
 
-	USETW(dev->def_ep_desc.wMaxPacketSize, dd->bMaxPacketSize);
+	if (mps != mps0) {
+		if ((speed == USB_SPEED_LOW) ||
+		    (mps != 8 || mps != 16 || mps != 32 || mps != 64)) {
+			usb_free_device(dev);
+			up->device = NULL;
+			return (USBD_INVAL);
+		}
+		USETW(dev->def_ep_desc.wMaxPacketSize, mps);
+	}
+
 
 	/* Set the address if the HC didn't do it already. */
 	if (bus->methods->dev_setaddr != NULL &&

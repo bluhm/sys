@@ -1,4 +1,4 @@
-/*	$OpenBSD: pmap.c,v 1.99 2016/06/07 06:23:19 dlg Exp $	*/
+/*	$OpenBSD: pmap.c,v 1.102 2016/09/17 07:37:57 mlarkin Exp $	*/
 /*	$NetBSD: pmap.c,v 1.3 2003/05/08 18:13:13 thorpej Exp $	*/
 
 /*
@@ -737,20 +737,18 @@ pmap_bootstrap(paddr_t first_avail, paddr_t max_pa)
 	 * initialize the pmap pool.
 	 */
 
-	pool_init(&pmap_pmap_pool, sizeof(struct pmap), 0, 0, 0,
+	pool_init(&pmap_pmap_pool, sizeof(struct pmap), 0, IPL_NONE, 0,
 	    "pmappl", NULL);
-	pool_setipl(&pmap_pmap_pool, IPL_NONE);
-	pool_init(&pmap_pv_pool, sizeof(struct pv_entry), 0, 0, 0, "pvpl",
-	    &pool_allocator_single);
-	pool_setipl(&pmap_pv_pool, IPL_VM);
+	pool_init(&pmap_pv_pool, sizeof(struct pv_entry), 0, IPL_VM, 0,
+	    "pvpl", &pool_allocator_single);
 	pool_sethiwat(&pmap_pv_pool, 32 * 1024);
 
 	/*
 	 * initialize the PDE pool.
 	 */
 
-	pool_init(&pmap_pdp_pool, PAGE_SIZE, 0, 0, PR_WAITOK, "pdppl", NULL);
-	pool_setipl(&pmap_pdp_pool, IPL_NONE);
+	pool_init(&pmap_pdp_pool, PAGE_SIZE, 0, IPL_NONE, PR_WAITOK,
+	    "pdppl", NULL);
 
 	/*
 	 * ensure the TLB is sync'd with reality by flushing it...
@@ -891,7 +889,7 @@ pmap_freepage(struct pmap *pmap, struct vm_page *ptp, int level,
 	obj = &pmap->pm_obj[lidx];
 	pmap->pm_stats.resident_count--;
 	if (pmap->pm_ptphint[lidx] == ptp)
-		pmap->pm_ptphint[lidx] = RB_ROOT(&obj->memt);
+		pmap->pm_ptphint[lidx] = RBT_ROOT(uvm_objtree, &obj->memt);
 	ptp->wire_count = 0;
 	uvm_pagerealloc(ptp, NULL, 0);
 	TAILQ_INSERT_TAIL(pagelist, ptp, pageq);
@@ -1143,7 +1141,8 @@ pmap_destroy(struct pmap *pmap)
 	 */
 
 	for (i = 0; i < PTP_LEVELS - 1; i++) {
-		while ((pg = RB_ROOT(&pmap->pm_obj[i].memt)) != NULL) {
+		while ((pg = RBT_ROOT(uvm_objtree,
+		    &pmap->pm_obj[i].memt)) != NULL) {
 			KASSERT((pg->pg_flags & PG_BUSY) == 0);
 
 			pg->wire_count = 0;
@@ -2394,60 +2393,6 @@ pmap_steal_memory(vsize_t size, vaddr_t *start, vaddr_t *end)
 
 	return (va);
 }
-
-#ifdef DEBUG
-void pmap_dump(struct pmap *, vaddr_t, vaddr_t);
-
-/*
- * pmap_dump: dump all the mappings from a pmap
- *
- * => caller should not be holding any pmap locks
- */
-
-void
-pmap_dump(struct pmap *pmap, vaddr_t sva, vaddr_t eva)
-{
-	pt_entry_t *ptes, *pte;
-	pd_entry_t **pdes;
-	vaddr_t blkendva;
-	paddr_t scr3;
-
-	/*
-	 * if end is out of range truncate.
-	 * if (end == start) update to max.
-	 */
-
-	if (eva > VM_MAXUSER_ADDRESS || eva <= sva)
-		eva = VM_MAXUSER_ADDRESS;
-
-	pmap_map_ptes(pmap, &ptes, &pdes, &scr3);
-
-	/*
-	 * dumping a range of pages: we dump in PTP sized blocks (4MB)
-	 */
-
-	for (/* null */ ; sva < eva ; sva = blkendva) {
-
-		/* determine range of block */
-		blkendva = x86_round_pdr(sva+1);
-		if (blkendva > eva)
-			blkendva = eva;
-
-		/* valid block? */
-		if (!pmap_pdes_valid(sva, pdes, NULL))
-			continue;
-
-		pte = &ptes[pl1_i(sva)];
-		for (/* null */; sva < blkendva ; sva += PAGE_SIZE, pte++) {
-			if (!pmap_valid_entry(*pte))
-				continue;
-			printf("va %#lx -> pa %#llx (pte=%#llx)\n",
-			       sva, *pte, *pte & PG_FRAME);
-		}
-	}
-	pmap_unmap_ptes(pmap, scr3);
-}
-#endif
 
 void
 pmap_virtual_space(vaddr_t *vstartp, vaddr_t *vendp)
