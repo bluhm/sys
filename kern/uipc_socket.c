@@ -1504,6 +1504,8 @@ somove(struct socket *so, int wait)
 void
 sorwakeup(struct socket *so)
 {
+	splsoftassert(IPL_SOFTNET);
+
 #ifdef SOCKET_SPLICE
 	if (so->so_rcv.sb_flagsintr & SB_SPLICE) {
 		/*
@@ -1530,6 +1532,8 @@ sorwakeup(struct socket *so)
 void
 sowwakeup(struct socket *so)
 {
+	splsoftassert(IPL_SOFTNET);
+
 #ifdef SOCKET_SPLICE
 	if (so->so_snd.sb_flagsintr & SB_SPLICE)
 		task_add(sosplice_taskq, &so->so_sp->ssp_soback->so_splicetask);
