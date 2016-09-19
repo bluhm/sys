@@ -1584,7 +1584,7 @@ bstp_notify_rtage(struct bstp_port *bp, int pending)
 {
 	int age = 0;
 
-	splassert(IPL_SOFTNET);
+	splsoftassert(IPL_SOFTNET);
 
 	switch (bp->bp_protover) {
 	case BSTP_PROTO_STP:
