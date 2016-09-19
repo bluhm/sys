@@ -356,21 +356,16 @@ soconnect2(struct socket *so1, struct socket *so2)
 int
 sodisconnect(struct socket *so)
 {
-	int s = splsoftnet();
 	int error;
 
-	if ((so->so_state & SS_ISCONNECTED) == 0) {
-		error = ENOTCONN;
-		goto bad;
-	}
-	if (so->so_state & SS_ISDISCONNECTING) {
-		error = EALREADY;
-		goto bad;
-	}
+	splsoftassert(IPL_SOFTNET);
+
+	if ((so->so_state & SS_ISCONNECTED) == 0)
+		return (ENOTCONN);
+	if (so->so_state & SS_ISDISCONNECTING)
+		return (EALREADY);
 	error = (*so->so_proto->pr_usrreq)(so, PRU_DISCONNECT, NULL, NULL,
 	    NULL, curproc);
-bad:
-	splx(s);
 	return (error);
 }
 
