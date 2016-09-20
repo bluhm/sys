@@ -1018,20 +1018,26 @@ int
 soshutdown(struct socket *so, int how)
 {
 	struct protosw *pr = so->so_proto;
+	int s, error = 0;
 
+	s = splsoftnet();
 	switch (how) {
 	case SHUT_RD:
 	case SHUT_RDWR:
 		sorflush(so);
 		if (how == SHUT_RD)
-			return (0);
+			break;
 		/* FALLTHROUGH */
 	case SHUT_WR:
-		return (*pr->pr_usrreq)(so, PRU_SHUTDOWN, NULL, NULL, NULL,
+		error = (*pr->pr_usrreq)(so, PRU_SHUTDOWN, NULL, NULL, NULL,
 		    curproc);
+		break;
 	default:
-		return (EINVAL);
+		error = EINVAL;
+		break;
 	}
+	splx(s);
+	return (error);
 }
 
 void
