@@ -48,7 +48,6 @@
 #include <sys/errno.h>
 #include <sys/malloc.h>
 #include <sys/poll.h>
-#include <sys/unpcb.h>
 #include <sys/unistd.h>
 
 #include <miscfs/fifofs/fifo.h>
