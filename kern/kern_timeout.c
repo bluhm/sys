@@ -304,8 +304,6 @@ timeout_hardclock_update(void)
 
 	mtx_enter(&timeout_mutex);
 
-	ticks++;
-
 	MOVEBUCKET(0, ticks);
 	if (MASKWHEEL(0, ticks) == 0) {
 		MOVEBUCKET(1, ticks);

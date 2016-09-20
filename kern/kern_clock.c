@@ -193,6 +193,7 @@ hardclock(struct clockframe *frame)
 		return;
 
 	tc_ticktock();
+	ticks++;
 
 	/*
 	 * Update real-time timeout queue.
