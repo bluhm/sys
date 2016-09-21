@@ -203,8 +203,10 @@ arp_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 				break;
 		}
 		if (ifa) {
-			KASSERT(ifa == rt->rt_ifa);
-			rt->rt_expire = 0;
+			if (ifa == rt->rt_ifa)
+				rt->rt_expire = 0;
+			else if (!ISSET(rt->rt_flags, RTF_LOCAL))
+				arpinvalidate(rt);
 		}
 		break;
 
