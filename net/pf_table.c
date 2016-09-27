@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf_table.c,v 1.118 2016/09/15 02:00:18 dlg Exp $	*/
+/*	$OpenBSD: pf_table.c,v 1.120 2016/09/27 04:57:17 dlg Exp $	*/
 
 /*
  * Copyright (c) 2002 Cedric Berger

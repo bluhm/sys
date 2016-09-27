@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_iwm.c,v 1.132 2016/09/12 10:18:26 stsp Exp $	*/
+/*	$OpenBSD: if_iwm.c,v 1.142 2016/09/27 15:54:33 stsp Exp $	*/
 
 /*
  * Copyright (c) 2014, 2016 genua gmbh <info@genua.de>
@@ -389,8 +389,6 @@ int	iwm_disable_beacon_filter(struct iwm_softc *);
 int	iwm_add_sta_cmd(struct iwm_softc *, struct iwm_node *, int);
 int	iwm_add_aux_sta(struct iwm_softc *);
 uint16_t iwm_scan_rx_chain(struct iwm_softc *);
-uint32_t iwm_scan_max_out_time(struct iwm_softc *, uint32_t, int);
-uint32_t iwm_scan_suspend_time(struct iwm_softc *, int);
 uint32_t iwm_scan_rate_n_flags(struct iwm_softc *, int, int);
 uint16_t iwm_get_active_dwell(struct iwm_softc *, int, int);
 uint16_t iwm_get_passive_dwell(struct iwm_softc *, int);
@@ -402,10 +400,10 @@ int	iwm_config_umac_scan(struct iwm_softc *);
 int	iwm_umac_scan(struct iwm_softc *);
 void	iwm_ack_rates(struct iwm_softc *, struct iwm_node *, int *, int *);
 void	iwm_mac_ctxt_cmd_common(struct iwm_softc *, struct iwm_node *,
-	    struct iwm_mac_ctx_cmd *, uint32_t);
+	    struct iwm_mac_ctx_cmd *, uint32_t, int);
 void	iwm_mac_ctxt_cmd_fill_sta(struct iwm_softc *, struct iwm_node *,
 	    struct iwm_mac_data_sta *, int);
-int	iwm_mac_ctxt_cmd(struct iwm_softc *, struct iwm_node *, uint32_t);
+int	iwm_mac_ctxt_cmd(struct iwm_softc *, struct iwm_node *, uint32_t, int);
 int	iwm_update_quotas(struct iwm_softc *, struct iwm_node *);
 int	iwm_auth(struct iwm_softc *);
 int	iwm_assoc(struct iwm_softc *);
@@ -2379,13 +2377,16 @@ void
 iwm_sta_rx_agg(struct iwm_softc *sc, struct ieee80211_node *ni, uint8_t tid,
     uint16_t ssn, int start)
 {
+	struct ieee80211com *ic = &sc->sc_ic;
 	struct iwm_add_sta_cmd_v7 cmd;
 	struct iwm_node *in = (void *)ni;
 	int err, s;
 	uint32_t status;
 
-	if (start && sc->sc_rx_ba_sessions >= IWM_MAX_RX_BA_SESSIONS)
+	if (start && sc->sc_rx_ba_sessions >= IWM_MAX_RX_BA_SESSIONS) {
+		ieee80211_addba_req_refuse(ic, ni, tid);
 		return;
+	}
 
 	memset(&cmd, 0, sizeof(cmd));
 
@@ -2406,17 +2407,18 @@ iwm_sta_rx_agg(struct iwm_softc *sc, struct ieee80211_node *ni, uint8_t tid,
 	status = IWM_ADD_STA_SUCCESS;
 	err = iwm_send_cmd_pdu_status(sc, IWM_ADD_STA, sizeof(cmd), &cmd,
 	    &status);
-	if (err)
-		return;
 
-	if (status == IWM_ADD_STA_SUCCESS) {
-		s = splnet();
-		if (start)
+	s = splnet();
+	if (err == 0 && status == IWM_ADD_STA_SUCCESS) {
+		if (start) {
 			sc->sc_rx_ba_sessions++;
-		else if (sc->sc_rx_ba_sessions > 0)
+			ieee80211_addba_req_accept(ic, ni, tid);
+		} else if (sc->sc_rx_ba_sessions > 0)
 			sc->sc_rx_ba_sessions--;
-		splx(s);
-	}
+	} else if (start)
+		ieee80211_addba_req_refuse(ic, ni, tid);
+
+	splx(s);
 }
 
 void
@@ -2428,7 +2430,7 @@ iwm_htprot_task(void *arg)
 	int err;
 
 	/* This call updates HT protection based on in->in_ni.ni_htop1. */
-	err = iwm_mac_ctxt_cmd(sc, in, IWM_FW_CTXT_ACTION_MODIFY);
+	err = iwm_mac_ctxt_cmd(sc, in, IWM_FW_CTXT_ACTION_MODIFY, 1);
 	if (err)
 		printf("%s: could not change HT protection: error %d\n",
 		    DEVNAME(sc), err);
@@ -2479,7 +2481,7 @@ iwm_ampdu_rx_start(struct ieee80211com *ic, struct ieee80211_node *ni,
 	sc->ba_ssn = htole16(ba->ba_winstart);
 	task_add(systq, &sc->ba_task);
 
-	return 0; /* XXX firmware may still fail to add BA agreement... */
+	return EBUSY;
 }
 
 /*
@@ -4203,14 +4205,15 @@ void
 iwm_power_build_cmd(struct iwm_softc *sc, struct iwm_node *in,
     struct iwm_mac_power_cmd *cmd)
 {
-	struct ieee80211com *ic = &sc->sc_ic;
 	struct ieee80211_node *ni = &in->in_ni;
-	int dtimper, dtimper_msec;
-	int keep_alive;
+	int dtim_period, dtim_msec, keep_alive;
 
 	cmd->id_and_color = htole32(IWM_FW_CMD_ID_AND_COLOR(in->in_id,
 	    in->in_color));
-	dtimper = ic->ic_dtim_period ?: 1;
+	if (ni->ni_dtimperiod)
+		dtim_period = ni->ni_dtimperiod;
+	else
+		dtim_period = 1;
 
 	/*
 	 * Regardless of power management state the driver must set
@@ -4218,11 +4221,16 @@ iwm_power_build_cmd(struct iwm_softc *sc, struct iwm_node *in,
 	 * immediately after association. Check that keep alive period
 	 * is at least 3 * DTIM.
 	 */
-	dtimper_msec = dtimper * ni->ni_intval;
-	keep_alive
-	    = MAX(3 * dtimper_msec, 1000 * IWM_POWER_KEEP_ALIVE_PERIOD_SEC);
+	dtim_msec = dtim_period * ni->ni_intval;
+	keep_alive = MAX(3 * dtim_msec, 1000 * IWM_POWER_KEEP_ALIVE_PERIOD_SEC);
 	keep_alive = roundup(keep_alive, 1000) / 1000;
 	cmd->keep_alive_seconds = htole16(keep_alive);
+
+#ifdef notyet
+	cmd->flags = htole16(IWM_POWER_FLAGS_POWER_SAVE_ENA_MSK);
+	cmd->rx_data_timeout = IWM_DEFAULT_PS_RX_DATA_TIMEOUT;
+	cmd->tx_data_timeout = IWM_DEFAULT_PS_TX_DATA_TIMEOUT;
+#endif
 }
 
 int
@@ -4250,7 +4258,9 @@ int
 iwm_power_update_device(struct iwm_softc *sc)
 {
 	struct iwm_device_power_cmd cmd = {
+#ifdef notyet
 		.flags = htole16(IWM_DEVICE_POWER_FLAGS_POWER_SAVE_ENA_MSK),
+#endif
 	};
 
 	if (!(sc->sc_capaflags & IWM_UCODE_TLV_FLAGS_DEVICE_PS_CMD))
@@ -4408,26 +4418,6 @@ iwm_scan_rx_chain(struct iwm_softc *sc)
 	rx_chain |= rx_ant << IWM_PHY_RX_CHAIN_FORCE_SEL_POS;
 	rx_chain |= 0x1 << IWM_PHY_RX_CHAIN_DRIVER_FORCE_POS;
 	return htole16(rx_chain);
-}
-
-#define ieee80211_tu_to_usec(a) (1024*(a))
-
-uint32_t
-iwm_scan_max_out_time(struct iwm_softc *sc, uint32_t flags, int is_assoc)
-{
-	if (!is_assoc)
-		return 0;
-	if (flags & 0x1)
-		return htole32(ieee80211_tu_to_usec(SHORT_OUT_TIME_PERIOD));
-	return htole32(ieee80211_tu_to_usec(LONG_OUT_TIME_PERIOD));
-}
-
-uint32_t
-iwm_scan_suspend_time(struct iwm_softc *sc, int is_assoc)
-{
-	if (!is_assoc)
-		return 0;
-	return htole32(ieee80211_tu_to_usec(SUSPEND_TIME_PERIOD));
 }
 
 uint32_t
@@ -4896,6 +4886,7 @@ iwm_ack_rates(struct iwm_softc *sc, struct iwm_node *in, int *cck_rates,
     int *ofdm_rates)
 {
 	struct ieee80211_node *ni = &in->in_ni;
+	struct ieee80211_rateset *rs = &ni->ni_rates;
 	int lowest_present_ofdm = 100;
 	int lowest_present_cck = 100;
 	uint8_t cck = 0;
@@ -4904,15 +4895,19 @@ iwm_ack_rates(struct iwm_softc *sc, struct iwm_node *in, int *cck_rates,
 
 	if (ni->ni_chan == IEEE80211_CHAN_ANYC ||
 	    IEEE80211_IS_CHAN_2GHZ(ni->ni_chan)) {
-		for (i = 0; i <= IWM_LAST_CCK_RATE; i++) {
+		for (i = 0; i < MIN(IWM_FIRST_OFDM_RATE, rs->rs_nrates); i++) {
+			if ((rs->rs_rates[i] & IEEE80211_RATE_BASIC) == 0)
+				continue;
 			cck |= (1 << i);
 			if (lowest_present_cck > i)
 				lowest_present_cck = i;
 		}
 	}
-	for (i = IWM_FIRST_OFDM_RATE; i <= IWM_LAST_NON_HT_RATE; i++) {
-		int adj = i - IWM_FIRST_OFDM_RATE;
-		ofdm |= (1 << adj);
+	for (i = IWM_FIRST_OFDM_RATE;
+	    i <= MIN(IWM_LAST_NON_HT_RATE, rs->rs_nrates - 1); i++) {
+		if ((rs->rs_rates[i] & IEEE80211_RATE_BASIC) == 0)
+			continue;	
+		ofdm |= (1 << (i - IWM_FIRST_OFDM_RATE));
 		if (lowest_present_ofdm > i)
 			lowest_present_ofdm = i;
 	}
@@ -4975,8 +4970,9 @@ iwm_ack_rates(struct iwm_softc *sc, struct iwm_node *in, int *cck_rates,
 
 void
 iwm_mac_ctxt_cmd_common(struct iwm_softc *sc, struct iwm_node *in,
-    struct iwm_mac_ctx_cmd *cmd, uint32_t action)
+    struct iwm_mac_ctx_cmd *cmd, uint32_t action, int assoc)
 {
+#define IWM_EXP2(x)	((1 << (x)) - 1)	/* CWmin = 2^ECWmin - 1 */
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ieee80211_node *ni = ic->ic_bss;
 	int cck_ack_rates, ofdm_ack_rates;
@@ -4987,14 +4983,11 @@ iwm_mac_ctxt_cmd_common(struct iwm_softc *sc, struct iwm_node *in,
 	cmd->action = htole32(action);
 
 	cmd->mac_type = htole32(IWM_FW_MAC_TYPE_BSS_STA);
-	cmd->tsf_id = htole32(in->in_tsfid);
+	cmd->tsf_id = htole32(IWM_TSF_ID_A);
 
 	IEEE80211_ADDR_COPY(cmd->node_addr, ic->ic_myaddr);
-	if (in->in_assoc) {
-		IEEE80211_ADDR_COPY(cmd->bssid_addr, ni->ni_bssid);
-	} else {
-		IEEE80211_ADDR_COPY(cmd->bssid_addr, etherbroadcastaddr);
-	}
+	IEEE80211_ADDR_COPY(cmd->bssid_addr, ni->ni_bssid);
+
 	iwm_ack_rates(sc, in, &cck_ack_rates, &ofdm_ack_rates);
 	cmd->cck_rates = htole32(cck_ack_rates);
 	cmd->ofdm_rates = htole32(ofdm_ack_rates);
@@ -5006,15 +4999,18 @@ iwm_mac_ctxt_cmd_common(struct iwm_softc *sc, struct iwm_node *in,
 	    = htole32((ic->ic_flags & IEEE80211_F_SHSLOT)
 	      ? IWM_MAC_FLG_SHORT_SLOT : 0);
 
-	for (i = 0; i < IWM_AC_NUM+1; i++) {
-		int txf = i;
+	for (i = 0; i < EDCA_NUM_AC; i++) {
+		struct ieee80211_edca_ac_params *ac = &ic->ic_edca_ac[i];
+		int txf = iwm_ac_to_tx_fifo[i];
 
-		cmd->ac[txf].cw_min = htole16(0x0f);
-		cmd->ac[txf].cw_max = htole16(0x3f);
-		cmd->ac[txf].aifsn = 1;
+		cmd->ac[txf].cw_min = htole16(IWM_EXP2(ac->ac_ecwmin));
+		cmd->ac[txf].cw_max = htole16(IWM_EXP2(ac->ac_ecwmax));
+		cmd->ac[txf].aifsn = ac->ac_aifsn;
 		cmd->ac[txf].fifos_mask = (1 << txf);
-		cmd->ac[txf].edca_txop = 0;
+		cmd->ac[txf].edca_txop = htole16(ac->ac_txoplimit * 32);
 	}
+	if (ni->ni_flags & IEEE80211_NODE_QOS)
+		cmd->qos_flags |= htole32(IWM_MAC_QOS_FLG_UPDATE_EDCA);
 
 	if (ni->ni_flags & IEEE80211_NODE_HT) {
 		enum ieee80211_htprot htprot =
@@ -5041,49 +5037,52 @@ iwm_mac_ctxt_cmd_common(struct iwm_softc *sc, struct iwm_node *in,
 		cmd->protection_flags |= htole32(IWM_MAC_PROT_FLG_TGG_PROTECT);
 
 	cmd->filter_flags = htole32(IWM_MAC_FILTER_ACCEPT_GRP);
+#undef IWM_EXP2
 }
 
 void
 iwm_mac_ctxt_cmd_fill_sta(struct iwm_softc *sc, struct iwm_node *in,
-    struct iwm_mac_data_sta *ctxt_sta, int force_assoc_off)
+    struct iwm_mac_data_sta *sta, int assoc)
 {
 	struct ieee80211_node *ni = &in->in_ni;
-	struct ieee80211com *ic = &sc->sc_ic;
+	uint32_t dtim_off;
+	uint64_t tsf;
 
-	ctxt_sta->is_assoc = htole32(0);
-	ctxt_sta->bi = htole32(ni->ni_intval);
-	ctxt_sta->bi_reciprocal = htole32(iwm_reciprocal(ni->ni_intval));
-	ctxt_sta->dtim_interval = htole32(ni->ni_intval * ic->ic_dtim_period);
-	ctxt_sta->dtim_reciprocal =
-	    htole32(iwm_reciprocal(ni->ni_intval * ic->ic_dtim_period));
+	dtim_off = ni->ni_dtimcount * ni->ni_intval * IEEE80211_DUR_TU;
+	memcpy(&tsf, ni->ni_tstamp, sizeof(tsf));
+	tsf = letoh64(tsf);
 
-	/* 10 = CONN_MAX_LISTEN_INTERVAL */
-	ctxt_sta->listen_interval = htole32(10);
-	ctxt_sta->assoc_id = htole32(ni->ni_associd);
+	sta->is_assoc = htole32(assoc);
+	sta->dtim_time = htole32(ni->ni_rstamp + dtim_off);
+	sta->dtim_tsf = htole64(tsf + dtim_off);
+	sta->bi = htole32(ni->ni_intval);
+	sta->bi_reciprocal = htole32(iwm_reciprocal(ni->ni_intval));
+	sta->dtim_interval = htole32(ni->ni_intval * ni->ni_dtimperiod);
+	sta->dtim_reciprocal = htole32(iwm_reciprocal(sta->dtim_interval));
+	sta->listen_interval = htole32(10);
+	sta->assoc_id = htole32(ni->ni_associd);
+	sta->assoc_beacon_arrive_time = htole32(ni->ni_rstamp);
 }
 
 int
-iwm_mac_ctxt_cmd(struct iwm_softc *sc, struct iwm_node *in, uint32_t action)
+iwm_mac_ctxt_cmd(struct iwm_softc *sc, struct iwm_node *in, uint32_t action,
+    int assoc)
 {
+	struct ieee80211_node *ni = &in->in_ni;
 	struct iwm_mac_ctx_cmd cmd;
 
 	memset(&cmd, 0, sizeof(cmd));
 
-	iwm_mac_ctxt_cmd_common(sc, in, &cmd, action);
+	iwm_mac_ctxt_cmd_common(sc, in, &cmd, action, assoc);
 
 	/* Allow beacons to pass through as long as we are not associated or we
 	 * do not have dtim period information */
-	if (!in->in_assoc || !sc->sc_ic.ic_dtim_period)
+	if (!assoc || !ni->ni_associd || !ni->ni_dtimperiod)
 		cmd.filter_flags |= htole32(IWM_MAC_FILTER_IN_BEACON);
 	else
-		cmd.filter_flags &= ~htole32(IWM_MAC_FILTER_IN_BEACON);
+		iwm_mac_ctxt_cmd_fill_sta(sc, in, &cmd.sta, assoc);
 
-	/* Fill the data specific for station mode */
-	iwm_mac_ctxt_cmd_fill_sta(sc, in,
-	    &cmd.sta, action == IWM_FW_CTXT_ACTION_ADD);
-
-	return iwm_send_cmd_pdu(sc, IWM_MAC_CONTEXT_CMD, 0, sizeof(cmd),
-	    &cmd);
+	return iwm_send_cmd_pdu(sc, IWM_MAC_CONTEXT_CMD, 0, sizeof(cmd), &cmd);
 }
 
 int
@@ -5157,8 +5156,6 @@ iwm_auth(struct iwm_softc *sc)
 	uint32_t duration;
 	int err;
 
-	in->in_assoc = 0;
-
 	err = iwm_sf_config(sc, IWM_SF_FULL_ON);
 	if (err)
 		return err;
@@ -5174,6 +5171,13 @@ iwm_auth(struct iwm_softc *sc)
 		return err;
 	in->in_phyctxt = &sc->sc_phyctxt[0];
 
+	err = iwm_mac_ctxt_cmd(sc, in, IWM_FW_CTXT_ACTION_ADD, 0);
+	if (err) {
+		printf("%s: could not add MAC context (error %d)\n",
+		    DEVNAME(sc), err);
+		return err;
+ 	}
+
 	err = iwm_binding_cmd(sc, in, IWM_FW_CTXT_ACTION_ADD);
 	if (err)
 		return err;
@@ -5182,7 +5186,7 @@ iwm_auth(struct iwm_softc *sc)
 	if (err)
 		return err;
 
-	err = iwm_mac_ctxt_cmd(sc, in, IWM_FW_CTXT_ACTION_MODIFY);
+	err = iwm_mac_ctxt_cmd(sc, in, IWM_FW_CTXT_ACTION_MODIFY, 0);
 	if (err) {
 		printf("%s: failed to update MAC\n", DEVNAME(sc));
 		return err;
@@ -5192,9 +5196,11 @@ iwm_auth(struct iwm_softc *sc)
 	 * Prevent the FW from wandering off channel during association
 	 * by "protecting" the session with a time event.
 	 */
-	/* XXX duration is in units of TU, not MS */
-	duration = IWM_TE_SESSION_PROTECTION_MAX_TIME_MS;
-	iwm_protect_session(sc, in, duration, 500 /* XXX magic number */);
+	if (in->in_ni.ni_intval)
+		duration = in->in_ni.ni_intval * 2;
+	else
+		duration = IEEE80211_DUR_TU; 
+	iwm_protect_session(sc, in, duration, in->in_ni.ni_intval / 2);
 	DELAY(100);
 
 	return 0;
@@ -5210,14 +5216,6 @@ iwm_assoc(struct iwm_softc *sc)
 	err = iwm_add_sta_cmd(sc, in, 1);
 	if (err)
 		return err;
-
-	in->in_assoc = 1;
-
-	err = iwm_mac_ctxt_cmd(sc, in, IWM_FW_CTXT_ACTION_MODIFY);
-	if (err) {
-		printf("%s: failed to update MAC\n", DEVNAME(sc));
-		return err;
-	}
 
 	return 0;
 }
@@ -5284,18 +5282,14 @@ iwm_setrates(struct iwm_node *in)
 	struct iwm_host_cmd cmd = {
 		.id = IWM_LQ_CMD,
 		.len = { sizeof(in->in_lq), },
-		.flags = 0,
+		.flags = IWM_LQ_FLAG_USE_RTS_MSK,
 	};
 
 	memset(lq, 0, sizeof(*lq));
 	lq->sta_id = IWM_STATION_ID;
 
-	/* For HT, enable RTS/CTS, and SGI (if supported). */
-	if (ni->ni_flags & IEEE80211_NODE_HT) {
-		lq->flags |= IWM_LQ_FLAG_USE_RTS_MSK;
-		sgi_ok = (ni->ni_htcaps & IEEE80211_HTCAP_SGI20);
-	} else
-		sgi_ok = 0;
+	sgi_ok = ((ni->ni_flags & IEEE80211_NODE_HT) &&
+	    (ni->ni_htcaps & IEEE80211_HTCAP_SGI20));
 
 	/*
 	 * Fill the LQ rate selection table with legacy and/or HT rates
@@ -5422,10 +5416,6 @@ iwm_newstate_task(void *psc)
 	/* Reset the device if moving out of AUTH, ASSOC, or RUN. */
 	/* XXX Is there a way to switch states without a full reset? */
 	if (ostate > IEEE80211_S_SCAN && nstate < ostate) {
-		in = (struct iwm_node *)ic->ic_bss;
-		if (in)
-			in->in_assoc = 0;
-
 		iwm_stop_device(sc);
 		iwm_init_hw(sc);
 
@@ -5479,16 +5469,46 @@ iwm_newstate_task(void *psc)
 
 	case IEEE80211_S_RUN:
 		in = (struct iwm_node *)ic->ic_bss;
-		iwm_power_mac_update_mode(sc, in);
+
+		/* We have now been assigned an associd by the AP. */
+		err = iwm_mac_ctxt_cmd(sc, in, IWM_FW_CTXT_ACTION_MODIFY, 1);
+		if (err) {
+			printf("%s: failed to update MAC\n", DEVNAME(sc));
+			return;
+		}
+
+		err = iwm_power_update_device(sc);
+		if (err) {
+			printf("%s: could send power command (error %d)\n",
+			    DEVNAME(sc), err);
+			return;
+		}
 #ifdef notyet
 		/* 
 		 * Disabled for now. Default beacon filter settings
 		 * prevent net80211 from getting ERP and HT protection
 		 * updates from beacons.
 		 */
-		iwm_enable_beacon_filter(sc, in);
+		err = iwm_enable_beacon_filter(sc, in);
+		if (err) {
+			printf("%s: could not enable beacon filter\n",
+			    DEVNAME(sc));
+			return;
+		}
 #endif
-		iwm_update_quotas(sc, in);
+		err = iwm_power_mac_update_mode(sc, in);
+		if (err) {
+			printf("%s: could not update MAC power (error %d)\n",
+			    DEVNAME(sc), err);
+			return;
+		}
+
+		err = iwm_update_quotas(sc, in);
+		if (err) {
+			printf("%s: could not update quotas (error %d)\n",
+			    DEVNAME(sc), err);
+			return;
+		}
 
 		ieee80211_amrr_node_init(&sc->sc_amrr, &in->in_amn);
 
@@ -5730,7 +5750,6 @@ int
 iwm_init_hw(struct iwm_softc *sc)
 {
 	struct ieee80211com *ic = &sc->sc_ic;
-	struct iwm_node *in = (struct iwm_node *)ic->ic_bss;
 	int err, i, ac;
 
 	err = iwm_preinit(sc);
@@ -5820,7 +5839,7 @@ iwm_init_hw(struct iwm_softc *sc)
 
 	err = iwm_power_update_device(sc);
 	if (err) {
-		printf("%s: could send power update command (error %d)\n",
+		printf("%s: could send power command (error %d)\n",
 		    DEVNAME(sc), err);
 		goto err;
 	}
@@ -5852,13 +5871,6 @@ iwm_init_hw(struct iwm_softc *sc)
 			goto err;
 		}
 	}
-
-	err = iwm_mac_ctxt_cmd(sc, in, IWM_FW_CTXT_ACTION_ADD);
-	if (err) {
-		printf("%s: could not add MAC context (error %d)\n",
-		    DEVNAME(sc), err);
-		goto err;
- 	}
 
 	err = iwm_disable_beacon_filter(sc);
 	if (err) {
@@ -6009,7 +6021,6 @@ iwm_stop(struct ifnet *ifp, int disable)
 	ifq_clr_oactive(&ifp->if_snd);
 
 	in->in_phyctxt = NULL;
-	in->in_assoc = 0;
 
 	task_del(systq, &sc->init_task);
 	task_del(sc->sc_nswq, &sc->newstate_task);

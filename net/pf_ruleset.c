@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf_ruleset.c,v 1.12 2016/07/19 13:34:12 henning Exp $ */
+/*	$OpenBSD: pf_ruleset.c,v 1.14 2016/09/27 04:57:17 dlg Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier

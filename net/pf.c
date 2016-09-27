@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf.c,v 1.984 2016/09/07 09:36:49 mpi Exp $ */
+/*	$OpenBSD: pf.c,v 1.987 2016/09/27 04:57:17 dlg Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -1887,7 +1887,7 @@ pf_cksum_fixup_a(u_int16_t *cksum, const struct pf_addr *a,
 	if (udp && x == 0x0000)
 		x = 0xffff;
 
- 	*cksum = (u_int16_t)(x);
+	*cksum = (u_int16_t)(x);
 }
 
 int
