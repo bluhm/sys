@@ -1,4 +1,4 @@
-/*	$OpenBSD: ahci.c,v 1.24 2016/03/10 13:56:14 krw Exp $ */
+/*	$OpenBSD: ahci.c,v 1.28 2016/10/02 18:56:05 patrick Exp $ */
 
 /*
  * Copyright (c) 2006 David Gwynne <dlg@openbsd.org>
@@ -253,6 +253,13 @@ ahci_attach(struct ahci_softc *sc)
 	}
 noccc:
 #endif
+	/*
+	 * Given that ahci_port_alloc() will grab one CCB for error recovery
+	 * in the NCQ case from the pool of CCBs sized based on sc->sc_ncmds
+	 * pretend at least 2 command slots for devices without NCQ support.
+	 * That way, also at least 1 slot is made available for atascsi(4).
+	 */
+	sc->sc_ncmds = max(2, sc->sc_ncmds);
 	for (i = 0; i < AHCI_MAX_PORTS; i++) {
 		if (!ISSET(pi, 1 << i)) {
 			/* dont allocate stuff if the port isnt implemented */
@@ -270,6 +277,7 @@ noccc:
 	aaa.aaa_nports = AHCI_MAX_PORTS;
 	aaa.aaa_ncmds = sc->sc_ncmds - 1;
 	if (!(sc->sc_flags & AHCI_F_NO_NCQ) &&
+	    sc->sc_ncmds > 2 &&
 	    (sc->sc_cap & AHCI_REG_CAP_SNCQ)) {
 		aaa.aaa_capability |= ASAA_CAP_NCQ | ASAA_CAP_PMP_NCQ;
 		/* XXX enabling ASAA_CAP_PMP_NCQ with FBS:
@@ -1305,6 +1313,7 @@ ahci_pmp_port_portreset(struct ahci_port *ap, int pmp_port)
 	DPRINTF(AHCI_D_VERBOSE, "%s.%d: PMP port reset\n", PORTNAME(ap),
 	    pmp_port);
 
+	/* Save previous command register state */
 	cmd = ahci_pread(ap, AHCI_PREG_CMD) & ~AHCI_PREG_CMD_ICC;
 
 	/* turn off power management and disable the PHY */
@@ -1382,6 +1391,8 @@ ahci_pmp_port_portreset(struct ahci_port *ap, int pmp_port)
 
 	rc = 0;
 err:
+	/* Restore preserved port state */
+	ahci_pwrite(ap, AHCI_PREG_CMD, cmd);
 	splx(s);
 	return (rc);
 }
@@ -2610,7 +2621,7 @@ ahci_dmamem_alloc(struct ahci_softc *sc, size_t size)
 		goto destroy;
 
 	if (bus_dmamem_map(sc->sc_dmat, &adm->adm_seg, nsegs, size,
-	    &adm->adm_kva, BUS_DMA_NOWAIT) != 0)
+	    &adm->adm_kva, BUS_DMA_NOWAIT | BUS_DMA_COHERENT) != 0)
 		goto free;
 
 	if (bus_dmamap_load(sc->sc_dmat, adm->adm_map, adm->adm_kva, size,

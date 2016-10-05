@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_bridge.c,v 1.284 2016/09/03 13:46:57 reyk Exp $	*/
+/*	$OpenBSD: if_bridge.c,v 1.287 2016/10/03 15:53:09 rzalamena Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 Jason L. Wright (jason@thought.net)
@@ -106,6 +106,8 @@
 
 void	bridgeattach(int);
 int	bridge_ioctl(struct ifnet *, u_long, caddr_t);
+void	bridge_ifdetach(void *);
+void	bridge_spandetach(void *);
 int	bridge_input(struct ifnet *, struct mbuf *, void *);
 void	bridge_process(struct ifnet *, struct mbuf *);
 void	bridgeintr_frame(struct bridge_softc *, struct ifnet *, struct mbuf *);
@@ -214,10 +216,8 @@ bridge_clone_destroy(struct ifnet *ifp)
 	bridge_rtflush(sc, IFBF_FLUSHALL);
 	while ((bif = TAILQ_FIRST(&sc->sc_iflist)) != NULL)
 		bridge_delete(sc, bif);
-	while ((bif = TAILQ_FIRST(&sc->sc_spanlist)) != NULL) {
-		TAILQ_REMOVE(&sc->sc_spanlist, bif, next);
-		free(bif, M_DEVBUF, sizeof *bif);
-	}
+	while ((bif = TAILQ_FIRST(&sc->sc_spanlist)) != NULL)
+		bridge_spandetach(bif);
 
 	bstp_destroy(sc->sc_stp);
 
@@ -244,6 +244,7 @@ bridge_delete(struct bridge_softc *sc, struct bridge_iflist *p)
 
 	p->ifp->if_bridgeport = NULL;
 	error = ifpromisc(p->ifp, 0);
+	hook_disestablish(p->ifp->if_detachhooks, p->bif_dhcookie);
 
 	if_ih_remove(p->ifp, bridge_input, NULL);
 	TAILQ_REMOVE(&sc->sc_iflist, p, next);
@@ -356,6 +357,8 @@ bridge_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		SIMPLEQ_INIT(&p->bif_brlin);
 		SIMPLEQ_INIT(&p->bif_brlout);
 		ifs->if_bridgeport = (caddr_t)p;
+		p->bif_dhcookie = hook_establish(ifs->if_detachhooks, 0,
+		    bridge_ifdetach, ifs);
 		if_ih_insert(p->ifp, bridge_input, NULL);
 		TAILQ_INSERT_TAIL(&sc->sc_iflist, p, next);
 		break;
@@ -404,6 +407,9 @@ bridge_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		}
 		p->ifp = ifs;
 		p->bif_flags = IFBIF_SPAN;
+		p->bridge_sc = sc;
+		p->bif_dhcookie = hook_establish(ifs->if_detachhooks, 0,
+		    bridge_spandetach, p);
 		SIMPLEQ_INIT(&p->bif_brlin);
 		SIMPLEQ_INIT(&p->bif_brlout);
 		TAILQ_INSERT_TAIL(&sc->sc_spanlist, p, next);
@@ -414,8 +420,7 @@ bridge_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		TAILQ_FOREACH(p, &sc->sc_spanlist, next) {
 			if (strncmp(p->ifp->if_xname, req->ifbr_ifsname,
 			    sizeof(p->ifp->if_xname)) == 0) {
-				TAILQ_REMOVE(&sc->sc_spanlist, p, next);
-				free(p, M_DEVBUF, sizeof *p);
+				bridge_spandetach(p);
 				break;
 			}
 		}
@@ -567,8 +572,9 @@ bridge_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 
 /* Detach an interface from a bridge.  */
 void
-bridge_ifdetach(struct ifnet *ifp)
+bridge_ifdetach(void *arg)
 {
+	struct ifnet *ifp = (struct ifnet *)arg;
 	struct bridge_softc *sc;
 	struct bridge_iflist *bif;
 
@@ -576,6 +582,17 @@ bridge_ifdetach(struct ifnet *ifp)
 	sc = bif->bridge_sc;
 
 	bridge_delete(sc, bif);
+}
+
+void
+bridge_spandetach(void *arg)
+{
+	struct bridge_iflist *p = (struct bridge_iflist *)arg;
+	struct bridge_softc *sc = p->bridge_sc;
+
+	hook_disestablish(p->ifp->if_detachhooks, p->bif_dhcookie);
+	TAILQ_REMOVE(&sc->sc_spanlist, p, next);
+	free(p, M_DEVBUF, sizeof(*p));
 }
 
 int
@@ -813,14 +830,9 @@ bridge_output(struct ifnet *ifp, struct mbuf *m, struct sockaddr *sa,
 
 sendunicast:
 	if ((dst_p != NULL) &&
-	    (dst_p->brt_tunnel.brtag_dst.sa.sa_family != AF_UNSPEC) &&
-	    ((brtag = bridge_tunneltag(m)) != NULL)) {
-		memcpy(&brtag->brtag_src, &dst_p->brt_tunnel.brtag_src.sa,
-		    dst_p->brt_tunnel.brtag_src.sa.sa_len);
-		memcpy(&brtag->brtag_dst, &dst_p->brt_tunnel.brtag_dst.sa,
-		    dst_p->brt_tunnel.brtag_dst.sa.sa_len);
-		brtag->brtag_id = dst_p->brt_tunnel.brtag_id;
-	}
+	    (dst_p->brt_tunnel.brtag_peer.sa.sa_family != AF_UNSPEC) &&
+	    ((brtag = bridge_tunneltag(m)) != NULL))
+		bridge_copytag(&dst_p->brt_tunnel, brtag);
 
 	bridge_span(sc, m);
 	if ((dst_if->if_flags & IFF_RUNNING) == 0) {
@@ -2002,8 +2014,8 @@ bridge_copytag(struct bridge_tunneltag *src, struct bridge_tunneltag *dst)
 	if (src == NULL) {
 		memset(dst, 0, sizeof(*dst));
 	} else {
-		bridge_copyaddr(&src->brtag_src.sa, &dst->brtag_src.sa);
-		bridge_copyaddr(&src->brtag_dst.sa, &dst->brtag_dst.sa);
+		bridge_copyaddr(&src->brtag_peer.sa, &dst->brtag_peer.sa);
+		bridge_copyaddr(&src->brtag_local.sa, &dst->brtag_local.sa);
 		dst->brtag_id = src->brtag_id;
 	}
 }

@@ -1,4 +1,4 @@
-/*	$OpenBSD: switchofp.c,v 1.6 2016/09/19 14:43:22 rzalamena Exp $	*/
+/*	$OpenBSD: switchofp.c,v 1.10 2016/10/04 17:58:09 rzalamena Exp $	*/
 
 /*
  * Copyright (c) 2016 Kazuya GODA <goda@openbsd.org>
@@ -273,6 +273,9 @@ struct mbuf
 	    struct switch_flow_classify *, struct switch_flow_classify *);
 struct mbuf
 	*swofp_apply_set_field_ether(struct mbuf *, int,
+	    struct switch_flow_classify *, struct switch_flow_classify *);
+struct mbuf
+	*swofp_apply_set_field_tunnel(struct mbuf *, int,
 	    struct switch_flow_classify *, struct switch_flow_classify *);
 struct mbuf
 	*swofp_apply_set_field(struct mbuf *, struct swofp_pipline_desc *);
@@ -2999,7 +3002,7 @@ swofp_action_output_controller(struct switch_softc *sc, struct mbuf *m0,
 	struct ofp_packet_in		*pin;
 	struct ofp_match		*om;
 	struct ofp_ox_match		*oxm;
-	struct mbuf			*m, *n;
+	struct mbuf			*m;
 	caddr_t				 tail;
 	int				 match_len;
 
@@ -3029,12 +3032,16 @@ swofp_action_output_controller(struct switch_softc *sc, struct mbuf *m0,
 	}
 
 	MGETHDR(m, M_DONTWAIT, MT_DATA);
-	if (m == NULL)
+	if (m == NULL) {
+		m_freem(m0);
 		return (ENOBUFS);
+	}
 	if ((sizeof(*pin) + match_len) >= MHLEN) {
 		MCLGET(m, M_DONTWAIT);
-		if (m == NULL)
+		if (m == NULL) {
+			m_freem(m0);
 			return (ENOBUFS);
+		}
 	}
 
 	pin = mtod(m, struct ofp_packet_in *);
@@ -3044,13 +3051,24 @@ swofp_action_output_controller(struct switch_softc *sc, struct mbuf *m0,
 	pin->pin_oh.oh_type = OFP_T_PACKET_IN;
 	pin->pin_oh.oh_xid = htonl(swofs->swofs_xidnxt++);
 
-	pin->pin_buffer_id = -1; /* no buffered */
+	pin->pin_buffer_id = -1; /* not buffered */
 	pin->pin_table_id = swpld->swpld_table_id;
 	pin->pin_cookie = swpld->swpld_cookie;
 	pin->pin_reason = reason;
+
 	if (frame_max_len) {
-		pin->pin_total_len = (m0->m_pkthdr.len < frame_max_len) ?
-		    htons(m0->m_pkthdr.len) : htons(frame_max_len);
+		/*
+		 * The switch should only truncate packets if it implements
+		 * buffering or the controller might end up sending PACKET_OUT
+		 * responses with truncated packets that will eventually end
+		 * up on the network.
+		 */
+		if (frame_max_len < m0->m_pkthdr.len) {
+			m_freem(m);
+			m_freem(m0);
+			return (EMSGSIZE);
+		}
+		pin->pin_total_len = htons(m0->m_pkthdr.len);
 	}
 
 	/*
@@ -3096,16 +3114,8 @@ swofp_action_output_controller(struct switch_softc *sc, struct mbuf *m0,
 	    htons(m->m_pkthdr.len + ntohs(pin->pin_total_len));
 
 	if (frame_max_len) {
-		/* Truncate the excess packet bytes. */
-		match_len = m0->m_pkthdr.len - ntohs(pin->pin_total_len);
-		n = m_dup_pkt(m0, 0, M_DONTWAIT);
-		if (n == NULL) {
-			m_freem(m);
-			return (ENOBUFS);
-		}
-		m_adj(n, -match_len);
-		/* m_cat() doesn't update m_pkthdr.len */
-		m_cat(m, n);
+		/* m_cat() doesn't update the m_pkthdr.len */
+		m_cat(m, m0);
 		m->m_pkthdr.len += ntohs(pin->pin_total_len);
 	}
 
@@ -3730,9 +3740,57 @@ swofp_apply_set_field_ether(struct mbuf *m, int off,
 }
 
 struct mbuf *
+swofp_apply_set_field_tunnel(struct mbuf *m, int off,
+    struct switch_flow_classify *pre_swfcl, struct switch_flow_classify *swfcl)
+{
+	struct bridge_tunneltag	*brtag;
+
+	if (pre_swfcl->swfcl_tunnel) {
+		if ((brtag = bridge_tunneltag(m)) == NULL) {
+			m_freem(m);
+			return (NULL);
+		}
+
+		brtag->brtag_id = be64toh(pre_swfcl->swfcl_tunnel->tun_key);
+
+		if (pre_swfcl->swfcl_tunnel->tun_ipv4_dst.s_addr !=
+		    INADDR_ANY) {
+			brtag->brtag_peer.sin.sin_family =
+			    brtag->brtag_local.sin.sin_family = AF_INET;
+			brtag->brtag_local.sin.sin_addr =
+			    pre_swfcl->swfcl_tunnel->tun_ipv4_src;
+			brtag->brtag_peer.sin.sin_addr =
+			    pre_swfcl->swfcl_tunnel->tun_ipv4_dst;
+		} else if (!IN6_ARE_ADDR_EQUAL(
+		    &pre_swfcl->swfcl_tunnel->tun_ipv6_dst, &in6addr_any)) {
+			brtag->brtag_peer.sin6.sin6_family =
+			    brtag->brtag_local.sin.sin_family = AF_INET6;
+			brtag->brtag_local.sin6.sin6_addr =
+			    pre_swfcl->swfcl_tunnel->tun_ipv6_src;
+			brtag->brtag_peer.sin6.sin6_addr =
+			    pre_swfcl->swfcl_tunnel->tun_ipv6_dst;
+		} else {
+			bridge_tunneluntag(m);
+			m_freem(m);
+			return (NULL);
+		}
+
+		/*
+		 * It can't be used by apply-action instruction.
+		 */
+		if (swfcl->swfcl_tunnel) {
+			memcpy(swfcl->swfcl_tunnel, pre_swfcl->swfcl_tunnel,
+			    sizeof(*pre_swfcl->swfcl_tunnel));
+		}
+	}
+
+	return swofp_apply_set_field_ether(m, 0, pre_swfcl, swfcl);
+}
+
+struct mbuf *
 swofp_apply_set_field(struct mbuf *m, struct swofp_pipline_desc *swpld)
 {
-	return swofp_apply_set_field_ether(m, 0,
+	return swofp_apply_set_field_tunnel(m, 0,
 	    &swpld->swpld_pre_swfcl, swpld->swpld_swfcl);
 }
 
@@ -4230,7 +4288,7 @@ swofp_input(struct switch_softc *sc, struct mbuf *m)
 		return (EMSGSIZE);
 	}
 
-	VDPRINTF(sc, "recived ofp massage type=%s xid=%x len=%d\n",
+	VDPRINTF(sc, "recived ofp message type=%s xid=%x len=%d\n",
 	    swofp_mtype_str(oh->oh_type), ntohl(oh->oh_xid),
 	    ntohs(oh->oh_length));
 
@@ -4255,7 +4313,7 @@ swofp_output(struct switch_softc *sc, struct mbuf *m)
 	}
 
 	oh = mtod(m, struct ofp_header *);
-	VDPRINTF(sc, "sending ofp massage type=%s xid=%x len=%d\n",
+	VDPRINTF(sc, "sending ofp message type=%s xid=%x len=%d\n",
 		 swofp_mtype_str(oh->oh_type), ntohl(oh->oh_xid),
 		 ntohs(oh->oh_length));
 
@@ -5710,16 +5768,21 @@ swofp_table_features_put_actions(struct mbuf *m, int *off, uint16_t tp_type)
 {
 	struct ofp_table_feature_property	 tp;
 	struct ofp_action_header		 action;
-	uint32_t				 padding = 0;
 	int					 i, supported = 0;
+	int					 actionlen, padsize;
+	uint8_t					 padding[8];
 
 	for (i = 0 ; i < nitems(ofp_action_handlers); i++) {
 		if (ofp_action_handlers[i].action)
 			supported++;
 	}
 
+	actionlen = sizeof(action) - sizeof(action.ah_pad);
 	tp.tp_type = htons(tp_type);
-	tp.tp_length = htons((sizeof(action) * supported) + sizeof(tp));
+	tp.tp_length = (actionlen * supported) + sizeof(tp);
+
+	padsize = OFP_ALIGN(tp.tp_length) - tp.tp_length;
+	tp.tp_length = htons(tp.tp_length);
 
 	if (m_copyback(m, *off, sizeof(tp), (caddr_t)&tp, M_NOWAIT))
 		return (OFP_ERRREQ_MULTIPART_OVERFLOW);
@@ -5729,25 +5792,24 @@ swofp_table_features_put_actions(struct mbuf *m, int *off, uint16_t tp_type)
 		if (ofp_action_handlers[i].action == NULL)
 			continue;
 
-		memset(&action, 0, sizeof(action));
+		memset(&action, 0, actionlen);
 		action.ah_type = ntohs(ofp_action_handlers[i].action_type);
-		action.ah_len = ntohs(sizeof(action));
+		/* XXX action length is different for experimenter type. */
+		action.ah_len = ntohs(actionlen);
 
-		if (m_copyback(m, *off, sizeof(action),
+		if (m_copyback(m, *off, actionlen,
 		    (caddr_t)&action, M_NOWAIT))
 			return (OFP_ERRREQ_MULTIPART_OVERFLOW);
-		*off += sizeof(action);
+		*off += actionlen;
 	}
 
-	/*
-	 * It's always necessary to use 4 byte padding because:
-	 *  - struct ofp_action_header is 8 byte so it is aligned
-	 *  - struct ofp_table_feature_property is 4 byte so it needs padding
-	 */
-	if (m_copyback(m, *off, sizeof(padding),
-	    (caddr_t)&padding, M_NOWAIT))
-		return (OFP_ERRREQ_MULTIPART_OVERFLOW);
-	*off += sizeof(padding);
+	if (padsize) {
+		memset(padding, 0, padsize);
+		if (m_copyback(m, *off, padsize, &padding, M_NOWAIT))
+			return (OFP_ERRREQ_MULTIPART_OVERFLOW);
+
+		*off += padsize;
+	}
 
 	return (0);
 }

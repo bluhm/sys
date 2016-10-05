@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_vxlan.c,v 1.44 2016/09/04 11:14:44 reyk Exp $	*/
+/*	$OpenBSD: if_vxlan.c,v 1.48 2016/09/30 10:22:05 yasuoka Exp $	*/
 
 /*
  * Copyright (c) 2013 Reyk Floeter <reyk@openbsd.org>
@@ -576,7 +576,6 @@ vxlan_lookup(struct mbuf *m, struct udphdr *uh, int iphlen,
 	int			 vni;
 	struct ifnet		*ifp;
 	int			 skip;
-	struct ether_header	*eh;
 #if NBRIDGE > 0
 	struct bridge_tunneltag	*brtag;
 #endif
@@ -636,19 +635,19 @@ vxlan_lookup(struct mbuf *m, struct udphdr *uh, int iphlen,
 	return (0);
 
  found:
+	if (m->m_pkthdr.len < skip + sizeof(struct ether_header))
+		return (EINVAL);
+
 	m_adj(m, skip);
 	ifp = &sc->sc_ac.ac_if;
-
-	if ((eh = mtod(m, struct ether_header *)) == NULL)
-		return (EINVAL);
 
 #if NBRIDGE > 0
 	/* Store the tunnel src/dst IP and vni for the bridge or switch */
 	if ((ifp->if_bridgeport != NULL || ifp->if_switchport != NULL) &&
 	    srcsa->sa_family != AF_UNSPEC &&
 	    ((brtag = bridge_tunneltag(m)) != NULL)) {
-		memcpy(&brtag->brtag_src.sa, srcsa, srcsa->sa_len);
-		memcpy(&brtag->brtag_dst.sa, dstsa, dstsa->sa_len);
+		memcpy(&brtag->brtag_peer.sa, srcsa, srcsa->sa_len);
+		memcpy(&brtag->brtag_local.sa, dstsa, dstsa->sa_len);
 		brtag->brtag_id = vni;
 	}
 #endif
@@ -777,11 +776,11 @@ vxlan_output(struct ifnet *ifp, struct mbuf *m)
 
 #if NBRIDGE > 0
 	if ((brtag = bridge_tunnel(m)) != NULL) {
-		dst = &brtag->brtag_dst.sa;
+		dst = &brtag->brtag_peer.sa;
 
 		/* If accepting any VNI, source ip address is from brtag */
 		if (sc->sc_vnetid == VXLAN_VNI_ANY) {
-			src = &brtag->brtag_src.sa;
+			src = &brtag->brtag_local.sa;
 			tag = (uint32_t)brtag->brtag_id;
 			af = src->sa_family;
 		}

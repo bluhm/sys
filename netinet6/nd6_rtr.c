@@ -1,4 +1,4 @@
-/*	$OpenBSD: nd6_rtr.c,v 1.146 2016/09/26 19:39:24 sthen Exp $	*/
+/*	$OpenBSD: nd6_rtr.c,v 1.148 2016/10/03 12:33:21 mpi Exp $	*/
 /*	$KAME: nd6_rtr.c,v 1.97 2001/02/07 11:09:13 itojun Exp $	*/
 
 /*
@@ -75,7 +75,6 @@ int rt6_deleteroute(struct rtentry *, void *, unsigned int);
 void nd6_addr_add(void *);
 
 void nd6_rs_output_timo(void *);
-u_int32_t nd6_rs_next_pltime_timo(struct ifnet *);
 void nd6_rs_output_set_timo(int);
 void nd6_rs_output(struct ifnet *, struct in6_ifaddr *);
 void nd6_rs_dev_state(void *);
@@ -284,64 +283,30 @@ nd6_rs_output_set_timo(int timeout)
 	timeout_add_sec(&nd6_rs_output_timer, nd6_rs_output_timeout);
 }
 
-u_int32_t
-nd6_rs_next_pltime_timo(struct ifnet *ifp)
-{
-	struct ifaddr *ifa;
-	struct in6_ifaddr *ia6;
-	u_int32_t pltime_expires = ND6_INFINITE_LIFETIME;
-
-	TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
-		if (ifa->ifa_addr->sa_family != AF_INET6)
-			continue;
-
-		ia6 = ifatoia6(ifa);
-		if (ia6->ia6_lifetime.ia6t_pltime == ND6_INFINITE_LIFETIME ||
-		    IFA6_IS_DEPRECATED(ia6) || IFA6_IS_INVALID(ia6))
-			continue;
-
-		pltime_expires = MIN(pltime_expires,
-		    ia6->ia6_lifetime.ia6t_pltime);
-	}
-
-	return pltime_expires;
-}
-
 void
 nd6_rs_output_timo(void *ignored_arg)
 {
 	struct ifnet *ifp;
 	struct in6_ifaddr *ia6;
-	u_int32_t pltime_expire = ND6_INFINITE_LIFETIME, t;
-	int timeout = ND6_RS_OUTPUT_INTERVAL;
 
 	if (nd6_rs_timeout_count == 0)
 		return;
 
 	if (nd6_rs_output_timeout < ND6_RS_OUTPUT_INTERVAL)
 		/* exponential backoff if running quick timeouts */
-		timeout = nd6_rs_output_timeout * 2;
+		nd6_rs_output_timeout *= 2;
+	if (nd6_rs_output_timeout > ND6_RS_OUTPUT_INTERVAL)
+		nd6_rs_output_timeout = ND6_RS_OUTPUT_INTERVAL;
 
 	TAILQ_FOREACH(ifp, &ifnet, if_list) {
 		if (ISSET(ifp->if_flags, IFF_RUNNING) &&
 		    ISSET(ifp->if_xflags, IFXF_AUTOCONF6)) {
-			t = nd6_rs_next_pltime_timo(ifp);
-			if (t == ND6_INFINITE_LIFETIME || t <
-			    ND6_RS_OUTPUT_INTERVAL) {
-				timeout = ND6_RS_OUTPUT_QUICK_INTERVAL;
-				ia6 = in6ifa_ifpforlinklocal(ifp,
-				    IN6_IFF_TENTATIVE);
-				if (ia6 != NULL)
-					nd6_rs_output(ifp, ia6);
-			}
-
-			pltime_expire = MIN(pltime_expire, t);
+			ia6 = in6ifa_ifpforlinklocal(ifp, IN6_IFF_TENTATIVE);
+			if (ia6 != NULL)
+				nd6_rs_output(ifp, ia6);
 		}
 	}
-	if (pltime_expire != ND6_INFINITE_LIFETIME)
-		timeout = MAX(timeout, pltime_expire / 2);
-
-	nd6_rs_output_set_timo(timeout);
+	nd6_rs_output_set_timo(nd6_rs_output_timeout);
 }
 
 void
@@ -463,7 +428,7 @@ nd6_ra_input(struct mbuf *m, int off, int icmp6len)
 	dr0.rtaddr = saddr6;
 	dr0.flags  = nd_ra->nd_ra_flags_reserved;
 	dr0.rtlifetime = ntohs(nd_ra->nd_ra_router_lifetime);
-	dr0.expire = time_second + dr0.rtlifetime;
+	dr0.expire = time_uptime + dr0.rtlifetime;
 	dr0.ifp = ifp;
 	/* unspecified or not? (RFC 2461 6.3.4) */
 	if (advreachable) {
@@ -553,7 +518,7 @@ nd6_ra_input(struct mbuf *m, int off, int icmp6len)
 			pr.ndpr_plen = pi->nd_opt_pi_prefix_len;
 			pr.ndpr_vltime = ntohl(pi->nd_opt_pi_valid_time);
 			pr.ndpr_pltime = ntohl(pi->nd_opt_pi_preferred_time);
-			pr.ndpr_lastupdate = time_second;
+			pr.ndpr_lastupdate = time_uptime;
 
 			if (in6_init_prefix_ltimes(&pr))
 				continue; /* prefix lifetime init failed */
@@ -1385,7 +1350,7 @@ prelist_update(struct nd_prefix *new, struct nd_defrouter *dr, struct mbuf *m)
 
 		if (lt6_tmp.ia6t_vltime == ND6_INFINITE_LIFETIME)
 			storedlifetime = ND6_INFINITE_LIFETIME;
-		else if (time_second - ia6->ia6_updatetime >
+		else if (time_uptime - ia6->ia6_updatetime >
 			 lt6_tmp.ia6t_vltime) {
 			/*
 			 * The case of "invalid" address.  We should usually
@@ -1394,7 +1359,7 @@ prelist_update(struct nd_prefix *new, struct nd_defrouter *dr, struct mbuf *m)
 			storedlifetime = 0;
 		} else
 			storedlifetime = lt6_tmp.ia6t_vltime -
-				(time_second - ia6->ia6_updatetime);
+				(time_uptime - ia6->ia6_updatetime);
 		if (TWOHOUR < new->ndpr_vltime ||
 		    storedlifetime < new->ndpr_vltime) {
 			lt6_tmp.ia6t_vltime = new->ndpr_vltime;
@@ -1425,7 +1390,7 @@ prelist_update(struct nd_prefix *new, struct nd_defrouter *dr, struct mbuf *m)
 		in6_init_address_ltimes(pr, &lt6_tmp);
 
 		ia6->ia6_lifetime = lt6_tmp;
-		ia6->ia6_updatetime = time_second;
+		ia6->ia6_updatetime = time_uptime;
 	}
 
 	if ((!autoconf || ((ifp->if_xflags & IFXF_INET6_NOPRIVACY) == 0 &&
@@ -2013,11 +1978,11 @@ in6_init_prefix_ltimes(struct nd_prefix *ndpr)
 	if (ndpr->ndpr_pltime == ND6_INFINITE_LIFETIME)
 		ndpr->ndpr_preferred = 0;
 	else
-		ndpr->ndpr_preferred = time_second + ndpr->ndpr_pltime;
+		ndpr->ndpr_preferred = time_uptime + ndpr->ndpr_pltime;
 	if (ndpr->ndpr_vltime == ND6_INFINITE_LIFETIME)
 		ndpr->ndpr_expire = 0;
 	else
-		ndpr->ndpr_expire = time_second + ndpr->ndpr_vltime;
+		ndpr->ndpr_expire = time_uptime + ndpr->ndpr_vltime;
 
 	return 0;
 }
@@ -2031,7 +1996,7 @@ in6_init_address_ltimes(struct nd_prefix *new, struct in6_addrlifetime *lt6)
 	if (lt6->ia6t_vltime == ND6_INFINITE_LIFETIME)
 		lt6->ia6t_expire = 0;
 	else {
-		lt6->ia6t_expire = time_second;
+		lt6->ia6t_expire = time_uptime;
 		lt6->ia6t_expire += lt6->ia6t_vltime;
 	}
 
@@ -2039,7 +2004,7 @@ in6_init_address_ltimes(struct nd_prefix *new, struct in6_addrlifetime *lt6)
 	if (lt6->ia6t_pltime == ND6_INFINITE_LIFETIME)
 		lt6->ia6t_preferred = 0;
 	else {
-		lt6->ia6t_preferred = time_second;
+		lt6->ia6t_preferred = time_uptime;
 		lt6->ia6t_preferred += lt6->ia6t_pltime;
 	}
 }
