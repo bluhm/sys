@@ -370,17 +370,12 @@ sodisconnect(struct socket *so)
 	rw_assert_wrlock(&netlock);
 	splsoftassert(IPL_SOFTNET);
 
-	if ((so->so_state & SS_ISCONNECTED) == 0) {
-		error = ENOTCONN;
-		goto bad;
-	}
-	if (so->so_state & SS_ISDISCONNECTING) {
-		error = EALREADY;
-		goto bad;
-	}
+	if ((so->so_state & SS_ISCONNECTED) == 0)
+		return (ENOTCONN);
+	if (so->so_state & SS_ISDISCONNECTING)
+		return (EALREADY);
 	error = (*so->so_proto->pr_usrreq)(so, PRU_DISCONNECT, NULL, NULL,
 	    NULL, curproc);
-bad:
 	return (error);
 }
 
