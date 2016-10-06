@@ -459,6 +459,8 @@ arpintr(void)
 	struct ifnet *ifp;
 
 	niq_delist(&arpinq, &ml);
+	if (ml_empty(&ml))
+		return;
 
 	while ((m = ml_dequeue(&ml)) != NULL) {
 		ifp = if_get(m->m_pkthdr.ph_ifidx);
