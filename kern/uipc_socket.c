@@ -431,8 +431,7 @@ restart:
 		if (so->so_error) {
 			error = so->so_error;
 			so->so_error = 0;
-			splx(s);
-			goto release;
+			snderr(error);
 		}
 		if ((so->so_state & SS_ISCONNECTED) == 0) {
 			if (so->so_proto->pr_flags & PR_CONNREQUIRED) {
