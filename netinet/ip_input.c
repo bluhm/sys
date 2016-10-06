@@ -1755,12 +1755,17 @@ ip_send_dispatch(void *xmq)
 	int s;
 
 	mq_delist(mq, &ml);
+	if (ml_empty(&ml))
+		return;
+
 	KERNEL_LOCK();
+	rw_enter_write(&netlock);
 	s = splsoftnet();
 	while ((m = ml_dequeue(&ml)) != NULL) {
 		ip_output(m, NULL, NULL, 0, NULL, NULL, 0);
 	}
 	splx(s);
+	rw_exit_write(&netlock);
 	KERNEL_UNLOCK();
 }
 

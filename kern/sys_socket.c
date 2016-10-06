@@ -133,6 +133,7 @@ soo_poll(struct file *fp, int events, struct proc *p)
 	int revents = 0;
 	int s;
 
+	rw_enter_write(&netlock);
 	s = splsoftnet();
 	if (events & (POLLIN | POLLRDNORM)) {
 		if (soreadable(so))
@@ -160,6 +161,7 @@ soo_poll(struct file *fp, int events, struct proc *p)
 		}
 	}
 	splx(s);
+	rw_exit_write(&netlock);
 	return (revents);
 }
 

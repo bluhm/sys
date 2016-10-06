@@ -160,7 +160,13 @@ void	if_netisr(void *);
 void	ifa_print_all(void);
 #endif
 
-void	if_start_locked(struct ifnet *ifp);
+void	if_start_locked(struct ifnet *);
+int	if_ioctl_locked(struct socket *, u_long, caddr_t, struct proc *);
+
+/*
+ * Network lock: serialize socket operations.
+ */
+struct rwlock netlock = RWLOCK_INITIALIZER("netlock");
 
 /*
  * interface index map
@@ -833,10 +839,16 @@ if_netisr(void *unused)
 	int s;
 
 	KERNEL_LOCK();
+	rw_enter_write(&netlock);
 	s = splsoftnet();
 
 	while ((n = netisr) != 0) {
-		sched_pause();
+		/* Like sched_pause() but with a rwlock dance. */
+		if (curcpu()->ci_schedstate.spc_schedflags & SPCF_SHOULDYIELD) {
+			rw_exit_write(&netlock);
+			yield();
+			rw_enter_write(&netlock);
+		}
 
 		atomic_clearbits_int(&netisr, n);
 
@@ -875,6 +887,7 @@ if_netisr(void *unused)
 #endif
 
 	splx(s);
+	rw_exit_write(&netlock);
 	KERNEL_UNLOCK();
 }
 
@@ -1427,6 +1440,7 @@ if_downall(void)
 	struct ifnet *ifp;
 	int s;
 
+	rw_enter_write(&netlock);
 	s = splnet();
 	TAILQ_FOREACH(ifp, &ifnet, if_list) {
 		if ((ifp->if_flags & IFF_UP) == 0)
@@ -1441,6 +1455,7 @@ if_downall(void)
 		}
 	}
 	splx(s);
+	rw_exit_write(&netlock);
 }
 
 /*
@@ -1500,9 +1515,11 @@ if_linkstate_task(void *xifidx)
 	if (ifp == NULL)
 		return;
 
+	rw_enter_write(&netlock);
 	s = splsoftnet();
 	if_linkstate(ifp);
 	splx(s);
+	rw_exit_write(&netlock);
 
 	if_put(ifp);
 }
@@ -1510,6 +1527,7 @@ if_linkstate_task(void *xifidx)
 void
 if_linkstate(struct ifnet *ifp)
 {
+	rw_assert_wrlock(&netlock);
 	splsoftassert(IPL_SOFTNET);
 
 	rt_ifmsg(ifp);
@@ -1700,6 +1718,18 @@ if_setrdomain(struct ifnet *ifp, int rdomain)
  */
 int
 ifioctl(struct socket *so, u_long cmd, caddr_t data, struct proc *p)
+{
+	int error;
+
+	rw_enter_write(&netlock);
+	error = if_ioctl_locked(so, cmd, data, p);
+	rw_exit_write(&netlock);
+
+	return (error);
+}
+
+int
+if_ioctl_locked(struct socket *so, u_long cmd, caddr_t data, struct proc *p)
 {
 	struct ifnet *ifp;
 	struct ifreq *ifr;

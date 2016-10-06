@@ -131,7 +131,10 @@ uipc_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		break;
 
 	case PRU_BIND:
+		rw_assert_wrlock(&netlock);
+		rw_exit_write(&netlock);
 		error = unp_bind(unp, nam, p);
+		rw_enter_write(&netlock);
 		break;
 
 	case PRU_LISTEN:

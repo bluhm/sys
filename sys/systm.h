@@ -290,6 +290,11 @@ struct uio;
 int	uiomove(void *, size_t, struct uio *);
 
 #if defined(_KERNEL)
+/*
+ * Network lock: serialize socket operations.
+ */
+extern struct rwlock netlock;
+
 __returns_twice int	setjmp(label_t *);
 __dead void	longjmp(label_t *);
 #endif

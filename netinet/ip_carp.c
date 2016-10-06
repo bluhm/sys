@@ -1045,6 +1045,7 @@ carp_send_ad(void *v)
 		return;
 	}
 
+	rw_enter_write(&netlock);
 	s = splsoftnet();
 
 	/* bow out if we've gone to backup (the carp interface is going down) */
@@ -1247,6 +1248,7 @@ carp_send_ad(void *v)
 retry_later:
 	sc->cur_vhe = NULL;
 	splx(s);
+	rw_exit_write(&netlock);
 	if (advbase != 255 || advskew != 255)
 		timeout_add(&vhe->ad_tmo, tvtohz(&tv));
 }
