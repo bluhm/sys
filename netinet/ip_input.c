@@ -1755,6 +1755,9 @@ ip_send_dispatch(void *xmq)
 	int s;
 
 	mq_delist(mq, &ml);
+	if (ml_empty(&ml))
+		return;
+
 	KERNEL_LOCK();
 	s = splsoftnet();
 	while ((m = ml_dequeue(&ml)) != NULL) {
