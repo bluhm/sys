@@ -296,6 +296,7 @@ route_ctloutput(int op, struct socket *so, int level, int optname,
 	return (error);
 }
 
+/* XXXSMP */
 void
 rt_senddesync(void *data)
 {

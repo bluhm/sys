@@ -250,6 +250,7 @@ doaccept(struct proc *p, int sock, struct sockaddr *name, socklen_t *anamelen,
 	if ((error = getsock(p, sock, &fp)) != 0)
 		return (error);
 
+	rw_enter_write(&netlock);
 	s = splsoftnet();
 	headfp = fp;
 	head = fp->f_data;
@@ -275,7 +276,8 @@ redo:
 			head->so_error = ECONNABORTED;
 			break;
 		}
-		error = tsleep(&head->so_timeo, PSOCK | PCATCH, "netcon", 0);
+		error = rwsleep(&head->so_timeo, &netlock, PSOCK | PCATCH,
+		    "netcon", 0);
 		if (error) {
 			goto bad;
 		}
@@ -352,6 +354,7 @@ redo:
 	m_freem(nam);
 bad:
 	splx(s);
+	rw_exit_write(&netlock);
 	FRELE(headfp, p);
 	return (error);
 }
@@ -406,9 +409,11 @@ sys_connect(struct proc *p, void *v, register_t *retval)
 		m_freem(nam);
 		return (EINPROGRESS);
 	}
+	rw_enter_write(&netlock);
 	s = splsoftnet();
 	while ((so->so_state & SS_ISCONNECTING) && so->so_error == 0) {
-		error = tsleep(&so->so_timeo, PSOCK | PCATCH, "netcon2", 0);
+		error = rwsleep(&so->so_timeo, &netlock, PSOCK | PCATCH,
+		    "netcon2", 0);
 		if (error) {
 			if (error == EINTR || error == ERESTART)
 				interrupted = 1;
@@ -420,6 +425,7 @@ sys_connect(struct proc *p, void *v, register_t *retval)
 		so->so_error = 0;
 	}
 	splx(s);
+	rw_exit_write(&netlock);
 bad:
 	if (!interrupted)
 		so->so_state &= ~SS_ISCONNECTING;

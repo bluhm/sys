@@ -1429,12 +1429,17 @@ ip6_send_dispatch(void *xmq)
 	int s;
 
 	mq_delist(mq, &ml);
+	if (ml_empty(&ml))
+		return;
+
 	KERNEL_LOCK();
+	rw_enter_write(&netlock);
 	s = splsoftnet();
 	while ((m = ml_dequeue(&ml)) != NULL) {
 		ip6_output(m, NULL, NULL, IPV6_MINMTU, NULL, NULL);
 	}
 	splx(s);
+	rw_exit_write(&netlock);
 	KERNEL_UNLOCK();
 }
 

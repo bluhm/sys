@@ -547,6 +547,7 @@ rtredirect(struct sockaddr *dst, struct sockaddr *gateway,
 	int 			 flags = RTF_GATEWAY|RTF_HOST;
 	uint8_t			 prio = RTP_NONE;
 
+	rw_assert_wrlock(&netlock);
 	splsoftassert(IPL_SOFTNET);
 
 	/* verify the gateway is directly reachable */
@@ -1590,6 +1591,7 @@ rt_timer_timer(void *arg)
 
 	current_time = time_uptime;
 
+	rw_enter_write(&netlock);
 	s = splsoftnet();
 	for (rtq = LIST_FIRST(&rttimer_queue_head); rtq != NULL;
 	     rtq = LIST_NEXT(rtq, rtq_link)) {
@@ -1606,6 +1608,7 @@ rt_timer_timer(void *arg)
 		}
 	}
 	splx(s);
+	rw_exit_write(&netlock);
 
 	timeout_add_sec(to, 1);
 }
