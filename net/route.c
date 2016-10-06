@@ -533,8 +533,6 @@ ifafree(struct ifaddr *ifa)
  * destination to go through the given gateway.
  * Normally called as a result of a routing redirect
  * message from the network layer.
- *
- * N.B.: must be called at splsoftnet
  */
 void
 rtredirect(struct sockaddr *dst, struct sockaddr *gateway,

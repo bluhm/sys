@@ -138,8 +138,6 @@ soisdisconnected(struct socket *so)
  * then we allocate a new structure, properly linked into the
  * data structure of the original socket, and return this.
  * Connstatus may be 0 or SS_ISCONNECTED.
- *
- * Must be called at splsoftnet()
  */
 struct socket *
 sonewconn(struct socket *head, int connstatus)

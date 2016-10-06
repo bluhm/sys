@@ -189,10 +189,6 @@ solisten(struct socket *so, int backlog)
 	return (0);
 }
 
-/*
- *  Must be called at splsoftnet()
- */
-
 void
 sofree(struct socket *so)
 {
@@ -284,9 +280,6 @@ discard:
 	return (error);
 }
 
-/*
- * Must be called at splsoftnet.
- */
 int
 soabort(struct socket *so)
 {

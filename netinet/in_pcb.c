@@ -655,8 +655,6 @@ in_setpeeraddr(struct inpcb *inp, struct mbuf *nam)
  * cmds that are uninteresting (e.g., no error in the map).
  * Call the protocol specific routine (if any) to report
  * any errors for each matching socket.
- *
- * Must be called at splsoftnet.
  */
 void
 in_pcbnotifyall(struct inpcbtable *table, struct sockaddr *dst, u_int rdomain,

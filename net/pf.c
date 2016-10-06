@@ -1308,7 +1308,6 @@ pf_src_tree_remove_state(struct pf_state *s)
 	}
 }
 
-/* callers should be at splsoftnet */
 void
 pf_remove_state(struct pf_state *cur)
 {
@@ -1354,8 +1353,7 @@ pf_remove_divert_state(struct pf_state_key *sk)
 	}
 }
 
-/* callers should be at splsoftnet and hold the
- * write_lock on pf_consistency_lock */
+/* callers should hold the write_lock on pf_consistency_lock */
 void
 pf_free_state(struct pf_state *cur)
 {
