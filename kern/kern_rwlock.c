@@ -98,6 +98,12 @@ rw_enter_read(struct rwlock *rwl)
 		membar_enter();
 }
 
+#if 1
+#include <machine/db_machdep.h>
+#include <ddb/db_output.h>
+#include <ddb/db_interface.h>
+#endif
+
 void
 rw_enter_write(struct rwlock *rwl)
 {
@@ -108,6 +114,15 @@ rw_enter_write(struct rwlock *rwl)
 		rw_enter(rwl, RW_WRITE);
 	else
 		membar_enter();
+
+#if 1
+	if ((rwl == &netlock) && (splassert_ctl == 3)) {
+		printf("ENTER::%d::", cpu_number());
+		db_stack_trace_print(
+		    (db_expr_t)__builtin_frame_address(1),
+		    TRUE, 1, "", printf);
+	}
+#endif
 }
 
 void
@@ -129,6 +144,15 @@ rw_exit_write(struct rwlock *rwl)
 	unsigned long owner = rwl->rwl_owner;
 
 	rw_assert_wrlock(rwl);
+
+#if 1
+	if ((rwl == &netlock) && (splassert_ctl == 3)) {
+		printf("EXIT::%d::", cpu_number());
+		db_stack_trace_print(
+		    (db_expr_t)__builtin_frame_address(1),
+		    TRUE, 1, "", printf);
+	}
+#endif
 
 	membar_exit();
 	if (__predict_false((owner & RWLOCK_WAIT) ||

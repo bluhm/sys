@@ -138,8 +138,6 @@ soisdisconnected(struct socket *so)
  * then we allocate a new structure, properly linked into the
  * data structure of the original socket, and return this.
  * Connstatus may be 0 or SS_ISCONNECTED.
- *
- * Must be called at splsoftnet()
  */
 struct socket *
 sonewconn(struct socket *head, int connstatus)
@@ -147,6 +145,7 @@ sonewconn(struct socket *head, int connstatus)
 	struct socket *so;
 	int soqueue = connstatus ? 1 : 0;
 
+	rw_assert_wrlock(&netlock);
 	splsoftassert(IPL_SOFTNET);
 
 	if (mclpools[0].pr_nout > mclpools[0].pr_hardlimit * 95 / 100)
@@ -276,10 +275,11 @@ socantrcvmore(struct socket *so)
 int
 sbwait(struct sockbuf *sb)
 {
+	rw_assert_wrlock(&netlock);
 	splsoftassert(IPL_SOFTNET);
 
 	sb->sb_flagsintr |= SB_WAIT;
-	return (tsleep(&sb->sb_cc,
+	return (rwsleep(&sb->sb_cc, &netlock,
 	    (sb->sb_flags & SB_NOINTR) ? PSOCK : PSOCK | PCATCH, "netio",
 	    sb->sb_timeo));
 }
@@ -317,7 +317,8 @@ sbunlock(struct sockbuf *sb)
 void
 sowakeup(struct socket *so, struct sockbuf *sb)
 {
-	int s = splsoftnet();
+	rw_assert_wrlock(&netlock);
+	splassert(IPL_SOFTNET);
 
 	selwakeup(&sb->sb_sel);
 	sb->sb_flagsintr &= ~SB_SEL;
@@ -325,7 +326,7 @@ sowakeup(struct socket *so, struct sockbuf *sb)
 		sb->sb_flagsintr &= ~SB_WAIT;
 		wakeup(&sb->sb_cc);
 	}
-	splx(s);
+
 	if (so->so_state & SS_ASYNC)
 		csignal(so->so_pgid, SIGIO, so->so_siguid, so->so_sigeuid);
 }

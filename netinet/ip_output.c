@@ -109,6 +109,9 @@ ip_output(struct mbuf *m0, struct mbuf *opt, struct route *ro, int flags,
 	int rv;
 #endif
 
+	/* Make sure this thread hold the correct lock. */
+	KASSERT(rw_status(&netlock) == RW_WRITE);
+
 #ifdef IPSEC
 	if (inp && (inp->inp_flags & INP_IPV6) != 0)
 		panic("ip_output: IPv6 pcb is passed");
