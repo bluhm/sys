@@ -3523,10 +3523,8 @@ syn_cache_timer(void *arg)
 	int s;
 
 	s = splsoftnet();
-	if (sc->sc_flags & SCF_DEAD) {
-		splx(s);
-		return;
-	}
+	if (sc->sc_flags & SCF_DEAD)
+		goto out;
 
 	if (__predict_false(sc->sc_rxtshift == TCP_MAXRXTSHIFT)) {
 		/* Drop it -- too many retransmissions. */
@@ -3549,6 +3547,7 @@ syn_cache_timer(void *arg)
 	sc->sc_rxtshift++;
 	SYN_CACHE_TIMER_ARM(sc);
 
+ out:
 	splx(s);
 	return;
 

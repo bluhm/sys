@@ -114,12 +114,11 @@ tcp_delack(void *arg)
 	 */
 
 	s = splsoftnet();
-	if (tp->t_flags & TF_DEAD) {
-		splx(s);
-		return;
-	}
+	if (tp->t_flags & TF_DEAD)
+		goto out;
 	tp->t_flags |= TF_ACKNOW;
 	(void) tcp_output(tp);
+ out:
 	splx(s);
 }
 
@@ -194,10 +193,8 @@ tcp_timer_rexmt(void *arg)
 	int s;
 
 	s = splsoftnet();
-	if (tp->t_flags & TF_DEAD) {
-		splx(s);
-		return;
-	}
+	if (tp->t_flags & TF_DEAD)
+		goto out;
 
 	if ((tp->t_flags & TF_PMTUD_PEND) && tp->t_inpcb &&
 	    SEQ_GEQ(tp->t_pmtud_th_seq, tp->snd_una) &&
@@ -224,8 +221,7 @@ tcp_timer_rexmt(void *arg)
 		sin.sin_addr = tp->t_inpcb->inp_faddr;
 		in_pcbnotifyall(&tcbtable, sintosa(&sin),
 		    tp->t_inpcb->inp_rtableid, EMSGSIZE, tcp_mtudisc);
-		splx(s);
-		return;
+		goto out;
 	}
 
 #ifdef TCP_SACK
@@ -387,11 +383,8 @@ tcp_timer_persist(void *arg)
 	int s;
 
 	s = splsoftnet();
-	if ((tp->t_flags & TF_DEAD) ||
-            TCP_TIMER_ISARMED(tp, TCPT_REXMT)) {
-		splx(s);
-		return;
-	}
+	if ((tp->t_flags & TF_DEAD) || TCP_TIMER_ISARMED(tp, TCPT_REXMT))
+		goto out;
 	tcpstat.tcps_persisttimeo++;
 	/*
 	 * Hack: if the peer is dead/unreachable, we do not
@@ -425,10 +418,8 @@ tcp_timer_keep(void *arg)
 	int s;
 
 	s = splsoftnet();
-	if (tp->t_flags & TF_DEAD) {
-		splx(s);
-		return;
-	}
+	if (tp->t_flags & TF_DEAD)
+		goto out;
 
 	tcpstat.tcps_keeptimeo++;
 	if (TCPS_HAVEESTABLISHED(tp->t_state) == 0)
@@ -457,7 +448,7 @@ tcp_timer_keep(void *arg)
 		TCP_TIMER_ARM(tp, TCPT_KEEP, tcp_keepintvl);
 	} else
 		TCP_TIMER_ARM(tp, TCPT_KEEP, tcp_keepidle);
-
+ out:
 	splx(s);
 	return;
 
@@ -475,10 +466,8 @@ tcp_timer_2msl(void *arg)
 	int s;
 
 	s = splsoftnet();
-	if (tp->t_flags & TF_DEAD) {
-		splx(s);
-		return;
-	}
+	if (tp->t_flags & TF_DEAD)
+		goto out;
 
 #ifdef TCP_SACK
 	tcp_timer_freesack(tp);
@@ -490,5 +479,6 @@ tcp_timer_2msl(void *arg)
 	else
 		tp = tcp_close(tp);
 
+ out:
 	splx(s);
 }
