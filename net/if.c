@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.c,v 1.452 2016/10/03 12:26:13 rzalamena Exp $	*/
+/*	$OpenBSD: if.c,v 1.454 2016/10/09 20:05:10 claudio Exp $	*/
 /*	$NetBSD: if.c,v 1.35 1996/05/07 05:26:04 thorpej Exp $	*/
 
 /*
@@ -93,6 +93,7 @@
 #include <net/if_dl.h>
 #include <net/if_types.h>
 #include <net/route.h>
+#include <net/radix.h>	/* for rn_refines */
 #include <net/netisr.h>
 
 #include <netinet/in.h>
@@ -128,10 +129,6 @@
 
 #if NPF > 0
 #include <net/pfvar.h>
-#endif
-
-#if NSWITCH > 0
-#include <net/if_switch.h>
 #endif
 
 void	if_attachsetup(struct ifnet *);
@@ -894,11 +891,6 @@ if_deactivate(struct ifnet *ifp)
 	 * the hooks have to be added to the head!
 	 */
 	dohooks(ifp->if_detachhooks, HOOK_REMOVE | HOOK_FREE);
-
-#if NSWITCH > 0
-	if (ifp->if_switchport)
-		switch_port_detach(ifp);
-#endif
 
 #if NCARP > 0
 	/* Remove the interface from any carp group it is a part of.  */

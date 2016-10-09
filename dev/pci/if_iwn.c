@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_iwn.c,v 1.172 2016/09/05 08:18:18 tedu Exp $	*/
+/*	$OpenBSD: if_iwn.c,v 1.174 2016/10/08 14:44:36 stsp Exp $	*/
 
 /*-
  * Copyright (c) 2007-2010 Damien Bergamini <damien.bergamini@free.fr>
@@ -2131,23 +2131,27 @@ iwn_rx_done(struct iwn_softc *sc, struct iwn_rx_desc *desc,
 		tap->wr_dbm_antsignal = (int8_t)rssi;
 		tap->wr_dbm_antnoise = (int8_t)sc->noise;
 		tap->wr_tsft = stat->tstamp;
-		switch (stat->rate) {
-		/* CCK rates. */
-		case  10: tap->wr_rate =   2; break;
-		case  20: tap->wr_rate =   4; break;
-		case  55: tap->wr_rate =  11; break;
-		case 110: tap->wr_rate =  22; break;
-		/* OFDM rates. */
-		case 0xd: tap->wr_rate =  12; break;
-		case 0xf: tap->wr_rate =  18; break;
-		case 0x5: tap->wr_rate =  24; break;
-		case 0x7: tap->wr_rate =  36; break;
-		case 0x9: tap->wr_rate =  48; break;
-		case 0xb: tap->wr_rate =  72; break;
-		case 0x1: tap->wr_rate =  96; break;
-		case 0x3: tap->wr_rate = 108; break;
-		/* Unknown rate: should not happen. */
-		default:  tap->wr_rate =   0;
+		if (stat->rflags & IWN_RFLAG_MCS) {
+			tap->wr_rate = (0x80 | stat->rate); /* HT MCS index */
+		} else {
+			switch (stat->rate) {
+			/* CCK rates. */
+			case  10: tap->wr_rate =   2; break;
+			case  20: tap->wr_rate =   4; break;
+			case  55: tap->wr_rate =  11; break;
+			case 110: tap->wr_rate =  22; break;
+			/* OFDM rates. */
+			case 0xd: tap->wr_rate =  12; break;
+			case 0xf: tap->wr_rate =  18; break;
+			case 0x5: tap->wr_rate =  24; break;
+			case 0x7: tap->wr_rate =  36; break;
+			case 0x9: tap->wr_rate =  48; break;
+			case 0xb: tap->wr_rate =  72; break;
+			case 0x1: tap->wr_rate =  96; break;
+			case 0x3: tap->wr_rate = 108; break;
+			/* Unknown rate: should not happen. */
+			default:  tap->wr_rate =  0;
+			}
 		}
 
 		mb.m_data = (caddr_t)tap;
@@ -2595,6 +2599,7 @@ iwn_wakeup_intr(struct iwn_softc *sc)
 	}
 }
 
+#ifdef IWN_DEBUG
 /*
  * Dump the error log of the firmware when a firmware panic occurs.  Although
  * we can't debug the firmware because it is neither open source nor free, it
@@ -2605,9 +2610,6 @@ iwn_fatal_intr(struct iwn_softc *sc)
 {
 	struct iwn_fw_dump dump;
 	int i;
-
-	/* Force a complete recalibration on next init. */
-	sc->sc_flags &= ~IWN_FLAG_CALIB_DONE;
 
 	/* Check that the error log address is valid. */
 	if (sc->errptr < IWN_FW_DATA_BASE ||
@@ -2657,6 +2659,7 @@ iwn_fatal_intr(struct iwn_softc *sc)
 	printf("  rx ring: cur=%d\n", sc->rxq.cur);
 	printf("  802.11 state %d\n", sc->sc_ic.ic_state);
 }
+#endif
 
 int
 iwn_intr(void *arg)
@@ -2711,8 +2714,14 @@ iwn_intr(void *arg)
 	}
 	if (r1 & (IWN_INT_SW_ERR | IWN_INT_HW_ERR)) {
 		printf("%s: fatal firmware error\n", sc->sc_dev.dv_xname);
+
+		/* Force a complete recalibration on next init. */
+		sc->sc_flags &= ~IWN_FLAG_CALIB_DONE;
+
 		/* Dump firmware error log and stop. */
+#ifdef IWN_DEBUG
 		iwn_fatal_intr(sc);
+#endif
 		iwn_stop(ifp, 1);
 		task_add(systq, &sc->init_task);
 		return 1;
@@ -2876,8 +2885,7 @@ iwn_tx(struct iwn_softc *sc, struct mbuf *m, struct ieee80211_node *ni)
 		if ((ni->ni_flags & IEEE80211_NODE_HT) &&
 		    !IEEE80211_IS_MULTICAST(wh->i_addr1) &&
 		    type == IEEE80211_FC0_TYPE_DATA) {
-			/* XXX need a way to pass current MCS in 11n mode */
-			tap->wt_rate = 0;
+			tap->wt_rate = (0x80 | ni->ni_txmcs);
 		} else
 			tap->wt_rate = rinfo->rate;
 		tap->wt_hwqueue = ac;
