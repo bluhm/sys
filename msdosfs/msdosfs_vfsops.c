@@ -323,7 +323,7 @@ msdosfs_mountfs(struct vnode *devvp, struct mount *mp, struct proc *p,
 	/* Determine the number of DEV_BSIZE blocks in a MSDOSFS sector */
 	pmp->pm_BlkPerSec = pmp->pm_BytesPerSec / DEV_BSIZE;
 
-	if (!pmp->pm_BytesPerSec || !SecPerClust || pmp->pm_SecPerTrack > 64) {
+	if (!pmp->pm_BytesPerSec || !SecPerClust) {
 		error = EFTYPE;
 		goto error_exit;
 	}
