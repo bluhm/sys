@@ -253,7 +253,7 @@ taskq_next_work(struct taskq *tq, struct task *work, sleepfn tqsleep)
 			return (0);
 		}
 
-		tqsleep(tq, &tq->tq_mtx, PWAIT, "bored", 0);
+		tqsleep(tq, &tq->tq_mtx, PUSER, "bored", 0);
 	}
 
 	TAILQ_REMOVE(&tq->tq_worklist, next, t_entry);
