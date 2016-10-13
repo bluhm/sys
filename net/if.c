@@ -665,7 +665,9 @@ if_input_local(struct ifnet *ifp, struct mbuf *m, sa_family_t af)
 			bpf_mtap_af(if_bpf, af, m, BPF_DIRECTION_OUT);
 	}
 #endif
+	m_resethdr(m);
 	m->m_pkthdr.ph_ifidx = ifp->if_index;
+	m->m_pkthdr.ph_rtableid = ifp->if_rdomain;
 
 	ifp->if_opackets++;
 	ifp->if_obytes += m->m_pkthdr.len;
