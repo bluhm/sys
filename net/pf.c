@@ -2340,7 +2340,8 @@ pf_change_icmp_af(struct mbuf *m, int ipoff2, struct pf_pdesc *pd,
 	struct mbuf		*n = NULL;
 	struct ip		*ip4;
 	struct ip6_hdr		*ip6;
-	u_int			 hlen, ohlen, d;
+	u_int			 hlen, ohlen, dlen;
+	int			 d;
 
 	if (af == naf || (af != AF_INET && af != AF_INET6) ||
 	    (naf != AF_INET && naf != AF_INET6))
@@ -2417,7 +2418,7 @@ pf_change_icmp_af(struct mbuf *m, int ipoff2, struct pf_pdesc *pd,
 
 	if (pd->proto == IPPROTO_ICMPV6) {
 		/* fixup pseudo-header */
-		int dlen = pd->tot_len - pd->off;
+		dlen = pd->tot_len - pd->off;
 		pf_cksum_fixup(pd->pcksum,
 		    htons(dlen), htons(dlen + d), pd->proto);
 	}
