@@ -929,7 +929,7 @@ if_detach(struct ifnet *ifp)
 	ifp->if_watchdog = NULL;
 
 	/* Remove the input task */
-	task_del(systq, ifp->if_inputtask);
+	task_del(softnettq, ifp->if_inputtask);
 	mq_purge(&ifp->if_inputqueue);
 
 	/* Remove the watchdog timeout & task */
