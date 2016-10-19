@@ -5975,8 +5975,8 @@ pf_route(struct pf_pdesc *pd, struct pf_rule *r, struct pf_state *s)
 	if (ip->ip_off & htons(IP_DF)) {
 		ipstat_inc(ips_cantfrag);
 		if (r->rt != PF_DUPTO) {
-			icmp_error(m0, ICMP_UNREACH, ICMP_UNREACH_NEEDFRAG, 0,
-			    ifp->if_mtu);
+			pf_send_icmp(m0, ICMP_UNREACH, ICMP_UNREACH_NEEDFRAG,
+			    ifp->if_mtu, pd->af, r, pd->rdomain);
 			goto done;
 		} else
 			goto bad;
