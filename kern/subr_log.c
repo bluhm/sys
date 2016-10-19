@@ -315,12 +315,10 @@ logwakeup(void)
 	if (logsoftc.sc_state & LOG_ASYNC)
 		csignal(logsoftc.sc_pgid, SIGIO,
 		    logsoftc.sc_siguid, logsoftc.sc_sigeuid);
-	mtx_enter(&log_mtx);
 	if (logsoftc.sc_state & LOG_RDWAIT) {
 		wakeup(msgbufp);
 		logsoftc.sc_state &= ~LOG_RDWAIT;
 	}
-	mtx_leave(&log_mtx);
 }
 
 int
