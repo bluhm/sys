@@ -5888,12 +5888,10 @@ pf_route(struct mbuf **m, struct pf_pdesc *pd, struct pf_rule *r,
 	 */
 	if (ip->ip_off & htons(IP_DF)) {
 		ipstat.ips_cantfrag++;
-		if (r->rt != PF_DUPTO) {
-			icmp_error(m0, ICMP_UNREACH, ICMP_UNREACH_NEEDFRAG, 0,
-			    ifp->if_mtu);
-			goto done;
-		} else
-			goto bad;
+		if (r->rt != PF_DUPTO)
+			pf_send_icmp(m0, ICMP_UNREACH, ICMP_UNREACH_NEEDFRAG,
+			    ifp->if_mtu, pd->af, r, pd->rdomain);
+		goto bad;
 	}
 
 	m1 = m0;
