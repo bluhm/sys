@@ -6109,7 +6109,11 @@ pf_route6(struct pf_pdesc *pd, struct pf_rule *r, struct pf_state *s)
 	} else if ((u_long)m0->m_pkthdr.len <= ifp->if_mtu) {
 		ifp->if_output(ifp, m0, sin6tosa(dst), rt);
 	} else {
-		icmp6_error(m0, ICMP6_PACKET_TOO_BIG, 0, ifp->if_mtu);
+		ip6stat.ip6s_cantfrag++;
+		if (r->rt != PF_DUPTO)
+			pf_send_icmp(m0, ICMP6_PACKET_TOO_BIG, 0,
+			    ifp->if_mtu, pd->af, r, pd->rdomain);
+		goto bad;
 	}
 
 done:
