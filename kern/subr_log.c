@@ -79,6 +79,7 @@ int	msgbufmapped;			/* is the message buffer mapped */
 struct	msgbuf *msgbufp;		/* the mapped buffer, itself. */
 struct	msgbuf *consbufp;		/* console message buffer. */
 struct	file *syslogf;
+struct mutex log_mtx = MUTEX_INITIALIZER(IPL_HIGH);
 
 void filt_logrdetach(struct knote *kn);
 int filt_logread(struct knote *kn, long hint);
@@ -140,13 +141,11 @@ initconsbuf(void)
 void
 msgbuf_putchar(struct msgbuf *mbp, const char c)
 {
-	int s;
-
 	if (mbp->msg_magic != MSG_MAGIC)
 		/* Nothing we can do */
 		return;
 
-	s = splhigh();
+	mtx_enter(&log_mtx);
 	mbp->msg_bufc[mbp->msg_bufx++] = c;
 	mbp->msg_bufl = lmin(mbp->msg_bufl+1, mbp->msg_bufs);
 	if (mbp->msg_bufx < 0 || mbp->msg_bufx >= mbp->msg_bufs)
@@ -157,7 +156,7 @@ msgbuf_putchar(struct msgbuf *mbp, const char c)
 			mbp->msg_bufr = 0;
 		mbp->msg_bufd++;
 	}
-	splx(s);
+	mtx_leave(&log_mtx);
 }
 
 int
@@ -186,25 +185,28 @@ logread(dev_t dev, struct uio *uio, int flag)
 {
 	struct msgbuf *mbp = msgbufp;
 	size_t l;
-	int s, error = 0;
+	int error = 0;
 
-	s = splhigh();
+	mtx_enter(&log_mtx);
 	while (mbp->msg_bufr == mbp->msg_bufx) {
 		if (flag & IO_NDELAY) {
-			error = EWOULDBLOCK;
-			goto out;
+			mtx_leave(&log_mtx);
+			return (EWOULDBLOCK);
 		}
 		logsoftc.sc_state |= LOG_RDWAIT;
-		error = tsleep(mbp, LOG_RDPRI | PCATCH,
+		error = msleep(mbp, &log_mtx, LOG_RDPRI | PCATCH,
 			       "klog", 0);
-		if (error)
-			goto out;
+		if (error) {
+			mtx_leave(&log_mtx);
+			return (error);
+		}
 	}
 	logsoftc.sc_state &= ~LOG_RDWAIT;
 
 	if (mbp->msg_bufd > 0) {
 		char buf[64];
 
+		mtx_leave(&log_mtx);
 		l = snprintf(buf, sizeof(buf),
 		    "<%d>klog: dropped %ld byte%s, message buffer full\n",
 		    LOG_KERN|LOG_WARNING, mbp->msg_bufd,
@@ -212,6 +214,7 @@ logread(dev_t dev, struct uio *uio, int flag)
 		error = uiomove(buf, ulmin(l, sizeof(buf) - 1), uio);
 		if (error)
 			goto out;
+		mtx_enter(&log_mtx);
 		mbp->msg_bufd = 0;
 	}
 
@@ -223,31 +226,33 @@ logread(dev_t dev, struct uio *uio, int flag)
 		l = ulmin(l, uio->uio_resid);
 		if (l == 0)
 			break;
+		mtx_leave(&log_mtx);
 		error = uiomove(&mbp->msg_bufc[mbp->msg_bufr], l, uio);
 		if (error)
-			break;
+			goto out;
+		mtx_enter(&log_mtx);
 		mbp->msg_bufr += l;
 		if (mbp->msg_bufr < 0 || mbp->msg_bufr >= mbp->msg_bufs)
 			mbp->msg_bufr = 0;
 	}
- out:
-	splx(s);
+	mtx_leave(&log_mtx);
+out:
 	return (error);
 }
 
 int
 logpoll(dev_t dev, int events, struct proc *p)
 {
-	int s, revents = 0;
+	int revents = 0;
 
-	s = splhigh();
+	mtx_enter(&log_mtx);
 	if (events & (POLLIN | POLLRDNORM)) {
 		if (msgbufp->msg_bufr != msgbufp->msg_bufx)
 			revents |= events & (POLLIN | POLLRDNORM);
 		else
 			selrecord(p, &logsoftc.sc_selp);
 	}
-	splx(s);
+	mtx_leave(&log_mtx);
 	return (revents);
 }
 
@@ -289,12 +294,12 @@ int
 filt_logread(struct knote *kn, long hint)
 {
 	struct  msgbuf *p = (struct  msgbuf *)kn->kn_hook;
-	int s, event = 0;
+	int event = 0;
 
-	s = splhigh();
+	mtx_enter(&log_mtx);
 	kn->kn_data = (int)(p->msg_bufx - p->msg_bufr);
 	event = (p->msg_bufx != p->msg_bufr);
-	splx(s);
+	mtx_leave(&log_mtx);
 	return (event);
 }
 
@@ -307,10 +312,12 @@ logwakeup(void)
 	if (logsoftc.sc_state & LOG_ASYNC)
 		csignal(logsoftc.sc_pgid, SIGIO,
 		    logsoftc.sc_siguid, logsoftc.sc_sigeuid);
+	mtx_enter(&log_mtx);
 	if (logsoftc.sc_state & LOG_RDWAIT) {
 		wakeup(msgbufp);
 		logsoftc.sc_state &= ~LOG_RDWAIT;
 	}
+	mtx_leave(&log_mtx);
 }
 
 int
