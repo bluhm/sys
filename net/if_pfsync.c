@@ -1732,6 +1732,7 @@ void
 pfsync_undefer(struct pfsync_deferral *pd, int drop)
 {
 	struct pfsync_softc *sc = pfsyncif;
+	struct pf_pdesc pdesc;
 
 	splsoftassert(IPL_SOFTNET);
 
@@ -1743,17 +1744,18 @@ pfsync_undefer(struct pfsync_deferral *pd, int drop)
 		m_freem(pd->pd_m);
 	else {
 		if (pd->pd_st->rule.ptr->rt == PF_ROUTETO) {
+			memset(&pdesc, 0, sizeof(pdesc));
+			pdesc.dir = pd->pd_st->direction;
+			pdesc.kif = pd->pd_st->rt_kif;
 			switch (pd->pd_st->key[PF_SK_WIRE]->af) {
 			case AF_INET:
-				pf_route(&pd->pd_m, pd->pd_st->rule.ptr,
-				    pd->pd_st->direction,
-				    pd->pd_st->rt_kif->pfik_ifp, pd->pd_st);
+				pf_route(&pd->pd_m, &pdesc,
+				    pd->pd_st->rule.ptr, pd->pd_st);
 				break;
 #ifdef INET6
 			case AF_INET6:
-				pf_route6(&pd->pd_m, pd->pd_st->rule.ptr,
-				    pd->pd_st->direction,
-				    pd->pd_st->rt_kif->pfik_ifp, pd->pd_st);
+				pf_route6(&pd->pd_m, &pdesc,
+				    pd->pd_st->rule.ptr, pd->pd_st);
 				break;
 #endif /* INET6 */
 			}
