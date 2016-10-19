@@ -206,11 +206,11 @@ logread(dev_t dev, struct uio *uio, int flag)
 	if (mbp->msg_bufd > 0) {
 		char buf[64];
 
-		mtx_leave(&log_mtx);
 		l = snprintf(buf, sizeof(buf),
 		    "<%d>klog: dropped %ld byte%s, message buffer full\n",
 		    LOG_KERN|LOG_WARNING, mbp->msg_bufd,
                     mbp->msg_bufd == 1 ? "" : "s");
+		mtx_leave(&log_mtx);
 		error = uiomove(buf, ulmin(l, sizeof(buf) - 1), uio);
 		if (error)
 			return (error);
@@ -219,6 +219,8 @@ logread(dev_t dev, struct uio *uio, int flag)
 	}
 
 	while (uio->uio_resid > 0) {
+		char *buf;
+
 		if (mbp->msg_bufx >= mbp->msg_bufr)
 			l = mbp->msg_bufx - mbp->msg_bufr;
 		else
@@ -226,8 +228,9 @@ logread(dev_t dev, struct uio *uio, int flag)
 		l = ulmin(l, uio->uio_resid);
 		if (l == 0)
 			break;
+		buf = &mbp->msg_bufc[mbp->msg_bufr];
 		mtx_leave(&log_mtx);
-		error = uiomove(&mbp->msg_bufc[mbp->msg_bufr], l, uio);
+		error = uiomove(buf, l, uio);
 		if (error)
 			return (error);
 		mtx_enter(&log_mtx);
