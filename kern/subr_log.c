@@ -213,7 +213,7 @@ logread(dev_t dev, struct uio *uio, int flag)
                     mbp->msg_bufd == 1 ? "" : "s");
 		error = uiomove(buf, ulmin(l, sizeof(buf) - 1), uio);
 		if (error)
-			goto out;
+			return (error);
 		mtx_enter(&log_mtx);
 		mbp->msg_bufd = 0;
 	}
@@ -229,14 +229,14 @@ logread(dev_t dev, struct uio *uio, int flag)
 		mtx_leave(&log_mtx);
 		error = uiomove(&mbp->msg_bufc[mbp->msg_bufr], l, uio);
 		if (error)
-			goto out;
+			return (error);
 		mtx_enter(&log_mtx);
 		mbp->msg_bufr += l;
 		if (mbp->msg_bufr < 0 || mbp->msg_bufr >= mbp->msg_bufs)
 			mbp->msg_bufr = 0;
 	}
 	mtx_leave(&log_mtx);
-out:
+
 	return (error);
 }
 
