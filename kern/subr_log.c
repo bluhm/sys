@@ -326,17 +326,17 @@ logioctl(dev_t dev, u_long com, caddr_t data, int flag, struct proc *p)
 {
 	struct file *fp;
 	long l;
-	int error, s;
+	int error;
 
 	switch (com) {
 
 	/* return number of characters immediately available */
 	case FIONREAD:
-		s = splhigh();
+		mtx_enter(&log_mtx);
 		l = msgbufp->msg_bufx - msgbufp->msg_bufr;
-		splx(s);
 		if (l < 0)
 			l += msgbufp->msg_bufs;
+		mtx_leave(&log_mtx);
 		*(int *)data = l;
 		break;
 
