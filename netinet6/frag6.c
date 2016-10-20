@@ -208,6 +208,12 @@ frag6_input(struct mbuf **mp, int *offp, int proto)
 		return ip6f->ip6f_nxt;
 	}
 
+	/* Ignore empty non atomic fragment, do not classify as overlapping. */
+	if (ntohs(ip6->ip6_plen) <= offset) {
+		m_freem(m);
+		return IPPROTO_DONE;
+	}
+
 	IP6Q_LOCK();
 
 	/*
