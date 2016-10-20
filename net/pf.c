@@ -4682,6 +4682,7 @@ pf_test_state(struct pf_pdesc *pd, struct pf_state **state, u_short *reason)
 				pf_remove_state(*state);
 				*state = NULL;
 				pd->m->m_pkthdr.pf.inp = inp;
+				return (PF_DROP);
 			} else if (dst->state >= TCPS_ESTABLISHED &&
 			    src->state >= TCPS_ESTABLISHED) {
                                 /*
@@ -4693,8 +4694,8 @@ pf_test_state(struct pf_pdesc *pd, struct pf_state **state, u_short *reason)
 				 * to get in sync again.
                                  */
                                 pf_send_challenge_ack(pd, *state, src, dst);
+				return (PF_DROP);
 			}
-			return (PF_DROP);
 		}
 
 		if ((*state)->state_flags & PFSTATE_SLOPPY) {
