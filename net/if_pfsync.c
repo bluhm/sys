@@ -61,9 +61,13 @@
 #include <net/netisr.h>
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
+#include <netinet/ip.h>
+#include <netinet/ip_icmp.h>
+#include <netinet/icmp6.h>
 #include <netinet/tcp.h>
 #include <netinet/tcp_seq.h>
 #include <netinet/tcp_fsm.h>
+#include <netinet/udp.h>
 
 #include <netinet/in_var.h>
 #include <netinet/ip.h>
@@ -1733,6 +1737,16 @@ pfsync_undefer(struct pfsync_deferral *pd, int drop)
 {
 	struct pfsync_softc *sc = pfsyncif;
 	struct pf_pdesc pdesc;
+	union pf_headers {
+		struct tcphdr           tcp;
+		struct udphdr           udp;
+		struct icmp             icmp;
+#ifdef INET6
+		struct icmp6_hdr        icmp6;
+		struct mld_hdr          mld;
+		struct nd_neighbor_solicit nd_ns;
+#endif /* INET6 */
+	} pdhdrs;
 
 	splsoftassert(IPL_SOFTNET);
 
@@ -1744,9 +1758,13 @@ pfsync_undefer(struct pfsync_deferral *pd, int drop)
 		m_freem(pd->pd_m);
 	else {
 		if (pd->pd_st->rule.ptr->rt == PF_ROUTETO) {
-			memset(&pdesc, 0, sizeof(pdesc));
-			pdesc.dir = pd->pd_st->direction;
-			pdesc.kif = pd->pd_st->rt_kif;
+			if (pf_setup_pdesc(&pdesc, &pdhdrs,
+			    pd->pd_st->key[PF_SK_WIRE]->af,
+			    pd->pd_st->direction, pd->pd_st->rt_kif,
+			    pd->pd_m, NULL) != PF_PASS) {
+				m_freem(pd->pd_m);
+				goto out;
+			}
 			switch (pd->pd_st->key[PF_SK_WIRE]->af) {
 			case AF_INET:
 				pf_route(&pd->pd_m, &pdesc,
@@ -1774,7 +1792,7 @@ pfsync_undefer(struct pfsync_deferral *pd, int drop)
 			}
 		}
 	}
-
+ out:
 	pool_put(&sc->sc_pool, pd);
 }
 
