@@ -59,6 +59,10 @@
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
 
+#ifdef DDB
+#include <ddb/db_var.h>
+#endif
+
 #include <dev/cons.h>
 
 #define LOG_RDPRI	(PZERO + 1)
@@ -141,11 +145,23 @@ initconsbuf(void)
 void
 msgbuf_putchar(struct msgbuf *mbp, const char c)
 {
+	int s, use_mtx = 1;
+
 	if (mbp->msg_magic != MSG_MAGIC)
 		/* Nothing we can do */
 		return;
 
-	mtx_enter(&log_mtx);
+	if (panicstr)
+		use_mtx = 0;
+#ifdef DDB
+	if (db_is_active)
+		use_mtx = 0;
+#endif
+	if (use_mtx)
+		mtx_enter(&log_mtx);
+	else
+		s = splhigh();
+
 	mbp->msg_bufc[mbp->msg_bufx++] = c;
 	mbp->msg_bufl = lmin(mbp->msg_bufl+1, mbp->msg_bufs);
 	if (mbp->msg_bufx < 0 || mbp->msg_bufx >= mbp->msg_bufs)
@@ -156,7 +172,11 @@ msgbuf_putchar(struct msgbuf *mbp, const char c)
 			mbp->msg_bufr = 0;
 		mbp->msg_bufd++;
 	}
-	mtx_leave(&log_mtx);
+
+	if (use_mtx)
+		mtx_leave(&log_mtx);
+	else
+		splx(s);
 }
 
 int
