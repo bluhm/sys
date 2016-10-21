@@ -91,6 +91,7 @@
 
 #define PF_DEBUGNAME	"pfsync: "
 #include <net/pfvar.h>
+#include <net/pfhdr.h>
 #include <netinet/ip_ipsp.h>
 #include <net/if_pfsync.h>
 
@@ -1737,16 +1738,7 @@ pfsync_undefer(struct pfsync_deferral *pd, int drop)
 {
 	struct pfsync_softc *sc = pfsyncif;
 	struct pf_pdesc pdesc;
-	union pf_headers {
-		struct tcphdr           tcp;
-		struct udphdr           udp;
-		struct icmp             icmp;
-#ifdef INET6
-		struct icmp6_hdr        icmp6;
-		struct mld_hdr          mld;
-		struct nd_neighbor_solicit nd_ns;
-#endif /* INET6 */
-	} pdhdrs;
+	union pf_headers pdhdrs;
 
 	splsoftassert(IPL_SOFTNET);
 
