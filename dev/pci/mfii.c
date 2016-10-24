@@ -1,4 +1,4 @@
-/* $OpenBSD: mfii.c,v 1.25 2015/03/14 03:38:48 jsg Exp $ */
+/* $OpenBSD: mfii.c,v 1.28 2016/10/24 05:27:52 yasuoka Exp $ */
 
 /*
  * Copyright (c) 2012 David Gwynne <dlg@openbsd.org>

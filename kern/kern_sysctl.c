@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_sysctl.c,v 1.316 2016/10/08 21:31:56 tedu Exp $	*/
+/*	$OpenBSD: kern_sysctl.c,v 1.318 2016/10/24 04:38:44 dlg Exp $	*/
 /*	$NetBSD: kern_sysctl.c,v 1.17 1996/05/20 17:49:05 mrg Exp $	*/
 
 /*-
@@ -62,6 +62,7 @@
 #include <sys/namei.h>
 #include <sys/exec.h>
 #include <sys/mbuf.h>
+#include <sys/percpu.h>
 #include <sys/sensors.h>
 #include <sys/pipe.h>
 #include <sys/eventvar.h>
@@ -390,9 +391,24 @@ kern_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 	case KERN_FILE:
 		return (sysctl_file(name + 1, namelen - 1, oldp, oldlenp, p));
 #endif
-	case KERN_MBSTAT:
-		return (sysctl_rdstruct(oldp, oldlenp, newp, &mbstat,
-		    sizeof(mbstat)));
+	case KERN_MBSTAT: {
+		extern struct cpumem *mbstat;
+		uint64_t counters[MBSTAT_COUNT];
+		struct mbstat mbs;
+		unsigned int i;
+
+		memset(&mbs, 0, sizeof(mbs));
+		counters_read(mbstat, counters, MBSTAT_COUNT);
+		for (i = 0; i < MBSTAT_TYPES; i++)
+			mbs.m_mtypes[i] = counters[i];
+
+		mbs.m_drops = counters[MBSTAT_DROPS];
+		mbs.m_wait = counters[MBSTAT_WAIT];
+		mbs.m_drain = counters[MBSTAT_DRAIN];
+
+		return (sysctl_rdstruct(oldp, oldlenp, newp,
+		    &mbs, sizeof(mbs)));
+	}
 #if defined(GPROF) || defined(DDBPROF)
 	case KERN_PROF:
 		return (sysctl_doprof(name + 1, namelen - 1, oldp, oldlenp,
@@ -1559,6 +1575,7 @@ fill_kproc(struct process *pr, struct kinfo_proc *ki, struct proc *p,
 {
 	struct session *s = pr->ps_session;
 	struct tty *tp;
+	struct vmspace *vm = pr->ps_vmspace;
 	struct timespec ut, st;
 	int isthread;
 
@@ -1567,7 +1584,7 @@ fill_kproc(struct process *pr, struct kinfo_proc *ki, struct proc *p,
 		p = pr->ps_mainproc;		/* XXX */
 
 	FILL_KPROC(ki, strlcpy, p, pr, pr->ps_ucred, pr->ps_pgrp,
-	    p, pr, s, pr->ps_vmspace, pr->ps_limit, pr->ps_sigacts, isthread,
+	    p, pr, s, vm, pr->ps_limit, pr->ps_sigacts, isthread,
 	    show_pointers);
 
 	/* stuff that's too painful to generalize into the macros */
@@ -1589,8 +1606,8 @@ fill_kproc(struct process *pr, struct kinfo_proc *ki, struct proc *p,
 
 	/* fixups that can only be done in the kernel */
 	if ((pr->ps_flags & PS_ZOMBIE) == 0) {
-		if ((pr->ps_flags & PS_EMBRYO) == 0)
-			ki->p_vm_rssize = vm_resident_count(pr->ps_vmspace);
+		if ((pr->ps_flags & PS_EMBRYO) == 0 && vm != NULL)
+			ki->p_vm_rssize = vm_resident_count(vm);
 		calctsru(isthread ? &p->p_tu : &pr->ps_tu, &ut, &st, NULL);
 		ki->p_uutime_sec = ut.tv_sec;
 		ki->p_uutime_usec = ut.tv_nsec/1000;
