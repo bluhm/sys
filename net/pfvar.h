@@ -1585,7 +1585,6 @@ struct pfioc_iface {
 
 #ifdef _KERNEL
 struct pf_pdesc;
-struct tcphdr;
 
 RB_HEAD(pf_src_tree, pf_src_node);
 RB_PROTOTYPE(pf_src_tree, pf_src_node, entry, pf_src_compare);
@@ -1807,6 +1806,8 @@ extern struct pf_pool_limit	pf_pool_limits[PF_LIMIT_MAX];
 extern struct pf_anchor_global	pf_anchors;
 extern struct pf_anchor		pf_main_anchor;
 #define pf_main_ruleset		pf_main_anchor.ruleset
+
+struct tcphdr;
 
 /* these ruleset functions can be linked into userland programs (pfctl) */
 void			 pf_init_ruleset(struct pf_ruleset *);
