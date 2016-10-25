@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_vxlan.c,v 1.50 2016/10/14 10:25:02 mikeb Exp $	*/
+/*	$OpenBSD: if_vxlan.c,v 1.51 2016/10/25 16:31:08 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2013 Reyk Floeter <reyk@openbsd.org>
