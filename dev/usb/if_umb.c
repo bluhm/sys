@@ -717,9 +717,11 @@ umb_input(struct ifnet *ifp, struct mbuf *m, void *cookie)
 	case 4:
 		inq = &ipintrq;
 		break;
+#ifdef INET6
 	case 6:
 		inq = &ip6intrq;
 		break;
+#endif /* INET6 */
 	default:
 		ifp->if_ierrors++;
 		DPRINTFN(4, "%s: dropping packet with bad IP version (%d)\n",
