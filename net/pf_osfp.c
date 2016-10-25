@@ -27,15 +27,21 @@
 #include <sys/mbuf.h>
 #include <sys/syslog.h>
 
+#include <net/if.h>
+
 #include <netinet/in.h>
 #include <netinet/ip.h>
+#include <netinet/ip_icmp.h>
 #include <netinet/tcp.h>
+#include <netinet/udp.h>
 
-#include <net/if.h>
-#include <net/pfvar.h>
-
+#ifdef INET6
 #include <netinet/ip6.h>
+#include <netinet/icmp6.h>
+#endif /* INET6 */
 
+#include <net/pfvar.h>
+#include <net/pf_pdesc.h>
 
 #ifdef _KERNEL
 typedef struct pool pool_t;
