@@ -35,6 +35,17 @@
 #ifndef _NET_PF_PDESC_H_
 #define _NET_PF_PDESC_H_
 
+union pf_headers {
+	struct tcphdr           tcp;
+	struct udphdr           udp;
+	struct icmp             icmp;
+#ifdef INET6
+	struct icmp6_hdr        icmp6;
+	struct mld_hdr          mld;
+	struct nd_neighbor_solicit nd_ns;
+#endif /* INET6 */
+};
+
 struct pf_pdesc {
 	struct {
 		int	 done;
