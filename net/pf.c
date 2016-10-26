@@ -5912,7 +5912,7 @@ pf_route(struct pf_pdesc *pd, struct pf_rule *r, struct pf_state *s)
 	dst->sin_addr = ip->ip_dst;
 	rtableid = m0->m_pkthdr.ph_rtableid;
 
-	if (dir == PF_IN) {
+	if (pd->dir == PF_IN) {
 		if (ip->ip_ttl <= IPTTLDEC) {
 			if (r->rt != PF_DUPTO) {
 				icmp_error(m0, ICMP_TIMXCEED,
@@ -6065,7 +6065,7 @@ pf_route6(struct pf_pdesc *pd, struct pf_rule *r, struct pf_state *s)
 	dst->sin6_addr = ip6->ip6_dst;
 	rtableid = m0->m_pkthdr.ph_rtableid;
 
-	if (dir == PF_IN) {
+	if (pd->dir == PF_IN) {
 		if (ip6->ip6_hlim <= IPV6_HLIMDEC) {
 			if (r->rt != PF_DUPTO) {
 				icmp6_error(m0, ICMP6_TIME_EXCEEDED,
