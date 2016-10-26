@@ -85,7 +85,7 @@
 #endif /* INET6 */
 
 #include <net/pfvar.h>
-#include <net/pf_pdesc.h>
+#include <net/pfvar_priv.h>
 
 #if NPFLOG > 0
 #include <net/if_pflog.h>

@@ -62,7 +62,7 @@
 #endif /* INET6 */
 
 #include <net/pfvar.h>
-#include <net/pf_pdesc.h>
+#include <net/pfvar_priv.h>
 
 struct pf_frent {
 	TAILQ_ENTRY(pf_frent) fr_next;

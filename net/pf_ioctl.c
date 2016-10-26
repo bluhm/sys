@@ -76,7 +76,7 @@
 #endif /* INET6 */
 
 #include <net/pfvar.h>
-#include <net/pf_pdesc.h>
+#include <net/pfvar_priv.h>
 
 #if NPFSYNC > 0
 #include <netinet/ip_ipsp.h>

@@ -62,7 +62,7 @@
 #endif /* INET6 */
 
 #include <net/pfvar.h>
-#include <net/pf_pdesc.h>
+#include <net/pfvar_priv.h>
 #include <net/if_pflog.h>
 
 #define PFLOGMTU	(32768 + MHLEN + MLEN)

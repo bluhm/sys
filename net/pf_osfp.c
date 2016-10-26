@@ -41,7 +41,7 @@
 #endif /* INET6 */
 
 #include <net/pfvar.h>
-#include <net/pf_pdesc.h>
+#include <net/pfvar_priv.h>
 
 #ifdef _KERNEL
 typedef struct pool pool_t;
