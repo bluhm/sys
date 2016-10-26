@@ -65,16 +65,13 @@
 #include <netinet/ip.h>
 #include <netinet/in_var.h>
 #include <netinet/ip_var.h>
+#include <netinet/ip_ipsp.h>
 #include <netinet/ip_icmp.h>
 #include <netinet/icmp6.h>
 #include <netinet/tcp.h>
 #include <netinet/tcp_seq.h>
 #include <netinet/tcp_fsm.h>
 #include <netinet/udp.h>
-
-#ifdef IPSEC
-#include <netinet/ip_ipsp.h>
-#endif /* IPSEC */
 
 #ifdef INET6
 #include <netinet6/in6_var.h>
