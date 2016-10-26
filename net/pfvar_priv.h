@@ -32,8 +32,8 @@
  *
  */
 
-#ifndef _NET_PF_PDESC_H_
-#define _NET_PF_PDESC_H_
+#ifndef _NET_PFVAR_PRIV_H_
+#define _NET_PFVAR_PRIV_H_
 
 union pf_headers {
 	struct tcphdr           tcp;
@@ -102,4 +102,4 @@ struct pf_pdesc {
 	u_int8_t	 pflog;		/* flags for packet logging */
 };
 
-#endif /* _NET_PF_PDESC_H_ */
+#endif /* _NET_PFVAR_PRIV_H_ */
