@@ -5859,14 +5859,17 @@ pf_route(struct mbuf **m, struct pf_rule *r, int dir, struct ifnet *oifp,
 
 		m0->m_pkthdr.pf.flags |= PF_TAG_GENERATED;
 	} else {
-		if (ip->ip_ttl <= IPTTLDEC) {
-			if (r->rt != PF_DUPTO) {
-				icmp_error(m0, ICMP_TIMXCEED,
-				    ICMP_TIMXCEED_INTRANS, 0, 0);
-				goto done;
+		if (dir == PF_IN) {
+			if (ip->ip_ttl <= IPTTLDEC) {
+				if (r->rt != PF_DUPTO) {
+					icmp_error(m0, ICMP_TIMXCEED,
+					    ICMP_TIMXCEED_INTRANS, 0, 0);
+					goto done;
+				} else
+					goto bad;
 			}
+			ip->ip_ttl -= IPTTLDEC;
 		}
-		ip->ip_ttl -= IPTTLDEC;
 		if (s == NULL) {
 			bzero(sns, sizeof(sns));
 			if (pf_map_addr(AF_INET, r,
@@ -6025,14 +6028,17 @@ pf_route6(struct mbuf **m, struct pf_rule *r, int dir, struct ifnet *oifp,
 		return;
 	}
 
-	if (ip6->ip6_hlim <= IPV6_HLIMDEC) {
-		if (r->rt != PF_DUPTO) {
-			icmp6_error(m0, ICMP6_TIME_EXCEEDED,
-			    ICMP6_TIME_EXCEED_TRANSIT, 0);
-			goto done;
+	if (dir == PF_IN) {
+		if (ip6->ip6_hlim <= IPV6_HLIMDEC) {
+			if (r->rt != PF_DUPTO) {
+				icmp6_error(m0, ICMP6_TIME_EXCEEDED,
+				    ICMP6_TIME_EXCEED_TRANSIT, 0);
+				goto done;
+			} else
+				goto bad;
 		}
+		ip6->ip6_hlim -= IPV6_HLIMDEC;
 	}
-	ip6->ip6_hlim -= IPV6_HLIMDEC;
 
 	if (s == NULL) {
 		bzero(sns, sizeof(sns));
