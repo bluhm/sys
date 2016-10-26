@@ -35,6 +35,8 @@
 #ifndef _NET_PFVAR_PRIV_H_
 #define _NET_PFVAR_PRIV_H_
 
+#ifdef _KERNEL
+
 union pf_headers {
 	struct tcphdr           tcp;
 	struct udphdr           udp;
@@ -101,5 +103,7 @@ struct pf_pdesc {
 	u_int8_t	 destchg;	/* flag set when destination changed */
 	u_int8_t	 pflog;		/* flags for packet logging */
 };
+
+#endif /* _KERNEL */
 
 #endif /* _NET_PFVAR_PRIV_H_ */
