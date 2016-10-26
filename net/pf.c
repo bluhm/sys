@@ -5912,6 +5912,14 @@ pf_route(struct pf_pdesc *pd, struct pf_rule *r, struct pf_state *s)
 	dst->sin_addr = ip->ip_dst;
 	rtableid = m0->m_pkthdr.ph_rtableid;
 
+	if (ip->ip_ttl <= IPTTLDEC) {
+		if (r->rt != PF_DUPTO) {
+			icmp_error(m0, ICMP_TIMXCEED,
+			    ICMP_TIMXCEED_INTRANS, 0, 0);
+			goto done;
+		}
+	}
+	ip->ip_ttl -= IPTTLDEC;
 	if (s == NULL) {
 		bzero(sns, sizeof(sns));
 		if (pf_map_addr(AF_INET, r,
@@ -6053,6 +6061,15 @@ pf_route6(struct pf_pdesc *pd, struct pf_rule *r, struct pf_state *s)
 	dst->sin6_len = sizeof(*dst);
 	dst->sin6_addr = ip6->ip6_dst;
 	rtableid = m0->m_pkthdr.ph_rtableid;
+
+	if (ip6->ip6_hlim <= IPV6_HLIMDEC) {
+		if (r->rt != PF_DUPTO) {
+			icmp6_error(m0, ICMP6_TIME_EXCEEDED,
+			    ICMP6_TIME_EXCEED_TRANSIT, 0);
+			goto done;
+		}
+	}
+	ip6->ip6_hlim -= IPV6_HLIMDEC;
 
 	if (s == NULL) {
 		bzero(sns, sizeof(sns));
