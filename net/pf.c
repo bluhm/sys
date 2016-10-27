@@ -2196,6 +2196,7 @@ pf_translate_a(struct pf_pdesc *pd, struct pf_addr *a, struct pf_addr *an)
 }
 
 #if INET6
+/* pf_translate_af() may change pd->m, adjust local variables after calling */
 int
 pf_translate_af(struct pf_pdesc *pd)
 {
