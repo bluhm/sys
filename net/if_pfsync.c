@@ -1754,12 +1754,12 @@ pfsync_undefer(struct pfsync_deferral *pd, int drop)
 			}
 			switch (pd->pd_st->key[PF_SK_WIRE]->af) {
 			case AF_INET:
-				pf_route(&pd->pd_m, &pdesc,
+				pf_route(&pdesc,
 				    pd->pd_st->rule.ptr, pd->pd_st);
 				break;
 #ifdef INET6
 			case AF_INET6:
-				pf_route6(&pd->pd_m, &pdesc,
+				pf_route6(&pdesc,
 				    pd->pd_st->rule.ptr, pd->pd_st);
 				break;
 #endif /* INET6 */
