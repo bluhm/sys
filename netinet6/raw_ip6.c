@@ -1,4 +1,4 @@
-/*	$OpenBSD: raw_ip6.c,v 1.96 2016/09/19 18:09:09 tedu Exp $	*/
+/*	$OpenBSD: raw_ip6.c,v 1.98 2016/10/25 19:40:57 florian Exp $	*/
 /*	$KAME: raw_ip6.c,v 1.69 2001/03/04 15:55:44 itojun Exp $	*/
 
 /*
@@ -640,7 +640,6 @@ rip6_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 	case PRU_BIND:
 	    {
 		struct sockaddr_in6 *addr = mtod(nam, struct sockaddr_in6 *);
-		struct ifaddr *ifa = NULL;
 
 		if (nam->m_len != sizeof(*addr)) {
 			error = EINVAL;
@@ -650,34 +649,16 @@ rip6_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 			error = EADDRNOTAVAIL;
 			break;
 		}
+
 		/*
-		 * we don't support mapped address here, it would confuse
-		 * users so reject it
+		 * Make sure to not enter in_pcblookup_local(), local ports
+		 * are non-sensical for raw sockets.
 		 */
-		if (IN6_IS_ADDR_V4MAPPED(&addr->sin6_addr)) {
-			error = EADDRNOTAVAIL;
+		addr->sin6_port = 0;
+
+		if ((error = in6_pcbaddrisavail(in6p, addr, 0, p)))
 			break;
-		}
-		/*
-		 * Currently, ifa_ifwithaddr tends to fail for a link-local
-		 * address, since it implicitly expects that the link ID
-		 * for the address is embedded in the sin6_addr part.
-		 * For now, we'd rather keep this "as is". We'll eventually fix
-		 * this in a more natural way.
-		 */
-		if (!IN6_IS_ADDR_UNSPECIFIED(&addr->sin6_addr) &&
-		    !(so->so_options & SO_BINDANY) &&
-		    (ifa = ifa_ifwithaddr(sin6tosa(addr),
-		    in6p->inp_rtableid)) == 0) {
-			error = EADDRNOTAVAIL;
-			break;
-		}
-		if (ifa && ifatoia6(ifa)->ia6_flags &
-		    (IN6_IFF_ANYCAST|IN6_IFF_TENTATIVE|IN6_IFF_DUPLICATED|
-		     IN6_IFF_DETACHED|IN6_IFF_DEPRECATED)) {
-			error = EADDRNOTAVAIL;
-			break;
-		}
+
 		in6p->inp_laddr6 = addr->sin6_addr;
 		break;
 	    }
