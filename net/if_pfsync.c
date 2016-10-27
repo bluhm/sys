@@ -1744,7 +1744,7 @@ pfsync_undefer(struct pfsync_deferral *pd, int drop)
 	if (drop)
 		m_freem(pd->pd_m);
 	else {
-		if (pd->pd_st->rule.ptr->rt == PF_ROUTETO) {
+		if (pd->pd_st->rule.ptr->rt) {
 			if (pf_setup_pdesc(&pdesc, &pdhdrs,
 			    pd->pd_st->key[PF_SK_WIRE]->af,
 			    pd->pd_st->direction, pd->pd_st->rt_kif,
@@ -1764,7 +1764,8 @@ pfsync_undefer(struct pfsync_deferral *pd, int drop)
 				break;
 #endif /* INET6 */
 			}
-		} else {
+		}
+		if (pd->pd_m) {
 			switch (pd->pd_st->key[PF_SK_WIRE]->af) {
 			case AF_INET:
 				ip_output(pd->pd_m, NULL, NULL, 0, NULL, NULL,

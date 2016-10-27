@@ -5828,50 +5828,34 @@ pf_route(struct mbuf **m, struct pf_pdesc *pd, struct pf_rule *r,
 	dst->sin_addr = ip->ip_dst;
 	rtableid = m0->m_pkthdr.ph_rtableid;
 
-	if (!r->rt) {
-		rt = rtalloc(sintosa(dst), RT_RESOLVE, rtableid);
-		if (rt == NULL) {
-			ipstat.ips_noroute++;
+	if (s == NULL) {
+		bzero(sns, sizeof(sns));
+		if (pf_map_addr(AF_INET, r,
+		    (struct pf_addr *)&ip->ip_src,
+		    &naddr, NULL, sns, &r->route, PF_SN_ROUTE)) {
+			DPFPRINTF(LOG_ERR,
+			    "pf_route: pf_map_addr() failed.");
 			goto bad;
 		}
 
-		ifp = if_get(rt->rt_ifidx);
-
-		if (rt->rt_flags & RTF_GATEWAY)
-			dst = satosin(rt->rt_gateway);
-
-		m0->m_pkthdr.pf.flags |= PF_TAG_GENERATED;
+		if (!PF_AZERO(&naddr, AF_INET))
+			dst->sin_addr.s_addr = naddr.v4.s_addr;
+		ifp = r->route.kif ?
+		    r->route.kif->pfik_ifp : NULL;
 	} else {
-		if (s == NULL) {
-			bzero(sns, sizeof(sns));
-			if (pf_map_addr(AF_INET, r,
-			    (struct pf_addr *)&ip->ip_src,
-			    &naddr, NULL, sns, &r->route, PF_SN_ROUTE)) {
-				DPFPRINTF(LOG_ERR,
-				    "pf_route: pf_map_addr() failed.");
-				goto bad;
-			}
-
-			if (!PF_AZERO(&naddr, AF_INET))
-				dst->sin_addr.s_addr = naddr.v4.s_addr;
-			ifp = r->route.kif ?
-			    r->route.kif->pfik_ifp : NULL;
-		} else {
-			if (!PF_AZERO(&s->rt_addr, AF_INET))
-				dst->sin_addr.s_addr =
-				    s->rt_addr.v4.s_addr;
-			ifp = s->rt_kif ? s->rt_kif->pfik_ifp : NULL;
-		}
-
-		rt = rtalloc(sintosa(dst), RT_RESOLVE, rtableid);
-		if (rt == NULL) {
-			ipstat.ips_noroute++;
-			goto bad;
-		}
+		if (!PF_AZERO(&s->rt_addr, AF_INET))
+			dst->sin_addr.s_addr =
+			    s->rt_addr.v4.s_addr;
+		ifp = s->rt_kif ? s->rt_kif->pfik_ifp : NULL;
 	}
 	if (ifp == NULL)
 		goto bad;
 
+	rt = rtalloc(sintosa(dst), RT_RESOLVE, rtableid);
+	if (rt == NULL) {
+		ipstat.ips_noroute++;
+		goto bad;
+	}
 
 	if (pd->kif->pfik_ifp != ifp) {
 		if (pf_test(AF_INET, PF_OUT, ifp, &m0) != PF_PASS)
@@ -5936,8 +5920,6 @@ pf_route(struct mbuf **m, struct pf_pdesc *pd, struct pf_rule *r,
 done:
 	if (r->rt != PF_DUPTO)
 		*m = NULL;
-	if (!r->rt)
-		if_put(ifp);
 	rtfree(rt);
 	return;
 
@@ -5992,12 +5974,6 @@ pf_route6(struct mbuf **m, struct pf_pdesc *pd, struct pf_rule *r,
 	dst->sin6_len = sizeof(*dst);
 	dst->sin6_addr = ip6->ip6_dst;
 	rtableid = m0->m_pkthdr.ph_rtableid;
-
-	if (!r->rt) {
-		m0->m_pkthdr.pf.flags |= PF_TAG_GENERATED;
-		ip6_output(m0, NULL, NULL, 0, NULL, NULL);
-		return;
-	}
 
 	if (s == NULL) {
 		bzero(sns, sizeof(sns));
@@ -6920,10 +6896,27 @@ done:
 			action = PF_DROP;
 			break;
 		}
-		if (pd.naf == AF_INET)
-			pf_route(&pd.m, &pd, r, s);
-		if (pd.naf == AF_INET6)
-			pf_route6(&pd.m, &pd, r, s);
+		if (r->rt) {
+                        switch (pd.naf) {
+                        case AF_INET:
+				pf_route(&pd.m, &pd, r, s);
+                                break;
+                        case AF_INET6:
+				pf_route6(&pd.m, &pd, r, s);
+                                break;
+                        }
+		}
+		if (pd.m) {
+			pd.m->m_pkthdr.pf.flags |= PF_TAG_GENERATED;
+                        switch (pd.naf) {
+                        case AF_INET:
+                                ip_output(pd.m, NULL, NULL, 0, NULL, NULL, 0);
+                                break;
+                        case AF_INET6:
+                                ip6_output(pd.m, NULL, NULL, 0, NULL, NULL);
+                                break;
+                        }
+		}
 		*m0 = NULL;
 		action = PF_PASS;
 		break;
