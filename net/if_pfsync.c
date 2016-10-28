@@ -1764,6 +1764,7 @@ pfsync_undefer(struct pfsync_deferral *pd, int drop)
 				break;
 #endif /* INET6 */
 			}
+			pd->pd_m = pdesc.m;
 		} else {
 			switch (pd->pd_st->key[PF_SK_WIRE]->af) {
 			case AF_INET:
