@@ -2196,7 +2196,7 @@ pf_translate_a(struct pf_pdesc *pd, struct pf_addr *a, struct pf_addr *an)
 }
 
 #if INET6
-/* pf_translate_af() may change pd->m, adjust local variables after calling */
+/* pf_translate_af() may change pd->m, adjust local copies after calling */
 int
 pf_translate_af(struct pf_pdesc *pd)
 {
@@ -5776,7 +5776,7 @@ pf_rtlabel_match(struct pf_addr *addr, sa_family_t af, struct pf_addr_wrap *aw,
 	return (ret);
 }
 
-/* pf_route() may change pd->m, adjust local variables after calling */
+/* pf_route() may change pd->m, adjust local copies after calling */
 void
 pf_route(struct pf_pdesc *pd, struct pf_rule *r, struct pf_state *s)
 {
@@ -5939,7 +5939,7 @@ bad:
 }
 
 #ifdef INET6
-/* pf_route6() may change pd->m, adjust local variables after calling */
+/* pf_route6() may change pd->m, adjust local copies after calling */
 void
 pf_route6(struct pf_pdesc *pd, struct pf_rule *r, struct pf_state *s)
 {
