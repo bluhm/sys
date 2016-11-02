@@ -6904,7 +6904,11 @@ done:
 			pd.m->m_pkthdr.pf.flags |= PF_TAG_GENERATED;
                         switch (pd.naf) {
                         case AF_INET:
-                                ip_output(pd.m, NULL, NULL, 0, NULL, NULL, 0);
+				if (pd.dir == PF_IN)
+					ip_forward(pd.m, ifp, NULL, 1);
+				else
+					ip_output(pd.m, NULL, NULL, 0, NULL,
+					    NULL, 0);
                                 break;
                         case AF_INET6:
                                 ip6_output(pd.m, NULL, NULL, 0, NULL, NULL);
