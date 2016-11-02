@@ -6913,7 +6913,11 @@ done:
 					    NULL, 0);
 				break;
 			case AF_INET6:
-				ip6_output(pd.m, NULL, NULL, 0, NULL, NULL);
+				if (pd.dir == PF_IN)
+					ip6_forward(pd.m, NULL, 1);
+				else
+					ip6_output(pd.m, NULL, NULL, 0, NULL,
+					    NULL);
 				break;
 			}
 			pd.m = NULL;
