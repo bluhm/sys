@@ -129,7 +129,6 @@ static struct mbuf_queue	ipsend_mq;
 void	ip_ours(struct mbuf *);
 int	ip_dooptions(struct mbuf *, struct ifnet *);
 int	in_ouraddr(struct mbuf *, struct ifnet *, struct rtentry **);
-void	ip_forward(struct mbuf *, struct ifnet *, struct rtentry *, int);
 #ifdef IPSEC
 int	ip_input_ipsec_fwd_check(struct mbuf *, int);
 int	ip_input_ipsec_ours_check(struct mbuf *, int);
