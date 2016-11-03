@@ -62,6 +62,7 @@
 #include <net/route.h>
 
 #include <netinet/in.h>
+#include <netinet/in_var.h>
 #include <netinet/ip.h>
 #include <netinet/in_pcb.h>
 #include <netinet/ip_var.h>
@@ -5935,6 +5936,15 @@ pf_route(struct pf_pdesc *pd, struct pf_rule *r, struct pf_state *s)
 	if (ifp == NULL)
 		goto bad;
 
+	rt = rtalloc(sintosa(dst), RT_RESOLVE, rtableid);
+	if (!rtisvalid(rt)) {
+		ipstat_inc(ips_noroute);
+		goto bad;
+	}
+	/* A locally generated packet may have invalid source address. */
+	if ((ntohl(ip->ip_src.s_addr) >> IN_CLASSA_NSHIFT) == IN_LOOPBACKNET)
+		ip->ip_src = ifatoia(rt->rt_ifa)->ia_addr.sin_addr;
+
 	if (pd->dir == PF_IN) {
 		if (ip->ip_ttl <= IPTTLDEC) {
 			if (r->rt != PF_DUPTO)
@@ -5960,12 +5970,6 @@ pf_route(struct pf_pdesc *pd, struct pf_rule *r, struct pf_state *s)
 	}
 
 	in_proto_cksum_out(m0, ifp);
-
-	rt = rtalloc(sintosa(dst), RT_RESOLVE, rtableid);
-	if (!rtisvalid(rt)) {
-		ipstat_inc(ips_noroute);
-		goto bad;
-	}
 
 	if (ntohs(ip->ip_len) <= ifp->if_mtu) {
 		ip->ip_sum = 0;
