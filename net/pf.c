@@ -5994,6 +5994,12 @@ pf_route6(struct mbuf **m, struct pf_pdesc *pd, struct pf_rule *r,
 	if (ifp == NULL)
 		goto bad;
 
+	rt = rtalloc(sin6tosa(dst), RT_RESOLVE, rtableid);
+	if (rt == NULL) {
+		ip6stat.ip6s_noroute++;
+		goto bad;
+	}
+
 	if (pd->kif->pfik_ifp != ifp) {
 		if (pf_test(AF_INET6, PF_OUT, ifp, &m0) != PF_PASS)
 			goto bad;
@@ -6018,13 +6024,7 @@ pf_route6(struct mbuf **m, struct pf_pdesc *pd, struct pf_rule *r,
 	if ((mtag = m_tag_find(m0, PACKET_TAG_PF_REASSEMBLED, NULL))) {
 		(void) pf_refragment6(&m0, mtag, dst, ifp);
 	} else if ((u_long)m0->m_pkthdr.len <= ifp->if_mtu) {
-		rt = rtalloc(sin6tosa(dst), RT_RESOLVE, rtableid);
-		if (rt == NULL) {
-			ip6stat.ip6s_noroute++;
-			goto bad;
-		}
 		ifp->if_output(ifp, m0, sin6tosa(dst), rt);
-		rtfree(rt);
 	} else {
 		icmp6_error(m0, ICMP6_PACKET_TOO_BIG, 0, ifp->if_mtu);
 	}
@@ -6032,6 +6032,7 @@ pf_route6(struct mbuf **m, struct pf_pdesc *pd, struct pf_rule *r,
 done:
 	if (r->rt != PF_DUPTO)
 		*m = NULL;
+	rtfree(rt);
 	return;
 
 bad:
