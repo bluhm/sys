@@ -78,6 +78,7 @@
 #include <netinet/ip_divert.h>
 
 #ifdef INET6
+#include <netinet6/in6_var.h>
 #include <netinet/ip6.h>
 #include <netinet6/ip6_var.h>
 #include <netinet/icmp6.h>
@@ -5999,6 +6000,9 @@ pf_route6(struct mbuf **m, struct pf_pdesc *pd, struct pf_rule *r,
 		ip6stat.ip6s_noroute++;
 		goto bad;
 	}
+	/* A locally generated packet may have invalid source address. */
+	if (IN6_IS_ADDR_LOOPBACK(&ip6->ip6_src))
+		ip6->ip6_src = ifatoia6(rt->rt_ifa)->ia_addr.sin6_addr;
 
 	if (pd->kif->pfik_ifp != ifp) {
 		if (pf_test(AF_INET6, PF_OUT, ifp, &m0) != PF_PASS)
