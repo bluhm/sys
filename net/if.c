@@ -806,7 +806,7 @@ if_input_process(void *xifidx)
 		goto out;
 
 	add_net_randomness(ml_len(&ml));
-	getnanotime(&now);
+	getnanouptime(&now);
 
 	s = splnet();
 	while ((m = ml_dequeue(&ml)) != NULL) {

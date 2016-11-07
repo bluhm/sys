@@ -225,7 +225,7 @@ ipintr(void)
 		if ((m->m_flags & M_PKTHDR) == 0)
 			panic("ipintr no HDR");
 #endif
-		getnanotime(&now);
+		getnanouptime(&now);
 		timespecadd(&m->m_pkthdr.ph_intime, &ipdelay, &takeout);
 		if (timespeccmp(&takeout, &now, >)) {
 			timespecsub(&takeout, &now, &sleeptime);
