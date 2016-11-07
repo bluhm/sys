@@ -212,6 +212,8 @@ void
 ipintr(void)
 {
 	struct mbuf *m;
+	struct timespec now, takeout, sleeptime;
+	static const struct timespec ipdelay = { 0, 100000000 };
 
 	/*
 	 * Get next datagram off input queue and get IP header
@@ -222,6 +224,12 @@ ipintr(void)
 		if ((m->m_flags & M_PKTHDR) == 0)
 			panic("ipintr no HDR");
 #endif
+		getnanotime(&now);
+		timespecadd(&m->m_pkthdr.ph_intime, &ipdelay, &takeout);
+		if (timespeccmp(&takeout, &now, >)) {
+			timespecsub(&takeout, &now, &sleeptime);
+			tsleep(&ipdelay, PSOCK, "latency", tstohz(&sleeptime));
+		}
 		ipv4_input(m);
 	}
 }
