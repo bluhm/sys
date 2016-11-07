@@ -214,6 +214,7 @@ ipintr(void)
 	struct mbuf *m;
 	struct timespec now, takeout, sleeptime;
 	static const struct timespec ipdelay = { 0, 100000000 };
+	int sleephz;
 
 	/*
 	 * Get next datagram off input queue and get IP header
@@ -228,7 +229,9 @@ ipintr(void)
 		timespecadd(&m->m_pkthdr.ph_intime, &ipdelay, &takeout);
 		if (timespeccmp(&takeout, &now, >)) {
 			timespecsub(&takeout, &now, &sleeptime);
-			tsleep(&ipdelay, PSOCK, "latency", tstohz(&sleeptime));
+			sleephz = tstohz(&sleeptime);
+			if (sleephz > 1)
+				tsleep(&ipdelay, PSOCK, "latency", sleephz);
 		}
 		ipv4_input(m);
 	}
