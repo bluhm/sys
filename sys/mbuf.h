@@ -131,6 +131,7 @@ struct	pkthdr {
 	u_int			 ph_ifidx;	/* rcv interface index */
 	u_int8_t		 ph_loopcnt;	/* mbuf is looping in kernel */
 	struct pkthdr_pf	 pf;
+	struct timespec		 ph_intime;	/* uptime inserted into niq */
 };
 
 /* description of external storage mapped into mbuf, valid if M_EXT set */
