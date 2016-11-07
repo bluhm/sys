@@ -794,6 +794,7 @@ if_input_process(void *xifidx)
 	struct ifnet *ifp;
 	struct ifih *ifih;
 	struct srp_ref sr;
+	struct timespec now;
 	int s;
 
 	ifp = if_get(ifidx);
@@ -805,9 +806,15 @@ if_input_process(void *xifidx)
 		goto out;
 
 	add_net_randomness(ml_len(&ml));
+	getnanotime(&now);
 
 	s = splnet();
 	while ((m = ml_dequeue(&ml)) != NULL) {
+#ifdef  DIAGNOSTIC
+		if ((m->m_flags & M_PKTHDR) == 0)
+			panic("ipintr no HDR");
+#endif
+		m->m_pkthdr.ph_intime = now;
 		/*
 		 * Pass this mbuf to all input handlers of its
 		 * interface until it is consumed.
