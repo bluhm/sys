@@ -1,4 +1,4 @@
-/*	$OpenBSD: pool.h,v 1.63 2016/09/15 02:00:16 dlg Exp $	*/
+/*	$OpenBSD: pool.h,v 1.67 2016/11/07 23:45:27 dlg Exp $	*/
 /*	$NetBSD: pool.h,v 1.27 2001/06/06 22:00:17 rafal Exp $	*/
 
 /*-
@@ -82,7 +82,11 @@ struct pool_allocator {
 	int pa_pagesz;
 };
 
-TAILQ_HEAD(pool_pagelist, pool_item_header);
+TAILQ_HEAD(pool_pagelist, pool_page_header);
+
+struct pool_cache_item;
+TAILQ_HEAD(pool_cache_lists, pool_cache_item);
+struct cpumem;
 
 struct pool {
 	struct mutex	pr_mtx;
@@ -94,7 +98,7 @@ struct pool {
 			pr_fullpages;	/* Full pages */
 	struct pool_pagelist
 			pr_partpages;	/* Partially-allocated pages */
-	struct pool_item_header	*
+	struct pool_page_header	*
 			pr_curpage;
 	unsigned int	pr_size;	/* Size of item */
 	unsigned int	pr_minitems;	/* minimum # of items to keep */
@@ -121,8 +125,18 @@ struct pool {
 
 	int		pr_ipl;
 
-	RBT_HEAD(phtree, pool_item_header)
+	RBT_HEAD(phtree, pool_page_header)
 			pr_phtree;
+
+	struct cpumem *	pr_cache;
+	unsigned long	pr_cache_magic[2];
+	struct mutex	pr_cache_mtx;
+	struct pool_cache_lists
+			pr_cache_lists;
+	u_int		pr_cache_nlist;
+	u_int		pr_cache_items;
+	u_int		pr_cache_contention;
+	int		pr_cache_nout;
 
 	u_int		pr_align;
 	u_int		pr_maxcolors;	/* Cache coloring */
@@ -175,6 +189,7 @@ struct pool_request {
 
 void		pool_init(struct pool *, size_t, u_int, int, int,
 		    const char *, struct pool_allocator *);
+void		pool_cache_init(struct pool *);
 void		pool_destroy(struct pool *);
 void		pool_setlowat(struct pool *, int);
 void		pool_sethiwat(struct pool *, int);

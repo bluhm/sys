@@ -1,4 +1,4 @@
-/*	$OpenBSD: subr_pool.c,v 1.198 2016/09/15 02:00:16 dlg Exp $	*/
+/*	$OpenBSD: subr_pool.c,v 1.203 2016/11/07 23:45:27 dlg Exp $	*/
 /*	$NetBSD: subr_pool.c,v 1.61 2001/09/26 07:14:56 chs Exp $	*/
 
 /*-
@@ -42,6 +42,7 @@
 #include <sys/sysctl.h>
 #include <sys/task.h>
 #include <sys/timeout.h>
+#include <sys/percpu.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -52,7 +53,7 @@
  * the pool item size. Each page is kept on one of three lists in the
  * pool structure: `pr_emptypages', `pr_fullpages' and `pr_partpages',
  * for empty, full and partially-full pages respectively. The individual
- * pool items are on a linked list headed by `ph_itemlist' in each page
+ * pool items are on a linked list headed by `ph_items' in each page
  * header. The memory for building the page list is either taken from
  * the allocated pages themselves (for small pool items) or taken from
  * an internal pool of page headers (`phpool').
@@ -74,27 +75,65 @@ struct rwlock pool_lock = RWLOCK_INITIALIZER("pools");
 /* Private pool for page header structures */
 struct pool phpool;
 
-struct pool_item_header {
-	/* Page headers */
-	TAILQ_ENTRY(pool_item_header)
-				ph_pagelist;	/* pool page list */
-	XSIMPLEQ_HEAD(,pool_item) ph_itemlist;	/* chunk list for this page */
-	RBT_ENTRY(pool_item_header)
-				ph_node;	/* Off-page page headers */
-	int			ph_nmissing;	/* # of chunks in use */
-	caddr_t			ph_page;	/* this page's address */
-	caddr_t			ph_colored;	/* page's colored address */
-	u_long			ph_magic;
-	int			ph_tick;
-};
-#define POOL_MAGICBIT (1 << 3) /* keep away from perturbed low bits */
-#define POOL_PHPOISON(ph) ISSET((ph)->ph_magic, POOL_MAGICBIT)
-
 struct pool_item {
 	u_long				pi_magic;
 	XSIMPLEQ_ENTRY(pool_item)	pi_list;
 };
 #define POOL_IMAGIC(ph, pi) ((u_long)(pi) ^ (ph)->ph_magic)
+
+struct pool_page_header {
+	/* Page headers */
+	TAILQ_ENTRY(pool_page_header)
+				ph_entry;	/* pool page list */
+	XSIMPLEQ_HEAD(, pool_item)
+				ph_items;	/* free items on the page */
+	RBT_ENTRY(pool_page_header)
+				ph_node;	/* off-page page headers */
+	unsigned int		ph_nmissing;	/* # of chunks in use */
+	caddr_t			ph_page;	/* this page's address */
+	caddr_t			ph_colored;	/* page's colored address */
+	unsigned long		ph_magic;
+	int			ph_tick;
+};
+#define POOL_MAGICBIT (1 << 3) /* keep away from perturbed low bits */
+#define POOL_PHPOISON(ph) ISSET((ph)->ph_magic, POOL_MAGICBIT)
+
+#ifdef MULTIPROCESSOR
+struct pool_cache_item {
+	struct pool_cache_item	*ci_next;	/* next item in list */
+	unsigned long		 ci_nitems;	/* number of items in list */
+	TAILQ_ENTRY(pool_cache_item)
+				 ci_nextl;	/* entry in list of lists */
+};
+
+/* we store whether the cached item is poisoned in the high bit of nitems */
+#define POOL_CACHE_ITEM_NITEMS_MASK	0x7ffffffUL
+#define POOL_CACHE_ITEM_NITEMS_POISON	0x8000000UL
+
+#define POOL_CACHE_ITEM_NITEMS(_ci)					\
+    ((_ci)->ci_nitems & POOL_CACHE_ITEM_NITEMS_MASK)
+
+#define POOL_CACHE_ITEM_POISONED(_ci)					\
+    ISSET((_ci)->ci_nitems, POOL_CACHE_ITEM_NITEMS_POISON)
+
+struct pool_cache {
+	struct pool_cache_item	*pc_actv;	/* active list of items */
+	unsigned long		 pc_nactv;	/* actv head nitems cache */
+	struct pool_cache_item	*pc_prev;	/* previous list of items */
+
+	uint64_t		 pc_gen;	/* generation number */
+	uint64_t		 pc_gets;
+	uint64_t		 pc_puts;
+	uint64_t		 pc_fails;
+
+	int			 pc_nout;
+};
+
+void	*pool_cache_get(struct pool *);
+void	 pool_cache_put(struct pool *, void *);
+void	 pool_cache_destroy(struct pool *);
+#endif
+void	 pool_cache_info(struct pool *, struct kinfo_pool *);
 
 #ifdef POOL_DEBUG
 int	pool_debug = 1;
@@ -104,15 +143,15 @@ int	pool_debug = 0;
 
 #define POOL_INPGHDR(pp) ((pp)->pr_phoffset != 0)
 
-struct pool_item_header *
+struct pool_page_header *
 	 pool_p_alloc(struct pool *, int, int *);
-void	 pool_p_insert(struct pool *, struct pool_item_header *);
-void	 pool_p_remove(struct pool *, struct pool_item_header *);
-void	 pool_p_free(struct pool *, struct pool_item_header *);
+void	 pool_p_insert(struct pool *, struct pool_page_header *);
+void	 pool_p_remove(struct pool *, struct pool_page_header *);
+void	 pool_p_free(struct pool *, struct pool_page_header *);
 
 void	 pool_update_curpage(struct pool *);
 void	*pool_do_get(struct pool *, int, int *);
-int	 pool_chk_page(struct pool *, struct pool_item_header *, int);
+int	 pool_chk_page(struct pool *, struct pool_page_header *, int);
 int	 pool_chk(struct pool *);
 void	 pool_get_done(void *, void *);
 void	 pool_runqueue(struct pool *, int);
@@ -165,11 +204,11 @@ struct task pool_gc_task = TASK_INITIALIZER(pool_gc_pages, NULL);
 int pool_wait_free = 1;
 int pool_wait_gc = 8;
 
-RBT_PROTOTYPE(phtree, pool_item_header, ph_node, phtree_compare);
+RBT_PROTOTYPE(phtree, pool_page_header, ph_node, phtree_compare);
 
 static inline int
-phtree_compare(const struct pool_item_header *a,
-    const struct pool_item_header *b)
+phtree_compare(const struct pool_page_header *a,
+    const struct pool_page_header *b)
 {
 	vaddr_t va = (vaddr_t)a->ph_page;
 	vaddr_t vb = (vaddr_t)b->ph_page;
@@ -183,22 +222,22 @@ phtree_compare(const struct pool_item_header *a,
 	return (0);
 }
 
-RBT_GENERATE(phtree, pool_item_header, ph_node, phtree_compare);
+RBT_GENERATE(phtree, pool_page_header, ph_node, phtree_compare);
 
 /*
  * Return the pool page header based on page address.
  */
-static inline struct pool_item_header *
+static inline struct pool_page_header *
 pr_find_pagehead(struct pool *pp, void *v)
 {
-	struct pool_item_header *ph, key;
+	struct pool_page_header *ph, key;
 
 	if (POOL_INPGHDR(pp)) {
 		caddr_t page;
 
 		page = (caddr_t)((vaddr_t)v & pp->pr_pgmask);
 
-		return ((struct pool_item_header *)(page + pp->pr_phoffset));
+		return ((struct pool_page_header *)(page + pp->pr_phoffset));
 	}
 
 	key.ph_page = v;
@@ -257,10 +296,10 @@ pool_init(struct pool *pp, size_t size, u_int align, int ipl, int flags,
 	 * go into an RB tree, so we can match a returned item with
 	 * its header based on the page address.
 	 */
-	if (pgsize - (size * items) > sizeof(struct pool_item_header)) {
-		off = pgsize - sizeof(struct pool_item_header);
-	} else if (sizeof(struct pool_item_header) * 2 >= size) {
-		off = pgsize - sizeof(struct pool_item_header);
+	if (pgsize - (size * items) > sizeof(struct pool_page_header)) {
+		off = pgsize - sizeof(struct pool_page_header);
+	} else if (sizeof(struct pool_page_header) * 2 >= size) {
+		off = pgsize - sizeof(struct pool_page_header);
 		items = off / size;
 	}
 
@@ -318,7 +357,7 @@ pool_init(struct pool *pp, size_t size, u_int align, int ipl, int flags,
 	TAILQ_INIT(&pp->pr_requests);
 
 	if (phpool.pr_size == 0) {
-		pool_init(&phpool, sizeof(struct pool_item_header), 0,
+		pool_init(&phpool, sizeof(struct pool_page_header), 0,
 		    IPL_HIGH, 0, "phpool", NULL);
 
 		/* make sure phpool wont "recurse" */
@@ -352,8 +391,13 @@ pool_init(struct pool *pp, size_t size, u_int align, int ipl, int flags,
 void
 pool_destroy(struct pool *pp)
 {
-	struct pool_item_header *ph;
+	struct pool_page_header *ph;
 	struct pool *prev, *iter;
+
+#ifdef MULTIPROCESSOR
+	if (pp->pr_cache != NULL)
+		pool_cache_destroy(pp);
+#endif
 
 #ifdef DIAGNOSTIC
 	if (pp->pr_nout != 0)
@@ -421,6 +465,14 @@ pool_get(struct pool *pp, int flags)
 	void *v = NULL;
 	int slowdown = 0;
 
+#ifdef MULTIPROCESSOR
+	if (pp->pr_cache != NULL) {
+		v = pool_cache_get(pp);
+		if (v != NULL)
+			goto good;
+	}
+#endif
+
 	KASSERT(flags & (PR_WAITOK | PR_NOWAIT));
 
 	mtx_enter(&pp->pr_mtx);
@@ -453,6 +505,9 @@ pool_get(struct pool *pp, int flags)
 		v = mem.v;
 	}
 
+#ifdef MULTIPROCESSOR
+good:
+#endif
 	if (ISSET(flags, PR_ZERO))
 		memset(v, 0, pp->pr_size);
 
@@ -537,7 +592,7 @@ void *
 pool_do_get(struct pool *pp, int flags, int *slowdown)
 {
 	struct pool_item *pi;
-	struct pool_item_header *ph;
+	struct pool_page_header *ph;
 
 	MUTEX_ASSERT_LOCKED(&pp->pr_mtx);
 
@@ -563,7 +618,7 @@ pool_do_get(struct pool *pp, int flags, int *slowdown)
 	}
 
 	ph = pp->pr_curpage;
-	pi = XSIMPLEQ_FIRST(&ph->ph_itemlist);
+	pi = XSIMPLEQ_FIRST(&ph->ph_items);
 	if (__predict_false(pi == NULL))
 		panic("%s: %s: page empty", __func__, pp->pr_wchan);
 
@@ -574,7 +629,7 @@ pool_do_get(struct pool *pp, int flags, int *slowdown)
 		    0, pi->pi_magic, POOL_IMAGIC(ph, pi));
 	}
 
-	XSIMPLEQ_REMOVE_HEAD(&ph->ph_itemlist, pi_list);
+	XSIMPLEQ_REMOVE_HEAD(&ph->ph_items, pi_list);
 
 #ifdef DIAGNOSTIC
 	if (pool_debug && POOL_PHPOISON(ph)) {
@@ -596,8 +651,8 @@ pool_do_get(struct pool *pp, int flags, int *slowdown)
 		 * This page was previously empty.  Move it to the list of
 		 * partially-full pages.  This page is already curpage.
 		 */
-		TAILQ_REMOVE(&pp->pr_emptypages, ph, ph_pagelist);
-		TAILQ_INSERT_TAIL(&pp->pr_partpages, ph, ph_pagelist);
+		TAILQ_REMOVE(&pp->pr_emptypages, ph, ph_entry);
+		TAILQ_INSERT_TAIL(&pp->pr_partpages, ph, ph_entry);
 
 		pp->pr_nidle--;
 	}
@@ -607,8 +662,8 @@ pool_do_get(struct pool *pp, int flags, int *slowdown)
 		 * This page is now full.  Move it to the full list
 		 * and select a new current page.
 		 */
-		TAILQ_REMOVE(&pp->pr_partpages, ph, ph_pagelist);
-		TAILQ_INSERT_TAIL(&pp->pr_fullpages, ph, ph_pagelist);
+		TAILQ_REMOVE(&pp->pr_partpages, ph, ph_entry);
+		TAILQ_INSERT_TAIL(&pp->pr_fullpages, ph, ph_entry);
 		pool_update_curpage(pp);
 	}
 
@@ -624,11 +679,18 @@ void
 pool_put(struct pool *pp, void *v)
 {
 	struct pool_item *pi = v;
-	struct pool_item_header *ph, *freeph = NULL;
+	struct pool_page_header *ph, *freeph = NULL;
 
 #ifdef DIAGNOSTIC
 	if (v == NULL)
 		panic("%s: NULL item", __func__);
+#endif
+
+#ifdef MULTIPROCESSOR
+	if (pp->pr_cache != NULL && TAILQ_EMPTY(&pp->pr_requests)) {
+		pool_cache_put(pp, v);
+		return;
+	}
 #endif
 
 	mtx_enter(&pp->pr_mtx);
@@ -640,7 +702,7 @@ pool_put(struct pool *pp, void *v)
 #ifdef DIAGNOSTIC
 	if (pool_debug) {
 		struct pool_item *qi;
-		XSIMPLEQ_FOREACH(qi, &ph->ph_itemlist, pi_list) {
+		XSIMPLEQ_FOREACH(qi, &ph->ph_items, pi_list) {
 			if (pi == qi) {
 				panic("%s: %s: double pool_put: %p", __func__,
 				    pp->pr_wchan, pi);
@@ -650,7 +712,7 @@ pool_put(struct pool *pp, void *v)
 #endif /* DIAGNOSTIC */
 
 	pi->pi_magic = POOL_IMAGIC(ph, pi);
-	XSIMPLEQ_INSERT_HEAD(&ph->ph_itemlist, pi, pi_list);
+	XSIMPLEQ_INSERT_HEAD(&ph->ph_items, pi, pi_list);
 #ifdef DIAGNOSTIC
 	if (POOL_PHPOISON(ph))
 		poison_mem(pi + 1, pp->pr_size - sizeof(*pi));
@@ -661,8 +723,8 @@ pool_put(struct pool *pp, void *v)
 		 * The page was previously completely full, move it to the
 		 * partially-full list.
 		 */
-		TAILQ_REMOVE(&pp->pr_fullpages, ph, ph_pagelist);
-		TAILQ_INSERT_TAIL(&pp->pr_partpages, ph, ph_pagelist);
+		TAILQ_REMOVE(&pp->pr_fullpages, ph, ph_entry);
+		TAILQ_INSERT_TAIL(&pp->pr_partpages, ph, ph_entry);
 	}
 
 	if (ph->ph_nmissing == 0) {
@@ -672,8 +734,8 @@ pool_put(struct pool *pp, void *v)
 		pp->pr_nidle++;
 
 		ph->ph_tick = ticks;
-		TAILQ_REMOVE(&pp->pr_partpages, ph, ph_pagelist);
-		TAILQ_INSERT_TAIL(&pp->pr_emptypages, ph, ph_pagelist);
+		TAILQ_REMOVE(&pp->pr_partpages, ph, ph_entry);
+		TAILQ_INSERT_TAIL(&pp->pr_emptypages, ph, ph_entry);
 		pool_update_curpage(pp);
 	}
 
@@ -706,7 +768,7 @@ int
 pool_prime(struct pool *pp, int n)
 {
 	struct pool_pagelist pl = TAILQ_HEAD_INITIALIZER(pl);
-	struct pool_item_header *ph;
+	struct pool_page_header *ph;
 	int newpages;
 
 	newpages = roundup(n, pp->pr_itemsperpage) / pp->pr_itemsperpage;
@@ -718,12 +780,12 @@ pool_prime(struct pool *pp, int n)
 		if (ph == NULL) /* or slowdown? */
 			break;
 
-		TAILQ_INSERT_TAIL(&pl, ph, ph_pagelist);
+		TAILQ_INSERT_TAIL(&pl, ph, ph_entry);
 	}
 
 	mtx_enter(&pp->pr_mtx);
 	while ((ph = TAILQ_FIRST(&pl)) != NULL) {
-		TAILQ_REMOVE(&pl, ph, ph_pagelist);
+		TAILQ_REMOVE(&pl, ph, ph_entry);
 		pool_p_insert(pp, ph);
 	}
 	mtx_leave(&pp->pr_mtx);
@@ -731,10 +793,10 @@ pool_prime(struct pool *pp, int n)
 	return (0);
 }
 
-struct pool_item_header *
+struct pool_page_header *
 pool_p_alloc(struct pool *pp, int flags, int *slowdown)
 {
-	struct pool_item_header *ph;
+	struct pool_page_header *ph;
 	struct pool_item *pi;
 	caddr_t addr;
 	int n;
@@ -747,7 +809,7 @@ pool_p_alloc(struct pool *pp, int flags, int *slowdown)
 		return (NULL);
 
 	if (POOL_INPGHDR(pp))
-		ph = (struct pool_item_header *)(addr + pp->pr_phoffset);
+		ph = (struct pool_page_header *)(addr + pp->pr_phoffset);
 	else {
 		ph = pool_get(&phpool, flags);
 		if (ph == NULL) {
@@ -756,7 +818,7 @@ pool_p_alloc(struct pool *pp, int flags, int *slowdown)
 		}
 	}
 
-	XSIMPLEQ_INIT(&ph->ph_itemlist);
+	XSIMPLEQ_INIT(&ph->ph_items);
 	ph->ph_page = addr;
 	addr += pp->pr_align * (pp->pr_npagealloc % pp->pr_maxcolors);
 	ph->ph_colored = addr;
@@ -774,7 +836,7 @@ pool_p_alloc(struct pool *pp, int flags, int *slowdown)
 	while (n--) {
 		pi = (struct pool_item *)addr;
 		pi->pi_magic = POOL_IMAGIC(ph, pi);
-		XSIMPLEQ_INSERT_TAIL(&ph->ph_itemlist, pi, pi_list);
+		XSIMPLEQ_INSERT_TAIL(&ph->ph_items, pi, pi_list);
 
 #ifdef DIAGNOSTIC
 		if (POOL_PHPOISON(ph))
@@ -788,14 +850,14 @@ pool_p_alloc(struct pool *pp, int flags, int *slowdown)
 }
 
 void
-pool_p_free(struct pool *pp, struct pool_item_header *ph)
+pool_p_free(struct pool *pp, struct pool_page_header *ph)
 {
 	struct pool_item *pi;
 
 	MUTEX_ASSERT_UNLOCKED(&pp->pr_mtx);
 	KASSERT(ph->ph_nmissing == 0);
 
-	XSIMPLEQ_FOREACH(pi, &ph->ph_itemlist, pi_list) {
+	XSIMPLEQ_FOREACH(pi, &ph->ph_items, pi_list) {
 		if (__predict_false(pi->pi_magic != POOL_IMAGIC(ph, pi))) {
 			panic("%s: %s free list modified: "
 			    "page %p; item addr %p; offset 0x%x=0x%lx",
@@ -826,7 +888,7 @@ pool_p_free(struct pool *pp, struct pool_item_header *ph)
 }
 
 void
-pool_p_insert(struct pool *pp, struct pool_item_header *ph)
+pool_p_insert(struct pool *pp, struct pool_page_header *ph)
 {
 	MUTEX_ASSERT_LOCKED(&pp->pr_mtx);
 
@@ -834,7 +896,7 @@ pool_p_insert(struct pool *pp, struct pool_item_header *ph)
 	if (pp->pr_curpage == NULL)
 		pp->pr_curpage = ph;
 
-	TAILQ_INSERT_TAIL(&pp->pr_emptypages, ph, ph_pagelist);
+	TAILQ_INSERT_TAIL(&pp->pr_emptypages, ph, ph_entry);
 	if (!POOL_INPGHDR(pp))
 		RBT_INSERT(phtree, &pp->pr_phtree, ph);
 
@@ -847,7 +909,7 @@ pool_p_insert(struct pool *pp, struct pool_item_header *ph)
 }
 
 void
-pool_p_remove(struct pool *pp, struct pool_item_header *ph)
+pool_p_remove(struct pool *pp, struct pool_page_header *ph)
 {
 	MUTEX_ASSERT_LOCKED(&pp->pr_mtx);
 
@@ -858,7 +920,7 @@ pool_p_remove(struct pool *pp, struct pool_item_header *ph)
 
 	if (!POOL_INPGHDR(pp))
 		RBT_REMOVE(phtree, &pp->pr_phtree, ph);
-	TAILQ_REMOVE(&pp->pr_emptypages, ph, ph_pagelist);
+	TAILQ_REMOVE(&pp->pr_emptypages, ph, ph_entry);
 
 	pool_update_curpage(pp);
 }
@@ -933,12 +995,12 @@ pool_set_constraints(struct pool *pp, const struct kmem_pa_mode *mode)
 int
 pool_reclaim(struct pool *pp)
 {
-	struct pool_item_header *ph, *phnext;
+	struct pool_page_header *ph, *phnext;
 	struct pool_pagelist pl = TAILQ_HEAD_INITIALIZER(pl);
 
 	mtx_enter(&pp->pr_mtx);
 	for (ph = TAILQ_FIRST(&pp->pr_emptypages); ph != NULL; ph = phnext) {
-		phnext = TAILQ_NEXT(ph, ph_pagelist);
+		phnext = TAILQ_NEXT(ph, ph_entry);
 
 		/* Check our minimum page claim */
 		if (pp->pr_npages <= pp->pr_minpages)
@@ -953,7 +1015,7 @@ pool_reclaim(struct pool *pp)
 			break;
 
 		pool_p_remove(pp, ph);
-		TAILQ_INSERT_TAIL(&pl, ph, ph_pagelist);
+		TAILQ_INSERT_TAIL(&pl, ph, ph_entry);
 	}
 	mtx_leave(&pp->pr_mtx);
 
@@ -961,7 +1023,7 @@ pool_reclaim(struct pool *pp)
 		return (0);
 
 	while ((ph = TAILQ_FIRST(&pl)) != NULL) {
-		TAILQ_REMOVE(&pl, ph, ph_pagelist);
+		TAILQ_REMOVE(&pl, ph, ph_entry);
 		pool_p_free(pp, ph);
 	}
 
@@ -1001,13 +1063,13 @@ void
 pool_print_pagelist(struct pool_pagelist *pl,
     int (*pr)(const char *, ...) __attribute__((__format__(__kprintf__,1,2))))
 {
-	struct pool_item_header *ph;
+	struct pool_page_header *ph;
 	struct pool_item *pi;
 
-	TAILQ_FOREACH(ph, pl, ph_pagelist) {
+	TAILQ_FOREACH(ph, pl, ph_entry) {
 		(*pr)("\t\tpage %p, color %p, nmissing %d\n",
 		    ph->ph_page, ph->ph_colored, ph->ph_nmissing);
-		XSIMPLEQ_FOREACH(pi, &ph->ph_itemlist, pi_list) {
+		XSIMPLEQ_FOREACH(pi, &ph->ph_items, pi_list) {
 			if (pi->pi_magic != POOL_IMAGIC(ph, pi)) {
 				(*pr)("\t\t\titem %p, magic 0x%lx\n",
 				    pi, pi->pi_magic);
@@ -1020,7 +1082,7 @@ void
 pool_print1(struct pool *pp, const char *modif,
     int (*pr)(const char *, ...) __attribute__((__format__(__kprintf__,1,2))))
 {
-	struct pool_item_header *ph;
+	struct pool_page_header *ph;
 	int print_pagelist = 0;
 	char c;
 
@@ -1139,7 +1201,7 @@ db_show_all_pools(db_expr_t expr, int haddr, db_expr_t count, char *modif)
 
 #if defined(POOL_DEBUG) || defined(DDB)
 int
-pool_chk_page(struct pool *pp, struct pool_item_header *ph, int expected)
+pool_chk_page(struct pool *pp, struct pool_page_header *ph, int expected)
 {
 	struct pool_item *pi;
 	caddr_t page;
@@ -1155,9 +1217,9 @@ pool_chk_page(struct pool *pp, struct pool_item_header *ph, int expected)
 		return 1;
 	}
 
-	for (pi = XSIMPLEQ_FIRST(&ph->ph_itemlist), n = 0;
+	for (pi = XSIMPLEQ_FIRST(&ph->ph_items), n = 0;
 	     pi != NULL;
-	     pi = XSIMPLEQ_NEXT(&ph->ph_itemlist, pi, pi_list), n++) {
+	     pi = XSIMPLEQ_NEXT(&ph->ph_items, pi, pi_list), n++) {
 		if ((caddr_t)pi < ph->ph_page ||
 		    (caddr_t)pi >= ph->ph_page + pp->pr_pgsize) {
 			printf("%s: ", label);
@@ -1212,14 +1274,14 @@ pool_chk_page(struct pool *pp, struct pool_item_header *ph, int expected)
 int
 pool_chk(struct pool *pp)
 {
-	struct pool_item_header *ph;
+	struct pool_page_header *ph;
 	int r = 0;
 
-	TAILQ_FOREACH(ph, &pp->pr_emptypages, ph_pagelist)
+	TAILQ_FOREACH(ph, &pp->pr_emptypages, ph_entry)
 		r += pool_chk_page(pp, ph, pp->pr_itemsperpage);
-	TAILQ_FOREACH(ph, &pp->pr_fullpages, ph_pagelist)
+	TAILQ_FOREACH(ph, &pp->pr_fullpages, ph_entry)
 		r += pool_chk_page(pp, ph, 0);
-	TAILQ_FOREACH(ph, &pp->pr_partpages, ph_pagelist)
+	TAILQ_FOREACH(ph, &pp->pr_partpages, ph_entry)
 		r += pool_chk_page(pp, ph, -1);
 
 	return (r);
@@ -1233,12 +1295,12 @@ pool_walk(struct pool *pp, int full,
     void (*func)(void *, int, int (*)(const char *, ...)
 	    __attribute__((__format__(__kprintf__,1,2)))))
 {
-	struct pool_item_header *ph;
+	struct pool_page_header *ph;
 	struct pool_item *pi;
 	caddr_t cp;
 	int n;
 
-	TAILQ_FOREACH(ph, &pp->pr_fullpages, ph_pagelist) {
+	TAILQ_FOREACH(ph, &pp->pr_fullpages, ph_entry) {
 		cp = ph->ph_colored;
 		n = ph->ph_nmissing;
 
@@ -1248,12 +1310,12 @@ pool_walk(struct pool *pp, int full,
 		}
 	}
 
-	TAILQ_FOREACH(ph, &pp->pr_partpages, ph_pagelist) {
+	TAILQ_FOREACH(ph, &pp->pr_partpages, ph_entry) {
 		cp = ph->ph_colored;
 		n = ph->ph_nmissing;
 
 		do {
-			XSIMPLEQ_FOREACH(pi, &ph->ph_itemlist, pi_list) {
+			XSIMPLEQ_FOREACH(pi, &ph->ph_items, pi_list) {
 				if (cp == (caddr_t)pi)
 					break;
 			}
@@ -1333,6 +1395,8 @@ sysctl_dopool(int *name, u_int namelen, char *oldp, size_t *oldlenp)
 		pi.pr_nidle = pp->pr_nidle;
 		mtx_leave(&pp->pr_mtx);
 
+		pool_cache_info(pp, &pi);
+
 		rv = sysctl_rdstruct(oldp, oldlenp, NULL, &pi, sizeof(pi));
 		break;
 	}
@@ -1353,7 +1417,7 @@ void
 pool_gc_pages(void *null)
 {
 	struct pool *pp;
-	struct pool_item_header *ph, *freeph;
+	struct pool_page_header *ph, *freeph;
 	int s;
 
 	rw_enter_read(&pool_lock);
@@ -1499,3 +1563,332 @@ pool_multi_free_ni(struct pool *pp, void *v)
 	km_free(v, pp->pr_pgsize, &kv, pp->pr_crange);
 	KERNEL_UNLOCK();
 }
+
+#ifdef MULTIPROCESSOR
+
+struct pool pool_caches; /* per cpu cache entries */
+
+void
+pool_cache_init(struct pool *pp)
+{
+	struct cpumem *cm;
+	struct pool_cache *pc;
+	struct cpumem_iter i;
+
+	if (pool_caches.pr_size == 0) {
+		pool_init(&pool_caches, sizeof(struct pool_cache), 64,
+		    IPL_NONE, PR_WAITOK, "plcache", NULL);
+	}
+
+	KASSERT(pp->pr_size >= sizeof(*pc));
+
+	cm = cpumem_get(&pool_caches);
+
+	mtx_init(&pp->pr_cache_mtx, pp->pr_ipl);
+	arc4random_buf(pp->pr_cache_magic, sizeof(pp->pr_cache_magic));
+	TAILQ_INIT(&pp->pr_cache_lists);
+	pp->pr_cache_nlist = 0;
+	pp->pr_cache_items = 8;
+	pp->pr_cache_contention = 0;
+
+	CPUMEM_FOREACH(pc, &i, cm) {
+		pc->pc_actv = NULL;
+		pc->pc_nactv = 0;
+		pc->pc_prev = NULL;
+
+		pc->pc_gets = 0;
+		pc->pc_puts = 0;
+		pc->pc_fails = 0;
+		pc->pc_nout = 0;
+	}
+
+	pp->pr_cache = cm;
+}
+
+static inline void
+pool_cache_item_magic(struct pool *pp, struct pool_cache_item *ci)
+{
+	unsigned long *entry = (unsigned long *)&ci->ci_nextl;
+
+	entry[0] = pp->pr_cache_magic[0] ^ (u_long)ci;
+	entry[1] = pp->pr_cache_magic[1] ^ (u_long)ci->ci_next;
+}
+
+static inline void
+pool_cache_item_magic_check(struct pool *pp, struct pool_cache_item *ci)
+{
+	unsigned long *entry;
+	unsigned long val;
+
+	entry = (unsigned long *)&ci->ci_nextl;
+	val = pp->pr_cache_magic[0] ^ (u_long)ci;
+	if (*entry != val)
+		goto fail;
+
+	entry++;
+	val = pp->pr_cache_magic[1] ^ (u_long)ci->ci_next;
+	if (*entry != val)
+		goto fail;
+
+	return;
+
+fail:
+	panic("%s: %s cpu free list modified: item addr %p+%zu 0x%lx!=0x%lx",
+	    __func__, pp->pr_wchan, ci, (caddr_t)entry - (caddr_t)ci,
+	    *entry, val);
+}
+
+static inline void
+pool_list_enter(struct pool *pp)
+{
+	if (mtx_enter_try(&pp->pr_cache_mtx) == 0) {
+		mtx_enter(&pp->pr_cache_mtx);
+		pp->pr_cache_contention++;
+	}
+}
+
+static inline void
+pool_list_leave(struct pool *pp)
+{
+	mtx_leave(&pp->pr_cache_mtx);
+}
+
+static inline struct pool_cache_item *
+pool_cache_list_alloc(struct pool *pp, struct pool_cache *pc)
+{
+	struct pool_cache_item *pl;
+
+	pool_list_enter(pp);
+	pl = TAILQ_FIRST(&pp->pr_cache_lists);
+	if (pl != NULL) {
+		TAILQ_REMOVE(&pp->pr_cache_lists, pl, ci_nextl);
+		pp->pr_cache_nlist--;
+
+		pool_cache_item_magic(pp, pl);
+	}
+
+	/* fold this cpus nout into the global while we have the lock */
+	pp->pr_cache_nout += pc->pc_nout;
+	pc->pc_nout = 0;
+	pool_list_leave(pp);
+
+	return (pl);
+}
+
+static inline void
+pool_cache_list_free(struct pool *pp, struct pool_cache *pc,
+    struct pool_cache_item *ci)
+{
+	pool_list_enter(pp);
+	TAILQ_INSERT_TAIL(&pp->pr_cache_lists, ci, ci_nextl);
+	pp->pr_cache_nlist++;
+
+	/* fold this cpus nout into the global while we have the lock */
+	pp->pr_cache_nout += pc->pc_nout;
+	pc->pc_nout = 0;
+	pool_list_leave(pp);
+}
+
+static inline struct pool_cache *
+pool_cache_enter(struct pool *pp, int *s)
+{
+	struct pool_cache *pc;
+
+	pc = cpumem_enter(pp->pr_cache);
+	*s = splraise(pp->pr_ipl);
+	pc->pc_gen++;
+
+	return (pc);
+}
+
+static inline void
+pool_cache_leave(struct pool *pp, struct pool_cache *pc, int s)
+{
+	pc->pc_gen++;
+	splx(s);
+	cpumem_leave(pp->pr_cache, pc);
+}
+
+void *
+pool_cache_get(struct pool *pp)
+{
+	struct pool_cache *pc;
+	struct pool_cache_item *ci;
+	int s;
+
+	pc = pool_cache_enter(pp, &s);
+
+	if (pc->pc_actv != NULL) {
+		ci = pc->pc_actv;
+	} else if (pc->pc_prev != NULL) {
+		ci = pc->pc_prev;
+		pc->pc_prev = NULL;
+	} else if ((ci = pool_cache_list_alloc(pp, pc)) == NULL) {
+		pc->pc_fails++;
+		goto done;
+	}
+
+	pool_cache_item_magic_check(pp, ci);
+#ifdef DIAGNOSTIC
+	if (pool_debug && POOL_CACHE_ITEM_POISONED(ci)) {
+		size_t pidx;
+		uint32_t pval;
+
+		if (poison_check(ci + 1, pp->pr_size - sizeof(*ci),
+		    &pidx, &pval)) {
+			int *ip = (int *)(ci + 1);
+			ip += pidx;
+
+			panic("%s: %s cpu free list modified: "
+			    "item addr %p+%zu 0x%x!=0x%x",
+			    __func__, pp->pr_wchan, ci,
+			    (caddr_t)ip - (caddr_t)ci, *ip, pval);
+		}
+	}
+#endif
+
+	pc->pc_actv = ci->ci_next;
+	pc->pc_nactv = POOL_CACHE_ITEM_NITEMS(ci) - 1;
+	pc->pc_gets++;
+	pc->pc_nout++;
+
+done:
+	pool_cache_leave(pp, pc, s);
+
+	return (ci);
+}
+
+void
+pool_cache_put(struct pool *pp, void *v)
+{
+	struct pool_cache *pc;
+	struct pool_cache_item *ci = v;
+	unsigned long nitems;
+	int s;
+#ifdef DIAGNOSTIC
+	int poison = pool_debug && pp->pr_size > sizeof(*ci);
+
+	if (poison)
+		poison_mem(ci + 1, pp->pr_size - sizeof(*ci));
+#endif
+
+	pc = pool_cache_enter(pp, &s);
+
+	nitems = pc->pc_nactv;
+	if (nitems >= pp->pr_cache_items) {
+		if (pc->pc_prev != NULL)
+			pool_cache_list_free(pp, pc, pc->pc_prev);
+			
+		pc->pc_prev = pc->pc_actv;
+
+		pc->pc_actv = NULL;
+		pc->pc_nactv = 0;
+		nitems = 0;
+	}
+
+	ci->ci_next = pc->pc_actv;
+	ci->ci_nitems = ++nitems;
+#ifdef DIAGNOSTIC
+	ci->ci_nitems |= poison ? POOL_CACHE_ITEM_NITEMS_POISON : 0;
+#endif
+	pool_cache_item_magic(pp, ci);
+
+	pc->pc_actv = ci;
+	pc->pc_nactv = nitems;
+
+	pc->pc_puts++;
+	pc->pc_nout--;
+
+	pool_cache_leave(pp, pc, s);
+}
+
+struct pool_cache_item *
+pool_cache_list_put(struct pool *pp, struct pool_cache_item *pl)
+{
+	struct pool_cache_item *rpl, *next;
+
+	if (pl == NULL)
+		return (NULL);
+
+	rpl = TAILQ_NEXT(pl, ci_nextl);
+
+	do {
+		next = pl->ci_next;
+		pool_put(pp, pl);
+		pl = next;
+	} while (pl != NULL);
+
+	return (rpl);
+}
+
+void
+pool_cache_destroy(struct pool *pp)
+{
+	struct pool_cache *pc;
+	struct pool_cache_item *pl;
+	struct cpumem_iter i;
+	struct cpumem *cm;
+
+	cm = pp->pr_cache;
+	pp->pr_cache = NULL; /* make pool_put avoid the cache */
+
+	CPUMEM_FOREACH(pc, &i, cm) {
+		pool_cache_list_put(pp, pc->pc_actv);
+		pool_cache_list_put(pp, pc->pc_prev);
+	}
+
+	cpumem_put(&pool_caches, cm);
+
+	pl = TAILQ_FIRST(&pp->pr_cache_lists);
+	while (pl != NULL)
+		pl = pool_cache_list_put(pp, pl);
+}
+
+void
+pool_cache_info(struct pool *pp, struct kinfo_pool *pi)
+{
+	struct pool_cache *pc;
+	struct cpumem_iter i;
+
+	if (pp->pr_cache == NULL)
+		return;
+
+	/* loop through the caches twice to collect stats */
+
+	/* once without the mtx so we can yield while reading nget/nput */
+	CPUMEM_FOREACH(pc, &i, pp->pr_cache) {
+		uint64_t gen, nget, nput;
+
+		do {
+			while ((gen = pc->pc_gen) & 1)
+				yield();
+
+			nget = pc->pc_gets;
+			nput = pc->pc_puts;
+		} while (gen != pc->pc_gen);
+
+		pi->pr_nget += nget;
+		pi->pr_nput += nput;
+	}
+
+	/* and once with the mtx so we can get consistent nout values */
+	mtx_enter(&pp->pr_cache_mtx);
+	CPUMEM_FOREACH(pc, &i, pp->pr_cache)
+		pi->pr_nout += pc->pc_nout;
+
+	pi->pr_nout += pp->pr_cache_nout;
+	mtx_leave(&pp->pr_cache_mtx);
+}
+#else /* MULTIPROCESSOR */
+void
+pool_cache_init(struct pool *pp)
+{
+	/* nop */
+}
+
+void
+pool_cache_info(struct pool *pp, struct kinfo_pool *pi)
+{
+	/* nop */
+}
+#endif /* MULTIPROCESSOR */
