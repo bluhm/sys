@@ -1,7 +1,7 @@
-/*	$OpenBSD: rtable.c,v 1.52 2016/09/07 09:36:49 mpi Exp $ */
+/*	$OpenBSD: rtable.c,v 1.54 2016/11/14 10:32:46 mpi Exp $ */
 
 /*
- * Copyright (c) 2014-2015 Martin Pieuchot
+ * Copyright (c) 2014-2016 Martin Pieuchot
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -41,7 +41,7 @@
  *	afmap		    rtmap/dommp
  *   -----------          ---------     -----
  *   |   0     |--------> | 0 | 0 | ... | 0 |	Array mapping rtableid (=index)
- *   -----------          ---------     -----   to rdomain (=value).
+ *   -----------          ---------     -----   to rdomain/loopback (=value).
  *   | AF_INET |.
  *   ----------- `.       .---------.     .---------.
  *       ...	   `----> | rtable0 | ... | rtableN |	Array of pointers for
@@ -59,10 +59,20 @@ struct rtmap {
 	void		 **tbl;
 };
 
-/* Array of rtableid -> rdomain mapping. */
+/*
+ * Array of rtableid -> rdomain mapping.
+ *
+ * Only used for the first index as describbed above.
+ */
 struct dommp {
 	unsigned int	   limit;
-	unsigned int	  *dom;
+	/*
+	 * Array to get the routing domain and loopback interface related to
+	 * a routing table. Format:
+	 *
+	 * 8 unused bits | 16 bits for loopback index | 8 bits for rdomain
+	 */
+	unsigned int	  *value;
 };
 
 unsigned int	   rtmap_limit = 0;
@@ -146,6 +156,8 @@ rtable_init(void)
 	unsigned int	 keylen = 0;
 	int		 i;
 
+	KASSERT(sizeof(struct rtmap) == sizeof(struct dommp));
+
 	/* We use index 0 for the rtable/rdomain map. */
 	af2idx_max = 1;
 	memset(af2idx, 0, sizeof(af2idx));
@@ -173,6 +185,9 @@ rtable_init(void)
 	    M_WAITOK|M_ZERO);
 
 	rtmap_init();
+
+	if (rtable_add(0) != 0)
+		panic("unable to create default routing table");
 }
 
 int
@@ -221,7 +236,7 @@ rtable_add(unsigned int id)
 
 	/* Use main rtable/rdomain by default. */
 	dmm = srp_get_locked(&afmap[0]);
-	dmm->dom[id] = 0;
+	dmm->value[id] = 0;
 
 	return (0);
 }
@@ -272,24 +287,42 @@ rtable_l2(unsigned int rtableid)
 
 	dmm = srp_enter(&sr, &afmap[0]);
 	if (rtableid < dmm->limit)
-		rdomain = dmm->dom[rtableid];
+		rdomain = (dmm->value[rtableid] & RT_TABLEID_MASK);
 	srp_leave(&sr);
 
 	return (rdomain);
 }
 
-void
-rtable_l2set(unsigned int rtableid, unsigned int rdomain)
+unsigned int
+rtable_loindex(unsigned int rtableid)
 {
 	struct dommp	*dmm;
+	unsigned int	 loifidx = 0;
+	struct srp_ref	 sr;
+
+	dmm = srp_enter(&sr, &afmap[0]);
+	if (rtableid < dmm->limit)
+		loifidx = (dmm->value[rtableid] >> RT_TABLEID_BITS);
+	srp_leave(&sr);
+
+	return (loifidx);
+}
+
+void
+rtable_l2set(unsigned int rtableid, unsigned int rdomain, unsigned int loifidx)
+{
+	struct dommp	*dmm;
+	unsigned int	 value;
 
 	KERNEL_ASSERT_LOCKED();
 
 	if (!rtable_exists(rtableid) || !rtable_exists(rdomain))
 		return;
 
+	value = (rdomain & RT_TABLEID_MASK) | (loifidx << RT_TABLEID_BITS);
+
 	dmm = srp_get_locked(&afmap[0]);
-	dmm->dom[rtableid] = rdomain;
+	dmm->value[rtableid] = value;
 }
 
 #ifndef ART
@@ -305,9 +338,6 @@ rtable_alloc(unsigned int rtableid, unsigned int alen, unsigned int off)
 	struct radix_node_head *rnh = NULL;
 
 	if (rn_inithead((void **)&rnh, off)) {
-#ifndef SMALL_KERNEL
-		rnh->rnh_multipath = 1;
-#endif /* SMALL_KERNEL */
 		rnh->rnh_rtableid = rtableid;
 	}
 
@@ -332,14 +362,6 @@ rtable_lookup(unsigned int rtableid, struct sockaddr *dst,
 
 	rt = ((struct rtentry *)rn);
 
-#ifndef SMALL_KERNEL
-	if (rnh->rnh_multipath) {
-		rt = rt_mpath_matchgate(rt, gateway, prio);
-		if (rt == NULL)
-			return (NULL);
-	}
-#endif /* !SMALL_KERNEL */
-
 	rtref(rt);
 	return (rt);
 }
@@ -350,9 +372,6 @@ rtable_match(unsigned int rtableid, struct sockaddr *dst, uint32_t *src)
 	struct radix_node_head	*rnh;
 	struct radix_node	*rn;
 	struct rtentry		*rt = NULL;
-#ifndef SMALL_KERNEL
-	int			 hash;
-#endif /* SMALL_KERNEL */
 
 	rnh = rtable_get(rtableid, dst->sa_family);
 	if (rnh == NULL)
@@ -365,36 +384,6 @@ rtable_match(unsigned int rtableid, struct sockaddr *dst, uint32_t *src)
 
 	rt = ((struct rtentry *)rn);
 	rtref(rt);
-
-#ifndef SMALL_KERNEL
-	/* Gateway selection by Hash-Threshold (RFC 2992) */
-	if ((hash = rt_hash(rt, dst, src)) != -1) {
-		struct rtentry		*mrt = rt;
-		int			 threshold, npaths = 1;
-
-		KASSERT(hash <= 0xffff);
-
-		rtref(rt);
-
-		while ((mrt = rtable_iterate(mrt)) != NULL)
-			npaths++;
-
-		threshold = (0xffff / npaths) + 1;
-
-		mrt = rt;
-		while (hash > threshold && mrt != NULL) {
-			/* stay within the multipath routes */
-			mrt = rtable_iterate(mrt);
-			hash -= threshold;
-		}
-
-		/* if gw selection fails, use the first match (default) */
-		if (mrt != NULL) {
-			rtfree(rt);
-			rt = mrt;
-		}
-	}
-#endif /* SMALL_KERNEL */
 out:
 	KERNEL_UNLOCK();
 	return (rt);
@@ -411,16 +400,6 @@ rtable_insert(unsigned int rtableid, struct sockaddr *dst,
 	rnh = rtable_get(rtableid, dst->sa_family);
 	if (rnh == NULL)
 		return (EAFNOSUPPORT);
-
-#ifndef SMALL_KERNEL
-	if (rnh->rnh_multipath) {
-		/* Do not permit exactly the same dst/mask/gw pair. */
-		if (rt_mpath_conflict(rnh, dst, mask, gateway, prio,
-	    	    ISSET(rt->rt_flags, RTF_MPATH))) {
-			return (EEXIST);
-		}
-	}
-#endif /* SMALL_KERNEL */
 
 	rn = rn_addroute(dst, mask, rnh, rn, prio);
 	if (rn == NULL)
@@ -477,45 +456,21 @@ rtable_walk(unsigned int rtableid, sa_family_t af,
 struct rtentry *
 rtable_iterate(struct rtentry *rt0)
 {
-#ifndef SMALL_KERNEL
-	struct radix_node *rn = (struct radix_node *)rt0;
-	struct rtentry *rt;
-
-	rt = (struct rtentry *)rn_mpath_next(rn, RMP_MODE_ACTIVE);
-	if (rt != NULL)
-		rtref(rt);
-	rtfree(rt0);
-
-	return (rt);
-#else
 	rtfree(rt0);
 	return (NULL);
-#endif /* SMALL_KERNEL */
 }
 
 #ifndef SMALL_KERNEL
 int
 rtable_mpath_capable(unsigned int rtableid, sa_family_t af)
 {
-	struct radix_node_head	*rnh;
-	int mpath;
-
-	rnh = rtable_get(rtableid, af);
-	if (rnh == NULL)
-		return (0);
-
-	mpath = rnh->rnh_multipath;
-	return (mpath);
+	return (0);
 }
 
 int
 rtable_mpath_reprio(unsigned int rtableid, struct sockaddr *dst,
     struct sockaddr *mask, uint8_t prio, struct rtentry *rt)
 {
-	struct radix_node	*rn = (struct radix_node *)rt;
-
-	rn_mpath_reprio(rn, prio);
-
 	return (0);
 }
 #endif /* SMALL_KERNEL */

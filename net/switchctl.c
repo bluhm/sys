@@ -1,4 +1,4 @@
-/*	$OpenBSD: switchctl.c,v 1.5 2016/11/08 19:11:57 rzalamena Exp $	*/
+/*	$OpenBSD: switchctl.c,v 1.8 2016/11/11 16:19:09 rzalamena Exp $	*/
 
 /*
  * Copyright (c) 2016 Kazuya GODA <goda@openbsd.org>
@@ -125,23 +125,23 @@ int
 switchread(dev_t dev, struct uio *uio, int ioflag)
 {
 	struct switch_softc	*sc;
-	int			 error = 0, s, truncated;
+	struct mbuf		*m;
 	u_int			 len;
-	struct mbuf		*m0, *m;
+	int			 s, error = 0;
 
 	sc = switch_dev2sc(dev);
 	if (sc == NULL)
 		return (ENXIO);
 
 	if (sc->sc_swdev->swdev_lastm != NULL) {
-		m0 = sc->sc_swdev->swdev_lastm;
+		m = sc->sc_swdev->swdev_lastm;
 		sc->sc_swdev->swdev_lastm = NULL;
 		goto skip_dequeue;
 	}
 
  dequeue_next:
 	s = splnet();
-	while ((m0 = mq_dequeue(&sc->sc_swdev->swdev_outq)) == NULL) {
+	while ((m = mq_dequeue(&sc->sc_swdev->swdev_outq)) == NULL) {
 		if (ISSET(ioflag, IO_NDELAY)) {
 			error = EWOULDBLOCK;
 			goto failed;
@@ -160,32 +160,34 @@ switchread(dev_t dev, struct uio *uio, int ioflag)
 	splx(s);
 
  skip_dequeue:
-	while (m0 != NULL && uio->uio_resid > 0 && error == 0) {
-		len = ulmin(uio->uio_resid, m0->m_len);
-		truncated = uio->uio_resid < m0->m_len;
-		if ((error = uiomove(mtod(m0, caddr_t), len, uio)) != 0) {
+	while (uio->uio_resid > 0) {
+		len = ulmin(uio->uio_resid, m->m_len);
+		if ((error = uiomove(mtod(m, caddr_t), len, uio)) != 0) {
 			/* Save it so user can recover from EFAULT. */
-			sc->sc_swdev->swdev_lastm = m0;
+			sc->sc_swdev->swdev_lastm = m;
 			return (error);
 		}
 
-		/* If we didn't finish moving, then save it for later. */
-		if (truncated) {
-			m_adj(m0, len);
-			sc->sc_swdev->swdev_lastm = m0;
-			return (0);
+		/* Handle partial reads. */
+		if (uio->uio_resid == 0) {
+			if (len < m->m_len)
+				m_adj(m, len);
+			else
+				m = m_free(m);
+			sc->sc_swdev->swdev_lastm = m;
+			break;
 		}
 
-		m = m_free(m0);
-		m0 = m;
+		/*
+		 * After consuming data from this mbuf test if we
+		 * have to dequeue a new chain.
+		 */
+		m = m_free(m);
+		if (m == NULL)
+			goto dequeue_next;
 	}
-	m_freem(m0);
 
-	/* Keep reading if the user wants more. */
-	if (uio->uio_resid > 0)
-		goto dequeue_next;
-
-	return (error);
+	return (0);
 failed:
 	splx(s);
 	return (error);
@@ -195,39 +197,94 @@ int
 switchwrite(dev_t dev, struct uio *uio, int ioflag)
 {
 	struct switch_softc	*sc = NULL;
-	int			 s, error;
-	u_int			 len;
-	struct mbuf		*m;
+	struct mbuf		*m, *n, *mhead, *mtail = NULL;
+	int			 s, error, trailing;
+	size_t			 len;
 
-	if (uio->uio_resid == 0 || uio->uio_resid > MAXMCLBYTES)
-		return (EMSGSIZE);
+	if (uio->uio_resid == 0)
+		return (0);
+
 	len = uio->uio_resid;
-
-	MGETHDR(m, M_DONTWAIT, MT_DATA);
-	if (m == NULL)
-		return (ENOBUFS);
-	if (len >= MHLEN) {
-		MCLGETI(m, M_DONTWAIT, NULL, len);
-		if ((m->m_flags & M_EXT) == 0) {
-			m_free(m);
-			return (ENOBUFS);
-		}
-	}
-
-	error = uiomove(mtod(m, caddr_t), len, uio);
-	if (error) {
-		m_freem(m);
-		return (error);
-	}
-	m->m_pkthdr.len = m->m_len = len;
 
 	sc = switch_dev2sc(dev);
 	if (sc == NULL)
 		return (ENXIO);
-	s = splnet();
-	error = sc->sc_swdev->swdev_input(sc, m);
-	splx(s);
 
+	if (sc->sc_swdev->swdev_inputm == NULL) {
+		MGETHDR(m, M_DONTWAIT, MT_DATA);
+		if (m == NULL)
+			return (ENOBUFS);
+		if (len >= MHLEN) {
+			MCLGETI(m, M_DONTWAIT, NULL, MIN(MAXMCLBYTES, len));
+			if ((m->m_flags & M_EXT) == 0) {
+				m_free(m);
+				return (ENOBUFS);
+			}
+		}
+		mhead = m;
+
+		/* M_TRAILINGSPACE() uses this to calculate space. */
+		m->m_len = 0;
+	} else {
+		/* Recover the mbuf from the last write and get its tail. */
+		mhead = sc->sc_swdev->swdev_inputm;
+		for (m = mhead; m->m_next != NULL; m = m->m_next)
+			/* NOTHING */;
+
+		sc->sc_swdev->swdev_inputm = NULL;
+	}
+
+	while (len) {
+		trailing = ulmin(M_TRAILINGSPACE(m), len);
+		if ((error = uiomove(mtod(m, caddr_t), trailing, uio)) != 0)
+			goto save_return;
+
+		len -= trailing;
+		mhead->m_pkthdr.len += trailing;
+		m->m_len += trailing;
+		if (len == 0)
+			break;
+
+		MGET(n, M_DONTWAIT, MT_DATA);
+		if (n == NULL) {
+			error = ENOBUFS;
+			goto save_return;
+		}
+		if (len >= MLEN) {
+			MCLGETI(n, M_DONTWAIT, NULL, MIN(MAXMCLBYTES, len));
+			if ((n->m_flags & M_EXT) == 0) {
+				m_free(n);
+				error = ENOBUFS;
+				goto save_return;
+			}
+		}
+		n->m_len = 0;
+
+		m->m_next = n;
+		m = n;
+	}
+
+	/* Loop until there is no more complete OFP packets. */
+	while (ofp_split_mbuf(mhead, &mtail) == 0) {
+		s = splnet();
+		sc->sc_swdev->swdev_input(sc, mhead);
+		splx(s);
+
+		/* We wrote everything, just quit. */
+		if (mtail == NULL)
+			return (0);
+
+		mhead = mtail;
+	}
+
+	/* Save the head, because ofp_split_mbuf failed. */
+	sc->sc_swdev->swdev_inputm = mhead;
+
+	return (0);
+
+ save_return:
+	/* Save it so user can recover from errors later. */
+	sc->sc_swdev->swdev_inputm = mhead;
 	return (error);
 }
 
@@ -258,6 +315,7 @@ switchclose(dev_t dev, int flags, int mode, struct proc *p)
 	sc = switch_lookup(minor(dev));
 	if (sc != NULL && sc->sc_swdev != NULL) {
 		m_freem(sc->sc_swdev->swdev_lastm);
+		m_freem(sc->sc_swdev->swdev_inputm);
 		mq_purge(&sc->sc_swdev->swdev_outq);
 		free(sc->sc_swdev, M_DEVBUF, sizeof(struct switch_dev));
 		sc->sc_swdev = NULL;
@@ -284,6 +342,7 @@ switch_dev_destroy(struct switch_softc *sc)
 		splx(s);
 
 		m_freem(sc->sc_swdev->swdev_lastm);
+		m_freem(sc->sc_swdev->swdev_inputm);
 		mq_purge(&sc->sc_swdev->swdev_outq);
 		free(sc->sc_swdev, M_DEVBUF, sizeof(struct switch_dev));
 		sc->sc_swdev = NULL;
@@ -319,7 +378,6 @@ int
 switchkqfilter(dev_t dev, struct knote *kn)
 {
 	struct switch_softc	*sc = switch_dev2sc(dev);
-	struct mutex		*mtx;
 	struct klist		*klist;
 
 	if (sc == NULL)
@@ -327,12 +385,10 @@ switchkqfilter(dev_t dev, struct knote *kn)
 
 	switch (kn->kn_filter) {
 	case EVFILT_READ:
-		mtx = &sc->sc_swdev->swdev_rsel_mtx;
 		klist = &sc->sc_swdev->swdev_rsel.si_note;
 		kn->kn_fop = &switch_rd_filtops;
 		break;
 	case EVFILT_WRITE:
-		mtx = &sc->sc_swdev->swdev_wsel_mtx;
 		klist = &sc->sc_swdev->swdev_wsel.si_note;
 		kn->kn_fop = &switch_wr_filtops;
 		break;
@@ -342,9 +398,7 @@ switchkqfilter(dev_t dev, struct knote *kn)
 
 	kn->kn_hook = (caddr_t)sc;
 
-	mtx_enter(mtx);
 	SLIST_INSERT_HEAD(klist, kn, kn_selnext);
-	mtx_leave(mtx);
 
 	return (0);
 }
@@ -358,9 +412,7 @@ filt_switch_rdetach(struct knote *kn)
 	if (ISSET(kn->kn_status, KN_DETACHED))
 		return;
 
-	mtx_enter(&sc->sc_swdev->swdev_rsel_mtx);
 	SLIST_REMOVE(klist, kn, knote, kn_selnext);
-	mtx_leave(&sc->sc_swdev->swdev_rsel_mtx);
 }
 
 int
@@ -392,9 +444,7 @@ filt_switch_wdetach(struct knote *kn)
 	if (ISSET(kn->kn_status, KN_DETACHED))
 		return;
 
-	mtx_enter(&sc->sc_swdev->swdev_wsel_mtx);
 	SLIST_REMOVE(klist, kn, knote, kn_selnext);
-	mtx_leave(&sc->sc_swdev->swdev_wsel_mtx);
 }
 
 int

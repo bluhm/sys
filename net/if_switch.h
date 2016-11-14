@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_switch.h,v 1.6 2016/11/08 19:11:57 rzalamena Exp $	*/
+/*	$OpenBSD: if_switch.h,v 1.8 2016/11/11 16:19:09 rzalamena Exp $	*/
 
 /*
  * Copyright (c) 2016 Kazuya GODA <goda@openbsd.org>
@@ -182,11 +182,10 @@ TAILQ_HEAD(switch_fwdp_queue, switch_port);
 
 struct switch_dev {
 	struct mbuf		*swdev_lastm;
+	struct mbuf		*swdev_inputm;
 	struct mbuf_queue	 swdev_outq;
 	struct selinfo		 swdev_rsel;
-	struct mutex		 swdev_rsel_mtx;
 	struct selinfo		 swdev_wsel;
-	struct mutex		 swdev_wsel_mtx;
 	int			 swdev_waiting;
 	void			(*swdev_init)(struct switch_softc *);
 	int			(*swdev_input)(struct switch_softc *,
@@ -202,8 +201,8 @@ struct switch_softc {
 	struct switch_dev		*sc_swdev;		/* char device */
 	struct bstp_state		*sc_stp;		/* STP state */
 	struct swofp_ofs		*sc_ofs;		/* OpenFlow */
-	TAILQ_HEAD(,switch_port)	 sc_swpo_list; 		/* port */
-	LIST_ENTRY(switch_softc)	 sc_switch_next; 	/* switch link */
+	TAILQ_HEAD(,switch_port)	 sc_swpo_list;		/* port */
+	LIST_ENTRY(switch_softc)	 sc_switch_next;	/* switch link */
 	void				(*switch_process_forward)(
 	    struct switch_softc *, struct switch_flow_classify *,
 	    struct mbuf *);
@@ -220,6 +219,7 @@ void	 switch_swfcl_free(struct switch_flow_classify *);
 struct mbuf
 	*switch_flow_classifier(struct mbuf *, uint32_t,
 	    struct switch_flow_classify *);
+int	 ofp_split_mbuf(struct mbuf *, struct mbuf **);
 
 /* switchctl.c */
 void	 switch_dev_destroy(struct switch_softc *);
