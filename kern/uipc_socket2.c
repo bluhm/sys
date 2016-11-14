@@ -284,6 +284,8 @@ sblock(struct sockbuf *sb, int wait)
 {
 	int error;
 
+	KERNEL_ASSERT_LOCKED();
+
 	if ((sb->sb_flags & SB_LOCK) == 0) {
 		sb->sb_flags |= SB_LOCK;
 		return (0);
@@ -306,6 +308,8 @@ sblock(struct sockbuf *sb, int wait)
 void
 sbunlock(struct sockbuf *sb)
 {
+	KERNEL_ASSERT_LOCKED();
+
 	sb->sb_flags &= ~SB_LOCK;
 	if (sb->sb_flags & SB_WANT) {
 		sb->sb_flags &= ~SB_WANT;
