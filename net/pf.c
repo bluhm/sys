@@ -5974,12 +5974,10 @@ pf_route(struct pf_pdesc *pd, struct pf_rule *r, struct pf_state *s)
 	 */
 	if (ip->ip_off & htons(IP_DF)) {
 		ipstat_inc(ips_cantfrag);
-		if (r->rt != PF_DUPTO) {
+		if (r->rt != PF_DUPTO)
 			pf_send_icmp(m0, ICMP_UNREACH, ICMP_UNREACH_NEEDFRAG,
 			    ifp->if_mtu, pd->af, r, pd->rdomain);
-			goto done;
-		} else
-			goto bad;
+		goto bad;
 	}
 
 	m1 = m0;
