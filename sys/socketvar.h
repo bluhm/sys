@@ -36,7 +36,6 @@
 #include <sys/queue.h>
 #include <sys/task.h>
 #include <sys/timeout.h>
-#include <sys/rwlock.h>
 
 #ifndef	_SOCKLEN_T_DEFINED_
 #define	_SOCKLEN_T_DEFINED_
@@ -111,12 +110,13 @@ struct socket {
 		struct mbuf *sb_lastrecord;/* first mbuf of last record in
 					      socket buffer */
 		struct	selinfo sb_sel;	/* process selecting read/write */
-		struct	rwlock sb_lock;	/* exclusive access from process */
 		int	sb_flagsintr;	/* flags, changed during interrupt */
 		short	sb_flags;	/* flags, see below */
 		u_short	sb_timeo;	/* timeout for read/write */
 	} so_rcv, so_snd;
 #define	SB_MAX		(2*1024*1024)	/* default for max chars in sockbuf */
+#define	SB_LOCK		0x01		/* lock on data queue */
+#define	SB_WANT		0x02		/* someone is waiting to lock */
 #define	SB_WAIT		0x04		/* someone is waiting for data/space */
 #define	SB_SEL		0x08		/* someone is selecting */
 #define	SB_ASYNC	0x10		/* ASYNC I/O, need signals */
@@ -220,10 +220,18 @@ struct socket {
  * Unless SB_NOINTR is set on sockbuf, sleep is interruptible.
  * Returns error without lock if sleep is interrupted.
  */
-int sblock(struct sockbuf *sb, int wf);
+#define sblock(sb, wf) ((sb)->sb_flags & SB_LOCK ? \
+		(((wf) == M_WAITOK) ? sb_lock(sb) : EWOULDBLOCK) : \
+		((sb)->sb_flags |= SB_LOCK, 0))
 
 /* release lock on sockbuf sb */
-void sbunlock(struct sockbuf *sb);
+#define	sbunlock(sb) do {						\
+	(sb)->sb_flags &= ~SB_LOCK;					\
+	if ((sb)->sb_flags & SB_WANT) {					\
+		(sb)->sb_flags &= ~SB_WANT;				\
+		wakeup((caddr_t)&(sb)->sb_flags);			\
+	}								\
+} while (/* CONSTCOND */ 0)
 
 #define	SB_EMPTY_FIXUP(sb) do {						\
 	if ((sb)->sb_mb == NULL) {					\
