@@ -279,14 +279,15 @@ sbwait(struct sockbuf *sb)
 	    sb->sb_timeo));
 }
 
-/*
- * Lock a sockbuf already known to be locked;
- * return any error returned from sleep (EINTR).
- */
 int
-sb_lock(struct sockbuf *sb)
+sblock(struct sockbuf *sb, int wait)
 {
 	int error;
+
+	if ((sb->sb_flags & SB_LOCK) == 0)
+		goto lock;
+	if (wait & M_NOWAIT)
+		return (EWOULDBLOCK);
 
 	while (sb->sb_flags & SB_LOCK) {
 		sb->sb_flags |= SB_WANT;
@@ -296,8 +297,19 @@ sb_lock(struct sockbuf *sb)
 		if (error)
 			return (error);
 	}
+ lock:
 	sb->sb_flags |= SB_LOCK;
 	return (0);
+}
+
+void
+sbunlock(struct sockbuf *sb)
+{
+	sb->sb_flags &= ~SB_LOCK;
+	if (sb->sb_flags & SB_WANT) {
+		sb->sb_flags &= ~SB_WANT;
+		wakeup(&sb->sb_flags);
+	}
 }
 
 /*

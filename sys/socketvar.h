@@ -220,18 +220,10 @@ struct socket {
  * Unless SB_NOINTR is set on sockbuf, sleep is interruptible.
  * Returns error without lock if sleep is interrupted.
  */
-#define sblock(sb, wf) ((sb)->sb_flags & SB_LOCK ? \
-		(((wf) == M_WAITOK) ? sb_lock(sb) : EWOULDBLOCK) : \
-		((sb)->sb_flags |= SB_LOCK, 0))
+int sblock(struct sockbuf *, int);
 
 /* release lock on sockbuf sb */
-#define	sbunlock(sb) do {						\
-	(sb)->sb_flags &= ~SB_LOCK;					\
-	if ((sb)->sb_flags & SB_WANT) {					\
-		(sb)->sb_flags &= ~SB_WANT;				\
-		wakeup((caddr_t)&(sb)->sb_flags);			\
-	}								\
-} while (/* CONSTCOND */ 0)
+void sbunlock(struct sockbuf *);
 
 #define	SB_EMPTY_FIXUP(sb) do {						\
 	if ((sb)->sb_mb == NULL) {					\
