@@ -284,8 +284,10 @@ sblock(struct sockbuf *sb, int wait)
 {
 	int error;
 
-	if ((sb->sb_flags & SB_LOCK) == 0)
-		goto lock;
+	if ((sb->sb_flags & SB_LOCK) == 0) {
+		sb->sb_flags |= SB_LOCK;
+		return (0);
+	}
 	if (wait & M_NOWAIT)
 		return (EWOULDBLOCK);
 
@@ -297,7 +299,6 @@ sblock(struct sockbuf *sb, int wait)
 		if (error)
 			return (error);
 	}
- lock:
 	sb->sb_flags |= SB_LOCK;
 	return (0);
 }
