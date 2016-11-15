@@ -951,11 +951,14 @@ icmp_mtudisc_clone(struct in_addr dst, u_int rtableid)
 	if ((rt->rt_flags & RTF_HOST) == 0) {
 		struct rtentry *nrt;
 		struct rt_addrinfo info;
+		struct sockaddr_rtlabel sa_rl;
 
 		memset(&info, 0, sizeof(info));
 		info.rti_flags = RTF_GATEWAY | RTF_HOST | RTF_DYNAMIC;
 		info.rti_info[RTAX_DST] = sintosa(&sin);
 		info.rti_info[RTAX_GATEWAY] = rt->rt_gateway;
+		info.rti_info[RTAX_LABEL] =
+		    rtlabel_id2sa(rt->rt_labelid, &sa_rl);
 
 		error = rtrequest(RTM_ADD, &info, RTP_DEFAULT, &nrt, rtableid);
 		if (error) {
