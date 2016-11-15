@@ -2047,7 +2047,8 @@ ip6_setmoptions(int optname, struct ip6_moptions **im6op, struct mbuf *m)
 			dst->sin6_addr = mreq->ipv6mr_multiaddr;
 			ro.ro_rt = rtalloc(sin6tosa(&ro.ro_dst),
 			    RT_RESOLVE, ro.ro_tableid);
-			if (ro.ro_rt == NULL) {
+			if (!rtisvalid(ro.ro_rt)) {
+				rtfree(ro.ro_rt);
 				error = EADDRNOTAVAIL;
 				break;
 			}
