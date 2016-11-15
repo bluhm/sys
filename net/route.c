@@ -1129,6 +1129,8 @@ rt_setgate(struct rtentry *rt, struct sockaddr *gate, u_int rtableid)
 	int glen = ROUNDUP(gate->sa_len);
 	struct sockaddr *sa;
 
+	splsoftassert(IPL_SOFTNET);
+
 	if (rt->rt_gateway == NULL || glen > ROUNDUP(rt->rt_gateway->sa_len)) {
 		sa = malloc(glen, M_RTABLE, M_NOWAIT);
 		if (sa == NULL)
