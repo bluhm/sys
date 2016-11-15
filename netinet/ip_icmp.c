@@ -953,9 +953,9 @@ icmp_mtudisc_clone(struct in_addr dst, u_int rtableid)
 		struct rt_addrinfo info;
 
 		memset(&info, 0, sizeof(info));
+		info.rti_flags = RTF_GATEWAY | RTF_HOST | RTF_DYNAMIC;
 		info.rti_info[RTAX_DST] = sintosa(&sin);
 		info.rti_info[RTAX_GATEWAY] = rt->rt_gateway;
-		info.rti_flags = RTF_GATEWAY | RTF_HOST | RTF_DYNAMIC;
 
 		error = rtrequest(RTM_ADD, &info, RTP_DEFAULT, &nrt, rtableid);
 		if (error) {
