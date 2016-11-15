@@ -1912,7 +1912,7 @@ ip6_freepcbopts(struct ip6_pktopts *pktopt)
 int
 ip6_setmoptions(int optname, struct ip6_moptions **im6op, struct mbuf *m)
 {
-	int error = 0;
+	int s, error = 0;
 	u_int loop, ifindex;
 	struct ipv6_mreq *mreq;
 	struct ifnet *ifp;
@@ -2039,6 +2039,7 @@ ip6_setmoptions(int optname, struct ip6_moptions **im6op, struct mbuf *m)
 			 * address, and choose the outgoing interface.
 			 *   XXX: is it a good approach?
 			 */
+			s = splsoftnet();
 			bzero(&ro, sizeof(ro));
 			ro.ro_tableid = m->m_pkthdr.ph_rtableid;
 			dst = &ro.ro_dst;
@@ -2049,11 +2050,13 @@ ip6_setmoptions(int optname, struct ip6_moptions **im6op, struct mbuf *m)
 			    RT_RESOLVE, ro.ro_tableid);
 			if (!rtisvalid(ro.ro_rt)) {
 				rtfree(ro.ro_rt);
+				splx(s);
 				error = EADDRNOTAVAIL;
 				break;
 			}
 			ifp = if_get(ro.ro_rt->rt_ifidx);
 			rtfree(ro.ro_rt);
+			splx(s);
 		} else {
 			/*
 			 * If the interface is specified, validate it.

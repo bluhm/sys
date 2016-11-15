@@ -1348,7 +1348,7 @@ ip_setmoptions(int optname, struct ip_moptions **imop, struct mbuf *m,
 	struct in_multi **immp;
 	struct rtentry *rt;
 	struct sockaddr_in sin;
-	int i, error = 0;
+	int i, s, error = 0;
 	u_char loop;
 
 	if (imo == NULL) {
@@ -1449,6 +1449,7 @@ ip_setmoptions(int optname, struct ip_moptions **imop, struct mbuf *m,
 		 * If no interface address was provided, use the interface of
 		 * the route to the given multicast address.
 		 */
+		s = splsoftnet();
 		if (mreq->imr_interface.s_addr == INADDR_ANY) {
 			memset(&sin, 0, sizeof(sin));
 			sin.sin_len = sizeof(sin);
@@ -1457,6 +1458,7 @@ ip_setmoptions(int optname, struct ip_moptions **imop, struct mbuf *m,
 			rt = rtalloc(sintosa(&sin), RT_RESOLVE, rtableid);
 			if (!rtisvalid(rt)) {
 				rtfree(rt);
+				splx(s);
 				error = EADDRNOTAVAIL;
 				break;
 			}
@@ -1468,12 +1470,14 @@ ip_setmoptions(int optname, struct ip_moptions **imop, struct mbuf *m,
 			rt = rtalloc(sintosa(&sin), 0, rtableid);
 			if (!rtisvalid(rt) || !ISSET(rt->rt_flags, RTF_LOCAL)) {
 				rtfree(rt);
+				splx(s);
 				error = EADDRNOTAVAIL;
 				break;
 			}
 		}
 		ifp = if_get(rt->rt_ifidx);
 		rtfree(rt);
+		splx(s);
 
 		/*
 		 * See if we found an interface, and confirm that it
