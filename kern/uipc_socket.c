@@ -1371,7 +1371,7 @@ somove(struct socket *so, int wait)
 			 * Move only a partial mbuf at maximum splice lenght or
 			 * if the drain buffer is too small for this large mbuf.
 			 */
-			if (!maxreached && so->so_snd.sb_datacc != 0) {
+			if (!maxreached && so->so_snd.sb_datacc > 0) {
 				len -= size;
 				break;
 			}
