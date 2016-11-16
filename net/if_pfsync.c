@@ -1733,7 +1733,6 @@ pfsync_undefer(struct pfsync_deferral *pd, int drop)
 {
 	struct pfsync_softc *sc = pfsyncif;
 	struct pf_pdesc pdesc;
-	union pf_headers pdhdrs;
 
 	splsoftassert(IPL_SOFTNET);
 
@@ -1745,7 +1744,7 @@ pfsync_undefer(struct pfsync_deferral *pd, int drop)
 		m_freem(pd->pd_m);
 	else {
 		if (pd->pd_st->rule.ptr->rt == PF_ROUTETO) {
-			if (pf_setup_pdesc(&pdesc, &pdhdrs,
+			if (pf_setup_pdesc(&pdesc,
 			    pd->pd_st->key[PF_SK_WIRE]->af,
 			    pd->pd_st->direction, pd->pd_st->rt_kif,
 			    pd->pd_m, NULL) != PF_PASS) {

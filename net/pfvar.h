@@ -1648,9 +1648,9 @@ void				 pf_rm_rule(struct pf_rulequeue *,
 				    struct pf_rule *);
 void				 pf_purge_rule(struct pf_rule *);
 struct pf_divert		*pf_find_divert(struct mbuf *);
-int				 pf_setup_pdesc(struct pf_pdesc *, void *,
-				    sa_family_t, int, struct pfi_kif *,
-				    struct mbuf *, u_short *);
+int				 pf_setup_pdesc(struct pf_pdesc *, sa_family_t,
+				    int, struct pfi_kif *, struct mbuf *,
+				    u_short *);
 
 int	pf_test(sa_family_t, int, struct ifnet *, struct mbuf **);
 

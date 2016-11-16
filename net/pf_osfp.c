@@ -86,7 +86,7 @@ void				 pf_osfp_insert(struct pf_osfp_list *,
 struct pf_osfp_enlist *
 pf_osfp_fingerprint(struct pf_pdesc *pd)
 {
-	struct tcphdr	*th = pd->hdr.tcp;
+	struct tcphdr	*th = &pd->hdr.tcp;
 	struct ip	*ip = NULL;
 	struct ip6_hdr	*ip6 = NULL;
 	char		 hdr[60];

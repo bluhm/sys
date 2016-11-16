@@ -37,17 +37,6 @@
 
 #ifdef _KERNEL
 
-union pf_headers {
-	struct tcphdr           tcp;
-	struct udphdr           udp;
-	struct icmp             icmp;
-#ifdef INET6
-	struct icmp6_hdr        icmp6;
-	struct mld_hdr          mld;
-	struct nd_neighbor_solicit nd_ns;
-#endif /* INET6 */
-};
-
 struct pf_pdesc {
 	struct {
 		int	 done;
@@ -56,15 +45,6 @@ struct pf_pdesc {
 		pid_t	 pid;
 	}		 lookup;
 	u_int64_t	 tot_len;	/* Make Mickey money */
-	union {
-		struct tcphdr		*tcp;
-		struct udphdr		*udp;
-		struct icmp		*icmp;
-#ifdef INET6
-		struct icmp6_hdr	*icmp6;
-#endif /* INET6 */
-		void			*any;
-	} hdr;
 
 	struct pf_addr	 nsaddr;	/* src address after NAT */
 	struct pf_addr	 ndaddr;	/* dst address after NAT */
@@ -102,6 +82,17 @@ struct pf_pdesc {
 	u_int8_t	 didx;		/* key index for destination */
 	u_int8_t	 destchg;	/* flag set when destination changed */
 	u_int8_t	 pflog;		/* flags for packet logging */
+
+	union {
+		struct tcphdr           tcp;
+		struct udphdr           udp;
+		struct icmp             icmp;
+#ifdef INET6
+		struct icmp6_hdr        icmp6;
+		struct mld_hdr          mld;
+		struct nd_neighbor_solicit nd_ns;
+#endif /* INET6 */
+	} hdr;
 };
 
 #endif /* _KERNEL */
