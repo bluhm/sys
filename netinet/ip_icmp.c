@@ -960,7 +960,8 @@ icmp_mtudisc_clone(struct in_addr dst, u_int rtableid)
 		info.rti_info[RTAX_LABEL] =
 		    rtlabel_id2sa(rt->rt_labelid, &sa_rl);
 
-		error = rtrequest(RTM_ADD, &info, RTP_DEFAULT, &nrt, rtableid);
+		error = rtrequest(RTM_ADD, &info, rt->rt_priority, &nrt,
+		    rtableid);
 		if (error) {
 			rtfree(rt);
 			return (NULL);
