@@ -957,7 +957,8 @@ icmp_mtudisc_clone(struct in_addr dst, u_int rtableid)
 		info.rti_info[RTAX_GATEWAY] = rt->rt_gateway;
 		info.rti_flags = RTF_GATEWAY | RTF_HOST | RTF_DYNAMIC;
 
-		error = rtrequest(RTM_ADD, &info, RTP_DEFAULT, &nrt, rtableid);
+		error = rtrequest(RTM_ADD, &info, rt->rt_priority, &nrt,
+		    rtableid);
 		if (error) {
 			rtfree(rt);
 			return (NULL);

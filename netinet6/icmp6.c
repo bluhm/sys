@@ -1901,46 +1901,47 @@ icmp6_ratelimit(const struct in6_addr *dst, const int type, const int code)
 }
 
 struct rtentry *
-icmp6_mtudisc_clone(struct sockaddr *dst, u_int rdomain)
+icmp6_mtudisc_clone(struct sockaddr *dst, u_int rtableid)
 {
 	struct rtentry *rt;
 	int    error;
 
-	rt = rtalloc(dst, RT_RESOLVE, rdomain);
-	if (rt == NULL)
-		return NULL;
+	rt = rtalloc(dst, RT_RESOLVE, rtableid);
+
+	/* Check if the route is actually usable */
+	if (!rtisvalid(rt) || (rt->rt_flags & (RTF_REJECT|RTF_BLACKHOLE))) {
+		rtfree(rt);
+		return (NULL);
+	}
 
 	/* If we didn't get a host route, allocate one */
 	if ((rt->rt_flags & RTF_HOST) == 0) {
 		struct rt_addrinfo info;
 		struct rtentry *nrt;
-		int s;
 
 		bzero(&info, sizeof(info));
 		info.rti_flags = RTF_GATEWAY | RTF_HOST | RTF_DYNAMIC;
 		info.rti_info[RTAX_DST] = dst;
 		info.rti_info[RTAX_GATEWAY] = rt->rt_gateway;
 
-		s = splsoftnet();
 		error = rtrequest(RTM_ADD, &info, rt->rt_priority, &nrt,
-		    rdomain);
-		splx(s);
+		    rtableid);
 		if (error) {
 			rtfree(rt);
-			return NULL;
+			return (NULL);
 		}
 		nrt->rt_rmx = rt->rt_rmx;
 		rtfree(rt);
 		rt = nrt;
 	}
-	error = rt_timer_add(rt, icmp6_mtudisc_timeout,
-			icmp6_mtudisc_timeout_q, rdomain);
+	error = rt_timer_add(rt, icmp6_mtudisc_timeout, icmp6_mtudisc_timeout_q,
+	    rtableid);
 	if (error) {
 		rtfree(rt);
-		return NULL;
+		return (NULL);
 	}
 
-	return rt;	/* caller need to call rtfree() */
+	return (rt);
 }
 
 void
