@@ -1365,8 +1365,16 @@ somove(struct socket *so, int wait)
 			    "m_type %d", so, so->so_type, *mp, (*mp)->m_type);
 #endif
 		if ((*mp)->m_len > size) {
-			if (!maxreached || (*mp = m_copym(
-			    so->so_rcv.sb_mb, 0, size, wait)) == NULL) {
+			/*
+			 * Only move a partial mbuf at maximum splice lenght or
+			 * if the drain buffer is too small for this large mbuf.
+			 */
+			if (!maxreached && so->so_snd.sb_datacc != 0) {
+				len -= size;
+				break;
+			}
+			*mp = m_copym(so->so_rcv.sb_mb, 0, size, wait);
+			if (*mp == NULL) {
 				len -= size;
 				break;
 			}
