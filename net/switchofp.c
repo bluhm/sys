@@ -1,4 +1,4 @@
-/*	$OpenBSD: switchofp.c,v 1.30 2016/11/10 17:32:40 rzalamena Exp $	*/
+/*	$OpenBSD: switchofp.c,v 1.35 2016/11/21 08:28:19 rzalamena Exp $	*/
 
 /*
  * Copyright (c) 2016 Kazuya GODA <goda@openbsd.org>
@@ -17,6 +17,8 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
+
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -44,6 +46,10 @@
 #include <net/if_switch.h>
 #include <net/if_vlan_var.h>
 #include <net/ofp.h>
+
+#if NBPFILTER > 0
+#include <net/bpf.h>
+#endif
 
 /*
  * per-frame matching logs provide a helpful for isolating a problem or debuging
@@ -977,6 +983,11 @@ swofp_create(struct switch_softc *sc)
 
 	sc->sc_capabilities |= SWITCH_CAP_OFP;
 	sc->switch_process_forward = swofp_forward_ofs;
+
+#if NBPFILTER > 0
+	bpfattach(&sc->sc_ofbpf, &sc->sc_if, DLT_OPENFLOW,
+	    sizeof(struct ofp_header));
+#endif
 
 	DPRINTF(sc, "enable OpenFlow switch capability\n");
 
@@ -2079,7 +2090,7 @@ swofp_flow_filter(struct swofp_flow_entry *swfe, uint64_t cookie,
 	    ((swfe->swfe_cookie & cookie_mask) != (cookie & cookie_mask)))
 		return (0);
 
-	if ((out_port == OFP_PORT_ANY) && (out_group == OFP_GROUP_ALL))
+	if ((out_port == OFP_PORT_ANY) && (out_group == OFP_GROUP_ID_ALL))
 		return (1);
 
 	if ((out_port != OFP_PORT_ANY) &&
@@ -2087,7 +2098,7 @@ swofp_flow_filter(struct swofp_flow_entry *swfe, uint64_t cookie,
 	    swofp_flow_filter_out_port(swfe->swfe_apply_actions, out_port)))
 	    return (0);
 
-	if (out_port != OFP_GROUP_ALL) {
+	if (out_port != OFP_GROUP_ID_ALL) {
 		/* XXX ignore group */
 	}
 
@@ -4462,6 +4473,7 @@ swofp_forward_ofs(struct switch_softc *sc, struct switch_flow_classify *swfcl,
 int
 swofp_input(struct switch_softc *sc, struct mbuf *m)
 {
+	struct swofp_ofs	*swofs = sc->sc_ofs;
 	struct ofp_header	*oh;
 	ofp_msg_handler		 handler;
 
@@ -4478,6 +4490,12 @@ swofp_input(struct switch_softc *sc, struct mbuf *m)
 	    swofp_mtype_str(oh->oh_type), ntohl(oh->oh_xid),
 	    ntohs(oh->oh_length));
 
+#if NBPFILTER > 0
+	if (sc->sc_ofbpf)
+		switch_mtap(sc->sc_ofbpf, m, BPF_DIRECTION_IN,
+		    swofs->swofs_datapath_id);
+#endif
+
 	handler = swofp_lookup_msg_handler(oh->oh_type);
 	if (handler)
 		(*handler)(sc, m);
@@ -4491,6 +4509,7 @@ swofp_input(struct switch_softc *sc, struct mbuf *m)
 int
 swofp_output(struct switch_softc *sc, struct mbuf *m)
 {
+	struct swofp_ofs	*swofs = sc->sc_ofs;
 	struct ofp_header	*oh;
 
 	if (sc->sc_swdev == NULL) {
@@ -4502,6 +4521,12 @@ swofp_output(struct switch_softc *sc, struct mbuf *m)
 	VDPRINTF(sc, "sending ofp message type=%s xid=%x len=%d\n",
 		 swofp_mtype_str(oh->oh_type), ntohl(oh->oh_xid),
 		 ntohs(oh->oh_length));
+
+#if NBPFILTER > 0
+	if (sc->sc_ofbpf)
+		switch_mtap(sc->sc_ofbpf, m, BPF_DIRECTION_OUT,
+		    swofs->swofs_datapath_id);
+#endif
 
 	if (sc->sc_swdev->swdev_output(sc, m) != 0)
 		return (ENOBUFS);
@@ -4564,10 +4589,9 @@ swofp_send_error(struct switch_softc *sc, struct mbuf *m,
 	/* Reuse mbuf from request message */
 	oe = mtod(m, struct ofp_error *);
 
-	len = min((ntohs(oe->err_oh.oh_length) - sizeof(struct ofp_header)),
-	    OFP_ERRDATA_MAX);
-
-	m_copydata(m, sizeof(struct ofp_header), len, data);
+	/* Save data for the response and copy back later. */
+	len = min(ntohs(oe->err_oh.oh_length), OFP_ERRDATA_MAX);
+	m_copydata(m, 0, len, data);
 
 	oe->err_oh.oh_version = OFP_V_1_3;
 	oe->err_oh.oh_type = OFP_T_ERROR;
@@ -4775,49 +4799,56 @@ swofp_flow_entry_put_instructions(struct mbuf *m,
 
 		switch (ntohs(oi->i_type)) {
 		case OFP_INSTRUCTION_T_GOTO_TABLE:
-			free(swfe->swfe_goto_table, M_DEVBUF,
-			    ntohs(oi->i_len));
+			if (swfe->swfe_goto_table)
+				free(swfe->swfe_goto_table, M_DEVBUF,
+				    ntohs(swfe->swfe_goto_table->igt_len));
 
 			swfe->swfe_goto_table =
 			    (struct ofp_instruction_goto_table *)inst;
 			break;
 		case OFP_INSTRUCTION_T_WRITE_META:
-			free(swfe->swfe_write_metadata, M_DEVBUF,
-			    ntohs(oi->i_len));
+			if (swfe->swfe_write_metadata)
+				free(swfe->swfe_write_metadata, M_DEVBUF,
+				    ntohs(swfe->swfe_write_metadata->iwm_len));
 
 			swfe->swfe_write_metadata =
 			    (struct ofp_instruction_write_metadata *)inst;
 			break;
 		case OFP_INSTRUCTION_T_WRITE_ACTIONS:
-			free(swfe->swfe_write_actions, M_DEVBUF,
-			    ntohs(oi->i_len));
+			if (swfe->swfe_write_actions)
+				free(swfe->swfe_write_actions, M_DEVBUF,
+				    ntohs(swfe->swfe_write_actions->ia_len));
 
 			swfe->swfe_write_actions =
 			    (struct ofp_instruction_actions *)inst;
 			break;
 		case OFP_INSTRUCTION_T_APPLY_ACTIONS:
-			free(swfe->swfe_apply_actions, M_DEVBUF,
-			    ntohs(oi->i_len));
+			if (swfe->swfe_apply_actions)
+				free(swfe->swfe_apply_actions, M_DEVBUF,
+				    ntohs(swfe->swfe_apply_actions->ia_len));
 
 			swfe->swfe_apply_actions =
 			    (struct ofp_instruction_actions *)inst;
 			break;
 		case OFP_INSTRUCTION_T_CLEAR_ACTIONS:
-			free(swfe->swfe_clear_actions, M_DEVBUF,
-			    ntohs(oi->i_len));
+			if (swfe->swfe_clear_actions)
+				free(swfe->swfe_clear_actions, M_DEVBUF,
+				    ntohs(swfe->swfe_clear_actions->ia_len));
 
 			swfe->swfe_clear_actions =
 			    (struct ofp_instruction_actions *)inst;
 			break;
 		case OFP_INSTRUCTION_T_METER:
-			free(swfe->swfe_meter, M_DEVBUF,
-			    ntohs(oi->i_len));
+			if (swfe->swfe_meter)
+				free(swfe->swfe_meter, M_DEVBUF,
+				    ntohs(swfe->swfe_meter->im_len));
 
 			swfe->swfe_meter = (struct ofp_instruction_meter *)inst;
 			break;
 		case OFP_INSTRUCTION_T_EXPERIMENTER:
-			free(swfe->swfe_experimenter, M_DEVBUF,
-			    ntohs(oi->i_len));
+			if (swfe->swfe_experimenter)
+				free(swfe->swfe_experimenter, M_DEVBUF,
+				    ntohs(swfe->swfe_experimenter->ie_len));
 
 			swfe->swfe_experimenter =
 			    (struct ofp_instruction_experimenter *)inst;
@@ -5264,7 +5295,7 @@ swofp_group_mod_delete(struct switch_softc *sc, struct mbuf *m)
 	ogm = mtod(m, struct ofp_group_mod *);
 	group_id = ntohl(ogm->gm_group_id);
 
-	if (group_id == OFP_GROUP_ALL)
+	if (group_id == OFP_GROUP_ID_ALL)
 		swofp_group_entry_delete_all(sc);
 	else if ((swge = swofp_group_entry_lookup(sc, group_id)) != NULL)
 		    swofp_group_entry_delete(sc, swge);

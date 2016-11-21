@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_iwm.c,v 1.146 2016/11/01 13:49:50 stsp Exp $	*/
+/*	$OpenBSD: if_iwm.c,v 1.148 2016/11/19 21:07:08 stsp Exp $	*/
 
 /*
  * Copyright (c) 2014, 2016 genua gmbh <info@genua.de>
@@ -3319,12 +3319,9 @@ iwm_rx_rx_mpdu(struct iwm_softc *sc, struct iwm_rx_packet *pkt,
 		tap->wr_tsft = phy_info->system_timestamp;
 		if (phy_info->phy_flags &
 		    htole16(IWM_RX_RES_PHY_FLAGS_OFDM_HT)) {
-#ifdef notyet
 			uint8_t mcs = (phy_info->rate_n_flags &
 			    htole32(IWM_RATE_HT_MCS_RATE_CODE_MSK));
-#endif
-			/* XXX need a way to pass current MCS in 11n mode */
-			tap->wr_rate = 0;
+			tap->wr_rate = (0x80 | mcs);
 		} else {
 			uint8_t rate = (phy_info->rate_n_flags &
 			    htole32(IWM_RATE_LEGACY_RATE_MSK));
@@ -3940,9 +3937,11 @@ iwm_tx(struct iwm_softc *sc, struct mbuf *m, struct ieee80211_node *ni, int ac)
 		tap->wt_flags = 0;
 		tap->wt_chan_freq = htole16(ni->ni_chan->ic_freq);
 		tap->wt_chan_flags = htole16(ni->ni_chan->ic_flags);
-		if (rinfo->plcp == IWM_RATE_INVM_PLCP) {
-			/* XXX need a way to pass current MCS in 11n mode */
-			tap->wt_rate = 0;
+		if ((ni->ni_flags & IEEE80211_NODE_HT) &&
+		    !IEEE80211_IS_MULTICAST(wh->i_addr1) &&
+		    type == IEEE80211_FC0_TYPE_DATA &&
+		    rinfo->plcp == IWM_RATE_INVM_PLCP) {
+			tap->wt_rate = (0x80 | rinfo->ht_plcp);
 		} else
 			tap->wt_rate = rinfo->rate;
 		tap->wt_hwqueue = ac;
@@ -4897,8 +4896,8 @@ iwm_ack_rates(struct iwm_softc *sc, struct iwm_node *in, int *cck_rates,
 {
 	struct ieee80211_node *ni = &in->in_ni;
 	struct ieee80211_rateset *rs = &ni->ni_rates;
-	int lowest_present_ofdm = 100;
-	int lowest_present_cck = 100;
+	int lowest_present_ofdm = -1;
+	int lowest_present_cck = -1;
 	uint8_t cck = 0;
 	uint8_t ofdm = 0;
 	int i;
@@ -4909,7 +4908,7 @@ iwm_ack_rates(struct iwm_softc *sc, struct iwm_node *in, int *cck_rates,
 			if ((iwm_ridx2rate(rs, i) & IEEE80211_RATE_BASIC) == 0)
 				continue;
 			cck |= (1 << i);
-			if (lowest_present_cck > i)
+			if (lowest_present_cck == -1 || lowest_present_cck > i)
 				lowest_present_cck = i;
 		}
 	}
@@ -4917,7 +4916,7 @@ iwm_ack_rates(struct iwm_softc *sc, struct iwm_node *in, int *cck_rates,
 		if ((iwm_ridx2rate(rs, i) & IEEE80211_RATE_BASIC) == 0)
 			continue;	
 		ofdm |= (1 << (i - IWM_FIRST_OFDM_RATE));
-		if (lowest_present_ofdm > i)
+		if (lowest_present_ofdm == -1 || lowest_present_ofdm > i)
 			lowest_present_ofdm = i;
 	}
 

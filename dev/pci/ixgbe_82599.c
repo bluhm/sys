@@ -1,8 +1,8 @@
-/*	$OpenBSD: ixgbe_82599.c,v 1.12 2015/04/30 14:17:26 jsg Exp $	*/
+/*	$OpenBSD: ixgbe_82599.c,v 1.16 2016/11/17 21:08:27 mikeb Exp $	*/
 
 /******************************************************************************
 
-  Copyright (c) 2001-2013, Intel Corporation
+  Copyright (c) 2001-2015, Intel Corporation
   All rights reserved.
 
   Redistribution and use in source and binary forms, with or without
@@ -32,10 +32,17 @@
   POSSIBILITY OF SUCH DAMAGE.
 
 ******************************************************************************/
-/* FreeBSD: src/sys/dev/ixgbe/ixgbe_82599.c 251964 Jun 18 21:28:19 2013 UTC */
+/*$FreeBSD: head/sys/dev/ixgbe/ixgbe_82599.c 292674 2015-12-23 22:45:17Z sbruno $*/
 
 #include <dev/pci/ixgbe.h>
 #include <dev/pci/ixgbe_type.h>
+
+#define IXGBE_82599_MAX_TX_QUEUES 128
+#define IXGBE_82599_MAX_RX_QUEUES 128
+#define IXGBE_82599_RAR_ENTRIES   128
+#define IXGBE_82599_MC_TBL_SIZE   128
+#define IXGBE_82599_VFT_TBL_SIZE  128
+#define IXGBE_82599_RX_PB_SIZE	  512
 
 int32_t ixgbe_get_link_capabilities_82599(struct ixgbe_hw *hw,
 					  ixgbe_link_speed *speed,
@@ -44,23 +51,16 @@ enum ixgbe_media_type ixgbe_get_media_type_82599(struct ixgbe_hw *hw);
 void ixgbe_disable_tx_laser_multispeed_fiber(struct ixgbe_hw *hw);
 void ixgbe_enable_tx_laser_multispeed_fiber(struct ixgbe_hw *hw);
 void ixgbe_flap_tx_laser_multispeed_fiber(struct ixgbe_hw *hw);
-void ixgbe_set_fiber_fixed_speed(struct ixgbe_hw *hw,
-				 ixgbe_link_speed speed);
-int32_t ixgbe_setup_mac_link_multispeed_fiber(struct ixgbe_hw *hw,
-					      ixgbe_link_speed speed,
-					      bool autoneg_wait_to_complete);
+void ixgbe_set_hard_rate_select_speed(struct ixgbe_hw *hw,
+				      ixgbe_link_speed speed);
 int32_t ixgbe_setup_mac_link_smartspeed(struct ixgbe_hw *hw,
-				     ixgbe_link_speed speed,
-				     bool autoneg_wait_to_complete);
+					ixgbe_link_speed speed,
+					bool autoneg_wait_to_complete);
 int32_t ixgbe_start_mac_link_82599(struct ixgbe_hw *hw,
 				   bool autoneg_wait_to_complete);
-void ixgbe_stop_mac_link_on_d3_82599(struct ixgbe_hw *hw);
 int32_t ixgbe_setup_mac_link_82599(struct ixgbe_hw *hw,
-				     ixgbe_link_speed speed,
-				     bool autoneg_wait_to_complete);
-int32_t ixgbe_setup_copper_link_82599(struct ixgbe_hw *hw,
-				      ixgbe_link_speed speed,
-				      bool autoneg_wait_to_complete);
+				   ixgbe_link_speed speed,
+				   bool autoneg_wait_to_complete);
 int32_t ixgbe_setup_sfp_modules_82599(struct ixgbe_hw *hw);
 void ixgbe_init_mac_link_ops_82599(struct ixgbe_hw *hw);
 int32_t ixgbe_reset_hw_82599(struct ixgbe_hw *hw);
@@ -73,32 +73,24 @@ int32_t ixgbe_identify_phy_82599(struct ixgbe_hw *hw);
 int32_t ixgbe_init_phy_ops_82599(struct ixgbe_hw *hw);
 uint32_t ixgbe_get_supported_physical_layer_82599(struct ixgbe_hw *hw);
 int32_t ixgbe_enable_rx_dma_82599(struct ixgbe_hw *hw, uint32_t regval);
+int32_t prot_autoc_read_82599(struct ixgbe_hw *, bool *locked, uint32_t *reg_val);
+int32_t prot_autoc_write_82599(struct ixgbe_hw *, uint32_t reg_val, bool locked);
+
+void ixgbe_stop_mac_link_on_d3_82599(struct ixgbe_hw *hw);
+
+int32_t ixgbe_setup_copper_link_82599(struct ixgbe_hw *hw,
+				      ixgbe_link_speed speed,
+				      bool autoneg_wait_to_complete);
+
 int32_t ixgbe_verify_fw_version_82599(struct ixgbe_hw *hw);
 bool ixgbe_verify_lesm_fw_enabled_82599(struct ixgbe_hw *hw);
+int32_t ixgbe_reset_pipeline_82599(struct ixgbe_hw *hw);
 int32_t ixgbe_read_eeprom_82599(struct ixgbe_hw *hw,
 				uint16_t offset, uint16_t *data);
-int32_t ixgbe_reset_pipeline_82599(struct ixgbe_hw *hw);
-int32_t ixgbe_blink_led_start_82599(struct ixgbe_hw *hw, uint32_t index);
-int32_t ixgbe_blink_led_stop_82599(struct ixgbe_hw *hw, uint32_t index);
-
-static bool ixgbe_mng_enabled(struct ixgbe_hw *hw)
-{
-	uint32_t fwsm, manc, factps;
-
-	fwsm = IXGBE_READ_REG(hw, IXGBE_FWSM);
-	if ((fwsm & IXGBE_FWSM_MODE_MASK) != IXGBE_FWSM_FW_MODE_PT)
-		return FALSE;
-
-	manc = IXGBE_READ_REG(hw, IXGBE_MANC);
-	if (!(manc & IXGBE_MANC_RCV_TCO_EN))
-		return FALSE;
-
-	factps = IXGBE_READ_REG(hw, IXGBE_FACTPS);
-	if (factps & IXGBE_FACTPS_MNGCG)
-		return FALSE;
-
-	return TRUE;
-}
+int32_t ixgbe_read_i2c_byte_82599(struct ixgbe_hw *hw, uint8_t byte_offset,
+				  uint8_t dev_addr, uint8_t *data);
+int32_t ixgbe_write_i2c_byte_82599(struct ixgbe_hw *hw, uint8_t byte_offset,
+				   uint8_t dev_addr, uint8_t data);
 
 void ixgbe_init_mac_link_ops_82599(struct ixgbe_hw *hw)
 {
@@ -111,12 +103,12 @@ void ixgbe_init_mac_link_ops_82599(struct ixgbe_hw *hw)
 	 * and MNG not enabled
 	 */
 	if ((mac->ops.get_media_type(hw) == ixgbe_media_type_fiber) &&
-	    !hw->mng_fw_enabled) {
+	    !ixgbe_mng_enabled(hw)) {
 		mac->ops.disable_tx_laser =
-				       &ixgbe_disable_tx_laser_multispeed_fiber;
+				       ixgbe_disable_tx_laser_multispeed_fiber;
 		mac->ops.enable_tx_laser =
-					&ixgbe_enable_tx_laser_multispeed_fiber;
-		mac->ops.flap_tx_laser = &ixgbe_flap_tx_laser_multispeed_fiber;
+					ixgbe_enable_tx_laser_multispeed_fiber;
+		mac->ops.flap_tx_laser = ixgbe_flap_tx_laser_multispeed_fiber;
 
 	} else {
 		mac->ops.disable_tx_laser = NULL;
@@ -126,15 +118,21 @@ void ixgbe_init_mac_link_ops_82599(struct ixgbe_hw *hw)
 
 	if (hw->phy.multispeed_fiber) {
 		/* Set up dual speed SFP+ support */
-		mac->ops.setup_link = &ixgbe_setup_mac_link_multispeed_fiber;
+		mac->ops.setup_link = ixgbe_setup_mac_link_multispeed_fiber;
+		mac->ops.setup_mac_link = ixgbe_setup_mac_link_82599;
+		mac->ops.set_rate_select_speed =
+					       ixgbe_set_hard_rate_select_speed;
+		if (ixgbe_get_media_type(hw) == ixgbe_media_type_fiber_fixed)
+			mac->ops.set_rate_select_speed =
+					       ixgbe_set_soft_rate_select_speed;
 	} else {
 		if ((ixgbe_get_media_type(hw) == ixgbe_media_type_backplane) &&
 		     (hw->phy.smart_speed == ixgbe_smart_speed_auto ||
 		      hw->phy.smart_speed == ixgbe_smart_speed_on) &&
 		      !ixgbe_verify_lesm_fw_enabled_82599(hw)) {
-			mac->ops.setup_link = &ixgbe_setup_mac_link_smartspeed;
+			mac->ops.setup_link = ixgbe_setup_mac_link_smartspeed;
 		} else {
-			mac->ops.setup_link = &ixgbe_setup_mac_link_82599;
+			mac->ops.setup_link = ixgbe_setup_mac_link_82599;
 		}
 	}
 }
@@ -153,9 +151,27 @@ int32_t ixgbe_init_phy_ops_82599(struct ixgbe_hw *hw)
 	struct ixgbe_mac_info *mac = &hw->mac;
 	struct ixgbe_phy_info *phy = &hw->phy;
 	int32_t ret_val = IXGBE_SUCCESS;
+	uint32_t esdp;
 
 	DEBUGFUNC("ixgbe_init_phy_ops_82599");
 
+	if (hw->device_id == IXGBE_DEV_ID_82599_QSFP_SF_QP) {
+		/* Store flag indicating I2C bus access control unit. */
+		hw->phy.qsfp_shared_i2c_bus = TRUE;
+
+		/* Initialize access to QSFP+ I2C bus */
+		esdp = IXGBE_READ_REG(hw, IXGBE_ESDP);
+		esdp |= IXGBE_ESDP_SDP0_DIR;
+		esdp &= ~IXGBE_ESDP_SDP1_DIR;
+		esdp &= ~IXGBE_ESDP_SDP0;
+		esdp &= ~IXGBE_ESDP_SDP0_NATIVE;
+		esdp &= ~IXGBE_ESDP_SDP1_NATIVE;
+		IXGBE_WRITE_REG(hw, IXGBE_ESDP, esdp);
+		IXGBE_WRITE_FLUSH(hw);
+
+		phy->ops.read_i2c_byte = ixgbe_read_i2c_byte_82599;
+		phy->ops.write_i2c_byte = ixgbe_write_i2c_byte_82599;
+	}
 	/* Identify the PHY or SFP module */
 	ret_val = phy->ops.identify(hw);
 	if (ret_val == IXGBE_ERR_SFP_NOT_SUPPORTED)
@@ -168,18 +184,18 @@ int32_t ixgbe_init_phy_ops_82599(struct ixgbe_hw *hw)
 
 	/* If copper media, overwrite with copper function pointers */
 	if (mac->ops.get_media_type(hw) == ixgbe_media_type_copper) {
-		mac->ops.setup_link = &ixgbe_setup_copper_link_82599;
+		mac->ops.setup_link = ixgbe_setup_copper_link_82599;
 		mac->ops.get_link_capabilities =
-				  &ixgbe_get_copper_link_capabilities_generic;
+				  ixgbe_get_copper_link_capabilities_generic;
 	}
 
-	/* Set necessary function pointers based on phy type */
+	/* Set necessary function pointers based on PHY type */
 	switch (hw->phy.type) {
 	case ixgbe_phy_tn:
-		phy->ops.setup_link = &ixgbe_setup_phy_link_tnx;
-		phy->ops.check_link = &ixgbe_check_phy_link_tnx;
+		phy->ops.setup_link = ixgbe_setup_phy_link_tnx;
+		phy->ops.check_link = ixgbe_check_phy_link_tnx;
 		phy->ops.get_firmware_version =
-			     &ixgbe_get_phy_firmware_version_tnx;
+			     ixgbe_get_phy_firmware_version_tnx;
 		break;
 	default:
 		break;
@@ -192,7 +208,6 @@ int32_t ixgbe_setup_sfp_modules_82599(struct ixgbe_hw *hw)
 {
 	int32_t ret_val = IXGBE_SUCCESS;
 	uint16_t list_offset, data_offset, data_value;
-	bool got_lock = FALSE;
 
 	DEBUGFUNC("ixgbe_setup_sfp_modules_82599");
 
@@ -225,35 +240,15 @@ int32_t ixgbe_setup_sfp_modules_82599(struct ixgbe_hw *hw)
 
 		/* Release the semaphore */
 		hw->mac.ops.release_swfw_sync(hw, IXGBE_GSSR_MAC_CSR_SM);
-		/* Delay obtaining semaphore again to allow FW access */
+		/* Delay obtaining semaphore again to allow FW access
+		 * prot_autoc_write uses the semaphore too.
+		 */
 		msec_delay(hw->eeprom.semaphore_delay);
 
-		/* Need SW/FW semaphore around AUTOC writes if LESM on,
-		 * likewise reset_pipeline requires lock as it also writes
-		 * AUTOC.
-		 */
-		if (ixgbe_verify_lesm_fw_enabled_82599(hw)) {
-			ret_val = hw->mac.ops.acquire_swfw_sync(hw,
-							IXGBE_GSSR_MAC_CSR_SM);
-			if (ret_val != IXGBE_SUCCESS) {
-				ret_val = IXGBE_ERR_SWFW_SYNC;
-				goto setup_sfp_out;
-			}
-
-			got_lock = TRUE;
-		}
-
 		/* Restart DSP and set SFI mode */
-		IXGBE_WRITE_REG(hw, IXGBE_AUTOC, ((hw->mac.orig_autoc) |
-				IXGBE_AUTOC_LMS_10G_SERIAL));
-		hw->mac.cached_autoc = IXGBE_READ_REG(hw, IXGBE_AUTOC);
-		ret_val = ixgbe_reset_pipeline_82599(hw);
-
-		if (got_lock) {
-			hw->mac.ops.release_swfw_sync(hw,
-						      IXGBE_GSSR_MAC_CSR_SM);
-			got_lock = FALSE;
-		}
+		ret_val = hw->mac.ops.prot_autoc_write(hw,
+			hw->mac.orig_autoc | IXGBE_AUTOC_LMS_10G_SERIAL,
+			FALSE);
 
 		if (ret_val) {
 			DEBUGOUT("sfp module setup not complete\n");
@@ -277,6 +272,80 @@ setup_sfp_err:
 }
 
 /**
+ *  prot_autoc_read_82599 - Hides MAC differences needed for AUTOC read
+ *  @hw: pointer to hardware structure
+ *  @locked: Return the if we locked for this read.
+ *  @reg_val: Value we read from AUTOC
+ *
+ *  For this part (82599) we need to wrap read-modify-writes with a possible
+ *  FW/SW lock.  It is assumed this lock will be freed with the next
+ *  prot_autoc_write_82599().
+ */
+int32_t prot_autoc_read_82599(struct ixgbe_hw *hw, bool *locked,
+    uint32_t *reg_val)
+{
+	int32_t ret_val;
+
+	*locked = FALSE;
+	 /* If LESM is on then we need to hold the SW/FW semaphore. */
+	if (ixgbe_verify_lesm_fw_enabled_82599(hw)) {
+		ret_val = hw->mac.ops.acquire_swfw_sync(hw,
+					IXGBE_GSSR_MAC_CSR_SM);
+		if (ret_val != IXGBE_SUCCESS)
+			return IXGBE_ERR_SWFW_SYNC;
+
+		*locked = TRUE;
+	}
+
+	*reg_val = IXGBE_READ_REG(hw, IXGBE_AUTOC);
+	return IXGBE_SUCCESS;
+}
+
+/**
+ * prot_autoc_write_82599 - Hides MAC differences needed for AUTOC write
+ * @hw: pointer to hardware structure
+ * @reg_val: value to write to AUTOC
+ * @locked: bool to indicate whether the SW/FW lock was already taken by
+ *           previous proc_autoc_read_82599.
+ *
+ * This part (82599) may need to hold the SW/FW lock around all writes to
+ * AUTOC. Likewise after a write we need to do a pipeline reset.
+ */
+int32_t prot_autoc_write_82599(struct ixgbe_hw *hw, uint32_t autoc, bool locked)
+{
+	int32_t ret_val = IXGBE_SUCCESS;
+
+	/* Blocked by MNG FW so bail */
+	if (ixgbe_check_reset_blocked(hw))
+		goto out;
+
+	/* We only need to get the lock if:
+	 *  - We didn't do it already (in the read part of a read-modify-write)
+	 *  - LESM is enabled.
+	 */
+	if (!locked && ixgbe_verify_lesm_fw_enabled_82599(hw)) {
+		ret_val = hw->mac.ops.acquire_swfw_sync(hw,
+					IXGBE_GSSR_MAC_CSR_SM);
+		if (ret_val != IXGBE_SUCCESS)
+			return IXGBE_ERR_SWFW_SYNC;
+
+		locked = TRUE;
+	}
+
+	IXGBE_WRITE_REG(hw, IXGBE_AUTOC, autoc);
+	ret_val = ixgbe_reset_pipeline_82599(hw);
+
+out:
+	/* Free the SW/FW semaphore as we either grabbed it here or
+	 * already had it when this function was called.
+	 */
+	if (locked)
+		hw->mac.ops.release_swfw_sync(hw, IXGBE_GSSR_MAC_CSR_SM);
+
+	return ret_val;
+}
+
+/**
  *  ixgbe_init_ops_82599 - Inits func ptrs and MAC type
  *  @hw: pointer to hardware structure
  *
@@ -293,61 +362,57 @@ int32_t ixgbe_init_ops_82599(struct ixgbe_hw *hw)
 
 	DEBUGFUNC("ixgbe_init_ops_82599");
 
-	ixgbe_init_phy_ops_generic(hw);
+	ret_val = ixgbe_init_phy_ops_generic(hw);
 	ret_val = ixgbe_init_ops_generic(hw);
 
 	/* PHY */
-	phy->ops.identify = &ixgbe_identify_phy_82599;
-	phy->ops.init = &ixgbe_init_phy_ops_82599;
+	phy->ops.identify = ixgbe_identify_phy_82599;
+	phy->ops.init = ixgbe_init_phy_ops_82599;
 
 	/* MAC */
-	mac->ops.reset_hw = &ixgbe_reset_hw_82599;
-	mac->ops.enable_relaxed_ordering = &ixgbe_enable_relaxed_ordering_gen2;
-	mac->ops.get_media_type = &ixgbe_get_media_type_82599;
+	mac->ops.reset_hw = ixgbe_reset_hw_82599;
+	mac->ops.get_media_type = ixgbe_get_media_type_82599;
 	mac->ops.get_supported_physical_layer =
-				    &ixgbe_get_supported_physical_layer_82599;
-	mac->ops.disable_sec_rx_path = &ixgbe_disable_sec_rx_path_generic;
-	mac->ops.enable_sec_rx_path = &ixgbe_enable_sec_rx_path_generic;
-	mac->ops.enable_rx_dma = &ixgbe_enable_rx_dma_82599;
-	mac->ops.read_analog_reg8 = &ixgbe_read_analog_reg8_82599;
-	mac->ops.write_analog_reg8 = &ixgbe_write_analog_reg8_82599;
-	mac->ops.start_hw = &ixgbe_start_hw_82599;
+				    ixgbe_get_supported_physical_layer_82599;
+	mac->ops.disable_sec_rx_path = ixgbe_disable_sec_rx_path_generic;
+	mac->ops.enable_sec_rx_path = ixgbe_enable_sec_rx_path_generic;
+	mac->ops.enable_rx_dma = ixgbe_enable_rx_dma_82599;
+	mac->ops.read_analog_reg8 = ixgbe_read_analog_reg8_82599;
+	mac->ops.write_analog_reg8 = ixgbe_write_analog_reg8_82599;
+	mac->ops.start_hw = ixgbe_start_hw_82599;
+
+	mac->ops.prot_autoc_read = prot_autoc_read_82599;
+	mac->ops.prot_autoc_write = prot_autoc_write_82599;
 
 	/* RAR, Multicast, VLAN */
-	mac->ops.set_vmdq = &ixgbe_set_vmdq_generic;
-	mac->ops.clear_vmdq = &ixgbe_clear_vmdq_generic;
-	mac->ops.insert_mac_addr = &ixgbe_insert_mac_addr_generic;
+	mac->ops.set_vmdq = ixgbe_set_vmdq_generic;
+	mac->ops.clear_vmdq = ixgbe_clear_vmdq_generic;
+	mac->ops.insert_mac_addr = ixgbe_insert_mac_addr_generic;
 	mac->rar_highwater = 1;
-	mac->ops.set_vfta = &ixgbe_set_vfta_generic;
-	mac->ops.set_vlvf = &ixgbe_set_vlvf_generic;
-	mac->ops.clear_vfta = &ixgbe_clear_vfta_generic;
-	mac->ops.init_uta_tables = &ixgbe_init_uta_tables_generic;
-	mac->ops.setup_sfp = &ixgbe_setup_sfp_modules_82599;
-
-	mac->ops.verify_lesm_fw_enabled = &ixgbe_verify_lesm_fw_enabled_82599;
-	mac->ops.reset_pipeline = &ixgbe_reset_pipeline_82599;
-	mac->ops.stop_mac_link_on_d3 = &ixgbe_stop_mac_link_on_d3_82599;
+	mac->ops.set_vfta = ixgbe_set_vfta_generic;
+	mac->ops.set_vlvf = ixgbe_set_vlvf_generic;
+	mac->ops.clear_vfta = ixgbe_clear_vfta_generic;
+	mac->ops.init_uta_tables = ixgbe_init_uta_tables_generic;
+	mac->ops.setup_sfp = ixgbe_setup_sfp_modules_82599;
 
 	/* Link */
-	mac->ops.get_link_capabilities = &ixgbe_get_link_capabilities_82599;
-	mac->ops.check_link = &ixgbe_check_mac_link_generic;
+	mac->ops.get_link_capabilities = ixgbe_get_link_capabilities_82599;
+	mac->ops.check_link = ixgbe_check_mac_link_generic;
+	mac->ops.stop_mac_link_on_d3 = ixgbe_stop_mac_link_on_d3_82599;
 	ixgbe_init_mac_link_ops_82599(hw);
 
-	mac->mcft_size		= 128;
-	mac->vft_size		= 128;
-	mac->num_rar_entries	= 128;
-	mac->rx_pb_size		= 512;
-	mac->max_tx_queues	= 128;
-	mac->max_rx_queues	= 128;
+	mac->mcft_size		= IXGBE_82599_MC_TBL_SIZE;
+	mac->vft_size		= IXGBE_82599_VFT_TBL_SIZE;
+	mac->num_rar_entries	= IXGBE_82599_RAR_ENTRIES;
+	mac->rx_pb_size		= IXGBE_82599_RX_PB_SIZE;
+	mac->max_rx_queues	= IXGBE_82599_MAX_RX_QUEUES;
+	mac->max_tx_queues	= IXGBE_82599_MAX_TX_QUEUES;
 	mac->max_msix_vectors	= 0 /*ixgbe_get_pcie_msix_count_generic(hw)*/;
 
 	hw->mbx.ops.init_params = ixgbe_init_mbx_params_pf;
 
 	/* EEPROM */
-	eeprom->ops.read = &ixgbe_read_eeprom_82599;
-
-	/* Cache if MNG FW is up */
-	hw->mng_fw_enabled = ixgbe_mng_enabled(hw);
+	eeprom->ops.read = ixgbe_read_eeprom_82599;
 
 	return ret_val;
 }
@@ -449,7 +514,14 @@ int32_t ixgbe_get_link_capabilities_82599(struct ixgbe_hw *hw,
 	if (hw->phy.multispeed_fiber) {
 		*speed |= IXGBE_LINK_SPEED_10GB_FULL |
 			  IXGBE_LINK_SPEED_1GB_FULL;
-		*autoneg = TRUE;
+
+		/* QSFP must not enable full auto-negotiation
+		 * Limited autoneg is enabled at 1G
+		 */
+		if (hw->phy.media_type == ixgbe_media_type_fiber_qsfp)
+			*autoneg = FALSE;
+		else
+			*autoneg = TRUE;
 	}
 
 out:
@@ -502,6 +574,9 @@ enum ixgbe_media_type ixgbe_get_media_type_82599(struct ixgbe_hw *hw)
 	case IXGBE_DEV_ID_82599_T3_LOM:
 		media_type = ixgbe_media_type_copper;
 		break;
+	case IXGBE_DEV_ID_82599_QSFP_SF_QP:
+		media_type = ixgbe_media_type_fiber_qsfp;
+		break;
 	case IXGBE_DEV_ID_82599_BYPASS:
 		media_type = ixgbe_media_type_fiber_fixed;
 		hw->phy.multispeed_fiber = TRUE;
@@ -529,7 +604,8 @@ void ixgbe_stop_mac_link_on_d3_82599(struct ixgbe_hw *hw)
 	DEBUGFUNC("ixgbe_stop_mac_link_on_d3_82599");
 	ixgbe_read_eeprom_82599(hw, IXGBE_EEPROM_CTRL_2, &ee_ctrl_2);
 
-	if (!hw->mng_fw_enabled && ee_ctrl_2 & IXGBE_EEPROM_CCD_BIT) {
+	if (!ixgbe_mng_present(hw) &&
+	    (ee_ctrl_2 & IXGBE_EEPROM_CCD_BIT)) {
 		autoc2_reg = IXGBE_READ_REG(hw, IXGBE_AUTOC2);
 		autoc2_reg |= IXGBE_AUTOC2_LINK_DISABLE_ON_D3_MASK;
 		IXGBE_WRITE_REG(hw, IXGBE_AUTOC2, autoc2_reg);
@@ -616,7 +692,11 @@ void ixgbe_disable_tx_laser_multispeed_fiber(struct ixgbe_hw *hw)
 {
 	uint32_t esdp_reg = IXGBE_READ_REG(hw, IXGBE_ESDP);
 
-	/* Disable tx laser; allow 100us to go dark per spec */
+	/* Blocked by MNG FW so bail */
+	if (ixgbe_check_reset_blocked(hw))
+		return;
+
+	/* Disable Tx laser; allow 100us to go dark per spec */
 	esdp_reg |= IXGBE_ESDP_SDP3;
 	IXGBE_WRITE_REG(hw, IXGBE_ESDP, esdp_reg);
 	IXGBE_WRITE_FLUSH(hw);
@@ -635,7 +715,7 @@ void ixgbe_enable_tx_laser_multispeed_fiber(struct ixgbe_hw *hw)
 {
 	uint32_t esdp_reg = IXGBE_READ_REG(hw, IXGBE_ESDP);
 
-	/* Enable tx laser; allow 100ms to light up */
+	/* Enable Tx laser; allow 100ms to light up */
 	esdp_reg &= ~IXGBE_ESDP_SDP3;
 	IXGBE_WRITE_REG(hw, IXGBE_ESDP, esdp_reg);
 	IXGBE_WRITE_FLUSH(hw);
@@ -649,7 +729,7 @@ void ixgbe_enable_tx_laser_multispeed_fiber(struct ixgbe_hw *hw)
  *  When the driver changes the link speeds that it can support,
  *  it sets autotry_restart to TRUE to indicate that we need to
  *  initiate a new autotry session with the link partner.  To do
- *  so, we set the speed then disable and re-enable the tx laser, to
+ *  so, we set the speed then disable and re-enable the Tx laser, to
  *  alert the link partner that it also needs to restart autotry on its
  *  end.  This is consistent with TRUE clause 37 autoneg, which also
  *  involves a loss of signal.
@@ -657,6 +737,10 @@ void ixgbe_enable_tx_laser_multispeed_fiber(struct ixgbe_hw *hw)
 void ixgbe_flap_tx_laser_multispeed_fiber(struct ixgbe_hw *hw)
 {
 	DEBUGFUNC("ixgbe_flap_tx_laser_multispeed_fiber");
+
+	/* Blocked by MNG FW so bail */
+	if (ixgbe_check_reset_blocked(hw))
+		return;
 
 	if (hw->mac.autotry_restart) {
 		ixgbe_disable_tx_laser_multispeed_fiber(hw);
@@ -666,229 +750,32 @@ void ixgbe_flap_tx_laser_multispeed_fiber(struct ixgbe_hw *hw)
 }
 
 /**
- *  ixgbe_set_fiber_fixed_speed - Set module link speed for fixed fiber
+ *  ixgbe_set_hard_rate_select_speed - Set module link speed
  *  @hw: pointer to hardware structure
  *  @speed: link speed to set
  *
- *  We set the module speed differently for fixed fiber.  For other
- *  multi-speed devices we don't have an error value so here if we
- *  detect an error we just log it and exit.
+ *  Set module link speed via RS0/RS1 rate select pins.
  */
-void ixgbe_set_fiber_fixed_speed(struct ixgbe_hw *hw,
-				 ixgbe_link_speed speed)
+void ixgbe_set_hard_rate_select_speed(struct ixgbe_hw *hw,
+				      ixgbe_link_speed speed)
 {
-	int32_t status;
-	uint8_t rs, eeprom_data;
+	uint32_t esdp_reg = IXGBE_READ_REG(hw, IXGBE_ESDP);
 
 	switch (speed) {
 	case IXGBE_LINK_SPEED_10GB_FULL:
-		/* one bit mask same as setting on */
-		rs = IXGBE_SFF_SOFT_RS_SELECT_10G;
+		esdp_reg |= (IXGBE_ESDP_SDP5_DIR | IXGBE_ESDP_SDP5);
 		break;
 	case IXGBE_LINK_SPEED_1GB_FULL:
-		rs = IXGBE_SFF_SOFT_RS_SELECT_1G;
+		esdp_reg &= ~IXGBE_ESDP_SDP5;
+		esdp_reg |= IXGBE_ESDP_SDP5_DIR;
 		break;
 	default:
 		DEBUGOUT("Invalid fixed module speed\n");
 		return;
 	}
 
-	/* Set RS0 */
-	status = hw->phy.ops.read_i2c_byte(hw, IXGBE_SFF_SFF_8472_OSCB,
-					   IXGBE_I2C_EEPROM_DEV_ADDR2,
-					   &eeprom_data);
-	if (status) {
-		DEBUGOUT("Failed to read Rx Rate Select RS0\n");
-		goto out;
-	}
-
-	eeprom_data = (eeprom_data & ~IXGBE_SFF_SOFT_RS_SELECT_MASK) & rs;
-
-	status = hw->phy.ops.write_i2c_byte(hw, IXGBE_SFF_SFF_8472_OSCB,
-					    IXGBE_I2C_EEPROM_DEV_ADDR2,
-					    eeprom_data);
-	if (status) {
-		DEBUGOUT("Failed to write Rx Rate Select RS0\n");
-		goto out;
-	}
-
-	/* Set RS1 */
-	status = hw->phy.ops.read_i2c_byte(hw, IXGBE_SFF_SFF_8472_ESCB,
-					   IXGBE_I2C_EEPROM_DEV_ADDR2,
-					   &eeprom_data);
-	if (status) {
-		DEBUGOUT("Failed to read Rx Rate Select RS1\n");
-		goto out;
-	}
-
-	eeprom_data = (eeprom_data & ~IXGBE_SFF_SOFT_RS_SELECT_MASK) & rs;
-
-	status = hw->phy.ops.write_i2c_byte(hw, IXGBE_SFF_SFF_8472_ESCB,
-					    IXGBE_I2C_EEPROM_DEV_ADDR2,
-					    eeprom_data);
-	if (status) {
-		DEBUGOUT("Failed to write Rx Rate Select RS1\n");
-		goto out;
-	}
-out:
-	return;
-}
-
-/**
- *  ixgbe_setup_mac_link_multispeed_fiber - Set MAC link speed
- *  @hw: pointer to hardware structure
- *  @speed: new link speed
- *  @autoneg_wait_to_complete: TRUE when waiting for completion is needed
- *
- *  Set the link speed in the AUTOC register and restarts link.
- **/
-int32_t ixgbe_setup_mac_link_multispeed_fiber(struct ixgbe_hw *hw,
-				     ixgbe_link_speed speed,
-				     bool autoneg_wait_to_complete)
-{
-	int32_t status = IXGBE_SUCCESS;
-	ixgbe_link_speed link_speed = IXGBE_LINK_SPEED_UNKNOWN;
-	ixgbe_link_speed highest_link_speed = IXGBE_LINK_SPEED_UNKNOWN;
-	uint32_t speedcnt = 0;
-	uint32_t esdp_reg = IXGBE_READ_REG(hw, IXGBE_ESDP);
-	uint32_t i = 0;
-	bool autoneg, link_up = FALSE;
-
-	DEBUGFUNC("ixgbe_setup_mac_link_multispeed_fiber");
-
-	/* Mask off requested but non-supported speeds */
-	status = ixgbe_get_link_capabilities_82599(hw, &link_speed, &autoneg);
-	if (status != IXGBE_SUCCESS)
-		return status;
-
-	speed &= link_speed;
-
-	/*
-	 * Try each speed one by one, highest priority first.  We do this in
-	 * software because 10gb fiber doesn't support speed autonegotiation.
-	 */
-	if (speed & IXGBE_LINK_SPEED_10GB_FULL) {
-		speedcnt++;
-		highest_link_speed = IXGBE_LINK_SPEED_10GB_FULL;
-
-		/* If we already have link at this speed, just jump out */
-		status = ixgbe_check_link(hw, &link_speed, &link_up, FALSE);
-		if (status != IXGBE_SUCCESS)
-			return status;
-
-		if ((link_speed == IXGBE_LINK_SPEED_10GB_FULL) && link_up)
-			goto out;
-
-		/* Set the module link speed */
-		if (hw->phy.media_type == ixgbe_media_type_fiber_fixed) {
-			ixgbe_set_fiber_fixed_speed(hw,
-						    IXGBE_LINK_SPEED_10GB_FULL);
-		} else {
-			esdp_reg |= (IXGBE_ESDP_SDP5_DIR | IXGBE_ESDP_SDP5);
-			IXGBE_WRITE_REG(hw, IXGBE_ESDP, esdp_reg);
-			IXGBE_WRITE_FLUSH(hw);
-		}
-
-		/* Allow module to change analog characteristics (1G->10G) */
-		msec_delay(40);
-
-		status = ixgbe_setup_mac_link_82599(hw,
-						    IXGBE_LINK_SPEED_10GB_FULL,
-						    autoneg_wait_to_complete);
-		if (status != IXGBE_SUCCESS)
-			return status;
-
-		/* Flap the tx laser if it has not already been done */
-		ixgbe_flap_tx_laser(hw);
-
-		/*
-		 * Wait for the controller to acquire link.  Per IEEE 802.3ap,
-		 * Section 73.10.2, we may have to wait up to 500ms if KR is
-		 * attempted.  82599 uses the same timing for 10g SFI.
-		 */
-		for (i = 0; i < 5; i++) {
-			/* Wait for the link partner to also set speed */
-			msec_delay(100);
-
-			/* If we have link, just jump out */
-			status = ixgbe_check_link(hw, &link_speed,
-						  &link_up, FALSE);
-			if (status != IXGBE_SUCCESS)
-				return status;
-
-			if (link_up)
-				goto out;
-		}
-	}
-
-	if (speed & IXGBE_LINK_SPEED_1GB_FULL) {
-		speedcnt++;
-		if (highest_link_speed == IXGBE_LINK_SPEED_UNKNOWN)
-			highest_link_speed = IXGBE_LINK_SPEED_1GB_FULL;
-
-		/* If we already have link at this speed, just jump out */
-		status = ixgbe_check_link(hw, &link_speed, &link_up, FALSE);
-		if (status != IXGBE_SUCCESS)
-			return status;
-
-		if ((link_speed == IXGBE_LINK_SPEED_1GB_FULL) && link_up)
-			goto out;
-
-		/* Set the module link speed */
-		if (hw->phy.media_type == ixgbe_media_type_fiber_fixed) {
-			ixgbe_set_fiber_fixed_speed(hw,
-						    IXGBE_LINK_SPEED_1GB_FULL);
-		} else {
-			esdp_reg &= ~IXGBE_ESDP_SDP5;
-			esdp_reg |= IXGBE_ESDP_SDP5_DIR;
-			IXGBE_WRITE_REG(hw, IXGBE_ESDP, esdp_reg);
-			IXGBE_WRITE_FLUSH(hw);
-		}
-
-		/* Allow module to change analog characteristics (10G->1G) */
-		msec_delay(40);
-
-		status = ixgbe_setup_mac_link_82599(hw,
-						    IXGBE_LINK_SPEED_1GB_FULL,
-						    autoneg_wait_to_complete);
-		if (status != IXGBE_SUCCESS)
-			return status;
-
-		/* Flap the tx laser if it has not already been done */
-		ixgbe_flap_tx_laser(hw);
-
-		/* Wait for the link partner to also set speed */
-		msec_delay(100);
-
-		/* If we have link, just jump out */
-		status = ixgbe_check_link(hw, &link_speed, &link_up, FALSE);
-		if (status != IXGBE_SUCCESS)
-			return status;
-
-		if (link_up)
-			goto out;
-	}
-
-	/*
-	 * We didn't get link.  Configure back to the highest speed we tried,
-	 * (if there was more than one).  We call ourselves back with just the
-	 * single highest speed that the user requested.
-	 */
-	if (speedcnt > 1)
-		status = ixgbe_setup_mac_link_multispeed_fiber(hw,
-			highest_link_speed, autoneg_wait_to_complete);
-
-out:
-	/* Set autoneg_advertised value based on input link speed */
-	hw->phy.autoneg_advertised = 0;
-
-	if (speed & IXGBE_LINK_SPEED_10GB_FULL)
-		hw->phy.autoneg_advertised |= IXGBE_LINK_SPEED_10GB_FULL;
-
-	if (speed & IXGBE_LINK_SPEED_1GB_FULL)
-		hw->phy.autoneg_advertised |= IXGBE_LINK_SPEED_1GB_FULL;
-
-	return status;
+	IXGBE_WRITE_REG(hw, IXGBE_ESDP, esdp_reg);
+	IXGBE_WRITE_FLUSH(hw);
 }
 
 /**
@@ -900,8 +787,8 @@ out:
  *  Implements the Intel SmartSpeed algorithm.
  **/
 int32_t ixgbe_setup_mac_link_smartspeed(struct ixgbe_hw *hw,
-				     ixgbe_link_speed speed,
-				     bool autoneg_wait_to_complete)
+					ixgbe_link_speed speed,
+					bool autoneg_wait_to_complete)
 {
 	int32_t status = IXGBE_SUCCESS;
 	ixgbe_link_speed link_speed = IXGBE_LINK_SPEED_UNKNOWN;
@@ -1017,19 +904,24 @@ int32_t ixgbe_setup_mac_link_82599(struct ixgbe_hw *hw,
 {
 	bool autoneg = FALSE;
 	int32_t status = IXGBE_SUCCESS;
-	uint32_t autoc, pma_pmd_1g, link_mode, start_autoc;
-	uint32_t autoc2 = IXGBE_READ_REG(hw, IXGBE_AUTOC2);
+	uint32_t pma_pmd_1g, link_mode;
+	/* holds the value of AUTOC register at this current point in time */
+	uint32_t current_autoc = IXGBE_READ_REG(hw, IXGBE_AUTOC);
+	/* holds the cached value of AUTOC register */
 	uint32_t orig_autoc = 0;
+	/* Temporary variable used for comparison purposes */
+	uint32_t autoc = current_autoc;
+	uint32_t autoc2 = IXGBE_READ_REG(hw, IXGBE_AUTOC2);
 	uint32_t pma_pmd_10g_serial = autoc2 & IXGBE_AUTOC2_10G_SERIAL_PMA_PMD_MASK;
 	uint32_t links_reg;
 	uint32_t i;
 	ixgbe_link_speed link_capabilities = IXGBE_LINK_SPEED_UNKNOWN;
-	bool got_lock = FALSE;
 
 	DEBUGFUNC("ixgbe_setup_mac_link_82599");
 
 	/* Check to see if speed passed in is supported. */
-	status = ixgbe_get_link_capabilities_82599(hw, &link_capabilities, &autoneg);
+	status = ixgbe_get_link_capabilities_82599(hw, &link_capabilities,
+	    &autoneg);
 	if (status)
 		goto out;
 
@@ -1042,12 +934,10 @@ int32_t ixgbe_setup_mac_link_82599(struct ixgbe_hw *hw,
 
 	/* Use stored value (EEPROM defaults) of AUTOC to find KR/KX4 support*/
 	if (hw->mac.orig_link_settings_stored)
-		autoc = hw->mac.orig_autoc;
+		orig_autoc = hw->mac.orig_autoc;
 	else
-		autoc = IXGBE_READ_REG(hw, IXGBE_AUTOC);
+		orig_autoc = autoc;
 
-	orig_autoc = autoc;
-	start_autoc = hw->mac.cached_autoc;
 	link_mode = autoc & IXGBE_AUTOC_LMS_MASK;
 	pma_pmd_1g = autoc & IXGBE_AUTOC_1G_PMA_PMD_MASK;
 
@@ -1080,39 +970,18 @@ int32_t ixgbe_setup_mac_link_82599(struct ixgbe_hw *hw,
 		if ((speed == IXGBE_LINK_SPEED_1GB_FULL) &&
 		    (pma_pmd_1g == IXGBE_AUTOC_1G_SFI)) {
 			autoc &= ~IXGBE_AUTOC_LMS_MASK;
-			if (autoneg)
+			if (autoneg || hw->phy.type == ixgbe_phy_qsfp_intel)
 				autoc |= IXGBE_AUTOC_LMS_1G_AN;
 			else
 				autoc |= IXGBE_AUTOC_LMS_1G_LINK_NO_AN;
 		}
 	}
 
-	if (autoc != start_autoc) {
-		/* Need SW/FW semaphore around AUTOC writes if LESM is on,
-		 * likewise reset_pipeline requires us to hold this lock as
-		 * it also writes to AUTOC.
-		 */
-		if (ixgbe_verify_lesm_fw_enabled_82599(hw)) {
-			status = hw->mac.ops.acquire_swfw_sync(hw,
-							IXGBE_GSSR_MAC_CSR_SM);
-			if (status != IXGBE_SUCCESS) {
-				status = IXGBE_ERR_SWFW_SYNC;
-				goto out;
-			}
-
-			got_lock = TRUE;
-		}
-
+	if (autoc != current_autoc) {
 		/* Restart link */
-		IXGBE_WRITE_REG(hw, IXGBE_AUTOC, autoc);
-		hw->mac.cached_autoc = autoc;
-		ixgbe_reset_pipeline_82599(hw);
-
-		if (got_lock) {
-			hw->mac.ops.release_swfw_sync(hw,
-						      IXGBE_GSSR_MAC_CSR_SM);
-			got_lock = FALSE;
-		}
+		status = hw->mac.ops.prot_autoc_write(hw, autoc, FALSE);
+		if (status != IXGBE_SUCCESS)
+			goto out;
 
 		/* Only poll for autoneg to complete if specified to do so */
 		if (autoneg_wait_to_complete) {
@@ -1180,7 +1049,8 @@ int32_t ixgbe_reset_hw_82599(struct ixgbe_hw *hw)
 {
 	ixgbe_link_speed link_speed;
 	int32_t status;
-	uint32_t ctrl, i, autoc2;
+	uint32_t ctrl = 0;
+	uint32_t i, autoc, autoc2;
 	uint32_t curr_lms;
 	bool link_up = FALSE;
 
@@ -1216,11 +1086,7 @@ int32_t ixgbe_reset_hw_82599(struct ixgbe_hw *hw)
 		hw->phy.ops.reset(hw);
 
 	/* remember AUTOC from before we reset */
-	if (hw->mac.cached_autoc)
-		curr_lms = hw->mac.cached_autoc & IXGBE_AUTOC_LMS_MASK;
-	else
-		curr_lms = IXGBE_READ_REG(hw, IXGBE_AUTOC) &
-					  IXGBE_AUTOC_LMS_MASK;
+	curr_lms = IXGBE_READ_REG(hw, IXGBE_AUTOC) & IXGBE_AUTOC_LMS_MASK;
 
 mac_reset_top:
 	/*
@@ -1240,7 +1106,7 @@ mac_reset_top:
 	IXGBE_WRITE_REG(hw, IXGBE_CTRL, ctrl);
 	IXGBE_WRITE_FLUSH(hw);
 
-	/* Poll for reset bit to self-clear indicating reset is complete */
+	/* Poll for reset bit to self-clear meaning reset is complete */
 	for (i = 0; i < 10; i++) {
 		usec_delay(1);
 		ctrl = IXGBE_READ_REG(hw, IXGBE_CTRL);
@@ -1257,8 +1123,8 @@ mac_reset_top:
 
 	/*
 	 * Double resets are required for recovery from certain error
-	 * conditions.  Between resets, it is necessary to stall to allow time
-	 * for any pending HW events to complete.
+	 * conditions.  Between resets, it is necessary to stall to
+	 * allow time for any pending HW events to complete.
 	 */
 	if (hw->mac.flags & IXGBE_FLAGS_DOUBLE_RESET_REQUIRED) {
 		hw->mac.flags &= ~IXGBE_FLAGS_DOUBLE_RESET_REQUIRED;
@@ -1270,7 +1136,7 @@ mac_reset_top:
 	 * stored off yet.  Otherwise restore the stored original
 	 * values since the reset operation sets back to defaults.
 	 */
-	hw->mac.cached_autoc = IXGBE_READ_REG(hw, IXGBE_AUTOC);
+	autoc = IXGBE_READ_REG(hw, IXGBE_AUTOC);
 	autoc2 = IXGBE_READ_REG(hw, IXGBE_AUTOC2);
 
 	/* Enable link if disabled in NVM */
@@ -1281,7 +1147,7 @@ mac_reset_top:
 	}
 
 	if (hw->mac.orig_link_settings_stored == FALSE) {
-		hw->mac.orig_autoc = hw->mac.cached_autoc;
+		hw->mac.orig_autoc = autoc;
 		hw->mac.orig_autoc2 = autoc2;
 		hw->mac.orig_link_settings_stored = TRUE;
 	} else {
@@ -1292,35 +1158,17 @@ mac_reset_top:
 		 * Likewise if we support WoL we don't want change the
 		 * LMS state.
 		 */
-		if (hw->phy.multispeed_fiber && hw->mng_fw_enabled)
+		if (hw->phy.multispeed_fiber && ixgbe_mng_enabled(hw))
 			hw->mac.orig_autoc =
 				(hw->mac.orig_autoc & ~IXGBE_AUTOC_LMS_MASK) |
 				curr_lms;
 
-		if (hw->mac.cached_autoc != hw->mac.orig_autoc) {
-			/* Need SW/FW semaphore around AUTOC writes if LESM is
-			 * on, likewise reset_pipeline requires us to hold
-			 * this lock as it also writes to AUTOC.
-			 */
-			bool got_lock = FALSE;
-			if (ixgbe_verify_lesm_fw_enabled_82599(hw)) {
-				status = hw->mac.ops.acquire_swfw_sync(hw,
-							IXGBE_GSSR_MAC_CSR_SM);
-				if (status != IXGBE_SUCCESS) {
-					status = IXGBE_ERR_SWFW_SYNC;
-					goto reset_hw_out;
-				}
-
-				got_lock = TRUE;
-			}
-
-			IXGBE_WRITE_REG(hw, IXGBE_AUTOC, hw->mac.orig_autoc);
-			hw->mac.cached_autoc = hw->mac.orig_autoc;
-			ixgbe_reset_pipeline_82599(hw);
-
-			if (got_lock)
-				hw->mac.ops.release_swfw_sync(hw,
-						      IXGBE_GSSR_MAC_CSR_SM);
+		if (autoc != hw->mac.orig_autoc) {
+			status = hw->mac.ops.prot_autoc_write(hw,
+							hw->mac.orig_autoc,
+							FALSE);
+			if (status != IXGBE_SUCCESS)
+				goto reset_hw_out;
 		}
 
 		if ((autoc2 & IXGBE_AUTOC2_UPPER_MASK) !=
@@ -1436,7 +1284,7 @@ out:
  **/
 int32_t ixgbe_identify_phy_82599(struct ixgbe_hw *hw)
 {
-	int32_t status = IXGBE_ERR_PHY_ADDR_INVALID;
+	int32_t status;
 
 	DEBUGFUNC("ixgbe_identify_phy_82599");
 
@@ -1445,7 +1293,7 @@ int32_t ixgbe_identify_phy_82599(struct ixgbe_hw *hw)
 	if (status != IXGBE_SUCCESS) {
 		/* 82599 10GBASE-T requires an external PHY */
 		if (hw->mac.ops.get_media_type(hw) == ixgbe_media_type_copper)
-			goto out;
+			return status;
 		else
 			status = ixgbe_identify_module_generic(hw);
 	}
@@ -1453,14 +1301,13 @@ int32_t ixgbe_identify_phy_82599(struct ixgbe_hw *hw)
 	/* Set PHY type none if no PHY detected */
 	if (hw->phy.type == ixgbe_phy_unknown) {
 		hw->phy.type = ixgbe_phy_none;
-		status = IXGBE_SUCCESS;
+		return IXGBE_SUCCESS;
 	}
 
 	/* Return error if SFP module has been detected but is not supported */
 	if (hw->phy.type == ixgbe_phy_sfp_unsupported)
-		status = IXGBE_ERR_SFP_NOT_SUPPORTED;
+		return IXGBE_ERR_SFP_NOT_SUPPORTED;
 
-out:
 	return status;
 }
 
@@ -1479,8 +1326,6 @@ uint32_t ixgbe_get_supported_physical_layer_82599(struct ixgbe_hw *hw)
 	uint32_t pma_pmd_10g_parallel = autoc & IXGBE_AUTOC_10G_PMA_PMD_MASK;
 	uint32_t pma_pmd_1g = autoc & IXGBE_AUTOC_1G_PMA_PMD_MASK;
 	uint16_t ext_ability = 0;
-	uint8_t comp_codes_10g = 0;
-	uint8_t comp_codes_1g = 0;
 
 	DEBUGFUNC("ixgbe_get_support_physical_layer_82599");
 
@@ -1548,47 +1393,7 @@ sfp_check:
 	/* SFP check must be done last since DA modules are sometimes used to
 	 * test KR mode -  we need to id KR mode correctly before SFP module.
 	 * Call identify_sfp because the pluggable module may have changed */
-	hw->phy.ops.identify_sfp(hw);
-	if (hw->phy.sfp_type == ixgbe_sfp_type_not_present)
-		goto out;
-
-	switch (hw->phy.type) {
-	case ixgbe_phy_sfp_passive_tyco:
-	case ixgbe_phy_sfp_passive_unknown:
-		physical_layer = IXGBE_PHYSICAL_LAYER_SFP_PLUS_CU;
-		break;
-	case ixgbe_phy_sfp_ftl_active:
-	case ixgbe_phy_sfp_active_unknown:
-		physical_layer = IXGBE_PHYSICAL_LAYER_SFP_ACTIVE_DA;
-		break;
-	case ixgbe_phy_sfp_avago:
-	case ixgbe_phy_sfp_ftl:
-	case ixgbe_phy_sfp_intel:
-	case ixgbe_phy_sfp_unknown:
-		hw->phy.ops.read_i2c_eeprom(hw,
-		      IXGBE_SFF_1GBE_COMP_CODES, &comp_codes_1g);
-		hw->phy.ops.read_i2c_eeprom(hw,
-		      IXGBE_SFF_10GBE_COMP_CODES, &comp_codes_10g);
-		if (comp_codes_10g & IXGBE_SFF_10GBASESR_CAPABLE)
-			physical_layer = IXGBE_PHYSICAL_LAYER_10GBASE_SR;
-		else if (comp_codes_10g & IXGBE_SFF_10GBASELR_CAPABLE)
-			physical_layer = IXGBE_PHYSICAL_LAYER_10GBASE_LR;
-		else if (comp_codes_10g &
-		    (IXGBE_SFF_DA_PASSIVE_CABLE | IXGBE_SFF_DA_BAD_HP_CABLE))
-			physical_layer = IXGBE_PHYSICAL_LAYER_SFP_PLUS_CU;
-		else if (comp_codes_10g & IXGBE_SFF_DA_ACTIVE_CABLE)
-			physical_layer = IXGBE_PHYSICAL_LAYER_SFP_ACTIVE_DA;
-		else if (comp_codes_1g & IXGBE_SFF_1GBASET_CAPABLE)
-			physical_layer = IXGBE_PHYSICAL_LAYER_1000BASE_T;
-		else if (comp_codes_1g & IXGBE_SFF_1GBASESX_CAPABLE)
-			physical_layer = IXGBE_PHYSICAL_LAYER_1000BASE_SX;
-		else if (comp_codes_1g & IXGBE_SFF_1GBASELX_CAPABLE)
-			physical_layer = IXGBE_PHYSICAL_LAYER_1000BASE_LX;
-		break;
-	default:
-		break;
-	}
-
+	physical_layer = ixgbe_get_supported_phy_sfp_layer_generic(hw);
 out:
 	return physical_layer;
 }
@@ -1614,7 +1419,10 @@ int32_t ixgbe_enable_rx_dma_82599(struct ixgbe_hw *hw, uint32_t regval)
 
 	hw->mac.ops.disable_sec_rx_path(hw);
 
-	IXGBE_WRITE_REG(hw, IXGBE_RXCTRL, regval);
+	if (regval & IXGBE_RXCTRL_RXEN)
+		ixgbe_enable_rx(hw);
+	else
+		ixgbe_disable_rx(hw);
 
 	hw->mac.ops.enable_sec_rx_path(hw);
 
@@ -1622,7 +1430,7 @@ int32_t ixgbe_enable_rx_dma_82599(struct ixgbe_hw *hw, uint32_t regval)
 }
 
 /**
- *  ixgbe_verify_fw_version_82599 - verify fw version for 82599
+ *  ixgbe_verify_fw_version_82599 - verify FW version for 82599
  *  @hw: pointer to hardware structure
  *
  *  Verifies that installed the firmware version is 0.6 or higher
@@ -1716,7 +1524,7 @@ bool ixgbe_verify_lesm_fw_enabled_82599(struct ixgbe_hw *hw)
 	    (fw_lesm_param_offset == 0) || (fw_lesm_param_offset == 0xFFFF))
 		goto out;
 
-	/* get the lesm state word */
+	/* get the LESM state word */
 	status = hw->eeprom.ops.read(hw, (fw_lesm_param_offset +
 				     IXGBE_FW_LESM_STATE_1),
 				     &fw_lesm_state);
@@ -1766,7 +1574,7 @@ int32_t ixgbe_read_eeprom_82599(struct ixgbe_hw *hw,
  *  @hw: pointer to hardware structure
  *
  * Reset pipeline by asserting Restart_AN together with LMS change to ensure
- * full pipeline reset
+ * full pipeline reset.  This function assumes the SW/FW lock is held.
  **/
 int32_t ixgbe_reset_pipeline_82599(struct ixgbe_hw *hw)
 {
@@ -1782,10 +1590,11 @@ int32_t ixgbe_reset_pipeline_82599(struct ixgbe_hw *hw)
 		IXGBE_WRITE_FLUSH(hw);
 	}
 
-	autoc_reg = hw->mac.cached_autoc;
+	autoc_reg = IXGBE_READ_REG(hw, IXGBE_AUTOC);
 	autoc_reg |= IXGBE_AUTOC_AN_RESTART;
 	/* Write AUTOC register with toggled LMS[2] bit and Restart_AN */
-	IXGBE_WRITE_REG(hw, IXGBE_AUTOC, autoc_reg ^ IXGBE_AUTOC_LMS_1G_AN);
+	IXGBE_WRITE_REG(hw, IXGBE_AUTOC,
+			autoc_reg ^ (0x4 << IXGBE_AUTOC_LMS_SHIFT));
 	/* Wait for AN to leave state 0 */
 	for (i = 0; i < 10; i++) {
 		msec_delay(4);
@@ -1808,4 +1617,118 @@ reset_pipeline_out:
 	IXGBE_WRITE_FLUSH(hw);
 
 	return ret_val;
+}
+
+/**
+ *  ixgbe_read_i2c_byte_82599 - Reads 8 bit word over I2C
+ *  @hw: pointer to hardware structure
+ *  @byte_offset: byte offset to read
+ *  @data: value read
+ *
+ *  Performs byte read operation to SFP module's EEPROM over I2C interface at
+ *  a specified device address.
+ **/
+int32_t ixgbe_read_i2c_byte_82599(struct ixgbe_hw *hw, uint8_t byte_offset,
+				  uint8_t dev_addr, uint8_t *data)
+{
+	uint32_t esdp;
+	int32_t status;
+	int32_t timeout = 200;
+
+	DEBUGFUNC("ixgbe_read_i2c_byte_82599");
+
+	if (hw->phy.qsfp_shared_i2c_bus == TRUE) {
+		/* Acquire I2C bus ownership. */
+		esdp = IXGBE_READ_REG(hw, IXGBE_ESDP);
+		esdp |= IXGBE_ESDP_SDP0;
+		IXGBE_WRITE_REG(hw, IXGBE_ESDP, esdp);
+		IXGBE_WRITE_FLUSH(hw);
+
+		while (timeout) {
+			esdp = IXGBE_READ_REG(hw, IXGBE_ESDP);
+			if (esdp & IXGBE_ESDP_SDP1)
+				break;
+
+			msec_delay(5);
+			timeout--;
+		}
+
+		if (!timeout) {
+			DEBUGOUT("Driver can't access resource,"
+				 " acquiring I2C bus timeout.\n");
+			status = IXGBE_ERR_I2C;
+			goto release_i2c_access;
+		}
+	}
+
+	status = ixgbe_read_i2c_byte_generic(hw, byte_offset, dev_addr, data);
+
+release_i2c_access:
+
+	if (hw->phy.qsfp_shared_i2c_bus == TRUE) {
+		/* Release I2C bus ownership. */
+		esdp = IXGBE_READ_REG(hw, IXGBE_ESDP);
+		esdp &= ~IXGBE_ESDP_SDP0;
+		IXGBE_WRITE_REG(hw, IXGBE_ESDP, esdp);
+		IXGBE_WRITE_FLUSH(hw);
+	}
+
+	return status;
+}
+
+/**
+ *  ixgbe_write_i2c_byte_82599 - Writes 8 bit word over I2C
+ *  @hw: pointer to hardware structure
+ *  @byte_offset: byte offset to write
+ *  @data: value to write
+ *
+ *  Performs byte write operation to SFP module's EEPROM over I2C interface at
+ *  a specified device address.
+ **/
+int32_t ixgbe_write_i2c_byte_82599(struct ixgbe_hw *hw, uint8_t byte_offset,
+				   uint8_t dev_addr, uint8_t data)
+{
+	uint32_t esdp;
+	int32_t status;
+	int32_t timeout = 200;
+
+	DEBUGFUNC("ixgbe_write_i2c_byte_82599");
+
+	if (hw->phy.qsfp_shared_i2c_bus == TRUE) {
+		/* Acquire I2C bus ownership. */
+		esdp = IXGBE_READ_REG(hw, IXGBE_ESDP);
+		esdp |= IXGBE_ESDP_SDP0;
+		IXGBE_WRITE_REG(hw, IXGBE_ESDP, esdp);
+		IXGBE_WRITE_FLUSH(hw);
+
+		while (timeout) {
+			esdp = IXGBE_READ_REG(hw, IXGBE_ESDP);
+			if (esdp & IXGBE_ESDP_SDP1)
+				break;
+
+			msec_delay(5);
+			timeout--;
+		}
+
+		if (!timeout) {
+			DEBUGOUT("Driver can't access resource,"
+				 " acquiring I2C bus timeout.\n");
+			status = IXGBE_ERR_I2C;
+			goto release_i2c_access;
+		}
+	}
+
+	status = ixgbe_write_i2c_byte_generic(hw, byte_offset, dev_addr, data);
+
+release_i2c_access:
+
+	if (hw->phy.qsfp_shared_i2c_bus == TRUE) {
+		/* Release I2C bus ownership. */
+		esdp = IXGBE_READ_REG(hw, IXGBE_ESDP);
+		esdp &= ~IXGBE_ESDP_SDP0;
+		IXGBE_WRITE_REG(hw, IXGBE_ESDP, esdp);
+		IXGBE_WRITE_FLUSH(hw);
+	}
+
+	return status;
 }

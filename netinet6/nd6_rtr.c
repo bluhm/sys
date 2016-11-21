@@ -1,4 +1,4 @@
-/*	$OpenBSD: nd6_rtr.c,v 1.148 2016/10/03 12:33:21 mpi Exp $	*/
+/*	$OpenBSD: nd6_rtr.c,v 1.151 2016/11/21 10:56:26 mpi Exp $	*/
 /*	$KAME: nd6_rtr.c,v 1.97 2001/02/07 11:09:13 itojun Exp $	*/
 
 /*
@@ -69,7 +69,7 @@ void purge_detached(struct ifnet *);
 int nd6_prefix_onlink(struct nd_prefix *);
 int nd6_prefix_offlink(struct nd_prefix *);
 void in6_init_address_ltimes(struct nd_prefix *, struct in6_addrlifetime *);
-
+int prelist_update(struct nd_prefix *, struct nd_defrouter *, struct mbuf *);
 int rt6_deleteroute(struct rtentry *, void *, unsigned int);
 
 void nd6_addr_add(void *);
@@ -871,7 +871,8 @@ defrtrlist_update(struct nd_defrouter *new)
 {
 	struct nd_defrouter *dr, *n;
 	struct in6_ifextra *ext = new->ifp->if_afdata[AF_INET6];
-	int s = splsoftnet();
+
+	splsoftassert(IPL_SOFTNET);
 
 	if ((dr = defrouter_lookup(&new->rtaddr, new->ifp->if_index)) != NULL) {
 		/* entry exists */
@@ -894,7 +895,6 @@ defrtrlist_update(struct nd_defrouter *new)
 			 * to sort the entries.
 			 */
 			if (rtpref(new) == oldpref) {
-				splx(s);
 				return (dr);
 			}
 
@@ -911,7 +911,6 @@ defrtrlist_update(struct nd_defrouter *new)
 			n = dr;
 			goto insert;
 		}
-		splx(s);
 		return (dr);
 	}
 
@@ -920,19 +919,16 @@ defrtrlist_update(struct nd_defrouter *new)
 		/* flush all possible redirects */
 		if (new->ifp->if_xflags & IFXF_AUTOCONF6)
 			rt6_flush(&new->rtaddr, new->ifp);
-		splx(s);
 		return (NULL);
 	}
 
 	if (ip6_maxifdefrouters >= 0 &&
 	    ext->ndefrouters >= ip6_maxifdefrouters) {
-		splx(s);
 		return (NULL);
 	}
 
 	n = malloc(sizeof(*n), M_IP6NDP, M_NOWAIT | M_ZERO);
 	if (n == NULL) {
-		splx(s);
 		return (NULL);
 	}
 	*n = *new;
@@ -957,8 +953,6 @@ insert:
 	defrouter_select();
 
 	ext->ndefrouters++;
-
-	splx(s);
 
 	return (n);
 }
@@ -1170,13 +1164,13 @@ prelist_update(struct nd_prefix *new, struct nd_defrouter *dr, struct mbuf *m)
 	struct ifaddr *ifa;
 	struct ifnet *ifp = new->ndpr_ifp;
 	struct nd_prefix *pr;
-	int s, error = 0;
+	int error = 0;
 	int tempaddr_preferred = 0, autoconf = 0, statique = 0;
 	int auth;
 	struct in6_addrlifetime lt6_tmp;
 	char addr[INET6_ADDRSTRLEN];
 
-	s = splsoftnet();
+	splsoftassert(IPL_SOFTNET);
 
 	auth = 0;
 	if (m) {
@@ -1215,11 +1209,9 @@ prelist_update(struct nd_prefix *new, struct nd_defrouter *dr, struct mbuf *m)
 			int e;
 
 			if ((e = nd6_prefix_onlink(pr)) != 0) {
-				nd6log((LOG_ERR,
-				    "prelist_update: failed to make "
-				    "the prefix %s/%d on-link on %s "
-				    "(errno=%d)\n",
-				    inet_ntop(AF_INET6,
+				nd6log((LOG_ERR, "%s: failed to make the prefix"
+				    " %s/%d on-link on %s (errno=%d)\n",
+				    __func__, inet_ntop(AF_INET6,
 					&pr->ndpr_prefix.sin6_addr,
 					addr, sizeof(addr)),
 				    pr->ndpr_plen, pr->ndpr_ifp->if_xname, e));
@@ -1239,9 +1231,8 @@ prelist_update(struct nd_prefix *new, struct nd_defrouter *dr, struct mbuf *m)
 
 		error = nd6_prelist_add(new, dr, &newpr);
 		if (error != 0 || newpr == NULL) {
-			nd6log((LOG_NOTICE, "prelist_update: "
-			    "nd6_prelist_add failed for %s/%d on %s "
-			    "errno=%d, returnpr=%p\n",
+			nd6log((LOG_NOTICE, "%s: nd6_prelist_add failed for"
+			    " %s/%d on %s errno=%d, returnpr=%p\n", __func__,
 			    inet_ntop(AF_INET6, &new->ndpr_prefix.sin6_addr,
 				addr, sizeof(addr)),
 			    new->ndpr_plen, new->ndpr_ifp->if_xname,
@@ -1411,7 +1402,6 @@ prelist_update(struct nd_prefix *new, struct nd_defrouter *dr, struct mbuf *m)
 	}
 
  end:
-	splx(s);
 	return error;
 }
 
@@ -1832,9 +1822,11 @@ in6_ifadd(struct nd_prefix *pr, int privacy)
 	struct ifaddr *ifa;
 	struct in6_aliasreq ifra;
 	struct in6_ifaddr *ia6;
-	int error, s, plen0;
+	int error, plen0;
 	struct in6_addr mask, rand_ifid;
 	int prefixlen = pr->ndpr_plen;
+
+	splsoftassert(IPL_SOFTNET);
 
 	in6_prefixlen2mask(&mask, prefixlen);
 
@@ -1867,8 +1859,8 @@ in6_ifadd(struct nd_prefix *pr, int privacy)
 	/* prefixlen + ifidlen must be equal to 128 */
 	plen0 = in6_mask2len(&ia6->ia_prefixmask.sin6_addr, NULL);
 	if (prefixlen != plen0) {
-		nd6log((LOG_INFO, "in6_ifadd: wrong prefixlen for %s "
-		    "(prefix=%d ifid=%d)\n",
+		nd6log((LOG_INFO, "%s: wrong prefixlen for %s "
+		    "(prefix=%d ifid=%d)\n", __func__,
 		    ifp->if_xname, prefixlen, 128 - plen0));
 		return NULL;
 	}
@@ -1940,15 +1932,13 @@ in6_ifadd(struct nd_prefix *pr, int privacy)
 	/* If this address already exists, update it. */
 	ia6 = in6ifa_ifpwithaddr(ifp, &ifra.ifra_addr.sin6_addr);
 
-	s = splsoftnet();
 	error = in6_update_ifa(ifp, &ifra, ia6);
-	splx(s);
 
 	if (error != 0) {
 		char addr[INET6_ADDRSTRLEN];
 
 		nd6log((LOG_ERR,
-		    "in6_ifadd: failed to make ifaddr %s on %s (errno=%d)\n",
+		    "%s: failed to make ifaddr %s on %s (errno=%d)\n", __func__,
 		    inet_ntop(AF_INET6,	&ifra.ifra_addr.sin6_addr,
 			addr, sizeof(addr)),
 		    ifp->if_xname, error));

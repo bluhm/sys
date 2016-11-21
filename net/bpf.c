@@ -1,4 +1,4 @@
-/*	$OpenBSD: bpf.c,v 1.151 2016/11/16 09:00:01 mpi Exp $	*/
+/*	$OpenBSD: bpf.c,v 1.154 2016/11/21 09:15:40 mpi Exp $	*/
 /*	$NetBSD: bpf.c,v 1.33 1997/02/21 23:59:35 thorpej Exp $	*/
 
 /*
@@ -99,8 +99,6 @@ int	_bpf_mtap(caddr_t, const struct mbuf *, u_int,
 void	bpf_mcopy(const void *, void *, size_t);
 int	bpf_movein(struct uio *, u_int, struct mbuf **,
 	    struct sockaddr *, struct bpf_insn *);
-void	bpf_attachd(struct bpf_d *, struct bpf_if *);
-void	bpf_detachd(struct bpf_d *);
 int	bpf_setif(struct bpf_d *, struct ifreq *);
 int	bpfpoll(dev_t, int, struct proc *);
 int	bpfkqfilter(dev_t, struct knote *);
@@ -108,7 +106,6 @@ void	bpf_wakeup(struct bpf_d *);
 void	bpf_wakeup_cb(void *);
 void	bpf_catchpacket(struct bpf_d *, u_char *, size_t, size_t,
 	    void (*)(const void *, void *, size_t), struct timeval *);
-void	bpf_reset_d(struct bpf_d *);
 int	bpf_getdltlist(struct bpf_d *, struct bpf_dltlist *);
 int	bpf_setdlt(struct bpf_d *, u_int);
 
@@ -118,6 +115,10 @@ int	filt_bpfread(struct knote *, long);
 int	bpf_sysctl_locked(int *, u_int, void *, size_t *, void *, size_t);
 
 struct bpf_d *bpfilter_lookup(int);
+
+void	bpf_attachd(struct bpf_d *, struct bpf_if *);
+void	bpf_detachd(struct bpf_d *);
+void	bpf_resetd(struct bpf_d *);
 
 /*
  * Reference count access to descriptor buffers
@@ -406,16 +407,17 @@ bpfread(dev_t dev, struct uio *uio, int ioflag)
 	if (d->bd_bif == NULL)
 		return (ENXIO);
 
+	s = splnet();
+	bpf_get(d);
+
 	/*
 	 * Restrict application to use a buffer the same size as
 	 * as kernel buffers.
 	 */
-	if (uio->uio_resid != d->bd_bufsize)
-		return (EINVAL);
-
-	s = splnet();
-
-	bpf_get(d);
+	if (uio->uio_resid != d->bd_bufsize) {
+		error = EINVAL;
+		goto out;
+	}
 
 	/*
 	 * If there's a timeout, bd_rdStart is tagged when we start the read.
@@ -431,13 +433,12 @@ bpfread(dev_t dev, struct uio *uio, int ioflag)
 	 * ends when the timeout expires or when enough packets
 	 * have arrived to fill the store buffer.
 	 */
-	while (d->bd_hbuf == 0) {
+	while (d->bd_hbuf == NULL) {
 		if (d->bd_bif == NULL) {
 			/* interface is gone */
 			if (d->bd_slen == 0) {
-				bpf_put(d);
-				splx(s);
-				return (EIO);
+				error = EIO;
+				goto out;
 			}
 			ROTATE_BUFFERS(d);
 			break;
@@ -461,18 +462,15 @@ bpfread(dev_t dev, struct uio *uio, int ioflag)
 			} else
 				error = EWOULDBLOCK;
 		}
-		if (error == EINTR || error == ERESTART) {
-			bpf_put(d);
-			splx(s);
-			return (error);
-		}
+		if (error == EINTR || error == ERESTART)
+			goto out;
 		if (error == EWOULDBLOCK) {
 			/*
 			 * On a timeout, return what's in the buffer,
 			 * which may be nothing.  If there is something
 			 * in the store buffer, we can rotate the buffers.
 			 */
-			if (d->bd_hbuf)
+			if (d->bd_hbuf != NULL)
 				/*
 				 * We filled up the buffer in between
 				 * getting the timeout and arriving
@@ -481,9 +479,8 @@ bpfread(dev_t dev, struct uio *uio, int ioflag)
 				break;
 
 			if (d->bd_slen == 0) {
-				bpf_put(d);
-				splx(s);
-				return (0);
+				error = 0;
+				goto out;
 			}
 			ROTATE_BUFFERS(d);
 			break;
@@ -505,7 +502,7 @@ bpfread(dev_t dev, struct uio *uio, int ioflag)
 	d->bd_fbuf = d->bd_hbuf;
 	d->bd_hbuf = NULL;
 	d->bd_hlen = 0;
-
+out:
 	bpf_put(d);
 	splx(s);
 
@@ -554,32 +551,40 @@ bpfwrite(dev_t dev, struct uio *uio, int ioflag)
 	struct bpf_insn *fcode = NULL;
 	int error, s;
 	struct sockaddr_storage dst;
+	u_int dlt;
 
 	d = bpfilter_lookup(minor(dev));
 	if (d->bd_bif == NULL)
 		return (ENXIO);
 
+	bpf_get(d);
 	ifp = d->bd_bif->bif_ifp;
 
-	if ((ifp->if_flags & IFF_UP) == 0)
-		return (ENETDOWN);
+	if ((ifp->if_flags & IFF_UP) == 0) {
+		error = ENETDOWN;
+		goto out;
+	}
 
-	if (uio->uio_resid == 0)
-		return (0);
+	if (uio->uio_resid == 0) {
+		error = 0;
+		goto out;
+	}
 
 	KERNEL_ASSERT_LOCKED(); /* for accessing bd_wfilter */
 	bf = srp_get_locked(&d->bd_wfilter);
 	if (bf != NULL)
 		fcode = bf->bf_insns;
 
-	error = bpf_movein(uio, d->bd_bif->bif_dlt, &m,
-	    (struct sockaddr *)&dst, fcode);
+	dlt = d->bd_bif->bif_dlt;
+
+	error = bpf_movein(uio, dlt, &m, (struct sockaddr *)&dst, fcode);
 	if (error)
-		return (error);
+		goto out;
 
 	if (m->m_pkthdr.len > ifp->if_mtu) {
 		m_freem(m);
-		return (EMSGSIZE);
+		error = EMSGSIZE;
+		goto out;
 	}
 
 	m->m_pkthdr.ph_rtableid = ifp->if_rdomain;
@@ -591,9 +596,9 @@ bpfwrite(dev_t dev, struct uio *uio, int ioflag)
 	s = splsoftnet();
 	error = ifp->if_output(ifp, m, (struct sockaddr *)&dst, NULL);
 	splx(s);
-	/*
-	 * The driver frees the mbuf.
-	 */
+
+out:
+	bpf_put(d);
 	return (error);
 }
 
@@ -602,7 +607,7 @@ bpfwrite(dev_t dev, struct uio *uio, int ioflag)
  * receive and drop counts.  Should be called at splnet.
  */
 void
-bpf_reset_d(struct bpf_d *d)
+bpf_resetd(struct bpf_d *d)
 {
 	if (d->bd_hbuf) {
 		/* Free the hold buffer. */
@@ -732,7 +737,7 @@ bpfioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct proc *p)
 	 */
 	case BIOCFLUSH:
 		s = splnet();
-		bpf_reset_d(d);
+		bpf_resetd(d);
 		splx(s);
 		break;
 
@@ -955,7 +960,7 @@ bpf_setf(struct bpf_d *d, struct bpf_program *fp, int wf)
 			return (EINVAL);
 		srp_update_locked(&bpf_insn_gc, filter, NULL);
 		s = splnet();
-		bpf_reset_d(d);
+		bpf_resetd(d);
 		splx(s);
 		return (0);
 	}
@@ -982,7 +987,7 @@ bpf_setf(struct bpf_d *d, struct bpf_program *fp, int wf)
 	srp_update_locked(&bpf_insn_gc, filter, bf);
 
 	s = splnet();
-	bpf_reset_d(d);
+	bpf_resetd(d);
 	splx(s);
 	return (0);
 }
@@ -1036,7 +1041,7 @@ bpf_setif(struct bpf_d *d, struct ifreq *ifr)
 
 		bpf_attachd(d, candidate);
 	}
-	bpf_reset_d(d);
+	bpf_resetd(d);
 out:
 	splx(s);
 	return (error);
@@ -1359,7 +1364,7 @@ bpf_catchpacket(struct bpf_d *d, u_char *pkt, size_t pktlen, size_t snaplen,
 {
 	struct bpf_hdr *hp;
 	int totlen, curlen;
-	int hdrlen;
+	int hdrlen, do_wakeup = 0;
 
 	if (d->bd_bif == NULL)
 		return;
@@ -1395,7 +1400,7 @@ bpf_catchpacket(struct bpf_d *d, u_char *pkt, size_t pktlen, size_t snaplen,
 			return;
 		}
 		ROTATE_BUFFERS(d);
-		bpf_wakeup(d);
+		do_wakeup = 1;
 		curlen = 0;
 	}
 
@@ -1418,7 +1423,7 @@ bpf_catchpacket(struct bpf_d *d, u_char *pkt, size_t pktlen, size_t snaplen,
 		 * Immediate mode is set.  A packet arrived so any
 		 * reads should be woken up.
 		 */
-		bpf_wakeup(d);
+		do_wakeup = 1;
 	}
 
 	if (d->bd_rdStart && (d->bd_rtout + d->bd_rdStart < ticks)) {
@@ -1427,12 +1432,15 @@ bpf_catchpacket(struct bpf_d *d, u_char *pkt, size_t pktlen, size_t snaplen,
 		 * may have timeouts set.  We got here by getting
 		 * a packet, so wake up the reader.
 		 */
-		if (d->bd_fbuf) {
+		if (d->bd_fbuf != NULL) {
 			d->bd_rdStart = 0;
 			ROTATE_BUFFERS(d);
-			bpf_wakeup(d);
+			do_wakeup = 1;
 		}
 	}
+
+	if (do_wakeup)
+		bpf_wakeup(d);
 }
 
 /*
@@ -1664,7 +1672,7 @@ bpf_setdlt(struct bpf_d *d, u_int dlt)
 	s = splnet();
 	bpf_detachd(d);
 	bpf_attachd(d, bp);
-	bpf_reset_d(d);
+	bpf_resetd(d);
 	splx(s);
 	return (0);
 }

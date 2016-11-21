@@ -1,4 +1,4 @@
-/*	$OpenBSD: bpf.h,v 1.59 2016/10/30 17:46:34 phessler Exp $	*/
+/*	$OpenBSD: bpf.h,v 1.61 2016/11/17 15:41:14 sthen Exp $	*/
 /*	$NetBSD: bpf.h,v 1.15 1996/12/13 07:57:33 mikel Exp $	*/
 
 /*
@@ -185,7 +185,24 @@ struct bpf_hdr {
 #define DLT_IEEE802_11		105	/* IEEE 802.11 wireless */
 #define DLT_PFLOG		117	/* Packet filter logging, by pcap people */
 #define DLT_IEEE802_11_RADIO	127	/* IEEE 802.11 plus WLAN header */
+#define DLT_USER0		147	/* Reserved for private use */
+#define DLT_USER1		148	/* Reserved for private use */
+#define DLT_USER2		149	/* Reserved for private use */
+#define DLT_USER3		150	/* Reserved for private use */
+#define DLT_USER4		151	/* Reserved for private use */
+#define DLT_USER5		152	/* Reserved for private use */
+#define DLT_USER6		153	/* Reserved for private use */
+#define DLT_USER7		154	/* Reserved for private use */
+#define DLT_USER8		155	/* Reserved for private use */
+#define DLT_USER9		156	/* Reserved for private use */
+#define DLT_USER10		157	/* Reserved for private use */
+#define DLT_USER11		158	/* Reserved for private use */
+#define DLT_USER12		159	/* Reserved for private use */
+#define DLT_USER13		160	/* Reserved for private use */
+#define DLT_USER14		161	/* Reserved for private use */
+#define DLT_USER15		162	/* Reserved for private use */
 #define DLT_MPLS		219	/* MPLS Provider Edge header */
+#define DLT_OPENFLOW		DLT_USER0
 
 /*
  * The instruction encodings.
