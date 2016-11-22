@@ -6878,28 +6878,16 @@ done:
 			action = PF_DROP;
 			break;
 		}
-		if (r->rt) {
-			switch (pd.naf) {
-			case AF_INET:
-				pf_route(&pd, r, s);
-				break;
-			case AF_INET6:
-				pf_route6(&pd, r, s);
-				break;
-			}
+		pd.m->m_pkthdr.pf.flags |= PF_TAG_GENERATED;
+		switch (pd.naf) {
+		case AF_INET:
+			ip_output(pd.m, NULL, NULL, 0, NULL, NULL, 0);
+			break;
+		case AF_INET6:
+			ip6_output(pd.m, NULL, NULL, 0, NULL, NULL);
+			break;
 		}
-		if (pd.m) {
-			pd.m->m_pkthdr.pf.flags |= PF_TAG_GENERATED;
-			switch (pd.naf) {
-			case AF_INET:
-				ip_output(pd.m, NULL, NULL, 0, NULL, NULL, 0);
-				break;
-			case AF_INET6:
-				ip6_output(pd.m, NULL, NULL, 0, NULL, NULL);
-				break;
-			}
-			pd.m = NULL;
-		}
+		pd.m = NULL;
 		action = PF_PASS;
 		break;
 #endif /* INET6 */
