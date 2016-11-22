@@ -5010,7 +5010,7 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **state,
 
 		switch (pd2.proto) {
 		case IPPROTO_TCP: {
-			struct tcphdr		*th = &pd2.hdr.tcp;
+			struct tcphdr		*th2 = &pd2.hdr.tcp;
 			u_int32_t		 seq;
 			struct pf_state_peer	*src, *dst;
 			u_int8_t		 dws;
@@ -5020,7 +5020,7 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **state,
 			 * expected. Don't access any TCP header fields after
 			 * th_seq, an ackskew test is not possible.
 			 */
-			if (!pf_pull_hdr(pd2.m, pd2.off, th, 8, NULL, reason,
+			if (!pf_pull_hdr(pd2.m, pd2.off, th2, 8, NULL, reason,
 			    pd2.af)) {
 				DPFPRINTF(LOG_NOTICE,
 				    "ICMP error message too short (tcp)");
@@ -5032,8 +5032,8 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **state,
 			key.rdomain = pd2.rdomain;
 			PF_ACPY(&key.addr[pd2.sidx], pd2.src, key.af);
 			PF_ACPY(&key.addr[pd2.didx], pd2.dst, key.af);
-			key.port[pd2.sidx] = th->th_sport;
-			key.port[pd2.didx] = th->th_dport;
+			key.port[pd2.sidx] = th2->th_sport;
+			key.port[pd2.didx] = th2->th_dport;
 
 			STATE_LOOKUP(pd2.kif, &key, pd2.dir, *state, pd2.m);
 
@@ -5061,9 +5061,9 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **state,
 				dws = 0;
 
 			/* Demodulate sequence number */
-			seq = ntohl(th->th_seq) - src->seqdiff;
+			seq = ntohl(th2->th_seq) - src->seqdiff;
 			if (src->seqdiff) {
-				pf_patch_32(pd, &th->th_seq, htonl(seq));
+				pf_patch_32(pd, &th2->th_seq, htonl(seq));
 				copyback = 1;
 			}
 
@@ -5138,20 +5138,20 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **state,
 					pd->naf = nk->af;
 
 					pf_patch_16(pd,
-					    &th->th_sport, nk->port[sidx]);
+					    &th2->th_sport, nk->port[sidx]);
 					pf_patch_16(pd,
-					    &th->th_dport, nk->port[didx]);
+					    &th2->th_dport, nk->port[didx]);
 
-					m_copyback(pd2.m, pd2.off, 8, th,
+					m_copyback(pd2.m, pd2.off, 8, th2,
 					    M_NOWAIT);
 					return (PF_AFRT);
 				}
 #endif	/* INET6 */
 				if (PF_ANEQ(pd2.src,
 				    &nk->addr[pd2.sidx], pd2.af) ||
-				    nk->port[pd2.sidx] != th->th_sport)
+				    nk->port[pd2.sidx] != th2->th_sport)
 					pf_translate_icmp(pd, pd2.src,
-					    &th->th_sport, pd->dst,
+					    &th2->th_sport, pd->dst,
 					    &nk->addr[pd2.sidx],
 					    nk->port[pd2.sidx]);
 
@@ -5162,9 +5162,9 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **state,
 
 				if (PF_ANEQ(pd2.dst,
 				    &nk->addr[pd2.didx], pd2.af) ||
-				    nk->port[pd2.didx] != th->th_dport)
+				    nk->port[pd2.didx] != th2->th_dport)
 					pf_translate_icmp(pd, pd2.dst,
-					    &th->th_dport, pd->src,
+					    &th2->th_dport, pd->src,
 					    &nk->addr[pd2.didx],
 					    nk->port[pd2.didx]);
 				copyback = 1;
@@ -5188,14 +5188,14 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **state,
 					break;
 #endif /* INET6 */
 				}
-				m_copyback(pd2.m, pd2.off, 8, th, M_NOWAIT);
+				m_copyback(pd2.m, pd2.off, 8, th2, M_NOWAIT);
 			}
 			break;
 		}
 		case IPPROTO_UDP: {
-			struct udphdr	*uh = &pd2.hdr.udp;
+			struct udphdr	*uh2 = &pd2.hdr.udp;
 
-			if (!pf_pull_hdr(pd2.m, pd2.off, uh, sizeof(*uh),
+			if (!pf_pull_hdr(pd2.m, pd2.off, uh2, sizeof(*uh2),
 			    NULL, reason, pd2.af)) {
 				DPFPRINTF(LOG_NOTICE,
 				    "ICMP error message too short (udp)");
@@ -5207,8 +5207,8 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **state,
 			key.rdomain = pd2.rdomain;
 			PF_ACPY(&key.addr[pd2.sidx], pd2.src, key.af);
 			PF_ACPY(&key.addr[pd2.didx], pd2.dst, key.af);
-			key.port[pd2.sidx] = uh->uh_sport;
-			key.port[pd2.didx] = uh->uh_dport;
+			key.port[pd2.sidx] = uh2->uh_sport;
+			key.port[pd2.didx] = uh2->uh_dport;
 
 			STATE_LOOKUP(pd2.kif, &key, pd2.dir, *state, pd2.m);
 
@@ -5253,21 +5253,21 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **state,
 					pd->naf = nk->af;
 
 					pf_patch_16(pd,
-					    &uh->uh_sport, nk->port[sidx]);
+					    &uh2->uh_sport, nk->port[sidx]);
 					pf_patch_16(pd,
-					    &uh->uh_dport, nk->port[didx]);
+					    &uh2->uh_dport, nk->port[didx]);
 
-					m_copyback(pd2.m, pd2.off, sizeof(uh),
-					    uh, M_NOWAIT);
+					m_copyback(pd2.m, pd2.off, sizeof(uh2),
+					    uh2, M_NOWAIT);
 					return (PF_AFRT);
 				}
 #endif /* INET6 */
 
 				if (PF_ANEQ(pd2.src,
 				    &nk->addr[pd2.sidx], pd2.af) ||
-				    nk->port[pd2.sidx] != uh->uh_sport)
+				    nk->port[pd2.sidx] != uh2->uh_sport)
 					pf_translate_icmp(pd, pd2.src,
-					    &uh->uh_sport, pd->dst,
+					    &uh2->uh_sport, pd->dst,
 					    &nk->addr[pd2.sidx],
 					    nk->port[pd2.sidx]);
 
@@ -5278,9 +5278,9 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **state,
 
 				if (PF_ANEQ(pd2.dst,
 				    &nk->addr[pd2.didx], pd2.af) ||
-				    nk->port[pd2.didx] != uh->uh_dport)
+				    nk->port[pd2.didx] != uh2->uh_dport)
 					pf_translate_icmp(pd, pd2.dst,
-					    &uh->uh_dport, pd->src,
+					    &uh2->uh_dport, pd->src,
 					    &nk->addr[pd2.didx],
 					    nk->port[pd2.didx]);
 
@@ -5304,29 +5304,29 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **state,
 				/* Avoid recomputing quoted UDP checksum.
 				 * note: udp6 0 csum invalid per rfc2460 p27.
 				 * but presumed nothing cares in this context */
-				pf_patch_16(pd, &uh->uh_sum, 0);
-				m_copyback(pd2.m, pd2.off, sizeof(*uh), uh,
+				pf_patch_16(pd, &uh2->uh_sum, 0);
+				m_copyback(pd2.m, pd2.off, sizeof(*uh2), uh2,
 				    M_NOWAIT);
 				copyback = 1;
 			}
 			break;
 		}
 		case IPPROTO_ICMP: {
-			struct icmp	*iih = &pd2.hdr.icmp;
+			struct icmp	*ih2 = &pd2.hdr.icmp;
 
 			if (pd2.af != AF_INET) {
 				REASON_SET(reason, PFRES_NORM);
 				return (PF_DROP);
 			}
 
-			if (!pf_pull_hdr(pd2.m, pd2.off, iih, ICMP_MINLEN,
+			if (!pf_pull_hdr(pd2.m, pd2.off, ih2, ICMP_MINLEN,
 			    NULL, reason, pd2.af)) {
 				DPFPRINTF(LOG_NOTICE,
 				    "ICMP error message too short (icmp)");
 				return (PF_DROP);
 			}
 
-			pf_icmp_mapping(&pd2, iih->icmp_type,
+			pf_icmp_mapping(&pd2, ih2->icmp_type,
 			    &icmp_dir, &virtual_id, &virtual_type);
 
 			ret = pf_icmp_state_lookup(&pd2, &key, state,
@@ -5366,13 +5366,13 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **state,
 						return (PF_DROP);
 					pd->proto = IPPROTO_ICMPV6;
 					if (pf_translate_icmp_af(pd,
-						nk->af, iih))
+						nk->af, ih2))
 						return (PF_DROP);
 					if (virtual_type == htons(ICMP_ECHO))
-						pf_patch_16(pd, &iih->icmp_id,
+						pf_patch_16(pd, &ih2->icmp_id,
 						    nk->port[iidx]);
 					m_copyback(pd2.m, pd2.off, ICMP_MINLEN,
-					    iih, M_NOWAIT);
+					    ih2, M_NOWAIT);
 					pd->m->m_pkthdr.ph_rtableid =
 					    nk->rdomain;
 					pd->destchg = 1;
@@ -5388,10 +5388,10 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **state,
 				if (PF_ANEQ(pd2.src,
 				    &nk->addr[pd2.sidx], pd2.af) ||
 				    (virtual_type == htons(ICMP_ECHO) &&
-				    nk->port[iidx] != iih->icmp_id))
+				    nk->port[iidx] != ih2->icmp_id))
 					pf_translate_icmp(pd, pd2.src,
 					    (virtual_type == htons(ICMP_ECHO)) ?
-					    &iih->icmp_id : NULL,
+					    &ih2->icmp_id : NULL,
 					    pd->dst, &nk->addr[pd2.sidx],
 					    (virtual_type == htons(ICMP_ECHO)) ?
 					    nk->port[iidx] : 0);
@@ -5410,7 +5410,7 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **state,
 				    &pd->hdr.icmp, M_NOWAIT);
 				m_copyback(pd2.m, ipoff2, sizeof(h2), &h2,
 				    M_NOWAIT);
-				m_copyback(pd2.m, pd2.off, ICMP_MINLEN, iih,
+				m_copyback(pd2.m, pd2.off, ICMP_MINLEN, ih2,
 				    M_NOWAIT);
 				copyback = 1;
 			}
@@ -5418,21 +5418,21 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **state,
 		}
 #ifdef INET6
 		case IPPROTO_ICMPV6: {
-			struct icmp6_hdr	*iih = &pd2.hdr.icmp6;
+			struct icmp6_hdr	*ih2 = &pd2.hdr.icmp6;
 
 			if (pd2.af != AF_INET6) {
 				REASON_SET(reason, PFRES_NORM);
 				return (PF_DROP);
 			}
 
-			if (!pf_pull_hdr(pd2.m, pd2.off, iih,
+			if (!pf_pull_hdr(pd2.m, pd2.off, ih2,
 			    sizeof(struct icmp6_hdr), NULL, reason, pd2.af)) {
 				DPFPRINTF(LOG_NOTICE,
 				    "ICMP error message too short (icmp6)");
 				return (PF_DROP);
 			}
 
-			pf_icmp_mapping(&pd2, iih->icmp6_type,
+			pf_icmp_mapping(&pd2, ih2->icmp6_type,
 			    &icmp_dir, &virtual_id, &virtual_type);
 			ret = pf_icmp_state_lookup(&pd2, &key, state,
 			    virtual_id, virtual_type, icmp_dir, &iidx, 0, 1);
@@ -5476,14 +5476,14 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **state,
 						return (PF_DROP);
 					pd->proto = IPPROTO_ICMP;
 					if (pf_translate_icmp_af(pd,
-						nk->af, iih))
+						nk->af, ih2))
 						return (PF_DROP);
 					if (virtual_type ==
 					    htons(ICMP6_ECHO_REQUEST))
-						pf_patch_16(pd, &iih->icmp6_id,
+						pf_patch_16(pd, &ih2->icmp6_id,
 						    nk->port[iidx]);
 					m_copyback(pd2.m, pd2.off,
-					    sizeof(struct icmp6_hdr), iih,
+					    sizeof(struct icmp6_hdr), ih2,
 					    M_NOWAIT);
 					pd->m->m_pkthdr.ph_rtableid =
 					    nk->rdomain;
@@ -5500,11 +5500,11 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **state,
 				    &nk->addr[pd2.sidx], pd2.af) ||
 				    ((virtual_type ==
 				    htons(ICMP6_ECHO_REQUEST)) &&
-				    nk->port[pd2.sidx] != iih->icmp6_id))
+				    nk->port[pd2.sidx] != ih2->icmp6_id))
 					pf_translate_icmp(pd, pd2.src,
 					    (virtual_type ==
 					    htons(ICMP6_ECHO_REQUEST))
-					    ? &iih->icmp6_id : NULL,
+					    ? &ih2->icmp6_id : NULL,
 					    pd->dst, &nk->addr[pd2.sidx],
 					    (virtual_type ==
 					    htons(ICMP6_ECHO_REQUEST))
@@ -5526,7 +5526,7 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **state,
 				m_copyback(pd2.m, ipoff2, sizeof(h2_6), &h2_6,
 				    M_NOWAIT);
 				m_copyback(pd2.m, pd2.off,
-				    sizeof(struct icmp6_hdr), iih, M_NOWAIT);
+				    sizeof(struct icmp6_hdr), ih2, M_NOWAIT);
 				copyback = 1;
 			}
 			break;
