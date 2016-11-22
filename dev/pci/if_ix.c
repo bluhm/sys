@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ix.c,v 1.140 2016/11/21 12:37:16 jsg Exp $	*/
+/*	$OpenBSD: if_ix.c,v 1.142 2016/11/21 17:21:33 mikeb Exp $	*/
 
 /******************************************************************************
 
@@ -100,6 +100,7 @@ void	ixgbe_local_timer(void *);
 void	ixgbe_setup_interface(struct ix_softc *);
 void	ixgbe_config_gpie(struct ix_softc *);
 void	ixgbe_config_delay_values(struct ix_softc *);
+void	ixgbe_add_media_types(struct ix_softc *);
 void	ixgbe_config_link(struct ix_softc *);
 
 int	ixgbe_allocate_transmit_buffers(struct tx_ring *);
@@ -115,6 +116,7 @@ int	ixgbe_setup_receive_ring(struct rx_ring *);
 void	ixgbe_initialize_receive_units(struct ix_softc *);
 void	ixgbe_free_receive_structures(struct ix_softc *);
 void	ixgbe_free_receive_buffers(struct rx_ring *);
+void	ixgbe_initialize_rss_mapping(struct ix_softc *);
 int	ixgbe_rxfill(struct rx_ring *);
 void	ixgbe_rxrefill(void *);
 
@@ -1084,21 +1086,43 @@ int
 ixgbe_media_change(struct ifnet *ifp)
 {
 	struct ix_softc	*sc = ifp->if_softc;
+	struct ixgbe_hw	*hw = &sc->hw;
 	struct ifmedia	*ifm = &sc->media;
+	ixgbe_link_speed speed = 0;
 
 	if (IFM_TYPE(ifm->ifm_media) != IFM_ETHER)
 		return (EINVAL);
 
+	if (hw->phy.media_type == ixgbe_media_type_backplane)
+		return (ENODEV);
+
 	switch (IFM_SUBTYPE(ifm->ifm_media)) {
-	case IFM_AUTO:
-		sc->hw.phy.autoneg_advertised =
-		    IXGBE_LINK_SPEED_100_FULL |
-		    IXGBE_LINK_SPEED_1GB_FULL |
-		    IXGBE_LINK_SPEED_10GB_FULL;
-		break;
-	default:
-		return (EINVAL);
+		case IFM_AUTO:
+		case IFM_10G_T:
+			speed |= IXGBE_LINK_SPEED_100_FULL;
+		case IFM_10G_SR: /* KR, too */
+		case IFM_10G_LR:
+		case IFM_10G_CX4: /* KX4 */
+			speed |= IXGBE_LINK_SPEED_1GB_FULL;
+		case IFM_10G_SFP_CU:
+			speed |= IXGBE_LINK_SPEED_10GB_FULL;
+			break;
+		case IFM_1000_T:
+			speed |= IXGBE_LINK_SPEED_100_FULL;
+		case IFM_1000_LX:
+		case IFM_1000_SX:
+		case IFM_1000_CX: /* KX */
+			speed |= IXGBE_LINK_SPEED_1GB_FULL;
+			break;
+		case IFM_100_TX:
+			speed |= IXGBE_LINK_SPEED_100_FULL;
+			break;
+		default:
+			return (EINVAL);
 	}
+
+	hw->mac.autotry_restart = TRUE;
+	hw->mac.ops.setup_link(hw, speed, TRUE);
 
 	return (0);
 }
@@ -1442,16 +1466,16 @@ ixgbe_setup_optics(struct ix_softc *sc)
 		sc->optics = IFM_1000_T;
 	else if (layer & IXGBE_PHYSICAL_LAYER_100BASE_TX)
 		sc->optics = IFM_100_TX;
-	else if (layer & (IXGBE_PHYSICAL_LAYER_SFP_PLUS_CU |
-			  IXGBE_PHYSICAL_LAYER_SFP_ACTIVE_DA))
+	else if (layer & IXGBE_PHYSICAL_LAYER_SFP_PLUS_CU ||
+	    layer & IXGBE_PHYSICAL_LAYER_SFP_ACTIVE_DA)
 		sc->optics = IFM_10G_SFP_CU;
-	else if (layer & (IXGBE_PHYSICAL_LAYER_10GBASE_LR |
-			  IXGBE_PHYSICAL_LAYER_10GBASE_LRM))
+	else if (layer & IXGBE_PHYSICAL_LAYER_10GBASE_LR ||
+	    layer & IXGBE_PHYSICAL_LAYER_10GBASE_LRM)
 		sc->optics = IFM_10G_LR;
 	else if (layer & IXGBE_PHYSICAL_LAYER_10GBASE_SR)
 		sc->optics = IFM_10G_SR;
-	else if (layer & (IXGBE_PHYSICAL_LAYER_10GBASE_KX4 |
-			  IXGBE_PHYSICAL_LAYER_10GBASE_CX4))
+	else if (layer & IXGBE_PHYSICAL_LAYER_10GBASE_KX4 ||
+	    layer & IXGBE_PHYSICAL_LAYER_10GBASE_CX4)
 		sc->optics = IFM_10G_CX4;
 	else if (layer & IXGBE_PHYSICAL_LAYER_1000BASE_SX)
 		sc->optics = IFM_1000_SX;
@@ -1602,16 +1626,61 @@ ixgbe_setup_interface(struct ix_softc *sc)
 	 */
 	ifmedia_init(&sc->media, IFM_IMASK, ixgbe_media_change,
 	    ixgbe_media_status);
-	if (sc->optics)
-		ifmedia_add(&sc->media, IFM_ETHER | sc->optics |
-		    IFM_FDX, 0, NULL);
-	ifmedia_add(&sc->media, IFM_ETHER | IFM_AUTO, 0, NULL);
+	ixgbe_add_media_types(sc);
 	ifmedia_set(&sc->media, IFM_ETHER | IFM_AUTO);
 
 	if_attach(ifp);
 	ether_ifattach(ifp);
 
 	sc->max_frame_size = IXGBE_MAX_FRAME_SIZE;
+}
+
+void
+ixgbe_add_media_types(struct ix_softc *sc)
+{
+	struct ixgbe_hw	*hw = &sc->hw;
+	int		layer;
+
+	layer = hw->mac.ops.get_supported_physical_layer(hw);
+
+	if (layer & IXGBE_PHYSICAL_LAYER_10GBASE_T)
+		ifmedia_add(&sc->media, IFM_ETHER | IFM_10G_T, 0, NULL);
+	if (layer & IXGBE_PHYSICAL_LAYER_1000BASE_T)
+		ifmedia_add(&sc->media, IFM_ETHER | IFM_1000_T, 0, NULL);
+	if (layer & IXGBE_PHYSICAL_LAYER_100BASE_TX)
+		ifmedia_add(&sc->media, IFM_ETHER | IFM_100_TX, 0, NULL);
+	if (layer & IXGBE_PHYSICAL_LAYER_SFP_PLUS_CU ||
+	    layer & IXGBE_PHYSICAL_LAYER_SFP_ACTIVE_DA)
+		ifmedia_add(&sc->media, IFM_ETHER | IFM_10G_SFP_CU, 0, NULL);
+	if (layer & IXGBE_PHYSICAL_LAYER_10GBASE_LR) {
+		ifmedia_add(&sc->media, IFM_ETHER | IFM_10G_LR, 0, NULL);
+		if (hw->phy.multispeed_fiber)
+			ifmedia_add(&sc->media, IFM_ETHER | IFM_1000_LX, 0,
+			    NULL);
+	}
+	if (layer & IXGBE_PHYSICAL_LAYER_10GBASE_SR) {
+		ifmedia_add(&sc->media, IFM_ETHER | IFM_10G_SR, 0, NULL);
+		if (hw->phy.multispeed_fiber)
+			ifmedia_add(&sc->media, IFM_ETHER | IFM_1000_SX, 0,
+			    NULL);
+	} else if (layer & IXGBE_PHYSICAL_LAYER_1000BASE_SX)
+		ifmedia_add(&sc->media, IFM_ETHER | IFM_1000_SX, 0, NULL);
+	if (layer & IXGBE_PHYSICAL_LAYER_10GBASE_CX4)
+		ifmedia_add(&sc->media, IFM_ETHER | IFM_10G_CX4, 0, NULL);
+	if (layer & IXGBE_PHYSICAL_LAYER_10GBASE_KR)
+		ifmedia_add(&sc->media, IFM_ETHER | IFM_10G_SR, 0, NULL);
+	if (layer & IXGBE_PHYSICAL_LAYER_10GBASE_KX4)
+		ifmedia_add(&sc->media, IFM_ETHER | IFM_10G_CX4, 0, NULL);
+	if (layer & IXGBE_PHYSICAL_LAYER_1000BASE_KX)
+		ifmedia_add(&sc->media, IFM_ETHER | IFM_1000_CX, 0, NULL);
+
+	if (hw->device_id == IXGBE_DEV_ID_82598AT) {
+		ifmedia_add(&sc->media, IFM_ETHER | IFM_1000_T | IFM_FDX, 0,
+		    NULL);
+		ifmedia_add(&sc->media, IFM_ETHER | IFM_1000_T, 0, NULL);
+	}
+
+	ifmedia_add(&sc->media, IFM_ETHER | IFM_AUTO, 0, NULL);
 }
 
 void
@@ -2550,8 +2619,7 @@ ixgbe_initialize_receive_units(struct ix_softc *sc)
 	struct rx_ring	*rxr = sc->rx_rings;
 	struct ixgbe_hw	*hw = &sc->hw;
 	uint32_t	bufsz, fctrl, srrctl, rxcsum;
-	uint32_t	reta, mrqc = 0, hlreg;
-	uint32_t	random[10];
+	uint32_t	hlreg;
 	int		i;
 
 	/*
@@ -2608,36 +2676,7 @@ ixgbe_initialize_receive_units(struct ix_softc *sc)
 
 	/* Setup RSS */
 	if (sc->num_queues > 1) {
-		int j;
-		reta = 0;
-		/* set up random bits */
-		arc4random_buf(&random, sizeof(random));
-
-		/* Set up the redirection table */
-		for (i = 0, j = 0; i < 128; i++, j++) {
-			if (j == sc->num_queues)
-				j = 0;
-			reta = (reta << 8) | (j * 0x11);
-			if ((i & 3) == 3)
-				IXGBE_WRITE_REG(&sc->hw, IXGBE_RETA(i >> 2), reta);
-		}
-
-		/* Now fill our hash function seeds */
-		for (i = 0; i < 10; i++)
-			IXGBE_WRITE_REG(&sc->hw, IXGBE_RSSRK(i), random[i]);
-
-		/* Perform hash on these packet types */
-		mrqc = IXGBE_MRQC_RSSEN
-		    | IXGBE_MRQC_RSS_FIELD_IPV4
-		    | IXGBE_MRQC_RSS_FIELD_IPV4_TCP
-		    | IXGBE_MRQC_RSS_FIELD_IPV4_UDP
-		    | IXGBE_MRQC_RSS_FIELD_IPV6_EX_TCP
-		    | IXGBE_MRQC_RSS_FIELD_IPV6_EX
-		    | IXGBE_MRQC_RSS_FIELD_IPV6
-		    | IXGBE_MRQC_RSS_FIELD_IPV6_TCP
-		    | IXGBE_MRQC_RSS_FIELD_IPV6_UDP
-		    | IXGBE_MRQC_RSS_FIELD_IPV6_EX_UDP;
-		IXGBE_WRITE_REG(&sc->hw, IXGBE_MRQC, mrqc);
+		ixgbe_initialize_rss_mapping(sc);
 
 		/* RSS and RX IPP Checksum are mutually exclusive */
 		rxcsum |= IXGBE_RXCSUM_PCSD;
@@ -2648,6 +2687,71 @@ ixgbe_initialize_receive_units(struct ix_softc *sc)
 		rxcsum |= IXGBE_RXCSUM_IPPCSE;
 
 	IXGBE_WRITE_REG(hw, IXGBE_RXCSUM, rxcsum);
+}
+
+void
+ixgbe_initialize_rss_mapping(struct ix_softc *sc)
+{
+	struct ixgbe_hw	*hw = &sc->hw;
+	uint32_t reta = 0, mrqc, rss_key[10];
+	int i, j, queue_id, table_size, index_mult;
+
+	/* set up random bits */
+	arc4random_buf(&rss_key, sizeof(rss_key));
+
+	/* Set multiplier for RETA setup and table size based on MAC */
+	index_mult = 0x1;
+	table_size = 128;
+	switch (sc->hw.mac.type) {
+	case ixgbe_mac_82598EB:
+		index_mult = 0x11;
+		break;
+	case ixgbe_mac_X550:
+	case ixgbe_mac_X550EM_x:
+		table_size = 512;
+		break;
+	default:
+		break;
+	}
+
+	/* Set up the redirection table */
+	for (i = 0, j = 0; i < table_size; i++, j++) {
+		if (j == sc->num_queues) j = 0;
+		queue_id = (j * index_mult);
+		/*
+		 * The low 8 bits are for hash value (n+0);
+		 * The next 8 bits are for hash value (n+1), etc.
+		 */
+		reta = reta >> 8;
+		reta = reta | ( ((uint32_t) queue_id) << 24);
+		if ((i & 3) == 3) {
+			if (i < 128)
+				IXGBE_WRITE_REG(hw, IXGBE_RETA(i >> 2), reta);
+			else
+				IXGBE_WRITE_REG(hw, IXGBE_ERETA((i >> 2) - 32),
+				    reta);
+			reta = 0;
+		}
+	}
+
+	/* Now fill our hash function seeds */
+	for (i = 0; i < 10; i++)
+		IXGBE_WRITE_REG(hw, IXGBE_RSSRK(i), rss_key[i]);
+
+	/*
+	 * Disable UDP - IP fragments aren't currently being handled
+	 * and so we end up with a mix of 2-tuple and 4-tuple
+	 * traffic.
+	 */
+	mrqc = IXGBE_MRQC_RSSEN
+	     | IXGBE_MRQC_RSS_FIELD_IPV4
+	     | IXGBE_MRQC_RSS_FIELD_IPV4_TCP
+	     | IXGBE_MRQC_RSS_FIELD_IPV6_EX_TCP
+	     | IXGBE_MRQC_RSS_FIELD_IPV6_EX
+	     | IXGBE_MRQC_RSS_FIELD_IPV6
+	     | IXGBE_MRQC_RSS_FIELD_IPV6_TCP
+	;
+	IXGBE_WRITE_REG(hw, IXGBE_MRQC, mrqc);
 }
 
 /*********************************************************************
