@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ix.c,v 1.142 2016/11/21 17:21:33 mikeb Exp $	*/
+/*	$OpenBSD: if_ix.c,v 1.144 2016/11/24 17:39:49 mikeb Exp $	*/
 
 /******************************************************************************
 
@@ -71,10 +71,20 @@ const struct pci_matchid ixgbe_devices[] = {
 	{ PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82599_T3_LOM },
 	{ PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82599_SFP },
 	{ PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82599_SFP_EM },
+	{ PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82599_SFP_SF_QP },
 	{ PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82599_SFP_SF2 },
 	{ PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82599_SFP_FCOE },
 	{ PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82599EN_SFP },
+	{ PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82599_QSFP_SF_QP },
 	{ PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_X540T },
+	{ PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_X540T1 },
+	{ PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_X550T },
+	{ PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_X550T1 },
+	{ PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_X550EM_X_KX4 },
+	{ PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_X550EM_X_KR },
+	{ PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_X550EM_X_SFP },
+	{ PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_X550EM_X_10G_T },
+	{ PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_X550EM_X_1G_T },
 };
 
 /*********************************************************************
@@ -1041,12 +1051,14 @@ ixgbe_media_status(struct ifnet * ifp, struct ifmediareq *ifmr)
 			break;
 		case IXGBE_LINK_SPEED_1GB_FULL:
 			switch (sc->optics) {
-			case IFM_1000_SX:
-			case IFM_1000_LX:
-				ifmr->ifm_active |= sc->optics | IFM_FDX;
+			case IFM_10G_SR: /* multi-speed fiber */
+				ifmr->ifm_active |= IFM_1000_SX | IFM_FDX;
+				break;
+			case IFM_10G_LR: /* multi-speed fiber */
+				ifmr->ifm_active |= IFM_1000_LX | IFM_FDX;
 				break;
 			default:
-				ifmr->ifm_active |= IFM_1000_T | IFM_FDX;
+				ifmr->ifm_active |= sc->optics | IFM_FDX;
 				break;
 			}
 			break;
