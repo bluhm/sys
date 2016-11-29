@@ -6076,7 +6076,6 @@ pf_route6(struct pf_pdesc *pd, struct pf_rule *r, struct pf_state *s)
 		}
 		ip6->ip6_hlim -= IPV6_HLIMDEC;
 	}
-
 	if (s == NULL) {
 		bzero(sns, sizeof(sns));
 		if (pf_map_addr(AF_INET6, r, (struct pf_addr *)&ip6->ip6_src,
