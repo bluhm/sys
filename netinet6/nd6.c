@@ -1,4 +1,4 @@
-/*	$OpenBSD: nd6.c,v 1.195 2016/11/15 13:12:24 mpi Exp $	*/
+/*	$OpenBSD: nd6.c,v 1.197 2016/11/28 14:14:39 mpi Exp $	*/
 /*	$KAME: nd6.c,v 1.280 2002/06/08 19:52:07 itojun Exp $	*/
 
 /*
@@ -502,6 +502,8 @@ nd6_purge(struct ifnet *ifp)
 	struct nd_defrouter *dr, *ndr;
 	struct nd_prefix *pr, *npr;
 
+	splsoftassert(IPL_SOFTNET);
+
 	/*
 	 * Nuke default router list entries toward ifp.
 	 * We defer removal of default router list entries that is installed
@@ -581,6 +583,7 @@ nd6_lookup(struct in6_addr *addr6, int create, struct ifnet *ifp,
 	if (rt == NULL) {
 		if (create && ifp) {
 			struct rt_addrinfo info;
+			struct ifaddr *ifa;
 			int error;
 
 			/*
@@ -590,8 +593,7 @@ nd6_lookup(struct in6_addr *addr6, int create, struct ifnet *ifp,
 			 * This hack is necessary for a neighbor which can't
 			 * be covered by our own prefix.
 			 */
-			struct ifaddr *ifa =
-			    ifaof_ifpforaddr(sin6tosa(&sin6), ifp);
+			ifa = ifaof_ifpforaddr(sin6tosa(&sin6), ifp);
 			if (ifa == NULL)
 				return (NULL);
 
@@ -602,6 +604,7 @@ nd6_lookup(struct in6_addr *addr6, int create, struct ifnet *ifp,
 			 * called in rtrequest.
 			 */
 			bzero(&info, sizeof(info));
+			info.rti_ifa = ifa;
 			info.rti_flags = RTF_HOST | RTF_LLINFO;
 			info.rti_info[RTAX_DST] = sin6tosa(&sin6);
 			info.rti_info[RTAX_GATEWAY] = sdltosa(ifp->if_sadl);
@@ -731,7 +734,8 @@ nd6_free(struct rtentry *rt, int gc)
 	struct in6_addr in6 = satosin6(rt_key(rt))->sin6_addr;
 	struct nd_defrouter *dr;
 	struct ifnet *ifp;
-	int s;
+
+	splsoftassert(IPL_SOFTNET);
 
 	/*
 	 * we used to have pfctlinput(PRC_HOSTDEAD) here.
@@ -739,7 +743,6 @@ nd6_free(struct rtentry *rt, int gc)
 	 */
 	ifp = if_get(rt->rt_ifidx);
 
-	s = splsoftnet();
 	if (!ip6_forwarding) {
 		dr = defrouter_lookup(&satosin6(rt_key(rt))->sin6_addr,
 		    rt->rt_ifidx);
@@ -763,7 +766,6 @@ nd6_free(struct rtentry *rt, int gc)
 				    dr->expire - time_uptime);
 			} else
 				nd6_llinfo_settimer(ln, nd6_gctimer);
-			splx(s);
 			if_put(ifp);
 			return (TAILQ_NEXT(ln, ln_list));
 		}
@@ -823,7 +825,6 @@ nd6_free(struct rtentry *rt, int gc)
 	 */
 	if (!ISSET(rt->rt_flags, RTF_STATIC|RTF_CACHED))
 		rtdeletemsg(rt, ifp, ifp->if_rdomain);
-	splx(s);
 
 	if_put(ifp);
 
