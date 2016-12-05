@@ -1,4 +1,4 @@
-/*	$OpenBSD: route.c,v 1.340 2016/11/29 10:22:30 jsg Exp $	*/
+/*	$OpenBSD: route.c,v 1.342 2016/12/04 09:46:39 stsp Exp $	*/
 /*	$NetBSD: route.c,v 1.14 1996/02/13 22:00:46 christos Exp $	*/
 
 /*
@@ -237,9 +237,10 @@ struct rtentry *
 rt_match(struct sockaddr *dst, uint32_t *src, int flags, unsigned int tableid)
 {
 	struct rtentry		*rt0, *rt = NULL;
-	int			 s, error = 0;
+	int			 error = 0;
 
-	s = splsoftnet();
+	splsoftassert(IPL_SOFTNET);
+
 	rt = rtable_match(tableid, dst, src);
 	if (rt != NULL) {
 		if ((rt->rt_flags & RTF_CLONING) && ISSET(flags, RT_RESOLVE)) {
@@ -266,7 +267,6 @@ rt_match(struct sockaddr *dst, uint32_t *src, int flags, unsigned int tableid)
 		rt->rt_use++;
 	} else
 		rtstat.rts_unreach++;
-	splx(s);
 	return (rt);
 }
 
@@ -1270,7 +1270,7 @@ rt_ifa_del(struct ifaddr *ifa, int flags, struct sockaddr *dst)
 		prio = RTP_LOCAL;
 
 	if (flags & RTF_CONNECTED)
-		prio = RTP_CONNECTED;
+		prio = ifp->if_priority + RTP_CONNECTED;
 
 	error = rtrequest_delete(&info, prio, ifp, &rt, rtableid);
 	if (error == 0) {

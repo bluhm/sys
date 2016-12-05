@@ -2,7 +2,7 @@
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	OpenBSD: pcidevs,v 1.1807 2016/11/25 18:28:28 mikeb Exp 
+ *	OpenBSD: pcidevs,v 1.1809 2016/12/02 16:43:45 mikeb Exp 
  */
 
 /*	$NetBSD: pcidevs,v 1.30 1997/06/24 06:20:24 thorpej Exp $	*/
@@ -10917,7 +10917,11 @@ static const struct pci_known_product pci_known_products[] = {
 	},
 	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82599_SFP_SF_QP,
-	    "82599 QSFP+",
+	    "82599",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_XL710_VF,
+	    "XL710/X710 VF",
 	},
 	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82599_SFP_SF2,
@@ -10964,12 +10968,12 @@ static const struct pci_known_product pci_known_products[] = {
 	    "I219-V",
 	},
 	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_XL710_VF,
-	    "XL710 VF",
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_XL710_VF_HV,
+	    "XL710/X710 VF",
 	},
 	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_XL710_10G_SFP,
-	    "XL710 SFP+",
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_X710_10G_SFP,
+	    "X710 SFP+",
 	},
 	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_I210_COPPER_NF,
@@ -10984,20 +10988,44 @@ static const struct pci_known_product pci_known_products[] = {
 	    "XL710 40GbE Backplane",
 	},
 	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_XL710_10G_BP,
-	    "XL710 10GbE Backplane",
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_X710_10G_BP,
+	    "X710 10GbE Backplane",
 	},
 	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_XL710_2xQSFP,
-	    "XL710 QSFP+ x2",
-	},
-	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_XL710_1xQSFP,
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_XL710_QSFP_1,
 	    "XL710 QSFP+",
 	},
 	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_XL710_10G_BASET,
-	    "XL710 10GBaseT",
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_XL710_QSFP_2,
+	    "XL710 QSFP+",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_X710_10G_QSFP,
+	    "X710 QSFP+",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_X710_10G_BASET,
+	    "X710 10GbaseT",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_XL710_20G_BP_1,
+	    "XL710 20GbE Backplane",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_XL710_20G_BP_2,
+	    "XL710 20GbE Backplane",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_X710_T4_10G,
+	    "X710-T4 10GbaseT",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_XXV710_25G_BP,
+	    "XXV710 25GbE Backplane",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_XXV710_25G_SFP28,
+	    "XXV710 SFP28",
 	},
 	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_I218_LM_2,

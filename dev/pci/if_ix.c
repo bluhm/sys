@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ix.c,v 1.144 2016/11/24 17:39:49 mikeb Exp $	*/
+/*	$OpenBSD: if_ix.c,v 1.146 2016/12/02 15:10:53 mikeb Exp $	*/
 
 /******************************************************************************
 
@@ -292,7 +292,7 @@ ixgbe_attach(struct device *parent, struct device *self, void *aux)
 		goto err_late;
 
 	/* Enable the optics for 82599 SFP+ fiber */
-	if (sc->hw.phy.multispeed_fiber && sc->hw.mac.ops.enable_tx_laser)
+	if (sc->hw.mac.ops.enable_tx_laser)
 		sc->hw.mac.ops.enable_tx_laser(&sc->hw);
 
 	/* Enable power to the phy */
@@ -1406,7 +1406,7 @@ ixgbe_stop(void *arg)
 	if (sc->hw.mac.type == ixgbe_mac_82599EB)
 		sc->hw.mac.ops.stop_mac_link_on_d3(&sc->hw);
 	/* Turn off the laser */
-	if (sc->hw.phy.multispeed_fiber && sc->hw.mac.ops.disable_tx_laser)
+	if (sc->hw.mac.ops.disable_tx_laser)
 		sc->hw.mac.ops.disable_tx_laser(&sc->hw);
 	timeout_del(&sc->timer);
 	timeout_del(&sc->rx_refill);
@@ -1742,7 +1742,7 @@ ixgbe_dma_malloc(struct ix_softc *sc, bus_size_t size,
 	r = bus_dmamap_create(dma->dma_tag, size, 1,
 	    size, 0, BUS_DMA_NOWAIT, &dma->dma_map);
 	if (r != 0) {
-		printf("%s: ixgbe_dma_malloc: bus_dma_tag_create failed; "
+		printf("%s: ixgbe_dma_malloc: bus_dmamap_create failed; "
 		       "error %u\n", ifp->if_xname, r);
 		goto fail_0;
 	}
@@ -3257,6 +3257,10 @@ ixgbe_handle_mod(struct ix_softc *sc)
 	}
 	/* Set the optics type so system reports correctly */
 	ixgbe_setup_optics(sc);
+
+	ifmedia_delete_instance(&sc->media, IFM_INST_ANY);
+	ixgbe_add_media_types(sc);
+	ifmedia_set(&sc->media, IFM_ETHER | IFM_AUTO);
 
 	ixgbe_handle_msf(sc);
 }

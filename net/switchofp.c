@@ -1,4 +1,4 @@
-/*	$OpenBSD: switchofp.c,v 1.39 2016/11/29 10:19:38 reyk Exp $	*/
+/*	$OpenBSD: switchofp.c,v 1.45 2016/12/05 09:46:31 rzalamena Exp $	*/
 
 /*
  * Copyright (c) 2016 Kazuya GODA <goda@openbsd.org>
@@ -86,7 +86,6 @@ struct swofp_flow_entry {
 	uint16_t				 swfe_idle_timeout;
 	uint16_t				 swfe_hard_timeout;
 	uint16_t				 swfe_flags;
-	uint32_t				 swfe_id; /* internal used */
 	int					 swfe_tablemiss;
 };
 
@@ -164,10 +163,12 @@ struct ofp_oxm_class
 	*swofp_lookup_oxm_handler(struct ofp_ox_match *);
 ofp_msg_handler
 	swofp_lookup_msg_handler(uint8_t);
-struct ofp_mp_msg_handler
-	*swofp_lookup_multipart_handler(uint16_t);
+ofp_msg_handler
+	swofp_lookup_mpmsg_handler(uint16_t);
 struct ofp_action_handler
 	*swofp_lookup_action_handler(uint16_t);
+ofp_msg_handler
+	*swofp_flow_mod_lookup_handler(uint8_t);
 
 /*
  * Flow table
@@ -211,6 +212,8 @@ int	 swofp_flow_cmp_non_strict(struct swofp_flow_entry *,
 	    struct ofp_match *);
 int	 swofp_flow_cmp_strict(struct swofp_flow_entry *, struct ofp_match *,
 	    uint32_t);
+int	 swofp_flow_filter_out_port(struct ofp_instruction_actions *,
+	    uint32_t);
 int	 swofp_flow_filter(struct swofp_flow_entry *, uint64_t, uint64_t,
 	    uint32_t, uint32_t);
 void	 swofp_flow_timeout(struct switch_softc *);
@@ -249,9 +252,15 @@ int	 swofp_ox_match_uint8(struct switch_flow_classify *,
 int	 swofp_ox_match_uint16(struct switch_flow_classify *,
 	    struct ofp_ox_match *);
 int	 swofp_ox_match_uint32(struct switch_flow_classify *,
-	struct ofp_ox_match *);
+	    struct ofp_ox_match *);
 int	 swofp_ox_match_uint64(struct switch_flow_classify *,
 	    struct ofp_ox_match *);
+
+void	 swofp_ox_match_put_start(struct ofp_match *);
+int	 swofp_ox_match_put_end(struct ofp_match *);
+int	 swofp_ox_match_put_uint32(struct ofp_match *, uint8_t, uint32_t);
+int	 swofp_ox_match_put_uint64(struct ofp_match *, uint8_t, uint64_t);
+int	 swofp_nx_match_put(struct ofp_match *, uint8_t, int, caddr_t);
 
 /*
  * OpenFlow protocol push/pop tag action handlers
@@ -273,7 +282,16 @@ struct mbuf
 	*swofp_apply_set_field_tcp(struct mbuf *, int,
 	    struct switch_flow_classify *, struct switch_flow_classify *);
 struct mbuf
+	*swofp_apply_set_field_nd6(struct mbuf *, int,
+	    struct switch_flow_classify *, struct switch_flow_classify *);
+struct mbuf
+	*swofp_apply_set_field_icmpv6(struct mbuf *m, int,
+	    struct switch_flow_classify *, struct switch_flow_classify *);
+struct mbuf
 	*swofp_apply_set_field_icmpv4(struct mbuf *, int,
+	    struct switch_flow_classify *, struct switch_flow_classify *);
+struct mbuf
+	*swofp_apply_set_field_ipv6(struct mbuf *, int,
 	    struct switch_flow_classify *, struct switch_flow_classify *);
 struct mbuf
 	*swofp_apply_set_field_ipv4(struct mbuf *, int,
@@ -296,7 +314,7 @@ int	 swofp_ox_set_uint8(struct switch_flow_classify *,
 int	 swofp_ox_set_uint16(struct switch_flow_classify *,
 	    struct ofp_ox_match *);
 int	 swofp_ox_set_uint32(struct switch_flow_classify *,
-	struct ofp_ox_match *);
+	    struct ofp_ox_match *);
 int	 swofp_ox_set_uint64(struct switch_flow_classify *,
 	    struct ofp_ox_match *);
 int	 swofp_ox_set_ether_addr(struct switch_flow_classify *,
@@ -326,6 +344,27 @@ struct mbuf
 struct mbuf
 	*swofp_execute_action(struct switch_softc *, struct mbuf *,
 	    struct swofp_pipline_desc *, struct ofp_action_header *);
+struct mbuf
+	*swofp_execute_action_set_field(struct switch_softc *, struct mbuf *,
+	    struct swofp_pipline_desc *, struct ofp_action_header *);
+struct mbuf
+	*swofp_execute_action_set(struct switch_softc *, struct mbuf *,
+	    struct swofp_pipline_desc *);
+struct mbuf
+	*swofp_apply_actions(struct switch_softc *, struct mbuf *,
+	    struct swofp_pipline_desc *, struct ofp_instruction_actions *);
+struct swofp_action_set
+	*swofp_lookup_action_set(struct swofp_pipline_desc *, uint16_t);
+void	 swofp_write_actions_set_field(struct swofp_action_set *,
+	    struct ofp_action_header *);
+int	 swofp_write_actions(struct ofp_instruction_actions *,
+	    struct swofp_pipline_desc *);
+void	 swofp_clear_actions_set_field(struct swofp_action_set *,
+	    struct ofp_action_header *);
+int	 swofp_clear_actions(struct ofp_instruction_actions *,
+	    struct swofp_pipline_desc *);
+void	 swofp_write_metadata(struct ofp_instruction_write_metadata *,
+	    struct swofp_pipline_desc *);
 
 /*
  * OpenFlow protocol message handlers
@@ -363,6 +402,22 @@ void	 swofp_barrier_reply(struct switch_softc *, struct mbuf *);
 /*
  * OpenFlow protocol multipart message handlers
  */
+int	swofp_mpmsg_reply_create(struct ofp_multipart *, struct swofp_mpmsg *);
+int	swofp_mpmsg_put(struct swofp_mpmsg *, caddr_t, size_t);
+int	swofp_mpmsg_m_put(struct swofp_mpmsg *, struct mbuf *);
+void	swofp_mpmsg_destroy(struct swofp_mpmsg *);
+int	swofp_multipart_reply(struct switch_softc *, struct swofp_mpmsg *);
+
+int	swofp_put_flow(struct mbuf *, struct swofp_flow_table *,
+	    struct swofp_flow_entry *);
+int	swofp_put_flows_from_table(struct swofp_mpmsg *,
+	    struct swofp_flow_table *, struct ofp_flow_stats_request *);
+void	swofp_aggregate_stat_from_table(struct ofp_aggregate_stats *,
+	    struct swofp_flow_table *, struct ofp_aggregate_stats_request *);
+int	swofp_table_features_put_oxm(struct mbuf *, int *, uint16_t);
+int	swofp_table_features_put_actions(struct mbuf *, int *, uint16_t);
+int	swofp_table_features_put_instruction(struct mbuf *, int *, uint16_t);
+
 int	swofp_mp_recv_desc(struct switch_softc *, struct mbuf *);
 int	swofp_mp_recv_flow(struct switch_softc *, struct mbuf *);
 int	swofp_mp_recv_aggregate_flow_stat(struct switch_softc *, struct mbuf *);
@@ -932,8 +987,6 @@ struct ofp_action_handler ofp_action_handlers[] = {
 extern struct pool swfcl_pool;
 struct pool swpld_pool;
 
-int swofp_flow_id = 0;
-
 void
 swofp_attach(void)
 {
@@ -973,7 +1026,7 @@ swofp_create(struct switch_softc *sc)
 	timeout_add_sec(&swofs->swofs_flow_timeout, 10);
 
 	/* TODO: Configured from ifconfig  */
-	swofs->swofs_group_table_num = 1000;
+	swofs->swofs_group_max_table = 1000;
 	swofs->swofs_flow_max_entry = 10000;
 
 	sc->sc_capabilities |= SWITCH_CAP_OFP;
@@ -1073,7 +1126,7 @@ swofp_ioctl(struct ifnet *ifp, unsigned long cmd, caddr_t data)
 		bparam->ifbrp_maxflow = swofs->swofs_flow_max_entry;
 		break;
 	case SIOCSWGMAXGROUP:
-		bparam->ifbrp_maxgroup = swofs->swofs_group_table_num;
+		bparam->ifbrp_maxgroup = swofs->swofs_group_max_table;
 		break;
 	case SIOCSWSPORTNO:
 		if ((error = suser(curproc, 0)) != 0)
@@ -1371,6 +1424,18 @@ swofp_validate_buckets(struct switch_softc *sc, struct mbuf *m, uint8_t type,
 	start = offsetof(struct ofp_group_mod, gm_buckets);
 	len = ntohs(ogm->gm_oh.oh_length) - start;
 
+	/* Invalid packet size. */
+	if (len < 0) {
+		*error = OFP_ERRGROUPMOD_INVALID_GROUP;
+		return (-1);
+	}
+
+	/* Indirect group type must always have one bucket. */
+	if (len < sizeof(*bucket) && type == OFP_GROUP_T_INDIRECT) {
+		*error = OFP_ERRGROUPMOD_INVALID_GROUP;
+		return (-1);
+	}
+
 	for (off = start, num = 0; off < start + len; off += blen, num++) {
 		bucket = (struct ofp_bucket *)(mtod(m, caddr_t) + off);
 
@@ -1465,7 +1530,6 @@ void
 swofp_flow_entry_add(struct switch_softc *sc, struct swofp_flow_table *swft,
     struct swofp_flow_entry *swfe)
 {
-	swfe->swfe_id = swofp_flow_id++;
 	swfe->swfe_table_id = swft->swft_table_id;
 	LIST_INSERT_HEAD(&swft->swft_flow_list, swfe, swfe_next);
 	swft->swft_flow_num++;
@@ -3408,6 +3472,10 @@ swofp_action_group_all(struct switch_softc *sc, struct mbuf *m,
 	struct switch_flow_classify	 swfcl;
 	struct mbuf			*n;
 
+	/* Don't do anything if we don't have buckets. */
+	if (swge->swge_buckets == NULL)
+		return (m);
+
 	OFP_BUCKETS_FOREACH(swge->swge_buckets,
 	    swge->swge_buckets_len, bucket) {
 		if (switch_swfcl_dup(swpld->swpld_swfcl, &swfcl) != 0)
@@ -3464,7 +3532,7 @@ swofp_action_group(struct switch_softc *sc, struct mbuf *m,
 
 	switch (swge->swge_type) {
 	case OFP_GROUP_T_ALL:
-		return swofp_action_group_all(sc, m, swpld,  swge);
+		return swofp_action_group_all(sc, m, swpld, swge);
 	case OFP_GROUP_T_INDIRECT:
 	case OFP_GROUP_T_FAST_FAILOVER:
 	case OFP_GROUP_T_SELECT:
@@ -4717,7 +4785,7 @@ swofp_send_flow_removed(struct switch_softc *sc, struct swofp_flow_entry *swfe,
 
 	ofr->fr_oh.oh_version = OFP_V_1_3;
 	ofr->fr_oh.oh_type = OFP_T_FLOW_REMOVED;
-	ofr->fr_oh.oh_xid = htons(sc->sc_ofs->swofs_xidnxt++);
+	ofr->fr_oh.oh_xid = htonl(sc->sc_ofs->swofs_xidnxt++);
 
 	ofr->fr_cookie = htobe64(swfe->swfe_cookie);
 	ofr->fr_priority = htons(swfe->swfe_priority);
@@ -4850,6 +4918,7 @@ swofp_flow_entry_put_instructions(struct mbuf *m,
 int
 swofp_flow_mod_cmd_add(struct switch_softc *sc, struct mbuf *m)
 {
+	struct swofp_ofs		*ofs = sc->sc_ofs;
 	struct ofp_header		*oh;
 	struct ofp_flow_mod		*ofm;
 	struct ofp_match		*om;
@@ -4886,14 +4955,19 @@ swofp_flow_mod_cmd_add(struct switch_softc *sc, struct mbuf *m)
 		goto ofp_error;
 	}
 
-	/* Validate that the OXM are in-place and correct. */
-	if (swofp_validate_flow_match(om, &error)) {
-		etype = OFP_ERRTYPE_BAD_MATCH;
+	if ((swft = swofp_flow_table_add(sc, ofm->fm_table_id)) == NULL) {
+		error = OFP_ERRFLOWMOD_TABLE_ID;
 		goto ofp_error;
 	}
 
-	if ((swft = swofp_flow_table_add(sc, ofm->fm_table_id)) == NULL) {
-		error = OFP_ERRFLOWMOD_TABLE_ID;
+	if (swft->swft_flow_num >= ofs->swofs_flow_max_entry) {
+		error = OFP_ERRFLOWMOD_TABLE_FULL;
+		goto ofp_error;
+	}
+
+	/* Validate that the OXM are in-place and correct. */
+	if (swofp_validate_flow_match(om, &error)) {
+		etype = OFP_ERRTYPE_BAD_MATCH;
 		goto ofp_error;
 	}
 
@@ -5164,11 +5238,17 @@ swofp_flow_mod(struct switch_softc *sc, struct mbuf *m)
 int
 swofp_group_mod_add(struct switch_softc *sc, struct mbuf *m)
 {
+	struct swofp_ofs		*ofs = sc->sc_ofs;
 	struct ofp_group_mod		*ogm;
 	struct swofp_group_entry	*swge;
 	int				 error;
 
 	ogm = mtod(m, struct ofp_group_mod *);
+
+	if (ofs->swofs_group_table_num >= ofs->swofs_group_max_table) {
+		error = OFP_ERRGROUPMOD_OUT_OF_GROUPS;
+		goto failed;
+	}
 
 	if (ntohl(ogm->gm_group_id) > OFP_GROUP_ID_MAX) {
 		error = OFP_ERRGROUPMOD_INVALID_GROUP;
@@ -5201,15 +5281,17 @@ swofp_group_mod_add(struct switch_softc *sc, struct mbuf *m)
 	swge->swge_buckets_len = (ntohs(ogm->gm_oh.oh_length) -
 	    offsetof(struct ofp_group_mod, gm_buckets));
 
-	if ((swge->swge_buckets = malloc(swge->swge_buckets_len,
-	    M_DEVBUF, M_NOWAIT|M_ZERO)) == NULL) {
-		free(swge, M_DEVBUF, sizeof(*swge));
-		error = OFP_ERRGROUPMOD_UNKNOWN_GROUP;
-		goto failed;
-	}
+	if (swge->swge_buckets_len > 0) {
+		if ((swge->swge_buckets = malloc(swge->swge_buckets_len,
+		    M_DEVBUF, M_NOWAIT|M_ZERO)) == NULL) {
+			free(swge, M_DEVBUF, sizeof(*swge));
+			error = OFP_ERRGROUPMOD_UNKNOWN_GROUP;
+			goto failed;
+		}
 
-	m_copydata(m, offsetof(struct ofp_group_mod, gm_buckets),
-	    swge->swge_buckets_len, (caddr_t)swge->swge_buckets);
+		m_copydata(m, offsetof(struct ofp_group_mod, gm_buckets),
+		    swge->swge_buckets_len, (caddr_t)swge->swge_buckets);
+	}
 
 	swofp_group_entry_add(sc, swge);
 
@@ -5227,6 +5309,7 @@ swofp_group_mod_modify(struct switch_softc *sc, struct mbuf *m)
 	struct ofp_group_mod		*ogm;
 	struct swofp_group_entry	*swge;
 	int				 error;
+	uint32_t			 obucketlen;
 
 	ogm = mtod(m, struct ofp_group_mod *);
 
@@ -5247,19 +5330,26 @@ swofp_group_mod_modify(struct switch_softc *sc, struct mbuf *m)
 
 	swge->swge_type = ogm->gm_type;
 
+	obucketlen = swge->swge_buckets_len;
 	swge->swge_buckets_len = (ntohs(ogm->gm_oh.oh_length) -
 	    offsetof(struct ofp_group_mod, gm_buckets));
 
-	free(swge->swge_buckets, M_DEVBUF, swge->swge_buckets_len);
-	if ((swge->swge_buckets = malloc(swge->swge_buckets_len,
-	    M_DEVBUF, M_NOWAIT|M_ZERO)) == NULL) {
-		free(swge, M_DEVBUF, sizeof(*swge));
-		error = OFP_ERRGROUPMOD_UNKNOWN_GROUP;
-		goto failed;
+	if (obucketlen != swge->swge_buckets_len) {
+		free(swge->swge_buckets, M_DEVBUF, obucketlen);
+		swge->swge_buckets = NULL;
+
+		if (swge->swge_buckets_len > 0 &&
+		    (swge->swge_buckets = malloc(swge->swge_buckets_len,
+		    M_DEVBUF, M_NOWAIT|M_ZERO)) == NULL) {
+			free(swge, M_DEVBUF, sizeof(*swge));
+			error = OFP_ERRGROUPMOD_UNKNOWN_GROUP;
+			goto failed;
+		}
 	}
 
-	m_copydata(m, offsetof(struct ofp_group_mod, gm_buckets),
-	    swge->swge_buckets_len, (caddr_t)swge->swge_buckets);
+	if (swge->swge_buckets != NULL)
+		m_copydata(m, offsetof(struct ofp_group_mod, gm_buckets),
+		    swge->swge_buckets_len, (caddr_t)swge->swge_buckets);
 
 	m_freem(m);
 	return (0);
@@ -6344,7 +6434,8 @@ swofp_mp_recv_group_desc(struct switch_softc *sc, struct mbuf *m)
 		/*
 		 * Copy back buckets on GROUP DESC
 		 */
-		if ((error = swofp_mpmsg_put(&swmp, (caddr_t)swge->swge_buckets,
+		if (swge->swge_buckets != NULL &&
+		    (error = swofp_mpmsg_put(&swmp, (caddr_t)swge->swge_buckets,
 		    swge->swge_buckets_len)))
 			goto failed;
 	}
