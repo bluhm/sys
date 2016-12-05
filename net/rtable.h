@@ -19,6 +19,12 @@
 #ifndef	_NET_RTABLE_H_
 #define	_NET_RTABLE_H_
 
+/* Array of routing table pointers. */
+struct rtmap {
+	unsigned int	   limit;
+	void		 **tbl;
+};
+
 #ifndef ART
 
 /*

@@ -53,12 +53,6 @@ struct srp	  *afmap;
 uint8_t		   af2idx[AF_MAX+1];	/* To only allocate supported AF */
 uint8_t		   af2idx_max;
 
-/* Array of routing table pointers. */
-struct rtmap {
-	unsigned int	   limit;
-	void		 **tbl;
-};
-
 /*
  * Array of rtableid -> rdomain mapping.
  *
