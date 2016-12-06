@@ -453,7 +453,8 @@ nd6_ns_output(struct ifnet *ifp, struct in6_addr *daddr6,
 
 		if (ln && ln->ln_hold) {
 			hip6 = mtod(ln->ln_hold, struct ip6_hdr *);
-			if (sizeof(*hip6) <= ln->ln_hold->m_len)
+			if (sizeof(*hip6) <= ln->ln_hold->m_len &&
+			    hip6->ip6_nxt != IPPROTO_ESP)
 				saddr6 = &hip6->ip6_src;
 			else
 				saddr6 = NULL;
