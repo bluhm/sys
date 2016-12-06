@@ -1616,7 +1616,6 @@ in6_ifawithscope(struct ifnet *oifp, struct in6_addr *dst, u_int rdomain)
 
 			src_scope = in6_addrscope(IFA_IN6(ifa));
 
-#define ADDRSELECT_DEBUG 1
 #ifdef ADDRSELECT_DEBUG		/* should be removed after stabilization */
 		{
 			char adst[INET6_ADDRSTRLEN], asrc[INET6_ADDRSTRLEN];
