@@ -181,10 +181,10 @@ counters_read(struct cpumem *cm, uint64_t *output, unsigned int n)
 			/* the generation number is odd during an update */
 			while (enter & 1) {
 				yield();
-				membar_consumer();
 				enter = *gen;
 			}
 
+			membar_consumer();
 			for (i = 0; i < n; i++)
 				temp[i] = counters[i];
 
