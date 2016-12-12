@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_iwm.c,v 1.149 2016/11/30 14:31:51 stsp Exp $	*/
+/*	$OpenBSD: if_iwm.c,v 1.154 2016/12/10 19:03:53 stsp Exp $	*/
 
 /*
  * Copyright (c) 2014, 2016 genua gmbh <info@genua.de>
@@ -183,7 +183,7 @@ const uint8_t iwm_nvm_channels_8000[] = {
 #define IWM_NUM_2GHZ_CHANNELS	14
 
 const struct iwm_rate {
-	uint8_t rate;
+	uint16_t rate;
 	uint8_t plcp;
 	uint8_t ht_plcp;
 } iwm_rates[] = {
@@ -195,12 +195,20 @@ const struct iwm_rate {
 	{  12,	IWM_RATE_6M_PLCP,	IWM_RATE_HT_SISO_MCS_0_PLCP },
 	{  18,	IWM_RATE_9M_PLCP,	IWM_RATE_HT_SISO_MCS_INV_PLCP  },
 	{  24,	IWM_RATE_12M_PLCP,	IWM_RATE_HT_SISO_MCS_1_PLCP },
+	{  26,	IWM_RATE_INVM_PLCP,	IWM_RATE_HT_MIMO2_MCS_8_PLCP },
 	{  36,	IWM_RATE_18M_PLCP,	IWM_RATE_HT_SISO_MCS_2_PLCP },
 	{  48,	IWM_RATE_24M_PLCP,	IWM_RATE_HT_SISO_MCS_3_PLCP },
+	{  52,	IWM_RATE_INVM_PLCP,	IWM_RATE_HT_MIMO2_MCS_9_PLCP },
 	{  72,	IWM_RATE_36M_PLCP,	IWM_RATE_HT_SISO_MCS_4_PLCP },
+	{  78,	IWM_RATE_INVM_PLCP,	IWM_RATE_HT_MIMO2_MCS_10_PLCP },
 	{  96,	IWM_RATE_48M_PLCP,	IWM_RATE_HT_SISO_MCS_5_PLCP },
+	{ 104,	IWM_RATE_INVM_PLCP,	IWM_RATE_HT_MIMO2_MCS_11_PLCP },
 	{ 108,	IWM_RATE_54M_PLCP,	IWM_RATE_HT_SISO_MCS_6_PLCP },
 	{ 128,	IWM_RATE_INVM_PLCP,	IWM_RATE_HT_SISO_MCS_7_PLCP },
+	{ 156,	IWM_RATE_INVM_PLCP,	IWM_RATE_HT_MIMO2_MCS_12_PLCP },
+	{ 208,	IWM_RATE_INVM_PLCP,	IWM_RATE_HT_MIMO2_MCS_13_PLCP },
+	{ 234,	IWM_RATE_INVM_PLCP,	IWM_RATE_HT_MIMO2_MCS_14_PLCP },
+	{ 260,	IWM_RATE_INVM_PLCP,	IWM_RATE_HT_MIMO2_MCS_15_PLCP },
 };
 #define IWM_RIDX_CCK	0
 #define IWM_RIDX_OFDM	4
@@ -218,6 +226,14 @@ const int iwm_mcs2ridx[] = {
 	IWM_RATE_MCS_5_INDEX,
 	IWM_RATE_MCS_6_INDEX,
 	IWM_RATE_MCS_7_INDEX,
+	IWM_RATE_MCS_8_INDEX,
+	IWM_RATE_MCS_9_INDEX,
+	IWM_RATE_MCS_10_INDEX,
+	IWM_RATE_MCS_11_INDEX,
+	IWM_RATE_MCS_12_INDEX,
+	IWM_RATE_MCS_13_INDEX,
+	IWM_RATE_MCS_14_INDEX,
+	IWM_RATE_MCS_15_INDEX,
 };
 
 struct iwm_nvm_section {
@@ -225,6 +241,8 @@ struct iwm_nvm_section {
 	uint8_t *data;
 };
 
+int	iwm_is_mimo_plcp(uint8_t);
+int	iwm_is_mimo_mcs(int);
 int	iwm_store_cscheme(struct iwm_softc *, uint8_t *, size_t);
 int	iwm_firmware_store_section(struct iwm_softc *, enum iwm_ucode_type,
 	    uint8_t *, size_t);
@@ -446,6 +464,21 @@ void	iwm_wakeup(struct iwm_softc *);
 #if NBPFILTER > 0
 void	iwm_radiotap_attach(struct iwm_softc *);
 #endif
+
+int
+iwm_is_mimo_ht_plcp(uint8_t ht_plcp)
+{
+	return (ht_plcp != IWM_RATE_HT_SISO_MCS_INV_PLCP &&
+	    (ht_plcp & IWM_RATE_HT_MCS_NSS_MSK));
+}
+
+int
+iwm_is_mimo_mcs(int mcs)
+{
+	int ridx = iwm_mcs2ridx[mcs];
+	return iwm_is_mimo_ht_plcp(iwm_rates[ridx].ht_plcp);
+	
+}
 
 int
 iwm_store_cscheme(struct iwm_softc *sc, uint8_t *data, size_t dlen)
@@ -2356,21 +2389,20 @@ void
 iwm_setup_ht_rates(struct iwm_softc *sc)
 {
 	struct ieee80211com *ic = &sc->sc_ic;
+	uint8_t rx_ant;
 
 	/* TX is supported with the same MCS as RX. */
 	ic->ic_tx_mcs_set = IEEE80211_TX_MCS_SET_DEFINED;
 
 	ic->ic_sup_mcs[0] = 0xff;		/* MCS 0-7 */
 
-#ifdef notyet
 	if (sc->sc_nvm.sku_cap_mimo_disable)
 		return;
 
-	if (iwm_fw_valid_rx_ant(sc) > 1)
+	rx_ant = iwm_fw_valid_rx_ant(sc);
+	if ((rx_ant & IWM_ANT_AB) == IWM_ANT_AB ||
+	    (rx_ant & IWM_ANT_BC) == IWM_ANT_BC)
 		ic->ic_sup_mcs[1] = 0xff;	/* MCS 8-15 */
-	if (iwm_fw_valid_rx_ant(sc) > 2)
-		ic->ic_sup_mcs[2] = 0xff;	/* MCS 16-23 */
-#endif
 }
 
 #define IWM_MAX_RX_BA_SESSIONS 16
@@ -3321,7 +3353,8 @@ iwm_rx_rx_mpdu(struct iwm_softc *sc, struct iwm_rx_packet *pkt,
 		if (phy_info->phy_flags &
 		    htole16(IWM_RX_RES_PHY_FLAGS_OFDM_HT)) {
 			uint8_t mcs = (phy_info->rate_n_flags &
-			    htole32(IWM_RATE_HT_MCS_RATE_CODE_MSK));
+			    htole32(IWM_RATE_HT_MCS_RATE_CODE_MSK |
+			        IWM_RATE_HT_MCS_NSS_MSK));
 			tap->wr_rate = (0x80 | mcs);
 		} else {
 			uint8_t rate = (phy_info->rate_n_flags &
@@ -3385,11 +3418,12 @@ iwm_rx_tx_cmd_single(struct iwm_softc *sc, struct iwm_rx_packet *pkt,
 		in->in_mn.frames += tx_resp->frame_count;
 		in->in_mn.ampdu_size = le16toh(tx_resp->byte_cnt);
 		in->in_mn.agglen = tx_resp->frame_count;
-		if (txfail) {
-			in->in_mn.retries += tx_resp->failure_frame;
+		if (tx_resp->failure_frame > 0)
+			in->in_mn.retries++;
+		if (txfail)
 			in->in_mn.txfail += tx_resp->frame_count;
-		}
-		ieee80211_mira_choose(&in->in_mn, ic, &in->in_ni);
+		if (ic->ic_state == IEEE80211_S_RUN)
+			ieee80211_mira_choose(&in->in_mn, ic, &in->in_ni);
 		/* 
 		 * If MiRA has chosen a new TX rate we must update
 		 * the firwmare's LQ rate table from process context.
@@ -3890,7 +3924,10 @@ iwm_tx_fill_cmd(struct iwm_softc *sc, struct iwm_node *in,
 	}
 
 	rinfo = &iwm_rates[ridx];
-	rate_flags = 1 << IWM_RATE_MCS_ANT_POS;
+	if (iwm_is_mimo_ht_plcp(rinfo->ht_plcp))
+		rate_flags = IWM_RATE_MCS_ANT_AB_MSK;
+	else
+		rate_flags = IWM_RATE_MCS_ANT_A_MSK;
 	if (IWM_RIDX_IS_CCK(ridx))
 		rate_flags |= IWM_RATE_MCS_CCK_MSK;
 	if ((ni->ni_flags & IEEE80211_NODE_HT) &&
@@ -5051,10 +5088,14 @@ iwm_mac_ctxt_cmd_common(struct iwm_softc *sc, struct iwm_node *in,
 		case IEEE80211_HTPROT_NONHT_MIXED:
 			cmd->protection_flags |=
 			    htole32(IWM_MAC_PROT_FLG_HT_PROT);
+			break;
 		case IEEE80211_HTPROT_20MHZ:
-			cmd->protection_flags |=
-			    htole32(IWM_MAC_PROT_FLG_HT_PROT |
-			    IWM_MAC_PROT_FLG_FAT_PROT);
+			if (ic->ic_htcaps & IEEE80211_HTCAP_CBW20_40) {
+				/* XXX ... and if our channel is 40 MHz ... */
+				cmd->protection_flags |=
+				    htole32(IWM_MAC_PROT_FLG_HT_PROT |
+				    IWM_MAC_PROT_FLG_FAT_PROT);
+			}
 			break;
 		default:
 			break;
@@ -5301,7 +5342,7 @@ iwm_setrates(struct iwm_node *in)
 	struct iwm_softc *sc = IC2IFP(ic)->if_softc;
 	struct iwm_lq_cmd *lq = &in->in_lq;
 	struct ieee80211_rateset *rs = &ni->ni_rates;
-	int i, ridx, ridx_min, j, sgi_ok, tab = 0;
+	int i, ridx, ridx_min, ridx_max, j, sgi_ok, mimo, tab = 0;
 	struct iwm_host_cmd cmd = {
 		.id = IWM_LQ_CMD,
 		.len = { sizeof(in->in_lq), },
@@ -5328,17 +5369,26 @@ iwm_setrates(struct iwm_node *in)
 	j = 0;
 	ridx_min = (IEEE80211_IS_CHAN_5GHZ(ni->ni_chan)) ?
 	    IWM_RIDX_OFDM : IWM_RIDX_CCK;
-	for (ridx = IWM_RIDX_MAX; ridx >= ridx_min; ridx--) {
+	mimo = iwm_is_mimo_mcs(ni->ni_txmcs);
+	ridx_max = (mimo ? IWM_RIDX_MAX : IWM_LAST_HT_SISO_RATE);
+	for (ridx = ridx_max; ridx >= ridx_min; ridx--) {
+		uint8_t plcp = iwm_rates[ridx].plcp;
+		uint8_t ht_plcp = iwm_rates[ridx].ht_plcp;
+
 		if (j >= nitems(lq->rs_table))
 			break;
 		tab = 0;
 		if ((ni->ni_flags & IEEE80211_NODE_HT) &&
-		    iwm_rates[ridx].ht_plcp != IWM_RATE_HT_SISO_MCS_INV_PLCP) {
+		    ht_plcp != IWM_RATE_HT_SISO_MCS_INV_PLCP) {
+	 		/* Do not mix SISO and MIMO HT rates. */
+			if ((mimo && !iwm_is_mimo_ht_plcp(ht_plcp)) ||
+			    (!mimo && iwm_is_mimo_ht_plcp(ht_plcp)))
+				continue;
 			for (i = ni->ni_txmcs; i >= 0; i--) {
 				if (isclr(ni->ni_rxmcs, i))
 					continue;
 				if (ridx == iwm_mcs2ridx[i]) {
-					tab = iwm_rates[ridx].ht_plcp;
+					tab = ht_plcp;
 					tab |= IWM_RATE_MCS_HT_MSK;
 					if (sgi_ok)
 						tab |= IWM_RATE_MCS_SGI_MSK;
@@ -5346,11 +5396,11 @@ iwm_setrates(struct iwm_node *in)
 				}
 			}
 		}
-		if (tab == 0 && iwm_rates[ridx].plcp != IWM_RATE_INVM_PLCP) {
+		if (tab == 0 && plcp != IWM_RATE_INVM_PLCP) {
 			for (i = ni->ni_txrate; i >= 0; i--) {
 				if (iwm_rates[ridx].rate == (rs->rs_rates[i] &
 				    IEEE80211_RATE_VAL)) {
-					tab = iwm_rates[ridx].plcp;
+					tab = plcp;
 					break;
 				}
 			}
@@ -5359,7 +5409,11 @@ iwm_setrates(struct iwm_node *in)
 		if (tab == 0)
 			continue;
 
-		tab |= 1 << IWM_RATE_MCS_ANT_POS;
+		if (iwm_is_mimo_ht_plcp(ht_plcp))
+			tab |= IWM_RATE_MCS_ANT_AB_MSK;
+		else
+			tab |= IWM_RATE_MCS_ANT_A_MSK;
+
 		if (IWM_RIDX_IS_CCK(ridx))
 			tab |= IWM_RATE_MCS_CCK_MSK;
 		lq->rs_table[j++] = htole32(tab);
@@ -5495,6 +5549,18 @@ iwm_newstate_task(void *psc)
 		break;
 
 	case IEEE80211_S_RUN:
+		/* Configure Rx chains for MIMO. */
+		if ((in->in_ni.ni_flags & IEEE80211_NODE_HT) &&
+		    !sc->sc_nvm.sku_cap_mimo_disable) {
+			err = iwm_phy_ctxt_cmd(sc, &sc->sc_phyctxt[0],
+			    2, 2, IWM_FW_CTXT_ACTION_MODIFY, 0);
+			if (err) {
+				printf("%s: failed to update PHY\n",
+				    DEVNAME(sc));
+				return;
+			}
+		}
+
 		/* We have now been assigned an associd by the AP. */
 		err = iwm_mac_ctxt_cmd(sc, in, IWM_FW_CTXT_ACTION_MODIFY, 1);
 		if (err) {
@@ -5650,13 +5716,9 @@ iwm_fill_sf_command(struct iwm_softc *sc, struct iwm_sf_cfg_cmd *sf_cmd,
 	 */
 	if (ni) {
 		if (ni->ni_flags & IEEE80211_NODE_HT) {
-#ifdef notyet
-			if (ni->ni_rxmcs[2] != 0)
-				watermark = IWM_SF_W_MARK_MIMO3;
-			else if (ni->ni_rxmcs[1] != 0)
+			if (ni->ni_rxmcs[1] != 0)
 				watermark = IWM_SF_W_MARK_MIMO2;
 			else
-#endif
 				watermark = IWM_SF_W_MARK_SISO;
 		} else {
 			watermark = IWM_SF_W_MARK_LEGACY;
@@ -7147,6 +7209,8 @@ iwm_attach(struct device *parent, struct device *self, void *aux)
 	    IEEE80211_C_SHPREAMBLE;	/* short preamble supported */
 
 	ic->ic_htcaps = IEEE80211_HTCAP_SGI20;
+	ic->ic_htcaps |=
+	    (IEEE80211_HTCAP_SMPS_DIS << IEEE80211_HTCAP_SMPS_SHIFT);
 	ic->ic_htxcaps = 0;
 	ic->ic_txbfcaps = 0;
 	ic->ic_aselcaps = 0;

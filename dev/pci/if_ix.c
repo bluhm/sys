@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ix.c,v 1.146 2016/12/02 15:10:53 mikeb Exp $	*/
+/*	$OpenBSD: if_ix.c,v 1.148 2016/12/09 17:41:39 mikeb Exp $	*/
 
 /******************************************************************************
 
@@ -272,11 +272,8 @@ ixgbe_attach(struct device *parent, struct device *self, void *aux)
 		    "with your hardware.\nIf you are experiencing problems "
 		    "please contact your Intel or hardware representative "
 		    "who provided you with this hardware.\n");
-	} else if (error == IXGBE_ERR_SFP_NOT_SUPPORTED) {
-		printf(": Unsupported SFP+ Module\n");
-	}
-
-	if (error) {
+	} else if (error && (error != IXGBE_ERR_SFP_NOT_PRESENT &&
+	    error != IXGBE_ERR_SFP_NOT_SUPPORTED)) {
 		printf(": Hardware Initialization Failure\n");
 		goto err_late;
 	}
@@ -3258,10 +3255,6 @@ ixgbe_handle_mod(struct ix_softc *sc)
 	/* Set the optics type so system reports correctly */
 	ixgbe_setup_optics(sc);
 
-	ifmedia_delete_instance(&sc->media, IFM_INST_ANY);
-	ixgbe_add_media_types(sc);
-	ifmedia_set(&sc->media, IFM_ETHER | IFM_AUTO);
-
 	ixgbe_handle_msf(sc);
 }
 
@@ -3283,6 +3276,10 @@ ixgbe_handle_msf(struct ix_softc *sc)
 	}
 	if (hw->mac.ops.setup_link)
 		hw->mac.ops.setup_link(hw, autoneg, TRUE);
+
+	ifmedia_delete_instance(&sc->media, IFM_INST_ANY);
+	ixgbe_add_media_types(sc);
+	ifmedia_set(&sc->media, IFM_ETHER | IFM_AUTO);
 }
 
 /*
