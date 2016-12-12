@@ -122,6 +122,7 @@ counters_enter(struct counters_ref *ref, struct cpumem *cm)
 	ref->c = cpumem_enter(cm);
 #ifdef MULTIPROCESSOR
 	ref->g = ++(*ref->c); /* make the generation number odd */
+	membar_producer();
 	return (ref->c + 1);
 #else
 	return (ref->c);
