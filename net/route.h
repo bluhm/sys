@@ -93,12 +93,8 @@ struct rt_metrics {
  */
 
 struct rtentry {
-#ifndef ART
-	struct	radix_node rt_nodes[2];	/* tree glue, and other values */
-#else
 	struct sockaddr	*rt_dest;	/* destination */
 	SRPL_ENTRY(rtentry) rt_next;	/* Next multipath entry to our dst. */
-#endif
 	struct sockaddr	*rt_gateway;	/* value */
 	struct ifaddr	*rt_ifa;	/* the answer: interface addr to use */
 	caddr_t		 rt_llinfo;	/* pointer to link level info cache or
@@ -115,9 +111,7 @@ struct rtentry {
 	unsigned int	 rt_ifidx;	/* the answer: interface to use */
 	unsigned int	 rt_flags;	/* up/down?, host/net */
 	int		 rt_refcnt;	/* # held references */
-#ifdef ART
 	int		 rt_plen;	/* prefix length */
-#endif
 	uint16_t	 rt_labelid;	/* route label ID */
 	uint8_t		 rt_priority;	/* routing priority to use */
 };

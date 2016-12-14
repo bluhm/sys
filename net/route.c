@@ -1810,11 +1810,7 @@ rt_plentosa(sa_family_t af, int plen, struct sockaddr_in6 *sa_mask)
 struct sockaddr *
 rt_plen2mask(struct rtentry *rt, struct sockaddr_in6 *sa_mask)
 {
-#ifndef ART
-	return (rt_mask(rt));
-#else
 	return (rt_plentosa(rt_key(rt)->sa_family, rt_plen(rt), sa_mask));
-#endif /* ART */
 }
 
 #ifdef DDB

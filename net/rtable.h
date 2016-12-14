@@ -19,20 +19,6 @@
 #ifndef	_NET_RTABLE_H_
 #define	_NET_RTABLE_H_
 
-#ifndef ART
-
-/*
- * Traditional BSD routing table implementation based on a radix tree.
- */
-#include <net/radix.h>
-
-#define	rt_key(rt)	(((struct sockaddr *)(rt)->rt_nodes[0].rn_key))
-#define	rt_mask(rt)	(((struct sockaddr *)(rt)->rt_nodes[0].rn_mask))
-#define	rt_plen(rt)	(rtable_satoplen(rt_key(rt)->sa_family, rt_mask(rt)))
-#define	RT_ROOT(rt)	((rt)->rt_nodes[0].rn_flags & RNF_ROOT)
-
-#else /* ART */
-
 /*
  * Newer routing table implementation based on ART (Allotment Routing
  * Table).
@@ -42,8 +28,6 @@
 #define	rt_key(rt)	((rt)->rt_dest)
 #define	rt_plen(rt)	((rt)->rt_plen)
 #define	RT_ROOT(rt)	(0)
-
-#endif /* ART */
 
 int		 rtable_satoplen(sa_family_t, struct sockaddr *);
 

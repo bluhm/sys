@@ -1003,7 +1003,6 @@ route_cleargateway(struct rtentry *rt, void *arg, unsigned int rtableid)
 int
 route_arp_conflict(struct rtentry *rt, struct rt_addrinfo *info)
 {
-#ifdef ART
 	int		 proxy = (info->rti_flags & RTF_ANNOUNCE);
 
 	if ((info->rti_flags & RTF_LLINFO) == 0 ||
@@ -1027,7 +1026,6 @@ route_arp_conflict(struct rtentry *rt, struct rt_addrinfo *info)
 
 	/* No conflict but an entry exist so we need to force mpath. */
 	info->rti_flags |= RTF_MPATH;
-#endif /* ART */
 	return (0);
 }
 
