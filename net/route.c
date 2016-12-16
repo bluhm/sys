@@ -171,11 +171,6 @@ struct	ifaddr *ifa_ifwithroute(int, struct sockaddr *, struct sockaddr *,
 int	rtrequest_delete(struct rt_addrinfo *, u_int8_t, struct ifnet *,
 	    struct rtentry **, u_int);
 
-#ifdef DDB
-void	db_print_sa(struct sockaddr *);
-void	db_print_ifa(struct ifaddr *);
-#endif
-
 #define	LABELID_MAX	50000
 
 struct rt_label {
@@ -1819,6 +1814,9 @@ rt_plen2mask(struct rtentry *rt, struct sockaddr_in6 *sa_mask)
 #ifdef DDB
 #include <machine/db_machdep.h>
 #include <ddb/db_output.h>
+
+void	db_print_sa(struct sockaddr *);
+void	db_print_ifa(struct ifaddr *);
 
 void
 db_print_sa(struct sockaddr *sa)
