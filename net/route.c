@@ -174,7 +174,6 @@ int	rtrequest_delete(struct rt_addrinfo *, u_int8_t, struct ifnet *,
 #ifdef DDB
 void	db_print_sa(struct sockaddr *);
 void	db_print_ifa(struct ifaddr *);
-int	db_show_rtentry(struct rtentry *, void *, unsigned int);
 #endif
 
 #define	LABELID_MAX	50000
