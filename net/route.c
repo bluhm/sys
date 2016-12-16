@@ -1883,10 +1883,9 @@ db_show_rtentry(struct rtentry *rt, void *w, unsigned int id)
 
 /*
  * Function to print all the route trees.
- * Use this from ddb:  "call db_show_arptab"
  */
 int
-db_show_arptab(void)
+db_show_rtable(void)
 {
 	db_printf("Route tree for AF_INET\n");
 	rtable_walk(0, AF_INET, db_show_rtentry, NULL);

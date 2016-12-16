@@ -423,6 +423,18 @@ db_show_all_bufs(db_expr_t addr, int have_addr, db_expr_t count, char *modif)
 	pool_walk(&bufpool, full, db_printf, vfs_buf_print);
 }
 
+void
+db_show_all_routes(db_expr_t addr, int have_addr, db_expr_t count, char *modif)
+{
+	db_show_rtable();
+}
+
+void
+db_show_route(db_expr_t addr, int have_addr, db_expr_t count, char *modif)
+{
+	db_show_rtentry((void *)addr, NULL, count);
+}
+
 /*ARGSUSED*/
 void
 db_object_print_cmd(db_expr_t addr, int have_addr, db_expr_t count, char *modif)
@@ -549,6 +561,7 @@ struct db_command db_show_all_cmds[] = {
 	{ "mounts",	db_show_all_mounts,	0, NULL },
 	{ "vnodes",	db_show_all_vnodes,	0, NULL },
 	{ "bufs",	db_show_all_bufs,	0, NULL },
+	{ "routes",	db_show_all_routes,	0, NULL },
 #ifdef NFSCLIENT
 	{ "nfsreqs",	db_show_all_nfsreqs,	0, NULL },
 	{ "nfsnodes",	db_show_all_nfsnodes,	0, NULL },
@@ -579,6 +592,7 @@ struct db_command db_show_cmds[] = {
 	{ "pool",	db_pool_print_cmd,	0,	NULL },
 	{ "proc",	db_proc_print_cmd,	0,	NULL },
 	{ "registers",	db_show_regs,		0,	NULL },
+	{ "route",	db_show_route,		0,	NULL },
 	{ "socket",	db_socket_print_cmd,	0,	NULL },
 #ifdef DDB_STRUCT
 	{ "struct",	db_struct_layout_cmd,	CS_OWN,	NULL },
