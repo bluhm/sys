@@ -1879,7 +1879,8 @@ db_show_rtentry(struct rtentry *rt, void *w, unsigned int id)
 	db_printf(" ifa=%p\n", rt->rt_ifa);
 	db_print_ifa(rt->rt_ifa);
 
-	db_printf(" gwroute=%p llinfo=%p\n", rt->rt_gwroute, rt->rt_llinfo);
+	db_printf(" gwroute=%p llinfo=%p priority=%d\n",
+	    rt->rt_gwroute, rt->rt_llinfo, rt->rt_priority);
 	return (0);
 }
 
