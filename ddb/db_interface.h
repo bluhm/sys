@@ -63,7 +63,7 @@ void so_print(void *, int (*)(const char *, ...));
 
 struct rtentry;
 int db_show_rtentry(struct rtentry *, void *, unsigned int);
-int db_show_rtable(void);
+int db_show_rtable(int, unsigned int);
 
 /* nfs/nfs_debug.c */
 void db_show_all_nfsreqs(db_expr_t, int, db_expr_t, char *);

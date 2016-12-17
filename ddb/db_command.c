@@ -426,13 +426,21 @@ db_show_all_bufs(db_expr_t addr, int have_addr, db_expr_t count, char *modif)
 void
 db_show_all_routes(db_expr_t addr, int have_addr, db_expr_t count, char *modif)
 {
-	db_show_rtable();
+	db_expr_t addressfamily;
+	db_expr_t rtableid;
+
+	if (!db_expression(&addressfamily))
+		addressfamily = AF_INET;
+	if (!db_expression(&rtableid))
+		rtableid = 0;
+
+	db_show_rtable(addressfamily, rtableid);
 }
 
 void
 db_show_route(db_expr_t addr, int have_addr, db_expr_t count, char *modif)
 {
-	db_show_rtentry((void *)addr, NULL, count);
+	db_show_rtentry((void *)addr, NULL, 0);
 }
 
 /*ARGSUSED*/
@@ -561,7 +569,7 @@ struct db_command db_show_all_cmds[] = {
 	{ "mounts",	db_show_all_mounts,	0, NULL },
 	{ "vnodes",	db_show_all_vnodes,	0, NULL },
 	{ "bufs",	db_show_all_bufs,	0, NULL },
-	{ "routes",	db_show_all_routes,	0, NULL },
+	{ "routes",	db_show_all_routes,	CS_MORE, NULL },
 #ifdef NFSCLIENT
 	{ "nfsreqs",	db_show_all_nfsreqs,	0, NULL },
 	{ "nfsnodes",	db_show_all_nfsnodes,	0, NULL },

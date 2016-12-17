@@ -1885,10 +1885,10 @@ db_show_rtentry(struct rtentry *rt, void *w, unsigned int id)
  * Function to print all the route trees.
  */
 int
-db_show_rtable(void)
+db_show_rtable(int af, unsigned int rtableid)
 {
-	db_printf("Route tree for AF_INET\n");
-	rtable_walk(0, AF_INET, db_show_rtentry, NULL);
+	db_printf("Route tree for af %d, rtableid %u\n", af, rtableid);
+	rtable_walk(rtableid, af, db_show_rtentry, NULL);
 	return (0);
 }
 #endif /* DDB */
