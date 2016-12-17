@@ -603,7 +603,7 @@ in_ifinit(struct ifnet *ifp, struct in_ifaddr *ia, struct sockaddr_in *sin,
 {
 	u_int32_t i = sin->sin_addr.s_addr;
 	struct sockaddr_in oldaddr;
-	int error = 0;
+	int error = 0, rterror;
 
 	splsoftassert(IPL_SOFTNET);
 
@@ -633,10 +633,15 @@ in_ifinit(struct ifnet *ifp, struct in_ifaddr *ia, struct sockaddr_in *sin,
 	 * error occured, put back the original address.
 	 */
 	ifa_add(ifp, &ia->ia_ifa);
-	rt_ifa_addlocal(&ia->ia_ifa);
+	rterror = rt_ifa_addlocal(&ia->ia_ifa);
 
 	if (error)
 		goto out;
+	if (rterror) {
+		ifa_del(ifp, &ia->ia_ifa);
+		error = rterror;
+		goto out;
+	}
 
 	if (ia->ia_netmask == 0) {
 		if (IN_CLASSA(i))
