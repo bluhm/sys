@@ -213,12 +213,13 @@ counters_zero(struct cpumem *cm, unsigned int n)
 	uint64_t *counters;
 	unsigned int i;
 
-	n++; /* zero the generation numbers too */
-
 	counters = cpumem_first(&cmi, cm);
 	do {
 		for (i = 0; i < n; i++)
 			counters[i] = 0;
+		/* zero the generation numbers too */
+		membar_producer();
+		counters[i] = 0;
 
 		counters = cpumem_next(&cmi, cm);
 	} while (counters != NULL);
