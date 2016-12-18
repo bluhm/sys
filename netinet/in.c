@@ -638,7 +638,8 @@ in_ifinit(struct ifnet *ifp, struct in_ifaddr *ia, struct sockaddr_in *sin,
 	if (error)
 		goto out;
 	if (rterror) {
-		ifa_del(ifp, &ia->ia_ifa);
+		if (!newaddr)
+			ifa_del(ifp, &ia->ia_ifa);
 		error = rterror;
 		goto out;
 	}
