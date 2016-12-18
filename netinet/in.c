@@ -635,14 +635,15 @@ in_ifinit(struct ifnet *ifp, struct in_ifaddr *ia, struct sockaddr_in *sin,
 	ifa_add(ifp, &ia->ia_ifa);
 	rterror = rt_ifa_addlocal(&ia->ia_ifa);
 
-	if (error)
-		goto out;
 	if (rterror) {
 		if (!newaddr)
 			ifa_del(ifp, &ia->ia_ifa);
-		error = rterror;
+		if (!error)
+			error = rterror;
 		goto out;
 	}
+	if (error)
+		goto out;
 
 	if (ia->ia_netmask == 0) {
 		if (IN_CLASSA(i))
