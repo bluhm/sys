@@ -1,4 +1,4 @@
-/*	$OpenBSD: route.c,v 1.342 2016/12/04 09:46:39 stsp Exp $	*/
+/*	$OpenBSD: route.c,v 1.345 2016/12/19 08:36:49 mpi Exp $	*/
 /*	$NetBSD: route.c,v 1.14 1996/02/13 22:00:46 christos Exp $	*/
 
 /*
@@ -252,8 +252,15 @@ rt_match(struct sockaddr *dst, uint32_t *src, int flags, unsigned int tableid)
 			info.rti_info[RTAX_DST] = dst;
 
 			KERNEL_LOCK();
-			error = rtrequest(RTM_RESOLVE, &info, RTP_DEFAULT,
-			    &rt, tableid);
+			/*
+			 * The priority of cloned route should be different
+			 * to avoid conflict with /32 cloning routes.
+			 *
+			 * It should also be higher to let the ARP layer find
+			 * cloned routes instead of the cloning one.
+			 */
+			error = rtrequest(RTM_RESOLVE, &info,
+			    rt->rt_priority - 1, &rt, tableid);
 			if (error) {
 				rt_missmsg(RTM_MISS, &info, 0, RTP_NONE, 0,
 				    error, tableid);
@@ -397,7 +404,7 @@ rt_setgwroute(struct rtentry *rt, u_int rtableid)
 	 */
 	if (ISSET(nhrt->rt_flags, RTF_CLONING|RTF_GATEWAY)) {
 		rtfree(nhrt);
-		return (ELOOP);
+		return (ENETUNREACH);
 	}
 
 	/* Next hop is valid so remove possible old cache. */
@@ -545,7 +552,7 @@ rtredirect(struct sockaddr *dst, struct sockaddr *gateway,
 	int 			 flags = RTF_GATEWAY|RTF_HOST;
 	uint8_t			 prio = RTP_NONE;
 
-	splsoftassert(IPL_SOFTNET);
+	NET_ASSERT_LOCKED();
 
 	/* verify the gateway is directly reachable */
 	rt = rtalloc(gateway, 0, rdomain);
@@ -1046,15 +1053,14 @@ rtrequest(int req, struct rt_addrinfo *info, u_int8_t prio,
 		ifa->ifa_refcnt++;
 		rt->rt_ifa = ifa;
 		rt->rt_ifidx = ifp->if_index;
-		if (rt->rt_flags & RTF_CLONED) {
-			/*
-			 * Copy both metrics and a back pointer to the cloned
-			 * route's parent.
-			 */
-			rt->rt_rmx = (*ret_nrt)->rt_rmx; /* copy metrics */
-			rt->rt_priority = (*ret_nrt)->rt_priority;
-			rt->rt_parent = *ret_nrt;	 /* Back ptr. to parent. */
-			rtref(rt->rt_parent);
+		/*
+		 * Copy metrics and a back pointer from the cloned
+		 * route's parent.
+		 */
+		if (ISSET(rt->rt_flags, RTF_CLONED)) {
+			rtref(*ret_nrt);
+			rt->rt_parent = *ret_nrt;
+			rt->rt_rmx = (*ret_nrt)->rt_rmx;
 		}
 
 		/*
@@ -1495,7 +1501,7 @@ rt_timer_queue_destroy(struct rttimer_queue *rtq)
 {
 	struct rttimer	*r;
 
-	splsoftassert(IPL_SOFTNET);
+	NET_ASSERT_LOCKED();
 
 	while ((r = TAILQ_FIRST(&rtq->rtq_head)) != NULL) {
 		LIST_REMOVE(r, rtt_link);
@@ -1589,7 +1595,7 @@ rt_timer_timer(void *arg)
 
 	current_time = time_uptime;
 
-	s = splsoftnet();
+	NET_LOCK(s);
 	for (rtq = LIST_FIRST(&rttimer_queue_head); rtq != NULL;
 	     rtq = LIST_NEXT(rtq, rtq_link)) {
 		while ((r = TAILQ_FIRST(&rtq->rtq_head)) != NULL &&
@@ -1604,7 +1610,7 @@ rt_timer_timer(void *arg)
 				printf("rt_timer_timer: rtq_count reached 0\n");
 		}
 	}
-	splx(s);
+	NET_UNLOCK(s);
 
 	timeout_add_sec(to, 1);
 }
