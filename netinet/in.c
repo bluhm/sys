@@ -84,7 +84,6 @@
 
 void in_socktrim(struct sockaddr_in *);
 int in_lifaddr_ioctl(u_long, caddr_t, struct ifnet *, int);
-int in_ioctl(u_long, caddr_t, struct ifnet *, int);
 
 void in_purgeaddr(struct ifaddr *);
 int in_addhost(struct in_ifaddr *, struct sockaddr_in *);
