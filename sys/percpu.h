@@ -114,7 +114,6 @@ struct cpumem	*counters_alloc(unsigned int, int);
 struct cpumem	*counters_alloc_ncpus(struct cpumem *, unsigned int, int);
 void		 counters_free(struct cpumem *, int, unsigned int);
 void		 counters_read(struct cpumem *, uint64_t *, unsigned int);
-void		 counters_zero(struct cpumem *, unsigned int);
 
 static inline uint64_t *
 counters_enter(struct counters_ref *ref, struct cpumem *cm)
