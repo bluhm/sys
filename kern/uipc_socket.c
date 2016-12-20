@@ -1070,8 +1070,7 @@ sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
 	int		 s, error = 0;
 
 	if (sosplice_taskq == NULL)
-		sosplice_taskq = taskq_create("sosplice", 1, IPL_SOFTNET,
-		    TASKQ_CANTSLEEP);
+		sosplice_taskq = taskq_create("sosplice", 1, IPL_SOFTNET, 0);
 	if (sosplice_taskq == NULL)
 		return (ENOMEM);
 
