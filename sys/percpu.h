@@ -1,4 +1,4 @@
-/*	$OpenBSD: percpu.h,v 1.4 2016/11/14 03:26:31 dlg Exp $ */
+/*	$OpenBSD: percpu.h,v 1.5 2016/12/20 12:07:14 bluhm Exp $ */
 
 /*
  * Copyright (c) 2016 David Gwynne <dlg@openbsd.org>
