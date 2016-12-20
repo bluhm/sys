@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_mroute.h,v 1.21 2016/12/19 09:22:24 rzalamena Exp $	*/
+/*	$OpenBSD: ip_mroute.h,v 1.23 2016/12/20 09:33:13 rzalamena Exp $	*/
 /*	$NetBSD: ip_mroute.h,v 1.23 2004/04/21 17:49:46 itojun Exp $	*/
 
 #ifndef _NETINET_IP_MROUTE_H_
@@ -250,7 +250,6 @@ struct vif {
 	u_long	  v_pkt_out;		/* # pkts out on interface */
 	u_long	  v_bytes_in;		/* # bytes in on interface */
 	u_long	  v_bytes_out;		/* # bytes out on interface */
-	struct	  timeout v_repq_ch;	/* for tbf_reprocess_q() */
 };
 
 /*
@@ -310,7 +309,6 @@ int	mrt_ioctl(struct socket *, u_long, caddr_t);
 int	mrt_sysctl_vif(void *, size_t *);
 int	mrt_sysctl_mfc(void *, size_t *);
 int	ip_mrouter_done(struct socket *);
-void	ip_mrouter_detach(struct ifnet *);
 void	reset_vif(struct vif *);
 void	vif_delete(struct ifnet *);
 
