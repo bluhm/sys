@@ -588,8 +588,7 @@ in6_update_ifa(struct ifnet *ifp, struct in6_aliasreq *ifra,
 		 * the following log might be noisy, but this is a typical
 		 * configuration mistake or a tool's bug.
 		 */
-		nd6log((LOG_INFO,
-		    "in6_update_ifa: valid lifetime is 0 for %s\n",
+		nd6log((LOG_INFO, "%s: valid lifetime is 0 for %s\n", __func__,
 		    inet_ntop(AF_INET6, &ifra->ifra_addr.sin6_addr,
 		        addr, sizeof(addr))));
 
@@ -654,8 +653,8 @@ in6_update_ifa(struct ifnet *ifp, struct in6_aliasreq *ifra,
 
 		if ((ia6->ia_flags & IFA_ROUTE) != 0 &&
 		    rt_ifa_del(ifa, RTF_HOST, ifa->ifa_dstaddr) != 0) {
-			nd6log((LOG_ERR, "in6_update_ifa: failed to remove "
-			    "a route to the old destination: %s\n",
+			nd6log((LOG_ERR, "%s: failed to remove a route "
+			    "to the old destination: %s\n", __func__,
 			    inet_ntop(AF_INET6, &ia6->ia_addr.sin6_addr,
 				addr, sizeof(addr))));
 			/* proceed anyway... */
