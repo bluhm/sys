@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_input.c,v 1.290 2016/12/19 09:22:24 rzalamena Exp $	*/
+/*	$OpenBSD: ip_input.c,v 1.291 2016/12/20 18:33:43 bluhm Exp $	*/
 /*	$NetBSD: ip_input.c,v 1.30 1996/03/16 23:53:58 christos Exp $	*/
 
 /*
