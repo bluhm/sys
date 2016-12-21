@@ -126,6 +126,8 @@ nd6_init(void)
 	/* start timer */
 	timeout_set(&nd6_slowtimo_ch, nd6_slowtimo, NULL);
 	timeout_add_sec(&nd6_slowtimo_ch, ND6_SLOWTIMER_INTERVAL);
+	timeout_set_proc(&nd6_timer_ch, nd6_timer, NULL);
+	timeout_add_sec(&nd6_timer_ch, 1);
 
 	nd6_rs_init();
 }
