@@ -93,14 +93,13 @@ struct nd_prhead nd_prefix = { 0 };
 int nd6_recalc_reachtm_interval = ND6_RECALC_REACHTM_INTERVAL;
 
 void nd6_slowtimo(void *);
+void nd6_timer(void *);
 void nd6_invalidate(struct rtentry *);
 struct llinfo_nd6 *nd6_free(struct rtentry *, int);
 void nd6_llinfo_timer(void *);
 
 struct timeout nd6_slowtimo_ch;
 struct timeout nd6_timer_ch;
-struct task nd6_timer_task;
-void nd6_timer_work(void *);
 
 int fill_drlist(void *, size_t *, size_t);
 int fill_prlist(void *, size_t *, size_t);
@@ -121,8 +120,6 @@ nd6_init(void)
 
 	/* initialization of the default router list */
 	TAILQ_INIT(&nd_defrouter);
-
-	task_set(&nd6_timer_task, nd6_timer_work, NULL);
 
 	nd6_init_done = 1;
 
@@ -428,7 +425,7 @@ nd6_llinfo_timer(void *arg)
  * ND6 timer routine to expire default route list and prefix list
  */
 void
-nd6_timer_work(void *null)
+nd6_timer(void *null)
 {
 	int s;
 	struct nd_defrouter *dr, *ndr;
@@ -436,7 +433,6 @@ nd6_timer_work(void *null)
 	struct in6_ifaddr *ia6, *nia6;
 
 	s = splsoftnet();
-	timeout_set(&nd6_timer_ch, nd6_timer, NULL);
 	timeout_add_sec(&nd6_timer_ch, nd6_prune);
 
 	/* expire default router list */
@@ -483,12 +479,6 @@ nd6_timer_work(void *null)
 		}
 	}
 	splx(s);
-}
-
-void
-nd6_timer(void *ignored_arg)
-{
-	task_add(systq, &nd6_timer_task);
 }
 
 /*
