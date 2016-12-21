@@ -427,7 +427,7 @@ nd6_llinfo_timer(void *arg)
  * ND6 timer routine to expire default route list and prefix list
  */
 void
-nd6_timer(void *null)
+nd6_timer(void *arg)
 {
 	int s;
 	struct nd_defrouter *dr, *ndr;
