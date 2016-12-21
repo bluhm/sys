@@ -167,7 +167,6 @@ ip6_init2(void *dummy)
 {
 
 	/* nd6_timer_init */
-	bzero(&nd6_timer_ch, sizeof(nd6_timer_ch));
 	timeout_set(&nd6_timer_ch, nd6_timer, NULL);
 	timeout_add_sec(&nd6_timer_ch, 1);
 }
