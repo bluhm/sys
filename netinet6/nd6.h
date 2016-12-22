@@ -223,8 +223,6 @@ extern int nd6_debug;
 
 #define nd6log(x)	do { if (nd6_debug) log x; } while (0)
 
-extern struct timeout nd6_timer_ch;
-
 union nd_opts {
 	struct nd_opt_hdr *nd_opt_array[9];
 	struct {
@@ -260,7 +258,6 @@ int nd6_options(union nd_opts *);
 struct	rtentry *nd6_lookup(struct in6_addr *, int, struct ifnet *, u_int);
 void nd6_setmtu(struct ifnet *);
 void nd6_llinfo_settimer(struct llinfo_nd6 *, int);
-void nd6_timer(void *);
 void nd6_purge(struct ifnet *);
 void nd6_nud_hint(struct rtentry *);
 void nd6_rtrequest(struct ifnet *, int, struct rtentry *);
