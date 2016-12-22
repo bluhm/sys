@@ -440,7 +440,6 @@ nd6_timer_work(void *null)
 
 	NET_LOCK(s);
 
-	timeout_set(&nd6_timer_ch, nd6_timer, NULL);
 	timeout_add_sec(&nd6_timer_ch, nd6_prune);
 
 	/* expire default router list */
