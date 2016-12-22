@@ -1002,13 +1002,14 @@ pf_find_state(struct pfi_kif *kif, struct pf_state_key_cmp *key, u_int dir,
 	if (dir == PF_OUT) {
 		/* first if block deals with outbound forwarded packet */
 		pkt_sk = m->m_pkthdr.pf.statekey;
-		if (pf_state_key_isvalid(pkt_sk) &&
-		    pf_state_key_isvalid(pkt_sk->reverse)) {
-			sk = pkt_sk->reverse;
-		} else {
+
+		if (!pf_state_key_isvalid(pkt_sk)) {
 			pf_pkt_unlink_state_key(m);
 			pkt_sk = NULL;
 		}
+
+		if (pkt_sk && pf_state_key_isvalid(pkt_sk->reverse))
+			sk = pkt_sk->reverse;
 
 		if (pkt_sk == NULL) {
 			/* here we deal with local outbound packet */
