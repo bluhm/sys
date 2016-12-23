@@ -202,7 +202,7 @@ logread(dev_t dev, struct uio *uio, int flag)
 	}
 	logsoftc.sc_state &= ~LOG_RDWAIT;
 
-	if (mbp->msg_bufd > 0) {
+	if (mbp->msg_bufd > 0 && uio->uio_resid > 0) {
 		char buf[64];
 
 		l = snprintf(buf, sizeof(buf),
