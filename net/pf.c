@@ -5833,7 +5833,7 @@ pf_route(struct pf_pdesc *pd, struct pf_rule *r, struct pf_state *s)
 		goto bad;
 
 	rt = rtalloc(sintosa(dst), RT_RESOLVE, rtableid);
-	if (rt == NULL) {
+	if (!rtisvalid(rt)) {
 		ipstat_inc(ips_noroute);
 		goto bad;
 	}
