@@ -5832,12 +5832,6 @@ pf_route(struct pf_pdesc *pd, struct pf_rule *r, struct pf_state *s)
 	if (ifp == NULL)
 		goto bad;
 
-	rt = rtalloc(sintosa(dst), RT_RESOLVE, rtableid);
-	if (!rtisvalid(rt)) {
-		ipstat_inc(ips_noroute);
-		goto bad;
-	}
-
 	if (pd->kif->pfik_ifp != ifp) {
 		if (pf_test(AF_INET, PF_OUT, ifp, &m0) != PF_PASS)
 			goto bad;
@@ -5852,6 +5846,12 @@ pf_route(struct pf_pdesc *pd, struct pf_rule *r, struct pf_state *s)
 	}
 
 	in_proto_cksum_out(m0, ifp);
+
+	rt = rtalloc(sintosa(dst), RT_RESOLVE, rtableid);
+	if (!rtisvalid(rt)) {
+		ipstat_inc(ips_noroute);
+		goto bad;
+	}
 
 	if (ntohs(ip->ip_len) <= ifp->if_mtu) {
 		ip->ip_sum = 0;
