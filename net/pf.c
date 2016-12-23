@@ -5991,6 +5991,12 @@ pf_route6(struct pf_pdesc *pd, struct pf_rule *r, struct pf_state *s)
 	if (IN6_IS_SCOPE_EMBED(&dst->sin6_addr))
 		dst->sin6_addr.s6_addr16[1] = htons(ifp->if_index);
 
+	rt = rtalloc(sin6tosa(dst), RT_RESOLVE, rtableid);
+	if (!rtisvalid(rt)) {
+		ip6stat.ip6s_noroute++;
+		goto bad;
+	}
+
 	/*
 	 * If packet has been reassembled by PF earlier, we have to
 	 * use pf_refragment6() here to turn it back to fragments.
@@ -5998,11 +6004,6 @@ pf_route6(struct pf_pdesc *pd, struct pf_rule *r, struct pf_state *s)
 	if ((mtag = m_tag_find(m0, PACKET_TAG_PF_REASSEMBLED, NULL))) {
 		(void) pf_refragment6(&m0, mtag, dst, ifp);
 	} else if ((u_long)m0->m_pkthdr.len <= ifp->if_mtu) {
-		rt = rtalloc(sin6tosa(dst), RT_RESOLVE, rtableid);
-		if (!rtisvalid(rt)) {
-			ip6stat.ip6s_noroute++;
-			goto bad;
-		}
 		ifp->if_output(ifp, m0, sin6tosa(dst), rt);
 	} else {
 		icmp6_error(m0, ICMP6_PACKET_TOO_BIG, 0, ifp->if_mtu);
