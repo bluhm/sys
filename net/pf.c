@@ -5999,12 +5999,11 @@ pf_route6(struct pf_pdesc *pd, struct pf_rule *r, struct pf_state *s)
 		(void) pf_refragment6(&m0, mtag, dst, ifp);
 	} else if ((u_long)m0->m_pkthdr.len <= ifp->if_mtu) {
 		rt = rtalloc(sin6tosa(dst), RT_RESOLVE, rtableid);
-		if (rt == NULL) {
+		if (!rtisvalid(rt)) {
 			ip6stat.ip6s_noroute++;
 			goto bad;
 		}
 		ifp->if_output(ifp, m0, sin6tosa(dst), rt);
-		rtfree(rt);
 	} else {
 		icmp6_error(m0, ICMP6_PACKET_TOO_BIG, 0, ifp->if_mtu);
 	}
@@ -6012,6 +6011,7 @@ pf_route6(struct pf_pdesc *pd, struct pf_rule *r, struct pf_state *s)
 done:
 	if (r->rt != PF_DUPTO)
 		pd->m = NULL;
+	rtfree(rt);
 	return;
 
 bad:
