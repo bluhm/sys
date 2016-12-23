@@ -1,4 +1,4 @@
-/*	$OpenBSD: uipc_usrreq.c,v 1.105 2016/12/22 01:52:40 visa Exp $	*/
+/*	$OpenBSD: uipc_usrreq.c,v 1.107 2016/12/22 15:15:28 mpi Exp $	*/
 /*	$NetBSD: uipc_usrreq.c,v 1.18 1996/02/09 19:00:50 christos Exp $	*/
 
 /*
@@ -143,10 +143,7 @@ uipc_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		break;
 
 	case PRU_CONNECT:
-		/* XXXSMP breaks atomicity */
-		rw_exit_write(&netlock);
 		error = unp_connect(so, nam, p);
-		rw_enter_write(&netlock);
 		break;
 
 	case PRU_CONNECT2:
@@ -503,7 +500,22 @@ unp_connect(struct socket *so, struct mbuf *nam, struct proc *p)
 
 	NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF, UIO_SYSSPACE, soun->sun_path, p);
 	nd.ni_pledge = PLEDGE_UNIX;
-	if ((error = namei(&nd)) != 0)
+	/*
+	 * XXXSMP breaks atomicity
+	 *
+	 * NFS might try to enter sosend(), at least during boot:
+	 *  sosend
+	 *  nfs_send
+	 *  nfs_request
+	 *  nfs_lookup
+	 *  VOP_LOOKUP
+	 *  vfs_lookup
+	 *  namei
+	 */
+	rw_exit_write(&netlock);
+	error = namei(&nd);
+	rw_enter_write(&netlock);
+	if (error != 0)
 		return (error);
 	vp = nd.ni_vp;
 	if (vp->v_type != VSOCK) {
