@@ -522,7 +522,11 @@ unp_connect(struct socket *so, struct mbuf *nam, struct proc *p)
 		error = ENOTSOCK;
 		goto bad;
 	}
-	if ((error = VOP_ACCESS(vp, VWRITE, p->p_ucred, p)) != 0)
+	/* XXXSMP breaks atomicity */
+	rw_exit_write(&netlock);
+	error = VOP_ACCESS(vp, VWRITE, p->p_ucred, p);
+	rw_enter_write(&netlock);
+	if (error != 0)
 		goto bad;
 	so2 = vp->v_socket;
 	if (so2 == NULL) {
@@ -557,7 +561,10 @@ unp_connect(struct socket *so, struct mbuf *nam, struct proc *p)
 	}
 	error = unp_connect2(so, so2);
 bad:
+	/* XXXSMP breaks atomicity */
+	rw_exit_write(&netlock);
 	vput(vp);
+	rw_enter_write(&netlock);
 	return (error);
 }
 
