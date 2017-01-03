@@ -322,6 +322,11 @@ extern int (*mountroot)(void);
 
 #include <lib/libkern/libkern.h>
 
+#define memcmp(b1, b2, n)	__builtin_memcmp((b1), (b2), (n))
+#define memcpy(d, s, n)		__builtin_memcpy((d), (s), (n))
+#define memmove(d, s, n)	__builtin_memmove((d), (s), (n))
+#define memset(b, c, n)		__builtin_memset((b), (c), (n))
+
 #if defined(DDB) || defined(KGDB)
 /* debugger entry points */
 void	Debugger(void);	/* in DDB only */
