@@ -276,7 +276,7 @@ sbwait(struct sockbuf *sb)
 	NET_ASSERT_LOCKED();
 
 	sb->sb_flagsintr |= SB_WAIT;
-	return (tsleep(&sb->sb_cc,
+	return (rwsleep(&sb->sb_cc, &netlock,
 	    (sb->sb_flags & SB_NOINTR) ? PSOCK : PSOCK | PCATCH, "netio",
 	    sb->sb_timeo));
 }

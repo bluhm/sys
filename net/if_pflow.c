@@ -505,6 +505,8 @@ pflowioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		    sizeof(pflowr))))
 			return (error);
 
+		/* XXXSMP breaks atomicity */
+		rw_exit_write(&netlock);
 		s = splnet();
 		error = pflow_set(sc, &pflowr);
 		splx(s);
@@ -522,6 +524,7 @@ pflowioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		} else
 			ifp->if_flags &= ~IFF_RUNNING;
 
+		rw_enter_write(&netlock);
 		break;
 
 	default:

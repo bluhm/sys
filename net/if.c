@@ -229,6 +229,12 @@ struct taskq	*softnettq;
 
 struct task if_input_task_locked = TASK_INITIALIZER(if_netisr, NULL);
 
+
+/*
+ * Serialize socket operations to ensure no new sleeping points
+ * are introduced in IP output paths.
+ */
+struct rwlock netlock = RWLOCK_INITIALIZER("netlock");
 /*
  * Network interface utility routines.
  */
@@ -1146,7 +1152,10 @@ if_clone_create(const char *name, int rdomain)
 	if (ifunit(name) != NULL)
 		return (EEXIST);
 
+	/* XXXSMP breaks atomicity */
+	rw_exit_write(&netlock);
 	ret = (*ifc->ifc_create)(ifc, unit);
+	rw_enter_write(&netlock);
 
 	if (ret != 0 || (ifp = ifunit(name)) == NULL)
 		return (ret);
@@ -1188,7 +1197,10 @@ if_clone_destroy(const char *name)
 		splx(s);
 	}
 
+	/* XXXSMP breaks atomicity */
+	rw_exit_write(&netlock);
 	ret = (*ifc->ifc_destroy)(ifp);
+	rw_enter_write(&netlock);
 
 	return (ret);
 }
