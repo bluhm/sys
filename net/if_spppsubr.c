@@ -693,7 +693,7 @@ sppp_attach(struct ifnet *ifp)
 
 	/* Initialize keepalive handler. */
 	if (! spppq) {
-		timeout_set(&keepalive_ch, sppp_keepalive, NULL);
+		timeout_set_proc(&keepalive_ch, sppp_keepalive, NULL);
 		timeout_add_sec(&keepalive_ch, 10);
 	}
 
