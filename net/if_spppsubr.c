@@ -4050,9 +4050,10 @@ void
 sppp_keepalive(void *dummy)
 {
 	struct sppp *sp;
-	int s;
+	int s, sl;
 	struct timeval tv;
 
+	NET_LOCK(sl);
 	s = splnet();
 	getmicrouptime(&tv);
 	for (sp=spppq; sp; sp=sp->pp_next) {
@@ -4104,6 +4105,7 @@ sppp_keepalive(void *dummy)
 		}
 	}
 	splx(s);
+	NET_UNLOCK(sl);
 	timeout_add_sec(&keepalive_ch, 10);
 }
 
