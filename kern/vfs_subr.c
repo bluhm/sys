@@ -380,8 +380,7 @@ getnewvnode(enum vtagtype tag, struct mount *mp, struct vops *vops,
 		TAILQ_INIT(&vp->v_cache_dst);
 		numvnodes++;
 	} else {
-		for (vp = TAILQ_FIRST(listhd); vp != NULLVP;
-		    vp = TAILQ_NEXT(vp, v_freelist)) {
+		TAILQ_FOREACH(vp, listhd, v_freelist) {
 			if (VOP_ISLOCKED(vp) == 0)
 				break;
 		}
