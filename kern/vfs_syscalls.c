@@ -371,8 +371,8 @@ sys_unmount(struct proc *p, void *v, register_t *retval)
 
 struct unmount_args {
 	struct proc	*ua_proc;
-	int 		 ua_flags;
-	int 		 ua_error;
+	int		 ua_flags;
+	int		 ua_error;
 };
 
 int
@@ -411,7 +411,7 @@ dounmount(struct mount *mp, int flags, struct proc *p)
 	ua.ua_flags = flags;
 	ua.ua_error = 0;
 	vfs_mount_foreach_vnode(mp, unmount_vnode, &ua);
- 	if (ua.ua_error && !(flags & MNT_DOOMED)) {
+	if (ua.ua_error && !(flags & MNT_DOOMED)) {
 		vfs_unbusy(mp);
 		return (ua.ua_error);
 	}
