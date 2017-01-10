@@ -1,4 +1,4 @@
-/* $OpenBSD: fuse_device.c,v 1.21 2016/08/30 16:45:54 natano Exp $ */
+/* $OpenBSD: fuse_device.c,v 1.22 2017/01/10 19:48:32 bluhm Exp $ */
 /*
  * Copyright (c) 2012-2013 Sylvestre Gallon <ccna.syl@gmail.com>
  *
