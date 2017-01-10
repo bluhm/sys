@@ -88,6 +88,7 @@ int domkdirat(struct proc *, int, const char *, mode_t);
 int doutimensat(struct proc *, int, const char *, struct timespec [2], int);
 int dovutimens(struct proc *, struct vnode *, struct timespec [2]);
 int dofutimens(struct proc *, int, struct timespec [2]);
+int unmount_vnode(struct vnode *, void *);
 
 /*
  * Virtual File System System Calls
@@ -368,15 +369,45 @@ sys_unmount(struct proc *p, void *v, register_t *retval)
 	return (dounmount(mp, SCARG(uap, flags) & MNT_FORCE, p, vp));
 }
 
+struct unmount_args {
+	struct proc	*ua_proc;
+	int 		 ua_flags;
+	int 		 ua_error;
+};
+
+int
+unmount_vnode(struct vnode *vp, void *args)
+{
+	struct unmount_args *ua = args;
+	struct mount *mp;
+
+	if (vp->v_type != VDIR)
+		return (0);
+	if ((mp = vp->v_mountedhere) == NULL)
+		return (0);
+	ua->ua_error = dounmount(mp, ua->ua_flags, ua->ua_proc, vp);
+	return (0);
+}
+
 /*
  * Do the actual file system unmount.
  */
 int
 dounmount(struct mount *mp, int flags, struct proc *p, struct vnode *olddp)
 {
+	struct unmount_args ua;
 	struct vnode *coveredvp;
 	int error;
 	int hadsyncer = 0;
+
+	ua.ua_proc = p;
+	ua.ua_flags = flags;
+	ua.ua_error = 0;
+	vfs_mount_foreach_vnode(mp, unmount_vnode, &ua);
+ 	if (ua.ua_error && !(flags & MNT_DOOMED)) {
+		vfs_unbusy(mp);
+		return (ua.ua_error);
+	}
 
  	mp->mnt_flag &=~ MNT_ASYNC;
  	cache_purgevfs(mp);	/* remove cache entries for this file sys */
