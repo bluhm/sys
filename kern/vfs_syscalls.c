@@ -390,7 +390,7 @@ unmount_vnode(struct vnode *vp, void *args)
 		ua->ua_error = EBUSY;
 		return (0);
 	}
-	error = dounmount(mp, ua->ua_flags, ua->ua_proc, vp);
+	error = dounmount(mp, ua->ua_flags, ua->ua_proc);
 	if (error)
 		ua->ua_error = error;
 	return (0);
