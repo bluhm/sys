@@ -380,6 +380,7 @@ unmount_vnode(struct vnode *vp, void *args)
 {
 	struct unmount_args *ua = args;
 	struct mount *mp;
+	int error;
 
 	if (vp->v_type != VDIR)
 		return (0);
@@ -389,7 +390,9 @@ unmount_vnode(struct vnode *vp, void *args)
 		ua->ua_error = EBUSY;
 		return (0);
 	}
-	ua->ua_error = dounmount(mp, ua->ua_flags, ua->ua_proc, vp);
+	error = dounmount(mp, ua->ua_flags, ua->ua_proc, vp);
+	if (error)
+		ua->ua_error = error;
 	return (0);
 }
 
