@@ -76,7 +76,7 @@ vop_generic_revoke(void *v)
 		 * point laying around in VFS.
 		 */
 		if (!vfs_busy(mp, VB_WRITE|VB_WAIT)) {
-			dounmount(mp, MNT_FORCE | MNT_DOOMED, p, NULL);
+			dounmount(mp, MNT_FORCE | MNT_DOOMED, p);
 			break;
 		}
 	}

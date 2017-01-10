@@ -602,7 +602,7 @@ int	speedup_syncer(void);
 
 int	vfs_syncwait(int);	/* sync and wait for complete */
 void	vfs_shutdown(void);	/* unmount and sync file systems */
-int	dounmount(struct mount *, int, struct proc *, struct vnode *);
+int	dounmount(struct mount *, int, struct proc *);
 void	vfsinit(void);
 int	vfs_register(struct vfsconf *);
 int	vfs_unregister(struct vfsconf *);

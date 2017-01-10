@@ -365,14 +365,14 @@ sys_unmount(struct proc *p, void *v, register_t *retval)
 	if (vfs_busy(mp, VB_WRITE|VB_WAIT))
 		return (EBUSY);
 
-	return (dounmount(mp, SCARG(uap, flags) & MNT_FORCE, p, vp));
+	return (dounmount(mp, SCARG(uap, flags) & MNT_FORCE, p));
 }
 
 /*
  * Do the actual file system unmount.
  */
 int
-dounmount(struct mount *mp, int flags, struct proc *p, struct vnode *olddp)
+dounmount(struct mount *mp, int flags, struct proc *p)
 {
 	struct vnode *coveredvp;
 	int error;
