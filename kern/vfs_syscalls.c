@@ -385,6 +385,10 @@ unmount_vnode(struct vnode *vp, void *args)
 		return (0);
 	if ((mp = vp->v_mountedhere) == NULL)
 		return (0);
+	if (vfs_busy(mp, VB_WRITE|VB_WAIT)) {
+		ua->ua_error = EBUSY;
+		return (0);
+	}
 	ua->ua_error = dounmount(mp, ua->ua_flags, ua->ua_proc, vp);
 	return (0);
 }
