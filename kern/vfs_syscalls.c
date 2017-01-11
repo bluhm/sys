@@ -88,6 +88,7 @@ int domkdirat(struct proc *, int, const char *, mode_t);
 int doutimensat(struct proc *, int, const char *, struct timespec [2], int);
 int dovutimens(struct proc *, struct vnode *, struct timespec [2]);
 int dofutimens(struct proc *, int, struct timespec [2]);
+int dounmount_leaf(struct mount *, int, struct proc *);
 int unmount_vnode(struct vnode *, void *);
 
 /*
@@ -370,9 +371,8 @@ sys_unmount(struct proc *p, void *v, register_t *retval)
 }
 
 struct unmount_args {
-	struct proc	*ua_proc;
-	int		 ua_flags;
-	int		 ua_error;
+	SLIST_HEAD(, mount)	ua_mplist;
+	int	 		ua_flags;
 };
 
 int
@@ -380,23 +380,18 @@ unmount_vnode(struct vnode *vp, void *args)
 {
 	struct unmount_args *ua = args;
 	struct mount *mp;
-	int error;
 
 	if (vp->v_type != VDIR)
 		return (0);
 	if ((mp = vp->v_mountedhere) == NULL)
 		return (0);
-	if (!(ua->ua_flags & MNT_FORCE)) {
-		ua->ua_error = EBUSY;
+	if (!(ua->ua_flags & MNT_FORCE))
 		return (EBUSY);
-	}
-	if (vfs_busy(mp, VB_WRITE|VB_WAIT)) {
-		ua->ua_error = EBUSY;
-		return (0);
-	}
-	error = dounmount(mp, ua->ua_flags, ua->ua_proc);
-	if (error)
-		ua->ua_error = error;
+	if (vfs_busy(mp, VB_WRITE|VB_WAIT))
+		return ((ua->ua_flags & MNT_DOOMED) ? 0 : EBUSY);
+
+	SLIST_INSERT_HEAD(&ua->ua_mplist, mp, mnt_dounmount);
+
 	return (0);
 }
 
@@ -407,18 +402,39 @@ int
 dounmount(struct mount *mp, int flags, struct proc *p)
 {
 	struct unmount_args ua;
+	int error = 0;
+
+	SLIST_INIT(&ua.ua_mplist);
+	SLIST_INSERT_HEAD(&ua.ua_mplist, mp, mnt_dounmount);
+	ua.ua_flags = flags;
+	error = vfs_mount_foreach_vnode(mp, unmount_vnode, &ua);
+	if (error)
+		goto err;
+
+	while ((mp = SLIST_FIRST(&ua.ua_mplist))) {
+		SLIST_REMOVE_HEAD(&ua.ua_mplist, mnt_dounmount);
+		error = dounmount_leaf(mp, flags, p);
+		if (error) {
+			SLIST_INSERT_HEAD(&ua.ua_mplist, mp, mnt_dounmount);
+			goto err;
+		}
+	}
+	return (0);
+
+ err:
+	while ((mp = SLIST_FIRST(&ua.ua_mplist))) {
+		SLIST_REMOVE_HEAD(&ua.ua_mplist, mnt_dounmount);
+		vfs_unbusy(mp);
+	}
+	return (error);
+}
+
+int
+dounmount_leaf(struct mount *mp, int flags, struct proc *p)
+{
 	struct vnode *coveredvp;
 	int error;
 	int hadsyncer = 0;
-
-	ua.ua_proc = p;
-	ua.ua_flags = flags;
-	ua.ua_error = 0;
-	vfs_mount_foreach_vnode(mp, unmount_vnode, &ua);
-	if (ua.ua_error && !(flags & MNT_DOOMED)) {
-		vfs_unbusy(mp);
-		return (ua.ua_error);
-	}
 
 	mp->mnt_flag &=~ MNT_ASYNC;
 	cache_purgevfs(mp);	/* remove cache entries for this file sys */
