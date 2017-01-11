@@ -416,10 +416,8 @@ dounmount(struct mount *mp, int flags, struct proc *p)
 	while ((mp = TAILQ_FIRST(&ua.ua_mplist))) {
 		TAILQ_REMOVE(&ua.ua_mplist, mp, mnt_dounmount);
 		error = dounmount_leaf(mp, flags, p);
-		if (error) {
-			TAILQ_INSERT_HEAD(&ua.ua_mplist, mp, mnt_dounmount);
+		if (error)
 			goto err;
-		}
 	}
 	return (0);
 
