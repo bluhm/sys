@@ -371,7 +371,7 @@ sys_unmount(struct proc *p, void *v, register_t *retval)
 }
 
 struct unmount_args {
-	SLIST_HEAD(, mount)	ua_mplist;
+	TAILQ_HEAD(, mount)	ua_mplist;
 	int	 		ua_flags;
 };
 
@@ -390,7 +390,7 @@ unmount_vnode(struct vnode *vp, void *args)
 	if (vfs_busy(mp, VB_WRITE|VB_WAIT))
 		return ((ua->ua_flags & MNT_DOOMED) ? 0 : EBUSY);
 
-	SLIST_INSERT_HEAD(&ua->ua_mplist, mp, mnt_dounmount);
+	TAILQ_INSERT_HEAD(&ua->ua_mplist, mp, mnt_dounmount);
 
 	return (0);
 }
@@ -404,26 +404,26 @@ dounmount(struct mount *mp, int flags, struct proc *p)
 	struct unmount_args ua;
 	int error = 0;
 
-	SLIST_INIT(&ua.ua_mplist);
-	SLIST_INSERT_HEAD(&ua.ua_mplist, mp, mnt_dounmount);
+	TAILQ_INIT(&ua.ua_mplist);
+	TAILQ_INSERT_HEAD(&ua.ua_mplist, mp, mnt_dounmount);
 	ua.ua_flags = flags;
 	error = vfs_mount_foreach_vnode(mp, unmount_vnode, &ua);
 	if (error)
 		goto err;
 
-	while ((mp = SLIST_FIRST(&ua.ua_mplist))) {
-		SLIST_REMOVE_HEAD(&ua.ua_mplist, mnt_dounmount);
+	while ((mp = TAILQ_FIRST(&ua.ua_mplist))) {
+		TAILQ_REMOVE(&ua.ua_mplist, mp, mnt_dounmount);
 		error = dounmount_leaf(mp, flags, p);
 		if (error) {
-			SLIST_INSERT_HEAD(&ua.ua_mplist, mp, mnt_dounmount);
+			TAILQ_INSERT_HEAD(&ua.ua_mplist, mp, mnt_dounmount);
 			goto err;
 		}
 	}
 	return (0);
 
  err:
-	while ((mp = SLIST_FIRST(&ua.ua_mplist))) {
-		SLIST_REMOVE_HEAD(&ua.ua_mplist, mnt_dounmount);
+	while ((mp = TAILQ_FIRST(&ua.ua_mplist))) {
+		TAILQ_REMOVE(&ua.ua_mplist, mp, mnt_dounmount);
 		vfs_unbusy(mp);
 	}
 	return (error);
