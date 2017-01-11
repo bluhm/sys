@@ -372,7 +372,7 @@ sys_unmount(struct proc *p, void *v, register_t *retval)
 
 struct unmount_args {
 	TAILQ_HEAD(ua_head, mount)	ua_mplist;
-	int	 			ua_flags;
+	int				ua_flags;
 };
 
 int
