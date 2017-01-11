@@ -1,4 +1,4 @@
-/*	$OpenBSD: subr_percpu.c,v 1.5 2016/10/27 09:40:20 dlg Exp $ */
+/*	$OpenBSD: subr_percpu.c,v 1.6 2017/01/11 17:46:28 bluhm Exp $ */
 
 /*
  * Copyright (c) 2016 David Gwynne <dlg@openbsd.org>
