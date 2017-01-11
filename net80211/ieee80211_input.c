@@ -1,4 +1,4 @@
-/*	$OpenBSD: ieee80211_input.c,v 1.180 2016/09/21 12:21:27 stsp Exp $	*/
+/*	$OpenBSD: ieee80211_input.c,v 1.183 2017/01/10 08:19:49 stsp Exp $	*/
 
 /*-
  * Copyright (c) 2001 Atsushi Onoe
@@ -1612,7 +1612,8 @@ ieee80211_recv_probe_resp(struct ieee80211com *ic, struct mbuf *m,
 				    htprot_last, htprot));
 				ic->ic_stats.is_ht_prot_change++;
 				ic->ic_bss->ni_htop1 = ni->ni_htop1;
-				ic->ic_update_htprot(ic, ic->ic_bss);
+				if (ic->ic_update_htprot)
+					ic->ic_update_htprot(ic, ic->ic_bss);
 			}
 		}
 
@@ -1801,6 +1802,8 @@ ieee80211_recv_probe_req(struct ieee80211com *ic, struct mbuf *m,
 	}
 	if (htcaps)
 		ieee80211_setup_htcaps(ni, htcaps + 2, htcaps[1]);
+	else
+		ieee80211_clear_htcaps(ni);
 	IEEE80211_SEND_MGMT(ic, ni, IEEE80211_FC0_SUBTYPE_PROBE_RESP, 0);
 }
 #endif	/* IEEE80211_STA_ONLY */
@@ -2140,6 +2143,8 @@ ieee80211_recv_assoc_req(struct ieee80211com *ic, struct mbuf *m,
 	ni->ni_chan = ic->ic_bss->ni_chan;
 	if (htcaps)
 		ieee80211_setup_htcaps(ni, htcaps + 2, htcaps[1]);
+	else
+		ieee80211_clear_htcaps(ni);
  end:
 	if (status != 0) {
 		IEEE80211_SEND_MGMT(ic, ni, resp, status);
@@ -2426,7 +2431,7 @@ ieee80211_recv_addba_req(struct ieee80211com *ic, struct mbuf *m,
 	struct ieee80211_rx_ba *ba;
 	u_int16_t params, ssn, bufsz, timeout;
 	u_int8_t token, tid;
-	int err;
+	int err = 0;
 
 	if (!(ni->ni_flags & IEEE80211_NODE_HT)) {
 		DPRINTF(("received ADDBA req from non-HT STA %s\n",
@@ -2469,10 +2474,6 @@ ieee80211_recv_addba_req(struct ieee80211com *ic, struct mbuf *m,
 		return;
 	}
 
-	/* If the driver does not support A-MPDU, refuse the request. */
-	if (ic->ic_ampdu_rx_start == NULL)
-		goto refuse;
-
 	/* if PBAC required but RA does not support it, refuse request */
 	if ((ic->ic_flags & IEEE80211_F_PBAR) &&
 	    (!(ni->ni_flags & IEEE80211_NODE_MFP) ||
@@ -2514,7 +2515,8 @@ ieee80211_recv_addba_req(struct ieee80211com *ic, struct mbuf *m,
 	ba->ba_head = 0;
 
 	/* notify drivers of this new Block Ack agreement */
-	err = ic->ic_ampdu_rx_start(ic, ni, tid);
+	if (ic->ic_ampdu_rx_start != NULL)
+		err = ic->ic_ampdu_rx_start(ic, ni, tid);
 	if (err == EBUSY) {
 		/* driver will accept or refuse agreement when done */
 		return;

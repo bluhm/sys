@@ -1,4 +1,4 @@
-/*	$OpenBSD: ieee80211_var.h,v 1.73 2016/12/17 18:35:54 stsp Exp $	*/
+/*	$OpenBSD: ieee80211_var.h,v 1.75 2017/01/09 16:24:20 stsp Exp $	*/
 /*	$NetBSD: ieee80211_var.h,v 1.7 2004/05/06 03:07:10 dyoung Exp $	*/
 
 /*-
@@ -160,6 +160,9 @@ struct ieee80211_edca_ac_params {
 	u_int8_t	ac_acm;
 };
 
+extern const struct ieee80211_edca_ac_params
+	    ieee80211_qap_edca_table[IEEE80211_MODE_MAX][EDCA_NUM_AC];
+
 #define IEEE80211_DEFRAG_SIZE	3	/* must be >= 3 according to spec */
 /*
  * Entry in the fragment cache.
@@ -310,6 +313,9 @@ struct ieee80211com {
 	u_int			ic_dtim_period;
 	u_int			ic_dtim_count;
 
+#ifndef IEEE80211_STA_ONLY
+	u_int16_t		ic_nonhtsta;	/* # non-HT stations */
+#endif
 	u_int32_t		ic_txbfcaps;
 	u_int16_t		ic_htcaps;
 	u_int8_t		ic_ampdu_params;
