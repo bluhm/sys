@@ -371,8 +371,8 @@ sys_unmount(struct proc *p, void *v, register_t *retval)
 }
 
 struct unmount_args {
-	TAILQ_HEAD(, mount)	ua_mplist;
-	int	 		ua_flags;
+	TAILQ_HEAD(ua_head, mount)	ua_mplist;
+	int	 			ua_flags;
 };
 
 int
@@ -407,9 +407,11 @@ dounmount(struct mount *mp, int flags, struct proc *p)
 	TAILQ_INIT(&ua.ua_mplist);
 	TAILQ_INSERT_HEAD(&ua.ua_mplist, mp, mnt_dounmount);
 	ua.ua_flags = flags;
-	error = vfs_mount_foreach_vnode(mp, unmount_vnode, &ua);
-	if (error)
-		goto err;
+	TAILQ_FOREACH_REVERSE(mp , &ua.ua_mplist, ua_head, mnt_dounmount) {
+		error = vfs_mount_foreach_vnode(mp, unmount_vnode, &ua);
+		if (error)
+			goto err;
+	}
 
 	while ((mp = TAILQ_FIRST(&ua.ua_mplist))) {
 		TAILQ_REMOVE(&ua.ua_mplist, mp, mnt_dounmount);
