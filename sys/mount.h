@@ -347,7 +347,7 @@ LIST_HEAD(vnodelst, vnode);
 
 struct mount {
 	TAILQ_ENTRY(mount) mnt_list;		/* mount list */
-	SLIST_ENTRY(mount) mnt_dounmount;	/* unmount work queue */
+	TAILQ_ENTRY(mount) mnt_dounmount;	/* unmount work queue */
 	const struct vfsops *mnt_op;		/* operations on fs */
 	struct vfsconf  *mnt_vfc;               /* configuration info */
 	struct vnode	*mnt_vnodecovered;	/* vnode we mounted on */
