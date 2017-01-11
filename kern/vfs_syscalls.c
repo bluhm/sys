@@ -402,7 +402,7 @@ int
 dounmount(struct mount *mp, int flags, struct proc *p)
 {
 	struct unmount_args ua;
-	int error = 0;
+	int error;
 
 	TAILQ_INIT(&ua.ua_mplist);
 	TAILQ_INSERT_HEAD(&ua.ua_mplist, mp, mnt_dounmount);
