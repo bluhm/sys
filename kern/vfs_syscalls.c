@@ -407,7 +407,7 @@ dounmount(struct mount *mp, int flags, struct proc *p)
 	TAILQ_INIT(&ua.ua_mplist);
 	TAILQ_INSERT_HEAD(&ua.ua_mplist, mp, mnt_dounmount);
 	ua.ua_flags = flags;
-	TAILQ_FOREACH_REVERSE(mp , &ua.ua_mplist, ua_mphead, mnt_dounmount) {
+	TAILQ_FOREACH_REVERSE(mp, &ua.ua_mplist, ua_mphead, mnt_dounmount) {
 		error = vfs_mount_foreach_vnode(mp, unmount_vnode, &ua);
 		if (error)
 			goto err;
