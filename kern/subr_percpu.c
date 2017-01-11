@@ -206,6 +206,25 @@ counters_read(struct cpumem *cm, uint64_t *output, unsigned int n)
 	free(temp, M_TEMP, n * sizeof(uint64_t));
 }
 
+void
+counters_zero(struct cpumem *cm, unsigned int n)
+{
+	struct cpumem_iter cmi;
+	uint64_t *counters;
+	unsigned int i;
+
+	counters = cpumem_first(&cmi, cm);
+	do {
+		for (i = 0; i < n; i++)
+			counters[i] = 0;
+		/* zero the generation numbers too */
+		membar_producer();
+		counters[i] = 0;
+
+		counters = cpumem_next(&cmi, cm);
+	} while (counters != NULL);
+}
+
 #else /* MULTIPROCESSOR */
 
 /*
@@ -300,4 +319,20 @@ counters_read(struct cpumem *cm, uint64_t *output, unsigned int n)
 	splx(s);
 }
 
+void
+counters_zero(struct cpumem *cm, unsigned int n)
+{
+	uint64_t *counters;
+	unsigned int i;
+	int s;
+
+	counters = (uint64_t *)cm;
+
+	s = splhigh();
+	for (i = 0; i < n; i++)
+		counters[i] = 0;
+	splx(s);
+}
+
 #endif /* MULTIPROCESSOR */
+
