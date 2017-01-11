@@ -335,4 +335,3 @@ counters_zero(struct cpumem *cm, unsigned int n)
 }
 
 #endif /* MULTIPROCESSOR */
-
