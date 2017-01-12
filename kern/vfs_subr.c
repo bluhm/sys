@@ -1574,8 +1574,9 @@ vfs_unmountall(void)
  retry:
 	allerror = 0;
 	TAILQ_FOREACH_REVERSE_SAFE(mp, &mountlist, mntlist, mnt_list, nmp) {
-		if ((vfs_busy(mp, VB_WRITE|VB_NOWAIT)) != 0)
+		if (vfs_busy(mp, VB_WRITE|VB_NOWAIT))
 			continue;
+		/* XXX Here is a race, the next pointer is not locked. */
 		if ((error = dounmount(mp, MNT_FORCE, curproc)) != 0) {
 			printf("unmount of %s failed with error %d\n",
 			    mp->mnt_stat.f_mntonname, error);
