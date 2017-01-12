@@ -570,7 +570,7 @@ sys_getfsstat(struct proc *p, void *v, register_t *retval)
 		syscallarg(size_t) bufsize;
 		syscallarg(int) flags;
 	} */ *uap = v;
-	struct mount *mp, *nmp;
+	struct mount *mp;
 	struct statfs *sp;
 	struct statfs *sfsp;
 	size_t count, maxcount;
@@ -580,7 +580,7 @@ sys_getfsstat(struct proc *p, void *v, register_t *retval)
 	sfsp = SCARG(uap, buf);
 	count = 0;
 
-	TAILQ_FOREACH_SAFE(mp, &mountlist, mnt_list, nmp) {
+	TAILQ_FOREACH(mp, &mountlist, mnt_list) {
 		if (vfs_busy(mp, VB_READ|VB_NOWAIT))
 			continue;
 		if (sfsp && count < maxcount) {
