@@ -425,10 +425,10 @@ struct ctldebug debug0 = { "syncprt", &syncprt };
 int
 sys_sync(struct proc *p, void *v, register_t *retval)
 {
-	struct mount *mp, *nmp;
+	struct mount *mp;
 	int asyncflag;
 
-	TAILQ_FOREACH_REVERSE_SAFE(mp, &mountlist, mntlist, mnt_list, nmp) {
+	TAILQ_FOREACH_REVERSE(mp, &mountlist, mntlist, mnt_list) {
 		if (vfs_busy(mp, VB_READ|VB_NOWAIT))
 			continue;
 		if ((mp->mnt_flag & MNT_RDONLY) == 0) {
