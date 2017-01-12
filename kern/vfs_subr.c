@@ -1251,12 +1251,12 @@ vprint(char *label, struct vnode *vp)
 void
 printlockedvnodes(void)
 {
-	struct mount *mp, *nmp;
+	struct mount *mp;
 	struct vnode *vp;
 
 	printf("Locked vnodes\n");
 
-	TAILQ_FOREACH_SAFE(mp, &mountlist, mnt_list, nmp) {
+	TAILQ_FOREACH(mp, &mountlist, mnt_list) {
 		if (vfs_busy(mp, VB_READ|VB_NOWAIT))
 			continue;
 		LIST_FOREACH(vp, &mp->mnt_vnodelist, v_mntvnodes) {
