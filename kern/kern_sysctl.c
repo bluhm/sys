@@ -157,7 +157,7 @@ sys_sysctl(struct proc *p, void *v, register_t *retval)
 		syscallarg(void *) new;
 		syscallarg(size_t) newlen;
 	} */ *uap = v;
-	int error, dolock = 1;
+	int error;
 	size_t savelen = 0, oldlen = 0;
 	sysctlfn *fn;
 	int name[CTL_MAXNAME];
@@ -222,25 +222,22 @@ sys_sysctl(struct proc *p, void *v, register_t *retval)
 	if (SCARG(uap, old) != NULL) {
 		if ((error = rw_enter(&sysctl_lock, RW_WRITE|RW_INTR)) != 0)
 			return (error);
-		if (dolock) {
-			if (atop(oldlen) > uvmexp.wiredmax - uvmexp.wired) {
-				rw_exit_write(&sysctl_lock);
-				return (ENOMEM);
-			}
-			error = uvm_vslock(p, SCARG(uap, old), oldlen,
-			    PROT_READ | PROT_WRITE);
-			if (error) {
-				rw_exit_write(&sysctl_lock);
-				return (error);
-			}
+		if (atop(oldlen) > uvmexp.wiredmax - uvmexp.wired) {
+			rw_exit_write(&sysctl_lock);
+			return (ENOMEM);
+		}
+		error = uvm_vslock(p, SCARG(uap, old), oldlen,
+		    PROT_READ | PROT_WRITE);
+		if (error) {
+			rw_exit_write(&sysctl_lock);
+			return (error);
 		}
 		savelen = oldlen;
 	}
 	error = (*fn)(&name[1], SCARG(uap, namelen) - 1, SCARG(uap, old),
 	    &oldlen, SCARG(uap, new), SCARG(uap, newlen), p);
 	if (SCARG(uap, old) != NULL) {
-		if (dolock)
-			uvm_vsunlock(p, SCARG(uap, old), savelen);
+		uvm_vsunlock(p, SCARG(uap, old), savelen);
 		rw_exit_write(&sysctl_lock);
 	}
 	if (error)
