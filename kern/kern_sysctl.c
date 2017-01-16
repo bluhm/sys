@@ -219,9 +219,11 @@ sys_sysctl(struct proc *p, void *v, register_t *retval)
 	if (SCARG(uap, oldlenp) &&
 	    (error = copyin(SCARG(uap, oldlenp), &oldlen, sizeof(oldlen))))
 		return (error);
-	if (SCARG(uap, old) != NULL) {
+	if (SCARG(uap, old) != NULL || SCARG(uap, new) != NULL) {
 		if ((error = rw_enter(&sysctl_lock, RW_WRITE|RW_INTR)) != 0)
 			return (error);
+	}
+	if (SCARG(uap, old) != NULL) {
 		if (atop(oldlen) > uvmexp.wiredmax - uvmexp.wired) {
 			rw_exit_write(&sysctl_lock);
 			return (ENOMEM);
@@ -238,6 +240,8 @@ sys_sysctl(struct proc *p, void *v, register_t *retval)
 	    &oldlen, SCARG(uap, new), SCARG(uap, newlen), p);
 	if (SCARG(uap, old) != NULL) {
 		uvm_vsunlock(p, SCARG(uap, old), savelen);
+	}
+	if (SCARG(uap, old) != NULL || SCARG(uap, new) != NULL) {
 		rw_exit_write(&sysctl_lock);
 	}
 	if (error)
