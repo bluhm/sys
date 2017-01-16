@@ -225,39 +225,33 @@ sys_sysctl(struct proc *p, void *v, register_t *retval)
 	}
 	if (SCARG(uap, old) != NULL) {
 		if (atop(oldlen) > uvmexp.wiredmax - uvmexp.wired) {
-			rw_exit_write(&sysctl_lock);
-			return (ENOMEM);
+			error = ENOMEM;
+			goto unlock;
 		}
 		error = uvm_vslock(p, SCARG(uap, old), oldlen,
 		    PROT_READ | PROT_WRITE);
-		if (error) {
-			rw_exit_write(&sysctl_lock);
-			return (error);
-		}
+		if (error)
+			goto unlock;
 		savelen = oldlen;
 	}
 	if (SCARG(uap, new) != NULL) {
 		if (atop(SCARG(uap, newlen)) > uvmexp.wiredmax - uvmexp.wired) {
-			if (SCARG(uap, old) != NULL)
-				uvm_vsunlock(p, SCARG(uap, old), savelen);
-			rw_exit_write(&sysctl_lock);
-			return (ENOMEM);
+			error = ENOMEM;
+			goto unwire;
 		}
 		error = uvm_vslock(p, SCARG(uap, new), SCARG(uap, newlen),
 		    PROT_READ | PROT_WRITE);
-		if (error) {
-			if (SCARG(uap, old) != NULL)
-				uvm_vsunlock(p, SCARG(uap, old), savelen);
-			rw_exit_write(&sysctl_lock);
-			return (error);
-		}
+		if (error)
+			goto unwire;
 	}
 	error = (*fn)(&name[1], SCARG(uap, namelen) - 1, SCARG(uap, old),
 	    &oldlen, SCARG(uap, new), SCARG(uap, newlen), p);
 	if (SCARG(uap, new) != NULL)
 		uvm_vsunlock(p, SCARG(uap, new), SCARG(uap, newlen));
+ unwire:
 	if (SCARG(uap, old) != NULL)
 		uvm_vsunlock(p, SCARG(uap, old), savelen);
+ unlock:
 	if (SCARG(uap, old) != NULL || SCARG(uap, new) != NULL)
 		rw_exit_write(&sysctl_lock);
 	if (error)
