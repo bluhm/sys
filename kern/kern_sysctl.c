@@ -246,7 +246,11 @@ sys_sysctl(struct proc *p, void *v, register_t *retval)
 	}
 	error = (*fn)(&name[1], SCARG(uap, namelen) - 1, SCARG(uap, old),
 	    &oldlen, SCARG(uap, new), SCARG(uap, newlen), p);
-	if (SCARG(uap, new) != NULL)
+	if (SCARG(uap, new) != NULL && (SCARG(uap, old) == NULL ||
+	    (trunc_page((vaddr_t)SCARG(uap, new)) <
+	    trunc_page((vaddr_t)SCARG(uap, old)) ||
+	    (round_page((vaddr_t)SCARG(uap, new) + SCARG(uap, newlen)) >
+	    round_page((vaddr_t)SCARG(uap, old) + savelen)))))
 		uvm_vsunlock(p, SCARG(uap, new), SCARG(uap, newlen));
  unwire:
 	if (SCARG(uap, old) != NULL)
