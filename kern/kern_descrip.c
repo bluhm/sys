@@ -182,13 +182,18 @@ fd_unused(struct filedesc *fdp, int fd)
 struct file *
 fd_getfile(struct filedesc *fdp, int fd)
 {
-	struct file *fp;
+	struct file *fp = NULL;
+
+	rw_enter_read(&fdp->fd_lock);
 
 	if ((u_int)fd >= fdp->fd_nfiles || (fp = fdp->fd_ofiles[fd]) == NULL)
-		return (NULL);
+		goto unlock;
 
 	if (!FILE_IS_USABLE(fp))
-		return (NULL);
+		fp = NULL;
+
+ unlock:
+	rw_exit_read(&fdp->fd_lock);
 
 	return (fp);
 }
