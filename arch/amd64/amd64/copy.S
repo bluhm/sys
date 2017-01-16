@@ -116,7 +116,7 @@ ENTRY(kcopy)
 	xorq	%rax,%rax
 	ret
 
-ENTRY(copyout)
+ENTRY(copyout_unlocked)
 	pushq	$0
 
 	xchgq	%rdi,%rsi
@@ -146,7 +146,7 @@ ENTRY(copyout)
 	xorl	%eax,%eax
 	ret
 
-ENTRY(copyin)
+ENTRY(copyin_unlocked)
 	movq	CPUVAR(CURPCB),%rax
 	pushq	$0
 	leaq	_C_LABEL(copy_fault)(%rip),%r11
@@ -187,7 +187,7 @@ NENTRY(copy_fault)
 	popq	PCB_ONFAULT(%rdx)
 	ret
 
-ENTRY(copyoutstr)
+ENTRY(copyoutstr_unlocked)
 	xchgq	%rdi,%rsi
 	movq	%rdx,%r8
 	movq	%rcx,%r9
@@ -228,7 +228,7 @@ ENTRY(copyoutstr)
 	movq	$ENAMETOOLONG,%rax
 	jmp	copystr_return
 
-ENTRY(copyinstr)
+ENTRY(copyinstr_unlocked)
 	xchgq	%rdi,%rsi
 	movq	%rdx,%r8
 	movq	%rcx,%r9

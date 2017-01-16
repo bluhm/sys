@@ -201,12 +201,18 @@ void	*memset(void *, int, size_t)
 
 int	copystr(const void *, void *, size_t, size_t *)
 		__attribute__ ((__bounded__(__string__,2,3)));
-int	copyinstr(const void *, void *, size_t, size_t *)
+static inline int	copyinstr(const void *, void *, size_t, size_t *)
 		__attribute__ ((__bounded__(__string__,2,3)));
-int	copyoutstr(const void *, void *, size_t, size_t *);
-int	copyin(const void *, void *, size_t)
+static inline int	copyoutstr(const void *, void *, size_t, size_t *);
+static inline int	copyin(const void *, void *, size_t)
 		__attribute__ ((__bounded__(__buffer__,2,3)));
-int	copyout(const void *, void *, size_t);
+static inline int	copyout(const void *, void *, size_t);
+int	copyinstr_unlocked(const void *, void *, size_t, size_t *)
+		__attribute__ ((__bounded__(__string__,2,3)));
+int	copyoutstr_unlocked(const void *, void *, size_t, size_t *);
+int	copyin_unlocked(const void *, void *, size_t)
+		__attribute__ ((__bounded__(__buffer__,2,3)));
+int	copyout_unlocked(const void *, void *, size_t);
 
 void	arc4random_buf(void *, size_t)
 		__attribute__ ((__bounded__(__buffer__,1,2)));
@@ -313,6 +319,62 @@ do {									\
 		splassert_fail(RW_WRITE, rw_status(&netlock), __func__);\
 	splsoftassert(IPL_SOFTNET);					\
 } while (0)
+
+static inline int
+copyinstr(const void *uaddr, void *kaddr, size_t len, size_t *done)
+{
+	int error, locked;
+
+	locked = (rw_status(&netlock) == RW_WRITE);
+	if (locked)
+		rw_exit_write(&netlock);
+	error = copyinstr_unlocked(uaddr, kaddr, len, done);
+	if (locked)
+		rw_enter_write(&netlock);
+	return error;
+}
+
+static inline int
+copyoutstr(const void *kaddr, void *uaddr, size_t len, size_t *done)
+{
+	int error, locked;
+
+	locked = (rw_status(&netlock) == RW_WRITE);
+	if (locked)
+		rw_exit_write(&netlock);
+	error = copyoutstr_unlocked(kaddr, uaddr, len, done);
+	if (locked)
+		rw_enter_write(&netlock);
+	return error;
+}
+
+static inline int
+copyin(const void *uaddr, void *kaddr, size_t len)
+{
+	int error, locked;
+
+	locked = (rw_status(&netlock) == RW_WRITE);
+	if (locked)
+		rw_exit_write(&netlock);
+	error = copyin_unlocked(uaddr, kaddr, len);
+	if (locked)
+		rw_enter_write(&netlock);
+	return error;
+}
+
+static inline int
+copyout(const void *kaddr, void *uaddr, size_t len)
+{
+	int error, locked;
+
+	locked = (rw_status(&netlock) == RW_WRITE);
+	if (locked)
+		rw_exit_write(&netlock);
+	error = copyout_unlocked(kaddr, uaddr, len);
+	if (locked)
+		rw_enter_write(&netlock);
+	return error;
+}
 
 __returns_twice int	setjmp(label_t *);
 __dead void	longjmp(label_t *);
