@@ -236,8 +236,29 @@ sys_sysctl(struct proc *p, void *v, register_t *retval)
 		}
 		savelen = oldlen;
 	}
+	if (SCARG(uap, new) != NULL) {
+		if (atop(SCARG(uap, newlen)) > uvmexp.wiredmax - uvmexp.wired) {
+			if (SCARG(uap, old) != NULL) {
+				uvm_vsunlock(p, SCARG(uap, old), savelen);
+			}
+			rw_exit_write(&sysctl_lock);
+			return (ENOMEM);
+		}
+		error = uvm_vslock(p, SCARG(uap, new), SCARG(uap, newlen),
+		    PROT_READ | PROT_WRITE);
+		if (error) {
+			if (SCARG(uap, old) != NULL) {
+				uvm_vsunlock(p, SCARG(uap, old), savelen);
+			}
+			rw_exit_write(&sysctl_lock);
+			return (error);
+		}
+	}
 	error = (*fn)(&name[1], SCARG(uap, namelen) - 1, SCARG(uap, old),
 	    &oldlen, SCARG(uap, new), SCARG(uap, newlen), p);
+	if (SCARG(uap, new) != NULL) {
+		uvm_vsunlock(p, SCARG(uap, new), SCARG(uap, newlen));
+	}
 	if (SCARG(uap, old) != NULL) {
 		uvm_vsunlock(p, SCARG(uap, old), savelen);
 	}
