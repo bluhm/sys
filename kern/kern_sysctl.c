@@ -240,7 +240,7 @@ sys_sysctl(struct proc *p, void *v, register_t *retval)
 			goto unwire;
 		}
 		error = uvm_vslock(p, SCARG(uap, new), SCARG(uap, newlen),
-		    PROT_READ | PROT_WRITE);
+		    PROT_READ);
 		if (error)
 			goto unwire;
 	}
