@@ -183,8 +183,11 @@ struct file *
 fd_getfile(struct filedesc *fdp, int fd)
 {
 	struct file *fp = NULL;
+	int locked;
 
-	rw_enter_read(&fdp->fd_lock);
+	locked = (rw_status(&fdp->fd_lock) == RW_WRITE);
+	if (!locked)
+		rw_enter_read(&fdp->fd_lock);
 
 	if ((u_int)fd >= fdp->fd_nfiles || (fp = fdp->fd_ofiles[fd]) == NULL)
 		goto unlock;
@@ -193,7 +196,8 @@ fd_getfile(struct filedesc *fdp, int fd)
 		fp = NULL;
 
  unlock:
-	rw_exit_read(&fdp->fd_lock);
+	if (!locked)
+		rw_exit_read(&fdp->fd_lock);
 
 	return (fp);
 }
