@@ -216,8 +216,7 @@ icmp6_mtudisc_callback_register(void (*func)(struct sockaddr_in6 *, u_int))
 {
 	struct icmp6_mtudisc_callback *mc;
 
-	for (mc = LIST_FIRST(&icmp6_mtudisc_callbacks); mc != NULL;
-	     mc = LIST_NEXT(mc, mc_list)) {
+	LIST_FOREACH(mc, &icmp6_mtudisc_callbacks, mc_list) {
 		if (mc->mc_func == func)
 			return;
 	}
@@ -1038,8 +1037,7 @@ icmp6_mtudisc_update(struct ip6ctlparam *ip6cp, int validated)
 	 * Notify protocols that the MTU for this destination
 	 * has changed.
 	 */
-	for (mc = LIST_FIRST(&icmp6_mtudisc_callbacks); mc != NULL;
-	     mc = LIST_NEXT(mc, mc_list))
+	LIST_FOREACH(mc, &icmp6_mtudisc_callbacks, mc_list)
 		(*mc->mc_func)(&sin6, m->m_pkthdr.ph_rtableid);
 }
 
