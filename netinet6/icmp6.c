@@ -1023,9 +1023,9 @@ icmp6_mtudisc_update(struct ip6ctlparam *ip6cp, int validated)
 	if (rt != NULL && ISSET(rt->rt_flags, RTF_HOST) &&
 	    !(rt->rt_rmx.rmx_locks & RTV_MTU) &&
 	    (rt->rt_rmx.rmx_mtu > mtu || rt->rt_rmx.rmx_mtu == 0)) {
-	    	struct ifnet *ifp;
+		struct ifnet *ifp;
 
-	    	ifp = if_get(rt->rt_ifidx);
+		ifp = if_get(rt->rt_ifidx);
 		if (ifp != NULL && mtu < ifp->if_mtu) {
 			icmp6stat.icp6s_pmtuchg++;
 			rt->rt_rmx.rmx_mtu = mtu;
