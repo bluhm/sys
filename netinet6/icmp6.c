@@ -980,11 +980,7 @@ icmp6_mtudisc_update(struct ip6ctlparam *ip6cp, int validated)
 	struct rtentry *rt = NULL;
 	struct sockaddr_in6 sin6;
 
-	/*
-	 * The MTU may not be less then the minimal IPv6 MTU except for the
-	 * hack in ip6_output/ip6_setpmtu where we always include a frag header.
-	 */
-	if (mtu < IPV6_MMTU - sizeof(struct ip6_frag))
+	if (mtu < IPV6_MMTU)
 		return;
 
 	/*
