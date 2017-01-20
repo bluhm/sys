@@ -121,7 +121,7 @@ struct sockaddr_in ripsrc = { sizeof(ripsrc), AF_INET };
  * mbuf chain.
  */
 void
-rip_input(struct mbuf *m, ...)
+rip_input(struct mbuf *m, int hlen, int proto)
 {
 	struct ip *ip = mtod(m, struct ip *);
 	struct inpcb *inp, *last = NULL;
