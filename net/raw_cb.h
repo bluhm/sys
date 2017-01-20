@@ -62,7 +62,6 @@ int	 raw_attach(struct socket *, int);
 void	 raw_detach(struct rawcb *);
 void	 raw_disconnect(struct rawcb *);
 void	 raw_init(void);
-void	 raw_input(struct mbuf *, ...);
 int	 raw_usrreq(struct socket *,
 	    int, struct mbuf *, struct mbuf *, struct mbuf *, struct proc *);
 #endif /* _KERNEL */

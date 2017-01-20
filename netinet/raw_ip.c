@@ -115,11 +115,6 @@ rip_init(void)
 
 struct sockaddr_in ripsrc = { sizeof(ripsrc), AF_INET };
 
-/*
- * Setup generic address and protocol structures
- * for raw_input routine, then pass them along with
- * mbuf chain.
- */
 void
 rip_input(struct mbuf *m, ...)
 {
