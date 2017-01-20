@@ -1,4 +1,4 @@
-/*	$OpenBSD: route.h,v 1.149 2016/11/21 10:30:42 mpi Exp $	*/
+/*	$OpenBSD: route.h,v 1.152 2017/01/20 08:10:54 dlg Exp $	*/
 /*	$NetBSD: route.h,v 1.9 1996/02/13 22:00:49 christos Exp $	*/
 
 /*
@@ -258,7 +258,8 @@ struct rt_msghdr {
 #define RTA_BRD		0x80	/* for NEWADDR, broadcast or p-p dest addr */
 #define RTA_SRC		0x100	/* source sockaddr present */
 #define RTA_SRCMASK	0x200	/* source netmask present */
-#define	RTA_LABEL	0x400	/* route label present */
+#define RTA_LABEL	0x400	/* route label present */
+#define RTA_BFD 	0x800	/* bfd present */
 
 /*
  * Index offsets for sockaddr array for alternate internal encoding.
@@ -274,7 +275,8 @@ struct rt_msghdr {
 #define RTAX_SRC	8	/* source sockaddr present */
 #define RTAX_SRCMASK	9	/* source netmask present */
 #define RTAX_LABEL	10	/* route label present */
-#define RTAX_MAX	11	/* size of array to allocate */
+#define RTAX_BFD	11	/* bfd present */
+#define RTAX_MAX	12	/* size of array to allocate */
 
 /*
  * setsockopt defines used for the filtering.
@@ -316,6 +318,26 @@ struct rt_addrinfo {
 };
 
 #ifdef _KERNEL
+
+#include <sys/percpu.h>
+
+enum rtstat_counters {
+	rts_badredirect,	/* bogus redirect calls */
+	rts_dynamic,		/* routes created by redirects */
+	rts_newgateway,		/* routes modified by redirects */
+	rts_unreach,		/* lookups which failed */
+	rts_wildcard,		/* lookups satisfied by a wildcard */
+
+	rts_ncounters
+};
+
+static inline void
+rtstat_inc(enum rtstat_counters c)
+{
+	extern struct cpumem *rtcounters;
+
+	counters_inc(rtcounters, c);
+}
 
 /* 
  * This structure, and the prototypes for the rt_timer_{init,remove_all,

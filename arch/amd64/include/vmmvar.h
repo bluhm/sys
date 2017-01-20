@@ -1,4 +1,4 @@
-/*	$OpenBSD: vmmvar.h,v 1.26 2017/01/13 02:27:37 mlarkin Exp $	*/
+/*	$OpenBSD: vmmvar.h,v 1.29 2017/01/19 23:18:55 mlarkin Exp $	*/
 /*
  * Copyright (c) 2014 Mike Larkin <mlarkin@openbsd.org>
  *
@@ -455,8 +455,12 @@ struct vm_rwregs_params {
 #define VMX_NUM_MSR_STORE 6
 
 /* MSR bitmap manipulation macros */
-#define MSRIDX(m) ((m) / 8)
-#define MSRBIT(m) (1 << (m) % 8)
+#define VMX_MSRIDX(m) ((m) / 8)
+#define VMX_MSRBIT(m) (1 << (m) % 8)
+
+#define SVM_MSRIDX(m) ((m) / 4)
+#define SVM_MSRBIT_R(m) (1 << (((m) % 4) * 2))
+#define SVM_MSRBIT_W(m) (1 << (((m) % 4) * 2 + 1))
 
 enum {
 	VMM_MODE_UNKNOWN,
@@ -688,6 +692,12 @@ struct vcpu {
 	paddr_t vc_vmx_msr_exit_load_pa;
 	vaddr_t vc_vmx_msr_entry_load_va;
 	paddr_t vc_vmx_msr_entry_load_pa;
+
+	/* SVM only */
+	vaddr_t vc_svm_hsa_va;
+	paddr_t vc_svm_hsa_pa;
+	vaddr_t vc_svm_ioio_va;
+	paddr_t vc_svm_ioio_pa;
 };
 
 SLIST_HEAD(vcpu_head, vcpu);

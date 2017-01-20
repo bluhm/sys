@@ -1,4 +1,4 @@
-/*	$OpenBSD: rtsock.c,v 1.212 2016/12/20 18:33:43 bluhm Exp $	*/
+/*	$OpenBSD: rtsock.c,v 1.214 2017/01/20 08:10:54 dlg Exp $	*/
 /*	$NetBSD: rtsock.c,v 1.18 1996/03/29 00:32:10 cgd Exp $	*/
 
 /*
@@ -111,6 +111,7 @@ void		 rt_xaddrs(caddr_t, caddr_t, struct rt_addrinfo *);
 
 int		 sysctl_iflist(int, struct walkarg *);
 int		 sysctl_ifnames(struct walkarg *);
+int		 sysctl_rtable_rtstat(void *, size_t *, void *);
 
 struct routecb {
 	struct rawcb	rcb;
@@ -472,6 +473,9 @@ route_output(struct mbuf *m, ...)
 	struct rawcb		*rp = NULL;
 	struct sockaddr_rtlabel	 sa_rl;
 	struct sockaddr_in6	 sa_mask;
+#ifdef BFD
+	struct sockaddr_bfd	 sa_bfd;
+#endif
 #ifdef MPLS
 	struct sockaddr_mpls	 sa_mpls, *psa_mpls;
 #endif
@@ -705,6 +709,10 @@ report:
 		    rt_plen2mask(rt, &sa_mask);
 		info.rti_info[RTAX_LABEL] =
 		    rtlabel_id2sa(rt->rt_labelid, &sa_rl);
+#ifdef BFD
+		if (rt->rt_flags & RTF_BFD)
+			info.rti_info[RTAX_BFD] = bfd2sa(rt, &sa_bfd);
+#endif
 #ifdef MPLS
 		if (rt->rt_flags & RTF_MPLS) {
 			bzero(&sa_mpls, sizeof(sa_mpls));
@@ -1355,6 +1363,7 @@ void
 rt_bfdmsg(struct bfd_config *bfd)
 {
 	struct bfd_msghdr	*bfdm;
+	struct sockaddr_bfd	 sa_bfd;
 	struct mbuf		*m;
 	struct rt_addrinfo	 info;
 
@@ -1368,26 +1377,12 @@ rt_bfdmsg(struct bfd_config *bfd)
 	if (m == NULL)
 		return;
 	bfdm = mtod(m, struct bfd_msghdr *);
+	bfdm->bm_addrs = info.rti_addrs;
 
-	bfdm->bm_mode = bfd->bc_mode;
-	bfdm->bm_mintx = bfd->bc_mintx;
-	bfdm->bm_minrx = bfd->bc_minrx;
-	bfdm->bm_minecho = bfd->bc_minecho;
-	bfdm->bm_multiplier = bfd->bc_multiplier;
+	bfd2sa(bfd->bc_rt, &sa_bfd);
+	memcpy(&bfdm->bm_sa, &sa_bfd, sizeof(sa_bfd));
 
-	bfdm->bm_uptime = bfd->bc_time->tv_sec;
-	bfdm->bm_lastuptime = bfd->bc_lastuptime;
-	bfdm->bm_state = bfd->bc_state;
-	bfdm->bm_remotestate = bfd->bc_neighbor->bn_rstate;
-	bfdm->bm_laststate = bfd->bc_laststate;
-	bfdm->bm_error = bfd->bc_error;
-
-	bfdm->bm_localdiscr = bfd->bc_neighbor->bn_ldiscr;
-	bfdm->bm_localdiag = bfd->bc_neighbor->bn_ldiag;
-	bfdm->bm_remotediscr = bfd->bc_neighbor->bn_rdiscr;
-	bfdm->bm_remotediag = bfd->bc_neighbor->bn_rdiag;
-
-	route_proto.sp_protocol = 0;
+	route_proto.sp_protocol = info.rti_info[RTAX_DST]->sa_family;
 	route_input(m, &route_proto, &route_src, &route_dst);
 }
 #endif /* BFD */
@@ -1402,6 +1397,9 @@ sysctl_dumpentry(struct rtentry *rt, void *v, unsigned int id)
 	int			 error = 0, size;
 	struct rt_addrinfo	 info;
 	struct ifnet		*ifp;
+#ifdef BFD
+	struct sockaddr_bfd	 sa_bfd;
+#endif
 #ifdef MPLS
 	struct sockaddr_mpls	 sa_mpls;
 #endif
@@ -1436,6 +1434,10 @@ sysctl_dumpentry(struct rtentry *rt, void *v, unsigned int id)
 	}
 	if_put(ifp);
 	info.rti_info[RTAX_LABEL] = rtlabel_id2sa(rt->rt_labelid, &sa_rl);
+#ifdef BFD
+	if (rt->rt_flags & RTF_BFD)
+		info.rti_info[RTAX_BFD] = bfd2sa(rt, &sa_bfd);
+#endif
 #ifdef MPLS
 	if (rt->rt_flags & RTF_MPLS) {
 		bzero(&sa_mpls, sizeof(sa_mpls));
@@ -1610,9 +1612,7 @@ sysctl_rtable(int *name, u_int namelen, void *where, size_t *given, void *new,
 		break;
 
 	case NET_RT_STATS:
-		error = sysctl_rdstruct(where, given, new,
-		    &rtstat, sizeof(rtstat));
-		return (error);
+		return (sysctl_rtable_rtstat(where, given, new));
 	case NET_RT_TABLE:
 		tableid = w.w_arg;
 		if (!rtable_exists(tableid))
@@ -1636,6 +1636,25 @@ sysctl_rtable(int *name, u_int namelen, void *where, size_t *given, void *new,
 		*given = (11 * w.w_needed) / 10;
 
 	return (error);
+}
+
+int
+sysctl_rtable_rtstat(void *oldp, size_t *oldlenp, void *newp)
+{
+	extern struct cpumem *rtcounters;
+	uint64_t counters[rts_ncounters];
+	struct rtstat rtstat;
+	uint32_t *words = (uint32_t *)&rtstat;
+	int i;
+
+	KASSERT(sizeof(rtstat) == (nitems(counters) * sizeof(uint32_t)));
+
+	counters_read(rtcounters, counters, nitems(counters));
+
+	for (i = 0; i < nitems(counters); i++)
+		words[i] = (uint32_t)counters[i];
+
+	return (sysctl_rdstruct(oldp, oldlenp, newp, &rtstat, sizeof(rtstat)));
 }
 
 /*
