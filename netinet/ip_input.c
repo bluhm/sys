@@ -584,7 +584,7 @@ found:
 	 * Switch out to protocol's input routine.
 	 */
 	ipstat_inc(ips_delivered);
-	(*inetsw[ip_protox[ip->ip_p]].pr_input)(m, hlen, NULL, 0);
+	(*inetsw[ip_protox[ip->ip_p]].pr_input)(m, hlen, ip->ip_p);
 	return;
 bad:
 	m_freem(m);
