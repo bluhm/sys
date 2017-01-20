@@ -270,7 +270,7 @@ static struct protosw pfkey_protosw_template = {
 	&pfkeydomain,
 	-1, /* protocol */
 	PR_ATOMIC | PR_ADDR,
-	(void *) raw_input,
+	NULL, /* input */
 	(void *) pfkey_output,
 	NULL, /* ctlinput */
 	NULL, /* ctloutput */

@@ -65,7 +65,7 @@ struct protosw unixsw[] = {
   0,		0,		0,		0,
 },
 { 0,		0,		0,		0,
-  raw_input,	0,		0,		0,
+  0,		0,		0,		0,
   raw_usrreq,
   raw_init,	0,		0,		0,
 }

@@ -115,11 +115,6 @@ rip6_init(void)
 	in_pcbinit(&rawin6pcbtable, 1);
 }
 
-/*
- * Setup generic address and protocol structures
- * for raw_input routine, then pass them along with
- * mbuf chain.
- */
 int
 rip6_input(struct mbuf **mp, int *offp, int proto)
 {
