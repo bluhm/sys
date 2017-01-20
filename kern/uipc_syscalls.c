@@ -278,6 +278,7 @@ doaccept(struct proc *p, int sock, struct sockaddr *name, socklen_t *anamelen,
 
 	headfp = fp;
 redo:
+	fdplock(fdp);
 	NET_LOCK(s);
 	head = headfp->f_data;
 	if (isdnssocket(head) || (head->so_options & SO_ACCEPTCONN) == 0) {
@@ -296,7 +297,7 @@ redo:
 			head->so_error = ECONNABORTED;
 			break;
 		}
-		error = tsleep(&head->so_timeo, PSOCK | PCATCH,
+		error = rwsleep(&head->so_timeo, &netlock, PSOCK | PCATCH,
 		    "netcon", 0);
 		if (error) {
 			goto bad;
@@ -312,11 +313,9 @@ redo:
 	nflag = flags & SOCK_NONBLOCK_INHERIT ? (headfp->f_flag & FNONBLOCK)
 	    : (flags & SOCK_NONBLOCK ? FNONBLOCK : 0);
 
-	fdplock(fdp);
 	error = falloc(p, &fp, &tmpfd);
 	if (error == 0 && (flags & SOCK_CLOEXEC))
 		fdp->fd_ofileflags[tmpfd] |= UF_EXCLOSE;
-	fdpunlock(fdp);
 	if (error != 0) {
 		/*
 		 * Probably ran out of file descriptors.  Wakeup
@@ -336,7 +335,6 @@ redo:
 	if (head->so_qlen == 0) {
 		NET_UNLOCK(s);
 		m_freem(nam);
-		fdplock(fdp);
 		fdremove(fdp, tmpfd);
 		closef(fp, p);
 		fdpunlock(fdp);
@@ -365,7 +363,6 @@ redo:
 		/* if an error occurred, free the file descriptor */
 		NET_UNLOCK(s);
 		m_freem(nam);
-		fdplock(fdp);
 		fdremove(fdp, tmpfd);
 		closef(fp, p);
 		fdpunlock(fdp);
@@ -377,6 +374,7 @@ redo:
 	m_freem(nam);
 bad:
 	NET_UNLOCK(s);
+	fdpunlock(fdp);
 out:
 	FRELE(headfp, p);
 	return (error);
@@ -436,7 +434,7 @@ sys_connect(struct proc *p, void *v, register_t *retval)
 	}
 	NET_LOCK(s);
 	while ((so->so_state & SS_ISCONNECTING) && so->so_error == 0) {
-		error = tsleep(&so->so_timeo, PSOCK | PCATCH,
+		error = rwsleep(&so->so_timeo, &netlock, PSOCK | PCATCH,
 		    "netcon2", 0);
 		if (error) {
 			if (error == EINTR || error == ERESTART)

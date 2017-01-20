@@ -131,7 +131,10 @@ uipc_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		break;
 
 	case PRU_BIND:
+		/* XXXSMP breaks atomicity */
+		rw_exit_write(&netlock);
 		error = unp_bind(unp, nam, p);
+		rw_enter_write(&netlock);
 		break;
 
 	case PRU_LISTEN:
@@ -140,7 +143,10 @@ uipc_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		break;
 
 	case PRU_CONNECT:
+		/* XXXSMP breaks atomicity */
+		rw_exit_write(&netlock);
 		error = unp_connect(so, nam, p);
+		rw_enter_write(&netlock);
 		break;
 
 	case PRU_CONNECT2:
@@ -208,7 +214,10 @@ uipc_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 					error = EISCONN;
 					break;
 				}
+				/* XXXSMP breaks atomicity */
+				rw_exit_write(&netlock);
 				error = unp_connect(so, nam, p);
+				rw_enter_write(&netlock);
 				if (error)
 					break;
 			} else {
@@ -484,6 +493,8 @@ unp_connect(struct socket *so, struct mbuf *nam, struct proc *p)
 	struct unpcb *unp, *unp2, *unp3;
 	struct nameidata nd;
 	int error, s;
+
+	NET_ASSERT_UNLOCKED();
 
 	if (soun->sun_family != AF_UNIX)
 		return (EAFNOSUPPORT);

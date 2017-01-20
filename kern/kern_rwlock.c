@@ -195,6 +195,9 @@ retry:
 		unsigned long set = o | op->wait_set;
 		int do_sleep;
 
+		if (panicstr)
+			return (0);
+
 		rw_enter_diag(rwl, flags);
 
 		if (flags & RW_NOSLEEP)
@@ -205,7 +208,7 @@ retry:
 			sleep_setup_signal(&sls, op->wait_prio | PCATCH);
 
 		do_sleep = !rw_cas(&rwl->rwl_owner, o, set);
-
+		NET_ASSERT_UNLOCKED();
 		sleep_finish(&sls, do_sleep);
 		if ((flags & RW_INTR) &&
 		    (error = sleep_finish_signal(&sls)) != 0)

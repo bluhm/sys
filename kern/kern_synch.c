@@ -111,6 +111,7 @@ tsleep(const volatile void *ident, int priority, const char *wmesg, int timo)
 	int hold_count;
 #endif
 
+	NET_ASSERT_UNLOCKED();
 	KASSERT((priority & ~(PRIMASK | PCATCH)) == 0);
 
 #ifdef MULTIPROCESSOR
@@ -170,6 +171,7 @@ msleep(const volatile void *ident, struct mutex *mtx, int priority,
 	int hold_count;
 #endif
 
+	NET_ASSERT_UNLOCKED();
 	KASSERT((priority & ~(PRIMASK | PCATCH | PNORELOCK)) == 0);
 	KASSERT(mtx != NULL);
 
