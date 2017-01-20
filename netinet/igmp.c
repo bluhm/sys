@@ -232,7 +232,7 @@ igmp_input(struct mbuf *m, ...)
 }
 
 void
-igmp_input_if(struct ifnet *ifp, struct mbuf *m, int iphlen)
+igmp_input_if(struct ifnet *ifp, struct mbuf *m, int iphlen, int proto)
 {
 	struct ip *ip = mtod(m, struct ip *);
 	struct igmp *igmp;
@@ -493,7 +493,7 @@ igmp_input_if(struct ifnet *ifp, struct mbuf *m, int iphlen)
 	 * Pass all valid IGMP packets up to any process(es) listening
 	 * on a raw IGMP socket.
 	 */
-	rip_input(m);
+	rip_input(m, iphlen, proto);
 }
 
 void
