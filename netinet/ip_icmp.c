@@ -325,7 +325,7 @@ icmp_input(struct mbuf *m, ...)
 }
 
 void
-icmp_input_if(struct ifnet *ifp, struct mbuf *m, int hlen)
+icmp_input_if(struct ifnet *ifp, struct mbuf *m, int hlen, int proto)
 {
 	struct icmp *icp;
 	struct ip *ip = mtod(m, struct ip *);
@@ -686,7 +686,7 @@ reflect:
 	}
 
 raw:
-	rip_input(m);
+	rip_input(m, hlen, proto);
 	return;
 
 freeit:
