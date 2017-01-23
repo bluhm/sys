@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_gif.c,v 1.87 2016/12/13 06:51:11 dlg Exp $	*/
+/*	$OpenBSD: if_gif.c,v 1.89 2017/01/23 11:37:29 mpi Exp $	*/
 /*	$KAME: if_gif.c,v 1.43 2001/02/20 08:51:07 itojun Exp $	*/
 
 /*
@@ -115,6 +115,7 @@ gif_clone_create(struct if_clone *ifc, int unit)
 	     "%s%d", ifc->ifc_name, unit);
 	sc->gif_if.if_mtu    = GIF_MTU;
 	sc->gif_if.if_flags  = IFF_POINTOPOINT | IFF_MULTICAST;
+	sc->gif_if.if_xflags = IFXF_CLONED;
 	sc->gif_if.if_ioctl  = gif_ioctl;
 	sc->gif_if.if_start  = gif_start;
 	sc->gif_if.if_output = gif_output;
@@ -226,7 +227,6 @@ gif_start(struct ifnet *ifp)
 			m->m_pkthdr.len += offset;
 		}
 #endif
-		ifp->if_opackets++;
 
 		/* XXX we should cache the outgoing route */
 

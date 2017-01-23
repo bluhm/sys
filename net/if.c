@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.c,v 1.474 2017/01/12 09:07:46 mpi Exp $	*/
+/*	$OpenBSD: if.c,v 1.478 2017/01/23 11:37:29 mpi Exp $	*/
 /*	$NetBSD: if.c,v 1.35 1996/05/07 05:26:04 thorpej Exp $	*/
 
 /*
@@ -583,8 +583,7 @@ if_start_locked(struct ifnet *ifp)
 int
 if_enqueue(struct ifnet *ifp, struct mbuf *m)
 {
-	int length, error = 0;
-	unsigned short mflags;
+	int error = 0;
 
 #if NBRIDGE > 0
 	if (ifp->if_bridgeport && (m->m_flags & M_PROTO1) == 0) {
@@ -594,9 +593,6 @@ if_enqueue(struct ifnet *ifp, struct mbuf *m)
 		return (error);
 	}
 #endif
-
-	length = m->m_pkthdr.len;
-	mflags = m->m_flags;
 
 #if NPF > 0
 	pf_pkt_unlink_state_key(m);
@@ -609,10 +605,6 @@ if_enqueue(struct ifnet *ifp, struct mbuf *m)
 	IFQ_ENQUEUE(&ifp->if_snd, m, error);
 	if (error)
 		return (error);
-
-	ifp->if_obytes += length;
-	if (mflags & M_MCAST)
-		ifp->if_omcasts++;
 
 	if_start(ifp);
 
@@ -825,7 +817,8 @@ if_input_process(void *xifidx)
 	if (ml_empty(&ml))
 		goto out;
 
-	add_net_randomness(ml_len(&ml));
+	if (!ISSET(ifp->if_xflags, IFXF_CLONED))
+		add_net_randomness(ml_len(&ml));
 
 	s = splnet();
 	while ((m = ml_dequeue(&ml)) != NULL) {
@@ -1783,7 +1776,7 @@ ifioctl(struct socket *so, u_long cmd, caddr_t data, struct proc *p)
 		break;
 
 	case SIOCGIFXFLAGS:
-		ifr->ifr_flags = ifp->if_xflags & ~IFXF_MPSAFE;
+		ifr->ifr_flags = ifp->if_xflags & ~(IFXF_MPSAFE|IFXF_CLONED);
 		break;
 
 	case SIOCGIFMETRIC:
@@ -1798,10 +1791,12 @@ ifioctl(struct socket *so, u_long cmd, caddr_t data, struct proc *p)
 		ifr->ifr_hardmtu = ifp->if_hardmtu;
 		break;
 
-	case SIOCGIFDATA:
-		error = copyout((caddr_t)&ifp->if_data, ifr->ifr_data,
-		    sizeof(ifp->if_data));
+	case SIOCGIFDATA: {
+		struct if_data ifdata;
+		if_getdata(ifp, &ifdata);
+		error = copyout(&ifdata, ifr->ifr_data, sizeof(ifdata));
 		break;
+	}
 
 	case SIOCSIFFLAGS:
 		if ((error = suser(p, 0)) != 0)
@@ -2166,6 +2161,33 @@ ifconf(u_long cmd, caddr_t data)
 	}
 	ifc->ifc_len -= space;
 	return (error);
+}
+
+void
+if_getdata(struct ifnet *ifp, struct if_data *data)
+{
+	struct ifqueue *ifq;
+	uint64_t opackets = 0;
+	uint64_t obytes = 0;
+	uint64_t omcasts = 0;
+	uint64_t oqdrops = 0;
+
+	ifq = &ifp->if_snd;
+
+	mtx_enter(&ifq->ifq_mtx);
+	opackets += ifq->ifq_packets;
+	obytes += ifq->ifq_bytes;
+	oqdrops += ifq->ifq_qdrops;
+	omcasts += ifq->ifq_mcasts;
+	/* ifq->ifq_errors */
+	mtx_leave(&ifq->ifq_mtx);
+
+	*data = ifp->if_data;
+	data->ifi_opackets += opackets;
+	data->ifi_obytes += obytes;
+	data->ifi_oqdrops += oqdrops;
+	data->ifi_omcasts += omcasts;
+	/* ifp->if_data.ifi_oerrors */
 }
 
 /*
