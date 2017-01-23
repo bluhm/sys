@@ -72,7 +72,7 @@ divert_init(void)
 }
 
 void
-divert_input(struct mbuf *m, ...)
+divert_input(struct mbuf *m, int iphlen, int proto)
 {
 	m_freem(m);
 }

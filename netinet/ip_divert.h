@@ -54,7 +54,7 @@ extern struct	inpcbtable	divbtable;
 extern struct	divstat		divstat;
 
 void	 divert_init(void);
-void	 divert_input(struct mbuf *, ...);
+void	 divert_input(struct mbuf *, int, int);
 int	 divert_packet(struct mbuf *, int, u_int16_t);
 int	 divert_sysctl(int *, u_int, void *, size_t *, void *, size_t);
 int	 divert_usrreq(struct socket *,
