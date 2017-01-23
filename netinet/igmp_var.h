@@ -110,7 +110,7 @@ igmpstat_inc(enum igmpstat_counters c)
 #define	IGMP_RANDOM_DELAY(X)	(arc4random_uniform(X) + 1)
 
 void	igmp_init(void);
-void	igmp_input(struct mbuf *, ...);
+void	igmp_input(struct mbuf *, int, int);
 void	igmp_joingroup(struct in_multi *);
 void	igmp_leavegroup(struct in_multi *);
 void	igmp_fasttimo(void);
