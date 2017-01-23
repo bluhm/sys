@@ -716,17 +716,11 @@ in_gif_output(struct ifnet *ifp, int family, struct mbuf **m0)
 }
 
 void
-in_gif_input(struct mbuf *m, ...)
+in_gif_input(struct mbuf *m, int off, int proto)
 {
-	int off;
 	struct gif_softc *sc;
 	struct ifnet *gifp = NULL;
 	struct ip *ip;
-	va_list ap;
-
-	va_start(ap, m);
-	off = va_arg(ap, int);
-	va_end(ap);
 
 	/* IP-in-IP header is caused by tunnel mode, so skip gif lookup */
 	if (m->m_flags & M_TUNNEL) {
