@@ -405,7 +405,7 @@ ip_etherip_output(struct ifnet *ifp, struct mbuf *m)
 }
 
 void
-ip_etherip_input(struct mbuf *m, ...)
+ip_etherip_input(struct mbuf *m, int off, int proto)
 {
 	struct mbuf_list ml = MBUF_LIST_INITIALIZER();
 	struct etherip_softc *sc;
@@ -413,12 +413,6 @@ ip_etherip_input(struct mbuf *m, ...)
 	struct etherip_header *eip;
 	struct sockaddr_in *src, *dst;
 	struct ifnet *ifp = NULL;
-	int off;
-	va_list ap;
-
-	va_start(ap, m);
-	off = va_arg(ap, int);
-	va_end(ap);
 
 	ip = mtod(m, struct ip *);
 
@@ -458,7 +452,7 @@ ip_etherip_input(struct mbuf *m, ...)
 		 * This is tricky but the path will be removed soon when
 		 * implementation of etherip is removed from gif(4).
 		 */
-		etherip_input(m, off);
+		etherip_input(m, off, proto);
 #else
 		etheripstat.etherip_noifdrops++;
 		m_freem(m);
