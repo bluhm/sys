@@ -256,19 +256,13 @@ gre_input(struct mbuf *m, int hlen, int proto)
  */
 
 void
-gre_mobile_input(struct mbuf *m, ...)
+gre_mobile_input(struct mbuf *m, int hlen, int proto)
 {
 	struct ip *ip;
 	struct mobip_h *mip;
 	struct gre_softc *sc;
-	int hlen;
-	va_list ap;
 	u_char osrc = 0;
 	int msiz;
-
-	va_start(ap, m);
-	hlen = va_arg(ap, int);
-	va_end(ap);
 
 	if (!ip_mobile_allow) {
 	        m_freem(m);
