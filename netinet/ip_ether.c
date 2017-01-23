@@ -89,17 +89,11 @@ struct etheripstat etheripstat;
  * Only a wrapper for the IPv4 case.
  */
 void
-etherip_input(struct mbuf *m, ...)
+etherip_input(struct mbuf *m, int iphlen, int proto)
 {
 	struct ip *ip;
-	va_list ap;
-	int iphlen;
 
 	ip = mtod(m, struct ip *);
-
-	va_start(ap, m);
-	iphlen = va_arg(ap, int);
-	va_end(ap);
 
 	switch (ip->ip_p) {
 #if NBRIDGE > 0
