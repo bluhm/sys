@@ -1,4 +1,4 @@
-/*	$OpenBSD: raw_usrreq.c,v 1.27 2016/12/19 08:36:49 mpi Exp $	*/
+/*	$OpenBSD: raw_usrreq.c,v 1.28 2017/01/23 16:31:24 bluhm Exp $	*/
 /*	$NetBSD: raw_usrreq.c,v 1.11 1996/02/13 22:00:43 christos Exp $	*/
 
 /*
