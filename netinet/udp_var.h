@@ -142,7 +142,7 @@ int	udp6_input(struct mbuf **, int *, int);
 #endif /* INET6 */
 void	 *udp_ctlinput(int, struct sockaddr *, u_int, void *);
 void	 udp_init(void);
-void	 udp_input(struct mbuf *, ...);
+void	 udp_input(struct mbuf *, int, int);
 #ifdef INET6
 int	 udp6_output(struct inpcb *, struct mbuf *, struct mbuf *,
 	struct mbuf *);
