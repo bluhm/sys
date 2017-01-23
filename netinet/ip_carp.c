@@ -412,15 +412,9 @@ carp_hmac_verify(struct carp_vhost_entry *vhe, u_int32_t counter[2],
 }
 
 void
-carp_proto_input(struct mbuf *m, ...)
+carp_proto_input(struct mbuf *m, int hlen, int proto)
 {
 	struct ifnet *ifp;
-	int hlen;
-	va_list ap;
-
-	va_start(ap, m);
-	hlen = va_arg(ap, int);
-	va_end(ap);
 
 	ifp = if_get(m->m_pkthdr.ph_ifidx);
 	if (ifp == NULL) {
