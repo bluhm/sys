@@ -635,7 +635,7 @@ pfsync_state_import(struct pfsync_state *sp, int flags)
 }
 
 void
-pfsync_input(struct mbuf *m, ...)
+pfsync_input(struct mbuf *m, int iphlen, int proto)
 {
 	struct pfsync_softc *sc = pfsyncif;
 	struct ip *ip = mtod(m, struct ip *);
