@@ -761,7 +761,7 @@ in_gif_input(struct mbuf *m, int off, int proto)
 	}
 
 inject:
-	ip4_input(m, off); /* No GIF interface was configured */
+	ip4_input(m, off, proto); /* No GIF interface was configured */
 	return;
 }
 
