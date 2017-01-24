@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_descrip.c,v 1.136 2016/09/24 18:39:17 tedu Exp $	*/
+/*	$OpenBSD: kern_descrip.c,v 1.138 2017/01/23 23:22:00 mpi Exp $	*/
 /*	$NetBSD: kern_descrip.c,v 1.42 1996/03/30 22:24:38 christos Exp $	*/
 
 /*
@@ -835,6 +835,16 @@ fdexpand(struct proc *p)
 		nfiles = 2 * fdp->fd_nfiles;
 
 	newofile = mallocarray(nfiles, OFILESIZE, M_FILEDESC, M_WAITOK);
+	/*
+	 * Allocate all required chunks before calling free(9) to make
+	 * sure that ``fd_ofiles'' stays valid if we go to sleep.
+	 */
+	if (NDHISLOTS(nfiles) > NDHISLOTS(fdp->fd_nfiles)) {
+		newhimap = mallocarray(NDHISLOTS(nfiles), sizeof(u_int),
+		    M_FILEDESC, M_WAITOK);
+		newlomap = mallocarray(NDLOSLOTS(nfiles), sizeof(u_int),
+		    M_FILEDESC, M_WAITOK);
+	}
 	newofileflags = (char *) &newofile[nfiles];
 
 	/*
@@ -853,11 +863,6 @@ fdexpand(struct proc *p)
 		free(fdp->fd_ofiles, M_FILEDESC, fdp->fd_nfiles * OFILESIZE);
 
 	if (NDHISLOTS(nfiles) > NDHISLOTS(fdp->fd_nfiles)) {
-		newhimap = mallocarray(NDHISLOTS(nfiles), sizeof(u_int),
-		    M_FILEDESC, M_WAITOK);
-		newlomap = mallocarray(NDLOSLOTS(nfiles), sizeof(u_int),
-		    M_FILEDESC, M_WAITOK);
-
 		copylen = NDHISLOTS(fdp->fd_nfiles) * sizeof(u_int);
 		memcpy(newhimap, fdp->fd_himap, copylen);
 		memset((char *)newhimap + copylen, 0,
@@ -1253,8 +1258,10 @@ filedescopen(dev_t dev, int mode, int type, struct proc *p)
  * Duplicate the specified descriptor to a free descriptor.
  */
 int
-dupfdopen(struct filedesc *fdp, int indx, int dfd, int mode)
+dupfdopen(struct proc *p, int indx, int mode)
 {
+	struct filedesc *fdp = p->p_fd;
+	int dupfd = p->p_dupfd;
 	struct file *wfp;
 
 	fdpassertlocked(fdp);
@@ -1263,10 +1270,10 @@ dupfdopen(struct filedesc *fdp, int indx, int dfd, int mode)
 	 * Assume that the filename was user-specified; applications do
 	 * not tend to open /dev/fd/# when they can just call dup()
 	 */
-	if ((curproc->p_p->ps_flags & (PS_SUGIDEXEC | PS_SUGID))) {
-		if (curproc->p_descfd == 255)
+	if ((p->p_p->ps_flags & (PS_SUGIDEXEC | PS_SUGID))) {
+		if (p->p_descfd == 255)
 			return (EPERM);
-		if (curproc->p_descfd != curproc->p_dupfd)
+		if (p->p_descfd != dupfd)
 			return (EPERM);
 	}
 
@@ -1277,7 +1284,7 @@ dupfdopen(struct filedesc *fdp, int indx, int dfd, int mode)
 	 * because fd_getfile will return NULL if the file at indx is
 	 * newly created by falloc (FIF_LARVAL).
 	 */
-	if ((wfp = fd_getfile(fdp, dfd)) == NULL)
+	if ((wfp = fd_getfile(fdp, dupfd)) == NULL)
 		return (EBADF);
 
 	/*
@@ -1291,7 +1298,7 @@ dupfdopen(struct filedesc *fdp, int indx, int dfd, int mode)
 
 	fdp->fd_ofiles[indx] = wfp;
 	fdp->fd_ofileflags[indx] = (fdp->fd_ofileflags[indx] & UF_EXCLOSE) |
-	    (fdp->fd_ofileflags[dfd] & ~UF_EXCLOSE);
+	    (fdp->fd_ofileflags[dupfd] & ~UF_EXCLOSE);
 	wfp->f_count++;
 	fd_used(fdp, indx);
 	return (0);
