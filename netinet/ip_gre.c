@@ -269,7 +269,7 @@ gre_mobile_input(struct mbuf *m, int hlen, int proto)
 		return;
 	}
 
-	if ((sc = gre_lookup(m, IPPROTO_MOBILE)) == NULL) {
+	if ((sc = gre_lookup(m, proto)) == NULL) {
 		/* No matching tunnel or tunnel is down. */
 		m_freem(m);
 		return;
