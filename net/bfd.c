@@ -1,4 +1,4 @@
-/*	$OpenBSD: bfd.c,v 1.55 2017/01/22 00:39:45 phessler Exp $	*/
+/*	$OpenBSD: bfd.c,v 1.58 2017/01/24 10:08:30 krw Exp $	*/
 
 /*
  * Copyright (c) 2016 Peter Hessler <phessler@openbsd.org>
@@ -375,7 +375,7 @@ bfd_start_task(void *arg)
 	bfd->bc_sosend = bfd_sender(bfd, BFD_UDP_PORT_CONTROL);
 	if (bfd->bc_sosend) {
 		task_set(&bfd->bc_bfd_send_task, bfd_send_task, bfd);
-		task_add(bfdtq, &bfd->bc_bfd_send_task);	
+		task_add(bfdtq, &bfd->bc_bfd_send_task);
 	}
 
 	return;
@@ -443,17 +443,6 @@ bfd_listener(struct bfd_config *bfd, unsigned int port)
 		goto close;
 	}
 
-	MGET(mopt, M_WAIT, MT_SOOPTS);
-	mopt->m_len = sizeof(int);
-	ip = mtod(mopt, int *);
-	*ip = IPTOS_PREC_INTERNETCONTROL;
-	error = sosetopt(so, IPPROTO_IP, IP_TOS, mopt);
-	if (error) {
-		printf("%s: sosetopt error %d\n",
-		    __func__, error);
-		goto close;
-	}
-
 	MGET(m, M_WAIT, MT_SONAME);
 	m->m_len = src->sa_len;
 	sa = mtod(m, struct sockaddr *);
@@ -495,7 +484,7 @@ bfd_listener(struct bfd_config *bfd, unsigned int port)
 struct socket *
 bfd_sender(struct bfd_config *bfd, unsigned int port)
 {
-	struct socket 		*so;
+	struct socket		*so;
 	struct rtentry		*rt = bfd->bc_rt;
 	struct proc		*p = curproc;
 	struct mbuf		*m = NULL, *mopt = NULL;
@@ -531,6 +520,17 @@ bfd_sender(struct bfd_config *bfd, unsigned int port)
 	ip = mtod(mopt, int *);
 	*ip = MAXTTL;
 	error = sosetopt(so, IPPROTO_IP, IP_TTL, mopt);
+	if (error) {
+		printf("%s: sosetopt error %d\n",
+		    __func__, error);
+		goto close;
+	}
+
+	MGET(mopt, M_WAIT, MT_SOOPTS);
+	mopt->m_len = sizeof(int);
+	ip = mtod(mopt, int *);
+	*ip = IPTOS_PREC_INTERNETCONTROL;
+	error = sosetopt(so, IPPROTO_IP, IP_TOS, mopt);
 	if (error) {
 		printf("%s: sosetopt error %d\n",
 		    __func__, error);
@@ -638,7 +638,7 @@ void
 bfd_timeout_tx(void *v)
 {
 	struct bfd_config *bfd = v;
-	task_add(bfdtq, &bfd->bc_bfd_send_task);	
+	task_add(bfdtq, &bfd->bc_bfd_send_task);
 }
 
 /*
@@ -649,8 +649,10 @@ bfd_timeout_rx(void *v)
 {
 	struct bfd_config *bfd = v;
 
-	bfd_error(bfd);
-	rt_bfdmsg(bfd);
+	if (bfd->bc_state > BFD_STATE_DOWN) {
+		bfd_error(bfd);
+		rt_bfdmsg(bfd);
+	}
 
 	timeout_add_usec(&bfd->bc_timo_rx, bfd->bc_minrx);
 }

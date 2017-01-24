@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.h,v 1.184 2017/01/23 11:37:29 mpi Exp $	*/
+/*	$OpenBSD: if.h,v 1.186 2017/01/24 10:08:30 krw Exp $	*/
 /*	$NetBSD: if.h,v 1.23 1996/05/07 02:40:27 thorpej Exp $	*/
 
 /*
@@ -401,7 +401,7 @@ struct ifmediareq {
 	uint64_t	ifm_current;		/* get/set current media options */
 	uint64_t	ifm_mask;		/* don't care mask */
 	uint64_t	ifm_status;		/* media status */
-	uint64_t	ifm_active;		/* active options */ 
+	uint64_t	ifm_active;		/* active options */
 	int		ifm_count;		/* # entries in ifm_ulist array */
 	uint64_t	*ifm_ulist;		/* media words */
 };
@@ -457,10 +457,13 @@ struct if_parent {
 #ifdef _KERNEL
 struct socket;
 struct ifnet;
+struct ifq_ops;
 
 void	if_alloc_sadl(struct ifnet *);
 void	if_free_sadl(struct ifnet *);
 void	if_attach(struct ifnet *);
+void	if_attach_queues(struct ifnet *, unsigned int);
+void	if_attach_ifq(struct ifnet *, const struct ifq_ops *, void *);
 void	if_attachtail(struct ifnet *);
 void	if_attachhead(struct ifnet *);
 void	if_deactivate(struct ifnet *);
