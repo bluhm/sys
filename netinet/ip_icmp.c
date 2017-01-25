@@ -326,7 +326,7 @@ icmp_input_if(struct ifnet *ifp, struct mbuf *m, int hlen, int proto)
 	struct sockaddr_in sin;
 	int icmplen, i, code;
 	struct in_ifaddr *ia;
-	void *(*ctlfunc)(int, struct sockaddr *, u_int, void *);
+	void (*ctlfunc)(int, struct sockaddr *, u_int, void *);
 	struct mbuf *opts;
 
 	/*
@@ -1053,7 +1053,7 @@ icmp_mtudisc_timeout(struct rtentry *rt, struct rttimer *r)
 		return;
 
 	if ((rt->rt_flags & (RTF_DYNAMIC|RTF_HOST)) == (RTF_DYNAMIC|RTF_HOST)) {
-		void *(*ctlfunc)(int, struct sockaddr *, u_int, void *);
+		void (*ctlfunc)(int, struct sockaddr *, u_int, void *);
 		struct sockaddr_in sin;
 
 		sin = *satosin(rt_key(rt));

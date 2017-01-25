@@ -869,7 +869,7 @@ udp6_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *d)
 }
 #endif
 
-void *
+void
 udp_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 {
 	struct ip *ip = v;
@@ -880,23 +880,23 @@ udp_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 	int errno;
 
 	if (sa == NULL)
-		return NULL;
+		return;
 	if (sa->sa_family != AF_INET ||
 	    sa->sa_len != sizeof(struct sockaddr_in))
-		return NULL;
+		return;
 	faddr = satosin(sa)->sin_addr;
 	if (faddr.s_addr == INADDR_ANY)
-		return NULL;
+		return;
 
 	if ((unsigned)cmd >= PRC_NCMDS)
-		return NULL;
+		return;
 	errno = inetctlerrmap[cmd];
 	if (PRC_IS_REDIRECT(cmd))
 		notify = in_rtchange, ip = 0;
 	else if (cmd == PRC_HOSTDEAD)
 		ip = 0;
 	else if (errno == 0)
-		return NULL;
+		return;
 	if (ip) {
 		uhp = (struct udphdr *)((caddr_t)ip + (ip->ip_hl << 2));
 
@@ -905,7 +905,7 @@ udp_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 		if (cmd == PRC_MSGSIZE && ip_mtudisc && udpencap_enable &&
 		    udpencap_port && uhp->uh_sport == htons(udpencap_port)) {
 			udpencap_ctlinput(cmd, sa, rdomain, v);
-			return (NULL);
+			return;
 		}
 #endif
 		inp = in_pcbhashlookup(&udbtable,
@@ -915,7 +915,6 @@ udp_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 			notify(inp, errno);
 	} else
 		in_pcbnotifyall(&udbtable, sa, rdomain, errno, notify);
-	return (NULL);
 }
 
 int

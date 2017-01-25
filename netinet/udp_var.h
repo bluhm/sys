@@ -140,7 +140,7 @@ extern struct	udpstat udpstat;
 void	udp6_ctlinput(int, struct sockaddr *, u_int, void *);
 int	udp6_input(struct mbuf **, int *, int);
 #endif /* INET6 */
-void	 *udp_ctlinput(int, struct sockaddr *, u_int, void *);
+void	 udp_ctlinput(int, struct sockaddr *, u_int, void *);
 void	 udp_init(void);
 void	 udp_input(struct mbuf *, int, int);
 #ifdef INET6
