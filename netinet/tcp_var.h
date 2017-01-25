@@ -601,7 +601,7 @@ int	 tcp_freeq(struct tcpcb *);
 #ifdef INET6
 void	 tcp6_ctlinput(int, struct sockaddr *, u_int, void *);
 #endif
-void	 *tcp_ctlinput(int, struct sockaddr *, u_int, void *);
+void	 tcp_ctlinput(int, struct sockaddr *, u_int, void *);
 int	 tcp_ctloutput(int, struct socket *, int, int, struct mbuf **);
 struct tcpcb *
 	 tcp_disconnect(struct tcpcb *);
