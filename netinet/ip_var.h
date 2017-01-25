@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_var.h,v 1.65 2016/12/19 09:22:24 rzalamena Exp $	*/
+/*	$OpenBSD: ip_var.h,v 1.66 2017/01/25 17:34:31 bluhm Exp $	*/
 /*	$NetBSD: ip_var.h,v 1.16 1996/02/13 23:43:20 christos Exp $	*/
 
 /*
