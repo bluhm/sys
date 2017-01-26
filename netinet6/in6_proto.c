@@ -135,7 +135,7 @@ struct ip6protosw inet6sw[] = {
   udp_sysctl,
 },
 { SOCK_STREAM,	&inet6domain,	IPPROTO_TCP,	PR_CONNREQUIRED|PR_WANTRCVD|PR_ABRTACPTDIS|PR_SPLICE,
-  tcp6_input,	0,		tcp6_ctlinput,	tcp_ctloutput,
+  tcp_input,	0,		tcp6_ctlinput,	tcp_ctloutput,
   tcp_usrreq,
   0,		0,		0,		0,
   tcp_sysctl,
