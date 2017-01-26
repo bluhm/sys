@@ -72,10 +72,7 @@ struct etherip_header {
 struct tdb;
 
 int	etherip_output(struct mbuf *, struct tdb *, struct mbuf **, int);
-void	etherip_input(struct mbuf *, int, int);
-#ifdef INET6
-int	etherip_input6(struct mbuf **, int *, int);
-#endif
+int	etherip_input(struct mbuf **, int *, int);
 int	etherip_sysctl(int *, u_int, void *, size_t *, void *, size_t);
 
 extern int etherip_allow;
