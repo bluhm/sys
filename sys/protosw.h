@@ -69,7 +69,7 @@ struct protosw {
 
 /* protocol-protocol hooks */
 					/* input to protocol (from below) */
-	void	(*pr_input)(struct mbuf *, int, int);
+	int	(*pr_input)(struct mbuf **, int *, int);
 					/* output to protocol (from above) */
 	int	(*pr_output)(struct mbuf *, ...);
 					/* control input (from below) */
