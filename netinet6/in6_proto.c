@@ -188,7 +188,7 @@ struct ip6protosw inet6sw[] = {
 #endif /* IPSEC */
 #if NGIF > 0
 { SOCK_RAW,	&inet6domain,	IPPROTO_ETHERIP,PR_ATOMIC|PR_ADDR,
-  etherip_input6, rip6_output,	0,		rip6_ctloutput,
+  etherip_input, rip6_output,	0,		rip6_ctloutput,
   rip6_usrreq,
   0,		0,		0,		0,		etherip_sysctl
 },
