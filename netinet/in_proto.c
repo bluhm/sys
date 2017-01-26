@@ -289,7 +289,7 @@ struct protosw inetsw[] = {
 #endif /* NPFSYNC > 0 */
 #if NPF > 0
 { SOCK_RAW,	&inetdomain,	IPPROTO_DIVERT,	PR_ATOMIC|PR_ADDR,
-  divert_input,	0,		0,		rip_ctloutput,
+  0,		0,		0,		rip_ctloutput,
   divert_usrreq,
   divert_init,	0,		0,		0,		divert_sysctl
 },
