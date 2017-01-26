@@ -223,7 +223,7 @@ struct ip6protosw inet6sw[] = {
 #endif /* NCARP */
 #if NPF > 0
 { SOCK_RAW,	&inet6domain,	IPPROTO_DIVERT,	PR_ATOMIC|PR_ADDR,
-  divert6_input,	0,		0,	rip6_ctloutput,
+  0,		0,		0,	rip6_ctloutput,
   divert6_usrreq,
   divert6_init,	0,		0,		0,		divert6_sysctl
 },
