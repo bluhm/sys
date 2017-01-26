@@ -475,14 +475,10 @@ int	ipe4_attach(void);
 int	ipe4_init(struct tdb *, struct xformsw *, struct ipsecinit *);
 int	ipe4_zeroize(struct tdb *);
 void	ipe4_input(struct mbuf *, int, int);
-void	ipip_input(struct mbuf *, int, struct ifnet *, int);
+int	ipip_input(struct mbuf **, int *, struct ifnet *, int);
 int	ipip_output(struct mbuf *, struct tdb *, struct mbuf **, int, int);
 
-void	ip4_input(struct mbuf *, int, int);
-
-#ifdef INET6
-int	ip4_input6(struct mbuf **, int *, int);
-#endif /* INET6 */
+int	ip4_input(struct mbuf **, int *, int);
 
 /* XF_AH */
 int 	ah_attach(void);

@@ -49,7 +49,7 @@ extern LIST_HEAD(gif_softc_head, gif_softc) gif_softc_list;
 
 int gif_encap(struct ifnet *, struct mbuf **, sa_family_t);
 
-void in_gif_input(struct mbuf *, int, int);
+int in_gif_input(struct mbuf **, int *, int);
 int in6_gif_input(struct mbuf **, int *, int);
 
 #endif /* _NET_IF_GIF_H_ */
