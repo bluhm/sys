@@ -148,7 +148,7 @@ ipsec_common_input(struct mbuf *m, int skip, int protoff, int af, int sproto,
 	    (sproto == IPPROTO_IPCOMP && !ipcomp_enable)) {
 		switch (af) {
 		case AF_INET:
-			rip_input(m, skip, sproto);
+			rip_input(&m, &skip, sproto);
 			break;
 #ifdef INET6
 		case AF_INET6:
