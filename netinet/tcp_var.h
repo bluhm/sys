@@ -610,10 +610,7 @@ struct tcpcb *
 int	 tcp_dooptions(struct tcpcb *, u_char *, int, struct tcphdr *,
 		struct mbuf *, int, struct tcp_opt_info *, u_int);
 void	 tcp_init(void);
-#ifdef INET6
-int	 tcp6_input(struct mbuf **, int *, int);
-#endif
-void	 tcp_input(struct mbuf *, int, int);
+int	 tcp_input(struct mbuf **, int *, int);
 int	 tcp_mss(struct tcpcb *, int);
 void	 tcp_mss_update(struct tcpcb *);
 u_int	 tcp_hdrsz(struct tcpcb *);

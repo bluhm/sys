@@ -920,8 +920,8 @@ ip6_unknown_opt(u_int8_t *optp, struct mbuf *m, int off)
 /*
  * Create the "control" list for this pcb.
  *
- * The routine will be called from upper layer handlers like tcp6_input().
- * Thus the routine assumes that the caller (tcp6_input) have already
+ * The routine will be called from upper layer handlers like udp_input().
+ * Thus the routine assumes that the caller (udp_input) have already
  * called IP6_EXTHDR_CHECK() and all the extension headers are located in the
  * very first mbuf on the mbuf chain.
  * We may want to add some infinite loop prevention or sanity checks for safety.
