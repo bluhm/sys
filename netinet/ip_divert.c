@@ -71,12 +71,6 @@ divert_init(void)
 	in_pcbinit(&divbtable, divbhashsize);
 }
 
-void
-divert_input(struct mbuf *m, int iphlen, int proto)
-{
-	m_freem(m);
-}
-
 int
 divert_output(struct inpcb *inp, struct mbuf *m, struct mbuf *nam,
     struct mbuf *control)
