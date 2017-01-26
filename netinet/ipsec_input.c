@@ -696,12 +696,12 @@ ipcomp_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 }
 
 /* IPv4 AH wrapper. */
-void
-ah4_input(struct mbuf *m, int skip, int proto)
+int
+ah4_input(struct mbuf **mp, int *offp, int proto)
 {
-	ipsec_common_input(m, skip, offsetof(struct ip, ip_p), AF_INET,
-	    IPPROTO_AH, 0);
-	return;
+	ipsec_common_input(*mp, *offp, offsetof(struct ip, ip_p), AF_INET,
+	    proto, 0);
+	return IPPROTO_DONE;
 }
 
 /* IPv4 AH callback. */
@@ -736,11 +736,12 @@ ah4_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 }
 
 /* IPv4 ESP wrapper. */
-void
-esp4_input(struct mbuf *m, int skip, int proto)
+int
+esp4_input(struct mbuf **mp, int *offp, int proto)
 {
-	ipsec_common_input(m, skip, offsetof(struct ip, ip_p), AF_INET,
-	    IPPROTO_ESP, 0);
+	ipsec_common_input(*mp, *offp, offsetof(struct ip, ip_p), AF_INET,
+	    proto, 0);
+	return IPPROTO_DONE;
 }
 
 /* IPv4 ESP callback. */

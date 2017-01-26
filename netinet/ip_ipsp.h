@@ -488,7 +488,7 @@ int	ah_input(struct mbuf *, struct tdb *, int, int);
 int	ah_output(struct mbuf *, struct tdb *, struct mbuf **, int, int);
 int	ah_sysctl(int *, u_int, void *, size_t *, void *, size_t);
 
-void	ah4_input(struct mbuf *, int, int);
+int	ah4_input(struct mbuf **, int *, int);
 void	ah4_ctlinput(int, struct sockaddr *, u_int, void *);
 void	udpencap_ctlinput(int, struct sockaddr *, u_int, void *);
 
@@ -504,7 +504,7 @@ int	esp_input(struct mbuf *, struct tdb *, int, int);
 int	esp_output(struct mbuf *, struct tdb *, struct mbuf **, int, int);
 int	esp_sysctl(int *, u_int, void *, size_t *, void *, size_t);
 
-void	esp4_input(struct mbuf *, int, int);
+int	esp4_input(struct mbuf **, int *, int);
 void	esp4_ctlinput(int, struct sockaddr *, u_int, void *);
 
 #ifdef INET6
