@@ -204,12 +204,12 @@ struct ip6protosw inet6sw[] = {
 },
 #else /* NGIF */
 { SOCK_RAW,	&inet6domain,	IPPROTO_IPV6,	PR_ATOMIC|PR_ADDR,
-  ip4_input6,	rip6_output,	0,		rip6_ctloutput,
+  ip4_input,	rip6_output,	0,		rip6_ctloutput,
   rip6_usrreq,	/* XXX */
   0,		0,		0,		0,		ipip_sysctl
 },
 { SOCK_RAW,	&inet6domain,	IPPROTO_IPV4,	PR_ATOMIC|PR_ADDR,
-  ip4_input6,	rip6_output,	0,		rip6_ctloutput,
+  ip4_input,	rip6_output,	0,		rip6_ctloutput,
   rip6_usrreq,	/* XXX */
   0,		0,		0,		0,
 },
