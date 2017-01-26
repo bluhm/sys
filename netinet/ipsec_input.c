@@ -763,11 +763,12 @@ esp4_input_cb(struct mbuf *m, ...)
 }
 
 /* IPv4 IPCOMP wrapper */
-void
-ipcomp4_input(struct mbuf *m, int skip, int proto)
+int
+ipcomp4_input(struct mbuf **mp, int *offp, int proto)
 {
-	ipsec_common_input(m, skip, offsetof(struct ip, ip_p), AF_INET,
-	    IPPROTO_IPCOMP, 0);
+	ipsec_common_input(*mp, *offp, offsetof(struct ip, ip_p), AF_INET,
+	    proto, 0);
+	return IPPROTO_DONE;
 }
 
 /* IPv4 IPCOMP callback */

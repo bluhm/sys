@@ -518,9 +518,7 @@ int	ipcomp_zeroize(struct tdb *);
 int	ipcomp_input(struct mbuf *, struct tdb *, int, int);
 int	ipcomp_output(struct mbuf *, struct tdb *, struct mbuf **, int, int);
 int	ipcomp_sysctl(int *, u_int, void *, size_t *, void *, size_t);
-
-void	ipcomp4_input(struct mbuf *, int, int);
-
+int	ipcomp4_input(struct mbuf **, int *, int);
 #ifdef INET6
 int	ipcomp6_input(struct mbuf **, int *, int);
 #endif /* INET6 */
