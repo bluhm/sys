@@ -74,14 +74,6 @@ divert6_init(void)
 }
 
 int
-divert6_input(struct mbuf **mp, int *offp, int proto)
-{
-	m_freem(*mp);
-
-	return (0);
-}
-
-int
 divert6_output(struct inpcb *inp, struct mbuf *m, struct mbuf *nam,
     struct mbuf *control)
 {
