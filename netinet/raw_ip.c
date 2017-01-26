@@ -115,9 +115,10 @@ rip_init(void)
 
 struct sockaddr_in ripsrc = { sizeof(ripsrc), AF_INET };
 
-void
-rip_input(struct mbuf *m, int hlen, int proto)
+int
+rip_input(struct mbuf **mp, int *offp, int proto)
 {
+	struct mbuf *m = *mp;
 	struct ip *ip = mtod(m, struct ip *);
 	struct inpcb *inp, *last = NULL;
 	struct mbuf *opts = NULL;
@@ -198,6 +199,7 @@ rip_input(struct mbuf *m, int hlen, int proto)
 		counters[ips_delivered]--;
 		counters_leave(&ref, ipcounters);
 	}
+	return IPPROTO_DONE;
 }
 
 /*
