@@ -64,12 +64,10 @@
 }
 
 #ifdef _KERNEL
-void gre_input(struct mbuf *, int, int);
-void gre_mobile_input(struct mbuf *, int, int);
-
+int	gre_input(struct mbuf **, int *, int);
+int	gre_mobile_input(struct mbuf **, int *, int);
 int     ipmobile_sysctl(int *, u_int, void *, size_t *, void *, size_t);
 int     gre_sysctl(int *, u_int, void *, size_t *, void *, size_t);
 int     gre_usrreq(struct socket *, int, struct mbuf *, struct mbuf *, struct mbuf *, struct proc *);
-
 #endif /* _KERNEL */
 #endif /* _NETINET_IP_GRE_H_ */
