@@ -415,7 +415,7 @@ sosend(struct socket *so, struct mbuf *addr, struct uio *uio, struct mbuf *top,
 		    mtod(control, struct cmsghdr *)->cmsg_type == SCM_RIGHTS)
 			clen = CMSG_SPACE(
 			    (clen - CMSG_ALIGN(sizeof(struct cmsghdr))) *
-			    (sizeof(struct file *) / sizeof(int)));
+			    (sizeof(struct fdpass) / sizeof(int)));
 	}
 
 #define	snderr(errno)	{ error = errno; NET_UNLOCK(s); goto release; }
