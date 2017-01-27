@@ -138,16 +138,16 @@ static struct task ip6send_task =
 void
 ip6_init(void)
 {
-	struct ip6protosw *pr;
+	struct protosw *pr;
 	int i;
 
-	pr = (struct ip6protosw *)pffindproto(PF_INET6, IPPROTO_RAW, SOCK_RAW);
+	pr = pffindproto(PF_INET6, IPPROTO_RAW, SOCK_RAW);
 	if (pr == NULL)
 		panic("ip6_init");
 	for (i = 0; i < IPPROTO_MAX; i++)
 		ip6_protox[i] = pr - inet6sw;
-	for (pr = (struct ip6protosw *)inet6domain.dom_protosw;
-	    pr < (struct ip6protosw *)inet6domain.dom_protoswNPROTOSW; pr++)
+	for (pr = inet6domain.dom_protosw;
+	    pr < inet6domain.dom_protoswNPROTOSW; pr++)
 		if (pr->pr_domain->dom_family == PF_INET6 &&
 		    pr->pr_protocol && pr->pr_protocol != IPPROTO_RAW &&
 		    pr->pr_protocol < IPPROTO_MAX)

@@ -121,7 +121,7 @@
  */
 u_char ip6_protox[IPPROTO_MAX];
 
-struct ip6protosw inet6sw[] = {
+struct protosw inet6sw[] = {
 { 0,		&inet6domain,	IPPROTO_IPV6,	0,
   0,		0,		0,		0,
   0,
