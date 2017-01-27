@@ -86,6 +86,11 @@ struct	unpcb {
 #define	sotounpcb(so)	((struct unpcb *)((so)->so_pcb))
 
 #ifdef _KERNEL
+struct fdpass {
+	struct file	*fp;
+	int		 flags;
+};
+
 int	unp_attach(struct socket *);
 int	unp_bind(struct unpcb *, struct mbuf *, struct proc *);
 int	unp_connect(struct socket *, struct mbuf *, struct proc *);

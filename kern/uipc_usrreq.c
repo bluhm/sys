@@ -56,11 +56,6 @@ void	uipc_setaddr(const struct unpcb *, struct mbuf *);
 /* list of all UNIX domain sockets, for unp_gc() */
 LIST_HEAD(unp_head, unpcb) unp_head = LIST_HEAD_INITIALIZER(unp_head);
 
-struct fdpass {
-	struct file	*fp;
-	int		flags;
-};
-
 /*
  * Stack of sets of files that were passed over a socket but were
  * not received and need to be closed.
