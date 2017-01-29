@@ -176,6 +176,8 @@ pf_purge_expired_fragments(void)
 	struct pf_fragment	*frag;
 	int32_t			 expire;
 
+	NET_ASSERT_LOCKED();
+
 	expire = time_uptime - pf_default_rule.timeout[PFTM_FRAG];
 	while ((frag = TAILQ_LAST(&pf_fragqueue, pf_fragqueue)) != NULL) {
 		if (frag->fr_timeout > expire)
