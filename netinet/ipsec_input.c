@@ -1,4 +1,4 @@
-/*	$OpenBSD: ipsec_input.c,v 1.140 2017/01/26 13:03:47 bluhm Exp $	*/
+/*	$OpenBSD: ipsec_input.c,v 1.141 2017/01/29 19:58:47 bluhm Exp $	*/
 /*
  * The authors of this code are John Ioannidis (ji@tla.org),
  * Angelos D. Keromytis (kermit@csd.uch.gr) and

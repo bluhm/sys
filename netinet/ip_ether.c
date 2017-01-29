@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_ether.c,v 1.82 2017/01/25 17:34:31 bluhm Exp $  */
+/*	$OpenBSD: ip_ether.c,v 1.83 2017/01/29 19:58:47 bluhm Exp $  */
 /*
  * The author of this code is Angelos D. Keromytis (kermit@adk.gr)
  *
