@@ -1,4 +1,4 @@
-/*	$OpenBSD: ieee80211_mira.c,v 1.8 2017/01/12 18:06:57 stsp Exp $	*/
+/*	$OpenBSD: ieee80211_mira.c,v 1.10 2017/01/28 16:01:36 stsp Exp $	*/
 
 /*
  * Copyright (c) 2016 Stefan Sperling <stsp@openbsd.org>
@@ -64,6 +64,7 @@ int	ieee80211_mira_prev_mcs(struct ieee80211_mira_node *,
 	    struct ieee80211_node *);
 int	ieee80211_mira_probe_valid(struct ieee80211_mira_node *,
 	    struct ieee80211_node *);
+void	ieee80211_mira_probe_done(struct ieee80211_mira_node *);
 int	ieee80211_mira_intra_mode_ra_finished(
 	    struct ieee80211_mira_node *, struct ieee80211_node *);
 void	ieee80211_mira_trigger_next_rateset(struct ieee80211_mira_node *mn,
@@ -134,6 +135,17 @@ mira_fp_sprintf(uint64_t fp)
 		return "ERR";
 
 	return buf;
+}
+
+void
+mira_print_driver_stats(struct ieee80211_mira_node *mn,
+    struct ieee80211_node *ni) {
+	DPRINTF(("%s driver stats:\n", ether_sprintf(ni->ni_macaddr)));
+	DPRINTF(("mn->frames = %u\n", mn->frames));
+	DPRINTF(("mn->retries = %u\n", mn->retries));
+	DPRINTF(("mn->txfail = %u\n", mn->txfail));
+	DPRINTF(("mn->ampdu_size = %u\n", mn->ampdu_size));
+	DPRINTF(("mn->agglen = %u\n", mn->agglen));
 }
 #endif /* MIRA_DEBUG */
 
@@ -427,12 +439,33 @@ ieee80211_mira_update_stats(struct ieee80211_mira_node *mn,
 
 	/* Compute Sub-Frame Error Rate (see section 2.2 in MiRA paper). */
 	sfer = (mn->frames * mn->retries + mn->txfail);
-	if ((sfer >> MIRA_FP_SHIFT) != 0)
-		panic("sfer overflow"); /* bug in wifi driver */
+	if ((sfer >> MIRA_FP_SHIFT) != 0) { /* bug in wifi driver */
+		if (ic->ic_if.if_flags & IFF_DEBUG) {
+#ifdef DIAGNOSTIC
+			printf("%s: mira sfer overflow\n",
+			    ether_sprintf(ni->ni_macaddr));
+#endif
+#ifdef MIRA_DEBUG
+			mira_print_driver_stats(mn, ni);
+#endif
+		}
+		ieee80211_mira_probe_done(mn);
+		return;
+	}
 	sfer <<= MIRA_FP_SHIFT; /* convert to fixed-point */
 	sfer /= ((mn->retries + 1) * mn->frames);
-	if (sfer > MIRA_FP_1)
-		panic("sfer > 1"); /* bug in wifi driver */
+	if (sfer > MIRA_FP_1) { /* bug in wifi driver */
+		if (ic->ic_if.if_flags & IFF_DEBUG) {
+#ifdef DIAGNOSTIC
+			printf("%s: mira sfer > 1\n",
+			    ether_sprintf(ni->ni_macaddr));
+#endif
+#ifdef MIRA_DEBUG
+			mira_print_driver_stats(mn, ni);
+#endif
+		}
+		sfer = MIRA_FP_1; /* round down */
+	}
 
 	/* Store current loss percentage SFER. */
 	g->loss = sfer * 100;
@@ -704,6 +737,16 @@ ieee80211_mira_probe_valid(struct ieee80211_mira_node *mn,
 
 	return (g->nprobes >= IEEE80211_MIRA_MIN_PROBE_FRAMES ||
 	    g->nprobe_bytes >= IEEE80211_MIRA_MIN_PROBE_BYTES);
+}
+
+void
+ieee80211_mira_probe_done(struct ieee80211_mira_node *mn)
+{
+	ieee80211_mira_cancel_timeouts(mn);
+	ieee80211_mira_reset_driver_stats(mn);
+	mn->probing = IEEE80211_MIRA_NOT_PROBING;
+	mn->probed_rates = 0;
+	mn->candidate_rates = 0;
 }
 
 int
@@ -993,13 +1036,10 @@ ieee80211_mira_choose(struct ieee80211_mira_node *mn, struct ieee80211com *ic,
 	if (mn->valid_rates == 0)
 		mn->valid_rates = ieee80211_mira_valid_rates(ic, ni);
 
-	DPRINTFN(5, ("%s: driver stats:\n", __func__));
-	DPRINTFN(5, ("mn->frames = %u\n", mn->frames));
-	DPRINTFN(5, ("mn->retries = %u\n", mn->retries));
-	DPRINTFN(5, ("mn->txfail = %u\n", mn->txfail));
-	DPRINTFN(5, ("mn->ampdu_size = %u\n", mn->ampdu_size));
-	DPRINTFN(5, ("mn->agglen = %u\n", mn->agglen));
-
+#ifdef MIRA_DEBUG
+	if (mira_debug >= 5)
+		mira_print_driver_stats(mn, ni);
+#endif
 	ieee80211_mira_update_stats(mn, ic, ni);
 
 	if (mn->probing) {
@@ -1012,8 +1052,6 @@ ieee80211_mira_choose(struct ieee80211_mira_node *mn, struct ieee80211com *ic,
 			DPRINTFN(4, ("probing MCS %d\n", ni->ni_txmcs));
 		} else if (ieee80211_mira_inter_mode_ra_finished(mn, ni)) {
 			int best = ieee80211_mira_best_rate(mn, ni);
-			mn->probing = IEEE80211_MIRA_NOT_PROBING;
-			mn->probed_rates = 0;
 			if (mn->best_mcs != best) {
 				mn->best_mcs = best;
 				ni->ni_txmcs = best;
@@ -1024,7 +1062,7 @@ ieee80211_mira_choose(struct ieee80211_mira_node *mn, struct ieee80211com *ic,
 				mn->g[best].nprobe_bytes = 0;
 			} else
 				ni->ni_txmcs = mn->best_mcs;
-
+			ieee80211_mira_probe_done(mn);
 		}
 
 		splx(s);
@@ -1079,6 +1117,7 @@ ieee80211_mira_choose(struct ieee80211_mira_node *mn, struct ieee80211com *ic,
 		/* Remain at current rate. */
 		mn->probing = IEEE80211_MIRA_NOT_PROBING;
 		mn->probed_rates = 0;
+		mn->candidate_rates = 0;
 	}
 
 	splx(s);
