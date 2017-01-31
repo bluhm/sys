@@ -1,4 +1,4 @@
-/*	$OpenBSD: ar5008.c,v 1.39 2017/01/22 10:17:37 dlg Exp $	*/
+/*	$OpenBSD: ar5008.c,v 1.41 2017/01/30 10:57:00 stsp Exp $	*/
 
 /*-
  * Copyright (c) 2009 Damien Bergamini <damien.bergamini@free.fr>
@@ -1500,7 +1500,9 @@ ar5008_tx(struct athn_softc *sc, struct mbuf *m, struct ieee80211_node *ni,
 	ds->ds_ctl6 = SM(AR_TXC6_ENCR_TYPE, encrtype);
 
 	/* Check if frame must be protected using RTS/CTS or CTS-to-self. */
-	if (!IEEE80211_IS_MULTICAST(wh->i_addr1)) {
+	if (!IEEE80211_IS_MULTICAST(wh->i_addr1) &&
+	    (wh->i_fc[0] & IEEE80211_FC0_TYPE_MASK) ==
+	    IEEE80211_FC0_TYPE_DATA) {
 		enum ieee80211_htprot htprot;
 		
 		htprot = (ic->ic_bss->ni_htop1 & IEEE80211_HTOP1_PROT_MASK);
@@ -1509,7 +1511,7 @@ ar5008_tx(struct athn_softc *sc, struct mbuf *m, struct ieee80211_node *ni,
 			ds->ds_ctl0 |= AR_TXC0_RTS_ENABLE;
 		} else if (((ic->ic_flags & IEEE80211_F_USEPROT) &&
 		    athn_rates[ridx[0]].phy == IEEE80211_T_OFDM) ||
-		    ((ic->ic_flags & IEEE80211_F_HTON) &&
+		    ((ni->ni_flags & IEEE80211_NODE_HT) &&
 		    htprot != IEEE80211_HTPROT_NONE)) {
 			if (ic->ic_protmode == IEEE80211_PROT_RTSCTS)
 				ds->ds_ctl0 |= AR_TXC0_RTS_ENABLE;
