@@ -1124,8 +1124,13 @@ icmp6_rip6_input(struct mbuf **mp, int off)
 		} else
 			sorwakeup(last->inp_socket);
 	} else {
+		struct counters_ref ref;
+		uint64_t *counters;
+
 		m_freem(m);
-		ip6stat.ip6s_delivered--;
+		counters = counters_enter(&ref, ip6counters);
+		counters[ip6s_delivered]--;
+		counters_leave(&ref, ip6counters);
 	}
 	return IPPROTO_DONE;
 }

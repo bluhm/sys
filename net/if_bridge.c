@@ -1692,7 +1692,7 @@ bridge_ip(struct bridge_softc *sc, int dir, struct ifnet *ifp,
 		if (m->m_len < sizeof(struct ip6_hdr)) {
 			if ((m = m_pullup(m, sizeof(struct ip6_hdr)))
 			    == NULL) {
-				ip6stat.ip6s_toosmall++;
+				ip6stat_inc(ip6s_toosmall);
 				return (NULL);
 			}
 		}
@@ -1700,7 +1700,7 @@ bridge_ip(struct bridge_softc *sc, int dir, struct ifnet *ifp,
 		ip6 = mtod(m, struct ip6_hdr *);
 
 		if ((ip6->ip6_vfc & IPV6_VERSION_MASK) != IPV6_VERSION) {
-			ip6stat.ip6s_badvers++;
+			ip6stat_inc(ip6s_badvers);
 			goto dropit;
 		}
 

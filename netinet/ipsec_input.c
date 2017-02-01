@@ -985,7 +985,7 @@ ah6_input_cb(struct mbuf *m, int off, int protoff)
 	 */
 	while (nxt != IPPROTO_DONE) {
 		if (ip6_hdrnestlimit && (++nest > ip6_hdrnestlimit)) {
-			ip6stat.ip6s_toomanyhdr++;
+			ip6stat_inc(ip6s_toomanyhdr);
 			goto bad;
 		}
 
@@ -994,7 +994,7 @@ ah6_input_cb(struct mbuf *m, int off, int protoff)
 		 * more sanity checks in header chain processing.
 		 */
 		if (m->m_pkthdr.len < off) {
-			ip6stat.ip6s_tooshort++;
+			ip6stat_inc(ip6s_tooshort);
 			goto bad;
 		}
 		nxt = (*inet6sw[ip6_protox[nxt]].pr_input)(&m, &off, nxt);

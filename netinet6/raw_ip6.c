@@ -211,6 +211,9 @@ rip6_input(struct mbuf **mp, int *offp, int proto)
 		} else
 			sorwakeup(last->inp_socket);
 	} else {
+		struct counters_ref ref;
+		uint64_t *counters;
+
 		rip6stat.rip6s_nosock++;
 		if (m->m_flags & M_MCAST)
 			rip6stat.rip6s_nosockmcast++;
@@ -222,7 +225,9 @@ rip6_input(struct mbuf **mp, int *offp, int proto)
 			    ICMP6_PARAMPROB_NEXTHEADER,
 			    prvnxtp - mtod(m, u_int8_t *));
 		}
-		ip6stat.ip6s_delivered--;
+		counters = counters_enter(&ref, ip6counters);
+		counters[ip6s_delivered]--;
+		counters_leave(&ref, ip6counters);
 	}
 	return IPPROTO_DONE;
 }

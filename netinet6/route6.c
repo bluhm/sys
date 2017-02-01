@@ -60,7 +60,7 @@ route6_input(struct mbuf **mp, int *offp, int proto)
 	ip6 = mtod(m, struct ip6_hdr *);
 	IP6_EXTHDR_GET(rh, struct ip6_rthdr *, m, off, sizeof(*rh));
 	if (rh == NULL) {
-		ip6stat.ip6s_tooshort++;
+		ip6stat_inc(ip6s_tooshort);
 		return IPPROTO_DONE;
 	}
 
@@ -77,7 +77,7 @@ route6_input(struct mbuf **mp, int *offp, int proto)
 			rhlen = (rh->ip6r_len + 1) << 3;
 			break;	/* Final dst. Just ignore the header. */
 		}
-		ip6stat.ip6s_badoptions++;
+		ip6stat_inc(ip6s_badoptions);
 		icmp6_error(m, ICMP6_PARAM_PROB, ICMP6_PARAMPROB_HEADER,
 			    (caddr_t)&rh->ip6r_type - (caddr_t)ip6);
 		return (IPPROTO_DONE);
