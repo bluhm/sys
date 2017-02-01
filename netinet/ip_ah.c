@@ -1248,6 +1248,7 @@ ah_output_cb(struct cryptop *crp)
 	crypto_freereq(crp);
 
 	ipsp_process_done(m, tdb);
+	/* XXX missing error counter if ipsp_process_done() drops packet */
 	NET_UNLOCK(s);
 
  baddone:
