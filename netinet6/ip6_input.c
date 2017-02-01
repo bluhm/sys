@@ -120,9 +120,9 @@ struct niqueue ip6intrq = NIQUEUE_INITIALIZER(IFQ_MAXLEN, NETISR_IPV6);
 struct ip6stat ip6stat;
 
 int ip6_check_rh0hdr(struct mbuf *, int *);
-
 int ip6_hbhchcheck(struct mbuf *, int *, int *, int *);
 int ip6_hopopts_input(u_int32_t *, u_int32_t *, struct mbuf **, int *);
+void ip6_ours(struct mbuf *, int, int);
 struct mbuf *ip6_pullexthdr(struct mbuf *, size_t, int);
 
 static struct mbuf_queue	ip6send_mq;
@@ -179,9 +179,8 @@ ip6_input(struct mbuf *m)
 	struct ip6_hdr *ip6;
 	struct sockaddr_in6 sin6;
 	struct rtentry *rt = NULL;
-	int off, nest;
+	int off, nxt, ours = 0;
 	u_int16_t src_scope, dst_scope;
-	int nxt, ours = 0;
 #if NPF > 0
 	struct in6_addr odst;
 #endif
@@ -504,16 +503,28 @@ ip6_input(struct mbuf *m)
 #ifdef MROUTING
   ours:
 #endif
+	ip6_ours(m, off, nxt);
+	rtfree(rt);
+	if_put(ifp);
+	return;
+ bad:
+	rtfree(rt);
+	if_put(ifp);
+	m_freem(m);
+}
+
+void
+ip6_ours(struct mbuf *m, int off, int nxt)
+{
+	int nest = 0;
+
 	/* pf might have changed things */
 	in6_proto_cksum_out(m, NULL);
-
-	ip6 = mtod(m, struct ip6_hdr *);
 
 	/*
 	 * Tell launch routine the next header
 	 */
 	ip6stat.ip6s_delivered++;
-	nest = 0;
 
 	while (nxt != IPPROTO_DONE) {
 		if (ip6_hdrnestlimit && (++nest > ip6_hdrnestlimit)) {
@@ -543,12 +554,8 @@ ip6_input(struct mbuf *m)
 
 		nxt = (*inet6sw[ip6_protox[nxt]].pr_input)(&m, &off, nxt);
 	}
-	rtfree(rt);
-	if_put(ifp);
 	return;
  bad:
-	rtfree(rt);
-	if_put(ifp);
 	m_freem(m);
 }
 
