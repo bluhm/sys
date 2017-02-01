@@ -1089,6 +1089,7 @@ esp_output_cb(struct cryptop *crp)
 
 	/* Call the IPsec input callback. */
 	ipsp_process_done(m, tdb);
+	/* XXX missing error counter if ipsp_process_done() drops packet */
 	NET_UNLOCK(s);
 	return;
 
