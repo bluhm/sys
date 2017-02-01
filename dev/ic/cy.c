@@ -1,4 +1,4 @@
-/*	$OpenBSD: cy.c,v 1.35 2014/10/31 09:45:27 jsg Exp $	*/
+/*	$OpenBSD: cy.c,v 1.36 2017/02/01 16:46:57 bluhm Exp $	*/
 /*
  * Copyright (c) 1996 Timo Rossi.
  * All rights reserved.
