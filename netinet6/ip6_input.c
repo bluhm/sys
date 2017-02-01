@@ -384,7 +384,7 @@ ip6_input(struct mbuf *m)
 			 * ip6_mforward() returns a non-zero value, the packet
 			 * must be discarded, else it may be accepted below.
 			 */
-		    	if (ip6_mforward(ip6, ifp, m)) {
+			if (ip6_mforward(ip6, ifp, m)) {
 				ip6stat_inc(ip6s_cantforward);
 				goto bad;
 			}
