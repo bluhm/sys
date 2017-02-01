@@ -181,7 +181,7 @@ struct cryptop {
 	void 		*crp_opaque;	/* Opaque pointer, passed along */
 	struct cryptodesc *crp_desc;	/* Linked list of processing descriptors */
 
-	int (*crp_callback)(struct cryptop *); /* Callback function */
+	void (*crp_callback)(struct cryptop *); /* Callback function */
 
 	caddr_t		crp_mac;
 };
