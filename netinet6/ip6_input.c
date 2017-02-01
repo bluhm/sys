@@ -197,8 +197,7 @@ ip6_input(struct mbuf *m)
 	if (m->m_len < sizeof(struct ip6_hdr)) {
 		if ((m = m_pullup(m, sizeof(struct ip6_hdr))) == NULL) {
 			ip6stat_inc(ip6s_toosmall);
-			if_put(ifp);
-			return;
+			goto out;
 		}
 	}
 
@@ -336,9 +335,7 @@ ip6_input(struct mbuf *m)
 	    ip6_check_rh0hdr(m, &off)) {
 		ip6stat_inc(ip6s_badoptions);
 		icmp6_error(m, ICMP6_PARAM_PROB, ICMP6_PARAMPROB_HEADER, off);
-		/* m is already freed */
-		if_put(ifp);
-		return;
+		goto out;
 	}
 
 	if (IN6_IS_ADDR_LOOPBACK(&ip6->ip6_src) ||
@@ -374,11 +371,8 @@ ip6_input(struct mbuf *m)
 
 #ifdef MROUTING
 		if (ip6_mforwarding && ip6_mrouter) {
-			if (ip6_hbhchcheck(m, &off, &nxt, &ours)) {
-				rtfree(rt);
-				if_put(ifp);
-				return;	/* m have already been freed */
-			}
+			if (ip6_hbhchcheck(m, &off, &nxt, &ours))
+				goto out;
 
 			ip6 = mtod(m, struct ip6_hdr *);
 
@@ -397,7 +391,8 @@ ip6_input(struct mbuf *m)
 
 			if (!ours)
 				goto bad;
-			goto ours;
+			ip6_ours(m, off, nxt);
+			goto out;
 		}
 #endif
 		if (!ours) {
@@ -467,34 +462,25 @@ ip6_input(struct mbuf *m)
 
   hbhcheck:
 
-	if (ip6_hbhchcheck(m, &off, &nxt, &ours)) {
-		rtfree(rt);
-		if_put(ifp);
-		return;	/* m have already been freed */
-	}
+	if (ip6_hbhchcheck(m, &off, &nxt, &ours))
+		goto out;
 
-	/* adjust pointer */
-	ip6 = mtod(m, struct ip6_hdr *);
+	if (ours) {
+		ip6_ours(m, off, nxt);
+		goto out;
+	}
 
 	/*
 	 * Forward if desirable.
 	 */
-	if (!ours) {
-		ip6_forward(m, rt, srcrt);
-		if_put(ifp);
-		return;
-	}
-#ifdef MROUTING
-  ours:
-#endif
-	ip6_ours(m, off, nxt);
-	rtfree(rt);
+	ip6_forward(m, rt, srcrt);
 	if_put(ifp);
 	return;
  bad:
+	m_freem(m);
+ out:
 	rtfree(rt);
 	if_put(ifp);
-	m_freem(m);
 }
 
 void
