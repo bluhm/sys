@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip6_input.c,v 1.177 2017/02/05 16:23:38 jca Exp $	*/
+/*	$OpenBSD: ip6_input.c,v 1.178 2017/02/06 16:01:25 bluhm Exp $	*/
 /*	$KAME: ip6_input.c,v 1.188 2001/03/29 05:34:31 itojun Exp $	*/
 
 /*
