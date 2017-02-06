@@ -1,4 +1,4 @@
-/*	$OpenBSD: icmp6.c,v 1.197 2017/01/19 14:49:19 bluhm Exp $	*/
+/*	$OpenBSD: icmp6.c,v 1.199 2017/02/05 16:04:14 jca Exp $	*/
 /*	$KAME: icmp6.c,v 1.217 2001/06/20 15:03:29 jinmei Exp $	*/
 
 /*
@@ -1124,8 +1124,13 @@ icmp6_rip6_input(struct mbuf **mp, int off)
 		} else
 			sorwakeup(last->inp_socket);
 	} else {
+		struct counters_ref ref;
+		uint64_t *counters;
+
 		m_freem(m);
-		ip6stat.ip6s_delivered--;
+		counters = counters_enter(&ref, ip6counters);
+		counters[ip6s_delivered]--;
+		counters_leave(&ref, ip6counters);
 	}
 	return IPPROTO_DONE;
 }
@@ -1802,11 +1807,10 @@ fail:
  */
 int
 icmp6_ctloutput(int op, struct socket *so, int level, int optname,
-    struct mbuf **mp)
+    struct mbuf *m)
 {
 	int error = 0;
 	struct inpcb *in6p = sotoinpcb(so);
-	struct mbuf *m = *mp;
 
 	if (level != IPPROTO_ICMPV6) {
 		if (op == PRCO_SETOPT)
@@ -1853,7 +1857,6 @@ icmp6_ctloutput(int op, struct socket *so, int level, int optname,
 				error = EINVAL;
 				break;
 			}
-			*mp = m = m_get(M_WAIT, MT_SOOPTS);
 			m->m_len = sizeof(struct icmp6_filter);
 			p = mtod(m, struct icmp6_filter *);
 			bcopy(in6p->inp_icmp6filt, p,

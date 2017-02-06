@@ -1,4 +1,4 @@
-/*	$OpenBSD: raw_ip6.c,v 1.103 2017/01/23 16:31:24 bluhm Exp $	*/
+/*	$OpenBSD: raw_ip6.c,v 1.105 2017/02/05 16:04:14 jca Exp $	*/
 /*	$KAME: raw_ip6.c,v 1.69 2001/03/04 15:55:44 itojun Exp $	*/
 
 /*
@@ -211,6 +211,9 @@ rip6_input(struct mbuf **mp, int *offp, int proto)
 		} else
 			sorwakeup(last->inp_socket);
 	} else {
+		struct counters_ref ref;
+		uint64_t *counters;
+
 		rip6stat.rip6s_nosock++;
 		if (m->m_flags & M_MCAST)
 			rip6stat.rip6s_nosockmcast++;
@@ -222,7 +225,9 @@ rip6_input(struct mbuf **mp, int *offp, int proto)
 			    ICMP6_PARAMPROB_NEXTHEADER,
 			    prvnxtp - mtod(m, u_int8_t *));
 		}
-		ip6stat.ip6s_delivered--;
+		counters = counters_enter(&ref, ip6counters);
+		counters[ip6s_delivered]--;
+		counters_leave(&ref, ip6counters);
 	}
 	return IPPROTO_DONE;
 }
@@ -474,7 +479,7 @@ rip6_output(struct mbuf *m, ...)
  */
 int
 rip6_ctloutput(int op, struct socket *so, int level, int optname,
-	struct mbuf **mp)
+    struct mbuf *m)
 {
 	struct inpcb *inp = sotoinpcb(so);
 	int error = 0;
@@ -487,11 +492,11 @@ rip6_ctloutput(int op, struct socket *so, int level, int optname,
 		case IP_DIVERTFL:
 			switch (op) {
 			case PRCO_SETOPT:
-				if (*mp == NULL || (*mp)->m_len < sizeof(int)) {
+				if (m == NULL || m->m_len < sizeof(int)) {
 					error = EINVAL;
 					break;
 				}
-				dir = *mtod(*mp, int *);
+				dir = *mtod(m, int *);
 				if (inp->inp_divertfl > 0)
 					error = ENOTSUP;
 				else if ((dir & IPPROTO_DIVERT_RESP) ||
@@ -502,9 +507,8 @@ rip6_ctloutput(int op, struct socket *so, int level, int optname,
 				break;
 
 			case PRCO_GETOPT:
-				*mp = m_get(M_WAIT, M_SOOPTS);
-				(*mp)->m_len = sizeof(int);
-				*mtod(*mp, int *) = inp->inp_divertfl;
+				m->m_len = sizeof(int);
+				*mtod(m, int *) = inp->inp_divertfl;
 				break;
 
 			default:
@@ -513,7 +517,7 @@ rip6_ctloutput(int op, struct socket *so, int level, int optname,
 			}
 
 			if (op == PRCO_SETOPT)
-				(void)m_free(*mp);
+				(void)m_free(m);
 			return (error);
 
 #ifdef MROUTING
@@ -524,18 +528,18 @@ rip6_ctloutput(int op, struct socket *so, int level, int optname,
 		case MRT6_ADD_MFC:
 		case MRT6_DEL_MFC:
 			if (op == PRCO_SETOPT) {
-				error = ip6_mrouter_set(optname, so, *mp);
-				m_free(*mp);
+				error = ip6_mrouter_set(optname, so, m);
+				m_free(m);
 			} else if (op == PRCO_GETOPT)
-				error = ip6_mrouter_get(optname, so, mp);
+				error = ip6_mrouter_get(optname, so, m);
 			else
 				error = EINVAL;
 			return (error);
 #endif
 		case IPV6_CHECKSUM:
-			return (ip6_raw_ctloutput(op, so, level, optname, mp));
+			return (ip6_raw_ctloutput(op, so, level, optname, m));
 		default:
-			return (ip6_ctloutput(op, so, level, optname, mp));
+			return (ip6_ctloutput(op, so, level, optname, m));
 		}
 
 	case IPPROTO_ICMPV6:
@@ -543,11 +547,11 @@ rip6_ctloutput(int op, struct socket *so, int level, int optname,
 		 * XXX: is it better to call icmp6_ctloutput() directly
 		 * from protosw?
 		 */
-		return (icmp6_ctloutput(op, so, level, optname, mp));
+		return (icmp6_ctloutput(op, so, level, optname, m));
 
 	default:
 		if (op == PRCO_SETOPT)
-			m_free(*mp);
+			m_free(m);
 		return EINVAL;
 	}
 }
