@@ -85,9 +85,9 @@ int esp4_input_cb(struct mbuf *, ...);
 int ipcomp4_input_cb(struct mbuf *, ...);
 
 #ifdef INET6
-int ah6_input_cb(struct mbuf *, int, int);
-int esp6_input_cb(struct mbuf *, int, int);
-int ipcomp6_input_cb(struct mbuf *, int, int);
+int ah6_input_cb(struct mbuf *, struct ifnet *, int, int);
+int esp6_input_cb(struct mbuf *, struct ifnet *, int, int);
+int ipcomp6_input_cb(struct mbuf *, struct ifnet *, int, int);
 #endif
 
 #ifdef ENCDEBUG
@@ -326,11 +326,7 @@ ipsec_common_input_cb(struct mbuf *m, struct tdb *tdbp, int skip, int protoff)
 {
 	int af, sproto;
 	u_char prot;
-
-#if NBPFILTER > 0
 	struct ifnet *encif;
-#endif
-
 	struct ip *ip, ipn;
 
 #ifdef INET6
@@ -559,21 +555,21 @@ ipsec_common_input_cb(struct mbuf *m, struct tdb *tdbp, int skip, int protoff)
 	if (tdbp->tdb_flags & TDBF_TUNNELING)
 		m->m_flags |= M_TUNNEL;
 
-#if NBPFILTER > 0
 	if ((encif = enc_getif(tdbp->tdb_rdomain, tdbp->tdb_tap)) != NULL) {
 		encif->if_ipackets++;
 		encif->if_ibytes += m->m_pkthdr.len;
+	}
 
-		if (encif->if_bpf) {
-			struct enchdr hdr;
+#if NBPFILTER > 0
+	if (encif != NULL && encif->if_bpf) {
+		struct enchdr hdr;
 
-			hdr.af = af;
-			hdr.spi = tdbp->tdb_spi;
-			hdr.flags = m->m_flags & (M_AUTH|M_CONF);
+		hdr.af = af;
+		hdr.spi = tdbp->tdb_spi;
+		hdr.flags = m->m_flags & (M_AUTH|M_CONF);
 
-			bpf_mtap_hdr(encif->if_bpf, (char *)&hdr,
-			    ENC_HDRLEN, m, BPF_DIRECTION_IN, NULL);
-		}
+		bpf_mtap_hdr(encif->if_bpf, (char *)&hdr,
+		    ENC_HDRLEN, m, BPF_DIRECTION_IN, NULL);
 	}
 #endif
 
@@ -603,13 +599,13 @@ ipsec_common_input_cb(struct mbuf *m, struct tdb *tdbp, int skip, int protoff)
 	case AF_INET6:
 		switch (sproto) {
 		case IPPROTO_ESP:
-			return esp6_input_cb(m, skip, protoff);
+			return esp6_input_cb(m, encif, skip, protoff);
 
 		case IPPROTO_AH:
-			return ah6_input_cb(m, skip, protoff);
+			return ah6_input_cb(m, encif, skip, protoff);
 
 		case IPPROTO_IPCOMP:
-			return ipcomp6_input_cb(m, skip, protoff);
+			return ipcomp6_input_cb(m, encif, skip, protoff);
 
 		default:
 			DPRINTF(("ipsec_common_input_cb(): unknown/unsupported"
@@ -969,11 +965,23 @@ ah6_input(struct mbuf **mp, int *offp, int proto)
 
 /* IPv6 AH callback. */
 int
-ah6_input_cb(struct mbuf *m, int off, int protoff)
+ah6_input_cb(struct mbuf *m, struct ifnet *ifp, int off, int protoff)
 {
 	int nxt;
 	u_int8_t nxt8;
 	int nest = 0;
+
+#if NPF > 0
+	if (ifp != NULL) {
+		/*
+		 * Packet filter
+		 */
+		if (pf_test(AF_INET6, PF_IN, ifp, &m) != PF_PASS)
+			goto bad;
+		if (m == NULL)
+			goto out;
+	}
+#endif
 
 	/* Retrieve new protocol */
 	m_copydata(m, protoff, sizeof(u_int8_t), (caddr_t) &nxt8);
@@ -999,6 +1007,9 @@ ah6_input_cb(struct mbuf *m, int off, int protoff)
 		}
 		nxt = (*inet6sw[ip6_protox[nxt]].pr_input)(&m, &off, nxt);
 	}
+#if NPF > 0
+ out:
+#endif
 	return 0;
 
  bad:
@@ -1061,9 +1072,9 @@ esp6_input(struct mbuf **mp, int *offp, int proto)
 
 /* IPv6 ESP callback */
 int
-esp6_input_cb(struct mbuf *m, int skip, int protoff)
+esp6_input_cb(struct mbuf *m, struct ifnet *ifp, int skip, int protoff)
 {
-	return ah6_input_cb(m, skip, protoff);
+	return ah6_input_cb(m, ifp, skip, protoff);
 }
 
 /* IPv6 IPcomp wrapper */
@@ -1120,9 +1131,9 @@ ipcomp6_input(struct mbuf **mp, int *offp, int proto)
 
 /* IPv6 IPcomp callback */
 int
-ipcomp6_input_cb(struct mbuf *m, int skip, int protoff)
+ipcomp6_input_cb(struct mbuf *m, struct ifnet *ifp, int skip, int protoff)
 {
-	return ah6_input_cb(m, skip, protoff);
+	return ah6_input_cb(m, ifp, skip, protoff);
 }
 
 #endif /* INET6 */
