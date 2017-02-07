@@ -579,8 +579,8 @@ ipcomp_output_cb(struct cryptop *crp)
 	if (rlen < crp->crp_olen) {
 		/* Compression was useless, we have lost time. */
 		crypto_freereq(crp);
-		ipsp_process_done(m, tdb);
-		/* XXX missing counter if ipsp_process_done() drops packet */
+		if (ipsp_process_done(m, tdb))
+			ipcompstat.ipcomps_outfail++;
 		NET_UNLOCK(s);
 		return;
 	}
@@ -628,8 +628,8 @@ ipcomp_output_cb(struct cryptop *crp)
 	/* Release the crypto descriptor. */
 	crypto_freereq(crp);
 
-	ipsp_process_done(m, tdb);
-	/* XXX missing error counter if ipsp_process_done() drops packet */
+	if (ipsp_process_done(m, tdb))
+		ipcompstat.ipcomps_outfail++;
 	NET_UNLOCK(s);
 	return;
 
