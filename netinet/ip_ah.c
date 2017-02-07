@@ -1247,8 +1247,8 @@ ah_output_cb(struct cryptop *crp)
 	/* No longer needed. */
 	crypto_freereq(crp);
 
-	ipsp_process_done(m, tdb);
-	/* XXX missing error counter if ipsp_process_done() drops packet */
+	if (ipsp_process_done(m, tdb))
+		ahstat.ahs_outfail++;
 	NET_UNLOCK(s);
 
  baddone:

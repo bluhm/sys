@@ -38,8 +38,7 @@
 #ifndef _NETINET_IP_ESP_H_
 #define _NETINET_IP_ESP_H_
 
-struct espstat
-{
+struct espstat {
     u_int32_t	esps_hdrops;	/* Packet shorter than header shows */
     u_int32_t	esps_nopf;	/* Protocol family not supported */
     u_int32_t	esps_notdb;
@@ -63,6 +62,7 @@ struct espstat
     u_int32_t	esps_udpencout; /* Output ESP-in-UDP packets */
     u_int32_t	esps_udpinval;  /* Invalid input ESP-in-UDP packets */
     u_int32_t	esps_udpneeded; /* Trying to use a ESP-in-UDP TDB */
+    u_int32_t	esps_outfail;	/* Packet output failure */
 };
 
 /*
