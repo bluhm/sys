@@ -967,36 +967,12 @@ ah6_input_cb(struct mbuf *m, int off, int protoff)
 {
 	int nxt;
 	u_int8_t nxt8;
-	int nest = 0;
 
 	/* Retrieve new protocol */
 	m_copydata(m, protoff, sizeof(u_int8_t), (caddr_t) &nxt8);
 	nxt = nxt8;
 
-	/*
-	 * see the end of ip6_input for this logic.
-	 * IPPROTO_IPV[46] case will be processed just like other ones
-	 */
-	while (nxt != IPPROTO_DONE) {
-		if (ip6_hdrnestlimit && (++nest > ip6_hdrnestlimit)) {
-			ip6stat_inc(ip6s_toomanyhdr);
-			goto bad;
-		}
-
-		/*
-		 * Protection against faulty packet - there should be
-		 * more sanity checks in header chain processing.
-		 */
-		if (m->m_pkthdr.len < off) {
-			ip6stat_inc(ip6s_tooshort);
-			goto bad;
-		}
-		nxt = (*inet6sw[ip6_protox[nxt]].pr_input)(&m, &off, nxt);
-	}
-	return;
-
- bad:
-	m_freem(m);
+	ip6_ours(m, off, nxt);
 }
 
 /* IPv6 ESP wrapper. */
