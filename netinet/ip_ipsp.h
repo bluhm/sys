@@ -551,7 +551,7 @@ struct ipsec_ids *ipsp_ids_lookup(u_int32_t);
 void	ipsp_ids_free(struct ipsec_ids *);
 
 int	ipsec_common_input(struct mbuf *, int, int, int, int, int);
-int	ipsec_common_input_cb(struct mbuf *, struct tdb *, int, int);
+void	ipsec_common_input_cb(struct mbuf *, struct tdb *, int, int);
 int	ipsec_delete_policy(struct ipsec_policy *);
 ssize_t	ipsec_hdrsz(struct tdb *);
 void	ipsec_adjust_mtu(struct mbuf *, u_int32_t);
