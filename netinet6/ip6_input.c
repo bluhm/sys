@@ -122,7 +122,6 @@ struct cpumem *ip6counters;
 int ip6_check_rh0hdr(struct mbuf *, int *);
 int ip6_hbhchcheck(struct mbuf *, int *, int *, int *);
 int ip6_hopopts_input(u_int32_t *, u_int32_t *, struct mbuf **, int *);
-void ip6_ours(struct mbuf *, int, int);
 struct mbuf *ip6_pullexthdr(struct mbuf *, size_t, int);
 
 static struct mbuf_queue	ip6send_mq;

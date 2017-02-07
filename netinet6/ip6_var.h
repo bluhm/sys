@@ -304,6 +304,7 @@ int	icmp6_ctloutput(int, struct socket *, int, int, struct mbuf *);
 void	ip6_init(void);
 void	ip6intr(void);
 void	ip6_input(struct mbuf *);
+void	ip6_ours(struct mbuf *, int, int);
 void	ip6_freepcbopts(struct ip6_pktopts *);
 void	ip6_freemoptions(struct ip6_moptions *);
 int	ip6_unknown_opt(u_int8_t *, struct mbuf *, int);
