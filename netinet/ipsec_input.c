@@ -80,14 +80,14 @@
 #include "bpfilter.h"
 
 void ipsec_common_ctlinput(u_int, int, struct sockaddr *, void *, int);
-int ah4_input_cb(struct mbuf *, ...);
-int esp4_input_cb(struct mbuf *, ...);
-int ipcomp4_input_cb(struct mbuf *, ...);
+void ah4_input_cb(struct mbuf *, ...);
+void esp4_input_cb(struct mbuf *, ...);
+void ipcomp4_input_cb(struct mbuf *, ...);
 
 #ifdef INET6
-int ah6_input_cb(struct mbuf *, int, int);
-int esp6_input_cb(struct mbuf *, int, int);
-int ipcomp6_input_cb(struct mbuf *, int, int);
+void ah6_input_cb(struct mbuf *, int, int);
+void esp6_input_cb(struct mbuf *, int, int);
+void ipcomp6_input_cb(struct mbuf *, int, int);
 #endif
 
 #ifdef ENCDEBUG
@@ -705,7 +705,7 @@ ah4_input(struct mbuf **mp, int *offp, int proto)
 }
 
 /* IPv4 AH callback. */
-int
+void
 ah4_input_cb(struct mbuf *m, ...)
 {
 	/*
@@ -717,10 +717,8 @@ ah4_input_cb(struct mbuf *m, ...)
 		ahstat.ahs_qfull++;
 		DPRINTF(("ah4_input_cb(): dropped packet because of full "
 		    "IP queue\n"));
-		return ENOBUFS;
+		return;
 	}
-
-	return 0;
 }
 
 
@@ -745,7 +743,7 @@ esp4_input(struct mbuf **mp, int *offp, int proto)
 }
 
 /* IPv4 ESP callback. */
-int
+void
 esp4_input_cb(struct mbuf *m, ...)
 {
 	/*
@@ -756,10 +754,8 @@ esp4_input_cb(struct mbuf *m, ...)
 		espstat.esps_qfull++;
 		DPRINTF(("esp4_input_cb(): dropped packet because of full "
 		    "IP queue\n"));
-		return ENOBUFS;
+		return;
 	}
-
-	return 0;
 }
 
 /* IPv4 IPCOMP wrapper */
@@ -772,7 +768,7 @@ ipcomp4_input(struct mbuf **mp, int *offp, int proto)
 }
 
 /* IPv4 IPCOMP callback */
-int
+void
 ipcomp4_input_cb(struct mbuf *m, ...)
 {
 	/*
@@ -782,10 +778,8 @@ ipcomp4_input_cb(struct mbuf *m, ...)
 	if (niq_enqueue(&ipintrq, m) != 0) {
 		ipcompstat.ipcomps_qfull++;
 		DPRINTF(("ipcomp4_input_cb(): dropped packet because of full IP queue\n"));
-		return ENOBUFS;
+		return;
 	}
-
-	return 0;
 }
 
 void
@@ -968,7 +962,7 @@ ah6_input(struct mbuf **mp, int *offp, int proto)
 }
 
 /* IPv6 AH callback. */
-int
+void
 ah6_input_cb(struct mbuf *m, int off, int protoff)
 {
 	int nxt;
@@ -999,11 +993,10 @@ ah6_input_cb(struct mbuf *m, int off, int protoff)
 		}
 		nxt = (*inet6sw[ip6_protox[nxt]].pr_input)(&m, &off, nxt);
 	}
-	return 0;
+	return;
 
  bad:
 	m_freem(m);
-	return EINVAL;
 }
 
 /* IPv6 ESP wrapper. */
@@ -1060,10 +1053,10 @@ esp6_input(struct mbuf **mp, int *offp, int proto)
 }
 
 /* IPv6 ESP callback */
-int
+void
 esp6_input_cb(struct mbuf *m, int skip, int protoff)
 {
-	return ah6_input_cb(m, skip, protoff);
+	ah6_input_cb(m, skip, protoff);
 }
 
 /* IPv6 IPcomp wrapper */
@@ -1119,10 +1112,10 @@ ipcomp6_input(struct mbuf **mp, int *offp, int proto)
 }
 
 /* IPv6 IPcomp callback */
-int
+void
 ipcomp6_input_cb(struct mbuf *m, int skip, int protoff)
 {
-	return ah6_input_cb(m, skip, protoff);
+	ah6_input_cb(m, skip, protoff);
 }
 
 #endif /* INET6 */
