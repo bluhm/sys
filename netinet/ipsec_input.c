@@ -316,7 +316,7 @@ void
 ipsec_common_input_cb(struct mbuf *m, struct tdb *tdbp, int skip, int protoff)
 {
 	int af, sproto;
-	u_char prot;
+	u_int8_t prot;
 
 #if NBPFILTER > 0
 	struct ifnet *encif;
