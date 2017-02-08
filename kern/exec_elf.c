@@ -1,4 +1,4 @@
-/*	$OpenBSD: exec_elf.c,v 1.131 2017/02/05 19:51:27 guenther Exp $	*/
+/*	$OpenBSD: exec_elf.c,v 1.136 2017/02/08 05:09:25 guenther Exp $	*/
 
 /*
  * Copyright (c) 1996 Per Fogelstrom
@@ -93,13 +93,18 @@
 #include <machine/reg.h>
 #include <machine/exec.h>
 
-int ELFNAME(load_file)(struct proc *, char *, struct exec_package *,
-	struct elf_args *, Elf_Addr *);
-int ELFNAME(check_header)(Elf_Ehdr *);
-int ELFNAME(read_from)(struct proc *, struct vnode *, u_long, caddr_t, int);
-void ELFNAME(load_psection)(struct exec_vmcmd_set *, struct vnode *,
-	Elf_Phdr *, Elf_Addr *, Elf_Addr *, int *, int);
-int ELFNAMEEND(coredump)(struct proc *, void *);
+int	elf_load_file(struct proc *, char *, struct exec_package *,
+	    struct elf_args *, Elf_Addr *);
+int	elf_check_header(Elf_Ehdr *);
+int	elf_read_from(struct proc *, struct vnode *, u_long, void *, int);
+void	elf_load_psection(struct exec_vmcmd_set *, struct vnode *,
+	    Elf_Phdr *, Elf_Addr *, Elf_Addr *, int *, int);
+int	coredump_elf(struct proc *, void *);
+void	*elf_copyargs(struct exec_package *, struct ps_strings *, void *,
+	    void *);
+int	exec_elf_fixup(struct proc *, struct exec_package *);
+int	elf_os_pt_note(struct proc *, struct exec_package *, Elf_Ehdr *,
+	    char *, size_t, size_t);
 
 extern char sigcode[], esigcode[], sigcoderet[];
 #ifdef SYSCALL_DEBUG
@@ -117,9 +122,14 @@ extern char *syscallnames[];
 #define ELF_MAX_VALID_PHDR 32
 
 /*
+ * How many entries are in the AuxInfo array we pass to the process?
+ */
+#define ELF_AUX_ENTRIES	8
+
+/*
  * This is the OpenBSD ELF emul
  */
-struct emul ELFNAMEEND(emul) = {
+struct emul emul_elf = {
 	"native",
 	NULL,
 	sendsig,
@@ -132,10 +142,10 @@ struct emul ELFNAMEEND(emul) = {
 	NULL,
 #endif
 	(sizeof(AuxInfo) * ELF_AUX_ENTRIES / sizeof(char *)),
-	ELFNAME(copyargs),
+	elf_copyargs,
 	setregs,
-	ELFNAME2(exec,fixup),
-	ELFNAMEEND(coredump),
+	exec_elf_fixup,
+	coredump_elf,
 	sigcode,
 	esigcode,
 	sigcoderet,
@@ -147,7 +157,7 @@ struct emul ELFNAMEEND(emul) = {
  * space for extra information in case of dynamic binding.
  */
 void *
-ELFNAME(copyargs)(struct exec_package *pack, struct ps_strings *arginfo,
+elf_copyargs(struct exec_package *pack, struct ps_strings *arginfo,
 		void *stack, void *argp)
 {
 	stack = copyargs(pack, arginfo, stack, argp);
@@ -169,7 +179,7 @@ ELFNAME(copyargs)(struct exec_package *pack, struct ps_strings *arginfo,
  * Check header for validity; return 0 for ok, ENOEXEC if error
  */
 int
-ELFNAME(check_header)(Elf_Ehdr *ehdr)
+elf_check_header(Elf_Ehdr *ehdr)
 {
 	/*
 	 * We need to check magic, class size, endianess, and version before
@@ -198,8 +208,8 @@ ELFNAME(check_header)(Elf_Ehdr *ehdr)
  * Load a psection at the appropriate address
  */
 void
-ELFNAME(load_psection)(struct exec_vmcmd_set *vcset, struct vnode *vp,
-	Elf_Phdr *ph, Elf_Addr *addr, Elf_Addr *size, int *prot, int flags)
+elf_load_psection(struct exec_vmcmd_set *vcset, struct vnode *vp,
+    Elf_Phdr *ph, Elf_Addr *addr, Elf_Addr *size, int *prot, int flags)
 {
 	u_long msize, lsize, psize, rm, rf;
 	long diff, offset, bdiff;
@@ -208,7 +218,7 @@ ELFNAME(load_psection)(struct exec_vmcmd_set *vcset, struct vnode *vp,
 	/*
 	 * If the user specified an address, then we load there.
 	 */
-	if (*addr != ELFDEFNNAME(NO_ADDR)) {
+	if (*addr != ELF_NO_ADDR) {
 		if (ph->p_align > 1) {
 			*addr = ELF_TRUNC(*addr, ph->p_align);
 			diff = ph->p_vaddr - ELF_TRUNC(ph->p_vaddr, ph->p_align);
@@ -279,8 +289,8 @@ ELFNAME(load_psection)(struct exec_vmcmd_set *vcset, struct vnode *vp,
  * Read from vnode into buffer at offset.
  */
 int
-ELFNAME(read_from)(struct proc *p, struct vnode *vp, u_long off, caddr_t buf,
-	int size)
+elf_read_from(struct proc *p, struct vnode *vp, u_long off, void *buf,
+    int size)
 {
 	int error;
 	size_t resid;
@@ -301,8 +311,8 @@ ELFNAME(read_from)(struct proc *p, struct vnode *vp, u_long off, caddr_t buf,
  * coff_load_shlib()]. Made slightly generic so it might be used externally.
  */
 int
-ELFNAME(load_file)(struct proc *p, char *path, struct exec_package *epp,
-	struct elf_args *ap, Elf_Addr *last)
+elf_load_file(struct proc *p, char *path, struct exec_package *epp,
+    struct elf_args *ap, Elf_Addr *last)
 {
 	int error, i;
 	struct nameidata nd;
@@ -340,11 +350,10 @@ ELFNAME(load_file)(struct proc *p, char *path, struct exec_package *epp,
 	}
 	if ((error = VOP_ACCESS(vp, VREAD, p->p_ucred, p)) != 0)
 		goto bad1;
-	if ((error = ELFNAME(read_from)(p, nd.ni_vp, 0,
-				    (caddr_t)&eh, sizeof(eh))) != 0)
+	if ((error = elf_read_from(p, nd.ni_vp, 0, &eh, sizeof(eh))) != 0)
 		goto bad1;
 
-	if (ELFNAME(check_header)(&eh) || eh.e_type != ET_DYN) {
+	if (elf_check_header(&eh) || eh.e_type != ET_DYN) {
 		error = ENOEXEC;
 		goto bad1;
 	}
@@ -352,8 +361,7 @@ ELFNAME(load_file)(struct proc *p, char *path, struct exec_package *epp,
 	ph = mallocarray(eh.e_phnum, sizeof(Elf_Phdr), M_TEMP, M_WAITOK);
 	phsize = eh.e_phnum * sizeof(Elf_Phdr);
 
-	if ((error = ELFNAME(read_from)(p, nd.ni_vp, eh.e_phoff, (caddr_t)ph,
-	    phsize)) != 0)
+	if ((error = elf_read_from(p, nd.ni_vp, eh.e_phoff, ph, phsize)) != 0)
 		goto bad1;
 
 	for (i = 0; i < eh.e_phnum; i++) {
@@ -374,7 +382,7 @@ ELFNAME(load_file)(struct proc *p, char *path, struct exec_package *epp,
 	 * function, pick the same address that a non-fixed mmap(0, ..)
 	 * would (i.e. something safely out of the way).
 	 */
-	if (pos == ELFDEFNNAME(NO_ADDR)) {
+	if (pos == ELF_NO_ADDR) {
 		pos = uvm_map_hint(p->p_vmspace, PROT_EXEC,
 		    VM_MIN_ADDRESS, VM_MAXUSER_ADDRESS);
 	}
@@ -450,7 +458,7 @@ ELFNAME(load_file)(struct proc *p, char *path, struct exec_package *epp,
 				flags = VMCMD_RELATIVE;
 				addr = ph[i].p_vaddr - base_ph->p_vaddr;
 			}
-			ELFNAME(load_psection)(&epp->ep_vmcmds, nd.ni_vp,
+			elf_load_psection(&epp->ep_vmcmds, nd.ni_vp,
 			    &ph[i], &addr, &size, &prot, flags);
 			/* If entry is within this section it must be text */
 			if (eh.e_entry >= ph[i].p_vaddr &&
@@ -504,7 +512,7 @@ bad:
  * stack segments.
  */
 int
-ELFNAME2(exec,makecmds)(struct proc *p, struct exec_package *epp)
+exec_elf_makecmds(struct proc *p, struct exec_package *epp)
 {
 	Elf_Ehdr *eh = epp->ep_hdr;
 	Elf_Phdr *ph, *pp, *base_ph = NULL;
@@ -517,7 +525,7 @@ ELFNAME2(exec,makecmds)(struct proc *p, struct exec_package *epp)
 	if (epp->ep_hdrvalid < sizeof(Elf_Ehdr))
 		return (ENOEXEC);
 
-	if (ELFNAME(check_header)(eh) ||
+	if (elf_check_header(eh) ||
 	   (eh->e_type != ET_EXEC && eh->e_type != ET_DYN))
 		return (ENOEXEC);
 
@@ -539,19 +547,19 @@ ELFNAME2(exec,makecmds)(struct proc *p, struct exec_package *epp)
 	ph = mallocarray(eh->e_phnum, sizeof(Elf_Phdr), M_TEMP, M_WAITOK);
 	phsize = eh->e_phnum * sizeof(Elf_Phdr);
 
-	if ((error = ELFNAME(read_from)(p, epp->ep_vp, eh->e_phoff, (caddr_t)ph,
+	if ((error = elf_read_from(p, epp->ep_vp, eh->e_phoff, ph,
 	    phsize)) != 0)
 		goto bad;
 
-	epp->ep_tsize = ELFDEFNNAME(NO_ADDR);
-	epp->ep_dsize = ELFDEFNNAME(NO_ADDR);
+	epp->ep_tsize = ELF_NO_ADDR;
+	epp->ep_dsize = ELF_NO_ADDR;
 
 	for (i = 0, pp = ph; i < eh->e_phnum; i++, pp++) {
 		if (pp->p_type == PT_INTERP && !interp) {
 			if (pp->p_filesz < 2 || pp->p_filesz > MAXPATHLEN)
 				goto bad;
 			interp = pool_get(&namei_pool, PR_WAITOK);
-			if ((error = ELFNAME(read_from)(p, epp->ep_vp,
+			if ((error = elf_read_from(p, epp->ep_vp,
 			    pp->p_offset, interp, pp->p_filesz)) != 0) {
 				goto bad;
 			}
@@ -583,15 +591,15 @@ ELFNAME2(exec,makecmds)(struct proc *p, struct exec_package *epp)
 	 * OK, we want a slightly different twist of the
 	 * standard emulation package for "real" elf.
 	 */
-	epp->ep_emul = &ELFNAMEEND(emul);
-	pos = ELFDEFNNAME(NO_ADDR);
+	epp->ep_emul = &emul_elf;
+	pos = ELF_NO_ADDR;
 
 	/*
 	 * Verify this is an OpenBSD executable.  If it's marked that way
 	 * via a PT_NOTE then also check for a PT_OPENBSD_WXNEEDED segment.
 	 */
 	if (eh->e_ident[EI_OSABI] != ELFOSABI_OPENBSD && (error =
-	    ELFNAME(os_pt_note)(p, epp, epp->ep_hdr, "OpenBSD", 8, 4)) != 0) {
+	    elf_os_pt_note(p, epp, epp->ep_hdr, "OpenBSD", 8, 4)) != 0) {
 		goto bad;
 	}
 
@@ -614,7 +622,7 @@ ELFNAME2(exec,makecmds)(struct proc *p, struct exec_package *epp)
 					addr = pp->p_vaddr - base_ph->p_vaddr;
 				}
 			} else
-				addr = ELFDEFNNAME(NO_ADDR);
+				addr = ELF_NO_ADDR;
 
 			/*
 			 * Calculates size of text and data segments
@@ -623,7 +631,7 @@ ELFNAME2(exec,makecmds)(struct proc *p, struct exec_package *epp)
 			 * this is correct for BSS_PLT, but may not be
 			 * for DATA_PLT, is fine for TEXT_PLT.
 			 */
-			ELFNAME(load_psection)(&epp->ep_vmcmds, epp->ep_vp,
+			elf_load_psection(&epp->ep_vmcmds, epp->ep_vp,
 			    pp, &addr, &size, &prot, flags);
 
 			/*
@@ -642,7 +650,7 @@ ELFNAME2(exec,makecmds)(struct proc *p, struct exec_package *epp)
 			 */
 			if (prot & PROT_WRITE) {
 				/* data section */
-				if (epp->ep_dsize == ELFDEFNNAME(NO_ADDR)) {
+				if (epp->ep_dsize == ELF_NO_ADDR) {
 					epp->ep_daddr = addr;
 					epp->ep_dsize = size;
 				} else {
@@ -658,7 +666,7 @@ ELFNAME2(exec,makecmds)(struct proc *p, struct exec_package *epp)
 				}
 			} else if (prot & PROT_EXEC) {
 				/* text section */
-				if (epp->ep_tsize == ELFDEFNNAME(NO_ADDR)) {
+				if (epp->ep_tsize == ELF_NO_ADDR) {
 					epp->ep_taddr = addr;
 					epp->ep_tsize = size;
 				} else {
@@ -715,14 +723,14 @@ ELFNAME2(exec,makecmds)(struct proc *p, struct exec_package *epp)
 	 * Strangely some linux programs may have all load sections marked
 	 * writeable, in this case, textsize is not -1, but rather 0;
 	 */
-	if (epp->ep_tsize == ELFDEFNNAME(NO_ADDR))
+	if (epp->ep_tsize == ELF_NO_ADDR)
 		epp->ep_tsize = 0;
 	/*
 	 * Another possibility is that it has all load sections marked
 	 * read-only.  Fake a zero-sized data segment right after the
 	 * text segment.
 	 */
-	if (epp->ep_dsize == ELFDEFNNAME(NO_ADDR)) {
+	if (epp->ep_dsize == ELF_NO_ADDR) {
 		epp->ep_daddr = round_page(epp->ep_taddr + epp->ep_tsize);
 		epp->ep_dsize = 0;
 	}
@@ -769,7 +777,7 @@ bad:
  * when loading the program is available for setup of the interpreter.
  */
 int
-ELFNAME2(exec,fixup)(struct proc *p, struct exec_package *epp)
+exec_elf_fixup(struct proc *p, struct exec_package *epp)
 {
 	char	*interp;
 	int	error = 0;
@@ -785,7 +793,7 @@ ELFNAME2(exec,fixup)(struct proc *p, struct exec_package *epp)
 	ap = epp->ep_emul_arg;
 
 	if (interp &&
-	    (error = ELFNAME(load_file)(p, interp, epp, ap, &pos)) != 0) {
+	    (error = elf_load_file(p, interp, epp, ap, &pos)) != 0) {
 		free(ap, M_TEMP, epp->ep_emul_argsize);
 		pool_put(&namei_pool, interp);
 		kill_vmcmds(&epp->ep_vmcmds);
@@ -843,21 +851,9 @@ ELFNAME2(exec,fixup)(struct proc *p, struct exec_package *epp)
 	return (error);
 }
 
-/*
- * Older ELF binaries use EI_ABIVERSION (formerly EI_BRAND) to brand
- * executables.  Newer ELF binaries use EI_OSABI instead.
- */
-char *
-ELFNAME(check_brand)(Elf_Ehdr *eh)
-{
-	if (eh->e_ident[EI_ABIVERSION] == '\0')
-		return (NULL);
-	return (&eh->e_ident[EI_ABIVERSION]);
-}
-
 int
-ELFNAME(os_pt_note)(struct proc *p, struct exec_package *epp, Elf_Ehdr *eh,
-	char *os_name, size_t name_size, size_t desc_size)
+elf_os_pt_note(struct proc *p, struct exec_package *epp, Elf_Ehdr *eh,
+    char *os_name, size_t name_size, size_t desc_size)
 {
 	char pathbuf[MAXPATHLEN];
 	Elf_Phdr *hph, *ph;
@@ -867,8 +863,8 @@ ELFNAME(os_pt_note)(struct proc *p, struct exec_package *epp, Elf_Ehdr *eh,
 
 	hph = mallocarray(eh->e_phnum, sizeof(Elf_Phdr), M_TEMP, M_WAITOK);
 	phsize = eh->e_phnum * sizeof(Elf_Phdr);
-	if ((error = ELFNAME(read_from)(p, epp->ep_vp, eh->e_phoff,
-	    (caddr_t)hph, phsize)) != 0)
+	if ((error = elf_read_from(p, epp->ep_vp, eh->e_phoff,
+	    hph, phsize)) != 0)
 		goto out1;
 
 	for (ph = hph;  ph < &hph[eh->e_phnum]; ph++) {
@@ -897,8 +893,8 @@ ELFNAME(os_pt_note)(struct proc *p, struct exec_package *epp, Elf_Ehdr *eh,
 			continue;
 
 		np = malloc(ph->p_filesz, M_TEMP, M_WAITOK);
-		if ((error = ELFNAME(read_from)(p, epp->ep_vp, ph->p_offset,
-		    (caddr_t)np, ph->p_filesz)) != 0)
+		if ((error = elf_read_from(p, epp->ep_vp, ph->p_offset,
+		    np, ph->p_filesz)) != 0)
 			goto out2;
 
 #if 0
@@ -932,11 +928,24 @@ out1:
 	return error;
 }
 
+/*
+ * Start of routines related to dumping core
+ */
+
+#ifdef SMALL_KERNEL
+int
+coredump_elf(struct proc *p, void *cookie)
+{
+	return EPERM;
+}
+#else /* !SMALL_KERNEL */
+
+
 struct countsegs_state {
 	int	npsections;
 };
 
-int	ELFNAMEEND(coredump_countsegs)(struct proc *, void *,
+int	coredump_countsegs_elf(struct proc *, void *,
 	    struct uvm_coredump_state *);
 
 struct writesegs_state {
@@ -944,23 +953,20 @@ struct writesegs_state {
 	off_t	secoff;
 };
 
-int	ELFNAMEEND(coredump_writeseghdrs)(struct proc *, void *,
+int	coredump_writeseghdrs_elf(struct proc *, void *,
 	    struct uvm_coredump_state *);
 
-int	ELFNAMEEND(coredump_notes)(struct proc *, void *, size_t *);
-int	ELFNAMEEND(coredump_note)(struct proc *, void *, size_t *);
-int	ELFNAMEEND(coredump_writenote)(struct proc *, void *, Elf_Note *,
+int	coredump_notes_elf(struct proc *, void *, size_t *);
+int	coredump_note_elf(struct proc *, void *, size_t *);
+int	coredump_writenote_elf(struct proc *, void *, Elf_Note *,
 	    const char *, void *);
 
 #define	ELFROUNDSIZE	4	/* XXX Should it be sizeof(Elf_Word)? */
 #define	elfround(x)	roundup((x), ELFROUNDSIZE)
 
 int
-ELFNAMEEND(coredump)(struct proc *p, void *cookie)
+coredump_elf(struct proc *p, void *cookie)
 {
-#ifdef SMALL_KERNEL
-	return EPERM;
-#else
 	Elf_Ehdr ehdr;
 	Elf_Phdr *psections = NULL;
 	struct countsegs_state cs;
@@ -982,8 +988,7 @@ ELFNAMEEND(coredump)(struct proc *p, void *cookie)
 
 	/* Pass 1: count the entries. */
 	cs.npsections = 0;
-	error = uvm_coredump_walkmap(p, NULL,
-	    ELFNAMEEND(coredump_countsegs), &cs);
+	error = uvm_coredump_walkmap(p, NULL, coredump_countsegs_elf, &cs);
 	if (error)
 		goto out;
 
@@ -991,7 +996,7 @@ ELFNAMEEND(coredump)(struct proc *p, void *cookie)
 	cs.npsections++;
 
 	/* Get the size of the notes. */
-	error = ELFNAMEEND(coredump_notes)(p, NULL, &notesize);
+	error = coredump_notes_elf(p, NULL, &notesize);
 	if (error)
 		goto out;
 
@@ -1034,8 +1039,7 @@ ELFNAMEEND(coredump)(struct proc *p, void *cookie)
 	/* Pass 2: now write the P-section headers. */
 	ws.secoff = secstart;
 	ws.psections = psections;
-	error = uvm_coredump_walkmap(p, cookie,
-	    ELFNAMEEND(coredump_writeseghdrs), &ws);
+	error = uvm_coredump_walkmap(p, cookie, coredump_writeseghdrs_elf, &ws);
 	if (error)
 		goto out;
 
@@ -1061,7 +1065,7 @@ ELFNAMEEND(coredump)(struct proc *p, void *cookie)
 #endif
 
 	/* Write out the notes. */
-	error = ELFNAMEEND(coredump_notes)(p, cookie, &notesize);
+	error = coredump_notes_elf(p, cookie, &notesize);
 	if (error)
 		goto out;
 
@@ -1101,26 +1105,22 @@ ELFNAMEEND(coredump)(struct proc *p, void *cookie)
 out:
 	free(psections, M_TEMP, psectionslen);
 	return (error);
-#endif
 }
 
 int
-ELFNAMEEND(coredump_countsegs)(struct proc *p, void *iocookie,
+coredump_countsegs_elf(struct proc *p, void *iocookie,
     struct uvm_coredump_state *us)
 {
-#ifndef SMALL_KERNEL
 	struct countsegs_state *cs = us->cookie;
 
 	cs->npsections++;
-#endif
 	return (0);
 }
 
 int
-ELFNAMEEND(coredump_writeseghdrs)(struct proc *p, void *iocookie,
+coredump_writeseghdrs_elf(struct proc *p, void *iocookie,
     struct uvm_coredump_state *us)
 {
-#ifndef SMALL_KERNEL
 	struct writesegs_state *ws = us->cookie;
 	Elf_Phdr phdr;
 	vsize_t size, realsize;
@@ -1145,15 +1145,13 @@ ELFNAMEEND(coredump_writeseghdrs)(struct proc *p, void *iocookie,
 
 	ws->secoff += phdr.p_filesz;
 	*ws->psections++ = phdr;
-#endif
 
 	return (0);
 }
 
 int
-ELFNAMEEND(coredump_notes)(struct proc *p, void *iocookie, size_t *sizep)
+coredump_notes_elf(struct proc *p, void *iocookie, size_t *sizep)
 {
-#ifndef SMALL_KERNEL
 	struct ps_strings pss;
 	struct iovec iov;
 	struct uio uio;
@@ -1204,7 +1202,7 @@ ELFNAMEEND(coredump_notes)(struct proc *p, void *iocookie, size_t *sizep)
 		nhdr.descsz = sizeof(cpi);
 		nhdr.type = NT_OPENBSD_PROCINFO;
 
-		error = ELFNAMEEND(coredump_writenote)(p, iocookie, &nhdr,
+		error = coredump_writenote_elf(p, iocookie, &nhdr,
 		    "OpenBSD", &cpi);
 		if (error)
 			return (error);
@@ -1264,7 +1262,7 @@ ELFNAMEEND(coredump_notes)(struct proc *p, void *iocookie, size_t *sizep)
 		nhdr.type = NT_OPENBSD_WCOOKIE;
 
 		wcookie = process_get_wcookie(p);
-		error = ELFNAMEEND(coredump_writenote)(p, iocookie, &nhdr,
+		error = coredump_writenote_elf(p, iocookie, &nhdr,
 		    "OpenBSD", &wcookie);
 		if (error)
 			return (error);
@@ -1276,7 +1274,7 @@ ELFNAMEEND(coredump_notes)(struct proc *p, void *iocookie, size_t *sizep)
 	 * Now write the register info for the thread that caused the
 	 * coredump.
 	 */
-	error = ELFNAMEEND(coredump_note)(p, iocookie, &notesize);
+	error = coredump_note_elf(p, iocookie, &notesize);
 	if (error)
 		return (error);
 	size += notesize;
@@ -1290,21 +1288,19 @@ ELFNAMEEND(coredump_notes)(struct proc *p, void *iocookie, size_t *sizep)
 	TAILQ_FOREACH(q, &pr->ps_threads, p_thr_link) {
 		if (q == p)		/* we've taken care of this thread */
 			continue;
-		error = ELFNAMEEND(coredump_note)(q, iocookie, &notesize);
+		error = coredump_note_elf(q, iocookie, &notesize);
 		if (error)
 			return (error);
 		size += notesize;
 	}
 
 	*sizep = size;
-#endif
 	return (0);
 }
 
 int
-ELFNAMEEND(coredump_note)(struct proc *p, void *iocookie, size_t *sizep)
+coredump_note_elf(struct proc *p, void *iocookie, size_t *sizep)
 {
-#ifndef SMALL_KERNEL
 	Elf_Note nhdr;
 	int size, notesize, error;
 	int namesize;
@@ -1331,7 +1327,7 @@ ELFNAMEEND(coredump_note)(struct proc *p, void *iocookie, size_t *sizep)
 		nhdr.descsz = sizeof(intreg);
 		nhdr.type = NT_OPENBSD_REGS;
 
-		error = ELFNAMEEND(coredump_writenote)(p, iocookie, &nhdr,
+		error = coredump_writenote_elf(p, iocookie, &nhdr,
 		    name, &intreg);
 		if (error)
 			return (error);
@@ -1350,8 +1346,7 @@ ELFNAMEEND(coredump_note)(struct proc *p, void *iocookie, size_t *sizep)
 		nhdr.descsz = sizeof(freg);
 		nhdr.type = NT_OPENBSD_FPREGS;
 
-		error = ELFNAMEEND(coredump_writenote)(p, iocookie, &nhdr,
-		    name, &freg);
+		error = coredump_writenote_elf(p, iocookie, &nhdr, name, &freg);
 		if (error)
 			return (error);
 	}
@@ -1360,17 +1355,13 @@ ELFNAMEEND(coredump_note)(struct proc *p, void *iocookie, size_t *sizep)
 
 	*sizep = size;
 	/* XXX Add hook for machdep per-LWP notes. */
-#endif
 	return (0);
 }
 
 int
-ELFNAMEEND(coredump_writenote)(struct proc *p, void *cookie, Elf_Note *nhdr,
+coredump_writenote_elf(struct proc *p, void *cookie, Elf_Note *nhdr,
     const char *name, void *data)
 {
-#ifdef SMALL_KERNEL
-	return EPERM;
-#else
 	int error;
 
 	error = coredump_write(cookie, UIO_SYSSPACE, nhdr, sizeof(*nhdr));
@@ -1383,5 +1374,5 @@ ELFNAMEEND(coredump_writenote)(struct proc *p, void *cookie, Elf_Note *nhdr,
 		return error;
 
 	return coredump_write(cookie, UIO_SYSSPACE, data, nhdr->descsz);
-#endif
 }
+#endif /* !SMALL_KERNEL */

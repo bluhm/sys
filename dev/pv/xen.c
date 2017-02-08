@@ -1,4 +1,4 @@
-/*	$OpenBSD: xen.c,v 1.76 2017/02/06 21:58:29 mikeb Exp $	*/
+/*	$OpenBSD: xen.c,v 1.78 2017/02/08 16:15:52 mikeb Exp $	*/
 
 /*
  * Copyright (c) 2015 Mike Belopuhov
@@ -696,6 +696,49 @@ xen_intr_schedule(xen_intr_handle_t xih)
 	}
 }
 
+static void
+xen_barrier_task(void *arg)
+{
+	int *notdone = arg;
+
+	*notdone = 0;
+	wakeup_one(notdone);
+}
+
+/*
+ * This code achieves two goals: 1) makes sure that *after* masking
+ * the interrupt source we're not getting more task_adds: intr_barrier
+ * will take care of that, and 2) makes sure that the interrupt task
+ * is finished executing the current task and won't be called again:
+ * it sets up a barrier task to await completion of the current task
+ * and relies on the interrupt masking to prevent submission of new
+ * tasks in the future.
+ */
+void
+xen_intr_barrier(xen_intr_handle_t xih)
+{
+	struct xen_softc *sc = xen_sc;
+	struct xen_intsrc *xi;
+	struct sleep_state sls;
+	int notdone = 1;
+	struct task t = TASK_INITIALIZER(xen_barrier_task, &notdone);
+
+	/*
+	 * XXX This will need to be revised once intr_barrier starts
+	 * using an argument.
+	 */
+	intr_barrier(NULL);
+
+	if ((xi = xen_intsrc_acquire(sc, (evtchn_port_t)xih)) != NULL) {
+		task_add(xi->xi_taskq, &t);
+		while (notdone) {
+			sleep_setup(&sls, &notdone, PWAIT, "xenbar");
+			sleep_finish(&sls, notdone);
+		}
+		xen_intsrc_release(sc, xi);
+	}
+}
+
 void
 xen_intr_signal(xen_intr_handle_t xih)
 {
@@ -1039,11 +1082,11 @@ xen_grant_table_alloc(struct xen_softc *sc, grant_ref_t *ref)
 			i = 0;
 		if (ge->ge_reserved && i < ge->ge_reserved)
 			continue;
-		if (ge->ge_table[i].flags != GTF_invalid &&
-		    ge->ge_table[i].frame != 0)
+		if (ge->ge_table[i].frame != 0)
 			continue;
 		*ref = ge->ge_start + i;
 		/* XXX Mark as taken */
+		ge->ge_table[i].flags = GTF_invalid;
 		ge->ge_table[i].frame = 0xffffffff;
 		if ((ge->ge_next = i + 1) == GNTTAB_NEPG)
 			ge->ge_next = ge->ge_reserved;
@@ -1080,13 +1123,9 @@ xen_grant_table_free(struct xen_softc *sc, grant_ref_t ref)
 	ref -= ge->ge_start;
 	if (ge->ge_table[ref].flags != GTF_invalid) {
 		mtx_leave(&ge->ge_lock);
-#ifdef XEN_DEBUG
-		panic("ref %u is still in use, sc %p gnt %p", ref +
-		    ge->ge_start, sc, sc->sc_gnt);
-#else
-		printf("%s: reference %u is still in use\n",
-		    sc->sc_dev.dv_xname, ref + ge->ge_start);
-#endif
+		panic("reference %u is still in use, flags %#x frame %#x",
+		    ref + ge->ge_start, ge->ge_table[ref].flags,
+		    ge->ge_table[ref].frame);
 	}
 	ge->ge_table[ref].frame = 0;
 	ge->ge_next = ref;
