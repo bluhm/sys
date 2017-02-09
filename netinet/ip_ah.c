@@ -1250,6 +1250,7 @@ ah_output_cb(struct cryptop *crp)
 	if (ipsp_process_done(m, tdb))
 		ahstat.ahs_outfail++;
 	NET_UNLOCK(s);
+	return;
 
  baddone:
 	NET_UNLOCK(s);

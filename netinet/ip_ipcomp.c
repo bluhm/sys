@@ -333,6 +333,7 @@ ipcomp_input_cb(struct cryptop *crp)
 	/* Back to generic IPsec input processing */
 	ipsec_common_input_cb(m, tdb, skip, protoff);
 	NET_UNLOCK(s);
+	return;
 
 baddone:
 	NET_UNLOCK(s);
