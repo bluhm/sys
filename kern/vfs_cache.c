@@ -135,7 +135,7 @@ cache_zap(struct namecache *ncp)
  * the information on the entry being sought, such as its length
  * and its name. If the lookup succeeds, vpp is set to point to the vnode
  * and an error of 0 is returned. If the lookup determines the name does
- * not exist (negative caching) an error of ENOENT is returned. If the 
+ * not exist (negative caching) an error of ENOENT is returned. If the
  * lookup fails, an error of -1 is returned.
  */
 int
@@ -384,7 +384,7 @@ cache_enter(struct vnode *dvp, struct vnode *vp, struct componentname *cnp)
 		 * for the same vnode (different ncp) - we don't need
 		 * this entry, so free it and we are done.
 		 */
-	  	pool_put(&nch_pool, ncp);
+		pool_put(&nch_pool, ncp);
 		/* we know now dvp->v_nc_tree is not empty, no need
 		 * to vdrop here
 		 */
