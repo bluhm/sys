@@ -462,17 +462,15 @@ cache_purgevfs(struct mount *mp)
 
 	/* whack the regular entries */
 	TAILQ_FOREACH_SAFE(ncp, &nclruhead, nc_lru, nxtcp) {
-		if (ncp->nc_dvp == NULL || ncp->nc_dvp->v_mount != mp) {
+		if (ncp->nc_dvp == NULL || ncp->nc_dvp->v_mount != mp)
 			continue;
-		}
 		/* free the resources we had */
 		cache_zap(ncp);
 	}
 	/* whack the negative entries */
 	TAILQ_FOREACH_SAFE(ncp, &nclruneghead, nc_neg, nxtcp) {
-		if (ncp->nc_dvp == NULL || ncp->nc_dvp->v_mount != mp) {
+		if (ncp->nc_dvp == NULL || ncp->nc_dvp->v_mount != mp)
 			continue;
-		}
 		/* free the resources we had */
 		cache_zap(ncp);
 	}
