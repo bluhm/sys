@@ -301,7 +301,7 @@ do {									\
 	s = splsoftnet();						\
 } while (0)
 
-#define	NET_UNLOCK(s)						\
+#define	NET_UNLOCK(s)							\
 do {									\
 	splx(s);							\
 	rw_exit_write(&netlock);					\
@@ -318,6 +318,27 @@ do {									\
 do {									\
 	if (rw_status(&netlock) == RW_WRITE)				\
 		splassert_fail(0, rw_status(&netlock), __func__);	\
+} while (0)
+
+
+#define SOCKET_LOCK(so, s)						\
+do {									\
+	if (so->so_proto->pr_domain->dom_family != PF_LOCAL)		\
+		NET_LOCK(s);						\
+	else								\
+		s = -42;						\
+} while (0)
+
+#define	SOCKET_UNLOCK(s)						\
+do {									\
+	if (s != -42)							\
+		NET_UNLOCK(s);						\
+} while (0)
+
+#define	SOCKET_ASSERT_LOCKED(so)					\
+do {									\
+	if (so->so_proto->pr_domain->dom_family != PF_LOCAL)		\
+		NET_ASSERT_LOCKED();					\
 } while (0)
 
 __returns_twice int	setjmp(label_t *);

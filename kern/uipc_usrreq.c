@@ -121,6 +121,9 @@ uipc_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		error = EINVAL;
 		goto release;
 	}
+
+	NET_ASSERT_UNLOCKED();
+
 	switch (req) {
 
 	case PRU_ATTACH:
@@ -132,17 +135,12 @@ uipc_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		break;
 
 	case PRU_DETACH:
-		/* XXXSMP breaks atomicity */
-		rw_exit_write(&netlock);
 		unp_detach(unp);
-		rw_enter_write(&netlock);
 		break;
 
 	case PRU_BIND:
-		/* XXXSMP breaks atomicity */
-		rw_exit_write(&netlock);
+		NET_ASSERT_UNLOCKED();
 		error = unp_bind(unp, nam, p);
-		rw_enter_write(&netlock);
 		break;
 
 	case PRU_LISTEN:
@@ -151,10 +149,7 @@ uipc_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		break;
 
 	case PRU_CONNECT:
-		/* XXXSMP breaks atomicity */
-		rw_exit_write(&netlock);
 		error = unp_connect(so, nam, p);
-		rw_enter_write(&netlock);
 		break;
 
 	case PRU_CONNECT2:
@@ -222,10 +217,7 @@ uipc_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 					error = EISCONN;
 					break;
 				}
-				/* XXXSMP breaks atomicity */
-				rw_exit_write(&netlock);
 				error = unp_connect(so, nam, p);
-				rw_enter_write(&netlock);
 				if (error)
 					break;
 			} else {
@@ -397,9 +389,7 @@ void
 unp_detach(struct unpcb *unp)
 {
 	struct vnode *vp;
-
-	NET_ASSERT_UNLOCKED();
-
+	
 	LIST_REMOVE(unp, unp_link);
 	if (unp->unp_vnode) {
 		unp->unp_vnode->v_socket = NULL;
@@ -411,10 +401,7 @@ unp_detach(struct unpcb *unp)
 		unp_disconnect(unp);
 	while (!SLIST_EMPTY(&unp->unp_refs))
 		unp_drop(SLIST_FIRST(&unp->unp_refs), ECONNRESET);
-	/* XXXSMP The assert is wrong */
-	rw_enter_write(&netlock);
 	soisdisconnected(unp->unp_socket);
-	rw_exit_write(&netlock);
 	unp->unp_socket->so_pcb = NULL;
 	m_freem(unp->unp_addr);
 	free(unp, M_PCB, sizeof *unp);
@@ -539,7 +526,7 @@ unp_connect(struct socket *so, struct mbuf *nam, struct proc *p)
 		error = EPROTOTYPE;
 		goto bad;
 	}
-	NET_LOCK(s);
+	SOCKET_LOCK(so, s);
 	if (so->so_proto->pr_flags & PR_CONNREQUIRED) {
 		if ((so2->so_options & SO_ACCEPTCONN) == 0 ||
 		    (so3 = sonewconn(so2, 0)) == 0) {
@@ -564,7 +551,7 @@ unp_connect(struct socket *so, struct mbuf *nam, struct proc *p)
 	}
 	error = unp_connect2(so, so2);
 unlock:
-	NET_UNLOCK(s);
+	SOCKET_UNLOCK(s);
 bad:
 	vput(vp);
 	return (error);

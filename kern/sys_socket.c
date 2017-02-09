@@ -38,6 +38,7 @@
 #include <sys/proc.h>
 #include <sys/mbuf.h>
 #include <sys/protosw.h>
+#include <sys/domain.h>
 #include <sys/socket.h>
 #include <sys/socketvar.h>
 #include <sys/ioctl.h>
@@ -127,10 +128,10 @@ soo_ioctl(struct file *fp, u_long cmd, caddr_t data, struct proc *p)
 	}
 	if (IOCGROUP(cmd) == 'r')
 		return (EOPNOTSUPP);
-	NET_LOCK(s);
+	SOCKET_LOCK(so, s);
 	error = ((*so->so_proto->pr_usrreq)(so, PRU_CONTROL, 
 	    (struct mbuf *)cmd, (struct mbuf *)data, (struct mbuf *)NULL, p));
-	NET_UNLOCK(s);
+	SOCKET_UNLOCK(s);
 
 	return (error);
 }
@@ -187,10 +188,10 @@ soo_stat(struct file *fp, struct stat *ub, struct proc *p)
 		ub->st_mode |= S_IWUSR | S_IWGRP | S_IWOTH;
 	ub->st_uid = so->so_euid;
 	ub->st_gid = so->so_egid;
-	NET_LOCK(s);
+	SOCKET_LOCK(so, s);
 	(void) ((*so->so_proto->pr_usrreq)(so, PRU_SENSE,
 	    (struct mbuf *)ub, NULL, NULL, p));
-	NET_UNLOCK(s);
+	SOCKET_UNLOCK(s);
 	return (0);
 }
 

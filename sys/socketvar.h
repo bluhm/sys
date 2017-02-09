@@ -278,7 +278,7 @@ void	sbrelease(struct sockbuf *sb);
 int	sbcheckreserve(u_long cnt, u_long defcnt);
 int	sbchecklowmem(void);
 int	sbreserve(struct sockbuf *sb, u_long cc);
-int	sbwait(struct sockbuf *sb);
+int	sbwait(struct socket *, struct sockbuf *sb);
 int	sb_lock(struct sockbuf *sb);
 void	soinit(void);
 int	soabort(struct socket *so);
@@ -313,6 +313,7 @@ int	sosend(struct socket *so, struct mbuf *addr, struct uio *uio,
 int	sosetopt(struct socket *so, int level, int optname,
 	    struct mbuf *m0);
 int	soshutdown(struct socket *so, int how);
+int	sosleep(struct socket *, void *, int, const char *, int);
 void	sowakeup(struct socket *so, struct sockbuf *sb);
 void	sorwakeup(struct socket *);
 void	sowwakeup(struct socket *);
