@@ -461,8 +461,7 @@ cache_purgevfs(struct mount *mp)
 	struct namecache *ncp, *nxtcp;
 
 	/* whack the regular entries */
-	for (ncp = TAILQ_FIRST(&nclruhead); ncp != NULL; ncp = nxtcp) {
-		nxtcp = TAILQ_NEXT(ncp, nc_lru);
+	TAILQ_FOREACH_SAFE(ncp, &nclruhead, nc_lru, nxtcp) {
 		if (ncp->nc_dvp == NULL || ncp->nc_dvp->v_mount != mp) {
 			continue;
 		}
@@ -470,8 +469,7 @@ cache_purgevfs(struct mount *mp)
 		cache_zap(ncp);
 	}
 	/* whack the negative entries */
-	for (ncp = TAILQ_FIRST(&nclruneghead); ncp != NULL; ncp = nxtcp) {
-		nxtcp = TAILQ_NEXT(ncp, nc_neg);
+	TAILQ_FOREACH_SAFE(ncp, &nclruneghead, nc_neg, nxtcp) {
 		if (ncp->nc_dvp == NULL || ncp->nc_dvp->v_mount != mp) {
 			continue;
 		}
