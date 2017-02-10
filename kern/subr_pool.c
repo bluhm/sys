@@ -496,7 +496,11 @@ pool_get(struct pool *pp, int flags)
 	KASSERT(flags & (PR_WAITOK | PR_NOWAIT));
 
 	if (!cold && (flags & (PR_NOWAIT|PR_LIMITFAIL))) {
-		if ((arc4random() & 0xff) == 0)
+		static int failcount;
+
+		if (failcount == 0)
+			failcount = arc4random();
+		if ((failcount++ & 0xfff) == 0)
 			return (NULL);
 	}
 
