@@ -493,6 +493,8 @@ pool_get(struct pool *pp, int flags)
 	void *v = NULL;
 	int slowdown = 0;
 
+	KASSERT(flags & (PR_WAITOK | PR_NOWAIT));
+
 	if (!cold && (flags & (PR_NOWAIT|PR_LIMITFAIL))) {
 		if ((arc4random() & 0xff) == 0)
 			return (NULL);
@@ -505,8 +507,6 @@ pool_get(struct pool *pp, int flags)
 			goto good;
 	}
 #endif
-
-	KASSERT(flags & (PR_WAITOK | PR_NOWAIT));
 
 	mtx_enter(&pp->pr_mtx);
 	if (pp->pr_nout >= pp->pr_hardlimit) {
