@@ -180,7 +180,11 @@ malloc(size_t size, int type, int flags)
 	}
 
 	if (!cold && (flags & (M_NOWAIT|M_CANFAIL))) {
-		if ((arc4random() & 0xff) == 0)
+		static int failcount;
+
+		if (failcount == 0) 
+			failcount = arc4random();
+		if ((failcount++ & 0xfff) == 0)
 			return (NULL);
 	}
 
