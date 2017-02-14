@@ -221,15 +221,15 @@ pfctlinput(int cmd, struct sockaddr *sa)
 {
 	struct domain *dp;
 	struct protosw *pr;
-	int i, s;
+	int i;
 
-	s = splsoftnet();
+	NET_ASSERT_LOCKED();
+
 	for (i = 0; (dp = domains[i]) != NULL; i++) {
 		for (pr = dp->dom_protosw; pr < dp->dom_protoswNPROTOSW; pr++)
 			if (pr->pr_ctlinput)
 				(*pr->pr_ctlinput)(cmd, sa, 0, NULL);
 	}
-	splx(s);
 }
 
 void
