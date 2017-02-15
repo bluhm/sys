@@ -1637,9 +1637,11 @@ rtlabel_name2id(char *name)
 	 */
 
 	if (!TAILQ_EMPTY(&rt_labels))
-		for (p = TAILQ_FIRST(&rt_labels); p != NULL &&
-		    p->rtl_id == new_id; p = TAILQ_NEXT(p, rtl_entry))
+		TAILQ_FOREACH(p, &rt_labels, rtl_entry) {
+			if (p->rtl_id != new_id)
+				break;
 			new_id = p->rtl_id + 1;
+		}
 
 	if (new_id > LABELID_MAX)
 		return (0);
