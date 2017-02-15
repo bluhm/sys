@@ -1597,8 +1597,7 @@ rt_timer_timer(void *arg)
 	current_time = time_uptime;
 
 	NET_LOCK(s);
-	for (rtq = LIST_FIRST(&rttimer_queue_head); rtq != NULL;
-	     rtq = LIST_NEXT(rtq, rtq_link)) {
+	LIST_FOREACH(rtq, &rttimer_queue_head, rtq_link) {
 		while ((r = TAILQ_FIRST(&rtq->rtq_head)) != NULL &&
 		    (r->rtt_time + rtq->rtq_timeout) < current_time) {
 			LIST_REMOVE(r, rtt_link);
