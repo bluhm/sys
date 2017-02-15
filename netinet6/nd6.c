@@ -722,6 +722,7 @@ nd6_free(struct rtentry *rt)
 		}
 	}
 
+	KASSERT(!ISSET(rt->rt_flags, RTF_LOCAL));
 	nd6_invalidate(rt);
 
 	/*
