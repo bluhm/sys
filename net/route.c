@@ -1618,7 +1618,7 @@ rt_timer_timer(void *arg)
 u_int16_t
 rtlabel_name2id(char *name)
 {
-	struct rt_label		*label, *p = NULL;
+	struct rt_label		*label, *p;
 	u_int16_t		 new_id = 1;
 
 	if (!name[0])
