@@ -694,6 +694,7 @@ arptfree(struct rtentry *rt)
 {
 	struct ifnet *ifp;
 
+	KASSERT(!ISSET(rt->rt_flags, RTF_LOCAL));
 	arpinvalidate(rt);
 
 	ifp = if_get(rt->rt_ifidx);
