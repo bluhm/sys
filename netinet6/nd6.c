@@ -722,6 +722,9 @@ nd6_free(struct rtentry *rt)
 		}
 	}
 
+	if (ISSET(rt->rt_flags, RTF_LOCAL))
+		goto out;
+
 	nd6_invalidate(rt);
 
 	/*
@@ -732,6 +735,7 @@ nd6_free(struct rtentry *rt)
 	if (!ISSET(rt->rt_flags, RTF_STATIC|RTF_CACHED))
 		rtdeletemsg(rt, ifp, ifp->if_rdomain);
 
+ out:
 	if_put(ifp);
 }
 
