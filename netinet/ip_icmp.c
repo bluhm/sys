@@ -1071,15 +1071,17 @@ icmp_mtudisc_timeout(struct rtentry *rt, struct rttimer *r)
 		return;
 
 	if ((rt->rt_flags & (RTF_DYNAMIC|RTF_HOST)) == (RTF_DYNAMIC|RTF_HOST)) {
-		void (*ctlfunc)(int, struct sockaddr *, u_int, void *);
+		void (*ctlfunc)(int, struct sockaddr *, u_int, void *) = NULL;
 		struct sockaddr_in sin;
 
-		sin = *satosin(rt_key(rt));
+		if (rt_key(rt)->sa_family == AF_INET) {
+			sin = *satosin(rt_key(rt));
+			ctlfunc = inetsw[ip_protox[IPPROTO_TCP]].pr_ctlinput;
+		}
 
 		rtdeletemsg(rt, ifp, r->rtt_tableid);
 
 		/* Notify TCP layer of increased Path MTU estimate */
-		ctlfunc = inetsw[ip_protox[IPPROTO_TCP]].pr_ctlinput;
 		if (ctlfunc)
 			(*ctlfunc)(PRC_MTUINC, sintosa(&sin),
 			    r->rtt_tableid, NULL);
