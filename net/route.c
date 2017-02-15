@@ -1556,8 +1556,7 @@ rt_timer_add(struct rtentry *rt, void (*func)(struct rtentry *,
 	 * If there's already a timer with this action, destroy it before
 	 * we add a new one.
 	 */
-	for (r = LIST_FIRST(&rt->rt_timer); r != NULL;
-	     r = LIST_NEXT(r, rtt_link)) {
+	LIST_FOREACH(r, &rt->rt_timer, rtt_link) {
 		if (r->rtt_func == func) {
 			LIST_REMOVE(r, rtt_link);
 			TAILQ_REMOVE(&r->rtt_queue->rtq_head, r, rtt_next);
