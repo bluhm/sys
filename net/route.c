@@ -1695,8 +1695,7 @@ rtlabel_unref(u_int16_t id)
 	if (id == 0)
 		return;
 
-	for (p = TAILQ_FIRST(&rt_labels); p != NULL; p = next) {
-		next = TAILQ_NEXT(p, rtl_entry);
+	TAILQ_FOREACH_SAFE(p, &rt_labels, rtl_entry, next) {
 		if (id == p->rtl_id) {
 			if (--p->rtl_ref == 0) {
 				TAILQ_REMOVE(&rt_labels, p, rtl_entry);
