@@ -169,6 +169,8 @@ arp_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 			    (u_char *)LLADDR(satosdl(gate)));
 		/*FALLTHROUGH*/
 	case RTM_RESOLVE:
+		if (ISSET(rt->rt_flags, RTF_LOCAL))
+			break;
 		if (gate->sa_family != AF_LINK ||
 		    gate->sa_len < sizeof(struct sockaddr_dl)) {
 			log(LOG_DEBUG, "%s: bad gateway value: %s\n", __func__,
