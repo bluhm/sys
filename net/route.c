@@ -1635,14 +1635,11 @@ rtlabel_name2id(char *name)
 	 * and take the first free slot we find. if there is none or the list
 	 * is empty, append a new entry at the end.
 	 */
-
-	if (!TAILQ_EMPTY(&rt_labels))
-		TAILQ_FOREACH(p, &rt_labels, rtl_entry) {
-			if (p->rtl_id != new_id)
-				break;
-			new_id = p->rtl_id + 1;
-		}
-
+	TAILQ_FOREACH(p, &rt_labels, rtl_entry) {
+		if (p->rtl_id != new_id)
+			break;
+		new_id = p->rtl_id + 1;
+	}
 	if (new_id > LABELID_MAX)
 		return (0);
 
