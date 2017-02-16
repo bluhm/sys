@@ -505,27 +505,25 @@ ipsec_common_input_cb(struct mbuf *m, struct tdb *tdbp, int skip, int protoff)
 	 * Record what we've done to the packet (under what SA it was
 	 * processed).
 	 */
-	if (tdbp->tdb_sproto != IPPROTO_IPCOMP) {
-		mtag = m_tag_get(PACKET_TAG_IPSEC_IN_DONE,
-		    sizeof(struct tdb_ident), M_NOWAIT);
-		if (mtag == NULL) {
-			m_freem(m);
-			DPRINTF(("ipsec_common_input_cb(): failed to "
-			    "get tag\n"));
-			IPSEC_ISTAT(espstat.esps_hdrops, ahstat.ahs_hdrops,
-			    ipcompstat.ipcomps_hdrops);
-			return;
-		}
-
-		tdbi = (struct tdb_ident *)(mtag + 1);
-		bcopy(&tdbp->tdb_dst, &tdbi->dst,
-		    sizeof(union sockaddr_union));
-		tdbi->proto = tdbp->tdb_sproto;
-		tdbi->spi = tdbp->tdb_spi;
-		tdbi->rdomain = tdbp->tdb_rdomain;
-
-		m_tag_prepend(m, mtag);
+	mtag = m_tag_get(PACKET_TAG_IPSEC_IN_DONE,
+	    sizeof(struct tdb_ident), M_NOWAIT);
+	if (mtag == NULL) {
+		m_freem(m);
+		DPRINTF(("ipsec_common_input_cb(): failed to "
+		    "get tag\n"));
+		IPSEC_ISTAT(espstat.esps_hdrops, ahstat.ahs_hdrops,
+		    ipcompstat.ipcomps_hdrops);
+		return;
 	}
+
+	tdbi = (struct tdb_ident *)(mtag + 1);
+	bcopy(&tdbp->tdb_dst, &tdbi->dst,
+	    sizeof(union sockaddr_union));
+	tdbi->proto = tdbp->tdb_sproto;
+	tdbi->spi = tdbp->tdb_spi;
+	tdbi->rdomain = tdbp->tdb_rdomain;
+
+	m_tag_prepend(m, mtag);
 
 	if (sproto == IPPROTO_ESP) {
 		/* Packet is confidential ? */
