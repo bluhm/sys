@@ -527,6 +527,29 @@ tdb_hashstats(void)
 			db_printf("%d%s\t\t%d\n", i, i == NBUCKETS - 1 ?
 			    "+" : "", buckets[i]);
 }
+
+int
+tdb_hashprint_walker(struct tdb *sa, void *arg, int last)
+{
+	db_printf("tdb %p, flags 0x%x\n", sa, sa->tdb_flags);
+	db_printf("  xform %p, encalgxform %p\n",
+	    sa->tdb_xform, sa->tdb_encalgxform);
+	db_printf("  authalgxform %p, compalgxform %p\n",
+	    sa->tdb_authalgxform, sa->tdb_compalgxform);
+	db_printf("  src %x, dst %x\n",
+	    sa->tdb_src.sin.sin_addr.s_addr, sa->tdb_dst.sin.sin_addr.s_addr);
+	db_printf("  spi %x, proto %d\n",
+	    sa->tdb_spi, sa->tdb_sproto);
+	db_printf("  hashval %d\n", tdb_hash(sa->tdb_rdomain, sa->tdb_spi,
+	    &sa->tdb_dst, sa->tdb_sproto));
+	return 0;
+}
+
+int
+tdb_hashprint(u_int rdomain)
+{
+	return tdb_walk(rdomain, tdb_hashprint_walker, NULL);
+}
 #endif	/* DDB */
 
 int
