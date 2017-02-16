@@ -93,7 +93,7 @@ int
 ip4_input(struct mbuf **mp, int *offp, int proto)
 {
 	/* If we do not accept IP-in-IP explicitly, drop.  */
-	if (!ipip_allow && ((*mp)->m_flags & (M_AUTH|M_CONF)) == 0) {
+	if (!ipip_allow && ((*mp)->m_flags & (M_AUTH|M_CONF|M_COMP)) == 0) {
 		DPRINTF(("ip4_input(): dropped due to policy\n"));
 		ipipstat.ipips_pdrops++;
 		m_freem(*mp);

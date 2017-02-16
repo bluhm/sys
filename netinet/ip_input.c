@@ -153,6 +153,12 @@ struct ip_srcrt {
 
 void save_rte(struct mbuf *, u_char *, struct in_addr);
 
+void
+ipstat_inc(enum ipstat_counters c)
+{
+	counters_inc(ipcounters, c);
+}
+
 /*
  * IP initialization: fill in IP protocol switch table.
  * All protocols not implemented in kernel go to raw IP protocol handler.
