@@ -137,11 +137,7 @@ enum ipstat_counters {
 
 extern struct cpumem *ipcounters;
 
-static inline void
-ipstat_inc(enum ipstat_counters c)
-{
-	counters_inc(ipcounters, c);
-}
+void ipstat_inc(enum ipstat_counters c);
 
 /*
  * Structure attached to inpcb.ip_moptions and
