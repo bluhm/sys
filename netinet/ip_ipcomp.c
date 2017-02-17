@@ -411,6 +411,7 @@ ipcomp_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 			ipcompstat.ipcomps_toobig++;
 			return EMSGSIZE;
 		}
+		break;
 #endif /* INET6 */
 
 	default:
