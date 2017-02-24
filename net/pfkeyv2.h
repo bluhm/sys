@@ -261,7 +261,8 @@ struct sadb_x_tap {
 #define SADB_X_EXT_LIFETIME_LASTUSE   32
 #define SADB_X_EXT_TAG                33
 #define SADB_X_EXT_TAP                34
-#define SADB_EXT_MAX                  34
+#define SADB_X_EXT_SATYPE2            35
+#define SADB_EXT_MAX                  35
 
 /* Fix pfkeyv2.c struct pfkeyv2_socket if SATYPE_MAX > 31 */
 #define SADB_SATYPE_UNSPEC		 0

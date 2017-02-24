@@ -1379,7 +1379,7 @@ pfkeyv2_send(struct socket *socket, void *message, int len)
 		ssa = (struct sadb_sa *) headers[SADB_X_EXT_SA2];
 		sunionp = (union sockaddr_union *) (headers[SADB_X_EXT_DST2] +
 		    sizeof(struct sadb_address));
-		sa_proto = ((struct sadb_protocol *) headers[SADB_X_EXT_PROTOCOL]);
+		sa_proto = (struct sadb_protocol *) headers[SADB_X_EXT_SATYPE2];
 
 		tdb2 = gettdb(rdomain, ssa->sadb_sa_spi, sunionp,
 		    SADB_X_GETSPROTO(sa_proto->sadb_protocol_proto));
