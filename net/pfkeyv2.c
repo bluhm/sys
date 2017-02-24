@@ -556,9 +556,12 @@ pfkeyv2_get(struct tdb *sa, void **headers, void **buffer, int *lenp)
 		}
 	}
 
-	if (sa->tdb_onext)
-		i += sizeof(struct sadb_sa) + sizeof(struct sadb_address) +
+	if (sa->tdb_onext) {
+		i += sizeof(struct sadb_sa);
+		i += sizeof(struct sadb_address) +
 		    PADUP(SA_LEN(&sa->tdb_onext->tdb_dst.sa));
+		i += sizeof(struct sadb_protocol);
+	}
 
 	if (sa->tdb_udpencap_port)
 		i += sizeof(struct sadb_x_udpencap);
@@ -643,6 +646,8 @@ pfkeyv2_get(struct tdb *sa, void **headers, void **buffer, int *lenp)
 		export_sa(&p, sa->tdb_onext);
 		headers[SADB_X_EXT_DST2] = p;
 		export_address(&p, &sa->tdb_onext->tdb_dst.sa);
+		headers[SADB_X_EXT_SATYPE2] = p;
+		export_satype(&p, sa->tdb_onext);
 	}
 
 	/* Export UDP encapsulation port, if present */
