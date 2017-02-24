@@ -887,4 +887,14 @@ export_tap(void **p, struct tdb *tdb)
 	stag->sadb_x_tap_len = sizeof(struct sadb_x_tap) / sizeof(uint64_t);
 	*p += sizeof(struct sadb_x_tap);
 }
+
+void
+export_satype(void **p, struct tdb *tdb)
+{
+	struct sadb_protocol *sab = *p;
+
+	sab->sadb_protocol_len = sizeof(struct sadb_protocol) /
+	    sizeof(uint64_t);
+	sab->sadb_protocol_proto = tdb->tdb_satype;
+}
 #endif

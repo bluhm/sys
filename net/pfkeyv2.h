@@ -428,6 +428,7 @@ void export_key(void **, struct tdb *, int);
 void export_udpencap(void **, struct tdb *);
 void export_tag(void **, struct tdb *);
 void export_tap(void **, struct tdb *);
+void export_satype(void **, struct tdb *);
 
 void import_address(struct sockaddr *, struct sadb_address *);
 void import_identities(struct ipsec_ids **, int, struct sadb_ident *,
