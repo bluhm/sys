@@ -883,10 +883,8 @@ pfkeyv2_send(struct socket *socket, void *message, int len)
 		    &sa1->tdb_sproto, 0)))
 			goto ret;
 
-		import_address(&sa1->tdb_src.sa,
-		    headers[SADB_EXT_ADDRESS_SRC]);
-		import_address(&sa1->tdb_dst.sa,
-		    headers[SADB_EXT_ADDRESS_DST]);
+		import_address(&sa1->tdb_src.sa, headers[SADB_EXT_ADDRESS_SRC]);
+		import_address(&sa1->tdb_dst.sa, headers[SADB_EXT_ADDRESS_DST]);
 
 		/* Find an unused SA identifier */
 		sprng = (struct sadb_spirange *) headers[SADB_EXT_SPIRANGE];
