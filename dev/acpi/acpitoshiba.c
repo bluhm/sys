@@ -1,4 +1,4 @@
-/* $OpenBSD: acpitoshiba.c,v 1.6 2016/06/16 10:39:36 giovanni Exp $ */
+/* $OpenBSD: acpitoshiba.c,v 1.8 2017/02/28 10:39:07 natano Exp $ */
 /*-
  * Copyright (c) 2003 Hiroyuki Aizu <aizu@navi.org>
  * All rights reserved.
@@ -121,9 +121,9 @@ struct cfdriver acpitoshiba_cd = {
 };
 
 const char *acpitoshiba_hids[] = {
-	ACPI_DEV_TOSHIBA_LIBRETTO,
-	ACPI_DEV_TOSHIBA_DYNABOOK,
-	ACPI_DEV_TOSHIBA_SPA40,
+	"TOS6200",	/* Libretto */
+	"TOS6207",	/* Dynabook */
+	"TOS6208",	/* SPA40 */
 	0
 };
 
@@ -400,7 +400,7 @@ toshiba_hotkey(struct aml_node *node, int notify, void *arg)
 #ifndef SMALL_KERNEL
 		if (acpi_record_event(sc->sc_acpi, APM_USER_SUSPEND_REQ)) {
 			acpi_addtask(sc->sc_acpi, acpi_sleep_task,
-			    sc->sc_acpi, ACPI_STATE_S3);
+			    sc->sc_acpi, ACPI_SLEEP_SUSPEND);
 			ret = HCI_SUCCESS;
 		}
 #endif
@@ -409,7 +409,7 @@ toshiba_hotkey(struct aml_node *node, int notify, void *arg)
 #if defined(HIBERNATE) && !defined(SMALL_KERNEL)
 		if (acpi_record_event(sc->sc_acpi, APM_USER_HIBERNATE_REQ)) {
 			acpi_addtask(sc->sc_acpi, acpi_sleep_task,
-			    sc->sc_acpi, ACPI_STATE_S4);
+			    sc->sc_acpi, ACPI_SLEEP_HIBERNATE);
 			ret = HCI_SUCCESS;
 		}
 #endif

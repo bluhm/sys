@@ -1,4 +1,4 @@
-/*	$OpenBSD: acpithinkpad.c,v 1.54 2017/02/07 05:18:07 jsg Exp $	*/
+/*	$OpenBSD: acpithinkpad.c,v 1.57 2017/02/28 10:39:07 natano Exp $	*/
 /*
  * Copyright (c) 2008 joshua stein <jcs@openbsd.org>
  *
@@ -181,7 +181,10 @@ struct cfdriver acpithinkpad_cd = {
 };
 
 const char *acpithinkpad_hids[] = {
-	ACPI_DEV_IBM, ACPI_DEV_LENOVO, 0
+	"IBM0068",
+	"LEN0068",
+	"LEN0268",
+	0
 };
 
 int
@@ -380,7 +383,7 @@ thinkpad_hotkey(struct aml_node *node, int notify_type, void *arg)
 #ifndef SMALL_KERNEL
 			if (acpi_record_event(sc->sc_acpi, APM_USER_SUSPEND_REQ))
 				acpi_addtask(sc->sc_acpi, acpi_sleep_task, 
-				    sc->sc_acpi, ACPI_STATE_S3);
+				    sc->sc_acpi, ACPI_SLEEP_SUSPEND);
 #endif
 			handled = 1;
 			break;
@@ -406,7 +409,7 @@ thinkpad_hotkey(struct aml_node *node, int notify_type, void *arg)
 #if defined(HIBERNATE) && !defined(SMALL_KERNEL)
 			if (acpi_record_event(sc->sc_acpi, APM_USER_HIBERNATE_REQ))
 				acpi_addtask(sc->sc_acpi, acpi_sleep_task, 
-				    sc->sc_acpi, ACPI_STATE_S4);
+				    sc->sc_acpi, ACPI_SLEEP_HIBERNATE);
 #endif
 			handled = 1;
 			break;
