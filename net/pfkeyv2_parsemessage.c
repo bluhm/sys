@@ -1,4 +1,4 @@
-/*	$OpenBSD: pfkeyv2_parsemessage.c,v 1.50 2017/01/24 10:08:30 krw Exp $	*/
+/*	$OpenBSD: pfkeyv2_parsemessage.c,v 1.51 2017/02/28 16:46:27 bluhm Exp $	*/
 
 /*
  *	@(#)COPYRIGHT	1.1 (NRL) 17 January 1995
