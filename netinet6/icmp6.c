@@ -1161,6 +1161,8 @@ icmp6_reflect(struct mbuf *m, size_t off)
 	struct in6_addr t, *src = NULL;
 	struct sockaddr_in6 sa6_src, sa6_dst;
 
+	CTASSERT(sizeof(struct ip6_hdr) + sizeof(struct icmp6_hdr) <= MHLEN);
+
 	/* too short to reflect */
 	if (off < sizeof(struct ip6_hdr)) {
 		nd6log((LOG_DEBUG,
@@ -1174,10 +1176,6 @@ icmp6_reflect(struct mbuf *m, size_t off)
 	 * If there are extra headers between IPv6 and ICMPv6, strip
 	 * off that header first.
 	 */
-#ifdef DIAGNOSTIC
-	if (sizeof(struct ip6_hdr) + sizeof(struct icmp6_hdr) > MHLEN)
-		panic("assumption failed in icmp6_reflect");
-#endif
 	if (off > sizeof(struct ip6_hdr)) {
 		size_t l;
 		struct ip6_hdr nip6;
