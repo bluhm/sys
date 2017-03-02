@@ -1,4 +1,4 @@
-/*	$OpenBSD: rtsock.c,v 1.223 2017/02/22 19:34:42 dhill Exp $	*/
+/*	$OpenBSD: rtsock.c,v 1.225 2017/03/02 09:37:04 mpi Exp $	*/
 /*	$NetBSD: rtsock.c,v 1.18 1996/03/29 00:32:10 cgd Exp $	*/
 
 /*
@@ -943,20 +943,15 @@ change:
 	seq = rtm->rtm_seq;
 	free(rtm, M_RTABLE, 0);
 	rtm = rt_report(rt, type, seq, tableid);
+flush:
+	rtfree(rt);
 	if (rtm == NULL) {
 		error = ENOBUFS;
 		goto fail;
-	}
-
-flush:
-	if (rt)
-		rtfree(rt);
-	if (rtm) {
-		if (error)
-			rtm->rtm_errno = error;
-		else {
-			rtm->rtm_flags |= RTF_DONE;
-		}
+	} else if (error) {
+		rtm->rtm_errno = error;
+	} else {
+		rtm->rtm_flags |= RTF_DONE;
 	}
 
 	/*
@@ -1666,6 +1661,10 @@ struct protosw routesw[] = {
 }
 };
 
-struct domain routedomain =
-    { PF_ROUTE, "route", route_init, 0, 0,
-      routesw, &routesw[nitems(routesw)] };
+struct domain routedomain = {
+  .dom_family = PF_ROUTE,
+  .dom_name = "route",
+  .dom_init = route_init,
+  .dom_protosw = routesw,
+  .dom_protoswNPROTOSW = &routesw[nitems(routesw)]
+};
