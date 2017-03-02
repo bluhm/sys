@@ -71,7 +71,8 @@ struct protosw {
 					/* input to protocol (from below) */
 	int	(*pr_input)(struct mbuf **, int *, int);
 					/* output to protocol (from above) */
-	int	(*pr_output)(struct mbuf *, ...);
+	int	(*pr_output)(struct mbuf *, struct socket *, struct sockaddr *,
+		    struct mbuf *);
 					/* control input (from below) */
 	void	(*pr_ctlinput)(int, struct sockaddr *, u_int, void *);
 					/* control output (from above) */
