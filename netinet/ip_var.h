@@ -253,7 +253,8 @@ void	 ip_forward(struct mbuf *, struct ifnet *, struct rtentry *, int);
 int	 rip_ctloutput(int, struct socket *, int, int, struct mbuf *);
 void	 rip_init(void);
 int	 rip_input(struct mbuf **, int *, int);
-int	 rip_output(struct mbuf *, ...);
+int	 rip_output(struct mbuf *, struct socket *, struct sockaddr *,
+	    struct mbuf *);
 int	 rip_usrreq(struct socket *,
 	    int, struct mbuf *, struct mbuf *, struct mbuf *, struct proc *);
 
