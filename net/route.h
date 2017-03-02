@@ -417,7 +417,8 @@ struct sockaddr_in6;
 struct bfd_config;
 
 void	 route_init(void);
-int	 route_output(struct mbuf *, ...);
+int	 route_output(struct mbuf *, struct socket *, struct sockaddr *,
+	    struct mbuf *);
 int	 route_usrreq(struct socket *, int, struct mbuf *,
 			   struct mbuf *, struct mbuf *, struct proc *);
 void	 rt_ifmsg(struct ifnet *);
