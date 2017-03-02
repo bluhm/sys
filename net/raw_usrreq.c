@@ -139,7 +139,7 @@ raw_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 			error = ENOTCONN;
 			break;
 		}
-		error = (*so->so_proto->pr_output)(m, so);
+		error = (*so->so_proto->pr_output)(m, so, NULL, NULL);
 		m = NULL;
 		if (nam)
 			rp->rcb_faddr = 0;
