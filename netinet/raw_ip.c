@@ -507,21 +507,22 @@ rip_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 	    {
 		struct sockaddr_in dst;
 
+		memset(&dst, 0, sizeof(dst));
+		dst.sin_family = AF_INET;
+		dst.sin_len = sizeof(dst);
 		if (so->so_state & SS_ISCONNECTED) {
 			if (nam) {
 				error = EISCONN;
 				break;
 			}
-			memset(&dst, 0, sizeof(dst));
-			dst.sin_family = AF_INET;
-			dst.sin_len = sizeof(dst);;
 			dst.sin_addr = inp->inp_faddr;
 		} else {
 			if (nam == NULL) {
 				error = ENOTCONN;
 				break;
 			}
-			dst = *mtod(nam, struct sockaddr_in *);
+			dst.sin_addr =
+			    mtod(nam, struct sockaddr_in *)->sin_addr;
 		}
 #ifdef IPSEC
 		/* XXX Find an IPsec TDB */
