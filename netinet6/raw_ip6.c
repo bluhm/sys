@@ -317,11 +317,10 @@ rip6_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *d)
  * Tack on options user may have setup with control call.
  */
 int
-rip6_output(struct mbuf *m, ...)
+rip6_output(struct mbuf *m, struct socket *so, struct sockaddr *dstaddr,
+    struct mbuf *control)
 {
-	struct socket *so;
-	struct sockaddr_in6 *dstsock;
-	struct mbuf *control;
+	struct sockaddr_in6 *dstsock = satosin6(dstaddr);
 	struct in6_addr *dst;
 	struct ip6_hdr *ip6;
 	struct inpcb *in6p;
@@ -330,14 +329,7 @@ rip6_output(struct mbuf *m, ...)
 	struct ip6_pktopts opt, *optp = NULL, *origoptp;
 	int type;		/* for ICMPv6 output statistics only */
 	int priv = 0;
-	va_list ap;
 	int flags;
-
-	va_start(ap, m);
-	so = va_arg(ap, struct socket *);
-	dstsock = va_arg(ap, struct sockaddr_in6 *);
-	control = va_arg(ap, struct mbuf *);
-	va_end(ap);
 
 	in6p = sotoinpcb(so);
 
@@ -732,7 +724,7 @@ rip6_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 				break;
 			}
 		}
-		error = rip6_output(m, so, dst, control);
+		error = rip6_output(m, so, sin6tosa(dst), control);
 		m = NULL;
 		break;
 	}
