@@ -320,7 +320,6 @@ int
 rip6_output(struct mbuf *m, struct socket *so, struct sockaddr *dstaddr,
     struct mbuf *control)
 {
-	struct sockaddr_in6 *dstsock = satosin6(dstaddr);
 	struct in6_addr *dst;
 	struct ip6_hdr *ip6;
 	struct inpcb *in6p;
@@ -336,7 +335,7 @@ rip6_output(struct mbuf *m, struct socket *so, struct sockaddr *dstaddr,
 	priv = 0;
 	if ((so->so_state & SS_PRIV) != 0)
 		priv = 1;
-	dst = &dstsock->sin6_addr;
+	dst = &satosin6(dstaddr)->sin6_addr;
 	if (control) {
 		if ((error = ip6_setpktopts(control, &opt,
 		    in6p->inp_outputopts6,
@@ -376,7 +375,7 @@ rip6_output(struct mbuf *m, struct socket *so, struct sockaddr *dstaddr,
 	/* KAME hack: embed scopeid */
 	origoptp = in6p->inp_outputopts6;
 	in6p->inp_outputopts6 = optp;
-	if (in6_embedscope(&ip6->ip6_dst, dstsock, in6p) != 0) {
+	if (in6_embedscope(&ip6->ip6_dst, satosin6(dstaddr), in6p) != 0) {
 		error = EINVAL;
 		goto bad;
 	}
@@ -388,7 +387,7 @@ rip6_output(struct mbuf *m, struct socket *so, struct sockaddr *dstaddr,
 	{
 		struct in6_addr *in6a;
 
-		error = in6_pcbselsrc(&in6a, dstsock, in6p, optp);
+		error = in6_pcbselsrc(&in6a, satosin6(dstaddr), in6p, optp);
 		if (error)
 			goto bad;
 
