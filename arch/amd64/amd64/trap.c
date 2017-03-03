@@ -425,7 +425,7 @@ faultcommon:
 		KERNEL_UNLOCK();
 		break;
 
-#if	NISA > 0
+#if NISA > 0
 	case T_NMI:
 #if defined(KGDB) || defined(DDB)
 		/* NMI can be hooked up to a pushbutton for debugging */

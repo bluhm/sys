@@ -483,7 +483,7 @@ trap(struct trapframe *frame)
 		KERNEL_UNLOCK();
 		break;
 
-#if	NISA > 0
+#if NISA > 0
 	case T_NMI:
 	case T_NMI|T_USER:
 #if defined(DDB) || defined(KGDB)
