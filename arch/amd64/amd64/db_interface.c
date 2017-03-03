@@ -118,6 +118,7 @@ db_ktrap(int type, int code, db_regs_t *regs)
 	case T_BPTFLT:	/* breakpoint */
 	case T_TRCTRAP:	/* single_step */
 	case T_NMI:	/* NMI */
+	case T_NMI|T_USER:
 	case -1:	/* keyboard interrupt */
 		break;
 	default:
