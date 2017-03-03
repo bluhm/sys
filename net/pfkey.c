@@ -1,4 +1,4 @@
-/*	$OpenBSD: pfkey.c,v 1.38 2017/03/02 08:58:24 mpi Exp $	*/
+/*	$OpenBSD: pfkey.c,v 1.39 2017/03/03 15:48:02 bluhm Exp $	*/
 
 /*
  *	@(#)COPYRIGHT	1.1 (NRL) 17 January 1995
