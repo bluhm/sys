@@ -934,10 +934,7 @@ change:
 	rtm = rt_report(rt, type, seq, tableid);
 flush:
 	rtfree(rt);
-	if (rtm == NULL) {
-		error = ENOBUFS;
-		goto fail;
-	} else if (error) {
+	if (error) {
 		rtm->rtm_errno = error;
 	} else {
 		rtm->rtm_flags |= RTF_DONE;
