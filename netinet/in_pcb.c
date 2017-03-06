@@ -663,7 +663,7 @@ in_pcbnotifyall(struct inpcbtable *table, struct sockaddr *dst, u_int rdomain,
 	struct inpcb *inp, *ninp;
 	struct in_addr faddr;
 
-	splsoftassert(IPL_SOFTNET);
+	NET_ASSERT_LOCKED();
 
 #ifdef INET6
 	/*
