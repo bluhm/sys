@@ -574,9 +574,8 @@ void
 in_pcbdetach(struct inpcb *inp)
 {
 	struct socket *so = inp->inp_socket;
-	int s;
 
-	splsoftassert(IPL_SOFTNET);
+	NET_ASSERT_LOCKED();
 
 	so->so_pcb = 0;
 	sofree(so);
@@ -599,12 +598,10 @@ in_pcbdetach(struct inpcb *inp)
 		pf_inp_unlink(inp);
 	}
 #endif
-	s = splnet();
 	LIST_REMOVE(inp, inp_lhash);
 	LIST_REMOVE(inp, inp_hash);
 	TAILQ_REMOVE(&inp->inp_table->inpt_queue, inp, inp_queue);
 	inp->inp_table->inpt_count--;
-	splx(s);
 	pool_put(&inpcb_pool, inp);
 }
 
