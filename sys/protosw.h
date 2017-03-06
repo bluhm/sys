@@ -83,6 +83,8 @@ struct protosw {
 	int	(*pr_usrreq)(struct socket *, int, struct mbuf *,
 		    struct mbuf *, struct mbuf *, struct proc *);
 
+	int	(*pr_attach)(struct socket *, int);
+
 /* utility hooks */
 	void	(*pr_init)(void);	/* initialization hook */
 	void	(*pr_fasttimo)(void);	/* fast timeout (200ms) */
@@ -121,7 +123,6 @@ struct protosw {
  * A non-zero return from usrreq gives an
  * UNIX error number which should be passed to higher level software.
  */
-#define	PRU_ATTACH		0	/* attach protocol to up */
 #define	PRU_DETACH		1	/* detach protocol from up */
 #define	PRU_BIND		2	/* bind socket to address */
 #define	PRU_LISTEN		3	/* listen for connection */
@@ -149,7 +150,7 @@ struct protosw {
 
 #ifdef PRUREQUESTS
 char *prurequests[] = {
-	"ATTACH",	"DETACH",	"BIND",		"LISTEN",
+	"",		"DETACH",	"BIND",		"LISTEN",
 	"CONNECT",	"ACCEPT",	"DISCONNECT",	"SHUTDOWN",
 	"RCVD",		"SEND",		"ABORT",	"CONTROL",
 	"SENSE",	"RCVOOB",	"SENDOOB",	"SOCKADDR",

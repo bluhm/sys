@@ -91,7 +91,10 @@ struct fdpass {
 	int		 flags;
 };
 
-int	unp_attach(struct socket *);
+int	uipc_usrreq(struct socket *, int , struct mbuf *,
+			 struct mbuf *, struct mbuf *, struct proc *);
+int	uipc_attach(struct socket *, int);
+
 int	unp_bind(struct unpcb *, struct mbuf *, struct proc *);
 int	unp_connect(struct socket *, struct mbuf *, struct proc *);
 int	unp_connect2(struct socket *, struct socket *);

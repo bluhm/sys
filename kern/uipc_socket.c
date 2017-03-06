@@ -119,7 +119,7 @@ socreate(int dom, struct socket **aso, int type, int proto)
 		prp = pffindproto(dom, proto, type);
 	else
 		prp = pffindtype(dom, type);
-	if (prp == NULL || prp->pr_usrreq == 0)
+	if (prp == NULL || prp->pr_attach == NULL)
 		return (EPROTONOSUPPORT);
 	if (prp->pr_type != type)
 		return (EPROTOTYPE);
@@ -135,9 +135,9 @@ socreate(int dom, struct socket **aso, int type, int proto)
 	so->so_egid = p->p_ucred->cr_gid;
 	so->so_cpid = p->p_p->ps_pid;
 	so->so_proto = prp;
+
 	s = solock(so);
-	error = (*prp->pr_usrreq)(so, PRU_ATTACH, NULL,
-	    (struct mbuf *)(long)proto, NULL, p);
+	error = (*prp->pr_attach)(so, proto);
 	if (error) {
 		so->so_state |= SS_NOFDREF;
 		sofree(so);

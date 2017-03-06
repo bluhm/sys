@@ -187,8 +187,7 @@ sonewconn(struct socket *head, int connstatus)
 	so->so_rcv.sb_timeo = head->so_rcv.sb_timeo;
 
 	soqinsque(head, so, soqueue);
-	if ((*so->so_proto->pr_usrreq)(so, PRU_ATTACH, NULL, NULL, NULL,
-	    curproc)) {
+	if ((*so->so_proto->pr_attach)(so, 0)) {
 		(void) soqremque(so, soqueue);
 		pool_put(&socket_pool, so);
 		return (NULL);

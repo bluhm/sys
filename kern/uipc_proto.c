@@ -55,6 +55,7 @@ struct protosw unixsw[] = {
   .pr_protocol	= PF_LOCAL,
   .pr_flags	= PR_CONNREQUIRED|PR_WANTRCVD|PR_RIGHTS,
   .pr_usrreq	= uipc_usrreq,
+  .pr_attach	= uipc_attach,
 },
 {
   .pr_type	= SOCK_SEQPACKET,
@@ -62,6 +63,7 @@ struct protosw unixsw[] = {
   .pr_protocol	= PF_LOCAL,
   .pr_flags	= PR_ATOMIC|PR_CONNREQUIRED|PR_WANTRCVD|PR_RIGHTS,
   .pr_usrreq	= uipc_usrreq,
+  .pr_attach	= uipc_attach,
 },
 {
   .pr_type	= SOCK_DGRAM,
@@ -69,6 +71,7 @@ struct protosw unixsw[] = {
   .pr_protocol	= PF_LOCAL,
   .pr_flags	= PR_ATOMIC|PR_ADDR|PR_RIGHTS,
   .pr_usrreq	= uipc_usrreq,
+  .pr_attach	= uipc_attach,
 }
 };
 
