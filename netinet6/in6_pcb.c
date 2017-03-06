@@ -334,6 +334,8 @@ in6_pcbnotify(struct inpcbtable *head, struct sockaddr_in6 *dst,
 	int errno, nmatch = 0;
 	u_int32_t flowinfo;
 
+	NET_ASSERT_LOCKED();
+
 	if ((unsigned)cmd >= PRC_NCMDS)
 		return (0);
 
