@@ -950,10 +950,10 @@ void
 in_pcbrehash(struct inpcb *inp)
 {
 	struct inpcbtable *table = inp->inp_table;
-	int s;
 	struct inpcbhead *head;
 
-	s = splnet();
+	NET_ASSERT_LOCKED();
+
 	LIST_REMOVE(inp, inp_lhash);
 	head = INPCBLHASH(table, inp->inp_lport, inp->inp_rtableid);
 	LIST_INSERT_HEAD(head, inp, inp_lhash);
@@ -969,7 +969,6 @@ in_pcbrehash(struct inpcb *inp)
 		    &inp->inp_laddr, inp->inp_lport,
 		    rtable_l2(inp->inp_rtableid));
 	LIST_INSERT_HEAD(head, inp, inp_hash);
-	splx(s);
 }
 
 int
