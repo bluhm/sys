@@ -1,4 +1,4 @@
-/* $OpenBSD: acpi.c,v 1.323 2017/03/02 10:38:10 natano Exp $ */
+/* $OpenBSD: acpi.c,v 1.325 2017/03/13 01:50:49 deraadt Exp $ */
 /*
  * Copyright (c) 2005 Thorsten Lockert <tholo@sigmasoft.com>
  * Copyright (c) 2005 Jordan Hargrave <jordan@openbsd.org>
@@ -135,6 +135,7 @@ int	acpi_foundpss(struct aml_node *, void *);
 int	acpi_foundtmp(struct aml_node *, void *);
 int	acpi_foundprw(struct aml_node *, void *);
 int	acpi_foundvideo(struct aml_node *, void *);
+int	acpi_foundsbs(struct aml_node *node, void *);
 
 int	acpi_foundide(struct aml_node *node, void *arg);
 int	acpiide_notify(struct aml_node *, int, void *);
@@ -1081,6 +1082,11 @@ acpi_attach(struct device *parent, struct device *self, void *aux)
 	aml_find_node(&aml_root, "GBRT", acpi_foundsony, sc);
 
 	aml_walknodes(&aml_root, AML_WALK_PRE, acpi_add_device, sc);
+
+#ifndef SMALL_KERNEL
+	/* try to find smart battery first */
+	aml_find_node(&aml_root, "_HID", acpi_foundsbs, sc);
+#endif /* SMALL_KERNEL */
 
 	/* attach battery, power supply and button devices */
 	aml_find_node(&aml_root, "_HID", acpi_foundhid, sc);
@@ -2908,6 +2914,44 @@ acpi_foundvideo(struct aml_node *node, void *arg)
 	aaa.aaa_name = "acpivideo";
 
 	config_found(self, &aaa, acpi_print);
+
+	return (0);
+}
+
+int
+acpi_foundsbs(struct aml_node *node, void *arg)
+{
+	struct acpi_softc	*sc = (struct acpi_softc *)arg;
+	struct device		*self = (struct device *)arg;
+	char		 	 cdev[32], dev[32];
+	struct acpi_attach_args	 aaa;
+	int64_t			 sta;
+
+	if (acpi_parsehid(node, arg, cdev, dev, sizeof(dev)) != 0)
+		return (0);
+
+	if (aml_evalinteger(sc, node->parent, "_STA", 0, NULL, &sta))
+		sta = STA_PRESENT | STA_ENABLED | STA_DEV_OK | 0x1000;
+
+	if ((sta & STA_PRESENT) == 0)
+		return (0);
+
+	acpi_attach_deps(sc, node->parent);
+
+	if (strcmp(dev, ACPI_DEV_SBS) != 0)
+		return (0);
+
+	if (node->parent->attached)
+		return (0);
+
+	memset(&aaa, 0, sizeof(aaa));
+	aaa.aaa_iot = sc->sc_iot;
+	aaa.aaa_memt = sc->sc_memt;
+	aaa.aaa_node = node->parent;
+	aaa.aaa_dev = dev;
+
+	config_found(self, &aaa, acpi_print);
+	node->parent->attached = 1;
 
 	return (0);
 }
