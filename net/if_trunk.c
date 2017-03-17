@@ -545,8 +545,11 @@ void
 trunk_port_ifdetach(void *arg)
 {
 	struct trunk_port *tp = (struct trunk_port *)arg;
+	int s;
 
+	NET_LOCK(s);
 	trunk_port_destroy(tp);
+	NET_UNLOCK(s);
 }
 
 struct trunk_port *
