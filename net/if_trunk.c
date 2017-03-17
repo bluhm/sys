@@ -210,7 +210,7 @@ trunk_clone_destroy(struct ifnet *ifp)
 {
 	struct trunk_softc *tr = (struct trunk_softc *)ifp->if_softc;
 	struct trunk_port *tp;
-	int error, s;
+	int error, s, sn;
 
 	/* Remove any multicast groups that we may have joined. */
 	trunk_ether_purgemulti(tr);
@@ -218,12 +218,15 @@ trunk_clone_destroy(struct ifnet *ifp)
 	s = splnet();
 
 	/* Shutdown and remove trunk ports, return on error */
+	NET_LOCK(sn);
 	while ((tp = SLIST_FIRST(&tr->tr_ports)) != NULL) {
 		if ((error = trunk_port_destroy(tp)) != 0) {
+			NET_UNLOCK(sn);
 			splx(s);
 			return (error);
 		}
 	}
+	NET_UNLOCK(sn);
 
 	ifmedia_delete_instance(&tr->tr_media, IFM_INST_ANY);
 	ether_ifdetach(ifp);
