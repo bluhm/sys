@@ -950,11 +950,8 @@ carp_ifdetach(struct ifnet *ifp0)
 
 	KERNEL_ASSERT_LOCKED(); /* touching vhif_vrs */
 
-	for (sc = SRPL_FIRST_LOCKED(&cif->vhif_vrs); sc != NULL; sc = nextsc) {
-		nextsc = SRPL_NEXT_LOCKED(sc, sc_list);
-
+	SRPL_FOREACH_SAFE_LOCKED(sc, &cif->vhif_vrs, sc_list, nextsc)
 		carpdetach(sc); /* this can free cif */
-	}
 }
 
 void
