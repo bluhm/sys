@@ -172,10 +172,12 @@ logopen(dev_t dev, int flags, int mode, struct proc *p)
 int
 logclose(dev_t dev, int flag, int mode, struct proc *p)
 {
+	struct file *fp;
 
-	if (syslogf)
-		FRELE(syslogf, p);
+	fp = syslogf;
 	syslogf = NULL;
+	if (fp)
+		FRELE(fp, p);
 	log_open = 0;
 	logsoftc.sc_state = 0;
 	return (0);
