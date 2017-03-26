@@ -1,4 +1,4 @@
-/*	$OpenBSD: vmm.c,v 1.125 2017/03/24 09:06:02 mlarkin Exp $	*/
+/*	$OpenBSD: vmm.c,v 1.128 2017/03/26 18:34:55 mlarkin Exp $	*/
 /*
  * Copyright (c) 2014 Mike Larkin <mlarkin@openbsd.org>
  *
@@ -100,6 +100,7 @@ struct vmm_softc {
 	size_t			vm_idx;		/* next unique VM index */
 };
 
+int vmm_enabled(void);
 int vmm_probe(struct device *, void *, void *);
 void vmm_attach(struct device *, struct device *, void *);
 int vmmopen(dev_t, int, int, struct proc *);
@@ -259,26 +260,17 @@ extern struct gate_descriptor *idt;
 #define CR_LMSW		3
 
 /*
- * vmm_probe
+ * vmm_enabled
  *
  * Checks if we have at least one CPU with either VMX or SVM.
  * Returns 1 if we have at least one of either type, but not both, 0 otherwise.
  */
 int
-vmm_probe(struct device *parent, void *match, void *aux)
+vmm_enabled(void)
 {
 	struct cpu_info *ci;
 	CPU_INFO_ITERATOR cii;
-	const char **busname = (const char **)aux;
-	int found_vmx, found_svm, vmm_disabled;
-
-	/* Check if this probe is for us */
-	if (strcmp(*busname, vmm_cd.cd_name) != 0)
-		return (0);
-
-	found_vmx = 0;
-	found_svm = 0;
-	vmm_disabled = 0;
+	int found_vmx = 0, found_svm = 0, vmm_disabled = 0;
 
 	/* Check if we have at least one CPU with either VMX or SVM */
 	CPU_INFO_FOREACH(cii, ci) {
@@ -298,10 +290,17 @@ vmm_probe(struct device *parent, void *match, void *aux)
 	if (found_vmx)
 		return 1;
 
-	if (vmm_disabled)
-		printf("vmm disabled by firmware\n");
-
 	return 0;
+}
+
+int
+vmm_probe(struct device *parent, void *match, void *aux)
+{
+	const char **busname = (const char **)aux;
+
+	if (strcmp(*busname, vmm_cd.cd_name) != 0)
+		return (0);
+	return (1);
 }
 
 /*
@@ -4379,6 +4378,7 @@ vmm_handle_cpuid(struct vcpu *vcpu)
 		 *  context id (CPUIDECX_CNXTID)
 		 *  silicon debug (CPUIDECX_SDBG)
 		 *  xTPR (CPUIDECX_XTPR)
+		 *  AVX (CPUIDECX_AVX)
 		 *  perf/debug (CPUIDECX_PDCM)
 		 *  pcid (CPUIDECX_PCID)
 		 *  direct cache access (CPUIDECX_DCA)
@@ -4401,7 +4401,7 @@ vmm_handle_cpuid(struct vcpu *vcpu)
 		    CPUIDECX_VMX | CPUIDECX_DTES64 |
 		    CPUIDECX_DSCPL | CPUIDECX_SMX |
 		    CPUIDECX_CNXTID | CPUIDECX_SDBG |
-		    CPUIDECX_XTPR |
+		    CPUIDECX_XTPR | CPUIDECX_AVX |
 		    CPUIDECX_PCID | CPUIDECX_DCA |
 		    CPUIDECX_X2APIC | CPUIDECX_DEADLINE);
 		*rdx = curcpu()->ci_feature_flags &
