@@ -357,11 +357,11 @@ logioctl(dev_t dev, u_long com, caddr_t data, int flag, struct proc *p)
 	case LIOCSFD:
 		if ((error = suser(p, 0)) != 0)
 			return (error);
-		if ((error = getsock(p, *(int *)data, &fp)) != 0)
+		fp = syslogf;
+		if ((error = getsock(p, *(int *)data, &syslogf)) != 0)
 			return (error);
-		if (syslogf)
-			FRELE(syslogf, p);
-		syslogf = fp;
+		if (fp)
+			FRELE(fp, p);
 		break;
 
 	default:
