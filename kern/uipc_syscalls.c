@@ -1146,8 +1146,8 @@ getsock(struct proc *p, int fdes, struct file **fpp)
 		return (EBADF);
 	if (fp->f_type != DTYPE_SOCKET)
 		return (ENOTSOCK);
-	*fpp = fp;
 	FREF(fp);
+	*fpp = fp;
 
 	return (0);
 }
