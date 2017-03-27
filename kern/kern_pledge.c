@@ -1420,6 +1420,8 @@ pledge_sockopt(struct proc *p, int set, int level, int optname)
 		case IP_RECVDSTPORT:
 			return (0);
 		case IP_MULTICAST_IF:
+		case IP_MULTICAST_TTL:
+		case IP_MULTICAST_LOOP:
 		case IP_ADD_MEMBERSHIP:
 		case IP_DROP_MEMBERSHIP:
 			if (p->p_p->ps_pledge & PLEDGE_MCAST)
@@ -1443,6 +1445,8 @@ pledge_sockopt(struct proc *p, int set, int level, int optname)
 #endif
 			return (0);
 		case IPV6_MULTICAST_IF:
+		case IPV6_MULTICAST_HOPS:
+		case IPV6_MULTICAST_LOOP:
 		case IPV6_JOIN_GROUP:
 		case IPV6_LEAVE_GROUP:
 			if (p->p_p->ps_pledge & PLEDGE_MCAST)
