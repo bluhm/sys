@@ -1426,7 +1426,7 @@ pledge_sockopt(struct proc *p, int set, int level, int optname)
 		case IP_DROP_MEMBERSHIP:
 			if (p->p_p->ps_pledge & PLEDGE_MCAST)
 				return (0);
-			break;
+			return pledge_fail(p, EPERM, PLEDGE_MCAST);
 		}
 		break;
 	case IPPROTO_ICMP:
@@ -1451,7 +1451,7 @@ pledge_sockopt(struct proc *p, int set, int level, int optname)
 		case IPV6_LEAVE_GROUP:
 			if (p->p_p->ps_pledge & PLEDGE_MCAST)
 				return (0);
-			break;
+			return pledge_fail(p, EPERM, PLEDGE_MCAST);
 		}
 		break;
 	case IPPROTO_ICMPV6:
