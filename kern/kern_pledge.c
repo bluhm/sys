@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_pledge.c,v 1.199 2017/03/27 00:33:15 deraadt Exp $	*/
+/*	$OpenBSD: kern_pledge.c,v 1.200 2017/03/28 16:03:31 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2015 Nicholas Marriott <nicm@openbsd.org>
