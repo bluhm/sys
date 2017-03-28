@@ -1266,6 +1266,7 @@ pledge_ioctl(struct proc *p, long com, struct file *fp)
 		case TIOCFLUSH:		/* getty, telnet */
 		case TIOCGPGRP:
 		case TIOCGETA:
+		case TIOCSETAF:		/* tcsetattr TCSAFLUSH, script */
 		case TIOCGWINSZ:	/* ENOTTY return for non-tty */
 			if (fp->f_type == DTYPE_VNODE && (vp->v_flag & VISTTY))
 				return (0);
@@ -1279,7 +1280,6 @@ pledge_ioctl(struct proc *p, long com, struct file *fp)
 		case TIOCEXCL:		/* cu */
 		case TIOCSETA:		/* cu, ... */
 		case TIOCSETAW:		/* cu, ... */
-		case TIOCSETAF:		/* tcsetattr TCSAFLUSH, script */
 		case TIOCSCTTY:		/* forkpty(3), login_tty(3), ... */
 			if (fp->f_type == DTYPE_VNODE && (vp->v_flag & VISTTY))
 				return (0);
