@@ -698,7 +698,7 @@ arptfree(struct rtentry *rt)
 
 	ifp = if_get(rt->rt_ifidx);
 	KASSERT(ifp != NULL);
-	if (!ISSET(rt->rt_flags, RTF_STATIC|RTF_CACHED))
+	if (!ISSET(rt->rt_flags, RTF_STATIC|RTF_CACHED|RTF_LOCAL))
 		rtdeletemsg(rt, ifp, ifp->if_rdomain);
 	if_put(ifp);
 }
