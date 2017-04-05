@@ -980,8 +980,8 @@ change:
 			    info->rti_info[RTAX_NETMASK]);
 			/* FALLTHROUGH */
 		case RTM_LOCK:
-			rt->rt_rmx.rmx_locks &= ~(rtm->rtm_inits);
-			rt->rt_rmx.rmx_locks |=
+			rt->rt_locks &= ~(rtm->rtm_inits);
+			rt->rt_locks |=
 			    (rtm->rtm_inits & rtm->rtm_rmx.rmx_locks);
 			break;
 		}

@@ -884,7 +884,7 @@ tcp_mtudisc(struct inpcb *inp, int errno)
 					return;
 			}
 			if (orig_maxseg != tp->t_maxseg ||
-			    (rt->rt_rmx.rmx_locks & RTV_MTU))
+			    (rt->rt_locks & RTV_MTU))
 				change = 1;
 		}
 		tcp_mss(tp, -1);
