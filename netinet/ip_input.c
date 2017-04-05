@@ -1512,8 +1512,8 @@ ip_forward(struct mbuf *m, struct ifnet *ifp, struct rtentry *rt, int srcrt)
 
 #ifdef IPSEC
 		if (rt != NULL) {
-			if (rt->rt_rmx.rmx_mtu)
-				destmtu = rt->rt_rmx.rmx_mtu;
+			if (rt->rt_mtu)
+				destmtu = rt->rt_mtu;
 			else {
 				struct ifnet *destifp;
 

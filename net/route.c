@@ -1522,7 +1522,7 @@ rt_timer_add(struct rtentry *rt, void (*func)(struct rtentry *,
 	long		 current_time;
 
 	current_time = time_uptime;
-	rt->rt_rmx.rmx_expire = time_uptime + queue->rtq_timeout;
+	rt->rt_expire = time_uptime + queue->rtq_timeout;
 
 	/*
 	 * If there's already a timer with this action, destroy it before
