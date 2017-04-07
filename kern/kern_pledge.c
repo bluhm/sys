@@ -1130,6 +1130,7 @@ pledge_ioctl(struct proc *p, long com, struct file *fp)
 
 	if ((p->p_p->ps_pledge & PLEDGE_INET)) {
 		switch (com) {
+		case SIOCATMARK:
 		case SIOCGIFGROUP:
 			if (fp->f_type == DTYPE_SOCKET)
 				return (0);
