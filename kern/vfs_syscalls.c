@@ -88,6 +88,7 @@ int domkdirat(struct proc *, int, const char *, mode_t);
 int doutimensat(struct proc *, int, const char *, struct timespec [2], int);
 int dovutimens(struct proc *, struct vnode *, struct timespec [2]);
 int dofutimens(struct proc *, int, struct timespec [2]);
+int dounmount_leaf(struct mount *, int, struct proc *);
 
 /*
  * Virtual File System System Calls
@@ -373,6 +374,71 @@ sys_unmount(struct proc *p, void *v, register_t *retval)
  */
 int
 dounmount(struct mount *mp, int flags, struct proc *p)
+{
+	SLIST_HEAD(, mount) mplist;
+	struct mount *nmp;
+	int error;
+
+	SLIST_INIT(&mplist);
+	SLIST_INSERT_HEAD(&mplist, mp, mnt_dounmount);
+
+	/*
+	 * Collect nested mount points. This takes advantage of the mount list
+	 * being ordered - nested mount points come after their parent.
+	 */
+	while ((mp = TAILQ_NEXT(mp, mnt_list)) != NULL) {
+		SLIST_FOREACH(nmp, &mplist, mnt_dounmount) {
+			if (mp->mnt_vnodecovered == NULLVP ||
+			    mp->mnt_vnodecovered->v_mount != nmp)
+				continue;
+
+			if ((flags & MNT_FORCE) == 0) {
+				error = EBUSY;
+				goto err;
+			}
+			error = vfs_busy(mp, VB_WRITE | VB_WAIT);
+			if (error) {
+				if ((flags & MNT_DOOMED)) {
+					/*
+					 * XXX: If the mount point was busy due
+					 * to being unmounted, it has been
+					 * removed from the mount list already.
+					 * We have to restart iteration from the
+					 * last collected busy entry.
+					 */
+					mp = SLIST_FIRST(&mplist);
+
+					break;
+				}
+				goto err;
+			}
+			SLIST_INSERT_HEAD(&mplist, mp, mnt_dounmount);
+			break;
+		}
+	}
+
+	/* 
+	 * XXX: Is it possible that new nested mount points appear during this
+	 * loop?
+	 */
+	while ((mp = SLIST_FIRST(&mplist)) != NULL) {
+		SLIST_REMOVE(&mplist, mp, mount, mnt_dounmount);
+		error = dounmount_leaf(mp, flags, p);
+		if (error)
+			goto err;
+	}
+	return (0);
+
+err:
+	while ((mp = SLIST_FIRST(&mplist)) != NULL) {
+		SLIST_REMOVE(&mplist, mp, mount, mnt_dounmount);
+		vfs_unbusy(mp);
+	}
+	return (error);
+}
+
+int
+dounmount_leaf(struct mount *mp, int flags, struct proc *p)
 {
 	struct vnode *coveredvp;
 	int error;
