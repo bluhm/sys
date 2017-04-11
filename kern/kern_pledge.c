@@ -1455,6 +1455,10 @@ pledge_sockopt(struct proc *p, int set, int level, int optname)
 		}
 		break;
 	case IPPROTO_ICMPV6:
+		switch(optname) {
+		case ICMP6_FILTER:
+			return (0);
+		}
 		break;
 	}
 	return pledge_fail(p, EPERM, PLEDGE_INET);
