@@ -400,14 +400,13 @@ dounmount(struct mount *mp, int flags, struct proc *p)
 			if (error) {
 				if ((flags & MNT_DOOMED)) {
 					/*
-					 * XXX: If the mount point was busy due
-					 * to being unmounted, it has been
-					 * removed from the mount list already.
-					 * We have to restart iteration from the
-					 * last collected busy entry.
+					 * If the mount point was busy due to 
+					 * being unmounted, it has been removed
+					 * from the mount list already.
+					 * Restart the iteration from the last 
+					 * collected busy entry.
 					 */
 					mp = SLIST_FIRST(&mplist);
-
 					break;
 				}
 				goto err;
