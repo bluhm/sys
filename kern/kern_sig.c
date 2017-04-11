@@ -649,7 +649,7 @@ killpg1(struct proc *cp, int signum, int pgid, int all)
 	struct pgrp *pgrp;
 	int nfound = 0;
 
-	if (all)
+	if (all) {
 		/* 
 		 * broadcast
 		 */
@@ -662,7 +662,7 @@ killpg1(struct proc *cp, int signum, int pgid, int all)
 			if (signum)
 				prsignal(pr, signum);
 		}
-	else {
+	} else {
 		if (pgid == 0)
 			/*
 			 * zero pgid means send to my process group.
