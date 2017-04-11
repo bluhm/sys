@@ -5058,7 +5058,8 @@ sr_hibernate_io(dev_t dev, daddr_t blkno, vaddr_t addr, size_t size, int op, voi
 		my->srd = sc->sc_targets[sd->sc_link->target];
 		DNPRINTF(SR_D_MISC, "sr_hibernate_io: discipline is %s\n",
 			my->srd->sd_name);
-		if (strncmp(my->srd->sd_name, "CRYPTO", 10))
+		if (strncmp(my->srd->sd_name, "CRYPTO",
+		    sizeof(my->srd->sd_name)))
 			return (ENOTSUP);
 
 		/* Find the underlying device */
