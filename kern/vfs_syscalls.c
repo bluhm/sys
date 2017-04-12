@@ -253,7 +253,8 @@ update:
 		}
 
 		vfs_unbusy(mp);
-		vfs_unbusy(pmp);
+		if (pmp != NULL)
+			vfs_unbusy(pmp);
 		return (error);
 	}
 
@@ -280,7 +281,8 @@ update:
 		free(mp, M_MOUNT, sizeof(*mp));
 		vput(vp);
 	}
-	vfs_unbusy(pmp);
+	if (pmp != NULL)
+		vfs_unbusy(pmp);
 	return (error);
 }
 
