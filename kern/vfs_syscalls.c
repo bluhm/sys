@@ -210,9 +210,13 @@ update:
 	/* Ensure that the parent mountpoint does not get unmounted. */
 	error = vfs_busy(vp->v_mount, VB_READ|VB_NOWAIT);
 	if (error) {
-		vfs_unbusy(mp);
-		if ((flags & MNT_UPDATE) == 0)
+		if (mp->mnt_flag & MNT_UPDATE) {
+			mp->mnt_flag = mntflag;
+			vfs_unbusy(mp);
+		} else {
+			vfs_unbusy(mp);
 			free(mp, M_MOUNT, sizeof(*mp));
+		}
 		vput(vp);
 		return (error);
 	}
