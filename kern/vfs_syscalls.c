@@ -107,7 +107,7 @@ sys_mount(struct proc *p, void *v, register_t *retval)
 		syscallarg(void *) data;
 	} */ *uap = v;
 	struct vnode *vp;
-	struct mount *mp;
+	struct mount *mp, *pmp = NULL;
 	int error, mntflag = 0;
 	char fstypename[MFSNAMELEN];
 	char fspath[MNAMELEN];
@@ -194,6 +194,14 @@ sys_mount(struct proc *p, void *v, register_t *retval)
 		return (EBUSY);
 	}
 
+	/* Ensure that the parent mountpoint does not get unmounted. */
+	pmp = vp->v_mount;
+	error = vfs_busy(pmp, VB_READ|VB_NOWAIT);
+	if (error) {
+		vput(vp);
+		return (error);
+	}
+
 	/*
 	 * Allocate and initialize the file system.
 	 */
@@ -245,6 +253,7 @@ update:
 		}
 
 		vfs_unbusy(mp);
+		vfs_unbusy(pmp);
 		return (error);
 	}
 
@@ -271,6 +280,7 @@ update:
 		free(mp, M_MOUNT, sizeof(*mp));
 		vput(vp);
 	}
+	vfs_unbusy(pmp);
 	return (error);
 }
 
