@@ -148,7 +148,7 @@ udp_init(void)
 }
 
 int
-udp_input(struct mbuf **mp, int *offp, int proto)
+udp_input(struct mbuf **mp, int *offp, int proto, int af)
 {
 	struct mbuf *m = *mp;
 	int iphlen = *offp;

@@ -378,7 +378,7 @@ icmp6_error(struct mbuf *m, int type, int code, int param)
  * Process a received ICMP6 message.
  */
 int
-icmp6_input(struct mbuf **mp, int *offp, int proto)
+icmp6_input(struct mbuf **mp, int *offp, int proto, int af)
 {
 #if NCARP > 0
 	struct ifnet *ifp;

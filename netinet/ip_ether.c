@@ -88,7 +88,7 @@ struct etheripstat etheripstat;
  * etherip_input gets called when we receive an encapsulated packet.
  */
 int
-etherip_input(struct mbuf **mp, int *offp, int proto)
+etherip_input(struct mbuf **mp, int *offp, int proto, int af)
 {
 	switch (proto) {
 #if NBRIDGE > 0

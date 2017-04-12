@@ -116,7 +116,7 @@ rip_init(void)
 struct sockaddr_in ripsrc = { sizeof(ripsrc), AF_INET };
 
 int
-rip_input(struct mbuf **mp, int *offp, int proto)
+rip_input(struct mbuf **mp, int *offp, int proto, int af)
 {
 	struct mbuf *m = *mp;
 	struct ip *ip = mtod(m, struct ip *);
