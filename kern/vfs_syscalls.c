@@ -211,7 +211,8 @@ update:
 	error = vfs_busy(vp->v_mount, VB_READ|VB_NOWAIT);
 	if (error) {
 		vfs_unbusy(mp);
-		free(mp, M_MOUNT, sizeof(*mp));
+		if ((flags & MNT_UPDATE) == 0)
+			free(mp, M_MOUNT, sizeof(*mp));
 		vput(vp);
 		return (error);
 	}
