@@ -107,7 +107,7 @@ sys_mount(struct proc *p, void *v, register_t *retval)
 		syscallarg(void *) data;
 	} */ *uap = v;
 	struct vnode *vp;
-	struct mount *mp, *pmp = NULL;
+	struct mount *mp;
 	int error, mntflag = 0;
 	char fstypename[MFSNAMELEN];
 	char fspath[MNAMELEN];
@@ -194,14 +194,6 @@ sys_mount(struct proc *p, void *v, register_t *retval)
 		return (EBUSY);
 	}
 
-	/* Ensure that the parent mountpoint does not get unmounted. */
-	pmp = vp->v_mount;
-	error = vfs_busy(pmp, VB_READ|VB_NOWAIT);
-	if (error) {
-		vput(vp);
-		return (error);
-	}
-
 	/*
 	 * Allocate and initialize the file system.
 	 */
@@ -213,7 +205,17 @@ sys_mount(struct proc *p, void *v, register_t *retval)
 	strncpy(mp->mnt_stat.f_fstypename, vfsp->vfc_name, MFSNAMELEN);
 	mp->mnt_vnodecovered = vp;
 	mp->mnt_stat.f_owner = p->p_ucred->cr_uid;
+
 update:
+	/* Ensure that the parent mountpoint does not get unmounted. */
+	error = vfs_busy(vp->v_mount, VB_READ|VB_NOWAIT);
+	if (error) {
+		vfs_unbusy(mp);
+		free(mp, M_MOUNT, sizeof(*mp));
+		vput(vp);
+		return (error);
+	}
+
 	/*
 	 * Set the mount level flags.
 	 */
@@ -235,7 +237,6 @@ update:
 		mp->mnt_stat.f_ctime = time_second;
 	}
 	if (mp->mnt_flag & MNT_UPDATE) {
-		vput(vp);
 		if (mp->mnt_flag & MNT_WANTRDWR)
 			mp->mnt_flag &= ~MNT_RDONLY;
 		mp->mnt_flag &=~
@@ -253,8 +254,8 @@ update:
 		}
 
 		vfs_unbusy(mp);
-		if (pmp != NULL)
-			vfs_unbusy(pmp);
+		vfs_unbusy(vp->v_mount);
+		vput(vp);
 		return (error);
 	}
 
@@ -279,10 +280,9 @@ update:
 		mp->mnt_vnodecovered->v_mountedhere = NULL;
 		vfs_unbusy(mp);
 		free(mp, M_MOUNT, sizeof(*mp));
+		vfs_unbusy(vp->v_mount);
 		vput(vp);
 	}
-	if (pmp != NULL)
-		vfs_unbusy(pmp);
 	return (error);
 }
 
