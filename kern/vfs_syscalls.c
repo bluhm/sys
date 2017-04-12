@@ -237,6 +237,8 @@ update:
 		mp->mnt_stat.f_ctime = time_second;
 	}
 	if (mp->mnt_flag & MNT_UPDATE) {
+		vfs_unbusy(vp->v_mount);
+		vput(vp);
 		if (mp->mnt_flag & MNT_WANTRDWR)
 			mp->mnt_flag &= ~MNT_RDONLY;
 		mp->mnt_flag &=~
@@ -254,8 +256,6 @@ update:
 		}
 
 		vfs_unbusy(mp);
-		vfs_unbusy(vp->v_mount);
-		vput(vp);
 		return (error);
 	}
 
@@ -269,6 +269,7 @@ update:
 		vfsp->vfc_refcount++;
 		TAILQ_INSERT_TAIL(&mountlist, mp, mnt_list);
 		checkdirs(vp);
+		vfs_unbusy(vp->v_mount);
 		VOP_UNLOCK(vp, p);
 		if ((mp->mnt_flag & MNT_RDONLY) == 0)
 			error = vfs_allocate_syncvnode(mp);
