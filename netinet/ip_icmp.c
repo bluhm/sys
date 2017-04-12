@@ -128,7 +128,7 @@ int *icmpctl_vars[ICMPCTL_MAXID] = ICMPCTL_VARS;
 void icmp_mtudisc_timeout(struct rtentry *, struct rttimer *);
 int icmp_ratelimit(const struct in_addr *, const int, const int);
 void icmp_redirect_timeout(struct rtentry *, struct rttimer *);
-int icmp_input_if(struct ifnet *, struct mbuf **, int *, int);
+int icmp_input_if(struct ifnet *, struct mbuf **, int *, int, int);
 int icmp_sysctl_icmpstat(void *, size_t *, void *);
 
 void
@@ -306,7 +306,7 @@ icmp_error(struct mbuf *n, int type, int code, u_int32_t dest, int destmtu)
  * Process a received ICMP message.
  */
 int
-icmp_input(struct mbuf **mp, int *offp, int proto)
+icmp_input(struct mbuf **mp, int *offp, int proto, int af)
 {
 	struct ifnet *ifp;
 
@@ -316,13 +316,13 @@ icmp_input(struct mbuf **mp, int *offp, int proto)
 		return IPPROTO_DONE;
 	}
 
-	proto = icmp_input_if(ifp, mp, offp, proto);
+	proto = icmp_input_if(ifp, mp, offp, proto, af);
 	if_put(ifp);
 	return proto;
 }
 
 int
-icmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto)
+icmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto, int af)
 {
 	struct mbuf *m = *mp;
 	int hlen = *offp;
@@ -685,7 +685,7 @@ reflect:
 	}
 
 raw:
-	return rip_input(mp, offp, proto);
+	return rip_input(mp, offp, proto, af);
 
 freeit:
 	m_freem(m);

@@ -96,7 +96,7 @@ ipip_init(void)
  * Really only a wrapper for ipip_input(), for use with pr_input.
  */
 int
-ip4_input(struct mbuf **mp, int *offp, int proto)
+ip4_input(struct mbuf **mp, int *offp, int proto, int af)
 {
 	/* If we do not accept IP-in-IP explicitly, drop.  */
 	if (!ipip_allow && ((*mp)->m_flags & (M_AUTH|M_CONF)) == 0) {

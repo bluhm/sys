@@ -194,10 +194,10 @@ carpstat_inc(enum carpstat_counters c)
 }
 
 void		 carp_ifdetach (struct ifnet *);
-int		 carp_proto_input(struct mbuf **, int *, int);
+int		 carp_proto_input(struct mbuf **, int *, int, int);
 void		 carp_carpdev_state(void *);
 void		 carp_group_demote_adj(struct ifnet *, int, char *);
-int		 carp6_proto_input(struct mbuf **, int *, int);
+int		 carp6_proto_input(struct mbuf **, int *, int, int);
 int		 carp_iamatch(struct ifnet *);
 int		 carp_iamatch6(struct ifnet *);
 struct ifnet	*carp_ourether(void *, u_int8_t *);

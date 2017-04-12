@@ -316,7 +316,7 @@ pfsyncstat_inc(enum pfsync_counters c)
 #define PFSYNC_S_DEFER	0xfe
 #define PFSYNC_S_NONE	0xff
 
-int			pfsync_input(struct mbuf **, int *, int);
+int			pfsync_input(struct mbuf **, int *, int, int);
 int			pfsync_sysctl(int *, u_int,  void *, size_t *,
 			    void *, size_t);
 

@@ -649,7 +649,7 @@ pfsync_state_import(struct pfsync_state *sp, int flags)
 }
 
 int
-pfsync_input(struct mbuf **mp, int *offp, int proto)
+pfsync_input(struct mbuf **mp, int *offp, int proto, int af)
 {
 	struct mbuf *n, *m = *mp;
 	struct pfsync_softc *sc = pfsyncif;

@@ -50,7 +50,7 @@
  */
 
 int
-route6_input(struct mbuf **mp, int *offp, int proto)
+route6_input(struct mbuf **mp, int *offp, int proto, int af)
 {
 	struct ip6_hdr *ip6;
 	struct mbuf *m = *mp;
