@@ -532,7 +532,8 @@ ip6_local(struct mbuf *m, int off, int nxt)
 				goto bad;
 		}
 
-		nxt = (*inet6sw[ip6_protox[nxt]].pr_input)(&m, &off, nxt);
+		nxt = (*inet6sw[ip6_protox[nxt]].pr_input)(&m, &off, nxt,
+		    AF_INET6);
 	}
 	return;
  bad:
