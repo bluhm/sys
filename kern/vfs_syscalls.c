@@ -406,7 +406,7 @@ dounmount(struct mount *mp, int flags, struct proc *p)
 				error = EBUSY;
 				goto err;
 			}
-			error = vfs_busy(mp, VB_WRITE | VB_WAIT);
+			error = vfs_busy(mp, VB_WRITE|VB_WAIT);
 			if (error) {
 				if ((flags & MNT_DOOMED)) {
 					/*
@@ -427,8 +427,8 @@ dounmount(struct mount *mp, int flags, struct proc *p)
 	}
 
 	/* 
-	 * XXX: Is it possible that new nested mount points appear during this
-	 * loop?
+	 * Nested mount points cannot appear during this loop as mounting
+	 * requires a read lock for the parent mount point.
 	 */
 	while ((mp = SLIST_FIRST(&mplist)) != NULL) {
 		SLIST_REMOVE(&mplist, mp, mount, mnt_dounmount);
