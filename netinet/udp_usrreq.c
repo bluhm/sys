@@ -323,7 +323,7 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 		 * to userland
 		 */
 		if (spi != 0) {
-			if ((m = m_pullup(m, skip)) == NULL) {
+			if ((m = *mp = m_pullup(m, skip)) == NULL) {
 				udpstat_inc(udps_hdrops);
 				return IPPROTO_DONE;
 			}
