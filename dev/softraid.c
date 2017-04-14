@@ -1,4 +1,4 @@
-/* $OpenBSD: softraid.c,v 1.379 2017/03/27 17:42:19 deraadt Exp $ */
+/* $OpenBSD: softraid.c,v 1.380 2017/04/14 15:11:31 bluhm Exp $ */
 /*
  * Copyright (c) 2007, 2008, 2009 Marco Peereboom <marco@peereboom.us>
  * Copyright (c) 2008 Chris Kuethe <ckuethe@openbsd.org>
