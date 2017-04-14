@@ -462,7 +462,7 @@ ip_etherip_input(struct mbuf **mp, int *offp, int proto, int af)
 	}
 
 	m_adj(m, *offp);
-	m = m_pullup(m, sizeof(struct etherip_header));
+	m = *mp = m_pullup(m, sizeof(struct etherip_header));
 	if (m == NULL) {
 		etheripstat.etherips_adrops++;
 		return IPPROTO_DONE;
@@ -480,7 +480,7 @@ ip_etherip_input(struct mbuf **mp, int *offp, int proto, int af)
 	    sizeof(struct etherip_header));
 
 	m_adj(m, sizeof(struct etherip_header));
-	m = m_pullup(m, sizeof(struct ether_header));
+	m = *mp = m_pullup(m, sizeof(struct ether_header));
 	if (m == NULL) {
 		etheripstat.etherips_adrops++;
 		return IPPROTO_DONE;
@@ -622,7 +622,7 @@ ip6_etherip_input(struct mbuf **mp, int *offp, int proto, int af)
 	}
 
 	m_adj(m, *offp);
-	m = m_pullup(m, sizeof(struct etherip_header));
+	m = *mp = m_pullup(m, sizeof(struct etherip_header));
 	if (m == NULL) {
 		etheripstat.etherips_adrops++;
 		return IPPROTO_DONE;
@@ -639,7 +639,7 @@ ip6_etherip_input(struct mbuf **mp, int *offp, int proto, int af)
 	    sizeof(struct etherip_header));
 
 	m_adj(m, sizeof(struct etherip_header));
-	m = m_pullup(m, sizeof(struct ether_header));
+	m = *mp = m_pullup(m, sizeof(struct ether_header));
 	if (m == NULL) {
 		etheripstat.etherips_adrops++;
 		return IPPROTO_DONE;

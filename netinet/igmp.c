@@ -253,7 +253,7 @@ igmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto, int af)
 	}
 	minlen = iphlen + IGMP_MINLEN;
 	if ((m->m_flags & M_EXT || m->m_len < minlen) &&
-	    (m = m_pullup(m, minlen)) == NULL) {
+	    (m = *mp = m_pullup(m, minlen)) == NULL) {
 		igmpstat_inc(igps_rcv_tooshort);
 		return IPPROTO_DONE;
 	}
