@@ -57,9 +57,8 @@ void drm_global_release(void)
 {
 	int i;
 	for (i = 0; i < DRM_GLOBAL_NUM; ++i) {
-		struct drm_global_item *item = &glob[i];
-		BUG_ON(item->object != NULL);
-		BUG_ON(item->refcount != 0);
+		BUG_ON(glob[i].object != NULL);
+		BUG_ON(glob[i].refcount != 0);
 	}
 }
 
