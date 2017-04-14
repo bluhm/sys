@@ -1,4 +1,4 @@
-/*	$OpenBSD: dest6.c,v 1.16 2017/02/05 16:04:14 jca Exp $	*/
+/*	$OpenBSD: dest6.c,v 1.17 2017/04/14 20:46:31 bluhm Exp $	*/
 /*	$KAME: dest6.c,v 1.25 2001/02/22 01:39:16 itojun Exp $	*/
 
 /*

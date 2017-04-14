@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_carp.c,v 1.307 2017/04/11 14:43:49 dhill Exp $	*/
+/*	$OpenBSD: ip_carp.c,v 1.308 2017/04/14 20:46:31 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2002 Michael Shalayeff. All rights reserved.

@@ -1,4 +1,4 @@
-/*	$OpenBSD: igmp_var.h,v 1.12 2017/01/29 19:58:47 bluhm Exp $	*/
+/*	$OpenBSD: igmp_var.h,v 1.13 2017/04/14 20:46:31 bluhm Exp $	*/
 /*	$NetBSD: igmp_var.h,v 1.9 1996/02/13 23:41:31 christos Exp $	*/
 
 /*
