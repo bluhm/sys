@@ -746,7 +746,7 @@ findpcb:
 					 * in use for the reply,
 					 * do not free it.
 					 */
-					m = NULL;
+					m = *mp = NULL;
 					goto drop;
 				} else {
 					/*
