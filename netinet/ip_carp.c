@@ -487,7 +487,7 @@ carp_proto_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto)
 		return IPPROTO_DONE;
 	}
 
-	if ((m = m_pullup(m, len)) == NULL) {
+	if ((m = *mp = m_pullup(m, len)) == NULL) {
 		carpstat_inc(carps_hdrops);
 		return IPPROTO_DONE;
 	}
@@ -562,7 +562,7 @@ carp6_proto_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto)
 
 	/* verify that we have a complete carp packet */
 	len = m->m_len;
-	if ((m = m_pullup(m, *offp + sizeof(*ch))) == NULL) {
+	if ((m = *mp = m_pullup(m, *offp + sizeof(*ch))) == NULL) {
 		carpstat_inc(carps_badlen);
 		CARP_LOG(LOG_INFO, sc, ("packet size %u too small", len));
 		return IPPROTO_DONE;

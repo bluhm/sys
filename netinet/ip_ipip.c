@@ -156,7 +156,7 @@ ipip_input(struct mbuf **mp, int *offp, struct ifnet *gifp, int proto)
 
 	/* Bring the IP header in the first mbuf, if not there already */
 	if (m->m_len < hlen) {
-		if ((m = m_pullup(m, hlen)) == NULL) {
+		if ((m = *mp = m_pullup(m, hlen)) == NULL) {
 			DPRINTF(("ipip_input(): m_pullup() failed\n"));
 			ipipstat_inc(ipips_hdrops);
 			return IPPROTO_DONE;
@@ -210,7 +210,7 @@ ipip_input(struct mbuf **mp, int *offp, struct ifnet *gifp, int proto)
 	 * Bring the inner header into the first mbuf, if not there already.
 	 */
 	if (m->m_len < hlen) {
-		if ((m = m_pullup(m, hlen)) == NULL) {
+		if ((m = *mp = m_pullup(m, hlen)) == NULL) {
 			DPRINTF(("ipip_input(): m_pullup() failed\n"));
 			ipipstat_inc(ipips_hdrops);
 			return IPPROTO_DONE;
