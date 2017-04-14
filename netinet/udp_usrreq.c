@@ -648,7 +648,7 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 		struct pipex_session *session;
 		int off = iphlen + sizeof(struct udphdr);
 		if ((session = pipex_l2tp_lookup_session(m, off)) != NULL) {
-			if ((m = pipex_l2tp_input(m, off, session,
+			if ((m = *mp = pipex_l2tp_input(m, off, session,
 			    ipsecflowinfo)) == NULL) {
 				m_freem(opts);
 				/* the packet is handled by PIPEX */
