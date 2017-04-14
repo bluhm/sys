@@ -162,7 +162,11 @@ do {									\
 	panic("BUG at %s:%d", __FILE__, __LINE__);			\
 } while (0)
 
-#define BUG_ON(x) KASSERT(!(x))
+#ifndef DIAGNOSTIC
+#define BUG_ON(x)	((void)(x))
+#else
+#define BUG_ON(x)	KASSERT(!(x))
+#endif
 
 #define BUILD_BUG_ON(x) CTASSERT(!(x))
 #define BUILD_BUG_ON_NOT_POWER_OF_2(x)
