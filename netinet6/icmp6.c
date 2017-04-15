@@ -534,7 +534,7 @@ icmp6_input(struct mbuf **mp, int *offp, int proto, int af)
 		if ((n = m_copym(m, 0, M_COPYALL, M_DONTWAIT)) == NULL) {
 			/* Give up local */
 			n = m;
-			m = NULL;
+			m = *mp = NULL;
 			goto deliverecho;
 		}
 		/*
@@ -568,7 +568,7 @@ icmp6_input(struct mbuf **mp, int *offp, int proto, int af)
 				/* Give up local */
 				m_freem(n0);
 				n = m;
-				m = NULL;
+				m = *mp = NULL;
 				goto deliverecho;
 			}
 			M_MOVE_PKTHDR(n, n0);
