@@ -181,25 +181,6 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 
 	udpstat_inc(udps_ipackets);
 
-	switch (af) {
-	case AF_INET:
-		ip = mtod(m, struct ip *);
-#ifdef IPSEC
-		protoff = offsetof(struct ip, ip_p);
-#endif /* IPSEC */
-		break;
-#ifdef INET6
-	case AF_INET6:
-		ip6 = mtod(m, struct ip6_hdr *);
-#ifdef IPSEC
-		protoff = offsetof(struct ip6_hdr, ip6_nxt);
-#endif /* IPSEC */
-		break;
-#endif /* INET6 */
-	default:
-		unhandled_af(af);
-	}
-
 	IP6_EXTHDR_GET(uh, struct udphdr *, m, iphlen, sizeof(struct udphdr));
 	if (!uh) {
 		udpstat_inc(udps_hdrops);
@@ -217,7 +198,8 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 	 * If not enough data to reflect UDP length, drop.
 	 */
 	len = ntohs((u_int16_t)uh->uh_ulen);
-	if (ip) {
+	switch (af) {
+	case AF_INET:
 		if (m->m_pkthdr.len - iphlen != len) {
 			if (len > (m->m_pkthdr.len - iphlen) ||
 			    len < sizeof(struct udphdr)) {
@@ -226,9 +208,18 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 			}
 			m_adj(m, len - (m->m_pkthdr.len - iphlen));
 		}
-	}
+		ip = mtod(m, struct ip *);
+		/*
+		 * Save a copy of the IP header in case we want restore it
+		 * for sending an ICMP error message in response.
+		 */
+		save_ip = *ip;
+#ifdef IPSEC
+		protoff = offsetof(struct ip, ip_p);
+#endif /* IPSEC */
+		break;
 #ifdef INET6
-	else if (ip6) {
+	case AF_INET6:
 		/* jumbograms */
 		if (len == 0 && m->m_pkthdr.len - iphlen > 0xffff)
 			len = m->m_pkthdr.len - iphlen;
@@ -236,28 +227,21 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 			udpstat_inc(udps_badlen);
 			goto bad;
 		}
-	}
-#endif
-	else /* shouldn't happen */
-		goto bad;
-
-	/*
-	 * Save a copy of the IP header in case we want restore it
-	 * for sending an ICMP error message in response.
-	 */
-	if (ip)
-		save_ip = *ip;
-
-#ifdef INET6
-	if (ip6) {
+		ip6 = mtod(m, struct ip6_hdr *);
 		/* Be proactive about malicious use of IPv4 mapped address */
 		if (IN6_IS_ADDR_V4MAPPED(&ip6->ip6_src) ||
 		    IN6_IS_ADDR_V4MAPPED(&ip6->ip6_dst)) {
 			/* XXX stat */
 			goto bad;
 		}
-	}
+#ifdef IPSEC
+		protoff = offsetof(struct ip6_hdr, ip6_nxt);
+#endif /* IPSEC */
+		break;
 #endif /* INET6 */
+	default:
+		unhandled_af(af);
+	}
 
 	/*
 	 * Checksum extended UDP header and data.
