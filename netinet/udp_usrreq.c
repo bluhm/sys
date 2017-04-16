@@ -152,7 +152,7 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 {
 	struct mbuf *m = *mp;
 	int iphlen = *offp;
-	struct ip *ip;
+	struct ip *ip = NULL;
 	struct udphdr *uh;
 	struct inpcb *inp = NULL;
 	struct mbuf *opts = NULL;
@@ -167,7 +167,7 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 #endif /* INET6 */
 	} srcsa, dstsa;
 #ifdef INET6
-	struct ip6_hdr *ip6;
+	struct ip6_hdr *ip6 = NULL;
 #endif /* INET6 */
 #ifdef IPSEC
 	struct m_tag *mtag;
@@ -181,19 +181,15 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 
 	udpstat_inc(udps_ipackets);
 
-	switch (mtod(m, struct ip *)->ip_v) {
-	case 4:
+	switch (af) {
+	case AF_INET:
 		ip = mtod(m, struct ip *);
-#ifdef INET6
-		ip6 = NULL;
-#endif /* INET6 */
 #ifdef IPSEC
 		protoff = offsetof(struct ip, ip_p);
 #endif /* IPSEC */
 		break;
 #ifdef INET6
-	case 6:
-		ip = NULL;
+	case AF_INET6:
 		ip6 = mtod(m, struct ip6_hdr *);
 #ifdef IPSEC
 		protoff = offsetof(struct ip6_hdr, ip6_nxt);
@@ -201,7 +197,7 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 		break;
 #endif /* INET6 */
 	default:
-		goto bad;
+		unhandled_af(af);
 	}
 
 	IP6_EXTHDR_GET(uh, struct udphdr *, m, iphlen, sizeof(struct udphdr));
