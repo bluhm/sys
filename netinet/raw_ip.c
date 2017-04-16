@@ -125,6 +125,8 @@ rip_input(struct mbuf **mp, int *offp, int proto, int af)
 	struct counters_ref ref;
 	uint64_t *counters;
 
+	KASSERT(af == AF_INET);
+
 	ripsrc.sin_addr = ip->ip_src;
 	TAILQ_FOREACH(inp, &rawcbtable.inpt_queue, inp_queue) {
 		if (inp->inp_socket->so_state & SS_CANTRCVMORE)
