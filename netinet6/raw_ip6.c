@@ -179,7 +179,7 @@ rip6_input(struct mbuf **mp, int *offp, int proto, int af)
 			if (icmp6 == NULL)
 				return IPPROTO_DONE;
 			if (ICMP6_FILTER_WILLBLOCK(icmp6->icmp6_type,
-			in6p->inp_icmp6filt))
+			    in6p->inp_icmp6filt))
 				continue;
 		}
 		if (proto != IPPROTO_ICMPV6 && in6p->inp_cksum6 != -1) {
