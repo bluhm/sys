@@ -214,9 +214,6 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 		 * for sending an ICMP error message in response.
 		 */
 		save_ip = *ip;
-#ifdef IPSEC
-		protoff = offsetof(struct ip, ip_p);
-#endif /* IPSEC */
 		break;
 #ifdef INET6
 	case AF_INET6:
@@ -234,9 +231,6 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 			/* XXX stat */
 			goto bad;
 		}
-#ifdef IPSEC
-		protoff = offsetof(struct ip6_hdr, ip6_nxt);
-#endif /* IPSEC */
 		break;
 #endif /* INET6 */
 	default:
@@ -313,6 +307,8 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 			skip -= sizeof(struct udphdr);
 
 			espstat.esps_udpencin++;
+			protoff = af == AF_INET ? offsetof(struct ip, ip_p) :
+			    offsetof(struct ip6_hdr, ip6_nxt);
 			ipsec_common_input(m, skip, protoff,
 			    af, IPPROTO_ESP, 1);
 			return IPPROTO_DONE;
