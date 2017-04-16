@@ -125,6 +125,8 @@ rip6_input(struct mbuf **mp, int *offp, int proto, int af)
 	struct sockaddr_in6 rip6src;
 	struct mbuf *opts = NULL;
 
+	KASSERT(af == AF_INET6);
+
 	rip6stat_inc(rip6s_ipackets);
 
 	/* Be proactive about malicious use of IPv4 mapped address */
