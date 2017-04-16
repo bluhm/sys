@@ -187,7 +187,6 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 #ifdef INET6
 		ip6 = NULL;
 #endif /* INET6 */
-		srcsa.sa.sa_family = AF_INET;
 #ifdef IPSEC
 		protoff = offsetof(struct ip, ip_p);
 #endif /* IPSEC */
@@ -196,7 +195,6 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 	case 6:
 		ip = NULL;
 		ip6 = mtod(m, struct ip6_hdr *);
-		srcsa.sa.sa_family = AF_INET6;
 #ifdef IPSEC
 		protoff = offsetof(struct ip6_hdr, ip6_nxt);
 #endif /* IPSEC */
@@ -336,13 +334,13 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 
 			espstat.esps_udpencin++;
 			ipsec_common_input(m, skip, protoff,
-			    srcsa.sa.sa_family, IPPROTO_ESP, 1);
+			    af, IPPROTO_ESP, 1);
 			return IPPROTO_DONE;
 		}
 	}
 #endif
 
-	switch (srcsa.sa.sa_family) {
+	switch (af) {
 	case AF_INET:
 		bzero(&srcsa, sizeof(struct sockaddr_in));
 		srcsa.sin.sin_len = sizeof(struct sockaddr_in);
@@ -621,7 +619,7 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 		    &tdbi->dst, tdbi->proto);
 	} else
 		tdb = NULL;
-	ipsp_spd_lookup(m, srcsa.sa.sa_family, iphlen, &error,
+	ipsp_spd_lookup(m, af, iphlen, &error,
 	    IPSP_DIRECTION_IN, tdb, inp, 0);
 	if (error) {
 		udpstat_inc(udps_nosec);
