@@ -1,4 +1,4 @@
-/*	$OpenBSD: drm_linux.h,v 1.48 2016/10/08 05:52:06 guenther Exp $	*/
+/*	$OpenBSD: drm_linux.h,v 1.49 2017/04/16 17:16:21 bluhm Exp $	*/
 /*
  * Copyright (c) 2013, 2014, 2015 Mark Kettenis
  *
