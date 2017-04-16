@@ -233,9 +233,9 @@ rip6_input(struct mbuf **mp, int *offp, int proto, int af)
 			if (m->m_flags & M_MCAST)
 				rip6stat_inc(rip6s_nosockmcast);
 		}
-		if (proto == IPPROTO_NONE)
+		if (proto == IPPROTO_NONE || proto == IPPROTO_ICMPV6) {
 			m_freem(m);
-		else if (proto != IPPROTO_ICMPV6) {
+		} else {
 			u_int8_t *prvnxtp = ip6_get_prevhdr(m, *offp); /* XXX */
 			icmp6_error(m, ICMP6_PARAM_PROB,
 			    ICMP6_PARAMPROB_NEXTHEADER,
