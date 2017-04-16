@@ -761,9 +761,7 @@ badlen:
 raw:
 #endif
 	/* deliver the packet to appropriate sockets */
-	icmp6_rip6_input(&m, *offp);
-
-	return IPPROTO_DONE;
+	return rip6_input(mp, offp, proto, af);
 
  freeit:
 	m_freem(m);
