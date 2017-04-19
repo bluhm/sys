@@ -1,4 +1,4 @@
-/*	$OpenBSD: rtsock.c,v 1.236 2017/04/05 13:35:18 deraadt Exp $	*/
+/*	$OpenBSD: rtsock.c,v 1.237 2017/04/19 15:21:54 bluhm Exp $	*/
 /*	$NetBSD: rtsock.c,v 1.18 1996/03/29 00:32:10 cgd Exp $	*/
 
 /*
