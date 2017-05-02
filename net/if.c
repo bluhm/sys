@@ -1325,7 +1325,7 @@ if_congested(void)
 
 #define	equal(a1, a2)	\
 	(bcmp((caddr_t)(a1), (caddr_t)(a2),	\
-	((struct sockaddr *)(a1))->sa_len) == 0)
+	(a1)->sa_len) == 0)
 
 /*
  * Locate an interface based on a complete address.

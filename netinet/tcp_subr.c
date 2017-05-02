@@ -694,8 +694,7 @@ tcp6_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *d)
 		 * payload.
 		 */
 		inp = in6_pcbhashlookup(&tcbtable, &sa6->sin6_addr,
-		    th.th_dport, (struct in6_addr *)&sa6_src->sin6_addr,
-		    th.th_sport, rdomain);
+		    th.th_dport, &sa6_src->sin6_addr, th.th_sport, rdomain);
 		if (cmd == PRC_MSGSIZE) {
 			/*
 			 * Depending on the value of "valid" and routing table
