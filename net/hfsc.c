@@ -1,4 +1,4 @@
-/*	$OpenBSD: hfsc.c,v 1.36 2017/03/07 01:29:53 dlg Exp $	*/
+/*	$OpenBSD: hfsc.c,v 1.38 2017/05/02 12:27:37 mikeb Exp $	*/
 
 /*
  * Copyright (c) 2012-2013 Henning Brauer <henning@openbsd.org>
@@ -279,6 +279,24 @@ const struct ifq_ops hfsc_ops = {
 
 const struct ifq_ops * const ifq_hfsc_ops = &hfsc_ops;
 
+/*
+ * pf queue glue.
+ */
+
+void		*hfsc_pf_alloc(struct ifnet *);
+int		 hfsc_pf_addqueue(void *, struct pf_queuespec *);
+void		 hfsc_pf_free(void *);
+int		 hfsc_pf_qstats(struct pf_queuespec *, void *, int *);
+
+const struct pfq_ops hfsc_pf_ops = {
+	hfsc_pf_alloc,
+	hfsc_pf_addqueue,
+	hfsc_pf_free,
+	hfsc_pf_qstats
+};
+
+const struct pfq_ops * const pfq_hfsc_ops = &hfsc_pf_ops;
+
 u_int64_t
 hfsc_microuptime(void)
 {
@@ -323,7 +341,7 @@ hfsc_initialize(void)
 	    IPL_NONE, PR_WAITOK, "hfscintsc", NULL);
 }
 
-struct hfsc_if *
+void *
 hfsc_pf_alloc(struct ifnet *ifp)
 {
 	struct hfsc_if *hif;
@@ -342,17 +360,20 @@ hfsc_pf_alloc(struct ifnet *ifp)
 }
 
 int
-hfsc_pf_addqueue(struct hfsc_if *hif, struct pf_queuespec *q)
+hfsc_pf_addqueue(void *arg, struct pf_queuespec *q)
 {
+	struct hfsc_if *hif = arg;
 	struct hfsc_class *cl, *parent;
 	struct hfsc_sc rtsc, lssc, ulsc;
 
 	KASSERT(hif != NULL);
 
-	if (q->parent_qid == HFSC_NULLCLASS_HANDLE &&
-	    hif->hif_rootclass == NULL)
-		parent = NULL;
-	else if ((parent = hfsc_clh2cph(hif, q->parent_qid)) == NULL)
+	if (q->parent_qid == 0 && hif->hif_rootclass == NULL) {
+		parent = hfsc_class_create(hif, NULL, NULL, NULL, NULL,
+		    0, 0, HFSC_ROOT_CLASS | q->qid);
+		if (parent == NULL)
+			return (EINVAL);
+	} else if ((parent = hfsc_clh2cph(hif, q->parent_qid)) == NULL)
 		return (EINVAL);
 
 	if (q->qid == 0)
@@ -414,8 +435,10 @@ hfsc_pf_qstats(struct pf_queuespec *q, void *ubuf, int *nbytes)
 }
 
 void
-hfsc_pf_free(struct hfsc_if *hif)
+hfsc_pf_free(void *arg)
 {
+	struct hfsc_if *hif = arg;
+
 	hfsc_free(0, hif);
 }
 
@@ -446,17 +469,22 @@ void
 hfsc_free(unsigned int idx, void *q)
 {
 	struct hfsc_if *hif = q;
-	int i;
+	struct hfsc_class *cl;
+	int i, restart;
 
 	KERNEL_ASSERT_LOCKED();
 	KASSERT(idx == 0); /* when hfsc is enabled we only use the first ifq */
 
 	timeout_del(&hif->hif_defer);
 
-	i = hif->hif_allocated;
-	do
-		hfsc_class_destroy(hif, hif->hif_class_tbl[--i]);
-	while (i > 0);
+	do {
+		restart = 0;
+		for (i = 0; i < hif->hif_allocated; i++) {
+			cl = hif->hif_class_tbl[i];
+			if (hfsc_class_destroy(hif, cl) == EBUSY)
+				restart++;
+		}
+	} while (restart > 0);
 
 	free(hif->hif_class_tbl, M_DEVBUF, hif->hif_allocated * sizeof(void *));
 	free(hif, M_DEVBUF, sizeof(*hif));

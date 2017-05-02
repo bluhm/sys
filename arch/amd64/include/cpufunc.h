@@ -1,4 +1,4 @@
-/*	$OpenBSD: cpufunc.h,v 1.13 2016/09/04 09:22:28 mpi Exp $	*/
+/*	$OpenBSD: cpufunc.h,v 1.15 2017/04/30 13:04:49 mpi Exp $	*/
 /*	$NetBSD: cpufunc.h,v 1.3 2003/05/08 10:27:43 fvdl Exp $	*/
 
 /*-
@@ -335,7 +335,17 @@ xsetbv(uint32_t reg, uint64_t mask)
 	__asm volatile("xsetbv" :: "c" (reg), "a" (lo), "d" (hi) : "memory");
 }
 
-/* Break into DDB/KGDB. */
+static __inline uint64_t
+xgetbv(uint32_t reg)
+{
+	uint32_t lo, hi;
+
+	__asm volatile("xgetbv" : "=a" (lo), "=d" (hi) : "c" (reg));
+
+	return (((uint64_t)hi << 32) | (uint64_t)lo);
+}
+
+/* Break into DDB. */
 static __inline void
 breakpoint(void)
 {
