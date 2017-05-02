@@ -834,19 +834,19 @@ const char *sockaddr_ntop(struct sockaddr *, char *, size_t);
  * casts or defines.
  */
 
-static __inline struct sockaddr_in *
+static inline struct sockaddr_in *
 satosin(struct sockaddr *sa)
 {
 	return ((struct sockaddr_in *)(sa));
 }
 
-static __inline struct sockaddr *
+static inline struct sockaddr *
 sintosa(struct sockaddr_in *sin)
 {
 	return ((struct sockaddr *)(sin));
 }
 
-static __inline struct in_ifaddr *
+static inline struct in_ifaddr *
 ifatoia(struct ifaddr *ifa)
 {
 	return ((struct in_ifaddr *)(ifa));

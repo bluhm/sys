@@ -438,19 +438,19 @@ struct in6_ifaddr;
  * casts or defines.
  */
 
-static __inline struct sockaddr_in6 *
+static inline struct sockaddr_in6 *
 satosin6(struct sockaddr *sa)
 {
 	return ((struct sockaddr_in6 *)(sa));
 }
 
-static __inline struct sockaddr *
+static inline struct sockaddr *
 sin6tosa(struct sockaddr_in6 *sin6)
 {
 	return ((struct sockaddr *)(sin6));
 }
 
-static __inline struct in6_ifaddr *
+static inline struct in6_ifaddr *
 ifatoia6(struct ifaddr *ifa)
 {
 	return ((struct in6_ifaddr *)(ifa));

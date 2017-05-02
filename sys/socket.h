@@ -535,7 +535,7 @@ __END_DECLS
 
 void	pfctlinput(int, struct sockaddr *);
 
-static __inline struct sockaddr *
+static inline struct sockaddr *
 sstosa(struct sockaddr_storage *ss)
 {
 	return ((struct sockaddr *)(ss));
