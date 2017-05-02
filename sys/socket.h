@@ -533,6 +533,18 @@ __END_DECLS
 
 #else
 void	pfctlinput(int, struct sockaddr *);
+
+static __inline struct sockaddr_storage *
+satoss(struct sockaddr *sa)
+{
+	return ((struct sockaddr_storage *)(sa));
+}
+
+static __inline struct sockaddr *
+sstosa(struct sockaddr_storage *ss)
+{
+	return ((struct sockaddr *)(ss));
+}
 #endif /* !_KERNEL */
 
 #endif /* !_SYS_SOCKET_H_ */
