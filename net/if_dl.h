@@ -73,13 +73,13 @@ struct sockaddr_dl {
 
 #ifdef _KERNEL
 
-static __inline struct sockaddr_dl *
+static inline struct sockaddr_dl *
 satosdl(struct sockaddr *sa)
 {
 	return ((struct sockaddr_dl *)(sa));
 }
 
-static __inline struct sockaddr *
+static inline struct sockaddr *
 sdltosa(struct sockaddr_dl *sdl)
 {
 	return ((struct sockaddr *)(sdl));
