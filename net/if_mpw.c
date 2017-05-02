@@ -396,7 +396,7 @@ mpw_start(struct ifnet *ifp)
 	 * the right place.
 	 */
 	memcpy(&ss, &sc->sc_nexthop, sizeof(sc->sc_nexthop));
-	((struct sockaddr *)&ss)->sa_family = AF_MPLS;
+	ss.ss_family = AF_MPLS;
 
 	while ((m = ifq_dequeue(&ifp->if_snd)) != NULL) {
 #if NBPFILTER > 0
