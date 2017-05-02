@@ -379,8 +379,7 @@ mpw_start(struct ifnet *ifp)
 		return;
 	}
 
-	rt = rtalloc((struct sockaddr *)&sc->sc_nexthop, RT_RESOLVE,
-	    ifp->if_rdomain);
+	rt = rtalloc(sstosa(&sc->sc_nexthop), RT_RESOLVE, ifp->if_rdomain);
 	if (!rtisvalid(rt)) {
 		IFQ_PURGE(&ifp->if_snd);
 		goto rtfree;
@@ -438,7 +437,7 @@ mpw_start(struct ifnet *ifp)
 
 		m->m_pkthdr.ph_rtableid = ifp->if_rdomain;
 
-		mpls_output(p, m, (struct sockaddr *)&ss, rt);
+		mpls_output(p, m, sstosa(&ss), rt);
 	}
 
 	if_put(p);

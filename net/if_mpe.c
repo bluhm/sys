@@ -139,7 +139,7 @@ void
 mpestart(struct ifnet *ifp0)
 {
 	struct mbuf		*m;
-	struct sockaddr		*sa = (struct sockaddr *)&mpedst;
+	struct sockaddr		*sa = sstosa(&mpedst);
 	sa_family_t		 af;
 	struct rtentry		*rt;
 	struct ifnet		*ifp;

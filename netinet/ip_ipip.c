@@ -294,8 +294,7 @@ ipip_input(struct mbuf **mp, int *offp, struct ifnet *gifp, int proto)
 			sin6->sin6_addr = ip6->ip6_src;
 #endif /* INET6 */
 		}
-		rt = rtalloc((struct sockaddr *)&ss, 0,
-		    m->m_pkthdr.ph_rtableid);
+		rt = rtalloc(sstosa(&ss), 0, m->m_pkthdr.ph_rtableid);
 		if ((rt != NULL) && (rt->rt_flags & RTF_LOCAL)) {
 			ipipstat_inc(ipips_spoof);
 			m_freem(m);
