@@ -1326,10 +1326,14 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 			if (fp->f_count > 1 && /* 0, +1 for our FREF() */
 			    (arg == 0 || fp->f_type == arg)) {
 				int af, skip = 0;
+				void *pcb;
 				if (arg == DTYPE_SOCKET && fp->f_type == arg) {
 					af = ((struct socket *)fp->f_data)->
 					    so_proto->pr_domain->dom_family;
-					if (af == AF_INET || af == AF_INET6)
+					pcb = ((struct socket *)fp->f_data)->
+					    so_pcb;
+					if ((af == AF_INET || af == AF_INET6)
+					    && pcb != NULL)
 						skip = 1;
 				}
 				if (!skip)
