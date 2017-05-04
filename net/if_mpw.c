@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_mpw.c,v 1.20 2017/03/02 03:09:50 renato Exp $ */
+/*	$OpenBSD: if_mpw.c,v 1.21 2017/05/04 15:00:24 bluhm Exp $ */
 
 /*
  * Copyright (c) 2015 Rafael Zalamena <rzalamena@openbsd.org>
