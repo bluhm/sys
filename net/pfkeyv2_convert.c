@@ -685,12 +685,12 @@ export_address(void **p, struct sockaddr *sa)
 	struct sadb_address *sadb_address = (struct sadb_address *) *p;
 
 	sadb_address->sadb_address_len = (sizeof(struct sadb_address) +
-	    PADUP(SA_LEN(sa))) / sizeof(uint64_t);
+	    PADUP(sa->sa_len)) / sizeof(uint64_t);
 
 	*p += sizeof(struct sadb_address);
-	bcopy(sa, *p, SA_LEN(sa));
+	bcopy(sa, *p, sa->sa_len);
 	((struct sockaddr *) *p)->sa_family = sa->sa_family;
-	*p += PADUP(SA_LEN(sa));
+	*p += PADUP(sa->sa_len);
 }
 
 /*

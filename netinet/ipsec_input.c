@@ -806,8 +806,8 @@ udpencap_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 		if (tdbp->tdb_sproto == IPPROTO_ESP &&
 		    ((tdbp->tdb_flags & (TDBF_INVALID|TDBF_UDPENCAP)) ==
 		    TDBF_UDPENCAP) &&
-		    !memcmp(&tdbp->tdb_dst, &dst, SA_LEN(&su_dst->sa)) &&
-		    !memcmp(&tdbp->tdb_src, &src, SA_LEN(&su_src->sa))) {
+		    !memcmp(&tdbp->tdb_dst, &dst, su_dst->sa.sa_len) &&
+		    !memcmp(&tdbp->tdb_src, &src, su_src->sa.sa_len)) {
 			if ((adjust = ipsec_hdrsz(tdbp)) != -1) {
 				/* Store adjusted MTU in tdb */
 				tdbp->tdb_mtu = mtu - adjust;
