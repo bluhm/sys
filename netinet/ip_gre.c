@@ -1,4 +1,4 @@
-/*      $OpenBSD: ip_gre.c,v 1.63 2017/04/14 20:46:31 bluhm Exp $ */
+/*      $OpenBSD: ip_gre.c,v 1.64 2017/05/04 17:58:46 bluhm Exp $ */
 /*	$NetBSD: ip_gre.c,v 1.9 1999/10/25 19:18:11 drochner Exp $ */
 
 /*
