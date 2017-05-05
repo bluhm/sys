@@ -424,13 +424,6 @@ tcp_input(struct mbuf **mp, int *offp, int proto, int af)
 		iptos = (ntohl(ip6->ip6_flow) >> 20) & 0xff;
 #endif
 
-		/* Be proactive about malicious use of IPv4 mapped address */
-		if (IN6_IS_ADDR_V4MAPPED(&ip6->ip6_src) ||
-		    IN6_IS_ADDR_V4MAPPED(&ip6->ip6_dst)) {
-			/* XXX stat */
-			goto drop;
-		}
-
 		/*
 		 * Be proactive about unspecified IPv6 address in source.
 		 * As we use all-zero to indicate unbounded/unconnected pcb,
