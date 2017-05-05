@@ -120,7 +120,7 @@ struct xformsw xformsw[] = {
   .xf_attach	= ipe4_attach,
   .xf_init	= ipe4_init,
   .xf_zeroize	= ipe4_zeroize,
-  .xf_input	= (int (*)(struct mbuf *, struct tdb *, int, int))ipe4_input,
+  .xf_input	= ipe4_input,
   .xf_output	= ipip_output,
 },
 {

@@ -474,7 +474,7 @@ int	tdb_walk(u_int, int (*)(struct tdb *, void *, int), void *);
 int	ipe4_attach(void);
 int	ipe4_init(struct tdb *, struct xformsw *, struct ipsecinit *);
 int	ipe4_zeroize(struct tdb *);
-void	ipe4_input(struct mbuf *, int, int);
+int	ipe4_input(struct mbuf *, struct tdb *, int, int);
 int	ipip_input(struct mbuf **, int *, struct ifnet *, int);
 int	ipip_output(struct mbuf *, struct tdb *, struct mbuf **, int, int);
 
