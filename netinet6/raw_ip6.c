@@ -130,14 +130,6 @@ rip6_input(struct mbuf **mp, int *offp, int proto, int af)
 	if (proto != IPPROTO_ICMPV6)
 		rip6stat_inc(rip6s_ipackets);
 
-	/* Be proactive about malicious use of IPv4 mapped address */
-	if (IN6_IS_ADDR_V4MAPPED(&ip6->ip6_src) ||
-	    IN6_IS_ADDR_V4MAPPED(&ip6->ip6_dst)) {
-		/* XXX stat */
-		m_freem(m);
-		return IPPROTO_DONE;
-	}
-
 	bzero(&rip6src, sizeof(rip6src));
 	rip6src.sin6_len = sizeof(struct sockaddr_in6);
 	rip6src.sin6_family = AF_INET6;
