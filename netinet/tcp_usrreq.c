@@ -229,8 +229,7 @@ tcp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 			    struct sockaddr_in6 *)->sin6_addr;
 
 			if (IN6_IS_ADDR_UNSPECIFIED(in6_addr) ||
-			    IN6_IS_ADDR_MULTICAST(in6_addr) ||
-			    IN6_IS_ADDR_V4MAPPED(in6_addr)) {
+			    IN6_IS_ADDR_MULTICAST(in6_addr)) {
 				error = EINVAL;
 				break;
 			}
