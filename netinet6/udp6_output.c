@@ -132,7 +132,7 @@ udp6_output(struct inpcb *in6p, struct mbuf *m, struct mbuf *addr6,
 			goto release;
 		}
 		if (IN6_IS_ADDR_V4MAPPED(&sin6->sin6_addr)) {
-			error = EINVAL;
+			error = EADDRNOTAVAIL;
 			goto release;
 		}
 
