@@ -635,6 +635,7 @@ tcp6_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *d)
 		u_int32_t th_seq;
 	} *thp;
 
+	CTASSERT(sizeof(*thp) <= sizeof(th));
 	if (sa->sa_family != AF_INET6 ||
 	    sa->sa_len != sizeof(struct sockaddr_in6) ||
 	    IN6_IS_ADDR_UNSPECIFIED(&sa6->sin6_addr) ||
@@ -682,10 +683,6 @@ tcp6_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *d)
 			return;
 
 		bzero(&th, sizeof(th));
-#ifdef DIAGNOSTIC
-		if (sizeof(*thp) > sizeof(th))
-			panic("assumption failed in tcp6_ctlinput");
-#endif
 		m_copydata(m, off, sizeof(*thp), (caddr_t)&th);
 
 		/*
