@@ -256,14 +256,9 @@ in6_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 		return (EAFNOSUPPORT);
 	if (sin6->sin6_port == 0)
 		return (EADDRNOTAVAIL);
-
 	/* reject IPv4 mapped address, we have no support for it */
 	if (IN6_IS_ADDR_V4MAPPED(&sin6->sin6_addr))
-		return EADDRNOTAVAIL;
-
-	/* sanity check for mapped address case */
-	if (IN6_IS_ADDR_V4MAPPED(&inp->inp_laddr6))
-		return EINVAL;
+		return (EADDRNOTAVAIL);
 
 	/* protect *sin6 from overwrites */
 	tmp = *sin6;
