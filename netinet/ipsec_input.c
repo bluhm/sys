@@ -591,6 +591,25 @@ ipsec_common_input_cb(struct mbuf *m, struct tdb *tdbp, int skip, int protoff)
 		return;
 #ifdef INET6
 	case AF_INET6:
+#if NPF > 0
+		if ((tdbp->tdb_flags & TDBF_TUNNELING) == 0) {
+			struct ifnet *ifp;
+
+			/* This is the enc0 interface unless for ipcomp. */
+			if ((ifp = if_get(m->m_pkthdr.ph_ifidx)) == NULL) {
+				m_freem(m);
+				return;
+			}
+			if (pf_test(AF_INET6, PF_IN, ifp, &m) != PF_PASS) {
+				if_put(ifp);
+				m_freem(m);
+				return;
+			}
+			if_put(ifp);
+			if (m == NULL)
+				return;
+		}
+#endif
 		ip6_local(m, skip, prot);
 		return;
 #endif /* INET6 */
