@@ -317,8 +317,7 @@ ipsec_common_input_cb(struct mbuf *m, struct tdb *tdbp, int skip, int protoff)
 {
 	int af, sproto;
 	u_int8_t prot;
-
-#if NBPFILTER > 0
+#if NBPFILTER > 0 || NPF > 0
 	struct ifnet *encif;
 #endif
 
@@ -549,21 +548,23 @@ ipsec_common_input_cb(struct mbuf *m, struct tdb *tdbp, int skip, int protoff)
 	if (tdbp->tdb_flags & TDBF_TUNNELING)
 		m->m_flags |= M_TUNNEL;
 
-#if NBPFILTER > 0
+#if NBPFILTER > 0 || NPF > 0
 	if ((encif = enc_getif(tdbp->tdb_rdomain, tdbp->tdb_tap)) != NULL) {
 		encif->if_ipackets++;
 		encif->if_ibytes += m->m_pkthdr.len;
+	}
+#endif
 
-		if (encif->if_bpf) {
-			struct enchdr hdr;
+#if NBPFILTER > 0
+	if (encif != NULL && encif->if_bpf) {
+		struct enchdr hdr;
 
-			hdr.af = af;
-			hdr.spi = tdbp->tdb_spi;
-			hdr.flags = m->m_flags & (M_AUTH|M_CONF);
+		hdr.af = af;
+		hdr.spi = tdbp->tdb_spi;
+		hdr.flags = m->m_flags & (M_AUTH|M_CONF);
 
-			bpf_mtap_hdr(encif->if_bpf, (char *)&hdr,
-			    ENC_HDRLEN, m, BPF_DIRECTION_IN, NULL);
-		}
+		bpf_mtap_hdr(encif->if_bpf, (char *)&hdr,
+		    ENC_HDRLEN, m, BPF_DIRECTION_IN, NULL);
 	}
 #endif
 
