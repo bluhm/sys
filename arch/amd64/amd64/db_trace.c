@@ -260,7 +260,7 @@ db_stack_trace_print(db_expr_t addr, boolean_t have_addr, db_expr_t count,
 
 		if (lastframe == 0 && offset == 0 && !have_addr) {
 			/* We have a breakpoint before the frame is set up */
-			for (i = min(6, narg); i > 0; i--) {
+			for (i = 0; i < min(6, narg); i++) {
 				(*pr)("%lx", *db_reg_args[i]);
 				if (--narg != 0)
 					(*pr)(",");
