@@ -343,7 +343,6 @@ rip6_output(struct mbuf *m, struct socket *so, struct sockaddr *dstaddr,
 	priv = 0;
 	if ((so->so_state & SS_PRIV) != 0)
 		priv = 1;
-	dst = &satosin6(dstaddr)->sin6_addr;
 	if (control) {
 		if ((error = ip6_setpktopts(control, &opt,
 		    in6p->inp_outputopts6,
@@ -352,6 +351,12 @@ rip6_output(struct mbuf *m, struct socket *so, struct sockaddr *dstaddr,
 		optp = &opt;
 	} else
 		optp = in6p->inp_outputopts6;
+
+	if (dstaddr->sa_family != AF_INET6) {
+		error = EAFNOSUPPORT;
+		goto bad;
+	}
+	dst = &satosin6(dstaddr)->sin6_addr;
 
 	/*
 	 * For an ICMPv6 packet, we should know its type and code
@@ -691,11 +696,6 @@ rip6_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 
 			tmp = *mtod(nam, struct sockaddr_in6 *);
 			dst = &tmp;
-
-			if (dst->sin6_family != AF_INET6) {
-				error = EAFNOSUPPORT;
-				break;
-			}
 		}
 		error = rip6_output(m, so, sin6tosa(dst), control);
 		m = NULL;
