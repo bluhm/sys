@@ -357,6 +357,10 @@ rip6_output(struct mbuf *m, struct socket *so, struct sockaddr *dstaddr,
 		goto bad;
 	}
 	dst = &satosin6(dstaddr)->sin6_addr;
+	if (IN6_IS_ADDR_V4MAPPED(dst)) {
+		error = EADDRNOTAVAIL;
+		goto bad;
+	}
 
 	/*
 	 * For an ICMPv6 packet, we should know its type and code
