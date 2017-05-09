@@ -1,4 +1,4 @@
-/*	$OpenBSD: icmp6.c,v 1.208 2017/05/04 17:58:46 bluhm Exp $	*/
+/*	$OpenBSD: icmp6.c,v 1.210 2017/05/08 16:14:47 rzalamena Exp $	*/
 /*	$KAME: icmp6.c,v 1.217 2001/06/20 15:03:29 jinmei Exp $	*/
 
 /*
@@ -595,9 +595,9 @@ icmp6_input(struct mbuf **mp, int *offp, int proto, int af)
 			    sizeof(*nicmp6));
 			noff = off;
 		}
-		nicmp6->icmp6_type = ICMP6_ECHO_REPLY;
-		nicmp6->icmp6_code = 0;
 		if (n) {
+			nicmp6->icmp6_type = ICMP6_ECHO_REPLY;
+			nicmp6->icmp6_code = 0;
 			icmp6stat_inc(icp6s_reflect);
 			icmp6stat_inc(icp6s_outhist + ICMP6_ECHO_REPLY);
 			icmp6_reflect(n, noff);
@@ -1127,29 +1127,20 @@ icmp6_reflect(struct mbuf *m, size_t off)
 	in6_embedscope(&t, &sa6_dst, NULL);
 
 	/*
-	 * This is the case if the dst is our link-local address
-	 * and the sender is also ourselves.
-	 */
-	if (IN6_IS_ADDR_LINKLOCAL(&t) && (m->m_flags & M_LOOP))
-		src = &t;
-
-	/*
 	 * If the incoming packet was addressed directly to us (i.e. unicast),
 	 * use dst as the src for the reply.
 	 * The IN6_IFF_TENTATIVE|IN6_IFF_DUPLICATED case would be VERY rare,
 	 * but is possible (for example) when we encounter an error while
 	 * forwarding procedure destined to a duplicated address of ours.
 	 */
-	if (src == NULL) {
-		rt = rtalloc(sin6tosa(&sa6_dst), 0, m->m_pkthdr.ph_rtableid);
-		if (rtisvalid(rt) && ISSET(rt->rt_flags, RTF_LOCAL) &&
-		    !ISSET(ifatoia6(rt->rt_ifa)->ia6_flags,
-		    IN6_IFF_ANYCAST|IN6_IFF_TENTATIVE|IN6_IFF_DUPLICATED)) {
-			src = &t;
-		}
-		rtfree(rt);
-		rt = NULL;
+	rt = rtalloc(sin6tosa(&sa6_dst), 0, m->m_pkthdr.ph_rtableid);
+	if (rtisvalid(rt) && ISSET(rt->rt_flags, RTF_LOCAL) &&
+	    !ISSET(ifatoia6(rt->rt_ifa)->ia6_flags,
+	    IN6_IFF_ANYCAST|IN6_IFF_TENTATIVE|IN6_IFF_DUPLICATED)) {
+		src = &t;
 	}
+	rtfree(rt);
+	rt = NULL;
 
 	if (src == NULL) {
 		/*
