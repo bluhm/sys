@@ -240,9 +240,6 @@ ipv4_input(struct mbuf *m)
 	struct rtentry	*rt = NULL;
 	struct ip	*ip;
 	int hlen, len;
-#if defined(MROUTING) || defined(IPSEC)
-	int rv;
-#endif
 	in_addr_t pfrdr = 0;
 
 	ifp = if_get(m->m_pkthdr.ph_ifidx);
@@ -376,6 +373,8 @@ ipv4_input(struct mbuf *m)
 
 #ifdef MROUTING
 		if (ipmforwarding && ip_mrouter[ifp->if_rdomain]) {
+			int rv;
+
 			if (m->m_flags & M_EXT) {
 				if ((m = m_pullup(m, hlen)) == NULL) {
 					ipstat_inc(ips_toosmall);
@@ -443,6 +442,8 @@ ipv4_input(struct mbuf *m)
 	}
 #ifdef IPSEC
 	if (ipsec_in_use) {
+		int rv;
+
 		KERNEL_LOCK();
 		rv = ip_input_ipsec_fwd_check(m, hlen, AF_INET);
 		KERNEL_UNLOCK();
