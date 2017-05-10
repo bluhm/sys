@@ -470,6 +470,24 @@ ip6_input(struct mbuf *m)
 		goto out;
 	}
 
+#ifdef IPSEC
+	if (ipsec_in_use) {
+		int rv;
+
+		KERNEL_LOCK();
+		rv = ip_input_ipsec_fwd_check(m, off, AF_INET6);
+		KERNEL_UNLOCK();
+		if (rv != 0) {
+			ipstat_inc(ips_cantforward);
+			goto bad;
+		}
+		/*
+		 * Fall through, forward packet. Outbound IPsec policy
+		 * checking will occur in ip6_forward().
+		 */
+	}
+#endif /* IPSEC */
+
 	ip6_forward(m, rt, srcrt);
 	if_put(ifp);
 	return;
