@@ -444,7 +444,7 @@ ipv4_input(struct mbuf *m)
 #ifdef IPSEC
 	if (ipsec_in_use) {
 		KERNEL_LOCK();
-		rv = ip_input_ipsec_fwd_check(m, hlen);
+		rv = ip_input_ipsec_fwd_check(m, hlen, AF_INET);
 		KERNEL_UNLOCK();
 		if (rv != 0) {
 			ipstat_inc(ips_cantforward);
@@ -674,7 +674,7 @@ in_ouraddr(struct mbuf *m, struct ifnet *ifp, struct rtentry **prt)
 
 #ifdef IPSEC
 int
-ip_input_ipsec_fwd_check(struct mbuf *m, int hlen)
+ip_input_ipsec_fwd_check(struct mbuf *m, int hlen, int af)
 {
 	struct tdb *tdb;
 	struct tdb_ident *tdbi;
@@ -691,8 +691,7 @@ ip_input_ipsec_fwd_check(struct mbuf *m, int hlen)
 		tdb = gettdb(tdbi->rdomain, tdbi->spi, &tdbi->dst, tdbi->proto);
 	} else
 		tdb = NULL;
-	ipsp_spd_lookup(m, AF_INET, hlen, &error, IPSP_DIRECTION_IN, tdb, NULL,
-	    0);
+	ipsp_spd_lookup(m, af, hlen, &error, IPSP_DIRECTION_IN, tdb, NULL, 0);
 
 	return error;
 }
