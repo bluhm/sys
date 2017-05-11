@@ -816,7 +816,8 @@ ip_reass(struct ipqent *ipqe, struct ipq *fp)
 		if (ecn0 == IPTOS_ECN_NOTECT)
 			goto dropfrag;
 		if (ecn0 != IPTOS_ECN_CE)
-			LIST_FIRST(&fp->ipq_fragq)->ipqe_ip->ip_tos |= IPTOS_ECN_CE;
+			LIST_FIRST(&fp->ipq_fragq)->ipqe_ip->ip_tos |=
+			    IPTOS_ECN_CE;
 	}
 	if (ecn == IPTOS_ECN_NOTECT && ecn0 != IPTOS_ECN_NOTECT)
 		goto dropfrag;
