@@ -127,7 +127,6 @@ int ip_sysctl_ipstat(void *, size_t *, void *);
 static struct mbuf_queue	ipsend_mq;
 
 void	ip_ours(struct mbuf *);
-void	ip_local(struct mbuf *, int, int);
 int	ip_dooptions(struct mbuf *, struct ifnet *);
 int	in_ouraddr(struct mbuf *, struct ifnet *, struct rtentry **);
 #ifdef IPSEC
