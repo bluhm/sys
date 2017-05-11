@@ -526,7 +526,8 @@ ipsec_common_input_cb(struct mbuf *m, struct tdb *tdbp, int skip, int protoff)
 		m_tag_prepend(m, mtag);
 	}
 
-	if (sproto == IPPROTO_ESP) {
+	switch (sproto) {
+	case IPPROTO_ESP:
 		/* Packet is confidential ? */
 		if (tdbp->tdb_encalgxform)
 			m->m_flags |= M_CONF;
@@ -534,10 +535,18 @@ ipsec_common_input_cb(struct mbuf *m, struct tdb *tdbp, int skip, int protoff)
 		/* Check if we had authenticated ESP. */
 		if (tdbp->tdb_authalgxform)
 			m->m_flags |= M_AUTH;
-	} else if (sproto == IPPROTO_AH) {
+		break;
+	case IPPROTO_AH:
 		m->m_flags |= M_AUTH;
-	} else if (sproto == IPPROTO_IPCOMP) {
+		break;
+	case IPPROTO_IPCOMP:
 		m->m_flags |= M_COMP;
+		break;
+	default:
+		DPRINTF(("ipsec_common_input_cb(): unknown/unsupported"
+		    " security protocol %d\n", sproto));
+		m_freem(m);
+		return;
 	}
 
 #if NPF > 0
@@ -566,18 +575,6 @@ ipsec_common_input_cb(struct mbuf *m, struct tdb *tdbp, int skip, int protoff)
 		}
 	}
 #endif
-
-	switch (sproto) {
-	case IPPROTO_ESP:
-	case IPPROTO_AH:
-	case IPPROTO_IPCOMP:
-		break;
-	default:
-		DPRINTF(("ipsec_common_input_cb(): unknown/unsupported"
-		    " security protocol %d\n", sproto));
-		m_freem(m);
-		return;
-	}
 
 	/* Call the appropriate IPsec transform callback. */
 	switch (af) {
