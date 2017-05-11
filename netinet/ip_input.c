@@ -127,6 +127,7 @@ int ip_sysctl_ipstat(void *, size_t *, void *);
 static struct mbuf_queue	ipsend_mq;
 
 void	ip_ours(struct mbuf *);
+void	ip_local(struct mbuf *, int, int);
 int	ip_dooptions(struct mbuf *, struct ifnet *);
 int	in_ouraddr(struct mbuf *, struct ifnet *, struct rtentry **);
 #ifdef IPSEC
@@ -483,9 +484,6 @@ ip_ours(struct mbuf *m)
 
 	hlen = ip->ip_hl << 2;
 
-	/* pf might have modified stuff, might have to chksum */
-	in_proto_cksum_out(m, NULL);
-
 	/*
 	 * If offset or IP_MF are set, must reassemble.
 	 * Otherwise, nothing need be done.
@@ -570,11 +568,26 @@ found:
 				ip_freef(fp);
 	}
 
+	ip_local(m, hlen, ip->ip_p);
+	return;
+bad:
+	m_freem(m);
+}
+
+void
+ip_local(struct mbuf *m, int off, int nxt)
+{
+	KERNEL_ASSERT_LOCKED();
+
+	/* pf might have modified stuff, might have to chksum */
+	in_proto_cksum_out(m, NULL);
+
 #ifdef IPSEC
 	if (ipsec_in_use) {
-		if (ip_input_ipsec_ours_check(m, hlen) != 0) {
+		if (ip_input_ipsec_ours_check(m, off) != 0) {
 			ipstat_inc(ips_cantforward);
-			goto bad;
+			m_freem(m);
+			return;
 		}
 	}
 	/* Otherwise, just fall through and deliver the packet */
@@ -584,10 +597,7 @@ found:
 	 * Switch out to protocol's input routine.
 	 */
 	ipstat_inc(ips_delivered);
-	(*inetsw[ip_protox[ip->ip_p]].pr_input)(&m, &hlen, ip->ip_p, AF_INET);
-	return;
-bad:
-	m_freem(m);
+	(*inetsw[ip_protox[nxt]].pr_input)(&m, &off, nxt, AF_INET);
 }
 
 int
