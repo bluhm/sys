@@ -592,6 +592,13 @@ ipsec_common_input_cb(struct mbuf *m, struct tdb *tdbp, int skip, int protoff)
 #ifdef INET6
 	case AF_INET6:
 #if NPF > 0
+		/*
+		 * In the IPv4 case all packets run through ipv4_input()
+		 * twice.  As the ip6_local() shortcut avoids this, IPv6
+		 * packets in transport mode have to be be passed to pf
+		 * explicitly.  In tunnel mode the inner IP header will
+		 * run through ip_input() and pf already.
+		 */
 		if ((tdbp->tdb_flags & TDBF_TUNNELING) == 0) {
 			struct ifnet *ifp;
 
