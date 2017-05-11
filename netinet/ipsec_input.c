@@ -596,7 +596,7 @@ ipsec_common_input_cb(struct mbuf *m, struct tdb *tdbp, int skip, int protoff)
 			m_freem(m);
 			return;
 		}
-		if (pf_test(AF_INET6, PF_IN, ifp, &m) != PF_PASS) {
+		if (pf_test(af, PF_IN, ifp, &m) != PF_PASS) {
 			if_put(ifp);
 			m_freem(m);
 			return;
