@@ -638,7 +638,7 @@ rtdeletemsg(struct rtentry *rt, struct ifnet *ifp, u_int tableid)
 	unsigned int		ifidx;
 	struct sockaddr_in6	sa_mask;
 
-	KASSERT(rt->rt_ifidx == ifp->if_index);
+	KASSERT(ifp == NULL || ifp->if_index == rt->rt_ifidx);
 
 	/*
 	 * Request the new route so that the entry is not actually
