@@ -543,10 +543,8 @@ ipsec_common_input_cb(struct mbuf *m, struct tdb *tdbp, int skip, int protoff)
 		m->m_flags |= M_COMP;
 		break;
 	default:
-		DPRINTF(("ipsec_common_input_cb(): unknown/unsupported"
-		    " security protocol %d\n", sproto));
-		m_freem(m);
-		return;
+		panic("%s: unknown/unsupported security protocol %d",
+		    __func__, sproto);
 	}
 
 #if NPF > 0
