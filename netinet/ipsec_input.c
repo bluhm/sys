@@ -172,15 +172,22 @@ ipsec_common_input(struct mbuf *m, int skip, int protoff, int af, int sproto,
 	}
 
 	/* Retrieve the SPI from the relevant IPsec header */
-	if (sproto == IPPROTO_ESP)
+	switch (sproto) {
+	case IPPROTO_ESP:
 		m_copydata(m, skip, sizeof(u_int32_t), (caddr_t) &spi);
-	else if (sproto == IPPROTO_AH)
+		break;
+	case IPPROTO_AH:
 		m_copydata(m, skip + sizeof(u_int32_t), sizeof(u_int32_t),
 		    (caddr_t) &spi);
-	else if (sproto == IPPROTO_IPCOMP) {
+		break;
+	case IPPROTO_IPCOMP:
 		m_copydata(m, skip + sizeof(u_int16_t), sizeof(u_int16_t),
 		    (caddr_t) &cpi);
 		spi = ntohl(htons(cpi));
+		break;
+	default:
+		panic("%s: unknown/unsupported security protocol %d",
+		    __func__, sproto);
 	}
 
 	/*
