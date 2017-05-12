@@ -1425,17 +1425,6 @@ bridge_ipsec(struct bridge_softc *sc, struct ifnet *ifp,
 			    sizeof(struct in_addr),
 			    (caddr_t)&dst.sin.sin_addr);
 
-			if (ip->ip_p == IPPROTO_ESP)
-				m_copydata(m, hlen, sizeof(u_int32_t),
-				    (caddr_t)&spi);
-			else if (ip->ip_p == IPPROTO_AH)
-				m_copydata(m, hlen + sizeof(u_int32_t),
-				    sizeof(u_int32_t), (caddr_t)&spi);
-			else if (ip->ip_p == IPPROTO_IPCOMP) {
-				m_copydata(m, hlen + sizeof(u_int16_t),
-				    sizeof(u_int16_t), (caddr_t)&cpi);
-				spi = ntohl(htons(cpi));
-			}
 			break;
 #ifdef INET6
 		case AF_INET6:
@@ -1459,25 +1448,29 @@ bridge_ipsec(struct bridge_softc *sc, struct ifnet *ifp,
 			    sizeof(struct in6_addr),
 			    (caddr_t)&dst.sin6.sin6_addr);
 
-			if (proto == IPPROTO_ESP)
-				m_copydata(m, hlen, sizeof(u_int32_t),
-				    (caddr_t)&spi);
-			else if (proto == IPPROTO_AH)
-				m_copydata(m, hlen + sizeof(u_int32_t),
-				    sizeof(u_int32_t), (caddr_t)&spi);
-			else if (proto == IPPROTO_IPCOMP) {
-				m_copydata(m, hlen + sizeof(u_int16_t),
-				    sizeof(u_int16_t), (caddr_t)&cpi);
-				spi = ntohl(htons(cpi));
-			}
 			break;
 #endif /* INET6 */
 		default:
 			return (0);
 		}
 
-		if (proto == 0)
-			goto skiplookup;
+		switch (proto) {
+		case IPPROTO_ESP:
+			m_copydata(m, hlen, sizeof(u_int32_t), (caddr_t)&spi);
+			break;
+		case IPPROTO_AH:
+			m_copydata(m, hlen + sizeof(u_int32_t),
+			    sizeof(u_int32_t), (caddr_t)&spi);
+			break;
+		case IPPROTO_IPCOMP:
+			m_copydata(m, hlen + sizeof(u_int16_t),
+			    sizeof(u_int16_t), (caddr_t)&cpi);
+			spi = ntohl(htons(cpi));
+			break;
+		default:
+			panic("%s: unknown/unsupported security protocol %d",
+			    __func__, proto);
+		}
 
 		splsoftassert(IPL_SOFTNET);
 
