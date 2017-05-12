@@ -1467,9 +1467,6 @@ bridge_ipsec(struct bridge_softc *sc, struct ifnet *ifp,
 			    sizeof(u_int16_t), (caddr_t)&cpi);
 			spi = ntohl(htons(cpi));
 			break;
-		default:
-			panic("%s: unknown/unsupported security protocol %d",
-			    __func__, proto);
 		}
 
 		splsoftassert(IPL_SOFTNET);
