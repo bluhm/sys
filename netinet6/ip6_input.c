@@ -550,6 +550,18 @@ ip6_local(struct mbuf *m, int off, int nxt)
 				goto bad;
 		}
 
+#ifdef IPSEC
+		if (ipsec_in_use) {
+			if (ip_input_ipsec_ours_check(m, off, nxt, AF_INET6)
+			    != 0) {
+				ipstat_inc(ip6s_cantforward);
+				m_freem(m);
+				return;
+			}
+		}
+		/* Otherwise, just fall through and deliver the packet */
+#endif /* IPSEC */
+
 		nxt = (*inet6sw[ip6_protox[nxt]].pr_input)(&m, &off, nxt,
 		    AF_INET6);
 	}
