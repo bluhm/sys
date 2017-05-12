@@ -129,9 +129,6 @@ static struct mbuf_queue	ipsend_mq;
 void	ip_ours(struct mbuf *);
 int	ip_dooptions(struct mbuf *, struct ifnet *);
 int	in_ouraddr(struct mbuf *, struct ifnet *, struct rtentry **);
-#ifdef IPSEC
-int	ip_input_ipsec_ours_check(struct mbuf *, int);
-#endif /* IPSEC */
 
 static void ip_send_dispatch(void *);
 static struct task ipsend_task = TASK_INITIALIZER(ip_send_dispatch, &ipsend_mq);

@@ -252,6 +252,7 @@ void	 ipv4_input(struct mbuf *);
 void	 ip_local(struct mbuf *, int, int);
 void	 ip_forward(struct mbuf *, struct ifnet *, struct rtentry *, int);
 int	 ip_input_ipsec_fwd_check(struct mbuf *, int, int);
+int	 ip_input_ipsec_ours_check(struct mbuf *, int);
 int	 rip_ctloutput(int, struct socket *, int, int, struct mbuf *);
 void	 rip_init(void);
 int	 rip_input(struct mbuf **, int *, int, int);
