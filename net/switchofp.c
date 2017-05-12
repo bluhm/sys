@@ -1,4 +1,4 @@
-/*	$OpenBSD: switchofp.c,v 1.60 2017/03/01 09:32:07 mpi Exp $	*/
+/*	$OpenBSD: switchofp.c,v 1.61 2017/05/12 13:40:29 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2016 Kazuya GODA <goda@openbsd.org>
