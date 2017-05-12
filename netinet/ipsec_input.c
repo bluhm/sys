@@ -583,10 +583,10 @@ ipsec_common_input_cb(struct mbuf *m, struct tdb *tdbp, int skip, int protoff)
 
 #if NPF > 0
 	/*
-	 * As the ip_local() shortcut avoids running through ip_input twice,
-	 * packets in transport mode have to be be passed to pf explicitly.
-	 * In tunnel mode the inner IP header will run through ip_input()
-	 * and pf already.
+	 * The ip_local() shortcut avoids running through ip_input() with the
+	 * same IP header twice.  Packets in transport mode have to be be
+	 * passed to pf explicitly.  In tunnel mode the inner IP header will
+	 * run through ip_input() and pf anyway.
 	 */
 	if ((tdbp->tdb_flags & TDBF_TUNNELING) == 0) {
 		struct ifnet *ifp;
