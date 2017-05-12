@@ -105,3 +105,16 @@
 #include <sys/scsiio.h>
 #include <sys/sockio.h>
 #include <sys/videoio.h>
+
+#include <net/if.h>
+#include <net/if_var.h>
+#include <net/pfvar.h>
+#include <netinet/tcp.h>
+#include <netinet/udp.h>
+#include <netinet/ip.h>
+#include <netinet/ip_icmp.h>
+#ifdef INET6
+#include <netinet/ip6.h>
+#include <netinet/icmp6.h>
+#endif /* INET6 */
+#include <net/pfvar_priv.h>
