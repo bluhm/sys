@@ -275,7 +275,8 @@ struct protosw inetsw[] = {
   .pr_attach	= rip_attach,
   .pr_sysctl	= etherip_sysctl
 },
-#ifdef MPLS
+#endif /* NGIF */
+#if defined(MPLS) && NGIF > 0
 {
   .pr_type	= SOCK_RAW,
   .pr_domain	= &inetdomain,
@@ -285,8 +286,7 @@ struct protosw inetsw[] = {
   .pr_usrreq	= rip_usrreq,
   .pr_attach	= rip_attach
 },
-#endif /* MPLS */
-#endif /* NGIF */
+#endif /* MPLS && GIF */
 {
   .pr_type	= SOCK_RAW,
   .pr_domain	= &inetdomain,
