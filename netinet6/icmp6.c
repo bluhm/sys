@@ -939,6 +939,16 @@ icmp6_notify_error(struct mbuf *m, int off, int icmp6len, int code)
 		icmp6src.sin6_flowinfo =
 		    (eip6->ip6_flow & IPV6_FLOWLABEL_MASK);
 
+		if (IN6_IS_ADDR_V4MAPPED(&icmp6src.sin6_addr) ||
+		    IN6_IS_ADDR_V4MAPPED(&icmp6dst.sin6_addr) ||
+		    IN6_IS_ADDR_V4COMPAT(&icmp6src.sin6_addr) ||
+		    IN6_IS_ADDR_V4COMPAT(&icmp6dst.sin6_addr)) {
+
+			ip6stat_inc(ip6s_badscope);  /* XXX */
+
+			goto freeit;
+		}
+
 		if (finaldst == NULL)
 			finaldst = &eip6->ip6_dst;
 		ip6cp.ip6c_m = m;
