@@ -231,19 +231,23 @@ struct protosw inetsw[] = {
   .pr_init	= icmp_init,
   .pr_sysctl	= icmp_sysctl
 },
-#if NGIF > 0
 {
   .pr_type	= SOCK_RAW,
   .pr_domain	= &inetdomain,
   .pr_protocol	= IPPROTO_IPV4,
   .pr_flags	= PR_ATOMIC|PR_ADDR,
+#if NGIF > 0
   .pr_input	= in_gif_input,
+#else
+  .pr_input	= ip4_input,
+#endif
   .pr_ctloutput	= rip_ctloutput,
   .pr_usrreq	= rip_usrreq,
   .pr_attach	= rip_attach,
   .pr_sysctl	= ipip_sysctl,
   .pr_init	= ipip_init
 },
+#if NGIF > 0
 {
   .pr_type	= SOCK_RAW,
   .pr_domain	= &inetdomain,
@@ -278,18 +282,6 @@ struct protosw inetsw[] = {
 },
 #endif
 #else /* NGIF */
-{
-  .pr_type	= SOCK_RAW,
-  .pr_domain	= &inetdomain,
-  .pr_protocol	= IPPROTO_IPIP,
-  .pr_flags	= PR_ATOMIC|PR_ADDR,
-  .pr_input	= ip4_input,
-  .pr_ctloutput	= rip_ctloutput,
-  .pr_usrreq	= rip_usrreq,
-  .pr_attach	= rip_attach,
-  .pr_sysctl	= ipip_sysctl,
-  .pr_init	= ipip_init
-},
 #ifdef INET6
 {
   .pr_type	= SOCK_RAW,
