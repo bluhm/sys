@@ -330,6 +330,10 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 	pf_pkt_addr_changed(m);
 #endif
 
+	/* If already in ip6_local() loop, use it. */
+	if (oaf == AF_INET6)
+		return proto;
+
 	if (niq_enqueue(ifq, m) != 0) {
 		ipipstat_inc(ipips_qfull);
 		DPRINTF(("%s: packet dropped because of full queue\n",
