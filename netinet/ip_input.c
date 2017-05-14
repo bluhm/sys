@@ -230,7 +230,7 @@ ipintr(void)
 			panic("ipintr no HDR");
 #endif
 		off = 0;
-		ipv4_input(&m, &off, IPPROTO_IPV4, AF_UNSPEC);
+		ip_input(&m, &off, IPPROTO_IPV4, AF_UNSPEC);
 	}
 }
 
@@ -240,7 +240,7 @@ ipintr(void)
  * Checksum and byte swap header.  Process options. Forward or deliver.
  */
 int
-ipv4_input(struct mbuf **mp, int *offp, int nxt, int af)
+ip_input(struct mbuf **mp, int *offp, int nxt, int af)
 {
 	struct mbuf	*m = *mp;
 	struct ifnet	*ifp;
