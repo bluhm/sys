@@ -239,7 +239,7 @@ ipintr(void)
  *
  * Checksum and byte swap header.  Process options. Forward or deliver.
  */
-void
+int
 ipv4_input(struct mbuf **mp, int *offp, int nxt, int af)
 {
 	struct mbuf	*m = *mp;
@@ -258,9 +258,9 @@ ipv4_input(struct mbuf **mp, int *offp, int nxt, int af)
 
 	ipstat_inc(ips_total);
 	if (m->m_len < sizeof (struct ip) &&
-	    (m = m_pullup(m, sizeof (struct ip))) == NULL) {
+	    (m = *mp = m_pullup(m, sizeof (struct ip))) == NULL) {
 		ipstat_inc(ips_toosmall);
-		goto out;
+		goto bad;
 	}
 	ip = mtod(m, struct ip *);
 	if (ip->ip_v != IPVERSION) {
@@ -273,9 +273,9 @@ ipv4_input(struct mbuf **mp, int *offp, int nxt, int af)
 		goto bad;
 	}
 	if (hlen > m->m_len) {
-		if ((m = m_pullup(m, hlen)) == NULL) {
+		if ((m = *mp = m_pullup(m, hlen)) == NULL) {
 			ipstat_inc(ips_badhlen);
-			goto out;
+			goto bad;
 		}
 		ip = mtod(m, struct ip *);
 	}
@@ -342,10 +342,11 @@ ipv4_input(struct mbuf **mp, int *offp, int nxt, int af)
 	 * Packet filter
 	 */
 	pfrdr = ip->ip_dst.s_addr;
-	if (pf_test(AF_INET, PF_IN, ifp, &m) != PF_PASS)
+	if (pf_test(AF_INET, PF_IN, ifp, mp) != PF_PASS)
 		goto bad;
+	m = *mp;
 	if (m == NULL)
-		goto out;
+		goto bad;
 
 	ip = mtod(m, struct ip *);
 	hlen = ip->ip_hl << 2;
@@ -359,7 +360,8 @@ ipv4_input(struct mbuf **mp, int *offp, int nxt, int af)
 	 * to be sent and the original packet to be freed).
 	 */
 	if (hlen > sizeof (struct ip) && ip_dooptions(m, ifp)) {
-		goto out;
+		m = *mp = NULL;
+		goto bad;
 	}
 
 	if (ip->ip_dst.s_addr == INADDR_BROADCAST ||
@@ -386,9 +388,9 @@ ipv4_input(struct mbuf **mp, int *offp, int nxt, int af)
 			int rv;
 
 			if (m->m_flags & M_EXT) {
-				if ((m = m_pullup(m, hlen)) == NULL) {
+				if ((m = *mp = m_pullup(m, hlen)) == NULL) {
 					ipstat_inc(ips_toosmall);
-					goto out;
+					goto bad;
 				}
 				ip = mtod(m, struct ip *);
 			}
@@ -470,12 +472,14 @@ ipv4_input(struct mbuf **mp, int *offp, int nxt, int af)
 
 	ip_forward(m, ifp, rt, pfrdr);
 	if_put(ifp);
-	return;
-bad:
-	m_freem(m);
-out:
+	return IPPROTO_DONE;
+ bad:
+	m_freem(*mp);
+	nxt = IPPROTO_DONE;
+ out:
 	rtfree(rt);
 	if_put(ifp);
+	return nxt;
 }
 
 /*
