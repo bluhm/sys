@@ -180,7 +180,8 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 	}
 
 	/* Remove outer IP header */
-	m_adj(m, iphlen);
+	m_adj(m, *offp);
+	*offp = 0;
 
 	/* Sanity check */
 	if (m->m_pkthdr.len < sizeof(struct ip)) {
