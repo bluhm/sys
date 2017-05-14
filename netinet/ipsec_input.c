@@ -608,13 +608,13 @@ ipsec_common_input_cb(struct mbuf *m, struct tdb *tdbp, int skip, int protoff)
 	}
 #endif
 	/* Call the appropriate IPsec transform callback. */
+	nxt = prot;
 	switch (af) {
 	case AF_INET:
-		ip_local(m, skip, prot);
+		ip_local(m, &skip, &nxt, AF_UNSPEC);
 		return;
 #ifdef INET6
 	case AF_INET6:
-		nxt = prot;
 		ip6_local(m, &skip, &nxt, AF_UNSPEC);
 		return;
 #endif /* INET6 */
