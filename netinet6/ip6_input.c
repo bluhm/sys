@@ -523,11 +523,13 @@ ip6_ours(struct mbuf *m, int *offp, int *nxtp, int af)
 void
 ip6_local(struct mbuf *m, int *offp, int *nxtp, int af)
 {
+	int nxt = *nxtp;
 	int nest = 0;
 
 	/* We are already in a IPv4/IPv6 local processing loop. */
 	if (af != AF_UNSPEC)
 		return;
+	af = AF_INET6;
 
 	KERNEL_ASSERT_LOCKED();
 
@@ -539,7 +541,7 @@ ip6_local(struct mbuf *m, int *offp, int *nxtp, int af)
 	 */
 	ip6stat_inc(ip6s_delivered);
 
-	while (*nxtp != IPPROTO_DONE) {
+	while (nxt != IPPROTO_DONE) {
 		if (ip6_hdrnestlimit && (++nest > ip6_hdrnestlimit)) {
 			ip6stat_inc(ip6s_toomanyhdr);
 			goto bad;
@@ -555,19 +557,26 @@ ip6_local(struct mbuf *m, int *offp, int *nxtp, int af)
 		}
 
 		/* draft-itojun-ipv6-tcp-to-anycast */
-		if (ISSET(m->m_flags, M_ACAST) && (*nxtp == IPPROTO_TCP)) {
+		if (ISSET(m->m_flags, M_ACAST) && (nxt == IPPROTO_TCP)) {
 			if (m->m_len >= sizeof(struct ip6_hdr)) {
 				icmp6_error(m, ICMP6_DST_UNREACH,
 					ICMP6_DST_UNREACH_ADDR,
 					offsetof(struct ip6_hdr, ip6_dst));
-				*nxtp = IPPROTO_DONE;
-				break;
-			} else
-				goto bad;
+				m = NULL;
+			}
+			goto bad;
 		}
 
-		*nxtp = (*inet6sw[ip6_protox[*nxtp]].pr_input)(&m, offp, *nxtp,
-		    AF_INET6);
+		*nxtp = (*inet6sw[ip6_protox[nxt]].pr_input)(&m, offp, nxt, af);
+		switch (nxt) {
+		case IPPROTO_IPV4:
+			af = AF_INET;
+			break;
+		case IPPROTO_IPV6:
+			af = AF_INET6;
+			break;
+		}
+		nxt = *nxtp;
 	}
 	return;
  bad:
