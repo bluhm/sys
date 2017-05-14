@@ -218,6 +218,7 @@ void
 ipintr(void)
 {
 	struct mbuf *m;
+	int off;
 
 	/*
 	 * Get next datagram off input queue and get IP header
@@ -228,7 +229,8 @@ ipintr(void)
 		if ((m->m_flags & M_PKTHDR) == 0)
 			panic("ipintr no HDR");
 #endif
-		ipv4_input(m);
+		off = 0;
+		ipv4_input(&m, &off, IPPROTO_IPV4, AF_UNSPEC);
 	}
 }
 
@@ -238,8 +240,9 @@ ipintr(void)
  * Checksum and byte swap header.  Process options. Forward or deliver.
  */
 void
-ipv4_input(struct mbuf *m)
+ipv4_input(struct mbuf **mp, int *offp, int nxt, int af)
 {
+	struct mbuf	*m = *mp;
 	struct ifnet	*ifp;
 	struct rtentry	*rt = NULL;
 	struct ip	*ip;
