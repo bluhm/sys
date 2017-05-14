@@ -122,7 +122,6 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 	struct mbuf *m = *mp;
 	struct sockaddr_in *sin;
 	struct ifnet *ifp;
-	struct niqueue *ifq = NULL;
 	struct ip *ip;
 #ifdef INET6
 	struct sockaddr_in6 *sin6;
@@ -152,7 +151,7 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 		if ((m = *mp = m_pullup(m, hlen)) == NULL) {
 			DPRINTF(("%s: m_pullup() failed\n", __func__));
 			ipipstat_inc(ipips_hdrops);
-			return IPPROTO_DONE;
+			goto bad;
 		}
 	}
 
@@ -191,15 +190,13 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 #endif
 	default:
 		ipipstat_inc(ipips_family);
-		m_freem(m);
-		return IPPROTO_DONE;
+		goto bad;
 	}
 
 	/* Sanity check */
 	if (m->m_pkthdr.len < hlen) {
 		ipipstat_inc(ipips_hdrops);
-		m_freem(m);
-		return IPPROTO_DONE;
+		goto bad;
 	}
 
 	/*
@@ -209,7 +206,7 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 		if ((m = *mp = m_pullup(m, hlen)) == NULL) {
 			DPRINTF(("%s: m_pullup() failed\n", __func__));
 			ipipstat_inc(ipips_hdrops);
-			return IPPROTO_DONE;
+			goto bad;
 		}
 	}
 
@@ -236,8 +233,7 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 		if (!ip_ecn_egress(mode, &otos, &ip->ip_tos)) {
 			DPRINTF(("%s: ip_ecn_egress() failed\n", __func__));
 			ipipstat_inc(ipips_pdrops);
-			m_freem(m);
-			return IPPROTO_DONE;
+			goto bad;
 		}
 		/* re-calculate the checksum if ip_tos was changed */
 		if (itos != ip->ip_tos) {
@@ -253,8 +249,7 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 		if (!ip_ecn_egress(ECN_ALLOWED, &otos, &itos)) {
 			DPRINTF(("%s: ip_ecn_egress() failed\n", __func__));
 			ipipstat_inc(ipips_pdrops);
-			m_freem(m);
-			return IPPROTO_DONE;
+			goto bad;
 		}
 		ip6->ip6_flow &= ~htonl(0xff << 20);
 		ip6->ip6_flow |= htonl((u_int32_t) itos << 20);
@@ -289,9 +284,8 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 		rt = rtalloc(sstosa(&ss), 0, m->m_pkthdr.ph_rtableid);
 		if ((rt != NULL) && (rt->rt_flags & RTF_LOCAL)) {
 			ipipstat_inc(ipips_spoof);
-			m_freem(m);
 			rtfree(rt);
-			return IPPROTO_DONE;
+			goto bad;
  		}
 		rtfree(rt);
  	} else {
@@ -319,22 +313,14 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 
 	switch (proto) {
 	case IPPROTO_IPV4:
-		ifq = &ipintrq;
-		break;
+		return ip_input(mp, offp, proto, oaf);
 #ifdef INET6
 	case IPPROTO_IPV6:
-		ifq = &ip6intrq;
-		break;
+		return ip6_input(mp, offp, proto, oaf);
 #endif
-	default:
-		panic("%s: should never reach here", __func__);
 	}
-
-	if (niq_enqueue(ifq, m) != 0) {
-		ipipstat_inc(ipips_qfull);
-		DPRINTF(("%s: packet dropped because of full queue\n",
-		    __func__));
-	}
+ bad:
+	m_freem(m);
 	return IPPROTO_DONE;
 }
 
