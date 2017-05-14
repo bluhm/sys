@@ -202,7 +202,7 @@ ip6_input(struct mbuf **mp, int *offp, int nxt, int af)
 	if (m->m_len < sizeof(struct ip6_hdr)) {
 		if ((m = *mp = m_pullup(m, sizeof(struct ip6_hdr))) == NULL) {
 			ip6stat_inc(ip6s_toosmall);
-			goto out;
+			goto bad;
 		}
 	}
 
@@ -341,7 +341,8 @@ ip6_input(struct mbuf **mp, int *offp, int nxt, int af)
 	    ip6_check_rh0hdr(m, offp)) {
 		ip6stat_inc(ip6s_badoptions);
 		icmp6_error(m, ICMP6_PARAM_PROB, ICMP6_PARAMPROB_HEADER, *offp);
-		goto out;
+		m = *mp = NULL;
+		goto bad;
 	}
 
 	if (IN6_IS_ADDR_LOOPBACK(&ip6->ip6_src) ||
@@ -502,7 +503,7 @@ ip6_input(struct mbuf **mp, int *offp, int nxt, int af)
 	if_put(ifp);
 	return IPPROTO_DONE;
  bad:
-	m_freem(m);
+	m_freem(*mp);
 	nxt = IPPROTO_DONE;
  out:
 	rtfree(rt);
