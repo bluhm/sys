@@ -173,6 +173,7 @@ ipip_input(struct mbuf **mp, int *offp, struct ifnet *gifp, int proto, int oaf)
 	}
 
 	/* Remove outer IP header */
+	KASSERT(*offp > 0);
 	m_adj(m, *offp);
 	*offp = 0;
 
