@@ -248,7 +248,7 @@ int	 ip_sysctl(int *, u_int, void *, size_t *, void *, size_t);
 void	 ip_savecontrol(struct inpcb *, struct mbuf **, struct ip *,
 	    struct mbuf *);
 void	 ipintr(void);
-int	 ipv4_input(struct mbuf **, int *, int, int);
+int	 ip_input(struct mbuf **, int *, int, int);
 void	 ip_local(struct mbuf *, int *, int *, int);
 void	 ip_forward(struct mbuf *, struct ifnet *, struct rtentry *, int);
 int	 rip_ctloutput(int, struct socket *, int, int, struct mbuf *);
