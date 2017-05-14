@@ -587,12 +587,7 @@ found:
 int
 ip_deliver(struct mbuf **mp, int *offp, int nxt, int af)
 {
-	int nest = 0;
-
-	/* We are already in a IPv4/IPv6 local processing loop. */
-	if (af != AF_UNSPEC)
-		return;
-	af = AF_INET;
+	int naf = af, nest = 0;
 
 	KERNEL_ASSERT_LOCKED();
 
@@ -622,8 +617,20 @@ ip_deliver(struct mbuf **mp, int *offp, int nxt, int af)
 		}
 	/* Otherwise, just fall through and deliver the packet */
 #endif /* IPSEC */
+
+		switch (nxt) {
+		case IPPROTO_IPV4:
+			naf = AF_INET;
+			break;
+#ifdef INET6
+		case IPPROTO_IPV6:
+			naf = AF_INET6;
+			break;
+#endif /* INET6 */
+		}
 		nxt = (*inetsw[ip_protox[nxt]].pr_input)(mp, offp, nxt, af);
 		KASSERT(nxt == IPPROTO_DONE);
+		af = naf;
 	}
 	return nxt;
  bad:
