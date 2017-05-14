@@ -130,7 +130,7 @@ int ip_sysctl_ipstat(void *, size_t *, void *);
 
 static struct mbuf_queue	ipsend_mq;
 
-void	ip_ours(struct mbuf *);
+void	ip_ours(struct mbuf *, int *, int *, int);
 int	ip_dooptions(struct mbuf *, struct ifnet *);
 int	in_ouraddr(struct mbuf *, struct ifnet *, struct rtentry **);
 
@@ -363,12 +363,12 @@ ipv4_input(struct mbuf **mp, int *offp, int nxt, int af)
 
 	if (ip->ip_dst.s_addr == INADDR_BROADCAST ||
 	    ip->ip_dst.s_addr == INADDR_ANY) {
-		ip_ours(m);
+		ip_ours(m, offp, &nxt, af);
 		goto out;
 	}
 
 	if (in_ouraddr(m, ifp, &rt)) {
-		ip_ours(m);
+		ip_ours(m, offp, &nxt, af);
 		goto out;
 	}
 
@@ -417,7 +417,7 @@ ipv4_input(struct mbuf **mp, int *offp, int nxt, int af)
 			 * host belongs to their destination groups.
 			 */
 			if (ip->ip_p == IPPROTO_IGMP) {
-				ip_ours(m);
+				ip_ours(m, offp, &nxt, af);
 				goto out;
 			}
 			ipstat_inc(ips_forward);
@@ -433,7 +433,7 @@ ipv4_input(struct mbuf **mp, int *offp, int nxt, int af)
 				ipstat_inc(ips_cantforward);
 			goto bad;
 		}
-		ip_ours(m);
+		ip_ours(m, offp, &nxt, af);
 		goto out;
 	}
 
@@ -485,7 +485,7 @@ ipv4_input(struct mbuf **mp, int *offp, int nxt, int af)
  * If fragmented try to reassemble.  Pass to next level.
  */
 void
-ip_ours(struct mbuf *m)
+ip_ours(struct mbuf *m, int *offp, int *nxtp, int af)
 {
 	struct ip *ip = mtod(m, struct ip *);
 	struct ipq *fp;
@@ -505,7 +505,7 @@ ip_ours(struct mbuf *m)
 		if (m->m_flags & M_EXT) {		/* XXX */
 			if ((m = m_pullup(m, hlen)) == NULL) {
 				ipstat_inc(ips_toosmall);
-				return;
+				goto bad;
 			}
 			ip = mtod(m, struct ip *);
 		}
@@ -566,9 +566,8 @@ found:
 			ipqe->ipqe_m = m;
 			ipqe->ipqe_ip = ip;
 			m = ip_reass(ipqe, fp);
-			if (m == NULL) {
-				return;
-			}
+			if (m == NULL)
+				goto bad;
 			ipstat_inc(ips_reassembled);
 			ip = mtod(m, struct ip *);
 			hlen = ip->ip_hl << 2;
@@ -578,10 +577,11 @@ found:
 				ip_freef(fp);
 	}
 
-	ip_deliver(&m, &hlen, ip->ip_p, AF_INET);
+	*nxtp = ip_deliver(&m, &hlen, ip->ip_p, AF_INET);
 	return;
-bad:
+ bad:
 	m_freem(m);
+	*nxtp = IPPROTO_DONE;
 }
 
 int
