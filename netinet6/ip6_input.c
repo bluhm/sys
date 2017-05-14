@@ -390,10 +390,12 @@ ip6_input(struct mbuf **mp, int *offp, int nxt, int af)
 			if (ip6_mforward(ip6, ifp, m)) {
 				ip6stat_inc(ip6s_cantforward);
 				m_freem(m);
+				nxt = IPPROTO_DONE;
 			} else if (ours) {
-				ip6_deliver(mp, offp, nxt, AF_INET6);
+				nxt = ip6_deliver(mp, offp, nxt, AF_INET6);
 			} else {
 				m_freem(m);
+				nxt = IPPROTO_DONE;
 			}
 			KERNEL_UNLOCK();
 			goto out;
@@ -469,7 +471,7 @@ ip6_input(struct mbuf **mp, int *offp, int nxt, int af)
 
 	if (ours) {
 		KERNEL_LOCK();
-		ip6_deliver(mp, offp, nxt, AF_INET6);
+		nxt = ip6_deliver(mp, offp, nxt, AF_INET6);
 		KERNEL_UNLOCK();
 		goto out;
 	}
@@ -510,14 +512,13 @@ ip6_ours(struct mbuf *m, int *offp, int *nxtp, int af)
 	if (ip6_hbhchcheck(m, offp, nxtp, NULL))
 		return;
 
-	/* We are alreay in a ip6_local() processing loop. */
+	/* We are already in a ip6_local() processing loop. */
 	if (af == AF_INET6)
 		return;
-	ip6_deliver(&m, offp, *nxtp, AF_INET6);
-	*nxtp = IPPROTO_DONE;
+	*nxtp = ip6_deliver(&m, offp, *nxtp, AF_INET6);
 }
 
-void
+int
 ip6_deliver(struct mbuf **mp, int *offp, int nxt, int af)
 {
 	int nest = 0;
@@ -570,9 +571,10 @@ ip6_deliver(struct mbuf **mp, int *offp, int nxt, int af)
 
 		nxt = (*inet6sw[ip6_protox[nxt]].pr_input)(mp, offp, nxt, af);
 	}
-	return;
+	return nxt;
  bad:
 	m_freem(*mp);
+	return IPPROTO_DONE;
 }
 
 int
