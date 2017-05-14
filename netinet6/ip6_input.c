@@ -526,7 +526,7 @@ ip6_ours(struct mbuf *m, int *offp, int *nxtp, int af)
 int
 ip6_deliver(struct mbuf **mp, int *offp, int nxt, int af)
 {
-	int nest = 0;
+	int naf = af, nest = 0;
 
 	KERNEL_ASSERT_LOCKED();
 
@@ -574,7 +574,16 @@ ip6_deliver(struct mbuf **mp, int *offp, int nxt, int af)
 		/* Otherwise, just fall through and deliver the packet */
 #endif /* IPSEC */
 
+		switch (nxt) {
+		case IPPROTO_IPV4:
+			naf = AF_INET;
+			break;
+		case IPPROTO_IPV6:
+			naf = AF_INET6;
+			break;
+		}
 		nxt = (*inet6sw[ip6_protox[nxt]].pr_input)(mp, offp, nxt, af);
+		af = naf;
 	}
 	return nxt;
  bad:
