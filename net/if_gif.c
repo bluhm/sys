@@ -753,7 +753,7 @@ in_gif_input(struct mbuf **mp, int *offp, int proto, int af)
 		gifp->if_ipackets++;
 		gifp->if_ibytes += m->m_pkthdr.len;
 		/* We have a configured GIF */
-		return ipip_input(mp, offp, gifp, proto);
+		return ipip_input(mp, offp, gifp, proto, af);
 	}
 
 inject:
@@ -878,7 +878,7 @@ int in6_gif_input(struct mbuf **mp, int *offp, int proto, int af)
 	        m->m_pkthdr.ph_ifidx = gifp->if_index;
 		gifp->if_ipackets++;
 		gifp->if_ibytes += m->m_pkthdr.len;
-		return ipip_input(mp, offp, gifp, proto);
+		return ipip_input(mp, offp, gifp, proto, af);
 	}
 
 inject:
