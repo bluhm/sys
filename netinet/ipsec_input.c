@@ -324,6 +324,7 @@ ipsec_common_input_cb(struct mbuf *m, struct tdb *tdbp, int skip, int protoff)
 {
 	int af, sproto;
 	u_int8_t prot;
+	int nxt;
 
 #if NBPFILTER > 0
 	struct ifnet *encif;
@@ -613,7 +614,8 @@ ipsec_common_input_cb(struct mbuf *m, struct tdb *tdbp, int skip, int protoff)
 		return;
 #ifdef INET6
 	case AF_INET6:
-		ip6_local(m, skip, prot);
+		nxt = prot;
+		ip6_local(m, &skip, &nxt, AF_UNSPEC);
 		return;
 #endif /* INET6 */
 	default:
