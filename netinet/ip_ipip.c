@@ -332,7 +332,7 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 
 	/* If already in ip6_local() loop, use it. */
 	if (oaf == AF_INET6)
-		return proto;
+		return ip6_input(mp, offp, proto, oaf);
 
 	if (niq_enqueue(ifq, m) != 0) {
 		ipipstat_inc(ipips_qfull);
