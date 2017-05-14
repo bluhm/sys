@@ -61,6 +61,11 @@
 #include <netinet/ip_var.h>
 #include <netinet/ip_icmp.h>
 
+#ifdef INET6
+#include <netinet6/ip6protosw.h>
+#include <netinet6/ip6_var.h>
+#endif
+
 #if NPF > 0
 #include <net/pfvar.h>
 #endif
@@ -126,7 +131,7 @@ int ip_sysctl_ipstat(void *, size_t *, void *);
 
 static struct mbuf_queue	ipsend_mq;
 
-void	ip_ours(struct mbuf *);
+void	ip_ours(struct mbuf *, int *, int *, int);
 int	ip_dooptions(struct mbuf *, struct ifnet *);
 int	in_ouraddr(struct mbuf *, struct ifnet *, struct rtentry **);
 
@@ -211,6 +216,7 @@ void
 ipintr(void)
 {
 	struct mbuf *m;
+	int off;
 
 	/*
 	 * Get next datagram off input queue and get IP header
@@ -221,7 +227,8 @@ ipintr(void)
 		if ((m->m_flags & M_PKTHDR) == 0)
 			panic("ipintr no HDR");
 #endif
-		ipv4_input(m);
+		off = 0;
+		ip_input(&m, &off, IPPROTO_IPV4, AF_UNSPEC);
 	}
 }
 
@@ -230,14 +237,17 @@ ipintr(void)
  *
  * Checksum and byte swap header.  Process options. Forward or deliver.
  */
-void
-ipv4_input(struct mbuf *m)
+int
+ip_input(struct mbuf **mp, int *offp, int nxt, int af)
 {
+	struct mbuf	*m = *mp;
 	struct ifnet	*ifp;
 	struct rtentry	*rt = NULL;
 	struct ip	*ip;
 	int hlen, len;
 	in_addr_t pfrdr = 0;
+
+	KASSERT(*offp == 0);
 
 	ifp = if_get(m->m_pkthdr.ph_ifidx);
 	if (ifp == NULL)
@@ -245,9 +255,9 @@ ipv4_input(struct mbuf *m)
 
 	ipstat_inc(ips_total);
 	if (m->m_len < sizeof (struct ip) &&
-	    (m = m_pullup(m, sizeof (struct ip))) == NULL) {
+	    (m = *mp = m_pullup(m, sizeof (struct ip))) == NULL) {
 		ipstat_inc(ips_toosmall);
-		goto out;
+		goto bad;
 	}
 	ip = mtod(m, struct ip *);
 	if (ip->ip_v != IPVERSION) {
@@ -260,9 +270,9 @@ ipv4_input(struct mbuf *m)
 		goto bad;
 	}
 	if (hlen > m->m_len) {
-		if ((m = m_pullup(m, hlen)) == NULL) {
+		if ((m = *mp = m_pullup(m, hlen)) == NULL) {
 			ipstat_inc(ips_badhlen);
-			goto out;
+			goto bad;
 		}
 		ip = mtod(m, struct ip *);
 	}
@@ -329,10 +339,11 @@ ipv4_input(struct mbuf *m)
 	 * Packet filter
 	 */
 	pfrdr = ip->ip_dst.s_addr;
-	if (pf_test(AF_INET, PF_IN, ifp, &m) != PF_PASS)
+	if (pf_test(AF_INET, PF_IN, ifp, mp) != PF_PASS)
 		goto bad;
+	m = *mp;
 	if (m == NULL)
-		goto out;
+		goto bad;
 
 	ip = mtod(m, struct ip *);
 	hlen = ip->ip_hl << 2;
@@ -346,17 +357,18 @@ ipv4_input(struct mbuf *m)
 	 * to be sent and the original packet to be freed).
 	 */
 	if (hlen > sizeof (struct ip) && ip_dooptions(m, ifp)) {
-		goto out;
+		m = *mp = NULL;
+		goto bad;
 	}
 
 	if (ip->ip_dst.s_addr == INADDR_BROADCAST ||
 	    ip->ip_dst.s_addr == INADDR_ANY) {
-		ip_ours(m);
+		ip_ours(m, offp, &nxt, af);
 		goto out;
 	}
 
 	if (in_ouraddr(m, ifp, &rt)) {
-		ip_ours(m);
+		ip_ours(m, offp, &nxt, af);
 		goto out;
 	}
 
@@ -373,9 +385,9 @@ ipv4_input(struct mbuf *m)
 			int rv;
 
 			if (m->m_flags & M_EXT) {
-				if ((m = m_pullup(m, hlen)) == NULL) {
+				if ((m = *mp = m_pullup(m, hlen)) == NULL) {
 					ipstat_inc(ips_toosmall);
-					goto out;
+					goto bad;
 				}
 				ip = mtod(m, struct ip *);
 			}
@@ -405,7 +417,7 @@ ipv4_input(struct mbuf *m)
 			 * host belongs to their destination groups.
 			 */
 			if (ip->ip_p == IPPROTO_IGMP) {
-				ip_ours(m);
+				ip_ours(m, offp, &nxt, af);
 				goto out;
 			}
 			ipstat_inc(ips_forward);
@@ -421,7 +433,7 @@ ipv4_input(struct mbuf *m)
 				ipstat_inc(ips_cantforward);
 			goto bad;
 		}
-		ip_ours(m);
+		ip_ours(m, offp, &nxt, af);
 		goto out;
 	}
 
@@ -457,12 +469,14 @@ ipv4_input(struct mbuf *m)
 
 	ip_forward(m, ifp, rt, pfrdr);
 	if_put(ifp);
-	return;
-bad:
-	m_freem(m);
-out:
+	return IPPROTO_DONE;
+ bad:
+	m_freem(*mp);
+	nxt = IPPROTO_DONE;
+ out:
 	rtfree(rt);
 	if_put(ifp);
+	return nxt;
 }
 
 /*
@@ -471,7 +485,7 @@ out:
  * If fragmented try to reassemble.  Pass to next level.
  */
 void
-ip_ours(struct mbuf *m)
+ip_ours(struct mbuf *m, int *offp, int *nxtp, int af)
 {
 	struct ip *ip = mtod(m, struct ip *);
 	struct ipq *fp;
@@ -491,7 +505,7 @@ ip_ours(struct mbuf *m)
 		if (m->m_flags & M_EXT) {		/* XXX */
 			if ((m = m_pullup(m, hlen)) == NULL) {
 				ipstat_inc(ips_toosmall);
-				return;
+				goto bad;
 			}
 			ip = mtod(m, struct ip *);
 		}
@@ -552,9 +566,8 @@ found:
 			ipqe->ipqe_m = m;
 			ipqe->ipqe_ip = ip;
 			m = ip_reass(ipqe, fp);
-			if (m == NULL) {
-				return;
-			}
+			if (m == NULL)
+				goto bad;
 			ipstat_inc(ips_reassembled);
 			ip = mtod(m, struct ip *);
 			hlen = ip->ip_hl << 2;
@@ -564,42 +577,125 @@ found:
 				ip_freef(fp);
 	}
 
-	ip_deliver(&m, &hlen, ip->ip_p, AF_INET);
+	*offp = hlen;
+	*nxtp = ip->ip_p;
+	/* Check wheter we are already in a IPv4/IPv6 local processing loop. */
+	if (af == AF_UNSPEC)
+		*nxtp = ip_deliver(&m, offp, *nxtp, AF_INET);
 	return;
-bad:
+ bad:
 	m_freem(m);
+	*nxtp = IPPROTO_DONE;
 }
 
-void
+#ifndef INET6
+#define IPSTAT_INC(name)	ipstat_inc(ips_##name)
+#else
+#define IPSTAT_INC(name)	(af == AF_INET ?	\
+    ipstat_inc(ips_##name) : ip6stat_inc(ip6s_##name))
+#endif
+
+int
 ip_deliver(struct mbuf **mp, int *offp, int nxt, int af)
 {
+	struct protosw *psw;
+	int naf = af;
+#ifdef INET6
+	int nest = 0;
+#endif /* INET6 */
+
 	KERNEL_ASSERT_LOCKED();
 
 	/* pf might have modified stuff, might have to chksum */
-	in_proto_cksum_out(*mp, NULL);
-
-#ifdef IPSEC
-	if (ipsec_in_use) {
-		if (ipsec_local_check(*mp, *offp, nxt, af) != 0) {
-			ipstat_inc(ips_cantforward);
-			goto bad;
-		}
+	switch (af) {
+	case AF_INET:
+		in_proto_cksum_out(*mp, NULL);
+		break;
+#ifdef INET6
+	case AF_INET6:
+		in6_proto_cksum_out(*mp, NULL);
+		break;
+#endif /* INET6 */
 	}
-	/* Otherwise, just fall through and deliver the packet */
-#endif /* IPSEC */
 
 	/*
-	 * Switch out to protocol's input routine.
+	 * Tell launch routine the next header
 	 */
-	ipstat_inc(ips_delivered);
-	nxt = (*inetsw[ip_protox[nxt]].pr_input)(mp, offp, nxt, af);
-	KASSERT(nxt == IPPROTO_DONE);
-	return;
+	IPSTAT_INC(delivered);
+
+	while (nxt != IPPROTO_DONE) {
+#ifdef INET6
+		if (af == AF_INET6 &&
+		    ip6_hdrnestlimit && (++nest > ip6_hdrnestlimit)) {
+			ip6stat_inc(ip6s_toomanyhdr);
+			goto bad;
+		}
+#endif /* INET6 */
+
+		/*
+		 * protection against faulty packet - there should be
+		 * more sanity checks in header chain processing.
+		 */
+		if ((*mp)->m_pkthdr.len < *offp) {
+			IPSTAT_INC(tooshort);
+			goto bad;
+		}
+
+#ifdef INET6
+		/* draft-itojun-ipv6-tcp-to-anycast */
+		if (af == AF_INET6 &&
+		    ISSET((*mp)->m_flags, M_ACAST) && (nxt == IPPROTO_TCP)) {
+			if ((*mp)->m_len >= sizeof(struct ip6_hdr)) {
+				icmp6_error(*mp, ICMP6_DST_UNREACH,
+					ICMP6_DST_UNREACH_ADDR,
+					offsetof(struct ip6_hdr, ip6_dst));
+				*mp = NULL;
+			}
+			goto bad;
+		}
+#endif /* INET6 */
+
 #ifdef IPSEC
+		if (ipsec_in_use) {
+			if (ipsec_local_check(*mp, *offp, nxt, af) != 0) {
+				IPSTAT_INC(cantforward);
+				goto bad;
+			}
+		}
+		/* Otherwise, just fall through and deliver the packet */
+#endif /* IPSEC */
+
+		switch (nxt) {
+		case IPPROTO_IPV4:
+			naf = AF_INET;
+			ipstat_inc(ips_delivered);
+			break;
+#ifdef INET6
+		case IPPROTO_IPV6:
+			naf = AF_INET6;
+			ip6stat_inc(ip6s_delivered);
+			break;
+#endif /* INET6 */
+		}
+		switch (af) {
+		case AF_INET:
+			psw = &inetsw[ip_protox[nxt]];
+			break;
+#ifdef INET6
+		case AF_INET6:
+			psw = &inet6sw[ip6_protox[nxt]];
+			break;
+#endif /* INET6 */
+		}
+		nxt = (*psw->pr_input)(mp, offp, nxt, af);
+		af = naf;
+	}
+	return nxt;
  bad:
-#endif
 	m_freem(*mp);
+	return IPPROTO_DONE;
 }
+#undef IPSTAT_INC
 
 int
 in_ouraddr(struct mbuf *m, struct ifnet *ifp, struct rtentry **prt)
