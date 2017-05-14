@@ -594,7 +594,7 @@ ip6_hbhchcheck(struct mbuf *m, int *offp, int *nxtp, int *oursp)
 		struct ip6_hbh *hbh;
 
 		if (ip6_hopopts_input(&plen, &rtalert, &m, offp)) {
-			return (-1);	/* m have already been freed */
+			goto bad;	/* m have already been freed */
 		}
 
 		/* adjust pointer */
@@ -615,13 +615,13 @@ ip6_hbhchcheck(struct mbuf *m, int *offp, int *nxtp, int *oursp)
 			icmp6_error(m, ICMP6_PARAM_PROB,
 				    ICMP6_PARAMPROB_HEADER,
 				    (caddr_t)&ip6->ip6_plen - (caddr_t)ip6);
-			return (-1);
+			goto bad;
 		}
 		IP6_EXTHDR_GET(hbh, struct ip6_hbh *, m, sizeof(struct ip6_hdr),
 			sizeof(struct ip6_hbh));
 		if (hbh == NULL) {
 			ip6stat_inc(ip6s_tooshort);
-			return (-1);
+			goto bad;
 		}
 		*nxtp = hbh->ip6h_nxt;
 
@@ -643,7 +643,7 @@ ip6_hbhchcheck(struct mbuf *m, int *offp, int *nxtp, int *oursp)
 	if (m->m_pkthdr.len - sizeof(struct ip6_hdr) < plen) {
 		ip6stat_inc(ip6s_tooshort);
 		m_freem(m);
-		return (-1);
+		goto bad;
 	}
 	if (m->m_pkthdr.len > sizeof(struct ip6_hdr) + plen) {
 		if (m->m_len == m->m_pkthdr.len) {
@@ -656,6 +656,10 @@ ip6_hbhchcheck(struct mbuf *m, int *offp, int *nxtp, int *oursp)
 	}
 
 	return (0);
+
+ bad:
+	*nxtp = IPPROTO_DONE;
+	return (-1);
 }
 
 /* scan packet for RH0 routing header. Mostly stolen from pf.c:pf_test() */
