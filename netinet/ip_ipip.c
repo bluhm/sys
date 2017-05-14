@@ -335,7 +335,7 @@ ipip_input(struct mbuf **mp, int *offp, struct ifnet *gifp, int proto, int oaf)
 #endif
 
 	/* If already in ip6_local() loop, use it. */
-	if (oaf == AF_INET6)
+	if (oaf == AF_INET6 && proto == IPPROTO_IPV6)
 		return ip6_input(mp, offp, proto, oaf);
 
 	if (niq_enqueue(ifq, m) != 0) {
