@@ -167,19 +167,23 @@ void
 ip6intr(void)
 {
 	struct mbuf *m;
+	int off;
 
-	while ((m = niq_dequeue(&ip6intrq)) != NULL)
-		ip6_input(m);
+	while ((m = niq_dequeue(&ip6intrq)) != NULL) {
+		off = 0;
+		ip6_input(&m, &off, IPPROTO_IPV6, AF_UNSPEC);
+	}
 }
 
-void
-ip6_input(struct mbuf *m)
+int
+ip6_input(struct mbuf **mp, int *offp, int nxt, int af)
 {
+	struct mbuf *m = *mp;
 	struct ifnet *ifp;
 	struct ip6_hdr *ip6;
 	struct sockaddr_in6 sin6;
 	struct rtentry *rt = NULL;
-	int off, nxt, ours = 0;
+	int ours = 0;
 	u_int16_t src_scope, dst_scope;
 #if NPF > 0
 	struct in6_addr odst;
@@ -330,9 +334,9 @@ ip6_input(struct mbuf *m)
 	 * If pf has already scanned the header chain, do not do it twice.
 	 */
 	if (!(m->m_pkthdr.pf.flags & PF_TAG_PROCESSED) &&
-	    ip6_check_rh0hdr(m, &off)) {
+	    ip6_check_rh0hdr(m, offp)) {
 		ip6stat_inc(ip6s_badoptions);
-		icmp6_error(m, ICMP6_PARAM_PROB, ICMP6_PARAMPROB_HEADER, off);
+		icmp6_error(m, ICMP6_PARAM_PROB, ICMP6_PARAMPROB_HEADER, *offp);
 		goto out;
 	}
 
@@ -369,7 +373,7 @@ ip6_input(struct mbuf *m)
 
 #ifdef MROUTING
 		if (ip6_mforwarding && ip6_mrouter[ifp->if_rdomain]) {
-			if (ip6_hbhchcheck(m, &off, &nxt, &ours))
+			if (ip6_hbhchcheck(m, offp, &nxt, &ours))
 				goto out;
 
 			ip6 = mtod(m, struct ip6_hdr *);
@@ -387,7 +391,7 @@ ip6_input(struct mbuf *m)
 				ip6stat_inc(ip6s_cantforward);
 				m_freem(m);
 			} else if (ours) {
-				ip6_local(m, off, nxt);
+				ip6_local(m, *offp, nxt);
 			} else {
 				m_freem(m);
 			}
@@ -460,12 +464,12 @@ ip6_input(struct mbuf *m)
 		goto bad;
 	}
 
-	if (ip6_hbhchcheck(m, &off, &nxt, &ours))
+	if (ip6_hbhchcheck(m, offp, &nxt, &ours))
 		goto out;
 
 	if (ours) {
 		KERNEL_LOCK();
-		ip6_local(m, off, nxt);
+		ip6_local(m, *offp, nxt);
 		KERNEL_UNLOCK();
 		goto out;
 	}
@@ -475,7 +479,7 @@ ip6_input(struct mbuf *m)
 		int rv;
 
 		KERNEL_LOCK();
-		rv = ipsec_forward_check(m, off, AF_INET6);
+		rv = ipsec_forward_check(m, *offp, AF_INET6);
 		KERNEL_UNLOCK();
 		if (rv != 0) {
 			ipstat_inc(ips_cantforward);
@@ -490,12 +494,14 @@ ip6_input(struct mbuf *m)
 
 	ip6_forward(m, rt, srcrt);
 	if_put(ifp);
-	return;
+	return IPPROTO_DONE;
  bad:
 	m_freem(m);
+	nxt = IPPROTO_DONE;
  out:
 	rtfree(rt);
 	if_put(ifp);
+	return nxt;
 }
 
 void
