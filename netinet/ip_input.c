@@ -61,6 +61,10 @@
 #include <netinet/ip_var.h>
 #include <netinet/ip_icmp.h>
 
+#ifdef INET6
+#include <netinet6/ip6_var.h>
+#endif
+
 #if NPF > 0
 #include <net/pfvar.h>
 #endif
@@ -570,33 +574,46 @@ bad:
 	m_freem(m);
 }
 
-void
+int
 ip_deliver(struct mbuf **mp, int *offp, int nxt, int af)
 {
+	int nest = 0;
+
 	KERNEL_ASSERT_LOCKED();
 
 	/* pf might have modified stuff, might have to chksum */
 	in_proto_cksum_out(*mp, NULL);
 
-#ifdef IPSEC
-	if (ipsec_in_use) {
-		if (ipsec_local_check(*mp, *offp, nxt, af) != 0) {
-			ipstat_inc(ips_cantforward);
-			goto bad;
-		}
-	}
-	/* Otherwise, just fall through and deliver the packet */
-#endif /* IPSEC */
-
 	/*
 	 * Switch out to protocol's input routine.
 	 */
 	ipstat_inc(ips_delivered);
-	nxt = (*inetsw[ip_protox[nxt]].pr_input)(mp, offp, nxt, af);
-	KASSERT(nxt == IPPROTO_DONE);
-	return;
+
+	while (nxt != IPPROTO_DONE) {
+#ifdef INET6
+		if (af == AF_INET6 &&
+		    ip6_hdrnestlimit && (++nest > ip6_hdrnestlimit)) {
+			ip6stat_inc(ip6s_toomanyhdr);
+			goto bad;
+		}
+#endif /* INET6 */
+
+#ifdef IPSEC
+		if (ipsec_in_use) {
+			if (ipsec_local_check(*mp, *offp, nxt, af) != 0) {
+				ipstat_inc(ips_cantforward);
+				goto bad;
+			}
+		}
+	/* Otherwise, just fall through and deliver the packet */
+#endif /* IPSEC */
+		nxt = (*inetsw[ip_protox[nxt]].pr_input)(mp, offp, nxt, af);
+		KASSERT(nxt == IPPROTO_DONE);
+	}
+	return nxt;
  bad:
 	m_freem(*mp);
+	return IPPROTO_DONE;
 }
 
 int
