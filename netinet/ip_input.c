@@ -61,6 +61,10 @@
 #include <netinet/ip_var.h>
 #include <netinet/ip_icmp.h>
 
+#ifdef INET6
+#include <netinet6/ip6_var.h>
+#endif
+
 #if NPF > 0
 #include <net/pfvar.h>
 #endif
@@ -476,7 +480,7 @@ ip_ours(struct mbuf *m)
 	struct ip *ip = mtod(m, struct ip *);
 	struct ipq *fp;
 	struct ipqent *ipqe;
-	int mff, hlen;
+	int mff, hlen, nxt;
 
 	hlen = ip->ip_hl << 2;
 
@@ -564,15 +568,18 @@ found:
 				ip_freef(fp);
 	}
 
-	ip_local(m, hlen, ip->ip_p);
+	nxt = ip->ip_p;
+	ip_local(m, &hlen, &nxt, AF_INET);
 	return;
 bad:
 	m_freem(m);
 }
 
 void
-ip_local(struct mbuf *m, int off, int nxt)
+ip_local(struct mbuf *m, int *offp, int *nxtp, int af)
 {
+	int nest = 0;
+
 	KERNEL_ASSERT_LOCKED();
 
 	/* pf might have modified stuff, might have to chksum */
@@ -580,7 +587,7 @@ ip_local(struct mbuf *m, int off, int nxt)
 
 #ifdef IPSEC
 	if (ipsec_in_use) {
-		if (ipsec_local_check(m, off, nxt, AF_INET) != 0) {
+		if (ipsec_local_check(m, *offp, *nxtp, AF_INET) != 0) {
 			ipstat_inc(ips_cantforward);
 			m_freem(m);
 			return;
@@ -593,7 +600,34 @@ ip_local(struct mbuf *m, int off, int nxt)
 	 * Switch out to protocol's input routine.
 	 */
 	ipstat_inc(ips_delivered);
-	(*inetsw[ip_protox[nxt]].pr_input)(&m, &off, nxt, AF_INET);
+
+	while (*nxtp != IPPROTO_DONE) {
+#ifdef INET6
+		if (af == AF_INET6) {
+			if (ip6_hdrnestlimit && (++nest > ip6_hdrnestlimit)) {
+				ip6stat_inc(ip6s_toomanyhdr);
+				goto bad;
+			}
+		}
+#endif /* INET6 */
+
+#ifdef IPSEC
+		if (ipsec_in_use) {
+			if (ip_input_ipsec_ours_check(m, *offp) != 0) {
+				ipstat_inc(ips_cantforward);
+				goto bad;
+			}
+		}
+		/* Otherwise, just fall through and deliver the packet */
+#endif /* IPSEC */
+
+		*nxtp = (*inetsw[ip_protox[*nxtp]].pr_input)(&m, offp, *nxtp,
+		    AF_INET);
+	}
+	return;
+ bad:
+	m_freem(m);
+	*nxtp = IPPROTO_DONE;
 }
 
 int
