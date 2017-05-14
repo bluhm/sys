@@ -118,7 +118,7 @@ struct niqueue ip6intrq = NIQUEUE_INITIALIZER(IFQ_MAXLEN, NETISR_IPV6);
 
 struct cpumem *ip6counters;
 
-void ip6_ours(struct mbuf *);
+void ip6_ours(struct mbuf *, int *, int *, int);
 int ip6_check_rh0hdr(struct mbuf *, int *);
 int ip6_hbhchcheck(struct mbuf *, int *, int *, int *);
 int ip6_hopopts_input(u_int32_t *, u_int32_t *, struct mbuf **, int *);
@@ -342,13 +342,13 @@ ip6_input(struct mbuf **mp, int *offp, int nxt, int af)
 
 	if (IN6_IS_ADDR_LOOPBACK(&ip6->ip6_src) ||
 	    IN6_IS_ADDR_LOOPBACK(&ip6->ip6_dst)) {
-		ip6_ours(m);
+		ip6_ours(m, offp, &nxt, af);
 		goto out;
 	}
 
 #if NPF > 0
 	if (pf_ouraddr(m) == 1) {
-		ip6_ours(m);
+		ip6_ours(m, offp, &nxt, af);
 		goto out;
 	}
 #endif
@@ -405,7 +405,7 @@ ip6_input(struct mbuf **mp, int *offp, int nxt, int af)
 				ip6stat_inc(ip6s_cantforward);
 			goto bad;
 		}
-		ip6_ours(m);
+		ip6_ours(m, offp, &nxt, af);
 		goto out;
 	}
 
@@ -444,7 +444,7 @@ ip6_input(struct mbuf **mp, int *offp, int nxt, int af)
 
 			goto bad;
 		} else {
-			ip6_ours(m);
+			ip6_ours(m, offp, &nxt, af);
 			goto out;
 		}
 	}
@@ -505,14 +505,16 @@ ip6_input(struct mbuf **mp, int *offp, int nxt, int af)
 }
 
 void
-ip6_ours(struct mbuf *m)
+ip6_ours(struct mbuf *m, int *offp, int *nxtp, int af)
 {
-	int off, nxt;
-
-	if (ip6_hbhchcheck(m, &off, &nxt, NULL))
+	if (ip6_hbhchcheck(m, offp, nxtp, NULL))
 		return;
 
-	ip6_local(m, off, nxt);
+	/* We are alreay in a ip6_local() processing loop. */
+	if (af == AF_INET6)
+		return;
+	ip6_local(m, *offp, *nxtp);
+	*nxtp = IPPROTO_DONE;
 }
 
 void
