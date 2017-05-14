@@ -197,7 +197,7 @@ ip6_input(struct mbuf **mp, int *offp, int nxt, int af)
 	ip6stat_inc(ip6s_total);
 
 	if (m->m_len < sizeof(struct ip6_hdr)) {
-		if ((m = m_pullup(m, sizeof(struct ip6_hdr))) == NULL) {
+		if ((m = *mp = m_pullup(m, sizeof(struct ip6_hdr))) == NULL) {
 			ip6stat_inc(ip6s_toosmall);
 			goto out;
 		}
@@ -304,8 +304,9 @@ ip6_input(struct mbuf **mp, int *offp, int nxt, int af)
 	 * Packet filter
 	 */
 	odst = ip6->ip6_dst;
-	if (pf_test(AF_INET6, PF_IN, ifp, &m) != PF_PASS)
+	if (pf_test(AF_INET6, PF_IN, ifp, mp) != PF_PASS)
 		goto bad;
+	m = *mp;
 	if (m == NULL)
 		goto bad;
 
