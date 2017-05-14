@@ -591,6 +591,7 @@ found:
 void
 ip_local(struct mbuf *m, int *offp, int *nxtp, int af)
 {
+	int nxt = *nxtp;
 	int nest = 0;
 
 	/* We are already in a IPv4/IPv6 local processing loop. */
@@ -608,7 +609,7 @@ ip_local(struct mbuf *m, int *offp, int *nxtp, int af)
 	 */
 	ipstat_inc(ips_delivered);
 
-	while (*nxtp != IPPROTO_DONE) {
+	while (nxt != IPPROTO_DONE) {
 #ifdef INET6
 		if (af == AF_INET6) {
 			if (ip6_hdrnestlimit && (++nest > ip6_hdrnestlimit)) {
@@ -628,8 +629,18 @@ ip_local(struct mbuf *m, int *offp, int *nxtp, int af)
 		/* Otherwise, just fall through and deliver the packet */
 #endif /* IPSEC */
 
-		*nxtp = (*inetsw[ip_protox[*nxtp]].pr_input)(&m, offp, *nxtp,
-		    AF_INET);
+		*nxtp = (*inetsw[ip_protox[nxt]].pr_input)(&m, offp, nxt, af);
+		switch (nxt) {
+		case IPPROTO_IPV4:
+			af = AF_INET;
+			break;
+#ifdef INET6
+		case IPPROTO_IPV6:
+			af = AF_INET6;
+			break;
+#endif /* INET6 */
+		}
+		nxt = *nxtp;
 	}
 	return;
  bad:
