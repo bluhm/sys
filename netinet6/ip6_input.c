@@ -523,6 +523,10 @@ ip6_deliver(struct mbuf **mp, int *offp, int nxt, int af)
 {
 	int nest = 0;
 
+	/* We are already in a ip6_local() processing loop. */
+	if (af == AF_INET6)
+		return nxt;
+
 	KERNEL_ASSERT_LOCKED();
 
 	/* pf might have changed things */
