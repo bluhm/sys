@@ -390,10 +390,12 @@ ip6_input(struct mbuf **mp, int *offp, int nxt, int af)
 			if (ip6_mforward(ip6, ifp, m)) {
 				ip6stat_inc(ip6s_cantforward);
 				m_freem(m);
+				nxt = IPPROTO_DONE;
 			} else if (ours) {
-				ip6_local(m, *offp, nxt);
+				ip6_local(m, offp, &nxt, af);
 			} else {
 				m_freem(m);
+				nxt = IPPROTO_DONE;
 			}
 			KERNEL_UNLOCK();
 			goto out;
@@ -469,7 +471,7 @@ ip6_input(struct mbuf **mp, int *offp, int nxt, int af)
 
 	if (ours) {
 		KERNEL_LOCK();
-		ip6_local(m, *offp, nxt);
+		ip6_local(m, offp, &nxt, af);
 		KERNEL_UNLOCK();
 		goto out;
 	}
@@ -510,15 +512,14 @@ ip6_ours(struct mbuf *m, int *offp, int *nxtp, int af)
 	if (ip6_hbhchcheck(m, offp, nxtp, NULL))
 		return;
 
-	/* We are alreay in a ip6_local() processing loop. */
+	/* We are already in a ip6_local() processing loop. */
 	if (af == AF_INET6)
 		return;
-	ip6_local(m, *offp, *nxtp);
-	*nxtp = IPPROTO_DONE;
+	ip6_local(m, offp, nxtp, af);
 }
 
 void
-ip6_local(struct mbuf *m, int off, int nxt)
+ip6_local(struct mbuf *m, int *offp, int *nxtp, int af)
 {
 	int nest = 0;
 
@@ -532,7 +533,7 @@ ip6_local(struct mbuf *m, int off, int nxt)
 	 */
 	ip6stat_inc(ip6s_delivered);
 
-	while (nxt != IPPROTO_DONE) {
+	while (*nxtp != IPPROTO_DONE) {
 		if (ip6_hdrnestlimit && (++nest > ip6_hdrnestlimit)) {
 			ip6stat_inc(ip6s_toomanyhdr);
 			goto bad;
@@ -542,17 +543,18 @@ ip6_local(struct mbuf *m, int off, int nxt)
 		 * protection against faulty packet - there should be
 		 * more sanity checks in header chain processing.
 		 */
-		if (m->m_pkthdr.len < off) {
+		if (m->m_pkthdr.len < *offp) {
 			ip6stat_inc(ip6s_tooshort);
 			goto bad;
 		}
 
 		/* draft-itojun-ipv6-tcp-to-anycast */
-		if (ISSET(m->m_flags, M_ACAST) && (nxt == IPPROTO_TCP)) {
+		if (ISSET(m->m_flags, M_ACAST) && (*nxtp == IPPROTO_TCP)) {
 			if (m->m_len >= sizeof(struct ip6_hdr)) {
 				icmp6_error(m, ICMP6_DST_UNREACH,
 					ICMP6_DST_UNREACH_ADDR,
 					offsetof(struct ip6_hdr, ip6_dst));
+				*nxtp = IPPROTO_DONE;
 				break;
 			} else
 				goto bad;
@@ -560,7 +562,7 @@ ip6_local(struct mbuf *m, int off, int nxt)
 
 #ifdef IPSEC
 		if (ipsec_in_use) {
-			if (ipsec_local_check(m, off, nxt, AF_INET6) != 0) {
+			if (ipsec_local_check(m, *offp, *nxtp, AF_INET6) != 0) {
 				ipstat_inc(ip6s_cantforward);
 				m_freem(m);
 				return;
@@ -569,12 +571,13 @@ ip6_local(struct mbuf *m, int off, int nxt)
 		/* Otherwise, just fall through and deliver the packet */
 #endif /* IPSEC */
 
-		nxt = (*inet6sw[ip6_protox[nxt]].pr_input)(&m, &off, nxt,
+		*nxtp = (*inet6sw[ip6_protox[*nxtp]].pr_input)(&m, offp, *nxtp,
 		    AF_INET6);
 	}
 	return;
  bad:
 	m_freem(m);
+	*nxtp = IPPROTO_DONE;
 }
 
 int
