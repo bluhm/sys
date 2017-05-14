@@ -593,6 +593,11 @@ ip_local(struct mbuf *m, int *offp, int *nxtp, int af)
 {
 	int nest = 0;
 
+	/* We are already in a IPv4/IPv6 local processing loop. */
+	if (af != AF_UNSPEC)
+		return;
+	af = AF_INET;
+
 	KERNEL_ASSERT_LOCKED();
 
 	/* pf might have modified stuff, might have to chksum */
