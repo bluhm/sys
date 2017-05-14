@@ -512,9 +512,6 @@ ip6_ours(struct mbuf *m, int *offp, int *nxtp, int af)
 	if (ip6_hbhchcheck(m, offp, nxtp, NULL))
 		return;
 
-	/* We are already in a ip6_local() processing loop. */
-	if (af == AF_INET6)
-		return;
 	ip6_local(m, offp, nxtp, af);
 }
 
@@ -522,6 +519,10 @@ void
 ip6_local(struct mbuf *m, int *offp, int *nxtp, int af)
 {
 	int nest = 0;
+
+	/* We are already in a ip6_local() processing loop. */
+	if (af == AF_INET6)
+		return;
 
 	KERNEL_ASSERT_LOCKED();
 
