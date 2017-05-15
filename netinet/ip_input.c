@@ -578,8 +578,9 @@ found:
 				ip_freef(fp);
 	}
 
+	*offp = hlen;
 	*nxtp = ip->ip_p;
-	ip_local(m, &hlen, nxtp, AF_INET);
+	ip_local(m, offp, nxtp, af);
 	return;
  bad:
 	m_freem(m);
