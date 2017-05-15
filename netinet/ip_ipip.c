@@ -336,8 +336,9 @@ ipip_input(struct mbuf **mp, int *offp, struct ifnet *gifp, int proto, int oaf)
 	case IPPROTO_IPV6:
 		return ip6_input(mp, offp, proto, oaf);
 #endif
+	default:
+		panic("%s: unexpected protocol %d", __func__, proto);
 	}
-	panic("%s: unexpected protocol %d", __func__, proto);
 }
 
 int
