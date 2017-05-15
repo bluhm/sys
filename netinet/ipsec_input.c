@@ -609,21 +609,7 @@ ipsec_common_input_cb(struct mbuf *m, struct tdb *tdbp, int skip, int protoff)
 #endif
 	/* Call the appropriate IPsec transform callback. */
 	nxt = prot;
-	switch (af) {
-	case AF_INET:
-		ip_local(m, &skip, &nxt, af);
-		return;
-#ifdef INET6
-	case AF_INET6:
-		ip6_local(m, &skip, &nxt, af);
-		return;
-#endif /* INET6 */
-	default:
-		DPRINTF(("ipsec_common_input_cb(): unknown/unsupported "
-		    "protocol family %d\n", af));
-		m_freem(m);
-		return;
-	}
+	ip_local(m, &skip, &nxt, af);
 #undef IPSEC_ISTAT
 }
 
