@@ -1274,6 +1274,7 @@ if_lookupbyvif(vifi_t vifi, unsigned int rtableid)
 	struct vif	*v;
 	struct ifnet	*ifp;
 
+	KERNEL_ASSERT_LOCKED();
 	TAILQ_FOREACH(ifp, &ifnet, if_list) {
 		if (ifp->if_rdomain != rtableid)
 			continue;
