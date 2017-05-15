@@ -62,6 +62,7 @@
 #include <netinet/ip_icmp.h>
 
 #ifdef INET6
+#include <netinet6/ip6protosw.h>
 #include <netinet6/ip6_var.h>
 #endif
 
@@ -587,6 +588,7 @@ found:
 int
 ip_deliver(struct mbuf **mp, int *offp, int nxt, int af)
 {
+	struct protosw *psw;
 	int naf = af, nest = 0;
 
 	KERNEL_ASSERT_LOCKED();
@@ -628,7 +630,9 @@ ip_deliver(struct mbuf **mp, int *offp, int nxt, int af)
 			break;
 #endif /* INET6 */
 		}
-		nxt = (*inetsw[ip_protox[nxt]].pr_input)(mp, offp, nxt, af);
+		psw = (af == AF_INET) ?
+		    &inetsw[ip_protox[nxt]] : &inet6sw[ip6_protox[nxt]];
+		nxt = (*psw->pr_input)(mp, offp, nxt, af);
 		KASSERT(nxt == IPPROTO_DONE);
 		af = naf;
 	}

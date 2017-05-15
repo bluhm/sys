@@ -526,6 +526,7 @@ ip6_ours(struct mbuf *m, int *offp, int *nxtp, int af)
 int
 ip6_deliver(struct mbuf **mp, int *offp, int nxt, int af)
 {
+	struct protosw *psw;
 	int naf = af, nest = 0;
 
 	KERNEL_ASSERT_LOCKED();
@@ -582,7 +583,9 @@ ip6_deliver(struct mbuf **mp, int *offp, int nxt, int af)
 			naf = AF_INET6;
 			break;
 		}
-		nxt = (*inet6sw[ip6_protox[nxt]].pr_input)(mp, offp, nxt, af);
+		psw = (af == AF_INET) ?
+		    &inetsw[ip_protox[nxt]] : &inet6sw[ip6_protox[nxt]];
+		nxt = (*psw->pr_input)(mp, offp, nxt, af);
 		af = naf;
 	}
 	return nxt;
