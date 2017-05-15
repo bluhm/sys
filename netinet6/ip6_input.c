@@ -524,6 +524,7 @@ void
 ip6_local(struct mbuf *m, int *offp, int *nxtp, int af)
 {
 	int nxt = *nxtp;
+	struct protosw *psw;
 	int nest = 0;
 
 	/* We are already in a IPv4/IPv6 local processing loop. */
@@ -567,7 +568,9 @@ ip6_local(struct mbuf *m, int *offp, int *nxtp, int af)
 			goto bad;
 		}
 
-		*nxtp = (*inet6sw[ip6_protox[nxt]].pr_input)(&m, offp, nxt, af);
+		psw = (af == AF_INET) ?
+		    &inetsw[ip_protox[nxt]] : &inet6sw[ip6_protox[nxt]];
+		*nxtp = (*psw->pr_input)(&m, offp, nxt, af);
 		switch (nxt) {
 		case IPPROTO_IPV4:
 			af = AF_INET;
