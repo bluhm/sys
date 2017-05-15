@@ -124,7 +124,6 @@ ipip_input(struct mbuf **mp, int *offp, struct ifnet *gifp, int proto, int oaf)
 	int iphlen = *offp;
 	struct sockaddr_in *sin;
 	struct ifnet *ifp;
-	struct niqueue *ifq = NULL;
 	struct ip *ipo;
 #ifdef INET6
 	struct sockaddr_in6 *sin6;
@@ -313,17 +312,13 @@ ipip_input(struct mbuf **mp, int *offp, struct ifnet *gifp, int proto, int oaf)
 
 	switch (proto) {
 	case IPPROTO_IPV4:
-		ifq = &ipintrq;
 		iaf = AF_INET;
 		break;
 #ifdef INET6
 	case IPPROTO_IPV6:
-		ifq = &ip6intrq;
 		iaf = AF_INET6;
 		break;
 #endif
-	default:
-		panic("ipip_input: should never reach here");
 	}
 
 #if NBPFILTER > 0
@@ -334,16 +329,15 @@ ipip_input(struct mbuf **mp, int *offp, struct ifnet *gifp, int proto, int oaf)
 	pf_pkt_addr_changed(m);
 #endif
 
-	/* If already in ip6_local() loop, use it. */
-	if (oaf == AF_INET6 && proto == IPPROTO_IPV6)
+	switch (proto) {
+	case IPPROTO_IPV4:
+		return ip_input(mp, offp, proto, oaf);
+#ifdef INET6
+	case IPPROTO_IPV6:
 		return ip6_input(mp, offp, proto, oaf);
-
-	if (niq_enqueue(ifq, m) != 0) {
-		ipipstat_inc(ipips_qfull);
-		DPRINTF(("ipip_input(): packet dropped because of full "
-		    "queue\n"));
+#endif
 	}
-	return IPPROTO_DONE;
+	panic("%s: unexpected protocol %d", __func__, proto);
 }
 
 int
