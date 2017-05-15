@@ -578,7 +578,9 @@ found:
 				ip_freef(fp);
 	}
 
-	*nxtp = ip_deliver(&m, &hlen, ip->ip_p, AF_INET);
+	/* Check wheter we are already in a IPv4/IPv6 local processing loop. */
+	if (af == AF_UNSPEC)
+		*nxtp = ip_deliver(&m, &hlen, ip->ip_p, AF_INET);
 	return;
  bad:
 	m_freem(m);
