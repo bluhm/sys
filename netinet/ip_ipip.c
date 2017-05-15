@@ -152,7 +152,7 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 		if ((m = *mp = m_pullup(m, hlen)) == NULL) {
 			DPRINTF(("%s: m_pullup() failed\n", __func__));
 			ipipstat_inc(ipips_hdrops);
-			return IPPROTO_DONE;
+			goto bad;
 		}
 	}
 
@@ -187,15 +187,13 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 #endif
 	default:
 		ipipstat_inc(ipips_family);
-		m_freem(m);
-		return IPPROTO_DONE;
+		goto bad;
 	}
 
 	/* Sanity check */
 	if (m->m_pkthdr.len < hlen) {
 		ipipstat_inc(ipips_hdrops);
-		m_freem(m);
-		return IPPROTO_DONE;
+		goto bad;
 	}
 
 	/*
@@ -205,7 +203,7 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 		if ((m = *mp = m_pullup(m, hlen)) == NULL) {
 			DPRINTF(("%s: m_pullup() failed\n", __func__));
 			ipipstat_inc(ipips_hdrops);
-			return IPPROTO_DONE;
+			goto bad;
 		}
 	}
 
@@ -228,8 +226,7 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 		if (!ip_ecn_egress(mode, &otos, &ipo->ip_tos)) {
 			DPRINTF(("%s: ip_ecn_egress() failed\n", __func__));
 			ipipstat_inc(ipips_pdrops);
-			m_freem(m);
-			return IPPROTO_DONE;
+			goto bad;
 		}
 		/* re-calculate the checksum if ip_tos was changed */
 		if (itos != ipo->ip_tos) {
@@ -248,8 +245,7 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 		if (!ip_ecn_egress(ECN_ALLOWED, &otos, &itos)) {
 			DPRINTF(("%s: ip_ecn_egress() failed\n", __func__));
 			ipipstat_inc(ipips_pdrops);
-			m_freem(m);
-			return IPPROTO_DONE;
+			goto bad;
 		}
 		ip6->ip6_flow &= ~htonl(0xff << 20);
 		ip6->ip6_flow |= htonl((u_int32_t) itos << 20);
@@ -289,9 +285,8 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 		rt = rtalloc(sstosa(&ss), 0, m->m_pkthdr.ph_rtableid);
 		if ((rt != NULL) && (rt->rt_flags & RTF_LOCAL)) {
 			ipipstat_inc(ipips_spoof);
-			m_freem(m);
 			rtfree(rt);
-			return IPPROTO_DONE;
+			goto bad;
  		}
 		rtfree(rt);
  	} else {
@@ -335,9 +330,10 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 	case IPPROTO_IPV6:
 		return ip6_input(mp, offp, proto, oaf);
 #endif
-	default:
-		panic("%s: unexpected protocol %d", __func__, proto);
 	}
+ bad:
+	m_freem(m);
+	return IPPROTO_DONE;
 }
 
 int
