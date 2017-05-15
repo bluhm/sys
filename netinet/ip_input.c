@@ -592,6 +592,13 @@ found:
 	*nxtp = IPPROTO_DONE;
 }
 
+#ifndef INET6
+#define IPSTAT_INC(name)	ipstat_inc(ips_##name)
+#else
+#define IPSTAT_INC(name)	(af == AF_INET ?	\
+    ipstat_inc(ips_##name) : ip6stat_inc(ip6s_##name))
+#endif
+
 void
 ip_local(struct mbuf *m, int *offp, int *nxtp, int af)
 {
@@ -605,24 +612,46 @@ ip_local(struct mbuf *m, int *offp, int *nxtp, int af)
 	in_proto_cksum_out(m, NULL);
 
 	/*
-	 * Switch out to protocol's input routine.
+	 * Tell launch routine the next header
 	 */
-	ipstat_inc(ips_delivered);
+	IPSTAT_INC(delivered);
 
 	while (nxt != IPPROTO_DONE) {
 #ifdef INET6
-		if (af == AF_INET6) {
-			if (ip6_hdrnestlimit && (++nest > ip6_hdrnestlimit)) {
-				ip6stat_inc(ip6s_toomanyhdr);
-				goto bad;
+		if (af == AF_INET6 &&
+		    ip6_hdrnestlimit && (++nest > ip6_hdrnestlimit)) {
+			ip6stat_inc(ip6s_toomanyhdr);
+			goto bad;
+		}
+#endif /* INET6 */
+
+		/*
+		 * protection against faulty packet - there should be
+		 * more sanity checks in header chain processing.
+		 */
+		if (m->m_pkthdr.len < *offp) {
+			IPSTAT_INC(tooshort);
+			goto bad;
+		}
+
+#ifdef INET6
+		/* draft-itojun-ipv6-tcp-to-anycast */
+		if (af == AF_INET6 &&
+		    ISSET(m->m_flags, M_ACAST) && (nxt == IPPROTO_TCP)) {
+			if (m->m_len >= sizeof(struct ip6_hdr)) {
+				icmp6_error(m, ICMP6_DST_UNREACH,
+					ICMP6_DST_UNREACH_ADDR,
+					offsetof(struct ip6_hdr, ip6_dst));
+				m = NULL;
 			}
+			goto bad;
 		}
 #endif /* INET6 */
 
 #ifdef IPSEC
 		if (ipsec_in_use) {
 			if (ip_input_ipsec_ours_check(m, *offp) != 0) {
-				ipstat_inc(ips_cantforward);
+				IPSTAT_INC(cantforward);
 				goto bad;
 			}
 		}
@@ -635,10 +664,12 @@ ip_local(struct mbuf *m, int *offp, int *nxtp, int af)
 		switch (nxt) {
 		case IPPROTO_IPV4:
 			af = AF_INET;
+			ipstat_inc(ips_delivered);
 			break;
 #ifdef INET6
 		case IPPROTO_IPV6:
 			af = AF_INET6;
+			ip6stat_inc(ip6s_delivered);
 			break;
 #endif /* INET6 */
 		}
@@ -649,6 +680,7 @@ ip_local(struct mbuf *m, int *offp, int *nxtp, int af)
 	m_freem(m);
 	*nxtp = IPPROTO_DONE;
 }
+#undef IPSTAT_INC
 
 int
 in_ouraddr(struct mbuf *m, struct ifnet *ifp, struct rtentry **prt)
