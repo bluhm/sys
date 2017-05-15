@@ -598,7 +598,10 @@ int
 ip_deliver(struct mbuf **mp, int *offp, int nxt, int af)
 {
 	struct protosw *psw;
-	int naf = af, nest = 0;
+	int naf = af;
+#ifdef INET6
+	int nest = 0;
+#endif /* INET6 */
 
 	KERNEL_ASSERT_LOCKED();
 
@@ -673,8 +676,16 @@ ip_deliver(struct mbuf **mp, int *offp, int nxt, int af)
 			break;
 #endif /* INET6 */
 		}
-		psw = (af == AF_INET) ?
-		    &inetsw[ip_protox[nxt]] : &inet6sw[ip6_protox[nxt]];
+		switch (af) {
+		case AF_INET:
+			psw = &inetsw[ip_protox[nxt]];
+			break;
+#ifdef INET6
+		case AF_INET6:
+			psw = &inet6sw[ip6_protox[nxt]];
+			break;
+#endif /* INET6 */
+		}
 		nxt = (*psw->pr_input)(mp, offp, nxt, af);
 		af = naf;
 	}
