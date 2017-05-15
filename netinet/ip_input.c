@@ -583,7 +583,9 @@ found:
 
 	*offp = hlen;
 	*nxtp = ip->ip_p;
-	ip_local(m, offp, nxtp, af);
+	/* Check wheter we are already in a IPv4/IPv6 local processing loop. */
+	if (af == AF_UNSPEC)
+		ip_local(m, offp, nxtp, AF_INET);
 	return;
  bad:
 	m_freem(m);
@@ -596,11 +598,6 @@ ip_local(struct mbuf *m, int *offp, int *nxtp, int af)
 	int nxt = *nxtp;
 	struct protosw *psw;
 	int nest = 0;
-
-	/* We are already in a IPv4/IPv6 local processing loop. */
-	if (af != AF_UNSPEC)
-		return;
-	af = AF_INET;
 
 	KERNEL_ASSERT_LOCKED();
 
