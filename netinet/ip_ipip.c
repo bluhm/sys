@@ -183,13 +183,6 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 	m_adj(m, *offp);
 	*offp = 0;
 
-	/* Sanity check */
-	if (m->m_pkthdr.len < sizeof(struct ip)) {
-		ipipstat_inc(ipips_hdrops);
-		m_freem(m);
-		return IPPROTO_DONE;
-	}
-
 	switch (proto) {
 	case IPPROTO_IPV4:
 		hlen = sizeof(struct ip);
@@ -202,6 +195,13 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 #endif
 	default:
 		ipipstat_inc(ipips_family);
+		m_freem(m);
+		return IPPROTO_DONE;
+	}
+
+	/* Sanity check */
+	if (m->m_pkthdr.len < hlen) {
+		ipipstat_inc(ipips_hdrops);
 		m_freem(m);
 		return IPPROTO_DONE;
 	}
