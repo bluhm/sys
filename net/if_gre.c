@@ -1,4 +1,4 @@
-/*      $OpenBSD: if_gre.c,v 1.85 2017/05/15 14:09:13 mpi Exp $ */
+/*      $OpenBSD: if_gre.c,v 1.86 2017/05/15 14:33:20 bluhm Exp $ */
 /*	$NetBSD: if_gre.c,v 1.9 1999/10/25 19:18:11 drochner Exp $ */
 
 /*
