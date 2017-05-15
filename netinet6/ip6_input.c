@@ -397,7 +397,8 @@ ip6_input(struct mbuf **mp, int *offp, int nxt, int af)
 				m_freem(m);
 				nxt = IPPROTO_DONE;
 			} else if (ours) {
-				ip6_local(m, offp, &nxt, af);
+				if (af == AF_UNSPEC)
+					ip6_local(m, offp, &nxt, af);
 			} else {
 				m_freem(m);
 				nxt = IPPROTO_DONE;
@@ -476,7 +477,8 @@ ip6_input(struct mbuf **mp, int *offp, int nxt, int af)
 
 	if (ours) {
 		KERNEL_LOCK();
-		ip6_local(m, offp, &nxt, af);
+		if (af == AF_UNSPEC)
+			ip6_local(m, offp, &nxt, af);
 		KERNEL_UNLOCK();
 		goto out;
 	}
@@ -517,7 +519,9 @@ ip6_ours(struct mbuf *m, int *offp, int *nxtp, int af)
 	if (ip6_hbhchcheck(m, offp, nxtp, NULL))
 		return;
 
-	ip6_local(m, offp, nxtp, af);
+	/* Check wheter we are already in a IPv4/IPv6 local processing loop. */
+	if (af == AF_UNSPEC)
+		ip6_local(m, offp, nxtp, AF_INET6);
 }
 
 void
@@ -526,11 +530,6 @@ ip6_local(struct mbuf *m, int *offp, int *nxtp, int af)
 	int nxt = *nxtp;
 	struct protosw *psw;
 	int nest = 0;
-
-	/* We are already in a IPv4/IPv6 local processing loop. */
-	if (af != AF_UNSPEC)
-		return;
-	af = AF_INET6;
 
 	KERNEL_ASSERT_LOCKED();
 
