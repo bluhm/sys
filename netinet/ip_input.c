@@ -601,7 +601,9 @@ ip_local(struct mbuf *m, int *offp, int *nxtp, int af)
 {
 	int nxt = *nxtp;
 	struct protosw *psw;
+#ifdef INET6
 	int nest = 0;
+#endif /* INET6 */
 
 	KERNEL_ASSERT_LOCKED();
 
@@ -664,8 +666,16 @@ ip_local(struct mbuf *m, int *offp, int *nxtp, int af)
 		/* Otherwise, just fall through and deliver the packet */
 #endif /* IPSEC */
 
-		psw = (af == AF_INET) ?
-		    &inetsw[ip_protox[nxt]] : &inet6sw[ip6_protox[nxt]];
+		switch (af) {
+		case AF_INET:
+			psw = &inetsw[ip_protox[nxt]];
+			break;
+#ifdef INET6
+		case AF_INET6:
+			psw = &inet6sw[ip6_protox[nxt]];
+			break;
+#endif /* INET6 */
+		}
 		*nxtp = (*psw->pr_input)(&m, offp, nxt, af);
 		switch (nxt) {
 		case IPPROTO_IPV4:
