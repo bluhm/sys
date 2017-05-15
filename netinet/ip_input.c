@@ -62,6 +62,7 @@
 #include <netinet/ip_icmp.h>
 
 #ifdef INET6
+#include <netinet6/ip6protosw.h>
 #include <netinet6/ip6_var.h>
 #endif
 
@@ -592,6 +593,7 @@ void
 ip_local(struct mbuf *m, int *offp, int *nxtp, int af)
 {
 	int nxt = *nxtp;
+	struct protosw *psw;
 	int nest = 0;
 
 	/* We are already in a IPv4/IPv6 local processing loop. */
@@ -629,7 +631,9 @@ ip_local(struct mbuf *m, int *offp, int *nxtp, int af)
 		/* Otherwise, just fall through and deliver the packet */
 #endif /* IPSEC */
 
-		*nxtp = (*inetsw[ip_protox[nxt]].pr_input)(&m, offp, nxt, af);
+		psw = (af == AF_INET) ?
+		    &inetsw[ip_protox[nxt]] : &inet6sw[ip6_protox[nxt]];
+		*nxtp = (*psw->pr_input)(&m, offp, nxt, af);
 		switch (nxt) {
 		case IPPROTO_IPV4:
 			af = AF_INET;
