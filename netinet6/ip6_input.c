@@ -398,7 +398,7 @@ ip6_input(struct mbuf **mp, int *offp, int nxt, int af)
 				nxt = IPPROTO_DONE;
 			} else if (ours) {
 				if (af == AF_UNSPEC)
-					ip6_local(m, offp, &nxt, af);
+					ip_local(m, offp, &nxt, af);
 			} else {
 				m_freem(m);
 				nxt = IPPROTO_DONE;
@@ -478,7 +478,7 @@ ip6_input(struct mbuf **mp, int *offp, int nxt, int af)
 	if (ours) {
 		KERNEL_LOCK();
 		if (af == AF_UNSPEC)
-			ip6_local(m, offp, &nxt, af);
+			ip_local(m, offp, &nxt, af);
 		KERNEL_UNLOCK();
 		goto out;
 	}
@@ -521,80 +521,7 @@ ip6_ours(struct mbuf *m, int *offp, int *nxtp, int af)
 
 	/* Check wheter we are already in a IPv4/IPv6 local processing loop. */
 	if (af == AF_UNSPEC)
-		ip6_local(m, offp, nxtp, AF_INET6);
-}
-
-void
-ip6_local(struct mbuf *m, int *offp, int *nxtp, int af)
-{
-	int nxt = *nxtp;
-	struct protosw *psw;
-	int nest = 0;
-
-	KERNEL_ASSERT_LOCKED();
-
-	/* pf might have changed things */
-	in6_proto_cksum_out(m, NULL);
-
-	/*
-	 * Tell launch routine the next header
-	 */
-	ip6stat_inc(ip6s_delivered);
-
-	while (nxt != IPPROTO_DONE) {
-		if (ip6_hdrnestlimit && (++nest > ip6_hdrnestlimit)) {
-			ip6stat_inc(ip6s_toomanyhdr);
-			goto bad;
-		}
-
-		/*
-		 * protection against faulty packet - there should be
-		 * more sanity checks in header chain processing.
-		 */
-		if (m->m_pkthdr.len < *offp) {
-			ip6stat_inc(ip6s_tooshort);
-			goto bad;
-		}
-
-		/* draft-itojun-ipv6-tcp-to-anycast */
-		if (ISSET(m->m_flags, M_ACAST) && (nxt == IPPROTO_TCP)) {
-			if (m->m_len >= sizeof(struct ip6_hdr)) {
-				icmp6_error(m, ICMP6_DST_UNREACH,
-					ICMP6_DST_UNREACH_ADDR,
-					offsetof(struct ip6_hdr, ip6_dst));
-				m = NULL;
-			}
-			goto bad;
-		}
-
-#ifdef IPSEC
-		if (ipsec_in_use) {
-			if (ipsec_local_check(m, *offp, nxt, AF_INET6) != 0) {
-				ipstat_inc(ip6s_cantforward);
-				m_freem(m);
-				return;
-			}
-		}
-		/* Otherwise, just fall through and deliver the packet */
-#endif /* IPSEC */
-
-		psw = (af == AF_INET) ?
-		    &inetsw[ip_protox[nxt]] : &inet6sw[ip6_protox[nxt]];
-		*nxtp = (*psw->pr_input)(&m, offp, nxt, af);
-		switch (nxt) {
-		case IPPROTO_IPV4:
-			af = AF_INET;
-			break;
-		case IPPROTO_IPV6:
-			af = AF_INET6;
-			break;
-		}
-		nxt = *nxtp;
-	}
-	return;
- bad:
-	m_freem(m);
-	*nxtp = IPPROTO_DONE;
+		ip_local(m, offp, nxtp, AF_INET6);
 }
 
 int
