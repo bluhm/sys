@@ -1800,7 +1800,7 @@ icmp6_mtudisc_clone(struct sockaddr *dst, u_int rtableid)
 	rt = rtalloc(dst, RT_RESOLVE, rtableid);
 
 	/* Check if the route is actually usable */
-	if (!rtisvalid(rt) || (rt->rt_flags & (RTF_REJECT|RTF_BLACKHOLE))) {
+	if (!rtisvalid(rt)) {
 		rtfree(rt);
 		return (NULL);
 	}

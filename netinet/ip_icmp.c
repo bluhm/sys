@@ -954,7 +954,7 @@ icmp_mtudisc_clone(struct in_addr dst, u_int rtableid)
 	rt = rtalloc(sintosa(&sin), RT_RESOLVE, rtableid);
 
 	/* Check if the route is actually usable */
-	if (!rtisvalid(rt) || (rt->rt_flags & (RTF_REJECT|RTF_BLACKHOLE))) {
+	if (!rtisvalid(rt)) {
 		rtfree(rt);
 		return (NULL);
 	}
