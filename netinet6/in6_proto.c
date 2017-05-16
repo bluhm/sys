@@ -263,7 +263,6 @@ struct protosw inet6sw[] = {
   .pr_ctloutput	= rip6_ctloutput,
   .pr_usrreq	= rip6_usrreq,	/* XXX */
   .pr_attach	= rip6_attach,
-  .pr_sysctl	= ipip_sysctl
 },
 #if NGIF > 0
 {
