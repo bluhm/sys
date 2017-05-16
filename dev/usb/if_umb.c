@@ -949,9 +949,10 @@ umb_state_task(void *arg)
 	struct ifnet *ifp = GET_IFP(sc);
 	struct ifreq ifr;
 	struct in_aliasreq ifra;
-	int	 s;
+	int	 s, ns;
 	int	 state;
 
+	NET_LOCK(ns);
 	s = splnet();
 	if (ifp->if_flags & IFF_UP)
 		umb_up(sc);
@@ -985,6 +986,7 @@ umb_state_task(void *arg)
 		if_link_state_change(ifp);
 	}
 	splx(s);
+	NET_UNLOCK(ns);
 }
 
 void
@@ -1613,7 +1615,7 @@ umb_decode_ip_configuration(struct umb_softc *sc, void *data, int len)
 {
 	struct mbim_cid_ip_configuration_info *ic = data;
 	struct ifnet *ifp = GET_IFP(sc);
-	int	 s;
+	int	 s, ns;
 	uint32_t avail;
 	uint32_t val;
 	int	 n, i;
@@ -1631,6 +1633,7 @@ umb_decode_ip_configuration(struct umb_softc *sc, void *data, int len)
 		    DEVNAM(sc), letoh32(ic->sessionid));
 		return 0;
 	}
+	NET_LOCK(ns);
 	s = splnet();
 
 	/*
@@ -1716,6 +1719,7 @@ umb_decode_ip_configuration(struct umb_softc *sc, void *data, int len)
 
 done:
 	splx(s);
+	NET_LOCK(ns);
 	return 1;
 }
 
