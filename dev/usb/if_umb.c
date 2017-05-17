@@ -952,7 +952,6 @@ umb_state_task(void *arg)
 	int	 s, ns;
 	int	 state;
 
-	NET_LOCK(ns);
 	s = splnet();
 	if (ifp->if_flags & IFF_UP)
 		umb_up(sc);
@@ -974,6 +973,7 @@ umb_state_task(void *arg)
 			 */
 			memset(sc->sc_info.ipv4dns, 0,
 			    sizeof (sc->sc_info.ipv4dns));
+			NET_LOCK(ns);
 			if (in_ioctl(SIOCGIFADDR, (caddr_t)&ifr, ifp, 1) == 0 &&
 			    satosin(&ifr.ifr_addr)->sin_addr.s_addr !=
 			    INADDR_ANY) {
@@ -982,11 +982,11 @@ umb_state_task(void *arg)
 				    sizeof (ifra.ifra_addr));
 				in_ioctl(SIOCDIFADDR, (caddr_t)&ifra, ifp, 1);
 			}
+			NET_UNLOCK(ns);
 		}
 		if_link_state_change(ifp);
 	}
 	splx(s);
-	NET_UNLOCK(ns);
 }
 
 void
@@ -1633,7 +1633,6 @@ umb_decode_ip_configuration(struct umb_softc *sc, void *data, int len)
 		    DEVNAM(sc), letoh32(ic->sessionid));
 		return 0;
 	}
-	NET_LOCK(ns);
 	s = splnet();
 
 	/*
@@ -1670,7 +1669,10 @@ umb_decode_ip_configuration(struct umb_softc *sc, void *data, int len)
 		sin->sin_len = sizeof (ifra.ifra_mask);
 		in_len2mask(&sin->sin_addr, ipv4elem.prefixlen);
 
-		if ((rv = in_ioctl(SIOCAIFADDR, (caddr_t)&ifra, ifp, 1)) == 0) {
+		NET_LOCK(ns);
+		rv = in_ioctl(SIOCAIFADDR, (caddr_t)&ifra, ifp, 1);
+		NET_UNLOCK(ns);
+		if (rv == 0) {
 			if (ifp->if_flags & IFF_DEBUG)
 				log(LOG_INFO, "%s: IPv4 addr %s, mask %s, "
 				    "gateway %s\n", DEVNAM(ifp->if_softc),
@@ -1719,7 +1721,6 @@ umb_decode_ip_configuration(struct umb_softc *sc, void *data, int len)
 
 done:
 	splx(s);
-	NET_LOCK(ns);
 	return 1;
 }
 
