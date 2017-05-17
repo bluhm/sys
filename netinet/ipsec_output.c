@@ -42,7 +42,7 @@
 #endif
 
 #include <netinet/udp.h>
-#include <netinet/ip_ipsp.h>
+#include <netinet/ip_ipip.h>
 #include <netinet/ip_ah.h>
 #include <netinet/ip_esp.h>
 #include <netinet/ip_ipcomp.h>

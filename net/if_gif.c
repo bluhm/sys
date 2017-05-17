@@ -47,6 +47,7 @@
 #include <netinet/ip.h>
 #include <netinet/ip_ether.h>
 #include <netinet/ip_var.h>
+#include <netinet/ip_ipip.h>
 #include <netinet/ip_ipsp.h>
 
 #ifdef INET6

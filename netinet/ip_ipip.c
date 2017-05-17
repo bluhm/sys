@@ -58,13 +58,11 @@
 #include <netinet/in_pcb.h>
 #include <netinet/ip_var.h>
 #include <netinet/ip_ecn.h>
+#include <netinet/ip_ipip.h>
 
 #ifdef MROUTING
 #include <netinet/ip_mroute.h>
 #endif
-
-#include <netinet/ip_ipsp.h>
-#include <netinet/ip_ipip.h>
 
 #include "bpfilter.h"
 
