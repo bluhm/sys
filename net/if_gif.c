@@ -756,7 +756,7 @@ in_gif_input(struct mbuf **mp, int *offp, int proto, int af)
 
 inject:
 	/* No GIF interface was configured */
-	return ip4_input(mp, offp, proto, af);
+	return ipip_input(mp, offp, proto, af);
 }
 
 #ifdef INET6
@@ -881,6 +881,6 @@ int in6_gif_input(struct mbuf **mp, int *offp, int proto, int af)
 
 inject:
 	/* No GIF tunnel configured */
-	return ip4_input(mp, offp, proto, af);
+	return ipip_input(mp, offp, proto, af);
 }
 #endif /* INET6 */

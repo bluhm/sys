@@ -244,7 +244,7 @@ struct protosw inet6sw[] = {
 #if NGIF > 0
   .pr_input	= in6_gif_input,
 #else
-  .pr_input	= ip4_input,
+  .pr_input	= ipip_input,
 #endif
   .pr_ctloutput	= rip6_ctloutput,
   .pr_usrreq	= rip6_usrreq,	/* XXX */
@@ -258,7 +258,7 @@ struct protosw inet6sw[] = {
 #if NGIF > 0
   .pr_input	= in6_gif_input,
 #else
-  .pr_input	= ip4_input,
+  .pr_input	= ipip_input,
 #endif
   .pr_ctloutput	= rip6_ctloutput,
   .pr_usrreq	= rip6_usrreq,	/* XXX */
