@@ -105,7 +105,7 @@ ipipstat_add(enum ipipstat_counters c, uint64_t v)
 }
 
 void	ipip_init(void);
-int	ipip_input(struct mbuf **, int *, struct ifnet *, int);
+int	ipip_input_gif(struct mbuf **, int *, int, int, struct ifnet *);
 int	ipip_output(struct mbuf *, struct tdb *, struct mbuf **, int, int);
 int	ipip_sysctl(int *, u_int, void *, size_t *, void *, size_t);
 int	ip4_input(struct mbuf **, int *, int, int);

@@ -104,7 +104,7 @@ ip4_input(struct mbuf **mp, int *offp, int proto, int af)
 		return IPPROTO_DONE;
 	}
 
-	return ipip_input(mp, offp, NULL, proto);
+	return ipip_input_gif(mp, offp, proto, af, NULL);
 }
 
 /*
@@ -116,7 +116,8 @@ ip4_input(struct mbuf **mp, int *offp, int proto, int af)
  */
 
 int
-ipip_input(struct mbuf **mp, int *offp, struct ifnet *gifp, int proto)
+ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
+    struct ifnet *gifp)
 {
 	struct mbuf *m = *mp;
 	int iphlen = *offp;
@@ -131,7 +132,7 @@ ipip_input(struct mbuf **mp, int *offp, struct ifnet *gifp, int proto)
 	int mode, hlen;
 	u_int8_t itos, otos;
 	u_int8_t v;
-	sa_family_t af;
+	sa_family_t iaf;
 
 	ipipstat_inc(ipips_ipackets);
 
@@ -318,12 +319,12 @@ ipip_input(struct mbuf **mp, int *offp, struct ifnet *gifp, int proto)
 	switch (proto) {
 	case IPPROTO_IPV4:
 		ifq = &ipintrq;
-		af = AF_INET;
+		iaf = AF_INET;
 		break;
 #ifdef INET6
 	case IPPROTO_IPV6:
 		ifq = &ip6intrq;
-		af = AF_INET6;
+		iaf = AF_INET6;
 		break;
 #endif
 	default:
@@ -332,7 +333,7 @@ ipip_input(struct mbuf **mp, int *offp, struct ifnet *gifp, int proto)
 
 #if NBPFILTER > 0
 	if (gifp && gifp->if_bpf)
-		bpf_mtap_af(gifp->if_bpf, af, m, BPF_DIRECTION_IN);
+		bpf_mtap_af(gifp->if_bpf, iaf, m, BPF_DIRECTION_IN);
 #endif
 #if NPF > 0
 	pf_pkt_addr_changed(m);
