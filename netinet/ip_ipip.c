@@ -341,8 +341,8 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 
 	if (niq_enqueue(ifq, m) != 0) {
 		ipipstat_inc(ipips_qfull);
-		DPRINTF(("%s: packet dropped because of full "
-		    "queue\n", __func__));
+		DPRINTF(("%s: packet dropped because of full queue\n",
+		    __func__));
 	}
 	return IPPROTO_DONE;
 }
