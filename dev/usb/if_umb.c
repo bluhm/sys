@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_umb.c,v 1.12 2017/05/03 15:32:31 gerhard Exp $ */
+/*	$OpenBSD: if_umb.c,v 1.13 2017/05/18 14:48:27 bluhm Exp $ */
 
 /*
  * Copyright (c) 2016 genua mbH
