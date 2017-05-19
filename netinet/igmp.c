@@ -368,7 +368,7 @@ igmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto, int af)
 	case IGMP_v1_HOST_MEMBERSHIP_REPORT:
 		igmpstat_inc(igps_rcv_reports);
 
-		if (ifp->if_flags & IFF_LOOPBACK)
+		if (m->m_flags & M_LOOP)
 			break;
 
 		if (!IN_MULTICAST(igmp->igmp_group.s_addr) ||
@@ -434,7 +434,7 @@ igmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto, int af)
 
 		igmpstat_inc(igps_rcv_reports);
 
-		if (ifp->if_flags & IFF_LOOPBACK)
+		if (m->m_flags & M_LOOP)
 			break;
 
 		if (!IN_MULTICAST(igmp->igmp_group.s_addr) ||
