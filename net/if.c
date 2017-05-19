@@ -750,6 +750,7 @@ if_input_local(struct ifnet *ifp, struct mbuf *m, sa_family_t af)
 	}
 #endif
 	m_resethdr(m);
+	m->m_flags |= M_LOOP;
 	m->m_pkthdr.ph_ifidx = ifp->if_index;
 	m->m_pkthdr.ph_rtableid = ifp->if_rdomain;
 
