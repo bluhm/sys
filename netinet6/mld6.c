@@ -284,7 +284,7 @@ mld6_input(struct mbuf *m, int off)
 		 * ifp for this purpose, since ip6_mloopback pass the physical
 		 * interface to if_input_local().
 		 */
-		if (m->m_flags & M_LOOP) /* XXX: grotty flag, but efficient */
+		if (m->m_flags & M_LOOP)
 			break;
 
 		if (!IN6_IS_ADDR_MULTICAST(&mldh->mld_addr))
