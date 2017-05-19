@@ -174,6 +174,10 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 	KASSERT(*offp > 0);
 	m_adj(m, *offp);
 	*offp = 0;
+	ip = NULL;
+#ifdef INET6
+	ip6 = NULL;
+#endif
 
 	switch (proto) {
 	case IPPROTO_IPV4:
@@ -219,9 +223,6 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 	switch (proto) {
     	case IPPROTO_IPV4:
 		ip = mtod(m, struct ip *);
-#ifdef INET6
-		ip6 = NULL;
-#endif
 		itos = ip->ip_tos;
 		mode = m->m_flags & (M_AUTH|M_CONF) ?
 		    ECN_ALLOWED_IPSEC : ECN_ALLOWED;
@@ -242,7 +243,6 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 		break;
 #ifdef INET6
     	case IPPROTO_IPV6:
-		ip = NULL;
 		ip6 = mtod(m, struct ip6_hdr *);
 		itos = (ntohl(ip6->ip6_flow) >> 20) & 0xff;
 		if (!ip_ecn_egress(ECN_ALLOWED, &otos, &itos)) {
@@ -254,11 +254,6 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 		ip6->ip6_flow &= ~htonl(0xff << 20);
 		ip6->ip6_flow |= htonl((u_int32_t) itos << 20);
 		break;
-#endif
-	default:
-		ip = NULL;
-#ifdef INET6
-		ip6 = NULL;
 #endif
 	}
 
