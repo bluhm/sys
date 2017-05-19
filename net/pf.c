@@ -3644,6 +3644,7 @@ pf_test_rule(struct pf_pdesc *pd, struct pf_rule **rm, struct pf_state **sm,
 	ctx.rsm = rsm;
 	ctx.th = &pd->hdr.tcp;
 	ctx.act.rtableid = pd->rdomain;
+       ctx.tag = -1;
 	SLIST_INIT(&ctx.rules);
 
 	if (pd->dir == PF_IN && if_congested()) {
