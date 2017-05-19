@@ -231,6 +231,12 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 	switch (proto) {
     	case IPPROTO_IPV4:
 		ip = mtod(m, struct ip *);
+		hlen = ip->ip_hl << 2;
+		if (m->m_pkthdr.len < hlen) {
+			ipipstat_inc(ipips_hdrops);
+			m_freem(m);
+			return IPPROTO_DONE;
+		}
 		itos = ip->ip_tos;
 		mode = m->m_flags & (M_AUTH|M_CONF) ?
 		    ECN_ALLOWED_IPSEC : ECN_ALLOWED;
@@ -242,11 +248,8 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 		}
 		/* re-calculate the checksum if ip_tos was changed */
 		if (itos != ip->ip_tos) {
-			hlen = ip->ip_hl << 2;
-			if (m->m_pkthdr.len >= hlen) {
-				ip->ip_sum = 0;
-				ip->ip_sum = in_cksum(m, hlen);
-			}
+			ip->ip_sum = 0;
+			ip->ip_sum = in_cksum(m, hlen);
 		}
 		break;
 #ifdef INET6
