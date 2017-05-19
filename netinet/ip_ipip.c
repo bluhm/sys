@@ -120,7 +120,6 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
     struct ifnet *gifp)
 {
 	struct mbuf *m = *mp;
-	int iphlen = *offp;
 	struct sockaddr_in *sin;
 	struct ifnet *ifp;
 	struct niqueue *ifq = NULL;
@@ -308,7 +307,7 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 	}
 
 	/* Statistics */
-	ipipstat_add(ipips_ibytes, m->m_pkthdr.len - iphlen);
+	ipipstat_add(ipips_ibytes, m->m_pkthdr.len - hlen);
 
 	/*
 	 * Interface pointer stays the same; if no IPsec processing has
