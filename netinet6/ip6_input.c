@@ -552,8 +552,7 @@ ip6_local(struct mbuf *m, int off, int nxt)
 
 #ifdef IPSEC
 		if (ipsec_in_use) {
-			if (ipsec_local_check(m, off, nxt, AF_INET6)
-			    != 0) {
+			if (ipsec_local_check(m, off, nxt, AF_INET6) != 0) {
 				ipstat_inc(ip6s_cantforward);
 				m_freem(m);
 				return;
