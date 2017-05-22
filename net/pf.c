@@ -6115,10 +6115,15 @@ int
 pf_walk_header(struct pf_pdesc *pd, struct ip *h, u_short *reason)
 {
 	struct ip6_ext		 ext;
-	u_int32_t		 end;
+	u_int32_t		 hlen, end;
 
+	hlen = h->ip_hl << 2;
+	if (hlen < sizeof(struct ip) || hlen > ntohs(h->ip_len)) {
+		REASON_SET(reason, PFRES_SHORT);
+		return (PF_DROP);
+	}
 	end = pd->off + ntohs(h->ip_len);
-	pd->off += sizeof(struct ip);
+	pd->off += hlen;
 	pd->proto = h->ip_p;
 	for (;;) {
 		switch (pd->proto) {
