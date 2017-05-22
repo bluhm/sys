@@ -591,8 +591,10 @@ reflect:
 
 		icmpstat_inc(icps_reflect);
 		icmpstat_inc(icps_outhist + icp->icmp_type);
-		if (!icmp_reflect(m, &opts, NULL))
+		if (!icmp_reflect(m, &opts, NULL)) {
 			icmp_send(m, opts);
+			m_free(opts);
+		}
 		return IPPROTO_DONE;
 
 	case ICMP_REDIRECT:
