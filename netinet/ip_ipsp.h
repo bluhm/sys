@@ -552,6 +552,8 @@ int	ipsec_delete_policy(struct ipsec_policy *);
 ssize_t	ipsec_hdrsz(struct tdb *);
 void	ipsec_adjust_mtu(struct mbuf *, u_int32_t);
 struct	ipsec_acquire *ipsec_get_acquire(u_int32_t);
+int	ipsec_fwd_check(struct mbuf *, int, int);
+int	ipsec_ours_check(struct mbuf *, int, int, int);
 
 #endif /* _KERNEL */
 #endif /* _NETINET_IPSP_H_ */

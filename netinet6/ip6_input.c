@@ -475,7 +475,7 @@ ip6_input(struct mbuf *m)
 		int rv;
 
 		KERNEL_LOCK();
-		rv = ip_input_ipsec_fwd_check(m, off, AF_INET6);
+		rv = ipsec_fwd_check(m, off, AF_INET6);
 		KERNEL_UNLOCK();
 		if (rv != 0) {
 			ipstat_inc(ips_cantforward);
@@ -552,7 +552,7 @@ ip6_local(struct mbuf *m, int off, int nxt)
 
 #ifdef IPSEC
 		if (ipsec_in_use) {
-			if (ip_input_ipsec_ours_check(m, off, nxt, AF_INET6)
+			if (ipsec_ours_check(m, off, nxt, AF_INET6)
 			    != 0) {
 				ipstat_inc(ip6s_cantforward);
 				m_freem(m);
