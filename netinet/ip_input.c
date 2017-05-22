@@ -442,7 +442,7 @@ ipv4_input(struct mbuf *m)
 		int rv;
 
 		KERNEL_LOCK();
-		rv = ipsec_fwd_check(m, hlen, AF_INET);
+		rv = ipsec_forward_check(m, hlen, AF_INET);
 		KERNEL_UNLOCK();
 		if (rv != 0) {
 			ipstat_inc(ips_cantforward);
@@ -580,7 +580,7 @@ ip_local(struct mbuf *m, int off, int nxt)
 
 #ifdef IPSEC
 	if (ipsec_in_use) {
-		if (ipsec_ours_check(m, off, nxt, AF_INET) != 0) {
+		if (ipsec_local_check(m, off, nxt, AF_INET) != 0) {
 			ipstat_inc(ips_cantforward);
 			m_freem(m);
 			return;

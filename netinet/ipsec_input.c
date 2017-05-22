@@ -1015,7 +1015,7 @@ ipcomp6_input(struct mbuf **mp, int *offp, int proto, int af)
 #endif /* INET6 */
 
 int
-ipsec_fwd_check(struct mbuf *m, int hlen, int af)
+ipsec_forward_check(struct mbuf *m, int hlen, int af)
 {
 	struct tdb *tdb;
 	struct tdb_ident *tdbi;
@@ -1038,7 +1038,7 @@ ipsec_fwd_check(struct mbuf *m, int hlen, int af)
 }
 
 int
-ipsec_ours_check(struct mbuf *m, int hlen, int proto, int af)
+ipsec_local_check(struct mbuf *m, int hlen, int proto, int af)
 {
 	struct tdb *tdb;
 	struct tdb_ident *tdbi;
