@@ -735,6 +735,14 @@ ip_input_ipsec_ours_check(struct mbuf *m, int hlen, int proto, int af)
 		return 0;
 
 	/*
+	 * When processing IPv6 header chains, do not look at the
+	 * outer header.  The inner protocol is relevant and will
+	 * be checked by the local delivery loop later.
+	 */
+	if ((af == AF_INET6) && ((proto == IPPROTO_DSTOPTS) ||
+	    (proto == IPPROTO_ROUTING) || (proto == IPPROTO_FRAGMENT)))
+		return 0;
+	/*
 	 * If the protected packet is TCP or UDP, we'll do the
 	 * policy check in the respective input routine, so we can
 	 * check for bypass sockets.
