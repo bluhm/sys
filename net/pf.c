@@ -4988,9 +4988,10 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **state,
 			}
 
 			/* offset of protocol header that follows h2 */
-			pd2.off = ipoff2 + (h2.ip_hl << 2);
+			pd2.off = ipoff2;
+			if (pf_walk_header(&pd2, &h2, reason) != PF_PASS)
+				return (PF_DROP);
 
-			pd2.proto = h2.ip_p;
 			pd2.tot_len = ntohs(h2.ip_len);
 			pd2.src = (struct pf_addr *)&h2.ip_src;
 			pd2.dst = (struct pf_addr *)&h2.ip_dst;
