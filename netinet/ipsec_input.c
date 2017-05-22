@@ -587,8 +587,11 @@ ipsec_common_input_cb(struct mbuf *m, struct tdb *tdbp, int skip, int protoff)
 	 * same IP header twice.  Packets in transport mode have to be be
 	 * passed to pf explicitly.  In tunnel mode the inner IP header will
 	 * run through ip_input() and pf anyway.
+	 * For transport AH packets pf walks through the extension headers and 
+	 * finds the inner protocol.  So the packet has been checked at the
+	 * input interface already.
 	 */
-	if ((tdbp->tdb_flags & TDBF_TUNNELING) == 0) {
+	if ((tdbp->tdb_flags & TDBF_TUNNELING) == 0 && sproto != IPPROTO_AH) {
 		struct ifnet *ifp;
 
 		/* This is the enc0 interface unless for ipcomp. */
