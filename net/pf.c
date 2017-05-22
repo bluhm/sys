@@ -6368,21 +6368,18 @@ pf_setup_pdesc(struct pf_pdesc *pd, sa_family_t af, int dir,
 			return (PF_DROP);
 		}
 
-		pd->off = 0;
 		if (pf_walk_header(pd, h, reason) != PF_PASS)
 			return (PF_DROP);
 
 		pd->src = (struct pf_addr *)&h->ip_src;
 		pd->dst = (struct pf_addr *)&h->ip_dst;
-		pd->virtual_proto = pd->proto;
 		pd->tot_len = ntohs(h->ip_len);
 		pd->tos = h->ip_tos & ~IPTOS_ECN_MASK;
 		pd->ttl = h->ip_ttl;
 		if (h->ip_hl > 5)	/* has options */
 			pd->badopts++;
-
-		if (h->ip_off & htons(IP_MF | IP_OFFMASK))
-			pd->virtual_proto = PF_VPROTO_FRAGMENT;
+		pd->virtual_proto = (h->ip_off & htons(IP_MF | IP_OFFMASK)) ?
+		     PF_VPROTO_FRAGMENT : pd->proto;
 
 		break;
 	}
@@ -6403,7 +6400,6 @@ pf_setup_pdesc(struct pf_pdesc *pd, sa_family_t af, int dir,
 			return (PF_DROP);
 		}
 
-		pd->off = 0;
 		if (pf_walk_header6(pd, h, reason) != PF_PASS)
 			return (PF_DROP);
 
@@ -6420,13 +6416,11 @@ pf_setup_pdesc(struct pf_pdesc *pd, sa_family_t af, int dir,
 
 		pd->src = (struct pf_addr *)&h->ip6_src;
 		pd->dst = (struct pf_addr *)&h->ip6_dst;
-		pd->virtual_proto = pd->proto;
 		pd->tot_len = ntohs(h->ip6_plen) + sizeof(struct ip6_hdr);
 		pd->tos = (ntohl(h->ip6_flow) & 0x0fc00000) >> 20;
 		pd->ttl = h->ip6_hlim;
-
-		if (pd->fragoff != 0)
-			pd->virtual_proto = PF_VPROTO_FRAGMENT;
+		pd->virtual_proto = (pd->fragoff != 0) ?
+			PF_VPROTO_FRAGMENT : pd->proto;
 
 		break;
 	}
