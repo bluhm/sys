@@ -6363,18 +6363,18 @@ pf_setup_pdesc(struct pf_pdesc *pd, sa_family_t af, int dir,
 		}
 
 		h = mtod(pd->m, struct ip *);
-		pd->off = h->ip_hl << 2;
-
-		if (pd->off < sizeof(struct ip) ||
-		    pd->off > ntohs(h->ip_len) ||
-		    pd->m->m_pkthdr.len < ntohs(h->ip_len)) {
+		if (pd->m->m_pkthdr.len < ntohs(h->ip_len)) {
 			REASON_SET(reason, PFRES_SHORT);
 			return (PF_DROP);
 		}
 
+		pd->off = 0;
+		if (pf_walk_header(pd, h, reason) != PF_PASS)
+			return (PF_DROP);
+
 		pd->src = (struct pf_addr *)&h->ip_src;
 		pd->dst = (struct pf_addr *)&h->ip_dst;
-		pd->virtual_proto = pd->proto = h->ip_p;
+		pd->virtual_proto = pd->proto;
 		pd->tot_len = ntohs(h->ip_len);
 		pd->tos = h->ip_tos & ~IPTOS_ECN_MASK;
 		pd->ttl = h->ip_ttl;
@@ -6397,14 +6397,13 @@ pf_setup_pdesc(struct pf_pdesc *pd, sa_family_t af, int dir,
 		}
 
 		h = mtod(pd->m, struct ip6_hdr *);
-		pd->off = 0;
-
 		if (pd->m->m_pkthdr.len <
 		    sizeof(struct ip6_hdr) + ntohs(h->ip6_plen)) {
 			REASON_SET(reason, PFRES_SHORT);
 			return (PF_DROP);
 		}
 
+		pd->off = 0;
 		if (pf_walk_header6(pd, h, reason) != PF_PASS)
 			return (PF_DROP);
 
