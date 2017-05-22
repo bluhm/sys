@@ -742,6 +742,7 @@ ip_input_ipsec_ours_check(struct mbuf *m, int hlen, int proto, int af)
 	if ((af == AF_INET6) && ((proto == IPPROTO_DSTOPTS) ||
 	    (proto == IPPROTO_ROUTING) || (proto == IPPROTO_FRAGMENT)))
 		return 0;
+
 	/*
 	 * If the protected packet is TCP or UDP, we'll do the
 	 * policy check in the respective input routine, so we can
