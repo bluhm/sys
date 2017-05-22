@@ -222,6 +222,8 @@ u_int16_t		 pf_calc_mss(struct pf_addr *, sa_family_t, int,
 static __inline int	 pf_set_rt_ifp(struct pf_state *, struct pf_addr *,
 			    sa_family_t);
 struct pf_divert	*pf_get_divert(struct mbuf *);
+int			 pf_walk_header(struct pf_pdesc *, struct ip *,
+			    u_short *);
 int			 pf_walk_option6(struct pf_pdesc *, struct ip6_hdr *,
 			    int, int, u_short *);
 int			 pf_walk_header6(struct pf_pdesc *, struct ip6_hdr *,
@@ -6107,6 +6109,36 @@ pf_get_divert(struct mbuf *m)
 	}
 
 	return ((struct pf_divert *)(mtag + 1));
+}
+
+int
+pf_walk_header(struct pf_pdesc *pd, struct ip *h, u_short *reason)
+{
+	struct ip6_ext		 ext;
+	u_int32_t		 end;
+
+	end = pd->off + ntohs(h->ip_len);
+	pd->off += sizeof(struct ip);
+	pd->proto = h->ip_p;
+	for (;;) {
+		switch (pd->proto) {
+		case IPPROTO_AH:
+			/* fragments may be short */
+			if ((h->ip_off & htons(IP_MF | IP_OFFMASK)) == 0 &&
+			    end < pd->off + sizeof(ext))
+				return (PF_PASS);
+			if (!pf_pull_hdr(pd->m, pd->off, &ext, sizeof(ext),
+			    NULL, reason, AF_INET)) {
+				DPFPRINTF(LOG_NOTICE, "IP short exthdr");
+				return (PF_DROP);
+			}
+			pd->off += (ext.ip6e_len + 2) * 4;
+			pd->proto = ext.ip6e_nxt;
+			break;
+		default:
+			return (PF_PASS);
+		}
+	}
 }
 
 #ifdef INET6
