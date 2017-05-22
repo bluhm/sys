@@ -731,7 +731,7 @@ ip_input_ipsec_ours_check(struct mbuf *m, int hlen, int proto, int af)
 	 * the packet header (the encapsulation routines know how
 	 * to deal with that).
 	 */
-	if ((proto == IPPROTO_IPIP) || (proto == IPPROTO_IPV6))
+	if ((proto == IPPROTO_IPV4) || (proto == IPPROTO_IPV6))
 		return 0;
 
 	/*
