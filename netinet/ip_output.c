@@ -559,30 +559,35 @@ int
 ip_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct ifnet *ifp,
     struct route *ro)
 {
-#if NPF > 0
-	struct ifnet *encif;
-#endif
 	struct ip *ip;
 
 #if NPF > 0
 	/*
-	 * Packet filter
+	 * For transport AH packets pf walks through the extension headers and 
+	 * finds the inner protocol.  So the packet will checked at the output 
+	 * interface already.
 	 */
-	if ((encif = enc_getif(tdb->tdb_rdomain, tdb->tdb_tap)) == NULL ||
-	    pf_test(AF_INET, PF_OUT, encif, &m) != PF_PASS) {
-		m_freem(m);
-		return EACCES;
+	if ((tdb->tdb_flags & TDBF_TUNNELING) != 0 ||
+	    tdb->tdb_sproto != IPPROTO_AH) {
+		struct ifnet *encif;
+
+		encif = enc_getif(tdb->tdb_rdomain, tdb->tdb_tap);
+		if (encif == NULL ||
+		    pf_test(AF_INET, PF_OUT, encif, &m) != PF_PASS) {
+			m_freem(m);
+			return EACCES;
+		}
+		if (m == NULL)
+			return 0;
+		/*
+		 * PF_TAG_REROUTE handling or not...
+		 * Packet is entering IPsec so the routing is
+		 * already overruled by the IPsec policy.
+		 * Until now the change was not reconsidered.
+		 * What's the behaviour?
+		 */
+		in_proto_cksum_out(m, encif);
 	}
-	if (m == NULL)
-		return 0;
-	/*
-	 * PF_TAG_REROUTE handling or not...
-	 * Packet is entering IPsec so the routing is
-	 * already overruled by the IPsec policy.
-	 * Until now the change was not reconsidered.
-	 * What's the behaviour?
-	 */
-	in_proto_cksum_out(m, encif);
 #endif
 
 	/* Check if we are allowed to fragment */
