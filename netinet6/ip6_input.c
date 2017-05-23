@@ -191,7 +191,6 @@ ip6_input(struct mbuf **mp, int *offp, int nxt, int af)
 	int srcrt = 0;
 
 	KASSERT(*offp == 0);
-	KASSERT(nxt == IPPROTO_IPV6);
 
 	ifp = if_get(m->m_pkthdr.ph_ifidx);
 	if (ifp == NULL)
