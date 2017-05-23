@@ -2783,9 +2783,9 @@ ip6_output_ipsec_send(struct tdb *tdb, struct mbuf *m, int tunalready, int fwd)
 		 * Until now the change was not reconsidered.
 		 * What's the behaviour?
 		 */
-		in6_proto_cksum_out(m, encif);
 	}
 #endif
+	in6_proto_cksum_out(m, NULL);
 	m->m_flags &= ~(M_BCAST | M_MCAST);	/* just in case */
 
 	/* Callee frees mbuf */
