@@ -6126,11 +6126,14 @@ pf_walk_header(struct pf_pdesc *pd, struct ip *h, u_short *reason)
 	end = pd->off + ntohs(h->ip_len);
 	pd->off += hlen;
 	pd->proto = h->ip_p;
+	/* stop walking over non initial fragments */
+	if ((h->ip_off & htons(IP_OFFMASK)) != 0)
+		return (PF_PASS);
 	for (;;) {
 		switch (pd->proto) {
 		case IPPROTO_AH:
 			/* fragments may be short */
-			if ((h->ip_off & htons(IP_MF | IP_OFFMASK)) == 0 &&
+			if ((h->ip_off & htons(IP_MF | IP_OFFMASK)) != 0 &&
 			    end < pd->off + sizeof(ext))
 				return (PF_PASS);
 			if (!pf_pull_hdr(pd->m, pd->off, &ext, sizeof(ext),
