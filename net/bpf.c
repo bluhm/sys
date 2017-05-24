@@ -1824,6 +1824,7 @@ u_int32_t
 bpf_mbuf_ldb(const void *m0, u_int32_t k, int *err)
 {
 	const struct mbuf *m = m0;
+	u_int8_t v;
 
 	while (k >= m->m_len) {
 		k -= m->m_len;
@@ -1834,9 +1835,10 @@ bpf_mbuf_ldb(const void *m0, u_int32_t k, int *err)
 			return (0);
 		}
 	}
+	v = m->m_data[k];
 
 	*err = 0;
-	return (m->m_data[k]);
+	return v;
 }
 
 u_int
