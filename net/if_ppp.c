@@ -128,6 +128,7 @@
 
 #include <netinet/in.h>
 #include <netinet/ip.h>
+#include <netinet/ip_var.h>
 
 #include "bpfilter.h"
 
@@ -1396,10 +1397,8 @@ ppp_inproc(struct ppp_softc *sc, struct mbuf *m)
 		m->m_data += PPP_HDRLEN;
 		m->m_len -= PPP_HDRLEN;
 
-		if (niq_enqueue(&ipintrq, m) != 0)
-			rv = 0; /* failure */
-		else
-			rv = 1; /* ipintrq success */
+		ipv4_input(ifp, m);
+		rv = 1;
 		break;
 
 	default:

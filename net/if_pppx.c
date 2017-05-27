@@ -317,7 +317,6 @@ pppxwrite(dev_t dev, struct uio *uio, int ioflag)
 	struct pppx_if	*pxi;
 	uint32_t proto;
 	struct mbuf *top, **mp, *m;
-	struct niqueue *ifq;
 	int tlen;
 	int error = 0;
 	size_t mlen;
@@ -401,20 +400,18 @@ pppxwrite(dev_t dev, struct uio *uio, int ioflag)
 
 	switch (proto) {
 	case AF_INET:
-		ifq = &ipintrq;
+		ipv4_input(&pxi->pxi_if, m);
 		break;
 #ifdef INET6
 	case AF_INET6:
-		ifq = &ip6intrq;
+		if (niq_enqueue(&ip6intrq, top) != 0)
+			return (ENOBUFS);
 		break;
 #endif
 	default:
 		m_freem(top);
 		return (EAFNOSUPPORT);
 	}
-
-	if (niq_enqueue(ifq, top) != 0)
-		return (ENOBUFS);
 
 	return (error);
 }
