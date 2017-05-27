@@ -387,7 +387,7 @@ ip6_input(struct mbuf *m)
 				ip6stat_inc(ip6s_cantforward);
 				m_freem(m);
 			} else if (ours) {
-				ip6_local(m, off, nxt);
+				ip6_deliver(m, off, nxt);
 			} else {
 				m_freem(m);
 			}
@@ -465,7 +465,7 @@ ip6_input(struct mbuf *m)
 
 	if (ours) {
 		KERNEL_LOCK();
-		ip6_local(m, off, nxt);
+		ip6_deliver(m, off, nxt);
 		KERNEL_UNLOCK();
 		goto out;
 	}
@@ -506,11 +506,11 @@ ip6_ours(struct mbuf *m)
 	if (ip6_hbhchcheck(m, &off, &nxt, NULL))
 		return;
 
-	ip6_local(m, off, nxt);
+	ip6_deliver(m, off, nxt);
 }
 
 void
-ip6_local(struct mbuf *m, int off, int nxt)
+ip6_deliver(struct mbuf *m, int off, int nxt)
 {
 	int nest = 0;
 
