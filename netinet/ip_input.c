@@ -127,7 +127,7 @@ int ip_sysctl_ipstat(void *, size_t *, void *);
 static struct mbuf_queue	ipsend_mq;
 
 void	ip_ours(struct mbuf *);
-void	ip_reassemble(struct mbuf *);
+void	ip_local(struct mbuf *);
 int	ip_dooptions(struct mbuf *, struct ifnet *);
 int	in_ouraddr(struct mbuf *, struct ifnet *, struct rtentry **);
 
@@ -222,7 +222,7 @@ ipintr(void)
 		if ((m->m_flags & M_PKTHDR) == 0)
 			panic("ipintr no HDR");
 #endif
-		ip_reassemble(m);
+		ip_local(m);
 	}
 }
 
@@ -471,7 +471,7 @@ out:
  * If fragmented try to reassemble.  Pass to next level.
  */
 void
-ip_reassemble(struct mbuf *m)
+ip_local(struct mbuf *m)
 {
 	struct ip *ip = mtod(m, struct ip *);
 	struct ipq *fp;
