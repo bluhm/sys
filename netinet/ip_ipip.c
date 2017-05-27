@@ -122,7 +122,6 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 	struct mbuf *m = *mp;
 	struct sockaddr_in *sin;
 	struct ifnet *ifp;
-	struct niqueue *ifq = NULL;
 	struct ip *ip;
 #ifdef INET6
 	struct sockaddr_in6 *sin6;
@@ -222,6 +221,7 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 	/* Some sanity checks in the inner IP header */
 	switch (proto) {
     	case IPPROTO_IPV4:
+		iaf = AF_INET;
 		ip = mtod(m, struct ip *);
 		hlen = ip->ip_hl << 2;
 		if (m->m_pkthdr.len < hlen) {
@@ -246,6 +246,7 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 		break;
 #ifdef INET6
     	case IPPROTO_IPV6:
+		iaf = AF_INET6;
 		ip6 = mtod(m, struct ip6_hdr *);
 		itos = (ntohl(ip6->ip6_flow) >> 20) & 0xff;
 		if (!ip_ecn_egress(ECN_ALLOWED, &otos, &itos)) {
@@ -299,6 +300,14 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 	/* Statistics */
 	ipipstat_add(ipips_ibytes, m->m_pkthdr.len - hlen);
 
+#if NBPFILTER > 0
+	if (gifp && gifp->if_bpf)
+		bpf_mtap_af(gifp->if_bpf, iaf, m, BPF_DIRECTION_IN);
+#endif
+#if NPF > 0
+	pf_pkt_addr_changed(m);
+#endif
+
 	/*
 	 * Interface pointer stays the same; if no IPsec processing has
 	 * been done (or will be done), this will point to a normal
@@ -309,32 +318,21 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 
 	switch (proto) {
 	case IPPROTO_IPV4:
-		ifq = &ipintrq;
-		iaf = AF_INET;
+		ipv4_input(ifp, m);
 		break;
 #ifdef INET6
 	case IPPROTO_IPV6:
-		ifq = &ip6intrq;
-		iaf = AF_INET6;
+		if (niq_enqueue(&ip6intrq, m) != 0) {
+			ipipstat_inc(ipips_qfull);
+			DPRINTF(("%s: packet dropped because of full queue\n",
+			    __func__));
+		}
 		break;
 #endif
 	default:
 		panic("%s: should never reach here", __func__);
 	}
 
-#if NBPFILTER > 0
-	if (gifp && gifp->if_bpf)
-		bpf_mtap_af(gifp->if_bpf, iaf, m, BPF_DIRECTION_IN);
-#endif
-#if NPF > 0
-	pf_pkt_addr_changed(m);
-#endif
-
-	if (niq_enqueue(ifq, m) != 0) {
-		ipipstat_inc(ipips_qfull);
-		DPRINTF(("%s: packet dropped because of full queue\n",
-		    __func__));
-	}
 	return IPPROTO_DONE;
 }
 

@@ -41,6 +41,7 @@
 #include <netinet/in.h>
 #include <netinet/in_var.h>
 #include <netinet/ip.h>
+#include <netinet/ip_var.h>
 
 #include <machine/bus.h>
 
@@ -768,7 +769,6 @@ umb_output(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst,
 int
 umb_input(struct ifnet *ifp, struct mbuf *m, void *cookie)
 {
-	struct niqueue *inq;
 	uint8_t ipv;
 
 	if ((ifp->if_flags & IFF_UP) == 0) {
@@ -789,11 +789,11 @@ umb_input(struct ifnet *ifp, struct mbuf *m, void *cookie)
 	ifp->if_ibytes += m->m_pkthdr.len;
 	switch (ipv) {
 	case 4:
-		inq = &ipintrq;
-		break;
+		ipv4_input(ifp, m);
+		return 1;
 #ifdef INET6
 	case 6:
-		inq = &ip6intrq;
+		niq_enqueue(&ip6intrq, m);
 		break;
 #endif /* INET6 */
 	default:
@@ -803,7 +803,6 @@ umb_input(struct ifnet *ifp, struct mbuf *m, void *cookie)
 		m_freem(m);
 		return 1;
 	}
-	niq_enqueue(inq, m);
 	return 1;
 }
 
