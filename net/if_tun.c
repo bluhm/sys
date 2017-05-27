@@ -63,6 +63,7 @@
 #include <net/rtable.h>
 
 #include <netinet/in.h>
+#include <netinet/ip_var.h>
 #include <netinet/if_ether.h>
 
 #ifdef PIPEX
@@ -835,7 +836,6 @@ int
 tun_dev_write(struct tun_softc *tp, struct uio *uio, int ioflag)
 {
 	struct ifnet		*ifp;
-	struct niqueue		*ifq;
 	u_int32_t		*th;
 	struct mbuf		*top, **mp, *m;
 	int			error = 0, tlen;
@@ -928,27 +928,25 @@ tun_dev_write(struct tun_softc *tp, struct uio *uio, int ioflag)
 	top->m_pkthdr.ph_rtableid = ifp->if_rdomain;
 	top->m_pkthdr.ph_ifidx = ifp->if_index;
 
+	ifp->if_ipackets++;
+	ifp->if_ibytes += top->m_pkthdr.len;
+
 	switch (ntohl(*th)) {
 	case AF_INET:
-		ifq = &ipintrq;
+		ipv4_input(ifp, top);
 		break;
 #ifdef INET6
 	case AF_INET6:
-		ifq = &ip6intrq;
+		if (niq_enqueue(&ip6intrq, top) != 0) {
+			ifp->if_collisions++;
+			return (ENOBUFS);
+		}
 		break;
 #endif
 	default:
 		m_freem(top);
 		return (EAFNOSUPPORT);
 	}
-
-	if (niq_enqueue(ifq, top) != 0) {
-		ifp->if_collisions++;
-		return (ENOBUFS);
-	}
-
-	ifp->if_ipackets++;
-	ifp->if_ibytes += top->m_pkthdr.len;
 
 	return (error);
 }
