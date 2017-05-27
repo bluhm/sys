@@ -1,4 +1,4 @@
-/*	$OpenBSD: cpufunc.h,v 1.16 2017/05/25 03:54:10 visa Exp $	*/
+/*	$OpenBSD: cpufunc.h,v 1.18 2017/05/27 12:21:50 tedu Exp $	*/
 /*	$NetBSD: cpufunc.h,v 1.3 2003/05/08 10:27:43 fvdl Exp $	*/
 
 /*-
@@ -145,37 +145,6 @@ tlbflush(void)
 	u_int64_t val;
 	__asm volatile("movq %%cr3,%0" : "=r" (val));
 	__asm volatile("movq %0,%%cr3" : : "r" (val));
-}
-
-static __inline void
-tlbflushg(void)
-{
-	/*
-	 * Big hammer: flush all TLB entries, including ones from PTE's
-	 * with the G bit set.  This should only be necessary if TLB
-	 * shootdown falls far behind.
-	 *
-	 * Intel Architecture Software Developer's Manual, Volume 3,
-	 *	System Programming, section 9.10, "Invalidating the
-	 * Translation Lookaside Buffers (TLBS)":
-	 * "The following operations invalidate all TLB entries, irrespective
-	 * of the setting of the G flag:
-	 * ...
-	 * "(P6 family processors only): Writing to control register CR4 to
-	 * modify the PSE, PGE, or PAE flag."
-	 *
-	 * (the alternatives not quoted above are not an option here.)
-	 *
-	 * If PGE is not in use, we reload CR3 for the benefit of
-	 * pre-P6-family processors.
-	 */
-
-	if (cpu_feature & CPUID_PGE) {
-		u_int cr4 = rcr4();
-		lcr4(cr4 & ~CR4_PGE);
-		lcr4(cr4);
-	} else
-		tlbflush();
 }
 
 #ifdef notyet
