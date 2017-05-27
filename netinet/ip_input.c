@@ -127,6 +127,7 @@ int ip_sysctl_ipstat(void *, size_t *, void *);
 static struct mbuf_queue	ipsend_mq;
 
 void	ip_ours(struct mbuf *);
+void	ip_reassemble(struct mbuf *);
 int	ip_dooptions(struct mbuf *, struct ifnet *);
 int	in_ouraddr(struct mbuf *, struct ifnet *, struct rtentry **);
 
@@ -221,8 +222,14 @@ ipintr(void)
 		if ((m->m_flags & M_PKTHDR) == 0)
 			panic("ipintr no HDR");
 #endif
-		ipv4_input(m);
+		ip_reassemble(m);
 	}
+}
+
+void
+ip_ours(struct mbuf *m)
+{
+	niq_enqueue(&ipintrq, m);
 }
 
 /*
@@ -231,17 +238,12 @@ ipintr(void)
  * Checksum and byte swap header.  Process options. Forward or deliver.
  */
 void
-ipv4_input(struct mbuf *m)
+ipv4_input(struct ifnet *ifp, struct mbuf *m)
 {
-	struct ifnet	*ifp;
 	struct rtentry	*rt = NULL;
 	struct ip	*ip;
 	int hlen, len;
 	in_addr_t pfrdr = 0;
-
-	ifp = if_get(m->m_pkthdr.ph_ifidx);
-	if (ifp == NULL)
-		goto bad;
 
 	ipstat_inc(ips_total);
 	if (m->m_len < sizeof (struct ip) &&
@@ -456,13 +458,11 @@ ipv4_input(struct mbuf *m)
 #endif /* IPSEC */
 
 	ip_forward(m, ifp, rt, pfrdr);
-	if_put(ifp);
 	return;
 bad:
 	m_freem(m);
 out:
 	rtfree(rt);
-	if_put(ifp);
 }
 
 /*
@@ -471,7 +471,7 @@ out:
  * If fragmented try to reassemble.  Pass to next level.
  */
 void
-ip_ours(struct mbuf *m)
+ip_reassemble(struct mbuf *m)
 {
 	struct ip *ip = mtod(m, struct ip *);
 	struct ipq *fp;
