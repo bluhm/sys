@@ -564,14 +564,14 @@ found:
 				ip_freef(fp);
 	}
 
-	ip_local(m, hlen, ip->ip_p);
+	ip_deliver(m, hlen, ip->ip_p);
 	return;
 bad:
 	m_freem(m);
 }
 
 void
-ip_local(struct mbuf *m, int off, int nxt)
+ip_deliver(struct mbuf *m, int off, int nxt)
 {
 	KERNEL_ASSERT_LOCKED();
 
