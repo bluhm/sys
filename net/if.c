@@ -96,6 +96,7 @@
 #include <net/netisr.h>
 
 #include <netinet/in.h>
+#include <netinet/ip_var.h>
 #include <netinet/if_ether.h>
 #include <netinet/igmp.h>
 #ifdef MROUTING
@@ -734,8 +735,6 @@ if_input(struct ifnet *ifp, struct mbuf_list *ml)
 int
 if_input_local(struct ifnet *ifp, struct mbuf *m, sa_family_t af)
 {
-	struct niqueue *ifq = NULL;
-
 #if NBPFILTER > 0
 	/*
 	 * Only send packets to bpf if they are destinated to local
@@ -758,33 +757,29 @@ if_input_local(struct ifnet *ifp, struct mbuf *m, sa_family_t af)
 	ifp->if_opackets++;
 	ifp->if_obytes += m->m_pkthdr.len;
 
+	ifp->if_ipackets++;
+	ifp->if_ibytes += m->m_pkthdr.len;
+
 	switch (af) {
 	case AF_INET:
-		ifq = &ipintrq;
-		break;
+		ipv4_input(ifp, m);
+		return (0);
 #ifdef INET6
 	case AF_INET6:
-		ifq = &ip6intrq;
+		if (niq_enqueue(&ip6intrq, m) != 0)
+			return (ENOBUFS);
 		break;
 #endif /* INET6 */
 #ifdef MPLS
 	case AF_MPLS:
-		ifp->if_ipackets++;
-		ifp->if_ibytes += m->m_pkthdr.len;
 		mpls_input(m);
-		return (0);
+		break;
 #endif /* MPLS */
 	default:
 		printf("%s: can't handle af%d\n", ifp->if_xname, af);
 		m_freem(m);
 		return (EAFNOSUPPORT);
 	}
-
-	if (niq_enqueue(ifq, m) != 0)
-		return (ENOBUFS);
-
-	ifp->if_ipackets++;
-	ifp->if_ibytes += m->m_pkthdr.len;
 
 	return (0);
 }
@@ -881,7 +876,7 @@ if_input_process(void *xifidx)
 	struct ifnet *ifp;
 	struct ifih *ifih;
 	struct srp_ref sr;
-	int s;
+	int s, s2;
 
 	ifp = if_get(ifidx);
 	if (ifp == NULL)
@@ -894,6 +889,7 @@ if_input_process(void *xifidx)
 	if (!ISSET(ifp->if_xflags, IFXF_CLONED))
 		add_net_randomness(ml_len(&ml));
 
+	NET_LOCK(s2);
 	s = splnet();
 	while ((m = ml_dequeue(&ml)) != NULL) {
 		/*
@@ -910,6 +906,7 @@ if_input_process(void *xifidx)
 			m_freem(m);
 	}
 	splx(s);
+	NET_UNLOCK(s2);
 
 out:
 	if_put(ifp);
