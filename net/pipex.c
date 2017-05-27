@@ -1096,20 +1096,15 @@ pipex_ip_input(struct mbuf *m0, struct pipex_session *session)
 		bpf_mtap_af(ifp->if_bpf, AF_INET, m0, BPF_DIRECTION_IN);
 #endif
 
-	if (niq_enqueue(&ipintrq, m0) != 0) {
-		ifp->if_collisions++;
-		goto dropped;
-	}
-
 	ifp->if_ipackets++;
 	ifp->if_ibytes += len;
 	session->stat.ipackets++;
 	session->stat.ibytes += len;
+	ipv4_input(ifp, m0);
 
 	return;
 drop:
 	m_freem(m0);
-dropped:
 	session->stat.ierrors++;
 }
 

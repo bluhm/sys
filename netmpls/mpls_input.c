@@ -121,7 +121,13 @@ mpls_input(struct mbuf *m)
 do_v4:
 				if (mpls_ip_adjttl(m, ttl))
 					return;
-				niq_enqueue(&ipintrq, m);
+				ifp = if_get(m->m_pkthdr.ph_ifidx);
+				if (ifp == NULL) {
+					m_freem(m);
+					return;
+				}
+				ipv4_input(ifp, m);
+				if_put(ifp);
 				return;
 #ifdef INET6
 			case MPLS_LABEL_IPV6NULL:

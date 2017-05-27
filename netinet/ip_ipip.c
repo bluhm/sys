@@ -122,7 +122,6 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 	struct mbuf *m = *mp;
 	struct sockaddr_in *sin;
 	struct ifnet *ifp;
-	struct niqueue *ifq = NULL;
 	struct ip *ip;
 #ifdef INET6
 	struct sockaddr_in6 *sin6;
@@ -319,22 +318,21 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 
 	switch (proto) {
 	case IPPROTO_IPV4:
-		ifq = &ipintrq;
+		ipv4_input(ifp, m);
 		break;
 #ifdef INET6
 	case IPPROTO_IPV6:
-		ifq = &ip6intrq;
+		if (niq_enqueue(&ip6intrq, m) != 0) {
+			ipipstat_inc(ipips_qfull);
+			DPRINTF(("%s: packet dropped because of full queue\n",
+			    __func__));
+		}
 		break;
 #endif
 	default:
 		panic("%s: should never reach here", __func__);
 	}
 
-	if (niq_enqueue(ifq, m) != 0) {
-		ipipstat_inc(ipips_qfull);
-		DPRINTF(("%s: packet dropped because of full queue\n",
-		    __func__));
-	}
 	return IPPROTO_DONE;
 }
 
