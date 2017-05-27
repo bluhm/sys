@@ -96,6 +96,7 @@ didn't get a copy, you may request one from <license@ipv6.nrl.navy.mil>.
 #include <net/if_types.h>
 
 #include <netinet/in.h>
+#include <netinet/ip_var.h>
 #include <netinet/if_ether.h>
 #include <netinet/ip_ipsp.h>
 
@@ -374,8 +375,8 @@ ether_input(struct ifnet *ifp, struct mbuf *m, void *cookie)
 decapsulate:
 	switch (etype) {
 	case ETHERTYPE_IP:
-		inq = &ipintrq;
-		break;
+		ipv4_input(ifp, m);
+		return (1);
 
 	case ETHERTYPE_ARP:
 		if (ifp->if_flags & IFF_NOARP)

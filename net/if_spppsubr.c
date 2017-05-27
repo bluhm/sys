@@ -58,8 +58,7 @@
 #include <netinet/in.h>
 #include <netinet/in_var.h>
 #include <netinet/ip.h>
-#include <netinet/tcp.h>
-#include <netinet/if_ether.h>
+#include <netinet/ip_var.h>
 
 #ifdef INET6
 #include <netinet6/in6_ifattach.h>
@@ -503,8 +502,11 @@ sppp_input(struct ifnet *ifp, struct mbuf *m)
 			return;
 		case PPP_IP:
 			if (sp->state[IDX_IPCP] == STATE_OPENED) {
-				inq = &ipintrq;
 				sp->pp_last_activity = tv.tv_sec;
+				if (ifp->if_flags & IFF_UP) {
+					ipv4_input(ifp, m);
+					return;
+				}
 			}
 			break;
 #ifdef INET6
