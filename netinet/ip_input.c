@@ -592,7 +592,8 @@ ip_deliver(struct mbuf **mp, int *offp, int nxt, int af)
 	 * Switch out to protocol's input routine.
 	 */
 	ipstat_inc(ips_delivered);
-	(*inetsw[ip_protox[nxt]].pr_input)(mp, offp, nxt, af);
+	nxt = (*inetsw[ip_protox[nxt]].pr_input)(mp, offp, nxt, af);
+	KASSERT(nxt == IPPROTO_DONE);
 	return;
  bad:
 	m_freem(*mp);
