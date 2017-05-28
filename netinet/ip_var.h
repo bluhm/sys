@@ -249,7 +249,7 @@ void	 ip_savecontrol(struct inpcb *, struct mbuf **, struct ip *,
 	    struct mbuf *);
 void	 ipintr(void);
 void	 ipv4_input(struct mbuf *);
-void	 ip_deliver(struct mbuf *, int, int);
+void	 ip_deliver(struct mbuf *, int *, int *);
 void	 ip_forward(struct mbuf *, struct ifnet *, struct rtentry *, int);
 int	 rip_ctloutput(int, struct socket *, int, int, struct mbuf *);
 void	 rip_init(void);

@@ -476,7 +476,7 @@ ip_ours(struct mbuf *m)
 	struct ip *ip = mtod(m, struct ip *);
 	struct ipq *fp;
 	struct ipqent *ipqe;
-	int mff, hlen;
+	int mff, hlen, nxt;
 
 	hlen = ip->ip_hl << 2;
 
@@ -564,14 +564,15 @@ found:
 				ip_freef(fp);
 	}
 
-	ip_deliver(m, hlen, ip->ip_p);
+	nxt = ip->ip_p;
+	ip_deliver(m, &hlen, &nxt);
 	return;
 bad:
 	m_freem(m);
 }
 
 void
-ip_deliver(struct mbuf *m, int off, int nxt)
+ip_deliver(struct mbuf *m, int *offp, int *nxtp)
 {
 	KERNEL_ASSERT_LOCKED();
 
@@ -580,10 +581,9 @@ ip_deliver(struct mbuf *m, int off, int nxt)
 
 #ifdef IPSEC
 	if (ipsec_in_use) {
-		if (ipsec_local_check(m, off, nxt, AF_INET) != 0) {
+		if (ipsec_local_check(m, *offp, *nxtp, AF_INET) != 0) {
 			ipstat_inc(ips_cantforward);
-			m_freem(m);
-			return;
+			goto bad;
 		}
 	}
 	/* Otherwise, just fall through and deliver the packet */
@@ -593,7 +593,11 @@ ip_deliver(struct mbuf *m, int off, int nxt)
 	 * Switch out to protocol's input routine.
 	 */
 	ipstat_inc(ips_delivered);
-	(*inetsw[ip_protox[nxt]].pr_input)(&m, &off, nxt, AF_INET);
+	*nxtp = (*inetsw[ip_protox[*nxtp]].pr_input)(&m, offp, *nxtp, AF_INET);
+	return;
+ bad:
+	m_freem(m);
+	*nxtp = IPPROTO_DONE;
 }
 
 int
