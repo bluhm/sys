@@ -387,7 +387,7 @@ ip6_input(struct mbuf *m)
 				ip6stat_inc(ip6s_cantforward);
 				m_freem(m);
 			} else if (ours) {
-				ip6_deliver(m, &off, &nxt);
+				ip6_deliver(&m, &off, &nxt);
 			} else {
 				m_freem(m);
 			}
@@ -465,7 +465,7 @@ ip6_input(struct mbuf *m)
 
 	if (ours) {
 		KERNEL_LOCK();
-		ip6_deliver(m, &off, &nxt);
+		ip6_deliver(&m, &off, &nxt);
 		KERNEL_UNLOCK();
 		goto out;
 	}
@@ -506,18 +506,18 @@ ip6_ours(struct mbuf *m)
 	if (ip6_hbhchcheck(m, &off, &nxt, NULL))
 		return;
 
-	ip6_deliver(m, &off, &nxt);
+	ip6_deliver(&m, &off, &nxt);
 }
 
 void
-ip6_deliver(struct mbuf *m, int *offp, int *nxtp)
+ip6_deliver(struct mbuf **mp, int *offp, int *nxtp)
 {
 	int nest = 0;
 
 	KERNEL_ASSERT_LOCKED();
 
 	/* pf might have changed things */
-	in6_proto_cksum_out(m, NULL);
+	in6_proto_cksum_out(*mp, NULL);
 
 	/*
 	 * Tell launch routine the next header
@@ -534,25 +534,25 @@ ip6_deliver(struct mbuf *m, int *offp, int *nxtp)
 		 * protection against faulty packet - there should be
 		 * more sanity checks in header chain processing.
 		 */
-		if (m->m_pkthdr.len < *offp) {
+		if ((*mp)->m_pkthdr.len < *offp) {
 			ip6stat_inc(ip6s_tooshort);
 			goto bad;
 		}
 
 		/* draft-itojun-ipv6-tcp-to-anycast */
-		if (ISSET(m->m_flags, M_ACAST) && (*nxtp == IPPROTO_TCP)) {
-			if (m->m_len >= sizeof(struct ip6_hdr)) {
-				icmp6_error(m, ICMP6_DST_UNREACH,
+		if (ISSET((*mp)->m_flags, M_ACAST) && (*nxtp == IPPROTO_TCP)) {
+			if ((*mp)->m_len >= sizeof(struct ip6_hdr)) {
+				icmp6_error(*mp, ICMP6_DST_UNREACH,
 					ICMP6_DST_UNREACH_ADDR,
 					offsetof(struct ip6_hdr, ip6_dst));
-				m = NULL;
+				*mp = NULL;
 			}
 			goto bad;
 		}
 
 #ifdef IPSEC
 		if (ipsec_in_use) {
-			if (ipsec_local_check(m, *offp, *nxtp, AF_INET6) != 0) {
+			if (ipsec_local_check(*mp, *offp, *nxtp, AF_INET6) != 0) {
 				ip6stat_inc(ip6s_cantforward);
 				goto bad;
 			}
@@ -560,12 +560,12 @@ ip6_deliver(struct mbuf *m, int *offp, int *nxtp)
 		/* Otherwise, just fall through and deliver the packet */
 #endif /* IPSEC */
 
-		*nxtp = (*inet6sw[ip6_protox[*nxtp]].pr_input)(&m, offp, *nxtp,
+		*nxtp = (*inet6sw[ip6_protox[*nxtp]].pr_input)(mp, offp, *nxtp,
 		    AF_INET6);
 	}
 	return;
  bad:
-	m_freem(m);
+	m_freem(*mp);
 	*nxtp = IPPROTO_DONE;
 }
 

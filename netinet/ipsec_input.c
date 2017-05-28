@@ -611,11 +611,11 @@ ipsec_common_input_cb(struct mbuf *m, struct tdb *tdbp, int skip, int protoff)
 	nxt = prot;
 	switch (af) {
 	case AF_INET:
-		ip_deliver(m, &skip, &nxt);
+		ip_deliver(&m, &skip, &nxt);
 		return;
 #ifdef INET6
 	case AF_INET6:
-		ip6_deliver(m, &skip, &nxt);
+		ip6_deliver(&m, &skip, &nxt);
 		return;
 #endif /* INET6 */
 	default:

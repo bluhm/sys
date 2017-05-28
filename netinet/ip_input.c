@@ -565,23 +565,23 @@ found:
 	}
 
 	nxt = ip->ip_p;
-	ip_deliver(m, &hlen, &nxt);
+	ip_deliver(&m, &hlen, &nxt);
 	return;
 bad:
 	m_freem(m);
 }
 
 void
-ip_deliver(struct mbuf *m, int *offp, int *nxtp)
+ip_deliver(struct mbuf **mp, int *offp, int *nxtp)
 {
 	KERNEL_ASSERT_LOCKED();
 
 	/* pf might have modified stuff, might have to chksum */
-	in_proto_cksum_out(m, NULL);
+	in_proto_cksum_out(*mp, NULL);
 
 #ifdef IPSEC
 	if (ipsec_in_use) {
-		if (ipsec_local_check(m, *offp, *nxtp, AF_INET) != 0) {
+		if (ipsec_local_check(*mp, *offp, *nxtp, AF_INET) != 0) {
 			ipstat_inc(ips_cantforward);
 			goto bad;
 		}
@@ -593,10 +593,10 @@ ip_deliver(struct mbuf *m, int *offp, int *nxtp)
 	 * Switch out to protocol's input routine.
 	 */
 	ipstat_inc(ips_delivered);
-	*nxtp = (*inetsw[ip_protox[*nxtp]].pr_input)(&m, offp, *nxtp, AF_INET);
+	*nxtp = (*inetsw[ip_protox[*nxtp]].pr_input)(mp, offp, *nxtp, AF_INET);
 	return;
  bad:
-	m_freem(m);
+	m_freem(*mp);
 	*nxtp = IPPROTO_DONE;
 }
 
