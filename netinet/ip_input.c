@@ -660,7 +660,7 @@ ip_deliver(struct mbuf **mp, int *offp, int nxt, int af)
 				goto bad;
 			}
 		}
-	/* Otherwise, just fall through and deliver the packet */
+		/* Otherwise, just fall through and deliver the packet */
 #endif /* IPSEC */
 
 		switch (nxt) {
