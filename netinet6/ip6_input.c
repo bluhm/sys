@@ -387,7 +387,7 @@ ip6_input(struct mbuf *m)
 				ip6stat_inc(ip6s_cantforward);
 				m_freem(m);
 			} else if (ours) {
-				ip6_deliver(&m, &off, &nxt);
+				ip6_deliver(&m, &off, nxt, AF_INET6);
 			} else {
 				m_freem(m);
 			}
@@ -465,7 +465,7 @@ ip6_input(struct mbuf *m)
 
 	if (ours) {
 		KERNEL_LOCK();
-		ip6_deliver(&m, &off, &nxt);
+		ip6_deliver(&m, &off, nxt, AF_INET6);
 		KERNEL_UNLOCK();
 		goto out;
 	}
@@ -506,11 +506,11 @@ ip6_ours(struct mbuf *m)
 	if (ip6_hbhchcheck(m, &off, &nxt, NULL))
 		return;
 
-	ip6_deliver(&m, &off, &nxt);
+	ip6_deliver(&m, &off, nxt, AF_INET6);
 }
 
 void
-ip6_deliver(struct mbuf **mp, int *offp, int *nxtp)
+ip6_deliver(struct mbuf **mp, int *offp, int nxt, int af)
 {
 	int nest = 0;
 
@@ -524,7 +524,7 @@ ip6_deliver(struct mbuf **mp, int *offp, int *nxtp)
 	 */
 	ip6stat_inc(ip6s_delivered);
 
-	while (*nxtp != IPPROTO_DONE) {
+	while (nxt != IPPROTO_DONE) {
 		if (ip6_hdrnestlimit && (++nest > ip6_hdrnestlimit)) {
 			ip6stat_inc(ip6s_toomanyhdr);
 			goto bad;
@@ -540,7 +540,7 @@ ip6_deliver(struct mbuf **mp, int *offp, int *nxtp)
 		}
 
 		/* draft-itojun-ipv6-tcp-to-anycast */
-		if (ISSET((*mp)->m_flags, M_ACAST) && (*nxtp == IPPROTO_TCP)) {
+		if (ISSET((*mp)->m_flags, M_ACAST) && (nxt == IPPROTO_TCP)) {
 			if ((*mp)->m_len >= sizeof(struct ip6_hdr)) {
 				icmp6_error(*mp, ICMP6_DST_UNREACH,
 					ICMP6_DST_UNREACH_ADDR,
@@ -552,7 +552,7 @@ ip6_deliver(struct mbuf **mp, int *offp, int *nxtp)
 
 #ifdef IPSEC
 		if (ipsec_in_use) {
-			if (ipsec_local_check(*mp, *offp, *nxtp, AF_INET6) != 0) {
+			if (ipsec_local_check(*mp, *offp, nxt, af) != 0) {
 				ip6stat_inc(ip6s_cantforward);
 				goto bad;
 			}
@@ -560,13 +560,11 @@ ip6_deliver(struct mbuf **mp, int *offp, int *nxtp)
 		/* Otherwise, just fall through and deliver the packet */
 #endif /* IPSEC */
 
-		*nxtp = (*inet6sw[ip6_protox[*nxtp]].pr_input)(mp, offp, *nxtp,
-		    AF_INET6);
+		nxt = (*inet6sw[ip6_protox[nxt]].pr_input)(mp, offp, nxt, af);
 	}
 	return;
  bad:
 	m_freem(*mp);
-	*nxtp = IPPROTO_DONE;
 }
 
 int

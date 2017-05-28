@@ -324,7 +324,6 @@ ipsec_common_input_cb(struct mbuf *m, struct tdb *tdbp, int skip, int protoff)
 {
 	int af, sproto;
 	u_int8_t prot;
-	int nxt;
 
 #if NBPFILTER > 0
 	struct ifnet *encif;
@@ -608,14 +607,13 @@ ipsec_common_input_cb(struct mbuf *m, struct tdb *tdbp, int skip, int protoff)
 	}
 #endif
 	/* Call the appropriate IPsec transform callback. */
-	nxt = prot;
 	switch (af) {
 	case AF_INET:
-		ip_deliver(&m, &skip, &nxt);
+		ip_deliver(&m, &skip, prot, af);
 		return;
 #ifdef INET6
 	case AF_INET6:
-		ip6_deliver(&m, &skip, &nxt);
+		ip6_deliver(&m, &skip, prot, af);
 		return;
 #endif /* INET6 */
 	default:
