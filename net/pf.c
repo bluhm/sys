@@ -114,6 +114,8 @@ struct pf_queuehead	*pf_queues_inactive;
 
 struct pf_status	 pf_status;
 
+int			 pf_hdr_limit = 20;  /* arbitrary limit, tune in ddb */
+
 SHA2_CTX		 pf_tcp_secret_ctx;
 u_char			 pf_tcp_secret[16];
 int			 pf_tcp_secret_init;
@@ -6117,6 +6119,7 @@ pf_walk_header(struct pf_pdesc *pd, struct ip *h, u_short *reason)
 {
 	struct ip6_ext		 ext;
 	u_int32_t		 hlen, end;
+	int			 hdr_cnt;
 
 	hlen = h->ip_hl << 2;
 	if (hlen < sizeof(struct ip) || hlen > ntohs(h->ip_len)) {
@@ -6129,7 +6132,8 @@ pf_walk_header(struct pf_pdesc *pd, struct ip *h, u_short *reason)
 	/* stop walking over non initial fragments */
 	if ((h->ip_off & htons(IP_OFFMASK)) != 0)
 		return (PF_PASS);
-	for (;;) {
+
+	for (hdr_cnt = 0; hdr_cnt < pf_hdr_limit; hdr_cnt++) {
 		switch (pd->proto) {
 		case IPPROTO_AH:
 			/* fragments may be short */
@@ -6148,6 +6152,9 @@ pf_walk_header(struct pf_pdesc *pd, struct ip *h, u_short *reason)
 			return (PF_PASS);
 		}
 	}
+	DPFPRINTF(LOG_NOTICE, "IPv6 nested header limit");
+	REASON_SET(reason, PFRES_IPOPTIONS);
+	return (PF_DROP);
 }
 
 #ifdef INET6
@@ -6220,14 +6227,14 @@ pf_walk_header6(struct pf_pdesc *pd, struct ip6_hdr *h, u_short *reason)
 	struct ip6_ext		 ext;
 	struct ip6_rthdr	 rthdr;
 	u_int32_t		 end;
-	int			 hdr_cnt = 0, fraghdr_cnt = 0, rthdr_cnt = 0;
+	int			 hdr_cnt, fraghdr_cnt = 0, rthdr_cnt = 0;
 
 	pd->off += sizeof(struct ip6_hdr);
 	end = pd->off + ntohs(h->ip6_plen);
 	pd->fragoff = pd->extoff = pd->jumbolen = 0;
 	pd->proto = h->ip6_nxt;
-	for (;;) {
-		hdr_cnt++;
+
+	for (hdr_cnt = 0; hdr_cnt < pf_hdr_limit; hdr_cnt++) {
 		switch (pd->proto) {
 		case IPPROTO_FRAGMENT:
 			if (fraghdr_cnt++) {
@@ -6282,7 +6289,7 @@ pf_walk_header6(struct pf_pdesc *pd, struct ip6_hdr *h, u_short *reason)
 			/* FALLTHROUGH */
 		case IPPROTO_HOPOPTS:
 			/* RFC2460 4.1:  Hop-by-Hop only after IPv6 header */
-			if (pd->proto == IPPROTO_HOPOPTS && hdr_cnt > 1) {
+			if (pd->proto == IPPROTO_HOPOPTS && hdr_cnt > 0) {
 				DPFPRINTF(LOG_NOTICE, "IPv6 hopopts not first");
 				REASON_SET(reason, PFRES_IPOPTIONS);
 				return (PF_DROP);
@@ -6340,6 +6347,9 @@ pf_walk_header6(struct pf_pdesc *pd, struct ip6_hdr *h, u_short *reason)
 			return (PF_PASS);
 		}
 	}
+	DPFPRINTF(LOG_NOTICE, "IPv6 nested header limit");
+	REASON_SET(reason, PFRES_IPOPTIONS);
+	return (PF_DROP);
 }
 #endif /* INET6 */
 
