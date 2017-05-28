@@ -6152,7 +6152,7 @@ pf_walk_header(struct pf_pdesc *pd, struct ip *h, u_short *reason)
 			return (PF_PASS);
 		}
 	}
-	DPFPRINTF(LOG_NOTICE, "IPv6 nested header limit");
+	DPFPRINTF(LOG_NOTICE, "IPv4 nested authentication header limit");
 	REASON_SET(reason, PFRES_IPOPTIONS);
 	return (PF_DROP);
 }
@@ -6347,7 +6347,7 @@ pf_walk_header6(struct pf_pdesc *pd, struct ip6_hdr *h, u_short *reason)
 			return (PF_PASS);
 		}
 	}
-	DPFPRINTF(LOG_NOTICE, "IPv6 nested header limit");
+	DPFPRINTF(LOG_NOTICE, "IPv6 nested extension header limit");
 	REASON_SET(reason, PFRES_IPOPTIONS);
 	return (PF_DROP);
 }
