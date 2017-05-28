@@ -608,7 +608,6 @@ ipsec_common_input_cb(struct mbuf *m, struct tdb *tdbp, int skip, int protoff)
 #endif
 	/* Call the appropriate IPsec transform callback. */
 	ip_deliver(&m, &skip, prot, af);
-	return;
 #undef IPSEC_ISTAT
 }
 
