@@ -6231,6 +6231,11 @@ pf_walk_header6(struct pf_pdesc *pd, struct ip6_hdr *h, u_short *reason)
 	for (;;) {
 		hdr_cnt++;
 		switch (pd->proto) {
+		case IPPROTO_HOPOPTS:
+		case IPPROTO_DSTOPTS:
+			pd->badopts++;
+		}
+		switch (pd->proto) {
 		case IPPROTO_FRAGMENT:
 			if (fraghdr_cnt++) {
 				DPFPRINTF(LOG_NOTICE, "IPv6 multiple fragment");
