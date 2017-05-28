@@ -6123,6 +6123,8 @@ pf_walk_header(struct pf_pdesc *pd, struct ip *h, u_short *reason)
 		REASON_SET(reason, PFRES_SHORT);
 		return (PF_DROP);
 	}
+	if (hlen != sizeof(struct ip))
+		pd->badopts++;
 	end = pd->off + ntohs(h->ip_len);
 	pd->off += hlen;
 	pd->proto = h->ip_p;
@@ -6380,8 +6382,6 @@ pf_setup_pdesc(struct pf_pdesc *pd, sa_family_t af, int dir,
 		pd->tot_len = ntohs(h->ip_len);
 		pd->tos = h->ip_tos & ~IPTOS_ECN_MASK;
 		pd->ttl = h->ip_ttl;
-		if (h->ip_hl > 5)	/* has options */
-			pd->badopts++;
 		pd->virtual_proto = (h->ip_off & htons(IP_MF | IP_OFFMASK)) ?
 		     PF_VPROTO_FRAGMENT : pd->proto;
 
