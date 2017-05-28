@@ -1870,11 +1870,13 @@ int			 pf_map_addr(sa_family_t, struct pf_rule *,
 			    struct pf_addr *, struct pf_src_node **,
 			    struct pf_pool *, enum pf_sn_types);
 int			 pf_postprocess_addr(struct pf_state *);
+
 struct pf_state_key	*pf_state_key_ref(struct pf_state_key *);
 void			 pf_state_key_unref(struct pf_state_key *);
 int			 pf_state_key_isvalid(struct pf_state_key *);
 void			 pf_pkt_unlink_state_key(struct mbuf *);
 void			 pf_pkt_state_key_ref(struct mbuf *);
+
 struct mbuf *		 pf_build_tcp(const struct pf_rule *, sa_family_t,
 			    const struct pf_addr *, const struct pf_addr *,
 			    u_int16_t, u_int16_t, u_int32_t, u_int32_t,
