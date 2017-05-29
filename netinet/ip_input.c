@@ -126,8 +126,9 @@ int ip_sysctl_ipstat(void *, size_t *, void *);
 
 static struct mbuf_queue	ipsend_mq;
 
-void	ip_ours(struct mbuf *);
-void	ip_local(struct mbuf *);
+int	ip_input_if(struct mbuf **, int *, int, int, struct ifnet *);
+int	ip_ours(struct mbuf **, int *, int, int);
+int	ip_local(struct mbuf **, int *, int, int);
 int	ip_dooptions(struct mbuf *, struct ifnet *);
 int	in_ouraddr(struct mbuf *, struct ifnet *, struct rtentry **);
 
@@ -213,10 +214,12 @@ ip_init(void)
  * between the network layer (input/forward path) running without
  * KERNEL_LOCK() and the transport layer still needing it.
  */
-void
-ip_ours(struct mbuf *m)
+int
+ip_ours(struct mbuf **mp, int *offp, int nxt, int af)
 {
-	niq_enqueue(&ipintrq, m);
+	niq_enqueue(&ipintrq, *mp);
+	*mp = NULL;
+	return IPPROTO_DONE;
 }
 
 /*
@@ -226,13 +229,15 @@ void
 ipintr(void)
 {
 	struct mbuf *m;
+	int off;
 
 	while ((m = niq_dequeue(&ipintrq)) != NULL) {
 #ifdef DIAGNOSTIC
 		if ((m->m_flags & M_PKTHDR) == 0)
 			panic("ipintr no HDR");
 #endif
-		ip_local(m);
+		off = 0;
+		ip_local(&m, &off, IPPROTO_IPV4, AF_UNSPEC);
 	}
 }
 
@@ -244,16 +249,44 @@ ipintr(void)
 void
 ipv4_input(struct ifnet *ifp, struct mbuf *m)
 {
+	int off;
+
+	off = 0;
+	ip_input_if(&m, &off, IPPROTO_IPV4, AF_UNSPEC, ifp);
+}
+
+int
+ip_input(struct mbuf **mp, int *offp, int nxt, int af)
+{
+	struct ifnet *ifp;
+
+	ifp = if_get((*mp)->m_pkthdr.ph_ifidx);
+	if (ifp == NULL) {
+		m_freem(*mp);
+		*mp = NULL;
+		return IPPROTO_DONE;
+	}
+	nxt = ip_input_if(mp, offp, nxt, af, ifp);
+	if_put(ifp);
+	return nxt;
+}
+
+int
+ip_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
+{
+	struct mbuf	*m = *mp;
 	struct rtentry	*rt = NULL;
 	struct ip	*ip;
 	int hlen, len;
 	in_addr_t pfrdr = 0;
 
+	KASSERT(*offp == 0);
+
 	ipstat_inc(ips_total);
 	if (m->m_len < sizeof (struct ip) &&
-	    (m = m_pullup(m, sizeof (struct ip))) == NULL) {
+	    (m = *mp = m_pullup(m, sizeof (struct ip))) == NULL) {
 		ipstat_inc(ips_toosmall);
-		goto out;
+		goto bad;
 	}
 	ip = mtod(m, struct ip *);
 	if (ip->ip_v != IPVERSION) {
@@ -266,9 +299,9 @@ ipv4_input(struct ifnet *ifp, struct mbuf *m)
 		goto bad;
 	}
 	if (hlen > m->m_len) {
-		if ((m = m_pullup(m, hlen)) == NULL) {
+		if ((m = *mp = m_pullup(m, hlen)) == NULL) {
 			ipstat_inc(ips_badhlen);
-			goto out;
+			goto bad;
 		}
 		ip = mtod(m, struct ip *);
 	}
@@ -336,10 +369,11 @@ ipv4_input(struct ifnet *ifp, struct mbuf *m)
 	 * Packet filter
 	 */
 	pfrdr = ip->ip_dst.s_addr;
-	if (pf_test(AF_INET, PF_IN, ifp, &m) != PF_PASS)
+	if (pf_test(AF_INET, PF_IN, ifp, mp) != PF_PASS)
 		goto bad;
+	m = *mp;
 	if (m == NULL)
-		goto out;
+		goto bad;
 
 	ip = mtod(m, struct ip *);
 	hlen = ip->ip_hl << 2;
@@ -353,17 +387,18 @@ ipv4_input(struct ifnet *ifp, struct mbuf *m)
 	 * to be sent and the original packet to be freed).
 	 */
 	if (hlen > sizeof (struct ip) && ip_dooptions(m, ifp)) {
-		goto out;
+		m = *mp = NULL;
+		goto bad;
 	}
 
 	if (ip->ip_dst.s_addr == INADDR_BROADCAST ||
 	    ip->ip_dst.s_addr == INADDR_ANY) {
-		ip_ours(m);
+		nxt = ip_ours(mp, offp, nxt, af);
 		goto out;
 	}
 
 	if (in_ouraddr(m, ifp, &rt)) {
-		ip_ours(m);
+		nxt = ip_ours(mp, offp, nxt, af);
 		goto out;
 	}
 
@@ -380,9 +415,9 @@ ipv4_input(struct ifnet *ifp, struct mbuf *m)
 			int error;
 
 			if (m->m_flags & M_EXT) {
-				if ((m = m_pullup(m, hlen)) == NULL) {
+				if ((m = *mp = m_pullup(m, hlen)) == NULL) {
 					ipstat_inc(ips_toosmall);
-					goto out;
+					goto bad;
 				}
 				ip = mtod(m, struct ip *);
 			}
@@ -412,7 +447,7 @@ ipv4_input(struct ifnet *ifp, struct mbuf *m)
 			 * host belongs to their destination groups.
 			 */
 			if (ip->ip_p == IPPROTO_IGMP) {
-				ip_ours(m);
+				nxt = ip_ours(mp, offp, nxt, af);
 				goto out;
 			}
 			ipstat_inc(ips_forward);
@@ -428,7 +463,7 @@ ipv4_input(struct ifnet *ifp, struct mbuf *m)
 				ipstat_inc(ips_cantforward);
 			goto bad;
 		}
-		ip_ours(m);
+		nxt = ip_ours(mp, offp, nxt, af);
 		goto out;
 	}
 
@@ -463,11 +498,15 @@ ipv4_input(struct ifnet *ifp, struct mbuf *m)
 #endif /* IPSEC */
 
 	ip_forward(m, ifp, rt, pfrdr);
-	return;
-bad:
-	m_freem(m);
-out:
+	*mp = NULL;
+	return IPPROTO_DONE;
+ bad:
+	nxt = IPPROTO_DONE;
+	m_freem(*mp);
+	*mp = NULL;
+ out:
 	rtfree(rt);
+	return nxt;
 }
 
 /*
@@ -475,9 +514,10 @@ out:
  *
  * If fragmented try to reassemble.  Pass to next level.
  */
-void
-ip_local(struct mbuf *m)
+int
+ip_local(struct mbuf **mp, int *offp, int nxt, int af)
 {
+	struct mbuf *m = *mp;
 	struct ip *ip = mtod(m, struct ip *);
 	struct ipq *fp;
 	struct ipqent *ipqe;
@@ -496,9 +536,9 @@ ip_local(struct mbuf *m)
 	 */
 	if (ip->ip_off &~ htons(IP_DF | IP_RF)) {
 		if (m->m_flags & M_EXT) {		/* XXX */
-			if ((m = m_pullup(m, hlen)) == NULL) {
+			if ((m = *mp = m_pullup(m, hlen)) == NULL) {
 				ipstat_inc(ips_toosmall);
-				return;
+				goto bad;
 			}
 			ip = mtod(m, struct ip *);
 		}
@@ -558,10 +598,9 @@ found:
 			ipqe->ipqe_mff = mff;
 			ipqe->ipqe_m = m;
 			ipqe->ipqe_ip = ip;
-			m = ip_reass(ipqe, fp);
-			if (m == NULL) {
-				return;
-			}
+			m = *mp = ip_reass(ipqe, fp);
+			if (m == NULL)
+				goto bad;
 			ipstat_inc(ips_reassembled);
 			ip = mtod(m, struct ip *);
 			hlen = ip->ip_hl << 2;
@@ -571,13 +610,15 @@ found:
 				ip_freef(fp);
 	}
 
-	ip_deliver(&m, &hlen, ip->ip_p, AF_INET);
-	return;
-bad:
-	m_freem(m);
+	*offp = hlen;
+	return ip_deliver(mp, offp, ip->ip_p, AF_INET);
+ bad:
+	m_freem(*mp);
+	*mp = NULL;
+	return IPPROTO_DONE;
 }
 
-void
+int
 ip_deliver(struct mbuf **mp, int *offp, int nxt, int af)
 {
 	KERNEL_ASSERT_LOCKED();
@@ -601,11 +642,12 @@ ip_deliver(struct mbuf **mp, int *offp, int nxt, int af)
 	ipstat_inc(ips_delivered);
 	nxt = (*inetsw[ip_protox[nxt]].pr_input)(mp, offp, nxt, af);
 	KASSERT(nxt == IPPROTO_DONE);
-	return;
+	return nxt;
 #ifdef IPSEC
  bad:
 #endif
 	m_freemp(mp);
+	return IPPROTO_DONE;
 }
 
 int
@@ -873,7 +915,7 @@ dropfrag:
 	m_freem(m);
 	pool_put(&ipqent_pool, ipqe);
 	ip_frags--;
-	return (0);
+	return (NULL);
 }
 
 /*
