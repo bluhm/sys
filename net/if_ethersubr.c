@@ -416,15 +416,11 @@ decapsulate:
 #ifdef PIPEX
 		if (pipex_enable) {
 			struct pipex_session *session;
-			int s;
 
-			NET_LOCK(s);
 			if ((session = pipex_pppoe_lookup_session(m)) != NULL) {
 				pipex_pppoe_input(m, session);
-				NET_UNLOCK(s);
 				return (1);
 			}
-			NET_UNLOCK(s);
 		}
 #endif
 		if (etype == ETHERTYPE_PPPOEDISC)
