@@ -500,7 +500,6 @@ ipv6_input(struct ifnet *ifp, struct mbuf *m)
 #endif /* IPSEC */
 
 	ip6_forward(m, rt, srcrt);
-	if_put(ifp);
 	return;
  bad:
 	m_freem(m);
