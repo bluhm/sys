@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_input.c,v 1.306 2017/05/28 12:22:54 jsg Exp $	*/
+/*	$OpenBSD: ip_input.c,v 1.309 2017/05/30 12:09:27 friehm Exp $	*/
 /*	$NetBSD: ip_input.c,v 1.30 1996/03/16 23:53:58 christos Exp $	*/
 
 /*
@@ -208,6 +208,12 @@ ip_init(void)
 }
 
 void
+ipv4_input(struct ifnet *ifp, struct mbuf *m)
+{
+	niq_enqueue(&ipintrq, m);
+}
+
+void
 ipintr(void)
 {
 	struct mbuf *m;
@@ -221,7 +227,7 @@ ipintr(void)
 		if ((m->m_flags & M_PKTHDR) == 0)
 			panic("ipintr no HDR");
 #endif
-		ipv4_input(m);
+		ip_input(m);
 	}
 }
 
@@ -231,7 +237,7 @@ ipintr(void)
  * Checksum and byte swap header.  Process options. Forward or deliver.
  */
 void
-ipv4_input(struct mbuf *m)
+ip_input(struct mbuf *m)
 {
 	struct ifnet	*ifp;
 	struct rtentry	*rt = NULL;
@@ -319,8 +325,9 @@ ipv4_input(struct mbuf *m)
 	}
 
 #if NCARP > 0
-	if (ifp->if_type == IFT_CARP && ip->ip_p != IPPROTO_ICMP &&
-	    carp_lsdrop(m, AF_INET, &ip->ip_src.s_addr, &ip->ip_dst.s_addr))
+	if (ifp->if_type == IFT_CARP &&
+	    carp_lsdrop(m, AF_INET, &ip->ip_src.s_addr, &ip->ip_dst.s_addr,
+	    (ip->ip_p == IPPROTO_ICMP ? 0 : 1)))
 		goto bad;
 #endif
 
@@ -427,7 +434,7 @@ ipv4_input(struct mbuf *m)
 
 #if NCARP > 0
 	if (ifp->if_type == IFT_CARP && ip->ip_p == IPPROTO_ICMP &&
-	    carp_lsdrop(m, AF_INET, &ip->ip_src.s_addr, &ip->ip_dst.s_addr))
+	    carp_lsdrop(m, AF_INET, &ip->ip_src.s_addr, &ip->ip_dst.s_addr, 1))
 		goto bad;
 #endif
 	/*
@@ -441,9 +448,9 @@ ipv4_input(struct mbuf *m)
 	if (ipsec_in_use) {
 		int rv;
 
-		KERNEL_LOCK();
+		KERNEL_ASSERT_LOCKED();
+
 		rv = ipsec_forward_check(m, hlen, AF_INET);
-		KERNEL_UNLOCK();
 		if (rv != 0) {
 			ipstat_inc(ips_cantforward);
 			goto bad;
@@ -667,7 +674,7 @@ in_ouraddr(struct mbuf *m, struct ifnet *ifp, struct rtentry **prt)
 		 * interface, and that M_BCAST will only be set on a BROADCAST
 		 * interface.
 		 */
-		KERNEL_LOCK();
+		NET_ASSERT_LOCKED();
 		TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
 			if (ifa->ifa_addr->sa_family != AF_INET)
 				continue;
@@ -678,7 +685,6 @@ in_ouraddr(struct mbuf *m, struct ifnet *ifp, struct rtentry **prt)
 				break;
 			}
 		}
-		KERNEL_UNLOCK();
 	}
 
 	return (match);
