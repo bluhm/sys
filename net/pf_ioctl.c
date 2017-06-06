@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf_ioctl.c,v 1.313 2017/05/30 19:37:54 henning Exp $ */
+/*	$OpenBSD: pf_ioctl.c,v 1.315 2017/06/05 22:18:28 sashan Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -128,6 +128,10 @@ struct {
 #define	TAGID_MAX	 50000
 TAILQ_HEAD(pf_tags, pf_tagname)	pf_tags = TAILQ_HEAD_INITIALIZER(pf_tags),
 				pf_qids = TAILQ_HEAD_INITIALIZER(pf_qids);
+
+#ifdef WITH_PF_LOCK
+struct rwlock		 pf_lock = RWLOCK_INITIALIZER("pf_lock");
+#endif /* WITH_PF_LOCK */
 
 #if (PF_QNAME_SIZE != PF_TAG_NAME_SIZE)
 #error PF_QNAME_SIZE must be equal to PF_TAG_NAME_SIZE
@@ -998,6 +1002,7 @@ pfioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 		}
 
 	NET_LOCK(s);
+	PF_LOCK();
 	switch (cmd) {
 
 	case DIOCSTART:
@@ -1005,7 +1010,7 @@ pfioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 			error = EEXIST;
 		else {
 			pf_status.running = 1;
-			pf_status.since = time_second;
+			pf_status.since = time_uptime;
 			if (pf_status.stateid == 0) {
 				pf_status.stateid = time_second;
 				pf_status.stateid = pf_status.stateid << 32;
@@ -1020,7 +1025,7 @@ pfioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 			error = ENOENT;
 		else {
 			pf_status.running = 0;
-			pf_status.since = time_second;
+			pf_status.since = time_uptime;
 			pf_remove_queues();
 			DPFPRINTF(LOG_NOTICE, "pf: stopped");
 		}
@@ -1674,7 +1679,7 @@ pfioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 		bzero(pf_status.counters, sizeof(pf_status.counters));
 		bzero(pf_status.fcounters, sizeof(pf_status.fcounters));
 		bzero(pf_status.scounters, sizeof(pf_status.scounters));
-		pf_status.since = time_second;
+		pf_status.since = time_uptime;
 
 		break;
 	}
@@ -2437,6 +2442,7 @@ pfioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 		break;
 	}
 fail:
+	PF_UNLOCK();
 	NET_UNLOCK(s);
 	return (error);
 }
