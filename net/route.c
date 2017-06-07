@@ -1394,11 +1394,12 @@ static int			rt_init_done = 0;
 	if (r->rtt_func != NULL) {				\
 		(*r->rtt_func)(r->rtt_rt, r);			\
 	} else {						\
-		struct rt_addrinfo info;			\
-		bzero(&info, sizeof(info));			\
-		info.rti_info[RTAX_DST] = rt_key(r->rtt_rt);	\
-		rtrequest(RTM_DELETE, &info,			\
-		    r->rtt_rt->rt_priority, NULL, r->rtt_tableid);	\
+		struct ifnet *ifp;				\
+								\
+		ifp = if_get(r->rtt_rt->rt_ifidx);		\
+		if (ifp != NULL)				\
+			rtdeletemsg(r->rtt_rt, r->rtt_tableid);	\
+		if_put(ifp);					\
 	}							\
 }
 
