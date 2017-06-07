@@ -168,7 +168,7 @@ struct sockaddr *rt_plentosa(sa_family_t, int, struct sockaddr_in6 *);
 
 struct	ifaddr *ifa_ifwithroute(int, struct sockaddr *, struct sockaddr *,
 		    u_int);
-int	rtrequest_delete(struct rt_addrinfo *, u_int8_t, struct ifnet *,
+int	rtrequest_delete(struct rt_addrinfo *, u_int8_t,
 	    struct rtentry **, u_int);
 
 #ifdef DDB
@@ -650,9 +650,10 @@ rtdeletemsg(struct rtentry *rt, struct ifnet *ifp, u_int tableid)
 	if (!ISSET(rt->rt_flags, RTF_HOST))
 		info.rti_info[RTAX_NETMASK] = rt_plen2mask(rt, &sa_mask);
 	info.rti_info[RTAX_GATEWAY] = rt->rt_gateway;
+	info.rti_ifa = rt->rt_ifa;
 	info.rti_flags = rt->rt_flags;
 	ifidx = rt->rt_ifidx;
-	error = rtrequest_delete(&info, rt->rt_priority, ifp, &rt, tableid);
+	error = rtrequest_delete(&info, rt->rt_priority, &rt, tableid);
 	rtm_miss(RTM_DELETE, &info, info.rti_flags, rt->rt_priority, ifidx,
 	    error, tableid);
 	if (error == 0)
@@ -827,10 +828,11 @@ rt_getifa(struct rt_addrinfo *info, u_int rtid)
 }
 
 int
-rtrequest_delete(struct rt_addrinfo *info, u_int8_t prio, struct ifnet *ifp,
+rtrequest_delete(struct rt_addrinfo *info, u_int8_t prio,
     struct rtentry **ret_nrt, u_int tableid)
 {
 	struct rtentry	*rt;
+	struct ifnet	*ifp;
 	int		 error;
 
 	NET_ASSERT_LOCKED();
@@ -841,12 +843,6 @@ rtrequest_delete(struct rt_addrinfo *info, u_int8_t prio, struct ifnet *ifp,
 	    info->rti_info[RTAX_NETMASK], info->rti_info[RTAX_GATEWAY], prio);
 	if (rt == NULL)
 		return (ESRCH);
-
-	/* Make sure that's the route the caller want to delete. */
-	if (ifp != NULL && ifp->if_index != rt->rt_ifidx) {
-		rtfree(rt);
-		return (ESRCH);
-	}
 
 #ifndef SMALL_KERNEL
 	/*
@@ -884,16 +880,9 @@ rtrequest_delete(struct rt_addrinfo *info, u_int8_t prio, struct ifnet *ifp,
 
 	rt->rt_flags &= ~RTF_UP;
 
-	if (ifp == NULL) {
-		ifp = if_get(rt->rt_ifidx);
-		if (ifp != NULL) {
-			ifp->if_rtrequest(ifp, RTM_DELETE, rt);
-			if_put(ifp);
-		}
-	} else {
-		KASSERT(ifp->if_index == rt->rt_ifidx);
-		ifp->if_rtrequest(ifp, RTM_DELETE, rt);
-	}
+	ifp = info->rti_ifa->ifa_ifp;
+	KASSERT(ifp != NULL);
+	ifp->if_rtrequest(ifp, RTM_DELETE, rt);
 
 	atomic_inc_int(&rttrash);
 
@@ -928,7 +917,7 @@ rtrequest(int req, struct rt_addrinfo *info, u_int8_t prio,
 		info->rti_info[RTAX_NETMASK] = NULL;
 	switch (req) {
 	case RTM_DELETE:
-		error = rtrequest_delete(info, prio, NULL, ret_nrt, tableid);
+		error = rtrequest_delete(info, prio, ret_nrt, tableid);
 		if (error)
 			return (error);
 		break;
@@ -1252,7 +1241,7 @@ rt_ifa_del(struct ifaddr *ifa, int flags, struct sockaddr *dst)
 	if (flags & RTF_CONNECTED)
 		prio = ifp->if_priority + RTP_CONNECTED;
 
-	error = rtrequest_delete(&info, prio, ifp, &rt, rtableid);
+	error = rtrequest_delete(&info, prio, &rt, rtableid);
 	if (error == 0) {
 		rtm_send(rt, RTM_DELETE, rtableid);
 		if (flags & RTF_LOCAL)
