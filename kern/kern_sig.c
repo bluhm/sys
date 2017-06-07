@@ -764,6 +764,7 @@ trapsignal(struct proc *p, int signum, u_long trapno, int code,
 	case SIGBUS:
 	case SIGSEGV:
 		pr->ps_acflag |= ATRAP;
+		break;
 	}
 
 	mask = sigmask(signum);
