@@ -1078,7 +1078,7 @@ icmp_mtudisc_timeout(struct rtentry *rt, struct rttimer *r)
 
 		sin = *satosin(rt_key(rt));
 
-		rtdeletemsg(rt, ifp, r->rtt_tableid);
+		rtdeletemsg(rt, r->rtt_tableid);
 
 		/* Notify TCP layer of increased Path MTU estimate */
 		ctlfunc = inetsw[ip_protox[IPPROTO_TCP]].pr_ctlinput;
@@ -1123,7 +1123,7 @@ icmp_redirect_timeout(struct rtentry *rt, struct rttimer *r)
 		return;
 
 	if ((rt->rt_flags & (RTF_DYNAMIC|RTF_HOST)) == (RTF_DYNAMIC|RTF_HOST)) {
-		rtdeletemsg(rt, ifp, r->rtt_tableid);
+		rtdeletemsg(rt, r->rtt_tableid);
 	}
 
 	if_put(ifp);

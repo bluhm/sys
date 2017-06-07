@@ -833,7 +833,7 @@ nd6_free(struct rtentry *rt, int gc)
 	 * cached routes.
 	 */
 	if (!ISSET(rt->rt_flags, RTF_STATIC|RTF_CACHED))
-		rtdeletemsg(rt, ifp, ifp->if_rdomain);
+		rtdeletemsg(rt, ifp->if_rdomain);
 
 	if_put(ifp);
 

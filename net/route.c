@@ -631,14 +631,12 @@ out:
  * Delete a route and generate a message
  */
 int
-rtdeletemsg(struct rtentry *rt, struct ifnet *ifp, u_int tableid)
+rtdeletemsg(struct rtentry *rt, u_int tableid)
 {
 	int			error;
 	struct rt_addrinfo	info;
 	unsigned int		ifidx;
 	struct sockaddr_in6	sa_mask;
-
-	KASSERT(rt->rt_ifidx == ifp->if_index);
 
 	/*
 	 * Request the new route so that the entry is not actually
@@ -692,7 +690,7 @@ rtflushclone1(struct rtentry *rt, void *arg, u_int id)
 	        return 0;
 
 	if (ISSET(rt->rt_flags, RTF_CLONED) && rtequal(rt->rt_parent, parent)) {
-	        error = rtdeletemsg(rt, ifp, id);
+	        error = rtdeletemsg(rt, id);
 	        if (error == 0)
 			error = EAGAIN;
 	} else
@@ -1052,12 +1050,7 @@ rtrequest(int req, struct rt_addrinfo *info, u_int8_t prio,
 		    (crt = rtable_match(tableid, ndst, NULL)) != NULL) {
 			/* overwrite cloned route */
 			if (ISSET(crt->rt_flags, RTF_CLONED)) {
-				struct ifnet *cifp;
-
-				cifp = if_get(crt->rt_ifidx);
-				KASSERT(cifp != NULL);
-				rtdeletemsg(crt, cifp, tableid);
-				if_put(cifp);
+				rtdeletemsg(crt, tableid);
 
 				error = rtable_insert(tableid, ndst,
 				    info->rti_info[RTAX_NETMASK],
@@ -1372,13 +1365,12 @@ int
 rt_ifa_purge_walker(struct rtentry *rt, void *vifa, unsigned int rtableid)
 {
 	struct ifaddr		*ifa = vifa;
-	struct ifnet		*ifp = ifa->ifa_ifp;
 	int			 error;
 
 	if (rt->rt_ifa != ifa)
 		return (0);
 
-	if ((error = rtdeletemsg(rt, ifp, rtableid))) {
+	if ((error = rtdeletemsg(rt, rtableid))) {
 		return (error);
 	}
 
@@ -1720,7 +1712,7 @@ rt_if_linkstate_change(struct rtentry *rt, void *arg, u_int id)
 			    !ISSET(rt->rt_flags, RTF_CACHED|RTF_BFD)) {
 				int error;
 
-				if ((error = rtdeletemsg(rt, ifp, id)))
+				if ((error = rtdeletemsg(rt, id)))
 					return (error);
 				return (EAGAIN);
 			}

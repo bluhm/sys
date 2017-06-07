@@ -1256,7 +1256,7 @@ mrt6_mcast6_del(struct rtentry *rt, unsigned int rtableid)
 		return ENOENT;
 	}
 
-	rv = rtdeletemsg(rt, ifp, rtableid);
+	rv = rtdeletemsg(rt, rtableid);
 	if_put(ifp);
 	if (rv != 0) {
 		DPRINTF("rtdeletemsg failed %d", rv);

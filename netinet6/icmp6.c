@@ -1851,7 +1851,7 @@ icmp6_mtudisc_timeout(struct rtentry *rt, struct rttimer *r)
 		return;
 
 	if ((rt->rt_flags & (RTF_DYNAMIC|RTF_HOST)) == (RTF_DYNAMIC|RTF_HOST)) {
-		rtdeletemsg(rt, ifp, r->rtt_tableid);
+		rtdeletemsg(rt, r->rtt_tableid);
 	} else {
 		if (!(rt->rt_locks & RTV_MTU))
 			rt->rt_mtu = 0;
@@ -1872,7 +1872,7 @@ icmp6_redirect_timeout(struct rtentry *rt, struct rttimer *r)
 		return;
 
 	if ((rt->rt_flags & (RTF_DYNAMIC|RTF_HOST)) == (RTF_DYNAMIC|RTF_HOST)) {
-		rtdeletemsg(rt, ifp, r->rtt_tableid);
+		rtdeletemsg(rt, r->rtt_tableid);
 	}
 
 	if_put(ifp);
