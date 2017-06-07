@@ -61,6 +61,7 @@ struct acct {
 #define	ACOMPAT	0x04		/* used compatibility mode */
 #define	ACORE	0x08		/* dumped core */
 #define	AXSIG	0x10		/* killed by a signal */
+#define	APLEDGE	0x20		/* killed due to pledge violation */
 	u_int8_t  ac_flag;	/* accounting flags */
 };
 
