@@ -62,6 +62,7 @@ struct acct {
 #define	ACORE	0x08		/* dumped core */
 #define	AXSIG	0x10		/* killed by a signal */
 #define	APLEDGE	0x20		/* killed due to pledge violation */
+#define	ATRAP	0x40		/* memory access violation */
 	u_int8_t  ac_flag;	/* accounting flags */
 };
 
