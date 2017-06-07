@@ -759,6 +759,13 @@ trapsignal(struct proc *p, int signum, u_long trapno, int code,
 	struct sigacts *ps = pr->ps_sigacts;
 	int mask;
 
+	switch (signum) {
+	case SIGILL:
+	case SIGBUS:
+	case SIGSEGV:
+		pr->ps_acflag |= ATRAP;
+	}
+
 	mask = sigmask(signum);
 	if ((pr->ps_flags & PS_TRACED) == 0 &&
 	    (ps->ps_sigcatch & mask) != 0 &&
