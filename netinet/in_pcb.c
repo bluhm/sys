@@ -718,9 +718,16 @@ in_losing(struct inpcb *inp)
 		info.rti_info[RTAX_NETMASK] = rt_plen2mask(rt, &sa_mask);
 		rtm_miss(RTM_LOSING, &info, rt->rt_flags, rt->rt_priority,
 		    rt->rt_ifidx, 0, inp->inp_rtableid);
-		if (rt->rt_flags & RTF_DYNAMIC)
+		if (rt->rt_flags & RTF_DYNAMIC) {
+			/*
+			 * If the interface is gone, all its attached
+			 * route entries have been removed from the table,
+			 * so we're dealing with a stale cache and have
+			 * nothing to do.
+			 */
 			(void)rtrequest(RTM_DELETE, &info, rt->rt_priority,
 			    NULL, inp->inp_rtableid);
+		}
 		/*
 		 * A new route can be allocated
 		 * the next time output is attempted.

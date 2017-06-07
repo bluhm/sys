@@ -772,13 +772,18 @@ rtm_output(struct rt_msghdr *rtm, struct rtentry **prt,
 		rt = rtable_lookup(tableid, info->rti_info[RTAX_DST],
 		    info->rti_info[RTAX_NETMASK], info->rti_info[RTAX_GATEWAY],
 		    prio);
+		if (rt == NULL) {
+			error = ESRCH;
+			break;
+		}
+		info->rti_ifa = rt->rt_ifa;
 
 		/*
 		 * Invalidate the cache of automagically created and
 		 * referenced L2 entries to make sure that ``rt_gwroute''
 		 * pointer stays valid for other CPUs.
 		 */
-		if ((rt != NULL) && (ISSET(rt->rt_flags, RTF_CACHED))) {
+		if (ISSET(rt->rt_flags, RTF_CACHED)) {
 			ifp = if_get(rt->rt_ifidx);
 			KASSERT(ifp != NULL);
 			ifp->if_rtrequest(ifp, RTM_INVALIDATE, rt);
@@ -793,8 +798,7 @@ rtm_output(struct rt_msghdr *rtm, struct rtentry **prt,
 		 * Make sure that local routes are only modified by the
 		 * kernel.
 		 */
-		if ((rt != NULL) &&
-		    ISSET(rt->rt_flags, RTF_LOCAL|RTF_BROADCAST)) {
+		if (ISSET(rt->rt_flags, RTF_LOCAL|RTF_BROADCAST)) {
 			error = EINVAL;
 			break;
 		}

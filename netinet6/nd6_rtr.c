@@ -688,7 +688,6 @@ defrtrlist_del(struct nd_defrouter *dr)
 void
 defrouter_delreq(struct nd_defrouter *dr)
 {
-	struct rt_addrinfo info;
 	struct sockaddr_in6 def, mask, gw;
 	struct rtentry *rt;
 	int error;
@@ -698,7 +697,6 @@ defrouter_delreq(struct nd_defrouter *dr)
 		panic("dr == NULL in defrouter_delreq");
 #endif
 
-	memset(&info, 0, sizeof(info));
 	memset(&def, 0, sizeof(def));
 	memset(&mask, 0, sizeof(mask));
 	memset(&gw, 0, sizeof(gw));	/* for safety */
@@ -709,17 +707,14 @@ defrouter_delreq(struct nd_defrouter *dr)
 	gw.sin6_addr = dr->rtaddr;
 	gw.sin6_scope_id = 0;	/* XXX */
 
-	info.rti_flags = RTF_GATEWAY;
-	info.rti_info[RTAX_DST] = sin6tosa(&def);
-	info.rti_info[RTAX_GATEWAY] = sin6tosa(&gw);
-	info.rti_info[RTAX_NETMASK] = sin6tosa(&mask);
-
-	error = rtrequest(RTM_DELETE, &info, RTP_DEFAULT, &rt,
-	    dr->ifp->if_rdomain);
-	if (error == 0) {
-		rtm_send(rt, RTM_DELETE, dr->ifp->if_rdomain);
-		rtfree(rt);
+	rt = rtable_lookup(dr->ifp->if_rdomain, sin6tosa(&def),
+	    sin6tosa(&mask), sin6tosa(&gw), RTP_DEFAULT);
+	if (rt != NULL) {
+		error = rtdeletemsg(rt, dr->ifp->if_rdomain);
+		if (error == 0)
+			rt = NULL;
 	}
+	rtfree(rt);
 
 	dr->installed = 0;
 }
@@ -2063,6 +2058,7 @@ rt6_deleteroute(struct rtentry *rt, void *arg, unsigned int id)
 		return (0);
 
 	bzero(&info, sizeof(info));
+	info.rti_ifa = rt->rt_ifa;
 	info.rti_flags =  rt->rt_flags;
 	info.rti_info[RTAX_DST] = rt_key(rt);
 	info.rti_info[RTAX_GATEWAY] = rt->rt_gateway;
