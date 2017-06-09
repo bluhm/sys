@@ -417,6 +417,8 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 
 #ifdef MROUTING
 		if (ip6_mforwarding && ip6_mrouter[ifp->if_rdomain]) {
+			int error;
+
 			if (ip6_hbhchcheck(m, offp, &nxt, &ours))
 				goto out;
 
@@ -431,16 +433,21 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 			 * must be discarded, else it may be accepted below.
 			 */
 			KERNEL_LOCK();
-			if (ip6_mforward(ip6, ifp, m)) {
+			error = ip6_mforward(ip6, ifp, m);
+			KERNEL_UNLOCK();
+			if (error) {
 				ip6stat_inc(ip6s_cantforward);
-			} else if (ours) {
+				goto bad;
+			}
+
+			if (ours) {
+				KERNEL_LOCK();
 				if (af == AF_UNSPEC)
 					nxt = ip_deliver(mp, offp, nxt,
 					    AF_INET6);
 				KERNEL_UNLOCK();
 				goto out;
 			}
-			KERNEL_UNLOCK();
 			goto bad;
 		}
 #endif
