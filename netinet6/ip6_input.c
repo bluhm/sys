@@ -170,6 +170,10 @@ ip6_init(void)
 int
 ip6_ours(struct mbuf **mp, int *offp, int nxt, int af)
 {
+	/* We are already in a IPv4/IPv6 local deliver loop. */
+	if (af != AF_UNSPEC)
+		return ip6_local(mp, offp, nxt, af);
+
 	niq_enqueue(&ip6intrq, *mp);
 	*mp = NULL;
 	return IPPROTO_DONE;
@@ -560,7 +564,7 @@ ip6_local(struct mbuf **mp, int *offp, int nxt, int af)
 	if (ip6_hbhchcheck(*mp, offp, &nxt, NULL))
 		return IPPROTO_DONE;
 
-	/* Check wheter we are already in a IPv4/IPv6 local processing loop. */
+	/* Check wheter we are already in a IPv4/IPv6 local deliver loop. */
 	if (af == AF_UNSPEC)
 		nxt = ip_deliver(mp, offp, nxt, AF_INET6);
 	return nxt;
