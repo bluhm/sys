@@ -283,22 +283,22 @@ ip_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 	if (m->m_len < sizeof (struct ip) &&
 	    (m = *mp = m_pullup(m, sizeof (struct ip))) == NULL) {
 		ipstat_inc(ips_toosmall);
-		goto done;
+		goto bad;
 	}
 	ip = mtod(m, struct ip *);
 	if (ip->ip_v != IPVERSION) {
 		ipstat_inc(ips_badvers);
-		goto done;
+		goto bad;
 	}
 	hlen = ip->ip_hl << 2;
 	if (hlen < sizeof(struct ip)) {	/* minimum header length */
 		ipstat_inc(ips_badhlen);
-		goto done;
+		goto bad;
 	}
 	if (hlen > m->m_len) {
 		if ((m = *mp = m_pullup(m, hlen)) == NULL) {
 			ipstat_inc(ips_badhlen);
-			goto done;
+			goto bad;
 		}
 		ip = mtod(m, struct ip *);
 	}
@@ -308,20 +308,20 @@ ip_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 	    (ntohl(ip->ip_src.s_addr) >> IN_CLASSA_NSHIFT) == IN_LOOPBACKNET) {
 		if ((ifp->if_flags & IFF_LOOPBACK) == 0) {
 			ipstat_inc(ips_badaddr);
-			goto done;
+			goto bad;
 		}
 	}
 
 	if ((m->m_pkthdr.csum_flags & M_IPV4_CSUM_IN_OK) == 0) {
 		if (m->m_pkthdr.csum_flags & M_IPV4_CSUM_IN_BAD) {
 			ipstat_inc(ips_badsum);
-			goto done;
+			goto bad;
 		}
 
 		ipstat_inc(ips_inswcsum);
 		if (in_cksum(m, hlen) != 0) {
 			ipstat_inc(ips_badsum);
-			goto done;
+			goto bad;
 		}
 	}
 
@@ -333,7 +333,7 @@ ip_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 	 */
 	if (len < hlen) {
 		ipstat_inc(ips_badlen);
-		goto done;
+		goto bad;
 	}
 
 	/*
@@ -344,7 +344,7 @@ ip_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 	 */
 	if (m->m_pkthdr.len < len) {
 		ipstat_inc(ips_tooshort);
-		goto done;
+		goto bad;
 	}
 	if (m->m_pkthdr.len > len) {
 		if (m->m_len == m->m_pkthdr.len) {
@@ -358,7 +358,7 @@ ip_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 	if (ifp->if_type == IFT_CARP &&
 	    carp_lsdrop(m, AF_INET, &ip->ip_src.s_addr, &ip->ip_dst.s_addr,
 	    (ip->ip_p == IPPROTO_ICMP ? 0 : 1)))
-		goto done;
+		goto bad;
 #endif
 
 #if NPF > 0
@@ -367,10 +367,10 @@ ip_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 	 */
 	pfrdr = ip->ip_dst.s_addr;
 	if (pf_test(AF_INET, PF_IN, ifp, mp) != PF_PASS)
-		goto done;
+		goto bad;
 	m = *mp;
 	if (m == NULL)
-		goto done;
+		goto bad;
 
 	ip = mtod(m, struct ip *);
 	hlen = ip->ip_hl << 2;
@@ -385,7 +385,7 @@ ip_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 	 */
 	if (hlen > sizeof (struct ip) && ip_dooptions(m, ifp)) {
 		m = *mp = NULL;
-		goto done;
+		goto bad;
 	}
 
 	if (ip->ip_dst.s_addr == INADDR_BROADCAST ||
@@ -414,7 +414,7 @@ ip_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 			if (m->m_flags & M_EXT) {
 				if ((m = *mp = m_pullup(m, hlen)) == NULL) {
 					ipstat_inc(ips_toosmall);
-					goto done;
+					goto bad;
 				}
 				ip = mtod(m, struct ip *);
 			}
@@ -435,7 +435,7 @@ ip_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 			KERNEL_UNLOCK();
 			if (rv != 0) {
 				ipstat_inc(ips_cantforward);
-				goto done;
+				goto bad;
 			}
 
 			/*
@@ -458,7 +458,7 @@ ip_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 			ipstat_inc(ips_notmember);
 			if (!IN_LOCAL_GROUP(ip->ip_dst.s_addr))
 				ipstat_inc(ips_cantforward);
-			goto done;
+			goto bad;
 		}
 		nxt = ip_ours(mp, offp, nxt, af);
 		goto out;
@@ -467,14 +467,14 @@ ip_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 #if NCARP > 0
 	if (ifp->if_type == IFT_CARP && ip->ip_p == IPPROTO_ICMP &&
 	    carp_lsdrop(m, AF_INET, &ip->ip_src.s_addr, &ip->ip_dst.s_addr, 1))
-		goto done;
+		goto bad;
 #endif
 	/*
 	 * Not for us; forward if possible and desirable.
 	 */
 	if (ipforwarding == 0) {
 		ipstat_inc(ips_cantforward);
-		goto done;
+		goto bad;
 	}
 #ifdef IPSEC
 	if (ipsec_in_use) {
@@ -485,7 +485,7 @@ ip_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 		rv = ipsec_forward_check(m, hlen, AF_INET);
 		if (rv != 0) {
 			ipstat_inc(ips_cantforward);
-			goto done;
+			goto bad;
 		}
 		/*
 		 * Fall through, forward packet. Outbound IPsec policy
@@ -497,7 +497,7 @@ ip_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 	ip_forward(m, ifp, rt, pfrdr);
 	*mp = NULL;
 	return IPPROTO_DONE;
- done:
+ bad:
 	nxt = IPPROTO_DONE;
 	m_freem(*mp);
 	*mp = NULL;
@@ -535,7 +535,7 @@ ip_local(struct mbuf **mp, int *offp, int nxt, int af)
 		if (m->m_flags & M_EXT) {		/* XXX */
 			if ((m = *mp = m_pullup(m, hlen)) == NULL) {
 				ipstat_inc(ips_toosmall);
-				goto done;
+				goto bad;
 			}
 			ip = mtod(m, struct ip *);
 		}
@@ -568,7 +568,7 @@ found:
 			if (ntohs(ip->ip_len) == 0 ||
 			    (ntohs(ip->ip_len) & 0x7) != 0) {
 				ipstat_inc(ips_badfrags);
-				goto done;
+				goto bad;
 			}
 		}
 		ip->ip_off = htons(ntohs(ip->ip_off) << 3);
@@ -583,13 +583,13 @@ found:
 			if (ip_frags + 1 > ip_maxqueue) {
 				ip_flush();
 				ipstat_inc(ips_rcvmemdrop);
-				goto done;
+				goto bad;
 			}
 
 			ipqe = pool_get(&ipqent_pool, PR_NOWAIT);
 			if (ipqe == NULL) {
 				ipstat_inc(ips_rcvmemdrop);
-				goto done;
+				goto bad;
 			}
 			ip_frags++;
 			ipqe->ipqe_mff = mff;
@@ -597,7 +597,7 @@ found:
 			ipqe->ipqe_ip = ip;
 			m = *mp = ip_reass(ipqe, fp);
 			if (m == NULL)
-				goto done;
+				goto bad;
 			ipstat_inc(ips_reassembled);
 			ip = mtod(m, struct ip *);
 			hlen = ip->ip_hl << 2;
@@ -609,7 +609,7 @@ found:
 
 	*offp = hlen;
 	return ip_deliver(mp, offp, ip->ip_p, AF_INET);
- done:
+ bad:
 	m_freem(*mp);
 	*mp = NULL;
 	return IPPROTO_DONE;
@@ -627,7 +627,7 @@ ip_deliver(struct mbuf **mp, int *offp, int nxt, int af)
 	if (ipsec_in_use) {
 		if (ipsec_local_check(*mp, *offp, nxt, af) != 0) {
 			ipstat_inc(ips_cantforward);
-			goto done;
+			goto bad;
 		}
 	}
 	/* Otherwise, just fall through and deliver the packet */
@@ -641,7 +641,7 @@ ip_deliver(struct mbuf **mp, int *offp, int nxt, int af)
 	KASSERT(nxt == IPPROTO_DONE);
 	return nxt;
 #ifdef IPSEC
- done:
+ bad:
 #endif
 	m_freem(*mp);
 	*mp = NULL;
