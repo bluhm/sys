@@ -523,10 +523,11 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 		goto out;
 
 	if (ours) {
-		KERNEL_LOCK();
-		if (af == AF_UNSPEC)
+		if (af == AF_UNSPEC) {
+			KERNEL_LOCK();
 			nxt = ip_deliver(mp, offp, nxt, AF_INET6);
-		KERNEL_UNLOCK();
+			KERNEL_UNLOCK();
+		}
 		goto out;
 	}
 
