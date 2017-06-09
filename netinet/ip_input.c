@@ -421,7 +421,7 @@ ip_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 
 #ifdef MROUTING
 		if (ipmforwarding && ip_mrouter[ifp->if_rdomain]) {
-			int rv;
+			int error;
 
 			if (m->m_flags & M_EXT) {
 				if ((m = *mp = m_pullup(m, hlen)) == NULL) {
@@ -443,9 +443,9 @@ ip_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 			 * ip_output().)
 			 */
 			KERNEL_LOCK();
-			rv = ip_mforward(m, ifp);
+			error = ip_mforward(m, ifp);
 			KERNEL_UNLOCK();
-			if (rv != 0) {
+			if (error) {
 				ipstat_inc(ips_cantforward);
 				goto bad;
 			}

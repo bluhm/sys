@@ -1084,8 +1084,7 @@ ip_mforward(struct mbuf *m, struct ifnet *ifp)
 		if ((srctun++ % 1000) == 0)
 			log(LOG_ERR, "ip_mforward: received source-routed "
 			    "packet from %x\n", ntohl(ip->ip_src.s_addr));
-
-		return (1);
+		return (EINVAL);
 	}
 
 	/*
