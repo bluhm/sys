@@ -237,7 +237,7 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 	if (m->m_len < sizeof(struct ip6_hdr)) {
 		if ((m = *mp = m_pullup(m, sizeof(struct ip6_hdr))) == NULL) {
 			ip6stat_inc(ip6s_toosmall);
-			goto done;
+			goto bad;
 		}
 	}
 
@@ -245,14 +245,14 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 
 	if ((ip6->ip6_vfc & IPV6_VERSION_MASK) != IPV6_VERSION) {
 		ip6stat_inc(ip6s_badvers);
-		goto done;
+		goto bad;
 	}
 
 #if NCARP > 0
 	if (ifp->if_type == IFT_CARP &&
 	    carp_lsdrop(m, AF_INET6, ip6->ip6_src.s6_addr32,
 	    ip6->ip6_dst.s6_addr32, (ip6->ip6_nxt == IPPROTO_ICMPV6 ? 0 : 1)))
-		goto done;
+		goto bad;
 #endif
 	ip6stat_inc(ip6s_nxthist + ip6->ip6_nxt);
 
@@ -265,20 +265,20 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 		 * XXX: "badscope" is not very suitable for a multicast source.
 		 */
 		ip6stat_inc(ip6s_badscope);
-		goto done;
+		goto bad;
 	}
 	if ((IN6_IS_ADDR_LOOPBACK(&ip6->ip6_src) ||
 	    IN6_IS_ADDR_LOOPBACK(&ip6->ip6_dst)) &&
 	    (ifp->if_flags & IFF_LOOPBACK) == 0) {
 		    ip6stat_inc(ip6s_badscope);
-		    goto done;
+		    goto bad;
 	}
 	/* Drop packets if interface ID portion is already filled. */
 	if (((IN6_IS_SCOPE_EMBED(&ip6->ip6_src) && ip6->ip6_src.s6_addr16[1]) ||
 	    (IN6_IS_SCOPE_EMBED(&ip6->ip6_dst) && ip6->ip6_dst.s6_addr16[1])) &&
 	    (ifp->if_flags & IFF_LOOPBACK) == 0) {
 		ip6stat_inc(ip6s_badscope);
-		goto done;
+		goto bad;
 	}
 	if (IN6_IS_ADDR_MC_INTFACELOCAL(&ip6->ip6_dst) &&
 	    !(m->m_flags & M_LOOP)) {
@@ -289,7 +289,7 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 		 * as the outgoing/incoming interface.
 		 */
 		ip6stat_inc(ip6s_badscope);
-		goto done;
+		goto bad;
 	}
 
 	/*
@@ -307,7 +307,7 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 	if (IN6_IS_ADDR_V4MAPPED(&ip6->ip6_src) ||
 	    IN6_IS_ADDR_V4MAPPED(&ip6->ip6_dst)) {
 		ip6stat_inc(ip6s_badscope);
-		goto done;
+		goto bad;
 	}
 
 	/*
@@ -318,7 +318,7 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 	if (IN6_IS_ADDR_V4COMPAT(&ip6->ip6_src) ||
 	    IN6_IS_ADDR_V4COMPAT(&ip6->ip6_dst)) {
 		ip6stat_inc(ip6s_badscope);
-		goto done;
+		goto bad;
 	}
 
 	/*
@@ -343,10 +343,10 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 	 */
 	odst = ip6->ip6_dst;
 	if (pf_test(AF_INET6, PF_IN, ifp, mp) != PF_PASS)
-		goto done;
+		goto bad;
 	m = *mp;
 	if (m == NULL)
-		goto done;
+		goto bad;
 
 	ip6 = mtod(m, struct ip6_hdr *);
 	srcrt = !IN6_ARE_ADDR_EQUAL(&odst, &ip6->ip6_dst);
@@ -377,7 +377,7 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 		ip6stat_inc(ip6s_badoptions);
 		icmp6_error(m, ICMP6_PARAM_PROB, ICMP6_PARAMPROB_HEADER, *offp);
 		m = *mp = NULL;
-		goto done;
+		goto bad;
 	}
 
 	if (IN6_IS_ADDR_LOOPBACK(&ip6->ip6_src) ||
@@ -437,14 +437,14 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 				goto out;
 			}
 			KERNEL_UNLOCK();
-			goto done;
+			goto bad;
 		}
 #endif
 		if (!ours) {
 			ip6stat_inc(ip6s_notmember);
 			if (!IN6_IS_ADDR_MC_LINKLOCAL(&ip6->ip6_dst))
 				ip6stat_inc(ip6s_cantforward);
-			goto done;
+			goto bad;
 		}
 		nxt = ip6_ours(mp, offp, nxt, af);
 		goto out;
@@ -483,7 +483,7 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 			    "%s: packet to an unready address %s->%s\n",
 			    __func__, src, dst));
 
-			goto done;
+			goto bad;
 		} else {
 			nxt = ip6_ours(mp, offp, nxt, af);
 			goto out;
@@ -494,7 +494,7 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 	if (ifp->if_type == IFT_CARP && ip6->ip6_nxt == IPPROTO_ICMPV6 &&
 	    carp_lsdrop(m, AF_INET6, ip6->ip6_src.s6_addr32,
 	    ip6->ip6_dst.s6_addr32, 1))
-		goto done;
+		goto bad;
 #endif
 	/*
 	 * Now there is no reason to process the packet if it's not our own
@@ -502,7 +502,7 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 	 */
 	if (!ip6_forwarding) {
 		ip6stat_inc(ip6s_cantforward);
-		goto done;
+		goto bad;
 	}
 
 	if (ip6_hbhchcheck(m, offp, &nxt, &ours))
@@ -524,7 +524,7 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 		rv = ipsec_forward_check(m, *offp, AF_INET6);
 		if (rv != 0) {
 			ip6stat_inc(ip6s_cantforward);
-			goto done;
+			goto bad;
 		}
 		/*
 		 * Fall through, forward packet. Outbound IPsec policy
@@ -536,7 +536,7 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 	ip6_forward(m, rt, srcrt);
 	*mp = NULL;
 	return IPPROTO_DONE;
- done:
+ bad:
 	nxt = IPPROTO_DONE;
 	m_freem(*mp);
 	*mp = NULL;
