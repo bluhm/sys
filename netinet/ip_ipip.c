@@ -224,8 +224,7 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 		hlen = ip->ip_hl << 2;
 		if (m->m_pkthdr.len < hlen) {
 			ipipstat_inc(ipips_hdrops);
-			m_freem(m);
-			return IPPROTO_DONE;
+			goto bad;
 		}
 		itos = ip->ip_tos;
 		mode = m->m_flags & (M_AUTH|M_CONF) ?
