@@ -121,7 +121,7 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 {
 	struct mbuf *m = *mp;
 	struct sockaddr_in *sin;
-	struct ifnet *ifp;
+	struct ifnet *ifp = NULL;
 	struct ip *ip;
 #ifdef INET6
 	struct sockaddr_in6 *sin6;
@@ -257,14 +257,16 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 #endif
 	}
 
+	if (gifp == NULL)
+		ifp = if_get(m->m_pkthdr.ph_ifidx);
+	else
+		ifp = gifp;
+
 	/* Check for local address spoofing. */
-	ifp = if_get(m->m_pkthdr.ph_ifidx);
 	if (((ifp == NULL) || !(ifp->if_flags & IFF_LOOPBACK)) &&
 	    ipip_allow != 2) {
 		struct sockaddr_storage ss;
 		struct rtentry *rt;
-
-		if_put(ifp);
 
 		memset(&ss, 0, sizeof(ss));
 
@@ -288,8 +290,6 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 			goto bad;
  		}
 		rtfree(rt);
- 	} else {
-		if_put(ifp);
 	}
 
 	/* Statistics */
@@ -315,16 +315,19 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 	case IPPROTO_IPV4:
 		ipv4_input(ifp, m);
 		*mp = NULL;
-		return IPPROTO_DONE;
+		goto out;
 #ifdef INET6
 	case IPPROTO_IPV6:
 		ipv6_input(ifp, m);
 		*mp = NULL;
-		return IPPROTO_DONE;
+		goto out;
 #endif
 	}
  bad:
 	m_freemp(mp);
+ out:
+	if (gifp == NULL)
+		if_put(ifp);
 	return IPPROTO_DONE;
 }
 
