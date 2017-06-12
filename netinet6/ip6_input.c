@@ -579,7 +579,7 @@ ip6_deliver(struct mbuf **mp, int *offp, int nxt, int af)
 	}
 	return;
  bad:
-	m_freem(*mp);
+	m_freemp(mp);
 }
 
 int

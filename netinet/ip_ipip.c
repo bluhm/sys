@@ -100,7 +100,7 @@ ipip_input(struct mbuf **mp, int *offp, int proto, int af)
 	if (!ipip_allow && ((*mp)->m_flags & (M_AUTH|M_CONF)) == 0) {
 		DPRINTF(("%s: dropped due to policy\n", __func__));
 		ipipstat_inc(ipips_pdrops);
-		m_freem(*mp);
+		m_freemp(mp);
 		return IPPROTO_DONE;
 	}
 
@@ -324,8 +324,7 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 #endif
 	}
  bad:
-	m_freem(*mp);
-	*mp = NULL;
+	m_freemp(mp);
 	return IPPROTO_DONE;
 }
 

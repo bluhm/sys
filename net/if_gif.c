@@ -277,7 +277,7 @@ gif_encap(struct ifnet *ifp, struct mbuf **mp, sa_family_t af)
 		break;
 #endif
 	default:
-		m_freem(*mp);
+		m_freemp(mp);
 		error = EAFNOSUPPORT;
 		break;
 	}

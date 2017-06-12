@@ -342,8 +342,7 @@ z_compress(arg, mret, mp, orig_len, maxolen)
 	state->stats.comp_bytes += olen;
 	state->stats.comp_packets++;
     } else {
-	m_freem(*mret);
-	*mret = NULL;
+	m_freemp(mret);
 
 	state->stats.inc_bytes += orig_len;
 	state->stats.inc_packets++;
