@@ -421,7 +421,7 @@ carp_proto_input(struct mbuf **mp, int *offp, int proto, int af)
 
 	ifp = if_get((*mp)->m_pkthdr.ph_ifidx);
 	if (ifp == NULL) {
-		m_freem(*mp);
+		m_freemp(mp);
 		return IPPROTO_DONE;
 	}
 
@@ -517,7 +517,7 @@ carp6_proto_input(struct mbuf **mp, int *offp, int proto, int af)
 
 	ifp = if_get((*mp)->m_pkthdr.ph_ifidx);
 	if (ifp == NULL) {
-		m_freem(*mp);
+		m_freemp(mp);
 		return IPPROTO_DONE;
 	}
 

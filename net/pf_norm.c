@@ -773,8 +773,7 @@ pf_refragment6(struct mbuf **m0, struct m_tag *mtag, struct sockaddr_in6 *dst,
 	(*m0)->m_nextpkt = NULL;
 	if (error == 0) {
 		/* The first mbuf contains the unfragmented packet */
-		m_freem(*m0);
-		*m0 = NULL;
+		m_freemp(m0);
 		action = PF_PASS;
 	} else {
 		/* Drop expects an mbuf to free */
