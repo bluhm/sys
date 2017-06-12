@@ -463,6 +463,15 @@ int	m_apply(struct mbuf *, int, int,
 struct mbuf *m_dup_pkt(struct mbuf *, unsigned int, int);
 int	m_dup_pkthdr(struct mbuf *, struct mbuf *, int);
 
+static inline struct mbuf *
+m_freemp(struct mbuf **mp)
+{
+	struct mbuf *m = *mp;
+
+	*mp = NULL;
+	return m_freem(m);
+}
+
 /* Packet tag routines */
 struct m_tag *m_tag_get(int, int, int);
 void	m_tag_prepend(struct mbuf *, struct m_tag *);
