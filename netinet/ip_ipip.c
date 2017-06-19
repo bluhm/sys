@@ -48,6 +48,7 @@
 #include <sys/sysctl.h>
 
 #include <net/if.h>
+#include <net/if_types.h>
 #include <net/if_var.h>
 #include <net/route.h>
 #include <net/netisr.h>
@@ -91,11 +92,13 @@ ipip_init(void)
 }
 
 /*
- * Really only a wrapper for ipip_input_gif(), for use with pr_input.
+ * Really only a wrapper for ipip_input_if(), for use with pr_input.
  */
 int
-ipip_input(struct mbuf **mp, int *offp, int proto, int af)
+ipip_input(struct mbuf **mp, int *offp, int nxt, int af)
 {
+	struct ifnet *ifp;
+
 	/* If we do not accept IP-in-IP explicitly, drop.  */
 	if (!ipip_allow && ((*mp)->m_flags & (M_AUTH|M_CONF)) == 0) {
 		DPRINTF(("%s: dropped due to policy\n", __func__));
@@ -104,7 +107,15 @@ ipip_input(struct mbuf **mp, int *offp, int proto, int af)
 		return IPPROTO_DONE;
 	}
 
-	return ipip_input_gif(mp, offp, proto, af, NULL);
+	ifp = if_get((*mp)->m_pkthdr.ph_ifidx);
+	if (ifp == NULL) {
+		m_freemp(mp);
+		return IPPROTO_DONE;
+	}
+	nxt = ipip_input_if(mp, offp, nxt, af, ifp);
+	if_put(ifp);
+
+	return nxt;
 }
 
 /*
@@ -116,12 +127,11 @@ ipip_input(struct mbuf **mp, int *offp, int proto, int af)
  */
 
 int
-ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
-    struct ifnet *gifp)
+ipip_input_if(struct mbuf **mp, int *offp, int proto, int oaf,
+    struct ifnet *ifp)
 {
 	struct mbuf *m = *mp;
 	struct sockaddr_in *sin;
-	struct ifnet *ifp = NULL;
 	struct ip *ip;
 #ifdef INET6
 	struct sockaddr_in6 *sin6;
@@ -256,14 +266,8 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 #endif
 	}
 
-	if (gifp == NULL)
-		ifp = if_get(m->m_pkthdr.ph_ifidx);
-	else
-		ifp = gifp;
-
 	/* Check for local address spoofing. */
-	if (((ifp == NULL) || !(ifp->if_flags & IFF_LOOPBACK)) &&
-	    ipip_allow != 2) {
+	if (!(ifp->if_flags & IFF_LOOPBACK) && ipip_allow != 2) {
 		struct sockaddr_storage ss;
 		struct rtentry *rt;
 
@@ -295,8 +299,8 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 	ipipstat_add(ipips_ibytes, m->m_pkthdr.len - hlen);
 
 #if NBPFILTER > 0
-	if (gifp && gifp->if_bpf)
-		bpf_mtap_af(gifp->if_bpf, iaf, m, BPF_DIRECTION_IN);
+	if (ifp->if_type == IFT_GIF && ifp->if_bpf != NULL)
+		bpf_mtap_af(ifp->if_bpf, iaf, m, BPF_DIRECTION_IN);
 #endif
 #if NPF > 0
 	pf_pkt_addr_changed(m);
@@ -314,19 +318,16 @@ ipip_input_gif(struct mbuf **mp, int *offp, int proto, int oaf,
 	case IPPROTO_IPV4:
 		ipv4_input(ifp, m);
 		*mp = NULL;
-		goto out;
+		return IPPROTO_DONE;
 #ifdef INET6
 	case IPPROTO_IPV6:
 		ipv6_input(ifp, m);
 		*mp = NULL;
-		goto out;
+		return IPPROTO_DONE;
 #endif
 	}
  bad:
 	m_freemp(mp);
- out:
-	if (gifp == NULL)
-		if_put(ifp);
 	return IPPROTO_DONE;
 }
 
