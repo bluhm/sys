@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_iwm.c,v 1.192 2017/06/09 13:47:26 stsp Exp $	*/
+/*	$OpenBSD: if_iwm.c,v 1.197 2017/06/16 08:45:34 stsp Exp $	*/
 
 /*
  * Copyright (c) 2014, 2016 genua gmbh <info@genua.de>
@@ -3126,6 +3126,7 @@ iwm_load_ucode_wait_alive(struct iwm_softc *sc,
 int
 iwm_run_init_mvm_ucode(struct iwm_softc *sc, int justnvm)
 {
+	const int wait_flags = (IWM_INIT_COMPLETE | IWM_CALIB_COMPLETE);
 	int err;
 
 	if ((sc->sc_flags & IWM_FLAG_RFKILL) && !justnvm) {
@@ -3177,10 +3178,10 @@ iwm_run_init_mvm_ucode(struct iwm_softc *sc, int justnvm)
 		return err;
 
 	/*
-	 * Nothing to do but wait for the init complete notification
-	 * from the firmware
+	 * Nothing to do but wait for the init complete and phy DB
+	 * notifications from the firmware.
 	 */
-	while (!sc->sc_init_complete) {
+	while ((sc->sc_init_complete & wait_flags) != wait_flags) {
 		err = tsleep(&sc->sc_init_complete, 0, "iwminit", 2*hz);
 		if (err)
 			break;
@@ -5622,6 +5623,7 @@ iwm_newstate_task(void *psc)
 		sc->sc_flags |= IWM_FLAG_SCANNING;
 		ic->ic_state = nstate;
 		iwm_led_blink_start(sc);
+		wakeup(&ic->ic_state); /* wake iwm_init() */
 		return;
 
 	case IEEE80211_S_AUTH:
@@ -6004,7 +6006,7 @@ iwm_init_hw(struct iwm_softc *sc)
 		goto err;
 	}
 
-	for (i = 0; i < IWM_NUM_PHY_CTX; i++) {
+	for (i = 0; i < 1; i++) {
 		/*
 		 * The channel used here isn't relevant as it's
 		 * going to be overwritten in the other flows.
@@ -6101,7 +6103,8 @@ int
 iwm_init(struct ifnet *ifp)
 {
 	struct iwm_softc *sc = ifp->if_softc;
-	int err;
+	struct ieee80211com *ic = &sc->sc_ic;
+	int err, generation;
 
 	if (sc->sc_flags & IWM_FLAG_HW_INITED) {
 		return 0;
@@ -6118,6 +6121,20 @@ iwm_init(struct ifnet *ifp)
 	ifp->if_flags |= IFF_RUNNING;
 
 	ieee80211_begin_scan(ifp);
+
+	/* 
+	 * ieee80211_begin_scan() ends up scheduling iwm_newstate_task().
+	 * Wait until the transition to SCAN state has completed.
+	 */
+	generation = sc->sc_generation;
+	do {
+		err = tsleep(&ic->ic_state, PCATCH, "iwminit", hz);
+		if (generation != sc->sc_generation)
+			return ENXIO;
+		if (err)
+			return err;
+	} while (ic->ic_state != IEEE80211_S_SCAN);
+
 	sc->sc_flags |= IWM_FLAG_HW_INITED;
 
 	return 0;
@@ -6251,16 +6268,19 @@ iwm_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 	struct iwm_softc *sc = ifp->if_softc;
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ifreq *ifr;
-	int s, err = 0;
+	int s, err = 0, generation = sc->sc_generation;
 
 	/*
 	 * Prevent processes from entering this function while another
 	 * process is tsleep'ing in it.
 	 */
 	err = rw_enter(&sc->ioctl_rwl, RW_WRITE | RW_INTR);
+	if (err == 0 && generation != sc->sc_generation) {
+		rw_exit(&sc->ioctl_rwl);
+		return ENXIO;
+	}
 	if (err)
 		return err;
-
 	s = splnet();
 
 	switch (cmd) {
@@ -6680,6 +6700,8 @@ iwm_notif_intr(struct iwm_softc *sc)
 			struct iwm_calib_res_notif_phy_db *phy_db_notif;
 			SYNC_RESP_STRUCT(phy_db_notif, pkt);
 			iwm_phy_db_set_section(sc, phy_db_notif);
+			sc->sc_init_complete |= IWM_CALIB_COMPLETE;
+			wakeup(&sc->sc_init_complete);
 			break;
 		}
 
@@ -6746,7 +6768,7 @@ iwm_notif_intr(struct iwm_softc *sc)
 			break;
 
 		case IWM_INIT_COMPLETE_NOTIF:
-			sc->sc_init_complete = 1;
+			sc->sc_init_complete |= IWM_INIT_COMPLETE;
 			wakeup(&sc->sc_init_complete);
 			break;
 
@@ -7419,8 +7441,13 @@ iwm_init_task(void *arg1)
 	struct iwm_softc *sc = arg1;
 	struct ifnet *ifp = &sc->sc_ic.ic_if;
 	int s;
+	int generation = sc->sc_generation;
 
 	rw_enter_write(&sc->ioctl_rwl);
+	if (generation != sc->sc_generation) {
+		rw_exit(&sc->ioctl_rwl);
+		return;
+	}
 	s = splnet();
 
 	if (sc->sc_flags & IWM_FLAG_HW_INITED)
