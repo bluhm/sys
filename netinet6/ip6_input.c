@@ -118,7 +118,6 @@ struct niqueue ip6intrq = NIQUEUE_INITIALIZER(IFQ_MAXLEN, NETISR_IPV6);
 
 struct cpumem *ip6counters;
 
-int ip6_input_if(struct mbuf **, int *, int, int, struct ifnet *);
 int ip6_ours(struct mbuf **, int *, int, int);
 int ip6_local(struct mbuf **, int *, int, int);
 int ip6_check_rh0hdr(struct mbuf *, int *);
@@ -201,25 +200,11 @@ ip6intr(void)
 void
 ipv6_input(struct ifnet *ifp, struct mbuf *m)
 {
-	int off;
+	int off, nxt;
 
 	off = 0;
-	ip6_input_if(&m, &off, IPPROTO_IPV6, AF_UNSPEC, ifp);
-}
-
-int
-ip6_input(struct mbuf **mp, int *offp, int nxt, int af)
-{
-	struct ifnet *ifp;
-
-	ifp = if_get((*mp)->m_pkthdr.ph_ifidx);
-	if (ifp == NULL) {
-		m_freemp(mp);
-		return IPPROTO_DONE;
-	}
-	nxt = ip6_input_if(mp, offp, nxt, af, ifp);
-	if_put(ifp);
-	return nxt;
+	nxt = ip6_input_if(&m, &off, IPPROTO_IPV6, AF_UNSPEC, ifp);
+	KASSERT(nxt == IPPROTO_DONE);
 }
 
 int
