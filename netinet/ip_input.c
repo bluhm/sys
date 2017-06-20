@@ -266,22 +266,6 @@ ipv4_input(struct ifnet *ifp, struct mbuf *m)
 }
 
 int
-ip_input(struct mbuf **mp, int *offp, int nxt, int af)
-{
-	struct ifnet *ifp;
-
-	ifp = if_get((*mp)->m_pkthdr.ph_ifidx);
-	if (ifp == NULL) {
-		m_freemp(mp);
-		return IPPROTO_DONE;
-	}
-	nxt = ip_input_if(mp, offp, nxt, af, ifp);
-	if_put(ifp);
-	return nxt;
->>>>>>> Make parameter list ip_input(mp, offp, nxt, af).
-}
-
-int
 ip_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 {
 	struct mbuf	*m = *mp;
