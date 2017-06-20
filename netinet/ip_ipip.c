@@ -316,10 +316,10 @@ ipip_input_if(struct mbuf **mp, int *offp, int proto, int oaf,
 
 	switch (proto) {
 	case IPPROTO_IPV4:
-		return ip_input(mp, offp, proto, oaf);
+		return ip_input_if(mp, offp, proto, oaf, ifp);
 #ifdef INET6
 	case IPPROTO_IPV6:
-		return ip6_input(mp, offp, proto, oaf);
+		return ip6_input_if(mp, offp, proto, oaf, ifp);
 #endif
 	}
  bad:
