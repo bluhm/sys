@@ -118,3 +118,4 @@
 #include <netinet/icmp6.h>
 #endif /* INET6 */
 #include <net/pfvar_priv.h>
+#include <netinet/in_pcb.h>
