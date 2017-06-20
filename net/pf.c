@@ -779,6 +779,7 @@ pf_state_key_detach(struct pf_state *s, int idx)
 		sk->removed = 1;
 		pf_state_key_unlink_reverse(sk);
 		pf_inpcb_unlink_state_key(sk->inp);
+		sk->inp = NULL;
 		pf_state_key_unref(sk);
 	}
 }
@@ -7147,8 +7148,7 @@ pf_state_key_unref(struct pf_state_key *sk)
 		/* state key must be unlinked from reverse key */
 		KASSERT(sk->reverse == NULL);
 		/* state key must be unlinked from socket */
-		KASSERT((sk->inp == NULL) || (sk->inp->inp_pf_sk == NULL));
-		sk->inp = NULL;
+		KASSERT(sk->inp == NULL);
 		pool_put(&pf_state_key_pl, sk);
 	}
 }
