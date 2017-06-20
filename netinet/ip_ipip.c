@@ -39,6 +39,8 @@
  * IP-inside-IP processing
  */
 
+#include "bpfilter.h"
+#include "gif.h"
 #include "pf.h"
 
 #include <sys/param.h>
@@ -64,8 +66,6 @@
 #ifdef MROUTING
 #include <netinet/ip_mroute.h>
 #endif
-
-#include "bpfilter.h"
 
 #if NPF > 0
 #include <net/pfvar.h>
@@ -298,7 +298,7 @@ ipip_input_if(struct mbuf **mp, int *offp, int proto, int oaf,
 	/* Statistics */
 	ipipstat_add(ipips_ibytes, m->m_pkthdr.len - hlen);
 
-#if NBPFILTER > 0
+#if NBPFILTER > 0 && NGIF > 0
 	if (ifp->if_type == IFT_GIF && ifp->if_bpf != NULL)
 		bpf_mtap_af(ifp->if_bpf, iaf, m, BPF_DIRECTION_IN);
 #endif
