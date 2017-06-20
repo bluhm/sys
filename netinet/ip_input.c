@@ -126,7 +126,6 @@ int ip_sysctl_ipstat(void *, size_t *, void *);
 
 static struct mbuf_queue	ipsend_mq;
 
-int	ip_input_if(struct mbuf **, int *, int, int, struct ifnet *);
 int	ip_ours(struct mbuf **, int *, int, int);
 int	ip_local(struct mbuf **, int *, int, int);
 int	ip_dooptions(struct mbuf *, struct ifnet *);
@@ -249,26 +248,11 @@ ipintr(void)
 void
 ipv4_input(struct ifnet *ifp, struct mbuf *m)
 {
-	int off;
+	int off, nxt;
 
 	off = 0;
-	ip_input_if(&m, &off, IPPROTO_IPV4, AF_UNSPEC, ifp);
-}
-
-int
-ip_input(struct mbuf **mp, int *offp, int nxt, int af)
-{
-	struct ifnet *ifp;
-
-	ifp = if_get((*mp)->m_pkthdr.ph_ifidx);
-	if (ifp == NULL) {
-		m_freem(*mp);
-		*mp = NULL;
-		return IPPROTO_DONE;
-	}
-	nxt = ip_input_if(mp, offp, nxt, af, ifp);
-	if_put(ifp);
-	return nxt;
+	nxt = ip_input_if(&m, &off, IPPROTO_IPV4, AF_UNSPEC, ifp);
+	KASSERT(nxt == IPPROTO_DONE);
 }
 
 int
