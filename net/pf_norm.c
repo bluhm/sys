@@ -375,7 +375,8 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 		frag->fr_id = id;
 		frag->fr_node = frnode;
 		/* otherwise pf_find_fragment() would have found 'frag' */
-		KASSERT(RB_INSERT(pf_frag_tree, &frnode->fn_tree, frag) == NULL);
+		KASSERT(RB_INSERT(pf_frag_tree, &frnode->fn_tree, frag)
+		    == NULL);
 		frnode->fn_fragments++;
 		if (frnode->fn_fragments == 1)
 			RB_INSERT(pf_frnode_tree, &pf_frnode_tree, frnode);
@@ -600,7 +601,8 @@ pf_reassemble(struct mbuf **m0, int dir, u_short *reason)
 	key.fn_direction = dir;
 
 	PF_FRAG_LOCK();
-	if ((frag = pf_fillup_fragment(&key, ip->ip_id, frent, reason)) == NULL) {
+	if ((frag = pf_fillup_fragment(&key, ip->ip_id, frent, reason))
+	    == NULL) {
 		PF_FRAG_UNLOCK();
 		return (PF_DROP);
 	}
