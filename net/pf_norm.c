@@ -593,15 +593,14 @@ pf_reassemble(struct mbuf **m0, int dir, u_short *reason)
 	frent->fe_off = (ntohs(ip->ip_off) & IP_OFFMASK) << 3;
 	frent->fe_mff = ntohs(ip->ip_off) & IP_MF;
 
-	key.fr_src.v4 = ip->ip_src;
-	key.fr_dst.v4 = ip->ip_dst;
-	key.fr_af = AF_INET;
-	key.fr_proto = ip->ip_p;
-	key.fr_id = ip->ip_id;
-	key.fr_direction = dir;
+	key.fn_src.v4 = ip->ip_src;
+	key.fn_dst.v4 = ip->ip_dst;
+	key.fn_af = AF_INET;
+	key.fn_proto = ip->ip_p;
+	key.fn_direction = dir;
 
 	PF_FRAG_LOCK();
-	if ((frag = pf_fillup_fragment(&key, frent, reason)) == NULL) {
+	if ((frag = pf_fillup_fragment(&key, ip->ip_id, frent, reason)) == NULL) {
 		PF_FRAG_UNLOCK();
 		return (PF_DROP);
 	}
@@ -676,16 +675,16 @@ pf_reassemble6(struct mbuf **m0, struct ip6_frag *fraghdr,
 	frent->fe_off = ntohs(fraghdr->ip6f_offlg & IP6F_OFF_MASK);
 	frent->fe_mff = fraghdr->ip6f_offlg & IP6F_MORE_FRAG;
 
-	key.fr_src.v6 = ip6->ip6_src;
-	key.fr_dst.v6 = ip6->ip6_dst;
-	key.fr_af = AF_INET6;
+	key.fn_src.v6 = ip6->ip6_src;
+	key.fn_dst.v6 = ip6->ip6_dst;
+	key.fn_af = AF_INET6;
 	/* Only the first fragment's protocol is relevant */
-	key.fr_proto = 0;
-	key.fr_id = fraghdr->ip6f_ident;
-	key.fr_direction = dir;
+	key.fn_proto = 0;
+	key.fn_direction = dir;
 
 	PF_FRAG_LOCK();
-	if ((frag = pf_fillup_fragment(&key, frent, reason)) == NULL) {
+	if ((frag = pf_fillup_fragment(&key, fraghdr->ip6f_ident, frent,
+	    reason)) == NULL) {
 		PF_FRAG_UNLOCK();
 		return (PF_DROP);
 	}
