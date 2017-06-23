@@ -252,6 +252,7 @@ pf_free_fragment(struct pf_fragment *frag)
 	KASSERT(frnode->fn_fragments >= 1);
 	frnode->fn_fragments--;
 	if (frnode->fn_fragments == 0) {
+		KASSERT(RB_EMPTY(&frnode->fn_tree));
 		RB_REMOVE(pf_frnode_tree, &pf_frnode_tree, frnode);
 		pool_put(&pf_frnode_pl, frnode);
 	}
