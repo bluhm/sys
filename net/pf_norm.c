@@ -374,9 +374,8 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 		frag->fr_maxlen = frent->fe_len;
 		frag->fr_id = id;
 		frag->fr_node = frnode;
-		/* otherwise pf_find_fragment() would have found 'frag' */
-		KASSERT(RB_INSERT(pf_frag_tree, &frnode->fn_tree, frag)
-		    == NULL);
+		/* RB_INSERT cannot fail as pf_find_fragment() found nothing */
+		RB_INSERT(pf_frag_tree, &frnode->fn_tree, frag);
 		frnode->fn_fragments++;
 		if (frnode->fn_fragments == 1)
 			RB_INSERT(pf_frnode_tree, &pf_frnode_tree, frnode);
