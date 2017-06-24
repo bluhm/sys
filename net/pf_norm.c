@@ -379,6 +379,7 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 			*frnode = *key;
 			RB_INIT(&frnode->fn_tree);
 			frnode->fn_fragments = 0;
+			frnode->fn_gen = 0;
 		}
 		TAILQ_INIT(&frag->fr_queue);
 		frag->fr_timeout = time_uptime;
