@@ -84,6 +84,7 @@ struct pf_frnode {
 	u_int8_t	fn_proto;	/* protocol for fragments in fn_tree */
 	u_int8_t	fn_direction;	/* pf packet direction */
 	u_int32_t	fn_fragments;	/* number of entries in fn_tree */
+	u_int32_t	fn_gen;		/* fr_gen of newest entry in fn_tree */
 
 	RB_ENTRY(pf_frnode) fn_entry;
 	struct pf_frag_tree fn_tree;	/* matching fragments, lookup by id */
@@ -96,6 +97,7 @@ struct pf_fragment {
 	TAILQ_ENTRY(pf_fragment) frag_next;
 	TAILQ_HEAD(pf_fragq, pf_frent) fr_queue;
 	int32_t		fr_timeout;
+	u_int32_t	fr_gen;		/* generation number (per pf_frnode) */
 	u_int16_t	fr_maxlen;	/* maximum length of single fragment */
 	struct pf_frnode *fr_node;	/* ip src/dst/proto/af for fragments */
 };
@@ -268,11 +270,13 @@ pf_free_fragment(struct pf_fragment *frag)
 	pool_put(&pf_frag_pl, frag);
 }
 
+#define PF_FRSTALE 200
 struct pf_fragment *
 pf_find_fragment(struct pf_frnode *key, u_int32_t id)
 {
 	struct pf_fragment	*frag, idkey;
 	struct pf_frnode	*frnode;
+	u_int32_t		 stale;
 
 	frnode = RB_FIND(pf_frnode_tree, &pf_frnode_tree, key);
 	if (frnode == NULL)
@@ -282,6 +286,12 @@ pf_find_fragment(struct pf_frnode *key, u_int32_t id)
 	frag = RB_FIND(pf_frag_tree, &frnode->fn_tree, &idkey);
 	if (frag == NULL)
 		return (NULL);
+	stale = pf_default_rule.timeout[PFTM_FRAG] * PF_FRSTALE;
+	if ((frnode->fn_gen - frag->fr_gen) >= stale) {
+		DPFPRINTF(LOG_NOTICE, "stale %d(%p)", frag->fr_id, frag);
+		pf_free_fragment(frag);
+		return (NULL);
+	}
 	TAILQ_REMOVE(&pf_fragqueue, frag, frag_next);
 	TAILQ_INSERT_HEAD(&pf_fragqueue, frag, frag_next);
 
@@ -372,6 +382,7 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 		}
 		TAILQ_INIT(&frag->fr_queue);
 		frag->fr_timeout = time_uptime;
+		frag->fr_gen = frnode->fn_gen++;
 		frag->fr_maxlen = frent->fe_len;
 		frag->fr_id = id;
 		frag->fr_node = frnode;
