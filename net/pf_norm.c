@@ -286,9 +286,21 @@ pf_find_fragment(struct pf_frnode *key, u_int32_t id)
 	frag = RB_FIND(pf_frag_tree, &frnode->fn_tree, &idkey);
 	if (frag == NULL)
 		return (NULL);
-	stale = pf_default_rule.timeout[PFTM_FRAG] * PF_FRSTALE;
+	/*
+	 * Limit the number of fragments we accept for each (proto,src,dst,af)
+	 * combination (aka pf_frnode), so we can deal better with a high rate
+	 * of fragments.
+	 * Store the current generation for each pf_frnode in fn_gen and on
+	 * lookup discard 'stale' fragments (pf_fragment, based on the fr_gen
+	 * member).  Instead of adding another button interpret the pf fragment
+	 * timeout in multiples of 200 fragments.  This way the default of 60s
+	 * means: pf_fragment objects older than 60*200 = 18.000 generations
+	 * are considered stale.
+	 */
+	stale = pf_default_rule.timeout[PFTM_FRAG] * PF_FRAG_STALE;
 	if ((frnode->fn_gen - frag->fr_gen) >= stale) {
-		DPFPRINTF(LOG_NOTICE, "stale %d(%p)", frag->fr_id, frag);
+		DPFPRINTF(LOG_NOTICE, "stale fragment %d(%p), gen %u, num %u",
+		    frag->fr_id, frag, frag->fr_gen, frnode->fn_fragments);
 		pf_free_fragment(frag);
 		return (NULL);
 	}
