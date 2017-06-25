@@ -109,6 +109,8 @@ enum	{ PFTM_TCP_FIRST_PACKET, PFTM_TCP_OPENING, PFTM_TCP_ESTABLISHED,
 #define PFTM_SRC_NODE_VAL		0	/* Source tracking */
 #define PFTM_TS_DIFF_VAL		30	/* Allowed TS diff */
 
+#define PF_FRAG_STALE	200	/* Limit fragments per second per connection */
+
 enum	{ PF_NOPFROUTE, PF_ROUTETO, PF_DUPTO, PF_REPLYTO };
 enum	{ PF_LIMIT_STATES, PF_LIMIT_SRC_NODES, PF_LIMIT_FRAGS,
 	  PF_LIMIT_TABLES, PF_LIMIT_TABLE_ENTRIES, PF_LIMIT_MAX };
