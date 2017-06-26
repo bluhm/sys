@@ -293,7 +293,7 @@ pf_find_fragment(struct pf_frnode *key, u_int32_t id)
 	 * lookup discard 'stale' fragments (pf_fragment, based on the fr_gen
 	 * member).  Instead of adding another button interpret the pf fragment
 	 * timeout in multiples of 200 fragments.  This way the default of 60s
-	 * means: pf_fragment objects older than 60*200 = 18,000 generations
+	 * means: pf_fragment objects older than 60*200 = 12,000 generations
 	 * are considered stale.
 	 */
 	stale = pf_default_rule.timeout[PFTM_FRAG] * PF_FRAG_STALE;
