@@ -288,7 +288,7 @@ pf_find_fragment(struct pf_frnode *key, u_int32_t id)
 	/*
 	 * Limit the number of fragments we accept for each (proto,src,dst,af)
 	 * combination (aka pf_frnode), so we can deal better with a high rate
-	 * of fragments.
+	 * of fragments.  Problem analysis is in RFC 4963.
 	 * Store the current generation for each pf_frnode in fn_gen and on
 	 * lookup discard 'stale' fragments (pf_fragment, based on the fr_gen
 	 * member).  Instead of adding another button interpret the pf fragment
