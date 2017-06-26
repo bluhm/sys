@@ -1582,7 +1582,9 @@ sosetopt(struct socket *so, int level, int optname, struct mbuf *m0)
 				error = EINVAL;
 				goto bad;
 			}
+			s = solock(so);
 			so->so_linger = mtod(m, struct linger *)->l_linger;
+			sounlock(s);
 			/* FALLTHROUGH */
 
 		case SO_BINDANY:
@@ -1599,10 +1601,12 @@ sosetopt(struct socket *so, int level, int optname, struct mbuf *m0)
 				error = EINVAL;
 				goto bad;
 			}
+			s = solock(so);
 			if (*mtod(m, int *))
 				so->so_options |= optname;
 			else
 				so->so_options &= ~optname;
+			sounlock(s);
 			break;
 
 		case SO_DONTROUTE:
@@ -1628,15 +1632,18 @@ sosetopt(struct socket *so, int level, int optname, struct mbuf *m0)
 			cnt = *mtod(m, int *);
 			if ((long)cnt <= 0)
 				cnt = 1;
-			switch (optname) {
 
+			s = solock(so);
+			switch (optname) {
 			case SO_SNDBUF:
 				if (so->so_state & SS_CANTSENDMORE) {
+					sounlock(s);
 					error = EINVAL;
 					goto bad;
 				}
 				if (sbcheckreserve(cnt, so->so_snd.sb_wat) ||
 				    sbreserve(so, &so->so_snd, cnt)) {
+					sounlock(s);
 					error = ENOBUFS;
 					goto bad;
 				}
@@ -1645,11 +1652,13 @@ sosetopt(struct socket *so, int level, int optname, struct mbuf *m0)
 
 			case SO_RCVBUF:
 				if (so->so_state & SS_CANTRCVMORE) {
+					sounlock(s);
 					error = EINVAL;
 					goto bad;
 				}
 				if (sbcheckreserve(cnt, so->so_rcv.sb_wat) ||
 				    sbreserve(so, &so->so_rcv, cnt)) {
+					sounlock(s);
 					error = ENOBUFS;
 					goto bad;
 				}
@@ -1667,6 +1676,7 @@ sosetopt(struct socket *so, int level, int optname, struct mbuf *m0)
 				    so->so_rcv.sb_hiwat : cnt;
 				break;
 			}
+			sounlock(s);
 			break;
 		    }
 
@@ -1687,8 +1697,8 @@ sosetopt(struct socket *so, int level, int optname, struct mbuf *m0)
 				goto bad;
 			}
 
+			s = solock(so);
 			switch (optname) {
-
 			case SO_SNDTIMEO:
 				so->so_snd.sb_timeo = val;
 				break;
@@ -1696,6 +1706,7 @@ sosetopt(struct socket *so, int level, int optname, struct mbuf *m0)
 				so->so_rcv.sb_timeo = val;
 				break;
 			}
+			sounlock(s);
 			break;
 		    }
 
@@ -1809,16 +1820,24 @@ sogetopt(struct socket *so, int level, int optname, struct mbuf **mp)
 			break;
 
 		case SO_ERROR:
+			s = solock(so);
 			*mtod(m, int *) = so->so_error;
 			so->so_error = 0;
+			sounlock(s);
 			break;
 
 		case SO_SNDBUF:
+			/* modified by tcp_input() */
+			s = solock(so);
 			*mtod(m, int *) = so->so_snd.sb_hiwat;
+			sounlock(s);
 			break;
 
 		case SO_RCVBUF:
+			/* modified by tcp_input() */
+			s = solock(so);
 			*mtod(m, int *) = so->so_rcv.sb_hiwat;
+			sounlock(s);
 			break;
 
 		case SO_SNDLOWAT:
