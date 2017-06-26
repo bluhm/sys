@@ -229,7 +229,7 @@ nfssvc_addsock(struct file *fp, struct mbuf *mynam)
 	struct nfssvc_sock *slp;
 	struct socket *so;
 	struct nfssvc_sock *tslp;
-	int error;
+	int s, error;
 
 	so = (struct socket *)fp->f_data;
 	tslp = NULL;
@@ -247,7 +247,9 @@ nfssvc_addsock(struct file *fp, struct mbuf *mynam)
 		siz = NFS_MAXPACKET + sizeof (u_long);
 	else
 		siz = NFS_MAXPACKET;
+	s = solock(so);
 	error = soreserve(so, siz, siz); 
+	sounlock(s);
 	if (error) {
 		m_freem(mynam);
 		return (error);
@@ -271,10 +273,12 @@ nfssvc_addsock(struct file *fp, struct mbuf *mynam)
 		m->m_len = sizeof(int32_t);
 		sosetopt(so, IPPROTO_TCP, TCP_NODELAY, m);
 	}
+	s = solock(so);
 	so->so_rcv.sb_flags &= ~SB_NOINTR;
 	so->so_rcv.sb_timeo = 0;
 	so->so_snd.sb_flags &= ~SB_NOINTR;
 	so->so_snd.sb_timeo = 0;
+	sounlock(s);
 	if (tslp)
 		slp = tslp;
 	else {
