@@ -270,7 +270,6 @@ pf_free_fragment(struct pf_fragment *frag)
 	pool_put(&pf_frag_pl, frag);
 }
 
-#define PF_FRSTALE 200
 struct pf_fragment *
 pf_find_fragment(struct pf_frnode *key, u_int32_t id)
 {
