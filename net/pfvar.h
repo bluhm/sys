@@ -109,7 +109,13 @@ enum	{ PFTM_TCP_FIRST_PACKET, PFTM_TCP_OPENING, PFTM_TCP_ESTABLISHED,
 #define PFTM_SRC_NODE_VAL		0	/* Source tracking */
 #define PFTM_TS_DIFF_VAL		30	/* Allowed TS diff */
 
-#define PF_FRAG_STALE	200	/* Limit fragments per second per connection */
+/*
+ * For each connection (combination of proto,src,dst,af) the number
+ * of fragments is limited.  Over the PFTM_FRAG interval the average
+ * rate must be less than PF_FRAG_STALE fragments per second.
+ * Otherwise older fragments are considered stale and are dropped.
+ */
+#define PF_FRAG_STALE			200
 
 enum	{ PF_NOPFROUTE, PF_ROUTETO, PF_DUPTO, PF_REPLYTO };
 enum	{ PF_LIMIT_STATES, PF_LIMIT_SRC_NODES, PF_LIMIT_FRAGS,
