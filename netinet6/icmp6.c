@@ -1117,14 +1117,10 @@ icmp6_reflect(struct mbuf *m, size_t off)
 	sa6_src.sin6_family = AF_INET6;
 	sa6_src.sin6_len = sizeof(sa6_src);
 	sa6_src.sin6_addr = ip6->ip6_dst;
-	in6_recoverscope(&sa6_src, &ip6->ip6_dst);
-	in6_embedscope(&ip6->ip6_dst, &sa6_src, NULL);
 	bzero(&sa6_dst, sizeof(sa6_dst));
 	sa6_dst.sin6_family = AF_INET6;
 	sa6_dst.sin6_len = sizeof(sa6_dst);
 	sa6_dst.sin6_addr = t;
-	in6_recoverscope(&sa6_dst, &t);
-	in6_embedscope(&t, &sa6_dst, NULL);
 
 	/*
 	 * If the incoming packet was addressed directly to us (i.e. unicast),
