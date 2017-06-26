@@ -1,4 +1,4 @@
-/* $OpenBSD: pfkeyv2.c,v 1.160 2017/05/29 20:31:12 claudio Exp $ */
+/* $OpenBSD: pfkeyv2.c,v 1.162 2017/06/26 09:32:32 mpi Exp $ */
 
 /*
  *	@(#)COPYRIGHT	1.1 (NRL) 17 January 1995
@@ -327,7 +327,7 @@ ret:
 }
 
 int
-pfkey_sendup(struct socket *socket, struct mbuf *packet, int more)
+pfkey_sendup(struct socket *so, struct mbuf *packet, int more)
 {
 	struct mbuf *packet2;
 
@@ -339,12 +339,12 @@ pfkey_sendup(struct socket *socket, struct mbuf *packet, int more)
 	} else
 		packet2 = packet;
 
-	if (!sbappendaddr(&socket->so_rcv, &pfkey_addr, packet2, NULL)) {
+	if (!sbappendaddr(so, &so->so_rcv, &pfkey_addr, packet2, NULL)) {
 		m_freem(packet2);
 		return (ENOBUFS);
 	}
 
-	sorwakeup(socket);
+	sorwakeup(so);
 	return (0);
 }
 
@@ -1214,6 +1214,15 @@ pfkeyv2_send(struct socket *socket, void *message, int len)
 			import_tag(sa2, headers[SADB_X_EXT_TAG]);
 			import_tap(sa2, headers[SADB_X_EXT_TAP]);
 #endif
+			if (headers[SADB_EXT_ADDRESS_SRC] ||
+			    headers[SADB_EXT_ADDRESS_PROXY]) {
+				tdb_unlink(sa2);
+				import_address((struct sockaddr *)&sa2->tdb_src,
+				    headers[SADB_EXT_ADDRESS_SRC]);
+				import_address((struct sockaddr *)&sa2->tdb_dst,
+				    headers[SADB_EXT_ADDRESS_PROXY]);
+				puttdb(sa2);
+			}
 		}
 
 		break;
