@@ -329,11 +329,13 @@ nfs_connect(struct nfsmount *nmp, struct nfsreq *rep)
 	 * Always set receive timeout to detect server crash and reconnect.
 	 * Otherwise, we can get stuck in soreceive forever.
 	 */
+	s = solock(so);
 	so->so_rcv.sb_timeo = (5 * hz);
 	if (nmp->nm_flag & (NFSMNT_SOFT | NFSMNT_INT))
 		so->so_snd.sb_timeo = (5 * hz);
 	else
 		so->so_snd.sb_timeo = 0;
+	sounlock(s);
 	if (nmp->nm_sotype == SOCK_DGRAM) {
 		sndreserve = nmp->nm_wsize + NFS_MAXPKTHDR;
 		rcvreserve = (max(nmp->nm_rsize, nmp->nm_readdirsize) +
@@ -362,11 +364,15 @@ nfs_connect(struct nfsmount *nmp, struct nfsreq *rep)
 		rcvreserve = (nmp->nm_rsize + NFS_MAXPKTHDR +
 		    sizeof (u_int32_t)) * 2;
 	}
+	s = solock(so);
 	error = soreserve(so, sndreserve, rcvreserve);
+	sounlock(s);
 	if (error)
 		goto bad;
+	s = solock(so);
 	so->so_rcv.sb_flags |= SB_NOINTR;
 	so->so_snd.sb_flags |= SB_NOINTR;
+	sounlock(s);
 
 	/* Initialize other non-zero congestion variables */
 	nfs_init_rtt(nmp);
