@@ -298,6 +298,8 @@ reroute:
 		/* tag as generated to skip over pf_test on rerun */
 		m->m_pkthdr.pf.flags |= PF_TAG_GENERATED;
 		srcrt = 1;
+		rtfree(rt);
+		rt = NULL;
 		if_put(ifp);
 		ifp = NULL;
 		goto reroute;
