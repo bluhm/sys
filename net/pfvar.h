@@ -1,4 +1,4 @@
-/*	$OpenBSD: pfvar.h,v 1.458 2017/06/26 18:33:24 bluhm Exp $ */
+/*	$OpenBSD: pfvar.h,v 1.460 2017/06/28 19:30:24 mikeb Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -47,6 +47,7 @@
 
 struct ip;
 struct ip6_hdr;
+struct mbuf_list;
 
 #define	PF_TCPS_PROXY_SRC	((TCP_NSTATES)+0)
 #define	PF_TCPS_PROXY_DST	((TCP_NSTATES)+1)
@@ -1365,10 +1366,16 @@ struct hfsc_opts {
 };
 
 struct pfq_ops {
-	void		*(*pfq_alloc)(struct ifnet *);
-	int		 (*pfq_addqueue)(void *, struct pf_queuespec *);
-	void		 (*pfq_free)(void *);
-	int		 (*pfq_qstats)(struct pf_queuespec *, void *, int *);
+	void *		(*pfq_alloc)(struct ifnet *);
+	int		(*pfq_addqueue)(void *, struct pf_queuespec *);
+	void		(*pfq_free)(void *);
+	int		(*pfq_qstats)(struct pf_queuespec *, void *, int *);
+	/* Queue manager ops */
+	unsigned int	(*pfq_qlength)(void *);
+	struct mbuf *	(*pfq_enqueue)(void *, struct mbuf *);
+	struct mbuf *	(*pfq_deq_begin)(void *, void **, struct mbuf_list *);
+	void		(*pfq_deq_commit)(void *, struct mbuf *, void *);
+	void		(*pfq_purge)(void *, struct mbuf_list *);
 };
 
 struct pf_tagname {
@@ -1814,6 +1821,9 @@ void		 pf_tag_unref(u_int16_t);
 void		 pf_tag_packet(struct mbuf *, int, int);
 int		 pf_addr_compare(struct pf_addr *, struct pf_addr *,
 		    sa_family_t);
+
+const struct pfq_ops
+		*pf_queue_manager(struct pf_queuespec *);
 
 extern struct pf_status	pf_status;
 extern struct pool	pf_frent_pl, pf_frag_pl;
