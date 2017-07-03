@@ -327,7 +327,7 @@ doaccept(struct proc *p, int sock, struct sockaddr *name, socklen_t *anamelen,
 	    : (flags & SOCK_NONBLOCK ? FNONBLOCK : 0);
 
 	/* connection has been removed from the listen queue */
-	KNOTE(&head->so_rcv.sb_sel.si_note, 0);
+	KNOTE(&head->so_rcv.sb_sel.si_note, NOTE_SUBMIT);
 
 	fp->f_type = DTYPE_SOCKET;
 	fp->f_flag = FREAD | FWRITE | nflag;
