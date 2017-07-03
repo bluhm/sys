@@ -239,7 +239,7 @@ struct rwlock;
  * Unless SB_NOINTR is set on sockbuf, sleep is interruptible.
  * Returns error without lock if sleep is interrupted.
  */
-int sblock(struct sockbuf *, int, struct rwlock *);
+int sblock(struct socket *, struct sockbuf *, int);
 
 /* release lock on sockbuf sb */
 void sbunlock(struct sockbuf *);
