@@ -98,7 +98,7 @@ spd_table_add(unsigned int rtableid)
 	}
 
 	if (spd_tables[rdomain] == NULL) {
-		if (rn_inithead((void **)&rnh,
+		if (rn_inithead(&rnh,
 		    offsetof(struct sockaddr_encap, sen_type)) == 0)
 			rnh = NULL;
 		spd_tables[rdomain] = rnh;

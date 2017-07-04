@@ -151,12 +151,12 @@ pipex_iface_init(struct pipex_iface_context *pipex_iface, struct ifnet *ifp)
 	pipex_iface->ifnet_this = ifp;
 
 	if (pipex_rd_head4 == NULL) {
-		if (!rn_inithead((void **)&pipex_rd_head4,
+		if (!rn_inithead(&pipex_rd_head4,
 		    offsetof(struct sockaddr_in, sin_addr)))
 			panic("rn_inithead() failed on pipex_init()");
 	}
 	if (pipex_rd_head6 == NULL) {
-		if (!rn_inithead((void **)&pipex_rd_head6,
+		if (!rn_inithead(&pipex_rd_head6,
 		    offsetof(struct sockaddr_in6, sin6_addr)))
 			panic("rn_inithead() failed on pipex_init()");
 	}

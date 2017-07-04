@@ -97,7 +97,8 @@ struct radix_node_head {
 };
 
 void	rn_init(unsigned int);
-int	rn_inithead(void **, int);
+int	rn_inithead(struct radix_node_head **, int);
+void	rn_freehead(struct radix_node_head *);
 
 int	rn_walktree(struct radix_node_head *,
 	    int (*)(struct radix_node *, void *, u_int), void *);

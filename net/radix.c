@@ -60,7 +60,8 @@ static unsigned int	 max_keylen;	/* size of the above arrays */
 
 
 struct radix_node_head	*mask_rnhead;	/* head of shared mask tree */
-struct pool		 rtmask_pool;	/* pool for radix_mask structures */
+struct pool		 rthead_pool;	/* pool for radix_node_head structs */
+struct pool		 rtmask_pool;	/* pool for radix_mask structs */
 
 static inline int rn_satisfies_leaf(char *, struct radix_node *, int);
 static inline int rn_lexobetter(void *, void *);
@@ -1097,7 +1098,7 @@ rn_initmask(void)
 
 	KASSERT(max_keylen > 0);
 
-	mask_rnhead = malloc(sizeof(*mask_rnhead), M_RTABLE, M_NOWAIT);
+	mask_rnhead = pool_get(&rthead_pool, PR_NOWAIT);
 	if (mask_rnhead == NULL)
 		return (1);
 
@@ -1106,7 +1107,7 @@ rn_initmask(void)
 }
 
 int
-rn_inithead(void **head, int off)
+rn_inithead(struct radix_node_head **head, int off)
 {
 	struct radix_node_head *rnh;
 
@@ -1116,12 +1117,20 @@ rn_inithead(void **head, int off)
 	if (rn_initmask())
 		panic("failed to initialize the mask tree");
 
-	rnh = malloc(sizeof(*rnh), M_RTABLE, M_NOWAIT);
+	rnh = pool_get(&rthead_pool, PR_NOWAIT);
 	if (rnh == NULL)
 		return (0);
 	*head = rnh;
 	rn_inithead0(rnh, off);
 	return (1);
+}
+
+void
+rn_freehead(struct radix_node_head *rnh)
+{
+	if (rnh == NULL)
+		return;
+	pool_put(&rthead_pool, rnh);
 }
 
 int
@@ -1158,6 +1167,8 @@ rn_init(unsigned int keylen)
 	if (max_keylen == 0) {
 		pool_init(&rtmask_pool, sizeof(struct radix_mask), 0,
 		    IPL_SOFTNET, 0, "rtmask", NULL);
+		pool_init(&rthead_pool, sizeof(struct radix_node_head), 0,
+		    IPL_SOFTNET, 0, "rthead", NULL);
 	}
 
 	if (keylen <= max_keylen)

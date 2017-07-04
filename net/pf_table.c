@@ -2010,9 +2010,9 @@ pfr_create_ktable(struct pfr_table *tbl, time_t tzero, int attachruleset,
 		rs->tables++;
 	}
 
-	if (!rn_inithead((void **)&kt->pfrkt_ip4,
+	if (!rn_inithead(&kt->pfrkt_ip4,
 	    offsetof(struct sockaddr_in, sin_addr)) ||
-	    !rn_inithead((void **)&kt->pfrkt_ip6,
+	    !rn_inithead(&kt->pfrkt_ip6,
 	    offsetof(struct sockaddr_in6, sin6_addr))) {
 		pfr_destroy_ktable(kt, 0);
 		return (NULL);
@@ -2046,10 +2046,8 @@ pfr_destroy_ktable(struct pfr_ktable *kt, int flushaddr)
 		pfr_clean_node_mask(kt, &addrq);
 		pfr_destroy_kentries(&addrq);
 	}
-	if (kt->pfrkt_ip4 != NULL)
-		free((caddr_t)kt->pfrkt_ip4, M_RTABLE, 0);
-	if (kt->pfrkt_ip6 != NULL)
-		free((caddr_t)kt->pfrkt_ip6, M_RTABLE, 0);
+	rn_freehead(kt->pfrkt_ip4);
+	rn_freehead(kt->pfrkt_ip6);
 	if (kt->pfrkt_shadow != NULL)
 		pfr_destroy_ktable(kt->pfrkt_shadow, flushaddr);
 	if (kt->pfrkt_rs != NULL) {

@@ -1405,7 +1405,7 @@ vfs_hang_addrlist(struct mount *mp, struct netexport *nep,
 	switch (i) {
 	case AF_INET:
 		if ((rnh = nep->ne_rtable_inet) == NULL) {
-			if (!rn_inithead((void **)&nep->ne_rtable_inet,
+			if (!rn_inithead(&nep->ne_rtable_inet,
 			    offsetof(struct sockaddr_in, sin_addr))) {
 				error = ENOBUFS;
 				goto out;
