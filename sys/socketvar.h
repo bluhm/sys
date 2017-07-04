@@ -1,4 +1,4 @@
-/*	$OpenBSD: socketvar.h,v 1.70 2017/06/26 09:32:32 mpi Exp $	*/
+/*	$OpenBSD: socketvar.h,v 1.72 2017/07/04 12:58:32 mpi Exp $	*/
 /*	$NetBSD: socketvar.h,v 1.18 1996/02/09 18:25:38 christos Exp $	*/
 
 /*-
@@ -199,11 +199,15 @@ sbspace(struct socket *so, struct sockbuf *sb)
     ((so)->so_state & SS_ISSENDING)
 
 /* can we read something from so? */
-#define	soreadable(so)	\
-    (!isspliced(so) && \
-    ((so)->so_rcv.sb_cc >= (so)->so_rcv.sb_lowat || \
-    ((so)->so_state & SS_CANTRCVMORE) || \
-    (so)->so_qlen || (so)->so_error))
+static inline int
+soreadable(struct socket *so)
+{
+	soassertlocked(so);
+	if (isspliced(so))
+		return 0;
+	return (so->so_state & SS_CANTRCVMORE) || so->so_qlen || so->so_error ||
+	    so->so_rcv.sb_cc >= so->so_rcv.sb_lowat;
+}
 
 /* can we write something to so? */
 #define	sowriteable(so) \
@@ -239,7 +243,7 @@ struct rwlock;
  * Unless SB_NOINTR is set on sockbuf, sleep is interruptible.
  * Returns error without lock if sleep is interrupted.
  */
-int sblock(struct sockbuf *, int, struct rwlock *);
+int sblock(struct socket *, struct sockbuf *, int);
 
 /* release lock on sockbuf sb */
 void sbunlock(struct sockbuf *);

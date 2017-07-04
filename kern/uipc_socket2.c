@@ -1,4 +1,4 @@
-/*	$OpenBSD: uipc_socket2.c,v 1.80 2017/06/27 12:02:43 mpi Exp $	*/
+/*	$OpenBSD: uipc_socket2.c,v 1.83 2017/07/04 12:58:32 mpi Exp $	*/
 /*	$NetBSD: uipc_socket2.c,v 1.11 1996/02/04 02:17:55 christos Exp $	*/
 
 /*
@@ -54,8 +54,6 @@ u_long	sb_max = SB_MAX;		/* patchable */
 extern struct pool mclpools[];
 extern struct pool mbpool;
 
-int sbsleep(struct sockbuf *, struct rwlock *);
-
 /*
  * Procedures to manipulate state flags of socket
  * and do appropriate wakeups.  Normal sequence from the
@@ -89,7 +87,7 @@ int sbsleep(struct sockbuf *, struct rwlock *);
 void
 soisconnecting(struct socket *so)
 {
-
+	soassertlocked(so);
 	so->so_state &= ~(SS_ISCONNECTED|SS_ISDISCONNECTING);
 	so->so_state |= SS_ISCONNECTING;
 }
@@ -99,6 +97,7 @@ soisconnected(struct socket *so)
 {
 	struct socket *head = so->so_head;
 
+	soassertlocked(so);
 	so->so_state &= ~(SS_ISCONNECTING|SS_ISDISCONNECTING);
 	so->so_state |= SS_ISCONNECTED;
 	if (head && soqremque(so, 0)) {
@@ -115,7 +114,7 @@ soisconnected(struct socket *so)
 void
 soisdisconnecting(struct socket *so)
 {
-
+	soassertlocked(so);
 	so->so_state &= ~SS_ISCONNECTING;
 	so->so_state |= (SS_ISDISCONNECTING|SS_CANTRCVMORE|SS_CANTSENDMORE);
 	wakeup(&so->so_timeo);
@@ -126,7 +125,7 @@ soisdisconnecting(struct socket *so)
 void
 soisdisconnected(struct socket *so)
 {
-
+	soassertlocked(so);
 	so->so_state &= ~(SS_ISCONNECTING|SS_ISCONNECTED|SS_ISDISCONNECTING);
 	so->so_state |= (SS_CANTRCVMORE|SS_CANTSENDMORE|SS_ISDISCONNECTED);
 	wakeup(&so->so_timeo);
@@ -208,6 +207,7 @@ sonewconn(struct socket *head, int connstatus)
 void
 soqinsque(struct socket *head, struct socket *so, int q)
 {
+	soassertlocked(head);
 
 #ifdef DIAGNOSTIC
 	if (so->so_onq != NULL)
@@ -228,9 +228,10 @@ soqinsque(struct socket *head, struct socket *so, int q)
 int
 soqremque(struct socket *so, int q)
 {
-	struct socket *head;
+	struct socket *head = so->so_head;
 
-	head = so->so_head;
+	soassertlocked(head);
+
 	if (q == 0) {
 		if (so->so_onq != &head->so_q0)
 			return (0);
@@ -259,7 +260,7 @@ soqremque(struct socket *so, int q)
 void
 socantsendmore(struct socket *so)
 {
-
+	soassertlocked(so);
 	so->so_state |= SS_CANTSENDMORE;
 	sowwakeup(so);
 }
@@ -267,7 +268,7 @@ socantsendmore(struct socket *so)
 void
 socantrcvmore(struct socket *so)
 {
-
+	soassertlocked(so);
 	so->so_state |= SS_CANTRCVMORE;
 	sorwakeup(so);
 }
@@ -337,24 +338,12 @@ sbwait(struct socket *so, struct sockbuf *sb)
 }
 
 int
-sbsleep(struct sockbuf *sb, struct rwlock *lock)
+sblock(struct socket *so, struct sockbuf *sb, int wait)
 {
 	int error, prio = (sb->sb_flags & SB_NOINTR) ? PSOCK : PSOCK | PCATCH;
 
-	if (lock != NULL)
-		error = rwsleep(&sb->sb_flags, lock, prio, "netlck", 0);
-	else
-		error = tsleep(&sb->sb_flags, prio, "netlck", 0);
-
-	return (error);
-}
-
-int
-sblock(struct sockbuf *sb, int wait, struct rwlock *lock)
-{
-	int error;
-
 	KERNEL_ASSERT_LOCKED();
+	soassertlocked(so);
 
 	if ((sb->sb_flags & SB_LOCK) == 0) {
 		sb->sb_flags |= SB_LOCK;
@@ -365,7 +354,7 @@ sblock(struct sockbuf *sb, int wait, struct rwlock *lock)
 
 	while (sb->sb_flags & SB_LOCK) {
 		sb->sb_flags |= SB_WANT;
-		error = sbsleep(sb, lock);
+		error = sosleep(so, &sb->sb_flags, prio, "netlck", 0);
 		if (error)
 			return (error);
 	}
