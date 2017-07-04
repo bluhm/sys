@@ -1450,7 +1450,7 @@ vfs_free_addrlist(struct netexport *nep)
 
 	if ((rnh = nep->ne_rtable_inet) != NULL) {
 		rn_walktree(rnh, vfs_free_netcred, rnh);
-		free(rnh, M_RTABLE, 0);
+		rn_freehead(rnh);
 		nep->ne_rtable_inet = NULL;
 	}
 }
