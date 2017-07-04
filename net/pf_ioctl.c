@@ -348,10 +348,11 @@ tagname2tag(struct pf_tags *head, char *tagname, int create)
 	 */
 
 	/* new entry */
-	if (!TAILQ_EMPTY(head))
-		for (p = TAILQ_FIRST(head); p != NULL &&
-		    p->tag == new_tagid; p = TAILQ_NEXT(p, entries))
-			new_tagid = p->tag + 1;
+	TAILQ_FOREACH(p, head, entries) {
+		if (p->tag != new_tagid)
+			break;
+		new_tagid = p->tag + 1;
+	}
 
 	if (new_tagid > TAGID_MAX)
 		return (0);
@@ -392,8 +393,7 @@ tag_unref(struct pf_tags *head, u_int16_t tag)
 	if (tag == 0)
 		return;
 
-	for (p = TAILQ_FIRST(head); p != NULL; p = next) {
-		next = TAILQ_NEXT(p, entries);
+	TAILQ_FOREACH_SAFE(p, head, entries, next) {
 		if (tag == p->tag) {
 			if (--p->ref == 0) {
 				TAILQ_REMOVE(head, p, entries);
