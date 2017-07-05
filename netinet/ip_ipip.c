@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_ipip.c,v 1.85 2017/06/20 11:12:13 bluhm Exp $ */
+/*	$OpenBSD: ip_ipip.c,v 1.86 2017/07/05 11:34:10 bluhm Exp $ */
 /*
  * The authors of this code are John Ioannidis (ji@tla.org),
  * Angelos D. Keromytis (kermit@csd.uch.gr) and
