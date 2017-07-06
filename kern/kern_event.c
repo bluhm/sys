@@ -690,7 +690,7 @@ kqueue_scan(struct kqueue *kq, int maxevents, struct kevent *ulistp,
 	struct kevent *kevp;
 	struct timeval atv, rtv, ttv;
 	struct knote *kn, marker;
-	int s, count, timeout, nkev = 0, error = 0;
+	int s, sn, count, timeout, nkev = 0, error = 0;
 
 	count = maxevents;
 	if (count == 0)
@@ -738,6 +738,7 @@ start:
 	}
 
 	kevp = kq->kq_kev;
+	NET_LOCK(sn);
 	s = splhigh();
 	if (kq->kq_count == 0) {
 		if (timeout < 0) {
@@ -747,6 +748,7 @@ start:
 			error = tsleep(kq, PSOCK | PCATCH, "kqread", timeout);
 		}
 		splx(s);
+		NET_UNLOCK(sn);
 		if (error == 0)
 			goto retry;
 		/* don't restart after signals... */
@@ -763,6 +765,7 @@ start:
 		TAILQ_REMOVE(&kq->kq_head, kn, kn_tqe);
 		if (kn == &marker) {
 			splx(s);
+			NET_UNLOCK(sn);
 			if (count == maxevents)
 				goto retry;
 			goto done;
@@ -785,8 +788,10 @@ start:
 			kn->kn_status &= ~KN_QUEUED;
 			kq->kq_count--;
 			splx(s);
+			NET_UNLOCK(sn);
 			kn->kn_fop->f_detach(kn);
 			knote_drop(kn, p, p->p_fd);
+			NET_LOCK(sn);
 			s = splhigh();
 		} else if (kn->kn_flags & (EV_CLEAR | EV_DISPATCH)) {
 			if (kn->kn_flags & EV_CLEAR) {
@@ -803,6 +808,7 @@ start:
 		count--;
 		if (nkev == KQ_NEVENTS) {
 			splx(s);
+			NET_UNLOCK(sn);
 #ifdef KTRACE
 			if (KTRPOINT(p, KTR_STRUCT))
 				ktrevent(p, kq->kq_kev, nkev);
@@ -812,6 +818,7 @@ start:
 			ulistp += nkev;
 			nkev = 0;
 			kevp = kq->kq_kev;
+			NET_LOCK(sn);
 			s = splhigh();
 			if (error)
 				break;
@@ -819,6 +826,7 @@ start:
 	}
 	TAILQ_REMOVE(&kq->kq_head, &marker, kn_tqe);
 	splx(s);
+	NET_UNLOCK(sn);
 done:
 	if (nkev != 0) {
 #ifdef KTRACE
