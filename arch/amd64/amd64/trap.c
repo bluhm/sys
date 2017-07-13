@@ -146,7 +146,7 @@ trap(struct trapframe *frame)
 	struct pcb *pcb;
 	extern char doreti_iret[], resume_iret[];
 	caddr_t onfault;
-	int error, sicode;
+	int error;
 	uint64_t cr2;
 	union sigval sv;
 
@@ -362,11 +362,6 @@ faultcommon:
 			KERNEL_UNLOCK();
 			goto out;
 		}
-		if (error == EACCES) {
-			error = EFAULT;
-			sicode = SEGV_ACCERR;
-		} else
-			sicode = SEGV_MAPERR;
 
 		if (type == T_PAGEFLT) {
 			if (pcb->pcb_onfault != 0) {
@@ -391,7 +386,8 @@ faultcommon:
 			frame_dump(frame);
 #endif
 			sv.sival_ptr = (void *)fa;
-			trapsignal(p, SIGSEGV, T_PAGEFLT, sicode, sv);
+			trapsignal(p, SIGSEGV, T_PAGEFLT,
+			    error == EACCES ? SEGV_ACCERR : SEGV_MAPERR, sv);
 		}
 		KERNEL_UNLOCK();
 		break;
