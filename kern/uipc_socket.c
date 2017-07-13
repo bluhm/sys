@@ -396,8 +396,9 @@ sosend(struct socket *so, struct mbuf *addr, struct uio *uio, struct mbuf *top,
 		resid = top->m_pkthdr.len;
 	/* MSG_EOR on a SOCK_STREAM socket is invalid. */
 	if (so->so_type == SOCK_STREAM && (flags & MSG_EOR)) {
-		error = EINVAL;
-		goto out;
+		m_freem(top);
+		m_freem(control);
+		return (EINVAL);
 	}
 	if (uio && uio->uio_procp)
 		uio->uio_procp->p_ru.ru_msgsnd++;
