@@ -306,6 +306,7 @@ copyfault:
 		struct vm_map *map;
 		vm_prot_t ftype;
 		extern struct vm_map *kernel_map;
+		int signal, sicode;
 
 		cr2 = rcr2();
 		KERNEL_LOCK();
@@ -372,32 +373,30 @@ faultcommon:
 			    map, fa, ftype, error);
 			goto we_re_toast;
 		}
+
+		signal = SIGSEGV;
+		sicode = SEGV_MAPERR;
 		if (error == ENOMEM) {
 			printf("UVM: pid %d (%s), uid %d killed:"
 			    " out of swap\n", p->p_p->ps_pid, p->p_p->ps_comm,
 			    p->p_ucred ? (int)p->p_ucred->cr_uid : -1);
-			sv.sival_ptr = (void *)fa;
-			trapsignal(p, SIGKILL, T_PAGEFLT, SEGV_MAPERR, sv);
+			signal = SIGKILL;
 		} else {
-			int signal, sicode;
-
 #ifdef TRAP_SIGDEBUG
 			printf("pid %d (%s): %s at rip %llx addr %llx\n",
 			    p->p_p->ps_pid, p->p_p->ps_comm, "SEGV",
 			    frame->tf_rip, rcr2());
 			frame_dump(frame);
 #endif
-			signal = SIGSEGV;
-			sicode = SEGV_MAPERR;
-			if (error == EACCES)
-				sicode = SEGV_ACCERR;
-			if (error == EIO) {
-				signal = SIGBUS;
-				sicode = BUS_ADRERR;
-			}
-			sv.sival_ptr = (void *)fa;
-			trapsignal(p, signal, T_PAGEFLT, sicode, sv);
 		}
+		if (error == EACCES)
+			sicode = SEGV_ACCERR;
+		if (error == EIO) {
+			signal = SIGBUS;
+			sicode = BUS_ADRERR;
+		}
+		sv.sival_ptr = (void *)fa;
+		trapsignal(p, signal, T_PAGEFLT, sicode, sv);
 		KERNEL_UNLOCK();
 		break;
 	}

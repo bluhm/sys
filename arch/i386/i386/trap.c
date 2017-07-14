@@ -374,6 +374,7 @@ trap(struct trapframe *frame)
 		struct vmspace *vm;
 		struct vm_map *map;
 		int error;
+		int signal, sicode;
 
 		cr2 = rcr2();
 		KERNEL_LOCK();
@@ -431,20 +432,17 @@ trap(struct trapframe *frame)
 			    map, va, ftype, error);
 			goto we_re_toast;
 		}
-		{
-			int signal, sicode;
 
-			signal = SIGSEGV;
-			sicode = SEGV_MAPERR;
-			if (error == EACCES)
-				sicode = SEGV_ACCERR;
-			if (error == EIO) {
-				signal = SIGBUS;
-				sicode = BUS_ADRERR;
-			}
-			sv.sival_int = fa;
-			trapsignal(p, signal, vftype, sicode, sv);
+		signal = SIGSEGV;
+		sicode = SEGV_MAPERR;
+		if (error == EACCES)
+			sicode = SEGV_ACCERR;
+		if (error == EIO) {
+			signal = SIGBUS;
+			sicode = BUS_ADRERR;
 		}
+		sv.sival_int = fa;
+		trapsignal(p, signal, vftype, sicode, sv);
 		KERNEL_UNLOCK();
 		break;
 	}
