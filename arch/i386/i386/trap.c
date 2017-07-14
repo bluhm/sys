@@ -431,9 +431,20 @@ trap(struct trapframe *frame)
 			    map, va, ftype, error);
 			goto we_re_toast;
 		}
-		sv.sival_int = fa;
-		trapsignal(p, SIGSEGV, vftype,
-		    error == EACCES ? SEGV_ACCERR : SEGV_MAPERR, sv);
+		{
+			int signal, sicode;
+
+			signal = SIGSEGV;
+			sicode = SEGV_MAPERR;
+			if (error == EACCES)
+				sicode = SEGV_ACCERR;
+			if (error == EIO) {
+				signal = SIGBUS;
+				sicode = BUS_ADRERR;
+			}
+			sv.sival_int = fa;
+			trapsignal(p, signal, vftype, sicode, sv);
+		}
 		KERNEL_UNLOCK();
 		break;
 	}
