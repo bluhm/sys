@@ -1032,7 +1032,7 @@ Case2:
 			}
 
 			if (!UVM_ET_ISNOFAULT(ufi.entry))
-				return (EACCES); /* XXX i/o error */
+				return (EIO);
 
 			uobjpage = PGO_DONTCARE;	
 			promote = TRUE;
