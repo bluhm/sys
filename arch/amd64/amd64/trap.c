@@ -379,6 +379,7 @@ faultcommon:
 			sv.sival_ptr = (void *)fa;
 			trapsignal(p, SIGKILL, T_PAGEFLT, SEGV_MAPERR, sv);
 		} else {
+			int signal, sicode;
 #ifdef TRAP_SIGDEBUG
 			printf("pid %d (%s): %s at rip %llx addr %llx\n",
 			    p->p_p->ps_pid, p->p_p->ps_comm, "SEGV",
@@ -386,8 +387,15 @@ faultcommon:
 			frame_dump(frame);
 #endif
 			sv.sival_ptr = (void *)fa;
-			trapsignal(p, SIGSEGV, T_PAGEFLT,
-			    error == EACCES ? SEGV_ACCERR : SEGV_MAPERR, sv);
+			signal = SIGSEGV;
+			sicode = SEGV_MAPERR;
+			if (error == EACCES)
+				sicode = SEGV_ACCERR;
+			if (error == EIO) {
+				signal = SIGBUS;
+				sicode = BUS_ADRERR;
+			}
+			trapsignal(p, signal, T_PAGEFLT, sicode, sv);
 		}
 		KERNEL_UNLOCK();
 		break;
