@@ -1073,6 +1073,7 @@ sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
 {
 	struct file	*fp;
 	struct socket	*sosp;
+	struct sosplice	*sp;
 	int		 s, error = 0;
 
 	if (sosplice_taskq == NULL)
@@ -1087,8 +1088,13 @@ sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
 	if ((so->so_state & (SS_ISCONNECTED|SS_ISCONNECTING)) == 0 &&
 	    (so->so_proto->pr_flags & PR_CONNREQUIRED))
 		return (ENOTCONN);
-	if (so->so_sp == NULL)
-		so->so_sp = pool_get(&sosplice_pool, PR_WAITOK | PR_ZERO);
+	if (so->so_sp == NULL) {
+		sp = pool_get(&sosplice_pool, PR_WAITOK | PR_ZERO);
+		if (so->so_sp == NULL)
+			so->so_sp = sp;
+		else
+			pool_put(&sosplice_pool, sp);
+	}
 
 	/* If no fd is given, unsplice by removing existing link. */
 	if (fd < 0) {
@@ -1116,8 +1122,13 @@ sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
 	if ((error = getsock(curproc, fd, &fp)) != 0)
 		return (error);
 	sosp = fp->f_data;
-	if (sosp->so_sp == NULL)
-		sosp->so_sp = pool_get(&sosplice_pool, PR_WAITOK | PR_ZERO);
+	if (sosp->so_sp == NULL) {
+		sp = pool_get(&sosplice_pool, PR_WAITOK | PR_ZERO);
+		if (sosp->so_sp == NULL)
+			sosp->so_sp = sp;
+		else
+			pool_put(&sosplice_pool, sp);
+	}
 
 	s = solock(so);
 	/* Lock both receive and send buffer. */
