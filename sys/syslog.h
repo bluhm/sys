@@ -39,6 +39,8 @@
 
 #define	LIOCSFD		_IOW('l', 127, int)	/* set sendsyslog() fd */
 
+#define LOG_MAXLINE	8192
+
 /*
  * priorities/facilities are encoded into a single 32-bit quantity, where the
  * bottom 3 bits are the priority (0-7) and the top 28 bits are the facility
