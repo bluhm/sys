@@ -373,9 +373,10 @@ sys_connect(struct proc *p, void *v, register_t *retval)
 	if ((error = getsock(p, SCARG(uap, s), &fp)) != 0)
 		return (error);
 	so = fp->f_data;
+	s = solock(so);
 	if (so->so_state & SS_ISCONNECTING) {
-		FRELE(fp, p);
-		return (EALREADY);
+		error = EALREADY;
+		goto out;
 	}
 	error = sockargs(&nam, SCARG(uap, name), SCARG(uap, namelen),
 	    MT_SONAME);
@@ -393,11 +394,8 @@ sys_connect(struct proc *p, void *v, register_t *retval)
 	if (isdnssocket(so)) {
 		u_int namelen = nam->m_len;
 		error = dns_portcheck(p, so, mtod(nam, void *), &namelen);
-		if (error) {
-			FRELE(fp, p);
-			m_freem(nam);
-			return (error);
-		}
+		if (error)
+			goto out;
 		nam->m_len = namelen;
 	}
 
@@ -405,11 +403,9 @@ sys_connect(struct proc *p, void *v, register_t *retval)
 	if (error)
 		goto bad;
 	if ((so->so_state & SS_NBIO) && (so->so_state & SS_ISCONNECTING)) {
-		FRELE(fp, p);
-		m_freem(nam);
-		return (EINPROGRESS);
+		error = EINPROGRESS;
+		goto out;
 	}
-	s = solock(so);
 	while ((so->so_state & SS_ISCONNECTING) && so->so_error == 0) {
 		error = sosleep(so, &so->so_timeo, PSOCK | PCATCH,
 		    "netcon2", 0);
@@ -423,10 +419,11 @@ sys_connect(struct proc *p, void *v, register_t *retval)
 		error = so->so_error;
 		so->so_error = 0;
 	}
-	sounlock(s);
 bad:
 	if (!interrupted)
 		so->so_state &= ~SS_ISCONNECTING;
+out:
+	sounlock(s);
 	FRELE(fp, p);
 	m_freem(nam);
 	if (error == ERESTART)
