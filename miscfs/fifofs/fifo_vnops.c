@@ -124,7 +124,7 @@ fifo_open(void *v)
 	struct fifoinfo *fip;
 	struct proc *p = ap->a_p;
 	struct socket *rso, *wso;
-	int error;
+	int s, error;
 
 	if ((fip = vp->v_fifoinfo) == NULL) {
 		fip = malloc(sizeof(*fip), M_VNODE, M_WAITOK);
@@ -135,6 +135,11 @@ fifo_open(void *v)
 			return (error);
 		}
 		fip->fi_readsock = rso;
+		/*
+		 * XXXSMP
+		 * We only lock `wso' because AF_LOCAL sockets are
+		 * still relying on the KERNEL_LOCK().
+		 */
 		if ((error = socreate(AF_LOCAL, &wso, SOCK_STREAM, 0)) != 0) {
 			(void)soclose(rso);
 			free(fip, M_VNODE, sizeof *fip);
@@ -142,7 +147,9 @@ fifo_open(void *v)
 			return (error);
 		}
 		fip->fi_writesock = wso;
+		s = solock(wso);
 		if ((error = soconnect2(wso, rso)) != 0) {
+			sounlock(s);
 			(void)soclose(wso);
 			(void)soclose(rso);
 			free(fip, M_VNODE, sizeof *fip);
@@ -152,11 +159,15 @@ fifo_open(void *v)
 		fip->fi_readers = fip->fi_writers = 0;
 		wso->so_state |= SS_CANTSENDMORE;
 		wso->so_snd.sb_lowat = PIPE_BUF;
+	} else {
+		rso = fip->fi_readsock;
+		wso = fip->fi_writesock;
+		s = solock(wso);
 	}
 	if (ap->a_mode & FREAD) {
 		fip->fi_readers++;
 		if (fip->fi_readers == 1) {
-			fip->fi_writesock->so_state &= ~SS_CANTSENDMORE;
+			wso->so_state &= ~SS_CANTSENDMORE;
 			if (fip->fi_writers > 0)
 				wakeup(&fip->fi_writers);
 		}
@@ -168,11 +179,12 @@ fifo_open(void *v)
 			goto bad;
 		}
 		if (fip->fi_writers == 1) {
-			fip->fi_readsock->so_state &= ~(SS_CANTRCVMORE|SS_ISDISCONNECTED);
+			rso->so_state &= ~(SS_CANTRCVMORE|SS_ISDISCONNECTED);
 			if (fip->fi_readers > 0)
 				wakeup(&fip->fi_readers);
 		}
 	}
+	sounlock(s);
 	if ((ap->a_mode & O_NONBLOCK) == 0) {
 		if ((ap->a_mode & FREAD) && fip->fi_writers == 0) {
 			VOP_UNLOCK(vp, p);
@@ -246,6 +258,7 @@ fifo_write(void *v)
 	if (ap->a_uio->uio_rw != UIO_WRITE)
 		panic("fifo_write mode");
 #endif
+	/* XXXSMP changing state w/o lock isn't safe. */
 	if (ap->a_ioflag & IO_NDELAY)
 		wso->so_state |= SS_NBIO;
 	VOP_UNLOCK(ap->a_vp, p);
