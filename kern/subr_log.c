@@ -418,6 +418,9 @@ dosendsyslog(struct proc *p, const char *buf, size_t nbyte, int flags,
 	size_t i, len;
 	int error;
 
+	if (nbyte > 8192)
+		nbyte = 8192;
+
 	/* Global variable syslogf may change during sleep, use local copy. */
 	fp = syslogf;
 	if (fp)
