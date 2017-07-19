@@ -231,7 +231,6 @@ tcp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 				break;
 			}
 			error = in6_pcbconnect(inp, nam);
-			break;
 		} else
 #endif /* INET6 */
 		{
@@ -247,9 +246,7 @@ tcp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 				break;
 			}
 			error = in_pcbconnect(inp, nam);
-			break;
 		}
-
 		if (error)
 			break;
 
