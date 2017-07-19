@@ -168,13 +168,13 @@ in6_nam2sin6(struct sockaddr_in6 **sin6, const struct mbuf *nam)
 {
 	struct sockaddr *sa = mtod(nam, struct sockaddr *);
 
-	if (nam->m_len < sizeof(*sa))
+	if (nam->m_len < offsetof(struct sockaddr, sa_data))
 		return EINVAL;
-	if (sa->sa_family != AF_INET)
+	if (sa->sa_family != AF_INET6)
 		return EAFNOSUPPORT;
-	if (sa->sa_len != sizeof(*sin6))
+	if (sa->sa_len != sizeof(struct sockaddr_in6))
 		return EINVAL;
-	if (nam->m_len != sizeof(*sin6))
+	if (nam->m_len != sizeof(struct sockaddr_in6))
 		return EINVAL;
 	*sin6 = satosin6(sa);
 

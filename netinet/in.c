@@ -169,13 +169,13 @@ in_nam2sin(struct sockaddr_in **sin, const struct mbuf *nam)
 {
 	struct sockaddr *sa = mtod(nam, struct sockaddr *);
 
-	if (nam->m_len < sizeof(*sa))
+	if (nam->m_len < offsetof(struct sockaddr, sa_data))
 		return EINVAL;
 	if (sa->sa_family != AF_INET)
 		return EAFNOSUPPORT;
-	if (sa->sa_len != sizeof(*sin))
+	if (sa->sa_len != sizeof(struct sockaddr_in))
 		return EINVAL;
-	if (nam->m_len != sizeof(*sin))
+	if (nam->m_len != sizeof(struct sockaddr_in))
 		return EINVAL;
 	*sin = satosin(sa);
 
