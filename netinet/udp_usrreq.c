@@ -960,26 +960,16 @@ udp_output(struct inpcb *inp, struct mbuf *m, struct mbuf *addr,
 	}
 
 	if (addr) {
-		sin = mtod(addr, struct sockaddr_in *);
-
-		if (addr->m_len != sizeof(*sin)) {
-			error = EINVAL;
+		if ((error = in_nam2sin(&sin, addr)))
 			goto release;
-		}
-		if (sin->sin_family != AF_INET) {
-			error = EAFNOSUPPORT;
-			goto release;
-		}
 		if (sin->sin_port == 0) {
 			error = EADDRNOTAVAIL;
 			goto release;
 		}
-
 		if (inp->inp_faddr.s_addr != INADDR_ANY) {
 			error = EISCONN;
 			goto release;
 		}
-
 		error = in_pcbselsrc(&laddr, sin, inp);
 		if (error)
 			goto release;
