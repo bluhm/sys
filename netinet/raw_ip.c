@@ -434,25 +434,19 @@ rip_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 
 	case PRU_BIND:
 	    {
-		struct sockaddr_in *addr = mtod(nam, struct sockaddr_in *);
+		struct sockaddr_in addr;
 
-		if (nam->m_len != sizeof(*addr)) {
-			error = EINVAL;
+		if ((error = in_nam2sin(&addr, nam)))
 			break;
-		}
-		if (addr->sin_family != AF_INET) {
-			error = EADDRNOTAVAIL;
-			break;
-		}
 		if (!((so->so_options & SO_BINDANY) ||
-		    addr->sin_addr.s_addr == INADDR_ANY ||
-		    addr->sin_addr.s_addr == INADDR_BROADCAST ||
-		    in_broadcast(addr->sin_addr, inp->inp_rtableid) ||
-		    ifa_ifwithaddr(sintosa(addr), inp->inp_rtableid))) {
+		    addr.sin_addr.s_addr == INADDR_ANY ||
+		    addr.sin_addr.s_addr == INADDR_BROADCAST ||
+		    in_broadcast(addr.sin_addr, inp->inp_rtableid) ||
+		    ifa_ifwithaddr(sintosa(&addr), inp->inp_rtableid))) {
 			error = EADDRNOTAVAIL;
 			break;
 		}
-		inp->inp_laddr = addr->sin_addr;
+		inp->inp_laddr = addr.sin_addr;
 		break;
 	    }
 	case PRU_CONNECT:
