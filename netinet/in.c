@@ -164,6 +164,22 @@ in_len2mask(struct in_addr *mask, int len)
 		p[i] = (0xff00 >> (len % 8)) & 0xff;
 }
 
+int
+in_nam2sin(struct sockaddr_in *sin, struct mbuf *nam)
+{
+	struct sockaddr *sa = mtod(nam, struct sockaddr *);
+
+	if (nam->m_len != sizeof(*sin))
+		return EINVAL;
+	if (sa->sa_family != AF_INET)
+		return EAFNOSUPPORT;
+	if (sa->sa_len != sizeof(*sin))
+		return EINVAL;
+	memcpy(sin, sa, sizeof(*sin));
+
+	return 0;
+}
+
 /*
  * Generic internet control operations (ioctl's).
  */
