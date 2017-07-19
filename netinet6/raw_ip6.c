@@ -635,18 +635,11 @@ rip6_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 
 	case PRU_CONNECT:
 	{
-		struct sockaddr_in6 *addr = mtod(nam, struct sockaddr_in6 *);
+		struct sockaddr_in6 *addr;
 		struct in6_addr *in6a = NULL;
 
-		if (nam->m_len != sizeof(*addr)) {
-			error = EINVAL;
+		if ((error = in6_nam2sin6(&addr, nam)))
 			break;
-		}
-		if (addr->sin6_family != AF_INET6) {
-			error = EAFNOSUPPORT;
-			break;
-		}
-
 		/* Source address selection. XXX: need pcblookup? */
 		error = in6_pcbselsrc(&in6a, addr, in6p, in6p->inp_outputopts6);
 		if (error)
