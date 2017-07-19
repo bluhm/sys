@@ -165,7 +165,7 @@ in_len2mask(struct in_addr *mask, int len)
 }
 
 int
-in_nam2sin(struct sockaddr_in *sin, struct mbuf *nam)
+in_nam2sin(struct sockaddr_in *sin, const struct mbuf *nam)
 {
 	struct sockaddr *sa = mtod(nam, struct sockaddr *);
 
