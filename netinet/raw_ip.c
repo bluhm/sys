@@ -434,28 +434,28 @@ rip_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 
 	case PRU_BIND:
 	    {
-		struct sockaddr_in addr;
+		struct sockaddr_in *addr;
 
 		if ((error = in_nam2sin(&addr, nam)))
 			break;
 		if (!((so->so_options & SO_BINDANY) ||
-		    addr.sin_addr.s_addr == INADDR_ANY ||
-		    addr.sin_addr.s_addr == INADDR_BROADCAST ||
-		    in_broadcast(addr.sin_addr, inp->inp_rtableid) ||
-		    ifa_ifwithaddr(sintosa(&addr), inp->inp_rtableid))) {
+		    addr->sin_addr.s_addr == INADDR_ANY ||
+		    addr->sin_addr.s_addr == INADDR_BROADCAST ||
+		    in_broadcast(addr->sin_addr, inp->inp_rtableid) ||
+		    ifa_ifwithaddr(sintosa(addr), inp->inp_rtableid))) {
 			error = EADDRNOTAVAIL;
 			break;
 		}
-		inp->inp_laddr = addr.sin_addr;
+		inp->inp_laddr = addr->sin_addr;
 		break;
 	    }
 	case PRU_CONNECT:
 	    {
-		struct sockaddr_in addr;
+		struct sockaddr_in *addr;
 
 		if ((error = in_nam2sin(&addr, nam)))
 			break;
-		inp->inp_faddr = addr.sin_addr;
+		inp->inp_faddr = addr->sin_addr;
 		soisconnected(so);
 		break;
 	    }
@@ -489,7 +489,7 @@ rip_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 			}
 			dst.sin_addr = inp->inp_faddr;
 		} else {
-			struct sockaddr_in addr;
+			struct sockaddr_in *addr;
 
 			if (nam == NULL) {
 				error = ENOTCONN;
@@ -497,7 +497,7 @@ rip_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 			}
 			if ((error = in_nam2sin(&addr, nam)))
 				break;
-			dst.sin_addr = addr.sin_addr;
+			dst.sin_addr = addr->sin_addr;
 		}
 #ifdef IPSEC
 		/* XXX Find an IPsec TDB */

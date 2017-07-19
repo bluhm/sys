@@ -818,7 +818,7 @@ void	   in_proto_cksum_out(struct mbuf *, struct ifnet *);
 void	   in_ifdetach(struct ifnet *);
 int	   in_mask2len(struct in_addr *);
 void	   in_len2mask(struct in_addr *, int);
-int	   in_nam2sin(struct sockaddr_in *, const struct mbuf *);
+int	   in_nam2sin(struct sockaddr_in **, const struct mbuf *);
 
 char	  *inet_ntoa(struct in_addr);
 int	   inet_nat64(int, const void *, void *, const void *, u_int8_t);
@@ -853,6 +853,5 @@ ifatoia(struct ifaddr *ifa)
 {
 	return ((struct in_ifaddr *)(ifa));
 }
-
 #endif /* _KERNEL */
 #endif /* _NETINET_IN_H_ */

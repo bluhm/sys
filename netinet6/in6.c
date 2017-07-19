@@ -164,7 +164,7 @@ in6_mask2len(struct in6_addr *mask, u_char *lim0)
 }
 
 int
-in6_nam2sin6(struct sockaddr_in6 *sin6, const struct mbuf *nam)
+in6_nam2sin6(struct sockaddr_in6 **sin6, const struct mbuf *nam)
 {
 	struct sockaddr *sa = mtod(nam, struct sockaddr *);
 
@@ -176,7 +176,7 @@ in6_nam2sin6(struct sockaddr_in6 *sin6, const struct mbuf *nam)
 		return EINVAL;
 	if (nam->m_len != sizeof(*sin6))
 		return EINVAL;
-	memcpy(sin6, sa, sizeof(*sin6));
+	*sin6 = satosin6(sa);
 
 	return 0;
 }
