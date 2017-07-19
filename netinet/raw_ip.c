@@ -451,17 +451,11 @@ rip_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 	    }
 	case PRU_CONNECT:
 	    {
-		struct sockaddr_in *addr = mtod(nam, struct sockaddr_in *);
+		struct sockaddr_in addr;
 
-		if (nam->m_len != sizeof(*addr)) {
-			error = EINVAL;
+		if ((error = in_nam2sin(&addr, nam)))
 			break;
-		}
-		if (addr->sin_family != AF_INET) {
-			error = EAFNOSUPPORT;
-			break;
-		}
-		inp->inp_faddr = addr->sin_addr;
+		inp->inp_faddr = addr.sin_addr;
 		soisconnected(so);
 		break;
 	    }
@@ -495,12 +489,15 @@ rip_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 			}
 			dst.sin_addr = inp->inp_faddr;
 		} else {
+			struct sockaddr_in addr;
+
 			if (nam == NULL) {
 				error = ENOTCONN;
 				break;
 			}
-			dst.sin_addr =
-			    mtod(nam, struct sockaddr_in *)->sin_addr;
+			if ((error = in_nam2sin(&addr, nam)))
+				break;
+			dst.sin_addr = addr.sin_addr;
 		}
 #ifdef IPSEC
 		/* XXX Find an IPsec TDB */
