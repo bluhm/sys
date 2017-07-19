@@ -853,5 +853,6 @@ ifatoia(struct ifaddr *ifa)
 {
 	return ((struct in_ifaddr *)(ifa));
 }
+
 #endif /* _KERNEL */
 #endif /* _NETINET_IN_H_ */
