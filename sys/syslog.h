@@ -39,7 +39,7 @@
 
 #define	LIOCSFD		_IOW('l', 127, int)	/* set sendsyslog() fd */
 
-#define LOG_MAXLINE	8192
+#define LOG_MAXLINE	8192			/* maximum line length */
 
 /*
  * priorities/facilities are encoded into a single 32-bit quantity, where the
