@@ -1112,9 +1112,10 @@ sockargs(struct mbuf **mp, const void *buf, size_t buflen, int type)
 	/*
 	 * We can't allow socket names > UCHAR_MAX in length, since that
 	 * will overflow sa_len. Also, control data more than MCLBYTES in
-	 * length is just too much.
+	 * length is just too much.  sa_len and sa_family must be valid.
 	 */
-	if (buflen > (type == MT_SONAME ? UCHAR_MAX : MCLBYTES))
+	if ((buflen > (type == MT_SONAME ? UCHAR_MAX : MCLBYTES)) ||
+	    (type == MT_SONAME && buflen < offsetof(struct sockaddr, sa_data)))
 		return (EINVAL);
 
 	/* Allocate an mbuf to hold the arguments. */
