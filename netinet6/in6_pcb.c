@@ -244,16 +244,12 @@ int
 in6_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 {
 	struct in6_addr *in6a = NULL;
-	struct sockaddr_in6 *sin6 = mtod(nam, struct sockaddr_in6 *);
-	int error = 0;
+	struct sockaddr_in6 *sin6;
+	int error;
 	struct sockaddr_in6 tmp;
 
-	(void)&in6a;				/* XXX fool gcc */
-
-	if (nam->m_len != sizeof(*sin6))
-		return (EINVAL);
-	if (sin6->sin6_family != AF_INET6)
-		return (EAFNOSUPPORT);
+	if ((error = in6_nam2sin6(&sin6, nam)))
+		return (error);
 	if (sin6->sin6_port == 0)
 		return (EADDRNOTAVAIL);
 	/* reject IPv4 mapped address, we have no support for it */
