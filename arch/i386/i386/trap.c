@@ -439,7 +439,7 @@ trap(struct trapframe *frame)
 			sicode = SEGV_ACCERR;
 		if (error == EIO) {
 			signal = SIGBUS;
-			sicode = BUS_ADRERR;
+			sicode = BUS_OBJERR;
 		}
 		sv.sival_int = fa;
 		trapsignal(p, signal, vftype, sicode, sv);

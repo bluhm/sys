@@ -393,7 +393,7 @@ faultcommon:
 			sicode = SEGV_ACCERR;
 		if (error == EIO) {
 			signal = SIGBUS;
-			sicode = BUS_ADRERR;
+			sicode = BUS_OBJERR;
 		}
 		sv.sival_ptr = (void *)fa;
 		trapsignal(p, signal, T_PAGEFLT, sicode, sv);
