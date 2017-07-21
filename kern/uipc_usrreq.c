@@ -1065,7 +1065,6 @@ int
 unp_nam2sun(struct mbuf *nam, struct sockaddr_un **sun, size_t *pathlen)
 {
 	struct sockaddr *sa = mtod(nam, struct sockaddr *);
-	char *path;
 	size_t size, len;
 
 	if (nam->m_len < offsetof(struct sockaddr, sa_data))
@@ -1078,9 +1077,8 @@ unp_nam2sun(struct mbuf *nam, struct sockaddr_un **sun, size_t *pathlen)
 		return EINVAL;
 	*sun = (struct sockaddr_un *)sa;
 
-	path = (*sun)->sun_path;
 	size = (*sun)->sun_len - offsetof(struct sockaddr_un, sun_path);
-	len = strnlen(path, size);
+	len = strnlen((*sun)->sun_path, size);
 	if (len == sizeof((*sun)->sun_path))
 		return EINVAL;
 	if (len == size) {
@@ -1088,8 +1086,7 @@ unp_nam2sun(struct mbuf *nam, struct sockaddr_un **sun, size_t *pathlen)
 			return EINVAL;
 		nam->m_len++;
 		(*sun)->sun_len++;
-		size++;
-		path[len] = '\0';
+		(*sun)->sun_path[len] = '\0';
 	}
 	if (pathlen != NULL)
 		*pathlen = len;
