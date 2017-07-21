@@ -165,7 +165,7 @@ in_len2mask(struct in_addr *mask, int len)
 }
 
 int
-in_nam2sin(struct sockaddr_in **sin, const struct mbuf *nam)
+in_nam2sin(const struct mbuf *nam, struct sockaddr_in **sin)
 {
 	struct sockaddr *sa = mtod(nam, struct sockaddr *);
 
@@ -173,9 +173,9 @@ in_nam2sin(struct sockaddr_in **sin, const struct mbuf *nam)
 		return EINVAL;
 	if (sa->sa_family != AF_INET)
 		return EAFNOSUPPORT;
-	if (sa->sa_len != sizeof(struct sockaddr_in))
+	if (sa->sa_len != nam->m_len)
 		return EINVAL;
-	if (nam->m_len != sizeof(struct sockaddr_in))
+	if (sa->sa_len != sizeof(struct sockaddr_in))
 		return EINVAL;
 	*sin = satosin(sa);
 
