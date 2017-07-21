@@ -960,7 +960,7 @@ udp_output(struct inpcb *inp, struct mbuf *m, struct mbuf *addr,
 	}
 
 	if (addr) {
-		if ((error = in_nam2sin(&sin, addr)))
+		if ((error = in_nam2sin(addr, &sin)))
 			goto release;
 		if (sin->sin_port == 0) {
 			error = EADDRNOTAVAIL;

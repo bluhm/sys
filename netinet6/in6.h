@@ -420,7 +420,7 @@ int	in6_addrscope(struct in6_addr *);
 struct	in6_ifaddr *in6_ifawithscope(struct ifnet *, struct in6_addr *, u_int);
 void 	in6_get_rand_ifid(struct ifnet *, struct in6_addr *);
 int	in6_mask2len(struct in6_addr *, u_char *);
-int	in6_nam2sin6(struct sockaddr_in6 **, const struct mbuf *);
+int	in6_nam2sin6(const struct mbuf *, struct sockaddr_in6 **);
 
 struct inpcb;
 

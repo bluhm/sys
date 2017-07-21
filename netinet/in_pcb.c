@@ -328,7 +328,7 @@ in_pcbbind(struct inpcb *inp, struct mbuf *nam, struct proc *p)
 		if (nam) {
 			struct sockaddr_in6 *sin6;
 
-			if ((error = in6_nam2sin6(&sin6, nam)))
+			if ((error = in6_nam2sin6(nam, &sin6)))
 				return (error);
 			if ((error = in6_pcbaddrisavail(inp, sin6, wild, p)))
 				return (error);
@@ -344,7 +344,7 @@ in_pcbbind(struct inpcb *inp, struct mbuf *nam, struct proc *p)
 		if (nam) {
 			struct sockaddr_in *sin;
 
-			if ((error = in_nam2sin(&sin, nam)))
+			if ((error = in_nam2sin(nam, &sin)))
 				return (error);
 			if ((error = in_pcbaddrisavail(inp, sin, wild, p)))
 				return (error);
@@ -515,7 +515,7 @@ in_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 		panic("IPv6 pcb passed into in_pcbconnect");
 #endif /* INET6 */
 
-	if ((error = in_nam2sin(&sin, nam)))
+	if ((error = in_nam2sin(nam, &sin)))
 		return (error);
 	if (sin->sin_port == 0)
 		return (EADDRNOTAVAIL);

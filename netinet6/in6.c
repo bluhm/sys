@@ -164,7 +164,7 @@ in6_mask2len(struct in6_addr *mask, u_char *lim0)
 }
 
 int
-in6_nam2sin6(struct sockaddr_in6 **sin6, const struct mbuf *nam)
+in6_nam2sin6(const struct mbuf *nam, struct sockaddr_in6 **sin6)
 {
 	struct sockaddr *sa = mtod(nam, struct sockaddr *);
 
@@ -172,9 +172,9 @@ in6_nam2sin6(struct sockaddr_in6 **sin6, const struct mbuf *nam)
 		return EINVAL;
 	if (sa->sa_family != AF_INET6)
 		return EAFNOSUPPORT;
-	if (sa->sa_len != sizeof(struct sockaddr_in6))
+	if (sa->sa_len != nam->m_len)
 		return EINVAL;
-	if (nam->m_len != sizeof(struct sockaddr_in6))
+	if (sa->sa_len != sizeof(struct sockaddr_in6))
 		return EINVAL;
 	*sin6 = satosin6(sa);
 

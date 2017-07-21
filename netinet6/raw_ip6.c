@@ -611,7 +611,7 @@ rip6_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 	    {
 		struct sockaddr_in6 *addr;
 
-		if ((error = in6_nam2sin6(&addr, nam)))
+		if ((error = in6_nam2sin6(nam, &addr)))
 			break;
 		/*
 		 * Make sure to not enter in_pcblookup_local(), local ports
@@ -631,7 +631,7 @@ rip6_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		struct sockaddr_in6 *addr;
 		struct in6_addr *in6a = NULL;
 
-		if ((error = in6_nam2sin6(&addr, nam)))
+		if ((error = in6_nam2sin6(nam, &addr)))
 			break;
 		/* Source address selection. XXX: need pcblookup? */
 		error = in6_pcbselsrc(&in6a, addr, in6p, in6p->inp_outputopts6);
