@@ -119,7 +119,7 @@ udp6_output(struct inpcb *in6p, struct mbuf *m, struct mbuf *addr6,
 	if (addr6) {
 		struct sockaddr_in6 *sin6;
 
-		if ((error = in6_nam2sin6(&sin6, addr6)))
+		if ((error = in6_nam2sin6(addr6, &sin6)))
 			goto release;
 		if (sin6->sin6_port == 0) {
 			error = EADDRNOTAVAIL;
