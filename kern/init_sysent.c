@@ -1,4 +1,4 @@
-/*	$OpenBSD: init_sysent.c,v 1.188 2017/04/28 13:51:14 mpi Exp $	*/
+/*	$OpenBSD$	*/
 
 /*
  * System call switch table.

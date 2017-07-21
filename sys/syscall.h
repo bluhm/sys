@@ -1,4 +1,4 @@
-/*	$OpenBSD: syscall.h,v 1.186 2017/04/28 13:51:14 mpi Exp $	*/
+/*	$OpenBSD$	*/
 
 /*
  * System call numbers.
