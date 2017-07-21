@@ -248,7 +248,7 @@ in6_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 	int error;
 	struct sockaddr_in6 tmp;
 
-	if ((error = in6_nam2sin6(&sin6, nam)))
+	if ((error = in6_nam2sin6(nam, &sin6)))
 		return (error);
 	if (sin6->sin6_port == 0)
 		return (EADDRNOTAVAIL);

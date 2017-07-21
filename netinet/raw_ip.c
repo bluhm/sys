@@ -436,7 +436,7 @@ rip_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 	    {
 		struct sockaddr_in *addr;
 
-		if ((error = in_nam2sin(&addr, nam)))
+		if ((error = in_nam2sin(nam, &addr)))
 			break;
 		if (!((so->so_options & SO_BINDANY) ||
 		    addr->sin_addr.s_addr == INADDR_ANY ||
@@ -453,7 +453,7 @@ rip_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 	    {
 		struct sockaddr_in *addr;
 
-		if ((error = in_nam2sin(&addr, nam)))
+		if ((error = in_nam2sin(nam, &addr)))
 			break;
 		inp->inp_faddr = addr->sin_addr;
 		soisconnected(so);
@@ -495,7 +495,7 @@ rip_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 				error = ENOTCONN;
 				break;
 			}
-			if ((error = in_nam2sin(&addr, nam)))
+			if ((error = in_nam2sin(nam, &addr)))
 				break;
 			dst.sin_addr = addr->sin_addr;
 		}
