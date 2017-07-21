@@ -70,7 +70,7 @@ struct	unp_deferral {
 void	unp_discard(struct fdpass *, int);
 void	unp_mark(struct fdpass *, int);
 void	unp_scan(struct mbuf *, void (*)(struct fdpass *, int));
-int	unp_nam2sun(const struct mbuf *, struct sockaddr_un **, size_t *);
+int	unp_nam2sun(struct mbuf *, struct sockaddr_un **, size_t *);
 
 /* list of sets of files that were sent over sockets that are now closed */
 SLIST_HEAD(,unp_deferral) unp_deferred = SLIST_HEAD_INITIALIZER(unp_deferred);
@@ -1062,9 +1062,10 @@ unp_discard(struct fdpass *rp, int nfds)
 }
 
 int
-unp_nam2sun(const struct mbuf *nam, struct sockaddr_un **sun, size_t *pathlen)
+unp_nam2sun(struct mbuf *nam, struct sockaddr_un **sun, size_t *pathlen)
 {
 	struct sockaddr *sa = mtod(nam, struct sockaddr *);
+	char *path;
 	size_t size, len;
 
 	if (nam->m_len < offsetof(struct sockaddr, sa_data))
@@ -1077,12 +1078,19 @@ unp_nam2sun(const struct mbuf *nam, struct sockaddr_un **sun, size_t *pathlen)
 		return EINVAL;
 	*sun = (struct sockaddr_un *)sa;
 
+	path = (*sun)->sun_path;
 	size = (*sun)->sun_len - offsetof(struct sockaddr_un, sun_path);
-	if (size == 0)
+	len = strnlen(path, size);
+	if (len == sizeof((*sun)->sun_path))
 		return EINVAL;
-	len = strnlen((*sun)->sun_path, size);
-	if (len == size)
-		return EINVAL;
+	if (len == size) {
+		if (M_TRAILINGSPACE(nam) == 0)
+			return EINVAL;
+		nam->m_len++;
+		(*sun)->sun_len++;
+		size++;
+		path[len] = '\0';
+	}
 	if (pathlen != NULL)
 		*pathlen = len;
 
