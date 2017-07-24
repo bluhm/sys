@@ -135,11 +135,6 @@ fifo_open(void *v)
 			return (error);
 		}
 		fip->fi_readsock = rso;
-		/*
-		 * XXXSMP
-		 * We only lock `wso' because AF_LOCAL sockets are
-		 * still relying on the KERNEL_LOCK().
-		 */
 		if ((error = socreate(AF_LOCAL, &wso, SOCK_STREAM, 0)) != 0) {
 			(void)soclose(rso);
 			free(fip, M_VNODE, sizeof *fip);
@@ -147,6 +142,11 @@ fifo_open(void *v)
 			return (error);
 		}
 		fip->fi_writesock = wso;
+		/*
+		 * XXXSMP
+		 * We only lock `wso' because AF_LOCAL sockets are
+		 * still relying on the KERNEL_LOCK().
+		 */
 		s = solock(wso);
 		if ((error = soconnect2(wso, rso)) != 0) {
 			sounlock(s);
@@ -176,6 +176,7 @@ fifo_open(void *v)
 		fip->fi_writers++;
 		if ((ap->a_mode & O_NONBLOCK) && fip->fi_readers == 0) {
 			error = ENXIO;
+			sounlock(s);
 			goto bad;
 		}
 		if (fip->fi_writers == 1) {
