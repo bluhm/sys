@@ -31,7 +31,7 @@ POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
-/* $OpenBSD: if_em.c,v 1.335 2017/03/19 11:09:26 jsg Exp $ */
+/* $OpenBSD: if_em.c,v 1.336 2017/07/25 20:45:18 bluhm Exp $ */
 /* $FreeBSD: if_em.c,v 1.46 2004/09/29 18:28:28 mlaier Exp $ */
 
 #include <dev/pci/if_em.h>
