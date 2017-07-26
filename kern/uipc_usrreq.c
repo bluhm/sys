@@ -1077,6 +1077,7 @@ unp_nam2sun(struct mbuf *nam, struct sockaddr_un **sun, size_t *pathlen)
 		return EINVAL;
 	*sun = (struct sockaddr_un *)sa;
 
+	/* ensure that sun_path is NUL terminated and fits */
 	size = (*sun)->sun_len - offsetof(struct sockaddr_un, sun_path);
 	len = strnlen((*sun)->sun_path, size);
 	if (len == sizeof((*sun)->sun_path))
