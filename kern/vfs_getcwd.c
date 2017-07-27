@@ -111,6 +111,7 @@ vfs_getcwd_scandir(struct vnode **lvpp, struct vnode **uvpp, char **bpp,
 	dirbuflen = DIRBLKSIZ;
 	if (dirbuflen < va.va_blocksize)
 		dirbuflen = va.va_blocksize;
+	/* XXX we need some limit for fuse, 1 MB should be enough */
 	if (dirbuflen > 0xfffff) {
 		error = EINVAL;
 		goto out;
