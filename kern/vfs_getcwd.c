@@ -159,7 +159,7 @@ vfs_getcwd_scandir(struct vnode **lvpp, struct vnode **uvpp, char **bpp,
 			reclen = dp->d_reclen;
 
 			/* Check for malformed directory */
-			if (reclen < DIRENT_RECSIZE(1)) {
+			if (reclen < DIRENT_RECSIZE(1) || reclen > len) {
 				error = EINVAL;
 				goto out;
 			}
