@@ -102,18 +102,19 @@ vfs_getcwd_scandir(struct vnode **lvpp, struct vnode **uvpp, char **bpp,
 
 	/* If we don't care about the pathname, we're done */
 	if (bufp == NULL) {
-		vrele(lvp);
-		*lvpp = NULL;
-		return (0);
+		error = 0;
+		goto out;
 	}
 
 	fileno = va.va_fileid;
 
 	dirbuflen = DIRBLKSIZ;
-
 	if (dirbuflen < va.va_blocksize)
 		dirbuflen = va.va_blocksize;
-
+	if (dirbuflen > 0xfffff) {
+		error = EINVAL;
+		goto out;
+	}
 	dirbuf = malloc(dirbuflen, M_TEMP, M_WAITOK);
 
 	off = 0;
