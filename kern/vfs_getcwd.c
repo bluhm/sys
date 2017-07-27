@@ -166,8 +166,13 @@ vfs_getcwd_scandir(struct vnode **lvpp, struct vnode **uvpp, char **bpp,
 
 			if (dp->d_fileno == fileno) {
 				char *bp = *bpp;
-				bp -= dp->d_namlen;
 
+				if (offsetof(struct dirent, d_name) +
+				    dp->d_namlen > reclen) {
+					error = EINVAL;
+					goto out;
+				}
+				bp -= dp->d_namlen;
 				if (bp <= bufp) {
 					error = ERANGE;
 					goto out;
