@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_uath.c,v 1.80 2017/03/26 15:31:15 deraadt Exp $	*/
+/*	$OpenBSD: if_uath.c,v 1.81 2017/07/28 10:50:56 bluhm Exp $	*/
 
 /*-
  * Copyright (c) 2006
