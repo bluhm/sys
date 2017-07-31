@@ -1,4 +1,4 @@
-/*	$OpenBSD: route.h,v 1.164 2017/07/28 09:01:09 mpi Exp $	*/
+/*	$OpenBSD: route.h,v 1.166 2017/07/30 18:18:08 florian Exp $	*/
 /*	$NetBSD: route.h,v 1.9 1996/02/13 22:00:49 christos Exp $	*/
 
 /*
@@ -93,7 +93,7 @@ struct rt_metrics {
  */
 
 struct rtentry {
-#ifndef ART
+#ifndef _KERNEL
 	struct	radix_node rt_nodes[2];	/* tree glue, and other values */
 #else
 	struct sockaddr	*rt_dest;	/* destination */
@@ -115,7 +115,7 @@ struct rtentry {
 	unsigned int	 rt_ifidx;	/* the answer: interface to use */
 	unsigned int	 rt_flags;	/* up/down?, host/net */
 	int		 rt_refcnt;	/* # held references */
-#ifdef ART
+#ifdef _KERNEL
 	int		 rt_plen;	/* prefix length */
 #endif
 	uint16_t	 rt_labelid;	/* route label ID */
@@ -441,11 +441,7 @@ void			 rt_timer_timer(void *);
 
 int	 rtisvalid(struct rtentry *);
 int	 rt_hash(struct rtentry *, struct sockaddr *, uint32_t *);
-#ifdef SMALL_KERNEL
-#define	 rtalloc_mpath(dst, s, rid) rtalloc((dst), RT_RESOLVE, (rid))
-#else
 struct	 rtentry *rtalloc_mpath(struct sockaddr *, uint32_t *, u_int);
-#endif
 struct	 rtentry *rtalloc(struct sockaddr *, int, unsigned int);
 void	 rtref(struct rtentry *);
 void	 rtfree(struct rtentry *);
@@ -460,10 +456,8 @@ int	 rtrequest(int, struct rt_addrinfo *, u_int8_t, struct rtentry **,
 	     u_int);
 int	 rtrequest_delete(struct rt_addrinfo *, u_int8_t, struct ifnet *,
 	     struct rtentry **, u_int);
-#ifndef SMALL_KERNEL
 void	 rt_if_track(struct ifnet *);
 int	 rt_if_linkstate_change(struct rtentry *, void *, u_int);
-#endif
 int	 rtdeletemsg(struct rtentry *, struct ifnet *, u_int);
 #endif /* _KERNEL */
 
