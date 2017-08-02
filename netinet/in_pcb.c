@@ -533,15 +533,23 @@ in_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 		return (error);
 
 	if (in_pcbhashlookup(inp->inp_table, sin->sin_addr, sin->sin_port,
-	    *ina, inp->inp_lport, inp->inp_rtableid) != 0)
+	    *ina, inp->inp_lport, inp->inp_rtableid) != NULL)
 		return (EADDRINUSE);
 
 	KASSERT(inp->inp_laddr.s_addr == INADDR_ANY || inp->inp_lport);
 
 	if (inp->inp_laddr.s_addr == INADDR_ANY) {
-		if (inp->inp_lport == 0 &&
-		    in_pcbbind(inp, NULL, curproc) == EADDRNOTAVAIL)
-			return (EADDRNOTAVAIL);
+		if (inp->inp_lport == 0) {
+			error = in_pcbbind(inp, NULL, curproc);
+			if (error)
+				return (error);
+			if (in_pcbhashlookup(inp->inp_table, sin->sin_addr,
+			    sin->sin_port, *ina, inp->inp_lport,
+			    inp->inp_rtableid) != NULL) {
+				inp->inp_lport = 0;
+				return (EADDRINUSE);
+			}
+		}
 		inp->inp_laddr = *ina;
 	}
 	inp->inp_faddr = sin->sin_addr;
