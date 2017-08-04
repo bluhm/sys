@@ -8,7 +8,6 @@ option		DDB		# in-kernel debugger
 #option		DDBPROF		# ddb(4) based profiling
 #option		DDBCTF		# DDB support for CTF
 #option		DDB_SAFE_CONSOLE # allow break into ddb during boot
-option		DDB_STRUCT	# information about data structures
 makeoptions	DEBUG=""	# do not compile full symbol table
 #makeoptions	PROF="-pg"	# build profiled kernel
 #option		GPROF		# kernel profiling, kgmon(8)
