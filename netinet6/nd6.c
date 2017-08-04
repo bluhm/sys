@@ -969,7 +969,8 @@ nd6_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 		break;
 
 	case RTM_INVALIDATE:
-		nd6_invalidate(rt);
+		if (!ISSET(rt->rt_flags, RTF_LOCAL))
+			nd6_invalidate(rt);
 		break;
 	}
 }
