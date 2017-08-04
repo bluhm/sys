@@ -206,7 +206,7 @@ void nd6_ra_input(struct mbuf *, int, int);
 void nd6_rs_input(struct mbuf *, int, int);
 
 int in6_ifdel(struct ifnet *, struct in6_addr *);
-void rt6_flush(struct in6_addr *, struct ifnet *);
+void rt6_flush(const struct in6_addr *, struct ifnet *);
 
 #endif /* _KERNEL */
 

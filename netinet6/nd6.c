@@ -653,7 +653,6 @@ void
 nd6_free(struct rtentry *rt)
 {
 	struct llinfo_nd6 *ln = (struct llinfo_nd6 *)rt->rt_llinfo;
-	struct in6_addr in6 = satosin6(rt_key(rt))->sin6_addr;
 	struct ifnet *ifp;
 
 	NET_ASSERT_LOCKED();
@@ -667,7 +666,7 @@ nd6_free(struct rtentry *rt)
 			 * is in the Default Router List.
 			 * See a corresponding comment in nd6_na_input().
 			 */
-			rt6_flush(&in6, ifp);
+			rt6_flush(&satosin6(rt_key(rt))->sin6_addr, ifp);
 		}
 	}
 

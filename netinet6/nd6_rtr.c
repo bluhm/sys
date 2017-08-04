@@ -244,8 +244,10 @@ nd6_ra_input(struct mbuf *m, int off, int icmp6len)
  * it shouldn't be called when acting as a router.
  */
 void
-rt6_flush(struct in6_addr *gateway, struct ifnet *ifp)
+rt6_flush(const struct in6_addr *gateway, struct ifnet *ifp)
 {
+	struct in6_addr in6;
+
 	NET_ASSERT_LOCKED();
 
 	/* We'll care only link-local addresses */
@@ -253,9 +255,10 @@ rt6_flush(struct in6_addr *gateway, struct ifnet *ifp)
 		return;
 
 	/* XXX: hack for KAME's link-local address kludge */
-	gateway->s6_addr16[1] = htons(ifp->if_index);
+	in6 = *gateway;
+	in6.s6_addr16[1] = htons(ifp->if_index);
 
-	rtable_walk(ifp->if_rdomain, AF_INET6, rt6_deleteroute, gateway);
+	rtable_walk(ifp->if_rdomain, AF_INET6, rt6_deleteroute, &in6);
 }
 
 int
