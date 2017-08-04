@@ -694,11 +694,14 @@ arptfree(struct rtentry *rt)
 {
 	struct ifnet *ifp;
 
+	if (ISSET(rt->rt_flags, RTF_LOCAL))
+		return;
+
 	arpinvalidate(rt);
 
 	ifp = if_get(rt->rt_ifidx);
 	KASSERT(ifp != NULL);
-	if (!ISSET(rt->rt_flags, RTF_STATIC|RTF_CACHED|RTF_LOCAL))
+	if (!ISSET(rt->rt_flags, RTF_STATIC|RTF_CACHED))
 		rtdeletemsg(rt, ifp, ifp->if_rdomain);
 	if_put(ifp);
 }
