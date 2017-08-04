@@ -93,7 +93,7 @@ void nd6_slowtimo(void *);
 void nd6_timer_work(void *);
 void nd6_timer(void *);
 void nd6_invalidate(struct rtentry *);
-void nd6_free(struct rtentry *, int);
+void nd6_free(struct rtentry *);
 void nd6_llinfo_timer(void *);
 
 struct timeout nd6_slowtimo_ch;
@@ -369,7 +369,7 @@ nd6_llinfo_timer(void *arg)
 					ln->ln_hold = NULL;
 				}
 			}
-			nd6_free(rt, 0);
+			nd6_free(rt);
 			ln = NULL;
 		}
 		break;
@@ -384,7 +384,7 @@ nd6_llinfo_timer(void *arg)
 	case ND6_LLINFO_PURGE:
 		/* Garbage Collection(RFC 2461 5.3) */
 		if (!ND6_LLINFO_PERMANENT(ln)) {
-			nd6_free(rt, 1);
+			nd6_free(rt);
 			ln = NULL;
 		}
 		break;
@@ -409,7 +409,7 @@ nd6_llinfo_timer(void *arg)
 			nd6_ns_output(ifp, &dst->sin6_addr,
 			    &dst->sin6_addr, ln, 0);
 		} else {
-			nd6_free(rt, 0);
+			nd6_free(rt);
 			ln = NULL;
 		}
 		break;
@@ -493,7 +493,7 @@ nd6_purge(struct ifnet *ifp)
 		    rt->rt_gateway->sa_family == AF_LINK) {
 			sdl = satosdl(rt->rt_gateway);
 			if (sdl->sdl_index == ifp->if_index)
-				nd6_free(rt, 0);
+				nd6_free(rt);
 		}
 	}
 }
@@ -656,7 +656,7 @@ nd6_invalidate(struct rtentry *rt)
  * that the change is safe.
  */
 void
-nd6_free(struct rtentry *rt, int gc)
+nd6_free(struct rtentry *rt)
 {
 	struct llinfo_nd6 *ln = (struct llinfo_nd6 *)rt->rt_llinfo;
 	struct in6_addr in6 = satosin6(rt_key(rt))->sin6_addr;
@@ -1103,7 +1103,7 @@ nd6_cache_lladdr(struct ifnet *ifp, struct in6_addr *from, char *lladdr,
 		return;
 	if ((rt->rt_flags & (RTF_GATEWAY | RTF_LLINFO)) != RTF_LLINFO) {
 fail:
-		nd6_free(rt, 0);
+		nd6_free(rt);
 		rtfree(rt);
 		return;
 	}
