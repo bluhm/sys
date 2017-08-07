@@ -1786,6 +1786,16 @@ icmp6_mtudisc_clone(struct sockaddr *dst, u_int rtableid)
 		return (NULL);
 	}
 
+	/*
+	 * No PMTU for local routes and permanent neighbors,
+	 * ARP and NDP use the same expire timer at the route.
+	 */
+	if (ISSET(rt->rt_flags, RTF_LOCAL) ||
+	    (ISSET(rt->rt_flags, RTF_LLINFO) && rt->rt_expire == 0)) {
+		rtfree(rt);
+		return (NULL);
+	}
+
 	/* If we didn't get a host route, allocate one */
 	if ((rt->rt_flags & RTF_HOST) == 0) {
 		struct rtentry *nrt;
