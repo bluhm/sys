@@ -114,7 +114,7 @@
 #include <netinet/ip_carp.h>
 #endif
 
-struct niqueue ip6intrq = NIQUEUE_INITIALIZER(IFQ_MAXLEN, NETISR_IPV6);
+struct niqueue ip6intrq = NIQUEUE_INITIALIZER(2048, NETISR_IPV6);
 
 struct cpumem *ip6counters;
 
