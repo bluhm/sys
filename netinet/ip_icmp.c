@@ -963,7 +963,7 @@ icmp_mtudisc_clone(struct in_addr dst, u_int rtableid)
 
 	/*
 	 * No PMTU for local routes and permanent neighbors,
-	 * ARP and NDP use the same expire timer at the route.
+	 * ARP and NDP use the same expire timer as the route.
 	 */
 	if (ISSET(rt->rt_flags, RTF_LOCAL) ||
 	    (ISSET(rt->rt_flags, RTF_LLINFO) && rt->rt_expire == 0)) {
