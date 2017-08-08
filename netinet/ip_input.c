@@ -120,7 +120,7 @@ int	ip_frags = 0;
 
 int *ipctl_vars[IPCTL_MAXID] = IPCTL_VARS;
 
-struct niqueue ipintrq = NIQUEUE_INITIALIZER(2048, NETISR_IP);
+struct niqueue ipintrq = NIQUEUE_INITIALIZER(IPQ_MAXLEN, NETISR_IP);
 
 struct pool ipqent_pool;
 struct pool ipq_pool;

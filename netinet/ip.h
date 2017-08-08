@@ -209,6 +209,10 @@ struct	ip_timestamp {
 #define	IP_MSS		576		/* default maximum segment size */
 
 #ifdef _KERNEL
+
+/* Maximum lenght for IP protocol queues */
+#define IPQ_MAXLEN	2048
+
 /*
  * This is the real IPv4 pseudo header, used for computing the TCP and UDP
  * checksums. For the Internet checksum, struct ipovly can be used instead.
