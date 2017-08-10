@@ -1,4 +1,4 @@
-/*	$OpenBSD: bfd.c,v 1.62 2017/05/16 12:24:01 mpi Exp $	*/
+/*	$OpenBSD: bfd.c,v 1.63 2017/08/10 16:38:37 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2016 Peter Hessler <phessler@openbsd.org>
