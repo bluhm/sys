@@ -1,4 +1,4 @@
-/*	$OpenBSD: nd6.h,v 1.68 2017/07/12 16:53:58 florian Exp $	*/
+/*	$OpenBSD: nd6.h,v 1.72 2017/08/09 14:36:00 florian Exp $	*/
 /*	$KAME: nd6.h,v 1.95 2002/06/08 11:31:06 itojun Exp $	*/
 
 /*
@@ -47,17 +47,9 @@ struct nd_ifinfo {
 	u_int32_t basereachable;	/* BaseReachableTime */
 	u_int32_t reachable;		/* Reachable Time */
 	u_int32_t retrans;		/* Retrans Timer */
-	u_int32_t flags;		/* Flags */
 	int recalctm;			/* BaseReacable re-calculation timer */
 	u_int8_t initialized; /* Flag to see the entry is initialized */
-	/* the following 3 members are for privacy extension for addrconf */
-	u_int8_t randomseed0[8]; /* upper 64 bits of MD5 digest */
-	u_int8_t randomseed1[8]; /* lower 64 bits (usually the EUI64 IFID) */
-	u_int8_t randomid[8];	/* current random ID */
 };
-
-#define ND6_IFF_PERFORMNUD	0x1
-#define ND6_IFF_ACCEPT_RTADV	0x2
 
 struct in6_nbrinfo {
 	char ifname[IFNAMSIZ];	/* if name, e.g. "en0" */
@@ -138,7 +130,6 @@ struct	llinfo_nd6 {
 		(((MIN_RANDOM_FACTOR * (x >> 10)) + (arc4random() & \
 		((MAX_RANDOM_FACTOR - MIN_RANDOM_FACTOR) * (x >> 10)))) /1000)
 
-extern int nd6_prune;
 extern int nd6_delay;
 extern int nd6_umaxtries;
 extern int nd6_mmaxtries;
@@ -208,6 +199,7 @@ void nd6_rs_input(struct mbuf *, int, int);
 int in6_ifdel(struct ifnet *, struct in6_addr *);
 void rt6_flush(struct in6_addr *, struct ifnet *);
 
+void nd6_expire_timer_update(struct in6_ifaddr *);
 #endif /* _KERNEL */
 
 #endif /* _NETINET6_ND6_H_ */
