@@ -486,6 +486,8 @@ bfd_listener(struct bfd_config *bfd, unsigned int port)
 	so->so_upcallarg = (caddr_t)bfd;
 	so->so_upcall = bfd_upcall;
 
+	m_free(m);
+
 	return (so);
 
  close:
