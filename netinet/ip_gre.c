@@ -424,7 +424,7 @@ gre_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 			if (inp)
 				ina_dst = &inp->inp_laddr;
 		} else if (nam) {
-			if (in_nam2sin(&sin4, nam) == 0)
+			if (in_nam2sin(nam, &sin4) == 0)
 				ina_dst = &sin4->sin_addr;
 		}
 		if (ina_dst != NULL &&

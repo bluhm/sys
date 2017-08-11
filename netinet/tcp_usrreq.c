@@ -223,7 +223,7 @@ tcp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		if (inp->inp_flags & INP_IPV6) {
 			struct sockaddr_in6 *sin6;
 
-			if ((error = in6_nam2sin6(&sin6, nam)))
+			if ((error = in6_nam2sin6(nam, &sin6)))
 				break;
 			if (IN6_IS_ADDR_UNSPECIFIED(&sin6->sin6_addr) ||
 			    IN6_IS_ADDR_MULTICAST(&sin6->sin6_addr)) {
@@ -236,7 +236,7 @@ tcp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		{
 			struct sockaddr_in *sin;
 
-			if ((error = in_nam2sin(&sin, nam)))
+			if ((error = in_nam2sin(nam, &sin)))
 				break;
 			if ((sin->sin_addr.s_addr == INADDR_ANY) ||
 			    (sin->sin_addr.s_addr == INADDR_BROADCAST) ||
