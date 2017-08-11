@@ -678,7 +678,7 @@ rip6_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 				error = ENOTCONN;
 				break;
 			}
-			if ((error = in6_nam2sin6(&addr6, nam)))
+			if ((error = in6_nam2sin6(nam, &addr6)))
 				break;
 			memcpy(&dst.sin6_addr, &addr6->sin6_addr,
 			    sizeof(struct in6_addr));
