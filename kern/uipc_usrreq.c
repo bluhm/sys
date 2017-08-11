@@ -1,4 +1,4 @@
-/*	$OpenBSD: uipc_usrreq.c,v 1.118 2017/06/26 09:32:31 mpi Exp $	*/
+/*	$OpenBSD: uipc_usrreq.c,v 1.119 2017/08/11 19:53:02 bluhm Exp $	*/
 /*	$NetBSD: uipc_usrreq.c,v 1.18 1996/02/09 19:00:50 christos Exp $	*/
 
 /*
