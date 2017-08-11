@@ -1,4 +1,4 @@
-/*	$OpenBSD: switchofp.c,v 1.62 2017/07/19 12:29:22 claudio Exp $	*/
+/*	$OpenBSD: switchofp.c,v 1.69 2017/08/11 13:56:06 reyk Exp $	*/
 
 /*
  * Copyright (c) 2016 Kazuya GODA <goda@openbsd.org>
@@ -212,6 +212,7 @@ int	 swofp_validate_buckets(struct switch_softc *, struct mbuf *, uint8_t,
  */
 int	 swofp_flow_entry_put_instructions(struct switch_softc *,
 	    struct mbuf *, struct swofp_flow_entry *, uint16_t *, uint16_t *);
+void	 swofp_flow_entry_table_free(struct ofp_instruction **);
 void	 swofp_flow_entry_instruction_free(struct swofp_flow_entry *);
 void	 swofp_flow_entry_free(struct swofp_flow_entry **);
 void	 swofp_flow_entry_add(struct switch_softc *, struct swofp_flow_table *,
@@ -1215,7 +1216,7 @@ swofp_lookup_oxm_handler(struct ofp_ox_match *oxm)
 ofp_msg_handler
 swofp_lookup_msg_handler(uint8_t type)
 {
-	if (type > OFP_T_TYPE_MAX)
+	if (type >= OFP_T_TYPE_MAX)
 		return (NULL);
 	else
 		return (ofp_msg_table[type].msg_handler);
@@ -1224,7 +1225,7 @@ swofp_lookup_msg_handler(uint8_t type)
 ofp_msg_handler
 swofp_lookup_mpmsg_handler(uint16_t type)
 {
-	if (type > nitems(ofp_mpmsg_table))
+	if (type >= nitems(ofp_mpmsg_table))
 		return (NULL);
 	else
 		return (ofp_mpmsg_table[type].mpmsg_handler);
@@ -1523,29 +1524,31 @@ swofp_validate_buckets(struct switch_softc *sc, struct mbuf *m, uint8_t type,
 }
 
 void
+swofp_flow_entry_table_free(struct ofp_instruction **table)
+{
+	if (*table) {
+		free(*table, M_DEVBUF, ntohs((*table)->i_len));
+		*table = NULL;
+	}
+}
+
+void
 swofp_flow_entry_instruction_free(struct swofp_flow_entry *swfe)
 {
-	if (swfe->swfe_goto_table)
-		free(swfe->swfe_goto_table, M_DEVBUF,
-		    ntohs(swfe->swfe_goto_table->igt_len));
-	if (swfe->swfe_write_metadata)
-		free(swfe->swfe_write_metadata, M_DEVBUF,
-		    ntohs(swfe->swfe_write_metadata->iwm_len));
-	if (swfe->swfe_apply_actions)
-		free(swfe->swfe_apply_actions, M_DEVBUF,
-		    ntohs(swfe->swfe_apply_actions->ia_len));
-	if (swfe->swfe_write_actions)
-		free(swfe->swfe_write_actions, M_DEVBUF,
-		    ntohs(swfe->swfe_write_actions->ia_len));
-	if (swfe->swfe_clear_actions)
-		free(swfe->swfe_clear_actions, M_DEVBUF,
-		    ntohs(swfe->swfe_clear_actions->ia_len));
-	if (swfe->swfe_experimenter)
-		free(swfe->swfe_experimenter, M_DEVBUF,
-		    ntohs(swfe->swfe_experimenter->ie_len));
-	if (swfe->swfe_meter)
-		free(swfe->swfe_meter, M_DEVBUF,
-		    ntohs(swfe->swfe_meter->im_len));
+	swofp_flow_entry_table_free((struct ofp_instruction **)
+	    &swfe->swfe_goto_table);
+	swofp_flow_entry_table_free((struct ofp_instruction **)
+	    &swfe->swfe_write_metadata);
+	swofp_flow_entry_table_free((struct ofp_instruction **)
+	    &swfe->swfe_apply_actions);
+	swofp_flow_entry_table_free((struct ofp_instruction **)
+	    &swfe->swfe_write_actions);
+	swofp_flow_entry_table_free((struct ofp_instruction **)
+	    &swfe->swfe_clear_actions);
+	swofp_flow_entry_table_free((struct ofp_instruction **)
+	    &swfe->swfe_experimenter);
+	swofp_flow_entry_table_free((struct ofp_instruction **)
+	    &swfe->swfe_meter);
 }
 
 void
@@ -1692,11 +1695,9 @@ swofp_ox_cmp_data(struct ofp_ox_match *target,
 	if (strict) {
 		if (tmask != kmask)
 			return (1);
-		return !((tmth & tmask) == (kmth & kmask));
 	} else {
 		if ((tmask & kmask) != kmask)
 			return (1);
-		return !((tmth & kmask) == (kmth & kmask));
 	}
 
 	return !((tmth & tmask) == (kmth & kmask));
@@ -1752,7 +1753,6 @@ swofp_ox_cmp_ipv6_addr(struct ofp_ox_match *target,
 		kmth.s6_addr32[2] &= kmask.s6_addr32[2];
 		kmth.s6_addr32[3] &= kmask.s6_addr32[3];
 
-		return memcmp(&tmth, &kmth, sizeof(tmth));
 	} else {
 		tmask.s6_addr32[0] &= kmask.s6_addr32[0];
 		tmask.s6_addr32[1] &= kmask.s6_addr32[1];
@@ -1772,8 +1772,9 @@ swofp_ox_cmp_ipv6_addr(struct ofp_ox_match *target,
 		kmth.s6_addr32[2] &= kmask.s6_addr32[2];
 		kmth.s6_addr32[3] &= kmask.s6_addr32[3];
 
-		return memcmp(&tmth, &kmth, sizeof(tmth));
 	}
+
+	return memcmp(&tmth, &kmth, sizeof(tmth));
 }
 #endif /* INET6 */
 
@@ -1815,12 +1816,12 @@ swofp_ox_cmp_ipv4_addr(struct ofp_ox_match *target,
 	if (strict) {
 		if (tmask != kmask)
 			return (1);
-		return !((tmth & tmask) == (kmth & kmask));
 	} else {
 		if ((tmask & kmask) != kmask)
 			return (1);
-		return !((tmth & kmask) == (kmth & kmask));
 	}
+
+	return !((tmth & kmask) == (kmth & kmask));
 }
 
 int
@@ -1841,7 +1842,7 @@ swofp_ox_cmp_vlan_vid(struct ofp_ox_match *target,
 		tmask = UINT16_MAX;
 
 	memcpy(&kmth, ((caddr_t)key + sizeof(*key)), sizeof(uint16_t));
-	if (OFP_OXM_GET_HASMASK(target))
+	if (OFP_OXM_GET_HASMASK(key))
 		memcpy(&kmask, ((caddr_t)key + sizeof(*key) +
 		    sizeof(uint16_t)), sizeof(uint16_t));
 	else
@@ -1855,12 +1856,12 @@ swofp_ox_cmp_vlan_vid(struct ofp_ox_match *target,
 	if (strict) {
 		if (tmask != kmask)
 			return (1);
-		return !((tmth & tmask) == (kmth & kmask));
 	} else {
 		if ((tmask & kmask) != kmask)
 			return (1);
-		return !((tmth & kmask) == (kmth & kmask));
 	}
+
+	return !((tmth & kmask) == (kmth & kmask));
 }
 
 int
@@ -1908,12 +1909,12 @@ swofp_ox_cmp_ether_addr(struct ofp_ox_match *target,
 	if (strict) {
 		if (tmask != kmask)
 			return (1);
-		return !((tmth & tmask) == (kmth & kmask));
 	} else {
 		if ((tmask & kmask) != kmask)
 			return (1);
-		return !((tmth & kmask) == (kmth & kmask));
 	}
+
+	return !((tmth & kmask) == (kmth & kmask));
 }
 
 int
@@ -3261,7 +3262,7 @@ swofp_action_pop_vlan(struct switch_softc *sc, struct mbuf *m,
 		swfcl->swfcl_vlan->vlan_tpid = htons(ETHERTYPE_VLAN);
 		swfcl->swfcl_vlan->vlan_vid =
 		    (evl->evl_tag & htons(EVL_VLID_MASK));
-		swfcl->swfcl_vlan->vlan_vid =
+		swfcl->swfcl_vlan->vlan_pcp =
 		    EVL_PRIOFTAG(ntohs(evl->evl_tag));
 	} else {
 		pool_put(&swfcl_pool, swfcl->swfcl_vlan);
@@ -5345,7 +5346,7 @@ swofp_flow_mod_cmd_delete_strict(struct switch_softc *sc, struct mbuf *m)
 ofp_msg_handler *
 swofp_flow_mod_lookup_handler(uint8_t cmd)
 {
-	if (cmd > nitems(ofp_flow_mod_table))
+	if (cmd >= nitems(ofp_flow_mod_table))
 		return (NULL);
 	else
 		return (&ofp_flow_mod_table[cmd].ofm_cmd_handler);

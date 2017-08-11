@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_spppsubr.c,v 1.166 2017/08/01 20:52:32 mpi Exp $	*/
+/*	$OpenBSD: if_spppsubr.c,v 1.169 2017/08/11 15:13:25 reyk Exp $	*/
 /*
  * Synchronous PPP link level subroutines.
  *
@@ -419,11 +419,12 @@ sppp_input(struct ifnet *ifp, struct mbuf *m)
 	struct timeval tv;
 	int debug = ifp->if_flags & IFF_DEBUG;
 
+	getmicrouptime(&tv);
+
 	if (ifp->if_flags & IFF_UP) {
 		/* Count received bytes, add hardware framing */
 		ifp->if_ibytes += m->m_pkthdr.len + sp->pp_framebytes;
 		/* Note time of last receive */
-		getmicrouptime(&tv);
 		sp->pp_last_receive = tv.tv_sec;
 	}
 
@@ -585,6 +586,9 @@ sppp_output(struct ifnet *ifp, struct mbuf *m,
 	if (dst->sa_family == AF_INET) {
 		struct ip *ip = NULL;
 
+		if (m->m_len >= sizeof(struct ip))
+			ip = mtod(m, struct ip *);
+
 		/*
 		 * When using dynamic local IP address assignment by using
 		 * 0.0.0.0 as a local address, the first TCP session will
@@ -596,12 +600,12 @@ sppp_output(struct ifnet *ifp, struct mbuf *m,
 		 * - we flag TCP packets with src ip 0 as an error
 		 */
 
-		if(ip && ip->ip_src.s_addr == INADDR_ANY) {
+		if (ip && ip->ip_src.s_addr == INADDR_ANY) {
 			u_int8_t proto = ip->ip_p;
 
 			m_freem(m);
 			splx(s);
-			if(proto == IPPROTO_TCP)
+			if (proto == IPPROTO_TCP)
 				return (EADDRNOTAVAIL);
 			else
 				return (0);
