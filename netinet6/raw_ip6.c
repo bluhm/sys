@@ -661,6 +661,7 @@ rip6_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 	{
 		struct sockaddr_in6 dst;
 
+		/* always copy sockaddr to avoid overwrites */
 		memset(&dst, 0, sizeof(dst));
 		dst.sin6_family = AF_INET6;
 		dst.sin6_len = sizeof(dst);
@@ -669,8 +670,7 @@ rip6_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 				error = EISCONN;
 				break;
 			}
-			memcpy(&dst.sin6_addr, &in6p->inp_faddr6,
-			    sizeof(struct in6_addr));
+			dst.sin6_addr = in6p->inp_faddr6;
 		} else {
 			struct sockaddr_in6 *addr6;
 
@@ -680,8 +680,7 @@ rip6_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 			}
 			if ((error = in6_nam2sin6(nam, &addr6)))
 				break;
-			memcpy(&dst.sin6_addr, &addr6->sin6_addr,
-			    sizeof(struct in6_addr));
+			dst.sin6_addr = addr6->sin6_addr;
 			dst.sin6_scope_id = addr6->sin6_scope_id;
 		}
 		error = rip6_output(m, so, sin6tosa(&dst), control);
