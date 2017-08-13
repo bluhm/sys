@@ -1,4 +1,4 @@
-/*	$OpenBSD: drm_linux.h,v 1.59 2017/08/10 14:18:31 guenther Exp $	*/
+/*	$OpenBSD: drm_linux.h,v 1.61 2017/08/12 19:46:02 mpi Exp $	*/
 /*
  * Copyright (c) 2013, 2014, 2015 Mark Kettenis
  *
@@ -491,7 +491,6 @@ typedef struct mutex spinlock_t;
 #define DEFINE_SPINLOCK(x)	struct mutex x
 #define DEFINE_MUTEX(x)		struct rwlock x
 
-#ifdef WITNESS
 static inline void
 _spin_lock_irqsave(struct mutex *mtxp, __unused unsigned long flags
     LOCK_FL_VARS)
@@ -508,18 +507,6 @@ _spin_unlock_irqrestore(struct mutex *mtxp, __unused unsigned long flags
 	_spin_lock_irqsave(m, fl LOCK_FILE_LINE)
 #define spin_unlock_irqrestore(m, fl)	\
 	_spin_unlock_irqrestore(m, fl LOCK_FILE_LINE)
-#else /* !WITNESS */
-static inline void
-spin_lock_irqsave(struct mutex *mtxp, __unused unsigned long flags)
-{
-	mtx_enter(mtxp);
-}
-static inline void
-spin_unlock_irqrestore(struct mutex *mtxp, __unused unsigned long flags)
-{
-	mtx_leave(mtxp);
-}
-#endif /* !WITNESS */
 
 
 #define spin_lock(mtxp)			mtx_enter(mtxp)
@@ -545,9 +532,13 @@ spin_unlock_irqrestore(struct mutex *mtxp, __unused unsigned long flags)
 #define might_lock(lock)
 #define lockdep_assert_held(lock)	do { (void)(lock); } while(0)
 
+#define IRQF_SHARED	0
+
 #define local_irq_save(x)		(x) = splhigh()
 #define local_irq_restore(x)		splx((x))
 
+#define request_irq(irq, hdlr, flags, name, dev)	(0)
+#define free_irq(irq, dev)
 #define synchronize_irq(x)
 
 #define fence_wait(x, y)
@@ -666,7 +657,6 @@ init_completion(struct completion *x)
 	mtx_init(&x->wait.lock, IPL_NONE);
 }
 
-#ifdef WITNESS
 static inline u_long
 _wait_for_completion_interruptible_timeout(struct completion *x, u_long timo
     LOCK_FL_VARS)
@@ -696,33 +686,6 @@ _complete_all(struct completion *x LOCK_FL_VARS)
 	wakeup(x);
 }
 #define complete_all(x)	_complete_all(x LOCK_FILE_LINE)
-#else /* !WITNESS */
-static inline u_long
-wait_for_completion_interruptible_timeout(struct completion *x, u_long timo)
-{
-	int ret;
-
-	mtx_enter(&x->wait.lock);
-	while (x->done == 0) {
-		ret = msleep(x, &x->wait.lock, PCATCH, "wfcit", timo);
-		if (ret) {
-			mtx_leave(&x->wait.lock);
-			return (ret == EWOULDBLOCK) ? 0 : -ret;
-		}
-	}
-
-	return 1;
-}
-
-static inline void
-complete_all(struct completion *x)
-{
-	mtx_enter(&x->wait.lock);
-	x->done = 1;
-	mtx_leave(&x->wait.lock);
-	wakeup(x);
-}
-#endif /* !WITNESS */
 
 struct workqueue_struct;
 

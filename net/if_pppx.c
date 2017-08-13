@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_pppx.c,v 1.61 2017/05/30 07:50:37 mpi Exp $ */
+/*	$OpenBSD: if_pppx.c,v 1.63 2017/08/12 20:27:28 mpi Exp $ */
 
 /*
  * Copyright (c) 2010 Claudio Jeker <claudio@openbsd.org>
@@ -277,7 +277,6 @@ pppxread(dev_t dev, struct uio *uio, int ioflag)
 	struct pppx_dev *pxd = pppx_dev2pxd(dev);
 	struct mbuf *m, *m0;
 	int error = 0;
-	int s;
 	size_t len;
 
 	if (!pxd)
@@ -287,11 +286,11 @@ pppxread(dev_t dev, struct uio *uio, int ioflag)
 		if (ISSET(ioflag, IO_NDELAY))
 			return (EWOULDBLOCK);
 
-		NET_LOCK(s);
+		NET_LOCK();
 		pxd->pxd_waiting = 1;
 		error = rwsleep(pxd, &netlock,
 		    (PZERO + 1)|PCATCH, "pppxread", 0);
-		NET_UNLOCK(s);
+		NET_UNLOCK();
 		if (error != 0) {
 			return (error);
 		}
@@ -414,9 +413,9 @@ int
 pppxioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 {
 	struct pppx_dev *pxd = pppx_dev2pxd(dev);
-	int s, error = 0;
+	int error = 0;
 
-	NET_LOCK(s);
+	NET_LOCK();
 	switch (cmd) {
 	case PIPEXSMODE:
 		/*
@@ -466,7 +465,7 @@ pppxioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 		error = ENOTTY;
 		break;
 	}
-	NET_UNLOCK(s);
+	NET_UNLOCK();
 
 	return (error);
 }
@@ -856,9 +855,9 @@ pppx_add_session(struct pppx_dev *pxd, struct pipex_session_req *req)
 		pipex_timer_start();
 
 	/* XXXSMP breaks atomicity */
-	rw_exit_write(&netlock);
+	NET_UNLOCK();
 	if_attach(ifp);
-	rw_enter_write(&netlock);
+	NET_LOCK();
 
 	if_addgroup(ifp, "pppx");
 	if_alloc_sadl(ifp);
@@ -971,9 +970,9 @@ pppx_if_destroy(struct pppx_dev *pxd, struct pppx_if *pxi)
 		pipex_timer_stop();
 
 	/* XXXSMP breaks atomicity */
-	rw_exit_write(&netlock);
+	NET_UNLOCK();
 	if_detach(ifp);
-	rw_enter_write(&netlock);
+	NET_LOCK();
 
 	rw_enter_write(&pppx_ifs_lk);
 	if (RBT_REMOVE(pppx_ifs, &pppx_ifs, pxi) == NULL)

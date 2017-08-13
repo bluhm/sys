@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_iwm.c,v 1.204 2017/07/23 13:51:11 stsp Exp $	*/
+/*	$OpenBSD: if_iwm.c,v 1.208 2017/08/12 22:05:20 stsp Exp $	*/
 
 /*
  * Copyright (c) 2014, 2016 genua gmbh <info@genua.de>
@@ -442,7 +442,7 @@ void	iwm_setrates(struct iwm_node *);
 int	iwm_media_change(struct ifnet *);
 void	iwm_newstate_task(void *);
 int	iwm_newstate(struct ieee80211com *, enum ieee80211_state, int);
-void	iwm_endscan_cb(void *);
+void	iwm_endscan(struct iwm_softc *);
 void	iwm_fill_sf_command(struct iwm_softc *, struct iwm_sf_cfg_cmd *,
 	    struct ieee80211_node *);
 int	iwm_sf_config(struct iwm_softc *, int);
@@ -3340,7 +3340,6 @@ iwm_rx_rx_mpdu(struct iwm_softc *sc, struct iwm_rx_packet *pkt,
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ieee80211_frame *wh;
 	struct ieee80211_node *ni;
-	struct ieee80211_channel *c = NULL;
 	struct ieee80211_rxinfo rxi;
 	struct mbuf *m;
 	struct iwm_rx_phy_info *phy_info;
@@ -3348,7 +3347,7 @@ iwm_rx_rx_mpdu(struct iwm_softc *sc, struct iwm_rx_packet *pkt,
 	int device_timestamp;
 	uint32_t len;
 	uint32_t rx_pkt_status;
-	int rssi;
+	int rssi, chanidx;
 
 	bus_dmamap_sync(sc->sc_dmat, data->map, 0, IWM_RBUF_SIZE,
 	    BUS_DMASYNC_POSTREAD);
@@ -3393,15 +3392,15 @@ iwm_rx_rx_mpdu(struct iwm_softc *sc, struct iwm_rx_packet *pkt,
 	if (iwm_rx_addbuf(sc, IWM_RBUF_SIZE, sc->rxq.cur) != 0)
 		return;
 
-	if (le32toh(phy_info->channel) < nitems(ic->ic_channels))
-		c = &ic->ic_channels[le32toh(phy_info->channel)];
+	chanidx = letoh32(phy_info->channel);
+	if (chanidx < 0 || chanidx >= nitems(ic->ic_channels))	
+		chanidx = ieee80211_chan2ieee(ic, ic->ic_ibss_chan);
+	ni = ieee80211_find_rxnode(ic, wh);
+	ni->ni_chan = &ic->ic_channels[chanidx];
 
 	memset(&rxi, 0, sizeof(rxi));
 	rxi.rxi_rssi = rssi;
 	rxi.rxi_tstamp = device_timestamp;
-	ni = ieee80211_find_rxnode(ic, wh);
-	if (c)
-		ni->ni_chan = c;
 
 #if NBPFILTER > 0
 	if (sc->sc_drvbpf != NULL) {
@@ -3413,8 +3412,8 @@ iwm_rx_rx_mpdu(struct iwm_softc *sc, struct iwm_rx_packet *pkt,
 		if (phy_info->phy_flags & htole16(IWM_PHY_INFO_FLAG_SHPREAMBLE))
 			tap->wr_flags |= IEEE80211_RADIOTAP_F_SHORTPRE;
 		tap->wr_chan_freq =
-		    htole16(ic->ic_channels[phy_info->channel].ic_freq);
-		chan_flags = ic->ic_channels[phy_info->channel].ic_flags;
+		    htole16(ic->ic_channels[chanidx].ic_freq);
+		chan_flags = ic->ic_channels[chanidx].ic_flags;
 		if (ic->ic_curmode != IEEE80211_MODE_11N)
 			chan_flags &= ~IEEE80211_CHAN_HT;
 		tap->wr_chan_flags = htole16(chan_flags);
@@ -3599,6 +3598,9 @@ iwm_binding_cmd(struct iwm_softc *sc, struct iwm_node *in, uint32_t action)
 		panic("binding already added");
 	if (action == IWM_FW_CTXT_ACTION_REMOVE && !active)
 		panic("binding already removed");
+
+	if (phyctxt == NULL) /* XXX race with iwm_stop() */
+		return EINVAL;
 
 	memset(&cmd, 0, sizeof(cmd));
 
@@ -5293,7 +5295,7 @@ iwm_update_quotas(struct iwm_softc *sc, struct iwm_node *in, int running)
 	memset(&cmd, 0, sizeof(cmd));
 
 	/* currently, PHY ID == binding ID */
-	if (in) {
+	if (in && in->in_phyctxt) {
 		id = in->in_phyctxt->id;
 		KASSERT(id < IWM_MAX_BINDINGS);
 		colors[id] = in->in_phyctxt->color;
@@ -5952,13 +5954,11 @@ iwm_newstate(struct ieee80211com *ic, enum ieee80211_state nstate, int arg)
 }
 
 void
-iwm_endscan_cb(void *arg)
+iwm_endscan(struct iwm_softc *sc)
 {
-	struct iwm_softc *sc = arg;
 	struct ieee80211com *ic = &sc->sc_ic;
 
-	/* Check if device was reset while scanning. */
-	if (ic->ic_state != IEEE80211_S_SCAN)
+	if ((sc->sc_flags & IWM_FLAG_SCANNING) == 0)
 		return;
 
 	sc->sc_flags &= ~IWM_FLAG_SCANNING;
@@ -6442,7 +6442,6 @@ iwm_stop(struct ifnet *ifp, int disable)
 
 	task_del(systq, &sc->init_task);
 	task_del(sc->sc_nswq, &sc->newstate_task);
-	task_del(sc->sc_eswq, &sc->sc_eswk);
 	task_del(systq, &sc->setrates_task);
 	task_del(systq, &sc->ba_task);
 	task_del(systq, &sc->htprot_task);
@@ -7003,22 +7002,21 @@ iwm_notif_intr(struct iwm_softc *sc)
 		case IWM_SCAN_ITERATION_COMPLETE: {
 			struct iwm_lmac_scan_complete_notif *notif;
 			SYNC_RESP_STRUCT(notif, pkt);
-			task_add(sc->sc_eswq, &sc->sc_eswk);
+			iwm_endscan(sc);
 			break;
 		}
 
 		case IWM_SCAN_COMPLETE_UMAC: {
 			struct iwm_umac_scan_complete *notif;
 			SYNC_RESP_STRUCT(notif, pkt);
-			task_add(sc->sc_eswq, &sc->sc_eswk);
+			iwm_endscan(sc);
 			break;
 		}
 
 		case IWM_SCAN_ITERATION_COMPLETE_UMAC: {
 			struct iwm_umac_scan_iter_complete_notif *notif;
 			SYNC_RESP_STRUCT(notif, pkt);
-
-			task_add(sc->sc_eswq, &sc->sc_eswk);
+			iwm_endscan(sc);
 			break;
 		}
 
@@ -7330,7 +7328,6 @@ iwm_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_pcitag = pa->pa_tag;
 	sc->sc_dmat = pa->pa_dmat;
 
-	task_set(&sc->sc_eswk, iwm_endscan_cb, sc);
 	rw_init(&sc->ioctl_rwl, "iwmioctl");
 
 	err = pci_get_capability(sc->sc_pct, sc->sc_pcitag,
@@ -7539,9 +7536,6 @@ iwm_attach(struct device *parent, struct device *self, void *aux)
 		goto fail4;
 	}
 
-	sc->sc_eswq = taskq_create("iwmes", 1, IPL_NET, 0);
-	if (sc->sc_eswq == NULL)
-		goto fail4;
 	sc->sc_nswq = taskq_create("iwmns", 1, IPL_NET, 0);
 	if (sc->sc_nswq == NULL)
 		goto fail4;
