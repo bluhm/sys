@@ -1,4 +1,4 @@
-/*	$OpenBSD: vmm.c,v 1.162 2017/08/12 19:56:08 mlarkin Exp $	*/
+/*	$OpenBSD: vmm.c,v 1.168 2017/08/20 21:15:32 pd Exp $	*/
 /*
  * Copyright (c) 2014 Mike Larkin <mlarkin@openbsd.org>
  *
@@ -45,8 +45,7 @@
 /* #define VMM_DEBUG */
 
 #ifdef VMM_DEBUG
-int vmm_debug = 0;
-#define DPRINTF(x...)	do { if (vmm_debug) printf(x); } while(0)
+#define DPRINTF(x...)	do { printf(x); } while(0)
 #else
 #define DPRINTF(x...)
 #endif /* VMM_DEBUG */
@@ -167,6 +166,8 @@ int svm_handle_inout(struct vcpu *);
 int vmx_handle_inout(struct vcpu *);
 int svm_handle_hlt(struct vcpu *);
 int vmx_handle_hlt(struct vcpu *);
+int vmm_inject_ud(struct vcpu *);
+int vmm_inject_db(struct vcpu *);
 void vmx_handle_intr(struct vcpu *);
 void vmx_handle_intwin(struct vcpu *);
 void vmx_handle_misc_enable_msr(struct vcpu *);
@@ -993,9 +994,9 @@ vm_create_check_mem_ranges(struct vm_create_params *vcp)
 
 		/*
 		 * ... and disallow ranges that end inside the MMIO space:
-		 * [VMM_PCI_MMIO_BAR_BASE .. VMM_PCI_MMIO_BAR_END]
+		 * (VMM_PCI_MMIO_BAR_BASE .. VMM_PCI_MMIO_BAR_END]
 		 */
-		if (vmr->vmr_gpa + vmr->vmr_size >= VMM_PCI_MMIO_BAR_BASE &&
+		if (vmr->vmr_gpa + vmr->vmr_size > VMM_PCI_MMIO_BAR_BASE &&
 		    vmr->vmr_gpa + vmr->vmr_size <= VMM_PCI_MMIO_BAR_END)
 			return (0);
 
@@ -1749,6 +1750,8 @@ vcpu_reset_regs_svm(struct vcpu *vcpu, struct vcpu_reg_state *vrs)
 	 * SKINIT instruction (SVM_INTERCEPT_SKINIT)
 	 * ICEBP instruction (SVM_INTERCEPT_ICEBP)
 	 * MWAIT instruction (SVM_INTERCEPT_MWAIT_UNCOND)
+	 * MWAIT instruction (SVM_INTERCEPT_MWAIT_COND)
+	 * MONITOR instruction (SVM_INTERCEPT_MONITOR)
 	 * XSETBV instruction (SVM_INTERCEPT_XSETBV) (if available)
 	 */
 	vmcb->v_intercept1 = SVM_INTERCEPT_INTR | SVM_INTERCEPT_NMI |
@@ -1758,7 +1761,8 @@ vcpu_reset_regs_svm(struct vcpu *vcpu, struct vcpu_reg_state *vrs)
 	vmcb->v_intercept2 = SVM_INTERCEPT_VMRUN | SVM_INTERCEPT_VMMCALL |
 	    SVM_INTERCEPT_VMLOAD | SVM_INTERCEPT_VMSAVE | SVM_INTERCEPT_STGI |
 	    SVM_INTERCEPT_CLGI | SVM_INTERCEPT_SKINIT | SVM_INTERCEPT_ICEBP |
-	    SVM_INTERCEPT_MWAIT_UNCOND;
+	    SVM_INTERCEPT_MWAIT_UNCOND | SVM_INTERCEPT_MONITOR |
+	    SVM_INTERCEPT_MWAIT_COND;
 
 	if (xsave_mask)
 		vmcb->v_intercept2 |= SVM_INTERCEPT_XSETBV;
@@ -2155,6 +2159,7 @@ vcpu_reset_regs_vmx(struct vcpu *vcpu, struct vcpu_reg_state *vrs)
 	 * IA32_VMX_CR8_LOAD_EXITING - guest TPR access
 	 * IA32_VMX_CR8_STORE_EXITING - guest TPR access
 	 * IA32_VMX_USE_TPR_SHADOW - guest TPR access (shadow)
+	 * IA32_VMX_MONITOR_EXITING - exit on MONITOR instruction
 	 *
 	 * If we have EPT, we must be able to clear the following
 	 * IA32_VMX_CR3_LOAD_EXITING - don't care about guest CR3 accesses
@@ -2166,6 +2171,7 @@ vcpu_reset_regs_vmx(struct vcpu *vcpu, struct vcpu_reg_state *vrs)
 	    IA32_VMX_USE_MSR_BITMAPS |
 	    IA32_VMX_CR8_LOAD_EXITING |
 	    IA32_VMX_CR8_STORE_EXITING |
+	    IA32_VMX_MONITOR_EXITING |
 	    IA32_VMX_USE_TPR_SHADOW;
 	want0 = 0;
 
@@ -2451,6 +2457,18 @@ vcpu_reset_regs_vmx(struct vcpu *vcpu, struct vcpu_reg_state *vrs)
 	msr_store[VCPU_REGS_SFMASK].vms_index = MSR_SFMASK;
 	msr_store[VCPU_REGS_KGSBASE].vms_index = MSR_KERNELGSBASE;
 	msr_store[VCPU_REGS_MISC_ENABLE].vms_index = MSR_MISC_ENABLE;
+
+	/*
+	 * Initialize MSR_MISC_ENABLE as it can't be read and populated from vmd
+	 * and some of the content is based on the host.
+	 */
+	msr_store[VCPU_REGS_MISC_ENABLE].vms_data = rdmsr(MSR_MISC_ENABLE);
+	msr_store[VCPU_REGS_MISC_ENABLE].vms_data &= 
+	    ~(MISC_ENABLE_TCC | MISC_ENABLE_PERF_MON_AVAILABLE |
+	      MISC_ENABLE_EIST_ENABLED | MISC_ENABLE_ENABLE_MONITOR_FSM |
+	      MISC_ENABLE_xTPR_MESSAGE_DISABLE);
+	msr_store[VCPU_REGS_MISC_ENABLE].vms_data |= 
+	      MISC_ENABLE_BTS_UNAVAILABLE | MISC_ENABLE_PEBS_UNAVAILABLE;
 
 	/*
 	 * Currently we have the same count of entry/exit MSRs loads/stores
@@ -3640,8 +3658,9 @@ vcpu_run_vmx(struct vcpu *vcpu, struct vm_run_params *vrp)
 	if (vrp->vrp_continue) {
 		switch (vcpu->vc_gueststate.vg_exit_reason) {
 		case VMX_EXIT_IO:
-			vcpu->vc_gueststate.vg_rax =
-			    vcpu->vc_exit.vei.vei_data;
+			if (vcpu->vc_exit.vei.vei_dir == VEI_DIR_IN)
+				vcpu->vc_gueststate.vg_rax =
+				    vcpu->vc_exit.vei.vei_data;
 			break;
 		case VMX_EXIT_HLT:
 			break;
@@ -3776,7 +3795,19 @@ vcpu_run_vmx(struct vcpu *vcpu, struct vm_run_params *vrp)
 		if (vcpu->vc_event != 0) {
 			eii = (vcpu->vc_event & 0xFF);
 			eii |= (1ULL << 31);	/* Valid */
-			eii |= (1ULL << 11);	/* Send error code */
+
+			/* Set the "Send error code" flag for certain vectors */
+			switch (vcpu->vc_event & 0xFF) {
+				case VMM_EX_DF:
+				case VMM_EX_TS:
+				case VMM_EX_NP:
+				case VMM_EX_SS:
+				case VMM_EX_GP:
+				case VMM_EX_PF:
+				case VMM_EX_AC:
+					eii |= (1ULL << 11);
+			}
+
 			eii |= (3ULL << 8);	/* Hardware Exception */
 			if (vmwrite(VMCS_ENTRY_INTERRUPTION_INFO, eii)) {
 				printf("%s: can't vector event to guest\n",
@@ -4230,14 +4261,29 @@ svm_handle_exit(struct vcpu *vcpu)
 		ret = svm_handle_hlt(vcpu);
 		update_rip = 1;
 		break;
+	case SVM_VMEXIT_MWAIT:
+	case SVM_VMEXIT_MWAIT_CONDITIONAL:
+	case SVM_VMEXIT_MONITOR:
+		ret = vmm_inject_ud(vcpu);
+		update_rip = 0;
+		break;
 	default:
 		DPRINTF("%s: unhandled exit 0x%llx (pa=0x%llx)\n", __func__,
 		    exit_reason, (uint64_t)vcpu->vc_control_pa);
 		return (EINVAL);
 	}
 
-	if (update_rip)
+	if (update_rip) {
 		vmcb->v_rip = vcpu->vc_gueststate.vg_rip;
+
+		if (rflags & PSL_T) {
+			if (vmm_inject_db(vcpu)) {
+				printf("%s: can't inject #DB exception to "
+				    "guest", __func__);
+				return (EINVAL);
+			}
+		}
+	}
 
 	/* Enable SVME in EFER (must always be set) */
 	vmcb->v_efer |= EFER_SVME;
@@ -4309,6 +4355,11 @@ vmx_handle_exit(struct vcpu *vcpu)
 		ret = vmx_handle_xsetbv(vcpu);
 		update_rip = 1;
 		break;
+	case VMX_EXIT_MWAIT:
+	case VMX_EXIT_MONITOR:
+		ret = vmm_inject_ud(vcpu);
+		update_rip = 0;
+		break;
 	case VMX_EXIT_TRIPLE_FAULT:
 #ifdef VMM_DEBUG
 		DPRINTF("%s: vm %d vcpu %d triple fault\n", __func__,
@@ -4349,9 +4400,59 @@ vmx_handle_exit(struct vcpu *vcpu)
 			    __func__);
 			return (EINVAL);
 		}
+
+		if (rflags & PSL_T) {
+			if (vmm_inject_db(vcpu)) {
+				printf("%s: can't inject #DB exception to "
+				    "guest", __func__);
+				return (EINVAL);
+			}
+		}
 	}
 
 	return (ret);
+}
+
+/*
+ * vmm_inject_ud
+ *
+ * Injects an #UD exception into the guest VCPU.
+ *
+ * Parameters:
+ *  vcpu: vcpu to inject into
+ *
+ * Return values:
+ *  Always 0
+ */
+int
+vmm_inject_ud(struct vcpu *vcpu)
+{
+	DPRINTF("%s: injecting #UD at guest %rip 0x%llx\n", __func__,
+	    vcpu->vc_gueststate.vg_rip);
+	vcpu->vc_event = VMM_EX_UD;
+	
+	return (0);
+}
+
+/*
+ * vmm_inject_db
+ *
+ * Injects a #DB exception into the guest VCPU.
+ *
+ * Parameters:
+ *  vcpu: vcpu to inject into
+ *
+ * Return values:
+ *  Always 0
+ */
+int
+vmm_inject_db(struct vcpu *vcpu)
+{
+	DPRINTF("%s: injecting #DB at guest %rip 0x%llx\n", __func__,
+	    vcpu->vc_gueststate.vg_rip);
+	vcpu->vc_event = VMM_EX_DB;
+	
+	return (0);
 }
 
 /*
@@ -5278,41 +5379,8 @@ vmm_handle_cpuid(struct vcpu *vcpu)
 		/* mask off host's APIC ID, reset to vcpu id */
 		*rbx = cpu_ebxfeature & 0x0000FFFF;
 		*rbx |= (vcpu->vc_id & 0xFF) << 24;
-		/*
-		 * clone host capabilities minus:
-		 *  debug store (CPUIDECX_DTES64, CPUIDECX_DSCPL, CPUID_DS)
-		 *  monitor/mwait (CPUIDECX_MWAIT)
-		 *  vmx (CPUIDECX_VMX)
-		 *  smx (CPUIDECX_SMX)
-		 *  speedstep (CPUIDECX_EST)
-		 *  thermal (CPUIDECX_TM2, CPUID_ACPI, CPUID_TM)
-		 *  context id (CPUIDECX_CNXTID)
-		 *  silicon debug (CPUIDECX_SDBG)
-		 *  xTPR (CPUIDECX_XTPR)
-		 *  perf/debug (CPUIDECX_PDCM)
-		 *  pcid (CPUIDECX_PCID)
-		 *  direct cache access (CPUIDECX_DCA)
-		 *  x2APIC (CPUIDECX_X2APIC)
-		 *  apic deadline (CPUIDECX_DEADLINE)
-		 *  apic (CPUID_APIC)
-		 *  psn (CPUID_PSN)
-		 *  self snoop (CPUID_SS)
-		 *  hyperthreading (CPUID_HTT)
-		 *  pending break enabled (CPUID_PBE)
-		 *  MTRR (CPUID_MTRR)
-		 * plus:
-		 *  hypervisor (CPUIDECX_HV)
-		 */
-		*rcx = (cpu_ecxfeature | CPUIDECX_HV) &
-		    ~(CPUIDECX_EST | CPUIDECX_TM2 | CPUIDECX_MWAIT |
-		    CPUIDECX_PDCM | CPUIDECX_VMX | CPUIDECX_DTES64 |
-		    CPUIDECX_DSCPL | CPUIDECX_SMX | CPUIDECX_CNXTID |
-		    CPUIDECX_SDBG | CPUIDECX_XTPR | CPUIDECX_PCID |
-		    CPUIDECX_DCA | CPUIDECX_X2APIC | CPUIDECX_DEADLINE);
-		*rdx = curcpu()->ci_feature_flags &
-		    ~(CPUID_ACPI | CPUID_TM | CPUID_HTT |
-		      CPUID_DS | CPUID_APIC | CPUID_PSN |
-		      CPUID_SS | CPUID_PBE | CPUID_MTRR);
+		*rcx = (cpu_ecxfeature | CPUIDECX_HV) & VMM_CPUIDECX_MASK;
+		*rdx = curcpu()->ci_feature_flags & VMM_CPUIDEDX_MASK;
 		break;
 	case 0x02:	/* Cache and TLB information */
 		*rax = eax;
@@ -5360,37 +5428,9 @@ vmm_handle_cpuid(struct vcpu *vcpu)
 		break;
 	case 0x07:	/* SEFF */
 		if (*rcx == 0) {
-			/*
-			 * SEFF flags - copy from host minus:
-			 *  SGX (SEFF0EBX_SGX)
-			 *  HLE (SEFF0EBX_HLE)
-			 *  INVPCID (SEFF0EBX_INVPCID)
-			 *  RTM (SEFF0EBX_RTM)
-			 *  PQM (SEFF0EBX_PQM)
-			 *  AVX512F (SEFF0EBX_AVX512F)
-			 *  AVX512DQ (SEFF0EBX_AVX512DQ)
-			 *  AVX512IFMA (SEFF0EBX_AVX512IFMA)
-			 *  AVX512PF (SEFF0EBX_AVX512PF)
-			 *  AVX512ER (SEFF0EBX_AVX512ER)
-			 *  AVX512CD (SEFF0EBX_AVX512CD)
-			 *  AVX512BW (SEFF0EBX_AVX512BW)
-			 *  AVX512VL (SEFF0EBX_AVX512VL)
-			 *  MPX (SEFF0EBX_MPX)
-			 *  PCOMMIT (SEFF0EBX_PCOMMIT)
-			 *  PT (SEFF0EBX_PT)
-			 *  AVX512VBMI (SEFF0ECX_AVX512VBMI)
-			 */
 			*rax = 0;	/* Highest subleaf supported */
-			*rbx = curcpu()->ci_feature_sefflags_ebx &
-			    ~(SEFF0EBX_SGX | SEFF0EBX_HLE | SEFF0EBX_INVPCID |
-			      SEFF0EBX_RTM | SEFF0EBX_PQM | SEFF0EBX_MPX |
-			      SEFF0EBX_PCOMMIT | SEFF0EBX_PT |
-			      SEFF0EBX_AVX512F | SEFF0EBX_AVX512DQ |
-			      SEFF0EBX_AVX512IFMA | SEFF0EBX_AVX512PF |
-			      SEFF0EBX_AVX512ER | SEFF0EBX_AVX512CD |
-			      SEFF0EBX_AVX512BW | SEFF0EBX_AVX512VL);
-			*rcx = curcpu()->ci_feature_sefflags_ecx &
-			    ~(SEFF0ECX_AVX512VBMI);
+			*rbx = curcpu()->ci_feature_sefflags_ebx & VMM_SEFF0EBX_MASK;
+			*rcx = curcpu()->ci_feature_sefflags_ecx & VMM_SEFF0ECX_MASK;
 			*rdx = 0;
 		} else {
 			/* Unsupported subleaf */
@@ -5587,9 +5627,11 @@ vcpu_run_svm(struct vcpu *vcpu, struct vm_run_params *vrp)
 	if (vrp->vrp_continue) {
 		switch (vcpu->vc_gueststate.vg_exit_reason) {
 		case SVM_VMEXIT_IOIO:
-			vcpu->vc_gueststate.vg_rax =
-			    vcpu->vc_exit.vei.vei_data;
-			vmcb->v_rax = vcpu->vc_gueststate.vg_rax;
+			if (vcpu->vc_exit.vei.vei_dir == VEI_DIR_IN) {
+				vcpu->vc_gueststate.vg_rax =
+				    vcpu->vc_exit.vei.vei_data;
+				vmcb->v_rax = vcpu->vc_gueststate.vg_rax;
+			}
 		}
 	}
 
@@ -5651,8 +5693,18 @@ vcpu_run_svm(struct vcpu *vcpu, struct vm_run_params *vrp)
 
 		/* Inject event if present */
 		if (vcpu->vc_event != 0) {
+			/* Set the "Send error code" flag for certain vectors */
+			switch (vcpu->vc_event & 0xFF) {
+				case VMM_EX_DF:
+				case VMM_EX_TS:
+				case VMM_EX_NP:
+				case VMM_EX_SS:
+				case VMM_EX_GP:
+				case VMM_EX_PF:
+				case VMM_EX_AC:
+					vmcb->v_eventinj |= (1ULL << 1);
+			}
 			vmcb->v_eventinj = (vcpu->vc_event) | (1 << 31);
-			vmcb->v_eventinj |= (1ULL << 1); /* Send error code */
 			vmcb->v_eventinj |= (3ULL << 8); /* Hardware Exception */
 			vcpu->vc_event = 0;
 		}
