@@ -79,7 +79,7 @@ divert_output(struct inpcb *inp, struct mbuf *m, struct mbuf *nam,
 	struct sockaddr_in *sin;
 	struct socket *so;
 	struct ifaddr *ifa;
-	int error = 0, min_hdrlen = 0, dir;
+	int error, min_hdrlen = 0, dir;
 	struct ip *ip;
 	u_int16_t off;
 
@@ -89,7 +89,8 @@ divert_output(struct inpcb *inp, struct mbuf *m, struct mbuf *nam,
 
 	m_freem(control);
 
-	sin = mtod(nam, struct sockaddr_in *);
+	if ((error = in_nam2sin(nam, &sin)))
+		goto fail;
 	so = inp->inp_socket;
 
 	/* Do basic sanity checks. */
