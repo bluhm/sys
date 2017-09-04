@@ -1,4 +1,4 @@
-/* $OpenBSD: xhci.c,v 1.74 2017/07/30 19:24:18 kettenis Exp $ */
+/* $OpenBSD: xhci.c,v 1.76 2017/09/04 11:24:08 stsp Exp $ */
 
 /*
  * Copyright (c) 2014-2015 Martin Pieuchot
