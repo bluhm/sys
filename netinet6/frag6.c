@@ -55,61 +55,12 @@
 
 void frag6_freef(struct ip6q *);
 
-static int ip6q_locked;
-u_int frag6_nfragpackets;
-u_int frag6_nfrags;
-TAILQ_HEAD(ip6q_head, ip6q) frag6_queue;	/* ip6 reassemble queue */
+/* Protects `frag6_queue', `frag6_nfragpackets' and `frag6_nfrags'. */
+static struct mutex frag6_mutex = MUTEX_INITIALIZER(IPL_SOFTNET);
 
-static __inline int ip6q_lock_try(void);
-static __inline void ip6q_unlock(void);
-
-static __inline int
-ip6q_lock_try(void)
-{
-	int s;
-
-	/* Use splvm() due to mbuf allocation. */
-	s = splvm();
-	if (ip6q_locked) {
-		splx(s);
-		return (0);
-	}
-	ip6q_locked = 1;
-	splx(s);
-	return (1);
-}
-
-static __inline void
-ip6q_unlock(void)
-{
-	int s;
-
-	s = splvm();
-	ip6q_locked = 0;
-	splx(s);
-}
-
-#ifdef DIAGNOSTIC
-#define	IP6Q_LOCK()							\
-do {									\
-	if (ip6q_lock_try() == 0) {					\
-		printf("%s:%d: ip6q already locked\n", __FILE__, __LINE__); \
-		panic("ip6q_lock");					\
-	}								\
-} while (0)
-#define	IP6Q_LOCK_CHECK()						\
-do {									\
-	if (ip6q_locked == 0) {						\
-		printf("%s:%d: ip6q lock not held\n", __FILE__, __LINE__); \
-		panic("ip6q lock check");				\
-	}								\
-} while (0)
-#else
-#define	IP6Q_LOCK()		(void) ip6q_lock_try()
-#define	IP6Q_LOCK_CHECK()	/* nothing */
-#endif
-
-#define	IP6Q_UNLOCK()		ip6q_unlock()
+static u_int frag6_nfragpackets;
+static u_int frag6_nfrags;
+static TAILQ_HEAD(ip6q_head, ip6q) frag6_queue;	/* ip6 reassemble queue */
 
 /*
  * Initialise reassembly queue and fragment identifier.
@@ -214,7 +165,7 @@ frag6_input(struct mbuf **mp, int *offp, int proto, int af)
 		return IPPROTO_DONE;
 	}
 
-	IP6Q_LOCK();
+	mtx_enter(&frag6_mutex);
 
 	/*
 	 * Enforce upper bound on number of fragments.
@@ -285,14 +236,14 @@ frag6_input(struct mbuf **mp, int *offp, int proto, int af)
 			icmp6_error(m, ICMP6_PARAM_PROB, ICMP6_PARAMPROB_HEADER,
 			    offset - sizeof(struct ip6_frag) +
 			    offsetof(struct ip6_frag, ip6f_offlg));
-			IP6Q_UNLOCK();
+			mtx_leave(&frag6_mutex);
 			return (IPPROTO_DONE);
 		}
 	} else if (fragoff + frgpartlen > IPV6_MAXPACKET) {
 		icmp6_error(m, ICMP6_PARAM_PROB, ICMP6_PARAMPROB_HEADER,
 			    offset - sizeof(struct ip6_frag) +
 				offsetof(struct ip6_frag, ip6f_offlg));
-		IP6Q_UNLOCK();
+		mtx_leave(&frag6_mutex);
 		return (IPPROTO_DONE);
 	}
 	/*
@@ -433,13 +384,13 @@ frag6_input(struct mbuf **mp, int *offp, int proto, int af)
 	    af6 != NULL;
 	    paf6 = af6, af6 = LIST_NEXT(af6, ip6af_list)) {
 		if (af6->ip6af_off != next) {
-			IP6Q_UNLOCK();
+			mtx_leave(&frag6_mutex);
 			return IPPROTO_DONE;
 		}
 		next += af6->ip6af_frglen;
 	}
 	if (paf6->ip6af_mff) {
-		IP6Q_UNLOCK();
+		mtx_leave(&frag6_mutex);
 		return IPPROTO_DONE;
 	}
 
@@ -489,6 +440,8 @@ frag6_input(struct mbuf **mp, int *offp, int proto, int af)
 	free(q6, M_FTABLE, sizeof(*q6));
 	frag6_nfragpackets--;
 
+	mtx_leave(&frag6_mutex);
+
 	if (m->m_flags & M_PKTHDR) { /* Isn't it always true? */
 		int plen = 0;
 		for (t = m; t; t = t->m_next)
@@ -505,7 +458,6 @@ frag6_input(struct mbuf **mp, int *offp, int proto, int af)
 	*mp = m;
 	*offp = offset;
 
-	IP6Q_UNLOCK();
 	return nxt;
 
  flushfrags:
@@ -521,9 +473,9 @@ frag6_input(struct mbuf **mp, int *offp, int proto, int af)
 	frag6_nfragpackets--;
 
  dropfrag:
+	mtx_leave(&frag6_mutex);
 	ip6stat_inc(ip6s_fragdropped);
 	m_freem(m);
-	IP6Q_UNLOCK();
 	return IPPROTO_DONE;
 }
 
@@ -560,7 +512,7 @@ frag6_freef(struct ip6q *q6)
 {
 	struct ip6asfrag *af6;
 
-	IP6Q_LOCK_CHECK();
+	MUTEX_ASSERT_LOCKED(&frag6_mutex);
 
 	while ((af6 = LIST_FIRST(&q6->ip6q_asfrag)) != NULL) {
 		struct mbuf *m = IP6_REASS_MBUF(af6);
@@ -603,9 +555,8 @@ frag6_slowtimo(void)
 {
 	struct ip6q *q6, *nq6;
 
-	NET_ASSERT_LOCKED();
+	mtx_enter(&frag6_mutex);
 
-	IP6Q_LOCK();
 	TAILQ_FOREACH_SAFE(q6, &frag6_queue, ip6q_queue, nq6)
 		if (--q6->ip6q_ttl == 0) {
 			ip6stat_inc(ip6s_fragtimeout);
@@ -622,7 +573,8 @@ frag6_slowtimo(void)
 		ip6stat_inc(ip6s_fragoverflow);
 		frag6_freef(TAILQ_LAST(&frag6_queue, ip6q_head));
 	}
-	IP6Q_UNLOCK();
+
+	mtx_leave(&frag6_mutex);
 }
 
 /*
@@ -633,11 +585,10 @@ frag6_drain(void)
 {
 	struct ip6q *q6;
 
-	if (ip6q_lock_try() == 0)
-		return;
+	mtx_enter(&frag6_mutex);
 	while ((q6 = TAILQ_FIRST(&frag6_queue)) != NULL) {
 		ip6stat_inc(ip6s_fragdropped);
 		frag6_freef(q6);
 	}
-	IP6Q_UNLOCK();
+	mtx_leave(&frag6_mutex);
 }
