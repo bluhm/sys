@@ -357,6 +357,8 @@ nfs_connect(struct nfsmount *nmp, struct nfsreq *rep)
 		    sizeof (u_int32_t)) * 2;
 		rcvreserve = (nmp->nm_rsize + NFS_MAXPKTHDR +
 		    sizeof (u_int32_t)) * 2;
+	} else {
+		panic("%s: nm_sotype %d", __func__, nmp->nm_sotype);
 	}
 	error = soreserve(so, sndreserve, rcvreserve);
 	if (error)

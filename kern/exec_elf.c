@@ -318,7 +318,7 @@ elf_load_file(struct proc *p, char *path, struct exec_package *epp,
 	struct nameidata nd;
 	Elf_Ehdr eh;
 	Elf_Phdr *ph = NULL;
-	u_long phsize;
+	u_long phsize = 0;
 	Elf_Addr addr;
 	struct vnode *vp;
 	Elf_Phdr *base_ph = NULL;
