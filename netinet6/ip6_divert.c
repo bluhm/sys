@@ -77,7 +77,7 @@ divert6_output(struct inpcb *inp, struct mbuf *m, struct mbuf *nam,
     struct mbuf *control)
 {
 	struct sockaddr_in6 *sin6;
-	int error, min_hdrlen = 0, nxt = 0, off, dir;
+	int error, min_hdrlen, nxt, off, dir;
 	struct ip6_hdr *ip6;
 
 	m_freem(control);
@@ -123,7 +123,7 @@ divert6_output(struct inpcb *inp, struct mbuf *m, struct mbuf *nam,
 		m->m_pkthdr.csum_flags |= M_ICMP_CSUM_OUT;
 		break;
 	default:
-		/* nothing */
+		min_hdrlen = 0;
 		break;
 	}
 	if (min_hdrlen && m->m_pkthdr.len < off + min_hdrlen)
