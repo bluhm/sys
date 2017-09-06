@@ -381,7 +381,7 @@ int
 toshiba_hotkey(struct aml_node *node, int notify, void *arg)
 {
 	struct acpitoshiba_softc *sc = arg;
-	int event, ret;
+	int event, ret = HCI_FAILURE;
 
 	event = toshiba_read_events(sc);
 	if (!event)
