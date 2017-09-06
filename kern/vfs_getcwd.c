@@ -53,7 +53,7 @@ int
 vfs_getcwd_scandir(struct vnode **lvpp, struct vnode **uvpp, char **bpp,
     char *bufp, struct proc *p)
 {
-	int eofflag, tries, dirbuflen, len, reclen, error = 0;
+	int eofflag, tries, dirbuflen = 0, len, reclen, error = 0;
 	off_t off;
 	struct uio uio;
 	struct iovec iov;
