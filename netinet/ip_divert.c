@@ -75,16 +75,13 @@ divert_output(struct inpcb *inp, struct mbuf *m, struct mbuf *nam,
     struct mbuf *control)
 {
 	struct sockaddr_in *sin;
-	struct socket *so;
-	int error, min_hdrlen = 0, dir;
+	int error, min_hdrlen = 0, off, dir;
 	struct ip *ip;
-	u_int16_t off;
 
 	m_freem(control);
 
 	if ((error = in_nam2sin(nam, &sin)))
 		goto fail;
-	so = inp->inp_socket;
 
 	/* Do basic sanity checks. */
 	if (m->m_pkthdr.len < sizeof(struct ip))
