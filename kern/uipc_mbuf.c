@@ -804,12 +804,13 @@ m_adj(struct mbuf *mp, int req_len)
 	struct mbuf *m;
 	int count;
 
-	if ((m = mp) == NULL)
+	if (mp == NULL)
 		return;
 	if (len >= 0) {
 		/*
 		 * Trim from head.
 		 */
+		m = mp;
 		while (m != NULL && len > 0) {
 			if (m->m_len <= len) {
 				len -= m->m_len;
@@ -833,6 +834,7 @@ m_adj(struct mbuf *mp, int req_len)
 		 */
 		len = -len;
 		count = 0;
+		m = mp;
 		for (;;) {
 			count += m->m_len;
 			if (m->m_next == NULL)
@@ -853,9 +855,9 @@ m_adj(struct mbuf *mp, int req_len)
 		 * Find the mbuf with last data, adjust its length,
 		 * and toss data from remaining mbufs on chain.
 		 */
+		if (mp->m_flags & M_PKTHDR)
+			mp->m_pkthdr.len = count;
 		m = mp;
-		if (m->m_flags & M_PKTHDR)
-			m->m_pkthdr.len = count;
 		for (;;) {
 			if (m->m_len >= count) {
 				m->m_len = count;
