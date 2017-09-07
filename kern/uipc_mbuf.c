@@ -856,12 +856,13 @@ m_adj(struct mbuf *mp, int req_len)
 		m = mp;
 		if (m->m_flags & M_PKTHDR)
 			m->m_pkthdr.len = count;
-		for (; m; m = m->m_next) {
+		for (;;) {
 			if (m->m_len >= count) {
 				m->m_len = count;
 				break;
 			}
 			count -= m->m_len;
+			m = m->m_next;
 		}
 		while ((m = m->m_next) != NULL)
 			m->m_len = 0;
