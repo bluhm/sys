@@ -540,7 +540,7 @@ m_getuio(struct mbuf **mp, int atomic, long space, struct uio *uio)
 			 * For datagram protocols, leave room
 			 * for protocol headers in first mbuf.
 			 */
-			if (atomic && top == NULL && len < mlen - max_hdr)
+			if (atomic && m == top && len < mlen - max_hdr)
 				m->m_data += max_hdr;
 		} else {
 nopages:
@@ -549,7 +549,7 @@ nopages:
 			 * For datagram protocols, leave room
 			 * for protocol headers in first mbuf.
 			 */
-			if (atomic && top == NULL && len < mlen - max_hdr)
+			if (atomic && m == top && len < mlen - max_hdr)
 				MH_ALIGN(m, len);
 		}
 
