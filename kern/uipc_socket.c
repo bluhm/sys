@@ -1041,9 +1041,12 @@ sorflush(struct socket *so)
 	struct sockbuf *sb = &so->so_rcv;
 	struct protosw *pr = so->so_proto;
 	struct socket aso;
+	int error;
 
 	sb->sb_flags |= SB_NOINTR;
-	sblock(so, sb, M_WAITOK);
+	error = sblock(so, sb, M_WAITOK);
+	/* with SB_NOINTR and M_WAITOK sblock() must not fail */
+	KASSERT(error == 0);
 	socantrcvmore(so);
 	sbunlock(sb);
 	aso.so_proto = pr;
