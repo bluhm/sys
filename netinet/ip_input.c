@@ -413,13 +413,6 @@ ip_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 		if (ipmforwarding && ip_mrouter[ifp->if_rdomain]) {
 			int error;
 
-			if (m->m_flags & M_EXT) {
-				if ((m = *mp = m_pullup(m, hlen)) == NULL) {
-					ipstat_inc(ips_toosmall);
-					goto bad;
-				}
-				ip = mtod(m, struct ip *);
-			}
 			/*
 			 * If we are acting as a multicast router, all
 			 * incoming multicast packets are passed to the
@@ -531,13 +524,6 @@ ip_local(struct mbuf **mp, int *offp, int nxt, int af)
 	 * but it's not worth the time; just let them time out.)
 	 */
 	if (ip->ip_off &~ htons(IP_DF | IP_RF)) {
-		if (m->m_flags & M_EXT) {		/* XXX */
-			if ((m = *mp = m_pullup(m, hlen)) == NULL) {
-				ipstat_inc(ips_toosmall);
-				return IPPROTO_DONE;
-			}
-			ip = mtod(m, struct ip *);
-		}
 
 		mtx_enter(&ipq_mutex);
 
