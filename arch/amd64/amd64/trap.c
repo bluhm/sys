@@ -211,10 +211,8 @@ trap(struct trapframe *frame)
 			goto we_re_toast;
 		/* Check for copyin/copyout fault. */
 		if (pcb->pcb_onfault != 0) {
-			error = EFAULT;
 copyfault:
 			frame->tf_rip = (u_int64_t)pcb->pcb_onfault;
-			frame->tf_rax = error;
 			return;
 		}
 
