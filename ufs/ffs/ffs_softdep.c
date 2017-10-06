@@ -907,6 +907,12 @@ softdep_flushfiles(struct mount *oldmnt, int flags, struct proc *p)
 			break;
 	}
 	/*
+	 * End the loop with a flush in case we got new vnodes during
+	 * sleeping in softdep.
+	 */
+	if (error == 0)
+		error = ffs_flushfiles(oldmnt, flags, p);
+	/*
 	 * If we are unmounting then it is an error to fail. If we
 	 * are simply trying to downgrade to read-only, then filesystem
 	 * activity can keep us busy forever, so we just fail with EBUSY.
