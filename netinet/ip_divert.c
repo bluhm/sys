@@ -186,6 +186,11 @@ divert_packet(struct mbuf *m, int dir, u_int16_t divert_port)
 		return (0);
 	}
 
+	TAILQ_FOREACH(inp, &divbtable.inpt_queue, inp_queue) {
+		if (inp->inp_lport == divert_port)
+			break;
+	}
+
 	memset(&addr, 0, sizeof(addr));
 	addr.sin_family = AF_INET;
 	addr.sin_len = sizeof(addr);
