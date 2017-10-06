@@ -190,18 +190,6 @@ divert6_packet(struct mbuf *m, int dir, u_int16_t divert_port)
 		return (0);
 	}
 
-	TAILQ_FOREACH(inp, &divb6table.inpt_queue, inp_queue) {
-		if (inp->inp_lport != divert_port)
-			continue;
-		if (inp->inp_divertfl == 0)
-			break;
-		if (dir == PF_IN && !(inp->inp_divertfl & IPPROTO_DIVERT_RESP))
-			return (-1);
-		if (dir == PF_OUT && !(inp->inp_divertfl & IPPROTO_DIVERT_INIT))
-			return (-1);
-		break;
-	}
-
 	memset(&addr, 0, sizeof(addr));
 	addr.sin6_family = AF_INET6;
 	addr.sin6_len = sizeof(addr);
