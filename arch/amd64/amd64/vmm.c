@@ -1,4 +1,4 @@
-/*	$OpenBSD: vmm.c,v 1.170 2017/09/08 05:36:51 deraadt Exp $	*/
+/*	$OpenBSD: vmm.c,v 1.174 2017/10/05 23:55:29 mlarkin Exp $	*/
 /*
  * Copyright (c) 2014 Mike Larkin <mlarkin@openbsd.org>
  *
@@ -211,6 +211,8 @@ void vmm_decode_perf_status_value(uint64_t);
 void vmm_decode_perf_ctl_value(uint64_t);
 void vmm_decode_mtrrdeftype_value(uint64_t);
 void vmm_decode_efer_value(uint64_t);
+void vmm_decode_rflags(uint64_t);
+void vmm_decode_misc_enable_value(uint64_t);
 
 extern int mtrr2mrt(int);
 
@@ -4371,7 +4373,7 @@ vmx_handle_exit(struct vcpu *vcpu)
 		update_rip = 0;
 		break;
 	default:
-		DPRINTF("%s: unhandled exit %lld (%s)\n", __func__,
+		DPRINTF("%s: unhandled exit 0x%llx (%s)\n", __func__,
 		    exit_reason, vmx_exit_reason_decode(exit_reason));
 		return (EINVAL);
 	}
@@ -4849,7 +4851,6 @@ vmx_handle_cr0_write(struct vcpu *vcpu, uint64_t r)
 
 	/*
 	 * XXX this is the place to place handling of the must1,must0 bits
-	 *     and the cr0 write shadow
 	 */
 
 	/* CR0 must always have NE set */
@@ -4868,7 +4869,7 @@ vmx_handle_cr0_write(struct vcpu *vcpu, uint64_t r)
 	 * If the guest has enabled paging, then the IA32_VMX_IA32E_MODE_GUEST
 	 * control must be set to the same as EFER_LME.
 	 */
-	msr_store = (struct vmx_msr_store *) vcpu->vc_vmx_msr_exit_save_va;
+	msr_store = (struct vmx_msr_store *)vcpu->vc_vmx_msr_exit_save_va;
 
 	if (vmread(VMCS_ENTRY_CTLS, &ectls)) {
 		printf("%s: can't read entry controls", __func__);
@@ -4907,7 +4908,6 @@ vmx_handle_cr4_write(struct vcpu *vcpu, uint64_t r)
 {
 	/*
 	 * XXX this is the place to place handling of the must1,must0 bits
-	 *     and the cr4 write shadow
 	 */
 
 	/* CR4_VMXE must always be enabled */
@@ -4956,8 +4956,6 @@ vmx_handle_cr(struct vcpu *vcpu)
 
 	switch (dir) {
 	case CR_WRITE:
-		DPRINTF("%s: mov to cr%d @ %llx, data=%llx\n", __func__, crnum,
-		    vcpu->vc_gueststate.vg_rip, r);
 		if (crnum == 0 || crnum == 4) {
 			switch (reg) {
 			case 0: r = vcpu->vc_gueststate.vg_rax; break;
@@ -4982,6 +4980,8 @@ vmx_handle_cr(struct vcpu *vcpu)
 			case 14: r = vcpu->vc_gueststate.vg_r14; break;
 			case 15: r = vcpu->vc_gueststate.vg_r15; break;
 			}
+			DPRINTF("%s: mov to cr%d @ %llx, data=%llx\n", __func__, crnum,
+			    vcpu->vc_gueststate.vg_rip, r);
 		}
 
 		if (crnum == 0)
@@ -5280,7 +5280,6 @@ svm_handle_msr(struct vcpu *vcpu)
 	rcx = &vcpu->vc_gueststate.vg_rcx;
 	rdx = &vcpu->vc_gueststate.vg_rdx;
 
-	/* XXX log the access for now, to be able to identify unknown MSRs */
 	if (vmcb->v_exitinfo1 == 1) {
 		if (*rcx == MSR_EFER) {
 			vmcb->v_efer = *rax | EFER_SVME;
@@ -5476,6 +5475,8 @@ vmm_handle_cpuid(struct vcpu *vcpu)
 			*rbx = 0;
 			*rcx = 0;
 			*rdx = 0;
+		} else {
+			CPUID_LEAF(*rax, *rcx, eax, ebx, ecx, edx);
 			*rax = eax;
 			*rbx = ebx;
 			*rcx = ecx;
@@ -6907,6 +6908,14 @@ vmx_vcpu_dump_regs(struct vcpu *vcpu)
 	else
 		DPRINTF("0x%016llx\n", r);
 
+	DPRINTF(" rflags=");
+	if (vmread(VMCS_GUEST_IA32_RFLAGS, &r))
+		DPRINTF("(error reading)\n");
+	else {
+		DPRINTF("0x%016llx ", r);
+		vmm_decode_rflags(r);
+	}
+
 	DPRINTF(" cr0=");
 	if (vmread(VMCS_GUEST_IA32_CR0, &r))
 		DPRINTF("(error reading)\n");
@@ -7227,6 +7236,7 @@ msr_name_decode(uint32_t msr)
 	case MSR_FSBASE: return "FSBASE";
 	case MSR_GSBASE: return "GSBASE";
 	case MSR_KERNELGSBASE: return "KGSBASE";
+	case MSR_MISC_ENABLE: return "Misc Enable";
 	default: return "Unknown MSR";
 	}
 }
@@ -7556,7 +7566,73 @@ vmm_decode_msr_value(uint64_t msr, uint64_t val)
 	case MSR_PERF_CTL: vmm_decode_perf_ctl_value(val); break;
 	case MSR_MTRRdefType: vmm_decode_mtrrdeftype_value(val); break;
 	case MSR_EFER: vmm_decode_efer_value(val); break;
+	case MSR_MISC_ENABLE: vmm_decode_misc_enable_value(val); break;
 	default: DPRINTF("\n");
 	}
+}
+
+void
+vmm_decode_rflags(uint64_t rflags)
+{
+	struct vmm_reg_debug_info rflags_info[16] = {
+		{ PSL_C,   "CF ", "cf "},
+		{ PSL_PF,  "PF ", "pf "},
+		{ PSL_AF,  "AF ", "af "},
+		{ PSL_Z,   "ZF ", "zf "},
+		{ PSL_N,   "SF ", "sf "},	/* sign flag */
+		{ PSL_T,   "TF ", "tf "},
+		{ PSL_I,   "IF ", "if "},
+		{ PSL_D,   "DF ", "df "},
+		{ PSL_V,   "OF ", "of "},	/* overflow flag */
+		{ PSL_NT,  "NT ", "nt "},
+		{ PSL_RF,  "RF ", "rf "},
+		{ PSL_VM,  "VM ", "vm "},
+		{ PSL_AC,  "AC ", "ac "},
+		{ PSL_VIF, "VIF ", "vif "},
+		{ PSL_VIP, "VIP ", "vip "},
+		{ PSL_ID,  "ID ", "id "},
+	};
+
+	uint8_t i, iopl;
+
+	DPRINTF("(");
+	for (i = 0; i < 16; i++)
+		if (rflags & rflags_info[i].vrdi_bit)
+			DPRINTF("%s", rflags_info[i].vrdi_present);
+		else
+			DPRINTF("%s", rflags_info[i].vrdi_absent);
+
+	iopl = (rflags & PSL_IOPL) >> 12;
+	DPRINTF("IOPL=%d", iopl);
+
+	DPRINTF(")\n");
+}
+
+void
+vmm_decode_misc_enable_value(uint64_t misc)
+{
+	struct vmm_reg_debug_info misc_info[10] = {
+		{ MISC_ENABLE_FAST_STRINGS,		"FSE ", "fse "},
+		{ MISC_ENABLE_TCC,			"TCC ", "tcc "},
+		{ MISC_ENABLE_PERF_MON_AVAILABLE,	"PERF ", "perf "},
+		{ MISC_ENABLE_BTS_UNAVAILABLE,		"BTSU ", "btsu "},
+		{ MISC_ENABLE_PEBS_UNAVAILABLE,		"PEBSU ", "pebsu "},
+		{ MISC_ENABLE_EIST_ENABLED,		"EIST ", "eist "},
+		{ MISC_ENABLE_ENABLE_MONITOR_FSM,	"MFSM ", "mfsm "},
+		{ MISC_ENABLE_LIMIT_CPUID_MAXVAL,	"CMAX ", "cmax "},
+		{ MISC_ENABLE_xTPR_MESSAGE_DISABLE,	"xTPRD ", "xtprd "},
+		{ MISC_ENABLE_XD_BIT_DISABLE,		"NXD", "nxd"},
+	};
+
+	uint8_t i;
+
+	DPRINTF("(");
+	for (i = 0; i < 10; i++)
+		if (misc & misc_info[i].vrdi_bit)
+			DPRINTF("%s", misc_info[i].vrdi_present);
+		else
+			DPRINTF("%s", misc_info[i].vrdi_absent);
+
+	DPRINTF(")\n");
 }
 #endif /* VMM_DEBUG */

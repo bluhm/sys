@@ -1,4 +1,4 @@
-#	$OpenBSD: GENERIC,v 1.246 2017/08/11 20:50:15 mpi Exp $
+#	$OpenBSD: GENERIC,v 1.248 2017/10/04 19:28:56 naddy Exp $
 #
 #	Machine-independent option; used by all architectures for their
 #	GENERIC kernel
