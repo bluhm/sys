@@ -317,11 +317,6 @@ struct ip_opts {
 						/* source address to use */
 
 #define IP_RTABLE		0x1021	/* int; routing table, see SO_RTABLE */
-#define IP_DIVERTFL		0x1022	/* int; divert direction flag opt */
-
-/* Values used by IP_DIVERTFL socket option */
-#define IPPROTO_DIVERT_RESP	0x01	/* divert response packets */
-#define IPPROTO_DIVERT_INIT	0x02	/* divert packets initial direction */
 
 #if __BSD_VISIBLE
 /*
