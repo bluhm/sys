@@ -441,6 +441,10 @@ getnewvnode(enum vtagtype tag, struct mount *mp, struct vops *vops,
 void
 insmntque(struct vnode *vp, struct mount *mp)
 {
+#ifdef DIAGNOSTIC
+	if (mp != NULL && (mp->mnt_flag & MNT_DOOMED) != 0)
+		panic("insert vnode %p into doomed mount point %p", vp, mp);
+#endif
 	/*
 	 * Delete from old mount point vnode list, if on one.
 	 */

@@ -470,12 +470,15 @@ dounmount_leaf(struct mount *mp, int flags, struct proc *p)
 	}
 	if (((mp->mnt_flag & MNT_RDONLY) ||
 	    (error = VFS_SYNC(mp, MNT_WAIT, p->p_ucred, p)) == 0) ||
-	    (flags & MNT_FORCE))
+	    (flags & MNT_FORCE)) {
+		mp->mnt_flag |= MNT_DOOMED;
 		error = VFS_UNMOUNT(mp, flags, p);
+	}
 
 	if (error && !(flags & MNT_DOOMED)) {
 		if ((mp->mnt_flag & MNT_RDONLY) == 0 && hadsyncer)
 			(void) vfs_allocate_syncvnode(mp);
+		mp->mnt_flag &=~ MNT_DOOMED;
 		vfs_unbusy(mp);
 		return (error);
 	}
