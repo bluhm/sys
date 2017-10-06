@@ -884,7 +884,7 @@ softdep_flushworklist(struct mount *oldmnt, int *countp, struct proc *p)
 int
 softdep_flushfiles(struct mount *oldmnt, int flags, struct proc *p)
 {
-	int error, count, loopcnt;
+	int error, count, loopcnt, doomed;
 
 	/*
 	 * Alternately flush the vnodes associated with the mount
@@ -892,6 +892,7 @@ softdep_flushfiles(struct mount *oldmnt, int flags, struct proc *p)
 	 * creates. In theory, this loop can happen at most twice,
 	 * but we give it a few extra just to be sure.
 	 */
+	doomed = oldmnt->mnt_flag & MNT_DOOMED;
 	for (loopcnt = 10; loopcnt > 0; loopcnt--) {
 		/*
 		 * Do another flush in case any vnodes were brought in
@@ -899,8 +900,10 @@ softdep_flushfiles(struct mount *oldmnt, int flags, struct proc *p)
 		 */
 		if ((error = ffs_flushfiles(oldmnt, flags, p)) != 0)
 			break;
-		if ((error = softdep_flushworklist(oldmnt, &count, p)) != 0 ||
-		    count == 0)
+		oldmnt->mnt_flag &=~ MNT_DOOMED;
+		error = softdep_flushworklist(oldmnt, &count, p);
+		oldmnt->mnt_flag |= doomed;
+		if (error != 0 || count == 0)
 			break;
 	}
 	/*
