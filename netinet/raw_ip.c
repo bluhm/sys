@@ -1,4 +1,4 @@
-/*	$OpenBSD: raw_ip.c,v 1.103 2017/09/05 07:59:11 mpi Exp $	*/
+/*	$OpenBSD: raw_ip.c,v 1.104 2017/10/06 21:14:55 bluhm Exp $	*/
 /*	$NetBSD: raw_ip.c,v 1.25 1996/02/18 18:58:33 christos Exp $	*/
 
 /*
