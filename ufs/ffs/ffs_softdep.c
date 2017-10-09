@@ -904,10 +904,10 @@ softdep_flushfiles(struct mount *oldmnt, int flags, struct proc *p)
 			break;
 	}
 	/*
-	 * If the reboot process sleeps during the loop, the updater may call
-	 * softdep_flushfiles() and create new dirty vnodes at the mount point.
-	 * Call ffs_flushfiles() again after the loop has processed all soft
-	 * dependencies.
+	 * If the reboot process sleeps during the loop, the update
+	 * process may call softdep_process_worklist() and create
+	 * new dirty vnodes at the mount point.  Call ffs_flushfiles()
+	 * again after the loop has flushed all soft dependencies.
 	 */
 	if (error == 0)
 		error = ffs_flushfiles(oldmnt, flags, p);
