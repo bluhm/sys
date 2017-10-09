@@ -904,6 +904,14 @@ softdep_flushfiles(struct mount *oldmnt, int flags, struct proc *p)
 			break;
 	}
 	/*
+	 * If the reboot process sleeps during the loop, the updater may call
+	 * softdep_flushfiles() and create new dirty vnodes at the mount point.
+	 * Call ffs_flushfiles() again after the loop has processed all soft
+	 * dependencies.
+	 */
+	if (error == 0)
+		error = ffs_flushfiles(oldmnt, flags, p);
+	/*
 	 * If we are unmounting then it is an error to fail. If we
 	 * are simply trying to downgrade to read-only, then filesystem
 	 * activity can keep us busy forever, so we just fail with EBUSY.
