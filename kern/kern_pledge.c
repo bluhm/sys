@@ -489,7 +489,7 @@ pledge_fail(struct proc *p, int error, uint64_t code)
 			codes = pledgenames[i].name;
 			break;
 		}
-	log(LOG_ERR, "%s(%d): syscall %d \"%s\"\n",
+	log(LOG_ERR, "%s[%d]: pledge violation, syscall %d \"%s\"\n",
 	    p->p_p->ps_comm, p->p_p->ps_pid, p->p_pledge_syscall, codes);
 	p->p_p->ps_acflag |= APLEDGE;
 #ifdef KTRACE
