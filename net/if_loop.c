@@ -219,7 +219,12 @@ looutput(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst,
 			rt->rt_flags & RTF_HOST ? EHOSTUNREACH : ENETUNREACH);
 	}
 
-	return (if_input_local(ifp, m, dst->sa_family));
+	/* Use the quick path only once to avoid stack overflow. */
+	if ((m->m_flags & M_LOOP) == 0)
+		return if_input_local(ifp, m, dst->sa_family);
+
+	m_freem(m);
+	return ELOOP;
 }
 
 void
