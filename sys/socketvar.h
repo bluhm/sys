@@ -129,6 +129,18 @@ struct socket {
 	uid_t	so_euid, so_ruid;	/* who opened the socket */
 	gid_t	so_egid, so_rgid;
 	pid_t	so_cpid;		/* pid of process that opened socket */
+
+	struct	mutex so_mtx;		/* mutex is protecting
+					 * so_state
+					 * so_rcv
+					 * so_options
+					 * so_qlen
+					 * so_qlimit
+					 * so_snd
+					 * so_error
+					 * so_oobmark
+					 * so_pcb
+					 */
 };
 
 /*
@@ -339,6 +351,7 @@ int	sockargs(struct mbuf **, const void *, size_t, int);
 int	sosleep(struct socket *, void *, int, const char *, int);
 int	solock(struct socket *);
 void	sounlock(int);
+void	somtxassert(struct socket *so);
 
 int	sendit(struct proc *, int, struct msghdr *, int, register_t *);
 int	recvit(struct proc *, int, struct msghdr *, caddr_t,

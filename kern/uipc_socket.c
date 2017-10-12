@@ -1991,6 +1991,34 @@ filt_solisten(struct knote *kn, long hint)
 	return (kn->kn_data != 0);
 }
 
+void
+sbmtxassert(struct sockbuf *sb)
+{
+	KASSERT(sb->sb_datacc <= sb->sb_cc);
+	KASSERT(sb->sb_cc <= sb->sb_hiwat);
+	KASSERT(sb->sb_wat <= sb->sb_hiwat);
+	KASSERT(sb->sb_lowat <= sb->sb_hiwat);
+	KASSERT(sb->sb_mbcnt <= sb->sb_mbmax);
+	if (sb->sb_mb == NULL) {
+		KASSERT(sb->sb_mbtail == NULL);
+		KASSERT(sb->sb_lastrecord == NULL);
+	} else {
+		KASSERT(sb->sb_mbtail != NULL);
+		KASSERT(sb->sb_lastrecord != NULL);
+	}
+	KASSERT((sb->sb_flagsintr &~ (SB_SEL|SB_WAIT|SB_SPLICE)) == 0);
+}
+
+void
+somtxassert(struct socket *so)
+{
+	MUTEX_ASSERT_LOCKED(&so->so_mtx);
+	KASSERT(so->so_qlen <= so->so_qlimit);
+	KASSERT(so->so_pcb != NULL || (so->so_state & SS_NOFDREF) == 0);
+	sbmtxassert(&so->so_rcv);
+	sbmtxassert(&so->so_snd);
+}
+
 #ifdef DDB
 void
 sobuf_print(struct sockbuf *,
