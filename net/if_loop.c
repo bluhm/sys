@@ -143,6 +143,7 @@
 int	loioctl(struct ifnet *, u_long, caddr_t);
 void	loopattach(int);
 void	lortrequest(struct ifnet *, int, struct rtentry *);
+int	loinput(struct ifnet *, struct mbuf *, void *);
 int	looutput(struct ifnet *,
 	    struct mbuf *, struct sockaddr *, struct rtentry *);
 
@@ -191,6 +192,7 @@ loop_clone_create(struct if_clone *ifc, int unit)
 #if NBPFILTER > 0
 	bpfattach(&ifp->if_bpf, ifp, DLT_LOOP, sizeof(u_int32_t));
 #endif
+	if_ih_insert(ifp, loinput, NULL);
 	return (0);
 }
 
@@ -207,11 +209,29 @@ loop_clone_destroy(struct ifnet *ifp)
 }
 
 int
+loinput(struct ifnet *ifp, struct mbuf *m, void *cookie)
+{
+	sa_family_t af;
+	int error;
+
+	if ((m->m_flags & M_PKTHDR) == 0)
+		panic("%s: no header mbuf", __func__);
+
+	/* XXX mbuf does not have address family, if_input does not pass it. */
+	af = m->m_pkthdr.ether_vtag;
+	error = if_input_local(ifp, m, af);
+	if (error)
+		ifp->if_ierrors++;
+
+	return (1);
+}
+
+int
 looutput(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst,
     struct rtentry *rt)
 {
 	if ((m->m_flags & M_PKTHDR) == 0)
-		panic("looutput: no header mbuf");
+		panic("%s: no header mbuf", __func__);
 
 	if (rt && rt->rt_flags & (RTF_REJECT|RTF_BLACKHOLE)) {
 		m_freem(m);
@@ -221,10 +241,15 @@ looutput(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst,
 
 	/* Use the quick path only once to avoid stack overflow. */
 	if ((m->m_flags & M_LOOP) == 0)
-		return if_input_local(ifp, m, dst->sa_family);
+		return (if_input_local(ifp, m, dst->sa_family));
 
-	m_freem(m);
-	return ELOOP;
+	/* XXX Reuse vlan for address family as it is unused on loopback. */
+	m->m_pkthdr.ether_vtag = dst->sa_family;
+	if (mq_enqueue(&ifp->if_inputqueue, m))
+		return ENOBUFS;
+	task_add(softnettq, ifp->if_inputtask);
+
+	return (0);
 }
 
 void
