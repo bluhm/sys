@@ -2013,6 +2013,7 @@ sbmtxassert(struct sockbuf *sb)
 		KASSERT(sb->sb_lastrecord != NULL);
 	}
 	KASSERT((sb->sb_flagsintr &~ (SB_SEL|SB_WAIT|SB_SPLICE)) == 0);
+	SBCHECK(sb);
 }
 
 void
