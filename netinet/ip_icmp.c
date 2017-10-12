@@ -714,10 +714,12 @@ icmp_reflect(struct mbuf *m, struct mbuf **op, struct in_ifaddr *ia)
 		return (EHOSTUNREACH);
 	}
 
-#if NPF > 0
-	pf_pkt_addr_changed(m);
-#endif
+	if (m->m_pkthdr.ph_loopcnt++ >= M_MAXLOOP) {
+		m_freem(m);
+                return (ELOOP);
+	}
 	rtableid = m->m_pkthdr.ph_rtableid;
+	m_resethdr(m);
 
 	/*
 	 * If the incoming packet was addressed directly to us,
