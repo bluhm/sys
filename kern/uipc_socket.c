@@ -137,13 +137,19 @@ socreate(int dom, struct socket **aso, int type, int proto)
 	so->so_proto = prp;
 
 	s = solock(so);
+	mtx_enter(&so->so_mtx);
+	somtxassert(so);
 	error = (*prp->pr_attach)(so, proto);
 	if (error) {
+		somtxassert(so);
+		mtx_leave(&so->so_mtx);
 		so->so_state |= SS_NOFDREF;
 		sofree(so);
 		sounlock(s);
 		return (error);
 	}
+	somtxassert(so);
+	mtx_leave(&so->so_mtx);
 	sounlock(s);
 	*aso = so;
 	return (0);
