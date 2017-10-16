@@ -211,15 +211,12 @@ loop_clone_destroy(struct ifnet *ifp)
 int
 loinput(struct ifnet *ifp, struct mbuf *m, void *cookie)
 {
-	sa_family_t af;
 	int error;
 
 	if ((m->m_flags & M_PKTHDR) == 0)
 		panic("%s: no header mbuf", __func__);
 
-	/* XXX mbuf does not have address family, if_input does not pass it. */
-	af = m->m_pkthdr.ether_vtag;
-	error = if_input_local(ifp, m, af);
+	error = if_input_local(ifp, m, m->m_pkthdr.ph_family);
 	if (error)
 		ifp->if_ierrors++;
 
@@ -243,8 +240,7 @@ looutput(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst,
 	if ((m->m_flags & M_LOOP) == 0)
 		return (if_input_local(ifp, m, dst->sa_family));
 
-	/* XXX Reuse vlan for address family as it is unused on loopback. */
-	m->m_pkthdr.ether_vtag = dst->sa_family;
+	m->m_pkthdr.ph_family = dst->sa_family;
 	if (mq_enqueue(&ifp->if_inputqueue, m))
 		return ENOBUFS;
 	task_add(softnettq, ifp->if_inputtask);
