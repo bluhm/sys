@@ -716,7 +716,7 @@ icmp_reflect(struct mbuf *m, struct mbuf **op, struct in_ifaddr *ia)
 
 	if (m->m_pkthdr.ph_loopcnt++ >= M_MAXLOOP) {
 		m_freem(m);
-                return (ELOOP);
+		return (ELOOP);
 	}
 	rtableid = m->m_pkthdr.ph_rtableid;
 	m_resethdr(m);
