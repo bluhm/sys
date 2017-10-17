@@ -1061,6 +1061,7 @@ icmp6_reflect(struct mbuf *m, size_t off)
 		goto bad;
 	rtableid = m->m_pkthdr.ph_rtableid;
 	m_resethdr(m);
+	m->m_pkthdr.ph_rtableid = rtableid;
 
 	/*
 	 * If there are extra headers between IPv6 and ICMPv6, strip
