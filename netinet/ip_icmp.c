@@ -720,6 +720,7 @@ icmp_reflect(struct mbuf *m, struct mbuf **op, struct in_ifaddr *ia)
 	}
 	rtableid = m->m_pkthdr.ph_rtableid;
 	m_resethdr(m);
+	m->m_pkthdr.ph_rtableid = rtableid;
 
 	/*
 	 * If the incoming packet was addressed directly to us,
