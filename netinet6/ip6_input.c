@@ -1481,6 +1481,13 @@ ip6_send_dispatch(void *xmq)
 #endif /* IPSEC */
 
 	while ((m = ml_dequeue(&ml)) != NULL) {
+		/*
+		 * To avoid a "too big" situation at an intermediate router and
+		 * the path MTU discovery process, specify the IPV6_MINMTU
+		 * flag.  Note that only echo and node information replies are
+		 * affected, since the length of ICMP6 errors is limited to the
+		 * minimum MTU.
+		 */
 		ip6_output(m, NULL, NULL, IPV6_MINMTU, NULL, NULL);
 	}
 	NET_UNLOCK();
