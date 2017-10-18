@@ -202,6 +202,7 @@ loop_clone_destroy(struct ifnet *ifp)
 	if (ifp->if_index == rtable_loindex(ifp->if_rdomain))
 		return (EPERM);
 
+	if_ih_remove(ifp, loinput, NULL);
 	if_detach(ifp);
 
 	free(ifp, M_DEVBUF, sizeof(*ifp));
