@@ -1162,12 +1162,6 @@ icmp6_reflect(struct mbuf *m, size_t off)
 
 	m->m_flags &= ~(M_BCAST|M_MCAST);
 
-	/*
-	 * To avoid a "too big" situation at an intermediate router
-	 * and the path MTU discovery process, specify the IPV6_MINMTU flag.
-	 * Note that only echo and node information replies are affected,
-	 * since the length of ICMP6 errors is limited to the minimum MTU.
-	 */
 #if NPF > 0
 	pf_pkt_addr_changed(m);
 #endif
