@@ -399,8 +399,10 @@ db_show_all_mounts(db_expr_t addr, int have_addr, db_expr_t count, char *modif)
 	if (modif[0] == 'f')
 		full = TRUE;
 
-	TAILQ_FOREACH(mp, &mountlist, mnt_list)
+	TAILQ_FOREACH(mp, &mountlist, mnt_list) {
+		db_printf("mountpoint %p\n", mp);
 		vfs_mount_print(mp, full, db_printf);
+	}
 }
 
 extern struct pool vnode_pool;
