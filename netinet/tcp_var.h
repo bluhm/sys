@@ -766,11 +766,9 @@ void	 tcp_clean_sackreport(struct tcpcb *tp);
 void	 tcp_sack_adjust(struct tcpcb *tp);
 struct sackhole *
 	 tcp_sack_output(struct tcpcb *tp);
-int	 tcp_sack_partialack(struct tcpcb *, struct tcphdr *);
 #ifdef DEBUG
 void	 tcp_print_holes(struct tcpcb *tp);
 #endif
-int	 tcp_newreno(struct tcpcb *, struct tcphdr *);
 u_long	 tcp_seq_subtract(u_long, u_long );
 #ifdef TCP_SIGNATURE
 int	tcp_signature_apply(caddr_t, caddr_t, unsigned int);
