@@ -56,6 +56,7 @@
 #define	RB_POWERDOWN	0x1000	/* attempt to power down machine */
 #define	RB_SERCONS	0x2000	/* use serial console if available */
 #define	RB_USERREQ	0x4000	/* boot() called at user request (e.g. ddb) */
+#define	RB_RESET	0x8000	/* do not try to cleanup, only for ddb */
 
 /*
  * Constants for converting boot-style device number to type,
