@@ -713,6 +713,9 @@ struct pcb dumppcb;
 __dead void
 boot(int howto)
 {
+	if ((howto & RB_RESET) != 0)
+		goto reset;
+
 	if ((howto & RB_POWERDOWN) != 0)
 		lid_action = 0;
 
@@ -770,6 +773,7 @@ haltsys:
 	printf("rebooting...\n");
 	if (cpureset_delay > 0)
 		delay(cpureset_delay * 1000);
+reset:
 	cpu_reset();
 	for (;;)
 		continue;
