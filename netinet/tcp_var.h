@@ -1,4 +1,4 @@
-/*	$OpenBSD: tcp_var.h,v 1.125 2017/10/22 14:11:34 mikeb Exp $	*/
+/*	$OpenBSD: tcp_var.h,v 1.128 2017/11/02 14:01:18 florian Exp $	*/
 /*	$NetBSD: tcp_var.h,v 1.17 1996/02/13 23:44:24 christos Exp $	*/
 
 /*
@@ -119,12 +119,6 @@ struct tcpcb {
 	int	sack_enable;		/* enable SACK for this connection */
 	int	snd_numholes;		/* number of holes seen by sender */
 	struct sackhole *snd_holes;	/* linked list of holes (sorted) */
-#if 1 /*defined(TCP_FACK)*/
-	tcp_seq snd_fack;		/* for FACK congestion control */
-	u_long	snd_awnd;		/* snd_nxt - snd_fack + */
-					/* retransmitted data */
-	int retran_data;		/* amount of outstanding retx. data  */
-#endif /* TCP_FACK */
 	tcp_seq snd_last;		/* for use in fast recovery */
 /* receive sequence variables */
 	u_long	rcv_wnd;		/* receive window */
@@ -757,6 +751,7 @@ int	 tcp_sysctl(int *, u_int, void *, size_t *, void *, size_t);
 int	 tcp_usrreq(struct socket *,
 	    int, struct mbuf *, struct mbuf *, struct mbuf *, struct proc *);
 int	 tcp_attach(struct socket *, int);
+int	 tcp_detach(struct socket *);
 void	 tcp_xmit_timer(struct tcpcb *, int);
 void	 tcpdropoldhalfopen(struct tcpcb *, u_int16_t);
 void	 tcp_sack_option(struct tcpcb *,struct tcphdr *,u_char *,int);
@@ -766,11 +761,9 @@ void	 tcp_clean_sackreport(struct tcpcb *tp);
 void	 tcp_sack_adjust(struct tcpcb *tp);
 struct sackhole *
 	 tcp_sack_output(struct tcpcb *tp);
-int	 tcp_sack_partialack(struct tcpcb *, struct tcphdr *);
 #ifdef DEBUG
 void	 tcp_print_holes(struct tcpcb *tp);
 #endif
-int	 tcp_newreno(struct tcpcb *, struct tcphdr *);
 u_long	 tcp_seq_subtract(u_long, u_long );
 #ifdef TCP_SIGNATURE
 int	tcp_signature_apply(caddr_t, caddr_t, unsigned int);
