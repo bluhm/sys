@@ -1556,7 +1556,7 @@ sowwakeup(struct socket *so)
 
 #ifdef SOCKET_SPLICE
 	if (so->so_snd.sb_flagsintr & SB_SPLICE)
-		task_add(sosplice_taskq, &so->so_sp->ssp_soback->so_splicetask);
+		somove(so->so_sp->ssp_soback, M_DONTWAIT);
 #endif
 	sowakeup(so, &so->so_snd);
 }
