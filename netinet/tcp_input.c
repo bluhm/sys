@@ -1158,7 +1158,9 @@ findpcb:
 
 		if (tiflags & TH_ACK && SEQ_GT(tp->snd_una, tp->iss)) {
 			tcpstat_inc(tcps_connects);
+			tp->t_flags |= TF_BLOCKOUTPUT;
 			soisconnected(so);
+			tp->t_flags &= ~TF_BLOCKOUTPUT;
 			tp->t_state = TCPS_ESTABLISHED;
 			TCP_TIMER_ARM(tp, TCPT_KEEP, tcp_keepidle);
 			/* Do window scaling on this connection? */
@@ -1439,7 +1441,9 @@ trimthenstep6:
 	 */
 	case TCPS_SYN_RECEIVED:
 		tcpstat_inc(tcps_connects);
+		tp->t_flags |= TF_BLOCKOUTPUT;
 		soisconnected(so);
+		tp->t_flags &= ~TF_BLOCKOUTPUT;
 		tp->t_state = TCPS_ESTABLISHED;
 		TCP_TIMER_ARM(tp, TCPT_KEEP, tcp_keepidle);
 		/* Do window scaling? */
@@ -1766,7 +1770,9 @@ trimthenstep6:
 				 * we'll hang forever.
 				 */
 				if (so->so_state & SS_CANTRCVMORE) {
+					tp->t_flags |= TF_BLOCKOUTPUT;
 					soisdisconnected(so);
+					tp->t_flags &= ~TF_BLOCKOUTPUT;
 					TCP_TIMER_ARM(tp, TCPT_2MSL, tcp_maxidle);
 				}
 				tp->t_state = TCPS_FIN_WAIT_2;
@@ -1784,7 +1790,9 @@ trimthenstep6:
 				tp->t_state = TCPS_TIME_WAIT;
 				tcp_canceltimers(tp);
 				TCP_TIMER_ARM(tp, TCPT_2MSL, 2 * TCPTV_MSL);
+				tp->t_flags |= TF_BLOCKOUTPUT;
 				soisdisconnected(so);
+				tp->t_flags &= ~TF_BLOCKOUTPUT;
 			}
 			break;
 
@@ -1952,7 +1960,9 @@ dodata:							/* XXX */
 	 */
 	if ((tiflags & TH_FIN) && TCPS_HAVEESTABLISHED(tp->t_state)) {
 		if (TCPS_HAVERCVDFIN(tp->t_state) == 0) {
+			tp->t_flags |= TF_BLOCKOUTPUT;
 			socantrcvmore(so);
+			tp->t_flags &= ~TF_BLOCKOUTPUT;
 			tp->t_flags |= TF_ACKNOW;
 			tp->rcv_nxt++;
 		}
@@ -1982,7 +1992,9 @@ dodata:							/* XXX */
 			tp->t_state = TCPS_TIME_WAIT;
 			tcp_canceltimers(tp);
 			TCP_TIMER_ARM(tp, TCPT_2MSL, 2 * TCPTV_MSL);
+			tp->t_flags |= TF_BLOCKOUTPUT;
 			soisdisconnected(so);
+			tp->t_flags &= ~TF_BLOCKOUTPUT;
 			break;
 
 		/*
