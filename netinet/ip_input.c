@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_input.c,v 1.328 2017/11/01 06:35:38 mpi Exp $	*/
+/*	$OpenBSD: ip_input.c,v 1.331 2017/11/10 08:55:49 mpi Exp $	*/
 /*	$NetBSD: ip_input.c,v 1.30 1996/03/16 23:53:58 christos Exp $	*/
 
 /*
@@ -216,6 +216,10 @@ ip_init(void)
 	strlcpy(ipsec_def_comp, IPSEC_DEFAULT_DEF_COMP, sizeof(ipsec_def_comp));
 
 	mq_init(&ipsend_mq, 64, IPL_SOFTNET);
+
+#ifdef IPSEC
+	ipsec_init();
+#endif
 }
 
 /*
@@ -1039,20 +1043,6 @@ ip_slowtimo(void)
 }
 
 /*
- * Drain off all datagram fragments.
- */
-void
-ip_drain(void)
-{
-	mtx_enter(&ipq_mutex);
-	while (!LIST_EMPTY(&ipq)) {
-		ipstat_inc(ips_fragdropped);
-		ip_freef(LIST_FIRST(&ipq));
-	}
-	mtx_leave(&ipq_mutex);
-}
-
-/*
  * Flush a bunch of datagram fragments, till we are down to 75%.
  */
 void
@@ -1828,11 +1818,11 @@ ip_send_dispatch(void *xmq)
 	if (ml_empty(&ml))
 		return;
 
-	NET_LOCK();
+	NET_RLOCK();
 	while ((m = ml_dequeue(&ml)) != NULL) {
 		ip_output(m, NULL, NULL, 0, NULL, NULL, 0);
 	}
-	NET_UNLOCK();
+	NET_RUNLOCK();
 }
 
 void

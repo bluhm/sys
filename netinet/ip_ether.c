@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_ether.c,v 1.87 2017/10/09 08:35:38 mpi Exp $  */
+/*	$OpenBSD: ip_ether.c,v 1.89 2017/11/10 02:37:14 visa Exp $  */
 /*
  * The author of this code is Angelos D. Keromytis (kermit@adk.gr)
  *
@@ -82,7 +82,13 @@ struct gif_softc	*etherip_getgif(struct mbuf *);
  */
 int etherip_allow = 0;
 
-struct etheripstat etheripstat;
+struct cpumem *etheripcounters;
+
+void
+etherip_init(void)
+{
+	etheripcounters = counters_alloc(etherips_ncounters);
+}
 
 /*
  * etherip_input gets called when we receive an encapsulated packet.
@@ -95,8 +101,8 @@ etherip_input(struct mbuf **mp, int *offp, int proto, int af)
 	case IPPROTO_ETHERIP:
 		/* If we do not accept EtherIP explicitly, drop. */
 		if (!etherip_allow && ((*mp)->m_flags & (M_AUTH|M_CONF)) == 0) {
-			DPRINTF(("etherip_input(): dropped due to policy\n"));
-			etheripstat.etherips_pdrops++;
+			DPRINTF(("%s: dropped due to policy\n", __func__));
+			etheripstat_inc(etherips_pdrops);
 			m_freemp(mp);
 			return IPPROTO_DONE;
 		}
@@ -109,8 +115,8 @@ etherip_input(struct mbuf **mp, int *offp, int proto, int af)
 		return IPPROTO_DONE;
 #endif
 	default:
-		DPRINTF(("etherip_input(): dropped, unhandled protocol\n"));
-		etheripstat.etherips_pdrops++;
+		DPRINTF(("%s: dropped, unhandled protocol\n", __func__));
+		etheripstat_inc(etherips_pdrops);
 		m_freemp(mp);
 		return IPPROTO_DONE;
 	}
@@ -124,7 +130,7 @@ etherip_decap(struct mbuf *m, int iphlen)
 	struct gif_softc *sc;
 	struct mbuf_list ml = MBUF_LIST_INITIALIZER();
 
-	etheripstat.etherips_ipackets++;
+	etheripstat_inc(etherips_ipackets);
 
 	/*
 	 * Make sure there's at least an ethernet header's and an EtherIP
@@ -132,8 +138,8 @@ etherip_decap(struct mbuf *m, int iphlen)
 	 */
 	if (m->m_pkthdr.len < iphlen + sizeof(struct ether_header) +
 	    sizeof(struct etherip_header)) {
-		DPRINTF(("etherip_input(): encapsulated packet too short\n"));
-		etheripstat.etherips_hdrops++;
+		DPRINTF(("%s: encapsulated packet too short\n", __func__));
+		etheripstat_inc(etherips_hdrops);
 		m_freem(m);
 		return;
 	}
@@ -143,18 +149,17 @@ etherip_decap(struct mbuf *m, int iphlen)
 	if (eip.eip_ver == ETHERIP_VERSION) {
 		/* Correct */
 	} else {
-		DPRINTF(("etherip_input(): received EtherIP version number "
-		    "%d not suppoorted\n", eip.eip_ver));
-		etheripstat.etherips_adrops++;
+		DPRINTF(("%s: received EtherIP version number %d not "
+		    "supported\n", __func__, eip.eip_ver));
+		etheripstat_inc(etherips_adrops);
 		m_freem(m);
 		return;
 	}
 
 	/* Finally, the pad value must be zero. */
 	if (eip.eip_pad) {
-		DPRINTF(("etherip_input(): received EtherIP invalid "
-		    "pad value\n"));
-		etheripstat.etherips_adrops++;
+		DPRINTF(("%s: received EtherIP invalid pad value\n", __func__));
+		etheripstat_inc(etherips_adrops);
 		m_freem(m);
 		return;
 	}
@@ -164,8 +169,8 @@ etherip_decap(struct mbuf *m, int iphlen)
 	    sizeof(struct etherip_header)) {
 		if ((m = m_pullup(m, iphlen + sizeof(struct ether_header) +
 		    sizeof(struct etherip_header))) == NULL) {
-			DPRINTF(("etherip_input(): m_pullup() failed\n"));
-			etheripstat.etherips_adrops++;
+			DPRINTF(("%s: m_pullup() failed\n", __func__));
+			etheripstat_inc(etherips_adrops);
 			return;
 		}
 	}
@@ -174,8 +179,8 @@ etherip_decap(struct mbuf *m, int iphlen)
 	if (sc == NULL)
 		return;
 	if (sc->gif_if.if_bridgeport == NULL) {
-		DPRINTF(("etherip_input(): interface not part of bridge\n"));
-		etheripstat.etherips_noifdrops++;
+		DPRINTF(("%s: interface not part of bridge\n", __func__));
+		etheripstat_inc(etherips_noifdrops);
 		m_freem(m);
 		return;
 	}
@@ -184,7 +189,7 @@ etherip_decap(struct mbuf *m, int iphlen)
 	m_adj(m, iphlen + sizeof(struct etherip_header));
 
 	/* Statistics */
-	etheripstat.etherips_ibytes += m->m_pkthdr.len;
+	etheripstat_add(etherips_ibytes, m->m_pkthdr.len);
 
 	/* Reset the flags based on the inner packet */
 	m->m_flags &= ~(M_BCAST|M_MCAST|M_AUTH|M_CONF|M_PROTO1);
@@ -204,15 +209,15 @@ mplsip_decap(struct mbuf *m, int iphlen)
 {
 	struct gif_softc *sc;
 
-	etheripstat.etherips_ipackets++;
+	etheripstat_inc(etherips_ipackets);
 
 	/*
 	 * Make sure there's at least one MPLS label worth of data after
 	 * the outer IP header.
 	 */
 	if (m->m_pkthdr.len < iphlen + sizeof(struct shim_hdr)) {
-		DPRINTF(("mplsip_input(): encapsulated packet too short\n"));
-		etheripstat.etherips_hdrops++;
+		DPRINTF(("%s: encapsulated packet too short\n", __func__));
+		etheripstat_inc(etherips_hdrops);
 		m_freem(m);
 		return;
 	}
@@ -221,8 +226,8 @@ mplsip_decap(struct mbuf *m, int iphlen)
 	if (m->m_len < iphlen + sizeof(struct shim_hdr)) {
 		if ((m = m_pullup(m, iphlen + sizeof(struct shim_hdr))) ==
 		    NULL) {
-			DPRINTF(("mplsip_input(): m_pullup() failed\n"));
-			etheripstat.etherips_adrops++;
+			DPRINTF(("%s: m_pullup() failed\n", __func__));
+			etheripstat_inc(etherips_adrops);
 			return;
 		}
 	}
@@ -235,7 +240,7 @@ mplsip_decap(struct mbuf *m, int iphlen)
 	m_adj(m, iphlen);
 
 	/* Statistics */
-	etheripstat.etherips_ibytes += m->m_pkthdr.len;
+	etheripstat_add(etherips_ibytes, m->m_pkthdr.len);
 
 	/* Reset the flags based */
 	m->m_flags &= ~(M_BCAST|M_MCAST);
@@ -291,9 +296,9 @@ etherip_getgif(struct mbuf *m)
 		break;
 #endif /* INET6 */
 	default:
-		DPRINTF(("etherip_input(): invalid protocol %d\n", v));
+		DPRINTF(("%s: invalid protocol %d\n", __func__, v));
 		m_freem(m);
-		etheripstat.etherips_hdrops++;
+		etheripstat_inc(etherips_hdrops);
 		return NULL;
 	}
 
@@ -311,8 +316,8 @@ etherip_getgif(struct mbuf *m)
 
 	/* None found. */
 	if (sc == NULL) {
-		DPRINTF(("etherip_input(): no interface found\n"));
-		etheripstat.etherips_noifdrops++;
+		DPRINTF(("%s: no interface found\n", __func__));
+		etheripstat_inc(etherips_noifdrops);
 		m_freem(m);
 		return NULL;
 	}
@@ -334,27 +339,27 @@ etherip_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int proto)
 	if ((tdb->tdb_src.sa.sa_family != 0) &&
 	    (tdb->tdb_src.sa.sa_family != AF_INET) &&
 	    (tdb->tdb_src.sa.sa_family != AF_INET6)) {
-		DPRINTF(("etherip_output(): IP in protocol-family <%d> "
-		    "attempted, aborting", tdb->tdb_src.sa.sa_family));
-		etheripstat.etherips_adrops++;
+		DPRINTF(("%s: IP in protocol-family <%d> attempted, aborting",
+		    __func__, tdb->tdb_src.sa.sa_family));
+		etheripstat_inc(etherips_adrops);
 		m_freem(m);
 		return EINVAL;
 	}
 
 	if ((tdb->tdb_dst.sa.sa_family != AF_INET) &&
 	    (tdb->tdb_dst.sa.sa_family != AF_INET6)) {
-		DPRINTF(("etherip_output(): IP in protocol-family <%d> "
-		    "attempted, aborting", tdb->tdb_dst.sa.sa_family));
-		etheripstat.etherips_adrops++;
+		DPRINTF(("%s: IP in protocol-family <%d> attempted, aborting",
+		    __func__, tdb->tdb_dst.sa.sa_family));
+		etheripstat_inc(etherips_adrops);
 		m_freem(m);
 		return EINVAL;
 	}
 
 	if (tdb->tdb_dst.sa.sa_family != tdb->tdb_src.sa.sa_family) {
-		DPRINTF(("etherip_output(): mismatch in tunnel source and "
-		    "destination address protocol families (%d/%d), aborting",
+		DPRINTF(("%s: mismatch in tunnel source and destination address"
+		    " protocol families (%d/%d), aborting", __func__,
 		    tdb->tdb_src.sa.sa_family, tdb->tdb_dst.sa.sa_family));
-		etheripstat.etherips_adrops++;
+		etheripstat_inc(etherips_adrops);
 		m_freem(m);
 		return EINVAL;
 	}
@@ -369,9 +374,9 @@ etherip_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int proto)
 		break;
 #endif /* INET6 */
 	default:
-		DPRINTF(("etherip_output(): unsupported tunnel protocol "
-		    "family <%d>, aborting", tdb->tdb_dst.sa.sa_family));
-		etheripstat.etherips_adrops++;
+		DPRINTF(("%s: unsupported tunnel protocol family <%d>, "
+		    "aborting", __func__, tdb->tdb_dst.sa.sa_family));
+		etheripstat_inc(etherips_adrops);
 		m_freem(m);
 		return EINVAL;
 	}
@@ -382,8 +387,8 @@ etherip_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int proto)
 
 	M_PREPEND(m, hlen, M_DONTWAIT);
 	if (m == NULL) {
-		DPRINTF(("etherip_output(): M_PREPEND failed\n"));
-		etheripstat.etherips_adrops++;
+		DPRINTF(("%s: M_PREPEND failed\n", __func__));
+		etheripstat_inc(etherips_adrops);
 		return ENOBUFS;
 	}
 
@@ -400,8 +405,8 @@ etherip_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int proto)
 	}
 
 	/* Statistics */
-	etheripstat.etherips_opackets++;
-	etheripstat.etherips_obytes += m->m_pkthdr.len - hlen;
+	etheripstat_pkt(etherips_opackets, etherips_obytes,
+	    m->m_pkthdr.len - hlen);
 
 	switch (tdb->tdb_dst.sa.sa_family) {
 	case AF_INET:
@@ -482,15 +487,23 @@ etherip_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 		NET_UNLOCK();
 		return (error);
 	case ETHERIPCTL_STATS:
-		if (newp != NULL)
-			return (EPERM);
-		NET_LOCK();
-		error = sysctl_struct(oldp, oldlenp, newp, newlen,
-		    &etheripstat, sizeof(etheripstat));
-		NET_UNLOCK();
-		return (error);
+		return (etherip_sysctl_etheripstat(oldp, oldlenp, newp));
 	default:
 		return (ENOPROTOOPT);
 	}
 	/* NOTREACHED */
+}
+
+int
+etherip_sysctl_etheripstat(void *oldp, size_t *oldlenp, void *newp)
+{
+	struct etheripstat etheripstat;
+
+	CTASSERT(sizeof(etheripstat) == (etherips_ncounters *
+	    sizeof(uint64_t)));
+	memset(&etheripstat, 0, sizeof etheripstat);
+	counters_read(etheripcounters, (uint64_t *)&etheripstat,
+	    etherips_ncounters);
+	return (sysctl_rdstruct(oldp, oldlenp, newp, &etheripstat,
+	    sizeof(etheripstat)));
 }
