@@ -593,8 +593,12 @@ frag6_slowtimo(void)
 
 	mtx_leave(&frag6_mutex);
 
-	while ((q6 = TAILQ_FIRST(&rmq6)) != NULL) {
-		TAILQ_REMOVE(&rmq6, q6, ip6q_queue);
-		frag6_freef(q6);
+	if (!TAILQ_EMPTY(&rmq6)) {
+		NET_LOCK();
+		while ((q6 = TAILQ_FIRST(&rmq6)) != NULL) {
+			TAILQ_REMOVE(&rmq6, q6, ip6q_queue);
+			frag6_freef(q6);
+		}
+		NET_UNLOCK();
 	}
 }
