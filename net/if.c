@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.c,v 1.526 2017/11/12 14:11:15 mpi Exp $	*/
+/*	$OpenBSD: if.c,v 1.529 2017/11/17 03:51:32 dlg Exp $	*/
 /*	$NetBSD: if.c,v 1.35 1996/05/07 05:26:04 thorpej Exp $	*/
 
 /*
@@ -1810,16 +1810,26 @@ ifioctl(struct socket *so, u_long cmd, caddr_t data, struct proc *p)
 
 	switch (cmd) {
 	case SIOCIFCREATE:
+		if ((error = suser(p, 0)) != 0)
+			return (error);
+		NET_LOCK();
+		error = if_clone_create(ifr->ifr_name, 0);
+		NET_UNLOCK();
+		return (error);
 	case SIOCIFDESTROY:
 		if ((error = suser(p, 0)) != 0)
 			return (error);
-		return ((cmd == SIOCIFCREATE) ?
-		    if_clone_create(ifr->ifr_name, 0) :
-		    if_clone_destroy(ifr->ifr_name));
+		NET_LOCK();
+		error = if_clone_destroy(ifr->ifr_name);
+		NET_UNLOCK();
+		return (error);
 	case SIOCSIFGATTR:
 		if ((error = suser(p, 0)) != 0)
 			return (error);
-		return (if_setgroupattribs(data));
+		NET_LOCK();
+		error = if_setgroupattribs(data);
+		NET_UNLOCK();
+		return (error);
 	case SIOCGIFCONF:
 	case SIOCIFGCLONERS:
 	case SIOCGIFGMEMB:
@@ -1844,6 +1854,8 @@ ifioctl(struct socket *so, u_long cmd, caddr_t data, struct proc *p)
 		return (ENXIO);
 	oif_flags = ifp->if_flags;
 	oif_xflags = ifp->if_xflags;
+
+	NET_LOCK();
 
 	switch (cmd) {
 	case SIOCIFAFATTACH:
@@ -2093,6 +2105,8 @@ ifioctl(struct socket *so, u_long cmd, caddr_t data, struct proc *p)
 	if (((oif_flags ^ ifp->if_flags) & IFF_UP) != 0)
 		getmicrotime(&ifp->if_lastchange);
 
+	NET_UNLOCK();
+
 	return (error);
 }
 
@@ -2109,18 +2123,32 @@ ifioctl_get(u_long cmd, caddr_t data)
 
 	switch(cmd) {
 	case SIOCGIFCONF:
-		return (ifconf(data));
+		NET_RLOCK();
+		error = ifconf(data);
+		NET_RUNLOCK();
+		return (error);
 	case SIOCIFGCLONERS:
-		return (if_clone_list((struct if_clonereq *)data));
+		NET_RLOCK();
+		error = if_clone_list((struct if_clonereq *)data);
+		NET_RUNLOCK();
+		return (error);
 	case SIOCGIFGMEMB:
-		return (if_getgroupmembers(data));
+		NET_RLOCK();
+		error = if_getgroupmembers(data);
+		NET_RUNLOCK();
+		return (error);
 	case SIOCGIFGATTR:
-		return (if_getgroupattribs(data));
+		NET_RLOCK();
+		error = if_getgroupattribs(data);
+		NET_RUNLOCK();
+		return (error);
 	}
 
 	ifp = ifunit(ifr->ifr_name);
 	if (ifp == NULL)
 		return (ENXIO);
+
+	NET_RLOCK();
 
 	switch(cmd) {
 	case SIOCGIFFLAGS:
@@ -2187,6 +2215,8 @@ ifioctl_get(u_long cmd, caddr_t data)
 	default:
 		panic("invalid ioctl %lu", cmd);
 	}
+
+	NET_RUNLOCK();
 
 	return (error);
 }
@@ -2277,30 +2307,14 @@ void
 if_getdata(struct ifnet *ifp, struct if_data *data)
 {
 	unsigned int i;
-	struct ifqueue *ifq;
-	uint64_t opackets = 0;
-	uint64_t obytes = 0;
-	uint64_t omcasts = 0;
-	uint64_t oqdrops = 0;
-
-	for (i = 0; i < ifp->if_nifqs; i++) {
-		ifq = ifp->if_ifqs[i];
-
-		mtx_enter(&ifq->ifq_mtx);
-		opackets += ifq->ifq_packets;
-		obytes += ifq->ifq_bytes;
-		oqdrops += ifq->ifq_qdrops;
-		omcasts += ifq->ifq_mcasts;
-		mtx_leave(&ifq->ifq_mtx);
-		/* ifq->ifq_errors */
-	}
 
 	*data = ifp->if_data;
-	data->ifi_opackets += opackets;
-	data->ifi_obytes += obytes;
-	data->ifi_oqdrops += oqdrops;
-	data->ifi_omcasts += omcasts;
-	/* ifp->if_data.ifi_oerrors */
+
+	for (i = 0; i < ifp->if_nifqs; i++) {
+		struct ifqueue *ifq = ifp->if_ifqs[i];
+
+		ifq_add_data(ifq, data);
+	}
 }
 
 /*
@@ -2818,6 +2832,19 @@ if_rxr_adjust_cwm(struct if_rxring *rxr)
 		rxr->rxr_cwm++;
 
 	rxr->rxr_adjusted = ticks;
+}
+
+void
+if_rxr_livelocked(struct if_rxring *rxr)
+{
+	extern int ticks;
+
+	if (ticks - rxr->rxr_adjusted >= 1) {
+		if (rxr->rxr_cwm > rxr->rxr_lwm)
+			rxr->rxr_cwm--;
+
+		rxr->rxr_adjusted = ticks;
+	}
 }
 
 u_int

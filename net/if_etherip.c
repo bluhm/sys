@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_etherip.c,v 1.22 2017/11/10 02:37:14 visa Exp $	*/
+/*	$OpenBSD: if_etherip.c,v 1.27 2017/11/17 18:22:52 jca Exp $	*/
 /*
  * Copyright (c) 2015 Kazuya GODA <goda@openbsd.org>
  *
@@ -17,7 +17,6 @@
 
 #include "bpfilter.h"
 #include "pf.h"
-#include "gif.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -65,20 +64,13 @@ struct etherip_softc {
 
 LIST_HEAD(, etherip_softc) etherip_softc_list;
 
-#if 0
-/*
- * TODO:
- *   At this stage, etherip_allow and etheripstat are defined
- *   at netinet/ip_ether.c. When implementation of etherip is
- *   removed from gif(4), there are moved here.
- */
-
 /*
  * We can control the acceptance of EtherIP packets by altering the sysctl
  * net.inet.etherip.allow value. Zero means drop them, all else is acceptance.
  */
 int etherip_allow = 0;
-#endif
+
+struct cpumem *etheripcounters;
 
 void etheripattach(int);
 int etherip_clone_create(struct if_clone *, int);
@@ -98,6 +90,7 @@ void
 etheripattach(int count)
 {
 	if_clone_attach(&etherip_cloner);
+	etheripcounters = counters_alloc(etherips_ncounters);
 }
 
 int
@@ -449,18 +442,9 @@ ip_etherip_input(struct mbuf **mp, int *offp, int proto, int af)
 	}
 
 	if (ifp == NULL) {
-#if NGIF > 0
-		/*
-		 * This path is nessesary for gif(4) and etherip(4) coexistence.
-		 * This is tricky but the path will be removed soon when
-		 * implementation of etherip is removed from gif(4).
-		 */
-		return etherip_input(mp, offp, proto, af);
-#else
 		etheripstat_inc(etherips_noifdrops);
 		m_freem(m);
 		return IPPROTO_DONE;
-#endif /* NGIF */
 	}
 
 	m_adj(m, *offp);
@@ -611,18 +595,9 @@ ip6_etherip_input(struct mbuf **mp, int *offp, int proto, int af)
 	}
 
 	if (ifp == NULL) {
-#if NGIF > 0
-		/*
-		 * This path is nessesary for gif(4) and etherip(4) coexistence.
-		 * This is tricky but the path will be removed soon when
-		 * implementation of etherip is removed from gif(4).
-		 */
-		return etherip_input(mp, offp, proto, af);
-#else
 		etheripstat_inc(etherips_noifdrops);
 		m_freem(m);
 		return IPPROTO_DONE;
-#endif /* NGIF */
 	}
 
 	m_adj(m, *offp);
@@ -661,7 +636,21 @@ ip6_etherip_input(struct mbuf **mp, int *offp, int proto, int af)
 #endif /* INET6 */
 
 int
-ip_etherip_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp,
+etherip_sysctl_etheripstat(void *oldp, size_t *oldlenp, void *newp)
+{
+	struct etheripstat etheripstat;
+
+	CTASSERT(sizeof(etheripstat) == (etherips_ncounters *
+	    sizeof(uint64_t)));
+	memset(&etheripstat, 0, sizeof etheripstat);
+	counters_read(etheripcounters, (uint64_t *)&etheripstat,
+	    etherips_ncounters);
+	return (sysctl_rdstruct(oldp, oldlenp, newp, &etheripstat,
+	    sizeof(etheripstat)));
+}
+
+int
+etherip_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp,
     void *newp, size_t newlen)
 {
 	int error;

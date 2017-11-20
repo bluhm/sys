@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_ether.h,v 1.23 2017/11/10 02:37:14 visa Exp $ */
+/*	$OpenBSD: ip_ether.h,v 1.28 2017/11/17 18:21:33 jca Exp $ */
 /*
  * The author of this code is Angelos D. Keromytis (angelos@adk.gr)
  *
@@ -107,15 +107,12 @@ etheripstat_pkt(enum etheripstat_counters pcounter,
 	counters_pkt(etheripcounters, pcounter, bcounter, v);
 }
 
-struct tdb;
+struct tdb;	/* XXX within #ifdef MPLS? */
 
-void	etherip_init(void);
-int	etherip_output(struct mbuf *, struct tdb *, struct mbuf **, int);
-int	etherip_input(struct mbuf **, int *, int, int);
-int	etherip_sysctl(int *, u_int, void *, size_t *, void *, size_t);
-int	etherip_sysctl_etheripstat(void *, size_t *, void *);
-
-extern int etherip_allow;
+#ifdef MPLS
+int	mplsip_output(struct mbuf *, struct tdb *, struct mbuf **, int);
+int	mplsip_input(struct mbuf **, int *, int, int);
+#endif /* MPLS */
 
 #endif /* _KERNEL */
 #endif /* _NETINET_IP_ETHER_H_ */
