@@ -84,7 +84,7 @@ struct tdb *
 ip_output_ipsec_lookup(struct mbuf *m, int hlen, int *error, struct inpcb *inp,
     int ipsecflowinfo);
 int
-ip_output_ipsec_send(struct tdb *, struct mbuf *, int, struct route *);
+ip_output_ipsec_send(struct tdb *, struct mbuf *, struct route *, int);
 #endif /* IPSEC */
 
 /*
@@ -403,8 +403,8 @@ sendit:
 	 */
 	if (tdb != NULL) {
 		/* Callee frees mbuf */
-		error = ip_output_ipsec_send(tdb, m,
-		    (flags & IP_FORWARDING) ? 1 : 0, ro);
+		error = ip_output_ipsec_send(tdb, m, ro,
+		    (flags & IP_FORWARDING) ? 1 : 0);
 		goto done;
 	}
 #endif /* IPSEC */
@@ -551,8 +551,7 @@ ip_output_ipsec_lookup(struct mbuf *m, int hlen, int *error, struct inpcb *inp,
 }
 
 int
-ip_output_ipsec_send(struct tdb *tdb, struct mbuf *m, int fwd,
-    struct route *ro)
+ip_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct route *ro, int fwd)
 {
 #if NPF > 0
 	struct ifnet *encif;
