@@ -6776,20 +6776,19 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 	}
 	pd.m->m_pkthdr.pf.flags |= PF_TAG_PROCESSED;
 
-	/* lock the lookup/write section of pf_test() */
-	PF_LOCK();
-
+	/*
+	 * Avoid pcb-lookups from the forwarding path.  They should never
+	 * match and would case MP locking problems.
+	 */
 	if (fwdir == PF_FWD) {
-		/*
-		 * We cannot do concurrent pcb-lookups from the fwding path,
-		 * so we simulate a failed call to pf_socket_lookup() because
-		 * it would fail anyway for forwarded packets.
-		 */
-		pd.lookup.done = 1;
+		pd.lookup.done = -1;
 		pd.lookup.uid = UID_MAX;
 		pd.lookup.gid = GID_MAX;
 		pd.lookup.pid = NO_PID;
 	}
+
+	/* lock the lookup/write section of pf_test() */
+	PF_LOCK();
 
 	switch (pd.virtual_proto) {
 
