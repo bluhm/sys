@@ -6779,6 +6779,18 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 	/* lock the lookup/write section of pf_test() */
 	PF_LOCK();
 
+	if (fwdir == PF_FWD) {
+		/*
+		 * We cannot do concurrent pcb-lookups from the fwding path,
+		 * so we simulate a failed call to pf_socket_lookup() because
+		 * it would fail anyway for forwarded packets.
+		 */
+		pd.lookup.done = 1;
+		pd.lookup.uid = UID_MAX;
+		pd.lookup.gid = GID_MAX;
+		pd.lookup.pid = NO_PID;
+	}
+
 	switch (pd.virtual_proto) {
 
 	case PF_VPROTO_FRAGMENT: {
@@ -7072,7 +7084,8 @@ done:
 
 #ifdef INET6
 	/* if reassembled packet passed, create new fragments */
-	if (pf_status.reass && action == PF_PASS && pd.m && fwdir == PF_FWD) {
+	if (pf_status.reass && action == PF_PASS && pd.m && fwdir == PF_FWD &&
+	    pd.af == AF_INET6) {
 		struct m_tag	*mtag;
 
 		if ((mtag = m_tag_find(pd.m, PACKET_TAG_PF_REASSEMBLED, NULL)))
