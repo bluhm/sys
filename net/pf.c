@@ -6778,7 +6778,7 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 
 	/*
 	 * Avoid pcb-lookups from the forwarding path.  They should never
-	 * match and would case MP locking problems.
+	 * match and would cause MP locking problems.
 	 */
 	if (fwdir == PF_FWD) {
 		pd.lookup.done = -1;
