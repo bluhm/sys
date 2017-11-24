@@ -1396,6 +1396,13 @@ struct pf_divert {
 	u_int16_t	rdomain;
 };
 
+enum pf_divert_types {
+	PF_DIVERT_NONE,
+	PF_DIVERT_TO,
+	PF_DIVERT_REPLY,
+	PF_DIVERT_PACKET
+};
+
 /* Fragment entries reference mbuf clusters, so base the default on that. */
 #define PFFRAG_FRENT_HIWAT	(NMBCLUSTERS / 16) /* Number of entries */
 #define PFFRAG_FRAG_HIWAT	(NMBCLUSTERS / 32) /* Number of packets */
