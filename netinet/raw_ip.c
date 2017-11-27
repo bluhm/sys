@@ -149,7 +149,7 @@ rip_input(struct mbuf **mp, int *offp, int proto, int af)
 			/* XXX rdomain support */
 			if ((divert = pf_find_divert(m)) == NULL)
 				continue;
-			if (!divert->addr.v4.s_addr)
+			if (divert->type == PF_DIVERT_REPLY)
 				goto divert_reply;
 			if (inp->inp_laddr.s_addr != divert->addr.v4.s_addr)
 				continue;

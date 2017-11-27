@@ -152,7 +152,7 @@ rip6_input(struct mbuf **mp, int *offp, int proto, int af)
 			/* XXX rdomain support */
 			if ((divert = pf_find_divert(m)) == NULL)
 				continue;
-			if (IN6_IS_ADDR_UNSPECIFIED(&divert->addr.v6))
+			if (divert->type == PF_DIVERT_REPLY)
 				goto divert_reply;
 			if (!IN6_ARE_ADDR_EQUAL(&in6p->inp_laddr6,
 			    &divert->addr.v6))
