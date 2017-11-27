@@ -97,7 +97,7 @@ void nd6_expire(void *);
 void nd6_expire_timer(void *);
 void nd6_invalidate(struct rtentry *);
 void nd6_free(struct rtentry *);
-void nd6_llinfo_timer(struct rtentry *);
+int nd6_llinfo_timer(struct rtentry *);
 
 struct timeout nd6_timer_to;
 struct timeout nd6_slowtimo_ch;
@@ -305,6 +305,8 @@ nd6_llinfo_settimer(struct llinfo_nd6 *ln, unsigned int secs)
 {
 	time_t expire = time_uptime + secs;
 
+	NET_ASSERT_LOCKED();
+
 	ln->ln_rt->rt_expire = expire;
 	if (!timeout_pending(&nd6_timer_to) || expire < nd6_timer_next) {
 		nd6_timer_next = expire;
@@ -324,7 +326,8 @@ nd6_timer(void *arg)
 		struct rtentry *rt = ln->ln_rt;
 
 		if (rt->rt_expire && rt->rt_expire <= time_uptime)
-			nd6_llinfo_timer(rt);
+			if (nd6_llinfo_timer(rt))
+				continue;
 
 		if (rt->rt_expire && rt->rt_expire < expire)
 			expire = rt->rt_expire;
@@ -339,7 +342,12 @@ nd6_timer(void *arg)
 	NET_UNLOCK();
 }
 
-void
+/*
+ * ND timer state handling.
+ *
+ * Returns 1 if `rt' should no longer be used, 0 otherwise.
+ */
+int
 nd6_llinfo_timer(struct rtentry *rt)
 {
 	struct llinfo_nd6 *ln = (struct llinfo_nd6 *)rt->rt_llinfo;
@@ -350,7 +358,8 @@ nd6_llinfo_timer(struct rtentry *rt)
 	NET_ASSERT_LOCKED();
 
 	if ((ifp = if_get(rt->rt_ifidx)) == NULL)
-		return;
+		return 1;
+
 	ndi = ND_IFINFO(ifp);
 
 	switch (ln->ln_state) {
@@ -424,6 +433,8 @@ nd6_llinfo_timer(struct rtentry *rt)
 	}
 
 	if_put(ifp);
+
+	return (ln == NULL);
 }
 
 void
