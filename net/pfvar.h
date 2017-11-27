@@ -590,7 +590,8 @@ struct pf_rule {
 	struct {
 		struct pf_addr		addr;
 		u_int16_t		port;
-	}			divert, divert_packet;
+		u_int8_t		type;
+	}			divert;
 
 	SLIST_ENTRY(pf_rule)	 gcle;
 	struct pf_ruleset	*ruleset;
@@ -1394,6 +1395,7 @@ struct pf_divert {
 	struct pf_addr	addr;
 	u_int16_t	port;
 	u_int16_t	rdomain;
+	u_int8_t	type;
 };
 
 enum pf_divert_types {
