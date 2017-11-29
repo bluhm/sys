@@ -131,27 +131,6 @@ struct nfs_args {
 	int		acdirmin;	/* ac for dir recently modified */
 	int		acdirmax;	/* ac for dir not recently modified */
 };
-/* NFS args version 3 (for backwards compatibility) */
-struct nfs_args3 {
-	int		version;	/* args structure version number */
-	struct sockaddr	*addr;		/* file server address */
-	int		addrlen;	/* length of address */
-	int		sotype;		/* Socket type */
-	int		proto;		/* and Protocol */
-	u_char		*fh;		/* File handle to be mounted */
-	int		fhsize;		/* Size, in bytes, of fh */
-	int		flags;		/* flags */
-	int		wsize;		/* write size in bytes */
-	int		rsize;		/* read size in bytes */
-	int		readdirsize;	/* readdir size in bytes */
-	int		timeo;		/* initial timeout in .1 secs */
-	int		retrans;	/* times to retry send */
-	int		maxgrouplist;	/* Max. size of group list */
-	int		readahead;	/* # of blocks to readahead */
-	int		leaseterm;	/* Term (sec) of lease */
-	int		deadthresh;	/* Retrans threshold */
-	char		*hostname;	/* server's name */
-};
 
 /*
  * NFS mount option flags
@@ -468,6 +447,7 @@ struct vfsconf {
 	int	vfc_refcount;		/* number mounted of this type */
 	int	vfc_flags;		/* permanent flags */
 	struct	vfsconf *vfc_next;	/* next in list */
+	size_t	vfc_datasize;		/* size of data args */
 };
 
 /* buffer cache statistics */
@@ -592,7 +572,6 @@ struct	mount *vfs_getvfs(fsid_t *);
 int	vfs_mountedon(struct vnode *);
 int	vfs_rootmountalloc(char *, char *, struct mount **);
 void	vfs_unbusy(struct mount *);
-void	vfs_unmountall(void);
 extern	TAILQ_HEAD(mntlist, mount) mountlist;
 
 struct	mount *getvfs(fsid_t *);	    /* return vfs given fsid */
