@@ -1,4 +1,4 @@
-/* $OpenBSD: fuse_vnops.c,v 1.34 2017/11/17 15:45:17 helg Exp $ */
+/* $OpenBSD: fuse_vnops.c,v 1.36 2017/11/27 22:55:17 helg Exp $ */
 /*
  * Copyright (c) 2012-2013 Sylvestre Gallon <ccna.syl@gmail.com>
  *
@@ -565,7 +565,7 @@ fusefs_link(void *v)
 	}
 	if (vp->v_type == VDIR) {
 		VOP_ABORTOP(dvp, cnp);
-		error = EISDIR;
+		error = EPERM;
 		goto out2;
 	}
 	if (dvp->v_mount != vp->v_mount) {
@@ -1261,6 +1261,8 @@ abortit:
 		vrele(tdvp);
 	else
 		vput(tdvp);
+	if (tvp)
+		vput(tvp);
 	vrele(fdvp);
 	vrele(fvp);
 
