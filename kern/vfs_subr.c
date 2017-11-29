@@ -1572,37 +1572,40 @@ vaccess(enum vtype type, mode_t file_mode, uid_t uid, gid_t gid,
 	return (file_mode & mask) == mask ? 0 : EACCES;
 }
 
+int
+vfs_readonly(struct mount *mp)
+{
+	int error;
+
+	error = vfs_busy(mp, VB_READ|VB_NOWAIT);
+	if (error)
+		return (error);
+	mp->mnt_flag |= MNT_UPDATE | MNT_RDONLY;
+	error = VFS_MOUNT(mp, mp->mnt_stat.f_mntonname, NULL, NULL, curproc);
+	if (error) {
+		printf("%s: failed to remount rdonly\n", mp->mnt_stat.f_mntonname);
+		return (error);
+	}
+	if (mp->mnt_syncer != NULL)
+		vgone(mp->mnt_syncer);
+	mp->mnt_syncer = NULL;
+	vfs_unbusy(mp);
+	return (error);
+}
+
 /*
- * Unmount all file systems.
+ * Read-only all file systems.
  * We traverse the list in reverse order under the assumption that doing so
  * will avoid needing to worry about dependencies.
  */
 void
-vfs_unmountall(void)
+vfs_rofs(void)
 {
 	struct mount *mp, *nmp;
-	int allerror, error, again = 1;
 
- retry:
-	allerror = 0;
 	TAILQ_FOREACH_REVERSE_SAFE(mp, &mountlist, mntlist, mnt_list, nmp) {
-		if (vfs_busy(mp, VB_WRITE|VB_NOWAIT))
-			continue;
 		/* XXX Here is a race, the next pointer is not locked. */
-		if ((error = dounmount(mp, MNT_FORCE, curproc)) != 0) {
-			printf("unmount of %s failed with error %d\n",
-			    mp->mnt_stat.f_mntonname, error);
-			allerror = 1;
-		}
-	}
-
-	if (allerror) {
-		printf("WARNING: some file systems would not unmount\n");
-		if (again) {
-			printf("retrying\n");
-			again = 0;
-			goto retry;
-		}
+		(void) vfs_readonly(mp);
 	}
 }
 
@@ -1616,17 +1619,12 @@ vfs_shutdown(void)
 	acct_shutdown();
 #endif
 
-	/* XXX Should suspend scheduling. */
-	(void) spl0();
-
 	printf("syncing disks... ");
 
 	if (panicstr == 0) {
-		/* Sync before unmount, in case we hang on something. */
-		sys_sync(&proc0, NULL, NULL);
-
-		/* Unmount file systems. */
-		vfs_unmountall();
+		/* Take all filesystems to read-only */
+		sys_sync(curproc, NULL, NULL);
+		vfs_rofs();
 	}
 
 	if (vfs_syncwait(1))
