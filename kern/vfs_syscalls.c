@@ -114,6 +114,7 @@ sys_mount(struct proc *p, void *v, register_t *retval)
 	struct nameidata nd;
 	struct vfsconf *vfsp;
 	int flags = SCARG(uap, flags);
+	void *args = NULL;
 
 	if ((error = suser(p, 0)))
 		return (error);
@@ -130,15 +131,24 @@ sys_mount(struct proc *p, void *v, register_t *retval)
 	 */
 	NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF, UIO_SYSSPACE, fspath, p);
 	if ((error = namei(&nd)) != 0)
-		return (error);
+		goto fail;
 	vp = nd.ni_vp;
 	if (flags & MNT_UPDATE) {
 		if ((vp->v_flag & VROOT) == 0) {
 			vput(vp);
-			return (EINVAL);
+			error = EINVAL;
+			goto fail;
 		}
 		mp = vp->v_mount;
 		vfsp = mp->mnt_vfc;
+
+		args = malloc(vfsp->vfc_datasize, M_TEMP, M_WAITOK | M_ZERO);
+		error = copyin(SCARG(uap, data), args, vfsp->vfc_datasize);
+		if (error) {
+			vput(vp);
+			goto fail;
+		}
+
 		mntflag = mp->mnt_flag;
 		/*
 		 * We only allow the filesystem to be reloaded if it
@@ -147,12 +157,13 @@ sys_mount(struct proc *p, void *v, register_t *retval)
 		if ((flags & MNT_RELOAD) &&
 		    ((mp->mnt_flag & MNT_RDONLY) == 0)) {
 			vput(vp);
-			return (EOPNOTSUPP);	/* Needs translation */
+			error = EOPNOTSUPP;	/* Needs translation */
+			goto fail;
 		}
 
 		if ((error = vfs_busy(mp, VB_READ|VB_NOWAIT)) != 0) {
 			vput(vp);
-			return (error);
+			goto fail;
 		}
 		mp->mnt_flag |= flags & (MNT_RELOAD | MNT_UPDATE);
 		goto update;
@@ -164,20 +175,21 @@ sys_mount(struct proc *p, void *v, register_t *retval)
 	if ((flags & MNT_NOPERM) &&
 	    (flags & (MNT_NODEV | MNT_NOEXEC)) != (MNT_NODEV | MNT_NOEXEC)) {
 		vput(vp);
-		return (EPERM);
+		error = EPERM;
+		goto fail;
 	}
 	if ((error = vinvalbuf(vp, V_SAVE, p->p_ucred, p, 0, 0)) != 0) {
 		vput(vp);
-		return (error);
+		goto fail;
 	}
 	if (vp->v_type != VDIR) {
 		vput(vp);
-		return (ENOTDIR);
+		goto fail;
 	}
 	error = copyinstr(SCARG(uap, type), fstypename, MFSNAMELEN, NULL);
 	if (error) {
 		vput(vp);
-		return (error);
+		goto fail;
 	}
 	for (vfsp = vfsconf; vfsp; vfsp = vfsp->vfc_next) {
 		if (!strcmp(vfsp->vfc_name, fstypename))
@@ -186,12 +198,21 @@ sys_mount(struct proc *p, void *v, register_t *retval)
 
 	if (vfsp == NULL) {
 		vput(vp);
-		return (EOPNOTSUPP);
+		error = EOPNOTSUPP;
+		goto fail;
+	}
+
+	args = malloc(vfsp->vfc_datasize, M_TEMP, M_WAITOK | M_ZERO);
+	error = copyin(SCARG(uap, data), args, vfsp->vfc_datasize);
+	if (error) {
+		vput(vp);
+		goto fail;
 	}
 
 	if (vp->v_mountedhere != NULL) {
 		vput(vp);
-		return (EBUSY);
+		error = EBUSY;
+		goto fail;
 	}
 
 	/*
@@ -207,6 +228,7 @@ sys_mount(struct proc *p, void *v, register_t *retval)
 	mp->mnt_stat.f_owner = p->p_ucred->cr_uid;
 
 update:
+
 	/* Ensure that the parent mountpoint does not get unmounted. */
 	error = vfs_busy(vp->v_mount, VB_READ|VB_NOWAIT);
 	if (error) {
@@ -218,7 +240,7 @@ update:
 			free(mp, M_MOUNT, sizeof(*mp));
 		}
 		vput(vp);
-		return (error);
+		goto fail;
 	}
 
 	/*
@@ -234,10 +256,11 @@ update:
 	mp->mnt_flag |= flags & (MNT_NOSUID | MNT_NOEXEC | MNT_WXALLOWED |
 	    MNT_NODEV | MNT_SYNCHRONOUS | MNT_ASYNC | MNT_SOFTDEP |
 	    MNT_NOATIME | MNT_NOPERM | MNT_FORCE);
+
 	/*
 	 * Mount the filesystem.
 	 */
-	error = VFS_MOUNT(mp, fspath, SCARG(uap, data), &nd, p);
+	error = VFS_MOUNT(mp, fspath, args, &nd, p);
 	if (!error) {
 		mp->mnt_stat.f_ctime = time_second;
 	}
@@ -261,7 +284,7 @@ update:
 		}
 
 		vfs_unbusy(mp);
-		return (error);
+		goto fail;
 	}
 
 	vp->v_mountedhere = mp;
@@ -289,6 +312,9 @@ update:
 		vfs_unbusy(vp->v_mount);
 		vput(vp);
 	}
+fail:
+	if (args)
+		free(args, M_TEMP, vfsp->vfc_datasize);
 	return (error);
 }
 
