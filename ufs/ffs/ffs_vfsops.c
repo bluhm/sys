@@ -206,17 +206,13 @@ ffs_mount(struct mount *mp, const char *path, void *data,
     struct nameidata *ndp, struct proc *p)
 {
 	struct vnode *devvp;
-	struct ufs_args args;
+	struct ufs_args *args = data;
 	struct ufsmount *ump = NULL;
 	struct fs *fs;
 	char fname[MNAMELEN];
 	char fspec[MNAMELEN];
 	int error = 0, flags;
 	int ronly;
-
-	error = copyin(data, &args, sizeof(struct ufs_args));
-	if (error)
-		return (error);
 
 #ifndef FFS_SOFTUPDATES
 	if (mp->mnt_flag & MNT_SOFTDEP) {
@@ -342,12 +338,14 @@ ffs_mount(struct mount *mp, const char *path, void *data,
 
 			ronly = 0;
 		}
-		if (args.fspec == NULL) {
+		if (args == NULL)
+			goto success;
+		if (args->fspec == NULL) {
 			/*
 			 * Process export requests.
 			 */
 			error = vfs_export(mp, &ump->um_export, 
-			    &args.export_info);
+			    &args->export_info);
 			if (error)
 				goto error_1;
 			else
@@ -359,7 +357,7 @@ ffs_mount(struct mount *mp, const char *path, void *data,
 	 * Not an update, or updating the name: look up the name
 	 * and verify that it refers to a sensible block device.
 	 */
-	error = copyinstr(args.fspec, fspec, sizeof(fspec), NULL);
+	error = copyinstr(args->fspec, fspec, sizeof(fspec), NULL);
 	if (error)
 		goto error_1;
 
@@ -435,7 +433,8 @@ ffs_mount(struct mount *mp, const char *path, void *data,
 	 *
 	 * This code is common to root and non-root mounts
 	 */
-	memcpy(&mp->mnt_stat.mount_info.ufs_args, &args, sizeof(args));
+	if (args)
+		memcpy(&mp->mnt_stat.mount_info.ufs_args, args, sizeof(*args));
 	VFS_STATFS(mp, &mp->mnt_stat, p);
 
 success:
