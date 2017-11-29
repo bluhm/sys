@@ -1147,8 +1147,15 @@ in_pcblookup_listen(struct inpcbtable *table, struct in_addr laddr,
 
 		if ((divert = pf_find_divert(m)) == NULL)
 			return (NULL);
-		key1 = key2 = &divert->addr.v4;
-		lport = divert->port;
+		if (divert->type == PF_DIVERT_TO) {
+			key1 = key2 = &divert->addr.v4;
+			lport = divert->port;
+		} else if (divert->type == PF_DIVERT_REPLY) {
+			return (NULL);
+		} else {
+			panic("%s: unknown divert type %d, mbuf %p, divert %p",
+			    __func__, divert->type, m, divert);
+		}
 	} else
 #endif
 	if (reverse) {
