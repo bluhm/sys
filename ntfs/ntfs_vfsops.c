@@ -119,7 +119,7 @@ ntfs_mount(struct mount *mp, const char *path, void *data,
 {
 	int		err = 0;
 	struct vnode	*devvp;
-	struct ntfs_args args;
+	struct ntfs_args *args = data;
 	char fname[MNAMELEN];
 	char fspec[MNAMELEN];
 
@@ -131,24 +131,19 @@ ntfs_mount(struct mount *mp, const char *path, void *data,
 	 ***
 	 */
 
-	/* copy in user arguments*/
-	err = copyin(data, (caddr_t)&args, sizeof (struct ntfs_args));
-	if (err)
-		goto error_1;		/* can't get arguments*/
-
 	/*
 	 * If updating, check whether changing from read-only to
 	 * read/write; if there is no device name, that's all we do.
 	 */
 	if (mp->mnt_flag & MNT_UPDATE) {
 		/* if not updating name...*/
-		if (args.fspec == NULL) {
+		if (args && args->fspec == NULL) {
 			/*
 			 * Process export requests.  Jumping to "success"
 			 * will return the vfs_export() error code.
 			 */
 			struct ntfsmount *ntm = VFSTONTFS(mp);
-			err = vfs_export(mp, &ntm->ntm_export, &args.export_info);
+			err = vfs_export(mp, &ntm->ntm_export, &args->export_info);
 			goto success;
 		}
 
@@ -161,7 +156,7 @@ ntfs_mount(struct mount *mp, const char *path, void *data,
 	 * Not an update, or updating the name: look up the name
 	 * and verify that it refers to a sensible block device.
 	 */
-	err = copyinstr(args.fspec, fspec, sizeof(fspec), NULL);
+	err = copyinstr(args->fspec, fspec, sizeof(fspec), NULL);
 	if (err)
 		goto error_1;
 
@@ -203,7 +198,7 @@ ntfs_mount(struct mount *mp, const char *path, void *data,
 		 * Update device name only on success
 		 */
 		if( !err) {
-			err = set_statfs_info(NULL, UIO_USERSPACE, args.fspec,
+			err = set_statfs_info(NULL, UIO_USERSPACE, args->fspec,
 			    UIO_USERSPACE, mp, p);
 		}
 #endif
@@ -227,9 +222,9 @@ ntfs_mount(struct mount *mp, const char *path, void *data,
 		strlcpy(mp->mnt_stat.f_mntfromname, fname, MNAMELEN);
 		bzero(mp->mnt_stat.f_mntfromspec, MNAMELEN);
 		strlcpy(mp->mnt_stat.f_mntfromspec, fspec, MNAMELEN);
-		bcopy(&args, &mp->mnt_stat.mount_info.ntfs_args, sizeof(args));
+		bcopy(args, &mp->mnt_stat.mount_info.ntfs_args, sizeof(*args));
 		if ( !err) {
-			err = ntfs_mountfs(devvp, mp, &args, p);
+			err = ntfs_mountfs(devvp, mp, args, p);
 		}
 	}
 	if (err) {
