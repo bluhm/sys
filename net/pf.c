@@ -6971,7 +6971,7 @@ done:
 	/*
 	 * connections redirected to loopback should not match sockets
 	 * bound specifically to loopback due to security implications,
-	 * see tcp_input() and in_pcblookup_listen().
+	 * see in_pcblookup_listen().
 	 */
 	if (pd.destchg)
 		if ((pd.af == AF_INET && (ntohl(pd.dst->v4.s_addr) >>
