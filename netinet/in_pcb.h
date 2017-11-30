@@ -263,16 +263,15 @@ struct inpcb *
 	 in_pcbhashlookup(struct inpcbtable *, struct in_addr,
 			       u_int, struct in_addr, u_int, u_int);
 struct inpcb *
-	 in_pcblookup_listen(struct inpcbtable *, struct in_addr, u_int, int,
+	 in_pcblookup_listen(struct inpcbtable *, struct in_addr, u_int,
 	    struct mbuf *, u_int);
 #ifdef INET6
 struct inpcb *
 	 in6_pcbhashlookup(struct inpcbtable *, const struct in6_addr *,
 			       u_int, const struct in6_addr *, u_int, u_int);
 struct inpcb *
-	 in6_pcblookup_listen(struct inpcbtable *,
-			       struct in6_addr *, u_int, int, struct mbuf *,
-			       u_int);
+	 in6_pcblookup_listen(struct inpcbtable *, struct in6_addr *, u_int,
+	    struct mbuf *, u_int);
 int	 in6_pcbaddrisavail(struct inpcb *, struct sockaddr_in6 *, int,
 	    struct proc *);
 int	 in6_pcbconnect(struct inpcb *, struct mbuf *);

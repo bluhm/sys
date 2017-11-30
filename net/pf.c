@@ -3224,7 +3224,7 @@ pf_socket_lookup(struct pf_pdesc *pd)
 		inp = in_pcbhashlookup(tb, saddr->v4, sport, daddr->v4, dport,
 		    pd->rdomain);
 		if (inp == NULL) {
-			inp = in_pcblookup_listen(tb, daddr->v4, dport, 0,
+			inp = in_pcblookup_listen(tb, daddr->v4, dport,
 			    NULL, pd->rdomain);
 			if (inp == NULL)
 				return (-1);
@@ -3235,7 +3235,7 @@ pf_socket_lookup(struct pf_pdesc *pd)
 		inp = in6_pcbhashlookup(tb, &saddr->v6, sport, &daddr->v6,
 		    dport, pd->rdomain);
 		if (inp == NULL) {
-			inp = in6_pcblookup_listen(tb, &daddr->v6, dport, 0,
+			inp = in6_pcblookup_listen(tb, &daddr->v6, dport,
 			    NULL, pd->rdomain);
 			if (inp == NULL)
 				return (-1);

@@ -1133,7 +1133,7 @@ in6_pcbhashlookup(struct inpcbtable *table, const struct in6_addr *faddr,
  */
 struct inpcb *
 in_pcblookup_listen(struct inpcbtable *table, struct in_addr laddr,
-    u_int lport_arg, int reverse, struct mbuf *m, u_int rdomain)
+    u_int lport_arg, struct mbuf *m, u_int rdomain)
 {
 	struct inpcbhead *head;
 	struct in_addr *key1, *key2;
@@ -1204,7 +1204,7 @@ in_pcblookup_listen(struct inpcbtable *table, struct in_addr laddr,
 #ifdef INET6
 struct inpcb *
 in6_pcblookup_listen(struct inpcbtable *table, struct in6_addr *laddr,
-    u_int lport_arg, int reverse, struct mbuf *m, u_int rtable)
+    u_int lport_arg, struct mbuf *m, u_int rtable)
 {
 	struct inpcbhead *head;
 	struct in6_addr *key1, *key2;
