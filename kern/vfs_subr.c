@@ -857,7 +857,8 @@ struct vflush_args {
 };
 
 int
-vflush_vnode(struct vnode *vp, void *arg) {
+vflush_vnode(struct vnode *vp, void *arg)
+{
 	struct vflush_args *va = arg;
 	struct proc *p = curproc;
 
@@ -900,6 +901,12 @@ vflush_vnode(struct vnode *vp, void *arg) {
 			vp->v_op = &spec_vops;
 			insmntque(vp, NULL);
 		}
+		return (0);
+	}
+
+	if (va->flags & WRITEDEMOTE) {
+		vp->v_op = &dead_vops;
+		vp->v_tag = VT_NON;
 		return (0);
 	}
 
@@ -1583,7 +1590,9 @@ vfs_readonly(struct mount *mp)
 	mp->mnt_flag |= MNT_UPDATE | MNT_RDONLY;
 	error = VFS_MOUNT(mp, mp->mnt_stat.f_mntonname, NULL, NULL, curproc);
 	if (error) {
-		printf("%s: failed to remount rdonly\n", mp->mnt_stat.f_mntonname);
+		printf("%s: failed to remount rdonly, error %d\n",
+		    mp->mnt_stat.f_mntonname, error);
+		vfs_unbusy(mp);
 		return (error);
 	}
 	if (mp->mnt_syncer != NULL)

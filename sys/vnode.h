@@ -227,6 +227,7 @@ extern int		vttoif_tab[];
 #define	FORCECLOSE	0x0002		/* vflush: force file closeure */
 #define	WRITECLOSE	0x0004		/* vflush: only close writeable files */
 #define	DOCLOSE		0x0008		/* vclean: close active files */
+#define WRITEDEMOTE	0x0010		/* vflush: ok if some writes remain */
 #define	V_SAVE		0x0001		/* vinvalbuf: sync file first */
 #define	V_SAVEMETA	0x0002		/* vinvalbuf: leave indirect blocks */
 
