@@ -251,6 +251,8 @@ ffs_mount(struct mount *mp, const char *path, void *data,
 			 * Get rid of files open for writing.
 			 */
 			flags = WRITECLOSE;
+			if (args == NULL)
+				flags |= WRITEDEMOTE;
 			if (mp->mnt_flag & MNT_FORCE)
 				flags |= FORCECLOSE;
 			if (fs->fs_flags & FS_DOSOFTDEP) {
