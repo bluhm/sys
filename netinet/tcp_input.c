@@ -3454,9 +3454,6 @@ syn_cache_get(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 	struct tcpcb *tp = NULL;
 	struct mbuf *am;
 	struct socket *oso;
-#if NPF > 0
-	struct pf_divert *divert = NULL;
-#endif
 
 	NET_ASSERT_LOCKED();
 
@@ -3517,10 +3514,13 @@ syn_cache_get(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 	}
 
 #if NPF > 0
-	if (m && m->m_pkthdr.pf.flags & PF_TAG_DIVERTED &&
-	    (divert = pf_find_divert(m)) != NULL)
+	if (m && m->m_pkthdr.pf.flags & PF_TAG_DIVERTED) {
+		struct pf_divert *divert = NULL;
+
+		divert = pf_find_divert(m);
+		KASSERT(divert != NULL);
 		inp->inp_rtableid = divert->rdomain;
-	else
+	} else
 #endif
 	/* inherit rtable from listening socket */
 	inp->inp_rtableid = sc->sc_rtableid;
