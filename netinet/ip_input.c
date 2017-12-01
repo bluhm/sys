@@ -1769,12 +1769,15 @@ ip_savecontrol(struct inpcb *inp, struct mbuf **mp, struct ip *ip,
 	}
 	if (inp->inp_flags & INP_RECVRTABLE) {
 		u_int rtableid = inp->inp_rtableid;
-#if NPF > 0
-		struct pf_divert *divert;
 
-		if (m && m->m_pkthdr.pf.flags & PF_TAG_DIVERTED &&
-		    (divert = pf_find_divert(m)) != NULL)
+#if NPF > 0
+		if (m && m->m_pkthdr.pf.flags & PF_TAG_DIVERTED) {
+			struct pf_divert *divert;
+
+			divert = pf_find_divert(m);
+			KASSERT(divert != NULL);
 			rtableid = divert->rdomain;
+		}
 #endif
 
 		*mp = sbcreatecontrol((caddr_t) &rtableid,
