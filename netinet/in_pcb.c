@@ -1149,12 +1149,14 @@ in_pcblookup_listen(struct inpcbtable *table, struct in_addr laddr,
 
 		divert = pf_find_divert(m);
 		KASSERT(divert != NULL);
-		if (divert->type == PF_DIVERT_TO) {
+		switch (divert->type) {
+		case PF_DIVERT_TO:
 			key1 = key2 = &divert->addr.v4;
 			lport = divert->port;
-		} else if (divert->type == PF_DIVERT_REPLY) {
+			break;
+		case PF_DIVERT_REPLY:
 			return (NULL);
-		} else {
+		default:
 			panic("%s: unknown divert type %d, mbuf %p, divert %p",
 			    __func__, divert->type, m, divert);
 		}
@@ -1227,12 +1229,14 @@ in6_pcblookup_listen(struct inpcbtable *table, struct in6_addr *laddr,
 
 		divert = pf_find_divert(m);
 		KASSERT(divert != NULL);
-		if (divert->type == PF_DIVERT_TO) {
+		switch (divert->type) {
+		case PF_DIVERT_TO:
 			key1 = key2 = &divert->addr.v6;
 			lport = divert->port;
-		} else if (divert->type == PF_DIVERT_REPLY) {
+			break;
+		case PF_DIVERT_REPLY:
 			return (NULL);
-		} else {
+		default:
 			panic("%s: unknown divert type %d, mbuf %p, divert %p",
 			    __func__, divert->type, m, divert);
 		}
