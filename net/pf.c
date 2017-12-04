@@ -6602,7 +6602,14 @@ pf_setup_pdesc(struct pf_pdesc *pd, sa_family_t af, int dir,
 		case ND_NEIGHBOR_SOLICIT:
 		case ND_NEIGHBOR_ADVERT:
 			icmp_hlen = sizeof(struct nd_neighbor_solicit);
-			break;
+			/* FALLTHROUGH */
+		case ND_ROUTER_SOLICIT:
+		case ND_ROUTER_ADVERT:
+		case ND_REDIRECT:
+			if (pd->ttl != 255) {
+				REASON_SET(reason, PFRES_NORM);
+				return (PF_DROP);
+			}
 		}
 		if (icmp_hlen > sizeof(struct icmp6_hdr) &&
 		    !pf_pull_hdr(pd->m, pd->off, &pd->hdr.icmp6, icmp_hlen,
