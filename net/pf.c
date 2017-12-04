@@ -6610,6 +6610,7 @@ pf_setup_pdesc(struct pf_pdesc *pd, sa_family_t af, int dir,
 				REASON_SET(reason, PFRES_NORM);
 				return (PF_DROP);
 			}
+			break;
 		}
 		if (icmp_hlen > sizeof(struct icmp6_hdr) &&
 		    !pf_pull_hdr(pd->m, pd->off, &pd->hdr.icmp6, icmp_hlen,
