@@ -3515,7 +3515,7 @@ syn_cache_get(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 
 #if NPF > 0
 	if (m && m->m_pkthdr.pf.flags & PF_TAG_DIVERTED) {
-		struct pf_divert *divert = NULL;
+		struct pf_divert *divert;
 
 		divert = pf_find_divert(m);
 		KASSERT(divert != NULL);
