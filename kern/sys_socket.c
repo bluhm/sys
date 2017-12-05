@@ -166,11 +166,11 @@ soo_poll(struct file *fp, int events, struct proc *p)
 	if (revents == 0) {
 		if (events & (POLLIN | POLLPRI | POLLRDNORM | POLLRDBAND)) {
 			selrecord(p, &so->so_rcv.sb_sel);
-			so->so_rcv.sb_flagsintr |= SB_SEL;
+			so->so_rcv.sb_flags |= SB_SEL;
 		}
 		if (events & (POLLOUT | POLLWRNORM)) {
 			selrecord(p, &so->so_snd.sb_sel);
-			so->so_snd.sb_flagsintr |= SB_SEL;
+			so->so_snd.sb_flags |= SB_SEL;
 		}
 	}
 	sounlock(s);
