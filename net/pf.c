@@ -246,7 +246,7 @@ void			 pf_counters_inc(int, struct pf_pdesc *,
 			    struct pf_state *, struct pf_rule *,
 			    struct pf_rule *);
 
-void			 pf_state_key_link(struct pf_state_key *,
+void			 pf_state_key_link_reverse(struct pf_state_key *,
 			    struct pf_state_key *);
 void			 pf_mbuf_unlink_state_key(struct mbuf *);
 void			 pf_inpcb_unlink_state_key(struct inpcb *);
@@ -1088,7 +1088,7 @@ pf_find_state(struct pfi_kif *kif, struct pf_state_key_cmp *key, u_int dir,
 			return (NULL);
 		if (dir == PF_OUT && pkt_sk &&
 		    pf_compare_state_keys(pkt_sk, sk, kif, dir) == 0)
-			pf_state_key_link(sk, pkt_sk);
+			pf_state_key_link_reverse(sk, pkt_sk);
 		else if (dir == PF_OUT && m->m_pkthdr.pf.inp &&
 		    !m->m_pkthdr.pf.inp->inp_pf_sk && !sk->inp)
 			pf_state_key_link_inpcb(sk, m->m_pkthdr.pf.inp);
@@ -7199,7 +7199,7 @@ pf_inp_unlink(struct inpcb *inp)
 }
 
 void
-pf_state_key_link(struct pf_state_key *sk, struct pf_state_key *pkt_sk)
+pf_state_key_link_reverse(struct pf_state_key *sk, struct pf_state_key *pkt_sk)
 {
 	/*
 	 * Assert will not wire as long as we are called by pf_find_state()
