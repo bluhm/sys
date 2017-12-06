@@ -169,6 +169,9 @@ rip_input(struct mbuf **mp, int *offp, int proto, int af)
 		    inp->inp_faddr.s_addr != ip->ip_src.s_addr)
 			continue;
 #if NPF > 0
+		printf("%s: inp laddr %x, faddr %x, state %x, proto %d\n",
+		    __func__, inp->inp_laddr.s_addr, inp->inp_faddr.s_addr,
+		    inp->inp_socket->so_state, ip->ip_p);
 		if ((inp->inp_socket->so_state & SS_ISCONNECTED) &&
 		    ip->ip_p != IPPROTO_ICMP)
 			pf_inp_link(m, inp);
@@ -290,6 +293,9 @@ rip_output(struct mbuf *m, struct socket *so, struct sockaddr *dstaddr,
 	m->m_pkthdr.ph_rtableid = inp->inp_rtableid;
 
 #if NPF > 0
+	printf("%s: inp laddr %x, faddr %x, state %x, proto %d\n",
+	    __func__, inp->inp_laddr.s_addr, inp->inp_faddr.s_addr,
+	    inp->inp_socket->so_state, ip->ip_p);
 	if (inp->inp_socket->so_state & SS_ISCONNECTED &&
 	    ip->ip_p != IPPROTO_ICMP)
 		m->m_pkthdr.pf.inp = inp;
