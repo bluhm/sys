@@ -7258,8 +7258,9 @@ pf_mbuf_unlink_state_key(struct mbuf *m)
 }
 
 void
-pf_pkt_state_key_ref(struct mbuf *m)
+pf_mbuf_link_state_key(struct mbuf *m, struct pf_state_key *sk)
 {
+	m->m_pkthdr.pf.statekey = sk;
 	pf_state_key_ref(m->m_pkthdr.pf.statekey);
 }
 
