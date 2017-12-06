@@ -1905,9 +1905,9 @@ int			 pf_map_addr(sa_family_t, struct pf_rule *,
 			    struct pf_pool *, enum pf_sn_types);
 int			 pf_postprocess_addr(struct pf_state *);
 
-void			 pf_mbuf_unlink_state_key(struct mbuf *);
 void			 pf_mbuf_link_state_key(struct mbuf *,
 			    struct pf_state_key *);
+void			 pf_mbuf_unlink_state_key(struct mbuf *);
 
 u_int8_t		 pf_get_wscale(struct pf_pdesc *);
 u_int16_t		 pf_get_mss(struct pf_pdesc *);
