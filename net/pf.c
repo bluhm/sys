@@ -1091,8 +1091,8 @@ pf_find_state(struct pfi_kif *kif, struct pf_state_key_cmp *key, u_int dir,
 		if (dir == PF_OUT && pkt_sk &&
 		    pf_compare_state_keys(pkt_sk, sk, kif, dir) == 0)
 			pf_state_key_link_reverse(sk, pkt_sk);
-		else if (dir == PF_OUT)
-			pf_inp_link(m, m->m_pkthdr.pf.inp);
+		else if (dir == PF_OUT && m->m_pkthdr.pf.inp && !sk->inp)
+			pf_state_key_link_inpcb(sk, m->m_pkthdr.pf.inp);
 	}
 
 	/* remove firewall data from outbound packet */
