@@ -249,14 +249,13 @@ void			 pf_counters_inc(int, struct pf_pdesc *,
 int			 pf_state_key_isvalid(struct pf_state_key *);
 struct pf_state_key	*pf_state_key_ref(struct pf_state_key *);
 void			 pf_state_key_unref(struct pf_state_key *);
+void			 pf_state_key_unlink_inpcb(struct pf_state_key *);
 void			 pf_state_key_link_reverse(struct pf_state_key *,
 			    struct pf_state_key *);
-void			 pf_mbuf_unlink_state_key(struct mbuf *);
-void			 pf_inpcb_unlink_state_key(struct inpcb *);
-void			 pf_state_key_unlink_inpcb(struct pf_state_key *);
 void			 pf_state_key_unlink_reverse(struct pf_state_key *);
 void			 pf_state_key_link_inpcb(struct pf_state_key *,
 			    struct inpcb *);
+void			 pf_inpcb_unlink_state_key(struct inpcb *);
 
 #if NPFLOG > 0
 void			 pf_log_matches(struct pf_pdesc *, struct pf_rule *,
