@@ -249,12 +249,12 @@ void			 pf_counters_inc(int, struct pf_pdesc *,
 int			 pf_state_key_isvalid(struct pf_state_key *);
 struct pf_state_key	*pf_state_key_ref(struct pf_state_key *);
 void			 pf_state_key_unref(struct pf_state_key *);
-void			 pf_state_key_unlink_inpcb(struct pf_state_key *);
 void			 pf_state_key_link_reverse(struct pf_state_key *,
 			    struct pf_state_key *);
 void			 pf_state_key_unlink_reverse(struct pf_state_key *);
 void			 pf_state_key_link_inpcb(struct pf_state_key *,
 			    struct inpcb *);
+void			 pf_state_key_unlink_inpcb(struct pf_state_key *);
 void			 pf_inpcb_unlink_state_key(struct inpcb *);
 
 #if NPFLOG > 0
@@ -7181,10 +7181,9 @@ pf_inp_link(struct mbuf *m, struct inpcb *inp)
 	 * state, which might be just being marked as deleted by another
 	 * thread.
 	 */
-	if (inp && !sk->inp && !inp->inp_pf_sk) {
-		sk->inp = inp;
-		inp->inp_pf_sk = pf_state_key_ref(sk);
-	}
+	if (inp && !sk->inp && !inp->inp_pf_sk)
+		pf_state_key_link_inpcb(sk, inp);
+
 	/* The statekey has finished finding the inp, it is no longer needed. */
 	pf_mbuf_unlink_state_key(m);
 }
@@ -7201,9 +7200,10 @@ pf_state_key_link_reverse(struct pf_state_key *sk, struct pf_state_key *pkt_sk)
 	/*
 	 * Assert will not wire as long as we are called by pf_find_state()
 	 */
-	KASSERT((pkt_sk->reverse == NULL) && (sk->reverse == NULL));
-	pkt_sk->reverse = pf_state_key_ref(sk);
+	KASSERT(sk->reverse == NULL);
 	sk->reverse = pf_state_key_ref(pkt_sk);
+	KASSERT(pkt_sk->reverse == NULL);
+	pkt_sk->reverse = pf_state_key_ref(sk);
 }
 
 #if NPFLOG > 0
@@ -7264,8 +7264,7 @@ pf_mbuf_unlink_state_key(struct mbuf *m)
 void
 pf_mbuf_link_state_key(struct mbuf *m, struct pf_state_key *sk)
 {
-	pf_state_key_ref(sk);
-	m->m_pkthdr.pf.statekey = sk;
+	m->m_pkthdr.pf.statekey = pf_state_key_ref(sk);
 }
 
 void
