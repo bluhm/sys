@@ -307,7 +307,7 @@ m_resethdr(struct mbuf *m)
 	m_tag_delete_chain(m);
 
 #if NPF > 0
-	pf_pkt_unlink_state_key(m);
+	pf_pkt_addr_changed(m);
 #endif	/* NPF > 0 */
 
 	/* like m_inithdr(), but keep any associated data and mbufs */
@@ -407,7 +407,7 @@ m_free(struct mbuf *m)
 	if (m->m_flags & M_PKTHDR) {
 		m_tag_delete_chain(m);
 #if NPF > 0
-		pf_pkt_unlink_state_key(m);
+		pf_pkt_addr_changed(m);
 #endif	/* NPF > 0 */
 	}
 	if (m->m_flags & M_EXT)

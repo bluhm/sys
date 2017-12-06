@@ -245,8 +245,10 @@ int			 pf_match_rule(struct pf_test_ctx *,
 void			 pf_counters_inc(int, struct pf_pdesc *,
 			    struct pf_state *, struct pf_rule *,
 			    struct pf_rule *);
+
 void			 pf_state_key_link(struct pf_state_key *,
 			    struct pf_state_key *);
+void			 pf_mbuf_unlink_state_key(struct mbuf *);
 void			 pf_inpcb_unlink_state_key(struct inpcb *);
 void			 pf_state_key_unlink_reverse(struct pf_state_key *);
 void			 pf_state_key_link_inpcb(struct pf_state_key *,
@@ -1060,7 +1062,7 @@ pf_find_state(struct pfi_kif *kif, struct pf_state_key_cmp *key, u_int dir,
 		pkt_sk = m->m_pkthdr.pf.statekey;
 
 		if (!pf_state_key_isvalid(pkt_sk)) {
-			pf_pkt_unlink_state_key(m);
+			pf_mbuf_unlink_state_key(m);
 			pkt_sk = NULL;
 		}
 
@@ -7141,7 +7143,7 @@ pf_ouraddr(struct mbuf *m)
 void
 pf_pkt_addr_changed(struct mbuf *m)
 {
-	pf_pkt_unlink_state_key(m);
+	pf_mbuf_unlink_state_key(m);
 	m->m_pkthdr.pf.inp = NULL;
 }
 
@@ -7152,7 +7154,7 @@ pf_inp_lookup(struct mbuf *m)
 	struct pf_state_key *sk = m->m_pkthdr.pf.statekey;
 
 	if (!pf_state_key_isvalid(sk))
-		pf_pkt_unlink_state_key(m);
+		pf_mbuf_unlink_state_key(m);
 	else
 		inp = m->m_pkthdr.pf.statekey->inp;
 
@@ -7168,7 +7170,7 @@ pf_inp_link(struct mbuf *m, struct inpcb *inp)
 	struct pf_state_key *sk = m->m_pkthdr.pf.statekey;
 
 	if (!pf_state_key_isvalid(sk)) {
-		pf_pkt_unlink_state_key(m);
+		pf_mbuf_unlink_state_key(m);
 		return;
 	}
 
@@ -7182,7 +7184,7 @@ pf_inp_link(struct mbuf *m, struct inpcb *inp)
 		inp->inp_pf_sk = pf_state_key_ref(sk);
 	}
 	/* The statekey has finished finding the inp, it is no longer needed. */
-	pf_pkt_unlink_state_key(m);
+	pf_mbuf_unlink_state_key(m);
 }
 
 void
@@ -7252,7 +7254,7 @@ pf_state_key_isvalid(struct pf_state_key *sk)
 }
 
 void
-pf_pkt_unlink_state_key(struct mbuf *m)
+pf_mbuf_unlink_state_key(struct mbuf *m)
 {
 	pf_state_key_unref(m->m_pkthdr.pf.statekey);
 	m->m_pkthdr.pf.statekey = NULL;

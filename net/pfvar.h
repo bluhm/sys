@@ -1908,7 +1908,6 @@ int			 pf_postprocess_addr(struct pf_state *);
 struct pf_state_key	*pf_state_key_ref(struct pf_state_key *);
 void			 pf_state_key_unref(struct pf_state_key *);
 int			 pf_state_key_isvalid(struct pf_state_key *);
-void			 pf_pkt_unlink_state_key(struct mbuf *);
 void			 pf_pkt_state_key_ref(struct mbuf *);
 
 u_int8_t		 pf_get_wscale(struct pf_pdesc *);
