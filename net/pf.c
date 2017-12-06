@@ -246,6 +246,7 @@ void			 pf_counters_inc(int, struct pf_pdesc *,
 			    struct pf_state *, struct pf_rule *,
 			    struct pf_rule *);
 
+int			 pf_state_key_isvalid(struct pf_state_key *);
 struct pf_state_key	*pf_state_key_ref(struct pf_state_key *);
 void			 pf_state_key_unref(struct pf_state_key *);
 void			 pf_state_key_link_reverse(struct pf_state_key *,
