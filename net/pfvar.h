@@ -1905,8 +1905,6 @@ int			 pf_map_addr(sa_family_t, struct pf_rule *,
 			    struct pf_pool *, enum pf_sn_types);
 int			 pf_postprocess_addr(struct pf_state *);
 
-struct pf_state_key	*pf_state_key_ref(struct pf_state_key *);
-void			 pf_state_key_unref(struct pf_state_key *);
 int			 pf_state_key_isvalid(struct pf_state_key *);
 void			 pf_mbuf_unlink_state_key(struct mbuf *);
 void			 pf_mbuf_link_state_key(struct mbuf *,
