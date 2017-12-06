@@ -250,6 +250,7 @@ void			 pf_state_key_link_reverse(struct pf_state_key *,
 			    struct pf_state_key *);
 void			 pf_mbuf_unlink_state_key(struct mbuf *);
 void			 pf_inpcb_unlink_state_key(struct inpcb *);
+void			 pf_state_key_unlink_inpcb(struct pf_state_key *);
 void			 pf_state_key_unlink_reverse(struct pf_state_key *);
 
 #if NPFLOG > 0
@@ -805,8 +806,7 @@ pf_state_key_detach(struct pf_state *s, int idx)
 		RB_REMOVE(pf_state_tree, &pf_statetbl, sk);
 		sk->removed = 1;
 		pf_state_key_unlink_reverse(sk);
-		pf_inpcb_unlink_state_key(sk->inp);
-		sk->inp = NULL;
+		pf_state_key_unlink_inpcb(sk);
 		pf_state_key_unref(sk);
 	}
 }
@@ -7187,10 +7187,7 @@ pf_inp_link(struct mbuf *m, struct inpcb *inp)
 void
 pf_inp_unlink(struct inpcb *inp)
 {
-	if (inp->inp_pf_sk) {
-		inp->inp_pf_sk->inp = NULL;
-		pf_inpcb_unlink_state_key(inp);
-	}
+	pf_inpcb_unlink_state_key(inp);
 }
 
 void
@@ -7253,33 +7250,55 @@ pf_state_key_isvalid(struct pf_state_key *sk)
 void
 pf_mbuf_unlink_state_key(struct mbuf *m)
 {
-	pf_state_key_unref(m->m_pkthdr.pf.statekey);
+	struct pf_state_key *sk = m->m_pkthdr.pf.statekey;
+
 	m->m_pkthdr.pf.statekey = NULL;
+	pf_state_key_unref(sk);
 }
 
 void
 pf_mbuf_link_state_key(struct mbuf *m, struct pf_state_key *sk)
 {
+	pf_state_key_ref(sk);
 	m->m_pkthdr.pf.statekey = sk;
-	pf_state_key_ref(m->m_pkthdr.pf.statekey);
 }
 
 void
 pf_inpcb_unlink_state_key(struct inpcb *inp)
 {
-	if (inp != NULL) {
-		pf_state_key_unref(inp->inp_pf_sk);
+	struct pf_state_key *sk = inp->inp_pf_sk;
+
+	if (sk != NULL) {
+		KASSERT(sk->inp == inp);
+		sk->inp = NULL;
 		inp->inp_pf_sk = NULL;
+		pf_state_key_unref(sk);
+	}
+}
+
+void
+pf_state_key_unlink_inpcb(struct pf_state_key *sk)
+{
+	struct inpcb *inp = sk->inp;
+
+	if (inp != NULL) {
+		KASSERT(inp->inp_pf_sk == sk);
+		sk->inp = NULL;
+		inp->inp_pf_sk = NULL;
+		pf_state_key_unref(sk);
 	}
 }
 
 void
 pf_state_key_unlink_reverse(struct pf_state_key *sk)
 {
-	if ((sk != NULL) && (sk->reverse != NULL)) {
-		pf_state_key_unref(sk->reverse->reverse);
-		sk->reverse->reverse = NULL;
-		pf_state_key_unref(sk->reverse);
+	struct pf_state_key *skrev = sk->reverse;
+
+	if (skrev != NULL) {
+		KASSERT(skrev->reverse == sk);
 		sk->reverse = NULL;
+		pf_state_key_unref(skrev);
+		skrev->reverse = NULL;
+		pf_state_key_unref(sk);
 	}
 }
