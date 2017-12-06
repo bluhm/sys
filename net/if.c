@@ -672,7 +672,7 @@ if_enqueue(struct ifnet *ifp, struct mbuf *m)
 #endif
 
 #if NPF > 0
-	pf_pkt_unlink_state_key(m);
+	pf_pkt_addr_changed(m);
 #endif	/* NPF > 0 */
 
 	/*

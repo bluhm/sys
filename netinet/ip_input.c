@@ -1459,7 +1459,7 @@ ip_forward(struct mbuf *m, struct ifnet *ifp, struct rtentry *rt, int srcrt)
 		m_copydata(m, 0, len, mfake.m_pktdat);
 		mfake.m_pkthdr.len = mfake.m_len = len;
 #if NPF > 0
-		pf_pkt_unlink_state_key(&mfake);
+		pf_pkt_addr_changed(&mfake);
 #endif	/* NPF > 0 */
 		fake = 1;
 	}
