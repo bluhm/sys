@@ -121,7 +121,7 @@ rip_input(struct mbuf **mp, int *offp, int proto, int af)
 	struct mbuf *m = *mp;
 	struct ip *ip = mtod(m, struct ip *);
 	struct inpcb *inp, *last = NULL;
-	struct in_addr *key;
+	struct in_addr *key = NULL;
 	struct mbuf *opts = NULL;
 	struct counters_ref ref;
 	uint64_t *counters;
@@ -129,7 +129,6 @@ rip_input(struct mbuf **mp, int *offp, int proto, int af)
 	KASSERT(af == AF_INET);
 
 	ripsrc.sin_addr = ip->ip_src;
-	key = &ip->ip_dst;
 #if NPF > 0
 	if (m->m_pkthdr.pf.flags & PF_TAG_DIVERTED) {
 		struct pf_divert *divert;
@@ -163,7 +162,8 @@ rip_input(struct mbuf **mp, int *offp, int proto, int af)
 		if (inp->inp_ip.ip_p && inp->inp_ip.ip_p != ip->ip_p)
 			continue;
 		if (inp->inp_laddr.s_addr &&
-		    inp->inp_laddr.s_addr != key->s_addr)
+		    inp->inp_laddr.s_addr != ip->ip_dst.s_addr &&
+		    (key == NULL || inp->inp_laddr.s_addr != key->s_addr))
 			continue;
 		if (inp->inp_faddr.s_addr &&
 		    inp->inp_faddr.s_addr != ip->ip_src.s_addr)
