@@ -122,7 +122,7 @@ rip6_input(struct mbuf **mp, int *offp, int proto, int af)
 	struct ip6_hdr *ip6 = mtod(m, struct ip6_hdr *);
 	struct inpcb *in6p;
 	struct inpcb *last = NULL;
-	struct in6_addr *key;
+	struct in6_addr *key = NULL;
 	struct sockaddr_in6 rip6src;
 	struct mbuf *opts = NULL;
 
@@ -137,7 +137,6 @@ rip6_input(struct mbuf **mp, int *offp, int proto, int af)
 	/* KAME hack: recover scopeid */
 	in6_recoverscope(&rip6src, &ip6->ip6_src);
 
-	key = &ip6->ip6_dst;
 #if NPF > 0
 	if (m->m_pkthdr.pf.flags & PF_TAG_DIVERTED) {
 		struct pf_divert *divert;
@@ -167,7 +166,9 @@ rip6_input(struct mbuf **mp, int *offp, int proto, int af)
 		    in6p->inp_ipv6.ip6_nxt != proto)
 			continue;
 		if (!IN6_IS_ADDR_UNSPECIFIED(&in6p->inp_laddr6) &&
-		    !IN6_ARE_ADDR_EQUAL(&in6p->inp_laddr6, key))
+		    !IN6_ARE_ADDR_EQUAL(&in6p->inp_laddr6, &ip6->ip6_dst) &&
+		    (key == NULL ||
+		    !IN6_ARE_ADDR_EQUAL(&in6p->inp_laddr6, key)))
 			continue;
 		if (!IN6_IS_ADDR_UNSPECIFIED(&in6p->inp_faddr6) &&
 		    !IN6_ARE_ADDR_EQUAL(&in6p->inp_faddr6, &ip6->ip6_src))
