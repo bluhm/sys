@@ -154,6 +154,11 @@ do_v6:
 				return;
 #endif	/* INET6 */
 			case MPLS_LABEL_IMPLNULL:
+				if (m->m_len < sizeof(u_char) &&
+				    (m = m_pullup(m, sizeof(u_char))) == NULL) {
+					if_put(ifp);
+					return;
+				}
 				switch (*mtod(m, u_char *) >> 4) {
 				case IPVERSION:
 					goto do_v4;
