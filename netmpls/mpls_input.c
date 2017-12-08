@@ -371,6 +371,9 @@ mpls_do_error(struct mbuf *m, int type, int code, int destmtu)
 	}
 	shim = &stack[0];
 
+	if (m->m_len < sizeof(u_char) &&
+	    (m = m_pullup(m, sizeof(u_char))) == NULL)
+		return (NULL);
 	switch (*mtod(m, u_char *) >> 4) {
 	case IPVERSION:
 		if (m->m_len < sizeof(*ip) &&
