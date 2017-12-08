@@ -362,7 +362,7 @@ mpls_do_error(struct mbuf *m, int type, int code, int destmtu)
 
 	for (nstk = 0; nstk < MPLS_INKERNEL_LOOP_MAX; nstk++) {
 		if (m->m_len < sizeof(*shim) &&
-		    (m = m_pullup(m, sizeof(*ip))) == NULL)
+		    (m = m_pullup(m, sizeof(*shim))) == NULL)
 			return (NULL);
 		stack[nstk] = *mtod(m, struct shim_hdr *);
 		m_adj(m, sizeof(*shim));
