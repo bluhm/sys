@@ -335,11 +335,11 @@ fifo_poll(void *v)
 			events = POLLIN;
 		if (events & (POLLIN | POLLRDNORM)) {
 			selrecord(ap->a_p, &rso->so_rcv.sb_sel);
-			rso->so_rcv.sb_flagsintr |= SB_SEL;
+			rso->so_rcv.sb_flags |= SB_SEL;
 		}
 		if (events & (POLLOUT | POLLWRNORM)) {
 			selrecord(ap->a_p, &wso->so_snd.sb_sel);
-			wso->so_snd.sb_flagsintr |= SB_SEL;
+			wso->so_snd.sb_flags |= SB_SEL;
 		}
 	}
 	sounlock(s);
@@ -573,7 +573,7 @@ filt_fifowdetach(struct knote *kn)
 
 	SLIST_REMOVE(&so->so_snd.sb_sel.si_note, kn, knote, kn_selnext);
 	if (SLIST_EMPTY(&so->so_snd.sb_sel.si_note))
-		so->so_snd.sb_flags &= ~SB_KNOTE;
+		so->so_snd.sb_flagsintr &= ~SB_KNOTE;
 }
 
 int
