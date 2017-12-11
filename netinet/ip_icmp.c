@@ -455,8 +455,10 @@ icmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto, int af)
 		code = PRC_QUENCH;
 	deliver:
 		/* Free packet atttributes */
-		if (m->m_flags & M_PKTHDR)
+		if (m->m_flags & M_PKTHDR) {
+			m->m_pkthdr.pf.flags &=~ PF_TAG_DIVERTED;
 			m_tag_delete_chain(m);
+		}
 
 		/*
 		 * Problem with datagram; advise higher level routines.
@@ -586,8 +588,10 @@ reflect:
 			goto freeit;
 #endif
 		/* Free packet atttributes */
-		if (m->m_flags & M_PKTHDR)
+		if (m->m_flags & M_PKTHDR) {
+			m->m_pkthdr.pf.flags &=~ PF_TAG_DIVERTED;
 			m_tag_delete_chain(m);
+		}
 
 		icmpstat_inc(icps_reflect);
 		icmpstat_inc(icps_outhist + icp->icmp_type);
@@ -605,8 +609,10 @@ reflect:
 		struct rtentry *newrt = NULL;
 
 		/* Free packet atttributes */
-		if (m->m_flags & M_PKTHDR)
+		if (m->m_flags & M_PKTHDR) {
+			m->m_pkthdr.pf.flags &=~ PF_TAG_DIVERTED;
 			m_tag_delete_chain(m);
+		}
 		if (icmp_rediraccept == 0 || ipforwarding == 1)
 			goto freeit;
 		if (code > 3)
