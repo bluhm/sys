@@ -2243,9 +2243,9 @@ vfs_mount_print(struct mount *mp, int full,
 	LIST_FOREACH(vp, &mp->mnt_vnodelist, v_mntvnodes) {
 		if (VOP_ISLOCKED(vp)) {
 			if (cnt == 0)
-				(*pr)("\n\t%p", vp);
+				(*pr)("\n  %p", vp);
 			else if ((cnt % (72 / (sizeof(void *) * 2 + 4))) == 0)
-				(*pr)(",\n\t%p", vp);
+				(*pr)(",\n  %p", vp);
 			else
 				(*pr)(", %p", vp);
 			cnt++;
@@ -2259,9 +2259,9 @@ vfs_mount_print(struct mount *mp, int full,
 		cnt = 0;
 		LIST_FOREACH(vp, &mp->mnt_vnodelist, v_mntvnodes) {
 			if (cnt == 0)
-				(*pr)("\n\t%p", vp);
+				(*pr)("\n  %p", vp);
 			else if ((cnt % (72 / (sizeof(void *) * 2 + 4))) == 0)
-				(*pr)(",\n\t%p", vp);
+				(*pr)(",\n  %p", vp);
 			else
 				(*pr)(", %p", vp);
 			cnt++;
