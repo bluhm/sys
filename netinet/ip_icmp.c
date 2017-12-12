@@ -386,12 +386,14 @@ icmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto, int af)
 		case ICMP_TIMXCEED:
 		case ICMP_PARAMPROB:
 		case ICMP_SOURCEQUENCH:
+			m->m_pkthdr.pf.flags &=~ PF_TAG_DIVERTED;
 			break;
 		 /*
 		  * Although pf_icmp_mapping() considers redirects belonging
 		  * to a diverted connection, we must process it here anyway.
 		  */
 		case ICMP_REDIRECT:
+			m->m_pkthdr.pf.flags &=~ PF_TAG_DIVERTED;
 			break;
 		default:
 			goto raw;
@@ -455,10 +457,8 @@ icmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto, int af)
 		code = PRC_QUENCH;
 	deliver:
 		/* Free packet atttributes */
-		if (m->m_flags & M_PKTHDR) {
-			m->m_pkthdr.pf.flags &=~ PF_TAG_DIVERTED;
+		if (m->m_flags & M_PKTHDR)
 			m_tag_delete_chain(m);
-		}
 
 		/*
 		 * Problem with datagram; advise higher level routines.
@@ -603,10 +603,8 @@ reflect:
 		struct rtentry *newrt = NULL;
 
 		/* Free packet atttributes */
-		if (m->m_flags & M_PKTHDR) {
-			m->m_pkthdr.pf.flags &=~ PF_TAG_DIVERTED;
+		if (m->m_flags & M_PKTHDR)
 			m_tag_delete_chain(m);
-		}
 		if (icmp_rediraccept == 0 || ipforwarding == 1)
 			goto freeit;
 		if (code > 3)
