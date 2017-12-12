@@ -431,6 +431,7 @@ icmp6_input(struct mbuf **mp, int *offp, int proto, int af)
 		case ICMP6_PACKET_TOO_BIG:
 		case ICMP6_TIME_EXCEEDED:
 		case ICMP6_PARAM_PROB:
+			m->m_pkthdr.pf.flags &=~ PF_TAG_DIVERTED;
 			break;
 		default:
 			goto raw;
