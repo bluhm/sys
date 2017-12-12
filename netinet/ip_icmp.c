@@ -587,12 +587,6 @@ reflect:
 		    &ip->ip_dst.s_addr, 1))
 			goto freeit;
 #endif
-		/* Free packet atttributes */
-		if (m->m_flags & M_PKTHDR) {
-			m->m_pkthdr.pf.flags &=~ PF_TAG_DIVERTED;
-			m_tag_delete_chain(m);
-		}
-
 		icmpstat_inc(icps_reflect);
 		icmpstat_inc(icps_outhist + icp->icmp_type);
 		if (!icmp_reflect(m, &opts, NULL)) {
