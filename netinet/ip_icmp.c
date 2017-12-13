@@ -378,6 +378,12 @@ icmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto, int af)
 #if NPF > 0
 	if (m->m_pkthdr.pf.flags & PF_TAG_DIVERTED) {
 		switch (icp->icmp_type) {
+		 /*
+		  * As pf_icmp_mapping() considers redirects belonging to a
+		  * diverted connection, we must include it here.
+		  */
+		case ICMP_REDIRECT:
+			/* FALLTHROUGH */
 		/*
 		 * These ICMP types map to other connections.  They must be
 		 * delivered to pr_ctlinput() also for diverted connections.
@@ -386,13 +392,10 @@ icmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto, int af)
 		case ICMP_TIMXCEED:
 		case ICMP_PARAMPROB:
 		case ICMP_SOURCEQUENCH:
-			m->m_pkthdr.pf.flags &=~ PF_TAG_DIVERTED;
-			break;
-		 /*
-		  * Although pf_icmp_mapping() considers redirects belonging
-		  * to a diverted connection, we must process it here anyway.
-		  */
-		case ICMP_REDIRECT:
+			/*
+			 * Do not use the divert-to property of the TCP or UDP
+			 * rule when doing the PCB lookup for the raw socket.
+			 */
 			m->m_pkthdr.pf.flags &=~ PF_TAG_DIVERTED;
 			break;
 		default:
