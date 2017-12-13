@@ -1,4 +1,4 @@
-/*	$OpenBSD: rtsock.c,v 1.256 2017/12/10 11:25:18 mpi Exp $	*/
+/*	$OpenBSD: rtsock.c,v 1.258 2017/12/13 08:59:02 mpi Exp $	*/
 /*	$NetBSD: rtsock.c,v 1.18 1996/03/29 00:32:10 cgd Exp $	*/
 
 /*
@@ -697,17 +697,18 @@ route_output(struct mbuf *m, struct socket *so, struct sockaddr *dstaddr,
 	 * Validate RTM_PROPOSAL and pass it along or error out.
 	 */
 	if (rtm->rtm_type == RTM_PROPOSAL) {
-	       if (rtm_validate_proposal(&info) == -1) {
+		if (rtm_validate_proposal(&info) == -1) {
 			error = EINVAL;
 			goto fail;
-	       }
+		}
 	} else {
 		error = rtm_output(rtm, &rt, &info, prio, tableid);
 		if (!error) {
 			type = rtm->rtm_type;
 			seq = rtm->rtm_seq;
-			free(rtm, M_RTABLE, 0);
+			free(rtm, M_RTABLE, len);
 			rtm = rtm_report(rt, type, seq, tableid);
+			len = rtm->rtm_msglen;
 		}
 	}
 
@@ -725,18 +726,18 @@ route_output(struct mbuf *m, struct socket *so, struct sockaddr *dstaddr,
 		if (route_cb.any_count <= 1) {
 			/* no other listener and no loopback of messages */
 fail:
-			free(rtm, M_RTABLE, 0);
+			free(rtm, M_RTABLE, len);
 			m_freem(m);
 			return (error);
 		}
 	}
 	if (rtm) {
-		if (m_copyback(m, 0, rtm->rtm_msglen, rtm, M_NOWAIT)) {
+		if (m_copyback(m, 0, len, rtm, M_NOWAIT)) {
 			m_freem(m);
 			m = NULL;
-		} else if (m->m_pkthdr.len > rtm->rtm_msglen)
-			m_adj(m, rtm->rtm_msglen - m->m_pkthdr.len);
-		free(rtm, M_RTABLE, 0);
+		} else if (m->m_pkthdr.len > len)
+			m_adj(m, len - m->m_pkthdr.len);
+		free(rtm, M_RTABLE, len);
 	}
 	if (m)
 		route_input(m, so, info.rti_info[RTAX_DST] ?
@@ -1161,7 +1162,7 @@ route_cleargateway(struct rtentry *rt, void *arg, unsigned int rtableid)
 
 	if (ISSET(rt->rt_flags, RTF_GATEWAY) && rt->rt_gwroute == nhrt &&
 	    !ISSET(rt->rt_locks, RTV_MTU))
-                rt->rt_mtu = 0;
+		rt->rt_mtu = 0;
 
 	return (0);
 }
@@ -1485,7 +1486,7 @@ void
 rtm_addr(struct rtentry *rt, int cmd, struct ifaddr *ifa)
 {
 	struct ifnet		*ifp = ifa->ifa_ifp;
-	struct mbuf		*m = NULL;
+	struct mbuf		*m;
 	struct rt_addrinfo	 info;
 	struct ifa_msghdr	*ifam;
 
