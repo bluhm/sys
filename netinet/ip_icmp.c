@@ -459,10 +459,6 @@ icmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto, int af)
 			goto badcode;
 		code = PRC_QUENCH;
 	deliver:
-		/* Free packet atttributes */
-		if (m->m_flags & M_PKTHDR)
-			m_tag_delete_chain(m);
-
 		/*
 		 * Problem with datagram; advise higher level routines.
 		 */
@@ -605,9 +601,6 @@ reflect:
 		struct sockaddr_in ssrc;
 		struct rtentry *newrt = NULL;
 
-		/* Free packet atttributes */
-		if (m->m_flags & M_PKTHDR)
-			m_tag_delete_chain(m);
 		if (icmp_rediraccept == 0 || ipforwarding == 1)
 			goto freeit;
 		if (code > 3)
