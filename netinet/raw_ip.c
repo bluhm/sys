@@ -163,7 +163,9 @@ rip_input(struct mbuf **mp, int *offp, int proto, int af)
 			continue;
 		if (inp->inp_laddr.s_addr &&
 		    inp->inp_laddr.s_addr != ip->ip_dst.s_addr &&
-		    (key == NULL || inp->inp_laddr.s_addr != key->s_addr))
+		    /* divert-to matches on bound but unconnected socket */
+		    (key == NULL || inp->inp_faddr.s_addr ||
+		    inp->inp_laddr.s_addr != key->s_addr))
 			continue;
 		if (inp->inp_faddr.s_addr &&
 		    inp->inp_faddr.s_addr != ip->ip_src.s_addr)
