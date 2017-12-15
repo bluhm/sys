@@ -167,8 +167,9 @@ rip6_input(struct mbuf **mp, int *offp, int proto, int af)
 			continue;
 		if (!IN6_IS_ADDR_UNSPECIFIED(&in6p->inp_laddr6) &&
 		    !IN6_ARE_ADDR_EQUAL(&in6p->inp_laddr6, &ip6->ip6_dst) &&
-		    (key == NULL ||
-		    !IN6_ARE_ADDR_EQUAL(&in6p->inp_laddr6, key)))
+		    /* divert-to matches on bound but unconnected socket */
+		    (key == NULL || !IN6_IS_ADDR_UNSPECIFIED(&in6p->inp_faddr6)
+		    || !IN6_ARE_ADDR_EQUAL(&in6p->inp_laddr6, key)))
 			continue;
 		if (!IN6_IS_ADDR_UNSPECIFIED(&in6p->inp_faddr6) &&
 		    !IN6_ARE_ADDR_EQUAL(&in6p->inp_faddr6, &ip6->ip6_src))
