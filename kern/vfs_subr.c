@@ -70,6 +70,11 @@
 #include <uvm/uvm_extern.h>
 #include <uvm/uvm_vnode.h>
 
+#ifdef DDB
+#include <machine/db_machdep.h>
+#include <ddb/db_interface.h>
+#endif
+
 #include "softraid.h"
 
 void sr_shutdown(int);
@@ -1651,9 +1656,17 @@ vfs_shutdown(struct proc *p)
 		vfs_rofs(p);
 	}
 
-	if (vfs_syncwait(p, 1))
+	if (vfs_syncwait(p, 1)) {
+		struct buf *bp;
+
 		printf("giving up\n");
-	else
+		LIST_FOREACH(bp, &bufhead, b_list) {
+			if ((bp->b_flags & (B_BUSY|B_INVAL|B_READ)) == B_BUSY) {
+				vfs_buf_print(bp, 1, printf);
+				vfs_vnode_print(bp->b_vp, 1, printf);
+			}
+		}
+	} else
 		printf("done\n");
 
 #if NSOFTRAID > 0
