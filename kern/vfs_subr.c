@@ -1658,14 +1658,17 @@ vfs_shutdown(struct proc *p)
 
 	if (vfs_syncwait(p, 1)) {
 		struct buf *bp;
+		struct vnode *vp = NULL;
 
 		printf("giving up\n");
 		LIST_FOREACH(bp, &bufhead, b_list) {
 			if ((bp->b_flags & (B_BUSY|B_INVAL|B_READ)) == B_BUSY) {
 				vfs_buf_print(bp, 1, printf);
-				vfs_vnode_print(bp->b_vp, 1, printf);
+				vp = bp->b_vp;
+				vfs_vnode_print(vp, 1, printf);
 			}
 		}
+		panic("%s: not done, vp %p", __func__, vp);
 	} else
 		printf("done\n");
 
