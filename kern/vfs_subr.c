@@ -1626,16 +1626,12 @@ vfs_readonly(struct mount *mp, struct proc *p)
 {
 	int error;
 
-	error = vfs_busy(mp, VB_WRITE|VB_WAIT);
-	if (error) {
-		printf("%s: busy\n", mp->mnt_stat.f_mntonname);
-		return (error);
-	}
+	rw_assert_wrlock(&mp->mnt_lock);
+
 	uvm_vnp_sync(mp);
 	error = VFS_SYNC(mp, MNT_WAIT, 0, p->p_ucred, p);
 	if (error) {
 		printf("%s: failed to sync\n", mp->mnt_stat.f_mntonname);
-		vfs_unbusy(mp);
 		return (error);
 	}
 
@@ -1645,13 +1641,11 @@ vfs_readonly(struct mount *mp, struct proc *p)
 	if (error) {
 		printf("%s: failed to remount rdonly, error %d\n",
 		    mp->mnt_stat.f_mntonname, error);
-		vfs_unbusy(mp);
 		return (error);
 	}
 	if (mp->mnt_syncer != NULL)
 		vgone(mp->mnt_syncer);
 	mp->mnt_syncer = NULL;
-	vfs_unbusy(mp);
 	return (error);
 }
 
@@ -1663,10 +1657,25 @@ vfs_readonly(struct mount *mp, struct proc *p)
 void
 vfs_rofs(struct proc *p)
 {
-	struct mount *mp, *nmp;
+	struct mount *mp, *start, *locked = NULL;
 
-	TAILQ_FOREACH_REVERSE_SAFE(mp, &mountlist, mntlist, mnt_list, nmp)
+	/* Lock all mount points before we remount them read only. */
+	start = TAILQ_FIRST(&mountlist);
+ restart:
+	for (mp = start; mp != NULL; mp = TAILQ_NEXT(mp, mnt_list)) {
+		if (vfs_busy(mp, VB_WRITE|VB_WAIT)) {
+			printf("%s: busy, retry\n", mp->mnt_stat.f_mntonname);
+			start = (locked == NULL) ?
+			    TAILQ_FIRST(&mountlist) : locked;
+			goto restart;
+		}
+		locked = mp;
+	}
+
+	TAILQ_FOREACH_REVERSE(mp, &mountlist, mntlist, mnt_list) {
 		(void) vfs_readonly(mp, p);
+		vfs_unbusy(mp);
+	}
 }
 
 /*
