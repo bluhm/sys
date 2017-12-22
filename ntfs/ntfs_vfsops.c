@@ -60,7 +60,7 @@ int	ntfs_root(struct mount *, struct vnode **);
 int	ntfs_start(struct mount *, int, struct proc *);
 int	ntfs_statfs(struct mount *, struct statfs *,
 				 struct proc *);
-int	ntfs_sync(struct mount *, int, struct ucred *,
+int	ntfs_sync(struct mount *, int, int, struct ucred *,
 			       struct proc *);
 int	ntfs_unmount(struct mount *, int, struct proc *);
 int	ntfs_vget(struct mount *mp, ino_t ino,
@@ -612,7 +612,7 @@ ntfs_statfs(struct mount *mp, struct statfs *sbp, struct proc *p)
 }
 
 int
-ntfs_sync(struct mount *mp, int waitfor, struct ucred *cred, struct proc *p)
+ntfs_sync(struct mount *mp, int waitfor, int stall, struct ucred *cred, struct proc *p)
 {
 	/*DPRINTF("ntfs_sync():\n");*/
 	return (0);

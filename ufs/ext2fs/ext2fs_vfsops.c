@@ -731,11 +731,12 @@ ext2fs_sync_vnode(struct vnode *vp, void *args)
  * Should always be called with the mount point locked.
  */
 int
-ext2fs_sync(struct mount *mp, int waitfor, struct ucred *cred, struct proc *p)
+ext2fs_sync(struct mount *mp, int waitfor, int stall,
+    struct ucred *cred, struct proc *p)
 {
 	struct ufsmount *ump = VFSTOUFS(mp);
 	struct m_ext2fs *fs;
-	int error, allerror = 0;
+	int error, allerror = 0, state, fmod;
 	struct ext2fs_sync_args esa;
 
 	fs = ump->um_e2fs;
@@ -768,12 +769,21 @@ ext2fs_sync(struct mount *mp, int waitfor, struct ucred *cred, struct proc *p)
 	/*
 	 * Write back modified superblock.
 	 */
+	state = fs->e2fs.e2fs_state;
+	fmod = fs->e2fs_fmod;
+	if (stall && fs->e2fs_ronly == 0) {
+		fs->e2fs_fmod = 1;
+		if ((fs->e2fs.e2fs_state & E2FS_ERRORS) == 0)
+			fs->e2fs.e2fs_state = E2FS_ISCLEAN;
+	}
 	if (fs->e2fs_fmod != 0) {
 		fs->e2fs_fmod = 0;
 		fs->e2fs.e2fs_wtime = time_second;
 		if ((error = ext2fs_cgupdate(ump, waitfor)))
 			allerror = error;
 	}
+	fs->e2fs.e2fs_state = state;
+	fs->e2fs_fmod = fmod;
 	return (allerror);
 }
 

@@ -87,7 +87,7 @@ int cd9660_unmount(struct mount *, int, struct proc *);
 int cd9660_root(struct mount *, struct vnode **);
 int cd9660_quotactl(struct mount *, int, uid_t, caddr_t, struct proc *);
 int cd9660_statfs(struct mount *, struct statfs *, struct proc *);
-int cd9660_sync(struct mount *, int, struct ucred *, struct proc *);
+int cd9660_sync(struct mount *, int, int, struct ucred *, struct proc *);
 int cd9660_vget(struct mount *, ino_t, struct vnode **);
 int cd9660_fhtovp(struct mount *, struct fid *, struct vnode **);
 int cd9660_vptofh(struct vnode *, struct fid *);

@@ -30,6 +30,8 @@
 #include <sys/sched.h>
 #include <sys/reboot.h>
 #include <sys/sysctl.h>
+#include <sys/mount.h>
+#include <sys/syscallargs.h>
 
 #ifdef HIBERNATE
 #include <sys/hibernate.h>
@@ -61,6 +63,7 @@
 
 #include "wd.h"
 #include "wsdisplay.h"
+#include "softraid.h"
 
 #ifdef ACPI_DEBUG
 int	acpi_debug = 16;
@@ -2443,6 +2446,9 @@ acpi_sleep_state(struct acpi_softc *sc, int sleepmode)
 	size_t rndbuflen = 0;
 	char *rndbuf = NULL;
 	int state, s;
+#if NSOFTRAID > 0
+	extern void sr_quiesce(void);
+#endif
 
 	switch (sleepmode) {
 	case ACPI_SLEEP_SUSPEND:
@@ -2481,8 +2487,12 @@ acpi_sleep_state(struct acpi_softc *sc, int sleepmode)
 
 #ifdef HIBERNATE
 	if (sleepmode == ACPI_SLEEP_HIBERNATE) {
-		uvmpd_hibernate();
+		/*
+		 * Discard useless memory, then attempt to
+		 * create a hibernate work area
+		 */
 		hibernate_suspend_bufcache();
+		uvmpd_hibernate();
 		if (hibernate_alloc()) {
 			printf("%s: failed to allocate hibernate memory\n",
 			    sc->sc_dev.dv_xname);
@@ -2495,17 +2505,35 @@ acpi_sleep_state(struct acpi_softc *sc, int sleepmode)
 	if (config_suspend_all(DVACT_QUIESCE))
 		goto fail_quiesce;
 
+	vfs_stall(curproc, 1);
+#if NSOFTRAID > 0
+	sr_quiesce();
+#endif
 	bufq_quiesce();
 
 #ifdef MULTIPROCESSOR
 	acpi_sleep_mp();
 #endif
 
+#ifdef HIBERNATE
+	if (sleepmode == ACPI_SLEEP_HIBERNATE) {
+		/*
+		 * VFS syncing churned lots of memory; so discard
+		 * useless memory again, hoping no processes are
+		 * still allocating..
+		 */
+		hibernate_suspend_bufcache();
+		uvmpd_hibernate();
+	}
+#endif /* HIBERNATE */
+
 	resettodr();
 
 	s = splhigh();
 	disable_intr();	/* PSL_I for resume; PIC/APIC broken until repair */
 	cold = 2;	/* Force other code to delay() instead of tsleep() */
+
+	vfs_stall(curproc, 0);
 
 	if (config_suspend_all(DVACT_SUSPEND) != 0)
 		goto fail_suspend;
@@ -2588,6 +2616,8 @@ fail_alloc:
 	wsdisplay_resume();
 	rw_enter_write(&sc->sc_lck);
 #endif /* NWSDISPLAY > 0 */
+
+	sys_sync(curproc, NULL, NULL);
 
 	/* Restore hw.setperf */
 	if (cpu_setperf != NULL)

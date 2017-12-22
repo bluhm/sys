@@ -144,7 +144,7 @@ int ffs_oldfscompat(struct fs *);
 int ffs_unmount(struct mount *, int, struct proc *);
 int ffs_flushfiles(struct mount *, int, struct proc *);
 int ffs_statfs(struct mount *, struct statfs *, struct proc *);
-int ffs_sync(struct mount *, int, struct ucred *, struct proc *);
+int ffs_sync(struct mount *, int, int, struct ucred *, struct proc *);
 int ffs_vget(struct mount *, ino_t, struct vnode **);
 int ffs_fhtovp(struct mount *, struct fid *, struct vnode **);
 int ffs_vptofh(struct vnode *, struct fid *);

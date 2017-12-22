@@ -537,7 +537,7 @@ udf_statfs(struct mount *mp, struct statfs *sbp, struct proc *p)
 }
 
 int
-udf_sync(struct mount *mp, int waitfor, struct ucred *cred, struct proc *p)
+udf_sync(struct mount *mp, int waitfor, int stall, struct ucred *cred, struct proc *p)
 {
 	return (0);
 }

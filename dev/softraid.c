@@ -3930,6 +3930,12 @@ sr_discipline_shutdown(struct sr_discipline *sd, int meta_save, int dying)
 		    EWOULDBLOCK)
 			break;
 
+	if (dying == -1) {
+		sd->sd_ready = 1;
+		splx(s);
+		return;
+	}
+
 #ifndef SMALL_KERNEL
 	sr_sensors_delete(sd);
 #endif /* SMALL_KERNEL */
@@ -4540,6 +4546,18 @@ sr_validate_stripsize(u_int32_t b)
 		return(-1);
 
 	return (s);
+}
+
+void
+sr_quiesce(void)
+{
+	struct sr_softc		*sc = softraid0;
+	struct sr_discipline	*sd, *nsd;
+
+	/* Shutdown disciplines in reverse attach order. */
+	TAILQ_FOREACH_REVERSE_SAFE(sd, &sc->sc_dis_list,
+	    sr_discipline_list, sd_link, nsd)
+		sr_discipline_shutdown(sd, 1, -1);
 }
 
 void
