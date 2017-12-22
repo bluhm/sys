@@ -77,7 +77,7 @@
 
 #include "softraid.h"
 
-void sr_shutdown(int);
+void sr_quiesce(void);
 
 enum vtype iftovt_tab[16] = {
 	VNON, VFIFO, VCHR, VNON, VDIR, VNON, VBLK, VNON,
@@ -1589,6 +1589,39 @@ vaccess(enum vtype type, mode_t file_mode, uid_t uid, gid_t gid,
 }
 
 int
+vfs_stall(struct proc *p, int stall)
+{
+	struct mount *mp, *nmp;
+	int allerror = 0, error;
+
+	TAILQ_FOREACH_REVERSE_SAFE(mp, &mountlist, mntlist, mnt_list, nmp) {
+		if (stall) {
+			error = vfs_busy(mp, VB_WRITE|VB_WAIT);
+			if (error) {
+				printf("%s: busy\n", mp->mnt_stat.f_mntonname);
+				allerror = error;
+				continue;
+			}
+			uvm_vnp_sync(mp);
+			error = VFS_SYNC(mp, MNT_WAIT, stall, p->p_ucred, p);
+			if (error) {
+				printf("%s: failed to sync\n", mp->mnt_stat.f_mntonname);
+				vfs_unbusy(mp);
+				allerror = error;
+				continue;
+			}
+			mp->mnt_flag |= MNT_STALLED;
+		} else {
+			if (mp->mnt_flag & MNT_STALLED) {
+				vfs_unbusy(mp);
+				mp->mnt_flag &= ~MNT_STALLED;
+			}
+		}
+	}
+	return (allerror);
+}
+
+int
 vfs_readonly(struct mount *mp, struct proc *p)
 {
 	int error;
@@ -1599,7 +1632,7 @@ vfs_readonly(struct mount *mp, struct proc *p)
 		return (error);
 	}
 	uvm_vnp_sync(mp);
-	error = VFS_SYNC(mp, MNT_WAIT, p->p_ucred, p);
+	error = VFS_SYNC(mp, MNT_WAIT, 0, p->p_ucred, p);
 	if (error) {
 		printf("%s: failed to sync\n", mp->mnt_stat.f_mntonname);
 		vfs_unbusy(mp);
@@ -1632,10 +1665,8 @@ vfs_rofs(struct proc *p)
 {
 	struct mount *mp, *nmp;
 
-	TAILQ_FOREACH_REVERSE_SAFE(mp, &mountlist, mntlist, mnt_list, nmp) {
-		/* XXX Here is a race, the next pointer is not locked. */
+	TAILQ_FOREACH_REVERSE_SAFE(mp, &mountlist, mntlist, mnt_list, nmp)
 		(void) vfs_readonly(mp, p);
-	}
 }
 
 /*
@@ -1673,7 +1704,7 @@ vfs_shutdown(struct proc *p)
 		printf("done\n");
 
 #if NSOFTRAID > 0
-	sr_shutdown(1);
+	sr_quiesce();
 #endif
 }
 

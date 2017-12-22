@@ -4945,7 +4945,7 @@ loop:
 	 */
 	if (vn_isdisk(vp, NULL) &&
 	    vp->v_specmountpoint && !VOP_ISLOCKED(vp) &&
-	    (error = VFS_SYNC(vp->v_specmountpoint, MNT_WAIT, ap->a_cred,
+	    (error = VFS_SYNC(vp->v_specmountpoint, MNT_WAIT, 0, ap->a_cred,
 	     ap->a_p)) != 0)
 		return (error);
 	return (0);

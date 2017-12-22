@@ -243,7 +243,7 @@ ffs_mount(struct mount *mp, const char *path, void *data,
 
 		if (ronly == 0 && (mp->mnt_flag & MNT_RDONLY)) {
 			/* Flush any dirty data */
-			VFS_SYNC(mp, MNT_WAIT, p->p_ucred, p);
+			VFS_SYNC(mp, MNT_WAIT, 0, p->p_ucred, p);
 
 			/*
 			 * Get rid of files open for writing.
@@ -1145,7 +1145,8 @@ struct ffs_sync_args {
 };
 
 int
-ffs_sync_vnode(struct vnode *vp, void *arg) {
+ffs_sync_vnode(struct vnode *vp, void *arg)
+{
 	struct ffs_sync_args *fsa = arg;
 	struct inode *ip;
 	int error;
@@ -1189,11 +1190,11 @@ ffs_sync_vnode(struct vnode *vp, void *arg) {
  * Should always be called with the mount point locked.
  */
 int
-ffs_sync(struct mount *mp, int waitfor, struct ucred *cred, struct proc *p)
+ffs_sync(struct mount *mp, int waitfor, int stall, struct ucred *cred, struct proc *p)
 {
 	struct ufsmount *ump = VFSTOUFS(mp);
 	struct fs *fs;
-	int error, allerror = 0, count;
+	int error, allerror = 0, count, clean, fmod;
 	struct ffs_sync_args fsa;
 
 	fs = ump->um_fs;
@@ -1240,12 +1241,20 @@ ffs_sync(struct mount *mp, int waitfor, struct ucred *cred, struct proc *p)
 		VOP_UNLOCK(ump->um_devvp, p);
 	}
 	qsync(mp);
+
 	/*
 	 * Write back modified superblock.
 	 */
-
+	clean = fs->fs_clean;
+	fmod = fs->fs_fmod;
+	if (stall && fs->fs_ronly == 0) {
+		fs->fs_fmod = 1;
+		fs->fs_clean = (fs->fs_flags & FS_UNCLEAN) ? 0 : 1;
+	}
 	if (fs->fs_fmod != 0 && (error = ffs_sbupdate(ump, waitfor)) != 0)
 		allerror = error;
+	fs->fs_clean = clean;
+	fs->fs_fmod = fmod;
 
 	return (allerror);
 }

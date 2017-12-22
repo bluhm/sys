@@ -644,9 +644,10 @@ cd9660_statfs(mp, sbp, p)
 
 /* ARGSUSED */
 int
-cd9660_sync(mp, waitfor, cred, p)
+cd9660_sync(mp, waitfor, stall, cred, p)
 	struct mount *mp;
 	int waitfor;
+	int stall;
 	struct ucred *cred;
 	struct proc *p;
 {

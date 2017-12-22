@@ -786,7 +786,7 @@ ufs_direnter(struct vnode *dvp, struct vnode *tvp, struct direct *dirp,
 			return (error);
 		}
 		error = VOP_BWRITE(bp);
- 		ret = UFS_UPDATE(dp, !DOINGSOFTDEP(dvp));
+ 		ret = UFS_UPDATE(dp, 1);
  		if (error == 0)
  			return (ret);
   		return (error);

@@ -369,8 +369,9 @@ ufs_setattr(void *v)
 			DIP_OR(ip, flags, vap->va_flags & UF_SETTABLE);
 		}
 		ip->i_flag |= IN_CHANGE;
+		error = UFS_UPDATE(ip, 0);
 		if (vap->va_flags & (IMMUTABLE | APPEND))
-			return (0);
+			return error;
 	}
 	if (DIP(ip, flags) & (IMMUTABLE | APPEND))
 		return (EPERM);
@@ -476,7 +477,8 @@ ufs_chmod(struct vnode *vp, int mode, struct ucred *cred, struct proc *p)
 	ip->i_flag |= IN_CHANGE;
 	if ((vp->v_flag & VTEXT) && (DIP(ip, mode) & S_ISTXT) == 0)
 		(void) uvm_vnp_uncache(vp);
-	return (0);
+	error = UFS_UPDATE(ip, 0);
+	return error;
 }
 
 /*
@@ -552,7 +554,8 @@ ufs_chown(struct vnode *vp, uid_t uid, gid_t gid, struct ucred *cred,
 	if (ogid != gid && cred->cr_uid != 0 &&
 	    (vp->v_mount->mnt_flag & MNT_NOPERM) == 0)
 		DIP_AND(ip, mode, ~ISGID);
-	return (0);
+	error = UFS_UPDATE(ip, 0);
+	return error;
 
 error:
 	(void) ufs_quota_delete(ip);
@@ -1361,6 +1364,7 @@ ufs_rmdir(void *v)
 
 		DIP_ADD(dp, nlink, -1);
 		dp->i_flag |= IN_CHANGE;
+		error = UFS_UPDATE(dp, 0);
 		DIP_ADD(ip, nlink, -1);
 		ip->i_flag |= IN_CHANGE;
 		ioflag = DOINGASYNC(vp) ? 0 : IO_SYNC;
@@ -1403,6 +1407,7 @@ ufs_symlink(void *v)
 		memcpy(SHORTLINK(ip), ap->a_target, len);
 		DIP_ASSIGN(ip, size, len);
 		ip->i_flag |= IN_CHANGE | IN_UPDATE;
+		error = UFS_UPDATE(ip, 0);
 	} else
 		error = vn_rdwr(UIO_WRITE, vp, ap->a_target, len, (off_t)0,
 		    UIO_SYSSPACE, IO_NODELOCKED, ap->a_cnp->cn_cred, NULL,

@@ -105,7 +105,7 @@ int	ext2fs_mountfs(struct vnode *, struct mount *, struct proc *);
 int	ext2fs_unmount(struct mount *, int, struct proc *);
 int	ext2fs_flushfiles(struct mount *, int, struct proc *);
 int	ext2fs_statfs(struct mount *, struct statfs *, struct proc *);
-int	ext2fs_sync(struct mount *, int, struct ucred *, struct proc *);
+int	ext2fs_sync(struct mount *, int, int, struct ucred *, struct proc *);
 int	ext2fs_vget(struct mount *, ino_t, struct vnode **);
 int	ext2fs_fhtovp(struct mount *, struct fid *, struct vnode **);
 int	ext2fs_vptofh(struct vnode *, struct fid *);
