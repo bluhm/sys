@@ -7234,7 +7234,7 @@ pf_state_key_ref(struct pf_state_key *sk)
 void
 pf_state_key_unref(struct pf_state_key *sk)
 {
-	if ((sk != NULL) && PF_REF_RELE(sk->refcnt)) {
+	if (PF_REF_RELE(sk->refcnt)) {
 		/* state key must be removed from tree */
 		KASSERT(!pf_state_key_isvalid(sk));
 		/* state key must be unlinked from reverse key */
@@ -7256,8 +7256,10 @@ pf_mbuf_unlink_state_key(struct mbuf *m)
 {
 	struct pf_state_key *sk = m->m_pkthdr.pf.statekey;
 
-	m->m_pkthdr.pf.statekey = NULL;
-	pf_state_key_unref(sk);
+	if (sk != NULL) {
+		m->m_pkthdr.pf.statekey = NULL;
+		pf_state_key_unref(sk);
+	}
 }
 
 void
