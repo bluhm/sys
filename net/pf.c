@@ -7197,15 +7197,15 @@ pf_inp_unlink(struct inpcb *inp)
 }
 
 void
-pf_state_key_link_reverse(struct pf_state_key *sk, struct pf_state_key *pkt_sk)
+pf_state_key_link_reverse(struct pf_state_key *sk, struct pf_state_key *skrev)
 {
 	/*
 	 * Assert will not wire as long as we are called by pf_find_state()
 	 */
 	KASSERT(sk->reverse == NULL);
-	sk->reverse = pf_state_key_ref(pkt_sk);
-	KASSERT(pkt_sk->reverse == NULL);
-	pkt_sk->reverse = pf_state_key_ref(sk);
+	sk->reverse = pf_state_key_ref(skrev);
+	KASSERT(skrev->reverse == NULL);
+	skrev->reverse = pf_state_key_ref(sk);
 }
 
 #if NPFLOG > 0
