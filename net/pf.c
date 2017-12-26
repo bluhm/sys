@@ -7311,8 +7311,8 @@ pf_state_key_unlink_reverse(struct pf_state_key *sk)
 	if (skrev != NULL) {
 		KASSERT(skrev->reverse == sk);
 		sk->reverse = NULL;
-		pf_state_key_unref(skrev);
 		skrev->reverse = NULL;
+		pf_state_key_unref(skrev);
 		pf_state_key_unref(sk);
 	}
 }
