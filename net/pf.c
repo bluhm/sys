@@ -7265,6 +7265,7 @@ pf_mbuf_unlink_state_key(struct mbuf *m)
 void
 pf_mbuf_link_state_key(struct mbuf *m, struct pf_state_key *sk)
 {
+	KASSERT(m->m_pkthdr.pf.statekey == NULL);
 	m->m_pkthdr.pf.statekey = pf_state_key_ref(sk);
 }
 
