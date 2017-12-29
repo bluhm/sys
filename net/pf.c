@@ -811,6 +811,7 @@ pf_state_key_detach(struct pf_state *s, int idx)
 		sk->removed = 1;
 		pf_state_key_unlink_reverse(sk);
 		pf_state_key_unlink_inpcb(sk);
+		pf_state_key_unref(sk);
 	}
 }
 
