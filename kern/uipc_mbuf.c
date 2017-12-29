@@ -1325,6 +1325,7 @@ m_dup_pkthdr(struct mbuf *to, struct mbuf *from, int wait)
 	to->m_pkthdr = from->m_pkthdr;
 
 #if NPF > 0
+	to->m_pkthdr.pf.statekey = NULL;
 	pf_mbuf_link_state_key(to, from->m_pkthdr.pf.statekey);
 #endif	/* NPF > 0 */
 
