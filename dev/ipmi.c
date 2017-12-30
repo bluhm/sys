@@ -1652,7 +1652,7 @@ ipmi_match(struct device *parent, void *match, void *aux)
 		return (0);
 
 	/* XXX local softc is wrong wrong wrong */
-	sc = malloc(sizeof(*sc), M_TEMP, M_NOWAIT | M_ZERO);
+	sc = malloc(sizeof(*sc), M_TEMP, M_WAITOK | M_ZERO);
 	mtx_init(&sc->sc_cmd_mtx, IPL_NONE);
 	strlcpy(sc->sc_dev.dv_xname, "ipmi0", sizeof(sc->sc_dev.dv_xname));
 
