@@ -1,4 +1,4 @@
-/*	$OpenBSD: ipmi.c,v 1.99 2017/09/08 05:36:52 deraadt Exp $ */
+/*	$OpenBSD: ipmi.c,v 1.100 2018/01/01 16:16:23 bluhm Exp $ */
 
 /*
  * Copyright (c) 2015 Masao Uebayashi
