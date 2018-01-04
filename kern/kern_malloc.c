@@ -205,9 +205,11 @@ malloc(size_t size, int type, int flags)
 			mtx_leave(&malloc_mtx);
 			return (NULL);
 		}
+#ifdef DIAGNOSTIC
 		if (ISSET(flags, M_WAITOK) && cold)
 			panic("%s: cannot sleep for memory during boot",
 			    __func__);
+#endif
 		if (ksp->ks_limblocks < 65535)
 			ksp->ks_limblocks++;
 		msleep(ksp, &malloc_mtx, PSWP+2, memname[type], 0);

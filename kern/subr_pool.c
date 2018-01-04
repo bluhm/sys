@@ -596,10 +596,11 @@ pool_get(struct pool *pp, int flags)
 		struct pool_get_memory mem = { .v = NULL };
 		struct pool_request pr;
 
+#ifdef DIAGNOSTIC
 		if (ISSET(flags, PR_WAITOK) && cold)
 			panic("%s: cannot sleep for memory during boot",
 			    __func__);
-
+#endif
 		pl_init(pp, &mem.lock);
 		pool_request_init(&pr, pool_get_done, &mem);
 		pool_request(pp, &pr);
