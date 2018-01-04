@@ -597,7 +597,8 @@ pool_get(struct pool *pp, int flags)
 		struct pool_request pr;
 
 		if (ISSET(flags, PR_WAITOK) && cold)
-			panic("pool_get: cannot sleep for memory during boot");
+			panic("%s: cannot sleep for memory during boot",
+			    __func__);
 
 		pl_init(pp, &mem.lock);
 		pool_request_init(&pr, pool_get_done, &mem);
