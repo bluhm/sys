@@ -35,6 +35,7 @@
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
+#include <sys/proc.h>
 #include <sys/stdint.h>
 #include <sys/systm.h>
 #include <sys/sysctl.h>
@@ -206,7 +207,7 @@ malloc(size_t size, int type, int flags)
 			return (NULL);
 		}
 #ifdef DIAGNOSTIC
-		if (ISSET(flags, M_WAITOK) && cold)
+		if (ISSET(flags, M_WAITOK) && curproc == &proc0)
 			panic("%s: cannot sleep for memory during boot",
 			    __func__);
 #endif

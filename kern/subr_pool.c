@@ -37,6 +37,7 @@
 #include <sys/kernel.h>
 #include <sys/malloc.h>
 #include <sys/pool.h>
+#include <sys/proc.h>
 #include <sys/syslog.h>
 #include <sys/sysctl.h>
 #include <sys/task.h>
@@ -597,7 +598,7 @@ pool_get(struct pool *pp, int flags)
 		struct pool_request pr;
 
 #ifdef DIAGNOSTIC
-		if (ISSET(flags, PR_WAITOK) && cold)
+		if (ISSET(flags, PR_WAITOK) && curproc == &proc0)
 			panic("%s: cannot sleep for memory during boot",
 			    __func__);
 #endif
