@@ -70,6 +70,7 @@
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/pool.h>
+#include <sys/proc.h>
 #include <sys/buf.h>
 #include <sys/mount.h>
 #include <sys/atomic.h>
@@ -110,6 +111,11 @@ void
 uvm_wait(const char *wmsg)
 {
 	int	timo = 0;
+
+#ifdef DIAGNOSTIC
+	if (curproc == &proc0)
+		panic("%s: cannot sleep for memory during boot", __func__);
+#endif
 
 	/* check for page daemon going to sleep (waiting for itself) */
 	if (curproc == uvm.pagedaemon_proc) {
