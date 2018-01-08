@@ -90,7 +90,14 @@ struct if_clone {
 };
 
 #define	IF_CLONE_INITIALIZER(name, create, destroy)			\
-	{ { 0 }, name, sizeof(name) - 1, create, destroy }
+{									\
+  .ifc_list	= { NULL, NULL },					\
+  .ifc_name	= name,							\
+  .ifc_namelen	= sizeof(name) - 1,					\
+  .ifc_create	= create,						\
+  .ifc_destroy	= destroy,						\
+}
+
 /*
  *  Locks used to protect struct members in this file:
  *	I	immutable after creation
