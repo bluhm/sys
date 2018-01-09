@@ -1,4 +1,4 @@
-/* $OpenBSD: if_vether.c,v 1.29 2017/01/22 10:17:39 dlg Exp $ */
+/* $OpenBSD: if_vether.c,v 1.30 2018/01/09 15:24:24 bluhm Exp $ */
 
 /*
  * Copyright (c) 2009 Theo de Raadt

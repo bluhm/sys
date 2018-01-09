@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_pair.c,v 1.10 2017/01/23 11:37:29 mpi Exp $	*/
+/*	$OpenBSD: if_pair.c,v 1.11 2018/01/09 15:24:24 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2015 Reyk Floeter <reyk@openbsd.org>

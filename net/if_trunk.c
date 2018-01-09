@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_trunk.c,v 1.134 2017/08/14 08:31:00 reyk Exp $	*/
+/*	$OpenBSD: if_trunk.c,v 1.135 2018/01/09 15:24:24 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006, 2007 Reyk Floeter <reyk@openbsd.org>

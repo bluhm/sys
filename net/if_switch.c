@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_switch.c,v 1.21 2017/11/20 10:17:40 mpi Exp $	*/
+/*	$OpenBSD: if_switch.c,v 1.22 2018/01/09 15:24:24 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2016 Kazuya GODA <goda@openbsd.org>

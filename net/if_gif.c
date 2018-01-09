@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_gif.c,v 1.106 2018/01/09 10:08:01 mpi Exp $	*/
+/*	$OpenBSD: if_gif.c,v 1.107 2018/01/09 15:24:24 bluhm Exp $	*/
 /*	$KAME: if_gif.c,v 1.43 2001/02/20 08:51:07 itojun Exp $	*/
 
 /*
