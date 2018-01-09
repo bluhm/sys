@@ -137,10 +137,7 @@ pflog_clone_create(struct if_clone *ifc, int unit)
 	struct ifnet *ifp;
 	struct pflog_softc *pflogif;
 
-	if ((pflogif = malloc(sizeof(*pflogif),
-	    M_DEVBUF, M_NOWAIT|M_ZERO)) == NULL)
-		return (ENOMEM);
-
+	pflogif = malloc(sizeof(*pflogif), M_DEVBUF, M_WAITOK|M_ZERO);
 	pflogif->sc_unit = unit;
 	ifp = &pflogif->sc_if;
 	snprintf(ifp->if_xname, sizeof ifp->if_xname, "pflog%d", unit);

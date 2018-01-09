@@ -145,12 +145,8 @@ pflow_clone_create(struct if_clone *ifc, int unit)
 	struct ifnet		*ifp;
 	struct pflow_softc	*pflowif;
 
-	if ((pflowif = malloc(sizeof(*pflowif),
-	    M_DEVBUF, M_NOWAIT|M_ZERO)) == NULL)
-		return (ENOMEM);
-
+	pflowif = malloc(sizeof(*pflowif), M_DEVBUF, M_WAITOK|M_ZERO);
 	MGET(pflowif->send_nam, M_WAIT, MT_SONAME);
-
 	pflowif->sc_version = PFLOW_PROTO_DEFAULT;
 
 	/* ipfix template init */

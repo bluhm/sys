@@ -99,9 +99,7 @@ etherip_clone_create(struct if_clone *ifc, int unit)
 	struct ifnet *ifp;
 	struct etherip_softc *sc;
 
-	if ((sc = malloc(sizeof(*sc), M_DEVBUF, M_NOWAIT|M_ZERO)) == NULL)
-		return ENOMEM;
-
+	sc = malloc(sizeof(*sc), M_DEVBUF, M_WAITOK|M_ZERO);
 	ifp = &sc->sc_ac.ac_if;
 	snprintf(ifp->if_xname, sizeof ifp->if_xname, "etherip%d", unit);
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;

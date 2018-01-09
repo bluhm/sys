@@ -157,9 +157,7 @@ trunk_clone_create(struct if_clone *ifc, int unit)
 	struct ifnet *ifp;
 	int i, error = 0;
 
-	if ((tr = malloc(sizeof *tr, M_DEVBUF, M_NOWAIT|M_ZERO)) == NULL)
-		return (ENOMEM);
-
+	tr = malloc(sizeof(*tr), M_DEVBUF, M_WAITOK|M_ZERO);
 	tr->tr_unit = unit;
 	tr->tr_proto = TRUNK_PROTO_NONE;
 	for (i = 0; trunk_protos[i].ti_proto != TRUNK_PROTO_NONE; i++) {

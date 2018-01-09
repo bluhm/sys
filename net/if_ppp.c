@@ -205,10 +205,7 @@ ppp_clone_create(struct if_clone *ifc, int unit)
 {
 	struct ppp_softc *sc;
 
-	sc = malloc(sizeof(*sc), M_DEVBUF, M_NOWAIT|M_ZERO);
-	if (!sc)
-		return (ENOMEM);
-
+	sc = malloc(sizeof(*sc), M_DEVBUF, M_WAITOK|M_ZERO);
 	sc->sc_unit = unit;
 	snprintf(sc->sc_if.if_xname, sizeof sc->sc_if.if_xname, "%s%d",
 	    ifc->ifc_name, unit);

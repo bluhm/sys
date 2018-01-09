@@ -151,7 +151,6 @@ switch_clone_create(struct if_clone *ifc, int unit)
 
 	sc = malloc(sizeof(struct switch_softc), M_DEVBUF, M_WAITOK|M_ZERO);
 	ifp = &sc->sc_if;
-
 	snprintf(ifp->if_xname, sizeof ifp->if_xname, "switch%d", unit);
 	ifp->if_softc = sc;
 	ifp->if_mtu = ETHERMTU;
@@ -159,7 +158,6 @@ switch_clone_create(struct if_clone *ifc, int unit)
 	ifp->if_output = NULL;
 	ifp->if_start = NULL;
 	ifp->if_type = IFT_BRIDGE;
-	ifp->if_addrlen = 0;
 	ifp->if_hdrlen = ETHER_HDR_LEN;
 	TAILQ_INIT(&sc->sc_swpo_list);
 

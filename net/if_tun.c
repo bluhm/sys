@@ -193,10 +193,7 @@ tun_create(struct if_clone *ifc, int unit, int flags)
 	struct tun_softc	*tp;
 	struct ifnet		*ifp;
 
-	tp = malloc(sizeof(*tp), M_DEVBUF, M_NOWAIT|M_ZERO);
-	if (tp == NULL)
-		return (ENOMEM);
-
+	tp = malloc(sizeof(*tp), M_DEVBUF, M_WAITOK|M_ZERO);
 	tp->tun_unit = unit;
 	tp->tun_flags = TUN_INITED|TUN_STAYUP;
 

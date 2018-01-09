@@ -156,10 +156,7 @@ bridge_clone_create(struct if_clone *ifc, int unit)
 	struct ifnet *ifp;
 	int i;
 
-	sc = malloc(sizeof(*sc), M_DEVBUF, M_NOWAIT|M_ZERO);
-	if (!sc)
-		return (ENOMEM);
-
+	sc = malloc(sizeof(*sc), M_DEVBUF, M_WAITOK|M_ZERO);
 	sc->sc_stp = bstp_create(&sc->sc_if);
 	if (!sc->sc_stp) {
 		free(sc, M_DEVBUF, sizeof *sc);
