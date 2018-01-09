@@ -107,10 +107,7 @@ gif_clone_create(struct if_clone *ifc, int unit)
 {
 	struct gif_softc *sc;
 
-	sc = malloc(sizeof(*sc), M_DEVBUF, M_NOWAIT|M_ZERO);
-	if (!sc)
-		return (ENOMEM);
-
+	sc = malloc(sizeof(*sc), M_DEVBUF, M_WAITOK|M_ZERO);
 	snprintf(sc->gif_if.if_xname, sizeof sc->gif_if.if_xname,
 	     "%s%d", ifc->ifc_name, unit);
 	sc->gif_if.if_mtu    = GIF_MTU;

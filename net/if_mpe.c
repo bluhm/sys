@@ -81,10 +81,7 @@ mpe_clone_create(struct if_clone *ifc, int unit)
 	struct ifnet		*ifp;
 	struct mpe_softc	*mpeif;
 
-	if ((mpeif = malloc(sizeof(*mpeif),
-	    M_DEVBUF, M_NOWAIT|M_ZERO)) == NULL)
-		return (ENOMEM);
-
+	mpeif = malloc(sizeof(*mpeif), M_DEVBUF, M_WAITOK|M_ZERO);
 	mpeif->sc_unit = unit;
 	ifp = &mpeif->sc_if;
 	snprintf(ifp->if_xname, sizeof ifp->if_xname, "mpe%d", unit);

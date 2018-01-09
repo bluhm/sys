@@ -300,8 +300,7 @@ pfsync_clone_create(struct if_clone *ifc, int unit)
 
 	pfsync_sync_ok = 1;
 
-	sc = malloc(sizeof(*pfsyncif), M_DEVBUF, M_WAITOK | M_ZERO);
-
+	sc = malloc(sizeof(*pfsyncif), M_DEVBUF, M_WAITOK|M_ZERO);
 	for (q = 0; q < PFSYNC_S_COUNT; q++)
 		TAILQ_INIT(&sc->sc_qs[q]);
 

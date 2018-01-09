@@ -196,10 +196,7 @@ pppoe_clone_create(struct if_clone *ifc, int unit)
 	struct pppoe_softc *sc, *tmpsc;
 	u_int32_t unique;
 
-        sc = malloc(sizeof(*sc), M_DEVBUF, M_WAITOK|M_CANFAIL|M_ZERO);
-        if (sc == NULL)
-                return (ENOMEM);
-
+	sc = malloc(sizeof(*sc), M_DEVBUF, M_WAITOK|M_ZERO);
 	snprintf(sc->sc_sppp.pp_if.if_xname,
 		 sizeof(sc->sc_sppp.pp_if.if_xname),
 		 "pppoe%d", unit);

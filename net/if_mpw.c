@@ -83,10 +83,7 @@ mpw_clone_create(struct if_clone *ifc, int unit)
 	struct mpw_softc *sc;
 	struct ifnet *ifp;
 
-	sc = malloc(sizeof(*sc), M_DEVBUF, M_NOWAIT | M_ZERO);
-	if (sc == NULL)
-		return (ENOMEM);
-
+	sc = malloc(sizeof(*sc), M_DEVBUF, M_WAITOK|M_ZERO);
 	ifp = &sc->sc_if;
 	snprintf(ifp->if_xname, sizeof(ifp->if_xname), "mpw%d", unit);
 	ifp->if_softc = sc;

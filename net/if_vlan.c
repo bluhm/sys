@@ -157,10 +157,7 @@ vlan_clone_create(struct if_clone *ifc, int unit)
 	struct ifvlan	*ifv;
 	struct ifnet	*ifp;
 
-	ifv = malloc(sizeof(*ifv), M_DEVBUF, M_NOWAIT|M_ZERO);
-	if (ifv == NULL)
-		return (ENOMEM);
-
+	ifv = malloc(sizeof(*ifv), M_DEVBUF, M_WAITOK|M_ZERO);
 	LIST_INIT(&ifv->vlan_mc_listhead);
 	ifp = &ifv->ifv_if;
 	ifp->if_softc = ifv;
