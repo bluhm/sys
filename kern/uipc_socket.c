@@ -1078,7 +1078,8 @@ sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
 	soassertlocked(so);
 
 	if (sosplice_taskq == NULL)
-		sosplice_taskq = taskq_create("sosplice", 1, IPL_SOFTNET, 0);
+		sosplice_taskq = taskq_create("sosplice", 1, IPL_SOFTNET, 
+		    TASKQ_MPSAFE);
 	if (sosplice_taskq == NULL)
 		return (ENOMEM);
 
