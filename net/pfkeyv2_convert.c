@@ -543,7 +543,7 @@ export_encap(void **p, struct sockaddr_encap *encap, int type)
 		}
 		*p += PADUP(sizeof(struct sockaddr_in));
 		break;
-        case SENT_IP6:
+	case SENT_IP6:
 		saddr->sadb_address_len = (sizeof(struct sadb_address)
 		    + PADUP(sizeof(struct sockaddr_in6))) / sizeof(uint64_t);
 		sunion->sa.sa_len = sizeof(struct sockaddr_in6);
