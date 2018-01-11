@@ -896,4 +896,5 @@ export_satype(void **p, struct tdb *tdb)
 	sab->sadb_protocol_len = sizeof(struct sadb_protocol) /
 	    sizeof(uint64_t);
 	sab->sadb_protocol_proto = tdb->tdb_satype;
+	*p += sizeof(struct sadb_protocol);
 }
