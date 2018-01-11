@@ -5942,7 +5942,6 @@ pf_route(struct pf_pdesc *pd, struct pf_rule *r, struct pf_state *s)
 		ipstat_inc(ips_noroute);
 		goto bad;
 	}
-
 	/* A locally generated packet may have invalid source address. */
 	if ((ntohl(ip->ip_src.s_addr) >> IN_CLASSA_NSHIFT) == IN_LOOPBACKNET)
 		ip->ip_src = ifatoia(rt->rt_ifa)->ia_addr.sin_addr;
@@ -6100,7 +6099,6 @@ pf_route6(struct pf_pdesc *pd, struct pf_rule *r, struct pf_state *s)
 		ip6stat_inc(ip6s_noroute);
 		goto bad;
 	}
-
 	/* A locally generated packet may have invalid source address. */
 	if (IN6_IS_ADDR_LOOPBACK(&ip6->ip6_src))
 		ip6->ip6_src = ifatoia6(rt->rt_ifa)->ia_addr.sin6_addr;
