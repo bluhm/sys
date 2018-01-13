@@ -231,7 +231,7 @@ k8pnow_transition(struct k8pnow_cpu_state *cstate, int level)
 
 	/* Phase 2: change to requested core frequency */
 	if (cfid != fid) {
-		u_int vco_fid, vco_cfid;
+		int vco_fid, vco_cfid;
 
 		vco_fid = FID_TO_VCO_FID(fid);
 		vco_cfid = FID_TO_VCO_FID(cfid);
