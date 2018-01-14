@@ -28,7 +28,7 @@
 #ifdef UCODE_DEBUG
 #define DPRINTF(x)	do { if (cpu_ucode_debug > 0) printf x; } while (0)
 #define DPRINTFN(n, x)	do { if (cpu_ucode_debug >= (n)) printf x; } while (0)
-static int cpu_ucode_debug = 1;
+int cpu_ucode_debug = 1;
 #else
 #define DPRINTF(x)	do { ; } while (0)
 #define DPRINTFN(n, x)	do { ; } while (0)
