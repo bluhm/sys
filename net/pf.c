@@ -5948,15 +5948,6 @@ pf_route(struct pf_pdesc *pd, struct pf_rule *r, struct pf_state *s)
 	if (ifp == NULL)
 		goto bad;
 
-	rt = rtalloc(sintosa(dst), RT_RESOLVE, rtableid);
-	if (!rtisvalid(rt)) {
-		ipstat_inc(ips_noroute);
-		goto bad;
-	}
-	/* A locally generated packet may have invalid source address. */
-	if ((ntohl(ip->ip_src.s_addr) >> IN_CLASSA_NSHIFT) == IN_LOOPBACKNET)
-		ip->ip_src = ifatoia(rt->rt_ifa)->ia_addr.sin_addr;
-
 	if (pd->kif->pfik_ifp != ifp) {
 		if (pf_test(AF_INET, PF_OUT, ifp, &m0) != PF_PASS)
 			goto bad;
@@ -5969,6 +5960,15 @@ pf_route(struct pf_pdesc *pd, struct pf_rule *r, struct pf_state *s)
 		}
 		ip = mtod(m0, struct ip *);
 	}
+
+	rt = rtalloc(sintosa(dst), RT_RESOLVE, rtableid);
+	if (!rtisvalid(rt)) {
+		ipstat_inc(ips_noroute);
+		goto bad;
+	}
+	/* A locally generated packet may have invalid source address. */
+	if ((ntohl(ip->ip_src.s_addr) >> IN_CLASSA_NSHIFT) == IN_LOOPBACKNET)
+		ip->ip_src = ifatoia(rt->rt_ifa)->ia_addr.sin_addr;
 
 	in_proto_cksum_out(m0, ifp);
 
@@ -6102,17 +6102,6 @@ pf_route6(struct pf_pdesc *pd, struct pf_rule *r, struct pf_state *s)
 	if (ifp == NULL)
 		goto bad;
 
-	if (IN6_IS_SCOPE_EMBED(&dst->sin6_addr))
-		dst->sin6_addr.s6_addr16[1] = htons(ifp->if_index);
-	rt = rtalloc(sin6tosa(dst), RT_RESOLVE, rtableid);
-	if (!rtisvalid(rt)) {
-		ip6stat_inc(ip6s_noroute);
-		goto bad;
-	}
-	/* A locally generated packet may have invalid source address. */
-	if (IN6_IS_ADDR_LOOPBACK(&ip6->ip6_src))
-		ip6->ip6_src = ifatoia6(rt->rt_ifa)->ia_addr.sin6_addr;
-
 	if (pd->kif->pfik_ifp != ifp) {
 		if (pf_test(AF_INET6, PF_OUT, ifp, &m0) != PF_PASS)
 			goto bad;
@@ -6124,6 +6113,17 @@ pf_route6(struct pf_pdesc *pd, struct pf_rule *r, struct pf_state *s)
 			goto bad;
 		}
 	}
+
+	if (IN6_IS_SCOPE_EMBED(&dst->sin6_addr))
+		dst->sin6_addr.s6_addr16[1] = htons(ifp->if_index);
+	rt = rtalloc(sin6tosa(dst), RT_RESOLVE, rtableid);
+	if (!rtisvalid(rt)) {
+		ip6stat_inc(ip6s_noroute);
+		goto bad;
+	}
+	/* A locally generated packet may have invalid source address. */
+	if (IN6_IS_ADDR_LOOPBACK(&ip6->ip6_src))
+		ip6->ip6_src = ifatoia6(rt->rt_ifa)->ia_addr.sin6_addr;
 
 	in6_proto_cksum_out(m0, ifp);
 
