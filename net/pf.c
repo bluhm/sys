@@ -7005,11 +7005,9 @@ done:
 	}
 	if (pd.dir == PF_OUT &&
 	    pd.m->m_pkthdr.pf.inp && !pd.m->m_pkthdr.pf.inp->inp_pf_sk &&
-	    s && s->key[PF_SK_STACK] && !s->key[PF_SK_STACK]->inp) {
-		pd.m->m_pkthdr.pf.inp->inp_pf_sk =
-		    pf_state_key_ref(s->key[PF_SK_STACK]);
-		s->key[PF_SK_STACK]->inp = pd.m->m_pkthdr.pf.inp;
-	}
+	    s && s->key[PF_SK_STACK] && !s->key[PF_SK_STACK]->inp)
+		pf_state_key_link_inpcb(s->key[PF_SK_STACK],
+		    pd.m->m_pkthdr.pf.inp);
 
 	if (s && (pd.m->m_pkthdr.ph_flowid & M_FLOWID_VALID) == 0) {
 		pd.m->m_pkthdr.ph_flowid = M_FLOWID_VALID |
