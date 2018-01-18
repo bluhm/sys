@@ -6988,21 +6988,8 @@ done:
 
 	if (action == PF_PASS && qid)
 		pd.m->m_pkthdr.pf.qid = qid;
-	if (pd.dir == PF_IN && s && s->key[PF_SK_STACK]) {
-		/*
-		 * Check below fires whenever caller forgets to call
-		 * pf_pkt_addr_changed(). This might happen when we
-		 * deal with IP tunnels.
-		 */
-		if (pd.m->m_pkthdr.pf.statekey != NULL) {
-#ifdef DDB
-			m_print(pd.m, printf);
-#endif
-			panic("incoming mbuf already has a statekey");
-		}
-		pd.m->m_pkthdr.pf.statekey =
-		    pf_state_key_ref(s->key[PF_SK_STACK]);
-	}
+	if (pd.dir == PF_IN && s && s->key[PF_SK_STACK])
+		pf_mbuf_link_state_key(pd.m, s->key[PF_SK_STACK]);
 	if (pd.dir == PF_OUT &&
 	    pd.m->m_pkthdr.pf.inp && !pd.m->m_pkthdr.pf.inp->inp_pf_sk &&
 	    s && s->key[PF_SK_STACK] && !s->key[PF_SK_STACK]->inp)
