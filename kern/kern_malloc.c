@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_malloc.c,v 1.132 2018/01/02 06:07:21 guenther Exp $	*/
+/*	$OpenBSD: kern_malloc.c,v 1.133 2018/01/18 18:08:51 bluhm Exp $	*/
 /*	$NetBSD: kern_malloc.c,v 1.15.4.2 1996/06/13 17:10:56 cgd Exp $	*/
 
 /*

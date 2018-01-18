@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_pdaemon.c,v 1.78 2017/02/14 10:31:15 mpi Exp $	*/
+/*	$OpenBSD: uvm_pdaemon.c,v 1.79 2018/01/18 18:08:51 bluhm Exp $	*/
 /*	$NetBSD: uvm_pdaemon.c,v 1.23 2000/08/20 10:24:14 bjh21 Exp $	*/
 
 /* 
