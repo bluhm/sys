@@ -80,6 +80,7 @@
 #include "bpfilter.h"
 
 void ipsec_common_ctlinput(u_int, int, struct sockaddr *, void *, int);
+void ipsec_set_mtu(struct tdb *, u_int32_t);
 
 #ifdef ENCDEBUG
 #define DPRINTF(x)	if (encdebug) printf x
@@ -822,6 +823,28 @@ ipcomp4_input(struct mbuf **mp, int *offp, int proto, int af)
 }
 
 void
+ipsec_set_mtu(struct tdb *tdbp, u_int32_t mtu)
+{
+	ssize_t adjust;
+
+	/* Walk the chain backwards to the first tdb */
+	NET_ASSERT_LOCKED();
+	for (; tdbp; tdbp = tdbp->tdb_inext) {
+		if (tdbp->tdb_flags & TDBF_INVALID ||
+		    (adjust = ipsec_hdrsz(tdbp)) == -1)
+			return;
+
+		mtu -= adjust;
+
+		/* Store adjusted MTU in tdb */
+		tdbp->tdb_mtu = mtu;
+		tdbp->tdb_mtutimeout = time_second + ip_mtudisc_timeout;
+		DPRINTF(("%s: spi %08x mtu %d adjust %ld\n", __func__,
+		    ntohl(tdbp->tdb_spi), tdbp->tdb_mtu, adjust));
+	}
+}
+
+void
 ipsec_common_ctlinput(u_int rdomain, int cmd, struct sockaddr *sa,
     void *v, int proto)
 {
@@ -833,7 +856,6 @@ ipsec_common_ctlinput(u_int rdomain, int cmd, struct sockaddr *sa,
 		struct icmp *icp;
 		int hlen = ip->ip_hl << 2;
 		u_int32_t spi, mtu;
-		ssize_t adjust;
 
 		/* Find the right MTU. */
 		icp = (struct icmp *)((caddr_t) ip -
@@ -859,23 +881,7 @@ ipsec_common_ctlinput(u_int rdomain, int cmd, struct sockaddr *sa,
 		if (tdbp == NULL || tdbp->tdb_flags & TDBF_INVALID)
 			return;
 
-		/* Walk the chain backwards to the first tdb */
-		NET_ASSERT_LOCKED();
-		for (; tdbp; tdbp = tdbp->tdb_inext) {
-			if (tdbp->tdb_flags & TDBF_INVALID ||
-			    (adjust = ipsec_hdrsz(tdbp)) == -1)
-				return;
-
-			mtu -= adjust;
-
-			/* Store adjusted MTU in tdb */
-			tdbp->tdb_mtu = mtu;
-			tdbp->tdb_mtutimeout = time_second +
-			    ip_mtudisc_timeout;
-			DPRINTF(("%s: spi %08x mtu %d adjust %ld\n", __func__,
-			    ntohl(tdbp->tdb_spi), tdbp->tdb_mtu,
-			    adjust));
-		}
+		ipsec_set_mtu(tdbp, mtu);
 	}
 }
 
