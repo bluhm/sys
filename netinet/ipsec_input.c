@@ -893,7 +893,6 @@ udpencap_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 	struct tdb *tdbp;
 	struct icmp *icp;
 	u_int32_t mtu;
-	ssize_t adjust;
 	struct sockaddr_in dst, src;
 	union sockaddr_union *su_dst, *su_src;
 
@@ -928,16 +927,7 @@ udpencap_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 		    TDBF_UDPENCAP) &&
 		    !memcmp(&tdbp->tdb_dst, &dst, su_dst->sa.sa_len) &&
 		    !memcmp(&tdbp->tdb_src, &src, su_src->sa.sa_len)) {
-			if ((adjust = ipsec_hdrsz(tdbp)) != -1) {
-				/* Store adjusted MTU in tdb */
-				tdbp->tdb_mtu = mtu - adjust;
-				tdbp->tdb_mtutimeout = time_second +
-				    ip_mtudisc_timeout;
-				DPRINTF(("%s: spi %08x mtu %d adjust %ld\n",
-				    __func__,
-				    ntohl(tdbp->tdb_spi), tdbp->tdb_mtu,
-				    adjust));
-			}
+			ipsec_set_mtu(tdbp, mtu);
 		}
 	}
 }
