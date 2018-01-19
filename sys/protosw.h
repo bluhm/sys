@@ -121,6 +121,7 @@ struct protosw {
  * A non-zero return from usrreq gives an
  * UNIX error number which should be passed to higher level software.
  */
+#define	PRU_DETACH		1	/* detach protocol from up */
 #define	PRU_BIND		2	/* bind socket to address */
 #define	PRU_LISTEN		3	/* listen for connection */
 #define	PRU_CONNECT		4	/* establish connection to peer */
