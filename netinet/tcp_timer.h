@@ -39,12 +39,13 @@
  * Definitions of the TCP timers.  These timers are counted
  * down PR_SLOWHZ times a second.
  */
-#define	TCPT_NTIMERS	4
+#define	TCPT_NTIMERS	5
 
 #define	TCPT_REXMT	0		/* retransmit */
 #define	TCPT_PERSIST	1		/* retransmit persistence */
 #define	TCPT_KEEP	2		/* keep alive */
 #define	TCPT_2MSL	3		/* 2*msl quiet time timer */
+#define	TCPT_REAPER	4		/* delayed cleanup timeout */
 
 /*
  * The TCPT_REXMT timer is used to force retransmissions.
