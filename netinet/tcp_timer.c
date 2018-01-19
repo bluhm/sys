@@ -70,12 +70,14 @@ void	tcp_timer_rexmt(void *);
 void	tcp_timer_persist(void *);
 void	tcp_timer_keep(void *);
 void	tcp_timer_2msl(void *);
+void	tcp_timer_reaper(void *);
 
 const tcp_timer_func_t tcp_timer_funcs[TCPT_NTIMERS] = {
 	tcp_timer_rexmt,
 	tcp_timer_persist,
 	tcp_timer_keep,
 	tcp_timer_2msl,
+	tcp_timer_reaper,
 };
 
 /*
@@ -462,5 +464,26 @@ tcp_timer_2msl(void *arg)
 		tp = tcp_close(tp);
 
  out:
+	NET_UNLOCK();
+}
+
+void
+tcp_timer_reaper(void *arg)
+{
+	struct tcpcb *tp = arg;
+	int i;
+
+	NET_LOCK();
+#ifdef DIAGNOSTIC
+	if ((tp->t_flags & TF_DEAD) == 0)
+		panic("%s: tcpcb %p is not dead", __func__, tp);
+	for (i = 0; i < TCPT_NTIMERS; i++) {
+		if (TCP_TIMER_ISARMED(tp, i))
+			panic("%s: tcpcb %p timer %d is armed",
+			    __func__, tp, i);
+	}
+#endif
+	pool_put(&tcpcb_pool, tp);
+	tcpstat_inc(tcps_closed);
 	NET_UNLOCK();
 }
