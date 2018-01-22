@@ -602,8 +602,8 @@ tcp_attach(struct socket *so, int proto)
 	if ((so->so_options & SO_LINGER) && so->so_linger == 0)
 		so->so_linger = TCP_LINGERTIME;
 
-	if (tp && (so->so_options & SO_DEBUG))
-		tcp_trace(TA_USER, 0, tp, (caddr_t)0, 0 /* XXX */, 0);
+	if (so->so_options & SO_DEBUG)
+		tcp_trace(TA_USER, TCPS_CLOSED, tp, (caddr_t)0, PRU_ATTACH, 0);
 	return (0);
 }
 
