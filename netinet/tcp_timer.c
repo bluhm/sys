@@ -218,7 +218,7 @@ tcp_timer_rexmt(void *arg)
 	if (++tp->t_rxtshift > TCP_MAXRXTSHIFT) {
 		tp->t_rxtshift = TCP_MAXRXTSHIFT;
 		tcpstat_inc(tcps_timeoutdrop);
-		(void)tcp_drop(tp, tp->t_softerror ?
+		tp = tcp_drop(tp, tp->t_softerror ?
 		    tp->t_softerror : ETIMEDOUT);
 		goto out;
 	}
