@@ -471,19 +471,7 @@ void
 tcp_timer_reaper(void *arg)
 {
 	struct tcpcb *tp = arg;
-	int i;
 
-	NET_LOCK();
-#ifdef DIAGNOSTIC
-	if ((tp->t_flags & TF_DEAD) == 0)
-		panic("%s: tcpcb %p is not dead", __func__, tp);
-	for (i = 0; i < TCPT_NTIMERS; i++) {
-		if (TCP_TIMER_ISARMED(tp, i))
-			panic("%s: tcpcb %p timer %d is armed",
-			    __func__, tp, i);
-	}
-#endif
 	pool_put(&tcpcb_pool, tp);
 	tcpstat_inc(tcps_closed);
-	NET_UNLOCK();
 }
