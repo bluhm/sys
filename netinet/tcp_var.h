@@ -1,4 +1,4 @@
-/*	$OpenBSD: tcp_var.h,v 1.128 2017/11/02 14:01:18 florian Exp $	*/
+/*	$OpenBSD: tcp_var.h,v 1.129 2018/01/23 21:41:17 bluhm Exp $	*/
 /*	$NetBSD: tcp_var.h,v 1.17 1996/02/13 23:44:24 christos Exp $	*/
 
 /*
