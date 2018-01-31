@@ -190,7 +190,7 @@ ah_zeroize(struct tdb *tdbp)
  * Massage IPv4/IPv6 headers for AH processing.
  */
 int
-ah_massage_headers(struct mbuf **m0, int proto, int skip, int alg, int out)
+ah_massage_headers(struct mbuf **m0, int af, int skip, int alg, int out)
 {
 	struct mbuf *m = *m0;
 	unsigned char *ptr;
@@ -204,7 +204,7 @@ ah_massage_headers(struct mbuf **m0, int proto, int skip, int alg, int out)
 	int ad, alloc, nxt, noff;
 #endif /* INET6 */
 
-	switch (proto) {
+	switch (af) {
 	case AF_INET:
 		/*
 		 * This is the least painful way of dealing with IPv4 header
