@@ -470,9 +470,15 @@ ah_massage_headers(struct mbuf **m0, int af, int skip, int alg, int out)
 					    (caddr_t)&ip6);
 					addr[0] = ip6.ip6_dst;
 					ip6.ip6_dst = finaldst;
-					m_copyback(m, 0, sizeof(ip6), &ip6,
-					    M_NOWAIT);
-
+					error = m_copyback(m, 0, sizeof(ip6),
+					    &ip6, M_NOWAIT);
+					if (error) {
+						if (alloc)
+							free(ptr, M_XDATA, 0);
+						ahstat_inc(ahs_hdrops);
+						m_freem(m);
+						return error;
+					}
 					rh0->ip6r0_segleft = 0;
 				}
 				break;
