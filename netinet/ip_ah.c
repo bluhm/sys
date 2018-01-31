@@ -444,6 +444,9 @@ ah_massage_headers(struct mbuf **m0, int af, int skip, int alg, int out)
 			    {
 				struct ip6_rthdr *rh;
 
+				if (off + sizeof(struct ip6_ext) >
+				    skip - sizeof(struct ip6_hdr))
+					goto error6;
 				ip6e = (struct ip6_ext *) (ptr + off);
 				rh = (struct ip6_rthdr *)(ptr + off);
 				/*
