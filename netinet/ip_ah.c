@@ -511,7 +511,7 @@ ah_input(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	struct tdb_crypto *tc;
 	u_int32_t btsx, esn;
 	u_int8_t hl;
-	int rplen;
+	int error, rplen;
 #ifdef ENCDEBUG
 	char buf[INET6_ADDRSTRLEN];
 #endif
@@ -648,8 +648,9 @@ ah_input(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	m_copyback(m, skip + rplen, ahx->authsize, ipseczeroes, M_NOWAIT);
 
 	/* "Massage" the packet headers for crypto processing. */
-	if ((btsx = ah_massage_headers(&m, tdb->tdb_dst.sa.sa_family,
-	    skip, ahx->type, 0)) != 0) {
+	error = ah_massage_headers(&m, tdb->tdb_dst.sa.sa_family, skip,
+	    ahx->type, 0);
+	if (error) {
 		/* mbuf will be free'd by callee. */
 		free(tc, M_XDATA, 0);
 		crypto_freereq(crp);
@@ -903,7 +904,7 @@ ah_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 	struct mbuf *mi;
 	struct cryptop *crp;
 	u_int16_t iplen;
-	int len, rplen, roff;
+	int error, len, rplen, roff;
 	u_int8_t prot;
 	struct ah *ah;
 #if NBPFILTER > 0
@@ -1135,8 +1136,9 @@ ah_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 	m_copyback(m, protoff, sizeof(u_int8_t), &prot, M_NOWAIT);
 
 	/* "Massage" the packet headers for crypto processing. */
-	if ((len = ah_massage_headers(&m, tdb->tdb_dst.sa.sa_family,
-	    skip, ahx->type, 1)) != 0) {
+	error = ah_massage_headers(&m, tdb->tdb_dst.sa.sa_family, skip,
+	    ahx->type, 1);
+	if (error) {
 		/* mbuf will be free'd by callee. */
 		free(tc, M_XDATA, 0);
 		crypto_freereq(crp);
