@@ -291,10 +291,12 @@ ah_massage_headers(struct mbuf **m0, int proto, int skip, int alg, int out)
 				 * what the destination's IP header
 				 * will look like.
 				 */
-				if (out)
-					bcopy(ptr + off + ptr[off + 1] -
+				if (out &&
+				    ptr[off + 1] >= 2 + sizeof(struct in_addr))
+					memcpy(&ip->ip_dst,
+					    ptr + off + ptr[off + 1] -
 					    sizeof(struct in_addr),
-					    &(ip->ip_dst), sizeof(struct in_addr));
+					    sizeof(struct in_addr));
 
 				/* FALLTHROUGH */
 			default:
