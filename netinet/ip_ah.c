@@ -496,9 +496,14 @@ error6:
 
 		/* Copyback and free, if we allocated. */
 		if (alloc) {
-			m_copyback(m, sizeof(struct ip6_hdr),
+			error = m_copyback(m, sizeof(struct ip6_hdr),
 			    skip - sizeof(struct ip6_hdr), ptr, M_NOWAIT);
 			free(ptr, M_XDATA, 0);
+			if (error) {
+				ahstat_inc(ahs_hdrops);
+				m_freem(m);
+				return error;
+			}
 		}
 
 		break;
