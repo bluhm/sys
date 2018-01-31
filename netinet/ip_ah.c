@@ -80,7 +80,7 @@ void	ah_output_cb(struct cryptop *);
 void	ah_input_cb(struct cryptop *);
 int	ah_massage_headers(struct mbuf **, int, int, int, int);
 
-unsigned char ipseczeroes[IPSEC_ZEROES_SIZE]; /* zeroes! */
+const unsigned char ipseczeroes[IPSEC_ZEROES_SIZE]; /* zeroes! */
 
 
 /*
