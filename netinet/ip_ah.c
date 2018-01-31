@@ -389,13 +389,14 @@ ah_massage_headers(struct mbuf **m0, int proto, int skip, int alg, int out)
 		nxt = ip6.ip6_nxt & 0xff; /* Next header type. */
 
 		for (off = 0; off < skip - sizeof(struct ip6_hdr);) {
+			if (off + sizeof(struct ip6_ext) >
+			    skip - sizeof(struct ip6_hdr))
+				goto error6;
+			ip6e = (struct ip6_ext *) (ptr + off);
+
 			switch (nxt) {
 			case IPPROTO_HOPOPTS:
 			case IPPROTO_DSTOPTS:
-				if (off + sizeof(struct ip6_ext) >
-				    skip - sizeof(struct ip6_hdr))
-					goto error6;
-				ip6e = (struct ip6_ext *) (ptr + off);
 				noff = off + ((ip6e->ip6e_len + 1) << 3);
 
 				/* Sanity check. */
@@ -441,10 +442,6 @@ ah_massage_headers(struct mbuf **m0, int proto, int skip, int alg, int out)
 			    {
 				struct ip6_rthdr *rh;
 
-				if (off + sizeof(struct ip6_ext) >
-				    skip - sizeof(struct ip6_hdr))
-					goto error6;
-				ip6e = (struct ip6_ext *) (ptr + off);
 				rh = (struct ip6_rthdr *)(ptr + off);
 				/*
 				 * must adjust content to make it look like
