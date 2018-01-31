@@ -392,7 +392,7 @@ ah_massage_headers(struct mbuf **m0, int proto, int skip, int alg, int out)
 			if (off + sizeof(struct ip6_ext) >
 			    skip - sizeof(struct ip6_hdr))
 				goto error6;
-			ip6e = (struct ip6_ext *) (ptr + off);
+			ip6e = (struct ip6_ext *)(ptr + off);
 
 			switch (nxt) {
 			case IPPROTO_HOPOPTS:
