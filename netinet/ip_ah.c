@@ -416,12 +416,12 @@ ah_massage_headers(struct mbuf **m0, int proto, int skip, int alg, int out)
 						return EINVAL;
 					}
 
-					ad = ptr[count + 1];
+					ad = ptr[count + 1] + 2;
 
 					/* If mutable option, zeroize. */
 					if (ptr[count] & IP6OPT_MUTABLE)
 						memcpy(ptr + count, ipseczeroes,
-						    ptr[count + 1]);
+						    ad);
 
 					count += ad;
 
