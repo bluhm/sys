@@ -430,10 +430,6 @@ ah_massage_headers(struct mbuf **m0, int af, int skip, int alg, int out)
 
 				if (count != noff)
 					goto error6;
-
-				/* Advance. */
-				off += ((ip6e->ip6e_len + 1) << 3);
-				nxt = ip6e->ip6e_nxt;
 				break;
 
 			case IPPROTO_ROUTING:
@@ -482,10 +478,6 @@ ah_massage_headers(struct mbuf **m0, int af, int skip, int alg, int out)
 
 					rh0->ip6r0_segleft = 0;
 				}
-
-				/* advance */
-				off += ((ip6e->ip6e_len + 1) << 3);
-				nxt = ip6e->ip6e_nxt;
 				break;
 			    }
 
@@ -499,6 +491,10 @@ error6:
 				m_freem(m);
 				return EINVAL;
 			}
+
+			/* Advance. */
+			off += ((ip6e->ip6e_len + 1) << 3);
+			nxt = ip6e->ip6e_nxt;
 		}
 
 		/* Copyback and free, if we allocated. */
