@@ -229,10 +229,8 @@ ah_massage_headers(struct mbuf **m0, int af, int skip, int alg, int out)
 
 		/* IPv4 option processing */
 		for (off = sizeof(struct ip); off < skip;) {
-			if (ptr[off] == IPOPT_EOL || ptr[off] == IPOPT_NOP ||
-			    off + 1 < skip)
-				;
-			else {
+			if (ptr[off] != IPOPT_EOL && ptr[off] != IPOPT_NOP &&
+			    off + 1 >= skip) {
 				DPRINTF(("%s: illegal IPv4 option length for"
 				    " option %d\n", __func__, ptr[off]));
 
