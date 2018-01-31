@@ -389,7 +389,7 @@ ah_massage_headers(struct mbuf **m0, int af, int skip, int alg, int out)
 		} else
 			break;
 
-		nxt = ip6.ip6_nxt & 0xff; /* Next header type. */
+		nxt = ip6.ip6_nxt;  /* Next header type. */
 
 		for (off = 0; off < skip - sizeof(struct ip6_hdr);) {
 			switch (nxt) {
