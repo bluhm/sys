@@ -194,10 +194,8 @@ ah_massage_headers(struct mbuf **m0, int af, int skip, int alg, int out)
 {
 	struct mbuf *m = *m0;
 	unsigned char *ptr;
-	int off, count;
-
+	int error, off, count;
 	struct ip *ip;
-
 #ifdef INET6
 	struct ip6_ext *ip6e;
 	struct ip6_hdr ip6;
@@ -353,7 +351,14 @@ ah_massage_headers(struct mbuf **m0, int af, int skip, int alg, int out)
 			ip6.ip6_dst.s6_addr16[1] = 0;
 
 		/* Done with IPv6 header. */
-		m_copyback(m, 0, sizeof(struct ip6_hdr), &ip6, M_NOWAIT);
+		error = m_copyback(m, 0, sizeof(struct ip6_hdr), &ip6,
+		    M_NOWAIT);
+		if (error) {
+			DPRINTF(("%s: m_copyback no memory", __func__));
+			ahstat_inc(ahs_hdrops);
+			m_freem(m);
+			return error;
+		}
 
 		/* Let's deal with the remaining headers (if any). */
 		if (skip - sizeof(struct ip6_hdr) > 0) {
