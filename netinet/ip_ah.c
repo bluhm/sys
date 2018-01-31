@@ -312,7 +312,7 @@ ah_massage_headers(struct mbuf **m0, int proto, int skip, int alg, int out)
 
 				/* Zeroize all other options. */
 				count = ptr[off + 1];
-				memcpy(ptr + off, ipseczeroes, count);
+				memset(ptr + off, 0, count);
 				off += count;
 				break;
 			}
