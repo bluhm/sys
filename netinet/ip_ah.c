@@ -415,6 +415,8 @@ ah_massage_headers(struct mbuf **m0, int af, int skip, int alg, int out)
 						continue; /* Skip padding. */
 					}
 
+					if (count + 2 > noff)
+						goto error6;
 					ad = ptr[count + 1] + 2;
 					if (count + ad > noff)
 						goto error6;
