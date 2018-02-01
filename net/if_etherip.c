@@ -571,7 +571,7 @@ ip6_etherip_input(struct mbuf **mp, int *offp, int proto, int af)
 	if (!etherip_allow && (m->m_flags & (M_AUTH|M_CONF)) == 0) {
 		m_freem(m);
 		etheripstat_inc(etherips_pdrops);
-		return IPPROTO_NONE;
+		return IPPROTO_DONE;
 	}
 
 	ip6 = mtod(m, const struct ip6_hdr *);
