@@ -422,14 +422,6 @@ frag6_input(struct mbuf **mp, int *offp, int proto, int af)
 		goto dropfrag;
 	}
 
-	/*
-	 * Store NXT to the original.
-	 */
-	{
-		u_int8_t *prvnxtp = ip6_get_prevhdr(m, offset); /* XXX */
-		*prvnxtp = nxt;
-	}
-
 	TAILQ_REMOVE(&frag6_queue, q6, ip6q_queue);
 	frag6_nfrags -= q6->ip6q_nfrag;
 	frag6_nfragpackets--;
@@ -443,6 +435,21 @@ frag6_input(struct mbuf **mp, int *offp, int proto, int af)
 		for (t = m; t; t = t->m_next)
 			plen += t->m_len;
 		m->m_pkthdr.len = plen;
+	}
+
+	/*
+	 * Restore NXT to the original.
+	 */
+	{
+		const int prvnxt = ip6_get_prevhdr(m, offset);
+		uint8_t *prvnxtp;
+
+		IP6_EXTHDR_GET(prvnxtp, uint8_t *, m, prvnxt,
+		    sizeof(*prvnxtp));
+		if (prvnxtp == NULL) {
+			goto dropfrag;
+		}
+		*prvnxtp = nxt;
 	}
 
 	ip6stat_inc(ip6s_reassembled);
