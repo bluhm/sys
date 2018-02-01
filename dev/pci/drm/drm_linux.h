@@ -1,4 +1,4 @@
-/*	$OpenBSD: drm_linux.h,v 1.80 2018/01/30 09:57:58 jsg Exp $	*/
+/*	$OpenBSD: drm_linux.h,v 1.83 2018/01/31 10:17:22 jsg Exp $	*/
 /*
  * Copyright (c) 2013, 2014, 2015 Mark Kettenis
  * Copyright (c) 2017 Martin Pieuchot
@@ -494,7 +494,7 @@ PTR_ERR_OR_ZERO(const void *ptr)
 	do { __typeof(a) __tmp = (a); (a) = (b); (b) = __tmp; } while(0)
 
 #define container_of(ptr, type, member) ({                      \
-	__typeof( ((type *)0)->member ) *__mptr = (ptr);        \
+	const __typeof( ((type *)0)->member ) *__mptr = (ptr);        \
 	(type *)( (char *)__mptr - offsetof(type,member) );})
 
 #ifndef __DECONST
@@ -1425,6 +1425,7 @@ struct dmi_system_id {
 #define	DMI_MATCH(a, b) {(a), (b)}
 #define	DMI_EXACT_MATCH(a, b) {(a), (b)}
 int dmi_check_system(const struct dmi_system_id *);
+bool dmi_match(int, const char *);
 
 struct resource {
 	u_long	start;
@@ -1433,6 +1434,7 @@ struct resource {
 struct pci_bus {
 	pci_chipset_tag_t pc;
 	unsigned char	number;
+	pcitag_t	*bridgetag;
 };
 
 struct pci_dev {
@@ -1573,6 +1575,12 @@ pci_pcie_cap(struct pci_dev *pdev)
 	    &pos, NULL))
 		return -EINVAL;
 	return pos;
+}
+
+static inline bool
+pci_is_root_bus(struct pci_bus *pbus)
+{
+	return (pbus->bridgetag == NULL);
 }
 
 static inline int
