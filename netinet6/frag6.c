@@ -446,9 +446,8 @@ frag6_input(struct mbuf **mp, int *offp, int proto, int af)
 
 		IP6_EXTHDR_GET(prvnxtp, uint8_t *, m, prvnxt,
 		    sizeof(*prvnxtp));
-		if (prvnxtp == NULL) {
+		if (prvnxtp == NULL)
 			goto dropfrag;
-		}
 		*prvnxtp = nxt;
 	}
 
