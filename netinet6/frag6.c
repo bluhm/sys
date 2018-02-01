@@ -441,7 +441,7 @@ frag6_input(struct mbuf **mp, int *offp, int proto, int af)
 	 * Restore NXT to the original.
 	 */
 	{
-		const int prvnxt = ip6_get_prevhdr(m, offset);
+		int prvnxt = ip6_get_prevhdr(m, offset);
 		uint8_t *prvnxtp;
 
 		IP6_EXTHDR_GET(prvnxtp, uint8_t *, m, prvnxt,

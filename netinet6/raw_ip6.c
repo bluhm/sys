@@ -236,7 +236,7 @@ rip6_input(struct mbuf **mp, int *offp, int proto, int af)
 		if (proto == IPPROTO_NONE || proto == IPPROTO_ICMPV6) {
 			m_freem(m);
 		} else {
-			const int prvnxt = ip6_get_prevhdr(m, *offp);
+			int prvnxt = ip6_get_prevhdr(m, *offp);
 			icmp6_error(m, ICMP6_PARAM_PROB,
 			    ICMP6_PARAMPROB_NEXTHEADER, prvnxt);
 		}
