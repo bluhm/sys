@@ -122,7 +122,7 @@ const char *tcptimers[TCPT_NTIMERS] =
 #define	TCP_TIMER_ARM(tp, timer, nticks)				\
 do {									\
 	SET((tp)->t_flags, TF_TIMER << (timer));			\
-	timeout_add(&(tp)->t_timer[(timer)], (nticks) * (hz / PR_SLOWHZ)); \
+	timeout_add_msec(&(tp)->t_timer[(timer)], (nticks) * 500);	\
 } while (0)
 
 #define	TCP_TIMER_DISARM(tp, timer)					\
