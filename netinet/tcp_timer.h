@@ -106,7 +106,7 @@
 
 #define	TCP_MAXRXTSHIFT	12			/* maximum retransmits */
 
-#define	TCP_DELACK_TICKS (hz / PR_FASTHZ)	/* time to delay ACK */
+#define	TCP_DELACK_MSEC 200			/* time to delay ACK */
 
 #ifdef	TCPTIMERS
 const char *tcptimers[TCPT_NTIMERS] =
