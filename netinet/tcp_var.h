@@ -205,14 +205,13 @@ struct tcpcb {
 #define	sototcpcb(so)	(intotcpcb(sotoinpcb(so)))
 
 #ifdef _KERNEL
-extern int tcp_delack_msec;
 void	tcp_delack(void *);
 
 #define TCP_INIT_DELACK(tp)						\
 	timeout_set_proc(&(tp)->t_delack_to, tcp_delack, tp)
 
 #define TCP_RESTART_DELACK(tp)						\
-	timeout_add_msec(&(tp)->t_delack_to, tcp_delack_msec)
+	timeout_add_msec(&(tp)->t_delack_to, tcp_delack_msecs)
 
 #define	TCP_SET_DELACK(tp)						\
 do {									\

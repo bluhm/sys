@@ -64,7 +64,7 @@ int	tcp_maxidle;
  * Time to delay the ACK.  This is initialized in tcp_init(), unless
  * its patched.
  */
-int	tcp_delack_msec;
+int	tcp_delack_msecs;
 
 void	tcp_timer_rexmt(void *);
 void	tcp_timer_persist(void *);
@@ -96,8 +96,8 @@ tcp_timer_init(void)
 	if (tcp_maxpersistidle == 0)
 		tcp_maxpersistidle = TCPTV_KEEP_IDLE;
 
-	if (tcp_delack_msec == 0)
-		tcp_delack_msec = TCP_DELACK_MSEC;
+	if (tcp_delack_msecs == 0)
+		tcp_delack_msecs = TCP_DELACK_MSECS;
 }
 
 /*
