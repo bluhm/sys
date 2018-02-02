@@ -106,7 +106,7 @@
 
 #define	TCP_MAXRXTSHIFT	12			/* maximum retransmits */
 
-#define	TCP_DELACK_MSEC 200			/* time to delay ACK */
+#define	TCP_DELACK_MSECS 200			/* time to delay ACK */
 
 #ifdef	TCPTIMERS
 const char *tcptimers[TCPT_NTIMERS] =
@@ -151,6 +151,7 @@ typedef void (*tcp_timer_func_t)(void *);
 
 extern const tcp_timer_func_t tcp_timer_funcs[TCPT_NTIMERS];
 
+extern int tcp_delack_msecs;		/* delayed ACK timeout in millisecs */
 extern int tcptv_keep_init;
 extern int tcp_always_keepalive;	/* assume SO_KEEPALIVE is always set */
 extern int tcp_keepidle;		/* time before keepalive probes begin */
