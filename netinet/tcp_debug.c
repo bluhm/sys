@@ -194,9 +194,11 @@ tcp_trace(short act, short ostate, struct tcpcb *tp, caddr_t headers,
 		break;
 
 	case TA_USER:
-		printf("%s", prurequests[req&0xff]);
-		if ((req & 0xff) == PRU_SLOWTIMO)
-			printf("<%s>", tcptimers[req>>8]);
+		printf("%s", prurequests[req]);
+		break;
+
+	case TA_TIMER:
+		printf("%s", tcptimers[req]);
 		break;
 	}
 	if (tp)
