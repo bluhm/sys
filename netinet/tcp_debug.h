@@ -93,10 +93,11 @@ struct	tcp_debug {
 #define	TA_USER		2
 #define	TA_RESPOND	3
 #define	TA_DROP		4
+#define	TA_TIMER	5
 
 #ifdef TANAMES
 const char *tanames[] =
-    { "input", "output", "user", "respond", "drop" };
+    { "input", "output", "user", "respond", "drop", "timer" };
 #endif /* TANAMES */
 
 #define	TCP_NDEBUG 100
