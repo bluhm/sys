@@ -423,6 +423,7 @@ gem_tick(void *arg)
 	int s;
 	u_int32_t v;
 
+	s = splnet();
 	/* unload collisions counters */
 	v = bus_space_read_4(t, mac, GEM_MAC_EXCESS_COLL_CNT) +
 	    bus_space_read_4(t, mac, GEM_MAC_LATE_COLL_CNT);
@@ -448,7 +449,15 @@ gem_tick(void *arg)
 	bus_space_write_4(t, mac, GEM_MAC_RX_CRC_ERR_CNT, 0);
 	bus_space_write_4(t, mac, GEM_MAC_RX_CODE_VIOL, 0);
 
-	s = splnet();
+	/*
+	 * If buffer allocation fails, the receive ring may become
+	 * empty. There is no receive interrupt to recover from that.
+	 */
+	if (if_rxr_inuse(&sc->sc_rx_ring) == 0) {
+		gem_fill_rx_ring(sc);
+		bus_space_write_4(t, mac, GEM_RX_KICK, sc->sc_rx_prod);
+	}
+
 	mii_tick(&sc->sc_mii);
 	splx(s);
 
