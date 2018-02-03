@@ -167,17 +167,15 @@ tcp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 			m_freem(m);
 		return (error);
 	}
-	if (inp) {
-		tp = intotcpcb(inp);
-		/* tp might get 0 when using socket splicing */
-		if (tp == NULL)
-			return (0);
+	tp = intotcpcb(inp);
+	/* tp might get 0 when using socket splicing */
+	if (tp == NULL)
+		return (0);
 #ifdef KPROF
-		tcp_acounts[tp->t_state][req]++;
+	tcp_acounts[tp->t_state][req]++;
 #endif
-		ostate = tp->t_state;
-	} else
-		ostate = 0;
+	ostate = tp->t_state;
+
 	switch (req) {
 
 	/*
