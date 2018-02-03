@@ -171,9 +171,6 @@ tcp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 	/* tp might get 0 when using socket splicing */
 	if (tp == NULL)
 		return (0);
-#ifdef KPROF
-	tcp_acounts[tp->t_state][req]++;
-#endif
 	ostate = tp->t_state;
 
 	switch (req) {
@@ -631,9 +628,6 @@ tcp_detach(struct socket *so)
 	/* tp might get 0 when using socket splicing */
 	if (tp == NULL)
 		return (0);
-#ifdef KPROF
-	tcp_acounts[tp->t_state][req]++;
-#endif
 	ostate = tp->t_state;
 
 	/*
