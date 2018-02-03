@@ -51,6 +51,7 @@
 #include <netinet/tcp_fsm.h>
 #include <netinet/tcp_timer.h>
 #include <netinet/tcp_var.h>
+#include <netinet/tcp_debug.h>
 #include <netinet/ip_icmp.h>
 #include <netinet/tcp_seq.h>
 
@@ -183,6 +184,7 @@ tcp_timer_rexmt(void *arg)
 {
 	struct tcpcb *tp = arg;
 	uint32_t rto;
+	short ostate;
 
 	NET_LOCK();
 	/* Ignore canceled timeouts or timeouts that have been rescheduled. */
@@ -227,6 +229,7 @@ tcp_timer_rexmt(void *arg)
 		    tp->t_softerror : ETIMEDOUT);
 		goto out;
 	}
+	ostate = tp->t_state;
 	tcpstat_inc(tcps_rexmttimeo);
 	rto = TCP_REXMTVAL(tp);
 	if (rto < tp->t_rttmin)
@@ -361,7 +364,8 @@ tcp_timer_rexmt(void *arg)
 #endif
 	}
 	(void) tcp_output(tp);
-
+        if (tp->t_inpcb->inp_socket->so_options & SO_DEBUG)
+		tcp_trace(TA_TIMER, ostate, tp, (caddr_t)0, TCPT_REXMT, 0);
  out:
 	NET_UNLOCK();
 }
@@ -371,6 +375,7 @@ tcp_timer_persist(void *arg)
 {
 	struct tcpcb *tp = arg;
 	uint32_t rto;
+	short ostate;
 
 	NET_LOCK();
 	/* Ignore canceled timeouts or timeouts that have been rescheduled. */
@@ -381,6 +386,8 @@ tcp_timer_persist(void *arg)
 
 	if (TCP_TIMER_ISARMED(tp, TCPT_REXMT))
 		goto out;
+
+	ostate = tp->t_state;
 	tcpstat_inc(tcps_persisttimeo);
 	/*
 	 * Hack: if the peer is dead/unreachable, we do not
@@ -403,6 +410,8 @@ tcp_timer_persist(void *arg)
 	tp->t_force = 1;
 	(void) tcp_output(tp);
 	tp->t_force = 0;
+        if (tp->t_inpcb->inp_socket->so_options & SO_DEBUG)
+		tcp_trace(TA_TIMER, ostate, tp, (caddr_t)0, TCPT_PERSIST, 0);
  out:
 	NET_UNLOCK();
 }
@@ -411,6 +420,7 @@ void
 tcp_timer_keep(void *arg)
 {
 	struct tcpcb *tp = arg;
+	short ostate;
 
 	NET_LOCK();
 	/* Ignore canceled timeouts or timeouts that have been rescheduled. */
@@ -419,6 +429,7 @@ tcp_timer_keep(void *arg)
 		goto out;
 	CLR((tp)->t_flags, TF_TMR_KEEP);
 
+	ostate = tp->t_state;
 	tcpstat_inc(tcps_keeptimeo);
 	if (TCPS_HAVEESTABLISHED(tp->t_state) == 0)
 		goto dropit;
@@ -446,6 +457,8 @@ tcp_timer_keep(void *arg)
 		TCP_TIMER_ARM(tp, TCPT_KEEP, tcp_keepintvl);
 	} else
 		TCP_TIMER_ARM(tp, TCPT_KEEP, tcp_keepidle);
+        if (tp->t_inpcb->inp_socket->so_options & SO_DEBUG)
+		tcp_trace(TA_TIMER, ostate, tp, (caddr_t)0, TCPT_KEEP, 0);
  out:
 	NET_UNLOCK();
 	return;
@@ -460,6 +473,7 @@ void
 tcp_timer_2msl(void *arg)
 {
 	struct tcpcb *tp = arg;
+	short ostate;
 
 	NET_LOCK();
 	/* Ignore canceled timeouts or timeouts that have been rescheduled. */
@@ -468,6 +482,7 @@ tcp_timer_2msl(void *arg)
 		goto out;
 	CLR((tp)->t_flags, TF_TMR_2MSL);
 
+	ostate = tp->t_state;
 	tcp_timer_freesack(tp);
 
 	if (tp->t_state != TCPS_TIME_WAIT &&
@@ -475,7 +490,8 @@ tcp_timer_2msl(void *arg)
 		TCP_TIMER_ARM(tp, TCPT_2MSL, tcp_keepintvl);
 	else
 		tp = tcp_close(tp);
-
+        if (tp && (tp->t_inpcb->inp_socket->so_options & SO_DEBUG))
+		tcp_trace(TA_TIMER, ostate, tp, (caddr_t)0, TCPT_2MSL, 0);
  out:
 	NET_UNLOCK();
 }
