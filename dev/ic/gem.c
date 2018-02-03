@@ -1209,17 +1209,26 @@ gem_rx_watchdog(void *arg)
 	rx_fifo_wr_ptr = bus_space_read_4(t, h, GEM_RX_FIFO_WR_PTR);
 	rx_fifo_rd_ptr = bus_space_read_4(t, h, GEM_RX_FIFO_RD_PTR);
 	state = bus_space_read_4(t, h, GEM_MAC_MAC_STATE);
-	if ((state & GEM_MAC_STATE_OVERFLOW) == GEM_MAC_STATE_OVERFLOW &&
-	    ((rx_fifo_wr_ptr == rx_fifo_rd_ptr) ||
-	     ((sc->sc_rx_fifo_wr_ptr == rx_fifo_wr_ptr) &&
-	      (sc->sc_rx_fifo_rd_ptr == rx_fifo_rd_ptr)))) {
-		/*
-		 * The RX state machine is still in overflow state and
-		 * the RX FIFO write and read pointers seem to be
-		 * stuck.  Whack the chip over the head to get things
-		 * going again.
-		 */
-		gem_init(ifp);
+	if ((state & GEM_MAC_STATE_OVERFLOW) == GEM_MAC_STATE_OVERFLOW) {
+		if ((rx_fifo_wr_ptr == rx_fifo_rd_ptr) ||
+		     ((sc->sc_rx_fifo_wr_ptr == rx_fifo_wr_ptr) &&
+		      (sc->sc_rx_fifo_rd_ptr == rx_fifo_rd_ptr))) {
+			/*
+			 * The RX state machine is still in overflow state and
+			 * the RX FIFO write and read pointers seem to be
+			 * stuck.  Whack the chip over the head to get things
+			 * going again.
+			 */
+			gem_init(ifp);
+		} else {
+			/*
+			 * We made some progress, but is not certain that the
+			 * overflow condition has been resolved.  Check again.
+			 */
+			sc->sc_rx_fifo_wr_ptr = rx_fifo_wr_ptr;
+			sc->sc_rx_fifo_rd_ptr = rx_fifo_rd_ptr;
+			timeout_add_msec(&sc->sc_rx_watchdog, 400);
+		}
 	}
 }
 
