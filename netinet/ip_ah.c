@@ -673,7 +673,7 @@ ah_input(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 		/* mbuf will be free'd by callee. */
 		free(tc, M_XDATA, 0);
 		crypto_freereq(crp);
-		return btsx;
+		return error;
 	}
 
 	/* Crypto operation descriptor. */
@@ -923,7 +923,7 @@ ah_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 	struct mbuf *mi;
 	struct cryptop *crp;
 	u_int16_t iplen;
-	int error, len, rplen, roff;
+	int error, rplen, roff;
 	u_int8_t prot;
 	struct ah *ah;
 #if NBPFILTER > 0
@@ -1161,7 +1161,7 @@ ah_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 		/* mbuf will be free'd by callee. */
 		free(tc, M_XDATA, 0);
 		crypto_freereq(crp);
-		return len;
+		return error;
 	}
 
 	/* Crypto operation descriptor. */
