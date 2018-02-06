@@ -1158,7 +1158,7 @@ ah_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 	error = ah_massage_headers(&m, tdb->tdb_dst.sa.sa_family, skip,
 	    ahx->type, 1);
 	if (error) {
-		/* mbuf has been be free'd by callee. */
+		/* mbuf has been free'd by callee. */
 		free(tc, M_XDATA, 0);
 		crypto_freereq(crp);
 		return error;
