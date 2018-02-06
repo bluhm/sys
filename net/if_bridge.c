@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_bridge.c,v 1.301 2018/01/10 23:50:39 dlg Exp $	*/
+/*	$OpenBSD: if_bridge.c,v 1.303 2018/02/05 05:06:51 henning Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 Jason L. Wright (jason@thought.net)
@@ -699,6 +699,7 @@ bridge_output(struct ifnet *ifp, struct mbuf *m, struct sockaddr *sa,
 	struct ether_addr *dst;
 	struct bridge_softc *sc;
 	struct bridge_tunneltag *brtag;
+	struct bridge_iflist *ifl;
 	int error;
 
 	/* ifp must be a member interface of the bridge. */
@@ -784,6 +785,12 @@ bridge_output(struct ifnet *ifp, struct mbuf *m, struct sockaddr *sa,
 					continue;
 				}
 			}
+
+			ifl = (struct bridge_iflist *)dst_if->if_bridgeport;
+			KASSERT(ifl != NULL);
+			if (bridge_filterrule(&ifl->bif_brlout, eh, mc) ==
+			    BRL_ACTION_BLOCK)
+				continue;
 
 			error = bridge_ifenqueue(sc, dst_if, mc);
 			if (error)
@@ -1061,8 +1068,8 @@ bridge_process(struct ifnet *ifp, struct mbuf *m)
 		 * STP destination address (as stored in bstp_etheraddr)
 		 * is the first of these.
 		 */
-		if (bcmp(eh->ether_dhost, bstp_etheraddr, ETHER_ADDR_LEN - 1)
-		    == 0) {
+		if (memcmp(eh->ether_dhost, bstp_etheraddr,
+		    ETHER_ADDR_LEN - 1) == 0) {
 			if (eh->ether_dhost[ETHER_ADDR_LEN - 1] == 0) {
 				/* STP traffic */
 				if ((m = bstp_input(sc->sc_stp, ifl->bif_stp,
@@ -1106,7 +1113,7 @@ bridge_process(struct ifnet *ifp, struct mbuf *m)
 		if (ifl->ifp->if_type != IFT_ETHER)
 			continue;
 		ac = (struct arpcom *)ifl->ifp;
-		if (bcmp(ac->ac_enaddr, eh->ether_dhost, ETHER_ADDR_LEN) == 0
+		if (memcmp(ac->ac_enaddr, eh->ether_dhost, ETHER_ADDR_LEN) == 0
 #if NCARP > 0
 		    || (!SRPL_EMPTY_LOCKED(&ifl->ifp->if_carp) &&
 		        !carp_ourether(ifl->ifp, eh->ether_dhost))
@@ -1129,7 +1136,7 @@ bridge_process(struct ifnet *ifp, struct mbuf *m)
 			bridge_ifinput(ifl->ifp, m);
 			return;
 		}
-		if (bcmp(ac->ac_enaddr, eh->ether_shost, ETHER_ADDR_LEN) == 0
+		if (memcmp(ac->ac_enaddr, eh->ether_shost, ETHER_ADDR_LEN) == 0
 #if NCARP > 0
 		    || (!SRPL_EMPTY_LOCKED(&ifl->ifp->if_carp) &&
 			!carp_ourether(ifl->ifp, eh->ether_shost))
