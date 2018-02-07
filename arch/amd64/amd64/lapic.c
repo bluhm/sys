@@ -218,6 +218,11 @@ lapic_map(paddr_t lapic_base)
 		invlpg(va);
 
 		lapic_tpr = s;
+
+                pmap_enter_special(va, lapic_base, PROT_READ | PROT_WRITE);
+                printf("%s: entered lapic page va 0x%llx pa 0x%llx\n", __func__,
+                    (uint64_t)va, (uint64_t)lapic_base);
+
 	}
 
 	enable_intr();

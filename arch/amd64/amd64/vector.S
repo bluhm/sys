@@ -104,7 +104,6 @@
 #define	TRAP(a)		pushq $(a) ; jmp _C_LABEL(alltraps)
 #define	ZTRAP(a)	pushq $0 ; TRAP(a)
 
-	.text
 IDTVEC(trap00)
 	ZTRAP(T_DIVIDE)
 IDTVEC(trap01)
@@ -122,13 +121,17 @@ IDTVEC(trap06)
 IDTVEC(trap07)
 	pushq	$0			# dummy error code
 	pushq	$T_DNA
-	INTRENTRY
+	INTRENTRY(trap07)
 	sti
 	cld
 	SMAP_CLAC
 	movq	CPUVAR(SELF),%rdi
 	movq	%rsp, %rsi
 	call	_C_LABEL(fpudna)
+	cli
+#ifdef DIAGNOSTIC
+	movl    $7,%esi
+#endif /* DIAGNOSTIC */
 	INTRFASTEXIT
 IDTVEC(trap08)
 	TRAP(T_DOUBLEFLT)
@@ -156,9 +159,13 @@ IDTVEC(trap0d)
 	cmpq	%rdi,TF_RIP(%rsp)
 	je	1f
 	testq	$SEL_RPL,TF_CS(%rsp)
-	jz	2f
+	jz	trap0d_untramp
 1:	swapgs
-2:	movq	%r15,TF_R15(%rsp)
+	jmp	trap0d_untramp
+	.text
+	.global	trap0d_untramp
+trap0d_untramp:
+	movq	%r15,TF_R15(%rsp)
 	movq	%r14,TF_R14(%rsp)
 	movq	%r13,TF_R13(%rsp)
 	movq	%r12,TF_R12(%rsp)
@@ -204,7 +211,7 @@ IDTVEC(trap1f)
 	/* 20 - 31 reserved for future exp */
 	ZTRAP(T_RESERVED)
 
-IDTVEC(exceptions)
+KIDTVEC(exceptions)
 	.quad	_C_LABEL(Xtrap00), _C_LABEL(Xtrap01)
 	.quad	_C_LABEL(Xtrap02), _C_LABEL(Xtrap03)
 	.quad	_C_LABEL(Xtrap04), _C_LABEL(Xtrap05)
@@ -243,8 +250,8 @@ NENTRY(resume_iret)
  * All traps go through here. Call the generic trap handler, and
  * check for ASTs afterwards.
  */
-NENTRY(alltraps)
-	INTRENTRY
+KUENTRY(alltraps)
+	INTRENTRY(alltraps)
 	sti
 calltrap:
 	cld
@@ -287,6 +294,7 @@ calltrap:
 #else /* DIAGNOSTIC */
 1:	cmpl	CPUVAR(ILEVEL),%ebx
 	jne	3f
+	movl    $0,%esi
 	INTRFASTEXIT
 3:	sti
 	movabsq	$spl_lowered,%rdi
@@ -345,23 +353,23 @@ _C_LABEL(x2apic_eoi):
 
 #if NLAPIC > 0
 #ifdef MULTIPROCESSOR
-IDTVEC(recurse_lapic_ipi)
+KIDTVEC(recurse_lapic_ipi)
 	INTR_RECURSE_HWFRAME
-	pushq	$0		
+	pushq	$0
 	subq	$8,%rsp			/* unused __if_trapno */
-	INTRENTRY		
+	INTR_REENTRY
 	jmp	1f
 IDTVEC(intr_lapic_ipi)
-	pushq	$0		
+	pushq	$0
 	subq	$8,%rsp			/* unused __if_trapno */
-	INTRENTRY		
+	INTRENTRY(intr_lapic_ipi)
 	CODEPATCH_START
 	movl	$0,_C_LABEL(local_apic)+LAPIC_EOI
 	CODEPATCH_END(CPTAG_EOI)
 	movl	CPUVAR(ILEVEL),%ebx
 	cmpl	$IPL_IPI,%ebx
 	jae	2f
-IDTVEC(resume_lapic_ipi)
+KIDTVEC(resume_lapic_ipi)
 1:
 	incl	CPUVAR(IDEPTH)
 	movl	$IPL_IPI,CPUVAR(ILEVEL)
@@ -374,6 +382,9 @@ IDTVEC(resume_lapic_ipi)
 2:
 	movq	$(1 << LIR_IPI),%rax
 	orq	%rax,CPUVAR(IPENDING)
+#ifdef DIAGNOSTIC
+	movl    $1,%esi
+#endif /* DIAGNOSTIC */
 	INTRFASTEXIT
 
 IDTVEC(ipi_invltlb)
@@ -425,27 +436,27 @@ IDTVEC(ipi_invlrange)
 	iretq
 
 #endif /* MULTIPROCESSOR */
-	
+
 	/*
 	 * Interrupt from the local APIC timer.
 	 */
-IDTVEC(recurse_lapic_ltimer)
+KIDTVEC(recurse_lapic_ltimer)
 	INTR_RECURSE_HWFRAME
-	pushq	$0		
+	pushq	$0
 	subq	$8,%rsp			/* unused __if_trapno */
-	INTRENTRY		
+	INTR_REENTRY
 	jmp	1f
 IDTVEC(intr_lapic_ltimer)
-	pushq	$0		
+	pushq	$0
 	subq	$8,%rsp			/* unused __if_trapno */
-	INTRENTRY		
+	INTRENTRY(intr_lapic_ltimer)
 	CODEPATCH_START
 	movl	$0,_C_LABEL(local_apic)+LAPIC_EOI
 	CODEPATCH_END(CPTAG_EOI)
 	movl	CPUVAR(ILEVEL),%ebx
 	cmpl	$IPL_CLOCK,%ebx
 	jae	2f
-IDTVEC(resume_lapic_ltimer)
+KIDTVEC(resume_lapic_ltimer)
 1:
 	incl	CPUVAR(IDEPTH)
 	movl	$IPL_CLOCK,CPUVAR(ILEVEL)
@@ -459,6 +470,9 @@ IDTVEC(resume_lapic_ltimer)
 2:
 	movq	$(1 << LIR_TIMER),%rax
 	orq	%rax,CPUVAR(IPENDING)
+#ifdef DIAGNOSTIC
+	movl    $2,%esi
+#endif /* DIAGNOSTIC */
 	INTRFASTEXIT
 
 #if NXEN > 0
@@ -466,21 +480,21 @@ IDTVEC(resume_lapic_ltimer)
  * Xen event channel upcall interrupt handler.
  * Only used when the hypervisor supports direct vector callbacks.
  */
-IDTVEC(recurse_xen_upcall)
+KIDTVEC(recurse_xen_upcall)
 	INTR_RECURSE_HWFRAME
 	pushq	$0
 	subq	$8,%rsp			/* unused __if_trapno */
-	INTRENTRY
+	INTR_REENTRY
 	jmp	1f
 IDTVEC(intr_xen_upcall)
 	pushq	$0
 	subq	$8,%rsp			/* unused __if_trapno */
-	INTRENTRY
+	INTRENTRY(intr_xen_upcall)
 	call	_C_LABEL(xen_intr_ack)
 	movl	CPUVAR(ILEVEL),%ebx
 	cmpl	$IPL_NET,%ebx
 	jae	2f
-IDTVEC(resume_xen_upcall)
+KIDTVEC(resume_xen_upcall)
 1:
 	incl	CPUVAR(IDEPTH)
 	movl	$IPL_NET,CPUVAR(ILEVEL)
@@ -494,6 +508,9 @@ IDTVEC(resume_xen_upcall)
 	movq	$(1 << LIR_XEN),%rax
 	orq	%rax,CPUVAR(IPENDING)
 3:
+#ifdef DIAGNOSTIC
+	movl    $3,%esi
+#endif /* DIAGNOSTIC */
 	INTRFASTEXIT
 #endif /* NXEN > 0 */
 
@@ -502,20 +519,20 @@ IDTVEC(resume_xen_upcall)
  * Hyperv event channel upcall interrupt handler.
  * Only used when the hypervisor supports direct vector callbacks.
  */
-IDTVEC(recurse_hyperv_upcall)
+KIDTVEC(recurse_hyperv_upcall)
 	INTR_RECURSE_HWFRAME
 	pushq	$0
 	subq	$8,%rsp			/* unused __if_trapno */
-	INTRENTRY
+	INTR_REENTRY
 	jmp	1f
 IDTVEC(intr_hyperv_upcall)
 	pushq	$0
 	subq	$8,%rsp			/* unused __if_trapno */
-	INTRENTRY
+	INTRENTRY(intr_hyperv_upcall)
 	movl	CPUVAR(ILEVEL),%ebx
 	cmpl	$IPL_NET,%ebx
 	jae	2f
-IDTVEC(resume_hyperv_upcall)
+KIDTVEC(resume_hyperv_upcall)
 1:
 	incl	CPUVAR(IDEPTH)
 	movl	$IPL_NET,CPUVAR(ILEVEL)
@@ -529,6 +546,9 @@ IDTVEC(resume_hyperv_upcall)
 	movq	$(1 << LIR_HYPERV),%rax
 	orq	%rax,CPUVAR(IPENDING)
 3:
+#ifdef DIAGNOSTIC
+	movl    $4,%esi
+#endif /* DIAGNOSTIC */
 	INTRFASTEXIT
 #endif /* NHYPERV > 0 */
 #endif /* NLAPIC > 0 */
@@ -542,11 +562,11 @@ IDTVEC(resume_hyperv_upcall)
  */
 
 #define	INTRSTUB(name, num, early_ack, late_ack, mask, unmask, level_mask) \
-IDTVEC(recurse_##name##num)						;\
+KIDTVEC(recurse_##name##num)						;\
 	INTR_RECURSE_HWFRAME						;\
 	subq	$16,%rsp		/* space for __if_{trapno,err} */;\
-	INTRENTRY							;\
-IDTVEC(resume_##name##num)						\
+	INTR_REENTRY							;\
+KIDTVEC(resume_##name##num)						\
 	movq	$IREENT_MAGIC,TF_ERR(%rsp)				;\
 	movl	%ebx,%r13d						;\
 	movq	CPUVAR(ISOURCES) + (num) * 8, %r14			;\
@@ -555,7 +575,7 @@ IDTVEC(resume_##name##num)						\
 IDTVEC(intr_##name##num)						;\
 	pushq	$0			/* dummy error code */		;\
 	subq	$8,%rsp			/* unused __if_trapno */	;\
-	INTRENTRY							;\
+	INTRENTRY(intr_##name##num)					;\
 	movq	CPUVAR(ISOURCES) + (num) * 8, %r14			;\
 	mask(num)			/* mask it in hardware */	;\
 	early_ack(num)			/* and allow other intrs */	;\
@@ -612,10 +632,12 @@ IDTVEC(intr_##name##num)						;\
 	orq	%rax,CPUVAR(IPENDING)					;\
 	level_mask(num)							;\
 	late_ack(num)							;\
+	movl    $10,%esi /* DIAGNOSTIC */				;\
 	INTRFASTEXIT							;\
 9:									\
 	unmask(num)							;\
 	late_ack(num)							;\
+	movl    $11,%esi /* DIAGNOSTIC */				;\
 	INTRFASTEXIT
 
 #define ICUADDR IO_ICU1
@@ -1095,7 +1117,7 @@ _C_LABEL(ioapic_level_stubs):
  * Soft interrupt handlers
  */
 	.text
-IDTVEC(softtty)
+KIDTVEC(softtty)
 	movl	$IPL_SOFTTTY, CPUVAR(ILEVEL)
 	sti
 	incl	CPUVAR(IDEPTH)
@@ -1104,7 +1126,7 @@ IDTVEC(softtty)
 	decl	CPUVAR(IDEPTH)
 	jmp	*%r13
 
-IDTVEC(softnet)
+KIDTVEC(softnet)
 	movl	$IPL_SOFTNET, CPUVAR(ILEVEL)
 	sti
 	incl	CPUVAR(IDEPTH)
@@ -1113,7 +1135,7 @@ IDTVEC(softnet)
 	decl	CPUVAR(IDEPTH)
 	jmp	*%r13
 
-IDTVEC(softclock)
+KIDTVEC(softclock)
 	movl	$IPL_SOFTCLOCK, CPUVAR(ILEVEL)
 	sti
 	incl	CPUVAR(IDEPTH)

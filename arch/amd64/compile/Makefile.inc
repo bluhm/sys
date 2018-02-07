@@ -16,4 +16,4 @@ config:
 cleandir clean:
 
 .include <bsd.obj.mk>
-
+CFLAGS?=	-O0
