@@ -382,11 +382,11 @@ x86_64_proc0_tss_ldt_init(void)
 #ifdef MULTIPROCESSOR
 void    
 x86_64_init_pcb_tss_ldt(struct cpu_info *ci)   
-{        
+{
 	struct pcb *pcb = ci->ci_idle_pcb;
  
 	pcb->pcb_cr0 = rcr0();
-}       
+}
 #endif	/* MULTIPROCESSOR */
 
 bios_diskinfo_t *
