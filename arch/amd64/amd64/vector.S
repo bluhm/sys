@@ -337,6 +337,7 @@ spl_lowered:
 /* XXX See comment in locore.s */
 #define	XINTR(name,num)		Xintr_##name##num
 
+	KUTEXT
 	.globl _C_LABEL(x2apic_eoi)
 _C_LABEL(x2apic_eoi):
 	pushq   %rax
@@ -351,6 +352,7 @@ _C_LABEL(x2apic_eoi):
 	popq    %rax
 	ret
 
+	.text
 #if NLAPIC > 0
 #ifdef MULTIPROCESSOR
 KIDTVEC(recurse_lapic_ipi)
