@@ -31,4 +31,3 @@
  */
 
 void gdt_init_cpu(struct cpu_info *);
-void gdt_alloc_cpu(struct cpu_info *);
