@@ -311,6 +311,9 @@ cpu_startup(void)
 	/* Safe for i/o port / memory space allocation to use malloc now. */
 	x86_bus_space_mallocok();
 
+#ifndef SMALL_KERNEL
+	cpu_ucode_setup();
+#endif
 	/* enter the IDT and trampoline code in the u-k maps */
 	enter_shared_special_pages();
 
@@ -352,10 +355,6 @@ enter_shared_special_pages(void)
 		va += PAGE_SIZE;
 		pa += PAGE_SIZE;
 	}
-
-#ifndef SMALL_KERNEL
-	cpu_ucode_setup();
-#endif
 }
 
 /*
