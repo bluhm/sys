@@ -104,6 +104,7 @@ SECTIONS
 		__kudata_end = ABSOLUTE(.);
 	} :data =0xcccccccc
 
+	. = ALIGN(0x1000);
 	PROVIDE (edata = .);
 	_edata = .;
 
