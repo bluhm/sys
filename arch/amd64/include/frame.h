@@ -147,6 +147,20 @@ struct intrframe {
 	int64_t	if_ss;
 };
 
+
+/*
+ * The trampoline frame used on the kernel stack page which is present
+ * but kernel-only, in the page tables used when in userspace.  This is
+ * the minimum for iretq operation.
+ */
+struct iretq_frame {
+	int64_t	iretq_rip;
+	int64_t	iretq_cs;
+	int64_t	iretq_rflags;
+	int64_t	iretq_rsp;
+	int64_t	iretq_ss;
+};
+
 /*
  * Stack frame inside cpu_switch()
  */
