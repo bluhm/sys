@@ -81,7 +81,7 @@
 #include <uvm/uvm_extern.h>
 
 #include <machine/codepatch.h>
-#include <machine/cpu.h>
+#include <machine/cpu_full.h>
 #include <machine/cpufunc.h>
 #include <machine/cpuvar.h>
 #include <machine/pmap.h>
@@ -172,7 +172,7 @@ struct cfdriver cpu_cd = {
  * CPU, on uniprocessors).  The CPU info list is initialized to
  * point at it.
  */
-struct cpu_info cpu_info_primary = { 0, &cpu_info_primary };
+struct cpu_info_full cpu_info_full_primary = { .cif_cpu = { .ci_self = &cpu_info_primary } };
 
 struct cpu_info *cpu_info_list = &cpu_info_primary;
 
@@ -338,8 +338,15 @@ cpu_attach(struct device *parent, struct device *self, void *aux)
 	 * structure, otherwise use the primary's.
 	 */
 	if (caa->cpu_role == CPU_ROLE_AP) {
-		ci = malloc(sizeof(*ci), M_DEVBUF, M_WAITOK|M_ZERO);
+		struct cpu_info_full *cif;
+		
+		cif = km_alloc(sizeof *cif, &kv_any, &kp_zero, &kd_waitok);
+		ci = &cif->cif_cpu;
 #if defined(MULTIPROCESSOR)
+		ci->ci_tss = &cif->cif_tss;
+		ci->ci_gdt = (void *)(ci->ci_tss + 1);
+		memcpy(ci->ci_gdt, cpu_info_primary.ci_gdt, GDT_SIZE);
+		cpu_enter_pages(cif);
 		if (cpu_info[cpunum] != NULL)
 			panic("cpu at apic id %d already attached?", cpunum);
 		cpu_info[cpunum] = ci;
@@ -451,7 +458,6 @@ cpu_attach(struct device *parent, struct device *self, void *aux)
 
 #if defined(MULTIPROCESSOR)
 		cpu_intr_init(ci);
-		gdt_alloc_cpu(ci);
 		sched_init_cpu(ci);
 		cpu_start_secondary(ci);
 		ncpus++;
@@ -937,4 +943,35 @@ cpu_activate(struct device *self, int act)
 	}
 
 	return (0);
+}
+
+void
+cpu_enter_pages(struct cpu_info_full *cif)
+{
+	vaddr_t va;
+	paddr_t pa;
+
+	/* The TSS+GDT need to be readable */
+	va = (vaddr_t)cif;
+	pmap_extract(pmap_kernel(), va, &pa);
+	pmap_enter_special(va, pa, PROT_READ);
+	printf("%s: entered tss+gdt page at va 0x%llx pa 0x%llx\n", __func__,
+	   (uint64_t)va, (uint64_t)pa);
+
+	/* The trampoline stack page needs to be read-write */
+	va = (vaddr_t)&cif->cif_tramp_stack;
+	pmap_extract(pmap_kernel(), va, &pa);
+	pmap_enter_special(va, pa, PROT_READ | PROT_WRITE);
+	printf("%s: entered t.stack page at va 0x%llx pa 0x%llx\n", __func__,
+	   (uint64_t)va, (uint64_t)pa);
+
+	cif->cif_tss.tss_rsp0 = va + sizeof(cif->cif_tramp_stack) - 16;
+	printf("%s: cif_tss.tss_rsp0 = 0x%llx\n" ,__func__, (uint64_t)cif->cif_tss.tss_rsp0);
+	cif->cif_cpu.ci_intr_rsp = cif->cif_tss.tss_rsp0 -
+	    sizeof(struct iretq_frame);
+	cif->cif_tss.tss_ist[0] = (vaddr_t)&cif->cif_nmi_stack +
+	    sizeof(cif->cif_nmi_stack) - 16;
+
+	/* an empty iomap, by setting its offset to the TSS limit */
+	cif->cif_tss.tss_iobase = sizeof(cif->cif_tss);
 }
