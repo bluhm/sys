@@ -278,6 +278,8 @@ extern vaddr_t lo32_paddr;
 vaddr_t virtual_avail;
 extern int end;
 
+extern uint32_t cpu_insecure;
+
 /*
  * local prototypes
  */
@@ -755,7 +757,6 @@ pmap_bootstrap(paddr_t first_avail, paddr_t max_pa)
 	pool_init(&pmap_pdp_pool, PAGE_SIZE, 0, IPL_NONE, PR_WAITOK,
 	    "pdppl", NULL);
 
-
 	kpm->pm_pdir_intel = 0;
 	kpm->pm_pdirpa_intel = 0;
 
@@ -1138,14 +1139,19 @@ pmap_create(void)
 
 	/*
 	 * Intel CPUs need a special page table to be used during usermode
-	 * execution, one that lacks all kernel mappings. Although AMD CPUs
-	 * don't need this, we still allocate the page (but it's never used).
+	 * execution, one that lacks all kernel mappings.
 	 */
-	pmap->pm_pdir_intel = pool_get(&pmap_pdp_pool, PR_WAITOK);
-	pmap_pdp_ctor_intel(pmap->pm_pdir_intel);
-	if (!pmap_extract(pmap_kernel(), (vaddr_t)pmap->pm_pdir_intel,
-	    &pmap->pm_pdirpa_intel))
-		panic("%s: unknown PA mapping for meltdown PML4\n", __func__);
+	if (cpu_insecure) {
+		pmap->pm_pdir_intel = pool_get(&pmap_pdp_pool, PR_WAITOK);
+		pmap_pdp_ctor_intel(pmap->pm_pdir_intel);
+		if (!pmap_extract(pmap_kernel(), (vaddr_t)pmap->pm_pdir_intel,
+		    &pmap->pm_pdirpa_intel))
+			panic("%s: unknown PA mapping for meltdown PML4\n",
+			    __func__);
+	} else {
+		pmap->pm_pdir_intel = 0;
+		pmap->pm_pdirpa_intel = 0;
+	}
 
 	LIST_INSERT_HEAD(&pmaps, pmap, pm_list);
 	return (pmap);
@@ -2030,6 +2036,10 @@ pmap_enter_special(vaddr_t va, paddr_t pa, vm_prot_t prot)
 	pd_entry_t *pd, *ptp;
 	paddr_t npa;
 	struct pmap *pmap = pmap_kernel();
+
+	/* If CPU is secure, no need to do anything */
+	if (!cpu_insecure)
+		return;
 
 	/* Must be kernel VA */
 	if (va < VM_MIN_KERNEL_ADDRESS)
