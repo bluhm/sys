@@ -205,13 +205,13 @@ bi_size_ok:
 	movl	$0,  12(%ebp)
 
 	/*
-	 * Determine if CPU is insecure. Certain Intel CPUs do not properly
+	 * Determine if CPU has meltdown. Certain Intel CPUs do not properly
 	 * respect page permissions when speculatively loading data into
 	 * the cache ("Meltdown" CVE). These CPUs must utilize a secondary
 	 * sanitized page table lacking kernel mappings when executing user
 	 * processes, and may not use PG_G global PTEs for kernel VAs.
 	 */
-	movl	$0x1, RELOC(cpu_insecure)	/* assume insecure at first */
+	movl	$0x1, RELOC(cpu_meltdown)	/* assume insecure at first */
 	movl	$0x0, RELOC(pg_g_kern)
 	
 	cmpl	$0x756e6547, %ebx	# "Genu"
@@ -242,7 +242,7 @@ bi_size_ok:
 	jz	.Lcpu_check_finished
 
 .Lcpu_secure:
-	movl	$0x0, RELOC(cpu_insecure)
+	movl	$0x0, RELOC(cpu_meltdown)
 	movl	$PG_G, RELOC(pg_g_kern)
 
 .Lcpu_check_finished:

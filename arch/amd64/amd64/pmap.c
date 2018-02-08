@@ -278,7 +278,7 @@ extern vaddr_t lo32_paddr;
 vaddr_t virtual_avail;
 extern int end;
 
-extern uint32_t cpu_insecure;
+extern uint32_t cpu_meltdown;
 
 /*
  * local prototypes
@@ -1141,7 +1141,7 @@ pmap_create(void)
 	 * Intel CPUs need a special page table to be used during usermode
 	 * execution, one that lacks all kernel mappings.
 	 */
-	if (cpu_insecure) {
+	if (cpu_meltdown) {
 		pmap->pm_pdir_intel = pool_get(&pmap_pdp_pool, PR_WAITOK);
 		pmap_pdp_ctor_intel(pmap->pm_pdir_intel);
 		if (!pmap_extract(pmap_kernel(), (vaddr_t)pmap->pm_pdir_intel,
@@ -2038,7 +2038,7 @@ pmap_enter_special(vaddr_t va, paddr_t pa, vm_prot_t prot)
 	struct pmap *pmap = pmap_kernel();
 
 	/* If CPU is secure, no need to do anything */
-	if (!cpu_insecure)
+	if (!cpu_meltdown)
 		return;
 
 	/* Must be kernel VA */
