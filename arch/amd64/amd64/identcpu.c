@@ -450,7 +450,7 @@ identifycpu(struct cpu_info *ci)
 	int i;
 	char *brandstr_from, *brandstr_to;
 	int skipspace;
-	extern uint32_t cpu_insecure;
+	extern uint32_t cpu_meltdown;
 
 	CPUID(1, ci->ci_signature, val, dummy, ci->ci_feature_flags);
 	CPUID(0x80000000, ci->ci_pnfeatset, dummy, dummy, dummy);
@@ -608,8 +608,8 @@ identifycpu(struct cpu_info *ci)
 		}
 	}
 
-	if (cpu_insecure)
-		printf(",INSECURE");
+	if (cpu_meltdown)
+		printf(",MELTDOWN");
 
 	printf("\n");
 
