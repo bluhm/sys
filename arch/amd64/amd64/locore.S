@@ -177,7 +177,7 @@ _C_LABEL(lapic_isr):
 	.globl	_C_LABEL(bootapiver)
 	.globl	_C_LABEL(pg_nx)
 	.globl	_C_LABEL(pg_g_kern)
-	.globl	_C_LABEL(cpu_insecure)
+	.globl	_C_LABEL(cpu_meltdown)
 _C_LABEL(cpu_id):	.long	0	# saved from `cpuid' instruction
 _C_LABEL(cpu_feature):	.long	0	# feature flags from 'cpuid'
 					#   instruction
@@ -213,7 +213,7 @@ _C_LABEL(pg_nx):	.quad	0	# NX PTE bit (if CPU supports)
 _C_LABEL(pg_g_kern):	.quad	0	# 0x100 if global pages should be used
 					# in kernel mappings, 0 otherwise (for
 					# insecure CPUs)
-_C_LABEL(cpu_insecure):	.long	0	# 1 if this CPU is insecure (Meltdown)
+_C_LABEL(cpu_meltdown):	.long	0	# 1 if this CPU has Meltdown
 
 #define	_RELOC(x)	((x) - KERNBASE)
 #define	RELOC(x)	_RELOC(_C_LABEL(x))
