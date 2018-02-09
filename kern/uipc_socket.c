@@ -212,13 +212,16 @@ sofree(struct socket *so)
 			    so->so_sp->ssp_soback != so);
 		if (isspliced(so))
 			sounsplice(so, so->so_sp->ssp_socket, 0);
-		taskq_barrier(sosplice_taskq);
-		pool_put(&sosplice_pool, so->so_sp);
-		so->so_sp = NULL;
 	}
 #endif /* SOCKET_SPLICE */
 	sbrelease(so, &so->so_snd);
 	sorflush(so);
+#ifdef SOCKET_SPLICE
+	if (so->so_sp) {
+		taskq_barrier(sosplice_taskq);
+		pool_put(&sosplice_pool, so->so_sp);
+	}
+#endif /* SOCKET_SPLICE */
 	pool_put(&socket_pool, so);
 }
 
