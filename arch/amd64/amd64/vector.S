@@ -152,34 +152,48 @@ IDTVEC(trap0c)
 	 * so that we can do the necessary swapgs in that case.
 	 */
 IDTVEC(trap0d)
-	subq	$TF_ERR,%rsp
-	movl	$T_PROTFLT,TF_TRAPNO(%rsp)
-	movq	%rdi,TF_RDI(%rsp)
-	leaq	_C_LABEL(doreti_iret)(%rip),%rdi
-	cmpq	%rdi,TF_RIP(%rsp)
+	pushq	%rcx
+	leaq	_C_LABEL(doreti_iret)(%rip),%rcx
+	cmpq	%rcx,TF_RIP(%rsp)
+	popq	%rcx
 	je	1f
-	testq	$SEL_RPL,TF_CS(%rsp)
-	jz	trap0d_untramp
+	testq	$SEL_RPL,24(%rsp)
+	je	INTRENTRY_LABEL(trap0d)
 1:	swapgs
-	jmp	trap0d_untramp
+	movq	%rax,CPUVAR(SCRATCH)
+	movq	CPUVAR(KERN_CR3),%rax
+	testq	%rax,%rax
+	jz	98f
+	movq	%rax,%cr3
+	jmp	98f
 	.text
-	.global	trap0d_untramp
-trap0d_untramp:
-	movq	%r15,TF_R15(%rsp)
-	movq	%r14,TF_R14(%rsp)
-	movq	%r13,TF_R13(%rsp)
-	movq	%r12,TF_R12(%rsp)
-	movq	%r11,TF_R11(%rsp)
-	movq	%r10,TF_R10(%rsp)
-	movq	%r9,TF_R9(%rsp)
-	movq	%r8,TF_R8(%rsp)
-	/*movq	%rdi,TF_RDI(%rsp)	done above */
-	movq	%rsi,TF_RSI(%rsp)
-	movq	%rbp,TF_RBP(%rsp)
-	movq	%rbx,TF_RBX(%rsp)
-	movq	%rdx,TF_RDX(%rsp)
+	.global	INTRENTRY_LABEL(trap0d)
+INTRENTRY_LABEL(trap0d):	/* from kernel */
+	pushq	$0		/* dummy error code */
+	pushq	$T_PROTFLT
+	subq	$152,%rsp
 	movq	%rcx,TF_RCX(%rsp)
-	movq	%rax,TF_RAX(%rsp)
+	jmp	99f
+98:	/* from userspace */
+	movq	CPUVAR(KERN_RSP),%rax
+	xchgq	%rax,%rsp
+	movq	%rcx,TF_RCX(%rsp)
+	/* set trapno+err in the trap frame */
+	movq	$T_PROTFLT,TF_TRAPNO(%rsp)
+	movq	$0,TF_ERR(%rsp)
+	/* copy iretq frame to the trap frame */
+	movq	IRETQ_RIP(%rax),%rcx
+	movq	%rcx,TF_RIP(%rsp)
+	movq	$(GSEL(GUCODE_SEL,SEL_UPL)),TF_CS(%rsp)
+	movq	IRETQ_RFLAGS(%rax),%rcx
+	movq	%rcx,TF_RFLAGS(%rsp)
+	movq	IRETQ_RSP(%rax),%rcx
+	movq	%rcx,TF_RSP(%rsp)
+	movq	$(GSEL(GUDATA_SEL,SEL_UPL)),TF_SS(%rsp)
+	movq	CPUVAR(SCRATCH),%rax
+
+
+99:	INTR_SAVE_MOST_GPRS_NO_ADJ
 	sti
 	jmp	calltrap
 
@@ -239,10 +253,32 @@ KIDTVEC(exceptions)
  * protection fault.  This will cause the process to get a SIGBUS.
  */
 NENTRY(resume_iret)
-	pushq	$0
-	pushq	$T_PROTFLT
-	subq	$32,%rsp
-	INTR_SAVE_GPRS
+	movq	%rax,CPUVAR(SCRATCH)
+	movq	CPUVAR(KERN_CR3),%rax
+	testq	%rax,%rax
+	jz	INTRENTRY_LABEL(iret)
+	movq	%rax,%cr3
+	jmp	INTRENTRY_LABEL(iret)
+	.text
+	.global	INTRENTRY_LABEL(iret)
+INTRENTRY_LABEL(iret):	/* from kernel */
+	movq	CPUVAR(KERN_RSP),%rax
+	xchgq	%rax,%rsp
+	movq	%rcx,TF_RCX(%rsp)
+	/* set trapno+err in the trap frame */
+	movq	$T_PROTFLT,TF_TRAPNO(%rsp)
+	movq	$0,TF_ERR(%rsp)
+	/* copy iretq frame to the trap frame */
+	movq	IRETQ_RIP(%rax),%rcx
+	movq	%rcx,TF_RIP(%rsp)
+	movq	$(GSEL(GUCODE_SEL,SEL_UPL)),TF_CS(%rsp)
+	movq	IRETQ_RFLAGS(%rax),%rcx
+	movq	%rcx,TF_RFLAGS(%rsp)
+	movq	IRETQ_RSP(%rax),%rcx
+	movq	%rcx,TF_RSP(%rsp)
+	movq	$(GSEL(GUDATA_SEL,SEL_UPL)),TF_SS(%rsp)
+	movq	CPUVAR(SCRATCH),%rax
+	INTR_SAVE_MOST_GPRS_NO_ADJ
 	sti
 	jmp	calltrap
 
@@ -352,7 +388,6 @@ _C_LABEL(x2apic_eoi):
 	popq    %rax
 	ret
 
-	.text
 #if NLAPIC > 0
 #ifdef MULTIPROCESSOR
 KIDTVEC(recurse_lapic_ipi)
@@ -1118,7 +1153,6 @@ _C_LABEL(ioapic_level_stubs):
 /*
  * Soft interrupt handlers
  */
-	.text
 KIDTVEC(softtty)
 	movl	$IPL_SOFTTTY, CPUVAR(ILEVEL)
 	sti
