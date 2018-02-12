@@ -388,6 +388,7 @@ _C_LABEL(x2apic_eoi):
 	popq    %rax
 	ret
 
+	.text
 #if NLAPIC > 0
 #ifdef MULTIPROCESSOR
 KIDTVEC(recurse_lapic_ipi)
