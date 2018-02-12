@@ -1,4 +1,4 @@
-/*	$OpenBSD: route.c,v 1.369 2018/01/02 12:57:30 mpi Exp $	*/
+/*	$OpenBSD: route.c,v 1.371 2018/02/10 09:17:56 mpi Exp $	*/
 /*	$NetBSD: route.c,v 1.14 1996/02/13 22:00:46 christos Exp $	*/
 
 /*
@@ -159,7 +159,7 @@ int	rtflushclone1(struct rtentry *, void *, u_int);
 void	rtflushclone(unsigned int, struct rtentry *);
 int	rt_ifa_purge_walker(struct rtentry *, void *, unsigned int);
 struct rtentry *rt_match(struct sockaddr *, uint32_t *, int, unsigned int);
-struct rtentry *rt_clone(struct rtentry *, struct sockaddr *, unsigned int);
+int	rt_clone(struct rtentry **, struct sockaddr *, unsigned int);
 struct sockaddr *rt_plentosa(sa_family_t, int, struct sockaddr_in6 *);
 
 #ifdef DDB
@@ -238,20 +238,18 @@ rt_match(struct sockaddr *dst, uint32_t *src, int flags, unsigned int tableid)
 	}
 
 	if (ISSET(rt->rt_flags, RTF_CLONING) && ISSET(flags, RT_RESOLVE))
-		rt = rt_clone(rt, dst, tableid);
+		rt_clone(&rt, dst, tableid);
 
 	rt->rt_use++;
 	return (rt);
 }
 
-struct rtentry *
-rt_clone(struct rtentry *rt, struct sockaddr *dst, unsigned int rtableid)
+int
+rt_clone(struct rtentry **rtp, struct sockaddr *dst, unsigned int rtableid)
 {
 	struct rt_addrinfo	 info;
-	struct rtentry		*rt0;
+	struct rtentry		*rt = *rtp;
 	int			 error = 0;
-
-	rt0 = rt;
 
 	memset(&info, 0, sizeof(info));
 	info.rti_info[RTAX_DST] = dst;
@@ -271,10 +269,11 @@ rt_clone(struct rtentry *rt, struct sockaddr *dst, unsigned int rtableid)
 	} else {
 		/* Inform listeners of the new route */
 		rtm_send(rt, RTM_ADD, 0, rtableid);
-		rtfree(rt0);
+		rtfree(*rtp);
+		*rtp = rt;
 	}
 	KERNEL_UNLOCK();
-	return (rt);
+	return (error);
 }
 
 /*
@@ -379,21 +378,57 @@ rtalloc(struct sockaddr *dst, int flags, unsigned int rtableid)
 int
 rt_setgwroute(struct rtentry *rt, u_int rtableid)
 {
-	struct rtentry *nhrt;
+	struct rtentry *prt, *nhrt;
+	unsigned int rdomain = rtable_l2(rtableid);
+	int error;
 
 	NET_ASSERT_LOCKED();
 
 	KASSERT(ISSET(rt->rt_flags, RTF_GATEWAY));
 
 	/* If we cannot find a valid next hop bail. */
-	nhrt = rt_match(rt->rt_gateway, NULL, RT_RESOLVE, rtable_l2(rtableid));
+	nhrt = rt_match(rt->rt_gateway, NULL, RT_RESOLVE, rdomain);
 	if (nhrt == NULL)
 		return (ENOENT);
 
 	/* Next hop entry must be on the same interface. */
 	if (nhrt->rt_ifidx != rt->rt_ifidx) {
+		struct sockaddr_in6	sa_mask;
+
+		/*
+		 * If we found a non-L2 entry on a different interface
+		 * there's nothing we can do.
+		 */
+		if (!ISSET(nhrt->rt_flags, RTF_LLINFO)) {
+			rtfree(nhrt);
+			return (EHOSTUNREACH);
+		}
+
+		/*
+		 * We found a L2 entry, so we might have multiple
+		 * RTF_CLONING routes for the same subnet.  Query
+		 * the first route of the multipath chain and iterate
+		 * until we find the correct one.
+		 */
+		prt = rtable_lookup(rdomain, rt_key(nhrt->rt_parent),
+		    rt_plen2mask(nhrt->rt_parent, &sa_mask), NULL, RTP_ANY);
 		rtfree(nhrt);
-		return (EHOSTUNREACH);
+
+		while (prt != NULL && prt->rt_ifidx != rt->rt_ifidx)
+			prt = rtable_iterate(prt);
+
+		/* We found nothing or a non-cloning MPATH route. */
+		if (prt == NULL || !ISSET(prt->rt_flags, RTF_CLONING)) {
+			rtfree(prt);
+			return (EHOSTUNREACH);
+		}
+
+		error = rt_clone(&prt, rt->rt_gateway, rdomain);
+		if (error) {
+			rtfree(prt);
+			return (error);
+		}
+		nhrt = prt;
 	}
 
 	/*

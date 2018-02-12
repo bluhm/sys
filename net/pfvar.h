@@ -1,4 +1,4 @@
-/*	$OpenBSD: pfvar.h,v 1.472 2018/02/07 05:48:47 henning Exp $ */
+/*	$OpenBSD: pfvar.h,v 1.476 2018/02/09 09:35:03 dlg Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -1326,6 +1326,9 @@ struct pf_status {
 #define	PF_SYNCOOKIES_ADAPTIVE	2
 #define	PF_SYNCOOKIES_MODE_MAX	PF_SYNCOOKIES_ADAPTIVE
 
+#define	PF_SYNCOOKIES_HIWATPCT	25
+#define	PF_SYNCOOKIES_LOWATPCT	PF_SYNCOOKIES_HIWATPCT/2
+
 #define PF_PRIO_ZERO		0xff		/* match "prio 0" packets */
 
 struct pf_queue_bwspec {
@@ -1650,6 +1653,7 @@ struct pfioc_synflwats {
 #define DIOCGETQSTATS	_IOWR('D', 96, struct pfioc_qstats)
 #define DIOCSETSYNFLWATS	_IOWR('D', 97, struct pfioc_synflwats)
 #define DIOCSETSYNCOOKIES	_IOWR('D', 98, u_int8_t)
+#define DIOCGETSYNFLWATS	_IOWR('D', 99, struct pfioc_synflwats)
 
 #ifdef _KERNEL
 
@@ -1945,6 +1949,7 @@ void			 pf_send_tcp(const struct pf_rule *, sa_family_t,
 void			 pf_syncookies_init(void);
 int			 pf_syncookies_setmode(u_int8_t);
 int			 pf_syncookies_setwats(u_int32_t, u_int32_t);
+int			 pf_syncookies_getwats(struct pfioc_synflwats *);
 int			 pf_synflood_check(struct pf_pdesc *);
 void			 pf_syncookie_send(struct pf_pdesc *);
 u_int8_t		 pf_syncookie_validate(struct pf_pdesc *);

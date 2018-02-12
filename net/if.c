@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.c,v 1.538 2018/01/12 23:47:24 dlg Exp $	*/
+/*	$OpenBSD: if.c,v 1.544 2018/02/10 09:32:54 claudio Exp $	*/
 /*	$NetBSD: if.c,v 1.35 1996/05/07 05:26:04 thorpej Exp $	*/
 
 /*
@@ -1550,8 +1550,9 @@ if_up(struct ifnet *ifp)
 
 #ifdef INET6
 	/* Userland expects the kernel to set ::1 on default lo(4). */
-	if (ifp->if_index == rtable_loindex(ifp->if_rdomain))
+	if (ifp->if_index == rtable_loindex(ifp->if_rdomain)) {
 		in6_ifattach(ifp);
+	}
 #endif
 
 	if_linkstate(ifp);
@@ -1744,6 +1745,7 @@ if_setrdomain(struct ifnet *ifp, int rdomain)
 		}
 
 		loifp->if_rdomain = rdomain;
+		if_up(loifp);
 	}
 
 	/* make sure that the routing table is a real rdomain */
@@ -1919,6 +1921,19 @@ ifioctl(struct socket *so, u_long cmd, caddr_t data, struct proc *p)
 				break;
 			}
 		}
+
+		if (ISSET(ifr->ifr_flags, IFXF_INET6_NOSOII) &&
+		    !ISSET(ifp->if_xflags, IFXF_INET6_NOSOII)) {
+			ifp->if_xflags |= IFXF_INET6_NOSOII;
+			in6_soiiupdate(ifp);
+		}
+
+		if (!ISSET(ifr->ifr_flags, IFXF_INET6_NOSOII) &&
+		    ISSET(ifp->if_xflags, IFXF_INET6_NOSOII)) {
+			ifp->if_xflags &= ~IFXF_INET6_NOSOII;
+			in6_soiiupdate(ifp);
+		}
+
 #endif	/* INET6 */
 
 #ifdef MPLS
@@ -2094,6 +2109,7 @@ ifioctl(struct socket *so, u_long cmd, caddr_t data, struct proc *p)
 		NET_UNLOCK();
 		break;
 
+	case SIOCSETKALIVE:
 	case SIOCDIFPHYADDR:
 	case SIOCSLIFPHYADDR:
 	case SIOCSLIFPHYRTABLE:

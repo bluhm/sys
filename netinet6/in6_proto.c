@@ -1,4 +1,4 @@
-/*	$OpenBSD: in6_proto.c,v 1.100 2017/11/23 13:45:46 mpi Exp $	*/
+/*	$OpenBSD: in6_proto.c,v 1.102 2018/02/10 08:12:01 dlg Exp $	*/
 /*	$KAME: in6_proto.c,v 1.66 2000/10/10 15:35:47 itojun Exp $	*/
 
 /*
@@ -97,7 +97,6 @@
 
 #include "gif.h"
 #if NGIF > 0
-#include <netinet/ip_ether.h>
 #include <net/if_gif.h>
 #endif
 
@@ -114,6 +113,11 @@
 #include "etherip.h"
 #if NETHERIP > 0
 #include <net/if_etherip.h>
+#endif
+
+#include "gre.h"
+#if NGRE > 0
+#include <net/if_gre.h>
 #endif
 
 /*
@@ -272,6 +276,23 @@ const struct protosw inet6sw[] = {
   .pr_attach	= rip6_attach,
   .pr_detach	= rip6_detach,
 },
+#if defined(MPLS) && NGIF > 0
+{
+  .pr_type	= SOCK_RAW,
+  .pr_domain	= &inet6domain,
+  .pr_protocol	= IPPROTO_MPLS,
+  .pr_flags	= PR_ATOMIC|PR_ADDR,
+#if NGIF > 0
+  .pr_input	= in6_gif_input,
+#else
+  .pr_input	= ipip_input,
+#endif
+  .pr_ctloutput	= rip6_ctloutput,
+  .pr_usrreq	= rip6_usrreq,	/* XXX */
+  .pr_attach	= rip6_attach,
+  .pr_detach	= rip6_detach,
+},
+#endif /* MPLS */
 #if NCARP > 0
 {
   .pr_type	= SOCK_RAW,
@@ -313,6 +334,19 @@ const struct protosw inet6sw[] = {
   .pr_detach	= rip6_detach,
 },
 #endif /* NETHERIP */
+#if NGRE > 0
+{
+  .pr_type	= SOCK_RAW,
+  .pr_domain	= &inet6domain,
+  .pr_protocol	= IPPROTO_GRE,
+  .pr_flags	= PR_ATOMIC|PR_ADDR,
+  .pr_input	= gre_input6,
+  .pr_ctloutput	= rip6_ctloutput,
+  .pr_usrreq	= rip6_usrreq,
+  .pr_attach	= rip6_attach,
+  .pr_detach	= rip6_detach,
+},
+#endif /* NGRE */
 {
   /* raw wildcard */
   .pr_type	= SOCK_RAW,
