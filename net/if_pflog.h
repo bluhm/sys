@@ -66,10 +66,5 @@ struct pflog_softc {
 	int			sc_unit;
 };
 
-#if NPFLOG > 0
-#define	PFLOG_PACKET(a,b,c,d,e,f) pflog_packet(a,b,c,d,e,f)
-#else
-#define	PFLOG_PACKET(a,b,c,d,e,f) ((void)0)
-#endif /* NPFLOG > 0 */
 #endif /* _KERNEL */
 #endif /* _NET_IF_PFLOG_H_ */
