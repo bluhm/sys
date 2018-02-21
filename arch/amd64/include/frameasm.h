@@ -63,12 +63,14 @@ INTRENTRY_LABEL(label):	/* from kernel */ \
 	/* copy iretq frame to the trap frame */ \
 	movq	IRETQ_RIP(%rax),%rcx	; \
 	movq	%rcx,TF_RIP(%rsp)	; \
-	movq	$(GSEL(GUCODE_SEL,SEL_UPL)),TF_CS(%rsp); \
+	movq	IRETQ_CS(%rax),%rcx	; \
+	movq	%rcx,TF_CS(%rsp)	; \
 	movq	IRETQ_RFLAGS(%rax),%rcx	; \
 	movq	%rcx,TF_RFLAGS(%rsp)	; \
 	movq	IRETQ_RSP(%rax),%rcx	; \
 	movq	%rcx,TF_RSP(%rsp)	; \
-	movq	$(GSEL(GUDATA_SEL,SEL_UPL)),TF_SS(%rsp); \
+	movq	IRETQ_SS(%rax),%rcx	; \
+	movq	%rcx,TF_SS(%rsp)	; \
 	movq	CPUVAR(SCRATCH),%rax	; \
 99:	INTR_SAVE_MOST_GPRS_NO_ADJ
 

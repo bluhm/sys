@@ -108,14 +108,74 @@ IDTVEC(trap00)
 	ZTRAP(T_DIVIDE)
 IDTVEC(trap01)
 	ZTRAP(T_TRCTRAP)
+
+/*
+ * NMIs can happen at any time, so there's no simple way to tell
+ * which GS.base is in place at the time of the interrupt.  Instead,
+ * borrow a couple ideas from FreeBSD and put the CPU's kernel
+ * GS.base in the memory right above the stack, storing the current
+ * one in a pair of callee-saved registers (%r12/13).  We save the
+ * current %cr3 in a callee-saved register too (%r15).
+ * Note: we don't unblock interrupts because a nested normal interrupt
+ * would also reenable NMIs.
+ */
 IDTVEC(trap02)
-	ZTRAP(T_NMI)
+	pushq	$0
+	pushq	$T_NMI
+calltrap_specstk:			# special stack path
+	INTR_REENTRY
+	movl	$MSR_FSBASE,%ecx	# save current GS.base...
+	rdmsr
+	movq	%rax,%r12		# ...in %r12 and %r13
+	movq	%rdx,%r13
+	movq	FRAMESIZE(%rsp),%rax	# get kernel GS.base
+	movq	%rax,%rdx
+	shrq	$32,%rdx
+	wrmsr				# switch to it
+	movq	%cr3,%r15		# save current %cr3 in %r15
+	movq	CPUVAR(KERN_CR3),%rax	# switch to kernel page tables
+	testq	%rax,%rax
+	jz	INTRENTRY_LABEL(calltrap_specstk)
+	movq	%rax,%cr3
+	jmp	INTRENTRY_LABEL(calltrap_specstk)
+	.text
+	.globl	INTRENTRY_LABEL(calltrap_specstk)
+INTRENTRY_LABEL(calltrap_specstk):
+	cld
+	SMAP_CLAC
+	movq	%rsp,%rdi
+	call	trap
+	movl	$MSR_FSBASE,%ecx	# restore GS.base
+	movq	%r12,%rax
+	movq	%r13,%rdx
+	wrmsr
+	popq	%rdi
+	popq	%rsi
+	popq	%rdx
+	popq	%rcx
+	popq	%r8
+	popq	%r9
+	popq	%r10
+	popq	%r11
+	popq	%r12
+	popq	%r13
+	popq	%r14
+	jmp	calltrap_specstk_tramp
+KUENTRY(calltrap_specstk_tramp)
+	movq	%r15,%cr3		# restore %cr3
+	popq	%r15
+	popq	%rbp
+	popq	%rbx
+	popq	%rax
+	addq	$48,%rsp		# ignored TF_[DEFG]S
+	iretq
+
 IDTVEC(trap03)
 	ZTRAP(T_BPTFLT)
 IDTVEC(trap04)
-	ZTRAP(T_OFLOW)
+	ZTRAP(T_OFLOW)	# impossible: INTO instruction invalid in amd64
 IDTVEC(trap05)
-	ZTRAP(T_BOUND)
+	ZTRAP(T_BOUND)	# impossible: BOUND instruction invalid in amd64
 IDTVEC(trap06)
 	ZTRAP(T_PRIVINFLT)
 IDTVEC(trap07)
@@ -129,14 +189,12 @@ IDTVEC(trap07)
 	movq	%rsp, %rsi
 	call	_C_LABEL(fpudna)
 	cli
-#ifdef DIAGNOSTIC
-	movl    $7,%esi
-#endif /* DIAGNOSTIC */
 	INTRFASTEXIT
 IDTVEC(trap08)
-	TRAP(T_DOUBLEFLT)
+	pushq	$T_DOUBLEFLT
+	jmp	calltrap_specstk
 IDTVEC(trap09)
-	ZTRAP(T_FPOPFLT)
+	ZTRAP(T_FPOPFLT)	# impossible: not generated on amd64
 IDTVEC(trap0a)
 	TRAP(T_TSSFLT)
 IDTVEC(trap0b)
@@ -154,10 +212,10 @@ IDTVEC(trap0c)
 IDTVEC(trap0d)
 	pushq	%rcx
 	leaq	_C_LABEL(doreti_iret)(%rip),%rcx
-	cmpq	%rcx,TF_RIP(%rsp)
+	cmpq	%rcx,16(%rsp)		/* over %rcx and err to %rip */
 	popq	%rcx
 	je	1f
-	testq	$SEL_RPL,24(%rsp)
+	testq	$SEL_RPL,16(%rsp)	/* over err and %rip to %cs */
 	je	INTRENTRY_LABEL(trap0d)
 1:	swapgs
 	movq	%rax,CPUVAR(SCRATCH)
@@ -167,9 +225,8 @@ IDTVEC(trap0d)
 	movq	%rax,%cr3
 	jmp	98f
 	.text
-	.global	INTRENTRY_LABEL(trap0d)
+	.globl	INTRENTRY_LABEL(trap0d)
 INTRENTRY_LABEL(trap0d):	/* from kernel */
-	pushq	$0		/* dummy error code */
 	pushq	$T_PROTFLT
 	subq	$152,%rsp
 	movq	%rcx,TF_RCX(%rsp)
@@ -178,21 +235,23 @@ INTRENTRY_LABEL(trap0d):	/* from kernel */
 	movq	CPUVAR(KERN_RSP),%rax
 	xchgq	%rax,%rsp
 	movq	%rcx,TF_RCX(%rsp)
-	/* set trapno+err in the trap frame */
+	/* set trapno in the trap frame */
 	movq	$T_PROTFLT,TF_TRAPNO(%rsp)
-	movq	$0,TF_ERR(%rsp)
-	/* copy iretq frame to the trap frame */
+	/* copy err and iretq frame to the trap frame */
+	movq	0(%rax),%rcx
+	movq	%rcx,TF_ERR(%rsp)
+	add	$8,%rax
 	movq	IRETQ_RIP(%rax),%rcx
 	movq	%rcx,TF_RIP(%rsp)
-	movq	$(GSEL(GUCODE_SEL,SEL_UPL)),TF_CS(%rsp)
+	movq	IRETQ_CS(%rax),%rcx
+	movq	%rcx,TF_CS(%rsp)
 	movq	IRETQ_RFLAGS(%rax),%rcx
 	movq	%rcx,TF_RFLAGS(%rsp)
 	movq	IRETQ_RSP(%rax),%rcx
 	movq	%rcx,TF_RSP(%rsp)
-	movq	$(GSEL(GUDATA_SEL,SEL_UPL)),TF_SS(%rsp)
+	movq	IRETQ_SS(%rax),%rcx
+	movq	%rcx,TF_SS(%rsp)
 	movq	CPUVAR(SCRATCH),%rax
-
-
 99:	INTR_SAVE_MOST_GPRS_NO_ADJ
 	sti
 	jmp	calltrap
@@ -225,7 +284,9 @@ IDTVEC(trap1f)
 	/* 20 - 31 reserved for future exp */
 	ZTRAP(T_RESERVED)
 
-KIDTVEC(exceptions)
+	.section .rodata
+	.globl	Xexceptions
+Xexceptions:
 	.quad	_C_LABEL(Xtrap00), _C_LABEL(Xtrap01)
 	.quad	_C_LABEL(Xtrap02), _C_LABEL(Xtrap03)
 	.quad	_C_LABEL(Xtrap04), _C_LABEL(Xtrap05)
@@ -260,7 +321,7 @@ NENTRY(resume_iret)
 	movq	%rax,%cr3
 	jmp	INTRENTRY_LABEL(iret)
 	.text
-	.global	INTRENTRY_LABEL(iret)
+	.globl	INTRENTRY_LABEL(iret)
 INTRENTRY_LABEL(iret):	/* from kernel */
 	movq	CPUVAR(KERN_RSP),%rax
 	xchgq	%rax,%rsp
@@ -271,16 +332,19 @@ INTRENTRY_LABEL(iret):	/* from kernel */
 	/* copy iretq frame to the trap frame */
 	movq	IRETQ_RIP(%rax),%rcx
 	movq	%rcx,TF_RIP(%rsp)
-	movq	$(GSEL(GUCODE_SEL,SEL_UPL)),TF_CS(%rsp)
+	movq	IRETQ_CS(%rax),%rcx
+	movq	%rcx,TF_CS(%rsp)
 	movq	IRETQ_RFLAGS(%rax),%rcx
 	movq	%rcx,TF_RFLAGS(%rsp)
 	movq	IRETQ_RSP(%rax),%rcx
 	movq	%rcx,TF_RSP(%rsp)
-	movq	$(GSEL(GUDATA_SEL,SEL_UPL)),TF_SS(%rsp)
+	movq	IRETQ_SS(%rax),%rcx
+	movq	%rcx,TF_SS(%rsp)
 	movq	CPUVAR(SCRATCH),%rax
 	INTR_SAVE_MOST_GPRS_NO_ADJ
 	sti
 	jmp	calltrap
+
 
 /*
  * All traps go through here. Call the generic trap handler, and
@@ -330,7 +394,6 @@ calltrap:
 #else /* DIAGNOSTIC */
 1:	cmpl	CPUVAR(ILEVEL),%ebx
 	jne	3f
-	movl    $0,%esi
 	INTRFASTEXIT
 3:	sti
 	movabsq	$spl_lowered,%rdi
@@ -419,9 +482,6 @@ KIDTVEC(resume_lapic_ipi)
 2:
 	movq	$(1 << LIR_IPI),%rax
 	orq	%rax,CPUVAR(IPENDING)
-#ifdef DIAGNOSTIC
-	movl    $1,%esi
-#endif /* DIAGNOSTIC */
 	INTRFASTEXIT
 
 IDTVEC(ipi_invltlb)
@@ -507,9 +567,6 @@ KIDTVEC(resume_lapic_ltimer)
 2:
 	movq	$(1 << LIR_TIMER),%rax
 	orq	%rax,CPUVAR(IPENDING)
-#ifdef DIAGNOSTIC
-	movl    $2,%esi
-#endif /* DIAGNOSTIC */
 	INTRFASTEXIT
 
 #if NXEN > 0
@@ -545,9 +602,6 @@ KIDTVEC(resume_xen_upcall)
 	movq	$(1 << LIR_XEN),%rax
 	orq	%rax,CPUVAR(IPENDING)
 3:
-#ifdef DIAGNOSTIC
-	movl    $3,%esi
-#endif /* DIAGNOSTIC */
 	INTRFASTEXIT
 #endif /* NXEN > 0 */
 
@@ -583,9 +637,6 @@ KIDTVEC(resume_hyperv_upcall)
 	movq	$(1 << LIR_HYPERV),%rax
 	orq	%rax,CPUVAR(IPENDING)
 3:
-#ifdef DIAGNOSTIC
-	movl    $4,%esi
-#endif /* DIAGNOSTIC */
 	INTRFASTEXIT
 #endif /* NHYPERV > 0 */
 #endif /* NLAPIC > 0 */
@@ -669,12 +720,10 @@ IDTVEC(intr_##name##num)						;\
 	orq	%rax,CPUVAR(IPENDING)					;\
 	level_mask(num)							;\
 	late_ack(num)							;\
-	movl    $10,%esi /* DIAGNOSTIC */				;\
 	INTRFASTEXIT							;\
 9:									\
 	unmask(num)							;\
 	late_ack(num)							;\
-	movl    $11,%esi /* DIAGNOSTIC */				;\
 	INTRFASTEXIT
 
 #define ICUADDR IO_ICU1

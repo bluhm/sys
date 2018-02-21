@@ -141,6 +141,14 @@ extern int db_console;
 #include <dev/ic/pckbcvar.h>
 #endif
 
+/* #define MACHDEP_DEBUG */
+
+#ifdef MACHDEP_DEBUG
+#define DPRINTF(x...)	do { printf(x); } while(0)
+#else
+#define DPRINTF(x...)
+#endif /* MACHDEP_DEBUG */
+
 /* the following is used externally (sysctl_hw) */
 char machine[] = MACHINE;
 
@@ -321,6 +329,24 @@ cpu_startup(void)
 	cpu_enter_pages(&cpu_info_full_primary);
 }
 
+/*
+ * enter_shared_special_pages
+ *
+ * Requests mapping of various special pages required in the Intel Meltdown
+ * case (to be entered into the U-K page table):
+ *
+ *  1 IDT page
+ *  Various number of pages covering the U-K ".kutext" section. This section
+ *   contains code needed during trampoline operation
+ *  Various number of pages covering the U-K ".kudata" section. This section
+ *   contains data accessed by the trampoline, before switching to U+K
+ *   (for example, various shared global variables used by IPIs, etc)
+ *
+ * The linker script places the required symbols in the sections above.
+ *
+ * On CPUs not affected by Meltdown, the calls to pmap_enter_special below
+ * become no-ops.
+ */
 void
 enter_shared_special_pages(void)
 {
@@ -331,7 +357,7 @@ enter_shared_special_pages(void)
 
 	/* idt */
 	pmap_enter_special(idt_vaddr, idt_paddr, PROT_READ);
-	printf("%s: entered idt page va 0x%llx pa 0x%llx\n", __func__,
+	DPRINTF("%s: entered idt page va 0x%llx pa 0x%llx\n", __func__,
 	    (uint64_t)idt_vaddr, (uint64_t)idt_paddr);
 
 	/* .kutext section */
@@ -339,8 +365,8 @@ enter_shared_special_pages(void)
 	pa = (paddr_t)__kernel_kutext_phys;
 	while (va < (vaddr_t)__kutext_end) {
 		pmap_enter_special(va, pa, PROT_READ | PROT_EXEC);
-		printf("%s: entered kutext page va 0x%llx pa 0x%llx\n", __func__,
-		    (uint64_t)va, (uint64_t)pa);
+		DPRINTF("%s: entered kutext page va 0x%llx pa 0x%llx\n",
+		    __func__, (uint64_t)va, (uint64_t)pa);
 		va += PAGE_SIZE;
 		pa += PAGE_SIZE;
 	}
@@ -350,8 +376,8 @@ enter_shared_special_pages(void)
 	pa = (paddr_t)__kernel_kudata_phys;
 	while (va < (vaddr_t)__kudata_end) {
 		pmap_enter_special(va, pa, PROT_READ | PROT_WRITE);
-		printf("%s: entered kudata page va 0x%llx pa 0x%llx\n", __func__,
-		    (uint64_t)va, (uint64_t)pa);
+		DPRINTF("%s: entered kudata page va 0x%llx pa 0x%llx\n",
+		    __func__, (uint64_t)va, (uint64_t)pa);
 		va += PAGE_SIZE;
 		pa += PAGE_SIZE;
 	}
@@ -1615,9 +1641,10 @@ init_x86_64(paddr_t first_avail)
 
 	/* exceptions */
 	for (x = 0; x < 32; x++) {
-		ist = (x == 8) ? 1 : 0;
+		/* trap2 == NMI, trap8 == double fault */
+		ist = (x == 2) ? 2 : (x == 8) ? 1 : 0;
 		setgate(&idt[x], IDTVEC(exceptions)[x], ist, SDT_SYS386IGT,
-		    (x == 3 || x == 4) ? SEL_UPL : SEL_KPL,
+		    (x == 3) ? SEL_UPL : SEL_KPL,
 		    GSEL(GCODE_SEL, SEL_KPL));
 		idt_allocmap[x] = 1;
 	}

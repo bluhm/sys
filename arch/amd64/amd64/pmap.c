@@ -334,7 +334,8 @@ static __inline boolean_t
 pmap_is_curpmap(struct pmap *pmap)
 {
 	return((pmap == pmap_kernel()) ||
-	       (pmap->pm_pdirpa == (paddr_t) rcr3()));
+	       (pmap->pm_pdirpa == (paddr_t) rcr3()) ||
+	       (pmap->pm_pdirpa_intel == (paddr_t) rcr3()));
 }
 
 /*
@@ -601,6 +602,7 @@ pmap_bootstrap(paddr_t first_avail, paddr_t max_pa)
 	int i;
 	long ndmpdp;
 	paddr_t dmpd, dmpdp;
+	vaddr_t kva, kva_end;
 
 	/*
 	 * define the boundaries of the managed kernel virtual address
@@ -651,27 +653,26 @@ pmap_bootstrap(paddr_t first_avail, paddr_t max_pa)
 
 	curpcb->pcb_pmap = kpm;	/* proc0's pcb */
 
-#if 0
 	/*
-	 * enable global TLB entries.
+	 * Add PG_G attribute to already mapped kernel pages. pg_g_kern
+	 * is calculated in locore0.S and may be set to:
+	 *
+	 * 0 if this CPU does not safely support global pages in the kernel
+	 *  (Intel/Meltdown)
+	 * PG_G if this CPU does safely support global pages in the kernel
+	 *  (AMD)
 	 */
-	if (pg_g_kern) {
-		/* add PG_G attribute to already mapped kernel pages */
-		vaddr_t kva, kva_end;
-
 #if KERNBASE == VM_MIN_KERNEL_ADDRESS
-		for (kva = VM_MIN_KERNEL_ADDRESS ; kva < virtual_avail ;
+	for (kva = VM_MIN_KERNEL_ADDRESS ; kva < virtual_avail ;
 #else
-		kva_end = roundup((vaddr_t)&end, PAGE_SIZE);
-		for (kva = KERNBASE; kva < kva_end ;
+	kva_end = roundup((vaddr_t)&end, PAGE_SIZE);
+	for (kva = KERNBASE; kva < kva_end ;
 #endif
-		     kva += PAGE_SIZE) {
-			unsigned long p1i = pl1_i(kva);
-			if (pmap_valid_entry(PTE_BASE[p1i]))
-				PTE_BASE[p1i] |= pg_g_kern;
-		}
+	     kva += PAGE_SIZE) {
+		unsigned long p1i = pl1_i(kva);
+		if (pmap_valid_entry(PTE_BASE[p1i]))
+			PTE_BASE[p1i] |= pg_g_kern;
 	}
-#endif
 
 	/*
 	 * Map the direct map. The first 4GB were mapped in locore, here
@@ -919,10 +920,10 @@ pmap_free_ptp(struct pmap *pmap, struct vm_page *ptp, vaddr_t va,
 		pmap_freepage(pmap, ptp, level, pagelist);
 		index = pl_i(va, level + 1);
 		opde = pmap_pte_set(&pdes[level - 1][index], 0);
-		if (level == 4 && pmap->pm_pdir_intel) {
+		if (level == 3 && pmap->pm_pdir_intel) {
 			/* Zap special meltdown PML4e */
 			mdpml4es = (pd_entry_t *)pmap->pm_pdir_intel;
-			mdpml4es[index] = 0;
+			opde = pmap_pte_set(&mdpml4es[index], 0);
 			DPRINTF("%s: cleared meltdown PML4e @ index %lu "
 			    "(va range start 0x%llx)\n", __func__, index,
 			    (uint64_t)(index << L4_SHIFT));
@@ -2014,8 +2015,6 @@ pmap_collect(struct pmap *pmap)
 /*	pmap_do_remove(pmap, VM_MIN_ADDRESS, VM_MAX_ADDRESS,
 	    PMAP_REMOVE_SKIPWIRED);
 */
-
-//	memset(pmap, 0, PAGE_SIZE);
 }
 
 /*

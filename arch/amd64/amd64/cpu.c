@@ -116,6 +116,14 @@
 #include <machine/hibernate.h>
 #endif /* HIBERNATE */
 
+/* #define CPU_DEBUG */
+
+#ifdef CPU_DEBUG
+#define DPRINTF(x...)	do { printf(x); } while(0)
+#else
+#define DPRINTF(x...)
+#endif /* CPU_DEBUG */
+
 int     cpu_match(struct device *, void *, void *);
 void    cpu_attach(struct device *, struct device *, void *);
 int     cpu_activate(struct device *, int);
@@ -945,6 +953,26 @@ cpu_activate(struct device *self, int act)
 	return (0);
 }
 
+/*
+ * cpu_enter_pages
+ *
+ * Requests mapping of various special pages required in the Intel Meltdown
+ * case (to be entered into the U-K page table):
+ *
+ *  1 tss+gdt page for each CPU
+ *  1 trampoline stack page for each CPU
+ *
+ * The cpu_info_full struct for each CPU straddles these pages. The offset into
+ * 'cif' is calculated below, for each page. For more information, consult
+ * the definition of struct cpu_info_full in cpu_full.h
+ *
+ * On CPUs unaffected by Meltdown, this function still configures 'cif' but
+ * the calls to pmap_enter_special become no-ops.
+ *
+ * Parameters:
+ *  cif : the cpu_info_full structure describing a CPU whose pages are to be
+ *    entered into the special meltdown U-K page table.
+ */ 
 void
 cpu_enter_pages(struct cpu_info_full *cif)
 {
@@ -955,22 +983,30 @@ cpu_enter_pages(struct cpu_info_full *cif)
 	va = (vaddr_t)cif;
 	pmap_extract(pmap_kernel(), va, &pa);
 	pmap_enter_special(va, pa, PROT_READ);
-	printf("%s: entered tss+gdt page at va 0x%llx pa 0x%llx\n", __func__,
+	DPRINTF("%s: entered tss+gdt page at va 0x%llx pa 0x%llx\n", __func__,
 	   (uint64_t)va, (uint64_t)pa);
 
-	/* The trampoline stack page needs to be read-write */
+	/* The trampoline stack page needs to be read/write */
 	va = (vaddr_t)&cif->cif_tramp_stack;
 	pmap_extract(pmap_kernel(), va, &pa);
 	pmap_enter_special(va, pa, PROT_READ | PROT_WRITE);
-	printf("%s: entered t.stack page at va 0x%llx pa 0x%llx\n", __func__,
+	DPRINTF("%s: entered t.stack page at va 0x%llx pa 0x%llx\n", __func__,
 	   (uint64_t)va, (uint64_t)pa);
 
 	cif->cif_tss.tss_rsp0 = va + sizeof(cif->cif_tramp_stack) - 16;
-	printf("%s: cif_tss.tss_rsp0 = 0x%llx\n" ,__func__, (uint64_t)cif->cif_tss.tss_rsp0);
+	DPRINTF("%s: cif_tss.tss_rsp0 = 0x%llx\n" ,__func__,
+	    (uint64_t)cif->cif_tss.tss_rsp0);
 	cif->cif_cpu.ci_intr_rsp = cif->cif_tss.tss_rsp0 -
 	    sizeof(struct iretq_frame);
-	cif->cif_tss.tss_ist[0] = (vaddr_t)&cif->cif_nmi_stack +
-	    sizeof(cif->cif_nmi_stack) - 16;
+
+#define	SETUP_IST_SPECIAL_STACK(ist, cif, member) do {			\
+	(cif)->cif_tss.tss_ist[(ist)] = (vaddr_t)&(cif)->member +	\
+	    sizeof((cif)->member) - 16;					\
+	(cif)->member[nitems((cif)->member) - 2] = (int64_t)&(cif)->cif_cpu; \
+} while (0)
+
+	SETUP_IST_SPECIAL_STACK(0, cif, cif_dblflt_stack);
+	SETUP_IST_SPECIAL_STACK(1, cif, cif_nmi_stack);
 
 	/* an empty iomap, by setting its offset to the TSS limit */
 	cif->cif_tss.tss_iobase = sizeof(cif->cif_tss);
