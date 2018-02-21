@@ -59,6 +59,14 @@
 #include <machine/i82093var.h>
 #endif
 
+/* #define LAPIC_DEBUG */
+
+#ifdef LAPIC_DEBUG
+#define DPRINTF(x...)	do { printf(x); } while(0)
+#else
+#define DPRINTF(x...)
+#endif /* LAPIC_DEBUG */
+
 struct evcount clk_count;
 #ifdef MULTIPROCESSOR
 struct evcount ipi_count;
@@ -221,8 +229,15 @@ lapic_map(paddr_t lapic_base)
 		lapic_tpr = s;
 	}
 
+	/*
+	 * Enter the LAPIC MMIO page in the U-K page table for handling
+	 * Meltdown (needed in the interrupt stub to acknowledge the
+	 * incoming interrupt). On CPUs unaffected by Meltdown,
+	 * pmap_enter_special is a no-op.
+	 * XXX - need to map this PG_N
+	 */
 	pmap_enter_special(va, lapic_base, PROT_READ | PROT_WRITE);
-	printf("%s: entered lapic page va 0x%llx pa 0x%llx\n", __func__,
+	DPRINTF("%s: entered lapic page va 0x%llx pa 0x%llx\n", __func__,
 	    (uint64_t)va, (uint64_t)lapic_base);
 
 	enable_intr();
