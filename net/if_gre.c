@@ -1,4 +1,4 @@
-/*      $OpenBSD: if_gre.c,v 1.101 2018/02/15 01:03:17 dlg Exp $ */
+/*      $OpenBSD: if_gre.c,v 1.107 2018/02/20 04:03:15 dlg Exp $ */
 /*	$NetBSD: if_gre.c,v 1.9 1999/10/25 19:18:11 drochner Exp $ */
 
 /*
@@ -50,6 +50,7 @@
 #include <sys/errno.h>
 #include <sys/timeout.h>
 #include <sys/queue.h>
+#include <sys/tree.h>
 
 #include <crypto/siphash.h>
 
@@ -141,9 +142,15 @@ union gre_addr {
 	struct in6_addr		in6;
 };
 
-struct gre_tunnel {
-	TAILQ_ENTRY(gre_tunnel)	t_entry;
+#define GRE_KEY_MIN		0x00000000U
+#define GRE_KEY_MAX		0xffffffffU
+#define GRE_KEY_SHIFT		0
 
+#define GRE_KEY_ENTROPY_MIN	0x00000000U
+#define GRE_KEY_ENTROPY_MAX	0x00ffffffU
+#define GRE_KEY_ENTROPY_SHIFT	8
+
+struct gre_tunnel {
 	uint32_t		t_key_mask;
 #define GRE_KEY_NONE			htonl(0x00000000U)
 #define GRE_KEY_ENTROPY			htonl(0xffffff00U)
@@ -158,10 +165,9 @@ struct gre_tunnel {
 #define t_dst4	t_dst.in4
 #define t_dst6	t_dst.in6
 	int			t_ttl;
+	uint16_t		t_df;
 	sa_family_t		t_af;
 };
-
-TAILQ_HEAD(gre_list, gre_tunnel);
 
 static inline int
 		gre_cmp(const struct gre_tunnel *, const struct gre_tunnel *);
@@ -174,12 +180,14 @@ static int	gre_set_vnetid(struct gre_tunnel *, struct ifreq *);
 static int	gre_get_vnetid(struct gre_tunnel *, struct ifreq *);
 static int	gre_del_vnetid(struct gre_tunnel *);
 
+static int	gre_set_vnetflowid(struct gre_tunnel *, struct ifreq *);
+static int	gre_get_vnetflowid(struct gre_tunnel *, struct ifreq *);
+
 static struct mbuf *
-		gre_ip_encap(const struct gre_tunnel *, struct mbuf *,
+		gre_encap(const struct gre_tunnel *, struct mbuf *, uint16_t,
 		    uint8_t, uint8_t);
 static int
-		gre_ip_output(const struct gre_tunnel *, struct mbuf *,
-		    uint8_t, uint8_t);
+		gre_ip_output(const struct gre_tunnel *, struct mbuf *);
 
 static int	gre_tunnel_ioctl(struct ifnet *, struct gre_tunnel *,
 		    u_long, void *);
@@ -189,8 +197,10 @@ static int	gre_tunnel_ioctl(struct ifnet *, struct gre_tunnel *,
  */
 
 struct gre_softc {
-	struct gre_tunnel	sc_tunnel; /* must be first */
 	struct ifnet		sc_if;
+
+	struct gre_tunnel	sc_tunnel;
+	TAILQ_ENTRY(gre_softc)	sc_entry;
 
 	struct timeout		sc_ka_send;
 	struct timeout		sc_ka_hold;
@@ -206,6 +216,8 @@ struct gre_softc {
 	uint32_t		sc_ka_bias;
 	int			sc_ka_recvtm;
 };
+
+TAILQ_HEAD(gre_list, gre_softc);
 
 struct gre_keepalive {
 	uint32_t		gk_uptime;
@@ -235,9 +247,6 @@ static int	gre_input_key(struct mbuf **, int *, int, int,
 static struct gre_softc *
 		gre_find(const struct gre_tunnel *);
 
-static struct mbuf *
-		gre_encap(struct gre_tunnel *, struct mbuf *, uint16_t);
-
 static void	gre_keepalive_send(void *);
 static void	gre_keepalive_recv(struct ifnet *ifp, struct mbuf *);
 static void	gre_keepalive_hold(void *);
@@ -248,9 +257,15 @@ static void	gre_keepalive_hold(void *);
 
 struct egre_softc {
 	struct gre_tunnel	sc_tunnel; /* must be first */
+	RBT_ENTRY(egre_softc)	sc_entry;
+
 	struct arpcom		sc_ac;
 	struct ifmedia		sc_media;
 };
+
+RBT_HEAD(egre_tree, egre_softc);
+
+RBT_PROTOTYPE(egre_tree, egre_softc, sc_entry, egre_cmp);
 
 static int	egre_clone_create(struct if_clone *, int);
 static int	egre_clone_destroy(struct ifnet *);
@@ -264,13 +279,10 @@ static int	egre_up(struct egre_softc *);
 static int	egre_down(struct egre_softc *);
 
 static int	egre_input(const struct gre_tunnel *, struct mbuf *, int);
-static struct egre_softc *
-		egre_find(const struct gre_tunnel *);
-
 struct if_clone egre_cloner =
     IF_CLONE_INITIALIZER("egre", egre_clone_create, egre_clone_destroy);
 
-struct gre_list egre_list = TAILQ_HEAD_INITIALIZER(gre_list);
+struct egre_tree egre_tree = RBT_INITIALIZER();
 
 /*
  * It is not easy to calculate the right value for a GRE MTU.
@@ -321,6 +333,7 @@ gre_clone_create(struct if_clone *ifc, int unit)
 	ifp->if_rtrequest = p2p_rtrequest;
 
 	sc->sc_tunnel.t_ttl = ip_defttl;
+	sc->sc_tunnel.t_df = htons(0);
 
 	timeout_set(&sc->sc_ka_send, gre_keepalive_send, sc);
 	timeout_set_proc(&sc->sc_ka_hold, gre_keepalive_hold, sc);
@@ -334,7 +347,7 @@ gre_clone_create(struct if_clone *ifc, int unit)
 #endif
 
 	NET_LOCK();
-	TAILQ_INSERT_TAIL(&gre_list, &sc->sc_tunnel, t_entry);
+	TAILQ_INSERT_TAIL(&gre_list, sc, sc_entry);
 	NET_UNLOCK();
 
 	return (0);
@@ -349,7 +362,7 @@ gre_clone_destroy(struct ifnet *ifp)
 	if (ISSET(ifp->if_flags, IFF_RUNNING))
 		gre_down(sc);
 
-	TAILQ_REMOVE(&gre_list, &sc->sc_tunnel, t_entry);
+	TAILQ_REMOVE(&gre_list, sc, sc_entry);
 	NET_UNLOCK();
 
 	if_detach(ifp);
@@ -381,6 +394,7 @@ egre_clone_create(struct if_clone *ifc, int unit)
 	ether_fakeaddr(ifp);
 
 	sc->sc_tunnel.t_ttl = ip_defttl;
+	sc->sc_tunnel.t_df = htons(0);
 
 	ifmedia_init(&sc->sc_media, 0, egre_media_change, egre_media_status);
 	ifmedia_add(&sc->sc_media, IFM_ETHER | IFM_AUTO, 0, NULL);
@@ -388,10 +402,6 @@ egre_clone_create(struct if_clone *ifc, int unit)
 
 	if_attach(ifp);
 	ether_ifattach(ifp);
-
-	NET_LOCK();
-	TAILQ_INSERT_TAIL(&egre_list, &sc->sc_tunnel, t_entry);
-	NET_UNLOCK();
 
 	return (0);
 }
@@ -404,8 +414,6 @@ egre_clone_destroy(struct ifnet *ifp)
 	NET_LOCK();
 	if (ISSET(ifp->if_flags, IFF_RUNNING))
 		egre_down(sc);
-
-	TAILQ_REMOVE(&egre_list, &sc->sc_tunnel, t_entry);
 	NET_UNLOCK();
 
 	ifmedia_delete_instance(&sc->sc_media, IFM_INST_ANY);
@@ -462,14 +470,12 @@ gre_input6(struct mbuf **mp, int *offp, int type, int af)
 static struct gre_softc *
 gre_find(const struct gre_tunnel *key)
 {
-	struct gre_tunnel *t;
 	struct gre_softc *sc;
 
-	TAILQ_FOREACH(t, &gre_list, t_entry) {
-		if (gre_cmp(key, t) != 0)
+	TAILQ_FOREACH(sc, &gre_list, sc_entry) {
+		if (gre_cmp(key, &sc->sc_tunnel) != 0)
 			continue;
 
-		sc = (struct gre_softc *)t;
 		if (!ISSET(sc->sc_if.if_flags, IFF_RUNNING))
 			continue;
 
@@ -563,8 +569,13 @@ gre_input_key(struct mbuf **mp, int *offp, int type, int af,
 	if (sc == NULL)
 		goto decline;
 
+	ifp = &sc->sc_if;
+
 	switch (gh->gre_proto) {
-	case htons(GRE_WCCP):
+	case htons(GRE_WCCP): {
+		struct mbuf *n;
+		int off;
+
 		/* WCCP/GRE:
 		 *   So far as I can see (and test) it seems that Cisco's WCCP
 		 *   GRE tunnel is precisely a IP-in-GRE tunnel that differs
@@ -574,22 +585,23 @@ gre_input_key(struct mbuf **mp, int *offp, int type, int af,
 		 *   the following:
 		 *     draft-forster-wrec-wccp-v1-00.txt
 		 *     draft-wilson-wrec-wccp-v2-01.txt
-		 *
-		 *   So yes, we're doing a fall-through (unless, of course,
-		 *   net.inet.gre.wccp is 0).
 		 */
-		switch (gre_wccp) {
-		case 1:
-			break;
-		case 2:
-			hlen += sizeof(gre_wccp);
-			break;
-		case 0:
-		default:
+
+		if (!gre_wccp && !ISSET(ifp->if_flags, IFF_LINK0))
 			goto decline;
-		}
+
+		/*
+		 * If the first nibble of the payload does not look like
+		 * IPv4, assume it is WCCP v2.
+		 */
+		n = m_getptr(m, hlen, &off);
+		if (n == NULL)
+			goto decline;
+		if (n->m_data[off] >> 4 != IPVERSION)
+			hlen += sizeof(gre_wccp);
 
 		/* FALLTHROUGH */
+	}
 	case htons(ETHERTYPE_IP):
 #if NBPFILTER > 0
 		bpf_af = AF_INET;
@@ -629,8 +641,6 @@ gre_input_key(struct mbuf **mp, int *offp, int type, int af,
 		goto decline;
 	}
 
-	ifp = &sc->sc_if;
-
 	m_adj(m, hlen);
 
 	if (sc->sc_tunnel.t_ttl == -1) {
@@ -650,6 +660,11 @@ gre_input_key(struct mbuf **mp, int *offp, int type, int af,
 	pf_pkt_addr_changed(m);
 #endif
 
+	if (sc->sc_tunnel.t_key_mask == GRE_KEY_ENTROPY) {
+		m->m_pkthdr.ph_flowid = M_FLOWID_VALID |
+		    (bemtoh32(&key->t_key) & ~GRE_KEY_ENTROPY);
+	}
+
 	ifp->if_ipackets++;
 	ifp->if_ibytes += m->m_pkthdr.len;
 
@@ -665,26 +680,6 @@ decline:
 	return (-1);
 }
 
-static struct egre_softc *
-egre_find(const struct gre_tunnel *key)
-{
-	struct gre_tunnel *t;
-	struct egre_softc *sc;
-
-	TAILQ_FOREACH(t, &egre_list, t_entry) {
-		if (gre_cmp(key, t) != 0)
-			continue;
-
-		sc = (struct egre_softc *)t;
-		if (!ISSET(sc->sc_ac.ac_if.if_flags, IFF_RUNNING))
-			continue;
-
-		return (sc);
-	}
-
-	return (NULL);
-}
-
 static int
 egre_input(const struct gre_tunnel *key, struct mbuf *m, int hlen)
 {
@@ -693,7 +688,7 @@ egre_input(const struct gre_tunnel *key, struct mbuf *m, int hlen)
 	struct mbuf *n;
 	int off;
 
-	sc = egre_find(key);
+	sc = RBT_FIND(egre_tree, &egre_tree, (const struct egre_softc *)key);
 	if (sc == NULL)
 		return (-1);
 
@@ -729,6 +724,11 @@ egre_input(const struct gre_tunnel *key, struct mbuf *m, int hlen)
 #if NPF > 0
 	pf_pkt_addr_changed(m);
 #endif
+
+	if (sc->sc_tunnel.t_key_mask == GRE_KEY_ENTROPY) {
+		m->m_pkthdr.ph_flowid = M_FLOWID_VALID |
+		    (bemtoh32(&key->t_key) & ~GRE_KEY_ENTROPY);
+	}
 
 	ml_enqueue(&ml, m);
 	if_input(&sc->sc_ac.ac_if, &ml);
@@ -894,14 +894,6 @@ gre_start(struct ifnet *ifp)
 		}
 #endif
 
-		m->m_flags &= ~(M_MCAST|M_BCAST);
-		m->m_pkthdr.ph_ifidx = ifp->if_index;
-		m->m_pkthdr.ph_rtableid = ifp->if_rdomain;
-
-#if NPF > 0
-		pf_pkt_addr_changed(m);
-#endif
-
 		switch (m->m_pkthdr.ph_family) {
 		case AF_INET: {
 			struct ip *ip;
@@ -948,9 +940,8 @@ gre_start(struct ifnet *ifp)
 		} else
 			ttl = tttl;
 
-		m = gre_encap(&sc->sc_tunnel, m, proto);
-		if (m == NULL ||
-		    gre_ip_output(&sc->sc_tunnel, m, ttl, tos) != 0) {
+		m = gre_encap(&sc->sc_tunnel, m, proto, ttl, tos);
+		if (m == NULL || gre_ip_output(&sc->sc_tunnel, m) != 0) {
 			ifp->if_oerrors++;
 			continue;
 		}
@@ -988,50 +979,18 @@ egre_start(struct ifnet *ifp)
 		MH_ALIGN(m, 0);
 		m->m_len = 0;
 
-		m->m_flags &= ~(M_MCAST|M_BCAST);
-		m->m_pkthdr.ph_ifidx = ifp->if_index;
-		m->m_pkthdr.ph_rtableid = ifp->if_rdomain;
-
-#if NPF > 0
-		pf_pkt_addr_changed(m);
-#endif
-
-		m = gre_encap(&sc->sc_tunnel, m, htons(ETHERTYPE_TRANSETHER));
-		if (m == NULL || gre_ip_output(&sc->sc_tunnel, m,
-		    sc->sc_tunnel.t_ttl, 0) != 0) {
+		m = gre_encap(&sc->sc_tunnel, m, htons(ETHERTYPE_TRANSETHER),
+		    sc->sc_tunnel.t_ttl, 0);
+		if (m == NULL || gre_ip_output(&sc->sc_tunnel, m) != 0) {
 			ifp->if_oerrors++;
 			continue;
 		}
 	}
 }
 
-static int
-gre_ip_output(const struct gre_tunnel *tunnel, struct mbuf *m,
-     uint8_t ttl, uint8_t tos)
-{
-	m = gre_ip_encap(tunnel, m, ttl, tos);
-	if (m == NULL)
-		return (-1);
-
-	switch (tunnel->t_af) {
-	case AF_INET:
-		ip_send(m);
-		break;
-#ifdef INET6
-	case AF_INET6:
-		ip6_send(m);
-		break;
-#endif
-	default:
-		panic("%s: unsupported af %d in %p", __func__, tunnel->t_af,
-		    tunnel);
-	}
-
-	return (0);
-}
-
 static struct mbuf *
-gre_encap(struct gre_tunnel *tunnel, struct mbuf *m, uint16_t proto)
+gre_encap(const struct gre_tunnel *tunnel, struct mbuf *m, uint16_t proto,
+    uint8_t ttl, uint8_t tos)
 {
 	struct gre_header *gh;
 	struct gre_h_key *gkh;
@@ -1053,21 +1012,13 @@ gre_encap(struct gre_tunnel *tunnel, struct mbuf *m, uint16_t proto)
 
 		gkh = (struct gre_h_key *)(gh + 1);
 		gkh->gre_key = tunnel->t_key;
+
+		if (tunnel->t_key_mask == GRE_KEY_ENTROPY &&
+		    ISSET(m->m_pkthdr.ph_flowid, M_FLOWID_VALID)) {
+			gkh->gre_key |= htonl(~GRE_KEY_ENTROPY &
+			    (m->m_pkthdr.ph_flowid & M_FLOWID_MASK));
+		}
 	}
-
-	return (m);
-}
-
-static struct mbuf *
-gre_ip_encap(const struct gre_tunnel *tunnel, struct mbuf *m,
-    uint8_t ttl, uint8_t tos)
-{
-	m->m_flags &= ~(M_BCAST|M_MCAST);
-	m->m_pkthdr.ph_rtableid = tunnel->t_rtableid;
-
-#if NPF > 0
-	pf_pkt_addr_changed(m);
-#endif
 
 	switch (tunnel->t_af) {
 	case AF_INET: {
@@ -1078,7 +1029,7 @@ gre_ip_encap(const struct gre_tunnel *tunnel, struct mbuf *m,
 			return (NULL);
 
 		ip = mtod(m, struct ip *);
-		ip->ip_off = 0; /* DF ? */
+		ip->ip_off = tunnel->t_df;
 		ip->ip_tos = tos;
 		ip->ip_len = htons(m->m_pkthdr.len);
 		ip->ip_ttl = ttl;
@@ -1105,6 +1056,10 @@ gre_ip_encap(const struct gre_tunnel *tunnel, struct mbuf *m,
 		ip6->ip6_hlim = ttl;
 		ip6->ip6_src = tunnel->t_src6;
 		ip6->ip6_dst = tunnel->t_dst6;
+
+		if (tunnel->t_df)
+			SET(m->m_pkthdr.csum_flags, M_IPV6_DF_OUT);
+
 		break;
 	}
 #endif /* INET6 */
@@ -1114,6 +1069,33 @@ gre_ip_encap(const struct gre_tunnel *tunnel, struct mbuf *m,
 	}
 
 	return (m);
+}
+
+static int
+gre_ip_output(const struct gre_tunnel *tunnel, struct mbuf *m)
+{
+	m->m_flags &= ~(M_BCAST|M_MCAST);
+	m->m_pkthdr.ph_rtableid = tunnel->t_rtableid;
+
+#if NPF > 0
+	pf_pkt_addr_changed(m);
+#endif
+
+	switch (tunnel->t_af) {
+	case AF_INET:
+		ip_send(m);
+		break;
+#ifdef INET6
+	case AF_INET6:
+		ip6_send(m);
+		break;
+#endif
+	default:
+		panic("%s: unsupported af %d in %p", __func__, tunnel->t_af,
+		    tunnel);
+	}
+
+	return (0);
 }
 
 static int
@@ -1146,6 +1128,14 @@ gre_tunnel_ioctl(struct ifnet *ifp, struct gre_tunnel *tunnel,
 		error = gre_del_vnetid(tunnel);
 		break;
 
+	case SIOCSVNETFLOWID:
+		error = gre_set_vnetflowid(tunnel, ifr);
+		break;
+
+	case SIOCGVNETFLOWID:
+		error = gre_get_vnetflowid(tunnel, ifr);
+		break;
+
 	case SIOCSLIFPHYADDR:
 		error = gre_set_tunnel(tunnel, (struct if_laddrreq *)data);
 		break;
@@ -1167,6 +1157,14 @@ gre_tunnel_ioctl(struct ifnet *ifp, struct gre_tunnel *tunnel,
 		break;
 	case SIOCGLIFPHYRTABLE:
 		ifr->ifr_rdomainid = tunnel->t_rtableid;
+		break;
+
+	case SIOCSLIFPHYDF:
+		/* commit */
+		tunnel->t_df = ifr->ifr_df ? htons(IP_DF) : htons(0);
+		break;
+	case SIOCGLIFPHYDF:
+		ifr->ifr_df = tunnel->t_df ? 1 : 0;
 		break;
 
 	default:
@@ -1256,8 +1254,7 @@ egre_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 
 	switch(cmd) {
 	case SIOCSIFADDR:
-		ifp->if_flags |= IFF_UP;
-		/* FALLTHROUGH */
+		break;
 	case SIOCSIFFLAGS:
 		if (ISSET(ifp->if_flags, IFF_UP)) {
 			if (!ISSET(ifp->if_flags, IFF_RUNNING))
@@ -1284,6 +1281,18 @@ egre_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		ifr->ifr_ttl = (int)sc->sc_tunnel.t_ttl;
 		break;
 
+	case SIOCSVNETID:
+	case SIOCDVNETID:
+	case SIOCSVNETFLOWID:
+	case SIOCSLIFPHYADDR:
+	case SIOCDIFPHYADDR:
+	case SIOCSLIFPHYRTABLE:
+		if (ISSET(ifp->if_flags, IFF_RUNNING)) {
+			error = EBUSY;
+			break;
+		}
+
+		/* FALLTHROUGH */
 	default:
 		error = gre_tunnel_ioctl(ifp, &sc->sc_tunnel, cmd, data);
 		if (error == ENOTTY)
@@ -1297,9 +1306,6 @@ egre_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 static int
 gre_up(struct gre_softc *sc)
 {
-	if (sc->sc_tunnel.t_af == AF_UNSPEC)
-		return (ENXIO);
-
 	NET_ASSERT_LOCKED(); 
 	SET(sc->sc_if.if_flags, IFF_RUNNING);
 
@@ -1411,16 +1417,16 @@ gre_keepalive_send(void *arg)
 	SipHash24_Update(&ctx, &gk->gk_random, sizeof(gk->gk_random));
 	SipHash24_Final(gk->gk_digest, &ctx);
 
-	m = gre_encap(&sc->sc_tunnel, m, htons(0));
-	if (m == NULL)
-		return;
-
 	ttl = sc->sc_tunnel.t_ttl == -1 ? ip_defttl : sc->sc_tunnel.t_ttl;
 
 	t.t_af = sc->sc_tunnel.t_af;
+	t.t_df = sc->sc_tunnel.t_df;
 	t.t_src = sc->sc_tunnel.t_dst;
 	t.t_dst = sc->sc_tunnel.t_src;
-	m = gre_ip_encap(&t, m, ttl, 0);
+	t.t_key = sc->sc_tunnel.t_key;
+	t.t_key_mask = sc->sc_tunnel.t_key_mask;
+
+	m = gre_encap(&t, m, htons(0), ttl, IPTOS_PREC_INTERNETCONTROL);
 	if (m == NULL)
 		return;
 
@@ -1431,7 +1437,6 @@ gre_keepalive_send(void *arg)
 		ip = mtod(m, struct ip *);
 		ip->ip_v = IPVERSION;
 		ip->ip_hl = sizeof(*ip) >> 2;
-		ip->ip_off &= htons(IP_DF);
 		ip->ip_id = htons(ip_randomid());
 		ip->ip_sum = 0;
 		ip->ip_sum = in_cksum(m, sizeof(*ip));
@@ -1446,18 +1451,15 @@ gre_keepalive_send(void *arg)
 #endif
 	}
 
-
 	/*
 	 * put it in the tunnel
 	 */
-	m = gre_encap(&sc->sc_tunnel, m, proto);
+	m = gre_encap(&sc->sc_tunnel, m, proto, ttl,
+	    IPTOS_PREC_INTERNETCONTROL);
 	if (m == NULL)
 		return;
 
-	m->m_pkthdr.ph_ifidx = sc->sc_if.if_index;
-	m->m_pkthdr.ph_rtableid = sc->sc_if.if_rdomain;
-
-	gre_ip_output(&sc->sc_tunnel, m, ttl, 0);
+	gre_ip_output(&sc->sc_tunnel, m);
 
 	timeout_add_sec(&sc->sc_ka_send, sc->sc_ka_timeo);
 }
@@ -1611,17 +1613,25 @@ static int
 gre_set_vnetid(struct gre_tunnel *tunnel, struct ifreq *ifr)
 {
 	uint32_t key;
+	uint32_t min = GRE_KEY_MIN;
+	uint32_t max = GRE_KEY_MAX;
+	unsigned int shift = GRE_KEY_SHIFT;
+	uint32_t mask = GRE_KEY_MASK;
 
-	if (ifr->ifr_vnetid < 0 || ifr->ifr_vnetid > 0xffffffff)
-		return EINVAL;
+	if (tunnel->t_key_mask == GRE_KEY_ENTROPY) {
+		min = GRE_KEY_ENTROPY_MIN;
+		max = GRE_KEY_ENTROPY_MAX;
+		shift = GRE_KEY_ENTROPY_SHIFT;
+		mask = GRE_KEY_ENTROPY;
+	}
 
-	key = htonl(ifr->ifr_vnetid);
+	if (ifr->ifr_vnetid < min || ifr->ifr_vnetid > max)
+		return (EINVAL);
 
-	if (tunnel->t_key_mask == GRE_KEY_MASK && tunnel->t_key == key)
-		return (0);
+	key = htonl(ifr->ifr_vnetid << shift);
 
 	/* commit */
-	tunnel->t_key_mask = GRE_KEY_MASK;
+	tunnel->t_key_mask = mask;
 	tunnel->t_key = key;
 
 	return (0);
@@ -1630,10 +1640,20 @@ gre_set_vnetid(struct gre_tunnel *tunnel, struct ifreq *ifr)
 static int
 gre_get_vnetid(struct gre_tunnel *tunnel, struct ifreq *ifr)
 {
-	if (tunnel->t_key_mask == GRE_KEY_NONE)
-		return (EADDRNOTAVAIL);
+	int shift;
 
-	ifr->ifr_vnetid = (int64_t)ntohl(tunnel->t_key);
+	switch (tunnel->t_key_mask) {
+	case GRE_KEY_NONE:
+		return (EADDRNOTAVAIL);
+	case GRE_KEY_ENTROPY:
+		shift = GRE_KEY_ENTROPY_SHIFT;
+		break;
+	case GRE_KEY_MASK:
+		shift = GRE_KEY_SHIFT;
+		break;
+	}
+
+	ifr->ifr_vnetid = ntohl(tunnel->t_key) >> shift;
 
 	return (0);
 }
@@ -1647,9 +1667,56 @@ gre_del_vnetid(struct gre_tunnel *tunnel)
 }
 
 static int
+gre_set_vnetflowid(struct gre_tunnel *tunnel, struct ifreq *ifr)
+{
+	uint32_t mask, key;
+
+	if (tunnel->t_key_mask == GRE_KEY_NONE)
+		return (EADDRNOTAVAIL);
+
+	mask = ifr->ifr_vnetid ? GRE_KEY_ENTROPY : GRE_KEY_MASK;
+	if (tunnel->t_key_mask == mask) {
+		/* nop */
+		return (0);
+	}
+
+	key = ntohl(tunnel->t_key);
+	if (mask == GRE_KEY_ENTROPY) {
+		if (key > GRE_KEY_ENTROPY_MAX)
+			return (ERANGE);
+
+		key = htonl(key << GRE_KEY_ENTROPY_SHIFT);
+	} else
+		key = htonl(key >> GRE_KEY_ENTROPY_SHIFT);
+
+	/* commit */
+	tunnel->t_key_mask = mask;
+	tunnel->t_key = key;
+
+	return (0);
+}
+
+static int
+gre_get_vnetflowid(struct gre_tunnel *tunnel, struct ifreq *ifr)
+{
+	if (tunnel->t_key_mask == GRE_KEY_NONE)
+		return (EADDRNOTAVAIL);
+
+	ifr->ifr_vnetid = tunnel->t_key_mask == GRE_KEY_ENTROPY;
+
+	return (0);
+}
+
+static int
 egre_up(struct egre_softc *sc)
 {
+	if (sc->sc_tunnel.t_af == AF_UNSPEC)
+		return (EDESTADDRREQ);
+
 	NET_ASSERT_LOCKED(); 
+
+	if (RBT_INSERT(egre_tree, &egre_tree, sc) != NULL)
+		return (EADDRINUSE);
 
 	SET(sc->sc_ac.ac_if.if_flags, IFF_RUNNING);
 
@@ -1662,6 +1729,8 @@ egre_down(struct egre_softc *sc)
 	NET_ASSERT_LOCKED();
 
 	CLR(sc->sc_ac.ac_if.if_flags, IFF_RUNNING);
+
+	RBT_REMOVE(egre_tree, &egre_tree, sc);
 
 	/* barrier? */
 
@@ -1725,7 +1794,7 @@ gre_ip_cmp(int af, const union gre_addr *a, const union gre_addr *b)
 	return (0);
 }
 
-static inline int
+static int
 gre_cmp(const struct gre_tunnel *a, const struct gre_tunnel *b)
 {
 	uint32_t ka, kb;
@@ -1780,3 +1849,10 @@ gre_cmp(const struct gre_tunnel *a, const struct gre_tunnel *b)
 	return (0);
 }
 
+static int
+egre_cmp(const struct egre_softc *a, const struct egre_softc *b)
+{
+	return (gre_cmp(&a->sc_tunnel, &b->sc_tunnel));
+}
+
+RBT_GENERATE(egre_tree, egre_softc, sc_entry, egre_cmp);
