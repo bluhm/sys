@@ -1,4 +1,4 @@
-/*	$OpenBSD: specialreg.h,v 1.68 2018/02/21 19:24:15 guenther Exp $	*/
+/*	$OpenBSD: specialreg.h,v 1.69 2018/02/22 20:18:59 bluhm Exp $	*/
 /*	$NetBSD: specialreg.h,v 1.1 2003/04/26 18:39:48 fvdl Exp $	*/
 /*	$NetBSD: x86/specialreg.h,v 1.2 2003/04/25 21:54:30 fvdl Exp $	*/
 
