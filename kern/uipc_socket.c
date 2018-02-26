@@ -60,6 +60,7 @@ int	sosplice(struct socket *, int, off_t, struct timeval *);
 void	sounsplice(struct socket *, struct socket *, int);
 void	soidle(void *);
 void	sotask(void *);
+void	soput(void *);
 int	somove(struct socket *, int);
 
 void	filt_sordetach(struct knote *kn);
@@ -218,11 +219,14 @@ sofree(struct socket *so)
 	sorflush(so);
 #ifdef SOCKET_SPLICE
 	if (so->so_sp) {
-		taskq_barrier(sosplice_taskq);
-		pool_put(&sosplice_pool, so->so_sp);
-	}
+		/* Reuse splice task, sounsplice() has been called before. */
+		task_set(&so->so_sp->ssp_task, soput, so);
+		task_add(sosplice_taskq, &so->so_sp->ssp_task);
+	} else 
 #endif /* SOCKET_SPLICE */
-	pool_put(&socket_pool, so);
+	{
+		pool_put(&socket_pool, so);
+	}
 }
 
 /*
@@ -1238,6 +1242,21 @@ sotask(void *arg)
 
 	/* Avoid user land starvation. */
 	yield();
+}
+
+/*
+ * The socket splicing task may sleep while grabbing the net lock.  As sofree()
+ * may be called anytime, sotask() can access the socket memory of a freed
+ * socket after wakeup.  So delay the pool_put() after all pending socket
+ * splicing tasks have finished.  Do this by scheduling it on the same thread.
+ */
+void
+soput(void *arg)
+{
+	struct socket *so = arg;
+
+	pool_put(&sosplice_pool, so->so_sp);
+	pool_put(&socket_pool, so);
 }
 
 /*
