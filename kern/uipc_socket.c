@@ -1246,7 +1246,7 @@ sotask(void *arg)
 
 /*
  * The socket splicing task may sleep while grabbing the net lock.  As sofree()
- * may be called anytime, sotask() can access the socket memory of a freed
+ * can be called anytime, sotask() can access the socket memory of a freed
  * socket after wakeup.  So delay the pool_put() after all pending socket
  * splicing tasks have finished.  Do this by scheduling it on the same thread.
  */
