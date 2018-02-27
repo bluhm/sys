@@ -1074,11 +1074,10 @@ pf_find_state(struct pfi_kif *kif, struct pf_state_key_cmp *key, u_int dir,
 			if (pf_state_key_isvalid(pkt_sk->reverse)) {
 				sk = pkt_sk->reverse;
 			} else if (pkt_sk->reverse != NULL) {
-				log(LOG_ERR,
-				    "pf: state key reverse invalid. "
+				printf("%s: state key reverse invalid. "
 				    "pkt_sk=%p, pkt_sk->reverse=%p, "
 				    "pkt_sk->reverse->reverse=%p\n",
-				    pkt_sk, pkt_sk->reverse,
+				    __func__, pkt_sk, pkt_sk->reverse,
 				    pkt_sk->reverse->reverse);
 				pf_mbuf_unlink_state_key(m);
 				pkt_sk = NULL;
