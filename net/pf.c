@@ -7284,12 +7284,10 @@ pf_inp_unlink(struct inpcb *inp)
 void
 pf_state_key_link_reverse(struct pf_state_key *sk, struct pf_state_key *skrev)
 {
-	/*
-	 * Assert will not wire as long as we are called by pf_find_state()
-	 */
+	/* Note that sk and skrev may be equal so we can refcount twice. */
 	KASSERT(sk->reverse == NULL);
-	sk->reverse = pf_state_key_ref(skrev);
 	KASSERT(skrev->reverse == NULL);
+	sk->reverse = pf_state_key_ref(skrev);
 	skrev->reverse = pf_state_key_ref(sk);
 }
 
@@ -7397,6 +7395,7 @@ pf_state_key_unlink_reverse(struct pf_state_key *sk)
 {
 	struct pf_state_key *skrev = sk->reverse;
 
+	/* Note that sk and skrev may be equal so we may unref twice. */
 	if (skrev != NULL) {
 		KASSERT(skrev->reverse == sk);
 		sk->reverse = NULL;
