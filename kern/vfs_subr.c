@@ -1626,40 +1626,11 @@ vfs_stall(struct proc *p, int stall)
 	return (allerror);
 }
 
-int
-vfs_readonly(struct mount *mp, struct proc *p)
-{
-	int error;
-
-	error = vfs_busy(mp, VB_WRITE|VB_WAIT);
-	if (error) {
-		printf("%s: busy\n", mp->mnt_stat.f_mntonname);
-		return (error);
-	}
-	uvm_vnp_sync(mp);
-	error = VFS_SYNC(mp, MNT_WAIT, 0, p->p_ucred, p);
-	if (error) {
-		printf("%s: failed to sync\n", mp->mnt_stat.f_mntonname);
-		vfs_unbusy(mp);
-		return (error);
-	}
-
-	mp->mnt_flag |= MNT_UPDATE | MNT_RDONLY;
-	mp->mnt_flag &= ~MNT_SOFTDEP;
-	error = VFS_MOUNT(mp, mp->mnt_stat.f_mntonname, NULL, NULL, curproc);
-	if (error) {
-		printf("%s: failed to remount rdonly, error %d\n",
-		    mp->mnt_stat.f_mntonname, error);
-		vfs_unbusy(mp);
-		return (error);
-	}
-	if (mp->mnt_syncer != NULL)
-		vgone(mp->mnt_syncer);
-	mp->mnt_syncer = NULL;
-	vfs_unbusy(mp);
-	return (error);
-}
-
+/*
+ * Unmount all file systems.
+ * We traverse the list in reverse order under the assumption that doing so
+ * will avoid needing to worry about dependencies.
+ */
 void
 vfs_unmountall(void)
 {
@@ -1686,21 +1657,6 @@ vfs_unmountall(void)
 			again = 0;
 			goto retry;
 		}
-	}
-}
-
-/*
- * Read-only all file systems.
- * We traverse the list in reverse order under the assumption that doing so
- * will avoid needing to worry about dependencies.
- */
-void
-vfs_rofs(struct proc *p)
-{
-	struct mount *mp, *nmp;
-
-	TAILQ_FOREACH_REVERSE_SAFE(mp, &mountlist, mntlist, mnt_list, nmp) {
-		(void) vfs_readonly(mp, p);
 	}
 }
 
