@@ -40,6 +40,8 @@
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
 
+int we_are_rebooting;
+
 int
 sys_reboot(struct proc *p, void *v, register_t *retval)
 {
@@ -66,6 +68,8 @@ reboot(int howto)
 	KASSERT((howto & RB_NOSYNC) || curproc != NULL);
 
 	stop_periodic_resettodr();
+
+	we_are_rebooting = 1;
 
 	boot(howto);
 	/* NOTREACHED */

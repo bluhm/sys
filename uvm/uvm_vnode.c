@@ -75,6 +75,8 @@ SIMPLEQ_HEAD(uvn_sq_struct, uvm_vnode);
 struct uvn_sq_struct uvn_sync_q;		/* sync'ing uvns */
 struct rwlock uvn_sync_lock;			/* locks sync operation */
 
+extern int we_are_rebooting;
+
 /*
  * functions
  */
@@ -1210,6 +1212,12 @@ uvn_io(struct uvm_vnode *uvn, vm_page_t *pps, int npages, int flags, int rw)
 		got = wanted - uio.uio_resid;
 
 		if (wanted && got == 0) {
+			if (we_are_rebooting) {
+				while (1) {
+					tsleep(&we_are_rebooting, PVM,
+					    "uvndead", 0);
+				}
+			}
 			result = EIO;		/* XXX: error? */
 		} else if (got < PAGE_SIZE * npages && rw == UIO_READ) {
 			memset((void *) (kva + got), 0,
