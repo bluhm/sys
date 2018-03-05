@@ -112,6 +112,7 @@ int vfs_free_netcred(struct radix_node *, void *, u_int);
 void vfs_free_addrlist(struct netexport *);
 void vputonfreelist(struct vnode *);
 
+void vfs_unmountall(void);
 int vflush_vnode(struct vnode *, void *);
 int maxvnodes;
 
@@ -1659,6 +1660,35 @@ vfs_readonly(struct mount *mp, struct proc *p)
 	return (error);
 }
 
+void
+vfs_unmountall(void)
+{
+	struct mount *mp, *nmp;
+	int allerror, error, again = 1;
+
+ retry:
+	allerror = 0;
+	TAILQ_FOREACH_REVERSE_SAFE(mp, &mountlist, mntlist, mnt_list, nmp) {
+		if (vfs_busy(mp, VB_WRITE|VB_NOWAIT))
+			continue;
+		/* XXX Here is a race, the next pointer is not locked. */
+		if ((error = dounmount(mp, MNT_FORCE, curproc)) != 0) {
+			printf("unmount of %s failed with error %d\n",
+			    mp->mnt_stat.f_mntonname, error);
+			allerror = 1;
+		}
+	}
+
+	if (allerror) {
+		printf("WARNING: some file systems would not unmount\n");
+		if (again) {
+			printf("retrying\n");
+			again = 0;
+			goto retry;
+		}
+	}
+}
+
 /*
  * Read-only all file systems.
  * We traverse the list in reverse order under the assumption that doing so
@@ -1687,9 +1717,9 @@ vfs_shutdown(struct proc *p)
 	printf("syncing disks... ");
 
 	if (panicstr == 0) {
-		/* Take all filesystems to read-only */
+		/* Sync before unmount, in case we hang on something. */
 		sys_sync(p, NULL, NULL);
-		vfs_rofs(p);
+		vfs_unmountall();
 	}
 
 #if NSOFTRAID > 0
