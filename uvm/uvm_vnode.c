@@ -1212,12 +1212,6 @@ uvn_io(struct uvm_vnode *uvn, vm_page_t *pps, int npages, int flags, int rw)
 		got = wanted - uio.uio_resid;
 
 		if (wanted && got == 0) {
-			if (we_are_rebooting) {
-				while (1) {
-					tsleep(&we_are_rebooting, PVM,
-					    "uvndead", 0);
-				}
-			}
 			result = EIO;		/* XXX: error? */
 		} else if (got < PAGE_SIZE * npages && rw == UIO_READ) {
 			memset((void *) (kva + got), 0,
@@ -1234,10 +1228,13 @@ uvn_io(struct uvm_vnode *uvn, vm_page_t *pps, int npages, int flags, int rw)
 		wakeup(&uvn->u_nio);
 	}
 
-	if (result == 0)
+	if (result == 0) {
 		return(VM_PAGER_OK);
-	else
+	} else {
+		while (we_are_rebooting)
+			tsleep(&we_are_rebooting, PVM, "uvndead", 0);
 		return(VM_PAGER_ERROR);
+	}
 }
 
 /*
