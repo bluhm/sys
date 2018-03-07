@@ -112,6 +112,7 @@ int vfs_free_netcred(struct radix_node *, void *, u_int);
 void vfs_free_addrlist(struct netexport *);
 void vputonfreelist(struct vnode *);
 
+void vfs_unmountall(void);
 int vflush_vnode(struct vnode *, void *);
 int maxvnodes;
 
