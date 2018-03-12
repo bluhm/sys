@@ -31,7 +31,7 @@
 
 *******************************************************************************/
 
-/* $OpenBSD: if_em_hw.c,v 1.94 2017/08/12 16:40:54 sf Exp $ */
+/* $OpenBSD: if_em_hw.c,v 1.96 2018/03/10 04:41:36 jsg Exp $ */
 /*
  * if_em_hw.c Shared functions for accessing and configuring the MAC
  */
@@ -536,6 +536,8 @@ em_set_mac_type(struct em_hw *hw)
 		hw->initialize_hw_bits_disable = 1;
 		break;
 	case E1000_DEV_ID_I210_COPPER:
+	case E1000_DEV_ID_I210_COPPER_OEM1:
+	case E1000_DEV_ID_I210_COPPER_IT:
 	case E1000_DEV_ID_I210_FIBER:
 	case E1000_DEV_ID_I210_SERDES:
 	case E1000_DEV_ID_I210_SGMII:
@@ -590,6 +592,7 @@ em_set_mac_type(struct em_hw *hw)
 		break;
 	case E1000_DEV_ID_ICH10_D_BM_LF:
 	case E1000_DEV_ID_ICH10_D_BM_LM:
+	case E1000_DEV_ID_ICH10_D_BM_V:
 		hw->mac_type = em_ich10lan;
 		break;
 	case E1000_DEV_ID_PCH_M_HV_LC:
