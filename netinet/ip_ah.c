@@ -597,7 +597,7 @@ ah_input(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 		return EACCES;
 	}
 	if (skip + ahx->authsize + rplen > m->m_pkthdr.len) {
-		DPRINTF(("%s: bad mbuf length %u (expecting %d) "
+		DPRINTF(("%s: bad mbuf length %d (expecting %d) "
 		    "for packet in SA %s/%08x\n", __func__,
 		    m->m_pkthdr.len, skip + ahx->authsize + rplen,
 		    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
