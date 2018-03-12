@@ -597,6 +597,17 @@ ah_input(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 		m_freem(m);
 		return EACCES;
 	}
+	if (skip + ahx->authsize + rplen > m->m_pkthdr.len) {
+		DPRINTF(("%s: bad mbuf length %u (expecting %d) "
+		    "for packet in SA %s/%08x\n", __func__,
+		    m->m_pkthdr.len, skip + ahx->authsize + rplen,
+		    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
+		    ntohl(tdb->tdb_spi)));
+
+		ahstat_inc(ahs_badauthl);
+		m_freem(m);
+		return EACCES;
+	}
 
 	/* Update the counters. */
 	tdb->tdb_cur_bytes +=
