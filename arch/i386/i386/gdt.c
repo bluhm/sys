@@ -31,20 +31,13 @@
  */
 
 /*
- * The GDT handling has two phases.  During the early lifetime of the
- * kernel there is a static gdt which will be stored in bootstrap_gdt.
- * Later, when the virtual memory is initialized, this will be
- * replaced with a maximum sized GDT.
- *
- * The bootstrap GDT area will hold the initial requirement of NGDT
- * descriptors.  The normal GDT will have a statically sized virtual memory
- * area of size GDT_SIZE.
+ * The initial GDT is setup for the boot processor.  The GDT holds
+ * NGDT descriptors.
  *
  * Every CPU in a system has its own copy of the GDT.  The only real difference
  * between the two are currently that there is a cpu-specific segment holding
  * the struct cpu_info of the processor, for simplicity at getting cpu_info
- * fields from assembly.  The boot processor will actually refer to the global
- * copy of the GDT as pointed to by the gdt variable.
+ * fields from assembly.
  */
 
 #include <sys/param.h>
@@ -53,11 +46,10 @@
 
 #include <uvm/uvm_extern.h>
 
+#include <machine/cpu.h>
 #include <machine/gdt.h>
 #include <machine/pcb.h>
-
-union descriptor bootstrap_gdt[NGDT];
-union descriptor *gdt = bootstrap_gdt;
+#include <machine/tss.h>
 
 int gdt_next;		/* next available slot for sweeping */
 int gdt_free;		/* next free slot; terminated with GNULL_SEL */
@@ -78,7 +70,7 @@ void
 setgdt(int sel, void *base, size_t limit, int type, int dpl, int def32,
     int gran)
 {
-	struct segment_descriptor *sd = &gdt[sel].sd;
+	struct segment_descriptor *sd = &cpu_info_primary.ci_gdt[sel].sd;
 	CPU_INFO_ITERATOR cii;
 	struct cpu_info *ci;
 
@@ -86,7 +78,7 @@ setgdt(int sel, void *base, size_t limit, int type, int dpl, int def32,
 
 	setsegment(sd, base, limit, type, dpl, def32, gran);
 	CPU_INFO_FOREACH(cii, ci)
-		if (ci->ci_gdt != NULL && ci->ci_gdt != gdt)
+		if (ci->ci_gdt != NULL && ci != &cpu_info_primary)
 			ci->ci_gdt[sel].sd = *sd;
 }
 
@@ -96,24 +88,11 @@ setgdt(int sel, void *base, size_t limit, int type, int dpl, int def32,
 void
 gdt_init(void)
 {
-	struct vm_page *pg;
-	vaddr_t va;
 	struct cpu_info *ci = &cpu_info_primary;
 
 	gdt_next = GBIOS32_SEL;
 	gdt_free = GNULL_SEL;
 
-	gdt = (union descriptor *)uvm_km_valloc(kernel_map, GDT_SIZE);
-	for (va = (vaddr_t)gdt; va < (vaddr_t)gdt + GDT_SIZE;
-	    va += PAGE_SIZE) {
-		pg = uvm_pagealloc(NULL, 0, NULL, UVM_PGA_ZERO);
-		if (pg == NULL)
-			panic("gdt_init: no pages");
-		pmap_kenter_pa(va, VM_PAGE_TO_PHYS(pg),
-		    PROT_READ | PROT_WRITE);
-	}
-	bcopy(bootstrap_gdt, gdt, NGDT * sizeof(union descriptor));
-	ci->ci_gdt = gdt;
 	setsegment(&ci->ci_gdt[GCPU_SEL].sd, ci, sizeof(struct cpu_info)-1,
 	    SDT_MEMRWA, SEL_KPL, 0, 0);
 
@@ -127,29 +106,10 @@ gdt_init(void)
 void
 gdt_alloc_cpu(struct cpu_info *ci)
 {
-	struct vm_page *pg;
-	vaddr_t va;
-
-	ci->ci_gdt = (union descriptor *)uvm_km_valloc(kernel_map,
-	    GDT_SIZE + sizeof(*ci->ci_tss));
-	ci->ci_tss = (void *)ci->ci_gdt + GDT_SIZE;
-	uvm_map_pageable(kernel_map, (vaddr_t)ci->ci_gdt,
-	    (vaddr_t)ci->ci_gdt + GDT_SIZE + sizeof(*ci->ci_tss),
-	    FALSE, FALSE);
-	for (va = (vaddr_t)ci->ci_gdt;
-	    va < (vaddr_t)ci->ci_gdt + GDT_SIZE + sizeof(*ci->ci_tss);
-	    va += PAGE_SIZE) {
-		pg = uvm_pagealloc(NULL, 0, NULL, UVM_PGA_ZERO);
-		if (pg == NULL)
-			panic("gdt_alloc_cpu: no pages");
-		pmap_kenter_pa(va, VM_PAGE_TO_PHYS(pg),
-		    PROT_READ | PROT_WRITE);
-	}
-	bzero(ci->ci_gdt, GDT_SIZE);
-	bcopy(gdt, ci->ci_gdt, GDT_SIZE);
+	ci->ci_gdt = (void *)(ci->ci_tss + 1);
+	bcopy(cpu_info_primary.ci_gdt, ci->ci_gdt, GDT_SIZE);
 	setsegment(&ci->ci_gdt[GCPU_SEL].sd, ci, sizeof(struct cpu_info)-1,
 	    SDT_MEMRWA, SEL_KPL, 0, 0);
-	bzero(ci->ci_tss, sizeof(*ci->ci_tss));
 }
 #endif	/* MULTIPROCESSOR */
 
@@ -188,7 +148,7 @@ gdt_get_slot(void)
 
 	if (gdt_free != GNULL_SEL) {
 		slot = gdt_free;
-		gdt_free = gdt[slot].gd.gd_selector;
+		gdt_free = cpu_info_primary.ci_gdt[slot].gd.gd_selector;
 	} else {
 		if (gdt_next >= NGDT)
 			panic("gdt_get_slot: out of GDT descriptors");

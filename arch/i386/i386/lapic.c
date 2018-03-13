@@ -87,6 +87,10 @@ lapic_map(paddr_t lapic_base)
 	pmap_pte_set(va, lapic_base, PG_RW | PG_V | PG_N);
 	invlpg(va);
 
+	pmap_enter_special(va, lapic_base, PROT_READ | PROT_WRITE, PG_N);
+	printf("%s: entered lapic page va 0x%08lx pa 0x%08lx\n", __func__,
+	    va, lapic_base);
+
 #ifdef MULTIPROCESSOR
 	cpu_init_first();
 #endif
