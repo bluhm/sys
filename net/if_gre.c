@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_gre.c,v 1.120 2018/03/01 00:27:01 dlg Exp $ */
+/*	$OpenBSD: if_gre.c,v 1.122 2018/03/12 12:47:35 aoyama Exp $ */
 /*	$NetBSD: if_gre.c,v 1.9 1999/10/25 19:18:11 drochner Exp $ */
 
 /*
@@ -562,7 +562,7 @@ mgre_clone_create(struct if_clone *ifc, int unit)
 	ifp->if_type = IFT_L3IPVLAN;
 	ifp->if_hdrlen = GRE_HDRLEN;
 	ifp->if_mtu = GREMTU;
-	ifp->if_flags = 0; /* it's not p2p, and can't mcast or bcast */
+	ifp->if_flags = IFF_MULTICAST|IFF_SIMPLEX;
 	ifp->if_xflags = IFXF_CLONED;
 	ifp->if_rtrequest = mgre_rtrequest;
 	ifp->if_output = mgre_output;
@@ -1261,7 +1261,6 @@ nvgre_input(const struct gre_tunnel *key, struct mbuf *m, int hlen)
 {
 	struct nvgre_softc *sc;
 	struct mbuf_list ml = MBUF_LIST_INITIALIZER();
-	extern int ticks;
 
 	if (ISSET(m->m_flags, M_MCAST|M_BCAST))
 		sc = nvgre_mcast_find(key, m->m_pkthdr.ph_ifidx);
