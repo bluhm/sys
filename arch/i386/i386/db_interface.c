@@ -229,7 +229,7 @@ db_cpuinfo_cmd(db_expr_t addr, int have_addr, db_expr_t count, char *modif)
 	for (i = 0; i < MAXCPUS; i++) {
 		if (cpu_info[i] != NULL) {
 			db_printf("%c%4d: ", (i == cpu_number()) ? '*' : ' ',
-			    cpu_info[i]->ci_dev.dv_unit);
+			    cpu_info[i]->ci_dev->dv_unit);
 			switch(cpu_info[i]->ci_ddb_paused) {
 			case CI_DDB_RUNNING:
 				db_printf("running\n");
