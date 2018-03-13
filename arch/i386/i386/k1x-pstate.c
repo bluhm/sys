@@ -1,4 +1,4 @@
-/*	$OpenBSD: k1x-pstate.c,v 1.9 2017/09/08 05:36:51 deraadt Exp $ */
+/*	$OpenBSD: k1x-pstate.c,v 1.10 2018/03/13 13:51:05 bluhm Exp $ */
 /*
  * Copyright (c) 2011 Bryan Steele <brynet@gmail.com>
  *

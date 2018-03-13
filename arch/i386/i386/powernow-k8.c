@@ -1,4 +1,4 @@
-/*	$OpenBSD: powernow-k8.c,v 1.30 2017/09/08 05:36:51 deraadt Exp $ */
+/*	$OpenBSD: powernow-k8.c,v 1.31 2018/03/13 13:51:05 bluhm Exp $ */
 
 /*
  * Copyright (c) 2004 Martin Végiard.

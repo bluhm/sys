@@ -1,4 +1,4 @@
-/*	$OpenBSD: lapic.c,v 1.41 2017/07/24 15:17:31 naddy Exp $	*/
+/*	$OpenBSD: lapic.c,v 1.42 2018/03/13 13:51:05 bluhm Exp $	*/
 /* $NetBSD: lapic.c,v 1.1.2.8 2000/02/23 06:10:50 sommerfeld Exp $ */
 
 /*-

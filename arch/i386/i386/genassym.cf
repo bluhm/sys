@@ -1,4 +1,4 @@
-#	$OpenBSD: genassym.cf,v 1.42 2018/02/10 09:21:12 mpi Exp $
+#	$OpenBSD: genassym.cf,v 1.43 2018/03/13 13:51:05 bluhm Exp $
 #
 # Copyright (c) 1982, 1990 The Regents of the University of California.
 # All rights reserved.

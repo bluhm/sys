@@ -1,4 +1,4 @@
-/*	$OpenBSD: amd64errata.c,v 1.8 2017/09/08 05:36:51 deraadt Exp $	*/
+/*	$OpenBSD: amd64errata.c,v 1.9 2018/03/13 13:51:05 bluhm Exp $	*/
 /*	$NetBSD: errata.c,v 1.6 2007/02/05 21:05:45 ad Exp $	*/
 
 /*-
