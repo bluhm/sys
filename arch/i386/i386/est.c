@@ -1049,7 +1049,7 @@ est_acpi_pss_changed(struct acpicpu_pss *pss, int npss)
 void
 est_init(struct cpu_info *ci, int vendor)
 {
-	const char *cpu_device = ci->ci_dev.dv_xname;
+	const char *cpu_device = ci->ci_dev->dv_xname;
 	int i, low, high;
 	u_int64_t msr;
 	u_int16_t idhi, idlo, cur;

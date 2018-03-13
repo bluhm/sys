@@ -131,8 +131,10 @@ enum npx_type {
 };
 
 static	enum npx_type		npx_type;
-static	volatile u_int		npx_intrs_while_probing;
-static	volatile u_int		npx_traps_while_probing;
+static	volatile u_int		npx_intrs_while_probing
+				    __attribute__((section(".kudata")));
+static	volatile u_int		npx_traps_while_probing
+				    __attribute__((section(".kudata")));
 
 extern int i386_fpu_present;
 extern int i386_fpu_exception;
@@ -353,7 +355,7 @@ npxinit(struct cpu_info *ci)
 	if (npx586bug1(4195835, 3145727) != 0) {
 		i386_fpu_fdivbug = 1;
 		printf("%s: WARNING: Pentium FDIV bug detected!\n",
-		    ci->ci_dev.dv_xname);
+		    ci->ci_dev->dv_xname);
 	}
 	if (fpu_mxcsr_mask == 0 && i386_use_fxsave) {
 		struct savexmm xm __attribute__((aligned(16)));

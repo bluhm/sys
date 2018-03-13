@@ -100,6 +100,7 @@
 #include <machine/bus.h>
 
 #include <machine/cpu.h>
+#include <machine/cpu_full.h>
 #include <machine/cpufunc.h>
 #include <machine/cpuvar.h>
 #include <machine/gdt.h>
@@ -314,6 +315,7 @@ void	p3_get_bus_clock(struct cpu_info *);
 void	p4_update_cpuspeed(void);
 void	p3_update_cpuspeed(void);
 int	pentium_cpuspeed(int *);
+void	enter_shared_special_pages(void);
 #if NVMM > 0
 void	cpu_check_vmm_cap(struct cpu_info *);
 #endif /* NVMM > 0 */
@@ -377,16 +379,6 @@ cpu_startup(void)
 	printf("%s", version);
 	startclocks();
 
-	/*
-	 * We need to call identifycpu here early, so users have at least some
-	 * basic information, if booting hangs later on.
-	 */
-	strlcpy(curcpu()->ci_dev.dv_xname, "cpu0",
-	    sizeof(curcpu()->ci_dev.dv_xname));
-	curcpu()->ci_signature = cpu_id;
-	curcpu()->ci_feature_flags = cpu_feature;
-	identifycpu(curcpu());
-
 	printf("real mem  = %llu (%lluMB)\n",
 	    (unsigned long long)ptoa((psize_t)physmem),
 	    (unsigned long long)ptoa((psize_t)physmem)/1024U/1024U);
@@ -425,6 +417,47 @@ cpu_startup(void)
 #endif
 	}
 	ioport_malloc_safe = 1;
+
+	/* enter the IDT and trampoline code in the u-k maps */
+	enter_shared_special_pages();
+
+	/* initialize CPU0's TSS and GDT and put them in the u-k maps */
+	cpu_enter_pages(&cpu_info_full_primary);
+}
+
+void
+enter_shared_special_pages(void)
+{
+	extern char __kutext_start[], __kutext_end[], __kernel_kutext_phys[];
+	extern char __kudata_start[], __kudata_end[], __kernel_kudata_phys[];
+	vaddr_t	va;
+	paddr_t	pa;
+
+	/* idt */
+	pmap_extract(pmap_kernel(), (vaddr_t)idt, &pa);
+	pmap_enter_special((vaddr_t)idt, pa, PROT_READ, 0);
+
+	/* .kutext section */
+	va = (vaddr_t)__kutext_start;
+	pa = (paddr_t)__kernel_kutext_phys;
+	while (va < (vaddr_t)__kutext_end) {
+		pmap_enter_special(va, pa, PROT_READ | PROT_EXEC, 0);
+		printf("%s: entered kutext page va 0x%08lx pa 0x%08lx\n",
+		    __func__, (unsigned long)va, (unsigned long)pa);
+		va += PAGE_SIZE;
+		pa += PAGE_SIZE;
+	}
+
+	/* .kudata section */
+	va = (vaddr_t)__kudata_start;
+	pa = (paddr_t)__kernel_kudata_phys;
+	while (va < (vaddr_t)__kudata_end) {
+		pmap_enter_special(va, pa, PROT_READ | PROT_WRITE, 0);
+		printf("%s: entered kudata page va 0x%08lx pa 0x%08lx\n",
+		    __func__, (unsigned long)va, (unsigned long)pa);
+		va += PAGE_SIZE;
+		pa += PAGE_SIZE;
+	}
 }
 
 /*
@@ -436,16 +469,9 @@ i386_proc0_tss_init(void)
 	struct pcb *pcb;
 
 	curpcb = pcb = &proc0.p_addr->u_pcb;
-
-	pcb->pcb_tss.tss_ioopt = sizeof(pcb->pcb_tss) << 16;
 	pcb->pcb_cr0 = rcr0();
-	pcb->pcb_tss.tss_ss0 = GSEL(GDATA_SEL, SEL_KPL);
-	pcb->pcb_tss.tss_esp0 = (int)proc0.p_addr + USPACE - 16;
-	proc0.p_md.md_regs = (struct trapframe *)pcb->pcb_tss.tss_esp0 - 1;
-	proc0.p_md.md_tss_sel = tss_alloc(pcb);
-
-	ltr(proc0.p_md.md_tss_sel);
-	lldt(0);
+	pcb->pcb_kstack = (int)proc0.p_addr + USPACE - 16;
+	proc0.p_md.md_regs = (struct trapframe *)pcb->pcb_kstack - 1;
 }
 
 #ifdef MULTIPROCESSOR
@@ -454,9 +480,7 @@ i386_init_pcb_tss(struct cpu_info *ci)
 {
 	struct pcb *pcb = ci->ci_idle_pcb;
 
-	pcb->pcb_tss.tss_ioopt = sizeof(pcb->pcb_tss) << 16;
 	pcb->pcb_cr0 = rcr0();
-	ci->ci_idle_tss_sel = tss_alloc(pcb);
 }
 #endif	/* MULTIPROCESSOR */
 
@@ -1088,7 +1112,7 @@ winchip_cpu_setup(struct cpu_info *ci)
 		ci->ci_feature_flags &= ~CPUID_TSC;
 		/* Disable RDTSC instruction from user-level. */
 		lcr4(rcr4() | CR4_TSD);
-		printf("%s: TSC disabled\n", ci->ci_dev.dv_xname);
+		printf("%s: TSC disabled\n", ci->ci_dev->dv_xname);
 		break;
 	}
 }
@@ -1102,7 +1126,7 @@ cyrix3_setperf_setup(struct cpu_info *ci)
 			est_init(ci, CPUVENDOR_VIA);
 		else
 			printf("%s: Enhanced SpeedStep disabled by BIOS\n",
-			    ci->ci_dev.dv_xname);
+			    ci->ci_dev->dv_xname);
 	}
 }
 #endif
@@ -1157,7 +1181,7 @@ cyrix3_cpu_setup(struct cpu_info *ci)
 		if (CPU_IS_PRIMARY(ci) &&
 		    (model == 10 || model == 13 || model == 15)) {
 			/* Setup the sensors structures */
-			strlcpy(ci->ci_sensordev.xname, ci->ci_dev.dv_xname,
+			strlcpy(ci->ci_sensordev.xname, ci->ci_dev->dv_xname,
 			    sizeof(ci->ci_sensordev.xname));
 			ci->ci_sensor.type = SENSOR_TEMP;
 			sensor_task_register(ci, via_update_sensor, 5);
@@ -1187,7 +1211,7 @@ cyrix3_cpu_setup(struct cpu_info *ci)
 			val = 0;
 
 		if (val & (C3_CPUID_HAS_RNG | C3_CPUID_HAS_ACE))
-			printf("%s:", ci->ci_dev.dv_xname);
+			printf("%s:", ci->ci_dev->dv_xname);
 
 		/* Enable RNG if present and disabled */
 		if (val & C3_CPUID_HAS_RNG) {
@@ -1305,13 +1329,13 @@ cyrix6x86_cpu_setup(struct cpu_info *ci)
 		cyrix_write_reg(0xC3, cyrix_read_reg(0xC3) & ~0x10);
 
 		printf("%s: xchg bug workaround performed\n",
-		    ci->ci_dev.dv_xname);
+		    ci->ci_dev->dv_xname);
 		break;	/* fallthrough? */
 	case 4:	/* GXm */
 		/* Unset the TSC bit until calibrate_delay() gets fixed. */
 		clock_broken_latch = 1;
 		curcpu()->ci_feature_flags &= ~CPUID_TSC;
-		printf("%s: TSC disabled\n", ci->ci_dev.dv_xname);
+		printf("%s: TSC disabled\n", ci->ci_dev->dv_xname);
 		break;
 	}
 }
@@ -1326,7 +1350,7 @@ natsem6x86_cpu_setup(struct cpu_info *ci)
 	switch (model) {
 	case 4:
 		cpu_feature &= ~CPUID_TSC;
-		printf("%s: TSC disabled\n", ci->ci_dev.dv_xname);
+		printf("%s: TSC disabled\n", ci->ci_dev->dv_xname);
 		break;
 	}
 }
@@ -1337,7 +1361,7 @@ intel586_cpu_setup(struct cpu_info *ci)
 	if (!cpu_f00f_bug) {
 		fix_f00f();
 		printf("%s: F00F bug workaround installed\n",
-		    ci->ci_dev.dv_xname);
+		    ci->ci_dev->dv_xname);
 	}
 }
 
@@ -1479,7 +1503,7 @@ intel686_cpusensors_setup(struct cpu_info *ci)
 		return;
 
 	/* Setup the sensors structures */
-	strlcpy(ci->ci_sensordev.xname, ci->ci_dev.dv_xname,
+	strlcpy(ci->ci_sensordev.xname, ci->ci_dev->dv_xname,
 	    sizeof(ci->ci_sensordev.xname));
 	ci->ci_sensor.type = SENSOR_TEMP;
 	sensor_task_register(ci, intelcore_update_sensor, 5);
@@ -1500,7 +1524,7 @@ intel686_setperf_setup(struct cpu_info *ci)
 			est_init(ci, CPUVENDOR_INTEL);
 		else
 			printf("%s: Enhanced SpeedStep disabled by BIOS\n",
-			    ci->ci_dev.dv_xname);
+			    ci->ci_dev->dv_xname);
 	} else if ((cpu_feature & (CPUID_ACPI | CPUID_TM)) ==
 	    (CPUID_ACPI | CPUID_TM))
 		p4tcc_init(family, step);
@@ -1557,7 +1581,7 @@ intel686_cpu_setup(struct cpu_info *ci)
 		wrmsr(MSR_BBL_CR_CTL, msr119);
 
 		printf("%s: disabling processor serial number\n",
-			 ci->ci_dev.dv_xname);
+			 ci->ci_dev->dv_xname);
 		ci->ci_feature_flags &= ~CPUID_PSN;
 		ci->ci_level = 2;
 	}
@@ -1673,7 +1697,7 @@ identifycpu(struct cpu_info *ci)
 	int family, model, step, modif, cachesize;
 	const struct cpu_cpuid_nameclass *cpup = NULL;
 	char *brandstr_from, *brandstr_to;
-	char *cpu_device = ci->ci_dev.dv_xname;
+	char *cpu_device = ci->ci_dev->dv_xname;
 	int skipspace;
 
 	if (cpuid_level == -1) {
@@ -2150,7 +2174,7 @@ p4_get_bus_clock(struct cpu_info *ci)
 		default:
 			printf("%s: unknown Pentium 4 (model %d) "
 			    "EBC_FREQUENCY_ID value %d\n",
-			    ci->ci_dev.dv_xname, model, bus);
+			    ci->ci_dev->dv_xname, model, bus);
 			break;
 		}
 	} else {
@@ -2171,7 +2195,7 @@ p4_get_bus_clock(struct cpu_info *ci)
 		default:
 			printf("%s: unknown Pentium 4 (model %d) "
 			    "EBC_FREQUENCY_ID value %d\n",
-			    ci->ci_dev.dv_xname, model, bus);
+			    ci->ci_dev->dv_xname, model, bus);
 			break;
 		}
 	}
@@ -2199,7 +2223,7 @@ p3_get_bus_clock(struct cpu_info *ci)
 			break;
 		default:
 			printf("%s: unknown Pentium M FSB_FREQ value %d",
-			    ci->ci_dev.dv_xname, bus);
+			    ci->ci_dev->dv_xname, bus);
 			goto print_msr;
 		}
 		break;
@@ -2233,7 +2257,7 @@ p3_get_bus_clock(struct cpu_info *ci)
 			break;
 		default:
 			printf("%s: unknown Core FSB_FREQ value %d",
-			    ci->ci_dev.dv_xname, bus);
+			    ci->ci_dev->dv_xname, bus);
 			goto print_msr;
 		}
 		break;
@@ -2257,7 +2281,7 @@ p3_get_bus_clock(struct cpu_info *ci)
 			break;
 		default:
 			printf("%s: unknown Atom FSB_FREQ value %d",
-			    ci->ci_dev.dv_xname, bus);
+			    ci->ci_dev->dv_xname, bus);
 			goto print_msr;
 		}
 		break;
@@ -2283,7 +2307,7 @@ p3_get_bus_clock(struct cpu_info *ci)
 			break;
 		default:
 			printf("%s: unknown i686 EBL_CR_POWERON value %d",
-			    ci->ci_dev.dv_xname, bus);
+			    ci->ci_dev->dv_xname, bus);
 			goto print_msr;
 		}
 		break;
@@ -2951,7 +2975,12 @@ setregs(struct proc *p, struct exec_package *pack, u_long stack,
  * Initialize segments and descriptor tables
  */
 
-struct gate_descriptor idt_region[NIDT];
+/* IDT is now a full page, so we can map it in u-k */
+union {
+	struct gate_descriptor	idt[NIDT];
+	char			align[PAGE_SIZE];
+} _idt_region __aligned(PAGE_SIZE);
+#define idt_region _idt_region.idt
 struct gate_descriptor *idt = idt_region;
 
 extern  struct user *proc0paddr;
@@ -2987,7 +3016,6 @@ unsetgate(struct gate_descriptor *gd)
 void
 setregion(struct region_descriptor *rd, void *base, size_t limit)
 {
-
 	rd->rd_limit = (int)limit;
 	rd->rd_base = (int)base;
 }
@@ -3025,6 +3053,7 @@ fix_f00f(void)
 {
 	struct region_descriptor region;
 	vaddr_t va;
+	paddr_t pa;
 	void *p;
 
 	/* Allocate two new pages */
@@ -3042,8 +3071,15 @@ fix_f00f(void)
 	/* Map first page RO */
 	pmap_pte_setbits(va, 0, PG_RW);
 
+	/* add k-u read-only mappings XXX old IDT stays in place */
+	/* XXX hshoexer: are f00f affected CPUs affected by meltdown? */
+	pmap_extract(pmap_kernel(), va, &pa);
+	pmap_enter_special(va, pa, PROT_READ, 0);
+	pmap_extract(pmap_kernel(), va + PAGE_SIZE, &pa);
+	pmap_enter_special(va + PAGE_SIZE, pa, PROT_READ, 0);
+
 	/* Reload idtr */
-	setregion(&region, idt, sizeof(idt_region) - 1);
+	setregion(&region, idt, NIDT * sizeof(idt[0]) - 1);
 	lidt(&region);
 
 	/* Tell the rest of the world */
@@ -3070,21 +3106,29 @@ init386(paddr_t first_avail)
 	proc0.p_addr = proc0paddr;
 	cpu_info_primary.ci_self = &cpu_info_primary;
 	cpu_info_primary.ci_curpcb = &proc0.p_addr->u_pcb;
+	cpu_info_primary.ci_tss = &cpu_info_full_primary.cif_tss;
+	cpu_info_primary.ci_gdt = (void *)(cpu_info_primary.ci_tss + 1);
 
 	/* make bootstrap gdt gates and memory segments */
-	setsegment(&gdt[GCODE_SEL].sd, 0, 0xfffff, SDT_MEMERA, SEL_KPL, 1, 1);
-	setsegment(&gdt[GICODE_SEL].sd, 0, 0xfffff, SDT_MEMERA, SEL_KPL, 1, 1);
-	setsegment(&gdt[GDATA_SEL].sd, 0, 0xfffff, SDT_MEMRWA, SEL_KPL, 1, 1);
-	setsegment(&gdt[GUCODE_SEL].sd, 0, atop(I386_MAX_EXE_ADDR) - 1,
-	    SDT_MEMERA, SEL_UPL, 1, 1);
-	setsegment(&gdt[GUDATA_SEL].sd, 0, atop(VM_MAXUSER_ADDRESS) - 1,
-	    SDT_MEMRWA, SEL_UPL, 1, 1);
-	setsegment(&gdt[GCPU_SEL].sd, &cpu_info_primary,
+	setsegment(&cpu_info_primary.ci_gdt[GCODE_SEL].sd, 0, 0xfffff,
+	    SDT_MEMERA, SEL_KPL, 1, 1);
+	setsegment(&cpu_info_primary.ci_gdt[GICODE_SEL].sd, 0, 0xfffff,
+	    SDT_MEMERA, SEL_KPL, 1, 1);
+	setsegment(&cpu_info_primary.ci_gdt[GDATA_SEL].sd, 0, 0xfffff,
+	    SDT_MEMRWA, SEL_KPL, 1, 1);
+	setsegment(&cpu_info_primary.ci_gdt[GUCODE_SEL].sd, 0,
+	    atop(I386_MAX_EXE_ADDR) - 1, SDT_MEMERA, SEL_UPL, 1, 1);
+	setsegment(&cpu_info_primary.ci_gdt[GUDATA_SEL].sd, 0,
+	    atop(VM_MAXUSER_ADDRESS) - 1, SDT_MEMRWA, SEL_UPL, 1, 1);
+	setsegment(&cpu_info_primary.ci_gdt[GCPU_SEL].sd, &cpu_info_primary,
 	    sizeof(struct cpu_info)-1, SDT_MEMRWA, SEL_KPL, 0, 0);
-	setsegment(&gdt[GUFS_SEL].sd, 0, atop(VM_MAXUSER_ADDRESS) - 1,
-	    SDT_MEMRWA, SEL_UPL, 1, 1);
-	setsegment(&gdt[GUGS_SEL].sd, 0, atop(VM_MAXUSER_ADDRESS) - 1,
-	    SDT_MEMRWA, SEL_UPL, 1, 1);
+	setsegment(&cpu_info_primary.ci_gdt[GUFS_SEL].sd, 0,
+	    atop(VM_MAXUSER_ADDRESS) - 1, SDT_MEMRWA, SEL_UPL, 1, 1);
+	setsegment(&cpu_info_primary.ci_gdt[GUGS_SEL].sd, 0,
+	    atop(VM_MAXUSER_ADDRESS) - 1, SDT_MEMRWA, SEL_UPL, 1, 1);
+	setsegment(&cpu_info_primary.ci_gdt[GTSS_SEL].sd,
+	    cpu_info_primary.ci_tss, sizeof(cpu_info_primary.ci_tss)-1,
+	    SDT_SYS386TSS, SEL_KPL, 0, 0);
 
 	/* exceptions */
 	setgate(&idt[  0], &IDTVEC(div),     0, SDT_SYS386TGT, SEL_KPL, GCODE_SEL);
@@ -3113,9 +3157,9 @@ init386(paddr_t first_avail)
 		unsetgate(&idt[i]);
 	setgate(&idt[128], &IDTVEC(syscall), 0, SDT_SYS386TGT, SEL_UPL, GCODE_SEL);
 
-	setregion(&region, gdt, NGDT * sizeof(union descriptor) - 1);
+	setregion(&region, cpu_info_primary.ci_gdt, GDT_SIZE - 1);
 	lgdt(&region);
-	setregion(&region, idt, sizeof(idt_region) - 1);
+	setregion(&region, idt, NIDT * sizeof(idt[0]) - 1);
 	lidt(&region);
 
 	/*
@@ -3406,7 +3450,7 @@ cpu_reset(void)
 	 * IDT to point to nothing.
 	 */
 	bzero((caddr_t)idt, sizeof(idt_region));
-	setregion(&region, idt, sizeof(idt_region) - 1);
+	setregion(&region, idt, NIDT * sizeof(idt[0]) - 1);
 	lidt(&region);
 	__asm volatile("divl %0,%1" : : "q" (0), "a" (0));
 
