@@ -849,33 +849,36 @@ void
 tcp_mtudisc(struct inpcb *inp, int errno)
 {
 	struct tcpcb *tp = intotcpcb(inp);
-	struct rtentry *rt = in_pcbrtentry(inp);
+	struct rtentry *rt;
 	int change = 0;
 
-	if (tp != 0) {
+	if (tp == NULL)
+		return;
+
+	rt = in_pcbrtentry(inp);
+	if (rt != NULL) {
 		int orig_maxseg = tp->t_maxseg;
-		if (rt != 0) {
-			/*
-			 * If this was not a host route, remove and realloc.
-			 */
-			if ((rt->rt_flags & RTF_HOST) == 0) {
-				in_rtchange(inp, errno);
-				if ((rt = in_pcbrtentry(inp)) == 0)
-					return;
-			}
-			if (orig_maxseg != tp->t_maxseg ||
-			    (rt->rt_locks & RTV_MTU))
-				change = 1;
-		}
-		tcp_mss(tp, -1);
 
 		/*
-		 * Resend unacknowledged packets
+		 * If this was not a host route, remove and realloc.
 		 */
-		tp->snd_nxt = tp->snd_una;
-		if (change || errno > 0)
-			tcp_output(tp);
+		if ((rt->rt_flags & RTF_HOST) == 0) {
+			in_rtchange(inp, errno);
+			if ((rt = in_pcbrtentry(inp)) == NULL)
+				return;
+		}
+		if (orig_maxseg != tp->t_maxseg ||
+		    (rt->rt_locks & RTV_MTU))
+			change = 1;
 	}
+	tcp_mss(tp, -1);
+
+	/*
+	 * Resend unacknowledged packets
+	 */
+	tp->snd_nxt = tp->snd_una;
+	if (change || errno > 0)
+		tcp_output(tp);
 }
 
 void
