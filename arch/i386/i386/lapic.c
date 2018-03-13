@@ -127,9 +127,9 @@ lapic_set_lvt(void)
 
 #ifdef MULTIPROCESSOR
 	if (mp_verbose) {
-		apic_format_redir(ci->ci_dev.dv_xname, "prelint", 0, 0,
+		apic_format_redir(ci->ci_dev->dv_xname, "prelint", 0, 0,
 		    i82489_readreg(LAPIC_LVINT0));
-		apic_format_redir(ci->ci_dev.dv_xname, "prelint", 1, 0,
+		apic_format_redir(ci->ci_dev->dv_xname, "prelint", 1, 0,
 		    i82489_readreg(LAPIC_LVINT1));
 	}
 #endif
@@ -177,15 +177,15 @@ lapic_set_lvt(void)
 
 #ifdef MULTIPROCESSOR
 	if (mp_verbose) {
-		apic_format_redir(ci->ci_dev.dv_xname, "timer", 0, 0,
+		apic_format_redir(ci->ci_dev->dv_xname, "timer", 0, 0,
 		    i82489_readreg(LAPIC_LVTT));
-		apic_format_redir(ci->ci_dev.dv_xname, "pcint", 0, 0,
+		apic_format_redir(ci->ci_dev->dv_xname, "pcint", 0, 0,
 		    i82489_readreg(LAPIC_PCINT));
-		apic_format_redir(ci->ci_dev.dv_xname, "lint", 0, 0,
+		apic_format_redir(ci->ci_dev->dv_xname, "lint", 0, 0,
 		    i82489_readreg(LAPIC_LVINT0));
-		apic_format_redir(ci->ci_dev.dv_xname, "lint", 1, 0,
+		apic_format_redir(ci->ci_dev->dv_xname, "lint", 1, 0,
 		    i82489_readreg(LAPIC_LVINT1));
-		apic_format_redir(ci->ci_dev.dv_xname, "err", 0, 0,
+		apic_format_redir(ci->ci_dev->dv_xname, "err", 0, 0,
 		    i82489_readreg(LAPIC_LVERR));
 	}
 #endif
@@ -307,7 +307,7 @@ lapic_calibrate_timer(struct cpu_info *ci)
 	int i, ef = read_eflags();
 
 	if (mp_verbose)
-		printf("%s: calibrating local timer\n", ci->ci_dev.dv_xname);
+		printf("%s: calibrating local timer\n", ci->ci_dev->dv_xname);
 
 	/*
 	 * Configure timer to one-shot, interrupt masked,
@@ -343,7 +343,7 @@ lapic_calibrate_timer(struct cpu_info *ci)
 	lapic_per_second = tmp;
 
 	printf("%s: apic clock running at %lldMHz\n",
-	    ci->ci_dev.dv_xname, tmp / (1000 * 1000));
+	    ci->ci_dev->dv_xname, tmp / (1000 * 1000));
 
 	if (lapic_per_second != 0) {
 		/*

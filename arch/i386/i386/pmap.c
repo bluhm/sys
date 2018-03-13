@@ -778,7 +778,7 @@ setcslimit(struct pmap *pm, struct trapframe *tf, struct pcb *pcb,
 	 */
 	curcpu()->ci_gdt[GUCODE_SEL].sd = pm->pm_codeseg;
 
-	pcb->pcb_cs = tf->tf_cs = GSEL(GUCODE_SEL, SEL_UPL);
+	tf->tf_cs = GSEL(GUCODE_SEL, SEL_UPL);
 }
 
 /*
