@@ -187,7 +187,7 @@ k1x_init(struct cpu_info *ci)
 #endif
 	if (cstate->n_states) {
 		printf("%s: %d MHz: speeds:",
-		    ci->ci_dev.dv_xname, cpuspeed);
+		    ci->ci_dev->dv_xname, cpuspeed);
 		for (i = cstate->n_states; i > 0; i--) {
 			state = &cstate->state_table[i-1];
 			printf(" %d", state->freq);
