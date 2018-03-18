@@ -780,8 +780,7 @@ void
 db_reboot(int howto)
 {
 	spl0();
-	if (!curproc)
-		curproc = &proc0;
+	curproc = &proc0;
 	reboot(howto);
 }
 
