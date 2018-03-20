@@ -216,6 +216,7 @@ reroute:
 		else
 			ifp = if_get(ro->ro_rt->rt_ifidx);
 		if (ifp == NULL) {
+			ipstat_inc(ips_noroute);
 			error = EHOSTUNREACH;
 			goto bad;
 		}
