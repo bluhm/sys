@@ -108,7 +108,7 @@ kvm86_init(void)
 	tss->tss_ioopt = ((caddr_t)vmd->iomap - (caddr_t)&tss) << 16;
 
 	/* setup TSS descriptor (including our iomap) */
-	setsegment(&vmd->sd, &tss,
+	setsegment(&vmd->sd, tss,
 	    sizeof(struct i386tss) + sizeof(vmd->iomap) - 1,
 	    SDT_SYS386TSS, SEL_KPL, 0, 0);
 
