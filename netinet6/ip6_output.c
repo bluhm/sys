@@ -463,6 +463,11 @@ reroute:
 			ifp = if_get(rtable_loindex(m->m_pkthdr.ph_rtableid));
 		else
 			ifp = if_get(rt->rt_ifidx);
+		if (ifp == NULL) {
+			ip6stat_inc(ip6s_noroute);
+			error = EHOSTUNREACH;
+			goto bad;
+		}
 	} else {
 		*dst = dstsock;
 	}
