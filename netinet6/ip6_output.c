@@ -463,6 +463,12 @@ reroute:
 			ifp = if_get(rtable_loindex(m->m_pkthdr.ph_rtableid));
 		else
 			ifp = if_get(rt->rt_ifidx);
+		/*
+		 * We aren't using rtisvalid() here because the UP/DOWN state
+		 * machine is broken with some Ethernet drivers like em(4).
+		 * As a result we might try to use an invalid cached route
+		 * entry while an interface is being detached.
+		 */
 		if (ifp == NULL) {
 			ip6stat_inc(ip6s_noroute);
 			error = EHOSTUNREACH;
