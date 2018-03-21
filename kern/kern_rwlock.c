@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_rwlock.c,v 1.34 2018/03/20 15:45:32 mpi Exp $	*/
+/*	$OpenBSD: kern_rwlock.c,v 1.35 2018/03/21 12:28:39 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2002, 2003 Artur Grabowski <art@openbsd.org>
