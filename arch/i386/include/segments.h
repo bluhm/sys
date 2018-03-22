@@ -221,10 +221,11 @@ void idt_vec_free(int);
 #define	GICODE_SEL	10	/* Interrupt code descriptor (same as Kernel code) */
 #define	GUFS_SEL	11	/* User per-thread (%fs) descriptor */
 #define	GUGS_SEL	12	/* User per-thread (%gs) descriptor */
-#define GTSS_SEL	13	/* common TSS */
-#define	GBIOS32_SEL	14	/* spare slot for 32 bit BIOS calls */
-#define	NGDT		15
+#define	NGDT		13
 
-#define GDT_SIZE	(NGDT << 3)
+/*
+ * Entries in the Local Descriptor Table (LDT)
+ */
+#define	NLDT		17
 
 #endif /* _MACHINE_SEGMENTS_H_ */

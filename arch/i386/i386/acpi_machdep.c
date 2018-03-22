@@ -448,7 +448,7 @@ acpi_resume_mp(void)
 		p = ci->ci_schedstate.spc_idleproc;
 		pcb = &p->p_addr->u_pcb;
 
-		tf = (struct trapframe *)pcb->pcb_kstack - 1;
+		tf = (struct trapframe *)pcb->pcb_tss.tss_esp0 - 1;
 		sf = (struct switchframe *)tf - 1;
 		sf->sf_esi = (int)sched_idle;
 		sf->sf_ebx = (int)ci;

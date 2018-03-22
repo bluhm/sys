@@ -181,7 +181,7 @@ nopae:
 
 # %ecx points at our cpu_info structure..
 
-	movw	$(GDT_SIZE-1), 6(%esp)		# prepare segment descriptor
+	movw	$(MAXGDTSIZ-1), 6(%esp)		# prepare segment descriptor
 	movl	CPU_INFO_GDT(%ecx), %eax	# for real gdt
 	movl	%eax, 8(%esp)
 	lgdt	6(%esp)

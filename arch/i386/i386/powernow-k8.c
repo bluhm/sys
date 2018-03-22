@@ -499,7 +499,7 @@ k8_powernow_init(void)
 	}
 	if (cstate->n_states) {
 		printf("%s: %s %d MHz: speeds:",
-		    ci->ci_dev->dv_xname, techname, cpuspeed);
+		    ci->ci_dev.dv_xname, techname, cpuspeed);
 		for (i = cstate->n_states; i > 0; i--) {
 			state = &cstate->state_table[i-1];
 			printf(" %d", state->freq);
