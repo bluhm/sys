@@ -1,4 +1,4 @@
-/*	$OpenBSD: cpu.h,v 1.159 2018/03/13 13:51:05 bluhm Exp $	*/
+/*	$OpenBSD: cpu.h,v 1.160 2018/03/22 19:30:19 bluhm Exp $	*/
 /*	$NetBSD: cpu.h,v 1.35 1996/05/05 19:29:26 christos Exp $	*/
 
 /*-

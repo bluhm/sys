@@ -1,4 +1,4 @@
-/* $OpenBSD: kvm86call.S,v 1.9 2018/03/20 16:39:10 bluhm Exp $ */
+/* $OpenBSD: kvm86call.S,v 1.10 2018/03/22 19:30:18 bluhm Exp $ */
 /* $NetBSD: kvm86call.S,v 1.7 2006/04/11 17:14:07 drochner Exp $ */
 
 /*-
