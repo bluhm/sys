@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_sig.c,v 1.216 2018/02/26 13:33:25 mpi Exp $	*/
+/*	$OpenBSD: kern_sig.c,v 1.218 2018/03/27 08:22:41 mpi Exp $	*/
 /*	$NetBSD: kern_sig.c,v 1.54 1996/04/22 01:38:32 christos Exp $	*/
 
 /*
@@ -1167,11 +1167,13 @@ issignal(struct proc *p)
 		    (pr->ps_flags & PS_TRACED) == 0)
 			continue;
 
-		if ((pr->ps_flags & (PS_TRACED | PS_PPWAIT)) == PS_TRACED) {
-			/*
-			 * If traced, always stop, and stay
-			 * stopped until released by the debugger.
-			 */
+		/*
+		 * If traced, always stop, and stay stopped until released
+		 * by the debugger.  If our parent process is waiting for
+		 * us, don't hang as we could deadlock.
+		 */
+		if (((pr->ps_flags & (PS_TRACED | PS_PPWAIT)) == PS_TRACED) &&
+		    signum != SIGKILL) {
 			p->p_xstat = signum;
 
 			if (dolock)
@@ -1833,7 +1835,7 @@ userret(struct proc *p)
 		KERNEL_UNLOCK();
 	}
 
-	if (CURSIG(p) != 0) {
+	if (SIGPENDING(p)) {
 		KERNEL_LOCK();
 		while ((signum = CURSIG(p)) != 0)
 			postsig(p, signum);
