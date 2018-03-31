@@ -104,7 +104,6 @@ SECTIONS
 		__data_load = LOADADDR(.data);
 		*(.data .data.*)
 	} :data =0xcccccccc
-	. = ALIGN(0x1000);
 
 	. = ALIGN(__ALIGN_SIZE);
 	__kernel_kudata_phys = . & 0xfffffff;
