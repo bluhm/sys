@@ -352,7 +352,7 @@ amd64_errata(struct cpu_info *ci)
 
 #ifdef ERRATA_DEBUG
 		printf("%s: erratum %d present%s\n",
-		    ci->ci_dev.dv_xname, e->e_num,
+		    ci->ci_dev->dv_xname, e->e_num,
 		    (rc == 2) ? " and patched" : "");
 #endif
 	}
