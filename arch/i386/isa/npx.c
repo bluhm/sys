@@ -131,8 +131,10 @@ enum npx_type {
 };
 
 static	enum npx_type		npx_type;
-static	volatile u_int		npx_intrs_while_probing;
-static	volatile u_int		npx_traps_while_probing;
+static	volatile u_int		npx_intrs_while_probing
+				    __attribute__((section(".kudata")));
+static	volatile u_int		npx_traps_while_probing
+				    __attribute__((section(".kudata")));
 
 extern int i386_fpu_present;
 extern int i386_fpu_exception;

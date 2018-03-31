@@ -289,5 +289,8 @@ breakpoint(void)
 
 void amd64_errata(struct cpu_info *);
 
+struct cpu_info_full;
+void cpu_enter_pages(struct cpu_info_full *);
+
 #endif /* _KERNEL */
 #endif /* !_MACHINE_CPUFUNC_H_ */

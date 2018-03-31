@@ -37,7 +37,6 @@ struct pcb;
 struct pmap;
 
 void gdt_alloc_cpu(struct cpu_info *);
-int gdt_get_slot(void);
 void gdt_init(void);
 void gdt_init_cpu(struct cpu_info *);
 void gdt_reload_cpu(/* XXX struct cpu_info * */ void);
