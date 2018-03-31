@@ -50,7 +50,7 @@
 #include <machine/sysarch.h>
 
 /*
- * Please not that pcb_savefpu must be aligend to 16 bytes.
+ * Please note that pcb_savefpu must be aligend to 16 bytes.
  */
 struct pcb {
 	union	savefpu pcb_savefpu;	/* floating point state for FPU */
