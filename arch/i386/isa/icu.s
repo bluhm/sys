@@ -44,7 +44,7 @@ _C_LABEL(imen):
  *   esi - address to resume loop at
  *   edi - scratch for Xsoftnet
  */
-IDTVEC(spllower)
+KIDTVEC(spllower)
 	pushl	%ebx
 	pushl	%esi
 	pushl	%edi
@@ -76,7 +76,7 @@ IDTVEC(spllower)
  *   esi - address to resume loop at
  *   edi - scratch for Xsoftnet
  */
-IDTVEC(doreti)
+KIDTVEC(doreti)
 	popl	%ebx			# get previous priority
 	movl	$1f,%esi		# address to resume loop at
 1:	movl	%ebx,%eax
@@ -108,14 +108,18 @@ IDTVEC(doreti)
 	addl	$4,%esp
 	cli
 	jmp	2b
-3:	INTRFASTEXIT
+3:
+#ifdef DIAGNOSTIC
+	movl	$0xf9,%esi
+#endif
+	INTRFASTEXIT
 
 
 /*
  * Soft interrupt handlers
  */
 
-IDTVEC(softtty)
+KIDTVEC(softtty)
 	movl	$IPL_SOFTTTY,%eax
 	movl	%eax,CPL
 	sti
@@ -124,7 +128,7 @@ IDTVEC(softtty)
 	addl	$4,%esp
 	jmp	*%esi
 
-IDTVEC(softnet)
+KIDTVEC(softnet)
 	movl	$IPL_SOFTNET,%eax
 	movl	%eax,CPL
 	sti
@@ -134,7 +138,7 @@ IDTVEC(softnet)
 	jmp	*%esi
 #undef DONETISR
 
-IDTVEC(softclock)
+KIDTVEC(softclock)
 	movl	$IPL_SOFTCLOCK,%eax
 	movl	%eax,CPL
 	sti
