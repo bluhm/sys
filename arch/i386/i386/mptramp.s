@@ -1,4 +1,4 @@
-/*	$OpenBSD: mptramp.s,v 1.24 2018/03/22 19:30:19 bluhm Exp $	*/
+/*	$OpenBSD: mptramp.s,v 1.25 2018/03/31 13:45:03 bluhm Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.

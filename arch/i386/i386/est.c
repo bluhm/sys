@@ -1,4 +1,4 @@
-/*	$OpenBSD: est.c,v 1.51 2018/03/22 19:30:18 bluhm Exp $ */
+/*	$OpenBSD: est.c,v 1.52 2018/03/31 13:45:03 bluhm Exp $ */
 /*
  * Copyright (c) 2003 Michael Eriksson.
  * All rights reserved.

@@ -1,4 +1,4 @@
-/*	$OpenBSD: segments.h,v 1.23 2018/03/22 19:30:19 bluhm Exp $	*/
+/*	$OpenBSD: segments.h,v 1.24 2018/03/31 13:45:03 bluhm Exp $	*/
 /*	$NetBSD: segments.h,v 1.23 1996/02/01 22:31:03 mycroft Exp $	*/
 
 /*-
