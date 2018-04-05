@@ -615,7 +615,7 @@ finishdup(struct proc *p, struct file *fp, int old, int new,
 		FREF(oldfp);
 
 	fdp->fd_ofiles[new] = fp;
-	fdp->fd_ofileflags[new] = fdp->fd_ofileflags[old] & ~(UF_EXCLOSE|UF_PLEDGED);
+	fdp->fd_ofileflags[new] = fdp->fd_ofileflags[old] & ~UF_EXCLOSE;
 	fp->f_count++;
 	FRELE(fp, p);
 	if (dup2 && oldfp == NULL)
