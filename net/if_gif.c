@@ -842,11 +842,12 @@ gif_input(struct gif_tunnel *key, struct mbuf **mp, int *offp, int proto,
 	}
 #endif
 
+	*mp = NULL;
 	(*input)(ifp, m);
 	return (IPPROTO_DONE);
 
  drop:
-	m_freem(m);
+	m_freemp(mp);
 	return (IPPROTO_DONE);
 }
 
