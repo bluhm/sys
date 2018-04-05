@@ -513,7 +513,7 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 	/*
 	 * Locate pcb for datagram.
 	 */
-#if NPF > 0 && 0  /* currently disabled */
+#if NPF > 0
 	inp = pf_inp_lookup(m);
 #endif
 	if (inp == NULL) {
