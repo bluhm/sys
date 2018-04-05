@@ -758,7 +758,7 @@ gif_input(struct gif_tunnel *key, struct mbuf **mp, int *offp, int proto,
 	case IPPROTO_IPV4: {
 		struct ip *ip;
 
-		m = m_pullup(m, sizeof(*ip));
+		m = *mp = m_pullup(m, sizeof(*ip));
 		if (m == NULL)
 			return (IPPROTO_DONE);
 
@@ -779,7 +779,7 @@ gif_input(struct gif_tunnel *key, struct mbuf **mp, int *offp, int proto,
 	case IPPROTO_IPV6: {
 		struct ip6_hdr *ip6;
 
-		m = m_pullup(m, sizeof(*ip6));
+		m = *mp = m_pullup(m, sizeof(*ip6));
 		if (m == NULL)
 			return (IPPROTO_DONE);
 
@@ -812,7 +812,7 @@ gif_input(struct gif_tunnel *key, struct mbuf **mp, int *offp, int proto,
 	m_adj(m, *offp);
 
 	if (sc->sc_ttl == -1) {
-		m = m_pullup(m, ttloff + 1);
+		m = *mp = m_pullup(m, ttloff + 1);
 		if (m == NULL)
 			return (IPPROTO_DONE);
 
