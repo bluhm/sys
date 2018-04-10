@@ -988,11 +988,7 @@ IDTVEC(dna)
 	pushl	$0			# dummy error code
 	pushl	$T_DNA
 	INTRENTRY(dna)
-#ifdef MULTIPROCESSOR
 	pushl	CPUVAR(SELF)
-#else
-	pushl	$_C_LABEL(cpu_info_primary)
-#endif
 	call	*_C_LABEL(npxdna_func)
 	addl	$4,%esp
 	testl	%eax,%eax

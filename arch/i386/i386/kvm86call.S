@@ -91,7 +91,7 @@ ENTRY(kvm86_call)
 	jne 1b
 	movl	%ecx,%edx
 #else
-	leal	_C_LABEL(cpu_info_primary),%ecx
+	movl	CPUVAR(SELF),%ecx
 #endif
 
 	movl	CPU_INFO_CURPCB(%ecx),%eax
@@ -100,7 +100,7 @@ ENTRY(kvm86_call)
 #ifdef	MULTIPROCESSOR
 	movl	CPU_INFO_GDT(%edx),%eax
 #else
-	movl	_C_LABEL(gdt),%eax
+	movl	CPU_INFO_GDT(%ecx),%eax
 #endif
 	movl	$GSEL(GTSS_SEL, SEL_KPL),%edi
 	andl	$~0x0200,4(%eax,%edi,1)	/* reset "task busy" */
@@ -150,7 +150,6 @@ ENTRY(kvm86_call)
 	addl	$8,%esp
 	iret
 
-
 /* void kvm86_ret(struct trapframe *, int) */
 ENTRY(kvm86_ret)
 	pushl	%ebp
@@ -185,8 +184,8 @@ ENTRY(kvm86_ret)
 	jne 1b
 	movl	CPU_INFO_GDT(%ecx),%eax
 #else
-	leal	_C_LABEL(cpu_info_primary),%ecx
-	movl	_C_LABEL(gdt),%eax
+	movl	CPUVAR(SELF),%ecx
+	movl	CPU_INFO_GDT(%ecx),%eax
 #endif
 	movl	$GSEL(GTSS_SEL, SEL_KPL),%edi
 	movl	SCRTSS0, %edx
@@ -208,7 +207,7 @@ ENTRY(kvm86_ret)
 	cmpl	%eax,%edx
 	jne 1b
 #else
-	leal	_C_LABEL(cpu_info_primary),%ecx
+	movl	CPUVAR(SELF),%ecx
 #endif
 	popl	%eax			/* restore curpcb */
 	movl	%eax,CPU_INFO_CURPCB(%ecx)

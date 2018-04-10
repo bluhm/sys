@@ -127,11 +127,7 @@
 
 #ifdef _KERNEL
 
-#ifdef MULTIPROCESSOR
 #define CPUVAR(var)	%fs:__CONCAT(CPU_INFO_,var)
-#else
-#define CPUVAR(var)	_C_LABEL(cpu_info_primary)+__CONCAT(CPU_INFO_,var)
-#endif
 
 #endif /* _KERNEL */
 
