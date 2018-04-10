@@ -1310,8 +1310,6 @@ dupfdopen(struct proc *p, int indx, int mode)
 	fdp->fd_ofiles[indx] = wfp;
 	fdp->fd_ofileflags[indx] = (fdp->fd_ofileflags[indx] & UF_EXCLOSE) |
 	    (fdp->fd_ofileflags[dupfd] & ~UF_EXCLOSE);
-	if (ISSET(p->p_p->ps_flags, PS_PLEDGE))
-		fdp->fd_ofileflags[indx] |= UF_PLEDGED;
 	wfp->f_count++;
 	fd_used(fdp, indx);
 	return (0);
