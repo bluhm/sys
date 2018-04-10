@@ -96,6 +96,20 @@
 #define _ENTRY(x) \
 	.text; _ALIGN_TEXT; .globl x; .type x,@function; x:
 
+#ifdef _KERNEL
+#define KUTEXT	.section .kutext, "ax"
+
+#define IDTVEC(name)    \
+	KUTEXT; ALIGN_TEXT;	\
+	.globl X##name; X##name:
+#define KIDTVEC(name)    \
+	.text; ALIGN_TEXT;	\
+	.globl X##name; X##name:
+#define KUENTRY(x) \
+	KUTEXT; _ALIGN_TEXT; .globl x; .type x,@function; x:
+
+#endif	/* _KERNEL */
+
 #if defined(PROF) || defined(GPROF)
 # define _PROF_PROLOGUE	\
 	pushl %ebp; movl %esp,%ebp; call PIC_PLT(mcount); popl %ebp
@@ -113,11 +127,7 @@
 
 #ifdef _KERNEL
 
-#ifdef MULTIPROCESSOR
 #define CPUVAR(var)	%fs:__CONCAT(CPU_INFO_,var)
-#else
-#define CPUVAR(var)	_C_LABEL(cpu_info_primary)+__CONCAT(CPU_INFO_,var)
-#endif
 
 #endif /* _KERNEL */
 
