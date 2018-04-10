@@ -31,7 +31,7 @@
 
 *******************************************************************************/
 
-/* $OpenBSD: if_em_hw.c,v 1.97 2018/03/16 06:30:50 jsg Exp $ */
+/* $OpenBSD: if_em_hw.c,v 1.99 2018/04/07 11:55:14 sf Exp $ */
 /*
  * if_em_hw.c Shared functions for accessing and configuring the MAC
  */
@@ -945,7 +945,7 @@ em_reset_hw(struct em_hw *hw)
 		}
 		em_get_software_flag(hw);
 		E1000_WRITE_REG(hw, CTRL, (ctrl | E1000_CTRL_RST));
-		msec_delay(5);
+		msec_delay(20);
 
 		/* Ungate automatic PHY configuration on non-managed 82579 */
 		if (hw->mac_type == em_pch2lan && !hw->phy_reset_disable &&
@@ -9539,9 +9539,18 @@ em_check_phy_reset_block(struct em_hw *hw)
 	DEBUGFUNC("em_check_phy_reset_block\n");
 
 	if (IS_ICH8(hw->mac_type)) {
-		fwsm = E1000_READ_REG(hw, FWSM);
-		return (fwsm & E1000_FWSM_RSPCIPHY) ? E1000_SUCCESS :
-		    E1000_BLK_PHY_RESET;
+		int i = 0;
+		int blocked = 0;
+		do {
+			fwsm = E1000_READ_REG(hw, FWSM);
+			if (!(fwsm & E1000_FWSM_RSPCIPHY)) {
+				blocked = 1;
+				msec_delay(10);
+				continue;
+			}
+			blocked = 0;
+		} while (blocked && (i++ < 30));
+		return blocked ? E1000_BLK_PHY_RESET : E1000_SUCCESS;
 	}
 	if (hw->mac_type > em_82547_rev_2)
 		manc = E1000_READ_REG(hw, MANC);
