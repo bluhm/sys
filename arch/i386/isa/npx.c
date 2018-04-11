@@ -1,4 +1,4 @@
-/*	$OpenBSD: npx.c,v 1.68 2018/03/31 22:52:30 bluhm Exp $	*/
+/*	$OpenBSD: npx.c,v 1.69 2018/04/11 15:44:08 bluhm Exp $	*/
 /*	$NetBSD: npx.c,v 1.57 1996/05/12 23:12:24 mycroft Exp $	*/
 
 #if 0

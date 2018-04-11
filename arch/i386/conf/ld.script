@@ -1,4 +1,4 @@
-/*	$OpenBSD: ld.script,v 1.8 2017/10/24 20:06:54 guenther Exp $	*/
+/*	$OpenBSD: ld.script,v 1.9 2018/04/11 15:44:08 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2015 Mike Larkin <mlarkin@openbsd.org>
