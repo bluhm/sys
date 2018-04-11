@@ -1,4 +1,4 @@
-/*	$OpenBSD: icu.s,v 1.33 2015/07/16 05:10:14 guenther Exp $	*/
+/*	$OpenBSD: icu.s,v 1.34 2018/04/11 15:44:08 bluhm Exp $	*/
 /*	$NetBSD: icu.s,v 1.45 1996/01/07 03:59:34 mycroft Exp $	*/
 
 /*-

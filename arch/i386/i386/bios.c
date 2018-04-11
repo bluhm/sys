@@ -1,4 +1,4 @@
-/*	$OpenBSD: bios.c,v 1.116 2017/07/15 17:20:56 tedu Exp $	*/
+/*	$OpenBSD: bios.c,v 1.117 2018/04/11 15:44:08 bluhm Exp $	*/
 
 /*
  * Copyright (c) 1997-2001 Michael Shalayeff
