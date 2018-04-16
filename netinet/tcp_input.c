@@ -1078,7 +1078,7 @@ findpcb:
 		if (tiflags & TH_ACK) {
 			if (tiflags & TH_SYN) {
 				tcpstat_inc(tcps_badsyn);
-				goto dropwithreset;
+				goto drop;
 			}
 			if (SEQ_LEQ(th->th_ack, tp->snd_una) ||
 			    SEQ_GT(th->th_ack, tp->snd_max))
