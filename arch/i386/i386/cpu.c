@@ -250,6 +250,7 @@ cpu_attach(struct device *parent, struct device *self, void *aux)
 		ci = &cif->cif_cpu;
 #ifdef MULTIPROCESSOR
 		ci->ci_tss = &cif->cif_tss;
+		ci->ci_gdt = (void *)&cif->cif_gdt;
 		cpu_enter_pages(cif);
 		if (cpu_info[cpunum] != NULL)
 			panic("cpu at apic id %d already attached?", cpunum);

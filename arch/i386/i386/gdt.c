@@ -97,7 +97,6 @@ gdt_init(void)
 void
 gdt_alloc_cpu(struct cpu_info *ci)
 {
-	ci->ci_gdt = (void *)(ci->ci_tss + 1);
 	bcopy(cpu_info_primary.ci_gdt, ci->ci_gdt, GDT_SIZE);
 	setsegment(&ci->ci_gdt[GCPU_SEL].sd, ci, sizeof(struct cpu_info)-1,
 	    SDT_MEMRWA, SEL_KPL, 0, 0);
