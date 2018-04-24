@@ -1415,7 +1415,7 @@ pfioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 				break;
 #endif /* INET6 */
 			default:
-				pool_put(&pf_rule_pl, newrule);
+				pf_rm_rule(NULL, newrule);
 				error = EAFNOSUPPORT;
 				PF_UNLOCK();
 				goto fail;
