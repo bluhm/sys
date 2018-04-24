@@ -242,6 +242,7 @@ start:	movw	$0x1234,0x472			# warm boot
 	 * processes, and may not use PG_G global PTEs for kernel VAs.
 	 */
 	movl	$0x1, RELOC(_C_LABEL(cpu_meltdown))
+	movl	$0x0, RELOC(_C_LABEL(pg_g_kern))
 
 	cmpl	$0x756e6547,%ebx	# "Genu"
 	jne	.Lcpu_secure
@@ -272,6 +273,7 @@ start:	movw	$0x1234,0x472			# warm boot
 
 .Lcpu_secure:
 	movl	$0x0, RELOC(_C_LABEL(cpu_meltdown))
+	movl	$PG_G, RELOC(_C_LABEL(pg_g_kern))
 
 .Lcpu_check_finished:
 	movl	$1,%eax

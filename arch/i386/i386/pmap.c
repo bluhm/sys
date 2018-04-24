@@ -380,6 +380,13 @@ int nkptp_max = 1024 - (KERNBASE / NBPD) - 1;
 extern int cpu_pae;
 
 /*
+ * pg_g_kern:  if CPU is affected by Meltdown pg_g_kern is 0,
+ * otherwise it is is set to PG_G.  pmap_pg_g will be dervied
+ * from pg_g_kern, see pmap_bootstrap().
+ */
+extern int pg_g_kern;
+
+/*
  * pmap_pg_g: if our processor supports PG_G in the PTE then we
  * set pmap_pg_g to PG_G (otherwise it is zero).
  */
@@ -975,15 +982,13 @@ pmap_bootstrap(vaddr_t kva_start)
 
 	if (cpu_feature & CPUID_PGE) {
 		lcr4(rcr4() | CR4_PGE);	/* enable hardware (via %cr4) */
-		if (!cpu_meltdown) {
-			pmap_pg_g = PG_G;	/* enable software */
+		pmap_pg_g = pg_g_kern;	/* if safe to use, enable software */
 
-			/* add PG_G attribute to already mapped kernel pages */
-			for (kva = VM_MIN_KERNEL_ADDRESS; kva < virtual_avail;
-			     kva += PAGE_SIZE)
-				if (pmap_valid_entry(PTE_BASE[atop(kva)]))
-					PTE_BASE[atop(kva)] |= PG_G;
-		}
+		/* add PG_G attribute to already mapped kernel pages */
+		for (kva = VM_MIN_KERNEL_ADDRESS; kva < virtual_avail;
+		     kva += PAGE_SIZE)
+			if (pmap_valid_entry(PTE_BASE[atop(kva)]))
+				PTE_BASE[atop(kva)] |= pmap_pg_g;
 	}
 
 	/*
@@ -2596,7 +2601,11 @@ pmap_enter_special_86(vaddr_t va, paddr_t pa, vm_prot_t prot, u_int32_t flags)
 	pmap_tmpunmap_pa();
 	mtx_leave(&ptppg->mdpage.pv_mtx);
 
-	/* if supported, set the PG_G flag on the corresponding U+K entry */
+	/*
+	 * if supported, set the PG_G flag on the corresponding U+K
+	 * entry.  U+K mappings can use PG_G, as they are mapped
+	 * along with user land anyway.
+	 */
 	if (!(cpu_feature & CPUID_PGE))
 		return;
 	ptes = pmap_map_ptes_86(pmap);	/* pmap_kernel -> PTE_BASE */
