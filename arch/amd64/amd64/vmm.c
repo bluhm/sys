@@ -1,4 +1,4 @@
-/*	$OpenBSD: vmm.c,v 1.187 2018/04/18 06:50:35 pd Exp $	*/
+/*	$OpenBSD: vmm.c,v 1.191 2018/04/25 16:22:19 mlarkin Exp $	*/
 /*
  * Copyright (c) 2014 Mike Larkin <mlarkin@openbsd.org>
  *
@@ -37,7 +37,6 @@
 #include <machine/segments.h>
 #include <machine/cpufunc.h>
 #include <machine/vmmvar.h>
-#include <machine/i82489reg.h>
 
 #include <dev/isa/isareg.h>
 
@@ -3826,6 +3825,8 @@ vmm_fpusave(void)
 	if (p == NULL)
 		return;
 
+	uvmexp.fpswtch++;
+
 	if (ci->ci_fpsaving != 0)
 		panic("%s: recursive save!", __func__);
 	/*
@@ -3838,6 +3839,7 @@ vmm_fpusave(void)
 		xsave(&p->p_addr->u_pcb.pcb_savefpu, xsave_mask);
 	else
 		fxsave(&p->p_addr->u_pcb.pcb_savefpu);
+
 	ci->ci_fpsaving = 0;
 
 	p->p_addr->u_pcb.pcb_cr0 |= CR0_TS;
@@ -4064,7 +4066,7 @@ vcpu_run_vmx(struct vcpu *vcpu, struct vm_run_params *vrp)
 		KERNEL_ASSERT_LOCKED();
 #endif /* VMM_DEBUG */
 
-		/* Disable interrupts and save the current FPU state. */
+		/* Disable interrupts and save the current host FPU state. */
 		disable_intr();
 		clts();
 		vmm_fpusave();
@@ -6131,8 +6133,8 @@ vcpu_run_svm(struct vcpu *vcpu, struct vm_run_params *vrp)
 		KERNEL_ASSERT_LOCKED();
 #endif /* VMM_DEBUG */
 
-		/* Disable interrupts and save the current FPU state. */
-		disable_intr();
+		/* Disable interrupts and save the current host FPU state. */
+		clgi();
 		clts();
 		vmm_fpusave();
 
@@ -6201,7 +6203,11 @@ vcpu_run_svm(struct vcpu *vcpu, struct vm_run_params *vrp)
 		 */
 		stts();
 
-		enable_intr();
+		/*
+		 * Enable interrupts now. Note that if the exit was due to INTR
+		 * (external interrupt), the interrupt will be processed now.
+		 */
+		stgi();
 
 		vcpu->vc_gueststate.vg_rip = vmcb->v_rip;
 		vmcb->v_tlb_control = SVM_TLB_CONTROL_FLUSH_NONE;
