@@ -743,6 +743,7 @@ pf_join_fragment(struct pf_fragment *frag)
 			m_adj(m2, frent->fe_len - m2->m_pkthdr.len);
 		pool_put(&pf_frent_pl, frent);
 		pf_nfrents--;
+		m_removehdr(m2);
 		m_cat(m, m2);
 	}
 
