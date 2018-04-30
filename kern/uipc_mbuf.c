@@ -308,8 +308,8 @@ void
 m_removehdr(struct mbuf *m)
 {
 	KASSERT(m->m_flags & M_PKTHDR);
-	m->m_flags &= ~M_PKTHDR;
 	m_clearhdr(m);
+	m->m_flags &= ~M_PKTHDR;
 }
 
 void
