@@ -400,6 +400,7 @@ frag6_input(struct mbuf **mp, int *offp, int proto, int af)
 			t = t->m_next;
 		t->m_next = af6->ip6af_m;
 		m_adj(t->m_next, af6->ip6af_offset);
+		m_removehdr(t->m_next);
 		pool_put(&ip6af_pool, af6);
 	}
 
@@ -430,7 +431,8 @@ frag6_input(struct mbuf **mp, int *offp, int proto, int af)
 
 	pool_put(&ip6q_pool, q6);
 
-	if (m->m_flags & M_PKTHDR) { /* Isn't it always true? */
+	{
+		KASSERT(m->m_flags & M_PKTHDR);
 		int plen = 0;
 		for (t = m; t; t = t->m_next)
 			plen += t->m_len;
