@@ -947,6 +947,7 @@ insert:
 		nq = LIST_NEXT(q, ipqe_q);
 		pool_put(&ipqent_pool, q);
 		ip_frags--;
+		m_removehdr(t);
 		m_cat(m, t);
 	}
 
@@ -964,7 +965,8 @@ insert:
 	m->m_len += (ip->ip_hl << 2);
 	m->m_data -= (ip->ip_hl << 2);
 	/* some debugging cruft by sklower, below, will go away soon */
-	if (m->m_flags & M_PKTHDR) { /* XXX this should be done elsewhere */
+	{
+		KASSERT(m->m_flags & M_PKTHDR);
 		int plen = 0;
 		for (t = m; t; t = t->m_next)
 			plen += t->m_len;
