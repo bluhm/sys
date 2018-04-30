@@ -1,4 +1,4 @@
-/*	$OpenBSD: vmm.c,v 1.191 2018/04/25 16:22:19 mlarkin Exp $	*/
+/*	$OpenBSD: vmm.c,v 1.197 2018/04/27 15:45:52 jasper Exp $	*/
 /*
  * Copyright (c) 2014 Mike Larkin <mlarkin@openbsd.org>
  *
@@ -4461,6 +4461,15 @@ svm_handle_exit(struct vcpu *vcpu)
 			break;
 		}
 
+		/*
+		 * Guest is now ready for interrupts, so disable interrupt
+		 * window exiting.
+		 */
+		vmcb->v_irq = 0;
+		vmcb->v_intr_vector = 0;
+		vmcb->v_intercept1 &= ~SVM_INTERCEPT_VINTR;
+		svm_set_dirty(vcpu, SVM_CLEANBITS_TPR | SVM_CLEANBITS_I);
+
 		update_rip = 0;
 		break;
 	case SVM_VMEXIT_INTR:
@@ -4974,9 +4983,11 @@ svm_handle_inout(struct vcpu *vcpu)
 	switch (vcpu->vc_exit.vei.vei_port) {
 	case IO_ICU1 ... IO_ICU1 + 1:
 	case 0x40 ... 0x43:
+	case PCKBC_AUX:
 	case IO_RTC ... IO_RTC + 1:
 	case IO_ICU2 ... IO_ICU2 + 1:
 	case 0x3f8 ... 0x3ff:
+	case ELCR0 ... ELCR1:
 	case 0x500 ... 0x50f:
 	case 0xcf8:
 	case 0xcfc ... 0xcff:
@@ -5055,9 +5066,11 @@ vmx_handle_inout(struct vcpu *vcpu)
 	switch (vcpu->vc_exit.vei.vei_port) {
 	case IO_ICU1 ... IO_ICU1 + 1:
 	case 0x40 ... 0x43:
+	case PCKBC_AUX:
 	case IO_RTC ... IO_RTC + 1:
 	case IO_ICU2 ... IO_ICU2 + 1:
 	case 0x3f8 ... 0x3ff:
+	case ELCR0 ... ELCR1:
 	case 0xcf8:
 	case 0xcfc ... 0xcff:
 	case 0x500 ... 0x50f:
@@ -6026,7 +6039,7 @@ vmm_handle_cpuid(struct vcpu *vcpu)
 int
 vcpu_run_svm(struct vcpu *vcpu, struct vm_run_params *vrp)
 {
-	int ret = 0, resume, locked;
+	int ret = 0, resume;
 	struct region_descriptor gdt;
 	struct cpu_info *ci;
 	uint64_t exit_reason;
@@ -6089,29 +6102,16 @@ vcpu_run_svm(struct vcpu *vcpu, struct vm_run_params *vrp)
 
 		/* Handle vmd(8) injected interrupts */
 		/* Is there an interrupt pending injection? */
-		if (irq != 0xFFFF) {
-			if (vcpu->vc_irqready) {
-				vmcb->v_eventinj = (irq & 0xFF) | (1<<31);
-			} else {
-				vmcb->v_irq = 1;
-				vmcb->v_intr_misc = SVM_INTR_MISC_V_IGN_TPR;
-				vmcb->v_intr_vector = 0;
-				vmcb->v_intercept1 |= SVM_INTERCEPT_VINTR;
-				svm_set_dirty(vcpu, SVM_CLEANBITS_TPR |
-				    SVM_CLEANBITS_I);
-			}
-
+		if (irq != 0xFFFF && vcpu->vc_irqready) {
+			DPRINTF("%s: inject irq %d\n", __func__, irq & 0xFF);
+			vmcb->v_eventinj = (irq & 0xFF) | (1<<31);
 			irq = 0xFFFF;
-		} else if (!vcpu->vc_intr) {
-			/* Disable interrupt window */
-			vmcb->v_irq = 0;
-			vmcb->v_intr_vector = 0;
-			vmcb->v_intercept1 &= ~SVM_INTERCEPT_VINTR;
-			svm_set_dirty(vcpu, SVM_CLEANBITS_TPR | SVM_CLEANBITS_I);
-		}
+		} 
 
 		/* Inject event if present */
 		if (vcpu->vc_event != 0) {
+			DPRINTF("%s: inject event %d\n", __func__,
+			    vcpu->vc_event);
 			/* Set the "Send error code" flag for certain vectors */
 			switch (vcpu->vc_event & 0xFF) {
 				case VMM_EX_DF:
@@ -6169,6 +6169,7 @@ vcpu_run_svm(struct vcpu *vcpu, struct vm_run_params *vrp)
 		} else
 			fxrstor(&vcpu->vc_g_fpu.fp_fxsave);
 
+		KASSERT(vmcb->v_intercept1 & SVM_INTERCEPT_INTR);
 		KERNEL_UNLOCK();
 
 		wrmsr(MSR_AMD_VM_HSAVE_PA, vcpu->vc_svm_hsa_pa);
@@ -6208,6 +6209,7 @@ vcpu_run_svm(struct vcpu *vcpu, struct vm_run_params *vrp)
 		 * (external interrupt), the interrupt will be processed now.
 		 */
 		stgi();
+		KERNEL_LOCK();
 
 		vcpu->vc_gueststate.vg_rip = vmcb->v_rip;
 		vmcb->v_tlb_control = SVM_TLB_CONTROL_FLUSH_NONE;
@@ -6218,12 +6220,6 @@ vcpu_run_svm(struct vcpu *vcpu, struct vm_run_params *vrp)
 			exit_reason = vmcb->v_exitcode;
 			vcpu->vc_gueststate.vg_exit_reason = exit_reason;
 		}	
-
-		if (ret || exit_reason != SVM_VMEXIT_INTR) {
-			KERNEL_LOCK();
-			locked = 1;
-		} else
-			locked = 0;
 
 		/* If we exited successfully ... */
 		if (ret == 0) {
@@ -6236,9 +6232,6 @@ vcpu_run_svm(struct vcpu *vcpu, struct vm_run_params *vrp)
 			 * the exit handler determines help from vmd is needed.
 			 */
 			ret = svm_handle_exit(vcpu);
-
-			if (!locked)
-				KERNEL_LOCK();
 
 			if (vcpu->vc_gueststate.vg_rflags & PSL_I)
 				vcpu->vc_irqready = 1;
@@ -7762,7 +7755,7 @@ vmm_decode_cr0(uint64_t cr0)
 	uint8_t i;
 
 	DPRINTF("(");
-	for (i = 0; i < 11; i++)
+	for (i = 0; i < nitems(cr0_info); i++)
 		if (cr0 & cr0_info[i].vrdi_bit)
 			DPRINTF("%s", cr0_info[i].vrdi_present);
 		else
@@ -7790,7 +7783,7 @@ vmm_decode_cr3(uint64_t cr3)
 	/* If CR4.PCIDE = 0, interpret CR3.PWT and CR3.PCD */
 	if ((cr4 & CR4_PCIDE) == 0) {
 		DPRINTF("(");
-		for (i = 0 ; i < 2 ; i++)
+		for (i = 0 ; i < nitems(cr3_info) ; i++)
 			if (cr3 & cr3_info[i].vrdi_bit)
 				DPRINTF("%s", cr3_info[i].vrdi_present);
 			else
@@ -7830,7 +7823,7 @@ vmm_decode_cr4(uint64_t cr4)
 	uint8_t i;
 
 	DPRINTF("(");
-	for (i = 0; i < 19; i++)
+	for (i = 0; i < nitems(cr4_info); i++)
 		if (cr4 & cr4_info[i].vrdi_bit)
 			DPRINTF("%s", cr4_info[i].vrdi_present);
 		else
@@ -7851,7 +7844,7 @@ vmm_decode_apicbase_msr_value(uint64_t apicbase)
 	uint8_t i;
 
 	DPRINTF("(");
-	for (i = 0; i < 3; i++)
+	for (i = 0; i < nitems(acpibase_info); i++)
 		if (apicbase & apicbase_info[i].vrdi_bit)
 			DPRINTF("%s", apicbase_info[i].vrdi_present);
 		else
@@ -7873,7 +7866,7 @@ vmm_decode_ia32_fc_value(uint64_t fcr)
 	uint8_t i;
 
 	DPRINTF("(");
-	for (i = 0; i < 4; i++)
+	for (i = 0; i < nitems(fcr_info); i++)
 		if (fcr & fcr_info[i].vrdi_bit)
 			DPRINTF("%s", fcr_info[i].vrdi_present);
 		else
@@ -7898,7 +7891,7 @@ vmm_decode_mtrrcap_value(uint64_t val)
 	uint8_t i;
 
 	DPRINTF("(");
-	for (i = 0; i < 3; i++)
+	for (i = 0; i < nitems(mtrrcap_info); i++)
 		if (val & mtrrcap_info[i].vrdi_bit)
 			DPRINTF("%s", mtrrcap_info[i].vrdi_present);
 		else
@@ -7935,7 +7928,7 @@ vmm_decode_mtrrdeftype_value(uint64_t mtrrdeftype)
 	int type;
 
 	DPRINTF("(");
-	for (i = 0; i < 2; i++)
+	for (i = 0; i < nitems(mtrrdeftype_info); i++)
 		if (mtrrdeftype & mtrrdeftype_info[i].vrdi_bit)
 			DPRINTF("%s", mtrrdeftype_info[i].vrdi_present);
 		else
@@ -7971,7 +7964,7 @@ vmm_decode_efer_value(uint64_t efer)
 	uint8_t i;
 
 	DPRINTF("(");
-	for (i = 0; i < 4; i++)
+	for (i = 0; i < nitems(efer_info); i++)
 		if (efer & efer_info[i].vrdi_bit)
 			DPRINTF("%s", efer_info[i].vrdi_present);
 		else
@@ -8021,7 +8014,7 @@ vmm_decode_rflags(uint64_t rflags)
 	uint8_t i, iopl;
 
 	DPRINTF("(");
-	for (i = 0; i < 16; i++)
+	for (i = 0; i < nitems(rflags_info); i++)
 		if (rflags & rflags_info[i].vrdi_bit)
 			DPRINTF("%s", rflags_info[i].vrdi_present);
 		else
@@ -8052,7 +8045,7 @@ vmm_decode_misc_enable_value(uint64_t misc)
 	uint8_t i;
 
 	DPRINTF("(");
-	for (i = 0; i < 10; i++)
+	for (i = 0; i < nitems(misc_info); i++)
 		if (misc & misc_info[i].vrdi_bit)
 			DPRINTF("%s", misc_info[i].vrdi_present);
 		else
