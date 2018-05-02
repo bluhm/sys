@@ -1,4 +1,4 @@
-/*	$OpenBSD: subr_witness.c,v 1.8 2018/04/12 14:59:08 visa Exp $	*/
+/*	$OpenBSD: subr_witness.c,v 1.10 2018/05/02 01:59:34 visa Exp $	*/
 
 /*-
  * Copyright (c) 2008 Isilon Systems, Inc.
@@ -560,15 +560,17 @@ witness_init(struct lock_object *lock, struct lock_type *type)
 
 	/*
 	 * If we shouldn't watch this lock, then just clear lo_witness.
+	 * Record the type in case the lock becomes watched later.
 	 * Otherwise, if witness_cold is set, then it is too early to
 	 * enroll this lock, so defer it to witness_initialize() by adding
 	 * it to the pending_locks list.  If it is not too early, then enroll
 	 * the lock now.
 	 */
 	if (witness_watch < 1 || panicstr != NULL || db_active ||
-	    (lock->lo_flags & LO_WITNESS) == 0)
+	    (lock->lo_flags & LO_WITNESS) == 0) {
 		lock->lo_witness = NULL;
-	else if (witness_cold) {
+		lock->lo_type = type;
+	} else if (witness_cold) {
 		pending_locks[pending_cnt].wh_lock = lock;
 		pending_locks[pending_cnt++].wh_type = type;
 		if (pending_cnt > WITNESS_PENDLIST)
@@ -706,7 +708,7 @@ int
 witness_defineorder(struct lock_object *lock1, struct lock_object *lock2)
 {
 
-	if (witness_watch == -1 || panicstr != NULL || db_active)
+	if (witness_watch < 0 || panicstr != NULL || db_active)
 		return (0);
 
 	/* Require locks that witness knows about. */
@@ -1078,7 +1080,7 @@ witness_lock(struct lock_object *lock, int flags, const char *file, int line)
 	struct witness *w;
 	int s;
 
-	if (witness_cold || witness_watch == -1 || panicstr != NULL ||
+	if (witness_cold || witness_watch < 0 || panicstr != NULL ||
 	    db_active || (lock->lo_flags & LO_WITNESS) == 0)
 		return;
 
@@ -1139,7 +1141,7 @@ witness_upgrade(struct lock_object *lock, int flags, const char *file, int line)
 	int s;
 
 	KASSERTMSG(witness_cold == 0, "%s: witness_cold", __func__);
-	if (lock->lo_witness == NULL || witness_watch == -1 ||
+	if (lock->lo_witness == NULL || witness_watch < 0 ||
 	    panicstr != NULL || db_active)
 		return;
 	class = LOCK_CLASS(lock);
@@ -1186,7 +1188,7 @@ witness_downgrade(struct lock_object *lock, int flags, const char *file,
 	int s;
 
 	KASSERTMSG(witness_cold == 0, "%s: witness_cold", __func__);
-	if (lock->lo_witness == NULL || witness_watch == -1 ||
+	if (lock->lo_witness == NULL || witness_watch < 0 ||
 	    panicstr != NULL || db_active)
 		return;
 	class = LOCK_CLASS(lock);
@@ -1455,7 +1457,7 @@ enroll(struct lock_type *type, const char *subtype,
 
 	KASSERT(type != NULL);
 
-	if (witness_watch == -1 || panicstr != NULL || db_active)
+	if (witness_watch < 0 || panicstr != NULL || db_active)
 		return (NULL);
 	if ((lock_class->lc_flags & LC_SPINLOCK)) {
 		if (witness_skipspin)
@@ -1694,7 +1696,7 @@ witness_get(void)
 	if (witness_cold == 0)
 		MUTEX_ASSERT_LOCKED(&w_mtx);
 
-	if (witness_watch == -1) {
+	if (witness_watch < 0) {
 		mtx_leave(&w_mtx);
 		return (NULL);
 	}
@@ -1730,7 +1732,7 @@ witness_lock_list_get(void)
 {
 	struct lock_list_entry *lle;
 
-	if (witness_watch == -1)
+	if (witness_watch < 0)
 		return (NULL);
 	mtx_enter(&w_mtx);
 	lle = w_lock_list_free;
@@ -1885,7 +1887,7 @@ witness_save(struct lock_object *lock, const char **filep, int *linep)
 	struct lock_class *class;
 
 	KASSERTMSG(witness_cold == 0, "%s: witness_cold", __func__);
-	if (lock->lo_witness == NULL || witness_watch == -1 ||
+	if (lock->lo_witness == NULL || witness_watch < 0 ||
 	    panicstr != NULL || db_active)
 		return;
 	class = LOCK_CLASS(lock);
@@ -1914,7 +1916,7 @@ witness_restore(struct lock_object *lock, const char *file, int line)
 	struct lock_class *class;
 
 	KASSERTMSG(witness_cold == 0, "%s: witness_cold", __func__);
-	if (lock->lo_witness == NULL || witness_watch == -1 ||
+	if (lock->lo_witness == NULL || witness_watch < 0 ||
 	    panicstr != NULL || db_active)
 		return;
 	class = LOCK_CLASS(lock);
@@ -2019,7 +2021,7 @@ witness_setflag(struct lock_object *lock, int flag, int set)
 	struct lock_instance *instance;
 	struct lock_class *class;
 
-	if (lock->lo_witness == NULL || witness_watch == -1 ||
+	if (lock->lo_witness == NULL || witness_watch < 0 ||
 	    panicstr != NULL || db_active)
 		return;
 	class = LOCK_CLASS(lock);
