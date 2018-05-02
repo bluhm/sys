@@ -855,6 +855,10 @@ ah_input_cb(struct cryptop *crp)
 		 * the mbuf.
 		 */
 		m_adj(m1, rplen + ahx->authsize);
+		/*
+		 * If m1 is the first mbuf, it has set M_PKTHDR and m_adj()
+		 * has already adjusted the packet header length for us.
+		 */
 		if (m1 != m)
 			m->m_pkthdr.len -= rplen + ahx->authsize;
 	} else
@@ -891,6 +895,10 @@ ah_input_cb(struct cryptop *crp)
 			 */
 			adjlen = m1->m_len - roff;
 			m_adj(m1, -adjlen);
+			/*
+			 * If m1 is the first mbuf, it has set M_PKTHDR and
+			 * m_adj() has already adjusted the packet header len.
+			 */
 			if (m1 != m)
 				m->m_pkthdr.len -= adjlen;
 

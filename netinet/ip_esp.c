@@ -673,6 +673,10 @@ esp_input_cb(struct cryptop *crp)
 	if (roff == 0) {
 		/* The ESP header was conveniently at the beginning of the mbuf */
 		m_adj(m1, hlen);
+		/*
+		 * If m1 is the first mbuf, it has set M_PKTHDR and m_adj()
+		 * has already adjusted the packet header length for us.
+		 */
 		if (m1 != m)
 			m->m_pkthdr.len -= hlen;
 	} else if (roff + hlen >= m1->m_len) {
@@ -700,6 +704,10 @@ esp_input_cb(struct cryptop *crp)
 		/* ...and trim the end of the first part of the chain...sick */
 		adjlen = m1->m_len - roff;
 		m_adj(m1, -adjlen);
+		/*
+		 * If m1 is the first mbuf, it has set M_PKTHDR and m_adj()
+		 * has already adjusted the packet header length for us.
+		 */
 		if (m1 != m)
 			m->m_pkthdr.len -= adjlen;
 
