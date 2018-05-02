@@ -290,27 +290,32 @@ ipcomp_input_cb(struct cryptop *crp)
 	if (roff == 0) {
 		/* The IPCOMP header is at the beginning of m1 */
 		m_adj(m1, hlen);
-		if (!(m1->m_flags & M_PKTHDR))
+		if (m1 != m)
 			m->m_pkthdr.len -= hlen;
 	} else if (roff + hlen >= m1->m_len) {
+		int adjlen;
+
 		if (roff + hlen > m1->m_len) {
+			adjlen = roff + hlen - m1->m_len;
+
 			/* Adjust the next mbuf by the remainder */
-			m_adj(m1->m_next, roff + hlen - m1->m_len);
+			m_adj(m1->m_next, adjlen);
 
 			/*
 			 * The second mbuf is guaranteed not to have a
 			 * pkthdr...
 			 */
-			m->m_pkthdr.len -= (roff + hlen - m1->m_len);
+			m->m_pkthdr.len -= adjlen;
 		}
 		/* Now, let's unlink the mbuf chain for a second... */
 		mo = m1->m_next;
 		m1->m_next = NULL;
 
 		/* ...and trim the end of the first part of the chain...sick */
-		m_adj(m1, -(m1->m_len - roff));
-		if (!(m1->m_flags & M_PKTHDR))
-			m->m_pkthdr.len -= (m1->m_len - roff);
+		adjlen = m1->m_len - roff;
+		m_adj(m1, -adjlen);
+		if (m1 != m)
+			m->m_pkthdr.len -= adjlen;
 
 		/* Finally, let's relink */
 		m1->m_next = mo;
