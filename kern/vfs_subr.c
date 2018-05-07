@@ -1852,7 +1852,7 @@ vinvalbuf(struct vnode *vp, int flags, struct ucred *cred, struct proc *p,
 
 #ifdef VFSLCKDEBUG
 	if ((vp->v_flag & VLOCKSWORK) && !VOP_ISLOCKED(vp))
-		panic("vinvalbuf(): vp isn't locked");
+		panic("%s: vp isn't locked, vp %p", __func__, vp);
 #endif
 
 	if (flags & V_SAVE) {
@@ -1865,7 +1865,7 @@ vinvalbuf(struct vnode *vp, int flags, struct ucred *cred, struct proc *p,
 			s = splbio();
 			if (vp->v_numoutput > 0 ||
 			    !LIST_EMPTY(&vp->v_dirtyblkhd))
-				panic("vinvalbuf: dirty bufs");
+				panic("%s: dirty bufs, vp %p", __func__, vp);
 		}
 		splx(s);
 	}
@@ -1917,7 +1917,7 @@ loop:
 	}
 	if (!(flags & V_SAVEMETA) &&
 	    (!LIST_EMPTY(&vp->v_dirtyblkhd) || !LIST_EMPTY(&vp->v_cleanblkhd)))
-		panic("vinvalbuf: flush failed");
+		panic("%s: flush failed, vp %p", __func__, vp);
 	splx(s);
 	return (0);
 }
