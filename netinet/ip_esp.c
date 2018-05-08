@@ -538,7 +538,7 @@ esp_input_cb(struct cryptop *crp)
 	int hlen, roff, skip, protoff;
 	struct mbuf *m1, *mo, *m;
 	struct auth_hash *esph;
-	struct tdb_crypto *tc;
+	struct tdb_crypto *tc = NULL;
 	struct tdb *tdb;
 	u_int32_t btsx, esn;
 	caddr_t ptr;
@@ -1050,7 +1050,7 @@ esp_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 void
 esp_output_cb(struct cryptop *crp)
 {
-	struct tdb_crypto *tc;
+	struct tdb_crypto *tc = NULL;
 	struct tdb *tdb;
 	struct mbuf *m;
 
