@@ -110,6 +110,7 @@ void
 tcp_timer_delack(void *arg)
 {
 	struct tcpcb *tp = arg;
+	short ostate;
 
 	/*
 	 * If tcp_output() wasn't able to transmit the ACK
@@ -123,8 +124,11 @@ tcp_timer_delack(void *arg)
 		goto out;
 	CLR((tp)->t_flags, TF_TMR_DELACK);
 
+	ostate = tp->t_state;
 	tp->t_flags |= TF_ACKNOW;
 	(void) tcp_output(tp);
+	if (tp->t_inpcb->inp_socket->so_options & SO_DEBUG)
+		tcp_trace(TA_TIMER, ostate, tp, (caddr_t)0, TCPT_DELACK, 0);
  out:
 	NET_UNLOCK();
 }
