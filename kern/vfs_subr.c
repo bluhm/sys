@@ -1596,6 +1596,10 @@ vfs_stall(struct proc *p, int stall)
 	if (stall)
 		rw_enter_write(&vfs_stall_lock);
 
+	/*
+	 * The loop variable mp is protected by vfs_busy() so that it cannot
+	 * be unmounted while VFS_SYNC() sleeps.
+	 */
 	TAILQ_FOREACH_REVERSE(mp, &mountlist, mntlist, mnt_list) {
 		if (stall) {
 			error = vfs_busy(mp, VB_WRITE|VB_WAIT);
