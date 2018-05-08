@@ -534,9 +534,8 @@ ah_input(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 #ifdef ENCDEBUG
 	char buf[INET6_ADDRSTRLEN];
 #endif
-
 	struct cryptodesc *crda = NULL;
-	struct cryptop *crp;
+	struct cryptop *crp = NULL;
 
 	rplen = AH_FLENGTH + sizeof(u_int32_t);
 
@@ -719,7 +718,7 @@ ah_input_cb(struct cryptop *crp)
 	struct mbuf *m1, *m0, *m;
 	struct auth_hash *ahx;
 	struct tdb_crypto *tc = NULL;
-	struct tdb *tdb = NULL;
+	struct tdb *tdb;
 	u_int32_t btsx, esn;
 	caddr_t ptr;
 #ifdef ENCDEBUG
@@ -935,7 +934,7 @@ ah_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 	struct mbuf *mi;
 	struct cryptop *crp = NULL;
 	u_int16_t iplen;
-	int error = 0, rplen, roff;
+	int error, rplen, roff;
 	u_int8_t prot;
 	struct ah *ah;
 #if NBPFILTER > 0
