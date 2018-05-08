@@ -1246,9 +1246,9 @@ sotask(void *arg)
 
 /*
  * The socket splicing task or idle timeout may sleep while grabbing the net
- * lock.  As sofree() can be called anytime, sotask() or soidle() can access
+ * lock.  As sofree() can be called anytime, sotask() or soidle() could access
  * the socket memory of a freed socket after wakeup.  So delay the pool_put()
- * after all pending socket splicing tasks or timeoutd have finished.  Do this
+ * after all pending socket splicing tasks or timeouts have finished.  Do this
  * by scheduling it on the same threads.
  */
 void
