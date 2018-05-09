@@ -1038,10 +1038,10 @@ esp_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 	return crypto_dispatch(crp);
 
  drop:
+	m_freem(m);
 	crypto_freereq(crp);
 	free(tc, M_XDATA, 0);
-	m_freem(m);
-	return (error);
+	return error;
 }
 
 /*
@@ -1101,10 +1101,8 @@ esp_output_cb(struct cryptop *crp)
 
  baddone:
 	NET_UNLOCK();
-
  droponly:
 	m_freem(m);
-
 	crypto_freereq(crp);
 	free(tc, M_XDATA, 0);
 }
