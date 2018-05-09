@@ -1050,7 +1050,7 @@ esp_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 void
 esp_output_cb(struct cryptop *crp)
 {
-	struct tdb_crypto *tc = NULL;
+	struct tdb_crypto *tc;
 	struct tdb *tdb;
 	struct mbuf *m;
 
