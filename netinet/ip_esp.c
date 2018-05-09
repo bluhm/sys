@@ -911,9 +911,9 @@ esp_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 		DPRINTF(("%s: failed to inject ESP header for SA %s/%08x\n",
 		    __func__, ipsp_address(&tdb->tdb_dst, buf,
 		    sizeof(buf)), ntohl(tdb->tdb_spi)));
-		m_freem(m);
 		espstat_inc(esps_hdrops);
-		return ENOBUFS;
+		error = ENOBUFS;
+		goto drop;
 	}
 
 	/* Initialize ESP header. */
