@@ -634,15 +634,17 @@ ipcomp_output_cb(struct cryptop *crp)
 
 	/* Release the crypto descriptor. */
 	crypto_freereq(crp);
+	free(tc, M_XDATA, 0);
 
 	if (ipsp_process_done(m, tdb))
 		ipcompstat_inc(ipcomps_outfail);
 	NET_UNLOCK();
 	return;
 
-baddone:
+ baddone:
 	NET_UNLOCK();
-droponly:
+ droponly:
 	m_freem(m);
 	crypto_freereq(crp);
+	free(tc, M_XDATA, 0);
 }
