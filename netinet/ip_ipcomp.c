@@ -217,9 +217,8 @@ ipcomp_input_cb(struct cryptop *crp)
 
 	tdb = gettdb(tc->tc_rdomain, tc->tc_spi, &tc->tc_dst, tc->tc_proto);
 	if (tdb == NULL) {
-		free(tc, M_XDATA, 0);
-		ipcompstat_inc(ipcomps_notdb);
 		DPRINTF(("%s: TDB expired while in crypto", __func__));
+		ipcompstat_inc(ipcomps_notdb);
 		goto baddone;
 	}
 
@@ -333,6 +332,7 @@ ipcomp_input_cb(struct cryptop *crp)
 
 	/* Release the crypto descriptors */
 	crypto_freereq(crp);
+	free(tc, M_XDATA, 0);
 
 	/* Restore the Next Protocol field */
 	m_copyback(m, protoff, sizeof(u_int8_t), &nproto, M_NOWAIT);
@@ -342,11 +342,12 @@ ipcomp_input_cb(struct cryptop *crp)
 	NET_UNLOCK();
 	return;
 
-baddone:
+ baddone:
 	NET_UNLOCK();
-droponly:
+ droponly:
 	m_freem(m);
 	crypto_freereq(crp);
+	free(tc, M_XDATA, 0);
 }
 
 /*
