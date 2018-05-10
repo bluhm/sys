@@ -1,4 +1,4 @@
-/*	$OpenBSD: tcp_timer.c,v 1.65 2018/05/08 15:10:33 bluhm Exp $	*/
+/*	$OpenBSD: tcp_timer.c,v 1.66 2018/05/10 13:30:25 bluhm Exp $	*/
 /*	$NetBSD: tcp_timer.c,v 1.14 1996/02/13 23:44:09 christos Exp $	*/
 
 /*
