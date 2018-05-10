@@ -208,11 +208,9 @@ ipcomp_input_cb(struct cryptop *crp)
 	m = (struct mbuf *) crp->crp_buf;
 	if (m == NULL) {
 		/* Shouldn't happen... */
-		free(tc, M_XDATA, 0);
-		crypto_freereq(crp);
-		ipcompstat_inc(ipcomps_crypto);
 		DPRINTF(("%s: bogus returned buffer from crypto\n", __func__));
-		return;
+		ipcompstat_inc(ipcomps_crypto);
+		goto droponly;
 	}
 
 	NET_LOCK();
@@ -232,7 +230,6 @@ ipcomp_input_cb(struct cryptop *crp)
 	/* Hard expiration */
 	if ((tdb->tdb_flags & TDBF_BYTES) &&
 	    (tdb->tdb_cur_bytes >= tdb->tdb_exp_bytes)) {
-		free(tc, M_XDATA, 0);
 		pfkeyv2_expire(tdb, SADB_EXT_LIFETIME_HARD);
 		tdb_delete(tdb);
 		goto baddone;
@@ -254,13 +251,11 @@ ipcomp_input_cb(struct cryptop *crp)
 			crypto_dispatch(crp);
 			return;
 		}
-		free(tc, M_XDATA, 0);
-		ipcompstat_inc(ipcomps_noxform);
 		DPRINTF(("%s: crypto error %d\n", __func__,
 		    crp->crp_etype));
+		ipcompstat_inc(ipcomps_noxform);
 		goto baddone;
 	}
-	free(tc, M_XDATA, 0);
 
 	/* Length of data after processing */
 	clen = crp->crp_olen;
@@ -269,16 +264,17 @@ ipcomp_input_cb(struct cryptop *crp)
 	m->m_pkthdr.len = clen + hlen + skip;
 
 	if ((m->m_len < skip + hlen) && (m = m_pullup(m, skip + hlen)) == 0) {
+		ipcompstat_inc(ipcomps_hdrops);
 		goto baddone;
 	}
 
 	/* Find the beginning of the IPCOMP header */
 	m1 = m_getptr(m, skip, &roff);
 	if (m1 == NULL) {
-		ipcompstat_inc(ipcomps_hdrops);
 		DPRINTF(("%s: bad mbuf chain, IPCA %s/%08x\n", __func__,
 		    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
 		    ntohl(tdb->tdb_spi)));
+		ipcompstat_inc(ipcomps_hdrops);
 		goto baddone;
 	}
 	/* Keep the next protocol field */
@@ -348,9 +344,8 @@ ipcomp_input_cb(struct cryptop *crp)
 
 baddone:
 	NET_UNLOCK();
-
+droponly:
 	m_freem(m);
-
 	crypto_freereq(crp);
 }
 
@@ -362,7 +357,7 @@ ipcomp_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
     int protoff)
 {
 	struct comp_algo *ipcompx = (struct comp_algo *) tdb->tdb_compalgxform;
-	int             hlen;
+	int error, hlen;
 	struct cryptodesc *crdc = NULL;
 	struct cryptop *crp;
 	struct tdb_crypto *tc;
@@ -405,9 +400,9 @@ ipcomp_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 			DPRINTF(("%s: packet in IPCA %s/%08x got too big\n",
 			    __func__, ipsp_address(&tdb->tdb_dst, buf,
 			    sizeof(buf)), ntohl(tdb->tdb_spi)));
-			m_freem(m);
 			ipcompstat_inc(ipcomps_toobig);
-			return EMSGSIZE;
+			error = EMSGSIZE;
+			goto drop;
 		}
 		break;
 
@@ -418,9 +413,9 @@ ipcomp_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 			DPRINTF(("%s: packet in IPCA %s/%08x got too big\n",
 			    __func__, ipsp_address(&tdb->tdb_dst, buf,
 			    sizeof(buf)), ntohl(tdb->tdb_spi)));
-			m_freem(m);
 			ipcompstat_inc(ipcomps_toobig);
-			return EMSGSIZE;
+			error = EMSGSIZE;
+			goto drop;
 		}
 		break;
 #endif /* INET6 */
@@ -430,9 +425,9 @@ ipcomp_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 		    "IPCA %s/%08x\n", __func__, tdb->tdb_dst.sa.sa_family,
 		    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
 		    ntohl(tdb->tdb_spi)));
-		m_freem(m);
 		ipcompstat_inc(ipcomps_nopf);
-		return EPFNOSUPPORT;
+		error = EPFNOSUPPORT;
+		goto drop;
 	}
 
 	/* Update the counters */
@@ -445,8 +440,8 @@ ipcomp_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 	    (tdb->tdb_cur_bytes >= tdb->tdb_exp_bytes)) {
 		pfkeyv2_expire(tdb, SADB_EXT_LIFETIME_HARD);
 		tdb_delete(tdb);
-		m_freem(m);
-		return EINVAL;
+		error = EINVAL;
+		goto drop;
 	}
 	/* Soft byte expiration */
 	if ((tdb->tdb_flags & TDBF_SOFT_BYTES) &&
@@ -470,8 +465,8 @@ ipcomp_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 			    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
 			    ntohl(tdb->tdb_spi)));
 			ipcompstat_inc(ipcomps_hdrops);
-			m_freem(m);
-			return ENOBUFS;
+			error = ENOBUFS;
+			goto drop;
 		}
 
 		m_freem(m);
@@ -482,10 +477,10 @@ ipcomp_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 	/* Get crypto descriptors */
 	crp = crypto_getreq(1);
 	if (crp == NULL) {
-		m_freem(m);
 		DPRINTF(("%s: failed to acquire crypto descriptors\n", __func__));
 		ipcompstat_inc(ipcomps_crypto);
-		return ENOBUFS;
+		error = ENOBUFS;
+		goto drop;
 	}
 	crdc = &crp->crp_desc[0];
 
@@ -523,6 +518,10 @@ ipcomp_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 	crp->crp_sid = tdb->tdb_cryptoid;
 
 	return crypto_dispatch(crp);
+
+ drop:
+	m_freem(m);
+	return error;
 }
 
 /*
@@ -552,20 +551,17 @@ ipcomp_output_cb(struct cryptop *crp)
 	m = (struct mbuf *) crp->crp_buf;
 	if (m == NULL) {
 		/* Shouldn't happen... */
-		free(tc, M_XDATA, 0);
-		crypto_freereq(crp);
-		ipcompstat_inc(ipcomps_crypto);
 		DPRINTF(("%s: bogus returned buffer from crypto\n", __func__));
-		return;
+		ipcompstat_inc(ipcomps_crypto);
+		goto droponly;
 	}
 
 	NET_LOCK();
 
 	tdb = gettdb(tc->tc_rdomain, tc->tc_spi, &tc->tc_dst, tc->tc_proto);
 	if (tdb == NULL) {
-		free(tc, M_XDATA, 0);
-		ipcompstat_inc(ipcomps_notdb);
 		DPRINTF(("%s: TDB expired while in crypto\n", __func__));
+		ipcompstat_inc(ipcomps_notdb);
 		goto baddone;
 	}
 
@@ -579,16 +575,15 @@ ipcomp_output_cb(struct cryptop *crp)
 			crypto_dispatch(crp);
 			return;
 		}
-		free(tc, M_XDATA, 0);
-		ipcompstat_inc(ipcomps_noxform);
 		DPRINTF(("%s: crypto error %d\n", __func__, crp->crp_etype));
+		ipcompstat_inc(ipcomps_noxform);
 		goto baddone;
 	}
-	free(tc, M_XDATA, 0);
 
 	/* Check sizes. */
 	if (rlen < crp->crp_olen) {
 		/* Compression was useless, we have lost time. */
+		ipcompstat_inc(ipcomps_minlen); /* misnomer, but like to count */
 		crypto_freereq(crp);
 		if (ipsp_process_done(m, tdb))
 			ipcompstat_inc(ipcomps_outfail);
@@ -646,8 +641,7 @@ ipcomp_output_cb(struct cryptop *crp)
 
 baddone:
 	NET_UNLOCK();
-
+droponly:
 	m_freem(m);
-
 	crypto_freereq(crp);
 }
