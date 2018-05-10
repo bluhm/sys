@@ -360,7 +360,7 @@ ipcomp_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 	struct comp_algo *ipcompx = (struct comp_algo *) tdb->tdb_compalgxform;
 	int error, hlen;
 	struct cryptodesc *crdc = NULL;
-	struct cryptop *crp;
+	struct cryptop *crp = NULL;
 	struct tdb_crypto *tc;
 	struct mbuf    *mi;
 #ifdef ENCDEBUG
@@ -497,11 +497,10 @@ ipcomp_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 	/* IPsec-specific opaque crypto info */
 	tc = malloc(sizeof(*tc), M_XDATA, M_NOWAIT | M_ZERO);
 	if (tc == NULL) {
-		m_freem(m);
-		crypto_freereq(crp);
 		DPRINTF(("%s: failed to allocate tdb_crypto\n", __func__));
 		ipcompstat_inc(ipcomps_crypto);
-		return ENOBUFS;
+		error = ENOBUFS;
+		goto drop;
 	}
 
 	tc->tc_spi = tdb->tdb_spi;
@@ -522,6 +521,7 @@ ipcomp_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 
  drop:
 	m_freem(m);
+	crypto_freereq(crp);
 	return error;
 }
 
