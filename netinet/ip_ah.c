@@ -934,7 +934,7 @@ ah_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 	struct mbuf *mi;
 	struct cryptop *crp = NULL;
 	u_int16_t iplen;
-	int error = 0, rplen, roff;
+	int error, rplen, roff;
 	u_int8_t prot;
 	struct ah *ah;
 #if NBPFILTER > 0
