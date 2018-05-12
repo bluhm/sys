@@ -291,9 +291,9 @@ ipsec_common_input(struct mbuf *m, int skip, int protoff, int af, int sproto,
 		DPRINTF(("%s: attempted to use non-udpencap SA %s/%08x/%u\n",
 		    __func__, ipsp_address(&dst_address, buf,
 		    sizeof(buf)), ntohl(spi), tdbp->tdb_sproto));
-		m_freem(m);
 		espstat_inc(esps_udpinval);
-		return EINVAL;
+		error = EINVAL;
+		goto drop;
 	}
 
 	if (!udpencap && (tdbp->tdb_flags & TDBF_UDPENCAP)) {
@@ -348,7 +348,7 @@ ipsec_common_input(struct mbuf *m, int skip, int protoff, int af, int sproto,
 	error = (*(tdbp->tdb_xform->xf_input))(m, tdbp, skip, protoff);
 	return error;
 
-drop:
+ drop:
 	m_freem(m);
 	return error;
 }
