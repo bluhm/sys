@@ -321,7 +321,10 @@ ipsp_process_packet(struct mbuf *m, struct tdb *tdb, int af, int tunalready)
 					 */
 					dstopt = 2;
 				}
-
+				if (m->m_pkthdr.len < hlen + sizeof(ip6e)) {
+					m_freem(m);
+					return EINVAL;
+				}
 				/* skip this header */
 				m_copydata(m, hlen, sizeof(ip6e),
 				    (caddr_t)&ip6e);
@@ -340,6 +343,11 @@ ipsp_process_packet(struct mbuf *m, struct tdb *tdb, int af, int tunalready)
 	exitip6loop:;
 		break;
 #endif /* INET6 */
+	}
+
+	if (m->m_pkthdr.len < hlen) {
+		m_freem(m);
+		return EINVAL;
 	}
 
 	/* Non expansion policy for IPCOMP */
