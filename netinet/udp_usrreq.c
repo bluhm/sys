@@ -270,7 +270,7 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 	}
 
 #ifdef IPSEC
-	if (udpencap_enable && udpencap_port &&
+	if (udpencap_enable && udpencap_port && esp_enable &&
 #if NPF > 0
 	    !(m->m_pkthdr.pf.flags & PF_TAG_DIVERTED) &&
 #endif
