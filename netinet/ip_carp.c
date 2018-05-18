@@ -1472,15 +1472,14 @@ carp_lsdrop(struct ifnet *ifp, struct mbuf *m, sa_family_t af, u_int32_t *src,
     u_int32_t *dst, int drop)
 {
 	struct carp_softc *sc;
-	int match = 1;
 	u_int32_t fold;
 	struct m_tag *mtag;
 
 	if (ifp->if_type != IFT_CARP)
-		goto done;
+		return 0;
 	sc = ifp->if_softc;
 	if (sc->sc_balancing == CARP_BAL_NONE)
-		goto done;
+		return 0;
 
 	/*
 	 * Remove M_MCAST flag from mbuf of balancing ip traffic, since the fact
@@ -1498,14 +1497,14 @@ carp_lsdrop(struct ifnet *ifp, struct mbuf *m, sa_family_t af, u_int32_t *src,
 	 * M_MCAST flag and do nothing else.
 	 */
 	if (!drop)
-		goto done;
+		return 0;
 
 	/*
 	 * Never drop carp advertisements.
 	 * XXX Bad idea to pass all broadcast / multicast traffic?
 	 */
 	if (m->m_flags & (M_BCAST|M_MCAST))
-		goto done;
+		return 0;
 
 	fold = src[0] ^ dst[0];
 #ifdef INET6
@@ -1516,12 +1515,9 @@ carp_lsdrop(struct ifnet *ifp, struct mbuf *m, sa_family_t af, u_int32_t *src,
 	}
 #endif
 	if (sc->sc_lscount == 0) /* just to be safe */
-		match = 0;
-	else
-		match = (1 << (ntohl(fold) % sc->sc_lscount)) & sc->sc_lsmask;
+		return 1;
 
-done:
-	return (!match);
+	return ((1 << (ntohl(fold) % sc->sc_lscount)) & sc->sc_lsmask) == 0;
 }
 
 void
