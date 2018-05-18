@@ -65,7 +65,7 @@ int	udpencap_port = 4500;	/* triggers decapsulation */
 int
 ipsp_process_packet(struct mbuf *m, struct tdb *tdb, int af, int tunalready)
 {
-	int hlen = 0, off, error;
+	int hlen, off, error;
 	struct mbuf *mp;
 #ifdef INET6
 	struct ip6_ext ip6e;
