@@ -1,4 +1,4 @@
-/* $OpenBSD: fuse_vfsops.c,v 1.34 2018/04/27 10:13:37 mpi Exp $ */
+/* $OpenBSD: fuse_vfsops.c,v 1.36 2018/05/17 11:25:11 helg Exp $ */
 /*
  * Copyright (c) 2012-2013 Sylvestre Gallon <ccna.syl@gmail.com>
  *
@@ -109,11 +109,11 @@ fusefs_mount(struct mount *mp, const char *path, void *data,
 	mp->mnt_flag |= MNT_LOCAL;
 	vfs_getnewfsid(mp);
 
-	bzero(mp->mnt_stat.f_mntonname, MNAMELEN);
+	memset(mp->mnt_stat.f_mntonname, 0, MNAMELEN);
 	strlcpy(mp->mnt_stat.f_mntonname, path, MNAMELEN);
-	bzero(mp->mnt_stat.f_mntfromname, MNAMELEN);
+	memset(mp->mnt_stat.f_mntfromname, 0, MNAMELEN);
 	strlcpy(mp->mnt_stat.f_mntfromname, "fusefs", MNAMELEN);
-	bzero(mp->mnt_stat.f_mntfromspec, MNAMELEN);
+	memset(mp->mnt_stat.f_mntfromspec, 0, MNAMELEN);
 	strlcpy(mp->mnt_stat.f_mntfromspec, "fusefs", MNAMELEN);
 
 	fuse_device_set_fmp(fmp, 1);
@@ -163,7 +163,7 @@ fusefs_unmount(struct mount *mp, int mntflags, struct proc *p)
 
 	fuse_device_cleanup(fmp->dev, NULL);
 	fuse_device_set_fmp(fmp, 0);
-	free(fmp, M_FUSEFS, 0);
+	free(fmp, M_FUSEFS, sizeof(*fmp));
 	mp->mnt_data = NULL;
 
 	return (0);
