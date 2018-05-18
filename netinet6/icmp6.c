@@ -450,7 +450,7 @@ icmp6_input(struct mbuf **mp, int *offp, int proto, int af)
 
 	if (ifp->if_type == IFT_CARP &&
 	    icmp6->icmp6_type == ICMP6_ECHO_REQUEST &&
-	    carp_lsdrop(m, AF_INET6, ip6->ip6_src.s6_addr32,
+	    carp_lsdrop(ifp, m, AF_INET6, ip6->ip6_src.s6_addr32,
 	    ip6->ip6_dst.s6_addr32, 1)) {
 		if_put(ifp);
 		goto freeit;

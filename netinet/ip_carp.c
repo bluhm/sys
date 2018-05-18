@@ -1468,17 +1468,13 @@ out:
 }
 
 int
-carp_lsdrop(struct mbuf *m, sa_family_t af, u_int32_t *src, u_int32_t *dst,
-   int drop)
+carp_lsdrop(struct ifnet *ifp, struct mbuf *m, sa_family_t af, u_int32_t *src,
+    u_int32_t *dst, int drop)
 {
-	struct ifnet *ifp;
 	struct carp_softc *sc;
 	int match = 1;
 	u_int32_t fold;
 	struct m_tag *mtag;
-
-	ifp = if_get(m->m_pkthdr.ph_ifidx);
-	KASSERT(ifp != NULL);
 
 	sc = ifp->if_softc;
 	if (sc->sc_balancing == CARP_BAL_NONE)
@@ -1523,7 +1519,6 @@ carp_lsdrop(struct mbuf *m, sa_family_t af, u_int32_t *src, u_int32_t *dst,
 		match = (1 << (ntohl(fold) % sc->sc_lscount)) & sc->sc_lsmask;
 
 done:
-	if_put(ifp);
 	return (!match);
 }
 
