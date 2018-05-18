@@ -479,10 +479,10 @@ ipsp_process_done(struct mbuf *m, struct tdb *tdb)
 	mtag = m_tag_get(PACKET_TAG_IPSEC_OUT_DONE, sizeof(struct tdb_ident),
 	    M_NOWAIT);
 	if (mtag == NULL) {
-		m_freem(m);
 		DPRINTF(("ipsp_process_done(): could not allocate packet "
 		    "tag\n"));
-		return ENOMEM;
+		error = ENOMEM;
+		goto drop;
 	}
 
 	tdbi = (struct tdb_ident *)(mtag + 1);
