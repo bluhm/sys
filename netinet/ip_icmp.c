@@ -463,29 +463,23 @@ icmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto, int af)
 		 * Problem with datagram; advise higher level routines.
 		 */
 		if (icmplen < ICMP_ADVLENMIN || icmplen < ICMP_ADVLEN(icp) ||
-		    icp->icmp_ip.ip_hl < (sizeof(struct ip) >> 2)) {
-			icmpstat_inc(icps_badlen);
-			goto freeit;
-		}
+		    icp->icmp_ip.ip_hl < (sizeof(struct ip) >> 2))
+			goto badlen;
 		if (IN_MULTICAST(icp->icmp_ip.ip_dst.s_addr))
 			goto badcode;
 #ifdef INET6
 		/* Get more contiguous data for a v6 in v4 ICMP message. */
 		if (icp->icmp_ip.ip_p == IPPROTO_IPV6) {
 			if (icmplen < ICMP_V6ADVLENMIN ||
-			    icmplen < ICMP_V6ADVLEN(icp)) {
-				icmpstat_inc(icps_badlen);
-				goto freeit;
-			} else {
-				if ((m = *mp = m_pullup(m, (ip->ip_hl << 2) +
-				    ICMP_V6ADVLEN(icp))) == NULL) {
-					icmpstat_inc(icps_tooshort);
-					return IPPROTO_DONE;
-				}
-				ip = mtod(m, struct ip *);
-				icp = (struct icmp *)
-				    (m->m_data + (ip->ip_hl << 2));
+			    icmplen < ICMP_V6ADVLEN(icp))
+				goto badlen;
+			if ((m = *mp = m_pullup(m, (ip->ip_hl << 2) +
+			    ICMP_V6ADVLEN(icp))) == NULL) {
+				icmpstat_inc(icps_tooshort);
+				return IPPROTO_DONE;
 			}
+			ip = mtod(m, struct ip *);
+			icp = (struct icmp *)(m->m_data + (ip->ip_hl << 2));
 		}
 #endif /* INET6 */
 #ifdef ICMPPRINTFS
@@ -516,6 +510,10 @@ icmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto, int af)
 		icmpstat_inc(icps_badcode);
 		break;
 
+	badlen:
+		icmpstat_inc(icps_badlen);
+		break;
+
 	case ICMP_ECHO:
 		if (!icmpbmcastecho &&
 		    (m->m_flags & (M_MCAST | M_BCAST)) != 0) {
@@ -534,10 +532,8 @@ icmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto, int af)
 			icmpstat_inc(icps_bmcastecho);
 			break;
 		}
-		if (icmplen < ICMP_TSLEN) {
-			icmpstat_inc(icps_badlen);
-			break;
-		}
+		if (icmplen < ICMP_TSLEN)
+			goto badlen;
 		icp->icmp_type = ICMP_TSTAMPREPLY;
 		icp->icmp_rtime = iptime();
 		icp->icmp_ttime = icp->icmp_rtime;	/* bogus, do later! */
@@ -546,10 +542,8 @@ icmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto, int af)
 	case ICMP_MASKREQ:
 		if (icmpmaskrepl == 0)
 			break;
-		if (icmplen < ICMP_MASKLEN) {
-			icmpstat_inc(icps_badlen);
-			break;
-		}
+		if (icmplen < ICMP_MASKLEN)
+			goto badlen;
 		/*
 		 * We are not able to respond with all ones broadcast
 		 * unless we receive it over a point-to-point interface.
@@ -606,10 +600,8 @@ reflect:
 		if (code > 3)
 			goto badcode;
 		if (icmplen < ICMP_ADVLENMIN || icmplen < ICMP_ADVLEN(icp) ||
-		    icp->icmp_ip.ip_hl < (sizeof(struct ip) >> 2)) {
-			icmpstat_inc(icps_badlen);
-			break;
-		}
+		    icp->icmp_ip.ip_hl < (sizeof(struct ip) >> 2))
+			goto badlen;
 		/*
 		 * Short circuit routing redirects to force
 		 * immediate change in the kernel's routing
