@@ -1476,6 +1476,8 @@ carp_lsdrop(struct ifnet *ifp, struct mbuf *m, sa_family_t af, u_int32_t *src,
 	u_int32_t fold;
 	struct m_tag *mtag;
 
+	if (ifp->if_type != IFT_CARP)
+		goto done;
 	sc = ifp->if_softc;
 	if (sc->sc_balancing == CARP_BAL_NONE)
 		goto done;

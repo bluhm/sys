@@ -341,8 +341,7 @@ ip_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 	}
 
 #if NCARP > 0
-	if (ifp->if_type == IFT_CARP &&
-	    carp_lsdrop(ifp, m, AF_INET, &ip->ip_src.s_addr,
+	if (carp_lsdrop(ifp, m, AF_INET, &ip->ip_src.s_addr,
 	    &ip->ip_dst.s_addr, (ip->ip_p == IPPROTO_ICMP ? 0 : 1)))
 		goto bad;
 #endif
@@ -451,7 +450,7 @@ ip_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 	}
 
 #if NCARP > 0
-	if (ifp->if_type == IFT_CARP && ip->ip_p == IPPROTO_ICMP &&
+	if (ip->ip_p == IPPROTO_ICMP &&
 	    carp_lsdrop(ifp, m, AF_INET, &ip->ip_src.s_addr,
 	    &ip->ip_dst.s_addr, 1))
 		goto bad;
