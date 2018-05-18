@@ -497,8 +497,7 @@ icmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto, int af)
 		sin.sin_len = sizeof(struct sockaddr_in);
 		sin.sin_addr = icp->icmp_ip.ip_dst;
 #if NCARP > 0
-		if (ifp->if_type == IFT_CARP &&
-		    carp_lsdrop(ifp, m, AF_INET, &sin.sin_addr.s_addr,
+		if (carp_lsdrop(ifp, m, AF_INET, &sin.sin_addr.s_addr,
 		    &ip->ip_dst.s_addr, 1))
 			goto freeit;
 #endif
@@ -581,8 +580,7 @@ icmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto, int af)
 		}
 reflect:
 #if NCARP > 0
-		if (ifp->if_type == IFT_CARP &&
-		    carp_lsdrop(ifp, m, AF_INET, &ip->ip_src.s_addr,
+		if (carp_lsdrop(ifp, m, AF_INET, &ip->ip_src.s_addr,
 		    &ip->ip_dst.s_addr, 1))
 			goto freeit;
 #endif
@@ -642,8 +640,7 @@ reflect:
 #endif
 
 #if NCARP > 0
-		if (ifp->if_type == IFT_CARP &&
-		    carp_lsdrop(ifp, m, AF_INET, &sdst.sin_addr.s_addr,
+		if (carp_lsdrop(ifp, m, AF_INET, &sdst.sin_addr.s_addr,
 		    &ip->ip_dst.s_addr, 1))
 			goto freeit;
 #endif
