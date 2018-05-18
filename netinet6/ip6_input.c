@@ -246,7 +246,7 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 
 #if NCARP > 0
 	if (ifp->if_type == IFT_CARP &&
-	    carp_lsdrop(m, AF_INET6, ip6->ip6_src.s6_addr32,
+	    carp_lsdrop(ifp, m, AF_INET6, ip6->ip6_src.s6_addr32,
 	    ip6->ip6_dst.s6_addr32, (ip6->ip6_nxt == IPPROTO_ICMPV6 ? 0 : 1)))
 		goto bad;
 #endif
@@ -496,7 +496,7 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 
 #if NCARP > 0
 	if (ifp->if_type == IFT_CARP && ip6->ip6_nxt == IPPROTO_ICMPV6 &&
-	    carp_lsdrop(m, AF_INET6, ip6->ip6_src.s6_addr32,
+	    carp_lsdrop(ifp, m, AF_INET6, ip6->ip6_src.s6_addr32,
 	    ip6->ip6_dst.s6_addr32, 1))
 		goto bad;
 #endif
