@@ -418,19 +418,6 @@ icmp6_input(struct mbuf **mp, int *offp, int proto, int af)
 		goto freeit;
 	}
 
-#if NCARP > 0
-	ifp = if_get(m->m_pkthdr.ph_ifidx);
-	if (ifp == NULL)
-		goto freeit;
-	if (ifp->if_type == IFT_CARP &&
-	    icmp6->icmp6_type == ICMP6_ECHO_REQUEST &&
-	    carp_lsdrop(m, AF_INET6, ip6->ip6_src.s6_addr32,
-	    ip6->ip6_dst.s6_addr32, 1)) {
-		if_put(ifp);
-		goto freeit;
-	}
-	if_put(ifp);
-#endif
 	if (icmp6->icmp6_type > ICMP6_MAXTYPE)
 		goto raw;
 #if NPF > 0
@@ -595,6 +582,18 @@ icmp6_input(struct mbuf **mp, int *offp, int proto, int af)
 		if (n) {
 			nicmp6->icmp6_type = ICMP6_ECHO_REPLY;
 			nicmp6->icmp6_code = 0;
+#if NCARP > 0
+			ifp = if_get(m->m_pkthdr.ph_ifidx);
+			if (ifp == NULL)
+				goto freeit;
+			if (ifp->if_type == IFT_CARP &&
+			    carp_lsdrop(m, AF_INET6, ip6->ip6_src.s6_addr32,
+			    ip6->ip6_dst.s6_addr32, 1)) {
+				if_put(ifp);
+				goto freeit;
+			}
+			if_put(ifp);
+#endif
 			icmp6stat_inc(icp6s_reflect);
 			icmp6stat_inc(icp6s_outhist + ICMP6_ECHO_REPLY);
 			icmp6_reflect(n, noff);
