@@ -371,8 +371,8 @@ ipsp_process_packet(struct mbuf *m, struct tdb *tdb, int af, int tunalready)
 	return (*(tdb->tdb_xform->xf_output))(m, tdb, NULL, hlen, off);
 
  drop:
-	m_free(m);
-	return (error);
+	m_freem(m);
+	return error;
 }
 
 /*
