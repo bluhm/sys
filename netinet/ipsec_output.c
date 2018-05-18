@@ -522,7 +522,7 @@ ipsp_process_done(struct mbuf *m, struct tdb *tdb)
 		return (ip6_output(m, NULL, NULL, 0, NULL, NULL));
 #endif /* INET6 */
 	}
-	return EINVAL; /* Not reached. */
+	error = EINVAL; /* Not reached. */
 
  drop:
 	m_freem(m);
