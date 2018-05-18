@@ -409,8 +409,6 @@ icmp6_input(struct mbuf **mp, int *offp, int proto, int af)
 		icmp6stat_inc(icp6s_tooshort);
 		return IPPROTO_DONE;
 	}
-	code = icmp6->icmp6_code;
-
 	if ((sum = in6_cksum(m, IPPROTO_ICMPV6, off, icmp6len)) != 0) {
 		nd6log((LOG_ERR,
 		    "ICMP6 checksum error(%d|%x) %s\n",
@@ -458,8 +456,9 @@ icmp6_input(struct mbuf **mp, int *offp, int proto, int af)
 	if_put(ifp);
 #endif
 	icmp6stat_inc(icp6s_inhist + icmp6->icmp6_type);
-
+	code = icmp6->icmp6_code;
 	switch (icmp6->icmp6_type) {
+
 	case ICMP6_DST_UNREACH:
 		switch (code) {
 		case ICMP6_DST_UNREACH_NOROUTE:
