@@ -458,7 +458,7 @@ icmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto, int af)
 		if (code)
 			goto badcode;
 		code = PRC_QUENCH;
-	deliver:
+ deliver:
 		/*
 		 * Problem with datagram; advise higher level routines.
 		 */
@@ -505,11 +505,11 @@ icmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto, int af)
 			    &icp->icmp_ip);
 		break;
 
-	badcode:
+ badcode:
 		icmpstat_inc(icps_badcode);
 		break;
 
-	badlen:
+ badlen:
 		icmpstat_inc(icps_badlen);
 		break;
 
@@ -572,7 +572,7 @@ icmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto, int af)
 			else if (ifp->if_flags & IFF_POINTOPOINT)
 				ip->ip_src = ia->ia_dstaddr.sin_addr;
 		}
-reflect:
+ reflect:
 #if NCARP > 0
 		if (carp_lsdrop(ifp, m, AF_INET, &ip->ip_src.s_addr,
 		    &ip->ip_dst.s_addr, 1))
@@ -669,10 +669,10 @@ reflect:
 		break;
 	}
 
-raw:
+ raw:
 	return rip_input(mp, offp, proto, af);
 
-freeit:
+ freeit:
 	m_freem(m);
 	return IPPROTO_DONE;
 }

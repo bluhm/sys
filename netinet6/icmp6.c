@@ -727,23 +727,23 @@ icmp6_input(struct mbuf **mp, int *offp, int proto, int af)
 			/* ICMPv6 informational: MUST not deliver */
 			break;
 		}
-deliver:
+ deliver:
 		if (icmp6_notify_error(m, off, icmp6len, code)) {
 			/* In this case, m should've been freed. */
 			return (IPPROTO_DONE);
 		}
 		break;
 
-badcode:
+ badcode:
 		icmp6stat_inc(icp6s_badcode);
 		break;
 
-badlen:
+ badlen:
 		icmp6stat_inc(icp6s_badlen);
 		break;
 	}
 
-raw:
+ raw:
 	/* deliver the packet to appropriate sockets */
 	return rip6_input(mp, offp, proto, af);
 
