@@ -418,6 +418,8 @@ icmp6_input(struct mbuf **mp, int *offp, int proto, int af)
 		goto freeit;
 	}
 
+	if (icmp6->icmp6_type > ICMP6_MAXTYPE)
+		goto raw;
 #if NPF > 0
 	if (m->m_pkthdr.pf.flags & PF_TAG_DIVERTED) {
 		switch (icmp6->icmp6_type) {
@@ -744,9 +746,7 @@ badlen:
 		break;
 	}
 
-#if NPF > 0
 raw:
-#endif
 	/* deliver the packet to appropriate sockets */
 	return rip6_input(mp, offp, proto, af);
 
