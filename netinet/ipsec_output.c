@@ -345,7 +345,7 @@ ipsp_process_packet(struct mbuf *m, struct tdb *tdb, int af, int tunalready)
 				goto exitip6loop;
 			}
 		} while (hlen < m->m_pkthdr.len);
-	exitip6loop:;
+	exitip6loop:
 		break;
 #endif /* INET6 */
 	default:
