@@ -381,7 +381,7 @@ pfkey_sendup(struct keycb *kp, struct mbuf *m0, int more)
 	} else
 		m = m0;
 
-	KERNEL_LOCK()
+	KERNEL_LOCK();
 	if (!sbappendaddr(so, &so->so_rcv, &pfkey_addr, m, NULL)) {
 		m_freem(m);
 		KERNEL_UNLOCK();
