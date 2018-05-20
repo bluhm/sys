@@ -718,6 +718,14 @@ route_output(struct mbuf *m, struct socket *so, struct sockaddr *dstaddr,
 		info.rti_flags |= RTF_LLINFO;
 	}
 
+	if (info.rti_info[RTAX_DST] != NULL &&
+	    info.rti_info[RTAX_GATEWAY] != NULL &&
+	    info.rti_info[RTAX_DST]->sa_family !=
+	    info.rti_info[RTAX_GATEWAY]->sa_family) {
+		error = EAFNOSUPPORT;
+		goto fail;
+	}
+
 	/*
 	 * Validate RTM_PROPOSAL and pass it along or error out.
 	 */
