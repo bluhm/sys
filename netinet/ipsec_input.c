@@ -766,11 +766,7 @@ ipcomp_sysctl_ipcompstat(void *oldp, size_t *oldlenp, void *newp)
 int
 ah4_input(struct mbuf **mp, int *offp, int proto, int af)
 {
-	if (
-#if NPF > 0
-	    ((*mp)->m_pkthdr.pf.flags & PF_TAG_DIVERTED) ||
-#endif
-	    !ah_enable)
+	if (!ah_enable || pf_isdiverted(*mp))
 		return rip_input(mp, offp, proto, af);
 
 	ipsec_common_input(*mp, *offp, offsetof(struct ip, ip_p), AF_INET,
@@ -793,11 +789,7 @@ ah4_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 int
 esp4_input(struct mbuf **mp, int *offp, int proto, int af)
 {
-	if (
-#if NPF > 0
-	    ((*mp)->m_pkthdr.pf.flags & PF_TAG_DIVERTED) ||
-#endif
-	    !esp_enable)
+	if (!esp_enable || pf_isdiverted(*mp))
 		return rip_input(mp, offp, proto, af);
 
 	ipsec_common_input(*mp, *offp, offsetof(struct ip, ip_p), AF_INET,
@@ -809,11 +801,7 @@ esp4_input(struct mbuf **mp, int *offp, int proto, int af)
 int
 ipcomp4_input(struct mbuf **mp, int *offp, int proto, int af)
 {
-	if (
-#if NPF > 0
-	    ((*mp)->m_pkthdr.pf.flags & PF_TAG_DIVERTED) ||
-#endif
-	    !ipcomp_enable)
+	if (!ipcomp_enable || pf_isdiverted(*mp))
 		return rip_input(mp, offp, proto, af);
 
 	ipsec_common_input(*mp, *offp, offsetof(struct ip, ip_p), AF_INET,
@@ -956,11 +944,7 @@ ah6_input(struct mbuf **mp, int *offp, int proto, int af)
 	int protoff, nxt;
 	struct ip6_ext ip6e;
 
-	if (
-#if NPF > 0
-	    ((*mp)->m_pkthdr.pf.flags & PF_TAG_DIVERTED) ||
-#endif
-	    !ah_enable)
+	if (!ah_enable || pf_isdiverted(*mp))
 		return rip6_input(mp, offp, proto, af);
 
 	if (*offp < sizeof(struct ip6_hdr)) {
@@ -1013,11 +997,7 @@ esp6_input(struct mbuf **mp, int *offp, int proto, int af)
 	int protoff, nxt;
 	struct ip6_ext ip6e;
 
-	if (
-#if NPF > 0
-	    ((*mp)->m_pkthdr.pf.flags & PF_TAG_DIVERTED) ||
-#endif
-	    !esp_enable)
+	if (!esp_enable || pf_isdiverted(*mp))
 		return rip6_input(mp, offp, proto, af);
 
 	if (*offp < sizeof(struct ip6_hdr)) {
@@ -1071,11 +1051,7 @@ ipcomp6_input(struct mbuf **mp, int *offp, int proto, int af)
 	int protoff, nxt;
 	struct ip6_ext ip6e;
 
-	if (
-#if NPF > 0
-	    ((*mp)->m_pkthdr.pf.flags & PF_TAG_DIVERTED) ||
-#endif
-	    !ipcomp_enable)
+	if (!ipcomp_enable || pf_isdiverted(*mp))
 		return rip6_input(mp, offp, proto, af);
 
 	if (*offp < sizeof(struct ip6_hdr)) {

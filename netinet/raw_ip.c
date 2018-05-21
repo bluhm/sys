@@ -131,7 +131,7 @@ rip_input(struct mbuf **mp, int *offp, int proto, int af)
 	ripsrc.sin_addr = ip->ip_src;
 	key = &ip->ip_dst;
 #if NPF > 0
-	if (m->m_pkthdr.pf.flags & PF_TAG_DIVERTED) {
+	if (pf_isdiverted(m)) {
 		struct pf_divert *divert;
 
 		divert = pf_find_divert(m);

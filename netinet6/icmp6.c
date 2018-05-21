@@ -421,7 +421,7 @@ icmp6_input(struct mbuf **mp, int *offp, int proto, int af)
 	}
 
 #if NPF > 0
-	if (m->m_pkthdr.pf.flags & PF_TAG_DIVERTED) {
+	if (pf_isdiverted(m)) {
 		switch (icmp6->icmp6_type) {
 		/*
 		 * These ICMP6 types map to other connections.  They must be

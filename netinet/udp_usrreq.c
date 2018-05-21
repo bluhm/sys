@@ -271,10 +271,7 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 
 #ifdef IPSEC
 	if (udpencap_enable && udpencap_port && esp_enable &&
-#if NPF > 0
-	    !(m->m_pkthdr.pf.flags & PF_TAG_DIVERTED) &&
-#endif
-	    uh->uh_dport == htons(udpencap_port)) {
+	    uh->uh_dport == htons(udpencap_port) && !pf_isdiverted(m)) {
 		u_int32_t spi;
 		int skip = iphlen + sizeof(struct udphdr);
 
@@ -350,10 +347,7 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 	}
 
 #if NVXLAN > 0
-	if (vxlan_enable > 0 &&
-#if NPF > 0
-	    !(m->m_pkthdr.pf.flags & PF_TAG_DIVERTED) &&
-#endif
+	if (vxlan_enable > 0 && !pf_isdiverted(m) &&
 	    vxlan_lookup(m, uh, iphlen, &srcsa.sa, &dstsa.sa) != 0)
 		return IPPROTO_DONE;
 #endif

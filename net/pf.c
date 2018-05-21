@@ -7204,7 +7204,7 @@ pf_ouraddr(struct mbuf *m)
 {
 	struct pf_state_key	*sk;
 
-	if (m->m_pkthdr.pf.flags & PF_TAG_DIVERTED)
+	if (pf_isdiverted(m))
 		return (1);
 
 	sk = m->m_pkthdr.pf.statekey;

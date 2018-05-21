@@ -1771,7 +1771,7 @@ ip_savecontrol(struct inpcb *inp, struct mbuf **mp, struct ip *ip,
 		u_int rtableid = inp->inp_rtableid;
 
 #if NPF > 0
-		if (m && m->m_pkthdr.pf.flags & PF_TAG_DIVERTED) {
+		if (m && pf_isdiverted(m)) {
 			struct pf_divert *divert;
 
 			divert = pf_find_divert(m);

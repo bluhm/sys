@@ -1147,7 +1147,7 @@ in_pcblookup_listen(struct inpcbtable *table, struct in_addr laddr,
 	key1 = &laddr;
 	key2 = &zeroin_addr;
 #if NPF > 0
-	if (m && m->m_pkthdr.pf.flags & PF_TAG_DIVERTED) {
+	if (m && pf_isdiverted(m)) {
 		struct pf_divert *divert;
 
 		divert = pf_find_divert(m);
@@ -1227,7 +1227,7 @@ in6_pcblookup_listen(struct inpcbtable *table, struct in6_addr *laddr,
 	key1 = laddr;
 	key2 = &zeroin6_addr;
 #if NPF > 0
-	if (m && m->m_pkthdr.pf.flags & PF_TAG_DIVERTED) {
+	if (m && pf_isdiverted(m)) {
 		struct pf_divert *divert;
 
 		divert = pf_find_divert(m);

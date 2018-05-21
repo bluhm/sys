@@ -376,7 +376,7 @@ icmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto, int af)
 	if (icp->icmp_type > ICMP_MAXTYPE)
 		goto raw;
 #if NPF > 0
-	if (m->m_pkthdr.pf.flags & PF_TAG_DIVERTED) {
+	if (pf_isdiverted(m)) {
 		switch (icp->icmp_type) {
 		 /*
 		  * As pf_icmp_mapping() considers redirects belonging to a

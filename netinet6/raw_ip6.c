@@ -139,7 +139,7 @@ rip6_input(struct mbuf **mp, int *offp, int proto, int af)
 
 	key = &ip6->ip6_dst;
 #if NPF > 0
-	if (m->m_pkthdr.pf.flags & PF_TAG_DIVERTED) {
+	if (pf_isdiverted(m)) {
 		struct pf_divert *divert;
 
 		/* XXX rdomain support */

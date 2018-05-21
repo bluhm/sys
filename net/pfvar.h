@@ -1954,6 +1954,16 @@ int			 pf_synflood_check(struct pf_pdesc *);
 void			 pf_syncookie_send(struct pf_pdesc *);
 u_int8_t		 pf_syncookie_validate(struct pf_pdesc *);
 struct mbuf *		 pf_syncookie_recreate_syn(struct pf_pdesc *);
+
+static inline int
+pf_isdiverted(const struct mbuf *m)
+{
+#if NPF > 0
+	if (m->m_pkthdr.pf.flags & PF_TAG_DIVERTED)
+		return 1;
+#endif
+	return 0;
+}
 #endif /* _KERNEL */
 
 #endif /* _NET_PFVAR_H_ */
