@@ -68,6 +68,8 @@
  * Research Laboratory (NRL).
  */
 
+#include "pf.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/mbuf.h>
@@ -88,8 +90,6 @@
 #include <netinet/ip_icmp.h>
 
 #include <net/pfvar.h>
-
-#include "pf.h"
 
 struct inpcbtable rawcbtable;
 
