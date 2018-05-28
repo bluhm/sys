@@ -2526,7 +2526,7 @@ pmap_enter_special_86(vaddr_t va, paddr_t pa, vm_prot_t prot, u_int32_t flags)
 	struct pmap	*pmap = pmap_kernel();
 	struct vm_page	*ptppg = NULL;
 	pd_entry_t	*pd, *ptp;
-	pt_entry_t	*ptes, ukpte;
+	pt_entry_t	*ptes;
 	uint32_t	 l2idx, l1idx;
 	paddr_t		 npa;
 
@@ -2609,9 +2609,8 @@ pmap_enter_special_86(vaddr_t va, paddr_t pa, vm_prot_t prot, u_int32_t flags)
 	if (!(cpu_feature & CPUID_PGE))
 		return;
 	ptes = pmap_map_ptes_86(pmap);	/* pmap_kernel -> PTE_BASE */
-	ukpte = ptes[atop(va)];
-	if (pmap_valid_entry(ukpte))
-		ukpte |= PG_G;
+	if (pmap_valid_entry(ptes[atop(va)]))
+		ptes[atop(va)] |= PG_G;
 	else
 		DPRINTF("%s: no U+K mapping for special mapping?\n", __func__);
 	pmap_unmap_ptes_86(pmap);	/* pmap_kernel -> nothing */
