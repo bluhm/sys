@@ -652,6 +652,8 @@ pmap_bootstrap_pae(void)
 		if (!pmap_valid_entry(PDE(kpm, pdei(va)))) {
 			ptp = uvm_pagealloc(&kpm->pm_obj, va, NULL,
 			    UVM_PGA_ZERO);
+			if (ptp == NULL)
+				panic("%s: uvm_pagealloc() failed", __func__);
 			ptaddr = VM_PAGE_TO_PHYS(ptp);
 			PDE(kpm, pdei(va)) = ptaddr | PG_KW | PG_V |
 			    PG_U | PG_M;
@@ -1943,7 +1945,16 @@ pmap_enter_special_pae(vaddr_t va, paddr_t pa, vm_prot_t prot, u_int32_t flags)
 			if (!pmap_extract(pmap, vapd + i*NBPG,
 			    (paddr_t *)&pmap->pm_pdidx_intel[i]))
 				panic("%s: can't locate PD page\n", __func__);
+
+			/* ensure PDPs are wired down XXX hshoexer why? */
+			pdppg = PHYS_TO_VM_PAGE(pmap->pm_pdidx_intel[i]);
+			if (pdppg == NULL)
+				panic("%s: no vm_page for pdidx %d", __func__, i);
+			atomic_clearbits_int(&pdppg->pg_flags, PG_BUSY);
+			pdppg->wire_count = 1;	/* no mappings yet */
+
 			pmap->pm_pdidx_intel[i] |= PG_V;
+
 			DPRINTF("%s: pm_pdidx_intel[%d] = 0x%llx\n", __func__,
 			    i, pmap->pm_pdidx_intel[i]);
 		}
@@ -1981,6 +1992,7 @@ pmap_enter_special_pae(vaddr_t va, paddr_t pa, vm_prot_t prot, u_int32_t flags)
 			panic("%s: failed to allocate PT page", __func__);
 
 		atomic_clearbits_int(&ptppg->pg_flags, PG_BUSY);
+		ptppg->wire_count = 1;	/* no mappings yet */
 
 		npa = VM_PAGE_TO_PHYS(ptppg);
 		pd[l2idx] = (npa | PG_RW | PG_V | PG_M | PG_U);
