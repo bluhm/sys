@@ -374,6 +374,7 @@ in6_pcbnotify(struct inpcbtable *table, struct sockaddr_in6 *dst,
 	errno = inet6ctlerrmap[cmd];
 
 	rdomain = rtable_l2(rtable);
+	mtx_enter(&inpcbtable_mtx);
 	TAILQ_FOREACH_SAFE(inp, &table->inpt_queue, inp_queue, ninp) {
 		if ((inp->inp_flags & INP_IPV6) == 0)
 			continue;
@@ -447,9 +448,12 @@ in6_pcbnotify(struct inpcbtable *table, struct sockaddr_in6 *dst,
 		}
 	  do_notify:
 		nmatch++;
+		/* XXX Is it safe to call notify with inpcbtable mutex held? */
 		if (notify)
 			(*notify)(inp, errno);
 	}
+	mtx_leave(&inpcbtable_mtx);
+
 	return (nmatch);
 }
 
