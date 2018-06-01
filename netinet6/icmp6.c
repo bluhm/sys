@@ -104,7 +104,6 @@
 
 struct cpumem *icmp6counters;
 
-extern struct inpcbtable rawin6pcbtable;
 extern int icmp6errppslim;
 static int icmp6errpps_count = 0;
 static struct timeval icmp6errppslim_last;

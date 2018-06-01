@@ -1319,10 +1319,6 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 	case KERN_FILE_BYFILE:
 		/* use the inp-tables to pick up closed connections, too */
 		if (arg == DTYPE_SOCKET) {
-			extern struct inpcbtable rawcbtable;
-#ifdef INET6
-			extern struct inpcbtable rawin6pcbtable;
-#endif
 			struct inpcb *inp;
 
 			NET_LOCK();
