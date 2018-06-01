@@ -160,6 +160,7 @@ void
 in_pcbinit(struct inpcbtable *table, int hashsize)
 {
 
+	mtx_enter(&inpcbtable_mtx);
 	TAILQ_INIT(&table->inpt_queue);
 	table->inpt_hashtbl = hashinit(hashsize, M_PCB, M_NOWAIT,
 	    &table->inpt_mask);
@@ -173,6 +174,7 @@ in_pcbinit(struct inpcbtable *table, int hashsize)
 	table->inpt_size = hashsize;
 	arc4random_buf(&table->inpt_key, sizeof(table->inpt_key));
 	arc4random_buf(&table->inpt_lkey, sizeof(table->inpt_lkey));
+	mtx_leave(&inpcbtable_mtx);
 }
 
 /*
@@ -247,6 +249,7 @@ in_pcballoc(struct socket *so, struct inpcbtable *table)
 	inp->inp_cksum6 = -1;
 #endif /* INET6 */
 
+	mtx_enter(&inpcbtable_mtx);
 	if (table->inpt_count++ > INPCBHASH_LOADFACTOR(table->inpt_size))
 		(void)in_pcbresize(table, table->inpt_size * 2);
 	TAILQ_INSERT_HEAD(&table->inpt_queue, inp, inp_queue);
@@ -263,6 +266,7 @@ in_pcballoc(struct socket *so, struct inpcbtable *table)
 		    &inp->inp_faddr, inp->inp_fport,
 		    &inp->inp_laddr, inp->inp_lport);
 	LIST_INSERT_HEAD(head, inp, inp_hash);
+	mtx_leave(&inpcbtable_mtx);
 
 	so->so_pcb = inp;
 
@@ -577,10 +581,12 @@ in_pcbdetach(struct inpcb *inp)
 		pf_inp_unlink(inp);
 	}
 #endif
+	mtx_enter(&inpcbtable_mtx);
 	LIST_REMOVE(inp, inp_lhash);
 	LIST_REMOVE(inp, inp_hash);
 	TAILQ_REMOVE(&inp->inp_table->inpt_queue, inp, inp_queue);
 	inp->inp_table->inpt_count--;
+	mtx_leave(&inpcbtable_mtx);
 	in_pcbunref(inp);
 }
 
@@ -674,6 +680,7 @@ in_pcbnotifyall(struct inpcbtable *table, struct sockaddr *dst, u_int rtable,
 		return;
 
 	rdomain = rtable_l2(rtable);
+	mtx_enter(&inpcbtable_mtx);
 	TAILQ_FOREACH_SAFE(inp, &table->inpt_queue, inp_queue, ninp) {
 #ifdef INET6
 		if (inp->inp_flags & INP_IPV6)
@@ -684,9 +691,11 @@ in_pcbnotifyall(struct inpcbtable *table, struct sockaddr *dst, u_int rtable,
 		    inp->inp_socket == 0) {
 			continue;
 		}
+		/* XXX Is it safe to call notify with inpcbtable mutex held? */
 		if (notify)
 			(*notify)(inp, errno);
 	}
+	mtx_leave(&inpcbtable_mtx);
 }
 
 /*
@@ -759,6 +768,7 @@ in_pcblookup_local(struct inpcbtable *table, void *laddrp, u_int lport_arg,
 	u_int rdomain;
 
 	rdomain = rtable_l2(rtable);
+	mtx_enter(&inpcbtable_mtx);
 	head = in_pcblhash(table, rdomain, lport);
 	LIST_FOREACH(inp, head, inp_lhash) {
 		if (rtable_l2(inp->inp_rtableid) != rdomain)
@@ -809,6 +819,8 @@ in_pcblookup_local(struct inpcbtable *table, void *laddrp, u_int lport_arg,
 				break;
 		}
 	}
+	mtx_leave(&inpcbtable_mtx);
+
 	return (match);
 }
 
@@ -958,6 +970,7 @@ in_pcbrehash(struct inpcb *inp)
 	struct inpcbhead *head;
 
 	NET_ASSERT_LOCKED();
+	MUTEX_ASSERT_LOCKED(&inpcbtable_mtx);
 
 	LIST_REMOVE(inp, inp_lhash);
 	head = in_pcblhash(table, inp->inp_rtableid, inp->inp_lport);
@@ -983,6 +996,8 @@ in_pcbresize(struct inpcbtable *table, int hashsize)
 	int osize;
 	void *nhashtbl, *nlhashtbl, *ohashtbl, *olhashtbl;
 	struct inpcb *inp;
+
+	MUTEX_ASSERT_LOCKED(&inpcbtable_mtx);
 
 	ohashtbl = table->inpt_hashtbl;
 	olhashtbl = table->inpt_lhashtbl;
@@ -1036,6 +1051,7 @@ in_pcbhashlookup(struct inpcbtable *table, struct in_addr faddr,
 	u_int rdomain;
 
 	rdomain = rtable_l2(rtable);
+	mtx_enter(&inpcbtable_mtx);
 	head = in_pcbhash(table, rdomain, &faddr, fport, &laddr, lport);
 	LIST_FOREACH(inp, head, inp_hash) {
 #ifdef INET6
@@ -1058,6 +1074,7 @@ in_pcbhashlookup(struct inpcbtable *table, struct in_addr faddr,
 			break;
 		}
 	}
+	mtx_leave(&inpcbtable_mtx);
 #ifdef DIAGNOSTIC
 	if (inp == NULL && in_pcbnotifymiss) {
 		printf("%s: faddr=%08x fport=%d laddr=%08x lport=%d rdom=%u\n",
@@ -1119,6 +1136,7 @@ in_pcblookup_listen(struct inpcbtable *table, struct in_addr laddr,
 #endif
 
 	rdomain = rtable_l2(rtable);
+	mtx_enter(&inpcbtable_mtx);
 	head = in_pcbhash(table, rdomain, &zeroin_addr, 0, key1, lport);
 	LIST_FOREACH(inp, head, inp_hash) {
 #ifdef INET6
@@ -1155,6 +1173,7 @@ in_pcblookup_listen(struct inpcbtable *table, struct in_addr laddr,
 		LIST_REMOVE(inp, inp_hash);
 		LIST_INSERT_HEAD(head, inp, inp_hash);
 	}
+	mtx_leave(&inpcbtable_mtx);
 #ifdef DIAGNOSTIC
 	if (inp == NULL && in_pcbnotifymiss) {
 		printf("%s: laddr=%08x lport=%d rdom=%u\n",
