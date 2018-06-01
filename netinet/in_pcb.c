@@ -269,9 +269,8 @@ in_pcballoc(struct socket *so, struct inpcbtable *table)
 	inp->inp_seclevel[SL_ESP_NETWORK] = IPSEC_ESP_NETWORK_LEVEL_DEFAULT;
 	inp->inp_seclevel[SL_IPCOMP] = IPSEC_IPCOMP_LEVEL_DEFAULT;
 	inp->inp_rtableid = curproc->p_p->ps_rtableid;
-	if (table->inpt_mask != 0 &&
-	    table->inpt_count++ > INPCBHASH_LOADFACTOR(table->inpt_mask))
-		(void)in_pcbresize(table, (table->inpt_mask + 1) * 2);
+	if (table->inpt_count++ > INPCBHASH_LOADFACTOR(table->inpt_size))
+		(void)in_pcbresize(table, table->inpt_size * 2);
 	TAILQ_INSERT_HEAD(&table->inpt_queue, inp, inp_queue);
 	head = INPCBLHASH(table, inp->inp_lport, inp->inp_rtableid);
 	LIST_INSERT_HEAD(head, inp, inp_lhash);
