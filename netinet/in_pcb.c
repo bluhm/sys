@@ -111,6 +111,7 @@ int ipport_lastauto = IPPORT_USERRESERVED;
 int ipport_hifirstauto = IPPORT_HIFIRSTAUTO;
 int ipport_hilastauto = IPPORT_HILASTAUTO;
 
+struct mutex inpcbtable_mtx = MUTEX_INITIALIZER(IPL_SOFTNET);
 struct baddynamicports baddynamicports;
 struct baddynamicports rootonlyports;
 struct pool inpcb_pool;
