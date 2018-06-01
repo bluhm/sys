@@ -249,6 +249,7 @@ struct baddynamicports {
 
 #ifdef _KERNEL
 
+extern struct mutex inpcbtable_mtx;
 extern struct inpcbtable rawcbtable, rawin6pcbtable;
 extern struct baddynamicports baddynamicports;
 extern struct baddynamicports rootonlyports;
