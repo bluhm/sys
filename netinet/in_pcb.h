@@ -151,7 +151,7 @@ struct inpcbtable {
 	TAILQ_HEAD(inpthead, inpcb) inpt_queue;
 	struct inpcbhead *inpt_hashtbl, *inpt_lhashtbl;
 	SIPHASH_KEY inpt_key;
-	u_long	  inpt_hash, inpt_lhash;
+	u_long	  inpt_mask, inpt_lmask;
 	int	  inpt_count, inpt_size;
 };
 
