@@ -117,7 +117,8 @@ struct baddynamicports rootonlyports;
 struct pool inpcb_pool;
 int inpcb_pool_initialized = 0;
 
-int in_pcbresize (struct inpcbtable *, int);
+void	in_pcbrehash_locked(struct inpcb *);
+int	in_pcbresize(struct inpcbtable *, int);
 
 #define	INPCBHASH_LOADFACTOR(_x)	(((_x) * 3) / 4)
 
@@ -965,6 +966,14 @@ in_pcbselsrc(struct in_addr **insrc, struct sockaddr_in *sin,
 void
 in_pcbrehash(struct inpcb *inp)
 {
+	mtx_enter(&inpcbtable_mtx);
+	in_pcbrehash_locked(inp);
+	mtx_leave(&inpcbtable_mtx);
+}
+
+void
+in_pcbrehash_locked(struct inpcb *inp)
+{
 	struct inpcbtable *table = inp->inp_table;
 	struct inpcbhead *head;
 
@@ -1018,7 +1027,7 @@ in_pcbresize(struct inpcbtable *table, int hashsize)
 	arc4random_buf(&table->inpt_key, sizeof(table->inpt_key));
 
 	TAILQ_FOREACH(inp, &table->inpt_queue, inp_queue) {
-		in_pcbrehash(inp);
+		in_pcbrehash_locked(inp);
 	}
 	hashfree(ohashtbl, osize, M_PCB);
 	hashfree(olhashtbl, osize, M_PCB);
