@@ -1322,6 +1322,7 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 			struct inpcb *inp;
 
 			NET_LOCK();
+			mtx_enter(&inpcbtable_mtx);
 			TAILQ_FOREACH(inp, &tcbtable.inpt_queue, inp_queue)
 				FILLSO(inp->inp_socket);
 			TAILQ_FOREACH(inp, &udbtable.inpt_queue, inp_queue)
@@ -1333,6 +1334,7 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 			    inp_queue)
 				FILLSO(inp->inp_socket);
 #endif
+			mtx_leave(&inpcbtable_mtx);
 			NET_UNLOCK();
 		}
 		fp = NULL;
