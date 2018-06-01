@@ -411,6 +411,7 @@ in6_pcbnotify(struct inpcbtable *table, struct sockaddr_in6 *dst,
 	errno = inet6ctlerrmap[cmd];
 
 	rdomain = rtable_l2(rtable);
+	mtx_enter(&inpcbtable_mtx);
 	TAILQ_FOREACH_SAFE(inp, &table->inpt_queue, inp_queue, ninp) {
 		if ((inp->inp_flags & INP_IPV6) == 0)
 			continue;
@@ -484,9 +485,12 @@ in6_pcbnotify(struct inpcbtable *table, struct sockaddr_in6 *dst,
 		}
 	  do_notify:
 		nmatch++;
+		/* XXX Is it safe to call notify with inpcbtable mutex held? */
 		if (notify)
 			(*notify)(inp, errno);
 	}
+	mtx_leave(&inpcbtable_mtx);
+
 	return (nmatch);
 }
 
@@ -501,6 +505,7 @@ in6_pcbhashlookup(struct inpcbtable *table, const struct in6_addr *faddr,
 	u_int rdomain;
 
 	rdomain = rtable_l2(rtable);
+	mtx_enter(&inpcbtable_mtx);
 	head = in6_pcbhash(table, rdomain, faddr, fport, laddr, lport);
 	LIST_FOREACH(inp, head, inp_hash) {
 		if (!(inp->inp_flags & INP_IPV6))
@@ -521,6 +526,7 @@ in6_pcbhashlookup(struct inpcbtable *table, const struct in6_addr *faddr,
 			break;
 		}
 	}
+	mtx_leave(&inpcbtable_mtx);
 #ifdef DIAGNOSTIC
 	if (inp == NULL && in_pcbnotifymiss) {
 		printf("%s: faddr= fport=%d laddr= lport=%d rdom=%u\n",
@@ -571,6 +577,7 @@ in6_pcblookup_listen(struct inpcbtable *table, struct in6_addr *laddr,
 #endif
 
 	rdomain = rtable_l2(rtable);
+	mtx_enter(&inpcbtable_mtx);
 	head = in6_pcbhash(table, rdomain, &zeroin6_addr, 0, key1, lport);
 	LIST_FOREACH(inp, head, inp_hash) {
 		if (!(inp->inp_flags & INP_IPV6))
@@ -603,6 +610,7 @@ in6_pcblookup_listen(struct inpcbtable *table, struct in6_addr *laddr,
 		LIST_REMOVE(inp, inp_hash);
 		LIST_INSERT_HEAD(head, inp, inp_hash);
 	}
+	mtx_leave(&inpcbtable_mtx);
 #ifdef DIAGNOSTIC
 	if (inp == NULL && in_pcbnotifymiss) {
 		printf("%s: laddr= lport=%d rdom=%u\n",
