@@ -1077,7 +1077,7 @@ in_pcbhashlookup(struct inpcbtable *table, struct in_addr faddr,
 	}
 #ifdef DIAGNOSTIC
 	if (inp == NULL && in_pcbnotifymiss) {
-		printf("%s: faddr=%08x fport=%d laddr=%08x lport=%d rdom=%d\n",
+		printf("%s: faddr=%08x fport=%d laddr=%08x lport=%d rdom=%u\n",
 		    __func__, ntohl(faddr.s_addr), ntohs(fport),
 		    ntohl(laddr.s_addr), ntohs(lport), rdomain);
 	}
@@ -1118,8 +1118,8 @@ in6_pcbhashlookup(struct inpcbtable *table, const struct in6_addr *faddr,
 	}
 #ifdef DIAGNOSTIC
 	if (inp == NULL && in_pcbnotifymiss) {
-		printf("%s: faddr= fport=%d laddr= lport=%d\n",
-		    __func__, ntohs(fport), ntohs(lport));
+		printf("%s: faddr= fport=%d laddr= lport=%d rdom=%u\n",
+		    __func__, ntohs(fport), ntohs(lport), rtable);
 	}
 #endif
 	return (inp);
@@ -1205,8 +1205,8 @@ in_pcblookup_listen(struct inpcbtable *table, struct in_addr laddr,
 	}
 #ifdef DIAGNOSTIC
 	if (inp == NULL && in_pcbnotifymiss) {
-		printf("%s: laddr=%08x lport=%d\n",
-		    __func__, ntohl(laddr.s_addr), ntohs(lport));
+		printf("%s: laddr=%08x lport=%d rdom=%u\n",
+		    __func__, ntohl(laddr.s_addr), ntohs(lport), rdomain);
 	}
 #endif
 	return (inp);
@@ -1281,8 +1281,8 @@ in6_pcblookup_listen(struct inpcbtable *table, struct in6_addr *laddr,
 	}
 #ifdef DIAGNOSTIC
 	if (inp == NULL && in_pcbnotifymiss) {
-		printf("%s: laddr= lport=%d\n",
-		    __func__, ntohs(lport));
+		printf("%s: laddr= lport=%d rdom=%u\n",
+		    __func__, ntohs(lport), rtable);
 	}
 #endif
 	return (inp);
