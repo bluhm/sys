@@ -262,6 +262,7 @@ in_pcballoc(struct socket *so, struct inpcbtable *table)
 		    &inp->inp_faddr, inp->inp_fport,
 		    &inp->inp_laddr, inp->inp_lport);
 	LIST_INSERT_HEAD(head, inp, inp_hash);
+
 	so->so_pcb = inp;
 
 	return (0);
