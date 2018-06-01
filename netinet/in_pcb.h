@@ -154,6 +154,7 @@ struct inpcb {
 LIST_HEAD(inpcbhead, inpcb);
 
 struct inpcbtable {
+	struct mutex inpt_mtx;			/* protect queue and hash */
 	TAILQ_HEAD(inpthead, inpcb) inpt_queue;	/* inet PCB queue */
 	struct	inpcbhead *inpt_hashtbl;	/* local and foreign hash */
 	struct	inpcbhead *inpt_lhashtbl;	/* local port hash */
