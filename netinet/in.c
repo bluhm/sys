@@ -1,4 +1,4 @@
-/*	$OpenBSD: in.c,v 1.153 2018/05/28 10:46:46 tb Exp $	*/
+/*	$OpenBSD: in.c,v 1.157 2018/05/31 17:17:01 tb Exp $	*/
 /*	$NetBSD: in.c,v 1.26 1996/02/13 23:41:39 christos Exp $	*/
 
 /*
@@ -248,33 +248,28 @@ in_ioctl(u_long cmd, caddr_t data, struct ifnet *ifp, int privileged)
 		}
 	}
 
-	switch (cmd) {
-	case SIOCSIFNETMASK:
-	case SIOCSIFDSTADDR:
-	case SIOCSIFBRDADDR:
-		if (!privileged) {
-			error = EPERM;
-			goto err;
-		}
-
-		if (ia && satosin(&ifr->ifr_addr)->sin_addr.s_addr) {
-			for (; ifa != NULL; ifa = TAILQ_NEXT(ifa, ifa_list)) {
-				if ((ifa->ifa_addr->sa_family == AF_INET) &&
-				    ifatoia(ifa)->ia_addr.sin_addr.s_addr ==
-				    satosin(&ifr->ifr_addr)->sin_addr.s_addr) {
-					ia = ifatoia(ifa);
-					break;
-				}
+	if (ia && satosin(&ifr->ifr_addr)->sin_addr.s_addr) {
+		for (; ifa != NULL; ifa = TAILQ_NEXT(ifa, ifa_list)) {
+			if ((ifa->ifa_addr->sa_family == AF_INET) &&
+			    ifatoia(ifa)->ia_addr.sin_addr.s_addr ==
+			    satosin(&ifr->ifr_addr)->sin_addr.s_addr) {
+				ia = ifatoia(ifa);
+				break;
 			}
 		}
-		if (ia == NULL) {
-			error = EADDRNOTAVAIL;
-			goto err;
-		}
-		break;
 	}
+	if (ia == NULL) {
+		NET_UNLOCK();
+		return (EADDRNOTAVAIL);
+	}
+
 	switch (cmd) {
 	case SIOCSIFDSTADDR:
+		if (!privileged) {
+			error = EPERM;
+			break;
+		}
+
 		if ((ifp->if_flags & IFF_POINTOPOINT) == 0) {
 			error = EINVAL;
 			break;
@@ -291,6 +286,11 @@ in_ioctl(u_long cmd, caddr_t data, struct ifnet *ifp, int privileged)
 		break;
 
 	case SIOCSIFBRDADDR:
+		if (!privileged) {
+			error = EPERM;
+			break;
+		}
+
 		if ((ifp->if_flags & IFF_BROADCAST) == 0) {
 			error = EINVAL;
 			break;
@@ -299,12 +299,16 @@ in_ioctl(u_long cmd, caddr_t data, struct ifnet *ifp, int privileged)
 		break;
 
 	case SIOCSIFNETMASK:
+		if (!privileged) {
+			error = EPERM;
+			break;
+		}
+
 		ia->ia_netmask = ia->ia_sockmask.sin_addr.s_addr =
 		    ifra->ifra_addr.sin_addr.s_addr;
 		break;
 	}
 
-err:
 	NET_UNLOCK();
 	return (error);
 }
@@ -421,9 +425,9 @@ in_ioctl_change_ifaddr(u_long cmd, caddr_t data, struct ifnet *ifp,
 	case SIOCDIFADDR:
 		/*
 		 * Even if the individual steps were safe, shouldn't
-		 * these kinds of changes happen atomically?  What 
+		 * these kinds of changes happen atomically?  What
 		 * should happen to a packet that was routed after
-		 * the scrub but before the other steps? 
+		 * the scrub but before the other steps?
 		 */
 		in_purgeaddr(&ia->ia_ifa);
 		dohooks(ifp->if_addrhooks, 0);
