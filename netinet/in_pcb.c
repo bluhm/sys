@@ -1258,7 +1258,8 @@ in6_pcblookup_listen(struct inpcbtable *table, struct in6_addr *laddr,
 			break;
 	}
 	if (inp == NULL && ! IN6_ARE_ADDR_EQUAL(key1, key2)) {
-		head = IN6PCBHASH(table, &zeroin6_addr, 0, key2, lport, rdomain);
+		head = IN6PCBHASH(table, &zeroin6_addr, 0, key2, lport,
+		    rdomain);
 		LIST_FOREACH(inp, head, inp_hash) {
 			if (!(inp->inp_flags & INP_IPV6))
 				continue;
