@@ -325,13 +325,14 @@ in6_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 int
 in6_pcbnotify(struct inpcbtable *table, struct sockaddr_in6 *dst,
     uint fport_arg, const struct sockaddr_in6 *src, uint lport_arg,
-    u_int rdomain, int cmd, void *cmdarg, void (*notify)(struct inpcb *, int))
+    u_int rtable, int cmd, void *cmdarg, void (*notify)(struct inpcb *, int))
 {
 	struct inpcb *inp, *ninp;
 	u_short fport = fport_arg, lport = lport_arg;
 	struct sockaddr_in6 sa6_src;
 	int errno, nmatch = 0;
 	u_int32_t flowinfo;
+	u_int rdomain = rtable_l2(rtable);
 
 	NET_ASSERT_LOCKED();
 
@@ -348,7 +349,6 @@ in6_pcbnotify(struct inpcbtable *table, struct sockaddr_in6 *dst,
 		return (0);
 	}
 
-	rdomain = rtable_l2(rdomain);
 	/*
 	 * note that src can be NULL when we get notify by local fragmentation.
 	 */
