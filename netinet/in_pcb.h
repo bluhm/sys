@@ -94,6 +94,7 @@ struct inpcb {
 	LIST_ENTRY(inpcb) inp_lhash;		/* extra hash for lport */
 	TAILQ_ENTRY(inpcb) inp_queue;
 	struct	  inpcbtable *inp_table;
+	struct	  mutex	inp_mtx;		/* protect pcb and socket */
 	union	  inpaddru inp_faddru;		/* Foreign address. */
 	union	  inpaddru inp_laddru;		/* Local address. */
 #define	inp_faddr	inp_faddru.iau_a4u.inaddr
