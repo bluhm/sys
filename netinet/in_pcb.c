@@ -284,11 +284,11 @@ in_pcballoc(struct socket *so, struct inpcbtable *table)
 		inp->inp_flags = INP_IPV6;
 	inp->inp_cksum6 = -1;
 #endif /* INET6 */
-	so->so_pcb = inp;
 
 	mtx_enter(&inpcbtable_mtx);
 	if (table->inpt_count++ > INPCBHASH_LOADFACTOR(table->inpt_size))
 		(void)in_pcbresize(table, table->inpt_size * 2);
+	mtx_enter(&inp->inp_mtx);
 	TAILQ_INSERT_HEAD(&table->inpt_queue, inp, inp_queue);
 	head = INPCBLHASH(table, inp->inp_lport, inp->inp_rtableid);
 	LIST_INSERT_HEAD(head, inp, inp_lhash);
@@ -304,6 +304,9 @@ in_pcballoc(struct socket *so, struct inpcbtable *table)
 		    rtable_l2(inp->inp_rtableid));
 	LIST_INSERT_HEAD(head, inp, inp_hash);
 	mtx_leave(&inpcbtable_mtx);
+
+	/* Attach the locked inp to the socket.  Caller has to unlock it. */
+	so->so_pcb = inp;
 
 	return (0);
 }
@@ -576,11 +579,12 @@ in_pcbdisconnect(struct inpcb *inp)
 		inp->inp_faddr.s_addr = INADDR_ANY;
 		break;
 	}
-
 	inp->inp_fport = 0;
-	in_pcbrehash(inp);
+
 	if (inp->inp_socket->so_state & SS_NOFDREF)
 		in_pcbdetach(inp);
+	else
+		in_pcbrehash(inp);
 }
 
 void
@@ -1006,6 +1010,7 @@ in_pcbrehash_locked(struct inpcb *inp)
 	NET_ASSERT_LOCKED();
 	MUTEX_ASSERT_LOCKED(&inpcbtable_mtx);
 
+	mutex_enter(&inp->inp_mtx);
 	LIST_REMOVE(inp, inp_lhash);
 	head = INPCBLHASH(table, inp->inp_lport, inp->inp_rtableid);
 	LIST_INSERT_HEAD(head, inp, inp_lhash);
@@ -1021,6 +1026,7 @@ in_pcbrehash_locked(struct inpcb *inp)
 		    &inp->inp_laddr, inp->inp_lport,
 		    rtable_l2(inp->inp_rtableid));
 	LIST_INSERT_HEAD(head, inp, inp_hash);
+	mutex_leave(&inp->inp_mtx);
 }
 
 int
