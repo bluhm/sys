@@ -1010,7 +1010,7 @@ in_pcbrehash_locked(struct inpcb *inp)
 	NET_ASSERT_LOCKED();
 	MUTEX_ASSERT_LOCKED(&inpcbtable_mtx);
 
-	mutex_enter(&inp->inp_mtx);
+	mtx_enter(&inp->inp_mtx);
 	LIST_REMOVE(inp, inp_lhash);
 	head = INPCBLHASH(table, inp->inp_lport, inp->inp_rtableid);
 	LIST_INSERT_HEAD(head, inp, inp_lhash);
@@ -1026,7 +1026,7 @@ in_pcbrehash_locked(struct inpcb *inp)
 		    &inp->inp_laddr, inp->inp_lport,
 		    rtable_l2(inp->inp_rtableid));
 	LIST_INSERT_HEAD(head, inp, inp_hash);
-	mutex_leave(&inp->inp_mtx);
+	mtx_leave(&inp->inp_mtx);
 }
 
 int
