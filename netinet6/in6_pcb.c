@@ -332,7 +332,7 @@ in6_pcbnotify(struct inpcbtable *table, struct sockaddr_in6 *dst,
 	struct sockaddr_in6 sa6_src;
 	int errno, nmatch = 0;
 	u_int32_t flowinfo;
-	u_int rdomain = rtable_l2(rtable);
+	u_int rdomain;
 
 	NET_ASSERT_LOCKED();
 
@@ -373,6 +373,7 @@ in6_pcbnotify(struct inpcbtable *table, struct sockaddr_in6 *dst,
 	}
 	errno = inet6ctlerrmap[cmd];
 
+	rdomain = rtable_l2(rtable);
 	TAILQ_FOREACH_SAFE(inp, &table->inpt_queue, inp_queue, ninp) {
 		if ((inp->inp_flags & INP_IPV6) == 0)
 			continue;

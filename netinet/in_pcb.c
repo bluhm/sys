@@ -661,7 +661,7 @@ in_pcbnotifyall(struct inpcbtable *table, struct sockaddr *dst, u_int rtable,
 {
 	struct inpcb *inp, *ninp;
 	struct in_addr faddr;
-	u_int rdomain = rtable_l2(rtable);
+	u_int rdomain;
 
 	NET_ASSERT_LOCKED();
 
@@ -679,6 +679,7 @@ in_pcbnotifyall(struct inpcbtable *table, struct sockaddr *dst, u_int rtable,
 	if (faddr.s_addr == INADDR_ANY)
 		return;
 
+	rdomain = rtable_l2(rtable);
 	TAILQ_FOREACH_SAFE(inp, &table->inpt_queue, inp_queue, ninp) {
 #ifdef INET6
 		if (inp->inp_flags & INP_IPV6)
@@ -775,8 +776,9 @@ in_pcblookup_local(struct inpcbtable *table, void *laddrp, u_int lport_arg,
 	struct in6_addr *laddr6 = (struct in6_addr *)laddrp;
 #endif
 	struct inpcbhead *head;
-	u_int rdomain = rtable_l2(rtable);
+	u_int rdomain;
 
+	rdomain = rtable_l2(rtable);
 	head = INPCBLHASH(table, lport, rdomain);
 	LIST_FOREACH(inp, head, inp_lhash) {
 		if (rtable_l2(inp->inp_rtableid) != rdomain)
@@ -1050,8 +1052,9 @@ in_pcbhashlookup(struct inpcbtable *table, struct in_addr faddr,
 	struct inpcbhead *head;
 	struct inpcb *inp;
 	u_int16_t fport = fport_arg, lport = lport_arg;
-	u_int rdomain = rtable_l2(rtable);
+	u_int rdomain;
 
+	rdomain = rtable_l2(rtable);
 	head = INPCBHASH(table, &faddr, fport, &laddr, lport, rdomain);
 	LIST_FOREACH(inp, head, inp_hash) {
 #ifdef INET6
@@ -1093,8 +1096,9 @@ in6_pcbhashlookup(struct inpcbtable *table, const struct in6_addr *faddr,
 	struct inpcbhead *head;
 	struct inpcb *inp;
 	u_int16_t fport = fport_arg, lport = lport_arg;
-	u_int rdomain = rtable_l2(rtable);
+	u_int rdomain;
 
+	rdomain = rtable_l2(rtable);
 	head = IN6PCBHASH(table, faddr, fport, laddr, lport, rdomain);
 	LIST_FOREACH(inp, head, inp_hash) {
 		if (!(inp->inp_flags & INP_IPV6))
@@ -1140,7 +1144,7 @@ in_pcblookup_listen(struct inpcbtable *table, struct in_addr laddr,
 	struct in_addr *key1, *key2;
 	struct inpcb *inp;
 	u_int16_t lport = lport_arg;
-	u_int rdomain = rtable_l2(rtable);
+	u_int rdomain;
 
 	key1 = &laddr;
 	key2 = &zeroin_addr;
@@ -1167,6 +1171,7 @@ in_pcblookup_listen(struct inpcbtable *table, struct in_addr laddr,
 	}
 #endif
 
+	rdomain = rtable_l2(rtable);
 	head = INPCBHASH(table, &zeroin_addr, 0, key1, lport, rdomain);
 	LIST_FOREACH(inp, head, inp_hash) {
 #ifdef INET6
@@ -1220,7 +1225,7 @@ in6_pcblookup_listen(struct inpcbtable *table, struct in6_addr *laddr,
 	struct in6_addr *key1, *key2;
 	struct inpcb *inp;
 	u_int16_t lport = lport_arg;
-	u_int rdomain = rtable_l2(rtable);
+	u_int rdomain;
 
 	key1 = laddr;
 	key2 = &zeroin6_addr;
@@ -1247,6 +1252,7 @@ in6_pcblookup_listen(struct inpcbtable *table, struct in6_addr *laddr,
 	}
 #endif
 
+	rdomain = rtable_l2(rtable);
 	head = IN6PCBHASH(table, &zeroin6_addr, 0, key1, lport, rdomain);
 	LIST_FOREACH(inp, head, inp_hash) {
 		if (!(inp->inp_flags & INP_IPV6))
