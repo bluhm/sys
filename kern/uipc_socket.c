@@ -248,7 +248,7 @@ soclose(struct socket *so)
 	int s, error = 0;
 
 	s = solock(so);
-	(*prp->pr_usrreq)(so, PRU_UNLOCK, NULL, NULL, NULL, p);
+	(*so->so_proto->pr_usrreq)(so, PRU_UNLOCK, NULL, NULL, NULL, NULL);
 	if (so->so_options & SO_ACCEPTCONN) {
 		while ((so2 = TAILQ_FIRST(&so->so_q0)) != NULL) {
 			(void) soqremque(so2, 0);
