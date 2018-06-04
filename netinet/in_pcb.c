@@ -814,15 +814,19 @@ in_pcblookup_local(struct inpcbtable *table, void *laddrp, u_int lport_arg,
 	mtx_enter(&inpcbtable_mtx);
 	head = INPCBLHASH(table, lport, rdomain);
 	LIST_FOREACH(inp, head, inp_lhash) {
-		if (rtable_l2(inp->inp_rtableid) != rdomain)
+		mtx_enter(&inp->inp_mtx);
+		if (rtable_l2(inp->inp_rtableid) != rdomain) {
+	 cont:
+			mtx_leave(&inp->inp_mtx);
 			continue;
+		}
 		if (inp->inp_lport != lport)
-			continue;
+			goto cont;
 		wildcard = 0;
 #ifdef INET6
 		if (ISSET(flags, INPLOOKUP_IPV6)) {
 			if (!ISSET(inp->inp_flags, INP_IPV6))
-				continue;
+				goto cont;
 
 			if (!IN6_IS_ADDR_UNSPECIFIED(&inp->inp_faddr6))
 				wildcard++;
@@ -832,7 +836,7 @@ in_pcblookup_local(struct inpcbtable *table, void *laddrp, u_int lport_arg,
 				    IN6_IS_ADDR_UNSPECIFIED(laddr6))
 					wildcard++;
 				else
-					continue;
+					goto cont;
 			}
 
 		} else
@@ -840,9 +844,8 @@ in_pcblookup_local(struct inpcbtable *table, void *laddrp, u_int lport_arg,
 		{
 #ifdef INET6
 			if (ISSET(inp->inp_flags, INP_IPV6))
-				continue;
+				goto cont;
 #endif /* INET6 */
-
 			if (inp->inp_faddr.s_addr != INADDR_ANY)
 				wildcard++;
 
@@ -851,7 +854,7 @@ in_pcblookup_local(struct inpcbtable *table, void *laddrp, u_int lport_arg,
 				    laddr.s_addr == INADDR_ANY)
 					wildcard++;
 				else
-					continue;
+					goto cont;
 			}
 
 		}
@@ -861,9 +864,11 @@ in_pcblookup_local(struct inpcbtable *table, void *laddrp, u_int lport_arg,
 			if ((matchwild = wildcard) == 0)
 				break;
 		}
+		mtx_leave(&inp->inp_mtx);
 	}
 	mtx_leave(&inpcbtable_mtx);
 
+	/* Unless NULL, the inp is locked.  Caller has to unlock it. */
 	return (match);
 }
 
@@ -1108,9 +1113,12 @@ in_pcbhashlookup(struct inpcbtable *table, struct in_addr faddr,
 	mtx_enter(&inpcbtable_mtx);
 	head = INPCBHASH(table, &faddr, fport, &laddr, lport, rdomain);
 	LIST_FOREACH(inp, head, inp_hash) {
+		mtx_enter(&inp->inp_mtx);
 #ifdef INET6
-		if (inp->inp_flags & INP_IPV6)
+		if (inp->inp_flags & INP_IPV6) {
+			mtx_leave(&inp->inp_mtx);
 			continue;	/*XXX*/
+		}
 #endif
 		if (inp->inp_faddr.s_addr == faddr.s_addr &&
 		    inp->inp_fport == fport && inp->inp_lport == lport &&
@@ -1127,6 +1135,7 @@ in_pcbhashlookup(struct inpcbtable *table, struct in_addr faddr,
 			}
 			break;
 		}
+		mtx_leave(&inp->inp_mtx);
 	}
 	mtx_leave(&inpcbtable_mtx);
 #ifdef DIAGNOSTIC
@@ -1136,6 +1145,7 @@ in_pcbhashlookup(struct inpcbtable *table, struct in_addr faddr,
 		    ntohl(laddr.s_addr), ntohs(lport), rdomain);
 	}
 #endif
+	/* Unless NULL, the inp is locked.  Caller has to unlock it. */
 	return (inp);
 }
 
@@ -1154,8 +1164,11 @@ in6_pcbhashlookup(struct inpcbtable *table, const struct in6_addr *faddr,
 	mtx_enter(&inpcbtable_mtx);
 	head = IN6PCBHASH(table, faddr, fport, laddr, lport, rdomain);
 	LIST_FOREACH(inp, head, inp_hash) {
-		if (!(inp->inp_flags & INP_IPV6))
+		mtx_enter(&inp->inp_mtx);
+		if (!(inp->inp_flags & INP_IPV6)) {
+			mtx_leave(&inp->inp_mtx);
 			continue;
+		}
 		if (IN6_ARE_ADDR_EQUAL(&inp->inp_faddr6, faddr) &&
 		    inp->inp_fport == fport && inp->inp_lport == lport &&
 		    IN6_ARE_ADDR_EQUAL(&inp->inp_laddr6, laddr) &&
@@ -1171,6 +1184,7 @@ in6_pcbhashlookup(struct inpcbtable *table, const struct in6_addr *faddr,
 			}
 			break;
 		}
+		mtx_leave(&inp->inp_mtx);
 	}
 	mtx_leave(&inpcbtable_mtx);
 #ifdef DIAGNOSTIC
@@ -1179,6 +1193,7 @@ in6_pcbhashlookup(struct inpcbtable *table, const struct in6_addr *faddr,
 		    __func__, ntohs(fport), ntohs(lport), rdomain);
 	}
 #endif
+	/* Unless NULL, the inp is locked.  Caller has to unlock it. */
 	return (inp);
 }
 #endif /* INET6 */
@@ -1229,28 +1244,37 @@ in_pcblookup_listen(struct inpcbtable *table, struct in_addr laddr,
 	mtx_enter(&inpcbtable_mtx);
 	head = INPCBHASH(table, &zeroin_addr, 0, key1, lport, rdomain);
 	LIST_FOREACH(inp, head, inp_hash) {
+		mtx_enter(&inp->inp_mtx);
+
 #ifdef INET6
-		if (inp->inp_flags & INP_IPV6)
+		if (inp->inp_flags & INP_IPV6) {
+			mtx_leave(&inp->inp_mtx);
 			continue;	/*XXX*/
+		}
 #endif
 		if (inp->inp_lport == lport && inp->inp_fport == 0 &&
 		    inp->inp_laddr.s_addr == key1->s_addr &&
 		    inp->inp_faddr.s_addr == INADDR_ANY &&
 		    rtable_l2(inp->inp_rtableid) == rdomain)
 			break;
+		mtx_leave(&inp->inp_mtx);
 	}
 	if (inp == NULL && key1->s_addr != key2->s_addr) {
 		head = INPCBHASH(table, &zeroin_addr, 0, key2, lport, rdomain);
 		LIST_FOREACH(inp, head, inp_hash) {
+			mtx_enter(&inp->inp_mtx);
 #ifdef INET6
-			if (inp->inp_flags & INP_IPV6)
+			if (inp->inp_flags & INP_IPV6) {
+				mtx_leave(&inp->inp_mtx);
 				continue;	/*XXX*/
+			}
 #endif
 			if (inp->inp_lport == lport && inp->inp_fport == 0 &&
 			    inp->inp_laddr.s_addr == key2->s_addr &&
 			    inp->inp_faddr.s_addr == INADDR_ANY &&
 			    rtable_l2(inp->inp_rtableid) == rdomain)
 				break;
+			mtx_leave(&inp->inp_mtx);
 		}
 	}
 	/*
@@ -1269,6 +1293,7 @@ in_pcblookup_listen(struct inpcbtable *table, struct in_addr laddr,
 		    __func__, ntohl(laddr.s_addr), ntohs(lport), rdomain);
 	}
 #endif
+	/* Unless NULL, the inp is locked.  Caller has to unlock it. */
 	return (inp);
 }
 
@@ -1312,25 +1337,33 @@ in6_pcblookup_listen(struct inpcbtable *table, struct in6_addr *laddr,
 	mtx_enter(&inpcbtable_mtx);
 	head = IN6PCBHASH(table, &zeroin6_addr, 0, key1, lport, rdomain);
 	LIST_FOREACH(inp, head, inp_hash) {
-		if (!(inp->inp_flags & INP_IPV6))
+		mtx_enter(&inp->inp_mtx);
+		if (!(inp->inp_flags & INP_IPV6)) {
+			mtx_leave(&inp->inp_mtx);
 			continue;
+		}
 		if (inp->inp_lport == lport && inp->inp_fport == 0 &&
 		    IN6_ARE_ADDR_EQUAL(&inp->inp_laddr6, key1) &&
 		    IN6_IS_ADDR_UNSPECIFIED(&inp->inp_faddr6) &&
 		    rtable_l2(inp->inp_rtableid) == rdomain)
 			break;
+		mtx_leave(&inp->inp_mtx);
 	}
 	if (inp == NULL && ! IN6_ARE_ADDR_EQUAL(key1, key2)) {
 		head = IN6PCBHASH(table, &zeroin6_addr, 0, key2, lport,
 		    rdomain);
 		LIST_FOREACH(inp, head, inp_hash) {
-			if (!(inp->inp_flags & INP_IPV6))
+			mtx_enter(&inp->inp_mtx);
+			if (!(inp->inp_flags & INP_IPV6)) {
+				mtx_leave(&inp->inp_mtx);
 				continue;
+			}
 			if (inp->inp_lport == lport && inp->inp_fport == 0 &&
 			    IN6_ARE_ADDR_EQUAL(&inp->inp_laddr6, key2) &&
 			    IN6_IS_ADDR_UNSPECIFIED(&inp->inp_faddr6) &&
 			    rtable_l2(inp->inp_rtableid) == rdomain)
 				break;
+			mtx_leave(&inp->inp_mtx);
 		}
 	}
 	/*
@@ -1349,6 +1382,7 @@ in6_pcblookup_listen(struct inpcbtable *table, struct in6_addr *laddr,
 		    __func__, ntohs(lport), rdomain);
 	}
 #endif
+	/* Unless NULL, the inp is locked.  Caller has to unlock it. */
 	return (inp);
 }
 #endif /* INET6 */
