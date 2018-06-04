@@ -120,7 +120,9 @@ int ipport_lastauto = IPPORT_USERRESERVED;
 int ipport_hifirstauto = IPPORT_HIFIRSTAUTO;
 int ipport_hilastauto = IPPORT_HILASTAUTO;
 
+/* Protect the inpcb hashes, queues and existence of an inp. */
 struct mutex inpcbtable_mtx = MUTEX_INITIALIZER(IPL_SOFTNET);
+
 struct baddynamicports baddynamicports;
 struct baddynamicports rootonlyports;
 struct pool inpcb_pool;
@@ -197,7 +199,6 @@ in_pcblhash(struct inpcbtable *table, int rdom, u_short lport)
 void
 in_pcbinit(struct inpcbtable *table, int hashsize)
 {
-
 	mtx_enter(&inpcbtable_mtx);
 	TAILQ_INIT(&table->inpt_queue);
 	table->inpt_hashtbl = hashinit(hashsize, M_PCB, M_NOWAIT,
@@ -594,7 +595,9 @@ in_pcbdetach(struct inpcb *inp)
 	struct socket *so = inp->inp_socket;
 
 	NET_ASSERT_LOCKED();
+	MUTEX_ASSERT_LOCKED(&inp->inp_mtx);
 
+	/* Detach the locked inp from the socket.  Caller has locked it. */
 	so->so_pcb = NULL;
 	/*
 	 * As long as the NET_LOCK() is the default lock for Internet
@@ -621,11 +624,16 @@ in_pcbdetach(struct inpcb *inp)
 		pf_inp_unlink(inp);
 	}
 #endif
+
+	/* Release and regrab inp lock to avoid lock order inversion. */
+	mtx_leave(&inp->inp_mtx);
 	mtx_enter(&inpcbtable_mtx);
+	mtx_enter(&inp->inp_mtx);
 	LIST_REMOVE(inp, inp_lhash);
 	LIST_REMOVE(inp, inp_hash);
 	TAILQ_REMOVE(&inp->inp_table->inpt_queue, inp, inp_queue);
 	inp->inp_table->inpt_count--;
+	mtx_leave(&inp->inp_mtx);
 	mtx_leave(&inpcbtable_mtx);
 
 	pool_put(&inpcb_pool, inp);
@@ -701,18 +709,23 @@ in_pcbnotifyall(struct inpcbtable *table, struct sockaddr *dst, u_int rtable,
 	rdomain = rtable_l2(rtable);
 	mtx_enter(&inpcbtable_mtx);
 	TAILQ_FOREACH_SAFE(inp, &table->inpt_queue, inp_queue, ninp) {
+		mtx_enter(&inp->inp_mtx);
 #ifdef INET6
-		if (inp->inp_flags & INP_IPV6)
+		if (inp->inp_flags & INP_IPV6) {
+			mtx_leave(&inp->inp_mtx);
 			continue;
+		}
 #endif
 		if (inp->inp_faddr.s_addr != faddr.s_addr ||
 		    rtable_l2(inp->inp_rtableid) != rdomain ||
 		    inp->inp_socket == 0) {
+			mtx_leave(&inp->inp_mtx);
 			continue;
 		}
 		/* XXX Is it safe to call notify with inpcbtable mutex held? */
 		if (notify)
 			(*notify)(inp, errno);
+		mtx_leave(&inp->inp_mtx);
 	}
 	mtx_leave(&inpcbtable_mtx);
 }
@@ -1060,7 +1073,9 @@ in_pcbresize(struct inpcbtable *table, int hashsize)
 	arc4random_buf(&table->inpt_key, sizeof(table->inpt_key));
 
 	TAILQ_FOREACH(inp, &table->inpt_queue, inp_queue) {
+		mtx_enter(&inp->inp_mtx);
 		in_pcbrehash_locked(inp);
+		mtx_leave(&inp->inp_mtx);
 	}
 	hashfree(ohashtbl, osize, M_PCB);
 	hashfree(olhashtbl, osize, M_PCB);

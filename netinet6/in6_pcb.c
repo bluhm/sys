@@ -376,8 +376,11 @@ in6_pcbnotify(struct inpcbtable *table, struct sockaddr_in6 *dst,
 	rdomain = rtable_l2(rtable);
 	mtx_enter(&inpcbtable_mtx);
 	TAILQ_FOREACH_SAFE(inp, &table->inpt_queue, inp_queue, ninp) {
-		if ((inp->inp_flags & INP_IPV6) == 0)
+		mtx_enter(&inp->inp_mtx);
+		if ((inp->inp_flags & INP_IPV6) == 0) {
+			mtx_leave(&inp->inp_mtx);
 			continue;
+		}
 
 		/*
 		 * Under the following condition, notify of redirects
@@ -437,13 +440,14 @@ in6_pcbnotify(struct inpcbtable *table, struct sockaddr_in6 *dst,
 			goto do_notify;
 		else if (!IN6_ARE_ADDR_EQUAL(&inp->inp_faddr6,
 					     &dst->sin6_addr) ||
-			 rtable_l2(inp->inp_rtableid) != rdomain ||
-			 inp->inp_socket == 0 ||
-			 (lport && inp->inp_lport != lport) ||
-			 (!IN6_IS_ADDR_UNSPECIFIED(&sa6_src.sin6_addr) &&
-			  !IN6_ARE_ADDR_EQUAL(&inp->inp_laddr6,
-					      &sa6_src.sin6_addr)) ||
-			 (fport && inp->inp_fport != fport)) {
+		    rtable_l2(inp->inp_rtableid) != rdomain ||
+		    inp->inp_socket == 0 ||
+		    (lport && inp->inp_lport != lport) ||
+		    (!IN6_IS_ADDR_UNSPECIFIED(&sa6_src.sin6_addr) &&
+		     !IN6_ARE_ADDR_EQUAL(&inp->inp_laddr6,
+					 &sa6_src.sin6_addr)) ||
+		    (fport && inp->inp_fport != fport)) {
+			mtx_leave(&inp->inp_mtx);
 			continue;
 		}
 	  do_notify:
@@ -451,6 +455,7 @@ in6_pcbnotify(struct inpcbtable *table, struct sockaddr_in6 *dst,
 		/* XXX Is it safe to call notify with inpcbtable mutex held? */
 		if (notify)
 			(*notify)(inp, errno);
+		mtx_leave(&inp->inp_mtx);
 	}
 	mtx_leave(&inpcbtable_mtx);
 
