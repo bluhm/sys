@@ -143,7 +143,7 @@ socreate(int dom, struct socket **aso, int type, int proto)
 	if (error) {
 		so->so_state |= SS_NOFDREF;
 		sofree(so, s);
-		sounlock(so, s);
+		sounlock(NULL, s);
 		return (error);
 	}
 	sounlock(so, s);
@@ -290,7 +290,7 @@ discard:
 	KASSERT((so->so_state & SS_NOFDREF) == 0);
 	so->so_state |= SS_NOFDREF;
 	sofree(so, s);
-	sounlock(so, s);
+	sounlock(NULL, s);
 	return (error);
 }
 
