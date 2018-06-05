@@ -7242,6 +7242,8 @@ pf_inp_lookup(struct mbuf *m)
 	if (inp && inp->inp_pf_sk)
 		KASSERT(m->m_pkthdr.pf.statekey == inp->inp_pf_sk);
 
+	/* Return a locked inpcb.  Caller has to unlock it. */
+	mtx_enter(&inp->inp_mtx);
 	return (inp);
 }
 
@@ -7350,6 +7352,9 @@ pf_mbuf_link_state_key(struct mbuf *m, struct pf_state_key *sk)
 void
 pf_state_key_link_inpcb(struct pf_state_key *sk, struct inpcb *inp)
 {
+	/* The net lock guarantees that inp at the m has not been detached. */
+	NET_ASSERT_LOCKED();
+
 	KASSERT(sk->inp == NULL);
 	sk->inp = inp;
 	KASSERT(inp->inp_pf_sk == NULL);
