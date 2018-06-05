@@ -7244,7 +7244,8 @@ pf_inp_lookup(struct mbuf *m)
 		KASSERT(m->m_pkthdr.pf.statekey == inp->inp_pf_sk);
 
 	/* Return a locked inpcb.  Caller has to unlock it. */
-	mtx_enter(&inp->inp_mtx);
+	if (inp != NULL)
+		mtx_enter(&inp->inp_mtx);
 	return (inp);
 }
 
