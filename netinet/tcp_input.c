@@ -812,6 +812,7 @@ findpcb:
 					tcpstat_inc(tcps_dropsyn);
 					goto drop;
 				}
+				mtx_leave(&inp->inp_mtx);
 				return IPPROTO_DONE;
 			}
 		}
