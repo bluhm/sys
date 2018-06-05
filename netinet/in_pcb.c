@@ -532,6 +532,7 @@ in_pcbpickport(u_int16_t *lport, void *laddr, int wild, struct inpcb *inp,
 int
 in_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 {
+	struct inpcb *t;
 	struct in_addr *ina = NULL;
 	struct sockaddr_in *sin;
 	int error;
@@ -550,9 +551,12 @@ in_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 	if (error)
 		return (error);
 
-	if (in_pcbhashlookup(inp->inp_table, sin->sin_addr, sin->sin_port,
-	    *ina, inp->inp_lport, inp->inp_rtableid) != NULL)
+	t = in_pcbhashlookup(inp->inp_table, sin->sin_addr, sin->sin_port,
+	    *ina, inp->inp_lport, inp->inp_rtableid);
+	if (t != NULL) {
+		mtx_leave(&t->inp_mtx);
 		return (EADDRINUSE);
+	}
 
 	KASSERT(inp->inp_laddr.s_addr == INADDR_ANY || inp->inp_lport);
 
@@ -561,9 +565,11 @@ in_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 			error = in_pcbbind(inp, NULL, curproc);
 			if (error)
 				return (error);
-			if (in_pcbhashlookup(inp->inp_table, sin->sin_addr,
+			t = in_pcbhashlookup(inp->inp_table, sin->sin_addr,
 			    sin->sin_port, *ina, inp->inp_lport,
-			    inp->inp_rtableid) != NULL) {
+			    inp->inp_rtableid);
+			if (t != NULL) {
+				mtx_leave(&t->inp_mtx);
 				inp->inp_lport = 0;
 				return (EADDRINUSE);
 			}
