@@ -214,20 +214,30 @@ in6_pcbaddrisavail(struct inpcb *inp, struct sockaddr_in6 *sin6, int wild,
 	}
 	if (lport) {
 		struct inpcb *t;
+		uid_t euid;
+		short options;
 
 		if (so->so_euid) {
 			t = in_pcblookup_local(table,
 			    (struct in_addr *)&sin6->sin6_addr, lport,
 			    INPLOOKUP_WILDCARD | INPLOOKUP_IPV6,
 			    inp->inp_rtableid);
-			if (t && (so->so_euid != t->inp_socket->so_euid))
-				return (EADDRINUSE);
+			if (t != NULL) {
+				euid = t->inp_socket->so_euid;
+				mtx_leave(&t->inp_mtx);
+				if (so->so_euid != euid)
+					return (EADDRINUSE);
+			}
 		}
 		t = in_pcblookup_local(table,
 		    (struct in_addr *)&sin6->sin6_addr, lport,
 		    wild, inp->inp_rtableid);
-		if (t && (reuseport & t->inp_socket->so_options) == 0)
-			return (EADDRINUSE);
+		if (t != NULL) {
+			options = t->inp_socket->so_options;
+			mtx_leave(&t->inp_mtx);
+			if ((reuseport & options) == 0)
+				return (EADDRINUSE);
+		}
 	}
 	return (0);
 }
