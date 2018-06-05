@@ -160,38 +160,45 @@ rip6_input(struct mbuf **mp, int *offp, int proto, int af)
 	NET_ASSERT_LOCKED();
 	mtx_enter(&inpcbtable_mtx);
 	TAILQ_FOREACH(in6p, &rawin6pcbtable.inpt_queue, inp_queue) {
-		if (in6p->inp_socket->so_state & SS_CANTRCVMORE)
+		mtx_enter(&in6p->inp_mtx);
+		if (in6p->inp_socket->so_state & SS_CANTRCVMORE) {
+	 cont:
+			mtx_leave(&in6p->inp_mtx);
 			continue;
+		}
 		if (!(in6p->inp_flags & INP_IPV6))
-			continue;
+			goto cont;
 		if ((in6p->inp_ipv6.ip6_nxt || proto == IPPROTO_ICMPV6) &&
 		    in6p->inp_ipv6.ip6_nxt != proto)
-			continue;
+			goto cont;
 		if (!IN6_IS_ADDR_UNSPECIFIED(&in6p->inp_laddr6) &&
 		    !IN6_ARE_ADDR_EQUAL(&in6p->inp_laddr6, key))
-			continue;
+			goto cont;
 		if (!IN6_IS_ADDR_UNSPECIFIED(&in6p->inp_faddr6) &&
 		    !IN6_ARE_ADDR_EQUAL(&in6p->inp_faddr6, &ip6->ip6_src))
-			continue;
+			goto cont;
 		if (proto == IPPROTO_ICMPV6 && in6p->inp_icmp6filt) {
 			struct icmp6_hdr *icmp6;
 
 			IP6_EXTHDR_GET(icmp6, struct icmp6_hdr *, m, *offp,
 			    sizeof(*icmp6));
 			if (icmp6 == NULL) {
+				if (last != NULL)
+					mtx_leave(&last->inp_mtx);
+				mtx_leave(&in6p->inp_mtx);
 				mtx_leave(&inpcbtable_mtx);
 				return IPPROTO_DONE;
 			}
 			if (ICMP6_FILTER_WILLBLOCK(icmp6->icmp6_type,
 			    in6p->inp_icmp6filt))
-				continue;
+				goto cont;
 		}
 		if (proto != IPPROTO_ICMPV6 && in6p->inp_cksum6 != -1) {
 			rip6stat_inc(rip6s_isum);
 			if (in6_cksum(m, proto, *offp,
 			    m->m_pkthdr.len - *offp)) {
 				rip6stat_inc(rip6s_badsum);
-				continue;
+				goto cont;
 			}
 		}
 		if (last) {
@@ -212,6 +219,7 @@ rip6_input(struct mbuf **mp, int *offp, int proto, int af)
 					sorwakeup(last->inp_socket);
 				opts = NULL;
 			}
+			mtx_leave(&last->inp_mtx);
 		}
 		last = in6p;
 	}
@@ -229,6 +237,7 @@ rip6_input(struct mbuf **mp, int *offp, int proto, int af)
 			rip6stat_inc(rip6s_fullsock);
 		} else
 			sorwakeup(last->inp_socket);
+		mtx_leave(&last->inp_mtx);
 	} else {
 		struct counters_ref ref;
 		uint64_t *counters;
