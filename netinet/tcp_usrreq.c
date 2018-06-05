@@ -804,6 +804,8 @@ tcp_ident(void *oldp, size_t *oldlenp, void *newp, size_t newlen, int dodrop)
 			tp = tcp_drop(tp, ECONNABORTED);
 		else
 			error = ESRCH;
+		if (inp != NULL)
+			mtx_leave(&inp->inp_mtx);
 		return (error);
 	}
 
@@ -830,6 +832,8 @@ tcp_ident(void *oldp, size_t *oldlenp, void *newp, size_t newlen, int dodrop)
 		tir.ruid = -1;
 		tir.euid = -1;
 	}
+	if (inp != NULL)
+		mtx_leave(&inp->inp_mtx);
 
 	*oldlenp = sizeof (tir);
 	error = copyout((void *)&tir, oldp, sizeof (tir));
