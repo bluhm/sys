@@ -143,10 +143,10 @@ socreate(int dom, struct socket **aso, int type, int proto)
 	if (error) {
 		so->so_state |= SS_NOFDREF;
 		sofree(so);
-		sounlock(s);
+		sounlock(so, s);
 		return (error);
 	}
-	sounlock(s);
+	sounlock(so, s);
 	*aso = so;
 	return (0);
 }
@@ -177,7 +177,7 @@ solisten(struct socket *so, int backlog)
 	error = (*so->so_proto->pr_usrreq)(so, PRU_LISTEN, NULL, NULL, NULL,
 	    curproc);
 	if (error) {
-		sounlock(s);
+		sounlock(so, s);
 		return (error);
 	}
 	if (TAILQ_FIRST(&so->so_q) == NULL)
@@ -187,7 +187,7 @@ solisten(struct socket *so, int backlog)
 	if (backlog < sominconn)
 		backlog = sominconn;
 	so->so_qlimit = backlog;
-	sounlock(s);
+	sounlock(so, s);
 	return (0);
 }
 
@@ -286,7 +286,7 @@ discard:
 		panic("soclose NOFDREF: so %p, so_type %d", so, so->so_type);
 	so->so_state |= SS_NOFDREF;
 	sofree(so);
-	sounlock(s);
+	sounlock(so, s);
 	return (error);
 }
 
@@ -351,7 +351,7 @@ soconnect2(struct socket *so1, struct socket *so2)
 	s = solock(so1);
 	error = (*so1->so_proto->pr_usrreq)(so1, PRU_CONNECT2, NULL,
 	    (struct mbuf *)so2, NULL, curproc);
-	sounlock(s);
+	sounlock(so1, s);
 	return (error);
 }
 
@@ -480,7 +480,7 @@ restart:
 				if (flags & MSG_EOR)
 					top->m_flags |= M_EOR;
 			} else {
-				sounlock(s);
+				sounlock(so, s);
 				error = m_getuio(&top, atomic, space, uio);
 				s = solock(so);
 				if (error)
@@ -509,7 +509,7 @@ release:
 	so->so_state &= ~SS_ISSENDING;
 	sbunlock(so, &so->so_snd);
 out:
-	sounlock(s);
+	sounlock(so, s);
 	m_freem(top);
 	m_freem(control);
 	return (error);
@@ -663,7 +663,7 @@ soreceive(struct socket *so, struct mbuf **paddr, struct uio *uio,
 		s = solock(so);
 		error = (*pr->pr_usrreq)(so, PRU_RCVOOB, m,
 		    (struct mbuf *)(long)(flags & MSG_PEEK), NULL, curproc);
-		sounlock(s);
+		sounlock(so, s);
 		if (error)
 			goto bad;
 		do {
@@ -681,7 +681,7 @@ bad:
 	s = solock(so);
 restart:
 	if ((error = sblock(so, &so->so_rcv, SBLOCKWAIT(flags))) != 0) {
-		sounlock(s);
+		sounlock(so, s);
 		return (error);
 	}
 
@@ -749,7 +749,7 @@ restart:
 		sbunlock(so, &so->so_rcv);
 		error = sbwait(so, &so->so_rcv);
 		if (error) {
-			sounlock(s);
+			sounlock(so, s);
 			return (error);
 		}
 		goto restart;
@@ -885,7 +885,7 @@ dontblock:
 			SBLASTRECORDCHK(&so->so_rcv, "soreceive uiomove");
 			SBLASTMBUFCHK(&so->so_rcv, "soreceive uiomove");
 			resid = uio->uio_resid;
-			sounlock(s);
+			sounlock(so, s);
 			uio_error = uiomove(mtod(m, caddr_t) + moff, len, uio);
 			s = solock(so);
 			if (uio_error)
@@ -969,7 +969,7 @@ dontblock:
 			error = sbwait(so, &so->so_rcv);
 			if (error) {
 				sbunlock(so, &so->so_rcv);
-				sounlock(s);
+				sounlock(so, s);
 				return (0);
 			}
 			if ((m = so->so_rcv.sb_mb) != NULL)
@@ -1015,7 +1015,7 @@ dontblock:
 		*flagsp |= flags;
 release:
 	sbunlock(so, &so->so_rcv);
-	sounlock(s);
+	sounlock(so, s);
 	return (error);
 }
 
@@ -1041,7 +1041,7 @@ soshutdown(struct socket *so, int how)
 		error = EINVAL;
 		break;
 	}
-	sounlock(s);
+	sounlock(so, s);
 
 	return (error);
 }
@@ -1220,7 +1220,7 @@ soidle(void *arg)
 		so->so_error = ETIMEDOUT;
 		sounsplice(so, so->so_sp->ssp_socket, 1);
 	}
-	sounlock(s);
+	sounlock(so, s);
 }
 
 void
@@ -1238,7 +1238,7 @@ sotask(void *arg)
 		 */
 		somove(so, M_DONTWAIT);
 	}
-	sounlock(s);
+	sounlock(so, s);
 
 	/* Avoid user land starvation. */
 	yield();

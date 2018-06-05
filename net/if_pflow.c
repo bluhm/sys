@@ -442,7 +442,7 @@ pflow_set(struct pflow_softc *sc, struct pflowreq *pflowr)
 
 				s = solock(so);
 				error = sobind(so, m, p);
-				sounlock(s);
+				sounlock(so, s);
 				m_freem(m);
 				if (error) {
 					soclose(so);

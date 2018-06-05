@@ -241,7 +241,7 @@ krpc_call(struct sockaddr_in *sa, u_int prog, u_int vers, u_int func,
 	m->m_len = sizeof(tv);
 	s = solock(so);
 	error = sosetopt(so, SOL_SOCKET, SO_RCVTIMEO, m);
-	sounlock(s);
+	sounlock(so, s);
 	m_freem(m);
 	if (error)
 		goto out;
@@ -257,7 +257,7 @@ krpc_call(struct sockaddr_in *sa, u_int prog, u_int vers, u_int func,
 		*on = 1;
 		s = solock(so);
 		error = sosetopt(so, SOL_SOCKET, SO_BROADCAST, m);
-		sounlock(s);
+		sounlock(so, s);
 		m_freem(m);
 		if (error)
 			goto out;
@@ -274,7 +274,7 @@ krpc_call(struct sockaddr_in *sa, u_int prog, u_int vers, u_int func,
 	*ip = IP_PORTRANGE_LOW;
 	s = solock(so);
 	error = sosetopt(so, IPPROTO_IP, IP_PORTRANGE, mopt);
-	sounlock(s);
+	sounlock(so, s);
 	m_freem(mopt);
 	if (error)
 		goto out;
@@ -288,7 +288,7 @@ krpc_call(struct sockaddr_in *sa, u_int prog, u_int vers, u_int func,
 	sin->sin_port = htons(0);
 	s = solock(so);
 	error = sobind(so, m, &proc0);
-	sounlock(s);
+	sounlock(so, s);
 	m_freem(m);
 	if (error) {
 		printf("bind failed\n");
@@ -301,7 +301,7 @@ krpc_call(struct sockaddr_in *sa, u_int prog, u_int vers, u_int func,
 	*ip = IP_PORTRANGE_DEFAULT;
 	s = solock(so);
 	error = sosetopt(so, IPPROTO_IP, IP_PORTRANGE, mopt);
-	sounlock(s);
+	sounlock(so, s);
 	m_freem(mopt);
 	if (error)
 		goto out;

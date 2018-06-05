@@ -611,7 +611,7 @@ bfd_sender(struct bfd_config *bfd, unsigned int port)
 
 	s = solock(so);
 	error = soconnect(so, m);
-	sounlock(s);
+	sounlock(so, s);
 	if (error && error != ECONNREFUSED) {
 		printf("%s: soconnect error %d\n",
 		    __func__, error);

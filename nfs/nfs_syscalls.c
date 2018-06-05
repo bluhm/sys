@@ -250,7 +250,7 @@ nfssvc_addsock(struct file *fp, struct mbuf *mynam)
 	s = solock(so);
 	error = soreserve(so, siz, siz); 
 	if (error) {
-		sounlock(s);
+		sounlock(so, s);
 		m_freem(mynam);
 		return (error);
 	}
@@ -279,7 +279,7 @@ nfssvc_addsock(struct file *fp, struct mbuf *mynam)
 	so->so_rcv.sb_timeo = 0;
 	so->so_snd.sb_flags &= ~SB_NOINTR;
 	so->so_snd.sb_timeo = 0;
-	sounlock(s);
+	sounlock(so, s);
 	if (tslp)
 		slp = tslp;
 	else {

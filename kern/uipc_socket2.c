@@ -290,7 +290,7 @@ solock(struct socket *so)
 }
 
 void
-sounlock(int s)
+sounlock(struct socket *so, int s)
 {
 	if (s != -42)
 		NET_UNLOCK();
