@@ -569,6 +569,11 @@ rip6_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 
 	soassertlocked(so);
 
+	if (in6p == NULL) {
+		error = EINVAL;
+		goto release;
+	}
+
 	switch (req) {
 	case PRU_DISCONNECT:
 		if ((so->so_state & SS_ISCONNECTED) == 0) {
@@ -698,9 +703,17 @@ rip6_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		in6_setpeeraddr(in6p, nam);
 		break;
 
+	case PRU_LOCK:
+		mtx_enter(&in6p->inp_mtx);
+		break;
+	case PRU_UNLOCK:
+		mtx_leave(&in6p->inp_mtx);
+		break;
+
 	default:
 		panic("rip6_usrreq");
 	}
+release:
 	m_freem(m);
 	return (error);
 }

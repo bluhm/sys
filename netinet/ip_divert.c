@@ -299,6 +299,11 @@ divert_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *addr,
 	case PRU_RCVOOB:
 		return (EOPNOTSUPP);	/* do not free mbuf's */
 
+	case PRU_LOCK:
+	case PRU_UNLOCK:
+		/* XXX */
+		break;
+
 	default:
 		panic("divert_usrreq");
 	}
