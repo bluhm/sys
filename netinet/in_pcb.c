@@ -438,17 +438,27 @@ in_pcbaddrisavail(struct inpcb *inp, struct sockaddr_in *sin, int wild,
 	}
 	if (lport) {
 		struct inpcb *t;
+		uid_t euid;
+		short options;
 
 		if (so->so_euid) {
 			t = in_pcblookup_local(table, &sin->sin_addr, lport,
 			    INPLOOKUP_WILDCARD, inp->inp_rtableid);
-			if (t && (so->so_euid != t->inp_socket->so_euid))
-				return (EADDRINUSE);
+			if (t != NULL) {
+				euid = t->inp_socket->so_euid;
+				mtx_leave(&t->inp_mtx);
+				if (so->so_euid != euid)
+					return (EADDRINUSE);
+			}
 		}
 		t = in_pcblookup_local(table, &sin->sin_addr, lport,
 		    wild, inp->inp_rtableid);
-		if (t && (reuseport & t->inp_socket->so_options) == 0)
-			return (EADDRINUSE);
+		if (t != NULL) {
+			options = t->inp_socket->so_options;
+			mtx_leave(&t->inp_mtx);
+			if ((reuseport & options) == 0)
+				return (EADDRINUSE);
+		}
 	}
 
 	return (0);
@@ -492,15 +502,22 @@ in_pcbpickport(u_int16_t *lport, void *laddr, int wild, struct inpcb *inp,
 	candidate = lower + arc4random_uniform(count);
 
 	do {
+		struct inpcb *t;
+
 		if (count-- < 0)	/* completely used? */
 			return (EADDRNOTAVAIL);
 		++candidate;
 		if (candidate < lower || candidate > higher)
 			candidate = lower;
 		localport = htons(candidate);
-	} while (in_baddynamic(candidate, so->so_proto->pr_protocol) ||
-	    in_pcblookup_local(table, laddr, localport, wild,
-	    inp->inp_rtableid));
+		if (!in_baddynamic(candidate, so->so_proto->pr_protocol))
+			break;
+		t = in_pcblookup_local(table, laddr, localport, wild,
+		    inp->inp_rtableid);
+		if (t == NULL)
+			break;
+		mtx_leave(&t->inp_mtx);
+	} while (1);
 	*lport = localport;
 
 	return (0);
