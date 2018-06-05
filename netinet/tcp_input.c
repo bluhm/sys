@@ -1326,9 +1326,9 @@ trimthenstep6:
 	 */
 	if ((so->so_state & SS_NOFDREF) &&
 	    tp->t_state > TCPS_CLOSE_WAIT && tlen) {
+		tcpstat_inc(tcps_rcvafterclose);
 		tp = tcp_close(tp);
 		inp = NULL;
-		tcpstat_inc(tcps_rcvafterclose);
 		goto dropwithreset;
 	}
 
