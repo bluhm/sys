@@ -1113,8 +1113,10 @@ findpcb:
 			if (tcp_do_ecn && !(tp->t_flags & TF_DISABLE_ECN))
 				goto drop;
 #endif
-			if (tiflags & TH_ACK)
+			if (tiflags & TH_ACK) {
 				tp = tcp_drop(tp, ECONNREFUSED);
+				inp = NULL;
+			}
 			goto drop;
 		}
 		if ((tiflags & TH_SYN) == 0)
@@ -1324,6 +1326,7 @@ trimthenstep6:
 	if ((so->so_state & SS_NOFDREF) &&
 	    tp->t_state > TCPS_CLOSE_WAIT && tlen) {
 		tp = tcp_close(tp);
+		inp = NULL;
 		tcpstat_inc(tcps_rcvafterclose);
 		goto dropwithreset;
 	}
@@ -1403,11 +1406,13 @@ trimthenstep6:
 			tp->t_state = TCPS_CLOSED;
 			tcpstat_inc(tcps_drops);
 			tp = tcp_close(tp);
+			inp = NULL;
 			goto drop;
 		case TCPS_CLOSING:
 		case TCPS_LAST_ACK:
 		case TCPS_TIME_WAIT:
 			tp = tcp_close(tp);
+			inp = NULL;
 			goto drop;
 		}
 	}
@@ -1805,6 +1810,7 @@ trimthenstep6:
 		case TCPS_LAST_ACK:
 			if (ourfinisacked) {
 				tp = tcp_close(tp);
+				inp = NULL;
 				goto drop;
 			}
 			break;
