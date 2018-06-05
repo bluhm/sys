@@ -142,8 +142,8 @@ socreate(int dom, struct socket **aso, int type, int proto)
 	error = (*prp->pr_attach)(so, proto);
 	if (error) {
 		so->so_state |= SS_NOFDREF;
-		/* sofree() calls sounlock(). */
 		sofree(so, s);
+		sounlock(so, s);
 		return (error);
 	}
 	sounlock(so, s);
@@ -290,8 +290,8 @@ discard:
 	if (so->so_state & SS_NOFDREF)
 		panic("soclose NOFDREF: so %p, so_type %d", so, so->so_type);
 	so->so_state |= SS_NOFDREF;
-	/* sofree() calls sounlock(). */
 	sofree(so, s);
+	sounlock(so, s);
 	return (error);
 }
 
