@@ -488,7 +488,7 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 		inp = in_pcbhashlookup(&udbtable, ip->ip_src, uh->uh_sport,
 		    ip->ip_dst, uh->uh_dport, m->m_pkthdr.ph_rtableid);
 	}
-	if (inp == 0) {
+	if (inp == NULL) {
 		udpstat_inc(udps_pcbhashmiss);
 #ifdef INET6
 		if (ip6) {
@@ -498,7 +498,7 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 #endif /* INET6 */
 		inp = in_pcblookup_listen(&udbtable, ip->ip_dst,
 		    uh->uh_dport, m, m->m_pkthdr.ph_rtableid);
-		if (inp == 0) {
+		if (inp == NULL) {
 			udpstat_inc(udps_noport);
 			if (m->m_flags & (M_BCAST | M_MCAST)) {
 				udpstat_inc(udps_noportbcast);
@@ -526,12 +526,12 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 #ifdef INET6
 	if (ip6 && inp->inp_ip6_minhlim &&
 	    inp->inp_ip6_minhlim > ip6->ip6_hlim) {
-		goto bad;
+		goto unlock;
 	} else
 #endif
 	if (ip && inp->inp_ip_minttl &&
 	    inp->inp_ip_minttl > ip->ip_ttl) {
-		goto bad;
+		goto unlock;
 	}
 
 #if NPF > 0
@@ -551,7 +551,7 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 	    IPSP_DIRECTION_IN, tdb, inp, 0);
 	if (error) {
 		udpstat_inc(udps_nosec);
-		goto bad;
+		goto unlock;
 	}
 	/* create ipsec options while we know that tdb cannot be modified */
 	if (tdb && tdb->tdb_ids)
@@ -566,6 +566,7 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 			if ((m = *mp = pipex_l2tp_input(m, off, session,
 			    ipsecflowinfo)) == NULL) {
 				/* the packet is handled by PIPEX */
+				mtx_leave(&inp->inp_mtx);
 				return IPPROTO_DONE;
 			}
 		}
@@ -573,8 +574,11 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 #endif
 
 	udp_sbappend(inp, m, ip, ip6, iphlen, uh, &srcsa.sa, ipsecflowinfo);
+	mtx_leave(&inp->inp_mtx);
 	return IPPROTO_DONE;
-bad:
+ unlock:
+	mtx_leave(&inp->inp_mtx);
+ bad:
 	m_freem(m);
 	return IPPROTO_DONE;
 }
@@ -745,6 +749,7 @@ udp6_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *d)
 		}
 
 		if (cmd == PRC_MSGSIZE) {
+			struct inpcb *inp;
 			int valid = 0;
 
 			/*
@@ -752,10 +757,9 @@ udp6_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *d)
 			 * corresponding to the address in the ICMPv6 message
 			 * payload.
 			 */
-			if (in6_pcbhashlookup(&udbtable, &sa6.sin6_addr,
+			inp = in6_pcbhashlookup(&udbtable, &sa6.sin6_addr,
 			    uh.uh_dport, &sa6_src.sin6_addr, uh.uh_sport,
-			    rdomain))
-				valid = 1;
+			    rdomain);
 #if 0
 			/*
 			 * As the use of sendto(2) is fairly popular,
@@ -764,11 +768,15 @@ udp6_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *d)
 			 * We should at least check if the local address (= s)
 			 * is really ours.
 			 */
-			else if (in6_pcblookup_listen(&udbtable,
-			    &sa6_src.sin6_addr, uh.uh_sport, NULL,
-			    rdomain))
-				valid = 1;
+			if (inp == NULL)
+				inp = in6_pcblookup_listen(&udbtable,
+				    &sa6_src.sin6_addr, uh.uh_sport, NULL,
+				    rdomain);
 #endif
+			if (inp != NULL) {
+				valid = 1;
+				mtx_leave(&inp->inp_mtx);
+			}
 
 			/*
 			 * Depending on the value of "valid" and routing table
@@ -839,8 +847,11 @@ udp_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 		inp = in_pcbhashlookup(&udbtable,
 		    ip->ip_dst, uhp->uh_dport, ip->ip_src, uhp->uh_sport,
 		    rdomain);
-		if (inp && inp->inp_socket != NULL)
-			notify(inp, errno);
+		if (inp != NULL) {
+			if (inp->inp_socket != NULL)
+				notify(inp, errno);
+			mtx_leave(&inp->inp_mtx);
+		}
 	} else
 		in_pcbnotifyall(&udbtable, sa, rdomain, errno, notify);
 }
