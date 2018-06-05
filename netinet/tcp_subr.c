@@ -756,8 +756,10 @@ tcp_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 			 * ever sent, drop the message.
 			 */
 			mtu = (u_int)ntohs(icp->icmp_nextmtu);
-			if (mtu >= tp->t_pmtud_mtu_sent)
+			if (mtu >= tp->t_pmtud_mtu_sent) {
+				mtx_leave(&inp->inp_mtx);
 				return;
+			}
 			if (mtu >= tcp_hdrsz(tp) + tp->t_pmtud_mss_acked) {
 				/* 
 				 * Calculate new MTU, and create corresponding
@@ -765,6 +767,7 @@ tcp_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 				 */
 				tp->t_flags &= ~TF_PMTUD_PEND;
 				icmp_mtudisc(icp, inp->inp_rtableid);
+				mtx_leave(&inp->inp_mtx);
 			} else {
 				/*
 				 * Record the information got in the ICMP
@@ -774,18 +777,23 @@ tcp_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 				 * refers to an older TCP segment
 				 */
 				if (tp->t_flags & TF_PMTUD_PEND) {
-					if (SEQ_LT(tp->t_pmtud_th_seq, seq))
+					if (SEQ_LT(tp->t_pmtud_th_seq, seq)) {
+						mtx_leave(&inp->inp_mtx);
 						return;
+					}
 				} else
 					tp->t_flags |= TF_PMTUD_PEND;
 				tp->t_pmtud_th_seq = seq;
 				tp->t_pmtud_nextmtu = icp->icmp_nextmtu;
 				tp->t_pmtud_ip_len = icp->icmp_ip.ip_len;
 				tp->t_pmtud_ip_hl = icp->icmp_ip.ip_hl;
+				mtx_leave(&inp->inp_mtx);
 				return;
 			}
 		} else {
 			/* ignore if we don't have a matching connection */
+			if (inp != NULL)
+				mtx_leave(&inp->inp_mtx);
 			return;
 		}
 		notify = tcp_mtudisc, ip = 0;
@@ -808,6 +816,7 @@ tcp_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 			    SEQ_GEQ(seq, tp->snd_una) &&
 			    SEQ_LT(seq, tp->snd_max))
 				notify(inp, errno);
+			mtx_leave(&inp->inp_mtx);
 		} else if (inetctlerrmap[cmd] == EHOSTUNREACH ||
 		    inetctlerrmap[cmd] == ENETUNREACH ||
 		    inetctlerrmap[cmd] == EHOSTDOWN) {
