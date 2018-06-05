@@ -702,7 +702,7 @@ findpcb:
 					 * We have created a
 					 * full-blown connection.
 					 */
-					tp = NULL;
+					mtx_leave(&inp->inp_mtx);
 					inp = sotoinpcb(so);
 					tp = intotcpcb(inp);
 					if (tp == NULL)
@@ -812,6 +812,7 @@ findpcb:
 					tcpstat_inc(tcps_dropsyn);
 					goto drop;
 				}
+				mtx_leave(&inp->inp_mtx);
 				return IPPROTO_DONE;
 			}
 		}
@@ -997,6 +998,7 @@ findpcb:
 				if (so->so_snd.sb_cc ||
 				    tp->t_flags & TF_NEEDOUTPUT)
 					(void) tcp_output(tp);
+				mtx_leave(&inp->inp_mtx);
 				return IPPROTO_DONE;
 			}
 		} else if (th->th_ack == tp->snd_una &&
@@ -1041,6 +1043,7 @@ findpcb:
 			tp->t_flags &= ~TF_BLOCKOUTPUT;
 			if (tp->t_flags & (TF_ACKNOW|TF_NEEDOUTPUT))
 				(void) tcp_output(tp);
+			mtx_leave(&inp->inp_mtx);
 			return IPPROTO_DONE;
 		}
 	}
@@ -1111,8 +1114,10 @@ findpcb:
 			if (tcp_do_ecn && !(tp->t_flags & TF_DISABLE_ECN))
 				goto drop;
 #endif
-			if (tiflags & TH_ACK)
+			if (tiflags & TH_ACK) {
 				tp = tcp_drop(tp, ECONNREFUSED);
+				inp = NULL;
+			}
 			goto drop;
 		}
 		if ((tiflags & TH_SYN) == 0)
@@ -1321,8 +1326,9 @@ trimthenstep6:
 	 */
 	if ((so->so_state & SS_NOFDREF) &&
 	    tp->t_state > TCPS_CLOSE_WAIT && tlen) {
-		tp = tcp_close(tp);
 		tcpstat_inc(tcps_rcvafterclose);
+		tp = tcp_close(tp);
+		inp = NULL;
 		goto dropwithreset;
 	}
 
@@ -1401,11 +1407,13 @@ trimthenstep6:
 			tp->t_state = TCPS_CLOSED;
 			tcpstat_inc(tcps_drops);
 			tp = tcp_close(tp);
+			inp = NULL;
 			goto drop;
 		case TCPS_CLOSING:
 		case TCPS_LAST_ACK:
 		case TCPS_TIME_WAIT:
 			tp = tcp_close(tp);
+			inp = NULL;
 			goto drop;
 		}
 	}
@@ -1803,6 +1811,7 @@ trimthenstep6:
 		case TCPS_LAST_ACK:
 			if (ourfinisacked) {
 				tp = tcp_close(tp);
+				inp = NULL;
 				goto drop;
 			}
 			break;
@@ -2011,6 +2020,7 @@ dodata:							/* XXX */
 	 */
 	if (tp->t_flags & (TF_ACKNOW|TF_NEEDOUTPUT))
 		(void) tcp_output(tp);
+	mtx_leave(&inp->inp_mtx);
 	return IPPROTO_DONE;
 
 badsyn:
@@ -2039,6 +2049,7 @@ dropafterack:
 	m_freem(m);
 	tp->t_flags |= TF_ACKNOW;
 	(void) tcp_output(tp);
+	mtx_leave(&inp->inp_mtx);
 	return IPPROTO_DONE;
 
 dropwithreset_ratelim:
@@ -2072,6 +2083,8 @@ dropwithreset:
 		tcp_respond(tp, mtod(m, caddr_t), th, th->th_seq + tlen,
 		    (tcp_seq)0, TH_RST|TH_ACK, m->m_pkthdr.ph_rtableid);
 	}
+	if (inp != NULL)
+		mtx_leave(&inp->inp_mtx);
 	m_freem(m);
 	return IPPROTO_DONE;
 
@@ -2082,6 +2095,8 @@ drop:
 	if (otp)
 		tcp_trace(TA_DROP, ostate, tp, otp, saveti, 0, tlen);
 
+	if (inp != NULL)
+		mtx_leave(&inp->inp_mtx);
 	m_freem(m);
 	return IPPROTO_DONE;
 }

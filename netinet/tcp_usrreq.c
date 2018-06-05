@@ -399,6 +399,13 @@ tcp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 			in_setpeeraddr(inp, nam);
 		break;
 
+	case PRU_LOCK:
+		mtx_enter(&inp->inp_mtx);
+		break;
+	case PRU_UNLOCK:
+		mtx_leave(&inp->inp_mtx);
+		break;
+
 	default:
 		panic("tcp_usrreq");
 	}
@@ -800,10 +807,13 @@ tcp_ident(void *oldp, size_t *oldlenp, void *newp, size_t newlen, int dodrop)
 
 	if (dodrop) {
 		if (inp && (tp = intotcpcb(inp)) &&
-		    ((inp->inp_socket->so_options & SO_ACCEPTCONN) == 0))
+		    ((inp->inp_socket->so_options & SO_ACCEPTCONN) == 0)) {
 			tp = tcp_drop(tp, ECONNABORTED);
-		else
+			inp = NULL;
+		} else
 			error = ESRCH;
+		if (inp != NULL)
+			mtx_leave(&inp->inp_mtx);
 		return (error);
 	}
 
@@ -830,6 +840,8 @@ tcp_ident(void *oldp, size_t *oldlenp, void *newp, size_t newlen, int dodrop)
 		tir.ruid = -1;
 		tir.euid = -1;
 	}
+	if (inp != NULL)
+		mtx_leave(&inp->inp_mtx);
 
 	*oldlenp = sizeof (tir);
 	error = copyout((void *)&tir, oldp, sizeof (tir));
