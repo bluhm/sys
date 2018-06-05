@@ -526,12 +526,12 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 #ifdef INET6
 	if (ip6 && inp->inp_ip6_minhlim &&
 	    inp->inp_ip6_minhlim > ip6->ip6_hlim) {
-		goto unlock;
+		goto bad;
 	} else
 #endif
 	if (ip && inp->inp_ip_minttl &&
 	    inp->inp_ip_minttl > ip->ip_ttl) {
-		goto unlock;
+		goto bad;
 	}
 
 #if NPF > 0
@@ -551,7 +551,7 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 	    IPSP_DIRECTION_IN, tdb, inp, 0);
 	if (error) {
 		udpstat_inc(udps_nosec);
-		goto unlock;
+		goto bad;
 	}
 	/* create ipsec options while we know that tdb cannot be modified */
 	if (tdb && tdb->tdb_ids)
@@ -576,9 +576,9 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 	udp_sbappend(inp, m, ip, ip6, iphlen, uh, &srcsa.sa, ipsecflowinfo);
 	mtx_leave(&inp->inp_mtx);
 	return IPPROTO_DONE;
- unlock:
-	mtx_leave(&inp->inp_mtx);
- bad:
+bad:
+	if (inp != NULL)
+		mtx_leave(&inp->inp_mtx);
 	m_freem(m);
 	return IPPROTO_DONE;
 }
