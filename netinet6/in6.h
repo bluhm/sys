@@ -405,7 +405,7 @@ typedef	__socklen_t	socklen_t;	/* length type for network syscalls */
 
 #ifdef _KERNEL
 extern	const u_char inet6ctlerrmap[];
-extern	struct in6_addr zeroin6_addr;
+extern	const struct in6_addr zeroin6_addr;
 
 struct mbuf;
 struct ifnet;
