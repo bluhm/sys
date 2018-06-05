@@ -1043,6 +1043,7 @@ findpcb:
 			tp->t_flags &= ~TF_BLOCKOUTPUT;
 			if (tp->t_flags & (TF_ACKNOW|TF_NEEDOUTPUT))
 				(void) tcp_output(tp);
+			mtx_leave(&inp->inp_mtx);
 			return IPPROTO_DONE;
 		}
 	}
