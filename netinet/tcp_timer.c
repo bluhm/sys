@@ -118,6 +118,7 @@ tcp_timer_delack(void *arg)
 	 * ACK callout.
 	 */
 	NET_LOCK();
+	mtx_enter(&tp->t_inpcb->inp_mtx);
 	/* Ignore canceled timeouts or timeouts that have been rescheduled. */
 	if (!ISSET((tp)->t_flags, TF_TMR_DELACK) ||
 	    timeout_pending(&tp->t_timer[TCPT_DELACK]))
@@ -133,6 +134,7 @@ tcp_timer_delack(void *arg)
 	if (otp)
 		tcp_trace(TA_TIMER, ostate, tp, otp, NULL, TCPT_DELACK, 0);
  out:
+	mtx_leave(&tp->t_inpcb->inp_mtx);
 	NET_UNLOCK();
 }
 
@@ -200,6 +202,7 @@ tcp_timer_rexmt(void *arg)
 	short ostate;
 
 	NET_LOCK();
+	mtx_enter(&tp->t_inpcb->inp_mtx);
 	/* Ignore canceled timeouts or timeouts that have been rescheduled. */
 	if (!ISSET((tp)->t_flags, TF_TMR_REXMT) ||
 	    timeout_pending(&tp->t_timer[TCPT_REXMT]))
@@ -383,6 +386,8 @@ tcp_timer_rexmt(void *arg)
 	if (otp)
 		tcp_trace(TA_TIMER, ostate, tp, otp, NULL, TCPT_REXMT, 0);
  out:
+	if (tp != NULL)
+		mtx_leave(&tp->t_inpcb->inp_mtx);
 	NET_UNLOCK();
 }
 
@@ -394,6 +399,7 @@ tcp_timer_persist(void *arg)
 	short ostate;
 
 	NET_LOCK();
+	mtx_enter(&tp->t_inpcb->inp_mtx);
 	/* Ignore canceled timeouts or timeouts that have been rescheduled. */
 	if (!ISSET((tp)->t_flags, TF_TMR_PERSIST) ||
 	    timeout_pending(&tp->t_timer[TCPT_PERSIST]))
@@ -432,6 +438,8 @@ tcp_timer_persist(void *arg)
 	if (otp)
 		tcp_trace(TA_TIMER, ostate, tp, otp, NULL, TCPT_PERSIST, 0);
  out:
+	if (tp != NULL)
+		mtx_leave(&tp->t_inpcb->inp_mtx);
 	NET_UNLOCK();
 }
 
@@ -442,6 +450,7 @@ tcp_timer_keep(void *arg)
 	short ostate;
 
 	NET_LOCK();
+	mtx_enter(&tp->t_inpcb->inp_mtx);
 	/* Ignore canceled timeouts or timeouts that have been rescheduled. */
 	if (!ISSET((tp)->t_flags, TF_TMR_KEEP) ||
 	    timeout_pending(&tp->t_timer[TCPT_KEEP]))
@@ -482,6 +491,7 @@ tcp_timer_keep(void *arg)
 	if (otp)
 		tcp_trace(TA_TIMER, ostate, tp, otp, NULL, TCPT_KEEP, 0);
  out:
+	mtx_leave(&tp->t_inpcb->inp_mtx);
 	NET_UNLOCK();
 	return;
 
@@ -498,6 +508,7 @@ tcp_timer_2msl(void *arg)
 	short ostate;
 
 	NET_LOCK();
+	mtx_enter(&tp->t_inpcb->inp_mtx);
 	/* Ignore canceled timeouts or timeouts that have been rescheduled. */
 	if (!ISSET((tp)->t_flags, TF_TMR_2MSL) ||
 	    timeout_pending(&tp->t_timer[TCPT_2MSL]))
@@ -518,6 +529,8 @@ tcp_timer_2msl(void *arg)
 	if (otp)
 		tcp_trace(TA_TIMER, ostate, tp, otp, NULL, TCPT_2MSL, 0);
  out:
+	if (tp != NULL)
+		mtx_leave(&tp->t_inpcb->inp_mtx);
 	NET_UNLOCK();
 }
 

@@ -149,25 +149,29 @@ rip_input(struct mbuf **mp, int *offp, int proto, int af)
 	}
 #endif
 	NET_ASSERT_LOCKED();
+	mtx_enter(&inpcbtable_mtx);
 	TAILQ_FOREACH(inp, &rawcbtable.inpt_queue, inp_queue) {
-		if (inp->inp_socket->so_state & SS_CANTRCVMORE)
+		mtx_enter(&inp->inp_mtx);
+		if (inp->inp_socket->so_state & SS_CANTRCVMORE) {
+	 cont:
+			mtx_leave(&inp->inp_mtx);
 			continue;
+		}
 #ifdef INET6
 		if (inp->inp_flags & INP_IPV6)
-			continue;
+			goto cont;
 #endif
 		if (rtable_l2(inp->inp_rtableid) !=
 		    rtable_l2(m->m_pkthdr.ph_rtableid))
-			continue;
-
+			goto cont;
 		if (inp->inp_ip.ip_p && inp->inp_ip.ip_p != ip->ip_p)
-			continue;
+			goto cont;
 		if (inp->inp_laddr.s_addr &&
 		    inp->inp_laddr.s_addr != key->s_addr)
-			continue;
+			goto cont;
 		if (inp->inp_faddr.s_addr &&
 		    inp->inp_faddr.s_addr != ip->ip_src.s_addr)
-			continue;
+			goto cont;
 		if (last) {
 			struct mbuf *n;
 
@@ -185,9 +189,12 @@ rip_input(struct mbuf **mp, int *offp, int proto, int af)
 					sorwakeup(last->inp_socket);
 				opts = NULL;
 			}
+			mtx_leave(&last->inp_mtx);
 		}
 		last = inp;
 	}
+	mtx_leave(&inpcbtable_mtx);
+
 	if (last) {
 		if (last->inp_flags & INP_CONTROLOPTS ||
 		    last->inp_socket->so_options & SO_TIMESTAMP)
@@ -198,6 +205,7 @@ rip_input(struct mbuf **mp, int *offp, int proto, int af)
 			m_freem(opts);
 		} else
 			sorwakeup(last->inp_socket);
+		mtx_leave(&last->inp_mtx);
 	} else {
 		if (ip->ip_p != IPPROTO_ICMP)
 			icmp_error(m, ICMP_UNREACH, ICMP_UNREACH_PROTOCOL, 0, 0);
@@ -496,6 +504,13 @@ rip_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 
 	case PRU_PEERADDR:
 		in_setpeeraddr(inp, nam);
+		break;
+
+	case PRU_LOCK:
+		mtx_enter(&inp->inp_mtx);
+		break;
+	case PRU_UNLOCK:
+		mtx_leave(&inp->inp_mtx);
 		break;
 
 	default:
