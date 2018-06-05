@@ -146,7 +146,6 @@ socreate(int dom, struct socket **aso, int type, int proto)
 		sounlock(so, s);
 		return (error);
 	}
-	(*prp->pr_usrreq)(so, PRU_UNLOCK, NULL, NULL, NULL, NULL);
 	sounlock(so, s);
 	*aso = so;
 	return (0);
@@ -248,7 +247,6 @@ soclose(struct socket *so)
 	int s, error = 0;
 
 	s = solock(so);
-	(*so->so_proto->pr_usrreq)(so, PRU_UNLOCK, NULL, NULL, NULL, NULL);
 	if (so->so_options & SO_ACCEPTCONN) {
 		while ((so2 = TAILQ_FIRST(&so->so_q0)) != NULL) {
 			(void) soqremque(so2, 0);

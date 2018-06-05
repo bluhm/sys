@@ -153,6 +153,10 @@ raw_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		nam->m_len = len;
 		break;
 
+	case PRU_LOCK:
+	case PRU_UNLOCK:
+		break;
+
 	default:
 		panic("raw_usrreq");
 	}
