@@ -132,7 +132,7 @@
  * Globals
  */
 
-struct in6_addr zeroin6_addr;
+const struct in6_addr zeroin6_addr;
 
 /*
  * Keep separate inet6ctlerrmap, because I may remap some of these.
