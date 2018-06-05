@@ -104,7 +104,7 @@
 #include <netinet/ip_esp.h>
 #endif /* IPSEC */
 
-struct	in_addr zeroin_addr;
+const struct in_addr zeroin_addr;
 
 union {
 	struct in_addr	za_in;
@@ -1141,7 +1141,7 @@ in_pcblookup_listen(struct inpcbtable *table, struct in_addr laddr,
     u_int lport_arg, struct mbuf *m, u_int rtable)
 {
 	struct inpcbhead *head;
-	struct in_addr *key1, *key2;
+	const struct in_addr *key1, *key2;
 	struct inpcb *inp;
 	u_int16_t lport = lport_arg;
 	u_int rdomain;
@@ -1222,7 +1222,7 @@ in6_pcblookup_listen(struct inpcbtable *table, struct in6_addr *laddr,
     u_int lport_arg, struct mbuf *m, u_int rtable)
 {
 	struct inpcbhead *head;
-	struct in6_addr *key1, *key2;
+	const struct in6_addr *key1, *key2;
 	struct inpcb *inp;
 	u_int16_t lport = lport_arg;
 	u_int rdomain;
