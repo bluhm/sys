@@ -304,6 +304,13 @@ divert6_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *addr,
 	case PRU_RCVOOB:
 		return (EOPNOTSUPP);	/* do not free mbuf's */
 
+	case PRU_LOCK:
+		mtx_enter(&inp->inp_mtx);
+		break;
+	case PRU_UNLOCK:
+		mtx_leave(&inp->inp_mtx);
+		break;
+
 	default:
 		panic("divert6_usrreq");
 	}

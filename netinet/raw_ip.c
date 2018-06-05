@@ -504,6 +504,13 @@ rip_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		in_setpeeraddr(inp, nam);
 		break;
 
+	case PRU_LOCK:
+		mtx_enter(&inp->inp_mtx);
+		break;
+	case PRU_UNLOCK:
+		mtx_leave(&inp->inp_mtx);
+		break;
+
 	default:
 		panic("rip_usrreq");
 	}

@@ -144,8 +144,10 @@ struct protosw {
 #define	PRU_SLOWTIMO		19	/* 500ms timeout */
 #define	PRU_PROTORCV		20	/* receive from below */
 #define	PRU_PROTOSEND		21	/* send to below */
+#define	PRU_LOCK		22	/* acquire PCB lock */
+#define	PRU_UNLOCK		23	/* release PCB lock */
 
-#define	PRU_NREQ		22
+#define	PRU_NREQ		24
 
 #ifdef PRUREQUESTS
 const char *prurequests[] = {
@@ -154,7 +156,7 @@ const char *prurequests[] = {
 	"RCVD",		"SEND",		"ABORT",	"CONTROL",
 	"SENSE",	"RCVOOB",	"SENDOOB",	"SOCKADDR",
 	"PEERADDR",	"CONNECT2",	"FASTTIMO",	"SLOWTIMO",
-	"PROTORCV",	"PROTOSEND",
+	"PROTORCV",	"PROTOSEND",	"PRU_LOCK",	"PRU_UNLOCK",
 };
 #endif
 

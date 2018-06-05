@@ -696,6 +696,13 @@ rip6_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		in6_setpeeraddr(in6p, nam);
 		break;
 
+	case PRU_LOCK:
+		mtx_enter(&in6p->inp_mtx);
+		break;
+	case PRU_UNLOCK:
+		mtx_leave(&in6p->inp_mtx);
+		break;
+
 	default:
 		panic("rip6_usrreq");
 	}
