@@ -287,6 +287,7 @@ solock(struct socket *so)
 		KERNEL_LOCK();
 		break;
 	}
+	(*so->so_proto->pr_usrreq)(so, PRU_LOCK, NULL, NULL, NULL, NULL);
 
 	return (SL_LOCKED);
 }
@@ -298,6 +299,8 @@ sounlock(struct socket *so, int s)
 
 	if (s != SL_LOCKED)
 		return;
+
+	(*so->so_proto->pr_usrreq)(so, PRU_UNLOCK, NULL, NULL, NULL, NULL);
 
 	switch (so->so_proto->pr_domain->dom_family) {
 	case PF_INET:
@@ -333,12 +336,18 @@ soassertlocked(struct socket *so)
 int
 sosleep(struct socket *so, void *ident, int prio, const char *wmesg, int timo)
 {
+	int error;
+
+	(*so->so_proto->pr_usrreq)(so, PRU_UNLOCK, NULL, NULL, NULL, NULL);
 	if ((so->so_proto->pr_domain->dom_family != PF_UNIX) &&
 	    (so->so_proto->pr_domain->dom_family != PF_ROUTE) &&
 	    (so->so_proto->pr_domain->dom_family != PF_KEY)) {
-		return rwsleep(ident, &netlock, prio, wmesg, timo);
+		error = rwsleep(ident, &netlock, prio, wmesg, timo);
 	} else
-		return tsleep(ident, prio, wmesg, timo);
+		error = tsleep(ident, prio, wmesg, timo);
+	(*so->so_proto->pr_usrreq)(so, PRU_LOCK, NULL, NULL, NULL, NULL);
+
+	return error;
 }
 
 /*

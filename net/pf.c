@@ -3262,6 +3262,7 @@ pf_socket_lookup(struct pf_pdesc *pd)
 	pd->lookup.uid = inp->inp_socket->so_euid;
 	pd->lookup.gid = inp->inp_socket->so_egid;
 	pd->lookup.pid = inp->inp_socket->so_cpid;
+	mtx_leave(&inp->inp_mtx);
 	return (1);
 }
 
@@ -7242,6 +7243,9 @@ pf_inp_lookup(struct mbuf *m)
 	if (inp && inp->inp_pf_sk)
 		KASSERT(m->m_pkthdr.pf.statekey == inp->inp_pf_sk);
 
+	/* Return a locked inpcb.  Caller has to unlock it. */
+	if (inp != NULL)
+		mtx_enter(&inp->inp_mtx);
 	return (inp);
 }
 
@@ -7350,6 +7354,9 @@ pf_mbuf_link_state_key(struct mbuf *m, struct pf_state_key *sk)
 void
 pf_state_key_link_inpcb(struct pf_state_key *sk, struct inpcb *inp)
 {
+	/* The net lock guarantees that inp at the m has not been detached. */
+	NET_ASSERT_LOCKED();
+
 	KASSERT(sk->inp == NULL);
 	sk->inp = inp;
 	KASSERT(inp->inp_pf_sk == NULL);

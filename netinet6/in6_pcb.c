@@ -155,7 +155,6 @@ in6_pcbaddrisavail(struct inpcb *inp, struct sockaddr_in6 *sin6, int wild,
     struct proc *p)
 {
 	struct socket *so = inp->inp_socket;
-	struct inpcbtable *table = inp->inp_table;
 	u_short lport = sin6->sin6_port;
 	int reuseport = (so->so_options & SO_REUSEPORT);
 
@@ -214,20 +213,29 @@ in6_pcbaddrisavail(struct inpcb *inp, struct sockaddr_in6 *sin6, int wild,
 	}
 	if (lport) {
 		struct inpcb *t;
+		uid_t euid;
+		short options;
 
 		if (so->so_euid) {
-			t = in_pcblookup_local(table,
+			t = in_pcblookup_local(inp,
 			    (struct in_addr *)&sin6->sin6_addr, lport,
-			    INPLOOKUP_WILDCARD | INPLOOKUP_IPV6,
-			    inp->inp_rtableid);
-			if (t && (so->so_euid != t->inp_socket->so_euid))
+			    INPLOOKUP_WILDCARD | INPLOOKUP_IPV6);
+			if (t != NULL) {
+				euid = t->inp_socket->so_euid;
+				mtx_leave(&t->inp_mtx);
+				if (so->so_euid != euid)
+					return (EADDRINUSE);
+			}
+		}
+		t = in_pcblookup_local(inp,
+		    (struct in_addr *)&sin6->sin6_addr, lport,
+		    wild);
+		if (t != NULL) {
+			options = t->inp_socket->so_options;
+			mtx_leave(&t->inp_mtx);
+			if ((reuseport & options) == 0)
 				return (EADDRINUSE);
 		}
-		t = in_pcblookup_local(table,
-		    (struct in_addr *)&sin6->sin6_addr, lport,
-		    wild, inp->inp_rtableid);
-		if (t && (reuseport & t->inp_socket->so_options) == 0)
-			return (EADDRINUSE);
 	}
 	return (0);
 }
@@ -376,9 +384,13 @@ in6_pcbnotify(struct inpcbtable *table, struct sockaddr_in6 *dst,
 	errno = inet6ctlerrmap[cmd];
 
 	rdomain = rtable_l2(rtable);
+	mtx_enter(&inpcbtable_mtx);
 	TAILQ_FOREACH_SAFE(inp, &table->inpt_queue, inp_queue, ninp) {
-		if ((inp->inp_flags & INP_IPV6) == 0)
+		mtx_enter(&inp->inp_mtx);
+		if ((inp->inp_flags & INP_IPV6) == 0) {
+			mtx_leave(&inp->inp_mtx);
 			continue;
+		}
 
 		/*
 		 * Under the following condition, notify of redirects
@@ -438,20 +450,25 @@ in6_pcbnotify(struct inpcbtable *table, struct sockaddr_in6 *dst,
 			goto do_notify;
 		else if (!IN6_ARE_ADDR_EQUAL(&inp->inp_faddr6,
 					     &dst->sin6_addr) ||
-			 rtable_l2(inp->inp_rtableid) != rdomain ||
-			 inp->inp_socket == 0 ||
-			 (lport && inp->inp_lport != lport) ||
-			 (!IN6_IS_ADDR_UNSPECIFIED(&sa6_src.sin6_addr) &&
-			  !IN6_ARE_ADDR_EQUAL(&inp->inp_laddr6,
-					      &sa6_src.sin6_addr)) ||
-			 (fport && inp->inp_fport != fport)) {
+		    rtable_l2(inp->inp_rtableid) != rdomain ||
+		    inp->inp_socket == 0 ||
+		    (lport && inp->inp_lport != lport) ||
+		    (!IN6_IS_ADDR_UNSPECIFIED(&sa6_src.sin6_addr) &&
+		     !IN6_ARE_ADDR_EQUAL(&inp->inp_laddr6,
+					 &sa6_src.sin6_addr)) ||
+		    (fport && inp->inp_fport != fport)) {
+			mtx_leave(&inp->inp_mtx);
 			continue;
 		}
 	  do_notify:
 		nmatch++;
+		/* XXX Is it safe to call notify with inpcbtable mutex held? */
 		if (notify)
 			(*notify)(inp, errno);
+		mtx_leave(&inp->inp_mtx);
 	}
+	mtx_leave(&inpcbtable_mtx);
+
 	return (nmatch);
 }
 

@@ -94,6 +94,7 @@ struct inpcb {
 	LIST_ENTRY(inpcb) inp_lhash;		/* extra hash for lport */
 	TAILQ_ENTRY(inpcb) inp_queue;
 	struct	  inpcbtable *inp_table;
+	struct	  mutex	inp_mtx;		/* protect pcb and socket */
 	union	  inpaddru inp_faddru;		/* Foreign address. */
 	union	  inpaddru inp_laddru;		/* Local address. */
 #define	inp_faddr	inp_faddru.iau_a4u.inaddr
@@ -246,6 +247,7 @@ struct baddynamicports {
 
 #ifdef _KERNEL
 
+extern struct mutex inpcbtable_mtx;
 extern struct inpcbtable rawcbtable, rawin6pcbtable;
 extern struct baddynamicports baddynamicports;
 extern struct baddynamicports rootonlyports;
@@ -281,7 +283,7 @@ int	 in6_setpeeraddr(struct inpcb *, struct mbuf *);
 #endif /* INET6 */
 void	 in_pcbinit(struct inpcbtable *, int);
 struct inpcb *
-	 in_pcblookup_local(struct inpcbtable *, void *, u_int, int, u_int);
+	 in_pcblookup_local(struct inpcb *, void *, u_int, int);
 void	 in_pcbnotifyall(struct inpcbtable *, struct sockaddr *,
 	    u_int, int, void (*)(struct inpcb *, int));
 void	 in_pcbrehash(struct inpcb *);
