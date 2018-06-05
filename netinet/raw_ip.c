@@ -151,24 +151,27 @@ rip_input(struct mbuf **mp, int *offp, int proto, int af)
 	NET_ASSERT_LOCKED();
 	mtx_enter(&inpcbtable_mtx);
 	TAILQ_FOREACH(inp, &rawcbtable.inpt_queue, inp_queue) {
-		if (inp->inp_socket->so_state & SS_CANTRCVMORE)
+		mtx_enter(&inp->inp_mtx);
+		if (inp->inp_socket->so_state & SS_CANTRCVMORE) {
+	 cont:
+			mtx_leave(&inp->inp_mtx);
 			continue;
+		}
 #ifdef INET6
 		if (inp->inp_flags & INP_IPV6)
-			continue;
+			goto cont;
 #endif
 		if (rtable_l2(inp->inp_rtableid) !=
 		    rtable_l2(m->m_pkthdr.ph_rtableid))
-			continue;
-
+			goto cont;
 		if (inp->inp_ip.ip_p && inp->inp_ip.ip_p != ip->ip_p)
-			continue;
+			goto cont;
 		if (inp->inp_laddr.s_addr &&
 		    inp->inp_laddr.s_addr != key->s_addr)
-			continue;
+			goto cont;
 		if (inp->inp_faddr.s_addr &&
 		    inp->inp_faddr.s_addr != ip->ip_src.s_addr)
-			continue;
+			goto cont;
 		if (last) {
 			struct mbuf *n;
 
@@ -186,6 +189,7 @@ rip_input(struct mbuf **mp, int *offp, int proto, int af)
 					sorwakeup(last->inp_socket);
 				opts = NULL;
 			}
+			mtx_leave(&last->inp_mtx);
 		}
 		last = inp;
 	}
@@ -201,6 +205,7 @@ rip_input(struct mbuf **mp, int *offp, int proto, int af)
 			m_freem(opts);
 		} else
 			sorwakeup(last->inp_socket);
+		mtx_leave(&last->inp_mtx);
 	} else {
 		if (ip->ip_p != IPPROTO_ICMP)
 			icmp_error(m, ICMP_UNREACH, ICMP_UNREACH_PROTOCOL, 0, 0);
