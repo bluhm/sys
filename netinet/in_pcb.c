@@ -106,11 +106,6 @@
 
 const struct in_addr zeroin_addr;
 
-union {
-	struct in_addr	za_in;
-	struct in6_addr	za_in6;
-} zeroin46_addr;
-
 /*
  * These configure the range of local port addresses assigned to
  * "unspecified" outgoing connections/packets/whatever.
@@ -134,6 +129,8 @@ struct inpcbhead *in_pcbhash(struct inpcbtable *, int,
 struct inpcbhead *in6_pcbhash(struct inpcbtable *, int,
     const struct in6_addr *, u_short, const struct in6_addr *, u_short);
 struct inpcbhead *in_pcblhash(struct inpcbtable *, int, u_short);
+
+int	in_pcbpickport(struct inpcb *, struct sockaddr *, int, struct proc *);
 
 struct inpcbhead *
 in_pcbhash(struct inpcbtable *table, int rdom,
@@ -305,9 +302,10 @@ int
 in_pcbbind(struct inpcb *inp, struct mbuf *nam, struct proc *p)
 {
 	struct socket *so = inp->inp_socket;
-	u_int16_t lport = 0;
+	struct sockaddr *lsa;
+	struct sockaddr_storage ss;
+	u_int16_t lport;
 	int wild = 0;
-	void *laddr = &zeroin46_addr;
 	int error;
 
 	if (inp->inp_lport)
@@ -332,8 +330,13 @@ in_pcbbind(struct inpcb *inp, struct mbuf *nam, struct proc *p)
 				return (error);
 			if ((error = in6_pcbaddrisavail(inp, sin6, wild, p)))
 				return (error);
-			laddr = &sin6->sin6_addr;
-			lport = sin6->sin6_port;
+			lsa = sin6tosa(sin6);
+			lport = ntohs(sin6->sin6_port);
+		} else {
+			memset(&ss, 0, sizeof(struct sockaddr_in6));
+			lsa = sstosa(&ss);
+			lsa->sa_family = AF_INET6;
+			lport = 0;
 		}
 		break;
 #endif
@@ -348,8 +351,13 @@ in_pcbbind(struct inpcb *inp, struct mbuf *nam, struct proc *p)
 				return (error);
 			if ((error = in_pcbaddrisavail(inp, sin, wild, p)))
 				return (error);
-			laddr = &sin->sin_addr;
+			lsa = sintosa(sin);
 			lport = sin->sin_port;
+		} else {
+			memset(&ss, 0, sizeof(struct sockaddr_in));
+			lsa = sstosa(&ss);
+			lsa->sa_family = AF_INET;
+			lport = 0;
 		}
 		break;
 	default:
@@ -357,26 +365,27 @@ in_pcbbind(struct inpcb *inp, struct mbuf *nam, struct proc *p)
 	}
 
 	if (lport == 0) {
-		if ((error = in_pcbpickport(&lport, laddr, wild, inp, p)))
+		if ((error = in_pcbpickport(inp, lsa, wild, p)))
 			return (error);
 	} else {
 		if (in_rootonly(ntohs(lport), so->so_proto->pr_protocol) &&
 		    suser(p) != 0)
 			return (EACCES);
 	}
-	if (nam) {
-		switch (sotopf(so)) {
+	switch (sotopf(so)) {
 #ifdef INET6
-		case PF_INET6:
-			inp->inp_laddr6 = *(struct in6_addr *)laddr;
-			break;
+	case PF_INET6:
+		if (nam)
+			inp->inp_laddr6 = satosin6(lsa)->sin6_addr;
+		inp->inp_lport = satosin6(lsa)->sin6_port;
+		break;
 #endif
-		case PF_INET:
-			inp->inp_laddr = *(struct in_addr *)laddr;
-			break;
-		}
+	case PF_INET:
+		if (nam)
+			inp->inp_laddr = satosin(lsa)->sin_addr;
+		inp->inp_lport = satosin(lsa)->sin_port;
+		break;
 	}
-	inp->inp_lport = lport;
 	in_pcbrehash(inp);
 	return (0);
 }
@@ -429,12 +438,12 @@ in_pcbaddrisavail(struct inpcb *inp, struct sockaddr_in *sin, int wild,
 		struct inpcb *t;
 
 		if (so->so_euid) {
-			t = in_pcblookup_local(table, &sin->sin_addr, lport,
+			t = in_pcblookup_local(table, sintosa(sin),
 			    INPLOOKUP_WILDCARD, inp->inp_rtableid);
 			if (t && (so->so_euid != t->inp_socket->so_euid))
 				return (EADDRINUSE);
 		}
-		t = in_pcblookup_local(table, &sin->sin_addr, lport,
+		t = in_pcblookup_local(table, sintosa(sin),
 		    wild, inp->inp_rtableid);
 		if (t && (reuseport & t->inp_socket->so_options) == 0)
 			return (EADDRINUSE);
@@ -444,12 +453,12 @@ in_pcbaddrisavail(struct inpcb *inp, struct sockaddr_in *sin, int wild,
 }
 
 int
-in_pcbpickport(u_int16_t *lport, void *laddr, int wild, struct inpcb *inp,
+in_pcbpickport(struct inpcb *inp, struct sockaddr *lsa, int wild,
     struct proc *p)
 {
 	struct socket *so = inp->inp_socket;
 	struct inpcbtable *table = inp->inp_table;
-	u_int16_t first, last, lower, higher, candidate, localport;
+	u_int16_t first, last, lower, higher, candidate;
 	int count;
 
 	if (inp->inp_flags & INP_HIGHPORT) {
@@ -486,11 +495,14 @@ in_pcbpickport(u_int16_t *lport, void *laddr, int wild, struct inpcb *inp,
 		++candidate;
 		if (candidate < lower || candidate > higher)
 			candidate = lower;
-		localport = htons(candidate);
+#ifdef INET6
+		if (ISSET(wild, INPLOOKUP_IPV6))
+			satosin6(lsa)->sin6_port = htons(candidate);
+		else
+#endif
+			satosin(lsa)->sin_port = htons(candidate);
 	} while (in_baddynamic(candidate, so->so_proto->pr_protocol) ||
-	    in_pcblookup_local(table, laddr, localport, wild,
-	    inp->inp_rtableid));
-	*lport = localport;
+	    in_pcblookup_local(table, lsa, wild, inp->inp_rtableid));
 
 	return (0);
 }
@@ -765,18 +777,28 @@ in_rtchange(struct inpcb *inp, int errno)
 }
 
 struct inpcb *
-in_pcblookup_local(struct inpcbtable *table, void *laddrp, u_int lport_arg,
-    int flags, u_int rtable)
+in_pcblookup_local(struct inpcbtable *table, struct sockaddr *lsa, int flags,
+    u_int rtable)
 {
 	struct inpcb *inp, *match = NULL;
 	int matchwild = 3, wildcard;
-	u_int16_t lport = lport_arg;
-	struct in_addr laddr = *(struct in_addr *)laddrp;
+	struct in_addr laddr;
 #ifdef INET6
-	struct in6_addr *laddr6 = (struct in6_addr *)laddrp;
+	struct in6_addr *laddr6;
 #endif
+	u_int16_t lport;
 	struct inpcbhead *head;
 	u_int rdomain;
+
+#ifdef INET6
+	if (ISSET(flags, INPLOOKUP_IPV6)) {
+		laddr6 = &satosin6(lsa)->sin6_addr;
+		lport = satosin6(lsa)->sin6_port;
+	} else {
+#endif
+		laddr = satosin(lsa)->sin_addr;
+		lport = satosin(lsa)->sin_port;
+	}
 
 	rdomain = rtable_l2(rtable);
 	head = INPCBLHASH(table, lport, rdomain);
