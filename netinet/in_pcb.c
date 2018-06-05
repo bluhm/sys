@@ -1038,6 +1038,7 @@ in_pcbselsrc(struct in_addr **insrc, struct sockaddr_in *sin,
 void
 in_pcbrehash(struct inpcb *inp)
 {
+	/* XXX lock order inversion */
 	mtx_enter(&inpcbtable_mtx);
 	in_pcbrehash_locked(inp);
 	mtx_leave(&inpcbtable_mtx);
@@ -1051,8 +1052,8 @@ in_pcbrehash_locked(struct inpcb *inp)
 
 	NET_ASSERT_LOCKED();
 	MUTEX_ASSERT_LOCKED(&inpcbtable_mtx);
+	MUTEX_ASSERT_LOCKED(&inp->inp_mtx);
 
-	mtx_enter(&inp->inp_mtx);
 	LIST_REMOVE(inp, inp_lhash);
 	head = INPCBLHASH(table, inp->inp_lport, inp->inp_rtableid);
 	LIST_INSERT_HEAD(head, inp, inp_lhash);
@@ -1068,7 +1069,6 @@ in_pcbrehash_locked(struct inpcb *inp)
 		    &inp->inp_laddr, inp->inp_lport,
 		    rtable_l2(inp->inp_rtableid));
 	LIST_INSERT_HEAD(head, inp, inp_hash);
-	mtx_leave(&inp->inp_mtx);
 }
 
 int
