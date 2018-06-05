@@ -303,8 +303,8 @@ rip6_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *d)
 	}
 
 	if (ip6 && cmd == PRC_MSGSIZE) {
-		int valid = 0;
 		struct inpcb *in6p;
+		int valid = 0;
 
 		/*
 		 * Check to see if we have a valid raw IPv6 socket
@@ -315,10 +315,12 @@ rip6_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *d)
 		 */
 		in6p = in6_pcbhashlookup(&rawin6pcbtable, &sa6->sin6_addr, 0,
 		    &sa6_src->sin6_addr, 0, rdomain);
-
-		if (in6p && in6p->inp_ipv6.ip6_nxt &&
-		    in6p->inp_ipv6.ip6_nxt == nxt)
-			valid++;
+		if (in6p != NULL) {
+			if (in6p->inp_ipv6.ip6_nxt &&
+			    in6p->inp_ipv6.ip6_nxt == nxt)
+				valid = 1;
+			mtx_leave(&in6p->inp_mtx);
+		}
 
 		/*
 		 * Depending on the value of "valid" and routing table
