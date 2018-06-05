@@ -702,7 +702,7 @@ findpcb:
 					 * We have created a
 					 * full-blown connection.
 					 */
-					tp = NULL;
+					mtx_leave(&inp->inp_mtx);
 					inp = sotoinpcb(so);
 					tp = intotcpcb(inp);
 					if (tp == NULL)
@@ -997,6 +997,7 @@ findpcb:
 				if (so->so_snd.sb_cc ||
 				    tp->t_flags & TF_NEEDOUTPUT)
 					(void) tcp_output(tp);
+				mtx_leave(&inp->inp_mtx);
 				return IPPROTO_DONE;
 			}
 		} else if (th->th_ack == tp->snd_una &&
@@ -2011,6 +2012,7 @@ dodata:							/* XXX */
 	 */
 	if (tp->t_flags & (TF_ACKNOW|TF_NEEDOUTPUT))
 		(void) tcp_output(tp);
+	mtx_leave(&inp->inp_mtx);
 	return IPPROTO_DONE;
 
 badsyn:
@@ -2039,6 +2041,7 @@ dropafterack:
 	m_freem(m);
 	tp->t_flags |= TF_ACKNOW;
 	(void) tcp_output(tp);
+	mtx_leave(&inp->inp_mtx);
 	return IPPROTO_DONE;
 
 dropwithreset_ratelim:
@@ -2072,6 +2075,8 @@ dropwithreset:
 		tcp_respond(tp, mtod(m, caddr_t), th, th->th_seq + tlen,
 		    (tcp_seq)0, TH_RST|TH_ACK, m->m_pkthdr.ph_rtableid);
 	}
+	if (inp != NULL)
+		mtx_leave(&inp->inp_mtx);
 	m_freem(m);
 	return IPPROTO_DONE;
 
@@ -2082,6 +2087,8 @@ drop:
 	if (otp)
 		tcp_trace(TA_DROP, ostate, tp, otp, saveti, 0, tlen);
 
+	if (inp != NULL)
+		mtx_leave(&inp->inp_mtx);
 	m_freem(m);
 	return IPPROTO_DONE;
 }

@@ -3262,6 +3262,7 @@ pf_socket_lookup(struct pf_pdesc *pd)
 	pd->lookup.uid = inp->inp_socket->so_euid;
 	pd->lookup.gid = inp->inp_socket->so_egid;
 	pd->lookup.pid = inp->inp_socket->so_cpid;
+	mtx_leave(&inp->inp_mtx);
 	return (1);
 }
 
