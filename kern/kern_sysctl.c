@@ -1331,7 +1331,13 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 		if (arg == DTYPE_SOCKET) {
 			struct inpcb *inp;
 
-			NET_LOCK();
+			/*
+			 * The inpcb and socket fields are accessed and read
+			 * without net lock.  This may result in inconsistent
+			 * data provided to userland.  The fix will be to lock
+			 * the in inpcb within the loops when we have per
+			 * socket locks.  XXXSMP
+			 */
 			mtx_enter(&inpcbtable_mtx);
 			TAILQ_FOREACH(inp, &tcbtable.inpt_queue, inp_queue)
 				FILLSO(inp->inp_socket);
@@ -1345,7 +1351,6 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 				FILLSO(inp->inp_socket);
 #endif
 			mtx_leave(&inpcbtable_mtx);
-			NET_UNLOCK();
 		}
 		fp = NULL;
 		while ((fp = fd_iterfile(fp, p)) != NULL) {
