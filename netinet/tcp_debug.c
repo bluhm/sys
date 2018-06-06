@@ -161,8 +161,8 @@ tcp_trace(short act, short ostate, struct tcpcb *tp, struct tcpcb *otp,
 #ifdef TCPDEBUG
 	if (tcpconsdebug == 0)
 		return;
-	if (tp)
-		printf("%p %s:", tp, tcpstates[ostate]);
+	if (otp)
+		printf("%p %s:", otp, tcpstates[ostate]);
 	else
 		printf("???????? ");
 	printf("%s ", tanames[act]);
@@ -205,7 +205,7 @@ tcp_trace(short act, short ostate, struct tcpcb *tp, struct tcpcb *otp,
 		printf(" -> %s", tcpstates[tp->t_state]);
 	/* print out internal state of tp !?! */
 	printf("\n");
-	if (tp == 0)
+	if (tp == NULL)
 		return;
 	printf("\trcv_(nxt,wnd,up) (%x,%lx,%x) snd_(una,nxt,max) (%x,%x,%x)\n",
 	    tp->rcv_nxt, tp->rcv_wnd, tp->rcv_up, tp->snd_una, tp->snd_nxt,
