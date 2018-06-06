@@ -132,7 +132,7 @@ int *udpctl_vars[UDPCTL_MAXID] = UDPCTL_VARS;
 struct	inpcbtable udbtable;
 struct	cpumem *udpcounters;
 
-int	udp_sbappend(struct inpcb *, struct mbuf *, struct ip *,
+void	udp_sbappend(struct inpcb *, struct mbuf *, struct ip *,
 	    struct ip6_hdr *, int, struct udphdr *, struct sockaddr *,
 	    u_int32_t);
 int	udp_output(struct inpcb *, struct mbuf *, struct mbuf *, struct mbuf *);
@@ -468,9 +468,7 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 			goto bad;
 		}
 
-		if (udp_sbappend(last, m, ip, ip6, iphlen, uh, &srcsa.sa, 0))
-			goto bad;
-
+		udp_sbappend(last, m, ip, ip6, iphlen, uh, &srcsa.sa, 0);
 		return IPPROTO_DONE;
 	}
 	/*
@@ -568,21 +566,20 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 			if ((m = *mp = pipex_l2tp_input(m, off, session,
 			    ipsecflowinfo)) == NULL) {
 				/* the packet is handled by PIPEX */
-				goto bad;
+				return IPPROTO_DONE;
 			}
 		}
 	}
 #endif
 
-	if (udp_sbappend(inp, m, ip, ip6, iphlen, uh, &srcsa.sa, ipsecflowinfo))
-		goto bad;
+	udp_sbappend(inp, m, ip, ip6, iphlen, uh, &srcsa.sa, ipsecflowinfo);
 	return IPPROTO_DONE;
 bad:
 	m_freem(m);
 	return IPPROTO_DONE;
 }
 
-int
+void
 udp_sbappend(struct inpcb *inp, struct mbuf *m, struct ip *ip,
     struct ip6_hdr *ip6, int iphlen, struct udphdr *uh,
     struct sockaddr *srcaddr, u_int32_t ipsecflowinfo)
@@ -629,12 +626,11 @@ udp_sbappend(struct inpcb *inp, struct mbuf *m, struct ip *ip,
 	m_adj(m, iphlen + sizeof(struct udphdr));
 	if (sbappendaddr(so, &so->so_rcv, srcaddr, m, opts) == 0) {
 		udpstat_inc(udps_fullsock);
+		m_freem(m);
 		m_freem(opts);
-		return ENOBUFS;
+		return;
 	}
-	sorwakeup(inp->inp_socket);
-
-	return 0;
+	sorwakeup(so);
 }
 
 /*
