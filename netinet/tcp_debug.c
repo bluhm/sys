@@ -137,19 +137,22 @@ tcp_trace(short act, short ostate, struct tcpcb *tp, struct tcpcb *otp,
 
 	bzero(&td->td_ti6, sizeof(struct tcpipv6hdr));
 	bzero(&td->td_ti, sizeof(struct tcpiphdr));
-	if (tp && headers) {
-		switch (tp->pf) {
+	if (headers) {
+		switch (ti6->ti6_i.ip6_vfc & IPV6_VERSION_MASK) {
 #ifdef INET6
-		case PF_INET6:
+		case IPV6_VERSION:
 			th = &ti6->ti6_t;
 			td->td_ti6 = *ti6;
 			td->td_ti6.ti6_plen = len;
 			break;
 #endif /* INET6 */
-		case PF_INET:
+		case IPVERSION:
 			th = &ti->ti_t;
 			td->td_ti = *ti;
 			td->td_ti.ti_len = len;
+			break;
+		default:
+			headers = NULL;
 			break;
 		}
 	}
@@ -168,7 +171,7 @@ tcp_trace(short act, short ostate, struct tcpcb *tp, struct tcpcb *otp,
 	case TA_INPUT:
 	case TA_OUTPUT:
 	case TA_DROP:
-		if (ti == 0)
+		if (headers == NULL)
 			break;
 		seq = th->th_seq;
 		ack = th->th_ack;
