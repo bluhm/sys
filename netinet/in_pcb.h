@@ -148,6 +148,7 @@ struct inpcb {
 LIST_HEAD(inpcbhead, inpcb);
 
 struct inpcbtable {
+	struct mutex inpt_mtx;	/* protect queue, hashe and existence of inp */
 	TAILQ_HEAD(inpthead, inpcb) inpt_queue;
 	struct inpcbhead *inpt_hashtbl, *inpt_lhashtbl;
 	SIPHASH_KEY inpt_key;
@@ -246,7 +247,6 @@ struct baddynamicports {
 
 #ifdef _KERNEL
 
-extern struct mutex inpcbtable_mtx;
 extern struct inpcbtable rawcbtable, rawin6pcbtable;
 extern struct baddynamicports baddynamicports;
 extern struct baddynamicports rootonlyports;
