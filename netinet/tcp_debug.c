@@ -117,6 +117,7 @@ tcp_trace(short act, short ostate, struct tcpcb *tp, struct tcpcb *otp,
 	tcp_seq seq, ack;
 	int flags;
 #endif
+	int pf = PF_UNSPEC;
 	struct tcp_debug *td = &tcp_debug[tcp_debx++];
 	struct tcpiphdr *ti = (struct tcpiphdr *)headers;
 	struct tcphdr *th;
@@ -130,23 +131,37 @@ tcp_trace(short act, short ostate, struct tcpcb *tp, struct tcpcb *otp,
 	td->td_act = act;
 	td->td_ostate = ostate;
 	td->td_tcb = (caddr_t)otp;
-	if (tp)
+	if (tp) {
+		pf = tp->pf;
 		td->td_cb = *tp;
-	else
+	} else
 		bzero((caddr_t)&td->td_cb, sizeof (*tp));
 
 	bzero(&td->td_ti6, sizeof(struct tcpipv6hdr));
 	bzero(&td->td_ti, sizeof(struct tcpiphdr));
 	if (headers) {
-		switch (ti6->ti6_i.ip6_vfc & IPV6_VERSION_MASK) {
+		/* The address family may be in tcpcb or ip header. */
+		if (pf == PF_UNSPEC) {
+			switch (ti6->ti6_i.ip6_vfc & IPV6_VERSION_MASK) {
 #ifdef INET6
-		case IPV6_VERSION:
+			case IPV6_VERSION:
+				pf = PF_INET6;
+				break;
+#endif /* INET6 */
+			case IPVERSION:
+				pf = PF_INET;
+				break;
+			}
+		}
+		switch (pf) {
+#ifdef INET6
+		case PF_INET6:
 			th = &ti6->ti6_t;
 			td->td_ti6 = *ti6;
 			td->td_ti6.ti6_plen = len;
 			break;
 #endif /* INET6 */
-		case IPVERSION:
+		case PF_INET:
 			th = &ti->ti_t;
 			td->td_ti = *ti;
 			td->td_ti.ti_len = len;
