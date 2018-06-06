@@ -110,8 +110,8 @@ int	tcp_debx;
  * Tcp debug routines
  */
 void
-tcp_trace(short act, short ostate, struct tcpcb *tp, caddr_t headers,
-   int req, int len)
+tcp_trace(short act, short ostate, struct tcpcb *tp, struct tcpcb *otp,
+    caddr_t headers, int req, int len)
 {
 #ifdef TCPDEBUG
 	tcp_seq seq, ack;
@@ -129,7 +129,7 @@ tcp_trace(short act, short ostate, struct tcpcb *tp, caddr_t headers,
 	td->td_time = iptime();
 	td->td_act = act;
 	td->td_ostate = ostate;
-	td->td_tcb = (caddr_t)tp;
+	td->td_tcb = (caddr_t)otp;
 	if (tp)
 		td->td_cb = *tp;
 	else

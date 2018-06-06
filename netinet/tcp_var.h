@@ -721,7 +721,8 @@ void	 tcp_update_rcvspace(struct tcpcb *);
 void	 tcp_slowtimo(void);
 struct mbuf *
 	 tcp_template(struct tcpcb *);
-void	 tcp_trace(short, short, struct tcpcb *, caddr_t, int, int);
+void	 tcp_trace(short, short, struct tcpcb *, struct tcpcb *, caddr_t,
+		int, int);
 struct tcpcb *
 	 tcp_usrclosed(struct tcpcb *);
 int	 tcp_sysctl(int *, u_int, void *, size_t *, void *, size_t);

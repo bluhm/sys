@@ -983,7 +983,7 @@ send:
 	 * Trace.
 	 */
 	if (so->so_options & SO_DEBUG)
-		tcp_trace(TA_OUTPUT, tp->t_state, tp, mtod(m, caddr_t), 0,
+		tcp_trace(TA_OUTPUT, tp->t_state, tp, tp, mtod(m, caddr_t), 0,
 			len);
 
 	/*
