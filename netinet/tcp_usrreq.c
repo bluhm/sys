@@ -399,8 +399,8 @@ tcp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 	default:
 		panic("tcp_usrreq");
 	}
-	if (tp && (so->so_options & SO_DEBUG))
-		tcp_trace(TA_USER, ostate, tp, (caddr_t)0, req, 0);
+	if (so->so_options & SO_DEBUG)
+		tcp_trace(TA_USER, ostate, tp, NULL, req, 0);
 	return (error);
 }
 
@@ -599,7 +599,7 @@ tcp_attach(struct socket *so, int proto)
 		so->so_linger = TCP_LINGERTIME;
 
 	if (so->so_options & SO_DEBUG)
-		tcp_trace(TA_USER, TCPS_CLOSED, tp, (caddr_t)0, PRU_ATTACH, 0);
+		tcp_trace(TA_USER, TCPS_CLOSED, tp, NULL, PRU_ATTACH, 0);
 	return (0);
 }
 
@@ -640,8 +640,8 @@ tcp_detach(struct socket *so)
 	 */
 	tp = tcp_disconnect(tp);
 
-	if (tp && (so->so_options & SO_DEBUG))
-		tcp_trace(TA_USER, ostate, tp, (caddr_t)0, PRU_DETACH, 0);
+	if (so->so_options & SO_DEBUG)
+		tcp_trace(TA_USER, ostate, tp, NULL, PRU_DETACH, 0);
 	return (error);
 }
 
