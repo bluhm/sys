@@ -121,7 +121,7 @@ tcp_trace(short act, short ostate, struct tcpcb *tp, caddr_t headers,
 	struct tcpiphdr *ti = (struct tcpiphdr *)headers;
 	struct tcphdr *th;
 #ifdef INET6
-	struct tcpipv6hdr *ti6 = (struct tcpipv6hdr *)ti;
+	struct tcpipv6hdr *ti6 = (struct tcpipv6hdr *)headers;
 #endif
 
 	if (tcp_debx == TCP_NDEBUG)
@@ -134,27 +134,24 @@ tcp_trace(short act, short ostate, struct tcpcb *tp, caddr_t headers,
 		td->td_cb = *tp;
 	else
 		bzero((caddr_t)&td->td_cb, sizeof (*tp));
-	switch (tp->pf) {
+
+	bzero(&td->td_ti6, sizeof(struct tcpipv6hdr));
+	bzero(&td->td_ti, sizeof(struct tcpiphdr));
+	if (tp && headers) {
+		switch (tp->pf) {
 #ifdef INET6
-	case PF_INET6:
-		if (ti6) {
+		case PF_INET6:
 			th = &ti6->ti6_t;
 			td->td_ti6 = *ti6;
 			td->td_ti6.ti6_plen = len;
-		} else
-			bzero(&td->td_ti6, sizeof(struct tcpipv6hdr));
-		break;
+			break;
 #endif /* INET6 */
-	case PF_INET:
-		if (ti) {
+		case PF_INET:
 			th = &ti->ti_t;
 			td->td_ti = *ti;
 			td->td_ti.ti_len = len;
-		} else
-			bzero(&td->td_ti, sizeof(struct tcpiphdr));
-		break;
-	default:
-		return;
+			break;
+		}
 	}
 
 	td->td_req = req;
