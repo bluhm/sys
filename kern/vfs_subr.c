@@ -1603,7 +1603,8 @@ vfs_stall(struct proc *p, int stall)
 
 	/*
 	 * The loop variable mp is protected by vfs_busy() so that it cannot
-	 * be unmounted while VFS_SYNC() sleeps.
+	 * be unmounted while VFS_SYNC() sleeps.  Traverse forward to keep the
+	 * lock order consistent with dounmount().
 	 */
 	TAILQ_FOREACH(mp, &mountlist, mnt_list) {
 		if (stall) {
