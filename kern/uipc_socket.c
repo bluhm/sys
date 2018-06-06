@@ -142,8 +142,8 @@ socreate(int dom, struct socket **aso, int type, int proto)
 	error = (*prp->pr_attach)(so, proto);
 	if (error) {
 		so->so_state |= SS_NOFDREF;
-		sofree(so, s);
-		sounlock(NULL, s);
+		so = sofree(so, s);
+		sounlock(so, s);
 		return (error);
 	}
 	sounlock(so, s);
@@ -191,25 +191,21 @@ solisten(struct socket *so, int backlog)
 	return (0);
 }
 
-void
+struct socket *
 sofree(struct socket *so, int s)
 {
 	soassertlocked(so);
 
-	if (so->so_pcb || (so->so_state & SS_NOFDREF) == 0) {
-		sounlock(so, s);
+	if (so->so_pcb || (so->so_state & SS_NOFDREF) == 0)
 		return;
-	}
 	if (so->so_head) {
 		/*
 		 * We must not decommission a socket that's on the accept(2)
 		 * queue.  If we do, then accept(2) may hang after select(2)
 		 * indicated that the listening socket was ready.
 		 */
-		if (!soqremque(so, 0)) {
-			sounlock(so, s);
+		if (!soqremque(so, 0))
 			return;
-		}
 	}
 #ifdef SOCKET_SPLICE
 	if (so->so_sp) {
@@ -233,6 +229,7 @@ sofree(struct socket *so, int s)
 	{
 		pool_put(&socket_pool, so);
 	}
+	return NULL;
 }
 
 /*
@@ -257,7 +254,7 @@ soclose(struct socket *so)
 			(void) soabort(so2);
 		}
 	}
-	if (so->so_pcb == 0)
+	if (so->so_pcb == NULL)
 		goto discard;
 	if (so->so_state & SS_ISCONNECTED) {
 		if ((so->so_state & SS_ISDISCONNECTING) == 0) {
@@ -289,8 +286,8 @@ drop:
 discard:
 	KASSERT((so->so_state & SS_NOFDREF) == 0);
 	so->so_state |= SS_NOFDREF;
-	sofree(so, s);
-	sounlock(NULL, s);
+	so = sofree(so, s);
+	sounlock(so, s);
 	return (error);
 }
 
