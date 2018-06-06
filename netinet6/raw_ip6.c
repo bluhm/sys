@@ -158,7 +158,7 @@ rip6_input(struct mbuf **mp, int *offp, int proto, int af)
 	}
 #endif
 	NET_ASSERT_LOCKED();
-	mtx_enter(&inpcbtable_mtx);
+	mtx_enter(&rawin6pcbtable.inpt_mtx);
 	TAILQ_FOREACH(in6p, &rawin6pcbtable.inpt_queue, inp_queue) {
 		if (in6p->inp_socket->so_state & SS_CANTRCVMORE)
 			continue;
@@ -179,7 +179,7 @@ rip6_input(struct mbuf **mp, int *offp, int proto, int af)
 			IP6_EXTHDR_GET(icmp6, struct icmp6_hdr *, m, *offp,
 			    sizeof(*icmp6));
 			if (icmp6 == NULL) {
-				mtx_leave(&inpcbtable_mtx);
+				mtx_leave(&rawin6pcbtable.inpt_mtx);
 				return IPPROTO_DONE;
 			}
 			if (ICMP6_FILTER_WILLBLOCK(icmp6->icmp6_type,
@@ -215,7 +215,7 @@ rip6_input(struct mbuf **mp, int *offp, int proto, int af)
 		}
 		last = in6p;
 	}
-	mtx_leave(&inpcbtable_mtx);
+	mtx_leave(&rawin6pcbtable.inpt_mtx);
 
 	if (last) {
 		if (last->inp_flags & IN6P_CONTROLOPTS)
