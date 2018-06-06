@@ -641,9 +641,8 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 		if ((session = pipex_l2tp_lookup_session(m, off)) != NULL) {
 			if ((m = *mp = pipex_l2tp_input(m, off, session,
 			    ipsecflowinfo)) == NULL) {
-				m_freem(opts);
 				/* the packet is handled by PIPEX */
-				return IPPROTO_DONE;
+				goto bad;
 			}
 		}
 	}
