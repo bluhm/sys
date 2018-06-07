@@ -1,4 +1,4 @@
-/*	$OpenBSD: vector.S,v 1.58 2018/05/26 23:10:13 guenther Exp $	*/
+/*	$OpenBSD: vector.S,v 1.60 2018/06/05 06:39:10 guenther Exp $	*/
 /*	$NetBSD: vector.S,v 1.5 2004/06/28 09:13:11 fvdl Exp $	*/
 
 /*
@@ -179,17 +179,7 @@ IDTVEC(trap05)
 IDTVEC(trap06)
 	ZTRAP(T_PRIVINFLT)
 IDTVEC(trap07)
-	pushq	$0			# dummy error code
-	pushq	$T_DNA
-	INTRENTRY(trap07)
-	sti
-	cld
-	SMAP_CLAC
-	movq	CPUVAR(SELF),%rdi
-	movq	%rsp, %rsi
-	call	_C_LABEL(fpudna)
-	cli
-	INTRFASTEXIT
+	ZTRAP(T_DNA)		# impossible: we don't do lazy FPU
 IDTVEC(trap08)
 	pushq	$T_DOUBLEFLT
 	jmp	calltrap_specstk
@@ -321,19 +311,14 @@ KUENTRY(alltraps)
 	jz	2f
 .Lreal_trap:
 #endif /* !defined(GPROF) && defined(DDBPROF) */
+	.globl	recall_trap
+recall_trap:
 	movq	%rsp, %rdi
 	call	_C_LABEL(trap)
 2:	/* Check for ASTs on exit to user mode. */
 	cli
-	CHECK_ASTPENDING(%r11)
-	je	1f
 	testb	$SEL_RPL,TF_CS(%rsp)
-	jz	1f
-	CLEAR_ASTPENDING(%r11)
-	sti
-	movq	%rsp, %rdi
-	call	_C_LABEL(ast)
-	jmp	2b
+	jnz	intr_user_exit
 #ifndef DIAGNOSTIC
 1:	INTRFASTEXIT
 #else /* DIAGNOSTIC */
@@ -623,7 +608,7 @@ IDTVEC(intr_##name##num)						;\
 	SMAP_CLAC							;\
 	incl	CPUVAR(IDEPTH)						;\
 	movq	IS_HANDLERS(%r14),%rbx					;\
-6:									\
+6:	/* loop, walking chain of handlers */				\
 	movl	IH_LEVEL(%rbx),%r12d					;\
 	cmpl	%r13d,%r12d						;\
 	jle	7f							;\
@@ -641,13 +626,13 @@ IDTVEC(intr_##name##num)						;\
 4:	movq	IH_NEXT(%rbx),%rbx	/* next handler in chain */	;\
 	testq	%rbx,%rbx						;\
 	jnz	6b							;\
-5:									\
+5:	/* successfully handled */					\
 	cli								;\
 	unmask(num)			/* unmask it in hardware */	;\
 	late_ack(num)							;\
 	sti								;\
 	jmp	_C_LABEL(Xdoreti)	/* lower spl and do ASTs */	;\
-7:									\
+7:	/* current IPL > handler's ih_level */				\
 	cli								;\
 	movq	$(1 << num),%rax					;\
 	orq     %rax,CPUVAR(IPENDING)					;\
@@ -655,16 +640,18 @@ IDTVEC(intr_##name##num)						;\
 	late_ack(num)							;\
 	sti								;\
 	jmp	_C_LABEL(Xdoreti)	/* lower spl and do ASTs */	;\
-10:									\
+10:	/* currently masked */						\
 	cli								;\
 	movq	$(1 << num),%rax					;\
 	orq	%rax,CPUVAR(IPENDING)					;\
 	level_mask(num)							;\
 	late_ack(num)							;\
 	INTRFASTEXIT							;\
-9:									\
+9:	/* spurious interrupt */					\
 	unmask(num)							;\
 	late_ack(num)							;\
+	testb	$SEL_RPL,TF_CS(%rsp)					;\
+	jnz	intr_user_exit						;\
 	INTRFASTEXIT
 
 #define ICUADDR IO_ICU1

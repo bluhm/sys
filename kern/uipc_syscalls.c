@@ -1,4 +1,4 @@
-/*	$OpenBSD: uipc_syscalls.c,v 1.173 2018/06/02 10:27:43 mpi Exp $	*/
+/*	$OpenBSD: uipc_syscalls.c,v 1.175 2018/06/06 06:55:22 mpi Exp $	*/
 /*	$NetBSD: uipc_syscalls.c,v 1.19 1996/02/09 19:00:48 christos Exp $	*/
 
 /*
@@ -106,9 +106,9 @@ sys_socket(struct proc *p, void *v, register_t *retval)
 
 	KERNEL_LOCK();
 	fdplock(fdp);
-	error = falloc(p, &fp, &fd);
+	error = falloc(p, cloexec, &fp, &fd);
+	fdpunlock(fdp);
 	if (error) {
-		fdpunlock(fdp);
 		soclose(so);
 	} else {
 		fp->f_flag = fflag;
@@ -118,9 +118,7 @@ sys_socket(struct proc *p, void *v, register_t *retval)
 			so->so_state |= SS_NBIO;
 		so->so_state |= ss;
 		fp->f_data = so;
-		fdinsert(fdp, fd, cloexec, fp);
-		fdpunlock(fdp);
-		FRELE(fp, p);
+		FILE_SET_MATURE(fp, p);
 		*retval = fd;
 	}
 	KERNEL_UNLOCK();
@@ -209,7 +207,7 @@ sys_bind(struct proc *p, void *v, register_t *retval)
 #endif
 	s = solock(so);
 	error = sobind(so, nam, p);
-	sounlock(s);
+	sounlock(so, s);
 	m_freem(nam);
 out:
 	FRELE(fp, p);
@@ -275,9 +273,7 @@ doaccept(struct proc *p, int sock, struct sockaddr *name, socklen_t *anamelen,
 	socklen_t namelen;
 	int error, s, tmpfd;
 	struct socket *head, *so;
-	int cloexec, nflag;
-
-	cloexec = (flags & SOCK_CLOEXEC) ? UF_EXCLOSE : 0;
+	int nflag;
 
 	if (name && (error = copyin(anamelen, &namelen, sizeof (namelen))))
 		return (error);
@@ -287,7 +283,7 @@ doaccept(struct proc *p, int sock, struct sockaddr *name, socklen_t *anamelen,
 	headfp = fp;
 
 	fdplock(fdp);
-	error = falloc(p, &fp, &tmpfd);
+	error = falloc(p, (flags & SOCK_CLOEXEC) ? UF_EXCLOSE : 0, &fp, &tmpfd);
 	fdpunlock(fdp);
 	if (error) {
 		FRELE(headfp, p);
@@ -351,15 +347,12 @@ out:
 			so->so_state |= SS_NBIO;
 		else
 			so->so_state &= ~SS_NBIO;
-		sounlock(s);
-		fdplock(fdp);
+		sounlock(head, s);
 		fp->f_data = so;
-		fdinsert(fdp, tmpfd, cloexec, fp);
-		fdpunlock(fdp);
-		FRELE(fp, p);
+		FILE_SET_MATURE(fp, p);
 		*retval = tmpfd;
 	} else {
-		sounlock(s);
+		sounlock(head, s);
 		fdplock(fdp);
 		fdremove(fdp, tmpfd);
 		closef(fp, p);
@@ -437,7 +430,7 @@ bad:
 	if (!interrupted)
 		so->so_state &= ~SS_ISCONNECTING;
 out:
-	sounlock(s);
+	sounlock(so, s);
 	FRELE(fp, p);
 	m_freem(nam);
 	if (error == ERESTART)
@@ -485,13 +478,13 @@ sys_socketpair(struct proc *p, void *v, register_t *retval)
 	}
 	KERNEL_LOCK();
 	fdplock(fdp);
-	if ((error = falloc(p, &fp1, &sv[0])) != 0)
+	if ((error = falloc(p, cloexec, &fp1, &sv[0])) != 0)
 		goto free3;
 	fp1->f_flag = fflag;
 	fp1->f_type = DTYPE_SOCKET;
 	fp1->f_ops = &socketops;
 	fp1->f_data = so1;
-	if ((error = falloc(p, &fp2, &sv[1])) != 0)
+	if ((error = falloc(p, cloexec, &fp2, &sv[1])) != 0)
 		goto free4;
 	fp2->f_flag = fflag;
 	fp2->f_type = DTYPE_SOCKET;
@@ -509,11 +502,9 @@ sys_socketpair(struct proc *p, void *v, register_t *retval)
 			(*fp2->f_ops->fo_ioctl)(fp2, FIONBIO, (caddr_t)&type,
 			    p);
 		}
-		fdinsert(fdp, sv[0], cloexec, fp1);
-		fdinsert(fdp, sv[1], cloexec, fp2);
+		FILE_SET_MATURE(fp1, p);
+		FILE_SET_MATURE(fp2, p);
 		fdpunlock(fdp);
-		FRELE(fp1, p);
-		FRELE(fp2, p);
 		KERNEL_UNLOCK();
 		return (0);
 	}
@@ -995,7 +986,7 @@ sys_setsockopt(struct proc *p, void *v, register_t *retval)
 	so = fp->f_data;
 	s = solock(so);
 	error = sosetopt(so, SCARG(uap, level), SCARG(uap, name), m);
-	sounlock(s);
+	sounlock(so, s);
 bad:
 	m_freem(m);
 	FRELE(fp, p);
@@ -1034,7 +1025,7 @@ sys_getsockopt(struct proc *p, void *v, register_t *retval)
 	so = fp->f_data;
 	s = solock(so);
 	error = sogetopt(so, SCARG(uap, level), SCARG(uap, name), m);
-	sounlock(s);
+	sounlock(so, s);
 	if (error == 0 && SCARG(uap, val) && valsize && m != NULL) {
 		if (valsize > m->m_len)
 			valsize = m->m_len;
@@ -1078,7 +1069,7 @@ sys_getsockname(struct proc *p, void *v, register_t *retval)
 	m = m_getclr(M_WAIT, MT_SONAME);
 	s = solock(so);
 	error = (*so->so_proto->pr_usrreq)(so, PRU_SOCKADDR, 0, m, 0, p);
-	sounlock(s);
+	sounlock(so, s);
 	if (error)
 		goto bad;
 	error = copyaddrout(p, m, SCARG(uap, asa), len, SCARG(uap, alen));
@@ -1121,7 +1112,7 @@ sys_getpeername(struct proc *p, void *v, register_t *retval)
 	m = m_getclr(M_WAIT, MT_SONAME);
 	s = solock(so);
 	error = (*so->so_proto->pr_usrreq)(so, PRU_PEERADDR, 0, m, 0, p);
-	sounlock(s);
+	sounlock(so, s);
 	if (error)
 		goto bad;
 	error = copyaddrout(p, m, SCARG(uap, asa), len, SCARG(uap, alen));
