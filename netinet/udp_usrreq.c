@@ -168,9 +168,7 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 		struct sockaddr_in6 sin6;
 #endif /* INET6 */
 	} srcsa, dstsa;
-#ifdef INET6
 	struct ip6_hdr *ip6 = NULL;
-#endif /* INET6 */
 #ifdef IPSEC
 	struct m_tag *mtag;
 	struct tdb_ident *tdbi;
