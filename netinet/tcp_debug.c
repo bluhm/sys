@@ -1,4 +1,4 @@
-/*	$OpenBSD: tcp_debug.c,v 1.27 2018/06/11 07:40:26 bluhm Exp $	*/
+/*	$OpenBSD: tcp_debug.c,v 1.28 2018/06/11 21:23:34 bluhm Exp $	*/
 /*	$NetBSD: tcp_debug.c,v 1.10 1996/02/13 23:43:36 christos Exp $	*/
 
 /*
