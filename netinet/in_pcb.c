@@ -388,7 +388,7 @@ in_pcbbind(struct inpcb *inp, struct mbuf *nam, struct proc *p)
 		}
 	}
 	inp->inp_lport = lport;
-	in_pcbrehash(inp);
+	in_pcbrehash_locked(inp);
 	return (0);
 }
 
@@ -577,7 +577,7 @@ in_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 	}
 	inp->inp_faddr = sin->sin_addr;
 	inp->inp_fport = sin->sin_port;
-	in_pcbrehash(inp);
+	in_pcbrehash_locked(inp);
 #ifdef IPSEC
 	{
 		/* Cause an IPsec SA to be established. */

@@ -239,6 +239,7 @@ tcp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 
 		tp->t_template = tcp_template(tp);
 		if (tp->t_template == 0) {
+			/* XXXSMP incpb table should no be locked. */
 			in_pcbdisconnect(inp);
 			error = ENOBUFS;
 			break;
