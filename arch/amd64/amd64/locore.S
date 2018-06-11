@@ -1,4 +1,4 @@
-/*	$OpenBSD: locore.S,v 1.98 2018/06/05 06:39:10 guenther Exp $	*/
+/*	$OpenBSD: locore.S,v 1.100 2018/06/09 16:51:23 guenther Exp $	*/
 /*	$NetBSD: locore.S,v 1.13 2004/03/25 18:33:17 drochner Exp $	*/
 
 /*
@@ -247,8 +247,7 @@ gdt64_end:
 	.section .rodata
 	.globl	_C_LABEL(sigcode)
 _C_LABEL(sigcode):
-	call	*%rax
-
+	call	1f
 	movq	%rsp,%rdi
 	pushq	%rdi			/* fake return address */
 	movq	$SYS_sigreturn,%rax
@@ -257,6 +256,8 @@ _C_LABEL(sigcode):
 _C_LABEL(sigcoderet):
 	movq	$SYS_exit,%rax
 	syscall
+	.align	16,0xcc
+1:	JMP_RETPOLINE(rax)
 	.globl	_C_LABEL(esigcode)
 _C_LABEL(esigcode):
 
@@ -490,28 +491,25 @@ switch_restored:
 ENTRY(cpu_idle_enter)
 	movq	_C_LABEL(cpu_idle_enter_fcn),%rax
 	cmpq	$0,%rax
-	je	1f
-	jmpq	*%rax
-1:
-	ret
-
-ENTRY(cpu_idle_cycle)
-	movq	_C_LABEL(cpu_idle_cycle_fcn),%rax
-	cmpq	$0,%rax
-	je	1f
-	call	*%rax
-	ret
-1:
-	sti
-	hlt
+	jne	retpoline_rax
 	ret
 
 ENTRY(cpu_idle_leave)
 	movq	_C_LABEL(cpu_idle_leave_fcn),%rax
 	cmpq	$0,%rax
-	je	1f
-	jmpq	*%rax
-1:
+	jne	retpoline_rax
+	ret
+
+/* placed here for correct static branch prediction in cpu_idle_* */
+NENTRY(retpoline_rax)
+	JMP_RETPOLINE(rax)
+
+ENTRY(cpu_idle_cycle)
+	movq	_C_LABEL(cpu_idle_cycle_fcn),%rax
+	cmpq	$0,%rax
+	jne	retpoline_rax
+	sti
+	hlt
 	ret
 
 	.globl	_C_LABEL(panic)
@@ -720,7 +718,8 @@ NENTRY(proc_trampoline)
 #endif
 	movl	$IPL_NONE,CPUVAR(ILEVEL)
 	movq	%r13,%rdi
-	call	*%r12
+	movq	%r12,%rax
+	call	retpoline_rax
 	movq	CPUVAR(CURPROC),%r14
 	jmp	.Lsyscall_check_asts
 
@@ -923,53 +922,8 @@ NENTRY(intr_fast_exit)
 	movq	TF_RCX(%rsp),%rcx
 	movq	TF_R11(%rsp),%r11
 	movq	TF_RAX(%rsp),%rax
-
-#if !defined(GPROF) && defined(DDBPROF)
-	/*
-	 * If we are returning from a probe trap we need to fix the
-	 * stack layout and emulate the patched instruction.
-	 *
-	 * The code below does that by trashing %rax, so it MUST be
-	 * restored afterward.
-	 */
-	cmpl	$INTR_FAKE_TRAP, TF_ERR(%rsp)
-	je	.Lprobe_fixup
-#endif /* !defined(GPROF) && defined(DDBPROF) */
-
 	addq	$TF_RIP,%rsp
 	iretq
-
-
-#if !defined(GPROF) && defined(DDBPROF)
-.Lprobe_fixup:
-	/* Reserve enough room to emulate "pushq %rbp". */
-	subq	$16, %rsp
-
-	/* Shift hardware-saved registers. */
-	movq	(TF_RIP + 16)(%rsp), %rax
-	movq	%rax, TF_RIP(%rsp)
-	movq	(TF_CS + 16)(%rsp), %rax
-	movq	%rax, TF_CS(%rsp)
-	movq	(TF_RFLAGS + 16)(%rsp), %rax
-	movq	%rax, TF_RFLAGS(%rsp)
-	movq	(TF_RSP + 16)(%rsp), %rax
-	movq	%rax, TF_RSP(%rsp)
-	movq	(TF_SS + 16)(%rsp), %rax
-	movq	%rax, TF_SS(%rsp)
-
-	/* Pull 8 bytes off the stack and store %rbp in the expected location.*/
-	movq	TF_RSP(%rsp), %rax
-	subq	$8, %rax
-	movq	%rax, TF_RSP(%rsp)
-	movq	%rbp, (%rax)
-
-	/* Write back overwritten %rax */
-	movq	(TF_RAX + 16)(%rsp),%rax
-
-	addq	$TF_RIP,%rsp
-	iretq
-#endif /* !defined(GPROF) && defined(DDBPROF) */
-	.text
 
 #ifdef DIAGNOSTIC
 .Lintr_exit_not_blocked:

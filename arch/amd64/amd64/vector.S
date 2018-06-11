@@ -1,4 +1,4 @@
-/*	$OpenBSD: vector.S,v 1.60 2018/06/05 06:39:10 guenther Exp $	*/
+/*	$OpenBSD: vector.S,v 1.64 2018/06/10 15:51:41 guenther Exp $	*/
 /*	$NetBSD: vector.S,v 1.5 2004/06/28 09:13:11 fvdl Exp $	*/
 
 /*
@@ -171,7 +171,79 @@ KUENTRY(calltrap_specstk_tramp)
 	iretq
 
 IDTVEC(trap03)
+#if defined(GPROF) || !defined(DDBPROF)
 	ZTRAP(T_BPTFLT)
+#else /* !defined(GPROF) && defined(DDBPROF) */
+	pushq	$0
+	pushq	$T_BPTFLT
+	testb	$SEL_RPL,24(%rsp)
+	je	INTRENTRY_LABEL(trap03)
+	jmp	alltraps
+	.text
+	.global	INTRENTRY_LABEL(trap03)
+INTRENTRY_LABEL(trap03):
+	INTR_ENTRY_KERN
+	INTR_SAVE_MOST_GPRS_NO_ADJ
+	sti
+	cld
+	SMAP_CLAC
+#ifdef DIAGNOSTIC
+	movl	CPUVAR(ILEVEL),%ebx
+#endif /* DIAGNOSTIC */
+	movq	%rsp, %rdi
+	call	_C_LABEL(db_prof_hook)
+	cmpl	$1, %eax
+	jne	recall_trap
+
+	cli
+	movq	TF_RDI(%rsp),%rdi
+	movq	TF_RSI(%rsp),%rsi
+	movq	TF_R8(%rsp),%r8
+	movq	TF_R9(%rsp),%r9
+	movq	TF_R10(%rsp),%r10
+	movq	TF_R12(%rsp),%r12
+	movq	TF_R13(%rsp),%r13
+	movq	TF_R14(%rsp),%r14
+	movq	TF_R15(%rsp),%r15
+	movq	TF_RBP(%rsp),%rbp
+	movq	TF_RBX(%rsp),%rbx
+	movq	TF_RDX(%rsp),%rdx
+	movq	TF_RCX(%rsp),%rcx
+	movq	TF_R11(%rsp),%r11
+	/* %rax restored below, after begin used to shift the stack */
+
+	/*
+	 * We are returning from a probe trap so we need to fix the
+	 * stack layout and emulate the patched instruction.
+	 * Reserve enough room to emulate "pushq %rbp".
+	 */
+	subq	$16, %rsp
+
+	/* Shift hardware-saved registers. */
+	movq	(TF_RIP + 16)(%rsp), %rax
+	movq	%rax, TF_RIP(%rsp)
+	movq	(TF_CS + 16)(%rsp), %rax
+	movq	%rax, TF_CS(%rsp)
+	movq	(TF_RFLAGS + 16)(%rsp), %rax
+	movq	%rax, TF_RFLAGS(%rsp)
+	movq	(TF_RSP + 16)(%rsp), %rax
+	movq	%rax, TF_RSP(%rsp)
+	movq	(TF_SS + 16)(%rsp), %rax
+	movq	%rax, TF_SS(%rsp)
+
+	/* Pull 8 bytes off the stack and store %rbp in the expected location.*/
+	movq	TF_RSP(%rsp), %rax
+	subq	$8, %rax
+	movq	%rax, TF_RSP(%rsp)
+	movq	%rbp, (%rax)
+
+	/* Finally restore %rax */
+	movq	(TF_RAX + 16)(%rsp),%rax
+
+	addq	$TF_RIP,%rsp
+	iretq
+#endif /* !defined(GPROF) && defined(DDBPROF) */
+
 IDTVEC(trap04)
 	ZTRAP(T_OFLOW)	# impossible: INTO instruction invalid in amd64
 IDTVEC(trap05)
@@ -294,23 +366,6 @@ KUENTRY(alltraps)
 #ifdef DIAGNOSTIC
 	movl	CPUVAR(ILEVEL),%ebx
 #endif /* DIAGNOSTIC */
-#if !defined(GPROF) && defined(DDBPROF)
-	cmpl	$T_BPTFLT,TF_TRAPNO(%rsp)
-	jne	.Lreal_trap
-
-	movq	%rsp, %rdi
-	call	_C_LABEL(db_prof_hook)
-	cmpl	$1, %eax
-	jne	.Lreal_trap
-
-	/*
-	 * Abuse the error field to indicate that intr_fast_exit needs
-	 * to emulate the patched instruction.
-	 */
-	movl	$INTR_FAKE_TRAP, TF_ERR(%rsp)
-	jz	2f
-.Lreal_trap:
-#endif /* !defined(GPROF) && defined(DDBPROF) */
 	.globl	recall_trap
 recall_trap:
 	movq	%rsp, %rdi
@@ -1130,6 +1185,9 @@ _C_LABEL(ioapic_level_stubs):
 /*
  * Soft interrupt handlers
  */
+NENTRY(retpoline_r13)
+	JMP_RETPOLINE(r13)
+
 KIDTVEC(softtty)
 	movl	$IPL_SOFTTTY, CPUVAR(ILEVEL)
 	sti
@@ -1137,7 +1195,7 @@ KIDTVEC(softtty)
 	movl	$X86_SOFTINTR_SOFTTTY,%edi
 	call	_C_LABEL(softintr_dispatch)
 	decl	CPUVAR(IDEPTH)
-	jmp	*%r13
+	jmp	retpoline_r13
 
 KIDTVEC(softnet)
 	movl	$IPL_SOFTNET, CPUVAR(ILEVEL)
@@ -1146,7 +1204,7 @@ KIDTVEC(softnet)
 	movl	$X86_SOFTINTR_SOFTNET,%edi
 	call	_C_LABEL(softintr_dispatch)
 	decl	CPUVAR(IDEPTH)
-	jmp	*%r13
+	jmp	retpoline_r13
 
 KIDTVEC(softclock)
 	movl	$IPL_SOFTCLOCK, CPUVAR(ILEVEL)
@@ -1155,4 +1213,4 @@ KIDTVEC(softclock)
 	movl	$X86_SOFTINTR_SOFTCLOCK,%edi
 	call	_C_LABEL(softintr_dispatch)
 	decl	CPUVAR(IDEPTH)
-	jmp	*%r13
+	jmp	retpoline_r13
