@@ -155,7 +155,6 @@ in6_pcbaddrisavail(struct inpcb *inp, struct sockaddr_in6 *sin6, int wild,
     struct proc *p)
 {
 	struct socket *so = inp->inp_socket;
-	struct inpcbtable *table = inp->inp_table;
 	u_short lport = sin6->sin6_port;
 	int reuseport = (so->so_options & SO_REUSEPORT);
 
@@ -218,7 +217,7 @@ in6_pcbaddrisavail(struct inpcb *inp, struct sockaddr_in6 *sin6, int wild,
 		short options;
 
 		if (so->so_euid) {
-			t = in_pcblookup_local(table,
+			t = in_pcblookup_local(inp,
 			    (struct in_addr *)&sin6->sin6_addr, lport,
 			    INPLOOKUP_WILDCARD | INPLOOKUP_IPV6,
 			    inp->inp_rtableid);
@@ -229,7 +228,7 @@ in6_pcbaddrisavail(struct inpcb *inp, struct sockaddr_in6 *sin6, int wild,
 					return (EADDRINUSE);
 			}
 		}
-		t = in_pcblookup_local(table,
+		t = in_pcblookup_local(inp,
 		    (struct in_addr *)&sin6->sin6_addr, lport,
 		    wild, inp->inp_rtableid);
 		if (t != NULL) {
