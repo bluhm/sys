@@ -173,11 +173,11 @@ solisten(struct socket *so, int backlog)
 	if (isspliced(so) || issplicedback(so))
 		return (EOPNOTSUPP);
 #endif /* SOCKET_SPLICE */
-	s = solock(so);
+	s = solockall(so);
 	error = (*so->so_proto->pr_usrreq)(so, PRU_LISTEN, NULL, NULL, NULL,
 	    curproc);
 	if (error) {
-		sounlock(so, s);
+		sounlockall(so, s);
 		return (error);
 	}
 	if (TAILQ_FIRST(&so->so_q) == NULL)
@@ -187,7 +187,7 @@ solisten(struct socket *so, int backlog)
 	if (backlog < sominconn)
 		backlog = sominconn;
 	so->so_qlimit = backlog;
-	sounlock(so, s);
+	sounlockall(so, s);
 	return (0);
 }
 

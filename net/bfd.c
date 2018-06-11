@@ -478,9 +478,9 @@ bfd_listener(struct bfd_config *bfd, unsigned int port)
 		break;
 	}
 
-	s = solock(so);
+	s = solockall(so);
 	error = sobind(so, m, p);
-	sounlock(s);
+	sounlockall(s);
 	if (error) {
 		printf("%s: sobind error %d\n",
 		    __func__, error);
@@ -586,9 +586,9 @@ bfd_sender(struct bfd_config *bfd, unsigned int port)
 		break;
 	}
 
-	s = solock(so);
+	s = solockall(so);
 	error = sobind(so, m, p);
-	sounlock(s);
+	sounlockall(s);
 	if (error) {
 		printf("%s: sobind error %d\n",
 		    __func__, error);
@@ -609,9 +609,9 @@ bfd_sender(struct bfd_config *bfd, unsigned int port)
 		break;
 	}
 
-	s = solock(so);
+	s = solockall(so);
 	error = soconnect(so, m);
-	sounlock(so, s);
+	sounlockall(so, s);
 	if (error && error != ECONNREFUSED) {
 		printf("%s: soconnect error %d\n",
 		    __func__, error);

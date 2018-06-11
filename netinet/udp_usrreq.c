@@ -1219,6 +1219,12 @@ udp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *addr,
 	case PRU_UNLOCK:
 		mtx_leave(&inp->inp_mtx);
 		break;
+	case PRU_LOCKALL:
+		mtx_enter(&inpcbtable_mtx);
+		break;
+	case PRU_UNLOCKALL:
+		mtx_leave(&inpcbtable_mtx);
+		break;
 
 	default:
 		panic("udp_usrreq");

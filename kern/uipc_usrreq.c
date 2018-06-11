@@ -308,6 +308,8 @@ uipc_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 
 	case PRU_LOCK:
 	case PRU_UNLOCK:
+	case PRU_LOCKALL:
+	case PRU_UNLOCKALL:
 		break;
 
 	default:

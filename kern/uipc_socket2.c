@@ -273,6 +273,20 @@ socantrcvmore(struct socket *so)
 }
 
 int
+solockall(struct socket *so)
+{
+	(*so->so_proto->pr_usrreq)(so, PRU_LOCKALL, NULL, NULL, NULL, NULL);
+	return solock(so);
+}
+
+void
+sounlockall(struct socket *so, int s)
+{
+	sounlock(so, s);
+	(*so->so_proto->pr_usrreq)(so, PRU_UNLOCKALL, NULL, NULL, NULL, NULL);
+}
+
+int
 solock(struct socket *so)
 {
 	switch (so->so_proto->pr_domain->dom_family) {

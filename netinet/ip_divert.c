@@ -301,6 +301,8 @@ divert_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *addr,
 
 	case PRU_LOCK:
 	case PRU_UNLOCK:
+	case PRU_LOCKALL:
+	case PRU_UNLOCKALL:
 		/* XXX */
 		break;
 

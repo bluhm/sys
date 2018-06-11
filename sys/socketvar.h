@@ -345,6 +345,8 @@ int	sockargs(struct mbuf **, const void *, size_t, int);
 int	sosleep(struct socket *, void *, int, const char *, int);
 int	solock(struct socket *);
 void	sounlock(struct socket *, int);
+int	solockall(struct socket *);
+void	sounlockall(struct socket *, int);
 
 int	sendit(struct proc *, int, struct msghdr *, int, register_t *);
 int	recvit(struct proc *, int, struct msghdr *, caddr_t,

@@ -146,8 +146,10 @@ struct protosw {
 #define	PRU_PROTOSEND		21	/* send to below */
 #define	PRU_LOCK		22	/* acquire lock */
 #define	PRU_UNLOCK		23	/* release lock */
+#define	PRU_LOCKALL		24	/* acquire lock for inpcp table */
+#define	PRU_UNLOCKALL		25	/* release lock for inpcp table */
 
-#define	PRU_NREQ		24
+#define	PRU_NREQ		26
 
 #ifdef PRUREQUESTS
 const char *prurequests[PRU_NREQ] = {
@@ -157,6 +159,7 @@ const char *prurequests[PRU_NREQ] = {
 	"SENSE",	"RCVOOB",	"SENDOOB",	"SOCKADDR",
 	"PEERADDR",	"CONNECT2",	"FASTTIMO",	"SLOWTIMO",
 	"PROTORCV",	"PROTOSEND",	"LOCK",		"UNLOCK",
+	"LOCKALL",	"UNLOCKALL",
 };
 #endif
 

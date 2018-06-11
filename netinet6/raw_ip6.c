@@ -709,6 +709,12 @@ rip6_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 	case PRU_UNLOCK:
 		mtx_leave(&in6p->inp_mtx);
 		break;
+	case PRU_LOCKALL:
+		mtx_enter(&inpcbtable_mtx);
+		break;
+	case PRU_UNLOCKALL:
+		mtx_leave(&inpcbtable_mtx);
+		break;
 
 	default:
 		panic("rip6_usrreq");

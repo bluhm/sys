@@ -205,9 +205,9 @@ sys_bind(struct proc *p, void *v, register_t *retval)
 	if (KTRPOINT(p, KTR_STRUCT))
 		ktrsockaddr(p, mtod(nam, caddr_t), SCARG(uap, namelen));
 #endif
-	s = solock(so);
+	s = solockall(so);
 	error = sobind(so, nam, p);
-	sounlock(so, s);
+	sounlockall(so, s);
 	m_freem(nam);
 out:
 	FRELE(fp, p);
@@ -380,7 +380,7 @@ sys_connect(struct proc *p, void *v, register_t *retval)
 	if ((error = getsock(p, SCARG(uap, s), &fp)) != 0)
 		return (error);
 	so = fp->f_data;
-	s = solock(so);
+	s = solockall(so);
 	if (so->so_state & SS_ISCONNECTING) {
 		error = EALREADY;
 		goto out;
@@ -430,7 +430,7 @@ bad:
 	if (!interrupted)
 		so->so_state &= ~SS_ISCONNECTING;
 out:
-	sounlock(so, s);
+	sounlockall(so, s);
 	FRELE(fp, p);
 	m_freem(nam);
 	if (error == ERESTART)

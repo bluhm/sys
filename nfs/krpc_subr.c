@@ -286,9 +286,9 @@ krpc_call(struct sockaddr_in *sa, u_int prog, u_int vers, u_int func,
 	sin->sin_family = AF_INET;
 	sin->sin_addr.s_addr = INADDR_ANY;
 	sin->sin_port = htons(0);
-	s = solock(so);
+	s = solockall(so);
 	error = sobind(so, m, &proc0);
-	sounlock(so, s);
+	sounlockall(so, s);
 	m_freem(m);
 	if (error) {
 		printf("bind failed\n");

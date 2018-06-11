@@ -259,7 +259,7 @@ nfs_connect(struct nfsmount *nmp, struct nfsreq *rep)
 		MGET(nam, M_WAIT, MT_SONAME);
 
 	so = nmp->nm_so;
-	s = solock(so);
+	s = solockall(so);
 	nmp->nm_soflags = so->so_proto->pr_flags;
 
 	/*
@@ -365,7 +365,7 @@ nfs_connect(struct nfsmount *nmp, struct nfsreq *rep)
 		goto bad;
 	so->so_rcv.sb_flags |= SB_NOINTR;
 	so->so_snd.sb_flags |= SB_NOINTR;
-	sounlock(so, s);
+	sounlockall(so, s);
 
 	m_freem(mopt);
 	m_freem(nam);
@@ -378,7 +378,7 @@ nfs_connect(struct nfsmount *nmp, struct nfsreq *rep)
 	return (0);
 
 bad:
-	sounlock(so, s);
+	sounlockall(so, s);
 
 	m_freem(mopt);
 	m_freem(nam);

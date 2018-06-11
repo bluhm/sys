@@ -440,9 +440,9 @@ pflow_set(struct pflow_softc *sc, struct pflowreq *pflowr)
 				memcpy(sa, sc->sc_flowsrc,
 				    sc->sc_flowsrc->sa_len);
 
-				s = solock(so);
+				s = solockall(so);
 				error = sobind(so, m, p);
-				sounlock(so, s);
+				sounlockall(so, s);
 				m_freem(m);
 				if (error) {
 					soclose(so);
