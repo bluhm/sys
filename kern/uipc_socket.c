@@ -197,7 +197,7 @@ sofree(struct socket *so, int s)
 	soassertlocked(so);
 
 	if (so->so_pcb || (so->so_state & SS_NOFDREF) == 0)
-		return;
+		return so;
 	if (so->so_head) {
 		/*
 		 * We must not decommission a socket that's on the accept(2)
@@ -205,7 +205,7 @@ sofree(struct socket *so, int s)
 		 * indicated that the listening socket was ready.
 		 */
 		if (!soqremque(so, 0))
-			return;
+			return so;
 	}
 #ifdef SOCKET_SPLICE
 	if (so->so_sp) {
@@ -218,7 +218,6 @@ sofree(struct socket *so, int s)
 #endif /* SOCKET_SPLICE */
 	sbrelease(so, &so->so_snd);
 	sorflush(so);
-	sounlock(so, s);
 #ifdef SOCKET_SPLICE
 	if (so->so_sp) {
 		/* Reuse splice idle, sounsplice() has been called before. */
@@ -284,7 +283,8 @@ drop:
 			error = error2;
 	}
 discard:
-	KASSERT((so->so_state & SS_NOFDREF) == 0);
+	if (so->so_state & SS_NOFDREF)
+		panic("soclose NOFDREF: so %p, so_type %d", so, so->so_type);
 	so->so_state |= SS_NOFDREF;
 	so = sofree(so, s);
 	sounlock(so, s);
