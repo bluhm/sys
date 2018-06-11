@@ -142,7 +142,8 @@ tcp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 			    (struct ifnet *)control));
 	}
 
-	soassertlocked(so);
+	if (req != PRU_LOCKALL && req != PRU_UNLOCKALL)
+		soassertlocked(so);
 
 	if (control && control->m_len) {
 		m_freem(control);

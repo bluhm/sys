@@ -1048,7 +1048,8 @@ udp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *addr,
 			    (struct ifnet *)control));
 	}
 
-	soassertlocked(so);
+	if (req != PRU_LOCKALL && req != PRU_UNLOCKALL)
+		soassertlocked(so);
 
 	inp = sotoinpcb(so);
 	if (inp == NULL) {

@@ -379,7 +379,8 @@ rip_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		return (in_control(so, (u_long)m, (caddr_t)nam,
 		    (struct ifnet *)control));
 
-	soassertlocked(so);
+	if (req != PRU_LOCKALL && req != PRU_UNLOCKALL)
+		soassertlocked(so);
 
 	if (inp == NULL) {
 		error = EINVAL;

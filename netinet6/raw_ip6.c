@@ -567,7 +567,8 @@ rip6_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		return (in6_control(so, (u_long)m, (caddr_t)nam,
 		    (struct ifnet *)control));
 
-	soassertlocked(so);
+	if (req != PRU_LOCKALL && req != PRU_UNLOCKALL)
+		soassertlocked(so);
 
 	if (in6p == NULL) {
 		error = EINVAL;
