@@ -289,6 +289,8 @@ sounlockall(struct socket *so, int s)
 int
 solock(struct socket *so)
 {
+	int s = 0;
+
 	switch (so->so_proto->pr_domain->dom_family) {
 	case PF_INET:
 	case PF_INET6:
@@ -299,37 +301,25 @@ solock(struct socket *so)
 	case PF_KEY:
 	default:
 		KERNEL_LOCK();
+		s = -42;
 		break;
 	}
 	(*so->so_proto->pr_usrreq)(so, PRU_LOCK, NULL, NULL, NULL, NULL);
 
-	return (SL_LOCKED);
+	return (s);
 }
 
 void
 sounlock(struct socket *so, int s)
 {
-	KASSERT(s == SL_LOCKED || s == SL_NOUNLOCK);
-
-	if (s != SL_LOCKED)
-		return;
-
 	if (so != NULL)
 		(*so->so_proto->pr_usrreq)(so, PRU_UNLOCK, NULL, NULL, NULL,
 		    NULL);
 
-	switch (so->so_proto->pr_domain->dom_family) {
-	case PF_INET:
-	case PF_INET6:
+	if (s != -42)
 		NET_UNLOCK();
-		break;
-	case PF_UNIX:
-	case PF_ROUTE:
-	case PF_KEY:
-	default:
+	else
 		KERNEL_UNLOCK();
-		break;
-	}
 }
 
 void
