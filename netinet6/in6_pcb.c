@@ -450,7 +450,7 @@ in6_pcbnotify(struct inpcbtable *table, struct sockaddr_in6 *dst,
 		}
 	  do_notify:
 		nmatch++;
-		/* XXX Is it safe to call notify with inpcbtable mutex held? */
+		/* XXXSMP Is it safe to call notify with inpcbtable mutex? */
 		if (notify)
 			(*notify)(inp, errno);
 	}
