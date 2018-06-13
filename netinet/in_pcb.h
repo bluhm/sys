@@ -83,6 +83,11 @@ union inpaddru {
 };
 
 /*
+ *  Locks used to protect struct members in this file:
+ *	I	immutable after creation
+ *	t	protected by internet PCB table mutex inpcbtable_mtx
+ */
+/*
  * Common structure pcb for internet protocol implementation.
  * Here are stored pointers to local and foreign host table
  * entries, local and foreign socket numbers, and pointers
@@ -90,10 +95,10 @@ union inpaddru {
  * control block.
  */
 struct inpcb {
-	LIST_ENTRY(inpcb) inp_hash;
-	LIST_ENTRY(inpcb) inp_lhash;		/* extra hash for lport */
-	TAILQ_ENTRY(inpcb) inp_queue;
-	struct	  inpcbtable *inp_table;
+	LIST_ENTRY(inpcb) inp_hash;		/* [t] local and foreign hash */
+	LIST_ENTRY(inpcb) inp_lhash;		/* [t] extra hash for lport */
+	TAILQ_ENTRY(inpcb) inp_queue;		/* [t] inet proto cb queue */
+	struct	  inpcbtable *inp_table;	/* [I] inet proto queue/hash */
 	union	  inpaddru inp_faddru;		/* Foreign address. */
 	union	  inpaddru inp_laddru;		/* Local address. */
 #define	inp_faddr	inp_faddru.iau_a4u.inaddr
@@ -149,11 +154,12 @@ struct inpcb {
 LIST_HEAD(inpcbhead, inpcb);
 
 struct inpcbtable {
-	TAILQ_HEAD(inpthead, inpcb) inpt_queue;
-	struct inpcbhead *inpt_hashtbl, *inpt_lhashtbl;
-	SIPHASH_KEY inpt_key;
-	u_long	  inpt_mask, inpt_lmask;
-	int	  inpt_count, inpt_size;
+	TAILQ_HEAD(inpthead, inpcb) inpt_queue;	/* [t] inet proto cb queue */
+	struct inpcbhead *inpt_hashtbl;		/* [t] local and foreign hash */
+	struct inpcbhead *inpt_lhashtbl;	/* [t] local port hash */
+	SIPHASH_KEY inpt_key;			/* [t] secret for both hashes */
+	u_long	  inpt_mask, inpt_lmask;	/* [t] hash masks */
+	int	  inpt_count, inpt_size;	/* [t] queue count, hash size */
 };
 
 /* flags in inp_flags: */
