@@ -693,7 +693,7 @@ in_pcbnotifyall(struct inpcbtable *table, struct sockaddr *dst, u_int rtable,
 		    inp->inp_socket == 0) {
 			continue;
 		}
-		/* XXX Is it safe to call notify with inpcbtable mutex held? */
+		/* XXXSMP Is it safe to call notify with inpcbtable mutex? */
 		if (notify)
 			(*notify)(inp, errno);
 	}
