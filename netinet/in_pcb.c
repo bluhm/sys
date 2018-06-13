@@ -1037,7 +1037,7 @@ in_pcbselsrc(struct in_addr **insrc, struct sockaddr_in *sin,
 void
 in_pcbrehash(struct inpcb *inp)
 {
-	/* XXX lock order inversion */
+	/* XXXSMP lock order inversion */
 	mtx_enter(&inpcbtable_mtx);
 	in_pcbrehash_locked(inp);
 	mtx_leave(&inpcbtable_mtx);
