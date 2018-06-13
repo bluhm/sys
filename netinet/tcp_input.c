@@ -3542,11 +3542,6 @@ syn_cache_get(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 
 	switch (src->sa_family) {
 	case AF_INET:
-		/* drop IPv4 packet to AF_INET6 socket */
-		if (inp->inp_flags & INP_IPV6) {
-			(void) m_free(am);
-			goto resetandabort;
-		}
 		if (in_pcbconnect(inp, am)) {
 			(void) m_free(am);
 			goto resetandabort;
