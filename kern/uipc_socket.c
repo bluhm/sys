@@ -142,8 +142,8 @@ socreate(int dom, struct socket **aso, int type, int proto)
 	error = (*prp->pr_attach)(so, proto);
 	if (error) {
 		so->so_state |= SS_NOFDREF;
-		so = sofree(so, s);
-		sounlock(so, s);
+		/* sofree() calls sounlock(). */
+		sofree(so, s);
 		return (error);
 	}
 	sounlock(so, s);
@@ -191,21 +191,25 @@ solisten(struct socket *so, int backlog)
 	return (0);
 }
 
-struct socket *
+void
 sofree(struct socket *so, int s)
 {
 	soassertlocked(so);
 
-	if (so->so_pcb || (so->so_state & SS_NOFDREF) == 0)
+	if (so->so_pcb || (so->so_state & SS_NOFDREF) == 0) {
+		sounlock(so, s);
 		return;
+	}
 	if (so->so_head) {
 		/*
 		 * We must not decommission a socket that's on the accept(2)
 		 * queue.  If we do, then accept(2) may hang after select(2)
 		 * indicated that the listening socket was ready.
 		 */
-		if (!soqremque(so, 0))
+		if (!soqremque(so, 0)) {
+			sounlock(so, s);
 			return;
+		}
 	}
 #ifdef SOCKET_SPLICE
 	if (so->so_sp) {
@@ -229,7 +233,6 @@ sofree(struct socket *so, int s)
 	{
 		pool_put(&socket_pool, so);
 	}
-	return NULL;
 }
 
 /*
@@ -287,8 +290,8 @@ discard:
 	if (so->so_state & SS_NOFDREF)
 		panic("soclose NOFDREF: so %p, so_type %d", so, so->so_type);
 	so->so_state |= SS_NOFDREF;
-	so = sofree(so, s);
-	sounlock(so, s);
+	/* sofree() calls sounlock(). */
+	sofree(so, s);
 	return (error);
 }
 

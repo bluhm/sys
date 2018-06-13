@@ -627,7 +627,7 @@ unp_drop(struct unpcb *unp, int errno)
 		 * As long as the KERNEL_LOCK() is the default lock for Unix
 		 * sockets, do not release it.
 		 */
-		so = sofree(so, SL_NOUNLOCK);
+		sofree(so, SL_NOUNLOCK);
 		m_freem(unp->unp_addr);
 		free(unp, M_PCB, sizeof *unp);
 	}

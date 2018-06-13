@@ -627,7 +627,7 @@ in_pcbdetach(struct inpcb *inp)
 	 * sockets, do not release it to not introduce new sleeping
 	 * points.
 	 */
-	so = inp->inp_socket = sofree(so, SL_NOUNLOCK);
+	sofree(so, SL_NOUNLOCK);
 	m_freem(inp->inp_options);
 	if (inp->inp_route.ro_rt) {
 		rtfree(inp->inp_route.ro_rt);
