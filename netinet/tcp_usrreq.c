@@ -807,9 +807,10 @@ tcp_ident(void *oldp, size_t *oldlenp, void *newp, size_t newlen, int dodrop)
 
 	if (dodrop) {
 		if (inp && (tp = intotcpcb(inp)) &&
-		    ((inp->inp_socket->so_options & SO_ACCEPTCONN) == 0))
+		    ((inp->inp_socket->so_options & SO_ACCEPTCONN) == 0)) {
 			tp = tcp_drop(tp, ECONNABORTED);
-		else
+			inp = NULL;
+		} else
 			error = ESRCH;
 		if (inp != NULL)
 			mtx_leave(&inp->inp_mtx);
