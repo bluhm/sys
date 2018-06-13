@@ -257,7 +257,7 @@ soclose(struct socket *so)
 			(void) soabort(so2);
 		}
 	}
-	if (so->so_pcb == 0)
+	if (so->so_pcb == NULL)
 		goto discard;
 	if (so->so_state & SS_ISCONNECTED) {
 		if ((so->so_state & SS_ISDISCONNECTING) == 0) {
@@ -287,7 +287,8 @@ drop:
 			error = error2;
 	}
 discard:
-	KASSERT((so->so_state & SS_NOFDREF) == 0);
+	if (so->so_state & SS_NOFDREF)
+		panic("soclose NOFDREF: so %p, so_type %d", so, so->so_type);
 	so->so_state |= SS_NOFDREF;
 	/* sofree() calls sounlock(). */
 	sofree(so, s);
@@ -310,7 +311,8 @@ soaccept(struct socket *so, struct mbuf *nam)
 
 	soassertlocked(so);
 
-	KASSERT((so->so_state & SS_NOFDREF) != 0);
+	if ((so->so_state & SS_NOFDREF) == 0)
+		panic("soaccept !NOFDREF: so %p, so_type %d", so, so->so_type);
 	so->so_state &= ~SS_NOFDREF;
 	if ((so->so_state & SS_ISDISCONNECTED) == 0 ||
 	    (so->so_proto->pr_flags & PR_ABRTACPTDIS) == 0)
