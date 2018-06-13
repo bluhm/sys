@@ -120,7 +120,9 @@ int ipport_lastauto = IPPORT_USERRESERVED;
 int ipport_hifirstauto = IPPORT_HIFIRSTAUTO;
 int ipport_hilastauto = IPPORT_HILASTAUTO;
 
+/* Protect PCB table queues, lookup hashes and existence of inpcb. */
 struct mutex inpcbtable_mtx = MUTEX_INITIALIZER(IPL_SOFTNET);
+
 struct baddynamicports baddynamicports;
 struct baddynamicports rootonlyports;
 struct pool inpcb_pool;
