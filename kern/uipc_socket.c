@@ -284,7 +284,8 @@ drop:
 			error = error2;
 	}
 discard:
-	KASSERT((so->so_state & SS_NOFDREF) == 0);
+	if (so->so_state & SS_NOFDREF)
+		panic("soclose NOFDREF: so %p, so_type %d", so, so->so_type);
 	so->so_state |= SS_NOFDREF;
 	so = sofree(so, s);
 	sounlock(so, s);
