@@ -317,7 +317,7 @@ int	soconnect(struct socket *so, struct mbuf *nam);
 int	soconnect2(struct socket *so1, struct socket *so2);
 int	socreate(int dom, struct socket **aso, int type, int proto);
 int	sodisconnect(struct socket *so);
-struct socket *sofree(struct socket *so, int);
+void	sofree(struct socket *so, int);
 int	sogetopt(struct socket *so, int level, int optname, struct mbuf *m);
 void	sohasoutofband(struct socket *so);
 void	soisconnected(struct socket *so);
