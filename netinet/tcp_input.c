@@ -3537,22 +3537,9 @@ syn_cache_get(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 		goto resetandabort;
 	am->m_len = src->sa_len;
 	memcpy(mtod(am, caddr_t), src, src->sa_len);
-
-	switch (src->sa_family) {
-	case AF_INET:
-		if (in_pcbconnect(inp, am)) {
-			(void) m_free(am);
-			goto resetandabort;
-		}
-		break;
-#ifdef INET6
-	case AF_INET6:
-		if (in6_pcbconnect(inp, am)) {
-			(void) m_free(am);
-			goto resetandabort;
-		}
-		break;
-#endif
+	if (in_pcbconnect(inp, am)) {
+		(void) m_free(am);
+		goto resetandabort;
 	}
 	(void) m_free(am);
 
