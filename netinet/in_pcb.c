@@ -550,7 +550,7 @@ in_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 		return (error);
 
 	t = in_pcbhashlookup(inp->inp_table, sin->sin_addr, sin->sin_port,
-	    *ina, inp->inp_lport, inp->inp_rtableid);
+	    *ina, inp->inp_lport, inp->inp_rtableid, inp);
 	if (t != NULL) {
 		mtx_leave(&t->inp_mtx);
 		return (EADDRINUSE);
@@ -565,7 +565,7 @@ in_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 				return (error);
 			t = in_pcbhashlookup(inp->inp_table, sin->sin_addr,
 			    sin->sin_port, *ina, inp->inp_lport,
-			    inp->inp_rtableid);
+			    inp->inp_rtableid, inp);
 			if (t != NULL) {
 				mtx_leave(&t->inp_mtx);
 				inp->inp_lport = 0;
@@ -1126,7 +1126,8 @@ int	in_pcbnotifymiss = 0;
  */
 struct inpcb *
 in_pcbhashlookup(struct inpcbtable *table, struct in_addr faddr,
-    u_int fport_arg, struct in_addr laddr, u_int lport_arg, u_int rtable)
+    u_int fport_arg, struct in_addr laddr, u_int lport_arg, u_int rtable,
+    struct inpcb *other)
 {
 	struct inpcbhead *head;
 	struct inpcb *inp;
@@ -1134,9 +1135,12 @@ in_pcbhashlookup(struct inpcbtable *table, struct in_addr faddr,
 	u_int rdomain;
 
 	rdomain = rtable_l2(rtable);
+	/* XXXSMP lock order inversion */
 	mtx_enter(&inpcbtable_mtx);
 	head = INPCBHASH(table, &faddr, fport, &laddr, lport, rdomain);
 	LIST_FOREACH(inp, head, inp_hash) {
+		if (other && other == inp)
+			continue;
 		mtx_enter(&inp->inp_mtx);
 #ifdef INET6
 		if (inp->inp_flags & INP_IPV6) {
@@ -1177,7 +1181,7 @@ in_pcbhashlookup(struct inpcbtable *table, struct in_addr faddr,
 struct inpcb *
 in6_pcbhashlookup(struct inpcbtable *table, const struct in6_addr *faddr,
     u_int fport_arg, const struct in6_addr *laddr, u_int lport_arg,
-    u_int rtable)
+    u_int rtable, struct inpcb *other)
 {
 	struct inpcbhead *head;
 	struct inpcb *inp;
@@ -1185,9 +1189,12 @@ in6_pcbhashlookup(struct inpcbtable *table, const struct in6_addr *faddr,
 	u_int rdomain;
 
 	rdomain = rtable_l2(rtable);
+	/* XXXSMP lock order inversion */
 	mtx_enter(&inpcbtable_mtx);
 	head = IN6PCBHASH(table, faddr, fport, laddr, lport, rdomain);
 	LIST_FOREACH(inp, head, inp_hash) {
+		if (other && other == inp)
+			continue;
 		mtx_enter(&inp->inp_mtx);
 		if (!(inp->inp_flags & INP_IPV6)) {
 			mtx_leave(&inp->inp_mtx);
