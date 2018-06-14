@@ -283,7 +283,8 @@ int	 in6_setpeeraddr(struct inpcb *, struct mbuf *);
 #endif /* INET6 */
 void	 in_pcbinit(struct inpcbtable *, int);
 struct inpcb *
-	 in_pcblookup_local(struct inpcb *, void *, u_int, int);
+	 in_pcblookup_local(struct inpcbtable *, void *, u_int, int,
+	    struct inpcb *);
 void	 in_pcbnotifyall(struct inpcbtable *, struct sockaddr *,
 	    u_int, int, void (*)(struct inpcb *, int));
 void	 in_pcbrehash(struct inpcb *);

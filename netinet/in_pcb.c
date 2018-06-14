@@ -397,6 +397,7 @@ in_pcbaddrisavail(struct inpcb *inp, struct sockaddr_in *sin, int wild,
     struct proc *p)
 {
 	struct socket *so = inp->inp_socket;
+	struct inpcbtable *table = inp->inp_table;
 	u_int16_t lport = sin->sin_port;
 	int reuseport = (so->so_options & SO_REUSEPORT);
 
@@ -441,8 +442,8 @@ in_pcbaddrisavail(struct inpcb *inp, struct sockaddr_in *sin, int wild,
 		short options;
 
 		if (so->so_euid) {
-			t = in_pcblookup_local(inp, &sin->sin_addr, lport,
-			    INPLOOKUP_WILDCARD);
+			t = in_pcblookup_local(table, &sin->sin_addr, lport,
+			    INPLOOKUP_WILDCARD, inp);
 			if (t != NULL) {
 				euid = t->inp_socket->so_euid;
 				mtx_leave(&t->inp_mtx);
@@ -450,8 +451,7 @@ in_pcbaddrisavail(struct inpcb *inp, struct sockaddr_in *sin, int wild,
 					return (EADDRINUSE);
 			}
 		}
-		t = in_pcblookup_local(inp, &sin->sin_addr, lport,
-		    wild);
+		t = in_pcblookup_local(table, &sin->sin_addr, lport, wild, inp);
 		if (t != NULL) {
 			options = t->inp_socket->so_options;
 			mtx_leave(&t->inp_mtx);
@@ -468,6 +468,7 @@ in_pcbpickport(u_int16_t *lport, void *laddr, int wild, struct inpcb *inp,
     struct proc *p)
 {
 	struct socket *so = inp->inp_socket;
+	struct inpcbtable *table = inp->inp_table;
 	u_int16_t first, last, lower, higher, candidate, localport;
 	int count;
 
@@ -510,7 +511,7 @@ in_pcbpickport(u_int16_t *lport, void *laddr, int wild, struct inpcb *inp,
 		localport = htons(candidate);
 		if (!in_baddynamic(candidate, so->so_proto->pr_protocol))
 			break;
-		t = in_pcblookup_local(inp, laddr, localport, wild);
+		t = in_pcblookup_local(table, laddr, localport, wild, inp);
 		if (t == NULL)
 			break;
 		mtx_leave(&t->inp_mtx);
@@ -817,10 +818,9 @@ in_rtchange(struct inpcb *inp, int errno)
 }
 
 struct inpcb *
-in_pcblookup_local(struct inpcb *other, void *laddrp, u_int lport_arg,
-    int flags)
+in_pcblookup_local(struct inpcbtable *table, void *laddrp, u_int lport_arg,
+    int flags, struct inpcb *other)
 {
-	struct inpcbtable *table = other->inp_table;
 	struct inpcb *inp, *match = NULL;
 	int matchwild = 3, wildcard;
 	u_int16_t lport = lport_arg;
