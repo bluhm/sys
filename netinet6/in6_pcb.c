@@ -290,7 +290,7 @@ in6_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 
 	if (in6_pcbhashlookup(inp->inp_table, &sin6->sin6_addr, sin6->sin6_port,
 	    IN6_IS_ADDR_UNSPECIFIED(&inp->inp_laddr6) ? in6a : &inp->inp_laddr6,
-	    inp->inp_lport, inp->inp_rtableid) != NULL) {
+	    inp->inp_lport, inp->inp_rtableid, inp) != NULL) {
 		return (EADDRINUSE);
 	}
 
@@ -303,7 +303,7 @@ in6_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 				return (error);
 			if (in6_pcbhashlookup(inp->inp_table, &sin6->sin6_addr,
 			    sin6->sin6_port, in6a, inp->inp_lport,
-			    inp->inp_rtableid) != NULL) {
+			    inp->inp_rtableid, inp) != NULL) {
 				inp->inp_lport = 0;
 				return (EADDRINUSE);
 			}

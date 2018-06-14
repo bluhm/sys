@@ -482,11 +482,11 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 		if (ip6)
 			inp = in6_pcbhashlookup(&udbtable, &ip6->ip6_src,
 			    uh->uh_sport, &ip6->ip6_dst, uh->uh_dport,
-			    m->m_pkthdr.ph_rtableid);
+			    m->m_pkthdr.ph_rtableid, NULL);
 		else
 #endif /* INET6 */
 		inp = in_pcbhashlookup(&udbtable, ip->ip_src, uh->uh_sport,
-		    ip->ip_dst, uh->uh_dport, m->m_pkthdr.ph_rtableid);
+		    ip->ip_dst, uh->uh_dport, m->m_pkthdr.ph_rtableid, NULL);
 	}
 	if (inp == NULL) {
 		udpstat_inc(udps_pcbhashmiss);
@@ -759,7 +759,7 @@ udp6_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *d)
 			 */
 			inp = in6_pcbhashlookup(&udbtable, &sa6.sin6_addr,
 			    uh.uh_dport, &sa6_src.sin6_addr, uh.uh_sport,
-			    rdomain);
+			    rdomain, NULL);
 #if 0
 			/*
 			 * As the use of sendto(2) is fairly popular,
@@ -846,7 +846,7 @@ udp_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 #endif
 		inp = in_pcbhashlookup(&udbtable,
 		    ip->ip_dst, uhp->uh_dport, ip->ip_src, uhp->uh_sport,
-		    rdomain);
+		    rdomain, NULL);
 		if (inp != NULL) {
 			if (inp->inp_socket != NULL)
 				notify(inp, errno);

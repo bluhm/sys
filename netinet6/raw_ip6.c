@@ -314,7 +314,7 @@ rip6_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *d)
 		 * from icmp6_notify_error()
 		 */
 		in6p = in6_pcbhashlookup(&rawin6pcbtable, &sa6->sin6_addr, 0,
-		    &sa6_src->sin6_addr, 0, rdomain);
+		    &sa6_src->sin6_addr, 0, rdomain, NULL);
 		if (in6p != NULL) {
 			if (in6p->inp_ipv6.ip6_nxt &&
 			    in6p->inp_ipv6.ip6_nxt == nxt)

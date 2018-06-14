@@ -3218,7 +3218,7 @@ pf_socket_lookup(struct pf_pdesc *pd)
 		 * The socket looked up will not match the one hit in the end.
 		 */
 		inp = in_pcbhashlookup(tb, saddr->v4, sport, daddr->v4, dport,
-		    pd->rdomain);
+		    pd->rdomain, NULL);
 		if (inp == NULL) {
 			inp = in_pcblookup_listen(tb, daddr->v4, dport,
 			    NULL, pd->rdomain);
@@ -3229,7 +3229,7 @@ pf_socket_lookup(struct pf_pdesc *pd)
 #ifdef INET6
 	case AF_INET6:
 		inp = in6_pcbhashlookup(tb, &saddr->v6, sport, &daddr->v6,
-		    dport, pd->rdomain);
+		    dport, pd->rdomain, NULL);
 		if (inp == NULL) {
 			inp = in6_pcblookup_listen(tb, &daddr->v6, dport,
 			    NULL, pd->rdomain);
