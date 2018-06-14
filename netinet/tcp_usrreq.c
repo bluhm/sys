@@ -794,12 +794,13 @@ tcp_ident(void *oldp, size_t *oldlenp, void *newp, size_t newlen, int dodrop)
 #ifdef INET6
 	case AF_INET6:
 		inp = in6_pcbhashlookup(&tcbtable, &f6,
-		    fin6->sin6_port, &l6, lin6->sin6_port, tir.rdomain);
+		    fin6->sin6_port, &l6, lin6->sin6_port, tir.rdomain, NULL);
 		break;
 #endif
 	case AF_INET:
 		inp = in_pcbhashlookup(&tcbtable, fin->sin_addr,
-		    fin->sin_port, lin->sin_addr, lin->sin_port, tir.rdomain);
+		    fin->sin_port, lin->sin_addr, lin->sin_port, tir.rdomain,
+		    NULL);
 		break;
 	default:
 		unhandled_af(tir.faddr.ss_family);

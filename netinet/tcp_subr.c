@@ -662,7 +662,8 @@ tcp6_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *d)
 		 * payload.
 		 */
 		inp = in6_pcbhashlookup(&tcbtable, &sa6->sin6_addr,
-		    th.th_dport, &sa6_src->sin6_addr, th.th_sport, rdomain);
+		    th.th_dport, &sa6_src->sin6_addr, th.th_sport, rdomain,
+		    NULL);
 		if (cmd == PRC_MSGSIZE) {
 			/*
 			 * Depending on the value of "valid" and routing table
@@ -732,7 +733,7 @@ tcp_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 		seq = ntohl(th->th_seq);
 		inp = in_pcbhashlookup(&tcbtable,
 		    ip->ip_dst, th->th_dport, ip->ip_src, th->th_sport,
-		    rdomain);
+		    rdomain, NULL);
 		if (inp && (tp = intotcpcb(inp)) &&
 		    SEQ_GEQ(seq, tp->snd_una) &&
 		    SEQ_LT(seq, tp->snd_max)) {
@@ -798,7 +799,7 @@ tcp_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 		th = (struct tcphdr *)((caddr_t)ip + (ip->ip_hl << 2));
 		inp = in_pcbhashlookup(&tcbtable,
 		    ip->ip_dst, th->th_dport, ip->ip_src, th->th_sport,
-		    rdomain);
+		    rdomain, NULL);
 		if (inp) {
 			seq = ntohl(th->th_seq);
 			if (inp->inp_socket &&
