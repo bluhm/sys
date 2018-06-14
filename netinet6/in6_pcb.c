@@ -248,8 +248,7 @@ in6_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 	int error;
 	struct sockaddr_in6 tmp;
 
-	if ((inp->inp_flags & INP_IPV6) == 0)
-		panic("IPv4 pcb passed into in6_pcbconnect");
+	KASSERT(inp->inp_flags & INP_IPV6);
 
 	if ((error = in6_nam2sin6(nam, &sin6)))
 		return (error);
