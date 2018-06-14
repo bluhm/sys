@@ -300,8 +300,10 @@ divert_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *addr,
 		return (EOPNOTSUPP);	/* do not free mbuf's */
 
 	case PRU_LOCK:
+		mtx_enter(&inp->inp_mtx);
+		break;
 	case PRU_UNLOCK:
-		/* XXX */
+		mtx_leave(&inp->inp_mtx);
 		break;
 
 	default:
