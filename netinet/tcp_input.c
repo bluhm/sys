@@ -3390,9 +3390,7 @@ syn_cache_lookup(struct sockaddr *src, struct sockaddr *dst,
 		TAILQ_FOREACH(sc, &scp->sch_bucket, sc_bucketq) {
 			if (sc->sc_hash != hash)
 				continue;
-			if (sc->sc_src.sa.sa_family == src->sa_family &&
-			    sc->sc_dst.sa.sa_family == dst->sa_family &&
-			    !bcmp(&sc->sc_src, src, src->sa_len) &&
+			if (!bcmp(&sc->sc_src, src, src->sa_len) &&
 			    !bcmp(&sc->sc_dst, dst, dst->sa_len) &&
 			    rtable_l2(rtableid) == rtable_l2(sc->sc_rtableid))
 				return (sc);
