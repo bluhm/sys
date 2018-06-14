@@ -397,7 +397,6 @@ in_pcbaddrisavail(struct inpcb *inp, struct sockaddr_in *sin, int wild,
     struct proc *p)
 {
 	struct socket *so = inp->inp_socket;
-	struct inpcbtable *table = inp->inp_table;
 	u_int16_t lport = sin->sin_port;
 	int reuseport = (so->so_options & SO_REUSEPORT);
 
@@ -442,8 +441,8 @@ in_pcbaddrisavail(struct inpcb *inp, struct sockaddr_in *sin, int wild,
 		short options;
 
 		if (so->so_euid) {
-			t = in_pcblookup_local(table, &sin->sin_addr, lport,
-			    INPLOOKUP_WILDCARD, inp->inp_rtableid);
+			t = in_pcblookup_local(inp, &sin->sin_addr, lport,
+			    INPLOOKUP_WILDCARD);
 			if (t != NULL) {
 				euid = t->inp_socket->so_euid;
 				mtx_leave(&t->inp_mtx);
@@ -451,8 +450,8 @@ in_pcbaddrisavail(struct inpcb *inp, struct sockaddr_in *sin, int wild,
 					return (EADDRINUSE);
 			}
 		}
-		t = in_pcblookup_local(table, &sin->sin_addr, lport,
-		    wild, inp->inp_rtableid);
+		t = in_pcblookup_local(inp, &sin->sin_addr, lport,
+		    wild);
 		if (t != NULL) {
 			options = t->inp_socket->so_options;
 			mtx_leave(&t->inp_mtx);
@@ -469,7 +468,6 @@ in_pcbpickport(u_int16_t *lport, void *laddr, int wild, struct inpcb *inp,
     struct proc *p)
 {
 	struct socket *so = inp->inp_socket;
-	struct inpcbtable *table = inp->inp_table;
 	u_int16_t first, last, lower, higher, candidate, localport;
 	int count;
 
@@ -512,8 +510,7 @@ in_pcbpickport(u_int16_t *lport, void *laddr, int wild, struct inpcb *inp,
 		localport = htons(candidate);
 		if (!in_baddynamic(candidate, so->so_proto->pr_protocol))
 			break;
-		t = in_pcblookup_local(table, laddr, localport, wild,
-		    inp->inp_rtableid);
+		t = in_pcblookup_local(inp, laddr, localport, wild);
 		if (t == NULL)
 			break;
 		mtx_leave(&t->inp_mtx);
@@ -820,9 +817,10 @@ in_rtchange(struct inpcb *inp, int errno)
 }
 
 struct inpcb *
-in_pcblookup_local(struct inpcbtable *table, void *laddrp, u_int lport_arg,
-    int flags, u_int rtable)
+in_pcblookup_local(struct inpcb *other, void *laddrp, u_int lport_arg,
+    int flags)
 {
+	struct inpcbtable *table = other->inp_table;
 	struct inpcb *inp, *match = NULL;
 	int matchwild = 3, wildcard;
 	u_int16_t lport = lport_arg;
@@ -833,10 +831,13 @@ in_pcblookup_local(struct inpcbtable *table, void *laddrp, u_int lport_arg,
 	struct inpcbhead *head;
 	u_int rdomain;
 
-	rdomain = rtable_l2(rtable);
+	rdomain = rtable_l2(other->inp_rtableid);
+	/* XXXSMP lock order inversion */
 	mtx_enter(&inpcbtable_mtx);
 	head = INPCBLHASH(table, lport, rdomain);
 	LIST_FOREACH(inp, head, inp_lhash) {
+		if (inp == other)
+			continue;
 		mtx_enter(&inp->inp_mtx);
 		if (rtable_l2(inp->inp_rtableid) != rdomain) {
 	 cont:
