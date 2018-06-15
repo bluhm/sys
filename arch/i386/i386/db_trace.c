@@ -1,4 +1,4 @@
-/*	$OpenBSD: db_trace.c,v 1.33 2018/05/04 02:54:23 visa Exp $	*/
+/*	$OpenBSD: db_trace.c,v 1.34 2018/06/15 17:58:41 bluhm Exp $	*/
 /*	$NetBSD: db_trace.c,v 1.18 1996/05/03 19:42:01 christos Exp $	*/
 
 /*
