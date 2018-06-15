@@ -43,7 +43,6 @@
 IDTVEC(intripi)
 	subl	$8,%esp			/* space for tf_{err,trapno} */
 	INTRENTRY(ipi)
-	MAKE_FRAME
 	pushl	CPL
 	movl	_C_LABEL(lapic_ppr),%eax
 	movl	%eax,CPL
@@ -154,7 +153,6 @@ IDTVEC(intripi_reloadcr3)
 IDTVEC(intrltimer)
 	subl	$8,%esp			/* space for tf_{err,trapno} */
 	INTRENTRY(ltimer)
-	MAKE_FRAME
 	pushl	CPL
 	movl	_C_LABEL(lapic_ppr),%eax
 	movl	%eax,CPL
@@ -171,7 +169,6 @@ IDTVEC(intrltimer)
 KIDTVEC(intrsoftclock)
 	subl	$8,%esp			/* space for tf_{err,trapno} */
 	INTRENTRY(intrsoftclock)
-	MAKE_FRAME
 	pushl	CPL
 	movl	$IPL_SOFTCLOCK,CPL
 	andl	$~(1<<SIR_CLOCK),CPUVAR(IPENDING)
@@ -187,7 +184,6 @@ KIDTVEC(intrsoftclock)
 KIDTVEC(intrsoftnet)
 	subl	$8,%esp			/* space for tf_{err,trapno} */
 	INTRENTRY(intrsoftnet)
-	MAKE_FRAME
 	pushl	CPL
 	movl	$IPL_SOFTNET,CPL
 	andl	$~(1<<SIR_NET),CPUVAR(IPENDING)
@@ -204,7 +200,6 @@ KIDTVEC(intrsoftnet)
 KIDTVEC(intrsofttty)
 	subl	$8,%esp			/* space for tf_{err,trapno} */
 	INTRENTRY(intrsofttty)
-	MAKE_FRAME
 	pushl	CPL
 	movl	$IPL_SOFTTTY,CPL
 	andl	$~(1<<SIR_TTY),CPUVAR(IPENDING)
@@ -233,7 +228,6 @@ KIDTVEC(intrsofttty)
 IDTVEC(intr_##name##num)						\
 	subl	$8,%esp			/* space for tf_{err,trapno} */	;\
 	INTRENTRY(intr_##name##num)					;\
-	MAKE_FRAME							;\
 	pushl	CPL							;\
 	movl	_C_LABEL(lapic_ppr),%eax				;\
 	orl	$num,%eax						;\

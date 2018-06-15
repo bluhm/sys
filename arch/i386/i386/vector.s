@@ -83,14 +83,12 @@ KIDTVEC(recurse_##name##num)						;\
 	subl	$8,%esp			/* space for tf_{err,trapno} */ ;\
 	movl	%ebx,%esi						;\
 	INTRENTRY(recurse_##name##num)					;\
-	MAKE_FRAME							;\
 	push	%esi							;\
 	cli								;\
 	jmp	1f							;\
 IDTVEC(intr_##name##num)						;\
 	subl	$8,%esp			/* space for tf_{err,trapno} */ ;\
 	INTRENTRY(intr_##name##num)					;\
-	MAKE_FRAME							;\
 	mask(num)			/* mask it in hardware */	;\
 	early_ack(num)			/* and allow other intrs */	;\
 	incl	_C_LABEL(uvmexp)+V_INTR	/* statistical info */		;\
@@ -160,13 +158,6 @@ KIDTVEC(hold_##name##num)						;\
 #define	STRAY_INTEGRATE
 #define	STRAY_TEST(name,num)
 #endif /* DEBUG */
-
-#ifdef DDB
-#define	MAKE_FRAME \
-	leal	-8(%esp),%ebp
-#else /* !DDB */
-#define	MAKE_FRAME
-#endif /* DDB */
 
 #define ICUADDR IO_ICU1
 
