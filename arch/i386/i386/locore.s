@@ -193,10 +193,15 @@ INTRENTRY_LABEL(label):	/* from kernel */	; \
 	/* we have an iretframe, build trapframe */	; \
 	subl	$44,%esp		; \
 	movl	%eax,TF_EAX(%esp)	; \
+	/* the hardware puts err next to %eip, we move it elsewhere and */ ; \
+	/* later put %ebp in this slot to make it look like a call frame */ ; \
+	movl	(TF_EIP - 4)(%esp),%eax ; \
+	movl	%eax,TF_ERR(%esp)	; \
 	movl	%ecx,TF_ECX(%esp)	; \
 	movl	%edx,TF_EDX(%esp)	; \
 	movl	%ebx,TF_EBX(%esp)	; \
 	movl	%ebp,TF_EBP(%esp)	; \
+	leal	TF_EBP(%esp),%ebp	; \
 	movl	%esi,TF_ESI(%esp)	; \
 	movl	%edi,TF_EDI(%esp)	; \
 	movw	%ds,TF_DS(%esp)		; \
@@ -218,11 +223,12 @@ INTRENTRY_LABEL(label):	/* from kernel */	; \
 	popl	%ds		; \
 	popl	%edi		; \
 	popl	%esi		; \
-	popl	%ebp		; \
+	addl	$4,%esp	/*err*/ ; \
 	popl	%ebx		; \
 	popl	%edx		; \
 	popl	%ecx		; \
-	popl	%eax
+	popl	%eax		; \
+	movl	4(%esp),%ebp
 
 #define	INTRFASTEXIT \
 	jmp	intr_fast_exit
