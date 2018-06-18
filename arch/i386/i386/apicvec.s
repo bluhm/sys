@@ -1,4 +1,4 @@
-/* $OpenBSD: apicvec.s,v 1.34 2018/04/11 15:44:08 bluhm Exp $ */
+/* $OpenBSD: apicvec.s,v 1.35 2018/06/18 23:15:05 bluhm Exp $ */
 /* $NetBSD: apicvec.s,v 1.1.2.2 2000/02/21 21:54:01 sommerfeld Exp $ */
 
 /*-
