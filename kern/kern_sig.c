@@ -901,6 +901,7 @@ ptsignal(struct proc *p, int signum, enum signal_type type)
 			 * delayed.  Otherwise, mark it pending on the
 			 * main thread.
 			 */
+			p = NULL;
 			TAILQ_FOREACH(q, &pr->ps_threads, p_thr_link) {
 				/* ignore exiting threads */
 				if (q->p_flag & P_WEXIT)
@@ -921,6 +922,8 @@ ptsignal(struct proc *p, int signum, enum signal_type type)
 				if (q->p_flag & P_SIGSUSPEND)
 					break;
 			}
+			if (p == NULL)
+				p = pr->ps_mainproc;
 		}
 	}
 
@@ -1153,14 +1156,18 @@ issignal(struct proc *p)
 	int s;
 
 	for (;;) {
-		mask = p->p_siglist & ~p->p_sigmask;
+		mask = p->p_siglist | pr->ps_mainproc->p_siglist;
+		mask &= ~p->p_sigmask;
 		if (pr->ps_flags & PS_PPWAIT)
 			mask &= ~stopsigmask;
 		if (mask == 0)	 	/* no signal to send */
 			return (0);
 		signum = ffs((long)mask);
 		mask = sigmask(signum);
-		atomic_clearbits_int(&p->p_siglist, mask);
+		if (p->p_siglist & mask)
+			atomic_clearbits_int(&p->p_siglist, mask);
+		else
+			atomic_clearbits_int(&pr->ps_mainproc->p_siglist, mask);
 
 		/*
 		 * We should see pending but ignored signals
