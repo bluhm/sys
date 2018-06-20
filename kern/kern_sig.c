@@ -901,7 +901,6 @@ ptsignal(struct proc *p, int signum, enum signal_type type)
 			 * delayed.  Otherwise, mark it pending on the
 			 * main thread.
 			 */
-			p = NULL;
 			TAILQ_FOREACH(q, &pr->ps_threads, p_thr_link) {
 				/* ignore exiting threads */
 				if (q->p_flag & P_WEXIT)
@@ -922,8 +921,6 @@ ptsignal(struct proc *p, int signum, enum signal_type type)
 				if (q->p_flag & P_SIGSUSPEND)
 					break;
 			}
-			if (p == NULL)
-				p = pr->ps_mainproc;
 		}
 	}
 
