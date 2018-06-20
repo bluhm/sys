@@ -68,7 +68,9 @@ struct	sigacts {
 /*
  * Check if process p has an unmasked signal pending.
  */
-#define	SIGPENDING(p)	(((p)->p_siglist & ~(p)->p_sigmask) != 0)
+#define	SIGPENDING(p)							\
+	((((p)->p_siglist | (p)->p_p->ps_mainproc->p_siglist) & 	\
+	    ~(p)->p_sigmask) != 0)
 
 /*
  * Determine signal that should be delivered to process p, the current
@@ -76,9 +78,11 @@ struct	sigacts {
  * action, the process stops in issignal().
  */
 #define	CURSIG(p)							\
-	(((p)->p_siglist == 0 ||					\
+	((((p)->p_siglist == 0 &&					\
+	    (p)->p_p->ps_mainproc->p_siglist == 0) ||			\
 	    (((p)->p_p->ps_flags & PS_TRACED) == 0 &&			\
-	    ((p)->p_siglist & ~(p)->p_sigmask) == 0)) ?			\
+	    (((p)->p_siglist | (p)->p_p->ps_mainproc->p_siglist) &	\
+	    ~(p)->p_sigmask) == 0)) ?					\
 	    0 : issignal(p))
 
 /*
