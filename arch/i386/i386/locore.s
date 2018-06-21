@@ -1009,7 +1009,7 @@ IDTVEC(nmi)
 	/*
 	 * when we came from within the kernel, iret will not
 	 * switch back to the stack we came from but will keep
-	 * runinng on the NMI stack. in that case we switch
+	 * running on the NMI stack. in that case we switch
 	 * manually back to the stack we were running on and
 	 * build the iretframe there.
 	 */
