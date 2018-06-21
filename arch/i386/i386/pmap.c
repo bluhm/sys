@@ -1526,11 +1526,7 @@ pmap_switch(struct proc *o, struct proc *p)
 	 */
 	if (pmap->pm_pdirpa_intel) {
 		self->ci_kern_cr3 = pmap->pm_pdirpa;
-#if 0		/* XXX hshoexer:  Do not unmap kernel, yet */
 		self->ci_user_cr3 = pmap->pm_pdirpa_intel;
-#else
-		self->ci_user_cr3 = pmap->pm_pdirpa;
-#endif
 	}
 
 	/*

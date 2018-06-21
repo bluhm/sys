@@ -220,4 +220,19 @@ member pm_pdirpa_intel
 
 struct i386tss
 member	tss_esp0
-
+member	tss_ss
+member	tss_esp
+member	tss_eflags
+member	tss_cs
+member	tss_eip
+member	tss_eax
+member	tss_ecx
+member	tss_edx
+member	tss_ebx
+member	tss_ebp
+member	tss_esi
+member	tss_edi
+member	tss_ds
+member	tss_es
+member	tss_fs
+member	tss_gs

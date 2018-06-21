@@ -749,6 +749,9 @@ pmap_bootstrap_pae(void)
 		    (vaddr_t)kpm - KERNBASE;
 		kpm->pm_pdirsize = 4 * NBPG;
 
+		/* Reset cr3 for NMI task switch */
+		cpu_update_nmi_cr3(kpm->pm_pdirpa);
+
 		DPRINTF("%s: pm_pdir 0x%x pm_pdirpa 0x%x pm_pdirsize %d\n",
 		    __func__, (uint32_t)kpm->pm_pdir, (uint32_t)kpm->pm_pdirpa,
 		    kpm->pm_pdirsize);
