@@ -1,4 +1,4 @@
-/*	$OpenBSD: tss.h,v 1.11 2018/03/31 13:45:03 bluhm Exp $	*/
+/*	$OpenBSD: tss.h,v 1.12 2018/06/22 13:21:14 bluhm Exp $	*/
 /*	$NetBSD: tss.h,v 1.6 1995/10/11 04:20:28 mycroft Exp $	*/
 
 /*-

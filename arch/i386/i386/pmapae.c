@@ -1,4 +1,4 @@
-/*	$OpenBSD: pmapae.c,v 1.55 2018/05/28 20:52:44 bluhm Exp $	*/
+/*	$OpenBSD: pmapae.c,v 1.56 2018/06/22 13:21:14 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2006-2008 Michael Shalayeff

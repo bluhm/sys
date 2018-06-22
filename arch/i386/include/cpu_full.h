@@ -1,4 +1,4 @@
-/*	$OpenBSD: cpu_full.h,v 1.2 2018/05/28 20:52:44 bluhm Exp $	*/
+/*	$OpenBSD: cpu_full.h,v 1.3 2018/06/22 13:21:14 bluhm Exp $	*/
 /*
  * Copyright (c) 2018 Philip Guenther <guenther@openbsd.org>
  * Copyright (c) 2018 Hans-Joerg Hoexer <hshoexer@genua.de>

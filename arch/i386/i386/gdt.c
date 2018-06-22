@@ -1,4 +1,4 @@
-/*	$OpenBSD: gdt.c,v 1.42 2018/05/28 20:52:44 bluhm Exp $	*/
+/*	$OpenBSD: gdt.c,v 1.43 2018/06/22 13:21:14 bluhm Exp $	*/
 /*	$NetBSD: gdt.c,v 1.28 2002/12/14 09:38:50 junyoung Exp $	*/
 
 /*-
