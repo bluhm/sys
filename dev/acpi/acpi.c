@@ -1,4 +1,4 @@
-/* $OpenBSD: acpi.c,v 1.344 2018/05/20 09:12:35 kettenis Exp $ */
+/* $OpenBSD: acpi.c,v 1.347 2018/06/26 07:38:39 mlarkin Exp $ */
 /*
  * Copyright (c) 2005 Thorsten Lockert <tholo@sigmasoft.com>
  * Copyright (c) 2005 Jordan Hargrave <jordan@openbsd.org>
@@ -79,8 +79,6 @@ pcireg_t acpi_pci_min_powerstate(pci_chipset_tag_t, pcitag_t);
 void	 acpi_pci_set_powerstate(pci_chipset_tag_t, pcitag_t, int, int);
 int	acpi_pci_notify(struct aml_node *, int, void *);
 
-int	acpi_match(struct device *, void *, void *);
-void	acpi_attach(struct device *, struct device *, void *);
 int	acpi_submatch(struct device *, void *, void *);
 int	acpi_print(void *, const char *);
 
@@ -198,21 +196,56 @@ static const char *sbtn_pnp[] = {
 int	mouse_has_softbtn;
 #endif /* SMALL_KERNEL */
 
+struct acpi_softc *acpi_softc;
+
 /* XXX move this into dsdt softc at some point */
 extern struct aml_node aml_root;
-
-struct cfattach acpi_ca = {
-	sizeof(struct acpi_softc), acpi_match, acpi_attach
-};
 
 struct cfdriver acpi_cd = {
 	NULL, "acpi", DV_DULL
 };
 
-struct acpi_softc *acpi_softc;
+#if defined(__amd64__) || defined(__i386__)
 
-#define acpi_bus_space_map	_bus_space_map
-#define acpi_bus_space_unmap	_bus_space_unmap
+#include <machine/biosvar.h>
+
+int	acpi_match(struct device *, void *, void *);
+void	acpi_attach(struct device *, struct device *, void *);
+
+struct cfattach acpi_ca = {
+	sizeof(struct acpi_softc), acpi_match, acpi_attach
+};
+
+int
+acpi_match(struct device *parent, void *match, void *aux)
+{
+	struct bios_attach_args	*ba = aux;
+	struct cfdata		*cf = match;
+
+	/* sanity */
+	if (strcmp(ba->ba_name, cf->cf_driver->cd_name))
+		return (0);
+
+	if (!acpi_probe(parent, cf, ba))
+		return (0);
+
+	return (1);
+}
+
+void
+acpi_attach(struct device *parent, struct device *self, void *aux)
+{
+	struct acpi_softc *sc = (struct acpi_softc *)self;
+	struct bios_attach_args *ba = aux;
+
+	sc->sc_iot = ba->ba_iot;
+	sc->sc_memt = ba->ba_memt;
+	sc->sc_dmat = &pci_bus_dma_tag;
+
+	acpi_attach_common(sc, ba->ba_acpipbase);
+}
+
+#endif
 
 uint8_t
 acpi_pci_conf_read_1(pci_chipset_tag_t pc, pcitag_t tag, int reg)
@@ -336,7 +369,7 @@ acpi_gasio(struct acpi_softc *sc, int iodir, int iospace, uint64_t address,
 				}
 			}
 		}
-		acpi_bus_space_unmap(iot, ioh, len, NULL);
+		acpi_bus_space_unmap(iot, ioh, len);
 		break;
 
 	case GAS_PCI_CFG_SPACE:
@@ -492,22 +525,6 @@ acpi_foundprt(struct aml_node *node, void *arg)
 	return 0;
 }
 
-int
-acpi_match(struct device *parent, void *match, void *aux)
-{
-	struct bios_attach_args	*ba = aux;
-	struct cfdata		*cf = match;
-
-	/* sanity */
-	if (strcmp(ba->ba_name, cf->cf_driver->cd_name))
-		return (0);
-
-	if (!acpi_probe(parent, cf, ba))
-		return (0);
-
-	return (1);
-}
-
 TAILQ_HEAD(, acpi_pci) acpi_pcidevs =
     TAILQ_HEAD_INITIALIZER(acpi_pcidevs);
 TAILQ_HEAD(, acpi_pci) acpi_pcirootdevs = 
@@ -585,12 +602,12 @@ acpi_getpci(struct aml_node *node, void *arg)
 			if (!aml_evalname(sc, node, "_CRS", 0, NULL, &res)) {
 				aml_parse_resource(&res, acpi_getminbus,
 				    &pci->bus);
-				dnprintf(10, "%s post-crs: %d\n", aml_nodename(node), 
-				    pci->bus);
+				dnprintf(10, "%s post-crs: %d\n",
+				    aml_nodename(node), pci->bus);
 			}
 			if (!aml_evalinteger(sc, node, "_BBN", 0, NULL, &val)) {
-				dnprintf(10, "%s post-bbn: %d, %lld\n", aml_nodename(node), 
-				    pci->bus, val);
+				dnprintf(10, "%s post-bbn: %d, %lld\n",
+				    aml_nodename(node), pci->bus, val);
 				if (pci->bus == -1)
 					pci->bus = val;
 			}
@@ -942,10 +959,8 @@ acpi_register_gsb(struct acpi_softc *sc, struct aml_node *devnode)
 #endif
 
 void
-acpi_attach(struct device *parent, struct device *self, void *aux)
+acpi_attach_common(struct acpi_softc *sc, paddr_t base)
 {
-	struct bios_attach_args *ba = aux;
-	struct acpi_softc *sc = (struct acpi_softc *)self;
 	struct acpi_mem_map handle;
 	struct acpi_rsdp *rsdp;
 	struct acpi_q *entry;
@@ -959,14 +974,11 @@ acpi_attach(struct device *parent, struct device *self, void *aux)
 	uint16_t pm1;
 	int s;
 
-	sc->sc_iot = ba->ba_iot;
-	sc->sc_memt = ba->ba_memt;
-
 	rw_init(&sc->sc_lck, "acpilk");
 
 	acpi_softc = sc;
 
-	if (acpi_map(ba->ba_acpipbase, sizeof(struct acpi_rsdp), &handle)) {
+	if (acpi_map(base, sizeof(struct acpi_rsdp), &handle)) {
 		printf(": can't map memory\n");
 		return;
 	}
@@ -1060,9 +1072,11 @@ acpi_attach(struct device *parent, struct device *self, void *aux)
 	 * extended (64-bit) pointer if it exists
 	 */
 	if (sc->sc_fadt->hdr_revision < 3 || sc->sc_fadt->x_dsdt == 0)
-		entry = acpi_maptable(sc, sc->sc_fadt->dsdt, NULL, NULL, NULL, -1);
+		entry = acpi_maptable(sc, sc->sc_fadt->dsdt, NULL, NULL, NULL,
+		    -1);
 	else
-		entry = acpi_maptable(sc, sc->sc_fadt->x_dsdt, NULL, NULL, NULL, -1);
+		entry = acpi_maptable(sc, sc->sc_fadt->x_dsdt, NULL, NULL, NULL,
+		    -1);
 
 	if (entry == NULL)
 		printf(" !DSDT");
@@ -1150,11 +1164,7 @@ acpi_attach(struct device *parent, struct device *self, void *aux)
 		aaa.aaa_name = "acpitimer";
 		aaa.aaa_iot = sc->sc_iot;
 		aaa.aaa_memt = sc->sc_memt;
-#if 0
-		aaa.aaa_pcit = sc->sc_pcit;
-		aaa.aaa_smbust = sc->sc_smbust;
-#endif
-		config_found(self, &aaa, acpi_print);
+		config_found(&sc->sc_dev, &aaa, acpi_print);
 	}
 #endif /* SMALL_KERNEL */
 
@@ -1167,12 +1177,8 @@ acpi_attach(struct device *parent, struct device *self, void *aux)
 		memset(&aaa, 0, sizeof(aaa));
 		aaa.aaa_iot = sc->sc_iot;
 		aaa.aaa_memt = sc->sc_memt;
-	#if 0
-		aaa.aaa_pcit = sc->sc_pcit;
-		aaa.aaa_smbust = sc->sc_smbust;
-	#endif
 		aaa.aaa_table = entry->q_table;
-		config_found_sm(self, &aaa, acpi_print, acpi_submatch);
+		config_found_sm(&sc->sc_dev, &aaa, acpi_print, acpi_submatch);
 	}
 
 	/* initialize runtime environment */
@@ -2012,8 +2018,10 @@ acpi_interrupt(void *arg)
 				if (en & sts & (1L << jdx)) {
 					/* Signal this GPE */
 					sc->gpe_table[idx+jdx].active = 1;
-					dnprintf(10, "queue gpe: %x\n", idx+jdx);
-					acpi_addtask(sc, acpi_gpe_task, NULL, idx+jdx);
+					dnprintf(10, "queue gpe: %x\n",
+					    idx+jdx);
+					acpi_addtask(sc, acpi_gpe_task, NULL,
+					    idx+jdx);
 
 					/*
 					 * Edge interrupts need their STS bits
@@ -2187,7 +2195,8 @@ acpi_set_gpehandler(struct acpi_softc *sc, int gpe, int (*handler)
 		dnprintf(10, "error: GPE %.2x already enabled\n", gpe);
 		return -EBUSY;
 	}
-	dnprintf(50, "Adding GPE handler %.2x (%s)\n", gpe, edge ? "edge" : "level");
+	dnprintf(50, "Adding GPE handler %.2x (%s)\n", gpe,
+	    edge ? "edge" : "level");
 	ptbl->handler = handler;
 	ptbl->arg = arg;
 	ptbl->edge = edge;
@@ -2335,8 +2344,10 @@ acpi_init_states(struct acpi_softc *sc)
 		sc->sc_sleeptype[i].slp_typb = -1;
 		if (aml_evalname(sc, &aml_root, name, 0, NULL, &res) == 0) {
 			if (res.type == AML_OBJTYPE_PACKAGE) {
-				sc->sc_sleeptype[i].slp_typa = aml_val2int(res.v_package[0]);
-				sc->sc_sleeptype[i].slp_typb = aml_val2int(res.v_package[1]);
+				sc->sc_sleeptype[i].slp_typa =
+				    aml_val2int(res.v_package[0]);
+				sc->sc_sleeptype[i].slp_typb =
+				    aml_val2int(res.v_package[1]);
 				printf(" S%d", i);
 			}
 			aml_freevalue(&res);
@@ -2609,7 +2620,8 @@ fail_suspend:
 	/* 3rd resume AML step: _TTS(runstate) */
 	aml_node_setval(sc, sc->sc_tts, sc->sc_state);
 
-	resume_randomness(rndbuf, rndbuflen);	/* force RNG upper level reseed */
+	/* force RNG upper level reseed */
+	resume_randomness(rndbuf, rndbuflen);
 
 #ifdef MULTIPROCESSOR
 	acpi_resume_mp();
@@ -3003,6 +3015,7 @@ acpi_foundhid(struct aml_node *node, void *arg)
 	memset(&aaa, 0, sizeof(aaa));
 	aaa.aaa_iot = sc->sc_iot;
 	aaa.aaa_memt = sc->sc_memt;
+	aaa.aaa_dmat = sc->sc_dmat;
 	aaa.aaa_node = node->parent;
 	aaa.aaa_dev = dev;
 
@@ -3402,4 +3415,5 @@ acpikqfilter(dev_t dev, struct knote *kn)
 {
 	return (ENXIO);
 }
+
 #endif /* SMALL_KERNEL */

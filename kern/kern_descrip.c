@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_descrip.c,v 1.169 2018/06/25 09:36:28 mpi Exp $	*/
+/*	$OpenBSD: kern_descrip.c,v 1.172 2018/06/27 16:37:25 visa Exp $	*/
 /*	$NetBSD: kern_descrip.c,v 1.42 1996/03/30 22:24:38 christos Exp $	*/
 
 /*
@@ -88,7 +88,7 @@ struct pool fdesc_pool;
 void
 filedesc_init(void)
 {
-	pool_init(&file_pool, sizeof(struct file), 0, IPL_NONE,
+	pool_init(&file_pool, sizeof(struct file), 0, IPL_MPFLOOR,
 	    PR_WAITOK, "filepl", NULL);
 	pool_init(&fdesc_pool, sizeof(struct filedesc0), 0, IPL_NONE,
 	    PR_WAITOK, "fdescpl", NULL);
@@ -714,6 +714,7 @@ fdrelease(struct proc *p, int fd)
 {
 	struct filedesc *fdp = p->p_fd;
 	struct file *fp;
+	int error;
 
 	fdpassertlocked(fdp);
 
@@ -722,7 +723,10 @@ fdrelease(struct proc *p, int fd)
 		return (EBADF);
 	fdremove(fdp, fd);
 	knote_fdclose(p, fd);
-	return (closef(fp, p));
+	fdpunlock(fdp);
+	error = closef(fp, p);
+	fdplock(fdp);
+	return error;
 }
 
 /*
@@ -1373,10 +1377,11 @@ dupfdopen(struct proc *p, int indx, int mode)
 		return (EDEADLK);
 	}
 
+	KASSERT(wfp->f_iflags & FIF_INSERTED);
 	fdp->fd_ofiles[indx] = wfp;
 	fdp->fd_ofileflags[indx] = (fdp->fd_ofileflags[indx] & UF_EXCLOSE) |
 	    (fdp->fd_ofileflags[dupfd] & ~UF_EXCLOSE);
-	fd_used(fdp, indx);
+
 	return (0);
 }
 
