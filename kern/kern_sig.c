@@ -1155,8 +1155,7 @@ issignal(struct proc *p)
 	int s;
 
 	for (;;) {
-		mask = p->p_siglist | pr->ps_mainproc->p_siglist;
-		mask &= ~p->p_sigmask;
+		mask = SIGPENDING(p);
 		if (pr->ps_flags & PS_PPWAIT)
 			mask &= ~stopsigmask;
 		if (mask == 0)	 	/* no signal to send */
@@ -1844,7 +1843,7 @@ userret(struct proc *p)
 		KERNEL_UNLOCK();
 	}
 
-	if (SIGPENDING(p)) {
+	if (SIGPENDING(p) != 0) {
 		KERNEL_LOCK();
 		while ((signum = CURSIG(p)) != 0)
 			postsig(p, signum);
