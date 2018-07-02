@@ -123,6 +123,7 @@ __FBSDID("$FreeBSD: head/sys/kern/subr_witness.c 313261 2017-02-05 02:27:04Z mar
 #define	LI_RECURSEMASK	0x0000ffff	/* Recursion depth of lock instance. */
 #define	LI_EXCLUSIVE	0x00010000	/* Exclusive lock instance. */
 #define	LI_NORELEASE	0x00020000	/* Lock not allowed to be released. */
+#define	LI_STACK	0x00040000	/* Lock stack trace saved. */
 
 #ifndef WITNESS_COUNT
 #define	WITNESS_COUNT		1536
@@ -206,6 +207,7 @@ struct lock_instance {
 	const char		*li_file;
 	int			li_line;
 	u_int			li_flags;
+	struct db_stack_trace	li_stack;
 };
 
 /*
@@ -372,7 +374,7 @@ static void	witness_setflag(struct lock_object *lock, int flag, int set);
  * completely disabled.
  */
 #ifdef WITNESS_WATCH
-static int witness_watch = 3;
+static int witness_watch = 4;
 #else
 static int witness_watch = 2;
 #endif
@@ -390,7 +392,7 @@ static struct witness_list w_spin = SIMPLEQ_HEAD_INITIALIZER(w_spin);
 static struct witness_list w_sleep = SIMPLEQ_HEAD_INITIALIZER(w_sleep);
 
 /* lock list */
-static struct lock_list_entry *w_lock_list_free = NULL;
+static struct lock_list_entry *w_lock_list_free;
 static struct witness_pendhelp pending_locks[WITNESS_PENDLIST];
 static u_int pending_cnt;
 
@@ -398,12 +400,12 @@ static int w_free_cnt, w_spin_cnt, w_sleep_cnt;
 
 static struct witness *w_data;
 static uint8_t **w_rmatrix;
-static struct lock_list_entry w_locklistdata[LOCK_CHILDCOUNT];
+static struct lock_list_entry *w_locklistdata;
 static struct witness_hash w_hash;	/* The witness hash table. */
 
 /* The lock order data hash */
-static struct witness_lock_order_data w_lodata[WITNESS_LO_DATA_COUNT];
-static struct witness_lock_order_data *w_lofree = NULL;
+static struct witness_lock_order_data *w_lodata;
+static struct witness_lock_order_data *w_lofree;
 static struct witness_lock_order_hash w_lohash;
 static int w_max_used_index = 0;
 static unsigned int w_generation = 0;
@@ -480,6 +482,12 @@ witness_initialize(void)
 	w_data = (void *)uvm_pageboot_alloc(sizeof(struct witness) *
 	    witness_count);
 	memset(w_data, 0, sizeof(struct witness) * witness_count);
+
+	w_locklistdata = (void *)uvm_pageboot_alloc(
+	    sizeof(struct lock_list_entry) * LOCK_CHILDCOUNT);
+
+	w_lodata = (void *)uvm_pageboot_alloc(
+	    sizeof(struct witness_lock_order_data) * WITNESS_LO_DATA_COUNT);
 
 	w_rmatrix = (void *)uvm_pageboot_alloc(sizeof(*w_rmatrix) *
 	    (witness_count + 1));
@@ -1161,10 +1169,13 @@ witness_lock(struct lock_object *lock, int flags, const char *file, int line)
 	instance->li_lock = lock;
 	instance->li_line = line;
 	instance->li_file = file;
+	instance->li_flags = 0;
 	if ((flags & LOP_EXCLUSIVE) != 0)
-		instance->li_flags = LI_EXCLUSIVE;
-	else
-		instance->li_flags = 0;
+		instance->li_flags |= LI_EXCLUSIVE;
+	if (witness_watch >= 3) {
+		db_save_stack_trace(&instance->li_stack);
+		instance->li_flags |= LI_STACK;
+	}
 out:
 	splx(s);
 }
@@ -1848,6 +1859,8 @@ witness_list_lock(struct lock_instance *instance,
 	prnt(" r = %d (%p) locked @ %s:%d\n",
 	    instance->li_flags & LI_RECURSEMASK, lock,
 	    fixup_filename(instance->li_file), instance->li_line);
+	if ((instance->li_flags & LI_STACK) != 0)
+		db_print_stack_trace(&instance->li_stack, prnt);
 }
 
 #ifdef DDB
@@ -2534,10 +2547,11 @@ witness_debugger(int dump)
 	case 1:
 		break;
 	case 2:
+	case 3:
 		if (dump)
 			db_stack_dump();
 		break;
-	case 3:
+	case 4:
 		if (dump)
 			db_stack_dump();
 		db_enter();
@@ -2556,7 +2570,7 @@ witness_sysctl_watch(void *oldp, size_t *oldlenp, void *newp, size_t newlen)
 	value = witness_watch;
 	error = sysctl_int(oldp, oldlenp, newp, newlen, &value);
 	if (error == 0 && newp != NULL) {
-		if (value >= -1 && value <= 3) {
+		if (value >= -1 && value <= 4) {
 			mtx_enter(&w_mtx);
 			if (value < 0 || witness_watch >= 0)
 				witness_watch = value;
