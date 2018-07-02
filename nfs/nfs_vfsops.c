@@ -812,7 +812,7 @@ loop:
 		 */
 		if (vp->v_mount != mp)
 			goto loop;
-		if (VOP_ISLOCKED(vp) || LIST_FIRST(&vp->v_dirtyblkhd) == NULL)
+		if (VOP_ISLOCKED(vp) || LIST_EMPTY(&vp->v_dirtyblkhd))
 			continue;
 		if (vget(vp, LK_EXCLUSIVE))
 			goto loop;

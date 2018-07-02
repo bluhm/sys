@@ -4640,8 +4640,7 @@ softdep_fsync_mountdev(struct vnode *vp, int waitfor)
 	if (!vn_isdisk(vp, NULL))
 		panic("softdep_fsync_mountdev: vnode not a disk");
 	ACQUIRE_LOCK(&lk);
-	for (bp = LIST_FIRST(&vp->v_dirtyblkhd); bp; bp = nbp) {
-		nbp = LIST_NEXT(bp, b_vnbufs);
+	LIST_FOREACH_SAFE(bp, &vp->v_dirtyblkhd, b_vnbufs, nbp) {
 		/* 
 		 * If it is already scheduled, skip to the next buffer.
 		 */
@@ -4932,7 +4931,7 @@ loop:
 	 * all potential buffers on the dirty list will be visible.
 	 */
 	drain_output(vp, 1);
-	if (LIST_FIRST(&vp->v_dirtyblkhd) == NULL) {
+	if (LIST_EMPTY(&vp->v_dirtyblkhd)) {
 		FREE_LOCK(&lk);
 		return (0);
 	}

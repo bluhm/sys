@@ -1519,10 +1519,9 @@ loop:
 		if (vp->v_mount != mp)	/* Paranoia */
 			goto loop;
 		nvp = LIST_NEXT(vp, v_mntvnodes);
-		for (bp = LIST_FIRST(&vp->v_dirtyblkhd); bp != NULL; bp = nbp) {
-			nbp = LIST_NEXT(bp, b_vnbufs);
+		LIST_FOREACH_SAFE(bp, &vp->v_dirtyblkhd, b_vnbufs, nbp) {
 			if ((bp->b_flags & (B_BUSY | B_DELWRI | B_NEEDCOMMIT))
-				== (B_DELWRI | B_NEEDCOMMIT))
+			    == (B_DELWRI | B_NEEDCOMMIT))
 				bp->b_flags &= ~B_NEEDCOMMIT;
 		}
 	}

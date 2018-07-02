@@ -435,11 +435,10 @@ ffs_fsync(void *v)
 		skipmeta = 1;
 	s = splbio();
 loop:
-	for (bp = LIST_FIRST(&vp->v_dirtyblkhd); bp;
-	     bp = LIST_NEXT(bp, b_vnbufs))
+	LIST_FOREACH(bp, &vp->v_dirtyblkhd, b_vnbufs) {
 		bp->b_flags &= ~B_SCANNED;
-	for (bp = LIST_FIRST(&vp->v_dirtyblkhd); bp; bp = nbp) {
-		nbp = LIST_NEXT(bp, b_vnbufs);
+	}
+	LIST_FOREACH_SAFE(bp, &vp->v_dirtyblkhd, b_vnbufs, nbp) {
 		/* 
 		 * Reasons to skip this buffer: it has already been considered
 		 * on this pass, this pass is the first time through on a
