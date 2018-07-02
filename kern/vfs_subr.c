@@ -1880,8 +1880,9 @@ vinvalbuf(struct vnode *vp, int flags, struct ucred *cred, struct proc *p,
 			if ((error = VOP_FSYNC(vp, cred, MNT_WAIT, p)) != 0)
 				return (error);
 			s = splbio();
-			if (vp->v_numoutput > 0 ||
-			    !LIST_EMPTY(&vp->v_dirtyblkhd))
+			/* Block device may fail to sync, see ffs_fsync(). */
+			if (vp->v_type != VBLK && (vp->v_numoutput > 0 ||
+			    !LIST_EMPTY(&vp->v_dirtyblkhd)))
 				panic("%s: dirty bufs, vp %p", __func__, vp);
 		}
 		splx(s);
