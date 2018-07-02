@@ -1,4 +1,4 @@
-/*	$OpenBSD: ffs_softdep.c,v 1.142 2018/05/02 02:24:56 visa Exp $	*/
+/*	$OpenBSD: ffs_softdep.c,v 1.143 2018/07/02 20:56:22 bluhm Exp $	*/
 
 /*
  * Copyright 1998, 2000 Marshall Kirk McKusick. All Rights Reserved.
