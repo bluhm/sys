@@ -682,6 +682,8 @@ bwrite(struct buf *bp)
 		mp = vp->v_type == VBLK? vp->v_specmountpoint : vp->v_mount;
 	else
 		mp = NULL;
+	if (mp != NULL && ISSET(mp->mnt_flag, MNT_DOOMED))
+		return (ENXIO);
 
 	/*
 	 * Remember buffer type, to switch on it later.  If the write was
@@ -773,7 +775,17 @@ bwrite(struct buf *bp)
 void
 bdwrite(struct buf *bp)
 {
+	struct vnode *vp;
+	struct mount *mp;
 	int s;
+
+	vp = bp->b_vp;
+	if (vp != NULL)
+		mp = vp->v_type == VBLK? vp->v_specmountpoint : vp->v_mount;
+	else
+		mp = NULL;
+	if (mp != NULL && ISSET(mp->mnt_flag, MNT_DOOMED))
+		return;
 
 	/*
 	 * If the block hasn't been seen before:
