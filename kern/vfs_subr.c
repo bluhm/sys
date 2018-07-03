@@ -1876,13 +1876,15 @@ vinvalbuf(struct vnode *vp, int flags, struct ucred *cred, struct proc *p,
 		s = splbio();
 		vwaitforio(vp, 0, "vinvalbuf", 0);
 		if (!LIST_EMPTY(&vp->v_dirtyblkhd)) {
+			KASSERT(!ISSET(vp->v_flag, VSYNCING));
+			SET(vp->v_flag, VSYNCING);
 			splx(s);
 			if ((error = VOP_FSYNC(vp, cred, MNT_WAIT, p)) != 0)
 				return (error);
 			s = splbio();
-			/* Block device may fail to sync, see ffs_fsync(). */
-			if (vp->v_type != VBLK && (vp->v_numoutput > 0 ||
-			    !LIST_EMPTY(&vp->v_dirtyblkhd)))
+			CLR(vp->v_flag, VSYNCING);
+			if (vp->v_numoutput > 0 ||
+			    !LIST_EMPTY(&vp->v_dirtyblkhd))
 				panic("%s: dirty bufs, vp %p", __func__, vp);
 		}
 		splx(s);
@@ -2114,6 +2116,7 @@ reassignbuf(struct buf *bp)
 			}
 			vn_syncer_add_to_worklist(vp, delay);
 		}
+		KASSERT(!ISSET(vp->v_flag, VSYNCING));
 	}
 	bufinsvn(bp, listheadp);
 }
