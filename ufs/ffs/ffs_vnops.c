@@ -510,8 +510,7 @@ loop:
 				goto loop;
 			}
 #ifdef DIAGNOSTIC
-			if (vp->v_type != VBLK)
-				vprint("ffs_fsync: dirty", vp);
+			vprint("ffs_fsync: dirty", vp);
 #endif
 		}
 	}
