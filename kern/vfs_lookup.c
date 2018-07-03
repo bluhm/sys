@@ -209,6 +209,8 @@ fail:
 		if (!dp->v_mount) {
 			/* Give up if the directory is no longer mounted */
 			pool_put(&namei_pool, cnp->cn_pnbuf);
+			vrele(dp);
+			ndp->ni_vp = NULL;
 			printf("%s 4: pid %d, error %d\n", __func__,
 			    p->p_p->ps_pid, ENOENT);
 			return (ENOENT);
