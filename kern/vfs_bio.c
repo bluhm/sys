@@ -682,8 +682,6 @@ bwrite(struct buf *bp)
 		mp = vp->v_type == VBLK? vp->v_specmountpoint : vp->v_mount;
 	else
 		mp = NULL;
-	if (mp != NULL && ISSET(mp->mnt_flag, MNT_DOOMED))
-		return (ENXIO);
 
 	/*
 	 * Remember buffer type, to switch on it later.  If the write was
@@ -784,8 +782,6 @@ bdwrite(struct buf *bp)
 		mp = vp->v_type == VBLK? vp->v_specmountpoint : vp->v_mount;
 	else
 		mp = NULL;
-	if (mp != NULL && ISSET(mp->mnt_flag, MNT_DOOMED))
-		return;
 
 	/*
 	 * If the block hasn't been seen before:
@@ -794,7 +790,8 @@ bdwrite(struct buf *bp)
 	 *	(3) Make sure it's on its vnode's correct block list,
 	 *	(4) If a buffer is rewritten, move it to end of dirty list
 	 */
-	if (!ISSET(bp->b_flags, B_DELWRI)) {
+	if (!ISSET(bp->b_flags, B_DELWRI) &&
+	    (mp == NULL || !ISSET(mp->mnt_flag, MNT_DOOMED))) {
 		SET(bp->b_flags, B_DELWRI);
 		s = splbio();
 		buf_flip_dma(bp);
