@@ -138,8 +138,7 @@ namei(struct nameidata *ndp)
 fail:
 		pool_put(&namei_pool, cnp->cn_pnbuf);
 		ndp->ni_vp = NULL;
-		printf("%s 1: pid %d, error %d\n", __func__,
-		    p->p_p->ps_pid, error);
+		printf("%s 1: error %d\n", __func__, error);
 		return (error);
 	}
 
@@ -190,16 +189,14 @@ fail:
 		struct file *fp = fd_getfile(fdp, ndp->ni_dirfd);
 		if (fp == NULL) {
 			pool_put(&namei_pool, cnp->cn_pnbuf);
-			printf("%s 2: pid %d, error %d\n", __func__,
-			    p->p_p->ps_pid, EBADF);
+			printf("%s 2: error %d\n", __func__, EBADF);
 			return (EBADF);
 		}
 		dp = (struct vnode *)fp->f_data;
 		if (fp->f_type != DTYPE_VNODE || dp->v_type != VDIR) {
 			FRELE(fp, p);
 			pool_put(&namei_pool, cnp->cn_pnbuf);
-			printf("%s 3: pid %d, error %d\n", __func__,
-			    p->p_p->ps_pid, ENOTDIR);
+			printf("%s 3: error %d\n", __func__, ENOTDIR);
 			return (ENOTDIR);
 		}
 		vref(dp);
@@ -211,8 +208,7 @@ fail:
 			pool_put(&namei_pool, cnp->cn_pnbuf);
 			vrele(dp);
 			ndp->ni_vp = NULL;
-			printf("%s 4: pid %d, error %d\n", __func__,
-			    p->p_p->ps_pid, ENOENT);
+			printf("%s 4: error %d\n", __func__, ENOENT);
 			return (ENOENT);
 		}
 		cnp->cn_nameptr = cnp->cn_pnbuf;
@@ -220,8 +216,7 @@ fail:
 		if ((error = vfs_lookup(ndp)) != 0) {
 			pool_put(&namei_pool, cnp->cn_pnbuf);
 			if (error != ENOENT)
-				printf("%s 5: pid %d, error %d\n", __func__,
-				    p->p_p->ps_pid, error);
+				printf("%s 5: error %d\n", __func__, error);
 			return (error);
 		}
 		/*
@@ -292,8 +287,7 @@ badlink:
 	vput(ndp->ni_vp);
 	ndp->ni_vp = NULL;
 	if (error)
-		printf("%s 6: pid %d, error %d\n", __func__,
-		    p->p_p->ps_pid, error);
+		printf("%s 6: error %d\n", __func__, error);
 	return (error);
 }
 
