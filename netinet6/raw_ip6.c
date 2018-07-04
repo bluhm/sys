@@ -544,7 +544,7 @@ int
 rip6_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 	struct mbuf *control, struct proc *p)
 {
-	struct inpcb *in6p = sotoinpcb(so);
+	struct inpcb *in6p;
 	int error = 0;
 
 	if (req == PRU_CONTROL)
@@ -552,6 +552,12 @@ rip6_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		    (struct ifnet *)control));
 
 	soassertlocked(so);
+
+	in6p = sotoinpcb(so);
+	if (in6p == NULL) {
+		error = EINVAL;
+		goto release;
+	}
 
 	switch (req) {
 	case PRU_DISCONNECT:
@@ -654,6 +660,7 @@ rip6_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 			dst.sin6_scope_id = addr6->sin6_scope_id;
 		}
 		error = rip6_output(m, so, sin6tosa(&dst), control);
+		control = NULL;
 		m = NULL;
 		break;
 	}
@@ -687,6 +694,8 @@ rip6_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 	default:
 		panic("rip6_usrreq");
 	}
+release:
+	m_freem(control);
 	m_freem(m);
 	return (error);
 }

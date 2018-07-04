@@ -365,7 +365,7 @@ int
 rip_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
     struct mbuf *control, struct proc *p)
 {
-	struct inpcb *inp = sotoinpcb(so);
+	struct inpcb *inp;
 	int error = 0;
 
 	if (req == PRU_CONTROL)
@@ -374,6 +374,7 @@ rip_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 
 	soassertlocked(so);
 
+	inp = sotoinpcb(so);
 	if (inp == NULL) {
 		error = EINVAL;
 		goto release;
@@ -504,6 +505,7 @@ rip_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		panic("rip_usrreq");
 	}
 release:
+	m_freem(control);
 	m_freem(m);
 	return (error);
 }

@@ -1203,7 +1203,6 @@ udp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *addr,
 	default:
 		panic("udp_usrreq");
 	}
-
 release:
 	m_freem(control);
 	m_freem(m);
