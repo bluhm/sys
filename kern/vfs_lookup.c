@@ -1,4 +1,4 @@
-/*	$OpenBSD: vfs_lookup.c,v 1.69 2018/05/02 02:24:56 visa Exp $	*/
+/*	$OpenBSD: vfs_lookup.c,v 1.70 2018/07/05 00:00:18 bluhm Exp $	*/
 /*	$NetBSD: vfs_lookup.c,v 1.17 1996/02/09 19:00:59 christos Exp $	*/
 
 /*
