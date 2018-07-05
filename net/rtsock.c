@@ -1,4 +1,4 @@
-/*	$OpenBSD: rtsock.c,v 1.273 2018/07/01 08:53:03 mpi Exp $	*/
+/*	$OpenBSD: rtsock.c,v 1.275 2018/07/05 13:48:06 benno Exp $	*/
 /*	$NetBSD: rtsock.c,v 1.18 1996/03/29 00:32:10 cgd Exp $	*/
 
 /*
@@ -465,9 +465,6 @@ next:
 		if (rtm->rtm_type != RTM_DESYNC && rop->rop_msgfilter != 0 &&
 		    !(rop->rop_msgfilter & (1 << rtm->rtm_type)))
 			goto next;
-		if (rop->rop_priority != 0 &&
-		    rop->rop_priority < rtm->rtm_priority)
-			goto next;
 		switch (rtm->rtm_type) {
 		case RTM_IFANNOUNCE:
 		case RTM_DESYNC:
@@ -477,12 +474,16 @@ next:
 		case RTM_NEWADDR:
 		case RTM_DELADDR:
 		case RTM_IFINFO:
+		case RTM_BFD:
 			/* check against rdomain id */
 			if (rop->rop_rtableid != RTABLE_ANY &&
 			    rtable_l2(rop->rop_rtableid) != rtm->rtm_tableid)
 				goto next;
 			break;
 		default:
+			if (rop->rop_priority != 0 &&
+			    rop->rop_priority < rtm->rtm_priority)
+				goto next;
 			/* check against rtable id */
 			if (rop->rop_rtableid != RTABLE_ANY &&
 			    rop->rop_rtableid != rtm->rtm_tableid)
