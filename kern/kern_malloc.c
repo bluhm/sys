@@ -409,6 +409,8 @@ free(void *addr, int type, size_t freedsize)
 			addr, size, memname[type], alloc);
 #endif /* DIAGNOSTIC */
 	if (size > MAXALLOCSAVE) {
+		u_short pagecnt = kup->ku_pagecnt;
+
 #ifdef KMEMSTATS
 		mtx_enter(&malloc_mtx);
 		ksp->ks_memuse -= size;
@@ -422,7 +424,7 @@ free(void *addr, int type, size_t freedsize)
 		mtx_leave(&malloc_mtx);
 #endif
 		s = splvm();
-		uvm_km_free(kmem_map, (vaddr_t)addr, ptoa(kup->ku_pagecnt));
+		uvm_km_free(kmem_map, (vaddr_t)addr, ptoa(pagecnt));
 		splx(s);
 		return;
 	}
