@@ -162,6 +162,7 @@ malloc(size_t size, int type, int flags)
 #endif
 #ifdef KMEMSTATS
 	struct kmemstats *ksp = &kmemstats[type];
+	int wake;
 
 	if (((unsigned long)type) <= 1 || ((unsigned long)type) >= M_LAST)
 		panic("malloc: bogus type %d", type);
@@ -243,11 +244,13 @@ malloc(size_t size, int type, int flags)
 #ifdef KMEMSTATS
 			mtx_enter(&malloc_mtx);
 			ksp->ks_memuse -= allocsize;
-			if (ksp->ks_memuse + allocsize >= ksp->ks_limit &&
-			    ksp->ks_memuse < ksp->ks_limit)
-				wakeup(ksp);
+			wake = ksp->ks_memuse + allocsize >= ksp->ks_limit &&
+			    ksp->ks_memuse < ksp->ks_limit;
 			mtx_leave(&malloc_mtx);
+			if (wake)
+				wakeup(ksp);
 #endif
+			
 			return (NULL);
 		}
 		mtx_enter(&malloc_mtx);
