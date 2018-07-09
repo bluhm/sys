@@ -1865,7 +1865,7 @@ vinvalbuf(struct vnode *vp, int flags, struct ucred *cred, struct proc *p,
 {
 	struct buf *bp;
 	struct buf *nbp, *blist;
-	int s, error;
+	int i, s, error;
 
 #ifdef VFSLCKDEBUG
 	if ((vp->v_flag & VLOCKSWORK) && !VOP_ISLOCKED(vp))
@@ -1875,15 +1875,19 @@ vinvalbuf(struct vnode *vp, int flags, struct ucred *cred, struct proc *p,
 	if (flags & V_SAVE) {
 		s = splbio();
 		vwaitforio(vp, 0, "vinvalbuf", 0);
-		if (!LIST_EMPTY(&vp->v_dirtyblkhd)) {
+		/*
+		 * ffs_fsync() writes all dirty blocks.  But then it sleeps to 
+		 * write the inode.  New dirty blocks could show up during that
+		 * period.  Try it three times as best effort solution.
+		 */
+		for (i = 0; i < 3 && !LIST_EMPTY(&vp->v_dirtyblkhd); i++) {
 			splx(s);
 			if ((error = VOP_FSYNC(vp, cred, MNT_WAIT, p)) != 0)
 				return (error);
 			s = splbio();
-			if (vp->v_numoutput > 0 ||
-			    !LIST_EMPTY(&vp->v_dirtyblkhd))
-				panic("%s: dirty bufs, vp %p", __func__, vp);
 		}
+		if (vp->v_numoutput > 0 || !LIST_EMPTY(&vp->v_dirtyblkhd))
+			panic("%s: dirty bufs, vp %p", __func__, vp);
 		splx(s);
 	}
 loop:
