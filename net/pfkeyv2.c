@@ -129,7 +129,7 @@ extern struct pool ipsec_policy_pool;
 extern struct radix_node_head **spd_tables;
 
 #define PFKEY_MSG_MAXSZ 4096
-struct sockaddr pfkey_addr = { 2, PF_KEY, };
+const struct sockaddr pfkey_addr = { 2, PF_KEY, };
 struct domain pfkeydomain;
 
 /*
