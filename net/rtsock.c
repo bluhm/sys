@@ -95,7 +95,7 @@
 #include <sys/kernel.h>
 #include <sys/timeout.h>
 
-struct sockaddr		route_src = { 2, PF_ROUTE, };
+const struct sockaddr route_src = { 2, PF_ROUTE, };
 
 struct walkarg {
 	int	w_op, w_arg, w_given, w_needed, w_tmemsize;
