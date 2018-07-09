@@ -78,7 +78,8 @@ struct	sigacts {
  * action, the process stops in issignal().
  */
 #define	CURSIG(p)							\
-	((SIGPENDING(p) == 0 && ((p)->p_p->ps_flags & PS_TRACED) == 0)	\
+	(((((p)->p_siglist | (p)->p_p->ps_mainproc->p_siglist) == 0) ||	\
+	(((p)->p_p->ps_flags & PS_TRACED) == 0 && SIGPENDING(p) == 0))	\
 	    ? 0 : issignal(p))
 
 /*
