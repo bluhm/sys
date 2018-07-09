@@ -779,7 +779,7 @@ sbinsertoob(struct sockbuf *sb, struct mbuf *m0)
  * Returns 0 if no space in sockbuf or insufficient mbufs.
  */
 int
-sbappendaddr(struct socket *so, struct sockbuf *sb, struct sockaddr *asa,
+sbappendaddr(struct socket *so, struct sockbuf *sb, const struct sockaddr *asa,
     struct mbuf *m0, struct mbuf *control)
 {
 	struct mbuf *m, *n, *nlast;

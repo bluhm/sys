@@ -288,8 +288,8 @@ int 	soo_close(struct file *fp, struct proc *p);
 int	soo_stat(struct file *, struct stat *, struct proc *);
 void	sbappend(struct socket *, struct sockbuf *, struct mbuf *);
 void	sbappendstream(struct socket *, struct sockbuf *, struct mbuf *);
-int	sbappendaddr(struct socket *, struct sockbuf *, struct sockaddr *,
-	    struct mbuf *, struct mbuf *);
+int	sbappendaddr(struct socket *, struct sockbuf *,
+	    const struct sockaddr *, struct mbuf *, struct mbuf *);
 int	sbappendcontrol(struct socket *, struct sockbuf *, struct mbuf *,
 	    struct mbuf *);
 void	sbappendrecord(struct socket *, struct sockbuf *, struct mbuf *);
