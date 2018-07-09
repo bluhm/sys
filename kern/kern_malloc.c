@@ -373,6 +373,7 @@ free(void *addr, int type, size_t freedsize)
 #endif
 #ifdef KMEMSTATS
 	struct kmemstats *ksp = &kmemstats[type];
+	int wake;
 #endif
 
 	if (addr == NULL)
@@ -421,12 +422,13 @@ free(void *addr, int type, size_t freedsize)
 #ifdef KMEMSTATS
 		mtx_enter(&malloc_mtx);
 		ksp->ks_memuse -= size;
-		if (ksp->ks_memuse + size >= ksp->ks_limit &&
-		    ksp->ks_memuse < ksp->ks_limit)
-			wakeup(ksp);
+		wake = ksp->ks_memuse + size >= ksp->ks_limit &&
+		    ksp->ks_memuse < ksp->ks_limit;
 		ksp->ks_inuse--;
 		kbp->kb_total -= 1;
 		mtx_leave(&malloc_mtx);
+		if (wake)
+			wakeup(ksp);
 #endif
 		return;
 	}
@@ -466,13 +468,16 @@ free(void *addr, int type, size_t freedsize)
 	}
 	kbp->kb_totalfree++;
 	ksp->ks_memuse -= size;
-	if (ksp->ks_memuse + size >= ksp->ks_limit &&
-	    ksp->ks_memuse < ksp->ks_limit)
-		wakeup(ksp);
+	wake = ksp->ks_memuse + size >= ksp->ks_limit &&
+	    ksp->ks_memuse < ksp->ks_limit;
 	ksp->ks_inuse--;
 #endif
 	XSIMPLEQ_INSERT_TAIL(&kbp->kb_freelist, freep, kf_flist);
 	mtx_leave(&malloc_mtx);
+#ifdef KMEMSTATS
+	if (wake)
+		wakeup(ksp);
+#endif
 }
 
 /*
