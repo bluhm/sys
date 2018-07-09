@@ -167,6 +167,7 @@ struct process {
 	struct	filedesc *ps_fd;	/* Ptr to open files structure */
 	struct	vmspace *ps_vmspace;	/* Address space */
 	pid_t	ps_pid;			/* Process identifier. */
+	int	ps_siglist;		/* Signals pending for the process. */
 
 	LIST_HEAD(, kqueue) ps_kqlist;	/* kqueues attached to this process */
 
