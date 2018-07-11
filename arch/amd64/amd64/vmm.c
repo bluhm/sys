@@ -1,4 +1,4 @@
-/*	$OpenBSD: vmm.c,v 1.209 2018/07/09 22:07:14 mlarkin Exp $	*/
+/*	$OpenBSD: vmm.c,v 1.213 2018/07/11 13:19:42 mlarkin Exp $	*/
 /*
  * Copyright (c) 2014 Mike Larkin <mlarkin@openbsd.org>
  *
@@ -653,13 +653,14 @@ vm_intr_pending(struct vm_intr_params *vip)
  *
  * Parameters:
  *   vrwp: Describes the VM and VCPU to get/set the registers from. The
- *   register values are returned here as well.
+ *    register values are returned here as well.
  *   dir: 0 for reading, 1 for writing
  *
  * Return values:
  *  0: if successful
- *  ENOENT: if the VM/VCPU defined by 'vgp' cannot be found
- *  EINVAL: if an error occured reading the registers of the guest
+ *  ENOENT: if the VM/VCPU defined by 'vrwp' cannot be found
+ *  EINVAL: if an error occured accessing the registers of the guest
+ *  EPERM: if the vm cannot be accessed from the calling process
  */
 int
 vm_rwregs(struct vm_rwregs_params *vrwp, int dir)
@@ -700,8 +701,10 @@ vm_rwregs(struct vm_rwregs_params *vrwp, int dir)
 		return (dir == 0) ?
 		    vcpu_readregs_svm(vcpu, vrwp->vrwp_mask, vrs) :
 		    vcpu_writeregs_svm(vcpu, vrwp->vrwp_mask, vrs);
-	else
-		panic("unknown vmm mode");
+	else {
+		DPRINTF("%s: unknown vmm mode", __func__);
+		return (EINVAL);
+	}
 }
 
 /*
@@ -1176,7 +1179,6 @@ vm_impl_init_vmx(struct vm *vm, struct proc *p)
 		}
 	}
 
-	/* Convert the low 512GB of the pmap to EPT */
 	ret = pmap_convert(pmap, PMAP_TYPE_EPT);
 	if (ret) {
 		printf("%s: pmap_convert failed\n", __func__);
@@ -5097,8 +5099,6 @@ svm_handle_inout(struct vcpu *vcpu)
 	 *
 	 * XXX something better than a hardcoded list here, maybe
 	 * configure via vmd via the device list in vm create params?
-	 *
-	 * XXX handle not eax target
 	 */
 	switch (vcpu->vc_exit.vei.vei_port) {
 	case IO_ICU1 ... IO_ICU1 + 1:
@@ -5117,8 +5117,20 @@ svm_handle_inout(struct vcpu *vcpu)
 	default:
 		/* Read from unsupported ports returns FFs */
 		if (vcpu->vc_exit.vei.vei_dir == 1) {
-			vcpu->vc_gueststate.vg_rax = 0xFFFFFFFF;
-			vmcb->v_rax = 0xFFFFFFFF;
+			switch(vcpu->vc_exit.vei.vei_size) {
+			case 1:
+				vcpu->vc_gueststate.vg_rax |= 0xFF;
+				vmcb->v_rax |= 0xFF;
+				break;
+			case 2:
+				vcpu->vc_gueststate.vg_rax |= 0xFFFF;
+				vmcb->v_rax |= 0xFFFF;
+				break;
+			case 4:
+				vcpu->vc_gueststate.vg_rax |= 0xFFFFFFFF;
+				vmcb->v_rax |= 0xFFFFFFFF;
+				break;
+			}	
 		}
 		ret = 0;
 	}
@@ -5180,8 +5192,6 @@ vmx_handle_inout(struct vcpu *vcpu)
 	 *
 	 * XXX something better than a hardcoded list here, maybe
 	 * configure via vmd via the device list in vm create params?
-	 *
-	 * XXX handle not eax target
 	 */
 	switch (vcpu->vc_exit.vei.vei_port) {
 	case IO_ICU1 ... IO_ICU1 + 1:
@@ -5201,7 +5211,7 @@ vmx_handle_inout(struct vcpu *vcpu)
 		/* Read from unsupported ports returns FFs */
 		if (vcpu->vc_exit.vei.vei_dir == VEI_DIR_IN) {
 			if (vcpu->vc_exit.vei.vei_size == 4)
-				vcpu->vc_gueststate.vg_rax = 0xFFFFFFFF;
+				vcpu->vc_gueststate.vg_rax |= 0xFFFFFFFF;
 			else if (vcpu->vc_exit.vei.vei_size == 2)
 				vcpu->vc_gueststate.vg_rax |= 0xFFFF;
 			else if (vcpu->vc_exit.vei.vei_size == 1)
@@ -5978,13 +5988,13 @@ vmm_handle_cpuid(struct vcpu *vcpu)
 		break;
 	case 0x04: 	/* Deterministic cache info */
 		if (*rcx == 0) {
-			*rax = eax;
+			*rax = eax & VMM_CPUID4_CACHE_TOPOLOGY_MASK;
 			*rbx = ebx;
 			*rcx = ecx;
 			*rdx = edx;
 		} else {
 			CPUID_LEAF(*rax, *rcx, eax, ebx, ecx, edx);
-			*rax = eax;
+			*rax = eax & VMM_CPUID4_CACHE_TOPOLOGY_MASK;
 			*rbx = ebx;
 			*rcx = ecx;
 			*rdx = edx;
