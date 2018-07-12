@@ -462,10 +462,14 @@ restart:
 		space = sbspace(so, &so->so_snd);
 		if (flags & MSG_OOB)
 			space += 1024;
-		if ((atomic && resid > so->so_snd.sb_hiwat) ||
-		    (so->so_proto->pr_domain->dom_family != AF_UNIX &&
-		    clen > so->so_snd.sb_hiwat))
-			snderr(EMSGSIZE);
+		if (so->so_proto->pr_domain->dom_family == AF_UNIX) {
+			if (atomic && resid > so->so_snd.sb_hiwat)
+				snderr(EMSGSIZE);
+		} else {
+			if ((atomic && resid > so->so_snd.sb_hiwat - clen) ||
+			    clen > so->so_snd.sb_hiwat)
+				snderr(EMSGSIZE);
+		}
 		if (space < clen ||
 		    (space - clen < resid &&
 		    (atomic || space < so->so_snd.sb_lowat))) {
