@@ -466,8 +466,8 @@ restart:
 			if (atomic && resid > so->so_snd.sb_hiwat)
 				snderr(EMSGSIZE);
 		} else {
-			if ((atomic && resid > so->so_snd.sb_hiwat - clen) ||
-			    clen > so->so_snd.sb_hiwat)
+			if (clen > so->so_snd.sb_hiwat ||
+			    (atomic && resid > so->so_snd.sb_hiwat - clen))
 				snderr(EMSGSIZE);
 		}
 		if (space < clen ||
