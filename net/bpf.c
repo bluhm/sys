@@ -332,7 +332,8 @@ bpf_detachd(struct bpf_d *d)
 		mtx_enter(&d->bd_mtx);
 		bpf_put(d);
 
-		if (error && !(error == EINVAL || error == ENODEV))
+		if (error && !(error == EINVAL || error == ENODEV ||
+		    error == ENXIO))
 			/*
 			 * Something is really wrong if we were able to put
 			 * the driver into promiscuous mode, but can't
