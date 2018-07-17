@@ -1153,17 +1153,14 @@ issignal(struct proc *p)
 	int s;
 
 	for (;;) {
-		mask = SIGPENDING(p);
+		mask = p->p_siglist & ~p->p_sigmask;
 		if (pr->ps_flags & PS_PPWAIT)
 			mask &= ~stopsigmask;
 		if (mask == 0)	 	/* no signal to send */
 			return (0);
 		signum = ffs((long)mask);
 		mask = sigmask(signum);
-		if (p->p_siglist & mask)
-			atomic_clearbits_int(&p->p_siglist, mask);
-		else
-			atomic_clearbits_int(&pr->ps_mainproc->p_siglist, mask);
+		atomic_clearbits_int(&p->p_siglist, mask);
 
 		/*
 		 * We should see pending but ignored signals
@@ -1839,7 +1836,7 @@ userret(struct proc *p)
 		KERNEL_UNLOCK();
 	}
 
-	if (SIGPENDING(p) != 0) {
+	if (SIGPENDING(p)) {
 		KERNEL_LOCK();
 		while ((signum = CURSIG(p)) != 0)
 			postsig(p, signum);
