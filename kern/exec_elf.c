@@ -512,7 +512,7 @@ exec_elf_makecmds(struct proc *p, struct exec_package *epp)
 	Elf_Ehdr *eh = epp->ep_hdr;
 	Elf_Phdr *ph, *pp, *base_ph = NULL;
 	Elf_Addr phdr = 0, exe_base = 0;
-	int error, i, has_phdr = 0;
+	int error, i, has_phdr = 0, has_base = 0;
 	char *interp = NULL;
 	u_long phsize;
 	size_t randomizequota = ELF_RANDOMIZE_LIMIT;
@@ -709,6 +709,20 @@ exec_elf_makecmds(struct proc *p, struct exec_package *epp)
 			 */
 			break;
 		}
+	}
+
+	for (i = 0; i < epp->ep_vmcmds.evs_used ; i++) {
+		struct exec_vmcmd *vcp;
+
+		vcp = &epp->ep_vmcmds.evs_cmds[i];
+
+		if (vcp->ev_flags & VMCMD_RELATIVE)
+			if (!has_base) {
+				error = ENOEXEC;
+				goto bad;
+			}
+		if (vcp->ev_flags & VMCMD_BASE)
+			has_base = 1;
 	}
 
 	phdr += exe_base;
