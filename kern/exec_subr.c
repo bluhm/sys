@@ -134,10 +134,10 @@ exec_process_vmcmds(struct proc *p, struct exec_package *epp)
 		vcp = &epp->ep_vmcmds.evs_cmds[i];
 
 		if (vcp->ev_flags & VMCMD_RELATIVE) {
-#ifdef DIAGNOSTIC
-			if (base_vc == NULL)
-				panic("exec_process_vmcmds: RELATIVE no base");
-#endif
+			if (base_vc == NULL) {
+				error = ENOEXEC;
+				break;
+			}
 			vcp->ev_addr += base_vc->ev_addr;
 		}
 		error = (*vcp->ev_proc)(p, vcp);
