@@ -612,6 +612,10 @@ exec_elf_makecmds(struct proc *p, struct exec_package *epp)
 					flags = VMCMD_BASE;
 					addr = exe_base;
 				} else {
+					if (!has_base) {
+						error = ENOEXEC;
+						goto bad;
+					}
 					flags = VMCMD_RELATIVE;
 					addr = pp->p_vaddr - base_ph->p_vaddr;
 				}
@@ -628,6 +632,11 @@ exec_elf_makecmds(struct proc *p, struct exec_package *epp)
 			elf_load_psection(&epp->ep_vmcmds, epp->ep_vp,
 			    pp, &addr, &size, &prot, flags);
 
+			if (flags == VMCMD_BASE &&
+			    epp->ep_vmcmds.evs_used > 0 &&
+			    (epp->ep_vmcmds.evs_cmds[epp->ep_vmcmds.evs_used-1]
+			    .ev_flags & VMCMD_BASE))
+				has_base = 1;
 			/*
 			 * Update exe_base in case alignment was off.
 			 * For PIE, addr is relative to exe_base so
