@@ -720,20 +720,6 @@ exec_elf_makecmds(struct proc *p, struct exec_package *epp)
 		}
 	}
 
-	for (i = 0; i < epp->ep_vmcmds.evs_used ; i++) {
-		struct exec_vmcmd *vcp;
-
-		vcp = &epp->ep_vmcmds.evs_cmds[i];
-
-		if (vcp->ev_flags & VMCMD_RELATIVE)
-			if (!has_base) {
-				error = ENOEXEC;
-				goto bad;
-			}
-		if (vcp->ev_flags & VMCMD_BASE)
-			has_base = 1;
-	}
-
 	phdr += exe_base;
 
 	/*
