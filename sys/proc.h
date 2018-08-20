@@ -1,4 +1,4 @@
-/*	$OpenBSD: proc.h,v 1.253 2018/07/20 21:57:26 deraadt Exp $	*/
+/*	$OpenBSD: proc.h,v 1.256 2018/08/13 15:26:17 visa Exp $	*/
 /*	$NetBSD: proc.h,v 1.44 1996/04/22 01:23:21 christos Exp $	*/
 
 /*-
@@ -130,7 +130,7 @@ struct tusage {
 struct unvname {
 	char 			*un_name;
 	size_t 			un_namesize;
-	uint64_t		un_flags;
+	u_char			un_flags;
 	RBT_ENTRY(unvnmae)	un_rbt;
 };
 
@@ -204,7 +204,6 @@ struct process {
 	size_t ps_uvvcount;		/* count of unveil vnodes held */
 	size_t ps_uvncount;		/* count of unveil names allocated */
 	int ps_uvshrink;		/* do we need to shrink vnode list */
-	int ps_uvactive;		/* is unveil active */
 	int ps_uvdone;			/* no more unveil is permitted */
 	int ps_uvpcwdgone;		/* need to reevaluate cwd unveil */
 
@@ -425,7 +424,7 @@ struct unveil {
 	struct vnode		*uv_vp;
 	struct unvname_rbt	uv_names;
 	struct rwlock		uv_lock;
-	u_int64_t		uv_flags;
+	u_char			uv_flags;
 };
 
 struct uidinfo {
@@ -536,7 +535,7 @@ void	resetpriority(struct proc *);
 void	setrunnable(struct proc *);
 void	endtsleep(void *);
 void	unsleep(struct proc *);
-void	reaper(void);
+void	reaper(void *);
 void	exit1(struct proc *, int, int);
 void	exit2(struct proc *);
 int	dowait4(struct proc *, pid_t, int *, int, struct rusage *,

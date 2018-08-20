@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_exit.c,v 1.165 2018/07/13 09:25:23 beck Exp $	*/
+/*	$OpenBSD: kern_exit.c,v 1.167 2018/08/19 11:42:33 anton Exp $	*/
 /*	$NetBSD: kern_exit.c,v 1.39 1996/04/22 01:38:25 christos Exp $	*/
 
 /*
@@ -56,6 +56,7 @@
 #include <sys/filedesc.h>
 #include <sys/signalvar.h>
 #include <sys/sched.h>
+#include <sys/kcov.h>
 #include <sys/ktrace.h>
 #include <sys/pool.h>
 #include <sys/mutex.h>
@@ -187,6 +188,10 @@ exit1(struct proc *p, int rv, int flags)
 		killjobc(pr);
 #ifdef ACCOUNTING
 		acct_process(p);
+#endif
+
+#ifdef KCOV
+		kcov_exit(p);
 #endif
 
 #ifdef KTRACE
@@ -376,7 +381,7 @@ proc_free(struct proc *p)
  * a zombie, and the parent is allowed to read the undead's status.
  */
 void
-reaper(void)
+reaper(void *arg)
 {
 	struct proc *p;
 

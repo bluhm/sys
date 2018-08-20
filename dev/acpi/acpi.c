@@ -1,4 +1,4 @@
-/* $OpenBSD: acpi.c,v 1.355 2018/07/10 17:11:42 kettenis Exp $ */
+/* $OpenBSD: acpi.c,v 1.357 2018/08/19 08:23:47 kettenis Exp $ */
 /*
  * Copyright (c) 2005 Thorsten Lockert <tholo@sigmasoft.com>
  * Copyright (c) 2005 Jordan Hargrave <jordan@openbsd.org>
@@ -122,9 +122,6 @@ void	acpi_create_thread(void *);
 #ifndef SMALL_KERNEL
 
 void	acpi_indicator(struct acpi_softc *, int);
-
-int	acpi_matchhids(struct acpi_attach_args *aa, const char *hids[],
-	    const char *driver);
 
 void	acpi_init_pm(struct acpi_softc *);
 
@@ -331,13 +328,6 @@ acpi_gasio(struct acpi_softc *sc, int iodir, int iospace, uint64_t address,
 		break;
 
 	case GAS_PCI_CFG_SPACE:
-		/* format of address:
-		 *    bits 00..15 = register
-		 *    bits 16..31 = function
-		 *    bits 32..47 = device
-		 *    bits 48..63 = bus
-		 */
-
 		/*
 		 * The ACPI standard says that a function number of
 		 * FFFF can be used to refer to all functions on a
@@ -352,7 +342,7 @@ acpi_gasio(struct acpi_softc *sc, int iodir, int iospace, uint64_t address,
 			return (0);
 		}
 
-		pc = sc->sc_pc;
+		pc = pci_lookup_segment(ACPI_PCI_SEG(address));
 		tag = pci_make_tag(pc,
 		    ACPI_PCI_BUS(address), ACPI_PCI_DEV(address),
 		    ACPI_PCI_FN(address));
@@ -508,6 +498,33 @@ acpi_getminbus(int crsidx, union acpi_resource *crs, void *arg)
 }
 
 int
+acpi_matchcls(struct acpi_attach_args *aaa, int class, int subclass,
+    int interface)
+{
+	struct acpi_softc *sc = acpi_softc;
+	struct aml_value res;
+
+	if (aaa->aaa_dev == NULL || aaa->aaa_node == NULL)
+		return (0);
+
+	if (aml_evalname(sc, aaa->aaa_node, "_CLS", 0, NULL, &res))
+		return (0);
+
+	if (res.type != AML_OBJTYPE_PACKAGE || res.length != 3 ||
+	    res.v_package[0]->type != AML_OBJTYPE_INTEGER ||
+	    res.v_package[1]->type != AML_OBJTYPE_INTEGER ||
+	    res.v_package[2]->type != AML_OBJTYPE_INTEGER)
+		return (0);
+
+	if (res.v_package[0]->v_integer == class &&
+	    res.v_package[1]->v_integer == subclass &&
+	    res.v_package[2]->v_integer == interface)
+		return (1);
+
+	return (0);
+}
+
+int
 _acpi_matchhids(const char *hid, const char *hids[])
 {
 	int i;
@@ -540,7 +557,7 @@ acpi_getpci(struct aml_node *node, void *arg)
 	struct acpi_pci *pci, *ppci;
 	struct aml_value res;
 	struct acpi_softc *sc = arg;
-	pci_chipset_tag_t pc = sc->sc_pc;
+	pci_chipset_tag_t pc;
 	pcitag_t tag;
 	uint64_t val;
 	uint32_t reg;
@@ -586,6 +603,7 @@ acpi_getpci(struct aml_node *node, void *arg)
 		return 0;
 
 	pci = malloc(sizeof(*pci), M_DEVBUF, M_WAITOK|M_ZERO);
+	pci->seg = ppci->seg;
 	pci->bus = ppci->sub;
 	pci->dev = ACPI_ADR_PCIDEV(val);
 	pci->fun = ACPI_ADR_PCIFUN(val);
@@ -619,6 +637,7 @@ acpi_getpci(struct aml_node *node, void *arg)
 		free(pci, M_DEVBUF, sizeof(*pci));
 		return (1);
 	}
+	pc = pci_lookup_segment(pci->seg);
 	tag = pci_make_tag(pc, pci->bus, pci->dev, pci->fun);
 	reg = pci_conf_read(pc, tag, PCI_ID_REG);
 	if (PCI_VENDOR(reg) == PCI_VENDOR_INVALID) {
@@ -791,7 +810,7 @@ int
 acpi_pci_notify(struct aml_node *node, int ntype, void *arg)
 {
 	struct acpi_pci *pdev = arg;
-	pci_chipset_tag_t pc = acpi_softc->sc_pc;
+	pci_chipset_tag_t pc;
 	pcitag_t tag;
 	pcireg_t reg;
 	int offset;
@@ -800,6 +819,7 @@ acpi_pci_notify(struct aml_node *node, int ntype, void *arg)
 	if (ntype != 2)
 		return (0);
 
+	pc = pci_lookup_segment(pdev->seg);
 	tag = pci_make_tag(pc, pdev->bus, pdev->dev, pdev->fun);
 	if (pci_get_capability(pc, tag, PCI_CAP_PWRMGMT, &offset, 0)) {
 		/* Clear the PME Status bit if it is set. */

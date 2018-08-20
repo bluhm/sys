@@ -1,4 +1,4 @@
-/*	$OpenBSD: ieee80211_node.h,v 1.75 2018/07/11 20:18:09 phessler Exp $	*/
+/*	$OpenBSD: ieee80211_node.h,v 1.77 2018/08/13 15:19:52 stsp Exp $	*/
 /*	$NetBSD: ieee80211_node.h,v 1.9 2004/04/30 22:57:32 dyoung Exp $	*/
 
 /*-
@@ -402,7 +402,7 @@ void ieee80211_setup_htcaps(struct ieee80211_node *, const uint8_t *,
     uint8_t);
 void ieee80211_clear_htcaps(struct ieee80211_node *);
 int ieee80211_setup_htop(struct ieee80211_node *, const uint8_t *,
-    uint8_t);
+    uint8_t, int);
 int ieee80211_setup_rates(struct ieee80211com *,
 	    struct ieee80211_node *, const u_int8_t *, const u_int8_t *, int);
 int ieee80211_iserp_sta(const struct ieee80211_node *);
@@ -416,6 +416,9 @@ void ieee80211_node_leave(struct ieee80211com *,
 		struct ieee80211_node *);
 int ieee80211_match_bss(struct ieee80211com *,
 		struct ieee80211_node *);
+struct ieee80211_node *ieee80211_node_choose_bss(struct ieee80211com *, int,
+		struct ieee80211_node **);
+void ieee80211_node_join_bss(struct ieee80211com *, struct ieee80211_node *);
 void ieee80211_create_ibss(struct ieee80211com* ,
 		struct ieee80211_channel *);
 void ieee80211_notify_dtim(struct ieee80211com *);
