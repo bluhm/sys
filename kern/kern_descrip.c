@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_descrip.c,v 1.179 2018/08/19 02:22:40 visa Exp $	*/
+/*	$OpenBSD: kern_descrip.c,v 1.181 2018/08/21 13:50:31 visa Exp $	*/
 /*	$NetBSD: kern_descrip.c,v 1.42 1996/03/30 22:24:38 christos Exp $	*/
 
 /*
@@ -1002,6 +1002,7 @@ restart:
 		return (ENFILE);
 	}
 
+	FREF(fp);
 	*resultfp = fp;
 	*resultfd = i;
 
@@ -1030,8 +1031,6 @@ fnew(struct proc *p)
 	fp->f_count = 1;
 	fp->f_cred = p->p_ucred;
 	crhold(fp->f_cred);
-
-	FREF(fp);
 
 	return (fp);
 }
@@ -1161,16 +1160,15 @@ void
 fdfree(struct proc *p)
 {
 	struct filedesc *fdp = p->p_fd;
-	struct file **fpp, *fp;
-	int i;
+	struct file *fp;
+	int fd;
 
 	if (--fdp->fd_refcnt > 0)
 		return;
-	fpp = fdp->fd_ofiles;
-	for (i = fdp->fd_lastfile; i >= 0; i--, fpp++) {
-		fp = *fpp;
+	for (fd = 0; fd <= fdp->fd_lastfile; fd++) {
+		fp = fdp->fd_ofiles[fd];
 		if (fp != NULL) {
-			*fpp = NULL;
+			fdp->fd_ofiles[fd] = NULL;
 			 /* closef() expects a refcount of 2 */
 			FREF(fp);
 			(void) closef(fp, p);
