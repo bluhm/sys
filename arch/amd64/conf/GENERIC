@@ -1,4 +1,4 @@
-#	$OpenBSD: GENERIC,v 1.460 2018/08/22 15:38:46 mpi Exp $
+#	$OpenBSD: GENERIC,v 1.462 2018/08/27 19:32:48 jcs Exp $
 #
 # For further information on compiling OpenBSD kernels, see the config(8)
 # man page.
@@ -257,6 +257,8 @@ wsmouse* at ubcmtp? mux 0
 uhidev*	at uhub?		# Human Interface Devices
 ums*	at uhidev?		# USB mouse
 wsmouse* at ums? mux 0
+umt*	at uhidev?		# USB multitouch touchpad
+wsmouse* at umt? mux 0
 uts*	at uhub?		# USB touchscreen
 wsmouse* at uts? mux 0
 uwacom*	at uhidev?		# USB Wacom tablet
@@ -417,7 +419,6 @@ pcscp*	at pci?				# AMD 53c974 PCscsi-PCI SCSI
 #trm*	at pci?				# Tekram DC-3x5U SCSI Controllers
 vmwpvs*	at pci?				# VMware ParaVirtual SCSI
 nvme*	at pci?				# NVMe controllers
-bwfm*	at pci?				# Broadcom FullMAC
 
 scsibus* at scsi?
 sd*	at scsibus?			# SCSI disk drives
@@ -544,6 +545,7 @@ pgt*	at cardbus?			# Prism54 (only full-mac varients)
 malo*	at pci?				# Marvell Libertas
 malo*	at cardbus?			# Marvell Libertas
 malo*	at pcmcia?			# Marvell 88W8385
+bwfm*	at pci?				# Broadcom FullMAC
 
 # Media Independent Interface (mii) drivers
 exphy*	at mii?				# 3Com internal PHYs
