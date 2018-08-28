@@ -551,7 +551,7 @@ db_ctf_decompress(const char *buf, size_t size, off_t len)
 	return data;
 
 exit:
-	free(data, M_DEVBUF, sizeof(*data));
+	free(data, M_DEVBUF, len);
 	return NULL;
 }
 
