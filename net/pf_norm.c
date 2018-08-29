@@ -99,6 +99,7 @@ struct pf_fragment {
 	int32_t		fr_timeout;
 	u_int32_t	fr_gen;		/* generation number (per pf_frnode) */
 	u_int16_t	fr_maxlen;	/* maximum length of single fragment */
+	u_int16_t	fr_entries;	/* total number of fragment entries */
 	struct pf_frnode *fr_node;	/* ip src/dst/proto/af for fragments */
 };
 
@@ -396,6 +397,7 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 		frag->fr_timeout = time_uptime;
 		frag->fr_gen = frnode->fn_gen++;
 		frag->fr_maxlen = frent->fe_len;
+		frag->fr_entries = 0;
 		frag->fr_id = id;
 		frag->fr_node = frnode;
 		/* RB_INSERT cannot fail as pf_find_fragment() found nothing */
@@ -407,12 +409,17 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 
 		/* We do not have a previous fragment */
 		TAILQ_INSERT_HEAD(&frag->fr_queue, frent, fr_next);
+		frag->fr_entries++;
 
 		return (frag);
 	}
 
 	KASSERT(!TAILQ_EMPTY(&frag->fr_queue));
 	KASSERT(frag->fr_node);
+
+	/* Prevent unlimited linear search in fragment queue. */
+	if (frag->fr_entries >= PF_FRAG_ENTRY_MAX)
+		goto bad_fragment;
 
 	/* Remember maximum fragment len for refragmentation */
 	if (frent->fe_len > frag->fr_maxlen)
@@ -487,6 +494,7 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 		DPFPRINTF(LOG_NOTICE, "old frag overlapped");
 		next = TAILQ_NEXT(after, fr_next);
 		TAILQ_REMOVE(&frag->fr_queue, after, fr_next);
+		frag->fr_entries--;
 		m_freem(after->fe_m);
 		pool_put(&pf_frent_pl, after);
 		pf_nfrents--;
@@ -496,6 +504,7 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 		TAILQ_INSERT_HEAD(&frag->fr_queue, frent, fr_next);
 	else
 		TAILQ_INSERT_AFTER(&frag->fr_queue, prev, frent, fr_next);
+	frag->fr_entries++;
 
 	return (frag);
 
