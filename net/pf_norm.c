@@ -99,7 +99,7 @@ struct pf_fragment {
 	int32_t		fr_timeout;
 	u_int32_t	fr_gen;		/* generation number (per pf_frnode) */
 	u_int16_t	fr_maxlen;	/* maximum length of single fragment */
-	u_int16_t	fr_entries;	/* total number of fragment entries */
+	u_int16_t	fr_entries;	/* number of fragment entry inserts */
 	struct pf_frnode *fr_node;	/* ip src/dst/proto/af for fragments */
 };
 
@@ -494,7 +494,6 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 		DPFPRINTF(LOG_NOTICE, "old frag overlapped");
 		next = TAILQ_NEXT(after, fr_next);
 		TAILQ_REMOVE(&frag->fr_queue, after, fr_next);
-		frag->fr_entries--;
 		m_freem(after->fe_m);
 		pool_put(&pf_frent_pl, after);
 		pf_nfrents--;
