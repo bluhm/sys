@@ -397,7 +397,7 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 		frag->fr_timeout = time_uptime;
 		frag->fr_gen = frnode->fn_gen++;
 		frag->fr_maxlen = frent->fe_len;
-		frag->fr_entries = 0;
+		frag->fr_entries = 1;
 		frag->fr_id = id;
 		frag->fr_node = frnode;
 		/* RB_INSERT cannot fail as pf_find_fragment() found nothing */
@@ -409,7 +409,6 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 
 		/* We do not have a previous fragment */
 		TAILQ_INSERT_HEAD(&frag->fr_queue, frent, fr_next);
-		frag->fr_entries++;
 
 		return (frag);
 	}
