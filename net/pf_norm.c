@@ -100,6 +100,7 @@ struct pf_fragment {
 	u_int32_t	fr_gen;		/* generation number (per pf_frnode) */
 	u_int16_t	fr_maxlen;	/* maximum length of single fragment */
 	u_int16_t	fr_holes;	/* number of holes in the queue */
+	u_int16_t	fr_entries;	/* number of fragment entry inserts */
 	struct pf_frnode *fr_node;	/* ip src/dst/proto/af for fragments */
 };
 
@@ -572,6 +573,7 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 		frag->fr_gen = frnode->fn_gen++;
 		frag->fr_maxlen = frent->fe_len;
 		frag->fr_holes = 1;
+		frag->fr_entries = 1;
 		frag->fr_node = frnode;
 		/* RB_INSERT cannot fail as pf_find_fragment() found nothing */
 		RB_INSERT(pf_frag_tree, &frnode->fn_tree, frag);
@@ -588,6 +590,10 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 
 	KASSERT(!TAILQ_EMPTY(&frag->fr_queue));
 	KASSERT(frag->fr_node);
+
+	/* Prevent unlimited linear search in fragment queue. */
+	if (frag->fr_entries >= PF_FRAG_ENTRY_MAX)
+		goto bad_fragment;
 
 	/* Remember maximum fragment len for refragmentation */
 	if (frent->fe_len > frag->fr_maxlen)
@@ -667,6 +673,7 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 	}
 
 	pf_frent_insert(frag, frent, prev);
+	frag->fr_entries++;
 
 	return (frag);
 
