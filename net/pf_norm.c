@@ -498,7 +498,8 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 
 	if (prev == NULL) {
 		TAILQ_INSERT_HEAD(&frag->fr_queue, frent, fr_next);
-		if (frag->fr_full == 0 && frent->fe_off == 0)
+		KASSERT(frag->fr_full == 0);
+		if (frent->fe_off == 0)
 			frag->fr_full = frent->fe_len;
 	} else {
 		TAILQ_INSERT_AFTER(&frag->fr_queue, prev, frent, fr_next);
