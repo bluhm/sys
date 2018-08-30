@@ -505,7 +505,17 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 		TAILQ_INSERT_AFTER(&frag->fr_queue, prev, frent, fr_next);
 		if (frag->fr_full == prev->fe_off + prev->fe_len &&
 		    frent->fe_off == frag->fr_full)
-			frag->fr_full = frent->fe_off + frent->fe_len;
+			frag->fr_full += frent->fe_len;
+	}
+
+	/* Update the full data counter as long the queue is continuous */
+	if (frag->fr_full == frent->fe_off + frent->fe_len) {
+		for (next = TAILQ_NEXT(frent, fr_next); next;
+		    next = TAILQ_NEXT(next, fr_next)) {
+			if (next->fe_off != frag->fr_full)
+				break;
+			frag->fr_full += next->fe_len;
+		}
 	}
 
 	return (frag);
