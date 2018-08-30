@@ -3,7 +3,7 @@
 /*
  * Copyright 2001 Niels Provos <provos@citi.umich.edu>
  * Copyright 2009 Henning Brauer <henning@openbsd.org>
- * Copyright 2011 Alexander Bluhm <bluhm@openbsd.org>
+ * Copyright 2011-2018 Alexander Bluhm <bluhm@openbsd.org>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
