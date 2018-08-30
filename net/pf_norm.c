@@ -99,6 +99,7 @@ struct pf_fragment {
 	int32_t		fr_timeout;
 	u_int32_t	fr_gen;		/* generation number (per pf_frnode) */
 	u_int16_t	fr_maxlen;	/* maximum length of single fragment */
+	u_int16_t	fr_full;	/* continuously collected length */
 	struct pf_frnode *fr_node;	/* ip src/dst/proto/af for fragments */
 };
 
@@ -396,6 +397,7 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 		frag->fr_timeout = time_uptime;
 		frag->fr_gen = frnode->fn_gen++;
 		frag->fr_maxlen = frent->fe_len;
+		frag->fr_full = 0;
 		frag->fr_id = id;
 		frag->fr_node = frnode;
 		/* RB_INSERT cannot fail as pf_find_fragment() found nothing */
@@ -407,6 +409,8 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 
 		/* We do not have a previous fragment */
 		TAILQ_INSERT_HEAD(&frag->fr_queue, frent, fr_next);
+		if (frent->fe_off == 0)
+			frag->fr_full = frent->fe_len;
 
 		return (frag);
 	}
@@ -492,10 +496,16 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 		pf_nfrents--;
 	}
 
-	if (prev == NULL)
+	if (prev == NULL) {
 		TAILQ_INSERT_HEAD(&frag->fr_queue, frent, fr_next);
-	else
+		if (frag->fr_full == 0 && frent->fe_off == 0)
+			frag->fr_full = frent->fe_len;
+	} else {
 		TAILQ_INSERT_AFTER(&frag->fr_queue, prev, frent, fr_next);
+		if (frag->fr_full == prev->fe_off + prev->fe_len &&
+		    frent->fe_off == frag->fr_full)
+			frag->fr_full = frent->fe_off + frent->fe_len;
+	}
 
 	return (frag);
 
@@ -524,35 +534,25 @@ drop_fragment:
 int
 pf_isfull_fragment(struct pf_fragment *frag)
 {
-	struct pf_frent		*frent, *next;
-	u_int16_t		 off, total;
+	struct pf_frent		*frent;
+	u_int16_t		 full, total;
 
 	KASSERT(!TAILQ_EMPTY(&frag->fr_queue));
 
 	/* Check if we are completely reassembled */
-	if (TAILQ_LAST(&frag->fr_queue, pf_fragq)->fe_mff)
+	frent = TAILQ_LAST(&frag->fr_queue, pf_fragq);
+	if (frent->fe_mff)
 		return (0);
 
-	/* Maximum data we have seen already */
-	total = TAILQ_LAST(&frag->fr_queue, pf_fragq)->fe_off +
-	    TAILQ_LAST(&frag->fr_queue, pf_fragq)->fe_len;
+	/* Maximum and continuous data we have seen already */
+	total = frent->fe_off + frent->fe_len;
+	full = frag->fr_full;
 
 	/* Check if we have all the data */
-	off = 0;
-	for (frent = TAILQ_FIRST(&frag->fr_queue); frent; frent = next) {
-		next = TAILQ_NEXT(frent, fr_next);
-		off += frent->fe_len;
-		if (off < total && (next == NULL || next->fe_off != off)) {
-			DPFPRINTF(LOG_NOTICE,
-			    "missing fragment at %d, next %d, total %d",
-			    off, next == NULL ? -1 : next->fe_off, total);
-			return (0);
-		}
-	}
-	DPFPRINTF(LOG_INFO, "%d < %d?", off, total);
-	if (off < total)
+	DPFPRINTF(LOG_INFO, "%d < %d?", full, total);
+	if (full < total)
 		return (0);
-	KASSERT(off == total);
+	KASSERT(full == total);
 
 	return (1);
 }
