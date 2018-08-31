@@ -333,7 +333,7 @@ pf_create_fragment(u_short *reason)
  * Calculate the additional holes that were created in the fragment
  * queue by inserting this fragment.  A fragment in the middle
  * creates one more hole by splitting.  For each connected side,
- * it looses one hole.
+ * it loses one hole.
  * Fragment entry must be in the queue when calling this function.
  */
 int
