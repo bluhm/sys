@@ -127,7 +127,7 @@ void			 pf_flush_fragments(void);
 void			 pf_free_fragment(struct pf_fragment *);
 struct pf_fragment	*pf_find_fragment(struct pf_frnode *, u_int32_t);
 struct pf_frent		*pf_create_fragment(u_short *);
-int			 pf_fragment_holes(struct pf_frent *frent);
+int			 pf_fragment_holes(struct pf_frent *);
 struct pf_fragment	*pf_fillup_fragment(struct pf_frnode *, u_int32_t,
 			    struct pf_frent *, u_short *);
 struct mbuf		*pf_join_fragment(struct pf_fragment *);
