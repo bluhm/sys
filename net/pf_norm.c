@@ -3,7 +3,7 @@
 /*
  * Copyright 2001 Niels Provos <provos@citi.umich.edu>
  * Copyright 2009 Henning Brauer <henning@openbsd.org>
- * Copyright 2011 Alexander Bluhm <bluhm@openbsd.org>
+ * Copyright 2011-2018 Alexander Bluhm <bluhm@openbsd.org>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -91,11 +91,11 @@ struct pf_frnode {
 };
 
 struct pf_fragment {
-	u_int32_t	fr_id;		/* fragment id for reassemble */
-
+	struct pf_frent	*fr_firstoff[PF_FRAG_ENTRY_POINTS];
 	RB_ENTRY(pf_fragment) fr_entry;
 	TAILQ_ENTRY(pf_fragment) frag_next;
 	TAILQ_HEAD(pf_fragq, pf_frent) fr_queue;
+	u_int32_t	fr_id;		/* fragment id for reassemble */
 	int32_t		fr_timeout;
 	u_int32_t	fr_gen;		/* generation number (per pf_frnode) */
 	u_int16_t	fr_maxlen;	/* maximum length of single fragment */
@@ -126,6 +126,13 @@ void			 pf_flush_fragments(void);
 void			 pf_free_fragment(struct pf_fragment *);
 struct pf_fragment	*pf_find_fragment(struct pf_frnode *, u_int32_t);
 struct pf_frent		*pf_create_fragment(u_short *);
+static inline int	 pf_frent_index(struct pf_frent *);
+void			 pf_frent_insert(struct pf_fragment *,
+			    struct pf_frent *, struct pf_frent *);
+void			 pf_frent_remove(struct pf_fragment *,
+			    struct pf_frent *);
+struct pf_frent		*pf_frent_previous(struct pf_fragment *,
+			    struct pf_frent *);
 struct pf_fragment	*pf_fillup_fragment(struct pf_frnode *, u_int32_t,
 			    struct pf_frent *, u_short *);
 int			 pf_isfull_fragment(struct pf_fragment *);
@@ -328,6 +335,109 @@ pf_create_fragment(u_short *reason)
 	return (frent);
 }
 
+static inline int
+pf_frent_index(struct pf_frent *frent)
+{
+	/*
+	 * We have an array of 16 entry points to the queue.  A full size
+	 * 65536 octet IP packat can have 8192 fragments.  So the queue
+	 * traversal length is at most 512 after checking at most 16 entry
+	 * points.  We need 128 additinioal bytes on a 64 bit architecture.
+	 */
+	CTASSERT(((u_int16_t)0xffff &~ 7) / (0x10000 / PF_FRAG_ENTRY_POINTS) ==
+	    16 - 1);
+	CTASSERT(((u_int16_t)0xffff >> 3) / PF_FRAG_ENTRY_POINTS == 512 - 1);
+
+	return frent->fe_off / (0x10000 / PF_FRAG_ENTRY_POINTS);
+}
+
+void
+pf_frent_insert(struct pf_fragment *frag, struct pf_frent *frent,
+    struct pf_frent *prev)
+{
+	int index;
+
+	if (prev == NULL) {
+		TAILQ_INSERT_HEAD(&frag->fr_queue, frent, fr_next);
+	} else {
+		KASSERT(prev->fe_off + prev->fe_len <= frent->fe_off);
+		TAILQ_INSERT_AFTER(&frag->fr_queue, prev, frent, fr_next);
+	}
+
+	index = pf_frent_index(frent);
+	if (frag->fr_firstoff[index] == NULL) {
+		if (prev != NULL)
+			KASSERT(pf_frent_index(prev) < index);
+		frag->fr_firstoff[index] = frent;
+	} else {
+		if (frent->fe_off < frag->fr_firstoff[index]->fe_off) {
+			if (prev != NULL)
+				KASSERT(pf_frent_index(prev) < index);
+			frag->fr_firstoff[index] = frent;
+		} else {
+			KASSERT(prev != NULL);
+			KASSERT(pf_frent_index(prev) == index);
+		}
+	}
+}
+
+void
+pf_frent_remove(struct pf_fragment *frag, struct pf_frent *frent)
+{
+	struct pf_frent *prev = TAILQ_PREV(frent, pf_fragq, fr_next);
+	struct pf_frent *next = TAILQ_NEXT(frent, fr_next);
+	int index;
+
+	index = pf_frent_index(frent);
+	KASSERT(frag->fr_firstoff[index] != NULL);
+	if (frag->fr_firstoff[index]->fe_off == frent->fe_off) {
+		if (next == NULL) {
+			frag->fr_firstoff[index] = NULL;
+		} else {
+			KASSERT(frent->fe_off + frent->fe_len <= next->fe_off);
+			if (pf_frent_index(next) == index) {
+				frag->fr_firstoff[index] = next;
+			} else {
+				frag->fr_firstoff[index] = NULL;
+			}
+		}
+	} else {
+		KASSERT(frag->fr_firstoff[index]->fe_off < frent->fe_off);
+		KASSERT(prev != NULL);
+		KASSERT(prev->fe_off + prev->fe_len <= frent->fe_off);
+		KASSERT(pf_frent_index(prev) == index);
+	}
+
+	TAILQ_REMOVE(&frag->fr_queue, frent, fr_next);
+}
+
+struct pf_frent *
+pf_frent_previous(struct pf_fragment *frag, struct pf_frent *frent)
+{
+	struct pf_frent *prev, *next;
+	int index;
+
+	for (index = pf_frent_index(frent); index >= 0; index--) {
+		prev = frag->fr_firstoff[index];
+		if (prev == NULL)
+			continue;
+		if (prev->fe_off > frent->fe_off)
+			prev = TAILQ_PREV(prev, pf_fragq, fr_next);
+		if (prev == NULL)
+			return NULL;
+		KASSERT(prev->fe_off <= frent->fe_off);
+		for (next = TAILQ_NEXT(prev, fr_next); next != NULL;
+		    next = TAILQ_NEXT(next, fr_next)) {
+			if (next->fe_off > frent->fe_off)
+				return prev;
+			prev = next;
+		}
+		return prev;
+	}
+
+	return NULL;
+}
+
 struct pf_fragment *
 pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
     struct pf_frent *frent, u_short *reason)
@@ -392,11 +502,12 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 			frnode->fn_fragments = 0;
 			frnode->fn_gen = 0;
 		}
+		memset(frag->fr_firstoff, 0, sizeof(frag->fr_firstoff));
 		TAILQ_INIT(&frag->fr_queue);
+		frag->fr_id = id;
 		frag->fr_timeout = time_uptime;
 		frag->fr_gen = frnode->fn_gen++;
 		frag->fr_maxlen = frent->fe_len;
-		frag->fr_id = id;
 		frag->fr_node = frnode;
 		/* RB_INSERT cannot fail as pf_find_fragment() found nothing */
 		RB_INSERT(pf_frag_tree, &frnode->fn_tree, frag);
@@ -406,7 +517,7 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 		TAILQ_INSERT_HEAD(&pf_fragqueue, frag, frag_next);
 
 		/* We do not have a previous fragment */
-		TAILQ_INSERT_HEAD(&frag->fr_queue, frent, fr_next);
+		pf_frent_insert(frag, frent, NULL);
 
 		return (frag);
 	}
@@ -437,14 +548,13 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 	}
 
 	/* Find a fragment after the current one */
-	prev = NULL;
-	TAILQ_FOREACH(after, &frag->fr_queue, fr_next) {
-		if (after->fe_off > frent->fe_off)
-			break;
-		prev = after;
+	prev = pf_frent_previous(frag, frent);
+	if (prev == NULL) {
+		after = TAILQ_FIRST(&frag->fr_queue);
+		KASSERT(after != NULL);
+	} else {
+		after = TAILQ_NEXT(prev, fr_next);
 	}
-
-	KASSERT(prev != NULL || after != NULL);
 
 	if (prev != NULL && prev->fe_off + prev->fe_len > frent->fe_off) {
 		u_int16_t	precut;
@@ -486,16 +596,13 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 		/* This fragment is completely overlapped, lose it */
 		DPFPRINTF(LOG_NOTICE, "old frag overlapped");
 		next = TAILQ_NEXT(after, fr_next);
-		TAILQ_REMOVE(&frag->fr_queue, after, fr_next);
+		pf_frent_remove(frag, after);
 		m_freem(after->fe_m);
 		pool_put(&pf_frent_pl, after);
 		pf_nfrents--;
 	}
 
-	if (prev == NULL)
-		TAILQ_INSERT_HEAD(&frag->fr_queue, frent, fr_next);
-	else
-		TAILQ_INSERT_AFTER(&frag->fr_queue, prev, frent, fr_next);
+	pf_frent_insert(frag, frent, prev);
 
 	return (frag);
 
