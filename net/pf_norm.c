@@ -337,7 +337,7 @@ pf_create_fragment(u_short *reason)
  * Fragment entry must be in the queue when calling this function.
  */
 int
-pf_fragment_holes(struct pf_frent *frent)
+pf_frent_holes(struct pf_frent *frent)
 {
 	struct pf_frent *prev = TAILQ_PREV(frent, pf_fragq, fr_next);
 	struct pf_frent *next = TAILQ_NEXT(frent, fr_next);
@@ -442,7 +442,7 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 
 		/* We do not have a previous fragment */
 		TAILQ_INSERT_HEAD(&frag->fr_queue, frent, fr_next);
-		frag->fr_holes += pf_fragment_holes(frent);
+		frag->fr_holes += pf_frent_holes(frent);
 
 		return (frag);
 	}
@@ -522,7 +522,7 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 		/* This fragment is completely overlapped, lose it */
 		DPFPRINTF(LOG_NOTICE, "old frag overlapped");
 		next = TAILQ_NEXT(after, fr_next);
-		frag->fr_holes -= pf_fragment_holes(after);
+		frag->fr_holes -= pf_frent_holes(after);
 		TAILQ_REMOVE(&frag->fr_queue, after, fr_next);
 		m_freem(after->fe_m);
 		pool_put(&pf_frent_pl, after);
@@ -533,7 +533,7 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 		TAILQ_INSERT_HEAD(&frag->fr_queue, frent, fr_next);
 	else
 		TAILQ_INSERT_AFTER(&frag->fr_queue, prev, frent, fr_next);
-	frag->fr_holes += pf_fragment_holes(frent);
+	frag->fr_holes += pf_frent_holes(frent);
 
 	return (frag);
 
