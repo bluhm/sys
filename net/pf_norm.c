@@ -374,7 +374,7 @@ pf_frent_index(struct pf_frent *frent)
 {
 	/*
 	 * We have an array of 16 entry points to the queue.  A full size
-	 * 65536 octet IP packat can have 8192 fragments.  So the queue
+	 * 65536 octet IP packet can have 8192 fragments.  So the queue
 	 * traversal length is at most 512 after checking at most 16 entry
 	 * points.  We need 128 additinioal bytes on a 64 bit architecture.
 	 */
