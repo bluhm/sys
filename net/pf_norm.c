@@ -451,25 +451,45 @@ pf_frent_previous(struct pf_fragment *frag, struct pf_frent *frent)
 	struct pf_frent *prev, *next;
 	int index;
 
-	for (index = pf_frent_index(frent); index >= 0; index--) {
+	/*
+	 * We want to find a fragement entry that is before frag, but still
+	 * close to it.  Find the first fragment entry that is in the same
+	 * entry point or in the first entry point after that.
+	 */
+	for (index = pf_frent_index(frent); index < PF_FRAG_ENTRY_POINTS;
+	    index++) {
 		prev = frag->fr_firstoff[index];
-		if (prev == NULL)
-			continue;
-		if (prev->fe_off > frent->fe_off)
-			prev = TAILQ_PREV(prev, pf_fragq, fr_next);
-		if (prev == NULL)
-			return NULL;
+		if (prev != NULL)
+			break;
+	}
+	/*
+	 * If there are no fragments after frag, take the final one.  Assume
+	 * that the global queue is not empty.
+	 */
+	if (prev == NULL)
+		prev = TAILQ_LAST(&frag->fr_queue, pf_fragq);
+	KASSERT(prev != NULL);
+	/*
+	 * In prev we may have a fragment from the same entry point that is
+	 * before frent, or one that is just one position behind frent.
+	 * In the latter case, we go back one step and have the predecessor.
+	 */
+	if (prev->fe_off > frent->fe_off) {
+		prev = TAILQ_PREV(prev, pf_fragq, fr_next);
 		KASSERT(prev->fe_off <= frent->fe_off);
-		for (next = TAILQ_NEXT(prev, fr_next); next != NULL;
-		    next = TAILQ_NEXT(next, fr_next)) {
-			if (next->fe_off > frent->fe_off)
-				return prev;
-			prev = next;
-		}
 		return prev;
 	}
-
-	return NULL;
+	/*
+	 * In prev is the first fragment of the entry point.  The offset
+	 * of frag is behind it.  Find the closest previous fragment.
+	 */
+	for (next = TAILQ_NEXT(prev, fr_next); next != NULL;
+	    next = TAILQ_NEXT(next, fr_next)) {
+		if (next->fe_off > frent->fe_off)
+			return prev;
+		prev = next;
+	}
+	return prev;
 }
 
 struct pf_fragment *
