@@ -493,7 +493,7 @@ pf_frent_previous(struct pf_fragment *frag, struct pf_frent *frent)
 	for (next = TAILQ_NEXT(prev, fr_next); next != NULL;
 	    next = TAILQ_NEXT(next, fr_next)) {
 		if (next->fe_off > frent->fe_off)
-			return prev;
+			break;
 		prev = next;
 	}
 	return prev;
