@@ -652,8 +652,10 @@ pf_reassemble(struct mbuf **m0, int dir, u_short *reason)
 	m = *m0 = pf_join_fragment(frag);
 	frag = NULL;
 
-	if (m->m_flags & M_PKTHDR) {
+	{
 		int plen = 0;
+
+		KASSERT(m->m_flags & M_PKTHDR);
 		for (m = *m0; m; m = m->m_next)
 			plen += m->m_len;
 		m = *m0;
@@ -751,8 +753,10 @@ pf_reassemble6(struct mbuf **m0, struct ip6_frag *fraghdr,
 	if (frag6_deletefraghdr(m, hdrlen) != 0)
 		goto fail;
 
-	if (m->m_flags & M_PKTHDR) {
+	{
 		int plen = 0;
+
+		KASSERT(m->m_flags & M_PKTHDR);
 		for (m = *m0; m; m = m->m_next)
 			plen += m->m_len;
 		m = *m0;
