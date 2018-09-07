@@ -473,9 +473,12 @@ pf_frent_previous(struct pf_fragment *frag, struct pf_frent *frent)
 	 * In prev we may have a fragment from the same entry point that is
 	 * before frent, or one that is just one position behind frent.
 	 * In the latter case, we go back one step and have the predecessor.
+	 * There may be none if the new fragment will be the first one.
 	 */
 	if (prev->fe_off > frent->fe_off) {
 		prev = TAILQ_PREV(prev, pf_fragq, fr_next);
+		if (prev == NULL)
+			return NULL;
 		KASSERT(prev->fe_off <= frent->fe_off);
 		return prev;
 	}
