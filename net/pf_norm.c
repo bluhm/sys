@@ -413,6 +413,8 @@ pf_frent_insert(struct pf_fragment *frag, struct pf_frent *frent,
 			KASSERT(pf_frent_index(prev) == index);
 		}
 	}
+
+	frag->fr_holes += pf_frent_holes(frent);
 }
 
 void
@@ -421,6 +423,8 @@ pf_frent_remove(struct pf_fragment *frag, struct pf_frent *frent)
 	struct pf_frent *prev = TAILQ_PREV(frent, pf_fragq, fr_next);
 	struct pf_frent *next = TAILQ_NEXT(frent, fr_next);
 	int index;
+
+	frag->fr_holes -= pf_frent_holes(frent);
 
 	index = pf_frent_index(frent);
 	KASSERT(frag->fr_firstoff[index] != NULL);
@@ -580,7 +584,6 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 
 		/* We do not have a previous fragment */
 		pf_frent_insert(frag, frent, NULL);
-		frag->fr_holes += pf_frent_holes(frent);
 
 		return (frag);
 	}
@@ -659,7 +662,6 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 		/* This fragment is completely overlapped, lose it */
 		DPFPRINTF(LOG_NOTICE, "old frag overlapped");
 		next = TAILQ_NEXT(after, fr_next);
-		frag->fr_holes -= pf_frent_holes(after);
 		pf_frent_remove(frag, after);
 		m_freem(after->fe_m);
 		pool_put(&pf_frent_pl, after);
@@ -667,7 +669,6 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 	}
 
 	pf_frent_insert(frag, frent, prev);
-	frag->fr_holes += pf_frent_holes(frent);
 
 	return (frag);
 
