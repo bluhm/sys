@@ -120,7 +120,7 @@ enum	{ PFTM_TCP_FIRST_PACKET, PFTM_TCP_OPENING, PFTM_TCP_ESTABLISHED,
 #define PF_FRAG_STALE			200
 
 /*
- * Limit the length of the fragment queue traversal.  Remember 
+ * Limit the length of the fragment queue traversal.  Remember
  * search entry points based on the fragment offset.
  */
 #define PF_FRAG_ENTRY_POINTS		16
