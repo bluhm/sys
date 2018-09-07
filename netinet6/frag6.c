@@ -432,8 +432,9 @@ frag6_input(struct mbuf **mp, int *offp, int proto, int af)
 	pool_put(&ip6q_pool, q6);
 
 	{
-		KASSERT(m->m_flags & M_PKTHDR);
 		int plen = 0;
+
+		KASSERT(m->m_flags & M_PKTHDR);
 		for (t = m; t; t = t->m_next)
 			plen += t->m_len;
 		m->m_pkthdr.len = plen;
