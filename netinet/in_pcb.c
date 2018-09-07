@@ -1157,6 +1157,12 @@ in_pcblookup_listen(struct inpcbtable *table, struct in_addr laddr,
 			    __func__, divert->type, m, divert);
 		}
 	} else if (m && m->m_pkthdr.pf.flags & PF_TAG_TRANSLATE_LOCALHOST) {
+		/*
+		 * portmap(8) grants more permissions for connections to the
+		 * socket bound to 127.0.0.1 than to the * socket.  So if the
+		 * packet has been redirected to 127.0.0.1, it is not local
+		 * and should match to the * socket first.
+		 */
 		key1 = &zeroin_addr;
 		key2 = &laddr;
 	}
