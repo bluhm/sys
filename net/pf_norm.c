@@ -395,6 +395,11 @@ pf_frent_insert(struct pf_fragment *frag, struct pf_frent *frent,
 	CTASSERT(PF_FRAG_ENTRY_LIMIT <= 0xff);
 	int index;
 
+	/*
+	 * A packet has at most 65536 octets.  With 16 entry points, each one
+	 * spawns 4096 octets.  We limit these to 64 fragments each, which
+	 * means on average every fragment must have at least 64 octets.
+	 */
 	index = pf_frent_index(frent);
 	if (frag->fr_entries[index] >= PF_FRAG_ENTRY_LIMIT)
 		return ENOBUFS;
