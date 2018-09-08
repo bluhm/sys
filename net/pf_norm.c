@@ -374,9 +374,9 @@ pf_frent_index(struct pf_frent *frent)
 {
 	/*
 	 * We have an array of 16 entry points to the queue.  A full size
-	 * 65536 octet IP packet can have 8192 fragments.  So the queue
-	 * traversal length is at most 512 after checking at most 16 entry
-	 * points.  We need 128 additinioal bytes on a 64 bit architecture.
+	 * 65535 octet IP packet can have 8192 fragments.  So the queue
+	 * traversal length is at most 512 and at most 16 entry points are
+	 * checked.  We need 128 additional bytes on a 64 bit architecture.
 	 */
 	CTASSERT(((u_int16_t)0xffff &~ 7) / (0x10000 / PF_FRAG_ENTRY_POINTS) ==
 	    16 - 1);
@@ -613,7 +613,7 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 			goto free_ipv6_fragment;
 	}
 
-	/* Find a fragment after the current one */
+	/* Find neighbors for newly inserted fragment */
 	prev = pf_frent_previous(frag, frent);
 	if (prev == NULL) {
 		after = TAILQ_FIRST(&frag->fr_queue);
