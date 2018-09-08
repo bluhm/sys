@@ -400,13 +400,11 @@ pf_frent_insert(struct pf_fragment *frag, struct pf_frent *frent,
 
 	index = pf_frent_index(frent);
 	if (frag->fr_firstoff[index] == NULL) {
-		if (prev != NULL)
-			KASSERT(pf_frent_index(prev) < index);
+		KASSERT(prev == NULL || pf_frent_index(prev) < index);
 		frag->fr_firstoff[index] = frent;
 	} else {
 		if (frent->fe_off < frag->fr_firstoff[index]->fe_off) {
-			if (prev != NULL)
-				KASSERT(pf_frent_index(prev) < index);
+			KASSERT(prev == NULL || pf_frent_index(prev) < index);
 			frag->fr_firstoff[index] = frent;
 		} else {
 			KASSERT(prev != NULL);
