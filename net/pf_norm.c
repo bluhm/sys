@@ -790,7 +790,7 @@ pf_reassemble(struct mbuf **m0, int dir, u_short *reason)
 	m = *m0 = NULL;
 
 	if (frag->fr_holes) {
-		DPFPRINTF(LOG_INFO, "frag %d, holes %d",
+		DPFPRINTF(LOG_DEBUG, "frag %d, holes %d",
 		    frag->fr_id, frag->fr_holes);
 		PF_FRAG_UNLOCK();
 		return (PF_PASS);  /* drop because *m0 is NULL, no error */
@@ -876,7 +876,7 @@ pf_reassemble6(struct mbuf **m0, struct ip6_frag *fraghdr,
 	m = *m0 = NULL;
 
 	if (frag->fr_holes) {
-		DPFPRINTF(LOG_INFO, "frag %d, holes %d",
+		DPFPRINTF(LOG_DEBUG, "frag %#08x, holes %d",
 		    frag->fr_id, frag->fr_holes);
 		PF_FRAG_UNLOCK();
 		return (PF_PASS);  /* drop because *m0 is NULL, no error */
