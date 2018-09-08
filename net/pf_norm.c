@@ -686,8 +686,10 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 	}
 
 	/* If part of the queue gets too long, there is not way to recover. */
-	if (pf_frent_insert(frag, frent, prev))
+	if (pf_frent_insert(frag, frent, prev)) {
+		DPFPRINTF(LOG_WARNING, "fragment queue limit exceeded");
 		goto free_fragment;
+	}
 
 	return (frag);
 
