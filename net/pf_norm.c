@@ -92,6 +92,9 @@ struct pf_frnode {
 
 struct pf_fragment {
 	struct pf_frent	*fr_firstoff[PF_FRAG_ENTRY_POINTS];
+					/* pointers to queue element */
+	u_int8_t	fr_entries[PF_FRAG_ENTRY_POINTS];
+					/* count entries between pointers */
 	RB_ENTRY(pf_fragment) fr_entry;
 	TAILQ_ENTRY(pf_fragment) frag_next;
 	TAILQ_HEAD(pf_fragq, pf_frent) fr_queue;
@@ -100,7 +103,6 @@ struct pf_fragment {
 	u_int32_t	fr_gen;		/* generation number (per pf_frnode) */
 	u_int16_t	fr_maxlen;	/* maximum length of single fragment */
 	u_int16_t	fr_holes;	/* number of holes in the queue */
-	u_int16_t	fr_entries;	/* number of fragment entry inserts */
 	struct pf_frnode *fr_node;	/* ip src/dst/proto/af for fragments */
 };
 
@@ -130,7 +132,7 @@ struct pf_fragment	*pf_find_fragment(struct pf_frnode *, u_int32_t);
 struct pf_frent		*pf_create_fragment(u_short *);
 int			 pf_frent_holes(struct pf_frent *);
 static inline int	 pf_frent_index(struct pf_frent *);
-void			 pf_frent_insert(struct pf_fragment *,
+int			 pf_frent_insert(struct pf_fragment *,
 			    struct pf_frent *, struct pf_frent *);
 void			 pf_frent_remove(struct pf_fragment *,
 			    struct pf_frent *);
@@ -386,11 +388,17 @@ pf_frent_index(struct pf_frent *frent)
 	return frent->fe_off / (0x10000 / PF_FRAG_ENTRY_POINTS);
 }
 
-void
+int
 pf_frent_insert(struct pf_fragment *frag, struct pf_frent *frent,
     struct pf_frent *prev)
 {
+	CTASSERT(PF_FRAG_ENTRY_LIMIT <= 0xff);
 	int index;
+
+	index = pf_frent_index(frent);
+	if (frag->fr_entries[index] >= PF_FRAG_ENTRY_LIMIT)
+		return ENOBUFS;
+	frag->fr_entries[index]++;
 
 	if (prev == NULL) {
 		TAILQ_INSERT_HEAD(&frag->fr_queue, frent, fr_next);
@@ -399,7 +407,6 @@ pf_frent_insert(struct pf_fragment *frag, struct pf_frent *frent,
 		TAILQ_INSERT_AFTER(&frag->fr_queue, prev, frent, fr_next);
 	}
 
-	index = pf_frent_index(frent);
 	if (frag->fr_firstoff[index] == NULL) {
 		KASSERT(prev == NULL || pf_frent_index(prev) < index);
 		frag->fr_firstoff[index] = frent;
@@ -414,6 +421,8 @@ pf_frent_insert(struct pf_fragment *frag, struct pf_frent *frent,
 	}
 
 	frag->fr_holes += pf_frent_holes(frent);
+
+	return 0;
 }
 
 void
@@ -446,6 +455,9 @@ pf_frent_remove(struct pf_fragment *frag, struct pf_frent *frent)
 	}
 
 	TAILQ_REMOVE(&frag->fr_queue, frent, fr_next);
+
+	KASSERT(frag->fr_entries[index] > 0);
+	frag->fr_entries[index]--;
 }
 
 struct pf_frent *
@@ -567,13 +579,13 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 			frnode->fn_gen = 0;
 		}
 		memset(frag->fr_firstoff, 0, sizeof(frag->fr_firstoff));
+		memset(frag->fr_entries, 0, sizeof(frag->fr_entries));
 		TAILQ_INIT(&frag->fr_queue);
 		frag->fr_id = id;
 		frag->fr_timeout = time_uptime;
 		frag->fr_gen = frnode->fn_gen++;
 		frag->fr_maxlen = frent->fe_len;
 		frag->fr_holes = 1;
-		frag->fr_entries = 1;
 		frag->fr_node = frnode;
 		/* RB_INSERT cannot fail as pf_find_fragment() found nothing */
 		RB_INSERT(pf_frag_tree, &frnode->fn_tree, frag);
@@ -582,7 +594,7 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 			RB_INSERT(pf_frnode_tree, &pf_frnode_tree, frnode);
 		TAILQ_INSERT_HEAD(&pf_fragqueue, frag, frag_next);
 
-		/* We do not have a previous fragment */
+		/* We do not have a previous fragment, cannot fail. */
 		pf_frent_insert(frag, frent, NULL);
 
 		return (frag);
@@ -590,10 +602,6 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 
 	KASSERT(!TAILQ_EMPTY(&frag->fr_queue));
 	KASSERT(frag->fr_node);
-
-	/* Prevent unlimited linear search in fragment queue. */
-	if (frag->fr_entries >= PF_FRAG_ENTRY_MAX)
-		goto bad_fragment;
 
 	/* Remember maximum fragment len for refragmentation */
 	if (frent->fe_len > frag->fr_maxlen)
@@ -631,7 +639,7 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 
 #ifdef INET6
 		if (frag->fr_node->fn_af == AF_INET6)
-			goto free_fragment;
+			goto free_ipv6_fragment;
 #endif /* INET6 */
 
 		precut = prev->fe_off + prev->fe_len - frent->fe_off;
@@ -651,7 +659,7 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 
 #ifdef INET6
 		if (frag->fr_node->fn_af == AF_INET6)
-			goto free_fragment;
+			goto free_ipv6_fragment;
 #endif /* INET6 */
 
 		aftercut = frent->fe_off + frent->fe_len - after->fe_off;
@@ -672,16 +680,15 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 		pf_nfrents--;
 	}
 
-	pf_frent_insert(frag, frent, prev);
-	frag->fr_entries++;
+	/* If part of the queue gets too long, there is not way to recover. */
+	if (pf_frent_insert(frag, frent, prev))
+		goto free_fragment;
 
 	return (frag);
 
 free_ipv6_fragment:
-#ifdef INET6
 	if (frag->fr_node->fn_af == AF_INET)
 		goto bad_fragment;
-free_fragment:
 	/*
 	 * RFC 5722, Errata 3089:  When reassembling an IPv6 datagram, if one
 	 * or more its constituent fragments is determined to be an overlapping
@@ -689,8 +696,8 @@ free_fragment:
 	 * be silently discarded.
 	 */
 	DPFPRINTF(LOG_NOTICE, "flush overlapping fragments");
+free_fragment:
 	pf_free_fragment(frag);
-#endif /* INET6 */
 bad_fragment:
 	REASON_SET(reason, PFRES_FRAG);
 drop_fragment:
