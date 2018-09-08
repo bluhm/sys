@@ -462,7 +462,7 @@ pf_frent_previous(struct pf_fragment *frag, struct pf_frent *frent)
 	if (prev->fe_off <= frent->fe_off)
 		return prev;
 	/*
-	 * We want to find a fragement entry that is before frag, but still
+	 * We want to find a fragment entry that is before frag, but still
 	 * close to it.  Find the first fragment entry that is in the same
 	 * entry point or in the first entry point after that.  As we have
 	 * already checked that there are entries behind frag, this will
