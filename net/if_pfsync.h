@@ -328,7 +328,7 @@ void			pfsync_state_export(struct pfsync_state *,
 			    struct pf_state *);
 
 void			pfsync_insert_state(struct pf_state *);
-void			pfsync_update_state(struct pf_state *);
+void			pfsync_update_state(struct pf_state *, int *);
 void			pfsync_delete_state(struct pf_state *);
 void			pfsync_clear_states(u_int32_t, const char *);
 
