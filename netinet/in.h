@@ -795,8 +795,8 @@ __END_DECLS
 #endif /* !_KERNEL */
 
 #ifdef _KERNEL
-extern	   const int inetctlerrmap[];
-extern	   const struct in_addr zeroin_addr;
+extern const u_char inetctlerrmap[];
+extern const struct in_addr zeroin_addr;
 
 struct mbuf;
 struct sockaddr;

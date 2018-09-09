@@ -1379,7 +1379,7 @@ ip_stripoptions(struct mbuf *m)
 	ip->ip_len = htons(ntohs(ip->ip_len) - olen);
 }
 
-const int inetctlerrmap[PRC_NCMDS] = {
+const u_char inetctlerrmap[PRC_NCMDS] = {
 	0,		0,		0,		0,
 	0,		EMSGSIZE,	EHOSTDOWN,	EHOSTUNREACH,
 	EHOSTUNREACH,	EHOSTUNREACH,	ECONNREFUSED,	ECONNREFUSED,
