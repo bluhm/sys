@@ -98,7 +98,6 @@
 
 #ifdef INET6
 #include <netinet6/in6_var.h>
-#include <netinet6/ip6_var.h>
 #endif /* INET6 */
 #ifdef IPSEC
 #include <netinet/ip_esp.h>

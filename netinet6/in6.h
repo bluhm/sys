@@ -404,8 +404,8 @@ typedef	__socklen_t	socklen_t;	/* length type for network syscalls */
 #endif /* __BSD_VISIBLE */
 
 #ifdef _KERNEL
-extern	const u_char inet6ctlerrmap[];
-extern	const struct in6_addr zeroin6_addr;
+extern const u_char inet6ctlerrmap[];
+extern const struct in6_addr zeroin6_addr;
 
 struct mbuf;
 struct ifnet;

@@ -124,31 +124,7 @@
 #include <netinet/ip6.h>
 #include <netinet6/ip6_var.h>
 
-/*
- * External globals
- */
-
-/*
- * Globals
- */
-
 const struct in6_addr zeroin6_addr;
-
-/*
- * Keep separate inet6ctlerrmap, because I may remap some of these.
- * I also put it here, because, quite frankly, it belongs here, not in
- * ip{v6,}_input().
- */
-#if 0
-u_char inet6ctlerrmap[PRC_NCMDS] = {
-	0,		0,		0,		0,
-	0,		EMSGSIZE,	EHOSTDOWN,	EHOSTUNREACH,
-	EHOSTUNREACH,	EHOSTUNREACH,	ECONNREFUSED,	ECONNREFUSED,
-	EMSGSIZE,	EHOSTUNREACH,	0,		0,
-	0,		0,		0,		0,
-	ENOPROTOOPT
-};
-#endif
 
 int
 in6_pcbaddrisavail(struct inpcb *inp, struct sockaddr_in6 *sin6, int wild,
