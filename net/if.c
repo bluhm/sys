@@ -219,8 +219,6 @@ void	if_idxmap_remove(struct ifnet *);
 
 TAILQ_HEAD(, ifg_group) ifg_head = TAILQ_HEAD_INITIALIZER(ifg_head);
 
-/* Serialize access to &if_cloners and if_cloners_count */
-struct rwlock if_cloners_lock = RWLOCK_INITIALIZER("ifclonerslk");
 LIST_HEAD(, if_clone) if_cloners = LIST_HEAD_INITIALIZER(if_cloners);
 int if_cloners_count;
 
@@ -1252,13 +1250,11 @@ if_clone_lookup(const char *name, int *unitp)
 	if (cp - name < IFNAMSIZ-1 && *cp == '0' && cp[1] != '\0')
 		return (NULL);	/* unit number 0 padded */
 
-	rw_enter_read(&if_cloners_lock);
 	LIST_FOREACH(ifc, &if_cloners, ifc_list) {
 		if (strlen(ifc->ifc_name) == cp - name &&
 		    !strncmp(name, ifc->ifc_name, cp - name))
 			break;
 	}
-	rw_exit_read(&if_cloners_lock);
 
 	if (ifc == NULL)
 		return (NULL);
@@ -1284,22 +1280,8 @@ if_clone_lookup(const char *name, int *unitp)
 void
 if_clone_attach(struct if_clone *ifc)
 {
-	rw_enter_write(&if_cloners_lock);
 	LIST_INSERT_HEAD(&if_cloners, ifc, ifc_list);
 	if_cloners_count++;
-	rw_exit_write(&if_cloners_lock);
-}
-
-/*
- * Unregister a network interface cloner.
- */
-void
-if_clone_detach(struct if_clone *ifc)
-{
-	rw_enter_write(&if_cloners_lock);
-	LIST_REMOVE(ifc, ifc_list);
-	if_cloners_count--;
-	rw_exit_write(&if_cloners_lock);
 }
 
 /*
@@ -1314,16 +1296,12 @@ if_clone_list(struct if_clonereq *ifcr)
 
 	if ((dst = ifcr->ifcr_buffer) == NULL) {
 		/* Just asking how many there are. */
-		rw_enter_read(&if_cloners_lock);
 		ifcr->ifcr_total = if_cloners_count;
-		rw_exit_read(&if_cloners_lock);
 		return (0);
 	}
 
 	if (ifcr->ifcr_count < 0)
 		return (EINVAL);
-
-	rw_enter_read(&if_cloners_lock);
 
 	ifcr->ifcr_total = if_cloners_count;
 	count = MIN(if_cloners_count, ifcr->ifcr_count);
@@ -1340,7 +1318,6 @@ if_clone_list(struct if_clonereq *ifcr)
 		dst += IFNAMSIZ;
 	}
 
-	rw_exit_read(&if_cloners_lock);
 	return (error);
 }
 
