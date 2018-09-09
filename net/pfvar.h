@@ -754,6 +754,7 @@ struct pf_state {
 
 	TAILQ_ENTRY(pf_state)	 sync_list;
 	TAILQ_ENTRY(pf_state)	 entry_list;
+	SLIST_ENTRY(pf_state)	 gc_list;
 	RB_ENTRY(pf_state)	 entry_id;
 	struct pf_state_peer	 src;
 	struct pf_state_peer	 dst;
@@ -798,6 +799,7 @@ struct pf_state {
 	u_int16_t		 max_mss;
 	u_int16_t		 if_index_in;
 	u_int16_t		 if_index_out;
+	pf_refcnt_t		 refcnt;
 	u_int16_t		 delay;
 };
 
