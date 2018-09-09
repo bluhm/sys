@@ -1516,9 +1516,7 @@ pfioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 
 		PF_LOCK();
 		PF_STATE_ENTER_WRITE();
-		for (s = RB_MIN(pf_state_tree_id, &tree_id); s; s = nexts) {
-			nexts = RB_NEXT(pf_state_tree_id, &tree_id, s);
-
+		RB_FOREACH_SAFE(s, pf_state_tree_id, &tree_id, nexts) {
 			if (!psk->psk_ifname[0] || !strcmp(psk->psk_ifname,
 			    s->kif->pfik_name)) {
 #if NPFSYNC > 0
@@ -1620,10 +1618,7 @@ pfioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 
 		PF_LOCK();
 		PF_STATE_ENTER_WRITE();
-		for (s = RB_MIN(pf_state_tree_id, &tree_id); s;
-		    s = nexts) {
-			nexts = RB_NEXT(pf_state_tree_id, &tree_id, s);
-
+		RB_FOREACH_SAFE(s, pf_state_tree_id, &tree_id, nexts) {
 			if (s->direction == PF_OUT) {
 				sk = s->key[PF_SK_STACK];
 				srcaddr = &sk->addr[1];
