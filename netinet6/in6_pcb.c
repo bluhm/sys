@@ -331,6 +331,52 @@ in6_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 }
 
 /*
+ * Get the local address/port, and put it in a sockaddr_in6.
+ * This services the getsockname(2) call.
+ */
+int
+in6_setsockaddr(struct inpcb *inp, struct mbuf *nam)
+{
+	struct sockaddr_in6 *sin6;
+
+	nam->m_len = sizeof(struct sockaddr_in6);
+	sin6 = mtod(nam,struct sockaddr_in6 *);
+
+	bzero ((caddr_t)sin6,sizeof(struct sockaddr_in6));
+	sin6->sin6_family = AF_INET6;
+	sin6->sin6_len = sizeof(struct sockaddr_in6);
+	sin6->sin6_port = inp->inp_lport;
+	sin6->sin6_addr = inp->inp_laddr6;
+	/* KAME hack: recover scopeid */
+	in6_recoverscope(sin6, &inp->inp_laddr6);
+
+	return 0;
+}
+
+/*
+ * Get the foreign address/port, and put it in a sockaddr_in6.
+ * This services the getpeername(2) call.
+ */
+int
+in6_setpeeraddr(struct inpcb *inp, struct mbuf *nam)
+{
+	struct sockaddr_in6 *sin6;
+
+	nam->m_len = sizeof(struct sockaddr_in6);
+	sin6 = mtod(nam,struct sockaddr_in6 *);
+
+	bzero ((caddr_t)sin6,sizeof(struct sockaddr_in6));
+	sin6->sin6_family = AF_INET6;
+	sin6->sin6_len = sizeof(struct sockaddr_in6);
+	sin6->sin6_port = inp->inp_fport;
+	sin6->sin6_addr = inp->inp_faddr6;
+	/* KAME hack: recover scopeid */
+	in6_recoverscope(sin6, &inp->inp_faddr6);
+
+	return 0;
+}
+
+/*
  * Pass some notification to all connections of a protocol
  * associated with address dst.  The local address and/or port numbers
  * may be specified to limit the search.  The "usual action" will be
@@ -471,52 +517,6 @@ in6_pcbnotify(struct inpcbtable *table, struct sockaddr_in6 *dst,
 			(*notify)(inp, errno);
 	}
 	return (nmatch);
-}
-
-/*
- * Get the local address/port, and put it in a sockaddr_in6.
- * This services the getsockname(2) call.
- */
-int
-in6_setsockaddr(struct inpcb *inp, struct mbuf *nam)
-{
-	struct sockaddr_in6 *sin6;
-
-	nam->m_len = sizeof(struct sockaddr_in6);
-	sin6 = mtod(nam,struct sockaddr_in6 *);
-
-	bzero ((caddr_t)sin6,sizeof(struct sockaddr_in6));
-	sin6->sin6_family = AF_INET6;
-	sin6->sin6_len = sizeof(struct sockaddr_in6);
-	sin6->sin6_port = inp->inp_lport;
-	sin6->sin6_addr = inp->inp_laddr6;
-	/* KAME hack: recover scopeid */
-	in6_recoverscope(sin6, &inp->inp_laddr6);
-
-	return 0;
-}
-
-/*
- * Get the foreign address/port, and put it in a sockaddr_in6.
- * This services the getpeername(2) call.
- */
-int
-in6_setpeeraddr(struct inpcb *inp, struct mbuf *nam)
-{
-	struct sockaddr_in6 *sin6;
-
-	nam->m_len = sizeof(struct sockaddr_in6);
-	sin6 = mtod(nam,struct sockaddr_in6 *);
-
-	bzero ((caddr_t)sin6,sizeof(struct sockaddr_in6));
-	sin6->sin6_family = AF_INET6;
-	sin6->sin6_len = sizeof(struct sockaddr_in6);
-	sin6->sin6_port = inp->inp_fport;
-	sin6->sin6_addr = inp->inp_faddr6;
-	/* KAME hack: recover scopeid */
-	in6_recoverscope(sin6, &inp->inp_faddr6);
-
-	return 0;
 }
 
 struct inpcb *
