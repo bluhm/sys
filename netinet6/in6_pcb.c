@@ -520,6 +520,46 @@ in6_setpeeraddr(struct inpcb *inp, struct mbuf *nam)
 }
 
 struct inpcb *
+in6_pcbhashlookup(struct inpcbtable *table, const struct in6_addr *faddr,
+    u_int fport_arg, const struct in6_addr *laddr, u_int lport_arg,
+    u_int rtable)
+{
+	struct inpcbhead *head;
+	struct inpcb *inp;
+	u_int16_t fport = fport_arg, lport = lport_arg;
+	u_int rdomain;
+
+	rdomain = rtable_l2(rtable);
+	head = in6_pcbhash(table, rdomain, faddr, fport, laddr, lport);
+	LIST_FOREACH(inp, head, inp_hash) {
+		if (!(inp->inp_flags & INP_IPV6))
+			continue;
+		if (IN6_ARE_ADDR_EQUAL(&inp->inp_faddr6, faddr) &&
+		    inp->inp_fport == fport && inp->inp_lport == lport &&
+		    IN6_ARE_ADDR_EQUAL(&inp->inp_laddr6, laddr) &&
+		    rtable_l2(inp->inp_rtableid) == rdomain) {
+			/*
+			 * Move this PCB to the head of hash chain so that
+			 * repeated accesses are quicker.  This is analogous to
+			 * the historic single-entry PCB cache.
+			 */
+			if (inp != LIST_FIRST(head)) {
+				LIST_REMOVE(inp, inp_hash);
+				LIST_INSERT_HEAD(head, inp, inp_hash);
+			}
+			break;
+		}
+	}
+#ifdef DIAGNOSTIC
+	if (inp == NULL && in_pcbnotifymiss) {
+		printf("%s: faddr= fport=%d laddr= lport=%d rdom=%u\n",
+		    __func__, ntohs(fport), ntohs(lport), rdomain);
+	}
+#endif
+	return (inp);
+}
+
+struct inpcb *
 in6_pcblookup_listen(struct inpcbtable *table, struct in6_addr *laddr,
     u_int lport_arg, struct mbuf *m, u_int rtable)
 {
