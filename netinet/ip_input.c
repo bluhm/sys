@@ -964,14 +964,7 @@ insert:
 	pool_put(&ipq_pool, fp);
 	m->m_len += (ip->ip_hl << 2);
 	m->m_data -= (ip->ip_hl << 2);
-	{
-		int plen = 0;
-
-		KASSERT(m->m_flags & M_PKTHDR);
-		for (t = m; t; t = t->m_next)
-			plen += t->m_len;
-		m->m_pkthdr.len = plen;
-	}
+	m_calchdrlen(m);
 	return (m);
 
 dropfrag:

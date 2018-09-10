@@ -327,6 +327,18 @@ m_resethdr(struct mbuf *m)
 	m->m_pkthdr.ph_loopcnt = loopcnt;
 }
 
+void
+m_calchdrlen(struct mbuf *m)
+{
+	struct mbuf *n;
+	int plen = 0;
+
+	KASSERT(m->m_flags & M_PKTHDR);
+	for (n = m; n; n = n->m_next)
+		plen += n->m_len;
+	m->m_pkthdr.len = plen;
+}
+
 struct mbuf *
 m_getclr(int nowait, int type)
 {
