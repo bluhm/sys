@@ -518,3 +518,85 @@ in6_setpeeraddr(struct inpcb *inp, struct mbuf *nam)
 
 	return 0;
 }
+
+struct inpcb *
+in6_pcblookup_listen(struct inpcbtable *table, struct in6_addr *laddr,
+    u_int lport_arg, struct mbuf *m, u_int rtable)
+{
+	struct inpcbhead *head;
+	const struct in6_addr *key1, *key2;
+	struct inpcb *inp;
+	u_int16_t lport = lport_arg;
+	u_int rdomain;
+
+	key1 = laddr;
+	key2 = &zeroin6_addr;
+#if NPF > 0
+	if (m && m->m_pkthdr.pf.flags & PF_TAG_DIVERTED) {
+		struct pf_divert *divert;
+
+		divert = pf_find_divert(m);
+		KASSERT(divert != NULL);
+		switch (divert->type) {
+		case PF_DIVERT_TO:
+			key1 = key2 = &divert->addr.v6;
+			lport = divert->port;
+			break;
+		case PF_DIVERT_REPLY:
+			return (NULL);
+		default:
+			panic("%s: unknown divert type %d, mbuf %p, divert %p",
+			    __func__, divert->type, m, divert);
+		}
+	} else if (m && m->m_pkthdr.pf.flags & PF_TAG_TRANSLATE_LOCALHOST) {
+		/*
+		 * Redirected connections should not be treated the same
+		 * as connections directed to ::1 since localhost
+		 * can only be accessed from the host itself.
+		 */
+		key1 = &zeroin6_addr;
+		key2 = laddr;
+	}
+#endif
+
+	rdomain = rtable_l2(rtable);
+	head = in6_pcbhash(table, rdomain, &zeroin6_addr, 0, key1, lport);
+	LIST_FOREACH(inp, head, inp_hash) {
+		if (!(inp->inp_flags & INP_IPV6))
+			continue;
+		if (inp->inp_lport == lport && inp->inp_fport == 0 &&
+		    IN6_ARE_ADDR_EQUAL(&inp->inp_laddr6, key1) &&
+		    IN6_IS_ADDR_UNSPECIFIED(&inp->inp_faddr6) &&
+		    rtable_l2(inp->inp_rtableid) == rdomain)
+			break;
+	}
+	if (inp == NULL && ! IN6_ARE_ADDR_EQUAL(key1, key2)) {
+		head = in6_pcbhash(table, rdomain,
+		    &zeroin6_addr, 0, key2, lport);
+		LIST_FOREACH(inp, head, inp_hash) {
+			if (!(inp->inp_flags & INP_IPV6))
+				continue;
+			if (inp->inp_lport == lport && inp->inp_fport == 0 &&
+			    IN6_ARE_ADDR_EQUAL(&inp->inp_laddr6, key2) &&
+			    IN6_IS_ADDR_UNSPECIFIED(&inp->inp_faddr6) &&
+			    rtable_l2(inp->inp_rtableid) == rdomain)
+				break;
+		}
+	}
+	/*
+	 * Move this PCB to the head of hash chain so that
+	 * repeated accesses are quicker.  This is analogous to
+	 * the historic single-entry PCB cache.
+	 */
+	if (inp != NULL && inp != LIST_FIRST(head)) {
+		LIST_REMOVE(inp, inp_hash);
+		LIST_INSERT_HEAD(head, inp, inp_hash);
+	}
+#ifdef DIAGNOSTIC
+	if (inp == NULL && in_pcbnotifymiss) {
+		printf("%s: laddr= lport=%d rdom=%u\n",
+		    __func__, ntohs(lport), rdomain);
+	}
+#endif
+	return (inp);
+}
