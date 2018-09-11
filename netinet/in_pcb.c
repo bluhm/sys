@@ -131,8 +131,6 @@ int in_pcbresize (struct inpcbtable *, int);
 
 struct inpcbhead *in_pcbhash(struct inpcbtable *, int,
     const struct in_addr *, u_short, const struct in_addr *, u_short);
-struct inpcbhead *in6_pcbhash(struct inpcbtable *, int,
-    const struct in6_addr *, u_short, const struct in6_addr *, u_short);
 struct inpcbhead *in_pcblhash(struct inpcbtable *, int, u_short);
 
 struct inpcbhead *

@@ -268,6 +268,9 @@ struct inpcb *
 	 in_pcblookup_listen(struct inpcbtable *, struct in_addr, u_int,
 	    struct mbuf *, u_int);
 #ifdef INET6
+struct inpcbhead *
+	 in6_pcbhash(struct inpcbtable *, int, const struct in6_addr *,
+	    u_short, const struct in6_addr *, u_short);
 struct inpcb *
 	 in6_pcbhashlookup(struct inpcbtable *, const struct in6_addr *,
 			       u_int, const struct in6_addr *, u_int, u_int);
