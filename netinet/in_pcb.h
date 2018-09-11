@@ -249,6 +249,7 @@ struct baddynamicports {
 extern struct inpcbtable rawcbtable, rawin6pcbtable;
 extern struct baddynamicports baddynamicports;
 extern struct baddynamicports rootonlyports;
+extern int in_pcbnotifymiss;
 
 #define sotopf(so)  (so->so_proto->pr_domain->dom_family)
 
