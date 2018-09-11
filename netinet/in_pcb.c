@@ -152,24 +152,6 @@ in_pcbhash(struct inpcbtable *table, int rdom,
 }
 
 struct inpcbhead *
-in6_pcbhash(struct inpcbtable *table, int rdom,
-    const struct in6_addr *faddr, u_short fport,
-    const struct in6_addr *laddr, u_short lport)
-{
-	SIPHASH_CTX ctx;
-	u_int32_t nrdom = htonl(rdom);
-
-	SipHash24_Init(&ctx, &table->inpt_key);
-	SipHash24_Update(&ctx, &nrdom, sizeof(nrdom));
-	SipHash24_Update(&ctx, faddr, sizeof(*faddr));
-	SipHash24_Update(&ctx, &fport, sizeof(fport));
-	SipHash24_Update(&ctx, laddr, sizeof(*laddr));
-	SipHash24_Update(&ctx, &lport, sizeof(lport));
-
-	return (&table->inpt_hashtbl[SipHash24_End(&ctx) & table->inpt_mask]);
-}
-
-struct inpcbhead *
 in_pcblhash(struct inpcbtable *table, int rdom, u_short lport)
 {
 	SIPHASH_CTX ctx;

@@ -150,6 +150,24 @@ u_char inet6ctlerrmap[PRC_NCMDS] = {
 };
 #endif
 
+struct inpcbhead *
+in6_pcbhash(struct inpcbtable *table, int rdom,
+    const struct in6_addr *faddr, u_short fport,
+    const struct in6_addr *laddr, u_short lport)
+{
+	SIPHASH_CTX ctx;
+	u_int32_t nrdom = htonl(rdom);
+
+	SipHash24_Init(&ctx, &table->inpt_key);
+	SipHash24_Update(&ctx, &nrdom, sizeof(nrdom));
+	SipHash24_Update(&ctx, faddr, sizeof(*faddr));
+	SipHash24_Update(&ctx, &fport, sizeof(fport));
+	SipHash24_Update(&ctx, laddr, sizeof(*laddr));
+	SipHash24_Update(&ctx, &lport, sizeof(lport));
+
+	return (&table->inpt_hashtbl[SipHash24_End(&ctx) & table->inpt_mask]);
+}
+
 int
 in6_pcbaddrisavail(struct inpcb *inp, struct sockaddr_in6 *sin6, int wild,
     struct proc *p)
