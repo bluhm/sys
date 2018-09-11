@@ -76,30 +76,21 @@
 #include <sys/protosw.h>
 #include <sys/socket.h>
 #include <sys/socketvar.h>
-#include <sys/proc.h>
-#include <sys/pledge.h>
 #include <sys/domain.h>
+#include <sys/mount.h>
 #include <sys/pool.h>
+#include <sys/proc.h>
 
 #include <net/if.h>
 #include <net/if_var.h>
+#include <net/pfvar.h>
 #include <net/route.h>
 
 #include <netinet/in.h>
-#include <netinet/ip.h>
-#include <netinet/in_pcb.h>
 #include <netinet/in_var.h>
+#include <netinet/ip.h>
 #include <netinet/ip_var.h>
-
-#include <net/pfvar.h>
-
-#include <sys/mount.h>
-#include <nfs/nfsproto.h>
-
-#ifdef INET6
-#include <netinet6/in6_var.h>
-#include <netinet6/ip6_var.h>
-#endif /* INET6 */
+#include <netinet/in_pcb.h>
 #ifdef IPSEC
 #include <netinet/ip_esp.h>
 #endif /* IPSEC */

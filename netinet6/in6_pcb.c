@@ -99,30 +99,25 @@
  *
  */
 
+#include "pf.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/mbuf.h>
-#include <sys/domain.h>
 #include <sys/protosw.h>
 #include <sys/socket.h>
 #include <sys/socketvar.h>
-#include <sys/errno.h>
-#include <sys/time.h>
-#include <sys/proc.h>
-#include <sys/pledge.h>
 
 #include <net/if.h>
 #include <net/if_var.h>
-#include <net/route.h>
+#include <net/pfvar.h>
 
 #include <netinet/in.h>
 #include <netinet/ip.h>
-#include <netinet/in_pcb.h>
 #include <netinet/ip_var.h>
+#include <netinet/in_pcb.h>
 
 #include <netinet6/in6_var.h>
-#include <netinet/ip6.h>
-#include <netinet6/ip6_var.h>
 
 /*
  * External globals
