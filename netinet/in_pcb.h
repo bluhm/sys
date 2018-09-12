@@ -110,6 +110,7 @@ struct inpcb {
 	} inp_ru;
 #define	inp_route	inp_ru.ru_route
 #define	inp_route6	inp_ru.ru_route6
+	struct    refcnt inp_refcnt;	/* refcount PCB, delay memory free */
 	int	  inp_flags;		/* generic IP/datagram flags */
 	union {				/* Header prototype. */
 		struct ip hu_ip;

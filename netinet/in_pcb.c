@@ -227,6 +227,7 @@ in_pcballoc(struct socket *so, struct inpcbtable *table)
 		return (ENOBUFS);
 	inp->inp_table = table;
 	inp->inp_socket = so;
+	refcnt_init(&inp->inp_refcnt);
 	inp->inp_seclevel[SL_AUTH] = IPSEC_AUTH_LEVEL_DEFAULT;
 	inp->inp_seclevel[SL_ESP_TRANS] = IPSEC_ESP_TRANS_LEVEL_DEFAULT;
 	inp->inp_seclevel[SL_ESP_NETWORK] = IPSEC_ESP_NETWORK_LEVEL_DEFAULT;
