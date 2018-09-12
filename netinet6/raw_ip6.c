@@ -467,7 +467,7 @@ rip6_output(struct mbuf *m, struct socket *so, struct sockaddr *dstaddr,
 #if NPF > 0
 	if (in6p->inp_socket->so_state & SS_ISCONNECTED &&
 	    so->so_proto->pr_protocol != IPPROTO_ICMPV6)
-		m->m_pkthdr.pf.inp = in6p;
+		pf_mbuf_link_inpcb(m, in6p);
 #endif
 
 	error = ip6_output(m, optp, &in6p->inp_route6, flags,
