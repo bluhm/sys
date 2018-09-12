@@ -998,7 +998,7 @@ udp_output(struct inpcb *inp, struct mbuf *m, struct mbuf *addr,
 
 #if NPF > 0
 	if (inp->inp_socket->so_state & SS_ISCONNECTED)
-		m->m_pkthdr.pf.inp = inp;
+		pf_mbuf_link_inpcb(m, inp);
 #endif
 
 	error = ip_output(m, inp->inp_options, &inp->inp_route,

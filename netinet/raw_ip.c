@@ -287,7 +287,7 @@ rip_output(struct mbuf *m, struct socket *so, struct sockaddr *dstaddr,
 #if NPF > 0
 	if (inp->inp_socket->so_state & SS_ISCONNECTED &&
 	    ip->ip_p != IPPROTO_ICMP)
-		m->m_pkthdr.pf.inp = inp;
+		pf_mbuf_link_inpcb(m, inp);
 #endif
 
 	error = ip_output(m, inp->inp_options, &inp->inp_route, flags,
