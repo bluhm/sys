@@ -261,6 +261,9 @@ int	 in_pcbaddrisavail(struct inpcb *, struct sockaddr_in *, int,
 	    struct proc *);
 int	 in_pcbconnect(struct inpcb *, struct mbuf *);
 void	 in_pcbdetach(struct inpcb *);
+struct inpcb *
+	 in_pcbref(struct inpcb *);
+void	 in_pcbunref(struct inpcb *);
 void	 in_pcbdisconnect(struct inpcb *);
 struct inpcb *
 	 in_pcbhashlookup(struct inpcbtable *, struct in_addr,

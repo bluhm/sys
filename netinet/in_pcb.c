@@ -578,7 +578,29 @@ in_pcbdetach(struct inpcb *inp)
 	LIST_REMOVE(inp, inp_hash);
 	TAILQ_REMOVE(&inp->inp_table->inpt_queue, inp, inp_queue);
 	inp->inp_table->inpt_count--;
-	pool_put(&inpcb_pool, inp);
+	in_pcbunref(inp);
+}
+
+struct inpcb *
+in_pcbref(struct inpcb *inp)
+{
+	if (inp != NULL)
+		refcnt_take(&inp->inp_refcnt);
+	return inp;
+}
+
+void
+in_pcbunref(struct inpcb *inp)
+{
+	if (refcnt_rele(&inp->inp_refcnt)) {
+		KASSERT((LIST_NEXT(inp, inp_hash) == NULL) ||
+		    (LIST_NEXT(inp, inp_hash) == _Q_INVALID));
+		KASSERT((LIST_NEXT(inp, inp_lhash) == NULL) ||
+		    (LIST_NEXT(inp, inp_lhash) == _Q_INVALID));
+		KASSERT((TAILQ_NEXT(inp, inp_queue) == NULL) ||
+		    (TAILQ_NEXT(inp, inp_queue) == _Q_INVALID));
+		pool_put(&inpcb_pool, inp);
+	}
 }
 
 void
