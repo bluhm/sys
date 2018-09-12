@@ -7412,7 +7412,7 @@ void
 pf_state_key_link_inpcb(struct pf_state_key *sk, struct inpcb *inp)
 {
 	KASSERT(sk->inp == NULL);
-	sk->inp = inp;
+	sk->inp = in_pcbref(inp);
 	KASSERT(inp->inp_pf_sk == NULL);
 	inp->inp_pf_sk = pf_state_key_ref(sk);
 }
@@ -7427,6 +7427,7 @@ pf_inpcb_unlink_state_key(struct inpcb *inp)
 		sk->inp = NULL;
 		inp->inp_pf_sk = NULL;
 		pf_state_key_unref(sk);
+		in_pcbunref(inp);
 	}
 }
 
@@ -7440,6 +7441,7 @@ pf_state_key_unlink_inpcb(struct pf_state_key *sk)
 		sk->inp = NULL;
 		inp->inp_pf_sk = NULL;
 		pf_state_key_unref(sk);
+		in_pcbunref(inp);
 	}
 }
 
