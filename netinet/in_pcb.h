@@ -91,7 +91,7 @@ union inpaddru {
  */
 struct inpcb {
 	LIST_ENTRY(inpcb) inp_hash;		/* local and foreign hash */
-	LIST_ENTRY(inpcb) inp_lhash;		/* extra hash for lport */
+	LIST_ENTRY(inpcb) inp_lhash;		/* locol port hash */
 	TAILQ_ENTRY(inpcb) inp_queue;		/* inet PCB queue */
 	struct	  inpcbtable *inp_table;	/* inet queue/hash table */
 	union	  inpaddru inp_faddru;		/* Foreign address. */
@@ -152,7 +152,7 @@ struct inpcbtable {
 	TAILQ_HEAD(inpthead, inpcb) inpt_queue;	/* inet PCB queue */
 	struct	inpcbhead *inpt_hashtbl;	/* local and foreign hash */
 	struct	inpcbhead *inpt_lhashtbl;	/* local port hash */
-	SIPHASH_KEY inpt_key, inpt_lkey;	/* secret for both hashes */
+	SIPHASH_KEY inpt_key, inpt_lkey;	/* secrets for hashes */
 	u_long	inpt_mask, inpt_lmask;		/* hash masks */
 	int	inpt_count, inpt_size;		/* queue count, hash size */
 };
