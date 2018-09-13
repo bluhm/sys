@@ -153,7 +153,7 @@ struct inpcbtable {
 	TAILQ_HEAD(inpthead, inpcb) inpt_queue;	/* inet PCB queue */
 	struct	inpcbhead *inpt_hashtbl;	/* local and foreign hash */
 	struct	inpcbhead *inpt_lhashtbl;	/* local port hash */
-	SIPHASH_KEY inpt_key;			/* secret for both hashes */
+	SIPHASH_KEY inpt_key, inpt_lkey;	/* secret for both hashes */
 	u_long	inpt_mask, inpt_lmask;		/* hash masks */
 	int	inpt_count, inpt_size;		/* queue count, hash size */
 };
