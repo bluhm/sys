@@ -554,9 +554,14 @@ in_pcbdisconnect(struct inpcb *inp)
 void
 in_pcbdetach(struct inpcb *inp)
 {
-	struct socket *so = inp->inp_socket;
+	struct socket *so;
 
 	NET_ASSERT_LOCKED();
+
+	mtx_enter(&inp->inp_mtx);
+	so = inp->inp_socket;
+	inp->inp_socket = NULL;
+	mtx_leave(&inp->inp_mtx);
 
 	so->so_pcb = NULL;
 	/*
@@ -605,6 +610,7 @@ void
 in_pcbunref(struct inpcb *inp)
 {
 	if (refcnt_rele(&inp->inp_refcnt)) {
+		KASSERT(inp->inp_socket == NULL);
 		KASSERT((LIST_NEXT(inp, inp_hash) == NULL) ||
 		    (LIST_NEXT(inp, inp_hash) == _Q_INVALID));
 		KASSERT((LIST_NEXT(inp, inp_lhash) == NULL) ||
