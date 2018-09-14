@@ -1320,10 +1320,19 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 	}								\
 	needed += elem_size;						\
 } while (0)
+
 #define FILLIT(fp, fdp, i, vp, pr) \
 	FILLIT2(fp, fdp, i, vp, pr, NULL)
-#define FILLSO(so) \
-	FILLIT2(NULL, NULL, 0, NULL, NULL, so)
+
+#define FILLINPCB(inp) do {						\
+	struct socket *so;						\
+									\
+	mtx_enter(&inp->inp_mtx);					\
+	so = inp->inp_socket;						\
+	if (so != NULL)							\
+		FILLIT2(NULL, NULL, 0, NULL, NULL, so);			\
+	mtx_leave(&inp->inp_mtx);					\
+} while (0)
 
 	switch (op) {
 	case KERN_FILE_BYFILE:
@@ -1339,32 +1348,16 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 			 * socket locks.  XXXSMP
 			 */
 			mtx_enter(&inpcbtable_mtx);
-			TAILQ_FOREACH(inp, &tcbtable.inpt_queue, inp_queue) {
-				mtx_enter(&inp->inp_mtx);
-				if (inp->inp_socket != NULL)
-					FILLSO(inp->inp_socket);
-				mtx_leave(&inp->inp_mtx);
-			}
-			TAILQ_FOREACH(inp, &udbtable.inpt_queue, inp_queue) {
-				mtx_enter(&inp->inp_mtx);
-				if (inp->inp_socket != NULL)
-					FILLSO(inp->inp_socket);
-				mtx_leave(&inp->inp_mtx);
-			}
-			TAILQ_FOREACH(inp, &rawcbtable.inpt_queue, inp_queue) {
-				mtx_enter(&inp->inp_mtx);
-				if (inp->inp_socket != NULL)
-					FILLSO(inp->inp_socket);
-				mtx_leave(&inp->inp_mtx);
-			}
+			TAILQ_FOREACH(inp, &tcbtable.inpt_queue, inp_queue)
+				FILLINPCB(inp);
+			TAILQ_FOREACH(inp, &udbtable.inpt_queue, inp_queue)
+				FILLINPCB(inp);
+			TAILQ_FOREACH(inp, &rawcbtable.inpt_queue, inp_queue)
+				FILLINPCB(inp);
 #ifdef INET6
 			TAILQ_FOREACH(inp, &rawin6pcbtable.inpt_queue,
-			    inp_queue) {
-				mtx_enter(&inp->inp_mtx);
-				if (inp->inp_socket != NULL)
-					FILLSO(inp->inp_socket);
-				mtx_leave(&inp->inp_mtx);
-			}
+			    inp_queue)
+				FILLINPCB(inp);
 #endif
 			mtx_leave(&inpcbtable_mtx);
 		}
