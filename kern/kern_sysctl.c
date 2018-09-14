@@ -1327,12 +1327,9 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 	FILLIT2(fp, fdp, i, vp, pr, NULL)
 
 #define FILLINPCB(inp) do {						\
-	struct socket *so;						\
-									\
 	mtx_enter(&inp->inp_mtx);					\
-	so = inp->inp_socket;						\
-	if (so != NULL)							\
-		FILLIT2(NULL, NULL, 0, NULL, NULL, so);			\
+	if (inp->inp_socket != NULL)					\
+		FILLIT2(NULL, NULL, 0, NULL, NULL, inp->inp_socket);	\
 	mtx_leave(&inp->inp_mtx);					\
 } while (0)
 
