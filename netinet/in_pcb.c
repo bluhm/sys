@@ -691,7 +691,7 @@ in_pcbnotifyall(struct inpcbtable *table, struct sockaddr *dst, u_int rtable,
 #endif
 		if (inp->inp_faddr.s_addr != faddr.s_addr ||
 		    rtable_l2(inp->inp_rtableid) != rdomain ||
-		    inp->inp_socket == 0) {
+		    inp->inp_socket == NULL) {
 			continue;
 		}
 		/* XXXSMP Is it safe to call notify with inpcbtable mutex? */
