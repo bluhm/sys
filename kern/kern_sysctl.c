@@ -1343,9 +1343,9 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 			/*
 			 * The inpcb and socket fields are accessed and read
 			 * without net lock.  This may result in inconsistent
-			 * data provided to userland.  The fix will be to lock
-			 * the in inpcb within the loops when we have per
-			 * socket locks.  XXXSMP
+			 * data provided to userland.  The fix will be to
+			 * protect the socket fields with the inpcb mutex.
+			 * XXXSMP
 			 */
 			mtx_enter(&inpcbtable_mtx);
 			TAILQ_FOREACH(inp, &tcbtable.inpt_queue, inp_queue)
