@@ -1179,7 +1179,8 @@ fill_file(struct kinfo_file *kf, struct file *fp, struct filedesc *fdp,
 			kf->inp_rtableid = inpcb->inp_rtableid;
 			if (so->so_type == SOCK_RAW)
 				kf->inp_proto = inpcb->inp_ip.ip_p;
-			if (so->so_proto->pr_protocol == IPPROTO_TCP) {
+			if (so->so_proto->pr_protocol == IPPROTO_TCP &&
+			    inpcb->inp_ppcb != NULL) {
 				struct tcpcb *tcpcb = (void *)inpcb->inp_ppcb;
 				kf->t_rcv_wnd = tcpcb->rcv_wnd;
 				kf->t_snd_wnd = tcpcb->snd_wnd;
@@ -1206,7 +1207,8 @@ fill_file(struct kinfo_file *kf, struct file *fp, struct filedesc *fdp,
 			kf->inp_rtableid = inpcb->inp_rtableid;
 			if (so->so_type == SOCK_RAW)
 				kf->inp_proto = inpcb->inp_ipv6.ip6_nxt;
-			if (so->so_proto->pr_protocol == IPPROTO_TCP) {
+			if (so->so_proto->pr_protocol == IPPROTO_TCP &&
+			    inpcb->inp_ppcb != NULL) {
 				struct tcpcb *tcpcb = (void *)inpcb->inp_ppcb;
 				kf->t_rcv_wnd = tcpcb->rcv_wnd;
 				kf->t_snd_wnd = tcpcb->snd_wnd;
