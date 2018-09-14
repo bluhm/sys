@@ -87,7 +87,8 @@ union inpaddru {
 /*
  *  Locks used to protect struct members in this file:
  *	I	immutable after creation
- *	t	protected by internet PCB table mutex inpcbtable_mtx
+ *	t	protected by internet table mutex inpcbtable_mtx
+ *	p	protected by internet PCB mutex inp_mtx
  */
 /*
  * Common structure pcb for internet protocol implementation.
@@ -110,8 +111,8 @@ struct inpcb {
 #define	inp_laddr6	inp_laddru.iau_addr6
 	u_int16_t inp_fport;		/* foreign port */
 	u_int16_t inp_lport;		/* local port */
-	struct	  socket *inp_socket;	/* back pointer to socket */
-	caddr_t	  inp_ppcb;		/* pointer to per-protocol pcb */
+	struct	  socket *inp_socket;	/* [p] back pointer to socket */
+	caddr_t	  inp_ppcb;		/* [p] pointer to per-protocol pcb */
 	union {				/* Route (notice increased size). */
 		struct route ru_route;
 		struct route_in6 ru_route6;
