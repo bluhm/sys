@@ -64,6 +64,7 @@
 #ifndef _NETINET_IN_PCB_H_
 #define _NETINET_IN_PCB_H_
 
+#include <sys/mutex.h>
 #include <sys/queue.h>
 #include <sys/refcnt.h>
 #include <netinet/ip6.h>
@@ -100,6 +101,7 @@ struct inpcb {
 	LIST_ENTRY(inpcb) inp_lhash;		/* [t] local port hash */
 	TAILQ_ENTRY(inpcb) inp_queue;		/* [t] inet PCB queue */
 	struct	  inpcbtable *inp_table;	/* [I] inet queue/hash table */
+	struct	  mutex inp_mtx;		/* protect PCB and socket */
 	union	  inpaddru inp_faddru;		/* Foreign address. */
 	union	  inpaddru inp_laddru;		/* Local address. */
 #define	inp_faddr	inp_faddru.iau_a4u.inaddr
