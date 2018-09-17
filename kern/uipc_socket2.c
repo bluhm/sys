@@ -333,12 +333,16 @@ soassertlocked(struct socket *so)
 int
 sosleep(struct socket *so, void *ident, int prio, const char *wmesg, int timo)
 {
-	if ((so->so_proto->pr_domain->dom_family != PF_UNIX) &&
-	    (so->so_proto->pr_domain->dom_family != PF_ROUTE) &&
-	    (so->so_proto->pr_domain->dom_family != PF_KEY)) {
+	switch (so->so_proto->pr_domain->dom_family) {
+	case PF_INET:
+	case PF_INET6:
 		return rwsleep(ident, &netlock, prio, wmesg, timo);
-	} else
+	case PF_UNIX:
+	case PF_ROUTE:
+	case PF_KEY:
+	default:
 		return tsleep(ident, prio, wmesg, timo);
+	}
 }
 
 /*
