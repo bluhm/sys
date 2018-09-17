@@ -1036,6 +1036,12 @@ soshutdown(struct socket *so, int how)
 	int s, error = 0;
 
 	s = solock(so);
+	switch (pr->pr_domain->dom_family) {
+	case PF_INET:
+	case PF_INET6:
+		(*pr->pr_usrreq)(so, PRU_LOCK, NULL, NULL, NULL, NULL);
+		break;
+	}
 	switch (how) {
 	case SHUT_RD:
 		sorflush(so);
@@ -1049,6 +1055,12 @@ soshutdown(struct socket *so, int how)
 		break;
 	default:
 		error = EINVAL;
+		break;
+	}
+	switch (pr->pr_domain->dom_family) {
+	case PF_INET:
+	case PF_INET6:
+		(*pr->pr_usrreq)(so, PRU_UNLOCK, NULL, NULL, NULL, NULL);
 		break;
 	}
 	sounlock(so, s);

@@ -287,7 +287,6 @@ solock(struct socket *so)
 		KERNEL_LOCK();
 		break;
 	}
-	(*so->so_proto->pr_usrreq)(so, PRU_LOCK, NULL, NULL, NULL, NULL);
 
 	return (SL_LOCKED);
 }
@@ -299,10 +298,6 @@ sounlock(struct socket *so, int s)
 
 	if (s != SL_LOCKED)
 		return;
-
-	if (so != NULL)
-		(*so->so_proto->pr_usrreq)(so, PRU_UNLOCK, NULL, NULL, NULL,
-		    NULL);
 
 	switch (so->so_proto->pr_domain->dom_family) {
 	case PF_INET:
