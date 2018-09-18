@@ -222,8 +222,6 @@ in_pcballoc(struct socket *so, struct inpcbtable *table)
 	struct inpcb *inp;
 	struct inpcbhead *head;
 
-	NET_ASSERT_LOCKED();
-
 	if (inpcb_pool_initialized == 0) {
 		pool_init(&inpcb_pool, sizeof(struct inpcb), 0,
 		    IPL_SOFTNET, 0, "inpcbpl", NULL);
@@ -233,7 +231,6 @@ in_pcballoc(struct socket *so, struct inpcbtable *table)
 	if (inp == NULL)
 		return (ENOBUFS);
 	inp->inp_table = table;
-	inp->inp_socket = so;
 	refcnt_init(&inp->inp_refcnt);
 	inp->inp_seclevel[SL_AUTH] = IPSEC_AUTH_LEVEL_DEFAULT;
 	inp->inp_seclevel[SL_ESP_TRANS] = IPSEC_ESP_TRANS_LEVEL_DEFAULT;
@@ -269,10 +266,14 @@ in_pcballoc(struct socket *so, struct inpcbtable *table)
 		    &inp->inp_faddr, inp->inp_fport,
 		    &inp->inp_laddr, inp->inp_lport);
 	LIST_INSERT_HEAD(head, inp, inp_hash);
+	mtx_enter(&inp->inp_mtx);
+	inp->inp_socket = so;
+	so->so_pcb = inp;
+	/* copy of the mutex for the socket to lock independent of af */
+	so->so_mtx = &inp->inp_mtx;
 	mtx_leave(&inpcbtable_mtx);
 
-	so->so_pcb = inp;
-
+	/* inp_mtx is still locked when we return */
 	return (0);
 }
 
@@ -556,14 +557,14 @@ in_pcbdetach(struct inpcb *inp)
 {
 	struct socket *so;
 
-	NET_ASSERT_LOCKED();
+	MUTEX_ASSERT_LOCKED(&inp->inp_mtx);
 
-	mtx_enter(&inp->inp_mtx);
 	so = inp->inp_socket;
 	inp->inp_socket = NULL;
+	so->so_pcb = NULL;
+	so->so_mtx = NULL;
 	mtx_leave(&inp->inp_mtx);
 
-	so->so_pcb = NULL;
 	/*
 	 * As long as the NET_LOCK() is the default lock for Internet
 	 * sockets, do not release it to not introduce new sleeping
@@ -993,8 +994,8 @@ in_pcbrehash_locked(struct inpcb *inp)
 	struct inpcbtable *table = inp->inp_table;
 	struct inpcbhead *head;
 
-	NET_ASSERT_LOCKED();
 	MUTEX_ASSERT_LOCKED(&inpcbtable_mtx);
+	//MUTEX_ASSERT_LOCKED(&inp->pcb_mtx);
 
 	LIST_REMOVE(inp, inp_lhash);
 	head = in_pcblhash(table, inp->inp_rtableid, inp->inp_lport);

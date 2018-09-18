@@ -43,6 +43,7 @@ typedef	__socklen_t	socklen_t;	/* length type for network syscalls */
 #endif
 
 TAILQ_HEAD(soqhead, socket);
+struct mutex;
 
 /*
  * Kernel structure per socket.
@@ -53,6 +54,7 @@ TAILQ_HEAD(soqhead, socket);
 struct socket {
 	const struct protosw *so_proto;	/* protocol handle */
 	void	*so_pcb;		/* protocol control block */
+	struct	mutex *so_mtx;		/* optional mutex in internet PCB */
 	u_int	so_state;		/* internal state flags SS_*, below */
 	short	so_type;		/* generic type, see socket.h */
 	short	so_options;		/* from socket call, see socket.h */

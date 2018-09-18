@@ -71,6 +71,7 @@
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/mbuf.h>
+#include <sys/mutex.h>
 #include <sys/socket.h>
 #include <sys/socketvar.h>
 #include <sys/protosw.h>
@@ -238,11 +239,13 @@ tcp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 			break;
 
 		tp->t_template = tcp_template(tp);
-		if (tp->t_template == 0) {
+		if (tp->t_template == NULL) {
 			in_pcbdisconnect(inp);
 			error = ENOBUFS;
 			break;
 		}
+
+		
 
 		so->so_state |= SS_CONNECTOUT;
 
@@ -574,7 +577,6 @@ tcp_attach(struct socket *so, int proto)
 			return (error);
 	}
 
-	NET_ASSERT_LOCKED();
 	error = in_pcballoc(so, &tcbtable);
 	if (error)
 		return (error);
@@ -601,8 +603,14 @@ tcp_attach(struct socket *so, int proto)
 	if ((so->so_options & SO_LINGER) && so->so_linger == 0)
 		so->so_linger = TCP_LINGERTIME;
 
-	if (so->so_options & SO_DEBUG)
+	if (so->so_options & SO_DEBUG) {
+		mtx_leave(&inp->inp_mtx);
+		NET_LOCK();
+		mtx_enter(&inp->inp_mtx);
+		tp = intotcpcb(inp);
 		tcp_trace(TA_USER, TCPS_CLOSED, tp, tp, NULL, PRU_ATTACH, 0);
+		NET_UNLOCK();
+	}
 	return (0);
 }
 
@@ -646,8 +654,14 @@ tcp_detach(struct socket *so)
 	 */
 	tp = tcp_disconnect(tp);
 
-	if (otp)
+	if (otp) {
+		mtx_leave(&inp->inp_mtx);
+		NET_LOCK();
+		mtx_enter(&inp->inp_mtx);
+		tp = intotcpcb(inp);
 		tcp_trace(TA_USER, ostate, tp, otp, NULL, PRU_DETACH, 0);
+		NET_UNLOCK();
+	}
 	return (error);
 }
 

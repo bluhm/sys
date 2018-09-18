@@ -502,6 +502,8 @@ tcp_close(struct tcpcb *tp)
 	struct socket *so = inp->inp_socket;
 	struct sackhole *p, *q;
 
+	MUTEX_ASSERT_LOCKED(&inp->inp_mtx);
+
 	/* free the reassembly queue, if any */
 	tcp_freeq(tp);
 
@@ -520,9 +522,7 @@ tcp_close(struct tcpcb *tp)
 	/* Free tcpcb after all pending timers have been run. */
 	TCP_TIMER_ARM(tp, TCPT_REAPER, 0);
 
-	mtx_enter(&inp->inp_mtx);
 	inp->inp_ppcb = NULL;
-	mtx_leave(&inp->inp_mtx);
 	soisdisconnected(so);
 	in_pcbdetach(inp);
 	return (NULL);
