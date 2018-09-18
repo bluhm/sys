@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_tc.c,v 1.33 2018/05/28 18:05:42 guenther Exp $ */
+/*	$OpenBSD: kern_tc.c,v 1.34 2018/09/18 20:47:11 bluhm Exp $ */
 
 /*
  * Copyright (c) 2000 Poul-Henning Kamp <phk@FreeBSD.org>
