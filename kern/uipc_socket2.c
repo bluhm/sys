@@ -278,7 +278,8 @@ solock(struct socket *so)
 	switch (so->so_proto->pr_domain->dom_family) {
 	case PF_INET:
 	case PF_INET6:
-		NET_LOCK();
+		if (so->so_mtx != NULL)
+			mtx_enter(so->so_mtx);
 		break;
 	case PF_UNIX:
 	case PF_ROUTE:
@@ -302,7 +303,8 @@ sounlock(struct socket *so, int s)
 	switch (so->so_proto->pr_domain->dom_family) {
 	case PF_INET:
 	case PF_INET6:
-		NET_UNLOCK();
+		if (so->so_mtx != NULL)
+			mtx_leave(so->so_mtx);
 		break;
 	case PF_UNIX:
 	case PF_ROUTE:
@@ -319,7 +321,8 @@ soassertlocked(struct socket *so)
 	switch (so->so_proto->pr_domain->dom_family) {
 	case PF_INET:
 	case PF_INET6:
-		NET_ASSERT_LOCKED();
+		if (so->so_mtx != NULL)
+			MUTEX_ASSERT_LOCKED(so->so_mtx);
 		break;
 	case PF_UNIX:
 	case PF_ROUTE:
@@ -333,11 +336,9 @@ soassertlocked(struct socket *so)
 int
 sosleep(struct socket *so, void *ident, int prio, const char *wmesg, int timo)
 {
-	if ((so->so_proto->pr_domain->dom_family != PF_UNIX) &&
-	    (so->so_proto->pr_domain->dom_family != PF_ROUTE) &&
-	    (so->so_proto->pr_domain->dom_family != PF_KEY)) {
-		return rwsleep(ident, &netlock, prio, wmesg, timo);
-	} else
+	if (so->so_mtx)
+		return msleep(ident, so->so_mtx, prio, wmesg, timo);
+	else
 		return tsleep(ident, prio, wmesg, timo);
 }
 
