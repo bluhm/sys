@@ -22,6 +22,7 @@
  */
 
 #include <sys/param.h>
+#include <sys/atomic.h>
 #include <sys/kernel.h>
 #include <sys/timeout.h>
 #include <sys/sysctl.h>
@@ -141,8 +142,10 @@ binuptime(struct bintime *bt)
 	do {
 		th = timehands;
 		gen = th->th_generation;
+		membar_consumer();
 		*bt = th->th_offset;
 		bintime_addx(bt, th->th_scale * tc_delta(th));
+		membar_consumer();
 	} while (gen == 0 || gen != th->th_generation);
 }
 
@@ -199,7 +202,9 @@ getnanouptime(struct timespec *tsp)
 	do {
 		th = timehands;
 		gen = th->th_generation;
+		membar_consumer();
 		bintime2timespec(&th->th_offset, tsp);
+		membar_consumer();
 	} while (gen == 0 || gen != th->th_generation);
 }
 
@@ -212,7 +217,9 @@ getmicrouptime(struct timeval *tvp)
 	do {
 		th = timehands;
 		gen = th->th_generation;
+		membar_consumer();
 		bintime2timeval(&th->th_offset, tvp);
+		membar_consumer();
 	} while (gen == 0 || gen != th->th_generation);
 }
 
@@ -225,7 +232,9 @@ getnanotime(struct timespec *tsp)
 	do {
 		th = timehands;
 		gen = th->th_generation;
+		membar_consumer();
 		*tsp = th->th_nanotime;
+		membar_consumer();
 	} while (gen == 0 || gen != th->th_generation);
 }
 
@@ -238,7 +247,9 @@ getmicrotime(struct timeval *tvp)
 	do {
 		th = timehands;
 		gen = th->th_generation;
+		membar_consumer();
 		*tvp = th->th_microtime;
+		membar_consumer();
 	} while (gen == 0 || gen != th->th_generation);
 }
 
@@ -390,6 +401,7 @@ tc_windup(void)
 	th = tho->th_next;
 	ogen = th->th_generation;
 	th->th_generation = 0;
+	membar_producer();
 	memcpy(th, tho, offsetof(struct timehands, th_generation));
 
 	/*
@@ -479,6 +491,7 @@ tc_windup(void)
 	 * Now that the struct timehands is again consistent, set the new
 	 * generation number, making sure to not make it zero.
 	 */
+	membar_sync();
 	if (++ogen == 0)
 		ogen = 1;
 	th->th_generation = ogen;
@@ -486,6 +499,7 @@ tc_windup(void)
 	/* Go live with the new struct timehands. */
 	time_second = th->th_microtime.tv_sec;
 	time_uptime = th->th_offset.sec;
+	membar_producer();
 	timehands = th;
 }
 
