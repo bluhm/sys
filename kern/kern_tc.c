@@ -142,8 +142,10 @@ binuptime(struct bintime *bt)
 	do {
 		th = timehands;
 		gen = th->th_generation;
+		membar_consumer();
 		*bt = th->th_offset;
 		bintime_addx(bt, th->th_scale * tc_delta(th));
+		membar_consumer();
 	} while (gen == 0 || gen != th->th_generation);
 }
 
@@ -200,7 +202,9 @@ getnanouptime(struct timespec *tsp)
 	do {
 		th = timehands;
 		gen = th->th_generation;
+		membar_consumer();
 		bintime2timespec(&th->th_offset, tsp);
+		membar_consumer();
 	} while (gen == 0 || gen != th->th_generation);
 }
 
@@ -213,7 +217,9 @@ getmicrouptime(struct timeval *tvp)
 	do {
 		th = timehands;
 		gen = th->th_generation;
+		membar_consumer();
 		bintime2timeval(&th->th_offset, tvp);
+		membar_consumer();
 	} while (gen == 0 || gen != th->th_generation);
 }
 
@@ -226,7 +232,9 @@ getnanotime(struct timespec *tsp)
 	do {
 		th = timehands;
 		gen = th->th_generation;
+		membar_consumer();
 		*tsp = th->th_nanotime;
+		membar_consumer();
 	} while (gen == 0 || gen != th->th_generation);
 }
 
@@ -239,7 +247,9 @@ getmicrotime(struct timeval *tvp)
 	do {
 		th = timehands;
 		gen = th->th_generation;
+		membar_consumer();
 		*tvp = th->th_microtime;
+		membar_consumer();
 	} while (gen == 0 || gen != th->th_generation);
 }
 
