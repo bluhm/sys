@@ -689,6 +689,7 @@ in_pcbnotifyall(struct inpcbtable *table, struct sockaddr *dst, u_int rtable,
 		return;
 
 	rdomain = rtable_l2(rtable);
+	KERNEL_LOCK();
 	mtx_enter(&inpcbtable_mtx);
 	TAILQ_FOREACH_SAFE(inp, &table->inpt_queue, inp_queue, ninp) {
 #ifdef INET6
@@ -700,11 +701,17 @@ in_pcbnotifyall(struct inpcbtable *table, struct sockaddr *dst, u_int rtable,
 		    inp->inp_socket == NULL) {
 			continue;
 		}
-		/* XXXSMP Is it safe to call notify with inpcbtable mutex? */
+		/*
+		 * The notify functions may grab the kernel lock.  Sometimes
+		 * we already hold the kernel lock when we acquire the pcb
+		 * mutex.  So do an extra kernel lock before the mutex outside
+		 * of this loop.  XXXSMP
+		 */
 		if (notify)
 			(*notify)(inp, errno);
 	}
 	mtx_leave(&inpcbtable_mtx);
+	KERNEL_UNLOCK();
 }
 
 /*
