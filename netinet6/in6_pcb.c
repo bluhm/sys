@@ -474,7 +474,7 @@ in6_pcbnotify(struct inpcbtable *table, struct sockaddr_in6 *dst,
 		else if (!IN6_ARE_ADDR_EQUAL(&inp->inp_faddr6,
 					     &dst->sin6_addr) ||
 			 rtable_l2(inp->inp_rtableid) != rdomain ||
-			 inp->inp_socket == 0 ||
+			 inp->inp_socket == NULL ||
 			 (lport && inp->inp_lport != lport) ||
 			 (!IN6_IS_ADDR_UNSPECIFIED(&sa6_src.sin6_addr) &&
 			  !IN6_ARE_ADDR_EQUAL(&inp->inp_laddr6,
