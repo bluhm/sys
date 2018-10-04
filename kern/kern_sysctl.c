@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_sysctl.c,v 1.348 2018/09/26 17:23:13 cheloha Exp $	*/
+/*	$OpenBSD: kern_sysctl.c,v 1.349 2018/10/04 17:33:40 bluhm Exp $	*/
 /*	$NetBSD: kern_sysctl.c,v 1.17 1996/05/20 17:49:05 mrg Exp $	*/
 
 /*-
