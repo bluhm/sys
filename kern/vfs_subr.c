@@ -1,4 +1,4 @@
-/*	$OpenBSD: vfs_subr.c,v 1.279 2018/09/17 14:56:37 visa Exp $	*/
+/*	$OpenBSD: vfs_subr.c,v 1.282 2018/09/29 04:29:48 visa Exp $	*/
 /*	$NetBSD: vfs_subr.c,v 1.53 1996/04/22 01:39:13 christos Exp $	*/
 
 /*
@@ -64,6 +64,7 @@
 #include <sys/pool.h>
 #include <sys/tree.h>
 #include <sys/specdev.h>
+#include <sys/atomic.h>
 
 #include <netinet/in.h>
 
@@ -163,6 +164,42 @@ vntblinit(void)
 }
 
 /*
+ * Allocate a mount point.
+ *
+ * The returned mount point is marked as busy.
+ */
+struct mount *
+vfs_mount_alloc(struct vnode *vp, struct vfsconf *vfsp)
+{
+	struct mount *mp;
+
+	mp = malloc(sizeof(*mp), M_MOUNT, M_WAITOK|M_ZERO);
+	rw_init_flags(&mp->mnt_lock, "vfslock", RWL_IS_VNODE);
+	(void)vfs_busy(mp, VB_READ|VB_NOWAIT);
+
+	LIST_INIT(&mp->mnt_vnodelist);
+	mp->mnt_vnodecovered = vp;
+
+	atomic_inc_int(&vfsp->vfc_refcount);
+	mp->mnt_vfc = vfsp;
+	mp->mnt_op = vfsp->vfc_vfsops;
+	mp->mnt_flag = vfsp->vfc_flags & MNT_VISFLAGMASK;
+	strncpy(mp->mnt_stat.f_fstypename, vfsp->vfc_name, MFSNAMELEN);
+
+	return (mp);
+}
+
+/*
+ * Release a mount point.
+ */
+void
+vfs_mount_free(struct mount *mp)
+{
+	atomic_dec_int(&mp->mnt_vfc->vfc_refcount);
+	free(mp, M_MOUNT, sizeof(*mp));
+}
+
+/*
  * Mark a mount point as busy. Used to synchronize access and to delay
  * unmounting.
  *
@@ -173,10 +210,6 @@ int
 vfs_busy(struct mount *mp, int flags)
 {
 	int rwflags = 0;
-
-	/* new mountpoints need their lock initialised */
-	if (mp->mnt_lock.rwl_name == NULL)
-		rw_init_flags(&mp->mnt_lock, "vfslock", RWL_IS_VNODE);
 
 	if (flags & VB_WRITE)
 		rwflags |= RW_WRITE;
@@ -232,16 +265,8 @@ vfs_rootmountalloc(char *fstypename, char *devname, struct mount **mpp)
 	vfsp = vfs_byname(fstypename);
 	if (vfsp == NULL)
 		return (ENODEV);
-	mp = malloc(sizeof(*mp), M_MOUNT, M_WAITOK|M_ZERO);
-	(void)vfs_busy(mp, VB_READ|VB_NOWAIT);
-	LIST_INIT(&mp->mnt_vnodelist);
-	mp->mnt_vfc = vfsp;
-	mp->mnt_op = vfsp->vfc_vfsops;
-	mp->mnt_flag = MNT_RDONLY;
-	mp->mnt_vnodecovered = NULLVP;
-	vfsp->vfc_refcount++;
-	mp->mnt_flag |= vfsp->vfc_flags & MNT_VISFLAGMASK;
-	strncpy(mp->mnt_stat.f_fstypename, vfsp->vfc_name, MFSNAMELEN);
+	mp = vfs_mount_alloc(NULLVP, vfsp);
+	mp->mnt_flag |= MNT_RDONLY;
 	mp->mnt_stat.f_mntonname[0] = '/';
 	copystr(devname, mp->mnt_stat.f_mntfromname, MNAMELEN, 0);
 	copystr(devname, mp->mnt_stat.f_mntfromspec, MNAMELEN, 0);
@@ -1682,7 +1707,7 @@ vfs_shutdown(struct proc *p)
 	acct_shutdown();
 #endif
 
-	printf("syncing disks... ");
+	printf("syncing disks...");
 
 	if (panicstr == 0) {
 		/* Sync before unmount, in case we hang on something. */
@@ -1695,9 +1720,9 @@ vfs_shutdown(struct proc *p)
 #endif
 
 	if (vfs_syncwait(p, 1))
-		printf("giving up\n");
+		printf(" giving up\n");
 	else
-		printf("done\n");
+		printf(" done\n");
 }
 
 /*
@@ -2203,7 +2228,7 @@ vfs_mount_print(struct mount *mp, int full,
 	    mp->mnt_flag, MNT_BITS,
 	    mp->mnt_vnodecovered, mp->mnt_syncer, mp->mnt_data);
 
-	(*pr)("vfsconf: ops %p name \"%s\" num %d ref %d flags 0x%x\n",
+	(*pr)("vfsconf: ops %p name \"%s\" num %d ref %u flags 0x%x\n",
             vfc->vfc_vfsops, vfc->vfc_name, vfc->vfc_typenum,
 	    vfc->vfc_refcount, vfc->vfc_flags);
 

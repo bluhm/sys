@@ -1,4 +1,4 @@
-/*	$OpenBSD: mount.h,v 1.140 2018/09/17 14:56:37 visa Exp $	*/
+/*	$OpenBSD: mount.h,v 1.142 2018/09/29 04:29:48 visa Exp $	*/
 /*	$NetBSD: mount.h,v 1.48 1996/02/18 11:55:47 fvdl Exp $	*/
 
 /*
@@ -454,7 +454,7 @@ struct vfsconf {
 	const struct vfsops *vfc_vfsops; /* filesystem operations vector */
 	char	vfc_name[MFSNAMELEN];	/* filesystem type name */
 	int	vfc_typenum;		/* historic filesystem type number */
-	int	vfc_refcount;		/* number mounted of this type */
+	u_int	vfc_refcount;		/* number mounted of this type */
 	int	vfc_flags;		/* permanent flags */
 	size_t	vfc_datasize;		/* size of data args */
 };
@@ -574,6 +574,8 @@ int	vfs_busy(struct mount *, int);
 #define VB_DUPOK	0x10	/* permit duplicate mount busying */
 
 int     vfs_isbusy(struct mount *);
+struct	mount *vfs_mount_alloc(struct vnode *, struct vfsconf *);
+void	vfs_mount_free(struct mount *);
 int     vfs_mount_foreach_vnode(struct mount *, int (*func)(struct vnode *,
 				    void *), void *);
 void	vfs_getnewfsid(struct mount *);
