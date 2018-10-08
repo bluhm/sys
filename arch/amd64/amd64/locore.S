@@ -1,4 +1,4 @@
-/*	$OpenBSD: locore.S,v 1.109 2018/09/12 06:12:59 guenther Exp $	*/
+/*	$OpenBSD: locore.S,v 1.111 2018/10/07 22:43:06 guenther Exp $	*/
 /*	$NetBSD: locore.S,v 1.13 2004/03/25 18:33:17 drochner Exp $	*/
 
 /*
@@ -480,6 +480,8 @@ restore_saved:
 	 * interrupt trampolines.
 	 */
 	movq	PM_PDIRPA_INTEL(%rcx),%rdx
+	orq	cr3_reuse_pcid,%rax
+	orq	cr3_pcid_proc_intel,%rdx
 	movq	%rax,CPUVAR(KERN_CR3)
 	movq	%rdx,CPUVAR(USER_CR3)
 	CODEPATCH_END(CPTAG_MELTDOWN_NOP)
@@ -688,6 +690,7 @@ IDTVEC_NOALIGN(syscall)
 	CODEPATCH_START
 	movq	%rax,CPUVAR(SCRATCH)
 	movq	CPUVAR(USER_CR3),%rax
+	PCID_SET_REUSE_NOP
 	movq	%rax,%cr3
 Xsyscall_trampback:
 0:	pause
@@ -864,6 +867,7 @@ intr_user_exit_post_ast:
 	CODEPATCH_START
 	movq	%rax,CPUVAR(SCRATCH)
 	movq	CPUVAR(USER_CR3),%rax
+	PCID_SET_REUSE_NOP
 	movq	%rax,%cr3
 Xiretq_trampback:
 KTEXT_PAGE_END
@@ -1034,6 +1038,8 @@ warn_once:
  *		save current state, but retain it in the FPU
  *	void fpusavereset(sfp)
  *		save current state and reset FPU to initial/kernel state
+ *	int xsetbv_user(reg, mask)
+ *		load specifed %xcr# register, returns 0/1 if okay/it trapped
  */
 
 ENTRY(xrstor_user)
@@ -1086,6 +1092,24 @@ ENTRY(fpusavereset)
 	ret
 END(fpusavereset)
 
+ENTRY(xsetbv_user)
+	RETGUARD_SETUP(xsetbv_user, r11)
+	movl	%edi, %ecx
+	movq	%rsi, %rdx
+	movl	%esi, %eax
+	shrq	$32, %rdx
+	.globl	xsetbv_fault
+xsetbv_fault:
+	xsetbv
+	xorl	%eax, %eax
+	RETGUARD_CHECK(xsetbv_user, r11)
+	ret
+NENTRY(xsetbv_resume)
+	movl	$1, %eax
+	RETGUARD_CHECK(xsetbv_user, r11)
+	ret
+END(xsetbv_user)
+
 	.section .rodata
 	.globl	_C_LABEL(_xrstor)
 _C_LABEL(_xrstor):
@@ -1098,6 +1122,10 @@ _C_LABEL(_xsave):
 	.globl	_C_LABEL(_xsaveopt)
 _C_LABEL(_xsaveopt):
 	.byte 0x48; xsaveopt	(%rdi)		/* really xsaveopt64 */
+
+	.globl	_C_LABEL(_pcid_set_reuse)
+_C_LABEL(_pcid_set_reuse):
+	orl	$(CR3_REUSE_PCID >> 32),CPUVAR(USER_CR3 + 4)
 
 ENTRY(pagezero)
 	RETGUARD_SETUP(pagezero, r11)
