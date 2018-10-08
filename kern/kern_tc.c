@@ -491,6 +491,7 @@ tc_windup(void)
 	 * Now that the struct timehands is again consistent, set the new
 	 * generation number, making sure to not make it zero.
 	 */
+	membar_sync();
 	if (++ogen == 0)
 		ogen = 1;
 	membar_producer();
