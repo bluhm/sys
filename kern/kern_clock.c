@@ -378,17 +378,15 @@ statclock(struct clockframe *frame)
 		 * so that we know how much of its real time was spent
 		 * in ``non-process'' (i.e., interrupt) work.
 		 */
-		if (spc->spc_spinning) {
-			if (p != NULL && p != spc->spc_idleproc)
-				p->p_sticks++;
-			spc->spc_cp_time[CP_SPIN]++;
-		} else if (CLKF_INTR(frame)) {
+		if (CLKF_INTR(frame)) {
 			if (p != NULL)
 				p->p_iticks++;
-			spc->spc_cp_time[CP_INTR]++;
+			spc->spc_cp_time[spc->spc_spinning ?
+			    CP_SPIN : CP_INTR]++;
 		} else if (p != NULL && p != spc->spc_idleproc) {
 			p->p_sticks++;
-			spc->spc_cp_time[CP_SYS]++;
+			spc->spc_cp_time[spc->spc_spinning ?
+			    CP_SPIN : CP_SYS]++;
 		} else
 			spc->spc_cp_time[CP_IDLE]++;
 	}
