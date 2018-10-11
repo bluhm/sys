@@ -388,7 +388,8 @@ statclock(struct clockframe *frame)
 			spc->spc_cp_time[spc->spc_spinning ?
 			    CP_SPIN : CP_SYS]++;
 		} else
-			spc->spc_cp_time[CP_IDLE]++;
+			spc->spc_cp_time[spc->spc_spinning ?
+			    CP_SPIN : CP_IDLE]++;
 	}
 	spc->spc_pscnt = psdiv;
 
