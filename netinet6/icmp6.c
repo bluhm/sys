@@ -1675,66 +1675,79 @@ int
 icmp6_ctloutput(int op, struct socket *so, int level, int optname,
     struct mbuf *m)
 {
-	int error = 0;
+	int error;
+
+	switch (op) {
+	case PRCO_SETOPT:
+		error = icmp6_setopt(so, level, optname, m);
+		break;
+	case PRCO_GETOPT:
+		error = icmp6_getopt(so, level, optname, m);
+		break;
+	default:
+		error = EINVAL;
+		break;
+	}
+
+	return error;
+}
+
+int
+icmp6_setopt(struct socket *so, int level, int optname, struct mbuf *m)
+{
 	struct inpcb *in6p = sotoinpcb(so);
+	struct icmp6_filter *p;
+	int error = 0;
 
 	if (level != IPPROTO_ICMPV6)
 		return EINVAL;
 
-	switch (op) {
-	case PRCO_SETOPT:
-		switch (optname) {
-		case ICMP6_FILTER:
-		    {
-			struct icmp6_filter *p;
-
-			if (m == NULL || m->m_len != sizeof(*p)) {
-				error = EMSGSIZE;
-				break;
-			}
-			p = mtod(m, struct icmp6_filter *);
-			if (!p || !in6p->inp_icmp6filt) {
-				error = EINVAL;
-				break;
-			}
-			bcopy(p, in6p->inp_icmp6filt,
-				sizeof(struct icmp6_filter));
-			error = 0;
-			break;
-		    }
-
-		default:
-			error = ENOPROTOOPT;
+	switch (optname) {
+	case ICMP6_FILTER:
+		if (m == NULL || m->m_len != sizeof(*p)) {
+			error = EMSGSIZE;
 			break;
 		}
+		p = mtod(m, struct icmp6_filter *);
+		if (!p || !in6p->inp_icmp6filt) {
+			error = EINVAL;
+			break;
+		}
+		bcopy(p, in6p->inp_icmp6filt,
+			sizeof(struct icmp6_filter));
 		break;
-
-	case PRCO_GETOPT:
-		switch (optname) {
-		case ICMP6_FILTER:
-		    {
-			struct icmp6_filter *p;
-
-			if (!in6p->inp_icmp6filt) {
-				error = EINVAL;
-				break;
-			}
-			m->m_len = sizeof(struct icmp6_filter);
-			p = mtod(m, struct icmp6_filter *);
-			bcopy(in6p->inp_icmp6filt, p,
-				sizeof(struct icmp6_filter));
-			error = 0;
-			break;
-		    }
-
-		default:
-			error = ENOPROTOOPT;
-			break;
-		}
+	default:
+		error = ENOPROTOOPT;
 		break;
 	}
 
-	return (error);
+	return error;
+}
+
+int
+icmp6_getopt(struct socket *so, int level, int optname, struct mbuf *m)
+{
+	struct inpcb *in6p = sotoinpcb(so);
+	struct icmp6_filter *p;
+	int error = 0;
+
+	switch (optname) {
+	case ICMP6_FILTER:
+		if (!in6p->inp_icmp6filt) {
+			error = EINVAL;
+			break;
+		}
+		m->m_len = sizeof(struct icmp6_filter);
+		p = mtod(m, struct icmp6_filter *);
+		bcopy(in6p->inp_icmp6filt, p,
+			sizeof(struct icmp6_filter));
+		break;
+	default:
+		error = ENOPROTOOPT;
+		break;
+	}
+
+	return error;
 }
 
 /*

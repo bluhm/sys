@@ -299,6 +299,8 @@ struct in6pcb;
 struct inpcb;
 
 int	icmp6_ctloutput(int, struct socket *, int, int, struct mbuf *);
+int	icmp6_getopt(struct socket *, int, int, struct mbuf *);
+int	icmp6_setopt(struct socket *, int, int, struct mbuf *);
 
 void	ip6_init(void);
 void	ip6intr(void);
@@ -322,6 +324,8 @@ int	ip6_output(struct mbuf *, struct ip6_pktopts *, struct route_in6 *, int,
 	    struct ip6_moptions *, struct inpcb *);
 int	ip6_fragment(struct mbuf *, int, u_char, u_long);
 int	ip6_ctloutput(int, struct socket *, int, int, struct mbuf *);
+int	ip6_getopt(struct socket *, int, int, struct mbuf *);
+int	ip6_setopt(struct socket *, int, int, struct mbuf *);
 int	ip6_raw_ctloutput(int, struct socket *, int, int, struct mbuf *);
 void	ip6_initpktopts(struct ip6_pktopts *);
 int	ip6_setpktopts(struct mbuf *, struct ip6_pktopts *,

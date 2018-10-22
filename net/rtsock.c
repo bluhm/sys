@@ -110,6 +110,8 @@ void	rcb_unref(void *, void *);
 int	route_output(struct mbuf *, struct socket *, struct sockaddr *,
 	    struct mbuf *);
 int	route_ctloutput(int, struct socket *, int, int, struct mbuf *);
+int	route_getopt(struct socket *, int, int, struct mbuf *);
+int	route_setopt(struct socket *, int, int, struct mbuf *);
 int	route_usrreq(struct socket *, int, struct mbuf *, struct mbuf *,
 	    struct mbuf *, struct proc *);
 void	route_input(struct mbuf *m0, struct socket *, sa_family_t);
@@ -358,69 +360,98 @@ int
 route_ctloutput(int op, struct socket *so, int level, int optname,
     struct mbuf *m)
 {
+	int error;
+
+	switch (op) {
+	case PRCO_SETOPT:
+		error = route_setopt(so, level, optname, m);
+		break;
+	case PRCO_GETOPT:
+		error = route_getopt(so, level, optname, m);
+		break;
+	default:
+		error = EINVAL;
+		break;
+	}
+
+	return error;
+}
+
+int
+route_setopt(struct socket *so, int level, int optname, struct mbuf *m)
+{
 	struct rtpcb *rop = sotortpcb(so);
 	int error = 0;
 	unsigned int tid, prio;
 
 	if (level != AF_ROUTE)
-		return (EINVAL);
+		return EINVAL;
 
-	switch (op) {
-	case PRCO_SETOPT:
-		switch (optname) {
-		case ROUTE_MSGFILTER:
-			if (m == NULL || m->m_len != sizeof(unsigned int))
-				error = EINVAL;
-			else
-				rop->rop_msgfilter = *mtod(m, unsigned int *);
-			break;
-		case ROUTE_TABLEFILTER:
-			if (m == NULL || m->m_len != sizeof(unsigned int)) {
-				error = EINVAL;
-				break;
-			}
-			tid = *mtod(m, unsigned int *);
-			if (tid != RTABLE_ANY && !rtable_exists(tid))
-				error = ENOENT;
-			else
-				rop->rop_rtableid = tid;
-			break;
-		case ROUTE_PRIOFILTER:
-			if (m == NULL || m->m_len != sizeof(unsigned int)) {
-				error = EINVAL;
-				break;
-			}
-			prio = *mtod(m, unsigned int *);
-			if (prio > RTP_MAX)
-				error = EINVAL;
-			else
-				rop->rop_priority = prio;
-			break;
-		default:
-			error = ENOPROTOOPT;
-			break;
-		}
+	switch (optname) {
+	case ROUTE_MSGFILTER:
+		if (m == NULL || m->m_len != sizeof(unsigned int))
+			error = EINVAL;
+		else
+			rop->rop_msgfilter = *mtod(m, unsigned int *);
 		break;
-	case PRCO_GETOPT:
-		switch (optname) {
-		case ROUTE_MSGFILTER:
-			m->m_len = sizeof(unsigned int);
-			*mtod(m, unsigned int *) = rop->rop_msgfilter;
-			break;
-		case ROUTE_TABLEFILTER:
-			m->m_len = sizeof(unsigned int);
-			*mtod(m, unsigned int *) = rop->rop_rtableid;
-			break;
-		case ROUTE_PRIOFILTER:
-			m->m_len = sizeof(unsigned int);
-			*mtod(m, unsigned int *) = rop->rop_priority;
-			break;
-		default:
-			error = ENOPROTOOPT;
+	case ROUTE_TABLEFILTER:
+		if (m == NULL || m->m_len != sizeof(unsigned int)) {
+			error = EINVAL;
 			break;
 		}
+		tid = *mtod(m, unsigned int *);
+		if (tid != RTABLE_ANY && !rtable_exists(tid))
+			error = ENOENT;
+		else
+			rop->rop_rtableid = tid;
+		break;
+	case ROUTE_PRIOFILTER:
+		if (m == NULL || m->m_len != sizeof(unsigned int)) {
+			error = EINVAL;
+			break;
+		}
+		prio = *mtod(m, unsigned int *);
+		if (prio > RTP_MAX)
+			error = EINVAL;
+		else
+			rop->rop_priority = prio;
+		break;
+	default:
+		error = ENOPROTOOPT;
+		break;
 	}
-	return (error);
+
+	return error;
+}
+
+int
+route_getopt(struct socket *so, int level, int optname, struct mbuf *m)
+{
+	struct rtpcb *rop = sotortpcb(so);
+	int error = 0;
+
+	if (level != AF_ROUTE)
+		return EINVAL;
+
+	switch (optname) {
+	case ROUTE_MSGFILTER:
+		m->m_len = sizeof(unsigned int);
+		*mtod(m, unsigned int *) = rop->rop_msgfilter;
+		break;
+	case ROUTE_TABLEFILTER:
+		m->m_len = sizeof(unsigned int);
+		*mtod(m, unsigned int *) = rop->rop_rtableid;
+		break;
+	case ROUTE_PRIOFILTER:
+		m->m_len = sizeof(unsigned int);
+		*mtod(m, unsigned int *) = rop->rop_priority;
+		break;
+	default:
+		error = ENOPROTOOPT;
+		break;
+	}
+	
+	return error;
 }
 
 void
