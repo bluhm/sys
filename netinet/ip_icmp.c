@@ -206,7 +206,7 @@ icmp_do_error(struct mbuf *n, int type, int code, u_int32_t dest, int destmtu)
 	 * according to RFC1812;
 	 */
 
-	KASSERT(ICMP_MINLEN <= MCLBYTES);
+	KASSERT(ICMP_MINLEN + sizeof (struct ip) <= MCLBYTES);
 
 	if (sizeof (struct ip) + icmplen + ICMP_MINLEN > MCLBYTES)
 		icmplen = MCLBYTES - ICMP_MINLEN - sizeof (struct ip);
