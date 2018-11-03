@@ -208,7 +208,7 @@ icmp_do_error(struct mbuf *n, int type, int code, u_int32_t dest, int destmtu)
 
 	KASSERT(ICMP_MINLEN <= MCLBYTES);
 
-	if (icmplen + ICMP_MINLEN > MCLBYTES)
+	if (sizeof (struct ip) + icmplen + ICMP_MINLEN > MCLBYTES)
 		icmplen = MCLBYTES - ICMP_MINLEN - sizeof (struct ip);
 
 	m = m_gethdr(M_DONTWAIT, MT_HEADER);
