@@ -544,6 +544,13 @@ icmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto, int af)
 			icmpstat_inc(icps_badlen);
 			break;
 		}
+		i = hlen + ICMP_TSLEN;
+		if (m->m_len < i && (m = *mp = m_pullup(m, i)) == NULL) {
+			icmpstat_inc(icps_tooshort);
+			return IPPROTO_DONE;
+		}
+		ip = mtod(m, struct ip *);
+		icp = (struct icmp *)(mtod(m, caddr_t) + hlen);
 		icp->icmp_type = ICMP_TSTAMPREPLY;
 		icp->icmp_rtime = iptime();
 		icp->icmp_ttime = icp->icmp_rtime;	/* bogus, do later! */
@@ -556,6 +563,13 @@ icmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto, int af)
 			icmpstat_inc(icps_badlen);
 			break;
 		}
+		i = hlen + ICMP_MASKLEN;
+		if (m->m_len < i && (m = *mp = m_pullup(m, i)) == NULL) {
+			icmpstat_inc(icps_tooshort);
+			return IPPROTO_DONE;
+		}
+		ip = mtod(m, struct ip *);
+		icp = (struct icmp *)(mtod(m, caddr_t) + hlen);
 		/*
 		 * We are not able to respond with all ones broadcast
 		 * unless we receive it over a point-to-point interface.
@@ -615,6 +629,13 @@ reflect:
 			icmpstat_inc(icps_badlen);
 			break;
 		}
+		i = hlen + ICMP_ADVLEN(icp);
+		if (m->m_len < i && (m = *mp = m_pullup(m, i)) == NULL) {
+			icmpstat_inc(icps_tooshort);
+			return IPPROTO_DONE;
+		}
+		ip = mtod(m, struct ip *);
+		icp = (struct icmp *)(mtod(m, caddr_t) + hlen);
 		/*
 		 * Short circuit routing redirects to force
 		 * immediate change in the kernel's routing
