@@ -467,6 +467,14 @@ icmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto, int af)
 			icmpstat_inc(icps_badlen);
 			goto freeit;
 		}
+		i = hlen + ICMP_ADVLEN(icp);
+		if (m->m_len < i && (m = *mp = m_pullup(m, i)) == NULL) {
+			icmpstat_inc(icps_tooshort);
+			return IPPROTO_DONE;
+		}
+		ip = mtod(m, struct ip *);
+		icp = (struct icmp *)(mtod(m, caddr_t) + hlen);
+
 		if (IN_MULTICAST(icp->icmp_ip.ip_dst.s_addr))
 			goto badcode;
 #ifdef INET6
