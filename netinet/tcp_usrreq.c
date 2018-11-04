@@ -1143,8 +1143,8 @@ tcp_update_sndspace(struct tcpcb *tp)
 	if (sbspace(so, &so->so_snd) >= so->so_snd.sb_lowat) {
 		if (nmax < so->so_snd.sb_cc + so->so_snd.sb_lowat)
 			nmax = so->so_snd.sb_cc + so->so_snd.sb_lowat;
-		if (nmax * 2 < so->so_snd.sb_mbcnt + so->so_snd.sb_lowat)
-			nmax = (so->so_snd.sb_mbcnt+so->so_snd.sb_lowat+1) / 2;
+		if (nmax * 8 < so->so_snd.sb_mbcnt + so->so_snd.sb_lowat)
+			nmax = (so->so_snd.sb_mbcnt+so->so_snd.sb_lowat+7) / 8;
 	}
 
 	/* round to MSS boundary */
