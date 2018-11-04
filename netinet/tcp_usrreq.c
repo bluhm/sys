@@ -1143,6 +1143,7 @@ tcp_update_sndspace(struct tcpcb *tp)
 	if (sbspace(so, &so->so_snd) >= so->so_snd.sb_lowat) {
 		if (nmax < so->so_snd.sb_cc + so->so_snd.sb_lowat)
 			nmax = so->so_snd.sb_cc + so->so_snd.sb_lowat;
+		/* keep in sync with sbreserve() calculation */
 		if (nmax * 8 < so->so_snd.sb_mbcnt + so->so_snd.sb_lowat)
 			nmax = (so->so_snd.sb_mbcnt+so->so_snd.sb_lowat+7) / 8;
 	}
