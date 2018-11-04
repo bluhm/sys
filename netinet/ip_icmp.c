@@ -359,12 +359,12 @@ icmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto, int af)
 		return IPPROTO_DONE;
 	}
 	ip = mtod(m, struct ip *);
+	icp = (struct icmp *)(mtod(m, caddr_t) + hlen);
 	if (in4_cksum(m, 0, hlen, icmplen)) {
 		icmpstat_inc(icps_checksum);
 		goto freeit;
 	}
 
-	icp = (struct icmp *)(mtod(m, caddr_t) + hlen);
 #ifdef ICMPPRINTFS
 	/*
 	 * Message type specific processing.
@@ -484,16 +484,15 @@ icmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto, int af)
 			    icmplen < ICMP_V6ADVLEN(icp)) {
 				icmpstat_inc(icps_badlen);
 				goto freeit;
-			} else {
-				if ((m = *mp = m_pullup(m, (ip->ip_hl << 2) +
-				    ICMP_V6ADVLEN(icp))) == NULL) {
-					icmpstat_inc(icps_tooshort);
-					return IPPROTO_DONE;
-				}
-				ip = mtod(m, struct ip *);
-				icp = (struct icmp *)
-				    (m->m_data + (ip->ip_hl << 2));
 			}
+			i = hlen + ICMP_V6ADVLEN(icp);
+			if (m->m_len < i &&
+			    (m = *mp = m_pullup(m, i)) == NULL) {
+				icmpstat_inc(icps_tooshort);
+				return IPPROTO_DONE;
+			}
+			ip = mtod(m, struct ip *);
+			icp = (struct icmp *)(mtod(m, caddr_t) + hlen);
 		}
 #endif /* INET6 */
 #ifdef ICMPPRINTFS
