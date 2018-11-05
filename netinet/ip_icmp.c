@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_icmp.c,v 1.178 2018/11/05 10:06:10 claudio Exp $	*/
+/*	$OpenBSD: ip_icmp.c,v 1.179 2018/11/05 20:52:22 bluhm Exp $	*/
 /*	$NetBSD: ip_icmp.c,v 1.19 1996/02/13 23:42:22 christos Exp $	*/
 
 /*
