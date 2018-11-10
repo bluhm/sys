@@ -157,8 +157,6 @@ divert_output(struct inpcb *inp, struct mbuf *m, struct mbuf *nam,
 
 		error = ip_output(m, NULL, &inp->inp_route,
 		    IP_ALLOWBROADCAST | IP_RAWOUTPUT, NULL, NULL, 0);
-		if (error == EACCES)	/* translate pf(4) error for userland */
-			error = EHOSTUNREACH;
 	}
 
 	divstat_inc(divs_opackets);

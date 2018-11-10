@@ -1084,8 +1084,6 @@ out:
 			tcp_mtudisc(tp->t_inpcb, -1);
 			return (0);
 		}
-		if (error == EACCES)	/* translate pf(4) error for userland */
-			error = EHOSTUNREACH;
 		if ((error == EHOSTUNREACH || error == ENETDOWN) &&
 		    TCPS_HAVERCVDSYN(tp->t_state)) {
 			tp->t_softerror = error;

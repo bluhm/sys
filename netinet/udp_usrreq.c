@@ -1004,8 +1004,6 @@ udp_output(struct inpcb *inp, struct mbuf *m, struct mbuf *addr,
 	error = ip_output(m, inp->inp_options, &inp->inp_route,
 	    (inp->inp_socket->so_options & SO_BROADCAST), inp->inp_moptions,
 	    inp, ipsecflowinfo);
-	if (error == EACCES)	/* translate pf(4) error for userland */
-		error = EHOSTUNREACH;
 
 bail:
 	m_freem(control);
