@@ -1125,7 +1125,7 @@ icmp6_reflect(struct mbuf *m, size_t off)
 	rt = NULL;
 
 	if (src == NULL) {
-		struct in6_ifaddr *ifa;
+		struct in6_ifaddr *ia6;
 
 		/*
 		 * This case matches to multicasts, our anycast, or unicasts
@@ -1143,9 +1143,9 @@ icmp6_reflect(struct mbuf *m, size_t off)
 			rtfree(rt);
 			goto bad;
 		}
-		ifa = in6_ifawithscope(rt->rt_ifa->ifa_ifp, &t, rtableid);
-		if (ifa != NULL)
-			src = &ifa->ia_addr.sin6_addr;
+		ia6 = in6_ifawithscope(rt->rt_ifa->ifa_ifp, &t, rtableid);
+		if (ia6 != NULL)
+			src = &ia6->ia_addr.sin6_addr;
 		if (src == NULL)
 			src = &ifatoia6(rt->rt_ifa)->ia_addr.sin6_addr;
 	}
