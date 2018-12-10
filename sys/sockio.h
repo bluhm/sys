@@ -1,4 +1,4 @@
-/*	$OpenBSD: sockio.h,v 1.76 2018/05/30 18:15:47 sthen Exp $	*/
+/*	$OpenBSD: sockio.h,v 1.78 2018/11/29 00:11:23 dlg Exp $	*/
 /*	$NetBSD: sockio.h,v 1.5 1995/08/23 00:40:47 thorpej Exp $	*/
 
 /*-
@@ -197,6 +197,12 @@
 
 #define	SIOCSVNETFLOWID	_IOW('i', 195, struct ifreq)	/* set vnet flowid */
 #define	SIOCGVNETFLOWID	_IOWR('i', 196, struct ifreq)	/* get vnet flowid */
+
+#define	SIOCSTXHPRIO	_IOW('i', 197, struct ifreq)	/* set tx hdr prio */
+#define	SIOCGTXHPRIO	_IOWR('i', 198, struct ifreq)	/* get tx hdr prio */
+
+#define	SIOCSLIFPHYECN	_IOW('i', 199, struct ifreq)	/* set ecn copying */
+#define	SIOCGLIFPHYECN	_IOWR('i', 200, struct ifreq)	/* get ecn copying */
 
 #define	SIOCSVH		_IOWR('i', 245, struct ifreq)	/* set carp param */
 #define	SIOCGVH		_IOWR('i', 246, struct ifreq)	/* get carp param */

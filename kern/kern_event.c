@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_event.c,v 1.99 2018/09/04 02:38:25 cheloha Exp $	*/
+/*	$OpenBSD: kern_event.c,v 1.101 2018/11/27 15:52:50 cheloha Exp $	*/
 
 /*-
  * Copyright (c) 1999,2000,2001 Jonathan Lemon <jlemon@FreeBSD.org>
@@ -309,6 +309,7 @@ filt_proc(struct knote *kn, long hint)
 		/*
 		 * register knote with new process.
 		 */
+		memset(&kev, 0, sizeof(kev));
 		kev.ident = hint & NOTE_PDATAMASK;	/* pid */
 		kev.filter = kn->kn_filter;
 		kev.flags = kn->kn_flags | EV_ADD | EV_ENABLE | EV_FLAG1;
@@ -327,12 +328,16 @@ static void
 filt_timer_timeout_add(struct knote *kn)
 {
 	struct timeval tv;
+	struct timeout *to = kn->kn_hook;
 	int tticks;
 
 	tv.tv_sec = kn->kn_sdata / 1000;
 	tv.tv_usec = (kn->kn_sdata % 1000) * 1000;
 	tticks = tvtohz(&tv);
-	timeout_add(kn->kn_hook, tticks ? tticks : 1);
+	/* Remove extra tick from tvtohz() if timeout has fired before. */
+	if (timeout_triggered(to))
+		tticks--;
+	timeout_add(to, (tticks > 0) ? tticks : 1);
 }
 
 void

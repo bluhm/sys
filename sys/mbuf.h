@@ -1,4 +1,4 @@
-/*	$OpenBSD: mbuf.h,v 1.239 2018/11/09 14:14:32 claudio Exp $	*/
+/*	$OpenBSD: mbuf.h,v 1.241 2018/12/07 08:37:24 claudio Exp $	*/
 /*	$NetBSD: mbuf.h,v 1.19 1996/02/09 18:25:14 christos Exp $	*/
 
 /*
@@ -345,19 +345,6 @@ u_int mextfree_register(void (*)(caddr_t, u_int, void *));
 } while (/* CONSTCOND */ 0)
 
 /*
- * Set the m_data pointer of a newly-allocated mbuf (m_get/MGET) to place
- * an object of the specified size at the end of the mbuf, longword aligned.
- */
-#define	M_ALIGN(m, len) \
-	(m)->m_data += (MLEN - (len)) &~ (sizeof(long) - 1)
-/*
- * As above, for mbufs allocated with m_gethdr/MGETHDR
- * or initialized by M_MOVE_PKTHDR.
- */
-#define	MH_ALIGN(m, len) \
-	(m)->m_data += (MHLEN - (len)) &~ (sizeof(long) - 1)
-
-/*
  * Determine if an mbuf's data area is read-only. This is true for
  * non-cluster external storage and for clusters that are being
  * referenced by more than one mbuf.
@@ -441,6 +428,7 @@ struct	mbuf *m_makespace(struct mbuf *, int, int, int *);
 struct  mbuf *m_getptr(struct mbuf *, int, int *);
 int	m_leadingspace(struct mbuf *);
 int	m_trailingspace(struct mbuf *);
+void	m_align(struct mbuf *, int);
 struct mbuf *m_clget(struct mbuf *, int, u_int);
 void	m_extref(struct mbuf *, struct mbuf *);
 void	m_pool_init(struct pool *, u_int, u_int, const char *);

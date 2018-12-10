@@ -2,7 +2,7 @@
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	OpenBSD: pcidevs,v 1.1866 2018/11/08 06:54:13 jsg Exp 
+ *	OpenBSD: pcidevs,v 1.1870 2018/11/30 19:18:31 mlarkin Exp 
  */
 
 /*	$NetBSD: pcidevs,v 1.30 1997/06/24 06:20:24 thorpej Exp $	*/
@@ -9872,6 +9872,10 @@ static const struct pci_known_product pci_known_products[] = {
 	    "HD Graphics",
 	},
 	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_CORE4G_THERM,
+	    "Core 4G Thermal",
+	},
+	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_CORE4G_HB_1,
 	    "Core 4G Host",
 	},
@@ -16380,6 +16384,10 @@ static const struct pci_known_product pci_known_products[] = {
 	    "HD Graphics",
 	},
 	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_XEONE3_1200V6_HB2,
+	    "Xeon E3-1200 v6/7 Host",
+	},
+	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_CORE_GMM_2,
 	    "Core GMM",
 	},
@@ -17932,7 +17940,7 @@ static const struct pci_known_product pci_known_products[] = {
 	    "100 Series SMBus",
 	},
 	{
-	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_100SERIES_LP_SPI,
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_100SERIES_LP_SPI_1,
 	    "100 Series SPI",
 	},
 	{
@@ -17942,6 +17950,14 @@ static const struct pci_known_product pci_known_products[] = {
 	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_100SERIES_LP_UART_2,
 	    "100 Series UART",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_100SERIES_LP_SPI_2,
+	    "100 Series SPI",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_100SERIES_LP_SPI_3,
+	    "100 Series SPI",
 	},
 	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_100SERIES_LP_XHCI,
@@ -23080,6 +23096,10 @@ static const struct pci_known_product pci_known_products[] = {
 	    "GeForce GTX 745",
 	},
 	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_QUADROM1200,
+	    "Quadro M1200",
+	},
+	{
 	    PCI_VENDOR_OAKTECH, PCI_PRODUCT_OAKTECH_OTI1007,
 	    "OTI107",
 	},
@@ -26764,7 +26784,7 @@ static const struct pci_known_product pci_known_products[] = {
 	    "VT8251 ISA",
 	},
 	{
-	    PCI_VENDOR_VIATECH, PCI_PRODUCT_VIATECH_HDA,
+	    PCI_VENDOR_VIATECH, PCI_PRODUCT_VIATECH_HDA_0,
 	    "HD Audio",
 	},
 	{
@@ -27094,6 +27114,10 @@ static const struct pci_known_product pci_known_products[] = {
 	{
 	    PCI_VENDOR_VIATECH, PCI_PRODUCT_VIATECH_VX900_IDE,
 	    "VX900 IDE",
+	},
+	{
+	    PCI_VENDOR_VIATECH, PCI_PRODUCT_VIATECH_HDA_1,
+	    "HD Audio",
 	},
 	{
 	    PCI_VENDOR_VIATECH, PCI_PRODUCT_VIATECH_VX800_SDMMC,
