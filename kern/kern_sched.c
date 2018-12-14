@@ -145,6 +145,7 @@ sched_idle(void *v)
 	 */
 	SCHED_LOCK(s);
 	cpuset_add(&sched_idle_cpus, ci);
+	p->p_slptime = 127;
 	p->p_stat = SSLEEP;
 	p->p_cpu = ci;
 	atomic_setbits_int(&p->p_flag, P_CPUPEG);
