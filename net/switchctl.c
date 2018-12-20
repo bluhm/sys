@@ -239,7 +239,8 @@ switchwrite(dev_t dev, struct uio *uio, int ioflag)
 
 	while (len) {
 		trailing = ulmin(m_trailingspace(m), len);
-		if ((error = uiomove(mtod(m, caddr_t), trailing, uio)) != 0)
+		if ((error = uiomove(mtod(m, caddr_t) + m->m_len, trailing,
+		    uio)) != 0)
 			goto save_return;
 
 		len -= trailing;
