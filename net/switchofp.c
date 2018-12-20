@@ -4666,7 +4666,7 @@ swofp_input(struct switch_softc *sc, struct mbuf *m)
 
 	ohlen = ntohs(oh->oh_length);
 	/* Validate that we have a sane header. */
-	if (ohlen < sizeof(*oh)) {
+	if (ohlen < sizeof(*oh) || m->m_pkthdr.len < ohlen) {
 		swofp_send_error(sc, m, OFP_ERRTYPE_BAD_REQUEST,
 		    OFP_ERRREQ_BAD_LEN);
 		return (0);
