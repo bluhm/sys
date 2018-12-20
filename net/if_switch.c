@@ -221,6 +221,7 @@ switchintr(void)
 		return;
 
 	while ((m = ml_dequeue(&ml)) != NULL) {
+		KASSERT(m->m_flags & M_PKTHDR);
 		ifp = if_get(m->m_pkthdr.ph_ifidx);
 		if (ifp == NULL) {
 			m_freem(m);
@@ -741,6 +742,7 @@ switch_ifenqueue(struct switch_softc *sc, struct ifnet *ifp,
 	/* Loop prevention. */
 	m->m_flags |= M_PROTO1;
 
+	KASSERT(m->m_flags & M_PKTHDR);
 	len = m->m_pkthdr.len;
 
 	if (local) {
@@ -1493,6 +1495,7 @@ ofp_split_mbuf(struct mbuf *m, struct mbuf **mtail)
 
  again:
 	/* We need more data. */
+	KASSERT(m->m_flags & M_PKTHDR);
 	if (m->m_pkthdr.len < sizeof(struct ofp_header))
 		return (-1);
 

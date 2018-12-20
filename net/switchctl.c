@@ -236,6 +236,7 @@ switchwrite(dev_t dev, struct uio *uio, int ioflag)
 
 		sc->sc_swdev->swdev_inputm = NULL;
 	}
+	KASSERT(mhead->m_flags & M_PKTHDR);
 
 	while (len) {
 		trailing = ulmin(m_trailingspace(m), len);
