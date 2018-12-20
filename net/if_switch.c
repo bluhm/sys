@@ -1487,22 +1487,22 @@ switch_mtap(caddr_t arg, struct mbuf *m, int dir, uint64_t datapath_id)
 int
 ofp_split_mbuf(struct mbuf *m, struct mbuf **mtail)
 {
-	struct ofp_header	*oh;
 	uint16_t		 ohlen;
 
 	*mtail = NULL;
 
  again:
 	/* We need more data. */
-	if (m->m_pkthdr.len < sizeof(*oh))
+	if (m->m_pkthdr.len < sizeof(struct ofp_header))
 		return (-1);
 
-	oh = mtod(m, struct ofp_header *);
-	ohlen = ntohs(oh->oh_length);
+	m_copydata(m, offsetof(struct ofp_header, oh_length), sizeof(ohlen),
+	    (caddr_t)&ohlen);
+	ohlen = ntohs(ohlen);
 
 	/* We got an invalid packet header, skip it. */
-	if (ohlen < sizeof(*oh)) {
-		m_adj(m, sizeof(*oh));
+	if (ohlen < sizeof(struct ofp_header)) {
+		m_adj(m, sizeof(struct ofp_header));
 		goto again;
 	}
 
