@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf_ioctl.c,v 1.339 2018/12/10 16:48:15 kn Exp $ */
+/*	$OpenBSD: pf_ioctl.c,v 1.341 2018/12/17 15:37:41 kn Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -316,7 +316,7 @@ pf_rm_rule(struct pf_rulequeue *rulequeue, struct pf_rule *rule)
 	pfi_kif_unref(rule->rdr.kif, PFI_KIF_REF_RULE);
 	pfi_kif_unref(rule->nat.kif, PFI_KIF_REF_RULE);
 	pfi_kif_unref(rule->route.kif, PFI_KIF_REF_RULE);
-	pf_anchor_remove(rule);
+	pf_remove_anchor(rule);
 	pool_put(&pf_rule_pl, rule);
 }
 
@@ -1037,7 +1037,7 @@ pfioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 				pf_status.stateid = time_second;
 				pf_status.stateid = pf_status.stateid << 32;
 			}
-			timeout_add(&pf_purge_to, 1 * hz);
+			timeout_add_sec(&pf_purge_to, 1);
 			pf_create_queues();
 			DPFPRINTF(LOG_NOTICE, "pf: started");
 		}
