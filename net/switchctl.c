@@ -1,4 +1,4 @@
-/*	$OpenBSD: switchctl.c,v 1.13 2018/11/09 14:14:31 claudio Exp $	*/
+/*	$OpenBSD: switchctl.c,v 1.14 2018/12/28 14:32:47 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2016 Kazuya GODA <goda@openbsd.org>
