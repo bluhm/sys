@@ -915,7 +915,7 @@ pci_init_extents(void)
 		    NULL, 0, EX_NOWAIT | EX_FILLED);
 		if (pciio_ex == NULL)
 			return;
-		extent_free(pciio_ex, 0, 0x10000, M_NOWAIT);
+		extent_free(pciio_ex, 0, 0x10000, EX_NOWAIT);
 	}
 
 	if (pcimem_ex == NULL) {
