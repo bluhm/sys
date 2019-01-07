@@ -1262,8 +1262,16 @@ m_devget(char *buf, int totlen, int off)
 void
 m_zero(struct mbuf *m)
 {
-	if (M_READONLY(m))	/* can't m_zero a shared buffer */
+	if (M_READONLY(m)) {
+		mtx_enter(&m_extref_mtx);
+		if (((m)->m_flags & M_EXT) && MCLISREFERENCED(m)) {
+			m->m_ext.ext_nextref->m_flags |= M_ZEROIZE;
+			m->m_ext.ext_prevref->m_flags |= M_ZEROIZE;
+		}
+		mtx_leave(&m_extref_mtx);
 		return;
+	}
+
 	explicit_bzero(M_DATABUF(m), M_SIZE(m));
 }
 
