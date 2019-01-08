@@ -1264,7 +1264,7 @@ m_zero(struct mbuf *m)
 {
 	if (M_READONLY(m)) {
 		mtx_enter(&m_extref_mtx);
-		if (((m)->m_flags & M_EXT) && MCLISREFERENCED(m)) {
+		if ((m->m_flags & M_EXT) && MCLISREFERENCED(m)) {
 			m->m_ext.ext_nextref->m_flags |= M_ZEROIZE;
 			m->m_ext.ext_prevref->m_flags |= M_ZEROIZE;
 		}
