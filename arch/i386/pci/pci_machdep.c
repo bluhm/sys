@@ -1,4 +1,4 @@
-/*	$OpenBSD: pci_machdep.c,v 1.84 2018/08/19 08:23:47 kettenis Exp $	*/
+/*	$OpenBSD: pci_machdep.c,v 1.85 2019/01/07 23:44:11 bluhm Exp $	*/
 /*	$NetBSD: pci_machdep.c,v 1.28 1997/06/06 23:29:17 thorpej Exp $	*/
 
 /*-
