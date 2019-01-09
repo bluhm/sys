@@ -130,7 +130,7 @@ db_examine(db_addr_t addr, char *fmt, int count)
 				break;
 			case 'x':	/* unsigned hex */
 				value = db_get_value(addr, size, FALSE);
-				db_printf("%-*lx", width, (long)value);
+				db_printf("%*lx", width, (long)value);
 				break;
 			case 'm':	/* hex dump */
 				/*
