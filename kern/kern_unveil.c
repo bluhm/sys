@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_unveil.c,v 1.19 2019/01/06 18:33:26 kettenis Exp $	*/
+/*	$OpenBSD: kern_unveil.c,v 1.21 2019/01/14 16:43:47 deraadt Exp $	*/
 
 /*
  * Copyright (c) 2017-2018 Bob Beck <beck@openbsd.org>

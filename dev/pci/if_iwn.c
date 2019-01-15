@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_iwn.c,v 1.203 2018/04/28 16:05:56 phessler Exp $	*/
+/*	$OpenBSD: if_iwn.c,v 1.205 2019/01/13 22:57:37 kn Exp $	*/
 
 /*-
  * Copyright (c) 2007-2010 Damien Bergamini <damien.bergamini@free.fr>
@@ -2612,10 +2612,7 @@ iwn_notif_intr(struct iwn_softc *sc)
 			DPRINTF(("state changed to %x\n", letoh32(*status)));
 
 			if (letoh32(*status) & 1) {
-				/* The radio button has to be pushed. */
-				printf("%s: Radio transmitter is off\n",
-				    sc->sc_dev.dv_xname);
-				/* Turn the interface down. */
+				/* Radio transmitter is off, power down. */
 				iwn_stop(ifp, 1);
 				return;	/* No further processing. */
 			}
@@ -2807,9 +2804,11 @@ iwn_intr(void *arg)
 		IWN_WRITE(sc, IWN_FH_INT, r2);
 
 	if (r1 & IWN_INT_RF_TOGGLED) {
-		tmp = IWN_READ(sc, IWN_GP_CNTRL);
+		tmp = IWN_READ(sc, IWN_GP_CNTRL) & IWN_GP_CNTRL_RFKILL;
 		printf("%s: RF switch: radio %s\n", sc->sc_dev.dv_xname,
-		    (tmp & IWN_GP_CNTRL_RFKILL) ? "enabled" : "disabled");
+		    tmp ? "enabled" : "disabled");
+		if (tmp)
+			task_add(systq, &sc->init_task);
 	}
 	if (r1 & IWN_INT_CT_REACHED) {
 		printf("%s: critical temperature reached!\n",
