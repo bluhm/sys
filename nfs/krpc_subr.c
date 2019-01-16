@@ -211,7 +211,7 @@ krpc_call(struct sockaddr_in *sa, u_int prog, u_int vers, u_int func,
 	struct rpc_call *call;
 	struct rpc_reply *reply;
 	struct uio auio;
-	int s, error, rcvflg, timo, secs, len;
+	int s, error, rcvflg, timo, secs, len, authlen;
 	static u_int32_t xid = 0;
 	char addr[INET_ADDRSTRLEN];
 	int *ip;
@@ -447,8 +447,17 @@ krpc_call(struct sockaddr_in *sa, u_int prog, u_int vers, u_int func,
 	}
 	reply = mtod(m, struct rpc_reply *);
 	if (reply->rp_auth.authtype != 0) {
-		len += fxdr_unsigned(u_int32_t, reply->rp_auth.authlen);
-		len = (len + 3) & ~3; /* XXX? */
+		authlen = fxdr_unsigned(u_int32_t, reply->rp_auth.authlen);
+		if (authlen < 0 || authlen > RPCAUTH_MAXSIZ) {
+			error = EBADRPC;
+			goto out;
+		}
+		len = len + (authlen + 3) & ~3; /* XXX? */
+	}
+	KASSERT(m->m_flags & M_PKTHDR);
+	if (len < 0 || m->m_pkthdr.len < len) {
+		error = EBADRPC;
+		goto out;
 	}
 	m_adj(m, len);
 
@@ -524,11 +533,16 @@ xdr_string_decode(struct mbuf *m, char *str, int *len_p)
 	}
 	xs = mtod(m, struct xdr_string *);
 	slen = fxdr_unsigned(u_int32_t, xs->len);
+	if (slen < 0 || slen > INT_MAX - 3 - 4) {
+		m_freem(m);
+		return (NULL);
+	}
 	mlen = 4 + ((slen + 3) & ~3);
 
 	if (slen > *len_p)
 		slen = *len_p;
-	if (slen > m->m_pkthdr.len) {
+	KASSERT(m->m_flags & M_PKTHDR);
+	if (slen + 4 > m->m_pkthdr.len || mlen > m->m_pkthdr.len) {
 		m_freem(m);
 		return (NULL);
 	}
