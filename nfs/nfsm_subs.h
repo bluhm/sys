@@ -173,7 +173,7 @@ struct nfsm_info {
 
 #define nfsm_strsiz(s, m) {						\
 	nfsm_dissect(tl, u_int32_t *,NFSX_UNSIGNED);			\
-	if (((s) = fxdr_unsigned(int32_t, *tl)) > (m)) {		\
+	if (((s) = fxdr_unsigned(int32_t, *tl)) < 0 || (s) > (m)) {	\
 		m_freem(info.nmi_mrep);					\
 		error = EBADRPC;					\
 		goto nfsmout;						\
