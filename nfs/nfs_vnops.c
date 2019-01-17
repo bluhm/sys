@@ -1248,7 +1248,7 @@ nfs_writerpc(struct vnode *vp, struct uio *uiop, int *iomode, int *must_commit)
 			nfsm_dissect(tl, u_int32_t *, 2 * NFSX_UNSIGNED
 				+ NFSX_V3WRITEVERF);
 			rlen = fxdr_unsigned(int, *tl++);
-			if (rlen == 0) {
+			if (rlen <= 0) {
 				error = NFSERR_IO;
 				break;
 			} else if (rlen < len) {
@@ -2523,7 +2523,8 @@ nfs_readdirplusrpc(struct vnode *vp, struct uio *uiop, struct ucred *cred,
 				/* Just skip over the file handle */
 				nfsm_dissect(tl, u_int32_t *, NFSX_UNSIGNED);
 				i = fxdr_unsigned(int, *tl);
-				nfsm_adv(nfsm_rndup(i));
+				if (i > 0)
+					nfsm_adv(nfsm_rndup(i));
 			}
 			if (newvp != NULLVP) {
 				if (newvp == vp)
