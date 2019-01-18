@@ -1,4 +1,4 @@
-/*	$OpenBSD: nfsm_subs.h,v 1.46 2018/07/09 07:50:28 krw Exp $	*/
+/*	$OpenBSD: nfsm_subs.h,v 1.47 2019/01/18 13:59:18 bluhm Exp $	*/
 /*	$NetBSD: nfsm_subs.h,v 1.10 1996/03/20 21:59:56 fvdl Exp $	*/
 
 /*
