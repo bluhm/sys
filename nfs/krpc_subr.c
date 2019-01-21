@@ -438,6 +438,11 @@ krpc_call(struct sockaddr_in *sa, u_int prog, u_int vers, u_int func,
 	 * get its length, then strip it off.
 	 */
 	len = sizeof(*reply);
+	KASSERT(m->m_flags & M_PKTHDR);
+	if (m->m_pkthdr.len < len) {
+		error = EBADRPC;
+		goto out;
+	}
 	if (m->m_len < len) {
 		m = m_pullup(m, len);
 		if (m == NULL) {
@@ -452,9 +457,8 @@ krpc_call(struct sockaddr_in *sa, u_int prog, u_int vers, u_int func,
 			error = EBADRPC;
 			goto out;
 		}
-		len = len + (authlen + 3) & ~3; /* XXX? */
+		len += (authlen + 3) & ~3; /* XXX? */
 	}
-	KASSERT(m->m_flags & M_PKTHDR);
 	if (len < 0 || m->m_pkthdr.len < len) {
 		error = EBADRPC;
 		goto out;
@@ -526,23 +530,28 @@ xdr_string_decode(struct mbuf *m, char *str, int *len_p)
 	int mlen;	/* message length */
 	int slen;	/* string length */
 
-	if (m->m_len < 4) {
-		m = m_pullup(m, 4);
+	mlen = sizeof(u_int32_t);
+	KASSERT(m->m_flags & M_PKTHDR);
+	if (m->m_pkthdr.len < mlen) {
+		m_freem(m);
+		return (NULL);
+	}
+	if (m->m_len < mlen) {
+		m = m_pullup(m, mlen);
 		if (m == NULL)
 			return (NULL);
 	}
 	xs = mtod(m, struct xdr_string *);
 	slen = fxdr_unsigned(u_int32_t, xs->len);
-	if (slen < 0 || slen > INT_MAX - 3 - 4) {
+	if (slen < 0 || slen > INT_MAX - 3 - mlen) {
 		m_freem(m);
 		return (NULL);
 	}
-	mlen = 4 + ((slen + 3) & ~3);
+	mlen += (slen + 3) & ~3;
 
 	if (slen > *len_p)
 		slen = *len_p;
-	KASSERT(m->m_flags & M_PKTHDR);
-	if (slen + 4 > m->m_pkthdr.len || mlen > m->m_pkthdr.len) {
+	if (m->m_pkthdr.len < mlen) {
 		m_freem(m);
 		return (NULL);
 	}
