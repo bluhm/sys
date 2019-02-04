@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_bridge.c,v 1.316 2019/01/17 16:07:42 mpi Exp $	*/
+/*	$OpenBSD: if_bridge.c,v 1.319 2019/01/29 17:47:35 mpi Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 Jason L. Wright (jason@thought.net)
@@ -732,10 +732,7 @@ bridge_output(struct ifnet *ifp, struct mbuf *m, struct sockaddr *sa,
 	struct bridge_iflist *bif;
 	struct ether_header *eh;
 	struct ifnet *dst_if = NULL;
-	struct bridge_rtnode *dst_p = NULL;
-	struct ether_addr *dst;
 	struct bridge_softc *sc;
-	struct bridge_tunneltag *brtag;
 #if NBPFILTER > 0
 	caddr_t if_bpf;
 #endif
@@ -743,27 +740,25 @@ bridge_output(struct ifnet *ifp, struct mbuf *m, struct sockaddr *sa,
 
 	KERNEL_ASSERT_LOCKED();
 
+	if (m->m_len < sizeof(*eh)) {
+		m = m_pullup(m, sizeof(*eh));
+		if (m == NULL)
+			return (ENOBUFS);
+	}
+
 	/* ifp must be a member interface of the bridge. */
 	bif = (struct bridge_iflist *)ifp->if_bridgeport;
 	if (bif == NULL) {
 		m_freem(m);
 		return (EINVAL);
 	}
-	sc = bif->bridge_sc;
-
-	if (m->m_len < sizeof(*eh)) {
-		m = m_pullup(m, sizeof(*eh));
-		if (m == NULL)
-			return (ENOBUFS);
-	}
-	eh = mtod(m, struct ether_header *);
-	dst = (struct ether_addr *)&eh->ether_dhost[0];
 
 	/*
 	 * If bridge is down, but original output interface is up,
 	 * go ahead and send out that interface.  Otherwise the packet
 	 * is dropped below.
 	 */
+	sc = bif->bridge_sc;
 	if ((sc->sc_if.if_flags & IFF_RUNNING) == 0) {
 		dst_if = ifp;
 		goto sendunicast;
@@ -777,18 +772,31 @@ bridge_output(struct ifnet *ifp, struct mbuf *m, struct sockaddr *sa,
 	ifp->if_opackets++;
 	ifp->if_obytes += m->m_pkthdr.len;
 
+	bridge_span(sc, m);
+
+	eh = mtod(m, struct ether_header *);
+	if (!ETHER_IS_MULTICAST(eh->ether_dhost)) {
+		struct bridge_rtnode *dst_p;
+		struct bridge_tunneltag *brtag;
+		struct ether_addr *dst;
+
+		dst = (struct ether_addr *)&eh->ether_dhost[0];
+		if ((dst_p = bridge_rtlookup(sc, dst)) != NULL) {
+			dst_if = dst_p->brt_if;
+			if ((dst_p->brt_family != AF_UNSPEC) &&
+			    ((brtag = bridge_tunneltag(m)) != NULL))
+				bridge_copytag(&dst_p->brt_tunnel, brtag);
+		}
+	}
+
 	/*
 	 * If the packet is a broadcast or we don't know a better way to
 	 * get there, send to all interfaces.
 	 */
-	if ((dst_p = bridge_rtlookup(sc, dst)) != NULL)
-		dst_if = dst_p->brt_if;
-	if (dst_if == NULL || ETHER_IS_MULTICAST(eh->ether_dhost)) {
+	if (dst_if == NULL) {
 		struct bridge_iflist *bif, *bif0;
 		struct mbuf *mc;
 		int used = 0;
-
-		bridge_span(sc, m);
 
 		SLIST_FOREACH(bif, &sc->sc_iflist, bif_next) {
 			dst_if = bif->ifp;
@@ -845,12 +853,6 @@ bridge_output(struct ifnet *ifp, struct mbuf *m, struct sockaddr *sa,
 	}
 
 sendunicast:
-	if ((dst_p != NULL) &&
-	    (dst_p->brt_tunnel.brtag_peer.sa.sa_family != AF_UNSPEC) &&
-	    ((brtag = bridge_tunneltag(m)) != NULL))
-		bridge_copytag(&dst_p->brt_tunnel, brtag);
-
-	bridge_span(sc, m);
 	if ((dst_if->if_flags & IFF_RUNNING) == 0) {
 		m_freem(m);
 		return (ENETDOWN);
@@ -895,9 +897,8 @@ bridgeintr(void)
 void
 bridgeintr_frame(struct bridge_softc *sc, struct ifnet *src_if, struct mbuf *m)
 {
-	struct ifnet *dst_if;
+	struct ifnet *dst_if = NULL;
 	struct bridge_iflist *bif;
-	struct bridge_rtnode *dst_p;
 	struct ether_addr *dst, *src;
 	struct ether_header eh;
 	u_int32_t protected;
@@ -945,10 +946,10 @@ bridgeintr_frame(struct bridge_softc *sc, struct ifnet *src_if, struct mbuf *m)
 	 * side of the bridge, drop it.
 	 */
 	if (!ETHER_IS_MULTICAST(eh.ether_dhost)) {
+		struct bridge_rtnode *dst_p;
+
 		if ((dst_p = bridge_rtlookup(sc, dst)) != NULL)
 			dst_if = dst_p->brt_if;
-		else
-			dst_if = NULL;
 		if (dst_if == src_if) {
 			m_freem(m);
 			return;
@@ -959,7 +960,6 @@ bridgeintr_frame(struct bridge_softc *sc, struct ifnet *src_if, struct mbuf *m)
 			m->m_flags |= M_BCAST;
 		else
 			m->m_flags |= M_MCAST;
-		dst_if = NULL;
 	}
 
 	/*
@@ -1062,15 +1062,15 @@ bridgeintr_frame(struct bridge_softc *sc, struct ifnet *src_if, struct mbuf *m)
  * Return 1 if `ena' belongs to `bif', 0 otherwise.
  */
 int
-bridge_ourether(struct bridge_iflist *bif, uint8_t *ena)
+bridge_ourether(struct ifnet *ifp, uint8_t *ena)
 {
-	struct arpcom *ac = (struct arpcom *)bif->ifp;
+	struct arpcom *ac = (struct arpcom *)ifp;
 
 	if (memcmp(ac->ac_enaddr, ena, ETHER_ADDR_LEN) == 0)
 		return (1);
 
 #if NCARP > 0
-	if (carp_ourether(bif->ifp, ena))
+	if (carp_ourether(ifp, ena))
 		return (1);
 #endif
 
@@ -1190,7 +1190,7 @@ bridge_process(struct ifnet *ifp, struct mbuf *m)
 	SLIST_FOREACH(bif, &sc->sc_iflist, bif_next) {
 		if (bif->ifp->if_type != IFT_ETHER)
 			continue;
-		if (bridge_ourether(bif, eh->ether_dhost)) {
+		if (bridge_ourether(bif->ifp, eh->ether_dhost)) {
 			if (bif0->bif_flags & IFBIF_LEARNING)
 				bridge_rtupdate(sc,
 				    (struct ether_addr *)&eh->ether_shost,
@@ -1208,7 +1208,7 @@ bridge_process(struct ifnet *ifp, struct mbuf *m)
 			bridge_ifinput(bif->ifp, m);
 			return;
 		}
-		if (bridge_ourether(bif, eh->ether_shost)) {
+		if (bridge_ourether(bif->ifp, eh->ether_shost)) {
 			m_freem(m);
 			return;
 		}
