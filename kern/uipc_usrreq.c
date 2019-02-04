@@ -285,12 +285,10 @@ uipc_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		    sb->st_mtim.tv_nsec =
 		    sb->st_ctim.tv_nsec = unp->unp_ctime.tv_nsec;
 		sb->st_ino = unp->unp_ino;
-		return (0);
+		break;
 	}
 
 	case PRU_RCVOOB:
-		return (EOPNOTSUPP);
-
 	case PRU_SENDOOB:
 		error = EOPNOTSUPP;
 		break;
@@ -310,8 +308,10 @@ uipc_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		panic("uipc_usrreq");
 	}
 release:
-	m_freem(control);
-	m_freem(m);
+	if (req != PRU_RCVD && req != PRU_RCVOOB && req != PRU_SENSE) {
+		m_freem(control);
+		m_freem(m);
+	}
 	return (error);
 }
 

@@ -1184,26 +1184,26 @@ udp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *addr,
 		 * Perhaps Path MTU might be returned for a connected
 		 * UDP socket in this case.
 		 */
-		return (0);
+		break;
 
 	case PRU_SENDOOB:
 	case PRU_FASTTIMO:
 	case PRU_SLOWTIMO:
 	case PRU_PROTORCV:
 	case PRU_PROTOSEND:
-		error =  EOPNOTSUPP;
-		break;
-
 	case PRU_RCVD:
 	case PRU_RCVOOB:
-		return (EOPNOTSUPP);	/* do not free mbuf's */
+		error =  EOPNOTSUPP;
+		break;
 
 	default:
 		panic("udp_usrreq");
 	}
 release:
-	m_freem(control);
-	m_freem(m);
+	if (req != PRU_RCVD && req != PRU_RCVOOB && req != PRU_SENSE) {
+		m_freem(control);
+		m_freem(m);
+	}
 	return (error);
 }
 
