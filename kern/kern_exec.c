@@ -471,6 +471,8 @@ sys_execve(struct proc *p, void *v, register_t *retval)
                 goto exec_abort;
 #endif
 
+	memset(&arginfo, 0, sizeof(arginfo));
+
 	/* remember information about the process */
 	arginfo.ps_nargvstr = argc;
 	arginfo.ps_nenvstr = envc;
