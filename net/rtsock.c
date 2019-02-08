@@ -1466,7 +1466,8 @@ again:
 		if (w->w_needed <= 0 && w->w_where) {
 			if (w->w_tmemsize < len) {
 				free(w->w_tmem, M_RTABLE, w->w_tmemsize);
-				w->w_tmem = malloc(len, M_RTABLE, M_NOWAIT);
+				w->w_tmem = malloc(len, M_RTABLE,
+				    M_NOWAIT | M_ZERO);
 				if (w->w_tmem)
 					w->w_tmemsize = len;
 			}
