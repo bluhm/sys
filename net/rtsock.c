@@ -1693,7 +1693,7 @@ int
 sysctl_dumpentry(struct rtentry *rt, void *v, unsigned int id)
 {
 	struct walkarg		*w = v;
-	int			 error = 0, size;
+	int			 error = 0, len;
 	struct rt_addrinfo	 info;
 	struct ifnet		*ifp;
 #ifdef BFD
@@ -1749,7 +1749,7 @@ sysctl_dumpentry(struct rtentry *rt, void *v, unsigned int id)
 	}
 #endif
 
-	size = rtm_msg2(RTM_GET, RTM_VERSION, &info, NULL, w);
+	len = rtm_msg2(RTM_GET, RTM_VERSION, &info, NULL, w);
 	if (w->w_where != NULL && w->w_tmem != NULL && w->w_needed <= 0) {
 		struct rt_msghdr *rtm = (struct rt_msghdr *)w->w_tmem;
 
@@ -1765,10 +1765,10 @@ sysctl_dumpentry(struct rtentry *rt, void *v, unsigned int id)
 #ifdef MPLS
 		rtm->rtm_mpls = info.rti_mpls;
 #endif
-		if ((error = copyout(rtm, w->w_where, size)) != 0)
+		if ((error = copyout(rtm, w->w_where, len)) != 0)
 			w->w_where = NULL;
 		else
-			w->w_where += size;
+			w->w_where += len;
 	}
 	return (error);
 }
