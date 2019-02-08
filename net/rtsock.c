@@ -1453,7 +1453,7 @@ again:
 			continue;
 		rtinfo->rti_addrs |= (1 << i);
 		dlen = ROUNDUP(sa->sa_len);
-		if (cp) {
+		if (cp != NULL) {
 			bcopy(sa, cp, (size_t)dlen);
 			cp += dlen;
 		}
@@ -1461,28 +1461,28 @@ again:
 	}
 	/* align message length to the next natural boundary */
 	len = ALIGN(len);
-	if (cp == 0 && w != NULL && !second_time) {
+	if (cp == NULL && w != NULL && !second_time) {
 		w->w_needed += len;
-		if (w->w_needed <= 0 && w->w_where) {
+		if (w->w_needed <= 0 && w->w_where != NULL) {
 			if (w->w_tmemsize < len) {
 				free(w->w_tmem, M_RTABLE, w->w_tmemsize);
 				w->w_tmem = malloc(len, M_RTABLE,
 				    M_NOWAIT | M_ZERO);
-				if (w->w_tmem)
+				if (w->w_tmem != NULL)
 					w->w_tmemsize = len;
 			}
-			if (w->w_tmem) {
+			if (w->w_tmem != NULL) {
 				cp = w->w_tmem;
 				second_time = 1;
 				goto again;
 			} else
-				w->w_where = 0;
+				w->w_where = NULL;
 		}
 	}
-	if (cp && w)		/* clear the message header */
+	if (cp != NULL && w != NULL)	/* clear the message header */
 		bzero(cp0, hlen);
 
-	if (cp) {
+	if (cp != NULL) {
 		struct rt_msghdr *rtm = (struct rt_msghdr *)cp0;
 
 		rtm->rtm_version = RTM_VERSION;
@@ -1750,7 +1750,7 @@ sysctl_dumpentry(struct rtentry *rt, void *v, unsigned int id)
 #endif
 
 	size = rtm_msg2(RTM_GET, RTM_VERSION, &info, NULL, w);
-	if (w->w_where && w->w_tmem && w->w_needed <= 0) {
+	if (w->w_where != NULL && w->w_tmem != NULL && w->w_needed <= 0) {
 		struct rt_msghdr *rtm = (struct rt_msghdr *)w->w_tmem;
 
 		rtm->rtm_pid = curproc->p_p->ps_pid;
@@ -1787,8 +1787,9 @@ sysctl_iflist(int af, struct walkarg *w)
 			continue;
 		/* Copy the link-layer address first */
 		info.rti_info[RTAX_IFP] = sdltosa(ifp->if_sadl);
-		len = rtm_msg2(RTM_IFINFO, RTM_VERSION, &info, 0, w);
-		if (w->w_where && w->w_tmem && w->w_needed <= 0) {
+		len = rtm_msg2(RTM_IFINFO, RTM_VERSION, &info, NULL, w);
+		if (w->w_where != NULL && w->w_tmem != NULL &&
+		    w->w_needed <= 0) {
 			struct if_msghdr *ifm;
 
 			ifm = (struct if_msghdr *)w->w_tmem;
@@ -1810,8 +1811,10 @@ sysctl_iflist(int af, struct walkarg *w)
 			info.rti_info[RTAX_IFA] = ifa->ifa_addr;
 			info.rti_info[RTAX_NETMASK] = ifa->ifa_netmask;
 			info.rti_info[RTAX_BRD] = ifa->ifa_dstaddr;
-			len = rtm_msg2(RTM_NEWADDR, RTM_VERSION, &info, 0, w);
-			if (w->w_where && w->w_tmem && w->w_needed <= 0) {
+			len = rtm_msg2(RTM_NEWADDR, RTM_VERSION, &info, NULL,
+			    w);
+			if (w->w_where != NULL && w->w_tmem != NULL &&
+			    w->w_needed <= 0) {
 				struct ifa_msghdr *ifam;
 
 				ifam = (struct ifa_msghdr *)w->w_tmem;
@@ -1843,7 +1846,7 @@ sysctl_ifnames(struct walkarg *w)
 		if (w->w_arg && w->w_arg != ifp->if_index)
 			continue;
 		w->w_needed += sizeof(ifn);
-		if (w->w_where && w->w_needed <= 0) {
+		if (w->w_where != NULL && w->w_needed <= 0) {
 
 			memset(&ifn, 0, sizeof(ifn));
 			ifn.if_index = ifp->if_index;
