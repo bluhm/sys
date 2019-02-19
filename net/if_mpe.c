@@ -1,4 +1,4 @@
-/* $OpenBSD: if_mpe.c,v 1.77 2019/01/31 02:00:27 dlg Exp $ */
+/* $OpenBSD: if_mpe.c,v 1.84 2019/02/14 03:27:42 dlg Exp $ */
 
 /*
  * Copyright (c) 2008 Pierre-Yves Ritschard <pyr@spootnik.org>
@@ -55,9 +55,9 @@
 
 struct mpe_softc {
 	struct ifnet		sc_if;		/* the interface */
+	unsigned int		sc_rdomain;
 	struct ifaddr		sc_ifa;
 	struct sockaddr_mpls	sc_smpls;
-	LIST_ENTRY(mpe_softc)	sc_list;
 };
 
 #define MPE_HDRLEN	sizeof(struct shim_hdr)
@@ -67,14 +67,13 @@ struct mpe_softc {
 
 void	mpeattach(int);
 int	mpe_output(struct ifnet *, struct mbuf *, struct sockaddr *,
-		       struct rtentry *);
+	    struct rtentry *);
 int	mpe_ioctl(struct ifnet *, u_long, caddr_t);
 void	mpe_start(struct ifnet *);
 int	mpe_clone_create(struct if_clone *, int);
 int	mpe_clone_destroy(struct ifnet *);
 void	mpe_input(struct ifnet *, struct mbuf *);
 
-LIST_HEAD(, mpe_softc)	mpeif_list;
 struct if_clone	mpe_cloner =
     IF_CLONE_INITIALIZER("mpe", mpe_clone_create, mpe_clone_destroy);
 
@@ -86,7 +85,6 @@ extern int	mpls_mapttl_ip6;
 void
 mpeattach(int nmpe)
 {
-	LIST_INIT(&mpeif_list);
 	if_clone_attach(&mpe_cloner);
 }
 
@@ -96,7 +94,10 @@ mpe_clone_create(struct if_clone *ifc, int unit)
 	struct mpe_softc	*sc;
 	struct ifnet		*ifp;
 
-	sc = malloc(sizeof(*sc), M_DEVBUF, M_WAITOK|M_ZERO);
+	sc = malloc(sizeof(*sc), M_DEVBUF, M_WAITOK|M_CANFAIL|M_ZERO);
+	if (sc == NULL)
+		return (ENOMEM);
+
 	ifp = &sc->sc_if;
 	snprintf(ifp->if_xname, sizeof ifp->if_xname, "mpe%d", unit);
 	ifp->if_flags = IFF_POINTOPOINT;
@@ -115,12 +116,11 @@ mpe_clone_create(struct if_clone *ifc, int unit)
 	bpfattach(&ifp->if_bpf, ifp, DLT_LOOP, sizeof(u_int32_t));
 #endif
 
+	sc->sc_rdomain = 0;
 	sc->sc_ifa.ifa_ifp = ifp;
 	sc->sc_ifa.ifa_addr = sdltosa(ifp->if_sadl);
 	sc->sc_smpls.smpls_len = sizeof(sc->sc_smpls);
 	sc->sc_smpls.smpls_family = AF_MPLS;
-
-	LIST_INSERT_HEAD(&mpeif_list, sc, sc_list);
 
 	return (0);
 }
@@ -130,11 +130,9 @@ mpe_clone_destroy(struct ifnet *ifp)
 {
 	struct mpe_softc	*sc = ifp->if_softc;
 
-	LIST_REMOVE(sc, sc_list);
-
 	if (sc->sc_smpls.smpls_label) {
-		rt_ifa_del(&sc->sc_ifa, RTF_MPLS,
-		    smplstosa(&sc->sc_smpls));
+		rt_ifa_del(&sc->sc_ifa, RTF_MPLS|RTF_LOCAL,
+		    smplstosa(&sc->sc_smpls), sc->sc_rdomain);
 	}
 
 	if_detach(ifp);
@@ -148,6 +146,7 @@ mpe_clone_destroy(struct ifnet *ifp)
 void
 mpe_start(struct ifnet *ifp)
 {
+	struct mpe_softc	*sc = ifp->if_softc;
 	struct mbuf		*m;
 	struct sockaddr		*sa;
 	struct sockaddr		smpls = { .sa_family = AF_MPLS };
@@ -156,7 +155,7 @@ mpe_start(struct ifnet *ifp)
 
 	while ((m = ifq_dequeue(&ifp->if_snd)) != NULL) {
 		sa = mtod(m, struct sockaddr *);
-		rt = rtalloc(sa, RT_RESOLVE, 0);
+		rt = rtalloc(sa, RT_RESOLVE, sc->sc_rdomain);
 		if (!rtisvalid(rt)) {
 			m_freem(m);
 			rtfree(rt);
@@ -278,10 +277,32 @@ out:
 }
 
 int
+mpe_set_label(struct mpe_softc *sc, uint32_t label, unsigned int rdomain)
+{
+	int error;
+
+	if (sc->sc_smpls.smpls_label) {
+		/* remove old MPLS route */
+		rt_ifa_del(&sc->sc_ifa, RTF_MPLS|RTF_LOCAL,
+		    smplstosa(&sc->sc_smpls), sc->sc_rdomain);
+	}
+
+	/* add new MPLS route */
+	sc->sc_smpls.smpls_label = label;
+	sc->sc_rdomain = rdomain;
+
+	error = rt_ifa_add(&sc->sc_ifa, RTF_MPLS|RTF_LOCAL,
+	    smplstosa(&sc->sc_smpls), sc->sc_rdomain);
+	if (error)
+		sc->sc_smpls.smpls_label = 0;
+
+	return (error);
+}
+
+int
 mpe_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 {
 	struct mpe_softc	*sc = ifp->if_softc;
-	struct mpe_softc	*ifm;
 	struct ifreq		*ifr;
 	struct shim_hdr		 shim;
 	int			 error = 0;
@@ -318,40 +339,26 @@ mpe_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		shim.shim_label = MPLS_LABEL2SHIM(shim.shim_label);
 		if (sc->sc_smpls.smpls_label == shim.shim_label)
 			break;
-		LIST_FOREACH(ifm, &mpeif_list, sc_list) {
-			if (ifm != ifp->if_softc &&
-			    ifm->sc_smpls.smpls_label == shim.shim_label) {
-				error = EEXIST;
-				break;
-			}
-		}
-		if (error)
-			break;
-		if (sc->sc_smpls.smpls_label) {
-			/* remove old MPLS route */
-			rt_ifa_del(&sc->sc_ifa, RTF_MPLS,
-			    smplstosa(&sc->sc_smpls));
-		}
-		/* add new MPLS route */
-		sc->sc_smpls.smpls_label = shim.shim_label;
-		error = rt_ifa_add(&sc->sc_ifa, RTF_MPLS|RTF_LOCAL,
-		    smplstosa(&sc->sc_smpls));
-		if (error) {
-			sc->sc_smpls.smpls_label = 0;
-			break;
-		}
+		error = mpe_set_label(sc, shim.shim_label, sc->sc_rdomain);
 		break;
-	case SIOCSIFRDOMAIN:
-		/* must readd the MPLS "route" for our label */
-		/* XXX does not make sense, the MPLS route is on rtable 0 */
-		if (ifr->ifr_rdomainid != ifp->if_rdomain) {
-			if (sc->sc_smpls.smpls_label) {
-				rt_ifa_add(&sc->sc_ifa, RTF_MPLS,
-				    smplstosa(&sc->sc_smpls));
-			}
+	case SIOCSLIFPHYRTABLE:
+		if (ifr->ifr_rdomainid < 0 ||
+		    ifr->ifr_rdomainid > RT_TABLEID_MAX ||
+		    !rtable_exists(ifr->ifr_rdomainid) ||
+		    ifr->ifr_rdomainid != rtable_l2(ifr->ifr_rdomainid)) {
+			error = EINVAL;
+			break;
 		}
-		/* return with ENOTTY so that the parent handler finishes */
-		return (ENOTTY);
+		if (sc->sc_rdomain == ifr->ifr_rdomainid)
+			break;
+
+		error = mpe_set_label(sc, sc->sc_smpls.smpls_label,
+		    ifr->ifr_rdomainid);
+		break;
+	case SIOCGLIFPHYRTABLE:
+		ifr->ifr_rdomainid = sc->sc_rdomain;
+		break;
+
 	default:
 		return (ENOTTY);
 	}

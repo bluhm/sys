@@ -1,4 +1,4 @@
-/*	$OpenBSD: in6_ifattach.c,v 1.111 2018/10/05 07:06:09 florian Exp $	*/
+/*	$OpenBSD: in6_ifattach.c,v 1.113 2019/02/13 23:47:43 dlg Exp $	*/
 /*	$KAME: in6_ifattach.c,v 1.124 2001/07/18 08:32:51 jinmei Exp $	*/
 
 /*
@@ -374,11 +374,12 @@ in6_ifattach_linklocal(struct ifnet *ifp, struct in6_addr *ifid)
 		return (0); /* No need to install a connected route. */
 	}
 
-	flags = RTF_CONNECTED;
+	flags = RTF_CONNECTED | RTF_MPATH;
 	if ((ifp->if_flags & IFF_POINTOPOINT) == 0)
 		flags |= RTF_CLONING;
 
-	error = rt_ifa_add(&ia6->ia_ifa, flags, ia6->ia_ifa.ifa_addr);
+	error = rt_ifa_add(&ia6->ia_ifa, flags, ia6->ia_ifa.ifa_addr,
+	    ifp->if_rdomain);
 	if (error) {
 		in6_purgeaddr(&ia6->ia_ifa);
 		return (error);
