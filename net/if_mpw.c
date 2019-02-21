@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_mpw.c,v 1.38 2019/02/15 02:01:44 dlg Exp $ */
+/*	$OpenBSD: if_mpw.c,v 1.44 2019/02/20 01:04:53 dlg Exp $ */
 
 /*
  * Copyright (c) 2015 Rafael Zalamena <rzalamena@openbsd.org>
@@ -52,7 +52,9 @@ struct mpw_softc {
 	struct ifaddr		sc_ifa;
 	struct sockaddr_mpls	sc_smpls; /* Local label */
 
-	uint32_t		sc_flags;
+	unsigned int		sc_cword;
+	unsigned int		sc_fword;
+	uint32_t		sc_flow;
 	uint32_t		sc_type;
 	struct shim_hdr		sc_rshim;
 	struct sockaddr_storage	sc_nexthop;
@@ -90,6 +92,8 @@ mpw_clone_create(struct if_clone *ifc, int unit)
 	sc = malloc(sizeof(*sc), M_DEVBUF, M_WAITOK|M_CANFAIL|M_ZERO);
 	if (sc == NULL)
 		return (ENOMEM);
+
+	sc->sc_flow = arc4random();
 
 	ifp = &sc->sc_if;
 	snprintf(ifp->if_xname, sizeof(ifp->if_xname), "%s%d",
@@ -173,6 +177,7 @@ mpw_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 {
 	struct ifreq *ifr = (struct ifreq *) data;
 	struct mpw_softc *sc = ifp->if_softc;
+	struct shim_hdr shim;
 	struct sockaddr_in *sin;
 	struct sockaddr_in *sin_nexthop;
 	int error = 0;
@@ -188,6 +193,27 @@ mpw_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 
 	case SIOCGPWE3:
 		ifr->ifr_pwe3 = IF_PWE3_ETHERNET;
+		break;
+
+	case SIOCGETLABEL:
+		shim.shim_label = MPLS_SHIM2LABEL(sc->sc_smpls.smpls_label);
+		error = copyout(&shim, ifr->ifr_data, sizeof(shim));
+		break;
+	case SIOCSETLABEL:
+		if ((error = copyin(ifr->ifr_data, &shim, sizeof(shim))))
+			break;
+		if (shim.shim_label > MPLS_LABEL_MAX ||
+		    shim.shim_label <= MPLS_LABEL_RESERVED_MAX) {
+			error = EINVAL;
+			break;
+		}
+		shim.shim_label = MPLS_LABEL2SHIM(shim.shim_label);
+		rw_enter_write(&sc->sc_lock);
+		if (sc->sc_smpls.smpls_label != shim.shim_label) {
+			error = mpw_set_label(sc, shim.shim_label,
+			    sc->sc_rdomain);
+		}
+		rw_exit_write(&sc->sc_lock);
 		break;
 
 	case SIOCSETMPWCFG:
@@ -208,7 +234,7 @@ mpw_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 
 			memset(&sc->sc_rshim, 0, sizeof(sc->sc_rshim));
 			memset(&sc->sc_nexthop, 0, sizeof(sc->sc_nexthop));
-			sc->sc_flags = 0;
+			sc->sc_cword = 0;
 			sc->sc_type = 0;
 			break;
 		}
@@ -239,10 +265,9 @@ mpw_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 			break;
 
 		/* Apply configuration */
-		sc->sc_flags = imr.imr_flags;
+		sc->sc_cword = ISSET(imr.imr_flags, IMR_FLAG_CONTROLWORD);
 		sc->sc_type = imr.imr_type;
 		sc->sc_rshim.shim_label = imr.imr_rshim.shim_label;
-		sc->sc_rshim.shim_label |= MPLS_BOS_MASK;
 
 		memset(&sc->sc_nexthop, 0, sizeof(sc->sc_nexthop));
 		sin_nexthop = (struct sockaddr_in *) &sc->sc_nexthop;
@@ -252,7 +277,7 @@ mpw_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		break;
 
 	case SIOCGETMPWCFG:
-		imr.imr_flags = sc->sc_flags;
+		imr.imr_flags = sc->sc_cword ? IMR_FLAG_CONTROLWORD : 0;
 		imr.imr_type = sc->sc_type;
 		imr.imr_lshim.shim_label =
 		    MPLS_SHIM2LABEL(sc->sc_smpls.smpls_label);
@@ -312,13 +337,33 @@ mpw_input(struct mpw_softc *sc, struct mbuf *m)
 		goto drop;
 
 	shim = mtod(m, struct shim_hdr *);
-	if (!MPLS_BOS_ISSET(shim->shim_label)) {
-		/* don't have RFC 6391: Flow-Aware Transport of Pseudowires */
-		goto drop;
+	if (sc->sc_fword) {
+		uint32_t flow;
+
+		if (MPLS_BOS_ISSET(shim->shim_label))
+			goto drop;
+		m_adj(m, sizeof(*shim));
+
+		if (m->m_len < sizeof(*shim)) {
+			m = m_pullup(m, sizeof(*shim));
+			if (m == NULL)
+				return;
+		}
+		shim = mtod(m, struct shim_hdr *);
+
+		if (!MPLS_BOS_ISSET(shim->shim_label))
+			goto drop;
+
+		flow = MPLS_SHIM2LABEL(shim->shim_label);
+		flow ^= sc->sc_flow;
+		m->m_pkthdr.ph_flowid = M_FLOWID_VALID | flow;
+	} else {
+		if (!MPLS_BOS_ISSET(shim->shim_label))
+			goto drop;
 	}
 	m_adj(m, sizeof(*shim));
 
-	if (sc->sc_flags & IMR_FLAG_CONTROLWORD) {
+	if (sc->sc_cword) {
 		if (m->m_len < sizeof(*shim)) {
 			m = m_pullup(m, sizeof(*shim));
 			if (m == NULL)
@@ -399,6 +444,7 @@ mpw_start(struct ifnet *ifp)
 		.smpls_len = sizeof(smpls),
 		.smpls_family = AF_MPLS,
 	};
+	uint32_t bos;
 
 	if (!ISSET(ifp->if_flags, IFF_RUNNING) ||
 	    sc->sc_rshim.shim_label == 0 ||
@@ -436,7 +482,7 @@ mpw_start(struct ifnet *ifp)
 		m_align(m0, 0);
 		m0->m_len = 0;
 
-		if (sc->sc_flags & IMR_FLAG_CONTROLWORD) {
+		if (sc->sc_cword) {
 			m0 = m_prepend(m0, sizeof(*shim), M_NOWAIT);
 			if (m0 == NULL)
 				continue;
@@ -445,13 +491,31 @@ mpw_start(struct ifnet *ifp)
 			memset(shim, 0, sizeof(*shim));
 		}
 
+		bos = MPLS_BOS_MASK;
+		if (sc->sc_fword) {
+			uint32_t flow = sc->sc_flow;
+
+			m0 = m_prepend(m0, sizeof(*shim), M_NOWAIT);
+			if (m0 == NULL)
+				continue;
+
+			if (ISSET(m->m_pkthdr.ph_flowid, M_FLOWID_VALID))
+				flow ^= m->m_pkthdr.ph_flowid & M_FLOWID_MASK;
+
+			shim = mtod(m0, struct shim_hdr *);
+			shim->shim_label = htonl(1) & MPLS_TTL_MASK;
+			shim->shim_label = MPLS_LABEL2SHIM(flow) | bos;
+
+			bos = 0;
+		}
+
 		m0 = m_prepend(m0, sizeof(*shim), M_NOWAIT);
 		if (m0 == NULL)
 			continue;
 
 		shim = mtod(m0, struct shim_hdr *);
 		shim->shim_label = htonl(mpls_defttl) & MPLS_TTL_MASK;
-		shim->shim_label |= sc->sc_rshim.shim_label;
+		shim->shim_label |= sc->sc_rshim.shim_label | bos;
 
 		m0->m_pkthdr.ph_rtableid = ifp->if_rdomain;
 
