@@ -96,7 +96,9 @@ drm_atomic_state_init(struct drm_device *dev, struct drm_atomic_state *state)
 
 	state->dev = dev;
 
+#if 0
 	DRM_DEBUG_ATOMIC("Allocated atomic state %p\n", state);
+#endif
 
 	return 0;
 fail:
@@ -145,7 +147,9 @@ void drm_atomic_state_default_clear(struct drm_atomic_state *state)
 	struct drm_mode_config *config = &dev->mode_config;
 	int i;
 
+#if 0
 	DRM_DEBUG_ATOMIC("Clearing atomic state %p\n", state);
+#endif
 
 	for (i = 0; i < state->num_connector; i++) {
 		struct drm_connector *connector = state->connectors[i];
@@ -239,7 +243,9 @@ void drm_atomic_state_free(struct drm_atomic_state *state)
 
 	drm_atomic_state_clear(state);
 
+#if 0
 	DRM_DEBUG_ATOMIC("Freeing atomic state %p\n", state);
+#endif
 
 	if (config->funcs->atomic_state_free) {
 		config->funcs->atomic_state_free(state);
@@ -288,8 +294,10 @@ drm_atomic_get_crtc_state(struct drm_atomic_state *state,
 	state->crtcs[index] = crtc;
 	crtc_state->state = state;
 
+#if 0
 	DRM_DEBUG_ATOMIC("Added [CRTC:%d] %p state to %p\n",
 			 crtc->base.id, crtc_state, state);
+#endif
 
 	return crtc_state;
 }
@@ -544,8 +552,10 @@ drm_atomic_get_plane_state(struct drm_atomic_state *state,
 	state->planes[index] = plane;
 	plane_state->state = state;
 
+#if 0
 	DRM_DEBUG_ATOMIC("Added [PLANE:%d] %p state to %p\n",
 			 plane->base.id, plane_state, state);
+#endif
 
 	if (plane_state->crtc) {
 		struct drm_crtc_state *crtc_state;
@@ -1013,12 +1023,14 @@ drm_atomic_set_fb_for_plane(struct drm_plane_state *plane_state,
 		drm_framebuffer_reference(fb);
 	plane_state->fb = fb;
 
+#if 0
 	if (fb)
 		DRM_DEBUG_ATOMIC("Set [FB:%d] for plane state %p\n",
 				 fb->base.id, plane_state);
 	else
 		DRM_DEBUG_ATOMIC("Set [NOFB] for plane state %p\n",
 				 plane_state);
+#endif
 }
 EXPORT_SYMBOL(drm_atomic_set_fb_for_plane);
 
@@ -1226,7 +1238,9 @@ int drm_atomic_check_only(struct drm_atomic_state *state)
 	struct drm_crtc_state *crtc_state;
 	int i, ret = 0;
 
+#if 0
 	DRM_DEBUG_ATOMIC("checking %p\n", state);
+#endif
 
 	for_each_plane_in_state(state, plane, plane_state, i) {
 		ret = drm_atomic_plane_check(plane, plane_state);
@@ -1291,7 +1305,9 @@ int drm_atomic_commit(struct drm_atomic_state *state)
 	if (ret)
 		return ret;
 
+#if 0
 	DRM_DEBUG_ATOMIC("commiting %p\n", state);
+#endif
 
 	return config->funcs->atomic_commit(state->dev, state, false);
 }

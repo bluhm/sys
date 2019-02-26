@@ -510,7 +510,9 @@ EXPORT_SYMBOL(drm_framebuffer_lookup);
  */
 void drm_framebuffer_unreference(struct drm_framebuffer *fb)
 {
+#if 0
 	DRM_DEBUG("%p: FB ID: %d (%d)\n", fb, fb->base.id, atomic_read(&fb->refcount.refcount));
+#endif
 	kref_put(&fb->refcount, drm_framebuffer_free);
 }
 EXPORT_SYMBOL(drm_framebuffer_unreference);
@@ -523,7 +525,9 @@ EXPORT_SYMBOL(drm_framebuffer_unreference);
  */
 void drm_framebuffer_reference(struct drm_framebuffer *fb)
 {
+#if 0
 	DRM_DEBUG("%p: FB ID: %d (%d)\n", fb, fb->base.id, atomic_read(&fb->refcount.refcount));
+#endif
 	kref_get(&fb->refcount);
 }
 EXPORT_SYMBOL(drm_framebuffer_reference);
@@ -4279,7 +4283,9 @@ void drm_property_unreference_blob(struct drm_property_blob *blob)
 
 	dev = blob->dev;
 
+#if 0
 	DRM_DEBUG("%p: blob ID: %d (%d)\n", blob, blob->base.id, atomic_read(&blob->refcount.refcount));
+#endif
 
 	if (kref_put_mutex(&blob->refcount, drm_property_free_blob,
 			   &dev->mode_config.blob_lock))
@@ -4336,7 +4342,9 @@ void drm_property_destroy_user_blobs(struct drm_device *dev,
  */
 struct drm_property_blob *drm_property_reference_blob(struct drm_property_blob *blob)
 {
+#if 0
 	DRM_DEBUG("%p: blob ID: %d (%d)\n", blob, blob->base.id, atomic_read(&blob->refcount.refcount));
+#endif
 	kref_get(&blob->refcount);
 	return blob;
 }

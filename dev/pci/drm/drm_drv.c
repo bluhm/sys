@@ -865,9 +865,11 @@ drm_do_ioctl(struct drm_device *dev, int minor, u_long cmd, caddr_t data)
 		return -EINVAL;
 	}
 
+#if 0
 	DRM_DEBUG("pid=%d, cmd=0x%02lx, nr=0x%02x, dev 0x%lx, auth=%d\n",
 	    DRM_CURRENTPID, cmd, (u_int)DRM_IOCTL_NR(cmd), (long)&dev->device,
 	    file_priv->authenticated);
+#endif
 
 	switch (cmd) {
 	case FIONBIO:

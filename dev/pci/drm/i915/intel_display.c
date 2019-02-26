@@ -11696,7 +11696,7 @@ int intel_plane_atomic_calc_changes(struct drm_crtc_state *crtc_state,
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	struct intel_plane_state *old_plane_state =
 		to_intel_plane_state(plane->state);
-#ifdef DRMDEBUG
+#if 0
 	int idx = intel_crtc->base.base.id, ret;
 #else
 	int ret;
@@ -11741,12 +11741,14 @@ int intel_plane_atomic_calc_changes(struct drm_crtc_state *crtc_state,
 	turn_off = was_visible && (!visible || mode_changed);
 	turn_on = visible && (!was_visible || mode_changed);
 
+#if 0
 	DRM_DEBUG_ATOMIC("[CRTC:%i] has [PLANE:%i] with fb %i\n", idx,
 			 plane->base.id, fb ? fb->base.id : -1);
 
 	DRM_DEBUG_ATOMIC("[PLANE:%i] visible %i -> %i, off %i, on %i, ms %i\n",
 			 plane->base.id, was_visible, visible,
 			 turn_off, turn_on, mode_changed);
+#endif
 
 	if (turn_on) {
 		intel_crtc->atomic.update_wm_pre = true;

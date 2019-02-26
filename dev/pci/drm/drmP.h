@@ -37,7 +37,7 @@
 
 #if defined(_KERNEL) || defined(__KERNEL__)
 
-//#define DRMDEBUG
+#define DRMDEBUG
 
 #include <sys/param.h>
 #include <sys/queue.h>
