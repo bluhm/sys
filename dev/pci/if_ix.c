@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ix.c,v 1.153 2019/02/21 03:16:47 dlg Exp $	*/
+/*	$OpenBSD: if_ix.c,v 1.155 2019/02/26 04:04:30 dlg Exp $	*/
 
 /******************************************************************************
 
@@ -2389,8 +2389,8 @@ ixgbe_get_buf(struct rx_ring *rxr, int i)
 	if (!mp)
 		return (ENOBUFS);
 
+	mp->m_data += (mp->m_ext.ext_size - sc->rx_mbuf_sz);
 	mp->m_len = mp->m_pkthdr.len = sc->rx_mbuf_sz;
-	m_adj(mp, ETHER_ALIGN);
 
 	error = bus_dmamap_load_mbuf(rxr->rxdma.dma_tag, rxbuf->map,
 	    mp, BUS_DMA_NOWAIT);
@@ -2483,7 +2483,7 @@ ixgbe_setup_receive_ring(struct rx_ring *rxr)
 	rxr->last_desc_filled = sc->num_rx_desc - 1;
 
 	if_rxr_init(&rxr->rx_ring, 2 * ((ifp->if_hardmtu / MCLBYTES) + 1),
-	    sc->num_rx_desc);
+	    sc->num_rx_desc - 1);
 
 	ixgbe_rxfill(rxr);
 	if (if_rxr_inuse(&rxr->rx_ring) == 0) {
