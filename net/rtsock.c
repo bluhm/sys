@@ -126,7 +126,7 @@ struct rt_msghdr *rtm_report(struct rtentry *, u_char, int, int);
 struct mbuf	*rtm_msg1(int, struct rt_addrinfo *);
 int		 rtm_msg2(int, int, struct rt_addrinfo *, caddr_t,
 		     struct walkarg *);
-void		 rtm_xaddrs(caddr_t, caddr_t, struct rt_addrinfo *);
+int		 rtm_xaddrs(caddr_t, caddr_t, struct rt_addrinfo *);
 int		 rtm_validate_proposal(struct rt_addrinfo *);
 void		 rtm_setmetrics(u_long, const struct rt_metrics *,
 		     struct rt_kmetrics *);
@@ -773,7 +773,10 @@ route_output(struct mbuf *m, struct socket *so, struct sockaddr *dstaddr,
 
 	bzero(&info, sizeof(info));
 	info.rti_addrs = rtm->rtm_addrs;
-	rtm_xaddrs(rtm->rtm_hdrlen + (caddr_t)rtm, len + (caddr_t)rtm, &info);
+	error = rtm_xaddrs(rtm->rtm_hdrlen + (caddr_t)rtm, len + (caddr_t)rtm,
+	    &info);
+	if (error)
+		goto fail;
 	info.rti_flags = rtm->rtm_flags;
 	if (rtm->rtm_type != RTM_PROPOSAL &&
 	   (info.rti_info[RTAX_DST] == NULL ||
@@ -1340,7 +1343,7 @@ rtm_getmetrics(const struct rt_kmetrics *in, struct rt_metrics *out)
 	((a) > 0 ? (1 + (((a) - 1) | (sizeof(long) - 1))) : sizeof(long))
 #define ADVANCE(x, n) (x += ROUNDUP((n)->sa_len))
 
-void
+int
 rtm_xaddrs(caddr_t cp, caddr_t cplim, struct rt_addrinfo *rtinfo)
 {
 	struct sockaddr	*sa;
@@ -1350,9 +1353,13 @@ rtm_xaddrs(caddr_t cp, caddr_t cplim, struct rt_addrinfo *rtinfo)
 	for (i = 0; (i < RTAX_MAX) && (cp < cplim); i++) {
 		if ((rtinfo->rti_addrs & (1 << i)) == 0)
 			continue;
-		rtinfo->rti_info[i] = sa = (struct sockaddr *)cp;
+		sa = (struct sockaddr *)cp;
+		if (cp + sa->sa_len > cplim)
+			return EINVAL;
+		rtinfo->rti_info[i] = sa;
 		ADVANCE(cp, sa);
 	}
+	return 0;
 }
 
 struct mbuf *
