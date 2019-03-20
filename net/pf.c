@@ -5169,7 +5169,7 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **state,
 			unhandled_af(pd->af);
 		}
 
-		if (pf_addr_compare(pd->dst, pd2.src, pd->af) != 0) {
+		if (PF_ANEQ(pd->dst, pd2.src, pd->af)) {
 			if (pf_status.debug >= LOG_NOTICE) {
 				log(LOG_NOTICE,
 				    "pf: BAD ICMP %d:%d outer dst: ",
