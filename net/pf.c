@@ -5253,7 +5253,8 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **state,
 			    (!SEQ_GEQ(src->seqhi, seq) || !SEQ_GEQ(seq,
 			    src->seqlo - (dst->max_win << dws)))) {
 				if (pf_status.debug >= LOG_NOTICE) {
-					log(LOG_NOTICE, "pf: BAD ICMP %d:%d ",
+					log(LOG_NOTICE,
+					    "pf: BAD ICMP %d:%d ",
 					    icmptype, icmpcode);
 					pf_print_host(pd->src, 0, pd->af);
 					addlog(" -> ");
@@ -5266,7 +5267,8 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **state,
 				return (PF_DROP);
 			} else {
 				if (pf_status.debug >= LOG_DEBUG) {
-					log(LOG_DEBUG, "pf: OK ICMP %d:%d ",
+					log(LOG_DEBUG,
+					    "pf: OK ICMP %d:%d ",
 					    icmptype, icmpcode);
 					pf_print_host(pd->src, 0, pd->af);
 					addlog(" -> ");
