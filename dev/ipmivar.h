@@ -111,6 +111,7 @@ struct ipmi_softc {
 
 	int			sc_btseq;
 	u_int8_t		sc_buf[IPMI_MAX_RX + 16];
+	int			sc_discovering;
 	struct taskq		*sc_cmd_taskq;
 	struct mutex		sc_cmd_mtx;
 

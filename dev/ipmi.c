@@ -269,14 +269,18 @@ int
 bmc_io_wait(struct ipmi_softc *sc, struct ipmi_iowait *a)
 {
 	volatile u_int8_t	v;
-	int			count = 5000000; /* == 5s XXX can be shorter */
+	int			count;
 
+	count = (cold || panicstr || sc->sc_discovering) ? 5000000 : 500;
 	while (count--) {
 		v = bmc_read(sc, a->offset);
 		if ((v & a->mask) == a->value)
 			return v;
-
-		delay(1);
+		if (cold || panicstr || sc->sc_discovering)
+			delay(1);
+		else
+			msleep(sc, &sc->sc_cmd_mtx, PWAIT, "ipmibmc",
+			    hz > 100 ? hz / 100 : 1);
 	}
 
 	dbg_printf(1, "%s: bmc_io_wait fails : *v=%.2x m=%.2x b=%.2x %s\n",
@@ -1589,6 +1593,7 @@ ipmi_poll_thread(void *arg)
 	strlcpy(sc->sc_sensordev.xname, sc->sc_dev.dv_xname,
 	    sizeof(sc->sc_sensordev.xname));
 	sensordev_install(&sc->sc_sensordev);
+	sc->sc_discovering = 0;
 
 	while (thread->running) {
 		ipmi_refresh_sensors(sc);
@@ -1725,6 +1730,7 @@ ipmi_attach(struct device *parent, struct device *self, void *aux)
 	c->c_sc = sc;
 	c->c_ccode = -1;
 
+	sc->sc_discovering = 1;
 	sc->sc_cmd_taskq = taskq_create("ipmicmd", 1, IPL_NONE, TASKQ_MPSAFE);
 	mtx_init(&sc->sc_cmd_mtx, IPL_MPFLOOR);
 }
