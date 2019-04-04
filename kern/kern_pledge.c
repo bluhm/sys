@@ -159,6 +159,8 @@ const uint64_t pledge_syscalls[SYS_MAXSYSCALL] = {
 	[SYS_munmap] = PLEDGE_STDIO,
 	[SYS_msync] = PLEDGE_STDIO,
 	[SYS_break] = PLEDGE_STDIO,
+	[SYS_mlock] = PLEDGE_STDIO,
+	[SYS_munlock] = PLEDGE_STDIO,
 
 	[SYS_umask] = PLEDGE_STDIO,
 
