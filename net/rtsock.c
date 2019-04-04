@@ -1355,11 +1355,14 @@ rtm_xaddrs(caddr_t cp, caddr_t cplim, struct rt_addrinfo *rtinfo)
 	int		 i;
 
 	bzero(rtinfo->rti_info, sizeof(rtinfo->rti_info));
-	for (i = 0; i < sizeof(i) * 8; i++) {
+	for (i = 0; i < sizeof(rtinfo->rti_addrs) * 8; i++) {
 		if ((rtinfo->rti_addrs & (1 << i)) == 0)
 			continue;
-		if (i >= RTAX_MAX || cp + sizeof(socklen_t) > cplim)
-			return (EINVAL);
+		if (i >= RTAX_MAX || cp + sizeof(socklen_t) > cplim) {
+			/* clear invalid bits, userland may set them */
+			rtinfo->rti_addrs &= (1 << i) - 1;
+			break;
+		}
 		sa = (struct sockaddr *)cp;
 		if (cp + sa->sa_len > cplim)
 			return (EINVAL);
