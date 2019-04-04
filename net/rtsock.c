@@ -1359,7 +1359,11 @@ rtm_xaddrs(caddr_t cp, caddr_t cplim, struct rt_addrinfo *rtinfo)
 		if ((rtinfo->rti_addrs & (1 << i)) == 0)
 			continue;
 		if (i >= RTAX_MAX || cp + sizeof(socklen_t) > cplim) {
-			/* clear invalid bits, userland may set them */
+			/*
+			 * Clear invalid bits, user land code may set them.
+			 * After OpenBSD 6.5 release, fix openvpn, remove
+			 * this workaround, and return EINVAL.  XXX
+			 */
 			rtinfo->rti_addrs &= (1 << i) - 1;
 			break;
 		}
