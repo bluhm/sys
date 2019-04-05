@@ -200,7 +200,7 @@ tcp_trace(short act, short ostate, struct tcpcb *tp, struct tcpcb *otp,
 		flags = th->th_flags;
 		if (flags) {
 			char *cp = "<";
-#define pf(f) { if (th->th_flags&TH_##f) { printf("%s%s", cp, "f"); cp = ","; } }
+#define pf(f) { if (th->th_flags&TH_##f) { printf("%s%s", cp, #f); cp = ","; } }
 			pf(SYN); pf(ACK); pf(FIN); pf(RST); pf(PUSH); pf(URG);
 			printf(">");
 		}
