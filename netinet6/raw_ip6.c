@@ -759,7 +759,7 @@ rip6_sysctl_rip6stat(void *oldp, size_t *oldplen, void *newp)
 	struct rip6stat rip6stat;
 
 	CTASSERT(sizeof(rip6stat) == rip6s_ncounters * sizeof(uint64_t));
-	counters_read(ip6counters, (uint64_t *)&rip6stat, rip6s_ncounters);
+	counters_read(rip6counters, (uint64_t *)&rip6stat, rip6s_ncounters);
 
 	return (sysctl_rdstruct(oldp, oldplen, newp,
 	    &rip6stat, sizeof(rip6stat)));
