@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.c,v 1.573 2019/03/01 04:47:32 dlg Exp $	*/
+/*	$OpenBSD: if.c,v 1.576 2019/04/16 04:04:19 dlg Exp $	*/
 /*	$NetBSD: if.c,v 1.35 1996/05/07 05:26:04 thorpej Exp $	*/
 
 /*
@@ -144,6 +144,8 @@ int	if_detached_ioctl(struct ifnet *, u_long, caddr_t);
 
 int	ifioctl_get(u_long, caddr_t);
 int	ifconf(caddr_t);
+static int
+	if_sffpage_check(const caddr_t);
 
 int	if_getgroup(caddr_t, struct ifnet *);
 int	if_getgroupmembers(caddr_t);
@@ -613,6 +615,8 @@ if_attach_common(struct ifnet *ifp)
 	ifp->if_snd.ifq_ifqs[0] = &ifp->if_snd;
 	ifp->if_ifqs = ifp->if_snd.ifq_ifqs;
 	ifp->if_nifqs = 1;
+	if (ifp->if_txmit == 0)
+		ifp->if_txmit = IF_TXMIT_DEFAULT;
 
 	ifiq_init(&ifp->if_rcv, ifp, 0);
 
@@ -900,7 +904,6 @@ if_input_process(struct ifnet *ifp, struct mbuf_list *ml)
 	struct mbuf *m;
 	struct ifih *ifih;
 	struct srp_ref sr;
-	int s;
 
 	if (ml_empty(ml))
 		return;
@@ -921,7 +924,6 @@ if_input_process(struct ifnet *ifp, struct mbuf_list *ml)
 	 * lists.
 	 */
 	NET_RLOCK();
-	s = splnet();
 	while ((m = ml_dequeue(ml)) != NULL) {
 		/*
 		 * Pass this mbuf to all input handlers of its
@@ -936,7 +938,6 @@ if_input_process(struct ifnet *ifp, struct mbuf_list *ml)
 		if (ifih == NULL)
 			m_freem(m);
 	}
-	splx(s);
 	NET_RUNLOCK();
 }
 
@@ -2143,6 +2144,19 @@ ifioctl(struct socket *so, u_long cmd, caddr_t data, struct proc *p)
 		NET_UNLOCK();
 		break;
 
+	case SIOCGIFSFFPAGE:
+		error = suser(p);
+		if (error != 0)
+			break;
+
+		error = if_sffpage_check(data);
+		if (error != 0)
+			break;
+
+		/* don't take NET_LOCK because i2c reads take a long time */
+		error = ((*ifp->if_ioctl)(ifp, cmd, data));
+		break;
+
 	case SIOCSETKALIVE:
 	case SIOCDIFPHYADDR:
 	case SIOCSLIFPHYADDR:
@@ -2302,6 +2316,22 @@ ifioctl_get(u_long cmd, caddr_t data)
 	NET_RUNLOCK();
 
 	return (error);
+}
+
+static int
+if_sffpage_check(const caddr_t data)
+{
+	const struct if_sffpage *sff = (const struct if_sffpage *)data;
+
+	switch (sff->sff_addr) {
+	case IFSFF_ADDR_EEPROM:
+	case IFSFF_ADDR_DDM:
+		break;
+	default:
+		return (EINVAL);
+	}
+
+	return (0);
 }
 
 /*
