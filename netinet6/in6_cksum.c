@@ -111,8 +111,8 @@ in6_cksum(struct mbuf *m, uint8_t nxt, uint32_t off, uint32_t len)
 
 	/* sanity check */
 	if (m->m_pkthdr.len < off + len) {
-		panic("in6_cksum: mbuf len (%d) < off+len (%d+%d)",
-			m->m_pkthdr.len, off, len);
+		panic("%s: mbuf len (%d) < off+len (%d+%d)",
+		    __func__, m->m_pkthdr.len, off, len);
 	}
 
 	/* Skip pseudo-header if nxt == 0. */
@@ -155,6 +155,11 @@ skip_phdr:
 		else
 			break;
 		m = m->m_next;
+	}
+	if (m == NULL) {
+		if  (off)
+			panic("%s: out of header, off %u", __func__, off);
+		goto end;
 	}
 	w = (uint16_t *)(mtod(m, uint8_t *) + off);
 	mlen = m->m_len - off;
@@ -284,8 +289,9 @@ skip_phdr:
 		} else if (mlen == -1)
 			s_util.c[0] = *(uint8_t *)w;
 	}
+ end:
 	if (len)
-		panic("in6_cksum: out of data");
+		panic("%s: out of data, len %u", __func__, len);
 	if (mlen == -1) {
 		/* The last mbuf has odd # of bytes. Follow the
 		   standard (the odd byte may be shifted left by 8 bits
