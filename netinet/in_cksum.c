@@ -49,24 +49,24 @@
 int
 in_cksum(struct mbuf *m, int len)
 {
-	u_int16_t *w;
+	uint16_t *w;
 	int sum = 0;
 	int mlen = 0;
 	int byte_swapped = 0;
 
 	union {
-		u_int8_t  c[2];
-		u_int16_t s;
+		uint8_t  c[2];
+		uint16_t s;
 	} s_util;
 	union {
-		u_int16_t s[2];
-		u_int32_t l;
+		uint16_t s[2];
+		uint32_t l;
 	} l_util;
 
 	for (;m && len; m = m->m_next) {
 		if (m->m_len == 0)
 			continue;
-		w = mtod(m, u_int16_t *);
+		w = mtod(m, uint16_t *);
 		if (mlen == -1) {
 			/*
 			 * The first byte of this mbuf is the continuation
@@ -76,9 +76,9 @@ in_cksum(struct mbuf *m, int len)
 			 * s_util.c[0] is already saved when scanning previous
 			 * mbuf.
 			 */
-			s_util.c[1] = *(u_int8_t *)w;
+			s_util.c[1] = *(uint8_t *)w;
 			sum += s_util.s;
-			w = (u_int16_t *)((u_int8_t *)w + 1);
+			w = (uint16_t *)((uint8_t *)w + 1);
 			mlen = m->m_len - 1;
 			len--;
 		} else
@@ -92,8 +92,8 @@ in_cksum(struct mbuf *m, int len)
 		if ((1 & (long) w) && (mlen > 0)) {
 			REDUCE;
 			sum <<= 8;
-			s_util.c[0] = *(u_int8_t *)w;
-			w = (u_int16_t *)((int8_t *)w + 1);
+			s_util.c[0] = *(uint8_t *)w;
+			w = (uint16_t *)((uint8_t *)w + 1);
 			mlen--;
 			byte_swapped = 1;
 		}
@@ -125,13 +125,13 @@ in_cksum(struct mbuf *m, int len)
 			sum <<= 8;
 			byte_swapped = 0;
 			if (mlen == -1) {
-				s_util.c[1] = *(u_int8_t *)w;
+				s_util.c[1] = *(uint8_t *)w;
 				sum += s_util.s;
 				mlen = 0;
 			} else
 				mlen = -1;
 		} else if (mlen == -1)
-			s_util.c[0] = *(u_int8_t *)w;
+			s_util.c[0] = *(uint8_t *)w;
 	}
 	if (len)
 		printf("cksum: out of data\n");
