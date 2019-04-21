@@ -53,7 +53,6 @@ in_cksum(struct mbuf *m, int len)
 	int sum = 0;
 	int mlen = 0;
 	int byte_swapped = 0;
-
 	union {
 		uint8_t  c[2];
 		uint16_t s;
