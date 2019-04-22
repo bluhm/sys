@@ -1,4 +1,4 @@
-/*	$OpenBSD: in_cksum.c,v 1.8 2015/07/17 23:49:03 tedu Exp $	*/
+/*	$OpenBSD: in_cksum.c,v 1.9 2019/04/22 22:47:49 bluhm Exp $	*/
 /*	$NetBSD: in_cksum.c,v 1.11 1996/04/08 19:55:37 jonathan Exp $	*/
 
 /*
