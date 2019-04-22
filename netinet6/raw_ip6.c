@@ -184,6 +184,13 @@ rip6_input(struct mbuf **mp, int *offp, int proto, int af)
 		}
 		if (proto != IPPROTO_ICMPV6 && in6p->inp_cksum6 != -1) {
 			rip6stat_inc(rip6s_isum);
+			/*
+			 * Although in6_cksum() does not need the position of
+			 * the checksum field for verification, enforce that it
+			 * is located within the packet.  Userland has given
+			 * a checksum offset, a packet too short for that is
+			 * invalid.  Avoid overflow with user supplied offset.
+			 */
 			if (m->m_pkthdr.len < *offp + 2 ||
 			    m->m_pkthdr.len - *offp - 2 < in6p->inp_cksum6 ||
 			    in6_cksum(m, proto, *offp,
