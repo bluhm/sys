@@ -1162,6 +1162,7 @@ bridge_process(struct ifnet *ifp, struct mbuf *m)
 		bridge_ifinput(ifp, mc);
 
 		bridgeintr_frame(brifp, ifp, m);
+		if_put(brifp);
 		return;
 	}
 
