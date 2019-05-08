@@ -1676,11 +1676,11 @@ ttycheckoutq(struct tty *tp, int wait)
 
 	hiwat = tp->t_hiwat;
 	s = spltty();
-	oldsig = wait ? curproc->p_siglist : 0;
+	oldsig = wait ? SIGPENDING(curproc) : 0;
 	if (tp->t_outq.c_cc > hiwat + TTHIWATMINSPACE)
 		while (tp->t_outq.c_cc > hiwat) {
 			ttstart(tp);
-			if (wait == 0 || curproc->p_siglist != oldsig) {
+			if (wait == 0 || SIGPENDING(curproc) != oldsig) {
 				splx(s);
 				return (0);
 			}
