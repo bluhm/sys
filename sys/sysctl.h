@@ -593,7 +593,7 @@ do {									\
 		(kp)->p_tracep = PTRTOINT64((pr)->ps_tracevp);		\
 	(kp)->p_traceflag = (pr)->ps_traceflag;				\
 									\
-	(kp)->p_siglist = (p)->p_siglist;				\
+	(kp)->p_siglist = (p)->p_siglist | (pr)->ps_siglist;		\
 	(kp)->p_sigmask = (p)->p_sigmask;				\
 	(kp)->p_sigignore = (sa) ? (sa)->ps_sigignore : 0;		\
 	(kp)->p_sigcatch = (sa) ? (sa)->ps_sigcatch : 0;		\
