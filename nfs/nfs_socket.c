@@ -1225,9 +1225,8 @@ nfs_sigintr(struct nfsmount *nmp, struct nfsreq *rep, struct proc *p)
 		return (EINTR);
 	if (!(nmp->nm_flag & NFSMNT_INT))
 		return (0);
-	if (p && p->p_siglist &&
-	    (((p->p_siglist & ~p->p_sigmask) &
-	    ~p->p_p->ps_sigacts->ps_sigignore) & NFSINT_SIGMASK))
+	if (p && (SIGPENDING(p) & ~p->p_p->ps_sigacts->ps_sigignore &
+	    NFSINT_SIGMASK))
 		return (EINTR);
 	return (0);
 }
