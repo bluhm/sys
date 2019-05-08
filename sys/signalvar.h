@@ -67,24 +67,30 @@ struct	sigacts {
 
 /*
  * Check if process p has an unmasked signal pending.
+ * Return mask of pending signals.
  */
-#define	SIGPENDING(p)	(((p)->p_siglist & ~(p)->p_sigmask) != 0)
+#define SIGPENDING(p)							\
+	(((p)->p_siglist | (p)->p_p->ps_siglist) & ~(p)->p_sigmask)
 
 /*
  * Determine signal that should be delivered to process p, the current
  * process, 0 if none.  If there is a pending stop signal with default
  * action, the process stops in issignal().
  */
-#define	CURSIG(p)							\
-	(((p)->p_siglist == 0 ||					\
+#define CURSIG(p)							\
+	((((p)->p_siglist | (p)->p_p->ps_siglist) == 0 ||		\
 	    (((p)->p_p->ps_flags & PS_TRACED) == 0 &&			\
-	    ((p)->p_siglist & ~(p)->p_sigmask) == 0)) ?			\
+	    SIGPENDING(p) == 0)) ?					\
 	    0 : issignal(p))
 
 /*
  * Clear a pending signal from a process.
  */
-#define	CLRSIG(p, sig)	atomic_clearbits_int(&(p)->p_siglist, sigmask(sig))
+#define CLRSIG(p, sig)	do {						\
+	int _mask = sigmask(sig);					\
+	atomic_clearbits_int(&(p)->p_siglist, _mask);			\
+	atomic_clearbits_int(&(p)->p_p->ps_siglist, _mask);		\
+} while (0)
 
 /*
  * Signal properties and actions.
