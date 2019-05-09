@@ -178,7 +178,6 @@ struct process {
 	struct	filedesc *ps_fd;	/* Ptr to open files structure */
 	struct	vmspace *ps_vmspace;	/* Address space */
 	pid_t	ps_pid;			/* Process identifier. */
-	int	ps_siglist;		/* Signals pending for the process. */
 
 	struct	futex_list ps_ftlist;	/* futexes attached to this process */
 	LIST_HEAD(, kqueue) ps_kqlist;	/* kqueues attached to this process */
@@ -187,6 +186,7 @@ struct process {
 #define	ps_startzero	ps_klist
 	struct	klist ps_klist;		/* knotes attached to this process */
 	int	ps_flags;		/* PS_* flags. */
+	int	ps_siglist;		/* Signals pending for the process. */
 
 	struct	proc *ps_single;	/* Single threading to this thread. */
 	int	ps_singlecount;		/* Not yet suspended threads. */
