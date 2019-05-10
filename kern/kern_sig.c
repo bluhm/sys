@@ -877,7 +877,6 @@ psignal(struct proc *p, int signum)
 
 /*
  * type = SPROCESS	process signal, can be diverted (sigwait())
- *	XXX if blocked in all threads, mark as pending in struct process
  * type = STHREAD	thread signal, but should be propagated if unhandled
  * type = SPROPAGATED	propagated to this thread, so don't propagate again
  */
