@@ -179,7 +179,9 @@ exit1(struct proc *p, int rv, int flags)
 			rup = pr->ps_ru;
 		}
 	}
-	p->p_siglist = pr->ps_siglist = 0;
+	p->p_siglist = 0;
+	if ((p->p_flag & P_THREAD) == 0)
+		pr->ps_siglist = 0;
 
 #if NKCOV > 0
 	kcov_exit(p);
