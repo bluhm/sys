@@ -364,8 +364,8 @@ setsigvec(struct proc *p, int signum, struct sigaction *sa)
 	 */
 	if (sa->sa_handler == SIG_IGN ||
 	    (sigprop[signum] & SA_IGNORE && sa->sa_handler == SIG_DFL)) {
-		atomic_clearbits_int(&p->p_siglist, bit);	
-		atomic_clearbits_int(&p->p_p->ps_siglist, bit);	
+		atomic_clearbits_int(&p->p_siglist, bit);
+		atomic_clearbits_int(&p->p_p->ps_siglist, bit);
 		if (signum != SIGCONT)
 			ps->ps_sigignore |= bit;	/* easier in psignal */
 		ps->ps_sigcatch &= ~bit;
@@ -420,7 +420,7 @@ execsigs(struct proc *p)
 			if (nc != SIGCONT)
 				ps->ps_sigignore |= mask;
 			atomic_clearbits_int(&p->p_siglist, mask);
-			atomic_clearbits_int(&p->p_p->ps_siglist, mask);	
+			atomic_clearbits_int(&p->p_p->ps_siglist, mask);
 		}
 		ps->ps_sigact[nc] = SIG_DFL;
 	}
