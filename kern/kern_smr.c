@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_smr.c,v 1.1 2019/02/26 14:24:21 visa Exp $	*/
+/*	$OpenBSD: kern_smr.c,v 1.3 2019/05/16 13:52:47 visa Exp $	*/
 
 /*
  * Copyright (c) 2019 Visa Hankala
@@ -25,11 +25,9 @@
 #include <sys/proc.h>
 #include <sys/smr.h>
 #include <sys/time.h>
+#include <sys/witness.h>
 
 #include <machine/cpu.h>
-
-#define SMR_ACTIVE	0x01
-#define SMR_ENTERED	0x02
 
 #define SMR_PAUSE	100		/* pause between rounds in msec */
 
@@ -45,6 +43,18 @@ struct timeout		smr_wakeup_tmo;
 unsigned int		smr_expedite;
 unsigned int		smr_ndeferred;
 
+#ifdef WITNESS
+static const char smr_lock_name[] = "smr";
+struct lock_object smr_lock_obj = {
+	.lo_name = smr_lock_name,
+	.lo_flags = LO_WITNESS | LO_INITIALIZED | LO_SLEEPABLE |
+	    (LO_CLASS_RWLOCK << LO_CLASSSHIFT)
+};
+struct lock_type smr_lock_type = {
+	.lt_name = smr_lock_name
+};
+#endif
+
 static inline int
 smr_cpu_is_idle(struct cpu_info *ci)
 {
@@ -55,6 +65,7 @@ void
 smr_startup(void)
 {
 	SIMPLEQ_INIT(&smr_deferred);
+	WITNESS_INIT(&smr_lock_obj, &smr_lock_type);
 	kthread_create_deferred(smr_create_thread, NULL);
 }
 
@@ -102,10 +113,15 @@ smr_thread(void *arg)
 
 		smr_grace_wait();
 
+		WITNESS_CHECKORDER(&smr_lock_obj, LOP_NEWORDER, NULL);
+		WITNESS_LOCK(&smr_lock_obj, 0);
+
 		while ((smr = SIMPLEQ_FIRST(&deferred)) != NULL) {
 			SIMPLEQ_REMOVE_HEAD(&deferred, smr_list);
 			smr->smr_func(smr->smr_arg);
 		}
+
+		WITNESS_UNLOCK(&smr_lock_obj, 0);
 
 		getmicrouptime(&end);
 		timersub(&end, &start, &elapsed);
@@ -130,8 +146,6 @@ smr_grace_wait(void)
 	CPU_INFO_FOREACH(cii, ci) {
 		if (ci == ci_start)
 			continue;
-		if (smr_cpu_is_idle(ci) && ci->ci_schedstate.spc_insmr == 0)
-			continue;
 		sched_peg_curproc(ci);
 	}
 	atomic_clearbits_int(&curproc->p_flag, P_CPUPEG);
@@ -147,22 +161,11 @@ smr_wakeup(void *arg)
 void
 smr_read_enter(void)
 {
-	struct cpu_info *ci = curcpu();
-	struct schedstate_percpu *spc = &ci->ci_schedstate;
-
 #ifdef DIAGNOSTIC
+	struct schedstate_percpu *spc = &curcpu()->ci_schedstate;
+
 	spc->spc_smrdepth++;
 #endif
-
-	if (smr_cpu_is_idle(ci) && (spc->spc_insmr & SMR_ENTERED) == 0) {
-		/*
-		 * Activate in two steps in order not to miss the memory
-		 * barrier with nested interrupts.
-		 */
-		spc->spc_insmr = SMR_ACTIVE;
-		membar_enter();
-		spc->spc_insmr = SMR_ACTIVE | SMR_ENTERED;
-	}
 }
 
 void
@@ -210,8 +213,6 @@ smr_idle(void)
 	struct schedstate_percpu *spc = &curcpu()->ci_schedstate;
 
 	SMR_ASSERT_NONCRITICAL();
-
-	spc->spc_insmr = 0;
 
 	if (spc->spc_ndeferred > 0)
 		smr_dispatch(spc);
@@ -288,6 +289,8 @@ smr_barrier_impl(int expedite)
 
 	assertwaitok();
 	SMR_ASSERT_NONCRITICAL();
+
+	WITNESS_CHECKORDER(&smr_lock_obj, LOP_NEWORDER, NULL);
 
 	smr_init(&smr);
 	smr_call_impl(&smr, smr_barrier_func, &c, expedite);
