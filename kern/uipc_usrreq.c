@@ -267,7 +267,7 @@ uipc_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 				sbappend(so2, &so2->so_rcv, m);
 			so->so_snd.sb_mbcnt = so2->so_rcv.sb_mbcnt;
 			so->so_snd.sb_cc = so2->so_rcv.sb_cc;
-			if (so2->so_rcv.sb_cc)
+			if (so2->so_rcv.sb_cc > 0)
 				sorwakeup(so2);
 			m = NULL;
 			break;
