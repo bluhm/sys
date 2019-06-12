@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_pfsync.c,v 1.262 2019/02/10 16:42:35 phessler Exp $	*/
+/*	$OpenBSD: if_pfsync.c,v 1.264 2019/06/10 16:32:51 mpi Exp $	*/
 
 /*
  * Copyright (c) 2002 Michael Shalayeff
@@ -328,9 +328,8 @@ pfsync_clone_create(struct if_clone *ifc, int unit)
 	sc->sc_len = PFSYNC_MINPKT;
 	sc->sc_maxupdates = 128;
 
-	sc->sc_imo.imo_membership = (struct in_multi **)malloc(
-	    (sizeof(struct in_multi *) * IP_MIN_MEMBERSHIPS), M_IPMOPTS,
-	    M_WAITOK | M_ZERO);
+	sc->sc_imo.imo_membership = mallocarray(IP_MIN_MEMBERSHIPS,
+	    sizeof(struct in_multi *), M_IPMOPTS, M_WAITOK|M_ZERO);
 	sc->sc_imo.imo_max_memberships = IP_MIN_MEMBERSHIPS;
 
 	ifp = &sc->sc_if;
@@ -407,7 +406,8 @@ pfsync_clone_destroy(struct ifnet *ifp)
 	NET_UNLOCK();
 
 	pool_destroy(&sc->sc_pool);
-	free(sc->sc_imo.imo_membership, M_IPMOPTS, 0);
+	free(sc->sc_imo.imo_membership, M_IPMOPTS,
+	    sc->sc_imo.imo_max_memberships * sizeof(struct in_multi *));
 	free(sc, M_DEVBUF, sizeof(*sc));
 
 	return (0);
@@ -1581,6 +1581,8 @@ pfsync_sendout(void)
 	int offset;
 	int q, count = 0;
 
+	PF_ASSERT_LOCKED();
+
 	if (sc == NULL || sc->sc_len == PFSYNC_MINPKT)
 		return;
 
@@ -2472,7 +2474,9 @@ void
 pfsync_timeout(void *arg)
 {
 	NET_LOCK();
+	PF_LOCK();
 	pfsync_sendout();
+	PF_UNLOCK();
 	NET_UNLOCK();
 }
 
@@ -2480,7 +2484,9 @@ pfsync_timeout(void *arg)
 void
 pfsyncintr(void)
 {
+	PF_LOCK();
 	pfsync_sendout();
+	PF_UNLOCK();
 }
 
 int
