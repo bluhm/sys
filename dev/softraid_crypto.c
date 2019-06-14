@@ -93,6 +93,7 @@ sr_crypto_discipline_init(struct sr_discipline *sd)
 	int i;
 
 	/* Fill out discipline members. */
+	sd->sd_wu_size = sizeof(struct sr_crypto_wu);
 	sd->sd_type = SR_MD_CRYPTO;
 	strlcpy(sd->sd_name, "CRYPTO", sizeof(sd->sd_name));
 	sd->sd_capabilities = SR_CAP_SYSTEM_DISK | SR_CAP_AUTO_ASSEMBLE;
