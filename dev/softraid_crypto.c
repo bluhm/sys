@@ -54,6 +54,20 @@
 
 #include <dev/softraidvar.h>
 
+/*
+ * The per-I/O data that we need to preallocate. We cannot afford to allow I/O
+ * to start failing when memory pressure kicks in. We can store this in the WU
+ * because we assert that only one ccb per WU will ever be active.
+ */
+struct sr_crypto_wu {
+	struct sr_workunit		 cr_wu;		/* Must be first. */
+	struct uio			 cr_uio;
+	struct iovec			 cr_iov;
+	struct cryptop	 		*cr_crp;
+	void				*cr_dmabuf;
+};
+
+
 struct sr_crypto_wu *sr_crypto_prepare(struct sr_workunit *, int);
 int		sr_crypto_create_keys(struct sr_discipline *);
 int		sr_crypto_get_kdf(struct bioc_createraid *,
