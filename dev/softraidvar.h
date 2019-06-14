@@ -508,6 +508,7 @@ struct sr_volume {
 
 struct sr_discipline {
 	struct sr_softc		*sd_sc;		/* link back to sr softc */
+	size_t			sd_wu_size;	/* alloc and free size */
 	u_int8_t		sd_type;	/* type of discipline */
 #define	SR_MD_RAID0		0
 #define	SR_MD_RAID1		1
