@@ -415,6 +415,19 @@ struct sr_workunit {
 	TAILQ_ENTRY(sr_workunit) swu_next;	/* Next work unit in chain. */
 };
 
+/*
+ * The per-I/O data that we need to preallocate. We cannot afford to allow I/O
+ * to start failing when memory pressure kicks in. We can store this in the WU
+ * because we assert that only one ccb per WU will ever be active.
+ */
+struct sr_crypto_wu {
+	struct sr_workunit		 cr_wu;		/* Must be first. */
+	struct uio			 cr_uio;
+	struct iovec			 cr_iov;
+	struct cryptop	 		*cr_crp;
+	void				*cr_dmabuf;
+};
+
 TAILQ_HEAD(sr_wu_list, sr_workunit);
 
 /* RAID 0 */
