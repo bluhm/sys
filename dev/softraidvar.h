@@ -661,7 +661,7 @@ void			sr_ccb_put(struct sr_ccb *);
 struct sr_ccb		*sr_ccb_rw(struct sr_discipline *, int, daddr_t,
 			    long, u_int8_t *, int, int);
 void			sr_ccb_done(struct sr_ccb *);
-int			sr_wu_alloc(struct sr_discipline *, int);
+int			sr_wu_alloc(struct sr_discipline *);
 void			sr_wu_free(struct sr_discipline *);
 void			*sr_wu_get(void *);
 void			sr_wu_put(void *, void *);

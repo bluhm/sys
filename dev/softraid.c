@@ -2089,9 +2089,10 @@ sr_ccb_done(struct sr_ccb *ccb)
 }
 
 int
-sr_wu_alloc(struct sr_discipline *sd, int wu_size)
+sr_wu_alloc(struct sr_discipline *sd)
 {
 	struct sr_workunit	*wu;
+	size_t			wu_size;
 	int			i, no_wu;
 
 	DNPRINTF(SR_D_WU, "%s: sr_wu_alloc %p %d\n", DEVNAME(sd->sd_sc),
@@ -2106,6 +2107,8 @@ sr_wu_alloc(struct sr_discipline *sd, int wu_size)
 	TAILQ_INIT(&sd->sd_wu_pendq);
 	TAILQ_INIT(&sd->sd_wu_defq);
 
+	wu_size = sd->sd_type == SR_MD_CRYPTO ?
+	    sizeof(struct sr_crypto_wu) : sizeof(struct sr_workunit);
 	for (i = 0; i < no_wu; i++) {
 		wu = malloc(wu_size, M_DEVBUF, M_WAITOK | M_ZERO);
 		TAILQ_INSERT_TAIL(&sd->sd_wu, wu, swu_next);
@@ -2122,6 +2125,7 @@ void
 sr_wu_free(struct sr_discipline *sd)
 {
 	struct sr_workunit	*wu;
+	size_t			wu_size;
 
 	DNPRINTF(SR_D_WU, "%s: sr_wu_free %p\n", DEVNAME(sd->sd_sc), sd);
 
@@ -2132,9 +2136,11 @@ sr_wu_free(struct sr_discipline *sd)
 	while ((wu = TAILQ_FIRST(&sd->sd_wu_defq)) != NULL)
 		TAILQ_REMOVE(&sd->sd_wu_defq, wu, swu_link);
 
+	wu_size = sd->sd_type == SR_MD_CRYPTO ?
+	    sizeof(struct sr_crypto_wu) : sizeof(struct sr_workunit);
 	while ((wu = TAILQ_FIRST(&sd->sd_wu)) != NULL) {
 		TAILQ_REMOVE(&sd->sd_wu, wu, swu_next);
-		free(wu, M_DEVBUF, sizeof(*wu));
+		free(wu, M_DEVBUF, wu_size);
 	}
 }
 
@@ -4301,7 +4307,7 @@ sr_raid_recreate_wu(struct sr_workunit *wu)
 int
 sr_alloc_resources(struct sr_discipline *sd)
 {
-	if (sr_wu_alloc(sd, sizeof(struct sr_workunit))) {
+	if (sr_wu_alloc(sd)) {
 		sr_error(sd->sd_sc, "unable to allocate work units");
 		return (ENOMEM);
 	}
