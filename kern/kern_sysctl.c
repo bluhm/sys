@@ -1183,8 +1183,11 @@ fill_file(struct kinfo_file *kf, struct file *fp, struct filedesc *fdp,
 			kf->so_splicelen = so->so_sp->ssp_len;
 		} else if (issplicedback(so))
 			kf->so_splicelen = -1;
-		if (!so->so_pcb)
+		if (so->so_pcb == NULL) {
+			if (locked)
+				NET_UNLOCK();
 			break;
+		}
 		switch (kf->so_family) {
 		case AF_INET: {
 			struct inpcb *inpcb = so->so_pcb;
