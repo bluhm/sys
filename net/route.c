@@ -742,10 +742,14 @@ rtflushclone(struct rtentry *parent, unsigned int rtableid)
 		    rtflushclone1, parent);
 		if (rt != NULL && error == EEXIST) {
 			ifp = if_get(rt->rt_ifidx);
-			error = rtdeletemsg(rt, ifp, rtableid);
-			if (error == 0)
+			if (ifp == NULL) {
 				error = EAGAIN;
-			if_put(ifp);
+			} else {
+				error = rtdeletemsg(rt, ifp, rtableid);
+				if (error == 0)
+					error = EAGAIN;
+				if_put(ifp);
+			}
 		}
 		rtfree(rt);
 		rt = NULL;
