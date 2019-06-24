@@ -156,7 +156,7 @@ void	rt_timer_init(void);
 int	rt_setgwroute(struct rtentry *, u_int);
 void	rt_putgwroute(struct rtentry *);
 int	rtflushclone1(struct rtentry *, void *, u_int);
-int	rtflushclone(struct ifnet *ifp, struct rtentry *, unsigned int);
+int	rtflushclone(struct rtentry *, unsigned int);
 int	rt_ifa_purge_walker(struct rtentry *, void *, unsigned int);
 struct rtentry *rt_match(struct sockaddr *, uint32_t *, int, unsigned int);
 int	rt_clone(struct rtentry **, struct sockaddr *, unsigned int);
@@ -726,9 +726,10 @@ rtflushclone1(struct rtentry *rt, void *arg, u_int id)
 }
 
 int
-rtflushclone(struct ifnet *ifp, struct rtentry *parent, unsigned int rtableid)
+rtflushclone(struct rtentry *parent, unsigned int rtableid)
 {
 	struct rtentry *rt = NULL;
+	struct ifnet *ifp;
 	int error;
 
 #ifdef DIAGNOSTIC
@@ -740,9 +741,11 @@ rtflushclone(struct ifnet *ifp, struct rtentry *parent, unsigned int rtableid)
 		error = rtable_walk(rtableid, rt_key(parent)->sa_family, &rt,
 		    rtflushclone1, parent);
 		if (rt != NULL && error == EEXIST) {
+			ifp = if_get(rt->rt_ifidx);
 			error = rtdeletemsg(rt, ifp, rtableid);
 			if (error == 0)
 				error = EAGAIN;
+			if_put(ifp);
 		}
 		rtfree(rt);
 		rt = NULL;
@@ -791,7 +794,7 @@ rtrequest_delete(struct rt_addrinfo *info, u_int8_t prio, struct ifnet *ifp,
 
 	/* Clean up any cloned children. */
 	if (ISSET(rt->rt_flags, RTF_CLONING))
-		rtflushclone(ifp, rt, tableid);
+		rtflushclone(rt, tableid);
 
 	rtfree(rt->rt_parent);
 	rt->rt_parent = NULL;
