@@ -1,4 +1,4 @@
-/*	$OpenBSD: rtable.c,v 1.69 2019/06/21 17:11:42 mpi Exp $ */
+/*	$OpenBSD: rtable.c,v 1.68 2019/03/05 19:07:56 anton Exp $ */
 
 /*
  * Copyright (c) 2014-2016 Martin Pieuchot
@@ -664,7 +664,6 @@ leave:
 struct rtable_walk_cookie {
 	int		(*rwc_func)(struct rtentry *, void *, unsigned int);
 	void		 *rwc_arg;
-	struct rtentry	**rwc_prt;
 	unsigned int	  rwc_rid;
 };
 
@@ -680,13 +679,8 @@ rtable_walk_helper(struct art_node *an, void *xrwc)
 	int				 error = 0;
 
 	SRPL_FOREACH(rt, &sr, &an->an_rtlist, rt_next) {
-		error = (*rwc->rwc_func)(rt, rwc->rwc_arg, rwc->rwc_rid);
-		if (error != 0)
+		if ((error = (*rwc->rwc_func)(rt, rwc->rwc_arg, rwc->rwc_rid)))
 			break;
-	}
-	if (rwc->rwc_prt != NULL && rt != NULL) {
-		rtref(rt);
-		*rwc->rwc_prt = rt;
 	}
 	SRPL_LEAVE(&sr);
 
@@ -694,7 +688,7 @@ rtable_walk_helper(struct art_node *an, void *xrwc)
 }
 
 int
-rtable_walk(unsigned int rtableid, sa_family_t af, struct rtentry **prt,
+rtable_walk(unsigned int rtableid, sa_family_t af,
     int (*func)(struct rtentry *, void *, unsigned int), void *arg)
 {
 	struct art_root			*ar;
@@ -707,10 +701,10 @@ rtable_walk(unsigned int rtableid, sa_family_t af, struct rtentry **prt,
 
 	rwc.rwc_func = func;
 	rwc.rwc_arg = arg;
-	rwc.rwc_prt = prt;
 	rwc.rwc_rid = rtableid;
 
-	error = art_walk(ar, rtable_walk_helper, &rwc);
+	while ((error = art_walk(ar, rtable_walk_helper, &rwc)) == EAGAIN)
+		continue;
 
 	return (error);
 }

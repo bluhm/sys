@@ -1,4 +1,4 @@
-/*	$OpenBSD: route.c,v 1.386 2019/06/21 17:11:42 mpi Exp $	*/
+/*	$OpenBSD: route.c,v 1.385 2019/06/13 08:12:10 claudio Exp $	*/
 /*	$NetBSD: route.c,v 1.14 1996/02/13 22:00:46 christos Exp $	*/
 
 /*
@@ -156,7 +156,7 @@ void	rt_timer_init(void);
 int	rt_setgwroute(struct rtentry *, u_int);
 void	rt_putgwroute(struct rtentry *);
 int	rtflushclone1(struct rtentry *, void *, u_int);
-int	rtflushclone(struct ifnet *ifp, struct rtentry *, unsigned int);
+void	rtflushclone(unsigned int, struct rtentry *);
 int	rt_ifa_purge_walker(struct rtentry *, void *, unsigned int);
 struct rtentry *rt_match(struct sockaddr *, uint32_t *, int, unsigned int);
 int	rt_clone(struct rtentry **, struct sockaddr *, unsigned int);
@@ -702,6 +702,7 @@ rtflushclone1(struct rtentry *rt, void *arg, u_int id)
 {
 	struct rtentry *cloningrt = arg;
 	struct ifnet *ifp;
+	int error;
 
 	if (!ISSET(rt->rt_flags, RTF_CLONED))
 		return 0;
@@ -721,35 +722,23 @@ rtflushclone1(struct rtentry *rt, void *arg, u_int id)
 	if (ifp == NULL)
 	        return 0;
 
+	error = rtdeletemsg(rt, ifp, id);
+	if (error == 0)
+		error = EAGAIN;
+
 	if_put(ifp);
-	return EEXIST;
+	return error;
 }
 
-int
-rtflushclone(struct ifnet *ifp, struct rtentry *parent, unsigned int rtableid)
+void
+rtflushclone(unsigned int rtableid, struct rtentry *parent)
 {
-	struct rtentry *rt = NULL;
-	int error;
 
 #ifdef DIAGNOSTIC
 	if (!parent || (parent->rt_flags & RTF_CLONING) == 0)
 		panic("rtflushclone: called with a non-cloning route");
 #endif
-
-	do {
-		error = rtable_walk(rtableid, rt_key(parent)->sa_family, &rt,
-		    rtflushclone1, parent);
-		if (rt != NULL && error == EEXIST) {
-			error = rtdeletemsg(rt, ifp, rtableid);
-			if (error == 0)
-				error = EAGAIN;
-		}
-		rtfree(rt);
-		rt = NULL;
-	} while (error == EAGAIN);
-
-	return error;
-
+	rtable_walk(rtableid, rt_key(parent)->sa_family, rtflushclone1, parent);
 }
 
 int
@@ -791,7 +780,7 @@ rtrequest_delete(struct rt_addrinfo *info, u_int8_t prio, struct ifnet *ifp,
 
 	/* Clean up any cloned children. */
 	if (ISSET(rt->rt_flags, RTF_CLONING))
-		rtflushclone(ifp, rt, tableid);
+		rtflushclone(tableid, rt);
 
 	rtfree(rt->rt_parent);
 	rt->rt_parent = NULL;
@@ -1295,13 +1284,12 @@ rt_ifa_dellocal(struct ifaddr *ifa)
 /*
  * Remove all addresses attached to ``ifa''.
  */
-int
+void
 rt_ifa_purge(struct ifaddr *ifa)
 {
 	struct ifnet		*ifp = ifa->ifa_ifp;
-	struct rtentry		*rt = NULL;
 	unsigned int		 rtableid;
-	int			 error, af = ifa->ifa_addr->sa_family;
+	int			 i;
 
 	KASSERT(ifp != NULL);
 
@@ -1309,38 +1297,27 @@ rt_ifa_purge(struct ifaddr *ifa)
 		/* skip rtables that are not in the rdomain of the ifp */
 		if (rtable_l2(rtableid) != ifp->if_rdomain)
 			continue;
-
-		do {
-			error = rtable_walk(rtableid, af, &rt,
-			    rt_ifa_purge_walker, ifa);
-			if (rt != NULL && error == EEXIST) {
-				error = rtdeletemsg(rt, ifp, rtableid);
-				if (error == 0)
-					error = EAGAIN;
-			}
-			rtfree(rt);
-			rt = NULL;
-		} while (error == EAGAIN);
-
-		if (error == EAFNOSUPPORT)
-			error = 0;
-
-		if (error)
-			break;
+		for (i = 1; i <= AF_MAX; i++) {
+			rtable_walk(rtableid, i, rt_ifa_purge_walker, ifa);
+		}
 	}
-
-	return error;
 }
 
 int
 rt_ifa_purge_walker(struct rtentry *rt, void *vifa, unsigned int rtableid)
 {
 	struct ifaddr		*ifa = vifa;
+	struct ifnet		*ifp = ifa->ifa_ifp;
+	int			 error;
 
-	if (rt->rt_ifa == ifa)
-		return EEXIST;
+	if (rt->rt_ifa != ifa)
+		return (0);
 
-	return 0;
+	if ((error = rtdeletemsg(rt, ifp, rtableid))) {
+		return (error);
+	}
+
+	return (EAGAIN);
 }
 
 /*
@@ -1662,42 +1639,23 @@ rtlabel_unref(u_int16_t id)
 	}
 }
 
-int
+void
 rt_if_track(struct ifnet *ifp)
 {
-	unsigned int rtableid;
-	struct rtentry *rt = NULL;
-	int i, error;
+	int i;
+	u_int tid;
 
-	for (rtableid = 0; rtableid < rtmap_limit; rtableid++) {
+	for (tid = 0; tid < rtmap_limit; tid++) {
 		/* skip rtables that are not in the rdomain of the ifp */
-		if (rtable_l2(rtableid) != ifp->if_rdomain)
+		if (rtable_l2(tid) != ifp->if_rdomain)
 			continue;
 		for (i = 1; i <= AF_MAX; i++) {
-			if (!rtable_mpath_capable(rtableid, i))
+			if (!rtable_mpath_capable(tid, i))
 				continue;
 
-			do {
-				error = rtable_walk(rtableid, i, &rt,
-				    rt_if_linkstate_change, ifp);
-				if (rt != NULL && error == EEXIST) {
-					error = rtdeletemsg(rt, ifp, rtableid);
-					if (error == 0)
-						error = EAGAIN;
-				}
-				rtfree(rt);
-				rt = NULL;
-			} while (error == EAGAIN);
-
-			if (error == EAFNOSUPPORT)
-				error = 0;
-
-			if (error)
-				break;
+			rtable_walk(tid, i, rt_if_linkstate_change, ifp);
 		}
 	}
-
-	return (error);
 }
 
 int
@@ -1732,7 +1690,9 @@ rt_if_linkstate_change(struct rtentry *rt, void *arg, u_int id)
 		 */
 		if (ISSET(rt->rt_flags, RTF_CLONED|RTF_DYNAMIC) &&
 		    !ISSET(rt->rt_flags, RTF_CACHED|RTF_BFD)) {
-			return (EEXIST);
+			if ((error = rtdeletemsg(rt, ifp, id)))
+				return (error);
+			return (EAGAIN);
 		}
 
 		if (!ISSET(rt->rt_flags, RTF_UP))
@@ -1863,7 +1823,7 @@ int
 db_show_arptab(void)
 {
 	db_printf("Route tree for AF_INET\n");
-	rtable_walk(0, AF_INET, NULL, db_show_rtentry, NULL);
+	rtable_walk(0, AF_INET, db_show_rtentry, NULL);
 	return (0);
 }
 #endif /* DDB */
