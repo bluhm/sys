@@ -144,6 +144,7 @@ cpu_ucode_intel_apply(struct cpu_info *ci)
 	/* Apply microcode. */
 	data = (paddr_t)update;
 	data += sizeof(struct intel_ucode_header);
+	wbinvd();
 	wrmsr(MSR_BIOS_UPDT_TRIG, data);
 
 	new_rev = cpu_ucode_intel_rev();
