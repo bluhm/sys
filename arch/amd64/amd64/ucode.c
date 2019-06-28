@@ -1,4 +1,4 @@
-/*	$OpenBSD: ucode.c,v 1.4 2018/02/06 01:09:17 patrick Exp $	*/
+/*	$OpenBSD: ucode.c,v 1.5 2019/06/28 21:54:05 bluhm Exp $	*/
 /*
  * Copyright (c) 2018 Stefan Fritsch <fritsch@genua.de>
  * Copyright (c) 2018 Patrick Wildt <patrick@blueri.se>
