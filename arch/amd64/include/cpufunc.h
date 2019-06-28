@@ -267,7 +267,7 @@ wrmsr_locked(u_int msr, u_int code, u_int64_t newval)
 static __inline void
 wbinvd(void)
 {
-	__asm volatile("wbinvd");
+	__asm volatile("wbinvd" : : : "memory");
 }
 
 static __inline void
