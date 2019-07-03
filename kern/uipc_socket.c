@@ -220,9 +220,10 @@ sofree(struct socket *so, int s)
 	if (so->so_sp) {
 		if (issplicedback(so))
 			sounsplice(so->so_sp->ssp_soback, so,
-			    so->so_sp->ssp_soback != so);
+			    so->so_sp->ssp_soback == so ? 3 : 2);
 		if (isspliced(so))
-			sounsplice(so, so->so_sp->ssp_socket, 0);
+			sounsplice(so, so->so_sp->ssp_socket,
+			    so == so->so_sp->ssp_socket ? 3 : 1);
 	}
 #endif /* SOCKET_SPLICE */
 	sbrelease(so, &so->so_snd);
@@ -1148,7 +1149,7 @@ sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
 			return (error);
 		}
 		if (so->so_sp->ssp_socket)
-			sounsplice(so, so->so_sp->ssp_socket, 1);
+			sounsplice(so, so->so_sp->ssp_socket, 0);
 		sbunlock(so, &so->so_rcv);
 		return (0);
 	}
@@ -1227,7 +1228,7 @@ sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
 }
 
 void
-sounsplice(struct socket *so, struct socket *sosp, int wakeup)
+sounsplice(struct socket *so, struct socket *sosp, int freeing)
 {
 	soassertlocked(so);
 
@@ -1236,8 +1237,11 @@ sounsplice(struct socket *so, struct socket *sosp, int wakeup)
 	sosp->so_snd.sb_flags &= ~SB_SPLICE;
 	so->so_rcv.sb_flags &= ~SB_SPLICE;
 	so->so_sp->ssp_socket = sosp->so_sp->ssp_soback = NULL;
-	if (wakeup && soreadable(so))
+	/* Do not wakeup a socket that is about to be freed. */
+	if ((freeing & 1) == 0 && soreadable(so))
 		sorwakeup(so);
+	if ((freeing & 2) == 0 && sowriteable(sosp))
+		sowwakeup(sosp);
 }
 
 void
@@ -1249,7 +1253,7 @@ soidle(void *arg)
 	s = solock(so);
 	if (so->so_rcv.sb_flags & SB_SPLICE) {
 		so->so_error = ETIMEDOUT;
-		sounsplice(so, so->so_sp->ssp_socket, 1);
+		sounsplice(so, so->so_sp->ssp_socket, 0);
 	}
 	sounlock(so, s);
 }
@@ -1574,7 +1578,7 @@ somove(struct socket *so, int wait)
 		so->so_error = error;
 	if (((so->so_state & SS_CANTRCVMORE) && so->so_rcv.sb_cc == 0) ||
 	    (sosp->so_state & SS_CANTSENDMORE) || maxreached || error) {
-		sounsplice(so, sosp, 1);
+		sounsplice(so, sosp, 0);
 		return (0);
 	}
 	if (timerisset(&so->so_idletv))
@@ -1620,6 +1624,8 @@ sowwakeup(struct socket *so)
 #ifdef SOCKET_SPLICE
 	if (so->so_snd.sb_flags & SB_SPLICE)
 		task_add(sosplice_taskq, &so->so_sp->ssp_soback->so_splicetask);
+	if (issplicedback(so))
+		return;
 #endif
 	sowakeup(so, &so->so_snd);
 }
