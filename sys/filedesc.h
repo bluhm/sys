@@ -70,6 +70,7 @@ struct filedesc {
 	int	fd_freefile;		/* approx. next free file */
 	u_short	fd_cmask;		/* mask for file creation */
 	u_short	fd_refcnt;		/* reference count */
+	int	fd_softrefs;		/* softrefs to prevent destruction */
 	struct rwlock fd_lock;		/* lock for the file descs; must be */
 					/* held when writing to fd_ofiles, */
 					/* fd_ofileflags, or fd_{hi,lo}map */

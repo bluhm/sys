@@ -1406,6 +1406,7 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 			}
 			matched = 1;
 			fdp = pr->ps_fd;
+			atomic_inc_int(&fdp->fd_softrefs);
 			if (pr->ps_textvp)
 				FILLIT(NULL, NULL, KERN_FILE_TEXT, pr->ps_textvp, pr);
 			if (fdp->fd_cdir)
@@ -1420,6 +1421,8 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 				FILLIT(fp, fdp, i, NULL, pr);
 				FRELE(fp, p);
 			}
+			if (atomic_dec_int_nv(&fdp->fd_softrefs) == 0)
+				wakeup(&fdp->fd_softrefs);
 		}
 		if (!matched)
 			error = ESRCH;
