@@ -262,7 +262,7 @@ fail:
 				if ((cnp->cn_flags & LOCKPARENT) &&
 				    (cnp->cn_flags & ISLASTCN) &&
 				    (ndp->ni_vp != ndp->ni_dvp))
-					VOP_UNLOCK(ndp->ni_dvp);
+					vput(ndp->ni_dvp);
 				if (ndp->ni_vp) {
 					if ((cnp->cn_flags & LOCKLEAF))
 						vput(ndp->ni_vp);
