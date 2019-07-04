@@ -195,6 +195,8 @@ solisten(struct socket *so, int backlog)
 	return (0);
 }
 
+#define SOSP_FREEING_READ	1
+#define SOSP_FREEING_WRITE	2
 void
 sofree(struct socket *so, int s)
 {
@@ -218,12 +220,20 @@ sofree(struct socket *so, int s)
 	sigio_free(&so->so_sigio);
 #ifdef SOCKET_SPLICE
 	if (so->so_sp) {
-		if (issplicedback(so))
-			sounsplice(so->so_sp->ssp_soback, so,
-			    so->so_sp->ssp_soback == so ? 3 : 2);
-		if (isspliced(so))
-			sounsplice(so, so->so_sp->ssp_socket,
-			    so == so->so_sp->ssp_socket ? 3 : 1);
+		if (issplicedback(so)) {
+			int freeing = SOSP_FREEING_WRITE;
+
+			if (so->so_sp->ssp_soback == so)
+				freeing |= SOSP_FREEING_READ;
+			sounsplice(so->so_sp->ssp_soback, so, freeing);
+		}
+		if (isspliced(so)) {
+			int freeing = SOSP_FREEING_READ;
+
+			if (so == so->so_sp->ssp_socket)
+				freeing |= SOSP_FREEING_WRITE;
+			sounsplice(so, so->so_sp->ssp_socket, freeing);
+		}
 	}
 #endif /* SOCKET_SPLICE */
 	sbrelease(so, &so->so_snd);
@@ -1238,9 +1248,9 @@ sounsplice(struct socket *so, struct socket *sosp, int freeing)
 	so->so_rcv.sb_flags &= ~SB_SPLICE;
 	so->so_sp->ssp_socket = sosp->so_sp->ssp_soback = NULL;
 	/* Do not wakeup a socket that is about to be freed. */
-	if ((freeing & 1) == 0 && soreadable(so))
+	if ((freeing & SOSP_FREEING_READ) == 0 && soreadable(so))
 		sorwakeup(so);
-	if ((freeing & 2) == 0 && sowriteable(sosp))
+	if ((freeing & SOSP_FREEING_WRITE) == 0 && sowriteable(sosp))
 		sowwakeup(sosp);
 }
 
