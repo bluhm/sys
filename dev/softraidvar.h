@@ -1,4 +1,4 @@
-/* $OpenBSD: softraidvar.h,v 1.168 2019/01/06 14:59:56 kn Exp $ */
+/* $OpenBSD: softraidvar.h,v 1.169 2019/07/04 18:09:17 bluhm Exp $ */
 /*
  * Copyright (c) 2006 Marco Peereboom <marco@peereboom.us>
  * Copyright (c) 2008 Chris Kuethe <ckuethe@openbsd.org>
