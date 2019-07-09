@@ -2492,7 +2492,7 @@ tcp_sack_option(struct tcpcb *tp, struct tcphdr *th, u_char *cp, int optlen)
 				 * ACKs some data in middle of a hole; need to
 				 * split current hole
 				 */
-				if (tp->snd_numholes >= 1024)
+				if (tp->snd_numholes >= 128)
 					goto done;
 				temp = (struct sackhole *)
 				    pool_get(&sackhl_pool, PR_NOWAIT);
@@ -2521,7 +2521,7 @@ tcp_sack_option(struct tcpcb *tp, struct tcphdr *th, u_char *cp, int optlen)
 			 * Need to append new hole at end.
 			 * Last hole is p (and it's not NULL).
 			 */
-			if (tp->snd_numholes >= 1024)
+			if (tp->snd_numholes >= 128)
 				goto done;
 			temp = (struct sackhole *)
 			    pool_get(&sackhl_pool, PR_NOWAIT);
