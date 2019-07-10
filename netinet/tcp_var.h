@@ -47,11 +47,11 @@ struct sackblk {
 };
 
 struct sackhole {
+	SLIST_ENTRY(sackhole) entries;
 	tcp_seq sah_start;	/* start seq no. of hole */
 	tcp_seq sah_end;	/* end seq no. */
-	int	sah_dups;	/* number of dup(s)acks for this hole */
 	tcp_seq sah_rxmit;	/* next seq. no in hole to be retransmitted */
-	SLIST_ENTRY(sackhole) entries;
+	int	sah_dups;	/* number of dup(s)acks for this hole */
 };
 
 /*
