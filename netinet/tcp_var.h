@@ -433,6 +433,7 @@ struct	tcpstat {
 	u_int64_t tcps_sack_rexmit_bytes;	/* SACK rexmit bytes */
 	u_int64_t tcps_sack_rcv_opts;		/* SACK options received */
 	u_int64_t tcps_sack_snd_opts;		/* SACK options sent */
+	u_int64_t tcps_sack_drop_opts;		/* SACK options dropped */
 };
 
 /*
@@ -632,6 +633,7 @@ enum tcpstat_counters {
 	tcps_sack_rexmit_bytes,
 	tcps_sack_rcv_opts,
 	tcps_sack_snd_opts,
+	tcps_sack_drop_opts,
 	tcps_ncounters,
 };
 
