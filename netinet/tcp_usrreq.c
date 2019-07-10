@@ -945,6 +945,7 @@ tcp_sysctl_tcpstat(void *oldp, size_t *oldlenp, void *newp)
 	ASSIGN(tcps_sack_rexmit_bytes);
 	ASSIGN(tcps_sack_rcv_opts);
 	ASSIGN(tcps_sack_snd_opts);
+	ASSIGN(tcps_sack_drop_opts);
 
 #undef ASSIGN
 
