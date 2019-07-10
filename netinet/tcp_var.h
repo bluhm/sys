@@ -46,6 +46,7 @@ struct sackblk {
 	tcp_seq end; 		/* end seq no. */
 };
 
+SLIST_HEAD(sahhead, sackhole);
 struct sackhole {
 	SLIST_ENTRY(sackhole) entries;
 	tcp_seq sah_start;	/* start seq no. of hole */
@@ -122,7 +123,7 @@ struct tcpcb {
 	u_long	snd_wnd;		/* send window */
 	int	sack_enable;		/* enable SACK for this connection */
 	int	snd_numholes;		/* number of holes seen by sender */
-	SLIST_HEAD(,sackhole) snd_holes;/* linked list of holes (sorted) */
+	struct	sahhead snd_holes;	/* linked list of holes (sorted) */
 	tcp_seq snd_last;		/* for use in fast recovery */
 /* receive sequence variables */
 	u_long	rcv_wnd;		/* receive window */
