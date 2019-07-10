@@ -132,7 +132,7 @@ tcp_sack_output(struct tcpcb *tp)
 
 	if (!tp->sack_enable)
 		return (NULL);
-	SLIST_FOREACH (sh, &tp->snd_holes, entries) {
+	SLIST_FOREACH(sh, &tp->snd_holes, entries) {
 		if (sh->sah_dups >= tcprexmtthresh &&
 		    SEQ_LT(sh->sah_rxmit, sh->sah_end)) {
 			if (SEQ_LT(sh->sah_rxmit, tp->snd_una)) {

@@ -2411,7 +2411,6 @@ tcp_sack_option(struct tcpcb *tp, struct tcphdr *th, u_char *cp, int optlen)
 		if (SEQ_GT(sack.end, tp->snd_max))
 			continue;
 		if (SLIST_EMPTY(&tp->snd_holes)) { /* first hole */
-			
 			sh = pool_get(&sackhl_pool, PR_NOWAIT);
 			if (sh == NULL) {
 				/* ENOBUFS, so ignore SACKed block for now*/
@@ -2434,7 +2433,7 @@ tcp_sack_option(struct tcpcb *tp, struct tcphdr *th, u_char *cp, int optlen)
 			continue; /* with next sack block */
 		}
 		/* Go thrugh list of holes: prev = previous, sh = current */
-		prev = SLIST_FIRST(&tp->snd_holes);
+		prev = NULL;
 		SLIST_FOREACH_SAFE(sh, &tp->snd_holes, entries, next) {
 			if (SEQ_LEQ(sack.end, sh->sah_start))
 				/* SACKs data before the current hole */
@@ -2452,7 +2451,7 @@ tcp_sack_option(struct tcpcb *tp, struct tcphdr *th, u_char *cp, int optlen)
 				/* Data acks at least the beginning of hole */
 				if (SEQ_GEQ(sack.end, sh->sah_end)) {
 					/* Acks entire hole, so delete hole */
-					if (prev != sh) {
+					if (prev != NULL) {
 						SLIST_REMOVE_AFTER(
 						    prev, entries);
 					} else {
@@ -2491,6 +2490,7 @@ tcp_sack_option(struct tcpcb *tp, struct tcphdr *th, u_char *cp, int optlen)
 				temp = pool_get(&sackhl_pool, PR_NOWAIT);
 				if (temp == NULL)
 					goto done; /* ENOBUFS */
+				SLIST_INSERT_AFTER(sh, temp, entries);
 				temp->sah_start = sack.end;
 				temp->sah_end = sh->sah_end;
 				temp->sah_dups = sh->sah_dups;
@@ -2503,9 +2503,8 @@ tcp_sack_option(struct tcpcb *tp, struct tcphdr *th, u_char *cp, int optlen)
 				if (((sack.end - sh->sah_end)/tp->t_maxseg) >=
 					tcprexmtthresh)
 					sh->sah_dups = tcprexmtthresh;
-				SLIST_INSERT_AFTER(sh, temp, entries);
-				prev = temp;
 				tp->snd_numholes++;
+				prev = temp;
 			}
 		}
 		/* At this point, prev points to the last hole on the list */
@@ -2517,6 +2516,7 @@ tcp_sack_option(struct tcpcb *tp, struct tcphdr *th, u_char *cp, int optlen)
 			temp = pool_get(&sackhl_pool, PR_NOWAIT);
 			if (temp == NULL)
 				goto done; /* ENOBUFS */
+			SLIST_INSERT_AFTER(prev, temp, entries);
 			temp->sah_start = tp->rcv_lastsack;
 			temp->sah_end = sack.start;
 			temp->sah_dups = min(tcprexmtthresh,
@@ -2524,7 +2524,6 @@ tcp_sack_option(struct tcpcb *tp, struct tcphdr *th, u_char *cp, int optlen)
 			if (temp->sah_dups < 1)
 				temp->sah_dups = 1;
 			temp->sah_rxmit = temp->sah_start;
-			SLIST_INSERT_AFTER(prev, temp, entries);
 			tp->rcv_lastsack = sack.end;
 			tp->snd_numholes++;
 		}
