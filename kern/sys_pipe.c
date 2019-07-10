@@ -1,4 +1,4 @@
-/*	$OpenBSD: sys_pipe.c,v 1.88 2019/06/22 06:48:25 semarie Exp $	*/
+/*	$OpenBSD: sys_pipe.c,v 1.90 2019/07/09 15:02:15 semarie Exp $	*/
 
 /*
  * Copyright (c) 1996 John S. Dyson
