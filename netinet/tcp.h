@@ -1,4 +1,4 @@
-/*	$OpenBSD: tcp.h,v 1.20 2013/08/12 21:57:16 bluhm Exp $	*/
+/*	$OpenBSD: tcp.h,v 1.21 2019/07/10 18:45:31 bluhm Exp $	*/
 /*	$NetBSD: tcp.h,v 1.8 1995/04/17 05:32:58 cgd Exp $	*/
 
 /*
