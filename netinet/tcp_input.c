@@ -2369,7 +2369,7 @@ tcp_sack_option(struct tcpcb *tp, struct tcphdr *th, u_char *cp, int optlen)
 {
 	int tmp_olen;
 	u_char *tmp_cp;
-	struct sackhole *cur, *p, *temp;
+	struct sackhole *sh, *prev, *next, *temp;
 
 	if (!tp->sack_enable)
 		return;
@@ -2410,128 +2410,121 @@ tcp_sack_option(struct tcpcb *tp, struct tcphdr *th, u_char *cp, int optlen)
 		}
 		if (SEQ_GT(sack.end, tp->snd_max))
 			continue;
-		if (tp->snd_holes == NULL) { /* first hole */
-			tp->snd_holes = (struct sackhole *)
-			    pool_get(&sackhl_pool, PR_NOWAIT);
-			if (tp->snd_holes == NULL) {
+		if (SLIST_EMPTY(&tp->snd_holes)) { /* first hole */
+			
+			sh = pool_get(&sackhl_pool, PR_NOWAIT);
+			if (sh == NULL) {
 				/* ENOBUFS, so ignore SACKed block for now*/
 				goto done;
 			}
-			cur = tp->snd_holes;
-			cur->start = th->th_ack;
-			cur->end = sack.start;
-			cur->rxmit = cur->start;
-			cur->next = NULL;
+			SLIST_INSERT_HEAD(&tp->snd_holes, sh, entries);
+			sh->sah_start = th->th_ack;
+			sh->sah_end = sack.start;
+			sh->sah_rxmit = sh->sah_start;
 			tp->snd_numholes = 1;
 			tp->rcv_lastsack = sack.end;
 			/*
 			 * dups is at least one.  If more data has been
 			 * SACKed, it can be greater than one.
 			 */
-			cur->dups = min(tcprexmtthresh,
-			    ((sack.end - cur->end)/tp->t_maxseg));
-			if (cur->dups < 1)
-				cur->dups = 1;
+			sh->sah_dups = min(tcprexmtthresh,
+			    ((sack.end - sh->sah_end)/tp->t_maxseg));
+			if (sh->sah_dups < 1)
+				sh->sah_dups = 1;
 			continue; /* with next sack block */
 		}
-		/* Go thru list of holes:  p = previous,  cur = current */
-		p = cur = tp->snd_holes;
-		while (cur) {
-			if (SEQ_LEQ(sack.end, cur->start))
+		/* Go thrugh list of holes: prev = previous, sh = current */
+		prev = SLIST_FIRST(&tp->snd_holes);
+		SLIST_FOREACH_SAFE(sh, &tp->snd_holes, entries, next) {
+			if (SEQ_LEQ(sack.end, sh->sah_start))
 				/* SACKs data before the current hole */
 				break; /* no use going through more holes */
-			if (SEQ_GEQ(sack.start, cur->end)) {
+			if (SEQ_GEQ(sack.start, sh->sah_end)) {
 				/* SACKs data beyond the current hole */
-				cur->dups++;
-				if (((sack.end - cur->end)/tp->t_maxseg) >=
+				sh->sah_dups++;
+				if (((sack.end - sh->sah_end)/tp->t_maxseg) >=
 				    tcprexmtthresh)
-					cur->dups = tcprexmtthresh;
-				p = cur;
-				cur = cur->next;
+					sh->sah_dups = tcprexmtthresh;
+				prev = sh;
 				continue;
 			}
-			if (SEQ_LEQ(sack.start, cur->start)) {
+			if (SEQ_LEQ(sack.start, sh->sah_start)) {
 				/* Data acks at least the beginning of hole */
-				if (SEQ_GEQ(sack.end, cur->end)) {
+				if (SEQ_GEQ(sack.end, sh->sah_end)) {
 					/* Acks entire hole, so delete hole */
-					if (p != cur) {
-						p->next = cur->next;
-						pool_put(&sackhl_pool, cur);
-						cur = p->next;
+					if (prev != sh) {
+						SLIST_REMOVE_AFTER(
+						    prev, entries);
 					} else {
-						cur = cur->next;
-						pool_put(&sackhl_pool, p);
-						p = cur;
-						tp->snd_holes = p;
+						SLIST_REMOVE_HEAD(	
+						    &tp->snd_holes, entries);
 					}
+					pool_put(&sackhl_pool, sh);
 					tp->snd_numholes--;
 					continue;
 				}
 				/* otherwise, move start of hole forward */
-				cur->start = sack.end;
-				cur->rxmit = SEQ_MAX(cur->rxmit, cur->start);
-				p = cur;
-				cur = cur->next;
+				sh->sah_start = sack.end;
+				sh->sah_rxmit = SEQ_MAX(sh->sah_rxmit,
+				    sh->sah_start);
+				prev = sh;
 				continue;
 			}
 			/* move end of hole backward */
-			if (SEQ_GEQ(sack.end, cur->end)) {
-				cur->end = sack.start;
-				cur->rxmit = SEQ_MIN(cur->rxmit, cur->end);
-				cur->dups++;
-				if (((sack.end - cur->end)/tp->t_maxseg) >=
+			if (SEQ_GEQ(sack.end, sh->sah_end)) {
+				sh->sah_end = sack.start;
+				sh->sah_rxmit = SEQ_MIN(sh->sah_rxmit,
+				    sh->sah_end);
+				sh->sah_dups++;
+				if (((sack.end - sh->sah_end)/tp->t_maxseg) >=
 				    tcprexmtthresh)
-					cur->dups = tcprexmtthresh;
-				p = cur;
-				cur = cur->next;
+					sh->sah_dups = tcprexmtthresh;
+				prev = sh;
 				continue;
 			}
-			if (SEQ_LT(cur->start, sack.start) &&
-			    SEQ_GT(cur->end, sack.end)) {
+			if (SEQ_LT(sh->sah_start, sack.start) &&
+			    SEQ_GT(sh->sah_end, sack.end)) {
 				/*
 				 * ACKs some data in middle of a hole; need to
 				 * split current hole
 				 */
-				temp = (struct sackhole *)
-				    pool_get(&sackhl_pool, PR_NOWAIT);
+				temp = pool_get(&sackhl_pool, PR_NOWAIT);
 				if (temp == NULL)
 					goto done; /* ENOBUFS */
-				temp->next = cur->next;
-				temp->start = sack.end;
-				temp->end = cur->end;
-				temp->dups = cur->dups;
-				temp->rxmit = SEQ_MAX(cur->rxmit, temp->start);
-				cur->end = sack.start;
-				cur->rxmit = SEQ_MIN(cur->rxmit, cur->end);
-				cur->dups++;
-				if (((sack.end - cur->end)/tp->t_maxseg) >=
+				temp->sah_start = sack.end;
+				temp->sah_end = sh->sah_end;
+				temp->sah_dups = sh->sah_dups;
+				temp->sah_rxmit = SEQ_MAX(sh->sah_rxmit,
+				    temp->sah_start);
+				sh->sah_end = sack.start;
+				sh->sah_rxmit = SEQ_MIN(sh->sah_rxmit,
+				    sh->sah_end);
+				sh->sah_dups++;
+				if (((sack.end - sh->sah_end)/tp->t_maxseg) >=
 					tcprexmtthresh)
-					cur->dups = tcprexmtthresh;
-				cur->next = temp;
-				p = temp;
-				cur = p->next;
+					sh->sah_dups = tcprexmtthresh;
+				SLIST_INSERT_AFTER(sh, temp, entries);
+				prev = temp;
 				tp->snd_numholes++;
 			}
 		}
-		/* At this point, p points to the last hole on the list */
+		/* At this point, prev points to the last hole on the list */
 		if (SEQ_LT(tp->rcv_lastsack, sack.start)) {
 			/*
 			 * Need to append new hole at end.
 			 * Last hole is p (and it's not NULL).
 			 */
-			temp = (struct sackhole *)
-			    pool_get(&sackhl_pool, PR_NOWAIT);
+			temp = pool_get(&sackhl_pool, PR_NOWAIT);
 			if (temp == NULL)
 				goto done; /* ENOBUFS */
-			temp->start = tp->rcv_lastsack;
-			temp->end = sack.start;
-			temp->dups = min(tcprexmtthresh,
+			temp->sah_start = tp->rcv_lastsack;
+			temp->sah_end = sack.start;
+			temp->sah_dups = min(tcprexmtthresh,
 			    ((sack.end - sack.start)/tp->t_maxseg));
-			if (temp->dups < 1)
-				temp->dups = 1;
-			temp->rxmit = temp->start;
-			temp->next = 0;
-			p->next = temp;
+			if (temp->sah_dups < 1)
+				temp->sah_dups = 1;
+			temp->sah_rxmit = temp->sah_start;
+			SLIST_INSERT_AFTER(prev, temp, entries);
 			tp->rcv_lastsack = sack.end;
 			tp->snd_numholes++;
 		}
@@ -2552,22 +2545,22 @@ tcp_del_sackholes(struct tcpcb *tp, struct tcphdr *th)
 		/* max because this could be an older ack just arrived */
 		tcp_seq lastack = SEQ_GT(th->th_ack, tp->snd_una) ?
 			th->th_ack : tp->snd_una;
-		struct sackhole *cur = tp->snd_holes;
-		struct sackhole *prev;
-		while (cur)
-			if (SEQ_LEQ(cur->end, lastack)) {
-				prev = cur;
-				cur = cur->next;
-				pool_put(&sackhl_pool, prev);
+		while (!SLIST_EMPTY(&tp->snd_holes)) {
+			struct sackhole *sh = SLIST_FIRST(&tp->snd_holes);
+
+			if (SEQ_LEQ(sh->sah_end, lastack)) {
+				SLIST_REMOVE_HEAD(&tp->snd_holes, entries);
+				pool_put(&sackhl_pool, sh);
 				tp->snd_numholes--;
-			} else if (SEQ_LT(cur->start, lastack)) {
-				cur->start = lastack;
-				if (SEQ_LT(cur->rxmit, cur->start))
-					cur->rxmit = cur->start;
-				break;
-			} else
-				break;
-		tp->snd_holes = cur;
+				continue;
+			}
+			if (SEQ_LT(sh->sah_start, lastack)) {
+				sh->sah_start = lastack;
+				if (SEQ_LT(sh->sah_rxmit, sh->sah_start))
+					sh->sah_rxmit = sh->sah_start;
+			}
+			break;
+		}
 	}
 }
 

@@ -427,6 +427,7 @@ tcp_newtcpcb(struct inpcb *inp)
 		TCP_TIMER_INIT(tp, i);
 
 	tp->sack_enable = tcp_do_sack;
+	SLIST_INIT(&tp->snd_holes);
 	tp->t_flags = tcp_do_rfc1323 ? (TF_REQ_SCALE|TF_REQ_TSTMP) : 0;
 	tp->t_inpcb = inp;
 	/*
@@ -500,7 +501,7 @@ tcp_close(struct tcpcb *tp)
 {
 	struct inpcb *inp = tp->t_inpcb;
 	struct socket *so = inp->inp_socket;
-	struct sackhole *p, *q;
+	struct sackhole *sh;
 
 	/* free the reassembly queue, if any */
 	tcp_freeq(tp);
@@ -509,11 +510,10 @@ tcp_close(struct tcpcb *tp)
 	syn_cache_cleanup(tp);
 
 	/* Free SACK holes. */
-	q = p = tp->snd_holes;
-	while (p != 0) {
-		q = p->next;
-		pool_put(&sackhl_pool, p);
-		p = q;
+	while (!SLIST_EMPTY(&tp->snd_holes)) {
+		sh = SLIST_FIRST(&tp->snd_holes);
+		SLIST_REMOVE_HEAD(&tp->snd_holes, entries);
+		pool_put(&sackhl_pool, sh);
 	}
 
 	m_free(tp->t_template);

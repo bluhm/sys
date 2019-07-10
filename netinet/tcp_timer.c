@@ -179,17 +179,16 @@ void	tcp_timer_freesack(struct tcpcb *);
 void
 tcp_timer_freesack(struct tcpcb *tp)
 {
-	struct sackhole *p, *q;
+	struct sackhole *sh;
+
 	/*
 	 * Free SACK holes for 2MSL and REXMT timers.
 	 */
-	q = tp->snd_holes;
-	while (q != NULL) {
-		p = q;
-		q = q->next;
-		pool_put(&sackhl_pool, p);
+        while (!SLIST_EMPTY(&tp->snd_holes)) {
+                sh = SLIST_FIRST(&tp->snd_holes);
+                SLIST_REMOVE_HEAD(&tp->snd_holes, entries);
+                pool_put(&sackhl_pool, sh);
 	}
-	tp->snd_holes = 0;
 }
 
 void

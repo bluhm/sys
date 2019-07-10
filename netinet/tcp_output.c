@@ -128,24 +128,22 @@ tcp_print_holes(struct tcpcb *tp)
 struct sackhole *
 tcp_sack_output(struct tcpcb *tp)
 {
-	struct sackhole *p;
+	struct sackhole *sh;
 
 	if (!tp->sack_enable)
 		return (NULL);
-	p = tp->snd_holes;
-	while (p) {
-		if (p->dups >= tcprexmtthresh && SEQ_LT(p->rxmit, p->end)) {
-			if (SEQ_LT(p->rxmit, tp->snd_una)) {/* old SACK hole */
-				p = p->next;
+	SLIST_FOREACH (sh, &tp->snd_holes, entries) {
+		if (sh->sah_dups >= tcprexmtthresh &&
+		    SEQ_LT(sh->sah_rxmit, sh->sah_end)) {
+			if (SEQ_LT(sh->sah_rxmit, tp->snd_una)) {
+				/* old SACK hole */
 				continue;
 			}
 #ifdef TCP_SACK_DEBUG
-			if (p)
-				tcp_print_holes(tp);
+			tcp_print_holes(tp);
 #endif
-			return (p);
+			return (sh);
 		}
-		p = p->next;
 	}
 	return (NULL);
 }
@@ -159,8 +157,9 @@ tcp_sack_output(struct tcpcb *tp)
 void
 tcp_sack_adjust(struct tcpcb *tp)
 {
-	struct sackhole *cur = tp->snd_holes;
-	if (cur == NULL)
+	struct sackhole *sh, *next;
+
+	if (SLIST_EMPTY(&tp->snd_holes))
 		return; /* No holes */
 	if (SEQ_GEQ(tp->snd_nxt, tp->rcv_lastsack))
 		return; /* We're already beyond any SACKed blocks */
@@ -169,17 +168,17 @@ tcp_sack_adjust(struct tcpcb *tp)
 	 * i) snd_nxt lies between end of one hole and beginning of another
 	 * ii) snd_nxt lies between end of last hole and rcv_lastsack
 	 */
-	while (cur->next) {
-		if (SEQ_LT(tp->snd_nxt, cur->end))
+	SLIST_FOREACH_SAFE(sh, &tp->snd_holes, entries, next) {
+		if (next == NULL)
+			break;
+		if (SEQ_LT(tp->snd_nxt, sh->sah_end))
 			return;
-		if (SEQ_GEQ(tp->snd_nxt, cur->next->start))
-			cur = cur->next;
-		else {
-			tp->snd_nxt = cur->next->start;
+		if (SEQ_LT(tp->snd_nxt, next->sah_start)) {
+			tp->snd_nxt = next->sah_start;
 			return;
 		}
 	}
-	if (SEQ_LT(tp->snd_nxt, cur->end))
+	if (SEQ_LT(tp->snd_nxt, sh->sah_end))
 		return;
 	tp->snd_nxt = tp->rcv_lastsack;
 	return;
@@ -201,7 +200,7 @@ tcp_output(struct tcpcb *tp)
 	unsigned int optlen, hdrlen, packetlen;
 	int idle, sendalot = 0;
 	int i, sack_rxmit = 0;
-	struct sackhole *p;
+	struct sackhole *sh;
 	int maxburst = TCP_MAXBURST;
 #ifdef TCP_SIGNATURE
 	unsigned int sigoff;
@@ -265,11 +264,11 @@ again:
 	 */
 	if (tp->sack_enable && !sendalot) {
 		if (tp->t_dupacks >= tcprexmtthresh &&
-		    (p = tcp_sack_output(tp))) {
-			off = p->rxmit - tp->snd_una;
+		    (sh = tcp_sack_output(tp))) {
+			off = sh->sah_rxmit - tp->snd_una;
 			sack_rxmit = 1;
 			/* Coalesce holes into a single retransmission */
-			len = min(tp->t_maxseg, p->end - p->rxmit);
+			len = min(tp->t_maxseg, sh->sah_end - sh->sah_rxmit);
 			if (SEQ_LT(tp->snd_una, tp->snd_last))
 				tp->snd_cwnd -= tp->t_maxseg;
 		}
@@ -763,8 +762,8 @@ send:
 		 */
 		if (sendalot)
 			sendalot = 0;
-		th->th_seq = htonl(p->rxmit);
-		p->rxmit += len;
+		th->th_seq = htonl(sh->sah_rxmit);
+		sh->sah_rxmit += len;
 		tcpstat_pkt(tcps_sack_rexmits, tcps_sack_rexmit_bytes, len);
 	}
 
@@ -906,9 +905,8 @@ send:
 			}
 		}
 		if (tp->sack_enable) {
-			if (sack_rxmit && (p->rxmit != tp->snd_nxt)) {
+			if (sack_rxmit && (sh->sah_rxmit != tp->snd_nxt))
 				goto timer;
-			}
 		}
 		tp->snd_nxt += len;
 		if (SEQ_GT(tp->snd_nxt, tp->snd_max)) {

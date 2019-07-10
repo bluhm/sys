@@ -47,11 +47,11 @@ struct sackblk {
 };
 
 struct sackhole {
-	tcp_seq start;		/* start seq no. of hole */
-	tcp_seq end;		/* end seq no. */
-	int	dups;		/* number of dup(s)acks for this hole */
-	tcp_seq rxmit;		/* next seq. no in hole to be retransmitted */
-	struct sackhole *next;	/* next in list */
+	tcp_seq sah_start;	/* start seq no. of hole */
+	tcp_seq sah_end;	/* end seq no. */
+	int	sah_dups;	/* number of dup(s)acks for this hole */
+	tcp_seq sah_rxmit;	/* next seq. no in hole to be retransmitted */
+	SLIST_ENTRY(sackhole) entries;
 };
 
 /*
@@ -122,7 +122,7 @@ struct tcpcb {
 	u_long	snd_wnd;		/* send window */
 	int	sack_enable;		/* enable SACK for this connection */
 	int	snd_numholes;		/* number of holes seen by sender */
-	struct sackhole *snd_holes;	/* linked list of holes (sorted) */
+	SLIST_HEAD(,sackhole) snd_holes;/* linked list of holes (sorted) */
 	tcp_seq snd_last;		/* for use in fast recovery */
 /* receive sequence variables */
 	u_long	rcv_wnd;		/* receive window */
