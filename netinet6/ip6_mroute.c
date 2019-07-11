@@ -666,6 +666,7 @@ mf6c_add_route(struct ifnet *ifp, struct sockaddr *origin,
 		    inet_ntop(AF_INET6, group, bdst, sizeof(bdst)),
 		    mf6cc->mf6cc_parent, ifp->if_xname);
 		mrt6_mcast6_del(rt, rtableid);
+		rtfree(rt);
 		return ENOMEM;
 	}
 
@@ -723,6 +724,7 @@ mf6c_update(struct mf6cctl *mf6cc, int wait, unsigned int rtableid)
 
 			rt_timer_remove_all(rt);
 			mrt6_mcast6_del(rt, rtableid);
+			rtfree(rt);
 			continue;
 		}
 
@@ -837,6 +839,7 @@ del_m6fc(struct socket *so, struct mf6cctl *mfccp)
 		/* Remove all timers related to this route. */
 		rt_timer_remove_all(rt);
 		mrt6_mcast6_del(rt, rtableid);
+		rtfree(rt);
 	}
 
 	return 0;
@@ -1260,24 +1263,17 @@ int
 mrt6_mcast6_del(struct rtentry *rt, unsigned int rtableid)
 {
 	struct ifnet *ifp;
-	int rv;
+	int error;
 
 	free(rt->rt_llinfo, M_MRTABLE, sizeof(struct mf6c));
 	rt->rt_llinfo = NULL;
 
-	if ((ifp = if_get(rt->rt_ifidx)) == NULL) {
-		DPRINTF("if_get(%d) failed", rt->rt_ifidx);
-		rtfree(rt);
+	ifp = if_get(rt->rt_ifidx);
+	if (ifp == NULL)
 		return ENOENT;
-	}
 
-	rv = rtdeletemsg(rt, ifp, rtableid);
+	error = rtdeletemsg(rt, ifp, rtableid);
 	if_put(ifp);
-	if (rv != 0) {
-		DPRINTF("rtdeletemsg failed %d", rv);
-		rtfree(rt);
-		return rv;
-	}
 
-	return 0;
+	return error;
 }
