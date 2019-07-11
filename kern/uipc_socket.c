@@ -172,7 +172,7 @@ solisten(struct socket *so, int backlog)
 	int s, error;
 
 	if (so->so_state & (SS_ISCONNECTED|SS_ISCONNECTING|SS_ISDISCONNECTING))
-		return (EOPNOTSUPP);
+		return (EINVAL);
 #ifdef SOCKET_SPLICE
 	if (isspliced(so) || issplicedback(so))
 		return (EOPNOTSUPP);
