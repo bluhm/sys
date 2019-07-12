@@ -134,8 +134,8 @@ void	m_extfree(struct mbuf *);
 void	m_zero(struct mbuf *);
 
 struct mutex m_pool_mtx = MUTEX_INITIALIZER(IPL_NET);
-unsigned int mbuf_mem_limit; /* how much memory can be allocated */
-unsigned int mbuf_mem_alloc; /* how much memory has been allocated */
+unsigned long mbuf_mem_limit;	/* how much memory can be allocated */
+unsigned long mbuf_mem_alloc;	/* how much memory has been allocated */
 
 void	*m_pool_alloc(struct pool *, int, int *);
 void	m_pool_free(struct pool *, void *);
@@ -160,14 +160,15 @@ static u_int num_extfree_fns;
 void
 mbinit(void)
 {
-	int i;
+	int i, error;
 	unsigned int lowbits;
 
 	CTASSERT(MSIZE == sizeof(struct mbuf));
 
 	m_pool_allocator.pa_pagesz = pool_allocator_multi.pa_pagesz;
 
-	nmbclust_update();
+	error = nmbclust_update(nmbclust);
+	KASSERT(error == 0);
 	mbuf_mem_alloc = 0;
 
 #if DIAGNOSTIC
@@ -213,11 +214,15 @@ mbcpuinit()
 		pool_cache_init(&mclpools[i]);
 }
 
-void
-nmbclust_update(void)
+int
+nmbclust_update(long newclust)
 {
+	if (nmbclust > LONG_MAX / MCLBYTES)
+		return ERANGE;
 	/* update the global mbuf memory limit */
+	nmbclust = newclust;
 	mbuf_mem_limit = nmbclust * MCLBYTES;
+	return 0;
 }
 
 /*
