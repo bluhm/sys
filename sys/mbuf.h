@@ -411,6 +411,7 @@ extern	int max_hdr;			/* largest link+protocol header */
 
 void	mbinit(void);
 void	mbcpuinit(void);
+void	nmbclust_update(void);
 struct	mbuf *m_copym(struct mbuf *, int, int, int);
 struct	mbuf *m_free(struct mbuf *);
 struct	mbuf *m_get(int, int);
