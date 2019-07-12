@@ -89,7 +89,7 @@ int	initialvnodes = NVNODE;
 int	maxprocess = NPROCESS;
 int	maxthread = NPROCESS + 8 * MAXUSERS;
 int	maxfiles = 5 * (NPROCESS + MAXUSERS) + 80;
-int	nmbclust = NMBCLUSTERS;
+long	nmbclust = NMBCLUSTERS;
 
 #ifndef MBLOWAT
 #define MBLOWAT		16

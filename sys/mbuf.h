@@ -402,7 +402,7 @@ struct mbuf_queue {
 #ifdef	_KERNEL
 struct pool;
 
-extern	int nmbclust;			/* limit on the # of clusters */
+extern	long nmbclust;			/* limit on the # of clusters */
 extern	int mblowat;			/* mbuf low water mark */
 extern	int mcllowat;			/* mbuf cluster low water mark */
 extern	int max_linkhdr;		/* largest link-level header */
@@ -411,7 +411,7 @@ extern	int max_hdr;			/* largest link+protocol header */
 
 void	mbinit(void);
 void	mbcpuinit(void);
-void	nmbclust_update(void);
+int	nmbclust_update(long);
 struct	mbuf *m_copym(struct mbuf *, int, int, int);
 struct	mbuf *m_free(struct mbuf *);
 struct	mbuf *m_get(int, int);
