@@ -131,7 +131,6 @@ int max_hdr;			/* largest link+protocol header */
 struct	mutex m_extref_mtx = MUTEX_INITIALIZER(IPL_NET);
 
 void	m_extfree(struct mbuf *);
-void	nmbclust_update(void);
 void	m_zero(struct mbuf *);
 
 struct mutex m_pool_mtx = MUTEX_INITIALIZER(IPL_NET);
