@@ -591,7 +591,7 @@ kern_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 	case KERN_MAXCLUSTERS: {
 		int val = nmbclust;
 		error = sysctl_int(oldp, oldlenp, newp, newlen, &val);
-		if (error == 0)
+		if (error == 0 && val != nmbclust)
 			error = nmbclust_update(val);
 		return (error);
 	}
