@@ -95,7 +95,7 @@ void
 unp_init(void)
 {
 	pool_init(&unpcb_pool, sizeof(struct unpcb), 0,
-	    IPL_NONE, PR_WAITOK, "unpcb", NULL);
+	    IPL_NONE, 0, "unpcb", NULL);
 }
 
 void
