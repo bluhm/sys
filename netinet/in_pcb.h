@@ -256,6 +256,7 @@ extern int in_pcbnotifymiss;
 
 #define sotopf(so)  (so->so_proto->pr_domain->dom_family)
 
+void	 in_init(void);
 void	 in_losing(struct inpcb *);
 int	 in_pcballoc(struct socket *, struct inpcbtable *);
 int	 in_pcbbind(struct inpcb *, struct mbuf *, struct proc *);

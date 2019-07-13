@@ -114,7 +114,6 @@ int ipport_hilastauto = IPPORT_HILASTAUTO;
 struct baddynamicports baddynamicports;
 struct baddynamicports rootonlyports;
 struct pool inpcb_pool;
-int inpcb_pool_initialized = 0;
 
 int in_pcbresize (struct inpcbtable *, int);
 
@@ -123,6 +122,13 @@ int in_pcbresize (struct inpcbtable *, int);
 struct inpcbhead *in_pcbhash(struct inpcbtable *, int,
     const struct in_addr *, u_short, const struct in_addr *, u_short);
 struct inpcbhead *in_pcblhash(struct inpcbtable *, int, u_short);
+
+void
+in_init(void)
+{
+	pool_init(&inpcb_pool, sizeof(struct inpcb), 0,
+	    IPL_SOFTNET, 0, "inpcb", NULL);
+}
 
 struct inpcbhead *
 in_pcbhash(struct inpcbtable *table, int rdom,
@@ -218,11 +224,6 @@ in_pcballoc(struct socket *so, struct inpcbtable *table)
 
 	NET_ASSERT_LOCKED();
 
-	if (inpcb_pool_initialized == 0) {
-		pool_init(&inpcb_pool, sizeof(struct inpcb), 0,
-		    IPL_SOFTNET, 0, "inpcbpl", NULL);
-		inpcb_pool_initialized = 1;
-	}
 	inp = pool_get(&inpcb_pool, PR_NOWAIT|PR_ZERO);
 	if (inp == NULL)
 		return (ENOBUFS);
