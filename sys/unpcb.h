@@ -96,6 +96,7 @@ int	uipc_usrreq(struct socket *, int , struct mbuf *,
 int	uipc_attach(struct socket *, int);
 int	uipc_detach(struct socket *);
 
+void	unp_init(void);
 int	unp_bind(struct unpcb *, struct mbuf *, struct proc *);
 int	unp_connect(struct socket *, struct mbuf *, struct proc *);
 int	unp_connect2(struct socket *, struct socket *);

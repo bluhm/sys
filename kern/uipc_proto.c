@@ -79,6 +79,7 @@ struct protosw unixsw[] = {
 struct domain unixdomain = {
   .dom_family = AF_UNIX,
   .dom_name = "unix",
+  .dom_init = unp_init,
   .dom_externalize = unp_externalize,
   .dom_dispose = unp_dispose,
   .dom_protosw = unixsw,
