@@ -269,7 +269,7 @@ pfkeyv2_attach(struct socket *so, int proto)
 	if ((so->so_state & SS_PRIV) == 0)
 		return EACCES;
 
-	kp = pool_get(&pkpcb_pool, PR_WAITOK | PR_ZERO);
+	kp = pool_get(&pkpcb_pool, PR_WAITOK|PR_ZERO);
 	so->so_pcb = kp;
 	refcnt_init(&kp->kcb_refcnt);
 
