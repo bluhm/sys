@@ -1,4 +1,4 @@
-/*	$OpenBSD: uipc_proto.c,v 1.17 2018/04/08 18:57:39 guenther Exp $	*/
+/*	$OpenBSD: uipc_proto.c,v 1.18 2019/07/15 12:28:06 bluhm Exp $	*/
 /*	$NetBSD: uipc_proto.c,v 1.8 1996/02/13 21:10:47 christos Exp $	*/
 
 /*-
