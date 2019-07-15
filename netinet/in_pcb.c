@@ -123,6 +123,10 @@ struct inpcbhead *in_pcbhash(struct inpcbtable *, int,
     const struct in_addr *, u_short, const struct in_addr *, u_short);
 struct inpcbhead *in_pcblhash(struct inpcbtable *, int, u_short);
 
+/*
+ * in_pcb is used for inet and inet6.  in6_pcb only contains special
+ * IPv6 cases.  So the internet initializer is used for both domains.
+ */
 void
 in_init(void)
 {
