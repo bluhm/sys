@@ -217,7 +217,7 @@ mbcpuinit()
 int
 nmbclust_update(long newval)
 {
-	if (newval > LONG_MAX / MCLBYTES)
+	if (newval < 0 || newval > LONG_MAX / MCLBYTES)
 		return ERANGE;
 	/* update the global mbuf memory limit */
 	nmbclust = newval;
