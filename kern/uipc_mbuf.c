@@ -217,11 +217,18 @@ mbcpuinit()
 int
 nmbclust_update(long newval)
 {
+	int i;
+
 	if (newval < 0 || newval > LONG_MAX / MCLBYTES)
 		return ERANGE;
 	/* update the global mbuf memory limit */
 	nmbclust = newval;
 	mbuf_mem_limit = nmbclust * MCLBYTES;
+
+	pool_wakeup(&mbpool);
+	for (i = 0; i < nitems(mclsizes); i++)
+		pool_wakeup(&mclpools[i]);
+
 	return 0;
 }
 
