@@ -212,13 +212,7 @@ ip_init(void)
 int
 ip_ours(struct mbuf **mp, int *offp, int nxt, int af)
 {
-	/* We are already in a IPv4/IPv6 local deliver loop. */
-	if (af != AF_UNSPEC)
-		return ip_local(mp, offp, nxt, af);
-
-	niq_enqueue(&ipintrq, *mp);
-	*mp = NULL;
-	return IPPROTO_DONE;
+	return ip_local(mp, offp, nxt, af);
 }
 
 /*
