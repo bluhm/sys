@@ -577,10 +577,11 @@ dirloop:
 		printf("not found\n");
 #endif
 		/*
-		 * Allow for unveiling a file in a directory where we
-		 * don't have access to create it ourselves
+		 * Allow for unveiling a file in a directory which we cannot
+		 * create outselves.
 		 */
-		if (ndp->ni_pledge == PLEDGE_UNVEIL && error == EACCES)
+		if (ndp->ni_pledge == PLEDGE_UNVEIL &&
+		    (error == EACCES || error == EROFS))
 			error = EJUSTRETURN;
 
 		if (error != EJUSTRETURN)
