@@ -581,7 +581,7 @@ dirloop:
 		 * create ourselves.
 		 */
 		if (ndp->ni_pledge == PLEDGE_UNVEIL &&
-		    (error == EACCES || error == EROFS))
+		    (error == EPERM || error == EACCES || error == EROFS))
 			error = EJUSTRETURN;
 
 		if (error != EJUSTRETURN)
