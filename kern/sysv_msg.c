@@ -588,7 +588,7 @@ msg_copyin(struct msg *msg, const char *ubuf, size_t len, struct proc *p)
 		return (error);
 	}
 
-	if (msg->msg_type <= 0) {
+	if (msg->msg_type < 1) {
 		msg_free(msg);
 		return (EINVAL);
 	}
