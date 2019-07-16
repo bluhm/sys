@@ -167,8 +167,6 @@ mbinit(void)
 
 	m_pool_allocator.pa_pagesz = pool_allocator_multi.pa_pagesz;
 
-	error = nmbclust_update(nmbclust);
-	KASSERT(error == 0);
 	mbuf_mem_alloc = 0;
 
 #if DIAGNOSTIC
@@ -195,6 +193,9 @@ mbinit(void)
 
 		m_pool_init(&mclpools[i], mclsizes[i], 64, mclnames[i]);
 	}
+
+	error = nmbclust_update(nmbclust);
+	KASSERT(error == 0);
 
 	(void)mextfree_register(m_extfree_pool);
 	KASSERT(num_extfree_fns == 1);
