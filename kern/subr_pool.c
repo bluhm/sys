@@ -815,6 +815,12 @@ pool_put(struct pool *pp, void *v)
 	if (freeph != NULL)
 		pool_p_free(pp, freeph);
 
+	pool_wakeup(pp);
+}
+
+void
+pool_wakeup(struct pool *pp)
+{
 	if (!TAILQ_EMPTY(&pp->pr_requests)) {
 		pl_enter(pp, &pp->pr_requests_lock);
 		pool_runqueue(pp, PR_NOWAIT);
