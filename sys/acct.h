@@ -63,6 +63,7 @@ struct acct {
 #define	AXSIG	0x10		/* killed by a signal */
 #define	APLEDGE	0x20		/* killed due to pledge violation */
 #define	ATRAP	0x40		/* memory access violation */
+#define	AUNVEIL	0x80		/* unveil access violation */
 	u_int8_t  ac_flag;	/* accounting flags */
 };
 
