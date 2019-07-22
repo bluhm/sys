@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_aggr.c,v 1.16 2019/07/19 05:21:25 dlg Exp $ */
+/*	$OpenBSD: if_aggr.c,v 1.18 2019/07/20 04:54:22 dlg Exp $ */
 
 /*
  * Copyright (c) 2019 The University of Queensland
@@ -596,14 +596,8 @@ aggr_port_enabled(struct aggr_port *p)
 	if (!ISSET(ifp0->if_flags, IFF_RUNNING))
 		return (0);
 
-	switch (ifp0->if_link_state) {
-	case LINK_STATE_UNKNOWN:
-	case LINK_STATE_UP:
-	case LINK_STATE_FULL_DUPLEX:
-		break;
-	default:
+	if (!LINK_STATE_IS_UP(ifp0->if_link_state))
 		return (0);
-	}
 
 	return (1);
 }
@@ -933,6 +927,13 @@ aggr_get_trunk(struct aggr_softc *sc, struct trunk_reqall *ra)
 			SET(rp.rp_flags, TRUNK_PORT_DISABLED);
 
 		opreq = &rp.rp_lacpreq;
+
+		opreq->actor_prio = sc->sc_lacp_prio;
+		memcpy(opreq->actor_mac, &sc->sc_ac.ac_enaddr,
+		    sizeof(req->actor_mac));
+		opreq->actor_key = ifp->if_index;
+		opreq->actor_portprio = sc->sc_lacp_port_prio;
+		opreq->actor_portno = ifp0->if_index;
 		opreq->actor_state = state | p->p_actor_state;
 
 		opreq->partner_prio =
