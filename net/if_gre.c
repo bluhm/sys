@@ -1930,8 +1930,10 @@ mgre_output(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dest,
 	}
 
 	m = gre_l3_encap_dst(&sc->sc_tunnel, addr, m, dest->sa_family);
-	if (m == NULL)
+	if (m == NULL) {
+		ifp->if_oerrors++;
 		return (ENOBUFS);
+	}
 
 	m->m_pkthdr.ph_family = dest->sa_family;
 
