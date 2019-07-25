@@ -2142,6 +2142,10 @@ gre_encap_dst_ip(const struct gre_tunnel *tunnel, const union gre_addr *dst,
     struct mbuf *m, uint8_t ttl, uint8_t tos)
 {
 	switch (tunnel->t_af) {
+	case AF_UNSPEC:
+		/* packets may arrive before tunnel is set up */
+		m_freem(m);
+		return (NULL);
 	case AF_INET: {
 		struct ip *ip;
 
