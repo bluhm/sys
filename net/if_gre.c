@@ -2188,8 +2188,7 @@ gre_encap_dst_ip(const struct gre_tunnel *tunnel, const union gre_addr *dst,
 	}
 #endif /* INET6 */
 	default:
-		panic("%s: unsupported af %d in %p", __func__, tunnel->t_af,
-		    tunnel);
+		unhandled_af(tunnel->t_af);
 	}
 
 	return (m);
@@ -2215,8 +2214,7 @@ gre_ip_output(const struct gre_tunnel *tunnel, struct mbuf *m)
 		break;
 #endif
 	default:
-		panic("%s: unsupported af %d in %p", __func__, tunnel->t_af,
-		    tunnel);
+		unhandled_af(tunnel->t_af);
 	}
 
 	return (0);
@@ -4286,7 +4284,7 @@ gre_ip_cmp(int af, const union gre_addr *a, const union gre_addr *b)
 	case AF_INET:
 		return (memcmp(&a->in4, &b->in4, sizeof(a->in4)));
 	default:
-		panic("%s: unsupported af %d\n", __func__, af);
+		unhandled_af(af);
 	}
 
 	return (0);
