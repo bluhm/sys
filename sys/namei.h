@@ -204,6 +204,10 @@ void nchinit(void);
 struct mount;
 void cache_purgevfs(struct mount *);
 
+void unveil_start_relative(struct proc *, struct nameidata *);
+void unveil_check_component(struct proc *, struct nameidata *, struct vnode *);
+int unveil_check_final(struct proc *, struct nameidata *);
+
 extern struct pool namei_pool;
 
 #endif

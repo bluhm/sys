@@ -57,10 +57,6 @@
 #include <sys/ktrace.h>
 #endif
 
-void unveil_start_relative(struct proc *p, struct nameidata *ni);
-void unveil_check_component(struct proc *p, struct nameidata *ni, struct vnode *dp );
-int unveil_check_final(struct proc *p, struct nameidata *ni);
-
 int
 component_push(struct componentname *cnp, char *component, size_t len)
 {
