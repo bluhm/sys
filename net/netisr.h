@@ -63,8 +63,6 @@ extern int	netisr;			/* scheduling bits for network */
 extern struct task if_input_task_locked;
 
 void	arpintr(void);
-void	ipintr(void);
-void	ip6intr(void);
 void	pppintr(void);
 void	bridgeintr(void);
 void	pppoeintr(void);
