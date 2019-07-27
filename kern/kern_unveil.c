@@ -309,8 +309,7 @@ unveil_find_cover(struct vnode *dp, struct proc *p)
 			break;
 		}
 
-		if (parent != vp)
-			vrele(vp);
+		vrele(vp);
 		(void) unveil_lookup(parent, p, &ret);
 		vput(parent);
 
