@@ -252,10 +252,10 @@ looutput(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst,
 			rt->rt_flags & RTF_HOST ? EHOSTUNREACH : ENETUNREACH);
 	}
 
-	/* Use the quick path only once to avoid stack overflow. */
-	if ((m->m_flags & M_LOOP) == 0)
-		return (if_input_local(ifp, m, dst->sa_family));
-
+	/*
+	 * Do not call if_input_local() directly.  Queue the packet to avoid
+	 * stack overflow and make TCP handshake over loopback work.
+	 */
 	return (if_output_local(ifp, m, dst->sa_family));
 }
 
