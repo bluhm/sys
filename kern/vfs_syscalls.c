@@ -969,7 +969,7 @@ sys_unveil(struct proc *p, void *v, register_t *retval)
 		syscallarg(const char *) path;
 		syscallarg(const char *) permissions;
 	} */ *uap = v;
-	char pathname[MAXPATHLEN];
+	char *pathname;
 	struct nameidata nd;
 	size_t pathlen;
 	char permissions[5];
@@ -986,10 +986,11 @@ sys_unveil(struct proc *p, void *v, register_t *retval)
 	error = copyinstr(SCARG(uap, permissions), permissions,
 	    sizeof(permissions), NULL);
 	if (error)
-		return(error);
-	error = copyinstr(SCARG(uap, path), pathname, sizeof(pathname), &pathlen);
+		return (error);
+	pathname = pool_get(&namei_pool, PR_WAITOK);
+	error = copyinstr(SCARG(uap, path), pathname, MAXPATHLEN, &pathlen);
 	if (error)
-		return(error);
+		goto put;
 
 #ifdef KTRACE
 	if (KTRPOINT(p, KTR_STRUCT))
@@ -1049,6 +1050,8 @@ sys_unveil(struct proc *p, void *v, register_t *retval)
 	pool_put(&namei_pool, nd.ni_cnd.cn_pnbuf);
 end:
 	unveil_free_traversed_vnodes(&nd);
+put:
+	pool_put(&namei_pool, pathname);
 
 	return (error);
 }
