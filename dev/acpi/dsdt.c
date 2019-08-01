@@ -1,4 +1,4 @@
-/* $OpenBSD: dsdt.c,v 1.244 2019/01/10 18:50:32 kettenis Exp $ */
+/* $OpenBSD: dsdt.c,v 1.246 2019/07/31 15:58:00 jcs Exp $ */
 /*
  * Copyright (c) 2005 Jordan Hargrave <jordan@openbsd.org>
  *
@@ -230,8 +230,8 @@ struct aml_opcode aml_table[] = {
 	/* Conversion operations */
 	{ AMLOP_TOINTEGER,	"ToInteger",	"tr",	},
 	{ AMLOP_TOBUFFER,	"ToBuffer",	"tr",	},
-	{ AMLOP_TODECSTRING,	"ToDecString",	"ir",	},
-	{ AMLOP_TOHEXSTRING,	"ToHexString",	"ir",	},
+	{ AMLOP_TODECSTRING,	"ToDecString",	"tr",	},
+	{ AMLOP_TOHEXSTRING,	"ToHexString",	"tr",	},
 	{ AMLOP_TOSTRING,	"ToString",	"tir",	},
 	{ AMLOP_MID,		"Mid",		"tiir",	},
 	{ AMLOP_FROMBCD,	"FromBCD",	"ir",	},
@@ -1263,6 +1263,7 @@ aml_find_node(struct aml_node *node, const char *name,
 	struct aml_node *child;
 	const char *nn;
 
+	/* match child of this node first before recursing */
 	SIMPLEQ_FOREACH(child, &node->son, sib) {
 		nn = child->name;
 		if (nn != NULL) {
@@ -1270,12 +1271,14 @@ aml_find_node(struct aml_node *node, const char *name,
 			while (*nn == AMLOP_PARENTPREFIX) nn++;
 			if (strcmp(name, nn) == 0) {
 				/* Only recurse if cbproc() wants us to */
-				if (cbproc(child, arg) == 0)
-					continue;
+				if (cbproc(child, arg) != 0)
+					return;
 			}
 		}
-		aml_find_node(child, name, cbproc, arg);
 	}
+
+	SIMPLEQ_FOREACH(child, &node->son, sib)
+		aml_find_node(child, name, cbproc, arg);
 }
 
 /*
