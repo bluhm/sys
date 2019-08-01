@@ -998,7 +998,7 @@ sys_unveil(struct proc *p, void *v, register_t *retval)
 	if (pathlen < 2)
 		return EINVAL;
 
-	if (pathlen == 2 && pathname[0] == '/')
+	if (pathlen == 2 && (pathname[0] == '/' || pathname[0] == '.'))
 		NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF | SAVENAME,
 		    UIO_SYSSPACE, pathname, p);
 	else
