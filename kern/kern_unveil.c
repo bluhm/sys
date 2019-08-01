@@ -43,9 +43,6 @@
 #define UNVEIL_MAX_VNODES	128
 #define UNVEIL_MAX_NAMES	128
 
-struct unveil *unveil_lookup(struct vnode *vp, struct proc *p,
-    ssize_t *position);
-
 static inline int
 unvname_compare(const struct unvname *n1, const struct unvname *n2)
 {

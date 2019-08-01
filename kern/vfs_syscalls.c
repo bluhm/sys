@@ -90,11 +90,6 @@ int doutimensat(struct proc *, int, const char *, struct timespec [2], int);
 int dovutimens(struct proc *, struct vnode *, struct timespec [2]);
 int dofutimens(struct proc *, int, struct timespec [2]);
 int dounmount_leaf(struct mount *, int, struct proc *);
-int unveil_add(struct proc *, struct nameidata *, const char *);
-void unveil_removevnode(struct vnode *vp);
-void unveil_free_traversed_vnodes(struct nameidata *);
-ssize_t unveil_find_cover(struct vnode *, struct proc *);
-struct unveil *unveil_lookup(struct vnode *, struct proc *, ssize_t *);
 
 /*
  * Virtual File System System Calls

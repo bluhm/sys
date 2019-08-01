@@ -204,6 +204,11 @@ void nchinit(void);
 struct mount;
 void cache_purgevfs(struct mount *);
 
+int unveil_add(struct proc *, struct nameidata *, const char *);
+void unveil_removevnode(struct vnode *);
+void unveil_free_traversed_vnodes(struct nameidata *);
+ssize_t unveil_find_cover(struct vnode *, struct proc *);
+struct unveil *unveil_lookup(struct vnode *, struct proc *, ssize_t *);
 void unveil_start_relative(struct proc *, struct nameidata *);
 void unveil_check_component(struct proc *, struct nameidata *, struct vnode *);
 int unveil_check_final(struct proc *, struct nameidata *);
