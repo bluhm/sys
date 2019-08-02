@@ -177,7 +177,7 @@ static int npromisc = 0;
 
 void pfkey_init(void);
 
-int pfkeyv2_attach(struct socket *, int);
+int pfkeyv2_attach(struct socket *, int, int);
 int pfkeyv2_detach(struct socket *);
 int pfkeyv2_usrreq(struct socket *, int, struct mbuf *, struct mbuf *,
     struct mbuf *, struct proc *);
@@ -261,7 +261,7 @@ pfkey_init(void)
  * Attach a new PF_KEYv2 socket.
  */
 int
-pfkeyv2_attach(struct socket *so, int proto)
+pfkeyv2_attach(struct socket *so, int proto, int wait)
 {
 	struct pkpcb *kp;
 	int error;
@@ -269,6 +269,7 @@ pfkeyv2_attach(struct socket *so, int proto)
 	if ((so->so_state & SS_PRIV) == 0)
 		return EACCES;
 
+	KASSERT(wait == M_WAIT);
 	kp = pool_get(&pkpcb_pool, PR_WAITOK|PR_ZERO);
 	so->so_pcb = kp;
 	refcnt_init(&kp->kcb_refcnt);

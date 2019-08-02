@@ -288,7 +288,7 @@ route_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 }
 
 int
-route_attach(struct socket *so, int proto)
+route_attach(struct socket *so, int proto, int wait)
 {
 	struct rtpcb	*rop;
 	int		 error;
@@ -298,6 +298,7 @@ route_attach(struct socket *so, int proto)
 	 * code does not care about the additional fields
 	 * and works directly on the raw socket.
 	 */
+	KASSERT(wait == M_WAIT);
 	rop = pool_get(&rtpcb_pool, PR_WAITOK|PR_ZERO);
 	so->so_pcb = rop;
 	/* Init the timeout structure */

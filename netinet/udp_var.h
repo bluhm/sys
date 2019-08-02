@@ -149,7 +149,7 @@ int	 udp6_output(struct inpcb *, struct mbuf *, struct mbuf *,
 int	 udp_sysctl(int *, u_int, void *, size_t *, void *, size_t);
 int	 udp_usrreq(struct socket *,
 	    int, struct mbuf *, struct mbuf *, struct mbuf *, struct proc *);
-int	 udp_attach(struct socket *, int);
+int	 udp_attach(struct socket *, int, int);
 int	 udp_detach(struct socket *);
 #endif /* _KERNEL */
 #endif /* _NETINET_UDP_VAR_H_ */

@@ -308,7 +308,7 @@ release:
 }
 
 int
-divert_attach(struct socket *so, int proto)
+divert_attach(struct socket *so, int proto, int wait)
 {
 	int error;
 
@@ -317,7 +317,7 @@ divert_attach(struct socket *so, int proto)
 	if ((so->so_state & SS_PRIV) == 0)
 		return EACCES;
 
-	error = in_pcballoc(so, &divbtable);
+	error = in_pcballoc(so, &divbtable, wait);
 	if (error)
 		return error;
 

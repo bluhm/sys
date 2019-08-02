@@ -190,7 +190,7 @@ sonewconn(struct socket *head, int connstatus)
 	sigio_copy(&so->so_sigio, &head->so_sigio);
 
 	soqinsque(head, so, soqueue);
-	if ((*so->so_proto->pr_attach)(so, 0)) {
+	if ((*so->so_proto->pr_attach)(so, 0, M_DONTWAIT)) {
 		(void) soqremque(so, soqueue);
 		sigio_free(&so->so_sigio);
 		pool_put(&socket_pool, so);

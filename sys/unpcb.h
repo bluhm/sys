@@ -93,7 +93,7 @@ struct fdpass {
 
 int	uipc_usrreq(struct socket *, int , struct mbuf *,
 			 struct mbuf *, struct mbuf *, struct proc *);
-int	uipc_attach(struct socket *, int);
+int	uipc_attach(struct socket *, int, int);
 int	uipc_detach(struct socket *);
 
 void	unp_init(void);

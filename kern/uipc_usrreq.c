@@ -354,7 +354,7 @@ u_long	unpdg_recvspace = 4*1024;
 int	unp_rights;			/* file descriptors in flight */
 
 int
-uipc_attach(struct socket *so, int proto)
+uipc_attach(struct socket *so, int proto, int wait)
 {
 	struct unpcb *unp;
 	int error;
@@ -379,7 +379,8 @@ uipc_attach(struct socket *so, int proto)
 		if (error)
 			return (error);
 	}
-	unp = pool_get(&unpcb_pool, PR_NOWAIT|PR_ZERO);
+	unp = pool_get(&unpcb_pool, (wait == M_WAIT ? PR_WAITOK : PR_NOWAIT) |
+	    PR_ZERO);
 	if (unp == NULL)
 		return (ENOBUFS);
 	unp->unp_socket = so;

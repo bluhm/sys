@@ -77,7 +77,7 @@ int	 divert6_packet(struct mbuf *, int, u_int16_t);
 int	 divert6_sysctl(int *, u_int, void *, size_t *, void *, size_t);
 int	 divert6_usrreq(struct socket *,
 	    int, struct mbuf *, struct mbuf *, struct mbuf *, struct proc *);
-int	 divert6_attach(struct socket *, int);
+int	 divert6_attach(struct socket *, int, int);
 int	 divert6_detach(struct socket *);
 #endif /* _KERNEL */
 

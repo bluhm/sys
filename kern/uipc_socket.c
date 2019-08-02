@@ -143,7 +143,7 @@ socreate(int dom, struct socket **aso, int type, int proto)
 	so->so_proto = prp;
 
 	s = solock(so);
-	error = (*prp->pr_attach)(so, proto);
+	error = (*prp->pr_attach)(so, proto, M_WAIT);
 	if (error) {
 		so->so_state |= SS_NOFDREF;
 		/* sofree() calls sounlock(). */

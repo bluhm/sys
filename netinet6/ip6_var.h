@@ -346,7 +346,7 @@ int	rip6_output(struct mbuf *, struct socket *, struct sockaddr *,
 	    struct mbuf *);
 int	rip6_usrreq(struct socket *,
 	    int, struct mbuf *, struct mbuf *, struct mbuf *, struct proc *);
-int	rip6_attach(struct socket *, int);
+int	rip6_attach(struct socket *, int, int);
 int	rip6_detach(struct socket *);
 int	rip6_sysctl(int *, u_int, void *, size_t *, void *, size_t);
 
