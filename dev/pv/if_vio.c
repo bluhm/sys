@@ -982,10 +982,7 @@ vio_populate_rx_mbufs(struct vio_softc *sc)
 
 	if (done)
 		virtio_notify(vsc, vq);
-	if (vq->vq_used_idx != vq->vq_avail_idx)
-		timeout_del(&sc->sc_rxtick);
-	else
-		timeout_add_sec(&sc->sc_rxtick, 1);
+	timeout_add_sec(&sc->sc_rxtick, 1);
 }
 
 /* dequeue received packets */
