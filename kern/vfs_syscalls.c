@@ -1,4 +1,4 @@
-/*	$OpenBSD: vfs_syscalls.c,v 1.331 2019/08/05 15:13:43 bluhm Exp $	*/
+/*	$OpenBSD: vfs_syscalls.c,v 1.332 2019/08/05 23:28:55 bluhm Exp $	*/
 /*	$NetBSD: vfs_syscalls.c,v 1.71 1996/04/23 10:29:02 mycroft Exp $	*/
 
 /*
