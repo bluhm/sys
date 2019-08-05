@@ -995,8 +995,10 @@ sys_unveil(struct proc *p, void *v, register_t *retval)
 		return (error);
 	pathname = pool_get(&namei_pool, PR_WAITOK);
 	error = copyinstr(SCARG(uap, path), pathname, MAXPATHLEN, &pathlen);
-	if (error)
-		goto put;
+	if (error) {
+		pool_put(&namei_pool, pathname);
+		return (error);
+	}
 
 #ifdef KTRACE
 	if (KTRPOINT(p, KTR_STRUCT))
@@ -1062,7 +1064,6 @@ sys_unveil(struct proc *p, void *v, register_t *retval)
 	pool_put(&namei_pool, nd.ni_cnd.cn_pnbuf);
 end:
 	unveil_free_traversed_vnodes(&nd);
-put:
 	pool_put(&namei_pool, pathname);
 
 	return (error);
