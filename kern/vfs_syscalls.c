@@ -1022,7 +1022,7 @@ sys_unveil(struct proc *p, void *v, register_t *retval)
 
 	nd.ni_pledge = PLEDGE_UNVEIL;
 	if ((error = namei(&nd)) != 0)
-		goto end;
+		goto ndfree;
 
 	/*
 	 * XXX Any access to the file or directory will allow us to
@@ -1062,6 +1062,7 @@ sys_unveil(struct proc *p, void *v, register_t *retval)
 		vrele(nd.ni_dvp);
 
 	pool_put(&namei_pool, nd.ni_cnd.cn_pnbuf);
+ndfree:
 	unveil_free_traversed_vnodes(&nd);
 end:
 	pool_put(&namei_pool, pathname);
