@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.c,v 1.586 2019/06/30 23:02:28 dlg Exp $	*/
+/*	$OpenBSD: if.c,v 1.587 2019/08/06 22:57:54 bluhm Exp $	*/
 /*	$NetBSD: if.c,v 1.35 1996/05/07 05:26:04 thorpej Exp $	*/
 
 /*
