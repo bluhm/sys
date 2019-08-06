@@ -995,17 +995,17 @@ sys_unveil(struct proc *p, void *v, register_t *retval)
 		return (error);
 	pathname = pool_get(&namei_pool, PR_WAITOK);
 	error = copyinstr(SCARG(uap, path), pathname, MAXPATHLEN, &pathlen);
-	if (error) {
-		pool_put(&namei_pool, pathname);
-		return (error);
-	}
+	if (error)
+		goto end;
 
 #ifdef KTRACE
 	if (KTRPOINT(p, KTR_STRUCT))
 		ktrstruct(p, "unveil", permissions, strlen(permissions));
 #endif
-	if (pathlen < 2)
-		return EINVAL;
+	if (pathlen < 2) {
+		error = EINVAL;
+		goto end;
+	}
 
 	/* find root "/" or "//" */
 	for (c = pathname; *c != '\0'; c++) {
@@ -1062,8 +1062,8 @@ sys_unveil(struct proc *p, void *v, register_t *retval)
 		vrele(nd.ni_dvp);
 
 	pool_put(&namei_pool, nd.ni_cnd.cn_pnbuf);
-end:
 	unveil_free_traversed_vnodes(&nd);
+end:
 	pool_put(&namei_pool, pathname);
 
 	return (error);
