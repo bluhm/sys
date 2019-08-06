@@ -873,7 +873,7 @@ sys___realpath(struct proc *p, void *v, register_t *retval)
 	char *rpbuf;
 	struct nameidata nd;
 	size_t pathlen;
-	int error = 0;
+	int flags, error;
 
 	if (SCARG(uap, pathname) == NULL)
 		return (EINVAL);
@@ -923,18 +923,19 @@ sys___realpath(struct proc *p, void *v, register_t *retval)
 		free(cwdbuf, M_TEMP, cwdlen);
 	}
 
-	/* find root "/" or "//" */
+	flags = FOLLOW | LOCKLEAF | SAVENAME | REALPATH;
 	for (c = pathname; *c != '\0'; c++) {
-		if (*c != '/')
+		if (*c != '/') {
+			/*
+			 * This is an non-root directory.  Root may also be
+			 * written as "//".  Path "/." has a parent and is
+			 * considered as non-root.
+			 */
+			flags |= LOCKPARENT;
 			break;
+		}
 	}
-	if (*c == '\0')
-		/* root directory */
-		NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF | SAVENAME | REALPATH,
-		    UIO_SYSSPACE, pathname, p);
-	else
-		NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF | LOCKPARENT | SAVENAME |
-		    REALPATH, UIO_SYSSPACE, pathname, p);
+	NDINIT(&nd, LOOKUP, flags, UIO_SYSSPACE, pathname, p);
 
 	nd.ni_cnd.cn_rpbuf = rpbuf;
 	nd.ni_cnd.cn_rpi = strlen(rpbuf);
@@ -979,7 +980,7 @@ sys_unveil(struct proc *p, void *v, register_t *retval)
 	struct nameidata nd;
 	size_t pathlen;
 	char permissions[5];
-	int error, allow;
+	int op, flags, error, allow;
 
 	if (SCARG(uap, path) == NULL && SCARG(uap, permissions) == NULL) {
 		p->p_p->ps_uvdone = 1;
@@ -1004,18 +1005,21 @@ sys_unveil(struct proc *p, void *v, register_t *retval)
 	if (pathlen < 2)
 		return EINVAL;
 
-	/* find root "/" or "//" */
+	op = LOOKUP;
+	flags = FOLLOW | LOCKLEAF | SAVENAME;
 	for (c = pathname; *c != '\0'; c++) {
-		if (*c != '/')
+		if (*c != '/') {
+			/*
+			 * This is an non-root directory.  Root may also be
+			 * written as "//".  Path "/." has a parent and is
+			 * considered as non-root.
+			 */
+			op = CREATE;
+			flags |= LOCKPARENT;
 			break;
+		}
 	}
-	if (*c == '\0')
-		/* root directory */
-		NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF | SAVENAME,
-		    UIO_SYSSPACE, pathname, p);
-	else
-		NDINIT(&nd, CREATE, FOLLOW | LOCKLEAF | LOCKPARENT | SAVENAME,
-		    UIO_SYSSPACE, pathname, p);
+	NDINIT(&nd, op, flags, UIO_SYSSPACE, pathname, p);
 
 	nd.ni_pledge = PLEDGE_UNVEIL;
 	if ((error = namei(&nd)) != 0)
