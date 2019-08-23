@@ -1,4 +1,4 @@
-/* $OpenBSD: ipmivar.h,v 1.28 2016/02/05 06:29:01 uebayasi Exp $ */
+/* $OpenBSD: ipmivar.h,v 1.31 2019/08/19 18:31:02 kettenis Exp $ */
 
 /*
  * Copyright (c) 2005 Jordan Hargrave
@@ -39,6 +39,7 @@
 #define IPMI_IF_KCS		1
 #define IPMI_IF_SMIC		2
 #define IPMI_IF_BT		3
+#define IPMI_IF_SSIF		4
 
 #define IPMI_IF_KCS_NREGS	2
 #define IPMI_IF_SMIC_NREGS	3
@@ -112,7 +113,6 @@ struct ipmi_softc {
 	int			sc_btseq;
 	u_int8_t		sc_buf[IPMI_MAX_RX + 16];
 	struct taskq		*sc_cmd_taskq;
-	struct mutex		sc_cmd_mtx;
 
 	struct ipmi_ioctl {
 		struct rwlock		lock;
@@ -166,38 +166,22 @@ struct ipmi_thread {
 #define	IPMI_GET_WDOG_PRECDM	7
 #define	IPMI_GET_WDOG_MAX	8
 
-void	ipmi_create_thread(void *);
-void	ipmi_poll_thread(void *);
+int	ipmi_probe(void *);
+void	ipmi_attach_common(struct ipmi_softc *, struct ipmi_attach_args *);
+int	ipmi_activate(struct device *, int);
 
-int	kcs_probe(struct ipmi_softc *);
-int	kcs_reset(struct ipmi_softc *);
-int	kcs_sendmsg(struct ipmi_cmd *);
-int	kcs_recvmsg(struct ipmi_cmd *);
+int	ipmi_sendcmd(struct ipmi_cmd *);
+int	ipmi_recvcmd(struct ipmi_cmd *);
 
-int	bt_probe(struct ipmi_softc *);
-int	bt_reset(struct ipmi_softc *);
-int	bt_sendmsg(struct ipmi_cmd *);
-int	bt_recvmsg(struct ipmi_cmd *);
-
-int	smic_probe(struct ipmi_softc *);
-int	smic_reset(struct ipmi_softc *);
-int	smic_sendmsg(struct ipmi_cmd *);
-int	smic_recvmsg(struct ipmi_cmd *);
-
-struct dmd_ipmi {
-	u_int8_t	dmd_sig[4];		/* Signature 'IPMI' */
-	u_int8_t	dmd_i2c_address;	/* Address of BMC */
-	u_int8_t	dmd_nvram_address;	/* Address of NVRAM */
-	u_int8_t	dmd_if_type;		/* IPMI Interface Type */
-	u_int8_t	dmd_if_rev;		/* IPMI Interface Revision */
-} __packed;
-
+#define IPMI_MSG_DATASND		2
+#define IPMI_MSG_DATARCV		3
 
 #define APP_NETFN			0x06
 #define APP_GET_DEVICE_ID		0x01
 #define APP_RESET_WATCHDOG		0x22
 #define APP_SET_WATCHDOG_TIMER		0x24
 #define APP_GET_WATCHDOG_TIMER		0x25
+#define APP_GET_SYSTEM_INTERFACE_CAPS	0x57
 
 #define TRANSPORT_NETFN			0xC
 #define BRIDGE_NETFN			0x2
@@ -316,7 +300,5 @@ struct sdrtype2 {
 	u_int8_t	typelen;
 	u_int8_t	name[1];
 } __packed;
-
-int ipmi_probe(void *);
 
 #endif				/* _IPMIVAR_H_ */

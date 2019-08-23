@@ -1,4 +1,4 @@
-/*	$OpenBSD: vfs_vnops.c,v 1.104 2019/08/05 08:35:59 anton Exp $	*/
+/*	$OpenBSD: vfs_vnops.c,v 1.106 2019/08/13 07:09:21 anton Exp $	*/
 /*	$NetBSD: vfs_vnops.c,v 1.20 1996/02/04 02:18:41 christos Exp $	*/
 
 /*
