@@ -1349,7 +1349,7 @@ rtm_xaddrs(caddr_t cp, caddr_t cplim, struct rt_addrinfo *rtinfo)
 {
 	struct sockaddr	*sa;
 	int		 i;
-	char		*str;
+	size_t		 len;
 
 	bzero(rtinfo->rti_info, sizeof(rtinfo->rti_info));
 	for (i = 0; i < sizeof(rtinfo->rti_addrs) * 8; i++) {
@@ -1364,9 +1364,11 @@ rtm_xaddrs(caddr_t cp, caddr_t cplim, struct rt_addrinfo *rtinfo)
 		ADVANCE(cp, sa);
 	}
 	if (rtinfo->rti_info[RTAX_LABEL] != NULL) {
-		str = ((struct sockaddr_rtlabel *)
-		    rtinfo->rti_info[RTAX_LABEL])->sr_label;
-		if (strnlen(str, RTLABEL_LEN) == RTLABEL_LEN)
+		sa = rtinfo->rti_info[RTAX_LABEL];
+		if (sa->sa_len < sizeof(struct sockaddr_rtlabel))
+			return (EINVAL);
+		len = strnlen(sa->sa_data, RTLABEL_LEN);
+		if (len >= RTLABEL_LEN || 2 + len + 1 > sa->sa_len)
 			return (EINVAL);
 	}
 	return (0);
