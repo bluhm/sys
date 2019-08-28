@@ -1,4 +1,4 @@
-/*	$OpenBSD: ieee80211_node.c,v 1.170 2019/07/29 10:50:09 stsp Exp $	*/
+/*	$OpenBSD: ieee80211_node.c,v 1.172 2019/08/27 14:57:48 stsp Exp $	*/
 /*	$NetBSD: ieee80211_node.c,v 1.14 2004/05/09 09:18:47 dyoung Exp $	*/
 
 /*-
@@ -74,7 +74,6 @@ void ieee80211_setup_node(struct ieee80211com *, struct ieee80211_node *,
     const u_int8_t *);
 void ieee80211_free_node(struct ieee80211com *, struct ieee80211_node *);
 struct ieee80211_node *ieee80211_alloc_node_helper(struct ieee80211com *);
-void ieee80211_node_cleanup(struct ieee80211com *, struct ieee80211_node *);
 void ieee80211_node_switch_bss(struct ieee80211com *, struct ieee80211_node *);
 void ieee80211_node_addba_request(struct ieee80211_node *, int);
 void ieee80211_node_addba_request_ac_be_to(void *);
@@ -92,6 +91,7 @@ void ieee80211_node_leave_11g(struct ieee80211com *, struct ieee80211_node *);
 void ieee80211_inact_timeout(void *);
 void ieee80211_node_cache_timeout(void *);
 #endif
+void ieee80211_clean_inactive_nodes(struct ieee80211com *, int);
 
 #ifndef IEEE80211_STA_ONLY
 void
@@ -780,6 +780,19 @@ ieee80211_reset_scan(struct ifnet *ifp)
 }
 
 /*
+ * Increase a node's inactitivy counter.
+ * This counter get reset to zero if a frame is received.
+ * This function is intended for station mode only.
+ * See ieee80211_node_cache_timeout() for hostap mode.
+ */
+void
+ieee80211_node_raise_inact(void *arg, struct ieee80211_node *ni)
+{
+	if (ni->ni_refcnt == 0 && ni->ni_inact < IEEE80211_INACT_SCAN)
+		ni->ni_inact++;
+}
+
+/*
  * Begin an active scan.
  */
 void
@@ -807,13 +820,11 @@ ieee80211_begin_scan(struct ifnet *ifp)
 			(ic->ic_flags & IEEE80211_F_ASCAN) ?
 				"active" : "passive");
 
-	/*
-	 * Flush any previously seen AP's. Note that the latter 
-	 * assumes we don't act as both an AP and a station,
-	 * otherwise we'll potentially flush state of stations
-	 * associated with us.
-	 */
-	ieee80211_free_allnodes(ic, 1);
+
+	if (ic->ic_opmode == IEEE80211_M_STA) {
+		ieee80211_node_cleanup(ic, ic->ic_bss);
+		ieee80211_iterate_nodes(ic, ieee80211_node_raise_inact, NULL);
+	}
 
 	/*
 	 * Reset the current mode. Setting the current mode will also
@@ -1158,8 +1169,6 @@ ieee80211_node_join_bss(struct ieee80211com *ic, struct ieee80211_node *selbs)
 	(*ic->ic_node_copy)(ic, ic->ic_bss, selbs);
 	ni = ic->ic_bss;
 
-	ic->ic_curmode = ieee80211_chan2mode(ic, ni->ni_chan);
-
 	/* Make sure we send valid rates in an association request. */
 	if (ic->ic_opmode == IEEE80211_M_STA)
 		ieee80211_fix_rate(ic, ni,
@@ -1296,6 +1305,9 @@ ieee80211_end_scan(struct ifnet *ifp)
 
 	if (ic->ic_scan_count)
 		ic->ic_flags &= ~IEEE80211_F_ASCAN;
+
+	if (ic->ic_opmode == IEEE80211_M_STA)
+		ieee80211_clean_inactive_nodes(ic, IEEE80211_INACT_SCAN);
 
 	ni = RBT_MIN(ieee80211_tree, &ic->ic_tree);
 
@@ -2130,6 +2142,29 @@ ieee80211_clean_nodes(struct ieee80211com *ic, int cache_timeout)
 		    "possible nodes leak\n", ifp->if_xname, nnodes,
 		    ic->ic_nnodes);
 #endif
+	splx(s);
+}
+
+void
+ieee80211_clean_inactive_nodes(struct ieee80211com *ic, int inact_max)
+{
+	struct ieee80211_node *ni, *next_ni;
+	u_int gen = ic->ic_scangen++;	/* NB: ok 'cuz single-threaded*/
+	int s;
+
+	s = splnet();
+	for (ni = RBT_MIN(ieee80211_tree, &ic->ic_tree);
+	    ni != NULL; ni = next_ni) {
+		next_ni = RBT_NEXT(ieee80211_tree, ni);
+		if (ni->ni_scangen == gen)	/* previously handled */
+			continue;
+		ni->ni_scangen = gen;
+		if (ni->ni_refcnt > 0 || ni->ni_inact < inact_max)
+			continue;
+		ieee80211_free_node(ic, ni);
+		ic->ic_stats.is_node_timeout++;
+	}
+
 	splx(s);
 }
 
