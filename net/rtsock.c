@@ -1393,7 +1393,7 @@ rtm_xaddrs(caddr_t cp, caddr_t cplim, struct rt_addrinfo *rtinfo)
 			if (sa->sa_family != AF_LINK)
 				return (EAFNOSUPPORT);
 			/*
-			 * XXX Should be sizeof(struct sockaddr_dl), but 
+			 * XXX Should be sizeof(struct sockaddr_dl), but
 			 * route(8) has a bug and provides less memory.
 			 */
 			size = 16;
