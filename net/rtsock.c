@@ -1353,7 +1353,6 @@ rtm_xaddrs(caddr_t cp, caddr_t cplim, struct rt_addrinfo *rtinfo)
 {
 	struct sockaddr	*sa;
 	int		 i;
-	size_t		 len;
 
 	bzero(rtinfo->rti_info, sizeof(rtinfo->rti_info));
 	for (i = 0; i < sizeof(rtinfo->rti_addrs) * 8; i++) {
@@ -1367,13 +1366,86 @@ rtm_xaddrs(caddr_t cp, caddr_t cplim, struct rt_addrinfo *rtinfo)
 		rtinfo->rti_info[i] = sa;
 		ADVANCE(cp, sa);
 	}
-	if (rtinfo->rti_info[RTAX_LABEL] != NULL) {
-		sa = rtinfo->rti_info[RTAX_LABEL];
-		if (sa->sa_len < sizeof(struct sockaddr_rtlabel))
-			return (EINVAL);
-		len = strnlen(sa->sa_data, RTLABEL_LEN);
-		if (len >= RTLABEL_LEN || 2 + len + 1 > sa->sa_len)
-			return (EINVAL);
+	for (i = 0; i < RTAX_MAX; i++) {
+		size_t len, maxlen, size;
+
+		sa = rtinfo->rti_info[i];
+		if (sa == NULL)
+			continue;
+		maxlen = size = 0;
+		switch (i) {
+		case RTAX_DST:
+		case RTAX_GATEWAY:
+		case RTAX_SRC:
+			switch (sa->sa_family) {
+			case AF_INET:
+				size = sizeof(struct sockaddr_in);
+				break;
+#ifdef INET6
+			case AF_INET6:
+				size = sizeof(struct sockaddr_in6);
+				break;
+#endif
+#ifdef MPLS
+			case AF_MPLS:
+				size = sizeof(struct sockaddr_mpls);
+				break;
+#endif
+			}
+			break;
+		case RTAX_IFP:
+			if (sa->sa_family != AF_LINK)
+				return (EAFNOSUPPORT);
+			size = sizeof(struct sockaddr_dl);
+			break;
+		case RTAX_IFA:
+			switch (sa->sa_family) {
+			case AF_INET:
+				size = sizeof(struct sockaddr_in);
+				break;
+#ifdef INET6
+			case AF_INET6:
+				size = sizeof(struct sockaddr_in6);
+				break;
+#endif
+			default:
+				return (EAFNOSUPPORT);
+			}
+			break;
+		case RTAX_LABEL:
+			maxlen = RTLABEL_LEN;
+			size = sizeof(struct sockaddr_rtlabel);
+			break;
+#ifdef BFD
+		case RTAX_BFD:
+			size = sizeof(struct sockaddr_bfd);
+			break;
+#endif
+		case RTAX_DNS:
+			maxlen = RTDNS_LEN;
+			size = sizeof(struct sockaddr_rtdns);
+			break;
+		case RTAX_STATIC:
+			maxlen = RTSTATIC_LEN;
+			size = sizeof(struct sockaddr_rtstatic);
+			break;
+		case RTAX_SEARCH:
+			maxlen = RTSEARCH_LEN;
+			size = sizeof(struct sockaddr_rtsearch);
+			break;
+		}
+		if (size) {
+			if (sa->sa_len < size)
+				return (EINVAL);
+		}
+		if (maxlen) {
+			if (2 + maxlen >= size)
+				return (EINVAL);
+			len = strnlen(sa->sa_data, maxlen);
+			if (len >= maxlen || 2 + len >= sa->sa_len)
+				return (EINVAL);
+			break;
+		}
 	}
 	return (0);
 }
