@@ -1392,7 +1392,11 @@ rtm_xaddrs(caddr_t cp, caddr_t cplim, struct rt_addrinfo *rtinfo)
 		case RTAX_IFP:
 			if (sa->sa_family != AF_LINK)
 				return (EAFNOSUPPORT);
-			size = sizeof(struct sockaddr_dl);
+			/*
+			 * XXX Should be sizeof(struct sockaddr_dl), but 
+			 * route(8) has a bug and provides less memory.
+			 */
+			size = 16;
 			break;
 		case RTAX_IFA:
 			switch (sa->sa_family) {
