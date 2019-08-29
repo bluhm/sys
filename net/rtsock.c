@@ -1440,7 +1440,7 @@ rtm_xaddrs(caddr_t cp, caddr_t cplim, struct rt_addrinfo *rtinfo)
 				return (EINVAL);
 		}
 		if (maxlen) {
-			if (2 + maxlen >= size)
+			if (2 + maxlen > size)
 				return (EINVAL);
 			len = strnlen(sa->sa_data, maxlen);
 			if (len >= maxlen || 2 + len >= sa->sa_len)
