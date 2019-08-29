@@ -1350,6 +1350,11 @@ rtm_xaddrs(caddr_t cp, caddr_t cplim, struct rt_addrinfo *rtinfo)
 	struct sockaddr	*sa;
 	int		 i;
 
+	/*
+	 * Parse address bits, split address storage in chunks, and
+	 * set info pointers.  Use sa_len for traversing the memory
+	 * and check that we stay within in the limit.
+	 */
 	bzero(rtinfo->rti_info, sizeof(rtinfo->rti_info));
 	for (i = 0; i < sizeof(rtinfo->rti_addrs) * 8; i++) {
 		if ((rtinfo->rti_addrs & (1 << i)) == 0)
@@ -1362,6 +1367,12 @@ rtm_xaddrs(caddr_t cp, caddr_t cplim, struct rt_addrinfo *rtinfo)
 		rtinfo->rti_info[i] = sa;
 		ADVANCE(cp, sa);
 	}
+	/*
+	 * Check that the address family is suitable for the route address
+	 * type.  Check that each address has a size that fits its family
+	 * and its length is within the size.  Strings within addresses must
+	 * be NUL terminated.
+	 */
 	for (i = 0; i < RTAX_MAX; i++) {
 		size_t len, maxlen, size;
 
@@ -1395,7 +1406,7 @@ rtm_xaddrs(caddr_t cp, caddr_t cplim, struct rt_addrinfo *rtinfo)
 			/*
 			 * XXX Should be sizeof(struct sockaddr_dl), but
 			 * route(8) has a bug and provides less memory.
-			 * arp(8) has anonther bug and uses sizeof pointer.
+			 * arp(8) has another bug and uses sizeof pointer.
 			 */
 			size = 4;
 			break;
@@ -1436,12 +1447,15 @@ rtm_xaddrs(caddr_t cp, caddr_t cplim, struct rt_addrinfo *rtinfo)
 			break;
 		}
 		if (size) {
+			/* memory for the full struct must not be provided */
 			if (sa->sa_len < size)
 				return (EINVAL);
 		}
 		if (maxlen) {
+			/* this should not happen */
 			if (2 + maxlen > size)
 				return (EINVAL);
+			/* strings must be NUL terminated within the struct */
 			len = strnlen(sa->sa_data, maxlen);
 			if (len >= maxlen || 2 + len >= sa->sa_len)
 				return (EINVAL);
