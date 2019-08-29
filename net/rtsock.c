@@ -1395,8 +1395,9 @@ rtm_xaddrs(caddr_t cp, caddr_t cplim, struct rt_addrinfo *rtinfo)
 			/*
 			 * XXX Should be sizeof(struct sockaddr_dl), but
 			 * route(8) has a bug and provides less memory.
+			 * arp(8) has anonther bug and uses sizeof pointer.
 			 */
-			size = 16;
+			size = 4;
 			break;
 		case RTAX_IFA:
 			switch (sa->sa_family) {
