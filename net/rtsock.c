@@ -1388,6 +1388,9 @@ rtm_xaddrs(caddr_t cp, caddr_t cplim, struct rt_addrinfo *rtinfo)
 			case AF_INET:
 				size = sizeof(struct sockaddr_in);
 				break;
+			case AF_LINK:
+				size = sizeof(struct sockaddr_dl);
+				break;
 #ifdef INET6
 			case AF_INET6:
 				size = sizeof(struct sockaddr_in6);
