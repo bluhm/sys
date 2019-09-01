@@ -829,6 +829,7 @@ mfc_add_route(struct ifnet *ifp, struct sockaddr *origin,
 		    satosin(group)->sin_addr.s_addr,
 		    mfccp->mfcc_parent, ifp->if_xname);
 		mrt_mcast_del(rt, rtableid);
+		rtfree(rt);
 		return (ENOMEM);
 	}
 
@@ -898,6 +899,7 @@ update_mfc_params(struct mfcctl2 *mfccp, int wait, unsigned int rtableid)
 			    mfccp->mfcc_mcastgrp.s_addr, i, ifp->if_xname);
 			rt_timer_remove_all(rt);
 			mrt_mcast_del(rt, rtableid);
+			rtfree(rt);
 			continue;
 		}
 
@@ -1047,6 +1049,7 @@ del_mfc(struct socket *so, struct mbuf *m)
 		/* Remove all timers related to this route. */
 		rt_timer_remove_all(rt);
 		mrt_mcast_del(rt, rtableid);
+		rtfree(rt);
 	}
 
 	return (0);
