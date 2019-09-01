@@ -127,7 +127,7 @@ int ip_mdq(struct mbuf *, struct ifnet *, struct rtentry *);
 struct ifnet *if_lookupbyvif(vifi_t, unsigned int);
 struct rtentry *rt_mcast_add(struct ifnet *, struct sockaddr *,
     struct sockaddr *);
-int mrt_mcast_del(struct rtentry *, unsigned int);
+void mrt_mcast_del(struct rtentry *, unsigned int);
 
 /*
  * Kernel multicast routing API capabilities and setup.
@@ -1325,30 +1325,21 @@ rt_mcast_add(struct ifnet *ifp, struct sockaddr *origin, struct sockaddr *group)
 	return (mfc_find(ifp, NULL, &satosin(group)->sin_addr, rtableid));
 }
 
-int
+void
 mrt_mcast_del(struct rtentry *rt, unsigned int rtableid)
 {
 	struct ifnet		*ifp;
-	int			 rv;
+	int			 error;
 
 	free(rt->rt_llinfo, M_MRTABLE, sizeof(struct mfc));
 	rt->rt_llinfo = NULL;
 
-	if ((ifp = if_get(rt->rt_ifidx)) == NULL) {
-		DPRINTF("if_get(%d) failed", rt->rt_ifidx);
-		rtfree(rt);
-		return (ENOENT);
-	}
-
-	rv = rtdeletemsg(rt, ifp, rtableid);
+	ifp = if_get(rt->rt_ifidx);
+	if (ifp == NULL)
+		return;
+	error = rtdeletemsg(rt, ifp, rtableid);
 	if_put(ifp);
-	if (rv != 0) {
-		DPRINTF("rtdeletemsg failed (%d)", rv);
-		rtfree(rt);
-		return (rv);
-	}
 
-	mrt_count[rtableid]--;
-
-	return (0);
+	if (error == 0)
+		mrt_count[rtableid]--;
 }
