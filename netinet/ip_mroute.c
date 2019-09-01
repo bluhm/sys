@@ -534,8 +534,7 @@ mrouter_rtwalk_delete(struct rtentry *rt, void *arg, unsigned int rtableid)
 
 	/* Remove all timers related to this route. */
 	rt_timer_remove_all(rt);
-	mrt_mcast_del(rt, rtableid);
-	return (0);
+	return EEXIST;
 }
 
 /*
@@ -547,12 +546,24 @@ ip_mrouter_done(struct socket *so)
 	struct inpcb *inp = sotoinpcb(so);
 	struct ifnet *ifp;
 	unsigned int rtableid = inp->inp_rtableid;
+	int error;
 
 	NET_ASSERT_LOCKED();
 
 	/* Delete all remaining installed multicast routes. */
-	rtable_walk(rtableid, AF_INET, NULL, mrouter_rtwalk_delete, NULL);
+	do {
+		struct rtentry *rt = NULL;
 
+		error = rtable_walk(rtableid, AF_INET, &rt,
+		    mrouter_rtwalk_delete, NULL);
+		if (rt != NULL && error == EEXIST) {
+			mrt_mcast_del(rt, rtableid);
+			error = EAGAIN;
+		}
+		rtfree(rt);
+	} while (error == EAGAIN);
+
+	/* Unregister all interfaces in the domain. */
 	TAILQ_FOREACH(ifp, &ifnet, if_list) {
 		if (ifp->if_rdomain != rtableid)
 			continue;
