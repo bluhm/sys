@@ -127,7 +127,7 @@ int ip_mdq(struct mbuf *, struct ifnet *, struct rtentry *);
 struct ifnet *if_lookupbyvif(vifi_t, unsigned int);
 struct rtentry *rt_mcast_add(struct ifnet *, struct sockaddr *,
     struct sockaddr *);
-int rt_mcast_del(struct rtentry *, unsigned int);
+int mrt_mcast_del(struct rtentry *, unsigned int);
 
 /*
  * Kernel multicast routing API capabilities and setup.
@@ -534,7 +534,7 @@ mrouter_rtwalk_delete(struct rtentry *rt, void *arg, unsigned int rtableid)
 
 	/* Remove all timers related to this route. */
 	rt_timer_remove_all(rt);
-	rt_mcast_del(rt, rtableid);
+	mrt_mcast_del(rt, rtableid);
 	return (0);
 }
 
@@ -794,7 +794,7 @@ mfc_expire_route(struct rtentry *rt, struct rttimer *rtt)
 
 	/* Remove all timers related to this route. */
 	rt_timer_remove_all(rt);
-	rt_mcast_del(rt, rtableid);
+	mrt_mcast_del(rt, rtableid);
 }
 
 int
@@ -817,7 +817,7 @@ mfc_add_route(struct ifnet *ifp, struct sockaddr *origin,
 		    satosin(origin)->sin_addr.s_addr,
 		    satosin(group)->sin_addr.s_addr,
 		    mfccp->mfcc_parent, ifp->if_xname);
-		rt_mcast_del(rt, rtableid);
+		mrt_mcast_del(rt, rtableid);
 		return (ENOMEM);
 	}
 
@@ -886,7 +886,7 @@ update_mfc_params(struct mfcctl2 *mfccp, int wait, unsigned int rtableid)
 			DPRINTF("del route (group %#08X) for vif %d (%s)",
 			    mfccp->mfcc_mcastgrp.s_addr, i, ifp->if_xname);
 			rt_timer_remove_all(rt);
-			rt_mcast_del(rt, rtableid);
+			mrt_mcast_del(rt, rtableid);
 			continue;
 		}
 
@@ -1035,7 +1035,7 @@ del_mfc(struct socket *so, struct mbuf *m)
 	    &mfcctl2.mfcc_mcastgrp, rtableid)) != NULL) {
 		/* Remove all timers related to this route. */
 		rt_timer_remove_all(rt);
-		rt_mcast_del(rt, rtableid);
+		mrt_mcast_del(rt, rtableid);
 	}
 
 	return (0);
@@ -1326,7 +1326,7 @@ rt_mcast_add(struct ifnet *ifp, struct sockaddr *origin, struct sockaddr *group)
 }
 
 int
-rt_mcast_del(struct rtentry *rt, unsigned int rtableid)
+mrt_mcast_del(struct rtentry *rt, unsigned int rtableid)
 {
 	struct ifnet		*ifp;
 	int			 rv;
