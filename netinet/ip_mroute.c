@@ -532,8 +532,6 @@ mrouter_rtwalk_delete(struct rtentry *rt, void *arg, unsigned int rtableid)
 	    (RTF_HOST | RTF_MULTICAST))
 		return (0);
 
-	/* Remove all timers related to this route. */
-	rt_timer_remove_all(rt);
 	return EEXIST;
 }
 
@@ -803,8 +801,6 @@ mfc_expire_route(struct rtentry *rt, struct rttimer *rtt)
 		return;
 	}
 
-	/* Remove all timers related to this route. */
-	rt_timer_remove_all(rt);
 	mrt_mcast_del(rt, rtableid);
 }
 
@@ -897,7 +893,6 @@ update_mfc_params(struct mfcctl2 *mfccp, int wait, unsigned int rtableid)
 
 			DPRINTF("del route (group %#08X) for vif %d (%s)",
 			    mfccp->mfcc_mcastgrp.s_addr, i, ifp->if_xname);
-			rt_timer_remove_all(rt);
 			mrt_mcast_del(rt, rtableid);
 			rtfree(rt);
 			continue;
@@ -1046,8 +1041,6 @@ del_mfc(struct socket *so, struct mbuf *m)
 
 	while ((rt = mfc_find(NULL, &mfcctl2.mfcc_origin,
 	    &mfcctl2.mfcc_mcastgrp, rtableid)) != NULL) {
-		/* Remove all timers related to this route. */
-		rt_timer_remove_all(rt);
 		mrt_mcast_del(rt, rtableid);
 		rtfree(rt);
 	}
@@ -1344,6 +1337,9 @@ mrt_mcast_del(struct rtentry *rt, unsigned int rtableid)
 {
 	struct ifnet		*ifp;
 	int			 error;
+
+	/* Remove all timers related to this route. */
+	rt_timer_remove_all(rt);
 
 	free(rt->rt_llinfo, M_MRTABLE, sizeof(struct mfc));
 	rt->rt_llinfo = NULL;
