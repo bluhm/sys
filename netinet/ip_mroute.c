@@ -1350,5 +1350,8 @@ mrt_mcast_del(struct rtentry *rt, unsigned int rtableid)
 	error = rtdeletemsg(rt, ifp, rtableid);
 	if_put(ifp);
 
+	if (error)
+		DPRINTF("delete route error %d\n", error);
+
 	mrt_count[rtableid]--;
 }
