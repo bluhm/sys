@@ -1,4 +1,4 @@
-/*	$OpenBSD: ses.c,v 1.55 2015/08/23 01:55:39 tedu Exp $ */
+/*	$OpenBSD: ses.c,v 1.57 2019/09/01 15:03:32 krw Exp $ */
 
 /*
  * Copyright (c) 2005 David Gwynne <dlg@openbsd.org>
@@ -129,12 +129,12 @@ ses_match(struct device *parent, void *match, void *aux)
 		return (0);
 
 	if ((inq->device & SID_TYPE) == T_ENCLOSURE &&
-	    SCSISPC(inq->version) >= 2)
+	    SID_ANSII_REV(inq) >= SCSI_REV_2)
 		return (2);
 
 	/* match on dell enclosures */
 	if ((inq->device & SID_TYPE) == T_PROCESSOR &&
-	    SCSISPC(inq->version) == 3)
+	    SID_ANSII_REV(inq) == SCSI_REV_SPC)
 		return (3);
 
 	return (0);

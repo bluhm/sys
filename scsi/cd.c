@@ -1,4 +1,4 @@
-/*	$OpenBSD: cd.c,v 1.225 2019/08/17 15:31:41 krw Exp $	*/
+/*	$OpenBSD: cd.c,v 1.227 2019/09/01 15:03:32 krw Exp $	*/
 /*	$NetBSD: cd.c,v 1.100 1997/04/02 02:29:30 mycroft Exp $	*/
 
 /*
@@ -217,7 +217,7 @@ cdattach(struct device *parent, struct device *self, void *aux)
 	 * Note if this device is ancient.  This is used in cdminphys().
 	 */
 	if (!(link->flags & SDEV_ATAPI) &&
-	    SCSISPC(sa->sa_inqbuf->version) == 0)
+	    SID_ANSII_REV(sa->sa_inqbuf) == SCSI_REV_0)
 		sc->sc_flags |= CDF_ANCIENT;
 
 	printf("\n");
@@ -2163,13 +2163,14 @@ cd_size(struct scsi_link *link, int flags, u_int32_t *blksize)
 		*blksize = _4btol(rdcap->length);
 	dma_free(rdcap, sizeof(*rdcap));
 
-	if (SCSISPC(link->inqdata.version) < 3 && max_addr != 0xffffffff)
+	/*
+	 * pre-SPC (i.e. pre-SCSI-3) devices reporting less than 2^32-1 sectors
+	 * can stop here.
+	 */
+	if (SID_ANSII_REV(&link->inqdata) < SCSI_REV_SPC &&
+	    max_addr != 0xffffffff)
 		goto exit;
 
-	/*
-	 * SCSI-3 devices, or devices reporting more than 2^32-1 sectors can
-	 * try READ CAPACITY(16).
-	 */
 	rdcap16 = dma_alloc(sizeof(*rdcap16), ((flags & SCSI_NOSLEEP) ?
 	    PR_NOWAIT : PR_WAITOK) | PR_ZERO);
 	if (rdcap16 == NULL)
