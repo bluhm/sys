@@ -1354,6 +1354,5 @@ mrt_mcast_del(struct rtentry *rt, unsigned int rtableid)
 	error = rtdeletemsg(rt, ifp, rtableid);
 	if_put(ifp);
 
-	if (error == 0)
-		mrt_count[rtableid]--;
+	mrt_count[rtableid]--;
 }
