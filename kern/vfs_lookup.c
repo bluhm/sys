@@ -652,6 +652,12 @@ dirloop:
 		ndp->ni_vp = dp = tdp;
 	}
 
+	/* In case we were sleeping, file system may be unmounted. */
+	if (dp->v_type == VBAD) {
+		error = ENOENT;
+		goto bad2;
+	}
+
 	/*
 	 * Check for symbolic link.  Back up over any slashes that we skipped,
 	 * as we will need them again.
