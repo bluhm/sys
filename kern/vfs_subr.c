@@ -962,14 +962,22 @@ int
 vflush(struct mount *mp, struct vnode *skipvp, int flags)
 {
 	struct vflush_args va;
+	int loopcnt;
 	va.skipvp = skipvp;
 	va.busy = 0;
 	va.flags = flags;
 
-	vfs_mount_foreach_vnode(mp, vflush_vnode, &va);
-
-	if (va.busy)
-		return (EBUSY);
+	for (loopcnt = 10; loopcnt > 0; loopcnt--) {
+		vfs_mount_foreach_vnode(mp, vflush_vnode, &va);
+		if (va.busy)
+			return (EBUSY);
+		if ((flags & FORCECLOSE) == 0)
+			break;
+		if (LIST_EMPTY(&mp->mnt_vnodelist))
+			break;
+	}
+	if (loopcnt == 0)
+		printf("could not flush all vnodes\n");
 	return (0);
 }
 
