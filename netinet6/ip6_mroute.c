@@ -174,9 +174,9 @@ int del_m6fc(struct socket *, struct mf6cctl *);
 struct ifnet *mrt6_iflookupbymif(mifi_t, unsigned int);
 struct rtentry *mf6c_find(struct ifnet *, struct in6_addr *,
     struct in6_addr *, unsigned int);
-struct rtentry *mrt6_mcast6_add(struct ifnet *, struct sockaddr *,
+struct rtentry *mrt6_mcast_add(struct ifnet *, struct sockaddr *,
     struct sockaddr *);
-int mrt6_mcast6_del(struct rtentry *, unsigned int);
+void mrt6_mcast_del(struct rtentry *, unsigned int);
 void mf6c_expire_route(struct rtentry *, struct rttimer *);
 
 /*
@@ -505,9 +505,6 @@ mrouter6_rtwalk_delete(struct rtentry *rt, void *arg, unsigned int rtableid)
 	    (RTF_HOST | RTF_MULTICAST))
 		return 0;
 
-	/* Remove all timers related to this route. */
-	rt_timer_remove_all(rt);
-
 	return EEXIST;
 }
 
@@ -531,7 +528,7 @@ ip6_mrouter_done(struct socket *so)
 		error = rtable_walk(rtableid, AF_INET6, &rt,
 		    mrouter6_rtwalk_delete, NULL);
 		if (rt != NULL && error == EEXIST) {
-			mrt6_mcast6_del(rt, rtableid);
+			mrt6_mcast_del(rt, rtableid);
 			error = EAGAIN;
 		}
 		rtfree(rt);
@@ -665,7 +662,7 @@ mf6c_add_route(struct ifnet *ifp, struct sockaddr *origin,
 	char bsrc[INET6_ADDRSTRLEN], bdst[INET6_ADDRSTRLEN];
 #endif /* MCAST_DEBUG */
 
-	rt = mrt6_mcast6_add(ifp, origin, group);
+	rt = mrt6_mcast_add(ifp, origin, group);
 	if (rt == NULL)
 		return ENOENT;
 
@@ -675,7 +672,7 @@ mf6c_add_route(struct ifnet *ifp, struct sockaddr *origin,
 		    inet_ntop(AF_INET6, origin, bsrc, sizeof(bsrc)),
 		    inet_ntop(AF_INET6, group, bdst, sizeof(bdst)),
 		    mf6cc->mf6cc_parent, ifp->if_xname);
-		mrt6_mcast6_del(rt, rtableid);
+		mrt6_mcast_del(rt, rtableid);
 		rtfree(rt);
 		return ENOMEM;
 	}
@@ -731,9 +728,7 @@ mf6c_update(struct mf6cctl *mf6cc, int wait, unsigned int rtableid)
 			    inet_ntop(AF_INET6,
 			    &mf6cc->mf6cc_mcastgrp.sin6_addr, bdst,
 			    sizeof(bdst)), mifi, ifp->if_xname);
-
-			rt_timer_remove_all(rt);
-			mrt6_mcast6_del(rt, rtableid);
+			mrt6_mcast_del(rt, rtableid);
 			rtfree(rt);
 			continue;
 		}
@@ -846,9 +841,7 @@ del_m6fc(struct socket *so, struct mf6cctl *mfccp)
 
 	while ((rt = mf6c_find(NULL, &mfccp->mf6cc_origin.sin6_addr,
 	    &mfccp->mf6cc_mcastgrp.sin6_addr, rtableid)) != NULL) {
-		/* Remove all timers related to this route. */
-		rt_timer_remove_all(rt);
-		mrt6_mcast6_del(rt, rtableid);
+		mrt6_mcast_del(rt, rtableid);
 		rtfree(rt);
 	}
 
@@ -1018,8 +1011,7 @@ mf6c_expire_route(struct rtentry *rt, struct rttimer *rtt)
 		return;
 	}
 
-	rt_timer_remove_all(rt);
-	mrt6_mcast6_del(rt, rtableid);
+	mrt6_mcast_del(rt, rtableid);
 }
 
 /*
@@ -1243,7 +1235,7 @@ mf6c_find(struct ifnet *ifp, struct in6_addr *origin, struct in6_addr *group,
 }
 
 struct rtentry *
-mrt6_mcast6_add(struct ifnet *ifp, struct sockaddr *origin,
+mrt6_mcast_add(struct ifnet *ifp, struct sockaddr *origin,
     struct sockaddr *group)
 {
 	struct ifaddr *ifa;
@@ -1269,21 +1261,24 @@ mrt6_mcast6_add(struct ifnet *ifp, struct sockaddr *origin,
 	return mf6c_find(ifp, NULL, &satosin6(group)->sin6_addr, rtableid);
 }
 
-int
-mrt6_mcast6_del(struct rtentry *rt, unsigned int rtableid)
+void
+mrt6_mcast_del(struct rtentry *rt, unsigned int rtableid)
 {
 	struct ifnet *ifp;
 	int error;
+
+	/* Remove all timers related to this route. */
+	rt_timer_remove_all(rt);
 
 	free(rt->rt_llinfo, M_MRTABLE, sizeof(struct mf6c));
 	rt->rt_llinfo = NULL;
 
 	ifp = if_get(rt->rt_ifidx);
 	if (ifp == NULL)
-		return ENOENT;
-
+		return;
 	error = rtdeletemsg(rt, ifp, rtableid);
 	if_put(ifp);
 
-	return error;
+	if (error)
+		DPRINTF("delete route error %d\n", error);
 }
