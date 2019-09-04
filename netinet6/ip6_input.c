@@ -363,6 +363,7 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 		 * See if we belong to the destination multicast group on the
 		 * arrival interface.
 		 */
+printf("%s: in6_hasmulti\n", __func__);
 		if (in6_hasmulti(&ip6->ip6_dst, ifp))
 			ours = 1;
 

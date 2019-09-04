@@ -1111,8 +1111,22 @@ in6_hasmulti(struct in6_addr *maddr6, struct ifnet *ifp)
 {
 	struct in6_multi *in6m;
 	int joined;
+	struct ifmaddr *ifma;
+	char name[INET6_ADDRSTRLEN];
 
-	IN6_LOOKUP_MULTI(*maddr6, ifp, in6m);
+printf("%s: maddr6 %s\n", __func__,
+inet_ntop(AF_INET6, maddr6, name, sizeof(name)));
+	(in6m) = NULL;
+	TAILQ_FOREACH(ifma, &ifp->if_maddrlist, ifma_list) {
+		if (ifma->ifma_addr->sa_family != AF_INET6)
+			continue;
+printf("%s: ifma %s\n", __func__,
+inet_ntop(AF_INET6, &(((struct sockaddr_in6 *)(ifma->ifma_addr))->sin6_addr), name, sizeof(name)));
+		if (IN6_ARE_ADDR_EQUAL(&ifmatoin6m(ifma)->in6m_addr, maddr6)) {
+			(in6m) = ifmatoin6m(ifma);
+			break;
+		}
+	}
 	joined = (in6m != NULL);
 
 	return (joined);

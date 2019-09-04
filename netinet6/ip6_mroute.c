@@ -1159,6 +1159,7 @@ phyint_send6(struct ifnet *ifp, struct ip6_hdr *ip6, struct mbuf *m)
 	 */
 	dst6 = &sin6;
 	memset(&sin6, 0, sizeof(sin6));
+printf("%s: in6_hasmulti\n", __func__);
 	if (in6_hasmulti(&ip6->ip6_dst, ifp)) {
 		dst6->sin6_len = sizeof(struct sockaddr_in6);
 		dst6->sin6_family = AF_INET6;

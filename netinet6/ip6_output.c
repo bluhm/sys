@@ -500,6 +500,7 @@ reroute:
 			goto bad;
 		}
 
+printf("%s: in6_hasmulti\n", __func__);
 		if ((im6o == NULL || im6o->im6o_loop) &&
 		    in6_hasmulti(&ip6->ip6_dst, ifp)) {
 			/*
