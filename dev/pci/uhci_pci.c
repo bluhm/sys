@@ -86,6 +86,9 @@ uhci_pci_activate(struct device *self, int act)
 {
 	struct uhci_pci_softc *sc = (struct uhci_pci_softc *)self;
 
+	if (sc->sc.sc_size == 0)
+		return 0;
+
 	/* On resume, set legacy support attribute and enable intrs */
 	switch (act) {
 	case DVACT_RESUME:
