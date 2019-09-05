@@ -312,11 +312,14 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 	 * addresses in the routing table.
 	 */
 	if (ifp->if_flags & IFF_LOOPBACK) {
+printf("%s: embed loopback scope src %d, dst %d\n", __func__,
+ntohs(src_scope), ntohs(dst_scope));
 		if (IN6_IS_SCOPE_EMBED(&ip6->ip6_src))
 			ip6->ip6_src.s6_addr16[1] = src_scope;
 		if (IN6_IS_SCOPE_EMBED(&ip6->ip6_dst))
 			ip6->ip6_dst.s6_addr16[1] = dst_scope;
 	} else {
+printf("%s: embed interface scope index %d\n", __func__, ifp->if_index);
 		if (IN6_IS_SCOPE_EMBED(&ip6->ip6_src))
 			ip6->ip6_src.s6_addr16[1] = htons(ifp->if_index);
 		if (IN6_IS_SCOPE_EMBED(&ip6->ip6_dst))
@@ -363,7 +366,7 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 		 * See if we belong to the destination multicast group on the
 		 * arrival interface.
 		 */
-printf("%s: in6_hasmulti\n", __func__);
+printf("%s: in6_hasmulti, ifindex %d\n", __func__, ifp->if_index);
 		if (in6_hasmulti(&ip6->ip6_dst, ifp))
 			ours = 1;
 
