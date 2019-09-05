@@ -193,6 +193,7 @@ uhci_pci_attach(struct device *parent, struct device *self, void *aux)
 
 unmap_ret:
 	bus_space_unmap(sc->sc.iot, sc->sc.ioh, sc->sc.sc_size);
+	sc->sc.sc_size = 0;
 	splx(s);
 }
 
@@ -221,6 +222,7 @@ uhci_pci_attach_deferred(struct device *self)
 unmap_ret:
 	bus_space_unmap(sc->sc.iot, sc->sc.ioh, sc->sc.sc_size);
 	pci_intr_disestablish(sc->sc_pc, sc->sc_ih);
+	sc->sc.sc_size = 0;
 	splx(s);
 }
 
