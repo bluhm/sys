@@ -86,6 +86,7 @@
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/acct.h>
 #include <sys/mman.h>
 #include <sys/proc.h>
 #include <sys/malloc.h>
@@ -1872,6 +1873,7 @@ uvm_map_inentry(struct proc *p, struct p_inentry *ie, vaddr_t addr,
 		if (!ok) {
 			printf(fmt, p->p_p->ps_comm, p->p_p->ps_pid, p->p_tid,
 			    addr, ie->ie_start, ie->ie_end);
+			p->p_p->ps_acflag |= AMAP;
 			sv.sival_ptr = (void *)PROC_PC(p);
 			trapsignal(p, SIGSEGV, 0, SEGV_ACCERR, sv);
 		}

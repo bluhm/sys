@@ -58,7 +58,7 @@ struct acct {
 
 #define	AFORK	0x01		/* fork'd but not exec'd */
 #define	ASU	0x02		/* used super-user permissions */
-#define	ACOMPAT	0x04		/* used compatibility mode */
+#define	AMAP	0x04		/* system call or stack mapping violation */
 #define	ACORE	0x08		/* dumped core */
 #define	AXSIG	0x10		/* killed by a signal */
 #define	APLEDGE	0x20		/* killed due to pledge violation */
