@@ -1,4 +1,4 @@
-/*	$OpenBSD: acct.h,v 1.8 2019/07/25 09:37:32 bluhm Exp $	*/
+/*	$OpenBSD: acct.h,v 1.9 2019/09/09 20:02:26 bluhm Exp $	*/
 /*	$NetBSD: acct.h,v 1.16 1995/03/26 20:23:52 jtc Exp $	*/
 
 /*-
