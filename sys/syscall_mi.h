@@ -71,13 +71,13 @@ mi_syscall(struct proc *p, register_t code, const struct sysent *callp,
 	if (!uvm_map_inentry(p, &p->p_spinentry, PROC_STACK(p),
 	    "[%s]%d/%d sp=%lx inside %lx-%lx: not MAP_STACK\n",
 	    uvm_map_inentry_sp, p->p_vmspace->vm_map.sserial))
-		return (EPERM);
+		return (ERESTART);
 
 	/* PC must not be in writeable memory */
 	if (!uvm_map_inentry(p, &p->p_pcinentry, PROC_PC(p),
 	    "[%s]%d/%d pc=%lx inside %lx-%lx: writeable syscall\n",
 	    uvm_map_inentry_pc, p->p_vmspace->vm_map.wserial))
-		return (EPERM);
+		return (ERESTART);
 
 	if (lock)
 		KERNEL_LOCK();
