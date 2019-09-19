@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_iwi.c,v 1.140 2019/07/25 01:46:14 cheloha Exp $	*/
+/*	$OpenBSD: if_iwi.c,v 1.142 2019/09/18 23:52:32 dlg Exp $	*/
 
 /*-
  * Copyright (c) 2004-2008
@@ -87,7 +87,7 @@ int		iwi_find_txnode(struct iwi_softc *, const uint8_t *);
 int		iwi_newstate(struct ieee80211com *, enum ieee80211_state, int);
 uint8_t		iwi_rate(int);
 void		iwi_frame_intr(struct iwi_softc *, struct iwi_rx_data *,
-		    struct iwi_frame *);
+		    struct iwi_frame *, struct mbuf_list *);
 void		iwi_notification_intr(struct iwi_softc *, struct iwi_rx_data *,
 		    struct iwi_notif *);
 void		iwi_rx_intr(struct iwi_softc *);
@@ -854,7 +854,7 @@ iwi_rate(int plcp)
 
 void
 iwi_frame_intr(struct iwi_softc *sc, struct iwi_rx_data *data,
-    struct iwi_frame *frame)
+    struct iwi_frame *frame, struct mbuf_list *ml)
 {
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ifnet *ifp = &ic->ic_if;
@@ -923,7 +923,6 @@ iwi_frame_intr(struct iwi_softc *sc, struct iwi_rx_data *data,
 
 #if NBPFILTER > 0
 	if (sc->sc_drvbpf != NULL) {
-		struct mbuf mb;
 		struct iwi_rx_radiotap_header *tap = &sc->sc_rxtap;
 
 		tap->wr_flags = 0;
@@ -937,13 +936,8 @@ iwi_frame_intr(struct iwi_softc *sc, struct iwi_rx_data *data,
 		if (frame->antenna & 0x40)
 			tap->wr_flags |= IEEE80211_RADIOTAP_F_SHORTPRE;
 
-		mb.m_data = (caddr_t)tap;
-		mb.m_len = sc->sc_rxtap_len;
-		mb.m_next = m;
-		mb.m_nextpkt = NULL;
-		mb.m_type = 0;
-		mb.m_flags = 0;
-		bpf_mtap(sc->sc_drvbpf, &mb, BPF_DIRECTION_IN);
+		bpf_mtap_hdr(sc->sc_drvbpf, tap, sc->sc_rxtap_len,
+		    m, BPF_DIRECTION_IN, NULL);
 	}
 #endif
 
@@ -954,7 +948,7 @@ iwi_frame_intr(struct iwi_softc *sc, struct iwi_rx_data *data,
 	rxi.rxi_flags = 0;
 	rxi.rxi_rssi = frame->rssi_dbm;
 	rxi.rxi_tstamp = 0;	/* unused */
-	ieee80211_input(ifp, m, ni, &rxi);
+	ieee80211_inputm(ifp, m, ni, &rxi, ml);
 
 	/* node is no longer needed */
 	ieee80211_release_node(ic, ni);
@@ -1073,6 +1067,7 @@ iwi_notification_intr(struct iwi_softc *sc, struct iwi_rx_data *data,
 void
 iwi_rx_intr(struct iwi_softc *sc)
 {
+	struct mbuf_list ml = MBUF_LIST_INITIALIZER();
 	struct iwi_rx_data *data;
 	struct iwi_hdr *hdr;
 	uint32_t hw;
@@ -1090,7 +1085,7 @@ iwi_rx_intr(struct iwi_softc *sc)
 		switch (hdr->type) {
 		case IWI_HDR_TYPE_FRAME:
 			iwi_frame_intr(sc, data,
-			    (struct iwi_frame *)(hdr + 1));
+			    (struct iwi_frame *)(hdr + 1), &ml);
 			break;
 
 		case IWI_HDR_TYPE_NOTIF:
@@ -1105,6 +1100,7 @@ iwi_rx_intr(struct iwi_softc *sc)
 
 		sc->rxq.cur = (sc->rxq.cur + 1) % IWI_RX_RING_COUNT;
 	}
+	if_input(&sc->sc_ic.ic_if, &ml);
 
 	/* tell the firmware what we have processed */
 	hw = (hw == 0) ? IWI_RX_RING_COUNT - 1 : hw - 1;
@@ -1265,20 +1261,14 @@ iwi_tx_start(struct ifnet *ifp, struct mbuf *m0, struct ieee80211_node *ni)
 
 #if NBPFILTER > 0
 	if (sc->sc_drvbpf != NULL) {
-		struct mbuf mb;
 		struct iwi_tx_radiotap_header *tap = &sc->sc_txtap;
 
 		tap->wt_flags = 0;
 		tap->wt_chan_freq = htole16(ic->ic_bss->ni_chan->ic_freq);
 		tap->wt_chan_flags = htole16(ic->ic_bss->ni_chan->ic_flags);
 
-		mb.m_data = (caddr_t)tap;
-		mb.m_len = sc->sc_txtap_len;
-		mb.m_next = m0;
-		mb.m_nextpkt = NULL;
-		mb.m_type = 0;
-		mb.m_flags = 0;
-		bpf_mtap(sc->sc_drvbpf, &mb, BPF_DIRECTION_OUT);
+		bpf_mtap_hdr(sc->sc_drvbpf, tap, sc->sc_txtap_len,
+		    m0, BPF_DIRECTION_OUT, NULL);
 	}
 #endif
 

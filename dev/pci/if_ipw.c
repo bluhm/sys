@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ipw.c,v 1.123 2019/07/25 01:46:14 cheloha Exp $	*/
+/*	$OpenBSD: if_ipw.c,v 1.125 2019/09/18 23:52:32 dlg Exp $	*/
 
 /*-
  * Copyright (c) 2004-2008
@@ -71,7 +71,8 @@ uint16_t	ipw_read_prom_word(struct ipw_softc *, uint8_t);
 void		ipw_command_intr(struct ipw_softc *, struct ipw_soft_buf *);
 void		ipw_newstate_intr(struct ipw_softc *, struct ipw_soft_buf *);
 void		ipw_data_intr(struct ipw_softc *, struct ipw_status *,
-		    struct ipw_soft_bd *, struct ipw_soft_buf *);
+		    struct ipw_soft_bd *, struct ipw_soft_buf *,
+		    struct mbuf_list *);
 void		ipw_notification_intr(struct ipw_softc *,
 		    struct ipw_soft_buf *);
 void		ipw_rx_intr(struct ipw_softc *);
@@ -816,7 +817,7 @@ ipw_newstate_intr(struct ipw_softc *sc, struct ipw_soft_buf *sbuf)
 
 void
 ipw_data_intr(struct ipw_softc *sc, struct ipw_status *status,
-    struct ipw_soft_bd *sbd, struct ipw_soft_buf *sbuf)
+    struct ipw_soft_bd *sbd, struct ipw_soft_buf *sbuf, struct mbuf_list *ml)
 {
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ifnet *ifp = &ic->ic_if;
@@ -878,7 +879,6 @@ ipw_data_intr(struct ipw_softc *sc, struct ipw_status *status,
 
 #if NBPFILTER > 0
 	if (sc->sc_drvbpf != NULL) {
-		struct mbuf mb;
 		struct ipw_rx_radiotap_header *tap = &sc->sc_rxtap;
 
 		tap->wr_flags = 0;
@@ -886,13 +886,8 @@ ipw_data_intr(struct ipw_softc *sc, struct ipw_status *status,
 		tap->wr_chan_freq = htole16(ic->ic_ibss_chan->ic_freq);
 		tap->wr_chan_flags = htole16(ic->ic_ibss_chan->ic_flags);
 
-		mb.m_data = (caddr_t)tap;
-		mb.m_len = sc->sc_rxtap_len;
-		mb.m_next = m;
-		mb.m_nextpkt = NULL;
-		mb.m_type = 0;
-		mb.m_flags = 0;
-		bpf_mtap(sc->sc_drvbpf, &mb, BPF_DIRECTION_IN);
+		bpf_mtap_hdr(sc->sc_drvbpf, tap, sc->sc_rxtap_len,
+		    m, BPF_DIRECTION_IN, NULL);
 	}
 #endif
 
@@ -903,7 +898,7 @@ ipw_data_intr(struct ipw_softc *sc, struct ipw_status *status,
 	rxi.rxi_flags = 0;
 	rxi.rxi_rssi = status->rssi;
 	rxi.rxi_tstamp = 0;	/* unused */
-	ieee80211_input(ifp, m, ni, &rxi);
+	ieee80211_inputm(ifp, m, ni, &rxi, ml);
 
 	ieee80211_release_node(ic, ni);
 }
@@ -917,6 +912,7 @@ ipw_notification_intr(struct ipw_softc *sc, struct ipw_soft_buf *sbuf)
 void
 ipw_rx_intr(struct ipw_softc *sc)
 {
+	struct mbuf_list ml = MBUF_LIST_INITIALIZER();
 	struct ipw_status *status;
 	struct ipw_soft_bd *sbd;
 	struct ipw_soft_buf *sbuf;
@@ -949,7 +945,7 @@ ipw_rx_intr(struct ipw_softc *sc)
 
 		case IPW_STATUS_CODE_DATA_802_3:
 		case IPW_STATUS_CODE_DATA_802_11:
-			ipw_data_intr(sc, status, sbd, sbuf);
+			ipw_data_intr(sc, status, sbd, sbuf, &ml);
 			break;
 
 		case IPW_STATUS_CODE_NOTIFICATION:
@@ -966,6 +962,7 @@ ipw_rx_intr(struct ipw_softc *sc)
 		    i * sizeof (struct ipw_bd), sizeof (struct ipw_bd),
 		    BUS_DMASYNC_PREWRITE);
 	}
+	if_input(&sc->sc_ic.ic_if, &ml);
 
 	/* tell the firmware what we have processed */
 	sc->rxcur = (r == 0) ? IPW_NRBD - 1 : r - 1;
@@ -1153,20 +1150,14 @@ ipw_tx_start(struct ifnet *ifp, struct mbuf *m, struct ieee80211_node *ni)
 
 #if NBPFILTER > 0
 	if (sc->sc_drvbpf != NULL) {
-		struct mbuf mb;
 		struct ipw_tx_radiotap_header *tap = &sc->sc_txtap;
 
 		tap->wt_flags = 0;
 		tap->wt_chan_freq = htole16(ic->ic_ibss_chan->ic_freq);
 		tap->wt_chan_flags = htole16(ic->ic_ibss_chan->ic_flags);
 
-		mb.m_data = (caddr_t)tap;
-		mb.m_len = sc->sc_txtap_len;
-		mb.m_next = m;
-		mb.m_nextpkt = NULL;
-		mb.m_type = 0;
-		mb.m_flags = 0;
-		bpf_mtap(sc->sc_drvbpf, &mb, BPF_DIRECTION_OUT);
+		bpf_mtap_hdr(sc->sc_drvbpf, tap, sc->sc_txtap_len,
+		    m, BPF_DIRECTION_OUT, NULL);
 	}
 #endif
 

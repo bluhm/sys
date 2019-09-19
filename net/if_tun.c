@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_tun.c,v 1.187 2019/06/10 21:55:16 dlg Exp $	*/
+/*	$OpenBSD: if_tun.c,v 1.190 2019/09/13 01:31:24 dlg Exp $	*/
 /*	$NetBSD: if_tun.c,v 1.24 1996/05/07 02:40:48 thorpej Exp $	*/
 
 /*
@@ -838,8 +838,8 @@ tun_dev_write(struct tun_softc *tp, struct uio *uio, int ioflag)
 	ifp = &tp->tun_if;
 	TUNDEBUG(("%s: tunwrite\n", ifp->if_xname));
 
-	if (uio->uio_resid == 0 || uio->uio_resid > ifp->if_mtu +
-	    (tp->tun_flags & TUN_LAYER2 ? ETHER_HDR_LEN : sizeof(*th))) {
+	if (uio->uio_resid < ifp->if_hdrlen ||
+	    uio->uio_resid > (ifp->if_hdrlen + ifp->if_hardmtu)) {
 		TUNDEBUG(("%s: len=%d!\n", ifp->if_xname, uio->uio_resid));
 		return (EMSGSIZE);
 	}
@@ -1008,9 +1008,6 @@ tun_dev_poll(struct tun_softc *tp, int events, struct proc *p)
  *
  * The tun driver uses an array of tun_softc's based on the minor number
  * of the device.  kn->kn_hook gets set to the specific tun_softc.
- *
- * filt_tunread() sets kn->kn_data to the iface qsize
- * filt_tunwrite() sets kn->kn_data to the MTU size
  */
 int
 tunkqfilter(dev_t dev, struct knote *kn)
@@ -1043,16 +1040,16 @@ tun_dev_kqfilter(struct tun_softc *tp, struct knote *kn)
 	TUNDEBUG(("%s: tunkqfilter\n", ifp->if_xname));
 
 	switch (kn->kn_filter) {
-		case EVFILT_READ:
-			klist = &tp->tun_rsel.si_note;
-			kn->kn_fop = &tunread_filtops;
-			break;
-		case EVFILT_WRITE:
-			klist = &tp->tun_wsel.si_note;
-			kn->kn_fop = &tunwrite_filtops;
-			break;
-		default:
-			return (EINVAL);
+	case EVFILT_READ:
+		klist = &tp->tun_rsel.si_note;
+		kn->kn_fop = &tunread_filtops;
+		break;
+	case EVFILT_WRITE:
+		klist = &tp->tun_wsel.si_note;
+		kn->kn_fop = &tunwrite_filtops;
+		break;
+	default:
+		return (EINVAL);
 	}
 
 	kn->kn_hook = (caddr_t)tp;
@@ -1082,7 +1079,6 @@ filt_tunread(struct knote *kn, long hint)
 {
 	struct tun_softc	*tp;
 	struct ifnet		*ifp;
-	unsigned int		 len;
 
 	if (kn->kn_status & KN_DETACHED) {
 		kn->kn_data = 0;
@@ -1092,16 +1088,9 @@ filt_tunread(struct knote *kn, long hint)
 	tp = (struct tun_softc *)kn->kn_hook;
 	ifp = &tp->tun_if;
 
-	len = IFQ_LEN(&ifp->if_snd);
-	if (len > 0) {
-		kn->kn_data = len;
+	kn->kn_data = ifq_hdatalen(&ifp->if_snd);
 
-		TUNDEBUG(("%s: tunkqread q=%d\n", ifp->if_xname,
-		    IFQ_LEN(&ifp->if_snd)));
-		return (1);
-	}
-	TUNDEBUG(("%s: tunkqread waiting\n", ifp->if_xname));
-	return (0);
+	return (kn->kn_data > 0);
 }
 
 void
@@ -1131,7 +1120,7 @@ filt_tunwrite(struct knote *kn, long hint)
 	tp = (struct tun_softc *)kn->kn_hook;
 	ifp = &tp->tun_if;
 
-	kn->kn_data = ifp->if_mtu;
+	kn->kn_data = ifp->if_hdrlen + ifp->if_hardmtu;
 
 	return (1);
 }
