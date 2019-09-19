@@ -1450,7 +1450,7 @@ rtm_xaddrs(caddr_t cp, caddr_t cplim, struct rt_addrinfo *rtinfo)
 			break;
 		}
 		if (size) {
-			/* memory for the full struct must not be provided */
+			/* memory for the full struct must be provided */
 			if (sa->sa_len < size)
 				return (EINVAL);
 		}
