@@ -1428,23 +1428,28 @@ rtm_xaddrs(caddr_t cp, caddr_t cplim, struct rt_addrinfo *rtinfo)
 			}
 			break;
 		case RTAX_LABEL:
+			sa->sa_family = AF_UNPSEC;
 			maxlen = RTLABEL_LEN;
 			size = sizeof(struct sockaddr_rtlabel);
 			break;
 #ifdef BFD
 		case RTAX_BFD:
+			sa->sa_family = AF_UNPSEC;
 			size = sizeof(struct sockaddr_bfd);
 			break;
 #endif
 		case RTAX_DNS:
+			sa->sa_family = AF_UNPSEC;
 			maxlen = RTDNS_LEN;
 			size = sizeof(struct sockaddr_rtdns);
 			break;
 		case RTAX_STATIC:
+			sa->sa_family = AF_UNPSEC;
 			maxlen = RTSTATIC_LEN;
 			size = sizeof(struct sockaddr_rtstatic);
 			break;
 		case RTAX_SEARCH:
+			sa->sa_family = AF_UNPSEC;
 			maxlen = RTSEARCH_LEN;
 			size = sizeof(struct sockaddr_rtsearch);
 			break;
