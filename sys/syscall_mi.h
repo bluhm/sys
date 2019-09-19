@@ -67,17 +67,43 @@ mi_syscall(struct proc *p, register_t code, const struct sysent *callp,
 	}
 #endif
 
+# if 0
 	/* SP must be within MAP_STACK space */
 	if (!uvm_map_inentry(p, &p->p_spinentry, PROC_STACK(p),
 	    "[%s]%d/%d sp=%lx inside %lx-%lx: not MAP_STACK\n",
-	    uvm_map_inentry_sp, p->p_vmspace->vm_map.sserial))
+	    uvm_map_inentry_sp, p->p_vmspace->vm_map.sserial)) {
+		db_enter();
 		return (ERESTART);
+	}
+#else
+	if (uvm_map_inentry_recheck(p->p_vmspace->vm_map.sserial,
+	    PROC_STACK(p), &p->p_spinentry)) {
+		int ok;
+
+		KERNEL_LOCK();
+		ok = uvm_map_inentry_fix(p, &p->p_spinentry, PROC_STACK(p),
+		    uvm_map_inentry_sp, p->p_vmspace->vm_map.sserial);
+		if (!ok) {
+			printf("[%s]%d/%d sp=%llx inside %lx-%lx: not MAP_STACK\n",
+			    p->p_p->ps_comm, p->p_p->ps_pid, p->p_tid,
+			    PROC_STACK(p), p->p_spinentry.ie_start,
+			    p->p_spinentry.ie_end);
+			p->p_p->ps_acflag |= AMAP;
+			psignal(p, SIGSEGV);
+			KERNEL_UNLOCK();
+			return (ERESTART);
+		}
+		KERNEL_UNLOCK();
+	}
+#endif
 
 	/* PC must not be in writeable memory */
 	if (!uvm_map_inentry(p, &p->p_pcinentry, PROC_PC(p),
 	    "[%s]%d/%d pc=%lx inside %lx-%lx: writeable syscall\n",
-	    uvm_map_inentry_pc, p->p_vmspace->vm_map.wserial))
+	    uvm_map_inentry_pc, p->p_vmspace->vm_map.wserial)) {
+		db_enter();
 		return (ERESTART);
+	}
 
 	if (lock)
 		KERNEL_LOCK();
