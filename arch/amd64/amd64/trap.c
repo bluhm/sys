@@ -329,8 +329,8 @@ usertrap(struct trapframe *frame)
 	refreshcreds(p);
 
 	if (!uvm_map_inentry(p, &p->p_spinentry, PROC_STACK(p),
-	    "[%s]%d/%d sp=%lx inside %lx-%lx: not MAP_STACK\n",
-	    uvm_map_inentry_sp, p->p_vmspace->vm_map.sserial))
+	    uvm_map_inentry_sp, p->p_vmspace->vm_map.sserial,
+	    "sp", "not MAP_STACK"))
 		goto out;
 
 	switch (type) {

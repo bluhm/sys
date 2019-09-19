@@ -414,14 +414,14 @@ void		uvm_unmap_remove(struct vm_map*, vaddr_t, vaddr_t,
 
 struct p_inentry;
 
-int		uvm_map_inentry_recheck(u_long serial, vaddr_t,
-		    struct p_inentry *);
+int		uvm_map_inentry_recheck(u_long, vaddr_t, struct p_inentry *);
 int		uvm_map_inentry_sp(vm_map_entry_t);
 int		uvm_map_inentry_pc(vm_map_entry_t);
-boolean_t	uvm_map_inentry_fix(struct proc *, struct p_inentry *,
-		    vaddr_t addr, int (*fn)(vm_map_entry_t), u_long serial);
-boolean_t	uvm_map_inentry(struct proc *, struct p_inentry *, vaddr_t addr,
-		    const char *fmt, int (*fn)(vm_map_entry_t), u_long serial);
+boolean_t	uvm_map_inentry_fix(struct proc *, struct p_inentry *, vaddr_t,
+		    int (*)(vm_map_entry_t), u_long);
+boolean_t	uvm_map_inentry(struct proc *, struct p_inentry *, vaddr_t,
+		    int (*)(vm_map_entry_t), u_long,
+		    const char *, const char *);
 
 struct kinfo_vmentry;
 

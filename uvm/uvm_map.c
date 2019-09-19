@@ -1862,7 +1862,8 @@ uvm_map_inentry_fix(struct proc *p, struct p_inentry *ie, vaddr_t addr,
 
 boolean_t
 uvm_map_inentry(struct proc *p, struct p_inentry *ie, vaddr_t addr,
-    const char *fmt, int (*fn)(vm_map_entry_t), u_long serial)
+    int (*fn)(vm_map_entry_t), u_long serial,
+    const char *regname, const char *reason)
 {
 	union sigval sv;
 	boolean_t ok = TRUE;
@@ -1871,8 +1872,9 @@ uvm_map_inentry(struct proc *p, struct p_inentry *ie, vaddr_t addr,
 		KERNEL_LOCK();
 		ok = uvm_map_inentry_fix(p, ie, addr, fn, serial);
 		if (!ok) {
-			printf(fmt, p->p_p->ps_comm, p->p_p->ps_pid, p->p_tid,
-			    addr, ie->ie_start, ie->ie_end);
+			printf("[%s]%d/%d %s=%lx inside %lx-%lx: %s\n",
+			    p->p_p->ps_comm, p->p_p->ps_pid, p->p_tid,
+			    regname, addr, ie->ie_start, ie->ie_end, reason);
 			p->p_p->ps_acflag |= AMAP;
 			sv.sival_ptr = (void *)PROC_PC(p);
 			trapsignal(p, SIGSEGV, 0, SEGV_ACCERR, sv);
