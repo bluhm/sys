@@ -496,6 +496,7 @@ syscall(struct trapframe *frame)
 	verify_smap(__func__);
 	uvmexp.syscalls++;
 	p = curproc;
+	p->p_md.md_regs = frame;
 
 	code = frame->tf_rax;
 	callp = p->p_p->ps_emul->e_sysent;
