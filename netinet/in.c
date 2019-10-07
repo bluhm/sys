@@ -228,7 +228,7 @@ in_ioctl(u_long cmd, caddr_t data, struct ifnet *ifp, int privileged)
 	struct ifreq *ifr = (struct ifreq *)data;
 	struct ifaddr *ifa;
 	struct in_ifaddr *ia = NULL;
-	struct sockaddr_in oldaddr;
+	struct sockaddr_in *sin, oldaddr;
 	int error = 0;
 
 	if (ifp == NULL)
@@ -262,13 +262,20 @@ in_ioctl(u_long cmd, caddr_t data, struct ifnet *ifp, int privileged)
 		}
 	}
 
-	if (ia && satosin(&ifr->ifr_addr)->sin_addr.s_addr) {
-		for (; ifa != NULL; ifa = TAILQ_NEXT(ifa, ifa_list)) {
-			if ((ifa->ifa_addr->sa_family == AF_INET) &&
-			    ifatoia(ifa)->ia_addr.sin_addr.s_addr ==
-			    satosin(&ifr->ifr_addr)->sin_addr.s_addr) {
-				ia = ifatoia(ifa);
-				break;
+	if (ia != NULL) {
+		error = in_sa2sin(&ifr->ifr_addr, &sin);
+		if (error) {
+			NET_UNLOCK();
+			return (error);
+		}
+		if (sin->sin_addr.s_addr) {
+			for (; ifa != NULL; ifa = TAILQ_NEXT(ifa, ifa_list)) {
+				if ((ifa->ifa_addr->sa_family == AF_INET) &&
+				    ifatoia(ifa)->ia_addr.sin_addr.s_addr ==
+				    sin->sin_addr.s_addr) {
+					ia = ifatoia(ifa);
+					break;
+				}
 			}
 		}
 	}
@@ -288,8 +295,11 @@ in_ioctl(u_long cmd, caddr_t data, struct ifnet *ifp, int privileged)
 			error = EINVAL;
 			break;
 		}
+		error = in_sa2sin(&ifr->ifr_dstaddr, &sin);
+		if (error)
+			break;
 		oldaddr = ia->ia_dstaddr;
-		ia->ia_dstaddr = *satosin(&ifr->ifr_dstaddr);
+		ia->ia_dstaddr = *sin;
 		error = (*ifp->if_ioctl)(ifp, SIOCSIFDSTADDR, (caddr_t)ia);
 		if (error) {
 			ia->ia_dstaddr = oldaddr;
@@ -309,7 +319,10 @@ in_ioctl(u_long cmd, caddr_t data, struct ifnet *ifp, int privileged)
 			error = EINVAL;
 			break;
 		}
-		ifa_update_broadaddr(ifp, &ia->ia_ifa, &ifr->ifr_broadaddr);
+		error = in_sa2sin(&ifr->ifr_broadaddr, &sin);
+		if (error)
+			break;
+		ifa_update_broadaddr(ifp, &ia->ia_ifa, sintosa(sin));
 		break;
 
 	case SIOCSIFNETMASK:
@@ -318,8 +331,11 @@ in_ioctl(u_long cmd, caddr_t data, struct ifnet *ifp, int privileged)
 			break;
 		}
 
+		error = in_sa2sin(&ifr->ifr_addr, &sin);
+		if (error)
+			break;
 		ia->ia_netmask = ia->ia_sockmask.sin_addr.s_addr =
-		    satosin(&ifr->ifr_addr)->sin_addr.s_addr;
+		    sin->sin_addr.s_addr;
 		break;
 	}
 
@@ -333,6 +349,7 @@ in_ioctl_sifaddr(u_long cmd, caddr_t data, struct ifnet *ifp, int privileged)
 	struct ifreq *ifr = (struct ifreq *)data;
 	struct ifaddr *ifa;
 	struct in_ifaddr *ia = NULL;
+	struct sockaddr_in *sin;
 	int error = 0;
 	int newifaddr;
 
@@ -341,6 +358,10 @@ in_ioctl_sifaddr(u_long cmd, caddr_t data, struct ifnet *ifp, int privileged)
 
 	if (!privileged)
 		return (EPERM);
+
+	error = in_sa2sin(&ifr->ifr_addr, &sin);
+	if (error)
+		return (error);
 
 	NET_LOCK();
 
@@ -370,7 +391,7 @@ in_ioctl_sifaddr(u_long cmd, caddr_t data, struct ifnet *ifp, int privileged)
 		newifaddr = 0;
 
 	in_ifscrub(ifp, ia);
-	error = in_ifinit(ifp, ia, satosin(&ifr->ifr_addr), newifaddr);
+	error = in_ifinit(ifp, ia, sin, newifaddr);
 	if (!error)
 		dohooks(ifp->if_addrhooks, 0);
 
