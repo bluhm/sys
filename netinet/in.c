@@ -185,6 +185,19 @@ in_nam2sin(const struct mbuf *nam, struct sockaddr_in **sin)
 }
 
 int
+in_sa2sin(struct sockaddr *sa, struct sockaddr_in **sin)
+{
+	if (sa->sa_family != AF_INET)
+		return EAFNOSUPPORT;
+	if (sa->sa_len != sizeof(struct sockaddr_in))
+		return EINVAL;
+	*sin = satosin(sa);
+
+	return 0;
+}
+
+
+int
 in_control(struct socket *so, u_long cmd, caddr_t data, struct ifnet *ifp)
 {
 	int privileged;
