@@ -1,4 +1,4 @@
-/*	$OpenBSD: scsiconf.h,v 1.173 2019/09/19 17:48:21 krw Exp $	*/
+/*	$OpenBSD: scsiconf.h,v 1.176 2019/09/27 23:07:42 krw Exp $	*/
 /*	$NetBSD: scsiconf.h,v 1.35 1997/04/02 02:29:38 mycroft Exp $	*/
 
 /*
@@ -47,8 +47,8 @@
  * Ported to run under 386BSD by Julian Elischer (julian@tfs.com) Sept 1992
  */
 
-#ifndef	SCSI_SCSICONF_H
-#define SCSI_SCSICONF_H
+#ifndef	_SCSI_SCSICONF_H
+#define _SCSI_SCSICONF_H
 
 #include <sys/queue.h>
 #include <sys/timeout.h>
@@ -501,9 +501,7 @@ int	scsi_report_luns(struct scsi_link *, int,
 void	scsi_minphys(struct buf *, struct scsi_link *);
 int	scsi_interpret_sense(struct scsi_xfer *);
 
-void	scsi_xs_show(struct scsi_xfer *);
 void	scsi_print_sense(struct scsi_xfer *);
-void	scsi_show_mem(u_char *, int);
 void	scsi_strvis(u_char *, u_char *, int);
 int	scsi_delay(struct scsi_xfer *, int);
 
@@ -539,9 +537,6 @@ struct scsi_xfer *	scsi_xs_get(struct scsi_link *, int);
 void			scsi_xs_exec(struct scsi_xfer *);
 int			scsi_xs_sync(struct scsi_xfer *);
 void			scsi_xs_put(struct scsi_xfer *);
-#ifdef SCSIDEBUG
-void			scsi_sense_print_debug(struct scsi_xfer *);
-#endif
 
 /*
  * iopool stuff
@@ -587,4 +582,4 @@ int	scsi_pending_finish(struct mutex *, u_int *);
 void	scsi_cmd_rw_decode(struct scsi_generic *, u_int64_t *, u_int32_t *);
 
 #endif /* _KERNEL */
-#endif /* SCSI_SCSICONF_H */
+#endif /* _SCSI_SCSICONF_H */

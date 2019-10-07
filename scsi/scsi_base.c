@@ -1,4 +1,4 @@
-/*	$OpenBSD: scsi_base.c,v 1.231 2019/09/21 00:12:15 krw Exp $	*/
+/*	$OpenBSD: scsi_base.c,v 1.237 2019/09/29 17:57:36 krw Exp $	*/
 /*	$NetBSD: scsi_base.c,v 1.43 1997/04/02 02:29:36 mycroft Exp $	*/
 
 /*
@@ -122,7 +122,7 @@ scsi_init(void)
 #if defined(SCSI_DELAY) && SCSI_DELAY > 0
 	/* Historical. Older buses may need a moment to stabilize. */
 	delay(1000000 * SCSI_DELAY);
-#endif
+#endif /* SCSI_DELAY && SCSI_DELAY > 0 */
 
 	/* Initialize the scsi_xfer pool. */
 	pool_init(&scsi_xfer_pool, sizeof(struct scsi_xfer), 0, IPL_BIO, 0,
@@ -274,7 +274,7 @@ scsi_iopool_destroy(struct scsi_iopool *iopl)
 #ifdef DIAGNOSTIC
 		else
 			panic("scsi_iopool_destroy: scsi_iohandler on pool");
-#endif
+#endif /* DIAGNOSTIC */
 	}
 	mtx_leave(&iopl->mtx);
 
@@ -296,7 +296,7 @@ scsi_default_put(void *iocookie, void *io)
 #ifdef DIAGNOSTIC
 	if (io != SCSI_IOPOOL_POISON)
 		panic("unexpected opening returned");
-#endif
+#endif /* DIAGNOSTIC */
 }
 
 /*
@@ -331,7 +331,7 @@ scsi_ioh_add(struct scsi_iohandler *ioh)
 		break;
 	default:
 		panic("scsi_ioh_add: unexpected state %u", ioh->q_state);
-#endif
+#endif /* DIAGNOSTIC */
 	}
 	mtx_leave(&iopl->mtx);
 
@@ -359,7 +359,7 @@ scsi_ioh_del(struct scsi_iohandler *ioh)
 		break;
 	default:
 		panic("scsi_ioh_del: unexpected state %u", ioh->q_state);
-#endif
+#endif /* DIAGNOSTIC */
 	}
 	mtx_leave(&iopl->mtx);
 
@@ -681,7 +681,7 @@ scsi_link_shutdown(struct scsi_link *link)
 #ifdef DIAGNOSTIC
 		else
 			panic("scsi_link_shutdown: scsi_xshandler on link");
-#endif
+#endif /* DIAGNOSTIC */
 	}
 
 	ioh = TAILQ_FIRST(&iopl->queue);
@@ -693,7 +693,7 @@ scsi_link_shutdown(struct scsi_link *link)
 		if (xsh->ioh.handler == scsi_xsh_ioh &&
 		    xsh->link == link)
 			panic("scsi_link_shutdown: scsi_xshandler on pool");
-#endif
+#endif /* DIAGNOSTIC */
 
 		if (xsh->ioh.handler == scsi_xs_get_done &&
 		    xsh->link == link) {
@@ -1302,12 +1302,8 @@ scsi_xs_exec(struct scsi_xfer *xs)
 	CLR(xs->flags, ITSDONE);
 
 #ifdef SCSIDEBUG
-	if (xs->sc_link->flags & SDEV_DB1) {
-		scsi_xs_show(xs);
-		if (xs->datalen && (xs->flags & SCSI_DATA_OUT))
-			scsi_show_mem(xs->data, min(64, xs->datalen));
-	}
-#endif
+	scsi_show_xs(xs);
+#endif /* SCSIDEBUG */
 
 	/* The adapter's scsi_cmd() is responsible for calling scsi_done(). */
 	KERNEL_LOCK();
@@ -1345,7 +1341,7 @@ scsi_xs_sync(struct scsi_xfer *xs)
 		panic("xs->cookie != NULL in scsi_xs_sync");
 	if (xs->done != NULL)
 		panic("xs->done != NULL in scsi_xs_sync");
-#endif
+#endif /* DIAGNOSTIC */
 
 	/*
 	 * If we cant sleep while waiting for completion, get the adapter to
@@ -1405,9 +1401,7 @@ scsi_xs_error(struct scsi_xfer *xs)
 
 	case XS_SENSE:
 	case XS_SHORTSENSE:
-#ifdef SCSIDEBUG
-		scsi_sense_print_debug(xs);
-#endif
+		SC_DEBUG_SENSE(xs);
 		error = xs->sc_link->interpret_sense(xs);
 		SC_DEBUG(xs->sc_link, SDEV_DB3,
 		    ("scsi_interpret_sense returned %#x\n", error));
@@ -1463,33 +1457,6 @@ scsi_delay(struct scsi_xfer *xs, int seconds)
 
 	return (ERESTART);
 }
-
-#ifdef SCSIDEBUG
-/*
- * Print out sense data details.
- */
-void
-scsi_sense_print_debug(struct scsi_xfer *xs)
-{
-	struct scsi_sense_data *sense = &xs->sense;
-	struct scsi_link *link = xs->sc_link;
-
-	SC_DEBUG(link, SDEV_DB1,
-	    ("code:%#x valid:%d key:%#x ili:%d eom:%d fmark:%d extra:%d\n",
-	    sense->error_code & SSD_ERRCODE,
-	    sense->error_code & SSD_ERRCODE_VALID ? 1 : 0,
-	    sense->flags & SSD_KEY,
-	    sense->flags & SSD_ILI ? 1 : 0,
-	    sense->flags & SSD_EOM ? 1 : 0,
-	    sense->flags & SSD_FILEMARK ? 1 : 0,
-	    sense->extra_len));
-
-	if (xs->sc_link->flags & SDEV_DB1)
-		scsi_show_mem((u_char *)&xs->sense, sizeof(xs->sense));
-
-	scsi_print_sense(xs);
-}
-#endif
 
 /*
  * Look at the returned sense and act on the error, determining
@@ -1633,7 +1600,7 @@ scsi_interpret_sense(struct scsi_xfer *xs)
 	/* SCSIDEBUG would mean it has already been printed. */
 	if (skey && (xs->flags & SCSI_SILENT) == 0)
 		scsi_print_sense(xs);
-#endif /* SCSIDEBUG */
+#endif /* ~SCSIDEBUG */
 
 	return (error);
 }
@@ -2503,57 +2470,6 @@ scsi_decode_sense(struct scsi_sense_data *sense, int flag)
 	return (rqsbuf);
 }
 
-#ifdef SCSIDEBUG
-/*
- * Given a scsi_xfer, dump the request, in all its glory
- */
-void
-scsi_xs_show(struct scsi_xfer *xs)
-{
-	u_char *b = (u_char *)xs->cmd;
-	int i = 0;
-
-	sc_print_addr(xs->sc_link);
-	printf("xs  (%p): ", xs);
-
-	printf("flg(0x%x)", xs->flags);
-	printf("link(%p)", xs->sc_link);
-	printf("retr(0x%x)", xs->retries);
-	printf("timo(0x%x)", xs->timeout);
-	printf("data(%p)", xs->data);
-	printf("res(0x%zx)", xs->resid);
-	printf("err(0x%x)", xs->error);
-	printf("bp(%p)\n", xs->bp);
-
-	sc_print_addr(xs->sc_link);
-	printf("cmd (%p): ", xs->cmd);
-
-	if ((xs->flags & SCSI_RESET) == 0) {
-		while (i < xs->cmdlen) {
-			if (i)
-				printf(",");
-			printf("%x", b[i++]);
-		}
-		printf("-[%d bytes]\n", xs->datalen);
-	} else
-		printf("-RESET-\n");
-}
-
-void
-scsi_show_mem(u_char *address, int num)
-{
-	int x;
-
-	printf("------------------------------");
-	for (x = 0; x < num; x++) {
-		if ((x % 16) == 0)
-			printf("\n%03d: ", x);
-		printf("%02x ", *address++);
-	}
-	printf("\n------------------------------\n");
-}
-#endif /* SCSIDEBUG */
-
 void
 scsi_cmd_rw_decode(struct scsi_generic *cmd, u_int64_t *blkno,
     u_int32_t *nblks)
@@ -2591,3 +2507,182 @@ scsi_cmd_rw_decode(struct scsi_generic *cmd, u_int64_t *blkno,
 		panic("scsi_cmd_rw_decode: bad opcode 0x%02x", cmd->opcode);
 	}
 }
+
+#ifdef SCSIDEBUG
+u_int32_t scsidebug_buses = SCSIDEBUG_BUSES;
+u_int32_t scsidebug_targets = SCSIDEBUG_TARGETS;
+u_int32_t scsidebug_luns = SCSIDEBUG_LUNS;
+int scsidebug_level = SCSIDEBUG_LEVEL;
+
+const char *flagnames[16] = {
+	"REMOVABLE",
+	"MEDIA LOADED",
+	"READONLY",
+	"OPEN",
+	"DB1",
+	"DB2",
+	"DB3",
+	"DB4",
+	"EJECTING",
+	"ATAPI",
+	"2NDBUS",
+	"UMASS",
+	"VIRTUAL",
+	"OWN",
+	"FLAG0x4000",
+	"FLAG0x8000"
+};
+
+const char *quirknames[16] = {
+	"AUTOSAVE",
+	"NOSYNC",
+	"NOWIDE",
+	"NOTAGS",
+	"QUIRK0x0010",
+	"QUIRK0x0020",
+	"QUIRK0x0040",
+	"QUIRK0x0080",
+	"NOSYNCCACHE",
+	"NOSENSE",
+	"LITTLETOC",
+	"NOCAPACITY",
+	"QUIRK0x1000",
+	"NODOORLOCK",
+	"ONLYBIG",
+	"QUIRK0x8000",
+};
+
+const char *devicetypenames[32] = {
+	"T_DIRECT",
+	"T_SEQUENTIAL",
+	"T_PRINTER",
+	"T_PROCESSOR",
+	"T_WORM",
+	"T_CDROM",
+	"T_SCANNER",
+	"T_OPTICAL",
+	"T_CHANGER",
+	"T_COMM",
+	"T_ASC0",
+	"T_ASC1",
+	"T_STROARRAY",
+	"T_ENCLOSURE",
+	"T_RDIRECT",
+	"T_OCRW",
+	"T_BCC",
+	"T_OSD",
+	"T_ADC",
+	"T_RESERVED",
+	"T_RESERVED",
+	"T_RESERVED",
+	"T_RESERVED",
+	"T_RESERVED",
+	"T_RESERVED",
+	"T_RESERVED",
+	"T_RESERVED",
+	"T_RESERVED",
+	"T_RESERVED",
+	"T_RESERVED",
+	"T_WELL_KNOWN_LU",
+	"T_NODEVICE"
+};
+
+/*
+ * Print out sense data details.
+ */
+void
+scsi_show_sense(struct scsi_xfer *xs)
+{
+	struct scsi_sense_data *sense = &xs->sense;
+	struct scsi_link *link = xs->sc_link;
+
+	SC_DEBUG(link, SDEV_DB1,
+	    ("code:%#x valid:%d key:%#x ili:%d eom:%d fmark:%d extra:%d\n",
+	    sense->error_code & SSD_ERRCODE,
+	    sense->error_code & SSD_ERRCODE_VALID ? 1 : 0,
+	    sense->flags & SSD_KEY,
+	    sense->flags & SSD_ILI ? 1 : 0,
+	    sense->flags & SSD_EOM ? 1 : 0,
+	    sense->flags & SSD_FILEMARK ? 1 : 0,
+	    sense->extra_len));
+
+	if (xs->sc_link->flags & SDEV_DB1)
+		scsi_show_mem((u_char *)&xs->sense, sizeof(xs->sense));
+
+	scsi_print_sense(xs);
+}
+
+/*
+ * Given a scsi_xfer, dump the request, in all its glory
+ */
+void
+scsi_show_xs(struct scsi_xfer *xs)
+{
+	u_char *b = (u_char *)xs->cmd;
+	int i = 0;
+
+	if (!ISSET(xs->sc_link->flags, SDEV_DB1))
+		return;
+
+	sc_print_addr(xs->sc_link);
+	printf("xs  (%p): ", xs);
+
+	printf("flg(0x%x)", xs->flags);
+	printf("link(%p)", xs->sc_link);
+	printf("retr(0x%x)", xs->retries);
+	printf("timo(0x%x)", xs->timeout);
+	printf("data(%p)", xs->data);
+	printf("res(0x%zx)", xs->resid);
+	printf("err(0x%x)", xs->error);
+	printf("bp(%p)\n", xs->bp);
+
+	sc_print_addr(xs->sc_link);
+	printf("cmd (%p): ", xs->cmd);
+
+	if ((xs->flags & SCSI_RESET) == 0) {
+		while (i < xs->cmdlen) {
+			if (i)
+				printf(",");
+			printf("%x", b[i++]);
+		}
+		printf("-[%d bytes]\n", xs->datalen);
+	} else
+		printf("-RESET-\n");
+
+	if (xs->datalen && (xs->flags & SCSI_DATA_OUT))
+		scsi_show_mem(xs->data, min(64, xs->datalen));
+}
+
+void
+scsi_show_mem(u_char *address, int num)
+{
+	int x;
+
+	printf("------------------------------");
+	for (x = 0; x < num; x++) {
+		if ((x % 16) == 0)
+			printf("\n%03d: ", x);
+		printf("%02x ", *address++);
+	}
+	printf("\n------------------------------\n");
+}
+
+void
+scsi_show_flags(u_int16_t flags, const char **names)
+{
+	int i, first;
+
+	first = 1;
+	printf("<");
+	for (i = 0; i < 16; i++) {
+		if (ISSET(flags, 1 << i)) {
+			if (first == 0)
+				printf(", ");
+			else
+				first = 0;
+			printf("%s", names[i]);
+		}
+	}
+	printf(">");
+}
+#endif /* SCSIDEBUG */

@@ -1,4 +1,4 @@
-/*	$OpenBSD: scsiconf.c,v 1.213 2019/09/16 16:34:14 krw Exp $	*/
+/*	$OpenBSD: scsiconf.c,v 1.217 2019/09/27 17:22:31 krw Exp $	*/
 /*	$NetBSD: scsiconf.c,v 1.57 1996/05/02 01:09:01 neil Exp $	*/
 
 /*
@@ -65,7 +65,7 @@
 #include <sys/ioctl.h>
 #include <sys/scsiio.h>
 #include <dev/biovar.h>
-#endif
+#endif /* NBIO > 0 */
 
 /*
  * Declarations
@@ -91,7 +91,7 @@ int	scsibussubmatch(struct device *, void *, void *);
 
 #if NBIO > 0
 int	scsibus_bioctl(struct device *, u_long, caddr_t);
-#endif
+#endif /* NBIO > 0 */
 
 struct cfattach scsibus_ca = {
 	sizeof(struct scsibus_softc), scsibusmatch, scsibusattach,
@@ -101,13 +101,6 @@ struct cfattach scsibus_ca = {
 struct cfdriver scsibus_cd = {
 	NULL, "scsibus", DV_DULL
 };
-
-#ifdef SCSIDEBUG
-u_int32_t scsidebug_buses = SCSIDEBUG_BUSES;
-u_int32_t scsidebug_targets = SCSIDEBUG_TARGETS;
-u_int32_t scsidebug_luns = SCSIDEBUG_LUNS;
-int scsidebug_level = SCSIDEBUG_LEVEL;
-#endif
 
 int scsi_autoconf = SCSI_AUTOCONF;
 
@@ -174,7 +167,7 @@ scsibusattach(struct device *parent, struct device *self, void *aux)
 #if NBIO > 0
 	if (bio_register(&sb->sc_dev, scsibus_bioctl) != 0)
 		printf("%s: unable to register bio\n", sb->sc_dev.dv_xname);
-#endif
+#endif /* NBIO > 0 */
 
 	scsi_probe(sb, -1, -1);
 }
@@ -270,7 +263,7 @@ scsibusdetach(struct device *dev, int type)
 
 #if NBIO > 0
 	bio_unregister(&sb->sc_dev);
-#endif
+#endif /* NBIO > 0 */
 
 	error = scsi_detach(sb, -1, -1, type);
 	if (error != 0)
@@ -316,7 +309,7 @@ scsibus_bioctl(struct device *dev, u_long cmd, caddr_t addr)
 		return (ENOTTY);
 	}
 }
-#endif
+#endif /* NBIO > 0 */
 
 void
 scsi_probe_bus(struct scsibus_softc *sb)
@@ -699,7 +692,6 @@ const struct scsi_quirk_inquiry_pattern scsi_quirk_patterns[] = {
          "UJDCD8730", "", "1.14"},              ADEV_NODOORLOCK}, /* Acer */
 };
 
-
 void
 scsibus_printlink(struct scsi_link *link)
 {
@@ -733,47 +725,61 @@ scsibus_printlink(struct scsi_link *link)
 	if ((link->flags & SDEV_REMOVABLE) != 0)
 		printf(" removable");
 
-	if (link->id == NULL || link->id->d_type == DEVID_NONE)
-		return;
-
-	id = (u_int8_t *)(link->id + 1);
-	switch (link->id->d_type) {
-	case DEVID_NAA:
-		printf(" naa.");
-		break;
-	case DEVID_EUI:
-		printf(" eui.");
-		break;
-	case DEVID_T10:
-		printf(" t10.");
-		break;
-	case DEVID_SERIAL:
-		printf(" serial.");
-		break;
-	case DEVID_WWN:
-		printf(" wwn.");
-		break;
-	}
-
-	if (ISSET(link->id->d_flags, DEVID_F_PRINT)) {
-		for (i = 0; i < link->id->d_len; i++) {
-			if (id[i] == '\0' || id[i] == ' ') {
-				/* skip leading blanks */
-				/* collapse multiple blanks into one */
-				if (i > 0 && id[i-1] != id[i])
-					printf("_");
-			} else if (id[i] < 0x20 || id[i] >= 0x80) {
-				/* non-printable characters */
-				printf("~");
-			} else {
-				/* normal characters */
-				printf("%c", id[i]);
-			}
+	if (link->id != NULL && link->id->d_type != DEVID_NONE) {
+		id = (u_int8_t *)(link->id + 1);
+		switch (link->id->d_type) {
+		case DEVID_NAA:
+			printf(" naa.");
+			break;
+		case DEVID_EUI:
+			printf(" eui.");
+			break;
+		case DEVID_T10:
+			printf(" t10.");
+			break;
+		case DEVID_SERIAL:
+			printf(" serial.");
+			break;
+		case DEVID_WWN:
+			printf(" wwn.");
+			break;
 		}
-	} else {
-		for (i = 0; i < link->id->d_len; i++)
-			printf("%02x", id[i]);
+
+		if (ISSET(link->id->d_flags, DEVID_F_PRINT)) {
+			for (i = 0; i < link->id->d_len; i++) {
+				if (id[i] == '\0' || id[i] == ' ') {
+					/* skip leading blanks */
+					/* collapse multiple blanks into one */
+					if (i > 0 && id[i-1] != id[i])
+						printf("_");
+				} else if (id[i] < 0x20 || id[i] >= 0x80) {
+					/* non-printable characters */
+					printf("~");
+				} else {
+					/* normal characters */
+					printf("%c", id[i]);
+				}
+			}
+		} else {
+			for (i = 0; i < link->id->d_len; i++)
+				printf("%02x", id[i]);
+		}
 	}
+#ifdef SCSIDEBUG
+	printf("\n");
+	sc_print_addr(link);
+	printf("state %u, luns %u, openings %u\n",
+	    link->state, link->luns, link->openings);
+
+	sc_print_addr(link);
+	printf("flags (0x%04x) ", link->flags);
+	scsi_show_flags(link->flags, flagnames);
+	printf("\n");
+
+	sc_print_addr(link);
+	printf("quirks (0x%04x) ", link->quirks);
+	scsi_show_flags(link->quirks, quirknames);
+#endif /* SCSIDEBUG */
 }
 
 /*
@@ -1062,42 +1068,6 @@ scsi_inqmatch(struct scsi_inquiry_data *inqbuf, const void *_base,
 	const unsigned char		*base = (const unsigned char *)_base;
 	const void			*bestmatch;
 	int				 removable;
-#ifdef SCSIDEBUG
-	static char *device_type[32] = {
-		"T_DIRECT",
-		"T_SEQUENTIAL",
-		"T_PRINTER",
-		"T_PROCESSOR",
-		"T_WORM",
-		"T_CDROM",
-		"T_SCANNER",
-		"T_OPTICAL",
-		"T_CHANGER",
-		"T_COMM",
-		"T_ASC0",
-		"T_ASC1",
-		"T_STROARRAY",
-		"T_ENCLOSURE",
-		"T_RDIRECT",
-		"T_OCRW",
-		"T_BCC",
-		"T_OSD",
-		"T_ADC",
-		"T_RESERVED",
-		"T_RESERVED",
-		"T_RESERVED",
-		"T_RESERVED",
-		"T_RESERVED",
-		"T_RESERVED",
-		"T_RESERVED",
-		"T_RESERVED",
-		"T_RESERVED",
-		"T_RESERVED",
-		"T_RESERVED",
-		"T_WELL_KNOWN_LU",
-		"T_NODEVICE"
-	};
-#endif
 
 	/* Include the qualifier to catch vendor-unique types. */
 	removable = inqbuf->dev_qual2 & SID_REMOVABLE ? T_REMOV : T_FIXED;
@@ -1132,7 +1102,7 @@ scsi_inqmatch(struct scsi_inquiry_data *inqbuf, const void *_base,
 			printf(" match ");
 
 		printf("priority %d. %s %s <\"%s\", \"%s\", \"%s\">", priority,
-		    device_type[(match->type & SID_TYPE)],
+		    devicetypenames[(match->type & SID_TYPE)],
 		    (match->removable == T_FIXED) ? "T_FIXED" : "T_REMOV",
 		    match->vendor, match->product, match->revision);
 

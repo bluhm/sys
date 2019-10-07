@@ -1,4 +1,4 @@
-/*	$OpenBSD: st.c,v 1.165 2019/09/10 23:07:46 krw Exp $	*/
+/*	$OpenBSD: st.c,v 1.169 2019/09/29 17:57:36 krw Exp $	*/
 /*	$NetBSD: st.c,v 1.71 1997/02/21 23:03:49 thorpej Exp $	*/
 
 /*
@@ -957,9 +957,7 @@ st_buf_done(struct scsi_xfer *xs)
 
 	case XS_SENSE:
 	case XS_SHORTSENSE:
-#ifdef SCSIDEBUG
-		scsi_sense_print_debug(xs);
-#endif
+		SC_DEBUG_SENSE(xs);
 		error = st_interpret_sense(xs);
 		if (error == 0) {
 			bp->b_error = 0;
@@ -1190,7 +1188,7 @@ stioctl(dev_t dev, u_long cmd, caddr_t arg, int flag, struct proc *p)
 	case MTIOCHLOCATE:
 		error = st_setpos(st, 1, (u_int32_t *) arg);
 		break;
-#endif
+#endif /* 0 */
 
 	default:
 		error = scsi_do_ioctl(st->sc_link, cmd, arg, flag);
@@ -1368,15 +1366,14 @@ st_mode_sense(struct st_softc *st, int flags)
 	st->media_density = density;
 
 	SC_DEBUG(link, SDEV_DB3,
-	    ("density code 0x%x, %d-byte blocks, write-%s, ",
+	    ("density code 0x%x, %d-byte blocks, write-%s, %sbuffered\n",
 	    st->media_density, st->media_blksize,
-	    ISSET(link->flags, SDEV_READONLY) ? "protected" : "enabled"));
-	SC_DEBUGN(link, SDEV_DB3,
-	    ("%sbuffered\n", ISSET(dev_spec, SMH_DSP_BUFF_MODE) ? "" : "un"));
+	    ISSET(link->flags, SDEV_READONLY) ? "protected" : "enabled",
+	    ISSET(dev_spec, SMH_DSP_BUFF_MODE) ? "" : "un"));
 
 	SET(link->flags, SDEV_MEDIA_LOADED);
 
-done:
+ done:
 	if (data)
 		dma_free(data, sizeof(*data));
 	return error;

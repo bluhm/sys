@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_sig.c,v 1.233 2019/08/07 14:14:01 deraadt Exp $	*/
+/*	$OpenBSD: kern_sig.c,v 1.235 2019/10/06 16:24:14 beck Exp $	*/
 /*	$NetBSD: kern_sig.c,v 1.54 1996/04/22 01:38:32 christos Exp $	*/
 
 /*
@@ -1535,36 +1535,37 @@ coredump(struct proc *p)
 
 	pr->ps_flags |= PS_COREDUMP;
 
-	/*
-	 * If the process has inconsistent uids, nosuidcoredump
-	 * determines coredump placement policy.
-	 */
-	if (((pr->ps_flags & PS_SUGID) && (error = suser(p))) ||
-	   ((pr->ps_flags & PS_SUGID) && nosuidcoredump)) {
-		if (nosuidcoredump == 3 || nosuidcoredump == 2)
-			incrash = 1;
-		else
-			return (EPERM);
-	}
-
 	/* Don't dump if will exceed file size limit. */
 	if (USPACE + ptoa(vm->vm_dsize + vm->vm_ssize) >= lim_cur(RLIMIT_CORE))
 		return (EFBIG);
 
 	name = pool_get(&namei_pool, PR_WAITOK);
 
-	if (incrash && nosuidcoredump == 3) {
-		/*
-		 * If the program directory does not exist, dumps of
-		 * that core will silently fail.
-		 */
-		len = snprintf(name, MAXPATHLEN, "%s/%s/%u.core",
-		    dir, pr->ps_comm, pr->ps_pid);
-	} else if (incrash && nosuidcoredump == 2)
-		len = snprintf(name, MAXPATHLEN, "%s/%s.core",
-		    dir, pr->ps_comm);
-	else
+	/*
+	 * If the process has inconsistent uids, nosuidcoredump
+	 * determines coredump placement policy.
+	 */
+	if (((pr->ps_flags & PS_SUGID) && (error = suser(p))) ||
+	   ((pr->ps_flags & PS_SUGID) && nosuidcoredump)) {
+		if (nosuidcoredump == 3) {
+			/*
+			 * If the program directory does not exist, dumps of
+			 * that core will silently fail.
+			 */
+			len = snprintf(name, MAXPATHLEN, "%s/%s/%u.core",
+			    dir, pr->ps_comm, pr->ps_pid);
+			incrash = KERNELPATH;
+		} else if (nosuidcoredump == 2) {
+			len = snprintf(name, MAXPATHLEN, "%s/%s.core",
+			    dir, pr->ps_comm);
+			incrash = KERNELPATH;
+		} else {
+			pool_put(&namei_pool, name);
+			return (EPERM);
+		}
+	} else
 		len = snprintf(name, MAXPATHLEN, "%s.core", pr->ps_comm);
+
 	if (len >= MAXPATHLEN) {
 		pool_put(&namei_pool, name);
 		return (EACCES);
@@ -1592,7 +1593,8 @@ coredump(struct proc *p)
 		cred->cr_gid = 0;
 	}
 
-	NDINIT(&nd, LOOKUP, NOFOLLOW, UIO_SYSSPACE, name, p);
+	/* incrash should be 0 or KERNELPATH only */
+	NDINIT(&nd, 0, incrash, UIO_SYSSPACE, name, p);
 
 	error = vn_open(&nd, O_CREAT | FWRITE | O_NOFOLLOW | O_NONBLOCK,
 	    S_IRUSR | S_IWUSR);
