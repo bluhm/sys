@@ -480,7 +480,7 @@ in_ioctl_change_ifaddr(u_long cmd, caddr_t data, struct ifnet *ifp,
 			newifaddr = 0;
 
 		if (sin == NULL) {
-			ifra->ifra_addr = ia->ia_addr;
+			sin = &ia->ia_addr;
 		} else if (newifaddr ||
 		    sin->sin_addr.s_addr != ia->ia_addr.sin_addr.s_addr) {
 			needinit = 1;
@@ -503,7 +503,7 @@ in_ioctl_change_ifaddr(u_long cmd, caddr_t data, struct ifnet *ifp,
 				ifa_update_broadaddr(ifp, &ia->ia_ifa,
 				    sintosa(broadsin));
 		}
-		if (sin != NULL && needinit) {
+		if (needinit) {
 			error = in_ifinit(ifp, ia, sin, newifaddr);
 			if (error)
 				break;
