@@ -326,6 +326,10 @@ in_ioctl(u_long cmd, caddr_t data, struct ifnet *ifp, int privileged)
 			break;
 		}
 
+		if (ifr->ifr_addr.sa_len < 8) {
+			error = EINVAL;
+			break;
+		}
 		ia->ia_netmask = ia->ia_sockmask.sin_addr.s_addr =
 		    satosin(&ifr->ifr_addr)->sin_addr.s_addr;
 		break;
