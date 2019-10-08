@@ -252,6 +252,10 @@ in_ioctl(u_long cmd, caddr_t data, struct ifnet *ifp, int privileged)
 		return (EOPNOTSUPP);
 	}
 
+	error = in_sa2sin(&ifr->ifr_addr, &sin);
+	if (error)
+		return (error);
+
 	NET_LOCK();
 
 	TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
@@ -260,21 +264,13 @@ in_ioctl(u_long cmd, caddr_t data, struct ifnet *ifp, int privileged)
 			break;
 		}
 	}
-
-	if (ia != NULL) {
-		error = in_sa2sin(&ifr->ifr_addr, &sin);
-		if (error) {
-			NET_UNLOCK();
-			return (error);
-		}
-		if (sin->sin_addr.s_addr) {
-			for (; ifa != NULL; ifa = TAILQ_NEXT(ifa, ifa_list)) {
-				if ((ifa->ifa_addr->sa_family == AF_INET) &&
-				    ifatoia(ifa)->ia_addr.sin_addr.s_addr ==
-				    sin->sin_addr.s_addr) {
-					ia = ifatoia(ifa);
-					break;
-				}
+	if (sin->sin_addr.s_addr) {
+		for (; ifa != NULL; ifa = TAILQ_NEXT(ifa, ifa_list)) {
+			if ((ifa->ifa_addr->sa_family == AF_INET) &&
+			    ifatoia(ifa)->ia_addr.sin_addr.s_addr ==
+			    sin->sin_addr.s_addr) {
+				ia = ifatoia(ifa);
+				break;
 			}
 		}
 	}
