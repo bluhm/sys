@@ -326,6 +326,10 @@ in_ioctl(u_long cmd, caddr_t data, struct ifnet *ifp, int privileged)
 			break;
 		}
 
+		if (ifr->ifr_addr.sa_len < 8) {
+			error = EINVAL;
+			break;
+		}
 		ia->ia_netmask = ia->ia_sockmask.sin_addr.s_addr =
 		    satosin(&ifr->ifr_addr)->sin_addr.s_addr;
 		break;
@@ -436,6 +440,12 @@ in_ioctl_change_ifaddr(u_long cmd, caddr_t data, struct ifnet *ifp,
 			break;
 		}
 
+		if (ifra->ifra_mask.sin_len) {
+			if (ifra->ifra_mask.sin_len < 8) {
+				error = EINVAL;
+				break;
+			}
+		}
 		if ((ifp->if_flags & IFF_POINTOPOINT) &&
 		    ifra->ifra_dstaddr.sin_family == AF_INET) {
 			error = in_sa2sin(sintosa(&ifra->ifra_dstaddr),
@@ -477,8 +487,8 @@ in_ioctl_change_ifaddr(u_long cmd, caddr_t data, struct ifnet *ifp,
 		}
 		if (ifra->ifra_mask.sin_len) {
 			in_ifscrub(ifp, ia);
-			ia->ia_sockmask = ifra->ifra_mask;
-			ia->ia_netmask = ia->ia_sockmask.sin_addr.s_addr;
+			ia->ia_netmask = ia->ia_sockmask.sin_addr.s_addr =
+			    ifra->ifra_mask.sin_addr.s_addr;
 			needinit = 1;
 		}
 		if (dstsin != NULL) {
