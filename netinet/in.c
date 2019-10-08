@@ -414,15 +414,9 @@ in_ioctl_change_ifaddr(u_long cmd, caddr_t data, struct ifnet *ifp,
 
 	NET_LOCK();
 
-	TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
-		if (ifa->ifa_addr->sa_family == AF_INET) {
-			ia = ifatoia(ifa);
-			break;
-		}
-	}
-	if (ia != NULL && sin != NULL && sin->sin_addr.s_addr) {
-		for (; ifa != NULL; ifa = TAILQ_NEXT(ifa, ifa_list)) {
-			if ((ifa->ifa_addr->sa_family == AF_INET) &&
+	if (sin != NULL) {
+		TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
+			if (ifa->ifa_addr->sa_family == AF_INET &&
 			    ifatoia(ifa)->ia_addr.sin_addr.s_addr ==
 			    sin->sin_addr.s_addr) {
 				ia = ifatoia(ifa);
