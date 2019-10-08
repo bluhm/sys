@@ -264,7 +264,7 @@ in_ioctl(u_long cmd, caddr_t data, struct ifnet *ifp, int privileged)
 			break;
 		}
 	}
-	if (sin->sin_addr.s_addr) {
+	if (ia != NULL && sin->sin_addr.s_addr) {
 		for (; ifa != NULL; ifa = TAILQ_NEXT(ifa, ifa_list)) {
 			if ((ifa->ifa_addr->sa_family == AF_INET) &&
 			    ifatoia(ifa)->ia_addr.sin_addr.s_addr ==
@@ -275,8 +275,8 @@ in_ioctl(u_long cmd, caddr_t data, struct ifnet *ifp, int privileged)
 		}
 	}
 	if (ia == NULL) {
-		NET_UNLOCK();
-		return (EADDRNOTAVAIL);
+		error = EADDRNOTAVAIL;
+		goto err;
 	}
 
 	switch (cmd) {
@@ -333,7 +333,7 @@ in_ioctl(u_long cmd, caddr_t data, struct ifnet *ifp, int privileged)
 		    sin->sin_addr.s_addr;
 		break;
 	}
-
+err:
 	NET_UNLOCK();
 	return (error);
 }
@@ -538,7 +538,14 @@ in_ioctl_get(u_long cmd, caddr_t data, struct ifnet *ifp)
 	struct ifreq *ifr = (struct ifreq *)data;
 	struct ifaddr *ifa;
 	struct in_ifaddr *ia = NULL;
+	struct sockaddr_in *sin = NULL;
 	int error = 0;
+
+	if (ifr->ifr_addr.sa_family == AF_INET) {
+		error = in_sa2sin(&ifr->ifr_addr, &sin);
+		if (error)
+			return (error);
+	}
 
 	NET_RLOCK();
 
@@ -548,12 +555,11 @@ in_ioctl_get(u_long cmd, caddr_t data, struct ifnet *ifp)
 			break;
 		}
 	}
-
-	if (ia && satosin(&ifr->ifr_addr)->sin_addr.s_addr) {
+	if (ia != NULL && sin != NULL && sin->sin_addr.s_addr) {
 		for (; ifa != NULL; ifa = TAILQ_NEXT(ifa, ifa_list)) {
 			if ((ifa->ifa_addr->sa_family == AF_INET) &&
 			    ifatoia(ifa)->ia_addr.sin_addr.s_addr ==
-			    satosin(&ifr->ifr_addr)->sin_addr.s_addr) {
+			    sin->sin_addr.s_addr) {
 				ia = ifatoia(ifa);
 				break;
 			}
