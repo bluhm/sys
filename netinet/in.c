@@ -326,11 +326,8 @@ in_ioctl(u_long cmd, caddr_t data, struct ifnet *ifp, int privileged)
 			break;
 		}
 
-		error = in_sa2sin(&ifr->ifr_addr, &sin);
-		if (error)
-			break;
 		ia->ia_netmask = ia->ia_sockmask.sin_addr.s_addr =
-		    sin->sin_addr.s_addr;
+		    satosin(&ifr->ifr_addr)->sin_addr.s_addr;
 		break;
 	}
 err:
