@@ -1,4 +1,4 @@
-/*	$OpenBSD: acpithinkpad.c,v 1.64 2019/03/08 16:33:23 jcs Exp $	*/
+/*	$OpenBSD: acpithinkpad.c,v 1.66 2019/10/13 10:56:31 kettenis Exp $	*/
 /*
  * Copyright (c) 2008 joshua stein <jcs@openbsd.org>
  *
@@ -24,6 +24,7 @@
 #include <dev/acpi/amltypes.h>
 #include <dev/acpi/dsdt.h>
 #include <dev/wscons/wsconsio.h>
+#include <dev/wscons/wsdisplayvar.h>
 
 #include <machine/apmvar.h>
 
@@ -176,8 +177,6 @@ int	thinkpad_get_brightness(struct acpithinkpad_softc *);
 int	thinkpad_set_brightness(void *, int);
 int	thinkpad_get_param(struct wsdisplay_param *);
 int	thinkpad_set_param(struct wsdisplay_param *);
-extern int (*ws_get_param)(struct wsdisplay_param *);
-extern int (*ws_set_param)(struct wsdisplay_param *);
 
 void    thinkpad_sensor_attach(struct acpithinkpad_softc *sc);
 void    thinkpad_sensor_refresh(void *);
@@ -289,11 +288,12 @@ thinkpad_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_acpi = (struct acpi_softc *)parent;
 	sc->sc_devnode = aa->aaa_node;
 
-	printf("\n");
-
 	if (aml_evalinteger(sc->sc_acpi, sc->sc_devnode, "MHKV", 0, NULL,
 	    &sc->sc_hkey_version))
 		sc->sc_hkey_version = THINKPAD_HKEY_VERSION1;
+
+	printf(": version %lld.%lld\n", sc->sc_hkey_version >> 8,
+	    sc->sc_hkey_version & 0xff);
 
 #if NAUDIO > 0 && NWSKBD > 0
 	/* Defer speaker mute */
