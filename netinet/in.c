@@ -397,14 +397,13 @@ in_ioctl_change_ifaddr(u_long cmd, caddr_t data, struct ifnet *ifp,
 	NET_LOCK();
 
 	TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
-		if (ifa->ifa_addr->sa_family == AF_INET) {
-			/* find first address, if no exact match wanted */
-			if (sin == NULL || sin->sin_addr.s_addr == INADDR_ANY ||
-			    ifatoia(ifa)->ia_addr.sin_addr.s_addr ==
-			    sin->sin_addr.s_addr) {
-				ia = ifatoia(ifa);
-				break;
-			}
+		if (ifa->ifa_addr->sa_family != AF_INET)
+			continue;
+		/* find first address, if no exact match wanted */
+		if (sin == NULL || sin->sin_addr.s_addr ==
+		    ifatoia(ifa)->ia_addr.sin_addr.s_addr) {
+			ia = ifatoia(ifa);
+			break;
 		}
 	}
 
@@ -480,7 +479,7 @@ in_ioctl_change_ifaddr(u_long cmd, caddr_t data, struct ifnet *ifp,
 				ifa_update_broadaddr(ifp, &ia->ia_ifa,
 				    sintosa(broadsin));
 		}
-		if (needinit) {
+		if (sin != NULL && needinit) {
 			error = in_ifinit(ifp, ia, sin, newifaddr);
 			if (error)
 				break;
