@@ -1473,10 +1473,8 @@ void *
 m_pool_alloc(struct pool *pp, int flags, int *slowdown)
 {
 	void *v;
-	long alloc;
 
-	alloc = atomic_add_long_nv(&mbuf_mem_alloc, pp->pr_pgsize);
-	if (alloc > mbuf_mem_limit)
+	if (atomic_add_long_nv(&mbuf_mem_alloc, pp->pr_pgsize) > mbuf_mem_limit)
 		goto fail;
 
 	v = (*pool_allocator_multi.pa_alloc)(pp, flags, slowdown);
