@@ -258,8 +258,8 @@ in6_ioctl_change_ifaddr(u_long cmd, caddr_t data, struct ifnet *ifp)
 	struct	in6_ifreq *ifr = (struct in6_ifreq *)data;
 	struct	in6_ifaddr *ia6 = NULL;
 	struct	in6_aliasreq *ifra = (struct in6_aliasreq *)data;
-	struct sockaddr_in6 *sa6;
-	int	error = 0, newifaddr = 0, plen;
+	struct	sockaddr_in6 *sa6;
+	int	error, newifaddr = 0, plen;
 
 	/*
 	 * Find address for this interface, if it exists.
@@ -272,21 +272,26 @@ in6_ioctl_change_ifaddr(u_long cmd, caddr_t data, struct ifnet *ifp)
 	 * on a single interface, we almost always look and check the
 	 * presence of ifra_addr, and reject invalid ones here.
 	 * It also decreases duplicated code among SIOC*_IN6 operations.
+	 *
+	 * We always require users to specify a valid IPv6 address for
+	 * the corresponding operation.
 	 */
 	switch (cmd) {
 	case SIOCAIFADDR_IN6:
-		sa6 = &ifra->ifra_addr;
+		error = in6_sa2sin6(sin6tosa(&ifra->ifra_addr), &sa6);
 		break;
 	case SIOCDIFADDR_IN6:
-		sa6 = &ifr->ifr_addr;
+		error = in6_sa2sin6(sin6tosa(&ifr->ifr_addr), &sa6);
 		break;
 	default:
-		panic("unknown ioctl %lu", cmd);
+		panic("%s: invalid ioctl %lu", __func__, cmd);
 	}
+	if (error)
+		return (error);
 
 	NET_LOCK();
 
-	if (sa6 && sa6->sin6_family == AF_INET6) {
+	if (sa6 != NULL) {
 		error = in6_check_embed_scope(sa6, ifp->if_index);
 		if (error)
 			goto err;
@@ -309,30 +314,11 @@ in6_ioctl_change_ifaddr(u_long cmd, caddr_t data, struct ifnet *ifp)
 			error = EADDRNOTAVAIL;
 			break;
 		}
-		/*
-		 * We always require users to specify a valid IPv6 address for
-		 * the corresponding operation.
-		 */
-		if (ifra->ifra_addr.sin6_family != AF_INET6 ||
-		    ifra->ifra_addr.sin6_len != sizeof(struct sockaddr_in6)) {
-			error = EAFNOSUPPORT;
-			break;
-		}
 		in6_purgeaddr(&ia6->ia_ifa);
 		dohooks(ifp->if_addrhooks, 0);
 		break;
 
 	case SIOCAIFADDR_IN6:
-		/*
-		 * We always require users to specify a valid IPv6 address for
-		 * the corresponding operation.
-		 */
-		if (ifra->ifra_addr.sin6_family != AF_INET6 ||
-		    ifra->ifra_addr.sin6_len != sizeof(struct sockaddr_in6)) {
-			error = EAFNOSUPPORT;
-			break;
-		}
-
 		/* reject read-only flags */
 		if ((ifra->ifra_flags & IN6_IFF_DUPLICATED) != 0 ||
 		    (ifra->ifra_flags & IN6_IFF_DETACHED) != 0 ||
