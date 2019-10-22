@@ -479,7 +479,7 @@ in_ioctl_change_ifaddr(u_long cmd, caddr_t data, struct ifnet *ifp,
 				ifa_update_broadaddr(ifp, &ia->ia_ifa,
 				    sintosa(broadsin));
 		}
-		if (sin != NULL && needinit) {
+		if (needinit) {
 			error = in_ifinit(ifp, ia, sin, newifaddr);
 			if (error)
 				break;
