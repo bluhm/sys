@@ -182,6 +182,18 @@ in6_nam2sin6(const struct mbuf *nam, struct sockaddr_in6 **sin6)
 }
 
 int
+in6_sa2sin6(struct sockaddr *sa, struct sockaddr_in6 **sin6)
+{
+	if (sa->sa_family != AF_INET6)
+		return EAFNOSUPPORT;
+	if (sa->sa_len != sizeof(struct sockaddr_in6))
+		return EINVAL;
+	*sin6 = satosin6(sa);
+
+	return 0;
+}
+
+int
 in6_control(struct socket *so, u_long cmd, caddr_t data, struct ifnet *ifp)
 {
 	int privileged;
