@@ -344,10 +344,10 @@ in6_ioctl_change_ifaddr(u_long cmd, caddr_t data, struct ifnet *ifp)
 		 * is no link-local yet.
 		 */
 		error = in6_ifattach(ifp);
-		if (error != 0)
+		if (error)
 			break;
 		error = in6_update_ifa(ifp, ifra, ia6);
-		if (error != 0)
+		if (error)
 			break;
 
 		ia6 = in6ifa_ifpwithaddr(ifp, &ifra->ifra_addr.sin6_addr);
