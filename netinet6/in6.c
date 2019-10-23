@@ -534,7 +534,7 @@ in6_update_ifa(struct ifnet *ifp, struct in6_aliasreq *ifra,
     struct in6_ifaddr *ia6)
 {
 	int error = 0, hostIsNew = 0, plen = -1;
-	struct sockaddr_in6 dst6;
+	struct sockaddr_in6 *dst6 = NULL;
 	struct in6_addrlifetime *lt;
 	struct in6_multi_mship *imm;
 	struct rtentry *rt;
@@ -545,15 +545,6 @@ in6_update_ifa(struct ifnet *ifp, struct in6_aliasreq *ifra,
 	/* Validate parameters */
 	if (ifp == NULL || ifra == NULL) /* this maybe redundant */
 		return (EINVAL);
-
-	/*
-	 * The destination address for a p2p link must have a family
-	 * of AF_UNSPEC or AF_INET6.
-	 */
-	if ((ifp->if_flags & IFF_POINTOPOINT) != 0 &&
-	    ifra->ifra_dstaddr.sin6_family != AF_INET6 &&
-	    ifra->ifra_dstaddr.sin6_family != AF_UNSPEC)
-		return (EAFNOSUPPORT);
 
 	/*
 	 * validate ifra_prefixmask.  don't check sin6_family, netmask
@@ -582,26 +573,29 @@ in6_update_ifa(struct ifnet *ifp, struct in6_aliasreq *ifra,
 		 */
 		plen = in6_mask2len(&ia6->ia_prefixmask.sin6_addr, NULL);
 	}
+
 	/*
-	 * If the destination address on a p2p interface is specified,
-	 * and the address is a scoped one, validate/set the scope
-	 * zone identifier.
+	 * The destination address for a p2p link must have a family
+	 * of AF_UNSPEC or AF_INET6.
 	 */
-	dst6 = ifra->ifra_dstaddr;
-	if ((ifp->if_flags & (IFF_POINTOPOINT|IFF_LOOPBACK)) != 0 &&
-	    (dst6.sin6_family == AF_INET6)) {
-		error = in6_check_embed_scope(&dst6, ifp->if_index);
+	if ((ifp->if_flags & (IFF_POINTOPOINT|IFF_LOOPBACK)) &&
+	    ifra->ifra_dstaddr.sin6_family == AF_INET6) {
+		error = in6_sa2sin6(sin6tosa(&ifra->ifra_dstaddr), &dst6);
 		if (error)
-			return error;
-	}
-	/*
-	 * The destination address can be specified only for a p2p or a
-	 * loopback interface.  If specified, the corresponding prefix length
-	 * must be 128.
-	 */
-	if (ifra->ifra_dstaddr.sin6_family == AF_INET6) {
-		if ((ifp->if_flags & (IFF_POINTOPOINT|IFF_LOOPBACK)) == 0)
-			return (EINVAL);
+			return (error);
+		/*
+		 * If the destination address on a p2p interface is specified,
+		 * and the address is a scoped one, validate/set the scope
+		 * zone identifier.
+		 */
+		error = in6_check_embed_scope(dst6, ifp->if_index);
+		if (error)
+			return (error);
+		/*
+		 * The destination address can be specified only for a p2p or a
+		 * loopback interface.  If specified, the corresponding prefix
+		 * length must be 128.
+		 */
 		if (plen != 128)
 			return (EINVAL);
 	}
@@ -672,8 +666,8 @@ in6_update_ifa(struct ifnet *ifp, struct in6_aliasreq *ifra,
 	 * install the new destination.  Note that the interface must be
 	 * p2p or loopback (see the check above.)
 	 */
-	if ((ifp->if_flags & IFF_POINTOPOINT) && dst6.sin6_family == AF_INET6 &&
-	    !IN6_ARE_ADDR_EQUAL(&dst6.sin6_addr, &ia6->ia_dstaddr.sin6_addr)) {
+	if (dst6 != NULL &&
+	    !IN6_ARE_ADDR_EQUAL(&dst6->sin6_addr, &ia6->ia_dstaddr.sin6_addr)) {
 		struct ifaddr *ifa = &ia6->ia_ifa;
 
 		if ((ia6->ia_flags & IFA_ROUTE) != 0 &&
@@ -686,7 +680,7 @@ in6_update_ifa(struct ifnet *ifp, struct in6_aliasreq *ifra,
 			/* proceed anyway... */
 		} else
 			ia6->ia_flags &= ~IFA_ROUTE;
-		ia6->ia_dstaddr = dst6;
+		ia6->ia_dstaddr = *dst6;
 	}
 
 	/*
