@@ -259,17 +259,17 @@ in_ioctl(u_long cmd, caddr_t data, struct ifnet *ifp, int privileged)
 	NET_LOCK();
 
 	TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
-		if (ifa->ifa_addr->sa_family == AF_INET) {
-			/* find first address or exact match */
-			if (ia == NULL)
-				ia = ifatoia(ifa);
-			if (sin == NULL || sin->sin_addr.s_addr == INADDR_ANY)
-				break;
-			if (ifatoia(ifa)->ia_addr.sin_addr.s_addr ==
-			    sin->sin_addr.s_addr) {
-				ia = ifatoia(ifa);
-				break;
-			}
+		if (ifa->ifa_addr->sa_family != AF_INET)
+			continue;
+		/* find first address or exact match */
+		if (ia == NULL)
+			ia = ifatoia(ifa);
+		if (sin == NULL || sin->sin_addr.s_addr == INADDR_ANY)
+			break;
+		if (ifatoia(ifa)->ia_addr.sin_addr.s_addr ==
+		    sin->sin_addr.s_addr) {
+			ia = ifatoia(ifa);
+			break;
 		}
 	}
 	if (ia == NULL) {
@@ -361,11 +361,11 @@ in_ioctl_set_ifaddr(u_long cmd, caddr_t data, struct ifnet *ifp,
 	NET_LOCK();
 
 	TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
-		if (ifa->ifa_addr->sa_family == AF_INET) {
-			/* find first address */
-			ia = ifatoia(ifa);
-			break;
-		}
+		if (ifa->ifa_addr->sa_family != AF_INET)
+			continue;
+		/* find first address */
+		ia = ifatoia(ifa);
+		break;
 	}
 	if (ia == NULL) {
 		ia = malloc(sizeof *ia, M_IFADDR, M_WAITOK | M_ZERO);
@@ -550,17 +550,17 @@ in_ioctl_get(u_long cmd, caddr_t data, struct ifnet *ifp)
 	NET_RLOCK();
 
 	TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
-		if (ifa->ifa_addr->sa_family == AF_INET) {
-			/* find first address or exact match */
-			if (ia == NULL)
-				ia = ifatoia(ifa);
-			if (sin == NULL || sin->sin_addr.s_addr == INADDR_ANY)
-				break;
-			if (ifatoia(ifa)->ia_addr.sin_addr.s_addr ==
-			    sin->sin_addr.s_addr) {
-				ia = ifatoia(ifa);
-				break;
-			}
+		if (ifa->ifa_addr->sa_family != AF_INET)
+			continue;
+		/* find first address or exact match */
+		if (ia == NULL)
+			ia = ifatoia(ifa);
+		if (sin == NULL || sin->sin_addr.s_addr == INADDR_ANY)
+			break;
+		if (ifatoia(ifa)->ia_addr.sin_addr.s_addr ==
+		    sin->sin_addr.s_addr) {
+			ia = ifatoia(ifa);
+			break;
 		}
 	}
 	if (ia == NULL) {
