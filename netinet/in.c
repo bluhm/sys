@@ -84,7 +84,7 @@
 
 void in_socktrim(struct sockaddr_in *);
 
-int in_ioctl_sifaddr(u_long, caddr_t, struct ifnet *, int);
+int in_ioctl_set_ifaddr(u_long, caddr_t, struct ifnet *, int);
 int in_ioctl_change_ifaddr(u_long, caddr_t, struct ifnet *, int);
 int in_ioctl_get(u_long, caddr_t, struct ifnet *);
 void in_purgeaddr(struct ifaddr *);
@@ -240,7 +240,7 @@ in_ioctl(u_long cmd, caddr_t data, struct ifnet *ifp, int privileged)
 	case SIOCGIFBRDADDR:
 		return in_ioctl_get(cmd, data, ifp);
 	case SIOCSIFADDR:
-		return in_ioctl_sifaddr(cmd, data, ifp, privileged);
+		return in_ioctl_set_ifaddr(cmd, data, ifp, privileged);
 	case SIOCAIFADDR:
 	case SIOCDIFADDR:
 		return in_ioctl_change_ifaddr(cmd, data, ifp, privileged);
@@ -338,7 +338,8 @@ err:
 }
 
 int
-in_ioctl_sifaddr(u_long cmd, caddr_t data, struct ifnet *ifp, int privileged)
+in_ioctl_set_ifaddr(u_long cmd, caddr_t data, struct ifnet *ifp,
+    int privileged)
 {
 	struct ifreq *ifr = (struct ifreq *)data;
 	struct ifaddr *ifa;
