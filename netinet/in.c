@@ -227,7 +227,7 @@ in_ioctl(u_long cmd, caddr_t data, struct ifnet *ifp, int privileged)
 	struct ifreq *ifr = (struct ifreq *)data;
 	struct ifaddr *ifa;
 	struct in_ifaddr *ia = NULL;
-	struct sockaddr_in *sin, oldaddr;
+	struct sockaddr_in *sin = NULL, oldaddr;
 	int error = 0;
 
 	if (ifp == NULL)
