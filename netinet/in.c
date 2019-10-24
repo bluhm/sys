@@ -252,9 +252,11 @@ in_ioctl(u_long cmd, caddr_t data, struct ifnet *ifp, int privileged)
 		return (EOPNOTSUPP);
 	}
 
-	error = in_sa2sin(&ifr->ifr_addr, &sin);
-	if (error)
-		return (error);
+	if (ifr->ifr_addr.sa_family == AF_INET) {
+		error = in_sa2sin(&ifr->ifr_addr, &sin);
+		if (error)
+			return (error);
+	}
 
 	NET_LOCK();
 
