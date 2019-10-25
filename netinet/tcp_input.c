@@ -1712,12 +1712,18 @@ trimthenstep6:
 		}
 		ND6_HINT(tp);
 		if (acked > so->so_snd.sb_cc) {
-			tp->snd_wnd -= so->so_snd.sb_cc;
+			if (tp->snd_wnd > so->so_snd.sb_cc)
+				tp->snd_wnd -= so->so_snd.sb_cc;
+			else
+				tp->snd_wnd = 0;
 			sbdrop(so, &so->so_snd, (int)so->so_snd.sb_cc);
 			ourfinisacked = 1;
 		} else {
 			sbdrop(so, &so->so_snd, acked);
-			tp->snd_wnd -= acked;
+			if (tp->snd_wnd > acked && acked >= 0)
+				tp->snd_wnd -= acked;
+			else
+				tp->snd_wnd = 0;
 			ourfinisacked = 0;
 		}
 
