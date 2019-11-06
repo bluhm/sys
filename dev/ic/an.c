@@ -902,6 +902,8 @@ an_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 		error = 0;
 		break;
 	case SIOCS80211NWKEY:
+		if ((error = suser(curproc)) != 0)
+			break;
 		error = an_set_nwkey(sc, (struct ieee80211_nwkey *)data);
 			break;
 	case SIOCG80211NWKEY:
