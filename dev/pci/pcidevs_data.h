@@ -2,7 +2,7 @@
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	OpenBSD: pcidevs,v 1.1897 2019/10/16 01:39:56 mlarkin Exp 
+ *	OpenBSD: pcidevs,v 1.1899 2019/10/29 18:47:51 jcs Exp 
  */
 
 /*	$NetBSD: pcidevs,v 1.30 1997/06/24 06:20:24 thorpej Exp $	*/
@@ -13812,6 +13812,10 @@ static const struct pci_known_product pci_known_products[] = {
 	    "Optane",
 	},
 	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_WL_9260_1,
+	    "Dual Band Wireless-AC 9260",
+	},
+	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82850_HB,
 	    "82850 Host",
 	},
@@ -20698,6 +20702,10 @@ static const struct pci_known_product pci_known_products[] = {
 	{
 	    PCI_VENDOR_MARVELL2, PCI_PRODUCT_MARVELL2_88SE9125,
 	    "88SE9125 SATA",
+	},
+	{
+	    PCI_VENDOR_MARVELL2, PCI_PRODUCT_MARVELL2_88SE9128,
+	    "88SE9128 AHCI",
 	},
 	{
 	    PCI_VENDOR_MARVELL2, PCI_PRODUCT_MARVELL2_88SE9172,

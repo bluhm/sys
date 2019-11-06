@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_sched.c,v 1.59 2019/10/15 10:05:43 mpi Exp $	*/
+/*	$OpenBSD: kern_sched.c,v 1.62 2019/11/04 18:06:03 visa Exp $	*/
 /*
  * Copyright (c) 2007, 2008 Artur Grabowski <art@openbsd.org>
  *
@@ -268,6 +268,9 @@ setrunqueue(struct cpu_info *ci, struct proc *p, uint8_t prio)
 
 	if (cpuset_isset(&sched_idle_cpus, p->p_cpu))
 		cpu_unidle(p->p_cpu);
+
+	if (prio < spc->spc_curpriority)
+		need_resched(ci);
 }
 
 void

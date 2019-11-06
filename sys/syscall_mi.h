@@ -1,4 +1,4 @@
-/*	$OpenBSD: syscall_mi.h,v 1.21 2019/06/14 05:52:42 deraadt Exp $	*/
+/*	$OpenBSD: syscall_mi.h,v 1.23 2019/11/04 18:06:03 visa Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993

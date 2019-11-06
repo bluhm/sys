@@ -1,4 +1,4 @@
-/*	$OpenBSD: subr_kubsan.c,v 1.8 2019/06/20 14:55:22 anton Exp $	*/
+/*	$OpenBSD: subr_kubsan.c,v 1.11 2019/11/04 17:51:22 anton Exp $	*/
 
 /*
  * Copyright (c) 2019 Anton Lindqvist <anton@openbsd.org>
@@ -16,14 +16,16 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <sys/types.h>
 #include <sys/param.h>
 #include <sys/atomic.h>
 #include <sys/syslimits.h>
 #include <sys/systm.h>
-#include <sys/task.h>
+#include <sys/timeout.h>
 
 #include <uvm/uvm_extern.h>
 
+#define KUBSAN_INTERVAL	100	/* report interval in msec */
 #define KUBSAN_NSLOTS	32
 
 #define NUMBER_BUFSIZ		32
@@ -35,6 +37,7 @@
 
 struct kubsan_report {
 	enum {
+		KUBSAN_FLOAT_CAST_OVERFLOW,
 		KUBSAN_INVALID_VALUE,
 		KUBSAN_NEGATE_OVERFLOW,
 		KUBSAN_NONNULL_ARG,
@@ -49,6 +52,11 @@ struct kubsan_report {
 	struct source_location *kr_src;
 
 	union {
+		struct {
+			const struct float_cast_overflow_data *v_data;
+			unsigned long v_val;
+		} v_float_cast_overflow;
+
 		struct {
 			const struct invalid_value_data *v_data;
 			unsigned long v_val;
@@ -93,6 +101,7 @@ struct kubsan_report {
 		} v_type_mismatch;
 	} kr_u;
 };
+#define kr_float_cast_overflow		kr_u.v_float_cast_overflow
 #define kr_invalid_value		kr_u.v_invalid_value
 #define kr_negate_overflow		kr_u.v_negate_overflow
 #define kr_nonnull_arg			kr_u.v_nonnull_arg
@@ -112,6 +121,12 @@ struct source_location {
 	const char *sl_filename;
 	uint32_t sl_line;
 	uint32_t sl_column;
+};
+
+struct float_cast_overflow_data {
+	struct source_location d_src;
+	struct type_descriptor *d_ftype;	/* from type */
+	struct type_descriptor *d_ttype;	/* to type */
 };
 
 struct invalid_value_data {
@@ -184,9 +199,9 @@ int kubsan_watch = 1;
 #endif
 
 struct kubsan_report	*kubsan_reports = NULL;
-struct task		 kubsan_task = TASK_INITIALIZER(kubsan_report, NULL);
+struct timeout		 kubsan_timo = TIMEOUT_INITIALIZER(kubsan_report, NULL);
 unsigned int		 kubsan_slot = 0;
-int			 kubsan_state = 0;
+int			 kubsan_cold = 1;
 
 /*
  * Compiling the kernel with `-fsanitize=undefined' will cause the following
@@ -231,6 +246,19 @@ __ubsan_handle_divrem_overflow(struct overflow_data *data,
 		.kr_type		= KUBSAN_OVERFLOW,
 		.kr_src			= &data->d_src,
 		.kr_overflow		= { data, lhs, rhs, '/' },
+	};
+
+	kubsan_defer_report(&kr);
+}
+
+void
+__ubsan_handle_float_cast_overflow(struct float_cast_overflow_data *data,
+    unsigned long val)
+{
+	struct kubsan_report kr = {
+		.kr_type		= KUBSAN_FLOAT_CAST_OVERFLOW,
+		.kr_src			= &data->d_src,
+		.kr_float_cast_overflow	= { data, val },
 	};
 
 	kubsan_defer_report(&kr);
@@ -352,28 +380,18 @@ __ubsan_handle_type_mismatch_v1(struct type_mismatch_data *data,
 }
 
 /*
- * Allocate storage for reports. Must be called as early on as possible in order
- * to catch undefined behavior during boot.
+ * Allocate storage for reports and schedule the reporter.
+ * Must be called as early on as possible in order to catch undefined behavior
+ * during boot.
  */
 void
 kubsan_init(void)
 {
 	kubsan_reports = (void *)uvm_pageboot_alloc(
 	    sizeof(struct kubsan_report) * KUBSAN_NSLOTS);
-	kubsan_state = 1;
-}
+	kubsan_cold = 0;
 
-/*
- * Start reporting. Must be called after the system task queue has been
- * initialized.
- */
-void
-kubsan_start(void)
-{
-	kubsan_state = 2;
-
-	if (kubsan_slot > 0)
-		task_add(systq, &kubsan_task);
+	timeout_add_msec(&kubsan_timo, KUBSAN_INTERVAL);
 }
 
 int64_t
@@ -413,7 +431,7 @@ kubsan_defer_report(struct kubsan_report *kr)
 {
 	unsigned int slot;
 
-	if (__predict_false(kubsan_state == 0) ||
+	if (__predict_false(kubsan_cold == 1) ||
 	    kubsan_is_reported(kr->kr_src))
 		return;
 
@@ -428,8 +446,6 @@ kubsan_defer_report(struct kubsan_report *kr)
 	}
 
 	memcpy(&kubsan_reports[slot], kr, sizeof(*kr));
-	if (__predict_true(kubsan_state > 1))
-		task_add(systq, &kubsan_task);
 }
 
 void
@@ -522,6 +538,8 @@ kubsan_report(void *arg)
 
 again:
 	nslots = kubsan_slot;
+	if (nslots == 0)
+		goto done;
 	if (nslots > KUBSAN_NSLOTS)
 		nslots = KUBSAN_NSLOTS;
 
@@ -530,6 +548,20 @@ again:
 
 		kubsan_format_location(kr->kr_src, bloc, sizeof(bloc));
 		switch (kr->kr_type) {
+		case KUBSAN_FLOAT_CAST_OVERFLOW: {
+			const struct float_cast_overflow_data *data =
+			    kr->kr_float_cast_overflow.v_data;
+
+			kubsan_format_int(data->d_ftype,
+			    kr->kr_float_cast_overflow.v_val,
+			    blhs, sizeof(blhs));
+			printf("kubsan: %s: %s of type %s is outside the range "
+			    "of representable values of type %s\n",
+			    bloc, blhs, data->d_ftype->t_name,
+			    data->d_ttype->t_name);
+			break;
+		}
+
 		case KUBSAN_INVALID_VALUE: {
 			const struct invalid_value_data *data =
 			    kr->kr_invalid_value.v_data;
@@ -681,6 +713,9 @@ again:
 
 	kubsan_slot = 0;
 	membar_producer();
+
+done:
+	timeout_add_msec(&kubsan_timo, KUBSAN_INTERVAL);
 }
 
 void

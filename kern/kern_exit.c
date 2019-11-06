@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_exit.c,v 1.178 2019/06/21 09:39:48 visa Exp $	*/
+/*	$OpenBSD: kern_exit.c,v 1.180 2019/11/04 18:06:02 visa Exp $	*/
 /*	$NetBSD: kern_exit.c,v 1.39 1996/04/22 01:38:25 christos Exp $	*/
 
 /*

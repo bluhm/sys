@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_iwmvar.h,v 1.39 2019/10/18 07:07:53 stsp Exp $	*/
+/*	$OpenBSD: if_iwmvar.h,v 1.44 2019/11/04 11:59:52 stsp Exp $	*/
 
 /*
  * Copyright (c) 2014 genua mbh <info@genua.de>
@@ -173,6 +173,7 @@ struct iwm_fw_info {
 		} fw_sect[IWM_UCODE_SECT_MAX];
 		size_t fw_totlen;
 		int fw_count;
+		uint32_t paging_mem_size;
 	} fw_sects[IWM_UCODE_TYPE_MAX];
 };
 
@@ -203,6 +204,8 @@ struct iwm_nvm_data {
 
 	uint16_t nvm_version;
 	uint8_t max_tx_pwr_half_dbm;
+
+	int lar_enabled;
 };
 
 /* max bufs per tfd the driver will use */
@@ -233,6 +236,16 @@ struct iwm_dma_info {
 	bus_addr_t		paddr;
 	void 			*vaddr;
 	bus_size_t		size;
+};
+
+/**
+ * struct iwm_fw_paging
+ * @fw_paging_block: dma memory info
+ * @fw_paging_size: page size
+ */
+struct iwm_fw_paging {
+	struct iwm_dma_info fw_paging_block;
+	uint32_t fw_paging_size;
 };
 
 #define IWM_TX_RING_COUNT	256
@@ -421,7 +434,7 @@ struct iwm_softc {
 	int sc_capaflags;
 	int sc_capa_max_probe_len;
 	int sc_capa_n_scan_channels;
-	uint32_t sc_ucode_api;
+	uint8_t sc_ucode_api[howmany(IWM_NUM_UCODE_TLV_API, NBBY)];
 	uint8_t sc_enabled_capa[howmany(IWM_NUM_UCODE_TLV_CAPA, NBBY)];
 	char sc_fw_mcc[3];
 
@@ -445,6 +458,7 @@ struct iwm_softc {
 
 	const char *sc_fwname;
 	bus_size_t sc_fwdmasegsz;
+	size_t sc_nvm_max_section_size;
 	struct iwm_fw_info sc_fw;
 	int sc_fw_phy_config;
 	struct iwm_tlv_calib_ctrl sc_default_calib[IWM_UCODE_TYPE_MAX];
@@ -482,6 +496,15 @@ struct iwm_softc {
 	int sc_noise;
 
 	int host_interrupt_operation_mode;
+	int sc_ltr_enabled;
+
+	/*
+	 * Paging parameters - All of the parameters should be set by the
+	 * opmode when paging is enabled
+	 */
+	struct iwm_fw_paging fw_paging_db[IWM_NUM_OF_FW_PAGING_BLOCKS];
+	uint16_t num_of_paging_blk;
+	uint16_t num_of_pages_in_last_blk;
 
 #if NBPFILTER > 0
 	caddr_t			sc_drvbpf;

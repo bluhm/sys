@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_vlan.c,v 1.198 2019/04/27 05:58:17 dlg Exp $	*/
+/*	$OpenBSD: if_vlan.c,v 1.200 2019/11/04 04:17:31 dlg Exp $	*/
 
 /*
  * Copyright 1998 Massachusetts Institute of Technology
@@ -85,6 +85,7 @@ struct vlan_mc_entry {
 struct vlan_softc {
 	struct arpcom		 sc_ac;
 #define	sc_if			 sc_ac.ac_if
+	unsigned int		 sc_dead;
 	unsigned int		 sc_ifidx0;	/* parent interface */
 	int			 sc_txprio;
 	int			 sc_rxprio;
@@ -121,7 +122,6 @@ void	vlan_start(struct ifqueue *ifq);
 int	vlan_ioctl(struct ifnet *ifp, u_long cmd, caddr_t addr);
 
 int	vlan_up(struct vlan_softc *);
-int	vlan_parent_up(struct vlan_softc *, struct ifnet *);
 int	vlan_down(struct vlan_softc *);
 
 void	vlan_ifdetach(void *);
@@ -190,6 +190,7 @@ vlan_clone_create(struct if_clone *ifc, int unit)
 	struct ifnet *ifp;
 
 	sc = malloc(sizeof(*sc), M_DEVBUF, M_WAITOK|M_ZERO);
+	sc->sc_dead = 0;
 	LIST_INIT(&sc->sc_mc_listhead);
 	ifp = &sc->sc_if;
 	ifp->if_softc = sc;
@@ -245,8 +246,12 @@ vlan_clone_destroy(struct ifnet *ifp)
 {
 	struct vlan_softc *sc = ifp->if_softc;
 
+	NET_LOCK();
+	sc->sc_dead = 1;
+
 	if (ISSET(ifp->if_flags, IFF_RUNNING))
 		vlan_down(sc);
+	NET_UNLOCK();
 
 	ether_ifdetach(ifp);
 	if_detach(ifp);
@@ -454,32 +459,6 @@ leave:
 }
 
 int
-vlan_parent_up(struct vlan_softc *sc, struct ifnet *ifp0)
-{
-	int error;
-
-	if (ISSET(sc->sc_flags, IFVF_PROMISC)) {
-		error = ifpromisc(ifp0, 1);
-		if (error != 0)
-			return (error);
-	}
-
-	/* Register callback for physical link state changes */
-	sc->sc_lh_cookie = hook_establish(ifp0->if_linkstatehooks, 1,
-	    vlan_link_hook, sc);
-
-	/* Register callback if parent wants to unregister */
-	sc->sc_dh_cookie = hook_establish(ifp0->if_detachhooks, 0,
-	    vlan_ifdetach, sc);
-
-	vlan_multi_apply(sc, ifp0, SIOCADDMULTI);
-
-	if_ih_insert(ifp0, vlan_input, NULL);
-
-	return (0);
-}
-
-int
 vlan_up(struct vlan_softc *sc)
 {
 	SRPL_HEAD(, vlan_softc) *tagh, *list;
@@ -516,6 +495,12 @@ vlan_up(struct vlan_softc *sc)
 	ifp->if_hardmtu = hardmtu;
 	SET(ifp->if_flags, ifp0->if_flags & IFF_SIMPLEX);
 
+	if (ISSET(sc->sc_flags, IFVF_PROMISC)) {
+		error = ifpromisc(ifp0, 1);
+		if (error != 0)
+			goto scrub;
+	}
+
 	/*
 	 * Note: In cases like vio(4) and em(4) where the offsets of the
 	 * csum can be freely defined, we could actually do csum offload
@@ -538,7 +523,7 @@ vlan_up(struct vlan_softc *sc)
 	/* commit the sc */
 	error = rw_enter(&vlan_tagh_lk, RW_WRITE | RW_INTR);
 	if (error != 0)
-		goto scrub;
+		goto unpromisc;
 
 	error = vlan_inuse_locked(sc->sc_type, sc->sc_ifidx0, sc->sc_tag);
 	if (error != 0)
@@ -547,10 +532,18 @@ vlan_up(struct vlan_softc *sc)
 	SRPL_INSERT_HEAD_LOCKED(&vlan_tagh_rc, list, sc, sc_list);
 	rw_exit(&vlan_tagh_lk);
 
+	/* Register callback for physical link state changes */
+	sc->sc_lh_cookie = hook_establish(ifp0->if_linkstatehooks, 1,
+	    vlan_link_hook, sc);
+
+	/* Register callback if parent wants to unregister */
+	sc->sc_dh_cookie = hook_establish(ifp0->if_detachhooks, 0,
+	    vlan_ifdetach, sc);
+
 	/* configure the parent to handle packets for this vlan */
-	error = vlan_parent_up(sc, ifp0);
-	if (error != 0)
-		goto remove;
+	vlan_multi_apply(sc, ifp0, SIOCADDMULTI);
+
+	if_ih_insert(ifp0, vlan_input, NULL);
 
 	/* we're running now */
 	SET(ifp->if_flags, IFF_RUNNING);
@@ -558,13 +551,13 @@ vlan_up(struct vlan_softc *sc)
 
 	if_put(ifp0);
 
-	return (0);
+	return (ENETRESET);
 
-remove:
-	rw_enter(&vlan_tagh_lk, RW_WRITE);
-	SRPL_REMOVE_LOCKED(&vlan_tagh_rc, list, sc, vlan_softc, sc_list);
 leave:
 	rw_exit(&vlan_tagh_lk);
+unpromisc:
+	if (ISSET(sc->sc_flags, IFVF_PROMISC))
+		(void)ifpromisc(ifp0, 0); /* XXX */
 scrub:
 	ifp->if_capabilities = 0;
 	CLR(ifp->if_flags, IFF_SIMPLEX);
@@ -668,6 +661,10 @@ vlan_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 	struct ifnet *ifp0;
 	uint16_t tag;
 	int error = 0;
+
+	NET_ASSERT_LOCKED();
+	if (sc->sc_dead)
+		return (ENXIO);
 
 	switch (cmd) {
 	case SIOCSIFADDR:
@@ -784,10 +781,8 @@ vlan_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		break;
 	}
 
-	if (error == ENETRESET) {
-		vlan_iff(sc);
-		error = 0;
-	}
+	if (error == ENETRESET)
+		error = vlan_iff(sc);
 
 	return error;
 }
