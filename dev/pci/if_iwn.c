@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_iwn.c,v 1.219 2019/10/09 09:21:45 tobhe Exp $	*/
+/*	$OpenBSD: if_iwn.c,v 1.221 2019/11/06 14:52:35 stsp Exp $	*/
 
 /*-
  * Copyright (c) 2007-2010 Damien Bergamini <damien.bergamini@free.fr>
@@ -2819,9 +2819,16 @@ iwn_notif_intr(struct iwn_softc *sc)
 			 * state machine will drop us into scanning after timing
 			 * out waiting for a probe response.
 			 */
-			if (missed > ic->ic_bmissthres && !ic->ic_mgt_timer)
+			if (missed > ic->ic_bmissthres && !ic->ic_mgt_timer) {
+				if (ic->ic_if.if_flags & IFF_DEBUG)
+					printf("%s: receiving no beacons from "
+					    "%s; checking if this AP is still "
+					    "responding to probe requests\n",
+					    sc->sc_dev.dv_xname, ether_sprintf(
+					    ic->ic_bss->ni_macaddr));
 				IEEE80211_SEND_MGMT(ic, ic->ic_bss,
 				    IEEE80211_FC0_SUBTYPE_PROBE_REQ, 0);
+			}
 			break;
 		}
 		case IWN_UC_READY:
@@ -5681,6 +5688,10 @@ iwn_ampdu_tx_stop(struct ieee80211com *ic, struct ieee80211_node *ni,
 	int qid = sc->first_agg_txq + tid;
 	struct iwn_node *wn = (void *)ni;
 	struct iwn_node_info node;
+
+	/* Discard all frames in the current window. */
+	iwn_ampdu_txq_advance(sc, &sc->txq[qid], qid,
+	    IWN_AGG_SSN_TO_TXQ_IDX(ba->ba_winend));
 
 	if (iwn_nic_lock(sc) != 0)
 		return;

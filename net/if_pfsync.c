@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_pfsync.c,v 1.264 2019/06/10 16:32:51 mpi Exp $	*/
+/*	$OpenBSD: if_pfsync.c,v 1.267 2019/11/07 11:46:42 dlg Exp $	*/
 
 /*
  * Copyright (c) 2002 Michael Shalayeff
@@ -235,8 +235,8 @@ struct pfsync_softc {
 
 	TAILQ_HEAD(, tdb)	 sc_tdb_q;
 
-	void			*sc_lhcookie;
-	void			*sc_dhcookie;
+	struct task		 sc_ltask;
+	struct task		 sc_dtask;
 
 	struct timeout		 sc_tmo;
 };
@@ -321,6 +321,8 @@ pfsync_clone_create(struct if_clone *ifc, int unit)
 	    NULL);
 	TAILQ_INIT(&sc->sc_upd_req_list);
 	TAILQ_INIT(&sc->sc_deferrals);
+	task_set(&sc->sc_ltask, pfsync_syncdev_state, sc);
+	task_set(&sc->sc_dtask, pfsync_ifdetach, sc);
 	sc->sc_deferred = 0;
 
 	TAILQ_INIT(&sc->sc_tdb_q);
@@ -378,11 +380,8 @@ pfsync_clone_destroy(struct ifnet *ifp)
 		carp_group_demote_adj(&sc->sc_if, -1, "pfsync destroy");
 #endif
 	if (sc->sc_sync_if) {
-		hook_disestablish(
-		    sc->sc_sync_if->if_linkstatehooks,
-		    sc->sc_lhcookie);
-		hook_disestablish(sc->sc_sync_if->if_detachhooks,
-		    sc->sc_dhcookie);
+		if_linkstatehook_del(sc->sc_sync_if, &sc->sc_ltask);
+		if_detachhook_del(sc->sc_sync_if, &sc->sc_dtask);
 	}
 
 	/* XXXSMP breaks atomicity */
@@ -456,6 +455,9 @@ void
 pfsync_ifdetach(void *arg)
 {
 	struct pfsync_softc *sc = arg;
+
+	if_linkstatehook_del(sc->sc_sync_if, &sc->sc_ltask);
+	if_detachhook_del(sc->sc_sync_if, &sc->sc_dtask);
 
 	sc->sc_sync_if = NULL;
 }
@@ -1347,12 +1349,10 @@ pfsyncioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 
 		if (pfsyncr.pfsyncr_syncdev[0] == 0) {
 			if (sc->sc_sync_if) {
-				hook_disestablish(
-				    sc->sc_sync_if->if_linkstatehooks,
-				    sc->sc_lhcookie);
-				hook_disestablish(
-				    sc->sc_sync_if->if_detachhooks,
-				    sc->sc_dhcookie);
+				if_linkstatehook_del(sc->sc_sync_if,
+				    &sc->sc_ltask);
+				if_detachhook_del(sc->sc_sync_if,
+				    &sc->sc_dtask);
 			}
 			sc->sc_sync_if = NULL;
 			if (imo->imo_num_memberships > 0) {
@@ -1373,12 +1373,8 @@ pfsyncioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 			pfsync_sendout();
 
 		if (sc->sc_sync_if) {
-			hook_disestablish(
-			    sc->sc_sync_if->if_linkstatehooks,
-			    sc->sc_lhcookie);
-			hook_disestablish(
-			    sc->sc_sync_if->if_detachhooks,
-			    sc->sc_dhcookie);
+			if_linkstatehook_del(sc->sc_sync_if, &sc->sc_ltask);
+			if_detachhook_del(sc->sc_sync_if, &sc->sc_dtask);
 		}
 		sc->sc_sync_if = sifp;
 
@@ -1421,11 +1417,8 @@ pfsyncioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		ip->ip_src.s_addr = INADDR_ANY;
 		ip->ip_dst.s_addr = sc->sc_sync_peer.s_addr;
 
-		sc->sc_lhcookie =
-		    hook_establish(sc->sc_sync_if->if_linkstatehooks, 1,
-		    pfsync_syncdev_state, sc);
-		sc->sc_dhcookie = hook_establish(sc->sc_sync_if->if_detachhooks,
-		    0, pfsync_ifdetach, sc);
+		if_linkstatehook_add(sc->sc_sync_if, &sc->sc_ltask);
+		if_detachhook_add(sc->sc_sync_if, &sc->sc_dtask);
 
 		pfsync_request_full_update(sc);
 

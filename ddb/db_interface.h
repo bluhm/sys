@@ -1,4 +1,4 @@
-/*	$OpenBSD: db_interface.h,v 1.20 2017/09/29 09:36:04 mpi Exp $	*/
+/*	$OpenBSD: db_interface.h,v 1.22 2019/11/07 13:16:25 mpi Exp $	*/
 /*	$NetBSD: db_interface.h,v 1.1 1996/02/05 01:57:03 christos Exp $	*/
 
 /*
@@ -37,7 +37,7 @@ void db_stack_trace_print(db_expr_t, int, db_expr_t, char *,
     int (*)(const char *, ...));
 
 /* arch/<arch>/<arch>/db_disasm.c */
-db_addr_t db_disasm(db_addr_t, boolean_t);
+vaddr_t db_disasm(vaddr_t, int);
 
 /* kern/kern_proc.c */
 void db_kill_cmd(db_expr_t, int, db_expr_t, char *);

@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_tpmr.c,v 1.4 2019/09/12 02:02:54 dlg Exp $ */
+/*	$OpenBSD: if_tpmr.c,v 1.7 2019/11/07 08:07:17 dlg Exp $ */
 
 /*
  * Copyright (c) 2019 The University of Queensland
@@ -86,8 +86,8 @@ struct tpmr_port {
 	int (*p_output)(struct ifnet *, struct mbuf *, struct sockaddr *,
 	    struct rtentry *);
 
-	void			*p_lcookie;
-	void			*p_dcookie;
+	struct task		 p_ltask;
+	struct task		 p_dtask;
 
 	struct tpmr_softc	*p_tpmr;
 	unsigned int		 p_slot;
@@ -563,10 +563,11 @@ tpmr_add_port(struct tpmr_softc *sc, const struct trunk_reqport *rp)
 	if (error != 0)
 		goto free;
 
-	p->p_lcookie = hook_establish(ifp0->if_linkstatehooks, 1,
-	    tpmr_p_linkch, p);
-	p->p_dcookie = hook_establish(ifp0->if_detachhooks, 0,
-	    tpmr_p_detach, p);
+	task_set(&p->p_ltask, tpmr_p_linkch, p);
+	if_linkstatehook_add(ifp0, &p->p_ltask);
+
+	task_set(&p->p_dtask, tpmr_p_detach, p);
+	if_detachhook_add(ifp0, &p->p_dtask);
 
 	/* commit */
 	DPRINTF(sc, "%s %s trunkport: creating port\n",
@@ -724,8 +725,8 @@ tpmr_p_dtor(struct tpmr_softc *sc, struct tpmr_port *p, const char *op)
 		    ifp->if_xname, ifp0->if_xname);
 	}
 
-	hook_disestablish(ifp0->if_detachhooks, p->p_dcookie);
-	hook_disestablish(ifp0->if_linkstatehooks, p->p_lcookie);
+	if_detachhook_del(ifp0, &p->p_dtask);
+	if_linkstatehook_del(ifp0, &p->p_ltask);
 
 	smr_barrier();
 

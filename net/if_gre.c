@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_gre.c,v 1.152 2019/07/29 16:28:25 bluhm Exp $ */
+/*	$OpenBSD: if_gre.c,v 1.154 2019/11/07 07:36:31 dlg Exp $ */
 /*	$NetBSD: if_gre.c,v 1.9 1999/10/25 19:18:11 drochner Exp $ */
 
 /*
@@ -429,8 +429,8 @@ struct nvgre_softc {
 	struct task		 sc_send_task;
 
 	void			*sc_inm;
-	void			*sc_lhcookie;
-	void			*sc_dhcookie;
+	struct task		 sc_ltask;
+	struct task		 sc_dtask;
 
 	struct rwlock		 sc_ether_lock;
 	struct nvgre_map	 sc_ether_map;
@@ -792,6 +792,8 @@ nvgre_clone_create(struct if_clone *ifc, int unit)
 
 	mq_init(&sc->sc_send_list, IFQ_MAXLEN * 2, IPL_SOFTNET);
 	task_set(&sc->sc_send_task, nvgre_send, sc);
+	task_set(&sc->sc_ltask, nvgre_link_change, sc);
+	task_set(&sc->sc_dtask, nvgre_detach, sc);
 
 	rw_init(&sc->sc_ether_lock, "nvgrelk");
 	RBT_INIT(nvgre_map, &sc->sc_ether_map);
@@ -3656,19 +3658,8 @@ nvgre_up(struct nvgre_softc *sc)
 		unhandled_af(tunnel->t_af);
 	}
 
-	sc->sc_lhcookie = hook_establish(ifp0->if_linkstatehooks, 0,
-	    nvgre_link_change, sc);
-	if (sc->sc_lhcookie == NULL) {
-		error = ENOMEM;
-		goto delmulti;
-	}
-
-	sc->sc_dhcookie = hook_establish(ifp0->if_detachhooks, 0,
-	    nvgre_detach, sc);
-	if (sc->sc_dhcookie == NULL) {
-		error = ENOMEM;
-		goto dislh;
-	}
+	if_linkstatehook_add(ifp0, &sc->sc_ltask);
+	if_detachhook_add(ifp0, &sc->sc_dtask);
 
 	if_put(ifp0);
 
@@ -3679,21 +3670,6 @@ nvgre_up(struct nvgre_softc *sc)
 
 	return (0);
 
-dislh:
-	hook_disestablish(ifp0->if_linkstatehooks, sc->sc_lhcookie);
-delmulti:
-	switch (tunnel->t_af) {
-	case AF_INET:
-		in_delmulti(inm);
-		break;
-#ifdef INET6
-	case AF_INET6:
-		in6_delmulti(inm);
-		break;
-#endif
-	default:
-		unhandled_af(tunnel->t_af);
-	}
 remove_ucast:
 	RBT_REMOVE(nvgre_ucast_tree, &nvgre_ucast_tree, sc);
 remove_mcast:
@@ -3726,8 +3702,8 @@ nvgre_down(struct nvgre_softc *sc)
 
 	ifp0 = if_get(sc->sc_ifp0);
 	if (ifp0 != NULL) {
-		hook_disestablish(ifp0->if_detachhooks, sc->sc_dhcookie);
-		hook_disestablish(ifp0->if_linkstatehooks, sc->sc_lhcookie);
+		if_detachhook_del(ifp0, &sc->sc_dtask);
+		if_linkstatehook_del(ifp0, &sc->sc_ltask);
 	}
 	if_put(ifp0);
 

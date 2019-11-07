@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.c,v 1.588 2019/08/21 15:32:18 florian Exp $	*/
+/*	$OpenBSD: if.c,v 1.591 2019/11/07 08:03:18 dlg Exp $	*/
 /*	$NetBSD: if.c,v 1.35 1996/05/07 05:26:04 thorpej Exp $	*/
 
 /*
@@ -227,6 +227,10 @@ TAILQ_HEAD(, ifg_group) ifg_head = TAILQ_HEAD_INITIALIZER(ifg_head);
 
 LIST_HEAD(, if_clone) if_cloners = LIST_HEAD_INITIALIZER(if_cloners);
 int if_cloners_count;
+
+/* hooks should only be added, deleted, and run from a process context */
+struct mutex if_hooks_mtx = MUTEX_INITIALIZER(IPL_NONE);
+void 	if_hooks_run(struct task_list *);
 
 struct timeout net_tick_to;
 void	net_tick(void *);
@@ -629,12 +633,8 @@ if_attach_common(struct ifnet *ifp)
 	ifp->if_addrhooks = malloc(sizeof(*ifp->if_addrhooks),
 	    M_TEMP, M_WAITOK);
 	TAILQ_INIT(ifp->if_addrhooks);
-	ifp->if_linkstatehooks = malloc(sizeof(*ifp->if_linkstatehooks),
-	    M_TEMP, M_WAITOK);
-	TAILQ_INIT(ifp->if_linkstatehooks);
-	ifp->if_detachhooks = malloc(sizeof(*ifp->if_detachhooks),
-	    M_TEMP, M_WAITOK);
-	TAILQ_INIT(ifp->if_detachhooks);
+	TAILQ_INIT(&ifp->if_linkstatehooks);
+	TAILQ_INIT(&ifp->if_detachhooks);
 
 	if (ifp->if_rtrequest == NULL)
 		ifp->if_rtrequest = if_rtrequest_dummy;
@@ -1044,17 +1044,64 @@ if_netisr(void *unused)
 }
 
 void
+if_hooks_run(struct task_list *hooks)
+{
+	struct task *t, *nt, cursor;
+	void (*func)(void *);
+	void *arg;
+
+	/*
+	 * holding the NET_LOCK guarantees that concurrent if_hooks_run
+	 * calls can't happen, and they therefore can't try and call
+	 * each others cursors as actual hooks.
+	 */
+	NET_ASSERT_LOCKED();
+
+	mtx_enter(&if_hooks_mtx);
+	for (t = TAILQ_FIRST(hooks); t != NULL; t = nt) {
+		func = t->t_func;
+		arg = t->t_arg;
+
+		TAILQ_INSERT_AFTER(hooks, t, &cursor, t_entry);
+		mtx_leave(&if_hooks_mtx);
+
+		(*func)(arg);
+
+		mtx_enter(&if_hooks_mtx);
+		nt = TAILQ_NEXT(&cursor, t_entry); /* avoid _Q_INVALIDATE */
+		TAILQ_REMOVE(hooks, &cursor, t_entry);
+	}
+	mtx_leave(&if_hooks_mtx);
+}
+
+void
 if_deactivate(struct ifnet *ifp)
 {
-	NET_LOCK();
 	/*
 	 * Call detach hooks from head to tail.  To make sure detach
 	 * hooks are executed in the reverse order they were added, all
 	 * the hooks have to be added to the head!
 	 */
-	dohooks(ifp->if_detachhooks, HOOK_REMOVE | HOOK_FREE);
 
+	NET_LOCK();
+	if_hooks_run(&ifp->if_detachhooks);
 	NET_UNLOCK();
+}
+
+void
+if_detachhook_add(struct ifnet *ifp, struct task *t)
+{
+	mtx_enter(&if_hooks_mtx);
+	TAILQ_INSERT_HEAD(&ifp->if_detachhooks, t, t_entry);
+	mtx_leave(&if_hooks_mtx);
+}
+
+void
+if_detachhook_del(struct ifnet *ifp, struct task *t)
+{
+	mtx_enter(&if_hooks_mtx);
+	TAILQ_REMOVE(&ifp->if_detachhooks, t, t_entry);
+	mtx_leave(&if_hooks_mtx);
 }
 
 /*
@@ -1131,8 +1178,8 @@ if_detach(struct ifnet *ifp)
 	}
 
 	free(ifp->if_addrhooks, M_TEMP, sizeof(*ifp->if_addrhooks));
-	free(ifp->if_linkstatehooks, M_TEMP, sizeof(*ifp->if_linkstatehooks));
-	free(ifp->if_detachhooks, M_TEMP, sizeof(*ifp->if_detachhooks));
+	KASSERT(TAILQ_EMPTY(&ifp->if_linkstatehooks));
+	KASSERT(TAILQ_EMPTY(&ifp->if_detachhooks));
 
 	for (i = 0; (dp = domains[i]) != NULL; i++) {
 		if (dp->dom_ifdetach && ifp->if_afdata[dp->dom_family])
@@ -1634,7 +1681,24 @@ if_linkstate(struct ifnet *ifp)
 
 	rtm_ifchg(ifp);
 	rt_if_track(ifp);
-	dohooks(ifp->if_linkstatehooks, 0);
+
+	if_hooks_run(&ifp->if_linkstatehooks);
+}
+
+void
+if_linkstatehook_add(struct ifnet *ifp, struct task *t)
+{
+	mtx_enter(&if_hooks_mtx);
+	TAILQ_INSERT_TAIL(&ifp->if_linkstatehooks, t, t_entry);
+	mtx_leave(&if_hooks_mtx);
+}
+
+void
+if_linkstatehook_del(struct ifnet *ifp, struct task *t)
+{
+	mtx_enter(&if_hooks_mtx);
+	TAILQ_REMOVE(&ifp->if_linkstatehooks, t, t_entry);
+	mtx_leave(&if_hooks_mtx);
 }
 
 /*
