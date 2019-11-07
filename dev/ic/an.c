@@ -1,4 +1,4 @@
-/*	$OpenBSD: an.c,v 1.74 2019/11/07 11:55:02 bluhm Exp $	*/
+/*	$OpenBSD: an.c,v 1.75 2019/11/07 12:56:34 bluhm Exp $	*/
 /*	$NetBSD: an.c,v 1.34 2005/06/20 02:49:18 atatat Exp $	*/
 /*
  * Copyright (c) 1997, 1998, 1999

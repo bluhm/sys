@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_wi.c,v 1.169 2019/05/12 18:12:38 stsp Exp $	*/
+/*	$OpenBSD: if_wi.c,v 1.170 2019/11/07 12:56:34 bluhm Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998, 1999
