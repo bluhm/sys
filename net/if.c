@@ -2268,13 +2268,15 @@ ifioctl(struct socket *so, u_long cmd, caddr_t data, struct proc *p)
 			break;
 		switch (cmd) {
 		case SIOCAIFADDR:
-		case SIOCAIFADDR_IN6:
 		case SIOCDIFADDR:
-		case SIOCDIFADDR_IN6:
 		case SIOCSIFADDR:
 		case SIOCSIFNETMASK:
 		case SIOCSIFDSTADDR:
 		case SIOCSIFBRDADDR:
+#ifdef INET6
+		case SIOCAIFADDR_IN6:
+		case SIOCDIFADDR_IN6:
+#endif
 			error = suser(p);
 			break;
 		default:
