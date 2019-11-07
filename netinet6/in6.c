@@ -255,7 +255,6 @@ in6_ioctl(u_long cmd, caddr_t data, struct ifnet *ifp, int privileged)
 int
 in6_ioctl_change_ifaddr(u_long cmd, caddr_t data, struct ifnet *ifp)
 {
-	struct	in6_ifreq *ifr = (struct in6_ifreq *)data;
 	struct	in6_ifaddr *ia6 = NULL;
 	struct	in6_aliasreq *ifra = (struct in6_aliasreq *)data;
 	struct	sockaddr *sa;
@@ -282,13 +281,13 @@ in6_ioctl_change_ifaddr(u_long cmd, caddr_t data, struct ifnet *ifp)
 		sa = sin6tosa(&ifra->ifra_addr);
 		break;
 	case SIOCDIFADDR_IN6:
-		sa = sin6tosa(&ifr->ifr_addr);
+		sa = sin6tosa(&((struct in6_ifreq *)data)->ifr_addr);
 		break;
 	default:
 		panic("%s: invalid ioctl %lu", __func__, cmd);
 	}
 	if (sa->sa_family == AF_INET6) {
-		error = in6_sa2sin6(sin6tosa(&ifra->ifra_addr), &sa6);
+		error = in6_sa2sin6(sa, &sa6);
 		if (error)
 			return (error);
 	}
@@ -354,7 +353,9 @@ in6_ioctl_change_ifaddr(u_long cmd, caddr_t data, struct ifnet *ifp)
 		if (error)
 			break;
 
-		ia6 = in6ifa_ifpwithaddr(ifp, &ifra->ifra_addr.sin6_addr);
+		ia6 = NULL;
+		if (sa6 != NULL)
+			ia6 = in6ifa_ifpwithaddr(ifp, &sa6->sin6_addr);
 		if (ia6 == NULL) {
 			/*
 			 * this can happen when the user specify the 0 valid
@@ -399,14 +400,20 @@ in6_ioctl_get(u_long cmd, caddr_t data, struct ifnet *ifp)
 {
 	struct	in6_ifreq *ifr = (struct in6_ifreq *)data;
 	struct	in6_ifaddr *ia6 = NULL;
-	struct sockaddr_in6 *sa6;
+	struct	sockaddr *sa;
+	struct	sockaddr_in6 *sa6 = NULL;
 	int	error = 0;
 
-	sa6 = &ifr->ifr_addr;
+	sa = sin6tosa(&ifr->ifr_addr);
+	if (sa->sa_family == AF_INET6) {
+		error = in6_sa2sin6(sa, &sa6);
+		if (error)
+			return (error);
+	}
 
 	NET_RLOCK();
 
-	if (sa6 && sa6->sin6_family == AF_INET6) {
+	if (sa6 != NULL) {
 		error = in6_check_embed_scope(sa6, ifp->if_index);
 		if (error)
 			goto err;
@@ -494,7 +501,7 @@ in6_ioctl_get(u_long cmd, caddr_t data, struct ifnet *ifp)
 		break;
 
 	default:
-		panic("invalid ioctl %lu", cmd);
+		panic("%s: invalid ioctl %lu", __func__, cmd);
 	}
 
 err:
