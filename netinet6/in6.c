@@ -258,8 +258,9 @@ in6_ioctl_change_ifaddr(u_long cmd, caddr_t data, struct ifnet *ifp)
 	struct	in6_ifreq *ifr = (struct in6_ifreq *)data;
 	struct	in6_ifaddr *ia6 = NULL;
 	struct	in6_aliasreq *ifra = (struct in6_aliasreq *)data;
-	struct	sockaddr_in6 *sa6;
-	int	error, newifaddr = 0, plen;
+	struct	sockaddr *sa;
+	struct	sockaddr_in6 *sa6 = NULL;
+	int	error = 0, newifaddr = 0, plen;
 
 	/*
 	 * Find address for this interface, if it exists.
@@ -278,16 +279,19 @@ in6_ioctl_change_ifaddr(u_long cmd, caddr_t data, struct ifnet *ifp)
 	 */
 	switch (cmd) {
 	case SIOCAIFADDR_IN6:
-		error = in6_sa2sin6(sin6tosa(&ifra->ifra_addr), &sa6);
+		sa = sin6tosa(&ifra->ifra_addr);
 		break;
 	case SIOCDIFADDR_IN6:
-		error = in6_sa2sin6(sin6tosa(&ifr->ifr_addr), &sa6);
+		sa = sin6tosa(&ifr->ifr_addr);
 		break;
 	default:
 		panic("%s: invalid ioctl %lu", __func__, cmd);
 	}
-	if (error)
-		return (error);
+	if (sa->sa_family == AF_INET6) {
+		error = in6_sa2sin6(sin6tosa(&ifra->ifra_addr), &sa6);
+		if (error)
+			return (error);
+	}
 
 	NET_LOCK();
 
