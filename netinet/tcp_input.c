@@ -1720,7 +1720,7 @@ trimthenstep6:
 			ourfinisacked = 1;
 		} else {
 			sbdrop(so, &so->so_snd, acked);
-			if (tp->snd_wnd > acked && acked >= 0)
+			if (tp->snd_wnd > acked)
 				tp->snd_wnd -= acked;
 			else
 				tp->snd_wnd = 0;
