@@ -1,4 +1,4 @@
-/*	$OpenBSD: ieee80211_node.c,v 1.174 2019/10/31 11:03:43 stsp Exp $	*/
+/*	$OpenBSD: ieee80211_node.c,v 1.176 2019/11/09 13:21:04 stsp Exp $	*/
 /*	$NetBSD: ieee80211_node.c,v 1.14 2004/05/09 09:18:47 dyoung Exp $	*/
 
 /*-
@@ -476,6 +476,10 @@ ieee80211_ess_calculate_score(struct ieee80211com *ic,
 	    ni->ni_rssi > min_5ghz_rssi)
 		score += 2;
 
+	/* Boost this AP if it had no auth/assoc failures in the past. */
+	if (ni->ni_fails == 0)
+		score += 21;
+
 	return score;
 }
 
@@ -669,6 +673,15 @@ ieee80211_set_ess(struct ieee80211com *ic, struct ieee80211_ess *ess,
 		ic->ic_def_txkey = ess->def_txkey;
 		ic->ic_flags |= IEEE80211_F_WEPON;
 	}
+}
+
+void
+ieee80211_deselect_ess(struct ieee80211com *ic)
+{
+	memset(ic->ic_des_essid, 0, IEEE80211_NWID_LEN);
+	ic->ic_des_esslen = 0;
+	ieee80211_disable_wep(ic);
+	ieee80211_disable_rsn(ic);
 }
 
 void
@@ -1563,6 +1576,7 @@ ieee80211_node_cleanup(struct ieee80211com *ic, struct ieee80211_node *ni)
 		ni->ni_rsnie = NULL;
 	}
 	ieee80211_ba_del(ni);
+	ni->ni_unref_cb = NULL;
 	free(ni->ni_unref_arg, M_DEVBUF, ni->ni_unref_arg_size);
 	ni->ni_unref_arg = NULL;
 	ni->ni_unref_arg_size = 0;

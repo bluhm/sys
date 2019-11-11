@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_iwmreg.h,v 1.40 2019/11/04 11:59:52 stsp Exp $	*/
+/*	$OpenBSD: if_iwmreg.h,v 1.42 2019/11/08 16:42:11 stsp Exp $	*/
 
 /******************************************************************************
  *
@@ -639,6 +639,8 @@
 #define IWM_UCODE_TLV_API_NAN2_VER2		31
 #define IWM_UCODE_TLV_API_ADAPTIVE_DWELL	32
 #define IWM_UCODE_TLV_API_NEW_RX_STATS		35
+#define IWM_UCODE_TLV_API_ADAPTIVE_DWELL_V2	42
+#define IWM_UCODE_TLV_API_SCAN_EXT_CHAN_VER	58
 #define IWM_NUM_UCODE_TLV_API			128
 
 #define IWM_UCODE_TLV_API_BITS \
@@ -3388,6 +3390,7 @@ struct iwm_sf_cfg_cmd {
  * @dtim_interval: dtim transmit time in TU
  * @dtim_reciprocal: 2^32 / dtim_interval
  * @mcast_qid: queue ID for multicast traffic
+ *	NOTE: obsolete from VER2 and on
  * @beacon_template: beacon template ID
  */
 struct iwm_mac_data_ap {
@@ -3399,7 +3402,7 @@ struct iwm_mac_data_ap {
 	uint32_t dtim_reciprocal;
 	uint32_t mcast_qid;
 	uint32_t beacon_template;
-} __packed; /* AP_MAC_DATA_API_S_VER_1 */
+} __packed; /* AP_MAC_DATA_API_S_VER_2 */
 
 /**
  * struct iwm_mac_data_ibss - configuration data for IBSS MAC context
@@ -4862,12 +4865,26 @@ struct iwm_scan_probe_segment {
  * @common_data: last (and common) part of the probe
  * @buf: raw data block
  */
-struct iwm_scan_probe_req {
+struct iwm_scan_probe_req_v1 {
 	struct iwm_scan_probe_segment mac_header;
 	struct iwm_scan_probe_segment band_data[2];
 	struct iwm_scan_probe_segment common_data;
 	uint8_t buf[IWM_SCAN_OFFLOAD_PROBE_REQ_SIZE];
 } __packed;
+
+/* iwl_scan_probe_req - PROBE_REQUEST_FRAME_API_S_VER_v2
+ * @mac_header: first (and common) part of the probe
+ * @band_data: band specific data
+ * @common_data: last (and common) part of the probe
+ * @buf: raw data block
+ */
+struct iwm_scan_probe_req {
+	struct iwm_scan_probe_segment mac_header;
+	struct iwm_scan_probe_segment band_data[3];
+	struct iwm_scan_probe_segment common_data;
+	uint8_t buf[IWM_SCAN_OFFLOAD_PROBE_REQ_SIZE];
+} __packed;
+
 
 #define IWM_SCAN_CHANNEL_FLAG_EBS		(1 << 0)
 #define IWM_SCAN_CHANNEL_FLAG_EBS_ACCURATE	(1 << 1)
@@ -5204,6 +5221,14 @@ struct iwm_scan_config {
 #define IWM_UMAC_SCAN_GEN_FLAGS_RRM_ENABLED	(1 << 8)
 #define IWM_UMAC_SCAN_GEN_FLAGS_MATCH		(1 << 9)
 #define IWM_UMAC_SCAN_GEN_FLAGS_EXTENDED_DWELL	(1 << 10)
+/* Extended dwell is obselete when adaptive dwell is used, making this
+ * bit reusable. Hence, probe request defer is used only when adaptive
+ * dwell is supported. */
+#define IWM_UMAC_SCAN_GEN_FLAGS_PROB_REQ_DEFER_SUPP	(1 << 10)
+#define IWM_UMAC_SCAN_GEN_FLAGS_LMAC2_FRAGMENTED	(1 << 11)
+#define IWM_UMAC_SCAN_GEN_FLAGS_ADAPTIVE_DWELL		(1 << 13)
+#define IWM_UMAC_SCAN_GEN_FLAGS_MAX_CHNL_TIME		(1 << 14)
+#define IWM_UMAC_SCAN_GEN_FLAGS_PROB_REQ_HIGH_TX_RATE	(1 << 15)
 
 /**
  * struct iwm_scan_channel_cfg_umac
@@ -5240,32 +5265,77 @@ struct iwm_scan_umac_schedule {
  * @preq: probe request with IEs blocks
  * @direct_scan: list of SSIDs for directed active scan
  */
-struct iwm_scan_req_umac_tail {
+struct iwm_scan_req_umac_tail_v1 {
 	/* SCAN_PERIODIC_PARAMS_API_S_VER_1 */
 	struct iwm_scan_umac_schedule schedule[IWM_MAX_SCHED_SCAN_PLANS];
 	uint16_t delay;
 	uint16_t reserved;
 	/* SCAN_PROBE_PARAMS_API_S_VER_1 */
+	struct iwm_scan_probe_req_v1 preq;
+	struct iwm_ssid_ie direct_scan[IWM_PROBE_OPTION_MAX];
+} __packed;
+
+/**
+ * struct iwm_scan_req_umac_tail - the rest of the UMAC scan request command
+ *      parameters following channels configuration array.
+ * @schedule: two scheduling plans.
+ * @delay: delay in TUs before starting the first scan iteration
+ * @reserved: for future use and alignment
+ * @preq: probe request with IEs blocks
+ * @direct_scan: list of SSIDs for directed active scan
+ */
+struct iwm_scan_req_umac_tail_v2 {
+	/* SCAN_PERIODIC_PARAMS_API_S_VER_1 */
+	struct iwm_scan_umac_schedule schedule[IWM_MAX_SCHED_SCAN_PLANS];
+	uint16_t delay;
+	uint16_t reserved;
+	/* SCAN_PROBE_PARAMS_API_S_VER_2 */
 	struct iwm_scan_probe_req preq;
 	struct iwm_ssid_ie direct_scan[IWM_PROBE_OPTION_MAX];
 } __packed;
 
 /**
- * struct iwm_scan_req_umac
- * @flags: &enum iwm_umac_scan_flags
- * @uid: scan id, &enum iwm_umac_scan_uid_offsets
- * @ooc_priority: out of channel priority - &enum iwm_scan_priority
- * @general_flags: &enum iwm_umac_scan_general_flags
- * @extended_dwell: dwell time for channels 1, 6 and 11
- * @active_dwell: dwell time for active scan
- * @passive_dwell: dwell time for passive scan
- * @fragmented_dwell: dwell time for fragmented passive scan
- * @max_out_time: max out of serving channel time
- * @suspend_time: max suspend time
- * @scan_priority: scan internal prioritization &enum iwm_scan_priority
- * @channel_flags: &enum iwm_scan_channel_flags
- * @n_channels: num of channels in scan request
+ * struct iwm_scan_umac_chan_param
+ * @flags: channel flags &enum iwl_scan_channel_flags
+ * @count: num of channels in scan request
  * @reserved: for future use and alignment
+ */
+struct iwm_scan_umac_chan_param {
+	uint8_t flags;
+	uint8_t count;
+	uint16_t reserved;
+} __packed; /* SCAN_CHANNEL_PARAMS_API_S_VER_1 */
+
+#define IWM_SCAN_LB_LMAC_IDX 0
+#define IWM_SCAN_HB_LMAC_IDX 1
+
+/**
+ * struct iwm_scan_req_umac
+ * @flags: &enum iwl_umac_scan_flags
+ * @uid: scan id, &enum iwl_umac_scan_uid_offsets
+ * @ooc_priority: out of channel priority - &enum iwl_scan_priority
+ * @general_flags: &enum iwl_umac_scan_general_flags
+ * @scan_start_mac_id: report the scan start TSF time according to this mac TSF
+ * @extended_dwell: dwell time for channels 1, 6 and 11
+ * @active_dwell: dwell time for active scan per LMAC
+ * @passive_dwell: dwell time for passive scan per LMAC
+ * @fragmented_dwell: dwell time for fragmented passive scan
+ * @adwell_default_n_aps: for adaptive dwell the default number of APs
+ *	per channel
+ * @adwell_default_n_aps_social: for adaptive dwell the default
+ *	number of APs per social (1,6,11) channel
+ * @general_flags2: &enum iwl_umac_scan_general_flags2
+ * @adwell_max_budget: for adaptive dwell the maximal budget of TU to be added
+ *	to total scan time
+ * @max_out_time: max out of serving channel time, per LMAC - for CDB there
+ *	are 2 LMACs (high band and low band)
+ * @suspend_time: max suspend time, per LMAC - for CDB there are 2 LMACs
+ * @scan_priority: scan internal prioritization &enum iwl_scan_priority
+ * @num_of_fragments: Number of fragments needed for full coverage per band.
+ *	Relevant only for fragmented scan.
+ * @channel: &struct iwm_scan_umac_chan_param
+ * @reserved: for future use and alignment
+ * @reserved3: for future use and alignment
  * @data: &struct iwm_scan_channel_cfg_umac and
  *	&struct iwm_scan_req_umac_tail
  */
@@ -5274,20 +5344,83 @@ struct iwm_scan_req_umac {
 	uint32_t uid;
 	uint32_t ooc_priority;
 	/* SCAN_GENERAL_PARAMS_API_S_VER_1 */
-	uint32_t general_flags;
-	uint8_t extended_dwell;
-	uint8_t active_dwell;
-	uint8_t passive_dwell;
-	uint8_t fragmented_dwell;
-	uint32_t max_out_time;
-	uint32_t suspend_time;
-	uint32_t scan_priority;
-	/* SCAN_CHANNEL_PARAMS_API_S_VER_1 */
-	uint8_t channel_flags;
-	uint8_t n_channels;
-	uint16_t reserved;
-	uint8_t data[];
-} __packed; /* SCAN_REQUEST_CMD_UMAC_API_S_VER_1 */
+	uint16_t general_flags;
+	uint8_t reserved;
+	uint8_t scan_start_mac_id;
+	union {
+		struct {
+			uint8_t extended_dwell;
+			uint8_t active_dwell;
+			uint8_t passive_dwell;
+			uint8_t fragmented_dwell;
+			uint32_t max_out_time;
+			uint32_t suspend_time;
+			uint32_t scan_priority;
+			struct iwm_scan_umac_chan_param channel;
+			uint8_t data[];
+		} v1; /* SCAN_REQUEST_CMD_UMAC_API_S_VER_1 */
+		struct {
+			uint8_t extended_dwell;
+			uint8_t active_dwell;
+			uint8_t passive_dwell;
+			uint8_t fragmented_dwell;
+			uint32_t max_out_time[2];
+			uint32_t suspend_time[2];
+			uint32_t scan_priority;
+			struct iwm_scan_umac_chan_param channel;
+			uint8_t data[];
+		} v6; /* SCAN_REQUEST_CMD_UMAC_API_S_VER_6 */
+		struct {
+			uint8_t active_dwell;
+			uint8_t passive_dwell;
+			uint8_t fragmented_dwell;
+			uint8_t adwell_default_n_aps;
+			uint8_t adwell_default_n_aps_social;
+			uint8_t reserved3;
+			uint16_t adwell_max_budget;
+			uint32_t max_out_time[2];
+			uint32_t suspend_time[2];
+			uint32_t scan_priority;
+			struct iwm_scan_umac_chan_param channel;
+			uint8_t data[];
+		} v7; /* SCAN_REQUEST_CMD_UMAC_API_S_VER_7 */
+		struct {
+			uint8_t active_dwell[2];
+			uint8_t reserved2;
+			uint8_t adwell_default_n_aps;
+			uint8_t adwell_default_n_aps_social;
+			uint8_t general_flags2;
+			uint16_t adwell_max_budget;
+			uint32_t max_out_time[2];
+			uint32_t suspend_time[2];
+			uint32_t scan_priority;
+			uint8_t passive_dwell[2];
+			uint8_t num_of_fragments[2];
+			struct iwm_scan_umac_chan_param channel;
+			uint8_t data[];
+		} v8; /* SCAN_REQUEST_CMD_UMAC_API_S_VER_8 */
+		struct {
+			uint8_t active_dwell[2];
+			uint8_t adwell_default_hb_n_aps;
+			uint8_t adwell_default_lb_n_aps;
+			uint8_t adwell_default_n_aps_social;
+			uint8_t general_flags2;
+			uint16_t adwell_max_budget;
+			uint32_t max_out_time[2];
+			uint32_t suspend_time[2];
+			uint32_t scan_priority;
+			uint8_t passive_dwell[2];
+			uint8_t num_of_fragments[2];
+			struct iwm_scan_umac_chan_param channel;
+			uint8_t data[];
+		} v9; /* SCAN_REQUEST_CMD_UMAC_API_S_VER_9 */
+	};
+} __packed;
+
+#define IWM_SCAN_REQ_UMAC_SIZE_V8 sizeof(struct iwm_scan_req_umac)
+#define IWM_SCAN_REQ_UMAC_SIZE_V7 48
+#define IWM_SCAN_REQ_UMAC_SIZE_V6 44
+#define IWM_SCAN_REQ_UMAC_SIZE_V1 36
 
 /**
  * struct iwm_umac_scan_abort
@@ -5640,6 +5773,95 @@ struct iwm_add_sta_cmd_v7 {
 	uint16_t beamform_flags;
 	uint32_t tfd_queue_msk;
 } __packed; /* ADD_STA_CMD_API_S_VER_7 */
+
+/**
+ * struct iwm_add_sta_cmd - Add/modify a station in the fw's sta table.
+ * ( REPLY_ADD_STA = 0x18 )
+ * @add_modify: see &enum iwl_sta_mode
+ * @awake_acs: ACs to transmit data on while station is sleeping (for U-APSD)
+ * @tid_disable_tx: is tid BIT(tid) enabled for Tx. Clear BIT(x) to enable
+ *	AMPDU for tid x. Set %STA_MODIFY_TID_DISABLE_TX to change this field.
+ * @mac_id_n_color: the Mac context this station belongs to,
+ *	see &enum iwl_ctxt_id_and_color
+ * @addr: station's MAC address
+ * @reserved2: reserved
+ * @sta_id: index of station in uCode's station table
+ * @modify_mask: STA_MODIFY_*, selects which parameters to modify vs. leave
+ *	alone. 1 - modify, 0 - don't change.
+ * @reserved3: reserved
+ * @station_flags: look at &enum iwl_sta_flags
+ * @station_flags_msk: what of %station_flags have changed,
+ *	also &enum iwl_sta_flags
+ * @add_immediate_ba_tid: tid for which to add block-ack support (Rx)
+ *	Set %STA_MODIFY_ADD_BA_TID to use this field, and also set
+ *	add_immediate_ba_ssn.
+ * @remove_immediate_ba_tid: tid for which to remove block-ack support (Rx)
+ *	Set %STA_MODIFY_REMOVE_BA_TID to use this field
+ * @add_immediate_ba_ssn: ssn for the Rx block-ack session. Used together with
+ *	add_immediate_ba_tid.
+ * @sleep_tx_count: number of packets to transmit to station even though it is
+ *	asleep. Used to synchronise PS-poll and u-APSD responses while ucode
+ *	keeps track of STA sleep state.
+ * @station_type: type of this station. See &enum iwl_sta_type.
+ * @sleep_state_flags: Look at &enum iwl_sta_sleep_flag.
+ * @assoc_id: assoc_id to be sent in VHT PLCP (9-bit), for grp use 0, for AP
+ *	mac-addr.
+ * @beamform_flags: beam forming controls
+ * @tfd_queue_msk: tfd queues used by this station.
+ *	Obselete for new TX API (9 and above).
+ * @rx_ba_window: aggregation window size
+ * @sp_length: the size of the SP in actual number of frames
+ * @uapsd_acs:  4 LS bits are trigger enabled ACs, 4 MS bits are the deliver
+ *	enabled ACs.
+ *
+ * The device contains an internal table of per-station information, with info
+ * on security keys, aggregation parameters, and Tx rates for initial Tx
+ * attempt and any retries (set by REPLY_TX_LINK_QUALITY_CMD).
+ *
+ * ADD_STA sets up the table entry for one station, either creating a new
+ * entry, or modifying a pre-existing one.
+ */
+struct iwm_add_sta_cmd {
+	uint8_t add_modify;
+	uint8_t awake_acs;
+	uint16_t tid_disable_tx;
+	uint32_t mac_id_n_color;
+	uint8_t addr[ETHER_ADDR_LEN];	/* _STA_ID_MODIFY_INFO_API_S_VER_1 */
+	uint16_t reserved2;
+	uint8_t sta_id;
+	uint8_t modify_mask;
+	uint16_t reserved3;
+	uint32_t station_flags;
+	uint32_t station_flags_msk;
+	uint8_t add_immediate_ba_tid;
+	uint8_t remove_immediate_ba_tid;
+	uint16_t add_immediate_ba_ssn;
+	uint16_t sleep_tx_count;
+	uint8_t sleep_state_flags;
+	uint8_t station_type;
+	uint16_t assoc_id;
+	uint16_t beamform_flags;
+	uint32_t tfd_queue_msk;
+	uint16_t rx_ba_window;
+	uint8_t sp_length;
+	uint8_t uapsd_acs;
+} __packed; /* ADD_STA_CMD_API_S_VER_10 */
+
+/**
+ * FW station types
+ * ( REPLY_ADD_STA = 0x18 )
+ * @IWM_STA_LINK: Link station - normal RX and TX traffic.
+ * @IWM_STA_GENERAL_PURPOSE: General purpose. In AP mode used for beacons
+ *	and probe responses.
+ * @IWM_STA_MULTICAST: multicast traffic,
+ * @IWM_STA_TDLS_LINK: TDLS link station
+ * @IWM_STA_AUX_ACTIVITY: auxilary station (scan, ROC and so on).
+ */
+#define IWM_STA_LINK		0
+#define IWM_STA_GENERAL_PURPOSE	1
+#define IWM_STA_MULTICAST	2
+#define IWM_STA_TDLS_LINK	3
+#define IWM_STA_AUX_ACTIVITY	4
 
 /**
  * struct iwm_add_sta_key_cmd - add/modify sta key

@@ -1,4 +1,4 @@
-/*	$OpenBSD: ieee80211_var.h,v 1.99 2019/11/06 13:55:44 stsp Exp $	*/
+/*	$OpenBSD: ieee80211_var.h,v 1.101 2019/11/09 13:21:04 stsp Exp $	*/
 /*	$NetBSD: ieee80211_var.h,v 1.7 2004/05/06 03:07:10 dyoung Exp $	*/
 
 /*-
@@ -472,7 +472,9 @@ int	ieee80211_add_ess(struct ieee80211com *, struct ieee80211_join *);
 void	ieee80211_del_ess(struct ieee80211com *, char *, int, int);
 void	ieee80211_set_ess(struct ieee80211com *, struct ieee80211_ess *,
 	    struct ieee80211_node *);
+void	ieee80211_deselect_ess(struct ieee80211com *);
 struct ieee80211_ess *ieee80211_get_ess(struct ieee80211com *, const char *, int);
+void	ieee80211_begin_bgscan(struct ifnet *);
 
 extern	int ieee80211_cache_size;
 
