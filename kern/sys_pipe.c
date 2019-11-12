@@ -1,4 +1,4 @@
-/*	$OpenBSD: sys_pipe.c,v 1.96 2019/11/09 19:02:31 anton Exp $	*/
+/*	$OpenBSD: sys_pipe.c,v 1.98 2019/11/11 16:45:46 anton Exp $	*/
 
 /*
  * Copyright (c) 1996 John S. Dyson
@@ -435,11 +435,26 @@ pipe_write(struct file *fp, struct uio *uio, int fflags)
 	/*
 	 * detect loss of pipe read side, issue SIGPIPE if lost.
 	 */
-	if ((wpipe == NULL) || (wpipe->pipe_state & PIPE_EOF)) {
-		error = EPIPE;
-		goto done;
+	if (wpipe == NULL || (wpipe->pipe_state & PIPE_EOF)) {
+		KERNEL_UNLOCK();
+		return (EPIPE);
 	}
+
 	++wpipe->pipe_busy;
+
+	error = pipelock(wpipe);
+	if (error) {
+		/* Failed to acquire lock, wakeup if run-down can proceed. */
+		--wpipe->pipe_busy;
+		if ((wpipe->pipe_busy == 0) &&
+		    (wpipe->pipe_state & PIPE_WANTD)) {
+			wpipe->pipe_state &= ~(PIPE_WANTD | PIPE_WANTR);
+			wakeup(wpipe);
+		}
+		KERNEL_UNLOCK();
+		return (error);
+	}
+
 
 	/*
 	 * If it is advantageous to resize the pipe buffer, do
@@ -451,28 +466,9 @@ pipe_write(struct file *fp, struct uio *uio, int fflags)
 	    	unsigned int npipe;
 
 		npipe = atomic_inc_int_nv(&nbigpipe);
-		if ((npipe <= LIMITBIGPIPES) &&
-		    (error = pipelock(wpipe)) == 0) {
-			if ((wpipe->pipe_buffer.cnt != 0) ||
-			    (pipe_buffer_realloc(wpipe, BIG_PIPE_SIZE) != 0))
-				atomic_dec_int(&nbigpipe);
-			pipeunlock(wpipe);
-		} else
+		if (npipe > LIMITBIGPIPES ||
+		    pipe_buffer_realloc(wpipe, BIG_PIPE_SIZE) != 0)
 			atomic_dec_int(&nbigpipe);
-	}
-
-	/*
-	 * If an early error occurred unbusy and return, waking up any pending
-	 * readers.
-	 */
-	if (error) {
-		--wpipe->pipe_busy;
-		if ((wpipe->pipe_busy == 0) &&
-		    (wpipe->pipe_state & PIPE_WANTD)) {
-			wpipe->pipe_state &= ~(PIPE_WANTD | PIPE_WANTR);
-			wakeup(wpipe);
-		}
-		goto done;
 	}
 
 	orig_resid = uio->uio_resid;
@@ -480,7 +476,6 @@ pipe_write(struct file *fp, struct uio *uio, int fflags)
 	while (uio->uio_resid) {
 		size_t space;
 
-retrywrite:
 		if (wpipe->pipe_state & PIPE_EOF) {
 			error = EPIPE;
 			break;
@@ -493,81 +488,65 @@ retrywrite:
 			space = 0;
 
 		if (space > 0) {
-			if ((error = pipelock(wpipe)) == 0) {
-				size_t size;	/* Transfer size */
-				size_t segsize;	/* first segment to transfer */
+			size_t size;	/* Transfer size */
+			size_t segsize;	/* first segment to transfer */
 
+			/*
+			 * Transfer size is minimum of uio transfer
+			 * and free space in pipe buffer.
+			 */
+			if (space > uio->uio_resid)
+				size = uio->uio_resid;
+			else
+				size = space;
+			/*
+			 * First segment to transfer is minimum of
+			 * transfer size and contiguous space in
+			 * pipe buffer.  If first segment to transfer
+			 * is less than the transfer size, we've got
+			 * a wraparound in the buffer.
+			 */
+			segsize = wpipe->pipe_buffer.size -
+				wpipe->pipe_buffer.in;
+			if (segsize > size)
+				segsize = size;
+
+			/* Transfer first segment */
+
+			error = uiomove(&wpipe->pipe_buffer.buffer[wpipe->pipe_buffer.in],
+					segsize, uio);
+
+			if (error == 0 && segsize < size) {
 				/*
-				 * If a process blocked in uiomove, our
-				 * value for space might be bad.
-				 *
-				 * XXX will we be ok if the reader has gone
-				 * away here?
+				 * Transfer remaining part now, to
+				 * support atomic writes.  Wraparound
+				 * happened.
 				 */
-				if (space > wpipe->pipe_buffer.size -
-				    wpipe->pipe_buffer.cnt) {
-					pipeunlock(wpipe);
-					goto retrywrite;
-				}
-
-				/*
-				 * Transfer size is minimum of uio transfer
-				 * and free space in pipe buffer.
-				 */
-				if (space > uio->uio_resid)
-					size = uio->uio_resid;
-				else
-					size = space;
-				/*
-				 * First segment to transfer is minimum of
-				 * transfer size and contiguous space in
-				 * pipe buffer.  If first segment to transfer
-				 * is less than the transfer size, we've got
-				 * a wraparound in the buffer.
-				 */
-				segsize = wpipe->pipe_buffer.size -
-					wpipe->pipe_buffer.in;
-				if (segsize > size)
-					segsize = size;
-
-				/* Transfer first segment */
-
-				error = uiomove(&wpipe->pipe_buffer.buffer[wpipe->pipe_buffer.in],
-						segsize, uio);
-
-				if (error == 0 && segsize < size) {
-					/*
-					 * Transfer remaining part now, to
-					 * support atomic writes.  Wraparound
-					 * happened.
-					 */
 #ifdef DIAGNOSTIC
-					if (wpipe->pipe_buffer.in + segsize !=
-					    wpipe->pipe_buffer.size)
-						panic("Expected pipe buffer wraparound disappeared");
+				if (wpipe->pipe_buffer.in + segsize !=
+				    wpipe->pipe_buffer.size)
+					panic("Expected pipe buffer wraparound disappeared");
 #endif
 
-					error = uiomove(&wpipe->pipe_buffer.buffer[0],
-							size - segsize, uio);
-				}
-				if (error == 0) {
-					wpipe->pipe_buffer.in += size;
-					if (wpipe->pipe_buffer.in >=
-					    wpipe->pipe_buffer.size) {
+				error = uiomove(&wpipe->pipe_buffer.buffer[0],
+						size - segsize, uio);
+			}
+			if (error == 0) {
+				wpipe->pipe_buffer.in += size;
+				if (wpipe->pipe_buffer.in >=
+				    wpipe->pipe_buffer.size) {
 #ifdef DIAGNOSTIC
-						if (wpipe->pipe_buffer.in != size - segsize + wpipe->pipe_buffer.size)
-							panic("Expected wraparound bad");
+					if (wpipe->pipe_buffer.in != size - segsize + wpipe->pipe_buffer.size)
+						panic("Expected wraparound bad");
 #endif
-						wpipe->pipe_buffer.in = size - segsize;
-					}
+					wpipe->pipe_buffer.in = size - segsize;
+				}
 
-					wpipe->pipe_buffer.cnt += size;
+				wpipe->pipe_buffer.cnt += size;
 #ifdef DIAGNOSTIC
-					if (wpipe->pipe_buffer.cnt > wpipe->pipe_buffer.size)
-						panic("Pipe buffer overflow");
+				if (wpipe->pipe_buffer.cnt > wpipe->pipe_buffer.size)
+					panic("Pipe buffer overflow");
 #endif
-				}
-				pipeunlock(wpipe);
 			}
 			if (error)
 				break;
@@ -594,11 +573,16 @@ retrywrite:
 			 */
 			pipeselwakeup(wpipe);
 
+			pipeunlock(wpipe);
 			wpipe->pipe_state |= PIPE_WANTW;
 			error = tsleep(wpipe, (PRIBIO + 1)|PCATCH,
 			    "pipewr", 0);
 			if (error)
-				break;
+				goto unlocked_error;
+			error = pipelock(wpipe);
+			if (error)
+				goto unlocked_error;
+
 			/*
 			 * If read side wants to go away, we just issue a
 			 * signal to ourselves.
@@ -609,7 +593,9 @@ retrywrite:
 			}	
 		}
 	}
+	pipeunlock(wpipe);
 
+unlocked_error:
 	--wpipe->pipe_busy;
 
 	if ((wpipe->pipe_busy == 0) && (wpipe->pipe_state & PIPE_WANTD)) {
@@ -643,7 +629,6 @@ retrywrite:
 	if (wpipe->pipe_buffer.cnt)
 		pipeselwakeup(wpipe);
 
-done:
 	KERNEL_UNLOCK();
 	return (error);
 }
