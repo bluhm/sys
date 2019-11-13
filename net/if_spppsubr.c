@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_spppsubr.c,v 1.180 2019/11/08 07:16:29 dlg Exp $	*/
+/*	$OpenBSD: if_spppsubr.c,v 1.181 2019/11/13 10:15:10 bluhm Exp $	*/
 /*
  * Synchronous PPP link level subroutines.
  *
