@@ -330,7 +330,7 @@ in_ioctl(u_long cmd, caddr_t data, struct ifnet *ifp, int privileged)
 			error = EINVAL;
 			break;
 		}
-		/* do not check family or strict len */
+		/* do not check inet family or strict len */
 		sin = satosin(&ifr->ifr_addr);
 		if (ntohl(sin->sin_addr.s_addr) &
 		    (~ntohl(sin->sin_addr.s_addr) >> 1)) {
@@ -449,7 +449,7 @@ in_ioctl_change_ifaddr(u_long cmd, caddr_t data, struct ifnet *ifp,
 				error = EINVAL;
 				break;
 			}
-			/* do not check family or strict len */
+			/* do not check inet family or strict len */
 			masksin = &ifra->ifra_mask;
 			if (ntohl(masksin->sin_addr.s_addr) &
 			    (~ntohl(masksin->sin_addr.s_addr) >> 1)) {
