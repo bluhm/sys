@@ -406,6 +406,7 @@ in6_ioctl_get(u_long cmd, caddr_t data, struct ifnet *ifp)
 
 	sa = sin6tosa(&ifr->ifr_addr);
 	if (sa->sa_family == AF_INET6) {
+		sa->sa_len = sizeof(struct sockaddr_in6);
 		error = in6_sa2sin6(sa, &sa6);
 		if (error)
 			return (error);
