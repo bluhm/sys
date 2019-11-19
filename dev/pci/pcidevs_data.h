@@ -2,7 +2,7 @@
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	OpenBSD: pcidevs,v 1.1899 2019/10/29 18:47:51 jcs Exp 
+ *	OpenBSD: pcidevs,v 1.1901 2019/11/19 13:47:06 stsp Exp 
  */
 
 /*	$NetBSD: pcidevs,v 1.30 1997/06/24 06:20:24 thorpej Exp $	*/
@@ -14408,6 +14408,10 @@ static const struct pci_known_product pci_known_products[] = {
 	    "6321ESB IDE",
 	},
 	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_WL_22500_1,
+	    "Wi-Fi 6 AX200",
+	},
+	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82945G_HB,
 	    "82945G Host",
 	},
@@ -25584,6 +25588,10 @@ static const struct pci_known_product pci_known_products[] = {
 	    "R6061 USB2",
 	},
 	{
+	    PCI_VENDOR_REALTEK, PCI_PRODUCT_REALTEK_E3000,
+	    "Killer E3000",
+	},
+	{
 	    PCI_VENDOR_REALTEK, PCI_PRODUCT_REALTEK_RTS5208,
 	    "RTS5208 Card Reader",
 	},
@@ -25630,6 +25638,10 @@ static const struct pci_known_product pci_known_products[] = {
 	{
 	    PCI_VENDOR_REALTEK, PCI_PRODUCT_REALTEK_RT8139D,
 	    "8139D",
+	},
+	{
+	    PCI_VENDOR_REALTEK, PCI_PRODUCT_REALTEK_RTL8125,
+	    "RTL8125",
 	},
 	{
 	    PCI_VENDOR_REALTEK, PCI_PRODUCT_REALTEK_RT8129,

@@ -1,4 +1,4 @@
-/*	$OpenBSD: re.c,v 1.202 2017/06/19 09:36:27 mpi Exp $	*/
+/*	$OpenBSD: re.c,v 1.204 2019/11/19 06:34:10 kevlo Exp $	*/
 /*	$FreeBSD: if_re.c,v 1.31 2004/09/04 07:54:05 ru Exp $	*/
 /*
  * Copyright (c) 1997, 1998-2003
@@ -1416,8 +1416,6 @@ re_txeof(struct rl_softc *sc)
 	unsigned int	idx;
 	int		free = 0;
 
-	ifp = &sc->sc_arpcom.ac_if;
-
 	prod = sc->rl_ldata.rl_txq_prodidx;
 	cons = sc->rl_ldata.rl_txq_considx;
 
@@ -1955,7 +1953,7 @@ re_init(struct ifnet *ifp)
 	 * Enable interrupts.
 	 */
 	re_setup_intr(sc, 1, sc->rl_imtype);
-	CSR_WRITE_2(sc, RL_ISR, sc->rl_imtype);
+	CSR_WRITE_2(sc, RL_ISR, sc->rl_intrs);
 
 	/* Start RX/TX process. */
 	CSR_WRITE_4(sc, RL_MISSEDPKT, 0);
