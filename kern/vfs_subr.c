@@ -976,8 +976,6 @@ vflush(struct mount *mp, struct vnode *skipvp, int flags)
 		if (LIST_EMPTY(&mp->mnt_vnodelist))
 			break;
 	}
-	if (loopcnt == 0)
-		printf("could not flush all vnodes\n");
 	return (0);
 }
 
