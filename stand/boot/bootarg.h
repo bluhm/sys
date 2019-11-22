@@ -49,6 +49,7 @@ extern int bootargc;
 extern bootarg_t *bootargp;
 #endif
 
+void	cpu_reset(void);
 void	loadrandom(char *name, char *buf, size_t buflen);
 void	mdrandom(char *buf, size_t buflen);
 void	fwrandom(char *buf, size_t buflen);
