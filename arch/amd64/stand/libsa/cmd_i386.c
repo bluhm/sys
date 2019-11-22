@@ -70,7 +70,6 @@ Xdiskinfo(void)
 int
 Xregs(void)
 {
-	DUMP_REGS;
 	return 0;
 }
 #endif

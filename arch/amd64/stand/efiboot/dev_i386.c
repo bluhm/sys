@@ -86,6 +86,10 @@ devopen(struct open_file *f, const char *fname, char **file)
 				extern char *bootmac;
 				bootmac = NULL;
 			}
+#ifdef DEBUG
+			if (debug)
+				putchar('\n');
+#endif
 			return 0;
 		}
 #ifdef DEBUG
