@@ -38,6 +38,8 @@
 
 #include <stand/boot/bootarg.h>
 
+#include <machine/pio.h>
+
 #include "cmd.h"
 
 #ifndef KERNEL
@@ -57,6 +59,20 @@ int boottimeout = 5;			/* can be changed by MD code */
 
 char	rnddata[BOOTRANDOM_MAX];
 struct rc4_ctx randomctx;
+
+void
+cpu_reset(void)
+{
+	printf("Before Reset!\n");
+	for (volatile long i = 0; i < 1000000000; i++);
+	printf("Reset 1!\n");
+	outb(0x64, 0xfe);
+	for (volatile long i = 0; i < 1000000000; i++);
+	printf("Reset 2!\n");
+	outb(0x64, 0xfe);
+	for (volatile long i = 0; i < 1000000000; i++);
+	printf("After Reset!\n");
+}
 
 void
 boot(dev_t bootdev)
