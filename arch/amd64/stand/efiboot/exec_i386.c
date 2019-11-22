@@ -106,13 +106,17 @@ run_loadfile(uint64_t *marks, int howto)
 		addbootarg(BOOTARG_DDB, sizeof(ddb), &ddb);
 	}
 
+printf("Before bootduid!\n");
 	bcopy(bootdev_dip->disklabel.d_uid, &bootduid.duid, sizeof(bootduid));
 	addbootarg(BOOTARG_BOOTDUID, sizeof(bootduid), &bootduid);
 
+printf("Before ucode!\n");
 	ucode_load();
 
 #ifdef SOFTRAID
-	if (bootdev_dip->sr_vol != NULL) {
+printf("Before softraid!\n");
+	if (bootdev_dip != NULL && bootdev_dip->sr_vol != NULL) {
+printf("In softraid! sr_vol %p\n", bootdev_dip->sr_vol);
 		bv = bootdev_dip->sr_vol;
 		bzero(&bootsr, sizeof(bootsr));
 		bcopy(&bv->sbv_uuid, &bootsr.uuid, sizeof(bootsr.uuid));
@@ -123,9 +127,11 @@ run_loadfile(uint64_t *marks, int howto)
 		explicit_bzero(&bootsr, sizeof(bootsr));
 	}
 
+printf("Before clear keys!\n");
 	sr_clear_keys();
 #endif
 
+printf("Before entry!\n");
 	entry = marks[MARK_ENTRY] & 0x0fffffff;
 	entry += delta;
 

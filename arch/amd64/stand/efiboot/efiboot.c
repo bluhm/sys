@@ -158,13 +158,18 @@ efi_cleanup(void)
 	EFI_STATUS	 status;
 
 	/* retry once in case of failure */
-	for (retry = 1; retry >= 0; retry--) {
+	for (retry = 5; retry >= 0; retry--) {
 		efi_memprobe_internal();	/* sync the current map */
+printf("efi_cleanup: BS %p, ExitBootServices %p, IH %p, mmap_key %llu\n",
+    BS, BS->ExitBootServices, IH, mmap_key);
 		status = EFI_CALL(BS->ExitBootServices, IH, mmap_key);
 		if (status == EFI_SUCCESS)
 			break;
-		if (retry == 0)
+printf("ExitBootServices failed (%d)\n", status);
+		if (retry == 0) {
+for (volatile long long i = 0; i < 10000000000LL; i++) continue;
 			panic("ExitBootServices failed (%d)", status);
+		}
 	}
 }
 
@@ -343,10 +348,14 @@ efi_memprobe_internal(void)
 	    &mmver);
 	if (status != EFI_BUFFER_TOO_SMALL)
 		panic("cannot get the size of memory map");
+printf("siz %llu, mapkey %llu, mmsiz %llu, mmver %u\n",
+    siz, mapkey, mmsiz, mmver);
 	mm0 = alloc(siz);
 	status = EFI_CALL(BS->GetMemoryMap, &siz, mm0, &mapkey, &mmsiz, &mmver);
 	if (status != EFI_SUCCESS)
 		panic("cannot get the memory map");
+printf("siz %llu, mapkey %llu, mmsiz %llu, mmver %u\n",
+    siz, mapkey, mmsiz, mmver);
 	n = siz / mmsiz;
 	mmap_key = mapkey;
 
@@ -375,6 +384,8 @@ efi_memprobe_internal(void)
 			 * XXX EfiMemoryMappedIOPortSpace EfiPalCode?
 			 */
 			bm0.type = BIOS_MAP_RES;
+printf("bm0 addr %llu, size %llu, type %u, Type %u\n",
+    bm0.addr, bm0.size, bm0.type, mm->Type);
 
 		for (bm = bios_memmap; bm->type != BIOS_MAP_END; bm++) {
 			if (bm->type != bm0.type)
@@ -403,7 +414,7 @@ efi_memprobe_internal(void)
 		    bm->addr / 1024 == extmem + 1024)
 			extmem += bm->size / 1024;
 	}
-	free(mm0, siz);
+//	free(mm0, siz);
 }
 
 /***********************************************************************

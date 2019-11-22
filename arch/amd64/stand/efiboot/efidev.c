@@ -572,6 +572,8 @@ efiopen(struct open_file *f, ...)
 	va_list ap;
 	char *dev;
 
+printf("Start efiopen!\n");
+
 	va_start(ap, f);
 	cp = *(file = va_arg(ap, char **));
 	va_end(ap);
@@ -656,6 +658,7 @@ efiopen(struct open_file *f, ...)
 
 		bv->sbv_part = part + 'a';
 
+printf("bootdev_dip = dip!\n");
 		bootdev_dip = dip;
 		f->f_devdata = dip;
 
@@ -689,6 +692,7 @@ efiopen(struct open_file *f, ...)
 	}
 
 	/* Find device */
+printf("Before dklookup!\n");
 	dip = dklookup(biosdev);
 	if (dip == NULL)
 		return ENXIO;
@@ -736,6 +740,7 @@ efiopen(struct open_file *f, ...)
 #endif
 	f->f_devdata = dip;
 
+printf("End efiopen!\n");
 	return 0;
 }
 

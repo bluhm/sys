@@ -40,10 +40,7 @@
 #include "efipxe.h"
 
 const char version[] = "3.47";
-
-#ifdef EFI_DEBUG
-int	debug = 0;
-#endif
+int	debug = 1;
 
 void (*sa_cleanup)(void) = NULL;
 

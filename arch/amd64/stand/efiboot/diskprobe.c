@@ -183,10 +183,14 @@ dklookup(int dev)
 {
 	struct diskinfo *dip;
 
-	for (dip = TAILQ_FIRST(&disklist); dip; dip = TAILQ_NEXT(dip, list))
-		if (dip->bios_info.bios_number == dev)
+	for (dip = TAILQ_FIRST(&disklist); dip; dip = TAILQ_NEXT(dip, list)) {
+		if (dip->bios_info.bios_number == dev) {
+printf("dklookup!\n");
 			return dip;
+		}
+	}
 
+printf("dklookup NULL!\n");
 	return NULL;
 }
 
