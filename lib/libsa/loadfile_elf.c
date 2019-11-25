@@ -282,12 +282,17 @@ ELFNAME(exec)(int fd, Elf_Ehdr *elf, uint64_t *marks, int flags)
 		BCOPY(elf, elfp, sizeof(*elf));
 	}
 
+printf("offset %08p\n", offset);
+printf("minp %08p, entry %08p, 1, elfp %08p, maxp %08p\n",
+    minp, elf->e_entry, 1, elfp, maxp);
 	marks[MARK_START] = LOADADDR(minp);
 	marks[MARK_ENTRY] = LOADADDR(elf->e_entry);
 	marks[MARK_VENTRY] = elf->e_entry;
 	marks[MARK_NSYM] = 1;	/* XXX: Kernel needs >= 0 */
 	marks[MARK_SYM] = LOADADDR(elfp);
 	marks[MARK_END] = LOADADDR(maxp);
+printf("start %08p, entry %08p, nsym %08p, sym %08p, end %08p\n",
+    marks[MARK_START], marks[MARK_ENTRY], marks[MARK_NSYM], marks[MARK_SYM], marks[MARK_END]);
 
 	return 0;
 }
