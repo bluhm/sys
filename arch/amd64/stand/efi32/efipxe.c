@@ -272,6 +272,15 @@ tftpopen(struct open_file *f, ...)
 	if (strncmp(*fname, "tftp", p - *fname) != 0)
 		return 1;
 
+	/*
+	 * It is expected that bootdev_dip exists.  Usually efiopen() sets
+	 * the pointer.  Create a fake disk device for the TFPT case.
+	 */
+	bootdev_dip = alloc(sizeof(struct diskinfo));
+	memset(bootdev_dip, 0, sizeof(struct diskinfo));
+	memset(bootdev_dip->disklabel.d_uid, 0xff,
+	    sizeof(bootdev_dip->disklabel.d_uid));
+
 	*fname = p + 1;
 	return 0;
 }
