@@ -227,12 +227,14 @@ free(void *ptr, unsigned int size)
 	if (size > f->size)
 		printf("free %u bytes @%p, should be <=%u\n",
 		    size, ptr, f->size);
+#if 0
 #ifdef HEAP_START
 	if (ptr < (void *)HEAP_START)
 #else
 	if (ptr < (void *)end)
 #endif
 		printf("free: %lx before start of heap.\n", (u_long)ptr);
+#endif
 
 #ifdef HEAP_LIMIT
 	if (ptr > (void *)HEAP_LIMIT)
