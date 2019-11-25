@@ -63,15 +63,15 @@ struct rc4_ctx randomctx;
 void
 cpu_reset(void)
 {
-	printf("Before Reset!\n");
-	for (volatile long i = 0; i < 1000000000; i++);
-	printf("Reset 1!\n");
+//	printf("Before Reset!\n");
+//	for (volatile long i = 0; i < 1000000000; i++);
+//	printf("Reset 1!\n");
 	outb(0x64, 0xfe);
-	for (volatile long i = 0; i < 1000000000; i++);
-	printf("Reset 2!\n");
+//	for (volatile long i = 0; i < 1000000000; i++);
+//	printf("Reset 2!\n");
 	outb(0x64, 0xfe);
-	for (volatile long i = 0; i < 1000000000; i++);
-	printf("After Reset!\n");
+//	for (volatile long i = 0; i < 1000000000; i++);
+//	printf("After Reset!\n");
 }
 
 void

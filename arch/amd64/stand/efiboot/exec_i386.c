@@ -89,6 +89,8 @@ run_loadfile(uint64_t *marks, int howto)
 		panic("alloc for bootarg");
 	efi_makebootargs();
 	delta = DEFAULT_KERNEL_ADDRESS - efi_loadaddr;
+printf("default_kernel %08p, efi_load %08p, delta %08p\n",
+    (void *)DEFAULT_KERNEL_ADDRESS, efi_loadaddr, delta);
 	if (sa_cleanup != NULL)
 		(*sa_cleanup)();
 
@@ -137,8 +139,17 @@ printf("Before entry!\n");
 
 	printf("entry point at 0x%lx\n", entry);
 
+printf("delta %08p\n", delta);
+printf("MARK_START %08p %d\n", marks[MARK_START], *(int *)(marks[MARK_START]));
+printf("MARK_ENTRY %08p %d\n", marks[MARK_ENTRY], *(int *)(marks[MARK_ENTRY]));
+printf("MARK_END %08p %d\n", marks[MARK_END], *(int *)(marks[MARK_END]));
+printf("MARK_START+delta %08p %d\n", (char *)(marks[MARK_START]) + delta,
+    *(int *)((char *)(marks[MARK_START]) + delta));
+printf("MARK_END+delta %08p %d\n", (char *)(marks[MARK_END]) + delta,
+    *(int *)((char *)(marks[MARK_END]) + delta));
 	/* Sync the memory map and call ExitBootServices() */
 	efi_cleanup();
+
 
 	/* Pass memory map to the kernel */
 	mem_pass();
@@ -157,8 +168,16 @@ printf("Before entry!\n");
 	 * Move the loaded kernel image to the usual place after calling
 	 * ExitBootServices().
 	 */
-	memmove((void *)marks[MARK_START] + delta, (void *)marks[MARK_START],
+#if 0
+	memset((char *)(marks[MARK_START]), 0,
 	    marks[MARK_END] - marks[MARK_START]);
+// XXX hangs in memset MARK_START + delta ... marks[MARK_END] + delta
+	memset((char *)(marks[MARK_START]) + delta, 0,
+	    marks[MARK_END] - marks[MARK_START]);
+#endif
+	memmove((char *)marks[MARK_START] + delta, (char *)marks[MARK_START],
+	    marks[MARK_END] - marks[MARK_START]);
+cpu_reset();
 	for (i = 0; i < MARK_MAX; i++)
 		marks[i] += delta;
 
