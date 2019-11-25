@@ -116,7 +116,7 @@ printf("Before ucode!\n");
 	ucode_load();
 
 #ifdef SOFTRAID
-printf("Before softraid!\n");
+printf("Before softraid, bootdev_dip %p!\n", bootdev_dip);
 	if (bootdev_dip->sr_vol != NULL) {
 printf("In softraid! sr_vol %p\n", bootdev_dip->sr_vol);
 		bv = bootdev_dip->sr_vol;
