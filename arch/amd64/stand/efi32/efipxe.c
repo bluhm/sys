@@ -274,7 +274,7 @@ tftpopen(struct open_file *f, ...)
 
 	/*
 	 * It is expected that bootdev_dip exists.  Usually efiopen() sets
-	 * the pointer.  Create a fake disk device for the TFPT case.
+	 * the pointer.  Create a fake disk device for the TFTP case.
 	 */
 	bootdev_dip = alloc(sizeof(struct diskinfo));
 	memset(bootdev_dip, 0, sizeof(struct diskinfo));
