@@ -114,9 +114,6 @@ makebootargs32(caddr_t v, size_t *lenp)
 		p32->ba_size = p->ba_size + adj;
 		bcopy(p->ba_arg, p32->ba_arg,
 		    p->ba_size - (sizeof(*p) - sizeof(p->ba_arg)));
-#ifdef DEBUG
-		printf("%d,%d ", p->ba_type, p->ba_size);
-#endif
 		q += p32->ba_size;
 	}
 	p32 = (struct bootarg32 *)q;
