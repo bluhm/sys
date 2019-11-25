@@ -167,10 +167,12 @@ efi_cleanup(void)
 		    &map_key, &desc_size, &desc_version);
 		if (status != EFI_BUFFER_TOO_SMALL)
 			panic("cannot get the size of memory map (%u)", status);
+		/* memory map can grow by allocation, allocate a bit more */
 		mem_map_size += 2 * desc_size;
-		mem_map = alloc(mem_map_size);
-		if (mem_map == NULL)
-			panic("alloc memory map");
+		status = EFI_CALL(BS->AllocatePool, EfiLoaderData,
+		    mem_map_size, (void **)&mem_map);
+		if (status != EFI_SUCCESS)
+			panic("cannot allocate memory map (%u)", status);
 		status = EFI_CALL(BS->GetMemoryMap, &mem_map_size, mem_map,
 		    &map_key, &desc_size, &desc_version);
 		if (status != EFI_SUCCESS)
