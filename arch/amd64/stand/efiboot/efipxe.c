@@ -98,6 +98,7 @@ efi_pxeprobe(void)
 		 * for the TFTP case.
 		 */
 		bootdev_dip = alloc(sizeof(struct diskinfo));
+printf("alloc bootdev_dip %p\n", bootdev_dip);
 		memset(bootdev_dip, 0, sizeof(struct diskinfo));
 		memset(bootdev_dip->disklabel.d_uid, 0xff,
 		    sizeof(bootdev_dip->disklabel.d_uid));
