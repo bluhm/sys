@@ -49,7 +49,6 @@ EFI_DEVICE_PATH		*efi_bootdp = NULL;
 EFI_PHYSICAL_ADDRESS	 heap;
 EFI_LOADED_IMAGE	*loadedImage;
 UINTN			 heapsiz = 1 * 1024 * 1024;
-UINTN			 mmap_key;
 static EFI_GUID		 imgp_guid = LOADED_IMAGE_PROTOCOL;
 static EFI_GUID		 blkio_guid = BLOCK_IO_PROTOCOL;
 static EFI_GUID		 devp_guid = DEVICE_PATH_PROTOCOL;
@@ -367,7 +366,6 @@ efi_memprobe_internal(void)
 	if (status != EFI_SUCCESS)
 		panic("cannot get the memory map");
 	n = siz / mmsiz;
-	mmap_key = mapkey;
 
 	for (i = 0, mm = mm0; i < n; i++, mm = NextMemoryDescriptor(mm, mmsiz)){
 		bm0.type = BIOS_MAP_END;
