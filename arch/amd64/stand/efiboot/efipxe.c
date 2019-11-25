@@ -133,8 +133,6 @@ tftp_open(char *path, struct open_file *f)
 	if (PXE == NULL)
 		return ENXIO;
 
-printf("tftp_open: bootdev_dip %p\n", bootdev_dip);
-bootdev_dip = NULL;
 	tftpfile = alloc(sizeof(*tftpfile));
 	if (tftpfile == NULL)
 		return ENOMEM;
