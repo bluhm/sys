@@ -658,7 +658,6 @@ printf("Start efiopen!\n");
 
 		bv->sbv_part = part + 'a';
 
-printf("bootdev_dip = dip!\n");
 		bootdev_dip = dip;
 		f->f_devdata = dip;
 
