@@ -27,7 +27,7 @@ hexdump(const void *addr, size_t size)
 
 	end = (const char *)addr + size;
 	for (line = addr; line < end; line += 16) {
-		printf("%08x  ", line);
+		printf("%08lx  ", line);
 		for (byte = 0; byte < 16; byte++) {
 			if (&line[byte] < end)
 				printf("%02x ", line[byte]);
@@ -48,5 +48,5 @@ hexdump(const void *addr, size_t size)
 		}
 		printf("|\n");
 	}
-	printf("%08x\n", end);
+	printf("%08lx\n", end);
 }
