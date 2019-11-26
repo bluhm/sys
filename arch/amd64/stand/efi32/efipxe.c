@@ -1,4 +1,4 @@
-/*	$OpenBSD: efipxe.c,v 1.3 2019/08/20 23:38:19 patrick Exp $	*/
+/*	$OpenBSD: efipxe.c,v 1.4 2019/11/26 19:08:01 bluhm Exp $	*/
 /*
  * Copyright (c) 2017 Patrick Wildt <patrick@blueri.se>
  *
