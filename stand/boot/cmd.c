@@ -39,6 +39,7 @@
 static int Xboot(void);
 static int Xecho(void);
 static int Xhelp(void);
+static int Xhexdump(void);
 static int Xls(void);
 static int Xnop(void);
 static int Xreboot(void);
@@ -62,6 +63,7 @@ const struct cmd_table cmd_table[] = {
 	{"echo",   CMDT_CMD, Xecho},
 	{"env",    CMDT_CMD, Xenv},
 	{"help",   CMDT_CMD, Xhelp},
+	{"hexdump",CMDT_CMD, Xhexdump},
 	{"ls",     CMDT_CMD, Xls},
 #ifdef MACHINE_CMD
 	{"machine",CMDT_MDC, Xmachine},
@@ -345,6 +347,51 @@ Xhelp(void)
 #else
 	return 0;
 #endif
+}
+
+static int
+Xhexdump(void)
+{
+	unsigned long val[2];
+	const unsigned char *p;
+	unsigned int n, b, d;
+
+	if (cmd.argc != 3) {
+		printf("hexdump addr size\n");
+		return 0;
+	}
+
+	for (n = 1; n < cmd.argc; n++) {
+		p = cmd.argv[n];
+		if (*p == '0') {
+			p++;
+			if (*p == 'x' || *p == 'X') {
+				p++;
+				b = 16;
+			} else
+				b = 8;
+		} else
+			b = 10;
+		val[n-1] = 0;
+		for (; *p != '\0'; p++) {
+			if (*p >= '0' && *p <= '9')
+				d = *p - '0';
+			else if (*p >= 'a' && *p <= 'z')
+				d = *p - 'a' + 10;
+			else if (*p >= 'A' && *p <= 'Z')
+				d = *p - 'A' + 10;
+			else
+				goto err;
+			if (d >= b)
+				goto err;
+			val[n-1] = val[n-1] * b + d;
+		}
+	}
+	hexdump((void *)val[0], val[1]);
+	return 0;
+ err:
+	printf("bad '%c' in \"%s\"\n", *p, cmd.argv[n]);
+	return 0;
 }
 
 #ifdef MACHINE_CMD
