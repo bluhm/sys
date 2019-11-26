@@ -57,7 +57,7 @@ u_long			 efi_loadaddr;
 int	 efi_device_path_depth(EFI_DEVICE_PATH *dp, int);
 int	 efi_device_path_ncmp(EFI_DEVICE_PATH *, EFI_DEVICE_PATH *, int);
 static void	 efi_heap_init(void);
-static void	 efi_memprobe_internal(void);
+void	 efi_memprobe_internal(void);
 static void	 efi_video_init(void);
 static void	 efi_video_reset(void);
 static EFI_STATUS
@@ -344,7 +344,7 @@ efi_memprobe(void)
 	printf("]");
 }
 
-static void
+void
 efi_memprobe_internal(void)
 {
 	EFI_STATUS		 status;
@@ -369,6 +369,8 @@ efi_memprobe_internal(void)
 	status = EFI_CALL(BS->GetMemoryMap, &siz, mm0, &mapkey, &mmsiz, &mmver);
 	if (status != EFI_SUCCESS)
 		panic("cannot get the memory map");
+printf("siz %llu, mapkey %llu, mmsiz %llu, mmver %u\n",
+    siz, mapkey, mmsiz, mmver);
 	n = siz / mmsiz;
 
 	for (i = 0, mm = mm0; i < n; i++, mm = NextMemoryDescriptor(mm, mmsiz)){
@@ -396,6 +398,14 @@ efi_memprobe_internal(void)
 			 * XXX EfiMemoryMappedIOPortSpace EfiPalCode?
 			 */
 			bm0.type = BIOS_MAP_RES;
+printf("md type %d, phys %08p, end %08p, pages %08llx, attr %016llx\n",
+    mm->Type, mm->PhysicalStart, mm->PhysicalStart + mm->NumberOfPages * 4096,
+    mm->NumberOfPages, mm->Attribute);
+//printf("bm0 addr %08p, end %08p, size %llu, type %u, Type %u\n",
+//    bm0.addr, bm0.addr + bm0.size, bm0.size, bm0.type, mm->Type);
+//for (volatile long long i = 0; i < 500000000LL; i++) continue;
+//if (mm->PhysicalStart == 0x01000000UL)
+//	for (volatile long long i = 0; i < 5000000000000LL; i++) continue;
 
 		for (bm = bios_memmap; bm->type != BIOS_MAP_END; bm++) {
 			if (bm->type != bm0.type)
