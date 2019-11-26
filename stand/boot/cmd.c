@@ -352,45 +352,23 @@ Xhelp(void)
 static int
 Xhexdump(void)
 {
-	unsigned long val[2];
-	const unsigned char *p;
-	unsigned int n, b, d;
+	long long val[2];
+	char *ep;
+	int i;
 
 	if (cmd.argc != 3) {
 		printf("hexdump addr size\n");
 		return 0;
 	}
 
-	for (n = 1; n < cmd.argc; n++) {
-		p = cmd.argv[n];
-		if (*p == '0') {
-			p++;
-			if (*p == 'x' || *p == 'X') {
-				p++;
-				b = 16;
-			} else
-				b = 8;
-		} else
-			b = 10;
-		val[n-1] = 0;
-		for (; *p != '\0'; p++) {
-			if (*p >= '0' && *p <= '9')
-				d = *p - '0';
-			else if (*p >= 'a' && *p <= 'z')
-				d = *p - 'a' + 10;
-			else if (*p >= 'A' && *p <= 'Z')
-				d = *p - 'A' + 10;
-			else
-				goto err;
-			if (d >= b)
-				goto err;
-			val[n-1] = val[n-1] * b + d;
+	for (i = 1; i < cmd.argc; i++) {
+		val[i-1] = strtoll(cmd.argv[i], &ep, 0);
+		if (cmd.argv[i][0] == '\0' && *ep != '\0') {
+			printf("bad arg %s\n", cmd.argv[i]);
+			return 0;
 		}
 	}
 	hexdump((void *)val[0], val[1]);
-	return 0;
- err:
-	printf("bad '%c' in \"%s\"\n", *p, cmd.argv[n]);
 	return 0;
 }
 
