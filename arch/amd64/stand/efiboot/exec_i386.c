@@ -84,6 +84,7 @@ run_loadfile(uint64_t *marks, int howto)
 	int i;
 	u_long delta;
 	extern u_long efi_loadaddr;
+	volatile int *p;
 
 	if ((av = alloc(ac)) == NULL)
 		panic("alloc for bootarg");
@@ -137,7 +138,27 @@ printf("Before entry!\n");
 	entry = marks[MARK_ENTRY] & 0x0fffffff;
 	entry += delta;
 
-	printf("entry point at 0x%lx\n", entry);
+	printf("entry point at 0x%08lx\n", entry);
+
+EFI_STATUS status;
+status = EFI_CALL(BS->FreePages, 0x01000000UL, 0x22);
+if (status != EFI_SUCCESS)
+        panic("cannot free 0x01000000UL (%d)", status);
+EFI_PHYSICAL_ADDRESS pa = 0x01000000UL;
+status = EFI_CALL(BS->AllocatePages, AllocateAddress, EfiLoaderData,
+    0x00f00UL, &pa);
+if (status != EFI_SUCCESS) {
+	printf("cannot allocate 0x01000000UL (%d)\n", status);
+	for (volatile long long i = 0; i < 5000000000000LL; i++) continue;
+	panic("cannot allocate 0x01000000UL (%d)", status);
+}
+printf("allocates %08p\n", pa);
+
+extern void efi_memprobe_internal(void);
+efi_memprobe_internal();
+
+printf("run_loadfile %08p, cpu_reset %08p, stack %08p, alloca %08p\n",
+    (void *)run_loadfile, (void *)cpu_reset, &entry, alloc(1000));
 
 printf("delta %08p\n", delta);
 printf("MARK_START %08p %d\n", marks[MARK_START], *(int *)(marks[MARK_START]));
@@ -147,6 +168,17 @@ printf("MARK_START+delta %08p %d\n", (char *)(marks[MARK_START]) + delta,
     *(int *)((char *)(marks[MARK_START]) + delta));
 printf("MARK_END+delta %08p %d\n", (char *)(marks[MARK_END]) + delta,
     *(int *)((char *)(marks[MARK_END]) + delta));
+
+#if 0
+	for (p = (int *)((char *)(marks[MARK_START]) + delta);
+	    p < (int *)((char *)(marks[MARK_END]) + delta);
+	    p += 1024) {
+		printf("read %08p, %08x\n", p, *p);
+		*p = 0;
+		printf("written %08p, %08x\n", p, *p);
+	}
+#endif
+
 	/* Sync the memory map and call ExitBootServices() */
 	efi_cleanup();
 
@@ -175,6 +207,10 @@ printf("MARK_END+delta %08p %d\n", (char *)(marks[MARK_END]) + delta,
 	memset((char *)(marks[MARK_START]) + delta, 0,
 	    marks[MARK_END] - marks[MARK_START]);
 #endif
+	p = (void *)0x01012000UL;
+	*p = 0;
+	memset((char *)p, 0, (char *)(marks[MARK_END]) - (char *)p);
+cpu_reset();
 	memmove((char *)marks[MARK_START] + delta, (char *)marks[MARK_START],
 	    marks[MARK_END] - marks[MARK_START]);
 cpu_reset();
