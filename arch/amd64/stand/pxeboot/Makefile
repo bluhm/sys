@@ -27,8 +27,9 @@ SRCS+=	softraid_amd64.c
 SRCS+=	boot.c cmd.c vars.c bootarg.c
 
 .PATH:	${S}/lib/libsa
-SRCS+=	alloc.c exit.c getchar.c getfile.c getln.c globals.c putchar.c \
-	strcmp.c strlen.c strncmp.c memcmp.c memcpy.c memmove.c memset.c printf.c \
+SRCS+=	alloc.c exit.c getchar.c getfile.c getln.c globals.c hexdump.c \
+	strcmp.c strlen.c strncmp.c memcmp.c memcpy.c memmove.c memset.c \
+	printf.c putchar.c \
 	snprintf.c strerror.c strncpy.c strtol.c strtoll.c ctime.c strlcpy.c \
 	strlcat.c
 SRCS+=	aes_xts.c bcrypt_pbkdf.c blowfish.c explicit_bzero.c hmac_sha1.c \
