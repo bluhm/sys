@@ -364,7 +364,7 @@ Xhexdump(void)
 	for (i = 1; i < cmd.argc; i++) {
 		val[i-1] = strtoll(cmd.argv[i], &ep, 0);
 		if (cmd.argv[i][0] == '\0' || *ep != '\0') {
-			printf("bad arg %s\n", cmd.argv[i]);
+			printf("bad '%c' in \"%s\"\n", *ep, cmd.argv[i]);
 			return 0;
 		}
 	}
