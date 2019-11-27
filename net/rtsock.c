@@ -1,4 +1,4 @@
-/*	$OpenBSD: rtsock.c,v 1.294 2019/11/06 15:18:53 florian Exp $	*/
+/*	$OpenBSD: rtsock.c,v 1.297 2019/11/24 07:56:03 claudio Exp $	*/
 /*	$NetBSD: rtsock.c,v 1.18 1996/03/29 00:32:10 cgd Exp $	*/
 
 /*
@@ -815,6 +815,19 @@ route_output(struct mbuf *m, struct socket *so, struct sockaddr *dstaddr,
 			error = EINVAL;
 			goto fail;
 		}
+		/*
+		 * If this is a solicitation proposal forward request to
+		 * all interfaces. Most handlers will ignore it but at least
+		 * umb(4) will send a response to this event.
+		 */
+		if (rtm->rtm_priority == RTP_PROPOSAL_SOLICIT) {
+			struct ifnet *ifp;
+			NET_LOCK();
+			TAILQ_FOREACH(ifp, &ifnet, if_list) {
+				ifp->if_rtrequest(ifp, RTM_PROPOSAL, NULL);
+			}
+			NET_UNLOCK();
+		}
 	} else {
 		error = rtm_output(rtm, &rt, &info, prio, tableid);
 		if (!error) {
@@ -1442,7 +1455,7 @@ rtm_xaddrs(caddr_t cp, caddr_t cplim, struct rt_addrinfo *rtinfo)
 			/* more validation in rtm_validate_proposal */
 			if (sa->sa_len > sizeof(struct sockaddr_rtdns))
 				return (EINVAL);
-			if (sa->sa_len <= offsetof(struct sockaddr_rtdns,
+			if (sa->sa_len < offsetof(struct sockaddr_rtdns,
 			    sr_dns))
 				return (EINVAL);
 			switch (sa->sa_family) {
@@ -1817,6 +1830,30 @@ rtm_80211info(struct ifnet *ifp, struct if_ieee80211_data *ifie)
 }
 
 /*
+ * This is used to generate routing socket messages indicating
+ * the address selection proposal from an interface.
+ */
+void
+rtm_proposal(struct ifnet *ifp, struct rt_addrinfo *rtinfo, int flags,
+    uint8_t prio)
+{
+	struct rt_msghdr	*rtm;
+	struct mbuf		*m;
+
+	m = rtm_msg1(RTM_PROPOSAL, rtinfo);
+	if (m == NULL)
+		return;
+	rtm = mtod(m, struct rt_msghdr *);
+	rtm->rtm_flags = RTF_DONE | flags;
+	rtm->rtm_priority = prio;
+	rtm->rtm_tableid = ifp->if_rdomain;
+	rtm->rtm_index = ifp->if_index;
+	rtm->rtm_addrs = rtinfo->rti_addrs;
+	
+	route_input(m, NULL, rtinfo->rti_info[RTAX_DNS]->sa_family);
+}
+
+/*
  * This is used in dumping the kernel table via sysctl().
  */
 int
@@ -2142,8 +2179,7 @@ rtm_validate_proposal(struct rt_addrinfo *info)
 			return -1;
 		if (rtdns->sr_len > sizeof(*rtdns))
 			return -1;
-		if (rtdns->sr_len <=
-		    offsetof(struct sockaddr_rtdns, sr_dns))
+		if (rtdns->sr_len < offsetof(struct sockaddr_rtdns, sr_dns))
 			return -1;
 		switch (rtdns->sr_family) {
 		case AF_INET:

@@ -1,4 +1,4 @@
-/*	$OpenBSD: st.c,v 1.169 2019/09/29 17:57:36 krw Exp $	*/
+/*	$OpenBSD: st.c,v 1.171 2019/11/26 20:48:03 krw Exp $	*/
 /*	$NetBSD: st.c,v 1.71 1997/02/21 23:03:49 thorpej Exp $	*/
 
 /*
@@ -1345,6 +1345,9 @@ st_mode_sense(struct st_softc *st, int flags)
 	/*
 	 * Ask for page 0 (vendor specific) mode sense data.
 	 */
+	density = 0;
+	block_count = 0;
+	block_size = 0;
 	error = scsi_do_mode_sense(link, 0, data, (void **)&page0,
 	    &density, &block_count, &block_size, 1, flags | SCSI_SILENT, &big);
 	if (error != 0)
@@ -1357,7 +1360,7 @@ st_mode_sense(struct st_softc *st, int flags)
 	else
 		dev_spec = data->hdr.dev_spec;
 
-	if (dev_spec & SMH_DSP_WRITE_PROT)
+	if (ISSET(dev_spec, SMH_DSP_WRITE_PROT))
 		SET(link->flags, SDEV_READONLY);
 	else
 		CLR(link->flags, SDEV_READONLY);
@@ -1913,7 +1916,7 @@ st_interpret_sense(struct scsi_xfer *xs)
 	 * to store datalen in the same units as resid and to adjust
 	 * xs->resid to be in bytes.
 	 */
-	if (sense->error_code & SSD_ERRCODE_VALID) {
+	if (ISSET(sense->error_code, SSD_ERRCODE_VALID)) {
 		if (ISSET(st->flags, ST_FIXEDBLOCKS))
 			resid = info * st->blksize; /* XXXX overflow? */
 		else

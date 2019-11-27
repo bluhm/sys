@@ -1,4 +1,4 @@
-/*	$OpenBSD: scsi_base.c,v 1.238 2019/11/09 12:15:50 krw Exp $	*/
+/*	$OpenBSD: scsi_base.c,v 1.245 2019/11/26 20:48:03 krw Exp $	*/
 /*	$NetBSD: scsi_base.c,v 1.43 1997/04/02 02:29:36 mycroft Exp $	*/
 
 /*
@@ -816,7 +816,7 @@ scsi_init_inquiry(struct scsi_xfer *xs, u_int8_t flags, u_int8_t pagecode,
 
 	xs->cmdlen = sizeof(*cmd);
 
-	xs->flags |= SCSI_DATA_IN;
+	SET(xs->flags, SCSI_DATA_IN);
 	xs->data = data;
 	xs->datalen = len;
 }
@@ -889,7 +889,7 @@ scsi_inquire_vpd(struct scsi_link *link, void *buf, u_int buflen,
 	u_int32_t bytes;
 #endif /* SCSIDEBUG */
 
-	if (link->flags & SDEV_UMASS)
+	if (ISSET(link->flags, SDEV_UMASS))
 		return (EJUSTRETURN);
 
 	xs = scsi_xs_get(link, flags | SCSI_DATA_IN | SCSI_SILENT);
@@ -918,6 +918,78 @@ scsi_inquire_vpd(struct scsi_link *link, void *buf, u_int buflen,
 	return (error);
 }
 
+int
+scsi_read_cap_10(struct scsi_link *link, struct scsi_read_cap_data *rdcap,
+    int flags)
+{
+	struct scsi_read_capacity	  cdb;
+	struct scsi_xfer		 *xs;
+	int				  rv;
+
+	xs = scsi_xs_get(link, flags | SCSI_DATA_IN | SCSI_SILENT);
+	if (xs == NULL)
+		return ENOMEM;
+
+	memset(&cdb, 0, sizeof(cdb));
+	cdb.opcode = READ_CAPACITY;
+
+	memcpy(xs->cmd, &cdb, sizeof(cdb));
+	xs->cmdlen = sizeof(cdb);
+	xs->data = (void *)rdcap;
+	xs->datalen = sizeof(*rdcap);
+	xs->timeout = 20000;
+
+	rv = scsi_xs_sync(xs);
+	scsi_xs_put(xs);
+
+#ifdef SCSIDEBUG
+	if (rv == 0) {
+		sc_print_addr(link);
+		printf("read capacity 10 data:\n");
+		scsi_show_mem((u_char *)rdcap, sizeof(*rdcap));
+	}
+#endif /* SCSIDEBUG */
+
+	return rv;
+}
+
+int
+scsi_read_cap_16(struct scsi_link *link, struct scsi_read_cap_data_16 *rdcap,
+    int flags)
+{
+	struct scsi_read_capacity_16	 cdb;
+	struct scsi_xfer		*xs;
+	int				 rv;
+
+	xs = scsi_xs_get(link, flags | SCSI_DATA_IN | SCSI_SILENT);
+	if (xs == NULL)
+		return ENOMEM;
+
+	memset(&cdb, 0, sizeof(cdb));
+	cdb.opcode = READ_CAPACITY_16;
+	cdb.byte2 = SRC16_SERVICE_ACTION;
+	_lto4b(sizeof(*rdcap), cdb.length);
+
+	memcpy(xs->cmd, &cdb, sizeof(cdb));
+	xs->cmdlen = sizeof(cdb);
+	xs->data = (void *)rdcap;
+	xs->datalen = sizeof(*rdcap);
+	xs->timeout = 20000;
+
+	rv = scsi_xs_sync(xs);
+	scsi_xs_put(xs);
+
+#ifdef SCSIDEBUG
+	if (rv == 0) {
+		sc_print_addr(link);
+		printf("read capacity 16 data:\n");
+		scsi_show_mem((u_char *)rdcap, sizeof(*rdcap));
+	}
+#endif /* SCSIDEBUG */
+
+	return (rv);
+}
+
 /*
  * Prevent or allow the user to remove the media
  */
@@ -928,7 +1000,7 @@ scsi_prevent(struct scsi_link *link, int type, int flags)
 	struct scsi_xfer *xs;
 	int error;
 
-	if (link->quirks & ADEV_NODOORLOCK)
+	if (ISSET(link->quirks, ADEV_NODOORLOCK))
 		return (0);
 
 	xs = scsi_xs_get(link, flags);
@@ -1097,16 +1169,10 @@ scsi_do_mode_sense(struct scsi_link *link, int page,
 
 	*page_data = NULL;
 
-	if (density != NULL)
-		*density = 0;
-	if (block_count != NULL)
-		*block_count = 0;
-	if (block_size != NULL)
-		*block_size = 0;
 	if (big != NULL)
 		*big = 0;
 
-	if ((link->flags & SDEV_ATAPI) == 0 ||
+	if (!ISSET(link->flags, SDEV_ATAPI) ||
 	    (link->inqdata.device & SID_TYPE) == T_SEQUENTIAL) {
 		/*
 		 * Try 6 byte mode sense request first. Some devices don't
@@ -1322,8 +1388,8 @@ void
 scsi_done(struct scsi_xfer *xs)
 {
 #ifdef SCSIDEBUG
-	if (xs->sc_link->flags & SDEV_DB1) {
-		if (xs->datalen && (xs->flags & SCSI_DATA_IN))
+	if (ISSET(xs->sc_link->flags, SDEV_DB1)) {
+		if (xs->datalen && ISSET(xs->flags, SCSI_DATA_IN))
 			scsi_show_mem(xs->data, min(64, xs->datalen));
 	}
 #endif /* SCSIDEBUG */
@@ -1497,7 +1563,7 @@ scsi_interpret_sense(struct scsi_xfer *xs)
 	case SKEY_EQUAL:
 		break;
 	case SKEY_NOT_READY:
-		if ((xs->flags & SCSI_IGNORE_NOT_READY) != 0)
+		if (ISSET(xs->flags, SCSI_IGNORE_NOT_READY))
 			return (0);
 		error = EIO;
 		if (xs->retries) {
@@ -1519,7 +1585,7 @@ scsi_interpret_sense(struct scsi_xfer *xs)
 			case SENSE_NOMEDIUM_TOPEN:
 			case SENSE_NOMEDIUM_LOADABLE:
 			case SENSE_NOMEDIUM_AUXMEM:
-				link->flags &= ~SDEV_MEDIA_LOADED;
+				CLR(link->flags, SDEV_MEDIA_LOADED);
 				error = ENOMEDIUM;
 				break;
 			default:
@@ -1534,7 +1600,7 @@ scsi_interpret_sense(struct scsi_xfer *xs)
 		case SENSE_NOMEDIUM_TOPEN:
 		case SENSE_NOMEDIUM_LOADABLE:
 		case SENSE_NOMEDIUM_AUXMEM:
-			link->flags &= ~SDEV_MEDIA_LOADED;
+			CLR(link->flags, SDEV_MEDIA_LOADED);
 			error = ENOMEDIUM;
 			break;
 		case SENSE_BAD_MEDIUM:
@@ -1552,7 +1618,7 @@ scsi_interpret_sense(struct scsi_xfer *xs)
 		}
 		break;
 	case SKEY_ILLEGAL_REQUEST:
-		if ((xs->flags & SCSI_IGNORE_ILLEGAL_REQUEST) != 0)
+		if (ISSET(xs->flags, SCSI_IGNORE_ILLEGAL_REQUEST))
 			return (0);
 		if (ASC_ASCQ(sense) == SENSE_MEDIUM_REMOVAL_PREVENTED)
 			return(EBUSY);
@@ -1572,11 +1638,11 @@ scsi_interpret_sense(struct scsi_xfer *xs)
 		default:
 			break;
 		}
-		if ((link->flags & SDEV_REMOVABLE) != 0)
-			link->flags &= ~SDEV_MEDIA_LOADED;
-		if ((xs->flags & SCSI_IGNORE_MEDIA_CHANGE) != 0 ||
+		if (ISSET(link->flags, SDEV_REMOVABLE))
+			CLR(link->flags, SDEV_MEDIA_LOADED);
+		if (ISSET(xs->flags, SCSI_IGNORE_MEDIA_CHANGE) ||
 		    /* XXX Should reupload any transient state. */
-		    (link->flags & SDEV_REMOVABLE) == 0) {
+		    !ISSET(link->flags, SDEV_REMOVABLE)) {
 			return (scsi_delay(xs, 1));
 		}
 		error = EIO;
@@ -1602,7 +1668,7 @@ scsi_interpret_sense(struct scsi_xfer *xs)
 
 #ifndef SCSIDEBUG
 	/* SCSIDEBUG would mean it has already been printed. */
-	if (skey && (xs->flags & SCSI_SILENT) == 0)
+	if (skey && !ISSET(xs->flags, SCSI_SILENT))
 		scsi_print_sense(xs);
 #endif /* ~SCSIDEBUG */
 
@@ -2363,7 +2429,7 @@ scsi_print_sense(struct scsi_xfer *xs)
 	    xs->cmd->opcode);
 
 	if (serr != SSD_ERRCODE_CURRENT && serr != SSD_ERRCODE_DEFERRED) {
-		if ((sense->error_code & SSD_ERRCODE_VALID) != 0) {
+		if (ISSET(sense->error_code, SSD_ERRCODE_VALID)) {
 			struct scsi_sense_data_unextended *usense =
 			    (struct scsi_sense_data_unextended *)sense;
 			printf("   AT BLOCK #: %d (decimal)",
@@ -2379,15 +2445,15 @@ scsi_print_sense(struct scsi_xfer *xs)
 		char pad = ' ';
 
 		printf("             ");
-		if (sense->flags & SSD_FILEMARK) {
+		if (ISSET(sense->flags, SSD_FILEMARK)) {
 			printf("%c Filemark Detected", pad);
 			pad = ',';
 		}
-		if (sense->flags & SSD_EOM) {
+		if (ISSET(sense->flags, SSD_EOM)) {
 			printf("%c EOM Detected", pad);
 			pad = ',';
 		}
-		if (sense->flags & SSD_ILI)
+		if (ISSET(sense->flags, SSD_ILI))
 			printf("%c Incorrect Length Indicator Set", pad);
 		printf("\n");
 	}
@@ -2399,7 +2465,7 @@ scsi_print_sense(struct scsi_xfer *xs)
 	info = _4btol(&sense->info[0]);
 	if (info)
 		printf("         INFO: 0x%x (VALID flag %s)\n", info,
-		    sense->error_code & SSD_ERRCODE_VALID ? "on" : "off");
+		    ISSET(sense->error_code, SSD_ERRCODE_VALID) ? "on" : "off");
 
 	if (sense->extra_len < 4)
 		return;
@@ -2440,16 +2506,16 @@ scsi_decode_sense(struct scsi_sense_data *sense, int flag)
 		    rqsbuf, sizeof(rqsbuf));
 		break;
 	case DECODE_SKSV:
-		if (sense->extra_len < 9 || ((spec_1 & SSD_SCS_VALID) == 0))
+		if (sense->extra_len < 9 || !ISSET(spec_1, SSD_SCS_VALID))
 			break;
 		switch (skey) {
 		case SKEY_ILLEGAL_REQUEST:
 			len = snprintf(rqsbuf, sizeof rqsbuf,
 			    "Error in %s, Offset %d",
-			    (spec_1 & SSD_SCS_CDB_ERROR) ? "CDB" : "Parameters",
-			    count);
+			    ISSET(spec_1, SSD_SCS_CDB_ERROR) ? "CDB" :
+			    "Parameters", count);
 			if ((len != -1 && len < sizeof rqsbuf) &&
-			    (spec_1 & SSD_SCS_VALID_BIT_INDEX))
+			    ISSET(spec_1, SSD_SCS_VALID_BIT_INDEX))
 				snprintf(rqsbuf+len, sizeof rqsbuf - len,
 				    ", bit %d", spec_1 & SSD_SCS_BIT_INDEX);
 			break;
@@ -2610,7 +2676,7 @@ scsi_show_sense(struct scsi_xfer *xs)
 	    sense->flags & SSD_FILEMARK ? 1 : 0,
 	    sense->extra_len));
 
-	if (xs->sc_link->flags & SDEV_DB1)
+	if (ISSET(xs->sc_link->flags, SDEV_DB1))
 		scsi_show_mem((u_char *)&xs->sense, sizeof(xs->sense));
 
 	scsi_print_sense(xs);
@@ -2643,7 +2709,7 @@ scsi_show_xs(struct scsi_xfer *xs)
 	sc_print_addr(xs->sc_link);
 	printf("cmd (%p): ", xs->cmd);
 
-	if ((xs->flags & SCSI_RESET) == 0) {
+	if (!ISSET(xs->flags, SCSI_RESET)) {
 		while (i < xs->cmdlen) {
 			if (i)
 				printf(",");
@@ -2653,7 +2719,7 @@ scsi_show_xs(struct scsi_xfer *xs)
 	} else
 		printf("-RESET-\n");
 
-	if (xs->datalen && (xs->flags & SCSI_DATA_OUT))
+	if (xs->datalen && ISSET(xs->flags, SCSI_DATA_OUT))
 		scsi_show_mem(xs->data, min(64, xs->datalen));
 }
 

@@ -1,4 +1,4 @@
-/*	$OpenBSD: uk.c,v 1.19 2017/09/08 05:36:53 deraadt Exp $	*/
+/*	$OpenBSD: uk.c,v 1.22 2019/11/23 17:10:13 krw Exp $	*/
 /*	$NetBSD: uk.c,v 1.15 1996/03/17 00:59:57 thorpej Exp $	*/
 
 /*
@@ -132,12 +132,12 @@ ukopen(dev_t dev, int flag, int fmt, struct proc *p)
 	    dev, unit, uk_cd.cd_ndevs));
 
 	/* Only allow one at a time */
-	if (link->flags & SDEV_OPEN) {
+	if (ISSET(link->flags, SDEV_OPEN)) {
 		device_unref(&sc->sc_dev);
 		return (EBUSY);
 	}
 
-	link->flags |= SDEV_OPEN;
+	SET(link->flags, SDEV_OPEN);
 
 	SC_DEBUG(link, SDEV_DB3, ("open complete\n"));
 
@@ -159,7 +159,7 @@ ukclose(dev_t dev, int flag, int fmt, struct proc *p)
 		return (ENXIO);
 
 	SC_DEBUG(sc->sc_link, SDEV_DB1, ("closing\n"));
-	sc->sc_link->flags &= ~SDEV_OPEN;
+	CLR(sc->sc_link->flags, SDEV_OPEN);
 
 	device_unref(&sc->sc_dev);
 	return (0);

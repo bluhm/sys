@@ -1,4 +1,4 @@
-/*	$OpenBSD: sd.c,v 1.297 2019/11/09 14:36:30 krw Exp $	*/
+/*	$OpenBSD: sd.c,v 1.301 2019/11/26 20:51:20 krw Exp $	*/
 /*	$NetBSD: sd.c,v 1.111 1997/04/02 02:29:41 mycroft Exp $	*/
 
 /*-
@@ -176,7 +176,7 @@ sdattach(struct device *parent, struct device *self, void *aux)
 	if (ISSET(link->flags, SDEV_ATAPI) && ISSET(link->flags, SDEV_REMOVABLE))
 		SET(link->quirks, SDEV_NOSYNCCACHE);
 
-	if (!(link->inqdata.flags & SID_RelAdr))
+	if (!ISSET(link->inqdata.flags, SID_RelAdr))
 		SET(link->quirks, SDEV_ONLYBIG);
 
 	/*
@@ -494,7 +494,7 @@ sdclose(dev_t dev, int flag, int fmt, struct proc *p)
 
 	disk_closepart(&sc->sc_dk, part, fmt);
 
-	if (((flag & FWRITE) != 0 || sc->sc_dk.dk_openmask == 0) &&
+	if ((ISSET(flag, FWRITE) || sc->sc_dk.dk_openmask == 0) &&
 	    ISSET(sc->flags, SDF_DIRTY))
 		sd_flush(sc, 0);
 
@@ -1325,7 +1325,7 @@ sddump(dev_t dev, daddr_t blkno, caddr_t va, size_t size)
 	 */
 #if 0
 	/* Make sure it was initialized. */
-	if ((sc->sc_link->flags & SDEV_MEDIA_LOADED) != SDEV_MEDIA_LOADED)
+	if (!ISSET(sc->sc_link->flags, SDEV_MEDIA_LOADED))
 		return ENXIO;
 #endif /* 0 */
 
@@ -1411,44 +1411,25 @@ viscpy(u_char *dst, u_char *src, int len)
 int
 sd_read_cap_10(struct sd_softc *sc, int flags)
 {
-	struct scsi_read_capacity cdb;
-	struct scsi_read_cap_data *rdcap;
-	struct scsi_xfer *xs;
-	int rv = ENOMEM;
-
-	CLR(flags, SCSI_IGNORE_ILLEGAL_REQUEST);
+	struct scsi_read_cap_data	*rdcap;
+	int				 rv;
 
 	rdcap = dma_alloc(sizeof(*rdcap), (ISSET(flags, SCSI_NOSLEEP) ?
 	    PR_NOWAIT : PR_WAITOK) | PR_ZERO);
 	if (rdcap == NULL)
-		return (ENOMEM);
+		return -1;
 
 	if (ISSET(sc->flags, SDF_DYING)) {
-		rv = ENXIO;
+		rv = -1;
 		goto done;
 	}
-	xs = scsi_xs_get(sc->sc_link, flags | SCSI_DATA_IN | SCSI_SILENT);
-	if (xs == NULL)
-		goto done;
 
-	bzero(&cdb, sizeof(cdb));
-	cdb.opcode = READ_CAPACITY;
-
-	memcpy(xs->cmd, &cdb, sizeof(cdb));
-	xs->cmdlen = sizeof(cdb);
-	xs->data = (void *)rdcap;
-	xs->datalen = sizeof(*rdcap);
-	xs->timeout = 20000;
-
-	rv = scsi_xs_sync(xs);
-	scsi_xs_put(xs);
-
+	rv = scsi_read_cap_10(sc->sc_link, rdcap, flags);
 	if (rv == 0) {
-#ifdef SCSIDEBUG
-		sc_print_addr(sc->sc_link);
-		printf("read capacity 10 data:\n");
-		scsi_show_mem((u_char *)rdcap, sizeof(*rdcap));
-#endif /* SCSIDEBUG */
+		if (_8btol(rdcap->addr) == 0) {
+			rv = -1;
+			goto done;
+		}
 		sc->params.disksize = _4btol(rdcap->addr) + 1ll;
 		sc->params.secsize = _4btol(rdcap->length);
 		CLR(sc->flags, SDF_THIN);
@@ -1456,58 +1437,32 @@ sd_read_cap_10(struct sd_softc *sc, int flags)
 
 done:
 	dma_free(rdcap, sizeof(*rdcap));
-	return (rv);
+	return rv;
 }
 
 int
 sd_read_cap_16(struct sd_softc *sc, int flags)
 {
-	struct scsi_read_capacity_16 cdb;
-	struct scsi_read_cap_data_16 *rdcap;
-	struct scsi_xfer *xs;
-	int rv = ENOMEM;
-
-	CLR(flags, SCSI_IGNORE_ILLEGAL_REQUEST);
+	struct scsi_read_cap_data_16	*rdcap;
+	int				 rv;
 
 	rdcap = dma_alloc(sizeof(*rdcap), (ISSET(flags, SCSI_NOSLEEP) ?
 	    PR_NOWAIT : PR_WAITOK) | PR_ZERO);
 	if (rdcap == NULL)
-		return (ENOMEM);
+		return -1;
 
 	if (ISSET(sc->flags, SDF_DYING)) {
-		rv = ENXIO;
+		rv = -1;
 		goto done;
 	}
-	xs = scsi_xs_get(sc->sc_link, flags | SCSI_DATA_IN | SCSI_SILENT);
-	if (xs == NULL)
-		goto done;
 
-	bzero(&cdb, sizeof(cdb));
-	cdb.opcode = READ_CAPACITY_16;
-	cdb.byte2 = SRC16_SERVICE_ACTION;
-	_lto4b(sizeof(*rdcap), cdb.length);
-
-	memcpy(xs->cmd, &cdb, sizeof(cdb));
-	xs->cmdlen = sizeof(cdb);
-	xs->data = (void *)rdcap;
-	xs->datalen = sizeof(*rdcap);
-	xs->timeout = 20000;
-
-	rv = scsi_xs_sync(xs);
-	scsi_xs_put(xs);
-
+	rv = scsi_read_cap_16(sc->sc_link, rdcap, flags);
 	if (rv == 0) {
 		if (_8btol(rdcap->addr) == 0) {
-			rv = EIO;
+			rv = -1;
 			goto done;
 		}
-
-#ifdef SCSIDEBUG
-		sc_print_addr(sc->sc_link);
-		printf("read capacity 16 data:\n");
-		scsi_show_mem((u_char *)rdcap, sizeof(*rdcap));
-#endif /* SCSIDEBUG */
-		sc->params.disksize = _8btol(rdcap->addr) + 1;
+		sc->params.disksize = _8btol(rdcap->addr) + 1ll;
 		sc->params.secsize = _4btol(rdcap->length);
 		if (ISSET(_2btol(rdcap->lowest_aligned), READ_CAP_16_TPE))
 			SET(sc->flags, SDF_THIN);
@@ -1517,7 +1472,7 @@ sd_read_cap_16(struct sd_softc *sc, int flags)
 
 done:
 	dma_free(rdcap, sizeof(*rdcap));
-	return (rv);
+	return rv;
 }
 
 int
@@ -1525,8 +1480,7 @@ sd_read_cap(struct sd_softc *sc, int flags)
 {
 	int rv;
 
-	if (ISSET(sc->flags, SDF_DYING))
-		return (ENXIO);
+	CLR(flags, SCSI_IGNORE_ILLEGAL_REQUEST);
 
 	/*
 	 * post-SPC2 (i.e. post-SCSI-3) devices can start with 16 byte
@@ -1545,7 +1499,7 @@ sd_read_cap(struct sd_softc *sc, int flags)
 			rv = sd_read_cap_16(sc, flags);
 	}
 
-	return (rv);
+	return rv;
 }
 
 int
@@ -1789,6 +1743,7 @@ sd_get_parms(struct sd_softc *sc, int flags)
 		 * so accept the page. The extra bytes will be zero and RPM will
 		 * end up with the default value of 3600.
 		 */
+		err = 0;
 		if (!ISSET(link->flags, SDEV_ATAPI) ||
 		    !ISSET(link->flags, SDEV_REMOVABLE))
 			err = scsi_do_mode_sense(link,

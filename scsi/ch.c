@@ -1,4 +1,4 @@
-/*	$OpenBSD: ch.c,v 1.54 2019/09/27 17:22:31 krw Exp $	*/
+/*	$OpenBSD: ch.c,v 1.59 2019/11/23 17:10:13 krw Exp $	*/
 /*	$NetBSD: ch.c,v 1.26 1997/02/21 22:06:52 thorpej Exp $	*/
 
 /*
@@ -182,10 +182,10 @@ chopen(dev_t dev, int flags, int fmt, struct proc *p)
 	/*
 	 * Only allow one open at a time.
 	 */
-	if (sc->sc_link->flags & SDEV_OPEN)
+	if (ISSET(sc->sc_link->flags, SDEV_OPEN))
 		return (EBUSY);
 
-	sc->sc_link->flags |= SDEV_OPEN;
+	SET(sc->sc_link->flags, SDEV_OPEN);
 
 	/*
 	 * Absorb any unit attention errors. We must notice
@@ -241,7 +241,7 @@ chopen(dev_t dev, int flags, int fmt, struct proc *p)
 	return (0);
 
 bad:
-	sc->sc_link->flags &= ~SDEV_OPEN;
+	CLR(sc->sc_link->flags, SDEV_OPEN);
 	return (error);
 }
 
@@ -250,7 +250,7 @@ chclose(dev_t dev, int flags, int fmt, struct proc *p)
 {
 	struct ch_softc *sc = ch_cd.cd_devs[CHUNIT(dev)];
 
-	sc->sc_link->flags &= ~SDEV_OPEN;
+	CLR(sc->sc_link->flags, SDEV_OPEN);
 	return (0);
 }
 
@@ -271,7 +271,7 @@ chioctl(dev_t dev, u_long cmd, caddr_t data, int flags, struct proc *p)
 		break;
 
 	default:
-		if ((flags & FWRITE) == 0)
+		if (!ISSET(flags, FWRITE))
 			return (EBADF);
 	}
 
@@ -371,8 +371,8 @@ ch_move(struct ch_softc *sc, struct changer_move *cm)
 	_lto2b(sc->sc_picker, cmd->tea);
 	_lto2b(fromelem, cmd->src);
 	_lto2b(toelem, cmd->dst);
-	if (cm->cm_flags & CM_INVERT)
-		cmd->flags |= MOVE_MEDIUM_INVERT;
+	if (ISSET(cm->cm_flags, CM_INVERT))
+		SET(cmd->flags, MOVE_MEDIUM_INVERT);
 
 	error = scsi_xs_sync(xs);
 	scsi_xs_put(xs);
@@ -431,10 +431,10 @@ ch_exchange(struct ch_softc *sc, struct changer_exchange *ce)
 	_lto2b(src, cmd->src);
 	_lto2b(dst1, cmd->fdst);
 	_lto2b(dst2, cmd->sdst);
-	if (ce->ce_flags & CE_INVERT1)
-		cmd->flags |= EXCHANGE_MEDIUM_INV1;
-	if (ce->ce_flags & CE_INVERT2)
-		cmd->flags |= EXCHANGE_MEDIUM_INV2;
+	if (ISSET(ce->ce_flags, CE_INVERT1))
+		SET(cmd->flags, EXCHANGE_MEDIUM_INV1);
+	if (ISSET(ce->ce_flags, CE_INVERT2))
+		SET(cmd->flags, EXCHANGE_MEDIUM_INV2);
 
 	error = scsi_xs_sync(xs);
 	scsi_xs_put(xs);
@@ -477,8 +477,8 @@ ch_position(struct ch_softc *sc, struct changer_position *cp)
 	cmd->opcode = POSITION_TO_ELEMENT;
 	_lto2b(sc->sc_picker, cmd->tea);
 	_lto2b(dst, cmd->dst);
-	if (cp->cp_flags & CP_INVERT)
-		cmd->flags |= POSITION_TO_ELEMENT_INVERT;
+	if (ISSET(cp->cp_flags, CP_INVERT))
+		SET(cmd->flags, POSITION_TO_ELEMENT_INVERT);
 
 	error = scsi_xs_sync(xs);
 	scsi_xs_put(xs);
@@ -519,9 +519,9 @@ copy_element_status(int flags,	struct read_element_status_descriptor *desc,
 {
 	ces->ces_flags = desc->flags1;
 
-	if (flags & READ_ELEMENT_STATUS_PVOLTAG)
+	if (ISSET(flags, READ_ELEMENT_STATUS_PVOLTAG))
 		copy_voltag(&ces->ces_pvoltag, &desc->pvoltag);
-	if (flags & READ_ELEMENT_STATUS_AVOLTAG)
+	if (ISSET(flags, READ_ELEMENT_STATUS_AVOLTAG))
 		copy_voltag(&ces->ces_avoltag, &desc->avoltag);
 }
 
@@ -644,7 +644,7 @@ ch_getelemstatus(struct ch_softc *sc, int first, int count, caddr_t data,
 	_lto2b(count, cmd->count);
 	_lto3b(datalen, cmd->len);
 	if (voltag)
-		cmd->byte2 |= READ_ELEMENT_STATUS_VOLTAG;
+		SET(cmd->byte2, READ_ELEMENT_STATUS_VOLTAG);
 
 	error = scsi_xs_sync(xs);
 	scsi_xs_put(xs);
@@ -721,7 +721,7 @@ ch_get_params(struct ch_softc *sc, int flags)
 		sc->sc_exchangemask[from] = exchanges[from];
 	}
 
-	sc->sc_link->flags |= SDEV_MEDIA_LOADED;
+	SET(sc->sc_link->flags, SDEV_MEDIA_LOADED);
 	dma_free(data, sizeof(*data));
 	return (0);
 }
@@ -756,7 +756,7 @@ ch_interpret_sense(struct scsi_xfer *xs)
 	u_int8_t serr = sense->error_code & SSD_ERRCODE;
 	u_int8_t skey = sense->flags & SSD_KEY;
 
-	if (((link->flags & SDEV_OPEN) == 0) ||
+	if (!ISSET(link->flags, SDEV_OPEN) ||
 	    (serr != SSD_ERRCODE_CURRENT && serr != SSD_ERRCODE_DEFERRED))
 		return (scsi_interpret_sense(xs));
 
@@ -775,7 +775,7 @@ ch_interpret_sense(struct scsi_xfer *xs)
 	 * all other cases are handled as per the default.
 	 */
 	case SKEY_NOT_READY:
-		if ((xs->flags & SCSI_IGNORE_NOT_READY) != 0)
+		if (ISSET(xs->flags, SCSI_IGNORE_NOT_READY))
 			return (0);
 		switch (ASC_ASCQ(sense)) {
 		case SENSE_NOT_READY_BECOMING_READY:
