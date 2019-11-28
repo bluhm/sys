@@ -158,6 +158,7 @@ long	strtol(const char *, char **, int);
 long long	strtoll(const char *, char **, int);
 char	*strchr(const char *, int);
 void	*memset(void *, int, size_t);
+void	*memget(void *, int, size_t);
 void	exit(void);
 int	open(const char *, int);
 int	close(int);
