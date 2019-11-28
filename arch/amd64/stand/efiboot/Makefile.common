@@ -1,4 +1,4 @@
-#	$OpenBSD: Makefile.common,v 1.18 2019/10/29 02:55:51 deraadt Exp $
+#	$OpenBSD: Makefile.common,v 1.19 2019/11/28 00:17:11 bluhm Exp $
 
 S=		${.CURDIR}/../../../../..
 SADIR=		${.CURDIR}/../..

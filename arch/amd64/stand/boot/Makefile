@@ -1,4 +1,4 @@
-#	$OpenBSD: Makefile,v 1.43 2019/10/29 02:55:50 deraadt Exp $
+#	$OpenBSD: Makefile,v 1.44 2019/11/28 00:17:10 bluhm Exp $
 
 COPTS?=
 MAN?=	boot.8

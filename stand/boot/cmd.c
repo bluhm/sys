@@ -1,4 +1,4 @@
-/*	$OpenBSD: cmd.c,v 1.65 2019/08/03 15:22:19 deraadt Exp $	*/
+/*	$OpenBSD: cmd.c,v 1.66 2019/11/28 00:17:13 bluhm Exp $	*/
 
 /*
  * Copyright (c) 1997-1999 Michael Shalayeff

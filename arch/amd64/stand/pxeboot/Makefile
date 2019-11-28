@@ -1,4 +1,4 @@
-#	$OpenBSD: Makefile,v 1.36 2019/10/29 02:55:51 deraadt Exp $
+#	$OpenBSD: Makefile,v 1.37 2019/11/28 00:17:11 bluhm Exp $
 
 MAN=	pxeboot.8
 
