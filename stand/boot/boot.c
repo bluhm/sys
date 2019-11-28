@@ -72,6 +72,8 @@ cpu_reset(void)
 	outb(0x64, 0xfe);
 //	for (volatile long i = 0; i < 1000000000; i++);
 //	printf("After Reset!\n");
+	for (;;)
+		continue;
 }
 
 void

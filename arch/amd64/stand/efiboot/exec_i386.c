@@ -221,7 +221,6 @@ printf("dst %08p, src %08p, len %08p\n",
 	    (char *)(marks[MARK_START]),
 	    (char *)(marks[MARK_END]) - (char *)(marks[MARK_START]));
 cpu_reset();
-for (volatile long long i = 0; i < 1000000000LL; i++) continue;
 	for (i = 0; i < MARK_MAX; i++)
 		marks[i] += delta;
 
