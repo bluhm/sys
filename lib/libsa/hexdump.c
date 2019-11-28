@@ -23,10 +23,25 @@ void
 hexdump(const void *addr, size_t size)
 {
 	const unsigned char *line, *end;
-	int byte;
+	int byte, iszero, waszero = 0, repzero = 0;
 
 	end = (const char *)addr + size;
 	for (line = addr; line < end; line += 16) {
+		iszero = 1;
+		for (byte = 0; byte < 16; byte++) {
+			if (&line[byte] >= end || line[byte] != 0) {
+				iszero = 0;
+				break;
+			}
+		}
+		if (waszero && iszero) {
+			if (!repzero)
+				printf("*\n");
+			repzero = 1;
+			continue;
+		}
+		waszero = iszero;
+		repzero = 0;
 		printf("%08lx  ", line);
 		for (byte = 0; byte < 16; byte++) {
 			if (&line[byte] < end)
