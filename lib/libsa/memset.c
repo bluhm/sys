@@ -43,3 +43,13 @@ memset(void *s1, int c, size_t n)
 		*p++ = c;
 	return s1;
 }
+
+void *
+memget(void *s1, int c, size_t n)
+{
+	volatile char *p = s1;
+
+	while (n--)
+		c = *p++;
+	return s1;
+}

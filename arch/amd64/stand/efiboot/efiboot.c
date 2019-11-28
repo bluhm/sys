@@ -394,6 +394,7 @@ printf("siz %llu, mapkey %llu, mmsiz %llu, mmver %u\n",
 			 * XXX EfiMemoryMappedIOPortSpace EfiPalCode?
 			 */
 			bm0.type = BIOS_MAP_RES;
+#if 0
 printf("md type %d, phys %08p, end %08p, pages %08llx, attr %016llx\n",
     mm->Type, mm->PhysicalStart, mm->PhysicalStart + mm->NumberOfPages * 4096,
     mm->NumberOfPages, mm->Attribute);
@@ -402,6 +403,7 @@ printf("md type %d, phys %08p, end %08p, pages %08llx, attr %016llx\n",
 //for (volatile long long i = 0; i < 500000000LL; i++) continue;
 //if (mm->PhysicalStart == 0x01000000UL)
 //	for (volatile long long i = 0; i < 5000000000000LL; i++) continue;
+#endif
 
 		for (bm = bios_memmap; bm->type != BIOS_MAP_END; bm++) {
 			if (bm->type != bm0.type)
