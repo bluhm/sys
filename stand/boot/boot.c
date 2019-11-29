@@ -64,13 +64,13 @@ void
 cpu_reset(void)
 {
 //	printf("Before Reset!\n");
-//	for (volatile long i = 0; i < 1000000000; i++);
+//	for (volatile long i = 0; i < 100000000; i++);
 //	printf("Reset 1!\n");
 	outb(0x64, 0xfe);
-//	for (volatile long i = 0; i < 1000000000; i++);
+	for (volatile long i = 0; i < 100000000; i++);
 //	printf("Reset 2!\n");
 	outb(0x64, 0xfe);
-//	for (volatile long i = 0; i < 1000000000; i++);
+	for (volatile long i = 0; i < 100000000; i++);
 //	printf("After Reset!\n");
 	for (;;)
 		continue;
