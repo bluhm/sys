@@ -39,6 +39,7 @@
 #include "cmd.h"
 #include "disk.h"
 #include "libsa.h"
+#include "run_i386.h"
 
 #ifdef SOFTRAID
 #include <dev/softraidvar.h>
@@ -84,6 +85,8 @@ run_loadfile(uint64_t *marks, int howto)
 	int i;
 	u_long delta;
 	extern u_long efi_loadaddr;
+
+hexdump(run_i386, 64);
 
 	if ((av = alloc(ac)) == NULL)
 		panic("alloc for bootarg");
@@ -134,8 +137,7 @@ printf("Before clear keys!\n");
 #endif
 
 printf("Before entry!\n");
-	entry = marks[MARK_ENTRY] & 0x0fffffff;
-	entry += delta;
+	entry = (marks[MARK_ENTRY] + delta ) & 0x0fffffff;
 
 	printf("entry point at 0x%08lx\n", entry);
 
@@ -160,10 +162,15 @@ efi_memprobe_internal();
 
 printf("run_loadfile %08p, cpu_reset %08p, stack %08p, alloca %08p\n",
     (void *)run_loadfile, (void *)cpu_reset, &entry, alloc(1000));
+#ifdef __amd64__
+printf("run_i386_start %08p, run_i386_size %08lx, run_i386 %08p, end %08p\n",
+    (void *)run_i386_start, run_i386_size, (void *)run_i386,
+    (char *)run_i386 + run_i386_size);
+#endif
 
 printf("delta %08p, &delta %08p, &marks %08p\n", delta, &delta, marks);
 printf("MARK_START %08p %d\n", marks[MARK_START], *(int *)(marks[MARK_START]));
-printf("MARK_ENTRY %08p %d\n", marks[MARK_ENTRY], *(int *)(marks[MARK_ENTRY]));
+printf("MARK_ENTRY %08p %08x\n", marks[MARK_ENTRY], *(int *)(marks[MARK_ENTRY]));
 printf("MARK_END %08p %d\n", marks[MARK_END], *(int *)(marks[MARK_END]));
 printf("MARK_START+delta %08p %d\n", (char *)(marks[MARK_START]) + delta,
     *(int *)((char *)(marks[MARK_START]) + delta));
@@ -184,9 +191,11 @@ printf("dst %08p, src %08p, len %08p\n",
 	}
 #endif
 
+hexdump((void *)(marks[MARK_ENTRY]), 64);
+printf("*entry %08p %08x\n", marks[MARK_ENTRY], *(int *)(marks[MARK_ENTRY]));
+
 	/* Sync the memory map and call ExitBootServices() */
 	efi_cleanup();
-
 
 	/* Pass memory map to the kernel */
 	mem_pass();
@@ -205,9 +214,11 @@ printf("dst %08p, src %08p, len %08p\n",
 	 * Move the loaded kernel image to the usual place after calling
 	 * ExitBootServices().
 	 */
+#if 0
 	volatile int *p;
 	p = (void *)0x02000000UL;
 	*p = 0;
+#endif
 	memset(
 	    (char *)(marks[MARK_START]) + delta,
 	    0xf0,
@@ -220,9 +231,10 @@ printf("dst %08p, src %08p, len %08p\n",
 	    (char *)(marks[MARK_START]) + delta,
 	    (char *)(marks[MARK_START]),
 	    (char *)(marks[MARK_END]) - (char *)(marks[MARK_START]));
-cpu_reset();
 	for (i = 0; i < MARK_MAX; i++)
 		marks[i] += delta;
+//if (*(int *)entry == 0x64e6feb0)
+//	cpu_reset();
 
 #ifdef __amd64__
 	(*run_i386)((u_long)run_i386, entry, howto, bootdev, BOOTARG_APIVER,

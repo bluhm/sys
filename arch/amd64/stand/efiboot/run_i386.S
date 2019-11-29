@@ -36,6 +36,8 @@ delay2:					\
 	dec	%eax;			\
 	jnz	delay2;
 
+	.align	4
+	.data
 	.globl _C_LABEL(run_i386_size)
 _C_LABEL(run_i386_size):
 	.long run_i386_end - _C_LABEL(run_i386_start)
@@ -103,9 +105,14 @@ start32a:
 	movl	%eax, %cr4
 
 	jmp	start32b
+	.align	4
 start32b:
 	.code32
 
+//cmpl	$0x64e6feb0, (%esi)
+//jne	noreset
+//CPU_RESET
+//noreset:
 	call	*%esi
 
 	.align	4
