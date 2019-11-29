@@ -77,6 +77,9 @@ efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE *systab)
 	EFI_DEVICE_PATH		*dp0 = NULL, *dp;
 	EFI_STATUS		 status;
 	EFI_PHYSICAL_ADDRESS	 stack;
+#ifdef __amd64__
+	EFI_PHYSICAL_ADDRESS	 run;
+#endif
 
 	ST = systab;
 	BS = ST->BootServices;
@@ -115,10 +118,14 @@ efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE *systab)
 	}
 
 #ifdef __amd64__
-	/* allocate run_i386_start() on heap */
-	if ((run_i386 = alloc(run_i386_size)) == NULL)
-		panic("alloc() failed");
-	memcpy(run_i386, run_i386_start, run_i386_size);
+	/* allocate copy of run_i386_start() as executable memory */
+	run = 0x01000000ULL;  /* Below 16MB */
+	status = EFI_CALL(BS->AllocatePages, AllocateMaxAddress, EfiLoaderCode,
+	    EFI_SIZE_TO_PAGES(run_i386_size), &run);
+	if (status != EFI_SUCCESS)
+		panic("cannot copy run_i386_start (%u)", status);
+	memcpy((void *)run, run_i386_start, run_i386_size);
+	run_i386 = (void *)run;
 #endif
 
 	/* can't use sa_cleanup since printf is used after sa_cleanup() */
