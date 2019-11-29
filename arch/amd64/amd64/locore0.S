@@ -126,6 +126,20 @@
 #define	_RELOC(x)	((x) - KERNBASE)
 #define	RELOC(x)	_RELOC(_C_LABEL(x))
 
+#define CPU_RESET			\
+	mov	$0xfe, %al;		\
+	out	%al, $0x64;		\
+	mov	$100000000, %eax;	\
+delay1:					\
+	dec	%eax;			\
+	jnz	delay1;			\
+	mov	$0xfe, %al;		\
+	out	%al, $0x64;		\
+	mov	$100000000, %eax;	\
+delay2:					\
+	dec	%eax;			\
+	jnz	delay2;
+
 /*
  * Some hackage to deal with 64bit symbols in 32 bit mode.
  * This may not be needed if things are cleaned up a little.

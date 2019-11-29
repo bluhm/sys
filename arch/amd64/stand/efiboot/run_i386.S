@@ -22,6 +22,20 @@
 #define	CODE_SEGMENT	0x10
 #define	DATA_SEGMENT	0x18
 
+#define CPU_RESET			\
+	mov	$0xfe, %al;		\
+	out	%al, $0x64;		\
+	mov	$100000000, %eax;	\
+delay1:					\
+	dec	%eax;			\
+	jnz	delay1;			\
+	mov	$0xfe, %al;		\
+	out	%al, $0x64;		\
+	mov	$100000000, %eax;	\
+delay2:					\
+	dec	%eax;			\
+	jnz	delay2;
+
 	.globl _C_LABEL(run_i386_size)
 _C_LABEL(run_i386_size):
 	.long run_i386_end - _C_LABEL(run_i386_start)
