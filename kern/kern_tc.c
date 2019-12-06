@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_tc.c,v 1.51 2019/11/26 15:27:08 cheloha Exp $ */
+/*	$OpenBSD: kern_tc.c,v 1.53 2019/12/02 21:47:54 cheloha Exp $ */
 
 /*
  * Copyright (c) 2000 Poul-Henning Kamp <phk@FreeBSD.org>

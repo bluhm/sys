@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_extern.h,v 1.149 2019/11/05 08:18:47 mpi Exp $	*/
+/*	$OpenBSD: uvm_extern.h,v 1.151 2019/11/29 06:34:45 deraadt Exp $	*/
 /*	$NetBSD: uvm_extern.h,v 1.57 2001/03/09 01:02:12 chs Exp $	*/
 
 /*
@@ -114,6 +114,7 @@ typedef int		vm_prot_t;
 #define UVM_FLAG_STACK   0x2000000 /* page may contain a stack */
 #define UVM_FLAG_WC      0x4000000 /* write combining */
 #define UVM_FLAG_CONCEAL 0x8000000 /* omit from dumps */
+#define UVM_FLAG_SYSCALL 0x10000000 /* system calls allowed */
 
 /* macros to extract info */
 #define UVM_PROTECTION(X)	((X) & PROT_MASK)
@@ -424,8 +425,6 @@ int			uvm_sysctl(int *, u_int, void *, size_t *,
 			    void *, size_t, struct proc *);
 struct vm_page		*uvm_pagealloc(struct uvm_object *,
 			    voff_t, struct vm_anon *, int);
-vaddr_t			uvm_pagealloc_contig(vaddr_t, vaddr_t,
-			    vaddr_t, vaddr_t);
 int			uvm_pagealloc_multi(struct uvm_object *, voff_t,
     			    vsize_t, int);
 void			uvm_pagerealloc(struct vm_page *, 

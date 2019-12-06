@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_map.c,v 1.252 2019/11/26 18:23:48 mlarkin Exp $	*/
+/*	$OpenBSD: uvm_map.c,v 1.256 2019/12/04 08:28:29 mlarkin Exp $	*/
 /*	$NetBSD: uvm_map.c,v 1.86 2000/11/27 08:40:03 chs Exp $	*/
 
 /*
@@ -951,9 +951,9 @@ uvm_mapanon(struct vm_map *map, vaddr_t *addr, vsize_t sz,
 	KASSERT((map->flags & VM_MAP_ISVMSPACE) == VM_MAP_ISVMSPACE);
 	KASSERT(map != kernel_map);
 	KASSERT((map->flags & UVM_FLAG_HOLE) == 0);
-
 	KASSERT((map->flags & VM_MAP_INTRSAFE) == 0);
 	splassert(IPL_NONE);
+	KASSERT((flags & UVM_FLAG_TRYLOCK) == 0);
 
 	/*
 	 * We use pmap_align and pmap_offset as alignment and offset variables.
@@ -989,14 +989,7 @@ uvm_mapanon(struct vm_map *map, vaddr_t *addr, vsize_t sz,
 	if (new == NULL)
 		return(ENOMEM);
 
-	if (flags & UVM_FLAG_TRYLOCK) {
-		if (vm_map_lock_try(map) == FALSE) {
-			error = EFAULT;
-			goto out;
-		}
-	} else
-		vm_map_lock(map);
-
+	vm_map_lock(map);
 	first = last = NULL;
 	if (flags & UVM_FLAG_FIXED) {
 		/*
@@ -1080,6 +1073,10 @@ uvm_mapanon(struct vm_map *map, vaddr_t *addr, vsize_t sz,
 	entry->advice = advice;
 	if (prot & PROT_WRITE)
 		map->wserial++;
+	if (flags & UVM_FLAG_SYSCALL) {
+		entry->etype |= UVM_ET_SYSCALL;
+		map->wserial++;
+	}
 	if (flags & UVM_FLAG_STACK) {
 		entry->etype |= UVM_ET_STACK;
 		if (flags & (UVM_FLAG_FIXED | UVM_FLAG_UNMAP))
@@ -1114,7 +1111,7 @@ unlock:
 	 * destroy free-space entries.
 	 */
 	uvm_unmap_detach(&dead, 0);
-out:
+
 	if (new)
 		uvm_mapent_free(new);
 	return error;
@@ -1345,6 +1342,10 @@ uvm_map(struct vm_map *map, vaddr_t *addr, vsize_t sz,
 	entry->advice = advice;
 	if (prot & PROT_WRITE)
 		map->wserial++;
+	if (flags & UVM_FLAG_SYSCALL) {
+		entry->etype |= UVM_ET_SYSCALL;
+		map->wserial++;
+	}
 	if (flags & UVM_FLAG_STACK) {
 		entry->etype |= UVM_ET_STACK;
 		if (flags & UVM_FLAG_UNMAP)
@@ -1808,12 +1809,15 @@ uvm_map_inentry_sp(vm_map_entry_t entry)
 /*
  * If a syscall comes from a writeable entry, W^X is violated.
  * (Would be nice if we can spot aliasing, which is also kind of bad)
+ * Ensure system call comes from libc or ld.so's text segment.
  */
 int
 uvm_map_inentry_pc(vm_map_entry_t entry)
 {
 	if (entry->protection & PROT_WRITE)
 		return (0);	/* not permitted */
+//	if ((entry->etype & UVM_ET_SYSCALL) == 0)
+//		return (0);	/* not permitted */
 	return (1);
 }
 
@@ -3089,12 +3093,14 @@ uvm_map_printit(struct vm_map *map, boolean_t full,
 		    entry, entry->start, entry->end, entry->object.uvm_obj,
 		    (long long)entry->offset, entry->aref.ar_amap,
 		    entry->aref.ar_pageoff);
-		(*pr)("\tsubmap=%c, cow=%c, nc=%c, stack=%c, prot(max)=%d/%d, inh=%d, "
+		(*pr)("\tsubmap=%c, cow=%c, nc=%c, stack=%c, "
+		    "syscall=%c, prot(max)=%d/%d, inh=%d, "
 		    "wc=%d, adv=%d\n",
 		    (entry->etype & UVM_ET_SUBMAP) ? 'T' : 'F',
 		    (entry->etype & UVM_ET_COPYONWRITE) ? 'T' : 'F',
 		    (entry->etype & UVM_ET_NEEDSCOPY) ? 'T' : 'F',
 		    (entry->etype & UVM_ET_STACK) ? 'T' : 'F',
+		    (entry->etype & UVM_ET_SYSCALL) ? 'T' : 'F',
 		    entry->protection, entry->max_protection,
 		    entry->inheritance, entry->wired_count, entry->advice);
 
@@ -3511,7 +3517,7 @@ uvmspace_exec(struct proc *p, vaddr_t start, vaddr_t end)
 		 * when a process execs another program image.
 		 */
 		vm_map_lock(map);
-		vm_map_modflags(map, 0, VM_MAP_WIREFUTURE);
+		vm_map_modflags(map, 0, VM_MAP_WIREFUTURE|VM_MAP_SYSCALL_ONCE);
 
 		/*
 		 * now unmap the old program
@@ -3614,7 +3620,7 @@ uvm_share(struct vm_map *dstmap, vaddr_t dstaddr, vm_prot_t prot,
 	int ret = 0;
 	vaddr_t unmap_end;
 	vaddr_t dstva;
-	vsize_t off, len, n = sz;
+	vsize_t s_off, len, n = sz, remain;
 	struct vm_map_entry *first = NULL, *last = NULL;
 	struct vm_map_entry *src_entry, *psrc_entry = NULL;
 	struct uvm_map_deadq dead;
@@ -3635,6 +3641,7 @@ uvm_share(struct vm_map *dstmap, vaddr_t dstaddr, vm_prot_t prot,
 		goto exit_unlock;
 	}
 
+	dstva = dstaddr;
 	unmap_end = dstaddr;
 	for (; src_entry != NULL;
 	    psrc_entry = src_entry,
@@ -3652,23 +3659,32 @@ uvm_share(struct vm_map *dstmap, vaddr_t dstaddr, vm_prot_t prot,
 			panic("uvm_share: non-copy_on_write map entries "
 			    "marked needs_copy (illegal)");
 
-		dstva = dstaddr;
-		if (src_entry->start > srcaddr) {
-			dstva += src_entry->start - srcaddr;
-			off = 0;
-		} else
-			off = srcaddr - src_entry->start;
+		/*
+		 * srcaddr > map entry start? means we are in the middle of a
+		 * map, so we calculate the offset to use in the source map.
+		 */
+		if (srcaddr > src_entry->start)
+			s_off = srcaddr - src_entry->start;
+		else if (srcaddr == src_entry->start)
+			s_off = 0;
+		else
+			panic("uvm_share: map entry start > srcaddr");
 
-		if (n < src_entry->end - src_entry->start)
+		remain = src_entry->end - src_entry->start - s_off;
+
+		/* Determine how many bytes to share in this pass */
+		if (n < remain)
 			len = n;
 		else
-			len = src_entry->end - src_entry->start;
-		n -= len;
+			len = remain;
 
-		if (uvm_mapent_share(dstmap, dstva, len, off, prot, prot,
+		if (uvm_mapent_share(dstmap, dstva, len, s_off, prot, prot,
 		    srcmap, src_entry, &dead) == NULL)
 			break;
 
+		n -= len;
+		dstva += len;
+		srcaddr += len;
 		unmap_end = dstva + len;
 		if (n == 0)
 			goto exit_unlock;
@@ -4284,6 +4300,45 @@ uvm_map_inherit(struct vm_map *map, vaddr_t start, vaddr_t end,
 		entry = RBT_NEXT(uvm_map_addr, entry);
 	}
 
+	vm_map_unlock(map);
+	return (0);
+}
+
+/* 
+ * uvm_map_syscall: permit system calls for range of addrs in map.
+ *
+ * => map must be unlocked
+ */
+int
+uvm_map_syscall(struct vm_map *map, vaddr_t start, vaddr_t end)
+{
+	struct vm_map_entry *entry;
+
+	if (start > end)
+		return EINVAL;
+	start = MAX(start, map->min_offset);
+	end = MIN(end, map->max_offset);
+	if (start >= end)
+		return 0;
+	if (map->flags & VM_MAP_SYSCALL_ONCE)	/* only allowed once */
+		return (EPERM);
+
+	vm_map_lock(map);
+
+	entry = uvm_map_entrybyaddr(&map->addr, start);
+	if (entry->end > start)
+		UVM_MAP_CLIP_START(map, entry, start);
+	else
+		entry = RBT_NEXT(uvm_map_addr, entry);
+
+	while (entry != NULL && entry->start < end) {
+		UVM_MAP_CLIP_END(map, entry, end);
+		entry->etype |= UVM_ET_SYSCALL;
+		entry = RBT_NEXT(uvm_map_addr, entry);
+	}
+
+	map->wserial++;
+	map->flags |= VM_MAP_SYSCALL_ONCE;
 	vm_map_unlock(map);
 	return (0);
 }

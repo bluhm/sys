@@ -1,4 +1,4 @@
-/*	$OpenBSD: scsi_base.c,v 1.248 2019/11/28 17:25:59 krw Exp $	*/
+/*	$OpenBSD: scsi_base.c,v 1.259 2019/12/05 19:53:05 krw Exp $	*/
 /*	$NetBSD: scsi_base.c,v 1.43 1997/04/02 02:29:36 mycroft Exp $	*/
 
 /*
@@ -87,6 +87,14 @@ void			scsi_link_close(struct scsi_link *);
 
 void *			scsi_iopool_get(struct scsi_iopool *);
 void			scsi_iopool_put(struct scsi_iopool *, void *);
+
+/* Various helper functions for scsi_do_mode_sense() */
+int			scsi_mode_sense(struct scsi_link *, int, struct scsi_mode_header *,
+			    size_t, int, int);
+int			scsi_mode_sense_big(struct scsi_link *, int,
+			    struct scsi_mode_header_big *, size_t, int, int);
+void *			scsi_mode_sense_page(struct scsi_mode_header *, int, int);
+void *			scsi_mode_sense_big_page(struct scsi_mode_header_big *, int, int);
 
 /* ioh/xsh queue state */
 #define RUNQ_IDLE	0
@@ -432,7 +440,7 @@ scsi_move(struct scsi_io_mover *m)
 {
 	mtx_enter(&m->mtx);
 	while (!m->done)
-		msleep(m, &m->mtx, PRIBIO, "scsiiomv", 0);
+		msleep_nsec(m, &m->mtx, PRIBIO, "scsiiomv", INFSLP);
 	mtx_leave(&m->mtx);
 }
 
@@ -706,7 +714,8 @@ scsi_link_shutdown(struct scsi_link *link)
 	}
 
 	while (link->pending > 0)
-		msleep(&link->pending, &iopl->mtx, PRIBIO, "pendxs", 0);
+		msleep_nsec(&link->pending, &iopl->mtx, PRIBIO, "pendxs",
+		    INFSLP);
 	mtx_leave(&iopl->mtx);
 
 	while ((ioh = TAILQ_FIRST(&sleepers)) != NULL) {
@@ -907,7 +916,10 @@ scsi_inquire_vpd(struct scsi_link *link, void *buf, u_int buflen,
 #ifdef SCSIDEBUG
 	sc_print_addr(link);
 	if (error == 0) {
-		bytes = _2btol(((struct scsi_vpd_hdr *)buf)->page_length);
+		bytes = sizeof(struct scsi_vpd_hdr) +
+		    _2btol(((struct scsi_vpd_hdr *)buf)->page_length);
+		if (bytes < buflen)
+			buflen = bytes;
 		printf("got %u of %u bytes of VPD inquiry page %u data:\n", buflen,
 		    bytes, page);
 		scsi_show_mem(buf, buflen);
@@ -1048,12 +1060,15 @@ scsi_start(struct scsi_link *link, int type, int flags)
 }
 
 int
-scsi_mode_sense(struct scsi_link *link, int byte2, int page,
+scsi_mode_sense(struct scsi_link *link, int pg_code,
     struct scsi_mode_header *data, size_t len, int flags, int timeout)
 {
-	struct scsi_mode_sense *cmd;
-	struct scsi_xfer *xs;
-	int error;
+	struct scsi_mode_sense	*cmd;
+	struct scsi_xfer	*xs;
+	int			 error;
+#ifdef SCSIDEBUG
+	size_t			 bytes;
+#endif /* SCSIDEBUG */
 
 	xs = scsi_xs_get(link, flags | SCSI_DATA_IN);
 	if (xs == NULL)
@@ -1068,12 +1083,11 @@ scsi_mode_sense(struct scsi_link *link, int byte2, int page,
 	 * that checks for bogus values of 0 will work in case the mode sense
 	 * fails.
 	 */
-	bzero(data, len);
+	memset(data, 0, len);
 
 	cmd = (struct scsi_mode_sense *)xs->cmd;
 	cmd->opcode = MODE_SENSE;
-	cmd->byte2 = byte2;
-	cmd->page = page;
+	cmd->page = pg_code;
 
 	if (len > 0xff)
 		len = 0xff;
@@ -1082,23 +1096,36 @@ scsi_mode_sense(struct scsi_link *link, int byte2, int page,
 	error = scsi_xs_sync(xs);
 	scsi_xs_put(xs);
 
-	SC_DEBUG(link, SDEV_DB2, ("scsi_mode_sense: page %#x, error = %d\n",
-	    page, error));
+#ifdef SCSIDEBUG
+	sc_print_addr(link);
+	if (error == 0) {
+		bytes = sizeof(data->data_length) + data->data_length;
+		if (bytes < len)
+			len = bytes;
+		printf("got %zu of %zu bytes of mode sense (6) page %d data:\n",
+		    len, bytes, pg_code);
+		scsi_show_mem((u_char *)data, len);
+	} else
+		printf("mode sense (6) page %d not available\n", pg_code);
+#endif /* SCSIDEBUG */
 
-	return (error);
+	return error;
 }
 
 int
-scsi_mode_sense_big(struct scsi_link *link, int byte2, int page,
+scsi_mode_sense_big(struct scsi_link *link, int pg_code,
     struct scsi_mode_header_big *data, size_t len, int flags, int timeout)
 {
-	struct scsi_mode_sense_big *cmd;
-	struct scsi_xfer *xs;
-	int error;
+	struct scsi_mode_sense_big	*cmd;
+	struct scsi_xfer		*xs;
+	int				 error;
+#ifdef SCSIDEBUG
+	size_t				 bytes;
+#endif /* SCSIDEBUG */
 
 	xs = scsi_xs_get(link, flags | SCSI_DATA_IN);
 	if (xs == NULL)
-		return (ENOMEM);
+		return ENOMEM;
 	xs->cmdlen = sizeof(*cmd);
 	xs->data = (void *)data;
 	xs->datalen = len;
@@ -1109,12 +1136,11 @@ scsi_mode_sense_big(struct scsi_link *link, int byte2, int page,
 	 * that checks for bogus values of 0 will work in case the mode sense
 	 * fails.
 	 */
-	bzero(data, len);
+	memset(data, 0, len);
 
 	cmd = (struct scsi_mode_sense_big *)xs->cmd;
 	cmd->opcode = MODE_SENSE_BIG;
-	cmd->byte2 = byte2;
-	cmd->page = page;
+	cmd->page = pg_code;
 
 	if (len > 0xffff)
 		len = 0xffff;
@@ -1123,38 +1149,59 @@ scsi_mode_sense_big(struct scsi_link *link, int byte2, int page,
 	error = scsi_xs_sync(xs);
 	scsi_xs_put(xs);
 
-	SC_DEBUG(link, SDEV_DB2,
-	    ("scsi_mode_sense_big: page %#x, error = %d\n", page, error));
+#ifdef SCSIDEBUG
+	sc_print_addr(link);
+	if (error == 0) {
+		bytes = sizeof(data->data_length) + _2btol(data->data_length);
+		if (bytes < len)
+			len = bytes;
+		printf("got %zu bytes of %zu bytes of mode sense (10) page %d data:\n",
+		    len, bytes, pg_code);
+		scsi_show_mem((u_char *)data, len);
+	} else
+		printf("mode sense (10) page %d not available\n", pg_code);
+#endif /* SCSIDEBUG */
 
-	return (error);
+	return error;
 }
 
 void *
-scsi_mode_sense_page(struct scsi_mode_header *hdr, const int page_len)
+scsi_mode_sense_page(struct scsi_mode_header *hdr, int pg_code, int pg_length)
 {
-	int					total_length, header_length;
+	u_int8_t	*page;
+	int		 total_length, header_length;
 
 	total_length = hdr->data_length + sizeof(hdr->data_length);
 	header_length = sizeof(*hdr) + hdr->blk_desc_len;
+	page = (u_int8_t *)hdr + header_length;
 
-	if ((total_length - header_length) < page_len)
-		return (NULL);
+	if ((total_length - header_length) < pg_length)
+		return NULL;
 
-	return ((u_char *)hdr + header_length);
+	if ((*page & SMS_PAGE_CODE) != pg_code)
+		return NULL;
+
+	return page;
 }
 
 void *
-scsi_mode_sense_big_page(struct scsi_mode_header_big *hdr, const int page_len)
+scsi_mode_sense_big_page(struct scsi_mode_header_big *hdr, int pg_code,
+    int pg_length)
 {
-	int					total_length, header_length;
+	u_int8_t	*page;
+	int		 total_length, header_length;
 
 	total_length = _2btol(hdr->data_length) + sizeof(hdr->data_length);
 	header_length = sizeof(*hdr) + _2btol(hdr->blk_desc_len);
+	page = (u_int8_t *)hdr + header_length;
 
-	if ((total_length - header_length) < page_len)
-		return (NULL);
+	if ((total_length - header_length) < pg_length)
+		return NULL;
 
-	return ((u_char *)hdr + header_length);
+	if ((*page & SMS_PAGE_CODE) != pg_code)
+		return NULL;
+
+	return page;
 }
 
 void
@@ -1205,12 +1252,11 @@ scsi_parse_blkdesc(struct scsi_link *link, union scsi_mode_sense_buf *buf,
 }
 
 int
-scsi_do_mode_sense(struct scsi_link *link, int page,
-    union scsi_mode_sense_buf *buf, void **page_data, u_int32_t *density,
-    u_int64_t *block_count, u_int32_t *block_size, int page_len, int flags,
-    int *big)
+scsi_do_mode_sense(struct scsi_link *link, int pg_code,
+    union scsi_mode_sense_buf *buf, void **page_data,
+    int pg_length, int flags, int *big)
 {
-	int					 error;
+	int			error = 0;
 
 	*page_data = NULL;
 	*big = 0;
@@ -1226,36 +1272,33 @@ scsi_do_mode_sense(struct scsi_link *link, int page,
 		 * data length to ensure that at least a header (3 additional
 		 * bytes) is returned.
 		 */
-		error = scsi_mode_sense(link, 0, page, &buf->hdr,
+		error = scsi_mode_sense(link, pg_code, &buf->hdr,
 		    sizeof(*buf), flags, 20000);
 		if (error == 0) {
-			*page_data = scsi_mode_sense_page(&buf->hdr, page_len);
-			if (*page_data == NULL) {
-				/*
-				 * XXX
-				 * Page data may be invalid (e.g. all zeros)
-				 * but we accept the device's word that this is
-				 * the best it can do. Some devices will freak
-				 * out if their word is not accepted and
-				 * MODE_SENSE_BIG is attempted.
-				 */
-				return (0);
-			}
-			goto blk_desc;
+			/*
+			 * Page data may be invalid (e.g. all zeros) but we
+			 * accept the device's word that this is the best it can
+			 * do. Some devices will freak out if their word is not
+			 * accepted and MODE_SENSE_BIG is attempted.
+			 */
+			*page_data = scsi_mode_sense_page(&buf->hdr, pg_code,
+			    pg_length);
+			return 0;
 		}
 	}
 
 	/*
-	 * non-ATAPI, non-USB devices that don't support SCSI-2 commands are done.
+	 * non-ATAPI, non-USB devices that don't support SCSI-2 commands
+	 * (i.e. MODE SENSE (10)) are done.
 	 */
 	if ((link->flags & (SDEV_ATAPI | SDEV_UMASS)) == 0 &&
 	    SID_ANSII_REV(&link->inqdata) < SCSI_REV_2)
-		return (0);
+		return error;
 
 	/*
 	 * Try 10 byte mode sense request.
 	 */
-	error = scsi_mode_sense_big(link, 0, page, &buf->hdr_big,
+	error = scsi_mode_sense_big(link, pg_code, &buf->hdr_big,
 	    sizeof(*buf), flags, 20000);
 	if (error != 0)
 		return (error);
@@ -1263,10 +1306,8 @@ scsi_do_mode_sense(struct scsi_link *link, int page,
 		return (EIO);
 
 	*big = 1;
-	*page_data = scsi_mode_sense_big_page(&buf->hdr_big, page_len);
-
-blk_desc:
-	scsi_parse_blkdesc(link, buf, *big, density, block_count, block_size);
+	*page_data = scsi_mode_sense_big_page(&buf->hdr_big, pg_code,
+	    pg_length);
 
 	return (0);
 }
@@ -1440,7 +1481,7 @@ scsi_xs_sync(struct scsi_xfer *xs)
 
 		mtx_enter(&cookie);
 		while (xs->cookie != NULL)
-			msleep(xs, &cookie, PRIBIO, "syncxs", 0);
+			msleep_nsec(xs, &cookie, PRIBIO, "syncxs", INFSLP);
 		mtx_leave(&cookie);
 
 		error = scsi_xs_error(xs);
@@ -1530,7 +1571,7 @@ scsi_delay(struct scsi_xfer *xs, int seconds)
 	}
 
 	while (seconds-- > 0) {
-		if (tsleep(&lbolt, PRIBIO|PCATCH, "scbusy", 0)) {
+		if (tsleep_nsec(&lbolt, PRIBIO|PCATCH, "scbusy", INFSLP)) {
 			/* Signal == abort xs. */
 			return (EIO);
 		}

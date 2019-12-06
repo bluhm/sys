@@ -1,4 +1,4 @@
-/*	$OpenBSD: proc.h,v 1.279 2019/11/12 04:20:21 visa Exp $	*/
+/*	$OpenBSD: proc.h,v 1.282 2019/11/30 11:19:17 visa Exp $	*/
 /*	$NetBSD: proc.h,v 1.44 1996/04/22 01:23:21 christos Exp $	*/
 
 /*-
@@ -335,7 +335,6 @@ struct proc {
 	struct	vmspace *p_vmspace;	/* [I] copy of p_p->ps_vmspace */
 	struct	p_inentry p_spinentry;	/* [o] cache for SP check */
 	struct	p_inentry p_pcinentry;	/* [o] cache for PC check */
-	struct	plimit	*p_limit;	/* [l] read ref. of p_p->ps_limit */
 
 	int	p_flag;			/* P_* flags. */
 	u_char	p_spare;		/* unused */
@@ -367,6 +366,10 @@ struct proc {
 	struct	rusage p_ru;		/* Statistics */
 	struct	tusage p_tu;		/* accumulated times. */
 	struct	timespec p_rtime;	/* Real time. */
+
+	struct	plimit	*p_limit;	/* [l] read ref. of p_p->ps_limit */
+	struct	kcov_dev *p_kd;		/* kcov device handle */
+	struct	lock_list_entry *p_sleeplocks;	/* WITNESS lock tracking */ 
 
 	int	 p_siglist;		/* Signals arrived but not delivered. */
 
@@ -400,10 +403,6 @@ struct proc {
 	int	p_sicode;	/* For core dump/debugger XXX */
 
 	u_short	p_xstat;	/* Exit status for wait; also stop signal. */
-
-	struct	lock_list_entry *p_sleeplocks;
-
-	struct	kcov_dev *p_kd;
 };
 
 /* Status values. */
@@ -612,6 +611,7 @@ struct sleep_state {
 	int sls_s;
 	int sls_catch;
 	int sls_do_sleep;
+	int sls_locked;
 	int sls_sig;
 	int sls_timeout;
 };
