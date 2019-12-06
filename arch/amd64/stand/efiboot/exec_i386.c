@@ -128,8 +128,7 @@ run_loadfile(uint64_t *marks, int howto)
 	sr_clear_keys();
 #endif
 
-	entry = marks[MARK_ENTRY] & 0x0fffffff;
-	entry += delta;
+	entry = (marks[MARK_ENTRY] + delta) & 0x0fffffff;
 
 	printf("entry point at 0x%lx\n", entry);
 
