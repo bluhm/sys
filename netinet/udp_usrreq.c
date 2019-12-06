@@ -499,22 +499,24 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 	}
 
 #ifdef IPSEC
-	mtag = m_tag_find(m, PACKET_TAG_IPSEC_IN_DONE, NULL);
-	if (mtag != NULL) {
-		tdbi = (struct tdb_ident *)(mtag + 1);
-		tdb = gettdb(tdbi->rdomain, tdbi->spi,
-		    &tdbi->dst, tdbi->proto);
-	} else
-		tdb = NULL;
-	ipsp_spd_lookup(m, af, iphlen, &error,
-	    IPSP_DIRECTION_IN, tdb, inp, 0);
-	if (error) {
-		udpstat_inc(udps_nosec);
-		goto bad;
+	if (ipsec_in_use) {
+		mtag = m_tag_find(m, PACKET_TAG_IPSEC_IN_DONE, NULL);
+		if (mtag != NULL) {
+			tdbi = (struct tdb_ident *)(mtag + 1);
+			tdb = gettdb(tdbi->rdomain, tdbi->spi,
+			    &tdbi->dst, tdbi->proto);
+		} else
+			tdb = NULL;
+		ipsp_spd_lookup(m, af, iphlen, &error,
+		    IPSP_DIRECTION_IN, tdb, inp, 0);
+		if (error) {
+			udpstat_inc(udps_nosec);
+			goto bad;
+		}
+		/* create ipsec options while we know that tdb cannot be modified */
+		if (tdb && tdb->tdb_ids)
+			ipsecflowinfo = tdb->tdb_ids->id_flow;
 	}
-	/* create ipsec options while we know that tdb cannot be modified */
-	if (tdb && tdb->tdb_ids)
-		ipsecflowinfo = tdb->tdb_ids->id_flow;
 #endif /*IPSEC */
 
 	if (inp == 0) {
