@@ -485,13 +485,6 @@ ipsp_spd_lookup(struct mbuf *m, int af, int hlen, int *error, int direction,
 		}
 	} else { /* IPSP_DIRECTION_IN */
 		if (tdbp != NULL) {
-			/* Direct match in the cache. */
-			if (ipo->ipo_tdb == tdbp) {
-				*error = 0;
-				return ipsp_spd_inp(m, af, hlen, error,
-				    direction, tdbp, inp, ipo);
-			}
-
 			/*
 			 * Special case for bundled IPcomp/ESP SAs:
 			 * 1) only IPcomp flows are loaded into kernel
@@ -509,6 +502,13 @@ ipsp_spd_lookup(struct mbuf *m, int af, int hlen, int *error, int direction,
 			    tdbp->tdb_inext != NULL &&
 			    tdbp->tdb_inext->tdb_sproto == IPPROTO_IPCOMP)
 				tdbp = tdbp->tdb_inext;
+
+			/* Direct match in the cache. */
+			if (ipo->ipo_tdb == tdbp) {
+				*error = 0;
+				return ipsp_spd_inp(m, af, hlen, error,
+				    direction, tdbp, inp, ipo);
+			}
 
 			if (memcmp(dignore ? &ssrc : &ipo->ipo_dst,
 			    &tdbp->tdb_src, tdbp->tdb_src.sa.sa_len) ||
