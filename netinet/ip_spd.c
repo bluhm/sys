@@ -492,6 +492,24 @@ ipsp_spd_lookup(struct mbuf *m, int af, int hlen, int *error, int direction,
 				    direction, tdbp, inp, ipo);
 			}
 
+			/*
+			 * Special case for bundled IPcomp/ESP SAs:
+			 * 1) only IPcomp flows are loaded into kernel
+			 * 2) input processing processes ESP SA first
+			 * 3) then optional IPcomp processing happens
+			 * 4) we only update m_pkthdr.ipsec.tdb_in for ESP
+			 * => 'tdbp' is always set to ESP SA
+			 * => flow has ipo_proto for IPcomp
+			 * So if 'tdbp' points to an ESP SA and this 'tdbp' is
+			 * bundled with an IPcomp SA, then we replace 'tdbp'
+			 * with the IPcomp SA at tdbp->tdb_inext.
+			 */
+			if (ipo->ipo_sproto == IPPROTO_IPCOMP &&
+			    tdbp->tdb_sproto == IPPROTO_ESP &&
+			    tdbp->tdb_inext != NULL &&
+			    tdbp->tdb_inext->tdb_sproto == IPPROTO_IPCOMP)
+				tdbp = tdbp->tdb_inext;
+
 			if (memcmp(dignore ? &ssrc : &ipo->ipo_dst,
 			    &tdbp->tdb_src, tdbp->tdb_src.sa.sa_len) ||
 			    (ipo->ipo_sproto != tdbp->tdb_sproto))

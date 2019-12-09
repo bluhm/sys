@@ -1249,6 +1249,9 @@ ipsec_forward_check(struct mbuf *m, int hlen, int af)
 		tdb = gettdb(tdbi->rdomain, tdbi->spi, &tdbi->dst, tdbi->proto);
 	} else
 		tdb = NULL;
+	if (tdb && tdb->tdb_inext == NULL &&
+	     !(tdb->tdb_flags & (TDBF_TUNNELING|TDBF_USEDTUNNEL)))
+		tdb = NULL;
 	ipsp_spd_lookup(m, af, hlen, &error, IPSP_DIRECTION_IN, tdb, NULL, 0);
 
 	return error;
