@@ -1,4 +1,4 @@
-#	$OpenBSD: GENERIC,v 1.845 2019/11/18 03:03:37 kevlo Exp $
+#	$OpenBSD: GENERIC,v 1.847 2019/12/08 12:27:26 mpi Exp $
 #
 # For further information on compiling OpenBSD kernels, see the config(8)
 # man page.
@@ -15,7 +15,6 @@ maxusers	80			# estimated number of users
 
 option		USER_PCICONF	# user-space PCI configuration
 
-option		KVM86		# Kernel Virtual 8086 emulation
 option		APERTURE	# in-kernel aperture driver for XFree86
 option		MTRR		# CPU memory range attributes control
 
@@ -73,7 +72,6 @@ isa0	at pcib?
 isa0	at amdpcib?
 isa0	at tcpcib?
 isa0	at ichpcib?
-isa0	at piixpcib?
 isa0	at gscpcib?
 isa0	at glxpcib?
 eisa0	at mainbus0
@@ -87,7 +85,6 @@ pcib*	at pci?			# PCI-ISA bridge
 amdpcib* at pci?		# AMD 8111 LPC bridge 
 tcpcib*	at pci?			# Intel Atom E600 LPC bridge
 ichpcib* at pci?		# Intel ICHx/ICHx-M LPC bridges
-piixpcib* at pci?		# Intel PIIX4 PCI-ISA bridge
 gscpcib* at pci?		# NS Geode SC1100 PCI-ISA bridge
 gpio*	at gscpcib?
 glxpcib* at pci?		# AMD CS5536 PCI-ISA bridge
