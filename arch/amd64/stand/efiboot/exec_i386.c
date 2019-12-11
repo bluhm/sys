@@ -133,8 +133,6 @@ run_loadfile(uint64_t *marks, int howto)
 
 	printf("entry point at 0x%lx\n", entry);
 
-	protect_writeable(marks[MARK_START] + delta, 20 * PAGE_SIZE);
-
 	/* Sync the memory map and call ExitBootServices() */
 	efi_cleanup();
 
@@ -155,6 +153,8 @@ run_loadfile(uint64_t *marks, int howto)
 	 * Move the loaded kernel image to the usual place after calling
 	 * ExitBootServices().
 	 */
+	protect_writeable(marks[MARK_START] + delta,
+	    marks[MARK_END] - marks[MARK_START]);
 	memmove((void *)marks[MARK_START] + delta, (void *)marks[MARK_START],
 	    marks[MARK_END] - marks[MARK_START]);
 	for (i = 0; i < MARK_MAX; i++)
@@ -240,19 +240,14 @@ protect_writeable(uint64_t addr, size_t len)
 	__asm volatile("mov %%cr3, %0;" : "=r"(cr3) : :);
 
 	for (addr &= ~(uint64_t)PAGE_MASK; addr < end; addr += PAGE_SIZE) {
-		printf("addr %08p\n", addr);
 		off = (addr & L4_MASK) >> L4_SHIFT;
-		printf("l1 %08p\n", cr3[off]);
 		p = (void *)(cr3[off] & ~(uint64_t)PAGE_MASK);
 		off = (addr & L3_MASK) >> L3_SHIFT;
-		printf("l2 %08p\n", p[off]);
 		p = (void *)(p[off] & ~(uint64_t)PAGE_MASK);
 		off = (addr & L2_MASK) >> L2_SHIFT;
-		printf("pde %08p\n", p[off]);
 		p = (void *)(p[off] & ~(uint64_t)PAGE_MASK);
 		off = (addr & L1_MASK) >> L1_SHIFT;
-		printf("pte %08p\n", p[off]);
-		//p[off] |= PG_RW;
+		p[off] |= PG_RW;
 	}
 
 	/* tlb flush */
