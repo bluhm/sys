@@ -64,6 +64,24 @@ extern struct cmd_state cmd;
 char *bootmac = NULL;
 
 void
+computrace(void)
+{
+	u_long *cr3;
+	u_long *p;
+	int i;
+
+	__asm volatile("mov %%cr3, %0;" : "=r"(cr3) : :);
+	p = (void *)(cr3[0] & ~0xfffUL);
+	p = (void *)(p[0] & ~0xfffUL);
+	p = (void *)(p[8] & ~0xfffUL);
+
+	for (i = 0; i < 20; i++)
+		p[i] |= 0x0000000000000002UL;
+
+	__asm volatile("mov %0,%%cr3" : : "r"(cr3) :);
+}
+
+void
 run_loadfile(uint64_t *marks, int howto)
 {
 	u_long entry;
@@ -134,6 +152,9 @@ run_loadfile(uint64_t *marks, int howto)
 
 	/* Sync the memory map and call ExitBootServices() */
 	efi_cleanup();
+
+	/* Map Computrace of HP EliteBook 830 G6 writable */
+	computrace();
 
 	/* Pass memory map to the kernel */
 	mem_pass();
