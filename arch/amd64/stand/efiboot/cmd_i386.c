@@ -59,9 +59,7 @@ const struct cmd_table cmd_machine[] = {
 	{ "gop",	CMDT_CMD, Xgop_efi },
 	{ "exit",	CMDT_CMD, Xexit_efi },
 	{ "poweroff",	CMDT_CMD, Xpoweroff_efi },
-#ifdef DEBUG
 	{ "regs",	CMDT_CMD, Xregs },
-#endif
 	{ NULL, 0 }
 };
 
@@ -72,14 +70,27 @@ Xdiskinfo(void)
 	return 0;
 }
 
-#ifdef DEBUG
 int
 Xregs(void)
 {
-	DUMP_REGS;
+	u_long *cr3;
+	u_long *p;
+	int i;
+
+	__asm volatile("mov %%cr3, %0;" : "=r"(cr3) : :);
+	printf("cr3\t%08p\n", cr3);
+	p = (void *)(cr3[0] & ~0xfffUL);
+	printf("l4+0\t%08p\n", p);
+	p = (void *)(p[0] & ~0xfffUL);
+	printf("l3+0\t%08p\n", p);
+	p = (void *)(p[8] & ~0xfffUL);
+	printf("l2+8\t%08p\n", p);
+
+	for (i = 0; i < 20; i++)
+		printf("l1+%d\t%08p\n", i, p[i]);
+
 	return 0;
 }
-#endif
 
 int
 Xmemory(void)
