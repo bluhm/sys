@@ -33,6 +33,7 @@
 #include <dev/cons.h>
 #include <lib/libsa/loadfile.h>
 #include <machine/biosvar.h>
+#include <machine/pte.h>
 #include <machine/specialreg.h>
 #include <stand/boot/bootarg.h>
 
@@ -57,6 +58,7 @@ typedef void (*startfuncp)(int, int, int, int, int, int, int, int)
     __attribute__ ((noreturn));
 
 void ucode_load(void);
+void protect_writeable(uint64_t, size_t);
 extern struct cmd_state cmd;
 
 char *bootmac = NULL;
@@ -130,6 +132,8 @@ run_loadfile(uint64_t *marks, int howto)
 	entry += delta;
 
 	printf("entry point at 0x%lx\n", entry);
+
+	protect_writeable(marks[MARK_START] + delta, 20 * PAGE_SIZE);
 
 	/* Sync the memory map and call ExitBootServices() */
 	efi_cleanup();
@@ -224,4 +228,33 @@ ucode_load(void)
 	addbootarg(BOOTARG_UCODE, sizeof(uc), &uc);
 
 	close(fd);
+}
+
+void
+protect_writeable(uint64_t addr, size_t len)
+{
+	uint64_t end = addr + len;
+	uint64_t *cr3, *p;
+	size_t off;
+
+	__asm volatile("mov %%cr3, %0;" : "=r"(cr3) : :);
+
+	for (addr &= ~(uint64_t)PAGE_MASK; addr < end; addr += PAGE_SIZE) {
+		printf("addr %08p\n", addr);
+		off = (addr & L4_MASK) >> L4_SHIFT;
+		printf("l1 %08p\n", cr3[off]);
+		p = (void *)(cr3[off] & ~(uint64_t)PAGE_MASK);
+		off = (addr & L3_MASK) >> L3_SHIFT;
+		printf("l2 %08p\n", p[off]);
+		p = (void *)(p[off] & ~(uint64_t)PAGE_MASK);
+		off = (addr & L2_MASK) >> L2_SHIFT;
+		printf("pde %08p\n", p[off]);
+		p = (void *)(p[off] & ~(uint64_t)PAGE_MASK);
+		off = (addr & L1_MASK) >> L1_SHIFT;
+		printf("pte %08p\n", p[off]);
+		//p[off] |= PG_RW;
+	}
+
+	/* tlb flush */
+	__asm volatile("mov %0,%%cr3" : : "r"(cr3) :);
 }
