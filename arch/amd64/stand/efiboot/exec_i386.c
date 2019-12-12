@@ -1,4 +1,4 @@
-/*	$OpenBSD: exec_i386.c,v 1.2 2019/05/22 15:40:48 kettenis Exp $	*/
+/*	$OpenBSD: exec_i386.c,v 1.3 2019/12/12 13:09:35 bluhm Exp $	*/
 
 /*
  * Copyright (c) 1997-1998 Michael Shalayeff
