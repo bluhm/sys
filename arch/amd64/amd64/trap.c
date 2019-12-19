@@ -163,14 +163,18 @@ pageflttrap(struct trapframe *frame, int usermode)
 		extern struct vm_map *kernel_map;
 
 		/* This will only trigger if SMEP is enabled */
-		if (cr2 <= VM_MAXUSER_ADDRESS && frame->tf_err & PGEX_I)
-			panic("attempt to execute user address %p "
-			    "in supervisor mode", (void *)cr2);
+		if (cr2 <= VM_MAXUSER_ADDRESS && frame->tf_err & PGEX_I) {
+			printf("attempt to execute user address %p "
+			    "in supervisor mode\n", (void *)cr2);
+			return 0;
+		}
 		/* This will only trigger if SMAP is enabled */
 		if (pcb->pcb_onfault == NULL && cr2 <= VM_MAXUSER_ADDRESS &&
-		    frame->tf_err & PGEX_P)
-			panic("attempt to access user address %p "
-			    "in supervisor mode", (void *)cr2);
+		    frame->tf_err & PGEX_P) {
+			printf("attempt to access user address %p "
+			    "in supervisor mode\n", (void *)cr2);
+			return 0;
+		}
 
 		/*
 		 * It is only a kernel address space fault iff:
