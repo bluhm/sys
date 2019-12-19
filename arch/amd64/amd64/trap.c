@@ -399,7 +399,7 @@ trap_print(struct trapframe *frame, int type)
 	printf(" in %s mode\n", KERNELMODE(frame->tf_cs, frame->tf_rflags) ?
 	    "supervisor" : "user");
 	printf("trap type %d code %llx rip %llx cs %llx rflags %llx cr2 "
-	       " %llx cpl %x rsp %llx\n",
+	       "%llx cpl %x rsp %llx\n",
 	    type, frame->tf_err, frame->tf_rip, frame->tf_cs,
 	    frame->tf_rflags, rcr2(), curcpu()->ci_ilevel, frame->tf_rsp);
 	printf("gsbase %p  kgsbase %p\n",
