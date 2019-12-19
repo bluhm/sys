@@ -1,4 +1,4 @@
-/*	$OpenBSD: acpivout.c,v 1.14 2019/10/21 16:32:51 jcs Exp $	*/
+/*	$OpenBSD: acpivout.c,v 1.16 2019/12/14 10:57:48 patrick Exp $	*/
 /*
  * Copyright (c) 2009 Paul Irofti <pirofti@openbsd.org>
  *

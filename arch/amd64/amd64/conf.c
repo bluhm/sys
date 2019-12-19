@@ -1,4 +1,4 @@
-/*	$OpenBSD: conf.c,v 1.63 2018/08/31 04:20:37 visa Exp $	*/
+/*	$OpenBSD: conf.c,v 1.65 2019/12/17 13:08:54 reyk Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Charles M. Hannum.  All rights reserved.
@@ -151,6 +151,7 @@ cdev_decl(cy);
 #include "ksyms.h"
 #include "usb.h"
 #include "uhid.h"
+#include "fido.h"
 #include "ugen.h"
 #include "ulpt.h"
 #include "ucom.h"
@@ -279,7 +280,7 @@ struct cdevsw	cdevsw[] =
 	cdev_notdef(),			/* 77: was USB scanners */
 	cdev_notdef(),			/* 78 */
 	cdev_bio_init(NBIO,bio),	/* 79: ioctl tunnel */
-	cdev_notdef(),			/* 80: gpr? XXX */
+	cdev_notdef(),			/* 80 */
 	cdev_ptm_init(NPTY,ptm),	/* 81: pseudo-tty ptm device */
 	cdev_hotplug_init(NHOTPLUG,hotplug), /* 82: devices hot plugging */
 	cdev_acpi_init(NACPI,acpi),	/* 83: ACPI */
@@ -297,6 +298,7 @@ struct cdevsw	cdevsw[] =
 	cdev_pvbus_init(NPVBUS,pvbus),	/* 95: pvbus(4) control interface */
 	cdev_ipmi_init(NIPMI,ipmi),	/* 96: ipmi */
 	cdev_switch_init(NSWITCH,switch), /* 97: switch(4) control interface */
+	cdev_fido_init(NFIDO,fido),	/* 98: FIDO/U2F security keys */
 };
 int	nchrdev = nitems(cdevsw);
 
