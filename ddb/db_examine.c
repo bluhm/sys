@@ -288,8 +288,10 @@ void
 db_print_loc_and_inst(vaddr_t loc)
 {
 	db_printsym(loc, DB_STGY_PROC, db_printf);
-	db_printf(":\t");
-	(void) db_disasm(loc, 0);
+	if (loc) {
+		db_printf(":\t");
+		db_disasm(loc, 0);
+	}
 }
 
 /* local copy is needed here so that we can trace strlcpy() in libkern */
