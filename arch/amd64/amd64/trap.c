@@ -148,6 +148,7 @@ pageflttrap(struct trapframe *frame, int usermode)
 	vaddr_t va;
 	struct vm_map *map;
 	vm_prot_t ftype;
+	static char faultbuf[512];
 
 	if (p == NULL || p->p_addr == NULL || p->p_vmspace == NULL)
 		return 0;
@@ -160,19 +161,23 @@ pageflttrap(struct trapframe *frame, int usermode)
 	KERNEL_LOCK();
 
 	if (!usermode) {
-		extern struct vm_map *kernel_map;
-
 		/* This will only trigger if SMEP is enabled */
 		if (cr2 <= VM_MAXUSER_ADDRESS && frame->tf_err & PGEX_I) {
-			printf("attempt to execute user address %p "
-			    "in supervisor mode\n", (void *)cr2);
+			snprintf(faultbuf, sizeof(faultbuf),
+			    "attempt to execute user address %p "
+			    "in supervisor mode", (void *)cr2);
+			printf("%s\n", faultbuf);
+			faultstr = faultbuf;
 			return 0;
 		}
 		/* This will only trigger if SMAP is enabled */
 		if (pcb->pcb_onfault == NULL && cr2 <= VM_MAXUSER_ADDRESS &&
 		    frame->tf_err & PGEX_P) {
-			printf("attempt to access user address %p "
-			    "in supervisor mode\n", (void *)cr2);
+			snprintf(faultbuf, sizeof(faultbuf),
+			    "attempt to access user address %p "
+			    "in supervisor mode", (void *)cr2);
+			printf("%s\n", faultbuf);
+			faultstr = faultbuf;
 			return 0;
 		}
 
@@ -220,7 +225,6 @@ pageflttrap(struct trapframe *frame, int usermode)
 			 * info for DDB and retain the kernel lock to keep
 			 * faultbuf from being overwritten by another CPU.
 			 */
-			static char faultbuf[512];
 			snprintf(faultbuf, sizeof faultbuf,
 			    "uvm_fault(%p, 0x%llx, 0, %d) -> %x",
 			    map, cr2, ftype, error);
