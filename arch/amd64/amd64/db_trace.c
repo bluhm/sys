@@ -150,7 +150,7 @@ db_stack_trace_print(db_expr_t addr, int have_addr, db_expr_t count,
 			name = NULL;
 		}
 
-		if (lastframe == 0 && sym == NULL) {
+		if (lastframe == 0 && sym == NULL && callpc != 0) {
 			/* Symbol not found, peek at code */
 			unsigned long instr = db_get_value(callpc, 8, 0);
 
