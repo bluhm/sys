@@ -77,6 +77,7 @@
 #include <sys/signal.h>
 #include <sys/syscall.h>
 #include <sys/syscall_mi.h>
+#include <sys/stdarg.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -132,6 +133,24 @@ static inline void verify_smap(const char *_func);
 static inline void debug_trap(struct trapframe *_frame, struct proc *_p,
     long _type);
 
+static inline int
+fault(const char *format, ...)
+{
+	static char faultbuf[512];
+	va_list ap;
+
+	/*
+	 * Save the fault info for DDB and retain the kernel lock to keep
+	 * faultbuf from being overwritten by another CPU.
+	 */
+	va_start(ap, format);
+	vsnprintf(faultbuf, sizeof faultbuf, format, ap);
+	va_end(ap);
+	printf("%s\n", faultbuf);
+	faultstr = faultbuf;
+	return 0;
+}
+
 /*
  * pageflttrap(frame, usermode): page fault handler
  * Returns non-zero if the fault was handled (possibly by generating
@@ -148,7 +167,6 @@ pageflttrap(struct trapframe *frame, int usermode)
 	vaddr_t va;
 	struct vm_map *map;
 	vm_prot_t ftype;
-	static char faultbuf[512];
 
 	if (p == NULL || p->p_addr == NULL || p->p_vmspace == NULL)
 		return 0;
@@ -162,24 +180,14 @@ pageflttrap(struct trapframe *frame, int usermode)
 
 	if (!usermode) {
 		/* This will only trigger if SMEP is enabled */
-		if (cr2 <= VM_MAXUSER_ADDRESS && frame->tf_err & PGEX_I) {
-			snprintf(faultbuf, sizeof(faultbuf),
-			    "attempt to execute user address %p "
+		if (cr2 <= VM_MAXUSER_ADDRESS && frame->tf_err & PGEX_I)
+			return fault("attempt to execute user address %p "
 			    "in supervisor mode", (void *)cr2);
-			printf("%s\n", faultbuf);
-			faultstr = faultbuf;
-			return 0;
-		}
 		/* This will only trigger if SMAP is enabled */
 		if (pcb->pcb_onfault == NULL && cr2 <= VM_MAXUSER_ADDRESS &&
-		    frame->tf_err & PGEX_P) {
-			snprintf(faultbuf, sizeof(faultbuf),
-			    "attempt to access user address %p "
+		    frame->tf_err & PGEX_P)
+			return fault("attempt to access user address %p "
 			    "in supervisor mode", (void *)cr2);
-			printf("%s\n", faultbuf);
-			faultstr = faultbuf;
-			return 0;
-		}
 
 		/*
 		 * It is only a kernel address space fault iff:
@@ -220,17 +228,9 @@ pageflttrap(struct trapframe *frame, int usermode)
 			frame->tf_rip = (u_int64_t)pcb->pcb_onfault;
 			return 1;
 		} else {
-			/*
-			 * Bad memory access in the kernel; save the fault
-			 * info for DDB and retain the kernel lock to keep
-			 * faultbuf from being overwritten by another CPU.
-			 */
-			snprintf(faultbuf, sizeof faultbuf,
-			    "uvm_fault(%p, 0x%llx, 0, %d) -> %x",
+			/* bad memory access in the kernel */
+			return fault("uvm_fault(%p, 0x%llx, 0, %d) -> %x",
 			    map, cr2, ftype, error);
-			printf("%s\n", faultbuf);
-			faultstr = faultbuf;
-			return 0;
 		}
 	} else {
 		union sigval sv;
