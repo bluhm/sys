@@ -335,12 +335,6 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 		goto bad;
 	}
 
-	if (IN6_IS_ADDR_LOOPBACK(&ip6->ip6_src) ||
-	    IN6_IS_ADDR_LOOPBACK(&ip6->ip6_dst)) {
-		nxt = ip6_ours(mp, offp, nxt, af);
-		goto out;
-	}
-
 #if NPF > 0
 	if (pf_ouraddr(m) == 1) {
 		nxt = ip6_ours(mp, offp, nxt, af);
