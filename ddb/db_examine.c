@@ -288,7 +288,7 @@ void
 db_print_loc_and_inst(vaddr_t loc)
 {
 	db_printsym(loc, DB_STGY_PROC, db_printf);
-	if (loc) {
+	if (loc != 0) {
 		db_printf(":\t");
 		db_disasm(loc, 0);
 	}
