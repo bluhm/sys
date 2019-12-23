@@ -133,7 +133,7 @@ void
 initconsbuf(void)
 {
 	/* Set up a buffer to collect /dev/console output */
-	consbufp = malloc(CONSBUFSIZE, M_TEMP, M_WAITOK | M_ZERO);
+	consbufp = malloc(CONSBUFSIZE, M_TTYS, M_WAITOK | M_ZERO);
 	consbufp->msg_magic = MSG_MAGIC;
 	consbufp->msg_bufs = CONSBUFSIZE - offsetof(struct msgbuf, msg_bufc);
 }
