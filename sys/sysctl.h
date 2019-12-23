@@ -274,8 +274,8 @@ struct ctlname {
 	{ "proc_nobroadcastkill", CTLTYPE_NODE }, \
 	{ "proc_vmmap", CTLTYPE_NODE }, \
 	{ "global_ptrace", CTLTYPE_INT }, \
-	{ "gap", 0 }, \
-	{ "gap", 0 }, \
+	{ "consbufsize", 0 }, \
+	{ "consbuf", 0 }, \
 	{ "audio", CTLTYPE_STRUCT }, \
 	{ "cpustats", CTLTYPE_STRUCT }, \
 	{ "pfstatus", CTLTYPE_STRUCT }, \
