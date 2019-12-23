@@ -132,15 +132,10 @@ initmsgbuf(caddr_t buf, size_t bufsize)
 void
 initconsbuf(void)
 {
-	long new_bufs;
-
 	/* Set up a buffer to collect /dev/console output */
-	consbufp = malloc(CONSBUFSIZE, M_TEMP, M_NOWAIT|M_ZERO);
-	if (consbufp) {
-		new_bufs = CONSBUFSIZE - offsetof(struct msgbuf, msg_bufc);
-		consbufp->msg_magic = MSG_MAGIC;
-		consbufp->msg_bufs = new_bufs;
-	}
+	consbufp = malloc(CONSBUFSIZE, M_TEMP, M_WAITOK | M_ZERO);
+	consbufp->msg_magic = MSG_MAGIC;
+	consbufp->msg_bufs = CONSBUFSIZE - offsetof(struct msgbuf, msg_bufc);
 }
 
 void
