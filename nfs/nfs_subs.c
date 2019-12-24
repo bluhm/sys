@@ -1515,10 +1515,9 @@ nfs_clearcommit(struct mount *mp)
 
 	s = splbio();
 loop:
-	for (vp = LIST_FIRST(&mp->mnt_vnodelist); vp != NULL; vp = nvp) {
+	LIST_FOREACH_SAFE(vp, &mp->mnt_vnodelist, v_mntvnodes, nvp) {
 		if (vp->v_mount != mp)	/* Paranoia */
 			goto loop;
-		nvp = LIST_NEXT(vp, v_mntvnodes);
 		LIST_FOREACH_SAFE(bp, &vp->v_dirtyblkhd, b_vnbufs, nbp) {
 			if ((bp->b_flags & (B_BUSY | B_DELWRI | B_NEEDCOMMIT))
 			    == (B_DELWRI | B_NEEDCOMMIT))
