@@ -96,19 +96,19 @@ int	nfs_fhtovp(struct mount *, struct fid *, struct vnode **);
  * nfs vfs operations.
  */
 const struct vfsops nfs_vfsops = {
-	nfs_mount,
-	nfs_start,
-	nfs_unmount,
-	nfs_root,
-	nfs_quotactl,
-	nfs_statfs,
-	nfs_sync,
-	nfs_vget,
-	nfs_fhtovp,
-	nfs_vptofh,
-	nfs_vfs_init,
-	nfs_sysctl,
-	nfs_checkexp
+	.vfs_mount =	nfs_mount,
+	.vfs_start =	nfs_start,
+	.vfs_unmount =	nfs_unmount,
+	.vfs_root =	nfs_root,
+	.vfs_quotactl =	nfs_quotactl,
+	.vfs_statfs =	nfs_statfs,
+	.vfs_sync =	nfs_sync,
+	.vfs_vget =	nfs_vget,
+	.vfs_fhtovp =	nfs_fhtovp,
+	.vfs_vptofh =	nfs_vptofh,
+	.vfs_init =	nfs_vfs_init,
+	.vfs_sysctl =	nfs_sysctl,
+	.vfs_checkexp =	nfs_checkexp,
 };
 
 /*
