@@ -480,8 +480,11 @@ insmntque(struct vnode *vp, struct mount *mp)
 	/*
 	 * Insert into list of vnodes for the new mount point, if available.
 	 */
-	if ((vp->v_mount = mp) != NULL)
+	if ((vp->v_mount = mp) != NULL) {
+		/* Do not insert new vnodes while forcefully unmounting. */
+		KASSERT((mp->mnt_flag & MNT_FORCE) == 0);
 		LIST_INSERT_HEAD(&mp->mnt_vnodelist, vp, v_mntvnodes);
+	}
 }
 
 /*
