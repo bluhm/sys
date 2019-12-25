@@ -477,6 +477,9 @@ dounmount_leaf(struct mount *mp, int flags, struct proc *p)
 	int error;
 	int hadsyncer = 0;
 
+	KASSERT(vfs_isbusy(mp));
+	if (flags & MNT_FORCE)
+		mp->mnt_flag |= MNT_FORCE;
 	mp->mnt_flag &=~ MNT_ASYNC;
 	cache_purgevfs(mp);	/* remove cache entries for this file sys */
 	if (mp->mnt_syncer != NULL) {
@@ -501,6 +504,7 @@ dounmount_leaf(struct mount *mp, int flags, struct proc *p)
 	if (error && !(flags & MNT_DOOMED)) {
 		if ((mp->mnt_flag & MNT_RDONLY) == 0 && hadsyncer)
 			(void) vfs_allocate_syncvnode(mp);
+		mp->mnt_flag &=~ MNT_FORCE;
 		vfs_unbusy(mp);
 		return (error);
 	}
