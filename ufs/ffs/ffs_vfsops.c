@@ -73,19 +73,19 @@ void ffs1_compat_read(struct fs *, struct ufsmount *, daddr_t);
 void ffs1_compat_write(struct fs *, struct ufsmount *);
 
 const struct vfsops ffs_vfsops = {
-	.vfs_mount =	ffs_mount,
-	.vfs_start =	ufs_start,
-	.vfs_unmount =	ffs_unmount,
-	.vfs_root =	ufs_root,
-	.vfs_quotactl =	ufs_quotactl,
-	.vfs_statfs =	ffs_statfs,
-	.vfs_sync =	ffs_sync,
-	.vfs_vget =	ffs_vget,
-	.vfs_fhtovp =	ffs_fhtovp,
-	.vfs_vptofh =	ffs_vptofh,
-	.vfs_init =	ffs_init,
-	.vfs_sysctl =	ffs_sysctl,
-	.vfs_checkexp =	ufs_check_export,
+	.vfs_mount	= ffs_mount,
+	.vfs_start	= ufs_start,
+	.vfs_unmount	= ffs_unmount,
+	.vfs_root	= ufs_root,
+	.vfs_quotactl	= ufs_quotactl,
+	.vfs_statfs	= ffs_statfs,
+	.vfs_sync	= ffs_sync,
+	.vfs_vget	= ffs_vget,
+	.vfs_fhtovp	= ffs_fhtovp,
+	.vfs_vptofh	= ffs_vptofh,
+	.vfs_init	= ffs_init,
+	.vfs_sysctl	= ffs_sysctl,
+	.vfs_checkexp	= ufs_check_export,
 };
 
 struct inode_vtbl ffs_vtbl = {

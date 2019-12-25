@@ -60,19 +60,19 @@ static	int mfs_minor;	/* used for building internal dev_t */
  * mfs vfs operations.
  */
 const struct vfsops mfs_vfsops = {
-	.vfs_mount =	mfs_mount,
-	.vfs_start =	mfs_start,
-	.vfs_unmount =	ffs_unmount,
-	.vfs_root =	ufs_root,
-	.vfs_quotactl =	ufs_quotactl,
-	.vfs_statfs =	ffs_statfs,
-	.vfs_sync =	ffs_sync,
-	.vfs_vget =	ffs_vget,
-	.vfs_fhtovp =	ffs_fhtovp,
-	.vfs_vptofh =	ffs_vptofh,
-	.vfs_init =	mfs_init,
-	.vfs_sysctl =	ffs_sysctl,
-	.vfs_checkexp =	mfs_checkexp,
+	.vfs_mount	= mfs_mount,
+	.vfs_start	= mfs_start,
+	.vfs_unmount	= ffs_unmount,
+	.vfs_root	= ufs_root,
+	.vfs_quotactl	= ufs_quotactl,
+	.vfs_statfs	= ffs_statfs,
+	.vfs_sync	= ffs_sync,
+	.vfs_vget	= ffs_vget,
+	.vfs_fhtovp	= ffs_fhtovp,
+	.vfs_vptofh	= ffs_vptofh,
+	.vfs_init	= mfs_init,
+	.vfs_sysctl	= ffs_sysctl,
+	.vfs_checkexp	= mfs_checkexp,
 };
 
 /*
