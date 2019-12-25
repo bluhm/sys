@@ -401,6 +401,11 @@ getnewvnode(enum vtagtype tag, struct mount *mp, struct vops *vops,
 		toggle = 0;
 
 	s = splbio();
+	if (mp != NULL && mp->mnt_flag & MNT_FORCE) {
+		splx(s);
+		*vpp = NULLVP;
+		return (EIO);
+	}
 	if ((numvnodes < maxvnodes) ||
 	    ((TAILQ_FIRST(listhd = &vnode_free_list) == NULL) &&
 	    ((TAILQ_FIRST(listhd = &vnode_hold_list) == NULL) || toggle))) {
@@ -425,7 +430,7 @@ getnewvnode(enum vtagtype tag, struct mount *mp, struct vops *vops,
 		if (vp == NULL) {
 			splx(s);
 			tablefull("vnode");
-			*vpp = 0;
+			*vpp = NULLVP;
 			return (ENFILE);
 		}
 
