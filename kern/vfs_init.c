@@ -50,47 +50,6 @@ struct pool namei_pool;
 struct vnode *rootvnode;
 
 /* Set up the filesystem operations for vnodes. */
-#ifdef FFS
-extern	const struct vfsops ffs_vfsops;
-#endif
-
-#ifdef MFS
-extern	const struct vfsops mfs_vfsops;
-#endif
-
-#ifdef MSDOSFS
-extern	const struct vfsops msdosfs_vfsops;
-#endif
-
-#ifdef NFSCLIENT
-extern	const struct vfsops nfs_vfsops;
-#endif
-
-#ifdef CD9660
-extern	const struct vfsops cd9660_vfsops;
-#endif
-
-#ifdef EXT2FS
-extern	const struct vfsops ext2fs_vfsops;
-#endif
-
-#ifdef NTFS
-extern  const struct vfsops ntfs_vfsops;
-#endif
-
-#ifdef UDF
-extern  const struct vfsops udf_vfsops;
-#endif
-
-#ifdef FUSE
-extern const struct vfsops fusefs_vfsops;
-#endif
-
-#ifdef TMPFS
-extern  const struct vfsops tmpfs_vfsops;
-#endif
-
-/* Set up the filesystem operations for vnodes. */
 static struct vfsconf vfsconflist[] = {
 #ifdef FFS
         { &ffs_vfsops, MOUNT_FFS, 1, 0, MNT_LOCAL | MNT_SWAPPABLE,
