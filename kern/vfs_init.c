@@ -1,4 +1,4 @@
-/*	$OpenBSD: vfs_init.c,v 1.42 2019/04/02 13:07:28 visa Exp $	*/
+/*	$OpenBSD: vfs_init.c,v 1.43 2019/12/26 13:30:54 bluhm Exp $	*/
 /*	$NetBSD: vfs_init.c,v 1.6 1996/02/09 19:00:58 christos Exp $	*/
 
 /*
