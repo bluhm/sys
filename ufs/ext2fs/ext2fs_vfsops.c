@@ -1,4 +1,4 @@
-/*	$OpenBSD: ext2fs_vfsops.c,v 1.113 2019/07/25 01:43:21 cheloha Exp $	*/
+/*	$OpenBSD: ext2fs_vfsops.c,v 1.114 2019/12/26 13:28:49 bluhm Exp $	*/
 /*	$NetBSD: ext2fs_vfsops.c,v 1.1 1997/06/11 09:34:07 bouyer Exp $	*/
 
 /*

@@ -1,4 +1,4 @@
-/*	$OpenBSD: tmpfs_vfsops.c,v 1.16 2018/04/06 15:14:27 patrick Exp $	*/
+/*	$OpenBSD: tmpfs_vfsops.c,v 1.17 2019/12/26 13:28:49 bluhm Exp $	*/
 /*	$NetBSD: tmpfs_vfsops.c,v 1.52 2011/09/27 01:10:43 christos Exp $	*/
 
 /*

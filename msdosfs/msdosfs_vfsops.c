@@ -1,4 +1,4 @@
-/*	$OpenBSD: msdosfs_vfsops.c,v 1.91 2019/07/25 01:43:21 cheloha Exp $	*/
+/*	$OpenBSD: msdosfs_vfsops.c,v 1.92 2019/12/26 13:28:49 bluhm Exp $	*/
 /*	$NetBSD: msdosfs_vfsops.c,v 1.48 1997/10/18 02:54:57 briggs Exp $	*/
 
 /*-
