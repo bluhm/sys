@@ -60,7 +60,7 @@
 
 int	spec_open_clone(struct vop_open_args *);
 
-struct vnode *speclisth[SPECHSZ];
+struct vnodechain speclisth[SPECHSZ];
 
 struct vops spec_vops = {
 	.vop_lookup	= vop_generic_lookup,
