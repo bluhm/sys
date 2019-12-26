@@ -1126,18 +1126,7 @@ vgonel(struct vnode *vp, struct proc *p)
 		    (minor(vp->v_rdev) >> CLONE_SHIFT == 0)) {
 			free(vp->v_specbitmap, M_VNODE, CLONE_MAPSZ);
 		}
-		if (SLIST_FIRST(vp->v_hashchain) == vp) {
-			SLIST_REMOVE_HEAD(vp->v_hashchain, v_specnext);
-		} else {
-			SLIST_FOREACH(vq, vp->v_hashchain, v_specnext) {
-				if (SLIST_NEXT(vq, v_specnext) != vp)
-					continue;
-				SLIST_REMOVE_AFTER(vq, v_specnext);
-				break;
-			}
-			if (vq == NULL)
-				panic("missing bdev");
-		}
+		SLIST_REMOVE(vp->v_hashchain, vp, vnode, v_specnext);
 		if (vp->v_flag & VALIASED) {
 			vx = NULL;
 			SLIST_FOREACH(vq, vp->v_hashchain, v_specnext) {
