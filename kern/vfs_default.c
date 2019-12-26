@@ -98,7 +98,7 @@ vop_generic_revoke(void *v)
 		 */
 		vp->v_flag |= VXLOCK;
 		while (vp->v_flag & VALIASED) {
-			for (vq = *vp->v_hashchain; vq; vq = vq->v_specnext) {
+			SLIST_FOREACH(vq, vp->v_hashchain, v_specnext) {
 				if (vq->v_rdev != vp->v_rdev ||
 				    vq->v_type != vp->v_type || vp == vq)
 					continue;
