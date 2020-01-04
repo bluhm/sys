@@ -190,7 +190,7 @@ unveil_destroy(struct process *ps)
 		struct unveil *uv = ps->ps_uvpaths + i;
 
 		struct vnode *vp = uv->uv_vp;
-		/* skip any vnodes zapped by unveil_removevnode */
+		/* skip any vnodes zapped by unveil_remove_vnode */
 		if (vp != NULL) {
 			vp->v_uvcount--;
 #ifdef DEBUG_UNVEIL
@@ -952,16 +952,16 @@ done:
  * as needing to have the hole shrunk the next time the process
  * uses it for lookup.
  */
-void
-unveil_removevnode(struct vnode *vp)
+int
+unveil_remove_vnode(struct vnode *vp, void *arg)
 {
 	struct process *pr;
 
 	if (vp->v_uvcount == 0)
-		return;
+		return 0;
 
 #ifdef DEBUG_UNVEIL
-	printf("unveil_removevnode found vnode %p with count %d\n",
+	printf("%s: found vnode %p with count %d\n", __func__,
 	    vp, vp->v_uvcount);
 #endif
 	vref(vp); /* make sure it is held till we are done */
@@ -974,7 +974,7 @@ unveil_removevnode(struct vnode *vp)
 			uv->uv_vp = NULL;
 			uv->uv_flags = 0;
 #ifdef DEBUG_UNVEIL
-			printf("unveil_removevnode vnode %p now count %d\n",
+			printf("%s: vnode %p now count %d\n", __func__,
 			    vp, vp->v_uvcount);
 #endif
 			pr->ps_uvshrink = 1;
@@ -989,4 +989,5 @@ unveil_removevnode(struct vnode *vp)
 	KASSERT(vp->v_uvcount == 0);
 
 	vrele(vp); /* release our ref */
+	return 0;
 }

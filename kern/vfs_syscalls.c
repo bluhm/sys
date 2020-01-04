@@ -473,7 +473,6 @@ int
 dounmount_leaf(struct mount *mp, int flags, struct proc *p)
 {
 	struct vnode *coveredvp;
-	struct vnode *vp, *nvp;
 	int error;
 	int hadsyncer = 0;
 
@@ -489,9 +488,7 @@ dounmount_leaf(struct mount *mp, int flags, struct proc *p)
 	 * Before calling file system unmount, make sure
 	 * all unveils to vnodes in here are dropped.
 	 */
-	LIST_FOREACH_SAFE(vp , &mp->mnt_vnodelist, v_mntvnodes, nvp) {
-		unveil_removevnode(vp);
-	}
+	vfs_mount_foreach_vnode(mp, unveil_remove_vnode, NULL);
 
 	if (((mp->mnt_flag & MNT_RDONLY) ||
 	    (error = VFS_SYNC(mp, MNT_WAIT, 0, p->p_ucred, p)) == 0) ||

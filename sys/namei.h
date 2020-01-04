@@ -205,7 +205,7 @@ struct mount;
 void cache_purgevfs(struct mount *);
 
 int unveil_add(struct proc *, struct nameidata *, const char *);
-void unveil_removevnode(struct vnode *);
+int unveil_remove_vnode(struct vnode *, void *);
 void unveil_free_traversed_vnodes(struct nameidata *);
 ssize_t unveil_find_cover(struct vnode *, struct proc *);
 struct unveil *unveil_lookup(struct vnode *, struct process *, ssize_t *);
