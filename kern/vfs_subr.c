@@ -481,7 +481,7 @@ insmntque(struct vnode *vp, struct mount *mp)
 	 * Insert into list of vnodes for the new mount point, if available.
 	 */
 	if ((vp->v_mount = mp) != NULL)
-		TAILQ_INSERT_HEAD(&mp->mnt_vnodelist, vp, v_mntvnodes);
+		TAILQ_INSERT_TAIL(&mp->mnt_vnodelist, vp, v_mntvnodes);
 }
 
 /*
@@ -872,8 +872,7 @@ vfs_mount_foreach_vnode(struct mount *mp,
 	int error = 0;
 
 loop:
-	TAILQ_FOREACH_REVERSE_SAFE(vp , &mp->mnt_vnodelist, vnodelist,
-	    v_mntvnodes, nvp) {
+	TAILQ_FOREACH_SAFE(vp , &mp->mnt_vnodelist, v_mntvnodes, nvp) {
 		if (vp->v_mount != mp)
 			goto loop;
 
