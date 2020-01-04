@@ -804,7 +804,7 @@ nfs_sync(struct mount *mp, int waitfor, int stall, struct ucred *cred, struct pr
 	 * Force stale buffer cache information to be flushed.
 	 */
 loop:
-	LIST_FOREACH(vp, &mp->mnt_vnodelist, v_mntvnodes) {
+	TAILQ_FOREACH(vp, &mp->mnt_vnodelist, v_mntvnodes) {
 		/*
 		 * If the vnode that we are about to sync is no longer
 		 * associated with this mount point, start over.
