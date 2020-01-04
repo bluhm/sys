@@ -1506,24 +1506,26 @@ netaddr_match(int family, union nethostaddr *haddr, struct mbuf *nam)
  * dirty block list as B_DELWRI, all this takes is clearing the B_NEEDCOMMIT
  * flag. Once done the new write verifier can be set for the mount point.
  */
+int
+nfs_clearcommit_vnode(struct vnode *vp, void *arg)
+{
+	struct buf *bp, *nbp;
+
+	LIST_FOREACH_SAFE(bp, &vp->v_dirtyblkhd, b_vnbufs, nbp) {
+		if ((bp->b_flags & (B_BUSY | B_DELWRI | B_NEEDCOMMIT))
+		    == (B_DELWRI | B_NEEDCOMMIT))
+			bp->b_flags &= ~B_NEEDCOMMIT;
+	}
+	return 0;
+}
+
 void
 nfs_clearcommit(struct mount *mp)
 {
-	struct vnode *vp, *nvp;
-	struct buf *bp, *nbp;
 	int s;
 
 	s = splbio();
-loop:
-	LIST_FOREACH_SAFE(vp, &mp->mnt_vnodelist, v_mntvnodes, nvp) {
-		if (vp->v_mount != mp)	/* Paranoia */
-			goto loop;
-		LIST_FOREACH_SAFE(bp, &vp->v_dirtyblkhd, b_vnbufs, nbp) {
-			if ((bp->b_flags & (B_BUSY | B_DELWRI | B_NEEDCOMMIT))
-			    == (B_DELWRI | B_NEEDCOMMIT))
-				bp->b_flags &= ~B_NEEDCOMMIT;
-		}
-	}
+	vfs_mount_foreach_vnode(mp, nfs_clearcommit_vnode, NULL);
 	splx(s);
 }
 
