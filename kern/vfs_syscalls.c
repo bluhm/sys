@@ -489,7 +489,7 @@ dounmount_leaf(struct mount *mp, int flags, struct proc *p)
 	 * Before calling file system unmount, make sure
 	 * all unveils to vnodes in here are dropped.
 	 */
-	LIST_FOREACH_SAFE(vp , &mp->mnt_vnodelist, v_mntvnodes, nvp) {
+	TAILQ_FOREACH_SAFE(vp , &mp->mnt_vnodelist, v_mntvnodes, nvp) {
 		unveil_removevnode(vp);
 	}
 
@@ -511,7 +511,7 @@ dounmount_leaf(struct mount *mp, int flags, struct proc *p)
 		vrele(coveredvp);
 	}
 
-	if (!LIST_EMPTY(&mp->mnt_vnodelist))
+	if (!TAILQ_EMPTY(&mp->mnt_vnodelist))
 		panic("unmount: dangling vnode");
 
 	vfs_unbusy(mp);

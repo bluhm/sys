@@ -1515,7 +1515,7 @@ nfs_clearcommit(struct mount *mp)
 
 	s = splbio();
 loop:
-	LIST_FOREACH_SAFE(vp, &mp->mnt_vnodelist, v_mntvnodes, nvp) {
+	TAILQ_FOREACH_SAFE(vp, &mp->mnt_vnodelist, v_mntvnodes, nvp) {
 		if (vp->v_mount != mp)	/* Paranoia */
 			goto loop;
 		LIST_FOREACH_SAFE(bp, &vp->v_dirtyblkhd, b_vnbufs, nbp) {
