@@ -1,4 +1,4 @@
-/* $OpenBSD: acpi.c,v 1.374 2019/09/07 13:46:20 kettenis Exp $ */
+/* $OpenBSD: acpi.c,v 1.377 2019/12/31 13:48:31 visa Exp $ */
 /*
  * Copyright (c) 2005 Thorsten Lockert <tholo@sigmasoft.com>
  * Copyright (c) 2005 Jordan Hargrave <jordan@openbsd.org>
@@ -32,6 +32,7 @@
 #include <sys/sysctl.h>
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
+#include <sys/sensors.h>
 
 #ifdef HIBERNATE
 #include <sys/hibernate.h>
@@ -2867,7 +2868,7 @@ acpi_thread(void *arg)
 		while (sc->sc_threadwaiting) {
 			dnprintf(10, "acpi thread going to sleep...\n");
 			rw_exit_write(&sc->sc_lck);
-			tsleep(sc, PWAIT, "acpi0", 0);
+			tsleep_nsec(sc, PWAIT, "acpi0", INFSLP);
 			rw_enter_write(&sc->sc_lck);
 		}
 		sc->sc_threadwaiting = 1;
@@ -3448,8 +3449,11 @@ acpiioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 void	acpi_filtdetach(struct knote *);
 int	acpi_filtread(struct knote *, long);
 
-struct filterops acpiread_filtops = {
-	1, NULL, acpi_filtdetach, acpi_filtread
+const struct filterops acpiread_filtops = {
+	.f_isfd		= 1,
+	.f_attach	= NULL,
+	.f_detach	= acpi_filtdetach,
+	.f_event	= acpi_filtread,
 };
 
 int acpi_evindex;
