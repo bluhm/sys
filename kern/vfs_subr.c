@@ -872,7 +872,8 @@ vfs_mount_foreach_vnode(struct mount *mp,
 	int error = 0;
 
 loop:
-	TAILQ_FOREACH_SAFE(vp , &mp->mnt_vnodelist, v_mntvnodes, nvp) {
+	TAILQ_FOREACH_REVERSE_SAFE(vp , &mp->mnt_vnodelist, vnodelist,
+	    v_mntvnodes, nvp) {
 		if (vp->v_mount != mp)
 			goto loop;
 
