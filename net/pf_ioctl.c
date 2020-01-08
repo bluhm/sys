@@ -1807,6 +1807,18 @@ pfioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 		int			 m = 0, direction = pnl->direction;
 		int			 sidx, didx;
 
+		switch (pnl->af) {
+		case AF_INET:
+			break;
+#ifdef INET6
+		case AF_INET6:
+			break;
+#endif /* INET6 */
+		default:
+			error = EINVAL;
+			goto fail;
+		}
+
 		/* NATLOOK src and dst are reversed, so reverse sidx/didx */
 		sidx = (direction == PF_IN) ? 1 : 0;
 		didx = (direction == PF_IN) ? 0 : 1;
