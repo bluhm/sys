@@ -1,4 +1,4 @@
-/* $OpenBSD: drm_drv.c,v 1.167 2019/12/31 13:48:31 visa Exp $ */
+/* $OpenBSD: drm_drv.c,v 1.170 2020/01/05 08:39:46 jsg Exp $ */
 /*-
  * Copyright 2007-2009 Owain G. Ainsworth <oga@openbsd.org>
  * Copyright © 2008 Intel Corporation
@@ -42,18 +42,11 @@
 
 #include <sys/param.h>
 #include <sys/fcntl.h>
-#include <sys/filio.h>
-#include <sys/limits.h>
-#include <sys/pledge.h>
 #include <sys/poll.h>
 #include <sys/specdev.h>
 #include <sys/systm.h>
-#include <sys/ttycom.h> /* for TIOCSGRP */
 #include <sys/vnode.h>
 #include <sys/event.h>
-
-#include <uvm/uvm.h>
-#include <uvm/uvm_device.h>
 
 #include <machine/bus.h>
 
@@ -459,8 +452,6 @@ drm_firstopen(struct drm_device *dev)
 		dev->irq_enabled = 0;
 	dev->if_version = 0;
 
-	dev->buf_pgid = 0;
-
 	DRM_DEBUG("\n");
 
 	return 0;
@@ -682,8 +673,6 @@ drmclose(dev_t kdev, int flags, int fmt, struct proc *p)
 
 	if (drm_core_check_feature(dev, DRIVER_GEM))
 		drm_gem_release(dev, file_priv);
-
-	dev->buf_pgid = 0;
 
 	if (dev->driver->postclose)
 		dev->driver->postclose(dev, file_priv);

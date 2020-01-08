@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_event.c,v 1.114 2020/01/03 05:37:00 visa Exp $	*/
+/*	$OpenBSD: kern_event.c,v 1.117 2020/01/06 10:28:32 visa Exp $	*/
 
 /*-
  * Copyright (c) 1999,2000,2001 Jonathan Lemon <jlemon@FreeBSD.org>
@@ -72,7 +72,7 @@ void	kqueue_wakeup(struct kqueue *kq);
 static void	kqueue_expand_hash(struct kqueue *kq);
 static void	kqueue_expand_list(struct kqueue *kq, int fd);
 
-struct fileops kqueueops = {
+const struct fileops kqueueops = {
 	.fo_read	= kqueue_read,
 	.fo_write	= kqueue_write,
 	.fo_ioctl	= kqueue_ioctl,
@@ -162,12 +162,21 @@ KQREF(struct kqueue *kq)
 void
 KQRELE(struct kqueue *kq)
 {
+	struct filedesc *fdp = kq->kq_fdp;
+
 	if (--kq->kq_refs > 0)
 		return;
 
-	LIST_REMOVE(kq, kq_next);
-	free(kq->kq_knlist, M_TEMP, kq->kq_knlistsize * sizeof(struct klist));
-	hashfree(kq->kq_knhash, KN_HASHSIZE, M_TEMP);
+	if (rw_status(&fdp->fd_lock) == RW_WRITE) {
+		LIST_REMOVE(kq, kq_next);
+	} else {
+		fdplock(fdp);
+		LIST_REMOVE(kq, kq_next);
+		fdpunlock(fdp);
+	}
+
+	free(kq->kq_knlist, M_KEVENT, kq->kq_knlistsize * sizeof(struct klist));
+	hashfree(kq->kq_knhash, KN_HASHSIZE, M_KEVENT);
 	pool_put(&kqueue_pool, kq);
 }
 
@@ -476,7 +485,7 @@ sys_kqueue(struct proc *p, void *v, register_t *retval)
 	KQREF(kq);
 	*retval = fd;
 	kq->kq_fdp = fdp;
-	LIST_INSERT_HEAD(&p->p_p->ps_kqlist, kq, kq_next);
+	LIST_INSERT_HEAD(&fdp->fd_kqlist, kq, kq_next);
 	fdinsert(fdp, fd, 0, fp);
 	FRELE(fp, p);
 out:
@@ -1055,13 +1064,13 @@ kqueue_expand_hash(struct kqueue *kq)
 	u_long hashmask;
 
 	if (kq->kq_knhashmask == 0) {
-		hash = hashinit(KN_HASHSIZE, M_TEMP, M_WAITOK, &hashmask);
+		hash = hashinit(KN_HASHSIZE, M_KEVENT, M_WAITOK, &hashmask);
 		if (kq->kq_knhashmask == 0) {
 			kq->kq_knhash = hash;
 			kq->kq_knhashmask = hashmask;
 		} else {
 			/* Another thread has allocated the hash. */
-			hashfree(hash, KN_HASHSIZE, M_TEMP);
+			hashfree(hash, KN_HASHSIZE, M_KEVENT);
 		}
 	}
 }
@@ -1076,19 +1085,19 @@ kqueue_expand_list(struct kqueue *kq, int fd)
 		size = kq->kq_knlistsize;
 		while (size <= fd)
 			size += KQEXTENT;
-		list = mallocarray(size, sizeof(*list), M_TEMP, M_WAITOK);
+		list = mallocarray(size, sizeof(*list), M_KEVENT, M_WAITOK);
 		if (kq->kq_knlistsize <= fd) {
 			memcpy(list, kq->kq_knlist,
 			    kq->kq_knlistsize * sizeof(*list));
 			memset(&list[kq->kq_knlistsize], 0,
 			    (size - kq->kq_knlistsize) * sizeof(*list));
-			free(kq->kq_knlist, M_TEMP,
+			free(kq->kq_knlist, M_KEVENT,
 			    kq->kq_knlistsize * sizeof(*list));
 			kq->kq_knlist = list;
 			kq->kq_knlistsize = size;
 		} else {
 			/* Another thread has expanded the list. */
-			free(list, M_TEMP, size * sizeof(*list));
+			free(list, M_KEVENT, size * sizeof(*list));
 		}
 	}
 }
@@ -1178,12 +1187,14 @@ knote_remove(struct proc *p, struct klist *list)
 void
 knote_fdclose(struct proc *p, int fd)
 {
+	struct filedesc *fdp = p->p_p->ps_fd;
 	struct kqueue *kq;
 	struct klist *list;
 
 	KERNEL_ASSERT_LOCKED();
+	fdpassertlocked(fdp);
 
-	LIST_FOREACH(kq, &p->p_p->ps_kqlist, kq_next) {
+	LIST_FOREACH(kq, &fdp->fd_kqlist, kq_next) {
 		if (fd >= kq->kq_knlistsize)
 			continue;
 
