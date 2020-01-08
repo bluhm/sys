@@ -1815,7 +1815,7 @@ pfioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 			break;
 #endif /* INET6 */
 		default:
-			error = EINVAL;
+			error = EAFNOSUPPORT;
 			goto fail;
 		}
 
