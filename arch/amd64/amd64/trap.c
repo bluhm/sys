@@ -133,14 +133,14 @@ static inline void verify_smap(const char *_func);
 static inline void debug_trap(struct trapframe *_frame, struct proc *_p,
     long _type);
 
-static inline int
+static inline void
 fault(const char *format, ...)
 {
 	static char faultbuf[512];
 	va_list ap;
 
 	/*
-	 * Save the fault info for DDB and retain the kernel lock to keep
+	 * Save the fault info for DDB.  Kernel lock protects
 	 * faultbuf from being overwritten by another CPU.
 	 */
 	va_start(ap, format);
@@ -148,7 +148,6 @@ fault(const char *format, ...)
 	va_end(ap);
 	printf("%s\n", faultbuf);
 	faultstr = faultbuf;
-	return 0;
 }
 
 /*
@@ -180,14 +179,20 @@ pageflttrap(struct trapframe *frame, int usermode)
 
 	if (!usermode) {
 		/* This will only trigger if SMEP is enabled */
-		if (cr2 <= VM_MAXUSER_ADDRESS && frame->tf_err & PGEX_I)
-			return fault("attempt to execute user address %p "
+		if (cr2 <= VM_MAXUSER_ADDRESS && frame->tf_err & PGEX_I) {
+			fault("attempt to execute user address %p "
 			    "in supervisor mode", (void *)cr2);
+			/* retain kernel lock */
+			return 0;
+		}
 		/* This will only trigger if SMAP is enabled */
 		if (pcb->pcb_onfault == NULL && cr2 <= VM_MAXUSER_ADDRESS &&
-		    frame->tf_err & PGEX_P)
-			return fault("attempt to access user address %p "
+		    frame->tf_err & PGEX_P) {
+			fault("attempt to access user address %p "
 			    "in supervisor mode", (void *)cr2);
+			/* retain kernel lock */
+			return 0;
+		}
 
 		/*
 		 * It is only a kernel address space fault iff:
@@ -229,8 +234,10 @@ pageflttrap(struct trapframe *frame, int usermode)
 			return 1;
 		} else {
 			/* bad memory access in the kernel */
-			return fault("uvm_fault(%p, 0x%llx, 0, %d) -> %x",
+			fault("uvm_fault(%p, 0x%llx, 0, %d) -> %x",
 			    map, cr2, ftype, error);
+			/* retain kernel lock */
+			return 0;
 		}
 	} else {
 		union sigval sv;
