@@ -1,4 +1,4 @@
-/*	$OpenBSD: db_examine.c,v 1.26 2019/11/07 13:16:25 mpi Exp $	*/
+/*	$OpenBSD: db_examine.c,v 1.27 2020/01/09 15:18:58 bluhm Exp $	*/
 /*	$NetBSD: db_examine.c,v 1.11 1996/03/30 22:30:07 christos Exp $	*/
 
 /*
