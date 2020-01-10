@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_descrip.c,v 1.194 2020/01/06 10:25:10 visa Exp $	*/
+/*	$OpenBSD: kern_descrip.c,v 1.196 2020/01/08 16:45:28 visa Exp $	*/
 /*	$NetBSD: kern_descrip.c,v 1.42 1996/03/30 22:24:38 christos Exp $	*/
 
 /*
@@ -498,26 +498,14 @@ restart:
 	case F_GETOWN:
 		tmp = 0;
 		error = (*fp->f_ops->fo_ioctl)
-			(fp, TIOCGPGRP, (caddr_t)&tmp, p);
-		*retval = -tmp;
+			(fp, FIOGETOWN, (caddr_t)&tmp, p);
+		*retval = tmp;
 		break;
 
 	case F_SETOWN:
 		tmp = (long)SCARG(uap, arg);
-		if (fp->f_type == DTYPE_SOCKET || fp->f_type == DTYPE_PIPE) {
-			/* nothing */
-		} else if (tmp <= 0) {
-			tmp = -tmp;
-		} else {
-			struct process *pr1 = prfind(tmp);
-			if (pr1 == 0) {
-				error = ESRCH;
-				break;
-			}
-			tmp = pr1->ps_pgrp->pg_id;
-		}
 		error = ((*fp->f_ops->fo_ioctl)
-			(fp, TIOCSPGRP, (caddr_t)&tmp, p));
+			(fp, FIOSETOWN, (caddr_t)&tmp, p));
 		break;
 
 	case F_SETLKW:
@@ -1196,7 +1184,6 @@ fdfree(struct proc *p)
 
 	if (--fdp->fd_refcnt > 0)
 		return;
-	fdplock(fdp);	/* required by knote_fdclose() */
 	for (fd = 0; fd <= fdp->fd_lastfile; fd++) {
 		fp = fdp->fd_ofiles[fd];
 		if (fp != NULL) {
@@ -1207,7 +1194,6 @@ fdfree(struct proc *p)
 			(void) closef(fp, p);
 		}
 	}
-	fdpunlock(fdp);
 	p->p_fd = NULL;
 	if (fdp->fd_nfiles > NDFILE)
 		free(fdp->fd_ofiles, M_FILEDESC, fdp->fd_nfiles * OFILESIZE);
