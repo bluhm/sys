@@ -1,4 +1,4 @@
-/*	$OpenBSD: nfs_vfsops.c,v 1.124 2020/01/08 15:03:10 mpi Exp $	*/
+/*	$OpenBSD: nfs_vfsops.c,v 1.125 2020/01/10 10:33:35 bluhm Exp $	*/
 /*	$NetBSD: nfs_vfsops.c,v 1.46.4.1 1996/05/25 22:40:35 fvdl Exp $	*/
 
 /*
