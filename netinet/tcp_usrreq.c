@@ -463,6 +463,15 @@ tcp_ctloutput(int op, struct socket *so, int level, int optname,
 			}
 			break;
 
+		case TCP_QUICKACK:
+			if (m == NULL || m->m_len < sizeof (int))
+				error = EINVAL;
+			else if (*mtod(m, int *))
+				tp->t_flags |= TF_QUICKACK;
+			else if (tp->t_flags & TF_QUICKACK)
+				tp->t_flags &= ~TF_QUICKACK;
+			break;
+
 		case TCP_MAXSEG:
 			if (m == NULL || m->m_len < sizeof (int)) {
 				error = EINVAL;
@@ -531,6 +540,9 @@ tcp_ctloutput(int op, struct socket *so, int level, int optname,
 			break;
 		case TCP_NOPUSH:
 			*mtod(m, int *) = tp->t_flags & TF_NOPUSH;
+			break;
+		case TCP_QUICKACK:
+			*mtod(m, int *) = tp->t_flags & TF_QUICKACK;
 			break;
 		case TCP_MAXSEG:
 			*mtod(m, int *) = tp->t_maxseg;

@@ -1407,6 +1407,7 @@ pledge_sockopt(struct proc *p, int set, int level, int optname)
 		case TCP_SACK_ENABLE:
 		case TCP_MAXSEG:
 		case TCP_NOPUSH:
+		case TCP_QUICKACK:
 			return (0);
 		}
 		break;

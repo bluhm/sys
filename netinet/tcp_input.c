@@ -178,6 +178,7 @@ do { \
 		ifp = if_get(m->m_pkthdr.ph_ifidx); \
 	if (TCP_TIMER_ISARMED(tp, TCPT_DELACK) || \
 	    (tcp_ack_on_push && (tiflags) & TH_PUSH) || \
+	    (tp->t_flags & TF_QUICKACK) || \
 	    (ifp && (ifp->if_flags & IFF_LOOPBACK))) \
 		tp->t_flags |= TF_ACKNOW; \
 	else \
@@ -3560,7 +3561,8 @@ syn_cache_get(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 	(void) m_free(am);
 
 	tp = intotcpcb(inp);
-	tp->t_flags = sototcpcb(oso)->t_flags & (TF_NOPUSH|TF_NODELAY);
+	tp->t_flags = sototcpcb(oso)->t_flags &
+	    (TF_NOPUSH|TF_NODELAY|TF_QUICKACK);
 	if (sc->sc_request_r_scale != 15) {
 		tp->requested_s_scale = sc->sc_requested_s_scale;
 		tp->request_r_scale = sc->sc_request_r_scale;

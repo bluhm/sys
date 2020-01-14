@@ -129,5 +129,6 @@ struct tcphdr {
 #define	TCP_MD5SIG		0x04   /* enable TCP MD5 signature option */
 #define	TCP_SACK_ENABLE		0x08   /* enable SACKs (if disabled by def.) */
 #define	TCP_NOPUSH		0x10   /* don't push last block of write */
+#define	TCP_QUICKACK		0x20   /* turn of delayed ACK algorithm */
 
 #endif /* _NETINET_TCP_H_ */

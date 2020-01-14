@@ -94,6 +94,7 @@ struct tcpcb {
 #define TF_DISABLE_ECN	0x00040000	/* disable ECN for this connection */
 #endif
 #define TF_LASTIDLE	0x00100000	/* no outstanding ACK on last send */
+#define TF_QUICKACK	0x00200000	/* don't delay ACK */
 #define TF_PMTUD_PEND	0x00400000	/* Path MTU Discovery pending */
 #define TF_NEEDOUTPUT	0x00800000	/* call tcp_output after tcp_input */
 #define TF_BLOCKOUTPUT	0x01000000	/* avert tcp_output during tcp_input */
