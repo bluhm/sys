@@ -1164,15 +1164,17 @@ void
 cpu_tsx_disable(struct cpu_info *ci)
 {
 	uint64_t msr;
-	uint32_t dummy, sefflags_edx;
+	uint32_t dummy, sefflags_ebx, sefflags_edx;
 
 	/* this runs before identifycpu() populates ci_feature_sefflags_edx */
 	if (cpuid_level >= 0x07)
-		CPUID_LEAF(0x7, 0, dummy, dummy, dummy, sefflags_edx);
+		CPUID_LEAF(0x7, 0, dummy, sefflags_ebx, dummy, sefflags_edx);
 	if (strcmp(cpu_vendor, "GenuineIntel") == 0 &&
+	    (sefflags_ebx & (SEFF0EBX_RTM | SEFF0EBX_HLE)) &&
 	    (sefflags_edx & SEFF0EDX_ARCH_CAP)) {
 		msr = rdmsr(MSR_ARCH_CAPABILITIES);
-		if (msr & ARCH_CAPABILITIES_TSX_CTRL) {
+		if ((msr & ARCH_CAPABILITIES_TSX_CTRL) &&
+		    (msr & ARCH_CAPABILITIES_TAA_NO) == 0) {
 			msr = rdmsr(MSR_TSX_CTRL);
 			msr |= TSX_CTRL_RTM_DISABLE | TSX_CTRL_TSX_CPUID_CLEAR;
 			wrmsr(MSR_TSX_CTRL, msr);
