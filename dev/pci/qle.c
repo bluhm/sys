@@ -1,4 +1,4 @@
-/*	$OpenBSD: qle.c,v 1.48 2019/12/31 22:57:07 jsg Exp $ */
+/*	$OpenBSD: qle.c,v 1.50 2020/01/23 07:53:00 krw Exp $ */
 
 /*
  * Copyright (c) 2013, 2014 Jonathan Matthew <jmatthew@openbsd.org>
@@ -255,11 +255,7 @@ int		qle_scsi_probe(struct scsi_link *);
 
 
 struct scsi_adapter qle_switch = {
-	qle_scsi_cmd,
-	scsi_minphys,
-	qle_scsi_probe,
-	NULL,	/* scsi_free */
-	NULL	/* ioctl */
+	qle_scsi_cmd, scsi_minphys, qle_scsi_probe, NULL, NULL
 };
 
 u_int32_t	qle_read(struct qle_softc *, int);
@@ -1886,7 +1882,8 @@ qle_ct_pass_through(struct qle_softc *sc, u_int32_t port_handle,
 			if (qle_read_isr(sc, &isr, &info) != 0)
 				qle_handle_intr(sc, isr, info);
 		} else {
-			tsleep(sc->sc_scratch, PRIBIO, "qle_fabric", 100);
+			tsleep_nsec(sc->sc_scratch, PRIBIO, "qle_fabric",
+			    SEC_TO_NSEC(1));
 		}
 	}
 	if (rv == 0)
@@ -2014,7 +2011,8 @@ qle_fabric_plogx(struct qle_softc *sc, struct qle_fc_port *port, int flags,
 			if (qle_read_isr(sc, &isr, &info) != 0)
 				qle_handle_intr(sc, isr, info);
 		} else {
-			tsleep(sc->sc_scratch, PRIBIO, "qle_fabric", 100);
+			tsleep_nsec(sc->sc_scratch, PRIBIO, "qle_fabric",
+			    SEC_TO_NSEC(1));
 		}
 	}
 	sc->sc_fabric_pending = 0;

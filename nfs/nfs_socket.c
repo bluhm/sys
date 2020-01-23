@@ -1,4 +1,4 @@
-/*	$OpenBSD: nfs_socket.c,v 1.134 2019/12/05 10:41:57 mpi Exp $	*/
+/*	$OpenBSD: nfs_socket.c,v 1.136 2020/01/21 00:18:13 cheloha Exp $	*/
 /*	$NetBSD: nfs_socket.c,v 1.27 1996/04/15 20:20:00 thorpej Exp $	*/
 
 /*
@@ -315,7 +315,8 @@ nfs_connect(struct nfsmount *nmp, struct nfsreq *rep)
 		 * that interruptible mounts don't hang here for a long time.
 		 */
 		while ((so->so_state & SS_ISCONNECTING) && so->so_error == 0) {
-			sosleep(so, &so->so_timeo, PSOCK, "nfscon", 2 * hz);
+			sosleep_nsec(so, &so->so_timeo, PSOCK, "nfscon",
+			    SEC_TO_NSEC(2));
 			if ((so->so_state & SS_ISCONNECTING) &&
 			    so->so_error == 0 && rep &&
 			    (error = nfs_sigintr(nmp, rep, rep->r_procp)) != 0){
@@ -333,11 +334,11 @@ nfs_connect(struct nfsmount *nmp, struct nfsreq *rep)
 	 * Always set receive timeout to detect server crash and reconnect.
 	 * Otherwise, we can get stuck in soreceive forever.
 	 */
-	so->so_rcv.sb_timeo = (5 * hz);
+	so->so_rcv.sb_timeo_nsecs = SEC_TO_NSEC(5);
 	if (nmp->nm_flag & (NFSMNT_SOFT | NFSMNT_INT))
-		so->so_snd.sb_timeo = (5 * hz);
+		so->so_snd.sb_timeo_nsecs = SEC_TO_NSEC(5);
 	else
-		so->so_snd.sb_timeo = 0;
+		so->so_snd.sb_timeo_nsecs = INFSLP;
 	if (nmp->nm_sotype == SOCK_DGRAM) {
 		sndreserve = nmp->nm_wsize + NFS_MAXPKTHDR;
 		rcvreserve = (max(nmp->nm_rsize, nmp->nm_readdirsize) +
@@ -850,10 +851,9 @@ nfs_request(struct vnode *vp, int procnum, struct nfsm_info *infop)
 	struct mbuf *m;
 	u_int32_t *tl;
 	struct nfsmount *nmp;
-	struct timeval tv;
 	caddr_t cp2;
 	int t1, i, error = 0;
-	int trylater_delay;
+	int addr, trylater_delay;
 	struct nfsreq *rep;
 	struct nfsm_info info;
 
@@ -998,9 +998,8 @@ tryagain:
 			    error == NFSERR_TRYLATER) {
 				m_freem(info.nmi_mrep);
 				error = 0;
-				tv.tv_sec = trylater_delay;
-				tv.tv_usec = 0;
-				tsleep(&tv, PSOCK, "nfsretry", tvtohz(&tv));
+				tsleep_nsec(&addr, PSOCK, "nfsretry",
+				    SEC_TO_NSEC(trylater_delay));
 				trylater_delay *= NFS_TIMEOUTMUL;
 				if (trylater_delay > NFS_MAXTIMEO)
 					trylater_delay = NFS_MAXTIMEO;
@@ -1240,8 +1239,9 @@ nfs_sigintr(struct nfsmount *nmp, struct nfsreq *rep, struct proc *p)
 int
 nfs_sndlock(int *flagp, struct nfsreq *rep)
 {
+	uint64_t slptimeo = INFSLP;
 	struct proc *p;
-	int slpflag = 0, slptimeo = 0;
+	int slpflag = 0;
 
 	if (rep) {
 		p = rep->r_procp;
@@ -1253,11 +1253,10 @@ nfs_sndlock(int *flagp, struct nfsreq *rep)
 		if (rep && nfs_sigintr(rep->r_nmp, rep, p))
 			return (EINTR);
 		*flagp |= NFSMNT_WANTSND;
-		(void)tsleep((caddr_t)flagp, slpflag | (PZERO - 1), "nfsndlck",
-		    slptimeo);
+		tsleep_nsec(flagp, slpflag | (PZERO - 1), "nfsndlck", slptimeo);
 		if (slpflag == PCATCH) {
 			slpflag = 0;
-			slptimeo = 2 * hz;
+			slptimeo = SEC_TO_NSEC(2);
 		}
 	}
 	*flagp |= NFSMNT_SNDLOCK;
@@ -1283,8 +1282,9 @@ nfs_sndunlock(int *flagp)
 int
 nfs_rcvlock(struct nfsreq *rep)
 {
+	uint64_t slptimeo = INFSLP;
 	int *flagp = &rep->r_nmp->nm_flag;
-	int slpflag, slptimeo = 0;
+	int slpflag;
 
 	if (*flagp & NFSMNT_INT)
 		slpflag = PCATCH;
@@ -1295,8 +1295,7 @@ nfs_rcvlock(struct nfsreq *rep)
 		if (nfs_sigintr(rep->r_nmp, rep, rep->r_procp))
 			return (EINTR);
 		*flagp |= NFSMNT_WANTRCV;
-		(void)tsleep((caddr_t)flagp, slpflag | (PZERO - 1), "nfsrcvlk",
-		    slptimeo);
+		tsleep_nsec(flagp, slpflag | (PZERO - 1), "nfsrcvlk", slptimeo);
 		if (rep->r_mrep != NULL) {
 			/*
 			 * Don't take the lock if our reply has been received
@@ -1306,7 +1305,7 @@ nfs_rcvlock(struct nfsreq *rep)
 		}
 		if (slpflag == PCATCH) {
 			slpflag = 0;
-			slptimeo = 2 * hz;
+			slptimeo = SEC_TO_NSEC(2);
 		}
 	}
 	*flagp |= NFSMNT_RCVLOCK;

@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_event.c,v 1.119 2020/01/10 15:49:37 visa Exp $	*/
+/*	$OpenBSD: kern_event.c,v 1.121 2020/01/18 08:59:48 visa Exp $	*/
 
 /*-
  * Copyright (c) 1999,2000,2001 Jonathan Lemon <jlemon@FreeBSD.org>
@@ -465,6 +465,27 @@ seltrue_kqfilter(dev_t dev, struct knote *kn)
 	return (0);
 }
 
+static int
+filt_dead(struct knote *kn, long hint)
+{
+	kn->kn_flags |= (EV_EOF | EV_ONESHOT);
+	kn->kn_data = 0;
+	return (1);
+}
+
+static void
+filt_deaddetach(struct knote *kn)
+{
+	/* Nothing to do */
+}
+
+static const struct filterops dead_filtops = {
+	.f_isfd		= 1,
+	.f_attach	= NULL,
+	.f_detach	= filt_deaddetach,
+	.f_event	= filt_dead,
+};
+
 int
 sys_kqueue(struct proc *p, void *v, register_t *retval)
 {
@@ -473,6 +494,11 @@ sys_kqueue(struct proc *p, void *v, register_t *retval)
 	struct file *fp;
 	int fd, error;
 
+	kq = pool_get(&kqueue_pool, PR_WAITOK | PR_ZERO);
+	kq->kq_refs = 1;
+	kq->kq_fdp = fdp;
+	TAILQ_INIT(&kq->kq_head);
+
 	fdplock(fdp);
 	error = falloc(p, &fp, &fd);
 	if (error)
@@ -480,17 +506,16 @@ sys_kqueue(struct proc *p, void *v, register_t *retval)
 	fp->f_flag = FREAD | FWRITE;
 	fp->f_type = DTYPE_KQUEUE;
 	fp->f_ops = &kqueueops;
-	kq = pool_get(&kqueue_pool, PR_WAITOK|PR_ZERO);
-	kq->kq_refs = 1;
-	kq->kq_fdp = fdp;
-	TAILQ_INIT(&kq->kq_head);
 	fp->f_data = kq;
 	*retval = fd;
 	LIST_INSERT_HEAD(&fdp->fd_kqlist, kq, kq_next);
+	kq = NULL;
 	fdinsert(fdp, fd, 0, fp);
 	FRELE(fp, p);
 out:
 	fdpunlock(fdp);
+	if (kq != NULL)
+		pool_put(&kqueue_pool, kq);
 	return (error);
 }
 
@@ -1311,8 +1336,18 @@ klist_invalidate(struct klist *list)
 {
 	struct knote *kn;
 
-	SLIST_FOREACH(kn, list, kn_selnext) {
-		kn->kn_status |= KN_DETACHED;
-		kn->kn_flags |= EV_EOF | EV_ONESHOT;
+	/*
+	 * NET_LOCK() must not be held because it can block another thread
+	 * in f_event with a knote acquired.
+	 */
+	NET_ASSERT_UNLOCKED();
+
+	while ((kn = SLIST_FIRST(list)) != NULL) {
+		if (knote_acquire(kn) == 0)
+			continue;
+		kn->kn_fop->f_detach(kn);
+		kn->kn_fop = &dead_filtops;
+		knote_activate(kn);
+		knote_release(kn);
 	}
 }
