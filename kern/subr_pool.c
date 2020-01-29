@@ -1,4 +1,4 @@
-/*	$OpenBSD: subr_pool.c,v 1.228 2019/07/19 09:03:03 bluhm Exp $	*/
+/*	$OpenBSD: subr_pool.c,v 1.230 2020/01/24 06:31:17 cheloha Exp $	*/
 /*	$NetBSD: subr_pool.c,v 1.61 2001/09/26 07:14:56 chs Exp $	*/
 
 /*-
@@ -83,7 +83,7 @@ struct pool_lock_ops {
 	void	(*pl_leave)(union pool_lock *);
 	void	(*pl_assert_locked)(union pool_lock *);
 	void	(*pl_assert_unlocked)(union pool_lock *);
-	int	(*pl_sleep)(void *, union pool_lock *, int, const char *, int);
+	int	(*pl_sleep)(void *, union pool_lock *, int, const char *);
 };
 
 static const struct pool_lock_ops pool_lock_ops_mtx;
@@ -125,9 +125,9 @@ pl_assert_unlocked(struct pool *pp, union pool_lock *pl)
 }
 static inline int
 pl_sleep(struct pool *pp, void *ident, union pool_lock *lock, int priority,
-    const char *wmesg, int timo)
+    const char *wmesg)
 {
-	return pp->pr_lock_ops->pl_sleep(ident, lock, priority, wmesg, timo);
+	return pp->pr_lock_ops->pl_sleep(ident, lock, priority, wmesg);
 }
 
 struct pool_item {
@@ -602,7 +602,7 @@ pool_get(struct pool *pp, int flags)
 
 		pl_enter(pp, &mem.lock);
 		while (mem.v == NULL)
-			pl_sleep(pp, &mem, &mem.lock, PSWP, pp->pr_wchan, 0);
+			pl_sleep(pp, &mem, &mem.lock, PSWP, pp->pr_wchan);
 		pl_leave(pp, &mem.lock);
 
 		v = mem.v;
@@ -649,11 +649,7 @@ pool_runqueue(struct pool *pp, int flags)
 	do {
 		pp->pr_requesting = 1;
 
-		/* no TAILQ_JOIN? :( */
-		while ((pr = TAILQ_FIRST(&pp->pr_requests)) != NULL) {
-			TAILQ_REMOVE(&pp->pr_requests, pr, pr_entry);
-			TAILQ_INSERT_TAIL(&prl, pr, pr_entry);
-		}
+		TAILQ_CONCAT(&prl, &pp->pr_requests, pr_entry);
 		if (TAILQ_EMPTY(&prl))
 			continue;
 
@@ -684,11 +680,7 @@ pool_runqueue(struct pool *pp, int flags)
 		pl_enter(pp, &pp->pr_requests_lock);
 	} while (--pp->pr_requesting);
 
-	/* no TAILQ_JOIN :( */
-	while ((pr = TAILQ_FIRST(&prl)) != NULL) {
-		TAILQ_REMOVE(&prl, pr, pr_entry);
-		TAILQ_INSERT_TAIL(&pp->pr_requests, pr, pr_entry);
-	}
+	TAILQ_CONCAT(&pp->pr_requests, &prl, pr_entry);
 }
 
 void *
@@ -2227,9 +2219,9 @@ pool_lock_mtx_assert_unlocked(union pool_lock *lock)
 
 int
 pool_lock_mtx_sleep(void *ident, union pool_lock *lock, int priority,
-    const char *wmesg, int timo)
+    const char *wmesg)
 {
-	return msleep(ident, &lock->prl_mtx, priority, wmesg, timo);
+	return msleep_nsec(ident, &lock->prl_mtx, priority, wmesg, INFSLP);
 }
 
 static const struct pool_lock_ops pool_lock_ops_mtx = {
@@ -2281,9 +2273,9 @@ pool_lock_rw_assert_unlocked(union pool_lock *lock)
 
 int
 pool_lock_rw_sleep(void *ident, union pool_lock *lock, int priority,
-    const char *wmesg, int timo)
+    const char *wmesg)
 {
-	return rwsleep(ident, &lock->prl_rwlock, priority, wmesg, timo);
+	return rwsleep_nsec(ident, &lock->prl_rwlock, priority, wmesg, INFSLP);
 }
 
 static const struct pool_lock_ops pool_lock_ops_rw = {

@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_physio.c,v 1.44 2019/12/19 17:40:11 mpi Exp $	*/
+/*	$OpenBSD: kern_physio.c,v 1.46 2020/01/26 23:06:39 krw Exp $	*/
 /*	$NetBSD: kern_physio.c,v 1.28 1997/05/19 10:43:28 pk Exp $	*/
 
 /*-
@@ -64,7 +64,8 @@ physio(void (*strategy)(struct buf *), dev_t dev, int flags,
 {
 	struct iovec *iovp;
 	struct proc *p = curproc;
-	int error, done, i, s, todo;
+	long done, todo;
+	int error, i, s;
 	struct buf *bp;
 
 	if ((uio->uio_offset % DEV_BSIZE) != 0)
@@ -110,12 +111,13 @@ physio(void (*strategy)(struct buf *), dev_t dev, int flags,
 			bp->b_blkno = btodb(uio->uio_offset);
 
 			/*
-			 * Because iov_len is unsigned but b_bcount is signed,
-			 * an overflow is possible. Therefore bound to MAXPHYS
-			 * before calling minphys.
+			 * Because iov_len is size_t (unsigned) but b_bcount is
+			 * long (signed), an overflow is possible. Therefore
+			 * limit b_bcount to LONG_MAX before calling the provided
+			 * minphys.
 			 */
-			if (iovp->iov_len > MAXPHYS)
-				bp->b_bcount = MAXPHYS;
+			if (iovp->iov_len > LONG_MAX)
+				bp->b_bcount = LONG_MAX;
 			else
 				bp->b_bcount = iovp->iov_len;
 
@@ -187,6 +189,7 @@ physio(void (*strategy)(struct buf *), dev_t dev, int flags,
 			 * [deduct the transfer size from the total number
 			 *    of data to transfer]
 			 */
+			KASSERTMSG(bp->b_resid <= LONG_MAX, "strategy broken");
 			done = bp->b_bcount - bp->b_resid;
 			KASSERTMSG(done >= 0, "strategy broken");
 			KASSERTMSG(done <= todo, "strategy broken");
