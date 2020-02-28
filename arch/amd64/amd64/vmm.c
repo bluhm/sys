@@ -1,4 +1,4 @@
-/*	$OpenBSD: vmm.c,v 1.257 2019/12/13 03:38:15 mlarkin Exp $	*/
+/*	$OpenBSD: vmm.c,v 1.264 2020/02/26 06:32:22 pd Exp $	*/
 /*
  * Copyright (c) 2014 Mike Larkin <mlarkin@openbsd.org>
  *
@@ -177,7 +177,6 @@ void vmx_handle_intr(struct vcpu *);
 void vmx_handle_intwin(struct vcpu *);
 void vmx_handle_misc_enable_msr(struct vcpu *);
 int vmm_get_guest_memtype(struct vm *, paddr_t);
-int vmm_get_guest_faulttype(void);
 int vmx_get_guest_faulttype(void);
 int svm_get_guest_faulttype(struct vmcb *);
 int vmx_get_exit_qualification(uint64_t *);
@@ -202,6 +201,7 @@ void vmx_setmsrbrw(struct vcpu *, uint32_t);
 void svm_set_clean(struct vcpu *, uint32_t);
 void svm_set_dirty(struct vcpu *, uint32_t);
 
+int vmm_gpa_is_valid(struct vcpu *vcpu, paddr_t gpa, size_t obj_size);
 void vmm_init_pvclock(struct vcpu *, paddr_t);
 int vmm_update_pvclock(struct vcpu *);
 
@@ -2062,6 +2062,9 @@ vcpu_reset_regs_svm(struct vcpu *vcpu, struct vcpu_reg_state *vrs)
 	/* EFER is R/O so we can ensure the guest always has SVME */
 	svm_setmsrbr(vcpu, MSR_EFER);
 
+	/* allow reading TSC */
+	svm_setmsrbr(vcpu, MSR_TSC);
+
 	/* Guest VCPU ASID */
 	if (vmm_alloc_vpid(&asid)) {
 		DPRINTF("%s: could not allocate asid\n", __func__);
@@ -3666,7 +3669,6 @@ vcpu_vmx_compute_ctrl(uint64_t ctrlval, uint16_t ctrl, uint32_t want1,
 /*
  * vm_get_info
  *
- * Returns information about the VM indicated by 'vip'.
  * Returns information about the VM indicated by 'vip'. The 'vip_size' field
  * in the 'vip' parameter is used to indicate the size of the caller's buffer.
  * If insufficient space exists in that buffer, the required size needed is
@@ -3942,7 +3944,7 @@ vcpu_must_stop(struct vcpu *vcpu)
 
 	if (vcpu->vc_state == VCPU_STATE_REQTERM)
 		return (1);
-	if (CURSIG(p) != 0)
+	if (SIGPENDING(p) != 0)
 		return (1);
 	return (0);
 }
@@ -5076,23 +5078,6 @@ vmm_get_guest_memtype(struct vm *vm, paddr_t gpa)
 }
 
 /*
- * vmm_get_guest_faulttype
- *
- * Determines the type (R/W/X) of the last fault on the VCPU last run on
- * this PCPU. Calls the appropriate architecture-specific subroutine.
- */
-int
-vmm_get_guest_faulttype(void)
-{
-	if (vmm_softc->mode == VMM_MODE_EPT)
-		return vmx_get_guest_faulttype();
-	else if (vmm_softc->mode == VMM_MODE_RVI)
-		return vmx_get_guest_faulttype();
-	else
-		panic("%s: unknown vmm mode: %d", __func__, vmm_softc->mode);
-}
-
-/*
  * vmx_get_exit_qualification
  *
  * Return the current VMCS' exit qualification information
@@ -6060,19 +6045,30 @@ svm_handle_xsetbv(struct vcpu *vcpu)
 int
 vmm_handle_xsetbv(struct vcpu *vcpu, uint64_t *rax)
 {
-	uint64_t *rdx, *rcx;
+	uint64_t *rdx, *rcx, val;
 
 	rcx = &vcpu->vc_gueststate.vg_rcx;
 	rdx = &vcpu->vc_gueststate.vg_rdx;
 
+	if (vmm_get_guest_cpu_cpl(vcpu) != 0) {
+		DPRINTF("%s: guest cpl not zero\n", __func__);
+		return (vmm_inject_gp(vcpu));
+	}
+
 	if (*rcx != 0) {
 		DPRINTF("%s: guest specified invalid xcr register number "
 		    "%lld\n", __func__, *rcx);
-		/* XXX this should #GP(0) instead of killing the guest */
-		return (EINVAL);
+		return (vmm_inject_gp(vcpu));
 	}
 
-	vcpu->vc_gueststate.vg_xcr0 = *rax + (*rdx << 32);
+	val = *rax + (*rdx << 32);
+	if (val & ~xsave_mask) {
+		DPRINTF("%s: guest specified xcr0 outside xsave_mask %lld\n",
+		    __func__, val);
+		return (vmm_inject_gp(vcpu));
+	}
+
+	vcpu->vc_gueststate.vg_xcr0 = val;
 
 	return (0);
 }
@@ -6188,10 +6184,10 @@ vmx_handle_wrmsr(struct vcpu *vcpu)
 int
 svm_handle_msr(struct vcpu *vcpu)
 {
-	uint64_t insn_length, msr;
+	uint64_t insn_length;
 	uint64_t *rax, *rcx, *rdx;
 	struct vmcb *vmcb = (struct vmcb *)vcpu->vc_control_va;
-	int i, ret;
+	int ret;
 
 	/* XXX: Validate RDMSR / WRMSR insn_length */
 	insn_length = 2;
@@ -6216,22 +6212,20 @@ svm_handle_msr(struct vcpu *vcpu)
 		}
 	} else {
 		switch (*rcx) {
-			case MSR_LS_CFG:
-				DPRINTF("%s: guest read LS_CFG msr, injecting "
-				    "#GP\n", __func__);
+			case MSR_DE_CFG:
+				/* LFENCE seralizing bit is set by host */
+				*rax = DE_CFG_SERIALIZE_LFENCE;
+				*rdx = 0;
+				break;
+			case MSR_INT_PEN_MSG:
+				*rax = 0;
+				*rdx = 0;
+				break;
+			default:
+				DPRINTF("%s: guest read msr 0x%llx, injecting "
+				    "#GP\n", __func__, *rcx);
 				ret = vmm_inject_gp(vcpu);
 				return (ret);
-		}
-
-		i = rdmsr_safe(*rcx, &msr);
-		if (i == 0) {
-			*rax = msr & 0xFFFFFFFFULL;
-			*rdx = msr >> 32;
-		} else {
-			DPRINTF("%s: rdmsr for unsupported MSR 0x%llx\n",
-			    __func__, *rcx);
-			*rax = 0;
-			*rdx = 0;
 		}
 	}
 
@@ -6863,9 +6857,53 @@ vmm_free_vpid(uint16_t vpid)
 	rw_exit_write(&vmm_softc->vpid_lock);
 }
 
+
+/* vmm_gpa_is_valid
+ *
+ * Check if the given gpa is within guest memory space.
+ *
+ * Parameters:
+ * 	vcpu: The virtual cpu we are running on.
+ * 	gpa: The address to check.
+ * 	obj_size: The size of the object assigned to gpa
+ *
+ * Return values:
+ * 	1: gpa is within the memory ranges allocated for the vcpu
+ * 	0: otherwise
+ */
+int
+vmm_gpa_is_valid(struct vcpu *vcpu, paddr_t gpa, size_t obj_size)
+{
+	struct vm *vm = vcpu->vc_parent;
+	struct vm_mem_range *vmr;
+	for (size_t i = 0; i < vm->vm_nmemranges; ++i) {
+		vmr = &vm->vm_memranges[i];
+		if (vmr->vmr_gpa <= gpa &&
+		    gpa < (vmr->vmr_gpa + vmr->vmr_size - obj_size)) {
+		    return 1;
+		}
+	}
+	return 0;
+}
+
 void
 vmm_init_pvclock(struct vcpu *vcpu, paddr_t gpa)
 {
+	paddr_t pvclock_gpa = gpa & 0xFFFFFFFFFFFFFFF0;
+	if (!vmm_gpa_is_valid(vcpu, pvclock_gpa,
+	        sizeof(struct pvclock_time_info))) {
+		/* XXX: Kill guest? */
+		vmm_inject_gp(vcpu);
+		return;
+	}
+
+	/* XXX: handle case when this struct goes over page boundaries */
+	if ((pvclock_gpa & PAGE_MASK) + sizeof(struct pvclock_time_info) >
+	    PAGE_SIZE) {
+		vmm_inject_gp(vcpu);
+		return;
+	}
+
 	vcpu->vc_pvclock_system_gpa = gpa;
 	if (tsc_frequency > 0)
 		vcpu->vc_pvclock_system_tsc_mul =

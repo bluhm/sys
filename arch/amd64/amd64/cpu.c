@@ -1,4 +1,4 @@
-/*	$OpenBSD: cpu.c,v 1.143 2019/12/20 07:49:31 jsg Exp $	*/
+/*	$OpenBSD: cpu.c,v 1.148 2020/02/28 05:31:41 deraadt Exp $	*/
 /* $NetBSD: cpu.c,v 1.1 2003/04/26 18:39:26 fvdl Exp $ */
 
 /*-
@@ -1167,8 +1167,10 @@ cpu_tsx_disable(struct cpu_info *ci)
 	uint32_t dummy, sefflags_edx;
 
 	/* this runs before identifycpu() populates ci_feature_sefflags_edx */
-	if (cpuid_level >= 0x07)
-		CPUID_LEAF(0x7, 0, dummy, dummy, dummy, sefflags_edx);
+	if (cpuid_level < 0x07)
+		return;
+	CPUID_LEAF(0x7, 0, dummy, dummy, dummy, sefflags_edx);
+
 	if (strcmp(cpu_vendor, "GenuineIntel") == 0 &&
 	    (sefflags_edx & SEFF0EDX_ARCH_CAP)) {
 		msr = rdmsr(MSR_ARCH_CAPABILITIES);
@@ -1217,8 +1219,10 @@ rdrand(void *v)
 		uint64_t u64;
 		uint32_t u32[2];
 	} r, t;
+	uint64_t tsc;
 	uint8_t valid = 0;
 
+	tsc = rdtsc();
 	if (has_rdseed)
 		__asm volatile(
 		    "rdseed	%0\n\t"
@@ -1230,10 +1234,12 @@ rdrand(void *v)
 		    "setc	%1\n"
 		    : "=r" (r.u64), "=qm" (valid) );
 
-	t.u64 = rdtsc();
+	t.u64 = tsc;
+	t.u64 ^= r.u64;
+	t.u64 ^= valid;			/* potential rdrand empty */
+	if (has_rdrand)
+		t.u64 += rdtsc();	/* potential vmexit latency */
 
-	if (valid)
-		t.u64 ^= r.u64;
 	enqueue_randomness(t.u32[0]);
 	enqueue_randomness(t.u32[1]);
 

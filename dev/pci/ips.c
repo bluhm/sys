@@ -1,4 +1,4 @@
-/*	$OpenBSD: ips.c,v 1.114 2020/01/23 07:53:00 krw Exp $	*/
+/*	$OpenBSD: ips.c,v 1.118 2020/02/19 01:31:38 cheloha Exp $	*/
 
 /*
  * Copyright (c) 2006, 2007, 2009 Alexander Yurchenko <grange@openbsd.org>
@@ -62,7 +62,6 @@ int ips_debug = IPS_D_ERR;
 #define IPS_MAXCHUNKS		16
 #define IPS_MAXCMDS		128
 
-#define IPS_MAXFER		(64 * 1024)
 #define IPS_MAXSGS		16
 #define IPS_MAXCDB		12
 
@@ -497,12 +496,12 @@ struct cfdriver ips_cd = {
 	NULL, "ips", DV_DULL
 };
 
-static struct scsi_adapter ips_scsi_adapter = {
-	ips_scsi_cmd, scsi_minphys, NULL, NULL, ips_scsi_ioctl
+static struct scsi_adapter ips_switch = {
+	ips_scsi_cmd, NULL, NULL, NULL, ips_scsi_ioctl
 };
 
-static struct scsi_adapter ips_scsi_pt_adapter = {
-	ips_scsi_pt_cmd, scsi_minphys, NULL, NULL, NULL
+static struct scsi_adapter ips_pt_switch = {
+	ips_scsi_pt_cmd, NULL, NULL, NULL, NULL
 };
 
 static const struct pci_matchid ips_ids[] = {
@@ -724,7 +723,7 @@ ips_attach(struct device *parent, struct device *self, void *aux)
 		sc->sc_scsi_link.openings = sc->sc_nccbs / sc->sc_nunits;
 	sc->sc_scsi_link.adapter_target = sc->sc_nunits;
 	sc->sc_scsi_link.adapter_buswidth = sc->sc_nunits;
-	sc->sc_scsi_link.adapter = &ips_scsi_adapter;
+	sc->sc_scsi_link.adapter = &ips_switch;
 	sc->sc_scsi_link.adapter_softc = sc;
 	sc->sc_scsi_link.pool = &sc->sc_iopool;
 
@@ -768,7 +767,7 @@ ips_attach(struct device *parent, struct device *self, void *aux)
 		link->openings = 1;
 		link->adapter_target = IPS_MAXTARGETS;
 		link->adapter_buswidth = lastarget + 1;
-		link->adapter = &ips_scsi_pt_adapter;
+		link->adapter = &ips_pt_switch;
 		link->adapter_softc = pt;
 		link->pool = &sc->sc_iopool;
 
@@ -1410,8 +1409,7 @@ ips_cmd(struct ips_softc *sc, struct ips_ccb *ccb)
 int
 ips_poll(struct ips_softc *sc, struct ips_ccb *ccb)
 {
-	struct timeval tv;
-	int error, timo;
+	int error, msecs, usecs;
 
 	splassert(IPL_BIO);
 
@@ -1420,7 +1418,7 @@ ips_poll(struct ips_softc *sc, struct ips_ccb *ccb)
 		DPRINTF(IPS_D_XFER, ("%s: ips_poll: busy-wait\n",
 		    sc->sc_dev.dv_xname));
 
-		for (timo = 10000; timo > 0; timo--) {
+		for (usecs = 1000000; usecs > 0; usecs -= 100) {
 			delay(100);
 			ips_intr(sc);
 			if (ccb->c_state == IPS_CCB_DONE)
@@ -1428,14 +1426,11 @@ ips_poll(struct ips_softc *sc, struct ips_ccb *ccb)
 		}
 	} else {
 		/* sleep */
-		timo = ccb->c_xfer ? ccb->c_xfer->timeout : IPS_TIMEOUT;
-		tv.tv_sec = timo / 1000;
-		tv.tv_usec = (timo % 1000) * 1000;
-		timo = tvtohz(&tv);
+		msecs = ccb->c_xfer ? ccb->c_xfer->timeout : IPS_TIMEOUT;
 
-		DPRINTF(IPS_D_XFER, ("%s: ips_poll: sleep %d hz\n",
-		    sc->sc_dev.dv_xname, timo));
-		tsleep(ccb, PRIBIO + 1, "ipscmd", timo);
+		DPRINTF(IPS_D_XFER, ("%s: ips_poll: sleep %d ms\n",
+		    sc->sc_dev.dv_xname, msecs));
+		tsleep_nsec(ccb, PRIBIO + 1, "ipscmd", MSEC_TO_NSEC(msecs));
 	}
 	DPRINTF(IPS_D_XFER, ("%s: ips_poll: state %d\n", sc->sc_dev.dv_xname,
 	    ccb->c_state));
@@ -1984,8 +1979,8 @@ ips_ccb_alloc(struct ips_softc *sc, int n)
 		    i * sizeof(struct ips_cmdb);
 		ccb[i].c_cmdbpa = sc->sc_cmdbm.dm_paddr +
 		    i * sizeof(struct ips_cmdb);
-		if (bus_dmamap_create(sc->sc_dmat, IPS_MAXFER, IPS_MAXSGS,
-		    IPS_MAXFER, 0, BUS_DMA_NOWAIT | BUS_DMA_ALLOCNOW,
+		if (bus_dmamap_create(sc->sc_dmat, MAXPHYS, IPS_MAXSGS,
+		    MAXPHYS, 0, BUS_DMA_NOWAIT | BUS_DMA_ALLOCNOW,
 		    &ccb[i].c_dmam))
 			goto fail;
 	}

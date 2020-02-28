@@ -1,4 +1,4 @@
-/*	$OpenBSD: switchctl.c,v 1.18 2019/12/31 13:48:32 visa Exp $	*/
+/*	$OpenBSD: switchctl.c,v 1.20 2020/02/20 16:56:52 visa Exp $	*/
 
 /*
  * Copyright (c) 2016 Kazuya GODA <goda@openbsd.org>
@@ -60,14 +60,14 @@ int	switch_dev_output(struct switch_softc *, struct mbuf *);
 void	switch_dev_wakeup(struct switch_softc *);
 
 const struct filterops switch_rd_filtops = {
-	.f_isfd		= 1,
+	.f_flags	= FILTEROP_ISFD,
 	.f_attach	= NULL,
 	.f_detach	= filt_switch_rdetach,
 	.f_event	= filt_switch_read,
 };
 
 const struct filterops switch_wr_filtops = {
-	.f_isfd		= 1,
+	.f_flags	= FILTEROP_ISFD,
 	.f_attach	= NULL,
 	.f_detach	= filt_switch_wdetach,
 	.f_event	= filt_switch_write,
@@ -420,9 +420,6 @@ filt_switch_rdetach(struct knote *kn)
 	struct switch_softc	*sc = (struct switch_softc *)kn->kn_hook;
 	struct klist		*klist = &sc->sc_swdev->swdev_rsel.si_note;
 
-	if (ISSET(kn->kn_status, KN_DETACHED))
-		return;
-
 	SLIST_REMOVE(klist, kn, knote, kn_selnext);
 }
 
@@ -430,11 +427,6 @@ int
 filt_switch_read(struct knote *kn, long hint)
 {
 	struct switch_softc	*sc = (struct switch_softc *)kn->kn_hook;
-
-	if (ISSET(kn->kn_status, KN_DETACHED)) {
-		kn->kn_data = 0;
-		return (1);
-	}
 
 	if (!mq_empty(&sc->sc_swdev->swdev_outq) ||
 	    sc->sc_swdev->swdev_lastm != NULL) {
@@ -451,9 +443,6 @@ filt_switch_wdetach(struct knote *kn)
 {
 	struct switch_softc	*sc = (struct switch_softc *)kn->kn_hook;
 	struct klist		*klist = &sc->sc_swdev->swdev_wsel.si_note;
-
-	if (ISSET(kn->kn_status, KN_DETACHED))
-		return;
 
 	SLIST_REMOVE(klist, kn, knote, kn_selnext);
 }

@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_descrip.c,v 1.196 2020/01/08 16:45:28 visa Exp $	*/
+/*	$OpenBSD: kern_descrip.c,v 1.200 2020/02/26 13:54:52 visa Exp $	*/
 /*	$NetBSD: kern_descrip.c,v 1.42 1996/03/30 22:24:38 christos Exp $	*/
 
 /*
@@ -81,6 +81,9 @@ static __inline int fd_inuse(struct filedesc *, int);
 int finishdup(struct proc *, struct file *, int, int, register_t *, int);
 int find_last_set(struct filedesc *, int);
 int dodup3(struct proc *, int, int, int, register_t *);
+
+#define DUPF_CLOEXEC	0x01
+#define DUPF_DUP2	0x02
 
 struct pool file_pool;
 struct pool fdesc_pool;
@@ -304,14 +307,11 @@ restart:
 			fdpunlock(fdp);
 			goto restart;
 		}
-		goto out;
+		fdpunlock(fdp);
+		return (error);
 	}
 	/* No need for FRELE(), finishdup() uses current ref. */
-	error = finishdup(p, fp, old, new, retval, 0);
-
-out:
-	fdpunlock(fdp);
-	return (error);
+	return (finishdup(p, fp, old, new, retval, 0));
 }
 
 /*
@@ -350,7 +350,7 @@ dodup3(struct proc *p, int old, int new, int flags, register_t *retval)
 {
 	struct filedesc *fdp = p->p_fd;
 	struct file *fp;
-	int i, error;
+	int dupflags, error, i;
 
 restart:
 	if ((fp = fd_getfile(fdp, old)) == NULL)
@@ -379,20 +379,20 @@ restart:
 				fdpunlock(fdp);
 				goto restart;
 			}
-			goto out;
+			fdpunlock(fdp);
+			return (error);
 		}
 		if (new != i)
 			panic("dup2: fdalloc");
 		fd_unused(fdp, new);
 	}
-	/* No need for FRELE(), finishdup() uses current ref. */
-	error = finishdup(p, fp, old, new, retval, 1);
-	if (!error && flags & O_CLOEXEC)
-		fdp->fd_ofileflags[new] |= UF_EXCLOSE;
 
-out:
-	fdpunlock(fdp);
-	return (error);
+	dupflags = DUPF_DUP2;
+	if (flags & O_CLOEXEC)
+		dupflags |= DUPF_CLOEXEC;
+
+	/* No need for FRELE(), finishdup() uses current ref. */
+	return (finishdup(p, fp, old, new, retval, dupflags));
 }
 
 /*
@@ -410,7 +410,7 @@ sys_fcntl(struct proc *p, void *v, register_t *retval)
 	struct filedesc *fdp = p->p_fd;
 	struct file *fp;
 	struct vnode *vp;
-	int i, tmp, newmin, flg = F_POSIX;
+	int i, prev, tmp, newmin, flg = F_POSIX;
 	struct flock fl;
 	int error = 0;
 
@@ -439,15 +439,16 @@ restart:
 				fdpunlock(fdp);
 				goto restart;
 			}
+			fdpunlock(fdp);
 		} else {
+			int dupflags = 0;
+
+			if (SCARG(uap, cmd) == F_DUPFD_CLOEXEC)
+				dupflags |= DUPF_CLOEXEC;
+
 			/* No need for FRELE(), finishdup() uses current ref. */
-			error = finishdup(p, fp, fd, i, retval, 0);
-
-			if (!error && SCARG(uap, cmd) == F_DUPFD_CLOEXEC)
-				fdp->fd_ofileflags[i] |= UF_EXCLOSE;
+			error = finishdup(p, fp, fd, i, retval, dupflags);
 		}
-
-		fdpunlock(fdp);
 		return (error);
 
 	case F_GETFD:
@@ -480,8 +481,11 @@ restart:
 		break;
 
 	case F_SETFL:
-		fp->f_flag &= ~FCNTLFLAGS;
-		fp->f_flag |= FFLAGS((long)SCARG(uap, arg)) & FCNTLFLAGS;
+		do {
+			tmp = prev = fp->f_flag;
+			tmp &= ~FCNTLFLAGS;
+			tmp |= FFLAGS((long)SCARG(uap, arg)) & FCNTLFLAGS;
+		} while (atomic_cas_uint(&fp->f_flag, prev, tmp) != prev);
 		tmp = fp->f_flag & FNONBLOCK;
 		error = (*fp->f_ops->fo_ioctl)(fp, FIONBIO, (caddr_t)&tmp, p);
 		if (error)
@@ -490,7 +494,7 @@ restart:
 		error = (*fp->f_ops->fo_ioctl)(fp, FIOASYNC, (caddr_t)&tmp, p);
 		if (!error)
 			break;
-		fp->f_flag &= ~FNONBLOCK;
+		atomic_clearbits_int(&fp->f_flag, FNONBLOCK);
 		tmp = 0;
 		(void) (*fp->f_ops->fo_ioctl)(fp, FIONBIO, (caddr_t)&tmp, p);
 		break;
@@ -642,30 +646,28 @@ out:
  */
 int
 finishdup(struct proc *p, struct file *fp, int old, int new,
-    register_t *retval, int dup2)
+    register_t *retval, int dupflags)
 {
 	struct file *oldfp;
 	struct filedesc *fdp = p->p_fd;
+	int error;
 
 	fdpassertlocked(fdp);
 	KASSERT(fp->f_iflags & FIF_INSERTED);
 
 	if (fp->f_count >= FDUP_MAX_COUNT) {
-		FRELE(fp, p);
-		return (EDEADLK);
+		error = EDEADLK;
+		goto fail;
 	}
 
 	oldfp = fd_getfile(fdp, new);
-	if (dup2 && oldfp == NULL) {
+	if ((dupflags & DUPF_DUP2) && oldfp == NULL) {
 		if (fd_inuse(fdp, new)) {
- 			FRELE(fp, p);
- 			return (EBUSY);
- 		}
+			error = EBUSY;
+			goto fail;
+		}
 		fd_used(fdp, new);
- 	}
-
-	/* Prevent race with kevent. */
-	KERNEL_LOCK();
+	}
 
 	/*
 	 * Use `fd_fplock' to synchronize with fd_getfile() so that
@@ -676,16 +678,24 @@ finishdup(struct proc *p, struct file *fp, int old, int new,
 	mtx_leave(&fdp->fd_fplock);
 
 	fdp->fd_ofileflags[new] = fdp->fd_ofileflags[old] & ~UF_EXCLOSE;
+	if (dupflags & DUPF_CLOEXEC)
+		fdp->fd_ofileflags[new] |= UF_EXCLOSE;
 	*retval = new;
 
 	if (oldfp != NULL) {
 		knote_fdclose(p, new);
+		fdpunlock(fdp);
 		closef(oldfp, p);
+	} else {
+		fdpunlock(fdp);
 	}
 
-	KERNEL_UNLOCK();
-
 	return (0);
+
+fail:
+	fdpunlock(fdp);
+	FRELE(fp, p);
+	return (error);
 }
 
 void
@@ -737,7 +747,6 @@ fdrelease(struct proc *p, int fd)
 {
 	struct filedesc *fdp = p->p_fd;
 	struct file *fp;
-	int error;
 
 	fdpassertlocked(fdp);
 
@@ -746,14 +755,10 @@ fdrelease(struct proc *p, int fd)
 		fdpunlock(fdp);
 		return (EBADF);
 	}
-	/* Prevent race with kevent. */
-	KERNEL_LOCK();
 	fdremove(fdp, fd);
 	knote_fdclose(p, fd);
 	fdpunlock(fdp);
-	error = closef(fp, p);
-	KERNEL_UNLOCK();
-	return (error);
+	return (closef(fp, p));
 }
 
 /*

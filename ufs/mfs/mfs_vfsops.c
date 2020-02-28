@@ -1,4 +1,4 @@
-/*	$OpenBSD: mfs_vfsops.c,v 1.57 2019/12/26 13:28:50 bluhm Exp $	*/
+/*	$OpenBSD: mfs_vfsops.c,v 1.59 2020/02/18 12:13:40 mpi Exp $	*/
 /*	$NetBSD: mfs_vfsops.c,v 1.10 1996/02/09 22:31:28 christos Exp $	*/
 
 /*
@@ -41,7 +41,6 @@
 #include <sys/signalvar.h>
 #include <sys/vnode.h>
 #include <sys/malloc.h>
-#include <sys/kthread.h>
 
 #include <ufs/ufs/quota.h>
 #include <ufs/ufs/inode.h>
@@ -167,7 +166,7 @@ mfs_start(struct mount *mp, int flags, struct proc *p)
 	struct vnode *vp = VFSTOUFS(mp)->um_devvp;
 	struct mfsnode *mfsp = VTOMFS(vp);
 	struct buf *bp;
-	int sleepreturn = 0;
+	int sleepreturn = 0, sig;
 
 	while (1) {
 		while (1) {
@@ -189,10 +188,10 @@ mfs_start(struct mount *mp, int flags, struct proc *p)
 		 * EINTR/ERESTART.
 		 */
 		if (sleepreturn != 0) {
+			sig = CURSIG(p);
 			if (vfs_busy(mp, VB_WRITE|VB_NOWAIT) ||
-			    dounmount(mp,
-			    (CURSIG(p) == SIGKILL) ? MNT_FORCE : 0, p))
-				CLRSIG(p, CURSIG(p));
+			    dounmount(mp, (sig == SIGKILL) ? MNT_FORCE : 0, p))
+				CLRSIG(p, sig);
 			sleepreturn = 0;
 			continue;
 		}

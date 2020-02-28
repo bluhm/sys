@@ -1,4 +1,4 @@
-/*	$OpenBSD: sys_generic.c,v 1.128 2020/01/16 16:35:04 mpi Exp $	*/
+/*	$OpenBSD: sys_generic.c,v 1.130 2020/02/14 14:32:44 mpi Exp $	*/
 /*	$NetBSD: sys_generic.c,v 1.24 1996/03/29 00:25:32 cgd Exp $	*/
 
 /*
@@ -73,6 +73,7 @@ int dopselect(struct proc *, int, fd_set *, fd_set *, fd_set *,
     struct timespec *, const sigset_t *, register_t *);
 int doppoll(struct proc *, struct pollfd *, u_int, struct timespec *,
     const sigset_t *, register_t *);
+void doselwakeup(struct selinfo *);
 
 int
 iovec_copyin(const struct iovec *uiov, struct iovec **iovp, struct iovec *aiov,
@@ -475,17 +476,17 @@ sys_ioctl(struct proc *p, void *v, register_t *retval)
 
 	case FIONBIO:
 		if ((tmp = *(int *)data) != 0)
-			fp->f_flag |= FNONBLOCK;
+			atomic_setbits_int(&fp->f_flag, FNONBLOCK);
 		else
-			fp->f_flag &= ~FNONBLOCK;
+			atomic_clearbits_int(&fp->f_flag, FNONBLOCK);
 		error = (*fp->f_ops->fo_ioctl)(fp, FIONBIO, (caddr_t)&tmp, p);
 		break;
 
 	case FIOASYNC:
 		if ((tmp = *(int *)data) != 0)
-			fp->f_flag |= FASYNC;
+			atomic_setbits_int(&fp->f_flag, FASYNC);
 		else
-			fp->f_flag &= ~FASYNC;
+			atomic_clearbits_int(&fp->f_flag, FASYNC);
 		error = (*fp->f_ops->fo_ioctl)(fp, FIOASYNC, (caddr_t)&tmp, p);
 		break;
 
@@ -750,6 +751,8 @@ selrecord(struct proc *selector, struct selinfo *sip)
 	struct proc *p;
 	pid_t mytid;
 
+	KERNEL_ASSERT_LOCKED();
+
 	mytid = selector->p_tid;
 	if (sip->si_seltid == mytid)
 		return;
@@ -766,9 +769,19 @@ selrecord(struct proc *selector, struct selinfo *sip)
 void
 selwakeup(struct selinfo *sip)
 {
+	KERNEL_LOCK();
+	KNOTE(&sip->si_note, NOTE_SUBMIT);
+	doselwakeup(sip);
+	KERNEL_UNLOCK();
+}
+
+void
+doselwakeup(struct selinfo *sip)
+{
 	struct proc *p;
 
-	KNOTE(&sip->si_note, NOTE_SUBMIT);
+	KERNEL_ASSERT_LOCKED();
+
 	if (sip->si_seltid == 0)
 		return;
 	if (sip->si_flags & SI_COLL) {

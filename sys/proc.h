@@ -1,4 +1,4 @@
-/*	$OpenBSD: proc.h,v 1.286 2020/01/21 15:20:47 visa Exp $	*/
+/*	$OpenBSD: proc.h,v 1.289 2020/02/21 11:10:23 claudio Exp $	*/
 /*	$NetBSD: proc.h,v 1.44 1996/04/22 01:23:21 christos Exp $	*/
 
 /*-
@@ -159,6 +159,7 @@ struct unveil;
 
 /*
  * Locks used to protect struct members in this file:
+ *	a	atomic operations
  *	m	this process' `ps_mtx'
  *	p	this process' `ps_lock'
  *	r	rlimit_lock
@@ -196,7 +197,7 @@ struct process {
 /* The following fields are all zeroed upon creation in process_new. */
 #define	ps_startzero	ps_klist
 	struct	klist ps_klist;		/* knotes attached to this process */
-	int	ps_flags;		/* PS_* flags. */
+	u_int	ps_flags;		/* [a] PS_* flags. */
 	int	ps_siglist;		/* Signals pending for the process. */
 
 	struct	proc *ps_single;	/* Single threading to this thread. */
@@ -346,7 +347,7 @@ struct proc {
 	int	p_flag;			/* P_* flags. */
 	u_char	p_spare;		/* unused */
 	char	p_stat;			/* [s] S* process status. */
-	char	p_pad1[1];
+	u_char	p_runpri;		/* [s] Runqueue priority */
 	u_char	p_descfd;		/* if not 255, fdesc permits this fd */
 
 	pid_t	p_tid;			/* Thread identifier. */
@@ -385,8 +386,8 @@ struct proc {
 #define	p_startcopy	p_sigmask
 	sigset_t p_sigmask;	/* Current signal mask. */
 
-	u_char	p_priority;	/* [s] Process priority. */
-	u_char	p_usrpri;	/* [s] User-prio based on p_estcpu & ps_nice. */
+	u_char	p_slppri;		/* [s] Sleeping priority */
+	u_char	p_usrpri;	/* [s] Priority based on p_estcpu & ps_nice */
 	u_int	p_estcpu;		/* [s] Time averaged val of p_cpticks */
 	int	p_pledge_syscall;	/* Cache of current syscall */
 
@@ -505,7 +506,6 @@ void uid_release(struct uidinfo *);
 #define FORK_SYSTEM	0x00000020
 #define FORK_NOZOMBIE	0x00000040
 #define FORK_SHAREVM	0x00000080
-#define FORK_SIGHAND	0x00000200
 #define FORK_PTRACE	0x00000400
 
 #define EXIT_NORMAL		0x00000001

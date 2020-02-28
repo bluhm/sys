@@ -1,4 +1,4 @@
-/*	$OpenBSD: vfs_vnops.c,v 1.111 2020/01/05 13:46:02 visa Exp $	*/
+/*	$OpenBSD: vfs_vnops.c,v 1.113 2020/02/22 11:58:29 anton Exp $	*/
 /*	$NetBSD: vfs_vnops.c,v 1.20 1996/02/04 02:18:41 christos Exp $	*/
 
 /*
@@ -508,8 +508,9 @@ vn_ioctl(struct file *fp, u_long com, caddr_t data, struct proc *p)
 {
 	struct vnode *vp = fp->f_data;
 	struct vattr vattr;
-	int error;
+	int error = ENOTTY;
 
+	KERNEL_LOCK();
 	switch (vp->v_type) {
 
 	case VREG:
@@ -517,15 +518,12 @@ vn_ioctl(struct file *fp, u_long com, caddr_t data, struct proc *p)
 		if (com == FIONREAD) {
 			error = VOP_GETATTR(vp, &vattr, p->p_ucred, p);
 			if (error)
-				return (error);
+				break;
 			*(int *)data = vattr.va_size - foffset(fp);
-			return (0);
-		}
-		if (com == FIONBIO || com == FIOASYNC)  /* XXX */
-			return (0);			/* XXX */
-		/* FALLTHROUGH */
-	default:
-		return (ENOTTY);
+
+		} else if (com == FIONBIO || com == FIOASYNC)	/* XXX */
+			error = 0;				/* XXX */
+		break;
 
 	case VFIFO:
 	case VCHR:
@@ -539,8 +537,14 @@ vn_ioctl(struct file *fp, u_long com, caddr_t data, struct proc *p)
 			if (ovp)
 				vrele(ovp);
 		}
-		return (error);
+		break;
+
+	default:
+		break;
 	}
+	KERNEL_UNLOCK();
+
+	return (error);
 }
 
 /*

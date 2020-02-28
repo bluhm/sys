@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_iwm.c,v 1.293 2019/12/20 10:23:27 stsp Exp $	*/
+/*	$OpenBSD: if_iwm.c,v 1.298 2020/02/28 13:27:25 stsp Exp $	*/
 
 /*
  * Copyright (c) 2014, 2016 genua gmbh <info@genua.de>
@@ -1276,6 +1276,7 @@ iwm_alloc_tx_ring(struct iwm_softc *sc, struct iwm_tx_ring *ring, int qid)
 	ring->qid = qid;
 	ring->queued = 0;
 	ring->cur = 0;
+	ring->tail = 0;
 
 	/* Allocate TX descriptors (256-byte aligned). */
 	size = IWM_TX_RING_COUNT * sizeof (struct iwm_tfd);
@@ -1377,6 +1378,7 @@ iwm_reset_tx_ring(struct iwm_softc *sc, struct iwm_tx_ring *ring)
 	}
 	ring->queued = 0;
 	ring->cur = 0;
+	ring->tail = 0;
 }
 
 void
@@ -3990,20 +3992,26 @@ iwm_rx_mpdu(struct iwm_softc *sc, struct mbuf *m, void *pktdata,
 	if (len < IEEE80211_MIN_LEN) {
 		ic->ic_stats.is_rx_tooshort++;
 		IC2IFP(ic)->if_ierrors++;
+		m_freem(m);
 		return;
 	}
 	if (len > maxlen - sizeof(*rx_res)) {
 		IC2IFP(ic)->if_ierrors++;
+		m_freem(m);
 		return;
 	}
 
-	if (__predict_false(phy_info->cfg_phy_cnt > 20))
+	if (__predict_false(phy_info->cfg_phy_cnt > 20)) {
+		m_freem(m);
 		return;
+	}
 
 	rx_pkt_status = le32toh(*(uint32_t *)(pktdata + sizeof(*rx_res) + len));
 	if (!(rx_pkt_status & IWM_RX_MPDU_RES_STATUS_CRC_OK) ||
-	    !(rx_pkt_status & IWM_RX_MPDU_RES_STATUS_OVERRUN_OK))
+	    !(rx_pkt_status & IWM_RX_MPDU_RES_STATUS_OVERRUN_OK)) {
+		m_freem(m);
 		return; /* drop */
+	}
 
 	m->m_data = pktdata + sizeof(*rx_res);
 	m->m_pkthdr.len = m->m_len = len;
@@ -4041,17 +4049,21 @@ iwm_rx_mpdu_mq(struct iwm_softc *sc, struct mbuf *m, void *pktdata,
 	desc = (struct iwm_rx_mpdu_desc *)pktdata;
 
 	if (!(desc->status & htole16(IWM_RX_MPDU_RES_STATUS_CRC_OK)) ||
-	    !(desc->status & htole16(IWM_RX_MPDU_RES_STATUS_OVERRUN_OK)))
+	    !(desc->status & htole16(IWM_RX_MPDU_RES_STATUS_OVERRUN_OK))) {
+		m_freem(m);
 		return; /* drop */
+	}
 
 	len = le16toh(desc->mpdu_len);
 	if (len < IEEE80211_MIN_LEN) {
 		ic->ic_stats.is_rx_tooshort++;
 		IC2IFP(ic)->if_ierrors++;
+		m_freem(m);
 		return;
 	}
 	if (len > maxlen - sizeof(*desc)) {
 		IC2IFP(ic)->if_ierrors++;
+		m_freem(m);
 		return;
 	}
 
@@ -4193,6 +4205,25 @@ iwm_rx_tx_cmd_single(struct iwm_softc *sc, struct iwm_rx_packet *pkt,
 }
 
 void
+iwm_txd_done(struct iwm_softc *sc, struct iwm_tx_data *txd)
+{
+	struct ieee80211com *ic = &sc->sc_ic;
+
+	bus_dmamap_sync(sc->sc_dmat, txd->map, 0, txd->map->dm_mapsize,
+	    BUS_DMASYNC_POSTWRITE);
+	bus_dmamap_unload(sc->sc_dmat, txd->map);
+	m_freem(txd->m);
+	txd->m = NULL;
+
+	KASSERT(txd->in);
+	ieee80211_release_node(ic, &txd->in->in_ni);
+	txd->in = NULL;
+
+	KASSERT(txd->done == 0);
+	txd->done = 1;
+}
+
+void
 iwm_rx_tx_cmd(struct iwm_softc *sc, struct iwm_rx_packet *pkt,
     struct iwm_rx_data *data)
 {
@@ -4202,31 +4233,35 @@ iwm_rx_tx_cmd(struct iwm_softc *sc, struct iwm_rx_packet *pkt,
 	int idx = cmd_hdr->idx;
 	int qid = cmd_hdr->qid;
 	struct iwm_tx_ring *ring = &sc->txq[qid];
-	struct iwm_tx_data *txd = &ring->data[idx];
-	struct iwm_node *in = txd->in;
-
-	if (txd->done)
-		return;
+	struct iwm_tx_data *txd;
 
 	bus_dmamap_sync(sc->sc_dmat, data->map, 0, IWM_RBUF_SIZE,
 	    BUS_DMASYNC_POSTREAD);
 
 	sc->sc_tx_timer = 0;
 
-	iwm_rx_tx_cmd_single(sc, pkt, in);
+	txd = &ring->data[idx];
+	if (txd->done)
+		return;
 
-	bus_dmamap_sync(sc->sc_dmat, txd->map, 0, txd->map->dm_mapsize,
-	    BUS_DMASYNC_POSTWRITE);
-	bus_dmamap_unload(sc->sc_dmat, txd->map);
-	m_freem(txd->m);
+	iwm_rx_tx_cmd_single(sc, pkt, txd->in);
+	iwm_txd_done(sc, txd);
 
-	KASSERT(txd->done == 0);
-	txd->done = 1;
-	KASSERT(txd->in);
-
-	txd->m = NULL;
-	txd->in = NULL;
-	ieee80211_release_node(ic, &in->in_ni);
+	/*
+	 * XXX Sometimes we miss Tx completion interrupts.
+	 * We cannot check Tx success/failure for affected frames; just free
+	 * the associated mbuf and release the associated node reference.
+	 */
+	while (ring->tail != idx) {
+		txd = &ring->data[ring->tail];
+		if (!txd->done) {
+			DPRINTF(("%s: missed Tx completion: tail=%d idx=%d\n",
+			    __func__, ring->tail, idx));
+			iwm_txd_done(sc, txd);
+			ring->queued--;
+		}
+		ring->tail = (ring->tail + 1) % IWM_TX_RING_COUNT;
+	}
 
 	if (--ring->queued < IWM_TX_RING_LOMARK) {
 		sc->qfullmsk &= ~(1 << ring->qid);
@@ -5192,12 +5227,27 @@ iwm_add_sta_cmd(struct iwm_softc *sc, struct iwm_node *in, int update)
 
 	memset(&add_sta_cmd, 0, sizeof(add_sta_cmd));
 
-	add_sta_cmd.sta_id = IWM_STATION_ID;
-	if (isset(sc->sc_ucode_api, IWM_UCODE_TLV_API_STA_TYPE))
-		add_sta_cmd.station_type = IWM_STA_LINK;
+	if (ic->ic_opmode == IEEE80211_M_MONITOR)
+		add_sta_cmd.sta_id = IWM_MONITOR_STA_ID;
+	else
+		add_sta_cmd.sta_id = IWM_STATION_ID;
+	if (isset(sc->sc_ucode_api, IWM_UCODE_TLV_API_STA_TYPE)) {
+		if (ic->ic_opmode == IEEE80211_M_MONITOR)
+			add_sta_cmd.station_type = IWM_STA_GENERAL_PURPOSE;
+		else
+			add_sta_cmd.station_type = IWM_STA_LINK;
+	}
 	add_sta_cmd.mac_id_n_color
 	    = htole32(IWM_FW_CMD_ID_AND_COLOR(in->in_id, in->in_color));
-	if (!update) {
+	if (ic->ic_opmode == IEEE80211_M_MONITOR) {
+		int qid;
+		IEEE80211_ADDR_COPY(&add_sta_cmd.addr, etheranyaddr);
+		if (isset(sc->sc_enabled_capa, IWM_UCODE_TLV_CAPA_DQA_SUPPORT))
+			qid = IWM_DQA_INJECT_MONITOR_QUEUE;
+		else
+			qid = IWM_AUX_QUEUE;
+		add_sta_cmd.tfd_queue_msk |= htole32(1 << qid);
+	} else if (!update) {
 		int ac;
 		for (ac = 0; ac < EDCA_NUM_AC; ac++) {
 			int qid = ac;
@@ -5206,12 +5256,7 @@ iwm_add_sta_cmd(struct iwm_softc *sc, struct iwm_node *in, int update)
 				qid += IWM_DQA_MIN_MGMT_QUEUE;
 			add_sta_cmd.tfd_queue_msk |= htole32(1 << qid);
 		}
-		if (ic->ic_opmode == IEEE80211_M_MONITOR)
-			IEEE80211_ADDR_COPY(&add_sta_cmd.addr,
-			    etherbroadcastaddr);
-		else
-			IEEE80211_ADDR_COPY(&add_sta_cmd.addr,
-			    in->in_ni.ni_bssid);
+		IEEE80211_ADDR_COPY(&add_sta_cmd.addr, in->in_ni.ni_bssid);
 	}
 	add_sta_cmd.add_modify = update ? 1 : 0;
 	add_sta_cmd.station_flags_msk
@@ -5306,6 +5351,7 @@ iwm_add_aux_sta(struct iwm_softc *sc)
 int
 iwm_rm_sta_cmd(struct iwm_softc *sc, struct iwm_node *in)
 {
+	struct ieee80211com *ic = &sc->sc_ic;
 	struct iwm_rm_sta_cmd rm_sta_cmd;
 	int err;
 
@@ -5313,7 +5359,10 @@ iwm_rm_sta_cmd(struct iwm_softc *sc, struct iwm_node *in)
 		panic("sta already removed");
 
 	memset(&rm_sta_cmd, 0, sizeof(rm_sta_cmd));
-	rm_sta_cmd.sta_id = IWM_STATION_ID;
+	if (ic->ic_opmode == IEEE80211_M_MONITOR)
+		rm_sta_cmd.sta_id = IWM_MONITOR_STA_ID;
+	else
+		rm_sta_cmd.sta_id = IWM_STATION_ID;
 
 	err = iwm_send_cmd_pdu(sc, IWM_REMOVE_STA, 0, sizeof(rm_sta_cmd),
 	    &rm_sta_cmd);
@@ -6177,6 +6226,7 @@ iwm_mac_ctxt_cmd(struct iwm_softc *sc, struct iwm_node *in, uint32_t action,
 	if (ic->ic_opmode == IEEE80211_M_MONITOR) {
 		cmd.filter_flags |= htole32(IWM_MAC_FILTER_IN_PROMISC |
 		    IWM_MAC_FILTER_IN_CONTROL_AND_MGMT |
+		    IWM_MAC_FILTER_ACCEPT_GRP |
 		    IWM_MAC_FILTER_IN_BEACON |
 		    IWM_MAC_FILTER_IN_PROBE_REQUEST |
 		    IWM_MAC_FILTER_IN_CRC32);
@@ -7493,7 +7543,7 @@ int
 iwm_init_hw(struct iwm_softc *sc)
 {
 	struct ieee80211com *ic = &sc->sc_ic;
-	int err, i, ac;
+	int err, i, ac, qid;
 
 	err = iwm_preinit(sc);
 	if (err)
@@ -7621,18 +7671,32 @@ iwm_init_hw(struct iwm_softc *sc)
 		}
 	}
 
-	for (ac = 0; ac < EDCA_NUM_AC; ac++) {
-		int qid;
+	if (ic->ic_opmode == IEEE80211_M_MONITOR) {
 		if (isset(sc->sc_enabled_capa, IWM_UCODE_TLV_CAPA_DQA_SUPPORT))
-			qid = ac + IWM_DQA_MIN_MGMT_QUEUE;
+			qid = IWM_DQA_INJECT_MONITOR_QUEUE;
 		else
-			qid = ac;
-		err = iwm_enable_txq(sc, IWM_STATION_ID, qid,
-		    iwm_ac_to_tx_fifo[ac]);
+			qid = IWM_AUX_QUEUE;
+		err = iwm_enable_txq(sc, IWM_MONITOR_STA_ID, qid,
+		    iwm_ac_to_tx_fifo[EDCA_AC_BE]);
 		if (err) {
-			printf("%s: could not enable Tx queue %d (error %d)\n",
-			    DEVNAME(sc), ac, err);
+			printf("%s: could not enable monitor inject Tx queue "
+			    "(error %d)\n", DEVNAME(sc), err);
 			goto err;
+		}
+	} else {
+		for (ac = 0; ac < EDCA_NUM_AC; ac++) {
+			if (isset(sc->sc_enabled_capa,
+			    IWM_UCODE_TLV_CAPA_DQA_SUPPORT))
+				qid = ac + IWM_DQA_MIN_MGMT_QUEUE;
+			else
+				qid = ac;
+			err = iwm_enable_txq(sc, IWM_STATION_ID, qid,
+			    iwm_ac_to_tx_fifo[ac]);
+			if (err) {
+				printf("%s: could not enable Tx queue %d "
+				    "(error %d)\n", DEVNAME(sc), ac, err);
+				goto err;
+			}
 		}
 	}
 
@@ -8273,6 +8337,8 @@ iwm_rx_pkt(struct iwm_softc *sc, struct iwm_rx_data *data, struct mbuf_list *ml)
 				m = m_copym(m0, 0, M_COPYALL, M_DONTWAIT);
 				if (m == NULL) {
 					ifp->if_ierrors++;
+					m_freem(m0);
+					m0 = NULL;
 					break;
 				}
 				m_adj(m, offset);
@@ -8589,8 +8655,8 @@ iwm_intr(void *arg)
 {
 	struct iwm_softc *sc = arg;
 	int handled = 0;
-	int r1, r2, rv = 0;
-	int isperiodic = 0;
+	int rv = 0;
+	uint32_t r1, r2;
 
 	IWM_WRITE(sc, IWM_CSR_INT_MASK, 0);
 
@@ -8617,19 +8683,24 @@ iwm_intr(void *arg)
 		if (r1 == 0xffffffff)
 			r1 = 0;
 
-		/* i am not expected to understand this */
+		/*
+		 * Workaround for hardware bug where bits are falsely cleared
+		 * when using interrupt coalescing.  Bit 15 should be set if
+		 * bits 18 and 19 are set.
+		 */
 		if (r1 & 0xc0000)
 			r1 |= 0x8000;
+
 		r1 = (0xff & r1) | ((0xff00 & r1) << 16);
 	} else {
 		r1 = IWM_READ(sc, IWM_CSR_INT);
-		if (r1 == 0xffffffff || (r1 & 0xfffffff0) == 0xa5a5a5a0)
-			goto out;
 		r2 = IWM_READ(sc, IWM_CSR_FH_INT_STATUS);
 	}
 	if (r1 == 0 && r2 == 0) {
 		goto out_ena;
 	}
+	if (r1 == 0xffffffff || (r1 & 0xfffffff0) == 0xa5a5a5a0)
+		goto out;
 
 	IWM_WRITE(sc, IWM_CSR_INT, r1 | ~sc->sc_intmask);
 
@@ -8691,27 +8762,32 @@ iwm_intr(void *arg)
 		wakeup(&sc->sc_fw);
 	}
 
-	if (r1 & IWM_CSR_INT_BIT_RX_PERIODIC) {
-		handled |= IWM_CSR_INT_BIT_RX_PERIODIC;
-		IWM_WRITE(sc, IWM_CSR_INT, IWM_CSR_INT_BIT_RX_PERIODIC);
-		if ((r1 & (IWM_CSR_INT_BIT_FH_RX | IWM_CSR_INT_BIT_SW_RX)) == 0)
-			IWM_WRITE_1(sc,
-			    IWM_CSR_INT_PERIODIC_REG, IWM_CSR_INT_PERIODIC_DIS);
-		isperiodic = 1;
-	}
+	if (r1 & (IWM_CSR_INT_BIT_FH_RX | IWM_CSR_INT_BIT_SW_RX |
+	    IWM_CSR_INT_BIT_RX_PERIODIC)) {
+		if (r1 & (IWM_CSR_INT_BIT_FH_RX | IWM_CSR_INT_BIT_SW_RX)) {
+			handled |= (IWM_CSR_INT_BIT_FH_RX | IWM_CSR_INT_BIT_SW_RX);
+			IWM_WRITE(sc, IWM_CSR_FH_INT_STATUS, IWM_CSR_FH_INT_RX_MASK);
+		}
+		if (r1 & IWM_CSR_INT_BIT_RX_PERIODIC) {
+			handled |= IWM_CSR_INT_BIT_RX_PERIODIC;
+			IWM_WRITE(sc, IWM_CSR_INT, IWM_CSR_INT_BIT_RX_PERIODIC);
+		}
 
-	if ((r1 & (IWM_CSR_INT_BIT_FH_RX | IWM_CSR_INT_BIT_SW_RX)) ||
-	    isperiodic) {
-		handled |= (IWM_CSR_INT_BIT_FH_RX | IWM_CSR_INT_BIT_SW_RX);
-		IWM_WRITE(sc, IWM_CSR_FH_INT_STATUS, IWM_CSR_FH_INT_RX_MASK);
+		/* Disable periodic interrupt; we use it as just a one-shot. */
+		IWM_WRITE_1(sc, IWM_CSR_INT_PERIODIC_REG, IWM_CSR_INT_PERIODIC_DIS);
 
-		iwm_notif_intr(sc);
-
-		/* enable periodic interrupt, see above */
-		if (r1 & (IWM_CSR_INT_BIT_FH_RX | IWM_CSR_INT_BIT_SW_RX) &&
-		    !isperiodic)
+		/*
+		 * Enable periodic interrupt in 8 msec only if we received
+		 * real RX interrupt (instead of just periodic int), to catch
+		 * any dangling Rx interrupt.  If it was just the periodic
+		 * interrupt, there was no dangling Rx activity, and no need
+		 * to extend the periodic interrupt; one-shot is enough.
+		 */
+		if (r1 & (IWM_CSR_INT_BIT_FH_RX | IWM_CSR_INT_BIT_SW_RX))
 			IWM_WRITE_1(sc, IWM_CSR_INT_PERIODIC_REG,
 			    IWM_CSR_INT_PERIODIC_ENA);
+
+		iwm_notif_intr(sc);
 	}
 
 	rv = 1;

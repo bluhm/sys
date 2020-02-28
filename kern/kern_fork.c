@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_fork.c,v 1.221 2020/01/21 15:20:47 visa Exp $	*/
+/*	$OpenBSD: kern_fork.c,v 1.223 2020/02/21 11:10:23 claudio Exp $	*/
 /*	$NetBSD: kern_fork.c,v 1.29 1996/02/09 18:59:34 christos Exp $	*/
 
 /*
@@ -148,6 +148,7 @@ thread_new(struct proc *parent, vaddr_t uaddr)
 
 	p = pool_get(&proc_pool, PR_WAITOK);
 	p->p_stat = SIDL;			/* protect against others */
+	p->p_runpri = 0;
 	p->p_flag = 0;
 
 	/*
@@ -249,10 +250,7 @@ process_new(struct proc *p, struct process *parent, int flags)
 		pr->ps_fd = fdshare(parent);
 	else
 		pr->ps_fd = fdcopy(parent);
-	if (flags & FORK_SIGHAND)
-		pr->ps_sigacts = sigactsshare(parent);
-	else
-		pr->ps_sigacts = sigactsinit(parent);
+	pr->ps_sigacts = sigactsinit(parent);
 	if (flags & FORK_SHAREVM)
 		pr->ps_vmspace = uvmspace_share(parent);
 	else
@@ -314,7 +312,7 @@ fork_thread_start(struct proc *p, struct proc *parent, int flags)
 
 	SCHED_LOCK(s);
 	ci = sched_choosecpu_fork(parent, flags);
-	setrunqueue(ci, p, p->p_priority);
+	setrunqueue(ci, p, p->p_usrpri);
 	SCHED_UNLOCK(s);
 }
 
@@ -334,8 +332,7 @@ fork1(struct proc *curp, int flags, void (*func)(void *), void *arg,
 
 	KASSERT((flags & ~(FORK_FORK | FORK_VFORK | FORK_PPWAIT | FORK_PTRACE
 	    | FORK_IDLE | FORK_SHAREVM | FORK_SHAREFILES | FORK_NOZOMBIE
-	    | FORK_SYSTEM | FORK_SIGHAND)) == 0);
-	KASSERT((flags & FORK_SIGHAND) == 0 || (flags & FORK_SHAREVM));
+	    | FORK_SYSTEM)) == 0);
 	KASSERT(func != NULL);
 
 	if ((error = fork_check_maxthread(uid)))

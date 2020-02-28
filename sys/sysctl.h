@@ -1,4 +1,4 @@
-/*	$OpenBSD: sysctl.h,v 1.200 2020/01/24 14:00:32 mpi Exp $	*/
+/*	$OpenBSD: sysctl.h,v 1.204 2020/02/16 07:55:30 anton Exp $	*/
 /*	$NetBSD: sysctl.h,v 1.16 1996/04/09 20:55:36 cgd Exp $	*/
 
 /*
@@ -460,7 +460,7 @@ struct kinfo_proc {
 
 	u_int32_t p_uctime_sec;		/* STRUCT TIMEVAL: child u+s time. */
 	u_int32_t p_uctime_usec;	/* STRUCT TIMEVAL: child u+s time. */
-	int32_t p_psflags;		/* INT: PS_* flags on the process. */
+	u_int32_t p_psflags;		/* UINT: PS_* flags on the process. */
 	int32_t p_spare;		/* INT: unused. */
 	u_int32_t p_svuid;		/* UID_T: saved user id */
 	u_int32_t p_svgid;		/* GID_T: saved group id */
@@ -561,6 +561,10 @@ struct kinfo_vmentry {
 #define PR_UNLOCK(pr)	/* nothing */
 #endif
 
+#define _getcompatprio(_p)						\
+	((_p)->p_stat == SRUN ? (_p)->p_runpri : 			\
+	    ((_p)->p_stat == SSLEEP) ? (_p)->p_slppri : (_p)->p_usrpri)
+
 #define PTRTOINT64(_x)	((u_int64_t)(u_long)(_x))
 
 #define FILL_KPROC(kp, copy_str, p, pr, uc, pg, paddr, \
@@ -659,7 +663,7 @@ do {									\
 		(kp)->p_stat = (p)->p_stat;				\
 		(kp)->p_slptime = (p)->p_slptime;			\
 		(kp)->p_holdcnt = 1;					\
-		(kp)->p_priority = (p)->p_priority;			\
+		(kp)->p_priority = _getcompatprio(p);			\
 		(kp)->p_usrpri = (p)->p_usrpri;				\
 		if ((p)->p_wchan && (p)->p_wmesg)			\
 			copy_str((kp)->p_wmesg, (p)->p_wmesg,		\
@@ -730,7 +734,7 @@ do {									\
 
 struct kinfo_file {
 	uint64_t	f_fileaddr;	/* PTR: address of struct file */
-	uint32_t	f_flag;		/* SHORT: flags (see fcntl.h) */
+	uint32_t	f_flag;		/* UINT: flags (see fcntl.h) */
 	uint32_t	f_iflags;	/* INT: internal flags */
 	uint32_t	f_type;		/* INT: descriptor type */
 	uint32_t	f_count;	/* UINT: reference count */

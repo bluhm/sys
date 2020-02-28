@@ -1,4 +1,4 @@
-/*      $OpenBSD: codepatch.h,v 1.11 2019/08/07 18:53:28 guenther Exp $    */
+/*      $OpenBSD: codepatch.h,v 1.13 2020/02/28 05:22:53 deraadt Exp $    */
 /*
  * Copyright (c) 2014-2015 Stefan Fritsch <sf@sfritsch.de>
  *

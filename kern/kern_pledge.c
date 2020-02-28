@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_pledge.c,v 1.257 2020/01/23 01:02:34 dlg Exp $	*/
+/*	$OpenBSD: kern_pledge.c,v 1.261 2020/02/15 09:35:48 anton Exp $	*/
 
 /*
  * Copyright (c) 2015 Nicholas Marriott <nicm@openbsd.org>
@@ -488,7 +488,7 @@ sys_pledge(struct proc *p, void *v, register_t *retval)
 
 	if (SCARG(uap, promises)) {
 		pr->ps_pledge = promises;
-		pr->ps_flags |= PS_PLEDGE;
+		atomic_setbits_int(&pr->ps_flags, PS_PLEDGE);
 		/*
 		 * Kill off unveil and drop unveil vnode refs if we no
 		 * longer are holding any path-accessing pledge
@@ -500,7 +500,7 @@ sys_pledge(struct proc *p, void *v, register_t *retval)
 	}
 	if (SCARG(uap, execpromises)) {
 		pr->ps_execpledge = execpromises;
-		pr->ps_flags |= PS_EXECPLEDGE;
+		atomic_setbits_int(&pr->ps_flags, PS_EXECPLEDGE);
 	}
 	return (0);
 }
@@ -904,6 +904,12 @@ pledge_sysctl(struct proc *p, int miblen, int *mib, void *new)
 			return (0);
 	}
 
+	if ((p->p_p->ps_pledge & PLEDGE_INET)) {
+		if (miblen == 2 &&		/* kern.somaxconn */
+		    mib[0] == CTL_KERN && mib[1] == KERN_SOMAXCONN)
+			return (0);
+	}
+
 	if ((p->p_p->ps_pledge & (PLEDGE_ROUTE | PLEDGE_INET | PLEDGE_DNS))) {
 		if (miblen == 6 &&		/* getifaddrs() */
 		    mib[0] == CTL_NET && mib[1] == PF_ROUTE &&
@@ -1045,6 +1051,7 @@ pledge_ioctl(struct proc *p, long com, struct file *fp)
 {
 	struct vnode *vp = NULL;
 	int error = EPERM;
+	uint64_t pl = p->p_p->ps_pledge;
 
 	if ((p->p_p->ps_flags & PS_PLEDGE) == 0)
 		return (0);
@@ -1067,7 +1074,7 @@ pledge_ioctl(struct proc *p, long com, struct file *fp)
 			return (ENOTTY);
 	}
 
-	if ((p->p_p->ps_pledge & PLEDGE_INET)) {
+	if ((pl & PLEDGE_INET)) {
 		switch (com) {
 		case SIOCATMARK:
 		case SIOCGIFGROUP:
@@ -1078,7 +1085,7 @@ pledge_ioctl(struct proc *p, long com, struct file *fp)
 	}
 
 #if NBPFILTER > 0
-	if ((p->p_p->ps_pledge & PLEDGE_BPF)) {
+	if ((pl & PLEDGE_BPF)) {
 		switch (com) {
 		case BIOCGSTATS:	/* bpf: tcpdump privsep on ^C */
 			if (fp->f_type == DTYPE_VNODE &&
@@ -1091,7 +1098,7 @@ pledge_ioctl(struct proc *p, long com, struct file *fp)
 	}
 #endif /* NBPFILTER > 0 */
 
-	if ((p->p_p->ps_pledge & PLEDGE_TAPE)) {
+	if ((pl & PLEDGE_TAPE)) {
 		switch (com) {
 		case MTIOCGET:
 		case MTIOCTOP:
@@ -1108,7 +1115,7 @@ pledge_ioctl(struct proc *p, long com, struct file *fp)
 	}
 
 #if NDRM > 0
-	if ((p->p_p->ps_pledge & PLEDGE_DRM)) {
+	if ((pl & PLEDGE_DRM)) {
 		if ((fp->f_type == DTYPE_VNODE) &&
 		    (vp->v_type == VCHR) &&
 		    (cdevsw[major(vp->v_rdev)].d_open == drmopen)) {
@@ -1120,13 +1127,16 @@ pledge_ioctl(struct proc *p, long com, struct file *fp)
 #endif /* NDRM > 0 */
 
 #if NAUDIO > 0
-	if ((p->p_p->ps_pledge & PLEDGE_AUDIO)) {
+	if ((pl & PLEDGE_AUDIO)) {
 		switch (com) {
 		case AUDIO_GETPOS:
 		case AUDIO_GETPAR:
 		case AUDIO_SETPAR:
 		case AUDIO_START:
 		case AUDIO_STOP:
+		case AUDIO_MIXER_DEVINFO:
+		case AUDIO_MIXER_READ:
+		case AUDIO_MIXER_WRITE:
 			if (fp->f_type == DTYPE_VNODE &&
 			    vp->v_type == VCHR &&
 			    cdevsw[major(vp->v_rdev)].d_open == audioopen)
@@ -1135,7 +1145,7 @@ pledge_ioctl(struct proc *p, long com, struct file *fp)
 	}
 #endif /* NAUDIO > 0 */
 
-	if ((p->p_p->ps_pledge & PLEDGE_DISKLABEL)) {
+	if ((pl & PLEDGE_DISKLABEL)) {
 		switch (com) {
 		case DIOCGDINFO:
 		case DIOCGPDINFO:
@@ -1162,7 +1172,7 @@ pledge_ioctl(struct proc *p, long com, struct file *fp)
 	}
 
 #if NVIDEO > 0
-	if ((p->p_p->ps_pledge & PLEDGE_VIDEO)) {
+	if ((pl & PLEDGE_VIDEO)) {
 		switch (com) {
 		case VIDIOC_QUERYCAP:
 		case VIDIOC_TRY_FMT:
@@ -1204,7 +1214,7 @@ pledge_ioctl(struct proc *p, long com, struct file *fp)
 #endif
 
 #if NPF > 0
-	if ((p->p_p->ps_pledge & PLEDGE_PF)) {
+	if ((pl & PLEDGE_PF)) {
 		switch (com) {
 		case DIOCADDRULE:
 		case DIOCGETSTATUS:
@@ -1227,13 +1237,13 @@ pledge_ioctl(struct proc *p, long com, struct file *fp)
 	}
 #endif
 
-	if ((p->p_p->ps_pledge & PLEDGE_TTY)) {
+	if ((pl & PLEDGE_TTY)) {
 		switch (com) {
 #if NPTY > 0
 		case PTMGET:
-			if ((p->p_p->ps_pledge & PLEDGE_RPATH) == 0)
+			if ((pl & PLEDGE_RPATH) == 0)
 				break;
-			if ((p->p_p->ps_pledge & PLEDGE_WPATH) == 0)
+			if ((pl & PLEDGE_WPATH) == 0)
 				break;
 			if (fp->f_type != DTYPE_VNODE || vp->v_type != VCHR)
 				break;
@@ -1241,16 +1251,16 @@ pledge_ioctl(struct proc *p, long com, struct file *fp)
 				break;
 			return (0);
 		case TIOCUCNTL:		/* vmd */
-			if ((p->p_p->ps_pledge & PLEDGE_RPATH) == 0)
+			if ((pl & PLEDGE_RPATH) == 0)
 				break;
-			if ((p->p_p->ps_pledge & PLEDGE_WPATH) == 0)
+			if ((pl & PLEDGE_WPATH) == 0)
 				break;
 			if (cdevsw[major(vp->v_rdev)].d_open != ptcopen)
 				break;
 			return (0);
 #endif /* NPTY > 0 */
 		case TIOCSPGRP:
-			if ((p->p_p->ps_pledge & PLEDGE_PROC) == 0)
+			if ((pl & PLEDGE_PROC) == 0)
 				break;
 			/* FALLTHROUGH */
 		case TIOCFLUSH:		/* getty, telnet */
@@ -1279,7 +1289,7 @@ pledge_ioctl(struct proc *p, long com, struct file *fp)
 		}
 	}
 
-	if ((p->p_p->ps_pledge & PLEDGE_ROUTE)) {
+	if ((pl & PLEDGE_ROUTE)) {
 		switch (com) {
 		case SIOCGIFADDR:
 		case SIOCGIFAFLAG_IN6:
@@ -1301,7 +1311,7 @@ pledge_ioctl(struct proc *p, long com, struct file *fp)
 		}
 	}
 
-	if ((p->p_p->ps_pledge & PLEDGE_WROUTE)) {
+	if ((pl & PLEDGE_WROUTE)) {
 		switch (com) {
 		case SIOCAIFADDR_IN6:
 		case SIOCDIFADDR_IN6:
@@ -1316,7 +1326,7 @@ pledge_ioctl(struct proc *p, long com, struct file *fp)
 	}
 
 #if NVMM > 0
-	if ((p->p_p->ps_pledge & PLEDGE_VMM)) {
+	if ((pl & PLEDGE_VMM)) {
 		if ((fp->f_type == DTYPE_VNODE) &&
 		    (vp->v_type == VCHR) &&
 		    (cdevsw[major(vp->v_rdev)].d_open == vmmopen)) {

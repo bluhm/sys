@@ -2,7 +2,7 @@
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	OpenBSD: pcidevs,v 1.1915 2020/01/23 04:33:54 jsg Exp 
+ *	OpenBSD: pcidevs,v 1.1919 2020/02/05 14:50:57 patrick Exp 
  */
 /*	$NetBSD: pcidevs,v 1.30 1997/06/24 06:20:24 thorpej Exp $	*/
 
@@ -4592,9 +4592,40 @@
 #define	PCI_PRODUCT_INTEL_WL_3165_2	0x3166		/* Dual Band Wireless AC 3165 */
 #define	PCI_PRODUCT_INTEL_GLK_UHD_605	0x3184		/* UHD Graphics 605 */
 #define	PCI_PRODUCT_INTEL_GLK_UHD_600	0x3185		/* UHD Graphics 600 */
+#define	PCI_PRODUCT_INTEL_GLK_DPTF	0x318c		/* Gemini Lake DPTF */
+#define	PCI_PRODUCT_INTEL_GLK_GNA	0x3190		/* Gemini Lake GNA */
+#define	PCI_PRODUCT_INTEL_GLK_PMC	0x3194		/* Gemini Lake PMC */
+#define	PCI_PRODUCT_INTEL_GLK_HDA	0x3198		/* Gemini Lake HD Audio */
+#define	PCI_PRODUCT_INTEL_GLK_XHCI	0x31a8		/* Gemini Lake xHCI */
+#define	PCI_PRODUCT_INTEL_GLK_I2C_1	0x31ac		/* Gemini Lake I2C */
+#define	PCI_PRODUCT_INTEL_GLK_I2C_2	0x31ae		/* Gemini Lake I2C */
+#define	PCI_PRODUCT_INTEL_GLK_I2C_3	0x31b0		/* Gemini Lake I2C */
+#define	PCI_PRODUCT_INTEL_GLK_I2C_4	0x31b2		/* Gemini Lake I2C */
+#define	PCI_PRODUCT_INTEL_GLK_I2C_5	0x31b4		/* Gemini Lake I2C */
+#define	PCI_PRODUCT_INTEL_GLK_I2C_6	0x31b6		/* Gemini Lake I2C */
+#define	PCI_PRODUCT_INTEL_GLK_I2C_7	0x31b8		/* Gemini Lake I2C */
+#define	PCI_PRODUCT_INTEL_GLK_I2C_8	0x31ba		/* Gemini Lake I2C */
+#define	PCI_PRODUCT_INTEL_GLK_UART_1	0x31bc		/* Gemini Lake HSUART */
+#define	PCI_PRODUCT_INTEL_GLK_UART_2	0x31be		/* Gemini Lake HSUART */
+#define	PCI_PRODUCT_INTEL_GLK_UART_3	0x31c0		/* Gemini Lake HSUART */
+#define	PCI_PRODUCT_INTEL_GLK_SPI_1	0x31c2		/* Gemini Lake SPI */
+#define	PCI_PRODUCT_INTEL_GLK_SPI_2	0x31c4		/* Gemini Lake SPI */
+#define	PCI_PRODUCT_INTEL_GLK_SPI_3	0x31c6		/* Gemini Lake SPI */
 #define	PCI_PRODUCT_INTEL_GLK_SDMMC	0x31ca		/* Gemini Lake SD/MMC */
 #define	PCI_PRODUCT_INTEL_GLK_EMMC	0x31cc		/* Gemini Lake eMMC */
 #define	PCI_PRODUCT_INTEL_GLK_SDIO	0x31d0		/* Gemini Lake SDIO */
+#define	PCI_PRODUCT_INTEL_GLK_SMB	0x31d4		/* Gemini Lake SMBus */
+#define	PCI_PRODUCT_INTEL_GLK_PCIE_1	0x31d6		/* Gemini Lake PCIE */
+#define	PCI_PRODUCT_INTEL_GLK_PCIE_2	0x31d7		/* Gemini Lake PCIE */
+#define	PCI_PRODUCT_INTEL_GLK_PCIE_3	0x31d8		/* Gemini Lake PCIE */
+#define	PCI_PRODUCT_INTEL_GLK_PCIE_4	0x31d9		/* Gemini Lake PCIE */
+#define	PCI_PRODUCT_INTEL_GLK_PCIE_5	0x31da		/* Gemini Lake PCIE */
+#define	PCI_PRODUCT_INTEL_GLK_PCIE_6	0x31db		/* Gemini Lake PCIE */
+#define	PCI_PRODUCT_INTEL_GLK_WL	0x31dc		/* Gemini Lake CNVi */
+#define	PCI_PRODUCT_INTEL_GLK_AHCI	0x31e3		/* Gemini Lake AHCI */
+#define	PCI_PRODUCT_INTEL_GLK_LPC	0x31e8		/* Gemini Lake LPC */
+#define	PCI_PRODUCT_INTEL_GLK_UART_4	0x31ee		/* Gemini Lake HSUART */
+#define	PCI_PRODUCT_INTEL_GLK_HB	0x31f0		/* Gemini Lake Host */
 #define	PCI_PRODUCT_INTEL_31244	0x3200		/* 31244 SATA */
 #define	PCI_PRODUCT_INTEL_82855PM_HB	0x3340		/* 82855PM Host */
 #define	PCI_PRODUCT_INTEL_82855PM_AGP	0x3341		/* 82855PM AGP */
@@ -4989,6 +5020,7 @@
 #define	PCI_PRODUCT_INTEL_APOLLOLAKE_HDA	0x5a98		/* Apollo Lake HD Audio */
 #define	PCI_PRODUCT_INTEL_APOLLOLAKE_TXE	0x5a9a		/* Apollo Lake TXE */
 #define	PCI_PRODUCT_INTEL_APOLLOLAKE_XHCI	0x5aa8		/* Apollo Lake xHCI */
+#define	PCI_PRODUCT_INTEL_APOLLOLAKE_XDCI	0x5aaa		/* Apollo Lake xDCI */
 #define	PCI_PRODUCT_INTEL_APOLLOLAKE_I2C_1	0x5aac		/* Apollo Lake I2C */
 #define	PCI_PRODUCT_INTEL_APOLLOLAKE_I2C_2	0x5aae		/* Apollo Lake I2C */
 #define	PCI_PRODUCT_INTEL_APOLLOLAKE_I2C_3	0x5ab0		/* Apollo Lake I2C */
@@ -4998,9 +5030,12 @@
 #define	PCI_PRODUCT_INTEL_APOLLOLAKE_I2C_7	0x5ab8		/* Apollo Lake I2C */
 #define	PCI_PRODUCT_INTEL_APOLLOLAKE_I2C_8	0x5aba		/* Apollo Lake I2C */
 #define	PCI_PRODUCT_INTEL_APOLLOLAKE_UART_1	0x5abc		/* Apollo Lake HSUART */
+#define	PCI_PRODUCT_INTEL_APOLLOLAKE_UART_2	0x5abe		/* Apollo Lake HSUART */
+#define	PCI_PRODUCT_INTEL_APOLLOLAKE_UART_3	0x5ac0		/* Apollo Lake HSUART */
 #define	PCI_PRODUCT_INTEL_APOLLOLAKE_SPI_1	0x5ac2		/* Apollo Lake SPI */
 #define	PCI_PRODUCT_INTEL_APOLLOLAKE_SPI_2	0x5ac4		/* Apollo Lake SPI */
 #define	PCI_PRODUCT_INTEL_APOLLOLAKE_SPI_3	0x5ac6		/* Apollo Lake SPI */
+#define	PCI_PRODUCT_INTEL_APOLLOLAKE_PWM	0x5ac8		/* Apollo Lake PWM */
 #define	PCI_PRODUCT_INTEL_APOLLOLAKE_SDMMC	0x5aca		/* Apollo Lake SD/MMC */
 #define	PCI_PRODUCT_INTEL_APOLLOLAKE_EMMC	0x5acc		/* Apollo Lake eMMC */
 #define	PCI_PRODUCT_INTEL_APOLLOLAKE_SDIO	0x5ad0		/* Apollo Lake SDIO */
@@ -5010,8 +5045,10 @@
 #define	PCI_PRODUCT_INTEL_APOLLOLAKE_PCIE_1	0x5ad8		/* Apollo Lake PCIE */
 #define	PCI_PRODUCT_INTEL_APOLLOLAKE_PCIE_2	0x5ad9		/* Apollo Lake PCIE */
 #define	PCI_PRODUCT_INTEL_APOLLOLAKE_PCIE_3	0x5ada		/* Apollo Lake PCIE */
+#define	PCI_PRODUCT_INTEL_APOLLOLAKE_PCIE_6	0x5adb		/* Apollo Lake PCIE */
 #define	PCI_PRODUCT_INTEL_APOLLOLAKE_AHCI	0x5ae3		/* Apollo Lake AHCI */
 #define	PCI_PRODUCT_INTEL_APOLLOLAKE_LPC	0x5ae8		/* Apollo Lake LPC */
+#define	PCI_PRODUCT_INTEL_APOLLOLAKE_UART_4	0x5aee		/* Apollo Lake HSUART */
 #define	PCI_PRODUCT_INTEL_APOLLOLAKE_HB	0x5af0		/* Apollo Lake Host */
 #define	PCI_PRODUCT_INTEL_5100_HB	0x65c0		/* 5100 Host */
 #define	PCI_PRODUCT_INTEL_5100_PCIE_2	0x65e2		/* 5100 PCIE */
@@ -6832,6 +6869,7 @@
 
 /* Pericom products */
 #define	PCI_PRODUCT_PERICOM_PI7C21P100	0x01a7		/* PI7C21P100 PCIX-PCIX */
+#define	PCI_PRODUCT_PERICOM_PI7C9X2G404EL	0x2404		/* PI7C9X2G404EL PCIE */
 #define	PCI_PRODUCT_PERICOM_PI7C9X2G608GP	0x2608		/* PI7C9X2G608GP PCIE */
 #define	PCI_PRODUCT_PERICOM_PPB_1	0x8140		/* PCI-PCI */
 #define	PCI_PRODUCT_PERICOM_PPB_2	0x8150		/* PCI-PCI */
