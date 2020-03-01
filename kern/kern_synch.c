@@ -321,6 +321,7 @@ rwsleep(const volatile void *ident, struct rwlock *rwl, int priority,
 	sleep_setup(&sls, ident, priority, wmesg);
 	sleep_setup_timeout(&sls, timo);
 	rw_exit(rwl);
+	/* signal may stop the process, release rwlock before that */
 	sleep_setup_signal(&sls);
 
 	error = sleep_finish_all(&sls, 1);
