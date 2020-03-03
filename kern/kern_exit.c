@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_exit.c,v 1.183 2020/02/12 14:41:23 mpi Exp $	*/
+/*	$OpenBSD: kern_exit.c,v 1.185 2020/03/01 18:50:52 mpi Exp $	*/
 /*	$NetBSD: kern_exit.c,v 1.39 1996/04/22 01:38:25 christos Exp $	*/
 
 /*
@@ -585,7 +585,7 @@ proc_finish_wait(struct proc *waiter, struct proc *p)
 	 */
 	pr = p->p_p;
 	if (pr->ps_oppid != 0 && (pr->ps_oppid != pr->ps_pptr->ps_pid) &&
-	   (tr = prfind(tr->ps_oppid))) {
+	   (tr = prfind(pr->ps_oppid))) {
 		atomic_clearbits_int(&pr->ps_flags, PS_TRACED);
 		pr->ps_oppid = 0;
 		proc_reparent(pr, tr);
