@@ -1,4 +1,4 @@
-/*	$OpenBSD: ieee80211_mira.h,v 1.6 2019/12/18 09:52:15 stsp Exp $	*/
+/*	$OpenBSD: ieee80211_mira.h,v 1.8 2020/03/03 21:09:35 tb Exp $	*/
 
 /*
  * Copyright (c) 2016 Stefan Sperling <stsp@openbsd.org>
@@ -23,7 +23,8 @@
 /* 
  * MiRA - "MIMO Rate Adaptation in 802.11n Wireless Networks"
  * Ioannis Pefkianakis, Yun Hu, Starsky H.Y. Wong, Hao Yang, Songwu Lu
- * http://www.cs.ucla.edu/wing/publication/papers/Pefkianakis.MOBICOM10.pdf
+ * http://metro.cs.ucla.edu/papers/Pefkianakis.MOBICOM10.pdf
+ * https://doi.org/10.1145/1859995.1860025
  */
 
 /* 
@@ -53,8 +54,8 @@ struct ieee80211_mira_node {
 	 * Fields set by drivers before calling ieee80211_mira_choose().
 	 */
 	uint32_t frames;	/* Increment per (sub-)frame transmitted. */
-	uint32_t retries;	/* Increment per Tx retry (frame not ACKed). */
-	uint32_t txfail;	/* Increment per Tx failure (also not ACKed). */
+	uint32_t retries;	/* Increment per Tx retry (MiRA "nbad") */
+	uint32_t txfail;	/* Increment per Tx failure (MiRA "retries") */
 	uint32_t ampdu_size;	/* Length of last (aggregated) frame sent. */
 	uint32_t agglen;	/* Number of subframes in last frame (1-64). */
 

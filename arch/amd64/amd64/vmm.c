@@ -1,4 +1,4 @@
-/*	$OpenBSD: vmm.c,v 1.265 2020/02/28 16:47:41 mortimer Exp $	*/
+/*	$OpenBSD: vmm.c,v 1.268 2020/03/16 08:21:16 jasper Exp $	*/
 /*
  * Copyright (c) 2014 Mike Larkin <mlarkin@openbsd.org>
  *
@@ -1167,7 +1167,7 @@ vm_create(struct vm_create_params *vcp, struct proc *p)
 	memcpy(vm->vm_memranges, vcp->vcp_memranges,
 	    vm->vm_nmemranges * sizeof(vm->vm_memranges[0]));
 	vm->vm_memory_size = memsize;
-	strncpy(vm->vm_name, vcp->vcp_name, VMM_MAX_NAME_LEN);
+	strlcpy(vm->vm_name, vcp->vcp_name, VMM_MAX_NAME_LEN);
 
 	rw_enter_write(&vmm_softc->vm_lock);
 
@@ -3718,7 +3718,7 @@ vm_get_info(struct vm_info_params *vip)
 		out[i].vir_ncpus = vm->vm_vcpu_ct;
 		out[i].vir_id = vm->vm_id;
 		out[i].vir_creator_pid = vm->vm_creator_pid;
-		strncpy(out[i].vir_name, vm->vm_name, VMM_MAX_NAME_LEN);
+		strlcpy(out[i].vir_name, vm->vm_name, VMM_MAX_NAME_LEN);
 		rw_enter_read(&vm->vm_vcpu_lock);
 		for (j = 0; j < vm->vm_vcpu_ct; j++) {
 			out[i].vir_vcpu_state[j] = VCPU_STATE_UNKNOWN;
@@ -4057,6 +4057,9 @@ vmm_translate_gva(struct vcpu *vcpu, uint64_t va, uint64_t *pa, int mode)
 	    vmm_softc->mode == VMM_MODE_SVM) {
 		if (vcpu_readregs_svm(vcpu, VM_RWREGS_ALL, &vrs))
 			return (EINVAL);
+	} else {
+		printf("%s: unknown vmm mode", __func__);
+		return (EINVAL);
 	}
 
 	DPRINTF("%s: guest %%cr0=0x%llx, %%cr3=0x%llx\n", __func__,
@@ -6876,7 +6879,9 @@ vmm_gpa_is_valid(struct vcpu *vcpu, paddr_t gpa, size_t obj_size)
 {
 	struct vm *vm = vcpu->vc_parent;
 	struct vm_mem_range *vmr;
-	for (size_t i = 0; i < vm->vm_nmemranges; ++i) {
+	size_t i;
+
+	for (i = 0; i < vm->vm_nmemranges; ++i) {
 		vmr = &vm->vm_memranges[i];
 		if (vmr->vmr_size >= obj_size &&
 		    vmr->vmr_gpa <= gpa &&

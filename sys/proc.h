@@ -1,4 +1,4 @@
-/*	$OpenBSD: proc.h,v 1.289 2020/02/21 11:10:23 claudio Exp $	*/
+/*	$OpenBSD: proc.h,v 1.293 2020/03/20 08:14:07 claudio Exp $	*/
 /*	$NetBSD: proc.h,v 1.44 1996/04/22 01:23:21 christos Exp $	*/
 
 /*-
@@ -50,7 +50,6 @@
 #include <sys/resource.h>		/* For struct rusage */
 #include <sys/rwlock.h>			/* For struct rwlock */
 #include <sys/sigio.h>			/* For struct sigio */
-#include <sys/tree.h>
 
 #ifdef _KERNEL
 #include <sys/atomic.h>
@@ -129,15 +128,6 @@ struct tusage {
 	uint64_t	tu_iticks;	/* Statclock hits processing intr. */
 };
 
-struct unvname {
-	char 			*un_name;
-	size_t 			un_namesize;
-	u_char			un_flags;
-	RBT_ENTRY(unvnmae)	un_rbt;
-};
-
-RBT_HEAD(unvname_rbt, unvname);
-
 /*
  * Description of a process.
  *
@@ -182,6 +172,15 @@ struct process {
 	LIST_HEAD(, process) ps_children;/* Pointer to list of children. */
 	LIST_ENTRY(process) ps_hash;    /* Hash chain. */
 
+	/*
+	 * An orphan is the child that has been re-parented to the
+	 * debugger as a result of attaching to it.  Need to keep
+	 * track of them for parent to be able to collect the exit
+	 * status of what used to be children.
+	 */
+	LIST_ENTRY(process) ps_orphan;	/* List of orphan processes. */
+	LIST_HEAD(, process) ps_orphans;/* Pointer to list of orphans. */
+
 	struct	sigiolst ps_sigiolst;	/* List of sigio structures. */
 	struct	sigacts *ps_sigacts;	/* Signal actions, state */
 	struct	vnode *ps_textvp;	/* Vnode of executable. */
@@ -201,7 +200,7 @@ struct process {
 	int	ps_siglist;		/* Signals pending for the process. */
 
 	struct	proc *ps_single;	/* Single threading to this thread. */
-	int	ps_singlecount;		/* Not yet suspended threads. */
+	u_int	ps_singlecount;		/* [a] Not yet suspended threads. */
 
 	int	ps_traceflag;		/* Kernel trace points. */
 	struct	vnode *ps_tracevp;	/* Trace to vnode. */
@@ -303,13 +302,15 @@ struct process {
 #define	PS_PLEDGE	0x00100000	/* Has called pledge(2) */
 #define	PS_WXNEEDED	0x00200000	/* Process may violate W^X */
 #define	PS_EXECPLEDGE	0x00400000	/* Has exec pledges */
+#define	PS_ORPHAN	0x00800000	/* Process is on an orphan list */
 
 #define	PS_BITS \
     ("\20" "\01CONTROLT" "\02EXEC" "\03INEXEC" "\04EXITING" "\05SUGID" \
      "\06SUGIDEXEC" "\07PPWAIT" "\010ISPWAIT" "\011PROFIL" "\012TRACED" \
      "\013WAITED" "\014COREDUMP" "\015SINGLEEXIT" "\016SINGLEUNWIND" \
      "\017NOZOMBIE" "\020STOPPED" "\021SYSTEM" "\022EMBRYO" "\023ZOMBIE" \
-     "\024NOBROADCASTKILL" "\025PLEDGE" "\026WXNEEDED" "\027EXECPLEDGE" )
+     "\024NOBROADCASTKILL" "\025PLEDGE" "\026WXNEEDED" "\027EXECPLEDGE" \
+     "\028ORPHAN")
 
 
 struct kcov_dev;
@@ -453,14 +454,6 @@ struct proc {
 
 #ifdef _KERNEL
 
-struct unveil {
-	struct vnode		*uv_vp;
-	ssize_t			uv_cover;
-	struct unvname_rbt	uv_names;
-	struct rwlock		uv_lock;
-	u_char			uv_flags;
-};
-
 struct uidinfo {
 	LIST_ENTRY(uidinfo) ui_hash;
 	uid_t   ui_uid;
@@ -603,7 +596,7 @@ enum single_thread_mode {
 	SINGLE_EXIT		/* other threads to unwind and then exit */
 };
 int	single_thread_set(struct proc *, enum single_thread_mode, int);
-void	single_thread_wait(struct process *);
+int	single_thread_wait(struct process *, int);
 void	single_thread_clear(struct proc *, int);
 int	single_thread_check(struct proc *, int);
 

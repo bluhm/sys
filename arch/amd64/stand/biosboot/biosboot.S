@@ -1,4 +1,4 @@
-/*	$OpenBSD: biosboot.S,v 1.8 2020/02/28 12:26:30 otto Exp $	*/
+/*	$OpenBSD: biosboot.S,v 1.10 2020/03/09 06:16:56 otto Exp $	*/
 
 /*
  * Copyright (c) 2003 Tobias Weingartner
@@ -464,8 +464,15 @@ load_blocks:
 
 	/* Get the next filesystem block number into %eax */
 	lodsl			/* %eax = *(%si++), make sure 0x66 0xad */
+
+	/*
+	 * The addw could be a 3 byte instruction, but stick to a 4 byte
+	 * one since the former inroduces mysterious hangs on *some*
+	 * BIOS implementations, possibly alignment related.
+	 * Grand prize for somebody finding the root cause!
+	 */
 blkincr = .+2
-	addw	$0x00, %si	/* adjust %si if needed (for ffs2) */
+	addw	$0x90, %si	/* adjust %si if needed (for ffs2) */
 
 	pushal				/* Save all 32-bit registers */
 

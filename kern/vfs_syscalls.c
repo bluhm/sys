@@ -1,4 +1,4 @@
-/*	$OpenBSD: vfs_syscalls.c,v 1.342 2020/01/30 15:36:11 visa Exp $	*/
+/*	$OpenBSD: vfs_syscalls.c,v 1.344 2020/03/19 13:55:20 anton Exp $	*/
 /*	$NetBSD: vfs_syscalls.c,v 1.71 1996/04/23 10:29:02 mycroft Exp $	*/
 
 /*
@@ -1034,15 +1034,8 @@ sys_unveil(struct proc *p, void *v, register_t *retval)
 	if (nd.ni_dvp && nd.ni_dvp != nd.ni_vp)
 		VOP_UNLOCK(nd.ni_dvp);
 
-	if (allow) {
+	if (allow)
 		error = unveil_add(p, &nd, permissions);
-		pr->ps_uvpcwd = unveil_lookup(p->p_fd->fd_cdir, pr, NULL);
-		if (pr->ps_uvpcwd == NULL) {
-			ssize_t i = unveil_find_cover(p->p_fd->fd_cdir, p);
-			if (i >= 0)
-				pr->ps_uvpcwd = &pr->ps_uvpaths[i];
-		}
-	}
 	else
 		error = EPERM;
 
@@ -1188,7 +1181,7 @@ doopenat(struct proc *p, int fd, const char *path, int oflags, mode_t mode,
 			goto out;
 		}
 		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
-		fp->f_iflags |= FIF_HASLOCK;
+		atomic_setbits_int(&fp->f_iflags, FIF_HASLOCK);
 	}
 	if (localtrunc) {
 		if ((fp->f_flag & FWRITE) == 0)
@@ -1457,7 +1450,7 @@ sys_fhopen(struct proc *p, void *v, register_t *retval)
 			goto bad;
 		}
 		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
-		fp->f_iflags |= FIF_HASLOCK;
+		atomic_setbits_int(&fp->f_iflags, FIF_HASLOCK);
 	}
 	VOP_UNLOCK(vp);
 	*retval = indx;

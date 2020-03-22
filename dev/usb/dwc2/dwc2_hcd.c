@@ -1,4 +1,4 @@
-/*	$OpenBSD: dwc2_hcd.c,v 1.20 2017/09/08 05:36:53 deraadt Exp $	*/
+/*	$OpenBSD: dwc2_hcd.c,v 1.22 2020/03/21 12:08:31 patrick Exp $	*/
 /*	$NetBSD: dwc2_hcd.c,v 1.15 2014/11/24 10:14:14 skrll Exp $	*/
 
 /*
@@ -680,7 +680,7 @@ STATIC int dwc2_hc_setup_align_buf(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh,
 		qh->dw_align_buf = NULL;
 		qh->dw_align_buf_dma = 0;
 		err = usb_allocmem(&hsotg->hsotg_sc->sc_bus, buf_size, buf_size,
-				   &qh->dw_align_buf_usbdma);
+				   USB_DMA_COHERENT, &qh->dw_align_buf_usbdma);
 		if (!err) {
 			struct usb_dma *ud = &qh->dw_align_buf_usbdma;
 
@@ -2269,6 +2269,7 @@ int dwc2_hcd_init(struct dwc2_hsotg *hsotg,
 	if (hsotg->core_params->dma_enable > 0) {
 		retval = usb_allocmem(&hsotg->hsotg_sc->sc_bus,
 				      DWC2_HCD_STATUS_BUF_SIZE, 0,
+				      USB_DMA_COHERENT,
 				      &hsotg->status_buf_usbdma);
 		if (!retval) {
 			hsotg->status_buf = KERNADDR(&hsotg->status_buf_usbdma, 0);

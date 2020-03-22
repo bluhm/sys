@@ -1,4 +1,4 @@
-/*	$OpenBSD: scsi_base.c,v 1.261 2020/01/22 00:17:46 cheloha Exp $	*/
+/*	$OpenBSD: scsi_base.c,v 1.265 2020/03/12 19:21:01 krw Exp $	*/
 /*	$NetBSD: scsi_base.c,v 1.43 1997/04/02 02:29:36 mycroft Exp $	*/
 
 /*
@@ -90,9 +90,9 @@ void			scsi_iopool_put(struct scsi_iopool *, void *);
 
 /* Various helper functions for scsi_do_mode_sense() */
 int			scsi_mode_sense(struct scsi_link *, int,
-			    struct scsi_mode_header *, size_t, int, int);
+			    union scsi_mode_sense_buf *, int);
 int			scsi_mode_sense_big(struct scsi_link *, int,
-			    struct scsi_mode_header_big *, size_t, int, int);
+			    union scsi_mode_sense_buf *, int);
 void *			scsi_mode_sense_page(struct scsi_mode_header *, int,
 			    int);
 void *			scsi_mode_sense_big_page(struct scsi_mode_header_big *,
@@ -1062,14 +1062,17 @@ scsi_start(struct scsi_link *link, int type, int flags)
 
 int
 scsi_mode_sense(struct scsi_link *link, int pg_code,
-    struct scsi_mode_header *data, size_t len, int flags, int timeout)
+    union scsi_mode_sense_buf *data, int flags)
 {
 	struct scsi_mode_sense	*cmd;
 	struct scsi_xfer	*xs;
+	size_t			 len;
 	int			 error;
 #ifdef SCSIDEBUG
 	size_t			 bytes;
 #endif /* SCSIDEBUG */
+
+	len = sizeof(*data);
 
 	xs = scsi_xs_get(link, flags | SCSI_DATA_IN);
 	if (xs == NULL)
@@ -1077,7 +1080,7 @@ scsi_mode_sense(struct scsi_link *link, int pg_code,
 	xs->cmdlen = sizeof(*cmd);
 	xs->data = (void *)data;
 	xs->datalen = len;
-	xs->timeout = timeout;
+	xs->timeout = 20000;
 
 	/*
 	 * Make sure the sense buffer is clean before we do the mode sense, so
@@ -1100,7 +1103,7 @@ scsi_mode_sense(struct scsi_link *link, int pg_code,
 #ifdef SCSIDEBUG
 	sc_print_addr(link);
 	if (error == 0) {
-		bytes = sizeof(data->data_length) + data->data_length;
+		bytes = sizeof(data->hdr.data_length) + data->hdr.data_length;
 		if (bytes < len)
 			len = bytes;
 		printf("got %zu of %zu bytes of mode sense (6) page %d data:\n",
@@ -1115,14 +1118,17 @@ scsi_mode_sense(struct scsi_link *link, int pg_code,
 
 int
 scsi_mode_sense_big(struct scsi_link *link, int pg_code,
-    struct scsi_mode_header_big *data, size_t len, int flags, int timeout)
+    union scsi_mode_sense_buf *data, int flags)
 {
 	struct scsi_mode_sense_big	*cmd;
 	struct scsi_xfer		*xs;
+	size_t				 len;
 	int				 error;
 #ifdef SCSIDEBUG
 	size_t				 bytes;
 #endif /* SCSIDEBUG */
+
+	len = sizeof(*data);
 
 	xs = scsi_xs_get(link, flags | SCSI_DATA_IN);
 	if (xs == NULL)
@@ -1130,7 +1136,7 @@ scsi_mode_sense_big(struct scsi_link *link, int pg_code,
 	xs->cmdlen = sizeof(*cmd);
 	xs->data = (void *)data;
 	xs->datalen = len;
-	xs->timeout = timeout;
+	xs->timeout = 20000;
 
 	/*
 	 * Make sure the sense buffer is clean before we do the mode sense, so
@@ -1150,10 +1156,14 @@ scsi_mode_sense_big(struct scsi_link *link, int pg_code,
 	error = scsi_xs_sync(xs);
 	scsi_xs_put(xs);
 
+	if (_2btol(data->hdr_big.data_length) < 6)
+		error = EIO;
+
 #ifdef SCSIDEBUG
 	sc_print_addr(link);
 	if (error == 0) {
-		bytes = sizeof(data->data_length) + _2btol(data->data_length);
+		bytes = sizeof(data->hdr_big.data_length) +
+		    _2btol(data->hdr_big.data_length);
 		if (bytes < len)
 			len = bytes;
 		printf("got %zu bytes of %zu bytes of mode sense (10) page %d "
@@ -1273,8 +1283,7 @@ scsi_do_mode_sense(struct scsi_link *link, int pg_code,
 		 * data length to ensure that at least a header (3 additional
 		 * bytes) is returned.
 		 */
-		error = scsi_mode_sense(link, pg_code, &buf->hdr,
-		    sizeof(*buf), flags, 20000);
+		error = scsi_mode_sense(link, pg_code, buf, flags);
 		if (error == 0) {
 			/*
 			 * Page data may be invalid (e.g. all zeros) but we
@@ -1299,12 +1308,9 @@ scsi_do_mode_sense(struct scsi_link *link, int pg_code,
 	/*
 	 * Try 10 byte mode sense request.
 	 */
-	error = scsi_mode_sense_big(link, pg_code, &buf->hdr_big,
-	    sizeof(*buf), flags, 20000);
+	error = scsi_mode_sense_big(link, pg_code, buf, flags);
 	if (error != 0)
 		return error;
-	if (_2btol(buf->hdr_big.data_length) < 6)
-		return EIO;
 
 	*big = 1;
 	*page_data = scsi_mode_sense_big_page(&buf->hdr_big, pg_code,
