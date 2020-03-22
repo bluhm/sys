@@ -1057,7 +1057,13 @@ uaudio_clock_id(struct uaudio_softc *sc)
 int
 uaudio_getrates(struct uaudio_softc *sc, struct uaudio_params *p)
 {
-	return uaudio_alt_getrates(sc, p->palt ? p->palt : p->ralt);
+	switch (sc->version) {
+	case UAUDIO_V1:
+		return p->v1_rates;
+	case UAUDIO_V2:
+		return uaudio_alt_getrates(sc, p->palt ? p->palt : p->ralt);
+	}
+	return 0;
 }
 
 /*
