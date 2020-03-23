@@ -1,4 +1,4 @@
-/*	$OpenBSD: uaudio.c,v 1.150 2020/03/23 14:53:51 bluhm Exp $	*/
+/*	$OpenBSD: uaudio.c,v 1.151 2020/03/23 17:10:02 bluhm Exp $	*/
 /*
  * Copyright (c) 2018 Alexandre Ratchov <alex@caoua.org>
  *
