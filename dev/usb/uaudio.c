@@ -2859,6 +2859,10 @@ uaudio_stream_open(struct uaudio_softc *sc, int dir,
 
 	/* max spf can't exceed the device usb packet size */
 	spf_max = (a->maxpkt / bpa) * UAUDIO_SPF_DIV;
+	if (s->spf > spf_max) {
+		printf("%s: samples per frame too large\n", DEVNAME(sc));
+		return EIO;
+	}
 	if (s->spf_max > spf_max)
 		s->spf_max = spf_max;
 
