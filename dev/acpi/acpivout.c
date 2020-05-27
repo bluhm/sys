@@ -1,6 +1,6 @@
-/*	$OpenBSD: acpivout.c,v 1.19 2020/02/08 19:08:17 patrick Exp $	*/
+/*	$OpenBSD: acpivout.c,v 1.23 2020/05/19 14:26:59 kettenis Exp $	*/
 /*
- * Copyright (c) 2009 Paul Irofti <pirofti@openbsd.org>
+ * Copyright (c) 2009 Paul Irofti <paul@irofti.net>
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -64,9 +64,6 @@ struct acpivout_softc {
 	int	sc_brightness;
 };
 
-void	acpivout_brightness_cycle(struct acpivout_softc *);
-void	acpivout_brightness_step(struct acpivout_softc *, int);
-void	acpivout_brightness_zero(struct acpivout_softc *);
 int	acpivout_get_brightness(struct acpivout_softc *);
 int	acpivout_select_brightness(struct acpivout_softc *, int);
 int	acpivout_find_brightness(struct acpivout_softc *, int);
@@ -117,12 +114,14 @@ acpivout_attach(struct device *parent, struct device *self, void *aux)
 	    ws_get_param || ws_set_param)
 		return;
 
-	ws_get_param = acpivout_get_param;
-	ws_set_param = acpivout_set_param;
-
 	acpivout_get_bcl(sc);
+	if (sc->sc_bcl_len == 0)
+		return;
 
 	sc->sc_brightness = acpivout_get_brightness(sc);
+
+	ws_get_param = acpivout_get_param;
+	ws_set_param = acpivout_set_param;
 }
 
 int
@@ -130,21 +129,18 @@ acpivout_notify(struct aml_node *node, int notify, void *arg)
 {
 	struct acpivout_softc *sc = arg;
 
-	if (ws_get_param == NULL || ws_set_param == NULL)
-		return (0);
-
 	switch (notify) {
 	case NOTIFY_BRIGHTNESS_CYCLE:
-		acpivout_brightness_cycle(sc);
+		wsdisplay_brightness_cycle(NULL);
 		break;
 	case NOTIFY_BRIGHTNESS_UP:
-		acpivout_brightness_step(sc, 1);
+		wsdisplay_brightness_step(NULL, 1);
 		break;
 	case NOTIFY_BRIGHTNESS_DOWN:
-		acpivout_brightness_step(sc, -1);
+		wsdisplay_brightness_step(NULL, -1);
 		break;
 	case NOTIFY_BRIGHTNESS_ZERO:
-		acpivout_brightness_zero(sc);
+		wsdisplay_brightness_zero(NULL);
 		break;
 	case NOTIFY_DISPLAY_OFF:
 		/* TODO: D3 state change */
@@ -157,64 +153,6 @@ acpivout_notify(struct aml_node *node, int notify, void *arg)
 	return (0);
 }
 
-void
-acpivout_brightness_cycle(struct acpivout_softc *sc)
-{
-	struct wsdisplay_param dp;
-
-	dp.param = WSDISPLAYIO_PARAM_BRIGHTNESS;
-	if (ws_get_param(&dp))
-		return;
-
-	if (dp.curval == dp.max)
-		acpivout_brightness_zero(sc);
-	else
-		acpivout_brightness_step(sc, 1);
-}
-
-void
-acpivout_brightness_step(struct acpivout_softc *sc, int dir)
-{
-	struct wsdisplay_param dp;
-	int delta, new;
-
-	dp.param = WSDISPLAYIO_PARAM_BRIGHTNESS;
-	if (ws_get_param(&dp))
-		return;
-
-	new = dp.curval;
-	delta = ((dp.max - dp.min) * BRIGHTNESS_STEP) / 100;
-	if (dir > 0) {
-		if (delta > dp.max - dp.curval)
-			new = dp.max;
-		else
-			new += delta;
-	} else if (dir < 0) {
-		if (delta > dp.curval - dp.min)
-			new = dp.min;
-		else
-			new -= delta;
-	}
-
-	if (dp.curval == new)
-		return;
-
-	dp.curval = new;
-	ws_set_param(&dp);
-}
-
-void
-acpivout_brightness_zero(struct acpivout_softc *sc)
-{
-	struct wsdisplay_param dp;
-
-	dp.param = WSDISPLAYIO_PARAM_BRIGHTNESS;
-	if (ws_get_param(&dp))
-		return;
-
-	dp.curval = dp.min;
-	ws_set_param(&dp);
-}
 
 int
 acpivout_get_brightness(struct acpivout_softc *sc)
@@ -227,8 +165,10 @@ acpivout_get_brightness(struct acpivout_softc *sc)
 	aml_freevalue(&res);
 	DPRINTF(("%s: BQC = %d\n", DEVNAME(sc), level));
 
-	if (level < sc->sc_bcl[0] || level > sc->sc_bcl[sc->sc_bcl_len -1])
-		level = -1;
+	if (level < sc->sc_bcl[0])
+		level = sc->sc_bcl[0];
+	else if (level > sc->sc_bcl[sc->sc_bcl_len - 1])
+		level = sc->sc_bcl[sc->sc_bcl_len - 1];
 
 	return (level);
 }
@@ -239,9 +179,6 @@ acpivout_select_brightness(struct acpivout_softc *sc, int nlevel)
 	int nindex, level;
 
 	level = sc->sc_brightness;
-	if (level == -1)
-		return level;
-
 	nindex = acpivout_find_brightness(sc, nlevel);
 	if (sc->sc_bcl[nindex] == level) {
 		if (nlevel > level && (nindex + 1 < sc->sc_bcl_len))
@@ -375,13 +312,11 @@ acpivout_set_param(struct wsdisplay_param *dp)
 		}
 		if (sc != NULL && sc->sc_bcl_len != 0) {
 			nindex = acpivout_select_brightness(sc, dp->curval);
-			if (nindex != -1) {
-				sc->sc_brightness = sc->sc_bcl[nindex];
-				acpi_addtask(sc->sc_acpi,
-				    acpivout_set_brightness, sc, 0);
-				acpi_wakeup(sc->sc_acpi);
-				return 0;
-			}
+			sc->sc_brightness = sc->sc_bcl[nindex];
+			acpi_addtask(sc->sc_acpi,
+			    acpivout_set_brightness, sc, 0);
+			acpi_wakeup(sc->sc_acpi);
+			return 0;
 		}
 		return -1;
 	default:

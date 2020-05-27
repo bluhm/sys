@@ -1,4 +1,4 @@
-/*	$OpenBSD: smr.h,v 1.3 2020/02/25 16:55:33 visa Exp $	*/
+/*	$OpenBSD: smr.h,v 1.6 2020/04/12 07:20:33 visa Exp $	*/
 
 /*
  * Copyright (c) 2019 Visa Hankala
@@ -38,8 +38,6 @@ void	smr_startup_thread(void);
 void	smr_idle(void);
 void	smr_read_enter(void);
 void	smr_read_leave(void);
-void	smr_assert_critical(void);
-void	smr_assert_noncritical(void);
 
 void	smr_call_impl(struct smr_entry *, void (*)(void *), void *, int);
 void	smr_barrier_impl(int);
@@ -56,8 +54,14 @@ smr_init(struct smr_entry *smr)
 }
 
 #ifdef DIAGNOSTIC
-#define SMR_ASSERT_CRITICAL()		smr_assert_critical()
-#define SMR_ASSERT_NONCRITICAL()	smr_assert_noncritical()
+#define SMR_ASSERT_CRITICAL() do {					\
+	if (panicstr == NULL && !db_active)				\
+		KASSERT(curcpu()->ci_schedstate.spc_smrdepth > 0);	\
+} while (0)
+#define SMR_ASSERT_NONCRITICAL() do {					\
+	if (panicstr == NULL && !db_active)				\
+		KASSERT(curcpu()->ci_schedstate.spc_smrdepth == 0);	\
+} while (0)
 #else
 #define SMR_ASSERT_CRITICAL()		do {} while (0)
 #define SMR_ASSERT_NONCRITICAL()	do {} while (0)
@@ -110,8 +114,8 @@ smr_init(struct smr_entry *smr)
 #include <sys/_null.h>
 
 /*
- * This file defines two types of data structures: singly-linked lists,
- * and lists.
+ * This file defines three types of data structures: singly-linked lists,
+ * lists, and tail queues.
  *
  *
  * A singly-linked list is headed by a single forward pointer. The elements
@@ -130,6 +134,14 @@ smr_init(struct smr_entry *smr)
  * traverse the list. New elements can be added to the list before
  * or after an existing element or at the head of the list. A list
  * may only be traversed in the forward direction.
+ *
+ * A tail queue is headed by a pair of pointers, one to the head of the
+ * list and the other to the tail of the list. The elements are doubly
+ * linked so that an arbitrary element can be removed without a need to
+ * traverse the list. New elements can be added to the list before or
+ * after an existing element, at the head of the list, or at the end of
+ * the list. A tail queue may only be traversed in the forward direction
+ * by lock-free readers.
  */
 
 /*
@@ -311,6 +323,115 @@ struct {								\
 		    (elm)->field.smr_le_prev;				\
 	*(elm)->field.smr_le_prev = (elm)->field.smr_le_next;		\
 	/* (elm)->field.smr_le_next must be left intact to allow	\
+	 * any concurrent readers to proceed iteration. */		\
+} while (0)
+
+/*
+ * Tail queue definitions.
+ */
+#define	SMR_TAILQ_HEAD(name, type)					\
+struct name {								\
+	struct type *smr_tqh_first;	/* first element, SMR-protected */\
+	struct type **smr_tqh_last;	/* last element, SMR-protected */\
+}
+
+#define	SMR_TAILQ_HEAD_INITIALIZER(head)				\
+	{ .smr_tqh_first = NULL, .smr_tqh_last = &(head).smr_tqh_first }
+
+#define	SMR_TAILQ_ENTRY(type)						\
+struct {								\
+	struct type *smr_tqe_next;	/* next element, SMR-protected */\
+	struct type **smr_tqe_prev;	/* address of previous next element */\
+}
+
+/*
+ * Tail queue access methods.
+ */
+#define	SMR_TAILQ_END(head)	NULL
+
+#define	SMR_TAILQ_FIRST(head) \
+	SMR_PTR_GET(&(head)->smr_tqh_first)
+#define	SMR_TAILQ_NEXT(elm, field) \
+	SMR_PTR_GET(&(elm)->field.smr_tqe_next)
+
+#define	SMR_TAILQ_FIRST_LOCKED(head)		((head)->smr_tqh_first)
+#define	SMR_TAILQ_NEXT_LOCKED(elm, field)	((elm)->field.smr_tqe_next)
+#define	SMR_TAILQ_LAST_LOCKED(head, headname) \
+	(*(((struct headname *)((head)->smr_tqh_last))->smr_tqh_last))
+#define	SMR_TAILQ_EMPTY_LOCKED(head) \
+	(SMR_TAILQ_FIRST_LOCKED(head) == SMR_TAILQ_END(head))
+
+#define	SMR_TAILQ_FOREACH(var, head, field)				\
+	for((var) = SMR_TAILQ_FIRST(head);				\
+	    (var)!= SMR_TAILQ_END(head);				\
+	    (var) = SMR_TAILQ_NEXT(var, field))
+
+#define	SMR_TAILQ_FOREACH_LOCKED(var, head, field)			\
+	for((var) = SMR_TAILQ_FIRST_LOCKED(head);			\
+	    (var)!= SMR_TAILQ_END(head);				\
+	    (var) = SMR_TAILQ_NEXT_LOCKED(var, field))
+
+#define	SMR_TAILQ_FOREACH_SAFE_LOCKED(var, head, field, tvar)		\
+	for ((var) = SMR_TAILQ_FIRST_LOCKED(head);			\
+	    (var) && ((tvar) = SMR_TAILQ_NEXT_LOCKED(var, field), 1);	\
+	    (var) = (tvar))
+
+/*
+ * Tail queue functions.
+ */
+#define	SMR_TAILQ_INIT(head) do {					\
+	(head)->smr_tqh_first = TAILQ_END(head);			\
+	(head)->smr_tqh_last = &(head)->smr_tqh_first;			\
+} while (0)
+
+#define	SMR_TAILQ_INSERT_AFTER_LOCKED(head, listelm, elm, field) do {	\
+	(elm)->field.smr_tqe_next = (listelm)->field.smr_tqe_next;	\
+	if ((listelm)->field.smr_tqe_next != NULL)			\
+		(listelm)->field.smr_tqe_next->field.smr_tqe_prev =	\
+		    &(elm)->field.smr_tqe_next;				\
+	else								\
+		(head)->smr_tqh_last = &(elm)->field.smr_tqe_next;	\
+	(elm)->field.smr_tqe_prev = &(listelm)->field.smr_tqe_next;	\
+	membar_producer();						\
+	(listelm)->field.smr_tqe_next = (elm);				\
+} while (0)
+
+#define	SMR_TAILQ_INSERT_BEFORE_LOCKED(listelm, elm, field) do {	\
+	(elm)->field.smr_tqe_prev = (listelm)->field.smr_tqe_prev;	\
+	(elm)->field.smr_tqe_next = (listelm);				\
+	membar_producer();						\
+	*(listelm)->field.smr_tqe_prev = (elm);				\
+	(listelm)->field.smr_tqe_prev = &(elm)->field.smr_tqe_next;	\
+} while (0)
+
+#define	SMR_TAILQ_INSERT_HEAD_LOCKED(head, elm, field) do {		\
+	(elm)->field.smr_tqe_next = (head)->smr_tqh_first;		\
+	(elm)->field.smr_tqe_prev = &(head)->smr_tqh_first;		\
+	if ((head)->smr_tqh_first != NULL)				\
+		(head)->smr_tqh_first->field.smr_tqe_prev =		\
+		    &(elm)->field.smr_tqe_next;				\
+	else								\
+		(head)->smr_tqh_last = &(elm)->field.smr_tqe_next;	\
+	membar_producer();						\
+	(head)->smr_tqh_first = (elm);					\
+} while (0)
+
+#define	SMR_TAILQ_INSERT_TAIL_LOCKED(head, elm, field) do {		\
+	(elm)->field.smr_tqe_next = NULL;				\
+	(elm)->field.smr_tqe_prev = (head)->smr_tqh_last;		\
+	membar_producer();						\
+	*(head)->smr_tqh_last = (elm);					\
+	(head)->smr_tqh_last = &(elm)->field.smr_tqe_next;		\
+} while (0)
+
+#define	SMR_TAILQ_REMOVE_LOCKED(head, elm, field) do {			\
+	if ((elm)->field.smr_tqe_next != NULL)				\
+		(elm)->field.smr_tqe_next->field.smr_tqe_prev =		\
+		    (elm)->field.smr_tqe_prev;				\
+	else								\
+		(head)->smr_tqh_last = (elm)->field.smr_tqe_prev;	\
+	*(elm)->field.smr_tqe_prev = (elm)->field.smr_tqe_next;		\
+	/* (elm)->field.smr_tqe_next must be left intact to allow	\
 	 * any concurrent readers to proceed iteration. */		\
 } while (0)
 

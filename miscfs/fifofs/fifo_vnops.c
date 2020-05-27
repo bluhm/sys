@@ -1,4 +1,4 @@
-/*	$OpenBSD: fifo_vnops.c,v 1.73 2020/02/20 16:56:52 visa Exp $	*/
+/*	$OpenBSD: fifo_vnops.c,v 1.76 2020/04/08 08:07:52 mpi Exp $	*/
 /*	$NetBSD: fifo_vnops.c,v 1.18 1996/03/16 23:52:42 christos Exp $	*/
 
 /*
@@ -507,16 +507,23 @@ int
 fifo_kqfilter(void *v)
 {
 	struct vop_kqfilter_args *ap = v;
-	struct socket *so = (struct socket *)ap->a_vp->v_fifoinfo->fi_readsock;
+	struct fifoinfo *fip = ap->a_vp->v_fifoinfo;
 	struct sockbuf *sb;
+	struct socket *so;
 
 	switch (ap->a_kn->kn_filter) {
 	case EVFILT_READ:
+		if (!(ap->a_fflag & FREAD))
+			return (EINVAL);
 		ap->a_kn->kn_fop = &fiforead_filtops;
+		so = fip->fi_readsock;
 		sb = &so->so_rcv;
 		break;
 	case EVFILT_WRITE:
+		if (!(ap->a_fflag & FWRITE))
+			return (EINVAL);
 		ap->a_kn->kn_fop = &fifowrite_filtops;
+		so = fip->fi_writesock;
 		sb = &so->so_snd;
 		break;
 	default:
@@ -525,7 +532,7 @@ fifo_kqfilter(void *v)
 
 	ap->a_kn->kn_hook = so;
 
-	SLIST_INSERT_HEAD(&sb->sb_sel.si_note, ap->a_kn, kn_selnext);
+	klist_insert(&sb->sb_sel.si_note, ap->a_kn);
 	sb->sb_flagsintr |= SB_KNOTE;
 
 	return (0);
@@ -536,8 +543,8 @@ filt_fifordetach(struct knote *kn)
 {
 	struct socket *so = (struct socket *)kn->kn_hook;
 
-	SLIST_REMOVE(&so->so_rcv.sb_sel.si_note, kn, knote, kn_selnext);
-	if (SLIST_EMPTY(&so->so_rcv.sb_sel.si_note))
+	klist_remove(&so->so_rcv.sb_sel.si_note, kn);
+	if (klist_empty(&so->so_rcv.sb_sel.si_note))
 		so->so_rcv.sb_flagsintr &= ~SB_KNOTE;
 }
 
@@ -568,8 +575,8 @@ filt_fifowdetach(struct knote *kn)
 {
 	struct socket *so = (struct socket *)kn->kn_hook;
 
-	SLIST_REMOVE(&so->so_snd.sb_sel.si_note, kn, knote, kn_selnext);
-	if (SLIST_EMPTY(&so->so_snd.sb_sel.si_note))
+	klist_remove(&so->so_snd.sb_sel.si_note, kn);
+	if (klist_empty(&so->so_snd.sb_sel.si_note))
 		so->so_snd.sb_flagsintr &= ~SB_KNOTE;
 }
 

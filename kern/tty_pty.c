@@ -1,4 +1,4 @@
-/*	$OpenBSD: tty_pty.c,v 1.97 2020/02/20 16:56:52 visa Exp $	*/
+/*	$OpenBSD: tty_pty.c,v 1.99 2020/05/21 09:34:06 mpi Exp $	*/
 /*	$NetBSD: tty_pty.c,v 1.33.4.1 1996/06/02 09:08:11 mrg Exp $	*/
 
 /*
@@ -655,7 +655,7 @@ filt_ptcrdetach(struct knote *kn)
 	int s;
 
 	s = spltty();
-	SLIST_REMOVE(&pti->pt_selr.si_note, kn, knote, kn_selnext);
+	klist_remove(&pti->pt_selr.si_note, kn);
 	splx(s);
 }
 
@@ -691,7 +691,7 @@ filt_ptcwdetach(struct knote *kn)
 	int s;
 
 	s = spltty();
-	SLIST_REMOVE(&pti->pt_selw.si_note, kn, knote, kn_selnext);
+	klist_remove(&pti->pt_selw.si_note, kn);
 	splx(s);
 }
 
@@ -708,7 +708,8 @@ filt_ptcwrite(struct knote *kn, long hint)
 		if (ISSET(pti->pt_flags, PF_REMOTE)) {
 			if (tp->t_canq.c_cc == 0)
 				kn->kn_data = tp->t_canq.c_cn;
-		} else if (tp->t_rawq.c_cc + tp->t_canq.c_cc < TTYHOG(tp)-2)
+		} else if ((tp->t_rawq.c_cc + tp->t_canq.c_cc < TTYHOG(tp)-2) ||
+		    (tp->t_canq.c_cc == 0 && ISSET(tp->t_lflag, ICANON)))
 			kn->kn_data = tp->t_canq.c_cn -
 			    (tp->t_rawq.c_cc + tp->t_canq.c_cc);
 	}
@@ -753,7 +754,7 @@ ptckqfilter(dev_t dev, struct knote *kn)
 	kn->kn_hook = (caddr_t)pti;
 
 	s = spltty();
-	SLIST_INSERT_HEAD(klist, kn, kn_selnext);
+	klist_insert(klist, kn);
 	splx(s);
 
 	return (0);

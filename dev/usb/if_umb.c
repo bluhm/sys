@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_umb.c,v 1.32 2020/02/18 08:09:37 gerhard Exp $ */
+/*	$OpenBSD: if_umb.c,v 1.34 2020/05/04 14:41:03 gerhard Exp $ */
 
 /*
  * Copyright (c) 2016 genua mbH
@@ -1945,7 +1945,7 @@ tryv6:;
 		goto done;
 	}
 
-	if ((avail_v4 & (MBIM_IPCONF_HAS_ADDRINFO | MBIM_IPCONF_HAS_GWINFO)) ==
+	if ((avail_v6 & (MBIM_IPCONF_HAS_ADDRINFO | MBIM_IPCONF_HAS_GWINFO)) ==
 	    (MBIM_IPCONF_HAS_ADDRINFO | MBIM_IPCONF_HAS_GWINFO)) {
 		n = letoh32(ic->ipv6_naddr);
 		off = letoh32(ic->ipv6_addroffs);
@@ -2583,7 +2583,8 @@ umb_send_connect(struct umb_softc *sc, int command)
 	c->iptype = htole32(MBIM_CONTEXT_IPTYPE_IPV4);
 #ifdef INET6
 	/* XXX FIXME: support IPv6-only mode, too */
-	if ((sc->sc_flags & UMBFLG_NO_INET6) == 0)
+	if ((sc->sc_flags & UMBFLG_NO_INET6) == 0 &&
+	    in6ifa_ifpforlinklocal(GET_IFP(sc), 0) != NULL)
 		c->iptype = htole32(MBIM_CONTEXT_IPTYPE_IPV4V6);
 #endif
 	memcpy(c->context, umb_uuid_context_internet, sizeof (c->context));

@@ -1,4 +1,4 @@
-/*	$OpenBSD: event.h,v 1.33 2020/02/20 16:56:52 visa Exp $	*/
+/*	$OpenBSD: event.h,v 1.37 2020/05/17 10:53:14 visa Exp $	*/
 
 /*-
  * Copyright (c) 1999,2000,2001 Jonathan Lemon <jlemon@FreeBSD.org>
@@ -42,14 +42,14 @@
 
 #define EVFILT_SYSCOUNT		8
 
-#define EV_SET(kevp_, a, b, c, d, e, f) do {	\
-	struct kevent *kevp = (kevp_);		\
-	(kevp)->ident = (a);			\
-	(kevp)->filter = (b);			\
-	(kevp)->flags = (c);			\
-	(kevp)->fflags = (d);			\
-	(kevp)->data = (e);			\
-	(kevp)->udata = (f);			\
+#define EV_SET(kevp, a, b, c, d, e, f) do {	\
+	struct kevent *__kevp = (kevp);		\
+	(__kevp)->ident = (a);			\
+	(__kevp)->filter = (b);			\
+	(__kevp)->flags = (c);			\
+	(__kevp)->fflags = (d);			\
+	(__kevp)->data = (e);			\
+	(__kevp)->udata = (f);			\
 } while(0)
 
 struct kevent {
@@ -121,7 +121,11 @@ struct kevent {
  */
 #include <sys/queue.h>
 struct knote;
-SLIST_HEAD(klist, knote);
+SLIST_HEAD(knlist, knote);
+
+struct klist {
+	struct knlist		 kl_list;
+};
 
 #ifdef _KERNEL
 
@@ -132,10 +136,10 @@ SLIST_HEAD(klist, knote);
  */
 #define NOTE_SUBMIT	0x01000000		/* initial knote submission */
 
-#define KNOTE(list_, hint)	do { \
-					struct klist *list = (list_); \
-					if ((list) != NULL) \
-						knote((list), (hint)); \
+#define KNOTE(list, hint)	do { \
+					struct klist *__list = (list); \
+					if (__list != NULL) \
+						knote(__list, hint); \
 				} while (0)
 
 #define	KN_HASHSIZE		64		/* XXX should be tunable */
@@ -185,19 +189,33 @@ struct knote {
 #define kn_fp		kn_ptr.p_fp
 };
 
+struct kqueue_scan_state {
+	struct kqueue	*kqs_kq;		/* kqueue of this scan */
+	struct knote	 kqs_start;		/* start marker */
+	struct knote	 kqs_end;		/* end marker */
+	int		 kqs_nevent;		/* number of events collected */
+	int		 kqs_queued;		/* if set, end marker is
+						 * in queue */
+};
+
 struct proc;
 
 extern const struct filterops sig_filtops;
 
 extern void	knote(struct klist *list, long hint);
 extern void	knote_activate(struct knote *);
-extern void	knote_remove(struct proc *p, struct klist *list);
+extern void	knote_remove(struct proc *p, struct knlist *list);
 extern void	knote_fdclose(struct proc *p, int fd);
 extern void	knote_processexit(struct proc *);
 extern int	kqueue_register(struct kqueue *kq,
 		    struct kevent *kev, struct proc *p);
+extern void	kqueue_scan_setup(struct kqueue_scan_state *, struct kqueue *);
+extern void	kqueue_scan_finish(struct kqueue_scan_state *);
 extern int	filt_seltrue(struct knote *kn, long hint);
 extern int	seltrue_kqfilter(dev_t, struct knote *);
+extern void	klist_insert(struct klist *, struct knote *);
+extern void	klist_remove(struct klist *, struct knote *);
+extern int	klist_empty(struct klist *);
 extern void	klist_invalidate(struct klist *);
 
 #else	/* !_KERNEL */

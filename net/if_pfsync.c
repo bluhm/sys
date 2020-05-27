@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_pfsync.c,v 1.267 2019/11/07 11:46:42 dlg Exp $	*/
+/*	$OpenBSD: if_pfsync.c,v 1.270 2020/04/12 11:56:52 mpi Exp $	*/
 
 /*
  * Copyright (c) 2002 Michael Shalayeff
@@ -1523,7 +1523,7 @@ pfsync_send_dispatch(void *xmq)
 	if (ml_empty(&ml))
 		return;
 
-	NET_RLOCK();
+	NET_LOCK();
 	sc = pfsyncif;
 	if (sc == NULL) {
 		ml_purge(&ml);
@@ -1541,7 +1541,7 @@ pfsync_send_dispatch(void *xmq)
 		}
 	}
 done:
-	NET_RUNLOCK();
+	NET_UNLOCK();
 }
 
 void
@@ -1688,10 +1688,10 @@ pfsync_sendout(void)
 		count = 0;
 		while ((st = TAILQ_FIRST(&sc->sc_qs[q])) != NULL) {
 			TAILQ_REMOVE(&sc->sc_qs[q], st, sync_list);
-			st->sync_state = PFSYNC_S_NONE;
 #ifdef PFSYNC_DEBUG
 			KASSERT(st->sync_state == q);
 #endif
+			st->sync_state = PFSYNC_S_NONE;
 			pfsync_qs[q].write(st, m->m_data + offset);
 			offset += pfsync_qs[q].len;
 
@@ -2178,7 +2178,7 @@ pfsync_q_ins(struct pf_state *st, int q)
 
 #if defined(PFSYNC_DEBUG)
 	if (sc->sc_len < PFSYNC_MINPKT)
-		panic("pfsync pkt len is too low %d", sc->sc_len);
+		panic("pfsync pkt len is too low %zd", sc->sc_len);
 #endif
 	if (TAILQ_EMPTY(&sc->sc_qs[q]))
 		nlen += sizeof(struct pfsync_subheader);

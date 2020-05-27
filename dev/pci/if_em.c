@@ -31,7 +31,7 @@ POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
-/* $OpenBSD: if_em.c,v 1.347 2020/03/08 11:43:43 mpi Exp $ */
+/* $OpenBSD: if_em.c,v 1.352 2020/05/12 08:49:54 jan Exp $ */
 /* $FreeBSD: if_em.c,v 1.46 2004/09/29 18:28:28 mlaier Exp $ */
 
 #include <dev/pci/if_em.h>
@@ -233,6 +233,7 @@ void em_defer_attach(struct device*);
 int  em_detach(struct device *, int);
 int  em_activate(struct device *, int);
 int  em_intr(void *);
+int  em_allocate_legacy(struct em_softc *);
 void em_start(struct ifqueue *);
 int  em_ioctl(struct ifnet *, u_long, caddr_t);
 void em_watchdog(struct ifnet *);
@@ -290,6 +291,17 @@ void em_flush_tx_ring(struct em_queue *);
 void em_flush_rx_ring(struct em_queue *);
 void em_flush_desc_rings(struct em_softc *);
 
+#ifndef SMALL_KERNEL
+/* MSIX/Multiqueue functions */
+int  em_allocate_msix(struct em_softc *);
+int  em_setup_queues_msix(struct em_softc *);
+int  em_queue_intr_msix(void *);
+int  em_link_intr_msix(void *);
+void em_enable_queue_intr_msix(struct em_queue *);
+#else
+#define em_allocate_msix(_sc) 	(-1)
+#endif
+
 /*********************************************************************
  *  OpenBSD Device Interface Entry Points
  *********************************************************************/
@@ -304,6 +316,7 @@ struct cfdriver em_cd = {
 };
 
 static int em_smart_pwr_down = FALSE;
+int em_enable_msix = 0;
 
 /*********************************************************************
  *  Device identification routine
@@ -918,6 +931,16 @@ em_init(void *arg)
 		return;
 	}
 	em_initialize_receive_unit(sc);
+
+#ifndef SMALL_KERNEL
+	if (sc->msix) {
+		if (em_setup_queues_msix(sc)) {
+			printf("%s: Can't setup msix queues\n", DEVNAME(sc));
+			splx(s);
+			return;
+		}
+	}
+#endif
 
 	/* Program promiscuous mode and multicast filters. */
 	em_iff(sc);
@@ -1617,10 +1640,7 @@ int
 em_allocate_pci_resources(struct em_softc *sc)
 {
 	int		val, rid;
-	pci_intr_handle_t	ih;
-	const char		*intrstr = NULL;
 	struct pci_attach_args *pa = &sc->osdep.em_pa;
-	pci_chipset_tag_t	pc = pa->pa_pc;
 	struct em_queue	       *que = NULL;
 
 	val = pci_conf_read(pa->pa_pc, pa->pa_tag, EM_MMBA);
@@ -1691,6 +1711,9 @@ em_allocate_pci_resources(struct em_softc *sc)
 		}
         }
 
+	sc->osdep.dev = (struct device *)sc;
+	sc->hw.back = &sc->osdep;
+
 	/* Only one queue for the moment. */
 	que = malloc(sizeof(struct em_queue), M_DEVBUF, M_NOWAIT | M_ZERO);
 	if (que == NULL) {
@@ -1703,29 +1726,10 @@ em_allocate_pci_resources(struct em_softc *sc)
 
 	sc->queues = que;
 	sc->num_queues = 1;
+	sc->msix = 0;
 	sc->legacy_irq = 0;
-	if (pci_intr_map_msi(pa, &ih)) {
-		if (pci_intr_map(pa, &ih)) {
-			printf(": couldn't map interrupt\n");
-			return (ENXIO);
-		}
-		sc->legacy_irq = 1;
-	}
-
-	sc->osdep.dev = (struct device *)sc;
-	sc->hw.back = &sc->osdep;
-
-	intrstr = pci_intr_string(pc, ih);
-	sc->sc_intrhand = pci_intr_establish(pc, ih, IPL_NET | IPL_MPSAFE,
-	    em_intr, sc, DEVNAME(sc));
-	if (sc->sc_intrhand == NULL) {
-		printf(": couldn't establish interrupt");
-		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
+	if (em_allocate_msix(sc) && em_allocate_legacy(sc))
 		return (ENXIO);
-	}
-	printf(": %s", intrstr);
 
 	/*
 	 * the ICP_xxxx device has multiple, duplicate register sets for
@@ -1775,15 +1779,25 @@ em_free_pci_resources(struct em_softc *sc)
 				sc->osdep.em_memsize);
 	sc->osdep.em_membase = 0;
 
-	que = sc->queues; /* Use only first queue. */
-	if (que->rx.sc_rx_desc_ring != NULL) {
-		que->rx.sc_rx_desc_ring = NULL;
-		em_dma_free(sc, &que->rx.sc_rx_dma);
+	FOREACH_QUEUE(sc, que) {
+		if (que->rx.sc_rx_desc_ring != NULL) {
+			que->rx.sc_rx_desc_ring = NULL;
+			em_dma_free(sc, &que->rx.sc_rx_dma);
+		}
+		if (que->tx.sc_tx_desc_ring != NULL) {
+			que->tx.sc_tx_desc_ring = NULL;
+			em_dma_free(sc, &que->tx.sc_tx_dma);
+		}
+		if (que->tag)
+			pci_intr_disestablish(pc, que->tag);
+		que->tag = NULL;
+		que->eims = 0;
+		que->me = 0;
+		que->sc = NULL;
 	}
-	if (que->tx.sc_tx_desc_ring != NULL) {
-		que->tx.sc_tx_desc_ring = NULL;
-		em_dma_free(sc, &que->tx.sc_tx_dma);
-	}
+	sc->legacy_irq = 0;
+	sc->msix_linkvec = 0;
+	sc->msix_queuesmask = 0;
 	if (sc->queues)
 		free(sc->queues, M_DEVBUF,
 		    sc->num_queues * sizeof(struct em_queue));
@@ -1971,6 +1985,7 @@ em_setup_interface(struct em_softc *sc)
 
 	if_attach(ifp);
 	ether_ifattach(ifp);
+	em_enable_intr(sc);
 }
 
 int
@@ -2098,7 +2113,7 @@ em_dma_malloc(struct em_softc *sc, bus_size_t size, struct em_dma_alloc *dma)
 		goto destroy;
 
 	r = bus_dmamem_map(sc->sc_dmat, &dma->dma_seg, dma->dma_nseg, size,
-	    &dma->dma_vaddr, BUS_DMA_WAITOK);
+	    &dma->dma_vaddr, BUS_DMA_WAITOK | BUS_DMA_COHERENT);
 	if (r != 0)
 		goto free;
 
@@ -2138,18 +2153,20 @@ em_dma_free(struct em_softc *sc, struct em_dma_alloc *dma)
 int
 em_allocate_transmit_structures(struct em_softc *sc)
 {
-	struct em_queue *que = sc->queues; /* Use only first queue. */
+	struct em_queue *que;
 
-	bus_dmamap_sync(sc->sc_dmat, que->tx.sc_tx_dma.dma_map,
-	    0, que->tx.sc_tx_dma.dma_map->dm_mapsize,
-	    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
+	FOREACH_QUEUE(sc, que) {
+		bus_dmamap_sync(sc->sc_dmat, que->tx.sc_tx_dma.dma_map,
+		    0, que->tx.sc_tx_dma.dma_map->dm_mapsize,
+		    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
 
-	que->tx.sc_tx_pkts_ring = mallocarray(sc->sc_tx_slots,
-	    sizeof(*que->tx.sc_tx_pkts_ring), M_DEVBUF, M_NOWAIT | M_ZERO);
-	if (que->tx.sc_tx_pkts_ring == NULL) {
-		printf("%s: Unable to allocate tx_buffer memory\n", 
-		       DEVNAME(sc));
-		return (ENOMEM);
+		que->tx.sc_tx_pkts_ring = mallocarray(sc->sc_tx_slots,
+		    sizeof(*que->tx.sc_tx_pkts_ring), M_DEVBUF, M_NOWAIT | M_ZERO);
+		if (que->tx.sc_tx_pkts_ring == NULL) {
+			printf("%s: Unable to allocate tx_buffer memory\n", 
+			    DEVNAME(sc));
+			return (ENOMEM);
+		}
 	}
 
 	return (0);
@@ -2163,33 +2180,35 @@ em_allocate_transmit_structures(struct em_softc *sc)
 int
 em_setup_transmit_structures(struct em_softc *sc)
 {
-	struct em_queue *que = sc->queues; /* Use only first queue. */
+	struct em_queue *que;
 	struct em_packet *pkt;
 	int error, i;
 
 	if ((error = em_allocate_transmit_structures(sc)) != 0)
 		goto fail;
 
-	bzero((void *) que->tx.sc_tx_desc_ring,
-	      (sizeof(struct em_tx_desc)) * sc->sc_tx_slots);
+	FOREACH_QUEUE(sc, que) {
+		bzero((void *) que->tx.sc_tx_desc_ring,
+		    (sizeof(struct em_tx_desc)) * sc->sc_tx_slots);
 
-	for (i = 0; i < sc->sc_tx_slots; i++) {
-		pkt = &que->tx.sc_tx_pkts_ring[i];
-		error = bus_dmamap_create(sc->sc_dmat, MAX_JUMBO_FRAME_SIZE,
-		    EM_MAX_SCATTER / (sc->pcix_82544 ? 2 : 1),
-		    MAX_JUMBO_FRAME_SIZE, 0, BUS_DMA_NOWAIT, &pkt->pkt_map);
-		if (error != 0) {
-			printf("%s: Unable to create TX DMA map\n",
-			    DEVNAME(sc));
-			goto fail;
+		for (i = 0; i < sc->sc_tx_slots; i++) {
+			pkt = &que->tx.sc_tx_pkts_ring[i];
+			error = bus_dmamap_create(sc->sc_dmat, MAX_JUMBO_FRAME_SIZE,
+			    EM_MAX_SCATTER / (sc->pcix_82544 ? 2 : 1),
+			    MAX_JUMBO_FRAME_SIZE, 0, BUS_DMA_NOWAIT, &pkt->pkt_map);
+			if (error != 0) {
+				printf("%s: Unable to create TX DMA map\n",
+				    DEVNAME(sc));
+				goto fail;
+			}
 		}
+
+		que->tx.sc_tx_desc_head = 0;
+		que->tx.sc_tx_desc_tail = 0;
+
+		/* Set checksum context */
+		que->tx.active_checksum_context = OFFLOAD_NONE;
 	}
-
-	que->tx.sc_tx_desc_head = 0;
-	que->tx.sc_tx_desc_tail = 0;
-
-	/* Set checksum context */
-	que->tx.active_checksum_context = OFFLOAD_NONE;
 
 	return (0);
 
@@ -2206,68 +2225,70 @@ fail:
 void
 em_initialize_transmit_unit(struct em_softc *sc)
 {
-	struct em_queue *que = sc->queues; /* Use only first queue. */
 	u_int32_t	reg_tctl, reg_tipg = 0;
 	u_int64_t	bus_addr;
+	struct em_queue *que;
 
 	INIT_DEBUGOUT("em_initialize_transmit_unit: begin");
 
-	/* Setup the Base and Length of the Tx Descriptor Ring */
-	bus_addr = que->tx.sc_tx_dma.dma_map->dm_segs[0].ds_addr;
-	E1000_WRITE_REG(&sc->hw, TDLEN(que->me),
-			sc->sc_tx_slots *
-			sizeof(struct em_tx_desc));
-	E1000_WRITE_REG(&sc->hw, TDBAH(que->me), (u_int32_t)(bus_addr >> 32));
-	E1000_WRITE_REG(&sc->hw, TDBAL(que->me), (u_int32_t)bus_addr);
+	FOREACH_QUEUE(sc, que) {
+		/* Setup the Base and Length of the Tx Descriptor Ring */
+		bus_addr = que->tx.sc_tx_dma.dma_map->dm_segs[0].ds_addr;
+		E1000_WRITE_REG(&sc->hw, TDLEN(que->me),
+		    sc->sc_tx_slots *
+		    sizeof(struct em_tx_desc));
+		E1000_WRITE_REG(&sc->hw, TDBAH(que->me), (u_int32_t)(bus_addr >> 32));
+		E1000_WRITE_REG(&sc->hw, TDBAL(que->me), (u_int32_t)bus_addr);
 
-	/* Setup the HW Tx Head and Tail descriptor pointers */
-	E1000_WRITE_REG(&sc->hw, TDT(que->me), 0);
-	E1000_WRITE_REG(&sc->hw, TDH(que->me), 0);
+		/* Setup the HW Tx Head and Tail descriptor pointers */
+		E1000_WRITE_REG(&sc->hw, TDT(que->me), 0);
+		E1000_WRITE_REG(&sc->hw, TDH(que->me), 0);
 
-	HW_DEBUGOUT2("Base = %x, Length = %x\n", 
-		     E1000_READ_REG(&sc->hw, TDBAL(que->me)),
-		     E1000_READ_REG(&sc->hw, TDLEN(que->me)));
+		HW_DEBUGOUT2("Base = %x, Length = %x\n",
+		    E1000_READ_REG(&sc->hw, TDBAL(que->me)),
+		    E1000_READ_REG(&sc->hw, TDLEN(que->me)));
 
-	/* Set the default values for the Tx Inter Packet Gap timer */
-	switch (sc->hw.mac_type) {
-	case em_82542_rev2_0:
-	case em_82542_rev2_1:
-		reg_tipg = DEFAULT_82542_TIPG_IPGT;
-		reg_tipg |= DEFAULT_82542_TIPG_IPGR1 << E1000_TIPG_IPGR1_SHIFT;
-		reg_tipg |= DEFAULT_82542_TIPG_IPGR2 << E1000_TIPG_IPGR2_SHIFT;
-		break;
-	case em_80003es2lan:
-		reg_tipg = DEFAULT_82543_TIPG_IPGR1;
-		reg_tipg |= DEFAULT_80003ES2LAN_TIPG_IPGR2 << E1000_TIPG_IPGR2_SHIFT;
-		break;
-	default:
-		if (sc->hw.media_type == em_media_type_fiber ||
-		    sc->hw.media_type == em_media_type_internal_serdes)
-			reg_tipg = DEFAULT_82543_TIPG_IPGT_FIBER;
-		else
-			reg_tipg = DEFAULT_82543_TIPG_IPGT_COPPER;
-		reg_tipg |= DEFAULT_82543_TIPG_IPGR1 << E1000_TIPG_IPGR1_SHIFT;
-		reg_tipg |= DEFAULT_82543_TIPG_IPGR2 << E1000_TIPG_IPGR2_SHIFT;
+		/* Set the default values for the Tx Inter Packet Gap timer */
+		switch (sc->hw.mac_type) {
+		case em_82542_rev2_0:
+		case em_82542_rev2_1:
+			reg_tipg = DEFAULT_82542_TIPG_IPGT;
+			reg_tipg |= DEFAULT_82542_TIPG_IPGR1 << E1000_TIPG_IPGR1_SHIFT;
+			reg_tipg |= DEFAULT_82542_TIPG_IPGR2 << E1000_TIPG_IPGR2_SHIFT;
+			break;
+		case em_80003es2lan:
+			reg_tipg = DEFAULT_82543_TIPG_IPGR1;
+			reg_tipg |= DEFAULT_80003ES2LAN_TIPG_IPGR2 << E1000_TIPG_IPGR2_SHIFT;
+			break;
+		default:
+			if (sc->hw.media_type == em_media_type_fiber ||
+			    sc->hw.media_type == em_media_type_internal_serdes)
+				reg_tipg = DEFAULT_82543_TIPG_IPGT_FIBER;
+			else
+				reg_tipg = DEFAULT_82543_TIPG_IPGT_COPPER;
+			reg_tipg |= DEFAULT_82543_TIPG_IPGR1 << E1000_TIPG_IPGR1_SHIFT;
+			reg_tipg |= DEFAULT_82543_TIPG_IPGR2 << E1000_TIPG_IPGR2_SHIFT;
+		}
+
+
+		E1000_WRITE_REG(&sc->hw, TIPG, reg_tipg);
+		E1000_WRITE_REG(&sc->hw, TIDV, sc->tx_int_delay);
+		if (sc->hw.mac_type >= em_82540)
+			E1000_WRITE_REG(&sc->hw, TADV, sc->tx_abs_int_delay);
+
+		/* Setup Transmit Descriptor Base Settings */
+		que->tx.sc_txd_cmd = E1000_TXD_CMD_IFCS;
+
+		if (sc->hw.mac_type == em_82575 || sc->hw.mac_type == em_82580 ||
+		    sc->hw.mac_type == em_82576 ||
+		    sc->hw.mac_type == em_i210 || sc->hw.mac_type == em_i350) {
+			/* 82575/6 need to enable the TX queue and lack the IDE bit */
+			reg_tctl = E1000_READ_REG(&sc->hw, TXDCTL(que->me));
+			reg_tctl |= E1000_TXDCTL_QUEUE_ENABLE;
+			E1000_WRITE_REG(&sc->hw, TXDCTL(que->me), reg_tctl);
+		} else if (sc->tx_int_delay > 0)
+			que->tx.sc_txd_cmd |= E1000_TXD_CMD_IDE;
 	}
-
-
-	E1000_WRITE_REG(&sc->hw, TIPG, reg_tipg);
-	E1000_WRITE_REG(&sc->hw, TIDV, sc->tx_int_delay);
-	if (sc->hw.mac_type >= em_82540)
-		E1000_WRITE_REG(&sc->hw, TADV, sc->tx_abs_int_delay);
-
-	/* Setup Transmit Descriptor Base Settings */   
-	que->tx.sc_txd_cmd = E1000_TXD_CMD_IFCS;
-
-	if (sc->hw.mac_type == em_82575 || sc->hw.mac_type == em_82580 ||
-	    sc->hw.mac_type == em_82576 ||
-	    sc->hw.mac_type == em_i210 || sc->hw.mac_type == em_i350) {
-		/* 82575/6 need to enable the TX queue and lack the IDE bit */
-		reg_tctl = E1000_READ_REG(&sc->hw, TXDCTL(que->me));
-		reg_tctl |= E1000_TXDCTL_QUEUE_ENABLE;
-		E1000_WRITE_REG(&sc->hw, TXDCTL(que->me), reg_tctl);
-	} else if (sc->tx_int_delay > 0)
-		que->tx.sc_txd_cmd |= E1000_TXD_CMD_IDE;
 
 	/* Program the Transmit Control Register */
 	reg_tctl = E1000_TCTL_PSP | E1000_TCTL_EN |
@@ -2306,40 +2327,44 @@ em_initialize_transmit_unit(struct em_softc *sc)
 void
 em_free_transmit_structures(struct em_softc *sc)
 {
-	struct em_queue *que = sc->queues; /* Use only first queue. */
+	struct em_queue *que;
 	struct em_packet *pkt;
 	int i;
 
 	INIT_DEBUGOUT("free_transmit_structures: begin");
 
-	if (que->tx.sc_tx_pkts_ring != NULL) {
-		for (i = 0; i < sc->sc_tx_slots; i++) {
-			pkt = &que->tx.sc_tx_pkts_ring[i];
+	FOREACH_QUEUE(sc, que) {
+		if (que->tx.sc_tx_pkts_ring != NULL) {
+			for (i = 0; i < sc->sc_tx_slots; i++) {
+				pkt = &que->tx.sc_tx_pkts_ring[i];
 
-			if (pkt->pkt_m != NULL) {
-				bus_dmamap_sync(sc->sc_dmat, pkt->pkt_map,
-				    0, pkt->pkt_map->dm_mapsize,
-				    BUS_DMASYNC_POSTWRITE);
-				bus_dmamap_unload(sc->sc_dmat, pkt->pkt_map);
+				if (pkt->pkt_m != NULL) {
+					bus_dmamap_sync(sc->sc_dmat, pkt->pkt_map,
+					    0, pkt->pkt_map->dm_mapsize,
+					    BUS_DMASYNC_POSTWRITE);
+					bus_dmamap_unload(sc->sc_dmat,
+					    pkt->pkt_map);
 
-				m_freem(pkt->pkt_m);
-				pkt->pkt_m = NULL;
+					m_freem(pkt->pkt_m);
+					pkt->pkt_m = NULL;
+				}
+
+				if (pkt->pkt_map != NULL) {
+					bus_dmamap_destroy(sc->sc_dmat,
+					    pkt->pkt_map);
+					pkt->pkt_map = NULL;
+				}
 			}
 
-			if (pkt->pkt_map != NULL) {
-				bus_dmamap_destroy(sc->sc_dmat, pkt->pkt_map);
-				pkt->pkt_map = NULL;
-			}
+			free(que->tx.sc_tx_pkts_ring, M_DEVBUF,
+			    sc->sc_tx_slots * sizeof(*que->tx.sc_tx_pkts_ring));
+			que->tx.sc_tx_pkts_ring = NULL;
 		}
 
-		free(que->tx.sc_tx_pkts_ring, M_DEVBUF,
-		    sc->sc_tx_slots * sizeof(*que->tx.sc_tx_pkts_ring));
-		que->tx.sc_tx_pkts_ring = NULL;
+		bus_dmamap_sync(sc->sc_dmat, que->tx.sc_tx_dma.dma_map,
+		    0, que->tx.sc_tx_dma.dma_map->dm_mapsize,
+		    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
 	}
-
-	bus_dmamap_sync(sc->sc_dmat, que->tx.sc_tx_dma.dma_map,
-	    0, que->tx.sc_tx_dma.dma_map->dm_mapsize,
-	    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
 }
 
 /*********************************************************************
@@ -2529,36 +2554,39 @@ em_get_buf(struct em_queue *que, int i)
 int
 em_allocate_receive_structures(struct em_softc *sc)
 {
-	struct em_queue *que = sc->queues; /* Use only first queue. */
+	struct em_queue *que;
 	struct em_packet *pkt;
 	int i;
 	int error;
 
-	que->rx.sc_rx_pkts_ring = mallocarray(sc->sc_rx_slots,
-	    sizeof(*que->rx.sc_rx_pkts_ring), M_DEVBUF, M_NOWAIT | M_ZERO);
-	if (que->rx.sc_rx_pkts_ring == NULL) {
-		printf("%s: Unable to allocate rx_buffer memory\n", 
-		    DEVNAME(sc));
-		return (ENOMEM);
-	}
-
-	bus_dmamap_sync(sc->sc_dmat, que->rx.sc_rx_dma.dma_map,
-	    0, que->rx.sc_rx_dma.dma_map->dm_mapsize,
-	    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
-
-	for (i = 0; i < sc->sc_rx_slots; i++) {
-		pkt = &que->rx.sc_rx_pkts_ring[i];
-
-		error = bus_dmamap_create(sc->sc_dmat, EM_MCLBYTES, 1,
-		    EM_MCLBYTES, 0, BUS_DMA_NOWAIT, &pkt->pkt_map);
-		if (error != 0) {
-			printf("%s: em_allocate_receive_structures: "
-			    "bus_dmamap_create failed; error %u\n",
-			    DEVNAME(sc), error);
-			goto fail;
+	FOREACH_QUEUE(sc, que) {
+		que->rx.sc_rx_pkts_ring = mallocarray(sc->sc_rx_slots,
+		    sizeof(*que->rx.sc_rx_pkts_ring),
+		    M_DEVBUF, M_NOWAIT | M_ZERO);
+		if (que->rx.sc_rx_pkts_ring == NULL) {
+			printf("%s: Unable to allocate rx_buffer memory\n",
+			    DEVNAME(sc));
+			return (ENOMEM);
 		}
 
-		pkt->pkt_m = NULL;
+		bus_dmamap_sync(sc->sc_dmat, que->rx.sc_rx_dma.dma_map,
+		    0, que->rx.sc_rx_dma.dma_map->dm_mapsize,
+		    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
+
+		for (i = 0; i < sc->sc_rx_slots; i++) {
+			pkt = &que->rx.sc_rx_pkts_ring[i];
+
+			error = bus_dmamap_create(sc->sc_dmat, EM_MCLBYTES, 1,
+			    EM_MCLBYTES, 0, BUS_DMA_NOWAIT, &pkt->pkt_map);
+			if (error != 0) {
+				printf("%s: em_allocate_receive_structures: "
+				    "bus_dmamap_create failed; error %u\n",
+				    DEVNAME(sc), error);
+				goto fail;
+			}
+
+			pkt->pkt_m = NULL;
+		}
 	}
 
         return (0);
@@ -2576,26 +2604,28 @@ fail:
 int
 em_setup_receive_structures(struct em_softc *sc)
 {
-	struct em_queue *que = sc->queues; /* Use only first queue. */
 	struct ifnet *ifp = &sc->sc_ac.ac_if;
+	struct em_queue *que;
 	u_int lwm;
 
 	if (em_allocate_receive_structures(sc))
 		return (ENOMEM);
 
-	memset(que->rx.sc_rx_desc_ring, 0,
-	    sc->sc_rx_slots * sizeof(*que->rx.sc_rx_desc_ring));
+	FOREACH_QUEUE(sc, que) {
+		memset(que->rx.sc_rx_desc_ring, 0,
+		    sc->sc_rx_slots * sizeof(*que->rx.sc_rx_desc_ring));
 
-	/* Setup our descriptor pointers */
-	que->rx.sc_rx_desc_tail = 0;
-	que->rx.sc_rx_desc_head = sc->sc_rx_slots - 1;
+		/* Setup our descriptor pointers */
+		que->rx.sc_rx_desc_tail = 0;
+		que->rx.sc_rx_desc_head = sc->sc_rx_slots - 1;
 
-	lwm = max(4, 2 * ((ifp->if_hardmtu / MCLBYTES) + 1));
-	if_rxr_init(&que->rx.sc_rx_ring, lwm, sc->sc_rx_slots);
+		lwm = max(4, 2 * ((ifp->if_hardmtu / MCLBYTES) + 1));
+		if_rxr_init(&que->rx.sc_rx_ring, lwm, sc->sc_rx_slots);
 
-	if (em_rxfill(que) == 0) {
-		printf("%s: unable to fill any rx descriptors\n",
-		    DEVNAME(sc));
+		if (em_rxfill(que) == 0) {
+			printf("%s: unable to fill any rx descriptors\n",
+			    DEVNAME(sc));
+		}
 	}
 
 	return (0);
@@ -2609,7 +2639,7 @@ em_setup_receive_structures(struct em_softc *sc)
 void
 em_initialize_receive_unit(struct em_softc *sc)
 {
-	struct em_queue *que = sc->queues; /* Use only first queue. */
+	struct em_queue *que;
 	u_int32_t	reg_rctl;
 	u_int32_t	reg_rxcsum;
 	u_int64_t	bus_addr;
@@ -2681,29 +2711,33 @@ em_initialize_receive_unit(struct em_softc *sc)
 	if (sc->hw.mac_type == em_82573)
 		E1000_WRITE_REG(&sc->hw, RDTR, 0x20);
 
-	/* Setup the Base and Length of the Rx Descriptor Ring */
-	bus_addr = que->rx.sc_rx_dma.dma_map->dm_segs[0].ds_addr;
-	E1000_WRITE_REG(&sc->hw, RDLEN(que->me),
-	    sc->sc_rx_slots * sizeof(*que->rx.sc_rx_desc_ring));
-	E1000_WRITE_REG(&sc->hw, RDBAH(que->me), (u_int32_t)(bus_addr >> 32));
-	E1000_WRITE_REG(&sc->hw, RDBAL(que->me), (u_int32_t)bus_addr);
+	FOREACH_QUEUE(sc, que) {
+		/* Setup the Base and Length of the Rx Descriptor Ring */
+		bus_addr = que->rx.sc_rx_dma.dma_map->dm_segs[0].ds_addr;
+		E1000_WRITE_REG(&sc->hw, RDLEN(que->me),
+		    sc->sc_rx_slots * sizeof(*que->rx.sc_rx_desc_ring));
+		E1000_WRITE_REG(&sc->hw, RDBAH(que->me), (u_int32_t)(bus_addr >> 32));
+		E1000_WRITE_REG(&sc->hw, RDBAL(que->me), (u_int32_t)bus_addr);
 
-	if (sc->hw.mac_type == em_82575 || sc->hw.mac_type == em_82580 ||
-	    sc->hw.mac_type == em_82576 ||
-	    sc->hw.mac_type == em_i210 || sc->hw.mac_type == em_i350) {
-		/* 82575/6 need to enable the RX queue */
-		uint32_t reg;
-		reg = E1000_READ_REG(&sc->hw, RXDCTL(que->me));
-		reg |= E1000_RXDCTL_QUEUE_ENABLE;
-		E1000_WRITE_REG(&sc->hw, RXDCTL(que->me), reg);
+		if (sc->hw.mac_type == em_82575 || sc->hw.mac_type == em_82580 ||
+		    sc->hw.mac_type == em_82576 ||
+		    sc->hw.mac_type == em_i210 || sc->hw.mac_type == em_i350) {
+			/* 82575/6 need to enable the RX queue */
+			uint32_t reg;
+			reg = E1000_READ_REG(&sc->hw, RXDCTL(que->me));
+			reg |= E1000_RXDCTL_QUEUE_ENABLE;
+			E1000_WRITE_REG(&sc->hw, RXDCTL(que->me), reg);
+		}
 	}
 
 	/* Enable Receives */
 	E1000_WRITE_REG(&sc->hw, RCTL, reg_rctl);
 
 	/* Setup the HW Rx Head and Tail Descriptor Pointers */
-	E1000_WRITE_REG(&sc->hw, RDH(que->me), 0);
-	E1000_WRITE_REG(&sc->hw, RDT(que->me), que->rx.sc_rx_desc_head);
+	FOREACH_QUEUE(sc, que) {
+		E1000_WRITE_REG(&sc->hw, RDH(que->me), 0);
+		E1000_WRITE_REG(&sc->hw, RDT(que->me), que->rx.sc_rx_desc_head);
+	}
 }
 
 /*********************************************************************
@@ -2714,41 +2748,45 @@ em_initialize_receive_unit(struct em_softc *sc)
 void
 em_free_receive_structures(struct em_softc *sc)
 {
-	struct em_queue *que = sc->queues; /* Use only first queue. */
+	struct em_queue *que;
 	struct em_packet *pkt;
 	int i;
 
 	INIT_DEBUGOUT("free_receive_structures: begin");
 
-	if_rxr_init(&que->rx.sc_rx_ring, 0, 0);
+	FOREACH_QUEUE(sc, que) {
+		if_rxr_init(&que->rx.sc_rx_ring, 0, 0);
 
-	bus_dmamap_sync(sc->sc_dmat, que->rx.sc_rx_dma.dma_map,
-	    0, que->rx.sc_rx_dma.dma_map->dm_mapsize,
-	    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
+		bus_dmamap_sync(sc->sc_dmat, que->rx.sc_rx_dma.dma_map,
+		    0, que->rx.sc_rx_dma.dma_map->dm_mapsize,
+		    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
 
-	if (que->rx.sc_rx_pkts_ring != NULL) {
-		for (i = 0; i < sc->sc_rx_slots; i++) {
-			pkt = &que->rx.sc_rx_pkts_ring[i];
-			if (pkt->pkt_m != NULL) {
-				bus_dmamap_sync(sc->sc_dmat, pkt->pkt_map,
-				    0, pkt->pkt_map->dm_mapsize,
-				    BUS_DMASYNC_POSTREAD);
-				bus_dmamap_unload(sc->sc_dmat, pkt->pkt_map);
-				m_freem(pkt->pkt_m);
-				pkt->pkt_m = NULL;
+		if (que->rx.sc_rx_pkts_ring != NULL) {
+			for (i = 0; i < sc->sc_rx_slots; i++) {
+				pkt = &que->rx.sc_rx_pkts_ring[i];
+				if (pkt->pkt_m != NULL) {
+					bus_dmamap_sync(sc->sc_dmat,
+					    pkt->pkt_map,
+					    0, pkt->pkt_map->dm_mapsize,
+					    BUS_DMASYNC_POSTREAD);
+					bus_dmamap_unload(sc->sc_dmat,
+					    pkt->pkt_map);
+					m_freem(pkt->pkt_m);
+					pkt->pkt_m = NULL;
+				}
+				bus_dmamap_destroy(sc->sc_dmat, pkt->pkt_map);
 			}
-			bus_dmamap_destroy(sc->sc_dmat, pkt->pkt_map);
+
+			free(que->rx.sc_rx_pkts_ring, M_DEVBUF,
+			    sc->sc_rx_slots * sizeof(*que->rx.sc_rx_pkts_ring));
+			que->rx.sc_rx_pkts_ring = NULL;
 		}
 
-		free(que->rx.sc_rx_pkts_ring, M_DEVBUF,
-		    sc->sc_rx_slots * sizeof(*que->rx.sc_rx_pkts_ring));
-		que->rx.sc_rx_pkts_ring = NULL;
-	}
-
-	if (que->rx.fmp != NULL) {
-		m_freem(que->rx.fmp);
-		que->rx.fmp = NULL;
-		que->rx.lmp = NULL;
+		if (que->rx.fmp != NULL) {
+			m_freem(que->rx.fmp);
+			que->rx.fmp = NULL;
+			que->rx.lmp = NULL;
+		}
 	}
 }
 
@@ -2795,7 +2833,7 @@ em_rxrefill(void *arg)
 
 	if (em_rxfill(que))
 		E1000_WRITE_REG(&sc->hw, RDT(que->me), que->rx.sc_rx_desc_head);
-	else if (if_rxr_inuse(&que->rx.sc_rx_ring) == 0)
+	else if (if_rxr_needrefill(&que->rx.sc_rx_ring))
 		timeout_add(&que->rx_refill, 1);
 }
 
@@ -3017,7 +3055,16 @@ em_enable_hw_vlans(struct em_softc *sc)
 void
 em_enable_intr(struct em_softc *sc)
 {
-	E1000_WRITE_REG(&sc->hw, IMS, (IMS_ENABLE_MASK));
+	uint32_t mask;
+
+	if (sc->msix) {
+		mask = sc->msix_queuesmask | sc->msix_linkmask;
+		E1000_WRITE_REG(&sc->hw, EIAC, mask);
+		E1000_WRITE_REG(&sc->hw, EIAM, mask);
+		E1000_WRITE_REG(&sc->hw, EIMS, mask);
+		E1000_WRITE_REG(&sc->hw, IMS, E1000_IMS_LSC);
+	} else
+		E1000_WRITE_REG(&sc->hw, IMS, (IMS_ENABLE_MASK));
 }
 
 void
@@ -3031,8 +3078,10 @@ em_disable_intr(struct em_softc *sc)
 	 * For this to work correctly the Sequence error interrupt had
 	 * to be enabled all the time.
 	 */
-
-	if (sc->hw.mac_type == em_82542_rev2_0)
+	if (sc->msix) {
+		E1000_WRITE_REG(&sc->hw, EIMC, ~0);
+		E1000_WRITE_REG(&sc->hw, EIAC, 0);
+	} else if (sc->hw.mac_type == em_82542_rev2_0)
 		E1000_WRITE_REG(&sc->hw, IMC, (0xffffffff & ~E1000_IMC_RXSEQ));
 	else
 		E1000_WRITE_REG(&sc->hw, IMC, 0xffffffff);
@@ -3303,6 +3352,38 @@ em_flush_desc_rings(struct em_softc *sc)
 		em_flush_rx_ring(que);
 }
 
+int
+em_allocate_legacy(struct em_softc *sc)
+{
+	pci_intr_handle_t	 ih;
+	const char		*intrstr = NULL;
+	struct pci_attach_args	*pa = &sc->osdep.em_pa;
+	pci_chipset_tag_t	 pc = pa->pa_pc;
+
+	if (pci_intr_map_msi(pa, &ih)) {
+		if (pci_intr_map(pa, &ih)) {
+			printf(": couldn't map interrupt\n");
+			return (ENXIO);
+		}
+		sc->legacy_irq = 1;
+	}
+
+	intrstr = pci_intr_string(pc, ih);
+	sc->sc_intrhand = pci_intr_establish(pc, ih, IPL_NET | IPL_MPSAFE,
+	    em_intr, sc, DEVNAME(sc));
+	if (sc->sc_intrhand == NULL) {
+		printf(": couldn't establish interrupt");
+		if (intrstr != NULL)
+			printf(" at %s", intrstr);
+		printf("\n");
+		return (ENXIO);
+	}
+	printf(": %s", intrstr);
+
+	return (0);
+}
+
+
 #ifndef SMALL_KERNEL
 /**********************************************************************
  *
@@ -3505,32 +3586,270 @@ em_print_hw_stats(struct em_softc *sc)
 	    (long long)sc->stats.rpthc);
 }
 #endif
+
+int
+em_allocate_msix(struct em_softc *sc)
+{
+	pci_intr_handle_t	 ih;
+	const char		*intrstr = NULL;
+	struct pci_attach_args	*pa = &sc->osdep.em_pa;
+	pci_chipset_tag_t	 pc = pa->pa_pc;
+	struct em_queue		*que = sc->queues; /* Use only first queue. */
+	int			 vec;
+
+	if (!em_enable_msix)
+		return (ENODEV);
+
+	switch (sc->hw.mac_type) {
+	case em_82576:
+	case em_82580:
+	case em_i350:
+	case em_i210:
+		break;
+	default:
+		return (ENODEV);
+	}
+
+	vec = 0;
+	if (pci_intr_map_msix(pa, vec, &ih))
+		return (ENODEV);
+	sc->msix = 1;
+
+	que->me = vec;
+	que->eims = 1 << vec;
+	snprintf(que->name, sizeof(que->name), "%s:%d", DEVNAME(sc), vec);
+
+	intrstr = pci_intr_string(pc, ih);
+	que->tag = pci_intr_establish(pc, ih, IPL_NET | IPL_MPSAFE,
+	    em_queue_intr_msix, que, que->name);
+	if (que->tag == NULL) {
+		printf(": couldn't establish interrupt");
+		if (intrstr != NULL)
+			printf(" at %s", intrstr);
+		printf("\n");
+		return (ENXIO);
+	}
+
+	/* Setup linkvector, use last queue vector + 1 */
+	vec++;
+	sc->msix_linkvec = vec;
+	if (pci_intr_map_msix(pa, sc->msix_linkvec, &ih)) {
+		printf(": couldn't map link vector\n");
+		return (ENXIO);
+	}
+
+	intrstr = pci_intr_string(pc, ih);
+	sc->sc_intrhand = pci_intr_establish(pc, ih, IPL_NET | IPL_MPSAFE,
+	    em_link_intr_msix, sc, DEVNAME(sc));
+	if (sc->sc_intrhand == NULL) {
+		printf(": couldn't establish interrupt");
+		if (intrstr != NULL)
+			printf(" at %s", intrstr);
+		printf("\n");
+		return (ENXIO);
+	}
+	printf(", %s, %d queue%s", intrstr, vec, (vec > 1) ? "s" : "");
+
+	return (0);
+}
+
+/*
+ * Interrupt for a specific queue, (not link interrupts). The EICR bit which
+ * maps to the EIMS bit expresses both RX and TX, therefore we can't
+ * distringuish if this is a RX completion of TX completion and must do both.
+ * The bits in EICR are autocleared and we _cannot_ read EICR.
+ */
+int
+em_queue_intr_msix(void *vque)
+{
+	struct em_queue *que = vque;
+	struct em_softc *sc = que->sc;
+	struct ifnet   *ifp = &sc->sc_ac.ac_if;
+
+	if (ifp->if_flags & IFF_RUNNING) {
+		em_txeof(que);
+		if (em_rxeof(que))
+			em_rxrefill(que);
+	}
+
+	em_enable_queue_intr_msix(que);
+
+	return (1);
+}
+
+int
+em_link_intr_msix(void *arg)
+{
+	struct em_softc *sc = arg;
+	uint32_t icr;
+
+	icr = E1000_READ_REG(&sc->hw, ICR);
+
+	/* Link status change */
+	if (icr & E1000_ICR_LSC) {
+		KERNEL_LOCK();
+		sc->hw.get_link_status = 1;
+		em_check_for_link(&sc->hw);
+		em_update_link_status(sc);
+		KERNEL_UNLOCK();
+	}
+
+	/* Re-arm unconditionally */
+	E1000_WRITE_REG(&sc->hw, IMS, E1000_ICR_LSC);
+	E1000_WRITE_REG(&sc->hw, EIMS, sc->msix_linkmask);
+
+	return (1);
+}
+
+/*
+ * Maps queues into msix interrupt vectors.
+ */
+int
+em_setup_queues_msix(struct em_softc *sc)
+{
+	uint32_t ivar, newitr, index;
+	struct em_queue *que;
+
+	KASSERT(sc->msix);
+
+	/* First turn on RSS capability */
+	if (sc->hw.mac_type != em_82575)
+		E1000_WRITE_REG(&sc->hw, GPIE,
+		    E1000_GPIE_MSIX_MODE | E1000_GPIE_EIAME |
+		    E1000_GPIE_PBA | E1000_GPIE_NSICR);
+
+	/* Turn on MSIX */
+	switch (sc->hw.mac_type) {
+	case em_82580:
+	case em_i350:
+	case em_i210:
+		/* RX entries */
+		/*
+		 * Note, this maps Queues into MSIX vectors, it works fine.
+		 * The funky calculation of offsets and checking if que->me is
+		 * odd is due to the weird register distribution, the datasheet
+		 * explains it well.
+		 */
+		FOREACH_QUEUE(sc, que) {
+			index = que->me >> 1;
+			ivar = E1000_READ_REG_ARRAY(&sc->hw, IVAR0, index);
+			if (que->me & 1) {
+				ivar &= 0xFF00FFFF;
+				ivar |= (que->me | E1000_IVAR_VALID) << 16;
+			} else {
+				ivar &= 0xFFFFFF00;
+				ivar |= que->me | E1000_IVAR_VALID;
+			}
+			E1000_WRITE_REG_ARRAY(&sc->hw, IVAR0, index, ivar);
+		}
+
+		/* TX entries */
+		FOREACH_QUEUE(sc, que) {
+			index = que->me >> 1;
+			ivar = E1000_READ_REG_ARRAY(&sc->hw, IVAR0, index);
+			if (que->me & 1) {
+				ivar &= 0x00FFFFFF;
+				ivar |= (que->me | E1000_IVAR_VALID) << 24;
+			} else {
+				ivar &= 0xFFFF00FF;
+				ivar |= (que->me | E1000_IVAR_VALID) << 8;
+			}
+			E1000_WRITE_REG_ARRAY(&sc->hw, IVAR0, index, ivar);
+			sc->msix_queuesmask |= que->eims;
+		}
+
+		/* And for the link interrupt */
+		ivar = (sc->msix_linkvec | E1000_IVAR_VALID) << 8;
+		sc->msix_linkmask = 1 << sc->msix_linkvec;
+		E1000_WRITE_REG(&sc->hw, IVAR_MISC, ivar);
+		break;
+	case em_82576:
+		/* RX entries */
+		FOREACH_QUEUE(sc, que) {
+			index = que->me & 0x7; /* Each IVAR has two entries */
+			ivar = E1000_READ_REG_ARRAY(&sc->hw, IVAR0, index);
+			if (que->me < 8) {
+				ivar &= 0xFFFFFF00;
+				ivar |= que->me | E1000_IVAR_VALID;
+			} else {
+				ivar &= 0xFF00FFFF;
+				ivar |= (que->me | E1000_IVAR_VALID) << 16;
+			}
+			E1000_WRITE_REG_ARRAY(&sc->hw, IVAR0, index, ivar);
+			sc->msix_queuesmask |= que->eims;
+		}
+		/* TX entries */
+		FOREACH_QUEUE(sc, que) {
+			index = que->me & 0x7; /* Each IVAR has two entries */
+			ivar = E1000_READ_REG_ARRAY(&sc->hw, IVAR0, index);
+			if (que->me < 8) {
+				ivar &= 0xFFFF00FF;
+				ivar |= (que->me | E1000_IVAR_VALID) << 8;
+			} else {
+				ivar &= 0x00FFFFFF;
+				ivar |= (que->me | E1000_IVAR_VALID) << 24;
+			}
+			E1000_WRITE_REG_ARRAY(&sc->hw, IVAR0, index, ivar);
+			sc->msix_queuesmask |= que->eims;
+		}
+
+		/* And for the link interrupt */
+		ivar = (sc->msix_linkvec | E1000_IVAR_VALID) << 8;
+		sc->msix_linkmask = 1 << sc->msix_linkvec;
+		E1000_WRITE_REG(&sc->hw, IVAR_MISC, ivar);
+		break;
+	default:
+		panic("unsupported mac");
+		break;
+	}
+
+	/* Set the starting interrupt rate */
+	newitr = (4000000 / MAX_INTS_PER_SEC) & 0x7FFC;
+
+	if (sc->hw.mac_type == em_82575)
+		newitr |= newitr << 16;
+	else
+		newitr |= E1000_EITR_CNT_IGNR;
+
+	FOREACH_QUEUE(sc, que)
+		E1000_WRITE_REG(&sc->hw, EITR(que->me), newitr);
+
+	return (0);
+}
+
+void
+em_enable_queue_intr_msix(struct em_queue *que)
+{
+	E1000_WRITE_REG(&que->sc->hw, EIMS, que->eims);
+}
 #endif /* !SMALL_KERNEL */
 
 int
 em_allocate_desc_rings(struct em_softc *sc)
 {
-	struct em_queue *que = sc->queues; /* Use only first queue. */
+	struct em_queue *que;
 
-	/* Allocate Transmit Descriptor ring */
-	if (em_dma_malloc(sc, sc->sc_tx_slots * sizeof(struct em_tx_desc),
-	    &que->tx.sc_tx_dma) != 0) {
-		printf("%s: Unable to allocate tx_desc memory\n", 
-		       DEVNAME(sc));
-		return (ENOMEM);
-	}
-	que->tx.sc_tx_desc_ring =
-	    (struct em_tx_desc *)que->tx.sc_tx_dma.dma_vaddr;
+	FOREACH_QUEUE(sc, que) {
+		/* Allocate Transmit Descriptor ring */
+		if (em_dma_malloc(sc, sc->sc_tx_slots * sizeof(struct em_tx_desc),
+		    &que->tx.sc_tx_dma) != 0) {
+			printf("%s: Unable to allocate tx_desc memory\n",
+			    DEVNAME(sc));
+			return (ENOMEM);
+		}
+		que->tx.sc_tx_desc_ring =
+		    (struct em_tx_desc *)que->tx.sc_tx_dma.dma_vaddr;
 
-	/* Allocate Receive Descriptor ring */
-	if (em_dma_malloc(sc, sc->sc_rx_slots * sizeof(struct em_rx_desc),
-	    &que->rx.sc_rx_dma) != 0) {
-		printf("%s: Unable to allocate rx_desc memory\n",
-		       DEVNAME(sc));
-		return (ENOMEM);
+		/* Allocate Receive Descriptor ring */
+		if (em_dma_malloc(sc, sc->sc_rx_slots * sizeof(struct em_rx_desc),
+		    &que->rx.sc_rx_dma) != 0) {
+			printf("%s: Unable to allocate rx_desc memory\n",
+			    DEVNAME(sc));
+			return (ENOMEM);
+		}
+		que->rx.sc_rx_desc_ring =
+		    (struct em_rx_desc *)que->rx.sc_rx_dma.dma_vaddr;
 	}
-	que->rx.sc_rx_desc_ring =
-	    (struct em_rx_desc *)que->rx.sc_rx_dma.dma_vaddr;
 
 	return (0);
 }

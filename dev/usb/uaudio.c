@@ -1,4 +1,4 @@
-/*	$OpenBSD: uaudio.c,v 1.151 2020/03/23 17:10:02 bluhm Exp $	*/
+/*	$OpenBSD: uaudio.c,v 1.159 2020/05/04 19:19:26 ratchov Exp $	*/
 /*
  * Copyright (c) 2018 Alexandre Ratchov <alex@caoua.org>
  *
@@ -171,6 +171,12 @@
 #define UAUDIO_SPF_DIV			327680
 
 /*
+ * names of DAC and ADC unit names
+ */
+#define UAUDIO_NAME_PLAY	"dac"
+#define UAUDIO_NAME_REC		"record"
+
+/*
  * read/write pointers for secure sequencial access of binary data,
  * ex. usb descriptors, tables and alike. Bytes are read using the
  * read pointer up to the write pointer.
@@ -214,6 +220,9 @@ struct uaudio_softc {
 		unsigned int nch;
 		int type, id;
 
+		/* terminal or clock type */
+		unsigned int term;
+
 		/* clock source, if a terminal or selector */
 		struct uaudio_unit *clock;
 
@@ -221,10 +230,9 @@ struct uaudio_softc {
 		struct uaudio_ranges rates;
 
 		/* mixer(4) bits */
-#define UAUDIO_CLASS_REC	0
-#define UAUDIO_CLASS_OUT	1
-#define UAUDIO_CLASS_IN		2
-#define UAUDIO_CLASS_COUNT	3
+#define UAUDIO_CLASS_OUT	0
+#define UAUDIO_CLASS_IN		1
+#define UAUDIO_CLASS_COUNT	2
 		int mixer_class;
 		struct uaudio_mixent {
 			struct uaudio_mixent *next;
@@ -243,6 +251,11 @@ struct uaudio_softc {
 	 * Current clock, UAC v2.0 only
 	 */
 	struct uaudio_unit *clock;
+
+	/*
+	 * Number of input and output terminals
+	 */
+	unsigned int nin, nout;
 
 	/*
 	 * When unique names are needed, they are generated using a
@@ -602,7 +615,7 @@ uaudio_unit_byid(struct uaudio_softc *sc, unsigned int id)
  * Return a terminal name for the given terminal type.
  */
 char *
-uaudio_tname(unsigned int type, int isout)
+uaudio_tname(struct uaudio_softc *sc, unsigned int type, int isout)
 {
 	unsigned int hi, lo;
 	char *name;
@@ -610,11 +623,21 @@ uaudio_tname(unsigned int type, int isout)
 	hi = type >> 8;
 	lo = type & 0xff;
 
+	/* usb data stream */
+	if (hi == 1)
+		return isout ? UAUDIO_NAME_REC : UAUDIO_NAME_PLAY;
+
+	/* if theres only one input (output) use "input" ("output") */
+	if (isout) {
+		if (sc->nout == 1)
+			return "output";
+	} else {
+		if (sc->nin == 1)
+			return "input";
+	}
+
+	/* determine name from USB terminal type */
 	switch (hi) {
-	case 1:
-		/* usb data stream */
-		name = isout ? "record" : "play";
-		break;
 	case 2:
 		/* embedded inputs */
 		name = isout ? "mic-out" : "mic";
@@ -1252,7 +1275,7 @@ uaudio_process_unit(struct uaudio_softc *sc,
 {
 	struct uaudio_blob p;
 	struct uaudio_unit *u, *s;
-	unsigned int i, j, term, size, attr, ctl, type, subtype, assoc, clk;
+	unsigned int i, j, size, ctl, type, subtype, assoc, clk;
 #ifdef UAUDIO_DEBUG
 	unsigned int bit;
 #endif
@@ -1269,6 +1292,7 @@ uaudio_process_unit(struct uaudio_softc *sc,
 		u = malloc(sizeof(struct uaudio_unit), M_DEVBUF, M_WAITOK);
 		u->id = id;
 		u->type = subtype;
+		u->term = 0;
 		u->src_list = NULL;
 		u->dst_list = NULL;
 		u->clock = NULL;
@@ -1302,10 +1326,12 @@ uaudio_process_unit(struct uaudio_softc *sc,
 
 	switch (u->type) {
 	case UAUDIO_AC_INPUT:
-		if (!uaudio_getnum(&p, 2, &term))
+		if (!uaudio_getnum(&p, 2, &u->term))
 			return 0;
 		if (!uaudio_getnum(&p, 1, &assoc))
 			return 0;
+		if (u->term >> 8 != 1)
+			sc->nin++;
 		switch (sc->version) {
 		case UAUDIO_V1:
 			break;
@@ -1319,13 +1345,12 @@ uaudio_process_unit(struct uaudio_softc *sc,
 		}
 		if (!uaudio_getnum(&p, 1, &u->nch))
 			return 0;
-		uaudio_mkname(sc, uaudio_tname(term, 0), u->name);
 		DPRINTF("%02u: "
 		    "in, nch = %d, term = 0x%x, assoc = %d\n",
-		    u->id, u->nch, term, assoc);
+		    u->id, u->nch, u->term, assoc);
 		break;
 	case UAUDIO_AC_OUTPUT:
-		if (!uaudio_getnum(&p, 2, &term))
+		if (!uaudio_getnum(&p, 2, &u->term))
 			return 0;
 		if (!uaudio_getnum(&p, 1, &assoc))
 			return 0;
@@ -1333,6 +1358,8 @@ uaudio_process_unit(struct uaudio_softc *sc,
 			return 0;
 		if (!uaudio_process_unit(sc, u, id, units, &s))
 			return 0;
+		if (u->term >> 8 != 1)
+			sc->nout++;
 		switch (sc->version) {
 		case UAUDIO_V1:
 			break;
@@ -1347,10 +1374,9 @@ uaudio_process_unit(struct uaudio_softc *sc,
 		u->src_list = s;
 		s->src_next = NULL;
 		u->nch = s->nch;
-		uaudio_mkname(sc, uaudio_tname(term, 1), u->name);
 		DPRINTF("%02u: "
 		    "out, id = %d, nch = %d, term = 0x%x, assoc = %d\n",
-		    u->id, id, u->nch, term, assoc);
+		    u->id, id, u->nch, u->term, assoc);
 		break;
 	case UAUDIO_AC_MIXER:
 		if (!uaudio_process_srcs(sc, u, units, &p))
@@ -1474,13 +1500,12 @@ uaudio_process_unit(struct uaudio_softc *sc,
 		}
 		break;
 	case UAUDIO_AC_CLKSRC:
-		if (!uaudio_getnum(&p, 1, &attr))
+		if (!uaudio_getnum(&p, 1, &u->term))
 			return 0;
 		if (!uaudio_getnum(&p, 1, &ctl))
 			return 0;
 		DPRINTF("%02u: clock source, attr = 0x%x, ctl = 0x%x\n",
-		    u->id, attr, ctl);
-		uaudio_mkname(sc, uaudio_clkname(attr), u->name);
+		    u->id, u->term, ctl);
 		break;
 	case UAUDIO_AC_CLKSEL:
 		DPRINTF("%02u: clock sel\n", u->id);
@@ -1491,7 +1516,6 @@ uaudio_process_unit(struct uaudio_softc *sc,
 			    DEVNAME(sc), u->id);
 			return 0;
 		}
-		uaudio_mkname(sc, "clksel", u->name);
 		break;
 	case UAUDIO_AC_CLKMULT:
 		DPRINTF("%02u: clock mult\n", u->id);
@@ -1895,6 +1919,25 @@ uaudio_mixer_nchan(struct uaudio_mixent *m, struct uaudio_mixent **rnext)
 }
 
 /*
+ * Skip redundant mixer entries that we don't want to expose to userland.
+ * For instance if there is a mute-all-channels control and per-channel
+ * mute controls, we don't want both (we expose the per-channel mute)
+ */
+void
+uaudio_mixer_skip(struct uaudio_mixent **pm)
+{
+	struct uaudio_mixent *m = *pm;
+
+	if (m != NULL &&
+	    m->chan == -1 &&
+	    m->next != NULL &&
+	    strcmp(m->fname, m->next->fname) == 0)
+		m = m->next;
+
+	*pm = m;
+}
+
+/*
  * Return pointer to the unit and mixer entry which have the given
  * index exposed by the mixer(4) API.
  */
@@ -1911,6 +1954,7 @@ uaudio_mixer_byindex(struct uaudio_softc *sc, int index,
 	for (u = sc->unit_list; u != NULL; u = u->unit_next) {
 		m = u->mixent_list;
 		while (1) {
+			uaudio_mixer_skip(&m);
 			if (m == NULL)
 				break;
 			if (index == i) {
@@ -2083,10 +2127,22 @@ uaudio_process_ac(struct uaudio_softc *sc, struct uaudio_blob *p, int ifnum)
 	}
 
 	/*
-	 * set effect and processor unit names
+	 * set terminal, effect, and processor unit names
 	 */
 	for (u = sc->unit_list; u != NULL; u = u->unit_next) {
 		switch (u->type) {
+		case UAUDIO_AC_INPUT:
+			uaudio_mkname(sc, uaudio_tname(sc, u->term, 0), u->name);
+			break;
+		case UAUDIO_AC_OUTPUT:
+			uaudio_mkname(sc, uaudio_tname(sc, u->term, 1), u->name);
+			break;
+		case UAUDIO_AC_CLKSRC:
+			uaudio_mkname(sc, uaudio_clkname(u->term), u->name);
+			break;
+		case UAUDIO_AC_CLKSEL:
+			uaudio_mkname(sc, "clksel", u->name);
+			break;
 		case UAUDIO_AC_EFFECT:
 			uaudio_mkname(sc, "fx", u->name);
 			break;
@@ -2125,11 +2181,11 @@ uaudio_process_ac(struct uaudio_softc *sc, struct uaudio_blob *p, int ifnum)
 	for (u = sc->unit_list; u != NULL; u = u->unit_next) {
 		if (u->type != UAUDIO_AC_FEATURE)
 			continue;
-		if (uaudio_setname_dsts(sc, u, "record")) {
-			u->mixer_class = UAUDIO_CLASS_REC;
+		if (uaudio_setname_dsts(sc, u, UAUDIO_NAME_REC)) {
+			u->mixer_class = UAUDIO_CLASS_IN;
 			continue;
 		}
-		if (uaudio_setname_srcs(sc, u, "play")) {
+		if (uaudio_setname_srcs(sc, u, UAUDIO_NAME_PLAY)) {
 			u->mixer_class = UAUDIO_CLASS_OUT;
 			continue;
 		}
@@ -3663,8 +3719,14 @@ uaudio_print(struct uaudio_softc *sc)
 	int nctl = 0;
 
 	for (u = sc->unit_list; u != NULL; u = u->unit_next) {
-		for (m = u->mixent_list; m != NULL; m = m->next)
+		m = u->mixent_list;
+		while (1) {
+			uaudio_mixer_skip(&m);
+			if (m == NULL)
+				break;
+			m = m->next;
 			nctl++;
+		}
 	}
 
 	for (p = sc->params_list; p != NULL; p = p->next) {
@@ -4259,11 +4321,6 @@ uaudio_query_devinfo(void *arg, struct mixer_devinfo *devinfo)
 	devinfo->next = -1;
 	devinfo->prev = -1;
 	switch (devinfo->index) {
-	case UAUDIO_CLASS_REC:
-		strlcpy(devinfo->label.name, AudioCrecord, MAX_AUDIO_DEV_LEN);
-		devinfo->type = AUDIO_MIXER_CLASS;
-		devinfo->mixer_class = -1;
-		return 0;
 	case UAUDIO_CLASS_IN:
 		strlcpy(devinfo->label.name, AudioCinputs, MAX_AUDIO_DEV_LEN);
 		devinfo->type = AUDIO_MIXER_CLASS;
@@ -4289,8 +4346,13 @@ uaudio_query_devinfo(void *arg, struct mixer_devinfo *devinfo)
 		 */
 		strlcpy(devinfo->label.name, u->name, MAX_AUDIO_DEV_LEN);
 	} else {
-		snprintf(devinfo->label.name,
-		    MAX_AUDIO_DEV_LEN, "%s_%s", u->name, m->fname);
+		if (m->chan == -1) {
+			snprintf(devinfo->label.name, MAX_AUDIO_DEV_LEN,
+			    "%s_%s", u->name, m->fname);
+		} else {
+			snprintf(devinfo->label.name, MAX_AUDIO_DEV_LEN,
+			    "%s_%s%u", u->name, m->fname, m->chan);
+		}
 	}
 
 	devinfo->mixer_class = u->mixer_class;

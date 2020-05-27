@@ -1,4 +1,4 @@
-/*	$OpenBSD: uipc_socket.c,v 1.242 2020/03/11 22:21:28 sashan Exp $	*/
+/*	$OpenBSD: uipc_socket.c,v 1.244 2020/04/12 16:15:18 anton Exp $	*/
 /*	$NetBSD: uipc_socket.c,v 1.21 1996/02/04 02:17:52 christos Exp $	*/
 
 /*
@@ -1259,7 +1259,15 @@ sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
 	sbunlock(sosp, &sosp->so_snd);
 	sbunlock(so, &so->so_rcv);
  frele:
+	/*
+	 * FRELE() must not be called with the socket lock held. It is safe to
+	 * release the lock here as long as no other operation happen on the
+	 * socket when sosplice() returns. The dance could be avoided by
+	 * grabbing the socket lock inside this function.
+	 */
+	sounlock(so, SL_LOCKED);
 	FRELE(fp, curproc);
+	solock(so);
 	return (error);
 }
 
@@ -2022,7 +2030,7 @@ soo_kqfilter(struct file *fp, struct knote *kn)
 		return (EINVAL);
 	}
 
-	SLIST_INSERT_HEAD(&sb->sb_sel.si_note, kn, kn_selnext);
+	klist_insert(&sb->sb_sel.si_note, kn);
 	sb->sb_flagsintr |= SB_KNOTE;
 
 	return (0);
@@ -2035,8 +2043,8 @@ filt_sordetach(struct knote *kn)
 
 	KERNEL_ASSERT_LOCKED();
 
-	SLIST_REMOVE(&so->so_rcv.sb_sel.si_note, kn, knote, kn_selnext);
-	if (SLIST_EMPTY(&so->so_rcv.sb_sel.si_note))
+	klist_remove(&so->so_rcv.sb_sel.si_note, kn);
+	if (klist_empty(&so->so_rcv.sb_sel.si_note))
 		so->so_rcv.sb_flagsintr &= ~SB_KNOTE;
 }
 
@@ -2078,8 +2086,8 @@ filt_sowdetach(struct knote *kn)
 
 	KERNEL_ASSERT_LOCKED();
 
-	SLIST_REMOVE(&so->so_snd.sb_sel.si_note, kn, knote, kn_selnext);
-	if (SLIST_EMPTY(&so->so_snd.sb_sel.si_note))
+	klist_remove(&so->so_snd.sb_sel.si_note, kn);
+	if (klist_empty(&so->so_snd.sb_sel.si_note))
 		so->so_snd.sb_flagsintr &= ~SB_KNOTE;
 }
 

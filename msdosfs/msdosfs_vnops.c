@@ -1,4 +1,4 @@
-/*	$OpenBSD: msdosfs_vnops.c,v 1.130 2020/02/27 09:10:31 mpi Exp $	*/
+/*	$OpenBSD: msdosfs_vnops.c,v 1.132 2020/04/07 13:27:52 visa Exp $	*/
 /*	$NetBSD: msdosfs_vnops.c,v 1.63 1997/10/17 11:24:19 ws Exp $	*/
 
 /*-
@@ -211,14 +211,11 @@ msdosfs_access(void *v)
 	struct msdosfsmount *pmp = dep->de_pmp;
 	mode_t dosmode;
 
-	dosmode = (S_IRUSR|S_IRGRP|S_IROTH);
+	dosmode = (S_IRUSR | S_IRGRP | S_IROTH);
 	if ((dep->de_Attributes & ATTR_READONLY) == 0)
-		dosmode |= (S_IWUSR|S_IWGRP|S_IWOTH);
-	if (dep->de_Attributes & ATTR_DIRECTORY) {
-		dosmode |= (dosmode & S_IRUSR) ? S_IXUSR : 0;
-		dosmode |= (dosmode & S_IRGRP) ? S_IXGRP : 0;
-		dosmode |= (dosmode & S_IROTH) ? S_IXOTH : 0;
-	}
+		dosmode |= (S_IWUSR | S_IWGRP | S_IWOTH);
+	if (dep->de_Attributes & ATTR_DIRECTORY)
+		dosmode |= (S_IXUSR | S_IXGRP | S_IXOTH);
 	dosmode &= pmp->pm_mask;
 
 	return (vaccess(ap->a_vp->v_type, dosmode, pmp->pm_uid, pmp->pm_gid,
@@ -1983,7 +1980,7 @@ msdosfs_kqfilter(void *v)
 
 	kn->kn_hook = (caddr_t)vp;
 
-	SLIST_INSERT_HEAD(&vp->v_selectinfo.si_note, kn, kn_selnext);
+	klist_insert(&vp->v_selectinfo.si_note, kn);
 
 	return (0);
 }
@@ -1993,7 +1990,7 @@ filt_msdosfsdetach(struct knote *kn)
 {
 	struct vnode *vp = (struct vnode *)kn->kn_hook;
 
-	SLIST_REMOVE(&vp->v_selectinfo.si_note, kn, knote, kn_selnext);
+	klist_remove(&vp->v_selectinfo.si_note, kn);
 }
 
 int

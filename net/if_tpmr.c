@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_tpmr.c,v 1.8 2019/11/10 10:03:28 dlg Exp $ */
+/*	$OpenBSD: if_tpmr.c,v 1.10 2020/04/12 06:56:37 dlg Exp $ */
 
 /*
  * Copyright (c) 2019 The University of Queensland
@@ -201,12 +201,14 @@ tpmr_clone_destroy(struct ifnet *ifp)
 
 	if_detach(ifp);
 
+	NET_LOCK();
 	for (i = 0; i < nitems(sc->sc_ports); i++) {
 		struct tpmr_port *p = SMR_PTR_GET_LOCKED(&sc->sc_ports[i]);
 		if (p == NULL)
 			continue;
 		tpmr_p_dtor(sc, p, "destroy");
 	}
+	NET_UNLOCK();
 
 	free(sc, M_DEVBUF, sizeof(*sc));
 
@@ -721,7 +723,7 @@ tpmr_p_dtor(struct tpmr_softc *sc, struct tpmr_port *p, const char *op)
 	SMR_PTR_SET_LOCKED(&sc->sc_ports[p->p_slot], NULL);
 
 	if (ifpromisc(ifp0, 0) != 0) {
-		log(LOG_WARNING, "%s %s: unable to disable promisc",
+		log(LOG_WARNING, "%s %s: unable to disable promisc\n",
 		    ifp->if_xname, ifp0->if_xname);
 	}
 

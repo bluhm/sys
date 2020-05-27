@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_synch.c,v 1.166 2020/03/20 17:13:51 cheloha Exp $	*/
+/*	$OpenBSD: kern_synch.c,v 1.170 2020/04/06 07:52:12 claudio Exp $	*/
 /*	$NetBSD: kern_synch.c,v 1.37 1996/04/22 01:38:37 christos Exp $	*/
 
 /*
@@ -197,22 +197,6 @@ tsleep_nsec(const volatile void *ident, int priority, const char *wmesg,
 	return tsleep(ident, priority, wmesg, (int)to_ticks);
 }
 
-int
-sleep_finish_all(struct sleep_state *sls, int do_sleep)
-{
-	int error, error1;
-
-	sleep_finish(sls, do_sleep);
-	error1 = sleep_finish_timeout(sls);
-	error = sleep_finish_signal(sls);
-
-	/* Signal errors are higher priority than timeouts. */
-	if (error == 0 && error1 != 0)
-		error = error1;
-
-	return error;
-}
-
 /*
  * Same as tsleep, but if we have a mutex provided, then once we've
  * entered the sleep queue we drop the mutex. After sleeping we re-lock.
@@ -376,6 +360,7 @@ sleep_setup(struct sleep_state *sls, const volatile void *ident, int prio,
 	sls->sls_do_sleep = 1;
 	sls->sls_locked = 0;
 	sls->sls_sig = 0;
+	sls->sls_unwind = 0;
 	sls->sls_timeout = 0;
 
 	/*
@@ -397,6 +382,22 @@ sleep_setup(struct sleep_state *sls, const volatile void *ident, int prio,
 	p->p_slptime = 0;
 	p->p_slppri = prio & PRIMASK;
 	TAILQ_INSERT_TAIL(&slpque[LOOKUP(ident)], p, p_runq);
+}
+
+int
+sleep_finish_all(struct sleep_state *sls, int do_sleep)
+{
+	int error, error1;
+
+	sleep_finish(sls, do_sleep);
+	error1 = sleep_finish_timeout(sls);
+	error = sleep_finish_signal(sls);
+
+	/* Signal errors are higher priority than timeouts. */
+	if (error == 0 && error1 != 0)
+		error = error1;
+
+	return error;
 }
 
 void
@@ -471,16 +472,20 @@ sleep_setup_signal(struct sleep_state *sls)
 	KERNEL_ASSERT_LOCKED();
 
 	/*
-	 * We put ourselves on the sleep queue and start our timeout
-	 * before calling CURSIG, as we could stop there, and a wakeup
-	 * or a SIGCONT (or both) could occur while we were stopped.
-	 * A SIGCONT would cause us to be marked as SSLEEP
-	 * without resuming us, thus we must be ready for sleep
-	 * when CURSIG is called.  If the wakeup happens while we're
-	 * stopped, p->p_wchan will be 0 upon return from CURSIG.
+	 * We put ourselves on the sleep queue and start our timeout before
+	 * calling single_thread_check or CURSIG, as we could stop there, and
+	 * a wakeup or a SIGCONT (or both) could occur while we were stopped.
+	 * A SIGCONT would cause us to be marked as SSLEEP without resuming us,
+	 * thus we must be ready for sleep when CURSIG is called.  If the
+	 * wakeup happens while we're stopped, p->p_wchan will be 0 upon
+	 * return from single_thread_check or CURSIG.  In that case we should
+	 * not go to sleep.  If single_thread_check returns an error we need
+	 * to unwind immediately.  That's achieved by saving the return value
+	 * in sls->sl_unwind and checking it later in sleep_finish_signal.
 	 */
 	atomic_setbits_int(&p->p_flag, P_SINTR);
-	if (p->p_p->ps_single != NULL || (sls->sls_sig = CURSIG(p)) != 0) {
+	if ((sls->sls_unwind = single_thread_check(p, 1)) != 0 ||
+	    (sls->sls_sig = CURSIG(p)) != 0) {
 		unsleep(p);
 		p->p_stat = SONPROC;
 		sls->sls_do_sleep = 0;
@@ -499,9 +504,11 @@ sleep_finish_signal(struct sleep_state *sls)
 	if (sls->sls_catch != 0) {
 		KERNEL_ASSERT_LOCKED();
 
-		error = single_thread_check(p, 1);
-		if (error == 0 &&
-		    (sls->sls_sig != 0 || (sls->sls_sig = CURSIG(p)) != 0)) {
+		if (sls->sls_unwind != 0 ||
+		    (sls->sls_unwind = single_thread_check(p, 1)) != 0)
+			error = sls->sls_unwind;
+		else if (sls->sls_sig != 0 ||
+		    (sls->sls_sig = CURSIG(p)) != 0) {
 			if (p->p_p->ps_sigacts->ps_sigintr &
 			    sigmask(sls->sls_sig))
 				error = EINTR;

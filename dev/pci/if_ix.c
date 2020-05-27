@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ix.c,v 1.161 2020/03/02 01:59:01 jmatthew Exp $	*/
+/*	$OpenBSD: if_ix.c,v 1.165 2020/04/24 08:50:23 mpi Exp $	*/
 
 /******************************************************************************
 
@@ -114,6 +114,8 @@ int	ixgbe_media_change(struct ifnet *);
 void	ixgbe_identify_hardware(struct ix_softc *);
 int	ixgbe_allocate_pci_resources(struct ix_softc *);
 int	ixgbe_allocate_legacy(struct ix_softc *);
+int	ixgbe_allocate_msix(struct ix_softc *);
+int	ixgbe_setup_msix(struct ix_softc *);
 int	ixgbe_allocate_queues(struct ix_softc *);
 void	ixgbe_free_pci_resources(struct ix_softc *);
 void	ixgbe_local_timer(void *);
@@ -140,6 +142,7 @@ void	ixgbe_initialize_rss_mapping(struct ix_softc *);
 int	ixgbe_rxfill(struct rx_ring *);
 void	ixgbe_rxrefill(void *);
 
+int	ixgbe_intr(struct ix_softc *sc);
 void	ixgbe_enable_intr(struct ix_softc *);
 void	ixgbe_disable_intr(struct ix_softc *);
 void	ixgbe_update_stats_counters(struct ix_softc *);
@@ -149,6 +152,7 @@ void	ixgbe_rx_checksum(uint32_t, struct mbuf *, uint32_t);
 void	ixgbe_iff(struct ix_softc *);
 #ifdef IX_DEBUG
 void	ixgbe_print_hw_stats(struct ix_softc *);
+void	ixgbe_map_queue_statistics(struct ix_softc *);
 #endif
 void	ixgbe_update_link_status(struct ix_softc *);
 int	ixgbe_get_buf(struct rx_ring *, int);
@@ -172,10 +176,15 @@ void	ixgbe_handle_msf(struct ix_softc *);
 void	ixgbe_handle_phy(struct ix_softc *);
 
 /* Legacy (single vector interrupt handler */
-int	ixgbe_intr(void *);
+int	ixgbe_legacy_intr(void *);
 void	ixgbe_enable_queue(struct ix_softc *, uint32_t);
+void	ixgbe_enable_queues(struct ix_softc *);
 void	ixgbe_disable_queue(struct ix_softc *, uint32_t);
 void	ixgbe_rearm_queue(struct ix_softc *, uint32_t);
+
+/* MSI-X (multiple vectors interrupt handlers)  */
+int	ixgbe_link_intr(void *);
+int	ixgbe_queue_intr(void *);
 
 /*********************************************************************
  *  OpenBSD Device Interface Entry Points
@@ -190,6 +199,7 @@ struct cfattach ix_ca = {
 };
 
 int ixgbe_smart_speed = ixgbe_smart_speed_on;
+int ixgbe_enable_msix = 0;
 
 /*********************************************************************
  *  Device identification routine
@@ -292,7 +302,10 @@ ixgbe_attach(struct device *parent, struct device *self, void *aux)
 	bcopy(sc->hw.mac.addr, sc->arpcom.ac_enaddr,
 	    IXGBE_ETH_LENGTH_OF_ADDRESS);
 
-	error = ixgbe_allocate_legacy(sc);
+	if (sc->msix > 1)
+		error = ixgbe_allocate_msix(sc);
+	else
+		error = ixgbe_allocate_legacy(sc);
 	if (error)
 		goto err_late;
 
@@ -524,6 +537,7 @@ ixgbe_ioctl(struct ifnet * ifp, u_long command, caddr_t data)
 			ixgbe_disable_intr(sc);
 			ixgbe_iff(sc);
 			ixgbe_enable_intr(sc);
+			ixgbe_enable_queues(sc);
 		}
 		error = 0;
 	}
@@ -819,6 +833,12 @@ ixgbe_init(void *arg)
 		itr |= IXGBE_EITR_LLI_MOD | IXGBE_EITR_CNT_WDIS;
 	IXGBE_WRITE_REG(&sc->hw, IXGBE_EITR(0), itr);
 
+	if (sc->msix > 1) {
+		/* Set moderation on the Link interrupt */
+		IXGBE_WRITE_REG(&sc->hw, IXGBE_EITR(sc->linkvec),
+		    IXGBE_LINK_ITR);
+	}
+
 	/* Enable power to the phy */
 	if (sc->hw.phy.ops.set_phy_power)
 		sc->hw.phy.ops.set_phy_power(&sc->hw, TRUE);
@@ -834,6 +854,7 @@ ixgbe_init(void *arg)
 
 	/* And now turn on interrupts */
 	ixgbe_enable_intr(sc);
+	ixgbe_enable_queues(sc);
 
 	/* Now inform the stack we're ready */
 	ifp->if_flags |= IFF_RUNNING;
@@ -964,6 +985,16 @@ ixgbe_enable_queue(struct ix_softc *sc, uint32_t vector)
 }
 
 void
+ixgbe_enable_queues(struct ix_softc *sc)
+{
+	struct ix_queue *que;
+	int i;
+
+	for (i = 0, que = sc->queues; i < sc->num_queues; i++, que++)
+		ixgbe_enable_queue(sc, que->msix);
+}
+
+void
 ixgbe_disable_queue(struct ix_softc *sc, uint32_t vector)
 {
 	uint64_t queue = 1ULL << vector;
@@ -982,6 +1013,41 @@ ixgbe_disable_queue(struct ix_softc *sc, uint32_t vector)
 	}
 }
 
+/*
+ * MSIX Interrupt Handlers
+ */
+int
+ixgbe_link_intr(void *vsc)
+{
+	struct ix_softc	*sc = (struct ix_softc *)vsc;
+
+	return ixgbe_intr(sc);
+}
+
+int
+ixgbe_queue_intr(void *vque)
+{
+	struct ix_queue *que = vque;
+	struct ix_softc	*sc = que->sc;
+	struct ifnet	*ifp = &sc->arpcom.ac_if;
+	struct tx_ring	*txr = sc->tx_rings;
+
+	if (ISSET(ifp->if_flags, IFF_RUNNING)) {
+		ixgbe_rxeof(que);
+		ixgbe_txeof(txr);
+		if (ixgbe_rxfill(que->rxr)) {
+			/* Advance the Rx Queue "Tail Pointer" */
+			IXGBE_WRITE_REG(&sc->hw, IXGBE_RDT(que->rxr->me),
+			    que->rxr->last_desc_filled);
+		} else
+			timeout_add(&sc->rx_refill, 1);
+	}
+
+	ixgbe_enable_queue(sc, que->msix);
+
+	return (1);
+}
+
 /*********************************************************************
  *
  *  Legacy Interrupt Service routine
@@ -989,35 +1055,47 @@ ixgbe_disable_queue(struct ix_softc *sc, uint32_t vector)
  **********************************************************************/
 
 int
-ixgbe_intr(void *arg)
+ixgbe_legacy_intr(void *arg)
 {
 	struct ix_softc	*sc = (struct ix_softc *)arg;
-	struct ix_queue *que = sc->queues;
 	struct ifnet	*ifp = &sc->arpcom.ac_if;
 	struct tx_ring	*txr = sc->tx_rings;
-	struct ixgbe_hw	*hw = &sc->hw;
-	uint32_t	 reg_eicr, mod_mask, msf_mask;
-	int		 i, refill = 0;
+	int rv;
 
-	reg_eicr = IXGBE_READ_REG(&sc->hw, IXGBE_EICR);
-	if (reg_eicr == 0) {
-		ixgbe_enable_intr(sc);
+	rv = ixgbe_intr(sc);
+	if (rv == 0) {
+		ixgbe_enable_queues(sc);
 		return (0);
 	}
 
 	if (ISSET(ifp->if_flags, IFF_RUNNING)) {
+		struct ix_queue *que = sc->queues;
+
 		ixgbe_rxeof(que);
 		ixgbe_txeof(txr);
-		refill = 1;
-	}
-
-	if (refill) {
 		if (ixgbe_rxfill(que->rxr)) {
 			/* Advance the Rx Queue "Tail Pointer" */
 			IXGBE_WRITE_REG(&sc->hw, IXGBE_RDT(que->rxr->me),
 			    que->rxr->last_desc_filled);
 		} else
 			timeout_add(&sc->rx_refill, 1);
+	}
+
+	ixgbe_enable_queues(sc);
+	return (rv);
+}
+
+int
+ixgbe_intr(struct ix_softc *sc)
+{
+	struct ifnet	*ifp = &sc->arpcom.ac_if;
+	struct ixgbe_hw	*hw = &sc->hw;
+	uint32_t	 reg_eicr, mod_mask, msf_mask;
+
+	reg_eicr = IXGBE_READ_REG(&sc->hw, IXGBE_EICR);
+	if (reg_eicr == 0) {
+		ixgbe_enable_intr(sc);
+		return (0);
 	}
 
 	/* Link status change */
@@ -1089,9 +1167,6 @@ ixgbe_intr(void *arg)
 		ixgbe_handle_phy(sc);
 		KERNEL_UNLOCK();
 	}
-
-	for (i = 0; i < sc->num_queues; i++, que++)
-		ixgbe_enable_queue(sc, que->msix);
 
 	return (1);
 }
@@ -1626,7 +1701,7 @@ ixgbe_allocate_legacy(struct ix_softc *sc)
 
 	intrstr = pci_intr_string(pc, ih);
 	sc->tag = pci_intr_establish(pc, ih, IPL_NET | IPL_MPSAFE,
-	    ixgbe_intr, sc, sc->dev.dv_xname);
+	    ixgbe_legacy_intr, sc, sc->dev.dv_xname);
 	if (sc->tag == NULL) {
 		printf(": couldn't establish interrupt");
 		if (intrstr != NULL)
@@ -1640,6 +1715,92 @@ ixgbe_allocate_legacy(struct ix_softc *sc)
 	sc->que_mask = IXGBE_EIMS_ENABLE_MASK;
 
 	return (0);
+}
+
+/*********************************************************************
+ *
+ *  Setup the MSI-X Interrupt handlers
+ *
+ **********************************************************************/
+int
+ixgbe_allocate_msix(struct ix_softc *sc)
+{
+	struct ixgbe_osdep	*os = &sc->osdep;
+	struct pci_attach_args	*pa  = &os->os_pa;
+	int			 vec, error = 0;
+	struct ix_queue		*que = sc->queues;
+	const char		*intrstr = NULL;
+	pci_chipset_tag_t	pc = pa->pa_pc;
+	pci_intr_handle_t	ih;
+
+	vec = 0;
+	if (pci_intr_map_msix(pa, vec, &ih)) {
+		printf(": couldn't map interrupt\n");
+		return (ENXIO);
+	}
+
+	que->msix = vec;
+	snprintf(que->name, sizeof(que->name), "%s:%d", sc->dev.dv_xname, vec);
+
+	intrstr = pci_intr_string(pc, ih);
+	que->tag = pci_intr_establish(pc, ih, IPL_NET | IPL_MPSAFE,
+	    ixgbe_queue_intr, que, que->name);
+	if (que->tag == NULL) {
+		printf(": couldn't establish interrupt");
+		if (intrstr != NULL)
+			printf(" at %s", intrstr);
+		printf("\n");
+		return (ENXIO);
+	}
+
+	/* Now the link status/control last MSI-X vector */
+	vec++;
+	if (pci_intr_map_msix(pa, vec, &ih)) {
+		printf(": couldn't map link vector\n");
+		error = ENXIO;
+		goto fail;
+	}
+
+	intrstr = pci_intr_string(pc, ih);
+	sc->tag = pci_intr_establish(pc, ih, IPL_NET | IPL_MPSAFE,
+	    ixgbe_link_intr, sc, sc->dev.dv_xname);
+	if (sc->tag == NULL) {
+		printf(": couldn't establish interrupt");
+		if (intrstr != NULL)
+			printf(" at %s", intrstr);
+		printf("\n");
+		error = ENXIO;
+		goto fail;
+	}
+
+	sc->linkvec = vec;
+	printf(", %s, %d queue%s", intrstr, vec, (vec > 1) ? "s" : "");
+
+	return (0);
+fail:
+	pci_intr_disestablish(pc, que->tag);
+	que->tag = NULL;
+	return (error);
+}
+
+int
+ixgbe_setup_msix(struct ix_softc *sc)
+{
+	struct ixgbe_osdep	*os = &sc->osdep;
+	struct pci_attach_args	*pa = &os->os_pa;
+	pci_intr_handle_t	 dummy;
+
+	if (!ixgbe_enable_msix)
+		return (0);
+
+	/*
+	 * Try a dummy map, maybe this bus doesn't like MSI, this function
+	 * has no side effects.
+	 */
+	if (pci_intr_map_msix(pa, 0, &dummy))
+		return (0);
+
+	return (2); /* queue vector + link vector */
 }
 
 int
@@ -1666,10 +1827,8 @@ ixgbe_allocate_pci_resources(struct ix_softc *sc)
 	sc->num_queues = 1;
 	sc->hw.back = os;
 
-#ifdef notyet
 	/* Now setup MSI or MSI/X, return us the number of supported vectors. */
 	sc->msix = ixgbe_setup_msix(sc);
-#endif
 
 	return (0);
 }
@@ -2740,6 +2899,11 @@ ixgbe_initialize_receive_units(struct ix_softc *sc)
 		rxcsum |= IXGBE_RXCSUM_PCSD;
 	}
 
+#ifdef IX_DEBUG
+	/* Map QPRC/QPRDC/QPTC on a per queue basis */
+	ixgbe_map_queue_statistics(sc);
+#endif
+
 	/* This is useful for calculating UDP/IP fragment checksums */
 	if (!(rxcsum & IXGBE_RXCSUM_PCSD))
 		rxcsum |= IXGBE_RXCSUM_IPPCSE;
@@ -3085,9 +3249,7 @@ void
 ixgbe_enable_intr(struct ix_softc *sc)
 {
 	struct ixgbe_hw *hw = &sc->hw;
-	struct ix_queue *que = sc->queues;
 	uint32_t	mask, fwsm;
-	int i;
 
 	mask = (IXGBE_EIMS_ENABLE_MASK & ~IXGBE_EIMS_RTX_QUEUE);
 	/* Enable Fan Failure detection */
@@ -3134,14 +3296,6 @@ ixgbe_enable_intr(struct ix_softc *sc)
 		mask &= ~IXGBE_EIMS_LSC;
 		IXGBE_WRITE_REG(hw, IXGBE_EIAC, mask);
 	}
-
-	/*
-	 * Now enable all queues, this is done separately to
-	 * allow for handling the extended (beyond 32) MSIX
-	 * vectors that can be used by 82599
-	 */
-	for (i = 0; i < sc->num_queues; i++, que++)
-		ixgbe_enable_queue(sc, que->msix);
 
 	IXGBE_WRITE_FLUSH(hw);
 }
@@ -3258,15 +3412,11 @@ ixgbe_set_ivar(struct ix_softc *sc, uint8_t entry, uint8_t vector, int8_t type)
 void
 ixgbe_configure_ivars(struct ix_softc *sc)
 {
-#if notyet
 	struct ix_queue *que = sc->queues;
 	uint32_t newitr;
 	int i;
 
-	if (ixgbe_max_interrupt_rate > 0)
-		newitr = (4000000 / ixgbe_max_interrupt_rate) & 0x0FF8;
-	else
-		newitr = 0;
+	newitr = (4000000 / IXGBE_INTS_PER_SEC) & 0x0FF8;
 
 	for (i = 0; i < sc->num_queues; i++, que++) {
 		/* First the RX queue entry */
@@ -3280,7 +3430,6 @@ ixgbe_configure_ivars(struct ix_softc *sc)
 
 	/* For the Link interrupt */
 	ixgbe_set_ivar(sc, 1, sc->linkvec, -1);
-#endif
 }
 
 /*
@@ -3362,14 +3511,16 @@ ixgbe_update_stats_counters(struct ix_softc *sc)
 {
 	struct ifnet	*ifp = &sc->arpcom.ac_if;
 	struct ixgbe_hw	*hw = &sc->hw;
-	uint64_t	total_missed_rx = 0;
+	uint64_t	crcerrs, rlec, total_missed_rx = 0;
 #ifdef IX_DEBUG
 	uint32_t	missed_rx = 0, bprc, lxon, lxoff, total;
 	int		i;
 #endif
 
-	sc->stats.crcerrs += IXGBE_READ_REG(hw, IXGBE_CRCERRS);
-	sc->stats.rlec += IXGBE_READ_REG(hw, IXGBE_RLEC);
+	crcerrs = IXGBE_READ_REG(hw, IXGBE_CRCERRS);
+	sc->stats.crcerrs += crcerrs;
+	rlec = IXGBE_READ_REG(hw, IXGBE_RLEC);
+	sc->stats.rlec += rlec;
 
 #ifdef IX_DEBUG
 	for (i = 0; i < 8; i++) {
@@ -3449,12 +3600,21 @@ ixgbe_update_stats_counters(struct ix_softc *sc)
 	sc->stats.ptc1023 += IXGBE_READ_REG(hw, IXGBE_PTC1023);
 	sc->stats.ptc1522 += IXGBE_READ_REG(hw, IXGBE_PTC1522);
 	sc->stats.bptc += IXGBE_READ_REG(hw, IXGBE_BPTC);
+	for (i = 0; i < 16; i++) {
+		uint32_t dropped;
+
+		dropped = IXGBE_READ_REG(hw, IXGBE_QPRDC(i));
+		sc->stats.qprdc[i] += dropped;
+		missed_rx += dropped;
+		sc->stats.qprc[i] += IXGBE_READ_REG(hw, IXGBE_QPRC(i));
+		sc->stats.qptc[i] += IXGBE_READ_REG(hw, IXGBE_QPTC(i));
+	}
 #endif
 
 	/* Fill out the OS statistics structure */
 	ifp->if_collisions = 0;
 	ifp->if_oerrors = sc->watchdog_events;
-	ifp->if_ierrors = total_missed_rx + sc->stats.crcerrs + sc->stats.rlec;
+	ifp->if_ierrors = total_missed_rx + crcerrs + rlec;
 }
 
 #ifdef IX_DEBUG
@@ -3469,6 +3629,7 @@ void
 ixgbe_print_hw_stats(struct ix_softc * sc)
 {
 	struct ifnet   *ifp = &sc->arpcom.ac_if;
+	int i;
 
 	printf("%s: missed pkts %llu, rx len errs %llu, crc errs %llu, "
 	    "dropped pkts %lu, watchdog timeouts %ld, "
@@ -3489,5 +3650,40 @@ ixgbe_print_hw_stats(struct ix_softc * sc)
 	    (long long)sc->stats.gprc,
 	    (long long)sc->stats.gptc,
 	    sc->tso_tx);
+
+	printf("%s: per queue statistics\n", ifp->if_xname);
+	for (i = 0; i < sc->num_queues; i++) {
+		printf("\tqueue %d: rx pkts %llu, rx drops %llu, "
+		    "tx pkts %llu\n",
+		    i, sc->stats.qprc[i], sc->stats.qprdc[i],
+		    sc->stats.qptc[i]);
+	}
+}
+
+void
+ixgbe_map_queue_statistics(struct ix_softc *sc)
+{
+	int i;
+	uint32_t r;
+
+	for (i = 0; i < 32; i++) {
+		/*
+		 * Queues 0-15 are mapped 1:1
+		 * Queue 0 -> Counter 0
+		 * Queue 1 -> Counter 1
+		 * Queue 2 -> Counter 2....
+		 * Queues 16-127 are mapped to Counter 0
+		 */
+		if (i < 4) {
+			r = (i * 4 + 0);
+			r |= (i * 4 + 1) << 8;
+			r |= (i * 4 + 2) << 16;
+			r |= (i * 4 + 3) << 24;
+		} else
+			r = 0;
+
+		IXGBE_WRITE_REG(&sc->hw, IXGBE_RQSMR(i), r);
+		IXGBE_WRITE_REG(&sc->hw, IXGBE_TQSM(i), r);
+	}
 }
 #endif

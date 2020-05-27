@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_pppx.c,v 1.76 2020/02/20 16:56:52 visa Exp $ */
+/*	$OpenBSD: if_pppx.c,v 1.84 2020/04/18 04:03:56 yasuoka Exp $ */
 
 /*
  * Copyright (c) 2010 Claudio Jeker <claudio@openbsd.org>
@@ -175,6 +175,12 @@ int		pppx_add_session(struct pppx_dev *,
 		    struct pipex_session_req *);
 int		pppx_del_session(struct pppx_dev *,
 		    struct pipex_session_close_req *);
+int		pppx_config_session(struct pppx_dev *,
+		    struct pipex_session_config_req *);
+int		pppx_get_stat(struct pppx_dev *,
+		    struct pipex_session_stat_req *);
+int		pppx_get_closed(struct pppx_dev *,
+		    struct pipex_session_list_req *);
 int		pppx_set_session_descr(struct pppx_dev *,
 		    struct pipex_session_descr_req *);
 
@@ -338,7 +344,7 @@ pppxwrite(dev_t dev, struct uio *uio, int ioflag)
 	if (m == NULL)
 		return (ENOBUFS);
 	mlen = MHLEN;
-	if (uio->uio_resid >= MINCLSIZE) {
+	if (uio->uio_resid > MHLEN) {
 		MCLGET(m, M_DONTWAIT);
 		if (!(m->m_flags & M_EXT)) {
 			m_free(m);
@@ -451,16 +457,18 @@ pppxioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 		break;
 
 	case PIPEXCSESSION:
-		error = pipex_config_session(
+		error = pppx_config_session(pxd,
 		    (struct pipex_session_config_req *)addr);
 		break;
 
 	case PIPEXGSTAT:
-		error = pipex_get_stat((struct pipex_session_stat_req *)addr);
+		error = pppx_get_stat(pxd,
+		    (struct pipex_session_stat_req *)addr);
 		break;
 
 	case PIPEXGCLOSED:
-		error = pipex_get_closed((struct pipex_session_list_req *)addr);
+		error = pppx_get_closed(pxd,
+		    (struct pipex_session_list_req *)addr);
 		break;
 
 	case PIPEXSIFDESCR:
@@ -529,7 +537,7 @@ pppxkqfilter(dev_t dev, struct knote *kn)
 	kn->kn_hook = (caddr_t)pxd;
 
 	mtx_enter(mtx);
-	SLIST_INSERT_HEAD(klist, kn, kn_selnext);
+	klist_insert(klist, kn);
 	mtx_leave(mtx);
 
 	return (0);
@@ -542,7 +550,7 @@ filt_pppx_rdetach(struct knote *kn)
 	struct klist *klist = &pxd->pxd_rsel.si_note;
 
 	mtx_enter(&pxd->pxd_rsel_mtx);
-	SLIST_REMOVE(klist, kn, knote, kn_selnext);
+	klist_remove(klist, kn);
 	mtx_leave(&pxd->pxd_rsel_mtx);
 }
 
@@ -563,7 +571,7 @@ filt_pppx_wdetach(struct knote *kn)
 	struct klist *klist = &pxd->pxd_wsel.si_note;
 
 	mtx_enter(&pxd->pxd_wsel_mtx);
-	SLIST_REMOVE(klist, kn, knote, kn_selnext);
+	klist_remove(klist, kn);
 	mtx_leave(&pxd->pxd_wsel_mtx);
 }
 
@@ -635,20 +643,20 @@ pppx_if_next_unit(void)
 struct pppx_if *
 pppx_if_find(struct pppx_dev *pxd, int session_id, int protocol)
 {
-	struct pppx_if *s, *p;
-	s = malloc(sizeof(*s), M_DEVBUF, M_WAITOK | M_ZERO);
+	struct pppx_if_key key;
+	struct pppx_if *pxi;
 
-	s->pxi_key.pxik_session_id = session_id;
-	s->pxi_key.pxik_protocol = protocol;
+	memset(&key, 0, sizeof(key));
+	key.pxik_session_id = session_id;
+	key.pxik_protocol = protocol;
 
 	rw_enter_read(&pppx_ifs_lk);
-	p = RBT_FIND(pppx_ifs, &pppx_ifs, s);
-	if (p && p->pxi_ready == 0)
-		p = NULL;
+	pxi = RBT_FIND(pppx_ifs, &pppx_ifs, (struct pppx_if *)&key);
+	if (pxi && pxi->pxi_ready == 0)
+		pxi = NULL;
 	rw_exit_read(&pppx_ifs_lk);
 
-	free(s, M_DEVBUF, sizeof(*s));
-	return (p);
+	return pxi;
 }
 
 int
@@ -665,6 +673,14 @@ pppx_add_session(struct pppx_dev *pxd, struct pipex_session_req *req)
 	struct ifnet *over_ifp = NULL;
 #endif
 
+	/*
+	 * XXX: As long as `session' is allocated as part of a `pxi'
+	 *	it isn't possible to free it separately.  So disallow
+	 *	the timeout feature until this is fixed.
+	 */
+	if (req->pr_timeout_sec != 0)
+		return (EINVAL);
+
 	switch (req->pr_protocol) {
 #ifdef PIPEX_PPPOE
 	case PIPEX_PROTO_PPPOE:
@@ -675,12 +691,9 @@ pppx_add_session(struct pppx_dev *pxd, struct pipex_session_req *req)
 			return (EINVAL);
 		break;
 #endif
-#ifdef PIPEX_PPTP
+#if defined(PIPEX_PPTP) || defined(PIPEX_L2TP)
 	case PIPEX_PROTO_PPTP:
-#endif
-#ifdef PIPEX_L2TP
 	case PIPEX_PROTO_L2TP:
-#endif
 		switch (req->pr_peer_address.ss_family) {
 		case AF_INET:
 			if (req->pr_peer_address.ss_len != sizeof(struct sockaddr_in))
@@ -701,13 +714,17 @@ pppx_add_session(struct pppx_dev *pxd, struct pipex_session_req *req)
 		    req->pr_local_address.ss_len)
 			return (EINVAL);
 		break;
+#endif /* defined(PIPEX_PPTP) || defined(PIPEX_L2TP) */
 	default:
 		return (EPROTONOSUPPORT);
 	}
 
+	session = pipex_lookup_by_session_id(req->pr_protocol,
+	    req->pr_session_id);
+	if (session)
+		return (EEXIST);
+
 	pxi = pool_get(pppx_if_pl, PR_WAITOK | PR_ZERO);
-	if (pxi == NULL)
-		return (ENOMEM);
 
 	session = &pxi->pxi_session;
 	ifp = &pxi->pxi_if;
@@ -854,6 +871,7 @@ pppx_add_session(struct pppx_dev *pxd, struct pipex_session_req *req)
 	chain = PIPEX_ID_HASHTABLE(session->session_id);
 	LIST_INSERT_HEAD(chain, session, id_chain);
 	LIST_INSERT_HEAD(&pipex_session_list, session, session_list);
+#if defined(PIPEX_PPTP) || defined(PIPEX_L2TP)
 	switch (req->pr_protocol) {
 	case PIPEX_PROTO_PPTP:
 	case PIPEX_PROTO_L2TP:
@@ -862,6 +880,7 @@ pppx_add_session(struct pppx_dev *pxd, struct pipex_session_req *req)
 		LIST_INSERT_HEAD(chain, session, peer_addr_chain);
 		break;
 	}
+#endif
 
 	/* if first session is added, start timer */
 	if (LIST_NEXT(session, session_list) == NULL)
@@ -940,6 +959,40 @@ pppx_del_session(struct pppx_dev *pxd, struct pipex_session_close_req *req)
 }
 
 int
+pppx_config_session(struct pppx_dev *pxd,
+    struct pipex_session_config_req *req)
+{
+	struct pppx_if *pxi;
+
+	pxi = pppx_if_find(pxd, req->pcr_session_id, req->pcr_protocol);
+	if (pxi == NULL)
+		return (EINVAL);
+
+	return pipex_config_session(req, &pxi->pxi_ifcontext);
+}
+
+int
+pppx_get_stat(struct pppx_dev *pxd, struct pipex_session_stat_req *req)
+{
+	struct pppx_if *pxi;
+
+	pxi = pppx_if_find(pxd, req->psr_session_id, req->psr_protocol);
+	if (pxi == NULL)
+		return (EINVAL);
+
+	return pipex_get_stat(req, &pxi->pxi_ifcontext);
+}
+
+int
+pppx_get_closed(struct pppx_dev *pxd, struct pipex_session_list_req *req)
+{
+	/* XXX: Only opened sessions exist for pppx(4) */
+	memset(req, 0, sizeof(*req));
+
+	return 0;
+}
+
+int
 pppx_set_session_descr(struct pppx_dev *pxd,
     struct pipex_session_descr_req *req)
 {
@@ -967,13 +1020,14 @@ pppx_if_destroy(struct pppx_dev *pxd, struct pppx_if *pxi)
 
 	LIST_REMOVE(session, id_chain);
 	LIST_REMOVE(session, session_list);
+#if defined(PIPEX_PPTP) || defined(PIPEX_L2TP)
 	switch (session->protocol) {
 	case PIPEX_PROTO_PPTP:
 	case PIPEX_PROTO_L2TP:
-		LIST_REMOVE((struct pipex_session *)session,
-		    peer_addr_chain);
+		LIST_REMOVE(session, peer_addr_chain);
 		break;
 	}
+#endif
 
 	/* if final session is destroyed, stop timer */
 	if (LIST_EMPTY(&pipex_session_list))
@@ -1314,7 +1368,7 @@ pppacwrite(dev_t dev, struct uio *uio, int ioflag)
 	if (m == NULL)
 		return (ENOMEM);
 
-	if (uio->uio_resid > MINCLSIZE) {
+	if (uio->uio_resid > MHLEN) {
 		m_clget(m, M_WAITOK, uio->uio_resid);
 		if (!ISSET(m->m_flags, M_EXT)) {
 			m_free(m);
@@ -1442,7 +1496,7 @@ pppackqfilter(dev_t dev, struct knote *kn)
 	kn->kn_hook = sc;
 
 	mtx_enter(mtx);
-	SLIST_INSERT_HEAD(klist, kn, kn_selnext);
+	klist_insert(klist, kn);
 	mtx_leave(mtx);
 
 	return (0);
@@ -1455,7 +1509,7 @@ filt_pppac_rdetach(struct knote *kn)
 	struct klist *klist = &sc->sc_rsel.si_note;
 
 	mtx_enter(&sc->sc_rsel_mtx);
-	SLIST_REMOVE(klist, kn, knote, kn_selnext);
+	klist_remove(klist, kn);
 	mtx_leave(&sc->sc_rsel_mtx);
 }
 
@@ -1476,7 +1530,7 @@ filt_pppac_wdetach(struct knote *kn)
 	struct klist *klist = &sc->sc_wsel.si_note;
 
 	mtx_enter(&sc->sc_wsel_mtx);
-	SLIST_REMOVE(klist, kn, knote, kn_selnext);
+	klist_remove(klist, kn);
 	mtx_leave(&sc->sc_wsel_mtx);
 }
 

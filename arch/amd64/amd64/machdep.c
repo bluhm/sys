@@ -1,4 +1,4 @@
-/*	$OpenBSD: machdep.c,v 1.261 2020/01/24 05:27:31 kettenis Exp $	*/
+/*	$OpenBSD: machdep.c,v 1.264 2020/05/16 14:44:44 kettenis Exp $	*/
 /*	$NetBSD: machdep.c,v 1.3 2003/05/07 22:58:18 fvdl Exp $	*/
 
 /*-
@@ -277,6 +277,7 @@ cpu_startup(void)
 
 	printf("%s", version);
 	startclocks();
+	rtcinit();
 
 	printf("real mem = %lu (%luMB)\n", ptoa((psize_t)physmem),
 	    ptoa((psize_t)physmem)/1024/1024);

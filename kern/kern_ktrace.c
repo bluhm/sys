@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_ktrace.c,v 1.101 2020/03/21 08:58:50 mpi Exp $	*/
+/*	$OpenBSD: kern_ktrace.c,v 1.103 2020/04/03 03:20:12 visa Exp $	*/
 /*	$NetBSD: kern_ktrace.c,v 1.23 1996/02/09 18:59:36 christos Exp $	*/
 
 /*
@@ -54,7 +54,7 @@
 
 void	ktrinitheaderraw(struct ktr_header *, uint, pid_t, pid_t);
 void	ktrinitheader(struct ktr_header *, struct proc *, int);
-void	ktrstart(struct proc *, struct vnode *, struct ucred *);
+int	ktrstart(struct proc *, struct vnode *, struct ucred *);
 int	ktrops(struct proc *, struct process *, int, int, struct vnode *,
 	    struct ucred *);
 int	ktrsetchildren(struct proc *, struct process *, int, int,
@@ -83,6 +83,7 @@ ktrcleartrace(struct process *pr)
 		pr->ps_tracevp = NULL;
 		pr->ps_tracecred = NULL;
 
+		vp->v_writecount--;
 		vrele(vp);
 		crfree(cred);
 	}
@@ -109,6 +110,7 @@ ktrsettrace(struct process *pr, int facs, struct vnode *newvp,
 
 	vref(newvp);
 	crhold(newcred);
+	newvp->v_writecount++;
 
 	oldvp = pr->ps_tracevp;
 	oldcred = pr->ps_tracecred;
@@ -117,6 +119,7 @@ ktrsettrace(struct process *pr, int facs, struct vnode *newvp,
 	pr->ps_tracecred = newcred;
 
 	if (oldvp != NULL) {
+		oldvp->v_writecount--;
 		vrele(oldvp);
 		crfree(oldcred);
 	}
@@ -141,13 +144,13 @@ ktrinitheader(struct ktr_header *kth, struct proc *p, int type)
 	memcpy(kth->ktr_comm, pr->ps_comm, MAXCOMLEN);
 }
 
-void
+int
 ktrstart(struct proc *p, struct vnode *vp, struct ucred *cred)
 {
 	struct ktr_header kth;
 
 	ktrinitheaderraw(&kth, htobe32(KTR_START), -1, -1);
-	ktrwriteraw(p, vp, cred, &kth, NULL);
+	return (ktrwriteraw(p, vp, cred, &kth, NULL));
 }
 
 void
@@ -449,7 +452,9 @@ doktrace(struct vnode *vp, int ops, int facs, pid_t pid, struct proc *p)
 	if (ops == KTROP_SET) {
 		if (suser(p) == 0)
 			facs |= KTRFAC_ROOT;
-		ktrstart(p, vp, cred);
+		error = ktrstart(p, vp, cred);
+		if (error != 0)
+			goto done;
 	}
 	/*
 	 * do it

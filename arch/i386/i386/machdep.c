@@ -1,4 +1,4 @@
-/*	$OpenBSD: machdep.c,v 1.631 2019/06/14 18:13:55 kettenis Exp $	*/
+/*	$OpenBSD: machdep.c,v 1.633 2020/05/16 14:44:44 kettenis Exp $	*/
 /*	$NetBSD: machdep.c,v 1.214 1996/11/10 03:16:17 thorpej Exp $	*/
 
 /*-
@@ -378,6 +378,7 @@ cpu_startup(void)
 
 	printf("%s", version);
 	startclocks();
+	rtcinit();
 
 	printf("real mem  = %llu (%lluMB)\n",
 	    (unsigned long long)ptoa((psize_t)physmem),
@@ -4036,4 +4037,3 @@ intr_barrier(void *ih)
 {
 	sched_barrier(NULL);
 }
-

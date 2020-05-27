@@ -1,4 +1,4 @@
-/*	$OpenBSD: ieee80211_mira.c,v 1.23 2020/03/05 11:52:18 stsp Exp $	*/
+/*	$OpenBSD: ieee80211_mira.c,v 1.30 2020/05/01 14:04:17 stsp Exp $	*/
 
 /*
  * Copyright (c) 2016 Stefan Sperling <stsp@openbsd.org>
@@ -73,7 +73,7 @@ int	ieee80211_mira_inter_mode_ra_finished(
 	    struct ieee80211_mira_node *, struct ieee80211_node *);
 int	ieee80211_mira_best_rate(struct ieee80211_mira_node *,
 	    struct ieee80211_node *);
-void	ieee80211_mira_update_probe_interval(struct ieee80211_mira_node *,
+void	ieee80211_mira_update_probe_interval(
 	    struct ieee80211_mira_goodput_stats *);
 void	ieee80211_mira_schedule_probe_timers(struct ieee80211_mira_node *,
 	    struct ieee80211_node *);
@@ -400,6 +400,9 @@ ieee80211_mira_update_stats(struct ieee80211_mira_node *mn,
 	uint64_t rate = ieee80211_mira_get_txrate(ni->ni_txmcs, sgi);
 	struct ieee80211_mira_goodput_stats *g = &mn->g[ni->ni_txmcs];
 
+	if (mn->frames == 0)
+		return; /* avoid divide-by-zero in sfer calculation below */
+
 	g->nprobes += mn->agglen;
 	g->nprobe_bytes += mn->ampdu_size;
 
@@ -454,6 +457,15 @@ ieee80211_mira_update_stats(struct ieee80211_mira_node *mn,
 	 * is tuned towards our fixed-point number format.
 	 */
 
+	g->average_agg = MIRA_FP_MUL(MIRA_FP_1 - alpha, g->average_agg);
+	g->average_agg += MIRA_FP_MUL(alpha, agglen);
+
+	toverhead = ieee80211_mira_toverhead(mn, ic, ni);
+	toverhead = MIRA_FP_MUL(toverhead, rate);
+	g->measured = MIRA_FP_DIV(MIRA_FP_1 - sfer, MIRA_FP_1 +
+	    MIRA_FP_DIV(toverhead, MIRA_FP_MUL(ampdu_size, g->average_agg)));
+	g->measured = MIRA_FP_MUL(g->measured, rate);
+
 	g->average = MIRA_FP_MUL(MIRA_FP_1 - alpha, g->average);
 	g->average += MIRA_FP_MUL(alpha, g->measured);
 
@@ -463,15 +475,6 @@ ieee80211_mira_update_stats(struct ieee80211_mira_node *mn,
 	else
 		delta = g->measured - g->average;
 	g->stddeviation += MIRA_FP_MUL(beta, delta);
-
-	g->average_agg = MIRA_FP_MUL(MIRA_FP_1 - alpha, g->average_agg);
-	g->average_agg += MIRA_FP_MUL(alpha, agglen);
-
-	toverhead = ieee80211_mira_toverhead(mn, ic, ni);
-	toverhead = MIRA_FP_MUL(toverhead, rate);
-	g->measured = MIRA_FP_DIV(MIRA_FP_1 - sfer, MIRA_FP_1 +
-	    MIRA_FP_DIV(toverhead, MIRA_FP_MUL(ampdu_size, g->average_agg)));
-	g->measured = MIRA_FP_MUL(g->measured, rate);
 }
 
 void
@@ -670,6 +673,9 @@ ieee80211_mira_probe_next_rateset(struct ieee80211_mira_node *mn,
 			break;
 		}
 	}
+	/* If all rates are lower the maximum rate is the closest match. */
+	if (i == rsnext->nrates)
+		ni->ni_txmcs = rsnext->max_mcs;
 
 	/* Add rates from the next rateset as candidates. */
 	mn->candidate_rates |= (1 << ni->ni_txmcs);
@@ -735,6 +741,19 @@ ieee80211_mira_probe_valid(struct ieee80211_mira_node *mn,
 void
 ieee80211_mira_probe_done(struct ieee80211_mira_node *mn)
 {
+	int mcs;
+
+	/* Reset probe interval of the best rate. */
+	mn->g[mn->best_mcs].probe_interval = IEEE80211_MIRA_PROBE_TIMEOUT_MIN;
+	mn->g[mn->best_mcs].nprobes = 0;
+	mn->g[mn->best_mcs].nprobe_bytes = 0;
+
+	/* Update probing interval of other probed rates. */
+	for (mcs = 0; mcs < IEEE80211_HT_RATESET_NUM_MCS; mcs++) {
+		if (mcs != mn->best_mcs && (mn->probed_rates & (1 << mcs)))
+			ieee80211_mira_update_probe_interval(&mn->g[mcs]);
+	}
+
 	ieee80211_mira_cancel_timeouts(mn);
 	ieee80211_mira_reset_driver_stats(mn);
 	ieee80211_mira_reset_collision_stats(mn);
@@ -871,8 +890,7 @@ ieee80211_mira_best_rate(struct ieee80211_mira_node *mn,
 
 /* See section 5.1.1 (at "Adaptive probing interval") in MiRA paper. */
 void
-ieee80211_mira_update_probe_interval(struct ieee80211_mira_node *mn,
-    struct ieee80211_mira_goodput_stats *g)
+ieee80211_mira_update_probe_interval(struct ieee80211_mira_goodput_stats *g)
 {
 	uint64_t lt;
 	int intval;
@@ -971,17 +989,6 @@ void
 ieee80211_mira_probe_next_rate(struct ieee80211_mira_node *mn,
     struct ieee80211_node *ni)
 {
-	struct ieee80211_mira_goodput_stats *gprev, *g;
-	int prev_mcs;
-
-	prev_mcs = ieee80211_mira_prev_mcs(mn, ni);
-	gprev = &mn->g[prev_mcs];
-	g = &mn->g[ni->ni_txmcs];
-	/* If the previous rate was worse, increase its probing interval. */
-	if (prev_mcs != ni->ni_txmcs &&
-	    gprev->measured + IEEE80211_MIRA_RATE_THRESHOLD < g->measured)
-		ieee80211_mira_update_probe_interval(mn, gprev);
-
 	/* Select the next rate to probe. */
 	mn->probed_rates |= (1 << ni->ni_txmcs);
 	ni->ni_txmcs = ieee80211_mira_next_mcs(mn, ni);
@@ -1140,9 +1147,8 @@ ieee80211_mira_choose(struct ieee80211_mira_node *mn, struct ieee80211com *ic,
 {
 	struct ieee80211_mira_goodput_stats *g = &mn->g[ni->ni_txmcs];
 	int s;
-#ifdef MIRA_AGGRESSIVE_DOWNWARDS_PROBING
 	int sgi = (ni->ni_flags & IEEE80211_NODE_HT_SGI20) ? 1 : 0;
-#endif
+	const struct ieee80211_ht_rateset *rs;
 
 	s = splnet();
 
@@ -1164,17 +1170,8 @@ ieee80211_mira_choose(struct ieee80211_mira_node *mn, struct ieee80211com *ic,
 			}
 			DPRINTFN(4, ("probing MCS %d\n", ni->ni_txmcs));
 		} else if (ieee80211_mira_inter_mode_ra_finished(mn, ni)) {
-			int best = ieee80211_mira_best_rate(mn, ni);
-			if (mn->best_mcs != best) {
-				mn->best_mcs = best;
-				ni->ni_txmcs = best;
-				/* Reset probe interval for new best rate. */
-				mn->g[best].probe_interval =
-				    IEEE80211_MIRA_PROBE_TIMEOUT_MIN;
-				mn->g[best].nprobes = 0;
-				mn->g[best].nprobe_bytes = 0;
-			} else
-				ni->ni_txmcs = mn->best_mcs;
+			mn->best_mcs = ieee80211_mira_best_rate(mn, ni);
+			ni->ni_txmcs = mn->best_mcs;
 			ieee80211_mira_probe_done(mn);
 		}
 
@@ -1193,7 +1190,9 @@ ieee80211_mira_choose(struct ieee80211_mira_node *mn, struct ieee80211com *ic,
 	}
 
 	/* Check if event-based probing should be triggered. */
-	if (g->measured <= g->average - 2 * g->stddeviation) {
+	rs = ieee80211_mira_get_rateset(ni->ni_txmcs, sgi);
+	if (g->measured < g->average - 2 * g->stddeviation &&
+	    ni->ni_txmcs != rs->min_mcs) {
 		/* Channel becomes bad. Probe downwards. */
 		DPRINTFN(2, ("channel becomes bad; probe downwards\n"));
 		DPRINTFN(3, ("measured: %s Mbit/s\n",
@@ -1214,7 +1213,8 @@ ieee80211_mira_choose(struct ieee80211_mira_node *mn, struct ieee80211com *ic,
 		    (1 << ieee80211_mira_next_lower_intra_rate(mn, ni));
 #endif
 		ieee80211_mira_cancel_timeouts(mn);
-	} else if (g->measured >= g->average + 2 * g->stddeviation) {
+	} else if (g->measured > g->average + 2 * g->stddeviation &&
+	    ni->ni_txmcs != rs->max_mcs) {
 		/* Channel becomes good. */
 		DPRINTFN(2, ("channel becomes good; probe upwards\n"));
 		DPRINTFN(3, ("measured: %s Mbit/s\n",

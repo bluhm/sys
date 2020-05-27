@@ -1,4 +1,4 @@
-/*	$OpenBSD: db_trace.c,v 1.38 2020/01/20 15:58:23 visa Exp $	*/
+/*	$OpenBSD: db_trace.c,v 1.42 2020/05/14 06:58:54 mpi Exp $	*/
 /*	$NetBSD: db_trace.c,v 1.18 1996/05/03 19:42:01 christos Exp $	*/
 
 /*
@@ -120,7 +120,7 @@ db_stack_trace_print(db_expr_t addr, int have_addr, db_expr_t count,
 		char c;
 
 		while ((c = *cp++) != 0) {
-			if (c == 'p')
+			if (c == 't')
 				trace_proc = 1;
 			if (c == 'u')
 				kernel_only = 0;
@@ -261,21 +261,32 @@ db_stack_trace_print(db_expr_t addr, int have_addr, db_expr_t count,
 }
 
 void
-stacktrace_save(struct stacktrace *st)
+stacktrace_save_at(struct stacktrace *st, unsigned int skip)
 {
-	struct callframe *frame, *lastframe;
+	struct callframe *frame, *lastframe, *limit;
+	struct pcb *pcb = curpcb;
+
+	st->st_count = 0;
+
+	if (pcb == NULL)
+		return;
 
 	frame = __builtin_frame_address(0);
-	st->st_count = 0;
+	KASSERT(INKERNEL(frame));
+	limit = (struct callframe *)((struct trapframe *)pcb->pcb_kstack - 1);
+
 	while (st->st_count < STACKTRACE_MAX) {
-		st->st_pc[st->st_count++] = frame->f_retaddr;
+		if (skip == 0)
+			st->st_pc[st->st_count++] = frame->f_retaddr;
+		else
+			skip--;
 
 		lastframe = frame;
 		frame = frame->f_frame;
 
-		if (!INKERNEL(frame))
-			break;
 		if (frame <= lastframe)
+			break;
+		if (frame >= limit)
 			break;
 		if (!INKERNEL(frame->f_retaddr))
 			break;

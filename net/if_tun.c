@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_tun.c,v 1.219 2020/02/20 16:56:52 visa Exp $	*/
+/*	$OpenBSD: if_tun.c,v 1.222 2020/05/13 00:48:06 dlg Exp $	*/
 /*	$NetBSD: if_tun.c,v 1.24 1996/05/07 02:40:48 thorpej Exp $	*/
 
 /*
@@ -775,8 +775,8 @@ tun_dev_read(dev_t dev, struct uio *uio, int ioflag)
 
 	ifp = &sc->sc_if;
 
-	error = ifq_deq_sleep(&ifp->if_snd, &m0, ioflag, (PZERO + 1)|PCATCH,
-	    "tunread", &sc->sc_reading, &sc->sc_dev);
+	error = ifq_deq_sleep(&ifp->if_snd, &m0, ISSET(ioflag, IO_NDELAY),
+	    (PZERO + 1)|PCATCH, "tunread", &sc->sc_reading, &sc->sc_dev);
 	if (error != 0)
 		goto put;
 
@@ -866,9 +866,9 @@ tun_dev_write(dev_t dev, struct uio *uio, int ioflag, int align)
 	if (error != 0)
 		goto drop;
 
-	NET_RLOCK();
+	NET_LOCK();
 	if_vinput(ifp, m0);
-	NET_RUNLOCK();
+	NET_UNLOCK();
 
 	tun_put(sc);
 	return (0);
@@ -1001,7 +1001,7 @@ tun_dev_kqfilter(dev_t dev, struct knote *kn)
 	kn->kn_hook = (caddr_t)sc; /* XXX give the sc_ref to the hook? */
 
 	s = splhigh();
-	SLIST_INSERT_HEAD(klist, kn, kn_selnext);
+	klist_insert(klist, kn);
 	splx(s);
 
 put:
@@ -1016,7 +1016,7 @@ filt_tunrdetach(struct knote *kn)
 	struct tun_softc	*sc = kn->kn_hook;
 
 	s = splhigh();
-	SLIST_REMOVE(&sc->sc_rsel.si_note, kn, knote, kn_selnext);
+	klist_remove(&sc->sc_rsel.si_note, kn);
 	splx(s);
 }
 
@@ -1038,7 +1038,7 @@ filt_tunwdetach(struct knote *kn)
 	struct tun_softc	*sc = kn->kn_hook;
 
 	s = splhigh();
-	SLIST_REMOVE(&sc->sc_wsel.si_note, kn, knote, kn_selnext);
+	klist_remove(&sc->sc_wsel.si_note, kn);
 	splx(s);
 }
 

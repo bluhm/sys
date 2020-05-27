@@ -1,4 +1,4 @@
-/*	$OpenBSD: acpivar.h,v 1.105 2019/09/07 13:46:20 kettenis Exp $	*/
+/*	$OpenBSD: acpivar.h,v 1.109 2020/05/14 13:07:10 kettenis Exp $	*/
 /*
  * Copyright (c) 2005 Thorsten Lockert <tholo@sigmasoft.com>
  *
@@ -43,6 +43,7 @@ extern int acpi_debug;
 #endif
 
 extern int acpi_hasprocfvs;
+extern int acpi_haspci;
 
 struct klist;
 struct acpiec_softc;
@@ -64,6 +65,13 @@ struct acpi_attach_args {
 	struct aml_node *aaa_node;
 	const char	*aaa_dev;
 	const char	*aaa_cdev;
+	uint64_t	 aaa_addr[4];
+	uint64_t	 aaa_size[4];
+	bus_space_tag_t	 aaa_bst[4];
+	int		 aaa_naddr;
+	uint32_t	 aaa_irq[4];
+	uint32_t	 aaa_irq_flags[4];
+	int		 aaa_nirq;
 };
 
 struct acpi_mem_map {
@@ -208,7 +216,8 @@ struct acpi_softc {
 
 	bus_space_tag_t		sc_iot;
 	bus_space_tag_t		sc_memt;
-	bus_dma_tag_t		sc_dmat;
+	bus_dma_tag_t		sc_cc_dmat;
+	bus_dma_tag_t		sc_ci_dmat;
 
 	/*
 	 * First-level ACPI tables
@@ -371,6 +380,7 @@ int	acpi_matchhids(struct acpi_attach_args *, const char *[], const char *);
 int	acpi_parsehid(struct aml_node *, void *, char *, char *, size_t);
 int64_t	acpi_getsta(struct acpi_softc *sc, struct aml_node *);
 
+int	acpi_getprop(struct aml_node *, const char *, void *, int);
 uint32_t acpi_getpropint(struct aml_node *, const char *, uint32_t);
 
 int	acpi_record_event(struct acpi_softc *, u_int);

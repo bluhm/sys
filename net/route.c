@@ -1,4 +1,4 @@
-/*	$OpenBSD: route.c,v 1.390 2020/03/21 20:12:37 krw Exp $	*/
+/*	$OpenBSD: route.c,v 1.393 2020/04/20 17:25:23 krw Exp $	*/
 /*	$NetBSD: route.c,v 1.14 1996/02/13 22:00:46 christos Exp $	*/
 
 /*
@@ -452,7 +452,7 @@ rt_setgwroute(struct rtentry *rt, u_int rtableid)
 	/*
 	 * To avoid reference counting problems when writting link-layer
 	 * addresses in an outgoing packet, we ensure that the lifetime
-	 * of a cached entry is greater that the bigger lifetime of the
+	 * of a cached entry is greater than the bigger lifetime of the
 	 * gateway entries it is pointed by.
 	 */
 	nhrt->rt_flags |= RTF_CACHED;
@@ -944,7 +944,8 @@ rtrequest(int req, struct rt_addrinfo *info, u_int8_t prio,
 		if (error != 0 &&
 		    (crt = rtable_match(tableid, ndst, NULL)) != NULL) {
 			/* overwrite cloned route */
-			if (ISSET(crt->rt_flags, RTF_CLONED)) {
+			if (ISSET(crt->rt_flags, RTF_CLONED) &&
+			    !ISSET(crt->rt_flags, RTF_CACHED)) {
 				struct ifnet *cifp;
 
 				cifp = if_get(crt->rt_ifidx);
@@ -1667,7 +1668,7 @@ rt_if_track(struct ifnet *ifp)
 {
 	unsigned int rtableid;
 	struct rtentry *rt = NULL;
-	int i, error;
+	int i, error = 0;
 
 	for (rtableid = 0; rtableid < rtmap_limit; rtableid++) {
 		/* skip rtables that are not in the rdomain of the ifp */

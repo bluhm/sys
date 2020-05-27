@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf_ioctl.c,v 1.349 2020/02/18 12:13:40 mpi Exp $ */
+/*	$OpenBSD: pf_ioctl.c,v 1.351 2020/04/19 22:31:06 sashan Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -2782,6 +2782,7 @@ pf_pool_copyin(struct pf_pool *from, struct pf_pool *to)
 {
 	memmove(to, from, sizeof(*to));
 	to->kif = NULL;
+	to->addr.p.tbl = NULL;
 }
 
 int
@@ -2791,7 +2792,9 @@ pf_rule_copyin(struct pf_rule *from, struct pf_rule *to,
 	int i;
 
 	to->src = from->src;
+	to->src.addr.p.tbl = NULL;
 	to->dst = from->dst;
+	to->dst.addr.p.tbl = NULL;
 
 	/* XXX union skip[] */
 
@@ -2921,12 +2924,12 @@ pf_sysctl(void *oldp, size_t *oldlenp, void *newp, size_t newlen)
 {
 	struct pf_status	pfs;
 
-	NET_RLOCK();
+	NET_LOCK();
 	PF_LOCK();
 	memcpy(&pfs, &pf_status, sizeof(struct pf_status));
 	pfi_update_status(pfs.ifname, &pfs);
 	PF_UNLOCK();
-	NET_RUNLOCK();
+	NET_UNLOCK();
 
 	return sysctl_rdstruct(oldp, oldlenp, newp, &pfs, sizeof(pfs));
 }

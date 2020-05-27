@@ -1,4 +1,4 @@
-/* $OpenBSD: dsdt.c,v 1.249 2019/10/16 01:43:50 mlarkin Exp $ */
+/* $OpenBSD: dsdt.c,v 1.251 2020/05/09 10:34:25 jca Exp $ */
 /*
  * Copyright (c) 2005 Jordan Hargrave <jordan@openbsd.org>
  *
@@ -102,7 +102,7 @@ struct aml_value	*aml_callosi(struct aml_scope *, struct aml_value *);
 const char		*aml_getname(const char *);
 int64_t			aml_hextoint(const char *);
 void			aml_dump(int, uint8_t *);
-void			_aml_die(const char *fn, int line, const char *fmt, ...);
+__dead void		_aml_die(const char *fn, int line, const char *fmt, ...);
 #define aml_die(x...)	_aml_die(__FUNCTION__, __LINE__, x)
 
 void aml_notify_task(void *, int);
@@ -465,15 +465,14 @@ void
 acpi_sleep(int ms, char *reason)
 {
 	static int acpinowait;
-	int to = ms * hz / 1000;
+
+	/* XXX ACPI integers are supposed to be unsigned. */
+	ms = MAX(1, ms);
 
 	if (cold)
 		delay(ms * 1000);
-	else {
-		if (to <= 0)
-			to = 1;
-		tsleep(&acpinowait, PWAIT, reason, to);
-	}
+	else
+		tsleep_nsec(&acpinowait, PWAIT, reason, MSEC_TO_NSEC(ms));
 }
 
 void
