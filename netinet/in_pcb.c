@@ -530,6 +530,13 @@ in_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 void
 in_pcbdisconnect(struct inpcb *inp)
 {
+#if NPF > 0
+	if (inp->inp_pf_sk) {
+		pf_remove_divert_state(inp->inp_pf_sk);
+		/* pf_remove_divert_state() may have detached the state */
+		pf_inp_unlink(inp);
+	}
+#endif
 	switch (sotopf(inp->inp_socket)) {
 #ifdef INET6
 	case PF_INET6:
