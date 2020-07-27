@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_var.h,v 1.105 2020/05/12 08:49:54 jan Exp $	*/
+/*	$OpenBSD: if_var.h,v 1.111 2020/07/24 18:17:15 mvs Exp $	*/
 /*	$NetBSD: if.h,v 1.23 1996/05/07 02:40:27 thorpej Exp $	*/
 
 /*
@@ -104,7 +104,7 @@ struct if_clone {
  *	I	immutable after creation
  *	d	protection left do the driver
  *	c	only used in ioctl or routing socket contexts (kernel lock)
- *	k	kernel lock
+ *	K	kernel lock
  *	N	net lock
  *
  *  For SRP related structures that allow lock-free reads, the write lock
@@ -120,7 +120,7 @@ TAILQ_HEAD(ifnet_head, ifnet);		/* the actual queue head */
 struct ifnet {				/* and the entries */
 	void	*if_softc;		/* [I] lower-level data for this if */
 	struct	refcnt if_refcnt;
-	TAILQ_ENTRY(ifnet) if_list;	/* [k] all struct ifnets are chained */
+	TAILQ_ENTRY(ifnet) if_list;	/* [K] all struct ifnets are chained */
 	TAILQ_HEAD(, ifaddr) if_addrlist; /* [N] list of addresses per if */
 	TAILQ_HEAD(, ifmaddr) if_maddrlist; /* [N] list of multicast records */
 	TAILQ_HEAD(, ifg_list) if_groups; /* [N] list of groups per if */
@@ -131,7 +131,7 @@ struct ifnet {				/* and the entries */
 	void	(*if_rtrequest)(struct ifnet *, int, struct rtentry *);
 	char	if_xname[IFNAMSIZ];	/* [I] external name (name + unit) */
 	int	if_pcount;		/* [N] # of promiscuous listeners */
-	unsigned int if_bridgeidx;	/* [k] used by bridge ports */
+	unsigned int if_bridgeidx;	/* [K] used by bridge ports */
 	caddr_t	if_bpf;			/* packet filter structure */
 	caddr_t if_switchport;		/* used by switch ports */
 	caddr_t if_mcast;		/* used by multicast code */
@@ -139,10 +139,11 @@ struct ifnet {				/* and the entries */
 	caddr_t	if_pf_kif;		/* pf interface abstraction */
 	union {
 		struct srpl carp_s;	/* carp if list (used by !carp ifs) */
-		struct ifnet *carp_d;	/* ptr to carpdev (used by carp ifs) */
+		int carp_idx;		/* index of carpdev (used by carp
+						ifs) */
 	} if_carp_ptr;
 #define if_carp		if_carp_ptr.carp_s
-#define if_carpdev	if_carp_ptr.carp_d
+#define if_carpdevidx	if_carp_ptr.carp_idx
 	unsigned int if_index;		/* [I] unique index for this if */
 	short	if_timer;		/* time 'til if_watchdog called */
 	unsigned short if_flags;	/* [N] up/down, broadcast, etc. */
@@ -159,7 +160,7 @@ struct ifnet {				/* and the entries */
 	struct	task if_linkstatetask;	/* [I] task to do route updates */
 
 	/* procedure handles */
-	SRPL_HEAD(, ifih) if_inputs;	/* [k] input routines (dequeue) */
+	void	(*if_input)(struct ifnet *, struct mbuf *);
 	int	(*if_output)(struct ifnet *, struct mbuf *, struct sockaddr *,
 		     struct rtentry *);	/* output routine (enqueue) */
 					/* link level output function */
@@ -281,29 +282,6 @@ struct ifg_list {
 
 #define	IFNET_SLOWTIMO	1		/* granularity is 1 second */
 
-/*
- * IFQ compat on ifq API
- */
-
-#define	IFQ_ENQUEUE(ifq, m, err)					\
-do {									\
-	(err) = ifq_enqueue((ifq), (m));				\
-} while (/* CONSTCOND */0)
-
-#define	IFQ_DEQUEUE(ifq, m)						\
-do {									\
-	(m) = ifq_dequeue(ifq);						\
-} while (/* CONSTCOND */0)
-
-#define	IFQ_PURGE(ifq)							\
-do {									\
-	(void)ifq_purge(ifq);						\
-} while (/* CONSTCOND */0)
-
-#define	IFQ_LEN(ifq)			ifq_len(ifq)
-#define	IFQ_IS_EMPTY(ifq)		ifq_empty(ifq)
-#define	IFQ_SET_MAXLEN(ifq, len)	ifq_set_maxlen(ifq, len)
-
 #define IF_TXMIT_MIN			1
 #define IF_TXMIT_DEFAULT		16
 
@@ -368,11 +346,6 @@ void	ifa_add(struct ifnet *, struct ifaddr *);
 void	ifa_del(struct ifnet *, struct ifaddr *);
 void	ifa_update_broadaddr(struct ifnet *, struct ifaddr *,
 	    struct sockaddr *);
-
-void	if_ih_insert(struct ifnet *, int (*)(struct ifnet *, struct mbuf *,
-	    void *), void *);
-void	if_ih_remove(struct ifnet *, int (*)(struct ifnet *, struct mbuf *,
-	    void *), void *);
 
 void	if_addrhook_add(struct ifnet *, struct task *);
 void	if_addrhook_del(struct ifnet *, struct task *);

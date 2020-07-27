@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_axen.c,v 1.27 2019/07/07 06:40:10 kevlo Exp $	*/
+/*	$OpenBSD: if_axen.c,v 1.29 2020/07/10 13:26:40 patrick Exp $	*/
 
 /*
  * Copyright (c) 2013 Yojiro UO <yuo@openbsd.org>
@@ -1083,7 +1083,7 @@ axen_txeof(struct usbd_xfer *xfer, void *priv, usbd_status status)
 	m_freem(c->axen_mbuf);
 	c->axen_mbuf = NULL;
 
-	if (IFQ_IS_EMPTY(&ifp->if_snd) == 0)
+	if (ifq_empty(&ifp->if_snd) == 0)
 		axen_start(ifp);
 
 	splx(s);
@@ -1186,6 +1186,7 @@ axen_encap(struct axen_softc *sc, struct mbuf *m, int idx)
 	/* Transmit */
 	err = usbd_transfer(c->axen_xfer);
 	if (err != USBD_IN_PROGRESS) {
+		c->axen_mbuf = NULL;
 		axen_stop(sc);
 		return EIO;
 	}
@@ -1209,16 +1210,15 @@ axen_start(struct ifnet *ifp)
 	if (ifq_is_oactive(&ifp->if_snd))
 		return;
 
-	m_head = ifq_deq_begin(&ifp->if_snd);
+	m_head = ifq_dequeue(&ifp->if_snd);
 	if (m_head == NULL)
 		return;
 
 	if (axen_encap(sc, m_head, 0)) {
-		ifq_deq_rollback(&ifp->if_snd, m_head);
+		m_freem(m_head);
 		ifq_set_oactive(&ifp->if_snd);
 		return;
 	}
-	ifq_deq_commit(&ifp->if_snd, m_head);
 
 	/*
 	 * If there's a BPF listener, bounce a copy of this frame
@@ -1399,7 +1399,7 @@ axen_watchdog(struct ifnet *ifp)
 	usbd_get_xfer_status(c->axen_xfer, NULL, NULL, NULL, &stat);
 	axen_txeof(c->axen_xfer, c, stat);
 
-	if (!IFQ_IS_EMPTY(&ifp->if_snd))
+	if (!ifq_empty(&ifp->if_snd))
 		axen_start(ifp);
 	splx(s);
 }

@@ -1,4 +1,4 @@
-/*	$OpenBSD: gem.c,v 1.123 2018/02/07 22:35:14 bluhm Exp $	*/
+/*	$OpenBSD: gem.c,v 1.125 2020/07/10 13:26:37 patrick Exp $	*/
 /*	$NetBSD: gem.c,v 1.1 2001/09/16 00:11:43 eeh Exp $ */
 
 /*
@@ -222,7 +222,7 @@ gem_config(struct gem_softc *sc)
 	ifp->if_qstart = gem_start;
 	ifp->if_ioctl = gem_ioctl;
 	ifp->if_watchdog = gem_watchdog;
-	IFQ_SET_MAXLEN(&ifp->if_snd, GEM_NTXDESC - 1);
+	ifq_set_maxlen(&ifp->if_snd, GEM_NTXDESC - 1);
 
 	ifp->if_capabilities = IFCAP_VLAN_MTU;
 
@@ -1020,6 +1020,9 @@ gem_rint(struct gem_softc *sc)
 		ml_enqueue(&ml, m);
 	}
 
+	if (ifiq_input(&ifp->if_rcv, &ml))
+		if_rxr_livelocked(&sc->sc_rx_ring);
+
 	/* Update the receive pointer. */
 	sc->sc_rx_cons = i;
 	gem_fill_rx_ring(sc);
@@ -1027,8 +1030,6 @@ gem_rint(struct gem_softc *sc)
 
 	DPRINTF(sc, ("gem_rint: done sc->sc_rx_cons %d, complete %d\n",
 		sc->sc_rx_cons, bus_space_read_4(t, h, GEM_RX_COMPLETION)));
-
-	if_input(ifp, &ml);
 
 	return (1);
 }

@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_mpw.c,v 1.55 2019/06/26 08:13:13 claudio Exp $ */
+/*	$OpenBSD: if_mpw.c,v 1.58 2020/07/10 13:26:41 patrick Exp $ */
 
 /*
  * Copyright (c) 2015 Rafael Zalamena <rzalamena@openbsd.org>
@@ -111,7 +111,7 @@ mpw_clone_create(struct if_clone *ifc, int unit)
 	ifp->if_output = mpw_output;
 	ifp->if_start = mpw_start;
 	ifp->if_hardmtu = ETHER_MAX_HARDMTU_LEN;
-	IFQ_SET_MAXLEN(&ifp->if_snd, IFQ_MAXLEN);
+	ifq_set_maxlen(&ifp->if_snd, IFQ_MAXLEN);
 	ether_fakeaddr(ifp);
 
 	sc->sc_dead = 0;
@@ -538,7 +538,8 @@ mpw_input(struct mpw_softc *sc, struct mbuf *m)
 
 		flow = MPLS_SHIM2LABEL(shim->shim_label);
 		flow ^= sc->sc_flow;
-		m->m_pkthdr.ph_flowid = M_FLOWID_VALID | flow;
+		SET(m->m_pkthdr.csum_flags, M_FLOWID);
+		m->m_pkthdr.ph_flowid = flow;
 	} else {
 		if (!MPLS_BOS_ISSET(shim->shim_label))
 			goto drop;
@@ -652,19 +653,19 @@ mpw_start(struct ifnet *ifp)
 	n = sc->sc_neighbor;
 	if (!ISSET(ifp->if_flags, IFF_RUNNING) ||
 	    n == NULL) {
-		IFQ_PURGE(&ifp->if_snd);
+		ifq_purge(&ifp->if_snd);
 		return;
 	}
 
 	rt = rtalloc(sstosa(&n->n_nexthop), RT_RESOLVE, sc->sc_rdomain);
 	if (!rtisvalid(rt)) {
-		IFQ_PURGE(&ifp->if_snd);
+		ifq_purge(&ifp->if_snd);
 		goto rtfree;
 	}
 
 	ifp0 = if_get(rt->rt_ifidx);
 	if (ifp0 == NULL) {
-		IFQ_PURGE(&ifp->if_snd);
+		ifq_purge(&ifp->if_snd);
 		goto rtfree;
 	}
 
@@ -712,8 +713,8 @@ mpw_start(struct ifnet *ifp)
 			if (m0 == NULL)
 				continue;
 
-			if (ISSET(m->m_pkthdr.ph_flowid, M_FLOWID_VALID))
-				flow ^= m->m_pkthdr.ph_flowid & M_FLOWID_MASK;
+			if (ISSET(m->m_pkthdr.csum_flags, M_FLOWID))
+				flow ^= m->m_pkthdr.ph_flowid;
 
 			shim = mtod(m0, struct shim_hdr *);
 			shim->shim_label = htonl(1) & MPLS_TTL_MASK;

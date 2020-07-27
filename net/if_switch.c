@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_switch.c,v 1.30 2019/11/06 03:51:26 dlg Exp $	*/
+/*	$OpenBSD: if_switch.c,v 1.34 2020/07/22 20:37:35 mvs Exp $	*/
 
 /*
  * Copyright (c) 2016 Kazuya GODA <goda@openbsd.org>
@@ -68,7 +68,8 @@ int	 switch_port_add(struct switch_softc *, struct ifbreq *);
 void	 switch_port_detach(void *);
 int	 switch_port_del(struct switch_softc *, struct ifbreq *);
 int	 switch_port_list(struct switch_softc *, struct ifbifconf *);
-int	 switch_input(struct ifnet *, struct mbuf *, void *);
+struct mbuf *
+	 switch_input(struct ifnet *, struct mbuf *, void *);
 struct mbuf
 	*switch_port_ingress(struct switch_softc *, struct ifnet *,
 	    struct mbuf *);
@@ -118,6 +119,11 @@ struct niqueue switchintrq = NIQUEUE_INITIALIZER(1024, NETISR_SWITCH);
 struct rwlock switch_ifs_lk = RWLOCK_INITIALIZER("switchifs");
 
 struct pool swfcl_pool;
+
+const struct ether_brport switch_brport = {
+	switch_input,
+	NULL,
+};
 
 void
 switchattach(int n)
@@ -454,7 +460,7 @@ switch_ioctl(struct ifnet *ifp, unsigned long cmd, caddr_t data)
 		if ((bp = bs->bs_root_port) == NULL)
 			brop->ifbop_root_port = 0;
 		else
-			brop->ifbop_root_port = bp->bp_ifp->if_index;
+			brop->ifbop_root_port = bp->bp_ifindex;
 		brop->ifbop_maxage = bs->bs_bridge_max_age >> 8;
 		brop->ifbop_hellotime = bs->bs_bridge_htime >> 8;
 		brop->ifbop_fwddelay = bs->bs_bridge_fdelay >> 8;
@@ -506,8 +512,8 @@ switch_port_add(struct switch_softc *sc, struct ifbreq *req)
 	if ((ifs = ifunit(req->ifbr_ifsname)) == NULL)
 		return (ENOENT);
 
-	if (ifs->if_bridgeidx != 0)
-		return (EBUSY);
+	if (ifs->if_type != IFT_ETHER)
+		return (EPROTONOSUPPORT);
 
 	if (ifs->if_switchport != NULL) {
 		swpo = (struct switch_port *)ifs->if_switchport;
@@ -517,21 +523,25 @@ switch_port_add(struct switch_softc *sc, struct ifbreq *req)
 			return (EBUSY);
 	}
 
-	if (ifs->if_type == IFT_ETHER) {
-		if ((error = ifpromisc(ifs, 1)) != 0)
-			return (error);
+	if ((error = ifpromisc(ifs, 1)) != 0)
+		return (error);
+
+	error = ether_brport_isset(ifs);
+	if (error != 0) {
+		ifpromisc(ifs, 0);
+		return (error);
 	}
 
 	swpo = malloc(sizeof(*swpo), M_DEVBUF, M_NOWAIT|M_ZERO);
 	if (swpo == NULL) {
-		if (ifs->if_type == IFT_ETHER)
-			ifpromisc(ifs, 0);
+		ifpromisc(ifs, 0);
 		return (ENOMEM);
 	}
+
 	swpo->swpo_switch = sc;
 	swpo->swpo_ifindex = ifs->if_index;
 	ifs->if_switchport = (caddr_t)swpo;
-	if_ih_insert(ifs, switch_input, NULL);
+	ether_brport_set(ifs, &switch_brport);
 	swpo->swpo_port_no = swofp_assign_portno(sc, ifs->if_index);
 	task_set(&swpo->swpo_dtask, switch_port_detach, ifs);
 	if_detachhook_add(ifs, &swpo->swpo_dtask);
@@ -603,7 +613,7 @@ switch_port_detach(void *arg)
 	ifp->if_switchport = NULL;
 	if_detachhook_del(ifp, &swpo->swpo_dtask);
 	ifpromisc(ifp, 0);
-	if_ih_remove(ifp, switch_input, NULL);
+	ether_brport_clr(ifp);
 	TAILQ_REMOVE(&sc->sc_swpo_list, swpo, swpo_list_next);
 	free(swpo, M_DEVBUF, sizeof(*swpo));
 }
@@ -633,19 +643,19 @@ switch_port_del(struct switch_softc *sc, struct ifbreq *req)
 	return (error);
 }
 
-int
-switch_input(struct ifnet *ifp, struct mbuf *m, void *cookie)
+struct mbuf *
+switch_input(struct ifnet *ifp, struct mbuf *m, void *null)
 {
 	KASSERT(m->m_flags & M_PKTHDR);
 
 	if (m->m_flags & M_PROTO1) {
 		m->m_flags &= ~M_PROTO1;
-		return (0);
+		return (m);
 	}
 
 	niq_enqueue(&switchintrq, m);
 
-	return (1);
+	return (NULL);
 }
 
 
@@ -779,7 +789,7 @@ switch_port_ifb_start(struct ifnet *ifp)
 	struct mbuf_list	 ml = MBUF_LIST_INITIALIZER();
 
 	for (;;) {
-		IFQ_DEQUEUE(&ifp->if_snd, m);
+		m = ifq_dequeue(&ifp->if_snd);
 		if (m == NULL)
 			return;
 

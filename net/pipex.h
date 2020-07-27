@@ -1,4 +1,4 @@
-/*	$OpenBSD: pipex.h,v 1.21 2017/01/24 10:08:30 krw Exp $	*/
+/*	$OpenBSD: pipex.h,v 1.25 2020/07/17 08:57:27 mvs Exp $	*/
 
 /*
  * Copyright (c) 2009 Internet Initiative Japan Inc.
@@ -183,24 +183,28 @@ extern int	pipex_enable;
 
 struct pipex_session;
 
-/* pipex context for a interface. */
+/* pipex context for a interface
+ *
+ * Locks used to protect struct members:
+ *      I       immutable after creation
+ *      N       net lock
+ */
 struct pipex_iface_context {
-	struct	ifnet *ifnet_this;	/* outer interface */
-	u_int	pipexmode;		/* pipex mode */
-	/* virtual pipex_session entry for multicast routing */
+	int	ifindex;		/* [I] outer interface index */
+	u_int	pipexmode;		/* [N] pipex mode */
+	/* [I] virtual pipex_session entry for multicast routing */
 	struct pipex_session *multicast_session;
 };
 
 __BEGIN_DECLS
 void                  pipex_init (void);
-void                  pipex_iface_init (struct pipex_iface_context *, struct ifnet *);
+void                  pipex_iface_init (struct pipex_iface_context *, int);
 void                  pipex_iface_fini (struct pipex_iface_context *);
 
 int                   pipex_notify_close_session(struct pipex_session *session);
 int                   pipex_notify_close_session_all(void);
 
 struct mbuf           *pipex_output (struct mbuf *, int, int, struct pipex_iface_context *);
-struct pipex_session  *pipex_pppoe_lookup_session (struct mbuf *);
 struct pipex_session  *pipex_pppoe_lookup_session (struct mbuf *);
 struct mbuf           *pipex_pppoe_input (struct mbuf *, struct pipex_session *);
 struct pipex_session  *pipex_pptp_lookup_session (struct mbuf *);

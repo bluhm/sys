@@ -1,4 +1,4 @@
-/*	$OpenBSD: ips.c,v 1.118 2020/02/19 01:31:38 cheloha Exp $	*/
+/*	$OpenBSD: ips.c,v 1.127 2020/07/24 12:43:31 krw Exp $	*/
 
 /*
  * Copyright (c) 2006, 2007, 2009 Alexander Yurchenko <grange@openbsd.org>
@@ -383,14 +383,11 @@ struct dmamem {
 struct ips_softc {
 	struct device		sc_dev;
 
-	struct scsi_link	sc_scsi_link;
 	struct scsibus_softc *	sc_scsibus;
 
 	struct ips_pt {
 		struct ips_softc *	pt_sc;
 		int			pt_chan;
-
-		struct scsi_link	pt_link;
 
 		int			pt_proctgt;
 		char			pt_procdev[16];
@@ -718,25 +715,25 @@ ips_attach(struct device *parent, struct device *self, void *aux)
 	    (sc->sc_nunits == 1 ? "" : "s"));
 	printf("\n");
 
-	/* Attach SCSI bus */
+	saa.saa_adapter_target = SDEV_NO_ADAPTER_TARGET;
+	saa.saa_adapter_buswidth = sc->sc_nunits;
+	saa.saa_adapter = &ips_switch;
+	saa.saa_adapter_softc = sc;
+	saa.saa_luns = 8;
 	if (sc->sc_nunits > 0)
-		sc->sc_scsi_link.openings = sc->sc_nccbs / sc->sc_nunits;
-	sc->sc_scsi_link.adapter_target = sc->sc_nunits;
-	sc->sc_scsi_link.adapter_buswidth = sc->sc_nunits;
-	sc->sc_scsi_link.adapter = &ips_switch;
-	sc->sc_scsi_link.adapter_softc = sc;
-	sc->sc_scsi_link.pool = &sc->sc_iopool;
+		saa.saa_openings = sc->sc_nccbs / sc->sc_nunits;
+	else
+		saa.saa_openings = 0;
+	saa.saa_pool = &sc->sc_iopool;
+	saa.saa_quirks = saa.saa_flags = 0;
+	saa.saa_wwpn = saa.saa_wwnn = 0;
 
-	bzero(&saa, sizeof(saa));
-	saa.saa_sc_link = &sc->sc_scsi_link;
 	sc->sc_scsibus = (struct scsibus_softc *)config_found(self, &saa,
 	    scsiprint);
 
 	/* For each channel attach SCSI pass-through bus */
-	bzero(&saa, sizeof(saa));
 	for (i = 0; i < IPS_MAXCHANS; i++) {
 		struct ips_pt *pt;
-		struct scsi_link *link;
 		int target, lastarget;
 
 		pt = &sc->sc_pt[i];
@@ -763,15 +760,16 @@ ips_attach(struct device *parent, struct device *self, void *aux)
 		if (lastarget == -1)
 			continue;
 
-		link = &pt->pt_link;
-		link->openings = 1;
-		link->adapter_target = IPS_MAXTARGETS;
-		link->adapter_buswidth = lastarget + 1;
-		link->adapter = &ips_pt_switch;
-		link->adapter_softc = pt;
-		link->pool = &sc->sc_iopool;
+		saa.saa_adapter = &ips_pt_switch;
+		saa.saa_adapter_softc = pt;
+		saa.saa_adapter_buswidth =  lastarget + 1;
+		saa.saa_adapter_target = IPS_MAXTARGETS;
+		saa.saa_luns = 8;
+		saa.saa_openings = 1;
+		saa.saa_pool = &sc->sc_iopool;
+		saa.saa_quirks = saa.saa_flags = 0;
+		saa.saa_wwpn = saa.saa_wwnn = 0;
 
-		saa.saa_sc_link = link;
 		config_found(self, &saa, scsiprint);
 	}
 
@@ -830,7 +828,7 @@ void
 ips_scsi_cmd(struct scsi_xfer *xs)
 {
 	struct scsi_link *link = xs->sc_link;
-	struct ips_softc *sc = link->adapter_softc;
+	struct ips_softc *sc = link->bus->sb_adapter_softc;
 	struct ips_driveinfo *di = &sc->sc_info->drive;
 	struct ips_drive *drive;
 	struct scsi_inquiry_data inq;
@@ -962,7 +960,7 @@ void
 ips_scsi_pt_cmd(struct scsi_xfer *xs)
 {
 	struct scsi_link *link = xs->sc_link;
-	struct ips_pt *pt = link->adapter_softc;
+	struct ips_pt *pt = link->bus->sb_adapter_softc;
 	struct ips_softc *sc = pt->pt_sc;
 	struct device *dev = link->device_softc;
 	struct ips_ccb *ccb = xs->io;
@@ -1048,7 +1046,7 @@ int
 ips_scsi_ioctl(struct scsi_link *link, u_long cmd, caddr_t addr, int flag)
 {
 #if NBIO > 0
-	return (ips_ioctl(link->adapter_softc, cmd, addr));
+	return (ips_ioctl(link->bus->sb_adapter_softc, cmd, addr));
 #else
 	return (ENOTTY);
 #endif
@@ -1564,7 +1562,7 @@ ips_error(struct ips_softc *sc, struct ips_ccb *ccb)
 			for (i = 0; i < dcdb->senselen; i++)
 				DPRINTF(IPS_D_ERR, (" %x", dcdb->sense[i]));
 		}
-	}		
+	}
 	DPRINTF(IPS_D_ERR, ("\n"));
 
 	switch (gsc) {
@@ -1910,7 +1908,7 @@ ips_copperhead_status(struct ips_softc *sc)
 	u_int32_t sqhead, sqtail, status;
 
 	sqhead = bus_space_read_4(sc->sc_iot, sc->sc_ioh, IPS_REG_SQH);
-	DPRINTF(IPS_D_XFER, ("%s: sqhead 0x%08x, sqtail 0x%08x\n",
+	DPRINTF(IPS_D_XFER, ("%s: sqhead 0x%08x, sqtail 0x%08lx\n",
 	    sc->sc_dev.dv_xname, sqhead, sc->sc_sqtail));
 
 	sqtail = sc->sc_sqtail + sizeof(u_int32_t);

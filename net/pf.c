@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf.c,v 1.1091 2019/11/17 08:25:05 otto Exp $ */
+/*	$OpenBSD: pf.c,v 1.1094 2020/07/24 18:17:15 mvs Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -417,13 +417,13 @@ pf_init_threshold(struct pf_threshold *threshold,
 	threshold->limit = limit * PF_THRESHOLD_MULT;
 	threshold->seconds = seconds;
 	threshold->count = 0;
-	threshold->last = time_uptime;
+	threshold->last = getuptime();
 }
 
 void
 pf_add_threshold(struct pf_threshold *threshold)
 {
-	u_int32_t t = time_uptime, diff = t - threshold->last;
+	u_int32_t t = getuptime(), diff = t - threshold->last;
 
 	if (diff >= threshold->seconds)
 		threshold->count = 0;
@@ -496,7 +496,7 @@ pf_src_connlimit(struct pf_state **state)
 		}
 
 		pfr_insert_kentry((*state)->rule.ptr->overload_tbl,
-		    &p, time_second);
+		    &p, gettime());
 
 		/* kill existing states if that's required. */
 		if ((*state)->rule.ptr->flush) {
@@ -584,7 +584,7 @@ pf_insert_src_node(struct pf_src_node **sn, struct pf_rule *rule,
 			pool_put(&pf_src_tree_pl, *sn);
 			return (-1);
 		}
-		(*sn)->creation = time_uptime;
+		(*sn)->creation = getuptime();
 		(*sn)->rule.ptr->src_nodes++;
 		if (kif != NULL) {
 			(*sn)->kif = kif;
@@ -605,7 +605,7 @@ pf_insert_src_node(struct pf_src_node **sn, struct pf_rule *rule,
 void
 pf_remove_src_node(struct pf_src_node *sn)
 {
-	if (sn->states > 0 || sn->expire > time_uptime)
+	if (sn->states > 0 || sn->expire > getuptime())
 		return;
 
 	sn->rule.ptr->src_nodes--;
@@ -1187,12 +1187,12 @@ pf_state_export(struct pfsync_state *sp, struct pf_state *st)
 	/* copy from state */
 	strlcpy(sp->ifname, st->kif->pfik_name, sizeof(sp->ifname));
 	memcpy(&sp->rt_addr, &st->rt_addr, sizeof(sp->rt_addr));
-	sp->creation = htonl(time_uptime - st->creation);
+	sp->creation = htonl(getuptime() - st->creation);
 	expire = pf_state_expires(st);
-	if (expire <= time_uptime)
+	if (expire <= getuptime())
 		sp->expire = htonl(0);
 	else
-		sp->expire = htonl(expire - time_uptime);
+		sp->expire = htonl(expire - getuptime());
 
 	sp->direction = st->direction;
 #if NPFLOG > 0
@@ -1342,7 +1342,7 @@ pf_purge_expired_src_nodes(void)
 	for (cur = RB_MIN(pf_src_tree, &tree_src_tracking); cur; cur = next) {
 	next = RB_NEXT(pf_src_tree, &tree_src_tracking, cur);
 
-		if (cur->states == 0 && cur->expire <= time_uptime) {
+		if (cur->states == 0 && cur->expire <= getuptime()) {
 			next = RB_NEXT(pf_src_tree, &tree_src_tracking, cur);
 			pf_remove_src_node(cur);
 		}
@@ -1364,7 +1364,7 @@ pf_src_tree_remove_state(struct pf_state *s)
 			if (!timeout)
 				timeout =
 				    pf_default_rule.timeout[PFTM_SRC_NODE];
-			sni->sn->expire = time_uptime + timeout;
+			sni->sn->expire = getuptime() + timeout;
 		}
 		pool_put(&pf_sn_item_pl, sni);
 	}
@@ -1477,7 +1477,7 @@ pf_purge_expired_states(u_int32_t maxcheck)
 		next = TAILQ_NEXT(cur, entry_list);
 
 		if ((cur->timeout == PFTM_UNLINKED) ||
-		    (pf_state_expires(cur) <= time_uptime))
+		    (pf_state_expires(cur) <= getuptime()))
 			SLIST_INSERT_HEAD(&gcl, cur, gc_list);
 		else
 			pf_state_unref(cur);
@@ -3081,7 +3081,7 @@ pf_match_tag(struct mbuf *m, struct pf_rule *r, int *tag)
 int
 pf_match_rcvif(struct mbuf *m, struct pf_rule *r)
 {
-	struct ifnet *ifp;
+	struct ifnet *ifp, *ifp0;
 	struct pfi_kif *kif;
 
 	ifp = if_get(m->m_pkthdr.ph_ifidx);
@@ -3089,9 +3089,11 @@ pf_match_rcvif(struct mbuf *m, struct pf_rule *r)
 		return (0);
 
 #if NCARP > 0
-	if (ifp->if_type == IFT_CARP && ifp->if_carpdev)
-		kif = (struct pfi_kif *)ifp->if_carpdev->if_pf_kif;
-	else
+	if (ifp->if_type == IFT_CARP &&
+	    (ifp0 = if_get(ifp->if_carpdevidx)) != NULL) {
+		kif = (struct pfi_kif *)ifp0->if_pf_kif;
+		if_put(ifp0);
+	} else
 #endif /* NCARP */
 		kif = (struct pfi_kif *)ifp->if_pf_kif;
 
@@ -3976,7 +3978,7 @@ pf_test_rule(struct pf_pdesc *pd, struct pf_rule **rm, struct pf_state **sm,
 		if (((rule_flag & PFRULE_EXPIRED) == 0) &&
 		    atomic_cas_uint(&r->rule_flag, rule_flag,
 			rule_flag | PFRULE_EXPIRED) == rule_flag) {
-			r->exptime = time_second;
+			r->exptime = gettime();
 			SLIST_INSERT_HEAD(&pf_rule_gcl, r, gcle);
 		}
 	}
@@ -4095,8 +4097,8 @@ pf_create_state(struct pf_pdesc *pd, struct pf_rule *r, struct pf_rule *a,
 		s->timeout = PFTM_OTHER_FIRST_PACKET;
 	}
 
-	s->creation = time_uptime;
-	s->expire = time_uptime;
+	s->creation = getuptime();
+	s->expire = getuptime();
 
 	if (pd->proto == IPPROTO_TCP) {
 		if (s->state_flags & PFSTATE_SCRUB_TCP &&
@@ -4478,7 +4480,7 @@ pf_tcp_track_full(struct pf_pdesc *pd, struct pf_state **state, u_short *reason,
 			pf_set_protostate(*state, PF_PEER_BOTH, TCPS_TIME_WAIT);
 
 		/* update expire time */
-		(*state)->expire = time_uptime;
+		(*state)->expire = getuptime();
 		if (src->state >= TCPS_FIN_WAIT_2 &&
 		    dst->state >= TCPS_FIN_WAIT_2)
 			(*state)->timeout = PFTM_TCP_CLOSED;
@@ -4671,7 +4673,7 @@ pf_tcp_track_sloppy(struct pf_pdesc *pd, struct pf_state **state,
 		pf_set_protostate(*state, PF_PEER_BOTH, TCPS_TIME_WAIT);
 
 	/* update expire time */
-	(*state)->expire = time_uptime;
+	(*state)->expire = getuptime();
 	if (src->state >= TCPS_FIN_WAIT_2 &&
 	    dst->state >= TCPS_FIN_WAIT_2)
 		(*state)->timeout = PFTM_TCP_CLOSED;
@@ -4878,7 +4880,7 @@ pf_test_state(struct pf_pdesc *pd, struct pf_state **state, u_short *reason,
 			pf_set_protostate(*state, pdst, PFUDPS_MULTIPLE);
 
 		/* update expire time */
-		(*state)->expire = time_uptime;
+		(*state)->expire = getuptime();
 		if (src->state == PFUDPS_MULTIPLE &&
 		    dst->state == PFUDPS_MULTIPLE)
 			(*state)->timeout = PFTM_UDP_MULTIPLE;
@@ -4893,7 +4895,7 @@ pf_test_state(struct pf_pdesc *pd, struct pf_state **state, u_short *reason,
 			pf_set_protostate(*state, pdst, PFOTHERS_MULTIPLE);
 
 		/* update expire time */
-		(*state)->expire = time_uptime;
+		(*state)->expire = getuptime();
 		if (src->state == PFOTHERS_MULTIPLE &&
 		    dst->state == PFOTHERS_MULTIPLE)
 			(*state)->timeout = PFTM_OTHER_MULTIPLE;
@@ -5045,7 +5047,7 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **state,
 		if (ret >= 0)
 			return (ret);
 
-		(*state)->expire = time_uptime;
+		(*state)->expire = getuptime();
 		(*state)->timeout = PFTM_ICMP_ERROR_REPLY;
 
 		/* translate source/destination address, if necessary */
@@ -5926,7 +5928,8 @@ pf_routable(struct pf_addr *addr, sa_family_t af, struct pfi_kif *kif,
 
 				ifp = if_get(rt->rt_ifidx);
 				if (ifp != NULL && ifp->if_type == IFT_CARP &&
-				    ifp->if_carpdev == kif->pfik_ifp)
+				    ifp->if_carpdevidx ==
+				    kif->pfik_ifp->if_index)
 					ret = 1;
 				if_put(ifp);
 #endif /* NCARP */
@@ -6852,6 +6855,7 @@ pf_counters_inc(int action, struct pf_pdesc *pd, struct pf_state *s,
 int
 pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 {
+	struct ifnet		*ifp0;
 	struct pfi_kif		*kif;
 	u_short			 action, reason = 0;
 	struct pf_rule		*a = NULL, *r = &pf_default_rule;
@@ -6866,9 +6870,11 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 		return (PF_PASS);
 
 #if NCARP > 0
-	if (ifp->if_type == IFT_CARP && ifp->if_carpdev)
-		kif = (struct pfi_kif *)ifp->if_carpdev->if_pf_kif;
-	else
+	if (ifp->if_type == IFT_CARP &&
+		(ifp0 = if_get(ifp->if_carpdevidx)) != NULL) {
+		kif = (struct pfi_kif *)ifp0->if_pf_kif;
+		if_put(ifp0);
+	} else
 #endif /* NCARP */
 		kif = (struct pfi_kif *)ifp->if_pf_kif;
 
@@ -7177,10 +7183,8 @@ done:
 		pf_state_key_link_inpcb(s->key[PF_SK_STACK],
 		    pd.m->m_pkthdr.pf.inp);
 
-	if (s && (pd.m->m_pkthdr.ph_flowid & M_FLOWID_VALID) == 0) {
-		pd.m->m_pkthdr.ph_flowid = M_FLOWID_VALID |
-		    (M_FLOWID_MASK & bemtoh64(&s->id));
-	}
+	if (s && (pd.m->m_pkthdr.csum_flags & M_FLOWID) == 0)
+		pd.m->m_pkthdr.ph_flowid = bemtoh64(&s->id);
 
 	/*
 	 * connections redirected to loopback should not match sockets

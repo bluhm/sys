@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_bridge.c,v 1.339 2020/04/12 06:48:46 visa Exp $	*/
+/*	$OpenBSD: if_bridge.c,v 1.343 2020/07/22 20:37:35 mvs Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 Jason L. Wright (jason@thought.net)
@@ -109,7 +109,8 @@ void	bridge_ifdetach(void *);
 void	bridge_spandetach(void *);
 int	bridge_ifremove(struct bridge_iflist *);
 void	bridge_spanremove(struct bridge_iflist *);
-int	bridge_input(struct ifnet *, struct mbuf *, void *);
+struct mbuf *
+	bridge_input(struct ifnet *, struct mbuf *, void *);
 void	bridge_process(struct ifnet *, struct mbuf *);
 void	bridgeintr_frame(struct ifnet *, struct ifnet *, struct mbuf *);
 void	bridge_bifgetstp(struct bridge_softc *, struct bridge_iflist *,
@@ -148,6 +149,11 @@ struct niqueue bridgeintrq = NIQUEUE_INITIALIZER(1024, NETISR_BRIDGE);
 
 struct if_clone bridge_cloner =
     IF_CLONE_INITIALIZER("bridge", bridge_clone_create, bridge_clone_destroy);
+
+const struct ether_brport bridge_brport = {
+	bridge_input,
+	NULL,
+};
 
 void
 bridgeattach(int n)
@@ -198,8 +204,6 @@ bridge_clone_create(struct if_clone *ifc, int unit)
 	    DLT_EN10MB, ETHER_HDR_LEN);
 #endif
 
-	if_ih_insert(ifp, ether_input, NULL);
-
 	return (0);
 }
 
@@ -236,10 +240,6 @@ bridge_clone_destroy(struct ifnet *ifp)
 	/* Undo pseudo-driver changes. */
 	if_deactivate(ifp);
 
-	if_ih_remove(ifp, ether_input, NULL);
-
-	KASSERT(SRPL_EMPTY_LOCKED(&ifp->if_inputs));
-
 	if_detach(ifp);
 
 	free(sc, M_DEVBUF, sizeof *sc);
@@ -273,14 +273,6 @@ bridge_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 			break;
 
 		ifs = ifunit(req->ifbr_ifsname);
-
-		/* try to create the interface if it does't exist */
-		if (ifs == NULL) {
-			error = if_clone_create(req->ifbr_ifsname, 0);
-			if (error == 0)
-				ifs = ifunit(req->ifbr_ifsname);
-		}
-
 		if (ifs == NULL) {			/* no such interface */
 			error = ENOENT;
 			break;
@@ -296,6 +288,10 @@ bridge_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 				error = EBUSY;
 			break;
 		}
+
+		error = ether_brport_isset(ifs);
+		if (error != 0)
+			break;
 
 		/* If it's in the span list, it can't be a member. */
 		SMR_SLIST_FOREACH_LOCKED(bif, &sc->sc_spanlist, bif_next) {
@@ -321,6 +317,14 @@ bridge_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 			break;
 		}
 
+		/*
+		 * XXX If the NET_LOCK() or ifpromisc() calls above
+		 * had to sleep, then something else could have come
+		 * along and taken over ifs while the kernel lock was
+		 * released. Or worse, ifs could have been destroyed
+		 * cos ifunit() is... optimistic.
+		 */
+
 		bif->bridge_sc = sc;
 		bif->ifp = ifs;
 		bif->bif_flags = IFBIF_LEARNING | IFBIF_DISCOVER;
@@ -329,7 +333,7 @@ bridge_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		ifs->if_bridgeidx = ifp->if_index;
 		task_set(&bif->bif_dtask, bridge_ifdetach, bif);
 		if_detachhook_add(ifs, &bif->bif_dtask);
-		if_ih_insert(bif->ifp, bridge_input, NULL);
+		ether_brport_set(bif->ifp, &bridge_brport);
 		SMR_SLIST_INSERT_HEAD_LOCKED(&sc->sc_iflist, bif, bif_next);
 		break;
 	case SIOCBRDGDEL:
@@ -473,7 +477,7 @@ bridge_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		if ((bp = bs->bs_root_port) == NULL)
 			brop->ifbop_root_port = 0;
 		else
-			brop->ifbop_root_port = bp->bp_ifp->if_index;
+			brop->ifbop_root_port = bp->bp_ifindex;
 		brop->ifbop_maxage = bs->bs_bridge_max_age >> 8;
 		brop->ifbop_hellotime = bs->bs_bridge_htime >> 8;
 		brop->ifbop_fwddelay = bs->bs_bridge_fdelay >> 8;
@@ -550,7 +554,7 @@ bridge_ifremove(struct bridge_iflist *bif)
 
 	SMR_SLIST_REMOVE_LOCKED(&sc->sc_iflist, bif, bridge_iflist, bif_next);
 	if_detachhook_del(bif->ifp, &bif->bif_dtask);
-	if_ih_remove(bif->ifp, bridge_input, NULL);
+	ether_brport_clr(bif->ifp);
 
 	smr_barrier();
 
@@ -1095,19 +1099,19 @@ bridge_ourether(struct ifnet *ifp, uint8_t *ena)
  * Receive input from an interface.  Queue the packet for bridging if its
  * not for us, and schedule an interrupt.
  */
-int
-bridge_input(struct ifnet *ifp, struct mbuf *m, void *cookie)
+struct mbuf *
+bridge_input(struct ifnet *ifp, struct mbuf *m, void *null)
 {
 	KASSERT(m->m_flags & M_PKTHDR);
 
 	if (m->m_flags & M_PROTO1) {
 		m->m_flags &= ~M_PROTO1;
-		return (0);
+		return (m);
 	}
 
 	niq_enqueue(&bridgeintrq, m);
 
-	return (1);
+	return (NULL);
 }
 
 void
@@ -1541,7 +1545,7 @@ bridge_ipsec(struct ifnet *ifp, struct ether_header *eh, int hassnap,
 		if (tdb != NULL && (tdb->tdb_flags & TDBF_INVALID) == 0 &&
 		    tdb->tdb_xform != NULL) {
 			if (tdb->tdb_first_use == 0) {
-				tdb->tdb_first_use = time_second;
+				tdb->tdb_first_use = gettime();
 				if (tdb->tdb_flags & TDBF_FIRSTUSE)
 					timeout_add_sec(&tdb->tdb_first_tmo,
 					    tdb->tdb_exp_first_use);
@@ -1586,7 +1590,7 @@ bridge_ipsec(struct ifnet *ifp, struct ether_header *eh, int hassnap,
 			if ((af == AF_INET) &&
 			    ip_mtudisc && (ip->ip_off & htons(IP_DF)) &&
 			    tdb->tdb_mtu && ntohs(ip->ip_len) > tdb->tdb_mtu &&
-			    tdb->tdb_mtutimeout > time_second)
+			    tdb->tdb_mtutimeout > gettime())
 				bridge_send_icmp_err(ifp, eh, m,
 				    hassnap, llc, tdb->tdb_mtu,
 				    ICMP_UNREACH, ICMP_UNREACH_NEEDFRAG);

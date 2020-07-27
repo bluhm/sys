@@ -1,4 +1,4 @@
-#	$OpenBSD: files.pci,v 1.345 2020/03/06 08:39:34 patrick Exp $
+#	$OpenBSD: files.pci,v 1.352 2020/07/17 06:33:07 dlg Exp $
 #	$NetBSD: files.pci,v 1.20 1996/09/24 17:47:15 christos Exp $
 #
 # Config file and device description for machine-independent PCI code.
@@ -343,7 +343,7 @@ file	dev/pci/ixgb_ee.c		ixgb
 file	dev/pci/ixgb_hw.c		ixgb
 
 # Intel 82598 10GbE
-device	ix: ether, ifnet, ifmedia
+device	ix: ether, ifnet, ifmedia, intrmap, stoeplitz
 attach	ix at pci
 file	dev/pci/if_ix.c			ix
 file	dev/pci/ixgbe.c			ix
@@ -354,7 +354,7 @@ file	dev/pci/ixgbe_x550.c		ix
 file	dev/pci/ixgbe_phy.c		ix
 
 # Intel Ethernet 700 Series
-device	ixl: ether, ifnet, ifmedia
+device	ixl: ether, ifnet, ifmedia, intrmap, stoeplitz
 attach	ixl at pci
 file	dev/pci/if_ixl.c		ixl
 
@@ -718,7 +718,7 @@ attach	vic at pci
 file	dev/pci/if_vic.c		vic
 
 # VMware VMXNET3 virtual interface
-device	vmx: ether, ifnet, ifmedia
+device	vmx: ether, ifnet, ifmedia, stoeplitz, intrmap
 attach	vmx at pci
 file	dev/pci/if_vmx.c		vmx
 
@@ -831,7 +831,7 @@ attach	bnxt at pci
 file	dev/pci/if_bnxt.c		bnxt
 
 # Mellanox ConnectX-4 and later
-device  mcx: ether, ifnet, ifmedia
+device  mcx: ether, ifnet, ifmedia, stoeplitz
 attach  mcx at pci
 file    dev/pci/if_mcx.c                mcx
 

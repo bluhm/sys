@@ -1,4 +1,4 @@
-/*	$OpenBSD: rasops.c,v 1.59 2019/03/18 16:10:39 fcambus Exp $	*/
+/*	$OpenBSD: rasops.c,v 1.66 2020/07/23 09:17:03 tim Exp $	*/
 /*	$NetBSD: rasops.c,v 1.35 2001/02/02 06:01:01 marcus Exp $	*/
 
 /*-
@@ -138,7 +138,7 @@ struct rasops_screen {
 	int rs_visible;
 	int rs_crow;
 	int rs_ccol;
-	long rs_defattr;
+	uint32_t rs_defattr;
 
 	int rs_sbscreens;
 #define RS_SCROLLBACK_SCREENS 5
@@ -151,11 +151,11 @@ int	rasops_copycols(void *, int, int, int, int);
 int	rasops_copyrows(void *, int, int, int);
 int	rasops_mapchar(void *, int, u_int *);
 int	rasops_cursor(void *, int, int, int);
-int	rasops_alloc_cattr(void *, int, int, int, long *);
-int	rasops_alloc_mattr(void *, int, int, int, long *);
+int	rasops_pack_cattr(void *, int, int, int, uint32_t *);
+int	rasops_pack_mattr(void *, int, int, int, uint32_t *);
 int	rasops_do_cursor(struct rasops_info *);
 void	rasops_init_devcmap(struct rasops_info *);
-void	rasops_unpack_attr(void *, long, int *, int *, int *);
+void	rasops_unpack_attr(void *, uint32_t, int *, int *, int *);
 #if NRASOPS_BSWAP > 0
 static void slow_bcopy(void *, void *, size_t);
 #endif
@@ -163,9 +163,9 @@ static void slow_bcopy(void *, void *, size_t);
 void	rasops_copychar(void *, int, int, int, int);
 int	rasops_copycols_rotated(void *, int, int, int, int);
 int	rasops_copyrows_rotated(void *, int, int, int);
-int	rasops_erasecols_rotated(void *, int, int, int, long);
-int	rasops_eraserows_rotated(void *, int, int, long);
-int	rasops_putchar_rotated(void *, int, int, u_int, long);
+int	rasops_erasecols_rotated(void *, int, int, int, uint32_t);
+int	rasops_eraserows_rotated(void *, int, int, uint32_t);
+int	rasops_putchar_rotated(void *, int, int, u_int, uint32_t);
 void	rasops_rotate_font(int *, int);
 
 /*
@@ -182,19 +182,19 @@ struct	rotatedfont {
 void	rasops_doswitch(void *);
 int	rasops_vcons_cursor(void *, int, int, int);
 int	rasops_vcons_mapchar(void *, int, u_int *);
-int	rasops_vcons_putchar(void *, int, int, u_int, long);
+int	rasops_vcons_putchar(void *, int, int, u_int, uint32_t);
 int	rasops_vcons_copycols(void *, int, int, int, int);
-int	rasops_vcons_erasecols(void *, int, int, int, long);
+int	rasops_vcons_erasecols(void *, int, int, int, uint32_t);
 int	rasops_vcons_copyrows(void *, int, int, int);
-int	rasops_vcons_eraserows(void *, int, int, long);
-int	rasops_vcons_alloc_attr(void *, int, int, int, long *);
-void	rasops_vcons_unpack_attr(void *, long, int *, int *, int *);
+int	rasops_vcons_eraserows(void *, int, int, uint32_t);
+int	rasops_vcons_pack_attr(void *, int, int, int, uint32_t *);
+void	rasops_vcons_unpack_attr(void *, uint32_t, int *, int *, int *);
 
-int	rasops_wronly_putchar(void *, int, int, u_int, long);
+int	rasops_wronly_putchar(void *, int, int, u_int, uint32_t);
 int	rasops_wronly_copycols(void *, int, int, int, int);
-int	rasops_wronly_erasecols(void *, int, int, int, long);
+int	rasops_wronly_erasecols(void *, int, int, int, uint32_t);
 int	rasops_wronly_copyrows(void *, int, int, int);
-int	rasops_wronly_eraserows(void *, int, int, long);
+int	rasops_wronly_eraserows(void *, int, int, uint32_t);
 int	rasops_wronly_do_cursor(struct rasops_info *);
 
 int	rasops_add_font(struct rasops_info *, struct wsdisplay_font *);
@@ -216,11 +216,11 @@ rasops_init(struct rasops_info *ri, int wantrows, int wantcols)
 		wsfont_init();
 
 		if (ri->ri_width >= 120 * 32)
-			/* Screen width larger than 3840px, 32px wide font */
+			/* Screen width of at least 3840px, 32px wide font */
 			cookie = wsfont_find(NULL, 32, 0, 0);
 
 		if (cookie <= 0 && ri->ri_width >= 120 * 16)
-			/* Screen width larger than 1920px, 16px wide font */
+			/* Screen width of at least 1920px, 16px wide font */
 			cookie = wsfont_find(NULL, 16, 0, 0);
 
 		if (cookie <= 0 && ri->ri_width > 80 * 12)
@@ -283,12 +283,12 @@ rasops_init(struct rasops_info *ri, int wantrows, int wantcols)
 	ri->ri_erasecols = ri->ri_ops.erasecols;
 	ri->ri_copyrows = ri->ri_ops.copyrows;
 	ri->ri_eraserows = ri->ri_ops.eraserows;
-	ri->ri_alloc_attr = ri->ri_ops.alloc_attr;
+	ri->ri_pack_attr = ri->ri_ops.pack_attr;
 
 	if (ri->ri_flg & RI_VCONS) {
 		void *cookie;
 		int curx, cury;
-		long attr;
+		uint32_t attr;
 
 		if (rasops_alloc_screen(ri, &cookie, &curx, &cury, &attr))
 			return (-1);
@@ -304,11 +304,11 @@ rasops_init(struct rasops_info *ri, int wantrows, int wantcols)
 		ri->ri_ops.erasecols = rasops_vcons_erasecols;
 		ri->ri_ops.copyrows = rasops_vcons_copyrows;
 		ri->ri_ops.eraserows = rasops_vcons_eraserows;
-		ri->ri_ops.alloc_attr = rasops_vcons_alloc_attr;
+		ri->ri_ops.pack_attr = rasops_vcons_pack_attr;
 		ri->ri_ops.unpack_attr = rasops_vcons_unpack_attr;
 		ri->ri_do_cursor = rasops_wronly_do_cursor;
 	} else if ((ri->ri_flg & RI_WRONLY) && ri->ri_bs != NULL) {
-		long attr;
+		uint32_t attr;
 		int i;
 
 		ri->ri_ops.putchar = rasops_wronly_putchar;
@@ -319,7 +319,7 @@ rasops_init(struct rasops_info *ri, int wantrows, int wantcols)
 		ri->ri_do_cursor = rasops_wronly_do_cursor;
 
 		if (ri->ri_flg & RI_CLEAR) {
-			ri->ri_alloc_attr(ri, 0, 0, 0, &attr);
+			ri->ri_pack_attr(ri, 0, 0, 0, &attr);
 			for (i = 0; i < ri->ri_rows * ri->ri_cols; i++) {
 				ri->ri_bs[i].uc = ' ';
 				ri->ri_bs[i].attr = attr;
@@ -446,10 +446,10 @@ rasops_reconfig(struct rasops_info *ri, int wantrows, int wantcols)
 	ri->ri_updatecursor = NULL;
 
 	if (ri->ri_depth < 8 || (ri->ri_flg & RI_FORCEMONO) != 0) {
-		ri->ri_ops.alloc_attr = rasops_alloc_mattr;
+		ri->ri_ops.pack_attr = rasops_pack_mattr;
 		ri->ri_caps = WSSCREEN_UNDERLINE | WSSCREEN_REVERSE;
 	} else {
-		ri->ri_ops.alloc_attr = rasops_alloc_cattr;
+		ri->ri_ops.pack_attr = rasops_pack_cattr;
 		ri->ri_caps = WSSCREEN_UNDERLINE | WSSCREEN_HILIT |
 		    WSSCREEN_WSCOLORS | WSSCREEN_REVERSE;
 	}
@@ -523,22 +523,14 @@ rasops_mapchar(void *cookie, int c, u_int *cp)
 		panic("rasops_mapchar: no font selected");
 #endif
 	if (ri->ri_font->encoding != WSDISPLAY_FONTENC_ISO) {
-
-		if ( (c = wsfont_map_unichar(ri->ri_font, c)) < 0) {
-
+		if ((c = wsfont_map_unichar(ri->ri_font, c)) < 0) {
 			*cp = '?';
 			return (0);
-
 		}
 	}
 
-
-	if (c < ri->ri_font->firstchar) {
-		*cp = '?';
-		return (0);
-	}
-
-	if (c - ri->ri_font->firstchar >= ri->ri_font->numchars) {
+	if (c < ri->ri_font->firstchar ||
+	    c - ri->ri_font->firstchar >= ri->ri_font->numchars) {
 		*cp = '?';
 		return (0);
 	}
@@ -548,10 +540,10 @@ rasops_mapchar(void *cookie, int c, u_int *cp)
 }
 
 /*
- * Allocate a color attribute.
+ * Pack a color attribute.
  */
 int
-rasops_alloc_cattr(void *cookie, int fg, int bg, int flg, long *attr)
+rasops_pack_cattr(void *cookie, int fg, int bg, int flg, uint32_t *attr)
 {
 	int swap;
 
@@ -589,10 +581,10 @@ rasops_alloc_cattr(void *cookie, int fg, int bg, int flg, long *attr)
 }
 
 /*
- * Allocate a mono attribute.
+ * Pack a mono attribute.
  */
 int
-rasops_alloc_mattr(void *cookie, int fg, int bg, int flg, long *attr)
+rasops_pack_mattr(void *cookie, int fg, int bg, int flg, uint32_t *attr)
 {
 	int swap;
 
@@ -897,7 +889,7 @@ rasops_init_devcmap(struct rasops_info *ri)
  * Unpack a rasops attribute
  */
 void
-rasops_unpack_attr(void *cookie, long attr, int *fg, int *bg, int *underline)
+rasops_unpack_attr(void *cookie, uint32_t attr, int *fg, int *bg, int *underline)
 {
 	*fg = ((u_int)attr >> 24) & 0xf;
 	*bg = ((u_int)attr >> 16) & 0xf;
@@ -909,7 +901,7 @@ rasops_unpack_attr(void *cookie, long attr, int *fg, int *bg, int *underline)
  * Erase rows
  */
 int
-rasops_eraserows(void *cookie, int row, int num, long attr)
+rasops_eraserows(void *cookie, int row, int num, uint32_t attr)
 {
 	struct rasops_info *ri;
 	int np, nw, cnt, delta;
@@ -995,7 +987,7 @@ rasops_do_cursor(struct rasops_info *ri)
 		/* Rotate rows/columns */
 		row = ri->ri_cols - ri->ri_ccol - 1;
 		col = ri->ri_crow;
-	} else		
+	} else
 #endif
 	{
 		row = ri->ri_crow;
@@ -1057,7 +1049,7 @@ rasops_do_cursor(struct rasops_info *ri)
  * Erase columns.
  */
 int
-rasops_erasecols(void *cookie, int row, int col, int num, long attr)
+rasops_erasecols(void *cookie, int row, int col, int num, uint32_t attr)
 {
 	int n8, height, cnt, slop1, slop2, clr;
 	struct rasops_info *ri;
@@ -1258,7 +1250,7 @@ rasops_copychar(void *cookie, int srcrow, int dstrow, int srccol, int dstcol)
 }
 
 int
-rasops_putchar_rotated(void *cookie, int row, int col, u_int uc, long attr)
+rasops_putchar_rotated(void *cookie, int row, int col, u_int uc, uint32_t attr)
 {
 	struct rasops_info *ri;
 	u_char *rp;
@@ -1297,7 +1289,7 @@ rasops_putchar_rotated(void *cookie, int row, int col, u_int uc, long attr)
 }
 
 int
-rasops_erasecols_rotated(void *cookie, int row, int col, int num, long attr)
+rasops_erasecols_rotated(void *cookie, int row, int col, int num, uint32_t attr)
 {
 	int i;
 	int rc;
@@ -1352,7 +1344,7 @@ rasops_copycols_rotated(void *cookie, int row, int src, int dst, int num)
 }
 
 int
-rasops_eraserows_rotated(void *cookie, int row, int num, long attr)
+rasops_eraserows_rotated(void *cookie, int row, int num, uint32_t attr)
 {
 	struct rasops_info *ri;
 	int col, rn;
@@ -1399,7 +1391,7 @@ slow_bcopy(void *s, void *d, size_t len)
 
 int
 rasops_alloc_screen(void *v, void **cookiep,
-    int *curxp, int *curyp, long *attrp)
+    int *curxp, int *curyp, uint32_t *attrp)
 {
 	struct rasops_info *ri = v;
 	struct rasops_screen *scr;
@@ -1423,7 +1415,7 @@ rasops_alloc_screen(void *v, void **cookiep,
 	*cookiep = scr;
 	*curxp = 0;
 	*curyp = 0;
-	ri->ri_alloc_attr(ri, 0, 0, 0, attrp);
+	ri->ri_pack_attr(ri, 0, 0, 0, attrp);
 
 	scr->rs_ri = ri;
 	scr->rs_visible = (ri->ri_nscreens == 0);
@@ -1553,7 +1545,7 @@ rasops_vcons_mapchar(void *cookie, int c, u_int *cp)
 }
 
 int
-rasops_vcons_putchar(void *cookie, int row, int col, u_int uc, long attr)
+rasops_vcons_putchar(void *cookie, int row, int col, u_int uc, uint32_t attr)
 {
 	struct rasops_screen *scr = cookie;
 	int off = row * scr->rs_ri->ri_cols + col + scr->rs_dispoffset;
@@ -1601,7 +1593,7 @@ rasops_vcons_copycols(void *cookie, int row, int src, int dst, int num)
 }
 
 int
-rasops_vcons_erasecols(void *cookie, int row, int col, int num, long attr)
+rasops_vcons_erasecols(void *cookie, int row, int col, int num, uint32_t attr)
 {
 	struct rasops_screen *scr = cookie;
 	int cols = scr->rs_ri->ri_cols;
@@ -1627,28 +1619,43 @@ rasops_vcons_copyrows(void *cookie, int src, int dst, int num)
 	struct rasops_info *ri = scr->rs_ri;
 	int cols = ri->ri_cols;
 	int row, col, rc;
+	int srcofs;
+	int move;
 
+	/* update the scrollback buffer if the entire screen is moving */
 	if (dst == 0 && (src + num == ri->ri_rows) && scr->rs_sbscreens > 0)
 		memmove(&scr->rs_bs[dst], &scr->rs_bs[src * cols],
-		    ((ri->ri_rows * (scr->rs_sbscreens + 1) * cols) -
-		    (src * cols)) * sizeof(struct wsdisplay_charcell));
-	else
+		    ri->ri_rows * scr->rs_sbscreens * cols
+		    * sizeof(struct wsdisplay_charcell));
+
+	/* copy everything */
+	if ((ri->ri_flg & RI_WRONLY) == 0 || !scr->rs_visible) {
 		memmove(&scr->rs_bs[dst * cols + scr->rs_dispoffset],
 		    &scr->rs_bs[src * cols + scr->rs_dispoffset],
 		    num * cols * sizeof(struct wsdisplay_charcell));
 
-	if (!scr->rs_visible)
-		return 0;
+		if (!scr->rs_visible)
+			return 0;
 
-	if ((ri->ri_flg & RI_WRONLY) == 0)
 		return ri->ri_copyrows(ri, src, dst, num);
+	}
 
-	for (row = dst; row < dst + num; row++) {
+	/* smart update, only redraw characters that are different */
+	srcofs = (src - dst) * cols;
+
+	for (move = 0; move < num; move++) {
+		row = srcofs > 0 ? dst + move : dst + num - 1 - move;
 		for (col = 0; col < cols; col++) {
 			int off = row * cols + col + scr->rs_dispoffset;
+			int newc = scr->rs_bs[off+srcofs].uc;
+			int newa = scr->rs_bs[off+srcofs].attr;
 
-			rc = ri->ri_putchar(ri, row, col,
-			    scr->rs_bs[off].uc, scr->rs_bs[off].attr);
+			if (scr->rs_bs[off].uc == newc &&
+			    scr->rs_bs[off].attr == newa)
+				continue;
+			scr->rs_bs[off].uc = newc;
+			scr->rs_bs[off].attr = newa;
+			rc = ri->ri_putchar(ri, row, col, newc, newa);
 			if (rc != 0)
 				return rc;
 		}
@@ -1658,7 +1665,7 @@ rasops_vcons_copyrows(void *cookie, int src, int dst, int num)
 }
 
 int
-rasops_vcons_eraserows(void *cookie, int row, int num, long attr)
+rasops_vcons_eraserows(void *cookie, int row, int num, uint32_t attr)
 {
 	struct rasops_screen *scr = cookie;
 	int cols = scr->rs_ri->ri_cols;
@@ -1678,15 +1685,15 @@ rasops_vcons_eraserows(void *cookie, int row, int num, long attr)
 }
 
 int
-rasops_vcons_alloc_attr(void *cookie, int fg, int bg, int flg, long *attr)
+rasops_vcons_pack_attr(void *cookie, int fg, int bg, int flg, uint32_t *attr)
 {
 	struct rasops_screen *scr = cookie;
 
-	return scr->rs_ri->ri_alloc_attr(scr->rs_ri, fg, bg, flg, attr);
+	return scr->rs_ri->ri_pack_attr(scr->rs_ri, fg, bg, flg, attr);
 }
 
 void
-rasops_vcons_unpack_attr(void *cookie, long attr, int *fg, int *bg,
+rasops_vcons_unpack_attr(void *cookie, uint32_t attr, int *fg, int *bg,
     int *underline)
 {
 	struct rasops_screen *scr = cookie;
@@ -1695,7 +1702,7 @@ rasops_vcons_unpack_attr(void *cookie, long attr, int *fg, int *bg,
 }
 
 int
-rasops_wronly_putchar(void *cookie, int row, int col, u_int uc, long attr)
+rasops_wronly_putchar(void *cookie, int row, int col, u_int uc, uint32_t attr)
 {
 	struct rasops_info *ri = cookie;
 	int off = row * ri->ri_cols + col;
@@ -1729,7 +1736,7 @@ rasops_wronly_copycols(void *cookie, int row, int src, int dst, int num)
 }
 
 int
-rasops_wronly_erasecols(void *cookie, int row, int col, int num, long attr)
+rasops_wronly_erasecols(void *cookie, int row, int col, int num, uint32_t attr)
 {
 	struct rasops_info *ri = cookie;
 	int cols = ri->ri_cols;
@@ -1770,7 +1777,7 @@ rasops_wronly_copyrows(void *cookie, int src, int dst, int num)
 }
 
 int
-rasops_wronly_eraserows(void *cookie, int row, int num, long attr)
+rasops_wronly_eraserows(void *cookie, int row, int num, uint32_t attr)
 {
 	struct rasops_info *ri = cookie;
 	int cols = ri->ri_cols;
@@ -1791,7 +1798,7 @@ rasops_wronly_do_cursor(struct rasops_info *ri)
 {
 	int off = ri->ri_crow * ri->ri_cols + ri->ri_ccol;
 	u_int uc;
-	long attr;
+	uint32_t attr;
 	int fg, bg;
 
 	uc = ri->ri_bs[off].uc;
@@ -1859,8 +1866,7 @@ rasops_use_font(struct rasops_info *ri, struct wsdisplay_font *font)
 	    WSDISPLAY_FONTORDER_KNOWN) < 0)
 		return EINVAL;
 
-	/* if (ri->ri_wsfcookie >= 0) */
-		wsfont_unlock(ri->ri_wsfcookie);
+	wsfont_unlock(ri->ri_wsfcookie);
 	ri->ri_wsfcookie = wsfcookie;
 	ri->ri_font = wsf;
 	ri->ri_fontscale = ri->ri_font->fontheight * ri->ri_font->stride;

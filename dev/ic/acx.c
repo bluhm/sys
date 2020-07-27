@@ -1,4 +1,4 @@
-/*	$OpenBSD: acx.c,v 1.122 2020/01/11 08:16:18 cheloha Exp $ */
+/*	$OpenBSD: acx.c,v 1.124 2020/07/10 13:26:37 patrick Exp $ */
 
 /*
  * Copyright (c) 2006 Jonathan Gray <jsg@openbsd.org>
@@ -284,7 +284,7 @@ acx_attach(struct acx_softc *sc)
 	ifp->if_watchdog = acx_watchdog;
 	ifp->if_flags = IFF_SIMPLEX | IFF_BROADCAST | IFF_MULTICAST;
 	strlcpy(ifp->if_xname, sc->sc_dev.dv_xname, IFNAMSIZ);
-	IFQ_SET_MAXLEN(&ifp->if_snd, IFQ_MAXLEN);
+	ifq_set_maxlen(&ifp->if_snd, IFQ_MAXLEN);
 
 	/* Set channels */
 	for (i = 1; i <= 14; ++i) {
@@ -950,7 +950,7 @@ acx_start(struct ifnet *ifp)
 				ni = m->m_pkthdr.ph_cookie;
 				goto encapped;
 			} else {
-				IFQ_DEQUEUE(&ifp->if_snd, m);
+				m = ifq_dequeue(&ifp->if_snd);
 				if (m == NULL)
 					break;
 			}

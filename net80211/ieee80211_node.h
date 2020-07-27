@@ -1,4 +1,4 @@
-/*	$OpenBSD: ieee80211_node.h,v 1.85 2020/01/15 09:34:27 phessler Exp $	*/
+/*	$OpenBSD: ieee80211_node.h,v 1.87 2020/07/21 08:38:59 stsp Exp $	*/
 /*	$NetBSD: ieee80211_node.h,v 1.9 2004/04/30 22:57:32 dyoung Exp $	*/
 
 /*-
@@ -172,7 +172,7 @@ enum {
 	RSNA_SUPP_INITIALIZE,		/* not expecting any messages */
 	RSNA_SUPP_PTKSTART,		/* awaiting handshake message 1 */
 	RSNA_SUPP_PTKNEGOTIATING,	/* got message 1 and derived PTK */
-	RNSA_SUPP_PTKDONE		/* got message 3 and authenticated AP */
+	RSNA_SUPP_PTKDONE		/* got message 3 and authenticated AP */
 };
 
 struct ieee80211_rxinfo {
@@ -226,6 +226,13 @@ struct ieee80211_rx_ba {
 	u_int16_t		ba_head;
 	struct timeout		ba_gap_to;
 #define IEEE80211_BA_GAP_TIMEOUT	300 /* msec */
+
+	/*
+	 * Counter for frames forced to wait in the reordering buffer
+	 * due to a leading gap caused by one or more missing frames.
+	 */
+	int			ba_gapwait;
+
 	/* Counter for consecutive frames which missed the BA window. */
 	int			ba_winmiss;
 	/* Sequence number of previous frame which missed the BA window. */

@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ether.h,v 1.76 2019/07/17 16:46:18 mpi Exp $	*/
+/*	$OpenBSD: if_ether.h,v 1.78 2020/07/22 02:16:02 dlg Exp $	*/
 /*	$NetBSD: if_ether.h,v 1.22 1996/05/11 13:00:00 mycroft Exp $	*/
 
 /*
@@ -199,6 +199,11 @@ do {									\
 
 #include <net/if_var.h>	/* for "struct ifnet" */
 
+struct ether_brport {
+	struct mbuf	*(*eb_input)(struct ifnet *, struct mbuf *, void *);
+	void		  *eb_port;
+};
+
 /*
  * Structure shared between the ethernet driver modules and
  * the address resolution code.  For example, each ec_softc or il_softc
@@ -213,6 +218,7 @@ struct	arpcom {
 	int	 ac_multirangecnt;		/* number of mcast ranges */
 
 	void	*ac_trunkport;
+	const struct ether_brport *ac_brport;
 };
 
 extern int arpt_keep;				/* arp resolved cache expire */
@@ -247,7 +253,7 @@ int	ether_multiaddr(struct sockaddr *, u_int8_t[], u_int8_t[]);
 void	ether_ifattach(struct ifnet *);
 void	ether_ifdetach(struct ifnet *);
 int	ether_ioctl(struct ifnet *, struct arpcom *, u_long, caddr_t);
-int	ether_input(struct ifnet *, struct mbuf *, void *);
+void	ether_input(struct ifnet *, struct mbuf *);
 int	ether_resolve(struct ifnet *, struct mbuf *, struct sockaddr *,
 	    struct rtentry *, struct ether_header *);
 struct mbuf *
@@ -258,6 +264,13 @@ int	ether_output(struct ifnet *, struct mbuf *, struct sockaddr *,
 void	ether_rtrequest(struct ifnet *, int, struct rtentry *);
 char	*ether_sprintf(u_char *);
 
+int	ether_brport_isset(struct ifnet *);
+void	ether_brport_set(struct ifnet *, const struct ether_brport *);
+void	ether_brport_clr(struct ifnet *);
+const struct ether_brport *
+	ether_brport_get(struct ifnet *);
+const struct ether_brport *
+	ether_brport_get_locked(struct ifnet *);
 
 /*
  * Ethernet multicast address structure.  There is one of these for each

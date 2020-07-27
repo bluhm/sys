@@ -1,4 +1,4 @@
-/*	$OpenBSD: xbf.c,v 1.36 2020/02/12 14:08:56 krw Exp $	*/
+/*	$OpenBSD: xbf.c,v 1.44 2020/07/22 13:16:05 krw Exp $	*/
 
 /*
  * Copyright (c) 2016, 2017 Mike Belopuhov
@@ -201,7 +201,6 @@ struct xbf_softc {
 	struct mutex		 sc_ccb_sqlck;
 
 	struct scsi_iopool	 sc_iopool;
-	struct scsi_link         sc_link;
 	struct device		*sc_scsibus;
 };
 
@@ -227,10 +226,9 @@ void	xbf_scsi_cmd(struct scsi_xfer *);
 int	xbf_submit_cmd(struct scsi_xfer *);
 int	xbf_poll_cmd(struct scsi_xfer *);
 void	xbf_complete_cmd(struct xbf_softc *, struct xbf_ccb_queue *, int);
-int	xbf_dev_probe(struct scsi_link *);
 
 struct scsi_adapter xbf_switch = {
-	xbf_scsi_cmd, NULL, xbf_dev_probe, NULL, NULL
+	xbf_scsi_cmd, NULL, NULL, NULL, NULL
 };
 
 void	xbf_scsi_inq(struct scsi_xfer *);
@@ -301,16 +299,16 @@ xbf_attach(struct device *parent, struct device *self, void *aux)
 		goto error;
 	}
 
-	sc->sc_link.adapter = &xbf_switch;
-	sc->sc_link.adapter_softc = self;
-	sc->sc_link.adapter_buswidth = 2;
-	sc->sc_link.luns = 1;
-	sc->sc_link.adapter_target = 2;
-	sc->sc_link.openings = sc->sc_nccb;
-	sc->sc_link.pool = &sc->sc_iopool;
+	saa.saa_adapter = &xbf_switch;
+	saa.saa_adapter_softc = self;
+	saa.saa_adapter_buswidth = 1;
+	saa.saa_luns = 1;
+	saa.saa_adapter_target = SDEV_NO_ADAPTER_TARGET;
+	saa.saa_openings = sc->sc_nccb;
+	saa.saa_pool = &sc->sc_iopool;
+	saa.saa_quirks = saa.saa_flags = 0;
+	saa.saa_wwpn = saa.saa_wwnn = 0;
 
-	bzero(&saa, sizeof(saa));
-	saa.saa_sc_link = &sc->sc_link;
 	sc->sc_scsibus = config_found(self, &saa, scsiprint);
 
 	xen_unplug_emulated(parent, XEN_UNPLUG_IDE | XEN_UNPLUG_IDESEC);
@@ -385,7 +383,7 @@ xbf_intr(void *xsc)
 void
 xbf_scsi_cmd(struct scsi_xfer *xs)
 {
-	struct xbf_softc *sc = xs->sc_link->adapter_softc;
+	struct xbf_softc *sc = xs->sc_link->bus->sb_adapter_softc;
 
 	switch (xs->cmd->opcode) {
 	case READ_BIG:
@@ -450,7 +448,7 @@ xbf_scsi_cmd(struct scsi_xfer *xs)
 int
 xbf_load_cmd(struct scsi_xfer *xs)
 {
-	struct xbf_softc *sc = xs->sc_link->adapter_softc;
+	struct xbf_softc *sc = xs->sc_link->bus->sb_adapter_softc;
 	struct xbf_ccb *ccb = xs->io;
 	struct xbf_sge *sge;
 	union xbf_ring_desc *xrd;
@@ -514,7 +512,7 @@ xbf_load_cmd(struct scsi_xfer *xs)
 int
 xbf_bounce_cmd(struct scsi_xfer *xs)
 {
-	struct xbf_softc *sc = xs->sc_link->adapter_softc;
+	struct xbf_softc *sc = xs->sc_link->bus->sb_adapter_softc;
 	struct xbf_ccb *ccb = xs->io;
 	struct xbf_sge *sge;
 	struct xbf_dma_mem *dma;
@@ -590,7 +588,7 @@ xbf_bounce_cmd(struct scsi_xfer *xs)
 void
 xbf_reclaim_cmd(struct scsi_xfer *xs)
 {
-	struct xbf_softc *sc = xs->sc_link->adapter_softc;
+	struct xbf_softc *sc = xs->sc_link->bus->sb_adapter_softc;
 	struct xbf_ccb *ccb = xs->io;
 	struct xbf_dma_mem *dma = &ccb->ccb_bbuf;
 
@@ -606,7 +604,7 @@ xbf_reclaim_cmd(struct scsi_xfer *xs)
 int
 xbf_submit_cmd(struct scsi_xfer *xs)
 {
-	struct xbf_softc *sc = xs->sc_link->adapter_softc;
+	struct xbf_softc *sc = xs->sc_link->bus->sb_adapter_softc;
 	struct xbf_ccb *ccb = xs->io;
 	union xbf_ring_desc *xrd;
 	struct scsi_rw *rw;
@@ -738,7 +736,7 @@ xbf_poll_cmd(struct scsi_xfer *xs)
 			delay(10);
 		else
 			tsleep_nsec(xs, PRIBIO, "xbfpoll", USEC_TO_NSEC(10));
-		xbf_intr(xs->sc_link->adapter_softc);
+		xbf_intr(xs->sc_link->bus->sb_adapter_softc);
 	} while(--timo > 0);
 
 	return (0);
@@ -822,7 +820,7 @@ xbf_scsi_inq(struct scsi_xfer *xs)
 void
 xbf_scsi_inquiry(struct scsi_xfer *xs)
 {
-	struct xbf_softc *sc = xs->sc_link->adapter_softc;
+	struct xbf_softc *sc = xs->sc_link->bus->sb_adapter_softc;
 	struct scsi_inquiry_data inq;
 	/* char buf[5]; */
 
@@ -853,7 +851,7 @@ xbf_scsi_inquiry(struct scsi_xfer *xs)
 void
 xbf_scsi_capacity(struct scsi_xfer *xs)
 {
-	struct xbf_softc *sc = xs->sc_link->adapter_softc;
+	struct xbf_softc *sc = xs->sc_link->bus->sb_adapter_softc;
 	struct scsi_read_cap_data rcd;
 	uint64_t capacity;
 
@@ -874,7 +872,7 @@ xbf_scsi_capacity(struct scsi_xfer *xs)
 void
 xbf_scsi_capacity16(struct scsi_xfer *xs)
 {
-	struct xbf_softc *sc = xs->sc_link->adapter_softc;
+	struct xbf_softc *sc = xs->sc_link->bus->sb_adapter_softc;
 	struct scsi_read_cap_data_16 rcd;
 
 	bzero(&rcd, sizeof(rcd));
@@ -897,15 +895,6 @@ xbf_scsi_done(struct scsi_xfer *xs, int error)
 	s = splbio();
 	scsi_done(xs);
 	splx(s);
-}
-
-int
-xbf_dev_probe(struct scsi_link *link)
-{
-	if (link->target == 0)
-		return (0);
-
-	return (ENODEV);
 }
 
 int

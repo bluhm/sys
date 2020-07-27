@@ -1,4 +1,4 @@
-/*	$OpenBSD: ixgbe.h,v 1.29 2020/03/02 01:59:01 jmatthew Exp $	*/
+/*	$OpenBSD: ixgbe.h,v 1.32 2020/07/18 07:18:22 dlg Exp $	*/
 
 /******************************************************************************
 
@@ -41,6 +41,7 @@
 
 #include "bpfilter.h"
 #include "vlan.h"
+#include "kstat.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,10 +54,13 @@
 #include <sys/timeout.h>
 #include <sys/pool.h>
 #include <sys/rwlock.h>
+#include <sys/intrmap.h>
 #include <sys/atomic.h>
+#include <sys/kstat.h>
 
 #include <net/if.h>
 #include <net/if_media.h>
+#include <net/toeplitz.h>
 
 #include <netinet/in.h>
 #include <netinet/if_ether.h>

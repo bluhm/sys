@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_gif.c,v 1.128 2019/10/04 05:00:49 dlg Exp $	*/
+/*	$OpenBSD: if_gif.c,v 1.130 2020/07/10 13:26:41 patrick Exp $	*/
 /*	$KAME: if_gif.c,v 1.43 2001/02/20 08:51:07 itojun Exp $	*/
 
 /*
@@ -170,7 +170,7 @@ gif_clone_create(struct if_clone *ifc, int unit)
 	ifp->if_output = gif_output;
 	ifp->if_rtrequest = p2p_rtrequest;
 	ifp->if_type   = IFT_GIF;
-	IFQ_SET_MAXLEN(&ifp->if_snd, IFQ_MAXLEN);
+	ifq_set_maxlen(&ifp->if_snd, IFQ_MAXLEN);
 	ifp->if_softc = sc;
 
 	if_attach(ifp);
@@ -355,8 +355,8 @@ gif_send(struct gif_softc *sc, struct mbuf *m,
 			return (-1);
 
 		flow = otos << 20;
-		if (ISSET(m->m_pkthdr.ph_flowid, M_FLOWID_VALID))
-			flow |= m->m_pkthdr.ph_flowid & M_FLOWID_MASK;
+		if (ISSET(m->m_pkthdr.csum_flags, M_FLOWID))
+			flow |= m->m_pkthdr.ph_flowid;
 
 		ip6 = mtod(m, struct ip6_hdr *);
 		ip6->ip6_flow = htonl(flow);

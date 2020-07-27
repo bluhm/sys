@@ -2,7 +2,7 @@
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	OpenBSD: pcidevs,v 1.1923 2020/05/21 21:46:34 patrick Exp 
+ *	OpenBSD: pcidevs,v 1.1930 2020/07/22 10:43:14 jsg Exp 
  */
 
 /*	$NetBSD: pcidevs,v 1.30 1997/06/24 06:20:24 thorpej Exp $	*/
@@ -1208,6 +1208,38 @@ static const struct pci_known_product pci_known_products[] = {
 	    "16h PCIE",
 	},
 	{
+	    PCI_VENDOR_AMD, PCI_PRODUCT_AMD_17_6X_DF_0,
+	    "17h/6xh Data Fabric",
+	},
+	{
+	    PCI_VENDOR_AMD, PCI_PRODUCT_AMD_17_6X_DF_1,
+	    "17h/6xh Data Fabric",
+	},
+	{
+	    PCI_VENDOR_AMD, PCI_PRODUCT_AMD_17_6X_DF_2,
+	    "17h/6xh Data Fabric",
+	},
+	{
+	    PCI_VENDOR_AMD, PCI_PRODUCT_AMD_17_6X_DF_3,
+	    "17h/6xh Data Fabric",
+	},
+	{
+	    PCI_VENDOR_AMD, PCI_PRODUCT_AMD_17_6X_DF_4,
+	    "17h/6xh Data Fabric",
+	},
+	{
+	    PCI_VENDOR_AMD, PCI_PRODUCT_AMD_17_6X_DF_5,
+	    "17h/6xh Data Fabric",
+	},
+	{
+	    PCI_VENDOR_AMD, PCI_PRODUCT_AMD_17_6X_DF_6,
+	    "17h/6xh Data Fabric",
+	},
+	{
+	    PCI_VENDOR_AMD, PCI_PRODUCT_AMD_17_6X_DF_7,
+	    "17h/6xh Data Fabric",
+	},
+	{
 	    PCI_VENDOR_AMD, PCI_PRODUCT_AMD_17_RC,
 	    "17h Root Complex",
 	},
@@ -1526,6 +1558,30 @@ static const struct pci_known_product pci_known_products[] = {
 	{
 	    PCI_VENDOR_AMD, PCI_PRODUCT_AMD_15_0X_HB,
 	    "15/0xh Host",
+	},
+	{
+	    PCI_VENDOR_AMD, PCI_PRODUCT_AMD_17_6X_RC,
+	    "17h/6xh Root Complex",
+	},
+	{
+	    PCI_VENDOR_AMD, PCI_PRODUCT_AMD_17_6X_IOMMU,
+	    "17h/6xh IOMMU",
+	},
+	{
+	    PCI_VENDOR_AMD, PCI_PRODUCT_AMD_17_6X_HB,
+	    "17h/6xh Host",
+	},
+	{
+	    PCI_VENDOR_AMD, PCI_PRODUCT_AMD_17_6X_PCIE_1,
+	    "17h/6xh PCIE",
+	},
+	{
+	    PCI_VENDOR_AMD, PCI_PRODUCT_AMD_17_6X_PCIE_2,
+	    "17h/6xh PCIE",
+	},
+	{
+	    PCI_VENDOR_AMD, PCI_PRODUCT_AMD_17_6X_XHCI,
+	    "17h/6xh xHCI",
 	},
 	{
 	    PCI_VENDOR_AMD, PCI_PRODUCT_AMD_14_LINK,
@@ -2544,6 +2600,10 @@ static const struct pci_known_product pci_known_products[] = {
 	    "AR5424",
 	},
 	{
+	    PCI_VENDOR_ATHEROS, PCI_PRODUCT_ATHEROS_AR2417,
+	    "AR2417",
+	},
+	{
 	    PCI_VENDOR_ATHEROS, PCI_PRODUCT_ATHEROS_AR5416,
 	    "AR5416",
 	},
@@ -2594,6 +2654,22 @@ static const struct pci_known_product pci_known_products[] = {
 	{
 	    PCI_VENDOR_ATHEROS, PCI_PRODUCT_ATHEROS_AR9565,
 	    "AR9565",
+	},
+	{
+	    PCI_VENDOR_ATHEROS, PCI_PRODUCT_ATHEROS_QCA988X,
+	    "QCA986x/988x",
+	},
+	{
+	    PCI_VENDOR_ATHEROS, PCI_PRODUCT_ATHEROS_QCA6174,
+	    "QCA6174",
+	},
+	{
+	    PCI_VENDOR_ATHEROS, PCI_PRODUCT_ATHEROS_QCA6164,
+	    "QCA6164",
+	},
+	{
+	    PCI_VENDOR_ATHEROS, PCI_PRODUCT_ATHEROS_QCA9377,
+	    "QCA9377",
 	},
 	{
 	    PCI_VENDOR_ATHEROS, PCI_PRODUCT_ATHEROS_AR5210_AP,
@@ -2734,6 +2810,14 @@ static const struct pci_known_product pci_known_products[] = {
 	{
 	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_RAVEN_VEGA_HDA,
 	    "Radeon Vega HD Audio",
+	},
+	{
+	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_RENOIR,
+	    "Renoir",
+	},
+	{
+	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_RENOIR_HDA,
+	    "Renoir HD Audio",
 	},
 	{
 	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_RADEON_HD6500D_HDA,
@@ -9838,6 +9922,10 @@ static const struct pci_known_product pci_known_products[] = {
 	{
 	    PCI_VENDOR_IBM, PCI_PRODUCT_IBM_CALGARY_IOMMU,
 	    "Calgary IOMMU",
+	},
+	{
+	    PCI_VENDOR_IBM, PCI_PRODUCT_IBM_POWER9_HB,
+	    "POWER9 Host",
 	},
 	{
 	    PCI_VENDOR_ICENSEMBLE, PCI_PRODUCT_ICENSEMBLE_ICE1712,
@@ -20976,8 +21064,16 @@ static const struct pci_known_product pci_known_products[] = {
 	    "88SE9172 SATA",
 	},
 	{
+	    PCI_VENDOR_MARVELL2, PCI_PRODUCT_MARVELL2_88SE9215,
+	    "88SE9215 AHCI",
+	},
+	{
 	    PCI_VENDOR_MARVELL2, PCI_PRODUCT_MARVELL2_88SE9230,
 	    "88SE9230 AHCI",
+	},
+	{
+	    PCI_VENDOR_MARVELL2, PCI_PRODUCT_MARVELL2_88SE9235,
+	    "88SE9235 AHCI",
 	},
 	{
 	    PCI_VENDOR_MATROX, PCI_PRODUCT_MATROX_ATLAS,
@@ -21142,6 +21238,10 @@ static const struct pci_known_product pci_known_products[] = {
 	{
 	    PCI_VENDOR_MELLANOX, PCI_PRODUCT_MELLANOX_MT28908VF,
 	    "ConnectX-6 VF",
+	},
+	{
+	    PCI_VENDOR_MELLANOX, PCI_PRODUCT_MELLANOX_MT2892,
+	    "ConnectX-6 Dx",
 	},
 	{
 	    PCI_VENDOR_MELLANOX, PCI_PRODUCT_MELLANOX_CONNECTX_EN,
@@ -26628,6 +26728,10 @@ static const struct pci_known_product pci_known_products[] = {
 	    "RS780",
 	},
 	{
+	    PCI_VENDOR_SSSTC, PCI_PRODUCT_SSSTC_CL1,
+	    "CL1",
+	},
+	{
 	    PCI_VENDOR_STALLION, PCI_PRODUCT_STALLION_EASYIO,
 	    "EasyIO",
 	},
@@ -27194,6 +27298,10 @@ static const struct pci_known_product pci_known_products[] = {
 	{
 	    PCI_VENDOR_SYMPHONY2, PCI_PRODUCT_SYMPHONY2_82C101,
 	    "82C101",
+	},
+	{
+	    PCI_VENDOR_SKHYNIX, PCI_PRODUCT_SKHYNIX_SSD,
+	    "BC501 NVMe",
 	},
 	{
 	    PCI_VENDOR_TAMARACK, PCI_PRODUCT_TAMARACK_TC9021,
@@ -30728,6 +30836,10 @@ static const struct pci_known_vendor pci_known_vendors[] = {
 	    "Symphony Labs",
 	},
 	{
+	    PCI_VENDOR_SKHYNIX,
+	    "SK hynix",
+	},
+	{
 	    PCI_VENDOR_ADATA,
 	    "ADATA Technology",
 	},
@@ -30746,6 +30858,10 @@ static const struct pci_known_vendor pci_known_vendors[] = {
 	{
 	    PCI_VENDOR_AMPERE,
 	    "Ampere",
+	},
+	{
+	    PCI_VENDOR_SSSTC,
+	    "SSSTC",
 	},
 	{
 	    PCI_VENDOR_TEHUTI,

@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf_ioctl.c,v 1.351 2020/04/19 22:31:06 sashan Exp $ */
+/*	$OpenBSD: pf_ioctl.c,v 1.354 2020/07/21 14:13:17 henning Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -741,7 +741,9 @@ pf_hash_rule_addr(MD5_CTX *ctx, struct pf_rule_addr *pfr)
 			PF_MD5_UPD(pfr, addr.iflags);
 			break;
 		case PF_ADDR_TABLE:
-			PF_MD5_UPD(pfr, addr.v.tblname);
+			if (strncmp(pfr->addr.v.tblname, PF_OPTIMIZER_TABLE_PFX,
+			    strlen(PF_OPTIMIZER_TABLE_PFX)))
+				PF_MD5_UPD(pfr, addr.v.tblname);
 			break;
 		case PF_ADDR_ADDRMASK:
 			/* XXX ignore af? */
@@ -1033,9 +1035,9 @@ pfioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 			error = EEXIST;
 		else {
 			pf_status.running = 1;
-			pf_status.since = time_uptime;
+			pf_status.since = getuptime();
 			if (pf_status.stateid == 0) {
-				pf_status.stateid = time_second;
+				pf_status.stateid = gettime();
 				pf_status.stateid = pf_status.stateid << 32;
 			}
 			timeout_add_sec(&pf_purge_to, 1);
@@ -1051,7 +1053,7 @@ pfioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 			error = ENOENT;
 		else {
 			pf_status.running = 0;
-			pf_status.since = time_uptime;
+			pf_status.since = getuptime();
 			pf_remove_queues();
 			DPFPRINTF(LOG_NOTICE, "pf: stopped");
 		}
@@ -1793,7 +1795,7 @@ pfioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 		memset(pf_status.counters, 0, sizeof(pf_status.counters));
 		memset(pf_status.fcounters, 0, sizeof(pf_status.fcounters));
 		memset(pf_status.scounters, 0, sizeof(pf_status.scounters));
-		pf_status.since = time_uptime;
+		pf_status.since = getuptime();
 
 		PF_UNLOCK();
 		break;
@@ -2571,7 +2573,7 @@ pfioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 
 		p = psn->psn_src_nodes;
 		RB_FOREACH(n, pf_src_tree, &tree_src_tracking) {
-			int	secs = time_uptime, diff;
+			int	secs = getuptime(), diff;
 
 			if ((nr + 1) * sizeof(*p) > psn->psn_len)
 				break;
@@ -2924,12 +2926,12 @@ pf_sysctl(void *oldp, size_t *oldlenp, void *newp, size_t newlen)
 {
 	struct pf_status	pfs;
 
-	NET_LOCK();
+	NET_RLOCK_IN_IOCTL();
 	PF_LOCK();
 	memcpy(&pfs, &pf_status, sizeof(struct pf_status));
 	pfi_update_status(pfs.ifname, &pfs);
 	PF_UNLOCK();
-	NET_UNLOCK();
+	NET_RUNLOCK_IN_IOCTL();
 
 	return sysctl_rdstruct(oldp, oldlenp, newp, &pfs, sizeof(pfs));
 }

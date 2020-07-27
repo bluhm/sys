@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_vr.c,v 1.153 2017/01/22 10:17:38 dlg Exp $	*/
+/*	$OpenBSD: if_vr.c,v 1.156 2020/07/10 13:26:38 patrick Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998
@@ -933,13 +933,14 @@ vr_rxeof(struct vr_softc *sc)
 		ml_enqueue(&ml, m);
 	}
 
+	if (ifiq_input(&ifp->if_rcv, &ml))
+		if_rxr_livelocked(&sc->sc_rxring);
+
 	vr_fill_rx_ring(sc);
 
 	bus_dmamap_sync(sc->sc_dmat, sc->sc_listmap.vrm_map,
 	    0, sc->sc_listmap.vrm_map->dm_mapsize,
 	    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
-
-	if_input(ifp, &ml);
 }
 
 void
@@ -1166,7 +1167,7 @@ vr_intr(void *arg)
 		}
 	}
 
-	if (!IFQ_IS_EMPTY(&ifp->if_snd))
+	if (!ifq_empty(&ifp->if_snd))
 		vr_start(ifp);
 
 	return (claimed);
@@ -1317,7 +1318,7 @@ vr_start(struct ifnet *ifp)
 			break;
 		}
 
-		IFQ_DEQUEUE(&ifp->if_snd, m);
+		m = ifq_dequeue(&ifp->if_snd);
 		if (m == NULL)
 			break;
 
@@ -1583,7 +1584,7 @@ vr_watchdog(struct ifnet *ifp)
 	printf("%s: watchdog timeout\n", sc->sc_dev.dv_xname);
 	vr_init(sc);
 
-	if (!IFQ_IS_EMPTY(&ifp->if_snd))
+	if (!ifq_empty(&ifp->if_snd))
 		vr_start(ifp);
 }
 

@@ -1,4 +1,4 @@
-/*	$OpenBSD: mpath.c,v 1.47 2020/02/05 21:50:41 krw Exp $ */
+/*	$OpenBSD: mpath.c,v 1.53 2020/07/22 13:16:05 krw Exp $ */
 
 /*
  * Copyright (c) 2009 David Gwynne <dlg@openbsd.org>
@@ -66,7 +66,6 @@ struct mpath_dev {
 
 struct mpath_softc {
 	struct device		sc_dev;
-	struct scsi_link	sc_link;
 	struct scsibus_softc	*sc_scsibus;
 	struct mpath_dev	*sc_devs[MPATH_BUSWIDTH];
 };
@@ -119,15 +118,15 @@ mpath_attach(struct device *parent, struct device *self, void *aux)
 
 	printf("\n");
 
-	sc->sc_link.adapter = &mpath_switch;
-	sc->sc_link.adapter_softc = sc;
-	sc->sc_link.adapter_target = MPATH_BUSWIDTH;
-	sc->sc_link.adapter_buswidth = MPATH_BUSWIDTH;
-	sc->sc_link.luns = 1;
-	sc->sc_link.openings = 1024; /* XXX magical */
-
-	bzero(&saa, sizeof(saa));
-	saa.saa_sc_link = &sc->sc_link;
+	saa.saa_adapter = &mpath_switch;
+	saa.saa_adapter_softc = sc;
+	saa.saa_adapter_target = SDEV_NO_ADAPTER_TARGET;
+	saa.saa_adapter_buswidth = MPATH_BUSWIDTH;
+	saa.saa_luns = 1;
+	saa.saa_openings = 1024; /* XXX magical */
+	saa.saa_pool = NULL;
+	saa.saa_quirks = saa.saa_flags = 0;
+	saa.saa_wwpn = saa.saa_wwnn = 0;
 
 	sc->sc_scsibus = (struct scsibus_softc *)config_found(&sc->sc_dev,
 	    &saa, scsiprint);
@@ -143,7 +142,7 @@ mpath_xs_stuffup(struct scsi_xfer *xs)
 int
 mpath_probe(struct scsi_link *link)
 {
-	struct mpath_softc *sc = link->adapter_softc;
+	struct mpath_softc *sc = link->bus->sb_adapter_softc;
 	struct mpath_dev *d = sc->sc_devs[link->target];
 
 	if (link->lun != 0 || d == NULL)
@@ -180,7 +179,7 @@ void
 mpath_cmd(struct scsi_xfer *xs)
 {
 	struct scsi_link *link = xs->sc_link;
-	struct mpath_softc *sc = link->adapter_softc;
+	struct mpath_softc *sc = link->bus->sb_adapter_softc;
 	struct mpath_dev *d = sc->sc_devs[link->target];
 	struct mpath_path *p;
 	struct scsi_xfer *mxs;
@@ -284,7 +283,7 @@ mpath_done(struct scsi_xfer *mxs)
 {
 	struct scsi_xfer *xs = mxs->cookie;
 	struct scsi_link *link = xs->sc_link;
-	struct mpath_softc *sc = link->adapter_softc;
+	struct mpath_softc *sc = link->bus->sb_adapter_softc;
 	struct mpath_dev *d = sc->sc_devs[link->target];
 	struct mpath_path *p;
 
@@ -395,7 +394,7 @@ mpath_path_status(struct mpath_path *p, int status)
 void
 mpath_minphys(struct buf *bp, struct scsi_link *link)
 {
-	struct mpath_softc *sc = link->adapter_softc;
+	struct mpath_softc *sc = link->bus->sb_adapter_softc;
 	struct mpath_dev *d = sc->sc_devs[link->target];
 	struct mpath_group *g;
 	struct mpath_path *p;
@@ -409,8 +408,9 @@ mpath_minphys(struct buf *bp, struct scsi_link *link)
 	TAILQ_FOREACH(g, &d->d_groups, g_entry) {
 		TAILQ_FOREACH(p, &g->g_paths, p_entry) {
 			/* XXX crossing layers with mutex held */
-			if (p->p_link->adapter->dev_minphys != NULL)
-				p->p_link->adapter->dev_minphys(bp, p->p_link);
+			if (p->p_link->bus->sb_adapter->dev_minphys != NULL)
+				p->p_link->bus->sb_adapter->dev_minphys(bp,
+				    p->p_link);
 		}
 	}
 	mtx_leave(&d->d_mtx);
@@ -428,7 +428,7 @@ mpath_path_probe(struct scsi_link *link)
 	if (ISSET(link->flags, SDEV_UMASS))
 		return (EINVAL);
 
-	if (mpath == link->adapter_softc)
+	if (mpath == link->bus->sb_adapter_softc)
 		return (ENXIO);
 
 	return (0);

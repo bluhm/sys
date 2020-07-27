@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_carp.h,v 1.48 2019/12/08 11:08:22 sashan Exp $	*/
+/*	$OpenBSD: ip_carp.h,v 1.50 2020/07/24 18:17:15 mvs Exp $	*/
 
 /*
  * Copyright (c) 2002 Michael Shalayeff. All rights reserved.
@@ -201,11 +201,15 @@ carpstat_inc(enum carpstat_counters c)
 static inline int
 carp_strict_addr_chk(struct ifnet *ifp_a, struct ifnet *ifp_b)
 {
-	return ((ifp_a->if_type == IFT_CARP && ifp_b == ifp_a->if_carpdev) ||
-	    (ifp_b->if_type == IFT_CARP && ifp_a == ifp_b->if_carpdev) ||
+	return ((ifp_a->if_type == IFT_CARP &&
+	    ifp_b->if_index == ifp_a->if_carpdevidx) ||
+	    (ifp_b->if_type == IFT_CARP &&
+	    ifp_a->if_index == ifp_b->if_carpdevidx) ||
 	    (ifp_a->if_type == IFT_CARP && ifp_b->if_type == IFT_CARP &&
-	    ifp_a->if_carpdev == ifp_b->if_carpdev));
+	    ifp_a->if_carpdevidx == ifp_b->if_carpdevidx));
 }
+
+struct mbuf	*carp_input(struct ifnet *, struct mbuf *);
 
 int		 carp_proto_input(struct mbuf **, int *, int, int);
 void		 carp_carpdev_state(void *);

@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_aggr.c,v 1.29 2020/04/12 06:59:54 dlg Exp $ */
+/*	$OpenBSD: if_aggr.c,v 1.33 2020/07/22 02:16:01 dlg Exp $ */
 
 /*
  * Copyright (c) 2019 The University of Queensland
@@ -332,6 +332,7 @@ struct aggr_port {
 	uint32_t		 p_mtu;
 
 	int (*p_ioctl)(struct ifnet *, u_long, caddr_t);
+	void (*p_input)(struct ifnet *, struct mbuf *);
 	int (*p_output)(struct ifnet *, struct mbuf *, struct sockaddr *,
 	    struct rtentry *);
 
@@ -466,7 +467,7 @@ static int	aggr_del_port(struct aggr_softc *,
 static int	aggr_group(struct aggr_softc *, struct aggr_port *, u_long);
 static int	aggr_multi(struct aggr_softc *, struct aggr_port *,
 		    const struct aggr_multiaddr *, u_long);
-static uint32_t	aggr_hardmtu(struct aggr_softc *);
+static void	aggr_update_capabilities(struct aggr_softc *);
 static void	aggr_set_lacp_mode(struct aggr_softc *, int);
 static void	aggr_set_lacp_timeout(struct aggr_softc *, int);
 static int	aggr_multi_add(struct aggr_softc *, struct ifreq *);
@@ -560,7 +561,7 @@ aggr_clone_create(struct if_clone *ifc, int unit)
 	ifp->if_flags = IFF_BROADCAST | IFF_MULTICAST | IFF_SIMPLEX;
 	ifp->if_xflags = IFXF_CLONED | IFXF_MPSAFE;
 	ifp->if_link_state = LINK_STATE_DOWN;
-	IFQ_SET_MAXLEN(&ifp->if_snd, IFQ_MAXLEN);
+	ifq_set_maxlen(&ifp->if_snd, IFQ_MAXLEN);
 	ether_fakeaddr(ifp);
 
 	if_counters_alloc(ifp);
@@ -660,7 +661,7 @@ aggr_transmit(struct aggr_softc *sc, const struct aggr_map *map, struct mbuf *m)
 	}
 #endif
 
-	if (ISSET(m->m_pkthdr.ph_flowid, M_FLOWID_VALID))
+	if (ISSET(m->m_pkthdr.csum_flags, M_FLOWID))
 		flow = m->m_pkthdr.ph_flowid;
 
 	ifp0 = map->m_ifp0s[flow % AGGR_MAX_PORTS];
@@ -723,13 +724,14 @@ aggr_eh_is_slow(const struct ether_header *eh)
 	    eh->ether_type == htons(ETHERTYPE_SLOW));
 }
 
-static int
-aggr_input(struct ifnet *ifp0, struct mbuf *m, void *cookie)
+static void
+aggr_input(struct ifnet *ifp0, struct mbuf *m)
 {
-	struct ether_header *eh;
-	struct aggr_port *p = cookie;
+	struct arpcom *ac0 = (struct arpcom *)ifp0;
+	struct aggr_port *p = ac0->ac_trunkport;
 	struct aggr_softc *sc = p->p_aggr;
 	struct ifnet *ifp = &sc->sc_if;
+	struct ether_header *eh;
 	int hlen = sizeof(*eh);
 
 	if (!ISSET(ifp->if_flags, IFF_RUNNING))
@@ -745,7 +747,7 @@ aggr_input(struct ifnet *ifp0, struct mbuf *m, void *cookie)
 			m = m_pullup(m, hlen);
 			if (m == NULL) {
 				/* short++ */
-				return (1);
+				return;
 			}
 			eh = mtod(m, struct ether_header *);
 		}
@@ -756,7 +758,7 @@ aggr_input(struct ifnet *ifp0, struct mbuf *m, void *cookie)
 		case SLOWPROTOCOLS_SUBTYPE_LACP_MARKER:
 			if (mq_enqueue(&p->p_rxm_mq, m) == 0)
 				task_add(systq, &p->p_rxm_task);
-			return (1);
+			return;
 		default:
 			break;
 		}
@@ -765,18 +767,15 @@ aggr_input(struct ifnet *ifp0, struct mbuf *m, void *cookie)
 	if (__predict_false(!p->p_collecting))
 		goto drop;
 
-	if (!ISSET(m->m_pkthdr.ph_flowid, M_FLOWID_VALID)) {
-		m->m_pkthdr.ph_flowid = M_FLOWID_VALID |
-		    (ifp0->if_index ^ sc->sc_mix);
-	}
+	if (!ISSET(m->m_pkthdr.csum_flags, M_FLOWID))
+		m->m_pkthdr.ph_flowid = ifp0->if_index ^ sc->sc_mix;
 
 	if_vinput(ifp, m);
 
-	return (1);
+	return;
 
 drop:
 	m_freem(m);
-	return (1);
 }
 
 static int
@@ -1059,7 +1058,6 @@ aggr_add_port(struct aggr_softc *sc, const struct trunk_reqport *rp)
 	struct arpcom *ac0;
 	struct aggr_port *p;
 	struct aggr_multiaddr *ma;
-	uint32_t hardmtu;
 	int past = ticks - (hz * LACP_TIMEOUT_FACTOR);
 	int i;
 	int error;
@@ -1075,11 +1073,12 @@ aggr_add_port(struct aggr_softc *sc, const struct trunk_reqport *rp)
 	if (ifp0->if_type != IFT_ETHER)
 		return (EPROTONOSUPPORT);
 
-	hardmtu = ifp0->if_hardmtu;
-	if (hardmtu < ifp->if_mtu)
+	error = ether_brport_isset(ifp0);
+	if (error != 0)
+		return (error);
+
+	if (ifp0->if_hardmtu < ifp->if_mtu)
 		return (ENOBUFS);
-	if (ifp->if_hardmtu < hardmtu)
-		hardmtu = ifp->if_hardmtu;
 
 	ac0 = (struct arpcom *)ifp0;
 	if (ac0->ac_trunkport != NULL)
@@ -1109,6 +1108,7 @@ aggr_add_port(struct aggr_softc *sc, const struct trunk_reqport *rp)
 	CTASSERT(sizeof(p->p_lladdr) == sizeof(ac0->ac_enaddr));
 	memcpy(p->p_lladdr, ac0->ac_enaddr, sizeof(p->p_lladdr));
 	p->p_ioctl = ifp0->if_ioctl;
+	p->p_input = ifp0->if_input;
 	p->p_output = ifp0->if_output;
 
 	error = aggr_group(sc, p, SIOCADDMULTI);
@@ -1162,17 +1162,23 @@ aggr_add_port(struct aggr_softc *sc, const struct trunk_reqport *rp)
 	DPRINTF(sc, "%s %s trunkport: creating port\n",
 	    ifp->if_xname, ifp0->if_xname);
 
-	ifp->if_hardmtu = hardmtu;
-
 	TAILQ_INSERT_TAIL(&sc->sc_ports, p, p_entry);
 	sc->sc_nports++;
 
+	aggr_update_capabilities(sc);
+
+	/*
+         * use (and modification) of ifp->if_input and ac->ac_trunkport
+         * is protected by NET_LOCK.
+	 */
+
 	ac0->ac_trunkport = p;
+
 	/* make sure p is visible before handlers can run */
 	membar_producer();
 	ifp0->if_ioctl = aggr_p_ioctl;
+	ifp0->if_input = aggr_input;
 	ifp0->if_output = aggr_p_output;
-	if_ih_insert(ifp0, aggr_input, p);
 
 	aggr_mux(sc, p, LACP_MUX_E_BEGIN);
 	aggr_rxm(sc, p, LACP_RXM_E_BEGIN);
@@ -1391,10 +1397,13 @@ aggr_p_dtor(struct aggr_softc *sc, struct aggr_port *p, const char *op)
 	timeout_del(&p->p_current_while_timer);
 	timeout_del(&p->p_wait_while_timer);
 
-	if_ih_remove(ifp0, aggr_input, p);
+	/*
+         * use (and modification) of ifp->if_input and ac->ac_trunkport
+         * is protected by NET_LOCK.
+	 */
 
 	ac0->ac_trunkport = NULL;
-
+	ifp0->if_input = p->p_input;
 	ifp0->if_ioctl = p->p_ioctl;
 	ifp0->if_output = p->p_output;
 
@@ -1445,7 +1454,7 @@ aggr_p_dtor(struct aggr_softc *sc, struct aggr_port *p, const char *op)
 	free(p, M_DEVBUF, sizeof(*p));
 
 	/* XXX this is a pretty ugly place to update this */
-	ifp->if_hardmtu = aggr_hardmtu(sc);
+	aggr_update_capabilities(sc);
 }
 
 static void
@@ -2593,22 +2602,27 @@ aggr_media_change(struct ifnet *ifp)
 	return (EOPNOTSUPP);
 }
 
-static uint32_t
-aggr_hardmtu(struct aggr_softc *sc)
+static void
+aggr_update_capabilities(struct aggr_softc *sc)
 {
 	struct aggr_port *p;
 	uint32_t hardmtu = ETHER_MAX_HARDMTU_LEN;
+	uint32_t capabilities = ~0;
+	int set = 0;
 
 	rw_enter_read(&sc->sc_lock);
 	TAILQ_FOREACH(p, &sc->sc_ports, p_entry) {
 		struct ifnet *ifp0 = p->p_ifp0;
 
+		set = 1;
+		capabilities &= ifp0->if_capabilities;
 		if (ifp0->if_hardmtu < hardmtu)
 			hardmtu = ifp0->if_hardmtu;
 	}
 	rw_exit_read(&sc->sc_lock);
 
-	return (hardmtu);
+	sc->sc_if.if_hardmtu = hardmtu;
+	sc->sc_if.if_capabilities = (set ? capabilities : 0);
 }
 
 static void

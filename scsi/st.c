@@ -1,4 +1,4 @@
-/*	$OpenBSD: st.c,v 1.177 2020/02/20 16:26:02 krw Exp $	*/
+/*	$OpenBSD: st.c,v 1.179 2020/07/16 14:44:55 krw Exp $	*/
 /*	$NetBSD: st.c,v 1.71 1997/02/21 23:03:49 thorpej Exp $	*/
 
 /*
@@ -247,10 +247,10 @@ int
 stmatch(struct device *parent, void *match, void *aux)
 {
 	struct scsi_attach_args *sa = aux;
+	struct scsi_inquiry_data *inq = &sa->sa_sc_link->inqdata;
 	int priority;
 
-	(void)scsi_inqmatch(sa->sa_inqbuf,
-	    st_patterns, nitems(st_patterns),
+	(void)scsi_inqmatch(inq, st_patterns, nitems(st_patterns),
 	    sizeof(st_patterns[0]), &priority);
 	return priority;
 }
@@ -1008,8 +1008,8 @@ stminphys(struct buf *bp)
 		return;
 	link = sc->sc_link;
 
-	if (link->adapter->dev_minphys != NULL)
-		(*link->adapter->dev_minphys)(bp, link);
+	if (link->bus->sb_adapter->dev_minphys != NULL)
+		(*link->bus->sb_adapter->dev_minphys)(bp, link);
 	else
 		minphys(bp);
 

@@ -1,4 +1,4 @@
-/*	$OpenBSD: cd.c,v 1.245 2020/02/20 16:26:01 krw Exp $	*/
+/*	$OpenBSD: cd.c,v 1.247 2020/07/16 14:44:55 krw Exp $	*/
 /*	$NetBSD: cd.c,v 1.100 1997/04/02 02:29:30 mycroft Exp $	*/
 
 /*
@@ -177,9 +177,10 @@ int
 cdmatch(struct device *parent, void *match, void *aux)
 {
 	struct scsi_attach_args		*sa = aux;
+	struct scsi_inquiry_data	*inq = &sa->sa_sc_link->inqdata;
 	int				 priority;
 
-	scsi_inqmatch(sa->sa_inqbuf, cd_patterns, nitems(cd_patterns),
+	scsi_inqmatch(inq, cd_patterns, nitems(cd_patterns),
 	    sizeof(cd_patterns[0]), &priority);
 
 	return priority;
@@ -217,7 +218,7 @@ cdattach(struct device *parent, struct device *self, void *aux)
 	 * Note if this device is ancient.  This is used in cdminphys().
 	 */
 	if (!ISSET(link->flags, SDEV_ATAPI) &&
-	    SID_ANSII_REV(sa->sa_inqbuf) == SCSI_REV_0)
+	    SID_ANSII_REV(&link->inqdata) == SCSI_REV_0)
 		SET(sc->sc_flags, CDF_ANCIENT);
 
 	printf("\n");
@@ -695,8 +696,8 @@ cdminphys(struct buf *bp)
 			bp->b_bcount = max;
 	}
 
-	if (link->adapter->dev_minphys != NULL)
-		(*link->adapter->dev_minphys)(bp, link);
+	if (link->bus->sb_adapter->dev_minphys != NULL)
+		(*link->bus->sb_adapter->dev_minphys)(bp, link);
 	else
 		minphys(bp);
 

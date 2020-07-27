@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_iwm.c,v 1.309 2020/05/18 17:56:41 stsp Exp $	*/
+/*	$OpenBSD: if_iwm.c,v 1.313 2020/07/10 13:22:20 patrick Exp $	*/
 
 /*
  * Copyright (c) 2014, 2016 genua gmbh <info@genua.de>
@@ -3921,7 +3921,7 @@ iwm_ccmp_decap(struct iwm_softc *sc, struct mbuf *m, struct ieee80211_node *ni)
 	hdrlen = ieee80211_get_hdrlen(wh);
 	ivp = (uint8_t *)wh + hdrlen;
 
-	/* Check that ExtIV bit is be set. */
+	/* Check that ExtIV bit is set. */
 	if (!(ivp[3] & IEEE80211_WEP_EXTIV))
 		return 1;
 
@@ -3992,6 +3992,7 @@ iwm_rx_frame(struct iwm_softc *sc, struct mbuf *m, int chanidx,
 			ic->ic_stats.is_ccmp_dec_errs++;
 			ifp->if_ierrors++;
 			m_freem(m);
+			ieee80211_release_node(ic, ni);
 			return;
 		}
 		/* Check whether decryption was successful or not. */
@@ -4003,11 +4004,13 @@ iwm_rx_frame(struct iwm_softc *sc, struct mbuf *m, int chanidx,
 			ic->ic_stats.is_ccmp_dec_errs++;
 			ifp->if_ierrors++;
 			m_freem(m);
+			ieee80211_release_node(ic, ni);
 			return;
 		}
 		if (iwm_ccmp_decap(sc, m, ni) != 0) {
 			ifp->if_ierrors++;
 			m_freem(m);
+			ieee80211_release_node(ic, ni);
 			return;
 		}
 		rxi->rxi_flags |= IEEE80211_RXI_HWDEC;
@@ -5607,7 +5610,6 @@ int
 iwm_fill_probe_req(struct iwm_softc *sc, struct iwm_scan_probe_req *preq)
 {
 	struct ieee80211com *ic = &sc->sc_ic;
-	struct ifnet *ifp = IC2IFP(ic);
 	struct ieee80211_frame *wh = (struct ieee80211_frame *)preq->buf;
 	struct ieee80211_rateset *rs;
 	size_t remain = sizeof(preq->buf);
@@ -5625,7 +5627,6 @@ iwm_fill_probe_req(struct iwm_softc *sc, struct iwm_scan_probe_req *preq)
 	wh->i_fc[0] = IEEE80211_FC0_VERSION_0 | IEEE80211_FC0_TYPE_MGT |
 	    IEEE80211_FC0_SUBTYPE_PROBE_REQ;
 	wh->i_fc[1] = IEEE80211_FC1_DIR_NODS;
-	IEEE80211_ADDR_COPY(ic->ic_myaddr, LLADDR(ifp->if_sadl));
 	IEEE80211_ADDR_COPY(wh->i_addr1, etherbroadcastaddr);
 	IEEE80211_ADDR_COPY(wh->i_addr2, ic->ic_myaddr);
 	IEEE80211_ADDR_COPY(wh->i_addr3, etherbroadcastaddr);
@@ -8034,7 +8035,7 @@ iwm_start(struct ifnet *ifp)
 		    (ic->ic_xflags & IEEE80211_F_TX_MGMT_ONLY))
 			break;
 
-		IFQ_DEQUEUE(&ifp->if_snd, m);
+		m = ifq_dequeue(&ifp->if_snd);
 		if (!m)
 			break;
 		if (m->m_len < sizeof (*eh) &&

@@ -1,4 +1,4 @@
-/*	$OpenBSD: sd.c,v 1.311 2020/03/10 02:01:21 krw Exp $	*/
+/*	$OpenBSD: sd.c,v 1.313 2020/07/16 14:44:55 krw Exp $	*/
 /*	$NetBSD: sd.c,v 1.111 1997/04/02 02:29:41 mycroft Exp $	*/
 
 /*-
@@ -139,10 +139,10 @@ int
 sdmatch(struct device *parent, void *match, void *aux)
 {
 	struct scsi_attach_args		*sa = aux;
+	struct scsi_inquiry_data	*inq = &sa->sa_sc_link->inqdata;
 	int				 priority;
 
-	(void)scsi_inqmatch(sa->sa_inqbuf,
-	    sd_patterns, nitems(sd_patterns),
+	(void)scsi_inqmatch(inq, sd_patterns, nitems(sd_patterns),
 	    sizeof(sd_patterns[0]), &priority);
 
 	return priority;
@@ -186,7 +186,7 @@ sdattach(struct device *parent, struct device *self, void *aux)
 	 * Note if this device is ancient. This is used in sdminphys().
 	 */
 	if (!ISSET(link->flags, SDEV_ATAPI) &&
-	    SID_ANSII_REV(sa->sa_inqbuf) == SCSI_REV_0)
+	    SID_ANSII_REV(&link->inqdata) == SCSI_REV_0)
 		SET(sc->flags, SDF_ANCIENT);
 
 	/*
@@ -832,8 +832,8 @@ sdminphys(struct buf *bp)
 			bp->b_bcount = max;
 	}
 
-	if (link->adapter->dev_minphys != NULL)
-		(*link->adapter->dev_minphys)(bp, link);
+	if (link->bus->sb_adapter->dev_minphys != NULL)
+		(*link->bus->sb_adapter->dev_minphys)(bp, link);
 	else
 		minphys(bp);
 

@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_vic.c,v 1.99 2019/11/09 03:53:44 yasuoka Exp $	*/
+/*	$OpenBSD: if_vic.c,v 1.101 2020/07/10 13:26:38 patrick Exp $	*/
 
 /*
  * Copyright (c) 2006 Reyk Floeter <reyk@openbsd.org>
@@ -480,7 +480,7 @@ vic_attach(struct device *parent, struct device *self, void *aux)
 	ifp->if_watchdog = vic_watchdog;
 	ifp->if_hardmtu = VIC_JUMBO_MTU;
 	strlcpy(ifp->if_xname, DEVNAME(sc), IFNAMSIZ);
-	IFQ_SET_MAXLEN(&ifp->if_snd, sc->sc_ntxbuf - 1);
+	ifq_set_maxlen(&ifp->if_snd, sc->sc_ntxbuf - 1);
 
 	ifp->if_capabilities = IFCAP_VLAN_MTU;
 
@@ -867,7 +867,9 @@ vic_rx_proc(struct vic_softc *sc, int q)
 		VIC_INC(sc->sc_data->vd_rx[q].nextidx, sc->sc_nrxbuf);
 	}
 
-	if_input(ifp, &ml);
+	if (ifiq_input(&ifp->if_rcv, &ml))
+		if_rxr_livelocked(&sc->sc_rxq[q].ring);
+
 	vic_rx_fill(sc, q);
 
 	bus_dmamap_sync(sc->sc_dmat, sc->sc_dma_map, 0, sc->sc_dma_size,
@@ -1037,7 +1039,7 @@ vic_start(struct ifnet *ifp)
 	if (ifq_is_oactive(&ifp->if_snd))
 		return;
 
-	if (IFQ_IS_EMPTY(&ifp->if_snd))
+	if (ifq_empty(&ifp->if_snd))
 		return;
 
 	sc = (struct vic_softc *)ifp->if_softc;
@@ -1159,7 +1161,7 @@ vic_watchdog(struct ifnet *ifp)
 		}
 	}
 
-	if (!IFQ_IS_EMPTY(&ifp->if_snd))
+	if (!ifq_empty(&ifp->if_snd))
 		vic_start(ifp);
 #endif
 }

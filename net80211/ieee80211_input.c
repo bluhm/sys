@@ -1,4 +1,4 @@
-/*	$OpenBSD: ieee80211_input.c,v 1.216 2020/05/15 14:21:09 stsp Exp $	*/
+/*	$OpenBSD: ieee80211_input.c,v 1.220 2020/07/21 08:38:59 stsp Exp $	*/
 
 /*-
  * Copyright (c) 2001 Atsushi Onoe
@@ -67,6 +67,7 @@ void	ieee80211_input_ba(struct ieee80211com *, struct mbuf *,
 	    struct mbuf_list *);
 void	ieee80211_input_ba_flush(struct ieee80211com *, struct ieee80211_node *,
 	    struct ieee80211_rx_ba *, struct mbuf_list *);
+int	ieee80211_input_ba_gap_skip(struct ieee80211_rx_ba *);
 void	ieee80211_input_ba_gap_timeout(void *arg);
 void	ieee80211_ba_move_window(struct ieee80211com *,
 	    struct ieee80211_node *, u_int8_t, u_int16_t, struct mbuf_list *);
@@ -178,9 +179,12 @@ ieee80211_input_hwdecrypt(struct ieee80211com *ic, struct ieee80211_node *ni,
 	switch (k->k_cipher) {
 	case IEEE80211_CIPHER_CCMP:
 		if (!(wh->i_fc[1] & IEEE80211_FC1_PROTECTED)) {
-			/* drop unencrypted */
-			ic->ic_stats.is_rx_unencrypted++;
-			return NULL;
+			/*
+			 * If the protected bit is clear then hardware has
+			 * stripped the IV and we must trust that it handles
+			 * replay detection correctly.
+			 */
+			break;
 		}
 		if (ieee80211_ccmp_get_pn(&pn, &prsc, m, k) != 0)
 			return NULL;
@@ -200,9 +204,12 @@ ieee80211_input_hwdecrypt(struct ieee80211com *ic, struct ieee80211_node *ni,
 		break;
 	 case IEEE80211_CIPHER_TKIP:
 		if (!(wh->i_fc[1] & IEEE80211_FC1_PROTECTED)) {
-			/* drop unencrypted */
-			ic->ic_stats.is_rx_unencrypted++;
-			return NULL;
+			/*
+			 * If the protected bit is clear then hardware has
+			 * stripped the IV and we must trust that it handles
+			 * replay detection correctly.
+			 */
+			break;
 		}
 		if (ieee80211_tkip_get_tsc(&pn, &prsc, m, k) != 0)
 			return NULL;
@@ -831,10 +838,29 @@ ieee80211_input_ba(struct ieee80211com *ic, struct mbuf *m,
 	rxi->rxi_flags |= IEEE80211_RXI_AMPDU_DONE;
 	ba->ba_buf[idx].rxi = *rxi;
 
-	if (ba->ba_buf[ba->ba_head].m == NULL)
-		timeout_add_msec(&ba->ba_gap_to, IEEE80211_BA_GAP_TIMEOUT);
-	else if (timeout_pending(&ba->ba_gap_to))
-		timeout_del(&ba->ba_gap_to);
+	if (ba->ba_buf[ba->ba_head].m == NULL) {
+		if (ba->ba_gapwait < (ba->ba_winsize - 1)) {
+			if (ba->ba_gapwait == 0) {
+				timeout_add_msec(&ba->ba_gap_to,
+				    IEEE80211_BA_GAP_TIMEOUT);
+			}
+			ba->ba_gapwait++;
+		} else {
+			/*
+			 * A full BA window worth of frames is now waiting.
+			 * Skip the missing frame at the head of the window.
+			 */
+			int skipped = ieee80211_input_ba_gap_skip(ba);
+			ic->ic_stats.is_ht_rx_ba_frame_lost += skipped;
+			ba->ba_gapwait = 0;
+			if (timeout_pending(&ba->ba_gap_to))
+				timeout_del(&ba->ba_gap_to);
+		}
+	} else {
+		ba->ba_gapwait = 0;
+		if (timeout_pending(&ba->ba_gap_to))
+			timeout_del(&ba->ba_gap_to);
+	}
 
 	ieee80211_input_ba_flush(ic, ni, ba, ml);
 }
@@ -902,10 +928,26 @@ ieee80211_input_ba_flush(struct ieee80211com *ic, struct ieee80211_node *ni,
  * A leading gap will occur if a particular A-MPDU subframe never arrives
  * or if a bug in the sender causes sequence numbers to jump forward by > 1.
  */
+int
+ieee80211_input_ba_gap_skip(struct ieee80211_rx_ba *ba)
+{
+	int skipped = 0;
+
+	while (skipped < ba->ba_winsize && ba->ba_buf[ba->ba_head].m == NULL) {
+		/* move window forward */
+		ba->ba_head = (ba->ba_head + 1) % IEEE80211_BA_MAX_WINSZ;
+		ba->ba_winstart = (ba->ba_winstart + 1) & 0xfff;
+		skipped++;
+	}
+	if (skipped > 0)
+		ba->ba_winend = (ba->ba_winstart + ba->ba_winsize - 1) & 0xfff;
+
+	return skipped;
+}
+
 void
 ieee80211_input_ba_gap_timeout(void *arg)
 {
-	struct mbuf_list ml = MBUF_LIST_INITIALIZER();
 	struct ieee80211_rx_ba *ba = arg;
 	struct ieee80211_node *ni = ba->ba_ni;
 	struct ieee80211com *ic = ni->ni_ic;
@@ -915,19 +957,8 @@ ieee80211_input_ba_gap_timeout(void *arg)
 
 	s = splnet();
 
-	skipped = 0;
-	while (skipped < ba->ba_winsize && ba->ba_buf[ba->ba_head].m == NULL) {
-		/* move window forward */
-		ba->ba_head = (ba->ba_head + 1) % IEEE80211_BA_MAX_WINSZ;
-		ba->ba_winstart = (ba->ba_winstart + 1) & 0xfff;
-		skipped++;
-		ic->ic_stats.is_ht_rx_ba_frame_lost++;
-	}
-	if (skipped > 0)
-		ba->ba_winend = (ba->ba_winstart + ba->ba_winsize - 1) & 0xfff;
-
-	ieee80211_input_ba_flush(ic, ni, ba, &ml);
-	if_input(&ic->ic_if, &ml);
+	skipped = ieee80211_input_ba_gap_skip(ba);
+	ic->ic_stats.is_ht_rx_ba_frame_lost += skipped;
 
 	splx(s);	
 }
@@ -1931,7 +1962,7 @@ ieee80211_recv_probe_req(struct ieee80211com *ic, struct mbuf *m,
 		return;
 	}
 	/* refuse wildcard SSID if we're hiding our SSID in beacons */
-	if (ssid[1] == 0 && (ic->ic_flags & IEEE80211_F_HIDENWID)) {
+	if (ssid[1] == 0 && (ic->ic_userflags & IEEE80211_F_HIDENWID)) {
 		DPRINTF(("wildcard SSID rejected"));
 		ic->ic_stats.is_rx_ssidmismatch++;
 		return;
@@ -2651,11 +2682,6 @@ ieee80211_recv_addba_req(struct ieee80211com *ic, struct mbuf *m,
 		DPRINTF(("frame too short\n"));
 		return;
 	}
-
-	/* No point in starting block-ack before the WPA handshake is done. */
-	if ((ic->ic_flags & IEEE80211_F_RSNON) && !ni->ni_port_valid)
-		return;
-
 	/* MLME-ADDBA.indication */
 	wh = mtod(m, struct ieee80211_frame *);
 	frm = (const u_int8_t *)&wh[1];
@@ -2715,6 +2741,7 @@ ieee80211_recv_addba_req(struct ieee80211com *ic, struct mbuf *m,
 	ba->ba_token = token;
 	timeout_set(&ba->ba_to, ieee80211_rx_ba_timeout, ba);
 	timeout_set(&ba->ba_gap_to, ieee80211_input_ba_gap_timeout, ba);
+	ba->ba_gapwait = 0;
 	ba->ba_winsize = bufsz;
 	if (ba->ba_winsize == 0 || ba->ba_winsize > IEEE80211_BA_MAX_WINSZ)
 		ba->ba_winsize = IEEE80211_BA_MAX_WINSZ;
@@ -2955,6 +2982,7 @@ ieee80211_recv_delba(struct ieee80211com *ic, struct mbuf *m,
 		/* stop Block Ack inactivity timer */
 		timeout_del(&ba->ba_to);
 		timeout_del(&ba->ba_gap_to);
+		ba->ba_gapwait = 0;
 
 		if (ba->ba_buf != NULL) {
 			/* free all MSDUs stored in reordering buffer */

@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_iwn.c,v 1.230 2020/05/15 14:21:08 stsp Exp $	*/
+/*	$OpenBSD: if_iwn.c,v 1.241 2020/07/27 07:24:03 stsp Exp $	*/
 
 /*-
  * Copyright (c) 2007-2010 Damien Bergamini <damien.bergamini@free.fr>
@@ -901,7 +901,7 @@ iwn_mem_write_2(struct iwn_softc *sc, uint32_t addr, uint16_t data)
 }
 
 #ifdef IWN_DEBUG
- 
+
 static __inline void
 iwn_mem_read_region_4(struct iwn_softc *sc, uint32_t addr, uint32_t *data,
     int count)
@@ -1810,7 +1810,7 @@ iwn_newstate(struct ieee80211com *ic, enum ieee80211_state nstate, int arg)
 		if (error != 0)
 			printf("%s: RXON command failed\n",
 			    sc->sc_dev.dv_xname);
-	}		 
+	}
 
 	switch (nstate) {
 	case IEEE80211_S_SCAN:
@@ -1920,7 +1920,7 @@ iwn_ccmp_decap(struct iwn_softc *sc, struct mbuf *m, struct ieee80211_node *ni)
 	hdrlen = ieee80211_get_hdrlen(wh);
 	ivp = (uint8_t *)wh + hdrlen;
 
-	/* Check that ExtIV bit is be set. */
+	/* Check that ExtIV bit is set. */
 	if (!(ivp[3] & IEEE80211_WEP_EXTIV)) {
 		DPRINTF(("CCMP decap ExtIV not set\n"));
 		return 1;
@@ -2103,7 +2103,7 @@ iwn_rx_done(struct iwn_softc *sc, struct iwn_rx_desc *desc,
 	m->m_data = head;
 	m->m_pkthdr.len = m->m_len = len;
 
-	/* 
+	/*
 	 * Grab a reference to the source node. Note that control frames are
 	 * shorter than struct ieee80211_frame but ieee80211_find_rxnode()
 	 * is being careful about control frames.
@@ -2128,6 +2128,7 @@ iwn_rx_done(struct iwn_softc *sc, struct iwn_rx_desc *desc,
 			ic->ic_stats.is_ccmp_dec_errs++;
 			ifp->if_ierrors++;
 			m_freem(m);
+			ieee80211_release_node(ic, ni);
 			return;
 		}
 		/* Check whether decryption was successful or not. */
@@ -2140,11 +2141,13 @@ iwn_rx_done(struct iwn_softc *sc, struct iwn_rx_desc *desc,
 			ic->ic_stats.is_ccmp_dec_errs++;
 			ifp->if_ierrors++;
 			m_freem(m);
+			ieee80211_release_node(ic, ni);
 			return;
 		}
 		if (iwn_ccmp_decap(sc, m, ni) != 0) {
 			ifp->if_ierrors++;
 			m_freem(m);
+			ieee80211_release_node(ic, ni);
 			return;
 		}
 		rxi.rxi_flags |= IEEE80211_RXI_HWDEC;
@@ -2376,19 +2379,22 @@ iwn_rx_compressed_ba(struct iwn_softc *sc, struct iwn_rx_desc *desc,
 	 * Multiple BA notifications in a row may be using this number, with
 	 * additional bits being set in cba->bitmap. It is unclear how the
 	 * firmware decides to shift this window forward.
+	 * We rely on ba->ba_winstart instead.
 	 */
 	seq = le16toh(cba->seq) >> IEEE80211_SEQ_SEQ_SHIFT;
 
 	/*
 	 * The firmware's new BA window starting sequence number
 	 * corresponds to the first hole in cba->bitmap, implying
-	 * that all frames between 'seq' and 'ssn' have been acked.
+	 * that all frames between 'seq' and 'ssn' (non-inclusive)
+	 * have been acked.
 	 */
 	ssn = le16toh(cba->ssn);
 
 	/* Skip rate control if our Tx rate is fixed. */
-	if (ic->ic_fixed_mcs != -1)
-		iwn_ampdu_rate_control(sc, ni, txq, cba->tid, seq, ssn);
+	if (ic->ic_fixed_mcs == -1)
+		iwn_ampdu_rate_control(sc, ni, txq, cba->tid, ba->ba_winstart,
+		    ssn);
 
 	/*
 	 * SSN corresponds to the first (perhaps not yet transmitted) frame
@@ -2506,6 +2512,9 @@ iwn_rx_statistics(struct iwn_softc *sc, struct iwn_rx_desc *desc,
 	sc->noise = iwn_get_noise(&stats->rx.general);
 
 	/* Test that RSSI and noise are present in stats report. */
+	if (sc->noise == -127)
+		return;
+
 	if (letoh32(stats->rx.general.flags) != 1) {
 		DPRINTF(("received statistics without RSSI\n"));
 		return;
@@ -2566,6 +2575,7 @@ iwn_ampdu_tx_done(struct iwn_softc *sc, struct iwn_tx_ring *txq,
 	int txfail = (status != IWN_TX_STATUS_SUCCESS &&
 	    status != IWN_TX_STATUS_DIRECT_DONE);
 	struct ieee80211_tx_ba *ba;
+	uint16_t seq;
 
 	sc->sc_tx_timer = 0;
 
@@ -2651,10 +2661,8 @@ iwn_ampdu_tx_done(struct iwn_softc *sc, struct iwn_tx_ring *txq,
 	if (ba->ba_state != IEEE80211_BA_AGREED)
 		return;
 
-	/* This is a final single-frame Tx attempt. */
-	DPRINTFN(3, ("%s: final tx status=0x%x qid=%d queued=%d idx=%d ssn=%u "
-	    "bitmap=0x%llx\n", __func__, status, desc->qid, txq->queued,
-	    desc->idx, ssn, ba->ba_bitmap));
+	/* This was a final single-frame Tx attempt for frame SSN-1. */
+	seq = (ssn - 1) & 0xfff;
 
 	/*
 	 * Skip rate control if our Tx rate is fixed.
@@ -2674,22 +2682,22 @@ iwn_ampdu_tx_done(struct iwn_softc *sc, struct iwn_tx_ring *txq,
 
 	if (txfail)
 		ieee80211_tx_compressed_bar(ic, ni, tid, ssn);
-	else if (!SEQ_LT(ssn, ba->ba_winstart)) {
+	else if (!SEQ_LT(seq, ba->ba_winstart)) {
 		/*
-		 * Move window forward if SSN lies beyond end of window,
+		 * Move window forward if SEQ lies beyond end of window,
 		 * otherwise we can't record the ACK for this frame.
 		 * Non-acked frames which left holes in the bitmap near
 		 * the beginning of the window must be discarded.
 		 */
-		uint16_t s = ssn;
+		uint16_t s = seq;
 		while (SEQ_LT(ba->ba_winend, s)) {
 			ieee80211_output_ba_move_window(ic, ni, tid, s);
 			iwn_ampdu_txq_advance(sc, txq, desc->qid,
 			    IWN_AGG_SSN_TO_TXQ_IDX(s));
 			s = (s + 1) % 0xfff;
 		}
-		/* SSN should now be within window; set corresponding bit. */
-		ieee80211_output_ba_record_ack(ic, ni, tid, ssn);
+		/* SEQ should now be within window; set corresponding bit. */
+		ieee80211_output_ba_record_ack(ic, ni, tid, seq);
 	}
 
 	/* Move window forward up to the first hole in the bitmap. */
@@ -2857,7 +2865,7 @@ iwn_tx_done(struct iwn_softc *sc, struct iwn_rx_desc *desc,
 		    data->txmcs == data->ni->ni_txmcs) {
 			wn->mn.frames++;
 			wn->mn.ampdu_size = len;
-			wn->mn.agglen = 1; 
+			wn->mn.agglen = 1;
 			if (ackfailcnt > 0)
 				wn->mn.retries++;
 			if (txfail)
@@ -3048,7 +3056,7 @@ iwn_notif_intr(struct iwn_softc *sc)
 
 			bus_dmamap_sync(sc->sc_dmat, data->map, sizeof (*desc),
 			    sizeof (*scan), BUS_DMASYNC_POSTREAD);
-			DPRINTFN(2, ("scanning channel %d status %x\n",
+			DPRINTFN(2, ("scan start: chan %d status %x\n",
 			    scan->chan, letoh32(scan->status)));
 
 			if (sc->sc_flags & IWN_FLAG_BGSCAN)
@@ -3065,7 +3073,7 @@ iwn_notif_intr(struct iwn_softc *sc)
 
 			bus_dmamap_sync(sc->sc_dmat, data->map, sizeof (*desc),
 			    sizeof (*scan), BUS_DMASYNC_POSTREAD);
-			DPRINTF(("scan finished nchan=%d status=%d chan=%d\n",
+			DPRINTFN(2, ("scan stop: nchan=%d status=%d chan=%d\n",
 			    scan->nchan, scan->status, scan->chan));
 
 			if (scan->status == 1 && scan->chan <= 14 &&
@@ -3438,7 +3446,7 @@ iwn_tx(struct iwn_softc *sc, struct mbuf *m, struct ieee80211_node *ni)
 			ridx = iwn_mcs2ridx[ni->ni_txmcs];
 		else
 			ridx = wn->ridx[ni->ni_txrate];
-	}	
+	}
 	rinfo = &iwn_rates[ridx];
 #if NBPFILTER > 0
 	if (sc->sc_drvbpf != NULL) {
@@ -3748,7 +3756,7 @@ iwn_start(struct ifnet *ifp)
 			break;
 
 		/* Encapsulate and send data frames. */
-		IFQ_DEQUEUE(&ifp->if_snd, m);
+		m = ifq_dequeue(&ifp->if_snd);
 		if (m == NULL)
 			break;
 #if NBPFILTER > 0
@@ -4593,22 +4601,28 @@ iwn5000_set_gains(struct iwn_softc *sc)
 	cmd.code = sc->noise_gain;
 	cmd.ngroups = 1;
 	cmd.isvalid = 1;
-	/* Get first available RX antenna as referential. */
-	ant = IWN_LSB(sc->rxchainmask);
+	/*
+	 * Get first available RX antenna as referential.
+	 * IWN_LSB() return values start with 1, but antenna gain array
+	 * cmd.gain[] and noise array calib->noise[] start with 0.
+	 */
+	ant = IWN_LSB(sc->rxchainmask) - 1;
+
 	/* Set differential gains for other antennas. */
 	for (i = ant + 1; i < 3; i++) {
 		if (sc->chainmask & (1 << i)) {
 			/* The delta is relative to antenna "ant". */
 			delta = ((int32_t)calib->noise[ant] -
 			    (int32_t)calib->noise[i]) / div;
+			DPRINTF(("Ant[%d] vs. Ant[%d]: delta %d\n", ant, i, delta));
 			/* Limit to [-4.5dB,+4.5dB]. */
-			cmd.gain[i - 1] = MIN(abs(delta), 3);
+			cmd.gain[i] = MIN(abs(delta), 3);
 			if (delta < 0)
-				cmd.gain[i - 1] |= 1 << 2;	/* sign bit */
+				cmd.gain[i] |= 1 << 2;	/* sign bit */
+			DPRINTF(("Setting differential gains for antenna %d: %x\n",
+				i, cmd.gain[i]));
 		}
 	}
-	DPRINTF(("setting differential gains: %x/%x (%x)\n",
-	    cmd.gain[0], cmd.gain[1], sc->chainmask));
 	return iwn_cmd(sc, IWN_CMD_PHY_CALIB, &cmd, sizeof cmd, 1);
 }
 
@@ -5187,7 +5201,6 @@ iwn_scan(struct iwn_softc *sc, uint16_t flags, int bgscan)
 	struct ieee80211_frame *wh;
 	struct ieee80211_rateset *rs;
 	struct ieee80211_channel *c;
-	struct ifnet *ifp = &ic->ic_if;
 	uint8_t *buf, *frm;
 	uint16_t rxchain, dwell_active, dwell_passive;
 	uint8_t txant;
@@ -5226,7 +5239,7 @@ iwn_scan(struct iwn_softc *sc, uint16_t flags, int bgscan)
 	    IWN_RXCHAIN_DRIVER_FORCE;
 	if ((flags & IEEE80211_CHAN_5GHZ) &&
 	    sc->hw_type == IWN_HW_REV_TYPE_4965) {
-		/* 
+		/*
 		 * On 4965 ant A and C must be avoided in 5GHz because of a
 		 * HW bug which causes very weak RSSI values being reported.
 		 */
@@ -5249,7 +5262,7 @@ iwn_scan(struct iwn_softc *sc, uint16_t flags, int bgscan)
 		hdr->flags = htole32(IWN_RXON_24GHZ | IWN_RXON_AUTO);
 		if (bgscan && sc->hw_type == IWN_HW_REV_TYPE_4965 &&
 		    sc->rxon.chan > 14) {
-			/* 
+			/*
 			 * 4965 firmware can crash when sending probe requests
 			 * with CCK rates while associated to a 5GHz AP.
 			 * Send probe requests at 6Mbps OFDM as a workaround.
@@ -5291,7 +5304,6 @@ iwn_scan(struct iwn_softc *sc, uint16_t flags, int bgscan)
 	wh->i_fc[0] = IEEE80211_FC0_VERSION_0 | IEEE80211_FC0_TYPE_MGT |
 	    IEEE80211_FC0_SUBTYPE_PROBE_REQ;
 	wh->i_fc[1] = IEEE80211_FC1_DIR_NODS;
-	IEEE80211_ADDR_COPY(ic->ic_myaddr, LLADDR(ifp->if_sadl));
 	IEEE80211_ADDR_COPY(wh->i_addr1, etherbroadcastaddr);
 	IEEE80211_ADDR_COPY(wh->i_addr2, ic->ic_myaddr);
 	IEEE80211_ADDR_COPY(wh->i_addr3, etherbroadcastaddr);
@@ -5388,7 +5400,6 @@ iwn_scan(struct iwn_softc *sc, uint16_t flags, int bgscan)
 	buflen = (uint8_t *)chan - buf;
 	hdr->len = htole16(buflen);
 
-	DPRINTF(("sending scan command nchan=%d\n", hdr->nchan));
 	error = iwn_cmd(sc, IWN_CMD_SCAN, buf, buflen, 1);
 	if (error == 0) {
 		/*
@@ -5419,10 +5430,10 @@ iwn_scan_abort(struct iwn_softc *sc)
 }
 
 int
-iwn_bgscan(struct ieee80211com *ic) 
+iwn_bgscan(struct ieee80211com *ic)
 {
 	struct iwn_softc *sc = ic->ic_softc;
-	int error; 
+	int error;
 
 	if (sc->sc_flags & IWN_FLAG_SCANNING)
 		return 0;
@@ -5441,7 +5452,7 @@ iwn_auth(struct iwn_softc *sc, int arg)
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ieee80211_node *ni = ic->ic_bss;
 	int error, ridx;
-	int bss_switch = 
+	int bss_switch =
 	    (!IEEE80211_ADDR_EQ(sc->bss_node_addr, etheranyaddr) &&
 	    !IEEE80211_ADDR_EQ(sc->bss_node_addr, ni->ni_macaddr));
 
@@ -5503,7 +5514,7 @@ iwn_auth(struct iwn_softc *sc, int arg)
 		return error;
 	}
 
-	/* 
+	/*
 	 * Make sure the firmware gets to see a beacon before we send
 	 * the auth request. Otherwise the Tx attempt can fail due to
 	 * the firmware's built-in regulatory domain enforcement.

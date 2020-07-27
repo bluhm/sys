@@ -1,4 +1,4 @@
-/*	$OpenBSD: ieee80211_pae_input.c,v 1.33 2019/09/02 12:54:21 stsp Exp $	*/
+/*	$OpenBSD: ieee80211_pae_input.c,v 1.35 2020/07/13 08:26:26 stsp Exp $	*/
 
 /*-
  * Copyright (c) 2007,2008 Damien Bergamini <damien.bergamini@free.fr>
@@ -375,7 +375,7 @@ ieee80211_recv_4way_msg3(struct ieee80211com *ic,
 #endif
 	/* discard if we're not expecting this message */
 	if (ni->ni_rsn_supp_state != RSNA_SUPP_PTKNEGOTIATING &&
-	    ni->ni_rsn_supp_state != RNSA_SUPP_PTKDONE) {
+	    ni->ni_rsn_supp_state != RSNA_SUPP_PTKDONE) {
 		DPRINTF(("unexpected in state: %d\n", ni->ni_rsn_supp_state));
 		return;
 	}
@@ -651,6 +651,8 @@ ieee80211_recv_4way_msg3(struct ieee80211com *ic,
 			ni->ni_port_valid = 1;
 			ieee80211_set_link_state(ic, LINK_STATE_UP);
 			ni->ni_assoc_fail = 0;
+			if (ic->ic_opmode == IEEE80211_M_STA)
+				ic->ic_rsngroupcipher = ni->ni_rsngroupcipher;
 		}
 	}
  deauth:
@@ -796,7 +798,7 @@ ieee80211_recv_rsn_group_msg1(struct ieee80211com *ic,
 		return;
 #endif
 	/* discard if we're not expecting this message */
-	if (ni->ni_rsn_supp_state != RNSA_SUPP_PTKDONE) {
+	if (ni->ni_rsn_supp_state != RSNA_SUPP_PTKDONE) {
 		DPRINTF(("unexpected in state: %d\n", ni->ni_rsn_supp_state));
 		return;
 	}
@@ -954,7 +956,7 @@ ieee80211_recv_wpa_group_msg1(struct ieee80211com *ic,
 		return;
 #endif
 	/* discard if we're not expecting this message */
-	if (ni->ni_rsn_supp_state != RNSA_SUPP_PTKDONE) {
+	if (ni->ni_rsn_supp_state != RSNA_SUPP_PTKDONE) {
 		DPRINTF(("unexpected in state: %d\n", ni->ni_rsn_supp_state));
 		return;
 	}

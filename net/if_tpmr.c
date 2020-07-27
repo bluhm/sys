@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_tpmr.c,v 1.10 2020/04/12 06:56:37 dlg Exp $ */
+/*	$OpenBSD: if_tpmr.c,v 1.17 2020/07/24 03:20:50 kn Exp $ */
 
 /*
  * Copyright (c) 2019 The University of Queensland
@@ -48,9 +48,7 @@
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
 
-#include <net/if_media.h> /* if_trunk.h uses ifmedia bits */
-#include <crypto/siphash.h> /* if_trunk.h uses siphash bits */
-#include <net/if_trunk.h>
+#include <net/if_bridge.h>
 
 #if NBPFILTER > 0
 #include <net/bpf.h>
@@ -75,7 +73,6 @@ static const uint8_t	ether_8021_prefix[ETHER_ADDR_LEN - 1] =
  */
 
 #define TPMR_NUM_PORTS		2
-#define TPMR_TRUNK_PROTO	TRUNK_PROTO_NONE
 
 struct tpmr_softc;
 
@@ -91,6 +88,8 @@ struct tpmr_port {
 
 	struct tpmr_softc	*p_tpmr;
 	unsigned int		 p_slot;
+
+	struct ether_brport	 p_brport;
 };
 
 struct tpmr_softc {
@@ -125,14 +124,12 @@ static int	tpmr_p_ioctl(struct ifnet *, u_long, caddr_t);
 static int	tpmr_p_output(struct ifnet *, struct mbuf *,
 		    struct sockaddr *, struct rtentry *);
 
-static int	tpmr_get_trunk(struct tpmr_softc *, struct trunk_reqall *);
 static void	tpmr_p_dtor(struct tpmr_softc *, struct tpmr_port *,
 		    const char *);
 static int	tpmr_add_port(struct tpmr_softc *,
-		    const struct trunk_reqport *);
-static int	tpmr_get_port(struct tpmr_softc *, struct trunk_reqport *);
+		    const struct ifbreq *);
 static int	tpmr_del_port(struct tpmr_softc *,
-		    const struct trunk_reqport *);
+		    const struct ifbreq *);
 
 static struct if_clone tpmr_cloner =
     IF_CLONE_INITIALIZER("tpmr", tpmr_clone_create, tpmr_clone_destroy);
@@ -171,7 +168,7 @@ tpmr_clone_create(struct if_clone *ifc, int unit)
 	ifp->if_flags = IFF_POINTOPOINT;
 	ifp->if_xflags = IFXF_CLONED | IFXF_MPSAFE;
 	ifp->if_link_state = LINK_STATE_DOWN;
-	IFQ_SET_MAXLEN(&ifp->if_snd, IFQ_MAXLEN);
+	ifq_set_maxlen(&ifp->if_snd, IFQ_MAXLEN);
 
 	if_counters_alloc(ifp);
 	if_attach(ifp);
@@ -211,6 +208,23 @@ tpmr_clone_destroy(struct ifnet *ifp)
 	NET_UNLOCK();
 
 	free(sc, M_DEVBUF, sizeof(*sc));
+
+	return (0);
+}
+
+static int
+tpmr_vlan_filter(const struct mbuf *m)
+{
+	const struct ether_header *eh;
+
+	eh = mtod(m, struct ether_header *);
+	switch (ntohs(eh->ether_type)) {
+	case ETHERTYPE_VLAN:
+	case ETHERTYPE_QINQ:
+		return (1);
+	default:
+		break;
+	}
 
 	return (0);
 }
@@ -281,10 +295,10 @@ tpmr_pf(struct ifnet *ifp0, int dir, struct mbuf *m)
 }
 #endif /* NPF > 0 */
 
-static int
-tpmr_input(struct ifnet *ifp0, struct mbuf *m, void *cookie)
+static struct mbuf *
+tpmr_input(struct ifnet *ifp0, struct mbuf *m, void *brport)
 {
-	struct tpmr_port *p = cookie;
+	struct tpmr_port *p = brport;
 	struct tpmr_softc *sc = p->p_tpmr;
 	struct ifnet *ifp = &sc->sc_if;
 	struct tpmr_port *pn;
@@ -310,6 +324,10 @@ tpmr_input(struct ifnet *ifp0, struct mbuf *m, void *cookie)
 	}
 #endif
 
+	if (!ISSET(ifp->if_flags, IFF_LINK2) &&
+	    tpmr_vlan_filter(m))
+		goto drop;
+
 	if (!ISSET(ifp->if_flags, IFF_LINK0) &&
 	    tpmr_8021q_filter(m))
 		goto drop;
@@ -317,7 +335,7 @@ tpmr_input(struct ifnet *ifp0, struct mbuf *m, void *cookie)
 #if NPF > 0
 	if (!ISSET(ifp->if_flags, IFF_LINK1) &&
 	    (m = tpmr_pf(ifp0, PF_IN, m)) == NULL)
-		return (1);
+		return (NULL);
 #endif
 
 	len = m->m_pkthdr.len;
@@ -353,11 +371,11 @@ tpmr_input(struct ifnet *ifp0, struct mbuf *m, void *cookie)
 	}
 	smr_read_leave();
 
-	return (1);
+	return (NULL);
 
 drop:
 	m_freem(m);
-	return (1);
+	return (NULL);
 }
 
 static int
@@ -405,50 +423,19 @@ tpmr_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		}
 		break;
 
-	case SIOCSTRUNK:
+	case SIOCBRDGADD:
 		error = suser(curproc);
 		if (error != 0)
 			break;
 
-		if (((struct trunk_reqall *)data)->ra_proto !=
-		    TRUNK_PROTO_LACP) {
-			error = EPROTONOSUPPORT;
-			break;
-		}
-
-		/* nop */
+		error = tpmr_add_port(sc, (struct ifbreq *)data);
 		break;
-	case SIOCGTRUNK:
-		error = tpmr_get_trunk(sc, (struct trunk_reqall *)data);
-		break;
-
-	case SIOCSTRUNKOPTS:
+	case SIOCBRDGDEL:
 		error = suser(curproc);
 		if (error != 0)
 			break;
 
-		error = EPROTONOSUPPORT;
-		break;
-
-	case SIOCGTRUNKOPTS:
-		break;
-
-	case SIOCGTRUNKPORT:
-		error = tpmr_get_port(sc, (struct trunk_reqport *)data);
-		break;
-	case SIOCSTRUNKPORT:
-		error = suser(curproc);
-		if (error != 0)
-			break;
-
-		error = tpmr_add_port(sc, (struct trunk_reqport *)data);
-		break;
-	case SIOCSTRUNKDELPORT:
-		error = suser(curproc);
-		if (error != 0)
-			break;
-
-		error = tpmr_del_port(sc, (struct trunk_reqport *)data);
+		error = tpmr_del_port(sc, (struct ifbreq *)data);
 		break;
 
 	default:
@@ -463,64 +450,10 @@ tpmr_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 }
 
 static int
-tpmr_get_trunk(struct tpmr_softc *sc, struct trunk_reqall *ra)
-{
-	struct ifnet *ifp = &sc->sc_if;
-	size_t size = ra->ra_size;
-	caddr_t ubuf = (caddr_t)ra->ra_port;
-	int error = 0;
-	int i;
-
-	ra->ra_proto = TPMR_TRUNK_PROTO;
-	memset(&ra->ra_psc, 0, sizeof(ra->ra_psc));
-
-	ra->ra_ports = sc->sc_nports;
-	for (i = 0; i < nitems(sc->sc_ports); i++) {
-		struct trunk_reqport rp;
-		struct ifnet *ifp0;
-		struct tpmr_port *p = SMR_PTR_GET_LOCKED(&sc->sc_ports[i]);
-		if (p == NULL)
-			continue;
-
-		if (size < sizeof(rp))
-			break;
-
-		ifp0 = p->p_ifp0;
-
-		CTASSERT(sizeof(rp.rp_ifname) == sizeof(ifp->if_xname));
-		CTASSERT(sizeof(rp.rp_portname) == sizeof(ifp0->if_xname));
-
-		memset(&rp, 0, sizeof(rp));
-		memcpy(rp.rp_ifname, ifp->if_xname, sizeof(rp.rp_ifname));
-		memcpy(rp.rp_portname, ifp0->if_xname, sizeof(rp.rp_portname));
-
-		if (!ISSET(ifp0->if_flags, IFF_RUNNING))
-			SET(rp.rp_flags, TRUNK_PORT_DISABLED);
-		else {
-			SET(rp.rp_flags, TRUNK_PORT_ACTIVE);
-			if (LINK_STATE_IS_UP(ifp0->if_link_state)) {
-				SET(rp.rp_flags, TRUNK_PORT_COLLECTING |
-				    TRUNK_PORT_DISTRIBUTING);
-			}
-		}
-
-		error = copyout(&rp, ubuf, sizeof(rp));
-		if (error != 0)
-			break;
-
-		ubuf += sizeof(rp);
-		size -= sizeof(rp);
-	}
-
-	return (error);
-}
-
-static int
-tpmr_add_port(struct tpmr_softc *sc, const struct trunk_reqport *rp)
+tpmr_add_port(struct tpmr_softc *sc, const struct ifbreq *req)
 {
 	struct ifnet *ifp = &sc->sc_if;
 	struct ifnet *ifp0;
-	struct arpcom *ac0;
 	struct tpmr_port **pp;
 	struct tpmr_port *p;
 	int i;
@@ -530,16 +463,16 @@ tpmr_add_port(struct tpmr_softc *sc, const struct trunk_reqport *rp)
 	if (sc->sc_nports >= nitems(sc->sc_ports))
 		return (ENOSPC);
 
-	ifp0 = ifunit(rp->rp_portname);
+	ifp0 = ifunit(req->ifbr_ifsname);
 	if (ifp0 == NULL)
 		return (EINVAL);
 
 	if (ifp0->if_type != IFT_ETHER)
 		return (EPROTONOSUPPORT);
 
-	ac0 = (struct arpcom *)ifp0;
-	if (ac0->ac_trunkport != NULL)
-		return (EBUSY);
+	error = ether_brport_isset(ifp0);
+	if (error != 0)
+		return (error);
 
 	/* let's try */
 
@@ -565,11 +498,19 @@ tpmr_add_port(struct tpmr_softc *sc, const struct trunk_reqport *rp)
 	if (error != 0)
 		goto free;
 
+	/* this might have changed if we slept for malloc or ifpromisc */
+	error = ether_brport_isset(ifp0);
+	if (error != 0)
+		goto unpromisc;
+
 	task_set(&p->p_ltask, tpmr_p_linkch, p);
 	if_linkstatehook_add(ifp0, &p->p_ltask);
 
 	task_set(&p->p_dtask, tpmr_p_detach, p);
 	if_detachhook_add(ifp0, &p->p_dtask);
+
+	p->p_brport.eb_input = tpmr_input;
+	p->p_brport.eb_port = p;
 
 	/* commit */
 	DPRINTF(sc, "%s %s trunkport: creating port\n",
@@ -584,12 +525,9 @@ tpmr_add_port(struct tpmr_softc *sc, const struct trunk_reqport *rp)
 
 	p->p_slot = i;
 
-	ac0->ac_trunkport = p;
-	/* make sure p is visible before handlers can run */
-	membar_producer();
+	ether_brport_set(ifp0, &p->p_brport);
 	ifp0->if_ioctl = tpmr_p_ioctl;
 	ifp0->if_output = tpmr_p_output;
-	if_ih_insert(ifp0, tpmr_input, p);
 
 	SMR_PTR_SET_LOCKED(pp, p);
 
@@ -597,6 +535,8 @@ tpmr_add_port(struct tpmr_softc *sc, const struct trunk_reqport *rp)
 
 	return (0);
 
+unpromisc:
+	ifpromisc(ifp0, 0);
 free:
 	free(p, M_DEVBUF, sizeof(*p));
 put:
@@ -622,27 +562,12 @@ tpmr_trunkport(struct tpmr_softc *sc, const char *name)
 }
 
 static int
-tpmr_get_port(struct tpmr_softc *sc, struct trunk_reqport *rp)
+tpmr_del_port(struct tpmr_softc *sc, const struct ifbreq *req)
 {
 	struct tpmr_port *p;
 
 	NET_ASSERT_LOCKED();
-	p = tpmr_trunkport(sc, rp->rp_portname);
-	if (p == NULL)
-		return (EINVAL);
-
-	/* XXX */
-
-	return (0);
-}
-
-static int
-tpmr_del_port(struct tpmr_softc *sc, const struct trunk_reqport *rp)
-{
-	struct tpmr_port *p;
-
-	NET_ASSERT_LOCKED();
-	p = tpmr_trunkport(sc, rp->rp_portname);
+	p = tpmr_trunkport(sc, req->ifbr_ifsname);
 	if (p == NULL)
 		return (EINVAL);
 
@@ -654,28 +579,23 @@ tpmr_del_port(struct tpmr_softc *sc, const struct trunk_reqport *rp)
 static int
 tpmr_p_ioctl(struct ifnet *ifp0, u_long cmd, caddr_t data)
 {
-	struct arpcom *ac0 = (struct arpcom *)ifp0;
-	struct tpmr_port *p = ac0->ac_trunkport;
+	const struct ether_brport *eb = ether_brport_get_locked(ifp0);
+	struct tpmr_port *p;
 	int error = 0;
+
+	KASSERTMSG(eb != NULL,
+	    "%s: %s called without an ether_brport set",
+	    ifp0->if_xname, __func__);
+	KASSERTMSG(eb->eb_input == tpmr_input,
+	    "%s: %s called, but eb_input seems wrong (%p != tpmr_input())",
+	    ifp0->if_xname, __func__, eb->eb_input);
+
+	p = eb->eb_port;
 
 	switch (cmd) {
 	case SIOCSIFADDR:
 		error = EBUSY;
 		break;
-
-	case SIOCGTRUNKPORT: {
-		struct trunk_reqport *rp = (struct trunk_reqport *)data;
-		struct tpmr_softc *sc = p->p_tpmr;
-		struct ifnet *ifp = &sc->sc_if;
-
-		if (strncmp(rp->rp_ifname, rp->rp_portname,
-		    sizeof(rp->rp_ifname)) != 0)
-			return (EINVAL);
-
-		CTASSERT(sizeof(rp->rp_ifname) == sizeof(ifp->if_xname));
-		memcpy(rp->rp_ifname, ifp->if_xname, sizeof(rp->rp_ifname));
-		break;
-	}
 
 	default:
 		error = (*p->p_ioctl)(ifp0, cmd, data);
@@ -689,8 +609,9 @@ static int
 tpmr_p_output(struct ifnet *ifp0, struct mbuf *m, struct sockaddr *dst,
     struct rtentry *rt)
 {
-	struct arpcom *ac0 = (struct arpcom *)ifp0;
-	struct tpmr_port *p = ac0->ac_trunkport;
+	int (*p_output)(struct ifnet *, struct mbuf *, struct sockaddr *,
+	    struct rtentry *) = NULL;
+	const struct ether_brport *eb;
 
 	/* restrict transmission to bpf only */
 	if ((m_tag_find(m, PACKET_TAG_DLT, NULL) == NULL)) {
@@ -698,7 +619,20 @@ tpmr_p_output(struct ifnet *ifp0, struct mbuf *m, struct sockaddr *dst,
 		return (EBUSY);
 	}
 
-	return ((*p->p_output)(ifp0, m, dst, rt));
+	smr_read_enter();
+	eb = ether_brport_get(ifp0);
+	if (eb != NULL && eb->eb_input == tpmr_input) {
+		struct tpmr_port *p = eb->eb_port;
+		p_output = p->p_output; /* code doesn't go away */
+	}
+	smr_read_leave();
+
+	if (p_output == NULL) {
+		m_freem(m);
+		return (ENXIO);
+	}
+
+	return ((*p_output)(ifp0, m, dst, rt));
 }
 
 static void
@@ -706,18 +640,14 @@ tpmr_p_dtor(struct tpmr_softc *sc, struct tpmr_port *p, const char *op)
 {
 	struct ifnet *ifp = &sc->sc_if;
 	struct ifnet *ifp0 = p->p_ifp0;
-	struct arpcom *ac0 = (struct arpcom *)ifp0;
 
 	DPRINTF(sc, "%s %s: destroying port\n",
 	    ifp->if_xname, ifp0->if_xname);
 
-	if_ih_remove(ifp0, tpmr_input, p);
-
 	ifp0->if_ioctl = p->p_ioctl;
 	ifp0->if_output = p->p_output;
-	membar_producer();
 
-	ac0->ac_trunkport = NULL;
+	ether_brport_clr(ifp0);
 
 	sc->sc_nports--;
 	SMR_PTR_SET_LOCKED(&sc->sc_ports[p->p_slot], NULL);

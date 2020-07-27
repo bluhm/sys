@@ -1,4 +1,4 @@
-/*	$OpenBSD: conf.c,v 1.69 2020/05/13 08:32:43 mpi Exp $	*/
+/*	$OpenBSD: conf.c,v 1.71 2020/07/06 04:32:25 dlg Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Charles M. Hannum.  All rights reserved.
@@ -75,12 +75,6 @@ struct bdevsw	bdevsw[] =
 };
 int	nblkdev = nitems(bdevsw);
 
-/* open, close, read, write, ioctl, tty, mmap */
-#define cdev_pc_init(c,n) { \
-	dev_init(c,n,open), dev_init(c,n,close), dev_init(c,n,read), \
-	dev_init(c,n,write), dev_init(c,n,ioctl), dev_init(c,n,stop), \
-	dev_init(c,n,tty), ttselect, dev_init(c,n,mmap), D_TTY }
-
 /* open, close, read, ioctl */
 #define cdev_joy_init(c,n) { \
 	dev_init(c,n,open), dev_init(c,n,close), dev_init(c,n,read), \
@@ -148,6 +142,7 @@ cdev_decl(cy);
 #include "pctr.h"
 #include "bktr.h"
 #include "ksyms.h"
+#include "kstat.h"
 #include "usb.h"
 #include "uhid.h"
 #include "fido.h"
@@ -244,7 +239,7 @@ struct cdevsw	cdevsw[] =
 	cdev_notdef(),			/* 48 */
 	cdev_bktr_init(NBKTR,bktr),     /* 49: Bt848 video capture device */
 	cdev_ksyms_init(NKSYMS,ksyms),	/* 50: Kernel symbols device */
-	cdev_notdef(),			/* 51 */
+	cdev_kstat_init(NKSTAT,kstat),	/* 51: Kernel statistics */
 	cdev_midi_init(NMIDI,midi),	/* 52: MIDI I/O */
 	cdev_notdef(),			/* 53 was: sequencer I/O */
 	cdev_notdef(),			/* 54 was: RAIDframe disk driver */

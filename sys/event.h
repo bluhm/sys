@@ -1,4 +1,4 @@
-/*	$OpenBSD: event.h,v 1.37 2020/05/17 10:53:14 visa Exp $	*/
+/*	$OpenBSD: event.h,v 1.44 2020/06/22 13:14:32 mpi Exp $	*/
 
 /*-
  * Copyright (c) 1999,2000,2001 Jonathan Lemon <jlemon@FreeBSD.org>
@@ -39,6 +39,7 @@
 #define EVFILT_SIGNAL		(-6)	/* attached to struct process */
 #define EVFILT_TIMER		(-7)	/* timers */
 #define EVFILT_DEVICE		(-8)	/* devices */
+#define EVFILT_EXCEPT		(-9)	/* exceptional conditions */
 
 #define EVFILT_SYSCOUNT		8
 
@@ -87,6 +88,12 @@ struct kevent {
 #define NOTE_EOF	0x0002			/* return on EOF */
 
 /*
+ * data/hint flags for EVFILT_EXCEPT, shared with userspace and with
+ * EVFILT_{READ|WRITE}
+ */
+#define NOTE_OOB	0x0004			/* OOB data on a socket */
+
+/*
  * data/hint flags for EVFILT_VNODE, shared with userspace
  */
 #define	NOTE_DELETE	0x0001			/* vnode was removed */
@@ -128,6 +135,10 @@ struct klist {
 };
 
 #ifdef _KERNEL
+
+/* kernel-only flags */
+#define __EV_POLL	0x1000		/* match behavior of poll & select */
+#define __EV_HUP	EV_FLAG1	/* device or socket disconnected */
 
 #define EVFILT_MARKER	0xf			/* placemarker for tailq */
 
@@ -189,18 +200,10 @@ struct knote {
 #define kn_fp		kn_ptr.p_fp
 };
 
-struct kqueue_scan_state {
-	struct kqueue	*kqs_kq;		/* kqueue of this scan */
-	struct knote	 kqs_start;		/* start marker */
-	struct knote	 kqs_end;		/* end marker */
-	int		 kqs_nevent;		/* number of events collected */
-	int		 kqs_queued;		/* if set, end marker is
-						 * in queue */
-};
-
 struct proc;
 
 extern const struct filterops sig_filtops;
+extern const struct filterops dead_filtops;
 
 extern void	knote(struct klist *list, long hint);
 extern void	knote_activate(struct knote *);
@@ -209,8 +212,6 @@ extern void	knote_fdclose(struct proc *p, int fd);
 extern void	knote_processexit(struct proc *);
 extern int	kqueue_register(struct kqueue *kq,
 		    struct kevent *kev, struct proc *p);
-extern void	kqueue_scan_setup(struct kqueue_scan_state *, struct kqueue *);
-extern void	kqueue_scan_finish(struct kqueue_scan_state *);
 extern int	filt_seltrue(struct knote *kn, long hint);
 extern int	seltrue_kqfilter(dev_t, struct knote *);
 extern void	klist_insert(struct klist *, struct knote *);

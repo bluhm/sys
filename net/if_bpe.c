@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_bpe.c,v 1.10 2019/11/07 07:36:31 dlg Exp $ */
+/*	$OpenBSD: if_bpe.c,v 1.13 2020/07/22 08:38:51 dlg Exp $ */
 /*
  * Copyright (c) 2018 David Gwynne <dlg@openbsd.org>
  *
@@ -97,7 +97,6 @@ RBT_GENERATE(bpe_map, bpe_entry, be_entry, bpe_entry_cmp);
 struct bpe_softc {
 	struct bpe_key		sc_key; /* must be first */
 	struct arpcom		sc_ac;
-	struct ifmedia		sc_media;
 	int			sc_txhprio;
 	int			sc_rxhprio;
 	uint8_t			sc_group[ETHER_ADDR_LEN];
@@ -190,7 +189,7 @@ bpe_clone_create(struct if_clone *ifc, int unit)
 	ifp->if_start = bpe_start;
 	ifp->if_flags = IFF_BROADCAST | IFF_MULTICAST;
 	ifp->if_xflags = IFXF_CLONED;
-	IFQ_SET_MAXLEN(&ifp->if_snd, IFQ_MAXLEN);
+	ifq_set_maxlen(&ifp->if_snd, IFQ_MAXLEN);
 	ether_fakeaddr(ifp);
 
 	if_counters_alloc(ifp);
@@ -210,7 +209,6 @@ bpe_clone_destroy(struct ifnet *ifp)
 		bpe_down(sc);
 	NET_UNLOCK();
 
-	ifmedia_delete_instance(&sc->sc_media, IFM_INST_ANY);
 	ether_ifdetach(ifp);
 	if_detach(ifp);
 
@@ -230,7 +228,7 @@ bpe_entry_valid(struct bpe_softc *sc, const struct bpe_entry *be)
 	if (be->be_type == BPE_ENTRY_STATIC)
 		return (1);
 
-	diff = time_uptime - be->be_age;
+	diff = getuptime() - be->be_age;
 	if (diff < sc->sc_bridge_tmo)
 		return (1);
 
@@ -343,7 +341,7 @@ bpe_bridge_age(void *arg)
 		if (be->be_type != BPE_ENTRY_DYNAMIC)
 			continue;
 
-		diff = time_uptime - be->be_age;
+		diff = getuptime() - be->be_age;
 		if (diff < sc->sc_bridge_tmo)
 			continue;
 
@@ -402,7 +400,7 @@ bpe_rtfind(struct bpe_softc *sc, struct ifbaconf *baconf)
 
 		switch (be->be_type) {
 		case BPE_ENTRY_DYNAMIC:
-			age = time_uptime - be->be_age;
+			age = getuptime() - be->be_age;
 			bareq.ifba_age = MIN(age, 0xff);
 			bareq.ifba_flags = IFBAF_DYNAMIC;
 			break;
@@ -833,7 +831,7 @@ bpe_input_map(struct bpe_softc *sc, const uint8_t *ba, const uint8_t *ca)
 	if (be == NULL)
 		new = 1;
 	else {
-		be->be_age = time_uptime; /* only a little bit racy */
+		be->be_age = getuptime(); /* only a little bit racy */
 
 		if (be->be_type != BPE_ENTRY_DYNAMIC ||
 		    ETHER_IS_EQ(ba, &be->be_b_da))
@@ -857,7 +855,7 @@ bpe_input_map(struct bpe_softc *sc, const uint8_t *ba, const uint8_t *ca)
 		memcpy(&be->be_b_da, ba, sizeof(be->be_b_da));
 		be->be_type = BPE_ENTRY_DYNAMIC;
 		refcnt_init(&be->be_refs);
-		be->be_age = time_uptime;
+		be->be_age = getuptime();
 
 		rw_enter_write(&sc->sc_bridge_lock);
 		num = sc->sc_bridge_num;

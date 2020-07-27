@@ -1,4 +1,4 @@
-/*	$OpenBSD: vioscsi.c,v 1.16 2020/02/14 15:56:47 krw Exp $	*/
+/*	$OpenBSD: vioscsi.c,v 1.25 2020/07/22 13:16:05 krw Exp $	*/
 /*
  * Copyright (c) 2013 Google Inc.
  *
@@ -49,8 +49,6 @@ struct vioscsi_req {
 
 struct vioscsi_softc {
 	struct device		 sc_dev;
-	struct scsi_link	 sc_link;
-	struct scsibus		*sc_scsibus;
 	struct scsi_iopool	 sc_iopool;
 	struct mutex		 sc_vr_mtx;
 
@@ -154,23 +152,23 @@ vioscsi_attach(struct device *parent, struct device *self, void *aux)
 	mtx_init(&sc->sc_vr_mtx, IPL_BIO);
 	scsi_iopool_init(&sc->sc_iopool, sc, vioscsi_req_get, vioscsi_req_put);
 
-	sc->sc_link.openings = vioscsi_alloc_reqs(sc, vsc, qsize);
-	if (sc->sc_link.openings == 0) {
+	int nreqs = vioscsi_alloc_reqs(sc, vsc, qsize);
+	if (nreqs == 0) {
 		printf("\nCan't alloc reqs\n");
 		goto err;
-	} else if (sc->sc_link.openings > cmd_per_lun)
-		sc->sc_link.openings = cmd_per_lun;
+	}
 
-	sc->sc_link.adapter = &vioscsi_switch;
-	sc->sc_link.adapter_softc = sc;
-	sc->sc_link.adapter_target = max_target;
-	sc->sc_link.adapter_buswidth = max_target;
-	sc->sc_link.pool = &sc->sc_iopool;
+	saa.saa_adapter = &vioscsi_switch;
+	saa.saa_adapter_softc = sc;
+	saa.saa_adapter_target = SDEV_NO_ADAPTER_TARGET;
+	saa.saa_adapter_buswidth = max_target;
+	saa.saa_luns = 8;
+	saa.saa_openings = (nreqs > cmd_per_lun) ? cmd_per_lun : nreqs;
+	saa.saa_pool = &sc->sc_iopool;
+	saa.saa_quirks = saa.saa_flags = 0;
+	saa.saa_wwpn = saa.saa_wwnn = 0;
 
-	bzero(&saa, sizeof(saa));
-	saa.saa_sc_link = &sc->sc_link;
-
-	sc->sc_scsibus = (struct scsibus *)config_found(self, &saa, scsiprint);
+	config_found(self, &saa, scsiprint);
 	return;
 
 err:
@@ -181,7 +179,7 @@ err:
 void
 vioscsi_scsi_cmd(struct scsi_xfer *xs)
 {
-	struct vioscsi_softc *sc = xs->sc_link->adapter_softc;
+	struct vioscsi_softc *sc = xs->sc_link->bus->sb_adapter_softc;
 	struct virtio_softc *vsc = (struct virtio_softc *)sc->sc_dev.dv_parent;
 	struct vioscsi_req *vr = xs->io;
 	struct virtio_scsi_req_hdr *req = &vr->vr_req;
@@ -329,7 +327,7 @@ vioscsi_req_done(struct vioscsi_softc *sc, struct virtio_softc *vsc,
 	xs->status = vr->vr_res.status;
 	xs->resid = vr->vr_res.residual;
 
-	DPRINTF("vioscsi_req_done: done %d, %d, %zd\n", 
+	DPRINTF("vioscsi_req_done: done %d, %d, %zd\n",
 	    xs->error, xs->status, xs->resid);
 
 done:

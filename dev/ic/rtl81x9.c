@@ -1,4 +1,4 @@
-/*	$OpenBSD: rtl81x9.c,v 1.96 2017/01/22 10:17:38 dlg Exp $ */
+/*	$OpenBSD: rtl81x9.c,v 1.98 2020/07/10 13:26:37 patrick Exp $ */
 
 /*
  * Copyright (c) 1997, 1998
@@ -774,7 +774,7 @@ rl_intr(void *arg)
 	/* Re-enable interrupts. */
 	CSR_WRITE_2(sc, RL_IMR, RL_INTRS);
 
-	if (!IFQ_IS_EMPTY(&ifp->if_snd))
+	if (!ifq_empty(&ifp->if_snd))
 		rl_start(ifp);
 
 	return (claimed);
@@ -850,7 +850,7 @@ rl_start(struct ifnet *ifp)
 	int		pkts = 0;
 
 	while (RL_CUR_TXMBUF(sc) == NULL) {
-		IFQ_DEQUEUE(&ifp->if_snd, m_head);
+		m_head = ifq_dequeue(&ifp->if_snd);
 		if (m_head == NULL)
 			break;
 

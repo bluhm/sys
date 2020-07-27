@@ -1,4 +1,4 @@
-/* $OpenBSD: pfkeyv2.c,v 1.200 2020/04/23 19:38:08 tobhe Exp $ */
+/* $OpenBSD: pfkeyv2.c,v 1.204 2020/07/21 07:54:43 tobhe Exp $ */
 
 /*
  *	@(#)COPYRIGHT	1.1 (NRL) 17 January 1995
@@ -633,8 +633,8 @@ pfkeyv2_sendmessage(void **headers, int mode, struct socket *so,
 
 ret:
 	if (buffer != NULL) {
-		bzero(buffer, j + sizeof(struct sadb_msg));
-		free(buffer, M_PFKEY, 0);
+		explicit_bzero(buffer, j + sizeof(struct sadb_msg));
+		free(buffer, M_PFKEY, j + sizeof(struct sadb_msg));
 	}
 
 	return (rval);
@@ -646,7 +646,8 @@ ret:
  * SPD rule was for incoming or outgoing packets).
  */
 int
-pfkeyv2_policy(struct ipsec_acquire *ipa, void **headers, void **buffer)
+pfkeyv2_policy(struct ipsec_acquire *ipa, void **headers, void **buffer,
+    int *bufferlen)
 {
 	union sockaddr_union sunion;
 	struct sadb_protocol *sp;
@@ -681,8 +682,10 @@ pfkeyv2_policy(struct ipsec_acquire *ipa, void **headers, void **buffer)
 	if (!(p = malloc(i, M_PFKEY, M_NOWAIT | M_ZERO))) {
 		rval = ENOMEM;
 		goto ret;
-	} else
+	} else {
 		*buffer = p;
+		*bufferlen = i;
+	}
 
 	if (dir == IPSP_DIRECTION_OUT)
 		headers[SADB_X_EXT_SRC_FLOW] = p;
@@ -985,6 +988,7 @@ pfkeyv2_dump_walker(struct tdb *tdb, void *state, int last)
 {
 	struct dump_state *dump_state = (struct dump_state *) state;
 	void *headers[SADB_EXT_MAX+1], *buffer;
+	int buflen;
 	int rval;
 
 	/* If not satype was specified, dump all TDBs */
@@ -994,7 +998,7 @@ pfkeyv2_dump_walker(struct tdb *tdb, void *state, int last)
 		headers[0] = (void *) dump_state->sadb_msg;
 
 		/* Get the information from the TDB to a PFKEYv2 message */
-		if ((rval = pfkeyv2_get(tdb, headers, &buffer, NULL)) != 0)
+		if ((rval = pfkeyv2_get(tdb, headers, &buffer, &buflen)) != 0)
 			return (rval);
 
 		if (last)
@@ -1005,7 +1009,8 @@ pfkeyv2_dump_walker(struct tdb *tdb, void *state, int last)
 		    PFKEYV2_SENDMESSAGE_UNICAST, dump_state->socket, 0, 0,
 		    tdb->tdb_rdomain);
 
-		free(buffer, M_PFKEY, 0);
+		explicit_bzero(buffer, buflen);
+		free(buffer, M_PFKEY, buflen);
 		if (rval)
 			return (rval);
 	}
@@ -1108,6 +1113,7 @@ pfkeyv2_send(struct socket *so, void *message, int len)
 	struct radix_node *rn = NULL;
 	struct pkpcb *kp, *bkp;
 	void *freeme = NULL, *freeme2 = NULL, *freeme3 = NULL;
+	int freeme_sz = 0, freeme2_sz = 0, freeme3_sz = 0;
 	void *bckptr = NULL;
 	void *headers[SADB_EXT_MAX + 1];
 	union sockaddr_union *sunionp;
@@ -1141,8 +1147,8 @@ pfkeyv2_send(struct socket *so, void *message, int len)
 	if (promisc) {
 		struct mbuf *packet;
 
-		if (!(freeme = malloc(sizeof(struct sadb_msg) + len, M_PFKEY,
-		    M_NOWAIT))) {
+		freeme_sz = sizeof(struct sadb_msg) + len;
+		if (!(freeme = malloc(freeme_sz, M_PFKEY, M_NOWAIT))) {
 			rval = ENOMEM;
 			goto ret;
 		}
@@ -1159,8 +1165,7 @@ pfkeyv2_send(struct socket *so, void *message, int len)
 		bcopy(message, freeme + sizeof(struct sadb_msg), len);
 
 		/* Convert to mbuf chain */
-		if ((rval = pfdatatopacket(freeme,
-		    sizeof(struct sadb_msg) + len, &packet)) != 0)
+		if ((rval = pfdatatopacket(freeme, freeme_sz, &packet)) != 0)
 			goto ret;
 
 		/* Send to all promiscuous listeners */
@@ -1178,9 +1183,10 @@ pfkeyv2_send(struct socket *so, void *message, int len)
 		m_freem(packet);
 
 		/* Paranoid */
-		explicit_bzero(freeme, sizeof(struct sadb_msg) + len);
-		free(freeme, M_PFKEY, 0);
+		explicit_bzero(freeme, freeme_sz);
+		free(freeme, M_PFKEY, freeme_sz);
 		freeme = NULL;
+		freeme_sz = 0;
 	}
 
 	/* Validate message format */
@@ -1227,8 +1233,8 @@ pfkeyv2_send(struct socket *so, void *message, int len)
 		}
 
 		/* Send a message back telling what the SA (the SPI really) is */
-		if (!(freeme = malloc(sizeof(struct sadb_sa), M_PFKEY,
-		    M_NOWAIT | M_ZERO))) {
+		freeme_sz = sizeof(struct sadb_sa);
+		if (!(freeme = malloc(freeme_sz, M_PFKEY, M_NOWAIT | M_ZERO))) {
 			rval = ENOMEM;
 			NET_UNLOCK();
 			goto ret;
@@ -1293,6 +1299,7 @@ pfkeyv2_send(struct socket *so, void *message, int len)
 			int alg;
 
 			/* Create new TDB */
+			freeme_sz = 0;
 			freeme = tdb_alloc(rdomain);
 			bzero(&ii, sizeof(struct ipsecinit));
 
@@ -1458,6 +1465,7 @@ pfkeyv2_send(struct socket *so, void *message, int len)
 		}
 
 		/* Allocate and initialize new TDB */
+		freeme_sz = 0;
 		freeme = tdb_alloc(rdomain);
 
 		{
@@ -1570,7 +1578,7 @@ pfkeyv2_send(struct socket *so, void *message, int len)
 			goto ret;
 		}
 
-		rval = pfkeyv2_policy(ipa, headers, &freeme);
+		rval = pfkeyv2_policy(ipa, headers, &freeme, &freeme_sz);
 		NET_UNLOCK();
 		if (rval)
 			mode = PFKEYV2_SENDMESSAGE_UNICAST;
@@ -1592,7 +1600,7 @@ pfkeyv2_send(struct socket *so, void *message, int len)
 			goto ret;
 		}
 
-		rval = pfkeyv2_get(sa2, headers, &freeme, NULL);
+		rval = pfkeyv2_get(sa2, headers, &freeme, &freeme_sz);
 		NET_UNLOCK();
 		if (rval)
 			mode = PFKEYV2_SENDMESSAGE_UNICAST;
@@ -1609,15 +1617,14 @@ pfkeyv2_send(struct socket *so, void *message, int len)
 		}
 		keyunlock(kp, s);
 
-		i = sizeof(struct sadb_supported) + sizeof(ealgs);
-
-		if (!(freeme = malloc(i, M_PFKEY, M_NOWAIT | M_ZERO))) {
+		freeme_sz = sizeof(struct sadb_supported) + sizeof(ealgs);
+		if (!(freeme = malloc(freeme_sz, M_PFKEY, M_NOWAIT | M_ZERO))) {
 			rval = ENOMEM;
 			goto ret;
 		}
 
 		ssup = (struct sadb_supported *) freeme;
-		ssup->sadb_supported_len = i / sizeof(uint64_t);
+		ssup->sadb_supported_len = freeme_sz / sizeof(uint64_t);
 
 		{
 			void *p = freeme + sizeof(struct sadb_supported);
@@ -1627,9 +1634,9 @@ pfkeyv2_send(struct socket *so, void *message, int len)
 
 		headers[SADB_EXT_SUPPORTED_ENCRYPT] = freeme;
 
-		i = sizeof(struct sadb_supported) + sizeof(aalgs);
-
-		if (!(freeme2 = malloc(i, M_PFKEY, M_NOWAIT | M_ZERO))) {
+		freeme2_sz = sizeof(struct sadb_supported) + sizeof(aalgs);
+		if (!(freeme2 = malloc(freeme2_sz, M_PFKEY,
+		    M_NOWAIT | M_ZERO))) {
 			rval = ENOMEM;
 			goto ret;
 		}
@@ -1641,7 +1648,7 @@ pfkeyv2_send(struct socket *so, void *message, int len)
 		keyunlock(kp, s);
 
 		ssup = (struct sadb_supported *) freeme2;
-		ssup->sadb_supported_len = i / sizeof(uint64_t);
+		ssup->sadb_supported_len = freeme2_sz / sizeof(uint64_t);
 
 		{
 			void *p = freeme2 + sizeof(struct sadb_supported);
@@ -1651,15 +1658,15 @@ pfkeyv2_send(struct socket *so, void *message, int len)
 
 		headers[SADB_EXT_SUPPORTED_AUTH] = freeme2;
 
-		i = sizeof(struct sadb_supported) + sizeof(calgs);
-
-		if (!(freeme3 = malloc(i, M_PFKEY, M_NOWAIT | M_ZERO))) {
+		freeme3_sz = sizeof(struct sadb_supported) + sizeof(calgs);
+		if (!(freeme3 = malloc(freeme3_sz, M_PFKEY,
+		    M_NOWAIT | M_ZERO))) {
 			rval = ENOMEM;
 			goto ret;
 		}
 
 		ssup = (struct sadb_supported *) freeme3;
-		ssup->sadb_supported_len = i / sizeof(uint64_t);
+		ssup->sadb_supported_len = freeme3_sz / sizeof(uint64_t);
 
 		{
 			void *p = freeme3 + sizeof(struct sadb_supported);
@@ -2090,14 +2097,15 @@ ret:
 
 realret:
 
-	free(freeme, M_PFKEY, 0);
-	free(freeme2, M_PFKEY, 0);
-	free(freeme3, M_PFKEY, 0);
+	explicit_bzero(freeme, freeme_sz);
+	free(freeme, M_PFKEY, freeme_sz);
+	free(freeme2, M_PFKEY, freeme2_sz);
+	free(freeme3, M_PFKEY, freeme3_sz);
 
 	explicit_bzero(message, len);
-	free(message, M_PFKEY, 0);
+	free(message, M_PFKEY, len);
 
-	free(sa1, M_PFKEY, 0);
+	free(sa1, M_PFKEY, sizeof(*sa1));
 
 	return (rval);
 }
@@ -2305,8 +2313,8 @@ pfkeyv2_acquire(struct ipsec_policy *ipo, union sockaddr_union *gw,
 	rval = 0;
 ret:
 	if (buffer != NULL) {
-		bzero(buffer, i);
-		free(buffer, M_PFKEY, 0);
+		explicit_bzero(buffer, i);
+		free(buffer, M_PFKEY, i);
 	}
 
 	return (rval);
@@ -2396,8 +2404,8 @@ pfkeyv2_expire(struct tdb *tdb, u_int16_t type)
 
  ret:
 	if (buffer != NULL) {
-		bzero(buffer, i);
-		free(buffer, M_PFKEY, 0);
+		explicit_bzero(buffer, i);
+		free(buffer, M_PFKEY, i);
 	}
 
 	return (rval);
@@ -2460,8 +2468,10 @@ pfkeyv2_sysctl_walker(struct tdb *tdb, void *arg, int last)
 	}
 
 done:
-	if (buffer)
-		free(buffer, M_PFKEY, 0);
+	if (buffer != NULL) {
+		explicit_bzero(buffer, buflen);
+		free(buffer, M_PFKEY, buflen);
+	}
 	return (error);
 }
 
@@ -2628,7 +2638,7 @@ pfkeyv2_sysctl_policydumper(struct ipsec_policy *ipo, void *arg,
 
 done:
 	if (buffer)
-		free(buffer, M_PFKEY, 0);
+		free(buffer, M_PFKEY, buflen);
 	return (error);
 }
 

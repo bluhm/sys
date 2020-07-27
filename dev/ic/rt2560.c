@@ -1,4 +1,4 @@
-/*	$OpenBSD: rt2560.c,v 1.86 2020/02/19 11:05:04 claudio Exp $  */
+/*	$OpenBSD: rt2560.c,v 1.88 2020/07/20 07:45:44 stsp Exp $  */
 
 /*-
  * Copyright (c) 2005, 2006
@@ -1588,7 +1588,7 @@ rt2560_tx_bcn(struct rt2560_softc *sc, struct mbuf *m0,
 		    mtod(m0, uint8_t *) +
 		    sizeof (struct ieee80211_frame) +
 		    8 + 2 + 2 +
-		    ((ic->ic_flags & IEEE80211_F_HIDENWID) ?
+		    ((ic->ic_userflags & IEEE80211_F_HIDENWID) ?
 			1 : 2 + ni->ni_esslen) +
 		    2 + min(ni->ni_rates.rs_nrates, IEEE80211_RATE_SIZE) +
 		    2 + 1 +
@@ -1943,7 +1943,7 @@ rt2560_start(struct ifnet *ifp)
 			if (ic->ic_state != IEEE80211_S_RUN)
 				break;
 
-			IFQ_DEQUEUE(&ifp->if_snd, m0);
+			m0 = ifq_dequeue(&ifp->if_snd);
 			if (m0 == NULL)
 				break;
 #if NBPFILTER > 0

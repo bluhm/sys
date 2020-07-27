@@ -1,4 +1,4 @@
-/*	$OpenBSD: acpi_machdep.c,v 1.90 2020/04/12 09:21:19 kettenis Exp $	*/
+/*	$OpenBSD: acpi_machdep.c,v 1.92 2020/07/21 03:48:04 deraadt Exp $	*/
 /*
  * Copyright (c) 2005 Thorsten Lockert <tholo@sigmasoft.com>
  *
@@ -195,7 +195,7 @@ acpi_intr_establish(int irq, int flags, int level,
 
 	type = (flags & LR_EXTIRQ_MODE) ? IST_EDGE : IST_LEVEL;
 	return (intr_establish(-1, (struct pic *)apic, map->ioapic_pin,
-	    type, level, handler, arg, what));
+	    type, level, NULL, handler, arg, what));
 #else
 	return NULL;
 #endif
@@ -328,7 +328,7 @@ acpi_attach_machdep(struct acpi_softc *sc)
 	extern void (*cpuresetfn)(void);
 
 	sc->sc_interrupt = isa_intr_establish(NULL, sc->sc_fadt->sci_int,
-	    IST_LEVEL, IPL_TTY, acpi_interrupt, sc, sc->sc_dev.dv_xname);
+	    IST_LEVEL, IPL_BIO, acpi_interrupt, sc, sc->sc_dev.dv_xname);
 	cpuresetfn = acpi_reset;
 
 #ifndef SMALL_KERNEL

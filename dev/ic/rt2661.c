@@ -1,4 +1,4 @@
-/*	$OpenBSD: rt2661.c,v 1.96 2020/02/19 11:05:04 claudio Exp $	*/
+/*	$OpenBSD: rt2661.c,v 1.98 2020/07/20 07:45:44 stsp Exp $	*/
 
 /*-
  * Copyright (c) 2006
@@ -1937,7 +1937,7 @@ rt2661_start(struct ifnet *ifp)
 			if (ic->ic_state != IEEE80211_S_RUN)
 				break;
 
-			IFQ_DEQUEUE(&ifp->if_snd, m0);
+			m0 = ifq_dequeue(&ifp->if_snd);
 			if (m0 == NULL)
 				break;
 #if NBPFILTER > 0
@@ -2935,7 +2935,7 @@ rt2661_prepare_beacon(struct rt2661_softc *sc)
 		    RT2661_HW_BEACON_BASE0 + 24 +
 		    sizeof (struct ieee80211_frame) +
 		    8 + 2 + 2 +
-		    ((ic->ic_flags & IEEE80211_F_HIDENWID) ?
+		    ((ic->ic_userflags & IEEE80211_F_HIDENWID) ?
 			1 : 2 + ni->ni_esslen) +
 		    2 + min(ni->ni_rates.rs_nrates, IEEE80211_RATE_SIZE) +
 		    2 + 1 +

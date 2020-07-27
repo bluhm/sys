@@ -2,7 +2,7 @@
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	OpenBSD: pcidevs,v 1.1923 2020/05/21 21:46:34 patrick Exp 
+ *	OpenBSD: pcidevs,v 1.1930 2020/07/22 10:43:14 jsg Exp 
  */
 /*	$NetBSD: pcidevs,v 1.30 1997/06/24 06:20:24 thorpej Exp $	*/
 
@@ -341,11 +341,13 @@
 #define	PCI_VENDOR_FRESCO	0x1b73		/* Fresco Logic */
 #define	PCI_VENDOR_WCH2	0x1c00		/* Nanjing QinHeng Electronics */
 #define	PCI_VENDOR_SYMPHONY2	0x1c1c		/* Symphony Labs */
+#define	PCI_VENDOR_SKHYNIX	0x1c5c		/* SK hynix */
 #define	PCI_VENDOR_ADATA	0x1cc1		/* ADATA Technology */
 #define	PCI_VENDOR_UMIS	0x1cc4		/* Union Memory */
 #define	PCI_VENDOR_ROCKCHIP	0x1d87		/* Rockchip */
 #define	PCI_VENDOR_TEKRAM2	0x1de1		/* Tekram */
 #define	PCI_VENDOR_AMPERE	0x1def		/* Ampere */
+#define	PCI_VENDOR_SSSTC	0x1e95		/* SSSTC */
 #define	PCI_VENDOR_TEHUTI	0x1fc9		/* Tehuti Networks */
 #define	PCI_VENDOR_SUNIX2	0x1fd4		/* Sunix */
 #define	PCI_VENDOR_HINT	0x3388		/* Hint */
@@ -724,6 +726,14 @@
 #define	PCI_PRODUCT_AMD_15_3X_PCIE_2	0x1425		/* 15h PCIE */
 #define	PCI_PRODUCT_AMD_15_3X_PCIE_3	0x1426		/* 15h PCIE */
 #define	PCI_PRODUCT_AMD_16_PCIE	0x1439		/* 16h PCIE */
+#define	PCI_PRODUCT_AMD_17_6X_DF_0	0x1448		/* 17h/6xh Data Fabric */
+#define	PCI_PRODUCT_AMD_17_6X_DF_1	0x1449		/* 17h/6xh Data Fabric */
+#define	PCI_PRODUCT_AMD_17_6X_DF_2	0x144a		/* 17h/6xh Data Fabric */
+#define	PCI_PRODUCT_AMD_17_6X_DF_3	0x144b		/* 17h/6xh Data Fabric */
+#define	PCI_PRODUCT_AMD_17_6X_DF_4	0x144c		/* 17h/6xh Data Fabric */
+#define	PCI_PRODUCT_AMD_17_6X_DF_5	0x144d		/* 17h/6xh Data Fabric */
+#define	PCI_PRODUCT_AMD_17_6X_DF_6	0x144e		/* 17h/6xh Data Fabric */
+#define	PCI_PRODUCT_AMD_17_6X_DF_7	0x144f		/* 17h/6xh Data Fabric */
 #define	PCI_PRODUCT_AMD_17_RC	0x1450		/* 17h Root Complex */
 #define	PCI_PRODUCT_AMD_17_IOMMU	0x1451		/* 17h IOMMU */
 #define	PCI_PRODUCT_AMD_17_PCIE_1	0x1452		/* 17h PCIE */
@@ -804,6 +814,12 @@
 #define	PCI_PRODUCT_AMD_15_0X_MISC	0x1603		/* 15/0xh Misc Cfg */
 #define	PCI_PRODUCT_AMD_15_0X_CPU_PM	0x1604		/* 15/0xh CPU Power */
 #define	PCI_PRODUCT_AMD_15_0X_HB	0x1605		/* 15/0xh Host */
+#define	PCI_PRODUCT_AMD_17_6X_RC	0x1630		/* 17h/6xh Root Complex */
+#define	PCI_PRODUCT_AMD_17_6X_IOMMU	0x1631		/* 17h/6xh IOMMU */
+#define	PCI_PRODUCT_AMD_17_6X_HB	0x1632		/* 17h/6xh Host */
+#define	PCI_PRODUCT_AMD_17_6X_PCIE_1	0x1634		/* 17h/6xh PCIE */
+#define	PCI_PRODUCT_AMD_17_6X_PCIE_2	0x1635		/* 17h/6xh PCIE */
+#define	PCI_PRODUCT_AMD_17_6X_XHCI	0x1639		/* 17h/6xh xHCI */
 #define	PCI_PRODUCT_AMD_14_LINK	0x1700		/* 14h Link Cfg */
 #define	PCI_PRODUCT_AMD_14_ADDR	0x1701		/* 14h Address Map */
 #define	PCI_PRODUCT_AMD_14_DRAM	0x1702		/* 14h DRAM Cfg */
@@ -1085,6 +1101,7 @@
 #define	PCI_PRODUCT_ATHEROS_AR2413	0x001a		/* AR2413 */
 #define	PCI_PRODUCT_ATHEROS_AR5413	0x001b		/* AR5413 */
 #define	PCI_PRODUCT_ATHEROS_AR5424	0x001c		/* AR5424 */
+#define	PCI_PRODUCT_ATHEROS_AR2417	0x001d		/* AR2417 */
 #define	PCI_PRODUCT_ATHEROS_AR5416	0x0023		/* AR5416 */
 #define	PCI_PRODUCT_ATHEROS_AR5418	0x0024		/* AR5418 */
 #define	PCI_PRODUCT_ATHEROS_AR9160	0x0027		/* AR9160 */
@@ -1098,6 +1115,10 @@
 #define	PCI_PRODUCT_ATHEROS_AR9485	0x0032		/* AR9485 */
 #define	PCI_PRODUCT_ATHEROS_AR9462	0x0034		/* AR9462 */
 #define	PCI_PRODUCT_ATHEROS_AR9565	0x0036		/* AR9565 */
+#define	PCI_PRODUCT_ATHEROS_QCA988X	0x003c		/* QCA986x/988x */
+#define	PCI_PRODUCT_ATHEROS_QCA6174	0x003e		/* QCA6174 */
+#define	PCI_PRODUCT_ATHEROS_QCA6164	0x0041		/* QCA6164 */
+#define	PCI_PRODUCT_ATHEROS_QCA9377	0x0042		/* QCA9377 */
 #define	PCI_PRODUCT_ATHEROS_AR5210_AP	0x0207		/* AR5210 */
 #define	PCI_PRODUCT_ATHEROS_AR5212_IBM	0x1014		/* AR5212 */
 #define	PCI_PRODUCT_ATHEROS_AR5210_DEFAULT	0x1107		/* AR5210 */
@@ -1135,6 +1156,8 @@
 #define	PCI_PRODUCT_ATI_PICASSO	0x15d8		/* Picasso */
 #define	PCI_PRODUCT_ATI_RAVEN_VEGA	0x15dd		/* Radeon Vega */
 #define	PCI_PRODUCT_ATI_RAVEN_VEGA_HDA	0x15de		/* Radeon Vega HD Audio */
+#define	PCI_PRODUCT_ATI_RENOIR	0x1636		/* Renoir */
+#define	PCI_PRODUCT_ATI_RENOIR_HDA	0x1637		/* Renoir HD Audio */
 #define	PCI_PRODUCT_ATI_RADEON_HD6500D_HDA	0x1714		/* Radeon HD 6500D HD Audio */
 #define	PCI_PRODUCT_ATI_RADEON_M241P	0x3150		/* Mobility Radeon X600 */
 #define	PCI_PRODUCT_ATI_FIREMV_2400_1	0x3151		/* FireMV 2400 */
@@ -3084,6 +3107,7 @@
 #define	PCI_PRODUCT_IBM_4810_BSP	0x0295		/* 4810 BSP */
 #define	PCI_PRODUCT_IBM_4810_SCC	0x0297		/* 4810 SCC */
 #define	PCI_PRODUCT_IBM_CALGARY_IOMMU	0x02a1		/* Calgary IOMMU */
+#define	PCI_PRODUCT_IBM_POWER9_HB	0x04c1		/* POWER9 Host */
 
 /* IC Ensemble */
 #define	PCI_PRODUCT_ICENSEMBLE_ICE1712	0x1712		/* Envy24 I/O Ctrlr */
@@ -5928,7 +5952,9 @@
 #define	PCI_PRODUCT_MARVELL2_88SE9125	0x9125		/* 88SE9125 SATA */
 #define	PCI_PRODUCT_MARVELL2_88SE9128	0x9128		/* 88SE9128 AHCI */
 #define	PCI_PRODUCT_MARVELL2_88SE9172	0x9172		/* 88SE9172 SATA */
+#define	PCI_PRODUCT_MARVELL2_88SE9215	0x9215		/* 88SE9215 AHCI */
 #define	PCI_PRODUCT_MARVELL2_88SE9230	0x9230		/* 88SE9230 AHCI */
+#define	PCI_PRODUCT_MARVELL2_88SE9235	0x9235		/* 88SE9235 AHCI */
 
 /* Matrox products */
 #define	PCI_PRODUCT_MATROX_ATLAS	0x0518		/* MGA PX2085 */
@@ -5976,6 +6002,7 @@
 #define	PCI_PRODUCT_MELLANOX_MT28800VF	0x101a		/* ConnectX-5 Ex VF */
 #define	PCI_PRODUCT_MELLANOX_MT28908	0x101b		/* ConnectX-6 */
 #define	PCI_PRODUCT_MELLANOX_MT28908VF	0x101c		/* ConnectX-6 VF */
+#define	PCI_PRODUCT_MELLANOX_MT2892	0x101d		/* ConnectX-6 Dx */
 #define	PCI_PRODUCT_MELLANOX_CONNECTX_EN	0x6368		/* ConnectX EN */
 
 /* Mentor */
@@ -7528,6 +7555,9 @@
 #define	PCI_PRODUCT_SONY_MEMSTICK_SLOT	0x808a		/* Memory Stick Slot */
 #define	PCI_PRODUCT_SONY_RS780	0x9602		/* RS780 */
 
+/* Solid State Storage Technology Corporation products */
+#define	PCI_PRODUCT_SSSTC_CL1	0x9100		/* CL1 */
+
 /* Stallion Technologies products */
 #define	PCI_PRODUCT_STALLION_EASYIO	0x0003		/* EasyIO */
 
@@ -7691,6 +7721,9 @@
 #define	PCI_PRODUCT_SYMPHONY_82C105	0x0105		/* 82C105 */
 #define	PCI_PRODUCT_SYMPHONY_82C565	0x0565		/* 82C565 ISA */
 #define	PCI_PRODUCT_SYMPHONY2_82C101	0x0001		/* 82C101 */
+
+/* SK hynix products */
+#define	PCI_PRODUCT_SKHYNIX_SSD	0x1327		/* BC501 NVMe */
 
 /* Tamarack Microelectronics */
 #define	PCI_PRODUCT_TAMARACK_TC9021	0x1021		/* TC9021 */

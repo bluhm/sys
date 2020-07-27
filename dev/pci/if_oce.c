@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_oce.c,v 1.100 2017/11/27 16:53:04 sthen Exp $	*/
+/*	$OpenBSD: if_oce.c,v 1.103 2020/07/10 13:26:38 patrick Exp $	*/
 
 /*
  * Copyright (c) 2012 Mike Belopuhov
@@ -823,7 +823,7 @@ oce_attach_ifp(struct oce_softc *sc)
 	ifp->if_watchdog = oce_watchdog;
 	ifp->if_hardmtu = OCE_MAX_MTU;
 	ifp->if_softc = sc;
-	IFQ_SET_MAXLEN(&ifp->if_snd, sc->sc_tx_ring_size - 1);
+	ifq_set_maxlen(&ifp->if_snd, sc->sc_tx_ring_size - 1);
 
 	ifp->if_capabilities = IFCAP_VLAN_MTU | IFCAP_CSUM_IPv4 |
 	    IFCAP_CSUM_TCPv4 | IFCAP_CSUM_UDPv4;
@@ -1180,7 +1180,7 @@ oce_start(struct ifnet *ifp)
 		return;
 
 	for (;;) {
-		IFQ_DEQUEUE(&ifp->if_snd, m);
+		m = ifq_dequeue(&ifp->if_snd);
 		if (m == NULL)
 			break;
 
@@ -1639,7 +1639,8 @@ oce_rxeof(struct oce_rq *rq, struct oce_nic_rx_cqe *cqe)
 		ml_enqueue(&ml, m);
 	}
 exit:
-	if_input(ifp, &ml);
+	if (ifiq_input(&ifp->if_rcv, &ml))
+		if_rxr_livelocked(&rq->rxring);
 }
 
 void

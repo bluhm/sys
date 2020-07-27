@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_bge.c,v 1.388 2018/11/09 14:14:31 claudio Exp $	*/
+/*	$OpenBSD: if_bge.c,v 1.392 2020/07/26 17:44:15 kettenis Exp $	*/
 
 /*
  * Copyright (c) 2001 Wind River Systems
@@ -384,6 +384,7 @@ static const struct bge_revision {
 	{ BGE_CHIPID_BCM5717_A0, "BCM5717 A0" },
 	{ BGE_CHIPID_BCM5717_B0, "BCM5717 B0" },
 	{ BGE_CHIPID_BCM5719_A0, "BCM5719 A0" },
+	{ BGE_CHIPID_BCM5719_A1, "BCM5719 A1" },
 	{ BGE_CHIPID_BCM5720_A0, "BCM5720 A0" },
 	{ BGE_CHIPID_BCM5755_A0, "BCM5755 A0" },
 	{ BGE_CHIPID_BCM5755_A1, "BCM5755 A1" },
@@ -2998,7 +2999,7 @@ bge_attach(struct device *parent, struct device *self, void *aux)
 	ifp->if_ioctl = bge_ioctl;
 	ifp->if_qstart = bge_start;
 	ifp->if_watchdog = bge_watchdog;
-	IFQ_SET_MAXLEN(&ifp->if_snd, BGE_TX_RING_CNT - 1);
+	ifq_set_maxlen(&ifp->if_snd, BGE_TX_RING_CNT - 1);
 
 	DPRINTFN(5, ("bcopy\n"));
 	bcopy(sc->bge_dev.dv_xname, ifp->if_xname, IFNAMSIZ);
@@ -3234,7 +3235,8 @@ bge_reset(struct bge_softc *sc)
 		write_op = bge_writereg_ind;
 
 	if (BGE_ASICREV(sc->bge_chipid) != BGE_ASICREV_BCM5700 &&
-	    BGE_ASICREV(sc->bge_chipid) != BGE_ASICREV_BCM5701) {
+	    BGE_ASICREV(sc->bge_chipid) != BGE_ASICREV_BCM5701 &&
+	    !(sc->bge_flags & BGE_NO_EEPROM)) {
 		CSR_WRITE_4(sc, BGE_NVRAM_SWARB, BGE_NVRAMSWARB_SET1);
 		for (i = 0; i < 8000; i++) {
 			if (CSR_READ_4(sc, BGE_NVRAM_SWARB) &
@@ -3461,6 +3463,7 @@ bge_rxeof(struct bge_softc *sc)
 	bus_addr_t offset, toff;
 	bus_size_t tlen;
 	int tosync;
+	int livelocked;
 
 	rx_cons = sc->bge_rx_saved_considx;
 	rx_prod = sc->bge_rdata->bge_status_block.bge_idx[0].bge_rx_prod_idx;
@@ -3563,16 +3566,20 @@ bge_rxeof(struct bge_softc *sc)
 
 	sc->bge_rx_saved_considx = rx_cons;
 	bge_writembx(sc, BGE_MBX_RX_CONS0_LO, sc->bge_rx_saved_considx);
+
+	livelocked = ifiq_input(&ifp->if_rcv, &ml);
 	if (stdcnt) {
 		if_rxr_put(&sc->bge_std_ring, stdcnt);
+		if (livelocked)
+			if_rxr_livelocked(&sc->bge_std_ring);
 		bge_fill_rx_ring_std(sc);
 	}
 	if (jumbocnt) {
 		if_rxr_put(&sc->bge_jumbo_ring, jumbocnt);
+		if (livelocked)
+			if_rxr_livelocked(&sc->bge_jumbo_ring);
 		bge_fill_rx_ring_jumbo(sc);
 	}
-
-	if_input(ifp, &ml);
 }
 
 void
