@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_carp.c,v 1.347 2020/07/24 18:17:15 mvs Exp $	*/
+/*	$OpenBSD: ip_carp.c,v 1.348 2020/07/28 09:22:37 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2002 Michael Shalayeff. All rights reserved.
