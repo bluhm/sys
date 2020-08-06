@@ -1744,6 +1744,17 @@ bridge_ip(struct ifnet *brifp, int dir, struct ifnet *ifp,
 			ip->ip_sum = in_cksum(m, hlen);
 		}
 
+#if NPF > 0
+		if (dir == BRIDGE_IN &&
+		    m->m_pkthdr.pf.flags & PF_TAG_DIVERTED) {
+			m_resethdr(m);
+			m->m_pkthdr.ph_ifidx = ifp->if_index;
+			m->m_pkthdr.ph_rtableid = ifp->if_rdomain;
+			ipv4_input(ifp, m);
+			return (NULL);
+		}
+#endif /* NPF > 0 */
+
 		break;
 
 #ifdef INET6
@@ -1781,6 +1792,17 @@ bridge_ip(struct ifnet *brifp, int dir, struct ifnet *ifp,
 			return (NULL);
 #endif /* NPF > 0 */
 		in6_proto_cksum_out(m, ifp);
+
+#if NPF > 0
+		if (dir == BRIDGE_IN &&
+		    m->m_pkthdr.pf.flags & PF_TAG_DIVERTED) {
+			m_resethdr(m);
+			m->m_pkthdr.ph_ifidx = ifp->if_index;
+			m->m_pkthdr.ph_rtableid = ifp->if_rdomain;
+			ipv6_input(ifp, m);
+			return (NULL);
+		}
+#endif /* NPF > 0 */
 
 		break;
 	}
