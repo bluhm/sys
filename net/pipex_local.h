@@ -1,4 +1,4 @@
-/*	$OpenBSD: pipex_local.h,v 1.37 2020/07/17 08:57:27 mvs Exp $	*/
+/*	$OpenBSD: pipex_local.h,v 1.39 2020/08/04 09:32:05 mvs Exp $	*/
 
 /*
  * Copyright (c) 2009 Internet Initiative Japan Inc.
@@ -183,7 +183,7 @@ struct pipex_session {
 	int		ip6_prefixlen;   /* [I] remote IPv6 prefixlen */
 
 	struct pipex_iface_context* pipex_iface; /* [N] context for interface */
-	int		ifindex;		/* [N] interface index */
+	u_int		ifindex;		/* [N] interface index */
 
 	uint32_t	ppp_flags;		/* [I] configure flags */
 #ifdef PIPEX_MPPE
@@ -403,7 +403,8 @@ void                  pipex_ip_input (struct mbuf *, struct pipex_session *);
 #ifdef INET6
 void                  pipex_ip6_input (struct mbuf *, struct pipex_session *);
 #endif
-struct mbuf           *pipex_common_input(struct pipex_session *, struct mbuf *, int, int, int);
+struct mbuf           *pipex_common_input(struct pipex_session *,
+                          struct mbuf *, int, int);
 
 #ifdef PIPEX_PPPOE
 void                  pipex_pppoe_output (struct mbuf *, struct pipex_session *);
