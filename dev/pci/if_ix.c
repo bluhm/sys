@@ -1597,7 +1597,8 @@ ixgbe_stop(void *arg)
 		ifq_barrier(ifq);
 		ifq_clr_oactive(ifq);
 
-		intr_barrier(sc->queues[i].tag);
+		if (sc->queues[i].tag != NULL)
+			intr_barrier(sc->queues[i].tag);
 		timeout_del(&sc->rx_rings[i].rx_refill);
 	}
 
