@@ -1,4 +1,4 @@
-/*	$OpenBSD: scsi_base.c,v 1.268 2020/07/27 19:19:49 krw Exp $	*/
+/*	$OpenBSD: scsi_base.c,v 1.277 2020/10/14 23:40:33 krw Exp $	*/
 /*	$NetBSD: scsi_base.c,v 1.43 1997/04/02 02:29:36 mycroft Exp $	*/
 
 /*
@@ -45,6 +45,7 @@
 #include <sys/task.h>
 
 #include <scsi/scsi_all.h>
+#include <scsi/scsi_debug.h>
 #include <scsi/scsi_disk.h>
 #include <scsi/scsiconf.h>
 
@@ -767,7 +768,6 @@ scsi_xs_io(struct scsi_link *link, void *io, int flags)
 		xs->sc_link = link;
 		xs->retries = SCSI_RETRIES;
 		xs->timeout = 10000;
-		xs->cmd = &xs->cmdstore;
 		xs->io = io;
 	}
 
@@ -803,7 +803,7 @@ scsi_test_unit_ready(struct scsi_link *link, int retries, int flags)
 	xs->retries = retries;
 	xs->timeout = 10000;
 
-	cmd = (struct scsi_test_unit_ready *)xs->cmd;
+	cmd = (struct scsi_test_unit_ready *)&xs->cmd;
 	cmd->opcode = TEST_UNIT_READY;
 
 	error = scsi_xs_sync(xs);
@@ -818,7 +818,7 @@ scsi_init_inquiry(struct scsi_xfer *xs, u_int8_t flags, u_int8_t pagecode,
 {
 	struct scsi_inquiry *cmd;
 
-	cmd = (struct scsi_inquiry *)xs->cmd;
+	cmd = (struct scsi_inquiry *)&xs->cmd;
 	cmd->opcode = INQUIRY;
 	cmd->flags = flags;
 	cmd->pagecode = pagecode;
@@ -848,7 +848,7 @@ scsi_inquire(struct scsi_link *link, struct scsi_inquiry_data *inqbuf,
 	 * information. This avoids problems with devices that choke trying to
 	 * supply more.
 	 */
-	bytes = 36;
+	bytes = SID_SCSI2_HDRLEN + SID_SCSI2_ALEN;
 
 #ifdef SCSIDEBUG
 again:
@@ -871,13 +871,14 @@ again:
 
 #ifdef SCSIDEBUG
 	sc_print_addr(link);
-	if (bytes > inqbuf->additional_length + 4)
-		bytes = inqbuf->additional_length + 4;
+	if (bytes > SID_SCSI2_HDRLEN + inqbuf->additional_length)
+		bytes = SID_SCSI2_HDRLEN + inqbuf->additional_length;
 	printf("got %zu of %u bytes of inquiry data:\n",
-	    bytes, inqbuf->additional_length + 4);
+	    bytes, SID_SCSI2_HDRLEN + inqbuf->additional_length);
 	scsi_show_mem((u_char *)inqbuf, bytes);
-	if (bytes == 36 && bytes < inqbuf->additional_length + 4) {
-		bytes = inqbuf->additional_length + 4;
+	if (bytes == SID_SCSI2_HDRLEN + SID_SCSI2_ALEN && bytes <
+	    SID_SCSI2_HDRLEN + inqbuf->additional_length) {
+		bytes = SID_SCSI2_HDRLEN + inqbuf->additional_length;
 		if (bytes > sizeof(*inqbuf))
 			bytes = sizeof(*inqbuf);
 		goto again;
@@ -946,7 +947,7 @@ scsi_read_cap_10(struct scsi_link *link, struct scsi_read_cap_data *rdcap,
 	memset(&cdb, 0, sizeof(cdb));
 	cdb.opcode = READ_CAPACITY;
 
-	memcpy(xs->cmd, &cdb, sizeof(cdb));
+	memcpy(&xs->cmd, &cdb, sizeof(cdb));
 	xs->cmdlen = sizeof(cdb);
 	xs->data = (void *)rdcap;
 	xs->datalen = sizeof(*rdcap);
@@ -983,7 +984,7 @@ scsi_read_cap_16(struct scsi_link *link, struct scsi_read_cap_data_16 *rdcap,
 	cdb.byte2 = SRC16_SERVICE_ACTION;
 	_lto4b(sizeof(*rdcap), cdb.length);
 
-	memcpy(xs->cmd, &cdb, sizeof(cdb));
+	memcpy(&xs->cmd, &cdb, sizeof(cdb));
 	xs->cmdlen = sizeof(cdb);
 	xs->data = (void *)rdcap;
 	xs->datalen = sizeof(*rdcap);
@@ -1023,7 +1024,7 @@ scsi_prevent(struct scsi_link *link, int type, int flags)
 	xs->retries = 2;
 	xs->timeout = 5000;
 
-	cmd = (struct scsi_prevent *)xs->cmd;
+	cmd = (struct scsi_prevent *)&xs->cmd;
 	cmd->opcode = PREVENT_ALLOW;
 	cmd->how = type;
 
@@ -1050,7 +1051,7 @@ scsi_start(struct scsi_link *link, int type, int flags)
 	xs->retries = 2;
 	xs->timeout = (type == SSS_START) ? 30000 : 10000;
 
-	cmd = (struct scsi_start_stop *)xs->cmd;
+	cmd = (struct scsi_start_stop *)&xs->cmd;
 	cmd->opcode = START_STOP;
 	cmd->how = type;
 
@@ -1089,7 +1090,7 @@ scsi_mode_sense(struct scsi_link *link, int pg_code,
 	 */
 	memset(data, 0, len);
 
-	cmd = (struct scsi_mode_sense *)xs->cmd;
+	cmd = (struct scsi_mode_sense *)&xs->cmd;
 	cmd->opcode = MODE_SENSE;
 	cmd->page = pg_code;
 
@@ -1099,6 +1100,9 @@ scsi_mode_sense(struct scsi_link *link, int pg_code,
 
 	error = scsi_xs_sync(xs);
 	scsi_xs_put(xs);
+
+	if (error == 0 && !VALID_MODE_HDR(&data->hdr))
+		error = EIO;
 
 #ifdef SCSIDEBUG
 	sc_print_addr(link);
@@ -1145,7 +1149,7 @@ scsi_mode_sense_big(struct scsi_link *link, int pg_code,
 	 */
 	memset(data, 0, len);
 
-	cmd = (struct scsi_mode_sense_big *)xs->cmd;
+	cmd = (struct scsi_mode_sense_big *)&xs->cmd;
 	cmd->opcode = MODE_SENSE_BIG;
 	cmd->page = pg_code;
 
@@ -1156,7 +1160,7 @@ scsi_mode_sense_big(struct scsi_link *link, int pg_code,
 	error = scsi_xs_sync(xs);
 	scsi_xs_put(xs);
 
-	if (_2btol(data->hdr_big.data_length) < 6)
+	if (error == 0 && !VALID_MODE_HDR_BIG(&data->hdr_big))
 		error = EIO;
 
 #ifdef SCSIDEBUG
@@ -1301,7 +1305,7 @@ scsi_do_mode_sense(struct scsi_link *link, int pg_code,
 	 * non-ATAPI, non-USB devices that don't support SCSI-2 commands
 	 * (i.e. MODE SENSE (10)) are done.
 	 */
-	if ((link->flags & (SDEV_ATAPI | SDEV_UMASS)) == 0 &&
+	if (!ISSET(link->flags, (SDEV_ATAPI | SDEV_UMASS)) &&
 	    SID_ANSII_REV(&link->inqdata) < SCSI_REV_2)
 		return error;
 
@@ -1338,7 +1342,7 @@ scsi_mode_select(struct scsi_link *link, int byte2,
 	xs->datalen = len;
 	xs->timeout = timeout;
 
-	cmd = (struct scsi_mode_select *)xs->cmd;
+	cmd = (struct scsi_mode_select *)&xs->cmd;
 	cmd->opcode = MODE_SELECT;
 	cmd->byte2 = byte2;
 	cmd->length = len;
@@ -1373,7 +1377,7 @@ scsi_mode_select_big(struct scsi_link *link, int byte2,
 	xs->datalen = len;
 	xs->timeout = timeout;
 
-	cmd = (struct scsi_mode_select_big *)xs->cmd;
+	cmd = (struct scsi_mode_select_big *)&xs->cmd;
 	cmd->opcode = MODE_SELECT_BIG;
 	cmd->byte2 = byte2;
 	_lto2b(len, cmd->length);
@@ -1409,7 +1413,7 @@ scsi_report_luns(struct scsi_link *link, int selectreport,
 
 	bzero(data, datalen);
 
-	cmd = (struct scsi_report_luns *)xs->cmd;
+	cmd = (struct scsi_report_luns *)&xs->cmd;
 	cmd->opcode = REPORT_LUNS;
 	cmd->selectreport = selectreport;
 	_lto4b(datalen, cmd->length);
@@ -1438,6 +1442,26 @@ scsi_xs_exec(struct scsi_xfer *xs)
 	KERNEL_LOCK();
 	xs->sc_link->bus->sb_adapter->scsi_cmd(xs);
 	KERNEL_UNLOCK();
+}
+
+/*
+ * Used by device drivers that fake various scsi commands.
+ */
+void
+scsi_copy_internal_data(struct scsi_xfer *xs, void *data, size_t datalen)
+{
+	size_t copy_cnt;
+
+	SC_DEBUG(xs->sc_link, SDEV_DB3, ("scsi_copy_internal_data\n"));
+
+	if (xs->datalen == 0) {
+		sc_print_addr(xs->sc_link);
+		printf("uio internal data copy not supported\n");
+	} else {
+		copy_cnt = MIN(datalen, xs->datalen);
+		memcpy(xs->data, data, copy_cnt);
+		xs->resid = xs->datalen - copy_cnt;
+	}
 }
 
 /*
@@ -2485,7 +2509,7 @@ scsi_print_sense(struct scsi_xfer *xs)
 	/* XXX For error 0x71, current opcode is not the relevant one. */
 	printf("%sCheck Condition (error %#x) on opcode 0x%x\n",
 	    (serr == SSD_ERRCODE_DEFERRED) ? "DEFERRED " : "", serr,
-	    xs->cmd->opcode);
+	    xs->cmd.opcode);
 
 	if (serr != SSD_ERRCODE_CURRENT && serr != SSD_ERRCODE_DEFERRED) {
 		if (ISSET(sense->error_code, SSD_ERRCODE_VALID)) {
@@ -2611,11 +2635,11 @@ scsi_cmd_rw_decode(struct scsi_generic *cmd, u_int64_t *blkno,
 		*nblks = rw->length ? rw->length : 0x100;
 		break;
 	}
-	case READ_BIG:
-	case WRITE_BIG: {
-		struct scsi_rw_big *rwb = (struct scsi_rw_big *)cmd;
-		*blkno = _4btol(rwb->addr);
-		*nblks = _2btol(rwb->length);
+	case READ_10:
+	case WRITE_10: {
+		struct scsi_rw_10 *rw10 = (struct scsi_rw_10 *)cmd;
+		*blkno = _4btol(rw10->addr);
+		*nblks = _2btol(rw10->length);
 		break;
 	}
 	case READ_12:
@@ -2654,7 +2678,6 @@ const char *flagnames[] = {
 	"DB4",
 	"EJECTING",
 	"ATAPI",
-	"",
 	"UMASS",
 	"VIRTUAL",
 	"OWN_IOPL",
@@ -2666,17 +2689,11 @@ const char *quirknames[] = {
 	"NOSYNC",
 	"NOWIDE",
 	"NOTAGS",
-	"",
-	"",
-	"",
-	"",
 	"NOSYNCCACHE",
 	"NOSENSE",
 	"LITTLETOC",
 	"NOCAPACITY",
-	"",
 	"NODOORLOCK",
-	"ONLYBIG",
 	NULL
 };
 
@@ -2746,7 +2763,7 @@ scsi_show_sense(struct scsi_xfer *xs)
 void
 scsi_show_xs(struct scsi_xfer *xs)
 {
-	u_char		*b = (u_char *)xs->cmd;
+	u_char		*b = (u_char *)&xs->cmd;
 	int		 i = 0;
 
 	if (!ISSET(xs->sc_link->flags, SDEV_DB1))
@@ -2765,7 +2782,7 @@ scsi_show_xs(struct scsi_xfer *xs)
 	printf("bp(%p)\n", xs->bp);
 
 	sc_print_addr(xs->sc_link);
-	printf("cmd (%p): ", xs->cmd);
+	printf("cmd (%p): ", &xs->cmd);
 
 	if (!ISSET(xs->flags, SCSI_RESET)) {
 		while (i < xs->cmdlen) {

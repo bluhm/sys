@@ -361,7 +361,7 @@ hvs_scsi_cmd(struct scsi_xfer *xs)
 	srb->srb_lun = link->lun;
 
 	srb->srb_cdblen = xs->cmdlen;
-	memcpy(srb->srb_data, xs->cmd, xs->cmdlen);
+	memcpy(srb->srb_data, &xs->cmd, xs->cmdlen);
 
 	switch (xs->flags & (SCSI_DATA_IN | SCSI_DATA_OUT)) {
 	case SCSI_DATA_IN:
@@ -424,7 +424,7 @@ hvs_scsi_cmd(struct scsi_xfer *xs)
 #ifdef HVS_DEBUG_IO
 	DPRINTF("%s: %u.%u: rid %llu opcode %#x flags %#x datalen %d\n",
 	    sc->sc_dev.dv_xname, link->target, link->lun, ccb->ccb_rid,
-	    xs->cmd->opcode, xs->flags, xs->datalen);
+	    xs->cmd.opcode, xs->flags, xs->datalen);
 #endif
 
 	if (xs->flags & SCSI_POLL)
@@ -590,8 +590,10 @@ fixup_inquiry(struct scsi_xfer *xs, struct hvs_srb *srb)
 	int datalen, resplen;
 	char vendor[8];
 
-	resplen = srb->srb_datalen >= 5 ? inq->additional_length + 5 : 0;
+	resplen = srb->srb_datalen >= SID_SCSI2_HDRLEN ?
+	    SID_SCSI2_HDRLEN + inq->additional_length : 0;
 	datalen = MIN(resplen, srb->srb_datalen);
+	xs->resid = xs->datalen - datalen;
 
 	/* Fixup wrong response from WS2012 */
 	if ((sc->sc_proto == HVS_PROTO_VERSION_WIN8_1 ||
@@ -600,8 +602,8 @@ fixup_inquiry(struct scsi_xfer *xs, struct hvs_srb *srb)
 	    !is_inquiry_valid(inq) && datalen >= 4 &&
 	    (inq->version == 0 || inq->response_format == 0)) {
 		inq->version = SCSI_REV_SPC3;
-		inq->response_format = 2;
-	} else if (datalen >= SID_INQUIRY_HDR + SID_SCSI2_ALEN) {
+		inq->response_format = SID_SCSI2_RESPONSE;
+	} else if (datalen >= SID_SCSI2_HDRLEN + SID_SCSI2_ALEN) {
 		/*
 		 * Upgrade SPC2 to SPC3 if host is Win8 or WS2012 R2
 		 * to support UNMAP feature.
@@ -663,7 +665,7 @@ hvs_scsi_cmd_done(struct hvs_ccb *ccb)
 	}
 
 	if (error == XS_NOERROR) {
-		if (xs->cmd->opcode == INQUIRY)
+		if (xs->cmd.opcode == INQUIRY)
 			fixup_inquiry(xs, srb);
 		else if (srb->srb_direction != SRB_DATA_NONE)
 			xs->resid = xs->datalen - srb->srb_datalen;

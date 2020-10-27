@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip6_input.c,v 1.227 2020/08/01 23:41:56 gnezdo Exp $	*/
+/*	$OpenBSD: ip6_input.c,v 1.229 2020/08/24 16:40:07 gnezdo Exp $	*/
 /*	$KAME: ip6_input.c,v 1.188 2001/03/29 05:34:31 itojun Exp $	*/
 
 /*
@@ -424,8 +424,6 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 	 */
 	if (rtisvalid(rt) && ISSET(rt->rt_flags, RTF_LOCAL)) {
 		struct in6_ifaddr *ia6 = ifatoia6(rt->rt_ifa);
-		if (ia6->ia6_flags & IN6_IFF_ANYCAST)
-			m->m_flags |= M_ACAST;
 
 		if (ip6_forwarding == 0 && rt->rt_ifidx != ifp->if_index &&
 		    !((ifp->if_flags & IFF_LOOPBACK) ||
@@ -1336,7 +1334,24 @@ const u_char inet6ctlerrmap[PRC_NCMDS] = {
 	ENOPROTOOPT
 };
 
-int *ipv6ctl_vars[IPV6CTL_MAXID] = IPV6CTL_VARS;
+const struct sysctl_bounded_args ipv6ctl_vars[] = {
+	{ IPV6CTL_FORWARDING, &ip6_forwarding, 0, 1 },
+	{ IPV6CTL_SENDREDIRECTS, &ip6_sendredirects, 0, 1 },
+	{ IPV6CTL_DEFHLIM, &ip6_defhlim, 0, 255 },
+	{ IPV6CTL_MAXFRAGPACKETS, &ip6_maxfragpackets, 0, 1000 },
+	{ IPV6CTL_LOG_INTERVAL, &ip6_log_interval, 0, INT_MAX },
+	{ IPV6CTL_HDRNESTLIMIT, &ip6_hdrnestlimit, 0, 100 },
+	{ IPV6CTL_DAD_COUNT, &ip6_dad_count, 0, 10 },
+	{ IPV6CTL_AUTO_FLOWLABEL, &ip6_auto_flowlabel, 0, 1 },
+	{ IPV6CTL_DEFMCASTHLIM, &ip6_defmcasthlim, 0, 255 },
+	{ IPV6CTL_USE_DEPRECATED, &ip6_use_deprecated, 0, 1 },
+	{ IPV6CTL_MAXFRAGS, &ip6_maxfrags, 0, 1000 },
+	{ IPV6CTL_MFORWARDING, &ip6_mforwarding, 0, 1 },
+	{ IPV6CTL_MULTIPATH, &ip6_multipath, 0, 1 },
+	{ IPV6CTL_MCAST_PMTU, &ip6_mcast_pmtu, 0, 1 },
+	{ IPV6CTL_NEIGHBORGCTHRESH, &ip6_neighborgcthresh, -1, 5 * 2048 },
+	{ IPV6CTL_MAXDYNROUTES, &ip6_maxdynroutes, -1, 5 * 4096 },
+};
 
 int
 ip6_sysctl_ip6stat(void *oldp, size_t *oldlenp, void *newp)
@@ -1439,8 +1454,8 @@ ip6_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 		return (ip6_sysctl_soiikey(oldp, oldlenp, newp, newlen));
 	default:
 		NET_LOCK();
-		error = sysctl_int_arr(ipv6ctl_vars, nitems(ipv6ctl_vars), name,
-		    namelen, oldp, oldlenp, newp, newlen);
+		error = sysctl_bounded_arr(ipv6ctl_vars, nitems(ipv6ctl_vars),
+		    name, namelen, oldp, oldlenp, newp, newlen);
 		NET_UNLOCK();
 		return (error);
 	}

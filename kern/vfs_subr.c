@@ -1,4 +1,4 @@
-/*	$OpenBSD: vfs_subr.c,v 1.301 2020/03/27 07:58:17 anton Exp $	*/
+/*	$OpenBSD: vfs_subr.c,v 1.303 2020/08/23 09:35:32 kn Exp $	*/
 /*	$NetBSD: vfs_subr.c,v 1.53 1996/04/22 01:39:13 christos Exp $	*/
 
 /*
@@ -864,9 +864,9 @@ vdrop(struct vnode *vp)
  * system error). If MNT_FORCE is specified, detach any active vnodes
  * that are found.
  */
-#ifdef DEBUG
+#ifdef DEBUG_SYSCTL
 int busyprt = 0;	/* print out busy vnodes */
-struct ctldebug debug1 = { "busyprt", &busyprt };
+struct ctldebug debug_vfs_busyprt = { "vfs_busyprt", &busyprt };
 #endif
 
 int
@@ -953,7 +953,7 @@ vflush_vnode(struct vnode *vp, void *arg)
 	    LIST_EMPTY(&vp->v_dirtyblkhd))
 		return (0);
 
-#ifdef DEBUG
+#ifdef DEBUG_SYSCTL
 	if (busyprt)
 		vprint("vflush: busy vnode", vp);
 #endif

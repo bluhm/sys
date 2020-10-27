@@ -1,4 +1,4 @@
-/*	$OpenBSD: azalia_codec.c,v 1.178 2019/10/14 02:04:35 jcs Exp $	*/
+/*	$OpenBSD: azalia_codec.c,v 1.182 2020/10/25 02:54:38 jsg Exp $	*/
 /*	$NetBSD: azalia_codec.c,v 1.8 2006/05/10 11:17:27 kent Exp $	*/
 
 /*-
@@ -35,6 +35,8 @@
 #include <sys/malloc.h>
 #include <sys/systm.h>
 #include <dev/pci/azalia.h>
+#include <dev/pci/pcireg.h>
+#include <dev/pci/pcidevs.h>
 
 #define XNAME(co)	(((struct device *)co->az)->dv_xname)
 #define MIXER_DELTA(n)	(AUDIO_MAX_GAIN / (n))
@@ -83,6 +85,28 @@ azalia_codec_init_vtbl(codec_t *this)
 		this->name = "Realtek ALC221";
 		this->qrks |= AZ_QRK_WID_CDIN_1C | AZ_QRK_WID_BEEP_1D;
 		break;
+	case 0x10ec0225:
+		this->name = "Realtek ALC225";
+		break;
+	case 0x10ec0233:
+	case 0x10ec0235:
+		this->name = "Realtek ALC233";
+		break;
+	case 0x10ec0236:
+		if (PCI_VENDOR(this->subid) == PCI_VENDOR_DELL)
+			this->name = "Realtek ALC3204";
+		else
+			this->name = "Realtek ALC236";
+		break;
+	case 0x10ec0255:
+		this->name = "Realtek ALC255";
+		break;
+	case 0x10ec0256:
+		this->name = "Realtek ALC256";
+		break;
+	case 0x10ec0257:
+		this->name = "Realtek ALC257";
+		break;
 	case 0x10ec0260:
 		this->name = "Realtek ALC260";
 		if (this->subid == 0x008f1025)
@@ -117,12 +141,24 @@ azalia_codec_init_vtbl(codec_t *this)
 		    this->subid == 0x220817aa)
 			this->qrks |= AZ_QRK_WID_TPDOCK1;
 		break;
+	case 0x10ec0270:
+		this->name = "Realtek ALC270";
+		break;
 	case 0x10ec0272:
 		this->name = "Realtek ALC272";
+		break;
+	case 0x10ec0275:
+		this->name = "Realtek ALC275";
+		break;
+	case 0x10ec0280:
+		this->name = "Realtek ALC280";
 		break;
 	case 0x10ec0282:
 		this->name = "Realtek ALC282";
 		this->qrks |= AZ_QRK_WID_CDIN_1C | AZ_QRK_WID_BEEP_1D;
+		break;
+	case 0x10ec0283:
+		this->name = "Realtek ALC283";
 		break;
 	case 0x10ec0285:
 		this->name = "Realtek ALC285";
@@ -159,11 +195,26 @@ azalia_codec_init_vtbl(codec_t *this)
 		    this->subid == 0x503c17aa)
 			this->qrks |= AZ_QRK_WID_TPDOCK2;
 		break;
+	case 0x10ec0293:
+		if (PCI_VENDOR(this->subid) == PCI_VENDOR_DELL)
+			this->name = "Realtek ALC3235";
+		else
+			this->name = "Realtek ALC293";
+		break;
+	case 0x10ec0295:
+		if (PCI_VENDOR(this->subid) == PCI_VENDOR_DELL)
+			this->name = "Realtek ALC3254";
+		else
+			this->name = "Realtek ALC295";
+		break;
 	case 0x10ec0298:
 		this->name = "Realtek ALC298";
 		if (this->subid == 0x320019e5 ||
 		    this->subid == 0x320119e5)		/* Huawei Matebook X */
 			this->qrks |= AZ_QRK_DOLBY_ATMOS;
+		break;
+	case 0x10ec0299:
+		this->name = "Realtek ALC299";
 		break;
 	case 0x10ec0660:
 		this->name = "Realtek ALC660";
@@ -177,6 +228,18 @@ azalia_codec_init_vtbl(codec_t *this)
 		break;
 	case 0x10ec0663:
 		this->name = "Realtek ALC663";
+		break;
+	case 0x10ec0668:
+		if (PCI_VENDOR(this->subid) == PCI_VENDOR_DELL)
+			this->name = "Realtek ALC3661";
+		else
+			this->name = "Realtek ALC668";
+		break;
+	case 0x10ec0671:
+		this->name = "Realtek ALC671";
+		break;
+	case 0x10ec0700:
+		this->name = "Realtek ALC700";
 		break;
 	case 0x10ec0861:
 		this->name = "Realtek ALC861";
@@ -222,12 +285,29 @@ azalia_codec_init_vtbl(codec_t *this)
 		    this->subid == 0x00a0106b)
 			this->qrks |= AZ_QRK_WID_OVREF50;
 		break;
+	case 0x10ec0887:
+		this->name = "Realtek ALC887";
+		this->qrks |= AZ_QRK_WID_CDIN_1C | AZ_QRK_WID_BEEP_1D;
+		break;
 	case 0x10ec0888:
 		this->name = "Realtek ALC888";
 		this->qrks |= AZ_QRK_WID_CDIN_1C | AZ_QRK_WID_BEEP_1D;
 		break;
+	case 0x10ec0889:
+		this->name = "Realtek ALC889";
+		break;
+	case 0x10ec0892:
+		this->name = "Realtek ALC892";
+		break;
 	case 0x10ec0900:
 		this->name = "Realtek ALC1150";
+		break;
+	case 0x10ec0b00:
+		this->name = "Realtek ALC1200";
+		break;
+	case 0x10ec1168:
+	case 0x10ec1220:
+		this->name = "Realtek ALC1220";
 		break;
 	case 0x11060398:
 	case 0x11061398:
@@ -241,9 +321,8 @@ azalia_codec_init_vtbl(codec_t *this)
 		break;
 	case 0x111d7603:
 		this->name = "IDT 92HD75B3/4";
-		if ((this->subid & 0x0000ffff) == 0x0000103c) {	/* HP */
+		if (PCI_VENDOR(this->subid) == PCI_VENDOR_HP)
 			this->qrks |= AZ_QRK_GPIO_UNMUTE_0;
-		}
 		break;
 	case 0x111d7604:
 		this->name = "IDT 92HD83C1X";
@@ -253,18 +332,16 @@ azalia_codec_init_vtbl(codec_t *this)
 		break;
 	case 0x111d7608:
 		this->name = "IDT 92HD75B1/2";
-		if ((this->subid & 0x0000ffff) == 0x0000103c) {	/* HP */
+		if (PCI_VENDOR(this->subid) == PCI_VENDOR_HP)
 			this->qrks |= AZ_QRK_GPIO_UNMUTE_0;
-		}
 		break;
 	case 0x111d7674:
 		this->name = "IDT 92HD73D1";
 		break;
 	case 0x111d7675:
 		this->name = "IDT 92HD73C1";	/* aka 92HDW74C1 */
-		if ((this->subid & 0x0000ffff) == 0x00001028) {	/* DELL */
+		if (PCI_VENDOR(this->subid) == PCI_VENDOR_DELL)
 			this->qrks |= AZ_QRK_GPIO_UNMUTE_0;
-		}
 		break;
 	case 0x111d7676:
 		this->name = "IDT 92HD73E1";	/* aka 92HDW74E1 */
@@ -274,10 +351,9 @@ azalia_codec_init_vtbl(codec_t *this)
 		break;
 	case 0x111d76b2:
 		this->name = "IDT 92HD71B7";
-		if ((this->subid & 0x0000ffff) == 0x00001028 || /* DELL */
-		    (this->subid & 0x0000ffff) == 0x0000103c) { /* HP */
+		if (PCI_VENDOR(this->subid) == PCI_VENDOR_DELL ||
+		    PCI_VENDOR(this->subid) == PCI_VENDOR_HP)
 			this->qrks |= AZ_QRK_GPIO_UNMUTE_0;
-		}
 		break;
 	case 0x111d76b6:
 		this->name = "IDT 92HD71B5";

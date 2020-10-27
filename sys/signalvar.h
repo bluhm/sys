@@ -1,4 +1,4 @@
-/*	$OpenBSD: signalvar.h,v 1.41 2020/05/10 00:56:06 guenther Exp $	*/
+/*	$OpenBSD: signalvar.h,v 1.44 2020/09/16 13:50:42 mpi Exp $	*/
 /*	$NetBSD: signalvar.h,v 1.17 1996/04/22 01:23:31 christos Exp $	*/
 
 /*
@@ -122,12 +122,13 @@ void	pgsignal(struct pgrp *pgrp, int sig, int checkctty);
 void	psignal(struct proc *p, int sig);
 void	ptsignal(struct proc *p, int sig, enum signal_type type);
 #define prsignal(pr,sig)	ptsignal((pr)->ps_mainproc, (sig), SPROCESS)
-void	siginit(struct process *);
+void	siginit(struct sigacts *);
 void	trapsignal(struct proc *p, int sig, u_long code, int type,
 	    union sigval val);
 void	sigexit(struct proc *, int);
+void	sigabort(struct proc *);
+int	sigismasked(struct proc *, int);
 int	sigonstack(size_t);
-void	setsigvec(struct proc *, int, struct sigaction *);
 int	killpg1(struct proc *, int, int, int);
 
 void	signal_init(void);

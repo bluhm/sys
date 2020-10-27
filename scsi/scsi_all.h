@@ -1,4 +1,4 @@
-/*	$OpenBSD: scsi_all.h,v 1.61 2019/11/25 17:02:56 krw Exp $	*/
+/*	$OpenBSD: scsi_all.h,v 1.64 2020/09/08 12:36:42 krw Exp $	*/
 /*	$NetBSD: scsi_all.h,v 1.10 1996/09/12 01:57:17 thorpej Exp $	*/
 
 /*
@@ -246,13 +246,14 @@ struct scsi_inquiry_data {
 #define SID_ISO			0xc0
 	u_int8_t response_format;
 #define SID_RESPONSE_DATA_FMT	0x0f	/* < 2 == obsolete, > 2 reserved! */
+#define		SID_SCSI2_RESPONSE	0x02
 #define SID_HiSup		0x10	/* Hierarchical LUNs */
 #define SID_NormACA		0x20	/* Normal ACA bit in CCB supported */
 #define SID_TrmIOP		0x40	/* obsolete */
 #define SID_AENC		0x80	/* obsolete */
 	u_int8_t additional_length;
-#define SID_INQUIRY_HDR	5	/* Bytes up to & including additional_length */
-#define SID_SCSI2_ALEN	31	/* Additional bytes of basic SCSI2 info */
+#define SID_SCSI2_HDRLEN	5	/* Bytes up to & including additional_length */
+#define SID_SCSI2_ALEN		31	/* Additional bytes of basic SCSI2 info */
 	u_int8_t spc3_flags;
 #define SPC3_SID_PROTECT	0x01	/* 0 == Type 0, 1 == Type 1, 2 or 3 */
 #define SPC3_SID_RESERVED	0x06
@@ -502,6 +503,7 @@ struct scsi_mode_header {
 	u_int8_t dev_spec;
 	u_int8_t blk_desc_len;
 };
+#define VALID_MODE_HDR(_x)	((_x)->data_length >= 3)
 
 struct scsi_mode_header_big {
 	u_int8_t data_length[2];	/* Sense data length */
@@ -512,6 +514,7 @@ struct scsi_mode_header_big {
 	u_int8_t reserved2;
 	u_int8_t blk_desc_len[2];
 };
+#define VALID_MODE_HDR_BIG(_x)	(_2btol((_x)->data_length) >= 6)
 
 /* Both disks and tapes use dev_spec to report READONLY status. */
 #define	SMH_DSP_WRITE_PROT	0x80

@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_proc.c,v 1.86 2020/01/30 08:51:27 mpi Exp $	*/
+/*	$OpenBSD: kern_proc.c,v 1.88 2020/09/26 15:15:22 kettenis Exp $	*/
 /*	$NetBSD: kern_proc.c,v 1.14 1996/02/09 18:59:41 christos Exp $	*/
 
 /*
@@ -109,7 +109,7 @@ procinit(void)
 	pool_init(&rusage_pool, sizeof(struct rusage), 0, IPL_NONE,
 	    PR_WAITOK, "zombiepl", NULL);
 	pool_init(&ucred_pool, sizeof(struct ucred), 0, IPL_MPFLOOR,
-	    PR_WAITOK, "ucredpl", NULL);
+	    0, "ucredpl", NULL);
 	pool_init(&pgrp_pool, sizeof(struct pgrp), 0, IPL_NONE,
 	    PR_WAITOK, "pgrppl", NULL);
 	pool_init(&session_pool, sizeof(struct session), 0, IPL_NONE,
@@ -494,7 +494,6 @@ void
 db_kill_cmd(db_expr_t addr, int have_addr, db_expr_t count, char *modif)
 {
 	struct process *pr;
-	struct sigaction sa;
 	struct proc *p;
 
 	pr = prfind(addr);
@@ -506,11 +505,7 @@ db_kill_cmd(db_expr_t addr, int have_addr, db_expr_t count, char *modif)
 	p = TAILQ_FIRST(&pr->ps_threads);
 
 	/* Send uncatchable SIGABRT for coredump */
-	memset(&sa, 0, sizeof sa);
-	sa.sa_handler = SIG_DFL;
-	setsigvec(p, SIGABRT, &sa);
-	atomic_clearbits_int(&p->p_sigmask, sigmask(SIGABRT));
-	psignal(p, SIGABRT);
+	sigabort(p);
 }
 
 void

@@ -1,4 +1,4 @@
-/*	$OpenBSD: pmapae.c,v 1.58 2019/12/19 17:46:32 mpi Exp $	*/
+/*	$OpenBSD: pmapae.c,v 1.60 2020/09/23 15:13:26 deraadt Exp $	*/
 
 /*
  * Copyright (c) 2006-2008 Michael Shalayeff
@@ -617,7 +617,7 @@ pmap_pte_paddr_pae(vaddr_t va)
 void
 pmap_bootstrap_pae(void)
 {
-	extern int cpu_pae, nkpde;
+	extern int nkpde;
 	struct pmap *kpm = pmap_kernel();
 	struct vm_page *ptp;
 	paddr_t ptaddr;
@@ -1888,7 +1888,7 @@ enter_now:
 
 	if (pmap_valid_entry(opte)) {
 		if (nocache && (opte & PG_N) == 0)
-			wbinvd(); /* XXX clflush before we enter? */
+			wbinvd_on_all_cpus(); /* XXX clflush before we enter? */
 		pmap_tlb_shootpage(pmap, va);
 	}
 

@@ -1,4 +1,4 @@
-/*	$OpenBSD: xbf.c,v 1.44 2020/07/22 13:16:05 krw Exp $	*/
+/*	$OpenBSD: xbf.c,v 1.51 2020/10/15 13:22:13 krw Exp $	*/
 
 /*
  * Copyright (c) 2016, 2017 Mike Belopuhov
@@ -385,13 +385,13 @@ xbf_scsi_cmd(struct scsi_xfer *xs)
 {
 	struct xbf_softc *sc = xs->sc_link->bus->sb_adapter_softc;
 
-	switch (xs->cmd->opcode) {
-	case READ_BIG:
+	switch (xs->cmd.opcode) {
 	case READ_COMMAND:
+	case READ_10:
 	case READ_12:
 	case READ_16:
-	case WRITE_BIG:
 	case WRITE_COMMAND:
+	case WRITE_10:
 	case WRITE_12:
 	case WRITE_16:
 		if (sc->sc_state != XBF_CONNECTED) {
@@ -420,7 +420,7 @@ xbf_scsi_cmd(struct scsi_xfer *xs)
 		xbf_scsi_done(xs, XS_NOERROR);
 		return;
 	default:
-		printf("%s cmd 0x%02x\n", __func__, xs->cmd->opcode);
+		printf("%s cmd 0x%02x\n", __func__, xs->cmd.opcode);
 	case MODE_SENSE:
 	case MODE_SENSE_BIG:
 	case REPORT_LUNS:
@@ -436,7 +436,7 @@ xbf_scsi_cmd(struct scsi_xfer *xs)
 
 	if (ISSET(xs->flags, SCSI_POLL) && xbf_poll_cmd(xs)) {
 		printf("%s: op %#x timed out\n", sc->sc_dev.dv_xname,
-		    xs->cmd->opcode);
+		    xs->cmd.opcode);
 		if (sc->sc_state == XBF_CONNECTED) {
 			xbf_reclaim_cmd(xs);
 			xbf_scsi_done(xs, XS_TIMEOUT);
@@ -608,7 +608,7 @@ xbf_submit_cmd(struct scsi_xfer *xs)
 	struct xbf_ccb *ccb = xs->io;
 	union xbf_ring_desc *xrd;
 	struct scsi_rw *rw;
-	struct scsi_rw_big *rwb;
+	struct scsi_rw_10 *rw10;
 	struct scsi_rw_12 *rw12;
 	struct scsi_rw_16 *rw16;
 	uint64_t lba = 0;
@@ -617,16 +617,16 @@ xbf_submit_cmd(struct scsi_xfer *xs)
 	unsigned int ndesc = 0;
 	int desc, error;
 
-	switch (xs->cmd->opcode) {
-	case READ_BIG:
+	switch (xs->cmd.opcode) {
 	case READ_COMMAND:
+	case READ_10:
 	case READ_12:
 	case READ_16:
 		operation = XBF_OP_READ;
 		break;
 
-	case WRITE_BIG:
 	case WRITE_COMMAND:
+	case WRITE_10:
 	case WRITE_12:
 	case WRITE_16:
 		operation = XBF_OP_WRITE;
@@ -645,19 +645,19 @@ xbf_submit_cmd(struct scsi_xfer *xs)
 	 * has the same layout as 10-byte READ/WRITE commands.
 	 */
 	if (xs->cmdlen == 6) {
-		rw = (struct scsi_rw *)xs->cmd;
+		rw = (struct scsi_rw *)&xs->cmd;
 		lba = _3btol(rw->addr) & (SRW_TOPADDR << 16 | 0xffff);
 		nblk = rw->length ? rw->length : 0x100;
 	} else if (xs->cmdlen == 10) {
-		rwb = (struct scsi_rw_big *)xs->cmd;
-		lba = _4btol(rwb->addr);
-		nblk = _2btol(rwb->length);
+		rw10 = (struct scsi_rw_10 *)&xs->cmd;
+		lba = _4btol(rw10->addr);
+		nblk = _2btol(rw10->length);
 	} else if (xs->cmdlen == 12) {
-		rw12 = (struct scsi_rw_12 *)xs->cmd;
+		rw12 = (struct scsi_rw_12 *)&xs->cmd;
 		lba = _4btol(rw12->addr);
 		nblk = _4btol(rw12->length);
 	} else if (xs->cmdlen == 16) {
-		rw16 = (struct scsi_rw_16 *)xs->cmd;
+		rw16 = (struct scsi_rw_16 *)&xs->cmd;
 		lba = _8btol(rw16->addr);
 		nblk = _4btol(rw16->length);
 	}
@@ -809,7 +809,7 @@ xbf_complete_cmd(struct xbf_softc *sc, struct xbf_ccb_queue *cq, int desc)
 void
 xbf_scsi_inq(struct scsi_xfer *xs)
 {
-	struct scsi_inquiry *inq = (struct scsi_inquiry *)xs->cmd;
+	struct scsi_inquiry *inq = (struct scsi_inquiry *)&xs->cmd;
 
 	if (ISSET(inq->flags, SI_EVPD))
 		xbf_scsi_done(xs, XS_DRIVER_STUFFUP);
@@ -822,7 +822,6 @@ xbf_scsi_inquiry(struct scsi_xfer *xs)
 {
 	struct xbf_softc *sc = xs->sc_link->bus->sb_adapter_softc;
 	struct scsi_inquiry_data inq;
-	/* char buf[5]; */
 
 	bzero(&inq, sizeof(inq));
 
@@ -835,15 +834,15 @@ xbf_scsi_inquiry(struct scsi_xfer *xs)
 		break;
 	}
 
-	inq.version = 0x05; /* SPC-3 */
-	inq.response_format = 2;
-	inq.additional_length = 32;
+	inq.version = SCSI_REV_SPC3;
+	inq.response_format = SID_SCSI2_RESPONSE;
+	inq.additional_length = SID_SCSI2_ALEN;
 	inq.flags |= SID_CmdQue;
 	bcopy("Xen     ", inq.vendor, sizeof(inq.vendor));
 	bcopy(sc->sc_prod, inq.product, sizeof(inq.product));
 	bcopy("0000", inq.revision, sizeof(inq.revision));
 
-	bcopy(&inq, xs->data, MIN(sizeof(inq), xs->datalen));
+	scsi_copy_internal_data(xs, &inq, sizeof(inq));
 
 	xbf_scsi_done(xs, XS_NOERROR);
 }

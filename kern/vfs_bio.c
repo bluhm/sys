@@ -1,4 +1,4 @@
-/*	$OpenBSD: vfs_bio.c,v 1.201 2020/07/14 06:02:50 beck Exp $	*/
+/*	$OpenBSD: vfs_bio.c,v 1.204 2020/10/05 01:56:17 asou Exp $	*/
 /*	$NetBSD: vfs_bio.c,v 1.44 1996/06/11 11:15:36 pk Exp $	*/
 
 /*
@@ -57,6 +57,7 @@
 #include <sys/conf.h>
 #include <sys/kernel.h>
 #include <sys/specdev.h>
+#include <sys/tracepoint.h>
 #include <uvm/uvm_extern.h>
 
 /* XXX Should really be in buf.h, but for uvm_constraint_range.. */
@@ -309,7 +310,7 @@ bufbackoff(struct uvm_constraint_range *range, long size)
 	 * If we will accept high memory for this backoff
 	 * try to steal it from the high memory buffer cache.
 	 */
-	if (range->ucr_high > dma_constraint.ucr_high) {
+	if (range != NULL && range->ucr_high > dma_constraint.ucr_high) {
 		struct buf *bp;
 		int64_t start = bcstats.numbufpages, recovered = 0;
 		int s = splbio();
@@ -948,6 +949,11 @@ brelse(struct buf *bp)
 			CLR(bp->b_flags, B_WANTED);
 			wakeup(bp);
 		}
+
+		if (bcstats.dmapages > targetpages)
+			(void) bufcache_recover_dmapages(0,
+			    bcstats.dmapages - targetpages);
+		bufcache_adjust();
 	}
 
 	/* Wake up syncer and cleaner processes waiting for buffers. */
@@ -1209,6 +1215,9 @@ buf_daemon(void *arg)
 		}
 
 		while ((bp = bufcache_getdirtybuf())) {
+			TRACEPOINT(vfs, cleaner, bp->b_flags, pushed,
+			    lodirtypages, hidirtypages);
+
 			if (UNCLEAN_PAGES < lodirtypages &&
 			    bcstats.kvaslots_avail > 2 * RESERVE_SLOTS &&
 			    pushed >= 16)
@@ -1693,6 +1702,9 @@ bufcache_take(struct buf *bp)
 	KASSERT((bp->cache < NUM_CACHES));
 
 	pages = atop(bp->b_bufsize);
+
+	TRACEPOINT(vfs, bufcache_take, bp->b_flags, bp->cache, pages);
+
 	struct bufcache *cache = &cleancache[bp->cache];
 	if (!ISSET(bp->b_flags, B_DELWRI)) {
                 if (ISSET(bp->b_flags, B_COLD)) {
@@ -1756,8 +1768,11 @@ bufcache_release(struct buf *bp)
 	int64_t pages;
 	struct bufcache *cache = &cleancache[bp->cache];
 
-	pages = atop(bp->b_bufsize);
 	KASSERT(ISSET(bp->b_flags, B_BC));
+	pages = atop(bp->b_bufsize);
+
+	TRACEPOINT(vfs, bufcache_rel, bp->b_flags, bp->cache, pages);
+
 	if (fliphigh) {
 		if (ISSET(bp->b_flags, B_DMA) && bp->cache > 0)
 			panic("B_DMA buffer release from cache %d",

@@ -1,4 +1,4 @@
-/*	$OpenBSD: ips.c,v 1.127 2020/07/24 12:43:31 krw Exp $	*/
+/*	$OpenBSD: ips.c,v 1.133 2020/10/15 13:22:13 krw Exp $	*/
 
 /*
  * Copyright (c) 2006, 2007, 2009 Alexander Yurchenko <grange@openbsd.org>
@@ -835,7 +835,7 @@ ips_scsi_cmd(struct scsi_xfer *xs)
 	struct scsi_read_cap_data rcd;
 	struct scsi_sense_data sd;
 	struct scsi_rw *rw;
-	struct scsi_rw_big *rwb;
+	struct scsi_rw_10 *rw10;
 	struct ips_ccb *ccb = xs->io;
 	struct ips_cmd *cmd;
 	int target = link->target;
@@ -844,7 +844,7 @@ ips_scsi_cmd(struct scsi_xfer *xs)
 
 	DPRINTF(IPS_D_XFER, ("%s: ips_scsi_cmd: xs %p, target %d, "
 	    "opcode 0x%02x, flags 0x%x\n", sc->sc_dev.dv_xname, xs, target,
-	    xs->cmd->opcode, xs->flags));
+	    xs->cmd.opcode, xs->flags));
 
 	if (target >= sc->sc_nunits || link->lun != 0) {
 		DPRINTF(IPS_D_INFO, ("%s: ips_scsi_cmd: invalid params "
@@ -859,20 +859,20 @@ ips_scsi_cmd(struct scsi_xfer *xs)
 	xs->error = XS_NOERROR;
 
 	/* Fake SCSI commands */
-	switch (xs->cmd->opcode) {
-	case READ_BIG:
+	switch (xs->cmd.opcode) {
+	case READ_10:
 	case READ_COMMAND:
-	case WRITE_BIG:
+	case WRITE_10:
 	case WRITE_COMMAND:
 		if (xs->cmdlen == sizeof(struct scsi_rw)) {
-			rw = (void *)xs->cmd;
+			rw = (void *)&xs->cmd;
 			blkno = _3btol(rw->addr) &
 			    (SRW_TOPADDR << 16 | 0xffff);
 			blkcnt = rw->length ? rw->length : 0x100;
 		} else {
-			rwb = (void *)xs->cmd;
-			blkno = _4btol(rwb->addr);
-			blkcnt = _2btol(rwb->length);
+			rw10 = (void *)&xs->cmd;
+			blkno = _4btol(rw10->addr);
+			blkcnt = _2btol(rw10->length);
 		}
 
 		if (blkno >= letoh32(drive->seccnt) || blkno + blkcnt >
@@ -914,27 +914,27 @@ ips_scsi_cmd(struct scsi_xfer *xs)
 	case INQUIRY:
 		bzero(&inq, sizeof(inq));
 		inq.device = T_DIRECT;
-		inq.version = 2;
-		inq.response_format = 2;
-		inq.additional_length = 32;
+		inq.version = SCSI_REV_2;
+		inq.response_format = SID_SCSI2_RESPONSE;
+		inq.additional_length = SID_SCSI2_ALEN;
 		inq.flags |= SID_CmdQue;
 		strlcpy(inq.vendor, "IBM", sizeof(inq.vendor));
 		snprintf(inq.product, sizeof(inq.product),
 		    "LD%d RAID%d", target, drive->raid);
 		strlcpy(inq.revision, "1.0", sizeof(inq.revision));
-		memcpy(xs->data, &inq, MIN(xs->datalen, sizeof(inq)));
+		scsi_copy_internal_data(xs, &inq, sizeof(inq));
 		break;
 	case READ_CAPACITY:
 		bzero(&rcd, sizeof(rcd));
 		_lto4b(letoh32(drive->seccnt) - 1, rcd.addr);
 		_lto4b(IPS_SECSZ, rcd.length);
-		memcpy(xs->data, &rcd, MIN(xs->datalen, sizeof(rcd)));
+		scsi_copy_internal_data(xs, &rcd, sizeof(rcd));
 		break;
 	case REQUEST_SENSE:
 		bzero(&sd, sizeof(sd));
 		sd.error_code = SSD_ERRCODE_CURRENT;
 		sd.flags = SKEY_NO_SENSE;
-		memcpy(xs->data, &sd, MIN(xs->datalen, sizeof(sd)));
+		scsi_copy_internal_data(xs, &sd, sizeof(sd));
 		break;
 	case SYNCHRONIZE_CACHE:
 		cmd = ccb->c_cmdbva;
@@ -949,7 +949,7 @@ ips_scsi_cmd(struct scsi_xfer *xs)
 		break;
 	default:
 		DPRINTF(IPS_D_INFO, ("%s: unsupported scsi command 0x%02x\n",
-		    sc->sc_dev.dv_xname, xs->cmd->opcode));
+		    sc->sc_dev.dv_xname, xs->cmd.opcode));
 		xs->error = XS_DRIVER_STUFFUP;
 	}
 
@@ -971,7 +971,7 @@ ips_scsi_pt_cmd(struct scsi_xfer *xs)
 
 	DPRINTF(IPS_D_XFER, ("%s: ips_scsi_pt_cmd: xs %p, chan %d, target %d, "
 	    "opcode 0x%02x, flags 0x%x\n", sc->sc_dev.dv_xname, xs, chan,
-	    target, xs->cmd->opcode, xs->flags));
+	    target, xs->cmd.opcode, xs->flags));
 
 	if (pt->pt_procdev[0] == '\0' && target == pt->pt_proctgt && dev)
 		strlcpy(pt->pt_procdev, dev->dv_xname, sizeof(pt->pt_procdev));
@@ -1022,7 +1022,7 @@ ips_scsi_pt_cmd(struct scsi_xfer *xs)
 	dcdb->datalen = htole16(xs->datalen);
 	dcdb->cdblen = xs->cmdlen;
 	dcdb->senselen = MIN(sizeof(xs->sense), sizeof(dcdb->sense));
-	memcpy(dcdb->cdb, xs->cmd, xs->cmdlen);
+	memcpy(dcdb->cdb, &xs->cmd, xs->cmdlen);
 
 	if (ips_load_xs(sc, ccb, xs)) {
 		DPRINTF(IPS_D_ERR, ("%s: ips_scsi_pt_cmd: ips_load_xs "
@@ -1507,7 +1507,7 @@ ips_done_pt(struct ips_softc *sc, struct ips_ccb *ccb)
 		memcpy(&xs->sense, dcdb->sense, MIN(sizeof(xs->sense),
 		    sizeof(dcdb->sense)));
 
-	if (xs->cmd->opcode == INQUIRY && xs->error == XS_NOERROR) {
+	if (xs->cmd.opcode == INQUIRY && xs->error == XS_NOERROR) {
 		int type = ((struct scsi_inquiry_data *)xs->data)->device &
 		    SID_TYPE;
 

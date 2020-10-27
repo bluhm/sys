@@ -1,4 +1,4 @@
-/* $OpenBSD: acpicpu.c,v 1.85 2020/05/27 05:02:21 jsg Exp $ */
+/* $OpenBSD: acpicpu.c,v 1.89 2020/09/27 16:03:55 kettenis Exp $ */
 /*
  * Copyright (c) 2005 Marco Peereboom <marco@openbsd.org>
  * Copyright (c) 2015 Philip Guenther <guenther@openbsd.org>
@@ -186,9 +186,12 @@ struct cfdriver acpicpu_cd = {
 	NULL, "acpicpu", DV_DULL
 };
 
-extern int setperf_prio;
+const char *acpicpu_hids[] = {
+	"ACPI0007",
+	NULL
+};
 
-struct acpicpu_softc *acpicpu_sc[MAXCPUS];
+extern int setperf_prio;
 
 #if 0
 void
@@ -649,6 +652,18 @@ acpicpu_match(struct device *parent, void *match, void *aux)
 {
 	struct acpi_attach_args	*aa = aux;
 	struct cfdata		*cf = match;
+	struct acpi_softc	*acpi = (struct acpi_softc *)parent;
+
+	if (acpi_matchhids(aa, acpicpu_hids, cf->cf_driver->cd_name) &&
+	    aa->aaa_node && aa->aaa_node->value &&
+	    aa->aaa_node->value->type == AML_OBJTYPE_DEVICE) {
+		/*
+		 * Record that we've seen a Device() CPU object,
+		 * so we won't attach any Processor() nodes.
+		 */
+		acpi->sc_skip_processor = 1;
+		return (1);
+	}
 
 	/* sanity */
 	if (aa->aaa_name == NULL ||
@@ -665,6 +680,7 @@ acpicpu_attach(struct device *parent, struct device *self, void *aux)
 	struct acpicpu_softc	*sc = (struct acpicpu_softc *)self;
 	struct acpi_attach_args *aa = aux;
 	struct aml_value	res;
+	int64_t			uid;
 	int			i;
 	uint32_t		status = 0;
 	CPU_INFO_ITERATOR	cii;
@@ -672,9 +688,12 @@ acpicpu_attach(struct device *parent, struct device *self, void *aux)
 
 	sc->sc_acpi = (struct acpi_softc *)parent;
 	sc->sc_devnode = aa->aaa_node;
-	acpicpu_sc[sc->sc_dev.dv_unit] = sc;
 
 	SLIST_INIT(&sc->sc_cstates);
+
+	if (aml_evalinteger(sc->sc_acpi, sc->sc_devnode,
+	    "_UID", 0, NULL, &uid) == 0)
+		sc->sc_cpu = uid;
 
 	if (aml_evalnode(sc->sc_acpi, sc->sc_devnode, 0, NULL, &res) == 0) {
 		if (res.type == AML_OBJTYPE_PROCESSOR) {
@@ -979,7 +998,7 @@ acpicpu_fetch_pss(struct acpicpu_pss **pss)
 	 * the bios ensures this...
 	 */
 
-	sc = acpicpu_sc[0];
+	sc = (struct acpicpu_softc *)cpu_info_primary.ci_acpicpudev;
 	if (!sc)
 		return 0;
 	*pss = sc->sc_pss;
@@ -1024,7 +1043,7 @@ acpicpu_set_notify(void (*func)(struct acpicpu_pss *, int))
 {
 	struct acpicpu_softc    *sc;
 
-	sc = acpicpu_sc[0];
+	sc = (struct acpicpu_softc *)cpu_info_primary.ci_acpicpudev;
 	if (sc != NULL)
 		sc->sc_notify = func;
 }
@@ -1034,7 +1053,7 @@ acpicpu_setperf_ppc_change(struct acpicpu_pss *pss, int npss)
 {
 	struct acpicpu_softc    *sc;
 
-	sc = acpicpu_sc[0];
+	sc = (struct acpicpu_softc *)cpu_info_primary.ci_acpicpudev;
 
 	if (sc != NULL)
 		cpu_setperf(sc->sc_level);
@@ -1048,7 +1067,7 @@ acpicpu_setperf(int level)
 	int			idx, len;
 	uint32_t		status = 0;
 
-	sc = acpicpu_sc[cpu_number()];
+	sc = (struct acpicpu_softc *)curcpu()->ci_acpicpudev;
 
 	dnprintf(10, "%s: acpicpu setperf level %d\n",
 	    sc->sc_devnode->name, level);

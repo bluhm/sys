@@ -1,4 +1,4 @@
-/*	$OpenBSD: trap.c,v 1.142 2019/12/08 12:25:30 mpi Exp $	*/
+/*	$OpenBSD: trap.c,v 1.150 2020/10/08 19:41:04 deraadt Exp $	*/
 /*	$NetBSD: trap.c,v 1.95 1996/05/05 06:50:02 mycroft Exp $	*/
 
 /*-
@@ -116,26 +116,27 @@ trap(struct trapframe *frame)
 	    resume_pop_fs[], resume_pop_gs[];
 	struct trapframe *vframe;
 	int resume;
-	vm_prot_t ftype;
+	vm_prot_t access_type;
 	union sigval sv;
 	caddr_t onfault;
-	uint32_t cr2;
+	vaddr_t gdt_cs = SEGDESC_LIMIT(curcpu()->ci_gdt[GUCODE_SEL].sd);
+	uint32_t cr2 = rcr2();
 
 	uvmexp.traps++;
 
 	/* SIGSEGV and SIGBUS need this */
 	if (frame->tf_err & PGEX_W) {
-		ftype = PROT_WRITE;
+		access_type = PROT_WRITE;
 	} else if (frame->tf_err & PGEX_I) {
-		ftype = PROT_EXEC;
+		access_type = PROT_EXEC;
 	} else
-		ftype = PROT_READ;
+		access_type = PROT_READ;
 
 #ifdef DEBUG
 	if (trapdebug) {
 		printf("trap %d code %x eip %x cs %x eflags %x cr2 %x cpl %x\n",
 		    frame->tf_trapno, frame->tf_err, frame->tf_eip,
-		    frame->tf_cs, frame->tf_eflags, rcr2(), lapic_tpr);
+		    frame->tf_cs, frame->tf_eflags, cr2, lapic_tpr);
 		printf("curproc %p\n", curproc);
 	}
 #endif
@@ -153,10 +154,6 @@ trap(struct trapframe *frame)
 		type |= T_USER;
 		p->p_md.md_regs = frame;
 		refreshcreds(p);
-		if (!uvm_map_inentry(p, &p->p_spinentry, PROC_STACK(p),
-		    "[%s]%d/%d sp=%lx inside %lx-%lx: not MAP_STACK\n",
-		    uvm_map_inentry_sp, p->p_vmspace->vm_map.sserial))
-			goto out;
 	}
 
 	switch (type) {
@@ -182,7 +179,7 @@ trap(struct trapframe *frame)
 		printf(" in %s mode\n", (type & T_USER) ? "user" : "supervisor");
 		printf("trap type %d code %x eip %x cs %x eflags %x cr2 %x cpl %x\n",
 		    type, frame->tf_err, frame->tf_eip, frame->tf_cs,
-		    frame->tf_eflags, rcr2(), lapic_tpr);
+		    frame->tf_eflags, cr2, lapic_tpr);
 
 		panic("trap type %d, code=%x, pc=%x",
 		    type, frame->tf_err, frame->tf_eip);
@@ -258,90 +255,66 @@ trap(struct trapframe *frame)
 		return;
 
 	case T_PROTFLT|T_USER:		/* protection fault */
-		KERNEL_LOCK();
-
 		/* If pmap_exec_fixup does something, let's retry the trap. */
-		if (pmap_exec_fixup(&p->p_vmspace->vm_map, frame,
-		    &p->p_addr->u_pcb)) {
-			KERNEL_UNLOCK();
+		if (cpu_pae == 0 &&
+		    pmap_exec_fixup(&p->p_vmspace->vm_map, frame, gdt_cs,
+		    &p->p_addr->u_pcb))
 			goto out;
-		}
 
 		sv.sival_int = frame->tf_eip;
 		trapsignal(p, SIGSEGV, type &~ T_USER, SEGV_MAPERR, sv);
-		KERNEL_UNLOCK();
 		goto out;
 
 	case T_TSSFLT|T_USER:
 		sv.sival_int = frame->tf_eip;
-		KERNEL_LOCK();
 		trapsignal(p, SIGBUS, type &~ T_USER, BUS_OBJERR, sv);
-		KERNEL_UNLOCK();
 		goto out;
 
 	case T_SEGNPFLT|T_USER:
 	case T_STKFLT|T_USER:
 		sv.sival_int = frame->tf_eip;
-		KERNEL_LOCK();
 		trapsignal(p, SIGSEGV, type &~ T_USER, SEGV_MAPERR, sv);
-		KERNEL_UNLOCK();
 		goto out;
 
 	case T_ALIGNFLT|T_USER:
 		sv.sival_int = frame->tf_eip;
-		KERNEL_LOCK();
 		trapsignal(p, SIGBUS, type &~ T_USER, BUS_ADRALN, sv);
-		KERNEL_UNLOCK();
 		goto out;
 
 	case T_PRIVINFLT|T_USER:	/* privileged instruction fault */
 		sv.sival_int = frame->tf_eip;
-		KERNEL_LOCK();
 		trapsignal(p, SIGILL, type &~ T_USER, ILL_PRVOPC, sv);
-		KERNEL_UNLOCK();
 		goto out;
 
 	case T_FPOPFLT|T_USER:		/* coprocessor operand fault */
 		sv.sival_int = frame->tf_eip;
-		KERNEL_LOCK();
 		trapsignal(p, SIGILL, type &~ T_USER, ILL_COPROC, sv);
-		KERNEL_UNLOCK();
 		goto out;
 
 	case T_DNA|T_USER: {
 		printf("pid %d killed due to lack of floating point\n",
 		    p->p_p->ps_pid);
 		sv.sival_int = frame->tf_eip;
-		KERNEL_LOCK();
 		trapsignal(p, SIGKILL, type &~ T_USER, FPE_FLTINV, sv);
-		KERNEL_UNLOCK();
 		goto out;
 	}
 
 	case T_BOUND|T_USER:
 		sv.sival_int = frame->tf_eip;
-		KERNEL_LOCK();
 		trapsignal(p, SIGFPE, type &~ T_USER, FPE_FLTSUB, sv);
-		KERNEL_UNLOCK();
 		goto out;
 	case T_OFLOW|T_USER:
 		sv.sival_int = frame->tf_eip;
-		KERNEL_LOCK();
 		trapsignal(p, SIGFPE, type &~ T_USER, FPE_INTOVF, sv);
-		KERNEL_UNLOCK();
 		goto out;
 	case T_DIVIDE|T_USER:
 		sv.sival_int = frame->tf_eip;
-		KERNEL_LOCK();
 		trapsignal(p, SIGFPE, type &~ T_USER, FPE_INTDIV, sv);
-		KERNEL_UNLOCK();
 		goto out;
 
 	case T_ARITHTRAP|T_USER:
 		sv.sival_int = frame->tf_eip;
-		KERNEL_LOCK();
 		trapsignal(p, SIGFPE, frame->tf_err, FPE_INTOVF, sv);
-		KERNEL_UNLOCK();
 		goto out;
 
 	case T_XFTRAP|T_USER:
@@ -353,7 +326,6 @@ trap(struct trapframe *frame)
 			goto we_re_toast;
 
 		pcb = &p->p_addr->u_pcb;
-		cr2 = rcr2();
 		KERNEL_LOCK();
 		/* This will only trigger if SMEP is enabled */
 		if (cr2 <= VM_MAXUSER_ADDRESS && frame->tf_err & PGEX_I)
@@ -373,7 +345,10 @@ trap(struct trapframe *frame)
 		int error;
 		int signal, sicode;
 
-		cr2 = rcr2();
+		if (!uvm_map_inentry(p, &p->p_spinentry, PROC_STACK(p),
+		    "[%s]%d/%d sp=%lx inside %lx-%lx: not MAP_STACK\n",
+		    uvm_map_inentry_sp, p->p_vmspace->vm_map.sserial))
+			goto out;
 		KERNEL_LOCK();
 	faultcommon:
 		vm = p->p_vmspace;
@@ -404,7 +379,7 @@ trap(struct trapframe *frame)
 		if (curcpu()->ci_inatomic == 0 || map == kernel_map) {
 			onfault = p->p_addr->u_pcb.pcb_onfault;
 			p->p_addr->u_pcb.pcb_onfault = NULL;
-			error = uvm_fault(map, va, 0, ftype);
+			error = uvm_fault(map, va, 0, access_type);
 			p->p_addr->u_pcb.pcb_onfault = onfault;
 		} else
 			error = EFAULT;
@@ -426,7 +401,7 @@ trap(struct trapframe *frame)
 				goto copyfault;
 			}
 			printf("uvm_fault(%p, 0x%lx, 0, %d) -> %x\n",
-			    map, va, ftype, error);
+			    map, va, access_type, error);
 			goto we_re_toast;
 		}
 
@@ -454,16 +429,12 @@ trap(struct trapframe *frame)
 #endif
 
 	case T_BPTFLT|T_USER:		/* bpt instruction fault */
-		sv.sival_int = rcr2();
-		KERNEL_LOCK();
+		sv.sival_int = cr2;
 		trapsignal(p, SIGTRAP, type &~ T_USER, TRAP_BRKPT, sv);
-		KERNEL_UNLOCK();
 		break;
 	case T_TRCTRAP|T_USER:		/* trace trap */
-		sv.sival_int = rcr2();
-		KERNEL_LOCK();
+		sv.sival_int = cr2;
 		trapsignal(p, SIGTRAP, type &~ T_USER, TRAP_TRACE, sv);
-		KERNEL_UNLOCK();
 		break;
 
 #if NISA > 0
@@ -505,7 +476,7 @@ ast(struct trapframe *frame)
 	p->p_md.md_regs = frame;
 	refreshcreds(p);
 	uvmexp.softs++;
-	mi_ast(p, want_resched);
+	mi_ast(p, curcpu()->ci_want_resched);
 	userret(p);
 }
 

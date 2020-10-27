@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_input.c,v 1.349 2020/08/01 23:41:55 gnezdo Exp $	*/
+/*	$OpenBSD: ip_input.c,v 1.351 2020/08/22 17:55:30 gnezdo Exp $	*/
 /*	$NetBSD: ip_input.c,v 1.30 1996/03/16 23:53:58 christos Exp $	*/
 
 /*
@@ -107,7 +107,22 @@ LIST_HEAD(, ipq) ipq;
 int	ip_maxqueue = 300;
 int	ip_frags = 0;
 
-int *ipctl_vars[IPCTL_MAXID] = IPCTL_VARS;
+const struct sysctl_bounded_args ipctl_vars[] = {
+	{ IPCTL_FORWARDING, &ipforwarding, 0, 1 },
+	{ IPCTL_SENDREDIRECTS, &ipsendredirects, 0, 1 },
+	{ IPCTL_DEFTTL, &ip_defttl, 0, 255 },
+	{ IPCTL_DIRECTEDBCAST, &ip_directedbcast, 0, 1 },
+	{ IPCTL_IPPORT_FIRSTAUTO, &ipport_firstauto, 0, 65535 },
+	{ IPCTL_IPPORT_LASTAUTO, &ipport_lastauto, 0, 65535 },
+	{ IPCTL_IPPORT_HIFIRSTAUTO, &ipport_hifirstauto, 0, 65535 },
+	{ IPCTL_IPPORT_HILASTAUTO, &ipport_hilastauto, 0, 65535 },
+	{ IPCTL_IPPORT_MAXQUEUE, &ip_maxqueue, 0, 10000 },
+	{ IPCTL_MFORWARDING, &ipmforwarding, 0, 1 },
+	{ IPCTL_MULTIPATH, &ipmultipath, 0, 1 },
+	{ IPCTL_ARPQUEUED, &la_hold_total, 0, 1000 },
+	{ IPCTL_ARPTIMEOUT, &arpt_keep, 0, INT_MAX },
+	{ IPCTL_ARPDOWN, &arpt_down, 0, INT_MAX },
+};
 
 struct pool ipqent_pool;
 struct pool ipq_pool;
@@ -618,20 +633,6 @@ ip_deliver(struct mbuf **mp, int *offp, int nxt, int af)
 			IPSTAT_INC(tooshort);
 			goto bad;
 		}
-
-#ifdef INET6
-		/* draft-itojun-ipv6-tcp-to-anycast */
-		if (af == AF_INET6 &&
-		    ISSET((*mp)->m_flags, M_ACAST) && (nxt == IPPROTO_TCP)) {
-			if ((*mp)->m_len >= sizeof(struct ip6_hdr)) {
-				icmp6_error(*mp, ICMP6_DST_UNREACH,
-					ICMP6_DST_UNREACH_ADDR,
-					offsetof(struct ip6_hdr, ip6_dst));
-				*mp = NULL;
-			}
-			goto bad;
-		}
-#endif /* INET6 */
 
 #ifdef IPSEC
 		if (ipsec_in_use) {
@@ -1660,8 +1661,8 @@ ip_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 #endif
 	default:
 		NET_LOCK();
-		error = sysctl_int_arr(ipctl_vars, nitems(ipctl_vars), name,
-		    namelen, oldp, oldlenp, newp, newlen);
+		error = sysctl_bounded_arr(ipctl_vars, nitems(ipctl_vars),
+		    name, namelen, oldp, oldlenp, newp, newlen);
 		NET_UNLOCK();
 		return (error);
 	}

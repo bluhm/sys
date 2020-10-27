@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_device.c,v 1.57 2019/12/08 12:37:45 mpi Exp $	*/
+/*	$OpenBSD: uvm_device.c,v 1.59 2020/10/24 21:07:53 kettenis Exp $	*/
 /*	$NetBSD: uvm_device.c,v 1.30 2000/11/25 06:27:59 chs Exp $	*/
 
 /*
@@ -43,7 +43,8 @@
 
 #if defined(__amd64__) || defined(__arm64__) || \
     defined(__i386__) || defined(__loongson__) || \
-    defined(__macppc__) || defined(__sparc64__)
+    defined(__macppc__) || defined(__powerpc64__) || \
+    defined(__sparc64__)
 #include "drm.h"
 #endif
 
@@ -70,12 +71,11 @@ static boolean_t        udv_flush(struct uvm_object *, voff_t, voff_t,
 /*
  * master pager structure
  */
-struct uvm_pagerops uvm_deviceops = {
-	NULL,		/* inited statically */
-	udv_reference,
-	udv_detach,
-	udv_fault,
-	udv_flush,
+const struct uvm_pagerops uvm_deviceops = {
+	.pgo_reference = udv_reference,
+	.pgo_detach = udv_detach,
+	.pgo_fault = udv_fault,
+	.pgo_flush = udv_flush,
 };
 
 /*
@@ -213,7 +213,7 @@ udv_attach(dev_t device, vm_prot_t accessprot, voff_t off, vsize_t size)
 static void
 udv_reference(struct uvm_object *uobj)
 {
-
+	KERNEL_ASSERT_LOCKED();
 	uobj->uo_refs++;
 }
 
@@ -226,6 +226,8 @@ static void
 udv_detach(struct uvm_object *uobj)
 {
 	struct uvm_device *udv = (struct uvm_device *)uobj;
+
+	KERNEL_ASSERT_LOCKED();
 
 	/* loop until done */
 again:
@@ -297,6 +299,8 @@ udv_fault(struct uvm_faultinfo *ufi, vaddr_t vaddr, vm_page_t *pps, int npages,
 	paddr_t (*mapfn)(dev_t, off_t, int);
 	vm_prot_t mapprot;
 
+	KERNEL_ASSERT_LOCKED();
+
 	/*
 	 * we do not allow device mappings to be mapped copy-on-write
 	 * so we kill any attempt to do so here.
@@ -320,7 +324,7 @@ udv_fault(struct uvm_faultinfo *ufi, vaddr_t vaddr, vm_page_t *pps, int npages,
 	curr_offset = entry->offset + (vaddr - entry->start);
 	/* pmap va = vaddr (virtual address of pps[0]) */
 	curr_va = vaddr;
-	
+
 	/* loop over the page range entering in as needed */
 	retval = VM_PAGER_OK;
 	for (lcv = 0 ; lcv < npages ; lcv++, curr_offset += PAGE_SIZE,

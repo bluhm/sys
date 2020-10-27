@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_pfsync.c,v 1.275 2020/07/29 12:08:15 mvs Exp $	*/
+/*	$OpenBSD: if_pfsync.c,v 1.278 2020/08/24 15:30:58 kn Exp $	*/
 
 /*
  * Copyright (c) 2002 Michael Shalayeff
@@ -253,7 +253,7 @@ void	pfsync_update_net_tdb(struct pfsync_tdb *);
 int	pfsyncoutput(struct ifnet *, struct mbuf *, struct sockaddr *,
 	    struct rtentry *);
 int	pfsyncioctl(struct ifnet *, u_long, caddr_t);
-void	pfsyncstart(struct ifnet *);
+void	pfsyncstart(struct ifqueue *);
 void	pfsync_syncdev_state(void *);
 void	pfsync_ifdetach(void *);
 
@@ -339,12 +339,11 @@ pfsync_clone_create(struct if_clone *ifc, int unit)
 	ifp->if_softc = sc;
 	ifp->if_ioctl = pfsyncioctl;
 	ifp->if_output = pfsyncoutput;
-	ifp->if_start = pfsyncstart;
+	ifp->if_qstart = pfsyncstart;
 	ifp->if_type = IFT_PFSYNC;
-	ifq_set_maxlen(&ifp->if_snd, IFQ_MAXLEN);
 	ifp->if_hdrlen = sizeof(struct pfsync_header);
 	ifp->if_mtu = ETHERMTU;
-	ifp->if_xflags = IFXF_CLONED;
+	ifp->if_xflags = IFXF_CLONED | IFXF_MPSAFE;
 	timeout_set_proc(&sc->sc_tmo, pfsync_timeout, NULL);
 	timeout_set_proc(&sc->sc_bulk_tmo, pfsync_bulk_update, NULL);
 	timeout_set_proc(&sc->sc_bulkfail_tmo, pfsync_bulk_fail, NULL);
@@ -418,9 +417,9 @@ pfsync_clone_destroy(struct ifnet *ifp)
  * Start output on the pfsync interface.
  */
 void
-pfsyncstart(struct ifnet *ifp)
+pfsyncstart(struct ifqueue *ifq)
 {
-	ifq_purge(&ifp->if_snd);
+	ifq_purge(ifq);
 }
 
 void
@@ -501,6 +500,7 @@ pfsync_state_import(struct pfsync_state *sp, int flags)
 	struct pfi_kif	*kif;
 	int pool_flags;
 	int error = ENOMEM;
+	int n = 0;
 
 	if (sp->creatorid == 0) {
 		DPFPRINTF(LOG_NOTICE, "pfsync_state_import: "
@@ -525,9 +525,11 @@ pfsync_state_import(struct pfsync_state *sp, int flags)
 	 */
 	if (sp->rule != htonl(-1) && sp->anchor == htonl(-1) &&
 	    (flags & (PFSYNC_SI_IOCTL | PFSYNC_SI_CKSUM)) && ntohl(sp->rule) <
-	    pf_main_ruleset.rules.active.rcount)
-		r = pf_main_ruleset.rules.active.ptr_array[ntohl(sp->rule)];
-	else
+	    pf_main_ruleset.rules.active.rcount) {
+		TAILQ_FOREACH(r, pf_main_ruleset.rules.active.ptr, entries)
+			if (ntohl(sp->rule) == n++)
+				break;
+	} else
 		r = &pf_default_rule;
 
 	if ((r->max_states && r->states_cur >= r->max_states))

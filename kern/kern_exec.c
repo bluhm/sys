@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_exec.c,v 1.217 2020/07/11 22:59:05 naddy Exp $	*/
+/*	$OpenBSD: kern_exec.c,v 1.219 2020/10/15 16:31:11 cheloha Exp $	*/
 /*	$NetBSD: kern_exec.c,v 1.75 1996/02/09 18:59:28 christos Exp $	*/
 
 /*-
@@ -656,14 +656,7 @@ sys_execve(struct proc *p, void *v, register_t *retval)
 	}
 
 	if (pr->ps_flags & PS_SUGIDEXEC) {
-		int i, s = splclock();
-
-		timeout_del(&pr->ps_realit_to);
-		for (i = 0; i < nitems(pr->ps_timer); i++) {
-			timespecclear(&pr->ps_timer[i].it_interval);
-			timespecclear(&pr->ps_timer[i].it_value);
-		}
-		splx(s);
+		cancel_all_itimers();
 	}
 
 	/* reset CPU time usage for the thread, but not the process */

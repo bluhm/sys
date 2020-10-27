@@ -1,4 +1,4 @@
-/*	$OpenBSD: cd.c,v 1.247 2020/07/16 14:44:55 krw Exp $	*/
+/*	$OpenBSD: cd.c,v 1.262 2020/09/22 19:32:53 krw Exp $	*/
 /*	$NetBSD: cd.c,v 1.100 1997/04/02 02:29:30 mycroft Exp $	*/
 
 /*
@@ -70,7 +70,8 @@
 
 #include <scsi/scsi_all.h>
 #include <scsi/cd.h>
-#include <scsi/scsi_disk.h>	/* rw_big and start_stop come from there */
+#include <scsi/scsi_debug.h>
+#include <scsi/scsi_disk.h>	/* rw_10 and start_stop come from there */
 #include <scsi/scsiconf.h>
 
 
@@ -98,9 +99,7 @@ struct cd_softc {
 	struct disk		 sc_dk;
 
 	int			 sc_flags;
-#define	CDF_ANCIENT	0x10		/* disk is ancient; for cdminphys */
 #define	CDF_DYING	0x40		/* dying, when deactivated */
-#define CDF_WAITING	0x100
 	struct scsi_link	*sc_link;	/* contains targ, lun, etc. */
 	struct cd_parms {
 		u_int32_t secsize;
@@ -108,11 +107,13 @@ struct cd_softc {
 	}			 params;
 	struct bufq		 sc_bufq;
 	struct scsi_xshandler	 sc_xsh;
-	struct timeout		 sc_timeout;
 };
 
 void	cdstart(struct scsi_xfer *);
 void	cd_buf_done(struct scsi_xfer *);
+int	cd_cmd_rw6(struct scsi_generic *, int, u_int64_t, u_int32_t);
+int	cd_cmd_rw10(struct scsi_generic *, int, u_int64_t, u_int32_t);
+int	cd_cmd_rw12(struct scsi_generic *, int, u_int64_t, u_int32_t);
 void	cdminphys(struct buf *);
 int	cdgetdisklabel(dev_t, struct cd_softc *, struct disklabel *, int);
 int	cd_setchan(struct cd_softc *, int, int, int, int, int);
@@ -214,18 +215,9 @@ cdattach(struct device *parent, struct device *self, void *aux)
 	sc->sc_dk.dk_name = sc->sc_dev.dv_xname;
 	bufq_init(&sc->sc_bufq, BUFQ_DEFAULT);
 
-	/*
-	 * Note if this device is ancient.  This is used in cdminphys().
-	 */
-	if (!ISSET(link->flags, SDEV_ATAPI) &&
-	    SID_ANSII_REV(&link->inqdata) == SCSI_REV_0)
-		SET(sc->sc_flags, CDF_ANCIENT);
-
 	printf("\n");
 
 	scsi_xsh_set(&sc->sc_xsh, link, cdstart);
-	timeout_set(&sc->sc_timeout, (void (*)(void *))scsi_xsh_add,
-	    &sc->sc_xsh);
 
 	/* Attach disk. */
 	sc->sc_dk.dk_flags = DKF_NOLABELREAD;
@@ -425,7 +417,6 @@ cdclose(dev_t dev, int flag, int fmt, struct proc *p)
 			CLR(sc->sc_link->flags, SDEV_EJECTING);
 		}
 
-		timeout_del(&sc->sc_timeout);
 		scsi_xsh_del(&sc->sc_xsh);
 	}
 
@@ -494,6 +485,45 @@ done:
 		device_unref(&sc->sc_dev);
 }
 
+int
+cd_cmd_rw6(struct scsi_generic *generic, int read, u_int64_t secno,
+    u_int32_t nsecs)
+{
+	struct scsi_rw *cmd = (struct scsi_rw *)generic;
+
+	cmd->opcode = read ? READ_COMMAND : WRITE_COMMAND;
+	_lto3b(secno, cmd->addr);
+	cmd->length = nsecs & 0xff;
+
+	return sizeof(*cmd);
+}
+
+int
+cd_cmd_rw10(struct scsi_generic *generic, int read, u_int64_t secno,
+    u_int32_t nsecs)
+{
+	struct scsi_rw_10 *cmd = (struct scsi_rw_10 *)generic;
+
+	cmd->opcode = read ? READ_10 : WRITE_10;
+	_lto4b(secno, cmd->addr);
+	_lto2b(nsecs, cmd->length);
+
+	return sizeof(*cmd);
+}
+
+int
+cd_cmd_rw12(struct scsi_generic *generic, int read, u_int64_t secno,
+    u_int32_t nsecs)
+{
+	struct scsi_rw_12 *cmd = (struct scsi_rw_12 *)generic;
+
+	cmd->opcode = read ? READ_12 : WRITE_12;
+	_lto4b(secno, cmd->addr);
+	_lto4b(nsecs, cmd->length);
+
+	return sizeof(*cmd);
+}
+
 /*
  * cdstart looks to see if there is a buf waiting for the device
  * and that the device is not already busy. If both are true,
@@ -516,10 +546,9 @@ cdstart(struct scsi_xfer *xs)
 	struct scsi_link	*link = xs->sc_link;
 	struct cd_softc		*sc = link->device_softc;
 	struct buf		*bp;
-	struct scsi_rw_big	*cmd_big;
-	struct scsi_rw		*cmd_small;
 	struct partition	*p;
-	u_int64_t		 secno, nsecs;
+	u_int64_t		 secno;
+	u_int32_t		 nsecs;
 	int			 read;
 
 	SC_DEBUG(link, SDEV_DB2, ("cdstart\n"));
@@ -529,11 +558,6 @@ cdstart(struct scsi_xfer *xs)
 		return;
 	}
 
-	/*
-	 * If the device has become invalid, abort all the
-	 * reads and writes until all files have been closed and
-	 * re-opened
-	 */
 	if (!ISSET(link->flags, SDEV_MEDIA_LOADED)) {
 		bufq_drain(&sc->sc_bufq);
 		scsi_xs_put(xs);
@@ -545,50 +569,9 @@ cdstart(struct scsi_xfer *xs)
 		scsi_xs_put(xs);
 		return;
 	}
+	read = ISSET(bp->b_flags, B_READ);
 
-	/*
-	 * We have a buf, now we should make a command
-	 *
-	 * First, translate the block to absolute and put it in terms
-	 * of the logical blocksize of the device.
-	 */
-	secno = DL_BLKTOSEC(sc->sc_dk.dk_label, bp->b_blkno);
-	p = &sc->sc_dk.dk_label->d_partitions[DISKPART(bp->b_dev)];
-	secno += DL_GETPOFFSET(p);
-	nsecs = howmany(bp->b_bcount, sc->sc_dk.dk_label->d_secsize);
-
-	read = (bp->b_flags & B_READ);
-
-	/*
-	 *  Fill out the scsi command.  If the transfer will
-	 *  fit in a "small" cdb, use it.
-	 */
-	if (!ISSET(link->flags, SDEV_ATAPI) &&
-	    !ISSET(link->quirks, SDEV_ONLYBIG) &&
-	    ((secno & 0x1fffff) == secno) &&
-	    ((nsecs & 0xff) == nsecs)) {
-		/*
-		 * We can fit in a small cdb.
-		 */
-		cmd_small = (struct scsi_rw *)xs->cmd;
-		cmd_small->opcode = read ?
-		    READ_COMMAND : WRITE_COMMAND;
-		_lto3b(secno, cmd_small->addr);
-		cmd_small->length = nsecs & 0xff;
-		xs->cmdlen = sizeof(*cmd_small);
-	} else {
-		/*
-		 * Need a large cdb.
-		 */
-		cmd_big = (struct scsi_rw_big *)xs->cmd;
-		cmd_big->opcode = read ?
-		    READ_BIG : WRITE_BIG;
-		_lto4b(secno, cmd_big->addr);
-		_lto2b(nsecs, cmd_big->length);
-		xs->cmdlen = sizeof(*cmd_big);
-	}
-
-	xs->flags |= (read ? SCSI_DATA_IN : SCSI_DATA_OUT);
+	SET(xs->flags, (read ? SCSI_DATA_IN : SCSI_DATA_OUT));
 	xs->timeout = 30000;
 	xs->data = bp->b_data;
 	xs->datalen = bp->b_bcount;
@@ -596,14 +579,26 @@ cdstart(struct scsi_xfer *xs)
 	xs->cookie = bp;
 	xs->bp = bp;
 
-	/* Instrumentation. */
-	disk_busy(&sc->sc_dk);
+	p = &sc->sc_dk.dk_label->d_partitions[DISKPART(bp->b_dev)];
+	secno = DL_GETPOFFSET(p) + DL_BLKTOSEC(sc->sc_dk.dk_label, bp->b_blkno);
+	nsecs = howmany(bp->b_bcount, sc->sc_dk.dk_label->d_secsize);
 
+	if (!ISSET(link->flags, SDEV_ATAPI | SDEV_UMASS) &&
+	    (SID_ANSII_REV(&link->inqdata) < SCSI_REV_2) &&
+	    ((secno & 0x1fffff) == secno) &&
+	    ((nsecs & 0xff) == nsecs))
+		xs->cmdlen = cd_cmd_rw6(&xs->cmd, read, secno, nsecs);
+	else if (((secno & 0xffffffff) == secno) &&
+	    ((nsecs & 0xffff) == nsecs))
+		xs->cmdlen = cd_cmd_rw10(&xs->cmd, read, secno, nsecs);
+	else
+		xs->cmdlen = cd_cmd_rw12(&xs->cmd, read, secno, nsecs);
+
+	disk_busy(&sc->sc_dk);
 	scsi_xs_exec(xs);
 
-	if (ISSET(sc->sc_flags, CDF_WAITING))
-		CLR(sc->sc_flags, CDF_WAITING);
-	else if (bufq_peek(&sc->sc_bufq))
+	/* Move onto the next io. */
+	if (bufq_peek(&sc->sc_bufq))
 		scsi_xsh_add(&sc->sc_xsh);
 }
 
@@ -689,7 +684,8 @@ cdminphys(struct buf *bp)
 	 * ancient device gets confused by length == 0.  A length of 0
 	 * in a 10-byte read/write actually means 0 blocks.
 	 */
-	if (ISSET(sc->sc_flags, CDF_ANCIENT)) {
+	if (!ISSET(link->flags, SDEV_ATAPI | SDEV_UMASS) &&
+	    SID_ANSII_REV(&link->inqdata) < SCSI_REV_2) {
 		max = sc->sc_dk.dk_label->d_secsize * 0xff;
 
 		if (bp->b_bcount > max)
@@ -1292,7 +1288,7 @@ cd_load_unload(struct cd_softc *sc, int options, int slot)
 	xs->cmdlen = sizeof(*cmd);
 	xs->timeout = 200000;
 
-	cmd = (struct scsi_load_unload *)xs->cmd;
+	cmd = (struct scsi_load_unload *)&xs->cmd;
 	cmd->opcode = LOAD_UNLOAD;
 	cmd->options = options;    /* ioctl uses ATAPI values */
 	cmd->slot = slot;
@@ -1357,7 +1353,7 @@ cd_play(struct cd_softc *sc, int secno, int nsecs)
 	xs->cmdlen = sizeof(*cmd);
 	xs->timeout = 200000;
 
-	cmd = (struct scsi_play *)xs->cmd;
+	cmd = (struct scsi_play *)&xs->cmd;
 	cmd->opcode = PLAY;
 	_lto4b(secno, cmd->blk_addr);
 	_lto2b(nsecs, cmd->xfer_len);
@@ -1444,7 +1440,7 @@ cd_play_msf(struct cd_softc *sc, int startm, int starts, int startf, int endm,
 	xs->cmdlen = sizeof(*cmd);
 	xs->timeout = 20000;
 
-	cmd = (struct scsi_play_msf *)xs->cmd;
+	cmd = (struct scsi_play_msf *)&xs->cmd;
 	cmd->opcode = PLAY_MSF;
 	cmd->start_m = startm;
 	cmd->start_s = starts;
@@ -1475,7 +1471,7 @@ cd_pause(struct cd_softc *sc, int go)
 	xs->cmdlen = sizeof(*cmd);
 	xs->timeout = 2000;
 
-	cmd = (struct scsi_pause *)xs->cmd;
+	cmd = (struct scsi_pause *)&xs->cmd;
 	cmd->opcode = PAUSE;
 	cmd->resume = go;
 
@@ -1525,7 +1521,7 @@ cd_read_subchannel(struct cd_softc *sc, int mode, int format, int track,
 	xs->datalen = len;
 	xs->timeout = 5000;
 
-	cmd = (struct scsi_read_subchannel *)xs->cmd;
+	cmd = (struct scsi_read_subchannel *)&xs->cmd;
 	cmd->opcode = READ_SUBCHANNEL;
 	if (mode == CD_MSF_FORMAT)
 		SET(cmd->byte2, CD_MSF);
@@ -1562,7 +1558,7 @@ cd_read_toc(struct cd_softc *sc, int mode, int start, void *data, int len,
 
 	bzero(data, len);
 
-	cmd = (struct scsi_read_toc *)xs->cmd;
+	cmd = (struct scsi_read_toc *)&xs->cmd;
 	cmd->opcode = READ_TOC;
 
 	if (mode == CD_MSF_FORMAT)
@@ -1663,7 +1659,7 @@ dvd_auth(struct cd_softc *sc, union dvd_authinfo *a)
 	xs->timeout = 30000;
 	xs->data = buf;
 
-	cmd = xs->cmd;
+	cmd = &xs->cmd;
 
 	switch (a->type) {
 	case DVD_LU_SEND_AGID:
@@ -1849,7 +1845,7 @@ dvd_read_physical(struct cd_softc *sc, union dvd_struct *s)
 	xs->datalen = DVD_READ_PHYSICAL_BUFSIZE;
 	xs->timeout = 30000;
 
-	cmd = xs->cmd;
+	cmd = &xs->cmd;
 	cmd->opcode = GPCMD_READ_DVD_STRUCTURE;
 	cmd->bytes[6] = s->type;
 	_lto2b(xs->datalen, &cmd->bytes[7]);
@@ -1906,7 +1902,7 @@ dvd_read_copyright(struct cd_softc *sc, union dvd_struct *s)
 	xs->datalen = DVD_READ_COPYRIGHT_BUFSIZE;
 	xs->timeout = 30000;
 
-	cmd = xs->cmd;
+	cmd = &xs->cmd;
 	cmd->opcode = GPCMD_READ_DVD_STRUCTURE;
 	cmd->bytes[6] = s->type;
 	_lto2b(xs->datalen, &cmd->bytes[7]);
@@ -1947,7 +1943,7 @@ dvd_read_disckey(struct cd_softc *sc, union dvd_struct *s)
 	xs->datalen = sizeof(*buf);
 	xs->timeout = 30000;
 
-	cmd = (struct scsi_read_dvd_structure *)xs->cmd;
+	cmd = (struct scsi_read_dvd_structure *)&xs->cmd;
 	cmd->opcode = GPCMD_READ_DVD_STRUCTURE;
 	cmd->format = s->type;
 	cmd->agid = s->disckey.agid << 6;
@@ -1987,7 +1983,7 @@ dvd_read_bca(struct cd_softc *sc, union dvd_struct *s)
 	xs->datalen = DVD_READ_BCA_BUFLEN;
 	xs->timeout = 30000;
 
-	cmd = xs->cmd;
+	cmd = &xs->cmd;
 	cmd->opcode = GPCMD_READ_DVD_STRUCTURE;
 	cmd->bytes[6] = s->type;
 	_lto2b(xs->datalen, &cmd->bytes[7]);
@@ -2028,7 +2024,7 @@ dvd_read_manufact(struct cd_softc *sc, union dvd_struct *s)
 	xs->datalen = sizeof(*buf);
 	xs->timeout = 30000;
 
-	cmd = (struct scsi_read_dvd_structure *)xs->cmd;
+	cmd = (struct scsi_read_dvd_structure *)&xs->cmd;
 	cmd->opcode = GPCMD_READ_DVD_STRUCTURE;
 	cmd->format = s->type;
 	_lto2b(xs->datalen, cmd->length);

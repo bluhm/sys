@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf_osfp.c,v 1.40 2017/04/23 11:37:11 sthen Exp $ */
+/*	$OpenBSD: pf_osfp.c,v 1.44 2020/10/21 16:15:32 kettenis Exp $ */
 
 /*
  * Copyright (c) 2003 Mike Frantzen <frantzen@w4g.org>
@@ -59,6 +59,11 @@ typedef struct pool pool_t;
 #define pool_get(pool, flags)	malloc(*(pool))
 #define pool_put(pool, item)	free(item)
 #define pool_init(pool, size, a, ao, f, m, p)	(*(pool)) = (size)
+
+#define NET_LOCK()
+#define NET_UNLOCK()
+#define PF_LOCK()
+#define PF_UNLOCK()
 
 #ifdef PFDEBUG
 #include <sys/stdarg.h>	/* for DPFPRINTF() */
@@ -307,6 +312,7 @@ pf_osfp_flush(void)
 	struct pf_os_fingerprint *fp;
 	struct pf_osfp_entry *entry;
 
+	PF_LOCK();
 	while ((fp = SLIST_FIRST(&pf_osfp_list))) {
 		SLIST_REMOVE_HEAD(&pf_osfp_list, fp_next);
 		while ((entry = SLIST_FIRST(&fp->fp_oses))) {
@@ -315,6 +321,7 @@ pf_osfp_flush(void)
 		}
 		pool_put(&pf_osfp_pl, fp);
 	}
+	PF_UNLOCK();
 }
 
 
@@ -322,7 +329,7 @@ pf_osfp_flush(void)
 int
 pf_osfp_add(struct pf_osfp_ioctl *fpioc)
 {
-	struct pf_os_fingerprint *fp, fpadd;
+	struct pf_os_fingerprint *fp, *fp_prealloc, fpadd;
 	struct pf_osfp_entry *entry;
 
 	memset(&fpadd, 0, sizeof(fpadd));
@@ -360,18 +367,33 @@ pf_osfp_add(struct pf_osfp_ioctl *fpioc)
 	    fpadd.fp_wscale,
 	    fpioc->fp_os.fp_os);
 
+	entry = pool_get(&pf_osfp_entry_pl, PR_WAITOK|PR_LIMITFAIL);
+	if (entry == NULL)
+		return (ENOMEM);
+
+	fp_prealloc = pool_get(&pf_osfp_pl, PR_WAITOK|PR_ZERO|PR_LIMITFAIL);
+	if (fp_prealloc == NULL) {
+		pool_put(&pf_osfp_entry_pl, entry);
+		return (ENOMEM);
+	}
+
+	NET_LOCK();
+	PF_LOCK();
 	if ((fp = pf_osfp_find_exact(&pf_osfp_list, &fpadd))) {
-		 SLIST_FOREACH(entry, &fp->fp_oses, fp_entry) {
-			if (PF_OSFP_ENTRY_EQ(entry, &fpioc->fp_os))
+		struct pf_osfp_entry *tentry;
+
+		 SLIST_FOREACH(tentry, &fp->fp_oses, fp_entry) {
+			if (PF_OSFP_ENTRY_EQ(tentry, &fpioc->fp_os)) {
+				NET_UNLOCK();
+				PF_UNLOCK();
+				pool_put(&pf_osfp_entry_pl, entry);
+				pool_put(&pf_osfp_pl, fp_prealloc);
 				return (EEXIST);
+			}
 		}
-		if ((entry = pool_get(&pf_osfp_entry_pl,
-		    PR_WAITOK|PR_LIMITFAIL)) == NULL)
-			return (ENOMEM);
 	} else {
-		if ((fp = pool_get(&pf_osfp_pl,
-		    PR_WAITOK|PR_ZERO|PR_LIMITFAIL)) == NULL)
-			return (ENOMEM);
+		fp = fp_prealloc;
+		fp_prealloc = NULL;
 		fp->fp_tcpopts = fpioc->fp_tcpopts;
 		fp->fp_wsize = fpioc->fp_wsize;
 		fp->fp_psize = fpioc->fp_psize;
@@ -381,11 +403,6 @@ pf_osfp_add(struct pf_osfp_ioctl *fpioc)
 		fp->fp_wscale = fpioc->fp_wscale;
 		fp->fp_ttl = fpioc->fp_ttl;
 		SLIST_INIT(&fp->fp_oses);
-		if ((entry = pool_get(&pf_osfp_entry_pl,
-		    PR_WAITOK|PR_LIMITFAIL)) == NULL) {
-			pool_put(&pf_osfp_pl, fp);
-			return (ENOMEM);
-		}
 		pf_osfp_insert(&pf_osfp_list, fp);
 	}
 	memcpy(entry, &fpioc->fp_os, sizeof(*entry));
@@ -396,12 +413,18 @@ pf_osfp_add(struct pf_osfp_ioctl *fpioc)
 	entry->fp_subtype_nm[sizeof(entry->fp_subtype_nm)-1] = '\0';
 
 	SLIST_INSERT_HEAD(&fp->fp_oses, entry, fp_entry);
+	PF_UNLOCK();
+	NET_UNLOCK();
 
 #ifdef PFDEBUG
 	if ((fp = pf_osfp_validate()))
 		DPFPRINTF(LOG_NOTICE,
 		    "Invalid fingerprint list");
 #endif /* PFDEBUG */
+
+	if (fp_prealloc != NULL)
+		pool_put(&pf_osfp_pl, fp_prealloc);
+
 	return (0);
 }
 
@@ -528,6 +551,8 @@ pf_osfp_get(struct pf_osfp_ioctl *fpioc)
 
 
 	memset(fpioc, 0, sizeof(*fpioc));
+	NET_LOCK();
+	PF_LOCK();
 	SLIST_FOREACH(fp, &pf_osfp_list, fp_next) {
 		SLIST_FOREACH(entry, &fp->fp_oses, fp_entry) {
 			if (i++ == num) {
@@ -540,10 +565,14 @@ pf_osfp_get(struct pf_osfp_ioctl *fpioc)
 				fpioc->fp_getnum = num;
 				memcpy(&fpioc->fp_os, entry,
 				    sizeof(fpioc->fp_os));
+				PF_UNLOCK();
+				NET_UNLOCK();
 				return (0);
 			}
 		}
 	}
+	PF_UNLOCK();
+	NET_UNLOCK();
 
 	return (EBUSY);
 }

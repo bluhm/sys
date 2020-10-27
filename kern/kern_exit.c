@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_exit.c,v 1.188 2020/03/18 15:48:21 visa Exp $	*/
+/*	$OpenBSD: kern_exit.c,v 1.190 2020/10/15 16:31:11 cheloha Exp $	*/
 /*	$NetBSD: kern_exit.c,v 1.39 1996/04/22 01:38:25 christos Exp $	*/
 
 /*
@@ -194,7 +194,8 @@ exit1(struct proc *p, int xexit, int xsig, int flags)
 		/* close open files and release open-file table */
 		fdfree(p);
 
-		timeout_del(&pr->ps_realit_to);
+		cancel_all_itimers();
+
 		timeout_del(&pr->ps_rucheck_to);
 #ifdef SYSVSEM
 		semexit(pr);

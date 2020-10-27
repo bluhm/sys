@@ -1,4 +1,4 @@
-/* $OpenBSD: dsdt.c,v 1.252 2020/07/21 03:48:06 deraadt Exp $ */
+/* $OpenBSD: dsdt.c,v 1.256 2020/09/27 16:46:15 kettenis Exp $ */
 /*
  * Copyright (c) 2005 Jordan Hargrave <jordan@openbsd.org>
  *
@@ -107,8 +107,6 @@ __dead void		_aml_die(const char *fn, int line, const char *fmt, ...);
 
 void aml_notify_task(void *, int);
 void acpi_poll_notify_task(void *, int);
-
-extern char		*hw_vendor;
 
 /*
  * @@@: Global variables
@@ -996,6 +994,8 @@ aml_copyvalue(struct aml_value *lhs, struct aml_value *rhs)
 		lhs->v_objref = rhs->v_objref;
 		aml_addref(lhs->v_objref.ref, "");
 		break;
+	case AML_OBJTYPE_DEVICE:
+		break;
 	default:
 		printf("copyvalue: %x", rhs->type);
 		break;
@@ -1485,31 +1485,11 @@ struct aml_defval {
  * We return True for Windows to fake out nasty bad AML
  */
 char *aml_valid_osi[] = {
-	"Windows 2000",
-	"Windows 2001",
-	"Windows 2001.1",
-	"Windows 2001.1 SP1",
-	"Windows 2001 SP0",
-	"Windows 2001 SP1",
-	"Windows 2001 SP2",
-	"Windows 2001 SP3",
-	"Windows 2001 SP4",
-	"Windows 2006",
-	"Windows 2006.1",
-	"Windows 2006 SP1",
-	"Windows 2006 SP2",
-	"Windows 2009",
-	"Windows 2012",
-	"Windows 2013",
-	"Windows 2015",
-	"Windows 2016",
-	"Windows 2017",
-	"Windows 2017.2",
-	"Windows 2018",
-	"Windows 2018.2",
-	"Windows 2019",
+	AML_VALID_OSI,
 	NULL
 };
+
+enum acpi_osi acpi_max_osi = OSI_UNKNOWN;
 
 struct aml_value *
 aml_callosi(struct aml_scope *scope, struct aml_value *val)
@@ -1536,6 +1516,11 @@ aml_callosi(struct aml_scope *scope, struct aml_value *val)
 	for (idx=0; !result && aml_valid_osi[idx] != NULL; idx++) {
 		dnprintf(10,"osi: %s,%s\n", fa->v_string, aml_valid_osi[idx]);
 		result = !strcmp(fa->v_string, aml_valid_osi[idx]);
+		if (result) {
+			if (idx > acpi_max_osi)
+				acpi_max_osi = idx;
+			break;
+		}
 	}
 	dnprintf(10,"@@ OSI found: %x\n", result);
 	return aml_allocvalue(AML_OBJTYPE_INTEGER, result, NULL);
@@ -2095,6 +2080,9 @@ aml_convert(struct aml_value *a, int ctype, int clen)
 		case AML_OBJTYPE_STRING:
 			aml_addref(a, "XConvert");
 			return a;
+		case AML_OBJTYPE_PACKAGE: /* XXX Deal with broken Lenovo X1 BIOS. */
+			c = aml_allocvalue(AML_OBJTYPE_STRING, 0, NULL);
+			break;
 		}
 		break;
 	}

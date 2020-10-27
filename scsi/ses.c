@@ -1,4 +1,4 @@
-/*	$OpenBSD: ses.c,v 1.61 2020/06/30 18:43:37 krw Exp $ */
+/*	$OpenBSD: ses.c,v 1.63 2020/09/22 19:32:53 krw Exp $ */
 
 /*
  * Copyright (c) 2005 David Gwynne <dlg@openbsd.org>
@@ -124,9 +124,6 @@ ses_match(struct device *parent, void *match, void *aux)
 {
 	struct scsi_attach_args		*sa = aux;
 	struct scsi_inquiry_data	*inq = &sa->sa_sc_link->inqdata;
-
-	if (inq == NULL)
-		return 0;
 
 	if ((inq->device & SID_TYPE) == T_ENCLOSURE &&
 	    SID_ANSII_REV(inq) >= SCSI_REV_2)
@@ -286,7 +283,7 @@ ses_read_config(struct ses_softc *sc)
 	xs->retries = 2;
 	xs->timeout = 3000;
 
-	cmd = (struct ses_scsi_diag *)xs->cmd;
+	cmd = (struct ses_scsi_diag *)&xs->cmd;
 	cmd->opcode = RECEIVE_DIAGNOSTIC;
 	SET(cmd->flags, SES_DIAG_PCV);
 	cmd->pgcode = SES_PAGE_CONFIG;
@@ -384,7 +381,7 @@ ses_read_status(struct ses_softc *sc)
 	xs->retries = 2;
 	xs->timeout = 3000;
 
-	cmd = (struct ses_scsi_diag *)xs->cmd;
+	cmd = (struct ses_scsi_diag *)&xs->cmd;
 	cmd->opcode = RECEIVE_DIAGNOSTIC;
 	SET(cmd->flags, SES_DIAG_PCV);
 	cmd->pgcode = SES_PAGE_STATUS;
@@ -615,7 +612,7 @@ ses_write_config(struct ses_softc *sc)
 	xs->retries = 2;
 	xs->timeout = 3000;
 
-	cmd = (struct ses_scsi_diag *)xs->cmd;
+	cmd = (struct ses_scsi_diag *)&xs->cmd;
 	cmd->opcode = SEND_DIAGNOSTIC;
 	SET(cmd->flags, SES_DIAG_PF);
 	cmd->length = htobe16(sc->sc_buflen);

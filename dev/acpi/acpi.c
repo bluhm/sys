@@ -1,4 +1,4 @@
-/* $OpenBSD: acpi.c,v 1.389 2020/07/21 03:48:06 deraadt Exp $ */
+/* $OpenBSD: acpi.c,v 1.391 2020/08/27 01:08:55 jmatthew Exp $ */
 /*
  * Copyright (c) 2005 Thorsten Lockert <tholo@sigmasoft.com>
  * Copyright (c) 2005 Jordan Hargrave <jordan@openbsd.org>
@@ -1213,8 +1213,6 @@ acpi_attach_common(struct acpi_softc *sc, paddr_t base)
 	/* check if we're running on a sony */
 	aml_find_node(&aml_root, "GBRT", acpi_foundsony, sc);
 
-	aml_walknodes(&aml_root, AML_WALK_PRE, acpi_add_device, sc);
-
 #ifndef SMALL_KERNEL
 	/* try to find smart battery first */
 	aml_find_node(&aml_root, "_HID", acpi_foundsbs, sc);
@@ -1222,6 +1220,8 @@ acpi_attach_common(struct acpi_softc *sc, paddr_t base)
 
 	/* attach battery, power supply and button devices */
 	aml_find_node(&aml_root, "_HID", acpi_foundhid, sc);
+
+	aml_walknodes(&aml_root, AML_WALK_PRE, acpi_add_device, sc);
 
 #ifndef SMALL_KERNEL
 #if NWD > 0
@@ -2176,6 +2176,8 @@ acpi_add_device(struct aml_node *node, void *arg)
 
 	switch (node->value->type) {
 	case AML_OBJTYPE_PROCESSOR:
+		if (sc->sc_skip_processor != 0)
+			return 0;
 		if (nacpicpus >= ncpus)
 			return 0;
 		if (aml_evalnode(sc, aaa.aaa_node, 0, NULL, &res) == 0) {
@@ -2360,18 +2362,14 @@ acpi_init_gpes(struct acpi_softc *sc)
 {
 	struct aml_node *gpe;
 	char name[12];
-	int  idx, ngpe;
+	int  idx;
 
 	sc->sc_lastgpe = sc->sc_fadt->gpe0_blk_len << 2;
-	if (sc->sc_fadt->gpe1_blk_len) {
-	}
 	dnprintf(50, "Last GPE: %.2x\n", sc->sc_lastgpe);
 
 	/* Allocate GPE table */
 	sc->gpe_table = mallocarray(sc->sc_lastgpe, sizeof(struct gpe_block),
 	    M_DEVBUF, M_WAITOK | M_ZERO);
-
-	ngpe = 0;
 
 	/* Clear GPE status */
 	acpi_disable_allgpes(sc);
@@ -2391,7 +2389,6 @@ acpi_init_gpes(struct acpi_softc *sc)
 		}
 	}
 	aml_find_node(&aml_root, "_PRW", acpi_foundprw, sc);
-	sc->sc_maxgpe = ngpe;
 }
 
 void

@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_tun.c,v 1.225 2020/07/22 02:16:02 dlg Exp $	*/
+/*	$OpenBSD: if_tun.c,v 1.227 2020/10/04 06:59:16 anton Exp $	*/
 /*	$NetBSD: if_tun.c,v 1.24 1996/05/07 02:40:48 thorpej Exp $	*/
 
 /*
@@ -235,7 +235,6 @@ tun_create(struct if_clone *ifc, int unit, int flags)
 	ifp->if_start = tun_start;
 	ifp->if_hardmtu = TUNMRU;
 	ifp->if_link_state = LINK_STATE_DOWN;
-	ifq_set_maxlen(&ifp->if_snd, IFQ_MAXLEN);
 
 	if_counters_alloc(ifp);
 
@@ -298,7 +297,7 @@ tun_clone_destroy(struct ifnet *ifp)
 		struct vnode *vp;
 
 		if (vfinddev(dev, VCHR, &vp))
-                        VOP_REVOKE(vp, REVOKEALL);
+			VOP_REVOKE(vp, REVOKEALL);
 
 		KASSERT(sc->sc_dev == 0);
 	}

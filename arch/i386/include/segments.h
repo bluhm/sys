@@ -1,4 +1,4 @@
-/*	$OpenBSD: segments.h,v 1.26 2018/07/09 19:20:30 guenther Exp $	*/
+/*	$OpenBSD: segments.h,v 1.28 2020/09/24 11:36:50 deraadt Exp $	*/
 /*	$NetBSD: segments.h,v 1.23 1996/02/01 22:31:03 mycroft Exp $	*/
 
 /*-
@@ -115,10 +115,13 @@ extern union descriptor *gdt;
 extern struct gate_descriptor idt_region[];
 extern struct gate_descriptor *idt;
 
+#define SEGDESC_LIMIT(sd) (ptoa(((sd).sd_hilimit << 16) | (sd).sd_lolimit))
+
 void setgate(struct gate_descriptor *, void *, int, int, int, int);
 void setregion(struct region_descriptor *, void *, size_t);
 void setsegment(struct segment_descriptor *, void *, size_t, int, int,
     int, int);
+void initcodesegment(struct segment_descriptor *);
 void unsetgate(struct gate_descriptor *);
 void cpu_init_idt(void);
 

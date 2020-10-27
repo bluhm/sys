@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_sysctl.c,v 1.374 2020/08/01 23:41:55 gnezdo Exp $	*/
+/*	$OpenBSD: kern_sysctl.c,v 1.380 2020/10/19 08:19:46 mpi Exp $	*/
 /*	$NetBSD: kern_sysctl.c,v 1.17 1996/05/20 17:49:05 mrg Exp $	*/
 
 /*-
@@ -213,7 +213,7 @@ sys_sysctl(struct proc *p, void *v, register_t *retval)
 	case CTL_MACHDEP:
 		fn = cpu_sysctl;
 		break;
-#ifdef DEBUG
+#ifdef DEBUG_SYSCTL
 	case CTL_DEBUG:
 		fn = debug_sysctl;
 		break;
@@ -809,17 +809,18 @@ hw_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 	/* NOTREACHED */
 }
 
-#ifdef DEBUG
+#ifdef DEBUG_SYSCTL
 /*
  * Debugging related system variables.
  */
-extern struct ctldebug debug0, debug1;
-struct ctldebug debug2, debug3, debug4;
+extern struct ctldebug debug_vfs_busyprt;
+struct ctldebug debug1, debug2, debug3, debug4;
 struct ctldebug debug5, debug6, debug7, debug8, debug9;
 struct ctldebug debug10, debug11, debug12, debug13, debug14;
 struct ctldebug debug15, debug16, debug17, debug18, debug19;
 static struct ctldebug *debugvars[CTL_DEBUG_MAXID] = {
-	&debug0, &debug1, &debug2, &debug3, &debug4,
+	&debug_vfs_busyprt,
+	&debug1, &debug2, &debug3, &debug4,
 	&debug5, &debug6, &debug7, &debug8, &debug9,
 	&debug10, &debug11, &debug12, &debug13, &debug14,
 	&debug15, &debug16, &debug17, &debug18, &debug19,
@@ -848,7 +849,7 @@ debug_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 	}
 	/* NOTREACHED */
 }
-#endif /* DEBUG */
+#endif /* DEBUG_SYSCTL */
 
 /*
  * Reads, or writes that lower the value
@@ -877,6 +878,13 @@ sysctl_int_lower(void *oldp, size_t *oldlenp, void *newp, size_t newlen, int *va
 int
 sysctl_int(void *oldp, size_t *oldlenp, void *newp, size_t newlen, int *valp)
 {
+	return (sysctl_int_bounded(oldp, oldlenp, newp, newlen, valp, 0, 0));
+}
+
+int
+sysctl_int_bounded(void *oldp, size_t *oldlenp, void *newp, size_t newlen,
+    int *valp, int minimum, int maximum)
+{
 	int error = 0;
 	int val;
 
@@ -890,8 +898,12 @@ sysctl_int(void *oldp, size_t *oldlenp, void *newp, size_t newlen, int *valp)
 		error = copyout(&val, oldp, sizeof(int));
 	if (error == 0 && newp)
 		error = copyin(newp, &val, sizeof(int));
-	if (error == 0)
+	if (error)
+		return (error);
+	if (minimum == maximum || (minimum <= val && val <= maximum))
 		*valp = val;
+	else
+		error = EINVAL;
 	return (error);
 }
 
@@ -914,17 +926,23 @@ sysctl_rdint(void *oldp, size_t *oldlenp, void *newp, int val)
 }
 
 /*
- * Array of integer values.
+ * Array of bounded integer values.
  */
 int
-sysctl_int_arr(int **valpp, u_int valplen, int *name, u_int namelen, void *oldp,
-    size_t *oldlenp, void *newp, size_t newlen)
+sysctl_bounded_arr(const struct sysctl_bounded_args *valpp, u_int valplen,
+    int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
+    size_t newlen)
 {
-	if (namelen > 1)
+	u_int i;
+	if (namelen != 1)
 		return (ENOTDIR);
-	if (name[0] < 0 || name[0] >= valplen || valpp[name[0]] == NULL)
-		return (EOPNOTSUPP);
-	return (sysctl_int(oldp, oldlenp, newp, newlen, valpp[name[0]]));
+	for (i = 0; i < valplen; ++i) {
+		if (valpp[i].mib == name[0]) {
+			return (sysctl_int_bounded(oldp, oldlenp, newp, newlen,
+			    valpp[i].var, valpp[i].minimum, valpp[i].maximum));
+		}
+	}
+	return (EOPNOTSUPP);
 }
 
 /*
@@ -1765,7 +1783,7 @@ sysctl_proc_args(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 	/* Execing - danger. */
 	if ((vpr->ps_flags & PS_INEXEC))
 		return (EBUSY);
-	
+
 	/* Only owner or root can get env */
 	if ((op == KERN_PROC_NENV || op == KERN_PROC_ENV) &&
 	    (vpr->ps_ucred->cr_uid != cp->p_ucred->cr_uid &&
@@ -1774,7 +1792,7 @@ sysctl_proc_args(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 
 	ps_strings = vpr->ps_strings;
 	vm = vpr->ps_vmspace;
-	vm->vm_refcnt++;
+	uvmspace_addref(vm);
 	vpr = NULL;
 
 	buf = malloc(PAGE_SIZE, M_TEMP, M_WAITOK);

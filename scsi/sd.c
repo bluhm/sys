@@ -1,4 +1,4 @@
-/*	$OpenBSD: sd.c,v 1.313 2020/07/16 14:44:55 krw Exp $	*/
+/*	$OpenBSD: sd.c,v 1.329 2020/09/22 19:32:53 krw Exp $	*/
 /*	$NetBSD: sd.c,v 1.111 1997/04/02 02:29:41 mycroft Exp $	*/
 
 /*-
@@ -70,6 +70,7 @@
 #include <sys/reboot.h>
 
 #include <scsi/scsi_all.h>
+#include <scsi/scsi_debug.h>
 #include <scsi/scsi_disk.h>
 #include <scsi/scsiconf.h>
 #include <scsi/sdvar.h>
@@ -102,10 +103,10 @@ void	viscpy(u_char *, u_char *, int);
 int	sd_ioctl_inquiry(struct sd_softc *, struct dk_inquiry *);
 int	sd_ioctl_cache(struct sd_softc *, long, struct dk_cache *);
 
-void	sd_cmd_rw6(struct scsi_xfer *, int, u_int64_t, u_int);
-void	sd_cmd_rw10(struct scsi_xfer *, int, u_int64_t, u_int);
-void	sd_cmd_rw12(struct scsi_xfer *, int, u_int64_t, u_int);
-void	sd_cmd_rw16(struct scsi_xfer *, int, u_int64_t, u_int);
+int	sd_cmd_rw6(struct scsi_generic *, int, u_int64_t, u_int32_t);
+int	sd_cmd_rw10(struct scsi_generic *, int, u_int64_t, u_int32_t);
+int	sd_cmd_rw12(struct scsi_generic *, int, u_int64_t, u_int32_t);
+int	sd_cmd_rw16(struct scsi_generic *, int, u_int64_t, u_int32_t);
 
 void	sd_buf_done(struct scsi_xfer *);
 
@@ -179,16 +180,6 @@ sdattach(struct device *parent, struct device *self, void *aux)
 	    SDEV_REMOVABLE))
 		SET(link->quirks, SDEV_NOSYNCCACHE);
 
-	if (!ISSET(link->inqdata.flags, SID_RelAdr))
-		SET(link->quirks, SDEV_ONLYBIG);
-
-	/*
-	 * Note if this device is ancient. This is used in sdminphys().
-	 */
-	if (!ISSET(link->flags, SDEV_ATAPI) &&
-	    SID_ANSII_REV(&link->inqdata) == SCSI_REV_0)
-		SET(sc->flags, SDF_ANCIENT);
-
 	/*
 	 * Use the subdriver to request information regarding the drive. We
 	 * cannot use interrupts yet, so the request must specify this.
@@ -196,8 +187,6 @@ sdattach(struct device *parent, struct device *self, void *aux)
 	printf("\n");
 
 	scsi_xsh_set(&sc->sc_xsh, link, sdstart);
-	timeout_set(&sc->sc_timeout, (void (*)(void *))scsi_xsh_add,
-	    &sc->sc_xsh);
 
 	/* Spin up non-UMASS devices ready or not. */
 	if (!ISSET(link->flags, SDEV_UMASS))
@@ -291,7 +280,6 @@ sdactivate(struct device *self, int act)
 		break;
 	case DVACT_DEACTIVATE:
 		SET(sc->flags, SDF_DYING);
-		timeout_del(&sc->sc_timeout);
 		scsi_xsh_del(&sc->sc_xsh);
 		break;
 	}
@@ -327,6 +315,10 @@ sdopen(dev_t dev, int flag, int fmt, struct proc *p)
 	unit = DISKUNIT(dev);
 	part = DISKPART(dev);
 
+	SC_DEBUG(link, SDEV_DB1,
+	    ("sdopen: dev=0x%x (unit %d (of %d), partition %d)\n", dev, unit,
+	    sd_cd.cd_ndevs, part));
+
 	rawopen = (part == RAW_PART) && (fmt == S_IFCHR);
 
 	sc = sdlookup(unit);
@@ -342,14 +334,13 @@ sdopen(dev_t dev, int flag, int fmt, struct proc *p)
 		device_unref(&sc->sc_dev);
 		return EACCES;
 	}
-
-	SC_DEBUG(link, SDEV_DB1,
-	    ("sdopen: dev=0x%x (unit %d (of %d), partition %d)\n", dev, unit,
-	    sd_cd.cd_ndevs, part));
-
 	if ((error = disk_lock(&sc->sc_dk)) != 0) {
 		device_unref(&sc->sc_dev);
 		return error;
+	}
+	if (ISSET(sc->flags, SDF_DYING)) {
+		error = ENXIO;
+		goto die;
 	}
 
 	if (sc->sc_dk.dk_openmask != 0) {
@@ -357,10 +348,6 @@ sdopen(dev_t dev, int flag, int fmt, struct proc *p)
 		 * If any partition is open, but the disk has been invalidated,
 		 * disallow further opens of non-raw partition.
 		 */
-		if (ISSET(sc->flags, SDF_DYING)) {
-			error = ENXIO;
-			goto die;
-		}
 		if (!ISSET(link->flags, SDEV_MEDIA_LOADED)) {
 			if (rawopen)
 				goto out;
@@ -369,10 +356,6 @@ sdopen(dev_t dev, int flag, int fmt, struct proc *p)
 		}
 	} else {
 		/* Spin up non-UMASS devices ready or not. */
-		if (ISSET(sc->flags, SDF_DYING)) {
-			error = ENXIO;
-			goto die;
-		}
 		if (!ISSET(link->flags, SDEV_UMASS))
 			scsi_start(link, SSS_START, (rawopen ? SCSI_SILENT :
 			    0) | SCSI_IGNORE_ILLEGAL_REQUEST |
@@ -525,7 +508,6 @@ sdclose(dev_t dev, int flag, int fmt, struct proc *p)
 			CLR(link->flags, SDEV_EJECTING);
 		}
 
-		timeout_del(&sc->sc_timeout);
 		scsi_xsh_del(&sc->sc_xsh);
 	}
 
@@ -598,52 +580,56 @@ done:
 		device_unref(&sc->sc_dev);
 }
 
-void
-sd_cmd_rw6(struct scsi_xfer *xs, int read, u_int64_t secno, u_int nsecs)
+int
+sd_cmd_rw6(struct scsi_generic *generic, int read, u_int64_t secno,
+    u_int32_t nsecs)
 {
-	struct scsi_rw *cmd = (struct scsi_rw *)xs->cmd;
+	struct scsi_rw *cmd = (struct scsi_rw *)generic;
 
 	cmd->opcode = read ? READ_COMMAND : WRITE_COMMAND;
 	_lto3b(secno, cmd->addr);
 	cmd->length = nsecs;
 
-	xs->cmdlen = sizeof(*cmd);
+	return sizeof(*cmd);
 }
 
-void
-sd_cmd_rw10(struct scsi_xfer *xs, int read, u_int64_t secno, u_int nsecs)
+int
+sd_cmd_rw10(struct scsi_generic *generic, int read, u_int64_t secno,
+    u_int32_t nsecs)
 {
-	struct scsi_rw_big *cmd = (struct scsi_rw_big *)xs->cmd;
+	struct scsi_rw_10 *cmd = (struct scsi_rw_10 *)generic;
 
-	cmd->opcode = read ? READ_BIG : WRITE_BIG;
+	cmd->opcode = read ? READ_10 : WRITE_10;
 	_lto4b(secno, cmd->addr);
 	_lto2b(nsecs, cmd->length);
 
-	xs->cmdlen = sizeof(*cmd);
+	return sizeof(*cmd);
 }
 
-void
-sd_cmd_rw12(struct scsi_xfer *xs, int read, u_int64_t secno, u_int nsecs)
+int
+sd_cmd_rw12(struct scsi_generic *generic, int read, u_int64_t secno,
+    u_int32_t nsecs)
 {
-	struct scsi_rw_12 *cmd = (struct scsi_rw_12 *)xs->cmd;
+	struct scsi_rw_12 *cmd = (struct scsi_rw_12 *)generic;
 
 	cmd->opcode = read ? READ_12 : WRITE_12;
 	_lto4b(secno, cmd->addr);
 	_lto4b(nsecs, cmd->length);
 
-	xs->cmdlen = sizeof(*cmd);
+	return sizeof(*cmd);
 }
 
-void
-sd_cmd_rw16(struct scsi_xfer *xs, int read, u_int64_t secno, u_int nsecs)
+int
+sd_cmd_rw16(struct scsi_generic *generic, int read, u_int64_t secno,
+    u_int32_t nsecs)
 {
-	struct scsi_rw_16 *cmd = (struct scsi_rw_16 *)xs->cmd;
+	struct scsi_rw_16 *cmd = (struct scsi_rw_16 *)generic;
 
 	cmd->opcode = read ? READ_16 : WRITE_16;
 	_lto8b(secno, cmd->addr);
 	_lto4b(nsecs, cmd->length);
 
-	xs->cmdlen = sizeof(*cmd);
+	return sizeof(*cmd);
 }
 
 /*
@@ -666,8 +652,9 @@ sdstart(struct scsi_xfer *xs)
 	struct sd_softc			*sc = link->device_softc;
 	struct buf			*bp;
 	struct partition		*p;
-	int				 nsecs, read;
 	u_int64_t			 secno;
+	u_int32_t			 nsecs;
+	int				 read;
 
 	if (ISSET(sc->flags, SDF_DYING)) {
 		scsi_xs_put(xs);
@@ -684,54 +671,42 @@ sdstart(struct scsi_xfer *xs)
 		scsi_xs_put(xs);
 		return;
 	}
-
-	secno = DL_BLKTOSEC(sc->sc_dk.dk_label, bp->b_blkno);
-
-	p = &sc->sc_dk.dk_label->d_partitions[DISKPART(bp->b_dev)];
-	secno += DL_GETPOFFSET(p);
-	nsecs = howmany(bp->b_bcount, sc->sc_dk.dk_label->d_secsize);
-	read = bp->b_flags & B_READ;
-
-	/*
-	 *  Fill out the scsi command.  If the transfer will
-	 *  fit in a "small" cdb, use it.
-	 */
-	if (!ISSET(link->flags, SDEV_ATAPI) &&
-	    !ISSET(link->quirks, SDEV_ONLYBIG) &&
-	    ((secno & 0x1fffff) == secno) &&
-	    ((nsecs & 0xff) == nsecs))
-		sd_cmd_rw6(xs, read, secno, nsecs);
-	else if (((secno & 0xffffffff) == secno) &&
-	    ((nsecs & 0xffff) == nsecs))
-		sd_cmd_rw10(xs, read, secno, nsecs);
-	else if (((secno & 0xffffffff) == secno) &&
-	    ((nsecs & 0xffffffff) == nsecs))
-		sd_cmd_rw12(xs, read, secno, nsecs);
-	else
-		sd_cmd_rw16(xs, read, secno, nsecs);
+	read = ISSET(bp->b_flags, B_READ);
 
 	SET(xs->flags, (read ? SCSI_DATA_IN : SCSI_DATA_OUT));
 	xs->timeout = 60000;
 	xs->data = bp->b_data;
 	xs->datalen = bp->b_bcount;
-
 	xs->done = sd_buf_done;
 	xs->cookie = bp;
 	xs->bp = bp;
 
-	/* Instrumentation. */
-	disk_busy(&sc->sc_dk);
+	p = &sc->sc_dk.dk_label->d_partitions[DISKPART(bp->b_dev)];
+	secno = DL_GETPOFFSET(p) + DL_BLKTOSEC(sc->sc_dk.dk_label, bp->b_blkno);
+	nsecs = howmany(bp->b_bcount, sc->sc_dk.dk_label->d_secsize);
 
-	/* Mark disk as dirty. */
+	if (!ISSET(link->flags, SDEV_ATAPI | SDEV_UMASS) &&
+	    (SID_ANSII_REV(&link->inqdata) < SCSI_REV_2) &&
+	    ((secno & 0x1fffff) == secno) &&
+	    ((nsecs & 0xff) == nsecs))
+		xs->cmdlen = sd_cmd_rw6(&xs->cmd, read, secno, nsecs);
+
+	else if (sc->params.disksize > UINT32_MAX)
+		xs->cmdlen = sd_cmd_rw16(&xs->cmd, read, secno, nsecs);
+
+	else if (nsecs <= UINT16_MAX)
+		xs->cmdlen = sd_cmd_rw10(&xs->cmd, read, secno, nsecs);
+
+	else
+		xs->cmdlen = sd_cmd_rw12(&xs->cmd, read, secno, nsecs);
+
+	disk_busy(&sc->sc_dk);
 	if (!read)
 		SET(sc->flags, SDF_DIRTY);
-
 	scsi_xs_exec(xs);
 
 	/* Move onto the next io. */
-	if (ISSET(sc->flags, SDF_WAITING))
-		CLR(sc->flags, SDF_WAITING);
-	else if (bufq_peek(&sc->sc_bufq))
+	if (bufq_peek(&sc->sc_bufq))
 		scsi_xsh_add(&sc->sc_xsh);
 }
 
@@ -825,7 +800,8 @@ sdminphys(struct buf *bp)
 	 * ancient device gets confused by length == 0.  A length of 0
 	 * in a 10-byte read/write actually means 0 blocks.
 	 */
-	if (ISSET(sc->flags, SDF_ANCIENT)) {
+	if (!ISSET(link->flags, SDEV_ATAPI | SDEV_UMASS) &&
+	    SID_ANSII_REV(&link->inqdata) < SCSI_REV_2) {
 		max = sc->sc_dk.dk_label->d_secsize * 0xff;
 
 		if (bp->b_bcount > max)
@@ -1364,7 +1340,7 @@ sddump(dev_t dev, daddr_t blkno, caddr_t va, size_t size)
 		xs->data = va;
 		xs->datalen = nwrt * sectorsize;
 
-		sd_cmd_rw10(xs, 0, blkno, nwrt); /* XXX */
+		xs->cmdlen = sd_cmd_rw10(&xs->cmd, 0, blkno, nwrt); /* XXX */
 
 		rv = scsi_xs_sync(xs);
 		scsi_xs_put(xs);
@@ -1893,7 +1869,7 @@ sd_flush(struct sd_softc *sc, int flags)
 		return EIO;
 	}
 
-	cmd = (struct scsi_synchronize_cache *)xs->cmd;
+	cmd = (struct scsi_synchronize_cache *)&xs->cmd;
 	cmd->opcode = SYNCHRONIZE_CACHE;
 
 	xs->cmdlen = sizeof(*cmd);

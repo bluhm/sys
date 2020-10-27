@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_iwm.c,v 1.313 2020/07/10 13:22:20 patrick Exp $	*/
+/*	$OpenBSD: if_iwm.c,v 1.315 2020/10/11 07:05:28 mpi Exp $	*/
 
 /*
  * Copyright (c) 2014, 2016 genua gmbh <info@genua.de>
@@ -4959,7 +4959,6 @@ iwm_tx(struct iwm_softc *sc, struct mbuf *m, struct ieee80211_node *ni, int ac)
 			tap->wt_rate = (0x80 | rinfo->ht_plcp);
 		} else
 			tap->wt_rate = rinfo->rate;
-		tap->wt_hwqueue = ac;
 		if ((ic->ic_flags & IEEE80211_F_WEPON) &&
 		    (wh->i_fc[1] & IEEE80211_FC1_PROTECTED))
 			tap->wt_flags |= IEEE80211_RADIOTAP_F_WEP;
@@ -6666,6 +6665,7 @@ iwm_deauth(struct iwm_softc *sc)
 			return err;
 		}
 		sc->sc_flags &= ~IWM_FLAG_STA_ACTIVE;
+		sc->sc_rx_ba_sessions = 0;
 	}
 
 	tfd_queue_msk = 0;
@@ -6743,6 +6743,7 @@ iwm_disassoc(struct iwm_softc *sc)
 			return err;
 		}
 		sc->sc_flags &= ~IWM_FLAG_STA_ACTIVE;
+		sc->sc_rx_ba_sessions = 0;
 	}
 
 	return 0;
@@ -8116,6 +8117,8 @@ iwm_stop(struct ifnet *ifp)
 	sc->sc_flags &= ~IWM_FLAG_TE_ACTIVE;
 	sc->sc_flags &= ~IWM_FLAG_HW_ERR;
 	sc->sc_flags &= ~IWM_FLAG_SHUTDOWN;
+
+	sc->sc_rx_ba_sessions = 0;
 
 	sc->sc_newstate(ic, IEEE80211_S_INIT, -1);
 

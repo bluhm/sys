@@ -1,4 +1,4 @@
-/*	$OpenBSD: drm_linux.c,v 1.62 2020/08/03 07:02:08 jsg Exp $	*/
+/*	$OpenBSD: drm_linux.c,v 1.65 2020/10/17 15:10:54 semarie Exp $	*/
 /*
  * Copyright (c) 2013 Jonathan Gray <jsg@openbsd.org>
  * Copyright (c) 2015, 2016 Mark Kettenis <kettenis@openbsd.org>
@@ -17,6 +17,7 @@
  */
 
 #include <sys/types.h>
+#include <sys/systm.h>
 #include <sys/param.h>
 #include <sys/event.h>
 #include <sys/filedesc.h>
@@ -45,6 +46,7 @@
 #include <linux/shrinker.h>
 #include <linux/fb.h>
 #include <linux/xarray.h>
+#include <linux/interval_tree.h>
 
 #include <drm/drm_device.h>
 #include <drm/drm_print.h>
@@ -205,6 +207,7 @@ kthread_func(void *arg)
 
 	ret = thread->func(thread->data);
 	thread->flags |= KTHREAD_STOPPED;
+	wakeup(thread);
 	kthread_exit(ret);
 }
 
@@ -296,14 +299,13 @@ kthread_stop(struct proc *p)
 
 	while ((thread->flags & KTHREAD_STOPPED) == 0) {
 		thread->flags |= KTHREAD_SHOULDSTOP;
+		kthread_unpark(p);
 		wake_up_process(thread->proc);
 		tsleep_nsec(thread, PPAUSE, "stop", INFSLP);
 	}
 	LIST_REMOVE(thread, next);
 	free(thread, M_DRM, sizeof(*thread));
 }
-
-extern char *hw_vendor, *hw_prod, *hw_ver;
 
 #if NBIOS > 0
 extern char smbios_board_vendor[];
@@ -2090,4 +2092,51 @@ printk(const char *fmt, ...)
 	va_end(ap);
 
 	return ret;
+}
+
+#define START(node) ((node)->start)
+#define LAST(node) ((node)->last)
+
+struct interval_tree_node *
+interval_tree_iter_first(struct rb_root_cached *root, unsigned long start,
+    unsigned long last)
+{
+	struct interval_tree_node *node;
+	struct rb_node *rb;
+
+	for (rb = rb_first_cached(root); rb; rb = rb_next(rb)) {
+		node = rb_entry(rb, typeof(*node), rb);
+		if (LAST(node) >= start && START(node) <= last)
+			return node;
+	}
+	return NULL;
+}
+
+void
+interval_tree_remove(struct interval_tree_node *node,
+    struct rb_root_cached *root) 
+{
+	rb_erase_cached(&node->rb, root);
+}
+
+void
+interval_tree_insert(struct interval_tree_node *node,
+    struct rb_root_cached *root)
+{
+	struct rb_node **iter = &root->rb_root.rb_node;
+	struct rb_node *parent = NULL;
+	struct interval_tree_node *iter_node;
+
+	while (*iter) {
+		parent = *iter;
+		iter_node = rb_entry(*iter, struct interval_tree_node, rb);
+
+		if (node->start < iter_node->start)
+			iter = &(*iter)->rb_left;
+		else
+			iter = &(*iter)->rb_right;
+	}
+
+	rb_link_node(&node->rb, parent, iter);
+	rb_insert_color_cached(&node->rb, root, false);
 }

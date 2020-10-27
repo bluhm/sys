@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_gre.c,v 1.158 2020/07/10 13:26:41 patrick Exp $ */
+/*	$OpenBSD: if_gre.c,v 1.160 2020/08/28 12:01:48 mvs Exp $ */
 /*	$NetBSD: if_gre.c,v 1.9 1999/10/25 19:18:11 drochner Exp $ */
 
 /*
@@ -715,7 +715,6 @@ egre_clone_create(struct if_clone *ifc, int unit)
 	ifp->if_ioctl = egre_ioctl;
 	ifp->if_start = egre_start;
 	ifp->if_xflags = IFXF_CLONED;
-	ifq_set_maxlen(&ifp->if_snd, IFQ_MAXLEN);
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
 	ether_fakeaddr(ifp);
 
@@ -777,7 +776,6 @@ nvgre_clone_create(struct if_clone *ifc, int unit)
 	ifp->if_ioctl = nvgre_ioctl;
 	ifp->if_start = nvgre_start;
 	ifp->if_xflags = IFXF_CLONED;
-	ifq_set_maxlen(&ifp->if_snd, IFQ_MAXLEN);
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
 	ether_fakeaddr(ifp);
 
@@ -849,7 +847,6 @@ eoip_clone_create(struct if_clone *ifc, int unit)
 	ifp->if_ioctl = eoip_ioctl;
 	ifp->if_start = eoip_start;
 	ifp->if_xflags = IFXF_CLONED;
-	ifq_set_maxlen(&ifp->if_snd, IFQ_MAXLEN);
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
 	ether_fakeaddr(ifp);
 
@@ -1012,7 +1009,9 @@ gre_input_key(struct mbuf **mp, int *offp, int type, int af, uint8_t otos,
 	void (*input)(struct ifnet *, struct mbuf *);
 	struct mbuf *(*patch)(const struct gre_tunnel *, struct mbuf *,
 	    uint8_t *, uint8_t);
+#if NBPFILTER > 0
 	int bpf_af = AF_UNSPEC; /* bpf */
+#endif
 	int mcast = 0;
 	uint8_t itos;
 

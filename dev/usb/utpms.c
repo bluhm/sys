@@ -1,4 +1,4 @@
-/*	$OpenBSD: utpms.c,v 1.7 2016/06/05 20:02:36 bru Exp $	*/
+/*	$OpenBSD: utpms.c,v 1.11 2020/10/23 21:23:58 tobhe Exp $	*/
 
 /*
  * Copyright (c) 2005, Johan Wallén
@@ -114,6 +114,7 @@
 
 #include <dev/usb/usb.h>
 #include <dev/usb/usbdi.h>
+#include <dev/usb/usbdi_util.h>
 #include <dev/usb/usbdevs.h>
 #include <dev/usb/uhidev.h>
 
@@ -301,6 +302,8 @@ utpms_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_datalen = UTPMS_DATA_LEN;
 	sc->sc_hdev.sc_udev = uha->uaa->device;
 
+	usbd_set_idle(uha->parent->sc_udev, uha->parent->sc_ifaceno, 0, 0);
+
 	/* Fill in device-specific parameters. */
 	if ((udd = usbd_get_device_descriptor(uha->parent->sc_udev)) != NULL) {
 		product = UGETW(udd->idProduct);
@@ -308,6 +311,12 @@ utpms_attach(struct device *parent, struct device *self, void *aux)
 		for (i = 0; i < nitems(utpms_devices); i++) {
 			pd = &utpms_devices[i];
 			if (product == pd->product && vendor == pd->vendor) {
+				sc->sc_noise = pd->noise;
+				sc->sc_threshold = pd->threshold;
+				sc->sc_x_factor = pd->x_factor;
+				sc->sc_x_sensors = pd->x_sensors;
+				sc->sc_y_factor = pd->y_factor;
+				sc->sc_y_sensors = pd->y_sensors;
 				switch (pd->type) {
 				case FOUNTAIN:
 					printf(": Fountain");
@@ -323,12 +332,6 @@ utpms_attach(struct device *parent, struct device *self, void *aux)
 					break;
 				}
 				printf(" Trackpad\n");
-				sc->sc_noise = pd->noise;
-				sc->sc_threshold = pd->threshold;
-				sc->sc_x_factor = pd->x_factor;
-				sc->sc_x_sensors = pd->x_sensors;
-				sc->sc_y_factor = pd->y_factor;
-				sc->sc_y_sensors = pd->y_sensors;
 				break;
 			}
 		}
@@ -635,8 +638,8 @@ detect_pos(int *sensors, int n_sensors, int threshold, int fact,
 		if (sensors[i] >= threshold) {
 			if (i == 0 || sensors[i - 1] < threshold)
 				*fingers_ret += 1;
-			s += sensors[i];
-			w += sensors[i] * i;
+			s += sensors[i] - threshold;
+			w += (sensors[i] - threshold) * i;
 		}
 	}
 

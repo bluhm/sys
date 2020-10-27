@@ -1,4 +1,4 @@
-/*	$OpenBSD: pfvar.h,v 1.495 2020/07/28 16:47:42 yasuoka Exp $ */
+/*	$OpenBSD: pfvar.h,v 1.497 2020/10/14 19:22:14 naddy Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -475,7 +475,7 @@ union pf_rule_ptr {
 };
 
 #define	PF_ANCHOR_NAME_SIZE	 64
-#define	PF_ANCHOR_MAXPATH	(MAXPATHLEN - PF_ANCHOR_NAME_SIZE - 1)
+#define	PF_ANCHOR_MAXPATH	(PATH_MAX - PF_ANCHOR_NAME_SIZE - 1)
 #define	PF_OPTIMIZER_TABLE_PFX	"__automatic_"
 
 struct pf_rule {
@@ -924,7 +924,6 @@ struct pf_ruleset {
 		struct pf_rulequeue	 queues[2];
 		struct {
 			struct pf_rulequeue	*ptr;
-			struct pf_rule		**ptr_array;
 			u_int32_t		 rcount;
 			u_int32_t		 ticket;
 			int			 open;

@@ -1,4 +1,4 @@
-/*	$OpenBSD: scsiconf.c,v 1.229 2020/07/20 14:41:14 krw Exp $	*/
+/*	$OpenBSD: scsiconf.c,v 1.236 2020/08/18 16:30:38 krw Exp $	*/
 /*	$NetBSD: scsiconf.c,v 1.57 1996/05/02 01:09:01 neil Exp $	*/
 
 /*
@@ -59,39 +59,41 @@
 #include <sys/atomic.h>
 
 #include <scsi/scsi_all.h>
+#include <scsi/scsi_debug.h>
 #include <scsi/scsiconf.h>
 
+int	scsibusmatch(struct device *, void *, void *);
+void	scsibusattach(struct device *, struct device *, void *);
+int	scsibusactivate(struct device *, int);
+int	scsibusdetach(struct device *, int);
+int	scsibussubmatch(struct device *, void *, void *);
+int	scsibussubprint(void *, const char *);
 #if NBIO > 0
 #include <sys/ioctl.h>
 #include <sys/scsiio.h>
 #include <dev/biovar.h>
+int	scsibusbioctl(struct device *, u_long, caddr_t);
 #endif /* NBIO > 0 */
 
-/*
- * Declarations
- */
 void	scsi_get_target_luns(struct scsi_link *, struct scsi_lun_array *);
-int	scsi_probedev(struct scsibus_softc *, int, int, int);
-void	scsi_add_link(struct scsibus_softc *, struct scsi_link *);
-void	scsi_remove_link(struct scsibus_softc *, struct scsi_link *);
-int	scsi_activate_link(struct scsibus_softc *, struct scsi_link *, int);
-int	scsi_detach_link(struct scsibus_softc *, struct scsi_link *, int);
+void	scsi_add_link(struct scsi_link *);
+void	scsi_remove_link(struct scsi_link *);
+void	scsi_print_link(struct scsi_link *);
+int	scsi_probe_link(struct scsibus_softc *, int, int, int);
+int	scsi_activate_link(struct scsi_link *, int);
+int	scsi_detach_link(struct scsi_link *, int);
+int	scsi_detach_bus(struct scsibus_softc *, int);
 
 void	scsi_devid(struct scsi_link *);
 int	scsi_devid_pg80(struct scsi_link *);
 int	scsi_devid_pg83(struct scsi_link *);
 int	scsi_devid_wwn(struct scsi_link *);
 
-int	scsibusmatch(struct device *, void *, void *);
-void	scsibusattach(struct device *, struct device *, void *);
-int	scsibusactivate(struct device *, int);
-int	scsibusdetach(struct device *, int);
+int	scsi_activate_bus(struct scsibus_softc *, int);
+int	scsi_activate_target(struct scsibus_softc *, int, int);
+int	scsi_activate_lun(struct scsibus_softc *, int, int, int);
 
-int	scsibussubmatch(struct device *, void *, void *);
-
-#if NBIO > 0
-int	scsibus_bioctl(struct device *, u_long, caddr_t);
-#endif /* NBIO > 0 */
+int	scsi_autoconf = SCSI_AUTOCONF;
 
 struct cfattach scsibus_ca = {
 	sizeof(struct scsibus_softc), scsibusmatch, scsibusattach,
@@ -102,14 +104,84 @@ struct cfdriver scsibus_cd = {
 	NULL, "scsibus", DV_DULL
 };
 
-int	scsi_autoconf = SCSI_AUTOCONF;
+struct scsi_quirk_inquiry_pattern {
+	struct scsi_inquiry_pattern	pattern;
+	u_int16_t			quirks;
+};
 
-int	scsibusprint(void *, const char *);
-void	scsibus_printlink(struct scsi_link *);
+const struct scsi_quirk_inquiry_pattern scsi_quirk_patterns[] = {
+	{{T_CDROM, T_REMOV,
+	 "PLEXTOR", "CD-ROM PX-40TS", "1.01"},    SDEV_NOSYNC},
 
-int	scsi_activate_bus(struct scsibus_softc *, int);
-int	scsi_activate_target(struct scsibus_softc *, int, int);
-int	scsi_activate_lun(struct scsibus_softc *, int, int, int);
+	{{T_DIRECT, T_FIXED,
+	 "MICROP  ", "1588-15MBSUN0669", ""},     SDEV_AUTOSAVE},
+	{{T_DIRECT, T_FIXED,
+	 "DEC     ", "RZ55     (C) DEC", ""},     SDEV_AUTOSAVE},
+	{{T_DIRECT, T_FIXED,
+	 "EMULEX  ", "MD21/S2     ESDI", "A00"},  SDEV_AUTOSAVE},
+	{{T_DIRECT, T_FIXED,
+	 "IBMRAID ", "0662S",            ""},     SDEV_AUTOSAVE},
+	{{T_DIRECT, T_FIXED,
+	 "IBM     ", "0663H",            ""},     SDEV_AUTOSAVE},
+	{{T_DIRECT, T_FIXED,
+	 "IBM",	  "0664",		 ""},	  SDEV_AUTOSAVE},
+	{{T_DIRECT, T_FIXED,
+	 "IBM     ", "H3171-S2",         ""},	  SDEV_AUTOSAVE},
+	{{T_DIRECT, T_FIXED,
+	 "IBM     ", "KZ-C",		 ""},	  SDEV_AUTOSAVE},
+	/* Broken IBM disk */
+	{{T_DIRECT, T_FIXED,
+	 ""	   , "DFRSS2F",		 ""},	  SDEV_AUTOSAVE},
+	{{T_DIRECT, T_FIXED,
+	 "QUANTUM ", "ELS85S          ", ""},	  SDEV_AUTOSAVE},
+	{{T_DIRECT, T_REMOV,
+	 "iomega", "jaz 1GB",		 ""},	  SDEV_NOTAGS},
+	{{T_DIRECT, T_FIXED,
+	 "MICROP", "4421-07",		 ""},     SDEV_NOTAGS},
+	{{T_DIRECT, T_FIXED,
+	 "SEAGATE", "ST150176LW",        "0002"}, SDEV_NOTAGS},
+	{{T_DIRECT, T_FIXED,
+	 "HP", "C3725S",		 ""},     SDEV_NOTAGS},
+	{{T_DIRECT, T_FIXED,
+	 "IBM", "DCAS",			 ""},     SDEV_NOTAGS},
+
+	{{T_SEQUENTIAL, T_REMOV,
+	 "SONY    ", "SDT-5000        ", "3."},   SDEV_NOSYNC|SDEV_NOWIDE},
+	{{T_SEQUENTIAL, T_REMOV,
+	 "WangDAT ", "Model 1300      ", "02.4"}, SDEV_NOSYNC|SDEV_NOWIDE},
+	{{T_SEQUENTIAL, T_REMOV,
+	 "WangDAT ", "Model 2600      ", "01.7"}, SDEV_NOSYNC|SDEV_NOWIDE},
+	{{T_SEQUENTIAL, T_REMOV,
+	 "WangDAT ", "Model 3200      ", "02.2"}, SDEV_NOSYNC|SDEV_NOWIDE},
+
+	/* ATAPI device quirks */
+	{{T_CDROM, T_REMOV,
+	 "CR-2801TE", "", "1.07"},              ADEV_NOSENSE},
+	{{T_CDROM, T_REMOV,
+	 "CREATIVECD3630E", "", "AC101"},       ADEV_NOSENSE},
+	{{T_CDROM, T_REMOV,
+	 "FX320S", "", "q01"},                  ADEV_NOSENSE},
+	{{T_CDROM, T_REMOV,
+	 "GCD-R580B", "", "1.00"},              ADEV_LITTLETOC},
+	{{T_CDROM, T_REMOV,
+	 "MATSHITA CR-574", "", "1.02"},        ADEV_NOCAPACITY},
+	{{T_CDROM, T_REMOV,
+	 "MATSHITA CR-574", "", "1.06"},        ADEV_NOCAPACITY},
+	{{T_CDROM, T_REMOV,
+	 "Memorex CRW-2642", "", "1.0g"},       ADEV_NOSENSE},
+	{{T_CDROM, T_REMOV,
+	 "SANYO CRD-256P", "", "1.02"},         ADEV_NOCAPACITY},
+	{{T_CDROM, T_REMOV,
+	 "SANYO CRD-254P", "", "1.02"},         ADEV_NOCAPACITY},
+	{{T_CDROM, T_REMOV,
+	 "SANYO CRD-S54P", "", "1.08"},         ADEV_NOCAPACITY},
+	{{T_CDROM, T_REMOV,
+	 "CD-ROM  CDR-S1", "", "1.70"},         ADEV_NOCAPACITY}, /* Sanyo */
+	{{T_CDROM, T_REMOV,
+	 "CD-ROM  CDR-N16", "", "1.25"},        ADEV_NOCAPACITY}, /* Sanyo */
+	{{T_CDROM, T_REMOV,
+	 "UJDCD8730", "", "1.14"},              ADEV_NODOORLOCK}, /* Acer */
+};
 
 int
 scsiprint(void *aux, const char *pnp)
@@ -171,11 +243,11 @@ scsibusattach(struct device *parent, struct device *self, void *aux)
 	SLIST_INIT(&sb->sc_link_list);
 
 #if NBIO > 0
-	if (bio_register(&sb->sc_dev, scsibus_bioctl) != 0)
+	if (bio_register(&sb->sc_dev, scsibusbioctl) != 0)
 		printf("%s: unable to register bio\n", sb->sc_dev.dv_xname);
 #endif /* NBIO > 0 */
 
-	scsi_probe(sb, -1, -1);
+	scsi_probe_bus(sb);
 }
 
 int
@@ -183,82 +255,7 @@ scsibusactivate(struct device *dev, int act)
 {
 	struct scsibus_softc *sb = (struct scsibus_softc *)dev;
 
-	return scsi_activate(sb, -1, -1, act);
-}
-
-int
-scsi_activate(struct scsibus_softc *sb, int target, int lun, int act)
-{
-	if (target == -1 && lun == -1)
-		return scsi_activate_bus(sb, act);
-
-	if (target == -1)
-		return 0;
-
-	if (lun == -1)
-		return scsi_activate_target(sb, target, act);
-
-	return scsi_activate_lun(sb, target, lun, act);
-}
-
-int
-scsi_activate_bus(struct scsibus_softc *sb, int act)
-{
-	int target, r, rv = 0;
-
-	for (target = 0; target < sb->sb_adapter_buswidth; target++) {
-		r = scsi_activate_target(sb, target, act);
-		if (r)
-			rv = r;
-	}
-	return rv;
-}
-
-int
-scsi_activate_target(struct scsibus_softc *sb, int target, int act)
-{
-	struct scsi_link		*link;
-	int				 r, rv = 0;
-
-	SLIST_FOREACH(link, &sb->sc_link_list, bus_list) {
-		if (link->target == target) {
-			r = scsi_activate_link(sb, link, act);
-			if (r)
-				rv = r;
-		}
-	}
-	return rv;
-}
-
-int
-scsi_activate_lun(struct scsibus_softc *sb, int target, int lun, int act)
-{
-	struct scsi_link *link;
-
-	link = scsi_get_link(sb, target, lun);
-	if (link == NULL)
-		return 0;
-
-	return scsi_activate_link(sb, link, act);
-}
-
-int
-scsi_activate_link(struct scsibus_softc *sb, struct scsi_link *link, int act)
-{
-	struct device			*dev;
-	int				 rv = 0;
-
-	dev = link->device_softc;
-	switch (act) {
-	case DVACT_DEACTIVATE:
-		atomic_setbits_int(&link->state, SDEV_S_DYING);
-		config_deactivate(dev);
-		break;
-	default:
-		rv = config_suspend(dev, act);
-		break;
-	}
-	return rv;
+	return scsi_activate_bus(sb, act);
 }
 
 int
@@ -271,7 +268,7 @@ scsibusdetach(struct device *dev, int type)
 	bio_unregister(&sb->sc_dev);
 #endif /* NBIO > 0 */
 
-	error = scsi_detach(sb, -1, -1, type);
+	error = scsi_detach_bus(sb, type);
 	if (error != 0)
 		return error;
 
@@ -295,9 +292,32 @@ scsibussubmatch(struct device *parent, void *match, void *aux)
 	return (*cf->cf_attach->ca_match)(parent, match, aux);
 }
 
+/*
+ * Print out autoconfiguration information for a subdevice.
+ *
+ * This is a slight abuse of 'standard' autoconfiguration semantics,
+ * because 'print' functions don't normally print the colon and
+ * device information.  However, in this case that's better than
+ * either printing redundant information before the attach message,
+ * or having the device driver call a special function to print out
+ * the standard device information.
+ */
+int
+scsibussubprint(void *aux, const char *pnp)
+{
+	struct scsi_attach_args		*sa = aux;
+
+	if (pnp != NULL)
+		printf("%s", pnp);
+
+	scsi_print_link(sa->sa_sc_link);
+
+	return UNCONF;
+}
+
 #if NBIO > 0
 int
-scsibus_bioctl(struct device *dev, u_long cmd, caddr_t addr)
+scsibusbioctl(struct device *dev, u_long cmd, caddr_t addr)
 {
 	struct scsibus_softc		*sb = (struct scsibus_softc *)dev;
 	struct sbioc_device		*sdev;
@@ -317,495 +337,141 @@ scsibus_bioctl(struct device *dev, u_long cmd, caddr_t addr)
 }
 #endif /* NBIO > 0 */
 
-void
-scsi_probe_bus(struct scsibus_softc *sb)
+int
+scsi_activate(struct scsibus_softc *sb, int target, int lun, int act)
 {
-	scsi_probe(sb, -1, -1);
-}
-
-void
-scsi_get_target_luns(struct scsi_link *link0, struct scsi_lun_array *lunarray)
-{
-	struct scsi_report_luns_data	*report;
-	int				 i, nluns, rv = 0;
-
-	/* Initialize dumbscan result. Just in case. */
-	report = NULL;
-	for (i = 0; i < link0->bus->sb_luns; i++)
-		lunarray->luns[i] = i;
-	lunarray->count = link0->bus->sb_luns;
-	lunarray->dumbscan = 1;
-
-	/*
-	 * ATAPI, USB and pre-SPC (i.e. pre-SCSI-3) devices can't ask
-	 * for a report of valid LUNs.
-	 */
-	if ((link0->flags & (SDEV_UMASS | SDEV_ATAPI)) != 0 ||
-	    SID_ANSII_REV(&link0->inqdata) < SCSI_REV_SPC)
-		goto dumbscan;
-
-	report = dma_alloc(sizeof(*report), PR_WAITOK);
-	if (report == NULL)
-		goto dumbscan;
-
-	rv = scsi_report_luns(link0, REPORT_NORMAL, report,
-	    sizeof(*report), scsi_autoconf | SCSI_SILENT |
-	    SCSI_IGNORE_ILLEGAL_REQUEST | SCSI_IGNORE_NOT_READY |
-	    SCSI_IGNORE_MEDIA_CHANGE, 10000);
-	if (rv != 0)
-		goto dumbscan;
-
-	/*
-	 * XXX In theory we should check if data is full, which
-	 * would indicate it needs to be enlarged and REPORT
-	 * LUNS tried again. Solaris tries up to 3 times with
-	 * larger sizes for data.
-	 */
-
-	/* Return the reported Type-0 LUNs. Type-0 only! */
-	lunarray->count = 0;
-	lunarray->dumbscan = 0;
-	nluns = _4btol(report->length) / RPL_LUNDATA_SIZE;
-	for (i = 0; i < nluns; i++) {
-		if (report->luns[i].lundata[0] != 0)
-			continue;
-		lunarray->luns[lunarray->count++] =
-		    report->luns[i].lundata[RPL_LUNDATA_T0LUN];
-	}
-
-dumbscan:
-	if (report != NULL)
-		dma_free(report, sizeof(*report));
+	if (target == -1 && lun == -1)
+		return scsi_activate_bus(sb, act);
+	else if (lun == -1)
+		return scsi_activate_target(sb, target, act);
+	else
+		return scsi_activate_lun(sb, target, lun, act);
 }
 
 int
-scsi_probe_target(struct scsibus_softc *sb, int target)
+scsi_activate_bus(struct scsibus_softc *sb, int act)
 {
-	/* Wild card target not allowed. */
-	if (target == -1)
-		return EINVAL;
-	else
-		return scsi_probe(sb, target, -1);
+	struct scsi_link		*link;
+	int				 r, rv = 0;
+
+	/*  Activate all links on the bus. */
+	SLIST_FOREACH(link, &sb->sc_link_list, bus_list) {
+		r = scsi_activate_link(link, act);
+		if (r)
+			rv = r;
+	}
+	return rv;
+}
+
+int
+scsi_activate_target(struct scsibus_softc *sb, int target, int act)
+{
+	struct scsi_link		*link;
+	int				 r, rv = 0;
+
+	/*  Activate all links on the target. */
+	SLIST_FOREACH(link, &sb->sc_link_list, bus_list) {
+		if (link->target == target) {
+			r = scsi_activate_link(link, act);
+			if (r)
+				rv = r;
+		}
+	}
+	return rv;
+}
+
+int
+scsi_activate_lun(struct scsibus_softc *sb, int target, int lun, int act)
+{
+	struct scsi_link *link;
+
+	/*  Activate the (target, lun) link.*/
+	link = scsi_get_link(sb, target, lun);
+	if (link == NULL)
+		return 0;
+
+	return scsi_activate_link(link, act);
+}
+
+int
+scsi_activate_link(struct scsi_link *link, int act)
+{
+	struct device			*dev;
+	int				 rv = 0;
+
+	dev = link->device_softc;
+	switch (act) {
+	case DVACT_DEACTIVATE:
+		atomic_setbits_int(&link->state, SDEV_S_DYING);
+		config_deactivate(dev);
+		break;
+	default:
+		rv = config_suspend(dev, act);
+		break;
+	}
+	return rv;
 }
 
 int
 scsi_probe(struct scsibus_softc *sb, int target, int lun)
 {
+	if (target == -1 && lun == -1)
+		return scsi_probe_bus(sb);
+	else if (lun == -1)
+		return scsi_probe_target(sb, target);
+	else
+		return scsi_probe_lun(sb, target, lun);
+}
+
+int
+scsi_probe_bus(struct scsibus_softc *sb)
+{
+	int		target, r, rv = 0;
+
+	/* Probe all possible targets on bus. */
+	for (target = 0; target < sb->sb_adapter_buswidth; target++) {
+		r = scsi_probe_target(sb, target);
+		if (r != 0 && r != EINVAL)
+			rv = r;
+	}
+	return rv;
+}
+
+int
+scsi_probe_target(struct scsibus_softc *sb, int target)
+{
 	struct scsi_lun_array		 lunarray;
 	struct scsi_link		*link0;
 	int				 i, r, rv = 0;
 
-	if (target == -1 && lun == -1) {
-		/* Probe all luns on all targets on bus. */
-		for (i = 0; i < sb->sb_adapter_buswidth; i++) {
-			r = scsi_probe(sb, i, -1);
-			if (r != 0 && r != EINVAL)
-				rv = r;
-		}
-		return rv;
-	}
-
-	if (target < 0 || target >= sb->sb_adapter_buswidth ||
-	    target == sb->sb_adapter_target)
+	if (target < 0 || target == sb->sb_adapter_target)
 		return EINVAL;
 
-	if (lun == -1) {
-		/* Probe all luns on the target. */
-		scsi_probedev(sb, target, 0, 0);
-		link0 = scsi_get_link(sb, target, 0);
-		if (link0 == NULL)
-			return EINVAL;
-		scsi_get_target_luns(link0, &lunarray);
-		for (i = 0; i < lunarray.count; i++) {
-			r = scsi_probedev(sb, target, lunarray.luns[i],
-			    lunarray.dumbscan);
-			if (r == EINVAL && lunarray.dumbscan == 1)
-				return 0;
-			if (r != 0 && r != EINVAL)
-				rv = r;
-		}
-		return rv;
+	/* Probe all possible luns on target. */
+	scsi_probe_link(sb, target, 0, 0);
+	link0 = scsi_get_link(sb, target, 0);
+	if (link0 == NULL)
+		return EINVAL;
+	scsi_get_target_luns(link0, &lunarray);
+	for (i = 0; i < lunarray.count; i++) {
+		r = scsi_probe_link(sb, target, lunarray.luns[i],
+		    lunarray.dumbscan);
+		if (r == EINVAL && lunarray.dumbscan == 1)
+			return 0;
+		if (r != 0 && r != EINVAL)
+			rv = r;
 	}
-
-	/* Probe lun on target. *NOT* a dumbscan! */
-	return scsi_probedev(sb, target, lun, 0);
+	return rv;
 }
 
 int
 scsi_probe_lun(struct scsibus_softc *sb, int target, int lun)
 {
-	if (target == -1 || lun == -1)
-		return EINVAL;
-	else
-		return scsi_probe(sb, target, lun);
-}
-
-int
-scsi_detach(struct scsibus_softc *sb, int target, int lun, int flags)
-{
-	struct scsi_link	*link, *tmp;
-	int			 r, rv = 0;
-
-	if (target == -1 && lun == -1) {
-		/* Detach all links from bus. */
-		while (!SLIST_EMPTY(&sb->sc_link_list)) {
-			link = SLIST_FIRST(&sb->sc_link_list);
-			r = scsi_detach_link(sb, link, flags);
-			if (r != 0 && r != ENXIO)
-				rv = r;
-		}
-		return rv;
-	}
-
-	if (target < 0 || target >= sb->sb_adapter_buswidth ||
-	    target == sb->sb_adapter_target)
+	if (target < 0 || target == sb->sb_adapter_target || lun < 0)
 		return EINVAL;
 
-	if (lun == -1) {
-		/* Detach all links from target. */
-		SLIST_FOREACH_SAFE(link, &sb->sc_link_list, bus_list, tmp) {
-			if (link->target == target) {
-				r = scsi_detach_link(sb, link, flags);
-				if (r != 0 && r != ENXIO)
-					rv = r;
-			}
-		}
-		return rv;
-	}
-
-	/* Detach specific link from target. */
-	link = scsi_get_link(sb, target, lun);
-	if (link == NULL)
-		return EINVAL;
-	else
-		return scsi_detach_link(sb, link, flags);
-}
-
-int
-scsi_detach_target(struct scsibus_softc *sb, int target, int flags)
-{
-	/* Wildcard value is not allowed! */
-	if (target == -1)
-		return EINVAL;
-	else
-		return scsi_detach(sb, target, -1, flags);
-}
-
-int
-scsi_detach_lun(struct scsibus_softc *sb, int target, int lun, int flags)
-{
-	/* Wildcard values are not allowed! */
-	if (target == -1 || lun == -1)
-		return EINVAL;
-	else
-		return scsi_detach(sb, target, lun, flags);
-}
-
-int
-scsi_detach_link(struct scsibus_softc *sb, struct scsi_link *link, int flags)
-{
-	int				 rv;
-
-	if (!ISSET(flags, DETACH_FORCE) && ISSET(link->flags, SDEV_OPEN))
-		return EBUSY;
-
-	/* Detaching a device from scsibus is a five step process. */
-
-	/* 1. Wake up processes sleeping for an xs. */
-	scsi_link_shutdown(link);
-
-	/* 2. Detach the device. */
-	rv = config_detach(link->device_softc, flags);
-
-	if (rv != 0)
-		return rv;
-
-	/* 3. If it's using the openings io allocator, clean that up. */
-	if (ISSET(link->flags, SDEV_OWN_IOPL)) {
-		scsi_iopool_destroy(link->pool);
-		free(link->pool, M_DEVBUF, sizeof(*link->pool));
-	}
-
-	/* 4. Free up its state in the adapter. */
-	if (sb->sb_adapter->dev_free != NULL)
-		sb->sb_adapter->dev_free(link);
-
-	/* 5. Free up its state in the midlayer. */
-	if (link->id != NULL)
-		devid_free(link->id);
-	scsi_remove_link(sb, link);
-	free(link, M_DEVBUF, sizeof(*link));
-
-	return 0;
-}
-
-struct scsi_link *
-scsi_get_link(struct scsibus_softc *sb, int target, int lun)
-{
-	struct scsi_link *link;
-
-	SLIST_FOREACH(link, &sb->sc_link_list, bus_list) {
-		if (link->target == target && link->lun == lun)
-			return link;
-	}
-
-	return NULL;
-}
-
-void
-scsi_add_link(struct scsibus_softc *sb, struct scsi_link *link)
-{
-	SLIST_INSERT_HEAD(&sb->sc_link_list, link, bus_list);
-}
-
-void
-scsi_remove_link(struct scsibus_softc *sb, struct scsi_link *link)
-{
-	SLIST_REMOVE(&sb->sc_link_list, link, scsi_link, bus_list);
-}
-
-void
-scsi_strvis(u_char *dst, u_char *src, int len)
-{
-	u_char				last;
-
-	/* Trim leading and trailing whitespace and NULs. */
-	while (len > 0 && (src[0] == ' ' || src[0] == '\t' || src[0] == '\n' ||
-	    src[0] == '\0' || src[0] == 0xff))
-		++src, --len;
-	while (len > 0 && (src[len-1] == ' ' || src[len-1] == '\t' ||
-	    src[len-1] == '\n' || src[len-1] == '\0' || src[len-1] == 0xff))
-		--len;
-
-	last = 0xff;
-	while (len > 0) {
-		switch (*src) {
-		case ' ':
-		case '\t':
-		case '\n':
-		case '\0':
-		case 0xff:
-			/* Collapse whitespace and NULs to a single space. */
-			if (last != ' ')
-				*dst++ = ' ';
-			last = ' ';
-			break;
-		case '\\':
-			/* Quote backslashes. */
-			*dst++ = '\\';
-			*dst++ = '\\';
-			last = '\\';
-			break;
-		default:
-			if (*src < 0x20 || *src >= 0x80) {
-				/* Non-printable characters to octal. */
-				*dst++ = '\\';
-				*dst++ = ((*src & 0300) >> 6) + '0';
-				*dst++ = ((*src & 0070) >> 3) + '0';
-				*dst++ = ((*src & 0007) >> 0) + '0';
-			} else {
-				/* Copy normal characters. */
-				*dst++ = *src;
-			}
-			last = *src;
-			break;
-		}
-		++src, --len;
-	}
-
-	*dst++ = 0;
-}
-
-struct scsi_quirk_inquiry_pattern {
-	struct scsi_inquiry_pattern	pattern;
-	u_int16_t			quirks;
-};
-
-const struct scsi_quirk_inquiry_pattern scsi_quirk_patterns[] = {
-	{{T_CDROM, T_REMOV,
-	 "PLEXTOR", "CD-ROM PX-40TS", "1.01"},    SDEV_NOSYNC},
-
-	{{T_DIRECT, T_FIXED,
-	 "MICROP  ", "1588-15MBSUN0669", ""},     SDEV_AUTOSAVE},
-	{{T_DIRECT, T_FIXED,
-	 "DEC     ", "RZ55     (C) DEC", ""},     SDEV_AUTOSAVE},
-	{{T_DIRECT, T_FIXED,
-	 "EMULEX  ", "MD21/S2     ESDI", "A00"},  SDEV_AUTOSAVE},
-	{{T_DIRECT, T_FIXED,
-	 "IBMRAID ", "0662S",            ""},     SDEV_AUTOSAVE},
-	{{T_DIRECT, T_FIXED,
-	 "IBM     ", "0663H",            ""},     SDEV_AUTOSAVE},
-	{{T_DIRECT, T_FIXED,
-	 "IBM",	  "0664",		 ""},	  SDEV_AUTOSAVE},
-	{{T_DIRECT, T_FIXED,
-	 "IBM     ", "H3171-S2",         ""},	  SDEV_AUTOSAVE},
-	{{T_DIRECT, T_FIXED,
-	 "IBM     ", "KZ-C",		 ""},	  SDEV_AUTOSAVE},
-	/* Broken IBM disk */
-	{{T_DIRECT, T_FIXED,
-	 ""	   , "DFRSS2F",		 ""},	  SDEV_AUTOSAVE},
-	{{T_DIRECT, T_FIXED,
-	 "QUANTUM ", "ELS85S          ", ""},	  SDEV_AUTOSAVE},
-	{{T_DIRECT, T_REMOV,
-	 "iomega", "jaz 1GB",		 ""},	  SDEV_NOTAGS},
-        {{T_DIRECT, T_FIXED,
-         "MICROP", "4421-07",		 ""},     SDEV_NOTAGS},
-        {{T_DIRECT, T_FIXED,
-         "SEAGATE", "ST150176LW",        "0002"}, SDEV_NOTAGS},
-        {{T_DIRECT, T_FIXED,
-         "HP", "C3725S",		 ""},     SDEV_NOTAGS},
-        {{T_DIRECT, T_FIXED,
-         "IBM", "DCAS",			 ""},     SDEV_NOTAGS},
-
-	{{T_SEQUENTIAL, T_REMOV,
-	 "SONY    ", "SDT-5000        ", "3."},   SDEV_NOSYNC|SDEV_NOWIDE},
-	{{T_SEQUENTIAL, T_REMOV,
-	 "WangDAT ", "Model 1300      ", "02.4"}, SDEV_NOSYNC|SDEV_NOWIDE},
-	{{T_SEQUENTIAL, T_REMOV,
-	 "WangDAT ", "Model 2600      ", "01.7"}, SDEV_NOSYNC|SDEV_NOWIDE},
-	{{T_SEQUENTIAL, T_REMOV,
-	 "WangDAT ", "Model 3200      ", "02.2"}, SDEV_NOSYNC|SDEV_NOWIDE},
-
-	/* ATAPI device quirks */
-        {{T_CDROM, T_REMOV,
-         "CR-2801TE", "", "1.07"},              ADEV_NOSENSE},
-        {{T_CDROM, T_REMOV,
-         "CREATIVECD3630E", "", "AC101"},       ADEV_NOSENSE},
-        {{T_CDROM, T_REMOV,
-         "FX320S", "", "q01"},                  ADEV_NOSENSE},
-        {{T_CDROM, T_REMOV,
-         "GCD-R580B", "", "1.00"},              ADEV_LITTLETOC},
-        {{T_CDROM, T_REMOV,
-         "MATSHITA CR-574", "", "1.02"},        ADEV_NOCAPACITY},
-        {{T_CDROM, T_REMOV,
-         "MATSHITA CR-574", "", "1.06"},        ADEV_NOCAPACITY},
-        {{T_CDROM, T_REMOV,
-         "Memorex CRW-2642", "", "1.0g"},       ADEV_NOSENSE},
-        {{T_CDROM, T_REMOV,
-         "SANYO CRD-256P", "", "1.02"},         ADEV_NOCAPACITY},
-        {{T_CDROM, T_REMOV,
-         "SANYO CRD-254P", "", "1.02"},         ADEV_NOCAPACITY},
-        {{T_CDROM, T_REMOV,
-         "SANYO CRD-S54P", "", "1.08"},         ADEV_NOCAPACITY},
-        {{T_CDROM, T_REMOV,
-         "CD-ROM  CDR-S1", "", "1.70"},         ADEV_NOCAPACITY}, /* Sanyo */
-        {{T_CDROM, T_REMOV,
-         "CD-ROM  CDR-N16", "", "1.25"},        ADEV_NOCAPACITY}, /* Sanyo */
-        {{T_CDROM, T_REMOV,
-         "UJDCD8730", "", "1.14"},              ADEV_NODOORLOCK}, /* Acer */
-};
-
-void
-scsibus_printlink(struct scsi_link *link)
-{
-	char				 visbuf[65];
-	struct scsi_inquiry_data	*inqbuf;
-	u_int8_t			*id;
-	int				 i;
-
-	printf(" targ %d lun %d: ", link->target, link->lun);
-
-	inqbuf = &link->inqdata;
-
-	scsi_strvis(visbuf, inqbuf->vendor, 8);
-	printf("<%s, ", visbuf);
-	scsi_strvis(visbuf, inqbuf->product, 16);
-	printf("%s, ", visbuf);
-	scsi_strvis(visbuf, inqbuf->revision, 4);
-	printf("%s>", visbuf);
-
-#ifdef SCSIDEBUG
-	if (ISSET(link->flags, SDEV_ATAPI))
-		printf(" ATAPI");
-	else if (SID_ANSII_REV(inqbuf) < SCSI_REV_SPC)
-		printf(" SCSI/%d", SID_ANSII_REV(inqbuf));
-	else if (SID_ANSII_REV(inqbuf) == SCSI_REV_SPC)
-		printf(" SCSI/SPC");
-	else
-		printf(" SCSI/SPC-%d", SID_ANSII_REV(inqbuf) - 2);
-#endif /* SCSIDEBUG */
-
-	if (ISSET(link->flags, SDEV_REMOVABLE))
-		printf(" removable");
-
-	if (link->id != NULL && link->id->d_type != DEVID_NONE) {
-		id = (u_int8_t *)(link->id + 1);
-		switch (link->id->d_type) {
-		case DEVID_NAA:
-			printf(" naa.");
-			break;
-		case DEVID_EUI:
-			printf(" eui.");
-			break;
-		case DEVID_T10:
-			printf(" t10.");
-			break;
-		case DEVID_SERIAL:
-			printf(" serial.");
-			break;
-		case DEVID_WWN:
-			printf(" wwn.");
-			break;
-		}
-
-		if (ISSET(link->id->d_flags, DEVID_F_PRINT)) {
-			for (i = 0; i < link->id->d_len; i++) {
-				if (id[i] == '\0' || id[i] == ' ') {
-					/* skip leading blanks */
-					/* collapse multiple blanks into one */
-					if (i > 0 && id[i-1] != id[i])
-						printf("_");
-				} else if (id[i] < 0x20 || id[i] >= 0x80) {
-					/* non-printable characters */
-					printf("~");
-				} else {
-					/* normal characters */
-					printf("%c", id[i]);
-				}
-			}
-		} else {
-			for (i = 0; i < link->id->d_len; i++)
-				printf("%02x", id[i]);
-		}
-	}
-#ifdef SCSIDEBUG
-	printf("\n");
-	sc_print_addr(link);
-	printf("state %u, luns %u, openings %u\n",
-	    link->state, link->bus->sb_luns, link->openings);
-
-	sc_print_addr(link);
-	printf("flags (0x%04x) ", link->flags);
-	scsi_show_flags(link->flags, flagnames);
-	printf("\n");
-
-	sc_print_addr(link);
-	printf("quirks (0x%04x) ", link->quirks);
-	scsi_show_flags(link->quirks, quirknames);
-#endif /* SCSIDEBUG */
-}
-
-/*
- * Print out autoconfiguration information for a subdevice.
- *
- * This is a slight abuse of 'standard' autoconfiguration semantics,
- * because 'print' functions don't normally print the colon and
- * device information.  However, in this case that's better than
- * either printing redundant information before the attach message,
- * or having the device driver call a special function to print out
- * the standard device information.
- */
-int
-scsibusprint(void *aux, const char *pnp)
-{
-	struct scsi_attach_args		*sa = aux;
-
-	if (pnp != NULL)
-		printf("%s", pnp);
-
-	scsibus_printlink(sa->sa_sc_link);
-
-	return UNCONF;
+	/* Probe lun on target. *NOT* a dumbscan! */
+	return scsi_probe_link(sb, target, lun, 0);
 }
 
 /*
@@ -815,7 +481,7 @@ scsibusprint(void *aux, const char *pnp)
  * Return 0 if further LUNs are possible, EINVAL if not.
  */
 int
-scsi_probedev(struct scsibus_softc *sb, int target, int lun, int dumbscan)
+scsi_probe_link(struct scsibus_softc *sb, int target, int lun, int dumbscan)
 {
 	struct scsi_attach_args			 sa;
 	const struct scsi_quirk_inquiry_pattern	*finger;
@@ -1027,7 +693,7 @@ scsi_probedev(struct scsibus_softc *sb, int target, int lun, int dumbscan)
 
 	if ((cf = config_search(scsibussubmatch, (struct device *)sb,
 	    &sa)) == 0) {
-		scsibusprint(&sa, sb->sc_dev.dv_xname);
+		scsibussubprint(&sa, sb->sc_dev.dv_xname);
 		printf(" not configured\n");
 		goto free_devid;
 	}
@@ -1049,7 +715,7 @@ scsi_probedev(struct scsibus_softc *sb, int target, int lun, int dumbscan)
 		dma_free(usbinqbuf, sizeof(*usbinqbuf));
 	}
 
-	scsi_add_link(sb, link);
+	scsi_add_link(link);
 
 	/*
 	 * Generate a TEST_UNIT_READY command. This gives drivers waiting for
@@ -1064,7 +730,7 @@ scsi_probedev(struct scsibus_softc *sb, int target, int lun, int dumbscan)
 	    scsi_autoconf | SCSI_IGNORE_ILLEGAL_REQUEST |
 	    SCSI_IGNORE_NOT_READY | SCSI_IGNORE_MEDIA_CHANGE);
 
-	config_attach((struct device *)sb, cf, &sa, scsibusprint);
+	config_attach((struct device *)sb, cf, &sa, scsibussubprint);
 
 	return 0;
 
@@ -1080,6 +746,323 @@ bad:
 free:
 	free(link, M_DEVBUF, sizeof(*link));
 	return rslt;
+}
+
+int
+scsi_detach(struct scsibus_softc *sb, int target, int lun, int flags)
+{
+	if (target == -1 && lun == -1)
+		return scsi_detach_bus(sb, flags);
+	else if (lun == -1)
+		return scsi_detach_target(sb, target, flags);
+	else
+		return scsi_detach_lun(sb, target, lun, flags);
+}
+
+int
+scsi_detach_bus(struct scsibus_softc *sb, int flags)
+{
+	struct scsi_link	*link, *tmp;
+	int			 r, rv = 0;
+
+	/* Detach all links from bus. */
+	SLIST_FOREACH_SAFE(link, &sb->sc_link_list, bus_list, tmp) {
+		r = scsi_detach_link(link, flags);
+		if (r != 0 && r != ENXIO)
+			rv = r;
+	}
+	return rv;
+}
+
+int
+scsi_detach_target(struct scsibus_softc *sb, int target, int flags)
+{
+	struct scsi_link	*link, *tmp;
+	int			 r, rv = 0;
+
+	/* Detach all links from target. */
+	SLIST_FOREACH_SAFE(link, &sb->sc_link_list, bus_list, tmp) {
+		if (link->target == target) {
+			r = scsi_detach_link(link, flags);
+			if (r != 0 && r != ENXIO)
+				rv = r;
+		}
+	}
+	return rv;
+}
+
+int
+scsi_detach_lun(struct scsibus_softc *sb, int target, int lun, int flags)
+{
+	struct scsi_link	*link;
+
+	/* Detach (target, lun) link. */
+	link = scsi_get_link(sb, target, lun);
+	if (link == NULL)
+		return EINVAL;
+
+	return scsi_detach_link(link, flags);
+}
+
+int
+scsi_detach_link(struct scsi_link *link, int flags)
+{
+	struct scsibus_softc		*sb = link->bus;
+	int				 rv;
+
+	if (!ISSET(flags, DETACH_FORCE) && ISSET(link->flags, SDEV_OPEN))
+		return EBUSY;
+
+	/* Detaching a device from scsibus is a five step process. */
+
+	/* 1. Wake up processes sleeping for an xs. */
+	scsi_link_shutdown(link);
+
+	/* 2. Detach the device. */
+	rv = config_detach(link->device_softc, flags);
+
+	if (rv != 0)
+		return rv;
+
+	/* 3. If it's using the openings io allocator, clean that up. */
+	if (ISSET(link->flags, SDEV_OWN_IOPL)) {
+		scsi_iopool_destroy(link->pool);
+		free(link->pool, M_DEVBUF, sizeof(*link->pool));
+	}
+
+	/* 4. Free up its state in the adapter. */
+	if (sb->sb_adapter->dev_free != NULL)
+		sb->sb_adapter->dev_free(link);
+
+	/* 5. Free up its state in the midlayer. */
+	if (link->id != NULL)
+		devid_free(link->id);
+	scsi_remove_link(link);
+	free(link, M_DEVBUF, sizeof(*link));
+
+	return 0;
+}
+
+struct scsi_link *
+scsi_get_link(struct scsibus_softc *sb, int target, int lun)
+{
+	struct scsi_link *link;
+
+	SLIST_FOREACH(link, &sb->sc_link_list, bus_list) {
+		if (link->target == target && link->lun == lun)
+			return link;
+	}
+
+	return NULL;
+}
+
+void
+scsi_add_link(struct scsi_link *link)
+{
+	SLIST_INSERT_HEAD(&link->bus->sc_link_list, link, bus_list);
+}
+
+void
+scsi_remove_link(struct scsi_link *link)
+{
+	SLIST_REMOVE(&link->bus->sc_link_list, link, scsi_link, bus_list);
+}
+
+void
+scsi_get_target_luns(struct scsi_link *link0, struct scsi_lun_array *lunarray)
+{
+	struct scsi_report_luns_data	*report;
+	int				 i, nluns, rv = 0;
+
+	/* Initialize dumbscan result. Just in case. */
+	report = NULL;
+	for (i = 0; i < link0->bus->sb_luns; i++)
+		lunarray->luns[i] = i;
+	lunarray->count = link0->bus->sb_luns;
+	lunarray->dumbscan = 1;
+
+	/*
+	 * ATAPI, USB and pre-SPC (i.e. pre-SCSI-3) devices can't ask
+	 * for a report of valid LUNs.
+	 */
+	if ((link0->flags & (SDEV_UMASS | SDEV_ATAPI)) != 0 ||
+	    SID_ANSII_REV(&link0->inqdata) < SCSI_REV_SPC)
+		goto dumbscan;
+
+	report = dma_alloc(sizeof(*report), PR_WAITOK);
+	if (report == NULL)
+		goto dumbscan;
+
+	rv = scsi_report_luns(link0, REPORT_NORMAL, report,
+	    sizeof(*report), scsi_autoconf | SCSI_SILENT |
+	    SCSI_IGNORE_ILLEGAL_REQUEST | SCSI_IGNORE_NOT_READY |
+	    SCSI_IGNORE_MEDIA_CHANGE, 10000);
+	if (rv != 0)
+		goto dumbscan;
+
+	/*
+	 * XXX In theory we should check if data is full, which
+	 * would indicate it needs to be enlarged and REPORT
+	 * LUNS tried again. Solaris tries up to 3 times with
+	 * larger sizes for data.
+	 */
+
+	/* Return the reported Type-0 LUNs. Type-0 only! */
+	lunarray->count = 0;
+	lunarray->dumbscan = 0;
+	nluns = _4btol(report->length) / RPL_LUNDATA_SIZE;
+	for (i = 0; i < nluns; i++) {
+		if (report->luns[i].lundata[0] != 0)
+			continue;
+		lunarray->luns[lunarray->count++] =
+		    report->luns[i].lundata[RPL_LUNDATA_T0LUN];
+	}
+
+dumbscan:
+	if (report != NULL)
+		dma_free(report, sizeof(*report));
+}
+
+void
+scsi_strvis(u_char *dst, u_char *src, int len)
+{
+	u_char				last;
+
+	/* Trim leading and trailing whitespace and NULs. */
+	while (len > 0 && (src[0] == ' ' || src[0] == '\t' || src[0] == '\n' ||
+	    src[0] == '\0' || src[0] == 0xff))
+		++src, --len;
+	while (len > 0 && (src[len-1] == ' ' || src[len-1] == '\t' ||
+	    src[len-1] == '\n' || src[len-1] == '\0' || src[len-1] == 0xff))
+		--len;
+
+	last = 0xff;
+	while (len > 0) {
+		switch (*src) {
+		case ' ':
+		case '\t':
+		case '\n':
+		case '\0':
+		case 0xff:
+			/* Collapse whitespace and NULs to a single space. */
+			if (last != ' ')
+				*dst++ = ' ';
+			last = ' ';
+			break;
+		case '\\':
+			/* Quote backslashes. */
+			*dst++ = '\\';
+			*dst++ = '\\';
+			last = '\\';
+			break;
+		default:
+			if (*src < 0x20 || *src >= 0x80) {
+				/* Non-printable characters to octal. */
+				*dst++ = '\\';
+				*dst++ = ((*src & 0300) >> 6) + '0';
+				*dst++ = ((*src & 0070) >> 3) + '0';
+				*dst++ = ((*src & 0007) >> 0) + '0';
+			} else {
+				/* Copy normal characters. */
+				*dst++ = *src;
+			}
+			last = *src;
+			break;
+		}
+		++src, --len;
+	}
+
+	*dst++ = 0;
+}
+
+void
+scsi_print_link(struct scsi_link *link)
+{
+	char				 visbuf[65];
+	struct scsi_inquiry_data	*inqbuf;
+	u_int8_t			*id;
+	int				 i;
+
+	printf(" targ %d lun %d: ", link->target, link->lun);
+
+	inqbuf = &link->inqdata;
+
+	scsi_strvis(visbuf, inqbuf->vendor, 8);
+	printf("<%s, ", visbuf);
+	scsi_strvis(visbuf, inqbuf->product, 16);
+	printf("%s, ", visbuf);
+	scsi_strvis(visbuf, inqbuf->revision, 4);
+	printf("%s>", visbuf);
+
+#ifdef SCSIDEBUG
+	if (ISSET(link->flags, SDEV_ATAPI))
+		printf(" ATAPI");
+	else if (SID_ANSII_REV(inqbuf) < SCSI_REV_SPC)
+		printf(" SCSI/%d", SID_ANSII_REV(inqbuf));
+	else if (SID_ANSII_REV(inqbuf) == SCSI_REV_SPC)
+		printf(" SCSI/SPC");
+	else
+		printf(" SCSI/SPC-%d", SID_ANSII_REV(inqbuf) - 2);
+#endif /* SCSIDEBUG */
+
+	if (ISSET(link->flags, SDEV_REMOVABLE))
+		printf(" removable");
+
+	if (link->id != NULL && link->id->d_type != DEVID_NONE) {
+		id = (u_int8_t *)(link->id + 1);
+		switch (link->id->d_type) {
+		case DEVID_NAA:
+			printf(" naa.");
+			break;
+		case DEVID_EUI:
+			printf(" eui.");
+			break;
+		case DEVID_T10:
+			printf(" t10.");
+			break;
+		case DEVID_SERIAL:
+			printf(" serial.");
+			break;
+		case DEVID_WWN:
+			printf(" wwn.");
+			break;
+		}
+
+		if (ISSET(link->id->d_flags, DEVID_F_PRINT)) {
+			for (i = 0; i < link->id->d_len; i++) {
+				if (id[i] == '\0' || id[i] == ' ') {
+					/* skip leading blanks */
+					/* collapse multiple blanks into one */
+					if (i > 0 && id[i-1] != id[i])
+						printf("_");
+				} else if (id[i] < 0x20 || id[i] >= 0x80) {
+					/* non-printable characters */
+					printf("~");
+				} else {
+					/* normal characters */
+					printf("%c", id[i]);
+				}
+			}
+		} else {
+			for (i = 0; i < link->id->d_len; i++)
+				printf("%02x", id[i]);
+		}
+	}
+#ifdef SCSIDEBUG
+	printf("\n");
+	sc_print_addr(link);
+	printf("state %u, luns %u, openings %u\n",
+	    link->state, link->bus->sb_luns, link->openings);
+
+	sc_print_addr(link);
+	printf("flags (0x%04x) ", link->flags);
+	scsi_show_flags(link->flags, flagnames);
+	printf("\n");
+
+	sc_print_addr(link);
+	printf("quirks (0x%04x) ", link->quirks);
+	scsi_show_flags(link->quirks, quirknames);
+#endif /* SCSIDEBUG */
 }
 
 /*

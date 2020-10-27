@@ -1,4 +1,4 @@
-/*	$OpenBSD: rtsock.c,v 1.299 2020/06/24 22:03:42 cheloha Exp $	*/
+/*	$OpenBSD: rtsock.c,v 1.302 2020/09/23 17:52:58 mvs Exp $	*/
 /*	$NetBSD: rtsock.c,v 1.18 1996/03/29 00:32:10 cgd Exp $	*/
 
 /*
@@ -138,17 +138,23 @@ int		 sysctl_iflist(int, struct walkarg *);
 int		 sysctl_ifnames(struct walkarg *);
 int		 sysctl_rtable_rtstat(void *, size_t *, void *);
 
+/*
+ * Locks used to protect struct members
+ *       I       immutable after creation
+ *       sK      solock (kernel lock)
+ */
 struct rtpcb {
-	struct socket		*rop_socket;
+	struct socket		*rop_socket;		/* [I] */
 
 	SRPL_ENTRY(rtpcb)	rop_list;
 	struct refcnt		rop_refcnt;
 	struct timeout		rop_timeout;
-	unsigned int		rop_msgfilter;
-	unsigned int		rop_flags;
-	u_int			rop_rtableid;
-	unsigned short		rop_proto;
-	u_char			rop_priority;
+	unsigned int		rop_msgfilter;		/* [sK] */
+	unsigned int		rop_flagfilter;		/* [sK] */
+	unsigned int		rop_flags;		/* [sK] */
+	u_int			rop_rtableid;		/* [sK] */
+	unsigned short		rop_proto;		/* [I] */
+	u_char			rop_priority;		/* [sK] */
 };
 #define	sotortpcb(so)	((struct rtpcb *)(so)->so_pcb)
 
@@ -402,6 +408,12 @@ route_ctloutput(int op, struct socket *so, int level, int optname,
 			else
 				rop->rop_priority = prio;
 			break;
+		case ROUTE_FLAGFILTER:
+			if (m == NULL || m->m_len != sizeof(unsigned int))
+				error = EINVAL;
+			else
+				rop->rop_flagfilter = *mtod(m, unsigned int *);
+			break;
 		default:
 			error = ENOPROTOOPT;
 			break;
@@ -420,6 +432,10 @@ route_ctloutput(int op, struct socket *so, int level, int optname,
 		case ROUTE_PRIOFILTER:
 			m->m_len = sizeof(unsigned int);
 			*mtod(m, unsigned int *) = rop->rop_priority;
+			break;
+		case ROUTE_FLAGFILTER:
+			m->m_len = sizeof(unsigned int);
+			*mtod(m, unsigned int *) = rop->rop_flagfilter;
 			break;
 		default:
 			error = ENOPROTOOPT;
@@ -516,9 +532,13 @@ next:
 		/* filter messages that the process does not want */
 		rtm = mtod(m, struct rt_msghdr *);
 		/* but RTM_DESYNC can't be filtered */
-		if (rtm->rtm_type != RTM_DESYNC && rop->rop_msgfilter != 0 &&
-		    !(rop->rop_msgfilter & (1 << rtm->rtm_type)))
-			goto next;
+		if (rtm->rtm_type != RTM_DESYNC) {
+			if (rop->rop_msgfilter != 0 &&
+			    !(rop->rop_msgfilter & (1 << rtm->rtm_type)))
+				goto next;
+			if (ISSET(rop->rop_flagfilter, rtm->rtm_flags))
+				goto next;
+		}
 		switch (rtm->rtm_type) {
 		case RTM_IFANNOUNCE:
 		case RTM_DESYNC:
@@ -2228,7 +2248,7 @@ rtm_validate_proposal(struct rt_addrinfo *info)
  * Definitions of protocols supported in the ROUTE domain.
  */
 
-extern	struct domain routedomain;		/* or at least forward */
+struct domain routedomain;
 
 struct protosw routesw[] = {
 {

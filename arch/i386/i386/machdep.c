@@ -1,4 +1,4 @@
-/*	$OpenBSD: machdep.c,v 1.637 2020/07/22 08:33:43 fcambus Exp $	*/
+/*	$OpenBSD: machdep.c,v 1.640 2020/09/24 11:36:50 deraadt Exp $	*/
 /*	$NetBSD: machdep.c,v 1.214 1996/11/10 03:16:17 thorpej Exp $	*/
 
 /*-
@@ -1099,6 +1099,9 @@ const struct cpu_cpuid_feature cpu_seff0_ecxfeatures[] = {
 const struct cpu_cpuid_feature cpu_seff0_edxfeatures[] = {
 	{ SEFF0EDX_AVX512_4FNNIW, "AVX512FNNIW" },
 	{ SEFF0EDX_AVX512_4FMAPS, "AVX512FMAPS" },
+	{ SEFF0EDX_SRBDS_CTRL,	"SRBDS_CTRL" },
+	{ SEFF0EDX_MD_CLEAR,	"MD_CLEAR" },
+	{ SEFF0EDX_TSXFA,	"TSXFA" },
 	{ SEFF0EDX_IBRS,	"IBRS,IBPB" },
 	{ SEFF0EDX_STIBP,	"STIBP" },
 	{ SEFF0EDX_L1DF,	"L1DF" },
@@ -2952,15 +2955,7 @@ setregs(struct proc *p, struct exec_package *pack, u_long stack,
 	p->p_md.md_flags &= ~MDP_USEDFPU;
 #endif
 
-	/*
-	 * Reset the code segment limit to I386_MAX_EXE_ADDR in the pmap;
-	 * this gets copied into the GDT for GUCODE_SEL by pmap_activate().
-	 * Similarly, reset the base of each of the two thread data
-	 * segments to zero in the pcb; they'll get copied into the
-	 * GDT for GUFS_SEL and GUGS_SEL.
-	 */
-	setsegment(&pmap->pm_codeseg, 0, atop(I386_MAX_EXE_ADDR) - 1,
-	    SDT_MEMERA, SEL_UPL, 1, 1);
+	initcodesegment(&pmap->pm_codeseg);
 	setsegment(&pcb->pcb_threadsegs[TSEG_FS], 0,
 	    atop(VM_MAXUSER_ADDRESS) - 1, SDT_MEMRWA, SEL_UPL, 1, 1);
 	setsegment(&pcb->pcb_threadsegs[TSEG_GS], 0,
@@ -3046,6 +3041,30 @@ setregion(struct region_descriptor *rd, void *base, size_t limit)
 {
 	rd->rd_limit = (int)limit;
 	rd->rd_base = (int)base;
+}
+
+void
+initcodesegment(struct segment_descriptor *cs)
+{
+	if (cpu_pae) {
+		/*
+		 * When code execution is managed using NX feature
+		 * in pmapae.c, GUCODE_SEL should cover userland.
+		 */
+		setsegment(cs, 0, atop(VM_MAXUSER_ADDRESS - 1),
+		    SDT_MEMERA, SEL_UPL, 1, 1);
+	} else {
+		/*
+		 * For pmap.c's non-PAE/NX line-in-the-sand execution, reset
+		 * the code segment limit to I386_MAX_EXE_ADDR in the pmap;
+		 * this gets copied into the GDT for GUCODE_SEL by
+		 * pmap_activate().  Similarly, reset the base of each of
+		 * the two thread data segments to zero in the pcb; they'll
+		 * get copied into the GDT for GUFS_SEL and GUGS_SEL.
+		 */
+		setsegment(cs, 0, atop(I386_MAX_EXE_ADDR - 1),
+		    SDT_MEMERA, SEL_UPL, 1, 1);
+	}
 }
 
 void
@@ -3543,6 +3562,10 @@ idt_vec_free(int vec)
 	unsetgate(&idt[vec]);
 }
 
+const struct sysctl_bounded_args cpuctl_vars[] = {
+	{ CPU_LIDACTION, &lid_action, 0, 2 },
+};
+
 /*
  * machine dependent system variables.
  */
@@ -3551,7 +3574,6 @@ cpu_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
     size_t newlen, struct proc *p)
 {
 	dev_t dev;
-	int val, error;
 
 	switch (name[0]) {
 	case CPU_CONSDEV:
@@ -3610,18 +3632,11 @@ cpu_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		return (sysctl_rdint(oldp, oldlenp, newp, i386_has_sse2));
 	case CPU_XCRYPT:
 		return (sysctl_rdint(oldp, oldlenp, newp, i386_has_xcrypt));
-	case CPU_LIDACTION:
-		val = lid_action;
-		error = sysctl_int(oldp, oldlenp, newp, newlen, &val);
-		if (!error) {
-			if (val < 0 || val > 2)
-				error = EINVAL;
-			else
-				lid_action = val;
-		}
-		return (error);
 #if NPCKBC > 0 && NUKBD > 0
 	case CPU_FORCEUKBD:
+		{
+		int error;
+
 		if (forceukbd)
 			return (sysctl_rdint(oldp, oldlenp, newp, forceukbd));
 
@@ -3629,9 +3644,11 @@ cpu_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		if (forceukbd)
 			pckbc_release_console();
 		return (error);
+		}
 #endif
 	default:
-		return (EOPNOTSUPP);
+		return (sysctl_bounded_arr(cpuctl_vars, nitems(cpuctl_vars),
+		    name, namelen, oldp, oldlenp, newp, newlen));
 	}
 	/* NOTREACHED */
 }

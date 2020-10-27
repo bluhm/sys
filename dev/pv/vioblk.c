@@ -1,4 +1,4 @@
-/*	$OpenBSD: vioblk.c,v 1.26 2020/07/22 13:16:05 krw Exp $	*/
+/*	$OpenBSD: vioblk.c,v 1.32 2020/10/15 13:22:13 krw Exp $	*/
 
 /*
  * Copyright (c) 2012 Stefan Fritsch.
@@ -399,23 +399,23 @@ vioblk_scsi_cmd(struct scsi_xfer *xs)
 	int len, s, timeout, isread, slot, ret, nsegs;
 	int error = XS_DRIVER_STUFFUP;
 	struct scsi_rw *rw;
-	struct scsi_rw_big *rwb;
+	struct scsi_rw_10 *rw10;
 	struct scsi_rw_12 *rw12;
 	struct scsi_rw_16 *rw16;
 	u_int64_t lba = 0;
 	u_int32_t sector_count = 0;
 	uint8_t operation;
 
-	switch (xs->cmd->opcode) {
-	case READ_BIG:
+	switch (xs->cmd.opcode) {
 	case READ_COMMAND:
+	case READ_10:
 	case READ_12:
 	case READ_16:
 		operation = VIRTIO_BLK_T_IN;
 		isread = 1;
 		break;
-	case WRITE_BIG:
 	case WRITE_COMMAND:
+	case WRITE_10:
 	case WRITE_12:
 	case WRITE_16:
 		operation = VIRTIO_BLK_T_OUT;
@@ -447,7 +447,7 @@ vioblk_scsi_cmd(struct scsi_xfer *xs)
 		return;
 
 	default:
-		printf("%s cmd 0x%02x\n", __func__, xs->cmd->opcode);
+		printf("%s cmd 0x%02x\n", __func__, xs->cmd.opcode);
 	case MODE_SENSE:
 	case MODE_SENSE_BIG:
 	case REPORT_LUNS:
@@ -460,19 +460,19 @@ vioblk_scsi_cmd(struct scsi_xfer *xs)
 	 * layout as 10-byte READ/WRITE commands.
 	 */
 	if (xs->cmdlen == 6) {
-		rw = (struct scsi_rw *)xs->cmd;
+		rw = (struct scsi_rw *)&xs->cmd;
 		lba = _3btol(rw->addr) & (SRW_TOPADDR << 16 | 0xffff);
 		sector_count = rw->length ? rw->length : 0x100;
 	} else if (xs->cmdlen == 10) {
-		rwb = (struct scsi_rw_big *)xs->cmd;
-		lba = _4btol(rwb->addr);
-		sector_count = _2btol(rwb->length);
+		rw10 = (struct scsi_rw_10 *)&xs->cmd;
+		lba = _4btol(rw10->addr);
+		sector_count = _2btol(rw10->length);
 	} else if (xs->cmdlen == 12) {
-		rw12 = (struct scsi_rw_12 *)xs->cmd;
+		rw12 = (struct scsi_rw_12 *)&xs->cmd;
 		lba = _4btol(rw12->addr);
 		sector_count = _4btol(rw12->length);
 	} else if (xs->cmdlen == 16) {
-		rw16 = (struct scsi_rw_16 *)xs->cmd;
+		rw16 = (struct scsi_rw_16 *)&xs->cmd;
 		lba = _8btol(rw16->addr);
 		sector_count = _4btol(rw16->length);
 	}
@@ -562,7 +562,7 @@ out_done:
 void
 vioblk_scsi_inq(struct scsi_xfer *xs)
 {
-	struct scsi_inquiry *inq = (struct scsi_inquiry *)xs->cmd;
+	struct scsi_inquiry *inq = (struct scsi_inquiry *)&xs->cmd;
 	struct scsi_inquiry_data inqd;
 
 	if (ISSET(inq->flags, SI_EVPD)) {
@@ -573,14 +573,15 @@ vioblk_scsi_inq(struct scsi_xfer *xs)
 	bzero(&inqd, sizeof(inqd));
 
 	inqd.device = T_DIRECT;
-	inqd.version = 0x05; /* SPC-3 */
-	inqd.response_format = 2;
-	inqd.additional_length = 32;
+	inqd.version = SCSI_REV_SPC3;
+	inqd.response_format = SID_SCSI2_RESPONSE;
+	inqd.additional_length = SID_SCSI2_ALEN;
 	inqd.flags |= SID_CmdQue;
 	bcopy("VirtIO  ", inqd.vendor, sizeof(inqd.vendor));
 	bcopy("Block Device    ", inqd.product, sizeof(inqd.product));
 
-	bcopy(&inqd, xs->data, MIN(sizeof(inqd), xs->datalen));
+	scsi_copy_internal_data(xs, &inqd, sizeof(inqd));
+
 	vioblk_scsi_done(xs, XS_NOERROR);
 }
 

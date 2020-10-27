@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_unix.c,v 1.68 2020/07/06 13:33:09 pirofti Exp $	*/
+/*	$OpenBSD: uvm_unix.c,v 1.71 2020/10/21 21:24:57 deraadt Exp $	*/
 /*	$NetBSD: uvm_unix.c,v 1.18 2000/09/13 15:00:25 thorpej Exp $	*/
 
 /*
@@ -108,11 +108,18 @@ void
 uvm_grow(struct proc *p, vaddr_t sp)
 {
 	struct vmspace *vm = p->p_vmspace;
+	vm_map_t map = &vm->vm_map;
 	int si;
 
 	/* For user defined stacks (from sendsig). */
 	if (sp < (vaddr_t)vm->vm_maxsaddr)
 		return;
+#ifdef MACHINE_STACK_GROWS_UP
+	if (sp >= (vaddr_t)vm->vm_minsaddr)
+		return;
+#endif
+
+	vm_map_lock(map);
 
 	/* For common case of already allocated (from trap). */
 #ifdef MACHINE_STACK_GROWS_UP
@@ -120,7 +127,7 @@ uvm_grow(struct proc *p, vaddr_t sp)
 #else
 	if (sp >= (vaddr_t)vm->vm_minsaddr - ptoa(vm->vm_ssize))
 #endif
-		return;
+		goto out;
 
 	/* Really need to check vs limit and increment stack size if ok. */
 #ifdef MACHINE_STACK_GROWS_UP
@@ -130,6 +137,8 @@ uvm_grow(struct proc *p, vaddr_t sp)
 #endif
 	if (vm->vm_ssize + si <= atop(lim_cur(RLIMIT_STACK)))
 		vm->vm_ssize += si;
+out:
+	vm_map_unlock(map);
 }
 
 #ifndef SMALL_KERNEL
@@ -148,7 +157,7 @@ uvm_grow(struct proc *p, vaddr_t sp)
  * When then pass that range to the walk callback with 'start'
  * pointing to the start of the present range, 'realend' pointing
  * to the first absent page (or the end of the entry), and 'end'
- * pointing to the page page the last absent page (or the end of
+ * pointing to the page past the last absent page (or the end of
  * the entry).
  *
  * Note that if the first page of the amap is empty then the callback

@@ -1,4 +1,4 @@
-/*	$OpenBSD: pmap.c,v 1.205 2019/12/19 17:46:32 mpi Exp $	*/
+/*	$OpenBSD: pmap.c,v 1.209 2020/09/24 11:36:50 deraadt Exp $	*/
 /*	$NetBSD: pmap.c,v 1.91 2000/06/02 17:46:37 thorpej Exp $	*/
 
 /*
@@ -375,8 +375,6 @@ struct pmap __attribute__ ((aligned (32))) kernel_pmap_store;
 int nkpde = NKPTP;
 int nkptp_max = 1024 - (KERNBASE / NBPD) - 1;
 
-extern int cpu_pae;
-
 /*
  * pg_g_kern:  if CPU is affected by Meltdown pg_g_kern is 0,
  * otherwise it is is set to PG_G.  pmap_pg_g will be dervied
@@ -584,6 +582,9 @@ pmap_exec_account(struct pmap *pm, vaddr_t va,
 	if ((opte ^ npte) & PG_X)
 		pmap_tlb_shootpage(pm, va);
 			
+	if (cpu_pae)
+		return;
+
 	/*
 	 * Executability was removed on the last executable change.
 	 * Reset the code segment to something conservative and
@@ -596,12 +597,12 @@ pmap_exec_account(struct pmap *pm, vaddr_t va,
 		struct trapframe *tf = curproc->p_md.md_regs;
 		struct pcb *pcb = &curproc->p_addr->u_pcb;
 
+		KERNEL_LOCK();
 		pm->pm_hiexec = I386_MAX_EXE_ADDR;
 		setcslimit(pm, tf, pcb, I386_MAX_EXE_ADDR);
+		KERNEL_UNLOCK();
 	}
 }
-
-#define SEGDESC_LIMIT(sd) (ptoa(((sd).sd_hilimit << 16) | (sd).sd_lolimit))
 
 /*
  * Fixup the code segment to cover all potential executable mappings.
@@ -609,12 +610,15 @@ pmap_exec_account(struct pmap *pm, vaddr_t va,
  * returns 0 if no changes to the code segment were made.
  */
 int
-pmap_exec_fixup(struct vm_map *map, struct trapframe *tf, struct pcb *pcb)
+pmap_exec_fixup(struct vm_map *map, struct trapframe *tf, vaddr_t gdt_cs,
+    struct pcb *pcb)
 {
 	struct vm_map_entry *ent;
 	struct pmap *pm = vm_map_pmap(map);
 	vaddr_t va = 0;
-	vaddr_t pm_cs, gdt_cs;
+	vaddr_t pm_cs;
+
+	KERNEL_LOCK();
 
 	vm_map_lock(map);
 	RBT_FOREACH_REVERSE(ent, uvm_map_addr, &map->addr) {
@@ -629,8 +633,9 @@ pmap_exec_fixup(struct vm_map *map, struct trapframe *tf, struct pcb *pcb)
 		va = trunc_page(ent->end - 1);
 	vm_map_unlock(map);
 
+	KERNEL_ASSERT_LOCKED();
+
 	pm_cs = SEGDESC_LIMIT(pm->pm_codeseg);
-	gdt_cs = SEGDESC_LIMIT(curcpu()->ci_gdt[GUCODE_SEL].sd);
 
 	/*
 	 * Another thread running on another cpu can change
@@ -642,6 +647,7 @@ pmap_exec_fixup(struct vm_map *map, struct trapframe *tf, struct pcb *pcb)
 	 */
 	if (va <= pm->pm_hiexec && pm_cs == pm->pm_hiexec &&
 	    gdt_cs == pm->pm_hiexec) {
+		KERNEL_UNLOCK();
 		return (0);
 	}
 
@@ -654,6 +660,7 @@ pmap_exec_fixup(struct vm_map *map, struct trapframe *tf, struct pcb *pcb)
 	 */
 	setcslimit(pm, tf, pcb, va);
 
+	KERNEL_UNLOCK();
 	return (1);
 }
 
@@ -846,7 +853,7 @@ pmap_kenter_pa(vaddr_t va, paddr_t pa, vm_prot_t prot)
 		((pa & PMAP_WC) ? pmap_pg_wc : 0));
 	if (pmap_valid_entry(bits)) {
 		if (pa & PMAP_NOCACHE && (bits & PG_N) == 0)
-			wbinvd();
+			wbinvd_on_all_cpus();
 		/* NB. - this should not happen. */
 		pmap_tlb_shootpage(pmap_kernel(), va);
 		pmap_tlb_shootwait();
@@ -1346,8 +1353,7 @@ pmap_create(void)
 	pmap->pm_hiexec = 0;
 	pmap->pm_flags = 0;
 
-	setsegment(&pmap->pm_codeseg, 0, atop(I386_MAX_EXE_ADDR) - 1,
-	    SDT_MEMERA, SEL_UPL, 1, 1);
+	initcodesegment(&pmap->pm_codeseg);
 
 	pmap_pinit_pd(pmap);
 	return (pmap);
@@ -1625,7 +1631,7 @@ pmap_flush_cache(vaddr_t addr, vsize_t len)
 	vaddr_t i;
 
 	if (curcpu()->ci_cflushsz == 0) {
-		wbinvd();
+		wbinvd_on_all_cpus();
 		return;
 	}
 	
@@ -2464,7 +2470,7 @@ enter_now:
 
 	if (pmap_valid_entry(opte)) {
 		if (nocache && (opte & PG_N) == 0)
-			wbinvd(); /* XXX clflush before we enter? */
+			wbinvd_on_all_cpus(); /* XXX clflush before we enter? */
 		pmap_tlb_shootpage(pmap, va);
 	}
 

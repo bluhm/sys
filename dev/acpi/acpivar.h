@@ -1,4 +1,4 @@
-/*	$OpenBSD: acpivar.h,v 1.109 2020/05/14 13:07:10 kettenis Exp $	*/
+/*	$OpenBSD: acpivar.h,v 1.111 2020/08/27 01:08:55 jmatthew Exp $	*/
 /*
  * Copyright (c) 2005 Thorsten Lockert <tholo@sigmasoft.com>
  *
@@ -247,7 +247,6 @@ struct acpi_softc {
 		int slp_typa;
 		int slp_typb;
 	}			sc_sleeptype[6];
-	int			sc_maxgpe;
 	int			sc_lastgpe;
 
 	struct gpe_block	*gpe_table;
@@ -279,6 +278,8 @@ struct acpi_softc {
 	int			sc_pse;		/* passive cooling enabled */
 
 	int			sc_flags;
+
+	int			sc_skip_processor;
 };
 
 extern struct acpi_softc *acpi_softc;

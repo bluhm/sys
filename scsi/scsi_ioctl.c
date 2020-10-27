@@ -1,4 +1,4 @@
-/*	$OpenBSD: scsi_ioctl.c,v 1.64 2020/07/16 14:44:55 krw Exp $	*/
+/*	$OpenBSD: scsi_ioctl.c,v 1.67 2020/09/22 19:32:53 krw Exp $	*/
 /*	$NetBSD: scsi_ioctl.c,v 1.23 1996/10/12 23:23:17 christos Exp $	*/
 
 /*
@@ -45,6 +45,7 @@
 #include <sys/fcntl.h>
 
 #include <scsi/scsi_all.h>
+#include <scsi/scsi_debug.h>
 #include <scsi/scsiconf.h>
 
 #include <sys/scsiio.h>
@@ -109,7 +110,7 @@ scsi_ioc_cmd(struct scsi_link *link, scsireq_t *screq)
 	if (xs == NULL)
 		return ENOMEM;
 
-	memcpy(xs->cmd, screq->cmd, screq->cmdlen);
+	memcpy(&xs->cmd, screq->cmd, screq->cmdlen);
 	xs->cmdlen = screq->cmdlen;
 
 	if (screq->datalen > 0) {
@@ -204,7 +205,7 @@ scsi_ioc_ata_cmd(struct scsi_link *link, atareq_t *atareq)
 	if (xs == NULL)
 		return ENOMEM;
 
-	cdb = (struct scsi_ata_passthru_12 *)xs->cmd;
+	cdb = (struct scsi_ata_passthru_12 *)&xs->cmd;
 	cdb->opcode = ATA_PASSTHRU_12;
 
 	if (atareq->datalen > 0) {
@@ -299,7 +300,7 @@ scsi_do_ioctl(struct scsi_link *link, u_long cmd, caddr_t addr, int flag)
 	case SCIOCIDENTIFY: {
 		struct scsi_addr *sca = (struct scsi_addr *)addr;
 
-		if ((link->flags & (SDEV_ATAPI | SDEV_UMASS)) == 0)
+		if (!ISSET(link->flags, (SDEV_ATAPI | SDEV_UMASS)))
 			/* A 'real' SCSI target. */
 			sca->type = TYPE_SCSI;
 		else
