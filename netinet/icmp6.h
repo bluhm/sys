@@ -594,7 +594,7 @@ struct mbuf	*icmp6_do_error(struct mbuf *, int, int, int);
 void		 icmp6_error(struct mbuf *, int, int, int);
 int		 icmp6_input(struct mbuf **, int *, int, int);
 void		 icmp6_fasttimo(void);
-int		 icmp6_reflect(struct mbuf *, size_t, struct sockaddr *);
+int		 icmp6_reflect(struct mbuf **, size_t, struct sockaddr *);
 void		 icmp6_prepare(struct mbuf *);
 void		 icmp6_redirect_input(struct mbuf *, int);
 void		 icmp6_redirect_output(struct mbuf *, struct rtentry *);
