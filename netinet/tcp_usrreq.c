@@ -326,8 +326,10 @@ tcp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		 * template for a listening socket and hence the kernel
 		 * will panic.
 		 */
-		if ((so->so_state & (SS_ISCONNECTED|SS_ISCONNECTING)) != 0)
+		if ((so->so_state & (SS_ISCONNECTED|SS_ISCONNECTING)) != 0) {
 			(void) tcp_output(tp);
+			tcp_rcvwnd_update(tp);
+		}
 		break;
 
 	/*

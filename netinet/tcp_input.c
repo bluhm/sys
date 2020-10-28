@@ -1053,19 +1053,7 @@ findpcb:
 	 */
 	hdroptlen = iphlen + off;
 
-	/*
-	 * Calculate amount of space in receive window,
-	 * and then do TCP input processing.
-	 * Receive window is amount of space in rcv queue,
-	 * but not less than advertised window.
-	 */
-	{ int win;
-
-	win = sbspace(so, &so->so_rcv);
-	if (win < 0)
-		win = 0;
-	tp->rcv_wnd = imax(win, (int)(tp->rcv_adv - tp->rcv_nxt));
-	}
+	tcp_rcvwnd_update(tp);
 
 	/* Reset receive buffer auto scaling when not in bulk receive mode. */
 	tp->rfbuf_cnt = 0;

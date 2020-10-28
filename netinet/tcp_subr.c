@@ -887,6 +887,24 @@ tcp_mtudisc_increase(struct inpcb *inp, int errno)
 }
 
 /*
+ * Calculate amount of space in receive window,
+ * and then do TCP input processing.
+ * Receive window is amount of space in rcv queue,
+ * but not less than advertised window.
+ */
+void
+tcp_rcvwnd_update(struct tcpcb *tp)
+{
+	struct socket *so = tp->t_inpcb->inp_socket;
+	int win;
+
+	win = sbspace(so, &so->so_rcv);
+	if (win < 0)
+		win = 0;
+	tp->rcv_wnd = imax(win, (int)(tp->rcv_adv - tp->rcv_nxt));
+}
+
+/*
  * Generate new ISNs with a method based on RFC1948
  */
 #define TCP_ISS_CONN_INC 4096

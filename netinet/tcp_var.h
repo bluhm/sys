@@ -679,6 +679,7 @@ void	 tcp_mtudisc_increase(struct inpcb *, int);
 void	tcp6_mtudisc(struct inpcb *, int);
 void	tcp6_mtudisc_callback(struct sockaddr_in6 *, u_int);
 #endif
+void     tcp_rcvwnd_update(struct tcpcb *);
 struct tcpcb *
 	 tcp_newtcpcb(struct inpcb *);
 void	 tcp_notify(struct inpcb *, int);
