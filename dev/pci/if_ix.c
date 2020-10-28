@@ -1048,7 +1048,7 @@ ixgbe_legacy_intr(void *arg)
 
 	rv = ixgbe_intr(sc);
 	if (rv == 0) {
-		ixgbe_enable_queues(sc);
+		ixgbe_enable_intr(sc);
 		return (0);
 	}
 
@@ -1058,7 +1058,7 @@ ixgbe_legacy_intr(void *arg)
 		ixgbe_rxrefill(rxr);
 	}
 
-	ixgbe_enable_queues(sc);
+	ixgbe_enable_queue(sc, sc->queues[0].msix);
 	return (rv);
 }
 
