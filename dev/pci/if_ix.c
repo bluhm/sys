@@ -174,7 +174,6 @@ void	ixgbe_handle_phy(struct ix_softc *);
 /* Legacy (single vector interrupt handler */
 int	ixgbe_legacy_intr(void *);
 void	ixgbe_enable_queue(struct ix_softc *, uint32_t);
-void	ixgbe_enable_queues(struct ix_softc *);
 void	ixgbe_disable_queue(struct ix_softc *, uint32_t);
 void	ixgbe_rearm_queue(struct ix_softc *, uint32_t);
 
@@ -535,7 +534,6 @@ ixgbe_ioctl(struct ifnet * ifp, u_long command, caddr_t data)
 			ixgbe_disable_intr(sc);
 			ixgbe_iff(sc);
 			ixgbe_enable_intr(sc);
-			ixgbe_enable_queues(sc);
 		}
 		error = 0;
 	}
@@ -849,7 +847,6 @@ ixgbe_init(void *arg)
 
 	/* And now turn on interrupts */
 	ixgbe_enable_intr(sc);
-	ixgbe_enable_queues(sc);
 
 	/* Now inform the stack we're ready */
 	ifp->if_flags |= IFF_RUNNING;
@@ -985,16 +982,6 @@ ixgbe_enable_queue(struct ix_softc *sc, uint32_t vector)
 }
 
 void
-ixgbe_enable_queues(struct ix_softc *sc)
-{
-	struct ix_queue *que;
-	int i;
-
-	for (i = 0, que = sc->queues; i < sc->num_queues; i++, que++)
-		ixgbe_enable_queue(sc, que->msix);
-}
-
-void
 ixgbe_disable_queue(struct ix_softc *sc, uint32_t vector)
 {
 	uint64_t queue = 1ULL << vector;
@@ -1082,14 +1069,16 @@ ixgbe_intr(struct ix_softc *sc)
 	struct ixgbe_hw	*hw = &sc->hw;
 	uint32_t	 reg_eicr, mod_mask, msf_mask;
 
-	reg_eicr = IXGBE_READ_REG(&sc->hw, IXGBE_EICR);
-	if (reg_eicr == 0) {
-		ixgbe_enable_intr(sc);
-		return (0);
-	}
+	/* First get the cause */
+	reg_eicr = IXGBE_READ_REG(&sc->hw, IXGBE_EICS);
+	/* Be sure the queue bits are not cleared */
+	reg_eicr &= ~IXGBE_EICR_RTX_QUEUE;
+	/* Clear interrupt with write */
+	IXGBE_WRITE_REG(hw, IXGBE_EICR, reg_eicr);
 
 	/* Link status change */
 	if (reg_eicr & IXGBE_EICR_LSC) {
+		IXGBE_WRITE_REG(hw, IXGBE_EIMC, IXGBE_EIMC_LSC);
 		KERNEL_LOCK();
 		ixgbe_update_link_status(sc);
 		KERNEL_UNLOCK();
@@ -1144,7 +1133,7 @@ ixgbe_intr(struct ix_softc *sc)
 	    (reg_eicr & IXGBE_EICR_GPI_SDP1)) {
 		printf("%s: CRITICAL: FAN FAILURE!! "
 		    "REPLACE IMMEDIATELY!!\n", ifp->if_xname);
-		IXGBE_WRITE_REG(&sc->hw, IXGBE_EICR, IXGBE_EICR_GPI_SDP1);
+		IXGBE_WRITE_REG(hw, IXGBE_EICR, IXGBE_EICR_GPI_SDP1);
 	}
 
 	/* External PHY interrupt */
@@ -1156,6 +1145,8 @@ ixgbe_intr(struct ix_softc *sc)
 		ixgbe_handle_phy(sc);
 		KERNEL_UNLOCK();
 	}
+
+	IXGBE_WRITE_REG(hw, IXGBE_EIMS, IXGBE_EIMS_OTHER | IXGBE_EIMS_LSC);
 
 	return (1);
 }
@@ -3252,6 +3243,8 @@ ixgbe_enable_intr(struct ix_softc *sc)
 {
 	struct ixgbe_hw *hw = &sc->hw;
 	uint32_t	mask, fwsm;
+	struct ix_queue *que;
+	int		i;
 
 	mask = (IXGBE_EIMS_ENABLE_MASK & ~IXGBE_EIMS_RTX_QUEUE);
 	/* Enable Fan Failure detection */
@@ -3298,6 +3291,9 @@ ixgbe_enable_intr(struct ix_softc *sc)
 		mask &= ~IXGBE_EIMS_LSC;
 		IXGBE_WRITE_REG(hw, IXGBE_EIAC, mask);
 	}
+
+	for (i = 0, que = sc->queues; i < sc->num_queues; i++, que++)
+		ixgbe_enable_queue(sc, que->msix);
 
 	IXGBE_WRITE_FLUSH(hw);
 }
