@@ -1061,7 +1061,6 @@ ixgbe_legacy_intr(void *arg)
 
 	rv = ixgbe_intr(sc);
 	if (rv == 0) {
-		ixgbe_enable_queues(sc);
 		return (0);
 	}
 
@@ -1091,8 +1090,14 @@ ixgbe_intr(struct ix_softc *sc)
 		reg_eicr &= ~IXGBE_EICR_RTX_QUEUE;
 		/* Clear interrupt with write */
 		IXGBE_WRITE_REG(hw, IXGBE_EICR, reg_eicr);
-	} else
+	} else {
 		reg_eicr = IXGBE_READ_REG(hw, IXGBE_EICR);
+		if (reg_eicr == 0) {
+			ixgbe_enable_intr(sc);
+			ixgbe_enable_queues(sc);
+			return (0);
+		}
+	}
 
 	/* Link status change */
 	if (reg_eicr & IXGBE_EICR_LSC) {
