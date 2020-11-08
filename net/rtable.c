@@ -1,4 +1,4 @@
-/*	$OpenBSD: rtable.c,v 1.69 2019/06/21 17:11:42 mpi Exp $ */
+/*	$OpenBSD: rtable.c,v 1.72 2020/11/07 09:51:40 denis Exp $ */
 
 /*
  * Copyright (c) 2014-2016 Martin Pieuchot
@@ -363,6 +363,44 @@ void *
 rtable_alloc(unsigned int rtableid, unsigned int alen, unsigned int off)
 {
 	return (art_alloc(rtableid, alen, off));
+}
+
+int
+rtable_setsource(unsigned int rtableid, int af, struct sockaddr *src)
+{
+	struct art_root		*ar;
+
+	if ((ar = rtable_get(rtableid, af)) == NULL)
+		return (EAFNOSUPPORT);
+
+	ar->source = src;
+
+	return (0);
+}
+
+struct sockaddr *
+rtable_getsource(unsigned int rtableid, int af)
+{
+	struct art_root		*ar;
+
+	ar = rtable_get(rtableid, af);
+	if (ar == NULL)
+		return (NULL);
+
+	return (ar->source);
+}
+
+void
+rtable_clearsource(unsigned int rtableid, struct sockaddr *src)
+{
+	struct sockaddr	*addr;
+
+	addr = rtable_getsource(rtableid, src->sa_family);
+	if (addr && (addr->sa_len == src->sa_len)) {
+		if (memcmp(src, addr, addr->sa_len) == 0) {
+			rtable_setsource(rtableid, src->sa_family, NULL);
+		}
+	}
 }
 
 struct rtentry *

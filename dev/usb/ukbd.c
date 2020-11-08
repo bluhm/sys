@@ -1,4 +1,4 @@
-/*	$OpenBSD: ukbd.c,v 1.79 2020/08/23 11:08:02 mglocker Exp $	*/
+/*	$OpenBSD: ukbd.c,v 1.81 2020/11/02 19:45:18 tobhe Exp $	*/
 /*      $NetBSD: ukbd.c,v 1.85 2003/03/11 16:44:00 augustss Exp $        */
 
 /*
@@ -257,6 +257,7 @@ ukbd_attach(struct device *parent, struct device *self, void *aux)
 				switch (uha->uaa->product) {
 				case USB_PRODUCT_APPLE_FOUNTAIN_ISO:
 				case USB_PRODUCT_APPLE_GEYSER_ISO:
+				case USB_PRODUCT_APPLE_GEYSER3_ISO:
 				case USB_PRODUCT_APPLE_WELLSPRING6_ISO:
 				case USB_PRODUCT_APPLE_WELLSPRING8_ISO:
 					sc->sc_munge = ukbd_apple_iso_munge;
@@ -559,6 +560,8 @@ ukbd_apple_munge(void *vsc, uint8_t *ibuf, u_int ilen)
 		{ 66, 0 },	/* F9 -> audio next */
 #endif
 #ifdef __macppc__
+		{ 58, 233 },	/* F1 -> screen brightness down */
+		{ 59, 232 },	/* F2 -> screen brightness up */
 		{ 60, 127 },	/* F3 -> audio mute */
 		{ 61, 129 },	/* F4 -> audio lower */
 		{ 62, 128 },	/* F5 -> audio raise */
