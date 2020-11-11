@@ -495,7 +495,8 @@ vmxnet3_dma_init(struct vmxnet3_softc *sc)
 		    UPT1_RSS_HASH_TYPE_IPV6;
 		rsscfg->hash_func = UPT1_RSS_HASH_FUNC_TOEPLITZ;
 		rsscfg->hash_key_size = sizeof(rsscfg->hash_key);
-		stoeplitz_to_key(rsscfg->hash_key, sizeof(rsscfg->hash_key));
+		stoeplitz_to_key(&rsscfg->hash_key[0],
+		    sizeof(rsscfg->hash_key));
 
 		rsscfg->ind_table_size = sizeof(rsscfg->ind_table);
 		for (i = 0; i < sizeof(rsscfg->ind_table); i++)

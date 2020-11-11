@@ -2932,7 +2932,7 @@ ixgbe_initialize_rss_mapping(struct ix_softc *sc)
 	int i, j, queue_id, table_size, index_mult;
 
 	/* set up random bits */
-	stoeplitz_to_key(&rss_key, sizeof(rss_key));
+	stoeplitz_to_key(&rss_key[0], sizeof(rss_key));
 
 	/* Set multiplier for RETA setup and table size based on MAC */
 	index_mult = 0x1;
