@@ -337,7 +337,7 @@ struct pmap {
  * which it is mapped at.
  */
 struct pv_entry {			/* locked by its list's pvh_lock */
-	struct pv_entry *pv_next;	/* next entry */
+	SLIST_ENTRY(pv_entry) pv_next;	/* next entry */
 	struct pmap *pv_pmap;		/* the pmap */
 	vaddr_t pv_va;			/* the virtual address */
 	struct vm_page *pv_ptp;		/* the vm_page of the PTP */
@@ -524,14 +524,15 @@ kvtopte(vaddr_t va)
 
 #ifndef _LOCORE
 struct pv_entry;
+SLIST_HEAD(pvlist, pv_entry);
 struct vm_page_md {
 	struct mutex pv_mtx;
-	struct pv_entry *pv_list;
+	struct pvlist pv_list;
 };
 
 #define VM_MDPAGE_INIT(pg) do {		\
 	mtx_init(&(pg)->mdpage.pv_mtx, IPL_VM); \
-	(pg)->mdpage.pv_list = NULL;	\
+	SLIST_INIT(&(pg)->mdpage.pv_list);	\
 } while (0)
 #endif	/* !_LOCORE */
 

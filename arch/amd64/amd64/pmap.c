@@ -321,9 +321,9 @@ void pmap_remove_ept(struct pmap *, vaddr_t, vaddr_t);
 void pmap_do_remove_ept(struct pmap *, vaddr_t);
 int pmap_enter_ept(struct pmap *, vaddr_t, paddr_t, vm_prot_t);
 int pmap_remove_pte(struct pmap *, struct vm_page *, pt_entry_t *,
-    vaddr_t, int, struct pv_entry **);
+    vaddr_t, int, struct pvlist *);
 void pmap_remove_ptes(struct pmap *, struct vm_page *, vaddr_t,
-    vaddr_t, vaddr_t, int, struct pv_entry **);
+    vaddr_t, vaddr_t, int, struct pvlist *);
 #define PMAP_REMOVE_ALL		0	/* remove all mappings */
 #define PMAP_REMOVE_SKIPWIRED	1	/* skip wired mappings */
 
@@ -1029,8 +1029,7 @@ pmap_enter_pv(struct vm_page *pg, struct pv_entry *pve, struct pmap *pmap,
 	pve->pv_va = va;
 	pve->pv_ptp = ptp;			/* NULL for kernel pmap */
 	mtx_enter(&pg->mdpage.pv_mtx);
-	pve->pv_next = pg->mdpage.pv_list;	/* add to ... */
-	pg->mdpage.pv_list = pve;		/* ... list */
+	SLIST_INSERT_HEAD(&pg->mdpage.pv_list, pve, pv_next);
 	mtx_leave(&pg->mdpage.pv_mtx);
 }
 
@@ -1044,16 +1043,19 @@ pmap_enter_pv(struct vm_page *pg, struct pv_entry *pve, struct pmap *pmap,
 struct pv_entry *
 pmap_remove_pv(struct vm_page *pg, struct pmap *pmap, vaddr_t va)
 {
-	struct pv_entry *pve, **prevptr;
+	struct pv_entry *pve, *prev;
 
 	mtx_enter(&pg->mdpage.pv_mtx);
-	prevptr = &pg->mdpage.pv_list;
-	while ((pve = *prevptr) != NULL) {
+	prev = NULL;
+	SLIST_FOREACH(pve, &pg->mdpage.pv_list, pv_next) {
 		if (pve->pv_pmap == pmap && pve->pv_va == va) {	/* match? */
-			*prevptr = pve->pv_next;		/* remove it! */
+			if (prev == NULL)
+				SLIST_REMOVE_HEAD(&pg->mdpage.pv_list, pv_next);
+			else
+				SLIST_REMOVE_AFTER(prev, pv_next);
 			break;
 		}
-		prevptr = &pve->pv_next;		/* previous pointer */
+		prev = pve;			/* previous pointer */
 	}
 	mtx_leave(&pg->mdpage.pv_mtx);
 	return(pve);				/* return removed pve */
@@ -1583,7 +1585,7 @@ pmap_copy_page(struct vm_page *srcpg, struct vm_page *dstpg)
 
 void
 pmap_remove_ptes(struct pmap *pmap, struct vm_page *ptp, vaddr_t ptpva,
-    vaddr_t startva, vaddr_t endva, int flags, struct pv_entry **free_pvs)
+    vaddr_t startva, vaddr_t endva, int flags, struct pvlist *free_pvs)
 {
 	struct pv_entry *pve;
 	pt_entry_t *pte = (pt_entry_t *) ptpva;
@@ -1643,10 +1645,8 @@ pmap_remove_ptes(struct pmap *pmap, struct vm_page *ptp, vaddr_t ptpva,
 		/* sync R/M bits */
 		pmap_sync_flags_pte(pg, opte);
 		pve = pmap_remove_pv(pg, pmap, startva);
-		if (pve != NULL) {
-			pve->pv_next = *free_pvs;
-			*free_pvs = pve;
-		}
+		if (pve != NULL)
+			SLIST_INSERT_HEAD(free_pvs, pve, pv_next);
 
 		/* end of "for" loop: time for next pte */
 	}
@@ -1663,7 +1663,7 @@ pmap_remove_ptes(struct pmap *pmap, struct vm_page *ptp, vaddr_t ptpva,
 
 int
 pmap_remove_pte(struct pmap *pmap, struct vm_page *ptp, pt_entry_t *pte,
-    vaddr_t va, int flags, struct pv_entry **free_pvs)
+    vaddr_t va, int flags, struct pvlist *free_pvs)
 {
 	struct pv_entry *pve;
 	struct vm_page *pg;
@@ -1708,10 +1708,8 @@ pmap_remove_pte(struct pmap *pmap, struct vm_page *ptp, pt_entry_t *pte,
 	/* sync R/M bits */
 	pmap_sync_flags_pte(pg, opte);
 	pve = pmap_remove_pv(pg, pmap, va);
-	if (pve != NULL) {
-		pve->pv_next = *free_pvs;
-		*free_pvs = pve;
-	}
+	if (pve != NULL)
+		SLIST_INSERT_HEAD(free_pvs, pve, pv_next);
 
 	return 1;
 }
@@ -1746,7 +1744,7 @@ pmap_do_remove(struct pmap *pmap, vaddr_t sva, vaddr_t eva, int flags)
 	vaddr_t blkendva;
 	struct vm_page *ptp;
 	struct pv_entry *pve;
-	struct pv_entry *free_pvs = NULL;
+	struct pvlist free_pvs = SLIST_HEAD_INITIALIZER(pvlist);
 	vaddr_t va;
 	int shootall = 0, shootself;
 	struct pg_to_free empty_ptps;
@@ -1864,8 +1862,8 @@ pmap_do_remove(struct pmap *pmap, vaddr_t sva, vaddr_t eva, int flags)
 	pmap_tlb_shootwait();
 
 cleanup:
-	while ((pve = free_pvs) != NULL) {
-		free_pvs = pve->pv_next;
+	while ((pve = SLIST_FIRST(&free_pvs)) != NULL) {
+		SLIST_REMOVE_HEAD(&free_pvs, pv_next);
 		pool_put(&pmap_pv_pool, pve);
 	}
 
@@ -1898,7 +1896,7 @@ pmap_page_remove(struct vm_page *pg)
 	TAILQ_INIT(&empty_ptps);
 
 	mtx_enter(&pg->mdpage.pv_mtx);
-	while ((pve = pg->mdpage.pv_list) != NULL) {
+	while ((pve = SLIST_FIRST(&pg->mdpage.pv_list)) != NULL) {
 		pmap_reference(pve->pv_pmap);
 		pm = pve->pv_pmap;
 		mtx_leave(&pg->mdpage.pv_mtx);
@@ -1917,8 +1915,8 @@ pmap_page_remove(struct vm_page *pg)
 		 * again.
 		 */
 		mtx_enter(&pg->mdpage.pv_mtx);
-		if ((pve = pg->mdpage.pv_list) == NULL ||
-		    pve->pv_pmap != pm) {
+		pve = SLIST_FIRST(&pg->mdpage.pv_list);
+		if (pve == NULL || pve->pv_pmap != pm) {
 			mtx_leave(&pg->mdpage.pv_mtx);
 			pmap_unmap_ptes(pm, scr3);	/* unlocks pmap */
 			pmap_destroy(pm);
@@ -1926,7 +1924,7 @@ pmap_page_remove(struct vm_page *pg)
 			continue;
 		}
 
-		pg->mdpage.pv_list = pve->pv_next;
+		SLIST_REMOVE_HEAD(&pg->mdpage.pv_list, pv_next);
 		mtx_leave(&pg->mdpage.pv_mtx);
 
 #ifdef DIAGNOSTIC
@@ -2003,8 +2001,9 @@ pmap_test_attrs(struct vm_page *pg, unsigned int testbits)
 
 	mybits = 0;
 	mtx_enter(&pg->mdpage.pv_mtx);
-	for (pve = pg->mdpage.pv_list; pve != NULL && mybits == 0;
-	    pve = pve->pv_next) {
+	SLIST_FOREACH(pve, &pg->mdpage.pv_list, pv_next) {
+		if (mybits != 0)
+			break;
 		level = pmap_find_pte_direct(pve->pv_pmap, pve->pv_va, &ptes,
 		    &offs);
 		mybits |= (ptes[offs] & testbits);
@@ -2040,7 +2039,7 @@ pmap_clear_attrs(struct vm_page *pg, unsigned long clearbits)
 		atomic_clearbits_int(&pg->pg_flags, clearflags);
 
 	mtx_enter(&pg->mdpage.pv_mtx);
-	for (pve = pg->mdpage.pv_list; pve != NULL; pve = pve->pv_next) {
+	SLIST_FOREACH(pve, &pg->mdpage.pv_list, pv_next) {
 		level = pmap_find_pte_direct(pve->pv_pmap, pve->pv_va, &ptes,
 		    &offs);
 		opte = ptes[offs];
