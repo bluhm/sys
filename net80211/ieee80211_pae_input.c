@@ -1,4 +1,4 @@
-/*	$OpenBSD: ieee80211_pae_input.c,v 1.35 2020/07/13 08:26:26 stsp Exp $	*/
+/*	$OpenBSD: ieee80211_pae_input.c,v 1.37 2020/11/19 20:03:33 krw Exp $	*/
 
 /*-
  * Copyright (c) 2007,2008 Damien Bergamini <damien.bergamini@free.fr>
@@ -366,7 +366,7 @@ ieee80211_recv_4way_msg3(struct ieee80211com *ic,
 	const u_int8_t *frm, *efrm;
 	const u_int8_t *rsnie1, *rsnie2, *gtk, *igtk;
 	u_int16_t info, reason = 0;
-	int keylen;
+	int keylen, deferlink = 0;
 
 #ifndef IEEE80211_STA_ONLY
 	if (ic->ic_opmode != IEEE80211_M_STA &&
@@ -565,7 +565,13 @@ ieee80211_recv_4way_msg3(struct ieee80211com *ic,
 		k->k_len = keylen;
 		memcpy(k->k_key, ni->ni_ptk.tk, k->k_len);
 		/* install the PTK */
-		if ((*ic->ic_set_key)(ic, ni, k) != 0) {
+		switch ((*ic->ic_set_key)(ic, ni, k)) {
+		case 0:
+			break;
+		case EBUSY:
+			deferlink = 1;
+			break;
+		default:
 			reason = IEEE80211_REASON_AUTH_LEAVE;
 			goto deauth;
 		}
@@ -599,7 +605,13 @@ ieee80211_recv_4way_msg3(struct ieee80211com *ic,
 			k->k_len = keylen;
 			memcpy(k->k_key, &gtk[8], k->k_len);
 			/* install the GTK */
-			if ((*ic->ic_set_key)(ic, ni, k) != 0) {
+			switch ((*ic->ic_set_key)(ic, ni, k)) {
+			case 0:
+				break;
+			case EBUSY:
+				deferlink = 1;
+				break;
+			default:
 				reason = IEEE80211_REASON_AUTH_LEAVE;
 				goto deauth;
 			}
@@ -630,7 +642,13 @@ ieee80211_recv_4way_msg3(struct ieee80211com *ic,
 			k->k_len = 16;
 			memcpy(k->k_key, &igtk[14], k->k_len);
 			/* install the IGTK */
-			if ((*ic->ic_set_key)(ic, ni, k) != 0) {
+			switch ((*ic->ic_set_key)(ic, ni, k)) {
+			case 0:
+				break;
+			case EBUSY:
+				deferlink = 1;
+				break;
+			default:
 				reason = IEEE80211_REASON_AUTH_LEAVE;
 				goto deauth;
 			}
@@ -646,10 +664,12 @@ ieee80211_recv_4way_msg3(struct ieee80211com *ic,
 		    ++ni->ni_key_count == 2)
 #endif
 		{
-			DPRINTF(("marking port %s valid\n",
-			    ether_sprintf(ni->ni_macaddr)));
-			ni->ni_port_valid = 1;
-			ieee80211_set_link_state(ic, LINK_STATE_UP);
+			if (deferlink == 0) {
+				DPRINTF(("marking port %s valid\n",
+				    ether_sprintf(ni->ni_macaddr)));
+				ni->ni_port_valid = 1;
+				ieee80211_set_link_state(ic, LINK_STATE_UP);
+			}
 			ni->ni_assoc_fail = 0;
 			if (ic->ic_opmode == IEEE80211_M_STA)
 				ic->ic_rsngroupcipher = ni->ni_rsngroupcipher;
@@ -704,7 +724,11 @@ ieee80211_recv_4way_msg4(struct ieee80211com *ic,
 		k->k_len = ieee80211_cipher_keylen(k->k_cipher);
 		memcpy(k->k_key, ni->ni_ptk.tk, k->k_len);
 		/* install the PTK */
-		if ((*ic->ic_set_key)(ic, ni, k) != 0) {
+		switch ((*ic->ic_set_key)(ic, ni, k)) {
+		case 0:
+		case EBUSY:
+			break;
+		default:
 			IEEE80211_SEND_MGMT(ic, ni,
 			    IEEE80211_FC0_SUBTYPE_DEAUTH,
 			    IEEE80211_REASON_ASSOC_TOOMANY);
@@ -874,7 +898,11 @@ ieee80211_recv_rsn_group_msg1(struct ieee80211com *ic,
 		k->k_len = keylen;
 		memcpy(k->k_key, &gtk[8], k->k_len);
 		/* install the GTK */
-		if ((*ic->ic_set_key)(ic, ni, k) != 0) {
+		switch ((*ic->ic_set_key)(ic, ni, k)) {
+		case 0:
+		case EBUSY:
+			break;
+		default:
 			reason = IEEE80211_REASON_AUTH_LEAVE;
 			goto deauth;
 		}
@@ -902,7 +930,11 @@ ieee80211_recv_rsn_group_msg1(struct ieee80211com *ic,
 			k->k_len = 16;
 			memcpy(k->k_key, &igtk[14], k->k_len);
 			/* install the IGTK */
-			if ((*ic->ic_set_key)(ic, ni, k) != 0) {
+			switch ((*ic->ic_set_key)(ic, ni, k)) {
+			case 0:
+			case EBUSY:
+				break;
+			default:
 				reason = IEEE80211_REASON_AUTH_LEAVE;
 				goto deauth;
 			}
@@ -1006,7 +1038,11 @@ ieee80211_recv_wpa_group_msg1(struct ieee80211com *ic,
 		k->k_len = keylen;
 		memcpy(k->k_key, gtk, k->k_len);
 		/* install the GTK */
-		if ((*ic->ic_set_key)(ic, ni, k) != 0) {
+		switch ((*ic->ic_set_key)(ic, ni, k)) {
+		case 0:
+		case EBUSY:
+			break;
+		default:
 			IEEE80211_SEND_MGMT(ic, ni, IEEE80211_FC0_SUBTYPE_DEAUTH,
 			    IEEE80211_REASON_AUTH_LEAVE);
 			ieee80211_new_state(ic, IEEE80211_S_SCAN, -1);

@@ -1,4 +1,4 @@
-#	$OpenBSD: files.acpi,v 1.58 2020/10/27 02:39:07 jordan Exp $
+#	$OpenBSD: files.acpi,v 1.61 2020/11/17 14:31:59 patrick Exp $
 #
 # Config file and device description for machine-independent ACPI code.
 # Included by ports that need it.
@@ -49,6 +49,11 @@ file	dev/acpi/acpihpet.c		acpihpet
 device	acpiec
 attach	acpiec at acpi
 file	dev/acpi/acpiec.c		acpiec
+
+# Generic Event
+device	acpige
+attach	acpige at acpi
+file	dev/acpi/acpige.c		acpige
 
 # Thermal Zone
 device	acpitz
@@ -151,6 +156,11 @@ device	glkgpio
 attach	glkgpio at acpi
 file	dev/acpi/glkgpio.c		glkgpio
 
+# Intel PCH GPIO
+device	pchgpio
+attach	pchgpio at acpi
+file	dev/acpi/pchgpio.c		pchgpio
+
 # "Intel" Dollar Cove TI PMIC
 device	tipmic
 attach	tipmic at i2c
@@ -236,3 +246,7 @@ file	dev/acpi/if_bse_acpi.c		bse_acpi
 device	acpihid
 attach	acpihid at acpi
 file	dev/acpi/acpihid.c		acpihid
+
+# Freescale i.MX I2C controller
+attach	imxiic at acpi with imxiic_acpi
+file	dev/acpi/imxiic_acpi.c		imxiic_acpi
