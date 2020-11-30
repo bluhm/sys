@@ -129,7 +129,7 @@ rw_enter_write(struct rwlock *rwl)
 }
 
 int
-rw_enter_write_sleepfail(struct rwlock *rwl)
+rw_enter_write_try(struct rwlock *rwl)
 {
 	struct proc *p = curproc;
 	int error = 0;

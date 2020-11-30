@@ -151,6 +151,7 @@ void	rw_enter_read(struct rwlock *);
 void	rw_enter_write(struct rwlock *);
 void	rw_exit_read(struct rwlock *);
 void	rw_exit_write(struct rwlock *);
+int	rw_enter_write_try(struct rwlock *);
 
 #ifdef DIAGNOSTIC
 void	rw_assert_wrlock(struct rwlock *);

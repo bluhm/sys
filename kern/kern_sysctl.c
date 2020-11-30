@@ -1078,8 +1078,6 @@ sysctl_rdstruct(void *oldp, size_t *oldlenp, void *newp, const void *sp,
 	return (error);
 }
 
-extern int rw_enter_write_sleepfail(struct rwlock *);
-
 #ifndef SMALL_KERNEL
 int
 fill_file(struct kinfo_file *kf, struct file *fp, struct filedesc *fdp,
@@ -1170,7 +1168,7 @@ fill_file(struct kinfo_file *kf, struct file *fp, struct filedesc *fdp,
 			switch (so->so_proto->pr_domain->dom_family) {
 			case AF_INET:
 			case AF_INET6:
-				error = rw_enter_write_sleepfail(&netlock);
+				NET_LOCK_TRY(error);
 				if (error)
 					return error;
 				locked = 1;

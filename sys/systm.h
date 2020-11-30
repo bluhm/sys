@@ -333,6 +333,7 @@ extern struct rwlock netlock;
  */
 #define	NET_LOCK()	do { rw_enter_write(&netlock); } while (0)
 #define	NET_UNLOCK()	do { rw_exit_write(&netlock); } while (0)
+#define	NET_LOCK_TRY(e)	do { (e) = rw_enter_write_try(&netlock); } while (0)
 
 /*
  * Reader version of NET_LOCK() to be used in "softnet" thread only.
