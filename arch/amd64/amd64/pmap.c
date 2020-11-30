@@ -987,7 +987,7 @@ pmap_prealloc_lowmem_ptps(paddr_t first_avail)
 		level--;
 		if (level <= 1)
 			break;
-		pdes = normal_pdes[level - 2];
+		pdes = normal_pdes[level - 1];
 	}
 
 	return first_avail;
@@ -1108,7 +1108,7 @@ pmap_free_ptp(struct pmap *pmap, struct vm_page *ptp, vaddr_t va,
 	do {
 		pmap_freepage(pmap, ptp, level, pagelist);
 		index = pl_i(va, level + 1);
-		pmap_pte_set(&normal_pdes[level - 1][index], 0);
+		pmap_pte_set(&normal_pdes[level][index], 0);
 		if (level == PTP_LEVELS - 1 && pmap->pm_pdir_intel != NULL) {
 			/* Zap special meltdown PML4e */
 			pmap_pte_set(&pmap->pm_pdir_intel[index], 0);
@@ -1116,8 +1116,7 @@ pmap_free_ptp(struct pmap *pmap, struct vm_page *ptp, vaddr_t va,
 			    "(va range start 0x%llx)\n", __func__, index,
 			    (uint64_t)(index << L4_SHIFT));
 		}
-		invaladdr = level == 1 ? (vaddr_t)PTE_BASE :
-		    (vaddr_t)normal_pdes[level - 2];
+		invaladdr = (vaddr_t)normal_pdes[level - 1];
 		pmap_tlb_shootpage(pmap, invaladdr + index * PAGE_SIZE,
 		    pmap_is_curpmap(curpcb->pcb_pmap));
 		if (level < PTP_LEVELS - 1) {
@@ -1139,7 +1138,7 @@ struct vm_page *
 pmap_get_ptp(struct pmap *pmap, vaddr_t va)
 {
 	struct vm_page *ptp, *pptp;
-	int i;
+	int level;
 	unsigned long index;
 	pd_entry_t *pva, *pva_intel;
 	paddr_t ppa, pa;
@@ -1152,15 +1151,15 @@ pmap_get_ptp(struct pmap *pmap, vaddr_t va)
 	 * Loop through all page table levels seeing if we need to
 	 * add a new page to that level.
 	 */
-	for (i = PTP_LEVELS; i > 1; i--) {
+	for (level = PTP_LEVELS; level > 1; level--) {
 		/*
 		 * Save values from previous round.
 		 */
 		pptp = ptp;
 		ppa = pa;
 
-		index = pl_i(va, i);
-		pva = normal_pdes[i - 2];
+		index = pl_i(va, level);
+		pva = normal_pdes[level - 1];
 
 		if (pmap_valid_entry(pva[index])) {
 			ppa = pva[index] & PG_FRAME;
@@ -1168,8 +1167,8 @@ pmap_get_ptp(struct pmap *pmap, vaddr_t va)
 			continue;
 		}
 
-		obj = &pmap->pm_obj[i-2];
-		ptp = uvm_pagealloc(obj, ptp_va2o(va, i - 1), NULL,
+		obj = &pmap->pm_obj[level - 2];
+		ptp = uvm_pagealloc(obj, ptp_va2o(va, level - 1), NULL,
 		    UVM_PGA_USERESERVE|UVM_PGA_ZERO);
 
 		if (ptp == NULL)
@@ -1177,7 +1176,7 @@ pmap_get_ptp(struct pmap *pmap, vaddr_t va)
 
 		atomic_clearbits_int(&ptp->pg_flags, PG_BUSY);
 		ptp->wire_count = 1;
-		pmap->pm_ptphint[i - 2] = ptp;
+		pmap->pm_ptphint[level - 2] = ptp;
 		pa = VM_PAGE_TO_PHYS(ptp);
 		pva[index] = (pd_entry_t) (pa | PG_u | PG_RW | PG_V);
 
@@ -1186,7 +1185,7 @@ pmap_get_ptp(struct pmap *pmap, vaddr_t va)
 		 * usermode addresses, just copy the PML4e to the U-K page
 		 * table.
 		 */
-		if (pmap->pm_pdir_intel != NULL && i == PTP_LEVELS &&
+		if (pmap->pm_pdir_intel != NULL && level == PTP_LEVELS &&
 		    va < VM_MAXUSER_ADDRESS) {
 			pva_intel = pmap->pm_pdir_intel;
 			pva_intel[index] = pva[index];
@@ -1200,9 +1199,9 @@ pmap_get_ptp(struct pmap *pmap, vaddr_t va)
 		 * If we're not in the top level, increase the
 		 * wire count of the parent page.
 		 */
-		if (i < PTP_LEVELS) {
+		if (level < PTP_LEVELS) {
 			if (pptp == NULL)
-				pptp = pmap_find_ptp(pmap, va, ppa, i);
+				pptp = pmap_find_ptp(pmap, va, ppa, level);
 #ifdef DIAGNOSTIC
 			if (pptp == NULL)
 				panic("%s: pde page disappeared", __func__);
@@ -1477,13 +1476,13 @@ pmap_deactivate(struct proc *p)
 int
 pmap_pdes_valid(vaddr_t va, pd_entry_t *lastpde)
 {
-	int i;
+	int level;
 	unsigned long index;
 	pd_entry_t pde;
 
-	for (i = PTP_LEVELS; i > 1; i--) {
-		index = pl_i(va, i);
-		pde = normal_pdes[i - 2][index];
+	for (level = PTP_LEVELS; level > 1; level--) {
+		index = pl_i(va, level);
+		pde = normal_pdes[level - 1][index];
 		if (!pmap_valid_entry(pde))
 			return 0;
 	}
@@ -2904,7 +2903,7 @@ pmap_alloc_level(vaddr_t kva, int lvl, long *needed_ptps)
 		if (level == PTP_LEVELS)
 			pdep = pmap_kernel()->pm_pdir;
 		else
-			pdep = normal_pdes[level - 2];
+			pdep = normal_pdes[level - 1];
 		va = kva;
 		index = pl_i(kva, level);
 		endindex = index + needed_ptps[level - 1];
