@@ -144,7 +144,7 @@ int sysctl_audio(int *, u_int, void *, size_t *, void *, size_t);
 int sysctl_cpustats(int *, u_int, void *, size_t *, void *, size_t);
 int sysctl_utc_offset(void *, size_t *, void *, size_t);
 
-void fill_file(struct kinfo_file *, struct file *, struct filedesc *, int,
+int fill_file(struct kinfo_file *, struct file *, struct filedesc *, int,
     struct vnode *, struct process *, struct proc *, struct socket *, int);
 void fill_kproc(struct process *, struct kinfo_proc *, struct proc *, int);
 
@@ -1078,8 +1078,10 @@ sysctl_rdstruct(void *oldp, size_t *oldlenp, void *newp, const void *sp,
 	return (error);
 }
 
+extern int rw_enter_write_sleepfail(struct rwlock *);
+
 #ifndef SMALL_KERNEL
-void
+int
 fill_file(struct kinfo_file *kf, struct file *fp, struct filedesc *fdp,
 	  int fd, struct vnode *vp, struct process *pr, struct proc *p,
 	  struct socket *so, int show_pointers)
@@ -1160,7 +1162,7 @@ fill_file(struct kinfo_file *kf, struct file *fp, struct filedesc *fdp,
 		break;
 
 	case DTYPE_SOCKET: {
-		int locked = 0;
+		int error, locked = 0;
 
 		if (so == NULL) {
 			so = (struct socket *)fp->f_data;
@@ -1168,7 +1170,9 @@ fill_file(struct kinfo_file *kf, struct file *fp, struct filedesc *fdp,
 			switch (so->so_proto->pr_domain->dom_family) {
 			case AF_INET:
 			case AF_INET6:
-				NET_LOCK();
+				error = rw_enter_write_sleepfail(&netlock);
+				if (error)
+					return error;
 				locked = 1;
 				break;
 			}
@@ -1304,6 +1308,7 @@ fill_file(struct kinfo_file *kf, struct file *fp, struct filedesc *fdp,
 		kf->fd_ofileflags = fdp->fd_ofileflags[fd];
 		fdpunlock(fdp);
 	}
+	return 0;
 }
 
 /*
@@ -1344,7 +1349,10 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 
 #define FILLIT2(fp, fdp, i, vp, pr, so) do {				\
 	if (buflen >= elem_size && elem_count > 0) {			\
-		fill_file(kf, fp, fdp, i, vp, pr, p, so, show_pointers);\
+		error = fill_file(kf, fp, fdp, i, vp, pr, p, so,	\
+		    show_pointers);					\
+		if (error)						\
+			break;						\
 		error = copyout(kf, dp, outsize);			\
 		if (error)						\
 			break;						\
@@ -1400,6 +1408,7 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 			error = EINVAL;
 			break;
 		}
+ retry_bypid:
 		matched = 0;
 		LIST_FOREACH(pr, &allprocess, ps_list) {
 			/*
@@ -1427,12 +1436,17 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 					continue;
 				FILLIT(fp, fdp, i, NULL, pr);
 				FRELE(fp, p);
+				if (error == EAGAIN) {
+					error = 0;
+					goto retry_bypid;
+				}
 			}
 		}
 		if (!matched)
 			error = ESRCH;
 		break;
 	case KERN_FILE_BYUID:
+ retry_byuid:
 		LIST_FOREACH(pr, &allprocess, ps_list) {
 			/*
 			 * skip system, exiting, embryonic and undead
@@ -1456,6 +1470,10 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 					continue;
 				FILLIT(fp, fdp, i, NULL, pr);
 				FRELE(fp, p);
+				if (error == EAGAIN) {
+					error = 0;
+					goto retry_byuid;
+				}
 			}
 		}
 		break;

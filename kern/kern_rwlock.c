@@ -39,7 +39,7 @@ void	rw_do_exit(struct rwlock *, unsigned long);
 #define RW_SPINS	1000
 
 #ifdef MULTIPROCESSOR
-#define rw_cas(p, o, n)	(atomic_cas_ulong(p, o, n) != o)
+#define rw_cas(p, o, n)	(atomic_cas_ulong((p), (o), (n)) != (o))
 #else
 static inline int
 rw_cas(volatile unsigned long *p, unsigned long o, unsigned long n)
@@ -126,6 +126,26 @@ rw_enter_write(struct rwlock *rwl)
 		    LOP_EXCLUSIVE | LOP_NEWORDER, NULL);
 		WITNESS_LOCK(&rwl->rwl_lock_obj, LOP_EXCLUSIVE);
 	}
+}
+
+int
+rw_enter_write_sleepfail(struct rwlock *rwl)
+{
+	struct proc *p = curproc;
+	int error = 0;
+
+	if (__predict_false(rw_cas(&rwl->rwl_owner, 0,
+	    RW_PROC(p) | RWLOCK_WRLOCK))) {
+		error = rw_enter(rwl, RW_WRITE | RW_SLEEPFAIL);
+		if (error)
+			rw_cas(&rwl->rwl_owner, RW_PROC(p) | RWLOCK_WRLOCK, 0);
+	} else {
+		membar_enter_after_atomic();
+		WITNESS_CHECKORDER(&rwl->rwl_lock_obj,
+		    LOP_EXCLUSIVE | LOP_NEWORDER, NULL);
+		WITNESS_LOCK(&rwl->rwl_lock_obj, LOP_EXCLUSIVE);
+	}
+	return error;
 }
 
 void
