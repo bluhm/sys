@@ -256,10 +256,12 @@ int	ether_ioctl(struct ifnet *, struct arpcom *, u_long, caddr_t);
 void	ether_input(struct ifnet *, struct mbuf *);
 int	ether_resolve(struct ifnet *, struct mbuf *, struct sockaddr *,
 	    struct rtentry *, struct ether_header *);
-struct mbuf *
-	ether_encap(struct ifnet *, struct mbuf *, struct sockaddr *,
+struct mbuf_list *
+	ether_encap(struct ifnet *, struct mbuf_list *, struct sockaddr *,
 	    struct rtentry *, int *);
 int	ether_output(struct ifnet *, struct mbuf *, struct sockaddr *,
+	    struct rtentry *);
+int	ether_output_ml(struct ifnet *, struct mbuf_list *, struct sockaddr *,
 	    struct rtentry *);
 void	ether_rtrequest(struct ifnet *, int, struct rtentry *);
 char	*ether_sprintf(u_char *);

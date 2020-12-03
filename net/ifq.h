@@ -168,6 +168,12 @@ struct ifiqueue {
  * current traffic conditioner may drop a packet to make space on the
  * queue.
  *
+ * === ifq_enqueue_ml()
+ *
+ * ifq_enqueue_ml() attempts to fit an mbuf_list onto the ifqueue. The
+ * current traffic conditioner may drop a packet to make space on the
+ * queue.
+ *
  * === ifq_start()
  *
  * Once a packet has been successfully queued with ifq_enqueue(),
@@ -402,6 +408,7 @@ struct ifq_ops {
 	unsigned int		 (*ifqop_idx)(unsigned int,
 				    const struct mbuf *);
 	struct mbuf		*(*ifqop_enq)(struct ifqueue *, struct mbuf *);
+	int			 (*ifqop_enq_ml)(struct ifqueue *, struct mbuf_list *);
 	struct mbuf		*(*ifqop_deq_begin)(struct ifqueue *, void **);
 	void			 (*ifqop_deq_commit)(struct ifqueue *,
 				    struct mbuf *, void *);
@@ -422,6 +429,7 @@ void		 ifq_attach(struct ifqueue *, const struct ifq_ops *, void *);
 void		 ifq_destroy(struct ifqueue *);
 void		 ifq_add_data(struct ifqueue *, struct if_data *);
 int		 ifq_enqueue(struct ifqueue *, struct mbuf *);
+int		 ifq_enqueue_ml(struct ifqueue *, struct mbuf_list *);
 void		 ifq_start(struct ifqueue *);
 struct mbuf	*ifq_deq_begin(struct ifqueue *);
 void		 ifq_deq_commit(struct ifqueue *, struct mbuf *);

@@ -227,6 +227,8 @@ struct mbuf*
 	 ip_insertoptions(struct mbuf *, struct mbuf *, int *);
 int	 ip_mforward(struct mbuf *, struct ifnet *);
 int	 ip_optcopy(struct ip *, struct ip *);
+int	 ip_output_ml(struct mbuf_list *, struct mbuf *, struct route *, int,
+    struct ip_moptions *, struct inpcb *, u_int32_t);
 int	 ip_output(struct mbuf *, struct mbuf *, struct route *, int,
 	    struct ip_moptions *, struct inpcb *, u_int32_t);
 struct mbuf *

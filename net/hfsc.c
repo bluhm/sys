@@ -270,6 +270,7 @@ void		 hfsc_free(unsigned int, void *);
 const struct ifq_ops hfsc_ops = {
 	hfsc_idx,
 	hfsc_enq,
+	NULL,
 	hfsc_deq_begin,
 	hfsc_deq_commit,
 	hfsc_purge,

@@ -138,6 +138,7 @@ void		 fqcodel_purge(struct fqcodel *, struct mbuf_list *);
 static const struct ifq_ops fqcodel_ops = {
 	fqcodel_idx,
 	fqcodel_if_enq,
+	NULL,
 	fqcodel_if_deq_begin,
 	fqcodel_if_deq_commit,
 	fqcodel_if_purge,

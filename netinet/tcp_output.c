@@ -193,7 +193,8 @@ tcp_output(struct tcpcb *tp)
 {
 	struct socket *so = tp->t_inpcb->inp_socket;
 	long len, win, txmaxseg;
-	int off, flags, error;
+	int off, flags, error = 0;
+	struct mbuf_list ml = MBUF_LIST_INITIALIZER();
 	struct mbuf *m;
 	struct tcphdr *th;
 	u_int32_t optbuf[howmany(MAX_TCPOPTLEN, sizeof(u_int32_t))];
@@ -426,7 +427,7 @@ again:
 	    TCP_TIMER_ISARMED(tp, TCPT_REXMT) == 0 &&
 	    TCP_TIMER_ISARMED(tp, TCPT_PERSIST) == 0) {
 		TCP_TIMER_ARM(tp, TCPT_REXMT, tp->t_rxtcur);
-		return (0);
+		goto out;
 	}
 
 	/*
@@ -460,7 +461,7 @@ again:
 	/*
 	 * No reason to send a segment, just return.
 	 */
-	return (0);
+	goto out;
 
 send:
 	/*
@@ -485,7 +486,8 @@ send:
 		break;
 #endif /* INET6 */
 	default:
-		return (EPFNOSUPPORT);
+		error = EPFNOSUPPORT;
+		goto out;
 	}
 
 	if (flags & TH_SYN) {
@@ -873,13 +875,15 @@ send:
 		    0, &src, &dst, IPPROTO_TCP);
 		if (tdb == NULL) {
 			m_freem(m);
-			return (EPERM);
+			error = EPERM;
+			goto out;
 		}
 
 		if (tcp_signature(tdb, tp->pf, m, th, iphlen, 0,
 		    mtod(m, caddr_t) + hdrlen - optlen + sigoff) < 0) {
 			m_freem(m);
-			return (EINVAL);
+			error = EINVAL;
+			goto out;
 		}
 	}
 #endif /* TCP_SIGNATURE */
@@ -1037,9 +1041,6 @@ send:
 				ip->ip_tos |= IPTOS_ECN_ECT0;
 #endif
 		}
-		error = ip_output(m, tp->t_inpcb->inp_options,
-			&tp->t_inpcb->inp_route,
-			(ip_mtudisc ? IP_MTUDISC : 0), NULL, tp->t_inpcb, 0);
 		break;
 #ifdef INET6
 	case AF_INET6:
@@ -1057,45 +1058,11 @@ send:
 				ip6->ip6_flow |= htonl(IPTOS_ECN_ECT0 << 20);
 #endif
 		}
-		error = ip6_output(m, tp->t_inpcb->inp_outputopts6,
-			  &tp->t_inpcb->inp_route6,
-			  0, NULL, tp->t_inpcb);
 		break;
 #endif /* INET6 */
 	}
 
-	if (error) {
-out:
-		if (error == ENOBUFS) {
-			/*
-			 * If the interface queue is full, or IP cannot
-			 * get an mbuf, trigger TCP slow start.
-			 */
-			tp->snd_cwnd = tp->t_maxseg;
-			return (0);
-		}
-		if (error == EMSGSIZE) {
-			/*
-			 * ip_output() will have already fixed the route
-			 * for us.  tcp_mtudisc() will, as its last action,
-			 * initiate retransmission, so it is important to
-			 * not do so here.
-			 */
-			tcp_mtudisc(tp->t_inpcb, -1);
-			return (0);
-		}
-		if ((error == EHOSTUNREACH || error == ENETDOWN) &&
-		    TCPS_HAVERCVDSYN(tp->t_state)) {
-			tp->t_softerror = error;
-			return (0);
-		}
-
-		/* Restart the delayed ACK timer, if necessary. */
-		if (TCP_TIMER_ISARMED(tp, TCPT_DELACK))
-			TCP_TIMER_ARM_MSEC(tp, TCPT_DELACK, tcp_delack_msecs);
-
-		return (error);
-	}
+	ml_enqueue(&ml, m);
 
 	if (packetlen > tp->t_pmtud_mtu_sent)
 		tp->t_pmtud_mtu_sent = packetlen;
@@ -1117,7 +1084,63 @@ out:
 	TCP_TIMER_DISARM(tp, TCPT_DELACK);
 	if (sendalot && --maxburst)
 		goto again;
-	return (0);
+
+ out:
+	if (!ml_empty(&ml)) {
+		int outerr;
+
+		switch (tp->pf) {
+		case 0:     /*default to PF_INET*/
+		case AF_INET:
+			outerr = ip_output_ml(&ml,
+			    tp->t_inpcb->inp_options, &tp->t_inpcb->inp_route,
+			    (ip_mtudisc ? IP_MTUDISC : 0), NULL, tp->t_inpcb,
+			    0);
+			break;
+#ifdef INET6
+		case AF_INET6:
+			outerr = ip6_output_ml(&ml,
+			    tp->t_inpcb->inp_outputopts6,
+			    &tp->t_inpcb->inp_route6, 0, NULL, tp->t_inpcb);
+			break;
+#endif /* INET6 */
+		}
+		if (error == 0)
+			error = outerr;
+	}
+	if (error == 0)
+		return (0);
+	if (error == ENOBUFS) {
+		/*
+		 * If the interface queue is full, or IP cannot
+		 * get an mbuf, trigger TCP slow start.
+		 */
+		tp->snd_cwnd = tp->t_maxseg;
+		return (0);
+	}
+	if (error == EMSGSIZE) {
+		/*
+		 * ip_output() will have already fixed the route
+		 * for us.  tcp_mtudisc() will, as its last action,
+		 * initiate retransmission, so it is important to
+		 * not do so here.
+		 */
+		tcp_mtudisc(tp->t_inpcb, -1);
+		return (0);
+	}
+	if (error == EACCES)        /* translate pf(4) error for userland */
+		error = EHOSTUNREACH;
+	if ((error == EHOSTUNREACH || error == ENETDOWN) &&
+	    TCPS_HAVERCVDSYN(tp->t_state)) {
+		tp->t_softerror = error;
+		return (0);
+	}
+
+	/* Restart the delayed ACK timer, if necessary. */
+	if (TCP_TIMER_ISARMED(tp, TCPT_DELACK))
+		TCP_TIMER_ARM_MSEC(tp, TCPT_DELACK, tcp_delack_msecs);
+
+	return (error);
 }
 
 void

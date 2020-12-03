@@ -633,6 +633,8 @@ if_attach_common(struct ifnet *ifp)
 		ifp->if_rtrequest = if_rtrequest_dummy;
 	if (ifp->if_enqueue == NULL)
 		ifp->if_enqueue = if_enqueue_ifq;
+	if (ifp->if_enqueue_ml == NULL)
+		ifp->if_enqueue_ml = if_enqueue_ifq_ml;
 	ifp->if_llprio = IFQ_DEFPRIO;
 }
 
@@ -682,52 +684,95 @@ if_qstart_compat(struct ifqueue *ifq)
 int
 if_enqueue(struct ifnet *ifp, struct mbuf *m)
 {
+	struct mbuf_list ml = MBUF_LIST_INITIALIZER();
+
+	ml_enqueue(&ml, m);
+	return (if_enqueue_ml(ifp, &ml));
+}
+
+int
+if_enqueue_ml(struct ifnet *ifp, struct mbuf_list *ml)
+{
+	int error = 0;
+	struct mbuf *m;
+
+	while ((m = ml_dequeue(ml)) != NULL) {
 #if NPF > 0
-	if (m->m_pkthdr.pf.delay > 0)
-		return (pf_delay_pkt(m, ifp->if_index));
+		if (m->m_pkthdr.pf.delay > 0) {
+			if ((error = pf_delay_pkt(m, ifp->if_index)) != 0)
+				goto bad;
+			continue;
+		}
 #endif
 
 #if NBRIDGE > 0
-	if (ifp->if_bridgeidx && (m->m_flags & M_PROTO1) == 0) {
-		int error;
-
-		error = bridge_enqueue(ifp, m);
-		return (error);
-	}
+		if (ifp->if_bridgeidx && (m->m_flags & M_PROTO1) == 0) {
+			if ((error = bridge_enqueue(ifp, m)) != 0)
+				goto bad;
+			continue;
+		}
 #endif
 
 #if NPF > 0
-	pf_pkt_addr_changed(m);
+		pf_pkt_addr_changed(m);
 #endif	/* NPF > 0 */
 
-	return ((*ifp->if_enqueue)(ifp, m));
+		if ((error = (*ifp->if_enqueue)(ifp, m)) != 0)
+			goto bad;
+	}
+
+	return error;
+ bad:
+	ml_purge(ml);
+	return error;
 }
 
 int
 if_enqueue_ifq(struct ifnet *ifp, struct mbuf *m)
 {
+	struct mbuf_list ml = MBUF_LIST_INITIALIZER();
+
+	ml_enqueue(&ml, m);
+	return (if_enqueue_ifq_ml(ifp, &ml));
+}
+
+int
+if_enqueue_ifq_ml(struct ifnet *ifp, struct mbuf_list *ml)
+{
 	struct ifqueue *ifq = &ifp->if_snd;
-	int error;
+	struct mbuf *m;
+	int error = 0;
 
 	if (ifp->if_nifqs > 1) {
-		unsigned int idx;
+		while ((m = ml_dequeue(ml)) != NULL) {
+			unsigned int idx;
 
-		/*
-		 * use the operations on the first ifq to pick which of
-		 * the array gets this mbuf.
-		 */
+			/*
+			 * use the operations on the first ifq to pick which of
+			 * the array gets this mbuf.
+			 */
 
-		idx = ifq_idx(&ifp->if_snd, ifp->if_nifqs, m);
-		ifq = ifp->if_ifqs[idx];
+			idx = ifq_idx(&ifp->if_snd, ifp->if_nifqs, m);
+			ifq = ifp->if_ifqs[idx];
+
+			error = ifq_enqueue(ifq, m);
+			if (error)
+				goto bad;
+
+			ifq_start(ifq);
+		}
+	} else {
+		error = ifq_enqueue_ml(ifq, ml);
+		if (error)
+			goto bad;
+
+		ifq_start(ifq);
 	}
 
-	error = ifq_enqueue(ifq, m);
-	if (error)
-		return (error);
-
-	ifq_start(ifq);
-
-	return (0);
+	return (error);
+ bad:
+	ml_purge(ml);
+	return (error);
 }
 
 void

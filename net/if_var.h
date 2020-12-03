@@ -161,12 +161,15 @@ struct ifnet {				/* and the entries */
 
 	/* procedure handles */
 	void	(*if_input)(struct ifnet *, struct mbuf *);
+	int	(*if_output_ml)(struct ifnet *, struct mbuf_list *,
+		    struct sockaddr *, struct rtentry *);
 	int	(*if_output)(struct ifnet *, struct mbuf *, struct sockaddr *,
 		     struct rtentry *);	/* output routine (enqueue) */
 					/* link level output function */
 	int	(*if_ll_output)(struct ifnet *, struct mbuf *,
 		    struct sockaddr *, struct rtentry *);
 	int	(*if_enqueue)(struct ifnet *, struct mbuf *);
+	int	(*if_enqueue_ml)(struct ifnet *, struct mbuf_list *);
 	void	(*if_start)(struct ifnet *);	/* initiate output */
 	int	(*if_ioctl)(struct ifnet *, u_long, caddr_t); /* ioctl hook */
 	void	(*if_watchdog)(struct ifnet *);	/* timer routine */
@@ -318,7 +321,9 @@ extern struct ifnet_head ifnet;
 
 void	if_start(struct ifnet *);
 int	if_enqueue(struct ifnet *, struct mbuf *);
+int	if_enqueue_ml(struct ifnet *, struct mbuf_list *);
 int	if_enqueue_ifq(struct ifnet *, struct mbuf *);
+int	if_enqueue_ifq_ml(struct ifnet *, struct mbuf_list *);
 void	if_input(struct ifnet *, struct mbuf_list *);
 void	if_vinput(struct ifnet *, struct mbuf *);
 void	if_input_process(struct ifnet *, struct mbuf_list *);

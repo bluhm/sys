@@ -136,6 +136,23 @@ void in6_delayed_cksum(struct mbuf *, u_int8_t);
 /* Context for non-repeating IDs */
 struct idgen32_ctx ip6_id_ctx;
 
+int
+ip6_output_ml(struct mbuf_list *ml, struct ip6_pktopts *opt,
+    struct route_in6 *ro, int flags, struct ip6_moptions *im6o,
+    struct inpcb *inp)
+{
+	struct mbuf *m;
+	int error = 0;
+
+	while ((m = ml_dequeue(ml)) != NULL) {
+		error = ip6_output(m, opt, ro, flags, im6o, inp);
+		if (error)
+			break;
+	}
+	ml_purge(ml);
+	return (error);
+}
+
 /*
  * IP6 output. The packet in mbuf chain m contains a skeletal IP6
  * header (with pri, len, nxt, hlim, src, dst).

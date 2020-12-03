@@ -311,12 +311,16 @@ bad:
 	return (error);
 }
 
-struct mbuf*
-ether_encap(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst,
+struct mbuf_list *
+ether_encap(struct ifnet *ifp, struct mbuf_list *ml, struct sockaddr *dst,
     struct rtentry *rt, int *errorp)
 {
 	struct ether_header eh;
+	struct mbuf *m, *n;
 	int error;
+
+	m = ml_dechain(ml);
+	n = m->m_nextpkt;	/* backup for error case */
 
 	error = ether_resolve(ifp, m, dst, rt, &eh);
 	switch (error) {
@@ -326,32 +330,50 @@ ether_encap(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst,
 		error = 0;
 	default:
 		*errorp = error;
-		return (NULL);
+		goto bad;
 	}
 
-	m = m_prepend(m, ETHER_ALIGN + sizeof(eh), M_DONTWAIT);
-	if (m == NULL) {
-		*errorp = ENOBUFS;
-		return (NULL);
+	for (; m != NULL; m = n) {
+		n = m->m_nextpkt;
+		m->m_nextpkt = NULL;
+
+		m = m_prepend(m, ETHER_ALIGN + sizeof(eh), M_DONTWAIT);
+		if (m == NULL) {
+			*errorp = ENOBUFS;
+			goto bad;
+		}
+		m_adj(m, ETHER_ALIGN);
+		memcpy(mtod(m, struct ether_header *), &eh, sizeof(eh));
+
+		ml_enqueue(ml, m);
 	}
 
-	m_adj(m, ETHER_ALIGN);
-	memcpy(mtod(m, struct ether_header *), &eh, sizeof(eh));
-
-	return (m);
+	return (ml);
+ bad:
+	m_purge(n);
+	return (NULL);
 }
 
 int
 ether_output(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst,
     struct rtentry *rt)
 {
-	int error;
+	struct mbuf_list ml = MBUF_LIST_INITIALIZER();
 
-	m = ether_encap(ifp, m, dst, rt, &error);
-	if (m == NULL)
-		return (error);
+	ml_enqueue(&ml, m);
+	return (ether_output_ml(ifp, &ml, dst, rt));
+}
 
-	return (if_enqueue(ifp, m));
+int
+ether_output_ml(struct ifnet *ifp, struct mbuf_list *ml, struct sockaddr *dst,
+    struct rtentry *rt)
+{
+	int error = 0;
+
+	if (ether_encap(ifp, ml, dst, rt, &error) == NULL)
+		return error;
+
+	return (if_enqueue_ml(ifp, ml));
 }
 
 /*
@@ -670,8 +692,11 @@ ether_ifattach(struct ifnet *ifp)
 	ifp->if_hdrlen = ETHER_HDR_LEN;
 	ifp->if_mtu = ETHERMTU;
 	ifp->if_input = ether_input;
+
 	if (ifp->if_output == NULL)
 		ifp->if_output = ether_output;
+	if (ifp->if_output_ml == NULL)
+		ifp->if_output_ml = ether_output_ml;
 	ifp->if_rtrequest = ether_rtrequest;
 
 	if (ifp->if_hardmtu == 0)
