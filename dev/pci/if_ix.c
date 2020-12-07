@@ -1169,7 +1169,10 @@ ixgbe_intr(struct ix_softc *sc)
 		KERNEL_UNLOCK();
 	}
 
-	IXGBE_WRITE_REG(hw, IXGBE_EIMS, IXGBE_EIMS_OTHER | IXGBE_EIMS_LSC);
+	if (sc->sc_intrmap) {
+		IXGBE_WRITE_REG(hw, IXGBE_EIMS,
+		    IXGBE_EIMS_OTHER | IXGBE_EIMS_LSC);
+	}
 
 	return (1);
 }
