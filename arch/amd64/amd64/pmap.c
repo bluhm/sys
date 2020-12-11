@@ -2636,7 +2636,7 @@ pmap_enter_ept(struct pmap *pmap, paddr_t gpa, paddr_t hpa, vm_prot_t prot)
 int
 pmap_enter(struct pmap *pmap, vaddr_t va, paddr_t pa, vm_prot_t prot, int flags)
 {
-	pt_entry_t opte, npte;
+	pt_entry_t opte, npte, apte;
 	struct vm_page *ptp, *pg = NULL;
 	struct pv_entry *pve, *opve = NULL;
 	int ptpdelta, wireddelta, resdelta;
@@ -2828,7 +2828,8 @@ enter_now:
 	if (pmap == pmap_kernel())
 		npte |= pg_g_kern;
 
-	PTE_BASE[pl1_i(va)] = npte;		/* zap! */
+	apte = pmap_pte_set(&PTE_BASE[pl1_i(va)], npte);	/* zap! */
+	KASSERT(apte == opte);
 
 	/*
 	 * If we changed anything other than modified/used bits,
