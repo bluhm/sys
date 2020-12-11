@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf.c,v 1.1094 2020/07/24 18:17:15 mvs Exp $ */
+/*	$OpenBSD: pf.c,v 1.1096 2020/12/10 06:40:22 dlg Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -4161,7 +4161,7 @@ pf_create_state(struct pf_pdesc *pd, struct pf_rule *r, struct pf_rule *a,
 		s->tag = tag;
 	}
 	if (pd->proto == IPPROTO_TCP && (th->th_flags & (TH_SYN|TH_ACK)) ==
-	    TH_SYN && r->keep_state == PF_STATE_SYNPROXY) {
+	    TH_SYN && r->keep_state == PF_STATE_SYNPROXY && pd->dir == PF_IN) {
 		int rtid = pd->rdomain;
 		if (act->rtableid >= 0)
 			rtid = act->rtableid;
@@ -7183,8 +7183,10 @@ done:
 		pf_state_key_link_inpcb(s->key[PF_SK_STACK],
 		    pd.m->m_pkthdr.pf.inp);
 
-	if (s && (pd.m->m_pkthdr.csum_flags & M_FLOWID) == 0)
+	if (s != NULL && !ISSET(pd.m->m_pkthdr.csum_flags, M_FLOWID)) {
 		pd.m->m_pkthdr.ph_flowid = bemtoh64(&s->id);
+		SET(pd.m->m_pkthdr.csum_flags, M_FLOWID);
+	}
 
 	/*
 	 * connections redirected to loopback should not match sockets
