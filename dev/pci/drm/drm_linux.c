@@ -1,4 +1,4 @@
-/*	$OpenBSD: drm_linux.c,v 1.71 2020/12/10 12:24:06 jsg Exp $	*/
+/*	$OpenBSD: drm_linux.c,v 1.73 2020/12/13 04:00:38 jsg Exp $	*/
 /*
  * Copyright (c) 2013 Jonathan Gray <jsg@openbsd.org>
  * Copyright (c) 2015, 2016 Mark Kettenis <kettenis@openbsd.org>
@@ -893,6 +893,7 @@ sg_free_table(struct sg_table *table)
 {
 	free(table->sgl, M_DRM,
 	    table->orig_nents * sizeof(struct scatterlist));
+	table->sgl = NULL;
 }
 
 size_t
@@ -1834,20 +1835,12 @@ pcie_get_width_cap(struct pci_dev *pdev)
 }
 
 int
-default_wake_function(struct wait_queue_entry *wqe, unsigned int mode,
+autoremove_wake_function(struct wait_queue_entry *wqe, unsigned int mode,
     int sync, void *key)
 {
 	wakeup(wqe);
 	if (wqe->proc)
 		wake_up_process(wqe->proc);
-	return 0;
-}
-
-int
-autoremove_wake_function(struct wait_queue_entry *wqe, unsigned int mode,
-    int sync, void *key)
-{
-	default_wake_function(wqe, mode, sync, key);
 	list_del_init(&wqe->entry);
 	return 0;
 }
