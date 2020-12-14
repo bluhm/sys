@@ -13,7 +13,6 @@
 #define _JB_EDI		5
 #define _JB_SIGMASK	6
 #define _JB_SIGFLAG	7
-#define _JB_MXCSR	8
-#define _JB_FCW		9
+#define _JB_FCW		8
 
 #define _JBLEN		10	/* size, in longs, of a jmp_buf */
