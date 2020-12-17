@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_event.c,v 1.148 2020/12/15 04:48:18 visa Exp $	*/
+/*	$OpenBSD: kern_event.c,v 1.150 2020/12/16 15:07:30 visa Exp $	*/
 
 /*-
  * Copyright (c) 1999,2000,2001 Jonathan Lemon <jlemon@FreeBSD.org>
@@ -59,7 +59,6 @@
 
 struct	kqueue *kqueue_alloc(struct filedesc *);
 void	kqueue_terminate(struct proc *p, struct kqueue *);
-void	kqueue_free(struct kqueue *);
 void	kqueue_init(void);
 void	KQREF(struct kqueue *);
 void	KQRELE(struct kqueue *);
@@ -182,12 +181,6 @@ KQRELE(struct kqueue *kq)
 		fdpunlock(fdp);
 	}
 
-	kqueue_free(kq);
-}
-
-void
-kqueue_free(struct kqueue *kq)
-{
 	free(kq->kq_knlist, M_KEVENT, kq->kq_knlistsize *
 	    sizeof(struct knlist));
 	hashfree(kq->kq_knhash, KN_HASHSIZE, M_KEVENT);
@@ -509,12 +502,17 @@ void
 kqpoll_init(void)
 {
 	struct proc *p = curproc;
+	struct filedesc *fdp;
 
 	if (p->p_kq != NULL)
 		return;
 
 	p->p_kq = kqueue_alloc(p->p_fd);
 	p->p_kq_serial = arc4random();
+	fdp = p->p_fd;
+	fdplock(fdp);
+	LIST_INSERT_HEAD(&fdp->fd_kqlist, p->p_kq, kq_next);
+	fdpunlock(fdp);
 }
 
 void
@@ -526,7 +524,8 @@ kqpoll_exit(void)
 		return;
 
 	kqueue_terminate(p, p->p_kq);
-	kqueue_free(p->p_kq);
+	KASSERT(p->p_kq->kq_refs == 1);
+	KQRELE(p->p_kq);
 	p->p_kq = NULL;
 }
 
