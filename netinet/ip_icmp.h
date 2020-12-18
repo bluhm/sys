@@ -239,7 +239,7 @@ int	icmp_reflect(struct mbuf *, struct mbuf **, struct in_ifaddr *);
 void	icmp_send(struct mbuf *, struct mbuf *);
 int	icmp_sysctl(int *, u_int, void *, size_t *, void *, size_t);
 struct rtentry *
-	icmp_mtudisc_clone(struct in_addr, u_int);
+	icmp_mtudisc_clone(struct in_addr, u_int, int);
 void	icmp_mtudisc(struct icmp *, u_int);
 int	icmp_do_exthdr(struct mbuf *, u_int16_t, u_int8_t, void *, size_t);
 #endif /* _KERNEL */

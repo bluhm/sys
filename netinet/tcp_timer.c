@@ -292,7 +292,7 @@ tcp_timer_rexmt(void *arg)
 #endif
 		case PF_INET:
 			rt = icmp_mtudisc_clone(inp->inp_faddr,
-			    inp->inp_rtableid);
+			    inp->inp_rtableid, 0);
 			break;
 		}
 		if (rt != NULL) {

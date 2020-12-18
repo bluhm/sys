@@ -605,7 +605,7 @@ ip_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct route *ro, int fwd)
 			rt = NULL;
 		else if (rt == NULL || (rt->rt_flags & RTF_HOST) == 0) {
 			rt = icmp_mtudisc_clone(ip->ip_dst,
-			    m->m_pkthdr.ph_rtableid);
+			    m->m_pkthdr.ph_rtableid, 1);
 			rt_mtucloned = 1;
 		}
 		DPRINTF(("%s: spi %08x mtu %d rt %p cloned %d\n", __func__,
