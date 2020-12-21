@@ -1,4 +1,4 @@
-/*	$OpenBSD: event.h,v 1.49 2020/12/09 18:58:19 mpi Exp $	*/
+/*	$OpenBSD: event.h,v 1.51 2020/12/20 12:54:05 visa Exp $	*/
 
 /*-
  * Copyright (c) 1999,2000,2001 Jonathan Lemon <jlemon@FreeBSD.org>
@@ -127,11 +127,15 @@ struct kevent {
  * programs which pull in <sys/proc.h> or <sys/selinfo.h>.
  */
 #include <sys/queue.h>
+
+struct klistops;
 struct knote;
 SLIST_HEAD(knlist, knote);
 
 struct klist {
 	struct knlist		 kl_list;
+	const struct klistops	*kl_ops;
+	void			*kl_arg;
 };
 
 #ifdef _KERNEL
@@ -200,6 +204,12 @@ struct knote {
 #define kn_fp		kn_ptr.p_fp
 };
 
+struct klistops {
+	void	(*klo_assertlk)(void *);
+	int	(*klo_lock)(void *);
+	void	(*klo_unlock)(void *, int);
+};
+
 struct kqueue_scan_state {
 	struct kqueue	*kqs_kq;		/* kqueue of this scan */
 	struct knote	 kqs_start;		/* start marker */
@@ -209,7 +219,9 @@ struct kqueue_scan_state {
 						 * in queue */
 };
 
+struct mutex;
 struct proc;
+struct rwlock;
 struct timespec;
 
 extern const struct filterops sig_filtops;
@@ -218,8 +230,6 @@ extern const struct filterops dead_filtops;
 extern void	kqpoll_init(void);
 extern void	kqpoll_exit(void);
 extern void	knote(struct klist *list, long hint);
-extern void	knote_activate(struct knote *);
-extern void	knote_remove(struct proc *p, struct knlist *list);
 extern void	knote_fdclose(struct proc *p, int fd);
 extern void	knote_processexit(struct proc *);
 extern int	kqueue_register(struct kqueue *kq,
@@ -231,6 +241,10 @@ extern void	kqueue_scan_finish(struct kqueue_scan_state *);
 extern void	kqueue_purge(struct proc *, struct kqueue *);
 extern int	filt_seltrue(struct knote *kn, long hint);
 extern int	seltrue_kqfilter(dev_t, struct knote *);
+extern void	klist_init(struct klist *, const struct klistops *, void *);
+extern void	klist_init_mutex(struct klist *, struct mutex *);
+extern void	klist_init_rwlock(struct klist *, struct rwlock *);
+extern void	klist_free(struct klist *);
 extern void	klist_insert(struct klist *, struct knote *);
 extern void	klist_remove(struct klist *, struct knote *);
 extern int	klist_empty(struct klist *);
