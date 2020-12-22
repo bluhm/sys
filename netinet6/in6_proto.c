@@ -227,6 +227,7 @@ const struct protosw inet6sw[] = {
   .pr_protocol	= IPPROTO_ESP,
   .pr_flags	= PR_ATOMIC|PR_ADDR,
   .pr_input	= esp6_input,
+  .pr_ctlinput	= esp6_ctlinput,
   .pr_ctloutput	= rip6_ctloutput,
   .pr_usrreq	= rip6_usrreq,
   .pr_attach	= rip6_attach,
