@@ -84,6 +84,7 @@
 #include "bpfilter.h"
 
 void ipsec_common_ctlinput(u_int, int, struct sockaddr *, void *, int);
+void ipsec6_common_ctlinput(u_int, int, struct sockaddr *, void *, int);
 
 #ifdef ENCDEBUG
 #define DPRINTF(x)	if (encdebug) printf x
@@ -947,13 +948,15 @@ ipcomp4_input(struct mbuf **mp, int *offp, int proto, int af)
 }
 
 void
-ipsec_set_mtu(struct tdb *tdbp, u_int32_t mtu, uint64_t timeout, const char *msg)
+ipsec_set_mtu(struct tdb *tdbp, u_int32_t mtu, uint64_t timeout,
+    const char *msg)
 {
 	ssize_t adjust;
 
 	if (timeout == 0)
 		timeout = ip_mtudisc_timeout;
 	/* Walk the chain backwards to the first tdb */
+	NET_ASSERT_LOCKED();
 	for (; tdbp; tdbp = tdbp->tdb_inext) {
 		if (tdbp->tdb_flags & TDBF_INVALID ||
 		    (adjust = ipsec_hdrsz(tdbp)) == -1)
@@ -976,7 +979,7 @@ ipsec_common_ctlinput(u_int rdomain, int cmd, struct sockaddr *sa,
 {
 	struct ip *ip = v;
 
-	if (cmd == PRC_MSGSIZE && ip && ip_mtudisc && ip->ip_v == 4) {
+	if (cmd == PRC_MSGSIZE && ip_mtudisc && ip && ip->ip_v == 4) {
 		struct tdb *tdbp;
 		struct sockaddr_in dst;
 		struct icmp *icp;
@@ -995,7 +998,7 @@ ipsec_common_ctlinput(u_int rdomain, int cmd, struct sockaddr *sa,
 		if (mtu < 296)
 			return;
 
-		memset(&dst, 0, sizeof(struct sockaddr_in));
+		memset(&dst, 0, sizeof(dst));
 		dst.sin_family = AF_INET;
 		dst.sin_len = sizeof(struct sockaddr_in);
 		dst.sin_addr.s_addr = ip->ip_dst.s_addr;
@@ -1015,19 +1018,25 @@ ipsec6_common_ctlinput(u_int rdomain, int cmd, struct sockaddr *sa,
     void *v, int proto)
 {
 	struct ip6ctlparam *ip6cp = v;
-	struct icmp6_hdr *icmp6;
-	struct sockaddr_in6 sa6;
-	struct mbuf *m;
-	struct tdb *tdbp;
-	u_int32_t spi, mtu;
-	int off;
 
 	if (cmd == PRC_MSGSIZE && ip_mtudisc && ip6cp && ip6cp->ip6c_icmp6) {
+		struct tdb *tdbp;
+		struct sockaddr_in6 dst;
+		struct icmp6_hdr *icmp6;
+		struct mbuf *m;
+		u_int32_t spi, mtu;
+		int off;
+
+		/* Find the right MTU. */
 		icmp6 = ip6cp->ip6c_icmp6;
 		mtu = ntohl(icmp6->icmp6_mtu);
+
+		/*
+		 * Ignore the packet, if we do not receive a MTU
+		 * or the MTU is too small to be acceptable.
+		 */
 		if (mtu < IPV6_MMTU)
 			return;
-
 		m = ip6cp->ip6c_m;
 		off = ip6cp->ip6c_off;
 		if (m->m_pkthdr.len < off + sizeof(spi))
@@ -1036,27 +1045,28 @@ ipsec6_common_ctlinput(u_int rdomain, int cmd, struct sockaddr *sa,
 		m_copydata(m, off, sizeof(spi), (caddr_t)&spi);
 
 		if (ip6cp->ip6c_finaldst) {
-			bzero(&sa6, sizeof(sa6));
-			sa6.sin6_family = AF_INET6;
-			sa6.sin6_len = sizeof(sa6);
-			sa6.sin6_addr = *ip6cp->ip6c_finaldst;
+			memset(&dst, 0, sizeof(dst));
+			dst.sin6_family = AF_INET6;
+			dst.sin6_len = sizeof(dst);
+			dst.sin6_addr = *ip6cp->ip6c_finaldst;
 			/* XXX: assuming M is valid in this case */
-			sa6.sin6_scope_id = in6_addr2scopeid(m->m_pkthdr.ph_ifidx,
+			dst.sin6_scope_id =
+			    in6_addr2scopeid(m->m_pkthdr.ph_ifidx,
 			    ip6cp->ip6c_finaldst);
-			if (in6_embedscope(ip6cp->ip6c_finaldst, &sa6, NULL)) {
+			if (in6_embedscope(ip6cp->ip6c_finaldst, &dst, NULL)) {
 				/* should be impossible */
 				return;
 			}
 		} else {
 			/* XXX: translate addresses into internal form */
-			sa6 = *satosin6(sa);
-			if (in6_embedscope(&sa6.sin6_addr, &sa6, NULL)) {
+			dst = *satosin6(sa);
+			if (in6_embedscope(&dst.sin6_addr, &dst, NULL)) {
 				/* should be impossible */
 				return;
 			}
 		}
 
-		tdbp = gettdb_rev(rdomain, spi, (union sockaddr_union *)&sa6,
+		tdbp = gettdb_rev(rdomain, spi, (union sockaddr_union *)&dst,
 		    proto);
 		if (tdbp != NULL && !(tdbp->tdb_flags & TDBF_INVALID))
 			ipsec_set_mtu(tdbp, mtu, 0, __func__);
