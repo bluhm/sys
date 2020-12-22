@@ -1064,7 +1064,6 @@ ipsec6_common_ctlinput(u_int rdomain, int cmd, struct sockaddr *sa,
 }
 #endif
 
-
 void
 udpencap_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 {
@@ -1111,39 +1110,6 @@ udpencap_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 		}
 	}
 }
-
-#ifdef INET6
-void
-udpencap6_ctlinput(struct ip6ctlparam *ip6cp, struct sockaddr_in6 *sa6,
-    struct sockaddr_in6 *sa6_src, u_int rdomain)
-{
-	struct tdb *tdbp;
-	union sockaddr_union *su_dst, *su_src;
-	struct icmp6_hdr *icmp6 = ip6cp->ip6c_icmp6;
-	u_int mtu = ntohl(icmp6->icmp6_mtu);
-
-	NET_ASSERT_LOCKED();
-
-	if (mtu < IPV6_MMTU)
-		return;
-
-	su_dst = (union sockaddr_union *)sa6;
-	su_src = (union sockaddr_union *)sa6_src;
-
-	tdbp = gettdbbysrcdst_rev(rdomain, 0, su_src, su_dst,
-	    IPPROTO_ESP);
-
-	for (; tdbp != NULL; tdbp = tdbp->tdb_snext) {
-		if (tdbp->tdb_sproto == IPPROTO_ESP &&
-		    ((tdbp->tdb_flags & (TDBF_INVALID|TDBF_UDPENCAP)) ==
-		    TDBF_UDPENCAP) &&
-		    !memcmp(&tdbp->tdb_dst, sa6, su_dst->sa.sa_len) &&
-		    !memcmp(&tdbp->tdb_src, sa6_src, su_src->sa.sa_len)) {
-			ipsec_set_mtu(tdbp, mtu, 0, __func__);
-		}
-	}
-}
-#endif
 
 void
 esp4_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)

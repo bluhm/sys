@@ -759,15 +759,6 @@ udp6_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *d)
 			return;
 		}
 
-#ifdef IPSEC
-		/* PMTU discovery for udpencap */
-		if (cmd == PRC_MSGSIZE && ip_mtudisc && udpencap_enable &&
-		    udpencap_port && uh.uh_sport == htons(udpencap_port)) {
-			udpencap6_ctlinput(ip6cp, &sa6, &sa6_src, rdomain);
-			return;
-		}
-#endif
-
 		if (cmd == PRC_MSGSIZE) {
 			int valid = 0;
 

@@ -591,9 +591,6 @@ void	ah4_ctlinput(int, struct sockaddr *, u_int, void *);
 void	udpencap_ctlinput(int, struct sockaddr *, u_int, void *);
 
 #ifdef INET6
-struct ip6ctlparam;
-void	udpencap6_ctlinput(struct ip6ctlparam *, struct sockaddr_in6 *,
-	    struct sockaddr_in6 *, u_int);
 int	ah6_input(struct mbuf **, int *, int, int);
 #endif /* INET6 */
 
