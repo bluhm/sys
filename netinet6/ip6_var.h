@@ -368,7 +368,8 @@ u_int32_t ip6_randomflowlabel(void);
 struct tdb;
 struct tdb *
 	ip6_output_ipsec_lookup(struct mbuf *, int *, struct inpcb *);
-int	ip6_output_ipsec_send(struct tdb *, struct mbuf *, int, int);
+int	ip6_output_ipsec_send(struct tdb *, struct mbuf *, struct route_in6 *,
+	    int, int);
 #endif /* IPSEC */
 
 #endif /* _KERNEL */

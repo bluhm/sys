@@ -613,7 +613,7 @@ ip_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct route *ro, int fwd)
 		    ntohl(tdb->tdb_spi), tdb->tdb_mtu, rt, rt_mtucloned));
 		if (rt != NULL) {
 			rt->rt_mtu = tdb->tdb_mtu;
-			if (ro && ro->ro_rt != NULL) {
+			if (ro != NULL && ro->ro_rt != NULL) {
 				rtfree(ro->ro_rt);
 				ro->ro_rt = rtalloc(&ro->ro_dst, RT_RESOLVE,
 				    m->m_pkthdr.ph_rtableid);
