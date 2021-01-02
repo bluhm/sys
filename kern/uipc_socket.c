@@ -1176,6 +1176,8 @@ sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
 	if ((so->so_state & (SS_ISCONNECTED|SS_ISCONNECTING)) == 0 &&
 	    (so->so_proto->pr_flags & PR_CONNREQUIRED))
 		return (ENOTCONN);
+	if (so->so_options & SO_BROADCAST)
+		return (EACCES);
 	if (so->so_sp == NULL) {
 		sp = pool_get(&sosplice_pool, PR_WAITOK | PR_ZERO);
 		if (so->so_sp == NULL)
