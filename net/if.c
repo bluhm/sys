@@ -740,6 +740,8 @@ if_input(struct ifnet *ifp, struct mbuf_list *ml)
 int
 if_input_local(struct ifnet *ifp, struct mbuf *m, sa_family_t af)
 {
+	int keepflags;
+
 #if NBPFILTER > 0
 	/*
 	 * Only send packets to bpf if they are destinated to local
@@ -755,8 +757,9 @@ if_input_local(struct ifnet *ifp, struct mbuf *m, sa_family_t af)
 			bpf_mtap_af(if_bpf, af, m, BPF_DIRECTION_OUT);
 	}
 #endif
+	keepflags = m->m_flags & (M_BCAST|M_MCAST);
 	m_resethdr(m);
-	m->m_flags |= M_LOOP;
+	m->m_flags |= M_LOOP | keepflags;
 	m->m_pkthdr.ph_ifidx = ifp->if_index;
 	m->m_pkthdr.ph_rtableid = ifp->if_rdomain;
 
