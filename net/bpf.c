@@ -1,4 +1,4 @@
-/*	$OpenBSD: bpf.c,v 1.199 2020/12/26 16:30:58 cheloha Exp $	*/
+/*	$OpenBSD: bpf.c,v 1.201 2021/01/02 07:25:42 dlg Exp $	*/
 /*	$NetBSD: bpf.c,v 1.33 1997/02/21 23:59:35 thorpej Exp $	*/
 
 /*
@@ -60,6 +60,7 @@
 #include <sys/selinfo.h>
 #include <sys/sigio.h>
 #include <sys/task.h>
+#include <sys/time.h>
 
 #include <net/if.h>
 #include <net/bpf.h>
@@ -76,9 +77,6 @@
 #define BPF_BUFSIZE 32768
 
 #define PRINET  26			/* interruptible */
-
-/* from kern/kern_clock.c; incremented each clock tick. */
-extern int ticks;
 
 /*
  * The default read buffer size is patchable.
@@ -422,15 +420,30 @@ bpfclose(dev_t dev, int flag, int mode, struct proc *p)
 	(d)->bd_sbuf = (d)->bd_fbuf; \
 	(d)->bd_slen = 0; \
 	(d)->bd_fbuf = NULL;
+
+/*
+ * TODO Move nsecuptime() into kern_tc.c and document it when we have
+ * more users elsewhere in the kernel.
+ */
+static uint64_t
+nsecuptime(void)
+{
+	struct timespec now;
+
+	nanouptime(&now);
+	return TIMESPEC_TO_NSEC(&now);
+}
+
 /*
  *  bpfread - read next chunk of packets from buffers
  */
 int
 bpfread(dev_t dev, struct uio *uio, int ioflag)
 {
+	uint64_t end, now;
 	struct bpf_d *d;
 	caddr_t hbuf;
-	int end, error, hlen, nticks;
+	int error, hlen;
 
 	KERNEL_ASSERT_LOCKED();
 
@@ -453,8 +466,12 @@ bpfread(dev_t dev, struct uio *uio, int ioflag)
 	/*
 	 * If there's a timeout, mark when the read should end.
 	 */
-	if (d->bd_rtout)
-		end = ticks + (int)d->bd_rtout;
+	if (d->bd_rtout != 0) {
+		now = nsecuptime();
+		end = now + d->bd_rtout;
+		if (end < now)
+			end = UINT64_MAX;
+	}
 
 	/*
 	 * If the hold buffer is empty, then do a timed sleep, which
@@ -489,11 +506,11 @@ bpfread(dev_t dev, struct uio *uio, int ioflag)
 			error = msleep_nsec(d, &d->bd_mtx, PRINET|PCATCH,
 			    "bpf", INFSLP);
 			d->bd_nreaders--;
-		} else if ((nticks = end - ticks) > 0) {
+		} else if ((now = nsecuptime()) < end) {
 			/* Read timeout has not expired yet. */
 			d->bd_nreaders++;
-			error = msleep(d, &d->bd_mtx, PRINET|PCATCH, "bpf",
-			    nticks);
+			error = msleep_nsec(d, &d->bd_mtx, PRINET|PCATCH,
+			    "bpf", end - now);
 			d->bd_nreaders--;
 		} else {
 			/* Read timeout has expired. */
@@ -554,7 +571,6 @@ out:
 	return (error);
 }
 
-
 /*
  * If there are processes sleeping on this descriptor, wake them up.
  */
@@ -563,14 +579,20 @@ bpf_wakeup(struct bpf_d *d)
 {
 	MUTEX_ASSERT_LOCKED(&d->bd_mtx);
 
+	if (d->bd_nreaders)
+		wakeup(d);
+
 	/*
 	 * As long as pgsigio() and selwakeup() need to be protected
 	 * by the KERNEL_LOCK() we have to delay the wakeup to
 	 * another context to keep the hot path KERNEL_LOCK()-free.
 	 */
-	bpf_get(d);
-	if (!task_add(systq, &d->bd_wake_task))
-		bpf_put(d);
+	if ((d->bd_async && d->bd_sig) ||
+	    (!klist_empty(&d->bd_sel.si_note) || d->bd_sel.si_seltid != 0)) {
+		bpf_get(d);
+		if (!task_add(systq, &d->bd_wake_task))
+			bpf_put(d);
+	}
 }
 
 void
@@ -578,7 +600,6 @@ bpf_wakeup_cb(void *xd)
 {
 	struct bpf_d *d = xd;
 
-	wakeup(d);
 	if (d->bd_async && d->bd_sig)
 		pgsigio(&d->bd_sigio, d->bd_sig, 0);
 
@@ -861,27 +882,19 @@ bpfioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct proc *p)
 	case BIOCSRTIMEOUT:
 		{
 			struct timeval *tv = (struct timeval *)addr;
-			u_long rtout;
+			uint64_t rtout;
 
-			/* Compute number of ticks. */
 			if (tv->tv_sec < 0 || !timerisvalid(tv)) {
 				error = EINVAL;
 				break;
 			}
-			if (tv->tv_sec > INT_MAX / hz) {
+			rtout = TIMEVAL_TO_NSEC(tv);
+			if (rtout > MAXTSLP) {
 				error = EOVERFLOW;
 				break;
 			}
-			rtout = tv->tv_sec * hz;
-			if (tv->tv_usec / tick > INT_MAX - rtout) {
-				error = EOVERFLOW;
-				break;
-			}
-			rtout += tv->tv_usec / tick;
 			mtx_enter(&d->bd_mtx);
 			d->bd_rtout = rtout;
-			if (d->bd_rtout == 0 && tv->tv_usec != 0)
-				d->bd_rtout = 1;
 			mtx_leave(&d->bd_mtx);
 			break;
 		}
@@ -893,9 +906,9 @@ bpfioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct proc *p)
 		{
 			struct timeval *tv = (struct timeval *)addr;
 
+			memset(tv, 0, sizeof(*tv));
 			mtx_enter(&d->bd_mtx);
-			tv->tv_sec = d->bd_rtout / hz;
-			tv->tv_usec = (d->bd_rtout % hz) * tick;
+			NSEC_TO_TIMEVAL(d->bd_rtout, tv);
 			mtx_leave(&d->bd_mtx);
 			break;
 		}
@@ -1542,17 +1555,6 @@ bpf_catchpacket(struct bpf_d *d, u_char *pkt, size_t pktlen, size_t snaplen,
 		 * reads should be woken up.
 		 */
 		do_wakeup = 1;
-	}
-
-	if (d->bd_nreaders > 0) {
-		/*
-		 * We have one or more threads sleeping in bpfread().
-		 * We got a packet, so wake up all readers.
-		 */
-		if (d->bd_fbuf != NULL) {
-			ROTATE_BUFFERS(d);
-			do_wakeup = 1;
-		}
 	}
 
 	if (do_wakeup)
