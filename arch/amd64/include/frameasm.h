@@ -68,10 +68,8 @@
 	swapgs				; \
 	FENCE_SWAPGS_MIS_TAKEN 		; \
 	movq	%rax,CPUVAR(SCRATCH)	; \
-	CODEPATCH_START			; \
-	movq	CPUVAR(KERN_CR3),%rax	; \
+	movq	%cr3,%rax		; \
 	movq	%rax,%cr3		; \
-	CODEPATCH_END(CPTAG_MELTDOWN_NOP);\
 	jmp	98f			; \
 END(X##label)				; \
 _ENTRY(INTRENTRY_LABEL(label)) /* from kernel */ \
