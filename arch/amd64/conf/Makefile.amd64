@@ -152,9 +152,6 @@ ioconf.o: ioconf.c
 
 locore.o: assym.h
 	${NORMAL_S}
-	@[[ -n `objdump -D $@ | grep -A1 doreti_iret | sort | uniq -d` ]] || \
-	 { rm -f $@; echo "ERROR: overlaid iretq instructions don't line up"; \
-	   echo "#GP-on-iretq fault handling would be broken"; exit 1; }
 
 ld.script: ${_machdir}/conf/ld.script
 	cp ${_machdir}/conf/ld.script $@
