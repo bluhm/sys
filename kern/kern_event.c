@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_event.c,v 1.156 2020/12/25 12:59:52 visa Exp $	*/
+/*	$OpenBSD: kern_event.c,v 1.158 2021/01/08 12:29:16 visa Exp $	*/
 
 /*-
  * Copyright (c) 1999,2000,2001 Jonathan Lemon <jlemon@FreeBSD.org>
@@ -1614,6 +1614,13 @@ klist_empty(struct klist *klist)
 	return (SLIST_EMPTY(&klist->kl_list));
 }
 
+/*
+ * Detach all knotes from klist. The knotes are rewired to indicate EOF.
+ *
+ * The caller of this function must not hold any locks that can block
+ * filterops callbacks that run with KN_PROCESSING.
+ * Otherwise this function might deadlock.
+ */
 void
 klist_invalidate(struct klist *list)
 {
@@ -1621,10 +1628,6 @@ klist_invalidate(struct klist *list)
 	struct proc *p = curproc;
 	int ls, s;
 
-	/*
-	 * NET_LOCK() must not be held because it can block another thread
-	 * in f_event with a knote acquired.
-	 */
 	NET_ASSERT_UNLOCKED();
 
 	s = splhigh();
@@ -1662,8 +1665,8 @@ klist_lock(struct klist *list)
 	if (list->kl_ops != NULL) {
 		ls = list->kl_ops->klo_lock(list->kl_arg);
 	} else {
-		ls = splhigh();
 		KERNEL_LOCK();
+		ls = splhigh();
 	}
 	return ls;
 }
@@ -1674,8 +1677,8 @@ klist_unlock(struct klist *list, int ls)
 	if (list->kl_ops != NULL) {
 		list->kl_ops->klo_unlock(list->kl_arg, ls);
 	} else {
-		KERNEL_UNLOCK();
 		splx(ls);
+		KERNEL_UNLOCK();
 	}
 }
 

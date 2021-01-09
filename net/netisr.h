@@ -1,4 +1,4 @@
-/*	$OpenBSD: netisr.h,v 1.53 2020/08/06 12:00:46 mvs Exp $	*/
+/*	$OpenBSD: netisr.h,v 1.55 2021/01/05 20:43:36 kn Exp $	*/
 /*	$NetBSD: netisr.h,v 1.12 1995/08/12 23:59:24 mycroft Exp $	*/
 
 /*
@@ -45,7 +45,6 @@
 #define	NETISR_ARP	18		/* same as AF_LINK */
 #define	NETISR_PPP	28		/* for PPP processing */
 #define	NETISR_BRIDGE	29		/* for bridge processing */
-#define	NETISR_PPPOE	30		/* for pppoe processing */
 #define	NETISR_SWITCH	31		/* for switch dataplane */
 
 #ifndef _LOCORE
@@ -60,7 +59,6 @@ extern struct task if_input_task_locked;
 void	arpintr(void);
 void	pppintr(void);
 void	bridgeintr(void);
-void	pppoeintr(void);
 void	switchintr(void);
 void	pfsyncintr(void);
 

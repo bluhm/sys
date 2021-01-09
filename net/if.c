@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.c,v 1.621 2020/12/15 03:43:34 dlg Exp $	*/
+/*	$OpenBSD: if.c,v 1.623 2021/01/04 21:21:41 kn Exp $	*/
 /*	$NetBSD: if.c,v 1.35 1996/05/07 05:26:04 thorpej Exp $	*/
 
 /*
@@ -68,7 +68,6 @@
 #include "pf.h"
 #include "pfsync.h"
 #include "ppp.h"
-#include "pppoe.h"
 #include "switch.h"
 #include "if_wg.h"
 
@@ -902,13 +901,6 @@ if_netisr(void *unused)
 		if (n & (1 << NETISR_SWITCH)) {
 			KERNEL_LOCK();
 			switchintr();
-			KERNEL_UNLOCK();
-		}
-#endif
-#if NPPPOE > 0
-		if (n & (1 << NETISR_PPPOE)) {
-			KERNEL_LOCK();
-			pppoeintr();
 			KERNEL_UNLOCK();
 		}
 #endif
