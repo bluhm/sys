@@ -353,8 +353,10 @@ pflog_mtap(caddr_t if_bpf, struct pfloghdr *pfloghdr, struct mbuf *m)
 	    (pfloghdr->rewritten = pf_translate(&pd, &pfloghdr->saddr,
 	    pfloghdr->sport, &pfloghdr->daddr, pfloghdr->dport, 0,
 	    pfloghdr->dir))) {
-		m_copyback(pd.m, pd.off, min(pd.m->m_len - pd.off, pd.hdrlen),
-		    &pd.hdr, M_NOWAIT);
+		if (pd.m->m_len > pd.off && pd.hdrlen > 0) {
+			m_copyback(pd.m, pd.off, min(pd.m->m_len - pd.off,
+			    pd.hdrlen), &pd.hdr, M_NOWAIT);
+		}
 #ifdef INET6
 		if (afto) {
 			pf_addrcpy(&pd.nsaddr, &pfloghdr->saddr, pd.naf);
