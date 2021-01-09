@@ -663,30 +663,15 @@ IDTVEC_NOALIGN(syscall)
 	movq	TF_RIP(%rsp),%rcx
 	movq	TF_RFLAGS(%rsp),%r11
 	movq	TF_RSP(%rsp),%rsp
-	CODEPATCH_START
 	movq	%rax,CPUVAR(SCRATCH)
-	movq	CPUVAR(USER_CR3),%rax
-	PCID_SET_REUSE_NOP
+	movq	%cr3,%rax
 	movq	%rax,%cr3
-Xsyscall_trampback:
-0:	pause
-	lfence
-	jmp	0b
-	CODEPATCH_END(CPTAG_MELTDOWN_NOP)
+	movq	CPUVAR(SCRATCH),%rax
 	swapgs
 	sysretq
 END(Xsyscall)
 END(Xsyscall_meltdown)
 KTEXT_PAGE_END
-
-KUTEXT_PAGE_START
-	.space	(Xsyscall_trampback - Xsyscall_meltdown) - \
-		(. - XUsyscall_meltdown), 0xcc
-	movq	%rax,%cr3
-	movq	CPUVAR(SCRATCH),%rax
-	swapgs
-	sysretq
-KUTEXT_PAGE_END
 
 	.text
 	_ALIGN_TRAPS
