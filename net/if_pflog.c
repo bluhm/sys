@@ -262,6 +262,7 @@ pflog_mtap(caddr_t if_bpf, struct pfloghdr *pfloghdr, struct mbuf *m)
 	u_int16_t		 osport = 0, odport = 0;
 	u_int8_t		 proto = 0;
 
+printf("%s: I was here!\n", __func__);
 	afto = pfloghdr->af != pfloghdr->naf;
 
 	/*
@@ -310,6 +311,8 @@ pflog_mtap(caddr_t if_bpf, struct pfloghdr *pfloghdr, struct mbuf *m)
 		/* shouldn't happen ever :-) */
 		goto copy;
 	}
+printf("%s: got ip header: hlen %d, m_pkthdr.len %d, proto %u\n", __func__,
+    hlen, m->m_pkthdr.len, proto);
 
 	if (m->m_pkthdr.len < hlen + 8 && proto != IPPROTO_NONE)
 		goto copy;
@@ -318,6 +321,7 @@ pflog_mtap(caddr_t if_bpf, struct pfloghdr *pfloghdr, struct mbuf *m)
 		m_copydata(m, hlen, 8, mdst + hlen);
 		hlen += 8;
 	}
+printf("%s: got protocol header: hlen %d\n", __func__, hlen);
 
 	mhdr.m_len = hlen;
 	mhdr.m_pkthdr.len = hlen;
@@ -341,6 +345,8 @@ pflog_mtap(caddr_t if_bpf, struct pfloghdr *pfloghdr, struct mbuf *m)
 	    &mhdr, NULL) != PF_PASS)
 		goto copy;
 	pd.naf = pfloghdr->naf;
+printf("%s: got packet description: off %d, hdrlen %d, end %d, m_len %d\n",
+    __func__, pd.off, pd.hdrlen, pd.off + pd.hdrlen, pd.m->m_len);
 
 	pf_addrcpy(&osaddr, pd.src, pd.af);
 	pf_addrcpy(&odaddr, pd.dst, pd.af);
@@ -355,6 +361,7 @@ pflog_mtap(caddr_t if_bpf, struct pfloghdr *pfloghdr, struct mbuf *m)
 	    pfloghdr->dir))) {
 		m_copyback(pd.m, pd.off, min(pd.m->m_len - pd.off, pd.hdrlen),
 		    &pd.hdr, M_NOWAIT);
+printf("%s: packet translate rewritten m_len %d\n", __func__, pd.m->m_len);
 #ifdef INET6
 		if (afto) {
 			pf_addrcpy(&pd.nsaddr, &pfloghdr->saddr, pd.naf);

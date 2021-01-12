@@ -6389,6 +6389,8 @@ pf_walk_option6(struct pf_pdesc *pd, struct ip6_hdr *h, int off, int end,
 	struct ip6_opt		 opt;
 	struct ip6_opt_jumbo	 jumbo;
 
+if (reason == NULL)
+printf("%s: I was here!\n", __func__);
 	while (off < end) {
 		if (!pf_pull_hdr(pd->m, off, &opt.ip6o_type,
 		    sizeof(opt.ip6o_type), NULL, reason, AF_INET6)) {
@@ -6453,6 +6455,8 @@ pf_walk_header6(struct pf_pdesc *pd, struct ip6_hdr *h, u_short *reason)
 	u_int32_t		 end;
 	int			 hdr_cnt, fraghdr_cnt = 0, rthdr_cnt = 0;
 
+if (reason == NULL)
+printf("%s: I was here!\n", __func__);
 	pd->off += sizeof(struct ip6_hdr);
 	end = pd->off + ntohs(h->ip6_plen);
 	pd->fragoff = pd->extoff = pd->jumbolen = 0;
@@ -6597,6 +6601,8 @@ pf_setup_pdesc(struct pf_pdesc *pd, sa_family_t af, int dir,
 	pd->af = pd->naf = af;
 	pd->rdomain = rtable_l2(pd->m->m_pkthdr.ph_rtableid);
 
+if (reason == NULL)
+printf("%s: I was here!\n", __func__);
 	switch (pd->af) {
 	case AF_INET: {
 		struct ip	*h;
@@ -6632,6 +6638,8 @@ pf_setup_pdesc(struct pf_pdesc *pd, sa_family_t af, int dir,
 
 		/* Check for illegal packets */
 		if (pd->m->m_pkthdr.len < (int)sizeof(struct ip6_hdr)) {
+if (reason == NULL)
+printf("%s: m_pkthdr.len %d\n", __func__, pd->m->m_pkthdr.len);
 			REASON_SET(reason, PFRES_SHORT);
 			return (PF_DROP);
 		}
@@ -6639,6 +6647,9 @@ pf_setup_pdesc(struct pf_pdesc *pd, sa_family_t af, int dir,
 		h = mtod(pd->m, struct ip6_hdr *);
 		if (pd->m->m_pkthdr.len <
 		    sizeof(struct ip6_hdr) + ntohs(h->ip6_plen)) {
+if (reason == NULL)
+printf("%s: m_pkthdr.len %d, ip6_plen %d\n",
+    __func__, pd->m->m_pkthdr.len, ntohs(h->ip6_plen));
 			REASON_SET(reason, PFRES_SHORT);
 			return (PF_DROP);
 		}
@@ -6672,6 +6683,8 @@ pf_setup_pdesc(struct pf_pdesc *pd, sa_family_t af, int dir,
 		panic("pf_setup_pdesc called with illegal af %u", pd->af);
 
 	}
+if (reason == NULL)
+printf("%s: virtual_proto %d\n", __func__, pd->virtual_proto);
 
 	pf_addrcpy(&pd->nsaddr, pd->src, pd->af);
 	pf_addrcpy(&pd->ndaddr, pd->dst, pd->af);
@@ -6765,6 +6778,9 @@ pf_setup_pdesc(struct pf_pdesc *pd, sa_family_t af, int dir,
 	}
 #endif	/* INET6 */
 	}
+if (reason == NULL)
+printf("%s: off %d, hdrlen %d, tot_len %llu\n",
+    __func__, pd->off, pd->hdrlen, pd->tot_len);
 
 	if (pd->sport)
 		pd->osport = pd->nsport = *pd->sport;
