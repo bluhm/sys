@@ -27,6 +27,7 @@
 #ifndef _NET_IF_PFLOG_H_
 #define _NET_IF_PFLOG_H_
 
+#include <sys/queue.h>
 #include <net/pfvar.h>
 
 #define PFLOG_RULESET_NAME_SIZE	16
@@ -62,8 +63,9 @@ struct pfloghdr {
 #ifdef _KERNEL
 
 struct pflog_softc {
-	struct ifnet		sc_if;		/* the interface */
-	int			sc_unit;
+	LIST_ENTRY(pflog_softc)		sc_entry;
+	struct ifnet			sc_if;		/* the interface */
+	int				sc_unit;
 };
 
 #endif /* _KERNEL */
