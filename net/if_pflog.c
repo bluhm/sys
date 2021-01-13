@@ -269,6 +269,7 @@ printf("%s: I was here!\n", __func__);
 	 * temporary mbuf will hold an ip/ip6 header and 8 bytes
 	 * of the protocol header
 	 */
+	arc4random_buf(&mhdr, sizeof(mhdr));
 	m_inithdr(&mhdr);
 	mhdr.m_len = 0;	/* XXX not done in m_inithdr() */
 
@@ -329,6 +330,7 @@ printf("%s: got protocol header: hlen %d\n", __func__, hlen);
 	/* create a chain mhdr -> mptr, mptr->m_data = (m->m_data+hlen) */
 	mp = m_getptr(m, hlen, &off);
 	if (mp != NULL) {
+		arc4random_buf(&mptr, sizeof(mptr));
 		mptr.mh_flags = 0;
 		mptr.mh_data = mp->m_data + off;
 		mptr.mh_len = mp->m_len - off;
