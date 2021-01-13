@@ -244,7 +244,7 @@ m_get(int nowait, int type)
 	uint64_t *counters;
 	int s;
 
-	KDASSERT(type < MT_NTYPES);
+	KASSERT(type >= 0 && type < MT_NTYPES);
 
 	m = pool_get(&mbpool, nowait == M_WAIT ? PR_WAITOK : PR_NOWAIT);
 	if (m == NULL)
@@ -277,7 +277,7 @@ m_gethdr(int nowait, int type)
 	uint64_t *counters;
 	int s;
 
-	KDASSERT(type < MT_NTYPES);
+	KASSERT(type >= 0 && type < MT_NTYPES);
 
 	m = pool_get(&mbpool, nowait == M_WAIT ? PR_WAITOK : PR_NOWAIT);
 	if (m == NULL)
