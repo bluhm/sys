@@ -1409,11 +1409,13 @@ ip_forward(struct mbuf *m, struct ifnet *ifp, struct rtentry *rt, int srcrt)
 
 	dest = 0;
 	if (m->m_flags & (M_BCAST|M_MCAST) || in_canforward(ip->ip_dst) == 0) {
+printf("%s: cannot forward: ip_dst %08x\n", __func__, ip->ip_dst.s_addr);
 		ipstat_inc(ips_cantforward);
 		m_freem(m);
 		goto freecopy;
 	}
 	if (ip->ip_ttl <= IPTTLDEC) {
+printf("%s: ttl %d\n", __func__, ip->ip_ttl);
 		icmp_error(m, ICMP_TIMXCEED, ICMP_TIMXCEED_INTRANS, dest, 0);
 		goto freecopy;
 	}
@@ -1425,6 +1427,7 @@ ip_forward(struct mbuf *m, struct ifnet *ifp, struct rtentry *rt, int srcrt)
 	sin->sin_addr = ip->ip_dst;
 
 	if (!rtisvalid(rt)) {
+printf("%s: route invalid\n", __func__);
 		rtfree(rt);
 		rt = rtalloc_mpath(sintosa(sin), &ip->ip_src.s_addr,
 		    m->m_pkthdr.ph_rtableid);
@@ -1434,6 +1437,8 @@ ip_forward(struct mbuf *m, struct ifnet *ifp, struct rtentry *rt, int srcrt)
 			return;
 		}
 	}
+printf("%s: route valid: ip_src %08x, ph_rtableid %d\n",
+    __func__, ip->ip_src.s_addr, m->m_pkthdr.ph_rtableid);
 
 	/*
 	 * Save at most 68 bytes of the packet in case

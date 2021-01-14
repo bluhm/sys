@@ -400,6 +400,8 @@ icmp6_input(struct mbuf **mp, int *offp, int proto, int af)
 	int code, sum, noff;
 	char src[INET6_ADDRSTRLEN], dst[INET6_ADDRSTRLEN];
 
+printf("%s: I was here!\n", __func__);
+
 	/*
 	 * Locate icmp6 structure in mbuf, and check
 	 * that not corrupted and of at least minimum length

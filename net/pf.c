@@ -7275,9 +7275,12 @@ done:
 					action = PF_DROP;
 					break;
 				}
+printf("%s: ip_forward\n", __func__);
 				ip_forward(pd.m, ifp, NULL, 1);
-			} else
+			} else {
+printf("%s: ip_output\n", __func__);
 				ip_output(pd.m, NULL, NULL, 0, NULL, NULL, 0);
+			}
 			break;
 		case AF_INET6:
 			if (pd.dir == PF_IN) {
@@ -7286,9 +7289,12 @@ done:
 					action = PF_DROP;
 					break;
 				}
+printf("%s: ip6_forward\n", __func__);
 				ip6_forward(pd.m, NULL, 1);
-			} else
+			} else {
+printf("%s: ip6_output\n", __func__);
 				ip6_output(pd.m, NULL, NULL, 0, NULL, NULL);
+			}
 			break;
 		}
 		if (action != PF_DROP) {

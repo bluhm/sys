@@ -425,6 +425,7 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 	if (rtisvalid(rt) && ISSET(rt->rt_flags, RTF_LOCAL)) {
 		struct in6_ifaddr *ia6 = ifatoia6(rt->rt_ifa);
 
+printf("%s: local route valid\n", __func__);
 		if (ip6_forwarding == 0 && rt->rt_ifidx != ifp->if_index &&
 		    !((ifp->if_flags & IFF_LOOPBACK) ||
 		    (ifp->if_type == IFT_ENC) ||
@@ -466,6 +467,7 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 
 			goto bad;
 		} else {
+printf("%s: local ours: off %d, nxt %d, af %d\n", __func__, *offp, nxt, af);
 			nxt = ip6_ours(mp, offp, nxt, af);
 			goto out;
 		}
