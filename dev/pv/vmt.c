@@ -1,4 +1,4 @@
-/*	$OpenBSD: vmt.c,v 1.19 2020/06/24 22:03:40 cheloha Exp $ */
+/*	$OpenBSD: vmt.c,v 1.21 2021/01/13 23:56:48 jmatthew Exp $ */
 
 /*
  * Copyright (c) 2007 David Crawshaw <david@zentus.com>
@@ -418,7 +418,7 @@ vmt_kvop(void *arg, int op, char *key, char *value, size_t valuelen)
 	int error = 0;
 
 	bufsz = VMT_RPC_BUFLEN;
-	buf = malloc(bufsz, M_TEMP|M_ZERO, M_WAITOK);
+	buf = malloc(bufsz, M_TEMP, M_WAITOK | M_ZERO);
 
 	switch (op) {
 	case PVBUS_KVWRITE:
@@ -1372,7 +1372,7 @@ vm_rpc_send_rpci_tx_buf(struct vmt_softc *sc, const uint8_t *buf,
 		return EIO;
 	}
 
-	if (vm_rpc_send(&rpci, sc->sc_rpc_buf, length) != 0) {
+	if (vm_rpc_send(&rpci, buf, length) != 0) {
 		DPRINTF("%s: unable to send rpci command\n", DEVNAME(sc));
 		result = EIO;
 		goto out;
