@@ -7265,7 +7265,7 @@ done:
 			break;
 		case AF_INET6:
 			if (pd.dir == PF_IN) {
-				if (!ip6_forwarding) {
+				if (ip6_forwarding == 0) {
 					ip6stat_inc(ip6s_cantforward);
 					action = PF_DROP;
 					break;
