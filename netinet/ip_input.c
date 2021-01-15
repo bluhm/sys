@@ -115,7 +115,7 @@ const struct sysctl_bounded_args ipctl_vars[] = {
 #ifdef MROUTING
 	{ IPCTL_MRTPROTO, &ip_mrtproto, 1, 0 },
 #endif
-	{ IPCTL_FORWARDING, &ipforwarding, 0, 1 },
+	{ IPCTL_FORWARDING, &ipforwarding, 0, 2 },
 	{ IPCTL_SENDREDIRECTS, &ipsendredirects, 0, 1 },
 	{ IPCTL_DEFTTL, &ip_defttl, 0, 255 },
 	{ IPCTL_DIRECTEDBCAST, &ip_directedbcast, 0, 1 },
@@ -1251,7 +1251,7 @@ ip_dooptions(struct mbuf *m, struct ifnet *ifp)
 		}
 	}
 	KERNEL_UNLOCK();
-	if (forward && ipforwarding) {
+	if (forward && ipforwarding > 0) {
 		ip_forward(m, ifp, NULL, 1);
 		return (1);
 	}
