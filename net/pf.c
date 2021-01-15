@@ -1122,12 +1122,6 @@ pf_find_state(struct pf_pdesc *pd, struct pf_state_key_cmp *key,
 	}
 
 	*state = s;
-	if (pd->dir == PF_OUT && s->rt_kif != NULL && s->rt_kif != pd->kif &&
-	    ((s->rule.ptr->rt == PF_ROUTETO &&
-	    s->rule.ptr->direction == PF_OUT) ||
-	    (s->rule.ptr->rt == PF_REPLYTO &&
-	    s->rule.ptr->direction == PF_IN)))
-		return (PF_PASS);
 
 	return (PF_MATCH);
 }
