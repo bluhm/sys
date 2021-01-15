@@ -7253,20 +7253,32 @@ done:
 		pd.m->m_pkthdr.pf.flags |= PF_TAG_GENERATED;
 		switch (pd.naf) {
 		case AF_INET:
-			if (pd.dir == PF_IN)
+			if (pd.dir == PF_IN) {
+				if (ipforwarding == 0) {
+					ipstat_inc(ips_cantforward);
+					action = PF_DROP;
+					break;
+				}
 				ip_forward(pd.m, ifp, NULL, 1);
-			else
+			} else
 				ip_output(pd.m, NULL, NULL, 0, NULL, NULL, 0);
 			break;
 		case AF_INET6:
-			if (pd.dir == PF_IN)
+			if (pd.dir == PF_IN) {
+				if (!ip6_forwarding) {
+					ip6stat_inc(ip6s_cantforward);
+					action = PF_DROP;
+					break;
+				}
 				ip6_forward(pd.m, NULL, 1);
-			else
+			} else
 				ip6_output(pd.m, NULL, NULL, 0, NULL, NULL);
 			break;
 		}
-		pd.m = NULL;
-		action = PF_PASS;
+		if (action != PF_DROP) {
+			pd.m = NULL;
+			action = PF_PASS;
+		}
 		break;
 #endif /* INET6 */
 	case PF_DROP:
