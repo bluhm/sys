@@ -6609,12 +6609,17 @@ printf("%s: I was here!\n", __func__);
 
 		/* Check for illegal packets */
 		if (pd->m->m_pkthdr.len < (int)sizeof(struct ip)) {
+if (reason == NULL)
+printf("%s: < struct ip: m_pkthdr.len %d\n", __func__, pd->m->m_pkthdr.len);
 			REASON_SET(reason, PFRES_SHORT);
 			return (PF_DROP);
 		}
 
 		h = mtod(pd->m, struct ip *);
 		if (pd->m->m_pkthdr.len < ntohs(h->ip_len)) {
+if (reason == NULL)
+printf("%s: < ip_len: m_pkthdr.len %d, ip_len %d\n",
+    __func__, pd->m->m_pkthdr.len, ntohs(h->ip_len));
 			REASON_SET(reason, PFRES_SHORT);
 			return (PF_DROP);
 		}
@@ -6639,7 +6644,8 @@ printf("%s: I was here!\n", __func__);
 		/* Check for illegal packets */
 		if (pd->m->m_pkthdr.len < (int)sizeof(struct ip6_hdr)) {
 if (reason == NULL)
-printf("%s: m_pkthdr.len %d\n", __func__, pd->m->m_pkthdr.len);
+printf("%s: < struct ip6_hdr: m_pkthdr.len %d\n",
+    __func__, pd->m->m_pkthdr.len);
 			REASON_SET(reason, PFRES_SHORT);
 			return (PF_DROP);
 		}
@@ -6648,7 +6654,7 @@ printf("%s: m_pkthdr.len %d\n", __func__, pd->m->m_pkthdr.len);
 		if (pd->m->m_pkthdr.len <
 		    sizeof(struct ip6_hdr) + ntohs(h->ip6_plen)) {
 if (reason == NULL)
-printf("%s: m_pkthdr.len %d, ip6_plen %d\n",
+printf("%s: < ip6_plen: m_pkthdr.len %d, ip6_plen %d\n",
     __func__, pd->m->m_pkthdr.len, ntohs(h->ip6_plen));
 			REASON_SET(reason, PFRES_SHORT);
 			return (PF_DROP);
