@@ -230,11 +230,18 @@ pflog_packet(struct pf_pdesc *pd, u_int8_t reason, struct pf_rule *rm,
 	hdr.rule_uid = rm->cuid;
 	hdr.rule_pid = rm->cpid;
 	hdr.dir = pd->dir;
+	hdr.af = pd->af;
 
+	if (pd->af != pd->naf ||
+	    pf_addr_compare(pd->src, &pd->nsaddr, pd->naf) != 0 ||
+	    pf_addr_compare(pd->dst, &pd->ndaddr, pd->naf) != 0 ||
+	    pd->osport != pd->nsport ||
+	    pd->odport != pd->ndport) {
+		hdr.rewritten = 1;
+	}
+	hdr.naf = pd->naf;
 	pf_addrcpy(&hdr.saddr, &pd->nsaddr, pd->naf);
 	pf_addrcpy(&hdr.daddr, &pd->ndaddr, pd->naf);
-	hdr.af = pd->af;
-	hdr.naf = pd->naf;
 	hdr.sport = pd->nsport;
 	hdr.dport = pd->ndport;
 
