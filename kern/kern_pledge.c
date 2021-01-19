@@ -1401,7 +1401,7 @@ pledge_sockopt(struct proc *p, int set, int level, int optname)
 	case SOL_SOCKET:
 		switch (optname) {
 		case SO_RTABLE:
-			return pledge_fail(p, EINVAL, PLEDGE_INET);
+			return pledge_fail(p, EINVAL, PLEDGE_WROUTE);
 		}
 		return (0);
 	}
