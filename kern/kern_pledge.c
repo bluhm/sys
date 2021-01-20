@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_pledge.c,v 1.268 2021/01/19 17:41:51 deraadt Exp $	*/
+/*	$OpenBSD: kern_pledge.c,v 1.269 2021/01/20 16:36:09 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2015 Nicholas Marriott <nicm@openbsd.org>
