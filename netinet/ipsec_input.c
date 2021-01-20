@@ -1006,7 +1006,7 @@ ipsec_common_ctlinput(u_int rdomain, int cmd, struct sockaddr *sa,
 
 		tdbp = gettdb_rev(rdomain, spi, (union sockaddr_union *)&dst,
 		    proto);
-		if (tdbp != NULL && !(tdbp->tdb_flags & TDBF_INVALID))
+		if (tdbp != NULL && (tdbp->tdb_flags & TDBF_INVALID) == 0)
 			ipsec_set_mtu(tdbp, mtu, __func__);
 	}
 }
@@ -1067,7 +1067,7 @@ ipsec6_common_ctlinput(u_int rdomain, int cmd, struct sockaddr *sa,
 
 		tdbp = gettdb_rev(rdomain, spi, (union sockaddr_union *)&dst,
 		    proto);
-		if (tdbp != NULL && !(tdbp->tdb_flags & TDBF_INVALID))
+		if (tdbp != NULL && (tdbp->tdb_flags & TDBF_INVALID) == 0)
 			ipsec_set_mtu(tdbp, mtu, __func__);
 	}
 }
