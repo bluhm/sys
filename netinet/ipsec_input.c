@@ -83,9 +83,6 @@
 
 #include "bpfilter.h"
 
-void ipsec_common_ctlinput(u_int, int, struct sockaddr *, void *, int);
-void ipsec6_common_ctlinput(u_int, int, struct sockaddr *, void *, int);
-
 #ifdef ENCDEBUG
 #define DPRINTF(x)	if (encdebug) printf x
 #else
@@ -150,6 +147,9 @@ int esp_sysctl_espstat(void *, size_t *, void *);
 int ah_sysctl_ahstat(void *, size_t *, void *);
 int ipcomp_sysctl_ipcompstat(void *, size_t *, void *);
 int ipsec_sysctl_ipsecstat(void *, size_t *, void *);
+void ipsec_set_mtu(struct tdb *, u_int32_t, const char *);
+void ipsec_common_ctlinput(u_int, int, struct sockaddr *, void *, int);
+void ipsec6_common_ctlinput(u_int, int, struct sockaddr *, void *, int);
 
 void
 ipsec_init(void)
@@ -948,13 +948,12 @@ ipcomp4_input(struct mbuf **mp, int *offp, int proto, int af)
 }
 
 void
-ipsec_set_mtu(struct tdb *tdbp, u_int32_t mtu, uint64_t timeout,
-    const char *msg)
+ipsec_set_mtu(struct tdb *tdbp, u_int32_t mtu, const char *msg)
 {
 	ssize_t adjust;
+	uint64_t timeout;
 
-	if (timeout == 0)
-		timeout = ip_mtudisc_timeout;
+	timeout = gettime() + ip_mtudisc_timeout;
 	/* Walk the chain backwards to the first tdb */
 	NET_ASSERT_LOCKED();
 	for (; tdbp; tdbp = tdbp->tdb_inext) {
@@ -966,7 +965,7 @@ ipsec_set_mtu(struct tdb *tdbp, u_int32_t mtu, uint64_t timeout,
 
 		/* Store adjusted MTU in tdb */
 		tdbp->tdb_mtu = mtu;
-		tdbp->tdb_mtutimeout = gettime() + timeout;
+		tdbp->tdb_mtutimeout = timeout;
 		DPRINTF(("%s: %s: spi %08x mtu %d adjust %ld timeout %llu\n",
 		    __func__, msg, ntohl(tdbp->tdb_spi), tdbp->tdb_mtu, adjust,
 		    timeout));
@@ -1008,7 +1007,7 @@ ipsec_common_ctlinput(u_int rdomain, int cmd, struct sockaddr *sa,
 		tdbp = gettdb_rev(rdomain, spi, (union sockaddr_union *)&dst,
 		    proto);
 		if (tdbp != NULL && !(tdbp->tdb_flags & TDBF_INVALID))
-			ipsec_set_mtu(tdbp, mtu, 0, __func__);
+			ipsec_set_mtu(tdbp, mtu, __func__);
 	}
 }
 
@@ -1069,7 +1068,7 @@ ipsec6_common_ctlinput(u_int rdomain, int cmd, struct sockaddr *sa,
 		tdbp = gettdb_rev(rdomain, spi, (union sockaddr_union *)&dst,
 		    proto);
 		if (tdbp != NULL && !(tdbp->tdb_flags & TDBF_INVALID))
-			ipsec_set_mtu(tdbp, mtu, 0, __func__);
+			ipsec_set_mtu(tdbp, mtu, __func__);
 	}
 }
 #endif
@@ -1116,7 +1115,7 @@ udpencap_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 		    TDBF_UDPENCAP) &&
 		    !memcmp(&tdbp->tdb_dst, &dst, su_dst->sa.sa_len) &&
 		    !memcmp(&tdbp->tdb_src, &src, su_src->sa.sa_len)) {
-			ipsec_set_mtu(tdbp, mtu, 0, __func__);
+			ipsec_set_mtu(tdbp, mtu, __func__);
 		}
 	}
 }
