@@ -2,7 +2,7 @@
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	OpenBSD: pcidevs,v 1.1949 2021/01/17 14:21:26 jcs Exp 
+ *	OpenBSD: pcidevs,v 1.1952 2021/01/24 10:16:58 jsg Exp 
  */
 
 /*	$NetBSD: pcidevs,v 1.30 1997/06/24 06:20:24 thorpej Exp $	*/
@@ -13028,6 +13028,10 @@ static const struct pci_known_product pci_known_products[] = {
 	    "I219-LM",
 	},
 	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_I219_V15,
+	    "I219-V",
+	},
+	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_I220_V,
 	    "I220-V",
 	},
@@ -13374,6 +13378,22 @@ static const struct pci_known_product pci_known_products[] = {
 	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_C3000_QAT,
 	    "C3000 QAT",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_I219_LM17,
+	    "I219-LM",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_I219_V17,
+	    "I219-V",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_I219_LM16,
+	    "I219-LM",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_I219_V16,
+	    "I219-V",
 	},
 	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82840_HB,
@@ -18214,6 +18234,22 @@ static const struct pci_known_product pci_known_products[] = {
 	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_I225_LMVP,
 	    "I225-LMvP",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_I219_LM18,
+	    "I219-LM",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_I219_V18,
+	    "I219-V",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_I219_LM19,
+	    "I219-LM",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_I219_V19,
+	    "I219-V",
 	},
 	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_QEMU_NVME,
@@ -26904,6 +26940,14 @@ static const struct pci_known_product pci_known_products[] = {
 	    "R6061 USB2",
 	},
 	{
+	    PCI_VENDOR_REALTEK, PCI_PRODUCT_REALTEK_E2500V2,
+	    "E2500",
+	},
+	{
+	    PCI_VENDOR_REALTEK, PCI_PRODUCT_REALTEK_E2600,
+	    "E2600",
+	},
+	{
 	    PCI_VENDOR_REALTEK, PCI_PRODUCT_REALTEK_E3000,
 	    "Killer E3000",
 	},
@@ -26974,6 +27018,10 @@ static const struct pci_known_product pci_known_products[] = {
 	{
 	    PCI_VENDOR_REALTEK, PCI_PRODUCT_REALTEK_RT8139,
 	    "8139",
+	},
+	{
+	    PCI_VENDOR_REALTEK, PCI_PRODUCT_REALTEK_RT8168_2,
+	    "8168",
 	},
 	{
 	    PCI_VENDOR_REALTEK, PCI_PRODUCT_REALTEK_RT8169SC,

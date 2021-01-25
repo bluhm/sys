@@ -1,4 +1,4 @@
-/*	$OpenBSD: vmm.c,v 1.274 2020/09/10 17:03:03 mpi Exp $	*/
+/*	$OpenBSD: vmm.c,v 1.276 2021/01/23 22:56:35 mlarkin Exp $	*/
 /*
  * Copyright (c) 2014 Mike Larkin <mlarkin@openbsd.org>
  *
@@ -915,7 +915,7 @@ vm_mprotect_ept(struct vm_mprotect_ept_params *vmep)
 	/* No execute only on EPT CPUs that don't have that capability */
 	if (vmm_softc->mode == VMM_MODE_EPT) {
 		msr = rdmsr(IA32_VMX_EPT_VPID_CAP);
-		if (prot == PROT_EXEC && 
+		if (prot == PROT_EXEC &&
 		    (msr & IA32_EPT_VPID_CAP_XO_TRANSLATIONS) == 0) {
 			DPRINTF("%s: Execute only permissions unsupported,"
 			   " adding read permission\n", __func__);
@@ -931,7 +931,7 @@ vm_mprotect_ept(struct vm_mprotect_ept_params *vmep)
 	/* size must be less then 512GB */
 	if (size >= NBPD_L4)
 		return (EINVAL);
-	
+
 	/* no wraparound */
 	if (sgpa + size < sgpa)
 		return (EINVAL);
@@ -988,7 +988,7 @@ vmx_mprotect_ept(vm_map_t vm_map, paddr_t sgpa, paddr_t egpa, int prot)
 	for (addr = sgpa; addr < egpa; addr += PAGE_SIZE) {
 		pte = vmx_pmap_find_pte_ept(pmap, addr);
 		if (pte == NULL) {
-			ret = uvm_fault(vm_map, addr, VM_FAULT_INVALID,
+			ret = uvm_fault(vm_map, addr, VM_FAULT_WIRE,
 			    PROT_READ | PROT_WRITE | PROT_EXEC);
 			if (ret)
 				printf("%s: uvm_fault returns %d, GPA=0x%llx\n",
@@ -4440,7 +4440,7 @@ vmm_translate_gva(struct vcpu *vcpu, uint64_t va, uint64_t *pa, int mode)
 			pte = pte | PG_M;
 		*hva = pte;
 
-		/* XXX: EINVAL if in 32bit and  PG_PS is 1 but CR4.PSE is 0 */
+		/* XXX: EINVAL if in 32bit and PG_PS is 1 but CR4.PSE is 0 */
 		if (pte & PG_PS)
 			break;
 
@@ -5455,12 +5455,9 @@ svm_get_guest_faulttype(struct vmcb *vmcb)
 int
 svm_fault_page(struct vcpu *vcpu, paddr_t gpa)
 {
-	int fault_type, ret;
-	struct vmcb *vmcb = (struct vmcb *)vcpu->vc_control_va;
+	int ret;
 
-	fault_type = svm_get_guest_faulttype(vmcb);
-
-	ret = uvm_fault(vcpu->vc_parent->vm_map, gpa, fault_type,
+	ret = uvm_fault(vcpu->vc_parent->vm_map, gpa, VM_FAULT_WIRE,
 	    PROT_READ | PROT_WRITE | PROT_EXEC);
 	if (ret)
 		printf("%s: uvm_fault returns %d, GPA=0x%llx, rip=0x%llx\n",
@@ -5512,20 +5509,9 @@ svm_handle_np_fault(struct vcpu *vcpu)
 int
 vmx_fault_page(struct vcpu *vcpu, paddr_t gpa)
 {
-	int fault_type, ret;
+	int ret;
 
-	fault_type = vmx_get_guest_faulttype();
-	if (fault_type == -1) {
-		printf("%s: invalid fault type\n", __func__);
-		return (EINVAL);
-	}
-
-	if (fault_type == VM_FAULT_PROTECT) {
-		vcpu->vc_exit.vee.vee_fault_type = VEE_FAULT_PROTECT;
-		return (EAGAIN);
-	}
-
-	ret = uvm_fault(vcpu->vc_parent->vm_map, gpa, fault_type,
+	ret = uvm_fault(vcpu->vc_parent->vm_map, gpa, VM_FAULT_WIRE,
 	    PROT_READ | PROT_WRITE | PROT_EXEC);
 
 	if (ret)
