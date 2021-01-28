@@ -2855,6 +2855,9 @@ ip6_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct route_in6 *ro,
 		m_freem(m);
 		return EMSGSIZE;
 	}
+	/* propagate don't fragment for v6-over-v6 */
+	if (ip_mtudisc)
+		SET(m->m_pkthdr.csum_flags, M_IPV6_DF_OUT);
 
 	/*
 	 * Clear these -- they'll be set in the recursive invocation
