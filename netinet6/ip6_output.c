@@ -682,6 +682,10 @@ reroute:
 	else
 		dontfrag = 0;
 	if (dontfrag && tlen > ifp->if_mtu) {	/* case 2-b */
+#ifdef IPSEC
+		if (ip_mtudisc)
+			ipsec_adjust_mtu(m, mtu);
+#endif
 		error = EMSGSIZE;
 		goto bad;
 	}
