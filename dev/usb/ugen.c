@@ -1,4 +1,4 @@
-/*	$OpenBSD: ugen.c,v 1.110 2021/01/25 14:14:42 mglocker Exp $ */
+/*	$OpenBSD: ugen.c,v 1.112 2021/01/27 17:28:19 mglocker Exp $ */
 /*	$NetBSD: ugen.c,v 1.63 2002/11/26 18:49:48 christos Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/ugen.c,v 1.26 1999/11/17 22:33:41 n_hibma Exp $	*/
 
@@ -107,16 +107,16 @@ struct ugen_softc {
 	u_char sc_secondary;
 };
 
-void ugenintr(struct usbd_xfer *xfer, void *addr, usbd_status status);
-void ugen_isoc_rintr(struct usbd_xfer *xfer, void *addr, usbd_status status);
+void ugenintr(struct usbd_xfer *, void *, usbd_status);
+void ugen_isoc_rintr(struct usbd_xfer *, void *, usbd_status);
 int ugen_do_read(struct ugen_softc *, int, struct uio *, int);
 int ugen_do_write(struct ugen_softc *, int, struct uio *, int);
 int ugen_do_ioctl(struct ugen_softc *, int, u_long, caddr_t, int,
 	struct proc *);
 int ugen_do_close(struct ugen_softc *, int, int);
-int ugen_set_config(struct ugen_softc *sc, int configno);
+int ugen_set_config(struct ugen_softc *, int configno);
 int ugen_set_interface(struct ugen_softc *, int, int);
-int ugen_get_alt_index(struct ugen_softc *sc, int ifaceidx);
+int ugen_get_alt_index(struct ugen_softc *, int ifaceidx);
 void ugen_clear_iface_eps(struct ugen_softc *, struct usbd_interface *);
 
 #define UGENUNIT(n) ((minor(n) >> 4) & 0xf)
@@ -224,7 +224,7 @@ ugen_set_config(struct ugen_softc *sc, int configno)
 	}
 
 	memset(sc->sc_endpoints, 0, sizeof sc->sc_endpoints);
-	for (ifaceno = 0; ifaceno < cdesc->bNumInterface; ifaceno++) {
+	for (ifaceno = 0; ifaceno < cdesc->bNumInterfaces; ifaceno++) {
 		DPRINTFN(1,("ugen_set_config: ifaceno %d\n", ifaceno));
 		if (usbd_iface_claimed(sc->sc_udev, ifaceno)) {
 			DPRINTF(("%s: iface %d not available\n", __func__,
@@ -906,7 +906,7 @@ ugen_set_interface(struct ugen_softc *sc, int ifaceidx, int altno)
 	DPRINTFN(15, ("ugen_set_interface %d %d\n", ifaceidx, altno));
 
 	cdesc = usbd_get_config_descriptor(sc->sc_udev);
-	if (ifaceidx < 0 || ifaceidx >= cdesc->bNumInterface ||
+	if (ifaceidx < 0 || ifaceidx >= cdesc->bNumInterfaces ||
 	    usbd_iface_claimed(sc->sc_udev, ifaceidx))
 		return (USBD_INVAL);
 
