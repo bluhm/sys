@@ -625,6 +625,9 @@ ip_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct route *ro, int fwd)
 		m_freem(m);
 		return EMSGSIZE;
 	}
+	/* propagate IP_DF for v4-over-v6 */
+	if (ip_mtudisc && ip->ip_off & htons(IP_DF))
+		SET(m->m_pkthdr.csum_flags, M_IPV6_DF_OUT);
 
 	/*
 	 * Clear these -- they'll be set in the recursive invocation
@@ -753,9 +756,6 @@ sendorfree:
 			m_freem(m);
 		}
 	}
-	/* propagate IP_DF for v4-over-v6 */
-	if (ip_mtudisc && ip->ip_off & htons(IP_DF))
-		SET(m->m_pkthdr.csum_flags, M_IPV6_DF_OUT);
 
 	return (error);
 }
