@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf.c,v 1.1106 2021/02/01 00:31:05 dlg Exp $ */
+/*	$OpenBSD: pf.c,v 1.1108 2021/02/04 00:55:41 sashan Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -6033,7 +6033,7 @@ pf_route(struct pf_pdesc *pd, struct pf_state *s)
 	    (ifp->if_flags & IFF_LOOPBACK) == 0)
 		ip->ip_src = ifatoia(rt->rt_ifa)->ia_addr.sin_addr;
 
-	if (s->rt != PF_DUPTO && pd->kif->pfik_ifp != ifp) {
+	if (s->rt != PF_DUPTO && pd->dir == PF_IN) {
 		if (pf_test(AF_INET, PF_OUT, ifp, &m0) != PF_PASS)
 			goto bad;
 		else if (m0 == NULL)
@@ -6178,7 +6178,7 @@ pf_route6(struct pf_pdesc *pd, struct pf_state *s)
 	    (ifp->if_flags & IFF_LOOPBACK) == 0)
 		ip6->ip6_src = ifatoia6(rt->rt_ifa)->ia_addr.sin6_addr;
 
-	if (s->rt != PF_DUPTO && pd->kif->pfik_ifp != ifp) {
+	if (s->rt != PF_DUPTO && pd->dir == PF_IN) {
 		if (pf_test(AF_INET6, PF_OUT, ifp, &m0) != PF_PASS)
 			goto bad;
 		else if (m0 == NULL)
@@ -6935,7 +6935,7 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 		PF_STATE_EXIT_READ();
 		if (action == PF_PASS || action == PF_AFRT) {
 #if NPFSYNC > 0
-			pfsync_update_state(s, &have_pf_lock);
+			pfsync_update_state(s);
 #endif /* NPFSYNC > 0 */
 			r = s->rule.ptr;
 			a = s->anchor.ptr;
@@ -6967,7 +6967,7 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 		PF_STATE_EXIT_READ();
 		if (action == PF_PASS || action == PF_AFRT) {
 #if NPFSYNC > 0
-			pfsync_update_state(s, &have_pf_lock);
+			pfsync_update_state(s);
 #endif /* NPFSYNC > 0 */
 			r = s->rule.ptr;
 			a = s->anchor.ptr;
@@ -7043,7 +7043,7 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 
 		if (action == PF_PASS || action == PF_AFRT) {
 #if NPFSYNC > 0
-			pfsync_update_state(s, &have_pf_lock);
+			pfsync_update_state(s);
 #endif /* NPFSYNC > 0 */
 			r = s->rule.ptr;
 			a = s->anchor.ptr;

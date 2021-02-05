@@ -1,4 +1,4 @@
-/*	$OpenBSD: tty_pty.c,v 1.105 2020/12/25 12:59:52 visa Exp $	*/
+/*	$OpenBSD: tty_pty.c,v 1.107 2021/02/04 13:32:33 claudio Exp $	*/
 /*	$NetBSD: tty_pty.c,v 1.33.4.1 1996/06/02 09:08:11 mrg Exp $	*/
 
 /*
