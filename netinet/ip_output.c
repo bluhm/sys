@@ -1877,7 +1877,11 @@ in_ifcap_cksum(struct mbuf *m, struct ifnet *ifp, int ifcap)
 	    !ISSET(ifp->if_capabilities, ifcap) ||
 	    (ifp->if_bridgeidx != 0))
 		return (0);
-	/* Simplex interface sends packet back without hardware cksum. */
+	/*
+	 * Simplex interface sends packet back without hardware cksum.
+	 * Keep this check in sync with the condition where ether_resolve()
+	 * calls if_input_local().
+	 */
 	if (ISSET(m->m_flags, M_BCAST) &&
 	    ISSET(ifp->if_flags, IFF_SIMPLEX) &&
 	    !m->m_pkthdr.pf.routed)
