@@ -484,12 +484,12 @@ ether_input(struct ifnet *ifp, struct mbuf *m)
 		ifp->if_imcasts++;
 	}
 
- 	/*
+	/*
 	 * Sixth phase: protocol demux.
 	 *
 	 * At this point it is known that the packet is destined
 	 * for layer 3 protocol handling on the local port.
- 	 */
+	 */
 
 	switch (etype) {
 	case ETHERTYPE_IP:
