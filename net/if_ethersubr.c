@@ -230,7 +230,7 @@ ether_resolve(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst,
 		/*
 		 * If broadcasting on a simplex interface, loopback a copy.
 		 * The checksum must be calculated in software.  Keep the
-		 * contition in sync with in_ifcap_cksum().
+		 * condition in sync with in_ifcap_cksum().
 		 */
 		if (ISSET(m->m_flags, M_BCAST) &&
 		    ISSET(ifp->if_flags, IFF_SIMPLEX) &&
