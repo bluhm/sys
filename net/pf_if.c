@@ -151,7 +151,7 @@ pfi_kif_ref(struct pfi_kif *kif, enum pfi_kif_refs what)
 		kif->pfik_srcnodes++;
 		break;
 	default:
-		panic("pfi_kif_ref with unknown type");
+		panic("%s: unknown pfi_kif_refs type %d", __func__, what);
 	}
 }
 
@@ -165,39 +165,23 @@ pfi_kif_unref(struct pfi_kif *kif, enum pfi_kif_refs what)
 	case PFI_KIF_REF_NONE:
 		break;
 	case PFI_KIF_REF_RULE:
-		if (kif->pfik_rules <= 0) {
-			DPFPRINTF(LOG_ERR,
-			    "pfi_kif_unref: rules refcount <= 0");
-			return;
-		}
+		KASSERT(kif->pfik_rules > 0);
 		kif->pfik_rules--;
 		break;
 	case PFI_KIF_REF_STATE:
-		if (kif->pfik_states <= 0) {
-			DPFPRINTF(LOG_ERR,
-			    "pfi_kif_unref: state refcount <= 0");
-			return;
-		}
+		KASSERT(kif->pfik_states > 0);
 		kif->pfik_states--;
 		break;
 	case PFI_KIF_REF_ROUTE:
-		if (kif->pfik_routes <= 0) {
-			DPFPRINTF(LOG_ERR,
-			    "pfi_kif_unref: route refcount <= 0");
-			return;
-		}
+		KASSERT(kif->pfik_routes > 0);
 		kif->pfik_routes--;
 		break;
 	case PFI_KIF_REF_SRCNODE:
-		if (kif->pfik_srcnodes <= 0) {
-			DPFPRINTF(LOG_ERR,
-			    "pfi_kif_unref: src-node refcount <= 0");
-			return;
-		}
+		KASSERT(kif->pfik_srcnodes > 0);
 		kif->pfik_srcnodes--;
 		break;
 	default:
-		panic("pfi_kif_unref with unknown type");
+		panic("%s: unknown pfi_kif_refs type %d", __func__, what);
 	}
 
 	if (kif->pfik_ifp != NULL || kif->pfik_group != NULL || kif == pfi_all)
