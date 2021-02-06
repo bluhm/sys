@@ -786,10 +786,7 @@ carp_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 void
 carpattach(int n)
 {
-	struct ifg_group	*ifg;
-
-	if ((ifg = if_creategroup("carp")) != NULL)
-		ifg->ifg_refcnt++;	/* keep around even if empty */
+	if_creategroup("carp");  /* keep around even if empty */
 	if_clone_attach(&carp_cloner);
 	carpcounters = counters_alloc(carps_ncounters);
 }

@@ -2601,7 +2601,7 @@ if_creategroup(const char *groupname)
 		return (NULL);
 
 	strlcpy(ifg->ifg_group, groupname, sizeof(ifg->ifg_group));
-	ifg->ifg_refcnt = 0;
+	refcnt_init(&ifg->ifg_refcnt);
 	ifg->ifg_carp_demoted = 0;
 	TAILQ_INIT(&ifg->ifg_members);
 #if NPF > 0
@@ -2642,13 +2642,17 @@ if_addgroup(struct ifnet *ifp, const char *groupname)
 		if (!strcmp(ifg->ifg_group, groupname))
 			break;
 
-	if (ifg == NULL && (ifg = if_creategroup(groupname)) == NULL) {
+	if (ifg == NULL)
+		ifg = if_creategroup(groupname);
+	else
+		refcnt_take(&ifg->ifg_refcnt);
+
+	if (ifg == NULL) {
 		free(ifgl, M_TEMP, sizeof(*ifgl));
 		free(ifgm, M_TEMP, sizeof(*ifgm));
 		return (ENOMEM);
 	}
 
-	ifg->ifg_refcnt++;
 	ifgl->ifgl_group = ifg;
 	ifgm->ifgm_ifp = ifp;
 
@@ -2692,7 +2696,7 @@ if_delgroup(struct ifnet *ifp, const char *groupname)
 	pfi_group_change(groupname);
 #endif
 
-	if (--ifgl->ifgl_group->ifg_refcnt == 0) {
+	if (refcnt_rele(&ifgl->ifgl_group->ifg_refcnt)) {
 		TAILQ_REMOVE(&ifg_head, ifgl->ifgl_group, ifg_next);
 #if NPF > 0
 		pfi_detach_ifgroup(ifgl->ifgl_group);

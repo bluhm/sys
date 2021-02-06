@@ -263,7 +263,7 @@ struct ifmaddr {
 
 struct ifg_group {
 	char			 ifg_group[IFNAMSIZ];
-	u_int			 ifg_refcnt;
+	struct refcnt		 ifg_refcnt;
 	caddr_t			 ifg_pf_kif;
 	int			 ifg_carp_demoted;
 	TAILQ_HEAD(, ifg_member) ifg_members;
