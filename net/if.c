@@ -2642,17 +2642,16 @@ if_addgroup(struct ifnet *ifp, const char *groupname)
 		if (!strcmp(ifg->ifg_group, groupname))
 			break;
 
-	if (ifg == NULL)
+	if (ifg == NULL) {
 		ifg = if_creategroup(groupname);
-	else
+		if (ifg == NULL) {
+			free(ifgl, M_TEMP, sizeof(*ifgl));
+			free(ifgm, M_TEMP, sizeof(*ifgm));
+			return (ENOMEM);
+		}
+	} else
 		ifg->ifg_refcnt++;
 	KASSERT(ifg->ifg_refcnt != 0);
-
-	if (ifg == NULL) {
-		free(ifgl, M_TEMP, sizeof(*ifgl));
-		free(ifgm, M_TEMP, sizeof(*ifgm));
-		return (ENOMEM);
-	}
 
 	ifgl->ifgl_group = ifg;
 	ifgm->ifgm_ifp = ifp;
