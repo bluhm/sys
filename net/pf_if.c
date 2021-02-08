@@ -111,7 +111,7 @@ pfi_kif_find(const char *kif_name)
 struct pfi_kif *
 pfi_kif_get(const char *kif_name)
 {
-	struct pfi_kif		*kif;
+	struct pfi_kif		*kif, *okif;
 
 	if ((kif = pfi_kif_find(kif_name)))
 		return (kif);
@@ -130,7 +130,11 @@ pfi_kif_get(const char *kif_name)
 		kif->pfik_flags_new |= PFI_IFLAG_ANY;
 	}
 
-	RB_INSERT(pfi_ifhead, &pfi_ifs, kif);
+printf("%s: insert kif %p\n", __func__, kif);
+	okif = RB_INSERT(pfi_ifhead, &pfi_ifs, kif);
+	if (okif != NULL)
+		panic("%s: cannot insert kif %p, existing entry %p",
+		    __func__, kif, okif);
 	return (kif);
 }
 
@@ -191,6 +195,7 @@ pfi_kif_unref(struct pfi_kif *kif, enum pfi_kif_refs what)
 	    kif->pfik_srcnodes)
 		return;
 
+printf("%s: remove kif %p\n", __func__, kif);
 	RB_REMOVE(pfi_ifhead, &pfi_ifs, kif);
 	free(kif, PFI_MTYPE, sizeof(*kif));
 }
@@ -256,6 +261,7 @@ pfi_detach_ifnet(struct ifnet *ifp)
 
 	kif->pfik_ifp = NULL;
 	ifp->if_pf_kif = NULL;
+printf("%s: pfi_kif_unref %p\n", __func__, kif);
 	pfi_kif_unref(kif, PFI_KIF_REF_NONE);
 }
 
@@ -269,6 +275,10 @@ pfi_attach_ifgroup(struct ifg_group *ifg)
 	if ((kif = pfi_kif_get(ifg->ifg_group)) == NULL)
 		panic("%s: pfi_kif_get failed", __func__);
 
+printf("%s: ifg %p, kif %p\n", __func__, ifg, kif);
+	if (kif->pfik_group != NULL)
+		printf("%s: double attach: old %s, new %s\n",
+		    __func__, kif->pfik_group->ifg_group, ifg->ifg_group);
 	kif->pfik_group = ifg;
 	ifg->ifg_pf_kif = (caddr_t)kif;
 }
@@ -285,6 +295,7 @@ pfi_detach_ifgroup(struct ifg_group *ifg)
 
 	kif->pfik_group = NULL;
 	ifg->ifg_pf_kif = NULL;
+printf("%s: ifg %p, kif %p\n", __func__, ifg, kif);
 	pfi_kif_unref(kif, PFI_KIF_REF_NONE);
 }
 
@@ -410,7 +421,10 @@ _bad:
 	if (ruleset != NULL)
 		pf_remove_if_empty_ruleset(ruleset);
 	if (dyn->pfid_kif != NULL)
+{
+printf("%s: pfi_kif_unref %p\n", __func__, dyn->pfid_kif);
 		pfi_kif_unref(dyn->pfid_kif, PFI_KIF_REF_RULE);
+}
 	pool_put(&pfi_addr_pl, dyn);
 	return (rv);
 }
@@ -587,6 +601,7 @@ pfi_dynaddr_remove(struct pf_addr_wrap *aw)
 		return;
 
 	TAILQ_REMOVE(&aw->p.dyn->pfid_kif->pfik_dynaddrs, aw->p.dyn, entry);
+printf("%s: pfi_kif_unref %p\n", __func__, aw->p.dyn->pfid_kif);
 	pfi_kif_unref(aw->p.dyn->pfid_kif, PFI_KIF_REF_RULE);
 	aw->p.dyn->pfid_kif = NULL;
 	pfr_detach_table(aw->p.dyn->pfid_kt);
@@ -696,10 +711,12 @@ pfi_get_ifaces(const char *name, struct pfi_kif *buf, int *size)
 				p->pfik_tzero = gettime();
 			pfi_kif_ref(p, PFI_KIF_REF_RULE);
 			if (copyout(p, buf++, sizeof(*buf))) {
+printf("%s: pfi_kif_unref %p\n", __func__, p);
 				pfi_kif_unref(p, PFI_KIF_REF_RULE);
 				return (EFAULT);
 			}
 			nextp = RB_NEXT(pfi_ifhead, &pfi_ifs, p);
+printf("%s: pfi_kif_unref %p\n", __func__, p);
 			pfi_kif_unref(p, PFI_KIF_REF_RULE);
 		}
 	}

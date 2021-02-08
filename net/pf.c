@@ -615,6 +615,7 @@ pf_remove_src_node(struct pf_src_node *sn)
 	RB_REMOVE(pf_src_tree, &tree_src_tracking, sn);
 	pf_status.scounters[SCNT_SRC_NODE_REMOVALS]++;
 	pf_status.src_nodes--;
+printf("%s: pfi_kif_unref %p\n", __func__, sn->kif);
 	pfi_kif_unref(sn->kif, PFI_KIF_REF_SRCNODE);
 	pool_put(&pf_src_tree_pl, sn);
 }
@@ -1440,6 +1441,7 @@ pf_free_state(struct pf_state *cur)
 		pool_put(&pf_rule_item_pl, ri);
 	}
 	pf_normalize_tcp_cleanup(cur);
+printf("%s: pfi_kif_unref %p\n", __func__, cur->kif);
 	pfi_kif_unref(cur->kif, PFI_KIF_REF_STATE);
 	TAILQ_REMOVE(&state_list, cur, entry_list);
 	if (cur->tag)

@@ -313,10 +313,15 @@ pf_rm_rule(struct pf_rulequeue *rulequeue, struct pf_rule *rule)
 		if (rule->overload_tbl)
 			pfr_detach_table(rule->overload_tbl);
 	}
+printf("%s: pfi_kif_unref %p\n", __func__, rule->rcv_kif);
 	pfi_kif_unref(rule->rcv_kif, PFI_KIF_REF_RULE);
+printf("%s: pfi_kif_unref %p\n", __func__, rule->kif);
 	pfi_kif_unref(rule->kif, PFI_KIF_REF_RULE);
+printf("%s: pfi_kif_unref %p\n", __func__, rule->rdr.kif);
 	pfi_kif_unref(rule->rdr.kif, PFI_KIF_REF_RULE);
+printf("%s: pfi_kif_unref %p\n", __func__, rule->nat.kif);
 	pfi_kif_unref(rule->nat.kif, PFI_KIF_REF_RULE);
+printf("%s: pfi_kif_unref %p\n", __func__, rule->route.kif);
 	pfi_kif_unref(rule->route.kif, PFI_KIF_REF_RULE);
 	pf_remove_anchor(rule);
 	pool_put(&pf_rule_pl, rule);

@@ -2605,6 +2605,7 @@ if_creategroup(const char *groupname)
 	ifg->ifg_carp_demoted = 0;
 	TAILQ_INIT(&ifg->ifg_members);
 #if NPF > 0
+printf("%s: pfi_attach_ifgroup %p\n", __func__, ifg);
 	pfi_attach_ifgroup(ifg);
 #endif
 	TAILQ_INSERT_TAIL(&ifg_head, ifg, ifg_next);
@@ -2646,13 +2647,17 @@ if_addgroup(struct ifnet *ifp, const char *groupname)
 
 	if (ifg == NULL) {
 		ifg = if_creategroup(groupname);
+printf("%s: created group %p, name %s\n", __func__, ifg, groupname);
 		if (ifg == NULL) {
 			free(ifgl, M_TEMP, sizeof(*ifgl));
 			free(ifgm, M_TEMP, sizeof(*ifgm));
 			return (ENOMEM);
 		}
 	} else
+{
 		ifg->ifg_refcnt++;
+printf("%s: ref group %p\n", __func__, ifg);
+}
 	KASSERT(ifg->ifg_refcnt != 0);
 
 	ifgl->ifgl_group = ifg;
@@ -2695,6 +2700,7 @@ if_delgroup(struct ifnet *ifp, const char *groupname)
 	}
 
 #if NPF > 0
+printf("%s: pfi_group_change %s\n", __func__, groupname);
 	pfi_group_change(groupname);
 #endif
 
@@ -2702,6 +2708,7 @@ if_delgroup(struct ifnet *ifp, const char *groupname)
 	if (--ifgl->ifgl_group->ifg_refcnt == 0) {
 		TAILQ_REMOVE(&ifg_head, ifgl->ifgl_group, ifg_next);
 #if NPF > 0
+printf("%s: pfi_detach_ifgroup %p\n", __func__, ifgl->ifgl_group);
 		pfi_detach_ifgroup(ifgl->ifgl_group);
 #endif
 		free(ifgl->ifgl_group, M_TEMP, sizeof(*ifgl->ifgl_group));
