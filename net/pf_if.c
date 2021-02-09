@@ -154,6 +154,9 @@ pfi_kif_ref(struct pfi_kif *kif, enum pfi_kif_refs what)
 	case PFI_KIF_REF_SRCNODE:
 		kif->pfik_srcnodes++;
 		break;
+	case PFI_KIF_REF_IFGROUP:
+		kif->pfik_ifgroup++;
+		break;
 	default:
 		panic("%s: unknown pfi_kif_refs type %d", __func__, what);
 	}
@@ -183,6 +186,10 @@ pfi_kif_unref(struct pfi_kif *kif, enum pfi_kif_refs what)
 	case PFI_KIF_REF_SRCNODE:
 		KASSERT(kif->pfik_srcnodes > 0);
 		kif->pfik_srcnodes--;
+		break;
+	case PFI_KIF_REF_IFGROUP:
+		KASSERT(kif->pfik_ifgroup > 0);
+		kif->pfik_ifgroup--;
 		break;
 	default:
 		panic("%s: unknown pfi_kif_refs type %d", __func__, what);

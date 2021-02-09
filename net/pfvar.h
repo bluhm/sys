@@ -1164,6 +1164,7 @@ struct pfi_kif {
 	int				 pfik_rules;
 	int				 pfik_routes;
 	int				 pfik_srcnodes;
+	int				 pfik_ifgroup;
 	TAILQ_HEAD(, pfi_dynaddr)	 pfik_dynaddrs;
 };
 
@@ -1172,7 +1173,8 @@ enum pfi_kif_refs {
 	PFI_KIF_REF_STATE,
 	PFI_KIF_REF_RULE,
 	PFI_KIF_REF_ROUTE,
-	PFI_KIF_REF_SRCNODE
+	PFI_KIF_REF_SRCNODE,
+	PFI_KIF_REF_IFGROUP
 };
 
 #define PFI_IFLAG_SKIP		0x0100	/* skip filtering on interface */
