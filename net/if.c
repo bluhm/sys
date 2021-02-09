@@ -2621,9 +2621,11 @@ if_addgroup(struct ifnet *ifp, const char *groupname)
 	struct ifg_list		*ifgl;
 	struct ifg_group	*ifg = NULL;
 	struct ifg_member	*ifgm;
+	size_t			 namelen;
 
-	if (groupname[0] && groupname[strlen(groupname) - 1] >= '0' &&
-	    groupname[strlen(groupname) - 1] <= '9')
+	namelen = strlen(groupname);
+	if (namelen == 0 || namelen >= IFNAMSIZ ||
+	    (groupname[namelen - 1] >= '0' && groupname[namelen - 1] <= '9'))
 		return (EINVAL);
 
 	TAILQ_FOREACH(ifgl, &ifp->if_groups, ifgl_next)
