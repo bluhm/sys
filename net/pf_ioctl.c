@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf_ioctl.c,v 1.361 2020/12/16 18:00:44 kn Exp $ */
+/*	$OpenBSD: pf_ioctl.c,v 1.363 2021/02/09 23:37:54 patrick Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -133,7 +133,6 @@ struct {
 TAILQ_HEAD(pf_tags, pf_tagname)	pf_tags = TAILQ_HEAD_INITIALIZER(pf_tags),
 				pf_qids = TAILQ_HEAD_INITIALIZER(pf_qids);
 
-#ifdef WITH_PF_LOCK
 /*
  * pf_lock protects consistency of PF data structures, which don't have
  * their dedicated lock yet. The pf_lock currently protects:
@@ -149,7 +148,6 @@ TAILQ_HEAD(pf_tags, pf_tagname)	pf_tags = TAILQ_HEAD_INITIALIZER(pf_tags),
  */
 struct rwlock		 pf_lock = RWLOCK_INITIALIZER("pf_lock");
 struct rwlock		 pf_state_lock = RWLOCK_INITIALIZER("pf_state_lock");
-#endif /* WITH_PF_LOCK */
 
 #if (PF_QNAME_SIZE != PF_TAG_NAME_SIZE)
 #error PF_QNAME_SIZE must be equal to PF_TAG_NAME_SIZE
@@ -1727,9 +1725,7 @@ pfioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 		}
 		NET_LOCK();
 		PF_LOCK();
-		PF_STATE_ENTER_WRITE();
 		error = pfsync_state_import(sp, PFSYNC_SI_IOCTL);
-		PF_STATE_EXIT_WRITE();
 		PF_UNLOCK();
 		NET_UNLOCK();
 		break;
