@@ -6156,8 +6156,6 @@ pf_route6(struct pf_pdesc *pd, struct pf_state *s)
 	dst->sin6_addr = s->rt_addr.v6;
 	rtableid = m0->m_pkthdr.ph_rtableid;
 
-	if (IN6_IS_SCOPE_EMBED(&dst->sin6_addr))
-		dst->sin6_addr.s6_addr16[1] = htons(ifp->if_index);
 	rt = rtalloc(sin6tosa(dst), RT_RESOLVE, rtableid);
 	if (!rtisvalid(rt)) {
 		if (s->rt != PF_DUPTO) {
