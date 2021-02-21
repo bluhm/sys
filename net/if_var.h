@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_var.h,v 1.112 2020/07/29 12:09:31 mvs Exp $	*/
+/*	$OpenBSD: if_var.h,v 1.114 2021/02/20 04:55:52 dlg Exp $	*/
 /*	$NetBSD: if.h,v 1.23 1996/05/07 02:40:27 thorpej Exp $	*/
 
 /*
@@ -161,6 +161,7 @@ struct ifnet {				/* and the entries */
 
 	/* procedure handles */
 	void	(*if_input)(struct ifnet *, struct mbuf *);
+	int	(*if_bpf_mtap)(caddr_t, const struct mbuf *, u_int);
 	int	(*if_output)(struct ifnet *, struct mbuf *, struct sockaddr *,
 		     struct rtentry *);	/* output routine (enqueue) */
 					/* link level output function */
@@ -326,6 +327,8 @@ int	if_input_local(struct ifnet *, struct mbuf *, sa_family_t);
 int	if_output_local(struct ifnet *, struct mbuf *, sa_family_t);
 void	if_rtrequest_dummy(struct ifnet *, int, struct rtentry *);
 void	p2p_rtrequest(struct ifnet *, int, struct rtentry *);
+void	p2p_input(struct ifnet *, struct mbuf *);
+int	p2p_bpf_mtap(caddr_t, const struct mbuf *, u_int);
 
 struct	ifaddr *ifa_ifwithaddr(struct sockaddr *, u_int);
 struct	ifaddr *ifa_ifwithdstaddr(struct sockaddr *, u_int);

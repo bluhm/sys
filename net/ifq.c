@@ -1,4 +1,4 @@
-/*	$OpenBSD: ifq.c,v 1.41 2020/07/07 00:00:03 dlg Exp $ */
+/*	$OpenBSD: ifq.c,v 1.43 2021/02/20 04:37:26 dlg Exp $ */
 
 /*
  * Copyright (c) 2015 David Gwynne <dlg@openbsd.org>
@@ -693,7 +693,7 @@ ifiq_input(struct ifiqueue *ifiq, struct mbuf_list *ml)
 		ml_init(ml);
 
 		while ((m = ml_dequeue(&ml0)) != NULL) {
-			if (bpf_mtap_ether(if_bpf, m, BPF_DIRECTION_IN))
+			if ((*ifp->if_bpf_mtap)(if_bpf, m, BPF_DIRECTION_IN))
 				m_freem(m);
 			else
 				ml_enqueue(ml, m);
@@ -715,10 +715,12 @@ ifiq_input(struct ifiqueue *ifiq, struct mbuf_list *ml)
 	ifiq->ifiq_bytes += bytes;
 
 	len = ml_len(&ifiq->ifiq_ml);
-	if (len > ifiq_maxlen_drop)
-		ifiq->ifiq_qdrops += ml_len(ml);
-	else
-		ml_enlist(&ifiq->ifiq_ml, ml);
+	if (__predict_true(!ISSET(ifp->if_xflags, IFXF_MONITOR))) {
+		if (len > ifiq_maxlen_drop)
+			ifiq->ifiq_qdrops += ml_len(ml);
+		else
+			ml_enlist(&ifiq->ifiq_ml, ml);
+	}
 	mtx_leave(&ifiq->ifiq_mtx);
 
 	if (ml_empty(ml))

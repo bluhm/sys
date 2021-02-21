@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_pfsync.c,v 1.284 2021/02/09 14:06:19 patrick Exp $	*/
+/*	$OpenBSD: if_pfsync.c,v 1.286 2021/02/19 06:14:07 dlg Exp $	*/
 
 /*
  * Copyright (c) 2002 Michael Shalayeff
@@ -1978,7 +1978,7 @@ pfsync_undefer_notify(struct pfsync_deferral *pd)
 	struct pf_pdesc pdesc;
 	struct pf_state *st = pd->pd_st;
 
-	if (st->rule.ptr->rt == PF_ROUTETO) {
+	if (st->rt == PF_ROUTETO) {
 		if (pf_setup_pdesc(&pdesc, st->key[PF_SK_WIRE]->af,
 		    st->direction, st->kif, pd->pd_m, NULL) != PF_PASS) {
 			m_freem(pd->pd_m);
@@ -2000,13 +2000,11 @@ pfsync_undefer_notify(struct pfsync_deferral *pd)
 	} else {
 		switch (st->key[PF_SK_WIRE]->af) {
 		case AF_INET:
-			ip_output(pd->pd_m, NULL, NULL, 0, NULL, NULL,
-			    0);
+			ip_output(pd->pd_m, NULL, NULL, 0, NULL, NULL, 0);
 			break;
 #ifdef INET6
 		case AF_INET6:
-			ip6_output(pd->pd_m, NULL, NULL, 0,
-			    NULL, NULL);
+			ip6_output(pd->pd_m, NULL, NULL, 0, NULL, NULL);
 			break;
 #endif /* INET6 */
 		default:
