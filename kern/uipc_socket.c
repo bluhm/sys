@@ -1133,8 +1133,7 @@ sorflush(struct socket *so)
 	sb->sb_timeo_nsecs = INFSLP;
 	if (pr->pr_flags & PR_RIGHTS && pr->pr_domain->dom_dispose)
 		(*pr->pr_domain->dom_dispose)(m);
-	while (m != NULL)
-		m = m_freem(m);
+	m_purge(m);
 }
 
 #ifdef SOCKET_SPLICE
