@@ -5969,7 +5969,8 @@ pf_rtlabel_match(struct pf_addr *addr, sa_family_t af, struct pf_addr_wrap *aw,
 void
 pf_route(struct pf_pdesc *pd, struct pf_state *s)
 {
-	struct mbuf		*m0, *m1;
+	struct mbuf		*m0;
+	struct mbuf_list	 ml;
 	struct sockaddr_in	*dst, sin;
 	struct rtentry		*rt = NULL;
 	struct ip		*ip;
@@ -6078,23 +6079,18 @@ pf_route(struct pf_pdesc *pd, struct pf_state *s)
 		goto bad;
 	}
 
-	m1 = m0;
-	error = ip_fragment(m0, ifp, ifp->if_mtu);
-	if (error) {
-		m0 = NULL;
-		goto bad;
-	}
+	error = ip_fragment(m0, &ml, ifp, ifp->if_mtu);
+	if (error)
+		goto done;
 
-	for (m0 = m1; m0; m0 = m1) {
-		m1 = m0->m_nextpkt;
-		m0->m_nextpkt = NULL;
-		if (error == 0)
-			error = ifp->if_output(ifp, m0, sintosa(dst), rt);
-		else
-			m_freem(m0);
+	while ((m0 = ml_dequeue(&ml)) != NULL) {
+		error = ifp->if_output(ifp, m0, sintosa(dst), rt);
+		if (error)
+			break;
 	}
-
-	if (error == 0)
+	if (error)
+		ml_purge(&ml);
+	else
 		ipstat_inc(ips_fragmented);
 
 done:
