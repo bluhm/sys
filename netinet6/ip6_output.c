@@ -785,7 +785,6 @@ ip6_fragment(struct mbuf *m0, struct mbuf_list *ml, int hlen, u_char nextproto,
 	int		 error;
 
 	ml_init(ml);
-	ml_enqueue(ml, m0);
 
 	tlen = m0->m_pkthdr.len;
 	len = (mtu - hlen - sizeof(struct ip6_frag)) & ~7;
@@ -836,15 +835,15 @@ ip6_fragment(struct mbuf *m0, struct mbuf_list *ml, int hlen, u_char nextproto,
 		ip6f->ip6f_ident = id;
 		ip6f->ip6f_nxt = nextproto;
 	}
-	/* Original packet is first in the queue. */
-	m_freem(ml_dequeue(ml));
 
 	ip6stat_add(ip6s_ofragments, ml_len(ml));
+	m_freem(m0);
 	return (0);
 
 bad:
 	ip6stat_inc(ip6s_odropped);
 	ml_purge(ml);
+	m_freem(m0);
 	return (error);
 }
 
