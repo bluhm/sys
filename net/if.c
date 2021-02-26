@@ -3316,12 +3316,15 @@ unhandled_af(int af)
  * globals aren't ready to be accessed by multiple threads in
  * parallel.
  */
-int		 nettaskqs = NET_TASKQ;
+int		 nettaskqs;
 
 struct taskq *
 net_tq(unsigned int ifindex)
 {
 	struct taskq *t = NULL;
+
+	if (nettaskqs == 0)
+		nettaskqs = min(NET_TASKQ, ncpus);
 
 	t = nettqmp[ifindex % nettaskqs];
 
