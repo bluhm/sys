@@ -237,7 +237,7 @@ int	ifq_congestion;
 
 int		 netisr;
 
-#define	NET_TASKQ	1
+#define	NET_TASKQ	4
 struct taskq	*nettqmp[NET_TASKQ];
 
 struct task if_input_task_locked = TASK_INITIALIZER(if_netisr, NULL);
