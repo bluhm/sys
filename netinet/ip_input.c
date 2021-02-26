@@ -234,8 +234,8 @@ ip_init(void)
 
 /*
  * Enqueue packet for local delivery.  Queuing is used as a boundary
- * between the network layer (input/forward path) running without
- * KERNEL_LOCK() and the transport layer still needing it.
+ * between the network layer (input/forward path) running with shared
+ * NET_RLOCK_IN_SOFTNET() and the transport layer needing it exclusively.
  */
 int
 ip_ours(struct mbuf **mp, int *offp, int nxt, int af)
