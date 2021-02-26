@@ -1013,7 +1013,6 @@ pf_refragment6(struct mbuf **m0, struct m_tag *mtag, struct sockaddr_in6 *dst,
 	error = ip6_fragment(m, &ml, hdrlen, proto, mtu);
 	*m0 = NULL;	/* ip6_fragment() has consumed original packet. */
 	if (error) {
-		/* Drop expects an mbuf to free */
 		DPFPRINTF(LOG_NOTICE, "refragment error %d", error);
 		return (PF_DROP);
 	}
