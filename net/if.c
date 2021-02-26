@@ -238,7 +238,7 @@ int	ifq_congestion;
 
 int		 netisr;
 
-#define	NET_TASKQ	1
+#define	NET_TASKQ	4
 struct taskq	*nettqmp[NET_TASKQ];
 
 struct task if_input_task_locked = TASK_INITIALIZER(if_netisr, NULL);
@@ -840,10 +840,10 @@ if_input_process(struct ifnet *ifp, struct mbuf_list *ml)
 	 * by multiple network threads in parallel.  In this case
 	 * use an exclusive lock.
 	 */
-	NET_LOCK();
+	NET_RLOCK_IN_SOFTNET();
 	while ((m = ml_dequeue(ml)) != NULL)
 		(*ifp->if_input)(ifp, m);
-	NET_UNLOCK();
+	NET_RUNLOCK_IN_SOFTNET();
 }
 
 void

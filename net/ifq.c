@@ -243,7 +243,7 @@ void
 ifq_init(struct ifqueue *ifq, struct ifnet *ifp, unsigned int idx)
 {
 	ifq->ifq_if = ifp;
-	ifq->ifq_softnet = net_tq(ifp->if_index); /* + idx */
+	ifq->ifq_softnet = net_tq(ifp->if_index + idx);
 	ifq->ifq_softc = NULL;
 
 	mtx_init(&ifq->ifq_mtx, IPL_NET);
