@@ -834,15 +834,10 @@ if_input_process(struct ifnet *ifp, struct mbuf_list *ml)
 	 * lists and the socket layer.
 	 */
 
-	/*
-	 * XXXSMP IPsec data structures are not ready to be accessed
-	 * by multiple network threads in parallel.  In this case
-	 * use an exclusive lock.
-	 */
-	NET_LOCK();
+	NET_RLOCK_IN_SOFTNET();
 	while ((m = ml_dequeue(ml)) != NULL)
 		(*ifp->if_input)(ifp, m);
-	NET_UNLOCK();
+	NET_RUNLOCK_IN_SOFTNET();
 }
 
 void
