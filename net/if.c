@@ -108,6 +108,10 @@
 #include <netinet6/ip6_var.h>
 #endif
 
+#ifdef IPSEC
+#include <netinet/ip_ipsp.h>
+#endif
+
 #ifdef MPLS
 #include <netmpls/mpls.h>
 #endif
@@ -237,7 +241,7 @@ int	ifq_congestion;
 
 int		 netisr;
 
-#define	NET_TASKQ	1
+#define	NET_TASKQ	4
 struct taskq	*nettqmp[NET_TASKQ];
 
 struct task if_input_task_locked = TASK_INITIALIZER(if_netisr, NULL);
@@ -814,6 +818,7 @@ void
 if_input_process(struct ifnet *ifp, struct mbuf_list *ml)
 {
 	struct mbuf *m;
+	int exclusive_lock = 0;
 
 	if (ml_empty(ml))
 		return;
@@ -834,15 +839,27 @@ if_input_process(struct ifnet *ifp, struct mbuf_list *ml)
 	 * lists and the socket layer.
 	 */
 
+#ifdef IPSEC
 	/*
 	 * XXXSMP IPsec data structures are not ready to be accessed
 	 * by multiple network threads in parallel.  In this case
 	 * use an exclusive lock.
 	 */
-	NET_LOCK();
+	if (ipsec_in_use)
+		exclusive_lock = 1;
+#endif
+	if (exclusive_lock)
+		NET_LOCK();
+	else
+		NET_RLOCK_IN_SOFTNET();
+
 	while ((m = ml_dequeue(ml)) != NULL)
 		(*ifp->if_input)(ifp, m);
-	NET_UNLOCK();
+
+	if (exclusive_lock)
+		NET_UNLOCK();
+	else
+		NET_RUNLOCK_IN_SOFTNET();
 }
 
 void
@@ -899,6 +916,12 @@ if_netisr(void *unused)
 			arpintr();
 			KERNEL_UNLOCK();
 		}
+#endif
+		if (n & (1 << NETISR_IP))
+			ipintr();
+#ifdef INET6
+		if (n & (1 << NETISR_IPV6))
+			ip6intr();
 #endif
 #if NPPP > 0
 		if (n & (1 << NETISR_PPP)) {
