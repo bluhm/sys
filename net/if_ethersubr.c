@@ -245,7 +245,10 @@ ether_resolve(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst,
 		break;
 #ifdef INET6
 	case AF_INET6:
+		KERNEL_LOCK();
+		/* XXXSMP there is a MP race in nd6_resolve() */
 		error = nd6_resolve(ifp, rt, m, dst, eh->ether_dhost);
+		KERNEL_UNLOCK();
 		if (error)
 			return (error);
 		eh->ether_type = htons(ETHERTYPE_IPV6);
