@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_gre.c,v 1.167 2021/02/24 03:20:48 dlg Exp $ */
+/*	$OpenBSD: if_gre.c,v 1.170 2021/02/27 09:21:22 dlg Exp $ */
 /*	$NetBSD: if_gre.c,v 1.9 1999/10/25 19:18:11 drochner Exp $ */
 
 /*
@@ -1363,7 +1363,7 @@ nvgre_input(const struct gre_tunnel *key, struct mbuf *m, int hlen,
 		return (0);
 
 	eh = mtod(m, struct ether_header *);
-	etherbridge_map(&sc->sc_eb, (void *)&key->t_dst,
+	etherbridge_map_ea(&sc->sc_eb, (void *)&key->t_dst,
 	    (struct ether_addr *)eh->ether_shost);
 
 	SET(m->m_pkthdr.csum_flags, M_FLOWID);
@@ -3590,9 +3590,6 @@ nvgre_add_addr(struct nvgre_softc *sc, const struct ifbareq *ifba)
 
 		endpoint.in4 = sin->sin_addr;
 		break;
-		memset(sin6, 0, sizeof(*sin6));
-		sin6->sin6_family = AF_INET6;
-		sin6->sin6_len = sizeof(*sin6);
 
 #ifdef INET6
 	case AF_INET6:
@@ -3658,7 +3655,7 @@ nvgre_start(struct ifnet *ifp)
 			const union gre_addr *endpoint;
 
 			smr_read_enter();
-			endpoint = etherbridge_resolve(&sc->sc_eb,
+			endpoint = etherbridge_resolve_ea(&sc->sc_eb,
 			    (struct ether_addr *)eh->ether_dhost);
 			if (endpoint == NULL) {
 				/* "flood" to unknown hosts */
@@ -4329,7 +4326,7 @@ nvgre_eb_port_sa(void *arg, struct sockaddr_storage *ss, void *port)
 
 		sin6->sin6_len = sizeof(*sin6);
 		sin6->sin6_family = AF_INET6;
-		sin6->sin6_addr = endpoint->in6;
+		in6_recoverscope(sin6, &endpoint->in6);
 
 		break;
 	}
