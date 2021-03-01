@@ -5970,7 +5970,7 @@ void
 pf_route(struct pf_pdesc *pd, struct pf_state *s)
 {
 	struct mbuf		*m0;
-	struct mbuf_list	 ml;
+	struct mbuf_list	 fml;
 	struct sockaddr_in	*dst, sin;
 	struct rtentry		*rt = NULL;
 	struct ip		*ip;
@@ -6079,17 +6079,17 @@ pf_route(struct pf_pdesc *pd, struct pf_state *s)
 		goto bad;
 	}
 
-	error = ip_fragment(m0, &ml, ifp, ifp->if_mtu);
+	error = ip_fragment(m0, &fml, ifp, ifp->if_mtu);
 	if (error)
 		goto done;
 
-	while ((m0 = ml_dequeue(&ml)) != NULL) {
+	while ((m0 = ml_dequeue(&fml)) != NULL) {
 		error = ifp->if_output(ifp, m0, sintosa(dst), rt);
 		if (error)
 			break;
 	}
 	if (error)
-		ml_purge(&ml);
+		ml_purge(&fml);
 	else
 		ipstat_inc(ips_fragmented);
 

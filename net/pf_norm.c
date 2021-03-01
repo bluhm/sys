@@ -967,7 +967,7 @@ pf_refragment6(struct mbuf **m0, struct m_tag *mtag, struct sockaddr_in6 *dst,
     struct ifnet *ifp, struct rtentry *rt)
 {
 	struct mbuf		*m = *m0;
-	struct mbuf_list	 ml;
+	struct mbuf_list	 fml;
 	struct pf_fragment_tag	*ftag = (struct pf_fragment_tag *)(mtag + 1);
 	u_int32_t		 mtu;
 	u_int16_t		 hdrlen, extoff, maxlen;
@@ -1010,14 +1010,14 @@ pf_refragment6(struct mbuf **m0, struct m_tag *mtag, struct sockaddr_in6 *dst,
 	 * we drop the packet.
 	 */
 	mtu = hdrlen + sizeof(struct ip6_frag) + maxlen;
-	error = ip6_fragment(m, &ml, hdrlen, proto, mtu);
+	error = ip6_fragment(m, &fml, hdrlen, proto, mtu);
 	*m0 = NULL;	/* ip6_fragment() has consumed original packet. */
 	if (error) {
 		DPFPRINTF(LOG_NOTICE, "refragment error %d", error);
 		return (PF_DROP);
 	}
 
-	while ((m = ml_dequeue(&ml)) != NULL) {
+	while ((m = ml_dequeue(&fml)) != NULL) {
 		m->m_pkthdr.pf.flags |= PF_TAG_REFRAGMENTED;
 		if (ifp == NULL) {
 			ip6_forward(m, NULL, 0);
