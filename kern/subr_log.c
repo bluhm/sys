@@ -454,6 +454,104 @@ logioctl(dev_t dev, u_long com, caddr_t data, int flag, struct proc *p)
 	return (0);
 }
 
+#define LOGSTASH_SIZE	100
+struct logstash_messages {
+	char	*lgs_buffer;
+	size_t	 lgs_size;
+} logstash_messages[LOGSTASH_SIZE];
+
+struct logstash_messages *logstash_in = &logstash_messages[0];
+struct logstash_messages *logstash_out = &logstash_messages[0];
+
+int	logstash_dropped, logstash_error, logstash_pid;
+
+void	logstash_insert(const char *, size_t, int, pid_t, enum uio_seg);
+void	logstash_remove(void);
+int	logstash_sendsyslog(struct proc *);
+
+static inline int
+logstash_empty(void)
+{
+	return logstash_out->lgs_buffer == NULL;
+}
+
+static inline int
+logstash_full(void)
+{
+	return logstash_out->lgs_buffer != NULL &&
+	    logstash_in == logstash_out;
+}
+
+static inline void
+logstash_increment(struct logstash_messages **msg)
+{
+	(*msg)++;
+	if ((*msg) == &logstash_messages[LOGSTASH_SIZE])
+		(*msg) = &logstash_messages[0];
+}
+
+void
+logstash_insert(const char * buf, size_t nbyte, int error, pid_t pid,
+    enum uio_seg sflg)
+{
+	if (logstash_full()) {
+		if (logstash_dropped == 0) {
+			logstash_error = error;
+			logstash_pid = pid;
+		}
+		logstash_dropped++;
+		return;
+	}
+	logstash_in->lgs_buffer = malloc(nbyte, M_LOG, M_WAITOK);
+	if (sflg == UIO_USERSPACE)
+		copyin(buf, logstash_in->lgs_buffer, nbyte);
+	else
+		memcpy(logstash_in->lgs_buffer, buf, nbyte);
+	logstash_in->lgs_size = nbyte;
+	logstash_increment(&logstash_in);
+}
+
+void
+logstash_remove(void)
+{
+	KASSERT(!logstash_empty());
+	free(logstash_out->lgs_buffer, M_LOG, logstash_out->lgs_size);
+	logstash_out->lgs_buffer = NULL;
+	logstash_increment(&logstash_out);
+
+	if (logstash_dropped) {
+		size_t l;
+		char buf[80];
+
+		l = snprintf(buf, sizeof(buf),
+		    "<%d>sendsyslog: dropped %d message%s, error %d, pid %d",
+		    LOG_KERN|LOG_WARNING, logstash_dropped,
+		    logstash_dropped == 1 ? "" : "s",
+		    logstash_error, logstash_pid);
+		/* cannot fail, we have just freed a slot */
+		logstash_insert(buf, ulmin(l, sizeof(buf) - 1), 0, 0,
+		    UIO_SYSSPACE);
+		logstash_dropped = 0;
+		logstash_error = 0;
+		logstash_pid = 0;
+	}
+}
+
+int
+logstash_sendsyslog(struct proc *p)
+{
+	int error;
+
+	while (logstash_out->lgs_buffer != NULL) {
+		error = dosendsyslog(p, logstash_out->lgs_buffer,
+		    logstash_out->lgs_size, 0, UIO_SYSSPACE);
+		if (error)
+			return (error);
+		logstash_remove();
+	}
+	return (0);
+}
+
 int
 sys_sendsyslog(struct proc *p, void *v, register_t *retval)
 {
@@ -462,31 +560,24 @@ sys_sendsyslog(struct proc *p, void *v, register_t *retval)
 		syscallarg(size_t) nbyte;
 		syscallarg(int) flags;
 	} */ *uap = v;
+	size_t nbyte;
 	int error;
-	static int dropped_count, orig_error, orig_pid;
 
-	if (dropped_count) {
-		size_t l;
-		char buf[80];
+	nbyte = SCARG(uap, nbyte);
+	if (nbyte > LOG_MAXLINE)
+		nbyte = LOG_MAXLINE;
 
-		l = snprintf(buf, sizeof(buf),
-		    "<%d>sendsyslog: dropped %d message%s, error %d, pid %d",
-		    LOG_KERN|LOG_WARNING, dropped_count,
-		    dropped_count == 1 ? "" : "s", orig_error, orig_pid);
-		error = dosendsyslog(p, buf, ulmin(l, sizeof(buf) - 1),
-		    0, UIO_SYSSPACE);
-		if (error == 0) {
-			dropped_count = 0;
-			orig_error = 0;
-			orig_pid = 0;
-		}
-	}
-	error = dosendsyslog(p, SCARG(uap, buf), SCARG(uap, nbyte),
-	    SCARG(uap, flags), UIO_USERSPACE);
+	error = logstash_sendsyslog(p);
 	if (error) {
-		dropped_count++;
-		orig_error = error;
-		orig_pid = p->p_p->ps_pid;
+		logstash_insert(SCARG(uap, buf), nbyte, error, p->p_p->ps_pid,
+		    UIO_USERSPACE);
+		return (error);
+	}
+	error = dosendsyslog(p, SCARG(uap, buf), nbyte, SCARG(uap, flags),
+	    UIO_USERSPACE);
+	if (error) {
+		logstash_insert(SCARG(uap, buf), nbyte, error, p->p_p->ps_pid,
+		    UIO_USERSPACE);
 	}
 	return (error);
 }
@@ -504,9 +595,6 @@ dosendsyslog(struct proc *p, const char *buf, size_t nbyte, int flags,
 	struct uio auio;
 	size_t i, len;
 	int error;
-
-	if (nbyte > LOG_MAXLINE)
-		nbyte = LOG_MAXLINE;
 
 	/* Global variable syslogf may change during sleep, use local copy. */
 	fp = syslogf;

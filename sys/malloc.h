@@ -83,7 +83,7 @@
 /* 21 - free */
 #define	M_NFSREQ	22	/* NFS request header */
 #define	M_NFSMNT	23	/* NFS mount structure */
-/* 24 - free */
+#define	M_LOG		24	/* Messages in kernel log stash */
 #define	M_VNODE		25	/* Dynamically allocated vnodes */
 #define	M_CACHE		26	/* Dynamically allocated cache entries */
 #define	M_DQUOT		27	/* UFS quota entries */
@@ -208,7 +208,7 @@
 	NULL, \
 	"NFS req",	/* 22 M_NFSREQ */ \
 	"NFS mount",	/* 23 M_NFSMNT */ \
-	NULL, \
+	"log",		/* 24 M_LOG */ \
 	"vnodes",	/* 25 M_VNODE */ \
 	"namecache",	/* 26 M_CACHE */ \
 	"UFS quota",	/* 27 M_DQUOT */ \
