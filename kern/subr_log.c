@@ -458,8 +458,8 @@ logioctl(dev_t dev, u_long com, caddr_t data, int flag, struct proc *p)
  * If syslogd is not running, temporarily store a limited amount of messages
  * in kernel.  After log stash is full, drop messages and count them.  When
  * syslogd is available again, next log message will flush the stashed
- * messages and a message with drop count before that.  Calls to malloc(9)
- * and copyin(9) may sleep, protect data structures with rwlock.
+ * messages and insert a message with drop count.  Calls to malloc(9) and 
+ * copyin(9) may sleep, protect data structures with rwlock.
  */
 
 #define LOGSTASH_SIZE	100
@@ -609,16 +609,11 @@ sys_sendsyslog(struct proc *p, void *v, register_t *retval)
 	if (nbyte > LOG_MAXLINE)
 		nbyte = LOG_MAXLINE;
 
-	error = logstash_sendsyslog(p);
-	if (error) {
-		logstash_insert(SCARG(uap, buf), nbyte, error, p->p_p->ps_pid);
-		return (error);
-	}
+	logstash_sendsyslog(p);
 	error = dosendsyslog(p, SCARG(uap, buf), nbyte, SCARG(uap, flags),
 	    UIO_USERSPACE);
-	if (error) {
+	if (error)
 		logstash_insert(SCARG(uap, buf), nbyte, error, p->p_p->ps_pid);
-	}
 	return (error);
 }
 
