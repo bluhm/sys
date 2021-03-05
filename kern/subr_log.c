@@ -454,6 +454,13 @@ logioctl(dev_t dev, u_long com, caddr_t data, int flag, struct proc *p)
 	return (0);
 }
 
+/*
+ * If syslogd is not running, temporarily store a limited amount of messages
+ * in kernel.  After log stash is full, drop messages and count them.  When
+ * syslogd is available again, next log message will flush the stashed
+ * messages and a message with drop count before that.
+ */
+
 #define LOGSTASH_SIZE	100
 struct logstash_messages {
 	char	*lgs_buffer;
@@ -519,6 +526,7 @@ logstash_remove(void)
 	logstash_out->lgs_buffer = NULL;
 	logstash_increment(&logstash_out);
 
+	/* Insert dropped message in sequence where messages were dropped. */
 	if (logstash_dropped) {
 		size_t l;
 		char buf[80];
@@ -551,6 +559,13 @@ logstash_sendsyslog(struct proc *p)
 	}
 	return (0);
 }
+
+/*
+ * Send syslog(3) message from userland to socketpair(2) created by syslogd(8).
+ * Store message in kernel log stash for later if syslogd(8) is not available
+ * or sending fails.  Send to console if LOG_CONS is set and syslogd(8) socket
+ * does not exist.
+ */
 
 int
 sys_sendsyslog(struct proc *p, void *v, register_t *retval)
