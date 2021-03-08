@@ -458,34 +458,26 @@ logioctl(dev_t dev, u_long com, caddr_t data, int flag, struct proc *p)
  * If syslogd is not running, temporarily store a limited amount of messages
  * in kernel.  After log stash is full, drop messages and count them.  When
  * syslogd is available again, next log message will flush the stashed
- * messages and insert a message with drop count.  Calls to malloc(9) and 
+ * messages and insert a message with drop count.  Calls to malloc(9) and
  * copyin(9) may sleep, protect data structures with rwlock.
  */
 
 #define LOGSTASH_SIZE	100
-struct logstash_messages {
+struct logstash_message {
 	char	*lgs_buffer;
 	size_t	 lgs_size;
 } logstash_messages[LOGSTASH_SIZE];
 
-struct	logstash_messages *logstash_in = &logstash_messages[0];
-struct	logstash_messages *logstash_out = &logstash_messages[0];
+struct	logstash_message *logstash_in = &logstash_messages[0];
+struct	logstash_message *logstash_out = &logstash_messages[0];
 
 struct	rwlock logstash_rwlock = RWLOCK_INITIALIZER("logstash");
 
 int	logstash_dropped, logstash_error, logstash_pid;
 
-void	logstash_insert(const char *, size_t, int, pid_t);
+int	logstash_insert(const char *, size_t, int, pid_t);
 void	logstash_remove(void);
 int	logstash_sendsyslog(struct proc *);
-
-static inline int
-logstash_empty(void)
-{
-	rw_assert_anylock(&logstash_rwlock);
-
-	return logstash_out->lgs_buffer == NULL;
-}
 
 static inline int
 logstash_full(void)
@@ -497,39 +489,50 @@ logstash_full(void)
 }
 
 static inline void
-logstash_increment(struct logstash_messages **msg)
+logstash_increment(struct logstash_message **msg)
 {
 	rw_assert_wrlock(&logstash_rwlock);
 
 	KASSERT((*msg) >= &logstash_messages[0]);
 	KASSERT((*msg) < &logstash_messages[LOGSTASH_SIZE]);
-	(*msg)++;
-	if ((*msg) == &logstash_messages[LOGSTASH_SIZE])
+	if ((*msg) == &logstash_messages[LOGSTASH_SIZE - 1])
 		(*msg) = &logstash_messages[0];
+	else
+		(*msg)++;
 }
 
-void
-logstash_insert(const char *buf, size_t nbyte, int error, pid_t pid)
+int
+logstash_insert(const char *buf, size_t nbyte, int logerror, pid_t pid)
 {
+	int error;
+
 	rw_enter_write(&logstash_rwlock);
 
 	if (logstash_full()) {
 		if (logstash_dropped == 0) {
-			logstash_error = error;
+			logstash_error = logerror;
 			logstash_pid = pid;
 		}
 		logstash_dropped++;
 
 		rw_exit(&logstash_rwlock);
-		return;
+		return (0);
 	}
 
 	logstash_in->lgs_buffer = malloc(nbyte, M_LOG, M_WAITOK);
-	copyin(buf, logstash_in->lgs_buffer, nbyte);
+	error = copyin(buf, logstash_in->lgs_buffer, nbyte);
+	if (error) {
+		free(logstash_in->lgs_buffer, M_LOG, nbyte);
+		logstash_in->lgs_buffer = NULL;
+
+		rw_exit(&logstash_rwlock);
+		return (error);
+	}
 	logstash_in->lgs_size = nbyte;
 	logstash_increment(&logstash_in);
 
 	rw_exit(&logstash_rwlock);
+	return (0);
 }
 
 void
@@ -537,7 +540,7 @@ logstash_remove(void)
 {
 	rw_assert_wrlock(&logstash_rwlock);
 
-	KASSERT(!logstash_empty());
+	KASSERT(logstash_out->lgs_buffer != NULL);
 	free(logstash_out->lgs_buffer, M_LOG, logstash_out->lgs_size);
 	logstash_out->lgs_buffer = NULL;
 	logstash_increment(&logstash_out);
@@ -612,7 +615,7 @@ sys_sendsyslog(struct proc *p, void *v, register_t *retval)
 	logstash_sendsyslog(p);
 	error = dosendsyslog(p, SCARG(uap, buf), nbyte, SCARG(uap, flags),
 	    UIO_USERSPACE);
-	if (error)
+	if (error && error != EFAULT)
 		logstash_insert(SCARG(uap, buf), nbyte, error, p->p_p->ps_pid);
 	return (error);
 }
@@ -730,7 +733,7 @@ dosendsyslog(struct proc *p, const char *buf, size_t nbyte, int flags,
 #endif
 	if (fp)
 		FRELE(fp, p);
-	else
+	else if (error != EFAULT)
 		error = ENOTCONN;
 	return (error);
 }
