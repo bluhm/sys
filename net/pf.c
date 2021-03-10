@@ -6819,6 +6819,8 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 	if (!pf_status.running)
 		return (PF_PASS);
 
+	NET_ASSERT_LOCKED();
+
 #if NCARP > 0
 	if (ifp->if_type == IFT_CARP &&
 		(ifp0 = if_get(ifp->if_carpdevidx)) != NULL) {
