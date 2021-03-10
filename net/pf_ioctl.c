@@ -146,8 +146,8 @@ TAILQ_HEAD(pf_tags, pf_tagname)	pf_tags = TAILQ_HEAD_INITIALIZER(pf_tags),
  * grab the lock as writer. Whenever packet creates state it grabs pf_lock
  * first then it locks pf_state_lock as the writer.
  */
-struct rwlock		 pf_lock = RWLOCK_INITIALIZER("pf_lock");
-struct rwlock		 pf_state_lock = RWLOCK_INITIALIZER("pf_state_lock");
+struct mutex	pf_lock = MUTEX_INITIALIZER(IPL_SOFTNET);
+struct mutex	pf_state_lock = MUTEX_INITIALIZER(IPL_SOFTNET);
 
 #if (PF_QNAME_SIZE != PF_TAG_NAME_SIZE)
 #error PF_QNAME_SIZE must be equal to PF_TAG_NAME_SIZE

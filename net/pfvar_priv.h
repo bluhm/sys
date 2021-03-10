@@ -37,9 +37,7 @@
 
 #ifdef _KERNEL
 
-#include <sys/rwlock.h>
-
-extern struct rwlock pf_lock;
+#include <sys/mutex.h>
 
 struct pf_pdesc {
 	struct {
@@ -104,51 +102,46 @@ extern struct timeout	pf_purge_to;
 struct pf_state		*pf_state_ref(struct pf_state *);
 void			 pf_state_unref(struct pf_state *);
 
-extern struct rwlock	pf_lock;
-extern struct rwlock	pf_state_lock;
+extern struct mutex	pf_lock;
+extern struct mutex	pf_state_lock;
 
 #define PF_LOCK()		do {			\
 		NET_ASSERT_LOCKED();			\
-		rw_enter_write(&pf_lock);		\
+		mtx_enter(&pf_lock);			\
 	} while (0)
 
 #define PF_UNLOCK()		do {			\
 		PF_ASSERT_LOCKED();			\
-		rw_exit_write(&pf_lock);		\
+		mtx_leave(&pf_lock);			\
 	} while (0)
 
 #define PF_ASSERT_LOCKED()	do {			\
-		if (rw_status(&pf_lock) != RW_WRITE)	\
-			splassert_fail(RW_WRITE,	\
-			    rw_status(&pf_lock),__func__);\
+		MUTEX_ASSERT_LOCKED(&pf_lock);		\
 	} while (0)
 
 #define PF_ASSERT_UNLOCKED()	do {			\
-		if (rw_status(&pf_lock) == RW_WRITE)	\
-			splassert_fail(0, rw_status(&pf_lock), __func__);\
+		MUTEX_ASSERT_UNLOCKED(&pf_lock);	\
 	} while (0)
 
 #define PF_STATE_ENTER_READ()	do {			\
-		rw_enter_read(&pf_state_lock);		\
+		mtx_enter(&pf_state_lock);		\
 	} while (0)
 
 #define PF_STATE_EXIT_READ()	do {			\
-		rw_exit_read(&pf_state_lock);		\
+		mtx_leave(&pf_state_lock);		\
 	} while (0)
 
 #define PF_STATE_ENTER_WRITE()	do {			\
-		rw_enter_write(&pf_state_lock);		\
+		mtx_enter(&pf_state_lock);		\
 	} while (0)
 
 #define PF_STATE_EXIT_WRITE()	do {			\
 		PF_ASSERT_STATE_LOCKED();		\
-		rw_exit_write(&pf_state_lock);		\
+		mtx_leave(&pf_state_lock);		\
 	} while (0)
 
 #define PF_ASSERT_STATE_LOCKED()	do {		\
-		if (rw_status(&pf_state_lock) != RW_WRITE)\
-			splassert_fail(RW_WRITE,	\
-			    rw_status(&pf_state_lock), __func__);\
+		MUTEX_ASSERT_LOCKED(&pf_state_lock);	\
 	} while (0)
 
 extern void			 pf_purge_timeout(void *);
