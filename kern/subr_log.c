@@ -108,7 +108,7 @@ const struct filterops logread_filtops = {
 	.f_event	= filt_logread,
 };
 
-int dosendsyslog(struct proc *, const char *, size_t, int, enum uio_seg);
+int dosendsyslog(struct proc *, char *, size_t, int, struct timeval *);
 void logtick(void *);
 size_t msgbuf_getlen(struct msgbuf *);
 void msgbuf_putchar_locked(struct msgbuf *, const char);
@@ -468,14 +468,15 @@ logioctl(dev_t dev, u_long com, caddr_t data, int flag, struct proc *p)
  * If syslogd is not running, temporarily store a limited amount of messages
  * in kernel.  After log stash is full, drop messages and count them.  When
  * syslogd is available again, next log message will flush the stashed
- * messages and insert a message with drop count.  Calls to malloc(9) and
- * copyin(9) may sleep, protect data structures with rwlock.
+ * messages and insert a message with drop count.  Calls to malloc(9) may
+ * sleep, protect data structures with rwlock.
  */
 
 #define LOGSTASH_SIZE	100
 struct logstash_message {
 	char	*lgs_buffer;
 	size_t	 lgs_size;
+	struct	 timeval lgs_time;
 } logstash_messages[LOGSTASH_SIZE];
 
 struct	logstash_message *logstash_in = &logstash_messages[0];
@@ -485,9 +486,9 @@ struct	rwlock logstash_rwlock = RWLOCK_INITIALIZER("logstash");
 
 int	logstash_dropped, logstash_error, logstash_pid;
 
-int	logstash_insert(const char *, size_t, int, pid_t);
-void	logstash_remove(void);
-int	logstash_sendsyslog(struct proc *);
+void	logstash_insert(char *, size_t, int, pid_t, struct timeval *);
+void	logstash_remove(struct timeval *);
+int	logstash_sendsyslog(struct proc *, struct timeval *);
 
 static inline int
 logstash_full(void)
@@ -511,11 +512,10 @@ logstash_increment(struct logstash_message **msg)
 		(*msg)++;
 }
 
-int
-logstash_insert(const char *buf, size_t nbyte, int logerror, pid_t pid)
+void
+logstash_insert(char *buffer, size_t nbyte, int logerror, pid_t pid,
+    struct timeval *now)
 {
-	int error;
-
 	rw_enter_write(&logstash_rwlock);
 
 	if (logstash_full()) {
@@ -524,29 +524,22 @@ logstash_insert(const char *buf, size_t nbyte, int logerror, pid_t pid)
 			logstash_pid = pid;
 		}
 		logstash_dropped++;
+		free(buffer, M_LOG, nbyte);
 
 		rw_exit(&logstash_rwlock);
-		return (0);
+		return;
 	}
 
-	logstash_in->lgs_buffer = malloc(nbyte, M_LOG, M_WAITOK);
-	error = copyin(buf, logstash_in->lgs_buffer, nbyte);
-	if (error) {
-		free(logstash_in->lgs_buffer, M_LOG, nbyte);
-		logstash_in->lgs_buffer = NULL;
-
-		rw_exit(&logstash_rwlock);
-		return (error);
-	}
+	logstash_in->lgs_buffer = buffer;
 	logstash_in->lgs_size = nbyte;
+	logstash_in->lgs_time = *now;
 	logstash_increment(&logstash_in);
 
 	rw_exit(&logstash_rwlock);
-	return (0);
 }
 
 void
-logstash_remove(void)
+logstash_remove(struct timeval *now)
 {
 	rw_assert_wrlock(&logstash_rwlock);
 
@@ -575,12 +568,13 @@ logstash_remove(void)
 		logstash_in->lgs_buffer = malloc(nbyte, M_LOG, M_WAITOK);
 		memcpy(logstash_in->lgs_buffer, buf, nbyte);
 		logstash_in->lgs_size = nbyte;
+		logstash_in->lgs_time = *now;
 		logstash_increment(&logstash_in);
 	}
 }
 
 int
-logstash_sendsyslog(struct proc *p)
+logstash_sendsyslog(struct proc *p, struct timeval *now)
 {
 	int error;
 
@@ -588,12 +582,12 @@ logstash_sendsyslog(struct proc *p)
 
 	while (logstash_out->lgs_buffer != NULL) {
 		error = dosendsyslog(p, logstash_out->lgs_buffer,
-		    logstash_out->lgs_size, 0, UIO_SYSSPACE);
+		    logstash_out->lgs_size, 0, &logstash_out->lgs_time);
 		if (error) {
 			rw_exit(&logstash_rwlock);
 			return (error);
 		}
-		logstash_remove();
+		logstash_remove(now);
 	}
 
 	rw_exit(&logstash_rwlock);
@@ -615,33 +609,51 @@ sys_sendsyslog(struct proc *p, void *v, register_t *retval)
 		syscallarg(size_t) nbyte;
 		syscallarg(int) flags;
 	} */ *uap = v;
+	struct timeval now;
+	char *buffer;
 	size_t nbyte;
 	int error;
+
+	microuptime(&now);
 
 	nbyte = SCARG(uap, nbyte);
 	if (nbyte > LOG_MAXLINE)
 		nbyte = LOG_MAXLINE;
 
-	logstash_sendsyslog(p);
-	error = dosendsyslog(p, SCARG(uap, buf), nbyte, SCARG(uap, flags),
-	    UIO_USERSPACE);
-	if (error && error != EFAULT)
-		logstash_insert(SCARG(uap, buf), nbyte, error, p->p_p->ps_pid);
-	return (error);
+	buffer = malloc(nbyte, M_LOG, M_WAITOK);
+	error = copyin(SCARG(uap, buf), buffer, nbyte);
+	if (error)
+		return (error);
+#ifdef KTRACE
+	if (KTRPOINT(p, KTR_GENIO)) {
+		struct iovec ktriov;
+
+		ktriov.iov_base = (char *)SCARG(uap, buf);
+		ktriov.iov_len = nbyte;
+		ktrgenio(p, -1, UIO_WRITE, &ktriov, nbyte);
+	}
+#endif
+
+	logstash_sendsyslog(p, &now);
+	error = dosendsyslog(p, buffer, nbyte, SCARG(uap, flags), &now);
+	if (error) {
+		/* logstash will free buffer later */
+		logstash_insert(buffer, nbyte, error, p->p_p->ps_pid, &now);
+		return (error);
+	}
+	free(buffer, M_LOG, nbyte);
+	return (0);
 }
 
 int
-dosendsyslog(struct proc *p, const char *buf, size_t nbyte, int flags,
-    enum uio_seg sflg)
+dosendsyslog(struct proc *p, char *buffer, size_t nbyte, int flags,
+    struct timeval *time)
 {
-#ifdef KTRACE
-	struct iovec ktriov;
-#endif
 	struct file *fp;
-	char pri[6], *kbuf;
-	struct iovec aiov;
+	char logtime[sizeof("-9223372036854775808.123456 ")];
+	struct iovec aiov[3];
 	struct uio auio;
-	size_t i, len;
+	size_t len;
 	int error;
 
 	/* Global variable syslogf may change during sleep, use local copy. */
@@ -651,106 +663,87 @@ dosendsyslog(struct proc *p, const char *buf, size_t nbyte, int flags,
 		FREF(fp);
 	rw_exit(&syslogf_rwlock);
 
-	if (fp == NULL) {
-		if (!ISSET(flags, LOG_CONS))
-			return (ENOTCONN);
+	if (fp) {
+		len = snprintf(logtime, sizeof(logtime), "%lld.%06ld ",
+		    time->tv_sec, time->tv_usec);
+		len = MIN(len, sizeof(logtime));
+	} else if (!ISSET(flags, LOG_CONS)) {
+		return (ENOTCONN);
+	} else {
+		size_t i;
+
 		/*
 		 * Strip off syslog priority when logging to console.
 		 * LOG_PRIMASK | LOG_FACMASK is 0x03ff, so at most 4
 		 * decimal digits may appear in priority as <1023>.
 		 */
-		len = MIN(nbyte, sizeof(pri));
-		if (sflg == UIO_USERSPACE) {
-			if ((error = copyin(buf, pri, len)))
-				return (error);
-		} else
-			memcpy(pri, buf, len);
-		if (0 < len && pri[0] == '<') {
+		len = MIN(nbyte, 6);
+		if (0 < len && buffer[0] == '<') {
 			for (i = 1; i < len; i++) {
-				if (pri[i] < '0' || pri[i] > '9')
+				if (buffer[i] < '0' || buffer[i] > '9')
 					break;
 			}
-			if (i < len && pri[i] == '>') {
+			if (i < len && buffer[i] == '>') {
 				i++;
 				/* There must be at least one digit <0>. */
 				if (i >= 3) {
-					buf += i;
+					buffer += i;
 					nbyte -= i;
 				}
 			}
 		}
+		len = 0;
 	}
 
-	aiov.iov_base = (char *)buf;
-	aiov.iov_len = nbyte;
-	auio.uio_iov = &aiov;
-	auio.uio_iovcnt = 1;
-	auio.uio_segflg = sflg;
+	aiov[0].iov_base = logtime;
+	aiov[0].iov_len = len;
+	aiov[1].iov_base = buffer;
+	aiov[1].iov_len = nbyte;
+	aiov[2].iov_base = "\r\n";
+	aiov[2].iov_len = 2;
+	auio.uio_segflg = UIO_SYSSPACE;
 	auio.uio_rw = UIO_WRITE;
 	auio.uio_procp = p;
 	auio.uio_offset = 0;
-	auio.uio_resid = aiov.iov_len;
-#ifdef KTRACE
-	if (sflg == UIO_USERSPACE && KTRPOINT(p, KTR_GENIO))
-		ktriov = aiov;
-	else
-		ktriov.iov_len = 0;
-#endif
 
-	len = auio.uio_resid;
 	if (fp) {
 		int flags = (fp->f_flag & FNONBLOCK) ? MSG_DONTWAIT : 0;
+
+		auio.uio_iov = &aiov[0];
+		auio.uio_iovcnt = 2;
+		auio.uio_resid = aiov[0].iov_len + aiov[1].iov_len;
 		error = sosend(fp->f_data, NULL, &auio, NULL, NULL, flags);
-		if (error == 0)
-			len -= auio.uio_resid;
 	} else {
 		KERNEL_LOCK();
 		if (constty || cn_devvp) {
+			auio.uio_iov = &aiov[1];
+			auio.uio_iovcnt = 2;
+			auio.uio_resid = aiov[1].iov_len + aiov[2].iov_len;
 			error = cnwrite(0, &auio, 0);
-			if (error == 0)
-				len -= auio.uio_resid;
-			aiov.iov_base = "\r\n";
-			aiov.iov_len = 2;
-			auio.uio_iov = &aiov;
-			auio.uio_iovcnt = 1;
-			auio.uio_segflg = UIO_SYSSPACE;
-			auio.uio_rw = UIO_WRITE;
-			auio.uio_procp = p;
-			auio.uio_offset = 0;
-			auio.uio_resid = aiov.iov_len;
-			cnwrite(0, &auio, 0);
 		} else {
+			char *p;
+
 			/* XXX console redirection breaks down... */
-			if (sflg == UIO_USERSPACE) {
-				kbuf = malloc(len, M_TEMP, M_WAITOK);
-				error = copyin(aiov.iov_base, kbuf, len);
-			} else {
-				kbuf = aiov.iov_base;
-				error = 0;
+			auio.uio_iov = &aiov[1];
+			auio.uio_iovcnt = 1;
+			auio.uio_resid = aiov[1].iov_len;
+			p = auio.uio_iov[0].iov_base;
+			while (auio.uio_resid > 0) {
+				if (*p == '\0')
+					break;
+				cnputc(*p);
+				p++;
+				auio.uio_resid--;
 			}
-			if (error == 0)
-				for (i = 0; i < len; i++) {
-					if (kbuf[i] == '\0')
-						break;
-					cnputc(kbuf[i]);
-					auio.uio_resid--;
-				}
-			if (sflg == UIO_USERSPACE)
-				free(kbuf, M_TEMP, len);
-			if (error == 0)
-				len -= auio.uio_resid;
 			cnputc('\n');
+			error = 0;
 		}
 		KERNEL_UNLOCK();
 	}
 
-#ifdef KTRACE
-	if (error == 0 && ktriov.iov_len != 0)
-		ktrgenio(p, -1, UIO_WRITE, &ktriov, len);
-#endif
 	if (fp)
 		FRELE(fp, p);
-	else if (error != EFAULT)
+	else
 		error = ENOTCONN;
 	return (error);
 }
