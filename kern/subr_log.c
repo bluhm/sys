@@ -614,7 +614,7 @@ sys_sendsyslog(struct proc *p, void *v, register_t *retval)
 	size_t nbyte;
 	int error;
 
-	microuptime(&now);
+	microtime(&now);
 
 	nbyte = SCARG(uap, nbyte);
 	if (nbyte > LOG_MAXLINE)
