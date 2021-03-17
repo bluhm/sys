@@ -1,4 +1,4 @@
-/*	$OpenBSD: acpireg.h,v 1.52 2021/01/23 20:01:01 patrick Exp $	*/
+/*	$OpenBSD: acpireg.h,v 1.54 2021/03/15 22:40:23 patrick Exp $	*/
 /*
  * Copyright (c) 2005 Thorsten Lockert <tholo@sigmasoft.com>
  * Copyright (c) 2005 Marco Peereboom <marco@openbsd.org>
@@ -696,10 +696,11 @@ struct acpi_iort {
 
 struct acpi_iort_node {
 	uint8_t		type;
-#define ACPI_IORT_ITS		0
-#define ACPI_IORT_ROOT_COMPLEX	2
-#define ACPI_IORT_SMMU		3
-#define ACPI_IORT_SMMU_V3	4
+#define ACPI_IORT_ITS			0
+#define ACPI_IORT_NAMED_COMPONENT	1
+#define ACPI_IORT_ROOT_COMPLEX		2
+#define ACPI_IORT_SMMU			3
+#define ACPI_IORT_SMMU_V3		4
 	uint16_t	length;
 	uint8_t		revision;
 	uint32_t	reserved1;
@@ -707,9 +708,16 @@ struct acpi_iort_node {
 	uint32_t	mapping_offset;
 } __packed;
 
+struct acpi_iort_nc_node {
+	uint32_t	node_flags;
+	uint64_t	memory_access_properties;
+	uint8_t		device_memory_address_size_limit;
+	char		device_object_name[];
+} __packed;
+
 struct acpi_iort_rc_node {
 	uint64_t	memory_access_properties;
-	uint32_t	atf_attributes;
+	uint32_t	ats_attributes;
 	uint32_t	segment;
 	uint8_t		memory_address_size_limit;
 	uint8_t		reserved2[3];

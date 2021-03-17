@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.c,v 1.633 2021/03/09 20:03:50 anton Exp $	*/
+/*	$OpenBSD: if.c,v 1.636 2021/03/11 16:48:47 florian Exp $	*/
 /*	$NetBSD: if.c,v 1.35 1996/05/07 05:26:04 thorpej Exp $	*/
 
 /*
@@ -667,7 +667,7 @@ if_qstart_compat(struct ifqueue *ifq)
 	 * the stack assumes that an interface can have multiple
 	 * transmit rings, but a lot of drivers are still written
 	 * so that interfaces and send rings have a 1:1 mapping.
-	 * this provides compatability between the stack and the older
+	 * this provides compatibility between the stack and the older
 	 * drivers by translating from the only queue they have
 	 * (ifp->if_snd) back to the interface and calling if_start.
 	 */
@@ -1952,35 +1952,14 @@ ifioctl(struct socket *so, u_long cmd, caddr_t data, struct proc *p)
 		NET_UNLOCK();
 		break;
 
-	case SIOCSIFFLAGS:
-		if ((error = suser(p)) != 0)
-			break;
-
-		NET_LOCK();
-		ifp->if_flags = (ifp->if_flags & IFF_CANTCHANGE) |
-			(ifr->ifr_flags & ~IFF_CANTCHANGE);
-
-		error = (*ifp->if_ioctl)(ifp, cmd, data);
-		if (error != 0) {
-			ifp->if_flags = oif_flags;
-		} else if (ISSET(oif_flags ^ ifp->if_flags, IFF_UP)) {
-			s = splnet();
-			if (ISSET(ifp->if_flags, IFF_UP))
-				if_up(ifp);
-			else
-				if_down(ifp);
-			splx(s);
-		}
-		NET_UNLOCK();
-		break;
-
 	case SIOCSIFXFLAGS:
 		if ((error = suser(p)) != 0)
 			break;
 
 		NET_LOCK();
 #ifdef INET6
-		if (ISSET(ifr->ifr_flags, IFXF_AUTOCONF6)) {
+		if (ISSET(ifr->ifr_flags, IFXF_AUTOCONF6) &&
+		    !ISSET(ifp->if_xflags, IFXF_AUTOCONF6)) {
 			error = in6_ifattach(ifp);
 			if (error != 0) {
 				NET_UNLOCK();
@@ -2042,6 +2021,39 @@ ifioctl(struct socket *so, u_long cmd, caddr_t data, struct proc *p)
 		if (error == 0)
 			ifp->if_xflags = (ifp->if_xflags & IFXF_CANTCHANGE) |
 				(ifr->ifr_flags & ~IFXF_CANTCHANGE);
+
+		if (!ISSET(ifp->if_flags, IFF_UP) &&
+		    ((!ISSET(oif_xflags, IFXF_AUTOCONF4) &&
+		    ISSET(ifp->if_xflags, IFXF_AUTOCONF4)) ||
+		    (!ISSET(oif_xflags, IFXF_AUTOCONF6) &&
+		    ISSET(ifp->if_xflags, IFXF_AUTOCONF6)))) {
+			ifr->ifr_flags = ifp->if_flags | IFF_UP;
+			cmd = SIOCSIFFLAGS;
+			goto forceup;
+		}
+
+		NET_UNLOCK();
+		break;
+
+	case SIOCSIFFLAGS:
+		if ((error = suser(p)) != 0)
+			break;
+
+		NET_LOCK();
+forceup:
+		ifp->if_flags = (ifp->if_flags & IFF_CANTCHANGE) |
+			(ifr->ifr_flags & ~IFF_CANTCHANGE);
+		error = (*ifp->if_ioctl)(ifp, cmd, data);
+		if (error != 0) {
+			ifp->if_flags = oif_flags;
+		} else if (ISSET(oif_flags ^ ifp->if_flags, IFF_UP)) {
+			s = splnet();
+			if (ISSET(ifp->if_flags, IFF_UP))
+				if_up(ifp);
+			else
+				if_down(ifp);
+			splx(s);
+		}
 		NET_UNLOCK();
 		break;
 
