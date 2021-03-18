@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_mpw.c,v 1.59 2020/08/21 22:59:27 kn Exp $ */
+/*	$OpenBSD: if_mpw.c,v 1.61 2021/03/17 18:53:25 kn Exp $ */
 
 /*
  * Copyright (c) 2015 Rafael Zalamena <rzalamena@openbsd.org>
@@ -323,7 +323,7 @@ mpw_del_label(struct mpw_softc *sc)
 
 	if (sc->sc_smpls.smpls_label != MPLS_LABEL2SHIM(0)) {
 		rt_ifa_del(&sc->sc_ifa, RTF_MPLS | RTF_LOCAL,
-		    smplstosa(&sc->sc_smpls), 0);
+		    smplstosa(&sc->sc_smpls), sc->sc_rdomain);
 	}
 
 	sc->sc_smpls.smpls_label = MPLS_LABEL2SHIM(0);
@@ -442,6 +442,9 @@ mpw_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		if (error != 0)
 			break;
 		error = mpw_set_label(sc, &shim);
+		break;
+	case SIOCDELLABEL:
+		error = mpw_del_label(sc);
 		break;
 
 	case SIOCSETMPWCFG:
