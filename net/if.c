@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.c,v 1.636 2021/03/11 16:48:47 florian Exp $	*/
+/*	$OpenBSD: if.c,v 1.639 2021/03/20 17:08:57 florian Exp $	*/
 /*	$NetBSD: if.c,v 1.35 1996/05/07 05:26:04 thorpej Exp $	*/
 
 /*
@@ -1958,8 +1958,10 @@ ifioctl(struct socket *so, u_long cmd, caddr_t data, struct proc *p)
 
 		NET_LOCK();
 #ifdef INET6
-		if (ISSET(ifr->ifr_flags, IFXF_AUTOCONF6) &&
-		    !ISSET(ifp->if_xflags, IFXF_AUTOCONF6)) {
+		if ((ISSET(ifr->ifr_flags, IFXF_AUTOCONF6) ||
+		    ISSET(ifr->ifr_flags, IFXF_AUTOCONF6TEMP)) &&
+		    !ISSET(ifp->if_xflags, IFXF_AUTOCONF6) &&
+		    !ISSET(ifp->if_xflags, IFXF_AUTOCONF6TEMP)) {
 			error = in6_ifattach(ifp);
 			if (error != 0) {
 				NET_UNLOCK();
@@ -2026,7 +2028,9 @@ ifioctl(struct socket *so, u_long cmd, caddr_t data, struct proc *p)
 		    ((!ISSET(oif_xflags, IFXF_AUTOCONF4) &&
 		    ISSET(ifp->if_xflags, IFXF_AUTOCONF4)) ||
 		    (!ISSET(oif_xflags, IFXF_AUTOCONF6) &&
-		    ISSET(ifp->if_xflags, IFXF_AUTOCONF6)))) {
+		    ISSET(ifp->if_xflags, IFXF_AUTOCONF6)) ||
+		    (!ISSET(oif_xflags, IFXF_AUTOCONF6TEMP) &&
+		    ISSET(ifp->if_xflags, IFXF_AUTOCONF6TEMP)))) {
 			ifr->ifr_flags = ifp->if_flags | IFF_UP;
 			cmd = SIOCSIFFLAGS;
 			goto forceup;
@@ -2071,7 +2075,7 @@ forceup:
 		NET_LOCK();
 		error = (*ifp->if_ioctl)(ifp, cmd, data);
 		NET_UNLOCK();
-		if (!error)
+		if (error == 0)
 			rtm_ifchg(ifp);
 		break;
 
@@ -2172,6 +2176,8 @@ forceup:
 		if (error == 0)
 			ifnewlladdr(ifp);
 		NET_UNLOCK();
+		if (error == 0)
+			rtm_ifchg(ifp);
 		break;
 
 	case SIOCSIFLLPRIO:
@@ -2284,8 +2290,11 @@ forceup:
 		break;
 	}
 
-	if (oif_flags != ifp->if_flags || oif_xflags != ifp->if_xflags)
-		rtm_ifchg(ifp);
+	if (oif_flags != ifp->if_flags || oif_xflags != ifp->if_xflags) {
+		/* if_up() and if_down() already sent an update, skip here */
+		if (((oif_flags ^ ifp->if_flags) & IFF_UP) == 0)
+			rtm_ifchg(ifp);
+	}
 
 	if (((oif_flags ^ ifp->if_flags) & IFF_UP) != 0)
 		getmicrotime(&ifp->if_lastchange);
