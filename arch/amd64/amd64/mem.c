@@ -126,6 +126,7 @@ mmrw(dev_t dev, struct uio *uio, int flags)
 	size_t c;
 	struct iovec *iov;
 	int error = 0;
+	static int header;
 
 	while (uio->uio_resid > 0 && error == 0) {
 		iov = uio->uio_iov;
@@ -148,6 +149,16 @@ mmrw(dev_t dev, struct uio *uio, int flags)
 		case 1:
 			v = uio->uio_offset;
 			c = ulmin(iov->iov_len, MAXPHYS);
+if (header == 0) {
+	printf("start %p, etext %p, kern_end %p\n",
+	    &start, &etext, (void *)kern_end);
+	printf("PMAP_DIRECT_BASE %p, PMAP_DIRECT_END %p\n",
+	    (void *)PMAP_DIRECT_BASE, (void *)PMAP_DIRECT_END);
+	printf("min_offset %p, max_offset %p\n",
+	    (void *)kernel_map->min_offset, (void *)kernel_map->max_offset);
+	header = 1;
+}
+printf("v %p, c %p, v+c %p\n", (void *)v, (void *)c, (void *)(v+c));
 			if (v >= (vaddr_t)&start && v < kern_end - c) {
                                 if (v < (vaddr_t)&etext - c &&
                                     uio->uio_rw == UIO_WRITE)
