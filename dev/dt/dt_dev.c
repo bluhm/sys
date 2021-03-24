@@ -213,7 +213,7 @@ dtread(dev_t dev, struct uio *uio, int flags)
 	struct dt_softc *sc;
 	struct dt_evt *estq;
 	struct dt_pcb *dp;
-	int error, unit = minor(dev);
+	int error = 0, unit = minor(dev);
 	size_t qlen, count, read = 0;
 	uint64_t dropped = 0;
 
