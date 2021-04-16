@@ -1,4 +1,4 @@
-/*	$OpenBSD: ieee80211_input.c,v 1.229 2021/03/10 10:21:48 jsg Exp $	*/
+/*	$OpenBSD: ieee80211_input.c,v 1.232 2021/03/26 10:18:55 stsp Exp $	*/
 
 /*-
  * Copyright (c) 2001 Atsushi Onoe
@@ -881,7 +881,7 @@ ieee80211_input_ba_seq(struct ieee80211com *ic, struct ieee80211_node *ni,
 			seq = letoh16(*(u_int16_t *)wh->i_seq) >>
 			    IEEE80211_SEQ_SEQ_SHIFT;
 			if (!SEQ_LT(seq, max_seq))
-				return;
+				break;
 			ieee80211_inputm(ifp, ba->ba_buf[ba->ba_head].m,
 			    ni, &ba->ba_buf[ba->ba_head].rxi, ml);
 			ba->ba_buf[ba->ba_head].m = NULL;
@@ -902,6 +902,10 @@ ieee80211_input_ba_flush(struct ieee80211com *ic, struct ieee80211_node *ni,
 
 {
 	struct ifnet *ifp = &ic->ic_if;
+
+	/* Do not re-arm the gap timeout if we made no progress. */
+	if (ba->ba_buf[ba->ba_head].m == NULL)
+		return;
 
 	/* pass reordered MPDUs up to the next MAC process */
 	while (ba->ba_buf[ba->ba_head].m != NULL) {
@@ -999,6 +1003,7 @@ ieee80211_ba_move_window(struct ieee80211com *ic, struct ieee80211_node *ni,
 	}
 	/* move window forward */
 	ba->ba_winstart = ssn;
+	ba->ba_winend = (ba->ba_winstart + ba->ba_winsize - 1) & 0xfff;
 
 	ieee80211_input_ba_flush(ic, ni, ba, ml);
 }
@@ -2035,7 +2040,7 @@ ieee80211_recv_auth(struct ieee80211com *ic, struct mbuf *m,
 			/* XXX hack to workaround calling convention */
 			IEEE80211_SEND_MGMT(ic, ni,
 			    IEEE80211_FC0_SUBTYPE_AUTH,
-			    IEEE80211_STATUS_ALG << 16 | ((seq + 1) & 0xffff));
+			    IEEE80211_STATUS_ALG << 16 | ((seq + 1) & 0xfff));
 		}
 #endif
 		return;

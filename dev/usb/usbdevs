@@ -1,4 +1,4 @@
-$OpenBSD: usbdevs,v 1.732 2021/03/08 14:37:08 jcs Exp $
+$OpenBSD: usbdevs,v 1.738 2021/04/05 20:45:49 mglocker Exp $
 /* $NetBSD: usbdevs,v 1.322 2003/05/10 17:47:14 hamajima Exp $ */
 
 /*
@@ -636,6 +636,7 @@ vendor ARDUINO		0x2341	Arduino SA
 vendor TPLINK		0x2357	TP-Link
 vendor WMR		0x2405	West Mountain Radio
 vendor TRIPPLITE	0x2478	Tripp-Lite
+vendor HAILUCK		0x258a	HAILUCK Co., Ltd
 vendor ARUBA		0x2626	Aruba
 vendor XIAOMI		0x2717	Xiaomi
 vendor NHJ		0x2770	NHJ
@@ -655,6 +656,7 @@ vendor MICRONET		0x3980	Micronet Communications
 vendor IODATA2		0x40bb	I-O Data
 vendor IRIVER		0x4102	iRiver
 vendor DELL		0x413c	Dell
+vendor PCSENSORS	0x413d	PC Sensors
 vendor WCH		0x4348	QinHeng Electronics
 vendor ACEECA		0x4766	Aceeca
 vendor FEIXUN		0x4855	FeiXun Communication
@@ -1336,6 +1338,7 @@ product CHICONY RTL8188CUS_3	0xaff9	RTL8188CUS
 product CHICONY RTL8188CUS_4	0xaffa	RTL8188CUS
 product CHICONY RTL8188CUS_5	0xaffb	RTL8188CUS
 product CHICONY RTL8188CUS_6	0xaffc	RTL8188CUS
+product CHICONY IRCAMERA	0xb615	Integrated IR Camera
 
 /* CH Products */
 product CHPRODUCTS PROTHROTTLE	0x00f1	Pro Throttle
@@ -1516,8 +1519,9 @@ product	DELL PRISM_GT_1		0x8102	PrismGT USB 2.0 WLAN
 product DELL BLUETOOTH350	0x8103	Bluetooth
 product	DELL PRISM_GT_2		0x8104	PrismGT USB 2.0 WLAN
 product DELL W5500		0x8115	W5500 HSDPA 
-product DELL U740		0x8135	Dell U740 CDMA
+product DELL U740		0x8135	U740 CDMA
 product DELL EU870D		0x8138	EU870D HSDPA
+product DELL DW5821E		0x81d7	DW5821e LTE
 product DELL DW700		0x9500	DW700 GPS
 product DELL2 UPS		0xffff	UPS
 
@@ -2179,6 +2183,9 @@ product HAGIWARA FGSM		0x0002  FlashGate SmartMedia
 product HAGIWARA FGCF		0x0003  FlashGate CompactFlash
 product HAGIWARA FG		0x0005  FlashGate
 
+/* HAILUCK Co., Ltd products */
+product HAILUCK KEYBOARD	0x001e	Keyboard
+
 /* HAL Corporation products */
 product HAL IMR001		0x0011	Crossam2+USB IR commander
 
@@ -2276,31 +2283,32 @@ product HTC SMARTPHONE		0x0a51	SmartPhone
 product HTC ANDROID		0x0ffe	Android phone
 
 /* HUAWEI products */
-product HUAWEI E618		0x1001	HUAWEI Mobile E618
-product HUAWEI E220		0x1003	HUAWEI Mobile Modem
-product HUAWEI MOBILE		0x1008	HUAWEI Mobile Modem
-product HUAWEI EM770W		0x1404	HUAWEI Mobile Modem
-product HUAWEI E1750		0x1406	HUAWEI Mobile Modem
-product HUAWEI E180		0x140c	HUAWEI Mobile E180
-product HUAWEI E510		0x1411	HUAWEI Mobile E510
-product HUAWEI E181		0x1414	HUAWEI Mobile E181
-product HUAWEI E1752		0x1417	HUAWEI Mobile Modem
-product HUAWEI E182		0x1429	HUAWEI Mobile Modem
-product HUAWEI E3372		0x1442	HUAWEI Mobile Modem
-product HUAWEI E161		0x1446	HUAWEI Mobile Modem
-product HUAWEI K3765		0x1465	HUAWEI Mobile K3765
-product HUAWEI E1820		0x14ac	HUAWEI Mobile Modem
-product HUAWEI K4511		0x14b7	HUAWEI Mobile Modem K4511
-product HUAWEI K4510		0x14c5	HUAWEI Mobile Modem
-product HUAWEI K3772		0x14cf	HUAWEI Mobile K3772
-product HUAWEI E353_INIT	0x14fe	HUAWEI Mobile E353 Initial
-product HUAWEI E392_INIT	0x1505	HUAWEI Mobile E392 Initial
-product HUAWEI K3765_INIT	0x1520	HUAWEI Mobile K3765 Initial
-product HUAWEI K3772_INIT	0x1526	HUAWEI Mobile K3772 Initial
-product HUAWEI MU609		0x1573	HUAWEI Mobile ME906 
-product HUAWEI E173S		0x1c05	HUAWEI Mobile E173s
-product HUAWEI E173S_INIT	0x1c0b	HUAWEI Mobile E173s Initial
-product HUAWEI E303		0x1f01	HUAWEI Mobile E303
+product HUAWEI E618		0x1001	E618 HSDPA
+product HUAWEI E220		0x1003	E220 HSDPA
+product HUAWEI MOBILE		0x1008	Modem
+product HUAWEI EM770W		0x1404	EM770W WCDMA
+product HUAWEI E1750		0x1406	E1750 HSDPA
+product HUAWEI E180		0x140c	E180 HSDPA
+product HUAWEI E510		0x1411	E510 HSDPA/DVB-T
+product HUAWEI E181		0x1414	E181 HSDPA
+product HUAWEI E1752		0x1417	E1752 HSDPA
+product HUAWEI E182		0x1429	E182 HSDPA
+product HUAWEI E3372		0x1442	E3372 LTE
+product HUAWEI E161		0x1446	E161 HSDPA
+product HUAWEI K3765		0x1465	K3765 HSDPA
+product HUAWEI E1820		0x14ac	E1820 HSDPA
+product HUAWEI K4511		0x14b7	K4511 HSDPA
+product HUAWEI K4510		0x14c5	K4510 HSDPA
+product HUAWEI K3772		0x14cf	K3772 LTE
+product HUAWEI E353_INIT	0x14fe	E353 Initial
+product HUAWEI E392_INIT	0x1505	E392 Initial
+product HUAWEI K3765_INIT	0x1520	K3765 Initial
+product HUAWEI K3772_INIT	0x1526	K3772 Initial
+product HUAWEI MU609		0x1573	ME906 LTE
+product HUAWEI ME906S		0x15c1	ME906s LTE
+product HUAWEI E173S		0x1c05	E173s HSDPA
+product HUAWEI E173S_INIT	0x1c0b	E173s Initial
+product HUAWEI E303		0x1f01	E303 HSDPA
 
 /* Huawei 3Com products */
 product HUAWEI3COM WUB320G	0x0009	Aolynk WUB320g
@@ -3492,6 +3500,9 @@ product PAPOUCH GOLIATH_MSR	0x8005	GOLIATH MSR
 
 /* PARA Industrial products */
 product PARA RT3070		0x8888	RT3070
+
+/* PC Sensors products */
+product PCSENSORS TEMPER	0x2107	TEMPer
 
 /* Pegatron products */
 product PEGATRON RT2870		0x0002	RT2870

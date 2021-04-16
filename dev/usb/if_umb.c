@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_umb.c,v 1.37 2021/01/29 17:06:19 sthen Exp $ */
+/*	$OpenBSD: if_umb.c,v 1.43 2021/04/01 08:39:52 mvs Exp $ */
 
 /*
  * Copyright (c) 2016 genua mbH
@@ -130,6 +130,7 @@ int		 umb_match(struct device *, void *, void *);
 void		 umb_attach(struct device *, struct device *, void *);
 int		 umb_detach(struct device *, int);
 void		 umb_ncm_setup(struct umb_softc *);
+void		 umb_ncm_setup_format(struct umb_softc *);
 int		 umb_alloc_xfers(struct umb_softc *);
 void		 umb_free_xfers(struct umb_softc *);
 int		 umb_alloc_bulkpipes(struct umb_softc *);
@@ -172,7 +173,7 @@ void		 umb_send_inet_proposal(struct umb_softc *, int);
 int		 umb_decode_ip_configuration(struct umb_softc *, void *, int);
 void		 umb_rx(struct umb_softc *);
 void		 umb_rxeof(struct usbd_xfer *, void *, usbd_status);
-int		 umb_encap(struct umb_softc *);
+int		 umb_encap(struct umb_softc *, int);
 void		 umb_txeof(struct usbd_xfer *, void *, usbd_status);
 void		 umb_decap(struct umb_softc *, struct usbd_xfer *);
 
@@ -224,12 +225,34 @@ const struct cfattach umb_ca = {
 
 int umb_delay = 4000;
 
-/*
- * These devices require an "FCC Authentication" command.
- */
-const struct usb_devno umb_fccauth_devs[] = {
-	{ USB_VENDOR_SIERRA, USB_PRODUCT_SIERRA_EM7455 },
+struct umb_quirk {
+	struct usb_devno	 dev;
+	u_int32_t		 umb_flags;
+	int			 umb_confno;
+	int			 umb_match;
 };
+const struct umb_quirk umb_quirks[] = {
+	{ { USB_VENDOR_DELL, USB_PRODUCT_DELL_DW5821E },
+	  0,
+	  2,
+	  UMATCH_VENDOR_PRODUCT
+	},
+
+	{ { USB_VENDOR_HUAWEI, USB_PRODUCT_HUAWEI_ME906S },
+	  UMBFLG_NDP_AT_END,
+	  3,
+	  UMATCH_VENDOR_PRODUCT
+	},
+
+	{ { USB_VENDOR_SIERRA, USB_PRODUCT_SIERRA_EM7455 },
+	  UMBFLG_FCC_AUTH_REQUIRED,
+	  0,
+	  0
+	},
+};
+
+#define umb_lookup(vid, pid)		\
+	((const struct umb_quirk *)usb_lookup(umb_quirks, vid, pid))
 
 uint8_t umb_qmi_alloc_cid[] = {
 	0x01,
@@ -261,8 +284,12 @@ int
 umb_match(struct device *parent, void *match, void *aux)
 {
 	struct usb_attach_arg *uaa = aux;
+	const struct umb_quirk *quirk;
 	usb_interface_descriptor_t *id;
 
+	quirk = umb_lookup(uaa->vendor, uaa->product);
+	if (quirk != NULL && quirk->umb_match)
+		return (quirk->umb_match);
 	if (!uaa->iface)
 		return UMATCH_NONE;
 	if ((id = usbd_get_interface_descriptor(uaa->iface)) == NULL)
@@ -293,6 +320,7 @@ umb_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct umb_softc *sc = (struct umb_softc *)self;
 	struct usb_attach_arg *uaa = aux;
+	const struct umb_quirk *quirk;
 	usbd_status status;
 	struct usbd_desc_iter iter;
 	const usb_descriptor_t *desc;
@@ -314,6 +342,57 @@ umb_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_udev = uaa->device;
 	sc->sc_ctrl_ifaceno = uaa->ifaceno;
 	ml_init(&sc->sc_tx_ml);
+
+	quirk = umb_lookup(uaa->vendor, uaa->product);
+	if (quirk != NULL && quirk->umb_flags) {
+		DPRINTF("%s: setting flags 0x%x from quirk\n", DEVNAM(sc),
+                    quirk->umb_flags);
+		sc->sc_flags |= quirk->umb_flags;
+	}
+
+	/*
+	 * Normally, MBIM devices are detected by their interface class and
+	 * subclass. But for some models that have multiple configurations, it
+	 * is better to match by vendor and product id so that we can select
+	 * the desired configuration ourselves, e.g. to override a class-based
+	 * match to another driver.
+	 */
+	if (uaa->configno < 0) {
+		if (quirk == NULL) {
+			printf("%s: unknown configuration for vid/pid match\n",
+			    DEVNAM(sc));
+			goto fail;
+		}
+		uaa->configno = quirk->umb_confno;
+		DPRINTF("%s: switching to config #%d\n", DEVNAM(sc),
+		    uaa->configno);
+		status = usbd_set_config_no(sc->sc_udev, uaa->configno, 1);
+		if (status) {
+			printf("%s: failed to switch to config #%d: %s\n",
+			    DEVNAM(sc), uaa->configno, usbd_errstr(status));
+			goto fail;
+		}
+		usbd_delay_ms(sc->sc_udev, 200);
+
+		/*
+		 * Need to do some manual setup that usbd_probe_and_attach()
+		 * would do for us otherwise.
+		 */
+		uaa->nifaces = uaa->device->cdesc->bNumInterfaces;
+		for (i = 0; i < uaa->nifaces; i++) {
+			if (usbd_iface_claimed(sc->sc_udev, i))
+				continue;
+			id = usbd_get_interface_descriptor(&uaa->device->ifaces[i]);
+			if (id != NULL && id->bInterfaceClass == UICLASS_CDC &&
+			    id->bInterfaceSubClass ==
+			    UISUBCLASS_MOBILE_BROADBAND_INTERFACE_MODEL) {
+				uaa->iface = &uaa->device->ifaces[i];
+				uaa->ifaceno = uaa->iface->idesc->bInterfaceNumber;
+				sc->sc_ctrl_ifaceno = uaa->ifaceno;
+				break;
+			}
+		}
+	}
 
 	/*
 	 * Some MBIM hardware does not provide the mandatory CDC Union
@@ -374,17 +453,15 @@ umb_attach(struct device *parent, struct device *self, void *aux)
 		printf("%s: missing MBIM descriptor\n", DEVNAM(sc));
 		goto fail;
 	}
-	if (usb_lookup(umb_fccauth_devs, uaa->vendor, uaa->product)) {
-		sc->sc_flags |= UMBFLG_FCC_AUTH_REQUIRED;
+	if (sc->sc_flags & UMBFLG_FCC_AUTH_REQUIRED)
 		sc->sc_cid = -1;
-	}
 
 	for (i = 0; i < uaa->nifaces; i++) {
 		if (usbd_iface_claimed(sc->sc_udev, i))
 			continue;
-		id = usbd_get_interface_descriptor(uaa->ifaces[i]);
+		id = usbd_get_interface_descriptor(&sc->sc_udev->ifaces[i]);
 		if (id != NULL && id->bInterfaceNumber == data_ifaceno) {
-			sc->sc_data_iface = uaa->ifaces[i];
+			sc->sc_data_iface = &sc->sc_udev->ifaces[i];
 			usbd_claim_iface(sc->sc_udev, i);
 		}
 	}
@@ -500,7 +577,12 @@ umb_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_info.rssi = UMB_VALUE_UNKNOWN;
 	sc->sc_info.ber = UMB_VALUE_UNKNOWN;
 
+	/* Default to 16 bit NTB format. */
+	sc->sc_ncm_format = NCM_FORMAT_NTB16;
 	umb_ncm_setup(sc);
+	umb_ncm_setup_format(sc);
+	if (sc->sc_ncm_supported_formats == 0)
+		goto fail;
 	DPRINTFN(2, "%s: rx/tx size %d/%d\n", DEVNAM(sc),
 	    sc->sc_rx_bufsz, sc->sc_tx_bufsz);
 
@@ -588,7 +670,7 @@ umb_ncm_setup(struct umb_softc *sc)
 	usb_device_request_t req;
 	struct ncm_ntb_parameters np;
 
-	/* Query NTB tranfers sizes */
+	/* Query NTB transfer sizes */
 	req.bmRequestType = UT_READ_CLASS_INTERFACE;
 	req.bRequest = NCM_GET_NTB_PARAMETERS;
 	USETW(req.wValue, 0);
@@ -611,12 +693,60 @@ umb_ncm_setup(struct umb_softc *sc)
 			sc->sc_ndp_div = sizeof (uint32_t);
 		if (sc->sc_ndp_remainder >= sc->sc_ndp_div)
 			sc->sc_ndp_remainder = 0;
+		DPRINTF("%s: NCM align=%d div=%d rem=%d\n", DEVNAM(sc),
+		    sc->sc_align, sc->sc_ndp_div, sc->sc_ndp_remainder);
+		sc->sc_ncm_supported_formats = UGETW(np.bmNtbFormatsSupported);
 	} else {
 		sc->sc_rx_bufsz = sc->sc_tx_bufsz = 8 * 1024;
 		sc->sc_maxdgram = 0;
 		sc->sc_align = sc->sc_ndp_div = sizeof (uint32_t);
 		sc->sc_ndp_remainder = 0;
+		DPRINTF("%s: align=default div=default rem=default\n",
+		    DEVNAM(sc));
+		sc->sc_ncm_supported_formats = NCM_FORMAT_NTB16_MASK;
 	}
+}
+
+void
+umb_ncm_setup_format(struct umb_softc *sc)
+{
+	usb_device_request_t req;
+	uWord wFmt;
+	uint16_t fmt;
+
+	assertwaitok();
+	if (sc->sc_ncm_supported_formats == 0)
+		goto fail;
+
+	/* NCM_GET_NTB_FORMAT is not allowed for 16-bit only devices. */
+	if (sc->sc_ncm_supported_formats == NCM_FORMAT_NTB16_MASK) {
+		DPRINTF("%s: Only NTB16 format supported.\n", DEVNAM(sc));
+		sc->sc_ncm_format = NCM_FORMAT_NTB16;
+		return;
+	}
+
+	/* Query NTB FORMAT (16 vs. 32 bit) */
+	req.bmRequestType = UT_READ_CLASS_INTERFACE;
+	req.bRequest = NCM_GET_NTB_FORMAT;
+	USETW(req.wValue, 0);
+	USETW(req.wIndex, sc->sc_ctrl_ifaceno);
+	USETW(req.wLength, sizeof (wFmt));
+	if (usbd_do_request(sc->sc_udev, &req, wFmt) != USBD_NORMAL_COMPLETION)
+		goto fail;
+	fmt = UGETW(wFmt);
+	if ((sc->sc_ncm_supported_formats & (1UL << fmt)) == 0)
+		goto fail;
+	if (fmt != NCM_FORMAT_NTB16 && fmt != NCM_FORMAT_NTB32)
+		goto fail;
+	sc->sc_ncm_format = fmt;
+
+	DPRINTF("%s: Using NCM format %d, supported=0x%x\n",
+	    DEVNAM(sc), sc->sc_ncm_format, sc->sc_ncm_supported_formats);
+	return;
+
+fail:
+	DPRINTF("%s: Cannot setup NCM format\n", DEVNAM(sc));
+	sc->sc_ncm_supported_formats = 0;
 }
 
 int
@@ -792,7 +922,7 @@ umb_input(struct ifnet *ifp, struct mbuf *m)
 	}
 	m->m_pkthdr.ph_rtableid = ifp->if_rdomain;
 
-	/* pop of DLT_LOOP header, no longer needed */
+	/* pop off DLT_LOOP header, no longer needed */
 	af = *mtod(m, uint32_t *);
 	m_adj(m, sizeof (af));
 	af = ntohl(af);
@@ -847,8 +977,8 @@ umb_start(struct ifnet *ifp)
 	struct umb_softc *sc = ifp->if_softc;
 	struct mbuf *m = NULL;
 	int	 ndgram = 0;
-	int	 offs, plen, len, mlen;
-	int	 maxalign;
+	int	 offs, len, mlen;
+	int	 maxoverhead;
 
 	if (usbd_is_dying(sc->sc_udev) ||
 	    !(ifp->if_flags & IFF_RUNNING) ||
@@ -857,16 +987,30 @@ umb_start(struct ifnet *ifp)
 
 	KASSERT(ml_empty(&sc->sc_tx_ml));
 
-	offs = sizeof (struct ncm_header16);
-	offs += umb_align(sc->sc_tx_bufsz, offs, sc->sc_align, 0);
+	switch (sc->sc_ncm_format) {
+	case NCM_FORMAT_NTB16:
+		offs = sizeof (struct ncm_header16);
+		offs += umb_align(sc->sc_tx_bufsz, offs, sc->sc_align, 0);
+		offs += sizeof (struct ncm_pointer16);
+		maxoverhead = sizeof (struct ncm_pointer16_dgram);
+		break;
+	case NCM_FORMAT_NTB32:
+		offs = sizeof (struct ncm_header32);
+		offs += umb_align(sc->sc_tx_bufsz, offs, sc->sc_align, 0);
+		offs += sizeof (struct ncm_pointer32);
+		maxoverhead = sizeof (struct ncm_pointer32_dgram);
+		break;
+	default:
+		KASSERT(0);
+	}
 
 	/*
-	 * Note that 'struct ncm_pointer16' already includes space for the
-	 * terminating zero pointer.
+	 * Overhead for per packet alignment plus packet pointer. Note
+	 * that 'struct ncm_pointer{16,32}' already includes space for
+	 * the terminating zero pointer.
 	 */
-	offs += sizeof (struct ncm_pointer16);
-	plen = sizeof (struct ncm_pointer16_dgram);
-	maxalign = (sc->sc_ndp_div - 1) + sc->sc_ndp_remainder;
+	maxoverhead += sc->sc_ndp_div - 1;
+
 	len = 0;
 	while (1) {
 		m = ifq_deq_begin(&ifp->if_snd);
@@ -877,10 +1021,9 @@ umb_start(struct ifnet *ifp)
 		 * Check if mbuf plus required NCM pointer still fits into
 		 * xfer buffers. Assume maximal padding.
 		 */
-		plen += sizeof (struct ncm_pointer16_dgram);
-		mlen = maxalign +  m->m_pkthdr.len;
+		mlen = maxoverhead +  m->m_pkthdr.len;
 		if ((sc->sc_maxdgram != 0 && ndgram >= sc->sc_maxdgram) ||
-		    (offs + plen + len + mlen > sc->sc_tx_bufsz)) {
+		    (offs + len + mlen > sc->sc_tx_bufsz)) {
 			ifq_deq_rollback(&ifp->if_snd, m);
 			break;
 		}
@@ -898,7 +1041,7 @@ umb_start(struct ifnet *ifp)
 	}
 	if (ml_empty(&sc->sc_tx_ml))
 		return;
-	if (umb_encap(sc)) {
+	if (umb_encap(sc, ndgram)) {
 		ifq_set_oactive(&ifp->if_snd);
 		ifp->if_timer = (2 * umb_xfer_tout) / 1000;
 	}
@@ -910,10 +1053,12 @@ umb_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 	struct umb_softc *sc = ifp->if_softc;
 
 	if (req == RTM_PROPOSAL) {
+		KERNEL_LOCK();
 		umb_send_inet_proposal(sc, AF_INET);
 #ifdef INET6
 		umb_send_inet_proposal(sc, AF_INET6);
 #endif
+		KERNEL_UNLOCK();
 		return;
 	}
 
@@ -2050,59 +2195,132 @@ umb_rxeof(struct usbd_xfer *xfer, void *priv, usbd_status status)
 }
 
 int
-umb_encap(struct umb_softc *sc)
+umb_encap(struct umb_softc *sc, int ndgram)
 {
-	struct ncm_header16 *hdr;
-	struct ncm_pointer16 *ptr;
-	struct ncm_pointer16_dgram *dgram;
-	int	 offs, poffs;
-	struct mbuf_list tmpml = MBUF_LIST_INITIALIZER();
+	struct ncm_header16 *hdr16 = NULL;
+	struct ncm_header32 *hdr32 = NULL;
+	struct ncm_pointer16 *ptr16 = NULL;
+	struct ncm_pointer32 *ptr32 = NULL;
+	struct ncm_pointer16_dgram *dgram16 = NULL;
+	struct ncm_pointer32_dgram *dgram32 = NULL;
+	int	 offs = 0, plen = 0;
+	int	 dgoffs = 0, poffs;
 	struct mbuf *m;
 	usbd_status  err;
 
 	/* All size constraints have been validated by the caller! */
-	hdr = sc->sc_tx_buf;
-	USETDW(hdr->dwSignature, NCM_HDR16_SIG);
-	USETW(hdr->wHeaderLength, sizeof (*hdr));
-	USETW(hdr->wBlockLength, 0);
-	USETW(hdr->wSequence, sc->sc_tx_seq);
-	sc->sc_tx_seq++;
-	offs = sizeof (*hdr);
+
+	/* NCM Header */
+	switch (sc->sc_ncm_format) {
+	case NCM_FORMAT_NTB16:
+		hdr16 = sc->sc_tx_buf;
+		USETDW(hdr16->dwSignature, NCM_HDR16_SIG);
+		USETW(hdr16->wHeaderLength, sizeof (*hdr16));
+		USETW(hdr16->wSequence, sc->sc_tx_seq);
+		USETW(hdr16->wBlockLength, 0);
+		offs = sizeof (*hdr16);
+		break;
+	case NCM_FORMAT_NTB32:
+		hdr32 = sc->sc_tx_buf;
+		USETDW(hdr32->dwSignature, NCM_HDR32_SIG);
+		USETW(hdr32->wHeaderLength, sizeof (*hdr32));
+		USETW(hdr32->wSequence, sc->sc_tx_seq);
+		USETDW(hdr32->dwBlockLength, 0);
+		offs = sizeof (*hdr32);
+		break;
+	}
 	offs += umb_padding(sc->sc_tx_buf, sc->sc_tx_bufsz, offs,
 	    sc->sc_align, 0);
-	USETW(hdr->wNdpIndex, offs);
 
-	poffs = offs;
-	ptr = (struct ncm_pointer16 *)(sc->sc_tx_buf + offs);
-	USETDW(ptr->dwSignature, MBIM_NCM_NTH16_SIG(umb_session_id));
-	USETW(ptr->wNextNdpIndex, 0);
-	dgram = &ptr->dgram[0];
-	offs = (caddr_t)dgram - (caddr_t)sc->sc_tx_buf;
+	if (sc->sc_flags & UMBFLG_NDP_AT_END) {
+		dgoffs = offs;
 
-	/* Leave space for dgram pointers */
+		/*
+		 * Calculate space needed for datagrams.
+		 *
+		 * XXX cannot use ml_len(&sc->sc_tx_ml), since it ignores
+		 *	the padding requirements.
+		 */
+		poffs = dgoffs;
+		MBUF_LIST_FOREACH(&sc->sc_tx_ml, m) {
+			poffs += umb_padding(sc->sc_tx_buf, sc->sc_tx_bufsz,
+			    poffs, sc->sc_ndp_div, sc->sc_ndp_remainder);
+			poffs += m->m_pkthdr.len;
+		}
+		poffs += umb_padding(sc->sc_tx_buf, sc->sc_tx_bufsz,
+		    poffs, sc->sc_ndp_div, sc->sc_ndp_remainder);
+	} else
+		poffs = offs;
+
+	/* NCM Pointer */
+	switch (sc->sc_ncm_format) {
+	case NCM_FORMAT_NTB16:
+		USETW(hdr16->wNdpIndex, poffs);
+		ptr16 = (struct ncm_pointer16 *)(sc->sc_tx_buf + poffs);
+		plen = sizeof(*ptr16) + ndgram * sizeof(*dgram16);
+		USETDW(ptr16->dwSignature, MBIM_NCM_NTH16_SIG(umb_session_id));
+		USETW(ptr16->wLength, plen);
+		USETW(ptr16->wNextNdpIndex, 0);
+		dgram16 = ptr16->dgram;
+		break;
+	case NCM_FORMAT_NTB32:
+		USETDW(hdr32->dwNdpIndex, poffs);
+		ptr32 = (struct ncm_pointer32 *)(sc->sc_tx_buf + poffs);
+		plen = sizeof(*ptr32) + ndgram * sizeof(*dgram32);
+		USETDW(ptr32->dwSignature, MBIM_NCM_NTH32_SIG(umb_session_id));
+		USETW(ptr32->wLength, plen);
+		USETW(ptr32->wReserved6, 0);
+		USETDW(ptr32->dwNextNdpIndex, 0);
+		USETDW(ptr32->dwReserved12, 0);
+		dgram32 = ptr32->dgram;
+		break;
+	}
+
+	if (!(sc->sc_flags & UMBFLG_NDP_AT_END))
+		dgoffs = offs + plen;
+
+	/* Encap mbufs to NCM dgrams */
+	sc->sc_tx_seq++;
 	while ((m = ml_dequeue(&sc->sc_tx_ml)) != NULL) {
-		offs += sizeof (*dgram);
-		ml_enqueue(&tmpml, m);
-	}
-	offs += sizeof (*dgram);	/* one more to terminate pointer list */
-	USETW(ptr->wLength, offs - poffs);
-
-	/* Encap mbufs */
-	while ((m = ml_dequeue(&tmpml)) != NULL) {
-		offs += umb_padding(sc->sc_tx_buf, sc->sc_tx_bufsz, offs,
+		dgoffs += umb_padding(sc->sc_tx_buf, sc->sc_tx_bufsz, dgoffs,
 		    sc->sc_ndp_div, sc->sc_ndp_remainder);
-		USETW(dgram->wDatagramIndex, offs);
-		USETW(dgram->wDatagramLen, m->m_pkthdr.len);
-		dgram++;
-		m_copydata(m, 0, m->m_pkthdr.len, sc->sc_tx_buf + offs);
-		offs += m->m_pkthdr.len;
-		ml_enqueue(&sc->sc_tx_ml, m);
+		switch (sc->sc_ncm_format) {
+		case NCM_FORMAT_NTB16:
+			USETW(dgram16->wDatagramIndex, dgoffs);
+			USETW(dgram16->wDatagramLen, m->m_pkthdr.len);
+			dgram16++;
+			break;
+		case NCM_FORMAT_NTB32:
+			USETDW(dgram32->dwDatagramIndex, dgoffs);
+			USETDW(dgram32->dwDatagramLen, m->m_pkthdr.len);
+			dgram32++;
+			break;
+		}
+		m_copydata(m, 0, m->m_pkthdr.len, sc->sc_tx_buf + dgoffs);
+		dgoffs += m->m_pkthdr.len;
+		m_freem(m);
 	}
 
-	/* Terminating pointer */
-	USETW(dgram->wDatagramIndex, 0);
-	USETW(dgram->wDatagramLen, 0);
-	USETW(hdr->wBlockLength, offs);
+	if (sc->sc_flags & UMBFLG_NDP_AT_END)
+		offs = poffs + plen;
+	else
+		offs = dgoffs;
+
+	/* Terminating pointer and datagram size */
+	switch (sc->sc_ncm_format) {
+	case NCM_FORMAT_NTB16:
+		USETW(dgram16->wDatagramIndex, 0);
+		USETW(dgram16->wDatagramLen, 0);
+		USETW(hdr16->wBlockLength, offs);
+		KASSERT(dgram16 - ptr16->dgram == ndgram);
+		break;
+	case NCM_FORMAT_NTB32:
+		USETDW(dgram32->dwDatagramIndex, 0);
+		USETDW(dgram32->dwDatagramLen, 0);
+		USETDW(hdr32->dwBlockLength, offs);
+		KASSERT(dgram32 - ptr32->dgram == ndgram);
+		break;
+	}
 
 	DPRINTFN(3, "%s: encap %d bytes\n", DEVNAM(sc), offs);
 	DDUMPN(5, sc->sc_tx_buf, offs);
@@ -2161,7 +2379,7 @@ umb_decap(struct umb_softc *sc, struct usbd_xfer *xfer)
 	struct ncm_pointer16_dgram *dgram16;
 	struct ncm_pointer32_dgram *dgram32;
 	uint32_t hsig, psig;
-	int	 hlen, blen;
+	int	 blen;
 	int	 ptrlen, ptroff, dgentryoff;
 	uint32_t doff, dlen;
 	struct mbuf_list ml = MBUF_LIST_INITIALIZER();
@@ -2176,27 +2394,28 @@ umb_decap(struct umb_softc *sc, struct usbd_xfer *xfer)
 
 	hdr16 = (struct ncm_header16 *)buf;
 	hsig = UGETDW(hdr16->dwSignature);
-	hlen = UGETW(hdr16->wHeaderLength);
-	if (len < hlen)
-		goto toosmall;
 
 	switch (hsig) {
 	case NCM_HDR16_SIG:
 		blen = UGETW(hdr16->wBlockLength);
 		ptroff = UGETW(hdr16->wNdpIndex);
-		if (hlen != sizeof (*hdr16)) {
+		if (UGETW(hdr16->wHeaderLength) != sizeof (*hdr16)) {
 			DPRINTF("%s: bad header len %d for NTH16 (exp %zu)\n",
-			    DEVNAM(sc), hlen, sizeof (*hdr16));
+			    DEVNAM(sc), UGETW(hdr16->wHeaderLength),
+			    sizeof (*hdr16));
 			goto fail;
 		}
 		break;
 	case NCM_HDR32_SIG:
+		if (len < sizeof (*hdr32))
+			goto toosmall;
 		hdr32 = (struct ncm_header32 *)hdr16;
 		blen = UGETDW(hdr32->dwBlockLength);
 		ptroff = UGETDW(hdr32->dwNdpIndex);
-		if (hlen != sizeof (*hdr32)) {
+		if (UGETW(hdr32->wHeaderLength) != sizeof (*hdr32)) {
 			DPRINTF("%s: bad header len %d for NTH32 (exp %zu)\n",
-			    DEVNAM(sc), hlen, sizeof (*hdr32));
+			    DEVNAM(sc), UGETW(hdr32->wHeaderLength),
+			    sizeof (*hdr32));
 			goto fail;
 		}
 		break;

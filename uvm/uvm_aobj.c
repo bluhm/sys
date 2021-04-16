@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_aobj.c,v 1.92 2021/03/20 10:24:21 mpi Exp $	*/
+/*	$OpenBSD: uvm_aobj.c,v 1.94 2021/03/31 08:53:39 mpi Exp $	*/
 /*	$NetBSD: uvm_aobj.c,v 1.39 2001/02/18 21:19:08 chs Exp $	*/
 
 /*
@@ -58,38 +58,39 @@
  * Note: for hash tables, we break the address space of the aobj into blocks
  * of UAO_SWHASH_CLUSTER_SIZE pages, which shall be a power of two.
  */
-#define UAO_SWHASH_CLUSTER_SHIFT 4
-#define UAO_SWHASH_CLUSTER_SIZE (1 << UAO_SWHASH_CLUSTER_SHIFT)
+#define	UAO_SWHASH_CLUSTER_SHIFT	4
+#define	UAO_SWHASH_CLUSTER_SIZE		(1 << UAO_SWHASH_CLUSTER_SHIFT)
 
 /* Get the "tag" for this page index. */
-#define UAO_SWHASH_ELT_TAG(PAGEIDX) \
-	((PAGEIDX) >> UAO_SWHASH_CLUSTER_SHIFT)
+#define	UAO_SWHASH_ELT_TAG(idx)		((idx) >> UAO_SWHASH_CLUSTER_SHIFT)
+#define UAO_SWHASH_ELT_PAGESLOT_IDX(idx) \
+    ((idx) & (UAO_SWHASH_CLUSTER_SIZE - 1))
 
 /* Given an ELT and a page index, find the swap slot. */
-#define UAO_SWHASH_ELT_PAGESLOT_IDX(PAGEIDX) \
-	((PAGEIDX) & (UAO_SWHASH_CLUSTER_SIZE - 1))
-#define UAO_SWHASH_ELT_PAGESLOT(ELT, PAGEIDX) \
-	((ELT)->slots[(PAGEIDX) & (UAO_SWHASH_CLUSTER_SIZE - 1)])
+#define	UAO_SWHASH_ELT_PAGESLOT(elt, idx) \
+    ((elt)->slots[UAO_SWHASH_ELT_PAGESLOT_IDX(idx)])
 
 /* Given an ELT, return its pageidx base. */
-#define UAO_SWHASH_ELT_PAGEIDX_BASE(ELT) \
-	((ELT)->tag << UAO_SWHASH_CLUSTER_SHIFT)
+#define	UAO_SWHASH_ELT_PAGEIDX_BASE(elt) \
+    ((elt)->tag << UAO_SWHASH_CLUSTER_SHIFT)
 
 /* The hash function. */
-#define UAO_SWHASH_HASH(AOBJ, PAGEIDX) \
-	(&(AOBJ)->u_swhash[(((PAGEIDX) >> UAO_SWHASH_CLUSTER_SHIFT) \
-			    & (AOBJ)->u_swhashmask)])
+#define	UAO_SWHASH_HASH(aobj, idx) \
+    (&(aobj)->u_swhash[(((idx) >> UAO_SWHASH_CLUSTER_SHIFT) \
+    & (aobj)->u_swhashmask)])
 
 /*
  * The threshold which determines whether we will use an array or a
  * hash table to store the list of allocated swap blocks.
  */
-#define UAO_SWHASH_THRESHOLD (UAO_SWHASH_CLUSTER_SIZE * 4)
+#define	UAO_SWHASH_THRESHOLD		(UAO_SWHASH_CLUSTER_SIZE * 4)
+#define	UAO_USES_SWHASH(aobj) \
+    ((aobj)->u_pages > UAO_SWHASH_THRESHOLD)
 
 /* The number of buckets in a hash, with an upper bound. */
-#define UAO_SWHASH_MAXBUCKETS 256
-#define UAO_SWHASH_BUCKETS(pages) \
-	(min((pages) >> UAO_SWHASH_CLUSTER_SHIFT, UAO_SWHASH_MAXBUCKETS))
+#define	UAO_SWHASH_MAXBUCKETS		256
+#define	UAO_SWHASH_BUCKETS(pages) \
+    (min((pages) >> UAO_SWHASH_CLUSTER_SHIFT, UAO_SWHASH_MAXBUCKETS))
 
 
 /*
@@ -211,7 +212,7 @@ uao_find_swhash_elt(struct uvm_aobj *aobj, int pageidx, boolean_t create)
 	 */
 	LIST_FOREACH(elt, swhash, list) {
 		if (elt->tag == page_tag)
-			return(elt);
+			return elt;
 	}
 
 	if (!create)
@@ -234,7 +235,7 @@ uao_find_swhash_elt(struct uvm_aobj *aobj, int pageidx, boolean_t create)
 	LIST_INSERT_HEAD(swhash, elt, list);
 	elt->tag = page_tag;
 
-	return(elt);
+	return elt;
 }
 
 /*
@@ -248,25 +249,25 @@ uao_find_swslot(struct uvm_aobj *aobj, int pageidx)
 	 * if noswap flag is set, then we never return a slot
 	 */
 	if (aobj->u_flags & UAO_FLAG_NOSWAP)
-		return(0);
+		return 0;
 
 	/*
 	 * if hashing, look in hash table.
 	 */
-	if (aobj->u_pages > UAO_SWHASH_THRESHOLD) {
+	if (UAO_USES_SWHASH(aobj)) {
 		struct uao_swhash_elt *elt =
 		    uao_find_swhash_elt(aobj, pageidx, FALSE);
 
 		if (elt)
-			return(UAO_SWHASH_ELT_PAGESLOT(elt, pageidx));
+			return UAO_SWHASH_ELT_PAGESLOT(elt, pageidx);
 		else
-			return(0);
+			return 0;
 	}
 
 	/*
 	 * otherwise, look in the array
 	 */
-	return(aobj->u_swslots[pageidx]);
+	return aobj->u_swslots[pageidx];
 }
 
 /*
@@ -289,7 +290,7 @@ uao_set_swslot(struct uvm_object *uobj, int pageidx, int slot)
 	 */
 	if (aobj->u_flags & UAO_FLAG_NOSWAP) {
 		if (slot == 0)
-			return(0);		/* a clear is ok */
+			return 0;		/* a clear is ok */
 
 		/* but a set is not */
 		printf("uao_set_swslot: uobj = %p\n", uobj);
@@ -299,7 +300,7 @@ uao_set_swslot(struct uvm_object *uobj, int pageidx, int slot)
 	/*
 	 * are we using a hash table?  if so, add it in the hash.
 	 */
-	if (aobj->u_pages > UAO_SWHASH_THRESHOLD) {
+	if (UAO_USES_SWHASH(aobj)) {
 		/*
 		 * Avoid allocating an entry just to free it again if
 		 * the page had not swap slot in the first place, and
@@ -309,7 +310,7 @@ uao_set_swslot(struct uvm_object *uobj, int pageidx, int slot)
 		    uao_find_swhash_elt(aobj, pageidx, slot ? TRUE : FALSE);
 		if (elt == NULL) {
 			KASSERT(slot == 0);
-			return (0);
+			return 0;
 		}
 
 		oldslot = UAO_SWHASH_ELT_PAGESLOT(elt, pageidx);
@@ -336,7 +337,7 @@ uao_set_swslot(struct uvm_object *uobj, int pageidx, int slot)
 		oldslot = aobj->u_swslots[pageidx];
 		aobj->u_swslots[pageidx] = slot;
 	}
-	return (oldslot);
+	return oldslot;
 }
 /*
  * end of hash/array functions
@@ -351,7 +352,7 @@ static void
 uao_free(struct uvm_aobj *aobj)
 {
 
-	if (aobj->u_pages > UAO_SWHASH_THRESHOLD) {
+	if (UAO_USES_SWHASH(aobj)) {
 		int i, hashbuckets = aobj->u_swhashmask + 1;
 
 		/*
@@ -441,7 +442,7 @@ uao_shrink_hash(struct uvm_object *uobj, int pages)
 	unsigned long new_hashmask;
 	int i;
 
-	KASSERT(aobj->u_pages > UAO_SWHASH_THRESHOLD);
+	KASSERT(UAO_USES_SWHASH(aobj));
 
 	/*
 	 * If the size of the hash table doesn't change, all we need to do is
@@ -743,13 +744,13 @@ uao_create(vsize_t size, int flags)
 			mflags = M_WAITOK;
 
 		/* allocate hash table or array depending on object size */
-		if (aobj->u_pages > UAO_SWHASH_THRESHOLD) {
+		if (UAO_USES_SWHASH(aobj)) {
 			aobj->u_swhash = hashinit(UAO_SWHASH_BUCKETS(pages),
 			    M_UVMAOBJ, mflags, &aobj->u_swhashmask);
 			if (aobj->u_swhash == NULL) {
 				if (flags & UAO_FLAG_CANFAIL) {
 					pool_put(&uvm_aobj_pool, aobj);
-					return (NULL);
+					return NULL;
 				}
 				panic("uao_create: hashinit swhash failed");
 			}
@@ -759,7 +760,7 @@ uao_create(vsize_t size, int flags)
 			if (aobj->u_swslots == NULL) {
 				if (flags & UAO_FLAG_CANFAIL) {
 					pool_put(&uvm_aobj_pool, aobj);
-					return (NULL);
+					return NULL;
 				}
 				panic("uao_create: malloc swslots failed");
 			}
@@ -767,7 +768,7 @@ uao_create(vsize_t size, int flags)
 
 		if (flags & UAO_FLAG_KERNSWAP) {
 			aobj->u_flags &= ~UAO_FLAG_NOSWAP; /* clear noswap */
-			return(&aobj->u_obj);
+			return &aobj->u_obj;
 			/* done! */
 		}
 	}
@@ -784,7 +785,7 @@ uao_create(vsize_t size, int flags)
 	LIST_INSERT_HEAD(&uao_list, aobj, u_list);
 	mtx_leave(&uao_list_lock);
 
-	return(&aobj->u_obj);
+	return &aobj->u_obj;
 }
 
 
@@ -940,7 +941,7 @@ uao_flush(struct uvm_object *uobj, voff_t start, voff_t stop, int flags)
 	 * or deactivating pages.
 	 */
 	if ((flags & (PGO_DEACTIVATE|PGO_FREE)) == 0)
-		return (TRUE);
+		return TRUE;
 
 	curoff = start;
 	for (;;) {
@@ -1016,7 +1017,7 @@ uao_flush(struct uvm_object *uobj, voff_t start, voff_t stop, int flags)
 		}
 	}
 
-	return (TRUE);
+	return TRUE;
 }
 
 /*
@@ -1118,10 +1119,10 @@ uao_get(struct uvm_object *uobj, voff_t offset, struct vm_page **pps,
 		*npagesp = gotpages;
 		if (done)
 			/* bingo! */
-			return(VM_PAGER_OK);	
+			return VM_PAGER_OK;	
 		else
 			/* EEK!   Need to unlock and I/O */
-			return(VM_PAGER_UNLOCK);
+			return VM_PAGER_UNLOCK;
 	}
 
 	/*
@@ -1249,7 +1250,7 @@ uao_get(struct uvm_object *uobj, voff_t offset, struct vm_page **pps,
 				uvm_pagefree(ptmp);
 				uvm_unlock_pageq();
 
-				return (rv);
+				return rv;
 			}
 		}
 
@@ -1269,7 +1270,7 @@ uao_get(struct uvm_object *uobj, voff_t offset, struct vm_page **pps,
 
 	}	/* lcv loop */
 
-	return(VM_PAGER_OK);
+	return VM_PAGER_OK;
 }
 
 /*
@@ -1284,7 +1285,7 @@ uao_dropswap(struct uvm_object *uobj, int pageidx)
 	if (slot) {
 		uvm_swap_free(slot, 1);
 	}
-	return (slot);
+	return slot;
 }
 
 /*
@@ -1370,7 +1371,7 @@ uao_pagein(struct uvm_aobj *aobj, int startslot, int endslot)
 {
 	boolean_t rv;
 
-	if (aobj->u_pages > UAO_SWHASH_THRESHOLD) {
+	if (UAO_USES_SWHASH(aobj)) {
 		struct uao_swhash_elt *elt;
 		int bucket;
 
@@ -1504,7 +1505,7 @@ uao_dropswap_range(struct uvm_object *uobj, voff_t start, voff_t end)
 		end = INT64_MAX;
 	}
 
-	if (aobj->u_pages > UAO_SWHASH_THRESHOLD) {
+	if (UAO_USES_SWHASH(aobj)) {
 		int i, hashbuckets = aobj->u_swhashmask + 1;
 		voff_t taghi;
 		voff_t taglo;

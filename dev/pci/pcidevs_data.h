@@ -2,7 +2,7 @@
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	OpenBSD: pcidevs,v 1.1961 2021/03/17 15:58:38 stsp Exp 
+ *	OpenBSD: pcidevs,v 1.1964 2021/04/14 18:36:42 stsp Exp 
  */
 
 /*	$NetBSD: pcidevs,v 1.30 1997/06/24 06:20:24 thorpej Exp $	*/
@@ -2450,6 +2450,70 @@ static const struct pci_known_product pci_known_products[] = {
 	{
 	    PCI_VENDOR_APPLE, PCI_PRODUCT_APPLE_NVME2,
 	    "NVMe",
+	},
+	{
+	    PCI_VENDOR_AQUANTIA, PCI_PRODUCT_AQUANTIA_AQC100,
+	    "AQC100",
+	},
+	{
+	    PCI_VENDOR_AQUANTIA, PCI_PRODUCT_AQUANTIA_AQC107,
+	    "AQC107",
+	},
+	{
+	    PCI_VENDOR_AQUANTIA, PCI_PRODUCT_AQUANTIA_AQC108,
+	    "AQC108",
+	},
+	{
+	    PCI_VENDOR_AQUANTIA, PCI_PRODUCT_AQUANTIA_AQC109,
+	    "AQC109",
+	},
+	{
+	    PCI_VENDOR_AQUANTIA, PCI_PRODUCT_AQUANTIA_AQC111,
+	    "AQC111",
+	},
+	{
+	    PCI_VENDOR_AQUANTIA, PCI_PRODUCT_AQUANTIA_AQC112,
+	    "AQC112",
+	},
+	{
+	    PCI_VENDOR_AQUANTIA, PCI_PRODUCT_AQUANTIA_AQC100S,
+	    "AQC100S",
+	},
+	{
+	    PCI_VENDOR_AQUANTIA, PCI_PRODUCT_AQUANTIA_AQC107S,
+	    "AQC107S",
+	},
+	{
+	    PCI_VENDOR_AQUANTIA, PCI_PRODUCT_AQUANTIA_AQC108S,
+	    "AQC108S",
+	},
+	{
+	    PCI_VENDOR_AQUANTIA, PCI_PRODUCT_AQUANTIA_AQC109S,
+	    "AQC109S",
+	},
+	{
+	    PCI_VENDOR_AQUANTIA, PCI_PRODUCT_AQUANTIA_AQC111S,
+	    "AQC111S",
+	},
+	{
+	    PCI_VENDOR_AQUANTIA, PCI_PRODUCT_AQUANTIA_AQC112S,
+	    "AQC112S",
+	},
+	{
+	    PCI_VENDOR_AQUANTIA, PCI_PRODUCT_AQUANTIA_D100,
+	    "D100",
+	},
+	{
+	    PCI_VENDOR_AQUANTIA, PCI_PRODUCT_AQUANTIA_D107,
+	    "D107",
+	},
+	{
+	    PCI_VENDOR_AQUANTIA, PCI_PRODUCT_AQUANTIA_D108,
+	    "D108",
+	},
+	{
+	    PCI_VENDOR_AQUANTIA, PCI_PRODUCT_AQUANTIA_D109,
+	    "D109",
 	},
 	{
 	    PCI_VENDOR_ARALION, PCI_PRODUCT_ARALION_ARS106S,
@@ -12252,6 +12316,10 @@ static const struct pci_known_product pci_known_products[] = {
 	    "ICH8 IGP M",
 	},
 	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_X710_10G_SFP_2,
+	    "X710 SFP+",
+	},
+	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_PRO_100_VE_4,
 	    "PRO/100 VE",
 	},
@@ -13222,6 +13290,18 @@ static const struct pci_known_product pci_known_products[] = {
 	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_JHL6340_XHCI,
 	    "JHL6340 Thunderbolt 3",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_JHL7540,
+	    "JHL7540 Thunderbolt 3",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_JHL7540_PCIE,
+	    "JHL7540 Thunderbolt 3",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_JHL7540_XHCI,
+	    "JHL7540 Thunderbolt 3",
 	},
 	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_I219_LM8,
@@ -17365,6 +17445,10 @@ static const struct pci_known_product pci_known_products[] = {
 	},
 	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_WL_22500_4,
+	    "Wi-Fi 6 AX201",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_WL_22500_5,
 	    "Wi-Fi 6 AX201",
 	},
 	{
@@ -32934,6 +33018,10 @@ static const struct pci_known_vendor pci_known_vendors[] = {
 	{
 	    PCI_VENDOR_UMIS,
 	    "Union Memory",
+	},
+	{
+	    PCI_VENDOR_AQUANTIA,
+	    "Aquantia",
 	},
 	{
 	    PCI_VENDOR_ROCKCHIP,
