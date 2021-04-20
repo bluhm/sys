@@ -175,6 +175,9 @@ ip6_output(struct mbuf *m, struct ip6_pktopts *opt, struct route_in6 *ro,
 	int hdrsplit = 0;
 	u_int8_t sproto = 0;
 	u_char nextproto;
+#if NPF > 0
+	u_int orig_rtableid;
+#endif
 #ifdef IPSEC
 	struct tdb *tdb = NULL;
 #endif /* IPSEC */
@@ -384,6 +387,7 @@ ip6_output(struct mbuf *m, struct ip6_pktopts *opt, struct route_in6 *ro,
 	 * Route packet.
 	 */
 #if NPF > 0
+	orig_rtableid = m->m_pkthdr.ph_rtableid;
 reroute:
 #endif
 
@@ -688,6 +692,16 @@ reroute:
 			ipsec_adjust_mtu(m, mtu);
 #endif
 		error = EMSGSIZE;
+#if NPF > 0
+		/* pf changed routing table, use orig rtable for path MTU */
+		if (ro->ro_tableid != orig_rtableid) {
+			rtfree(ro->ro_rt);
+			ro->ro_tableid = orig_rtableid;
+			ro->ro_rt = icmp6_mtudisc_clone(
+			    &ro->ro_dst, ro->ro_tableid, 0);
+		}
+#endif
+		ip6stat_inc(ip6s_cantfrag);
 		goto bad;
 	}
 
