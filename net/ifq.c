@@ -620,7 +620,7 @@ void
 ifiq_init(struct ifiqueue *ifiq, struct ifnet *ifp, unsigned int idx)
 {
 	ifiq->ifiq_if = ifp;
-	ifiq->ifiq_softnet = net_tq(ifp->if_index); /* + idx */
+	ifiq->ifiq_softnet = net_tq(ifp->if_index + idx);
 	ifiq->ifiq_softc = NULL;
 
 	mtx_init(&ifiq->ifiq_mtx, IPL_NET);
