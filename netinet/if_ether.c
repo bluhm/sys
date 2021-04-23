@@ -60,6 +60,7 @@
 #include <netinet/in.h>
 #include <netinet/in_var.h>
 #include <netinet/if_ether.h>
+#include <netinet/ip_var.h>
 #if NCARP > 0
 #include <netinet/ip_carp.h>
 #endif
