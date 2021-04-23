@@ -65,10 +65,18 @@
 #include <netinet/ip_carp.h>
 #endif
 
+/*
+ *  Locks used to protect struct members in this file:
+ *	a	atomic operations
+ *	I	immutable after creation
+ *	K	kernel lock
+ *	N	net lock
+ */
+
 struct llinfo_arp {
-	LIST_ENTRY(llinfo_arp)	 la_list;
-	struct rtentry		*la_rt;		/* backpointer to rtentry */
-	struct mbuf_queue	 la_mq;		/* packet hold queue */
+	LIST_ENTRY(llinfo_arp)	 la_list;	/* [N] global arp_list */
+	struct rtentry		*la_rt;		/* [I] backpointer to rtentry */
+	struct mbuf_queue	 la_mq;		/* [I] packet hold queue */
 	time_t			 la_refreshed;	/* when was refresh sent */
 	int			 la_asked;	/* number of queries sent */
 };
@@ -76,9 +84,9 @@ struct llinfo_arp {
 #define LA_HOLD_TOTAL 100
 
 /* timer values */
-int	arpt_prune = (5 * 60);	/* walk list every 5 minutes */
-int	arpt_keep = (20 * 60);	/* once resolved, cache for 20 minutes */
-int	arpt_down = 20;		/* once declared down, don't send for 20 secs */
+int 	arpt_prune = (5 * 60);	/* [I] walk list every 5 minutes */
+int 	arpt_keep = (20 * 60);	/* [N] once resolved, cache for 20 minutes */
+int 	arpt_down = 20;	/* [N] once declared down, don't send for 20 secs */
 
 struct mbuf *arppullup(struct mbuf *m);
 void arpinvalidate(struct rtentry *);
@@ -93,10 +101,10 @@ void arpreply(struct ifnet *, struct mbuf *, struct in_addr *, uint8_t *,
 
 struct niqueue arpinq = NIQUEUE_INITIALIZER(50, NETISR_ARP);
 
-LIST_HEAD(, llinfo_arp) arp_list;
-struct	pool arp_pool;		/* pool for llinfo_arp structures */
-int	arp_maxtries = 5;
-int	la_hold_total;
+LIST_HEAD(, llinfo_arp) arp_list; /* [N] list of all llinfo_arp structures */
+struct	pool arp_pool;		/* [N] pool for llinfo_arp structures */
+int	arp_maxtries = 5;	/* [I] arp requests before set to rejected */
+int	la_hold_total;		/* [a] packets currently in the arp queue */
 
 #ifdef NFSCLIENT
 /* revarp state */
@@ -143,6 +151,8 @@ arp_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 {
 	struct sockaddr *gate = rt->rt_gateway;
 	struct llinfo_arp *la = (struct llinfo_arp *)rt->rt_llinfo;
+
+	NET_ASSERT_LOCKED();
 
 	if (ISSET(rt->rt_flags,
 	    RTF_GATEWAY|RTF_BROADCAST|RTF_MULTICAST|RTF_MPLS))
@@ -308,6 +318,8 @@ arpresolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 	struct sockaddr_dl *sdl;
 	struct rtentry *rt = NULL;
 	char addr[INET_ADDRSTRLEN];
+
+	NET_ASSERT_LOCKED();
 
 	if (m->m_flags & M_BCAST) {	/* broadcast */
 		memcpy(desten, etherbroadcastaddr, sizeof(etherbroadcastaddr));
@@ -598,6 +610,7 @@ arpcache(struct ifnet *ifp, struct ether_arp *ea, struct rtentry *rt)
 	int changed = 0;
 
 	KERNEL_ASSERT_LOCKED();
+	NET_ASSERT_LOCKED();
 	KASSERT(sdl != NULL);
 
 	/*
