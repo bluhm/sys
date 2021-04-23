@@ -595,7 +595,6 @@ arpcache(struct ifnet *ifp, struct ether_arp *ea, struct rtentry *rt)
 	char addr[INET_ADDRSTRLEN];
 	struct ifnet *rifp;
 	struct mbuf *m;
-	unsigned int len;
 	int changed = 0;
 
 	KERNEL_ASSERT_LOCKED();
@@ -668,13 +667,15 @@ arpcache(struct ifnet *ifp, struct ether_arp *ea, struct rtentry *rt)
 	la->la_asked = 0;
 	la->la_refreshed = 0;
 	while ((m = mq_dequeue(&la->la_mq)) != NULL) {
+		unsigned int len;
+
 		atomic_dec_int(&la_hold_total);
 		len = mq_len(&la->la_mq);
 
 		ifp->if_output(ifp, m, rt_key(rt), rt);
 
 		/* XXXSMP we discard if other CPU enqueues */
-		if (mq_len(&la->la_mq) >= len) {
+		if (mq_len(&la->la_mq) > len) {
 			/* mbuf is back in queue. Discard. */
 			atomic_sub_int(&la_hold_total, mq_purge(&la->la_mq));
 			break;
