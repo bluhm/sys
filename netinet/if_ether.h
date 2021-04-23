@@ -257,6 +257,7 @@ void	revarprequest(struct ifnet *);
 int	revarpwhoarewe(struct ifnet *, struct in_addr *, struct in_addr *);
 int	revarpwhoami(struct in_addr *, struct ifnet *);
 
+void	arpinit(void);
 void	arpinput(struct ifnet *, struct mbuf *);
 void	arprequest(struct ifnet *, u_int32_t *, u_int32_t *, u_int8_t *);
 void	arpwhohas(struct arpcom *, struct in_addr *);

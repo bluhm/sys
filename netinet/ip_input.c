@@ -223,6 +223,7 @@ ip_init(void)
 	mq_init(&ipsend_mq, 64, IPL_SOFTNET);
 	mq_init(&ipsendraw_mq, 64, IPL_SOFTNET);
 
+	arpinit();
 #ifdef IPSEC
 	ipsec_init();
 #endif
