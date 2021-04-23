@@ -203,7 +203,7 @@ arp_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 		LIST_REMOVE(la, la_list);
 		rt->rt_llinfo = NULL;
 		rt->rt_flags &= ~RTF_LLINFO;
-		la_hold_total -= mq_purge(&la->la_mq);
+		atomic_sub_int(&la_hold_total, mq_purge(&la->la_mq));
 		pool_put(&arp_pool, la);
 		break;
 
@@ -374,11 +374,11 @@ arpresolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 	 * response yet. Insert mbuf in hold queue if below limit
 	 * if above the limit free the queue without queuing the new packet.
 	 */
-	if (la_hold_total < LA_HOLD_TOTAL) {
-		if (mq_push(&la->la_mq, m) == 0)
-			la_hold_total++;
+	if (atomic_inc_int_nv(&la_hold_total) <= LA_HOLD_TOTAL) {
+		if (mq_push(&la->la_mq, m) != 0)
+			atomic_dec_int(&la_hold_total);
 	} else {
-		la_hold_total -= mq_purge(&la->la_mq);
+		atomic_sub_int(&la_hold_total, mq_purge(&la->la_mq) + 1);
 		m_freem(m);
 	}
 
@@ -407,7 +407,8 @@ arpresolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 				rt->rt_expire += arpt_down;
 				la->la_asked = 0;
 				la->la_refreshed = 0;
-				la_hold_total -= mq_purge(&la->la_mq);
+				atomic_sub_int(&la_hold_total,
+				    mq_purge(&la->la_mq));
 			}
 		}
 	}
@@ -667,14 +668,15 @@ arpcache(struct ifnet *ifp, struct ether_arp *ea, struct rtentry *rt)
 	la->la_asked = 0;
 	la->la_refreshed = 0;
 	while ((m = mq_dequeue(&la->la_mq)) != NULL) {
-		la_hold_total--;
+		atomic_dec_int(&la_hold_total);
 		len = mq_len(&la->la_mq);
 
 		ifp->if_output(ifp, m, rt_key(rt), rt);
 
+		/* XXXSMP we discard if other CPU enqueues */
 		if (mq_len(&la->la_mq) >= len) {
 			/* mbuf is back in queue. Discard. */
-			la_hold_total -= mq_purge(&la->la_mq);
+			atomic_sub_int(&la_hold_total, mq_purge(&la->la_mq));
 			break;
 		}
 	}
@@ -688,7 +690,7 @@ arpinvalidate(struct rtentry *rt)
 	struct llinfo_arp *la = (struct llinfo_arp *)rt->rt_llinfo;
 	struct sockaddr_dl *sdl = satosdl(rt->rt_gateway);
 
-	la_hold_total -= mq_purge(&la->la_mq);
+	atomic_sub_int(&la_hold_total, mq_purge(&la->la_mq));
 	sdl->sdl_alen = 0;
 	la->la_asked = 0;
 }
