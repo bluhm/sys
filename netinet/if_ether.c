@@ -86,8 +86,8 @@ struct llinfo_arp {
 
 /* timer values */
 int 	arpt_prune = (5 * 60);	/* [I] walk list every 5 minutes */
-int 	arpt_keep = (20 * 60);	/* [N] once resolved, cache for 20 minutes */
-int 	arpt_down = 20;	/* [N] once declared down, don't send for 20 secs */
+int 	arpt_keep = (20 * 60);	/* [a] once resolved, cache for 20 minutes */
+int 	arpt_down = 20;	/* [a] once declared down, don't send for 20 secs */
 
 struct mbuf *arppullup(struct mbuf *m);
 void arpinvalidate(struct rtentry *);
@@ -104,7 +104,7 @@ struct niqueue arpinq = NIQUEUE_INITIALIZER(50, NETISR_ARP);
 struct mutex arp_mtx = MUTEX_INITIALIZER(IPL_SOFTNET);
 
 LIST_HEAD(, llinfo_arp) arp_list; /* [Nm] list of all llinfo_arp structures */
-struct	pool arp_pool;		/* [N] pool for llinfo_arp structures */
+struct	pool arp_pool;		/* [I] pool for llinfo_arp structures */
 int	arp_maxtries = 5;	/* [I] arp requests before set to rejected */
 int	la_hold_total;		/* [a] packets currently in the arp queue */
 
@@ -325,8 +325,6 @@ arpresolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 	struct sockaddr_dl *sdl;
 	struct rtentry *rt = NULL;
 	char addr[INET_ADDRSTRLEN];
-
-	NET_ASSERT_LOCKED();
 
 	if (m->m_flags & M_BCAST) {	/* broadcast */
 		memcpy(desten, etherbroadcastaddr, sizeof(etherbroadcastaddr));
@@ -617,7 +615,6 @@ arpcache(struct ifnet *ifp, struct ether_arp *ea, struct rtentry *rt)
 	int changed = 0;
 
 	KERNEL_ASSERT_LOCKED();
-	NET_ASSERT_LOCKED();
 	KASSERT(sdl != NULL);
 
 	/*
