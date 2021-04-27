@@ -818,7 +818,8 @@ debug_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
  * Reads, or writes that lower the value
  */
 int
-sysctl_int_lower(void *oldp, size_t *oldlenp, void *newp, size_t newlen, int *valp)
+sysctl_int_lower(void *oldp, size_t *oldlenp, void *newp, size_t newlen,
+    int *valp)
 {
 	unsigned int oval = *valp, val = *valp;
 	int error;
