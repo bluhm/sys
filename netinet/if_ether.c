@@ -70,11 +70,12 @@
  *	a	atomic operations
  *	I	immutable after creation
  *	K	kernel lock
+ *	m	arp mutex, needed when net lock is shared
  *	N	net lock
  */
 
 struct llinfo_arp {
-	LIST_ENTRY(llinfo_arp)	 la_list;	/* [N] global arp_list */
+	LIST_ENTRY(llinfo_arp)	 la_list;	/* [mN] global arp_list */
 	struct rtentry		*la_rt;		/* [I] backpointer to rtentry */
 	struct mbuf_queue	 la_mq;		/* [I] packet hold queue */
 	time_t			 la_refreshed;	/* when was refresh sent */
@@ -100,8 +101,9 @@ void arpreply(struct ifnet *, struct mbuf *, struct in_addr *, uint8_t *,
     unsigned int);
 
 struct niqueue arpinq = NIQUEUE_INITIALIZER(50, NETISR_ARP);
+struct mutex arp_mtx = MUTEX_INITIALIZER(IPL_SOFTNET);
 
-LIST_HEAD(, llinfo_arp) arp_list; /* [N] list of all llinfo_arp structures */
+LIST_HEAD(, llinfo_arp) arp_list; /* [Nm] list of all llinfo_arp structures */
 struct	pool arp_pool;		/* [N] pool for llinfo_arp structures */
 int	arp_maxtries = 5;	/* [I] arp requests before set to rejected */
 int	la_hold_total;		/* [a] packets currently in the arp queue */
@@ -125,6 +127,7 @@ arptimer(void *arg)
 
 	NET_LOCK();
 	timeout_add_sec(to, arpt_prune);
+	/* Net lock is exclusive, no arp mutex needed for arp_list here. */
 	LIST_FOREACH_SAFE(la, &arp_list, la_list, nla) {
 		struct rtentry *rt = la->la_rt;
 
@@ -204,13 +207,17 @@ arp_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 		rt->rt_flags |= RTF_LLINFO;
 		if ((rt->rt_flags & RTF_LOCAL) == 0)
 			rt->rt_expire = getuptime();
+		mtx_enter(&arp_mtx);
 		LIST_INSERT_HEAD(&arp_list, la, la_list);
+		mtx_leave(&arp_mtx);
 		break;
 
 	case RTM_DELETE:
 		if (la == NULL)
 			break;
+		mtx_enter(&arp_mtx);
 		LIST_REMOVE(la, la_list);
+		mtx_leave(&arp_mtx);
 		rt->rt_llinfo = NULL;
 		rt->rt_flags &= ~RTF_LLINFO;
 		atomic_sub_int(&la_hold_total, mq_purge(&la->la_mq));
