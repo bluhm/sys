@@ -113,7 +113,7 @@ extern int ip_mrtproto;
 
 const struct sysctl_bounded_args ipctl_vars[] = {
 #ifdef MROUTING
-	{ IPCTL_MRTPROTO, &ip_mrtproto, 1, 0 },
+	{ IPCTL_MRTPROTO, &ip_mrtproto, SYSCTL_INT_READONLY },
 #endif
 	{ IPCTL_FORWARDING, &ipforwarding, 0, 2 },
 	{ IPCTL_SENDREDIRECTS, &ipsendredirects, 0, 1 },

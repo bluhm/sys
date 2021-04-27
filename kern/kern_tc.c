@@ -829,7 +829,7 @@ inittimecounter(void)
 }
 
 const struct sysctl_bounded_args tc_vars[] = {
-	{ KERN_TIMECOUNTER_TICK, &tc_tick, 1, 0 },
+	{ KERN_TIMECOUNTER_TICK, &tc_tick, SYSCTL_INT_READONLY },
 	{ KERN_TIMECOUNTER_TIMESTEPWARNINGS, &timestepwarnings, 0, 1 },
 };
 

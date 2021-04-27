@@ -1339,9 +1339,9 @@ extern int ip6_mrtproto;
 #endif
 
 const struct sysctl_bounded_args ipv6ctl_vars[] = {
-	{ IPV6CTL_DAD_PENDING, &ip6_dad_pending, 1, 0 },
+	{ IPV6CTL_DAD_PENDING, &ip6_dad_pending, SYSCTL_INT_READONLY },
 #ifdef MROUTING
-	{ IPV6CTL_MRTPROTO, &ip6_mrtproto, 1, 0 },
+	{ IPV6CTL_MRTPROTO, &ip6_mrtproto, SYSCTL_INT_READONLY },
 #endif
 	{ IPV6CTL_FORWARDING, &ip6_forwarding, 0, 1 },
 	{ IPV6CTL_SENDREDIRECTS, &ip6_sendredirects, 0, 1 },

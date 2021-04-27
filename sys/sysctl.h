@@ -1000,6 +1000,9 @@ struct sysctl_bounded_args {
 	int maximum; /* read-only variable if minimum > maximum */
 };
 
+#define SYSCTL_INT_UNBOUNDED	0,0
+#define SYSCTL_INT_READONLY	1,0
+
 /*
  * Internal sysctl function calling convention:
  *
