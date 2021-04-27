@@ -77,7 +77,7 @@
 struct llinfo_arp {
 	LIST_ENTRY(llinfo_arp)	 la_list;	/* [mN] global arp_list */
 	struct rtentry		*la_rt;		/* [I] backpointer to rtentry */
-	struct mbuf_queue	 la_mq;		/* [I] packet hold queue */
+	struct mbuf_queue	 la_mq;		/* packet hold queue */
 	time_t			 la_refreshed;	/* when was refresh sent */
 	int			 la_asked;	/* number of queries sent */
 };
