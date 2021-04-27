@@ -841,33 +841,38 @@ sysctl_int_lower(void *oldp, size_t *oldlenp, void *newp, size_t newlen, int *va
 int
 sysctl_int(void *oldp, size_t *oldlenp, void *newp, size_t newlen, int *valp)
 {
-	return (sysctl_int_bounded(oldp, oldlenp, newp, newlen, valp, 0, 0));
-}
-
-int
-sysctl_int_bounded(void *oldp, size_t *oldlenp, void *newp, size_t newlen,
-    int *valp, int minimum, int maximum)
-{
 	int error = 0;
-	int val;
 
 	if (oldp && *oldlenp < sizeof(int))
 		return (ENOMEM);
 	if (newp && newlen != sizeof(int))
 		return (EINVAL);
 	*oldlenp = sizeof(int);
-	val = *valp;
 	if (oldp)
-		error = copyout(&val, oldp, sizeof(int));
+		error = copyout(valp, oldp, sizeof(int));
 	if (error == 0 && newp)
-		error = copyin(newp, &val, sizeof(int));
-	if (error)
-		return (error);
-	if (minimum == maximum || (minimum <= val && val <= maximum))
-		*valp = val;
-	else
-		error = EINVAL;
+		error = copyin(newp, valp, sizeof(int));
 	return (error);
+}
+
+int
+sysctl_int_bounded(void *oldp, size_t *oldlenp, void *newp, size_t newlen,
+    int *valp, int minimum, int maximum)
+{
+	int val = *valp;
+	int error;
+
+	/* read only */
+	if (newp == NULL || minimum > maximum)
+		return (sysctl_rdint(oldp, oldlenp, newp, *valp));
+
+	if ((error = sysctl_int(oldp, oldlenp, newp, newlen, &val)))
+		return (error);
+	/* bounded and not within limits */
+	if (minimum < maximum && (val < minimum || maximum < val))
+		return (EINVAL);
+	*valp = val;
+	return (0);
 }
 
 /*
@@ -901,14 +906,8 @@ sysctl_bounded_arr(const struct sysctl_bounded_args *valpp, u_int valplen,
 		return (ENOTDIR);
 	for (i = 0; i < valplen; ++i) {
 		if (valpp[i].mib == name[0]) {
-			if (valpp[i].minimum <= valpp[i].maximum) {
-				return (sysctl_int_bounded(oldp, oldlenp, newp,
-				    newlen, valpp[i].var, valpp[i].minimum,
-				    valpp[i].maximum));
-			} else {
-				return (sysctl_rdint(oldp, oldlenp, newp,
-				    *valpp[i].var));
-			}
+			return (sysctl_int_bounded(oldp, oldlenp, newp, newlen,
+			    valpp[i].var, valpp[i].minimum, valpp[i].maximum));
 		}
 	}
 	return (EOPNOTSUPP);
