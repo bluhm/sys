@@ -103,7 +103,7 @@ void arpreply(struct ifnet *, struct mbuf *, struct in_addr *, uint8_t *,
 struct niqueue arpinq = NIQUEUE_INITIALIZER(50, NETISR_ARP);
 struct mutex arp_mtx = MUTEX_INITIALIZER(IPL_SOFTNET);
 
-LIST_HEAD(, llinfo_arp) arp_list; /* [Nm] list of all llinfo_arp structures */
+LIST_HEAD(, llinfo_arp) arp_list; /* [mN] list of all llinfo_arp structures */
 struct	pool arp_pool;		/* [I] pool for llinfo_arp structures */
 int	arp_maxtries = 5;	/* [I] arp requests before set to rejected */
 int	la_hold_total;		/* [a] packets currently in the arp queue */
