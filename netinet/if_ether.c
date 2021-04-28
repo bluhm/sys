@@ -689,12 +689,15 @@ arpcache(struct ifnet *ifp, struct ether_arp *ea, struct rtentry *rt)
 	len = ml_len(&ml);
 	while ((m = ml_dequeue(&ml)) != NULL)
 		ifp->if_output(ifp, m, rt_key(rt), rt);
-	/* XXXSMP we discard if other CPU enqueues */
-	if (mq_len(&la->la_mq) > 0) {
-		/* mbuf is back in queue. Discard. */
-		atomic_sub_int(&la_hold_total, len + mq_purge(&la->la_mq));
-	} else
-		atomic_sub_int(&la_hold_total, len);
+	atomic_sub_int(&la_hold_total, len);
+
+	/*
+	 * This function is protected by kernel lock.  No other CPU can insert
+	 * to la_mq while we feed the packets to if_output().  If a packet
+	 * is reinserted from there we have a loop.  This should not happen
+	 * and we want to find such cases.
+	 */
+	KASSERT(mq_len(&la->la_mq) == 0);
 
 	return (0);
 }
