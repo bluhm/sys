@@ -687,9 +687,8 @@ arpcache(struct ifnet *ifp, struct ether_arp *ea, struct rtentry *rt)
 	la->la_refreshed = 0;
 	mq_delist(&la->la_mq, &ml);
 	len = ml_len(&ml);
-	while ((m = ml_dequeue(&ml)) != NULL) {
+	while ((m = ml_dequeue(&ml)) != NULL)
 		ifp->if_output(ifp, m, rt_key(rt), rt);
-	}
 	/* XXXSMP we discard if other CPU enqueues */
 	if (mq_len(&la->la_mq) > 0) {
 		/* mbuf is back in queue. Discard. */
