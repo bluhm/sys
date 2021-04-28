@@ -3,6 +3,7 @@
 #	Machine-independent option; used by all architectures for their
 #	GENERIC kernel
 
+option		HZ=50		# qemu cannot handle more
 option		DDB		# in-kernel debugger
 #option		DDBPROF		# ddb(4) based profiling
 #option		DDB_SAFE_CONSOLE # allow break into ddb during boot
