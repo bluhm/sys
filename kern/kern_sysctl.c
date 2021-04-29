@@ -825,7 +825,7 @@ sysctl_int_lower(void *oldp, size_t *oldlenp, void *newp, size_t newlen,
 	int error;
 
 	if (newp == NULL)
-		return (sysctl_rdint(oldp, oldlenp, newp, *valp));
+		return (sysctl_rdint(oldp, oldlenp, newp, val));
 
 	if ((error = sysctl_int(oldp, oldlenp, newp, newlen, &val)))
 		return (error);
@@ -865,7 +865,7 @@ sysctl_int_bounded(void *oldp, size_t *oldlenp, void *newp, size_t newlen,
 
 	/* read only */
 	if (newp == NULL || minimum > maximum)
-		return (sysctl_rdint(oldp, oldlenp, newp, *valp));
+		return (sysctl_rdint(oldp, oldlenp, newp, val));
 
 	if ((error = sysctl_int(oldp, oldlenp, newp, newlen, &val)))
 		return (error);
