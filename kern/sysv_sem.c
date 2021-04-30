@@ -1,4 +1,4 @@
-/*	$OpenBSD: sysv_sem.c,v 1.60 2020/11/17 03:23:54 gnezdo Exp $	*/
+/*	$OpenBSD: sysv_sem.c,v 1.61 2021/04/30 13:52:48 bluhm Exp $	*/
 /*	$NetBSD: sysv_sem.c,v 1.26 1996/02/09 19:00:25 christos Exp $	*/
 
 /*
