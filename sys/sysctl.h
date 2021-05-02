@@ -1014,10 +1014,10 @@ struct sysctl_bounded_args {
  */
 typedef int (sysctlfn)(int *, u_int, void *, size_t *, void *, size_t, struct proc *);
 
-int sysctl_int(void *, size_t *, void *, size_t, int *);
-int sysctl_int_bounded(void *, size_t *, void *, size_t, int *, int, int);
 int sysctl_int_lower(void *, size_t *, void *, size_t, int *);
+int sysctl_int(void *, size_t *, void *, size_t, int *);
 int sysctl_rdint(void *, size_t *, void *, int);
+int sysctl_int_bounded(void *, size_t *, void *, size_t, int *, int, int);
 int sysctl_bounded_arr(const struct sysctl_bounded_args *, u_int,
     int *, u_int, void *, size_t *, void *, size_t);
 int sysctl_quad(void *, size_t *, void *, size_t, int64_t *);
