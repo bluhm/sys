@@ -54,22 +54,12 @@ ddb_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 
 	switch (name[0]) {
 	case DBCTL_PANIC:
-		if (securelevel > 0)
-			return (sysctl_int_lower(oldp, oldlenp, newp, newlen,
-			    &db_panic));
-		else {
-			return (sysctl_int_bounded(oldp, oldlenp, newp, newlen,
-			    &db_panic, 0, 1));
-		}
+		return (sysctl_int_bounded(oldp, oldlenp, newp, newlen,
+		    &db_panic, securelevel > 0 ? db_panic : 0, 1));
 		break;
 	case DBCTL_CONSOLE:
-		if (securelevel > 0)
-			return (sysctl_int_lower(oldp, oldlenp, newp, newlen,
-			    &db_console));
-		else {
-			return (sysctl_int_bounded(oldp, oldlenp, newp, newlen,
-			    &db_console, 0, 1));
-		}
+		return (sysctl_int_bounded(oldp, oldlenp, newp, newlen,
+		    &db_console, securelevel > 0 ? db_console : 0, 1));
 		break;
 	case DBCTL_TRIGGER:
 		if (newp && db_console) {
@@ -86,13 +76,8 @@ ddb_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		return (sysctl_rdint(oldp, oldlenp, newp, 0));
 #if defined(DDBPROF)
 	case DBCTL_PROFILE:
-		if (securelevel > 0)
-			return (sysctl_int_lower(oldp, oldlenp, newp, newlen,
-			    &db_profile));
-		else {
-			return (sysctl_int_bounded(oldp, oldlenp, newp, newlen,
-			    &db_profile, 0, 1));
-		}
+		return (sysctl_int_bounded(oldp, oldlenp, newp, newlen,
+		    &db_profile, securelevel > 0 ? db_profile : 0, 1));
 		break;
 #endif /* DDBPROF */
 	default:
