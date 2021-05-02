@@ -3604,7 +3604,7 @@ cpu_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 	case CPU_ALLOWAPERTURE:
 #ifdef APERTURE
 		return (sysctl_int_bounded(oldp, oldlenp, newp, newlen,
-		    &allowaperture, securelevel > 0 ? allowaperture : 0, 3));
+		    &allowaperture, 0, securelevel > 0 ? allowaperture : 3));
 #else
 		return (sysctl_rdint(oldp, oldlenp, newp, 0));
 #endif

@@ -55,11 +55,11 @@ ddb_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 	switch (name[0]) {
 	case DBCTL_PANIC:
 		return (sysctl_int_bounded(oldp, oldlenp, newp, newlen,
-		    &db_panic, securelevel > 0 ? db_panic : 0, 1));
+		    &db_panic, 0, securelevel > 0 ? db_panic : 1));
 		break;
 	case DBCTL_CONSOLE:
 		return (sysctl_int_bounded(oldp, oldlenp, newp, newlen,
-		    &db_console, securelevel > 0 ? db_console : 0, 1));
+		    &db_console, 0, securelevel > 0 ? db_console : 1));
 		break;
 	case DBCTL_TRIGGER:
 		if (newp && db_console) {
@@ -77,7 +77,7 @@ ddb_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 #if defined(DDBPROF)
 	case DBCTL_PROFILE:
 		return (sysctl_int_bounded(oldp, oldlenp, newp, newlen,
-		    &db_profile, securelevel > 0 ? db_profile : 0, 1));
+		    &db_profile, 0, securelevel > 0 ? db_profile : 1));
 		break;
 #endif /* DDBPROF */
 	default:
