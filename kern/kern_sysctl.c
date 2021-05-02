@@ -869,8 +869,8 @@ sysctl_int_bounded(void *oldp, size_t *oldlenp, void *newp, size_t newlen,
 
 	if ((error = sysctl_int(oldp, oldlenp, newp, newlen, &val)))
 		return (error);
-	/* bounded and outside limits */
-	if (minimum < maximum && (val < minimum || maximum < val))
+	/* outside limits */
+	if (val < minimum || maximum < val)
 		return (EINVAL);
 	*valp = val;
 	return (0);
