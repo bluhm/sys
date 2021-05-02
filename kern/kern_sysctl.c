@@ -815,27 +815,6 @@ debug_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 #endif /* DEBUG_SYSCTL */
 
 /*
- * Reads, or writes that lower the value
- */
-int
-sysctl_int_lower(void *oldp, size_t *oldlenp, void *newp, size_t newlen,
-    int *valp)
-{
-	unsigned int oval = *valp, val = *valp;
-	int error;
-
-	if (newp == NULL)
-		return (sysctl_rdint(oldp, oldlenp, newp, val));
-
-	if ((error = sysctl_int(oldp, oldlenp, newp, newlen, &val)))
-		return (error);
-	if (val > oval)
-		return (EPERM);		/* do not allow raising */
-	*(unsigned int *)valp = val;
-	return (0);
-}
-
-/*
  * Validate parameters and get old / set new parameters
  * for an integer-valued sysctl function.
  */
