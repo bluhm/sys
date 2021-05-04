@@ -871,7 +871,7 @@ sysctl_int_bounded(void *oldp, size_t *oldlenp, void *newp, size_t newlen,
 		return (error);
 	/* outside limits */
 	if (val < minimum || maximum < val)
-		return (EINVAL);
+		return (EPERM);
 	*valp = val;
 	return (0);
 }
