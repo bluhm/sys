@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_sysctl.c,v 1.392 2021/05/01 16:18:28 gnezdo Exp $	*/
+/*	$OpenBSD: kern_sysctl.c,v 1.393 2021/05/04 19:04:56 bluhm Exp $	*/
 /*	$NetBSD: kern_sysctl.c,v 1.17 1996/05/20 17:49:05 mrg Exp $	*/
 
 /*-
