@@ -106,6 +106,7 @@ void	filt_fifordetach(struct knote *kn);
 int	filt_fiforead(struct knote *kn, long hint);
 void	filt_fifowdetach(struct knote *kn);
 int	filt_fifowrite(struct knote *kn, long hint);
+int	filt_fiforhup(struct knote *kn, long hint);
 
 const struct filterops fiforead_filtops = {
 	.f_flags	= FILTEROP_ISFD,
@@ -119,6 +120,13 @@ const struct filterops fifowrite_filtops = {
 	.f_attach	= NULL,
 	.f_detach	= filt_fifowdetach,
 	.f_event	= filt_fifowrite,
+};
+
+const struct filterops fifohup_filtops = {
+	.f_flags	= FILTEROP_ISFD,
+	.f_attach	= NULL,
+	.f_detach	= filt_fifordetach,
+	.f_event	= filt_fiforhup,
 };
 
 /*
@@ -520,11 +528,26 @@ fifo_kqfilter(void *v)
 		sb = &so->so_rcv;
 		break;
 	case EVFILT_WRITE:
-		if (!(ap->a_fflag & FWRITE))
+		if (!(ap->a_fflag & FWRITE)) {
+			/* Tell uper layer to ask for POLLUP only */
+			if (ap->a_kn->kn_flags & __EV_POLL)
+				return (EPERM);
 			return (EINVAL);
+		}
 		ap->a_kn->kn_fop = &fifowrite_filtops;
 		so = fip->fi_writesock;
 		sb = &so->so_snd;
+		break;
+	case EVFILT_EXCEPT:
+		/*
+		 * Filter used to set POLLHUP when no poll(2) flag are
+		 * specified or if POLLOUT is passed on a read-only fd.
+		 */
+		if (!(ap->a_kn->kn_flags & __EV_POLL))
+			return (EINVAL);
+		ap->a_kn->kn_fop = &fifohup_filtops;
+		so = fip->fi_readsock;
+		sb = &so->so_rcv;
 		break;
 	default:
 		return (EINVAL);
@@ -600,3 +623,24 @@ filt_fifowrite(struct knote *kn, long hint)
 
 	return (rv);
 }
+
+int
+filt_fiforhup(struct knote *kn, long hint)
+{
+	struct socket *so = (struct socket *)kn->kn_hook;
+	int s, rv = 0;
+
+	KASSERT(kn->kn_flags & __EV_POLL);
+
+	if ((hint & NOTE_SUBMIT) == 0)
+		s = solock(so);
+	if (so->so_state & SS_ISDISCONNECTED) {
+		kn->kn_flags |= __EV_HUP;
+		rv = 1;
+	}
+	if ((hint & NOTE_SUBMIT) == 0)
+		sounlock(so, s);
+
+	return (rv);
+}
+
