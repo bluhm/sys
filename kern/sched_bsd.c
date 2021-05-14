@@ -1,4 +1,4 @@
-/*	$OpenBSD: sched_bsd.c,v 1.65 2020/12/10 04:26:50 gnezdo Exp $	*/
+/*	$OpenBSD: sched_bsd.c,v 1.67 2021/05/10 18:01:24 mpi Exp $	*/
 /*	$NetBSD: kern_synch.c,v 1.37 1996/04/22 01:38:37 christos Exp $	*/
 
 /*-

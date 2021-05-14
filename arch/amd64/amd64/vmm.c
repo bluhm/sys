@@ -1,4 +1,4 @@
-/*	$OpenBSD: vmm.c,v 1.280 2021/04/06 00:19:58 dv Exp $	*/
+/*	$OpenBSD: vmm.c,v 1.282 2021/05/12 04:00:46 mlarkin Exp $	*/
 /*
  * Copyright (c) 2014 Mike Larkin <mlarkin@openbsd.org>
  *
@@ -1130,7 +1130,7 @@ vm_find(uint32_t id, struct vm **res)
 			 * all VMs and is indicated by PLEDGE_PROC.
 			 */
 			if (((p->p_p->ps_pledge &
-			    (PLEDGE_VMM|PLEDGE_PROC)) == PLEDGE_VMM) &&
+			    (PLEDGE_VMM | PLEDGE_PROC)) == PLEDGE_VMM) &&
 			    (vm->vm_creator_pid != p->p_p->ps_pid))
 				return (pledge_fail(p, EPERM, PLEDGE_VMM));
 			*res = vm;
@@ -6970,15 +6970,14 @@ vmm_handle_cpuid(struct vcpu *vcpu)
 int
 vcpu_run_svm(struct vcpu *vcpu, struct vm_run_params *vrp)
 {
-	int ret = 0, resume;
+	int ret = 0;
 	struct region_descriptor gdt;
-	struct cpu_info *ci;
+	struct cpu_info *ci = NULL;
 	uint64_t exit_reason;
 	struct schedstate_percpu *spc;
 	uint16_t irq;
 	struct vmcb *vmcb = (struct vmcb *)vcpu->vc_control_va;
 
-	resume = 0;
 	irq = vrp->vrp_irq;
 
 	/*
@@ -7000,7 +6999,7 @@ vcpu_run_svm(struct vcpu *vcpu, struct vm_run_params *vrp)
 
 	while (ret == 0) {
 		vmm_update_pvclock(vcpu);
-		if (!resume) {
+		if (ci != curcpu()) {
 			/*
 			 * We are launching for the first time, or we are
 			 * resuming from a different pcpu, so we need to
@@ -7106,8 +7105,6 @@ vcpu_run_svm(struct vcpu *vcpu, struct vm_run_params *vrp)
 
 		/* If we exited successfully ... */
 		if (ret == 0) {
-			resume = 1;
-
 			vcpu->vc_gueststate.vg_rflags = vmcb->v_rflags;
 
 			/*
@@ -7149,7 +7146,6 @@ vcpu_run_svm(struct vcpu *vcpu, struct vm_run_params *vrp)
 			/* Check if we should yield - don't hog the cpu */
 			spc = &ci->ci_schedstate;
 			if (spc->spc_schedflags & SPCF_SHOULDYIELD) {
-				resume = 0;
 				yield();
 			}
 		}

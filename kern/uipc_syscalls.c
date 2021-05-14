@@ -1,4 +1,4 @@
-/*	$OpenBSD: uipc_syscalls.c,v 1.188 2021/03/10 17:03:58 deraadt Exp $	*/
+/*	$OpenBSD: uipc_syscalls.c,v 1.190 2021/05/13 17:31:59 mvs Exp $	*/
 /*	$NetBSD: uipc_syscalls.c,v 1.19 1996/02/09 19:00:48 christos Exp $	*/
 
 /*
@@ -465,13 +465,13 @@ sys_socketpair(struct proc *p, void *v, register_t *retval)
 	fp2->f_data = so2;
 	error = copyout(sv, SCARG(uap, rsv), 2 * sizeof (int));
 	if (error == 0) {
+		fdinsert(fdp, sv[0], cloexec, fp1);
+		fdinsert(fdp, sv[1], cloexec, fp2);
+		fdpunlock(fdp);
 #ifdef KTRACE
 		if (KTRPOINT(p, KTR_STRUCT))
 			ktrfds(p, sv, 2);
 #endif
-		fdinsert(fdp, sv[0], cloexec, fp1);
-		fdinsert(fdp, sv[1], cloexec, fp2);
-		fdpunlock(fdp);
 		FRELE(fp1, p);
 		FRELE(fp2, p);
 		return (0);
@@ -645,7 +645,7 @@ sendit(struct proc *p, int s, struct msghdr *mp, int flags, register_t *retsize)
 			    mp->msg_controllen);
 #endif
 	} else
-		control = 0;
+		control = NULL;
 #ifdef KTRACE
 	if (KTRPOINT(p, KTR_GENIO)) {
 		ktriov = mallocarray(auio.uio_iovcnt, sizeof(struct iovec),
