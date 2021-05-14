@@ -231,6 +231,12 @@ kqueue_init(void)
 	    PR_WAITOK, "knotepl", NULL);
 }
 
+void
+kqueue_init_percpu(void)
+{
+	pool_cache_init(&knote_pool);
+}
+
 int
 filt_fileattach(struct knote *kn)
 {
@@ -996,6 +1002,9 @@ kqueue_register(struct kqueue *kq, struct kevent *kev, struct proc *p)
 			return (EBADF);
 	}
 
+	if (kev->flags & EV_ADD)
+		newkn = pool_get(&knote_pool, PR_WAITOK | PR_ZERO);
+
 again:
 	if (fops->f_flags & FILTEROP_ISFD) {
 		if ((fp = fd_getfile(fdp, kev->ident)) == NULL) {
@@ -1037,14 +1046,6 @@ again:
 	if (kn == NULL && ((kev->flags & EV_ADD) == 0)) {
 		error = ENOENT;
 		goto done;
-	}
-
-	if (kn == NULL && newkn == NULL && (kev->flags & EV_ADD)) {
-		newkn = pool_get(&knote_pool, PR_NOWAIT | PR_ZERO);
-		if (newkn == NULL) {
-			newkn = pool_get(&knote_pool, PR_WAITOK | PR_ZERO);
-			goto again;
-		}
 	}
 
 	/*
