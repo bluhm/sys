@@ -292,6 +292,8 @@ extern void	knote_fdclose(struct proc *p, int fd);
 extern void	knote_processexit(struct proc *);
 extern void	knote_modify(const struct kevent *, struct knote *);
 extern void	knote_submit(struct knote *, struct kevent *);
+extern void	kqueue_init(void);
+extern void	kqueue_init_percpu(void);
 extern int	kqueue_register(struct kqueue *kq,
 		    struct kevent *kev, struct proc *p);
 extern int	kqueue_scan(struct kqueue_scan_state *, int, struct kevent *,

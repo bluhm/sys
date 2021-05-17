@@ -231,6 +231,12 @@ kqueue_init(void)
 	    PR_WAITOK, "knotepl", NULL);
 }
 
+void
+kqueue_init_percpu(void)
+{
+	pool_cache_init(&knote_pool);
+}
+
 int
 filt_fileattach(struct knote *kn)
 {
