@@ -1645,7 +1645,7 @@ vnoperm(struct vnode *vp)
 }
 
 struct rwlock vfs_stall_lock = RWLOCK_INITIALIZER("vfs_stall");
-unsigned int vfs_stalling = 0;
+unsigned int vfs_stalling __read_mostly = 0;
 
 int
 vfs_stall(struct proc *p, int stall)

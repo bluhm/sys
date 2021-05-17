@@ -376,7 +376,10 @@ do {									\
 
 __returns_twice int	setjmp(label_t *);
 __dead void	longjmp(label_t *);
-#endif
+
+#define __read_mostly	__attribute__((__section__(".data.read_mostly")))
+
+#endif /* KERNEL */
 
 void	consinit(void);
 

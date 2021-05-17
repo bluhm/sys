@@ -70,36 +70,53 @@ void	sorflush(struct socket *);
 
 void	filt_sordetach(struct knote *kn);
 int	filt_soread(struct knote *kn, long hint);
+int	filt_soreadmodify(struct kevent *kev, struct knote *kn);
+int	filt_soreadprocess(struct knote *kn, struct kevent *kev);
+int	filt_soread_common(struct knote *kn, struct socket *so);
 void	filt_sowdetach(struct knote *kn);
 int	filt_sowrite(struct knote *kn, long hint);
+int	filt_sowritemodify(struct kevent *kev, struct knote *kn);
+int	filt_sowriteprocess(struct knote *kn, struct kevent *kev);
+int	filt_sowrite_common(struct knote *kn, struct socket *so);
 int	filt_solisten(struct knote *kn, long hint);
+int	filt_solistenmodify(struct kevent *kev, struct knote *kn);
+int	filt_solistenprocess(struct knote *kn, struct kevent *kev);
+int	filt_solisten_common(struct knote *kn, struct socket *so);
 
 const struct filterops solisten_filtops = {
-	.f_flags	= FILTEROP_ISFD,
+	.f_flags	= FILTEROP_ISFD | FILTEROP_MPSAFE,
 	.f_attach	= NULL,
 	.f_detach	= filt_sordetach,
 	.f_event	= filt_solisten,
+	.f_modify	= filt_solistenmodify,
+	.f_process	= filt_solistenprocess,
 };
 
 const struct filterops soread_filtops = {
-	.f_flags	= FILTEROP_ISFD,
+	.f_flags	= FILTEROP_ISFD | FILTEROP_MPSAFE,
 	.f_attach	= NULL,
 	.f_detach	= filt_sordetach,
 	.f_event	= filt_soread,
+	.f_modify	= filt_soreadmodify,
+	.f_process	= filt_soreadprocess,
 };
 
 const struct filterops sowrite_filtops = {
-	.f_flags	= FILTEROP_ISFD,
+	.f_flags	= FILTEROP_ISFD | FILTEROP_MPSAFE,
 	.f_attach	= NULL,
 	.f_detach	= filt_sowdetach,
 	.f_event	= filt_sowrite,
+	.f_modify	= filt_sowritemodify,
+	.f_process	= filt_sowriteprocess,
 };
 
 const struct filterops soexcept_filtops = {
-	.f_flags	= FILTEROP_ISFD,
+	.f_flags	= FILTEROP_ISFD | FILTEROP_MPSAFE,
 	.f_attach	= NULL,
 	.f_detach	= filt_sordetach,
 	.f_event	= filt_soread,
+	.f_modify	= filt_soreadmodify,
+	.f_process	= filt_soreadprocess,
 };
 
 #ifndef SOMINCONN
@@ -2056,13 +2073,12 @@ filt_sordetach(struct knote *kn)
 }
 
 int
-filt_soread(struct knote *kn, long hint)
+filt_soread_common(struct knote *kn, struct socket *so)
 {
-	struct socket *so = kn->kn_fp->f_data;
-	int s, rv = 0;
+	int rv = 0;
 
-	if ((hint & NOTE_SUBMIT) == 0)
-		s = solock(so);
+	soassertlocked(so);
+
 	kn->kn_data = so->so_rcv.sb_cc;
 #ifdef SOCKET_SPLICE
 	if (isspliced(so)) {
@@ -2090,10 +2106,45 @@ filt_soread(struct knote *kn, long hint)
 	} else {
 		rv = (kn->kn_data >= so->so_rcv.sb_lowat);
 	}
-	if ((hint & NOTE_SUBMIT) == 0)
-		sounlock(so, s);
 
 	return rv;
+}
+
+int
+filt_soread(struct knote *kn, long hint)
+{
+	struct socket *so = kn->kn_fp->f_data;
+
+	return (filt_soread_common(kn, so));
+}
+
+int
+filt_soreadmodify(struct kevent *kev, struct knote *kn)
+{
+	struct socket *so = kn->kn_fp->f_data;
+	int rv, s;
+
+	s = solock(so);
+	knote_modify(kev, kn);
+	rv = filt_soread_common(kn, so);
+	sounlock(so, s);
+
+	return (rv);
+}
+
+int
+filt_soreadprocess(struct knote *kn, struct kevent *kev)
+{
+	struct socket *so = kn->kn_fp->f_data;
+	int rv, s;
+
+	s = solock(so);
+	rv = filt_soread_common(kn, so);
+	if (rv != 0)
+		knote_submit(kn, kev);
+	sounlock(so, s);
+
+	return (rv);
 }
 
 void
@@ -2107,13 +2158,12 @@ filt_sowdetach(struct knote *kn)
 }
 
 int
-filt_sowrite(struct knote *kn, long hint)
+filt_sowrite_common(struct knote *kn, struct socket *so)
 {
-	struct socket *so = kn->kn_fp->f_data;
-	int s, rv;
+	int rv;
 
-	if ((hint & NOTE_SUBMIT) == 0)
-		s = solock(so);
+	soassertlocked(so);
+
 	kn->kn_data = sbspace(so, &so->so_snd);
 	if (so->so_state & SS_CANTSENDMORE) {
 		kn->kn_flags |= EV_EOF;
@@ -2133,25 +2183,92 @@ filt_sowrite(struct knote *kn, long hint)
 	} else {
 		rv = (kn->kn_data >= so->so_snd.sb_lowat);
 	}
-	if ((hint & NOTE_SUBMIT) == 0)
-		sounlock(so, s);
 
 	return (rv);
+}
+
+int
+filt_sowrite(struct knote *kn, long hint)
+{
+	struct socket *so = kn->kn_fp->f_data;
+
+	return (filt_sowrite_common(kn, so));
+}
+
+int
+filt_sowritemodify(struct kevent *kev, struct knote *kn)
+{
+	struct socket *so = kn->kn_fp->f_data;
+	int rv, s;
+
+	s = solock(so);
+	knote_modify(kev, kn);
+	rv = filt_sowrite_common(kn, so);
+	sounlock(so, s);
+
+	return (rv);
+}
+
+int
+filt_sowriteprocess(struct knote *kn, struct kevent *kev)
+{
+	struct socket *so = kn->kn_fp->f_data;
+	int rv, s;
+
+	s = solock(so);
+	rv = filt_sowrite_common(kn, so);
+	if (rv != 0)
+		knote_submit(kn, kev);
+	sounlock(so, s);
+
+	return (rv);
+}
+
+int
+filt_solisten_common(struct knote *kn, struct socket *so)
+{
+	soassertlocked(so);
+
+	kn->kn_data = so->so_qlen;
+
+	return (kn->kn_data != 0);
 }
 
 int
 filt_solisten(struct knote *kn, long hint)
 {
 	struct socket *so = kn->kn_fp->f_data;
-	int s;
 
-	if ((hint & NOTE_SUBMIT) == 0)
-		s = solock(so);
-	kn->kn_data = so->so_qlen;
-	if ((hint & NOTE_SUBMIT) == 0)
-		sounlock(so, s);
+	return (filt_solisten_common(kn, so));
+}
 
-	return (kn->kn_data != 0);
+int
+filt_solistenmodify(struct kevent *kev, struct knote *kn)
+{
+	struct socket *so = kn->kn_fp->f_data;
+	int rv, s;
+
+	s = solock(so);
+	knote_modify(kev, kn);
+	rv = filt_solisten_common(kn, so);
+	sounlock(so, s);
+
+	return (rv);
+}
+
+int
+filt_solistenprocess(struct knote *kn, struct kevent *kev)
+{
+	struct socket *so = kn->kn_fp->f_data;
+	int rv, s;
+
+	s = solock(so);
+	rv = filt_solisten_common(kn, so);
+	if (rv != 0)
+		knote_submit(kn, kev);
+	sounlock(so, s);
+
+	return (rv);
 }
 
 #ifdef DDB

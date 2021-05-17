@@ -37,6 +37,7 @@ PHDRS
  *__ALIGN_SIZE = 0x200000;
  */
 __ALIGN_SIZE = 0x1000;
+__CACHELINE_SIZE = 0x40;
 __kernel_base = 0xffffffff80000000;
 __kernel_virt_base = __kernel_base + 0x1000000;
 __kernel_phys_base = 0x1000000;
@@ -117,6 +118,8 @@ SECTIONS
 	.data : AT (__kernel_data_phys)
 	{
 		__data_start = ABSOLUTE(.);
+		*(.data.read_mostly)
+		. = ALIGN(__CACHELINE_SIZE);
 		*(.data .data.*)
 	} :data =0xcccccccc
 
