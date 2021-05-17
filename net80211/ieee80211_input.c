@@ -1,4 +1,4 @@
-/*	$OpenBSD: ieee80211_input.c,v 1.234 2021/04/29 21:43:46 stsp Exp $	*/
+/*	$OpenBSD: ieee80211_input.c,v 1.236 2021/05/17 11:44:22 stsp Exp $	*/
 
 /*-
  * Copyright (c) 2001 Atsushi Onoe
@@ -77,6 +77,8 @@ void	ieee80211_input_ba_seq(struct ieee80211com *,
 struct	mbuf *ieee80211_align_mbuf(struct mbuf *);
 void	ieee80211_decap(struct ieee80211com *, struct mbuf *,
 	    struct ieee80211_node *, int, struct mbuf_list *);
+int	ieee80211_amsdu_decap_validate(struct ieee80211com *, struct mbuf *,
+	    struct ieee80211_node *);
 void	ieee80211_amsdu_decap(struct ieee80211com *, struct mbuf *,
 	    struct ieee80211_node *, int, struct mbuf_list *);
 void	ieee80211_enqueue_data(struct ieee80211com *, struct mbuf *,
@@ -701,6 +703,7 @@ ieee80211_input(struct ifnet *ifp, struct mbuf *m, struct ieee80211_node *ni,
 	if_input(ifp, &ml);
 }
 
+#ifdef notyet
 /*
  * Handle defragmentation (see 9.5 and Annex C).  We support the concurrent
  * reception of fragments of three fragmented MSDUs or MMPDUs.
@@ -790,6 +793,7 @@ ieee80211_defrag_timeout(void *arg)
 
 	splx(s);
 }
+#endif
 
 /*
  * Process a received data MPDU related to a specific HT-immediate Block Ack
@@ -1155,6 +1159,50 @@ ieee80211_decap(struct ieee80211com *ic, struct mbuf *m,
 	ieee80211_enqueue_data(ic, m, ni, mcast, ml);
 }
 
+int
+ieee80211_amsdu_decap_validate(struct ieee80211com *ic, struct mbuf *m,
+    struct ieee80211_node *ni)
+{
+	struct ether_header *eh = mtod(m, struct ether_header *);
+	const uint8_t llc_hdr_mac[ETHER_ADDR_LEN] = {
+		/* MAC address matching the 802.2 LLC header. */
+		LLC_SNAP_LSAP, LLC_SNAP_LSAP, LLC_UI, 0, 0, 0
+	}; 
+
+	/*
+	 * We are sorry, but this particular MAC address cannot be used.
+	 * This mitigates an attack where a single 802.11 frame is interpreted
+	 * as an A-MSDU because of a forged AMSDU-present bit in the 802.11
+	 * QoS frame header: https://papers.mathyvanhoef.com/usenix2021.pdf
+	 * See Section 7.2, 'Countermeasures for the design flaws'
+	 */
+	if (ETHER_IS_EQ(eh->ether_dhost, llc_hdr_mac))
+		return 1;
+
+	switch (ic->ic_opmode) {
+#ifndef IEEE80211_STA_ONLY
+	case IEEE80211_M_HOSTAP:
+		/*
+		 * Subframes must use the source address of the node which
+		 * transmitted the A-MSDU. Prevents MAC spoofing.
+		 */
+		if (!ETHER_IS_EQ(ni->ni_macaddr, eh->ether_shost))
+			return 1;
+		break;
+#endif
+	case IEEE80211_M_STA:
+		/* Subframes must be addressed to me. */
+		if (!ETHER_IS_EQ(ic->ic_myaddr, eh->ether_dhost))
+			return 1;
+		break;
+	default:
+		/* Ignore MONITOR/IBSS modes for now. */
+		break;
+	}
+
+	return 0;
+}
+
 /*
  * Decapsulate an Aggregate MSDU (see 7.2.2.2).
  */
@@ -1167,6 +1215,7 @@ ieee80211_amsdu_decap(struct ieee80211com *ic, struct mbuf *m,
 	struct llc *llc;
 	int len, pad, mcast;
 	struct ieee80211_frame *wh;
+	struct mbuf_list subframes = MBUF_LIST_INITIALIZER();
 
 	wh = mtod(m, struct ieee80211_frame *);
 	mcast = IEEE80211_IS_MULTICAST(wh->i_addr1);
@@ -1177,10 +1226,8 @@ ieee80211_amsdu_decap(struct ieee80211com *ic, struct mbuf *m,
 	while (m->m_pkthdr.len >= ETHER_HDR_LEN + LLC_SNAPFRAMELEN) {
 		/* process an A-MSDU subframe */
 		m = m_pullup(m, ETHER_HDR_LEN + LLC_SNAPFRAMELEN);
-		if (m == NULL) {
-			ic->ic_stats.is_rx_decap++;
-			return;
-		}
+		if (m == NULL)
+			break;
 		eh = mtod(m, struct ether_header *);
 		/* examine 802.3 header */
 		len = ntohs(eh->ether_type);
@@ -1188,11 +1235,12 @@ ieee80211_amsdu_decap(struct ieee80211com *ic, struct mbuf *m,
 			DPRINTF(("A-MSDU subframe too short (%d)\n", len));
 			/* stop processing A-MSDU subframes */
 			ic->ic_stats.is_rx_decap++;
+			ml_purge(&subframes);
 			m_freem(m);
 			return;
 		}
 		llc = (struct llc *)&eh[1];
-		/* examine 802.2 LLC header */
+		/* Examine the 802.2 LLC header after the A-MSDU header. */
 		if (llc->llc_dsap == LLC_SNAP_LSAP &&
 		    llc->llc_ssap == LLC_SNAP_LSAP &&
 		    llc->llc_control == LLC_UI &&
@@ -1212,6 +1260,7 @@ ieee80211_amsdu_decap(struct ieee80211com *ic, struct mbuf *m,
 			/* stop processing A-MSDU subframes */
 			DPRINTF(("A-MSDU subframe too long (%d)\n", len));
 			ic->ic_stats.is_rx_decap++;
+			ml_purge(&subframes);
 			m_freem(m);
 			return;
 		}
@@ -1221,16 +1270,29 @@ ieee80211_amsdu_decap(struct ieee80211com *ic, struct mbuf *m,
 		if (n == NULL) {
 			/* stop processing A-MSDU subframes */
 			ic->ic_stats.is_rx_decap++;
+			ml_purge(&subframes);
 			m_freem(m);
 			return;
 		}
-		ieee80211_enqueue_data(ic, m, ni, mcast, ml);
 
+		if (ieee80211_amsdu_decap_validate(ic, m, ni)) {
+			/* stop processing A-MSDU subframes */
+			ic->ic_stats.is_rx_decap++;
+			ml_purge(&subframes);
+			m_freem(m);
+			return;
+		}
+
+		ml_enqueue(&subframes, m);
+	
 		m = n;
 		/* remove padding */
 		pad = ((len + 3) & ~3) - len;
 		m_adj(m, pad);
 	}
+	
+	while ((n = ml_dequeue(&subframes)) != NULL)
+		ieee80211_enqueue_data(ic, n, ni, mcast, ml);
 
 	m_freem(m);
 }
