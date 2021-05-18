@@ -1700,10 +1700,6 @@ vfs_stall(struct proc *p, int stall)
 void
 vfs_stall_barrier(void)
 {
-	if (__predict_false(vfs_stalling)) {
-		rw_enter_read(&vfs_stall_lock);
-		rw_exit_read(&vfs_stall_lock);
-	}
 }
 
 /*
