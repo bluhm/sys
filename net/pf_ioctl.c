@@ -2495,16 +2495,13 @@ pfioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 				}
 				break;
 			case PF_TRANS_RULESET:
-				PF_LOCK();
 				if ((error = pf_commit_rules(ioe->ticket,
 				    ioe->anchor))) {
-					PF_UNLOCK();
 					NET_UNLOCK();
 					free(table, M_TEMP, sizeof(*table));
 					free(ioe, M_TEMP, sizeof(*ioe));
 					goto fail; /* really bad */
 				}
-				PF_UNLOCK();
 				break;
 			default:
 				NET_UNLOCK();
