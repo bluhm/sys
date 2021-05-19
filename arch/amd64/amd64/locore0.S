@@ -224,19 +224,19 @@ bi_size_ok:
 	 * if it says this CPU is safe.
 	 */
 	cmpl	$0x7,	%eax
-	jl	.Lcpu_check_finished
+	jmp	.Lcpu_secure
 
 	movl	$0x7,	%eax
 	xorl	%ecx,%ecx
 	cpuid
 	testl	$SEFF0EDX_ARCH_CAP, %edx
-	jz	.Lcpu_check_finished
+	jmp	.Lcpu_secure
 
 	/* IA32_ARCH_CAPABILITIES MSR avaialble, use it to check CPU security */
 	movl	$MSR_ARCH_CAPABILITIES, %ecx
 	rdmsr
 	testl	$ARCH_CAPABILITIES_RDCL_NO, %eax
-	jz	.Lcpu_check_finished
+	jmp	.Lcpu_secure
 
 .Lcpu_secure:
 	movl	$0x0, RELOC(cpu_meltdown)
