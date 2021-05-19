@@ -1,4 +1,4 @@
-/*	$OpenBSD: uipc_usrreq.c,v 1.145 2021/04/29 20:13:25 mvs Exp $	*/
+/*	$OpenBSD: uipc_usrreq.c,v 1.147 2021/05/18 11:15:14 mvs Exp $	*/
 /*	$NetBSD: uipc_usrreq.c,v 1.18 1996/02/09 19:00:50 christos Exp $	*/
 
 /*
@@ -52,6 +52,7 @@
 #include <sys/pledge.h>
 #include <sys/pool.h>
 #include <sys/rwlock.h>
+#include <sys/sysctl.h>
 
 /*
  * Locks used to protect global data and struct members:
@@ -354,11 +355,26 @@ release:
  * and don't really want to reserve the sendspace.  Their recvspace should
  * be large enough for at least one max-size datagram plus address.
  */
-#define	PIPSIZ	4096
-u_long	unpst_sendspace = PIPSIZ;
-u_long	unpst_recvspace = PIPSIZ;
-u_long	unpdg_sendspace = 2*1024;	/* really max datagram size */
-u_long	unpdg_recvspace = 4*1024;
+#define	PIPSIZ	8192
+u_int	unpst_sendspace = PIPSIZ;
+u_int	unpst_recvspace = PIPSIZ;
+u_int	unpsq_sendspace = PIPSIZ;
+u_int	unpsq_recvspace = PIPSIZ;
+u_int	unpdg_sendspace = 2*1024;	/* really max datagram size */
+u_int	unpdg_recvspace = 16*1024;
+
+const struct sysctl_bounded_args unpstctl_vars[] = {
+	{ UNPCTL_RECVSPACE, &unpst_recvspace, 0, SB_MAX },
+	{ UNPCTL_SENDSPACE, &unpst_sendspace, 0, SB_MAX },
+};
+const struct sysctl_bounded_args unpsqctl_vars[] = {
+	{ UNPCTL_RECVSPACE, &unpsq_recvspace, 0, SB_MAX },
+	{ UNPCTL_SENDSPACE, &unpsq_sendspace, 0, SB_MAX },
+};
+const struct sysctl_bounded_args unpdgctl_vars[] = {
+	{ UNPCTL_RECVSPACE, &unpdg_recvspace, 0, SB_MAX },
+	{ UNPCTL_SENDSPACE, &unpdg_sendspace, 0, SB_MAX },
+};
 
 int
 uipc_attach(struct socket *so, int proto)
@@ -374,8 +390,11 @@ uipc_attach(struct socket *so, int proto)
 		switch (so->so_type) {
 
 		case SOCK_STREAM:
-		case SOCK_SEQPACKET:
 			error = soreserve(so, unpst_sendspace, unpst_recvspace);
+			break;
+
+		case SOCK_SEQPACKET:
+			error = soreserve(so, unpsq_sendspace, unpsq_recvspace);
 			break;
 
 		case SOCK_DGRAM:
@@ -409,6 +428,41 @@ uipc_detach(struct socket *so)
 	unp_detach(unp);
 
 	return (0);
+}
+
+int
+uipc_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
+    size_t newlen)
+{
+	int *valp = &unp_defer;
+
+	/* All sysctl names at this level are terminal. */
+	switch (name[0]) {
+	case SOCK_STREAM:
+		if (namelen != 2)
+			return (ENOTDIR);
+		return sysctl_bounded_arr(unpstctl_vars, nitems(unpstctl_vars),
+		    name + 1, namelen - 1, oldp, oldlenp, newp, newlen);
+	case SOCK_SEQPACKET:
+		if (namelen != 2)
+			return (ENOTDIR);
+		return sysctl_bounded_arr(unpsqctl_vars, nitems(unpsqctl_vars),
+		    name + 1, namelen - 1, oldp, oldlenp, newp, newlen);
+	case SOCK_DGRAM:
+		if (namelen != 2)
+			return (ENOTDIR);
+		return sysctl_bounded_arr(unpdgctl_vars, nitems(unpdgctl_vars),
+		    name + 1, namelen - 1, oldp, oldlenp, newp, newlen);
+	case NET_UNIX_INFLIGHT:
+		valp = &unp_rights;
+		/* FALLTHOUGH */
+	case NET_UNIX_DEFERRED:
+		if (namelen != 1)
+			return (ENOTDIR);
+		return sysctl_rdint(oldp, oldlenp, newp, *valp);
+	default:
+		return (ENOPROTOOPT);
+	}
 }
 
 void
@@ -476,6 +530,16 @@ unp_bind(struct unpcb *unp, struct mbuf *nam, struct proc *p)
 	if ((error = unp_nam2sun(nam, &soun, &pathlen)))
 		return (error);
 
+	unp->unp_flags |= UNP_BINDING;
+
+	/*
+	 * Enforce `i_lock' -> `unplock' because fifo subsystem
+	 * requires it. The socket can't be closed concurrently
+	 * because the file descriptor reference is still held.
+	 */
+
+	sounlock(unp->unp_socket, SL_LOCKED);
+
 	nam2 = m_getclr(M_WAITOK, MT_SONAME);
 	nam2->m_len = sizeof(struct sockaddr_un);
 	memcpy(mtod(nam2, struct sockaddr_un *), soun,
@@ -490,16 +554,6 @@ unp_bind(struct unpcb *unp, struct mbuf *nam, struct proc *p)
 	NDINIT(&nd, CREATE, NOFOLLOW | LOCKPARENT, UIO_SYSSPACE,
 	    soun->sun_path, p);
 	nd.ni_pledge = PLEDGE_UNIX;
-
-	unp->unp_flags |= UNP_BINDING;
-
-	/*
-	 * Enforce `i_lock' -> `unplock' because fifo subsystem
-	 * requires it. The socket can't be closed concurrently
-	 * because the file descriptor reference is still held.
-	 */
-
-	sounlock(unp->unp_socket, SL_LOCKED);
 
 	KERNEL_LOCK();
 /* SHOULD BE ABLE TO ADOPT EXISTING AND wakeup() ALA FIFO's */

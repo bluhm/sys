@@ -1,4 +1,4 @@
-/*	$OpenBSD: vmm.c,v 1.282 2021/05/12 04:00:46 mlarkin Exp $	*/
+/*	$OpenBSD: vmm.c,v 1.284 2021/05/18 00:05:20 dv Exp $	*/
 /*
  * Copyright (c) 2014 Mike Larkin <mlarkin@openbsd.org>
  *
@@ -4487,9 +4487,9 @@ vmm_translate_gva(struct vcpu *vcpu, uint64_t va, uint64_t *pa, int mode)
 int
 vcpu_run_vmx(struct vcpu *vcpu, struct vm_run_params *vrp)
 {
-	int ret = 0, resume, locked, exitinfo;
+	int ret = 0, resume = 0, cleared = 1, locked, exitinfo;
 	struct region_descriptor gdt;
-	struct cpu_info *ci;
+	struct cpu_info *ci = NULL;
 	uint64_t exit_reason, cr3, vmcs_ptr, insn_error;
 	struct schedstate_percpu *spc;
 	struct vmx_invvpid_descriptor vid;
@@ -4498,7 +4498,6 @@ vcpu_run_vmx(struct vcpu *vcpu, struct vm_run_params *vrp)
 	u_long s;
 	struct region_descriptor gdtr, idtr;
 
-	resume = 0;
 	irq = vrp->vrp_irq;
 
 	/*
@@ -4576,12 +4575,13 @@ vcpu_run_vmx(struct vcpu *vcpu, struct vm_run_params *vrp)
 
 	while (ret == 0) {
 		vmm_update_pvclock(vcpu);
-		if (!resume) {
+		if (cleared || ci != curcpu()) {
 			/*
-			 * We are launching for the first time, or we are
-			 * resuming from a different pcpu, so we need to
-			 * reset certain pcpu-specific values.
+			 * We are launching for the first time, we yielded the
+			 * pcpu, or we are resuming from a different pcpu, so we
+			 * need to reset certain pcpu-specific values.
 			 */
+			resume = cleared = 0;
 			ci = curcpu();
 			setregion(&gdt, ci->ci_gdt, GDT_SIZE - 1);
 
@@ -4605,7 +4605,7 @@ vcpu_run_vmx(struct vcpu *vcpu, struct vm_run_params *vrp)
 
 			/* Host TR base */
 			if (vmwrite(VMCS_HOST_IA32_TR_BASE,
-			    (uint64_t)curcpu()->ci_tss)) {
+			    (uint64_t)ci->ci_tss)) {
 				ret = EINVAL;
 				break;
 			}
@@ -4723,7 +4723,7 @@ vcpu_run_vmx(struct vcpu *vcpu, struct vm_run_params *vrp)
 		KERNEL_UNLOCK();
 		ret = vmx_enter_guest(&vcpu->vc_control_pa,
 		    &vcpu->vc_gueststate, resume,
-		    curcpu()->ci_vmm_cap.vcc_vmx.vmx_has_l1_flush_msr);
+		    ci->ci_vmm_cap.vcc_vmx.vmx_has_l1_flush_msr);
 
 		bare_lgdt(&gdtr);
 		lidt(&idtr);
@@ -4849,11 +4849,11 @@ vcpu_run_vmx(struct vcpu *vcpu, struct vm_run_params *vrp)
 			/* Check if we should yield - don't hog the cpu */
 			spc = &ci->ci_schedstate;
 			if (spc->spc_schedflags & SPCF_SHOULDYIELD) {
-				resume = 0;
 				if (vmclear(&vcpu->vc_control_pa)) {
 					ret = EINVAL;
 					break;
 				}
+				cleared = 1;
 				yield();
 			}
 		} else if (ret == VMX_FAIL_LAUNCH_INVALID_VMCS) {
@@ -4882,8 +4882,8 @@ vcpu_run_vmx(struct vcpu *vcpu, struct vm_run_params *vrp)
 #endif /* VMM_DEBUG */
 			ret = EINVAL;
 		} else {
-			printf("%s: failed launch for unknown reason %d\n",
-			    __func__, ret);
+			printf("%s: failed %s for unknown reason %d\n",
+			    __func__, resume ? "vmresume" : "vmlaunch", ret);
 #ifdef VMM_DEBUG
 			vmx_vcpu_dump_regs(vcpu);
 			dump_vcpu(vcpu);
@@ -7596,6 +7596,9 @@ vmx_instruction_error_decode(uint32_t code)
 	case 20: return "VMCALL: invalid VM exit control fields";
 	case 26: return "VM entry: blocked by MOV SS";
 	case 28: return "Invalid operand to INVEPT/INVVPID";
+	case 0x80000021: return "VM entry: invalid guest state";
+	case 0x80000022: return "VM entry: failure due to MSR loading";
+	case 0x80000029: return "VM entry: machine-check event";
 	default: return "unknown";
 	}
 }
