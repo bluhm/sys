@@ -436,6 +436,11 @@ void import_udpencap(struct tdb *, struct sadb_x_udpencap *);
 void import_tag(struct tdb *, struct sadb_x_tag *);
 void import_rdomain(struct tdb *, struct sadb_x_rdomain *);
 void import_tap(struct tdb *, struct sadb_x_tap *);
+
+extern const uint64_t sadb_exts_allowed_out[SADB_MAX+1];
+extern const uint64_t sadb_exts_required_out[SADB_MAX+1];
+
+extern struct pool ipsec_policy_pool;
 #endif /* _KERNEL */
 
 #endif /* _NET_PFKEY_V2_H_ */
