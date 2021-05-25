@@ -50,9 +50,11 @@
 #include <sys/sched.h>
 #include <sys/timetc.h>
 
-
 #if defined(GPROF) || defined(DDBPROF)
 #include <sys/gmon.h>
+#endif
+#if defined(DDB)
+#include <ddb/db_var.h>
 #endif
 
 #include "dt.h"
@@ -139,6 +141,9 @@ hardclock(struct clockframe *frame)
 {
 	struct proc *p;
 	struct cpu_info *ci = curcpu();
+
+	if (db_panic == 2)
+		panic("%s: panic on cpu %u", __func__, ci->ci_cpuid);
 
 	p = curproc;
 	if (p && ((p->p_flag & (P_SYSTEM | P_WEXIT)) == 0)) {

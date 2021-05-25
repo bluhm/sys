@@ -54,13 +54,8 @@ ddb_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 
 	switch (name[0]) {
 	case DBCTL_PANIC:
-		if (securelevel > 0)
-			return (sysctl_int_lower(oldp, oldlenp, newp, newlen,
-			    &db_panic));
-		else {
-			return (sysctl_int_bounded(oldp, oldlenp, newp, newlen,
-			    &db_panic, 0, 1));
-		}
+		return (sysctl_int_bounded(oldp, oldlenp, newp, newlen,
+		    &db_panic, 0, 2));
 		break;
 	case DBCTL_CONSOLE:
 		if (securelevel > 0)
