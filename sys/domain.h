@@ -68,7 +68,7 @@ struct domain {
 #ifdef _KERNEL
 void domaininit(void);
 
-extern const struct domain *domains[];
+extern const struct domain *const domains[];
 extern const struct domain mplsdomain;
 extern const struct domain pfkeydomain;
 extern const struct domain inet6domain;

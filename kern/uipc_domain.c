@@ -45,7 +45,7 @@
 #include "bpfilter.h"
 #include "pflow.h"
 
-const struct domain *domains[] = {
+const struct domain *const domains[] = {
 #ifdef MPLS
 	&mplsdomain,
 #endif
