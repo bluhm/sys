@@ -69,10 +69,10 @@ struct domain {
 void domaininit(void);
 
 extern const struct domain *const domains[];
-extern const struct domain mplsdomain;
-extern const struct domain pfkeydomain;
 extern const struct domain inet6domain;
 extern const struct domain inetdomain;
-extern const struct domain unixdomain;
+extern const struct domain mplsdomain;
+extern const struct domain pfkeydomain;
 extern const struct domain routedomain;
+extern const struct domain unixdomain;
 #endif /* _KERNEL */
