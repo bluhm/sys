@@ -144,6 +144,8 @@ hardclock(struct clockframe *frame)
 
 	if (db_panic == 2)
 		panic("%s: panic on cpu %u", __func__, ci->ci_cpuid);
+	if (db_panic == 3)
+		explicit_bzero(NULL, 1);
 
 	p = curproc;
 	if (p && ((p->p_flag & (P_SYSTEM | P_WEXIT)) == 0)) {
