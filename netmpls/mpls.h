@@ -1,4 +1,4 @@
-/*	$OpenBSD: mpls.h,v 1.45 2021/03/10 10:21:49 jsg Exp $	*/
+/*	$OpenBSD: mpls.h,v 1.46 2021/05/25 22:45:10 bluhm Exp $	*/
 
 /*
  * Copyright (C) 1999, 2000 and 2001 AYAME Project, WIDE Project.

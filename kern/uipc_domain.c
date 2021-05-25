@@ -1,4 +1,4 @@
-/*	$OpenBSD: uipc_domain.c,v 1.58 2021/05/17 17:06:51 claudio Exp $	*/
+/*	$OpenBSD: uipc_domain.c,v 1.59 2021/05/25 22:45:09 bluhm Exp $	*/
 /*	$NetBSD: uipc_domain.c,v 1.14 1996/02/09 19:00:44 christos Exp $	*/
 
 /*
