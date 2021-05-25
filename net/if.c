@@ -501,7 +501,7 @@ if_free_sadl(struct ifnet *ifp)
 void
 if_attachdomain(struct ifnet *ifp)
 {
-	struct domain *dp;
+	const struct domain *dp;
 	int i, s;
 
 	s = splnet();
@@ -1010,7 +1010,7 @@ if_detach(struct ifnet *ifp)
 {
 	struct ifaddr *ifa;
 	struct ifg_list *ifg;
-	struct domain *dp;
+	const struct domain *dp;
 	int i, s;
 
 	/* Undo pseudo-driver changes. */

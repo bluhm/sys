@@ -1061,7 +1061,7 @@ rt_copysa(struct sockaddr *src, struct sockaddr *mask, struct sockaddr **dst)
 	static const u_char maskarray[] = {
 	    0x0, 0x80, 0xc0, 0xe0, 0xf0, 0xf8, 0xfc, 0xfe };
 	struct sockaddr *ndst;
-	struct domain *dp;
+	const struct domain *dp;
 	u_char *csrc, *cdst;
 	int i, plen;
 

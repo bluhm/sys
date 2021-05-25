@@ -1821,7 +1821,8 @@ sosetopt(struct socket *so, int level, int optname, struct mbuf *m)
 			if (so->so_proto->pr_domain &&
 			    so->so_proto->pr_domain->dom_protosw &&
 			    so->so_proto->pr_ctloutput) {
-				struct domain *dom = so->so_proto->pr_domain;
+				const struct domain *dom =
+				    so->so_proto->pr_domain;
 
 				level = dom->dom_protosw->pr_protocol;
 				error = (*so->so_proto->pr_ctloutput)
@@ -1961,7 +1962,8 @@ sogetopt(struct socket *so, int level, int optname, struct mbuf *m)
 			if (so->so_proto->pr_domain &&
 			    so->so_proto->pr_domain->dom_protosw &&
 			    so->so_proto->pr_ctloutput) {
-				struct domain *dom = so->so_proto->pr_domain;
+				const struct domain *dom =
+				    so->so_proto->pr_domain;
 
 				level = dom->dom_protosw->pr_protocol;
 				error = (*so->so_proto->pr_ctloutput)

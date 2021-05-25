@@ -47,7 +47,7 @@ typedef	__socklen_t	socklen_t;	/* length type for network syscalls */
 struct	mbuf;
 struct	ifnet;
 
-struct	domain {
+struct domain {
 	int	dom_family;		/* AF_xxx */
 	char	*dom_name;
 	void	(*dom_init)(void);	/* initialize domain data structures */
@@ -66,13 +66,13 @@ struct	domain {
 };
 
 #ifdef _KERNEL
-extern struct domain *domains[];
 void domaininit(void);
 
-extern struct domain inetdomain;
-
-#ifdef INET6
-extern struct domain inet6domain;
-#endif
-
+extern const struct domain *domains[];
+extern const struct domain mplsdomain;
+extern const struct domain pfkeydomain;
+extern const struct domain inet6domain;
+extern const struct domain inetdomain;
+extern const struct domain unixdomain;
+extern const struct domain routedomain;
 #endif /* _KERNEL */

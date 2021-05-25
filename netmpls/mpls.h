@@ -145,8 +145,6 @@ struct ifmpwreq {
 #define MPLS_LABEL2SHIM(_l)	(htonl((_l) << MPLS_LABEL_OFFSET))
 #define MPLS_SHIM2LABEL(_s)	(ntohl((_s)) >> MPLS_LABEL_OFFSET)
 
-extern	struct domain mplsdomain;
-
 extern int		mpls_defttl;
 extern int		mpls_mapttl_ip;
 extern int		mpls_mapttl_ip6;

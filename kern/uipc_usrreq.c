@@ -792,8 +792,6 @@ unp_drain(void)
 }
 #endif
 
-extern	struct domain unixdomain;
-
 static struct unpcb *
 fptounp(struct file *fp)
 {

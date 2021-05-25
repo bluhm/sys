@@ -361,7 +361,7 @@ const struct protosw inet6sw[] = {
 }
 };
 
-struct domain inet6domain = {
+const struct domain inet6domain = {
   .dom_family = AF_INET6,
   .dom_name = "internet6",
   .dom_protosw = inet6sw,

@@ -44,8 +44,6 @@
  * Definitions of protocols supported in the UNIX domain.
  */
 
-extern	struct domain unixdomain;		/* or at least forward */
-
 struct protosw unixsw[] = {
 {
   .pr_type	= SOCK_STREAM,
@@ -76,7 +74,7 @@ struct protosw unixsw[] = {
 }
 };
 
-struct domain unixdomain = {
+const struct domain unixdomain = {
   .dom_family = AF_UNIX,
   .dom_name = "unix",
   .dom_init = unp_init,

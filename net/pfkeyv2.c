@@ -125,7 +125,7 @@ static const struct sadb_alg calgs[] = {
 struct pool pkpcb_pool;
 #define PFKEY_MSG_MAXSZ 4096
 const struct sockaddr pfkey_addr = { 2, PF_KEY, };
-struct domain pfkeydomain;
+const struct domain pfkeydomain;
 
 /*
  * pfkey PCB
@@ -214,7 +214,7 @@ static struct protosw pfkeysw[] = {
 }
 };
 
-struct domain pfkeydomain = {
+const struct domain pfkeydomain = {
   .dom_family = PF_KEY,
   .dom_name = "PF_KEY",
   .dom_init = pfkey_init,

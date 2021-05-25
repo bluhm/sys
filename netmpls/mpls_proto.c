@@ -45,7 +45,7 @@
 /*
  * MPLS address family: needed for the routing table
  */
-struct domain mplsdomain = {
+const struct domain mplsdomain = {
   .dom_family = AF_MPLS,
   .dom_name = "mpls",
   .dom_sasize = sizeof(struct sockaddr_mpls),
