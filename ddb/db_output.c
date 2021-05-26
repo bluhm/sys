@@ -226,11 +226,11 @@ void
 db_stack_dump(void)
 {
 	static struct cpu_info *intrace = NULL;
-	struct cpu_info *tracing;
+	struct cpu_info *tracing, *ci = curcpu();
 
-	tracing = atomic_cas_ptr(&intrace, NULL, curcpu());
+	tracing = atomic_cas_ptr(&intrace, NULL, ci);
 	if (tracing != NULL) {
-		if (tracing == curcpu())
+		if (tracing == ci)
 			printf("Faulted in traceback, aborting...\n");
 		else
 			printf("Parallel traceback, suppressed...\n");
