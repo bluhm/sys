@@ -225,10 +225,13 @@ db_format(char *buf, size_t bufsize, long val, int format, int alt, int width)
 void
 db_stack_dump(void)
 {
-	static volatile unsigned int intrace = 0;
+	static struct cpu_info *intrace = NULL;
+	struct cpu_info *tracing;
 
-	if (atomic_cas_uint(&intrace, 0, 1) != 0) {
-		printf("Faulted in traceback, aborting...\n");
+	tracing = atomic_cas_ptr(&intrace, NULL, curcpu());
+	if (tracing != NULL) {
+		if (tracing == curcpu())
+			printf("Faulted in traceback, aborting...\n");
 		return;
 	}
 
@@ -236,7 +239,7 @@ db_stack_dump(void)
 	db_stack_trace_print((db_expr_t)__builtin_frame_address(0), 1,
 	    256 /* low limit */, "", printf);
 	printf("End of stack trace.\n");
-	intrace = 0;
+	intrace = NULL;
 }
 
 void
