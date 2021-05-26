@@ -44,7 +44,7 @@
  * Definitions of protocols supported in the UNIX domain.
  */
 
-struct protosw unixsw[] = {
+const struct protosw unixsw[] = {
 {
   .pr_type	= SOCK_STREAM,
   .pr_domain	= &unixdomain,

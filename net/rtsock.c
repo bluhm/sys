@@ -2356,7 +2356,7 @@ rt_setsource(unsigned int rtableid, struct sockaddr *src)
  * Definitions of protocols supported in the ROUTE domain.
  */
 
-struct protosw routesw[] = {
+const struct protosw routesw[] = {
 {
   .pr_type	= SOCK_RAW,
   .pr_domain	= &routedomain,

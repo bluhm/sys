@@ -200,7 +200,7 @@ pfdatatopacket(void *data, int len, struct mbuf **packet)
 	return (0);
 }
 
-static struct protosw pfkeysw[] = {
+const struct protosw pfkeysw[] = {
 {
   .pr_type      = SOCK_RAW,
   .pr_domain    = &pfkeydomain,
