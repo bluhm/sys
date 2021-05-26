@@ -31,6 +31,7 @@
  * Printf and character output for debugger.
  */
 #include <sys/param.h>
+#include <sys/atomic.h>
 #include <sys/stdarg.h>
 #include <sys/systm.h>
 #include <sys/stacktrace.h>
@@ -224,14 +225,13 @@ db_format(char *buf, size_t bufsize, long val, int format, int alt, int width)
 void
 db_stack_dump(void)
 {
-	static volatile int intrace;
+	static volatile unsigned int intrace = 0;
 
-	if (intrace) {
+	if (atomic_cas_uint(&intrace, 0, 1) != 0) {
 		printf("Faulted in traceback, aborting...\n");
 		return;
 	}
 
-	intrace = 1;
 	printf("Starting stack trace...\n");
 	db_stack_trace_print((db_expr_t)__builtin_frame_address(0), 1,
 	    256 /* low limit */, "", printf);
