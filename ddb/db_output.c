@@ -232,6 +232,8 @@ db_stack_dump(void)
 	if (tracing != NULL) {
 		if (tracing == curcpu())
 			printf("Faulted in traceback, aborting...\n");
+		else
+			printf("Parallel traceback, suppressed...\n");
 		return;
 	}
 
