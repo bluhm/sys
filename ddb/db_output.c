@@ -241,6 +241,7 @@ db_stack_dump(void)
 	db_stack_trace_print((db_expr_t)__builtin_frame_address(0), 1,
 	    256 /* low limit */, "", printf);
 	printf("End of stack trace.\n");
+	membar_producer();
 	intrace = NULL;
 }
 
