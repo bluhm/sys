@@ -142,9 +142,9 @@ hardclock(struct clockframe *frame)
 	struct proc *p;
 	struct cpu_info *ci = curcpu();
 
-	if (db_panic == 2)
+	if (db_panic == 2 || db_panic == -2)
 		panic("%s: panic on cpu %u", __func__, ci->ci_cpuid);
-	if (db_panic == 3)
+	if (db_panic == 3 || db_panic == -3)
 		explicit_bzero(NULL, 1);
 
 	p = curproc;

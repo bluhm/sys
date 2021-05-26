@@ -227,7 +227,7 @@ panic(const char *fmt, ...)
 	}
 
 #ifdef DDB
-	if (db_panic)
+	if (db_panic > 0)
 		db_enter();
 	else
 		db_stack_dump();
