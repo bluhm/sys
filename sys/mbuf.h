@@ -419,7 +419,7 @@ void	m_calchdrlen(struct mbuf *);
 int	m_defrag(struct mbuf *, int);
 struct	mbuf *m_prepend(struct mbuf *, int, int);
 struct	mbuf *m_pulldown(struct mbuf *, int, int, int *);
-struct	mbuf *m_pullup(struct mbuf *, int);
+int	m_pullup(struct mbuf **, int);
 struct	mbuf *m_split(struct mbuf *, int, int);
 struct	mbuf *m_makespace(struct mbuf *, int, int, int *);
 struct  mbuf *m_getptr(struct mbuf *, int, int *);

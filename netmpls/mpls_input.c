@@ -69,7 +69,7 @@ mpls_input(struct ifnet *ifp, struct mbuf *m)
 	}
 
 	if (m->m_len < sizeof(*shim)) {
-		m = m_pullup(m, sizeof(*shim));
+		m_pullup(&m, sizeof(*shim));
 		if (m == NULL)
 			return;
 	}
@@ -141,7 +141,7 @@ do_v6:
 #endif	/* INET6 */
 			case MPLS_LABEL_IMPLNULL:
 				if (m->m_len < sizeof(u_char) &&
-				    (m = m_pullup(m, sizeof(u_char))) == NULL)
+				    (m_pullup(&m, sizeof(u_char))) != 0)
 					return;
 				switch (*mtod(m, u_char *) >> 4) {
 				case IPVERSION:
@@ -305,7 +305,7 @@ mpls_ip_adjttl(struct mbuf *m, u_int8_t ttl)
 	uint32_t x;
 
 	if (m->m_len < sizeof(*ip)) {
-		m = m_pullup(m, sizeof(*ip));
+		m_pullup(&m, sizeof(*ip));
 		if (m == NULL)
 			return (NULL);
 	}
@@ -329,7 +329,7 @@ mpls_ip6_adjttl(struct mbuf *m, u_int8_t ttl)
 	struct ip6_hdr *ip6;
 
 	if (m->m_len < sizeof(*ip6)) {
-		m = m_pullup(m, sizeof(*ip6));
+		m_pullup(&m, sizeof(*ip6));
 		if (m == NULL)
 			return (NULL);
 	}
@@ -356,7 +356,7 @@ mpls_do_error(struct mbuf *m, int type, int code, int destmtu)
 
 	for (nstk = 0; nstk < MPLS_INKERNEL_LOOP_MAX; nstk++) {
 		if (m->m_len < sizeof(*shim) &&
-		    (m = m_pullup(m, sizeof(*shim))) == NULL)
+		    (m_pullup(&m, sizeof(*shim))) != 0)
 			return (NULL);
 		stack[nstk] = *mtod(m, struct shim_hdr *);
 		m_adj(m, sizeof(*shim));
@@ -366,12 +366,12 @@ mpls_do_error(struct mbuf *m, int type, int code, int destmtu)
 	shim = &stack[0];
 
 	if (m->m_len < sizeof(u_char) &&
-	    (m = m_pullup(m, sizeof(u_char))) == NULL)
+	    (m_pullup(m, sizeof(u_char))) != 0)
 		return (NULL);
 	switch (*mtod(m, u_char *) >> 4) {
 	case IPVERSION:
 		if (m->m_len < sizeof(*ip) &&
-		    (m = m_pullup(m, sizeof(*ip))) == NULL)
+		    (m_pullup(&m, sizeof(*ip))) != 0)
 			return (NULL);
 		m = icmp_do_error(m, type, code, 0, destmtu);
 		if (m == NULL)

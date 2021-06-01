@@ -256,10 +256,11 @@ ip_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 	KASSERT(*offp == 0);
 
 	ipstat_inc(ips_total);
-	if (m->m_len < sizeof (struct ip) &&
-	    (m = *mp = m_pullup(m, sizeof (struct ip))) == NULL) {
-		ipstat_inc(ips_toosmall);
-		goto bad;
+	if (m->m_len < sizeof (struct ip)) {
+		if (m_pullup(mp, sizeof (struct ip)) != 0) {
+			ipstat_inc(ips_toosmall);
+			goto bad;
+		m = *mp;
 	}
 	ip = mtod(m, struct ip *);
 	if (ip->ip_v != IPVERSION) {
@@ -272,10 +273,11 @@ ip_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 		goto bad;
 	}
 	if (hlen > m->m_len) {
-		if ((m = *mp = m_pullup(m, hlen)) == NULL) {
+		if ((m_pullup(mp, hlen)) != 0) {
 			ipstat_inc(ips_badhlen);
 			goto bad;
 		}
+		m = *mp;
 		ip = mtod(m, struct ip *);
 	}
 
@@ -390,10 +392,11 @@ ip_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 			int error;
 
 			if (m->m_flags & M_EXT) {
-				if ((m = *mp = m_pullup(m, hlen)) == NULL) {
+				if ((m_pullup(mp, hlen)) != 0) {
 					ipstat_inc(ips_toosmall);
 					goto bad;
 				}
+				m = *mp;
 				ip = mtod(m, struct ip *);
 			}
 			/*
@@ -507,10 +510,11 @@ ip_ours(struct mbuf **mp, int *offp, int nxt, int af)
 	 */
 	if (ip->ip_off &~ htons(IP_DF | IP_RF)) {
 		if (m->m_flags & M_EXT) {		/* XXX */
-			if ((m = *mp = m_pullup(m, hlen)) == NULL) {
+			if ((m_pullup(mp, hlen)) != 0) {
 				ipstat_inc(ips_toosmall);
 				return IPPROTO_DONE;
 			}
+			m = *mp;
 			ip = mtod(m, struct ip *);
 		}
 
