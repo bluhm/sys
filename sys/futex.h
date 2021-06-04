@@ -25,6 +25,8 @@
 __BEGIN_DECLS
 int futex(volatile uint32_t *, int, int, const struct timespec *,
     volatile uint32_t *);
+int futex_error(volatile uint32_t *, int, int, const struct timespec *,
+    volatile uint32_t *);
 __END_DECLS
 #endif /* ! _KERNEL */
 
