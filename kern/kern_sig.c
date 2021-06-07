@@ -849,7 +849,7 @@ trapsignal(struct proc *p, int signum, u_long trapno, int code,
 		if ((pr->ps_flags & PS_TRACED) == 0 &&
 		    (sigprop[signum] & SA_KILL) &&
 		    ((p->p_sigmask & mask) || (ps->ps_sigignore & mask)) &&
-		    pr->ps_pid != 1)
+		    (pr->ps_pid != 1 || !vfs_down))
 			sigexit(p, signum);
 		ptsignal(p, signum, STHREAD);
 	}

@@ -496,6 +496,7 @@ extern int bufcachepercent;
 extern void bufadjust(int);
 struct uvm_constraint_range;
 extern int bufbackoff(struct uvm_constraint_range*, long);
+extern int vfs_down;
 
 /*
  * Operations supported on mounted file system.

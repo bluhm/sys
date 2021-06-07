@@ -1740,6 +1740,8 @@ vfs_unmountall(void)
 	}
 }
 
+int vfs_down;
+
 /*
  * Sync and unmount file systems before shutting down.
  */
@@ -1750,6 +1752,7 @@ vfs_shutdown(struct proc *p)
 	acct_shutdown();
 #endif
 
+	vfs_down = 1;
 	printf("syncing disks...");
 
 	if (panicstr == 0) {
