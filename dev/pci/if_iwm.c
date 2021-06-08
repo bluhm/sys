@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_iwm.c,v 1.326 2021/05/31 08:40:41 stsp Exp $	*/
+/*	$OpenBSD: if_iwm.c,v 1.328 2021/06/01 18:03:56 stsp Exp $	*/
 
 /*
  * Copyright (c) 2014, 2016 genua gmbh <info@genua.de>

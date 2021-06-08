@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_tpmr.c,v 1.26 2021/05/27 03:46:15 dlg Exp $ */
+/*	$OpenBSD: if_tpmr.c,v 1.30 2021/06/02 01:37:10 dlg Exp $ */
 
 /*
  * Copyright (c) 2019 The University of Queensland
@@ -242,23 +242,40 @@ tpmr_8021q_filter(const struct mbuf *m, uint64_t dst)
 }
 
 #if NPF > 0
+struct tpmr_pf_ip_family {
+	sa_family_t	   af;
+	struct mbuf	*(*ip_check)(struct ifnet *, struct mbuf *);
+	void		 (*ip_input)(struct ifnet *, struct mbuf *);
+};
+
+static const struct tpmr_pf_ip_family tpmr_pf_ipv4 = {
+	.af		= AF_INET,
+	.ip_check	= ipv4_check,
+	.ip_input	= ipv4_input,
+};
+
+#ifdef INET6
+static const struct tpmr_pf_ip_family tpmr_pf_ipv6 = {
+	.af		= AF_INET6,
+	.ip_check	= ipv6_check,
+	.ip_input	= ipv6_input,
+};
+#endif
+
 static struct mbuf *
 tpmr_pf(struct ifnet *ifp0, int dir, struct mbuf *m)
 {
 	struct ether_header *eh, copy;
-	sa_family_t af = AF_UNSPEC;
-	void (*ip_input)(struct ifnet *, struct mbuf *) = NULL;
+	const struct tpmr_pf_ip_family *fam;
 
 	eh = mtod(m, struct ether_header *);
 	switch (ntohs(eh->ether_type)) {
 	case ETHERTYPE_IP:
-		af = AF_INET;
-		ip_input = ipv4_input;
+		fam = &tpmr_pf_ipv4;
 		break;
 #ifdef INET6
 	case ETHERTYPE_IPV6:
-		af = AF_INET6;
-		ip_input = ipv6_input;
+		fam = &tpmr_pf_ipv6;
 		break;
 #endif
 	default:
@@ -268,7 +285,13 @@ tpmr_pf(struct ifnet *ifp0, int dir, struct mbuf *m)
 	copy = *eh;
 	m_adj(m, sizeof(*eh));
 
-	if (pf_test(af, dir, ifp0, &m) != PF_PASS) {
+	if (dir == PF_IN) {
+		m = (*fam->ip_check)(ifp0, m);
+		if (m == NULL)
+			return (NULL);
+	}
+
+	if (pf_test(fam->af, dir, ifp0, &m) != PF_PASS) {
 		m_freem(m);
 		return (NULL);
 	}
@@ -278,7 +301,7 @@ tpmr_pf(struct ifnet *ifp0, int dir, struct mbuf *m)
 	if (dir == PF_IN && ISSET(m->m_pkthdr.pf.flags, PF_TAG_DIVERTED)) {
 		pf_mbuf_unlink_state_key(m);
 		pf_mbuf_unlink_inpcb(m);
-		(*ip_input)(ifp0, m);
+		(*fam->ip_input)(ifp0, m);
 		return (NULL);
 	}
 
@@ -301,13 +324,16 @@ tpmr_input(struct ifnet *ifp0, struct mbuf *m, uint64_t dst, void *brport)
 	struct tpmr_port *p = brport;
 	struct tpmr_softc *sc = p->p_tpmr;
 	struct ifnet *ifp = &sc->sc_if;
+	struct ifnet *ifpn;
+	unsigned int iff;
 	struct tpmr_port *pn;
 	int len;
 #if NBPFILTER > 0
 	caddr_t if_bpf;
 #endif
 
-	if (!ISSET(ifp->if_flags, IFF_RUNNING))
+	iff = READ_ONCE(ifp->if_flags);
+	if (!ISSET(iff, IFF_RUNNING))
 		goto drop;
 
 #if NVLAN > 0
@@ -324,16 +350,16 @@ tpmr_input(struct ifnet *ifp0, struct mbuf *m, uint64_t dst, void *brport)
 	}
 #endif
 
-	if (!ISSET(ifp->if_flags, IFF_LINK2) &&
+	if (!ISSET(iff, IFF_LINK2) &&
 	    tpmr_vlan_filter(m))
 		goto drop;
 
-	if (!ISSET(ifp->if_flags, IFF_LINK0) &&
+	if (!ISSET(iff, IFF_LINK0) &&
 	    tpmr_8021q_filter(m, dst))
 		goto drop;
 
 #if NPF > 0
-	if (!ISSET(ifp->if_flags, IFF_LINK1) &&
+	if (!ISSET(iff, IFF_LINK1) &&
 	    (m = tpmr_pf(ifp0, PF_IN, m)) == NULL)
 		return (NULL);
 #endif
@@ -342,34 +368,31 @@ tpmr_input(struct ifnet *ifp0, struct mbuf *m, uint64_t dst, void *brport)
 	counters_pkt(ifp->if_counters, ifc_ipackets, ifc_ibytes, len);
 
 #if NBPFILTER > 0
-	if_bpf = ifp->if_bpf;
+	if_bpf = READ_ONCE(ifp->if_bpf);
 	if (if_bpf) {
 		if (bpf_mtap(if_bpf, m, 0))
 			goto drop;
 	}
 #endif
 
-	smr_read_enter();
+	SMR_ASSERT_CRITICAL(); /* ether_input calls us in a crit section */
 	pn = SMR_PTR_GET(&sc->sc_ports[!p->p_slot]);
 	if (pn == NULL)
-		m_freem(m);
-	else {
-		struct ifnet *ifpn = pn->p_ifp0;
+		goto drop;
 
+	ifpn = pn->p_ifp0;
 #if NPF > 0
-		if (!ISSET(ifp->if_flags, IFF_LINK1) &&
-		    (m = tpmr_pf(ifpn, PF_OUT, m)) == NULL)
-			;
-		else
+	if (!ISSET(iff, IFF_LINK1) &&
+	    (m = tpmr_pf(ifpn, PF_OUT, m)) == NULL)
+		return (NULL);
 #endif
-		if (if_enqueue(ifpn, m))
-			counters_inc(ifp->if_counters, ifc_oerrors);
-		else {
-			counters_pkt(ifp->if_counters,
-			    ifc_opackets, ifc_obytes, len);
-		}
+
+	if (if_enqueue(ifpn, m))
+		counters_inc(ifp->if_counters, ifc_oerrors);
+	else {
+		counters_pkt(ifp->if_counters,
+		    ifc_opackets, ifc_obytes, len);
 	}
-	smr_read_leave();
 
 	return (NULL);
 
