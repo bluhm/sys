@@ -3107,9 +3107,7 @@ ifnewlladdr(struct ifnet *ifp)
 #endif
 	struct ifreq ifrq;
 	short up;
-	int s;
 
-	s = splnet();
 	up = ifp->if_flags & IFF_UP;
 
 	if (up) {
@@ -3143,7 +3141,6 @@ ifnewlladdr(struct ifnet *ifp)
 		ifrq.ifr_flags = ifp->if_flags;
 		(*ifp->if_ioctl)(ifp, SIOCSIFFLAGS, (caddr_t)&ifrq);
 	}
-	splx(s);
 }
 
 void
