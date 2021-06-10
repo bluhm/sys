@@ -3107,18 +3107,25 @@ ifnewlladdr(struct ifnet *ifp)
 #endif
 	struct ifreq ifrq;
 	short up;
+	int s;
 
+	NET_ASSERT_LOCKED();
+
+	s = splnet();
 	up = ifp->if_flags & IFF_UP;
 
 	if (up) {
 		/* go down for a moment... */
 		ifp->if_flags &= ~IFF_UP;
 		ifrq.ifr_flags = ifp->if_flags;
+		splx(s);
 		(*ifp->if_ioctl)(ifp, SIOCSIFFLAGS, (caddr_t)&ifrq);
+		s = splnet();
 	}
 
 	ifp->if_flags |= IFF_UP;
 	ifrq.ifr_flags = ifp->if_flags;
+	splx(s);
 	(*ifp->if_ioctl)(ifp, SIOCSIFFLAGS, (caddr_t)&ifrq);
 
 #ifdef INET6
@@ -3137,8 +3144,10 @@ ifnewlladdr(struct ifnet *ifp)
 #endif
 	if (!up) {
 		/* go back down */
+		s = splnet();
 		ifp->if_flags &= ~IFF_UP;
 		ifrq.ifr_flags = ifp->if_flags;
+		splx(s);
 		(*ifp->if_ioctl)(ifp, SIOCSIFFLAGS, (caddr_t)&ifrq);
 	}
 }
