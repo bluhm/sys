@@ -1,4 +1,4 @@
-/*	$OpenBSD: db_output.c,v 1.36 2021/02/09 14:37:13 jcs Exp $	*/
+/*	$OpenBSD: db_output.c,v 1.37 2021/06/10 12:33:48 bluhm Exp $	*/
 /*	$NetBSD: db_output.c,v 1.13 1996/04/01 17:27:14 christos Exp $	*/
 
 /*
