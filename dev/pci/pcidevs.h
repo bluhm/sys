@@ -2,7 +2,7 @@
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	OpenBSD: pcidevs,v 1.1970 2021/05/19 05:20:48 jsg Exp 
+ *	OpenBSD: pcidevs,v 1.1972 2021/06/13 12:43:15 jsg Exp 
  */
 /*	$NetBSD: pcidevs,v 1.30 1997/06/24 06:20:24 thorpej Exp $	*/
 
@@ -386,6 +386,7 @@
 #define	PCI_VENDOR_ENDACE	0xeace		/* Endace */
 #define	PCI_VENDOR_BELKIN	0xec80		/* Belkin Components */
 #define	PCI_VENDOR_ARC	0xedd8		/* ARC Logic */
+#define	PCI_VENDOR_SIFIVE	0xf15e		/* SiFive */
 #define	PCI_VENDOR_INVALID	0xffff		/* INVALID VENDOR ID */
 
 /*
@@ -1118,6 +1119,7 @@
 #define	PCI_PRODUCT_ASMEDIA_ASM1184E	0x1184		/* ASM1184e */
 #define	PCI_PRODUCT_ASMEDIA_ASM1042AE	0x1242		/* ASM1042AE xHCI */
 #define	PCI_PRODUCT_ASMEDIA_ASM1143	0x1343		/* ASM1143 xHCI */
+#define	PCI_PRODUCT_ASMEDIA_ASM2824	0x2824		/* ASM2824 */
 
 /* ASPEED Technology products */
 #define	PCI_PRODUCT_ASPEED_AST1150	0x1150		/* AST1150 PCI */
@@ -6338,6 +6340,7 @@
 #define	PCI_PRODUCT_INTEL_CORE_SCRATCH	0xd156		/* Core Scratch */
 #define	PCI_PRODUCT_INTEL_CORE_CONTROL	0xd157		/* Core Control */
 #define	PCI_PRODUCT_INTEL_CORE_MISC	0xd158		/* Core Misc */
+#define	PCI_PRODUCT_INTEL_500SERIES_HDA_2	0xf0c8		/* 500 Series HD Audio */
 #define	PCI_PRODUCT_INTEL_NVME_2	0xf1a5		/* NVMe */
 #define	PCI_PRODUCT_INTEL_NVME_3	0xf1a6		/* NVMe */
 #define	PCI_PRODUCT_INTEL_NVME_4	0xf1a8		/* NVMe */
@@ -8013,6 +8016,9 @@
 #define	PCI_PRODUCT_SGSTHOMSON_1764	0x0009		/* STG 1764 */
 #define	PCI_PRODUCT_SGSTHOMSON_KYROII	0x0010		/* Kyro-II */
 #define	PCI_PRODUCT_SGSTHOMSON_1764X	0x1746		/* STG 1764X */
+
+/* SiFive products */
+#define	PCI_PRODUCT_SIFIVE_PCIE	0x0000		/* PCIe */
 
 /* Sigma Designs */
 #define	PCI_PRODUCT_SIGMA_64GX	0x6401		/* 64GX */
