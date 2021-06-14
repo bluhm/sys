@@ -745,12 +745,12 @@ esp_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 {
 	struct enc_xform *espx = (struct enc_xform *) tdb->tdb_encalgxform;
 	struct auth_hash *esph = (struct auth_hash *) tdb->tdb_authalgxform;
-	int ilen, hlen, rlen, padding, blks, alen, roff, error;
+	int ilen, hlen, rlen, padding, blks, alen, roff, error, len;
 	u_int64_t replay64;
 	u_int32_t replay;
 	struct mbuf *mi, *mo = (struct mbuf *) NULL;
 	struct tdb_crypto *tc = NULL;
-	unsigned char *pad;
+	unsigned char *pad, *ehdr;
 	u_int8_t prot;
 #ifdef ENCDEBUG
 	char buf[INET6_ADDRSTRLEN];
@@ -862,39 +862,52 @@ esp_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 		mi = mi->m_next;
 
 	if (mi != NULL)	{
-		struct mbuf *n = m_dup_pkt(m, 0, M_DONTWAIT);
+		/* Allocate enough to fit msg + esp header + padding */
+		struct mbuf *n = m_get(M_DONTWAIT, m->m_type);
+		if (n == NULL)
+			goto err;
 
-		if (n == NULL) {
-			DPRINTF(("%s: bad mbuf chain, SA %s/%08x\n", __func__,
-			    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
-			    ntohl(tdb->tdb_spi)));
-			espstat_inc(esps_hdrops);
-			error = ENOBUFS;
-			goto drop;
+		 if (m_dup_pkthdr(n, m, M_DONTWAIT) != 0)
+			goto err;
+
+		len = m->m_pkthdr.len + hlen + padding + alen;
+		if (len > MHLEN) {
+			MCLGETL(n, M_DONTWAIT, len);
+			if (!ISSET(n->m_flags, M_EXT))
+				goto err;
 		}
+
+		n->m_len = n->m_pkthdr.len = len;
+
+		m_copydata(m, 0, skip, mtod(n, caddr_t));
+		ehdr = mtod(n, caddr_t) + skip;
+		m_copydata(m, skip, m->m_pkthdr.len - skip, ehdr + hlen);
+		pad = mtod(n, caddr_t) + hlen + m->m_pkthdr.len;
 
 		m_freem(m);
 		m = n;
 	}
 
 	/* Inject ESP header. */
-	mo = m_makespace(m, skip, hlen, &roff);
-	if (mo == NULL) {
-		DPRINTF(("%s: failed to inject ESP header for SA %s/%08x\n",
-		    __func__, ipsp_address(&tdb->tdb_dst, buf,
-		    sizeof(buf)), ntohl(tdb->tdb_spi)));
-		espstat_inc(esps_hdrops);
-		error = ENOBUFS;
-		goto drop;
+	if (mi == NULL) {
+		mo = m_makespace(m, skip, hlen, &roff);
+		if (mo == NULL) {
+			DPRINTF(("%s: failed to inject ESP header for SA %s/%08x\n",
+			    __func__, ipsp_address(&tdb->tdb_dst, buf,
+			    sizeof(buf)), ntohl(tdb->tdb_spi)));
+			espstat_inc(esps_hdrops);
+			error = ENOBUFS;
+			goto drop;
+		}
+		ehdr = mtod(mo, caddr_t) + roff;
 	}
 
 	/* Initialize ESP header. */
-	memcpy(mtod(mo, caddr_t) + roff, (caddr_t) &tdb->tdb_spi,
+	memcpy(ehdr, (caddr_t) &tdb->tdb_spi,
 	    sizeof(u_int32_t));
 	replay64 = tdb->tdb_rpl++;	/* used for both header and ESN */
 	replay = htonl((u_int32_t)replay64);
-	memcpy(mtod(mo, caddr_t) + roff + sizeof(u_int32_t), (caddr_t) &replay,
-	    sizeof(u_int32_t));
+	memcpy(ehdr + sizeof(u_int32_t), (caddr_t) &replay, sizeof(u_int32_t));
 
 #if NPFSYNC > 0
 	pfsync_update_tdb(tdb,1);
@@ -904,16 +917,18 @@ esp_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 	 * Add padding -- better to do it ourselves than use the crypto engine,
 	 * although if/when we support compression, we'd have to do that.
 	 */
-	mo = m_makespace(m, m->m_pkthdr.len, padding + alen, &roff);
-	if (mo == NULL) {
-		DPRINTF(("%s: m_makespace() failed for SA %s/%08x\n", __func__,
-		    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
-		    ntohl(tdb->tdb_spi)));
-		espstat_inc(esps_hdrops);
-		error = ENOBUFS;
-		goto drop;
+	if (mi == NULL) {
+		mo = m_makespace(m, m->m_pkthdr.len, padding + alen, &roff);
+		if (mo == NULL) {
+			DPRINTF(("%s: m_makespace() failed for SA %s/%08x\n", __func__,
+			    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
+			    ntohl(tdb->tdb_spi)));
+			espstat_inc(esps_hdrops);
+			error = ENOBUFS;
+			goto drop;
+		}
+		pad = mtod(mo, caddr_t) + roff;
 	}
-	pad = mtod(mo, caddr_t) + roff;
 
 	/* Apply self-describing padding */
 	for (ilen = 0; ilen < padding - 2; ilen++)
@@ -1020,6 +1035,12 @@ esp_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 	KERNEL_UNLOCK();
 	return error;
 
+ err:
+	DPRINTF(("%s: bad mbuf chain, SA %s/%08x\n", __func__,
+	    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
+	    ntohl(tdb->tdb_spi)));
+	espstat_inc(esps_hdrops);
+	error = ENOBUFS;
  drop:
 	m_freem(m);
 	crypto_freereq(crp);
