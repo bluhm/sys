@@ -444,9 +444,7 @@ esp_input(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	}
 
 	/* Get crypto descriptors */
-	KERNEL_LOCK();
 	crp = crypto_getreq(esph && espx ? 2 : 1);
-	KERNEL_UNLOCK();
 	if (crp == NULL) {
 		DPRINTF(("%s: failed to acquire crypto descriptors\n", __func__));
 		espstat_inc(esps_crypto);
@@ -534,9 +532,7 @@ esp_input(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 
  drop:
 	m_freem(m);
-	KERNEL_LOCK();
 	crypto_freereq(crp);
-	KERNEL_UNLOCK();
 	free(tc, M_XDATA, 0);
 	return error;
 }
@@ -932,9 +928,7 @@ esp_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 	m_copyback(m, protoff, sizeof(u_int8_t), &prot, M_NOWAIT);
 
 	/* Get crypto descriptors. */
-	KERNEL_LOCK();
 	crp = crypto_getreq(esph && espx ? 2 : 1);
-	KERNEL_UNLOCK();
 	if (crp == NULL) {
 		DPRINTF(("%s: failed to acquire crypto descriptors\n",
 		    __func__));
@@ -1028,9 +1022,7 @@ esp_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 
  drop:
 	m_freem(m);
-	KERNEL_LOCK();
 	crypto_freereq(crp);
-	KERNEL_UNLOCK();
 	free(tc, M_XDATA, 0);
 	return error;
 }

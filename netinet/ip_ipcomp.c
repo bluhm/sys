@@ -143,9 +143,7 @@ ipcomp_input(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	hlen = IPCOMP_HLENGTH;
 
 	/* Get crypto descriptors */
-	KERNEL_LOCK();
 	crp = crypto_getreq(1);
-	KERNEL_UNLOCK();
 	if (crp == NULL) {
 		m_freem(m);
 		DPRINTF(("%s: failed to acquire crypto descriptors\n", __func__));
@@ -156,9 +154,7 @@ ipcomp_input(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	tc = malloc(sizeof(*tc), M_XDATA, M_NOWAIT | M_ZERO);
 	if (tc == NULL) {
 		m_freem(m);
-		KERNEL_LOCK();
 		crypto_freereq(crp);
-		KERNEL_UNLOCK();
 		DPRINTF(("%s: failed to allocate tdb_crypto\n", __func__));
 		ipcompstat_inc(ipcomps_crypto);
 		return ENOBUFS;
@@ -444,9 +440,7 @@ ipcomp_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 	/* Ok now, we can pass to the crypto processing */
 
 	/* Get crypto descriptors */
-	KERNEL_LOCK();
 	crp = crypto_getreq(1);
-	KERNEL_UNLOCK();
 	if (crp == NULL) {
 		DPRINTF(("%s: failed to acquire crypto descriptors\n", __func__));
 		ipcompstat_inc(ipcomps_crypto);
@@ -494,9 +488,7 @@ ipcomp_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 
  drop:
 	m_freem(m);
-	KERNEL_LOCK();
 	crypto_freereq(crp);
-	KERNEL_UNLOCK();
 	return error;
 }
 
