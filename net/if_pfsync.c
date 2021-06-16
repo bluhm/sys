@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_pfsync.c,v 1.289 2021/06/02 21:49:31 sashan Exp $	*/
+/*	$OpenBSD: if_pfsync.c,v 1.292 2021/06/15 10:10:22 dlg Exp $	*/
 
 /*
  * Copyright (c) 2002 Michael Shalayeff
@@ -92,6 +92,8 @@
 
 #include "bpfilter.h"
 #include "pfsync.h"
+
+#define PFSYNC_DEFER_NSEC 20000000ULL
 
 #define PFSYNC_MINPKT ( \
 	sizeof(struct ip) + \
@@ -187,7 +189,7 @@ struct pfsync_deferral {
 	TAILQ_ENTRY(pfsync_deferral)		 pd_entry;
 	struct pf_state				*pd_st;
 	struct mbuf				*pd_m;
-	struct timeout				 pd_tmo;
+	uint64_t				 pd_deadline;
 };
 TAILQ_HEAD(pfsync_deferrals, pfsync_deferral);
 
@@ -223,6 +225,7 @@ struct pfsync_softc {
 	struct pfsync_deferrals	 sc_deferrals;
 	u_int			 sc_deferred;
 	struct mutex		 sc_deferrals_mtx;
+	struct timeout		 sc_deferrals_tmo;
 
 	void			*sc_plus;
 	size_t			 sc_pluslen;
@@ -273,7 +276,7 @@ void	pfsync_ifdetach(void *);
 
 void	pfsync_deferred(struct pf_state *, int);
 void	pfsync_undefer(struct pfsync_deferral *, int);
-void	pfsync_defer_tmo(void *);
+void	pfsync_deferrals_tmo(void *);
 
 void	pfsync_cancel_full_update(struct pfsync_softc *);
 void	pfsync_request_full_update(struct pfsync_softc *);
@@ -346,6 +349,7 @@ pfsync_clone_create(struct if_clone *ifc, int unit)
 	mtx_init(&sc->sc_upd_req_mtx, IPL_SOFTNET);
 	TAILQ_INIT(&sc->sc_deferrals);
 	mtx_init(&sc->sc_deferrals_mtx, IPL_SOFTNET);
+	timeout_set_proc(&sc->sc_deferrals_tmo, pfsync_deferrals_tmo, sc);
 	task_set(&sc->sc_ltask, pfsync_syncdev_state, sc);
 	task_set(&sc->sc_dtask, pfsync_ifdetach, sc);
 	sc->sc_deferred = 0;
@@ -1931,6 +1935,7 @@ pfsync_defer(struct pf_state *st, struct mbuf *m)
 {
 	struct pfsync_softc *sc = pfsyncif;
 	struct pfsync_deferral *pd;
+	unsigned int sched;
 
 	NET_ASSERT_LOCKED();
 
@@ -1942,10 +1947,12 @@ pfsync_defer(struct pf_state *st, struct mbuf *m)
 	if (sc->sc_deferred >= 128) {
 		mtx_enter(&sc->sc_deferrals_mtx);
 		pd = TAILQ_FIRST(&sc->sc_deferrals);
-		TAILQ_REMOVE(&sc->sc_deferrals, pd, pd_entry);
-		sc->sc_deferred--;
+		if (pd != NULL) {
+			TAILQ_REMOVE(&sc->sc_deferrals, pd, pd_entry);
+			sc->sc_deferred--;
+		}
 		mtx_leave(&sc->sc_deferrals_mtx);
-		if (timeout_del(&pd->pd_tmo))
+		if (pd != NULL)
 			pfsync_undefer(pd, 0);
 	}
 
@@ -1959,13 +1966,17 @@ pfsync_defer(struct pf_state *st, struct mbuf *m)
 	pd->pd_st = pf_state_ref(st);
 	pd->pd_m = m;
 
+	pd->pd_deadline = getnsecuptime() + PFSYNC_DEFER_NSEC;
+
 	mtx_enter(&sc->sc_deferrals_mtx);
-	sc->sc_deferred++;
+	sched = TAILQ_EMPTY(&sc->sc_deferrals);
+
 	TAILQ_INSERT_TAIL(&sc->sc_deferrals, pd, pd_entry);
+	sc->sc_deferred++;
 	mtx_leave(&sc->sc_deferrals_mtx);
 
-	timeout_set_proc(&pd->pd_tmo, pfsync_defer_tmo, pd);
-	timeout_add_msec(&pd->pd_tmo, 20);
+	if (sched)
+		timeout_add_nsec(&sc->sc_deferrals_tmo, PFSYNC_DEFER_NSEC);
 
 	schednetisr(NETISR_PFSYNC);
 
@@ -2047,17 +2058,46 @@ pfsync_undefer(struct pfsync_deferral *pd, int drop)
 }
 
 void
-pfsync_defer_tmo(void *arg)
+pfsync_deferrals_tmo(void *arg)
 {
-	struct pfsync_softc *sc = pfsyncif;
-	struct pfsync_deferral *pd = arg;
+	struct pfsync_softc *sc = arg;
+	struct pfsync_deferral *pd;
+	uint64_t now, nsec = 0;
+	struct pfsync_deferrals pds = TAILQ_HEAD_INITIALIZER(pds);
+
+	now = getnsecuptime();
 
 	mtx_enter(&sc->sc_deferrals_mtx);
-	TAILQ_REMOVE(&sc->sc_deferrals, pd, pd_entry);
-	sc->sc_deferred--;
+	for (;;) {
+		pd = TAILQ_FIRST(&sc->sc_deferrals);
+		if (pd == NULL)
+			break;
+
+		if (now < pd->pd_deadline) {
+			nsec = pd->pd_deadline - now;
+			break;
+		}
+
+		TAILQ_REMOVE(&sc->sc_deferrals, pd, pd_entry);
+		sc->sc_deferred--;
+		TAILQ_INSERT_TAIL(&pds, pd, pd_entry);
+	}
 	mtx_leave(&sc->sc_deferrals_mtx);
+
+	if (nsec > 0) {
+		/* we were looking at a pd, but it wasn't old enough */
+		timeout_add_nsec(&sc->sc_deferrals_tmo, nsec);
+	}
+
+	if (TAILQ_EMPTY(&pds))
+		return;
+
 	NET_LOCK();
-	pfsync_undefer(pd, 0);
+	while ((pd = TAILQ_FIRST(&pds)) != NULL) {
+		TAILQ_REMOVE(&pds, pd, pd_entry);
+
+		pfsync_undefer(pd, 0);
+	}
 	NET_UNLOCK();
 }
 
@@ -2072,17 +2112,15 @@ pfsync_deferred(struct pf_state *st, int drop)
 	mtx_enter(&sc->sc_deferrals_mtx);
 	TAILQ_FOREACH(pd, &sc->sc_deferrals, pd_entry) {
 		 if (pd->pd_st == st) {
-			if (timeout_del(&pd->pd_tmo)) {
-				TAILQ_REMOVE(&sc->sc_deferrals, pd, pd_entry);
-				sc->sc_deferred--;
-				mtx_leave(&sc->sc_deferrals_mtx);
-				pfsync_undefer(pd, drop);
-			} else
-				mtx_leave(&sc->sc_deferrals_mtx);
-			return;
+			TAILQ_REMOVE(&sc->sc_deferrals, pd, pd_entry);
+			sc->sc_deferred--;
+			break;
 		}
 	}
 	mtx_leave(&sc->sc_deferrals_mtx);
+
+	if (pd != NULL)
+		pfsync_undefer(pd, drop);
 }
 
 void
