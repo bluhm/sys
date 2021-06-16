@@ -93,6 +93,7 @@ esp_init(struct tdb *tdbp, struct xformsw *xsp, struct ipsecinit *ii)
 	struct enc_xform *txform = NULL;
 	struct auth_hash *thash = NULL;
 	struct cryptoini cria, crie, crin;
+	int error;
 
 	if (!ii->ii_encalg && !ii->ii_authalg) {
 		DPRINTF(("esp_init(): neither authentication nor encryption "
@@ -294,8 +295,11 @@ esp_init(struct tdb *tdbp, struct xformsw *xsp, struct ipsecinit *ii)
 		cria.cri_key = ii->ii_authkey;
 	}
 
-	return crypto_newsession(&tdbp->tdb_cryptoid,
+	KERNEL_LOCK();
+	error = crypto_newsession(&tdbp->tdb_cryptoid,
 	    (tdbp->tdb_encalgxform ? &crie : &cria), 0);
+	KERNEL_UNLOCK();
+	return error;
 }
 
 /*
@@ -304,7 +308,7 @@ esp_init(struct tdb *tdbp, struct xformsw *xsp, struct ipsecinit *ii)
 int
 esp_zeroize(struct tdb *tdbp)
 {
-	int err;
+	int error;
 
 	if (tdbp->tdb_amxkey) {
 		explicit_bzero(tdbp->tdb_amxkey, tdbp->tdb_amxkeylen);
@@ -318,9 +322,11 @@ esp_zeroize(struct tdb *tdbp)
 		tdbp->tdb_emxkey = NULL;
 	}
 
-	err = crypto_freesession(tdbp->tdb_cryptoid);
+	KERNEL_LOCK();
+	error = crypto_freesession(tdbp->tdb_cryptoid);
+	KERNEL_UNLOCK();
 	tdbp->tdb_cryptoid = 0;
-	return err;
+	return error;
 }
 
 #define MAXBUFSIZ (AH_ALEN_MAX > ESP_MAX_IVS ? AH_ALEN_MAX : ESP_MAX_IVS)
@@ -438,7 +444,9 @@ esp_input(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	}
 
 	/* Get crypto descriptors */
+	KERNEL_LOCK();
 	crp = crypto_getreq(esph && espx ? 2 : 1);
+	KERNEL_UNLOCK();
 	if (crp == NULL) {
 		DPRINTF(("%s: failed to acquire crypto descriptors\n", __func__));
 		espstat_inc(esps_crypto);
@@ -519,11 +527,16 @@ esp_input(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 			crde->crd_len = m->m_pkthdr.len - (skip + hlen + alen);
 	}
 
-	return crypto_dispatch(crp);
+	KERNEL_LOCK();
+	error = crypto_dispatch(crp);
+	KERNEL_UNLOCK();
+	return error;
 
  drop:
 	m_freem(m);
+	KERNEL_LOCK();
 	crypto_freereq(crp);
+	KERNEL_UNLOCK();
 	free(tc, M_XDATA, 0);
 	return error;
 }
@@ -919,7 +932,9 @@ esp_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 	m_copyback(m, protoff, sizeof(u_int8_t), &prot, M_NOWAIT);
 
 	/* Get crypto descriptors. */
+	KERNEL_LOCK();
 	crp = crypto_getreq(esph && espx ? 2 : 1);
+	KERNEL_UNLOCK();
 	if (crp == NULL) {
 		DPRINTF(("%s: failed to acquire crypto descriptors\n",
 		    __func__));
@@ -1006,11 +1021,16 @@ esp_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 			crda->crd_len = m->m_pkthdr.len - (skip + alen);
 	}
 
-	return crypto_dispatch(crp);
+	KERNEL_LOCK();
+	error = crypto_dispatch(crp);
+	KERNEL_UNLOCK();
+	return error;
 
  drop:
 	m_freem(m);
+	KERNEL_LOCK();
 	crypto_freereq(crp);
+	KERNEL_UNLOCK();
 	free(tc, M_XDATA, 0);
 	return error;
 }

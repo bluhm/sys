@@ -79,6 +79,7 @@ ipcomp_init(struct tdb *tdbp, struct xformsw *xsp, struct ipsecinit *ii)
 {
 	struct comp_algo *tcomp = NULL;
 	struct cryptoini cric;
+	int error;
 
 	switch (ii->ii_compalg) {
 	case SADB_X_CALG_DEFLATE:
@@ -105,7 +106,10 @@ ipcomp_init(struct tdb *tdbp, struct xformsw *xsp, struct ipsecinit *ii)
 	memset(&cric, 0, sizeof(cric));
 	cric.cri_alg = tdbp->tdb_compalgxform->type;
 
-	return crypto_newsession(&tdbp->tdb_cryptoid, &cric, 0);
+	KERNEL_LOCK();
+	error = crypto_newsession(&tdbp->tdb_cryptoid, &cric, 0);
+	KERNEL_UNLOCK();
+	return error;
 }
 
 /*
@@ -114,11 +118,13 @@ ipcomp_init(struct tdb *tdbp, struct xformsw *xsp, struct ipsecinit *ii)
 int
 ipcomp_zeroize(struct tdb *tdbp)
 {
-	int err;
+	int error;
 
-	err = crypto_freesession(tdbp->tdb_cryptoid);
+	KERNEL_LOCK();
+	error = crypto_freesession(tdbp->tdb_cryptoid);
+	KERNEL_UNLOCK();
 	tdbp->tdb_cryptoid = 0;
-	return err;
+	return error;
 }
 
 /*
@@ -129,7 +135,7 @@ ipcomp_input(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 {
 	struct comp_algo *ipcompx = (struct comp_algo *) tdb->tdb_compalgxform;
 	struct tdb_crypto *tc;
-	int hlen;
+	int hlen, error;
 
 	struct cryptodesc *crdc = NULL;
 	struct cryptop *crp;
@@ -137,7 +143,9 @@ ipcomp_input(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	hlen = IPCOMP_HLENGTH;
 
 	/* Get crypto descriptors */
+	KERNEL_LOCK();
 	crp = crypto_getreq(1);
+	KERNEL_UNLOCK();
 	if (crp == NULL) {
 		m_freem(m);
 		DPRINTF(("%s: failed to acquire crypto descriptors\n", __func__));
@@ -148,7 +156,9 @@ ipcomp_input(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	tc = malloc(sizeof(*tc), M_XDATA, M_NOWAIT | M_ZERO);
 	if (tc == NULL) {
 		m_freem(m);
+		KERNEL_LOCK();
 		crypto_freereq(crp);
+		KERNEL_UNLOCK();
 		DPRINTF(("%s: failed to allocate tdb_crypto\n", __func__));
 		ipcompstat_inc(ipcomps_crypto);
 		return ENOBUFS;
@@ -178,7 +188,10 @@ ipcomp_input(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	tc->tc_rdomain = tdb->tdb_rdomain;
 	tc->tc_dst = tdb->tdb_dst;
 
-	return crypto_dispatch(crp);
+	KERNEL_LOCK();
+	error = crypto_dispatch(crp);
+	KERNEL_UNLOCK();
+	return error;
 }
 
 int
@@ -431,7 +444,9 @@ ipcomp_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 	/* Ok now, we can pass to the crypto processing */
 
 	/* Get crypto descriptors */
+	KERNEL_LOCK();
 	crp = crypto_getreq(1);
+	KERNEL_UNLOCK();
 	if (crp == NULL) {
 		DPRINTF(("%s: failed to acquire crypto descriptors\n", __func__));
 		ipcompstat_inc(ipcomps_crypto);
@@ -472,11 +487,16 @@ ipcomp_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 	crp->crp_opaque = (caddr_t)tc;
 	crp->crp_sid = tdb->tdb_cryptoid;
 
-	return crypto_dispatch(crp);
+	KERNEL_LOCK();
+	error = crypto_dispatch(crp);
+	KERNEL_UNLOCK();
+	return error;
 
  drop:
 	m_freem(m);
+	KERNEL_LOCK();
 	crypto_freereq(crp);
+	KERNEL_UNLOCK();
 	return error;
 }
 

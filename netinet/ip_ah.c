@@ -98,6 +98,7 @@ ah_init(struct tdb *tdbp, struct xformsw *xsp, struct ipsecinit *ii)
 {
 	struct auth_hash *thash = NULL;
 	struct cryptoini cria, crin;
+	int error;
 
 	/* Authentication operation. */
 	switch (ii->ii_authalg) {
@@ -162,7 +163,10 @@ ah_init(struct tdb *tdbp, struct xformsw *xsp, struct ipsecinit *ii)
 		cria.cri_next = &crin;
 	}
 
-	return crypto_newsession(&tdbp->tdb_cryptoid, &cria, 0);
+	KERNEL_LOCK();
+	error = crypto_newsession(&tdbp->tdb_cryptoid, &cria, 0);
+	KERNEL_UNLOCK();
+	return error;
 }
 
 /*
@@ -171,7 +175,7 @@ ah_init(struct tdb *tdbp, struct xformsw *xsp, struct ipsecinit *ii)
 int
 ah_zeroize(struct tdb *tdbp)
 {
-	int err;
+	int error;
 
 	if (tdbp->tdb_amxkey) {
 		explicit_bzero(tdbp->tdb_amxkey, tdbp->tdb_amxkeylen);
@@ -179,9 +183,11 @@ ah_zeroize(struct tdb *tdbp)
 		tdbp->tdb_amxkey = NULL;
 	}
 
-	err = crypto_freesession(tdbp->tdb_cryptoid);
+	KERNEL_LOCK();
+	error = crypto_freesession(tdbp->tdb_cryptoid);
+	KERNEL_UNLOCK();
 	tdbp->tdb_cryptoid = 0;
-	return err;
+	return error;
 }
 
 /*
@@ -626,7 +632,9 @@ ah_input(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	}
 
 	/* Get crypto descriptors. */
+	KERNEL_LOCK();
 	crp = crypto_getreq(1);
+	KERNEL_UNLOCK();
 	if (crp == NULL) {
 		DPRINTF(("%s: failed to acquire crypto descriptors\n",
 		    __func__));
@@ -696,11 +704,16 @@ ah_input(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	tc->tc_rdomain = tdb->tdb_rdomain;
 	memcpy(&tc->tc_dst, &tdb->tdb_dst, sizeof(union sockaddr_union));
 
-	return crypto_dispatch(crp);
+	KERNEL_LOCK();
+	error = crypto_dispatch(crp);
+	KERNEL_UNLOCK();
+	return error;
 
  drop:
 	m_freem(m);
+	KERNEL_LOCK();
 	crypto_freereq(crp);
+	KERNEL_UNLOCK();
 	free(tc, M_XDATA, 0);
 	return error;
 }
@@ -1047,7 +1060,9 @@ ah_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 #endif
 
 	/* Get crypto descriptors. */
+	KERNEL_LOCK();
 	crp = crypto_getreq(1);
+	KERNEL_UNLOCK();
 	if (crp == NULL) {
 		DPRINTF(("%s: failed to acquire crypto descriptors\n",
 		    __func__));
@@ -1144,11 +1159,16 @@ ah_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 	tc->tc_rdomain = tdb->tdb_rdomain;
 	memcpy(&tc->tc_dst, &tdb->tdb_dst, sizeof(union sockaddr_union));
 
-	return crypto_dispatch(crp);
+	KERNEL_LOCK();
+	error = crypto_dispatch(crp);
+	KERNEL_UNLOCK();
+	return error;
 
  drop:
 	m_freem(m);
+	KERNEL_LOCK();
 	crypto_freereq(crp);
+	KERNEL_UNLOCK();
 	free(tc, M_XDATA, 0);
 	return error;
 }
