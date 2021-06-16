@@ -376,6 +376,8 @@ ipsec_input_cb(struct cryptop *crp)
 	struct tdb *tdb = NULL;
 	int clen, error;
 
+	KERNEL_ASSERT_LOCKED();
+
 	if (m == NULL) {
 		DPRINTF(("%s: bogus returned buffer from crypto\n", __func__));
 		ipsecstat_inc(ipsec_crypto);
