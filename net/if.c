@@ -3108,7 +3108,8 @@ ifnewlladdr(struct ifnet *ifp)
 	struct ifreq ifrq;
 	short up;
 
-	NET_ASSERT_LOCKED();
+	NET_ASSERT_LOCKED();	/* for ioctl and in6 */
+	KERNEL_ASSERT_LOCKED();	/* for if_flags */
 
 	up = ifp->if_flags & IFF_UP;
 
