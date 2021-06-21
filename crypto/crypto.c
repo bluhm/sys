@@ -241,39 +241,33 @@ crypto_get_driverid(u_int8_t flags)
 	}
 
 	/* Out of entries, allocate some more. */
-	if (i == crypto_drivers_num) {
-		if (crypto_drivers_num >= CRYPTO_DRIVERS_MAX) {
-			splx(s);
-			return -1;
-		}
-
-		newdrv = mallocarray(crypto_drivers_num,
-		    2 * sizeof(struct cryptocap), M_CRYPTO_DATA, M_NOWAIT);
-		if (newdrv == NULL) {
-			splx(s);
-			return -1;
-		}
-
-		memcpy(newdrv, crypto_drivers,
-		    crypto_drivers_num * sizeof(struct cryptocap));
-		bzero(&newdrv[crypto_drivers_num],
-		    crypto_drivers_num * sizeof(struct cryptocap));
-
-		newdrv[i].cc_sessions = 1; /* Mark */
-		newdrv[i].cc_flags = flags;
-
-		free(crypto_drivers, M_CRYPTO_DATA,
-		    crypto_drivers_num * sizeof(struct cryptocap));
-
-		crypto_drivers_num *= 2;
-		crypto_drivers = newdrv;
+	if (crypto_drivers_num >= CRYPTO_DRIVERS_MAX) {
 		splx(s);
-		return i;
+		return -1;
 	}
 
-	/* Shouldn't really get here... */
+	newdrv = mallocarray(crypto_drivers_num,
+	    2 * sizeof(struct cryptocap), M_CRYPTO_DATA, M_NOWAIT);
+	if (newdrv == NULL) {
+		splx(s);
+		return -1;
+	}
+
+	memcpy(newdrv, crypto_drivers,
+	    crypto_drivers_num * sizeof(struct cryptocap));
+	bzero(&newdrv[crypto_drivers_num],
+	    crypto_drivers_num * sizeof(struct cryptocap));
+
+	newdrv[i].cc_sessions = 1; /* Mark */
+	newdrv[i].cc_flags = flags;
+
+	free(crypto_drivers, M_CRYPTO_DATA,
+	    crypto_drivers_num * sizeof(struct cryptocap));
+
+	crypto_drivers_num *= 2;
+	crypto_drivers = newdrv;
 	splx(s);
-	return -1;
+	return i;
 }
 
 /*
