@@ -216,6 +216,7 @@ struct cryptocap {
 	int		(*cc_freesession) (u_int64_t);
 };
 
+void	crypto_init(void);
 
 int	crypto_newsession(u_int64_t *, struct cryptoini *, int);
 int	crypto_freesession(u_int64_t);

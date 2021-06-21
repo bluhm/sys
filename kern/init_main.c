@@ -145,7 +145,6 @@ long	__guard_local __attribute__((section(".openbsd.randomdata")));
 int	main(void *);
 void	check_console(struct proc *);
 void	start_init(void *);
-void	crypto_init(void);
 void	db_ctf_init(void);
 void	prof_init(void);
 void	init_exec(void);

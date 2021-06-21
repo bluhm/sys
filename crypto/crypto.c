@@ -27,8 +27,6 @@
 
 #include <crypto/cryptodev.h>
 
-void crypto_init(void);
-
 struct cryptocap *crypto_drivers = NULL;
 int crypto_drivers_num = 0;
 
