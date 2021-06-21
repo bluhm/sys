@@ -31,7 +31,6 @@ struct cryptocap *crypto_drivers = NULL;
 int crypto_drivers_num = 0;
 
 struct pool cryptop_pool;
-struct pool cryptodesc_pool;
 
 struct taskq *crypto_taskq;
 struct taskq *crypto_taskq_mpsafe;
