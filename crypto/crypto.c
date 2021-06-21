@@ -27,13 +27,23 @@
 
 #include <crypto/cryptodev.h>
 
-struct cryptocap *crypto_drivers = NULL;
-int crypto_drivers_num = 0;
+/*
+ * Locks used to protect struct members in this file:
+ *	A	allocated during driver attach, no hotplug, no detach
+ *	I	initialized by main()
+ *	K	modified with kernel lock
+ */
 
-struct pool cryptop_pool;
+struct cryptocap *crypto_drivers;	/* [A] array allocated by driver
+					   [K] driver data and session count */
+int crypto_drivers_num = 0;		/* [A] attached drivers array size */
 
-struct taskq *crypto_taskq;
-struct taskq *crypto_taskq_mpsafe;
+struct pool cryptop_pool;		/* [I] set of crypto descriptors */
+
+struct taskq *crypto_taskq;		/* [I] run crypto_invoke() and callback
+					       with kernel lock */
+struct taskq *crypto_taskq_mpsafe;	/* [I] run crypto_invoke()
+					       without kernel lock */
 
 /*
  * Create a new session.
@@ -48,6 +58,8 @@ crypto_newsession(u_int64_t *sid, struct cryptoini *cri, int hard)
 
 	if (crypto_drivers == NULL)
 		return EINVAL;
+
+	KERNEL_ASSERT_LOCKED();
 
 	s = splvm();
 
@@ -183,6 +195,8 @@ crypto_freesession(u_int64_t sid)
 	if (hid >= crypto_drivers_num)
 		return ENOENT;
 
+	KERNEL_ASSERT_LOCKED();
+
 	s = splvm();
 
 	if (crypto_drivers[hid].cc_sessions)
@@ -212,6 +226,9 @@ crypto_get_driverid(u_int8_t flags)
 {
 	struct cryptocap *newdrv;
 	int i, s;
+
+	/* called from attach routines */
+	KERNEL_ASSERT_LOCKED();
 	
 	s = splvm();
 
@@ -278,11 +295,13 @@ crypto_register(u_int32_t driverid, int *alg,
 {
 	int s, i;
 
-
 	if (driverid >= crypto_drivers_num || alg == NULL ||
 	    crypto_drivers == NULL)
 		return EINVAL;
 	
+	/* called from attach routines */
+	KERNEL_ASSERT_LOCKED();
+
 	s = splvm();
 
 	for (i = 0; i <= CRYPTO_ALGORITHM_MAX; i++) {
@@ -317,6 +336,9 @@ crypto_unregister(u_int32_t driverid, int alg)
 {
 	int i = CRYPTO_ALGORITHM_MAX + 1, s;
 	u_int32_t ses;
+
+	/* may be called from detach routines, but not used */
+	KERNEL_ASSERT_LOCKED();
 
 	s = splvm();
 
