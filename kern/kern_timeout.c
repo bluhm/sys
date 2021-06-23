@@ -256,10 +256,14 @@ static inline void
 _timeout_set(struct timeout *to, void (*fn)(void *), void *arg, int kclock,
     int flags)
 {
+	mtx_enter(&timeout_mutex);
+
 	to->to_func = fn;
 	to->to_arg = arg;
 	to->to_kclock = kclock;
 	to->to_flags = flags | TIMEOUT_INITIALIZED;
+
+	mtx_leave(&timeout_mutex);
 }
 
 void
