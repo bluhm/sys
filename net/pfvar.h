@@ -1,4 +1,4 @@
-/*	$OpenBSD: pfvar.h,v 1.500 2021/03/10 10:21:48 jsg Exp $ */
+/*	$OpenBSD: pfvar.h,v 1.502 2021/06/23 06:53:52 dlg Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -1682,7 +1682,7 @@ RB_HEAD(pf_state_tree_id, pf_state);
 RB_PROTOTYPE(pf_state_tree_id, pf_state,
     entry_id, pf_state_compare_id);
 extern struct pf_state_tree_id tree_id;
-extern struct pf_state_queue state_list;
+extern struct pf_state_list pf_state_list;
 
 TAILQ_HEAD(pf_queuehead, pf_queuespec);
 extern struct pf_queuehead		  pf_queues[2];
@@ -1781,7 +1781,6 @@ int	pf_normalize_tcp_stateful(struct pf_pdesc *, u_short *,
 	    int *);
 int	pf_normalize_mss(struct pf_pdesc *, u_int16_t);
 void	pf_scrub(struct mbuf *, u_int16_t, sa_family_t, u_int8_t, u_int8_t);
-int32_t	pf_state_expires(const struct pf_state *);
 void	pf_purge_expired_fragments(void);
 int	pf_routable(struct pf_addr *addr, sa_family_t af, struct pfi_kif *,
 	    int);

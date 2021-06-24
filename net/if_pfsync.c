@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_pfsync.c,v 1.293 2021/06/17 00:18:09 dlg Exp $	*/
+/*	$OpenBSD: if_pfsync.c,v 1.295 2021/06/23 06:53:51 dlg Exp $	*/
 
 /*
  * Copyright (c) 2002 Michael Shalayeff
@@ -1989,6 +1989,17 @@ pfsync_undefer_notify(struct pfsync_deferral *pd)
 	struct pf_pdesc pdesc;
 	struct pf_state *st = pd->pd_st;
 
+	/*
+	 * pf_remove_state removes the state keys and sets st->timeout
+	 * to PFTM_UNLINKED. this is done under NET_LOCK which should
+	 * be held here, so we can use PFTM_UNLINKED as a test for
+	 * whether the state keys are set for the address family
+	 * lookup.
+	 */
+
+	if (st->timeout == PFTM_UNLINKED)
+		return;
+
 	if (st->rt == PF_ROUTETO) {
 		if (pf_setup_pdesc(&pdesc, st->key[PF_SK_WIRE]->af,
 		    st->direction, st->kif, pd->pd_m, NULL) != PF_PASS)
@@ -2539,21 +2550,33 @@ pfsync_bulk_start(void)
 {
 	struct pfsync_softc *sc = pfsyncif;
 
+	NET_ASSERT_LOCKED();
+
+	/*
+	 * pf gc via pfsync_state_in_use reads sc_bulk_next and
+	 * sc_bulk_last while exclusively holding the pf_state_list
+	 * rwlock. make sure it can't race with us setting these
+	 * pointers. they basically act as hazards, and borrow the
+	 * lists state reference count.
+	 */
+	rw_enter_read(&pf_state_list.pfs_rwl);
+
+	/* get a consistent view of the list pointers */
+	mtx_enter(&pf_state_list.pfs_mtx);
+	if (sc->sc_bulk_next == NULL)
+		sc->sc_bulk_next = TAILQ_FIRST(&pf_state_list.pfs_list);
+
+	sc->sc_bulk_last = TAILQ_LAST(&pf_state_list.pfs_list, pf_state_queue);
+	mtx_leave(&pf_state_list.pfs_mtx);
+
+	rw_exit_read(&pf_state_list.pfs_rwl);
+
 	DPFPRINTF(LOG_INFO, "received bulk update request");
 
-	if (TAILQ_EMPTY(&state_list))
+	if (sc->sc_bulk_last == NULL)
 		pfsync_bulk_status(PFSYNC_BUS_END);
 	else {
 		sc->sc_ureq_received = getuptime();
-
-		if (sc->sc_bulk_next == NULL) {
-			PF_STATE_ENTER_READ();
-			sc->sc_bulk_next = TAILQ_FIRST(&state_list);
-			pf_state_ref(sc->sc_bulk_next);
-			PF_STATE_EXIT_READ();
-		}
-		sc->sc_bulk_last = sc->sc_bulk_next;
-		pf_state_ref(sc->sc_bulk_last);
 
 		pfsync_bulk_status(PFSYNC_BUS_START);
 		timeout_add(&sc->sc_bulk_tmo, 0);
@@ -2564,13 +2587,15 @@ void
 pfsync_bulk_update(void *arg)
 {
 	struct pfsync_softc *sc;
-	struct pf_state *st, *st_next;
+	struct pf_state *st;
 	int i = 0;
 
 	NET_LOCK();
 	sc = pfsyncif;
 	if (sc == NULL)
 		goto out;
+
+	rw_enter_read(&pf_state_list.pfs_rwl);
 	st = sc->sc_bulk_next;
 	sc->sc_bulk_next = NULL;
 
@@ -2582,23 +2607,9 @@ pfsync_bulk_update(void *arg)
 			i++;
 		}
 
-		/*
-		 * I wonder how we prevent infinite bulk update.  IMO it can
-		 * happen when sc_bulk_last state expires before we iterate
-		 * through the whole list.
-		 */
-		PF_STATE_ENTER_READ();
-		st_next = TAILQ_NEXT(st, entry_list);
-		pf_state_unref(st);
-		st = st_next;
-		if (st == NULL)
-			st = TAILQ_FIRST(&state_list);
-		pf_state_ref(st);
-		PF_STATE_EXIT_READ();
-
+		st = TAILQ_NEXT(st, entry_list);
 		if ((st == NULL) || (st == sc->sc_bulk_last)) {
 			/* we're done */
-			pf_state_unref(sc->sc_bulk_last);
 			sc->sc_bulk_last = NULL;
 			pfsync_bulk_status(PFSYNC_BUS_END);
 			break;
@@ -2612,6 +2623,8 @@ pfsync_bulk_update(void *arg)
 			break;
 		}
 	}
+
+	rw_exit_read(&pf_state_list.pfs_rwl);
  out:
 	NET_UNLOCK();
 }
@@ -2708,6 +2721,8 @@ pfsync_state_in_use(struct pf_state *st)
 
 	if (sc == NULL)
 		return (0);
+
+	rw_assert_wrlock(&pf_state_list.pfs_rwl);
 
 	if (st->sync_state != PFSYNC_S_NONE ||
 	    st == sc->sc_bulk_next ||
