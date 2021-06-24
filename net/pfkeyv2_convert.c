@@ -886,6 +886,26 @@ export_rdomain(void **p, struct tdb *tdb)
 	*p += sizeof(struct sadb_x_rdomain);
 }
 
+/* Import mtu for SA */
+void
+import_mtu(struct tdb *tdb, struct sadb_x_mtu *smtu)
+{
+	if (smtu)
+		ipsec_set_mtu(tdb, smtu->sadb_x_mtu_mtu, __func__);
+}
+
+/* Export mtu for SA */
+void
+export_mtu(void **p, struct tdb *tdb)
+{
+	struct sadb_x_mtu *smtu = (struct sadb_x_mtu *)*p;
+
+	smtu->sadb_x_mtu_mtu = tdb->tdb_mtu;
+	smtu->sadb_x_mtu_len =
+	    sizeof(struct sadb_x_mtu) / sizeof(uint64_t);
+	*p += sizeof(struct sadb_x_mtu);
+}
+
 #if NPF > 0
 /* Import PF tag information for SA */
 void

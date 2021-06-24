@@ -884,6 +884,14 @@ pfkeyv2_parsemessage(void *p, int len, void **headers)
 				return (EINVAL);
 			}
 			break;
+
+		case SADB_X_EXT_MTU:
+			if (i != sizeof(struct sadb_x_mtu)) {
+				DPRINTF(("pfkeyv2_parsemessage: bad MTU "
+				    "header length\n"));
+				return (EINVAL);
+			}
+			break;
 #if NPF > 0
 		case SADB_X_EXT_TAG:
 			if (i < sizeof(struct sadb_x_tag)) {
