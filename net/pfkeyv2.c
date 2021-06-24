@@ -1561,6 +1561,9 @@ pfkeyv2_send(struct socket *so, void *message, int len)
 				NET_UNLOCK();
 				goto ret;
 			}
+			/* set mtu after tdb_init() so ipsec_hdrsz() works */
+			/* XXX what about grouped SAs? */
+			import_mtu(newsa, headers[SADB_X_EXT_MTU]);
 		}
 
 		/* Add TDB in table */
