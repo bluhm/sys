@@ -614,7 +614,8 @@ ip_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct route *ro, int fwd)
 		DPRINTF(("%s: spi %08x mtu %d rt %p cloned %d\n", __func__,
 		    ntohl(tdb->tdb_spi), tdb->tdb_mtu, rt, rt_mtucloned));
 		if (rt != NULL) {
-			rt->rt_mtu = tdb->tdb_mtu;
+			if (rt->rt_mtu > tdb->tdb_mtu || rt->rt_mtu == 0)
+				rt->rt_mtu = tdb->tdb_mtu;
 			if (ro != NULL && ro->ro_rt != NULL) {
 				rtfree(ro->ro_rt);
 				ro->ro_rt = rtalloc(&ro->ro_dst, RT_RESOLVE,
