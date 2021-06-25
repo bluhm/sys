@@ -662,7 +662,7 @@ int	ipsec_common_input_cb(struct mbuf *, struct tdb *, int, int);
 int	ipsec_delete_policy(struct ipsec_policy *);
 ssize_t	ipsec_hdrsz(struct tdb *);
 void	ipsec_adjust_mtu(struct mbuf *, u_int32_t);
-void	ipsec_set_mtu(struct tdb *, u_int32_t, const char *);
+void	ipsec_set_mtu(struct tdb *, u_int32_t, uint64_t);
 struct	ipsec_acquire *ipsec_get_acquire(u_int32_t);
 int	ipsec_forward_check(struct mbuf *, int, int);
 int	ipsec_local_check(struct mbuf *, int, int, int);

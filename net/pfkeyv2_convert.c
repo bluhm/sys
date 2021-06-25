@@ -891,7 +891,7 @@ void
 import_mtu(struct tdb *tdb, struct sadb_x_mtu *smtu)
 {
 	if (smtu)
-		ipsec_set_mtu(tdb, smtu->sadb_x_mtu_mtu, __func__);
+		ipsec_set_mtu(tdb, smtu->sadb_x_mtu_mtu, tdb->tdb_exp_timeout);
 }
 
 /* Export mtu for SA */
