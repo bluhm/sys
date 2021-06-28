@@ -837,15 +837,14 @@ tcp_mtudisc(struct inpcb *inp, int errno)
 {
 	struct tcpcb *tp = intotcpcb(inp);
 	struct rtentry *rt;
-	int change = 0;
+	int orig_maxseg, change = 0;
 
 	if (tp == NULL)
 		return;
+	orig_maxseg = tp->t_maxseg;
 
 	rt = in_pcbrtentry(inp);
 	if (rt != NULL) {
-		int orig_maxseg = tp->t_maxseg;
-
 		/*
 		 * If this was not a host route, remove and realloc.
 		 */
@@ -854,11 +853,12 @@ tcp_mtudisc(struct inpcb *inp, int errno)
 			if ((rt = in_pcbrtentry(inp)) == NULL)
 				return;
 		}
-		if (orig_maxseg != tp->t_maxseg ||
-		    (rt->rt_locks & RTV_MTU))
+		if (rt->rt_locks & RTV_MTU)
 			change = 1;
 	}
 	tcp_mss(tp, -1);
+	if (orig_maxseg != tp->t_maxseg)
+		change = 1;
 
 	/*
 	 * Resend unacknowledged packets
