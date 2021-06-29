@@ -857,7 +857,7 @@ tcp_mtudisc(struct inpcb *inp, int errno)
 			change = 1;
 	}
 	tcp_mss(tp, -1);
-	if (orig_maxseg != tp->t_maxseg)
+	if (orig_maxseg > tp->t_maxseg)
 		change = 1;
 
 	/*
