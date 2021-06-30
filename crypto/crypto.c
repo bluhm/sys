@@ -30,8 +30,8 @@
 /*
  * Locks used to protect struct members in this file:
  *	A	allocated during driver attach, no hotplug, no detach
- *	I	initialized by main()
- *	K	modified with kernel lock
+ *	I	immutable after creation
+ *	K	kernel lock
  */
 
 struct cryptocap *crypto_drivers;	/* [A] array allocated by driver
