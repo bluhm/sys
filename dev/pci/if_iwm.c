@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_iwm.c,v 1.329 2021/06/21 10:19:21 stsp Exp $	*/
+/*	$OpenBSD: if_iwm.c,v 1.333 2021/06/30 09:45:47 stsp Exp $	*/
 
 /*
  * Copyright (c) 2014, 2016 genua gmbh <info@genua.de>
@@ -3223,7 +3223,8 @@ iwm_mac_ctxt_task(void *arg)
 	struct iwm_node *in = (void *)ic->ic_bss;
 	int err, s = splnet();
 
-	if (sc->sc_flags & IWM_FLAG_SHUTDOWN) {
+	if ((sc->sc_flags & IWM_FLAG_SHUTDOWN) ||
+	    ic->ic_state != IEEE80211_S_RUN) {
 		refcnt_rele_wake(&sc->task_refs);
 		splx(s);
 		return;
@@ -3242,7 +3243,8 @@ iwm_updateprot(struct ieee80211com *ic)
 {
 	struct iwm_softc *sc = ic->ic_softc;
 
-	if (ic->ic_state == IEEE80211_S_RUN)
+	if (ic->ic_state == IEEE80211_S_RUN &&
+	    !task_pending(&sc->newstate_task))
 		iwm_add_task(sc, systq, &sc->mac_ctxt_task);
 }
 
@@ -3251,7 +3253,8 @@ iwm_updateslot(struct ieee80211com *ic)
 {
 	struct iwm_softc *sc = ic->ic_softc;
 
-	if (ic->ic_state == IEEE80211_S_RUN)
+	if (ic->ic_state == IEEE80211_S_RUN &&
+	    !task_pending(&sc->newstate_task))
 		iwm_add_task(sc, systq, &sc->mac_ctxt_task);
 }
 
@@ -3260,7 +3263,8 @@ iwm_updateedca(struct ieee80211com *ic)
 {
 	struct iwm_softc *sc = ic->ic_softc;
 
-	if (ic->ic_state == IEEE80211_S_RUN)
+	if (ic->ic_state == IEEE80211_S_RUN &&
+	    !task_pending(&sc->newstate_task))
 		iwm_add_task(sc, systq, &sc->mac_ctxt_task);
 }
 
@@ -5460,7 +5464,7 @@ iwm_rx_tx_cmd(struct iwm_softc *sc, struct iwm_rx_packet *pkt,
 		return;
 	if (qid < IWM_FIRST_AGG_TX_QUEUE && tx_resp->frame_count > 1)
 		return;
-	if (qid >= IWM_FIRST_AGG_TX_QUEUE && sizeof(*tx_resp) + sizeof(ssn) +
+	if (sizeof(*tx_resp) + sizeof(ssn) +
 	    tx_resp->frame_count * sizeof(tx_resp->status) > len)
 		return;
 
@@ -5468,26 +5472,21 @@ iwm_rx_tx_cmd(struct iwm_softc *sc, struct iwm_rx_packet *pkt,
 	if (txd->m == NULL)
 		return;
 
+	memcpy(&ssn, &tx_resp->status + tx_resp->frame_count, sizeof(ssn));
+	ssn = le32toh(ssn) & 0xfff;
 	if (qid >= IWM_FIRST_AGG_TX_QUEUE) {
 		int status;
-		memcpy(&ssn, &tx_resp->status + tx_resp->frame_count, sizeof(ssn));
-		ssn = le32toh(ssn) & 0xfff;
 		status = le16toh(tx_resp->status.status) & IWM_TX_STATUS_MSK;
 		iwm_ampdu_tx_done(sc, cmd_hdr, txd->in, ring,
 		    le32toh(tx_resp->initial_rate), tx_resp->frame_count,
 		    tx_resp->failure_frame, ssn, status, &tx_resp->status);
 	} else {
-		iwm_rx_tx_cmd_single(sc, pkt, txd->in, txd->txmcs, txd->txrate);
-		iwm_txd_done(sc, txd);
-		ring->queued--;
-
 		/*
-		 * XXX Sometimes we miss Tx completion interrupts.
-		 * We cannot check Tx success/failure for affected frames;
-		 * just free the associated mbuf and release the associated
-		 * node reference.
+		 * Even though this is not an agg queue, we must only free
+		 * frames before the firmware's starting sequence number.
 		 */
-		iwm_txq_advance(sc, ring, idx);
+		iwm_rx_tx_cmd_single(sc, pkt, txd->in, txd->txmcs, txd->txrate);
+		iwm_txq_advance(sc, ring, IWM_AGG_SSN_TO_TXQ_IDX(ssn));
 		iwm_clear_oactive(sc, ring);
 	}
 }
@@ -6429,8 +6428,8 @@ int
 iwm_flush_tx_path(struct iwm_softc *sc, int tfd_queue_msk)
 {
 	struct iwm_tx_path_flush_cmd flush_cmd = {
-		.queues_ctl = htole32(tfd_queue_msk),
-		.flush_ctl = htole16(IWM_DUMP_TX_FIFO_FLUSH),
+		.sta_id = htole32(IWM_STATION_ID),
+		.tid_mask = htole16(0xffff),
 	};
 	int err;
 
@@ -6860,15 +6859,14 @@ iwm_flush_sta(struct iwm_softc *sc, struct iwm_node *in)
 		goto done;
 	}
 
+	/*
+	 * Flushing Tx rings may fail if the AP has disappeared.
+	 * We can rely on iwm_newstate_task() to reset everything and begin
+	 * scanning again if we are left with outstanding frames on queues.
+	 */
 	err = iwm_wait_tx_queues_empty(sc);
-	if (err) {
-		printf("%s: Could not empty Tx queues (error %d)\n",
-		    DEVNAME(sc), err);
-#if 1
-		iwm_dump_driver_status(sc);
-#endif
+	if (err)
 		goto done;
-	}
 
 	err = iwm_drain_sta(sc, in, 0);
 done:
@@ -7678,10 +7676,8 @@ iwm_mac_ctxt_cmd_common(struct iwm_softc *sc, struct iwm_node *in,
 		case IEEE80211_HTPROT_NONMEMBER:
 		case IEEE80211_HTPROT_NONHT_MIXED:
 			cmd->protection_flags |=
-			    htole32(IWM_MAC_PROT_FLG_HT_PROT);
-			if (ic->ic_protmode == IEEE80211_PROT_CTSONLY)
-				cmd->protection_flags |=
-				    htole32(IWM_MAC_PROT_FLG_SELF_CTS_EN);
+			    htole32(IWM_MAC_PROT_FLG_HT_PROT |
+			    IWM_MAC_PROT_FLG_FAT_PROT);
 			break;
 		case IEEE80211_HTPROT_20MHZ:
 			if (ic->ic_htcaps & IEEE80211_HTCAP_CBW20_40) {
@@ -7689,9 +7685,6 @@ iwm_mac_ctxt_cmd_common(struct iwm_softc *sc, struct iwm_node *in,
 				cmd->protection_flags |=
 				    htole32(IWM_MAC_PROT_FLG_HT_PROT |
 				    IWM_MAC_PROT_FLG_FAT_PROT);
-				if (ic->ic_protmode == IEEE80211_PROT_CTSONLY)
-					cmd->protection_flags |= htole32(
-					    IWM_MAC_PROT_FLG_SELF_CTS_EN);
 			}
 			break;
 		default:

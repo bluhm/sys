@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_sched.c,v 1.69 2021/02/08 08:18:45 mpi Exp $	*/
+/*	$OpenBSD: kern_sched.c,v 1.71 2021/06/29 21:31:49 kettenis Exp $	*/
 /*
  * Copyright (c) 2007, 2008 Artur Grabowski <art@openbsd.org>
  *

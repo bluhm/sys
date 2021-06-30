@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_pledge.c,v 1.273 2021/06/09 17:52:47 semarie Exp $	*/
+/*	$OpenBSD: kern_pledge.c,v 1.275 2021/06/29 01:46:35 jsg Exp $	*/
 
 /*
  * Copyright (c) 2015 Nicholas Marriott <nicm@openbsd.org>
@@ -80,11 +80,7 @@
 #endif
 #endif
 
-#if defined(__amd64__) || defined(__arm64__) || \
-    defined(__i386__) || defined(__loongson__) || \
-    defined(__macppc__) || defined(__sparc64__)
 #include "drm.h"
-#endif
 
 uint64_t pledgereq_flags(const char *req);
 int	 parsepledges(struct proc *p, const char *kname,

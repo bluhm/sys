@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_smr.c,v 1.9 2020/12/25 12:49:31 visa Exp $	*/
+/*	$OpenBSD: kern_smr.c,v 1.11 2021/06/29 21:31:49 kettenis Exp $	*/
 
 /*
  * Copyright (c) 2019-2020 Visa Hankala
