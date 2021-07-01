@@ -315,18 +315,17 @@ doaccept(struct proc *p, int sock, struct sockaddr *name, socklen_t *anamelen,
 	fp->f_ops = &socketops;
 	fp->f_data = so;
 	error = soaccept(so, nam);
+out:
+	sounlock(head, s);
 	if (!error && name != NULL)
 		error = copyaddrout(p, nam, name, namelen, anamelen);
-out:
 	if (!error) {
-		sounlock(head, s);
 		fdplock(fdp);
 		fdinsert(fdp, tmpfd, cloexec, fp);
 		fdpunlock(fdp);
 		FRELE(fp, p);
 		*retval = tmpfd;
 	} else {
-		sounlock(head, s);
 		fdplock(fdp);
 		fdremove(fdp, tmpfd);
 		fdpunlock(fdp);
