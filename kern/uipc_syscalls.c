@@ -348,42 +348,40 @@ sys_connect(struct proc *p, void *v, register_t *retval)
 	} */ *uap = v;
 	struct file *fp;
 	struct socket *so;
-	struct mbuf *nam = NULL;
+	struct mbuf *nam;
 	int error, s, interrupted = 0;
 
 	if ((error = getsock(p, SCARG(uap, s), &fp)) != 0)
 		return (error);
 	so = fp->f_data;
-	s = solock(so);
-	if (so->so_state & SS_ISCONNECTING) {
-		error = EALREADY;
-		goto out;
-	}
-	error = sockargs(&nam, SCARG(uap, name), SCARG(uap, namelen),
-	    MT_SONAME);
-	if (error)
-		goto out;
 	error = pledge_socket(p, so->so_proto->pr_domain->dom_family,
 	    so->so_state);
+	if (error)
+		goto out;
+	error = sockargs(&nam, SCARG(uap, name), SCARG(uap, namelen),
+	    MT_SONAME);
 	if (error)
 		goto out;
 #ifdef KTRACE
 	if (KTRPOINT(p, KTR_STRUCT))
 		ktrsockaddr(p, mtod(nam, caddr_t), SCARG(uap, namelen));
 #endif
-
+	s = solock(so);
 	if (isdnssocket(so)) {
 		error = dns_portcheck(p, so, mtod(nam, void *), nam->m_len);
 		if (error)
-			goto out;
+			goto unlock;
 	}
-
+	if (so->so_state & SS_ISCONNECTING) {
+		error = EALREADY;
+		goto unlock;
+	}
 	error = soconnect(so, nam);
 	if (error)
 		goto bad;
 	if ((fp->f_flag & FNONBLOCK) && (so->so_state & SS_ISCONNECTING)) {
 		error = EINPROGRESS;
-		goto out;
+		goto unlock;
 	}
 	while ((so->so_state & SS_ISCONNECTING) && so->so_error == 0) {
 		error = sosleep_nsec(so, &so->so_timeo, PSOCK | PCATCH,
@@ -401,10 +399,11 @@ sys_connect(struct proc *p, void *v, register_t *retval)
 bad:
 	if (!interrupted)
 		so->so_state &= ~SS_ISCONNECTING;
-out:
+unlock:
 	sounlock(so, s);
-	FRELE(fp, p);
 	m_freem(nam);
+out:
+	FRELE(fp, p);
 	if (error == ERESTART)
 		error = EINTR;
 	return (error);
