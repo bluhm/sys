@@ -124,20 +124,20 @@ isdnssocket(struct socket *so)
 
 /* For SS_DNS sockets, only allow port DNS (port 53) */
 static int
-dns_portcheck(struct proc *p, struct socket *so, void *nam, u_int *namelen)
+dns_portcheck(struct proc *p, struct socket *so, void *nam, size_t namelen)
 {
 	int error = EINVAL;
 
 	switch (so->so_proto->pr_domain->dom_family) {
 	case AF_INET:
-		if (*namelen < sizeof(struct sockaddr_in))
+		if (namelen < sizeof(struct sockaddr_in))
 			break;
 		if (((struct sockaddr_in *)nam)->sin_port == htons(53))
 			error = 0;
 		break;
 #ifdef INET6
 	case AF_INET6:
-		if (*namelen < sizeof(struct sockaddr_in6))
+		if (namelen < sizeof(struct sockaddr_in6))
 			break;
 		if (((struct sockaddr_in6 *)nam)->sin6_port == htons(53))
 			error = 0;
@@ -373,11 +373,9 @@ sys_connect(struct proc *p, void *v, register_t *retval)
 #endif
 
 	if (isdnssocket(so)) {
-		u_int namelen = nam->m_len;
-		error = dns_portcheck(p, so, mtod(nam, void *), &namelen);
+		error = dns_portcheck(p, so, mtod(nam, void *), nam->m_len);
 		if (error)
 			goto out;
-		nam->m_len = namelen;
 	}
 
 	error = soconnect(so, nam);
@@ -618,12 +616,10 @@ sendit(struct proc *p, int s, struct msghdr *mp, int flags, register_t *retsize)
 		if (error)
 			goto bad;
 		if (isdnssocket(so)) {
-			u_int namelen = mp->msg_namelen;
 			error = dns_portcheck(p, so, mtod(to, caddr_t),
-			    &namelen);
+			    mp->msg_namelen);
 			if (error)
 				goto bad;
-			mp->msg_namelen = namelen;
 		}
 #ifdef KTRACE
 		if (KTRPOINT(p, KTR_STRUCT))
