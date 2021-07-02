@@ -168,12 +168,6 @@ struct lock_type timeout_spinlock_type = {
 	((needsproc) ? &timeout_sleeplock_obj : &timeout_spinlock_obj)
 #endif
 
-struct timeout_reaper {
-	STAILQ_ENTRY(timeout_reaper)	 tr_entry;
-	struct pool			*tr_pool;
-	void				*tr_item;
-};
-
 void kclock_nanotime(int, struct timespec *);
 void softclock(void *);
 void softclock_create_thread(void *);
@@ -828,8 +822,7 @@ softclock_thread(void *arg)
 }
 
 void
-timeout_reap_pool(struct timeout *to, struct timeout_reaper *reaper,
-    struct pool *pool, void *item)
+timeout_reap_pool(struct timeout_reaper *reaper, struct pool *pool, void *item)
 {
 	mtx_enter(&timeout_mutex);
 	if (timeout_running) {

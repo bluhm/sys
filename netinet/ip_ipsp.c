@@ -80,7 +80,6 @@ void tdb_hashstats(void);
 #endif
 
 void		tdb_rehash(void);
-void		tdb_reaper(void *);
 void		tdb_timeout(void *);
 void		tdb_firstuse(void *);
 void		tdb_soft_timeout(void *);
@@ -879,16 +878,7 @@ tdb_free(struct tdb *tdbp)
 	timeout_del(&tdbp->tdb_stimer_tmo);
 	timeout_del(&tdbp->tdb_sfirst_tmo);
 
-	timeout_set_proc(&tdbp->tdb_timer_tmo, tdb_reaper, tdbp);
-	timeout_add(&tdbp->tdb_timer_tmo, 0);
-}
-
-void
-tdb_reaper(void *xtdbp)
-{
-	struct tdb *tdbp = xtdbp;
-
-	pool_put(&tdb_pool, tdbp);
+	timeout_reap_pool(&tdbp->tdb_reaper, &tdb_pool, tdbp);
 }
 
 /*

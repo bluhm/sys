@@ -349,6 +349,7 @@ struct tdb {				/* tunnel descriptor block */
 	struct timeout	tdb_first_tmo;
 	struct timeout	tdb_stimer_tmo;
 	struct timeout	tdb_sfirst_tmo;
+	struct timeout_reaper	tdb_reaper;
 
 	u_int32_t	tdb_seq;		/* Tracking number for PFKEY */
 	u_int32_t	tdb_exp_allocations;	/* Expire after so many flows */

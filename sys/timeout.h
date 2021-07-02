@@ -74,6 +74,12 @@ struct timeoutstat {
 #ifdef _KERNEL
 int timeout_sysctl(void *, size_t *, void *, size_t);
 
+struct timeout_reaper {
+	STAILQ_ENTRY(timeout_reaper)	 tr_entry;
+	struct pool			*tr_pool;
+	void				*tr_item;
+};
+
 /*
  * special macros
  *
@@ -125,6 +131,7 @@ int timeout_in_nsec(struct timeout *, uint64_t);
 int timeout_del(struct timeout *);
 int timeout_del_barrier(struct timeout *);
 void timeout_barrier(struct timeout *);
+void timeout_reap_pool(struct timeout_reaper *, struct pool *, void *);
 
 void timeout_adjust_ticks(int);
 void timeout_hardclock_update(void);
