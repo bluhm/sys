@@ -229,6 +229,7 @@ union syn_cache_sa {
 struct syn_cache {
 	TAILQ_ENTRY(syn_cache) sc_bucketq;	/* link on bucket list */
 	struct timeout sc_timer;		/* rexmt timer */
+	struct timeout_reaper sc_reaper;	/* reap after timeout */
 	union {					/* cached route */
 		struct route route4;
 #ifdef INET6

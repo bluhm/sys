@@ -192,7 +192,6 @@ void	 syn_cache_put(struct syn_cache *);
 void	 syn_cache_rm(struct syn_cache *);
 int	 syn_cache_respond(struct syn_cache *, struct mbuf *);
 void	 syn_cache_timer(void *);
-void	 syn_cache_reaper(void *);
 void	 syn_cache_insert(struct syn_cache *, struct tcpcb *);
 void	 syn_cache_reset(struct sockaddr *, struct sockaddr *,
 		struct tcphdr *, u_int);
@@ -3115,6 +3114,8 @@ syn_cache_rm(struct syn_cache *sc)
 	sc->sc_set->scs_count--;
 }
 
+struct pool syn_cache_pool;
+
 void
 syn_cache_put(struct syn_cache *sc)
 {
@@ -3123,11 +3124,8 @@ syn_cache_put(struct syn_cache *sc)
 		rtfree(sc->sc_route4.ro_rt);
 		sc->sc_route4.ro_rt = NULL;
 	}
-	timeout_set(&sc->sc_timer, syn_cache_reaper, sc);
-	timeout_add(&sc->sc_timer, 0);
+	timeout_reap_pool(&sc->sc_reaper, &syn_cache_pool, sc);
 }
-
-struct pool syn_cache_pool;
 
 /*
  * We don't estimate RTT with SYNs, so each packet starts with the default
@@ -3344,15 +3342,6 @@ syn_cache_timer(void *arg)
 	syn_cache_rm(sc);
 	syn_cache_put(sc);
 	NET_UNLOCK();
-}
-
-void
-syn_cache_reaper(void *arg)
-{
-	struct syn_cache *sc = arg;
-
-	pool_put(&syn_cache_pool, (sc));
-	return;
 }
 
 /*
