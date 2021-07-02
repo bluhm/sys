@@ -28,12 +28,14 @@
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kthread.h>
+#include <sys/pool.h>
 #include <sys/proc.h>
 #include <sys/timeout.h>
 #include <sys/mutex.h>
 #include <sys/kernel.h>
 #include <sys/queue.h>			/* _Q_INVALIDATE */
 #include <sys/sysctl.h>
+#include <sys/task.h>
 #include <sys/witness.h>
 
 #ifdef DDB
@@ -166,6 +168,12 @@ struct lock_type timeout_spinlock_type = {
 	((needsproc) ? &timeout_sleeplock_obj : &timeout_spinlock_obj)
 #endif
 
+struct timeout_reaper {
+	STAILQ_ENTRY(timeout_reaper)	 tr_entry;
+	struct pool			*tr_pool;
+	void				*tr_item;
+};
+
 void kclock_nanotime(int, struct timespec *);
 void softclock(void *);
 void softclock_create_thread(void *);
@@ -176,6 +184,13 @@ void timeout_barrier_timeout(void *);
 uint32_t timeout_bucket(const struct timeout *);
 uint32_t timeout_maskwheel(uint32_t, const struct timespec *);
 void timeout_run(struct timeout *);
+void timeout_reap(void *);
+
+int timeout_running = 0;		/* [T] callbacks currently executed */
+STAILQ_HEAD(, timeout_reaper)		/* [T] reap after timeout */
+    timeout_reap_later = STAILQ_HEAD_INITIALIZER(timeout_reap_later),
+    timeout_reap_now = STAILQ_HEAD_INITIALIZER(timeout_reap_now);
+struct task timeout_reap_task = TASK_INITIALIZER(timeout_reap, NULL);
 
 /*
  * The first thing in a struct timeout is its struct circq, so we
@@ -668,6 +683,7 @@ timeout_run(struct timeout *to)
 	struct process *kcov_process = to->to_process;
 #endif
 
+	timeout_running = 1;
 	mtx_leave(&timeout_mutex);
 	timeout_sync_enter(needsproc);
 #if NKCOV > 0
@@ -679,6 +695,10 @@ timeout_run(struct timeout *to)
 #endif
 	timeout_sync_leave(needsproc);
 	mtx_enter(&timeout_mutex);
+	timeout_running = 0;
+	STAILQ_CONCAT(&timeout_reap_now, &timeout_reap_later);
+	if (!STAILQ_EMPTY(&timeout_reap_now))
+		task_add(systqmp, &timeout_reap_task);
 }
 
 void
@@ -805,6 +825,39 @@ softclock_thread(void *arg)
 		mtx_leave(&timeout_mutex);
 	}
 	splx(s);
+}
+
+void
+timeout_reap_pool(struct timeout *to, struct timeout_reaper *reaper,
+    struct pool *pool, void *item)
+{
+	mtx_enter(&timeout_mutex);
+	if (timeout_running) {
+		reaper->tr_pool = pool;
+		reaper->tr_item = item;
+		STAILQ_INSERT_TAIL(&timeout_reap_later, reaper, tr_entry);
+		mtx_leave(&timeout_mutex);
+	} else {
+		mtx_leave(&timeout_mutex);
+		pool_put(pool, item);
+	}
+}
+
+void
+timeout_reap(void *arg)
+{
+	STAILQ_HEAD(, timeout_reaper) head = STAILQ_HEAD_INITIALIZER(head);
+	struct timeout_reaper *elm;
+
+	mtx_enter(&timeout_mutex);
+	STAILQ_CONCAT(&head, &timeout_reap_now);
+	mtx_leave(&timeout_mutex);
+	
+	while (!STAILQ_EMPTY(&head)) {
+		elm = STAILQ_FIRST(&head);
+		STAILQ_REMOVE_HEAD(&head, tr_entry);
+		pool_put(elm->tr_pool, elm->tr_item);
+	}
 }
 
 #ifndef SMALL_KERNEL
