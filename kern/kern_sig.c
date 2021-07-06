@@ -843,8 +843,10 @@ trapsignal(struct proc *p, int signum, u_long trapno, int code,
 		 * If it is and we're not being traced, then just kill
 		 * the process.
 		 * After vfs_shutdown(9), init(8) cannot receive signals
-		 * because new code pages cannot be mapped against halted
-		 * storage.  init(8) may not die or the kernel panics.
+		 * because new code pages of the signal handler cannot be
+		 * mapped from halted storage.  init(8) may not die or the
+		 * kernel panics.  Better loop between signal handler and
+		 * page fault trap until the machine is halted.
 		 */
 		if ((pr->ps_flags & PS_TRACED) == 0 &&
 		    (sigprop[signum] & SA_KILL) &&
