@@ -195,7 +195,7 @@ void			 pf_rule_to_actions(struct pf_rule *,
 int			 pf_test_rule(struct pf_pdesc *, struct pf_rule **,
 			    struct pf_state **, struct pf_rule **,
 			    struct pf_ruleset **, u_short *,
-			    void **);
+			    struct pfsync_deferral **);
 static __inline int	 pf_create_state(struct pf_pdesc *, struct pf_rule *,
 			    struct pf_rule *, struct pf_rule *,
 			    struct pf_state_key **, struct pf_state_key **,
@@ -3810,7 +3810,7 @@ pf_match_rule(struct pf_test_ctx *ctx, struct pf_ruleset *ruleset)
 int
 pf_test_rule(struct pf_pdesc *pd, struct pf_rule **rm, struct pf_state **sm,
     struct pf_rule **am, struct pf_ruleset **rsm, u_short *reason,
-    void **pdeferral)
+    struct pfsync_deferral **pdeferral)
 {
 	struct pf_rule		*r = NULL;
 	struct pf_rule		*a = NULL;
@@ -4043,8 +4043,7 @@ pf_test_rule(struct pf_pdesc *pd, struct pf_rule **rm, struct pf_state **sm,
 		 * firewall has to know about it to allow
 		 * replies through it.
 		 */
-		if (pfsync_defer(*sm, pd->m,
-		    (struct pfsync_deferral **)pdeferral))
+		if (pfsync_defer(*sm, pd->m, pdeferral))
 			return (PF_DEFER);
 	}
 #endif	/* NPFSYNC > 0 */
@@ -6893,7 +6892,7 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 	int			 dir = (fwdir == PF_FWD) ? PF_OUT : fwdir;
 	u_int32_t		 qid, pqid = 0;
 	int			 have_pf_lock = 0;
-	void			*deferral = NULL;
+	struct pfsync_deferral	*deferral = NULL;
 
 	if (!pf_status.running)
 		return (PF_PASS);
