@@ -194,7 +194,8 @@ void			 pf_rule_to_actions(struct pf_rule *,
 			    struct pf_rule_actions *);
 int			 pf_test_rule(struct pf_pdesc *, struct pf_rule **,
 			    struct pf_state **, struct pf_rule **,
-			    struct pf_ruleset **, u_short *);
+			    struct pf_ruleset **, u_short *,
+			    void **);
 static __inline int	 pf_create_state(struct pf_pdesc *, struct pf_rule *,
 			    struct pf_rule *, struct pf_rule *,
 			    struct pf_state_key **, struct pf_state_key **,
@@ -3808,7 +3809,8 @@ pf_match_rule(struct pf_test_ctx *ctx, struct pf_ruleset *ruleset)
 
 int
 pf_test_rule(struct pf_pdesc *pd, struct pf_rule **rm, struct pf_state **sm,
-    struct pf_rule **am, struct pf_ruleset **rsm, u_short *reason)
+    struct pf_rule **am, struct pf_ruleset **rsm, u_short *reason,
+    void **pdeferral)
 {
 	struct pf_rule		*r = NULL;
 	struct pf_rule		*a = NULL;
@@ -4041,7 +4043,8 @@ pf_test_rule(struct pf_pdesc *pd, struct pf_rule **rm, struct pf_state **sm,
 		 * firewall has to know about it to allow
 		 * replies through it.
 		 */
-		if (pfsync_defer(*sm, pd->m))
+		if (pfsync_defer(*sm, pd->m,
+		    (struct pfsync_deferral **)pdeferral))
 			return (PF_DEFER);
 	}
 #endif	/* NPFSYNC > 0 */
@@ -6890,6 +6893,7 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 	int			 dir = (fwdir == PF_FWD) ? PF_OUT : fwdir;
 	u_int32_t		 qid, pqid = 0;
 	int			 have_pf_lock = 0;
+	void			*deferral = NULL;
 
 	if (!pf_status.running)
 		return (PF_PASS);
@@ -6992,7 +6996,8 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 		 */
 		PF_LOCK();
 		have_pf_lock = 1;
-		action = pf_test_rule(&pd, &r, &s, &a, &ruleset, &reason);
+		action = pf_test_rule(&pd, &r, &s, &a, &ruleset, &reason,
+		    &deferral);
 		s = pf_state_ref(s);
 		if (action != PF_PASS)
 			REASON_SET(&reason, PFRES_FRAG);
@@ -7024,7 +7029,7 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 			PF_LOCK();
 			have_pf_lock = 1;
 			action = pf_test_rule(&pd, &r, &s, &a, &ruleset,
-			    &reason);
+			    &reason, &deferral);
 			s = pf_state_ref(s);
 		}
 		break;
@@ -7056,7 +7061,7 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 			PF_LOCK();
 			have_pf_lock = 1;
 			action = pf_test_rule(&pd, &r, &s, &a, &ruleset,
-			    &reason);
+			    &reason, &deferral);
 			s = pf_state_ref(s);
 		}
 		break;
@@ -7132,7 +7137,7 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 			PF_LOCK();
 			have_pf_lock = 1;
 			action = pf_test_rule(&pd, &r, &s, &a, &ruleset,
-			    &reason);
+			    &reason, &deferral);
 			s = pf_state_ref(s);
 		}
 
@@ -7268,6 +7273,14 @@ done:
 		m_freem(pd.m);
 		/* FALLTHROUGH */
 	case PF_DEFER:
+#if NPFSYNC > 0
+		/*
+		 * We no longer hold PF_LOCK() here, so we can dispatch
+		 * deferral if we are asked to do so.
+		 */
+		if (deferral != NULL)
+			pfsync_undefer(deferral, 0);
+#endif	/* NPFSYNC > 0 */
 		pd.m = NULL;
 		action = PF_PASS;
 		break;
