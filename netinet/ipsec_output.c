@@ -453,7 +453,7 @@ ipsec_output_cb(struct cryptop *crp)
  baddone:
 	NET_UNLOCK();
  droponly:
- 	if (tdb != NULL)
+	if (tdb != NULL)
 		tdb->tdb_odrops++;
 	m_freem(m);
 	free(tc, M_XDATA, 0);

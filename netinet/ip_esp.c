@@ -689,7 +689,7 @@ esp_input_cb(struct tdb *tdb, struct tdb_crypto *tc, struct mbuf *m, int clen)
 		 * overlapping copy of the remainder of the mbuf over the ESP
 		 * header.
 		 */
-		memmove(mtod(m1, u_char *) + roff, 
+		memmove(mtod(m1, u_char *) + roff,
 		    mtod(m1, u_char *) + roff + hlen,
 		    m1->m_len - (roff + hlen));
 		m1->m_len -= hlen;

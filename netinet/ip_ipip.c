@@ -228,7 +228,7 @@ ipip_input_if(struct mbuf **mp, int *offp, int proto, int oaf,
 
 	/* Some sanity checks in the inner IP header */
 	switch (proto) {
-    	case IPPROTO_IPV4:
+	case IPPROTO_IPV4:
 		iaf = AF_INET;
 		ip = mtod(m, struct ip *);
 		hlen = ip->ip_hl << 2;
@@ -249,7 +249,7 @@ ipip_input_if(struct mbuf **mp, int *offp, int proto, int oaf,
 			ip_tos_patch(ip, itos);
 		break;
 #ifdef INET6
-    	case IPPROTO_IPV6:
+	case IPPROTO_IPV6:
 		iaf = AF_INET6;
 		ip6 = mtod(m, struct ip6_hdr *);
 		itos = (ntohl(ip6->ip6_flow) >> 20) & 0xff;
@@ -289,7 +289,7 @@ ipip_input_if(struct mbuf **mp, int *offp, int proto, int oaf,
 			ipipstat_inc(ipips_spoof);
 			rtfree(rt);
 			goto bad;
- 		}
+		}
 		rtfree(rt);
 	}
 
