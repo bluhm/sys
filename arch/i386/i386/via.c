@@ -115,7 +115,7 @@ viac3_crypto_newsession(u_int32_t *sidp, struct cryptoini *cri)
 	struct cryptoini	*c;
 	struct viac3_softc	*sc = vc3_sc;
 	struct viac3_session	*ses = NULL;
-	struct auth_hash	*axf;
+	const struct auth_hash	*axf;
 	struct swcr_data	*swd;
 	int			 sesn, i, cw0;
 
@@ -272,7 +272,7 @@ viac3_crypto_freesession(u_int64_t tid)
 {
 	struct viac3_softc *sc = vc3_sc;
 	struct swcr_data *swd;
-	struct auth_hash *axf;
+	const struct auth_hash *axf;
 	int sesn;
 	u_int32_t sid = ((u_int32_t)tid) & 0xffffffff;
 
