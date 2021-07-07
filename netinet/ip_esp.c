@@ -96,8 +96,8 @@ esp_init(struct tdb *tdbp, struct xformsw *xsp, struct ipsecinit *ii)
 	int error;
 
 	if (!ii->ii_encalg && !ii->ii_authalg) {
-		DPRINTF(("esp_init(): neither authentication nor encryption "
-		    "algorithm given"));
+		DPRINTF(("%s: neither authentication nor encryption algorithm "
+		    "given\n", __func__));
 		return EINVAL;
 	}
 
@@ -140,21 +140,21 @@ esp_init(struct tdb *tdbp, struct xformsw *xsp, struct ipsecinit *ii)
 			break;
 
 		default:
-			DPRINTF(("esp_init(): unsupported encryption "
-			    "algorithm %d specified\n", ii->ii_encalg));
+			DPRINTF(("%s: unsupported encryption algorithm %d "
+			    "specified\n", __func__, ii->ii_encalg));
 			return EINVAL;
 		}
 
 		if (ii->ii_enckeylen < txform->minkey) {
-			DPRINTF(("esp_init(): keylength %d too small "
-			    "(min length is %d) for algorithm %s\n",
+			DPRINTF(("%s: keylength %d too small "
+			    "(min length is %d) for algorithm %s\n", __func__,
 			    ii->ii_enckeylen, txform->minkey, txform->name));
 			return EINVAL;
 		}
 
 		if (ii->ii_enckeylen > txform->maxkey) {
-			DPRINTF(("esp_init(): keylength %d too large "
-			    "(max length is %d) for algorithm %s\n",
+			DPRINTF(("%s: keylength %d too large "
+			    "(max length is %d) for algorithm %s\n", __func__,
 			    ii->ii_enckeylen, txform->maxkey, txform->name));
 			return EINVAL;
 		}
@@ -182,8 +182,8 @@ esp_init(struct tdb *tdbp, struct xformsw *xsp, struct ipsecinit *ii)
 
 		tdbp->tdb_encalgxform = txform;
 
-		DPRINTF(("esp_init(): initialized TDB with enc algorithm %s\n",
-		    txform->name));
+		DPRINTF(("%s: initialized TDB with enc algorithm %s\n",
+		    __func__, txform->name));
 
 		tdbp->tdb_ivlen = txform->ivsize;
 	}
@@ -231,22 +231,22 @@ esp_init(struct tdb *tdbp, struct xformsw *xsp, struct ipsecinit *ii)
 			break;
 
 		default:
-			DPRINTF(("esp_init(): unsupported authentication "
-			    "algorithm %d specified\n", ii->ii_authalg));
+			DPRINTF(("%s: unsupported authentication algorithm %d "
+			    "specified\n", __func__, ii->ii_authalg));
 			return EINVAL;
 		}
 
 		if (ii->ii_authkeylen != thash->keysize) {
-			DPRINTF(("esp_init(): keylength %d doesn't match "
-			    "algorithm %s keysize (%d)\n", ii->ii_authkeylen,
+			DPRINTF(("%s: keylength %d doesn't match algorithm %s "
+			    "keysize (%d)\n", __func__, ii->ii_authkeylen,
 			    thash->name, thash->keysize));
 			return EINVAL;
 		}
 
 		tdbp->tdb_authalgxform = thash;
 
-		DPRINTF(("esp_init(): initialized TDB with hash algorithm %s\n",
-		    thash->name));
+		DPRINTF(("%s: initialized TDB with hash algorithm %s\n",
+		    __func__, thash->name));
 	}
 
 	tdbp->tdb_xform = xsp;
@@ -366,8 +366,8 @@ esp_input(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 		 * block size.
 		 */
 		if (plen & (espx->blocksize - 1)) {
-			DPRINTF(("%s: payload of %d octets not a multiple of %d"
-			    " octets, SA %s/%08x\n", __func__,
+			DPRINTF(("%s: payload of %d octets not a multiple "
+			    "of %d octets, SA %s/%08x\n", __func__,
 			    plen, espx->blocksize, ipsp_address(&tdb->tdb_dst,
 			    buf, sizeof(buf)), ntohl(tdb->tdb_spi)));
 			espstat_inc(esps_badilen);
@@ -402,16 +402,16 @@ esp_input(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 			error = EACCES;
 			goto drop;
 		case 3:
-			DPRINTF(("%s: duplicate packet received"
-			    " in SA %s/%08x\n", __func__,
+			DPRINTF(("%s: duplicate packet received "
+			    "in SA %s/%08x\n", __func__,
 			    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
 			    ntohl(tdb->tdb_spi)));
 			espstat_inc(esps_replay);
 			error = EACCES;
 			goto drop;
 		default:
-			DPRINTF(("%s: bogus value from"
-			    " checkreplaywindow() in SA %s/%08x\n",
+			DPRINTF(("%s: bogus value from "
+			    "checkreplaywindow() in SA %s/%08x\n",
 			    __func__,
 			    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
 			    ntohl(tdb->tdb_spi)));
@@ -446,7 +446,8 @@ esp_input(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	/* Get crypto descriptors */
 	crp = crypto_getreq(esph && espx ? 2 : 1);
 	if (crp == NULL) {
-		DPRINTF(("%s: failed to acquire crypto descriptors\n", __func__));
+		DPRINTF(("%s: failed to acquire crypto descriptors\n",
+		    __func__));
 		espstat_inc(esps_crypto);
 		error = ENOBUFS;
 		goto drop;
@@ -610,15 +611,15 @@ esp_input_cb(struct tdb *tdb, struct tdb_crypto *tc, struct mbuf *m, int clen)
 			espstat_inc(esps_replay);
 			goto baddone;
 		case 3:
-			DPRINTF(("%s: duplicate packet received"
-			    " in SA %s/%08x\n", __func__,
+			DPRINTF(("%s: duplicate packet received "
+			    "in SA %s/%08x\n", __func__,
 			    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
 			    ntohl(tdb->tdb_spi)));
 			espstat_inc(esps_replay);
 			goto baddone;
 		default:
-			DPRINTF(("%s: bogus value from"
-			    " checkreplaywindow() in SA %s/%08x\n", __func__,
+			DPRINTF(("%s: bogus value from "
+			    "checkreplaywindow() in SA %s/%08x\n", __func__,
 			    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
 			    ntohl(tdb->tdb_spi)));
 			espstat_inc(esps_replay);

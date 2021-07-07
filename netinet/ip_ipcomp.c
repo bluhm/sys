@@ -146,7 +146,8 @@ ipcomp_input(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	crp = crypto_getreq(1);
 	if (crp == NULL) {
 		m_freem(m);
-		DPRINTF(("%s: failed to acquire crypto descriptors\n", __func__));
+		DPRINTF(("%s: failed to acquire crypto descriptors\n",
+		    __func__));
 		ipcompstat_inc(ipcomps_crypto);
 		return ENOBUFS;
 	}
@@ -442,7 +443,8 @@ ipcomp_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 	/* Get crypto descriptors */
 	crp = crypto_getreq(1);
 	if (crp == NULL) {
-		DPRINTF(("%s: failed to acquire crypto descriptors\n", __func__));
+		DPRINTF(("%s: failed to acquire crypto descriptors\n",
+		    __func__));
 		ipcompstat_inc(ipcomps_crypto);
 		error = ENOBUFS;
 		goto drop;

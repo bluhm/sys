@@ -127,8 +127,8 @@ ah_init(struct tdb *tdbp, struct xformsw *xsp, struct ipsecinit *ii)
 		break;
 
 	default:
-		DPRINTF(("%s: unsupported authentication algorithm %d"
-		    " specified\n", __func__, ii->ii_authalg));
+		DPRINTF(("%s: unsupported authentication algorithm %d "
+		    "specified\n", __func__, ii->ii_authalg));
 		return EINVAL;
 	}
 
@@ -233,8 +233,8 @@ ah_massage_headers(struct mbuf **m0, int af, int skip, int alg, int out)
 		for (off = sizeof(struct ip); off < skip;) {
 			if (ptr[off] != IPOPT_EOL && ptr[off] != IPOPT_NOP &&
 			    off + 1 >= skip) {
-				DPRINTF(("%s: illegal IPv4 option length for"
-				    " option %d\n", __func__, ptr[off]));
+				DPRINTF(("%s: illegal IPv4 option length for "
+				    "option %d\n", __func__, ptr[off]));
 
 				ahstat_inc(ahs_hdrops);
 				m_freem(m);
@@ -257,8 +257,8 @@ ah_massage_headers(struct mbuf **m0, int af, int skip, int alg, int out)
 			case 0x95:	/* RFC1770 */
 				/* Sanity check for option length. */
 				if (ptr[off + 1] < 2) {
-					DPRINTF(("%s: illegal IPv4 option"
-					    " length for option %d\n", __func__,
+					DPRINTF(("%s: illegal IPv4 option "
+					    "length for option %d\n", __func__,
 					    ptr[off]));
 
 					ahstat_inc(ahs_hdrops);
@@ -273,8 +273,8 @@ ah_massage_headers(struct mbuf **m0, int af, int skip, int alg, int out)
 			case IPOPT_SSRR:
 				/* Sanity check for option length. */
 				if (ptr[off + 1] < 2) {
-					DPRINTF(("%s: illegal IPv4 option"
-					    " length for option %d\n", __func__,
+					DPRINTF(("%s: illegal IPv4 option "
+					    "length for option %d\n", __func__,
 					    ptr[off]));
 
 					ahstat_inc(ahs_hdrops);
@@ -302,8 +302,8 @@ ah_massage_headers(struct mbuf **m0, int af, int skip, int alg, int out)
 			default:
 				/* Sanity check for option length. */
 				if (ptr[off + 1] < 2) {
-					DPRINTF(("%s: illegal IPv4 option"
-					    " length for option %d\n", __func__,
+					DPRINTF(("%s: illegal IPv4 option "
+					    "length for option %d\n", __func__,
 					    ptr[off]));
 					ahstat_inc(ahs_hdrops);
 					m_freem(m);
@@ -337,7 +337,7 @@ ah_massage_headers(struct mbuf **m0, int af, int skip, int alg, int out)
 
 		/* We don't do IPv6 Jumbograms. */
 		if (ip6.ip6_plen == 0) {
-			DPRINTF(("%s: unsupported IPv6 jumbogram", __func__));
+			DPRINTF(("%s: unsupported IPv6 jumbogram\n", __func__));
 			ahstat_inc(ahs_hdrops);
 			m_freem(m);
 			return EMSGSIZE;
@@ -358,7 +358,7 @@ ah_massage_headers(struct mbuf **m0, int af, int skip, int alg, int out)
 		error = m_copyback(m, 0, sizeof(struct ip6_hdr), &ip6,
 		    M_NOWAIT);
 		if (error) {
-			DPRINTF(("%s: m_copyback no memory", __func__));
+			DPRINTF(("%s: m_copyback no memory\n", __func__));
 			ahstat_inc(ahs_hdrops);
 			m_freem(m);
 			return error;
@@ -370,8 +370,9 @@ ah_massage_headers(struct mbuf **m0, int af, int skip, int alg, int out)
 				ptr = malloc(skip - sizeof(struct ip6_hdr),
 				    M_XDATA, M_NOWAIT);
 				if (ptr == NULL) {
-					DPRINTF(("%s: failed to allocate memory"
-					    " for IPv6 headers\n", __func__));
+					DPRINTF(("%s: failed to allocate "
+					    "memory for IPv6 headers\n",
+					    __func__));
 					ahstat_inc(ahs_hdrops);
 					m_freem(m);
 					return ENOBUFS;

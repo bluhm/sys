@@ -388,7 +388,7 @@ ipsec_input_cb(struct cryptop *crp)
 	NET_LOCK();
 	tdb = gettdb(tc->tc_rdomain, tc->tc_spi, &tc->tc_dst, tc->tc_proto);
 	if (tdb == NULL) {
-		DPRINTF(("%s: TDB is expired while in crypto", __func__));
+		DPRINTF(("%s: TDB is expired while in crypto\n", __func__));
 		ipsecstat_inc(ipsec_notdb);
 		goto baddone;
 	}

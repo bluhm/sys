@@ -995,8 +995,8 @@ ipsp_ids_insert(struct ipsec_ids *ids)
 		if (++ipsec_ids_next_flow == 0)
 			ipsec_ids_next_flow = 1;
 		if (ipsec_ids_next_flow == start_flow) {
-			DPRINTF(("ipsec_ids_next_flow exhausted %u\n",
-			    ipsec_ids_next_flow));
+			DPRINTF(("%s: ipsec_ids_next_flow exhausted %u\n",
+			    __func__, ipsec_ids_next_flow));
 			return NULL;
 		}
 	}

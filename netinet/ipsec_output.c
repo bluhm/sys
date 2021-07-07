@@ -89,8 +89,8 @@ ipsp_process_packet(struct mbuf *m, struct tdb *tdb, int af, int tunalready)
 	if ((tdb->tdb_sproto == IPPROTO_ESP && !esp_enable) ||
 	    (tdb->tdb_sproto == IPPROTO_AH && !ah_enable) ||
 	    (tdb->tdb_sproto == IPPROTO_IPCOMP && !ipcomp_enable)) {
-		DPRINTF(("ipsp_process_packet(): IPsec outbound packet "
-		    "dropped due to policy (check your sysctls)\n"));
+		DPRINTF(("%s: IPsec outbound packet dropped due to policy "
+		    "(check your sysctls)\n", __func__));
 		error = EHOSTUNREACH;
 		goto drop;
 	}
@@ -104,8 +104,8 @@ ipsp_process_packet(struct mbuf *m, struct tdb *tdb, int af, int tunalready)
 
 	/* Check if the SPI is invalid. */
 	if (tdb->tdb_flags & TDBF_INVALID) {
-		DPRINTF(("ipsp_process_packet(): attempt to use invalid "
-		    "SA %s/%08x/%u\n", ipsp_address(&tdb->tdb_dst, buf,
+		DPRINTF(("%s: attempt to use invalid SA %s/%08x/%u\n",
+		    __func__, ipsp_address(&tdb->tdb_dst, buf,
 		    sizeof(buf)), ntohl(tdb->tdb_spi), tdb->tdb_sproto));
 		error = ENXIO;
 		goto drop;
@@ -122,8 +122,8 @@ ipsp_process_packet(struct mbuf *m, struct tdb *tdb, int af, int tunalready)
 #endif /* INET6 */
 
 	default:
-		DPRINTF(("ipsp_process_packet(): attempt to use "
-		    "SA %s/%08x/%u for protocol family %d\n",
+		DPRINTF(("%s: attempt to use SA %s/%08x/%u for "
+		    "protocol family %d\n", __func__,
 		    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
 		    ntohl(tdb->tdb_spi), tdb->tdb_sproto,
 		    tdb->tdb_dst.sa.sa_family));
@@ -498,8 +498,8 @@ ipsp_process_done(struct mbuf *m, struct tdb *tdb)
 			break;
 #endif /* INET6 */
 		default:
-			DPRINTF(("ipsp_process_done(): unknown protocol family "
-			    "(%d)\n", tdb->tdb_dst.sa.sa_family));
+			DPRINTF(("%s: unknown protocol family (%d)\n",
+			    __func__, tdb->tdb_dst.sa.sa_family));
 			error = ENXIO;
 			goto drop;
 		}
@@ -552,7 +552,7 @@ ipsp_process_done(struct mbuf *m, struct tdb *tdb)
 #endif /* INET6 */
 
 	default:
-		DPRINTF(("ipsp_process_done(): unknown protocol family (%d)\n",
+		DPRINTF(("%s: unknown protocol family (%d)\n", __func__,
 		    tdb->tdb_dst.sa.sa_family));
 		error = ENXIO;
 		goto drop;
@@ -565,8 +565,7 @@ ipsp_process_done(struct mbuf *m, struct tdb *tdb)
 	mtag = m_tag_get(PACKET_TAG_IPSEC_OUT_DONE, sizeof(struct tdb_ident),
 	    M_NOWAIT);
 	if (mtag == NULL) {
-		DPRINTF(("ipsp_process_done(): could not allocate packet "
-		    "tag\n"));
+		DPRINTF(("%s: could not allocate packet tag\n", __func__));
 		error = ENOMEM;
 		goto drop;
 	}
@@ -701,8 +700,7 @@ ipsec_adjust_mtu(struct mbuf *m, u_int32_t mtu)
 		mtu -= adjust;
 		tdbp->tdb_mtu = mtu;
 		tdbp->tdb_mtutimeout = gettime() + ip_mtudisc_timeout;
-		DPRINTF(("ipsec_adjust_mtu: "
-		    "spi %08x mtu %d adjust %ld mbuf %p\n",
+		DPRINTF(("%s: spi %08x mtu %d adjust %ld mbuf %p\n", __func__,
 		    ntohl(tdbp->tdb_spi), tdbp->tdb_mtu,
 		    adjust, m));
 	}
