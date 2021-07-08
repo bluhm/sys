@@ -80,7 +80,7 @@ ipcomp_attach(void)
  * ipcomp_init() is called when an CPI is being set up.
  */
 int
-ipcomp_init(struct tdb *tdbp, struct xformsw *xsp, struct ipsecinit *ii)
+ipcomp_init(struct tdb *tdbp, const struct xformsw *xsp, struct ipsecinit *ii)
 {
 	const struct comp_algo *tcomp = NULL;
 	struct cryptoini cric;

@@ -554,7 +554,7 @@ ipe4_attach(void)
 }
 
 int
-ipe4_init(struct tdb *tdbp, struct xformsw *xsp, struct ipsecinit *ii)
+ipe4_init(struct tdb *tdbp, const struct xformsw *xsp, struct ipsecinit *ii)
 {
 	tdbp->tdb_xform = xsp;
 	return 0;

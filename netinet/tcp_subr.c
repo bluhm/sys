@@ -930,7 +930,7 @@ tcp_signature_tdb_attach(void)
 }
 
 int
-tcp_signature_tdb_init(struct tdb *tdbp, struct xformsw *xsp,
+tcp_signature_tdb_init(struct tdb *tdbp, const struct xformsw *xsp,
     struct ipsecinit *ii)
 {
 	if ((ii->ii_authkeylen < 1) || (ii->ii_authkeylen > 80))

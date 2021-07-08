@@ -99,7 +99,7 @@ ah_attach(void)
  * ah_init() is called when an SPI is being set up.
  */
 int
-ah_init(struct tdb *tdbp, struct xformsw *xsp, struct ipsecinit *ii)
+ah_init(struct tdb *tdbp, const struct xformsw *xsp, struct ipsecinit *ii)
 {
 	const struct auth_hash *thash = NULL;
 	struct cryptoini cria, crin;

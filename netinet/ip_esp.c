@@ -93,7 +93,7 @@ esp_attach(void)
  * esp_init() is called when an SPI is being set up.
  */
 int
-esp_init(struct tdb *tdbp, struct xformsw *xsp, struct ipsecinit *ii)
+esp_init(struct tdb *tdbp, const struct xformsw *xsp, struct ipsecinit *ii)
 {
 	const struct enc_xform *txform = NULL;
 	const struct auth_hash *thash = NULL;
