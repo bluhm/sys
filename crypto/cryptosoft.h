@@ -24,6 +24,8 @@
 #ifndef _CRYPTO_CRYPTOSOFT_H_
 #define _CRYPTO_CRYPTOSOFT_H_
 
+#include <sys/queue.h>
+
 /* Software session entry */
 struct swcr_data {
 	int		sw_alg;		/* Algorithm */
@@ -53,8 +55,9 @@ struct swcr_data {
 #define sw_size		SWCR_UN.SWCR_COMP.SW_size
 #define sw_cxf		SWCR_UN.SWCR_COMP.SW_cxf
 
-	struct swcr_data *sw_next;
+	SLIST_ENTRY(swcr_data)	sw_next;
 };
+SLIST_HEAD(swcr_list, swcr_data);
 
 #ifdef _KERNEL
 extern const u_int8_t hmac_ipad_buffer[HMAC_MAX_BLOCK_LEN];
