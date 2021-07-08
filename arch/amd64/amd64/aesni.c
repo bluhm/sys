@@ -1,4 +1,4 @@
-/*	$OpenBSD: aesni.c,v 1.49 2019/03/16 16:33:59 visa Exp $	*/
+/*	$OpenBSD: aesni.c,v 1.50 2021/07/08 09:22:30 bluhm Exp $	*/
 /*-
  * Copyright (c) 2003 Jason Wright
  * Copyright (c) 2003, 2004 Theo de Raadt

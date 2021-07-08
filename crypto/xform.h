@@ -1,4 +1,4 @@
-/*	$OpenBSD: xform.h,v 1.30 2018/04/09 04:34:56 visa Exp $	*/
+/*	$OpenBSD: xform.h,v 1.31 2021/07/08 09:22:30 bluhm Exp $	*/
 
 /*
  * The author of this code is Angelos D. Keromytis (angelos@cis.upenn.edu)

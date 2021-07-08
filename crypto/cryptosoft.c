@@ -1,4 +1,4 @@
-/*	$OpenBSD: cryptosoft.c,v 1.86 2020/05/29 01:22:53 deraadt Exp $	*/
+/*	$OpenBSD: cryptosoft.c,v 1.87 2021/07/08 09:22:30 bluhm Exp $	*/
 
 /*
  * The author of this code is Angelos D. Keromytis (angelos@cis.upenn.edu)

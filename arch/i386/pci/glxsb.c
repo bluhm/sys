@@ -1,4 +1,4 @@
-/*	$OpenBSD: glxsb.c,v 1.36 2020/05/29 04:42:24 deraadt Exp $	*/
+/*	$OpenBSD: glxsb.c,v 1.37 2021/07/08 09:22:30 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2006 Tom Cosgrove <tom@openbsd.org>

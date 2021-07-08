@@ -1,4 +1,4 @@
-/*	$OpenBSD: via.c,v 1.33 2020/05/29 04:42:23 deraadt Exp $	*/
+/*	$OpenBSD: via.c,v 1.34 2021/07/08 09:22:30 bluhm Exp $	*/
 /*	$NetBSD: machdep.c,v 1.214 1996/11/10 03:16:17 thorpej Exp $	*/
 
 /*-
