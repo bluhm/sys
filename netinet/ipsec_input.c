@@ -288,9 +288,14 @@ ipsec_common_input(struct mbuf *m, int skip, int protoff, int af, int sproto,
 	}
 
 	if (tdbp->tdb_flags & TDBF_INVALID) {
-		DPRINTF("attempted to use invalid SA %s/%08x/%u",
-		    ipsp_address(&dst_address, buf, sizeof(buf)),
-		    ntohl(spi), tdbp->tdb_sproto);
+		static struct timeval last;
+		const struct timeval min = { 1, 0 };
+
+		if (ratecheck(&last, &min)) {
+			DPRINTF("attempted to use invalid SA %s/%08x/%u",
+			    ipsp_address(&dst_address, buf, sizeof(buf)),
+			    ntohl(spi), tdbp->tdb_sproto);
+		}
 		IPSEC_ISTAT(esps_invalid, ahs_invalid, ipcomps_invalid);
 		error = EINVAL;
 		goto drop;
