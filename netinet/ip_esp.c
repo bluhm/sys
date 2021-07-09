@@ -573,10 +573,15 @@ esp_input_cb(struct tdb *tdb, struct tdb_crypto *tc, struct mbuf *m, int clen)
 
 		/* Verify authenticator */
 		if (timingsafe_bcmp(ptr, aalg, esph->authsize)) {
-			DPRINTF("authentication failed for packet "
-			    "in SA %s/%08x",
-			    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
-			    ntohl(tdb->tdb_spi));
+			static struct timeval last;
+			const struct timeval min = { 1, 0 };
+
+			if (ratecheck(&last, &min)) {
+				DPRINTF("authentication failed for packet "
+				    "in SA %s/%08x",
+				    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
+				    ntohl(tdb->tdb_spi));
+			}
 			espstat_inc(esps_badauth);
 			goto baddone;
 		}
