@@ -97,6 +97,7 @@ esp_init(struct tdb *tdbp, const struct xformsw *xsp, struct ipsecinit *ii)
 {
 	const struct enc_xform *txform = NULL;
 	const struct auth_hash *thash = NULL;
+	struct cryptolist crl;
 	struct cryptoini cria, crie, crin;
 	int error;
 
@@ -257,6 +258,8 @@ esp_init(struct tdb *tdbp, const struct xformsw *xsp, struct ipsecinit *ii)
 	tdbp->tdb_xform = xsp;
 	tdbp->tdb_rpl = AH_HMAC_INITIAL_RPL;
 
+	SLIST_INIT(&crl);
+
 	/* Initialize crypto session */
 	if (tdbp->tdb_encalgxform) {
 		/* Save the raw keys */
@@ -266,14 +269,8 @@ esp_init(struct tdb *tdbp, const struct xformsw *xsp, struct ipsecinit *ii)
 		memcpy(tdbp->tdb_emxkey, ii->ii_enckey, tdbp->tdb_emxkeylen);
 
 		memset(&crie, 0, sizeof(crie));
-
+		SLIST_INSERT_HEAD(&crl, &crie, cri_next);
 		crie.cri_alg = tdbp->tdb_encalgxform->type;
-
-		if (tdbp->tdb_authalgxform)
-			crie.cri_next = &cria;
-		else
-			crie.cri_next = NULL;
-
 		crie.cri_klen = ii->ii_enckeylen * 8;
 		crie.cri_key = ii->ii_enckey;
 		/* XXX Rounds ? */
@@ -287,22 +284,20 @@ esp_init(struct tdb *tdbp, const struct xformsw *xsp, struct ipsecinit *ii)
 		memcpy(tdbp->tdb_amxkey, ii->ii_authkey, tdbp->tdb_amxkeylen);
 
 		memset(&cria, 0, sizeof(cria));
-
+		SLIST_INSERT_HEAD(&crl, &cria, cri_next);
 		cria.cri_alg = tdbp->tdb_authalgxform->type;
+		cria.cri_klen = ii->ii_authkeylen * 8;
+		cria.cri_key = ii->ii_authkey;
 
 		if ((tdbp->tdb_wnd > 0) && (tdbp->tdb_flags & TDBF_ESN)) {
 			memset(&crin, 0, sizeof(crin));
+			SLIST_INSERT_HEAD(&crl, &crin, cri_next);
 			crin.cri_alg = CRYPTO_ESN;
-			cria.cri_next = &crin;
 		}
-
-		cria.cri_klen = ii->ii_authkeylen * 8;
-		cria.cri_key = ii->ii_authkey;
 	}
 
 	KERNEL_LOCK();
-	error = crypto_newsession(&tdbp->tdb_cryptoid,
-	    (tdbp->tdb_encalgxform ? &crie : &cria), 0);
+	error = crypto_newsession(&tdbp->tdb_cryptoid, &crl, 0);
 	KERNEL_UNLOCK();
 	return error;
 }

@@ -728,8 +728,9 @@ swcr_compdec(struct cryptodesc *crd, struct swcr_data *sw,
  * Generate a new software session.
  */
 int
-swcr_newsession(u_int32_t *sid, struct cryptoini *cri)
+swcr_newsession(u_int32_t *sid, struct cryptolist *crl)
 {
+	struct cryptoini *cri;
 	struct swcr_list *session;
 	struct swcr_data *swd, *prev;
 	const struct auth_hash *axf;
@@ -738,7 +739,7 @@ swcr_newsession(u_int32_t *sid, struct cryptoini *cri)
 	u_int32_t i;
 	int k;
 
-	if (sid == NULL || cri == NULL)
+	if (sid == NULL || SLIST_EMPTY(crl))
 		return EINVAL;
 
 	if (swcr_sessions != NULL) {
@@ -780,7 +781,7 @@ swcr_newsession(u_int32_t *sid, struct cryptoini *cri)
 	*sid = i;
 	prev = NULL;
 
-	while (cri) {
+	SLIST_FOREACH(cri, crl, cri_next) {
 		swd = malloc(sizeof(struct swcr_data), M_CRYPTO_DATA,
 		    M_NOWAIT | M_ZERO);
 		if (swd == NULL) {
@@ -935,7 +936,6 @@ swcr_newsession(u_int32_t *sid, struct cryptoini *cri)
 		}
 
 		swd->sw_alg = cri->cri_alg;
-		cri = cri->cri_next;
 		prev = swd;
 	}
 	return 0;

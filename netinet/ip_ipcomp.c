@@ -83,6 +83,7 @@ int
 ipcomp_init(struct tdb *tdbp, const struct xformsw *xsp, struct ipsecinit *ii)
 {
 	const struct comp_algo *tcomp = NULL;
+	struct cryptolist crl;
 	struct cryptoini cric;
 	int error;
 
@@ -107,11 +108,13 @@ ipcomp_init(struct tdb *tdbp, const struct xformsw *xsp, struct ipsecinit *ii)
 	tdbp->tdb_xform = xsp;
 
 	/* Initialize crypto session */
+	SLIST_INIT(&crl);
 	memset(&cric, 0, sizeof(cric));
+	SLIST_INSERT_HEAD(&crl, &cric, cri_next);
 	cric.cri_alg = tdbp->tdb_compalgxform->type;
 
 	KERNEL_LOCK();
-	error = crypto_newsession(&tdbp->tdb_cryptoid, &cric, 0);
+	error = crypto_newsession(&tdbp->tdb_cryptoid, &crl, 0);
 	KERNEL_UNLOCK();
 	return error;
 }

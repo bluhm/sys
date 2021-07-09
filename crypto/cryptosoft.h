@@ -69,7 +69,7 @@ int	swcr_authcompute(struct cryptop *, struct cryptodesc *, struct swcr_data *,
 int	swcr_authenc(struct cryptop *);
 int	swcr_compdec(struct cryptodesc *, struct swcr_data *, caddr_t, int);
 int	swcr_process(struct cryptop *);
-int	swcr_newsession(u_int32_t *, struct cryptoini *);
+int	swcr_newsession(u_int32_t *, struct cryptolist *);
 int	swcr_freesession(u_int64_t);
 void	swcr_init(void);
 #endif /* _KERNEL */

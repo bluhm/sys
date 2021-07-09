@@ -49,11 +49,11 @@ struct taskq *crypto_taskq_mpsafe;	/* [I] run crypto_invoke()
  * Create a new session.
  */
 int
-crypto_newsession(u_int64_t *sid, struct cryptoini *cri, int hard)
+crypto_newsession(u_int64_t *sid, struct cryptolist *crl, int hard)
 {
 	u_int32_t hid, lid, hid2 = -1;
 	struct cryptocap *cpc;
-	struct cryptoini *cr;
+	struct cryptoini *cri;
 	int err, s, turn = 0;
 
 	if (crypto_drivers == NULL)
@@ -99,8 +99,8 @@ crypto_newsession(u_int64_t *sid, struct cryptoini *cri, int hard)
 			}
 
 			/* See if all the algorithms are supported. */
-			for (cr = cri; cr; cr = cr->cri_next) {
-				if (cpc->cc_alg[cr->cri_alg] == 0)
+			SLIST_FOREACH(cri, crl, cri_next) {
+				if (cpc->cc_alg[cri->cri_alg] == 0)
 					break;
 			}
 
@@ -108,7 +108,7 @@ crypto_newsession(u_int64_t *sid, struct cryptoini *cri, int hard)
 			 * If even one algorithm is not supported,
 			 * keep searching.
 			 */
-			if (cr != NULL)
+			if (cri != NULL)
 				continue;
 
 			/*
@@ -164,7 +164,7 @@ crypto_newsession(u_int64_t *sid, struct cryptoini *cri, int hard)
 
 	/* Call the driver initialization routine. */
 	lid = hid; /* Pass the driver ID. */
-	err = crypto_drivers[hid].cc_newsession(&lid, cri);
+	err = crypto_drivers[hid].cc_newsession(&lid, crl);
 	if (err == 0) {
 		(*sid) = hid;
 		(*sid) <<= 32;
@@ -290,7 +290,7 @@ crypto_get_driverid(u_int8_t flags)
  */
 int
 crypto_register(u_int32_t driverid, int *alg,
-    int (*newses)(u_int32_t *, struct cryptoini *),
+    int (*newses)(u_int32_t *, struct cryptolist *),
     int (*freeses)(u_int64_t), int (*process)(struct cryptop *))
 {
 	int s, i;
@@ -463,11 +463,13 @@ crypto_invoke(struct cryptop *crp)
 
  migrate:
 	/* Migrate session. */
-	for (i = 0; i < crp->crp_ndesc - 1; i++)
-		crp->crp_desc[i].CRD_INI.cri_next = &crp->crp_desc[i+1].CRD_INI;
-	crp->crp_desc[crp->crp_ndesc].CRD_INI.cri_next = NULL;
+	SLIST_INIT(&crp->crp_inilist);
+	for (i = 0; i < crp->crp_ndesc; i++) {
+		SLIST_INSERT_HEAD(&crp->crp_inilist,
+		    &crp->crp_desc[i].CRD_INI, cri_next);
+	}
 
-	if (crypto_newsession(&nid, &(crp->crp_desc->CRD_INI), 0) == 0)
+	if (crypto_newsession(&nid, &crp->crp_inilist, 0) == 0)
 		crp->crp_sid = nid;
 
 	crp->crp_etype = EAGAIN;
@@ -503,9 +505,6 @@ crypto_getreq(int num)
 	if (crp == NULL)
 		return NULL;
 
-	crp->crp_desc = crp->crp_sdesc;
-	crp->crp_ndescalloc = crp->crp_ndesc = num;
-
 	if (num > 2) {
 		crp->crp_desc = mallocarray(num, sizeof(struct cryptodesc),
 		    M_CRYPTO_DATA, M_NOWAIT | M_ZERO);
@@ -513,7 +512,9 @@ crypto_getreq(int num)
 			pool_put(&cryptop_pool, crp);
 			return NULL;
 		}
-	}
+	} else
+		crp->crp_desc = crp->crp_sdesc;
+	crp->crp_ndescalloc = crp->crp_ndesc = num;
 
 	return crp;
 }

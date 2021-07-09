@@ -103,7 +103,7 @@ extern void aesni_gmac_final(struct aesni_session *ses, uint8_t *tag,
     uint8_t *icb, uint8_t *hashstate);
 
 void	aesni_setup(void);
-int	aesni_newsession(u_int32_t *, struct cryptoini *);
+int	aesni_newsession(u_int32_t *, struct cryptolist *);
 int	aesni_freesession(u_int64_t);
 int	aesni_process(struct cryptop *);
 
@@ -173,7 +173,7 @@ aesni_setup(void)
 }
 
 int
-aesni_newsession(u_int32_t *sidp, struct cryptoini *cri)
+aesni_newsession(u_int32_t *sidp, struct cryptolist *crl)
 {
 	struct aesni_session *ses = NULL;
 	struct aesni_aes_ctx *aes1, *aes2;
@@ -182,7 +182,7 @@ aesni_newsession(u_int32_t *sidp, struct cryptoini *cri)
 	struct swcr_data *swd;
 	int i;
 
-	if (sidp == NULL || cri == NULL)
+	if (sidp == NULL || SLIST_EMPTY(crl))
 		return (EINVAL);
 
 	ses = pool_get(&aesnipl, PR_NOWAIT | PR_ZERO);
@@ -194,7 +194,7 @@ aesni_newsession(u_int32_t *sidp, struct cryptoini *cri)
 	if (ses->ses_buf != NULL)
 		ses->ses_buflen = PAGE_SIZE;
 
-	for (c = cri; c != NULL; c = c->cri_next) {
+	SLIST_FOREACH(c, crl, cri_next) {
 		switch (c->cri_alg) {
 		case CRYPTO_AES_CBC:
 			ses->ses_klen = c->cri_klen / 8;

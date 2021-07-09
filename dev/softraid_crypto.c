@@ -938,6 +938,7 @@ sr_crypto_alloc_resources_internal(struct sr_discipline *sd,
 {
 	struct sr_workunit	*wu;
 	struct sr_crypto_wu	*crwu;
+	struct cryptolist	crl;
 	struct cryptoini	cri;
 	u_int			num_keys, i;
 
@@ -988,9 +989,11 @@ sr_crypto_alloc_resources_internal(struct sr_discipline *sd,
 			return (ENOMEM);
 	}
 
+	SLIST_INIT(&crl);
 	memset(&cri, 0, sizeof(cri));
 	cri.cri_alg = mdd_crypto->scr_alg;
 	cri.cri_klen = mdd_crypto->scr_klen;
+	SLIST_INSERT_HEAD(&crl, &cri, cri_next);
 
 	/* Allocate a session for every 2^SR_CRYPTO_KEY_BLKSHIFT blocks. */
 	num_keys = ((sd->sd_meta->ssdi.ssd_size - 1) >>
@@ -999,8 +1002,7 @@ sr_crypto_alloc_resources_internal(struct sr_discipline *sd,
 		return (EFBIG);
 	for (i = 0; i < num_keys; i++) {
 		cri.cri_key = mdd_crypto->scr_key[i];
-		if (crypto_newsession(&mdd_crypto->scr_sid[i],
-		    &cri, 0) != 0) {
+		if (crypto_newsession(&mdd_crypto->scr_sid[i], &crl, 0) != 0) {
 			sr_crypto_free_sessions(sd, mdd_crypto);
 			return (EINVAL);
 		}

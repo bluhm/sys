@@ -52,6 +52,7 @@
 #ifndef _CRYPTO_CRYPTO_H_
 #define _CRYPTO_CRYPTO_H_
 
+#include <sys/queue.h>
 #include <sys/task.h>
 
 /* Some initial values */
@@ -122,8 +123,9 @@ struct cryptoini {
 	} u;
 #define cri_iv		u.iv
 #define cri_esn		u.esn
-	struct cryptoini *cri_next;
+	SLIST_ENTRY(cryptoini)	cri_next;
 };
+SLIST_HEAD(cryptolist, cryptoini);
 
 /* Describe boundaries of a single crypto operation */
 struct cryptodesc {
@@ -181,6 +183,7 @@ struct cryptop {
 	struct cryptodesc crp_sdesc[2];	/* Static array for small ops */
 	int		 crp_ndesc;	/* Amount of descriptors to use */
 	int		 crp_ndescalloc;/* Amount of descriptors allocated */
+	struct cryptolist crp_inilist;	/* List descriptors initializations */
 
 	void (*crp_callback)(struct cryptop *); /* Callback function */
 
@@ -208,18 +211,18 @@ struct cryptocap {
 #define CRYPTOCAP_F_SOFTWARE    0x02
 #define CRYPTOCAP_F_MPSAFE      0x04
 
-	int		(*cc_newsession) (u_int32_t *, struct cryptoini *);
+	int		(*cc_newsession) (u_int32_t *, struct cryptolist *);
 	int		(*cc_process) (struct cryptop *);
 	int		(*cc_freesession) (u_int64_t);
 };
 
 void	crypto_init(void);
 
-int	crypto_newsession(u_int64_t *, struct cryptoini *, int);
+int	crypto_newsession(u_int64_t *, struct cryptolist *, int);
 int	crypto_freesession(u_int64_t);
 int	crypto_dispatch(struct cryptop *);
 int	crypto_register(u_int32_t, int *,
-	    int (*)(u_int32_t *, struct cryptoini *), int (*)(u_int64_t),
+	    int (*)(u_int32_t *, struct cryptolist *), int (*)(u_int64_t),
 	    int (*)(struct cryptop *));
 int	crypto_unregister(u_int32_t, int);
 int32_t	crypto_get_driverid(u_int8_t);

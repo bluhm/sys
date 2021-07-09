@@ -69,7 +69,7 @@ extern const u_int8_t hmac_ipad_buffer[HMAC_MAX_BLOCK_LEN];
 extern const u_int8_t hmac_opad_buffer[HMAC_MAX_BLOCK_LEN];
 
 void viac3_crypto_setup(void);
-int viac3_crypto_newsession(u_int32_t *, struct cryptoini *);
+int viac3_crypto_newsession(u_int32_t *, struct cryptolist *);
 int viac3_crypto_process(struct cryptop *);
 int viac3_crypto_swauth(struct cryptop *, struct cryptodesc *,
     struct swcr_data *, caddr_t);
@@ -109,7 +109,7 @@ viac3_crypto_setup(void)
 }
 
 int
-viac3_crypto_newsession(u_int32_t *sidp, struct cryptoini *cri)
+viac3_crypto_newsession(u_int32_t *sidp, struct cryptolist *crl)
 {
 	struct cryptoini	*c;
 	struct viac3_softc	*sc = vc3_sc;
@@ -118,7 +118,7 @@ viac3_crypto_newsession(u_int32_t *sidp, struct cryptoini *cri)
 	struct swcr_data	*swd;
 	int			 sesn, i, cw0;
 
-	if (sc == NULL || sidp == NULL || cri == NULL)
+	if (sc == NULL || sidp == NULL || SLIST_EMPTY(crl))
 		return (EINVAL);
 
 	if (sc->sc_sessions == NULL) {
@@ -154,7 +154,7 @@ viac3_crypto_newsession(u_int32_t *sidp, struct cryptoini *cri)
 	bzero(ses, sizeof(*ses));
 	ses->ses_used = 1;
 
-	for (c = cri; c != NULL; c = c->cri_next) {
+	SLIST_FOREACH(c, crl, cri_next) {
 		switch (c->cri_alg) {
 		case CRYPTO_AES_CBC:
 			switch (c->cri_klen) {

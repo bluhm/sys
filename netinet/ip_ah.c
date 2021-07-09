@@ -102,6 +102,7 @@ int
 ah_init(struct tdb *tdbp, const struct xformsw *xsp, struct ipsecinit *ii)
 {
 	const struct auth_hash *thash = NULL;
+	struct cryptolist crl;
 	struct cryptoini cria, crin;
 	int error;
 
@@ -155,19 +156,21 @@ ah_init(struct tdb *tdbp, const struct xformsw *xsp, struct ipsecinit *ii)
 	memcpy(tdbp->tdb_amxkey, ii->ii_authkey, tdbp->tdb_amxkeylen);
 
 	/* Initialize crypto session. */
+	SLIST_INIT(&crl);
 	memset(&cria, 0, sizeof(cria));
+	SLIST_INSERT_HEAD(&crl, &cria, cri_next);
 	cria.cri_alg = tdbp->tdb_authalgxform->type;
 	cria.cri_klen = ii->ii_authkeylen * 8;
 	cria.cri_key = ii->ii_authkey;
 
 	if ((tdbp->tdb_wnd > 0) && (tdbp->tdb_flags & TDBF_ESN)) {
 		memset(&crin, 0, sizeof(crin));
+		SLIST_INSERT_HEAD(&crl, &crin, cri_next);
 		crin.cri_alg = CRYPTO_ESN;
-		cria.cri_next = &crin;
 	}
 
 	KERNEL_LOCK();
-	error = crypto_newsession(&tdbp->tdb_cryptoid, &cria, 0);
+	error = crypto_newsession(&tdbp->tdb_cryptoid, &crl, 0);
 	KERNEL_UNLOCK();
 	return error;
 }

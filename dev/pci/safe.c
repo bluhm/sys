@@ -75,7 +75,7 @@ struct cfdriver safe_cd = {
 };
 
 int safe_intr(void *);
-int safe_newsession(u_int32_t *, struct cryptoini *);
+int safe_newsession(u_int32_t *, struct cryptolist *);
 int safe_freesession(u_int64_t);
 int safe_process(struct cryptop *);
 void safe_callback(struct safe_softc *, struct safe_ringentry *);
@@ -1246,7 +1246,7 @@ retry:
  * id on successful allocation.
  */
 int
-safe_newsession(u_int32_t *sidp, struct cryptoini *cri)
+safe_newsession(u_int32_t *sidp, struct cryptolist *crl)
 {
 	struct cryptoini *c, *encini = NULL, *macini = NULL;
 	struct safe_softc *sc = NULL;
@@ -1255,7 +1255,7 @@ safe_newsession(u_int32_t *sidp, struct cryptoini *cri)
 	SHA1_CTX sha1ctx;
 	int i, sesn;
 
-	if (sidp == NULL || cri == NULL)
+	if (sidp == NULL || SLIST_EMPTY(crl))
 		return (EINVAL);
 	for (i = 0; i < safe_cd.cd_ndevs; i++) {
 		sc = safe_cd.cd_devs[i];
@@ -1265,7 +1265,7 @@ safe_newsession(u_int32_t *sidp, struct cryptoini *cri)
 	if (sc == NULL)
 		return (EINVAL);
 
-	for (c = cri; c != NULL; c = c->cri_next) {
+	SLIST_FOREACH(c, crl, cri_next) {
 		if (c->cri_alg == CRYPTO_MD5_HMAC ||
 		    c->cri_alg == CRYPTO_SHA1_HMAC) {
 			if (macini)

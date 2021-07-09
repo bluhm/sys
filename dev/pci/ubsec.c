@@ -81,7 +81,7 @@ struct cfdriver ubsec_cd = {
 };
 
 int	ubsec_intr(void *);
-int	ubsec_newsession(u_int32_t *, struct cryptoini *);
+int	ubsec_newsession(u_int32_t *, struct cryptolist *);
 int	ubsec_freesession(u_int64_t);
 int	ubsec_process(struct cryptop *);
 void	ubsec_callback(struct ubsec_softc *, struct ubsec_q *);
@@ -596,7 +596,7 @@ feed1:
  * id on successful allocation.
  */
 int
-ubsec_newsession(u_int32_t *sidp, struct cryptoini *cri)
+ubsec_newsession(u_int32_t *sidp, struct cryptolist *crl)
 {
 	struct cryptoini *c, *encini = NULL, *macini = NULL;
 	struct ubsec_softc *sc = NULL;
@@ -605,7 +605,7 @@ ubsec_newsession(u_int32_t *sidp, struct cryptoini *cri)
 	SHA1_CTX sha1ctx;
 	int i, sesn;
 
-	if (sidp == NULL || cri == NULL)
+	if (sidp == NULL || SLIST_EMPTY(crl))
 		return (EINVAL);
 
 	for (i = 0; i < ubsec_cd.cd_ndevs; i++) {
@@ -616,7 +616,7 @@ ubsec_newsession(u_int32_t *sidp, struct cryptoini *cri)
 	if (sc == NULL)
 		return (EINVAL);
 
-	for (c = cri; c != NULL; c = c->cri_next) {
+	SLIST_FOREACH(c, crl, cri_next) {
 		if (c->cri_alg == CRYPTO_MD5_HMAC ||
 		    c->cri_alg == CRYPTO_SHA1_HMAC) {
 			if (macini)

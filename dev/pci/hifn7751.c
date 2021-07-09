@@ -93,7 +93,7 @@ void	hifn_sessions(struct hifn_softc *);
 int	hifn_intr(void *);
 u_int	hifn_write_command(struct hifn_command *, u_int8_t *);
 u_int32_t hifn_next_signature(u_int32_t a, u_int cnt);
-int	hifn_newsession(u_int32_t *, struct cryptoini *);
+int	hifn_newsession(u_int32_t *, struct cryptolist *);
 int	hifn_freesession(u_int64_t);
 int	hifn_process(struct cryptop *);
 void	hifn_callback(struct hifn_softc *, struct hifn_command *, u_int8_t *);
@@ -1802,14 +1802,14 @@ hifn_intr(void *arg)
  * id on successful allocation.
  */
 int
-hifn_newsession(u_int32_t *sidp, struct cryptoini *cri)
+hifn_newsession(u_int32_t *sidp, struct cryptolist *crl)
 {
 	struct cryptoini *c;
 	struct hifn_softc *sc = NULL;
 	int i, mac = 0, cry = 0, comp = 0, sesn;
 	struct hifn_session *ses = NULL;
 
-	if (sidp == NULL || cri == NULL)
+	if (sidp == NULL || SLIST_EMPTY(crl))
 		return (EINVAL);
 
 	for (i = 0; i < hifn_cd.cd_ndevs; i++) {
@@ -1853,7 +1853,7 @@ hifn_newsession(u_int32_t *sidp, struct cryptoini *cri)
 	}
 	bzero(ses, sizeof(*ses));
 
-	for (c = cri; c != NULL; c = c->cri_next) {
+	SLIST_FOREACH(c, crl, cri_next) {
 		switch (c->cri_alg) {
 		case CRYPTO_MD5_HMAC:
 		case CRYPTO_SHA1_HMAC:
