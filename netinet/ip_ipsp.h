@@ -432,12 +432,13 @@ struct tdb_ident {
 };
 
 struct tdb_crypto {
-	u_int32_t		tc_spi;
 	union sockaddr_union	tc_dst;
-	u_int8_t		tc_proto;
+	u_int64_t		tc_rpl;
+	u_int32_t		tc_spi;
 	int			tc_protoff;
 	int			tc_skip;
 	u_int			tc_rdomain;
+	u_int8_t		tc_proto;
 };
 
 struct ipsecinit {
@@ -622,7 +623,7 @@ int	tcp_signature_tdb_output(struct mbuf *, struct tdb *, struct mbuf **,
 	  int, int);
 
 /* Replay window */
-int	checkreplaywindow(struct tdb *, u_int32_t, u_int32_t *, int);
+int	checkreplaywindow(struct tdb *, u_int64_t, u_int32_t, u_int32_t *, int);
 
 /* Packet processing */
 int	ipsp_process_packet(struct mbuf *, struct tdb *, int, int);
