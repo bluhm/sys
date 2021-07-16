@@ -395,8 +395,6 @@ ipsec_output_cb(struct cryptop *crp)
 	struct tdb *tdb = NULL;
 	int error, ilen, olen;
 
-	KERNEL_ASSERT_LOCKED();
-
 	if (m == NULL) {
 		DPRINTF("bogus returned buffer from crypto");
 		ipsecstat_inc(ipsec_crypto);
@@ -484,6 +482,8 @@ ipsp_process_done(struct mbuf *m, struct tdb *tdb)
 	struct tdb_ident *tdbi;
 	struct m_tag *mtag;
 	int roff, error;
+
+	NET_ASSERT_LOCKED();
 
 	tdb->tdb_last_used = gettime();
 
