@@ -380,14 +380,11 @@ ipsec_input_cb(struct cryptop *crp)
 	struct tdb *tdb = NULL;
 	int clen, error;
 
-	KERNEL_ASSERT_LOCKED();
-
 	if (m == NULL) {
 		DPRINTF("bogus returned buffer from crypto");
 		ipsecstat_inc(ipsec_crypto);
 		goto droponly;
 	}
-
 
 	NET_LOCK();
 	tdb = gettdb(tc->tc_rdomain, tc->tc_spi, &tc->tc_dst, tc->tc_proto);
