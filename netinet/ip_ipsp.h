@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_ipsp.h,v 1.201 2021/07/13 08:16:17 mvs Exp $	*/
+/*	$OpenBSD: ip_ipsp.h,v 1.202 2021/07/18 14:38:20 bluhm Exp $	*/
 /*
  * The authors of this code are John Ioannidis (ji@tla.org),
  * Angelos D. Keromytis (kermit@csd.uch.gr),
