@@ -562,6 +562,8 @@ ip_local(struct mbuf **mp, int *offp, int nxt, int af)
 	struct ipqent *ipqe;
 	int mff, hlen;
 
+	NET_ASSERT_WLOCKED();
+
 	hlen = ip->ip_hl << 2;
 
 	/*

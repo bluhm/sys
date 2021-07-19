@@ -586,6 +586,8 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 int
 ip6_local(struct mbuf **mp, int *offp, int nxt, int af)
 {
+	NET_ASSERT_WLOCKED();
+
 	if (ip6_hbhchcheck(*mp, offp, &nxt, NULL))
 		return IPPROTO_DONE;
 
