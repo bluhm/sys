@@ -109,6 +109,10 @@
 #include <netinet6/ip6_var.h>
 #endif
 
+#ifdef IPSEC
+#include <netinet/ip_ipsp.h>
+#endif
+
 #ifdef MPLS
 #include <netmpls/mpls.h>
 #endif
@@ -815,6 +819,7 @@ void
 if_input_process(struct ifnet *ifp, struct mbuf_list *ml)
 {
 	struct mbuf *m;
+	int exclusive_lock = 0;
 
 	if (ml_empty(ml))
 		return;
@@ -835,15 +840,27 @@ if_input_process(struct ifnet *ifp, struct mbuf_list *ml)
 	 * lists and the socket layer.
 	 */
 
+#ifdef IPSEC
 	/*
 	 * XXXSMP IPsec data structures are not ready to be accessed
 	 * by multiple network threads in parallel.  In this case
 	 * use an exclusive lock.
 	 */
-	NET_RLOCK_IN_SOFTNET();
+	if (ipsec_in_use)
+		exclusive_lock = 1;
+#endif
+	if (exclusive_lock)
+		NET_LOCK();
+	else
+		NET_RLOCK_IN_SOFTNET();
+
 	while ((m = ml_dequeue(ml)) != NULL)
 		(*ifp->if_input)(ifp, m);
-	NET_RUNLOCK_IN_SOFTNET();
+
+	if (exclusive_lock)
+		NET_UNLOCK();
+	else
+		NET_RUNLOCK_IN_SOFTNET();
 }
 
 void
