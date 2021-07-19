@@ -834,6 +834,12 @@ if_input_process(struct ifnet *ifp, struct mbuf_list *ml)
 	 * to PF globals, pipex globals, unicast and multicast addresses
 	 * lists and the socket layer.
 	 */
+
+	/*
+	 * XXXSMP IPsec data structures are not ready to be accessed
+	 * by multiple network threads in parallel.  In this case
+	 * use an exclusive lock.
+	 */
 	NET_LOCK();
 	while ((m = ml_dequeue(ml)) != NULL)
 		(*ifp->if_input)(ifp, m);
@@ -3311,17 +3317,14 @@ unhandled_af(int af)
 	panic("unhandled af %d", af);
 }
 
-/*
- * XXXSMP This tunable is here to work around the fact that IPsec
- * globals aren't ready to be accessed by multiple threads in
- * parallel.
- */
-int		 nettaskqs = NET_TASKQ;
-
 struct taskq *
 net_tq(unsigned int ifindex)
 {
 	struct taskq *t = NULL;
+	static int nettaskqs;
+
+	if (nettaskqs == 0)
+		nettaskqs = min(NET_TASKQ, ncpus);
 
 	t = nettqmp[ifindex % nettaskqs];
 

@@ -2019,14 +2019,6 @@ pfkeyv2_send(struct socket *so, void *message, int len)
 			}
 			TAILQ_INSERT_HEAD(&ipsec_policy_head, ipo, ipo_list);
 			ipsec_in_use++;
-			/*
-			 * XXXSMP IPsec data structures are not ready to be
-			 * accessed by multiple Network threads in parallel,
-			 * so force all packets to be processed by the first
-			 * one.
-			 */
-			extern int nettaskqs;
-			nettaskqs = 1;
 		} else {
 			ipo->ipo_last_searched = ipo->ipo_flags = 0;
 		}
