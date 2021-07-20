@@ -535,12 +535,14 @@ ether_input(struct ifnet *ifp, struct mbuf *m)
 	case ETHERTYPE_PPPOE:
 		if (m->m_flags & (M_MCAST | M_BCAST))
 			goto dropanyway;
+		KERNEL_LOCK();
 #ifdef PIPEX
 		if (pipex_enable) {
 			struct pipex_session *session;
 
 			if ((session = pipex_pppoe_lookup_session(m)) != NULL) {
 				pipex_pppoe_input(m, session);
+				KERNEL_UNLOCK();
 				return;
 			}
 		}
@@ -549,6 +551,7 @@ ether_input(struct ifnet *ifp, struct mbuf *m)
 			pppoe_disc_input(m);
 		else
 			pppoe_data_input(m);
+		KERNEL_UNLOCK();
 		return;
 #endif
 #ifdef MPLS
