@@ -819,7 +819,7 @@ void
 if_input_process(struct ifnet *ifp, struct mbuf_list *ml)
 {
 	struct mbuf *m;
-	int exclusive_lock = 0;
+	int kernel_lock = 0;
 
 	if (ml_empty(ml))
 		return;
@@ -847,20 +847,18 @@ if_input_process(struct ifnet *ifp, struct mbuf_list *ml)
 	 * use an exclusive lock.
 	 */
 	if (ipsec_in_use)
-		exclusive_lock = 1;
+		kernel_lock = 1;
 #endif
-	if (exclusive_lock)
-		NET_LOCK();
-	else
-		NET_RLOCK_IN_SOFTNET();
+	NET_RLOCK_IN_SOFTNET();
+	if (kernel_lock)
+		KERNEL_LOCK();
 
 	while ((m = ml_dequeue(ml)) != NULL)
 		(*ifp->if_input)(ifp, m);
 
-	if (exclusive_lock)
-		NET_UNLOCK();
-	else
-		NET_RUNLOCK_IN_SOFTNET();
+	if (kernel_lock)
+		KERNEL_UNLOCK();
+	NET_RUNLOCK_IN_SOFTNET();
 }
 
 void
