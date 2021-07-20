@@ -418,7 +418,12 @@ ipsec_output_cb(struct cryptop *crp)
 			if (tdb->tdb_cryptoid != 0)
 				tdb->tdb_cryptoid = crp->crp_sid;
 			NET_UNLOCK();
-			crypto_dispatch(crp);
+			error = crypto_dispatch(crp);
+			if (error) {
+				DPRINTF("crypto dispatch error %d", error);
+				ipsecstat_inc(ipsec_odrops);
+				tdb->tdb_odrops++;
+			}
 			return;
 		}
 		DPRINTF("crypto error %d", crp->crp_etype);
