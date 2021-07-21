@@ -394,10 +394,12 @@ crypto_dispatch(struct cryptop *crp)
 	hid = (crp->crp_sid >> 32) & 0xffffffff;
 	if (hid < crypto_drivers_num) {
 		if (crypto_drivers[hid].cc_flags & CRYPTOCAP_F_MPSAFE)
-			/* XXXSMP crypto_invoke() is not MP safe */
-			lock = 1;
+			lock = 0;
 	}
 	splx(s);
+
+	/* XXXSMP crypto_invoke() is not MP safe */
+	lock = 1;
 
 	if (crp->crp_flags & CRYPTO_F_NOQUEUE) {
 		if (lock)
@@ -543,24 +545,16 @@ crypto_init(void)
 void
 crypto_done(struct cryptop *crp)
 {
-	int lock = 1;
-
 	crp->crp_flags |= CRYPTO_F_DONE;
-
-	if (crp->crp_flags & CRYPTO_F_MPSAFE)
-		lock = 0;
 
 	if (crp->crp_flags & CRYPTO_F_NOQUEUE) {
 		/* not from the crypto queue, wakeup the userland process */
-		if (lock)
-			KERNEL_LOCK();
 		crp->crp_callback(crp);
-		if (lock)
-			KERNEL_UNLOCK();
 	} else {
 		struct taskq *tq;
 
-		tq = lock ? crypto_taskq : crypto_taskq_mpsafe;
+		tq = (crp->crp_flags & CRYPTO_F_MPSAFE) ?
+		    crypto_taskq_mpsafe : crypto_taskq;
 		task_set(&crp->crp_task, (void (*))crp->crp_callback, crp);
 		task_add(tq, &crp->crp_task);
 	}
