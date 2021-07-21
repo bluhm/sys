@@ -380,18 +380,19 @@ ipsec_input_cb(struct cryptop *crp)
 	struct tdb *tdb = NULL;
 	int clen, error;
 
+	NET_ASSERT_LOCKED();
+
 	if (m == NULL) {
 		DPRINTF("bogus returned buffer from crypto");
 		ipsecstat_inc(ipsec_crypto);
-		goto droponly;
+		goto drop;
 	}
 
-	NET_LOCK();
 	tdb = gettdb(tc->tc_rdomain, tc->tc_spi, &tc->tc_dst, tc->tc_proto);
 	if (tdb == NULL) {
 		DPRINTF("TDB is expired while in crypto");
 		ipsecstat_inc(ipsec_notdb);
-		goto baddone;
+		goto drop;
 	}
 
 	/* Check for crypto errors */
@@ -400,18 +401,16 @@ ipsec_input_cb(struct cryptop *crp)
 			/* Reset the session ID */
 			if (tdb->tdb_cryptoid != 0)
 				tdb->tdb_cryptoid = crp->crp_sid;
-			NET_UNLOCK();
 			error = crypto_dispatch(crp);
 			if (error) {
 				DPRINTF("crypto dispatch error %d", error);
-				ipsecstat_inc(ipsec_idrops);
-				tdb->tdb_idrops++;
+				goto drop;
 			}
 			return;
 		}
 		DPRINTF("crypto error %d", crp->crp_etype);
 		ipsecstat_inc(ipsec_noxform);
-		goto baddone;
+		goto drop;
 	}
 
 	/* Length of data after processing */
@@ -435,16 +434,13 @@ ipsec_input_cb(struct cryptop *crp)
 		    __func__, tdb->tdb_sproto);
 	}
 
-	NET_UNLOCK();
 	if (error) {
 		ipsecstat_inc(ipsec_idrops);
 		tdb->tdb_idrops++;
 	}
 	return;
 
- baddone:
-	NET_UNLOCK();
- droponly:
+ drop:
 	ipsecstat_inc(ipsec_idrops);
 	if (tdb != NULL)
 		tdb->tdb_idrops++;
