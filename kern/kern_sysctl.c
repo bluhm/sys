@@ -84,6 +84,9 @@
 
 #include <uvm/uvm_extern.h>
 
+#ifdef CLOCKINTR
+#include <dev/clockintr.h>
+#endif
 #include <dev/cons.h>
 
 #include <net/route.h>
@@ -642,6 +645,10 @@ kern_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		return (timeout_sysctl(oldp, oldlenp, newp, newlen));
 	case KERN_UTC_OFFSET:
 		return (sysctl_utc_offset(oldp, oldlenp, newp, newlen));
+#ifdef CLOCKINTR
+	case KERN_CLOCKINTR_STATS:
+		return (clockintr_sysctl(oldp, oldlenp, newp, newlen));
+#endif
 	default:
 		return (sysctl_bounded_arr(kern_vars, nitems(kern_vars), name,
 		    namelen, oldp, oldlenp, newp, newlen));

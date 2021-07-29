@@ -939,7 +939,7 @@ cpu_hatch(void *v)
 	tsc_sync_ap(ci);
 
 	lapic_enable();
-	lapic_startclock();
+
 	cpu_ucode_apply(ci);
 	cpu_tsx_disable(ci);
 
@@ -995,6 +995,8 @@ cpu_hatch(void *v)
 
 	nanouptime(&ci->ci_schedstate.spc_runtime);
 	splx(s);
+
+	lapic_startclock();
 
 	SCHED_LOCK(s);
 	cpu_switchto(NULL, sched_chooseproc());

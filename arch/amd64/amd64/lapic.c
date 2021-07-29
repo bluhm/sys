@@ -49,6 +49,7 @@
 #include <machine/i82489reg.h>
 #include <machine/i82489var.h>
 
+#include <dev/clockintr.h>
 #include <dev/ic/i8253reg.h>
 
 #include "ioapic.h"
@@ -72,7 +73,6 @@ struct evcount clk_count;
 struct evcount ipi_count;
 #endif
 
-void	lapic_delay(int);
 static u_int32_t lapic_gettick(void);
 void	lapic_clockintr(void *, struct intrframe);
 void	lapic_initclocks(void);
@@ -402,18 +402,23 @@ lapic_gettick(void)
 
 #include <sys/kernel.h>		/* for hz */
 
-u_int32_t lapic_tval;
+void lapic_timer_oneshot(uint32_t, uint32_t);
+void lapic_timer_periodic(uint32_t, uint32_t);
+
+void lapic_timer_rearm(uint64_t);
+
+const struct intrclock lapic_intrclock = {
+	.ic_rearm = lapic_timer_rearm,
+};
 
 /*
  * this gets us up to a 4GHz busclock....
  */
 u_int32_t lapic_per_second = 0;
-u_int32_t lapic_frac_usec_per_cycle;
-u_int64_t lapic_frac_cycle_per_usec;
-u_int32_t lapic_delaytab[26];
 
-void lapic_timer_oneshot(uint32_t, uint32_t);
-void lapic_timer_periodic(uint32_t, uint32_t);
+uint64_t lapic_nsec_cycle_ratio;
+uint64_t lapic_nsec_max;
+uint32_t lapic_cycle_min = 1;
 
 /*
  * Start the local apic countdown timer.
@@ -443,6 +448,17 @@ lapic_timer_periodic(uint32_t mask, uint32_t cycles)
 }
 
 void
+lapic_timer_rearm(uint64_t nsecs)
+{
+	uint32_t cycles;
+
+	nsecs = MIN(lapic_nsec_max, nsecs);
+	cycles = (nsecs * lapic_nsec_cycle_ratio) >> 32;
+	cycles = MAX(lapic_cycle_min, cycles);
+	lapic_timer_oneshot(0, cycles);
+}
+
+void
 lapic_clockintr(void *arg, struct intrframe frame)
 {
 	struct cpu_info *ci = curcpu();
@@ -450,7 +466,7 @@ lapic_clockintr(void *arg, struct intrframe frame)
 
 	floor = ci->ci_handled_intr_level;
 	ci->ci_handled_intr_level = ci->ci_ilevel;
-	hardclock((struct clockframe *)&frame);
+	clockintr_dispatch((struct clockframe *)&frame);
 	ci->ci_handled_intr_level = floor;
 
 	clk_count.ec_count++;
@@ -459,17 +475,23 @@ lapic_clockintr(void *arg, struct intrframe frame)
 void
 lapic_startclock(void)
 {
-	lapic_timer_periodic(0, lapic_tval);
+	clockintr_cpu_init(&lapic_intrclock, 0);
+	lapic_timer_rearm(0);
 }
 
 void
 lapic_initclocks(void)
 {
-	lapic_startclock();
+	KASSERT(lapic_per_second > 0);
 
 	i8254_inittimecounter_simple();
-}
 
+	stathz = hz;
+	profhz = stathz;
+	clockintr_init(hz, stathz, CI_RNDSTAT);
+
+	lapic_startclock();
+}
 
 extern int gettick(void);	/* XXX put in header file */
 extern u_long rtclock_tval; /* XXX put in header file */
@@ -487,8 +509,6 @@ wait_next_cycle(void)
 		tlast = tick;
 	}
 }
-
-extern void tsc_delay(int);
 
 /*
  * Calibrate the local apic count-down timer (which is running at
@@ -551,75 +571,16 @@ skip_calibration:
 	printf("%s: apic clock running at %dMHz\n",
 	    ci->ci_dev->dv_xname, lapic_per_second / (1000 * 1000));
 
-	if (lapic_per_second != 0) {
-		/*
-		 * reprogram the apic timer to run in periodic mode.
-		 * XXX need to program timer on other cpu's, too.
-		 */
-		lapic_tval = (lapic_per_second * 2) / hz;
-		lapic_tval = (lapic_tval / 2) + (lapic_tval & 0x1);
-
-		lapic_timer_periodic(LAPIC_LVTT_M, lapic_tval);
-
-		/*
-		 * Compute fixed-point ratios between cycles and
-		 * microseconds to avoid having to do any division
-		 * in lapic_delay.
-		 */
-
-		tmp = (1000000 * (u_int64_t)1 << 32) / lapic_per_second;
-		lapic_frac_usec_per_cycle = tmp;
-
-		tmp = (lapic_per_second * (u_int64_t)1 << 32) / 1000000;
-
-		lapic_frac_cycle_per_usec = tmp;
-
-		/*
-		 * Compute delay in cycles for likely short delays in usec.
-		 */
-		for (i = 0; i < 26; i++)
-			lapic_delaytab[i] = (lapic_frac_cycle_per_usec * i) >>
-			    32;
-
-		/*
-		 * Now that the timer's calibrated, use the apic timer routines
-		 * for all our timing needs..
-		 */
-		if (delay_func != tsc_delay)
-			delay_func = lapic_delay;
-		initclock_func = lapic_initclocks;
-	}
-}
-
-/*
- * delay for N usec.
- */
-
-void
-lapic_delay(int usec)
-{
-	int32_t tick, otick;
-	int64_t deltat;		/* XXX may want to be 64bit */
-
-	otick = lapic_gettick();
-
-	if (usec <= 0)
+	/*
+	 * XXX What happens if the lapic timer frequency is zero at this
+	 * point?  Should we panic?
+	 */
+	if (lapic_per_second == 0)
 		return;
-	if (usec <= 25)
-		deltat = lapic_delaytab[usec];
-	else
-		deltat = (lapic_frac_cycle_per_usec * usec) >> 32;
 
-	while (deltat > 0) {
-		tick = lapic_gettick();
-		if (tick > otick)
-			deltat -= lapic_tval - (tick - otick);
-		else
-			deltat -= otick - tick;
-		otick = tick;
-
-		CPU_BUSY_CYCLE();
-	}
+	lapic_nsec_cycle_ratio = lapic_per_second * (1ULL << 32) / 1000000000;
+	lapic_nsec_max = UINT64_MAX / lapic_nsec_cycle_ratio;
+	initclock_func = lapic_initclocks;
 }
 
 /*

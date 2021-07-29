@@ -190,7 +190,8 @@ struct ctlname {
 #define	KERN_TIMEOUT_STATS	87	/* struct: timeout status and stats */
 #define	KERN_UTC_OFFSET		88	/* int: adjust RTC time to UTC */
 #define	KERN_VIDEO		89	/* struct: video properties */
-#define	KERN_MAXID		90	/* number of valid kern ids */
+#define	KERN_CLOCKINTR_STATS	90	/* struct: clockintr stats */
+#define	KERN_MAXID		91	/* number of valid kern ids */
 
 #define	CTL_KERN_NAMES { \
 	{ 0, 0 }, \

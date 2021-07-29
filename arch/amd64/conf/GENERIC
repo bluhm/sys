@@ -20,6 +20,7 @@ option		MTRR		# CPU memory range attributes control
 
 option		NTFS		# NTFS support
 option		HIBERNATE	# Hibernate support
+option		CLOCKINTR
 
 config		bsd	swap generic
 
