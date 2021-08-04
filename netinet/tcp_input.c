@@ -620,7 +620,7 @@ findpcb:
 
 	/* Unscale the window into a 32-bit value. */
 	if ((tiflags & TH_SYN) == 0)
-		tiwin = th->th_win << tp->snd_scale;
+		tiwin = (u_long)th->th_win << tp->snd_scale;
 	else
 		tiwin = th->th_win;
 
@@ -1454,7 +1454,7 @@ trimthenstep6:
 			(TF_RCVD_SCALE|TF_REQ_SCALE)) {
 			tp->snd_scale = tp->requested_s_scale;
 			tp->rcv_scale = tp->request_r_scale;
-			tiwin = th->th_win << tp->snd_scale;
+			tiwin = (u_long)th->th_win << tp->snd_scale;
 		}
 		tcp_flush_queue(tp);
 		tp->snd_wl1 = th->th_seq - 1;
