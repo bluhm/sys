@@ -1019,8 +1019,7 @@ findpcb:
 			tp->rcv_nxt += tlen;
 			/* Pull snd_wl1 and rcv_up up to prevent seq wrap. */
 			tp->snd_wl1 = th->th_seq;
-			if (SEQ_GT(tp->rcv_nxt, tp->rcv_up))
-				tp->rcv_up = tp->rcv_nxt;
+			tp->rcv_up = tp->rcv_nxt;
 			tcpstat_pkt(tcps_rcvpack, tcps_rcvbyte, tlen);
 			ND6_HINT(tp);
 
