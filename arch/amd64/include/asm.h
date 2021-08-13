@@ -193,6 +193,7 @@
 		jmp	68b		; \
 		_ALIGN_TRAPS		; \
 	69:	mov	%reg,(%rsp)	; \
-		ret
+		ret			; \
+		lfence
 
 #endif /* !_MACHINE_ASM_H_ */
