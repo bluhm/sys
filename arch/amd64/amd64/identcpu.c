@@ -1,4 +1,4 @@
-/*	$OpenBSD: identcpu.c,v 1.118 2020/12/31 06:22:33 jsg Exp $	*/
+/*	$OpenBSD: identcpu.c,v 1.120 2021/08/31 15:52:59 patrick Exp $	*/
 /*	$NetBSD: identcpu.c,v 1.1 2003/04/26 18:39:28 fvdl Exp $	*/
 
 /*
@@ -41,13 +41,19 @@
 #include <sys/sysctl.h>
 
 #include "vmm.h"
+#include "pvbus.h"
 
 #include <machine/cpu.h>
 #include <machine/cpufunc.h>
 
+#if NPVBUS > 0
+#include <dev/pv/pvvar.h>
+#endif
+
 void	replacesmap(void);
 void	replacemeltdown(void);
 uint64_t cpu_freq(struct cpu_info *);
+void	tsc_identify(struct cpu_info *);
 void	tsc_timecounter_init(struct cpu_info *, uint64_t);
 #if NVMM > 0
 void	cpu_check_vmm_cap(struct cpu_info *);
@@ -521,6 +527,12 @@ identifycpu(struct cpu_info *ci)
 		ci->ci_model += ((ci->ci_signature >> 16) & 0x0f) << 4;
 	}
 
+#if NPVBUS > 0
+	/* Detect hypervisors early, attach the paravirtual bus later */
+	if (CPU_IS_PRIMARY(ci) && cpu_ecxfeature & CPUIDECX_HV)
+		pvbus_identify();
+#endif
+
 	if (ci->ci_feature_flags && ci->ci_feature_flags & CPUID_TSC) {
 		/* Has TSC, check if it's constant */
 		if (!strcmp(cpu_vendor, "GenuineIntel")) {
@@ -545,6 +557,8 @@ identifycpu(struct cpu_info *ci)
 		/* Check if it's an invariant TSC */
 		if (cpu_apmi_edx & CPUIDEDX_ITSC)
 			ci->ci_flags |= CPUF_INVAR_TSC;
+
+		tsc_identify(ci);
 	}
 
 	freq = cpu_freq(ci);
