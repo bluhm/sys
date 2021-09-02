@@ -269,6 +269,7 @@ NENTRY(lgdt)
 	pushq	%rax
 	RETGUARD_CHECK(lgdt, r11)
 	lretq
+	lfence
 END(lgdt)
 
 #ifdef DDB
