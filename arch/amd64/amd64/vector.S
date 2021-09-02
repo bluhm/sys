@@ -537,6 +537,7 @@ KUENTRY(x2apic_eoi)
 	popq    %rcx
 	popq    %rax
 	ret
+	lfence
 END(x2apic_eoi)
 
 #if NLAPIC > 0

@@ -491,6 +491,7 @@ NENTRY(hibernate_activate_resume_pt_machdep)
 
 1:	RETGUARD_CHECK(hibernate_activate_resume_pt_machdep, r11)
 	ret
+	lfence
 
 	/*
 	 * Switch to the private resume-time hibernate stack
@@ -505,12 +506,14 @@ NENTRY(hibernate_switch_stack_machdep)
 	/* On our own stack from here onward */
 	RETGUARD_CHECK(hibernate_switch_stack_machdep, r11)
 	ret
+	lfence
 
 NENTRY(hibernate_flush)
 	RETGUARD_SETUP(hibernate_flush, r11)
 	invlpg	HIBERNATE_INFLATE_PAGE
 	RETGUARD_CHECK(hibernate_flush, r11)
 	ret
+	lfence
 #endif /* HIBERNATE */
 
 	/*
@@ -806,3 +809,4 @@ NENTRY(acpi_savecpu)
 	movl	$1, %eax
 	RETGUARD_CHECK(acpi_savecpu, r11)
 	ret
+	lfence

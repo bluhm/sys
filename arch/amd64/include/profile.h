@@ -67,6 +67,7 @@ __asm(" .globl __mcount		\n"			\
 "	movq	48(%rsp),%rax	\n"			\
 "	leave			\n"			\
 "	ret			\n"			\
+"	lfence			\n"			\
 "	.size __mcount,.-__mcount");
 
 

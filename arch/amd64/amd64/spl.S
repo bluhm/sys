@@ -89,6 +89,7 @@ _C_LABEL(splhigh):
 	xchgl	%eax,CPUVAR(ILEVEL)
 	RETGUARD_CHECK(splhigh, r11)
 	ret
+	lfence
 
 	.align 16, 0xcc
 _C_LABEL(splx):
@@ -99,6 +100,7 @@ _C_LABEL(splx):
 	jnz	_C_LABEL(Xspllower)
 	RETGUARD_CHECK(splx, r11)
 	ret
+	lfence
 #endif /* PROF || GPROF */
 #endif
 
@@ -136,6 +138,7 @@ KIDTVEC(spllower)
 	popq	%rbx
 	RETGUARD_CHECK(Xspllower, r11)
 	ret
+	lfence
 2:	bsrq	%rax,%rax
 	btrq	%rax,CPUVAR(IPENDING)
 	movq	CPUVAR(ISOURCES)(,%rax,8),%rax

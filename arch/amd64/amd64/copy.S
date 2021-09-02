@@ -79,6 +79,7 @@ ENTRY(kcopy)
 	xorq	%rax,%rax
 	RETGUARD_CHECK(kcopy, r10)
 	ret
+	lfence
 
 1:	addq	%rcx,%rdi		# copy backward
 	addq	%rcx,%rsi
@@ -101,6 +102,7 @@ ENTRY(kcopy)
 	xorq	%rax,%rax
 	RETGUARD_CHECK(kcopy, r10)
 	ret
+	lfence
 
 ENTRY(copyout)
 	RETGUARD_SETUP(kcopy, r10)
@@ -138,6 +140,7 @@ ENTRY(copyout)
 	xorl	%eax,%eax
 	RETGUARD_CHECK(kcopy, r10)
 	ret
+	lfence
 
 ENTRY(copyin)
 	RETGUARD_SETUP(kcopy, r10)
@@ -177,6 +180,7 @@ ENTRY(copyin)
 	xorl	%eax,%eax
 	RETGUARD_CHECK(kcopy, r10)
 	ret
+	lfence
 
 NENTRY(copy_fault)
 	SMAP_CLAC
@@ -185,6 +189,7 @@ NENTRY(copy_fault)
 	movl	$EFAULT,%eax
 	RETGUARD_CHECK(kcopy, r10)
 	ret
+	lfence
 
 ENTRY(copyoutstr)
 	RETGUARD_SETUP(copyoutstr, r10)
@@ -285,6 +290,7 @@ copystr_return:
 8:
 	RETGUARD_CHECK(copyoutstr, r10)
 	ret
+	lfence
 
 ENTRY(copystr)
 	RETGUARD_SETUP(copystr, r10)
@@ -316,6 +322,7 @@ ENTRY(copystr)
 7:
 	RETGUARD_CHECK(copystr, r10)
 	ret
+	lfence
 
 	.section .rodata
 	.globl _C_LABEL(_stac)
