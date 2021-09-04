@@ -1,4 +1,4 @@
-/*	$OpenBSD: spl.S,v 1.17 2018/07/10 16:01:26 deraadt Exp $	*/
+/*	$OpenBSD: spl.S,v 1.18 2021/09/04 22:15:33 bluhm Exp $	*/
 /*	$NetBSD: spl.S,v 1.3 2004/06/28 09:13:11 fvdl Exp $	*/
 
 /*

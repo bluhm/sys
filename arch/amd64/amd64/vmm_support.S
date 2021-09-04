@@ -1,4 +1,4 @@
-/*	$OpenBSD: vmm_support.S,v 1.17 2021/02/13 07:47:37 mlarkin Exp $	*/
+/*	$OpenBSD: vmm_support.S,v 1.18 2021/09/04 22:15:33 bluhm Exp $	*/
 /*
  * Copyright (c) 2014 Mike Larkin <mlarkin@openbsd.org>
  *

@@ -1,4 +1,4 @@
-/*	$OpenBSD: aes_intel.S,v 1.13 2018/07/09 08:39:28 mortimer Exp $	*/
+/*	$OpenBSD: aes_intel.S,v 1.14 2021/09/04 22:15:33 bluhm Exp $	*/
 
 /*
  * Implement AES algorithm in Intel AES-NI instructions.
