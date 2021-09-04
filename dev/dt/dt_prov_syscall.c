@@ -1,4 +1,4 @@
-/*	$OpenBSD: dt_prov_syscall.c,v 1.4 2020/07/04 10:19:09 mpi Exp $ */
+/*	$OpenBSD: dt_prov_syscall.c,v 1.6 2021/09/03 16:45:45 jasper Exp $ */
 
 /*
  * Copyright (c) 2019 Martin Pieuchot <mpi@openbsd.org>
@@ -37,7 +37,7 @@ unsigned int	  dtps_nsysent = SYS_MAXSYSCALL;
 
 int	dt_prov_syscall_alloc(struct dt_probe *, struct dt_softc *,
 	    struct dt_pcb_list *, struct dtioc_req *);
-void	dt_prov_syscall_entry(struct dt_provider *, ...);
+int	dt_prov_syscall_entry(struct dt_provider *, ...);
 void	dt_prov_syscall_return(struct dt_provider *, ...);
 
 struct dt_provider dt_prov_syscall = {
@@ -45,6 +45,7 @@ struct dt_provider dt_prov_syscall = {
 	.dtpv_alloc	= dt_prov_syscall_alloc,
 	.dtpv_enter	= dt_prov_syscall_entry,
 	.dtpv_leave	= dt_prov_syscall_return,
+	.dtpv_dealloc	= NULL,
 };
 
 int
@@ -119,7 +120,7 @@ dt_prov_syscall_alloc(struct dt_probe *dtp, struct dt_softc *sc,
 	return 0;
 }
 
-void
+int
 dt_prov_syscall_entry(struct dt_provider *dtpv, ...)
 {
 	struct dt_probe *dtp;
@@ -136,14 +137,14 @@ dt_prov_syscall_entry(struct dt_provider *dtpv, ...)
 	args = va_arg(ap, register_t*);
 	va_end(ap);
 
-	KASSERT((argsize / sizeof(register_t)) <= DTMAXSYSARGS);
+	KASSERT((argsize / sizeof(register_t)) <= DTMAXFUNCARGS);
 
 	if (sysnum < 0 || sysnum >= dtps_nsysent)
-		return;
+		return 0;
 
 	dtp = dtps_entry[sysnum];
 	if (!dtp->dtp_recording)
-		return;
+		return 0;
 
 	smr_read_enter();
 	SMR_SLIST_FOREACH(dp, &dtp->dtp_pcbs, dp_pnext) {
@@ -154,11 +155,12 @@ dt_prov_syscall_entry(struct dt_provider *dtpv, ...)
 			continue;
 
 		if (ISSET(dp->dp_evtflags, DTEVT_FUNCARGS))
-			memcpy(dtev->dtev_sysargs, args, argsize);
+			memcpy(dtev->dtev_args, args, argsize);
 
 		dt_pcb_ring_consume(dp, dtev);
 	}
 	smr_read_leave();
+	return 0;
 }
 
 void
@@ -196,13 +198,13 @@ dt_prov_syscall_return(struct dt_provider *dtpv, ...)
 			continue;
 
 		if (error) {
-			dtev->dtev_sysretval[0] = -1;
-			dtev->dtev_sysretval[1] = 0;
-			dtev->dtev_syserror = error;
+			dtev->dtev_retval[0] = -1;
+			dtev->dtev_retval[1] = 0;
+			dtev->dtev_error = error;
 		} else {
-			dtev->dtev_sysretval[0] = retval[0];
-			dtev->dtev_sysretval[1] = retval[1];
-			dtev->dtev_syserror = 0;
+			dtev->dtev_retval[0] = retval[0];
+			dtev->dtev_retval[1] = retval[1];
+			dtev->dtev_error = 0;
 		}
 
 		dt_pcb_ring_consume(dp, dtev);
