@@ -135,7 +135,7 @@
 	cmpq (__retguard_ ## x)(%rip), %reg; \
 	je 66f; \
 	int3; int3; \
-	.zero (0xf - ((. - x) & 0xf)), 0xcc; \
+	.zero (0xf - ((. + 3 - x) & 0xf)), 0xcc; \
 66:
 # define RETGUARD_PUSH(reg) \
 	pushq %reg
