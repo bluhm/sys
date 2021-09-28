@@ -1,4 +1,4 @@
-/*	$OpenBSD: uhid.c,v 1.84 2021/03/08 14:35:57 jcs Exp $ */
+/*	$OpenBSD: uhid.c,v 1.87 2021/09/15 04:57:47 anton Exp $ */
 /*	$NetBSD: uhid.c,v 1.57 2003/03/11 16:44:00 augustss Exp $	*/
 
 /*
@@ -392,7 +392,7 @@ uhid_do_ioctl(struct uhid_softc *sc, u_long cmd, caddr_t addr,
 	default:
 		rc = uhidev_ioctl(&sc->sc_hdev, cmd, addr, flag, p);
 		if (rc == -1)
-			rc = EINVAL;
+			rc = ENOTTY;
 		return rc;
 	}
 	return (0);

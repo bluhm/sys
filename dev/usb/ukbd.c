@@ -1,4 +1,4 @@
-/*	$OpenBSD: ukbd.c,v 1.82 2021/01/29 16:59:41 sthen Exp $	*/
+/*	$OpenBSD: ukbd.c,v 1.84 2021/09/12 06:58:08 anton Exp $	*/
 /*      $NetBSD: ukbd.c,v 1.85 2003/03/11 16:44:00 augustss Exp $        */
 
 /*

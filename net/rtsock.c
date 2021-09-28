@@ -1,4 +1,4 @@
-/*	$OpenBSD: rtsock.c,v 1.320 2021/09/07 09:56:00 mvs Exp $	*/
+/*	$OpenBSD: rtsock.c,v 1.322 2021/09/14 09:15:55 mvs Exp $	*/
 /*	$NetBSD: rtsock.c,v 1.18 1996/03/29 00:32:10 cgd Exp $	*/
 
 /*
@@ -630,8 +630,11 @@ rtm_report(struct rtentry *rt, u_char type, int seq, int tableid)
 	info.rti_info[RTAX_NETMASK] = rt_plen2mask(rt, &sa_mask);
 	info.rti_info[RTAX_LABEL] = rtlabel_id2sa(rt->rt_labelid, &sa_rl);
 #ifdef BFD
-	if (rt->rt_flags & RTF_BFD)
+	if (rt->rt_flags & RTF_BFD) {
+		KERNEL_LOCK();
 		info.rti_info[RTAX_BFD] = bfd2sa(rt, &sa_bfd);
+		KERNEL_UNLOCK();
+	}
 #endif
 #ifdef MPLS
 	if (rt->rt_flags & RTF_MPLS) {
@@ -1032,14 +1035,6 @@ rtm_output(struct rt_msghdr *rtm, struct rtentry **prt,
 			rt = NULL;
 		}
 
-		ifp = if_get(rt->rt_ifidx);
-		if (ifp == NULL) {
-			rtfree(rt);
-			rt = NULL;
-			error = ESRCH;
-			break;
-		}
-
 		/*
 		 * If RTAX_GATEWAY is the argument we're trying to
 		 * change, try to find a compatible route.
@@ -1065,6 +1060,14 @@ rtm_output(struct rt_msghdr *rtm, struct rtentry **prt,
 		 */
 		if (ISSET(rt->rt_flags, RTF_LOCAL|RTF_BROADCAST)) {
 			error = EINVAL;
+			break;
+		}
+
+		ifp = if_get(rt->rt_ifidx);
+		if (ifp == NULL) {
+			rtfree(rt);
+			rt = NULL;
+			error = ESRCH;
 			break;
 		}
 
@@ -1148,11 +1151,16 @@ change:
 
 #ifdef BFD
 		if (ISSET(rtm->rtm_flags, RTF_BFD)) {
-			if ((error = bfdset(rt)))
+			KERNEL_LOCK();
+			error = bfdset(rt);
+			KERNEL_UNLOCK();
+			if (error)
 				break;
 		} else if (!ISSET(rtm->rtm_flags, RTF_BFD) &&
 		    ISSET(rtm->rtm_fmask, RTF_BFD)) {
+			KERNEL_LOCK();
 			bfdclear(rt);
+			KERNEL_UNLOCK();
 		}
 #endif
 
@@ -1853,6 +1861,7 @@ rtm_bfd(struct bfd_config *bfd)
 	bfdm = mtod(m, struct bfd_msghdr *);
 	bfdm->bm_addrs = info.rti_addrs;
 
+	KERNEL_ASSERT_LOCKED();
 	bfd2sa(bfd->bc_rt, &sa_bfd);
 	memcpy(&bfdm->bm_sa, &sa_bfd, sizeof(sa_bfd));
 
@@ -1955,8 +1964,10 @@ sysctl_dumpentry(struct rtentry *rt, void *v, unsigned int id)
 	if_put(ifp);
 	info.rti_info[RTAX_LABEL] = rtlabel_id2sa(rt->rt_labelid, &sa_rl);
 #ifdef BFD
-	if (rt->rt_flags & RTF_BFD)
+	if (rt->rt_flags & RTF_BFD) {
+		KERNEL_ASSERT_LOCKED();
 		info.rti_info[RTAX_BFD] = bfd2sa(rt, &sa_bfd);
+	}
 #endif
 #ifdef MPLS
 	if (rt->rt_flags & RTF_MPLS) {

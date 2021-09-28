@@ -1,4 +1,4 @@
-/*	$OpenBSD: ugold.c,v 1.17 2021/04/05 16:26:06 landry Exp $   */
+/*	$OpenBSD: ugold.c,v 1.19 2021/09/12 06:58:08 anton Exp $   */
 
 /*
  * Copyright (c) 2013 Takayoshi SASANO <uaa@openbsd.org>

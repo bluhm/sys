@@ -1,4 +1,4 @@
-/*	$OpenBSD: ums.c,v 1.48 2021/03/24 02:49:57 jcs Exp $ */
+/*	$OpenBSD: ums.c,v 1.50 2021/09/12 06:58:08 anton Exp $ */
 /*	$NetBSD: ums.c,v 1.60 2003/03/11 16:44:00 augustss Exp $	*/
 
 /*
