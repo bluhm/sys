@@ -526,11 +526,13 @@ esp_input(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 			crde->crd_len = m->m_pkthdr.len - (skip + hlen + alen);
 	}
 
+	tdb_unref(tdb);
 	crypto_dispatch(crp);
 	return 0;
 
  drop:
 	m_freem(m);
+	tdb_unref(tdb);
 	crypto_freereq(crp);
 	free(tc, M_XDATA, 0);
 	return error;
@@ -730,6 +732,7 @@ esp_input_cb(struct tdb *tdb, struct tdb_crypto *tc, struct mbuf *m, int clen)
 
  baddone:
 	m_freem(m);
+	tdb_unref(tdb);
 	free(tc, M_XDATA, 0);
 	return -1;
 }
@@ -1010,11 +1013,13 @@ esp_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 			crda->crd_len = m->m_pkthdr.len - (skip + alen);
 	}
 
+	tdb_unref(tdb);
 	crypto_dispatch(crp);
 	return 0;
 
  drop:
 	m_freem(m);
+	tdb_unref(tdb);
 	crypto_freereq(crp);
 	free(tc, M_XDATA, 0);
 	return error;

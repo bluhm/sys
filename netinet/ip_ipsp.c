@@ -289,9 +289,10 @@ reserve_spi(u_int rdomain, u_int32_t sspi, u_int32_t tspi,
 
 		/* Check whether we're using this SPI already. */
 		exists = gettdb(rdomain, spi, dst, sproto);
-		if (exists)
+		if (exists) {
+			tdb_unref(exists);
 			continue;
-
+		}
 
 		tdbp->tdb_spi = spi;
 		memcpy(&tdbp->tdb_dst.sa, &dst->sa, dst->sa.sa_len);
@@ -516,7 +517,7 @@ gettdbbysrc(u_int rdomain, union sockaddr_union *src, u_int8_t sproto,
 			break;
 		}
 
-	tdb_ref(result);
+	tdb_ref(tdbp);
 	mtx_leave(&tdb_sadb_mtx);
 	return tdbp;
 }
@@ -843,6 +844,27 @@ tdb_unlink(struct tdb *tdbp)
 		ipsecstat_inc(ipsec_prevtunnels);
 	}
 #endif /* IPSEC */
+
+	mtx_leave(&tdb_sadb_mtx);
+}
+
+struct tdb *
+tdb_ref(struct tdb *tdb)
+{
+	if (tdb == NULL)
+		return NULL;
+	refcnt_take(&tdb->tdb_refcnt);
+	return tdb;
+}
+
+void
+tdb_unref(struct tdb *tdb)
+{
+	if (tdb == NULL)
+		return;
+	if (refcnt_rele(&tdb->tdb_refcnt))
+		return;
+	tdb_free(tdb);
 }
 
 void
@@ -867,6 +889,8 @@ tdb_alloc(u_int rdomain)
 	tdbp = pool_get(&tdb_pool, PR_WAITOK | PR_ZERO);
 
 	TAILQ_INIT(&tdbp->tdb_policy_head);
+	refcnt_init(&tdbp->tdb_refcnt);
+	mtx_init(&tdbp->tdb_mtx, IPL_NET);
 
 	/* Record establishment time. */
 	tdbp->tdb_established = gettime();
@@ -881,7 +905,6 @@ tdb_alloc(u_int rdomain)
 	timeout_set_proc(&tdbp->tdb_stimer_tmo, tdb_soft_timeout, tdbp);
 	timeout_set_proc(&tdbp->tdb_sfirst_tmo, tdb_soft_firstuse, tdbp);
 
-	mtx_leave(&tdb_sadb_mtx);
 	return tdbp;
 }
 

@@ -218,11 +218,12 @@ reroute:
 	 * ipsp_process_packet will never come back to here.
 	 */
 	if (tdb != NULL) {
-		/* Callee frees mbuf */
+		/* Callee frees mbuf and tdb */
 		ro.ro_rt = rt;
 		ro.ro_tableid = m->m_pkthdr.ph_rtableid;
 		error = ip6_output_ipsec_send(tdb, m, &ro, 0, 1);
 		rt = ro.ro_rt;
+		tdb = NULL;
 		if (error)
 			goto senderr;
 		goto freecopy;
@@ -371,6 +372,9 @@ senderr:
 freecopy:
 	m_freem(mcopy);
 out:
+#ifdef IPSEC
+	tdb_unref(tdb);
+#endif
 	rtfree(rt);
 	if_put(ifp);
 }

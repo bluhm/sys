@@ -1395,7 +1395,7 @@ pfkeyv2_send(struct socket *so, void *message, int len)
 			/* Delete old version of the SA, insert new one */
 			tdb_delete(sa2);
 			puttdb((struct tdb *) freeme);
-			sa2 = freeme = NULL;
+			freeme = NULL;
 		} else {
 			/*
 			 * The SA is already initialized, so we're only allowed to
@@ -1594,7 +1594,6 @@ pfkeyv2_send(struct socket *so, void *message, int len)
 		tdb_delete(sa2);
 		NET_UNLOCK();
 
-		sa2 = NULL;
 		break;
 
 	case SADB_X_ASKPOLICY:
@@ -1784,6 +1783,7 @@ pfkeyv2_send(struct socket *so, void *message, int len)
 		    ssa->sadb_sa_spi, sunionp,
 		    SADB_X_GETSPROTO(sa_proto->sadb_protocol_proto));
 		if (tdb2 == NULL) {
+			tdb_unref(tdb1);
 			rval = ESRCH;
 			NET_UNLOCK();
 			goto ret;
@@ -1792,6 +1792,8 @@ pfkeyv2_send(struct socket *so, void *message, int len)
 		/* Detect cycles */
 		for (tdb3 = tdb2; tdb3; tdb3 = tdb3->tdb_onext)
 			if (tdb3 == tdb1) {
+				tdb_unref(tdb1);
+				tdb_unref(tdb2);
 				rval = ESRCH;
 				NET_UNLOCK();
 				goto ret;
@@ -1799,12 +1801,16 @@ pfkeyv2_send(struct socket *so, void *message, int len)
 
 		/* Maintenance */
 		if ((tdb1->tdb_onext) &&
-		    (tdb1->tdb_onext->tdb_inext == tdb1))
+		    (tdb1->tdb_onext->tdb_inext == tdb1)) {
+			tdb_unref(tdb1->tdb_onext->tdb_inext);
 			tdb1->tdb_onext->tdb_inext = NULL;
+		}
 
 		if ((tdb2->tdb_inext) &&
-		    (tdb2->tdb_inext->tdb_onext == tdb2))
+		    (tdb2->tdb_inext->tdb_onext == tdb2)) {
+			tdb_unref(tdb2->tdb_inext->tdb_onext);
 			tdb2->tdb_inext->tdb_onext = NULL;
+		}
 
 		/* Link them */
 		tdb1->tdb_onext = tdb2;
@@ -2125,6 +2131,7 @@ realret:
 	free(message, M_PFKEY, len);
 
 	free(sa1, M_PFKEY, sizeof(*sa1));
+	tdb_unref(sa2);
 
 	return (rval);
 }

@@ -322,6 +322,9 @@ struct tdb {				/* tunnel descriptor block */
 	struct tdb	*tdb_inext;
 	struct tdb	*tdb_onext;
 
+	struct refcnt	tdb_refcnt;
+	struct mutex	tdb_mtx;
+
 	const struct xformsw	*tdb_xform;		/* Transform to use */
 	const struct enc_xform	*tdb_encalgxform;	/* Enc algorithm */
 	const struct auth_hash	*tdb_authalgxform;	/* Auth algorithm */
@@ -555,6 +558,8 @@ struct	tdb *gettdbbysrcdst_dir(u_int, u_int32_t, union sockaddr_union *,
 void	puttdb(struct tdb *);
 void	tdb_delete(struct tdb *);
 struct	tdb *tdb_alloc(u_int);
+struct	tdb *tdb_ref(struct tdb *);
+void	tdb_unref(struct tdb *);
 void	tdb_free(struct tdb *);
 int	tdb_init(struct tdb *, u_int16_t, struct ipsecinit *);
 void	tdb_unlink(struct tdb *);

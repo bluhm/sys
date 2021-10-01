@@ -1578,6 +1578,7 @@ bridge_ipsec(struct ifnet *ifp, struct ether_header *eh, int hassnap,
 			(*(tdb->tdb_xform->xf_input))(m, tdb, hlen, off);
 			return (1);
 		} else {
+			tdb_unref(tdb);
  skiplookup:
 			/* XXX do an input policy lookup */
 			return (0);
@@ -1595,11 +1596,14 @@ bridge_ipsec(struct ifnet *ifp, struct ether_header *eh, int hassnap,
 			    tdb->tdb_tap)) == NULL ||
 			    pf_test(af, dir, encif, &m) != PF_PASS) {
 				m_freem(m);
+				tdb_unref(tdb);
 				return (1);
 			}
-			if (m == NULL)
+			if (m == NULL) {
+				tdb_unref(tdb);
 				return (1);
-			else if (af == AF_INET)
+			}
+			if (af == AF_INET)
 				in_proto_cksum_out(m, encif);
 #ifdef INET6
 			else if (af == AF_INET6)
@@ -1611,11 +1615,12 @@ bridge_ipsec(struct ifnet *ifp, struct ether_header *eh, int hassnap,
 			if ((af == AF_INET) &&
 			    ip_mtudisc && (ip->ip_off & htons(IP_DF)) &&
 			    tdb->tdb_mtu && ntohs(ip->ip_len) > tdb->tdb_mtu &&
-			    tdb->tdb_mtutimeout > gettime())
+			    tdb->tdb_mtutimeout > gettime()) {
 				bridge_send_icmp_err(ifp, eh, m,
 				    hassnap, llc, tdb->tdb_mtu,
 				    ICMP_UNREACH, ICMP_UNREACH_NEEDFRAG);
-			else
+				tdb_unref(tdb);
+			} else
 				error = ipsp_process_packet(m, tdb, af, 0);
 			return (1);
 		} else

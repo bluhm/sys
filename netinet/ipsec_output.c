@@ -374,6 +374,9 @@ ipsp_process_packet(struct mbuf *m, struct tdb *tdb, int af, int tunalready)
 
  drop:
 	m_freem(m);
+	ipsecstat_inc(ipsec_odrops);
+	tdb->tdb_odrops++;
+	tdb_unref(tdb);
 	return error;
 }
 
@@ -450,6 +453,7 @@ ipsec_output_cb(struct cryptop *crp)
 	ipsecstat_inc(ipsec_odrops);
 	if (tdb != NULL)
 		tdb->tdb_odrops++;
+	tdb_unref(tdb);
 }
 
 /*
@@ -576,9 +580,13 @@ ipsp_process_done(struct mbuf *m, struct tdb *tdb)
 	tdb->tdb_obytes += m->m_pkthdr.len;
 
 	/* If there's another (bundled) TDB to apply, do so. */
-	if (tdb->tdb_onext)
-		return ipsp_process_packet(m, tdb->tdb_onext,
+	if (tdb->tdb_onext) {
+		tdb_ref(tdb->tdb_onext);
+		error = ipsp_process_packet(m, tdb->tdb_onext,
 		    tdb->tdb_dst.sa.sa_family, 0);
+		tdb_unref(tdb);
+		return error;
+	}
 
 #if NPF > 0
 	/* Add pf tag if requested. */
@@ -597,6 +605,7 @@ ipsp_process_done(struct mbuf *m, struct tdb *tdb)
 	case AF_INET:
 		error = ip_output(m, NULL, NULL, IP_RAWOUTPUT, NULL, NULL, 0);
 		break;
+
 #ifdef INET6
 	case AF_INET6:
 		/*
@@ -610,10 +619,12 @@ ipsp_process_done(struct mbuf *m, struct tdb *tdb)
 		error = EPFNOSUPPORT;
 		break;
 	}
+	tdb_unref(tdb);
 	return error;
 
  drop:
 	m_freem(m);
+	tdb_unref(tdb);
 	return error;
 }
 

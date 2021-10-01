@@ -371,6 +371,7 @@ ipsp_spd_lookup(struct mbuf *m, int af, int hlen, int *error, int direction,
 	if ((ipo->ipo_tdb) && (ipo->ipo_tdb->tdb_flags & TDBF_INVALID)) {
 		TAILQ_REMOVE(&ipo->ipo_tdb->tdb_policy_head, ipo,
 		    ipo_tdb_next);
+		tdb_unref(ipo->ipo_tdb);
 		ipo->ipo_tdb = NULL;
 	}
 
@@ -420,6 +421,7 @@ ipsp_spd_lookup(struct mbuf *m, int af, int hlen, int *error, int direction,
 			/* Cached TDB was not good. */
 			TAILQ_REMOVE(&ipo->ipo_tdb->tdb_policy_head, ipo,
 			    ipo_tdb_next);
+			tdb_unref(ipo->ipo_tdb);
 			ipo->ipo_tdb = NULL;
 			ipo->ipo_last_searched = 0;
 		}
@@ -552,6 +554,7 @@ ipsp_spd_lookup(struct mbuf *m, int af, int hlen, int *error, int direction,
 			TAILQ_REMOVE(&ipo->ipo_tdb->tdb_policy_head, ipo,
 			    ipo_tdb_next);
 			ipo->ipo_last_searched = 0;
+			tdb_unref(ipo->ipo_tdb);
 			ipo->ipo_tdb = NULL;
 		}
 
@@ -844,10 +847,10 @@ ipsp_spd_inp(struct mbuf *m, int af, int hlen, int *error, int direction,
 	return NULL;
 
  justreturn:
-	if (ipo != NULL)
-		return ipo->ipo_tdb;
-	else
+	if (ipo == NULL)
 		return NULL;
+	tdb_ref(ipo->ipo_tdb);
+	return ipo->ipo_tdb;
 }
 
 /*

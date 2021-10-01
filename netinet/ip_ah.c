@@ -699,11 +699,13 @@ ah_input(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	memcpy(&tc->tc_dst, &tdb->tdb_dst, sizeof(union sockaddr_union));
 	tc->tc_rpl = tdb->tdb_rpl;
 
+	tdb_unref(tdb);
 	crypto_dispatch(crp);
 	return 0;
 
  drop:
 	m_freem(m);
+	tdb_unref(tdb);
 	crypto_freereq(crp);
 	free(tc, M_XDATA, 0);
 	return error;
@@ -876,6 +878,7 @@ ah_input_cb(struct tdb *tdb, struct tdb_crypto *tc, struct mbuf *m, int clen)
 
  baddone:
 	m_freem(m);
+	tdb_unref(tdb);
 	free(tc, M_XDATA, 0);
 	return -1;
 }
@@ -1145,11 +1148,13 @@ ah_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	tc->tc_rdomain = tdb->tdb_rdomain;
 	memcpy(&tc->tc_dst, &tdb->tdb_dst, sizeof(union sockaddr_union));
 
+	tdb_unref(tdb);
 	crypto_dispatch(crp);
 	return 0;
 
  drop:
 	m_freem(m);
+	tdb_unref(tdb);
 	crypto_freereq(crp);
 	free(tc, M_XDATA, 0);
 	return error;

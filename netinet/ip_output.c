@@ -412,9 +412,10 @@ sendit:
 	 * Check if the packet needs encapsulation.
 	 */
 	if (tdb != NULL) {
-		/* Callee frees mbuf */
+		/* Callee frees mbuf and tdb */
 		error = ip_output_ipsec_send(tdb, m, ro,
 		    (flags & IP_FORWARDING) ? 1 : 0);
+		tdb = NULL;
 		goto done;
 	}
 #endif /* IPSEC */
@@ -442,6 +443,7 @@ sendit:
 		ro = NULL;
 		if_put(ifp); /* drop reference since target changed */
 		ifp = NULL;
+		KASSERT(tdb == NULL);
 		goto reroute;
 	}
 #endif
@@ -525,6 +527,9 @@ done:
 	if (ro == &iproute && ro->ro_rt)
 		rtfree(ro->ro_rt);
 	if_put(ifp);
+#ifdef IPSEC
+	tdb_unref(tdb);
+#endif
 	return (error);
 
 bad:
@@ -557,6 +562,7 @@ ip_output_ipsec_lookup(struct mbuf *m, int hlen, int *error, struct inpcb *inp,
 		    !memcmp(&tdbi->dst, &tdb->tdb_dst,
 		    sizeof(union sockaddr_union))) {
 			/* no IPsec needed */
+			tdb_unref(tdb);
 			return NULL;
 		}
 	}
@@ -578,11 +584,13 @@ ip_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct route *ro, int fwd)
 	 */
 	if ((encif = enc_getif(tdb->tdb_rdomain, tdb->tdb_tap)) == NULL ||
 	    pf_test(AF_INET, fwd ? PF_FWD : PF_OUT, encif, &m) != PF_PASS) {
-		m_freem(m);
-		return EACCES;
+		error = EACCES;
+		goto drop;
 	}
-	if (m == NULL)
-		return 0;
+	if (m == NULL) {
+		error = 0;
+		goto drop;
+	}
 	/*
 	 * PF_TAG_REROUTE handling or not...
 	 * Packet is entering IPsec so the routing is
@@ -629,8 +637,8 @@ ip_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct route *ro, int fwd)
 				rtfree(rt);
 		}
 		ipsec_adjust_mtu(m, tdb->tdb_mtu);
-		m_freem(m);
-		return EMSGSIZE;
+		error = EMSGSIZE;
+		goto drop;
 	}
 	/* propagate IP_DF for v4-over-v6 */
 	if (ip_mtudisc && ip->ip_off & htons(IP_DF))
@@ -642,12 +650,19 @@ ip_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct route *ro, int fwd)
 	 */
 	m->m_flags &= ~(M_MCAST | M_BCAST);
 
-	/* Callee frees mbuf */
+	tdb_ref(tdb);
+	/* Callee frees mbuf and tdb */
 	error = ipsp_process_packet(m, tdb, AF_INET, 0);
 	if (error) {
 		ipsecstat_inc(ipsec_odrops);
 		tdb->tdb_odrops++;
 	}
+	tdb_unref(tdb);
+	return error;
+
+ drop:
+	m_freem(m);
+	tdb_unref(tdb);
 	return error;
 }
 #endif /* IPSEC */

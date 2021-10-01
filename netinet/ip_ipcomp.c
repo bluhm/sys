@@ -134,30 +134,28 @@ int
 ipcomp_input(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 {
 	const struct comp_algo *ipcompx = tdb->tdb_compalgxform;
-	struct tdb_crypto *tc;
-	int hlen;
-
+	struct tdb_crypto *tc = NULL;
 	struct cryptodesc *crdc = NULL;
-	struct cryptop *crp;
+	struct cryptop *crp = NULL;
+	int hlen, error;
 
 	hlen = IPCOMP_HLENGTH;
 
 	/* Get crypto descriptors */
 	crp = crypto_getreq(1);
 	if (crp == NULL) {
-		m_freem(m);
 		DPRINTF("failed to acquire crypto descriptors");
 		ipcompstat_inc(ipcomps_crypto);
-		return ENOBUFS;
+		error = ENOBUFS;
+		goto drop;
 	}
 	/* Get IPsec-specific opaque pointer */
 	tc = malloc(sizeof(*tc), M_XDATA, M_NOWAIT | M_ZERO);
 	if (tc == NULL) {
-		m_freem(m);
-		crypto_freereq(crp);
 		DPRINTF("failed to allocate tdb_crypto");
 		ipcompstat_inc(ipcomps_crypto);
-		return ENOBUFS;
+		error = ENOBUFS;
+		goto drop;
 	}
 	crdc = &crp->crp_desc[0];
 
@@ -184,8 +182,16 @@ ipcomp_input(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	tc->tc_rdomain = tdb->tdb_rdomain;
 	tc->tc_dst = tdb->tdb_dst;
 
+	tdb_unref(tdb);
 	crypto_dispatch(crp);
 	return 0;
+
+ drop:
+	m_freem(m);
+	tdb_unref(tdb);
+	crypto_freereq(crp);
+	free(tc, M_XDATA, 0);
+	return error;
 }
 
 int
@@ -308,6 +314,7 @@ ipcomp_input_cb(struct tdb *tdb, struct tdb_crypto *tc, struct mbuf *m, int clen
 
  baddone:
 	m_freem(m);
+	tdb_unref(tdb);
 	free(tc, M_XDATA, 0);
 	return -1;
 }
@@ -478,11 +485,13 @@ ipcomp_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	crp->crp_opaque = (caddr_t)tc;
 	crp->crp_sid = tdb->tdb_cryptoid;
 
+	tdb_unref(tdb);
 	crypto_dispatch(crp);
 	return 0;
 
  drop:
 	m_freem(m);
+	tdb_unref(tdb);
 	crypto_freereq(crp);
 	return error;
 }
@@ -569,6 +578,7 @@ ipcomp_output_cb(struct tdb *tdb, struct tdb_crypto *tc, struct mbuf *m,
 
  drop:
 	m_freem(m);
+	tdb_unref(tdb);
 	free(tc, M_XDATA, 0);
 	return error;
 }

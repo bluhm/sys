@@ -430,7 +430,7 @@ reroute:
 	}
 
 #ifdef IPSEC
-	if (tdb) {
+	if (tdb != NULL) {
 		/*
 		 * XXX what should we do if ip6_hlim == 0 and the
 		 * packet gets tunneled?
@@ -442,6 +442,7 @@ reroute:
 		 */
 		error = ip6_output_ipsec_send(tdb, m, ro,
 		    exthdrs.ip6e_rthdr ? 1 : 0, 0);
+		tdb = NULL;
 		goto done;
 	}
 #endif /* IPSEC */
@@ -759,6 +760,9 @@ reroute:
 		ip6stat_inc(ip6s_fragmented);
 
 done:
+#ifdef IPSEC
+	tdb_unref(tdb);
+#endif
 	if_put(ifp);
 	if (ro == &ip6route && ro->ro_rt) {
 		rtfree(ro->ro_rt);
@@ -2765,6 +2769,7 @@ ip6_output_ipsec_lookup(struct mbuf *m, int *error, struct inpcb *inp)
 		    !memcmp(&tdbi->dst, &tdb->tdb_dst,
 		    sizeof(union sockaddr_union))) {
 			/* no IPsec needed */
+			tdb_unref(tdb);
 			return NULL;
 		}
 	}
@@ -2787,11 +2792,13 @@ ip6_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct route_in6 *ro,
 	 */
 	if ((encif = enc_getif(tdb->tdb_rdomain, tdb->tdb_tap)) == NULL ||
 	    pf_test(AF_INET6, fwd ? PF_FWD : PF_OUT, encif, &m) != PF_PASS) {
-		m_freem(m);
-		return EACCES;
+		error = EACCES;
+		goto drop;
 	}
-	if (m == NULL)
-		return 0;
+	if (m == NULL) {
+		error = 0;
+		goto drop;
+	}
 	/*
 	 * PF_TAG_REROUTE handling or not...
 	 * Packet is entering IPsec so the routing is
@@ -2835,8 +2842,7 @@ ip6_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct route_in6 *ro,
 			if (error) {
 				/* should be impossible */
 				ipsecstat_inc(ipsec_odrops);
-				m_freem(m);
-				return error;
+				goto drop;
 			}
 			rt = icmp6_mtudisc_clone(&sin6,
 			    m->m_pkthdr.ph_rtableid, 1);
@@ -2855,8 +2861,8 @@ ip6_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct route_in6 *ro,
 				rtfree(rt);
 		}
 		ipsec_adjust_mtu(m, tdb->tdb_mtu);
-		m_freem(m);
-		return EMSGSIZE;
+		error = EMSGSIZE;
+		goto drop;
 	}
 	/* propagate don't fragment for v6-over-v6 */
 	if (ip_mtudisc)
@@ -2868,12 +2874,17 @@ ip6_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct route_in6 *ro,
 	 */
 	m->m_flags &= ~(M_BCAST | M_MCAST);
 
-	/* Callee frees mbuf */
+	/* Callee frees mbuf and tdb */
 	error = ipsp_process_packet(m, tdb, AF_INET6, tunalready);
 	if (error) {
 		ipsecstat_inc(ipsec_odrops);
 		tdb->tdb_odrops++;
 	}
+	return error;
+
+ drop:
+	m_freem(m);
+	tdb_unref(tdb);
 	return error;
 }
 #endif /* IPSEC */

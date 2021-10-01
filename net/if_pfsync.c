@@ -1325,11 +1325,13 @@ pfsync_update_net_tdb(struct pfsync_tdb *pt)
 		/* Neither replay nor byte counter should ever decrease. */
 		if (pt->rpl < tdb->tdb_rpl ||
 		    pt->cur_bytes < tdb->tdb_cur_bytes) {
+			tdb_unref(tdb);
 			goto bad;
 		}
 
 		tdb->tdb_rpl = pt->rpl;
 		tdb->tdb_cur_bytes = pt->cur_bytes;
+		tdb_unref(tdb);
 	}
 	return;
 

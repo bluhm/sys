@@ -2248,6 +2248,7 @@ tcp_dooptions(struct tcpcb *tp, u_char *cp, int cnt, struct tcphdr *th,
 
 	if ((sigp ? TF_SIGNATURE : 0) ^ (tp->t_flags & TF_SIGNATURE)) {
 		tcpstat_inc(tcps_rcvbadsig);
+		tdb_unref(tdb);
 		return (-1);
 	}
 
@@ -2259,16 +2260,20 @@ tcp_dooptions(struct tcpcb *tp, u_char *cp, int cnt, struct tcphdr *th,
 			return (-1);
 		}
 
-		if (tcp_signature(tdb, tp->pf, m, th, iphlen, 1, sig) < 0)
+		if (tcp_signature(tdb, tp->pf, m, th, iphlen, 1, sig) < 0) {
+			tdb_unref(tdb);
 			return (-1);
+		}
 
 		if (timingsafe_bcmp(sig, sigp, 16)) {
 			tcpstat_inc(tcps_rcvbadsig);
+			tdb_unref(tdb);
 			return (-1);
 		}
 
 		tcpstat_inc(tcps_rcvgoodsig);
 	}
+	tdb_unref(tdb);
 #endif /* TCP_SIGNATURE */
 
 	return (0);
@@ -4056,6 +4061,7 @@ syn_cache_respond(struct syn_cache *sc, struct mbuf *m)
 		if (tcp_signature(tdb, sc->sc_src.sa.sa_family, m, th,
 		    hlen, 0, optp) < 0) {
 			m_freem(m);
+			tdb_unref(tdb);
 			return (EINVAL);
 		}
 		optp += 16;
@@ -4065,6 +4071,7 @@ syn_cache_respond(struct syn_cache *sc, struct mbuf *m)
 		 */
 		*optp++ = TCPOPT_NOP;
 		*optp++ = TCPOPT_EOL;
+		tdb_unref(tdb);
 	}
 #endif /* TCP_SIGNATURE */
 
