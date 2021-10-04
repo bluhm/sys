@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_sig.c,v 1.282 2021/07/14 22:09:24 bluhm Exp $	*/
+/*	$OpenBSD: kern_sig.c,v 1.284 2021/10/04 08:48:12 claudio Exp $	*/
 /*	$NetBSD: kern_sig.c,v 1.54 1996/04/22 01:38:32 christos Exp $	*/
 
 /*
@@ -1752,8 +1752,6 @@ sys___thrsigdivert(struct proc *p, void *v, register_t *retval)
 		syscallarg(siginfo_t *) info;
 		syscallarg(const struct timespec *) timeout;
 	} */ *uap = v;
-	struct process *pr = p->p_p;
-	sigset_t *m;
 	sigset_t mask = SCARG(uap, sigmask) &~ sigcantmask;
 	siginfo_t si;
 	uint64_t nsecs = INFSLP;
@@ -1782,15 +1780,7 @@ sys___thrsigdivert(struct proc *p, void *v, register_t *retval)
 		if (si.si_signo != 0) {
 			sigset_t smask = sigmask(si.si_signo);
 			if (smask & mask) {
-				if (p->p_siglist & smask)
-					m = &p->p_siglist;
-				else if (pr->ps_siglist & smask)
-					m = &pr->ps_siglist;
-				else {
-					/* signal got eaten by someone else? */
-					continue;
-				}
-				atomic_clearbits_int(m, smask);
+				atomic_clearbits_int(&p->p_siglist, smask);
 				error = 0;
 				break;
 			}
@@ -1799,8 +1789,8 @@ sys___thrsigdivert(struct proc *p, void *v, register_t *retval)
 		/* per-POSIX, delay this error until after the above */
 		if (timeinvalid)
 			error = EINVAL;
-
-		if (SCARG(uap, timeout) != NULL && nsecs == INFSLP)
+		/* per-POSIX, return immediatly if timeout is zero-valued */
+		if (nsecs == 0)
 			error = EAGAIN;
 
 		if (error != 0)

@@ -1,4 +1,4 @@
-/*	$OpenBSD: vnode.h,v 1.157 2021/04/28 09:53:53 claudio Exp $	*/
+/*	$OpenBSD: vnode.h,v 1.159 2021/10/04 08:11:02 claudio Exp $	*/
 /*	$NetBSD: vnode.h,v 1.38 1996/02/29 20:59:05 cgd Exp $	*/
 
 /*
@@ -107,7 +107,6 @@ struct vnode {
 	u_int   v_bioflag;
 	u_int   v_holdcnt;			/* buffer references */
 	u_int   v_id;				/* capability identifier */
-	u_int	v_inflight;
 	struct	mount *v_mount;			/* ptr to vfs we are in */
 	TAILQ_ENTRY(vnode) v_freelist;		/* vnode freelist */
 	TAILQ_ENTRY(vnode) v_mntvnodes;		/* vnodes for mount point */
@@ -628,6 +627,7 @@ int vfs_getcwd_getcache(struct vnode **, struct vnode **, char **, char *);
 
 /* vfs_default.c */
 int	vop_generic_abortop(void *);
+int	vop_generic_badop(void *);
 int	vop_generic_bmap(void *);
 int	vop_generic_bwrite(void *);
 int	vop_generic_islocked(void *);
