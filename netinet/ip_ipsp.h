@@ -191,6 +191,12 @@ ipsecstat_add(enum ipsec_counters c, uint64_t v)
 	counters_add(ipseccounters, c, v);
 }
 
+static inline void
+ipsecstat_pkt(enum ipsec_counters p, enum ipsec_counters b, uint64_t v)
+{
+	counters_pkt(ipseccounters, p, b, v);
+}
+
 struct m_tag;
 
 #define	sen_data		Sen.Data

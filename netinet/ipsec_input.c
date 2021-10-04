@@ -200,8 +200,7 @@ ipsec_common_input(struct mbuf *m, int skip, int protoff, int af, int sproto,
 
 	NET_ASSERT_LOCKED();
 
-	ipsecstat_inc(ipsec_ipackets);
-	ipsecstat_add(ipsec_ibytes, m->m_pkthdr.len);
+	ipsecstat_pkt(ipsec_ipackets, ipsec_ibytes, m->m_pkthdr.len);
 	IPSEC_ISTAT(esps_input, ahs_input, ipcomps_input);
 
 	if (m == NULL) {

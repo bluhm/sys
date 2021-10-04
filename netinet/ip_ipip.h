@@ -104,6 +104,12 @@ ipipstat_add(enum ipipstat_counters c, uint64_t v)
 	counters_add(ipipcounters, c, v);
 }
 
+static inline void
+ipipstat_pkt(enum ipipstat_counters p, enum ipipstat_counters b, uint64_t v)
+{
+	counters_pkt(ipipcounters, p, b, v);
+}
+
 struct tdb;
 
 void	ipip_init(void);

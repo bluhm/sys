@@ -583,8 +583,7 @@ ipsp_process_done(struct mbuf *m, struct tdb *tdb)
 
 	m_tag_prepend(m, mtag);
 
-	ipsecstat_inc(ipsec_opackets);
-	ipsecstat_add(ipsec_obytes, m->m_pkthdr.len);
+	ipsecstat_pkt(ipsec_opackets, ipsec_obytes, m->m_pkthdr.len);
 	tdb->tdb_opackets++;
 	tdb->tdb_obytes += m->m_pkthdr.len;
 
