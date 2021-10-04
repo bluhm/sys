@@ -130,7 +130,7 @@ ipsp_process_packet(struct mbuf *m, struct tdb *tdb, int af, int tunalready)
 		    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
 		    ntohl(tdb->tdb_spi), tdb->tdb_sproto,
 		    tdb->tdb_dst.sa.sa_family);
-		error = ENXIO;
+		error = EPFNOSUPPORT;
 		goto drop;
 	}
 
@@ -348,7 +348,7 @@ ipsp_process_packet(struct mbuf *m, struct tdb *tdb, int af, int tunalready)
 		break;
 #endif /* INET6 */
 	default:
-		error = EINVAL;
+		error = EPFNOSUPPORT;
 		goto drop;
 	}
 
@@ -434,22 +434,19 @@ ipsec_output_cb(struct cryptop *crp)
 		error = ipcomp_output_cb(tdb, tc, m, ilen, olen);
 		break;
 	default:
-		panic("%s: unknown/unsupported security protocol %d",
+		panic("%s: unhandled security protocol %d",
 		    __func__, tdb->tdb_sproto);
 	}
-
-	if (error) {
+	if (error)
 		ipsecstat_inc(ipsec_odrops);
-		tdb->tdb_odrops++;
-	}
 	return;
 
  drop:
-	if (tdb != NULL)
-		tdb->tdb_odrops++;
 	m_freem(m);
 	free(tc, M_XDATA, 0);
 	crypto_freereq(crp);
+	if (tdb != NULL)
+		tdb->tdb_odrops++;
 	ipsecstat_inc(ipsec_odrops);
 }
 
@@ -494,7 +491,7 @@ ipsp_process_done(struct mbuf *m, struct tdb *tdb)
 		default:
 			DPRINTF("unknown protocol family (%d)",
 			    tdb->tdb_dst.sa.sa_family);
-			error = ENXIO;
+			error = EPFNOSUPPORT;
 			goto drop;
 		}
 
@@ -548,7 +545,7 @@ ipsp_process_done(struct mbuf *m, struct tdb *tdb)
 	default:
 		DPRINTF("unknown protocol family (%d)",
 		    tdb->tdb_dst.sa.sa_family);
-		error = ENXIO;
+		error = EPFNOSUPPORT;
 		goto drop;
 	}
 
@@ -596,21 +593,28 @@ ipsp_process_done(struct mbuf *m, struct tdb *tdb)
 	 */
 	switch (tdb->tdb_dst.sa.sa_family) {
 	case AF_INET:
-		return (ip_output(m, NULL, NULL, IP_RAWOUTPUT, NULL, NULL, 0));
-
+		error = ip_output(m, NULL, NULL, IP_RAWOUTPUT, NULL, NULL, 0);
+		break;
 #ifdef INET6
 	case AF_INET6:
 		/*
 		 * We don't need massage, IPv6 header fields are always in
 		 * net endian.
 		 */
-		return (ip6_output(m, NULL, NULL, 0, NULL, NULL));
+		error = ip6_output(m, NULL, NULL, 0, NULL, NULL);
+		break;
 #endif /* INET6 */
+	default:
+		error = EPFNOSUPPORT;
+		break;
 	}
-	error = EINVAL; /* Not reached. */
+	if (error)
+		tdb->tdb_odrops++;
+	return error;
 
  drop:
 	m_freem(m);
+	tdb->tdb_odrops++;
 	return error;
 }
 

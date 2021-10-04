@@ -2870,10 +2870,8 @@ ip6_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct route_in6 *ro,
 
 	/* Callee frees mbuf */
 	error = ipsp_process_packet(m, tdb, AF_INET6, tunalready);
-	if (error) {
+	if (error)
 		ipsecstat_inc(ipsec_odrops);
-		tdb->tdb_odrops++;
-	}
 	return error;
 }
 #endif /* IPSEC */

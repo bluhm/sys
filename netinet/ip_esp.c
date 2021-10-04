@@ -731,6 +731,7 @@ esp_input_cb(struct tdb *tdb, struct tdb_crypto *tc, struct mbuf *m, int clen)
  baddone:
 	m_freem(m);
 	free(tc, M_XDATA, 0);
+	tdb->tdb_idrops++;
 	return -1;
 }
 
@@ -1017,6 +1018,7 @@ esp_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	m_freem(m);
 	crypto_freereq(crp);
 	free(tc, M_XDATA, 0);
+	tdb->tdb_odrops++;
 	return error;
 }
 
@@ -1024,16 +1026,16 @@ int
 esp_output_cb(struct tdb *tdb, struct tdb_crypto *tc, struct mbuf *m, int ilen,
     int olen)
 {
+	int error;
+
 	/* Release crypto descriptors. */
 	free(tc, M_XDATA, 0);
 
 	/* Call the IPsec input callback. */
-	if (ipsp_process_done(m, tdb)) {
+	error = ipsp_process_done(m, tdb);
+	if (error)
 		espstat_inc(esps_outfail);
-		return -1;
-	}
-
-	return 0;
+	return error;
 }
 
 #define SEEN_SIZE	howmany(TDB_REPLAYMAX, 32)

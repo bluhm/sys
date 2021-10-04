@@ -524,7 +524,7 @@ ipip_output(struct mbuf **mp, struct tdb *tdb)
 		DPRINTF("unsupported protocol family %d",
 		    tdb->tdb_dst.sa.sa_family);
 		ipipstat_inc(ipips_family);
-		error = EAFNOSUPPORT;
+		error = EPFNOSUPPORT;
 		goto drop;
 	}
 
@@ -533,6 +533,7 @@ ipip_output(struct mbuf **mp, struct tdb *tdb)
 
  drop:
 	m_freemp(mp);
+	tdb->tdb_odrops++;
 	return error;
 }
 

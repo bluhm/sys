@@ -877,6 +877,7 @@ ah_input_cb(struct tdb *tdb, struct tdb_crypto *tc, struct mbuf *m, int clen)
  baddone:
 	m_freem(m);
 	free(tc, M_XDATA, 0);
+	tdb->tdb_idrops++;
 	return -1;
 }
 
@@ -1152,6 +1153,7 @@ ah_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	m_freem(m);
 	crypto_freereq(crp);
 	free(tc, M_XDATA, 0);
+	tdb->tdb_odrops++;
 	return error;
 }
 
@@ -1164,6 +1166,7 @@ ah_output_cb(struct tdb *tdb, struct tdb_crypto *tc, struct mbuf *m, int ilen,
 {
 	int skip = tc->tc_skip;
 	caddr_t ptr = (caddr_t) (tc + 1);
+	int error;
 
 	/*
 	 * Copy original headers (with the new protocol number) back
@@ -1175,10 +1178,8 @@ ah_output_cb(struct tdb *tdb, struct tdb_crypto *tc, struct mbuf *m, int ilen,
 	free(tc, M_XDATA, 0);
 
 	/* Call the IPsec input callback. */
-	if (ipsp_process_done(m, tdb)) {
+	error = ipsp_process_done(m, tdb);
+	if (error)
 		ahstat_inc(ahs_outfail);
-		return -1;
-	}
-
-	return 0;
+	return error;
 }
