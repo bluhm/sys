@@ -533,6 +533,8 @@ ipip_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int dummy,
  drop:
 	m_freem(m);
 	*mp = NULL;
+	ipsecstat_inc(ipsec_odrops);
+	tdb->tdb_odrops++;
 	return error;
 }
 

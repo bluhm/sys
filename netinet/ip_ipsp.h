@@ -574,7 +574,7 @@ int	ah_zeroize(struct tdb *);
 int	ah_input(struct mbuf *, struct tdb *, int, int);
 int	ah_input_cb(struct tdb *, struct tdb_crypto *, struct mbuf *, int);
 int	ah_output(struct mbuf *, struct tdb *, struct mbuf **, int, int);
-int	ah_output_cb(struct tdb *, struct tdb_crypto *, struct mbuf *, int,
+void	ah_output_cb(struct tdb *, struct tdb_crypto *, struct mbuf *, int,
 	    int);
 int	ah_sysctl(int *, u_int, void *, size_t *, void *, size_t);
 
@@ -593,7 +593,7 @@ int	esp_zeroize(struct tdb *);
 int	esp_input(struct mbuf *, struct tdb *, int, int);
 int	esp_input_cb(struct tdb *, struct tdb_crypto *, struct mbuf *, int);
 int	esp_output(struct mbuf *, struct tdb *, struct mbuf **, int, int);
-int	esp_output_cb(struct tdb *, struct tdb_crypto *, struct mbuf *, int,
+void	esp_output_cb(struct tdb *, struct tdb_crypto *, struct mbuf *, int,
 	    int);
 int	esp_sysctl(int *, u_int, void *, size_t *, void *, size_t);
 
@@ -611,7 +611,7 @@ int	ipcomp_zeroize(struct tdb *);
 int	ipcomp_input(struct mbuf *, struct tdb *, int, int);
 int	ipcomp_input_cb(struct tdb *, struct tdb_crypto *, struct mbuf *, int);
 int	ipcomp_output(struct mbuf *, struct tdb *, struct mbuf **, int, int);
-int	ipcomp_output_cb(struct tdb *, struct tdb_crypto *, struct mbuf *, int,
+void	ipcomp_output_cb(struct tdb *, struct tdb_crypto *, struct mbuf *, int,
 	    int);
 int	ipcomp_sysctl(int *, u_int, void *, size_t *, void *, size_t);
 int	ipcomp4_input(struct mbuf **, int *, int, int);

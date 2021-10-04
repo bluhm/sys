@@ -644,10 +644,6 @@ ip_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct route *ro, int fwd)
 
 	/* Callee frees mbuf */
 	error = ipsp_process_packet(m, tdb, AF_INET, 0);
-	if (error) {
-		ipsecstat_inc(ipsec_odrops);
-		tdb->tdb_odrops++;
-	}
 	return error;
 }
 #endif /* IPSEC */

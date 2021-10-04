@@ -484,11 +484,16 @@ ipcomp_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 	crp->crp_sid = tdb->tdb_cryptoid;
 
 	error = crypto_dispatch(crp);
-	return error;
+	if (error)
+		goto errcnt;
+	return 0;
 
  drop:
 	m_freem(m);
 	crypto_freereq(crp);
+ errcnt:
+	ipsecstat_inc(ipsec_odrops);
+	tdb->tdb_odrops++;
 	return error;
 }
 

@@ -1147,12 +1147,17 @@ ah_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
 	memcpy(&tc->tc_dst, &tdb->tdb_dst, sizeof(union sockaddr_union));
 
 	error = crypto_dispatch(crp);
-	return error;
+	if (error)
+		goto errcnt;
+	return 0;
 
  drop:
 	m_freem(m);
 	crypto_freereq(crp);
 	free(tc, M_XDATA, 0);
+ errcnt:
+	ipsecstat_inc(ipsec_odrops);
+	tdb->tdb_odrops++;
 	return error;
 }
 

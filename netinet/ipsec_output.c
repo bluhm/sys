@@ -436,32 +436,27 @@ ipsec_output_cb(struct cryptop *crp)
 
 	switch (tdb->tdb_sproto) {
 	case IPPROTO_ESP:
-		error = esp_output_cb(tdb, tc, m, ilen, olen);
+		esp_output_cb(tdb, tc, m, ilen, olen);
 		break;
 	case IPPROTO_AH:
-		error = ah_output_cb(tdb, tc, m, ilen, olen);
+		ah_output_cb(tdb, tc, m, ilen, olen);
 		break;
 	case IPPROTO_IPCOMP:
-		error = ipcomp_output_cb(tdb, tc, m, ilen, olen);
+		ipcomp_output_cb(tdb, tc, m, ilen, olen);
 		break;
 	default:
-		panic("%s: unknown/unsupported security protocol %d",
+		panic("%s: unhandled security protocol %d",
 		    __func__, tdb->tdb_sproto);
-	}
-
-	if (error) {
-		ipsecstat_inc(ipsec_odrops);
-		tdb->tdb_odrops++;
 	}
 	return;
 
  drop:
-	if (tdb != NULL)
-		tdb->tdb_odrops++;
 	m_freem(m);
 	free(tc, M_XDATA, 0);
 	crypto_freereq(crp);
 	ipsecstat_inc(ipsec_odrops);
+	if (tdb != NULL)
+		tdb->tdb_odrops++;
 }
 
 /*
@@ -607,21 +602,29 @@ ipsp_process_done(struct mbuf *m, struct tdb *tdb)
 	 */
 	switch (tdb->tdb_dst.sa.sa_family) {
 	case AF_INET:
-		return (ip_output(m, NULL, NULL, IP_RAWOUTPUT, NULL, NULL, 0));
-
+		error = ip_output(m, NULL, NULL, IP_RAWOUTPUT, NULL, NULL, 0);
+		break;
 #ifdef INET6
 	case AF_INET6:
 		/*
 		 * We don't need massage, IPv6 header fields are always in
 		 * net endian.
 		 */
-		return (ip6_output(m, NULL, NULL, 0, NULL, NULL));
+		error = ip6_output(m, NULL, NULL, 0, NULL, NULL);
+		break;
 #endif /* INET6 */
+	default:
+		unhandled_af(tdb->tdb_dst.sa.sa_family);
 	}
-	error = EINVAL; /* Not reached. */
+	if (error)
+		goto errcnt;
+	return 0;
 
  drop:
 	m_freem(m);
+ errcnt:
+	ipsecstat_inc(ipsec_odrops);
+	tdb->tdb_odrops++;
 	return error;
 }
 
