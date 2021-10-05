@@ -781,10 +781,6 @@ ubsec_process(struct cryptop *crp)
 	u_int16_t flags = 0;
 	int ivlen = 0, keylen = 0;
 
-	if (crp == NULL || crp->crp_callback == NULL) {
-		ubsecstats.hst_invalid++;
-		return (EINVAL);
-	}
 	card = UBSEC_CARD(crp->crp_sid);
 	if (card >= ubsec_cd.cd_ndevs || ubsec_cd.cd_devs[card] == NULL) {
 		ubsecstats.hst_invalid++;

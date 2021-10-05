@@ -428,10 +428,7 @@ viac3_crypto_process(struct cryptop *crp)
 	int sesn, err = 0;
 	int i;
 
-	if (crp == NULL || crp->crp_callback == NULL)
-		return (EINVAL);
-	if (crp->crp_ndesc < 1)
-		return (EINVAL);
+	KASSERT(crp->crp_ndesc >= 1);
 
 	sesn = VIAC3_SESSION(crp->crp_sid);
 	if (sesn >= sc->sc_nsessions) {

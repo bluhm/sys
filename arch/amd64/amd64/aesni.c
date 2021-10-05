@@ -639,10 +639,7 @@ aesni_process(struct cryptop *crp)
 	int err = 0;
 	int i;
 
-	if (crp == NULL || crp->crp_callback == NULL)
-		return (EINVAL);
-	if (crp->crp_ndesc < 1)
-		return (EINVAL);
+	KASSERT(crp->crp_ndesc >= 1);
 
 	smr_read_enter();
 	ses = aesni_get(crp->crp_sid & 0xffffffff);

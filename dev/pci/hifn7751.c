@@ -1925,11 +1925,6 @@ hifn_process(struct cryptop *crp)
 	struct hifn_softc *sc;
 	struct cryptodesc *crd1, *crd2 = NULL, *maccrd, *enccrd;
 
-	if (crp == NULL || crp->crp_callback == NULL) {
-		hifnstats.hst_invalid++;
-		return (EINVAL);
-	}
-
 	if (crp->crp_ilen == 0) {
 		err = EINVAL;
 		goto errout;

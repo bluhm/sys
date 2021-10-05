@@ -1035,11 +1035,9 @@ swcr_process(struct cryptop *crp)
 	int type;
 	int i;
 
-	/* Sanity check */
-	if (crp == NULL)
-		return EINVAL;
+	KASSERT(crp->crp_ndesc >= 1);
 
-	if (crp->crp_ndesc < 1 || crp->crp_buf == NULL) {
+	if (crp->crp_buf == NULL) {
 		crp->crp_etype = EINVAL;
 		goto done;
 	}
