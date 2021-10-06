@@ -740,8 +740,7 @@ esp_input_cb(struct tdb *tdb, struct tdb_crypto *tc, struct mbuf *m, int clen)
  * ESP output routine, called by ipsp_process_packet().
  */
 int
-esp_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
-    int protoff)
+esp_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 {
 	const struct enc_xform *espx = tdb->tdb_encalgxform;
 	const struct auth_hash *esph = tdb->tdb_authalgxform;

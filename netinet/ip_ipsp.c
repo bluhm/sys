@@ -135,7 +135,7 @@ const struct xformsw xformsw[] = {
   .xf_init	= ipe4_init,
   .xf_zeroize	= ipe4_zeroize,
   .xf_input	= ipe4_input,
-  .xf_output	= ipip_output,
+  .xf_output	= NULL,
 },
 {
   .xf_type	= XF_AH,

@@ -966,8 +966,8 @@ tcp_signature_tdb_input(struct mbuf *m, struct tdb *tdbp, int skip, int protoff)
 }
 
 int
-tcp_signature_tdb_output(struct mbuf *m, struct tdb *tdbp, struct mbuf **mp,
-    int skip, int protoff)
+tcp_signature_tdb_output(struct mbuf *m, struct tdb *tdbp, int skip,
+    int protoff)
 {
 	return (EINVAL);
 }

@@ -884,8 +884,7 @@ ah_input_cb(struct tdb *tdb, struct tdb_crypto *tc, struct mbuf *m, int clen)
  * AH output routine, called by ipsp_process_packet().
  */
 int
-ah_output(struct mbuf *m, struct tdb *tdb, struct mbuf **mp, int skip,
-    int protoff)
+ah_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 {
 	const struct auth_hash *ahx = tdb->tdb_authalgxform;
 	struct cryptodesc *crda;

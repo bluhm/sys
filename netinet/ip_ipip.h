@@ -115,7 +115,7 @@ struct tdb;
 void	ipip_init(void);
 int	ipip_input(struct mbuf **, int *, int, int);
 int	ipip_input_if(struct mbuf **, int *, int, int, struct ifnet *);
-int	ipip_output(struct mbuf *, struct tdb *, struct mbuf **, int, int);
+int	ipip_output(struct mbuf **, struct tdb *);
 int	ipip_sysctl(int *, u_int, void *, size_t *, void *, size_t);
 
 extern int ipip_allow;
