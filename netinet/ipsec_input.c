@@ -203,12 +203,6 @@ ipsec_common_input(struct mbuf *m, int skip, int protoff, int af, int sproto,
 	ipsecstat_pkt(ipsec_ipackets, ipsec_ibytes, m->m_pkthdr.len);
 	IPSEC_ISTAT(esps_input, ahs_input, ipcomps_input);
 
-	if (m == NULL) {
-		DPRINTF("NULL packet received");
-		IPSEC_ISTAT(esps_hdrops, ahs_hdrops, ipcomps_hdrops);
-		return EINVAL;
-	}
-
 	if ((sproto == IPPROTO_IPCOMP) && (m->m_flags & M_COMP)) {
 		DPRINTF("repeated decompression");
 		ipcompstat_inc(ipcomps_pdrops);
@@ -475,13 +469,6 @@ ipsec_common_input_cb(struct mbuf *m, struct tdb *tdbp, int skip, int protoff)
 	sproto = tdbp->tdb_sproto;
 
 	tdbp->tdb_last_used = gettime();
-
-	/* Sanity check */
-	if (m == NULL) {
-		/* The called routine will print a message if necessary */
-		IPSEC_ISTAT(esps_badkcr, ahs_badkcr, ipcomps_badkcr);
-		return -1;
-	}
 
 	/* Fix IPv4 header */
 	if (af == AF_INET) {
