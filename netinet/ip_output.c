@@ -403,8 +403,9 @@ sendit:
 	 * If we're doing Path MTU discovery, we need to set DF unless
 	 * the route's MTU is locked.
 	 */
-	if ((flags & IP_MTUDISC) && ro && ro->ro_rt &&
-	    (ro->ro_rt->rt_locks & RTV_MTU) == 0)
+	if ((flags & IP_MTUDISC) &&
+	    ((ro && ro->ro_rt && (ro->ro_rt->rt_locks & RTV_MTU) == 0) ||
+	    ISSET(m->m_pkthdr.csum_flags, M_IPV6_DF_OUT)))
 		ip->ip_off |= htons(IP_DF);
 
 #ifdef IPSEC
