@@ -1014,7 +1014,8 @@ icmp6_mtudisc_update(struct ip6ctlparam *ip6cp, int validated)
 	sin6.sin6_scope_id = in6_addr2scopeid(m->m_pkthdr.ph_ifidx,
 	    &sin6.sin6_addr);
 
-	rt = icmp6_mtudisc_clone(&sin6, m->m_pkthdr.ph_rtableid, 0);
+	rt = icmp6_mtudisc_clone(&sin6, m->m_pkthdr.ph_rtableid,
+	    ISSET(m->m_flags, M_AUTH|M_CONF|M_COMP));
 
 	if (rt != NULL && ISSET(rt->rt_flags, RTF_HOST) &&
 	    !(rt->rt_locks & RTV_MTU) &&
