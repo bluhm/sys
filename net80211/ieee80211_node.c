@@ -1,4 +1,4 @@
-/*	$OpenBSD: ieee80211_node.c,v 1.185 2021/04/29 21:43:47 stsp Exp $	*/
+/*	$OpenBSD: ieee80211_node.c,v 1.187 2021/10/08 09:22:10 stsp Exp $	*/
 /*	$NetBSD: ieee80211_node.c,v 1.14 2004/05/09 09:18:47 dyoung Exp $	*/
 
 /*-
