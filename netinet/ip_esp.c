@@ -528,8 +528,8 @@ esp_input(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 			crde->crd_len = m->m_pkthdr.len - (skip + hlen + alen);
 	}
 
-	error = crypto_dispatch(crp);
-	return error;
+	crypto_dispatch(crp);
+	return 0;
 
  drop:
 	m_freem(m);
@@ -1012,8 +1012,8 @@ esp_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 			crda->crd_len = m->m_pkthdr.len - (skip + alen);
 	}
 
-	error = crypto_dispatch(crp);
-	return error;
+	crypto_dispatch(crp);
+	return 0;
 
  drop:
 	m_freem(m);

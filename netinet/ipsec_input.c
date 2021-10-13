@@ -401,11 +401,7 @@ ipsec_input_cb(struct cryptop *crp)
 			/* Reset the session ID */
 			if (tdb->tdb_cryptoid != 0)
 				tdb->tdb_cryptoid = crp->crp_sid;
-			error = crypto_dispatch(crp);
-			if (error) {
-				DPRINTF("crypto dispatch error %d", error);
-				goto drop;
-			}
+			crypto_dispatch(crp);
 			return;
 		}
 		DPRINTF("crypto error %d", crp->crp_etype);
