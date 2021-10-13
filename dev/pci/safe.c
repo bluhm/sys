@@ -1,4 +1,4 @@
-/*	$OpenBSD: safe.c,v 1.45 2021/02/25 02:48:20 dlg Exp $	*/
+/*	$OpenBSD: safe.c,v 1.46 2021/10/13 13:08:58 bluhm Exp $	*/
 
 /*-
  * Copyright (c) 2003 Sam Leffler, Errno Consulting

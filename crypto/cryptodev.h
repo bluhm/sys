@@ -1,4 +1,4 @@
-/*	$OpenBSD: cryptodev.h,v 1.74 2021/07/26 21:27:56 bluhm Exp $	*/
+/*	$OpenBSD: cryptodev.h,v 1.75 2021/10/13 13:08:58 bluhm Exp $	*/
 
 /*
  * The author of this code is Angelos D. Keromytis (angelos@cis.upenn.edu)

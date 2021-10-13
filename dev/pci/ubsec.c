@@ -1,4 +1,4 @@
-/*	$OpenBSD: ubsec.c,v 1.167 2021/02/25 02:48:20 dlg Exp $	*/
+/*	$OpenBSD: ubsec.c,v 1.168 2021/10/13 13:08:58 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2000 Jason L. Wright (jason@thought.net)
