@@ -1,4 +1,4 @@
-/* $OpenBSD: softraid_raid1c.c,v 1.3 2021/05/10 08:17:07 stsp Exp $ */
+/* $OpenBSD: softraid_raid1c.c,v 1.4 2021/10/13 22:43:44 bluhm Exp $ */
 /*
  * Copyright (c) 2007 Marco Peereboom <marco@peereboom.us>
  * Copyright (c) 2008 Hans-Joerg Hoexer <hshoexer@openbsd.org>
