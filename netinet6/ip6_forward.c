@@ -222,6 +222,7 @@ reroute:
 		ro.ro_rt = rt;
 		ro.ro_tableid = m->m_pkthdr.ph_rtableid;
 		error = ip6_output_ipsec_send(tdb, m, &ro, 0, 1);
+		rt = ro.ro_rt;
 		if (error)
 			goto senderr;
 		goto freecopy;
