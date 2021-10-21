@@ -107,6 +107,5 @@ extern const struct auth_hash auth_hash_gmac_aes_256;
 extern const struct auth_hash auth_hash_chacha20_poly1305;
 
 extern const struct comp_algo comp_algo_deflate;
-extern const struct comp_algo comp_algo_lzs;
 
 #endif /* _CRYPTO_XFORM_H_ */

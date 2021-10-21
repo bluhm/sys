@@ -90,10 +90,6 @@ ipcomp_init(struct tdb *tdbp, const struct xformsw *xsp, struct ipsecinit *ii)
 	case SADB_X_CALG_DEFLATE:
 		tcomp = &comp_algo_deflate;
 		break;
-	case SADB_X_CALG_LZS:
-		tcomp = &comp_algo_lzs;
-		break;
-
 	default:
 		DPRINTF("unsupported compression algorithm %d specified",
 		    ii->ii_compalg);

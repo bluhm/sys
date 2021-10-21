@@ -171,9 +171,6 @@ export_sa(void **p, struct tdb *tdb)
 		case CRYPTO_DEFLATE_COMP:
 			sadb_sa->sadb_sa_encrypt = SADB_X_CALG_DEFLATE;
 			break;
-		case CRYPTO_LZS_COMP:
-			sadb_sa->sadb_sa_encrypt = SADB_X_CALG_LZS;
-			break;
 		}
 	}
 
