@@ -1,4 +1,4 @@
-#	$OpenBSD: files.pci,v 1.355 2021/09/02 10:11:21 mlarkin Exp $
+#	$OpenBSD: files.pci,v 1.356 2021/10/21 18:36:42 bluhm Exp $
 #	$NetBSD: files.pci,v 1.20 1996/09/24 17:47:15 christos Exp $
 #
 # Config file and device description for machine-independent PCI code.
