@@ -1,4 +1,4 @@
-/*	$OpenBSD: vfs_vops.c,v 1.31 2021/10/04 08:11:02 claudio Exp $	*/
+/*	$OpenBSD: vfs_vops.c,v 1.33 2021/10/20 06:35:39 semarie Exp $	*/
 /*
  * Copyright (c) 2010 Thordur I. Bjornsson <thib@openbsd.org> 
  *
