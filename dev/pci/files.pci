@@ -420,21 +420,6 @@ device	nep: ether, ifnet, ifmedia, mii
 attach	nep at pci
 file	dev/pci/if_nep.c		nep
 
-# Hi/fn 7751/7811/7951
-device	hifn: crypto
-attach	hifn at pci
-file	dev/pci/hifn7751.c		hifn
-
-# Bluesteelnet (Broadcom) 5501/5601
-device	ubsec: crypto
-attach	ubsec at pci
-file	dev/pci/ubsec.c			ubsec
-
-# Safenet SafeXcel 1141
-device	safe: crypto
-attach	safe at pci
-file	dev/pci/safe.c			safe
-
 # Winbond W89C840F ethernet
 device	wb: ether, ifnet, mii, ifmedia, mii_phy
 attach	wb at pci
