@@ -309,7 +309,6 @@ ipcomp_input_cb(struct tdb *tdb, struct tdb_crypto *tc, struct mbuf *m, int clen
  baddone:
 	m_freem(m);
 	free(tc, M_XDATA, 0);
-	tdb->tdb_idrops++;
 	return -1;
 }
 
@@ -485,7 +484,6 @@ ipcomp_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
  drop:
 	m_freem(m);
 	crypto_freereq(crp);
-	tdb->tdb_odrops++;
 	return error;
 }
 
@@ -572,6 +570,5 @@ ipcomp_output_cb(struct tdb *tdb, struct tdb_crypto *tc, struct mbuf *m,
  drop:
 	m_freem(m);
 	free(tc, M_XDATA, 0);
-	tdb->tdb_odrops++;
 	return error;
 }

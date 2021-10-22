@@ -533,7 +533,6 @@ ipip_output(struct mbuf **mp, struct tdb *tdb)
 
  drop:
 	m_freemp(mp);
-	tdb->tdb_odrops++;
 	return error;
 }
 

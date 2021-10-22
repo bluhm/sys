@@ -352,15 +352,17 @@ ipsec_common_input(struct mbuf *m, int skip, int protoff, int af, int sproto,
 	 * everything else.
 	 */
 	error = (*(tdbp->tdb_xform->xf_input))(m, tdbp, skip, protoff);
-	if (error)
+	if (error) {
 		ipsecstat_inc(ipsec_idrops);
+		tdbp->tdb_idrops++;
+	}
 	return error;
 
  drop:
 	m_freem(m);
+	ipsecstat_inc(ipsec_idrops);
 	if (tdbp != NULL)
 		tdbp->tdb_idrops++;
-	ipsecstat_inc(ipsec_idrops);
 	return error;
 }
 
@@ -421,17 +423,19 @@ ipsec_input_cb(struct cryptop *crp)
 		panic("%s: unknown/unsupported security protocol %d",
 		    __func__, tdb->tdb_sproto);
 	}
-	if (error)
+	if (error) {
 		ipsecstat_inc(ipsec_idrops);
+		tdb->tdb_idrops++;
+	}
 	return;
 
  drop:
 	m_freem(m);
 	free(tc, M_XDATA, 0);
 	crypto_freereq(crp);
+	ipsecstat_inc(ipsec_idrops);
 	if (tdb != NULL)
 		tdb->tdb_idrops++;
-	ipsecstat_inc(ipsec_idrops);
 }
 
 /*
@@ -703,7 +707,6 @@ ipsec_common_input_cb(struct mbuf *m, struct tdb *tdbp, int skip, int protoff)
 
  baddone:
 	m_freem(m);
-	tdbp->tdb_idrops++;
 	return -1;
 #undef IPSEC_ISTAT
 }
