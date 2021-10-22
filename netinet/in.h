@@ -684,7 +684,6 @@ struct ip_mreqn {
 #define IPCTL_IPSEC_AUTH_ALGORITHM 26
 #define	IPCTL_MTUDISC		27	/* allow path MTU discovery */
 #define	IPCTL_MTUDISCTIMEOUT	28	/* allow path MTU discovery */
-#define	IPCTL_IPSEC_IPCOMP_ALGORITHM	29
 #define	IPCTL_IFQUEUE		30
 #define	IPCTL_MFORWARDING	31
 #define	IPCTL_MULTIPATH		32
@@ -704,7 +703,7 @@ struct ip_mreqn {
 	{ "forwarding", CTLTYPE_INT }, \
 	{ "redirect", CTLTYPE_INT }, \
 	{ "ttl", CTLTYPE_INT }, \
-	/* { "mtu", CTLTYPE_INT }, */ { 0, 0 }, \
+	{ 0, 0 }, \
 	{ "sourceroute", CTLTYPE_INT }, \
 	{ "directed-broadcast", CTLTYPE_INT }, \
 	{ "portfirst", CTLTYPE_INT }, \
@@ -729,7 +728,7 @@ struct ip_mreqn {
 	{ "ipsec-auth-alg", CTLTYPE_STRING }, \
 	{ "mtudisc", CTLTYPE_INT }, \
 	{ "mtudisctimeout", CTLTYPE_INT }, \
-	{ "ipsec-comp-alg", CTLTYPE_STRING }, \
+	{ 0, 0 }, \
 	{ "ifq", CTLTYPE_NODE }, \
 	{ "mforwarding", CTLTYPE_INT }, \
 	{ "multipath", CTLTYPE_INT }, \

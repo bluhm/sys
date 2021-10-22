@@ -1660,7 +1660,6 @@ ip_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 	case IPCTL_IPSEC_FIRSTUSE:
 	case IPCTL_IPSEC_ENC_ALGORITHM:
 	case IPCTL_IPSEC_AUTH_ALGORITHM:
-	case IPCTL_IPSEC_IPCOMP_ALGORITHM:
 		return (ipsec_sysctl(name, namelen, oldp, oldlenp, newp,
 		    newlen));
 #endif

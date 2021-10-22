@@ -2262,12 +2262,9 @@ pfkeyv2_acquire(struct ipsec_policy *ipo, union sockaddr_union *gw,
 			}
 		} else if (ipo->ipo_sproto == IPPROTO_IPCOMP) {
 			/* Set the compression algorithm */
-			if (!strncasecmp(ipsec_def_comp, "deflate",
-			    sizeof("deflate"))) {
-				sadb_comb->sadb_comb_encrypt = SADB_X_CALG_DEFLATE;
-				sadb_comb->sadb_comb_encrypt_minbits = 0;
-				sadb_comb->sadb_comb_encrypt_maxbits = 0;
-			}
+			sadb_comb->sadb_comb_encrypt = SADB_X_CALG_DEFLATE;
+			sadb_comb->sadb_comb_encrypt_minbits = 0;
+			sadb_comb->sadb_comb_encrypt_maxbits = 0;
 		}
 
 		/* Set the authentication algorithm */

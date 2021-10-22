@@ -132,7 +132,6 @@ struct cpumem *ipseccounters;
 
 char ipsec_def_enc[20];
 char ipsec_def_auth[20];
-char ipsec_def_comp[20];
 
 const struct sysctl_bounded_args ipsecctl_vars[] = {
 	{ IPSEC_ENCDEBUG, &encdebug, 0, 1 },
@@ -164,7 +163,6 @@ ipsec_init(void)
 
 	strlcpy(ipsec_def_enc, IPSEC_DEFAULT_DEF_ENC, sizeof(ipsec_def_enc));
 	strlcpy(ipsec_def_auth, IPSEC_DEFAULT_DEF_AUTH, sizeof(ipsec_def_auth));
-	strlcpy(ipsec_def_comp, IPSEC_DEFAULT_DEF_COMP, sizeof(ipsec_def_comp));
 
 	ipsp_init();
 }
@@ -739,12 +737,6 @@ ipsec_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		NET_LOCK();
 		error = sysctl_tstring(oldp, oldlenp, newp, newlen,
 		    ipsec_def_auth, sizeof(ipsec_def_auth));
-		NET_UNLOCK();
-		return (error);
-	case IPCTL_IPSEC_IPCOMP_ALGORITHM:
-		NET_LOCK();
-		error = sysctl_tstring(oldp, oldlenp, newp, newlen,
-		    ipsec_def_comp, sizeof(ipsec_def_comp));
 		NET_UNLOCK();
 		return (error);
 	case IPCTL_IPSEC_STATS:

@@ -519,7 +519,6 @@ extern int ipsec_exp_first_use;		/* seconds between 1st asso & expire */
 
 extern char ipsec_def_enc[];
 extern char ipsec_def_auth[];
-extern char ipsec_def_comp[];
 
 extern TAILQ_HEAD(ipsec_policy_head, ipsec_policy) ipsec_policy_head;
 
