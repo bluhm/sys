@@ -437,19 +437,17 @@ ipsec_output_cb(struct cryptop *crp)
 		panic("%s: unhandled security protocol %d",
 		    __func__, tdb->tdb_sproto);
 	}
-	if (error) {
+	if (error)
 		ipsecstat_inc(ipsec_odrops);
-		tdb->tdb_odrops++;
-	}
 	return;
 
  drop:
 	m_freem(m);
 	free(tc, M_XDATA, 0);
 	crypto_freereq(crp);
-	ipsecstat_inc(ipsec_odrops);
 	if (tdb != NULL)
 		tdb->tdb_odrops++;
+	ipsecstat_inc(ipsec_odrops);
 }
 
 /*
@@ -610,10 +608,13 @@ ipsp_process_done(struct mbuf *m, struct tdb *tdb)
 		error = EPFNOSUPPORT;
 		break;
 	}
+	if (error)
+		tdb->tdb_odrops++;
 	return error;
 
  drop:
 	m_freem(m);
+	tdb->tdb_odrops++;
 	return error;
 }
 
