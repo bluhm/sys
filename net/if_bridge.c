@@ -1575,7 +1575,7 @@ bridge_ipsec(struct ifnet *ifp, struct ether_header *eh, int hassnap,
 					    tdb->tdb_soft_first_use);
 			}
 
-			(*(tdb->tdb_xform->xf_input))(m, tdb, hlen, off);
+			(*(tdb->tdb_xform->xf_input))(&m, tdb, hlen, off);
 			return (1);
 		} else {
  skiplookup:

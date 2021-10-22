@@ -557,11 +557,11 @@ ipe4_zeroize(struct tdb *tdbp)
 }
 
 int
-ipe4_input(struct mbuf *m, struct tdb *tdb, int hlen, int proto)
+ipe4_input(struct mbuf **mp, struct tdb *tdb, int hlen, int proto)
 {
 	/* This is a rather serious mistake, so no conditional printing. */
 	printf("%s: should never be called\n", __func__);
-	m_freem(m);
+	m_freemp(mp);
 	return EINVAL;
 }
 #endif	/* IPSEC */

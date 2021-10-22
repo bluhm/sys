@@ -960,15 +960,18 @@ tcp_signature_tdb_zeroize(struct tdb *tdbp)
 }
 
 int
-tcp_signature_tdb_input(struct mbuf *m, struct tdb *tdbp, int skip, int protoff)
+tcp_signature_tdb_input(struct mbuf **mp, struct tdb *tdbp, int skip,
+    int protoff)
 {
-	return (0);
+	m_freemp(mp);
+	return (EINVAL);
 }
 
 int
 tcp_signature_tdb_output(struct mbuf *m, struct tdb *tdbp, int skip,
     int protoff)
 {
+	m_freem(m);
 	return (EINVAL);
 }
 

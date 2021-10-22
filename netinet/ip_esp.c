@@ -340,10 +340,11 @@ esp_zeroize(struct tdb *tdbp)
  * ESP input processing, called (eventually) through the protocol switch.
  */
 int
-esp_input(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
+esp_input(struct mbuf **mp, struct tdb *tdb, int skip, int protoff)
 {
 	const struct auth_hash *esph = tdb->tdb_authalgxform;
 	const struct enc_xform *espx = tdb->tdb_encalgxform;
+	struct mbuf *m = *mp;
 	struct cryptodesc *crde = NULL, *crda = NULL;
 	struct cryptop *crp = NULL;
 	struct tdb_crypto *tc = NULL;
@@ -554,7 +555,7 @@ esp_input(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	return 0;
 
  drop:
-	m_freem(m);
+	m_freemp(mp);
 	crypto_freereq(crp);
 	free(tc, M_XDATA, 0);
 	return error;
