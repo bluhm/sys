@@ -1,4 +1,4 @@
-/* $OpenBSD: ip_ipcomp.c,v 1.77 2021/10/21 22:59:07 tobhe Exp $ */
+/* $OpenBSD: ip_ipcomp.c,v 1.78 2021/10/22 12:30:53 bluhm Exp $ */
 
 /*
  * Copyright (c) 2001 Jean-Jacques Bernard-Gundol (jj@wabbitt.org)
