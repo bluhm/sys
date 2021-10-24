@@ -1009,6 +1009,7 @@ esp4_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 	ipsec_common_ctlinput(rdomain, cmd, sa, v, IPPROTO_ESP);
 }
 
+/* Find the offset of the next protocol field in the previous header. */
 int
 ipsec_protoff(struct mbuf *m, int off, int af)
 {
