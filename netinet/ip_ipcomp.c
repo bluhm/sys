@@ -203,13 +203,7 @@ ipcomp_input(struct mbuf **mp, struct tdb *tdb, int skip, int protoff)
 	/* Release the crypto descriptors */
 	crypto_freereq(crp);
 
-	error = ipcomp_input_cb(tdb, tc, m, clen);
-	if (error) {
-		ipsecstat_inc(ipsec_idrops);
-		tdb->tdb_idrops++;
-	}
-
-	return 0;
+	return ipcomp_input_cb(tdb, tc, m, clen);
 
  drop:
 	m_freemp(mp);
@@ -530,13 +524,7 @@ ipcomp_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	/* Release the crypto descriptors */
 	crypto_freereq(crp);
 
-	error = ipcomp_output_cb(tdb, tc, m, ilen, olen);
-	if (error) {
-		ipsecstat_inc(ipsec_odrops);
-		tdb->tdb_odrops++;
-	}
-
-	return 0;
+	return ipcomp_output_cb(tdb, tc, m, ilen, olen);
 
  drop:
 	m_freem(m);
