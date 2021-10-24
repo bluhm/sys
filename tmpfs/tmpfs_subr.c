@@ -1,4 +1,4 @@
-/*	$OpenBSD: tmpfs_subr.c,v 1.23 2019/10/17 11:23:49 millert Exp $	*/
+/*	$OpenBSD: tmpfs_subr.c,v 1.25 2021/10/24 17:20:06 patrick Exp $	*/
 /*	$NetBSD: tmpfs_subr.c,v 1.79 2012/03/13 18:40:50 elad Exp $	*/
 
 /*
@@ -61,7 +61,7 @@
  *	reference counting and link counting.  That is, an inode can only be
  *	destroyed if its associated vnode is inactive.  The destruction is
  *	done on vnode reclamation i.e. tmpfs_reclaim().  It should be noted
- *	that tmpfs_node_t::tn_links being 0 is a destruction criterion. 
+ *	that tmpfs_node_t::tn_links being 0 is a destruction criterion.
  *
  *	If an inode has references within the file system (tn_links > 0) and
  *	its inactive vnode gets reclaimed/recycled - then the association is
@@ -461,7 +461,6 @@ tmpfs_alloc_dirent(tmpfs_mount_t *tmp, const char *name, uint16_t len,
 void
 tmpfs_free_dirent(tmpfs_mount_t *tmp, tmpfs_dirent_t *de)
 {
-
 	KASSERT(de->td_node == NULL);
 	KASSERT(de->td_seq == TMPFS_DIRSEQ_NONE);
 	tmpfs_strname_free(tmp, de->td_name, de->td_namelen);
@@ -670,7 +669,7 @@ tmpfs_dir_putseq(tmpfs_node_t *dnode, tmpfs_dirent_t *de)
 	if (dnode->tn_size == 0) {
 		dnode->tn_spec.tn_dir.tn_next_seq = TMPFS_DIRSEQ_START;
 	} else if (seq != TMPFS_DIRSEQ_NONE &&
-		seq == dnode->tn_spec.tn_dir.tn_next_seq - 1) {
+	    seq == dnode->tn_spec.tn_dir.tn_next_seq - 1) {
 		dnode->tn_spec.tn_dir.tn_next_seq--;
 	}
 }
@@ -693,7 +692,6 @@ tmpfs_dir_lookupbyseq(tmpfs_node_t *node, off_t seq)
 		KASSERT(de->td_seq != TMPFS_DIRSEQ_NONE);
 		return de;
 	}
-
 	TAILQ_FOREACH(de, &node->tn_spec.tn_dir.tn_dir, td_entries) {
 		KASSERT(de->td_seq >= TMPFS_DIRSEQ_START);
 		KASSERT(de->td_seq != TMPFS_DIRSEQ_NONE);
@@ -715,19 +713,19 @@ tmpfs_dir_getdotents(tmpfs_node_t *node, struct dirent *dp, struct uio *uio)
 	int error;
 
 	switch (uio->uio_offset) {
-		case TMPFS_DIRSEQ_DOT:
-			dp->d_fileno = node->tn_id;
-			strlcpy(dp->d_name, ".", sizeof(dp->d_name));
-			next = TMPFS_DIRSEQ_DOTDOT;
-			break;
-		case TMPFS_DIRSEQ_DOTDOT:
-			dp->d_fileno = node->tn_spec.tn_dir.tn_parent->tn_id;
-			strlcpy(dp->d_name, "..", sizeof(dp->d_name));
-			de = TAILQ_FIRST(&node->tn_spec.tn_dir.tn_dir);
-			next = de ? tmpfs_dir_getseq(node, de) : TMPFS_DIRSEQ_EOF;
-			break;
-		default:
-			KASSERT(false);
+	case TMPFS_DIRSEQ_DOT:
+		dp->d_fileno = node->tn_id;
+		strlcpy(dp->d_name, ".", sizeof(dp->d_name));
+		next = TMPFS_DIRSEQ_DOTDOT;
+		break;
+	case TMPFS_DIRSEQ_DOTDOT:
+		dp->d_fileno = node->tn_spec.tn_dir.tn_parent->tn_id;
+		strlcpy(dp->d_name, "..", sizeof(dp->d_name));
+		de = TAILQ_FIRST(&node->tn_spec.tn_dir.tn_dir);
+		next = de ? tmpfs_dir_getseq(node, de) : TMPFS_DIRSEQ_EOF;
+		break;
+	default:
+		KASSERT(false);
 	}
 	dp->d_type = DT_DIR;
 	dp->d_namlen = strlen(dp->d_name);
@@ -858,7 +856,7 @@ done:
 }
 
 /*
- * tmpfs_reg_resize: resize the underlying UVM object associated with the 
+ * tmpfs_reg_resize: resize the underlying UVM object associated with the
  * specified regular file.
  */
 
@@ -1136,13 +1134,13 @@ tmpfs_update(tmpfs_node_t *node, int flags)
 
 	if (flags & TMPFS_NODE_ACCESSED) {
 		node->tn_atime = nowtm;
- 	}
+	}
 	if (flags & TMPFS_NODE_MODIFIED) {
 		node->tn_mtime = nowtm;
- 	}
+	}
 	if (flags & TMPFS_NODE_CHANGED) {
- 		node->tn_ctime = nowtm;
- 	}
+		node->tn_ctime = nowtm;
+	}
 }
 
 int
@@ -1279,4 +1277,3 @@ tmpfs_zeropg(tmpfs_node_t *node, voff_t pgnum, vaddr_t pgoff)
 
 	return 0;
 }
-
