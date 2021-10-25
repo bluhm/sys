@@ -525,14 +525,6 @@ in_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 	inp->inp_flowid = stoeplitz_ip4port(inp->inp_faddr.s_addr,
 	    inp->inp_laddr.s_addr, inp->inp_fport, inp->inp_lport);
 #endif
-#ifdef IPSEC
-	{
-		/* Cause an IPsec SA to be established. */
-		/* error is just ignored */
-		ipsp_spd_inp(NULL, AF_INET, 0, &error, IPSP_DIRECTION_OUT,
-		    NULL, inp, NULL);
-	}
-#endif
 	return (0);
 }
 
