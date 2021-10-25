@@ -348,6 +348,7 @@ ipsec_common_input(struct mbuf **mp, int skip, int protoff, int af, int sproto,
 		ipsecstat_inc(ipsec_idrops);
 		tdbp->tdb_idrops++;
 	}
+	tdb_unref(tdbp);
 	return prot;
 
  drop:
@@ -355,6 +356,7 @@ ipsec_common_input(struct mbuf **mp, int skip, int protoff, int af, int sproto,
 	ipsecstat_inc(ipsec_idrops);
 	if (tdbp != NULL)
 		tdbp->tdb_idrops++;
+	tdb_unref(tdbp);
 	return IPPROTO_DONE;
 }
 
@@ -937,6 +939,7 @@ ipsec_common_ctlinput(u_int rdomain, int cmd, struct sockaddr *sa,
 		tdbp = gettdb_rev(rdomain, spi, (union sockaddr_union *)&dst,
 		    proto);
 		ipsec_set_mtu(tdbp, mtu);
+		tdb_unref(tdbp);
 	}
 }
 
@@ -944,7 +947,7 @@ void
 udpencap_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 {
 	struct ip *ip = v;
-	struct tdb *tdbp;
+	struct tdb *tdbp, *first;
 	struct icmp *icp;
 	u_int32_t mtu;
 	struct sockaddr_in dst, src;
@@ -973,10 +976,9 @@ udpencap_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 	src.sin_addr.s_addr = ip->ip_src.s_addr;
 	su_src = (union sockaddr_union *)&src;
 
-	tdbp = gettdbbysrcdst_rev(rdomain, 0, su_src, su_dst,
-	    IPPROTO_ESP);
+	first = gettdbbysrcdst_rev(rdomain, 0, su_src, su_dst, IPPROTO_ESP);
 
-	for (; tdbp != NULL; tdbp = tdbp->tdb_snext) {
+	for (tdbp = first; tdbp != NULL; tdbp = tdbp->tdb_snext) {
 		if (tdbp->tdb_sproto == IPPROTO_ESP &&
 		    ((tdbp->tdb_flags & (TDBF_INVALID|TDBF_UDPENCAP)) ==
 		    TDBF_UDPENCAP) &&
@@ -985,6 +987,7 @@ udpencap_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 			ipsec_set_mtu(tdbp, mtu);
 		}
 	}
+	tdb_unref(first);
 }
 
 void
@@ -1070,6 +1073,7 @@ ipsec_forward_check(struct mbuf *m, int hlen, int af)
 	} else
 		tdb = NULL;
 	ipsp_spd_lookup(m, af, hlen, &error, IPSP_DIRECTION_IN, tdb, NULL, 0);
+	tdb_unref(tdb);
 
 	return error;
 }
@@ -1142,6 +1146,7 @@ ipsec_local_check(struct mbuf *m, int hlen, int proto, int af)
 		tdb = NULL;
 	ipsp_spd_lookup(m, af, hlen, &error, IPSP_DIRECTION_IN,
 	    tdb, NULL, 0);
+	tdb_unref(tdb);
 
 	return error;
 }

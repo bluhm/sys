@@ -514,11 +514,13 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 		    IPSP_DIRECTION_IN, tdb, inp, 0);
 		if (error) {
 			udpstat_inc(udps_nosec);
+			tdb_unref(tdb);
 			goto bad;
 		}
 		/* create ipsec options while we know that tdb cannot be modified */
 		if (tdb && tdb->tdb_ids)
 			ipsecflowinfo = tdb->tdb_ids->id_flow;
+		tdb_unref(tdb);
 	}
 #endif /*IPSEC */
 
