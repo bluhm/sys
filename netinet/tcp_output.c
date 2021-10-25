@@ -879,8 +879,10 @@ send:
 		if (tcp_signature(tdb, tp->pf, m, th, iphlen, 0,
 		    mtod(m, caddr_t) + hdrlen - optlen + sigoff) < 0) {
 			m_freem(m);
+			tdb_unref(tdb);
 			return (EINVAL);
 		}
+		tdb_unref(tdb);
 	}
 #endif /* TCP_SIGNATURE */
 

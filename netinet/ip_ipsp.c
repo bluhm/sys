@@ -297,9 +297,10 @@ reserve_spi(u_int rdomain, u_int32_t sspi, u_int32_t tspi,
 
 		/* Check whether we're using this SPI already. */
 		exists = gettdb(rdomain, spi, dst, sproto);
-		if (exists)
+		if (exists != NULL) {
+			tdb_unref(exists);
 			continue;
-
+		}
 
 		tdbp->tdb_spi = spi;
 		memcpy(&tdbp->tdb_dst.sa, &dst->sa, dst->sa.sa_len);
@@ -351,6 +352,7 @@ gettdb_dir(u_int rdomain, u_int32_t spi, union sockaddr_union *dst,
 		    !memcmp(&tdbp->tdb_dst, dst, dst->sa.sa_len))
 			break;
 
+	tdb_ref(tdbp);
 	mtx_leave(&tdb_sadb_mtx);
 	return tdbp;
 }
@@ -383,6 +385,7 @@ gettdbbysrcdst_dir(u_int rdomain, u_int32_t spi, union sockaddr_union *src,
 			break;
 
 	if (tdbp != NULL) {
+		tdb_ref(tdbp);
 		mtx_leave(&tdb_sadb_mtx);
 		return tdbp;
 	}
@@ -402,6 +405,7 @@ gettdbbysrcdst_dir(u_int rdomain, u_int32_t spi, union sockaddr_union *src,
 		    tdbp->tdb_src.sa.sa_family == AF_UNSPEC)
 			break;
 
+	tdb_ref(tdbp);
 	mtx_leave(&tdb_sadb_mtx);
 	return tdbp;
 }
@@ -469,6 +473,7 @@ gettdbbydst(u_int rdomain, union sockaddr_union *dst, u_int8_t sproto,
 			break;
 		}
 
+	tdb_ref(tdbp);
 	mtx_leave(&tdb_sadb_mtx);
 	return tdbp;
 }
@@ -499,6 +504,7 @@ gettdbbysrc(u_int rdomain, union sockaddr_union *src, u_int8_t sproto,
 			break;
 		}
 
+	tdb_ref(tdbp);
 	mtx_leave(&tdb_sadb_mtx);
 	return tdbp;
 }
@@ -548,6 +554,7 @@ tdb_printit(void *addr, int full, int (*pr)(const char *, ...))
 		DUMP(inext, "%p");
 		DUMP(onext, "%p");
 		DUMP(xform, "%p");
+		pr("%18s: %d\n", "refcnt", tdb->tdb_refcnt.refs);
 		DUMP(encalgxform, "%p");
 		DUMP(authalgxform, "%p");
 		DUMP(compalgxform, "%p");
@@ -607,6 +614,7 @@ tdb_printit(void *addr, int full, int (*pr)(const char *, ...))
 		pr(" %s", ipsp_address(&tdb->tdb_src, buf, sizeof(buf)));
 		pr("->%s", ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)));
 		pr(":%d", tdb->tdb_sproto);
+		pr(" #%d", tdb->tdb_refcnt.refs);
 		pr(" %08x\n", tdb->tdb_flags);
 	}
 }
@@ -894,12 +902,55 @@ tdb_unlink_locked(struct tdb *tdbp)
 }
 
 void
+tdb_unbundle(struct tdb *tdbp)
+{
+	if (tdbp->tdb_onext != NULL) {
+		if (tdbp->tdb_onext->tdb_inext == tdbp) {
+			tdb_unref(tdbp);	/* to us */
+			tdbp->tdb_onext->tdb_inext = NULL;
+		}
+		tdb_unref(tdbp->tdb_onext);	/* to other */
+		tdbp->tdb_onext = NULL;
+	}
+	if (tdbp->tdb_inext != NULL) {
+		if (tdbp->tdb_inext->tdb_onext == tdbp) {
+			tdb_unref(tdbp);	/* to us */
+			tdbp->tdb_inext->tdb_onext = NULL;
+		}
+		tdb_unref(tdbp->tdb_inext);	/* to other */
+		tdbp->tdb_inext = NULL;
+	}
+}
+
+struct tdb *
+tdb_ref(struct tdb *tdb)
+{
+	if (tdb == NULL)
+		return NULL;
+	refcnt_take(&tdb->tdb_refcnt);
+	return tdb;
+}
+
+void
+tdb_unref(struct tdb *tdb)
+{
+	if (tdb == NULL)
+		return;
+	if (refcnt_rele(&tdb->tdb_refcnt) == 0)
+		return;
+	tdb_free(tdb);
+}
+
+void
 tdb_delete(struct tdb *tdbp)
 {
 	NET_ASSERT_LOCKED();
 
 	tdb_unlink(tdbp);
-	tdb_free(tdbp);
+	/* release tdb_onext/tdb_inext references */
+	tdb_unbundle(tdbp);
+	/* release the reference for tdb_unlink() */
+	tdb_unref(tdbp);
 }
 
 /*
@@ -914,6 +965,7 @@ tdb_alloc(u_int rdomain)
 
 	tdbp = pool_get(&tdb_pool, PR_WAITOK | PR_ZERO);
 
+	refcnt_init(&tdbp->tdb_refcnt);
 	TAILQ_INIT(&tdbp->tdb_policy_head);
 
 	/* Record establishment time. */
@@ -950,9 +1002,9 @@ tdb_free(struct tdb *tdbp)
 #endif
 
 	/* Cleanup SPD references. */
-	for (ipo = TAILQ_FIRST(&tdbp->tdb_policy_head); ipo;
-	    ipo = TAILQ_FIRST(&tdbp->tdb_policy_head))	{
+	while ((ipo = TAILQ_FIRST(&tdbp->tdb_policy_head)) != NULL) {
 		TAILQ_REMOVE(&tdbp->tdb_policy_head, ipo, ipo_tdb_next);
+		tdb_unref(ipo->ipo_tdb);
 		ipo->ipo_tdb = NULL;
 		ipo->ipo_last_searched = 0; /* Force a re-search. */
 	}
@@ -969,11 +1021,8 @@ tdb_free(struct tdb *tdbp)
 	}
 #endif
 
-	if ((tdbp->tdb_onext) && (tdbp->tdb_onext->tdb_inext == tdbp))
-		tdbp->tdb_onext->tdb_inext = NULL;
-
-	if ((tdbp->tdb_inext) && (tdbp->tdb_inext->tdb_onext == tdbp))
-		tdbp->tdb_inext->tdb_onext = NULL;
+	KASSERT(tdbp->tdb_onext == NULL);
+	KASSERT(tdbp->tdb_inext == NULL);
 
 	/* Remove expiration timeouts. */
 	tdbp->tdb_flags &= ~(TDBF_FIRSTUSE | TDBF_SOFT_FIRSTUSE | TDBF_TIMER |

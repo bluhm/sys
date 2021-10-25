@@ -1577,10 +1577,12 @@ bridge_ipsec(struct ifnet *ifp, struct ether_header *eh, int hassnap,
 
 			prot = (*(tdb->tdb_xform->xf_input))(&m, tdb, hlen,
 			    off);
+			tdb_unref(tdb);
 			if (prot != IPPROTO_DONE)
 				ip_deliver(&m, &hlen, prot, af);
 			return (1);
 		} else {
+			tdb_unref(tdb);
  skiplookup:
 			/* XXX do an input policy lookup */
 			return (0);
