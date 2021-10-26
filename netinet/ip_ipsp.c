@@ -540,6 +540,11 @@ tdb_walk(u_int rdomain, int (*walker)(struct tdb *, void *, int), void *arg)
 	int i, rval = 0;
 	struct tdb *tdbp, *next;
 
+	/*
+	 * The walker may aquire the kernel lock.  Grab it here to keep
+	 * the lock order.
+	 */
+	KERNEL_LOCK();
 	mtx_enter(&tdb_sadb_mtx);
 	for (i = 0; i <= tdb_hashmask; i++) {
 		for (tdbp = tdbh[i]; rval == 0 && tdbp != NULL; tdbp = next) {
@@ -555,6 +560,7 @@ tdb_walk(u_int rdomain, int (*walker)(struct tdb *, void *, int), void *arg)
 		}
 	}
 	mtx_leave(&tdb_sadb_mtx);
+	KERNEL_UNLOCK();
 
 	return rval;
 }
