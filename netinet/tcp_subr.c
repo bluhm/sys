@@ -964,7 +964,7 @@ tcp_signature_tdb_input(struct mbuf **mp, struct tdb *tdbp, int skip,
     int protoff)
 {
 	m_freemp(mp);
-	return (EINVAL);
+	return (IPPROTO_DONE);
 }
 
 int

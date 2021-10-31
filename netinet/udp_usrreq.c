@@ -305,9 +305,8 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 			espstat_inc(esps_udpencin);
 			protoff = af == AF_INET ? offsetof(struct ip, ip_p) :
 			    offsetof(struct ip6_hdr, ip6_nxt);
-			ipsec_common_input(mp, skip, protoff,
+			return ipsec_common_input(mp, skip, protoff,
 			    af, IPPROTO_ESP, 1);
-			return IPPROTO_DONE;
 		}
 	}
 #endif
