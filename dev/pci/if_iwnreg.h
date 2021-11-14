@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_iwnreg.h,v 1.57 2021/11/11 13:36:58 stsp Exp $	*/
+/*	$OpenBSD: if_iwnreg.h,v 1.59 2021/11/12 11:41:04 stsp Exp $	*/
 
 /*-
  * Copyright (c) 2007, 2008
@@ -637,6 +637,8 @@ struct iwn_node_info {
 	uint32_t	htflags;
 #define IWN_AMDPU_SIZE_FACTOR(x)	((x) << 19)
 #define IWN_AMDPU_SIZE_FACTOR_MASK	((0x3) << 19)
+#define IWN_40MHZ_ENABLE		(1 << 21)
+#define IWN_MIMO_DISABLE		(1 << 22)
 #define IWN_AMDPU_DENSITY(x)		((x) << 23)
 #define IWN_AMDPU_DENSITY_MASK		((0x7) << 23)
 
@@ -1537,6 +1539,8 @@ struct iwn_general_stats {
 
 struct iwn_stats {
 	uint32_t			flags;
+#define IWN_STATS_FLAGS_BAND_24G	0x02
+#define IWN_STATS_FLAGS_BAND_HT40	0x08
 	struct iwn_rx_stats		rx;
 	struct iwn_tx_stats		tx;
 	struct iwn_general_stats	general;
@@ -1706,9 +1710,18 @@ struct iwn_eeprom_chan {
 } __packed;
 
 struct iwn_eeprom_enhinfo {
-	uint16_t	chan;
+	uint8_t		flags;
+#define IWN_TXP_VALID		(1 << 0)
+#define IWN_TXP_BAND_52G	(1 << 1)
+#define IWN_TXP_OFDM		(1 << 2)
+#define IWN_TXP_40MHZ		(1 << 3)
+#define IWN_TXP_HT_AP		(1 << 4)
+#define IWN_TXP_RES1		(1 << 5)
+#define IWN_TXP_RES2		(1 << 6)
+#define IWN_TXP_COMMON_TYPE	(1 << 7)
+	uint8_t		chan;
 	int8_t		chain[3];	/* max power in half-dBm */
-	uint8_t		reserved;
+	uint8_t		delta_20_in_40;
 	int8_t		mimo2;		/* max power in half-dBm */
 	int8_t		mimo3;		/* max power in half-dBm */
 } __packed;
