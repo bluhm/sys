@@ -328,12 +328,16 @@ ipsec_common_input(struct mbuf **mp, int skip, int protoff, int af, int sproto,
 	/* Register first use, setup expiration timer. */
 	if (tdbp->tdb_first_use == 0) {
 		tdbp->tdb_first_use = gettime();
-		if (tdbp->tdb_flags & TDBF_FIRSTUSE)
-			timeout_add_sec(&tdbp->tdb_first_tmo,
-			    tdbp->tdb_exp_first_use);
-		if (tdbp->tdb_flags & TDBF_SOFT_FIRSTUSE)
-			timeout_add_sec(&tdbp->tdb_sfirst_tmo,
-			    tdbp->tdb_soft_first_use);
+		if (tdbp->tdb_flags & TDBF_FIRSTUSE) {
+			if (timeout_add_sec(&tdbp->tdb_first_tmo,
+			    tdbp->tdb_exp_first_use))
+				tdb_ref(tdbp);
+		}
+		if (tdbp->tdb_flags & TDBF_SOFT_FIRSTUSE) {
+			if (timeout_add_sec(&tdbp->tdb_sfirst_tmo,
+			    tdbp->tdb_soft_first_use))
+				tdb_ref(tdbp);
+		}
 	}
 
 	tdbp->tdb_ipackets++;
