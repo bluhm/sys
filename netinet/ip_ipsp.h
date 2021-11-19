@@ -313,6 +313,18 @@ struct ipsec_policy {
 #define	IPSP_IDENTITY_USERFQDN		3
 #define	IPSP_IDENTITY_ASN1_DN		4
 
+#define TDB_TRACE_MAX 100
+#ifdef TDB_TRACE_MAX
+struct tdb_trace {
+	const char *	tt_func;
+	int		tt_line;
+	unsigned int	tt_stamp;
+	unsigned int	tt_refs;
+	int		tt_op;
+	int		tt_cpu;
+};
+#endif /* TDB_TRACE_MAX */
+
 /*
  * Locks used to protect struct members in this file:
  *	I	immutable after creation
@@ -446,6 +458,10 @@ struct tdb {				/* tunnel descriptor block */
 
 	TAILQ_HEAD(tdb_policy_head, ipsec_policy) tdb_policy_head; /* [p] */
 	TAILQ_ENTRY(tdb)	tdb_sync_entry;
+#ifdef TDB_TRACE_MAX
+	unsigned int		tdb_trace_idx;
+	struct tdb_trace	tdb_trace[TDB_TRACE_MAX];
+#endif /* TDB_TRACE_MAX */
 };
 #define tdb_ipackets		tdb_data.tdd_ipackets
 #define tdb_opackets		tdb_data.tdd_opackets
@@ -567,26 +583,108 @@ int spd_table_walk(unsigned int,
 
 /* TDB management routines */
 uint32_t reserve_spi(u_int, u_int32_t, u_int32_t, union sockaddr_union *,
-		union sockaddr_union *, u_int8_t, int *);
-struct	tdb *gettdb_dir(u_int, u_int32_t, union sockaddr_union *, u_int8_t, int);
-#define gettdb(a,b,c,d)		gettdb_dir((a),(b),(c),(d),0)
-#define gettdb_rev(a,b,c,d)	gettdb_dir((a),(b),(c),(d),1)
-struct	tdb *gettdbbydst(u_int, union sockaddr_union *, u_int8_t,
-		struct ipsec_ids *,
-		struct sockaddr_encap *, struct sockaddr_encap *);
-struct	tdb *gettdbbysrc(u_int, union sockaddr_union *, u_int8_t,
-		struct ipsec_ids *,
-		struct sockaddr_encap *, struct sockaddr_encap *);
+    union sockaddr_union *, u_int8_t, int *);
+struct	tdb *gettdb_dir(u_int, u_int32_t, union sockaddr_union *, u_int8_t,
+    int);
 struct	tdb *gettdbbysrcdst_dir(u_int, u_int32_t, union sockaddr_union *,
-		union sockaddr_union *, u_int8_t, int);
-#define gettdbbysrcdst(a,b,c,d,e) gettdbbysrcdst_dir((a),(b),(c),(d),(e),0)
-#define gettdbbysrcdst_rev(a,b,c,d,e) gettdbbysrcdst_dir((a),(b),(c),(d),(e),1)
+    union sockaddr_union *, u_int8_t, int);
+struct	tdb *gettdbbydst0(u_int, union sockaddr_union *, u_int8_t,
+    struct ipsec_ids *, struct sockaddr_encap *, struct sockaddr_encap *);
+struct	tdb *gettdbbysrc0(u_int, union sockaddr_union *, u_int8_t,
+    struct ipsec_ids *, struct sockaddr_encap *, struct sockaddr_encap *);
 void	puttdb(struct tdb *);
 void	puttdb_locked(struct tdb *);
-void	tdb_delete(struct tdb *);
+void	tdb_delete0(struct tdb *);
 struct	tdb *tdb_alloc(u_int);
-struct	tdb *tdb_ref(struct tdb *);
-void	tdb_unref(struct tdb *);
+struct	tdb *tdb_ref0(struct tdb *);
+void	tdb_unref0(struct tdb *);
+
+#ifdef TDB_TRACE_MAX
+extern int tdb_trace_level;
+extern unsigned int tdb_trace_stamp;
+
+#define TDB_TRACE_RECORD(y, f, l, op) do {				\
+	struct tdb *x = y;						\
+	if (x) {							\
+		struct tdb_trace *tt;					\
+		unsigned int idx;					\
+									\
+		idx = atomic_inc_int_nv(&x->tdb_trace_idx);		\
+		tt = &x->tdb_trace[(idx - 1) % TDB_TRACE_MAX];		\
+		tt->tt_stamp = atomic_inc_int_nv(&tdb_trace_stamp);	\
+		tt->tt_func = f;					\
+		tt->tt_line = l;					\
+		tt->tt_op = op;						\
+		tt->tt_cpu = cpu_number();				\
+		tt->tt_refs = x->tdb_refcnt.refs;	/* RACE */	\
+		if (tdb_trace_level > 0)				\
+			printf("tdb %p: %u: refs %u %+d cpu%d %s:%d\n",	\
+			    x, tt->tt_stamp, tt->tt_refs, tt->tt_op,	\
+			    tt->tt_cpu,	tt->tt_func, tt->tt_line);	\
+	}								\
+	} while(0)
+#define tdb_ref(x) ({							\
+		struct tdb *y;						\
+		TDB_TRACE_RECORD(x, __func__, __LINE__, 1);		\
+		y = tdb_ref0(x);					\
+		y;							\
+       })
+#define tdb_unref(x) do {						\
+		TDB_TRACE_RECORD(x, __func__, __LINE__, -1);		\
+		tdb_unref0(x);						\
+       } while(0)
+#define tdb_delete(x) do {						\
+		TDB_TRACE_RECORD(x, __func__, __LINE__, 0);		\
+		tdb_delete0(x);						\
+       } while(0)
+#define gettdb(a,b,c,d) ({						\
+		struct tdb *y;						\
+		y = gettdb_dir((a),(b),(c),(d),0);			\
+		TDB_TRACE_RECORD(y, __func__, __LINE__, 0);		\
+		y;							\
+	})
+#define gettdb_rev(a,b,c,d) ({						\
+		struct tdb *y;						\
+		y = gettdb_dir((a),(b),(c),(d),1);			\
+		TDB_TRACE_RECORD(y, __func__, __LINE__, 0);		\
+		y;							\
+	})
+#define gettdbbysrcdst(a,b,c,d,e) ({					\
+		struct tdb *y;						\
+		y = gettdbbysrcdst_dir((a),(b),(c),(d),(e),0);		\
+		TDB_TRACE_RECORD(y, __func__, __LINE__, 0);		\
+		y;							\
+	})
+#define gettdbbysrcdst_rev(a,b,c,d,e) ({				\
+		struct tdb *y;						\
+		y = gettdbbysrcdst_dir((a),(b),(c),(d),(e),1);		\
+		TDB_TRACE_RECORD(y, __func__, __LINE__, 0);		\
+		y;							\
+	})
+#define gettdbbydst(a,b,c,d,e,f) ({					\
+		struct tdb *y;						\
+		y = gettdbbydst0((a),(b),(c),(d),(e),(f));		\
+		TDB_TRACE_RECORD(y, __func__, __LINE__, 0);		\
+		y;							\
+	})
+#define gettdbbysrc(a,b,c,d,e,f) ({					\
+		struct tdb *y;						\
+		y = gettdbbysrc0((a),(b),(c),(d),(e),(f));		\
+		TDB_TRACE_RECORD(y, __func__, __LINE__, 0);		\
+		y;							\
+	})
+#else /* TDB_TRACE_MAX */
+#define tdb_ref(x)		tdb_ref0(x)
+#define tdb_unref(x)		tdb_unref0(x)
+#define tdb_delete(x)		tdb_delete0(x)
+#define gettdb(a,b,c,d)		gettdb_dir((a),(b),(c),(d),0)
+#define gettdb_rev(a,b,c,d)	gettdb_dir((a),(b),(c),(d),1)
+#define gettdbbysrcdst(a,b,c,d,e) gettdbbysrcdst_dir((a),(b),(c),(d),(e),0)
+#define gettdbbysrcdst_rev(a,b,c,d,e) gettdbbysrcdst_dir((a),(b),(c),(d),(e),1)
+#define gettdbbydst(a,b,c,d,e,f) gettdbbydst0((a),(b),(c),(d),(e),(f))
+#define gettdbbysrc(a,b,c,d,e,f) gettdbbysrc0((a),(b),(c),(d),(e),(f))
+#endif /* TDB_TRACE_MAX */
+
 void	tdb_free(struct tdb *);
 int	tdb_init(struct tdb *, u_int16_t, struct ipsecinit *);
 void	tdb_unlink(struct tdb *);

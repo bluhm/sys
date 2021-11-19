@@ -209,6 +209,11 @@ ipsp_init(void)
 	    M_WAITOK | M_ZERO);
 }
 
+#ifdef TDB_TRACE_MAX
+int tdb_trace_level;
+unsigned int tdb_trace_stamp;
+#endif /* TDB_TRACE_MAX */
+
 /*
  * Our hashing function needs to stir things with a non-zero random multiplier
  * so we cannot be DoS-attacked via choosing of the data to hash.
@@ -454,7 +459,7 @@ ipsp_aux_match(struct tdb *tdb,
  * the desired IDs.
  */
 struct tdb *
-gettdbbydst(u_int rdomain, union sockaddr_union *dst, u_int8_t sproto,
+gettdbbydst0(u_int rdomain, union sockaddr_union *dst, u_int8_t sproto,
     struct ipsec_ids *ids,
     struct sockaddr_encap *filter, struct sockaddr_encap *filtermask)
 {
@@ -485,7 +490,7 @@ gettdbbydst(u_int rdomain, union sockaddr_union *dst, u_int8_t sproto,
  * the desired IDs.
  */
 struct tdb *
-gettdbbysrc(u_int rdomain, union sockaddr_union *src, u_int8_t sproto,
+gettdbbysrc0(u_int rdomain, union sockaddr_union *src, u_int8_t sproto,
     struct ipsec_ids *ids,
     struct sockaddr_encap *filter, struct sockaddr_encap *filtermask)
 {
@@ -610,6 +615,24 @@ tdb_printit(void *addr, int full, int (*pr)(const char *, ...))
 		/* tdb_filtermask */
 		/* tdb_policy_head */
 		/* tdb_sync_entry */
+#ifdef TDB_TRACE_MAX
+		{
+			struct tdb_trace *tt;
+			unsigned int idx, i;
+
+			DUMP(trace_idx, "%d");
+			for (i = 0; i < TDB_TRACE_MAX; i++) {
+				idx = (tdb->tdb_trace_idx + i) % TDB_TRACE_MAX;
+				tt = &tdb->tdb_trace[idx];
+				if (tt->tt_stamp == 0)
+					continue;
+				pr("     tdb_trace[%2u]: "
+				    "%u: refs %u %+d cpu%d %s:%d\n",
+				    idx, tt->tt_stamp, tt->tt_refs, tt->tt_op,
+				    tt->tt_cpu, tt->tt_func, tt->tt_line);
+			}
+		}
+#endif /* TDB_TRACE_MAX */
 	} else {
 		pr("%p:", tdb);
 		pr(" %08x", ntohl(tdb->tdb_spi));
@@ -987,7 +1010,7 @@ tdb_deltimeouts(struct tdb *tdbp)
 }
 
 struct tdb *
-tdb_ref(struct tdb *tdb)
+tdb_ref0(struct tdb *tdb)
 {
 	if (tdb == NULL)
 		return NULL;
@@ -996,7 +1019,7 @@ tdb_ref(struct tdb *tdb)
 }
 
 void
-tdb_unref(struct tdb *tdb)
+tdb_unref0(struct tdb *tdb)
 {
 	if (tdb == NULL)
 		return;
@@ -1006,7 +1029,7 @@ tdb_unref(struct tdb *tdb)
 }
 
 void
-tdb_delete(struct tdb *tdbp)
+tdb_delete0(struct tdb *tdbp)
 {
 	NET_ASSERT_LOCKED();
 
