@@ -85,7 +85,6 @@ void tdb_hashstats(void);
 #endif
 
 int		tdb_rehash(void);
-void		tdb_reaper(void *);
 void		tdb_timeout(void *);
 void		tdb_firstuse(void *);
 void		tdb_soft_timeout(void *);
@@ -315,8 +314,9 @@ reserve_spi(u_int rdomain, u_int32_t sspi, u_int32_t tspi,
 		if (ipsec_keep_invalid > 0) {
 			tdbp->tdb_flags |= TDBF_TIMER;
 			tdbp->tdb_exp_timeout = ipsec_keep_invalid;
-			timeout_add_sec(&tdbp->tdb_timer_tmo,
-			    ipsec_keep_invalid);
+			if (timeout_add_sec(&tdbp->tdb_timer_tmo,
+			    ipsec_keep_invalid))
+				tdb_ref(tdbp);
 		}
 #endif
 
@@ -663,6 +663,9 @@ tdb_timeout(void *v)
 		if (!(tdb->tdb_flags & TDBF_INVALID))
 			pfkeyv2_expire(tdb, SADB_EXT_LIFETIME_HARD);
 		tdb_delete(tdb);
+	} else {
+		/* decrement refcount of the timeout argument */
+		tdb_unref(tdb);
 	}
 	NET_UNLOCK();
 }
@@ -678,6 +681,9 @@ tdb_firstuse(void *v)
 		if (tdb->tdb_first_use != 0)
 			pfkeyv2_expire(tdb, SADB_EXT_LIFETIME_HARD);
 		tdb_delete(tdb);
+	} else {
+		/* decrement refcount of the timeout argument */
+		tdb_unref(tdb);
 	}
 	NET_UNLOCK();
 }
@@ -692,6 +698,9 @@ tdb_soft_timeout(void *v)
 		/* Soft expirations. */
 		pfkeyv2_expire(tdb, SADB_EXT_LIFETIME_SOFT);
 		tdb->tdb_flags &= ~TDBF_SOFT_TIMER;
+	} else {
+		/* decrement refcount of the timeout argument */
+		tdb_unref(tdb);
 	}
 	NET_UNLOCK();
 }
@@ -707,6 +716,9 @@ tdb_soft_firstuse(void *v)
 		if (tdb->tdb_first_use != 0)
 			pfkeyv2_expire(tdb, SADB_EXT_LIFETIME_SOFT);
 		tdb->tdb_flags &= ~TDBF_SOFT_FIRSTUSE;
+	} else {
+		/* decrement refcount of the timeout argument */
+		tdb_unref(tdb);
 	}
 	NET_UNLOCK();
 }
@@ -1020,19 +1032,10 @@ tdb_free(struct tdb *tdbp)
 	/* Remove expiration timeouts. */
 	tdbp->tdb_flags &= ~(TDBF_FIRSTUSE | TDBF_SOFT_FIRSTUSE | TDBF_TIMER |
 	    TDBF_SOFT_TIMER);
-	timeout_del(&tdbp->tdb_timer_tmo);
-	timeout_del(&tdbp->tdb_first_tmo);
-	timeout_del(&tdbp->tdb_stimer_tmo);
-	timeout_del(&tdbp->tdb_sfirst_tmo);
-
-	timeout_set_proc(&tdbp->tdb_timer_tmo, tdb_reaper, tdbp);
-	timeout_add(&tdbp->tdb_timer_tmo, 0);
-}
-
-void
-tdb_reaper(void *xtdbp)
-{
-	struct tdb *tdbp = xtdbp;
+	KASSERT(timeout_pending(&tdbp->tdb_timer_tmo) == 0);
+	KASSERT(timeout_pending(&tdbp->tdb_first_tmo) == 0);
+	KASSERT(timeout_pending(&tdbp->tdb_stimer_tmo) == 0);
+	KASSERT(timeout_pending(&tdbp->tdb_sfirst_tmo) == 0);
 
 	pool_put(&tdb_pool, tdbp);
 }
