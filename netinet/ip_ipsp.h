@@ -571,6 +571,7 @@ int	tdb_init(struct tdb *, u_int16_t, struct ipsecinit *);
 void	tdb_unlink(struct tdb *);
 void	tdb_unlink_locked(struct tdb *);
 void	tdb_unbundle(struct tdb *);
+void	tdb_deltimeouts(struct tdb *);
 int	tdb_walk(u_int, int (*)(struct tdb *, void *, int), void *);
 void	tdb_printit(void *, int, int (*)(const char *, ...));
 

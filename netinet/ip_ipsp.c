@@ -930,6 +930,19 @@ tdb_unbundle(struct tdb *tdbp)
 	}
 }
 
+void
+tdb_deltimeouts(struct tdb *tdbp)
+{
+	if (timeout_del(&tdbp->tdb_timer_tmo))
+		tdb_unref(tdbp);
+	if (timeout_del(&tdbp->tdb_first_tmo))
+		tdb_unref(tdbp);
+	if (timeout_del(&tdbp->tdb_stimer_tmo))
+		tdb_unref(tdbp);
+	if (timeout_del(&tdbp->tdb_sfirst_tmo))
+		tdb_unref(tdbp);
+}
+
 struct tdb *
 tdb_ref(struct tdb *tdb)
 {
@@ -957,6 +970,8 @@ tdb_delete(struct tdb *tdbp)
 	tdb_unlink(tdbp);
 	/* release tdb_onext/tdb_inext references */
 	tdb_unbundle(tdbp);
+	/* delete timeouts and release references */
+	tdb_deltimeouts(tdbp);
 	/* release the reference for tdb_unlink() */
 	tdb_unref(tdbp);
 }
