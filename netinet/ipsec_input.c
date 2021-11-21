@@ -66,6 +66,7 @@
 #ifdef INET6
 #include <netinet6/in6_var.h>
 #include <netinet/ip6.h>
+#include <netinet/icmp6.h>
 #include <netinet6/ip6_var.h>
 #include <netinet6/ip6protosw.h>
 #endif /* INET6 */
@@ -83,6 +84,7 @@
 #include "bpfilter.h"
 
 void ipsec_common_ctlinput(u_int, int, struct sockaddr *, void *, int);
+void ipsec6_common_ctlinput(u_int, int, struct sockaddr *, void *, int);
 
 #ifdef ENCDEBUG
 #define DPRINTF(fmt, args...)						\
@@ -909,12 +911,12 @@ ipsec_common_ctlinput(u_int rdomain, int cmd, struct sockaddr *sa,
 {
 	struct ip *ip = v;
 
-	if (cmd == PRC_MSGSIZE && ip && ip_mtudisc && ip->ip_v == 4) {
+	if (cmd == PRC_MSGSIZE && ip_mtudisc && ip && ip->ip_v == 4) {
 		struct tdb *tdbp;
 		struct sockaddr_in dst;
 		struct icmp *icp;
 		int hlen = ip->ip_hl << 2;
-		u_int32_t spi, mtu;
+		uint32_t spi, mtu;
 
 		/* Find the right MTU. */
 		icp = (struct icmp *)((caddr_t) ip -
@@ -928,18 +930,71 @@ ipsec_common_ctlinput(u_int rdomain, int cmd, struct sockaddr *sa,
 		if (mtu < 296)
 			return;
 
+		memcpy(&spi, (caddr_t)ip + hlen, sizeof(spi));
+
 		memset(&dst, 0, sizeof(struct sockaddr_in));
 		dst.sin_family = AF_INET;
 		dst.sin_len = sizeof(struct sockaddr_in);
 		dst.sin_addr.s_addr = ip->ip_dst.s_addr;
-
-		memcpy(&spi, (caddr_t)ip + hlen, sizeof(u_int32_t));
 
 		tdbp = gettdb_rev(rdomain, spi, (union sockaddr_union *)&dst,
 		    proto);
 		ipsec_set_mtu(tdbp, mtu);
 	}
 }
+
+#ifdef INET6
+void
+ipsec6_common_ctlinput(u_int rdomain, int cmd, struct sockaddr *sa,
+    void *v, int proto)
+{
+	struct ip6ctlparam *ip6cp = v;
+
+	if (cmd == PRC_MSGSIZE && ip_mtudisc && ip6cp && ip6cp->ip6c_icmp6) {
+		struct tdb *tdbp;
+		struct sockaddr_in6 sa6;
+		struct icmp6_hdr *icmp6;
+		struct mbuf *m;
+		int off;
+		uint32_t spi, mtu;
+
+		/* Find the right MTU. */
+		icmp6 = ip6cp->ip6c_icmp6;
+		mtu = ntohl(icmp6->icmp6_mtu);
+
+		/*
+		 * Ignore the packet, if we do not receive a MTU
+		 * or the MTU is too small to be acceptable.
+		 */
+		if (mtu < IPV6_MMTU)
+			return;
+
+		m = ip6cp->ip6c_m;
+		off = ip6cp->ip6c_off;
+		if (m->m_pkthdr.len < off + sizeof(spi))
+			return;
+		m_copydata(m, off, sizeof(spi), &spi);
+
+		if (ip6cp->ip6c_finaldst) {
+			memset(&sa6, 0, sizeof(struct sockaddr_in));
+			sa6.sin6_family = AF_INET6;
+			sa6.sin6_len = sizeof(sa6);
+			sa6.sin6_addr = *ip6cp->ip6c_finaldst;
+			sa6.sin6_scope_id = in6_addr2scopeid(
+			    m->m_pkthdr.ph_ifidx, ip6cp->ip6c_finaldst);
+		} else
+			sa6 = *satosin6(sa);
+		if (in6_embedscope(&sa6.sin6_addr, &sa6, NULL)) {
+			/* should be impossible */
+			return;
+		}
+
+		tdbp = gettdb_rev(rdomain, spi, (union sockaddr_union *)&sa6,
+		    proto);
+		ipsec_set_mtu(tdbp, mtu);
+	}
+}
+#endif /* INET6 */
 
 void
 udpencap_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
@@ -997,6 +1052,18 @@ esp4_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 
 	ipsec_common_ctlinput(rdomain, cmd, sa, v, IPPROTO_ESP);
 }
+
+#ifdef INET6
+void
+esp6_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
+{
+	if (sa->sa_family != AF_INET6 ||
+	    sa->sa_len != sizeof(struct sockaddr_in6))
+		return;
+
+	ipsec6_common_ctlinput(rdomain, cmd, sa, v, IPPROTO_ESP);
+}
+#endif /* INET6 */
 
 /* Find the offset of the next protocol field in the previous header. */
 int

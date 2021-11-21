@@ -599,6 +599,7 @@ int	esp_sysctl(int *, u_int, void *, size_t *, void *, size_t);
 
 int	esp46_input(struct mbuf **, int *, int, int);
 void	esp4_ctlinput(int, struct sockaddr *, u_int, void *);
+void	esp6_ctlinput(int, struct sockaddr *, u_int, void *);
 
 /* XF_IPCOMP */
 int	ipcomp_attach(void);
