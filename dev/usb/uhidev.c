@@ -1,4 +1,4 @@
-/*	$OpenBSD: uhidev.c,v 1.101 2021/11/17 06:20:30 anton Exp $	*/
+/*	$OpenBSD: uhidev.c,v 1.103 2021/11/22 11:30:16 anton Exp $	*/
 /*	$NetBSD: uhidev.c,v 1.14 2003/03/11 16:44:00 augustss Exp $	*/
 
 /*
@@ -140,9 +140,10 @@ uhidev_attach(struct device *parent, struct device *self, void *aux)
 	usb_interface_descriptor_t *id;
 	usb_endpoint_descriptor_t *ed;
 	struct uhidev_attach_arg uha;
-	int size, nrepid, repid, repsz;
+	int nrepid, repid, repsz;
 	int i;
 	void *desc = NULL;
+	int size = 0;
 	struct device *dev;
 
 	sc->sc_udev = uaa->device;
@@ -248,7 +249,7 @@ uhidev_attach(struct device *parent, struct device *self, void *aux)
 
 	uha.uaa = uaa;
 	uha.parent = sc;
-	uha.reportid = __UHIDEV_CLAIM_MULTIPLE_REPORTID;
+	uha.reportid = 0;
 	uha.nreports = nrepid;
 	uha.claimed = malloc(nrepid, M_TEMP, M_WAITOK|M_ZERO);
 
@@ -360,7 +361,7 @@ uhidevprint(void *aux, const char *pnp)
 
 	if (pnp)
 		printf("uhid at %s", pnp);
-	if (uha->reportid != 0 && uha->reportid != __UHIDEV_CLAIM_MULTIPLE_REPORTID)
+	if (uha->reportid != 0)
 		printf(" reportid %d", uha->reportid);
 	return (UNCONF);
 }

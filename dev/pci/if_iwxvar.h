@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_iwxvar.h,v 1.25 2021/10/15 13:38:10 stsp Exp $	*/
+/*	$OpenBSD: if_iwxvar.h,v 1.27 2021/11/22 10:54:36 stsp Exp $	*/
 
 /*
  * Copyright (c) 2014 genua mbh <info@genua.de>
@@ -497,7 +497,7 @@ struct iwx_softc {
 	int sc_msix;
 
 	/* TX/RX rings. */
-	struct iwx_tx_ring txq[IWX_LAST_AGG_TX_QUEUE];
+	struct iwx_tx_ring txq[IWX_NUM_TX_QUEUES];
 	struct iwx_rx_ring rxq;
 	int qfullmsk;
 	int qenablemsk;
@@ -563,7 +563,7 @@ struct iwx_softc {
 	struct iwx_nvm_data sc_nvm;
 	struct iwx_bf_data sc_bf;
 
-	int sc_tx_timer;
+	int sc_tx_timer[IWX_NUM_TX_QUEUES];
 	int sc_rx_ba_sessions;
 
 	int sc_scan_last_antenna;
