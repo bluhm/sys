@@ -86,7 +86,7 @@ static __inline u_int16_t __attribute__((__unused__))
 void in_delayed_cksum(struct mbuf *);
 int in_ifcap_cksum(struct mbuf *, struct ifnet *, int);
 
-struct tdb * ip_output_ipsec_lookup(struct mbuf *m, int hlen, int *error,
+struct tdb *ip_output_ipsec_lookup(struct mbuf *m, int hlen, int *error,
     struct inpcb *inp, int ipsecflowinfo);
 void ip_output_ipsec_pmtu_update(struct tdb *, struct route *, struct in_addr,
     int, int);
@@ -655,7 +655,7 @@ ip_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct route *ro, int fwd)
 		ipsecstat_inc(ipsec_odrops);
 		tdb->tdb_odrops++;
 	}
-	if (error == EMSGSIZE)
+	if (ip_mtudisc && error == EMSGSIZE)
 		ip_output_ipsec_pmtu_update(tdb, ro, dst, rtableid, 0);
 	return error;
 }
