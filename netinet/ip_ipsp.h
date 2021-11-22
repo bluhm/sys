@@ -634,7 +634,7 @@ int	ipsp_process_packet(struct mbuf *, struct tdb *, int, int);
 int	ipsp_process_done(struct mbuf *, struct tdb *);
 struct	tdb *ipsp_spd_lookup(struct mbuf *, int, int, int *, int,
 	    struct tdb *, struct inpcb *, u_int32_t);
-struct	tdb *ipsp_spd_inp(struct mbuf *, int, int, int *, int,
+struct	tdb *ipsp_spd_inp(struct mbuf *, int, int *, int,
 	    struct tdb *, struct inpcb *, struct ipsec_policy *);
 int	ipsp_is_unspecified(union sockaddr_union);
 int	ipsp_aux_match(struct tdb *, struct ipsec_ids *,

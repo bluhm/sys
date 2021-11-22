@@ -307,7 +307,7 @@ ipsp_spd_lookup(struct mbuf *m, int af, int hlen, int *error, int direction,
 		 * system-wide policies.
 		 */
 		*error = 0;
-		return ipsp_spd_inp(m, af, hlen, error, direction,
+		return ipsp_spd_inp(m, hlen, error, direction,
 		    tdbp, inp, NULL);
 	}
 	ipo = (struct ipsec_policy *)rn;
@@ -315,7 +315,7 @@ ipsp_spd_lookup(struct mbuf *m, int af, int hlen, int *error, int direction,
 	switch (ipo->ipo_type) {
 	case IPSP_PERMIT:
 		*error = 0;
-		return ipsp_spd_inp(m, af, hlen, error, direction, tdbp,
+		return ipsp_spd_inp(m, hlen, error, direction, tdbp,
 		    inp, ipo);
 
 	case IPSP_DENY:
@@ -415,7 +415,7 @@ ipsp_spd_lookup(struct mbuf *m, int af, int hlen, int *error, int direction,
 
 			/* Cached entry is good. */
 			*error = 0;
-			return ipsp_spd_inp(m, af, hlen, error, direction,
+			return ipsp_spd_inp(m, hlen, error, direction,
 			    tdbp, inp, ipo);
 
   nomatchout:
@@ -452,7 +452,7 @@ ipsp_spd_lookup(struct mbuf *m, int af, int hlen, int *error, int direction,
 				    &ipo->ipo_tdb->tdb_policy_head,
 				    ipo, ipo_tdb_next);
 				*error = 0;
-				return ipsp_spd_inp(m, af, hlen, error,
+				return ipsp_spd_inp(m, hlen, error,
 				    direction, tdbp, inp, ipo);
 			}
 		}
@@ -481,7 +481,7 @@ ipsp_spd_lookup(struct mbuf *m, int af, int hlen, int *error, int direction,
 			/* FALLTHROUGH */
 		case IPSP_IPSEC_USE:
 			*error = 0;
-			return ipsp_spd_inp(m, af, hlen, error, direction,
+			return ipsp_spd_inp(m, hlen, error, direction,
 			    tdbp, inp, ipo);
 		}
 	} else { /* IPSP_DIRECTION_IN */
@@ -507,7 +507,7 @@ ipsp_spd_lookup(struct mbuf *m, int af, int hlen, int *error, int direction,
 			/* Direct match in the cache. */
 			if (ipo->ipo_tdb == tdbp) {
 				*error = 0;
-				return ipsp_spd_inp(m, af, hlen, error,
+				return ipsp_spd_inp(m, hlen, error,
 				    direction, tdbp, inp, ipo);
 			}
 
@@ -532,7 +532,7 @@ ipsp_spd_lookup(struct mbuf *m, int af, int hlen, int *error, int direction,
 			TAILQ_INSERT_TAIL(&tdbp->tdb_policy_head, ipo,
 			    ipo_tdb_next);
 			*error = 0;
-			return ipsp_spd_inp(m, af, hlen, error, direction,
+			return ipsp_spd_inp(m, hlen, error, direction,
 			    tdbp, inp, ipo);
 
   nomatchin: /* Nothing needed here, falling through */
@@ -603,7 +603,7 @@ ipsp_spd_lookup(struct mbuf *m, int af, int hlen, int *error, int direction,
 			/* If appropriate SA exists, don't acquire another. */
 			if (ipo->ipo_tdb) {
 				*error = 0;
-				return ipsp_spd_inp(m, af, hlen, error,
+				return ipsp_spd_inp(m, hlen, error,
 				    direction, tdbp, inp, ipo);
 			}
 
@@ -614,7 +614,7 @@ ipsp_spd_lookup(struct mbuf *m, int af, int hlen, int *error, int direction,
 			/* FALLTHROUGH */
 		case IPSP_IPSEC_USE:
 			*error = 0;
-			return ipsp_spd_inp(m, af, hlen, error, direction,
+			return ipsp_spd_inp(m, hlen, error, direction,
 			    tdbp, inp, ipo);
 		}
 	}
@@ -832,7 +832,7 @@ ipsp_acquire_sa(struct ipsec_policy *ipo, union sockaddr_union *gw,
  * Deal with PCB security requirements.
  */
 struct tdb *
-ipsp_spd_inp(struct mbuf *m, int af, int hlen, int *error, int direction,
+ipsp_spd_inp(struct mbuf *m, int hlen, int *error, int direction,
     struct tdb *tdbp, struct inpcb *inp, struct ipsec_policy *ipo)
 {
 	/* Sanity check. */
