@@ -230,7 +230,16 @@ reroute:
 			error = EHOSTUNREACH;
 			goto bad;
 		}
-		if ((mtu = ro->ro_rt->rt_mtu) == 0)
+		mtu = 0;
+		/*
+		 * The route MTU is used for the unencrypted packet.
+		 * Fragmentation or sending ICMP should be done there.
+		 * In transport mode the inner MTU must not be used
+		 * for the encrypted packet.
+		 */
+		if ((m->m_pkthdr.ph_tagsset & PACKET_TAG_IPSEC_OUT_DONE) == 0)
+			mtu = ro->ro_rt->rt_mtu;
+		if (mtu == 0)
 			mtu = ifp->if_mtu;
 
 		if (ro->ro_rt->rt_flags & RTF_GATEWAY)
