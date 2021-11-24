@@ -186,7 +186,7 @@ const struct xformsw *const xformswNXFORMSW = &xformsw[nitems(xformsw)];
 #define	TDB_HASHSIZE_INIT	32
 
 /* Protected by the tdb_sadb_mtx. */
-struct mutex tdb_sadb_mtx = MUTEX_INITIALIZER(IPL_NET);
+struct mutex tdb_sadb_mtx = MUTEX_INITIALIZER(IPL_SOFTNET);
 static SIPHASH_KEY tdbkey;
 static struct tdb **tdbh;
 static struct tdb **tdbdst;
