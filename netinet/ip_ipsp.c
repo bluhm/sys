@@ -197,7 +197,7 @@ static int tdb_count;
 void
 ipsp_init(void)
 {
-	pool_init(&tdb_pool, sizeof(struct tdb), 0, IPL_NET, 0,
+	pool_init(&tdb_pool, sizeof(struct tdb), 0, IPL_SOFTNET, 0,
 	    "tdb", NULL);
 
 	arc4random_buf(&tdbkey, sizeof(tdbkey));
