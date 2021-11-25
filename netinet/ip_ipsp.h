@@ -313,7 +313,7 @@ struct ipsec_policy {
 #define	IPSP_IDENTITY_USERFQDN		3
 #define	IPSP_IDENTITY_ASN1_DN		4
 
-#define TDB_TRACE_MAX 100
+/* #define TDB_TRACE_MAX 100 */
 #ifdef TDB_TRACE_MAX
 struct tdb_trace {
 	const char *	tt_func;
