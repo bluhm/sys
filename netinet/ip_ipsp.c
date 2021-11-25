@@ -324,7 +324,7 @@ reserve_spi(u_int rdomain, u_int32_t sspi, u_int32_t tspi,
 	}
 
 	(*errval) = EEXIST;
-	tdb_free(tdbp);
+	tdb_unref(tdbp);
 	return 0;
 }
 
