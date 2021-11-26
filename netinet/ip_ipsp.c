@@ -804,6 +804,8 @@ puttdb_locked(struct tdb *tdbp)
 {
 	u_int32_t hashval;
 
+	MUTEX_ASSERT_LOCKED(&tdb_sadb_mtx);
+
 	hashval = tdb_hash(tdbp->tdb_spi, &tdbp->tdb_dst, tdbp->tdb_sproto);
 
 	/*
