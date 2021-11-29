@@ -397,4 +397,7 @@ freecopy:
 out:
 	rtfree(rt);
 	if_put(ifp);
+#ifdef IPSEC
+	tdb_unref(tdb);
+#endif /* IPSEC */
 }

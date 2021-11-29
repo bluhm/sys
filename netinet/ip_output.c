@@ -523,6 +523,9 @@ done:
 	if (ro == &iproute && ro->ro_rt)
 		rtfree(ro->ro_rt);
 	if_put(ifp);
+#ifdef IPSEC
+	tdb_unref(tdb);
+#endif /* IPSEC */
 	return (error);
 
 bad:
@@ -558,6 +561,7 @@ ip_output_ipsec_lookup(struct mbuf *m, int hlen, struct inpcb *inp,
 		    !memcmp(&tdbi->dst, &tdb->tdb_dst,
 		    sizeof(union sockaddr_union))) {
 			/* no IPsec needed */
+			tdb_unref(tdb);
 			*tdbout = NULL;
 			return 0;
 		}

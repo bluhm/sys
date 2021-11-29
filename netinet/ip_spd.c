@@ -825,9 +825,10 @@ ipsp_spd_inp(struct mbuf *m, struct inpcb *inp, struct ipsec_policy *ipo,
 
  justreturn:
 	if (tdbout != NULL) {
-		if (ipo != NULL)
+		if (ipo != NULL) {
+			tdb_ref(ipo->ipo_tdb);
 			*tdbout = ipo->ipo_tdb;
-		else
+		} else
 			*tdbout = NULL;
 	}
 	return 0;
