@@ -1484,7 +1484,7 @@ bridge_ipsec(struct ifnet *ifp, struct ether_header *eh, int hassnap,
     struct llc *llc, int dir, int af, int hlen, struct mbuf *m)
 {
 	union sockaddr_union dst;
-	struct tdb *tdb;
+	struct tdb *tdbp;
 	u_int32_t spi;
 	u_int16_t cpi;
 	int error, off, prot;
@@ -1562,48 +1562,48 @@ bridge_ipsec(struct ifnet *ifp, struct ether_header *eh, int hassnap,
 
 		NET_ASSERT_LOCKED();
 
-		tdb = gettdb(ifp->if_rdomain, spi, &dst, proto);
-		if (tdb != NULL && (tdb->tdb_flags & TDBF_INVALID) == 0 &&
-		    tdb->tdb_xform != NULL) {
-			if (tdb->tdb_first_use == 0) {
-				tdb->tdb_first_use = gettime();
-				if (tdb->tdb_flags & TDBF_FIRSTUSE) {
+		tdbp = gettdb(ifp->if_rdomain, spi, &dst, proto);
+		if (tdbp != NULL && (tdbp->tdb_flags & TDBF_INVALID) == 0 &&
+		    tdbp->tdb_xform != NULL) {
+			if (tdbp->tdb_first_use == 0) {
+				tdbp->tdb_first_use = gettime();
+				if (tdbp->tdb_flags & TDBF_FIRSTUSE) {
 					if (timeout_add_sec(
-					    &tdb->tdb_first_tmo,
-					    tdb->tdb_exp_first_use))
-						tdb_ref(tdb);
+					    &tdbp->tdb_first_tmo,
+					    tdbp->tdb_exp_first_use))
+						tdb_ref(tdbp);
 				}
-				if (tdb->tdb_flags & TDBF_SOFT_FIRSTUSE) {
+				if (tdbp->tdb_flags & TDBF_SOFT_FIRSTUSE) {
 					if (timeout_add_sec(
-					    &tdb->tdb_sfirst_tmo,
-					    tdb->tdb_soft_first_use))
-						tdb_ref(tdb);
+					    &tdbp->tdb_sfirst_tmo,
+					    tdbp->tdb_soft_first_use))
+						tdb_ref(tdbp);
 				}
 			}
 
-			prot = (*(tdb->tdb_xform->xf_input))(&m, tdb, hlen,
+			prot = (*(tdbp->tdb_xform->xf_input))(&m, tdbp, hlen,
 			    off);
-			tdb_unref(tdb);
+			tdb_unref(tdbp);
 			if (prot != IPPROTO_DONE)
 				ip_deliver(&m, &hlen, prot, af);
 			return (1);
 		} else {
-			tdb_unref(tdb);
+			tdb_unref(tdbp);
  skiplookup:
 			/* XXX do an input policy lookup */
 			return (0);
 		}
 	} else { /* Outgoing from the bridge. */
-		tdb = ipsp_spd_lookup(m, af, hlen, &error,
+		tdbp = ipsp_spd_lookup(m, af, hlen, &error,
 		    IPSP_DIRECTION_OUT, NULL, NULL, 0);
-		if (tdb != NULL) {
+		if (tdbp != NULL) {
 			/*
 			 * We don't need to do loop detection, the
 			 * bridge will do that for us.
 			 */
 #if NPF > 0
-			if ((encif = enc_getif(tdb->tdb_rdomain,
-			    tdb->tdb_tap)) == NULL ||
+			if ((encif = enc_getif(tdbp->tdb_rdomain,
+			    tdbp->tdb_tap)) == NULL ||
 			    pf_test(af, dir, encif, &m) != PF_PASS) {
 				m_freem(m);
 				return (1);
@@ -1621,13 +1621,14 @@ bridge_ipsec(struct ifnet *ifp, struct ether_header *eh, int hassnap,
 			ip = mtod(m, struct ip *);
 			if ((af == AF_INET) &&
 			    ip_mtudisc && (ip->ip_off & htons(IP_DF)) &&
-			    tdb->tdb_mtu && ntohs(ip->ip_len) > tdb->tdb_mtu &&
-			    tdb->tdb_mtutimeout > gettime())
+			    tdbp->tdb_mtu && ntohs(ip->ip_len) >
+			    tdbp->tdb_mtu &&
+			    tdbp->tdb_mtutimeout > gettime())
 				bridge_send_icmp_err(ifp, eh, m,
-				    hassnap, llc, tdb->tdb_mtu,
+				    hassnap, llc, tdbp->tdb_mtu,
 				    ICMP_UNREACH, ICMP_UNREACH_NEEDFRAG);
 			else
-				error = ipsp_process_packet(m, tdb, af, 0);
+				error = ipsp_process_packet(m, tdbp, af, 0);
 			return (1);
 		} else
 			return (0);

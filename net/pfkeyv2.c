@@ -794,7 +794,7 @@ ret:
  * Get all the information contained in an SA to a PFKEYV2 message.
  */
 int
-pfkeyv2_get(struct tdb *tdb, void **headers, void **buffer, int *lenp,
+pfkeyv2_get(struct tdb *tdbp, void **headers, void **buffer, int *lenp,
     int *lenused)
 {
 	int rval, i;
@@ -804,36 +804,38 @@ pfkeyv2_get(struct tdb *tdb, void **headers, void **buffer, int *lenp,
 	i = sizeof(struct sadb_sa) + sizeof(struct sadb_lifetime) +
 	    sizeof(struct sadb_x_counter);
 
-	if (tdb->tdb_soft_allocations || tdb->tdb_soft_bytes ||
-	    tdb->tdb_soft_timeout || tdb->tdb_soft_first_use)
+	if (tdbp->tdb_soft_allocations || tdbp->tdb_soft_bytes ||
+	    tdbp->tdb_soft_timeout || tdbp->tdb_soft_first_use)
 		i += sizeof(struct sadb_lifetime);
 
-	if (tdb->tdb_exp_allocations || tdb->tdb_exp_bytes ||
-	    tdb->tdb_exp_timeout || tdb->tdb_exp_first_use)
+	if (tdbp->tdb_exp_allocations || tdbp->tdb_exp_bytes ||
+	    tdbp->tdb_exp_timeout || tdbp->tdb_exp_first_use)
 		i += sizeof(struct sadb_lifetime);
 
-	if (tdb->tdb_last_used)
+	if (tdbp->tdb_last_used)
 		i += sizeof(struct sadb_lifetime);
 
-	i += sizeof(struct sadb_address) + PADUP(tdb->tdb_src.sa.sa_len);
-	i += sizeof(struct sadb_address) + PADUP(tdb->tdb_dst.sa.sa_len);
+	i += sizeof(struct sadb_address) + PADUP(tdbp->tdb_src.sa.sa_len);
+	i += sizeof(struct sadb_address) + PADUP(tdbp->tdb_dst.sa.sa_len);
 
-	if (tdb->tdb_ids) {
-		i += sizeof(struct sadb_ident) + PADUP(tdb->tdb_ids->id_local->len);
-		i += sizeof(struct sadb_ident) + PADUP(tdb->tdb_ids->id_remote->len);
+	if (tdbp->tdb_ids) {
+		i += sizeof(struct sadb_ident) +
+		    PADUP(tdbp->tdb_ids->id_local->len);
+		i += sizeof(struct sadb_ident) +
+		    PADUP(tdbp->tdb_ids->id_remote->len);
 	}
 
-	if (tdb->tdb_amxkey)
-		i += sizeof(struct sadb_key) + PADUP(tdb->tdb_amxkeylen);
+	if (tdbp->tdb_amxkey)
+		i += sizeof(struct sadb_key) + PADUP(tdbp->tdb_amxkeylen);
 
-	if (tdb->tdb_emxkey)
-		i += sizeof(struct sadb_key) + PADUP(tdb->tdb_emxkeylen);
+	if (tdbp->tdb_emxkey)
+		i += sizeof(struct sadb_key) + PADUP(tdbp->tdb_emxkeylen);
 
-	if (tdb->tdb_filter.sen_type) {
+	if (tdbp->tdb_filter.sen_type) {
 		i += 2 * sizeof(struct sadb_protocol);
 
 		/* We'll need four of them: src, src mask, dst, dst mask. */
-		switch (tdb->tdb_filter.sen_type) {
+		switch (tdbp->tdb_filter.sen_type) {
 		case SENT_IP4:
 			i += 4 * PADUP(sizeof(struct sockaddr_in));
 			i += 4 * sizeof(struct sadb_address);
@@ -850,28 +852,28 @@ pfkeyv2_get(struct tdb *tdb, void **headers, void **buffer, int *lenp,
 		}
 	}
 
-	if (tdb->tdb_onext) {
+	if (tdbp->tdb_onext) {
 		i += sizeof(struct sadb_sa);
 		i += sizeof(struct sadb_address) +
-		    PADUP(tdb->tdb_onext->tdb_dst.sa.sa_len);
+		    PADUP(tdbp->tdb_onext->tdb_dst.sa.sa_len);
 		i += sizeof(struct sadb_protocol);
 	}
 
-	if (tdb->tdb_udpencap_port)
+	if (tdbp->tdb_udpencap_port)
 		i += sizeof(struct sadb_x_udpencap);
 
 	i += sizeof(struct sadb_x_replay);
 
-	if (tdb->tdb_mtu > 0)
+	if (tdbp->tdb_mtu > 0)
 		i+= sizeof(struct sadb_x_mtu);
 
-	if (tdb->tdb_rdomain != tdb->tdb_rdomain_post)
+	if (tdbp->tdb_rdomain != tdbp->tdb_rdomain_post)
 		i += sizeof(struct sadb_x_rdomain);
 
 #if NPF > 0
-	if (tdb->tdb_tag)
+	if (tdbp->tdb_tag)
 		i += sizeof(struct sadb_x_tag) + PADUP(PF_TAG_NAME_SIZE);
-	if (tdb->tdb_tap)
+	if (tdbp->tdb_tap)
 		i += sizeof(struct sadb_x_tap);
 #endif
 
@@ -891,103 +893,105 @@ pfkeyv2_get(struct tdb *tdb, void **headers, void **buffer, int *lenp,
 
 	headers[SADB_EXT_SA] = p;
 
-	export_sa(&p, tdb);  /* Export SA information (mostly flags) */
+	export_sa(&p, tdbp);  /* Export SA information (mostly flags) */
 
 	/* Export lifetimes where applicable */
 	headers[SADB_EXT_LIFETIME_CURRENT] = p;
-	export_lifetime(&p, tdb, PFKEYV2_LIFETIME_CURRENT);
+	export_lifetime(&p, tdbp, PFKEYV2_LIFETIME_CURRENT);
 
-	if (tdb->tdb_soft_allocations || tdb->tdb_soft_bytes ||
-	    tdb->tdb_soft_first_use || tdb->tdb_soft_timeout) {
+	if (tdbp->tdb_soft_allocations || tdbp->tdb_soft_bytes ||
+	    tdbp->tdb_soft_first_use || tdbp->tdb_soft_timeout) {
 		headers[SADB_EXT_LIFETIME_SOFT] = p;
-		export_lifetime(&p, tdb, PFKEYV2_LIFETIME_SOFT);
+		export_lifetime(&p, tdbp, PFKEYV2_LIFETIME_SOFT);
 	}
 
-	if (tdb->tdb_exp_allocations || tdb->tdb_exp_bytes ||
-	    tdb->tdb_exp_first_use || tdb->tdb_exp_timeout) {
+	if (tdbp->tdb_exp_allocations || tdbp->tdb_exp_bytes ||
+	    tdbp->tdb_exp_first_use || tdbp->tdb_exp_timeout) {
 		headers[SADB_EXT_LIFETIME_HARD] = p;
-		export_lifetime(&p, tdb, PFKEYV2_LIFETIME_HARD);
+		export_lifetime(&p, tdbp, PFKEYV2_LIFETIME_HARD);
 	}
 
-	if (tdb->tdb_last_used) {
+	if (tdbp->tdb_last_used) {
 		headers[SADB_X_EXT_LIFETIME_LASTUSE] = p;
-		export_lifetime(&p, tdb, PFKEYV2_LIFETIME_LASTUSE);
+		export_lifetime(&p, tdbp, PFKEYV2_LIFETIME_LASTUSE);
 	}
 
 	/* Export TDB source address */
 	headers[SADB_EXT_ADDRESS_SRC] = p;
-	export_address(&p, &tdb->tdb_src.sa);
+	export_address(&p, &tdbp->tdb_src.sa);
 
 	/* Export TDB destination address */
 	headers[SADB_EXT_ADDRESS_DST] = p;
-	export_address(&p, &tdb->tdb_dst.sa);
+	export_address(&p, &tdbp->tdb_dst.sa);
 
 	/* Export source/destination identities, if present */
-	if (tdb->tdb_ids)
-		export_identities(&p, tdb->tdb_ids, tdb->tdb_ids_swapped, headers);
+	if (tdbp->tdb_ids) {
+		export_identities(&p, tdbp->tdb_ids, tdbp->tdb_ids_swapped,
+		    headers);
+	}
 
 	/* Export authentication key, if present */
-	if (tdb->tdb_amxkey) {
+	if (tdbp->tdb_amxkey) {
 		headers[SADB_EXT_KEY_AUTH] = p;
-		export_key(&p, tdb, PFKEYV2_AUTHENTICATION_KEY);
+		export_key(&p, tdbp, PFKEYV2_AUTHENTICATION_KEY);
 	}
 
 	/* Export encryption key, if present */
-	if (tdb->tdb_emxkey) {
+	if (tdbp->tdb_emxkey) {
 		headers[SADB_EXT_KEY_ENCRYPT] = p;
-		export_key(&p, tdb, PFKEYV2_ENCRYPTION_KEY);
+		export_key(&p, tdbp, PFKEYV2_ENCRYPTION_KEY);
 	}
 
 	/* Export flow/filter, if present */
-	if (tdb->tdb_filter.sen_type)
-		export_flow(&p, IPSP_IPSEC_USE, &tdb->tdb_filter,
-		    &tdb->tdb_filtermask, headers);
+	if (tdbp->tdb_filter.sen_type)
+		export_flow(&p, IPSP_IPSEC_USE, &tdbp->tdb_filter,
+		    &tdbp->tdb_filtermask, headers);
 
-	if (tdb->tdb_onext) {
+	if (tdbp->tdb_onext) {
 		headers[SADB_X_EXT_SA2] = p;
-		export_sa(&p, tdb->tdb_onext);
+		export_sa(&p, tdbp->tdb_onext);
 		headers[SADB_X_EXT_DST2] = p;
-		export_address(&p, &tdb->tdb_onext->tdb_dst.sa);
+		export_address(&p, &tdbp->tdb_onext->tdb_dst.sa);
 		headers[SADB_X_EXT_SATYPE2] = p;
-		export_satype(&p, tdb->tdb_onext);
+		export_satype(&p, tdbp->tdb_onext);
 	}
 
 	/* Export UDP encapsulation port, if present */
-	if (tdb->tdb_udpencap_port) {
+	if (tdbp->tdb_udpencap_port) {
 		headers[SADB_X_EXT_UDPENCAP] = p;
-		export_udpencap(&p, tdb);
+		export_udpencap(&p, tdbp);
 	}
 
 	headers[SADB_X_EXT_REPLAY] = p;
-	export_replay(&p, tdb);
+	export_replay(&p, tdbp);
 
-	if (tdb->tdb_mtu > 0) {
+	if (tdbp->tdb_mtu > 0) {
 		headers[SADB_X_EXT_MTU] = p;
-		export_mtu(&p, tdb);
+		export_mtu(&p, tdbp);
 	}
 
 	/* Export rdomain switch, if present */
-	if (tdb->tdb_rdomain != tdb->tdb_rdomain_post) {
+	if (tdbp->tdb_rdomain != tdbp->tdb_rdomain_post) {
 		headers[SADB_X_EXT_RDOMAIN] = p;
-		export_rdomain(&p, tdb);
+		export_rdomain(&p, tdbp);
 	}
 
 #if NPF > 0
 	/* Export tag information, if present */
-	if (tdb->tdb_tag) {
+	if (tdbp->tdb_tag) {
 		headers[SADB_X_EXT_TAG] = p;
-		export_tag(&p, tdb);
+		export_tag(&p, tdbp);
 	}
 
 	/* Export tap enc(4) device information, if present */
-	if (tdb->tdb_tap) {
+	if (tdbp->tdb_tap) {
 		headers[SADB_X_EXT_TAP] = p;
-		export_tap(&p, tdb);
+		export_tap(&p, tdbp);
 	}
 #endif
 
 	headers[SADB_X_EXT_COUNTER] = p;
-	export_counter(&p, tdb);
+	export_counter(&p, tdbp);
 
 	if (lenused)
 		*lenused = p - *buffer;
@@ -1001,7 +1005,7 @@ pfkeyv2_get(struct tdb *tdb, void **headers, void **buffer, int *lenp,
  * Dump a TDB.
  */
 int
-pfkeyv2_dump_walker(struct tdb *tdb, void *state, int last)
+pfkeyv2_dump_walker(struct tdb *tdbp, void *state, int last)
 {
 	struct dump_state *dump_state = (struct dump_state *) state;
 	void *headers[SADB_EXT_MAX+1], *buffer;
@@ -1010,12 +1014,13 @@ pfkeyv2_dump_walker(struct tdb *tdb, void *state, int last)
 
 	/* If not satype was specified, dump all TDBs */
 	if (!dump_state->sadb_msg->sadb_msg_satype ||
-	    (tdb->tdb_satype == dump_state->sadb_msg->sadb_msg_satype)) {
+	    (tdbp->tdb_satype == dump_state->sadb_msg->sadb_msg_satype)) {
 		bzero(headers, sizeof(headers));
 		headers[0] = (void *) dump_state->sadb_msg;
 
 		/* Get the information from the TDB to a PFKEYv2 message */
-		if ((rval = pfkeyv2_get(tdb, headers, &buffer, &buflen, NULL)) != 0)
+		if ((rval = pfkeyv2_get(tdbp, headers, &buffer, &buflen, NULL))
+		    != 0)
 			return (rval);
 
 		if (last)
@@ -1024,7 +1029,7 @@ pfkeyv2_dump_walker(struct tdb *tdb, void *state, int last)
 		/* Send the message to the specified socket */
 		rval = pfkeyv2_sendmessage(headers,
 		    PFKEYV2_SENDMESSAGE_UNICAST, dump_state->socket, 0, 0,
-		    tdb->tdb_rdomain);
+		    tdbp->tdb_rdomain);
 
 		explicit_bzero(buffer, buflen);
 		free(buffer, M_PFKEY, buflen);
@@ -1039,18 +1044,18 @@ pfkeyv2_dump_walker(struct tdb *tdb, void *state, int last)
  * Delete an SA.
  */
 int
-pfkeyv2_sa_flush(struct tdb *tdb, void *satype_vp, int last)
+pfkeyv2_sa_flush(struct tdb *tdbp, void *satype_vp, int last)
 {
 	if (!(*((u_int8_t *) satype_vp)) ||
-	    tdb->tdb_satype == *((u_int8_t *) satype_vp)) {
+	    tdbp->tdb_satype == *((u_int8_t *) satype_vp)) {
 		/* keep in sync with tdb_delete() */
 		NET_ASSERT_LOCKED();
 
-		if (tdb_unlink_locked(tdb) == 0)
+		if (tdb_unlink_locked(tdbp) == 0)
 			return (0);
-		tdb_unbundle(tdb);
-		tdb_deltimeouts(tdb);
-		tdb_unref(tdb);
+		tdb_unbundle(tdbp);
+		tdb_deltimeouts(tdbp);
+		tdb_unref(tdbp);
 	}
 	return (0);
 }
@@ -2349,14 +2354,14 @@ ret:
  * specifies the type of expiration (soft or hard).
  */
 int
-pfkeyv2_expire(struct tdb *tdb, u_int16_t type)
+pfkeyv2_expire(struct tdb *tdbp, u_int16_t type)
 {
 	void *p, *headers[SADB_EXT_MAX+1], *buffer = NULL;
 	struct sadb_msg *smsg;
 	int rval = 0;
 	int i;
 
-	switch (tdb->tdb_sproto) {
+	switch (tdbp->tdb_sproto) {
 	case IPPROTO_AH:
 	case IPPROTO_ESP:
 	case IPPROTO_IPIP:
@@ -2373,8 +2378,8 @@ pfkeyv2_expire(struct tdb *tdb, u_int16_t type)
 
 	i = sizeof(struct sadb_msg) + sizeof(struct sadb_sa) +
 	    2 * sizeof(struct sadb_lifetime) +
-	    sizeof(struct sadb_address) + PADUP(tdb->tdb_src.sa.sa_len) +
-	    sizeof(struct sadb_address) + PADUP(tdb->tdb_dst.sa.sa_len);
+	    sizeof(struct sadb_address) + PADUP(tdbp->tdb_src.sa.sa_len) +
+	    sizeof(struct sadb_address) + PADUP(tdbp->tdb_dst.sa.sa_len);
 
 	if (!(p = malloc(i, M_PFKEY, M_NOWAIT | M_ZERO))) {
 		rval = ENOMEM;
@@ -2391,7 +2396,7 @@ pfkeyv2_expire(struct tdb *tdb, u_int16_t type)
 	smsg = (struct sadb_msg *) headers[0];
 	smsg->sadb_msg_version = PF_KEY_V2;
 	smsg->sadb_msg_type = SADB_EXPIRE;
-	smsg->sadb_msg_satype = tdb->tdb_satype;
+	smsg->sadb_msg_satype = tdbp->tdb_satype;
 	smsg->sadb_msg_len = i / sizeof(uint64_t);
 
 	mtx_enter(&pfkeyv2_mtx);
@@ -2399,29 +2404,29 @@ pfkeyv2_expire(struct tdb *tdb, u_int16_t type)
 	mtx_leave(&pfkeyv2_mtx);
 
 	headers[SADB_EXT_SA] = p;
-	export_sa(&p, tdb);
+	export_sa(&p, tdbp);
 
 	headers[SADB_EXT_LIFETIME_CURRENT] = p;
-	export_lifetime(&p, tdb, PFKEYV2_LIFETIME_CURRENT);
+	export_lifetime(&p, tdbp, PFKEYV2_LIFETIME_CURRENT);
 
 	headers[type] = p;
-	export_lifetime(&p, tdb, type == SADB_EXT_LIFETIME_SOFT ?
+	export_lifetime(&p, tdbp, type == SADB_EXT_LIFETIME_SOFT ?
 	    PFKEYV2_LIFETIME_SOFT : PFKEYV2_LIFETIME_HARD);
 
 	headers[SADB_EXT_ADDRESS_SRC] = p;
-	export_address(&p, &tdb->tdb_src.sa);
+	export_address(&p, &tdbp->tdb_src.sa);
 
 	headers[SADB_EXT_ADDRESS_DST] = p;
-	export_address(&p, &tdb->tdb_dst.sa);
+	export_address(&p, &tdbp->tdb_dst.sa);
 
 	if ((rval = pfkeyv2_sendmessage(headers, PFKEYV2_SENDMESSAGE_BROADCAST,
-	    NULL, 0, 0, tdb->tdb_rdomain)) != 0)
+	    NULL, 0, 0, tdbp->tdb_rdomain)) != 0)
 		goto ret;
 	/* XXX */
-	if (tdb->tdb_rdomain != tdb->tdb_rdomain_post)
+	if (tdbp->tdb_rdomain != tdbp->tdb_rdomain_post)
 		if ((rval = pfkeyv2_sendmessage(headers,
 		    PFKEYV2_SENDMESSAGE_BROADCAST, NULL, 0, 0,
-		    tdb->tdb_rdomain_post)) != 0)
+		    tdbp->tdb_rdomain_post)) != 0)
 			goto ret;
 
 	rval = 0;
@@ -2443,7 +2448,7 @@ struct pfkeyv2_sysctl_walk {
 };
 
 int
-pfkeyv2_sysctl_walker(struct tdb *tdb, void *arg, int last)
+pfkeyv2_sysctl_walker(struct tdb *tdbp, void *arg, int last)
 {
 	struct pfkeyv2_sysctl_walk *w = (struct pfkeyv2_sysctl_walk *)arg;
 	void *buffer = NULL;
@@ -2451,7 +2456,7 @@ pfkeyv2_sysctl_walker(struct tdb *tdb, void *arg, int last)
 	int usedlen, buflen, i;
 
 	if (w->w_satype != SADB_SATYPE_UNSPEC &&
-	    w->w_satype != tdb->tdb_satype)
+	    w->w_satype != tdbp->tdb_satype)
 		return (0);
 
 	if (w->w_where) {
@@ -2459,7 +2464,7 @@ pfkeyv2_sysctl_walker(struct tdb *tdb, void *arg, int last)
 		struct sadb_msg msg;
 
 		bzero(headers, sizeof(headers));
-		if ((error = pfkeyv2_get(tdb, headers, &buffer, &buflen,
+		if ((error = pfkeyv2_get(tdbp, headers, &buffer, &buflen,
 		    &usedlen)) != 0)
 			goto done;
 		if (w->w_len < sizeof(msg) + usedlen) {
@@ -2469,7 +2474,7 @@ pfkeyv2_sysctl_walker(struct tdb *tdb, void *arg, int last)
 		/* prepend header */
 		bzero(&msg, sizeof(msg));
 		msg.sadb_msg_version = PF_KEY_V2;
-		msg.sadb_msg_satype = tdb->tdb_satype;
+		msg.sadb_msg_satype = tdbp->tdb_satype;
 		msg.sadb_msg_type = SADB_DUMP;
 		msg.sadb_msg_len = (sizeof(msg) + usedlen) / sizeof(uint64_t);
 		if ((error = copyout(&msg, w->w_where, sizeof(msg))) != 0)
@@ -2486,7 +2491,7 @@ pfkeyv2_sysctl_walker(struct tdb *tdb, void *arg, int last)
 		w->w_where += usedlen;
 		w->w_len -= usedlen;
 	} else {
-		if ((error = pfkeyv2_get(tdb, NULL, NULL, &buflen, NULL)) != 0)
+		if ((error = pfkeyv2_get(tdbp, NULL, NULL, &buflen, NULL)) != 0)
 			return (error);
 		w->w_len += buflen;
 		w->w_len += sizeof(struct sadb_msg);

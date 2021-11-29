@@ -109,7 +109,7 @@ ip_output(struct mbuf *m, struct mbuf *opt, struct route *ro, int flags,
 	int error = 0;
 	struct route iproute;
 	struct sockaddr_in *dst;
-	struct tdb *tdb = NULL;
+	struct tdb *tdbp = NULL;
 	u_long mtu;
 #if NPF > 0
 	u_int orig_rtableid;
@@ -244,7 +244,7 @@ reroute:
 #ifdef IPSEC
 	if (ipsec_in_use || inp != NULL) {
 		/* Do we have any pending SAs to apply ? */
-		tdb = ip_output_ipsec_lookup(m, hlen, &error, inp,
+		tdbp = ip_output_ipsec_lookup(m, hlen, &error, inp,
 		    ipsecflowinfo);
 		if (error != 0) {
 			/* Should silently drop packet */
@@ -252,7 +252,7 @@ reroute:
 				error = 0;
 			goto bad;
 		}
-		if (tdb != NULL) {
+		if (tdbp != NULL) {
 			/*
 			 * If it needs TCP/UDP hardware-checksumming, do the
 			 * computation now.
@@ -301,7 +301,8 @@ reroute:
 		if ((((m->m_flags & M_MCAST) &&
 		      (ifp->if_flags & IFF_MULTICAST) == 0) ||
 		     ((m->m_flags & M_BCAST) &&
-		      (ifp->if_flags & IFF_BROADCAST) == 0)) && (tdb == NULL)) {
+		      (ifp->if_flags & IFF_BROADCAST) == 0)) &&
+		      (tdbp == NULL)) {
 			ipstat_inc(ips_noroute);
 			error = ENETUNREACH;
 			goto bad;
@@ -376,7 +377,7 @@ reroute:
 	 * such a packet; if the packet is going in an IPsec tunnel, skip
 	 * this check.
 	 */
-	if ((tdb == NULL) && ((dst->sin_addr.s_addr == INADDR_BROADCAST) ||
+	if ((tdbp == NULL) && ((dst->sin_addr.s_addr == INADDR_BROADCAST) ||
 	    (ro && ro->ro_rt && ISSET(ro->ro_rt->rt_flags, RTF_BROADCAST)))) {
 		if ((ifp->if_flags & IFF_BROADCAST) == 0) {
 			error = EADDRNOTAVAIL;
@@ -409,9 +410,9 @@ sendit:
 	/*
 	 * Check if the packet needs encapsulation.
 	 */
-	if (tdb != NULL) {
+	if (tdbp != NULL) {
 		/* Callee frees mbuf */
-		error = ip_output_ipsec_send(tdb, m, ro,
+		error = ip_output_ipsec_send(tdbp, m, ro,
 		    (flags & IP_FORWARDING) ? 1 : 0);
 		goto done;
 	}
@@ -537,32 +538,32 @@ ip_output_ipsec_lookup(struct mbuf *m, int hlen, int *error, struct inpcb *inp,
 {
 	struct m_tag *mtag;
 	struct tdb_ident *tdbi;
-	struct tdb *tdb;
+	struct tdb *tdbp;
 
 	/* Do we have any pending SAs to apply ? */
-	tdb = ipsp_spd_lookup(m, AF_INET, hlen, error, IPSP_DIRECTION_OUT,
+	tdbp = ipsp_spd_lookup(m, AF_INET, hlen, error, IPSP_DIRECTION_OUT,
 	    NULL, inp, ipsecflowinfo);
-	if (tdb == NULL)
+	if (tdbp == NULL)
 		return NULL;
 	/* Loop detection */
 	for (mtag = m_tag_first(m); mtag != NULL; mtag = m_tag_next(m, mtag)) {
 		if (mtag->m_tag_id != PACKET_TAG_IPSEC_OUT_DONE)
 			continue;
 		tdbi = (struct tdb_ident *)(mtag + 1);
-		if (tdbi->spi == tdb->tdb_spi &&
-		    tdbi->proto == tdb->tdb_sproto &&
-		    tdbi->rdomain == tdb->tdb_rdomain &&
-		    !memcmp(&tdbi->dst, &tdb->tdb_dst,
+		if (tdbi->spi == tdbp->tdb_spi &&
+		    tdbi->proto == tdbp->tdb_sproto &&
+		    tdbi->rdomain == tdbp->tdb_rdomain &&
+		    !memcmp(&tdbi->dst, &tdbp->tdb_dst,
 		    sizeof(union sockaddr_union))) {
 			/* no IPsec needed */
 			return NULL;
 		}
 	}
-	return tdb;
+	return tdbp;
 }
 
 void
-ip_output_ipsec_pmtu_update(struct tdb *tdb, struct route *ro,
+ip_output_ipsec_pmtu_update(struct tdb *tdbp, struct route *ro,
     struct in_addr dst, int rtableid, int transportmode)
 {
 	struct rtentry *rt = NULL;
@@ -579,9 +580,9 @@ ip_output_ipsec_pmtu_update(struct tdb *tdb, struct route *ro,
 		rt_mtucloned = 1;
 	}
 	DPRINTF("spi %08x mtu %d rt %p cloned %d",
-	    ntohl(tdb->tdb_spi), tdb->tdb_mtu, rt, rt_mtucloned);
+	    ntohl(tdbp->tdb_spi), tdbp->tdb_mtu, rt, rt_mtucloned);
 	if (rt != NULL) {
-		rt->rt_mtu = tdb->tdb_mtu;
+		rt->rt_mtu = tdbp->tdb_mtu;
 		if (ro != NULL && ro->ro_rt != NULL) {
 			rtfree(ro->ro_rt);
 			ro->ro_rt = rtalloc(&ro->ro_dst, RT_RESOLVE, rtableid);
@@ -592,7 +593,7 @@ ip_output_ipsec_pmtu_update(struct tdb *tdb, struct route *ro,
 }
 
 int
-ip_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct route *ro, int fwd)
+ip_output_ipsec_send(struct tdb *tdbp, struct mbuf *m, struct route *ro, int fwd)
 {
 #if NPF > 0
 	struct ifnet *encif;
@@ -605,7 +606,7 @@ ip_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct route *ro, int fwd)
 	/*
 	 * Packet filter
 	 */
-	if ((encif = enc_getif(tdb->tdb_rdomain, tdb->tdb_tap)) == NULL ||
+	if ((encif = enc_getif(tdbp->tdb_rdomain, tdbp->tdb_tap)) == NULL ||
 	    pf_test(AF_INET, fwd ? PF_FWD : PF_OUT, encif, &m) != PF_PASS) {
 		m_freem(m);
 		return EACCES;
@@ -626,16 +627,16 @@ ip_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct route *ro, int fwd)
 	ip = mtod(m, struct ip *);
 	dst = ip->ip_dst;
 	rtableid = m->m_pkthdr.ph_rtableid;
-	if (ip_mtudisc && (ip->ip_off & htons(IP_DF)) && tdb->tdb_mtu &&
-	    ntohs(ip->ip_len) > tdb->tdb_mtu &&
-	    tdb->tdb_mtutimeout > gettime()) {
+	if (ip_mtudisc && (ip->ip_off & htons(IP_DF)) && tdbp->tdb_mtu &&
+	    ntohs(ip->ip_len) > tdbp->tdb_mtu &&
+	    tdbp->tdb_mtutimeout > gettime()) {
 		int transportmode;
 
-		transportmode = (tdb->tdb_dst.sa.sa_family == AF_INET) &&
-		    (tdb->tdb_dst.sin.sin_addr.s_addr == dst.s_addr);
-		ip_output_ipsec_pmtu_update(tdb, ro, dst, rtableid,
+		transportmode = (tdbp->tdb_dst.sa.sa_family == AF_INET) &&
+		    (tdbp->tdb_dst.sin.sin_addr.s_addr == dst.s_addr);
+		ip_output_ipsec_pmtu_update(tdbp, ro, dst, rtableid,
 		    transportmode);
-		ipsec_adjust_mtu(m, tdb->tdb_mtu);
+		ipsec_adjust_mtu(m, tdbp->tdb_mtu);
 		m_freem(m);
 		return EMSGSIZE;
 	}
@@ -650,13 +651,13 @@ ip_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct route *ro, int fwd)
 	m->m_flags &= ~(M_MCAST | M_BCAST);
 
 	/* Callee frees mbuf */
-	error = ipsp_process_packet(m, tdb, AF_INET, 0);
+	error = ipsp_process_packet(m, tdbp, AF_INET, 0);
 	if (error) {
 		ipsecstat_inc(ipsec_odrops);
-		tdb->tdb_odrops++;
+		tdbp->tdb_odrops++;
 	}
 	if (ip_mtudisc && error == EMSGSIZE)
-		ip_output_ipsec_pmtu_update(tdb, ro, dst, rtableid, 0);
+		ip_output_ipsec_pmtu_update(tdbp, ro, dst, rtableid, 0);
 	return error;
 }
 #endif /* IPSEC */

@@ -527,9 +527,9 @@ error6:
  * passes authentication.
  */
 int
-ah_input(struct mbuf **mp, struct tdb *tdb, int skip, int protoff)
+ah_input(struct mbuf **mp, struct tdb *tdbp, int skip, int protoff)
 {
-	const struct auth_hash *ahx = tdb->tdb_authalgxform;
+	const struct auth_hash *ahx = tdbp->tdb_authalgxform;
 	struct mbuf *m = *mp, *m1, *m0;
 	struct cryptodesc *crda = NULL;
 	struct cryptop *crp = NULL;
@@ -550,37 +550,37 @@ ah_input(struct mbuf **mp, struct tdb *tdb, int skip, int protoff)
 	m_copydata(m, skip + offsetof(struct ah, ah_hl), sizeof(u_int8_t), &hl);
 
 	/* Replay window checking, if applicable. */
-	if (tdb->tdb_wnd > 0) {
+	if (tdbp->tdb_wnd > 0) {
 		m_copydata(m, skip + offsetof(struct ah, ah_rpl),
 		    sizeof(u_int32_t), &btsx);
 		btsx = ntohl(btsx);
 
-		switch (checkreplaywindow(tdb, tdb->tdb_rpl, btsx, &esn, 0)) {
+		switch (checkreplaywindow(tdbp, tdbp->tdb_rpl, btsx, &esn, 0)) {
 		case 0: /* All's well. */
 			break;
 		case 1:
 			DPRINTF("replay counter wrapped for SA %s/%08x",
-			    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
-			    ntohl(tdb->tdb_spi));
+			    ipsp_address(&tdbp->tdb_dst, buf, sizeof(buf)),
+			    ntohl(tdbp->tdb_spi));
 			ahstat_inc(ahs_wrap);
 			goto drop;
 		case 2:
 			DPRINTF("old packet received in SA %s/%08x",
-			    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
-			    ntohl(tdb->tdb_spi));
+			    ipsp_address(&tdbp->tdb_dst, buf, sizeof(buf)),
+			    ntohl(tdbp->tdb_spi));
 			ahstat_inc(ahs_replay);
 			goto drop;
 		case 3:
 			DPRINTF("duplicate packet received in SA %s/%08x",
-			    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
-			    ntohl(tdb->tdb_spi));
+			    ipsp_address(&tdbp->tdb_dst, buf, sizeof(buf)),
+			    ntohl(tdbp->tdb_spi));
 			ahstat_inc(ahs_replay);
 			goto drop;
 		default:
 			DPRINTF("bogus value from checkreplaywindow() "
 			    "in SA %s/%08x",
-			    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
-			    ntohl(tdb->tdb_spi));
+			    ipsp_address(&tdbp->tdb_dst, buf, sizeof(buf)),
+			    ntohl(tdbp->tdb_spi));
 			ahstat_inc(ahs_replay);
 			goto drop;
 		}
@@ -590,8 +590,8 @@ ah_input(struct mbuf **mp, struct tdb *tdb, int skip, int protoff)
 	if (hl * sizeof(u_int32_t) != ahx->authsize + rplen - AH_FLENGTH) {
 		DPRINTF("bad authenticator length %ld for packet in SA %s/%08x",
 		    hl * sizeof(u_int32_t),
-		    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
-		    ntohl(tdb->tdb_spi));
+		    ipsp_address(&tdbp->tdb_dst, buf, sizeof(buf)),
+		    ntohl(tdbp->tdb_spi));
 		ahstat_inc(ahs_badauthl);
 		goto drop;
 	}
@@ -599,32 +599,32 @@ ah_input(struct mbuf **mp, struct tdb *tdb, int skip, int protoff)
 		DPRINTF("bad mbuf length %d (expecting %d) for packet "
 		    "in SA %s/%08x",
 		    m->m_pkthdr.len, skip + ahx->authsize + rplen,
-		    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
-		    ntohl(tdb->tdb_spi));
+		    ipsp_address(&tdbp->tdb_dst, buf, sizeof(buf)),
+		    ntohl(tdbp->tdb_spi));
 		ahstat_inc(ahs_badauthl);
 		goto drop;
 	}
 
 	/* Update the counters. */
 	ibytes = (m->m_pkthdr.len - skip - hl * sizeof(u_int32_t));
-	tdb->tdb_cur_bytes += ibytes;
-	tdb->tdb_ibytes += ibytes;
+	tdbp->tdb_cur_bytes += ibytes;
+	tdbp->tdb_ibytes += ibytes;
 	ahstat_add(ahs_ibytes, ibytes);
 
 	/* Hard expiration. */
-	if (tdb->tdb_flags & TDBF_BYTES &&
-	    tdb->tdb_cur_bytes >= tdb->tdb_exp_bytes) {
+	if (tdbp->tdb_flags & TDBF_BYTES &&
+	    tdbp->tdb_cur_bytes >= tdbp->tdb_exp_bytes) {
 		ipsecstat_inc(ipsec_exctdb);
-		pfkeyv2_expire(tdb, SADB_EXT_LIFETIME_HARD);
-		tdb_delete(tdb);
+		pfkeyv2_expire(tdbp, SADB_EXT_LIFETIME_HARD);
+		tdb_delete(tdbp);
 		goto drop;
 	}
 
 	/* Notify on expiration. */
-	if (tdb->tdb_flags & TDBF_SOFT_BYTES &&
-	    tdb->tdb_cur_bytes >= tdb->tdb_soft_bytes) {
-		pfkeyv2_expire(tdb, SADB_EXT_LIFETIME_SOFT);
-		tdb->tdb_flags &= ~TDBF_SOFT_BYTES;  /* Turn off checking. */
+	if (tdbp->tdb_flags & TDBF_SOFT_BYTES &&
+	    tdbp->tdb_cur_bytes >= tdbp->tdb_soft_bytes) {
+		pfkeyv2_expire(tdbp, SADB_EXT_LIFETIME_SOFT);
+		tdbp->tdb_flags &= ~TDBF_SOFT_BYTES;  /* Turn off checking. */
 	}
 
 	/* Get crypto descriptors. */
@@ -643,10 +643,10 @@ ah_input(struct mbuf **mp, struct tdb *tdb, int skip, int protoff)
 
 	/* Authentication operation. */
 	crda->crd_alg = ahx->type;
-	crda->crd_key = tdb->tdb_amxkey;
-	crda->crd_klen = tdb->tdb_amxkeylen * 8;
+	crda->crd_key = tdbp->tdb_amxkey;
+	crda->crd_klen = tdbp->tdb_amxkeylen * 8;
 
-	if ((tdb->tdb_wnd > 0) && (tdb->tdb_flags & TDBF_ESN)) {
+	if ((tdbp->tdb_wnd > 0) && (tdbp->tdb_flags & TDBF_ESN)) {
 		esn = htonl(esn);
 		memcpy(crda->crd_esn, &esn, 4);
 		crda->crd_flags |= CRD_F_ESN;
@@ -670,7 +670,7 @@ ah_input(struct mbuf **mp, struct tdb *tdb, int skip, int protoff)
 	m_copyback(m, skip + rplen, ahx->authsize, ipseczeroes, M_NOWAIT);
 
 	/* "Massage" the packet headers for crypto processing. */
-	error = ah_massage_headers(mp, tdb->tdb_dst.sa.sa_family, skip,
+	error = ah_massage_headers(mp, tdbp->tdb_dst.sa.sa_family, skip,
 	    ahx->type, 0);
 	/* callee may change or free mbuf */
 	m = *mp;
@@ -681,13 +681,13 @@ ah_input(struct mbuf **mp, struct tdb *tdb, int skip, int protoff)
 	crp->crp_ilen = m->m_pkthdr.len; /* Total input length. */
 	crp->crp_flags = CRYPTO_F_IMBUF | CRYPTO_F_MPSAFE;
 	crp->crp_buf = (caddr_t)m;
-	crp->crp_sid = tdb->tdb_cryptoid;
+	crp->crp_sid = tdbp->tdb_cryptoid;
 
 	KERNEL_LOCK();
 	while ((error = crypto_invoke(crp)) == EAGAIN) {
 		/* Reset the session ID */
-		if (tdb->tdb_cryptoid != 0)
-			tdb->tdb_cryptoid = crp->crp_sid;
+		if (tdbp->tdb_cryptoid != 0)
+			tdbp->tdb_cryptoid = crp->crp_sid;
 	}
 	KERNEL_UNLOCK();
 	if (error) {
@@ -709,8 +709,8 @@ ah_input(struct mbuf **mp, struct tdb *tdb, int skip, int protoff)
 	/* Verify authenticator. */
 	if (timingsafe_bcmp(ptr + skip + rplen, calc, ahx->authsize)) {
 		DPRINTF("authentication failed for packet in SA %s/%08x",
-		    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
-		    ntohl(tdb->tdb_spi));
+		    ipsp_address(&tdbp->tdb_dst, buf, sizeof(buf)),
+		    ntohl(tdbp->tdb_spi));
 		ahstat_inc(ahs_badauth);
 		goto drop;
 	}
@@ -725,40 +725,40 @@ ah_input(struct mbuf **mp, struct tdb *tdb, int skip, int protoff)
 	ptr = NULL;
 
 	/* Replay window checking, if applicable. */
-	if (tdb->tdb_wnd > 0) {
+	if (tdbp->tdb_wnd > 0) {
 		m_copydata(m, skip + offsetof(struct ah, ah_rpl),
 		    sizeof(u_int32_t), &btsx);
 		btsx = ntohl(btsx);
 
-		switch (checkreplaywindow(tdb, tdb->tdb_rpl, btsx, &esn, 1)) {
+		switch (checkreplaywindow(tdbp, tdbp->tdb_rpl, btsx, &esn, 1)) {
 		case 0: /* All's well. */
 #if NPFSYNC > 0
-			pfsync_update_tdb(tdb,0);
+			pfsync_update_tdb(tdbp, 0);
 #endif
 			break;
 		case 1:
 			DPRINTF("replay counter wrapped for SA %s/%08x",
-			    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
-			    ntohl(tdb->tdb_spi));
+			    ipsp_address(&tdbp->tdb_dst, buf, sizeof(buf)),
+			    ntohl(tdbp->tdb_spi));
 			ahstat_inc(ahs_wrap);
 			goto drop;
 		case 2:
 			DPRINTF("old packet received in SA %s/%08x",
-			    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
-			    ntohl(tdb->tdb_spi));
+			    ipsp_address(&tdbp->tdb_dst, buf, sizeof(buf)),
+			    ntohl(tdbp->tdb_spi));
 			ahstat_inc(ahs_replay);
 			goto drop;
 		case 3:
 			DPRINTF("duplicate packet received in SA %s/%08x",
-			    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
-			    ntohl(tdb->tdb_spi));
+			    ipsp_address(&tdbp->tdb_dst, buf, sizeof(buf)),
+			    ntohl(tdbp->tdb_spi));
 			ahstat_inc(ahs_replay);
 			goto drop;
 		default:
 			DPRINTF("bogus value from checkreplaywindow() "
 			    "in SA %s/%08x",
-			    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
-			    ntohl(tdb->tdb_spi));
+			    ipsp_address(&tdbp->tdb_dst, buf, sizeof(buf)),
+			    ntohl(tdbp->tdb_spi));
 			ahstat_inc(ahs_replay);
 			goto drop;
 		}
@@ -768,8 +768,8 @@ ah_input(struct mbuf **mp, struct tdb *tdb, int skip, int protoff)
 	m1 = m_getptr(m, skip, &roff);
 	if (m1 == NULL) {
 		DPRINTF("bad mbuf chain for packet in SA %s/%08x",
-		    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
-		    ntohl(tdb->tdb_spi));
+		    ipsp_address(&tdbp->tdb_dst, buf, sizeof(buf)),
+		    ntohl(tdbp->tdb_spi));
 		ahstat_inc(ahs_hdrops);
 		goto drop;
 	}
@@ -843,7 +843,7 @@ ah_input(struct mbuf **mp, struct tdb *tdb, int skip, int protoff)
 			m->m_pkthdr.len -= rplen + ahx->authsize;
 		}
 
-	return ipsec_common_input_cb(mp, tdb, skip, protoff);
+	return ipsec_common_input_cb(mp, tdbp, skip, protoff);
 
  drop:
 	free(ptr, M_XDATA, 0);
@@ -856,9 +856,9 @@ ah_input(struct mbuf **mp, struct tdb *tdb, int skip, int protoff)
  * AH output routine, called by ipsp_process_packet().
  */
 int
-ah_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
+ah_output(struct mbuf *m, struct tdb *tdbp, int skip, int protoff)
 {
-	const struct auth_hash *ahx = tdb->tdb_authalgxform;
+	const struct auth_hash *ahx = tdbp->tdb_authalgxform;
 	struct cryptodesc *crda;
 	struct mbuf *mi;
 	struct cryptop *crp = NULL;
@@ -874,7 +874,7 @@ ah_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	char buf[INET6_ADDRSTRLEN];
 #endif
 
-	if ((encif = enc_getif(tdb->tdb_rdomain, tdb->tdb_tap)) != NULL) {
+	if ((encif = enc_getif(tdbp->tdb_rdomain, tdbp->tdb_tap)) != NULL) {
 		encif->if_opackets++;
 		encif->if_obytes += m->m_pkthdr.len;
 
@@ -883,8 +883,8 @@ ah_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 
 			memset(&hdr, 0, sizeof(hdr));
 
-			hdr.af = tdb->tdb_dst.sa.sa_family;
-			hdr.spi = tdb->tdb_spi;
+			hdr.af = tdbp->tdb_dst.sa.sa_family;
+			hdr.spi = tdbp->tdb_spi;
 			hdr.flags |= M_AUTH;
 
 			bpf_mtap_hdr(encif->if_bpf, (char *)&hdr,
@@ -899,10 +899,10 @@ ah_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	 * Check for replay counter wrap-around in automatic (not
 	 * manual) keying.
 	 */
-	if ((tdb->tdb_rpl == 0) && (tdb->tdb_wnd > 0)) {
+	if ((tdbp->tdb_rpl == 0) && (tdbp->tdb_wnd > 0)) {
 		DPRINTF("SA %s/%08x should have expired",
-		    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
-		    ntohl(tdb->tdb_spi));
+		    ipsp_address(&tdbp->tdb_dst, buf, sizeof(buf)),
+		    ntohl(tdbp->tdb_spi));
 		ahstat_inc(ahs_wrap);
 		error = EINVAL;
 		goto drop;
@@ -910,13 +910,13 @@ ah_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 
 	rplen = AH_FLENGTH + sizeof(u_int32_t);
 
-	switch (tdb->tdb_dst.sa.sa_family) {
+	switch (tdbp->tdb_dst.sa.sa_family) {
 	case AF_INET:
 		/* Check for IP maximum packet size violations. */
 		if (rplen + ahx->authsize + m->m_pkthdr.len > IP_MAXPACKET) {
 			DPRINTF("packet in SA %s/%08x got too big",
-			    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
-			    ntohl(tdb->tdb_spi));
+			    ipsp_address(&tdbp->tdb_dst, buf, sizeof(buf)),
+			    ntohl(tdbp->tdb_spi));
 			ahstat_inc(ahs_toobig);
 			error = EMSGSIZE;
 			goto drop;
@@ -928,8 +928,8 @@ ah_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 		/* Check for IPv6 maximum packet size violations. */
 		if (rplen + ahx->authsize + m->m_pkthdr.len > IPV6_MAXPACKET) {
 			DPRINTF("packet in SA %s/%08x got too big",
-			    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
-			    ntohl(tdb->tdb_spi));
+			    ipsp_address(&tdbp->tdb_dst, buf, sizeof(buf)),
+			    ntohl(tdbp->tdb_spi));
 			ahstat_inc(ahs_toobig);
 			error = EMSGSIZE;
 			goto drop;
@@ -939,33 +939,33 @@ ah_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 
 	default:
 		DPRINTF("unknown/unsupported protocol family %d, SA %s/%08x",
-		    tdb->tdb_dst.sa.sa_family,
-		    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
-		    ntohl(tdb->tdb_spi));
+		    tdbp->tdb_dst.sa.sa_family,
+		    ipsp_address(&tdbp->tdb_dst, buf, sizeof(buf)),
+		    ntohl(tdbp->tdb_spi));
 		ahstat_inc(ahs_nopf);
 		error = EPFNOSUPPORT;
 		goto drop;
 	}
 
 	/* Update the counters. */
-	tdb->tdb_cur_bytes += m->m_pkthdr.len - skip;
+	tdbp->tdb_cur_bytes += m->m_pkthdr.len - skip;
 	ahstat_add(ahs_obytes, m->m_pkthdr.len - skip);
 
 	/* Hard expiration. */
-	if (tdb->tdb_flags & TDBF_BYTES &&
-	    tdb->tdb_cur_bytes >= tdb->tdb_exp_bytes) {
+	if (tdbp->tdb_flags & TDBF_BYTES &&
+	    tdbp->tdb_cur_bytes >= tdbp->tdb_exp_bytes) {
 		ipsecstat_inc(ipsec_exctdb);
-		pfkeyv2_expire(tdb, SADB_EXT_LIFETIME_HARD);
-		tdb_delete(tdb);
+		pfkeyv2_expire(tdbp, SADB_EXT_LIFETIME_HARD);
+		tdb_delete(tdbp);
 		error = EINVAL;
 		goto drop;
 	}
 
 	/* Notify on expiration. */
-	if (tdb->tdb_flags & TDBF_SOFT_BYTES &&
-	    tdb->tdb_cur_bytes >= tdb->tdb_soft_bytes) {
-		pfkeyv2_expire(tdb, SADB_EXT_LIFETIME_SOFT);
-		tdb->tdb_flags &= ~TDBF_SOFT_BYTES; /* Turn off checking */
+	if (tdbp->tdb_flags & TDBF_SOFT_BYTES &&
+	    tdbp->tdb_cur_bytes >= tdbp->tdb_soft_bytes) {
+		pfkeyv2_expire(tdbp, SADB_EXT_LIFETIME_SOFT);
+		tdbp->tdb_flags &= ~TDBF_SOFT_BYTES; /* Turn off checking */
 	}
 
 	/*
@@ -993,8 +993,8 @@ ah_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	mi = m_makespace(m, skip, rplen + ahx->authsize, &roff);
 	if (mi == NULL) {
 		DPRINTF("failed to inject AH header for SA %s/%08x",
-		    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
-		    ntohl(tdb->tdb_spi));
+		    ipsp_address(&tdbp->tdb_dst, buf, sizeof(buf)),
+		    ntohl(tdbp->tdb_spi));
 		ahstat_inc(ahs_hdrops);
 		error = ENOBUFS;
 		goto drop;
@@ -1010,15 +1010,15 @@ ah_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	m_copydata(m, protoff, sizeof(u_int8_t), &ah->ah_nh);
 	ah->ah_hl = (rplen + ahx->authsize - AH_FLENGTH) / sizeof(u_int32_t);
 	ah->ah_rv = 0;
-	ah->ah_spi = tdb->tdb_spi;
+	ah->ah_spi = tdbp->tdb_spi;
 
 	/* Zeroize authenticator. */
 	m_copyback(m, skip + rplen, ahx->authsize, ipseczeroes, M_NOWAIT);
 
-	replay64 = tdb->tdb_rpl++;
+	replay64 = tdbp->tdb_rpl++;
 	ah->ah_rpl = htonl((u_int32_t)replay64);
 #if NPFSYNC > 0
-	pfsync_update_tdb(tdb,1);
+	pfsync_update_tdb(tdbp, 1);
 #endif
 
 	/* Get crypto descriptors. */
@@ -1038,10 +1038,10 @@ ah_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 
 	/* Authentication operation. */
 	crda->crd_alg = ahx->type;
-	crda->crd_key = tdb->tdb_amxkey;
-	crda->crd_klen = tdb->tdb_amxkeylen * 8;
+	crda->crd_key = tdbp->tdb_amxkey;
+	crda->crd_klen = tdbp->tdb_amxkeylen * 8;
 
-	if ((tdb->tdb_wnd > 0) && (tdb->tdb_flags & TDBF_ESN)) {
+	if ((tdbp->tdb_wnd > 0) && (tdbp->tdb_flags & TDBF_ESN)) {
 		u_int32_t esn;
 
 		esn = htonl((u_int32_t)(replay64 >> 32));
@@ -1065,7 +1065,7 @@ ah_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	 * authentication. We don't need to fix the original
 	 * header length as it will be fixed by our caller.
 	 */
-	switch (tdb->tdb_dst.sa.sa_family) {
+	switch (tdbp->tdb_dst.sa.sa_family) {
 	case AF_INET:
 		memcpy((caddr_t) &iplen, ((caddr_t)ptr) +
 		    offsetof(struct ip, ip_len), sizeof(u_int16_t));
@@ -1093,7 +1093,7 @@ ah_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	m_copyback(m, protoff, sizeof(u_int8_t), &prot, M_NOWAIT);
 
 	/* "Massage" the packet headers for crypto processing. */
-	error = ah_massage_headers(&m, tdb->tdb_dst.sa.sa_family, skip,
+	error = ah_massage_headers(&m, tdbp->tdb_dst.sa.sa_family, skip,
 	    ahx->type, 1);
 	if (error) {
 		/* mbuf was freed by callee. */
@@ -1105,13 +1105,13 @@ ah_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	crp->crp_ilen = m->m_pkthdr.len; /* Total input length. */
 	crp->crp_flags = CRYPTO_F_IMBUF | CRYPTO_F_MPSAFE;
 	crp->crp_buf = (caddr_t)m;
-	crp->crp_sid = tdb->tdb_cryptoid;
+	crp->crp_sid = tdbp->tdb_cryptoid;
 
 	KERNEL_LOCK();
 	while ((error = crypto_invoke(crp)) == EAGAIN) {
 		/* Reset the session ID */
-		if (tdb->tdb_cryptoid != 0)
-			tdb->tdb_cryptoid = crp->crp_sid;
+		if (tdbp->tdb_cryptoid != 0)
+			tdbp->tdb_cryptoid = crp->crp_sid;
 	}
 	KERNEL_UNLOCK();
 	if (error) {
@@ -1136,7 +1136,7 @@ ah_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	ptr = NULL;
 
 	/* Call the IPsec input callback. */
-	error = ipsp_process_done(m, tdb);
+	error = ipsp_process_done(m, tdbp);
 	if (error)
 		ahstat_inc(ahs_outfail);
 	return error;

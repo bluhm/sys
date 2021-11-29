@@ -417,19 +417,19 @@ gettdbbysrcdst_dir(u_int rdomain, u_int32_t spi, union sockaddr_union *src,
  * established TDBs.
  */
 int
-ipsp_aux_match(struct tdb *tdb,
+ipsp_aux_match(struct tdb *tdbp,
     struct ipsec_ids *ids,
     struct sockaddr_encap *pfilter,
     struct sockaddr_encap *pfiltermask)
 {
 	if (ids != NULL)
-		if (tdb->tdb_ids == NULL ||
-		    !ipsp_ids_match(tdb->tdb_ids, ids))
+		if (tdbp->tdb_ids == NULL ||
+		    !ipsp_ids_match(tdbp->tdb_ids, ids))
 			return 0;
 
 	/* Check for filter matches. */
 	if (pfilter != NULL && pfiltermask != NULL &&
-	    tdb->tdb_filter.sen_type) {
+	    tdbp->tdb_filter.sen_type) {
 		/*
 		 * XXX We should really be doing a subnet-check (see
 		 * whether the TDB-associated filter is a subset
@@ -437,9 +437,9 @@ ipsp_aux_match(struct tdb *tdb,
 		 * most problems (all this will do is make every
 		 * policy get its own SAs).
 		 */
-		if (memcmp(&tdb->tdb_filter, pfilter,
+		if (memcmp(&tdbp->tdb_filter, pfilter,
 		    sizeof(struct sockaddr_encap)) ||
-		    memcmp(&tdb->tdb_filtermask, pfiltermask,
+		    memcmp(&tdbp->tdb_filtermask, pfiltermask,
 		    sizeof(struct sockaddr_encap)))
 			return 0;
 	}
@@ -539,26 +539,26 @@ tdb_hashstats(void)
 			    "+" : "", buckets[i]);
 }
 
-#define DUMP(m, f) pr("%18s: " f "\n", #m, tdb->tdb_##m)
+#define DUMP(m, f) pr("%18s: " f "\n", #m, tdbp->tdb_##m)
 void
 tdb_printit(void *addr, int full, int (*pr)(const char *, ...))
 {
-	struct tdb *tdb = addr;
+	struct tdb *tdbp = addr;
 	char buf[INET6_ADDRSTRLEN];
 
 	if (full) {
-		pr("tdb at %p\n", tdb);
+		pr("tdb at %p\n", tdbp);
 		DUMP(hnext, "%p");
 		DUMP(dnext, "%p");
 		DUMP(snext, "%p");
 		DUMP(inext, "%p");
 		DUMP(onext, "%p");
 		DUMP(xform, "%p");
-		pr("%18s: %d\n", "refcnt", tdb->tdb_refcnt.refs);
+		pr("%18s: %d\n", "refcnt", tdbp->tdb_refcnt.refs);
 		DUMP(encalgxform, "%p");
 		DUMP(authalgxform, "%p");
 		DUMP(compalgxform, "%p");
-		pr("%18s: %b\n", "flags", tdb->tdb_flags, TDBF_BITS);
+		pr("%18s: %b\n", "flags", tdbp->tdb_flags, TDBF_BITS);
 		/* tdb_XXX_tmo */
 		DUMP(seq, "%d");
 		DUMP(exp_allocations, "%d");
@@ -577,7 +577,7 @@ tdb_printit(void *addr, int full, int (*pr)(const char *, ...))
 		DUMP(last_marked, "%lld");
 		/* tdb_data */
 		DUMP(cryptoid, "%lld");
-		pr("%18s: %08x\n", "tdb_spi", ntohl(tdb->tdb_spi));
+		pr("%18s: %08x\n", "tdb_spi", ntohl(tdbp->tdb_spi));
 		DUMP(amxkeylen, "%d");
 		DUMP(emxkeylen, "%d");
 		DUMP(ivlen, "%d");
@@ -586,9 +586,9 @@ tdb_printit(void *addr, int full, int (*pr)(const char *, ...))
 		DUMP(satype, "%d");
 		DUMP(updates, "%d");
 		pr("%18s: %s\n", "dst",
-		    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)));
+		    ipsp_address(&tdbp->tdb_dst, buf, sizeof(buf)));
 		pr("%18s: %s\n", "src",
-		    ipsp_address(&tdb->tdb_src, buf, sizeof(buf)));
+		    ipsp_address(&tdbp->tdb_src, buf, sizeof(buf)));
 		DUMP(amxkey, "%p");
 		DUMP(emxkey, "%p");
 		DUMP(rpl, "%lld");
@@ -599,7 +599,7 @@ tdb_printit(void *addr, int full, int (*pr)(const char *, ...))
 		DUMP(mtu, "%d");
 		DUMP(mtutimeout, "%lld");
 		pr("%18s: %d\n", "udpencap_port",
-		    ntohs(tdb->tdb_udpencap_port));
+		    ntohs(tdbp->tdb_udpencap_port));
 		DUMP(tag, "%d");
 		DUMP(tap, "%d");
 		DUMP(rdomain, "%d");
@@ -609,13 +609,13 @@ tdb_printit(void *addr, int full, int (*pr)(const char *, ...))
 		/* tdb_policy_head */
 		/* tdb_sync_entry */
 	} else {
-		pr("%p:", tdb);
-		pr(" %08x", ntohl(tdb->tdb_spi));
-		pr(" %s", ipsp_address(&tdb->tdb_src, buf, sizeof(buf)));
-		pr("->%s", ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)));
-		pr(":%d", tdb->tdb_sproto);
-		pr(" #%d", tdb->tdb_refcnt.refs);
-		pr(" %08x\n", tdb->tdb_flags);
+		pr("%p:", tdbp);
+		pr(" %08x", ntohl(tdbp->tdb_spi));
+		pr(" %s", ipsp_address(&tdbp->tdb_src, buf, sizeof(buf)));
+		pr("->%s", ipsp_address(&tdbp->tdb_dst, buf, sizeof(buf)));
+		pr(":%d", tdbp->tdb_sproto);
+		pr(" #%d", tdbp->tdb_refcnt.refs);
+		pr(" %08x\n", tdbp->tdb_flags);
 	}
 }
 #undef DUMP
@@ -655,71 +655,71 @@ tdb_walk(u_int rdomain, int (*walker)(struct tdb *, void *, int), void *arg)
 void
 tdb_timeout(void *v)
 {
-	struct tdb *tdb = v;
+	struct tdb *tdbp = v;
 
 	NET_LOCK();
-	if (tdb->tdb_flags & TDBF_TIMER) {
+	if (tdbp->tdb_flags & TDBF_TIMER) {
 		/* If it's an "invalid" TDB do a silent expiration. */
-		if (!(tdb->tdb_flags & TDBF_INVALID)) {
+		if (!(tdbp->tdb_flags & TDBF_INVALID)) {
 			ipsecstat_inc(ipsec_exctdb);
-			pfkeyv2_expire(tdb, SADB_EXT_LIFETIME_HARD);
+			pfkeyv2_expire(tdbp, SADB_EXT_LIFETIME_HARD);
 		}
-		tdb_delete(tdb);
+		tdb_delete(tdbp);
 	}
 	/* decrement refcount of the timeout argument */
-	tdb_unref(tdb);
+	tdb_unref(tdbp);
 	NET_UNLOCK();
 }
 
 void
 tdb_firstuse(void *v)
 {
-	struct tdb *tdb = v;
+	struct tdb *tdbp = v;
 
 	NET_LOCK();
-	if (tdb->tdb_flags & TDBF_SOFT_FIRSTUSE) {
+	if (tdbp->tdb_flags & TDBF_SOFT_FIRSTUSE) {
 		/* If the TDB hasn't been used, don't renew it. */
-		if (tdb->tdb_first_use != 0) {
+		if (tdbp->tdb_first_use != 0) {
 			ipsecstat_inc(ipsec_exctdb);
-			pfkeyv2_expire(tdb, SADB_EXT_LIFETIME_HARD);
+			pfkeyv2_expire(tdbp, SADB_EXT_LIFETIME_HARD);
 		}
-		tdb_delete(tdb);
+		tdb_delete(tdbp);
 	}
 	/* decrement refcount of the timeout argument */
-	tdb_unref(tdb);
+	tdb_unref(tdbp);
 	NET_UNLOCK();
 }
 
 void
 tdb_soft_timeout(void *v)
 {
-	struct tdb *tdb = v;
+	struct tdb *tdbp = v;
 
 	NET_LOCK();
-	if (tdb->tdb_flags & TDBF_SOFT_TIMER) {
+	if (tdbp->tdb_flags & TDBF_SOFT_TIMER) {
 		/* Soft expirations. */
-		pfkeyv2_expire(tdb, SADB_EXT_LIFETIME_SOFT);
-		tdb->tdb_flags &= ~TDBF_SOFT_TIMER;
+		pfkeyv2_expire(tdbp, SADB_EXT_LIFETIME_SOFT);
+		tdbp->tdb_flags &= ~TDBF_SOFT_TIMER;
 	}
 	/* decrement refcount of the timeout argument */
-	tdb_unref(tdb);
+	tdb_unref(tdbp);
 	NET_UNLOCK();
 }
 
 void
 tdb_soft_firstuse(void *v)
 {
-	struct tdb *tdb = v;
+	struct tdb *tdbp = v;
 
 	NET_LOCK();
-	if (tdb->tdb_flags & TDBF_SOFT_FIRSTUSE) {
+	if (tdbp->tdb_flags & TDBF_SOFT_FIRSTUSE) {
 		/* If the TDB hasn't been used, don't renew it. */
-		if (tdb->tdb_first_use != 0)
-			pfkeyv2_expire(tdb, SADB_EXT_LIFETIME_SOFT);
-		tdb->tdb_flags &= ~TDBF_SOFT_FIRSTUSE;
+		if (tdbp->tdb_first_use != 0)
+			pfkeyv2_expire(tdbp, SADB_EXT_LIFETIME_SOFT);
+		tdbp->tdb_flags &= ~TDBF_SOFT_FIRSTUSE;
 	}
 	/* decrement refcount of the timeout argument */
-	tdb_unref(tdb);
+	tdb_unref(tdbp);
 	NET_UNLOCK();
 }
 
@@ -960,22 +960,22 @@ tdb_deltimeouts(struct tdb *tdbp)
 }
 
 struct tdb *
-tdb_ref(struct tdb *tdb)
+tdb_ref(struct tdb *tdbp)
 {
-	if (tdb == NULL)
+	if (tdbp == NULL)
 		return NULL;
-	refcnt_take(&tdb->tdb_refcnt);
-	return tdb;
+	refcnt_take(&tdbp->tdb_refcnt);
+	return tdbp;
 }
 
 void
-tdb_unref(struct tdb *tdb)
+tdb_unref(struct tdb *tdbp)
 {
-	if (tdb == NULL)
+	if (tdbp == NULL)
 		return;
-	if (refcnt_rele(&tdb->tdb_refcnt) == 0)
+	if (refcnt_rele(&tdbp->tdb_refcnt) == 0)
 		return;
-	tdb_free(tdb);
+	tdb_free(tdbp);
 }
 
 void

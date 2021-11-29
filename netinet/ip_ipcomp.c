@@ -131,9 +131,9 @@ ipcomp_zeroize(struct tdb *tdbp)
  * ipcomp_input() gets called to uncompress an input packet
  */
 int
-ipcomp_input(struct mbuf **mp, struct tdb *tdb, int skip, int protoff)
+ipcomp_input(struct mbuf **mp, struct tdb *tdbp, int skip, int protoff)
 {
-	const struct comp_algo *ipcompx = tdb->tdb_compalgxform;
+	const struct comp_algo *ipcompx = tdbp->tdb_compalgxform;
 	struct mbuf *m = *mp;
 	struct cryptodesc *crdc = NULL;
 	struct cryptop *crp;
@@ -169,13 +169,13 @@ ipcomp_input(struct mbuf **mp, struct tdb *tdb, int skip, int protoff)
 	crp->crp_ilen = m->m_pkthdr.len - (skip + hlen);
 	crp->crp_flags = CRYPTO_F_IMBUF | CRYPTO_F_MPSAFE;
 	crp->crp_buf = (caddr_t)m;
-	crp->crp_sid = tdb->tdb_cryptoid;
+	crp->crp_sid = tdbp->tdb_cryptoid;
 
 	KERNEL_LOCK();
 	while ((error = crypto_invoke(crp)) == EAGAIN) {
 		/* Reset the session ID */
-		if (tdb->tdb_cryptoid != 0)
-			tdb->tdb_cryptoid = crp->crp_sid;
+		if (tdbp->tdb_cryptoid != 0)
+			tdbp->tdb_cryptoid = crp->crp_sid;
 	}
 	KERNEL_UNLOCK();
 	if (error) {
@@ -192,23 +192,23 @@ ipcomp_input(struct mbuf **mp, struct tdb *tdb, int skip, int protoff)
 
 	/* update the counters */
 	ibytes = m->m_pkthdr.len - (skip + hlen);
-	tdb->tdb_cur_bytes += ibytes;
-	tdb->tdb_ibytes += ibytes;
+	tdbp->tdb_cur_bytes += ibytes;
+	tdbp->tdb_ibytes += ibytes;
 	ipcompstat_add(ipcomps_ibytes, ibytes);
 
 	/* Hard expiration */
-	if ((tdb->tdb_flags & TDBF_BYTES) &&
-	    (tdb->tdb_cur_bytes >= tdb->tdb_exp_bytes)) {
+	if ((tdbp->tdb_flags & TDBF_BYTES) &&
+	    (tdbp->tdb_cur_bytes >= tdbp->tdb_exp_bytes)) {
 		ipsecstat_inc(ipsec_exctdb);
-		pfkeyv2_expire(tdb, SADB_EXT_LIFETIME_HARD);
-		tdb_delete(tdb);
+		pfkeyv2_expire(tdbp, SADB_EXT_LIFETIME_HARD);
+		tdb_delete(tdbp);
 		goto drop;
 	}
 	/* Notify on soft expiration */
-	if ((tdb->tdb_flags & TDBF_SOFT_BYTES) &&
-	    (tdb->tdb_cur_bytes >= tdb->tdb_soft_bytes)) {
-		pfkeyv2_expire(tdb, SADB_EXT_LIFETIME_SOFT);
-		tdb->tdb_flags &= ~TDBF_SOFT_BYTES;	/* Turn off checking */
+	if ((tdbp->tdb_flags & TDBF_SOFT_BYTES) &&
+	    (tdbp->tdb_cur_bytes >= tdbp->tdb_soft_bytes)) {
+		pfkeyv2_expire(tdbp, SADB_EXT_LIFETIME_SOFT);
+		tdbp->tdb_flags &= ~TDBF_SOFT_BYTES;	/* Turn off checking */
 	}
 
 	/* In case it's not done already, adjust the size of the mbuf chain */
@@ -224,8 +224,8 @@ ipcomp_input(struct mbuf **mp, struct tdb *tdb, int skip, int protoff)
 	m1 = m_getptr(m, skip, &roff);
 	if (m1 == NULL) {
 		DPRINTF("bad mbuf chain, IPCA %s/%08x",
-		    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
-		    ntohl(tdb->tdb_spi));
+		    ipsp_address(&tdbp->tdb_dst, buf, sizeof(buf)),
+		    ntohl(tdbp->tdb_spi));
 		ipcompstat_inc(ipcomps_hdrops);
 		goto drop;
 	}
@@ -287,7 +287,7 @@ ipcomp_input(struct mbuf **mp, struct tdb *tdb, int skip, int protoff)
 	m_copyback(m, protoff, sizeof(u_int8_t), &nproto, M_NOWAIT);
 
 	/* Back to generic IPsec input processing */
-	return ipsec_common_input_cb(mp, tdb, skip, protoff);
+	return ipsec_common_input_cb(mp, tdbp, skip, protoff);
 
  drop:
 	m_freemp(mp);
@@ -299,9 +299,9 @@ ipcomp_input(struct mbuf **mp, struct tdb *tdb, int skip, int protoff)
  * IPComp output routine, called by ipsp_process_packet()
  */
 int
-ipcomp_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
+ipcomp_output(struct mbuf *m, struct tdb *tdbp, int skip, int protoff)
 {
-	const struct comp_algo *ipcompx = tdb->tdb_compalgxform;
+	const struct comp_algo *ipcompx = tdbp->tdb_compalgxform;
 	int error, hlen, ilen, olen, rlen, roff;
 	struct cryptodesc *crdc = NULL;
 	struct cryptop *crp = NULL;
@@ -318,7 +318,7 @@ ipcomp_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	struct ifnet *encif;
 	struct ipcomp  *ipcomp;
 
-	if ((encif = enc_getif(0, tdb->tdb_tap)) != NULL) {
+	if ((encif = enc_getif(0, tdbp->tdb_tap)) != NULL) {
 		encif->if_opackets++;
 		encif->if_obytes += m->m_pkthdr.len;
 
@@ -327,8 +327,8 @@ ipcomp_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 
 			memset(&hdr, 0, sizeof(hdr));
 
-			hdr.af = tdb->tdb_dst.sa.sa_family;
-			hdr.spi = tdb->tdb_spi;
+			hdr.af = tdbp->tdb_dst.sa.sa_family;
+			hdr.spi = tdbp->tdb_spi;
 
 			bpf_mtap_hdr(encif->if_bpf, (char *)&hdr,
 			    ENC_HDRLEN, m, BPF_DIRECTION_OUT);
@@ -339,7 +339,7 @@ ipcomp_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 
 	ipcompstat_inc(ipcomps_output);
 
-	switch (tdb->tdb_dst.sa.sa_family) {
+	switch (tdbp->tdb_dst.sa.sa_family) {
 	case AF_INET:
 		/* Check for IPv4 maximum packet size violations */
 		/*
@@ -348,8 +348,8 @@ ipcomp_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 		 */
 		if (m->m_pkthdr.len + hlen > IP_MAXPACKET) {
 			DPRINTF("packet in IPCA %s/%08x got too big",
-			    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
-			    ntohl(tdb->tdb_spi));
+			    ipsp_address(&tdbp->tdb_dst, buf, sizeof(buf)),
+			    ntohl(tdbp->tdb_spi));
 			ipcompstat_inc(ipcomps_toobig);
 			error = EMSGSIZE;
 			goto drop;
@@ -361,8 +361,8 @@ ipcomp_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 		/* Check for IPv6 maximum packet size violations */
 		if (m->m_pkthdr.len + hlen > IPV6_MAXPACKET) {
 			DPRINTF("packet in IPCA %s/%08x got too big",
-			    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
-			    ntohl(tdb->tdb_spi));
+			    ipsp_address(&tdbp->tdb_dst, buf, sizeof(buf)),
+			    ntohl(tdbp->tdb_spi));
 			ipcompstat_inc(ipcomps_toobig);
 			error = EMSGSIZE;
 			goto drop;
@@ -372,32 +372,32 @@ ipcomp_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 
 	default:
 		DPRINTF("unknown/unsupported protocol family %d, IPCA %s/%08x",
-		    tdb->tdb_dst.sa.sa_family,
-		    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
-		    ntohl(tdb->tdb_spi));
+		    tdbp->tdb_dst.sa.sa_family,
+		    ipsp_address(&tdbp->tdb_dst, buf, sizeof(buf)),
+		    ntohl(tdbp->tdb_spi));
 		ipcompstat_inc(ipcomps_nopf);
 		error = EPFNOSUPPORT;
 		goto drop;
 	}
 
 	/* Update the counters */
-	tdb->tdb_cur_bytes += m->m_pkthdr.len - skip;
+	tdbp->tdb_cur_bytes += m->m_pkthdr.len - skip;
 	ipcompstat_add(ipcomps_obytes, m->m_pkthdr.len - skip);
 
 	/* Hard byte expiration */
-	if ((tdb->tdb_flags & TDBF_BYTES) &&
-	    (tdb->tdb_cur_bytes >= tdb->tdb_exp_bytes)) {
+	if ((tdbp->tdb_flags & TDBF_BYTES) &&
+	    (tdbp->tdb_cur_bytes >= tdbp->tdb_exp_bytes)) {
 		ipsecstat_inc(ipsec_exctdb);
-		pfkeyv2_expire(tdb, SADB_EXT_LIFETIME_HARD);
-		tdb_delete(tdb);
+		pfkeyv2_expire(tdbp, SADB_EXT_LIFETIME_HARD);
+		tdb_delete(tdbp);
 		error = EINVAL;
 		goto drop;
 	}
 	/* Soft byte expiration */
-	if ((tdb->tdb_flags & TDBF_SOFT_BYTES) &&
-	    (tdb->tdb_cur_bytes >= tdb->tdb_soft_bytes)) {
-		pfkeyv2_expire(tdb, SADB_EXT_LIFETIME_SOFT);
-		tdb->tdb_flags &= ~TDBF_SOFT_BYTES;	/* Turn off checking */
+	if ((tdbp->tdb_flags & TDBF_SOFT_BYTES) &&
+	    (tdbp->tdb_cur_bytes >= tdbp->tdb_soft_bytes)) {
+		pfkeyv2_expire(tdbp, SADB_EXT_LIFETIME_SOFT);
+		tdbp->tdb_flags &= ~TDBF_SOFT_BYTES;	/* Turn off checking */
 	}
 	/*
 	 * Loop through mbuf chain; if we find a readonly mbuf,
@@ -412,8 +412,8 @@ ipcomp_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 
 		if (n == NULL) {
 			DPRINTF("bad mbuf chain, IPCA %s/%08x",
-			    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
-			    ntohl(tdb->tdb_spi));
+			    ipsp_address(&tdbp->tdb_dst, buf, sizeof(buf)),
+			    ntohl(tdbp->tdb_spi));
 			ipcompstat_inc(ipcomps_hdrops);
 			error = ENOBUFS;
 			goto drop;
@@ -447,13 +447,13 @@ ipcomp_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	crp->crp_ilen = m->m_pkthdr.len;	/* Total input length */
 	crp->crp_flags = CRYPTO_F_IMBUF | CRYPTO_F_MPSAFE;
 	crp->crp_buf = (caddr_t)m;
-	crp->crp_sid = tdb->tdb_cryptoid;
+	crp->crp_sid = tdbp->tdb_cryptoid;
 
 	KERNEL_LOCK();
 	while ((error = crypto_invoke(crp)) == EAGAIN) {
 		/* Reset the session ID */
-		if (tdb->tdb_cryptoid != 0)
-			tdb->tdb_cryptoid = crp->crp_sid;
+		if (tdbp->tdb_cryptoid != 0)
+			tdbp->tdb_cryptoid = crp->crp_sid;
 	}
 	KERNEL_UNLOCK();
 	if (error) {
@@ -482,8 +482,8 @@ ipcomp_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	mo = m_makespace(m, skip, IPCOMP_HLENGTH, &roff);
 	if (mo == NULL) {
 		DPRINTF("ailed to inject IPCOMP header for IPCA %s/%08x",
-		    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
-		    ntohl(tdb->tdb_spi));
+		    ipsp_address(&tdbp->tdb_dst, buf, sizeof(buf)),
+		    ntohl(tdbp->tdb_spi));
 		ipcompstat_inc(ipcomps_wrap);
 		error = ENOBUFS;
 		goto drop;
@@ -492,11 +492,11 @@ ipcomp_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	/* Initialize the IPCOMP header */
 	ipcomp = (struct ipcomp *)(mtod(mo, caddr_t) + roff);
 	memset(ipcomp, 0, sizeof(struct ipcomp));
-	cpi = (u_int16_t) ntohl(tdb->tdb_spi);
+	cpi = (u_int16_t) ntohl(tdbp->tdb_spi);
 	ipcomp->ipcomp_cpi = htons(cpi);
 
 	/* m_pullup before ? */
-	switch (tdb->tdb_dst.sa.sa_family) {
+	switch (tdbp->tdb_dst.sa.sa_family) {
 	case AF_INET:
 		ip = mtod(m, struct ip *);
 		ipcomp->ipcomp_nh = ip->ip_p;
@@ -511,16 +511,16 @@ ipcomp_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 #endif
 	default:
 		DPRINTF("unsupported protocol family %d, IPCA %s/%08x",
-		    tdb->tdb_dst.sa.sa_family,
-		    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
-		    ntohl(tdb->tdb_spi));
+		    tdbp->tdb_dst.sa.sa_family,
+		    ipsp_address(&tdbp->tdb_dst, buf, sizeof(buf)),
+		    ntohl(tdbp->tdb_spi));
 		ipcompstat_inc(ipcomps_nopf);
 		error = EPFNOSUPPORT;
 		goto drop;
 	}
 
  skiphdr:
-	error = ipsp_process_done(m, tdb);
+	error = ipsp_process_done(m, tdbp);
 	if (error)
 		ipcompstat_inc(ipcomps_outfail);
 	return error;

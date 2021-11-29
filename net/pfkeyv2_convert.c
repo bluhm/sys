@@ -117,7 +117,7 @@
  * of the TDB will be initialized by other import routines, and tdb_init().
  */
 void
-import_sa(struct tdb *tdb, struct sadb_sa *sadb_sa, struct ipsecinit *ii)
+import_sa(struct tdb *tdbp, struct sadb_sa *sadb_sa, struct ipsecinit *ii)
 {
 	if (!sadb_sa)
 		return;
@@ -127,55 +127,55 @@ import_sa(struct tdb *tdb, struct sadb_sa *sadb_sa, struct ipsecinit *ii)
 		ii->ii_authalg = sadb_sa->sadb_sa_auth;
 		ii->ii_compalg = sadb_sa->sadb_sa_encrypt; /* Yeurk! */
 
-		tdb->tdb_spi = sadb_sa->sadb_sa_spi;
-		tdb->tdb_wnd = sadb_sa->sadb_sa_replay;
+		tdbp->tdb_spi = sadb_sa->sadb_sa_spi;
+		tdbp->tdb_wnd = sadb_sa->sadb_sa_replay;
 
 		if (sadb_sa->sadb_sa_flags & SADB_SAFLAGS_PFS)
-			tdb->tdb_flags |= TDBF_PFS;
+			tdbp->tdb_flags |= TDBF_PFS;
 
 		if (sadb_sa->sadb_sa_flags & SADB_X_SAFLAGS_TUNNEL)
-			tdb->tdb_flags |= TDBF_TUNNELING;
+			tdbp->tdb_flags |= TDBF_TUNNELING;
 
 		if (sadb_sa->sadb_sa_flags & SADB_X_SAFLAGS_UDPENCAP)
-			tdb->tdb_flags |= TDBF_UDPENCAP;
+			tdbp->tdb_flags |= TDBF_UDPENCAP;
 
 		if (sadb_sa->sadb_sa_flags & SADB_X_SAFLAGS_ESN)
-			tdb->tdb_flags |= TDBF_ESN;
+			tdbp->tdb_flags |= TDBF_ESN;
 	}
 
 	if (sadb_sa->sadb_sa_state != SADB_SASTATE_MATURE)
-		tdb->tdb_flags |= TDBF_INVALID;
+		tdbp->tdb_flags |= TDBF_INVALID;
 }
 
 /*
  * Export some of the information on a TDB.
  */
 void
-export_sa(void **p, struct tdb *tdb)
+export_sa(void **p, struct tdb *tdbp)
 {
 	struct sadb_sa *sadb_sa = (struct sadb_sa *) *p;
 
 	sadb_sa->sadb_sa_len = sizeof(struct sadb_sa) / sizeof(uint64_t);
 
-	sadb_sa->sadb_sa_spi = tdb->tdb_spi;
-	sadb_sa->sadb_sa_replay = tdb->tdb_wnd;
+	sadb_sa->sadb_sa_spi = tdbp->tdb_spi;
+	sadb_sa->sadb_sa_replay = tdbp->tdb_wnd;
 
-	if (tdb->tdb_flags & TDBF_INVALID)
+	if (tdbp->tdb_flags & TDBF_INVALID)
 		sadb_sa->sadb_sa_state = SADB_SASTATE_LARVAL;
 	else
 		sadb_sa->sadb_sa_state = SADB_SASTATE_MATURE;
 
-	if (tdb->tdb_sproto == IPPROTO_IPCOMP &&
-	    tdb->tdb_compalgxform != NULL) {
-		switch (tdb->tdb_compalgxform->type) {
+	if (tdbp->tdb_sproto == IPPROTO_IPCOMP &&
+	    tdbp->tdb_compalgxform != NULL) {
+		switch (tdbp->tdb_compalgxform->type) {
 		case CRYPTO_DEFLATE_COMP:
 			sadb_sa->sadb_sa_encrypt = SADB_X_CALG_DEFLATE;
 			break;
 		}
 	}
 
-	if (tdb->tdb_authalgxform) {
-		switch (tdb->tdb_authalgxform->type) {
+	if (tdbp->tdb_authalgxform) {
+		switch (tdbp->tdb_authalgxform->type) {
 		case CRYPTO_MD5_HMAC:
 			sadb_sa->sadb_sa_auth = SADB_AALG_MD5HMAC;
 			break;
@@ -218,8 +218,8 @@ export_sa(void **p, struct tdb *tdb)
 		}
 	}
 
-	if (tdb->tdb_encalgxform) {
-		switch (tdb->tdb_encalgxform->type) {
+	if (tdbp->tdb_encalgxform) {
+		switch (tdbp->tdb_encalgxform->type) {
 		case CRYPTO_NULL:
 			sadb_sa->sadb_sa_encrypt = SADB_EALG_NULL;
 			break;
@@ -258,16 +258,16 @@ export_sa(void **p, struct tdb *tdb)
 		}
 	}
 
-	if (tdb->tdb_flags & TDBF_PFS)
+	if (tdbp->tdb_flags & TDBF_PFS)
 		sadb_sa->sadb_sa_flags |= SADB_SAFLAGS_PFS;
 
-	if (tdb->tdb_flags & TDBF_TUNNELING)
+	if (tdbp->tdb_flags & TDBF_TUNNELING)
 		sadb_sa->sadb_sa_flags |= SADB_X_SAFLAGS_TUNNEL;
 
-	if (tdb->tdb_flags & TDBF_UDPENCAP)
+	if (tdbp->tdb_flags & TDBF_UDPENCAP)
 		sadb_sa->sadb_sa_flags |= SADB_X_SAFLAGS_UDPENCAP;
 
-	if (tdb->tdb_flags & TDBF_ESN)
+	if (tdbp->tdb_flags & TDBF_ESN)
 		sadb_sa->sadb_sa_flags |= SADB_X_SAFLAGS_ESN;
 
 	*p += sizeof(struct sadb_sa);
@@ -277,76 +277,76 @@ export_sa(void **p, struct tdb *tdb)
  * Initialize expirations and counters based on lifetime payload.
  */
 void
-import_lifetime(struct tdb *tdb, struct sadb_lifetime *sadb_lifetime, int type)
+import_lifetime(struct tdb *tdbp, struct sadb_lifetime *sadb_lifetime, int type)
 {
 	if (!sadb_lifetime)
 		return;
 
 	switch (type) {
 	case PFKEYV2_LIFETIME_HARD:
-		if ((tdb->tdb_exp_allocations =
+		if ((tdbp->tdb_exp_allocations =
 		    sadb_lifetime->sadb_lifetime_allocations) != 0)
-			tdb->tdb_flags |= TDBF_ALLOCATIONS;
+			tdbp->tdb_flags |= TDBF_ALLOCATIONS;
 		else
-			tdb->tdb_flags &= ~TDBF_ALLOCATIONS;
+			tdbp->tdb_flags &= ~TDBF_ALLOCATIONS;
 
-		if ((tdb->tdb_exp_bytes =
+		if ((tdbp->tdb_exp_bytes =
 		    sadb_lifetime->sadb_lifetime_bytes) != 0)
-			tdb->tdb_flags |= TDBF_BYTES;
+			tdbp->tdb_flags |= TDBF_BYTES;
 		else
-			tdb->tdb_flags &= ~TDBF_BYTES;
+			tdbp->tdb_flags &= ~TDBF_BYTES;
 
-		if ((tdb->tdb_exp_timeout =
+		if ((tdbp->tdb_exp_timeout =
 		    sadb_lifetime->sadb_lifetime_addtime) != 0) {
-			tdb->tdb_flags |= TDBF_TIMER;
-			if (timeout_add_sec(&tdb->tdb_timer_tmo,
-			    tdb->tdb_exp_timeout))
-				tdb_ref(tdb);
+			tdbp->tdb_flags |= TDBF_TIMER;
+			if (timeout_add_sec(&tdbp->tdb_timer_tmo,
+			    tdbp->tdb_exp_timeout))
+				tdb_ref(tdbp);
 		} else
-			tdb->tdb_flags &= ~TDBF_TIMER;
+			tdbp->tdb_flags &= ~TDBF_TIMER;
 
-		if ((tdb->tdb_exp_first_use =
+		if ((tdbp->tdb_exp_first_use =
 		    sadb_lifetime->sadb_lifetime_usetime) != 0)
-			tdb->tdb_flags |= TDBF_FIRSTUSE;
+			tdbp->tdb_flags |= TDBF_FIRSTUSE;
 		else
-			tdb->tdb_flags &= ~TDBF_FIRSTUSE;
+			tdbp->tdb_flags &= ~TDBF_FIRSTUSE;
 		break;
 
 	case PFKEYV2_LIFETIME_SOFT:
-		if ((tdb->tdb_soft_allocations =
+		if ((tdbp->tdb_soft_allocations =
 		    sadb_lifetime->sadb_lifetime_allocations) != 0)
-			tdb->tdb_flags |= TDBF_SOFT_ALLOCATIONS;
+			tdbp->tdb_flags |= TDBF_SOFT_ALLOCATIONS;
 		else
-			tdb->tdb_flags &= ~TDBF_SOFT_ALLOCATIONS;
+			tdbp->tdb_flags &= ~TDBF_SOFT_ALLOCATIONS;
 
-		if ((tdb->tdb_soft_bytes =
+		if ((tdbp->tdb_soft_bytes =
 		    sadb_lifetime->sadb_lifetime_bytes) != 0)
-			tdb->tdb_flags |= TDBF_SOFT_BYTES;
+			tdbp->tdb_flags |= TDBF_SOFT_BYTES;
 		else
-			tdb->tdb_flags &= ~TDBF_SOFT_BYTES;
+			tdbp->tdb_flags &= ~TDBF_SOFT_BYTES;
 
-		if ((tdb->tdb_soft_timeout =
+		if ((tdbp->tdb_soft_timeout =
 		    sadb_lifetime->sadb_lifetime_addtime) != 0) {
-			tdb->tdb_flags |= TDBF_SOFT_TIMER;
-			if (timeout_add_sec(&tdb->tdb_stimer_tmo,
-			    tdb->tdb_soft_timeout))
-				tdb_ref(tdb);
+			tdbp->tdb_flags |= TDBF_SOFT_TIMER;
+			if (timeout_add_sec(&tdbp->tdb_stimer_tmo,
+			    tdbp->tdb_soft_timeout))
+				tdb_ref(tdbp);
 		} else
-			tdb->tdb_flags &= ~TDBF_SOFT_TIMER;
+			tdbp->tdb_flags &= ~TDBF_SOFT_TIMER;
 
-		if ((tdb->tdb_soft_first_use =
+		if ((tdbp->tdb_soft_first_use =
 		    sadb_lifetime->sadb_lifetime_usetime) != 0)
-			tdb->tdb_flags |= TDBF_SOFT_FIRSTUSE;
+			tdbp->tdb_flags |= TDBF_SOFT_FIRSTUSE;
 		else
-			tdb->tdb_flags &= ~TDBF_SOFT_FIRSTUSE;
+			tdbp->tdb_flags &= ~TDBF_SOFT_FIRSTUSE;
 		break;
 
 	case PFKEYV2_LIFETIME_CURRENT:  /* Nothing fancy here. */
-		tdb->tdb_cur_allocations =
+		tdbp->tdb_cur_allocations =
 		    sadb_lifetime->sadb_lifetime_allocations;
-		tdb->tdb_cur_bytes = sadb_lifetime->sadb_lifetime_bytes;
-		tdb->tdb_established = sadb_lifetime->sadb_lifetime_addtime;
-		tdb->tdb_first_use = sadb_lifetime->sadb_lifetime_usetime;
+		tdbp->tdb_cur_bytes = sadb_lifetime->sadb_lifetime_bytes;
+		tdbp->tdb_established = sadb_lifetime->sadb_lifetime_addtime;
+		tdbp->tdb_first_use = sadb_lifetime->sadb_lifetime_usetime;
 	}
 }
 
@@ -354,7 +354,7 @@ import_lifetime(struct tdb *tdb, struct sadb_lifetime *sadb_lifetime, int type)
  * Export TDB expiration information.
  */
 void
-export_lifetime(void **p, struct tdb *tdb, int type)
+export_lifetime(void **p, struct tdb *tdbp, int type)
 {
 	struct sadb_lifetime *sadb_lifetime = (struct sadb_lifetime *) *p;
 
@@ -363,54 +363,54 @@ export_lifetime(void **p, struct tdb *tdb, int type)
 
 	switch (type) {
 	case PFKEYV2_LIFETIME_HARD:
-		if (tdb->tdb_flags & TDBF_ALLOCATIONS)
+		if (tdbp->tdb_flags & TDBF_ALLOCATIONS)
 			sadb_lifetime->sadb_lifetime_allocations =
-			    tdb->tdb_exp_allocations;
+			    tdbp->tdb_exp_allocations;
 
-		if (tdb->tdb_flags & TDBF_BYTES)
+		if (tdbp->tdb_flags & TDBF_BYTES)
 			sadb_lifetime->sadb_lifetime_bytes =
-			    tdb->tdb_exp_bytes;
+			    tdbp->tdb_exp_bytes;
 
-		if (tdb->tdb_flags & TDBF_TIMER)
+		if (tdbp->tdb_flags & TDBF_TIMER)
 			sadb_lifetime->sadb_lifetime_addtime =
-			    tdb->tdb_exp_timeout;
+			    tdbp->tdb_exp_timeout;
 
-		if (tdb->tdb_flags & TDBF_FIRSTUSE)
+		if (tdbp->tdb_flags & TDBF_FIRSTUSE)
 			sadb_lifetime->sadb_lifetime_usetime =
-			    tdb->tdb_exp_first_use;
+			    tdbp->tdb_exp_first_use;
 		break;
 
 	case PFKEYV2_LIFETIME_SOFT:
-		if (tdb->tdb_flags & TDBF_SOFT_ALLOCATIONS)
+		if (tdbp->tdb_flags & TDBF_SOFT_ALLOCATIONS)
 			sadb_lifetime->sadb_lifetime_allocations =
-			    tdb->tdb_soft_allocations;
+			    tdbp->tdb_soft_allocations;
 
-		if (tdb->tdb_flags & TDBF_SOFT_BYTES)
+		if (tdbp->tdb_flags & TDBF_SOFT_BYTES)
 			sadb_lifetime->sadb_lifetime_bytes =
-			    tdb->tdb_soft_bytes;
+			    tdbp->tdb_soft_bytes;
 
-		if (tdb->tdb_flags & TDBF_SOFT_TIMER)
+		if (tdbp->tdb_flags & TDBF_SOFT_TIMER)
 			sadb_lifetime->sadb_lifetime_addtime =
-			    tdb->tdb_soft_timeout;
+			    tdbp->tdb_soft_timeout;
 
-		if (tdb->tdb_flags & TDBF_SOFT_FIRSTUSE)
+		if (tdbp->tdb_flags & TDBF_SOFT_FIRSTUSE)
 			sadb_lifetime->sadb_lifetime_usetime =
-			    tdb->tdb_soft_first_use;
+			    tdbp->tdb_soft_first_use;
 		break;
 
 	case PFKEYV2_LIFETIME_CURRENT:
 		sadb_lifetime->sadb_lifetime_allocations =
-		    tdb->tdb_cur_allocations;
-		sadb_lifetime->sadb_lifetime_bytes = tdb->tdb_cur_bytes;
-		sadb_lifetime->sadb_lifetime_addtime = tdb->tdb_established;
-		sadb_lifetime->sadb_lifetime_usetime = tdb->tdb_first_use;
+		    tdbp->tdb_cur_allocations;
+		sadb_lifetime->sadb_lifetime_bytes = tdbp->tdb_cur_bytes;
+		sadb_lifetime->sadb_lifetime_addtime = tdbp->tdb_established;
+		sadb_lifetime->sadb_lifetime_usetime = tdbp->tdb_first_use;
 		break;
 
 	case PFKEYV2_LIFETIME_LASTUSE:
 		sadb_lifetime->sadb_lifetime_allocations = 0;
 		sadb_lifetime->sadb_lifetime_bytes = 0;
 		sadb_lifetime->sadb_lifetime_addtime = 0;
-		sadb_lifetime->sadb_lifetime_usetime = tdb->tdb_last_used;
+		sadb_lifetime->sadb_lifetime_usetime = tdbp->tdb_last_used;
 		break;
 	}
 
@@ -809,43 +809,43 @@ import_key(struct ipsecinit *ii, struct sadb_key *sadb_key, int type)
 }
 
 void
-export_key(void **p, struct tdb *tdb, int type)
+export_key(void **p, struct tdb *tdbp, int type)
 {
 	struct sadb_key *sadb_key = (struct sadb_key *) *p;
 
 	if (type == PFKEYV2_ENCRYPTION_KEY) {
 		sadb_key->sadb_key_len = (sizeof(struct sadb_key) +
-		    PADUP(tdb->tdb_emxkeylen)) /
+		    PADUP(tdbp->tdb_emxkeylen)) /
 		    sizeof(uint64_t);
-		sadb_key->sadb_key_bits = tdb->tdb_emxkeylen * 8;
+		sadb_key->sadb_key_bits = tdbp->tdb_emxkeylen * 8;
 		*p += sizeof(struct sadb_key);
-		bcopy(tdb->tdb_emxkey, *p, tdb->tdb_emxkeylen);
-		*p += PADUP(tdb->tdb_emxkeylen);
+		bcopy(tdbp->tdb_emxkey, *p, tdbp->tdb_emxkeylen);
+		*p += PADUP(tdbp->tdb_emxkeylen);
 	} else {
 		sadb_key->sadb_key_len = (sizeof(struct sadb_key) +
-		    PADUP(tdb->tdb_amxkeylen)) /
+		    PADUP(tdbp->tdb_amxkeylen)) /
 		    sizeof(uint64_t);
-		sadb_key->sadb_key_bits = tdb->tdb_amxkeylen * 8;
+		sadb_key->sadb_key_bits = tdbp->tdb_amxkeylen * 8;
 		*p += sizeof(struct sadb_key);
-		bcopy(tdb->tdb_amxkey, *p, tdb->tdb_amxkeylen);
-		*p += PADUP(tdb->tdb_amxkeylen);
+		bcopy(tdbp->tdb_amxkey, *p, tdbp->tdb_amxkeylen);
+		*p += PADUP(tdbp->tdb_amxkeylen);
 	}
 }
 
 /* Import/Export remote port for UDP Encapsulation */
 void
-import_udpencap(struct tdb *tdb, struct sadb_x_udpencap *sadb_udpencap)
+import_udpencap(struct tdb *tdbp, struct sadb_x_udpencap *sadb_udpencap)
 {
 	if (sadb_udpencap)
-		tdb->tdb_udpencap_port = sadb_udpencap->sadb_x_udpencap_port;
+		tdbp->tdb_udpencap_port = sadb_udpencap->sadb_x_udpencap_port;
 }
 
 void
-export_udpencap(void **p, struct tdb *tdb)
+export_udpencap(void **p, struct tdb *tdbp)
 {
 	struct sadb_x_udpencap *sadb_udpencap = (struct sadb_x_udpencap *) *p;
 
-	sadb_udpencap->sadb_x_udpencap_port = tdb->tdb_udpencap_port;
+	sadb_udpencap->sadb_x_udpencap_port = tdbp->tdb_udpencap_port;
 	sadb_udpencap->sadb_x_udpencap_reserved = 0;
 	sadb_udpencap->sadb_x_udpencap_len =
 	    sizeof(struct sadb_x_udpencap) / sizeof(uint64_t);
@@ -854,11 +854,11 @@ export_udpencap(void **p, struct tdb *tdb)
 
 /* Export PF replay for SA */
 void
-export_replay(void **p, struct tdb *tdb)
+export_replay(void **p, struct tdb *tdbp)
 {
 	struct sadb_x_replay *sreplay = (struct sadb_x_replay *)*p;
 
-	sreplay->sadb_x_replay_count = tdb->tdb_rpl;
+	sreplay->sadb_x_replay_count = tdbp->tdb_rpl;
 	sreplay->sadb_x_replay_len =
 	    sizeof(struct sadb_x_replay) / sizeof(uint64_t);
 	*p += sizeof(struct sadb_x_replay);
@@ -866,11 +866,11 @@ export_replay(void **p, struct tdb *tdb)
 
 /* Export mtu for SA */
 void
-export_mtu(void **p, struct tdb *tdb)
+export_mtu(void **p, struct tdb *tdbp)
 {
 	struct sadb_x_mtu *smtu = (struct sadb_x_mtu *)*p;
 
-	smtu->sadb_x_mtu_mtu = tdb->tdb_mtu;
+	smtu->sadb_x_mtu_mtu = tdbp->tdb_mtu;
 	smtu->sadb_x_mtu_len =
 	    sizeof(struct sadb_x_mtu) / sizeof(uint64_t);
 	*p += sizeof(struct sadb_x_mtu);
@@ -878,20 +878,20 @@ export_mtu(void **p, struct tdb *tdb)
 
 /* Import rdomain switch for SA */
 void
-import_rdomain(struct tdb *tdb, struct sadb_x_rdomain *srdomain)
+import_rdomain(struct tdb *tdbp, struct sadb_x_rdomain *srdomain)
 {
 	if (srdomain)
-		tdb->tdb_rdomain_post = srdomain->sadb_x_rdomain_dom2;
+		tdbp->tdb_rdomain_post = srdomain->sadb_x_rdomain_dom2;
 }
 
 /* Export rdomain switch for SA */
 void
-export_rdomain(void **p, struct tdb *tdb)
+export_rdomain(void **p, struct tdb *tdbp)
 {
 	struct sadb_x_rdomain *srdomain = (struct sadb_x_rdomain *)*p;
 
-	srdomain->sadb_x_rdomain_dom1 = tdb->tdb_rdomain;
-	srdomain->sadb_x_rdomain_dom2 = tdb->tdb_rdomain_post;
+	srdomain->sadb_x_rdomain_dom1 = tdbp->tdb_rdomain;
+	srdomain->sadb_x_rdomain_dom2 = tdbp->tdb_rdomain_post;
 	srdomain->sadb_x_rdomain_len =
 	    sizeof(struct sadb_x_rdomain) / sizeof(uint64_t);
 	*p += sizeof(struct sadb_x_rdomain);
@@ -900,24 +900,24 @@ export_rdomain(void **p, struct tdb *tdb)
 #if NPF > 0
 /* Import PF tag information for SA */
 void
-import_tag(struct tdb *tdb, struct sadb_x_tag *stag)
+import_tag(struct tdb *tdbp, struct sadb_x_tag *stag)
 {
 	char *s;
 
 	if (stag) {
 		s = (char *)(stag + 1);
-		tdb->tdb_tag = pf_tagname2tag(s, 1);
+		tdbp->tdb_tag = pf_tagname2tag(s, 1);
 	}
 }
 
 /* Export PF tag information for SA */
 void
-export_tag(void **p, struct tdb *tdb)
+export_tag(void **p, struct tdb *tdbp)
 {
 	struct sadb_x_tag *stag = (struct sadb_x_tag *)*p;
 	char *s = (char *)(stag + 1);
 
-	pf_tag2tagname(tdb->tdb_tag, s);
+	pf_tag2tagname(tdbp->tdb_tag, s);
 
 	stag->sadb_x_tag_taglen = strlen(s) + 1;
 	stag->sadb_x_tag_len = (sizeof(struct sadb_x_tag) +
@@ -927,50 +927,50 @@ export_tag(void **p, struct tdb *tdb)
 
 /* Import enc(4) tap device information for SA */
 void
-import_tap(struct tdb *tdb, struct sadb_x_tap *stap)
+import_tap(struct tdb *tdbp, struct sadb_x_tap *stap)
 {
 	if (stap)
-		tdb->tdb_tap = stap->sadb_x_tap_unit;
+		tdbp->tdb_tap = stap->sadb_x_tap_unit;
 }
 
 /* Export enc(4) tap device information for SA */
 void
-export_tap(void **p, struct tdb *tdb)
+export_tap(void **p, struct tdb *tdbp)
 {
 	struct sadb_x_tap *stag = (struct sadb_x_tap *)*p;
 
-	stag->sadb_x_tap_unit = tdb->tdb_tap;
+	stag->sadb_x_tap_unit = tdbp->tdb_tap;
 	stag->sadb_x_tap_len = sizeof(struct sadb_x_tap) / sizeof(uint64_t);
 	*p += sizeof(struct sadb_x_tap);
 }
 #endif
 
 void
-export_satype(void **p, struct tdb *tdb)
+export_satype(void **p, struct tdb *tdbp)
 {
 	struct sadb_protocol *sab = *p;
 
 	sab->sadb_protocol_len = sizeof(struct sadb_protocol) /
 	    sizeof(uint64_t);
-	sab->sadb_protocol_proto = tdb->tdb_satype;
+	sab->sadb_protocol_proto = tdbp->tdb_satype;
 	*p += sizeof(struct sadb_protocol);
 }
 
 void
-export_counter(void **p, struct tdb *tdb)
+export_counter(void **p, struct tdb *tdbp)
 {
 	struct sadb_x_counter *scnt = (struct sadb_x_counter *)*p;
 
 	scnt->sadb_x_counter_len = sizeof(struct sadb_x_counter) /
 	    sizeof(uint64_t);
 	scnt->sadb_x_counter_pad = 0;
-	scnt->sadb_x_counter_ipackets = tdb->tdb_ipackets;
-	scnt->sadb_x_counter_opackets = tdb->tdb_opackets;
-	scnt->sadb_x_counter_ibytes = tdb->tdb_ibytes;
-	scnt->sadb_x_counter_obytes = tdb->tdb_obytes;
-	scnt->sadb_x_counter_idrops = tdb->tdb_idrops;
-	scnt->sadb_x_counter_odrops = tdb->tdb_odrops;
-	scnt->sadb_x_counter_idecompbytes = tdb->tdb_idecompbytes;
-	scnt->sadb_x_counter_ouncompbytes = tdb->tdb_ouncompbytes;
+	scnt->sadb_x_counter_ipackets = tdbp->tdb_ipackets;
+	scnt->sadb_x_counter_opackets = tdbp->tdb_opackets;
+	scnt->sadb_x_counter_ibytes = tdbp->tdb_ibytes;
+	scnt->sadb_x_counter_obytes = tdbp->tdb_obytes;
+	scnt->sadb_x_counter_idrops = tdbp->tdb_idrops;
+	scnt->sadb_x_counter_odrops = tdbp->tdb_odrops;
+	scnt->sadb_x_counter_idecompbytes = tdbp->tdb_idecompbytes;
+	scnt->sadb_x_counter_ouncompbytes = tdbp->tdb_ouncompbytes;
 	*p += sizeof(struct sadb_x_counter);
 }

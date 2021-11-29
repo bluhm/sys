@@ -91,7 +91,7 @@ ip6_forward(struct mbuf *m, struct rtentry *rt, int srcrt)
 	int error = 0, type = 0, code = 0, destmtu = 0;
 	struct mbuf *mcopy = NULL;
 #ifdef IPSEC
-	struct tdb *tdb = NULL;
+	struct tdb *tdbp = NULL;
 #endif /* IPSEC */
 	char src6[INET6_ADDRSTRLEN], dst6[INET6_ADDRSTRLEN];
 
@@ -145,7 +145,7 @@ reroute:
 
 #ifdef IPSEC
 	if (ipsec_in_use) {
-		tdb = ip6_output_ipsec_lookup(m, &error, NULL);
+		tdbp = ip6_output_ipsec_lookup(m, &error, NULL);
 		if (error != 0) {
 			/*
 			 * -EINVAL is used to indicate that the packet should
@@ -217,11 +217,11 @@ reroute:
 	 * Check if the packet needs encapsulation.
 	 * ipsp_process_packet will never come back to here.
 	 */
-	if (tdb != NULL) {
+	if (tdbp != NULL) {
 		/* Callee frees mbuf */
 		ro.ro_rt = rt;
 		ro.ro_tableid = m->m_pkthdr.ph_rtableid;
-		error = ip6_output_ipsec_send(tdb, m, &ro, 0, 1);
+		error = ip6_output_ipsec_send(tdbp, m, &ro, 0, 1);
 		rt = ro.ro_rt;
 		if (error)
 			goto senderr;

@@ -983,7 +983,7 @@ tcp_signature_apply(caddr_t fstate, caddr_t data, unsigned int len)
 }
 
 int
-tcp_signature(struct tdb *tdb, int af, struct mbuf *m, struct tcphdr *th,
+tcp_signature(struct tdb *tdbp, int af, struct mbuf *m, struct tcphdr *th,
     int iphlen, int doswap, char *sig)
 {
 	MD5_CTX ctx;
@@ -1049,7 +1049,7 @@ tcp_signature(struct tdb *tdb, int af, struct mbuf *m, struct tcphdr *th,
 	    tcp_signature_apply, (caddr_t)&ctx))
 		return (-1); 
 
-	MD5Update(&ctx, tdb->tdb_amxkey, tdb->tdb_amxkeylen);
+	MD5Update(&ctx, tdbp->tdb_amxkey, tdbp->tdb_amxkeylen);
 	MD5Final(sig, &ctx);
 
 	return (0);

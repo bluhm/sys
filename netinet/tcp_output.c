@@ -840,7 +840,7 @@ send:
 	if (tp->t_flags & TF_SIGNATURE) {
 		int iphlen;
 		union sockaddr_union src, dst;
-		struct tdb *tdb;
+		struct tdb *tdbp;
 
 		bzero(&src, sizeof(union sockaddr_union));
 		bzero(&dst, sizeof(union sockaddr_union));
@@ -869,20 +869,20 @@ send:
 #endif /* INET6 */
 		}
 
-		tdb = gettdbbysrcdst(rtable_l2(tp->t_inpcb->inp_rtableid),
+		tdbp = gettdbbysrcdst(rtable_l2(tp->t_inpcb->inp_rtableid),
 		    0, &src, &dst, IPPROTO_TCP);
-		if (tdb == NULL) {
+		if (tdbp == NULL) {
 			m_freem(m);
 			return (EPERM);
 		}
 
-		if (tcp_signature(tdb, tp->pf, m, th, iphlen, 0,
+		if (tcp_signature(tdbp, tp->pf, m, th, iphlen, 0,
 		    mtod(m, caddr_t) + hdrlen - optlen + sigoff) < 0) {
 			m_freem(m);
-			tdb_unref(tdb);
+			tdb_unref(tdbp);
 			return (EINVAL);
 		}
-		tdb_unref(tdb);
+		tdb_unref(tdbp);
 	}
 #endif /* TCP_SIGNATURE */
 

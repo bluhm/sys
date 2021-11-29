@@ -1062,7 +1062,7 @@ ipsec_protoff(struct mbuf *m, int off, int af)
 int
 ipsec_forward_check(struct mbuf *m, int hlen, int af)
 {
-	struct tdb *tdb;
+	struct tdb *tdbp;
 	struct tdb_ident *tdbi;
 	struct m_tag *mtag;
 	int error = 0;
@@ -1074,11 +1074,12 @@ ipsec_forward_check(struct mbuf *m, int hlen, int af)
 	mtag = m_tag_find(m, PACKET_TAG_IPSEC_IN_DONE, NULL);
 	if (mtag != NULL) {
 		tdbi = (struct tdb_ident *)(mtag + 1);
-		tdb = gettdb(tdbi->rdomain, tdbi->spi, &tdbi->dst, tdbi->proto);
+		tdbp = gettdb(tdbi->rdomain, tdbi->spi, &tdbi->dst,
+		    tdbi->proto);
 	} else
-		tdb = NULL;
-	ipsp_spd_lookup(m, af, hlen, &error, IPSP_DIRECTION_IN, tdb, NULL, 0);
-	tdb_unref(tdb);
+		tdbp = NULL;
+	ipsp_spd_lookup(m, af, hlen, &error, IPSP_DIRECTION_IN, tdbp, NULL, 0);
+	tdb_unref(tdbp);
 
 	return error;
 }
@@ -1086,7 +1087,7 @@ ipsec_forward_check(struct mbuf *m, int hlen, int af)
 int
 ipsec_local_check(struct mbuf *m, int hlen, int proto, int af)
 {
-	struct tdb *tdb;
+	struct tdb *tdbp;
 	struct tdb_ident *tdbi;
 	struct m_tag *mtag;
 	int error = 0;
@@ -1145,13 +1146,13 @@ ipsec_local_check(struct mbuf *m, int hlen, int proto, int af)
 	mtag = m_tag_find(m, PACKET_TAG_IPSEC_IN_DONE, NULL);
 	if (mtag) {
 		tdbi = (struct tdb_ident *)(mtag + 1);
-		tdb = gettdb(tdbi->rdomain, tdbi->spi, &tdbi->dst,
+		tdbp = gettdb(tdbi->rdomain, tdbi->spi, &tdbi->dst,
 		    tdbi->proto);
 	} else
-		tdb = NULL;
+		tdbp = NULL;
 	ipsp_spd_lookup(m, af, hlen, &error, IPSP_DIRECTION_IN,
-	    tdb, NULL, 0);
-	tdb_unref(tdb);
+	    tdbp, NULL, 0);
+	tdb_unref(tdbp);
 
 	return error;
 }

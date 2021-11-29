@@ -331,7 +331,7 @@ ipip_input_if(struct mbuf **mp, int *offp, int proto, int oaf,
 }
 
 int
-ipip_output(struct mbuf **mp, struct tdb *tdb)
+ipip_output(struct mbuf **mp, struct tdb *tdbp)
 {
 	struct mbuf *m = *mp;
 	u_int8_t tp, otos, itos;
@@ -350,16 +350,16 @@ ipip_output(struct mbuf **mp, struct tdb *tdb)
 	m_copydata(m, 0, 1, &tp);
 	tp = (tp >> 4) & 0xff;  /* Get the IP version number. */
 
-	switch (tdb->tdb_dst.sa.sa_family) {
+	switch (tdbp->tdb_dst.sa.sa_family) {
 	case AF_INET:
-		if (tdb->tdb_src.sa.sa_family != AF_INET ||
-		    tdb->tdb_src.sin.sin_addr.s_addr == INADDR_ANY ||
-		    tdb->tdb_dst.sin.sin_addr.s_addr == INADDR_ANY) {
+		if (tdbp->tdb_src.sa.sa_family != AF_INET ||
+		    tdbp->tdb_src.sin.sin_addr.s_addr == INADDR_ANY ||
+		    tdbp->tdb_dst.sin.sin_addr.s_addr == INADDR_ANY) {
 
 			DPRINTF("unspecified tunnel endpoind address "
 			    "in SA %s/%08x",
-			    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
-			    ntohl(tdb->tdb_spi));
+			    ipsp_address(&tdbp->tdb_dst, buf, sizeof(buf)),
+			    ntohl(tdbp->tdb_spi));
 
 			ipipstat_inc(ipips_unspec);
 			error = EINVAL;
@@ -382,8 +382,8 @@ ipip_output(struct mbuf **mp, struct tdb *tdb)
 		ipo->ip_len = htons(m->m_pkthdr.len);
 		ipo->ip_ttl = ip_defttl;
 		ipo->ip_sum = 0;
-		ipo->ip_src = tdb->tdb_src.sin.sin_addr;
-		ipo->ip_dst = tdb->tdb_dst.sin.sin_addr;
+		ipo->ip_src = tdbp->tdb_src.sin.sin_addr;
+		ipo->ip_dst = tdbp->tdb_dst.sin.sin_addr;
 
 		/*
 		 * We do the htons() to prevent snoopers from determining our
@@ -435,20 +435,20 @@ ipip_output(struct mbuf **mp, struct tdb *tdb)
 		ipo->ip_tos = otos;
 
 		obytes = m->m_pkthdr.len - sizeof(struct ip);
-		if (tdb->tdb_xform->xf_type == XF_IP4)
-			tdb->tdb_cur_bytes += obytes;
+		if (tdbp->tdb_xform->xf_type == XF_IP4)
+			tdbp->tdb_cur_bytes += obytes;
 		break;
 
 #ifdef INET6
 	case AF_INET6:
-		if (IN6_IS_ADDR_UNSPECIFIED(&tdb->tdb_dst.sin6.sin6_addr) ||
-		    tdb->tdb_src.sa.sa_family != AF_INET6 ||
-		    IN6_IS_ADDR_UNSPECIFIED(&tdb->tdb_src.sin6.sin6_addr)) {
+		if (IN6_IS_ADDR_UNSPECIFIED(&tdbp->tdb_dst.sin6.sin6_addr) ||
+		    tdbp->tdb_src.sa.sa_family != AF_INET6 ||
+		    IN6_IS_ADDR_UNSPECIFIED(&tdbp->tdb_src.sin6.sin6_addr)) {
 
 			DPRINTF("unspecified tunnel endpoind address "
 			    "in SA %s/%08x",
-			    ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)),
-			    ntohl(tdb->tdb_spi));
+			    ipsp_address(&tdbp->tdb_dst, buf, sizeof(buf)),
+			    ntohl(tdbp->tdb_spi));
 
 			ipipstat_inc(ipips_unspec);
 			error = EINVAL;
@@ -481,8 +481,8 @@ ipip_output(struct mbuf **mp, struct tdb *tdb)
 		ip6o->ip6_vfc |= IPV6_VERSION;
 		ip6o->ip6_plen = htons(m->m_pkthdr.len - sizeof(*ip6o));
 		ip6o->ip6_hlim = ip_defttl;
-		in6_embedscope(&ip6o->ip6_src, &tdb->tdb_src.sin6, NULL);
-		in6_embedscope(&ip6o->ip6_dst, &tdb->tdb_dst.sin6, NULL);
+		in6_embedscope(&ip6o->ip6_src, &tdbp->tdb_src.sin6, NULL);
+		in6_embedscope(&ip6o->ip6_dst, &tdbp->tdb_dst.sin6, NULL);
 
 		if (tp == IPVERSION) {
 			/* Save ECN notification */
@@ -515,14 +515,14 @@ ipip_output(struct mbuf **mp, struct tdb *tdb)
 		ip6o->ip6_flow |= htonl((u_int32_t) otos << 20);
 
 		obytes = m->m_pkthdr.len - sizeof(struct ip6_hdr);
-		if (tdb->tdb_xform->xf_type == XF_IP4)
-			tdb->tdb_cur_bytes += obytes;
+		if (tdbp->tdb_xform->xf_type == XF_IP4)
+			tdbp->tdb_cur_bytes += obytes;
 		break;
 #endif /* INET6 */
 
 	default:
 		DPRINTF("unsupported protocol family %d",
-		    tdb->tdb_dst.sa.sa_family);
+		    tdbp->tdb_dst.sa.sa_family);
 		ipipstat_inc(ipips_family);
 		error = EPFNOSUPPORT;
 		goto drop;
@@ -557,7 +557,7 @@ ipe4_zeroize(struct tdb *tdbp)
 }
 
 int
-ipe4_input(struct mbuf **mp, struct tdb *tdb, int hlen, int proto)
+ipe4_input(struct mbuf **mp, struct tdb *tdbp, int hlen, int proto)
 {
 	/* This is a rather serious mistake, so no conditional printing. */
 	printf("%s: should never be called\n", __func__);

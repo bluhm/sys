@@ -566,7 +566,7 @@ findpcb:
 #ifdef IPSEC
 	if (ipsec_in_use) {
 		struct m_tag *mtag;
-		struct tdb *tdb = NULL;
+		struct tdb *tdbp = NULL;
 		int error;
 
 		/* Find most recent IPsec tag */
@@ -575,12 +575,12 @@ findpcb:
 			struct tdb_ident *tdbi;
 
 			tdbi = (struct tdb_ident *)(mtag + 1);
-			tdb = gettdb(tdbi->rdomain, tdbi->spi,
+			tdbp = gettdb(tdbi->rdomain, tdbi->spi,
 			    &tdbi->dst, tdbi->proto);
 		}
 		ipsp_spd_lookup(m, af, iphlen, &error, IPSP_DIRECTION_IN,
-		    tdb, inp, 0);
-		tdb_unref(tdb);
+		    tdbp, inp, 0);
+		tdb_unref(tdbp);
 		if (error) {
 			tcpstat_inc(tcps_rcvnosec);
 			goto drop;
@@ -2112,7 +2112,7 @@ tcp_dooptions(struct tcpcb *tp, u_char *cp, int cnt, struct tcphdr *th,
 	int opt, optlen;
 #ifdef TCP_SIGNATURE
 	caddr_t sigp = NULL;
-	struct tdb *tdb = NULL;
+	struct tdb *tdbp = NULL;
 #endif /* TCP_SIGNATURE */
 
 	for (; cp && cnt > 0; cnt -= optlen, cp += optlen) {
@@ -2234,14 +2234,14 @@ tcp_dooptions(struct tcpcb *tp, u_char *cp, int cnt, struct tcphdr *th,
 #endif /* INET6 */
 		}
 
-		tdb = gettdbbysrcdst(rtable_l2(rtableid),
+		tdbp = gettdbbysrcdst(rtable_l2(rtableid),
 		    0, &src, &dst, IPPROTO_TCP);
 
 		/*
 		 * We don't have an SA for this peer, so we turn off
 		 * TF_SIGNATURE on the listen socket
 		 */
-		if (tdb == NULL && tp->t_state == TCPS_LISTEN)
+		if (tdbp == NULL && tp->t_state == TCPS_LISTEN)
 			tp->t_flags &= ~TF_SIGNATURE;
 
 	}
@@ -2254,12 +2254,12 @@ tcp_dooptions(struct tcpcb *tp, u_char *cp, int cnt, struct tcphdr *th,
 	if (sigp) {
 		char sig[16];
 
-		if (tdb == NULL) {
+		if (tdbp == NULL) {
 			tcpstat_inc(tcps_rcvbadsig);
 			goto bad;
 		}
 
-		if (tcp_signature(tdb, tp->pf, m, th, iphlen, 1, sig) < 0)
+		if (tcp_signature(tdbp, tp->pf, m, th, iphlen, 1, sig) < 0)
 			goto bad;
 
 		if (timingsafe_bcmp(sig, sigp, 16)) {
@@ -2270,16 +2270,16 @@ tcp_dooptions(struct tcpcb *tp, u_char *cp, int cnt, struct tcphdr *th,
 		tcpstat_inc(tcps_rcvgoodsig);
 	}
 
-	tdb_unref(tdb);
+	tdb_unref(tdbp);
 #endif /* TCP_SIGNATURE */
 
 	return (0);
 
 #ifdef TCP_SIGNATURE
  bad:
-	tdb_unref(tdb);
-#endif /* TCP_SIGNATURE */
+	tdb_unref(tdbp);
 	return (-1);
+#endif /* TCP_SIGNATURE */
 }
 
 u_long
@@ -4027,7 +4027,7 @@ syn_cache_respond(struct syn_cache *sc, struct mbuf *m)
 #ifdef TCP_SIGNATURE
 	if (sc->sc_flags & SCF_SIGNATURE) {
 		union sockaddr_union src, dst;
-		struct tdb *tdb;
+		struct tdb *tdbp;
 
 		bzero(&src, sizeof(union sockaddr_union));
 		bzero(&dst, sizeof(union sockaddr_union));
@@ -4050,9 +4050,9 @@ syn_cache_respond(struct syn_cache *sc, struct mbuf *m)
 #endif /* INET6 */
 		}
 
-		tdb = gettdbbysrcdst(rtable_l2(sc->sc_rtableid),
+		tdbp = gettdbbysrcdst(rtable_l2(sc->sc_rtableid),
 		    0, &src, &dst, IPPROTO_TCP);
-		if (tdb == NULL) {
+		if (tdbp == NULL) {
 			m_freem(m);
 			return (EPERM);
 		}
@@ -4061,13 +4061,13 @@ syn_cache_respond(struct syn_cache *sc, struct mbuf *m)
 		*(optp++) = TCPOPT_SIGNATURE;
 		*(optp++) = TCPOLEN_SIGNATURE;
 
-		if (tcp_signature(tdb, sc->sc_src.sa.sa_family, m, th,
+		if (tcp_signature(tdbp, sc->sc_src.sa.sa_family, m, th,
 		    hlen, 0, optp) < 0) {
 			m_freem(m);
-			tdb_unref(tdb);
+			tdb_unref(tdbp);
 			return (EINVAL);
 		}
-		tdb_unref(tdb);
+		tdb_unref(tdbp);
 		optp += 16;
 
 		/* Pad options list to the next 32 bit boundary and

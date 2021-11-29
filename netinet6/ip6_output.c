@@ -184,7 +184,7 @@ ip6_output(struct mbuf *m, struct ip6_pktopts *opt, struct route_in6 *ro,
 	u_int8_t sproto = 0;
 	u_char nextproto;
 #ifdef IPSEC
-	struct tdb *tdb = NULL;
+	struct tdb *tdbp = NULL;
 #endif /* IPSEC */
 
 #ifdef IPSEC
@@ -221,7 +221,7 @@ ip6_output(struct mbuf *m, struct ip6_pktopts *opt, struct route_in6 *ro,
 
 #ifdef IPSEC
 	if (ipsec_in_use || inp) {
-		tdb = ip6_output_ipsec_lookup(m, &error, inp);
+		tdbp = ip6_output_ipsec_lookup(m, &error, inp);
 		if (error != 0) {
 			/*
 			 * -EINVAL is used to indicate that the packet should
@@ -433,7 +433,7 @@ reroute:
 	}
 
 #ifdef IPSEC
-	if (tdb) {
+	if (tdbp != NULL) {
 		/*
 		 * XXX what should we do if ip6_hlim == 0 and the
 		 * packet gets tunneled?
@@ -443,7 +443,7 @@ reroute:
 		 * packet just because ip6_dst is different from what tdb has.
 		 * XXX
 		 */
-		error = ip6_output_ipsec_send(tdb, m, ro,
+		error = ip6_output_ipsec_send(tdbp, m, ro,
 		    exthdrs.ip6e_rthdr ? 1 : 0, 0);
 		goto done;
 	}
@@ -2742,7 +2742,7 @@ in6_proto_cksum_out(struct mbuf *m, struct ifnet *ifp)
 struct tdb *
 ip6_output_ipsec_lookup(struct mbuf *m, int *error, struct inpcb *inp)
 {
-	struct tdb *tdb;
+	struct tdb *tdbp;
 	struct m_tag *mtag;
 	struct tdb_ident *tdbi;
 
@@ -2752,30 +2752,30 @@ ip6_output_ipsec_lookup(struct mbuf *m, int *error, struct inpcb *inp)
 	 */
 
 	/* Do we have any pending SAs to apply ? */
-	tdb = ipsp_spd_lookup(m, AF_INET6, sizeof(struct ip6_hdr),
+	tdbp = ipsp_spd_lookup(m, AF_INET6, sizeof(struct ip6_hdr),
 	    error, IPSP_DIRECTION_OUT, NULL, inp, 0);
 
-	if (tdb == NULL)
+	if (tdbp == NULL)
 		return NULL;
 	/* Loop detection */
 	for (mtag = m_tag_first(m); mtag != NULL; mtag = m_tag_next(m, mtag)) {
 		if (mtag->m_tag_id != PACKET_TAG_IPSEC_OUT_DONE)
 			continue;
 		tdbi = (struct tdb_ident *)(mtag + 1);
-		if (tdbi->spi == tdb->tdb_spi &&
-		    tdbi->proto == tdb->tdb_sproto &&
-		    tdbi->rdomain == tdb->tdb_rdomain &&
-		    !memcmp(&tdbi->dst, &tdb->tdb_dst,
+		if (tdbi->spi == tdbp->tdb_spi &&
+		    tdbi->proto == tdbp->tdb_sproto &&
+		    tdbi->rdomain == tdbp->tdb_rdomain &&
+		    !memcmp(&tdbi->dst, &tdbp->tdb_dst,
 		    sizeof(union sockaddr_union))) {
 			/* no IPsec needed */
 			return NULL;
 		}
 	}
-	return tdb;
+	return tdbp;
 }
 
 int
-ip6_output_ipsec_pmtu_update(struct tdb *tdb, struct route_in6 *ro,
+ip6_output_ipsec_pmtu_update(struct tdb *tdbp, struct route_in6 *ro,
     struct in6_addr *dst, int ifidx, int rtableid, int transportmode)
 {
 	struct rtentry *rt = NULL;
@@ -2805,9 +2805,9 @@ ip6_output_ipsec_pmtu_update(struct tdb *tdb, struct route_in6 *ro,
 		rt_mtucloned = 1;
 	}
 	DPRINTF("spi %08x mtu %d rt %p cloned %d",
-	    ntohl(tdb->tdb_spi), tdb->tdb_mtu, rt, rt_mtucloned);
+	    ntohl(tdbp->tdb_spi), tdbp->tdb_mtu, rt, rt_mtucloned);
 	if (rt != NULL) {
-		rt->rt_mtu = tdb->tdb_mtu;
+		rt->rt_mtu = tdbp->tdb_mtu;
 		if (ro != NULL && ro->ro_rt != NULL) {
 			rtfree(ro->ro_rt);
 			ro->ro_rt = rtalloc(sin6tosa(&ro->ro_dst), RT_RESOLVE,
@@ -2820,7 +2820,7 @@ ip6_output_ipsec_pmtu_update(struct tdb *tdb, struct route_in6 *ro,
 }
 
 int
-ip6_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct route_in6 *ro,
+ip6_output_ipsec_send(struct tdb *tdbp, struct mbuf *m, struct route_in6 *ro,
     int tunalready, int fwd)
 {
 #if NPF > 0
@@ -2834,7 +2834,7 @@ ip6_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct route_in6 *ro,
 	/*
 	 * Packet filter
 	 */
-	if ((encif = enc_getif(tdb->tdb_rdomain, tdb->tdb_tap)) == NULL ||
+	if ((encif = enc_getif(tdbp->tdb_rdomain, tdbp->tdb_tap)) == NULL ||
 	    pf_test(AF_INET6, fwd ? PF_FWD : PF_OUT, encif, &m) != PF_PASS) {
 		m_freem(m);
 		return EACCES;
@@ -2856,22 +2856,22 @@ ip6_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct route_in6 *ro,
 	dst = ip6->ip6_dst;
 	ifidx = m->m_pkthdr.ph_ifidx;
 	rtableid = m->m_pkthdr.ph_rtableid;
-	if (ip_mtudisc && tdb->tdb_mtu &&
-	    sizeof(struct ip6_hdr) + ntohs(ip6->ip6_plen) > tdb->tdb_mtu &&
-	    tdb->tdb_mtutimeout > gettime()) {
+	if (ip_mtudisc && tdbp->tdb_mtu &&
+	    sizeof(struct ip6_hdr) + ntohs(ip6->ip6_plen) > tdbp->tdb_mtu &&
+	    tdbp->tdb_mtutimeout > gettime()) {
 		int transportmode;
 
-		transportmode = (tdb->tdb_dst.sa.sa_family == AF_INET6) &&
-		    (IN6_ARE_ADDR_EQUAL(&tdb->tdb_dst.sin6.sin6_addr, &dst));
-		error = ip6_output_ipsec_pmtu_update(tdb, ro, &dst, ifidx,
+		transportmode = (tdbp->tdb_dst.sa.sa_family == AF_INET6) &&
+		    (IN6_ARE_ADDR_EQUAL(&tdbp->tdb_dst.sin6.sin6_addr, &dst));
+		error = ip6_output_ipsec_pmtu_update(tdbp, ro, &dst, ifidx,
 		    rtableid, transportmode);
 		if (error) {
 			ipsecstat_inc(ipsec_odrops);
-			tdb->tdb_odrops++;
+			tdbp->tdb_odrops++;
 			m_freem(m);
 			return error;
 		}
-		ipsec_adjust_mtu(m, tdb->tdb_mtu);
+		ipsec_adjust_mtu(m, tdbp->tdb_mtu);
 		m_freem(m);
 		return EMSGSIZE;
 	}
@@ -2886,13 +2886,13 @@ ip6_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct route_in6 *ro,
 	m->m_flags &= ~(M_BCAST | M_MCAST);
 
 	/* Callee frees mbuf */
-	error = ipsp_process_packet(m, tdb, AF_INET6, tunalready);
+	error = ipsp_process_packet(m, tdbp, AF_INET6, tunalready);
 	if (error) {
 		ipsecstat_inc(ipsec_odrops);
-		tdb->tdb_odrops++;
+		tdbp->tdb_odrops++;
 	}
 	if (ip_mtudisc && error == EMSGSIZE)
-		ip6_output_ipsec_pmtu_update(tdb, ro, &dst, ifidx, rtableid, 0);
+		ip6_output_ipsec_pmtu_update(tdbp, ro, &dst, ifidx, rtableid, 0);
 	return error;
 }
 #endif /* IPSEC */
