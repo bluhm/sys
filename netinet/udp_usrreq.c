@@ -510,8 +510,8 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 			    &tdbi->dst, tdbi->proto);
 		} else
 			tdb = NULL;
-		ipsp_spd_lookup(m, af, iphlen, &error,
-		    IPSP_DIRECTION_IN, tdb, inp, 0);
+		error = ipsp_spd_lookup(m, af, iphlen, IPSP_DIRECTION_IN,
+		    tdb, inp, NULL, 0);
 		if (error) {
 			udpstat_inc(udps_nosec);
 			tdb_unref(tdb);

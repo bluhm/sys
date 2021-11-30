@@ -1077,7 +1077,8 @@ ipsec_forward_check(struct mbuf *m, int hlen, int af)
 		tdb = gettdb(tdbi->rdomain, tdbi->spi, &tdbi->dst, tdbi->proto);
 	} else
 		tdb = NULL;
-	ipsp_spd_lookup(m, af, hlen, &error, IPSP_DIRECTION_IN, tdb, NULL, 0);
+	error = ipsp_spd_lookup(m, af, hlen, IPSP_DIRECTION_IN,
+	    tdb, NULL, NULL, 0);
 	tdb_unref(tdb);
 
 	return error;
@@ -1149,8 +1150,8 @@ ipsec_local_check(struct mbuf *m, int hlen, int proto, int af)
 		    tdbi->proto);
 	} else
 		tdb = NULL;
-	ipsp_spd_lookup(m, af, hlen, &error, IPSP_DIRECTION_IN,
-	    tdb, NULL, 0);
+	error = ipsp_spd_lookup(m, af, hlen, IPSP_DIRECTION_IN,
+	    tdb, NULL, NULL, 0);
 	tdb_unref(tdb);
 
 	return error;

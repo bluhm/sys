@@ -1594,9 +1594,9 @@ bridge_ipsec(struct ifnet *ifp, struct ether_header *eh, int hassnap,
 			return (0);
 		}
 	} else { /* Outgoing from the bridge. */
-		tdb = ipsp_spd_lookup(m, af, hlen, &error,
-		    IPSP_DIRECTION_OUT, NULL, NULL, 0);
-		if (tdb != NULL) {
+		error = ipsp_spd_lookup(m, af, hlen, IPSP_DIRECTION_OUT,
+		    NULL, NULL, &tdb, 0);
+		if (error == 0 && tdb != NULL) {
 			/*
 			 * We don't need to do loop detection, the
 			 * bridge will do that for us.

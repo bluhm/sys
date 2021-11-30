@@ -578,8 +578,8 @@ findpcb:
 			tdb = gettdb(tdbi->rdomain, tdbi->spi,
 			    &tdbi->dst, tdbi->proto);
 		}
-		ipsp_spd_lookup(m, af, iphlen, &error, IPSP_DIRECTION_IN,
-		    tdb, inp, 0);
+		error = ipsp_spd_lookup(m, af, iphlen, IPSP_DIRECTION_IN,
+		    tdb, inp, NULL, 0);
 		tdb_unref(tdb);
 		if (error) {
 			tcpstat_inc(tcps_rcvnosec);

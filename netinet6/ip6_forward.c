@@ -145,8 +145,8 @@ reroute:
 
 #ifdef IPSEC
 	if (ipsec_in_use) {
-		tdb = ip6_output_ipsec_lookup(m, &error, NULL);
-		if (error != 0) {
+		error = ip6_output_ipsec_lookup(m, NULL, &tdb);
+		if (error) {
 			/*
 			 * -EINVAL is used to indicate that the packet should
 			 * be silently dropped, typically because we've asked
