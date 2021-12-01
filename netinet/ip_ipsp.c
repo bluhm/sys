@@ -661,7 +661,9 @@ tdb_timeout(void *v)
 	if (tdb->tdb_flags & TDBF_TIMER) {
 		/* If it's an "invalid" TDB do a silent expiration. */
 		if (!(tdb->tdb_flags & TDBF_INVALID)) {
+#ifdef IPSEC
 			ipsecstat_inc(ipsec_exctdb);
+#endif /* IPSEC */
 			pfkeyv2_expire(tdb, SADB_EXT_LIFETIME_HARD);
 		}
 		tdb_delete(tdb);
@@ -680,7 +682,9 @@ tdb_firstuse(void *v)
 	if (tdb->tdb_flags & TDBF_SOFT_FIRSTUSE) {
 		/* If the TDB hasn't been used, don't renew it. */
 		if (tdb->tdb_first_use != 0) {
+#ifdef IPSEC
 			ipsecstat_inc(ipsec_exctdb);
+#endif /* IPSEC */
 			pfkeyv2_expire(tdb, SADB_EXT_LIFETIME_HARD);
 		}
 		tdb_delete(tdb);
