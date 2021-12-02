@@ -356,21 +356,21 @@ do {									\
 #define	NET_ASSERT_LOCKED()						\
 do {									\
 	int _s = rw_status(&netlock);					\
-	if ((splassert_ctl > 0) && (_s != RW_WRITE && _s != RW_READ))	\
+	if ((splassert_ctl > 0) && (_s != RW_WRITE))			\
 		splassert_fail(RW_READ, _s, __func__);			\
 } while (0)
 
-#define	NET_ASSERT_WLOCKED()						\
+#define	NET_ASSERT_RLOCKED()						\
 do {									\
 	int _s = rw_status(&netlock);					\
-	if ((splassert_ctl > 0) && (_s != RW_WRITE))			\
+	if ((splassert_ctl > 0) && (_s != RW_WRITE && _s != RW_READ))	\
 		splassert_fail(RW_WRITE, _s, __func__);			\
 } while (0)
 
 #else /* DIAGNOSTIC */
 #define	NET_ASSERT_UNLOCKED()	do {} while (0)
 #define	NET_ASSERT_LOCKED()	do {} while (0)
-#define	NET_ASSERT_WLOCKED()	do {} while (0)
+#define	NET_ASSERT_RLOCKED()	do {} while (0)
 #endif /* !DIAGNOSTIC */
 
 __returns_twice int	setjmp(label_t *);
