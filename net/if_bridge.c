@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_bridge.c,v 1.360 2021/12/01 12:51:09 bluhm Exp $	*/
+/*	$OpenBSD: if_bridge.c,v 1.361 2021/12/03 17:18:34 bluhm Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 Jason L. Wright (jason@thought.net)
