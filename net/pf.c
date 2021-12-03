@@ -3317,14 +3317,12 @@ pf_socket_lookup(struct pf_pdesc *pd)
 		sport = pd->hdr.tcp.th_sport;
 		dport = pd->hdr.tcp.th_dport;
 		PF_ASSERT_LOCKED();
-		NET_ASSERT_LOCKED();
 		tb = &tcbtable;
 		break;
 	case IPPROTO_UDP:
 		sport = pd->hdr.udp.uh_sport;
 		dport = pd->hdr.udp.uh_dport;
 		PF_ASSERT_LOCKED();
-		NET_ASSERT_LOCKED();
 		tb = &udbtable;
 		break;
 	default:

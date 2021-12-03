@@ -344,6 +344,8 @@ extern struct rwlock netlock;
 #define	NET_RLOCK_IN_IOCTL()	do { rw_enter_read(&netlock); } while (0)
 #define	NET_RUNLOCK_IN_IOCTL()	do { rw_exit_read(&netlock); } while (0)
 
+#define	NET_WLOCKED()		(rw_status(&netlock) == RW_WRITE)
+
 #ifdef DIAGNOSTIC
 
 #define	NET_ASSERT_UNLOCKED()						\

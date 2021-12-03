@@ -1069,6 +1069,8 @@ in_pcbhashlookup(struct inpcbtable *table, struct in_addr faddr,
 	u_int16_t fport = fport_arg, lport = lport_arg;
 	u_int rdomain;
 
+	NET_ASSERT_LOCKED();
+
 	rdomain = rtable_l2(rtable);
 	head = in_pcbhash(table, rdomain, &faddr, fport, &laddr, lport);
 	LIST_FOREACH(inp, head, inp_hash) {
@@ -1085,7 +1087,7 @@ in_pcbhashlookup(struct inpcbtable *table, struct in_addr faddr,
 			 * repeated accesses are quicker.  This is analogous to
 			 * the historic single-entry PCB cache.
 			 */
-			if (inp != LIST_FIRST(head)) {
+			if (NET_WLOCKED() && inp != LIST_FIRST(head)) {
 				LIST_REMOVE(inp, inp_hash);
 				LIST_INSERT_HEAD(head, inp, inp_hash);
 			}
@@ -1118,6 +1120,8 @@ in_pcblookup_listen(struct inpcbtable *table, struct in_addr laddr,
 	struct inpcb *inp;
 	u_int16_t lport = lport_arg;
 	u_int rdomain;
+
+	NET_ASSERT_LOCKED();
 
 	key1 = &laddr;
 	key2 = &zeroin_addr;
@@ -1185,7 +1189,7 @@ in_pcblookup_listen(struct inpcbtable *table, struct in_addr laddr,
 	 * repeated accesses are quicker.  This is analogous to
 	 * the historic single-entry PCB cache.
 	 */
-	if (inp != NULL && inp != LIST_FIRST(head)) {
+	if (NET_WLOCKED() && inp != NULL && inp != LIST_FIRST(head)) {
 		LIST_REMOVE(inp, inp_hash);
 		LIST_INSERT_HEAD(head, inp, inp_hash);
 	}
