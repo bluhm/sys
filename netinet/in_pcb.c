@@ -1051,6 +1051,15 @@ in_pcbresize(struct inpcbtable *table, int hashsize)
 int	in_pcbnotifymiss = 0;
 #endif
 
+struct inpcb *
+in_pcbhashlookup(struct inpcbtable *table, struct in_addr faddr,
+    u_int fport_arg, struct in_addr laddr, u_int lport_arg, u_int rtable)
+{
+	NET_ASSERT_WLOCKED();
+	return in_pcbhashlookup_wlocked(table, faddr ,fport_arg, laddr,
+	    lport_arg, rtable, 1);
+}
+
 /*
  * The in(6)_pcbhashlookup functions are used to locate connected sockets
  * quickly:
@@ -1061,8 +1070,9 @@ int	in_pcbnotifymiss = 0;
  * After those two lookups no other are necessary.
  */
 struct inpcb *
-in_pcbhashlookup(struct inpcbtable *table, struct in_addr faddr,
-    u_int fport_arg, struct in_addr laddr, u_int lport_arg, u_int rtable)
+in_pcbhashlookup_wlocked(struct inpcbtable *table, struct in_addr faddr,
+    u_int fport_arg, struct in_addr laddr, u_int lport_arg, u_int rtable,
+    int wlocked)
 {
 	struct inpcbhead *head;
 	struct inpcb *inp;
@@ -1093,13 +1103,22 @@ in_pcbhashlookup(struct inpcbtable *table, struct in_addr faddr,
 		}
 	}
 #ifdef DIAGNOSTIC
-	if (inp == NULL && in_pcbnotifymiss) {
+	if (wlocked && inp == NULL && in_pcbnotifymiss) {
 		printf("%s: faddr=%08x fport=%d laddr=%08x lport=%d rdom=%u\n",
 		    __func__, ntohl(faddr.s_addr), ntohs(fport),
 		    ntohl(laddr.s_addr), ntohs(lport), rdomain);
 	}
 #endif
 	return (inp);
+}
+
+struct inpcb *
+in_pcblookup_listen(struct inpcbtable *table, struct in_addr laddr,
+    u_int lport_arg, struct mbuf *m, u_int rtable)
+{
+	NET_ASSERT_WLOCKED();
+	return in_pcblookup_listen_wlocked(table, laddr, lport_arg, m, rtable,
+	    1);
 }
 
 /*
@@ -1110,8 +1129,8 @@ in_pcbhashlookup(struct inpcbtable *table, struct in_addr faddr,
  *		*.*     <->     *.lport
  */
 struct inpcb *
-in_pcblookup_listen(struct inpcbtable *table, struct in_addr laddr,
-    u_int lport_arg, struct mbuf *m, u_int rtable)
+in_pcblookup_listen_wlocked(struct inpcbtable *table, struct in_addr laddr,
+    u_int lport_arg, struct mbuf *m, u_int rtable, int wlocked)
 {
 	struct inpcbhead *head;
 	const struct in_addr *key1, *key2;
@@ -1185,7 +1204,7 @@ in_pcblookup_listen(struct inpcbtable *table, struct in_addr laddr,
 	 * repeated accesses are quicker.  This is analogous to
 	 * the historic single-entry PCB cache.
 	 */
-	if (inp != NULL && inp != LIST_FIRST(head)) {
+	if (wlocked && inp != NULL && inp != LIST_FIRST(head)) {
 		LIST_REMOVE(inp, inp_hash);
 		LIST_INSERT_HEAD(head, inp, inp_hash);
 	}

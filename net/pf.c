@@ -3317,14 +3317,12 @@ pf_socket_lookup(struct pf_pdesc *pd)
 		sport = pd->hdr.tcp.th_sport;
 		dport = pd->hdr.tcp.th_dport;
 		PF_ASSERT_LOCKED();
-		NET_ASSERT_LOCKED();
 		tb = &tcbtable;
 		break;
 	case IPPROTO_UDP:
 		sport = pd->hdr.udp.uh_sport;
 		dport = pd->hdr.udp.uh_dport;
 		PF_ASSERT_LOCKED();
-		NET_ASSERT_LOCKED();
 		tb = &udbtable;
 		break;
 	default:
@@ -3348,22 +3346,24 @@ pf_socket_lookup(struct pf_pdesc *pd)
 		 * Fails when rtable is changed while evaluating the ruleset
 		 * The socket looked up will not match the one hit in the end.
 		 */
-		inp = in_pcbhashlookup(tb, saddr->v4, sport, daddr->v4, dport,
-		    pd->rdomain);
+		NET_ASSERT_LOCKED();
+		inp = in_pcbhashlookup_wlocked(tb, saddr->v4, sport, daddr->v4,
+		    dport, pd->rdomain, 0);
 		if (inp == NULL) {
-			inp = in_pcblookup_listen(tb, daddr->v4, dport,
-			    NULL, pd->rdomain);
+			inp = in_pcblookup_listen_wlocked(tb, daddr->v4, dport,
+			    NULL, pd->rdomain, 0);
 			if (inp == NULL)
 				return (-1);
 		}
 		break;
 #ifdef INET6
 	case AF_INET6:
-		inp = in6_pcbhashlookup(tb, &saddr->v6, sport, &daddr->v6,
-		    dport, pd->rdomain);
+		NET_ASSERT_LOCKED();
+		inp = in6_pcbhashlookup_wlocked(tb, &saddr->v6, sport,
+		    &daddr->v6, dport, pd->rdomain, 0);
 		if (inp == NULL) {
-			inp = in6_pcblookup_listen(tb, &daddr->v6, dport,
-			    NULL, pd->rdomain);
+			inp = in6_pcblookup_listen_wlocked(tb, &daddr->v6,
+			    dport, NULL, pd->rdomain, 0);
 			if (inp == NULL)
 				return (-1);
 		}

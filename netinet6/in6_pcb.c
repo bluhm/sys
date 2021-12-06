@@ -500,6 +500,16 @@ in6_pcbhashlookup(struct inpcbtable *table, const struct in6_addr *faddr,
     u_int fport_arg, const struct in6_addr *laddr, u_int lport_arg,
     u_int rtable)
 {
+	NET_ASSERT_WLOCKED();
+	return in6_pcbhashlookup_wlocked(table, faddr, fport_arg, laddr,
+	    lport_arg, rtable, 1);
+}
+
+struct inpcb *
+in6_pcbhashlookup_wlocked(struct inpcbtable *table,
+    const struct in6_addr *faddr, u_int fport_arg,
+    const struct in6_addr *laddr, u_int lport_arg, u_int rtable, int wlocked)
+{
 	struct inpcbhead *head;
 	struct inpcb *inp;
 	u_int16_t fport = fport_arg, lport = lport_arg;
@@ -538,6 +548,14 @@ in6_pcbhashlookup(struct inpcbtable *table, const struct in6_addr *faddr,
 struct inpcb *
 in6_pcblookup_listen(struct inpcbtable *table, struct in6_addr *laddr,
     u_int lport_arg, struct mbuf *m, u_int rtable)
+{
+	return in6_pcblookup_listen_wlocked(table, laddr, lport_arg, m, rtable,
+	    1);
+}
+
+struct inpcb *
+in6_pcblookup_listen_wlocked(struct inpcbtable *table, struct in6_addr *laddr,
+    u_int lport_arg, struct mbuf *m, u_int rtable, int wlocked)
 {
 	struct inpcbhead *head;
 	const struct in6_addr *key1, *key2;
@@ -604,7 +622,7 @@ in6_pcblookup_listen(struct inpcbtable *table, struct in6_addr *laddr,
 	 * repeated accesses are quicker.  This is analogous to
 	 * the historic single-entry PCB cache.
 	 */
-	if (inp != NULL && inp != LIST_FIRST(head)) {
+	if (wlocked && inp != NULL && inp != LIST_FIRST(head)) {
 		LIST_REMOVE(inp, inp_hash);
 		LIST_INSERT_HEAD(head, inp, inp_hash);
 	}
