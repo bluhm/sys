@@ -934,15 +934,16 @@ udpencap_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 
 	first = gettdbbysrcdst_rev(rdomain, 0, su_src, su_dst, IPPROTO_ESP);
 
+	mtx_enter(&tdb_sadb_mtx);
 	for (tdbp = first; tdbp != NULL; tdbp = tdbp->tdb_snext) {
 		if (tdbp->tdb_sproto == IPPROTO_ESP &&
 		    ((tdbp->tdb_flags & (TDBF_INVALID|TDBF_UDPENCAP)) ==
 		    TDBF_UDPENCAP) &&
 		    !memcmp(&tdbp->tdb_dst, &dst, su_dst->sa.sa_len) &&
-		    !memcmp(&tdbp->tdb_src, &src, su_src->sa.sa_len)) {
+		    !memcmp(&tdbp->tdb_src, &src, su_src->sa.sa_len))
 			ipsec_set_mtu(tdbp, mtu);
-		}
 	}
+	mtx_leave(&tdb_sadb_mtx);
 	tdb_unref(first);
 }
 
