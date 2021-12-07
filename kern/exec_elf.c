@@ -1,4 +1,4 @@
-/*	$OpenBSD: exec_elf.c,v 1.160 2021/03/10 10:21:47 jsg Exp $	*/
+/*	$OpenBSD: exec_elf.c,v 1.162 2021/12/07 04:19:24 guenther Exp $	*/
 
 /*
  * Copyright (c) 1996 Per Fogelstrom
@@ -100,8 +100,6 @@ int	elf_read_from(struct proc *, struct vnode *, u_long, void *, int);
 void	elf_load_psection(struct exec_vmcmd_set *, struct vnode *,
 	    Elf_Phdr *, Elf_Addr *, Elf_Addr *, int *, int);
 int	coredump_elf(struct proc *, void *);
-void	*elf_copyargs(struct exec_package *, struct ps_strings *, void *,
-	    void *);
 int	exec_elf_fixup(struct proc *, struct exec_package *);
 int	elf_os_pt_note_name(Elf_Note *);
 int	elf_os_pt_note(struct proc *, struct exec_package *, Elf_Ehdr *, int *);
@@ -122,11 +120,6 @@ extern char *syscallnames[];
 #define ELF_MAX_VALID_PHDR 32
 
 /*
- * How many entries are in the AuxInfo array we pass to the process?
- */
-#define ELF_AUX_ENTRIES	9
-
-/*
  * This is the OpenBSD ELF emul
  */
 struct emul emul_elf = {
@@ -140,8 +133,6 @@ struct emul emul_elf = {
 #else
 	NULL,
 #endif
-	(sizeof(AuxInfo) * ELF_AUX_ENTRIES / sizeof(char *)),
-	elf_copyargs,
 	setregs,
 	exec_elf_fixup,
 	coredump_elf,
@@ -162,28 +153,6 @@ struct elf_note_name {
 #define	ELFROUNDSIZE	sizeof(Elf_Word)
 #define	elfround(x)	roundup((x), ELFROUNDSIZE)
 
-/*
- * Copy arguments onto the stack in the normal way, but add some
- * space for extra information in case of dynamic binding.
- */
-void *
-elf_copyargs(struct exec_package *pack, struct ps_strings *arginfo,
-		void *stack, void *argp)
-{
-	stack = copyargs(pack, arginfo, stack, argp);
-	if (!stack)
-		return (NULL);
-
-	/*
-	 * Push space for extra arguments on the stack needed by
-	 * dynamically linked binaries.
-	 */
-	if (pack->ep_emul_arg != NULL) {
-		pack->ep_emul_argp = stack;
-		stack = (char *)stack + ELF_AUX_ENTRIES * sizeof (AuxInfo);
-	}
-	return (stack);
-}
 
 /*
  * Check header for validity; return 0 for ok, ENOEXEC if error
@@ -770,8 +739,7 @@ exec_elf_makecmds(struct proc *p, struct exec_package *epp)
 		ap->arg_entry = eh->e_entry + exe_base;
 		ap->arg_interp = exe_base;
 
-		epp->ep_emul_arg = ap;
-		epp->ep_emul_argsize = sizeof *ap;
+		epp->ep_args = ap;
 	}
 
 	free(ph, M_TEMP, phsize);
@@ -800,16 +768,16 @@ exec_elf_fixup(struct proc *p, struct exec_package *epp)
 	struct	elf_args *ap;
 	AuxInfo ai[ELF_AUX_ENTRIES], *a;
 
-	if (epp->ep_emul_arg == NULL) {
+	ap = epp->ep_args;
+	if (ap == NULL) {
 		return (0);
 	}
 
 	interp = epp->ep_interp;
-	ap = epp->ep_emul_arg;
 
 	if (interp &&
 	    (error = elf_load_file(p, interp, epp, ap)) != 0) {
-		free(ap, M_TEMP, epp->ep_emul_argsize);
+		free(ap, M_TEMP, sizeof *ap);
 		pool_put(&namei_pool, interp);
 		kill_vmcmds(&epp->ep_vmcmds);
 		return (error);
@@ -863,9 +831,9 @@ exec_elf_fixup(struct proc *p, struct exec_package *epp)
 		a->au_v = 0;
 		a++;
 
-		error = copyout(ai, epp->ep_emul_argp, sizeof ai);
+		error = copyout(ai, epp->ep_auxinfo, sizeof ai);
 	}
-	free(ap, M_TEMP, epp->ep_emul_argsize);
+	free(ap, M_TEMP, sizeof *ap);
 	if (interp)
 		pool_put(&namei_pool, interp);
 	return (error);
@@ -1281,7 +1249,7 @@ coredump_notes_elf(struct proc *p, void *iocookie, size_t *sizep)
 
 	/* Second, write an NT_OPENBSD_AUXV note. */
 	notesize = sizeof(nhdr) + elfround(sizeof("OpenBSD")) +
-	    elfround(pr->ps_emul->e_arglen * sizeof(char *));
+	    elfround(ELF_AUX_WORDS * sizeof(char *));
 	if (iocookie) {
 		iov.iov_base = &pss;
 		iov.iov_len = sizeof(pss);
@@ -1301,7 +1269,7 @@ coredump_notes_elf(struct proc *p, void *iocookie, size_t *sizep)
 			return (EIO);
 
 		nhdr.namesz = sizeof("OpenBSD");
-		nhdr.descsz = pr->ps_emul->e_arglen * sizeof(char *);
+		nhdr.descsz = ELF_AUX_WORDS * sizeof(char *);
 		nhdr.type = NT_OPENBSD_AUXV;
 
 		error = coredump_write(iocookie, UIO_SYSSPACE,
