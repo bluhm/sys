@@ -659,7 +659,9 @@ ip_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct route *ro, int fwd)
 	m->m_flags &= ~(M_MCAST | M_BCAST);
 
 	/* Callee frees mbuf */
+	KERNEL_LOCK();
 	error = ipsp_process_packet(m, tdb, AF_INET, 0);
+	KERNEL_UNLOCK();
 	if (error) {
 		ipsecstat_inc(ipsec_odrops);
 		tdbstat_inc(tdb, tdb_odrops);

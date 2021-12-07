@@ -2894,7 +2894,9 @@ ip6_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct route_in6 *ro,
 	m->m_flags &= ~(M_BCAST | M_MCAST);
 
 	/* Callee frees mbuf */
+	KERNEL_LOCK();
 	error = ipsp_process_packet(m, tdb, AF_INET6, tunalready);
+	KERNEL_UNLOCK();
 	if (error) {
 		ipsecstat_inc(ipsec_odrops);
 		tdbstat_inc(tdb, tdb_odrops);
