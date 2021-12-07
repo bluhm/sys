@@ -309,6 +309,7 @@ ipsec_common_input(struct mbuf **mp, int skip, int protoff, int af, int sproto,
 		goto drop;
 	}
 
+	KERNEL_LOCK();
 	/* Register first use, setup expiration timer. */
 	if (tdbp->tdb_first_use == 0) {
 		tdbp->tdb_first_use = gettime();
@@ -336,6 +337,7 @@ ipsec_common_input(struct mbuf **mp, int skip, int protoff, int af, int sproto,
 		tdbstat_inc(tdbp, tdb_idrops);
 	}
 	tdb_unref(tdbp);
+	KERNEL_UNLOCK();
 	return prot;
 
  drop:
