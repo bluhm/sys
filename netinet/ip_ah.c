@@ -951,6 +951,9 @@ ah_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	tdb->tdb_cur_bytes += m->m_pkthdr.len - skip;
 	ahstat_add(ahs_obytes, m->m_pkthdr.len - skip);
 
+	/* SMPXXX Exclusive lock needed for tdb_delete() and tdb_flags */
+	NET_ASSERT_WLOCKED();
+
 	/* Hard expiration. */
 	if (tdb->tdb_flags & TDBF_BYTES &&
 	    tdb->tdb_cur_bytes >= tdb->tdb_exp_bytes) {

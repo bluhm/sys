@@ -958,6 +958,9 @@ tdb_unbundle(struct tdb *tdbp)
 void
 tdb_deltimeouts(struct tdb *tdbp)
 {
+	/* Remove expiration timeouts. */
+	tdbp->tdb_flags &= ~(TDBF_FIRSTUSE | TDBF_SOFT_FIRSTUSE | TDBF_TIMER |
+	    TDBF_SOFT_TIMER);
 	if (timeout_del(&tdbp->tdb_timer_tmo))
 		tdb_unref(tdbp);
 	if (timeout_del(&tdbp->tdb_first_tmo))
@@ -1003,7 +1006,7 @@ tdb_delete_locked(struct tdb *tdbp)
 void
 tdb_dodelete(struct tdb *tdbp, int locked)
 {
-	NET_ASSERT_LOCKED();
+	NET_ASSERT_WLOCKED();
 
 	if (tdbp->tdb_flags & TDBF_DELETED)
 		return;
@@ -1084,9 +1087,6 @@ tdb_free(struct tdb *tdbp)
 	KASSERT(tdbp->tdb_onext == NULL);
 	KASSERT(tdbp->tdb_inext == NULL);
 
-	/* Remove expiration timeouts. */
-	tdbp->tdb_flags &= ~(TDBF_FIRSTUSE | TDBF_SOFT_FIRSTUSE | TDBF_TIMER |
-	    TDBF_SOFT_TIMER);
 	KASSERT(timeout_pending(&tdbp->tdb_timer_tmo) == 0);
 	KASSERT(timeout_pending(&tdbp->tdb_first_tmo) == 0);
 	KASSERT(timeout_pending(&tdbp->tdb_stimer_tmo) == 0);

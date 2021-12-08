@@ -119,6 +119,8 @@
 void
 import_sa(struct tdb *tdb, struct sadb_sa *sadb_sa, struct ipsecinit *ii)
 {
+	NET_ASSERT_WLOCKED();
+
 	if (!sadb_sa)
 		return;
 
@@ -279,6 +281,8 @@ export_sa(void **p, struct tdb *tdb)
 void
 import_lifetime(struct tdb *tdb, struct sadb_lifetime *sadb_lifetime, int type)
 {
+	NET_ASSERT_WLOCKED();
+
 	if (!sadb_lifetime)
 		return;
 
