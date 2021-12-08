@@ -1,4 +1,4 @@
-/*	$OpenBSD: init_main.c,v 1.310 2021/12/07 04:19:24 guenther Exp $	*/
+/*	$OpenBSD: init_main.c,v 1.312 2021/12/07 22:17:02 guenther Exp $	*/
 /*	$NetBSD: init_main.c,v 1.84.4.1 1996/06/02 09:08:06 mrg Exp $	*/
 
 /*
@@ -154,28 +154,10 @@ void	timeout_proc_init(void);
 void	pool_gc_pages(void *);
 void	percpu_init(void);
 
-extern char sigcode[], esigcode[], sigcoderet[];
-#ifdef SYSCALL_DEBUG
-extern char *syscallnames[];
-#endif
-
 struct emul emul_native = {
-	"native",
-	NULL,
 	SYS_syscall,
 	SYS_MAXSYSCALL,
 	sysent,
-#ifdef SYSCALL_DEBUG
-	syscallnames,
-#else
-	NULL,
-#endif
-	setregs,
-	NULL,		/* fixup */
-	NULL,		/* coredump */
-	sigcode,
-	esigcode,
-	sigcoderet
 };
 
 #ifdef DIAGNOSTIC
