@@ -7,6 +7,6 @@ include "arch/i386/conf/GENERIC"
 
 option		MULTIPROCESSOR	# Multiple processor support
 #option		MP_LOCKDEBUG
-#option		WITNESS
+option		WITNESS
 
 cpu*		at mainbus?
