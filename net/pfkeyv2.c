@@ -1000,44 +1000,6 @@ pfkeyv2_get(struct tdb *tdb, void **headers, void **buffer, int *lenp,
 }
 
 /*
- * Dump a TDB.
- */
-int
-pfkeyv2_dump_walker(struct tdb *tdb, void *state, int last)
-{
-	struct dump_state *dump_state = (struct dump_state *) state;
-	void *headers[SADB_EXT_MAX+1], *buffer;
-	int buflen;
-	int rval;
-
-	/* If not satype was specified, dump all TDBs */
-	if (!dump_state->sadb_msg->sadb_msg_satype ||
-	    (tdb->tdb_satype == dump_state->sadb_msg->sadb_msg_satype)) {
-		bzero(headers, sizeof(headers));
-		headers[0] = (void *) dump_state->sadb_msg;
-
-		/* Get the information from the TDB to a PFKEYv2 message */
-		if ((rval = pfkeyv2_get(tdb, headers, &buffer, &buflen, NULL)) != 0)
-			return (rval);
-
-		if (last)
-			((struct sadb_msg *)headers[0])->sadb_msg_seq = 0;
-
-		/* Send the message to the specified socket */
-		rval = pfkeyv2_sendmessage(headers,
-		    PFKEYV2_SENDMESSAGE_UNICAST, dump_state->socket, 0, 0,
-		    tdb->tdb_rdomain);
-
-		explicit_bzero(buffer, buflen);
-		free(buffer, M_PFKEY, buflen);
-		if (rval)
-			return (rval);
-	}
-
-	return (0);
-}
-
-/*
  * Delete an SA.
  */
 int
@@ -1732,20 +1694,8 @@ pfkeyv2_send(struct socket *so, void *message, int len)
 		break;
 
 	case SADB_DUMP:
-	{
-		struct dump_state dump_state;
-		dump_state.sadb_msg = (struct sadb_msg *) headers[0];
-		dump_state.socket = so;
-
-		NET_LOCK();
-		rval = tdb_walk(rdomain, pfkeyv2_dump_walker, &dump_state);
-		NET_UNLOCK();
-		if (!rval)
-			goto realret;
-		if ((rval == ENOMEM) || (rval == ENOBUFS))
-			rval = 0;
-	}
-	break;
+		rval = EOPNOTSUPP;
+		break;
 
 	case SADB_X_GRPSPIS:
 	{
