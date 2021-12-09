@@ -268,7 +268,9 @@ ipsp_process_packet(struct mbuf *m, struct tdb *tdb, int af, int tunalready)
 			}
 
 			/* Remember that we appended a tunnel header. */
+			mtx_enter(&tdb->tdb_mtx);
 			tdb->tdb_flags |= TDBF_USEDTUNNEL;
+			mtx_leave(&tdb->tdb_mtx);
 		}
 	}
 
