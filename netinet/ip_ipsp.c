@@ -934,12 +934,14 @@ tdb_cleanspd(struct tdb *tdbp)
 {
 	struct ipsec_policy *ipo;
 
+	mtx_enter(&ipo_tdb_mtx);
 	while ((ipo = TAILQ_FIRST(&tdbp->tdb_policy_head)) != NULL) {
 		TAILQ_REMOVE(&tdbp->tdb_policy_head, ipo, ipo_tdb_next);
 		tdb_unref(ipo->ipo_tdb);
 		ipo->ipo_tdb = NULL;
 		ipo->ipo_last_searched = 0; /* Force a re-search. */
 	}
+	mtx_leave(&ipo_tdb_mtx);
 }
 
 void
