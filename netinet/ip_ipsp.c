@@ -1017,17 +1017,20 @@ tdb_dodelete(struct tdb *tdbp, int locked)
 {
 	NET_ASSERT_LOCKED();
 
+	if (!locked)
+		mtx_enter(&tdb_sadb_mtx);
 	mtx_enter(&tdbp->tdb_mtx);
 	if (tdbp->tdb_flags & TDBF_DELETED) {
 		mtx_leave(&tdbp->tdb_mtx);
+		if (!locked)
+			mtx_leave(&tdb_sadb_mtx);
 		return;
 	}
 	tdbp->tdb_flags |= TDBF_DELETED;
 	mtx_leave(&tdbp->tdb_mtx);
-	if (locked)
-		tdb_unlink_locked(tdbp);
-	else
-		tdb_unlink(tdbp);
+	tdb_unlink_locked(tdbp);
+	if (!locked)
+		mtx_leave(&tdb_sadb_mtx);
 
 	/* cleanup SPD references */
 	tdb_cleanspd(tdbp);
