@@ -1327,12 +1327,16 @@ nd6_dad_ns_input(struct ifaddr *ifa)
 
 	duplicate = 0;
 	dp = nd6_dad_find(ifa);
+	if (dp == NULL) {
+		log(LOG_ERR, "%s: DAD structure not found\n", __func__);
+		return;
+	}
 
 	/*
 	 * if I'm yet to start DAD, someone else started using this address
 	 * first.  I have a duplicate and you win.
 	 */
-	if (!dp || dp->dad_ns_ocount == 0)
+	if (dp->dad_ns_ocount == 0)
 		duplicate++;
 
 	/* XXX more checks for loopback situation - see nd6_dad_timer too */
@@ -1345,8 +1349,7 @@ nd6_dad_ns_input(struct ifaddr *ifa)
 		 * not sure if I got a duplicate.
 		 * increment ns count and see what happens.
 		 */
-		if (dp)
-			dp->dad_ns_icount++;
+		dp->dad_ns_icount++;
 	}
 }
 
