@@ -1,4 +1,4 @@
-/*	$OpenBSD: sys_pipe.c,v 1.131 2021/12/08 13:03:52 visa Exp $	*/
+/*	$OpenBSD: sys_pipe.c,v 1.133 2021/12/13 14:56:55 visa Exp $	*/
 
 /*
  * Copyright (c) 1996 John S. Dyson
@@ -927,6 +927,11 @@ pipe_kqfilter(struct file *fp, struct knote *kn)
 			error = EPERM;
 			break;
 		}
+		if ((kn->kn_flags & __EV_POLL) == 0) {
+			/* Disallow usage through kevent(2). */
+			error = EINVAL;
+			break;
+		}
 		kn->kn_fop = &pipe_efiltops;
 		kn->kn_hook = rpipe;
 		klist_insert_locked(&rpipe->pipe_sel.si_note, kn);
@@ -1074,19 +1079,20 @@ int
 filt_pipeexcept_common(struct knote *kn, struct pipe *rpipe)
 {
 	struct pipe *wpipe;
+	int active = 0;
 
 	rw_assert_wrlock(rpipe->pipe_lock);
 
 	wpipe = pipe_peer(rpipe);
 
-	if ((rpipe->pipe_state & PIPE_EOF) || wpipe == NULL) {
-		kn->kn_flags |= EV_EOF;
-		if (kn->kn_flags & __EV_POLL)
+	if (kn->kn_flags & __EV_POLL) {
+		if ((rpipe->pipe_state & PIPE_EOF) || wpipe == NULL) {
 			kn->kn_flags |= __EV_HUP;
-		return (1);
+			active = 1;
+		}
 	}
 
-	return (0);
+	return (active);
 }
 
 int

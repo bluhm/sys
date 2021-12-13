@@ -1,4 +1,4 @@
-/*	$OpenBSD: fifo_vnops.c,v 1.87 2021/12/11 09:28:26 visa Exp $	*/
+/*	$OpenBSD: fifo_vnops.c,v 1.89 2021/12/13 14:56:55 visa Exp $	*/
 /*	$NetBSD: fifo_vnops.c,v 1.18 1996/03/16 23:52:42 christos Exp $	*/
 
 /*
@@ -544,6 +544,10 @@ fifo_kqfilter(void *v)
 			/* Prevent triggering exceptfds. */
 			return (EPERM);
 		}
+		if ((ap->a_kn->kn_flags & __EV_POLL) == 0) {
+			/* Disallow usage through kevent(2). */
+			return (EINVAL);
+		}
 		ap->a_kn->kn_fop = &fifoexcept_filtops;
 		so = fip->fi_readsock;
 		sb = &so->so_rcv;
@@ -704,13 +708,11 @@ filt_fifoexcept_common(struct knote *kn, struct socket *so)
 
 	soassertlocked(so);
 
-	if (so->so_state & SS_CANTRCVMORE) {
-		kn->kn_flags |= EV_EOF;
-		if (kn->kn_flags & __EV_POLL) {
-			if (so->so_state & SS_ISDISCONNECTED)
-				kn->kn_flags |= __EV_HUP;
+	if (kn->kn_flags & __EV_POLL) {
+		if (so->so_state & SS_ISDISCONNECTED) {
+			kn->kn_flags |= __EV_HUP;
+			rv = 1;
 		}
-		rv = 1;
 	}
 
 	return (rv);
