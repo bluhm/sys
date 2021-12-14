@@ -453,6 +453,16 @@ ipsp_spd_lookup(struct mbuf *m, int af, int hlen, int direction,
 			    ipo->ipo_sproto, ids ? ids: ipo->ipo_ids,
 			    &ipo->ipo_addr, &ipo->ipo_mask);
 			mtx_enter(&ipo_tdb_mtx);
+			if ((tdbp_new != NULL) &&
+			    (tdbp_new->tdb_flags & TDBF_DELETED)) {
+				/*
+				 * After tdb_delete() has released ipo_tdb_mtx
+				 * in tdb_unlink(), never add a new one.
+				 * tdb_cleanspd() has to catch all of them.
+				 */
+				tdb_unref(tdbp_new);
+				tdbp_new = NULL;
+			}
 			if (ipo->ipo_tdb != NULL) {
 				/* Remove cached TDB from parallel thread. */
 				TAILQ_REMOVE(&ipo->ipo_tdb->tdb_policy_head,
@@ -590,6 +600,16 @@ ipsp_spd_lookup(struct mbuf *m, int af, int hlen, int direction,
 			    ipo->ipo_sproto, ipo->ipo_ids,
 			    &ipo->ipo_addr, &ipo->ipo_mask);
 			mtx_enter(&ipo_tdb_mtx);
+			if ((tdbp_new != NULL) &&
+			    (tdbp_new->tdb_flags & TDBF_DELETED)) {
+				/*
+				 * After tdb_delete() has released ipo_tdb_mtx
+				 * in tdb_unlink(), never add a new one.
+				 * tdb_cleanspd() has to catch all of them.
+				 */
+				tdb_unref(tdbp_new);
+				tdbp_new = NULL;
+			}
 			if (ipo->ipo_tdb != NULL) {
 				/* Remove cached TDB from parallel thread. */
 				TAILQ_REMOVE(&ipo->ipo_tdb->tdb_policy_head,
