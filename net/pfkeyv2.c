@@ -1045,7 +1045,7 @@ pfkeyv2_sa_flush(struct tdb *tdb, void *satype_vp, int last)
 {
 	if (!(*((u_int8_t *) satype_vp)) ||
 	    tdb->tdb_satype == *((u_int8_t *) satype_vp))
-		tdb_delete_locked(tdb);
+		tdb_delete(tdb);
 	return (0);
 }
 
