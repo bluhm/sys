@@ -428,8 +428,6 @@ dt_ioctl_record_stop(struct dt_softc *sc)
 {
 	struct dt_pcb *dp;
 
-	KASSERT(suser(curproc) == 0);
-
 	if (!sc->ds_recording)
 		return;
 
@@ -458,8 +456,6 @@ dt_ioctl_probe_enable(struct dt_softc *sc, struct dtioc_req *dtrq)
 	struct dt_pcb_list plist;
 	struct dt_probe *dtp;
 	int error;
-
-	KASSERT(suser(curproc) == 0);
 
 	if (!dtioc_req_isvalid(dtrq))
 		return EINVAL;
@@ -491,7 +487,6 @@ dt_ioctl_probe_disable(struct dt_softc *sc, struct dtioc_req *dtrq)
 	struct dt_probe *dtp;
 	int error;
 
-	KASSERT(suser(curproc) == 0);
 	if (!dtioc_req_isvalid(dtrq))
 		return EINVAL;
 
