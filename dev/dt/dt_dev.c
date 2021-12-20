@@ -141,8 +141,6 @@ dtattach(struct device *parent, struct device *self, void *aux)
 #ifdef DDBPROF
 	dt_nprobes += dt_prov_kprobe_init();
 #endif
-
-	printf("dt: %u probes\n", dt_nprobes);
 }
 
 int
