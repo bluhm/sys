@@ -1045,6 +1045,8 @@ disk_attach(struct device *dv, struct disk *diskp)
 {
 	int majdev;
 
+	KERNEL_ASSERT_LOCKED();
+
 	if (!ISSET(diskp->dk_flags, DKF_CONSTRUCTED))
 		disk_construct(diskp);
 
@@ -1130,6 +1132,7 @@ done:
 void
 disk_detach(struct disk *diskp)
 {
+	KERNEL_ASSERT_LOCKED();
 
 	if (softraid_disk_attach)
 		softraid_disk_attach(diskp, -1);
@@ -1845,6 +1848,8 @@ const char *
 duid_format(u_char *duid)
 {
 	static char duid_str[17];
+
+	KERNEL_ASSERT_LOCKED();
 
 	snprintf(duid_str, sizeof(duid_str),
 	    "%02x%02x%02x%02x%02x%02x%02x%02x",
