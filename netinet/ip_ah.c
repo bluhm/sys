@@ -687,13 +687,11 @@ ah_input(struct mbuf **mp, struct tdb *tdb, int skip, int protoff)
 	crp->crp_buf = (caddr_t)m;
 	crp->crp_sid = tdb->tdb_cryptoid;
 
-	KERNEL_LOCK();
 	while ((error = crypto_invoke(crp)) == EAGAIN) {
 		/* Reset the session ID */
 		if (tdb->tdb_cryptoid != 0)
 			tdb->tdb_cryptoid = crp->crp_sid;
 	}
-	KERNEL_UNLOCK();
 	if (error) {
 		DPRINTF("crypto error %d", error);
 		ipsecstat_inc(ipsec_noxform);
@@ -1112,13 +1110,11 @@ ah_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 	crp->crp_buf = (caddr_t)m;
 	crp->crp_sid = tdb->tdb_cryptoid;
 
-	KERNEL_LOCK();
 	while ((error = crypto_invoke(crp)) == EAGAIN) {
 		/* Reset the session ID */
 		if (tdb->tdb_cryptoid != 0)
 			tdb->tdb_cryptoid = crp->crp_sid;
 	}
-	KERNEL_UNLOCK();
 	if (error) {
 		DPRINTF("crypto error %d", error);
 		ipsecstat_inc(ipsec_noxform);

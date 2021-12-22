@@ -502,13 +502,11 @@ esp_input(struct mbuf **mp, struct tdb *tdb, int skip, int protoff)
 			crde->crd_len = plen;
 	}
 
-	KERNEL_LOCK();
 	while ((error = crypto_invoke(crp)) == EAGAIN) {
 		/* Reset the session ID */
 		if (tdb->tdb_cryptoid != 0)
 			tdb->tdb_cryptoid = crp->crp_sid;
 	}
-	KERNEL_UNLOCK();
 	if (error) {
 		DPRINTF("crypto error %d", error);
 		ipsecstat_inc(ipsec_noxform);
@@ -948,13 +946,11 @@ esp_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 			crda->crd_len = m->m_pkthdr.len - (skip + alen);
 	}
 
-	KERNEL_LOCK();
 	while ((error = crypto_invoke(crp)) == EAGAIN) {
 		/* Reset the session ID */
 		if (tdb->tdb_cryptoid != 0)
 			tdb->tdb_cryptoid = crp->crp_sid;
 	}
-	KERNEL_UNLOCK();
 	if (error) {
 		DPRINTF("crypto error %d", error);
 		ipsecstat_inc(ipsec_noxform);
