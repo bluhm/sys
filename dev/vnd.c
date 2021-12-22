@@ -498,6 +498,7 @@ fail:
 		if ((error = disk_lock(&sc->sc_dk)) != 0)
 			goto fail;
 		if (sc->sc_flags & VNF_INITED) {
+			disk_unlock(&sc->sc_dk);
 			error = EBUSY;
 			goto fail;
 		}
