@@ -404,12 +404,9 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 			}
 
 			if (ours) {
-				if (af == AF_UNSPEC) {
-					KERNEL_LOCK();
+				if (af == AF_UNSPEC)
 					nxt = ip_deliver(mp, offp, nxt,
 					    AF_INET6);
-					KERNEL_UNLOCK();
-				}
 				goto out;
 			}
 			goto bad;
@@ -508,11 +505,8 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 		goto out;
 
 	if (ours) {
-		if (af == AF_UNSPEC) {
-			KERNEL_LOCK();
+		if (af == AF_UNSPEC)
 			nxt = ip_deliver(mp, offp, nxt, AF_INET6);
-			KERNEL_UNLOCK();
-		}
 		goto out;
 	}
 
