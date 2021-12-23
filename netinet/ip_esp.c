@@ -690,7 +690,7 @@ esp_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 {
 	const struct enc_xform *espx = tdb->tdb_encalgxform;
 	const struct auth_hash *esph = tdb->tdb_authalgxform;
-	int ilen, olen, hlen, rlen, padding, blks, alen, roff, error;
+	int ilen, hlen, rlen, padding, blks, alen, roff, error;
 	uint64_t replay64;
 	uint32_t replay;
 	struct mbuf *mi, *mo = (struct mbuf *) NULL;
@@ -956,9 +956,6 @@ esp_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 		ipsecstat_inc(ipsec_noxform);
 		goto drop;
 	}
-
-	ilen = crp->crp_ilen;
-	olen = crp->crp_olen;
 
 	/* Release the crypto descriptors */
 	crypto_freereq(crp);
