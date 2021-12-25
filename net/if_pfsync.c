@@ -1647,7 +1647,9 @@ pfsync_drop_snapshot(struct pfsync_snapshot *sn)
 
 	while ((t = TAILQ_FIRST(&sn->sn_tdb_q)) != NULL) {
 		TAILQ_REMOVE(&sn->sn_tdb_q, t, tdb_sync_entry);
+		mtx_enter(&t->tdb_mtx);
 		CLR(t->tdb_flags, TDBF_PFSYNC);
+		mtx_leave(&t->tdb_mtx);
 	}
 }
 
@@ -1840,7 +1842,9 @@ pfsync_sendout(void)
 			TAILQ_REMOVE(&sn.sn_tdb_q, t, tdb_sync_entry);
 			pfsync_out_tdb(t, m->m_data + offset);
 			offset += sizeof(struct pfsync_tdb);
+			mtx_enter(&t->tdb_mtx);
 			CLR(t->tdb_flags, TDBF_PFSYNC);
+			mtx_leave(&t->tdb_mtx);
 			count++;
 		}
 
@@ -2489,9 +2493,11 @@ pfsync_update_tdb(struct tdb *t, int output)
 			}
 
 			TAILQ_INSERT_TAIL(&sc->sc_tdb_q, t, tdb_sync_entry);
-			mtx_leave(&sc->sc_tdb_mtx);
-
+			mtx_enter(&t->tdb_mtx);
 			SET(t->tdb_flags, TDBF_PFSYNC);
+			mtx_leave(&t->tdb_mtx);
+
+			mtx_leave(&sc->sc_tdb_mtx);
 			t->tdb_updates = 0;
 		} while (0);
 	} else {
@@ -2499,10 +2505,12 @@ pfsync_update_tdb(struct tdb *t, int output)
 			schednetisr(NETISR_PFSYNC);
 	}
 
+	mtx_enter(&t->tdb_mtx);
 	if (output)
 		SET(t->tdb_flags, TDBF_PFSYNC_RPL);
 	else
 		CLR(t->tdb_flags, TDBF_PFSYNC_RPL);
+	mtx_leave(&t->tdb_mtx);
 }
 
 void
@@ -2517,7 +2525,9 @@ pfsync_delete_tdb(struct tdb *t)
 	mtx_enter(&sc->sc_tdb_mtx);
 
 	TAILQ_REMOVE(&sc->sc_tdb_q, t, tdb_sync_entry);
+	mtx_enter(&t->tdb_mtx);
 	CLR(t->tdb_flags, TDBF_PFSYNC);
+	mtx_leave(&t->tdb_mtx);
 
 	nlen = sizeof(struct pfsync_tdb);
 	if (TAILQ_EMPTY(&sc->sc_tdb_q))
