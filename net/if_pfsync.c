@@ -295,7 +295,7 @@ void	pfsync_bulk_update(void *);
 void	pfsync_bulk_fail(void *);
 
 void	pfsync_grab_snapshot(struct pfsync_snapshot *, struct pfsync_softc *);
-void	pfsync_drop_snapshot(struct pfsync_snapshot *);
+void	pfsync_drop_snapshot(struct pfsync_snapshot *, struct pfsync_softc *);
 
 void	pfsync_send_dispatch(void *);
 void	pfsync_send_pkt(struct mbuf *);
@@ -1618,7 +1618,7 @@ pfsync_grab_snapshot(struct pfsync_snapshot *sn, struct pfsync_softc *sc)
 }
 
 void
-pfsync_drop_snapshot(struct pfsync_snapshot *sn)
+pfsync_drop_snapshot(struct pfsync_snapshot *sn, struct pfsync_softc * sc)
 {
 	struct pf_state *st;
 	struct pfsync_upd_req_item *ur;
@@ -1645,12 +1645,14 @@ pfsync_drop_snapshot(struct pfsync_snapshot *sn)
 		pool_put(&sn->sn_sc->sc_pool, ur);
 	}
 
+	mtx_enter(&sc->sc_tdb_mtx);
 	while ((t = TAILQ_FIRST(&sn->sn_tdb_q)) != NULL) {
 		TAILQ_REMOVE(&sn->sn_tdb_q, t, tdb_sync_entry);
 		mtx_enter(&t->tdb_mtx);
 		CLR(t->tdb_flags, TDBF_PFSYNC);
 		mtx_leave(&t->tdb_mtx);
 	}
+	mtx_leave(&sc->sc_tdb_mtx);
 }
 
 int
@@ -1677,7 +1679,7 @@ pfsync_drop(struct pfsync_softc *sc)
 	struct pfsync_snapshot	sn;
 
 	pfsync_grab_snapshot(&sn, sc);
-	pfsync_drop_snapshot(&sn);
+	pfsync_drop_snapshot(&sn, sc);
 }
 
 void
@@ -1769,7 +1771,7 @@ pfsync_sendout(void)
 	if (m == NULL) {
 		sc->sc_if.if_oerrors++;
 		pfsyncstat_inc(pfsyncs_onomem);
-		pfsync_drop_snapshot(&sn);
+		pfsync_drop_snapshot(&sn, sc);
 		return;
 	}
 
@@ -1779,7 +1781,7 @@ pfsync_sendout(void)
 			m_free(m);
 			sc->sc_if.if_oerrors++;
 			pfsyncstat_inc(pfsyncs_onomem);
-			pfsync_drop_snapshot(&sn);
+			pfsync_drop_snapshot(&sn, sc);
 			return;
 		}
 	}
@@ -1837,6 +1839,7 @@ pfsync_sendout(void)
 		subh = (struct pfsync_subheader *)(m->m_data + offset);
 		offset += sizeof(*subh);
 
+		mtx_enter(&sc->sc_tdb_mtx);
 		count = 0;
 		while ((t = TAILQ_FIRST(&sn.sn_tdb_q)) != NULL) {
 			TAILQ_REMOVE(&sn.sn_tdb_q, t, tdb_sync_entry);
@@ -1847,6 +1850,7 @@ pfsync_sendout(void)
 			mtx_leave(&t->tdb_mtx);
 			count++;
 		}
+		mtx_leave(&sc->sc_tdb_mtx);
 
 		bzero(subh, sizeof(*subh));
 		subh->action = PFSYNC_ACT_TDB;
