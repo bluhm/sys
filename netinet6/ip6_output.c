@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip6_output.c,v 1.265 2021/12/23 12:21:48 bluhm Exp $	*/
+/*	$OpenBSD: ip6_output.c,v 1.267 2022/01/04 06:32:40 yasuoka Exp $	*/
 /*	$KAME: ip6_output.c,v 1.172 2001/03/25 09:55:56 itojun Exp $	*/
 
 /*
@@ -655,7 +655,7 @@ reroute:
 #endif
 
 	/*
-	 * If the packet is not going on the wire it can be destinated
+	 * If the packet is not going on the wire it can be destined
 	 * to any local address.  In this case do not clear its scopes
 	 * to let ip6_input() find a matching local route.
 	 */
@@ -2757,7 +2757,7 @@ ip6_output_ipsec_lookup(struct mbuf *m, struct inpcb *inp, struct tdb **tdbout)
 
 	/* Do we have any pending SAs to apply ? */
 	error = ipsp_spd_lookup(m, AF_INET6, sizeof(struct ip6_hdr),
-	    IPSP_DIRECTION_OUT, NULL, inp, &tdb, 0);
+	    IPSP_DIRECTION_OUT, NULL, inp, &tdb, NULL);
 	if (error || tdb == NULL) {
 		*tdbout = NULL;
 		return error;

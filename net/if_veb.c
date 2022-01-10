@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_veb.c,v 1.21 2021/11/08 04:15:46 dlg Exp $ */
+/*	$OpenBSD: if_veb.c,v 1.25 2022/01/04 06:32:39 yasuoka Exp $ */
 
 /*
  * Copyright (c) 2021 David Gwynne <dlg@openbsd.org>
@@ -117,6 +117,8 @@ struct veb_port {
 	struct ifnet			*p_ifp0;
 	struct refcnt			 p_refs;
 
+	int (*p_enqueue)(struct ifnet *, struct mbuf *);
+
 	int (*p_ioctl)(struct ifnet *, u_long, caddr_t);
 	int (*p_output)(struct ifnet *, struct mbuf *, struct sockaddr *,
 	    struct rtentry *);
@@ -161,7 +163,6 @@ struct veb_softc {
 	if (ISSET((_sc)->sc_if.if_flags, IFF_DEBUG)) \
 		printf(fmt); \
 } while (0)
-
 
 static int	veb_clone_create(struct if_clone *, int);
 static int	veb_clone_destroy(struct ifnet *);
@@ -232,6 +233,8 @@ struct vport_softc {
 	struct arpcom		 sc_ac;
 	unsigned int		 sc_dead;
 };
+
+static int	vport_if_enqueue(struct ifnet *, struct mbuf *);
 
 static int	vport_ioctl(struct ifnet *, u_long, caddr_t);
 static int	vport_enqueue(struct ifnet *, struct mbuf *);
@@ -746,7 +749,7 @@ veb_ipsec_proto_out(struct mbuf *m, sa_family_t af, int iphlen)
 #endif
 
 	tdb = ipsp_spd_lookup(m, af, iphlen, &error, IPSP_DIRECTION_OUT,
-	    NULL, NULL, 0);
+	    NULL, NULL, NULL);
 	if (tdb == NULL)
 		return (m);
 
@@ -901,7 +904,7 @@ veb_broadcast(struct veb_softc *sc, struct veb_port *rp, struct mbuf *m0,
 			continue;
 		}
 
-		if_enqueue(ifp0, m); /* XXX count error? */
+		(*tp->p_enqueue)(ifp0, m); /* XXX count error */
 	}
 	smr_read_leave();
 
@@ -946,12 +949,18 @@ veb_transmit(struct veb_softc *sc, struct veb_port *rp, struct veb_port *tp,
 	counters_pkt(ifp->if_counters, ifc_opackets, ifc_obytes,
 	    m->m_pkthdr.len);
 
-	if_enqueue(ifp0, m); /* XXX count error? */
+	(*tp->p_enqueue)(ifp0, m); /* XXX count error */
 
 	return (NULL);
 drop:
 	m_freem(m);
 	return (NULL);
+}
+
+static struct mbuf *
+veb_vport_input(struct ifnet *ifp0, struct mbuf *m, uint64_t dst, void *brport)
+{
+	return (m);
 }
 
 static struct mbuf *
@@ -965,11 +974,6 @@ veb_port_input(struct ifnet *ifp0, struct mbuf *m, uint64_t dst, void *brport)
 #if NBPFILTER > 0
 	caddr_t if_bpf;
 #endif
-
-	if (ISSET(m->m_flags, M_PROTO1)) {
-		CLR(m->m_flags, M_PROTO1);
-		return (m);
-	}
 
 	if (!ISSET(ifp->if_flags, IFF_RUNNING))
 		return (m);
@@ -1059,7 +1063,6 @@ veb_port_input(struct ifnet *ifp0, struct mbuf *m, uint64_t dst, void *brport)
 		etherbridge_map(&sc->sc_eb, p, src);
 
 	CLR(m->m_flags, M_BCAST|M_MCAST);
-	SET(m->m_flags, M_PROTO1);
 
 	if (!ETH64_IS_MULTICAST(dst)) {
 		struct veb_port *tp = NULL;
@@ -1245,6 +1248,7 @@ veb_add_port(struct veb_softc *sc, const struct ifbreq *req, unsigned int span)
 	struct ifnet *ifp0;
 	struct veb_ports *port_list;
 	struct veb_port *p;
+	int isvport;
 	int error;
 
 	NET_ASSERT_LOCKED();
@@ -1262,6 +1266,8 @@ veb_add_port(struct veb_softc *sc, const struct ifbreq *req, unsigned int span)
 		error = EPROTONOSUPPORT;
 		goto put;
 	}
+
+	isvport = (ifp0->if_enqueue == vport_enqueue);
 
 	error = ether_brport_isset(ifp0);
 	if (error != 0)
@@ -1283,11 +1289,17 @@ veb_add_port(struct veb_softc *sc, const struct ifbreq *req, unsigned int span)
 	SMR_TAILQ_INIT(&p->p_vr_list[0]);
 	SMR_TAILQ_INIT(&p->p_vr_list[1]);
 
+	p->p_enqueue = isvport ? vport_if_enqueue : if_enqueue;
 	p->p_ioctl = ifp0->if_ioctl;
 	p->p_output = ifp0->if_output;
 
 	if (span) {
 		port_list = &sc->sc_spans;
+
+		if (isvport) {
+			error = EPROTONOSUPPORT;
+			goto free;
+		}
 
 		p->p_brport.eb_input = veb_span_input;
 		p->p_bif_flags = IFBIF_SPAN;
@@ -1299,7 +1311,8 @@ veb_add_port(struct veb_softc *sc, const struct ifbreq *req, unsigned int span)
 			goto free;
 
 		p->p_bif_flags = IFBIF_LEARNING | IFBIF_DISCOVER;
-		p->p_brport.eb_input = veb_port_input;
+		p->p_brport.eb_input = isvport ?
+		    veb_vport_input : veb_port_input;
 	}
 
 	p->p_brport.eb_port_take = veb_eb_brport_take;
@@ -1323,7 +1336,7 @@ veb_add_port(struct veb_softc *sc, const struct ifbreq *req, unsigned int span)
 	port_list->l_count++;
 
 	ether_brport_set(ifp0, &p->p_brport);
-	if (ifp0->if_enqueue != vport_enqueue) { /* vport is special */
+	if (!isvport) { /* vport is special */
 		ifp0->if_ioctl = veb_p_ioctl;
 		ifp0->if_output = veb_p_output;
 	}
@@ -2176,6 +2189,20 @@ vport_down(struct vport_softc *sc)
 }
 
 static int
+vport_if_enqueue(struct ifnet *ifp, struct mbuf *m)
+{
+	/*
+	 * switching an l2 packet toward a vport means pushing it
+	 * into the network stack. this function exists to make
+	 * if_vinput compat with veb calling if_enqueue.
+	 */
+
+	if_vinput(ifp, m);
+
+	return (0);
+}
+
+static int
 vport_enqueue(struct ifnet *ifp, struct mbuf *m)
 {
 	struct arpcom *ac;
@@ -2185,23 +2212,18 @@ vport_enqueue(struct ifnet *ifp, struct mbuf *m)
 	caddr_t if_bpf;
 #endif
 
+	/*
+	 * a packet sent from the l3 stack out a vport goes into
+	 * veb for switching out another port.
+	 */
+
 #if NPF > 0
 	/*
-	 * the packet is about to leave the l3 stack and go into
-	 * the l2 switching space, or it's coming from a switch space
-	 * into the network stack. either way, there's no relationship
-	 * between pf states in those different places.
+	 * there's no relationship between pf states in the l3 stack
+	 * and the l2 bridge.
 	 */
 	pf_pkt_addr_changed(m);
 #endif
-
-	if (ISSET(m->m_flags, M_PROTO1)) {
-		/* packet is coming from a bridge */
-		if_vinput(ifp, m);
-		return (0);
-	}
-
-	/* packet is going to the bridge */
 
 	ac = (struct arpcom *)ifp;
 
@@ -2211,6 +2233,8 @@ vport_enqueue(struct ifnet *ifp, struct mbuf *m)
 		eb->eb_port_take(eb->eb_port);
 	smr_read_leave();
 	if (eb != NULL) {
+		struct mbuf *(*input)(struct ifnet *, struct mbuf *,
+		    uint64_t, void *) = eb->eb_input;
 		struct ether_header *eh;
 		uint64_t dst;
 
@@ -2225,7 +2249,10 @@ vport_enqueue(struct ifnet *ifp, struct mbuf *m)
 
 		eh = mtod(m, struct ether_header *);
 		dst = ether_addr_to_e64((struct ether_addr *)eh->ether_dhost);
-		m = (*eb->eb_input)(ifp, m, dst, eb->eb_port);
+
+		if (input == veb_vport_input)
+			input = veb_port_input;
+		m = (*input)(ifp, m, dst, eb->eb_port);
 
 		error = 0;
 

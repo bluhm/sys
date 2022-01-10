@@ -1,9 +1,9 @@
-#	$OpenBSD: files.acpi,v 1.62 2020/12/06 20:39:07 kettenis Exp $
+#	$OpenBSD: files.acpi,v 1.64 2021/12/29 18:40:19 patrick Exp $
 #
 # Config file and device description for machine-independent ACPI code.
 # Included by ports that need it.
 
-define	acpi {}
+define	acpi {[addr = -1]}
 device	acpi
 file	dev/acpi/acpi.c			acpi needs-flag
 file	dev/acpi/acpiutil.c		acpi
@@ -186,6 +186,14 @@ file	dev/acpi/pluart_acpi.c		pluart_acpi
 # SD Host Controller
 attach	sdhc at acpi with sdhc_acpi
 file	dev/acpi/sdhc_acpi.c		sdhc_acpi
+
+# OHCI
+attach	ohci at acpi with ohci_acpi
+file	dev/acpi/ohci_acpi.c		ohci_acpi
+
+# EHCI
+attach	ehci at acpi with ehci_acpi
+file	dev/acpi/ehci_acpi.c		ehci_acpi
 
 # XHCI
 attach	xhci at acpi with xhci_acpi

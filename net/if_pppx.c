@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_pppx.c,v 1.111 2021/07/20 16:44:55 mvs Exp $ */
+/*	$OpenBSD: if_pppx.c,v 1.113 2021/12/30 14:25:39 anton Exp $ */
 
 /*
  * Copyright (c) 2010 Claudio Jeker <claudio@openbsd.org>
@@ -930,6 +930,7 @@ RBT_GENERATE(pppx_ifs, pppx_if, pxi_entry, pppx_if_cmp);
 struct pppac_softc {
 	struct ifnet	sc_if;
 	dev_t		sc_dev;		/* [I] */
+	int		sc_ready;	/* [K] */
 	LIST_ENTRY(pppac_softc)
 			sc_entry;	/* [K] */
 
@@ -985,8 +986,12 @@ pppac_lookup(dev_t dev)
 	struct pppac_softc *sc;
 
 	LIST_FOREACH(sc, &pppac_devs, sc_entry) {
-		if (sc->sc_dev == dev)
+		if (sc->sc_dev == dev) {
+			if (sc->sc_ready == 0)
+				break;
+
 			return (sc);
+		}
 	}
 
 	return (NULL);
@@ -1001,15 +1006,19 @@ pppacattach(int n)
 int
 pppacopen(dev_t dev, int flags, int mode, struct proc *p)
 {
-	struct pppac_softc *sc;
+	struct pppac_softc *sc, *tmp;
 	struct ifnet *ifp;
 	struct pipex_session *session;
 
 	sc = malloc(sizeof(*sc), M_DEVBUF, M_WAITOK|M_ZERO);
-	if (pppac_lookup(dev) != NULL) {
-		free(sc, M_DEVBUF, sizeof(*sc));
-		return (EBUSY);
+	sc->sc_dev = dev;
+	LIST_FOREACH(tmp, &pppac_devs, sc_entry) {
+		if (tmp->sc_dev == dev) {
+			free(sc, M_DEVBUF, sizeof(*sc));
+			return (EBUSY);
+		}
 	}
+	LIST_INSERT_HEAD(&pppac_devs, sc, sc_entry);
 
 	/* virtual pipex_session entry for multicast */
 	session = pool_get(&pipex_session_pool, PR_WAITOK | PR_ZERO);
@@ -1017,13 +1026,9 @@ pppacopen(dev_t dev, int flags, int mode, struct proc *p)
 	session->ownersc = sc;
 	sc->sc_multicast_session = session;
 
-	sc->sc_dev = dev;
-
 	mtx_init(&sc->sc_rsel_mtx, IPL_SOFTNET);
 	mtx_init(&sc->sc_wsel_mtx, IPL_SOFTNET);
 	mq_init(&sc->sc_mq, IFQ_MAXLEN, IPL_SOFTNET);
-
-	LIST_INSERT_HEAD(&pppac_devs, sc, sc_entry);
 
 	ifp = &sc->sc_if;
 	snprintf(ifp->if_xname, sizeof(ifp->if_xname), "pppac%u", minor(dev));
@@ -1048,6 +1053,8 @@ pppacopen(dev_t dev, int flags, int mode, struct proc *p)
 #if NBPFILTER > 0
 	bpfattach(&ifp->if_bpf, ifp, DLT_LOOP, sizeof(uint32_t));
 #endif
+
+	sc->sc_ready = 1;
 
 	return (0);
 }
@@ -1301,6 +1308,8 @@ pppacclose(dev_t dev, int flags, int mode, struct proc *p)
 	struct pppac_softc *sc = pppac_lookup(dev);
 	struct ifnet *ifp = &sc->sc_if;
 	int s;
+
+	sc->sc_ready = 0;
 
 	NET_LOCK();
 	CLR(ifp->if_flags, IFF_RUNNING);

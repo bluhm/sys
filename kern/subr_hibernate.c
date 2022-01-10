@@ -1,4 +1,4 @@
-/*	$OpenBSD: subr_hibernate.c,v 1.129 2021/08/31 14:45:25 deraadt Exp $	*/
+/*	$OpenBSD: subr_hibernate.c,v 1.132 2022/01/07 02:47:07 guenther Exp $	*/
 
 /*
  * Copyright (c) 2011 Ariane van der Steldt <ariane@stack.nl>
@@ -34,6 +34,9 @@
 #include <uvm/uvm_swap.h>
 
 #include <machine/hibernate.h>
+
+/* Make sure the signature can fit in one block */
+CTASSERT(sizeof(union hibernate_info) <= DEV_BSIZE);
 
 /*
  * Hibernate piglet layout information
@@ -568,6 +571,7 @@ get_hibernate_info(union hibernate_info *hib, int suspend)
 {
 	struct disklabel dl;
 	char err_string[128], *dl_ret;
+	int part;
 
 #ifndef NO_PROPOLICE
 	/* Save propolice guard */
@@ -591,19 +595,17 @@ get_hibernate_info(union hibernate_info *hib, int suspend)
 	}
 
 	/* Make sure we have a swap partition. */
-	if (dl.d_partitions[1].p_fstype != FS_SWAP ||
-	    DL_GETPSIZE(&dl.d_partitions[1]) == 0)
-		return (1);
-
-	/* Make sure the signature can fit in one block */
-	if (sizeof(union hibernate_info) > DEV_BSIZE)
+	part = DISKPART(hib->dev);
+	if (dl.d_npartitions <= part ||
+	    dl.d_partitions[part].p_fstype != FS_SWAP ||
+	    DL_GETPSIZE(&dl.d_partitions[part]) == 0)
 		return (1);
 
 	/* Magic number */
 	hib->magic = HIBERNATE_MAGIC;
 
 	/* Calculate signature block location */
-	hib->sig_offset = DL_GETPSIZE(&dl.d_partitions[1]) -
+	hib->sig_offset = DL_GETPSIZE(&dl.d_partitions[part]) -
 	    sizeof(union hibernate_info)/DEV_BSIZE;
 
 	/* Stash kernel version information */
@@ -626,8 +628,8 @@ get_hibernate_info(union hibernate_info *hib, int suspend)
 		 * a matching HIB_DONE call performed after the write is
 		 * completed.
 		 */
-		if (hib->io_func(hib->dev, DL_GETPOFFSET(&dl.d_partitions[1]),
-		    (vaddr_t)NULL, DL_GETPSIZE(&dl.d_partitions[1]),
+		if (hib->io_func(hib->dev, DL_GETPOFFSET(&dl.d_partitions[part]),
+		    (vaddr_t)NULL, DL_GETPSIZE(&dl.d_partitions[part]),
 		    HIB_INIT, hib->io_page))
 			goto fail;
 
@@ -916,23 +918,18 @@ hibernate_write_chunktable(union hibernate_info *hib)
  * guaranteed to not match any valid hib.
  */
 int
-hibernate_clear_signature(void)
+hibernate_clear_signature(union hibernate_info *hib)
 {
 	union hibernate_info blank_hiber_info;
-	union hibernate_info hib;
 
 	/* Zero out a blank hiber_info */
 	memset(&blank_hiber_info, 0, sizeof(union hibernate_info));
 
-	/* Get the signature block location */
-	if (get_hibernate_info(&hib, 0))
-		return (1);
-
 	/* Write (zeroed) hibernate info to disk */
 	DPRINTF("clearing hibernate signature block location: %lld\n",
-		hib.sig_offset);
-	if (hibernate_block_io(&hib,
-	    hib.sig_offset,
+		hib->sig_offset);
+	if (hibernate_block_io(hib,
+	    hib->sig_offset,
 	    DEV_BSIZE, (vaddr_t)&blank_hiber_info, 1))
 		printf("Warning: could not clear hibernate signature\n");
 
@@ -1158,7 +1155,7 @@ hibernate_resume(void)
 	 * We (possibly) found a hibernate signature. Clear signature first,
 	 * to prevent accidental resume or endless resume cycles later.
 	 */
-	if (hibernate_clear_signature()) {
+	if (hibernate_clear_signature(&hib)) {
 		DPRINTF("error clearing hibernate signature block\n");
 		splx(s);
 		return;
@@ -1173,6 +1170,7 @@ hibernate_resume(void)
 		splx(s);
 		return;
 	}
+	disk_hib.dev = hib.dev;
 
 #ifdef MULTIPROCESSOR
 	/* XXX - if we fail later, we may need to rehatch APs on some archs */

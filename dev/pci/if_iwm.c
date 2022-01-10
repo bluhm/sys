@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_iwm.c,v 1.385 2021/12/20 15:08:10 stsp Exp $	*/
+/*	$OpenBSD: if_iwm.c,v 1.389 2022/01/09 05:42:50 jsg Exp $	*/
 
 /*
  * Copyright (c) 2014, 2016 genua gmbh <info@genua.de>
@@ -404,8 +404,7 @@ void	iwm_rx_tx_cmd(struct iwm_softc *, struct iwm_rx_packet *,
 void	iwm_clear_oactive(struct iwm_softc *, struct iwm_tx_ring *);
 void	iwm_ampdu_rate_control(struct iwm_softc *, struct ieee80211_node *,
 	    struct iwm_tx_ring *, int, uint16_t, uint16_t);
-void	iwm_rx_compressed_ba(struct iwm_softc *, struct iwm_rx_packet *,
-	    struct iwm_rx_data *);
+void	iwm_rx_compressed_ba(struct iwm_softc *, struct iwm_rx_packet *);
 void	iwm_rx_bmiss(struct iwm_softc *, struct iwm_rx_packet *,
 	    struct iwm_rx_data *);
 int	iwm_binding_cmd(struct iwm_softc *, struct iwm_node *, uint32_t);
@@ -4258,7 +4257,7 @@ iwm_start_fw(struct iwm_softc *sc, enum iwm_ucode_type ucode_type)
 	IWM_WRITE(sc, IWM_CSR_UCODE_DRV_GP1_CLR,
 	    IWM_CSR_UCODE_DRV_GP1_BIT_CMD_BLOCKED);
 
-	/* clear (again), then enable firwmare load interrupt */
+	/* clear (again), then enable firmware load interrupt */
 	IWM_WRITE(sc, IWM_CSR_INT, ~0);
 	iwm_enable_fwload_interrupt(sc);
 
@@ -5115,7 +5114,8 @@ iwm_rx_reorder(struct iwm_softc *sc, struct mbuf *m, int chanidx,
 		return 0;
 
 	rxba = &sc->sc_rxba_data[baid];
-	if (rxba == NULL || tid != rxba->tid || rxba->sta_id != IWM_STATION_ID)
+	if (rxba->baid == IWM_RX_REORDER_DATA_INVALID_BAID ||
+	    tid != rxba->tid || rxba->sta_id != IWM_STATION_ID)
 		return 0;
 
 	if (rxba->timeout != 0)
@@ -5764,8 +5764,7 @@ iwm_ampdu_rate_control(struct iwm_softc *sc, struct ieee80211_node *ni,
 }
 
 void
-iwm_rx_compressed_ba(struct iwm_softc *sc, struct iwm_rx_packet *pkt,
-    struct iwm_rx_data *data)
+iwm_rx_compressed_ba(struct iwm_softc *sc, struct iwm_rx_packet *pkt)
 {
 	struct iwm_ba_notif *ban = (void *)pkt->data;
 	struct ieee80211com *ic = &sc->sc_ic;
@@ -9206,7 +9205,7 @@ iwm_newstate(struct ieee80211com *ic, enum ieee80211_state nstate, int arg)
 	struct iwm_softc *sc = ifp->if_softc;
 
 	/*
-	 * Prevent attemps to transition towards the same state, unless
+	 * Prevent attempts to transition towards the same state, unless
 	 * we are scanning in which case a SCAN -> SCAN transition
 	 * triggers another scan iteration. And AUTH -> AUTH is needed
 	 * to support band-steering.
@@ -10585,8 +10584,7 @@ iwm_rx_pkt(struct iwm_softc *sc, struct iwm_rx_data *data, struct mbuf_list *ml)
 			break;
 
 		len = sizeof(pkt->len_n_flags) + iwm_rx_packet_len(pkt);
-		if (len < sizeof(pkt->hdr) ||
-		    len > (IWM_RBUF_SIZE - offset - minsz))
+		if (len < minsz || len > (IWM_RBUF_SIZE - offset))
 			break;
 
 		if (code == IWM_REPLY_RX_MPDU_CMD && ++nmpdu == 1) {
@@ -10650,7 +10648,7 @@ iwm_rx_pkt(struct iwm_softc *sc, struct iwm_rx_data *data, struct mbuf_list *ml)
 			break;
 
 		case IWM_BA_NOTIF:
-			iwm_rx_compressed_ba(sc, pkt, data);
+			iwm_rx_compressed_ba(sc, pkt);
 			break;
 
 		case IWM_MISSED_BEACONS_NOTIFICATION:

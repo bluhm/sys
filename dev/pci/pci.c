@@ -1,4 +1,4 @@
-/*	$OpenBSD: pci.c,v 1.120 2021/07/23 00:29:14 jmatthew Exp $	*/
+/*	$OpenBSD: pci.c,v 1.123 2022/01/05 16:46:11 deraadt Exp $	*/
 /*	$NetBSD: pci.c,v 1.31 1997/06/06 23:48:04 thorpej Exp $	*/
 
 /*
@@ -1220,6 +1220,7 @@ pciioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 {
 	struct pcisel *sel = (struct pcisel *)data;
 	struct pci_io *io;
+	struct pci_dev *pd;
 	struct pci_rom *rom;
 	int i, error;
 	pcitag_t tag;
@@ -1263,6 +1264,18 @@ pciioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 		return EINVAL;
 
 	pc = pci->sc_pc;
+	LIST_FOREACH(pd, &pci->sc_devs, pd_next) {
+		int bus, dev, func;
+
+		pci_decompose_tag(pc, pd->pd_tag, &bus, &dev, &func);
+
+		if (bus == sel->pc_bus && dev == sel->pc_dev &&
+		    func == sel->pc_func)
+			break;
+	}
+	if (pd == LIST_END(&pci->sc_devs))
+		return ENXIO;
+
 	tag = pci_make_tag(pc, sel->pc_bus, sel->pc_dev, sel->pc_func);
 
 	switch (cmd) {
@@ -1307,28 +1320,17 @@ pciioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 		break;
 
 	case PCIOCREADMASK:
-	{
 		io = (struct pci_io *)data;
-		struct pci_dev *pd;
-		int dev, func, i;
 
 		if (io->pi_width != 4 || io->pi_reg & 0x3 ||
 		    io->pi_reg < PCI_MAPREG_START ||
 		    io->pi_reg >= PCI_MAPREG_END)
 			return (EINVAL);
 
-		error = ENODEV;
-		LIST_FOREACH(pd, &pci->sc_devs, pd_next) {
-			pci_decompose_tag(pc, pd->pd_tag, NULL, &dev, &func);
-			if (dev == sel->pc_dev && func == sel->pc_func) {
-				i = (io->pi_reg - PCI_MAPREG_START) / 4;
-				io->pi_data = pd->pd_mask[i];
-				error = 0;
-				break;
-			}
-		}
+		i = (io->pi_reg - PCI_MAPREG_START) / 4;
+		io->pi_data = pd->pd_mask[i];
+		error = 0;
 		break;
-	}
 
 	case PCIOCGETROMLEN:
 	case PCIOCGETROM:
@@ -1353,7 +1355,7 @@ pciioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 		splx(s);
 
 		/*
-		 * Section 6.2.5.2 `Expansion ROM Base Addres Register',
+		 * Section 6.2.5.2 `Expansion ROM Base Address Register',
 		 *
 		 * tells us that only the upper 21 bits are writable.
 		 * This means that the size of a ROM must be a

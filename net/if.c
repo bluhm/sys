@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.c,v 1.645 2021/12/26 01:00:32 sashan Exp $	*/
+/*	$OpenBSD: if.c,v 1.647 2022/01/07 16:39:18 deraadt Exp $	*/
 /*	$NetBSD: if.c,v 1.35 1996/05/07 05:26:04 thorpej Exp $	*/
 
 /*
@@ -258,7 +258,7 @@ ifinit(void)
 
 	/*
 	 * most machines boot with 4 or 5 interfaces, so size the initial map
-	 * to accomodate this
+	 * to accommodate this
 	 */
 	if_idxmap_init(8);
 
@@ -744,7 +744,7 @@ if_input_local(struct ifnet *ifp, struct mbuf *m, sa_family_t af)
 
 #if NBPFILTER > 0
 	/*
-	 * Only send packets to bpf if they are destinated to local
+	 * Only send packets to bpf if they are destined to local
 	 * addresses.
 	 *
 	 * if_input_local() is also called for SIMPLEX interfaces to
@@ -2030,7 +2030,6 @@ ifioctl(struct socket *so, u_long cmd, caddr_t data, struct proc *p)
 		    (!ISSET(oif_xflags, IFXF_AUTOCONF6TEMP) &&
 		    ISSET(ifp->if_xflags, IFXF_AUTOCONF6TEMP)))) {
 			ifr->ifr_flags = ifp->if_flags | IFF_UP;
-			cmd = SIOCSIFFLAGS;
 			goto forceup;
 		}
 
@@ -2045,9 +2044,11 @@ ifioctl(struct socket *so, u_long cmd, caddr_t data, struct proc *p)
 forceup:
 		ifp->if_flags = (ifp->if_flags & IFF_CANTCHANGE) |
 			(ifr->ifr_flags & ~IFF_CANTCHANGE);
-		error = (*ifp->if_ioctl)(ifp, cmd, data);
+		error = (*ifp->if_ioctl)(ifp, SIOCSIFFLAGS, data);
 		if (error != 0) {
 			ifp->if_flags = oif_flags;
+			if (cmd == SIOCSIFXFLAGS)
+				ifp->if_xflags = oif_xflags;
 		} else if (ISSET(oif_flags ^ ifp->if_flags, IFF_UP)) {
 			s = splnet();
 			if (ISSET(ifp->if_flags, IFF_UP))
