@@ -1,4 +1,4 @@
-/*	$OpenBSD: init_sysent.c,v 1.234 2022/01/11 08:10:03 mvs Exp $	*/
+/*	$OpenBSD$	*/
 
 /*
  * System call switch table.
@@ -125,7 +125,7 @@ const struct sysent sysent[] = {
 	    sys_getgid },			/* 47 = getgid */
 	{ 2, s(struct sys_sigprocmask_args), SY_NOLOCK | 0,
 	    sys_sigprocmask },			/* 48 = sigprocmask */
-	{ 6, s(struct sys_mmap_args), 0,
+	{ 6, s(struct sys_mmap_args), SY_NOLOCK | 0,
 	    sys_mmap },				/* 49 = mmap */
 	{ 1, s(struct sys_setlogin_args), 0,
 	    sys_setlogin },			/* 50 = setlogin */
