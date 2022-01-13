@@ -2437,12 +2437,9 @@ ixgbe_tx_ctx_setup(struct tx_ring *txr, struct mbuf *mp,
 #else
 	struct ether_header *eh;
 #endif
-	struct ip *ip;
 #ifdef notyet
 	struct ip6_hdr *ip6;
 #endif
-	struct mbuf *m;
-	int	ipoff;
 	uint32_t vlan_macip_lens = 0, type_tucmd_mlhl = 0;
 	int 	ehdrlen, ip_hlen = 0;
 	uint16_t etype;
@@ -2511,16 +2508,23 @@ ixgbe_tx_ctx_setup(struct tx_ring *txr, struct mbuf *mp,
 	vlan_macip_lens |= ehdrlen << IXGBE_ADVTXD_MACLEN_SHIFT;
 
 	switch (etype) {
-	case ETHERTYPE_IP:
+	case ETHERTYPE_IP: {
+		struct ip *ip, ipdata;
+
 		if (mp->m_pkthdr.len < ehdrlen + sizeof(*ip))
 			return (-1);
-		m = m_getptr(mp, ehdrlen, &ipoff);
-		KASSERT(m != NULL && m->m_len - ipoff >= sizeof(*ip));
-		ip = (struct ip *)(m->m_data + ipoff);
+		if (((mtod(mp, unsigned long) + ehdrlen) & ALIGNBYTES) == 0 &&
+		    mp->m_len >= ehdrlen + sizeof(*ip)) {
+			ip = (struct ip *)(mp->m_data + ehdrlen);
+		} else {
+			m_copydata(mp, ehdrlen, sizeof(ipdata), &ipdata);
+			ip = &ipdata;
+		}
 		ip_hlen = ip->ip_hl << 2;
 		ipproto = ip->ip_p;
 		type_tucmd_mlhl |= IXGBE_ADVTXD_TUCMD_IPV4;
 		break;
+	}
 #ifdef notyet
 	case ETHERTYPE_IPV6:
 		if (mp->m_pkthdr.len < ehdrlen + sizeof(*ip6))
