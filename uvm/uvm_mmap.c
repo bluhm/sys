@@ -183,12 +183,14 @@ uvm_wxcheck(struct proc *p, char *call)
 		return 0;
 
 	if (uvm_wxabort) {
+		KERNEL_LOCK();
 		/* Report W^X failures */
 		if (pr->ps_wxcounter++ == 0)
 			log(LOG_NOTICE, "%s(%d): %s W^X violation\n",
 			    pr->ps_comm, pr->ps_pid, call);
 		/* Send uncatchable SIGABRT for coredump */
 		sigexit(p, SIGABRT);
+		KERNEL_UNLOCK();
 	}
 
 	return ENOTSUP;
