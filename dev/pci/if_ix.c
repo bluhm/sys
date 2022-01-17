@@ -1879,7 +1879,8 @@ ixgbe_setup_interface(struct ix_softc *sc)
 	ifp->if_capabilities |= IFCAP_VLAN_HWTAGGING;
 #endif
 
-	ifp->if_capabilities |= IFCAP_CSUM_TCPv4 | IFCAP_CSUM_UDPv4;
+	ifp->if_capabilities |= IFCAP_CSUM_TCPv4 | IFCAP_CSUM_UDPv4
+	    | IFCAP_CSUM_TCPv6 | IFCAP_CSUM_UDPv6;
 
 	/*
 	 * Specify the media types supported by this sc and register
@@ -2438,9 +2439,7 @@ ixgbe_tx_ctx_setup(struct tx_ring *txr, struct mbuf *mp,
 	struct ether_header *eh;
 #endif
 	struct ip *ip;
-#ifdef notyet
 	struct ip6_hdr *ip6;
-#endif
 	struct mbuf *m;
 	int	ipoff;
 	uint32_t vlan_macip_lens = 0, type_tucmd_mlhl = 0;
@@ -2521,19 +2520,16 @@ ixgbe_tx_ctx_setup(struct tx_ring *txr, struct mbuf *mp,
 		ipproto = ip->ip_p;
 		type_tucmd_mlhl |= IXGBE_ADVTXD_TUCMD_IPV4;
 		break;
-#ifdef notyet
 	case ETHERTYPE_IPV6:
 		if (mp->m_pkthdr.len < ehdrlen + sizeof(*ip6))
 			return (-1);
 		m = m_getptr(mp, ehdrlen, &ipoff);
 		KASSERT(m != NULL && m->m_len - ipoff >= sizeof(*ip6));
-		ip6 = (struct ip6 *)(m->m_data + ipoff);
+		ip6 = (struct ip6_hdr *)(m->m_data + ipoff);
 		ip_hlen = sizeof(*ip6);
-		/* XXX-BZ this will go badly in case of ext hdrs. */
 		ipproto = ip6->ip6_nxt;
 		type_tucmd_mlhl |= IXGBE_ADVTXD_TUCMD_IPV6;
 		break;
-#endif
 	default:
 		offload = FALSE;
 		break;
