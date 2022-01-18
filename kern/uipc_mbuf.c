@@ -1,4 +1,4 @@
-/*	$OpenBSD: uipc_mbuf.c,v 1.279 2021/03/06 09:20:49 jsg Exp $	*/
+/*	$OpenBSD: uipc_mbuf.c,v 1.280 2022/01/18 12:38:21 bluhm Exp $	*/
 /*	$NetBSD: uipc_mbuf.c,v 1.15.4.1 1996/06/13 17:11:44 cgd Exp $	*/
 
 /*
