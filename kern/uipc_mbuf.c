@@ -939,8 +939,6 @@ m_pullup(struct mbuf *m0, int len)
 
 	head = M_DATABUF(m0);
 	if (m0->m_len == 0) {
-		m0->m_data = head;
-
 		while (m->m_len == 0) {
 			m = m_free(m);
 			if (m == NULL)
@@ -954,10 +952,11 @@ m_pullup(struct mbuf *m0, int len)
 	tail = head + M_SIZE(m0);
 	head += adj;
 
-	if (len <= tail - head) {
-		/* there's enough space in the first mbuf */
-
-		if (len > tail - mtod(m0, caddr_t)) {
+	if (!M_READONLY(m0) && len <= tail - head) {
+		/* we can copy everything into the first mbuf */
+		if (m0->m_len == 0) {
+			m0->m_data = head;
+		} else if (len > tail - mtod(m0, caddr_t)) {
 			/* need to memmove to make space at the end */
 			memmove(head, mtod(m0, caddr_t), m0->m_len);
 			m0->m_data = head;
@@ -965,7 +964,7 @@ m_pullup(struct mbuf *m0, int len)
 
 		len -= m0->m_len;
 	} else {
-		/* the first mbuf is too small so make a new one */
+		/* the first mbuf is too small or read-only, make a new one */
 		space = adj + len;
 
 		if (space > MAXMCLBYTES)
