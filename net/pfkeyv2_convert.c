@@ -432,13 +432,15 @@ import_flow(struct sockaddr_encap *flow, struct sockaddr_encap *flowmask,
     struct sadb_protocol *sab, struct sadb_protocol *ftype)
 {
 	u_int8_t transproto = 0;
-	union sockaddr_union *src = (union sockaddr_union *)(ssrc + 1);
-	union sockaddr_union *dst = (union sockaddr_union *)(ddst + 1);
-	union sockaddr_union *srcmask = (union sockaddr_union *)(ssrcmask + 1);
-	union sockaddr_union *dstmask = (union sockaddr_union *)(ddstmask + 1);
+	union sockaddr_union *src, *dst, *srcmask, *dstmask;
 
 	if (ssrc == NULL)
 		return 0; /* There wasn't any information to begin with. */
+
+	src = (union sockaddr_union *)(ssrc + 1);
+	dst = (union sockaddr_union *)(ddst + 1);
+	srcmask = (union sockaddr_union *)(ssrcmask + 1);
+	dstmask = (union sockaddr_union *)(ddstmask + 1);
 
 	bzero(flow, sizeof(*flow));
 	bzero(flowmask, sizeof(*flowmask));
