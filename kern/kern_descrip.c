@@ -156,7 +156,7 @@ fd_inuse(struct filedesc *fdp, int fd)
 {
 	u_int off = fd >> NDENTRYSHIFT;
 
-	if (fdp->fd_lomap[off] & (1 << (fd & NDENTRYMASK)))
+	if (fdp->fd_lomap[off] & (1U << (fd & NDENTRYMASK)))
 		return 1;
 
 	return 0;
@@ -167,9 +167,9 @@ fd_used(struct filedesc *fdp, int fd)
 {
 	u_int off = fd >> NDENTRYSHIFT;
 
-	fdp->fd_lomap[off] |= 1 << (fd & NDENTRYMASK);
+	fdp->fd_lomap[off] |= 1U << (fd & NDENTRYMASK);
 	if (fdp->fd_lomap[off] == ~0)
-		fdp->fd_himap[off >> NDENTRYSHIFT] |= 1 << (off & NDENTRYMASK);
+		fdp->fd_himap[off >> NDENTRYSHIFT] |= 1U << (off & NDENTRYMASK);
 
 	if (fd > fdp->fd_lastfile)
 		fdp->fd_lastfile = fd;
@@ -185,8 +185,8 @@ fd_unused(struct filedesc *fdp, int fd)
 		fdp->fd_freefile = fd;
 
 	if (fdp->fd_lomap[off] == ~0)
-		fdp->fd_himap[off >> NDENTRYSHIFT] &= ~(1 << (off & NDENTRYMASK));
-	fdp->fd_lomap[off] &= ~(1 << (fd & NDENTRYMASK));
+		fdp->fd_himap[off >> NDENTRYSHIFT] &= ~(1U << (off & NDENTRYMASK));
+	fdp->fd_lomap[off] &= ~(1U << (fd & NDENTRYMASK));
 
 #ifdef DIAGNOSTIC
 	if (fd > fdp->fd_lastfile)
