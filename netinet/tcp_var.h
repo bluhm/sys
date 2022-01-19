@@ -104,7 +104,7 @@ struct tcpcb {
 #define TF_TMR_2MSL	0x20000000	/* 2*msl quiet time timer armed */
 #define TF_TMR_REAPER	0x40000000	/* delayed cleanup timer armed, dead */
 #define TF_TMR_DELACK	0x80000000	/* delayed ack timer armed */
-#define TF_TIMER	TF_TMR_REXMT	/* used to shift with TCPT values */
+#define TF_TIMER ((unsigned)TF_TMR_REXMT) /* used to shift with TCPT values */
 
 	struct	mbuf *t_template;	/* skeletal packet for transmit */
 	struct	inpcb *t_inpcb;		/* back pointer to internet pcb */
