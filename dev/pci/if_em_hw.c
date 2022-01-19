@@ -7622,7 +7622,7 @@ em_read_part_num(struct em_hw *hw, uint32_t *part_num)
 		return -E1000_ERR_EEPROM;
 	}
 	/* Save word 0 in upper half of part_num */
-	*part_num = (uint32_t) (eeprom_data << 16);
+	*part_num = (uint32_t)eeprom_data << 16;
 
 	/* Get word 1 from EEPROM */
 	if (em_read_eeprom(hw, ++offset, 1, &eeprom_data) < 0) {
