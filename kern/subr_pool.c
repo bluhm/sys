@@ -961,7 +961,7 @@ pool_p_alloc(struct pool *pp, int flags, int *slowdown)
 			order = arc4random();
 			o = 0;
 		}
-		if (ISSET(order, 1 << o++))
+		if (ISSET(order, 1U << o++))
 			XSIMPLEQ_INSERT_TAIL(&ph->ph_items, pi, pi_list);
 		else
 			XSIMPLEQ_INSERT_HEAD(&ph->ph_items, pi, pi_list);
