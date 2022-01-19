@@ -570,14 +570,14 @@ snprintf(char *buf, size_t size, const char *fmt, ...)
 	va_list ap;
 	char *p;
 
-	p = buf + size - 1;
-	if (size < 1)
-		p = buf;
+	p = buf;
+	if (size > 0)
+		p += size - 1;
 	va_start(ap, fmt);
 	retval = kprintf(fmt, TOBUFONLY | TOCOUNT, &p, buf, ap);
 	va_end(ap);
 	if (size > 0)
-		*(p) = 0;	/* null terminate */
+		*p = '\0';	/* null terminate */
 	return(retval);
 }
 
