@@ -1,4 +1,4 @@
-/*	$OpenBSD: subr_prf.c,v 1.104 2021/06/02 00:39:25 cheloha Exp $	*/
+/*	$OpenBSD: subr_prf.c,v 1.105 2022/01/20 17:11:30 bluhm Exp $	*/
 /*	$NetBSD: subr_prf.c,v 1.45 1997/10/24 18:14:25 chuck Exp $	*/
 
 /*-
