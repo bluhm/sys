@@ -2510,7 +2510,7 @@ ixgbe_tx_ctx_setup(struct tx_ring *txr, struct mbuf *mp,
 		struct ip *ip, ipdata;
 
 		if (mp->m_pkthdr.len < ehdrlen + sizeof(*ip)) {
-			ipstat_inc(ips_outcpycsum);
+			ipstat_inc(ips_outbadcsum);
 			return (-1);
 		}
 		if (((mtod(mp, unsigned long) + ehdrlen) & ALIGNBYTES) == 0 &&
@@ -2530,7 +2530,7 @@ ixgbe_tx_ctx_setup(struct tx_ring *txr, struct mbuf *mp,
 		struct ip6_hdr *ip6, ip6data;
 
 		if (mp->m_pkthdr.len < ehdrlen + sizeof(*ip6)) {
-			ip6stat_inc(ip6s_outcpycsum);
+			ip6stat_inc(ip6s_outbadcsum);
 			return (-1);
 		}
 		if (((mtod(mp, unsigned long) + ehdrlen) & ALIGNBYTES) == 0 &&

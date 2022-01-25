@@ -71,6 +71,7 @@
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_media.h>
+#include <net/route.h>
 #include <net/toeplitz.h>
 
 #if NBPFILTER > 0
@@ -83,9 +84,14 @@
 
 #include <netinet/in.h>
 #include <netinet/ip.h>
+#include <netinet/ip_var.h>
 #include <netinet/ip6.h>
+#include <netinet6/ip6_var.h>
 #include <netinet/tcp.h>
+#include <netinet/tcp_timer.h>
+#include <netinet/tcp_var.h>
 #include <netinet/udp.h>
+#include <netinet/udp_var.h>
 #include <netinet/if_ether.h>
 
 #include <dev/pci/pcireg.h>
@@ -1951,7 +1957,6 @@ ixl_attach(struct device *parent, struct device *self, void *aux)
 	ifp->if_capabilities |= IFCAP_CSUM_IPv4 | IFCAP_CSUM_TCPv4 |
 	    IFCAP_CSUM_UDPv4 | IFCAP_CSUM_TCPv6 | IFCAP_CSUM_UDPv6;
 
-
 	ifmedia_init(&sc->sc_media, 0, ixl_media_change, ixl_media_status);
 
 	ixl_media_add(sc, phy_types);
@@ -2777,27 +2782,28 @@ ixl_load_mbuf(bus_dma_tag_t dmat, bus_dmamap_t map, struct mbuf *m)
 	    BUS_DMA_STREAMING | BUS_DMA_NOWAIT));
 }
 
-static void
+static int
 ixl_tx_setup_offload(struct mbuf *mp, uint64_t *cmd)
 {
 	uint64_t         ip_hdr_len;
-	int              ipoff = ETHER_HDR_LEN;
 	uint8_t          ipproto;
-	struct ip       *ip;
-#ifdef INET6
-	struct ip6_hdr  *ip6;
-#endif
-	struct tcphdr   *th;
-	struct mbuf     *m;
 
 	switch (ntohs(mtod(mp, struct ether_header *)->ether_type)) {
-	case ETHERTYPE_IP:
-		if (mp->m_pkthdr.len < ETHER_HDR_LEN + sizeof(*ip))
-			return;
-		m = m_getptr(mp, ETHER_HDR_LEN, &ipoff);
-		KASSERT(m != NULL && m->m_len - ipoff >= sizeof(*ip));
-		ip = (struct ip *)(m->m_data + ipoff);
+	case ETHERTYPE_IP: {
+		struct ip *ip, ipdata;
 
+		if (mp->m_pkthdr.len < ETHER_HDR_LEN + sizeof(*ip)) {
+			ipstat_inc(ips_outbadcsum);
+			return (-1);
+		}
+		if (((mtod(mp, unsigned long) + ETHER_HDR_LEN) & ALIGNBYTES)
+		    == 0 && mp->m_len >= ETHER_HDR_LEN + sizeof(*ip)) {
+			ip = (struct ip *)(mp->m_data + ETHER_HDR_LEN);
+		} else {
+			ipstat_inc(ips_outcpycsum);
+			m_copydata(mp, ETHER_HDR_LEN, sizeof(ipdata), &ipdata);
+			ip = &ipdata;
+		}
 		if (mp->m_pkthdr.csum_flags & M_IPV4_CSUM_OUT)
 			*cmd |= IXL_TX_DESC_CMD_IIPT_IPV4_CSUM;
 		else
@@ -2806,38 +2812,87 @@ ixl_tx_setup_offload(struct mbuf *mp, uint64_t *cmd)
 		ip_hdr_len = ip->ip_hl << 2;
 		ipproto = ip->ip_p;
 		break;
+	}
 #ifdef INET6
-	case ETHERTYPE_IPV6:
-		if (mp->m_pkthdr.len < ETHER_HDR_LEN + sizeof(*ip6))
-			return;
-		m = m_getptr(mp, ETHER_HDR_LEN, &ipoff);
-		KASSERT(m != NULL && m->m_len - ipoff >= sizeof(*ip6));
-		ip6 = (struct ip6_hdr *)(m->m_data + ipoff);
+	case ETHERTYPE_IPV6: {
+		struct ip6_hdr *ip6, ip6data;
+
+		if (mp->m_pkthdr.len < ETHER_HDR_LEN + sizeof(*ip6)) {
+			ip6stat_inc(ip6s_outbadcsum);
+			return (-1);
+		}
+		if (((mtod(mp, unsigned long) + ETHER_HDR_LEN) & ALIGNBYTES)
+		    == 0 && mp->m_len >= ETHER_HDR_LEN + sizeof(*ip6)) {
+			ip6 = (struct ip6_hdr *)(mp->m_data + ETHER_HDR_LEN);
+		} else {
+			ip6stat_inc(ip6s_outcpycsum);
+			m_copydata(mp, ETHER_HDR_LEN, sizeof(ip6data),
+			    &ip6data);
+			ip6 = &ip6data;
+		}
 
 		*cmd |= IXL_TX_DESC_CMD_IIPT_IPV6;
 
 		ip_hdr_len = sizeof(*ip6);
 		ipproto = ip6->ip6_nxt;
 		break;
+	}
 #endif
 	default:
-		return;
+		return (-1);
 	}
 
 	*cmd |= (ETHER_HDR_LEN >> 1) << IXL_TX_DESC_MACLEN_SHIFT;
 	*cmd |= (ip_hdr_len >> 2) << IXL_TX_DESC_IPLEN_SHIFT;
 
-	if (ipproto == IPPROTO_TCP && m->m_pkthdr.csum_flags & M_TCP_CSUM_OUT) {
-		th = (struct tcphdr *)(m->m_data + ipoff + ip_hdr_len);
+	switch (ipproto) {
+	case IPPROTO_TCP:
+		if (mp->m_pkthdr.csum_flags & M_TCP_CSUM_OUT) {
+			struct tcphdr *th, thdata;
 
-		*cmd |= IXL_TX_DESC_CMD_L4T_EOFT_TCP;
-		*cmd |= (uint64_t)th->th_off << IXL_TX_DESC_L4LEN_SHIFT;
+			if (mp->m_pkthdr.len < ETHER_HDR_LEN + ip_hdr_len +
+			    sizeof(*th)) {
+				tcpstat_inc(tcps_outbadcsum);
+				return (-1);
+			}
+			if (((mtod(mp, unsigned long) + ETHER_HDR_LEN +
+			    ip_hdr_len) & ALIGNBYTES) == 0 &&
+			    mp->m_len >= ETHER_HDR_LEN + ip_hdr_len +
+			    sizeof(*th)) {
+				th = (struct tcphdr *)(mp->m_data +
+				    ETHER_HDR_LEN + ip_hdr_len);
+			} else {
+				tcpstat_inc(tcps_outcpycsum);
+				m_copydata(mp, ETHER_HDR_LEN + ip_hdr_len,
+				    sizeof(thdata), &thdata);
+				th = &thdata;
+			}
+			*cmd |= IXL_TX_DESC_CMD_L4T_EOFT_TCP;
+			*cmd |= (uint64_t)th->th_off <<
+			    IXL_TX_DESC_L4LEN_SHIFT;
+		}
+		break;
+	case IPPROTO_UDP:
+		if (mp->m_pkthdr.csum_flags & M_UDP_CSUM_OUT) {
+			if (mp->m_pkthdr.len < ETHER_HDR_LEN + ip_hdr_len +
+			    sizeof(struct udphdr)) {
+				udpstat_inc(udps_outbadcsum);
+				return (-1);
+			}
+			*cmd |= IXL_TX_DESC_CMD_L4T_EOFT_UDP;
+			*cmd |= (sizeof(struct udphdr) >> 2) <<
+			    IXL_TX_DESC_L4LEN_SHIFT;
+		}
+		break;
+	default:
+		if (mp->m_pkthdr.csum_flags & M_TCP_CSUM_OUT)
+			tcpstat_inc(tcps_outbadcsum);
+		if (mp->m_pkthdr.csum_flags & M_UDP_CSUM_OUT)
+			udpstat_inc(udps_outbadcsum);
+		return (-1);
 	}
 
-	if (ipproto == IPPROTO_UDP && m->m_pkthdr.csum_flags & M_UDP_CSUM_OUT) {
-		*cmd |= IXL_TX_DESC_CMD_L4T_EOFT_UDP;
-		*cmd |= (sizeof(struct udphdr) >> 2) << IXL_TX_DESC_L4LEN_SHIFT;
-	}
+	return (0);
 }
 
 static void
