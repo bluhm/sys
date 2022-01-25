@@ -2509,12 +2509,15 @@ ixgbe_tx_ctx_setup(struct tx_ring *txr, struct mbuf *mp,
 	case ETHERTYPE_IP: {
 		struct ip *ip, ipdata;
 
-		if (mp->m_pkthdr.len < ehdrlen + sizeof(*ip))
+		if (mp->m_pkthdr.len < ehdrlen + sizeof(*ip)) {
+			ipstat_inc(ips_outcpycsum);
 			return (-1);
+		}
 		if (((mtod(mp, unsigned long) + ehdrlen) & ALIGNBYTES) == 0 &&
 		    mp->m_len >= ehdrlen + sizeof(*ip)) {
 			ip = (struct ip *)(mp->m_data + ehdrlen);
 		} else {
+			ipstat_inc(ips_outcpycsum);
 			m_copydata(mp, ehdrlen, sizeof(ipdata), &ipdata);
 			ip = &ipdata;
 		}
@@ -2526,12 +2529,15 @@ ixgbe_tx_ctx_setup(struct tx_ring *txr, struct mbuf *mp,
 	case ETHERTYPE_IPV6: {
 		struct ip6_hdr *ip6, ip6data;
 
-		if (mp->m_pkthdr.len < ehdrlen + sizeof(*ip6))
+		if (mp->m_pkthdr.len < ehdrlen + sizeof(*ip6)) {
+			ip6stat_inc(ip6s_outcpycsum);
 			return (-1);
+		}
 		if (((mtod(mp, unsigned long) + ehdrlen) & ALIGNBYTES) == 0 &&
 		    mp->m_len >= ehdrlen + sizeof(*ip6)) {
 			ip6 = (struct ip6_hdr *)(mp->m_data + ehdrlen);
 		} else {
+			ip6stat_inc(ip6s_outcpycsum);
 			m_copydata(mp, ehdrlen, sizeof(ip6data), &ip6data);
 			ip6 = &ip6data;
 		}
@@ -2558,6 +2564,10 @@ ixgbe_tx_ctx_setup(struct tx_ring *txr, struct mbuf *mp,
 			type_tucmd_mlhl |= IXGBE_ADVTXD_TUCMD_L4T_UDP;
 		break;
 	default:
+		if (mp->m_pkthdr.csum_flags & M_TCP_CSUM_OUT)
+			tcpstat_inc(tcps_outbadcsum);
+		if (mp->m_pkthdr.csum_flags & M_UDP_CSUM_OUT)
+			udpstat_inc(udps_outbadcsum);
 		offload = FALSE;
 		break;
 	}

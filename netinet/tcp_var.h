@@ -434,6 +434,9 @@ struct	tcpstat {
 	u_int64_t tcps_sack_rcv_opts;		/* SACK options received */
 	u_int64_t tcps_sack_snd_opts;		/* SACK options sent */
 	u_int64_t tcps_sack_drop_opts;		/* SACK options dropped */
+
+	u_int64_t tcps_outbadcsum;	/* output hardware checksum failed */
+	u_int64_t tcps_outcpycsum;	/* output checksum needs copy */
 };
 
 /*
@@ -605,6 +608,9 @@ enum tcpstat_counters {
 	tcps_sack_rcv_opts,
 	tcps_sack_snd_opts,
 	tcps_sack_drop_opts,
+	tcps_outbadcsum,
+	tcps_outcpycsum,
+
 	tcps_ncounters,
 };
 

@@ -199,6 +199,8 @@ struct	ip6stat {
 	u_int64_t ip6s_forward_cachehit;
 	u_int64_t ip6s_forward_cachemiss;
 	u_int64_t ip6s_wrongif;
+	u_int64_t ip6s_outbadcsum;
+	u_int64_t ip6s_outcpycsum;
 };
 
 #ifdef _KERNEL
@@ -245,6 +247,9 @@ enum ip6stat_counters {
 	ip6s_forward_cachehit = ip6s_sources_deprecated + 16,
 	ip6s_forward_cachemiss,
 	ip6s_wrongif,
+	ip6s_outbadcsum,
+	ip6s_outcpycsum,
+
 	ip6s_ncounters,
 };
 

@@ -88,6 +88,8 @@ struct	ipstat {
 	u_long	ips_outswcsum;		/* software checksummed on output */
 	u_long	ips_notmember;		/* multicasts for unregistered groups */
 	u_long	ips_wrongif;		/* packet received on wrong interface */
+	u_long	ips_outbadcsum;		/* output hardware checksum failed */
+	u_long	ips_outcpycsum;		/* output checksum needs copy */
 };
 
 struct ipoption {
@@ -133,6 +135,8 @@ enum ipstat_counters {
 	ips_outswcsum,		/* software checksummed on output */
 	ips_notmember,		/* multicasts for unregistered groups */
 	ips_wrongif,		/* packet received on wrong interface */
+	ips_outbadcsum,		/* output hardware checksum failed */
+	ips_outcpycsum,		/* output checksum needs copy */
 
 	ips_ncounters
 };

@@ -68,6 +68,8 @@ struct	udpstat {
 				/* output statistics: */
 	u_long	udps_opackets;		/* total output packets */
 	u_long	udps_outswcsum;		/* output software-csummed packets */
+	u_long	udps_outbadcsum;	/* output hardware checksum failed */
+	u_long	udps_outcpycsum;	/* output checksum needs copy */
 };
 
 /*
@@ -111,6 +113,8 @@ enum udpstat_counters {
 			/* output statistics: */
 	udps_opackets,		/* total output packets */
 	udps_outswcsum,		/* output software-csummed packets */
+	udps_outbadcsum,	/* output hardware checksum failed */
+	udps_outcpycsum,	/* output checksum needs copy */
 
 	udps_ncounters
 };
