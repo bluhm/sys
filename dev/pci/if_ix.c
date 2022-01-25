@@ -1878,9 +1878,8 @@ ixgbe_setup_interface(struct ix_softc *sc)
 #if NVLAN > 0
 	ifp->if_capabilities |= IFCAP_VLAN_HWTAGGING;
 #endif
-
-	ifp->if_capabilities |= IFCAP_CSUM_TCPv4 | IFCAP_CSUM_UDPv4
-	    | IFCAP_CSUM_TCPv6 | IFCAP_CSUM_UDPv6;
+	ifp->if_capabilities |= IFCAP_CSUM_TCPv4 | IFCAP_CSUM_UDPv4;
+	ifp->if_capabilities |= IFCAP_CSUM_TCPv6 | IFCAP_CSUM_UDPv6;
 
 	/*
 	 * Specify the media types supported by this sc and register

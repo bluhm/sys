@@ -1954,8 +1954,9 @@ ixl_attach(struct device *parent, struct device *self, void *aux)
 #if 0
 	ifp->if_capabilities |= IFCAP_VLAN_HWTAGGING;
 #endif
-	ifp->if_capabilities |= IFCAP_CSUM_IPv4 | IFCAP_CSUM_TCPv4 |
-	    IFCAP_CSUM_UDPv4 | IFCAP_CSUM_TCPv6 | IFCAP_CSUM_UDPv6;
+	ifp->if_capabilities |= IFCAP_CSUM_IPv4;
+	ifp->if_capabilities |= IFCAP_CSUM_TCPv4 | IFCAP_CSUM_UDPv4;
+	ifp->if_capabilities |= IFCAP_CSUM_TCPv6 | IFCAP_CSUM_UDPv6;
 
 	ifmedia_init(&sc->sc_media, 0, ixl_media_change, ixl_media_status);
 
