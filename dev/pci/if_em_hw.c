@@ -31,7 +31,7 @@
 
 *******************************************************************************/
 
-/* $OpenBSD: if_em_hw.c,v 1.113 2022/01/09 05:42:50 jsg Exp $ */
+/* $OpenBSD: if_em_hw.c,v 1.114 2022/01/27 18:28:44 bluhm Exp $ */
 /*
  * if_em_hw.c Shared functions for accessing and configuring the MAC
  */

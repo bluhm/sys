@@ -1,4 +1,4 @@
-/*	$OpenBSD: ixgbe.c,v 1.26 2020/03/02 01:59:01 jmatthew Exp $	*/
+/*	$OpenBSD: ixgbe.c,v 1.27 2022/01/27 18:28:45 bluhm Exp $	*/
 
 /******************************************************************************
   SPDX-License-Identifier: BSD-3-Clause
