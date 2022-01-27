@@ -792,6 +792,7 @@ nd6_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 	struct sockaddr *gate = rt->rt_gateway;
 	struct llinfo_nd6 *ln = (struct llinfo_nd6 *)rt->rt_llinfo;
 	struct ifaddr *ifa;
+	struct in6_ifaddr *ifa6;
 
 	if (ISSET(rt->rt_flags, RTF_GATEWAY|RTF_MULTICAST|RTF_MPLS))
 		return;
@@ -944,8 +945,9 @@ nd6_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 		 * check if rt_key(rt) is one of my address assigned
 		 * to the interface.
 		 */
-		ifa = &in6ifa_ifpwithaddr(ifp,
-		    &satosin6(rt_key(rt))->sin6_addr)->ia_ifa;
+		ifa6 = in6ifa_ifpwithaddr(ifp,
+		    &satosin6(rt_key(rt))->sin6_addr);
+		ifa = ifa6 ? &ifa6->ia_ifa : NULL;
 		if (ifa) {
 			ln->ln_state = ND6_LLINFO_REACHABLE;
 			ln->ln_byhint = 0;

@@ -568,6 +568,7 @@ nd6_na_input(struct mbuf *m, int off, int icmp6len)
 	char *lladdr = NULL;
 	int lladdrlen = 0;
 	struct ifaddr *ifa;
+	struct in6_ifaddr *ifa6;
 	struct llinfo_nd6 *ln;
 	struct rtentry *rt = NULL;
 	struct sockaddr_dl *sdl;
@@ -637,7 +638,8 @@ nd6_na_input(struct mbuf *m, int off, int icmp6len)
 		lladdrlen = ndopts.nd_opts_tgt_lladdr->nd_opt_len << 3;
 	}
 
-	ifa = &in6ifa_ifpwithaddr(ifp, &taddr6)->ia_ifa;
+	ifa6 = in6ifa_ifpwithaddr(ifp, &taddr6);
+	ifa = ifa6 ? &ifa6->ia_ifa : NULL;
 
 	/*
 	 * Target address matches one of my interface address.
