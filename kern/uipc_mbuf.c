@@ -955,7 +955,7 @@ m_pullup(struct mbuf *m0, int len)
 	if (!M_READONLY(m0) && len <= tail - head) {
 		/* we can copy everything into the first mbuf */
 		if (m0->m_len == 0) {
-			m0->m_data = head;
+			m0->m_data = M_DATABUF(m0);
 		} else if (len > tail - mtod(m0, caddr_t)) {
 			/* need to memmove to make space at the end */
 			memmove(head, mtod(m0, caddr_t), m0->m_len);
