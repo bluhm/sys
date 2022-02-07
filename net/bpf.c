@@ -198,6 +198,8 @@ bpf_movein(struct uio *uio, struct bpf_d *d, struct mbuf **mp,
 		return (EIO);
 	}
 
+	if (uio->uio_resid > MAXMCLBYTES)
+		return (EMSGSIZE);
 	len = uio->uio_resid;
 	if (len < hlen)
 		return (EINVAL);
@@ -211,7 +213,6 @@ bpf_movein(struct uio *uio, struct bpf_d *d, struct mbuf **mp,
 	 * Allocate enough space for headers and the aligned payload.
 	 */
 	mlen = max(max_linkhdr, hlen) + roundup(alen, sizeof(long));
-
 	if (mlen > MAXMCLBYTES)
 		return (EMSGSIZE);
 
