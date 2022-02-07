@@ -1,4 +1,4 @@
-/* $OpenBSD: acpi.c,v 1.407 2022/02/01 18:09:00 deraadt Exp $ */
+/* $OpenBSD: acpi.c,v 1.409 2022/02/04 08:06:48 robert Exp $ */
 /*
  * Copyright (c) 2005 Thorsten Lockert <tholo@sigmasoft.com>
  * Copyright (c) 2005 Jordan Hargrave <jordan@openbsd.org>
@@ -21,6 +21,7 @@
 #include <sys/buf.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
+#include <sys/pool.h>
 #include <sys/fcntl.h>
 #include <sys/ioccom.h>
 #include <sys/event.h>
@@ -73,6 +74,8 @@ int	acpi_debug = 16;
 int	acpi_poll_enabled;
 int	acpi_hasprocfvs;
 int	acpi_haspci;
+
+struct pool acpiwqpool;
 
 #define ACPIEN_RETRIES 15
 
@@ -1007,6 +1010,10 @@ acpi_attach_common(struct acpi_softc *sc, paddr_t base)
 	}
 	rsdp = (struct acpi_rsdp *)handle.va;
 
+	pool_init(&acpiwqpool, sizeof(struct acpi_taskq), 0, IPL_BIO, 0,
+	    "acpiwqpl", NULL);
+	pool_setlowat(&acpiwqpool, 16);
+
 	SIMPLEQ_INIT(&sc->sc_tables);
 	SIMPLEQ_INIT(&sc->sc_wakedevs);
 #if NACPIPWRRES > 0
@@ -1798,9 +1805,11 @@ acpi_addtask(struct acpi_softc *sc, void (*handler)(void *, int),
 	struct acpi_taskq *wq;
 	int s;
 
-	wq = malloc(sizeof(*wq), M_DEVBUF, M_ZERO | M_NOWAIT);
-	if (wq == NULL)
+	wq = pool_get(&acpiwqpool, PR_ZERO | PR_NOWAIT);
+	if (wq == NULL) {
+		printf("unable to create task");
 		return;
+	}
 	wq->handler = handler;
 	wq->arg0 = arg0;
 	wq->arg1 = arg1;
@@ -1829,7 +1838,7 @@ acpi_dotask(struct acpi_softc *sc)
 
 	wq->handler(wq->arg0, wq->arg1);
 
-	free(wq, M_DEVBUF, sizeof(*wq));
+	pool_put(&acpiwqpool, wq);
 
 	/* We did something */
 	return (1);
@@ -3571,6 +3580,9 @@ acpiioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 			remaining += min(bat->aba_softc->sc_bst.bst_capacity,
 			    bat->aba_softc->sc_bix.bix_last_capacity);
 
+			if (bat->aba_softc->sc_bst.bst_state & BST_CHARGE)
+				pi->battery_state = APM_BATT_CHARGING;
+
 			if (bat->aba_softc->sc_bst.bst_rate == BST_UNKNOWN)
 				continue;
 			else if (bat->aba_softc->sc_bst.bst_rate > 1)
@@ -3606,13 +3618,19 @@ acpiioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 			break;
 		}
 
-		if (pi->ac_state == APM_AC_ON || rate == 0)
+		if (rate == 0)
 			pi->minutes_left = (unsigned int)-1;
+		else if (pi->battery_state == APM_BATT_CHARGING)
+			pi->minutes_left = 60 * (capacity - remaining) / rate;
 		else
 			pi->minutes_left = 60 * minutes / rate;
 
-		/* running on battery */
 		pi->battery_life = remaining * 100 / capacity;
+
+		if (pi->battery_state == APM_BATT_CHARGING)
+			break;
+
+		/* running on battery */
 		if (pi->battery_life > 50)
 			pi->battery_state = APM_BATT_HIGH;
 		else if (pi->battery_life > 25)
