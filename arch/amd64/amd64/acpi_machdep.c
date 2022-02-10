@@ -1,4 +1,4 @@
-/*	$OpenBSD: acpi_machdep.c,v 1.94 2021/03/15 22:44:57 patrick Exp $	*/
+/*	$OpenBSD: acpi_machdep.c,v 1.96 2022/02/09 23:54:32 deraadt Exp $	*/
 /*
  * Copyright (c) 2005 Thorsten Lockert <tholo@sigmasoft.com>
  *
@@ -39,7 +39,10 @@
 #include <dev/isa/isareg.h>
 #include <dev/pci/pcivar.h>
 
+#include <machine/apmvar.h>
+
 #include "isa.h"
+#include "wsdisplay.h"
 #include "ioapic.h"
 #include "lapic.h"
 
@@ -52,6 +55,8 @@
 #if NLAPIC > 0
 #include <machine/i82489var.h>
 #endif
+
+#include <dev/wscons/wsdisplayvar.h>
 
 extern u_char acpi_real_mode_resume[], acpi_resume_end[];
 extern u_char acpi_tramp_data_start[], acpi_tramp_data_end[];
@@ -372,7 +377,7 @@ acpi_attach_machdep(struct acpi_softc *sc)
 #ifndef SMALL_KERNEL
 
 void
-acpi_sleep_clocks(struct acpi_softc *sc, int state)
+sleep_clocks(void *v)
 {
 	rtcstop();
 
@@ -499,7 +504,7 @@ acpi_resume_cpu(struct acpi_softc *sc, int state)
 
 #ifdef MULTIPROCESSOR
 void
-acpi_sleep_mp(void)
+sleep_mp(void)
 {
 	int i;
 
@@ -522,7 +527,7 @@ acpi_sleep_mp(void)
 }
 
 void
-acpi_resume_mp(void)
+resume_mp(void)
 {
 	void	cpu_start_secondary(struct cpu_info *ci);
 	struct cpu_info *ci;
