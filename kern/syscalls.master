@@ -99,7 +99,7 @@
 			    socklen_t *anamelen); }
 31	STD NOLOCK	{ int sys_getpeername(int fdes, struct sockaddr *asa, \
 			    socklen_t *alen); }
-32	STD		{ int sys_getsockname(int fdes, struct sockaddr *asa, \
+32	STD NOLOCK	{ int sys_getsockname(int fdes, struct sockaddr *asa, \
 			    socklen_t *alen); }
 33	STD		{ int sys_access(const char *path, int amode); }
 34	STD		{ int sys_chflags(const char *path, u_int flags); }

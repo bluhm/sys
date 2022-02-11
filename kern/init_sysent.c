@@ -1,4 +1,4 @@
-/*	$OpenBSD: init_sysent.c,v 1.234 2022/01/11 08:10:03 mvs Exp $	*/
+/*	$OpenBSD$	*/
 
 /*
  * System call switch table.
@@ -86,7 +86,7 @@ const struct sysent sysent[] = {
 	    sys_accept },			/* 30 = accept */
 	{ 3, s(struct sys_getpeername_args), SY_NOLOCK | 0,
 	    sys_getpeername },			/* 31 = getpeername */
-	{ 3, s(struct sys_getsockname_args), 0,
+	{ 3, s(struct sys_getsockname_args), SY_NOLOCK | 0,
 	    sys_getsockname },			/* 32 = getsockname */
 	{ 2, s(struct sys_access_args), 0,
 	    sys_access },			/* 33 = access */
