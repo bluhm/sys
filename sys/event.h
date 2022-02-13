@@ -1,4 +1,4 @@
-/*	$OpenBSD: event.h,v 1.64 2022/02/11 07:27:07 visa Exp $	*/
+/*	$OpenBSD: event.h,v 1.66 2022/02/13 13:03:02 visa Exp $	*/
 
 /*-
  * Copyright (c) 1999,2000,2001 Jonathan Lemon <jlemon@FreeBSD.org>
@@ -294,7 +294,7 @@ extern void	kqpoll_exit(void);
 extern void	knote(struct klist *list, long hint);
 extern void	knote_fdclose(struct proc *p, int fd);
 extern void	knote_processexit(struct proc *);
-extern void	knote_modify(const struct kevent *, struct knote *);
+extern void	knote_assign(const struct kevent *, struct knote *);
 extern void	knote_submit(struct knote *, struct kevent *);
 extern void	kqueue_init(void);
 extern void	kqueue_init_percpu(void);
@@ -315,6 +315,45 @@ extern void	klist_insert_locked(struct klist *, struct knote *);
 extern void	klist_remove(struct klist *, struct knote *);
 extern void	klist_remove_locked(struct klist *, struct knote *);
 extern void	klist_invalidate(struct klist *);
+
+static inline int
+knote_modify_fn(const struct kevent *kev, struct knote *kn,
+    int (*f_event)(struct knote *, long))
+{
+	knote_assign(kev, kn);
+	return ((*f_event)(kn, 0));
+}
+
+static inline int
+knote_modify(const struct kevent *kev, struct knote *kn)
+{
+	return (knote_modify_fn(kev, kn, kn->kn_fop->f_event));
+}
+
+static inline int
+knote_process_fn(struct knote *kn, struct kevent *kev,
+    int (*f_event)(struct knote *, long))
+{
+	int active;
+
+	/*
+	 * If called from kqueue_scan(), skip f_event
+	 * when EV_ONESHOT is set, to preserve old behaviour.
+	 */
+	if (kev != NULL && (kn->kn_flags & EV_ONESHOT))
+		active = 1;
+	else
+		active = (*f_event)(kn, 0);
+	if (active)
+		knote_submit(kn, kev);
+	return (active);
+}
+
+static inline int
+knote_process(struct knote *kn, struct kevent *kev)
+{
+	return (knote_process_fn(kn, kev, kn->kn_fop->f_event));
+}
 
 static inline int
 klist_empty(struct klist *klist)
