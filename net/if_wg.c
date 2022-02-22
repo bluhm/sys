@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_wg.c,v 1.20 2022/01/02 22:36:04 jsg Exp $ */
+/*	$OpenBSD: if_wg.c,v 1.22 2022/02/22 01:15:02 guenther Exp $ */
 
 /*
  * Copyright (C) 2015-2020 Jason A. Donenfeld <Jason@zx2c4.com>. All Rights Reserved.
@@ -30,7 +30,6 @@
 #include <sys/percpu.h>
 #include <sys/ioctl.h>
 #include <sys/mbuf.h>
-#include <sys/protosw.h>
 
 #include <net/if.h>
 #include <net/if_var.h>
@@ -2156,7 +2155,7 @@ wg_output(struct ifnet *ifp, struct mbuf *m, struct sockaddr *sa,
 	}
 
 	if (m->m_pkthdr.ph_loopcnt++ > M_MAXLOOP) {
-		DPRINTF(sc, "Packet looped");
+		DPRINTF(sc, "Packet looped\n");
 		ret = ELOOP;
 		goto error;
 	}
@@ -2169,7 +2168,7 @@ wg_output(struct ifnet *ifp, struct mbuf *m, struct sockaddr *sa,
 	 * another aip_lookup in wg_qstart, or refcnting as mentioned before.
 	 */
 	if (m->m_pkthdr.pf.delay > 0) {
-		DPRINTF(sc, "PF Delay Unsupported");
+		DPRINTF(sc, "PF delay unsupported\n");
 		ret = EOPNOTSUPP;
 		goto error;
 	}

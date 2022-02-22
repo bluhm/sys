@@ -1,4 +1,4 @@
-/*	$OpenBSD: acpi_machdep.c,v 1.81 2022/02/12 16:26:57 deraadt Exp $	*/
+/*	$OpenBSD: acpi_machdep.c,v 1.85 2022/02/21 10:24:28 mpi Exp $	*/
 /*
  * Copyright (c) 2005 Thorsten Lockert <tholo@sigmasoft.com>
  *
@@ -17,9 +17,6 @@
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/kernel.h>
-#include <sys/device.h>
-#include <sys/malloc.h>
 #include <sys/memrange.h>
 #include <sys/proc.h>
 #include <sys/user.h>
@@ -29,22 +26,16 @@
 #include <uvm/uvm_extern.h>
 
 #include <machine/biosvar.h>
-#include <machine/bus.h>
-#include <machine/conf.h>
-#include <machine/acpiapm.h>
 #include <i386/isa/isa_machdep.h>
 
-#include <machine/cpu.h>
-#include <machine/cpufunc.h>
-#include <machine/cpuvar.h>
-#include <machine/npx.h>
+#include <machine/conf.h>
+#include <machine/acpiapm.h>
 
-#include <dev/acpi/acpireg.h>
+#include <machine/cpuvar.h>
+
 #include <dev/acpi/acpivar.h>
 #include <dev/acpi/acpidev.h>
-#include <dev/acpi/dsdt.h>
 #include <dev/isa/isareg.h>
-#include <dev/pci/pcivar.h>
 
 #include <machine/apmvar.h>
 
@@ -58,7 +49,6 @@
 #endif
 
 #if NLAPIC > 0
-#include <machine/apicvar.h>
 #include <machine/i82489reg.h>
 #include <machine/i82489var.h>
 #endif
@@ -81,7 +71,7 @@ u_int8_t	*acpi_scan(struct acpi_mem_map *, paddr_t, size_t);
 int	acpi_match(struct device *, void *, void *);
 void	acpi_attach(struct device *, struct device *, void *);
 
-struct cfattach acpi_ca = {
+const struct cfattach acpi_ca = {
 	sizeof(struct acpi_softc), acpi_match, acpi_attach
 };
 
@@ -376,7 +366,7 @@ acpi_sleep_cpu(struct acpi_softc *sc, int state)
 		wbinvd();
 
 #ifdef HIBERNATE
-		if (state == ACPI_STATE_S4) {
+		if (state == ACPI_STATE_S4 || state == ACPI_STATE_S5) {
 			if (hibernate_suspend()) {
 				printf("%s: hibernate_suspend failed\n",
 				    DEVNAME(sc));
@@ -459,9 +449,6 @@ sleep_mp(void)
 {
 	int i;
 
-	sched_stop_secondary_cpus();
-	KASSERT(CPU_IS_PRIMARY(curcpu()));
-
 	/* 
 	 * Wait for cpus to halt so we know their FPU state has been
 	 * saved and their caches have been written back.
@@ -511,9 +498,7 @@ resume_mp(void)
 
 		ci->ci_idepth = 0;
 	}
-
 	cpu_boot_secondary_processors();
-	sched_start_secondary_cpus();
 }
 #endif /* MULTIPROCESSOR */
 

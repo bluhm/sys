@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_synch.c,v 1.180 2021/10/07 08:51:00 mpi Exp $	*/
+/*	$OpenBSD: kern_synch.c,v 1.182 2022/02/19 23:56:18 deraadt Exp $	*/
 /*	$NetBSD: kern_synch.c,v 1.37 1996/04/22 01:38:37 christos Exp $	*/
 
 /*
@@ -222,6 +222,10 @@ msleep(const volatile void *ident, struct mutex *mtx, int priority,
 	if (priority & PCATCH)
 		KERNEL_ASSERT_LOCKED();
 
+#ifdef DDB
+	if (cold == 2)
+		db_stack_dump();
+#endif
 	if (cold || panicstr) {
 		/*
 		 * After a panic, or during autoconfiguration,
@@ -475,12 +479,13 @@ int
 sleep_signal_check(void)
 {
 	struct proc *p = curproc;
+	struct sigctx ctx;
 	int err, sig;
 
 	if ((err = single_thread_check(p, 1)) != 0)
 		return err;
-	if ((sig = cursig(p)) != 0) {
-		if (p->p_p->ps_sigacts->ps_sigintr & sigmask(sig))
+	if ((sig = cursig(p, &ctx)) != 0) {
+		if (ctx.sig_intr)
 			return EINTR;
 		else
 			return ERESTART;

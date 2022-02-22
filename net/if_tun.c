@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_tun.c,v 1.231 2021/03/09 20:05:14 anton Exp $	*/
+/*	$OpenBSD: if_tun.c,v 1.235 2022/02/22 01:15:02 guenther Exp $	*/
 /*	$NetBSD: if_tun.c,v 1.24 1996/05/07 02:40:48 thorpej Exp $	*/
 
 /*
@@ -42,7 +42,6 @@
 #include <sys/proc.h>
 #include <sys/systm.h>
 #include <sys/mbuf.h>
-#include <sys/protosw.h>
 #include <sys/sigio.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
@@ -130,7 +129,7 @@ int	filt_tunread(struct knote *, long);
 int	filt_tunwrite(struct knote *, long);
 void	filt_tunrdetach(struct knote *);
 void	filt_tunwdetach(struct knote *);
-void	tun_link_state(struct tun_softc *, int);
+void	tun_link_state(struct ifnet *, int);
 
 const struct filterops tunread_filtops = {
 	.f_flags	= FILTEROP_ISFD,
@@ -218,6 +217,8 @@ tun_create(struct if_clone *ifc, int unit, int flags)
 	KERNEL_ASSERT_LOCKED();
 
 	sc = malloc(sizeof(*sc), M_DEVBUF, M_WAITOK|M_ZERO);
+	refcnt_init(&sc->sc_refs);
+
 	ifp = &sc->sc_if;
 	snprintf(ifp->if_xname, sizeof(ifp->if_xname),
 	    "%s%d", ifc->ifc_name, unit);
@@ -267,7 +268,6 @@ tun_create(struct if_clone *ifc, int unit, int flags)
 	}
 
 	sigio_init(&sc->sc_sigio);
-	refcnt_init(&sc->sc_refs);
 
 	/* tell tun_dev_open we're initialised */
 
@@ -381,7 +381,7 @@ tun_dev_open(dev_t dev, const struct if_clone *ifc, int mode, struct proc *p)
 	rdomain = rtable_l2(p->p_p->ps_rtableid);
 
 	/* let's find or make an interface to work with */
-	while ((ifp = if_unit(name)) == NULL) {
+	while ((sc = tun_name_lookup(name)) == NULL) {
 		error = if_clone_create(name, rdomain);
 		switch (error) {
 		case 0: /* it's probably ours */
@@ -394,32 +394,45 @@ tun_dev_open(dev_t dev, const struct if_clone *ifc, int mode, struct proc *p)
 		}
 	}
 
-	sc = ifp->if_softc;
+	refcnt_take(&sc->sc_refs);
+
 	/* wait for it to be fully constructed before we use it */
-	while (!ISSET(sc->sc_flags, TUN_INITED)) {
+	for (;;) {
+		if (ISSET(sc->sc_flags, TUN_DEAD)) {
+			error = ENXIO;
+			goto done;
+		}
+
+		if (ISSET(sc->sc_flags, TUN_INITED))
+			break;
+
 		error = tsleep_nsec(sc, PCATCH, "tuninit", INFSLP);
 		if (error != 0) {
 			/* XXX if_clone_destroy if stayup? */
-			if_put(ifp);
-			return (error);
+			goto done;
 		}
 	}
 
 	if (sc->sc_dev != 0) {
 		/* aww, we lost */
-		if_put(ifp);
-		return (EBUSY);
+		error = EBUSY;
+		goto done;
 	}
 	/* it's ours now */
 	sc->sc_dev = dev;
 	CLR(sc->sc_flags, stayup);
 
 	/* automatically mark the interface running on open */
+	ifp = &sc->sc_if;
+	NET_LOCK();
 	SET(ifp->if_flags, IFF_UP | IFF_RUNNING);
-	if_put(ifp);
-	tun_link_state(sc, LINK_STATE_FULL_DUPLEX);
+	NET_UNLOCK();
+	tun_link_state(ifp, LINK_STATE_FULL_DUPLEX);
+	error = 0;
 
-	return (0);
+done:
+	tun_put(sc);
+	return (error);
 }
 
 /*
@@ -456,7 +469,9 @@ tun_dev_close(dev_t dev, struct proc *p)
 	/*
 	 * junk all pending output
 	 */
+	NET_LOCK();
 	CLR(ifp->if_flags, IFF_UP | IFF_RUNNING);
+	NET_UNLOCK();
 	ifq_purge(&ifp->if_snd);
 
 	CLR(sc->sc_flags, TUN_ASYNC);
@@ -469,8 +484,7 @@ tun_dev_close(dev_t dev, struct proc *p)
 			destroy = 1;
 			strlcpy(name, ifp->if_xname, sizeof(name));
 		} else {
-			CLR(ifp->if_flags, IFF_UP | IFF_RUNNING);
-			tun_link_state(sc, LINK_STATE_DOWN);
+			tun_link_state(ifp, LINK_STATE_DOWN);
 		}
 	}
 
@@ -1066,10 +1080,8 @@ tun_start(struct ifnet *ifp)
 }
 
 void
-tun_link_state(struct tun_softc *sc, int link_state)
+tun_link_state(struct ifnet *ifp, int link_state)
 {
-	struct ifnet *ifp = &sc->sc_if;
-
 	if (ifp->if_link_state != link_state) {
 		ifp->if_link_state = link_state;
 		if_link_state_change(ifp);

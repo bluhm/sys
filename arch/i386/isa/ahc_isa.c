@@ -1,4 +1,4 @@
-/*	$OpenBSD: ahc_isa.c,v 1.19 2021/03/11 11:16:57 jsg Exp $	*/
+/*	$OpenBSD: ahc_isa.c,v 1.21 2022/02/21 12:53:39 jsg Exp $	*/
 /*	$NetBSD: ahc_isa.c,v 1.5 1996/10/21 22:27:39 thorpej Exp $	*/
 
 /*
@@ -120,7 +120,7 @@ int	ahc_isa_probe(struct device *, void *, void *);
 void	ahc_isa_attach(struct device *, struct device *, void *);
 void	aha2840_load_seeprom(struct ahc_softc *ahc);
 
-struct cfattach ahc_isa_ca = {
+const struct cfattach ahc_isa_ca = {
 	sizeof(struct ahc_softc), ahc_isa_probe, ahc_isa_attach
 };
 
@@ -402,7 +402,7 @@ ahc_isa_attach(struct device *parent, struct device *self, void *aux)
 	/*      
 	 * See if we have a Rev E or higher aic7770. Anything below a
 	 * Rev E will have a R/O autoflush disable configuration bit.
-	 * It's still not clear exactly what is differenent about the Rev E.
+	 * It's still not clear exactly what is different about the Rev E.
 	 * We think it allows 8 bit entries in the QOUTFIFO to support
 	 * "paging" SCBs so you can have more than 4 commands active at
 	 * once.

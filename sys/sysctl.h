@@ -1,4 +1,4 @@
-/*	$OpenBSD: sysctl.h,v 1.223 2022/02/07 22:57:47 rob Exp $	*/
+/*	$OpenBSD: sysctl.h,v 1.225 2022/02/22 03:34:51 deraadt Exp $	*/
 /*	$NetBSD: sysctl.h,v 1.16 1996/04/09 20:55:36 cgd Exp $	*/
 
 /*
@@ -382,7 +382,6 @@ struct kinfo_proc {
 #define	EPROC_SLEADER	0x02	/* session leader */
 #define	EPROC_UNVEIL	0x04	/* has unveil settings */
 #define	EPROC_LKUNVEIL	0x08	/* unveil is locked */
-#define	EPROC_CHROOT	0x10	/* chrooted */
 	int32_t	p_exitsig;		/* unused, always zero. */
 	int32_t	p_flag;			/* INT: P_* flags. */
 
@@ -581,6 +580,8 @@ struct kinfo_vmentry {
 
 #define PTRTOINT64(_x)	((u_int64_t)(u_long)(_x))
 
+#define	_FILL_KPROC_MIN(a,b) (((a)<(b))?(a):(b))
+
 #define FILL_KPROC(kp, copy_str, p, pr, uc, pg, paddr, \
     praddr, sess, vm, lim, sa, isthread, show_addresses) \
 do {									\
@@ -611,7 +612,7 @@ do {									\
 	(kp)->p_svgid = (uc)->cr_svgid;					\
 									\
 	memcpy((kp)->p_groups, (uc)->cr_groups,				\
-	    MIN(sizeof((kp)->p_groups), sizeof((uc)->cr_groups)));	\
+	    _FILL_KPROC_MIN(sizeof((kp)->p_groups), sizeof((uc)->cr_groups)));	\
 	(kp)->p_ngroups = (uc)->cr_ngroups;				\
 									\
 	(kp)->p_jobc = (pg)->pg_jobc;					\
@@ -653,10 +654,8 @@ do {									\
 	strlcpy((kp)->p_emul, "native", sizeof((kp)->p_emul));		\
 	strlcpy((kp)->p_comm, (pr)->ps_comm, sizeof((kp)->p_comm));	\
 	strlcpy((kp)->p_login, (sess)->s_login,				\
-	    MIN(sizeof((kp)->p_login), sizeof((sess)->s_login)));	\
+	    _FILL_KPROC_MIN(sizeof((kp)->p_login), sizeof((sess)->s_login)));	\
 									\
-	if ((pr)->ps_fd->fd_rdir != NULL)				\
-		(kp)->p_eflag |= EPROC_CHROOT;				\
 	if ((sess)->s_ttyvp)						\
 		(kp)->p_eflag |= EPROC_CTTY;				\
 	if ((pr)->ps_uvpaths)						\
