@@ -2485,19 +2485,27 @@ pfsync_update_tdb(struct tdb *t, int output)
 			mtx_enter(&sc->sc_tdb_mtx);
 			nlen = sizeof(struct pfsync_tdb);
 
+			mtx_enter(&t->tdb_mtx);
+			if (ISSET(t->tdb_flags, TDBF_PFSYNC)) {
+				/* we've lost race, no action for us then */
+				mtx_leave(&t->tdb_mtx);
+				mtx_leave(&sc->sc_tdb_mtx);
+				break;
+			}
+
 			if (TAILQ_EMPTY(&sc->sc_tdb_q))
 				nlen += sizeof(struct pfsync_subheader);
 
 			sc_len = atomic_add_long_nv(&sc->sc_len, nlen);
 			if (sc_len > sc->sc_if.if_mtu) {
 				atomic_sub_long(&sc->sc_len, nlen);
+				mtx_leave(&t->tdb_mtx);
 				mtx_leave(&sc->sc_tdb_mtx);
 				pfsync_sendout();
 				continue;
 			}
 
 			TAILQ_INSERT_TAIL(&sc->sc_tdb_q, t, tdb_sync_entry);
-			mtx_enter(&t->tdb_mtx);
 			SET(t->tdb_flags, TDBF_PFSYNC);
 			mtx_leave(&t->tdb_mtx);
 
