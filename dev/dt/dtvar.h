@@ -51,7 +51,7 @@ struct dt_evt {
 	/*
 	 * Recorded if the corresponding flag is set.
 	 */
-	struct stacktrace 	dtev_kstack;	/* kernel stack frame */
+	struct stacktrace	dtev_kstack;	/* kernel stack frame */
 	char			dtev_comm[DTMAXCOMLEN]; /* current pr. name */
 	union {
 		register_t		E_entry[DTMAXFUNCARGS];
@@ -110,7 +110,7 @@ struct dtioc_probe_info {
 };
 
 struct dtioc_probe {
-	size_t		 	 dtpr_size;	/* size of the buffer */
+	size_t			 dtpr_size;	/* size of the buffer */
 	struct dtioc_probe_info	*dtpr_probes;	/* array of probe info */
 };
 
