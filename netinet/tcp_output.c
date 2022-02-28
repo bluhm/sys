@@ -186,6 +186,11 @@ tcp_sack_adjust(struct tcpcb *tp)
 	return;
 }
 
+int tcp_dosendalot;
+int tcp_notsendalot;
+int tcp_outerror;
+int tcp_sackrexmit;
+
 /*
  * Tcp output routine: figure out what should be sent and send it.
  */
@@ -761,8 +766,8 @@ send:
 		 * off. Properly set th_seq field.  Advance the ret'x pointer
 		 * by len.
 		 */
-		if (sendalot)
-			sendalot = 0;
+		tcp_sackrexmit++;
+		sendalot = 0;
 		th->th_seq = htonl(p->rxmit);
 		p->rxmit += len;
 		tcpstat_pkt(tcps_sack_rexmits, tcps_sack_rexmit_bytes, len);
@@ -1072,6 +1077,7 @@ send:
 
 	if (error) {
 out:
+		tcp_outerror++;
 		if (error == ENOBUFS) {
 			/*
 			 * If the interface queue is full, or IP cannot
@@ -1121,8 +1127,11 @@ out:
 	tp->last_ack_sent = tp->rcv_nxt;
 	tp->t_flags &= ~TF_ACKNOW;
 	TCP_TIMER_DISARM(tp, TCPT_DELACK);
-	if (sendalot)
+	if (sendalot) {
+		tcp_dosendalot++;
 		goto again;
+	}
+	tcp_notsendalot++;
 	return (0);
 }
 
