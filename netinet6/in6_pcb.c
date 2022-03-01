@@ -369,14 +369,15 @@ in6_pcbnotify(struct inpcbtable *table, struct sockaddr_in6 *dst,
     uint fport_arg, const struct sockaddr_in6 *src, uint lport_arg,
     u_int rtable, int cmd, void *cmdarg, void (*notify)(struct inpcb *, int))
 {
-	struct inpcb *inp, *ninp;
+	SIMPLEQ_HEAD(, inpcb) inpcblist;
+	struct inpcb *inp;
 	u_short fport = fport_arg, lport = lport_arg;
 	struct sockaddr_in6 sa6_src;
 	int errno;
 	u_int32_t flowinfo;
 	u_int rdomain;
 
-	NET_ASSERT_LOCKED();
+	NET_ASSERT_WLOCKED();
 
 	if ((unsigned)cmd >= PRC_NCMDS)
 		return;
@@ -414,10 +415,13 @@ in6_pcbnotify(struct inpcbtable *table, struct sockaddr_in6 *dst,
 			notify = in_rtchange;
 	}
 	errno = inet6ctlerrmap[cmd];
+	if (notify == NULL)
+		return;
 
+	SIMPLEQ_INIT(&inpcblist);
 	rdomain = rtable_l2(rtable);
 	mtx_enter(&table->inpt_mtx);
-	TAILQ_FOREACH_SAFE(inp, &table->inpt_queue, inp_queue, ninp) {
+	TAILQ_FOREACH(inp, &table->inpt_queue, inp_queue) {
 		if ((inp->inp_flags & INP_IPV6) == 0)
 			continue;
 
@@ -489,11 +493,16 @@ in6_pcbnotify(struct inpcbtable *table, struct sockaddr_in6 *dst,
 			continue;
 		}
 	  do_notify:
-		/* XXX Is it safe to call notify with inpcbtable mutex held? */
-		if (notify)
-			(*notify)(inp, errno);
+		in_pcbref(inp);
+		SIMPLEQ_INSERT_TAIL(&inpcblist, inp, inp_notify);
 	}
 	mtx_leave(&table->inpt_mtx);
+
+	while ((inp = SIMPLEQ_FIRST(&inpcblist)) != NULL) {
+		SIMPLEQ_REMOVE_HEAD(&inpcblist, inp_notify);
+		(*notify)(inp, errno);
+		in_pcbunref(inp);
+	}
 }
 
 struct inpcb *

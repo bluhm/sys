@@ -94,6 +94,7 @@ struct inpcb {
 	LIST_ENTRY(inpcb) inp_hash;		/* local and foreign hash */
 	LIST_ENTRY(inpcb) inp_lhash;		/* local port hash */
 	TAILQ_ENTRY(inpcb) inp_queue;		/* inet PCB queue */
+	SIMPLEQ_ENTRY(inpcb) inp_notify;	/* temp queue to notify PCB */
 	struct	  inpcbtable *inp_table;	/* inet queue/hash table */
 	union	  inpaddru inp_faddru;		/* Foreign address. */
 	union	  inpaddru inp_laddru;		/* Local address. */

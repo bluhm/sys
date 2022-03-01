@@ -669,21 +669,25 @@ void
 in_pcbnotifyall(struct inpcbtable *table, struct sockaddr *dst, u_int rtable,
     int errno, void (*notify)(struct inpcb *, int))
 {
-	struct inpcb *inp, *ninp;
+	SIMPLEQ_HEAD(, inpcb) inpcblist;
+	struct inpcb *inp;
 	struct in_addr faddr;
 	u_int rdomain;
 
-	NET_ASSERT_LOCKED();
+	NET_ASSERT_WLOCKED();
 
 	if (dst->sa_family != AF_INET)
 		return;
 	faddr = satosin(dst)->sin_addr;
 	if (faddr.s_addr == INADDR_ANY)
 		return;
+	if (notify == NULL)
+		return;
 
+	SIMPLEQ_INIT(&inpcblist);
 	rdomain = rtable_l2(rtable);
 	mtx_enter(&table->inpt_mtx);
-	TAILQ_FOREACH_SAFE(inp, &table->inpt_queue, inp_queue, ninp) {
+	TAILQ_FOREACH(inp, &table->inpt_queue, inp_queue) {
 #ifdef INET6
 		if (inp->inp_flags & INP_IPV6)
 			continue;
@@ -693,11 +697,16 @@ in_pcbnotifyall(struct inpcbtable *table, struct sockaddr *dst, u_int rtable,
 		    inp->inp_socket == NULL) {
 			continue;
 		}
-		/* XXX Is it safe to call notify with inpcbtable mutex held? */
-		if (notify)
-			(*notify)(inp, errno);
+		in_pcbref(inp);
+		SIMPLEQ_INSERT_TAIL(&inpcblist, inp, inp_notify);
 	}
 	mtx_leave(&table->inpt_mtx);
+
+	while ((inp = SIMPLEQ_FIRST(&inpcblist)) != NULL) {
+		SIMPLEQ_REMOVE_HEAD(&inpcblist, inp_notify);
+		(*notify)(inp, errno);
+		in_pcbunref(inp);
+	}
 }
 
 /*
