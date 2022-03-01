@@ -336,7 +336,7 @@ rip6_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *d)
 		 */
 	}
 
-	(void) in6_pcbnotify(&rawin6pcbtable, sa6, 0,
+	in6_pcbnotify(&rawin6pcbtable, sa6, 0,
 	    sa6_src, 0, rdomain, cmd, cmdarg, notify);
 }
 

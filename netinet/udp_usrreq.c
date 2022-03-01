@@ -791,10 +791,10 @@ udp6_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *d)
 			 */
 		}
 
-		(void) in6_pcbnotify(&udbtable, &sa6, uh.uh_dport,
+		in6_pcbnotify(&udbtable, &sa6, uh.uh_dport,
 		    &sa6_src, uh.uh_sport, rdomain, cmd, cmdarg, notify);
 	} else {
-		(void) in6_pcbnotify(&udbtable, &sa6, 0,
+		in6_pcbnotify(&udbtable, &sa6, 0,
 		    &sa6_any, 0, rdomain, cmd, cmdarg, notify);
 	}
 }
