@@ -671,14 +671,6 @@ in_pcbnotifyall(struct inpcbtable *table, struct sockaddr *dst, u_int rtable,
 
 	NET_ASSERT_LOCKED();
 
-#ifdef INET6
-	/*
-	 * See in6_pcbnotify() for IPv6 codepath.  By the time this
-	 * gets called, the addresses passed are either definitely IPv4 or
-	 * IPv6; *_pcbnotify() never gets called with v4-mapped v6 addresses.
-	 */
-#endif /* INET6 */
-
 	if (dst->sa_family != AF_INET)
 		return;
 	faddr = satosin(dst)->sin_addr;
