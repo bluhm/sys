@@ -740,7 +740,7 @@ in_rtchange(struct inpcb *inp, int errno)
 {
 	if (inp->inp_route.ro_rt) {
 		rtfree(inp->inp_route.ro_rt);
-		inp->inp_route.ro_rt = 0;
+		inp->inp_route.ro_rt = NULL;
 		/*
 		 * A new route can be allocated the next time
 		 * output is attempted.
