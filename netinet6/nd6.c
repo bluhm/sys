@@ -716,7 +716,12 @@ nd6_free(struct rtentry *rt)
 
 	NET_ASSERT_LOCKED();
 
+	KASSERT(!ISSET(rt->rt_flags, RTF_LOCAL));
+	nd6_invalidate(rt);
+
 	ifp = if_get(rt->rt_ifidx);
+	if (ifp == NULL)
+		return;
 
 	if (!ip6_forwarding) {
 		if (ln->ln_router) {
@@ -729,9 +734,6 @@ nd6_free(struct rtentry *rt)
 		}
 	}
 
-	KASSERT(!ISSET(rt->rt_flags, RTF_LOCAL));
-	nd6_invalidate(rt);
-
 	/*
 	 * Detach the route from the routing tree and the list of neighbor
 	 * caches, and disable the route entry not to be used in already
@@ -739,7 +741,6 @@ nd6_free(struct rtentry *rt)
 	 */
 	if (!ISSET(rt->rt_flags, RTF_STATIC|RTF_CACHED))
 		rtdeletemsg(rt, ifp, ifp->if_rdomain);
-
 	if_put(ifp);
 }
 
