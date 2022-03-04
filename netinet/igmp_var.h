@@ -107,8 +107,8 @@ igmpstat_inc(enum igmpstat_counters c)
 
 void	igmp_init(void);
 int	igmp_input(struct mbuf **, int *, int, int);
-void	igmp_joingroup(struct in_multi *);
-void	igmp_leavegroup(struct in_multi *);
+void	igmp_joingroup(struct in_multi *, struct ifnet *);
+void	igmp_leavegroup(struct in_multi *, struct ifnet *);
 void	igmp_fasttimo(void);
 void	igmp_slowtimo(void);
 int	igmp_sysctl(int *, u_int, void *, size_t *, void *, size_t);
