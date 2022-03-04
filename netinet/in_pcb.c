@@ -175,14 +175,10 @@ in_pcbinit(struct inpcbtable *table, int hashsize)
 {
 
 	TAILQ_INIT(&table->inpt_queue);
-	table->inpt_hashtbl = hashinit(hashsize, M_PCB, M_NOWAIT,
+	table->inpt_hashtbl = hashinit(hashsize, M_PCB, M_WAITOK,
 	    &table->inpt_mask);
-	if (table->inpt_hashtbl == NULL)
-		panic("in_pcbinit: hashinit failed");
-	table->inpt_lhashtbl = hashinit(hashsize, M_PCB, M_NOWAIT,
+	table->inpt_lhashtbl = hashinit(hashsize, M_PCB, M_WAITOK,
 	    &table->inpt_lmask);
-	if (table->inpt_lhashtbl == NULL)
-		panic("in_pcbinit: hashinit failed for lport");
 	table->inpt_count = 0;
 	table->inpt_size = hashsize;
 	arc4random_buf(&table->inpt_key, sizeof(table->inpt_key));
