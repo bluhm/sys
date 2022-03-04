@@ -866,10 +866,7 @@ in_addmulti(struct in_addr *ap, struct ifnet *ifp)
 		 * New address; allocate a new multicast record
 		 * and link it into the interface's multicast list.
 		 */
-		inm = malloc(sizeof(*inm), M_IPMADDR, M_NOWAIT | M_ZERO);
-		if (inm == NULL)
-			return (NULL);
-
+		inm = malloc(sizeof(*inm), M_IPMADDR, M_WAITOK | M_ZERO);
 		inm->inm_sin.sin_len = sizeof(struct sockaddr_in);
 		inm->inm_sin.sin_family = AF_INET;
 		inm->inm_sin.sin_addr = *ap;
