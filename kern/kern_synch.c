@@ -855,13 +855,13 @@ refcnt_finalize(struct refcnt *r, const char *wmesg)
 void
 cond_init(struct cond *c)
 {
-	c->c_wait = 1;
+	WRITE_ONCE(c->c_wait, 1);
 }
 
 void
 cond_signal(struct cond *c)
 {
-	c->c_wait = 0;
+	WRITE_ONCE(c->c_wait, 0);
 
 	wakeup_one(c);
 }
@@ -872,10 +872,10 @@ cond_wait(struct cond *c, const char *wmesg)
 	struct sleep_state sls;
 	int wait;
 
-	wait = c->c_wait;
+	wait = READ_ONCE(c->c_wait);
 	while (wait) {
 		sleep_setup(&sls, c, PWAIT, wmesg, 0);
-		wait = c->c_wait;
+		wait = READ_ONCE(c->c_wait);
 		sleep_finish(&sls, wait);
 	}
 }

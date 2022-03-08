@@ -589,7 +589,7 @@ struct sleep_state {
 };
 
 struct cond {
-	int	c_wait;
+	int	c_wait;			/* [a] initialized and waiting */
 };
 
 #define COND_INITIALIZER()		{ 1 }
