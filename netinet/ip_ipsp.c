@@ -565,7 +565,7 @@ tdb_printit(void *addr, int full, int (*pr)(const char *, ...))
 		DUMP(inext, "%p");
 		DUMP(onext, "%p");
 		DUMP(xform, "%p");
-		pr("%18s: %d\n", "refcnt", tdb->tdb_refcnt.refs);
+		pr("%18s: %d\n", "refcnt", tdb->tdb_refcnt.r_refs);
 		DUMP(encalgxform, "%p");
 		DUMP(authalgxform, "%p");
 		DUMP(compalgxform, "%p");
@@ -625,7 +625,7 @@ tdb_printit(void *addr, int full, int (*pr)(const char *, ...))
 		pr(" %s", ipsp_address(&tdb->tdb_src, buf, sizeof(buf)));
 		pr("->%s", ipsp_address(&tdb->tdb_dst, buf, sizeof(buf)));
 		pr(":%d", tdb->tdb_sproto);
-		pr(" #%d", tdb->tdb_refcnt.refs);
+		pr(" #%d", tdb->tdb_refcnt.r_refs);
 		pr(" %08x\n", tdb->tdb_flags);
 	}
 }

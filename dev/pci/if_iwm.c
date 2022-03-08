@@ -9975,7 +9975,7 @@ iwm_init(struct ifnet *ifp)
 
 	generation = ++sc->sc_generation;
 
-	KASSERT(sc->task_refs.refs == 0);
+	KASSERT(atomic_load_int(&sc->task_refs.r_refs) == 0);
 	refcnt_init(&sc->task_refs);
 
 	err = iwm_preinit(sc);
@@ -10116,7 +10116,7 @@ iwm_stop(struct ifnet *ifp)
 	iwm_del_task(sc, systq, &sc->mac_ctxt_task);
 	iwm_del_task(sc, systq, &sc->phy_ctxt_task);
 	iwm_del_task(sc, systq, &sc->bgscan_done_task);
-	KASSERT(sc->task_refs.refs >= 1);
+	KASSERT(atomic_load_int(&sc->task_refs.r_refs) >= 1);
 	refcnt_finalize(&sc->task_refs, "iwmstop");
 
 	iwm_stop_device(sc);
