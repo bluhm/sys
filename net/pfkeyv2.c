@@ -1591,7 +1591,8 @@ pfkeyv2_send(struct socket *so, void *message, int len)
 	case SADB_X_ASKPOLICY:
 		/* Get the relevant policy */
 		NET_LOCK();
-		ipa = ipsec_get_acquire(((struct sadb_x_policy *) headers[SADB_X_EXT_POLICY])->sadb_x_policy_seq);
+		ipa = ipsec_get_acquire(((struct sadb_x_policy *)
+		    headers[SADB_X_EXT_POLICY])->sadb_x_policy_seq);
 		if (ipa == NULL) {
 			rval = ESRCH;
 			NET_UNLOCK();
@@ -1600,6 +1601,7 @@ pfkeyv2_send(struct socket *so, void *message, int len)
 
 		rval = pfkeyv2_policy(ipa, headers, &freeme, &freeme_sz);
 		NET_UNLOCK();
+		ipsec_unref_acquire(ipa);
 		if (rval)
 			mode = PFKEYV2_SENDMESSAGE_UNICAST;
 
