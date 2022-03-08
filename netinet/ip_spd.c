@@ -60,6 +60,8 @@ struct mutex ipo_tdb_mtx = MUTEX_INITIALIZER(IPL_SOFTNET);
 /* Protected by the NET_LOCK(). */
 struct radix_node_head **spd_tables;
 unsigned int spd_table_max;
+
+struct mutex ipsec_acquire_mtx = MUTEX_INITIALIZER(IPL_SOFTNET);
 TAILQ_HEAD(ipsec_acquire_head, ipsec_acquire) ipsec_acquire_head =
     TAILQ_HEAD_INITIALIZER(ipsec_acquire_head);
 
@@ -721,10 +723,13 @@ ipsp_delete_acquire(struct ipsec_acquire *ipa)
 	NET_ASSERT_LOCKED();
 
 	timeout_del(&ipa->ipa_timeout);
+
+	mtx_enter(&ipsec_acquire_mtx);
 	TAILQ_REMOVE(&ipsec_acquire_head, ipa, ipa_next);
-	if (ipa->ipa_policy != NULL)
-		TAILQ_REMOVE(&ipa->ipa_policy->ipo_acquires, ipa,
-		    ipa_ipo_next);
+	TAILQ_REMOVE(&ipa->ipa_policy->ipo_acquires, ipa, ipa_ipo_next);
+	ipa->ipa_policy = NULL;
+	mtx_leave(&ipsec_acquire_mtx);
+
 	pool_put(&ipsec_acquire_pool, ipa);
 }
 
@@ -735,16 +740,18 @@ ipsp_delete_acquire(struct ipsec_acquire *ipa)
 struct ipsec_acquire *
 ipsp_pending_acquire(struct ipsec_policy *ipo, union sockaddr_union *gw)
 {
-	struct ipsec_acquire *ipa;
+	struct ipsec_acquire *ipa = NULL;
 
 	NET_ASSERT_LOCKED();
 
-	TAILQ_FOREACH (ipa, &ipo->ipo_acquires, ipa_ipo_next) {
+	mtx_enter(&ipsec_acquire_mtx);
+	TAILQ_FOREACH(ipa, &ipo->ipo_acquires, ipa_ipo_next) {
 		if (!memcmp(gw, &ipa->ipa_addr, gw->sa.sa_len))
-			return ipa;
+			break
 	}
+	mtx_leave(&ipsec_acquire_mtx);
 
-	return NULL;
+	return ipa;
 }
 
 /*
@@ -855,9 +862,11 @@ ipsp_acquire_sa(struct ipsec_policy *ipo, union sockaddr_union *gw,
 	timeout_add_sec(&ipa->ipa_timeout, ipsec_expire_acquire);
 #endif
 
+	mtx_enter(&ipsec_acquire_mtx);
 	TAILQ_INSERT_TAIL(&ipsec_acquire_head, ipa, ipa_next);
 	TAILQ_INSERT_TAIL(&ipo->ipo_acquires, ipa, ipa_ipo_next);
 	ipa->ipa_policy = ipo;
+	mtx_leave(&ipsec_acquire_mtx);
 
 	/* PF_KEYv2 notification message. */
 	return pfkeyv2_acquire(ipo, gw, laddr, &ipa->ipa_seq, ddst);
@@ -905,13 +914,16 @@ ipsp_spd_inp(struct mbuf *m, struct inpcb *inp, struct ipsec_policy *ipo,
 struct ipsec_acquire *
 ipsec_get_acquire(u_int32_t seq)
 {
-	struct ipsec_acquire *ipa;
+	struct ipsec_acquire *ipa = NULL;
 
 	NET_ASSERT_LOCKED();
 
-	TAILQ_FOREACH (ipa, &ipsec_acquire_head, ipa_next)
+	mtx_enter(&ipsec_acquire_mtx);
+	TAILQ_FOREACH(ipa, &ipsec_acquire_head, ipa_next) {
 		if (ipa->ipa_seq == seq)
-			return ipa;
+			break;
+	}
+	mtx_leave(&ipsec_acquire_mtx);
 
-	return NULL;
+	return ipa;
 }

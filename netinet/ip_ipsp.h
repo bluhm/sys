@@ -45,6 +45,7 @@
  *	I	immutable after creation
  *	a	atomic operations
  *	N	net lock
+ *	A	ipsec_acquire_mtx
  *	F	ipsec_flows_mtx
  *	m	tdb_mtx			fields of struct tdb
  *	p	ipo_tdb_mtx		link policy to TDB global mutex
@@ -252,9 +253,9 @@ struct ipsec_acquire {
 	struct sockaddr_encap		ipa_info;
 	struct sockaddr_encap		ipa_mask;
 	struct timeout			ipa_timeout;
-	struct ipsec_policy		*ipa_policy;
-	TAILQ_ENTRY(ipsec_acquire)	ipa_ipo_next;
-	TAILQ_ENTRY(ipsec_acquire)	ipa_next;
+	struct ipsec_policy		*ipa_policy;	/* [A] back pointer */
+	TAILQ_ENTRY(ipsec_acquire)	ipa_ipo_next;	/* [A] per policy */
+	TAILQ_ENTRY(ipsec_acquire)	ipa_next;	/* [A] global list */
 };
 
 struct ipsec_policy {
