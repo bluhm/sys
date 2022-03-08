@@ -281,7 +281,7 @@ struct ipsec_policy {
 	u_int8_t		ipo_sproto;	/* ESP/AH; if zero, use system dflts */
 	u_int			ipo_rdomain;
 
-	int                     ipo_ref_count;
+	struct refcnt		ipo_refcnt;
 
 	struct tdb		*ipo_tdb;	/* [p] Cached TDB entry */
 

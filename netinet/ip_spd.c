@@ -666,11 +666,10 @@ ipsec_delete_policy(struct ipsec_policy *ipo)
 	struct ipsec_acquire *ipa;
 	struct radix_node_head *rnh;
 	struct radix_node *rn = (struct radix_node *)ipo;
-	int err = 0;
 
 	NET_ASSERT_LOCKED();
 
-	if (--ipo->ipo_ref_count > 0)
+	if (refcnt_rele(&ipo->ipo_refcnt) == 0)
 		return 0;
 
 	/* Delete from SPD. */
@@ -699,7 +698,7 @@ ipsec_delete_policy(struct ipsec_policy *ipo)
 
 	pool_put(&ipsec_policy_pool, ipo);
 
-	return err;
+	return 0;
 }
 
 void

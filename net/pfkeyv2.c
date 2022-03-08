@@ -1996,7 +1996,7 @@ pfkeyv2_send(struct socket *so, void *message, int len)
 
 			TAILQ_INIT(&ipo->ipo_acquires);
 			ipo->ipo_rdomain = rdomain;
-			ipo->ipo_ref_count = 1;
+			refcnt_init(&ipo->ipo_refcnt);
 
 			/* Add SPD entry */
 			if ((rnh = spd_table_get(rdomain)) == NULL ||
