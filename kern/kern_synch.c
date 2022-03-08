@@ -804,7 +804,7 @@ sys___thrwakeup(struct proc *p, void *v, register_t *retval)
 void
 refcnt_init(struct refcnt *r)
 {
-	r->refs = 1;
+	WRITE_ONCE(r->r_refs, 1);
 }
 
 void
@@ -813,10 +813,10 @@ refcnt_take(struct refcnt *r)
 #ifdef DIAGNOSTIC
 	u_int refcnt;
 
-	refcnt = atomic_inc_int_nv(&r->refs);
+	refcnt = atomic_inc_int_nv(&r->r_refs);
 	KASSERT(refcnt != 0);
 #else
-	atomic_inc_int(&r->refs);
+	atomic_inc_int(&r->r_refs);
 #endif
 }
 
@@ -825,7 +825,7 @@ refcnt_rele(struct refcnt *r)
 {
 	u_int refcnt;
 
-	refcnt = atomic_dec_int_nv(&r->refs);
+	refcnt = atomic_dec_int_nv(&r->r_refs);
 	KASSERT(refcnt != ~0);
 
 	return (refcnt == 0);
@@ -844,10 +844,10 @@ refcnt_finalize(struct refcnt *r, const char *wmesg)
 	struct sleep_state sls;
 	u_int refcnt;
 
-	refcnt = atomic_dec_int_nv(&r->refs);
+	refcnt = atomic_dec_int_nv(&r->r_refs);
 	while (refcnt) {
 		sleep_setup(&sls, r, PWAIT, wmesg, 0);
-		refcnt = r->refs;
+		refcnt = READ_ONCE(r->r_refs);
 		sleep_finish(&sls, refcnt);
 	}
 }
