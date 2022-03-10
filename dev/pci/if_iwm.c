@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_iwm.c,v 1.392 2022/03/10 15:21:08 bluhm Exp $	*/
+/*	$OpenBSD: if_iwm.c,v 1.393 2022/03/10 21:00:51 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2014, 2016 genua gmbh <info@genua.de>
