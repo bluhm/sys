@@ -805,6 +805,7 @@ void
 refcnt_init(struct refcnt *r)
 {
 	atomic_store_int(&r->r_refs, 1);
+	membar_enter_after_atomic();
 }
 
 void
@@ -818,6 +819,7 @@ refcnt_take(struct refcnt *r)
 #else
 	atomic_inc_int(&r->r_refs);
 #endif
+	membar_enter_after_atomic();
 }
 
 int
@@ -825,6 +827,7 @@ refcnt_rele(struct refcnt *r)
 {
 	u_int refcnt;
 
+	membar_exit_before_atomic();
 	refcnt = atomic_dec_int_nv(&r->r_refs);
 	KASSERT(refcnt != ~0);
 
@@ -844,6 +847,7 @@ refcnt_finalize(struct refcnt *r, const char *wmesg)
 	struct sleep_state sls;
 	u_int refcnt;
 
+	membar_exit_before_atomic();
 	refcnt = atomic_dec_int_nv(&r->r_refs);
 	while (refcnt) {
 		sleep_setup(&sls, r, PWAIT, wmesg, 0);
@@ -856,11 +860,13 @@ void
 cond_init(struct cond *c)
 {
 	atomic_store_int(&c->c_wait, 1);
+	membar_enter_after_atomic();
 }
 
 void
 cond_signal(struct cond *c)
 {
+	membar_exit_before_atomic();
 	atomic_store_int(&c->c_wait, 0);
 
 	wakeup_one(c);
@@ -872,9 +878,11 @@ cond_wait(struct cond *c, const char *wmesg)
 	struct sleep_state sls;
 	unsigned int wait;
 
+	membar_exit_before_atomic();
 	wait = atomic_load_int(&c->c_wait);
 	while (wait) {
 		sleep_setup(&sls, c, PWAIT, wmesg, 0);
+		membar_exit_before_atomic();
 		wait = atomic_load_int(&c->c_wait);
 		sleep_finish(&sls, wait);
 	}
