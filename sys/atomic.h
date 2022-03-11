@@ -201,7 +201,7 @@ atomic_sub_long_nv(volatile unsigned long *p, unsigned long v)
  * atomic_load_* - read from memory
  */
 
-static void membar_datadep_consumer(void);
+static inline void membar_datadep_consumer(void);
 
 static inline unsigned int
 atomic_load_int(volatile unsigned int *p)
