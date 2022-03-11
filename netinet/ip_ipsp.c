@@ -1048,7 +1048,7 @@ tdb_alloc(u_int rdomain)
 
 	tdbp = pool_get(&tdb_pool, PR_WAITOK | PR_ZERO);
 
-	refcnt_init(&tdbp->tdb_refcnt);
+	refcnt_init_trace(&tdbp->tdb_refcnt, DT_REFCNT_ID_TDB);
 	mtx_init(&tdbp->tdb_mtx, IPL_SOFTNET);
 	TAILQ_INIT(&tdbp->tdb_policy_head);
 

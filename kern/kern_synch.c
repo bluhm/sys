@@ -804,31 +804,37 @@ sys___thrwakeup(struct proc *p, void *v, register_t *retval)
 void
 refcnt_init(struct refcnt *r)
 {
+	refcnt_init_trace(r, 0);
+}
+
+void
+refcnt_init_trace(struct refcnt *r, int id)
+{
+	r->r_id = id;
 	atomic_store_int(&r->r_refs, 1);
+	TRACEINDEX(refcnt, r->r_id, r, 0, +1);
 }
 
 void
 refcnt_take(struct refcnt *r)
 {
-#ifdef DIAGNOSTIC
-	u_int refcnt;
+	u_int refs;
 
-	refcnt = atomic_inc_int_nv(&r->r_refs);
-	KASSERT(refcnt != 0);
-#else
-	atomic_inc_int(&r->r_refs);
-#endif
+	refs = atomic_inc_int_nv(&r->r_refs);
+	KASSERT(refs != 0);
+	TRACEINDEX(refcnt, r->r_id, r, refs - 1, +1);
 }
 
 int
 refcnt_rele(struct refcnt *r)
 {
-	u_int refcnt;
+	u_int refs;
 
-	refcnt = atomic_dec_int_nv(&r->r_refs);
-	KASSERT(refcnt != ~0);
+	refs = atomic_dec_int_nv(&r->r_refs);
+	KASSERT(refs != ~0);
+	TRACEINDEX(refcnt, r->r_id, r, refs + 1, -1);
 
-	return (refcnt == 0);
+	return (refs == 0);
 }
 
 void
@@ -842,26 +848,37 @@ void
 refcnt_finalize(struct refcnt *r, const char *wmesg)
 {
 	struct sleep_state sls;
-	u_int refcnt;
+	u_int refs;
 
-	refcnt = atomic_dec_int_nv(&r->r_refs);
-	while (refcnt) {
+	refs = atomic_dec_int_nv(&r->r_refs);
+	KASSERT(refs != ~0);
+	TRACEINDEX(refcnt, r->r_id, r, refs + 1, -1);
+	while (refs) {
 		sleep_setup(&sls, r, PWAIT, wmesg, 0);
-		refcnt = atomic_load_int(&r->r_refs);
-		sleep_finish(&sls, refcnt);
+		refs = atomic_load_int(&r->r_refs);
+		sleep_finish(&sls, refs);
 	}
+	TRACEINDEX(refcnt, r->r_id, r, refs, 0);
 }
 
 int
 refcnt_shared(struct refcnt *r)
 {
-	return (atomic_load_int(&r->r_refs) > 1);
+	u_int refs;
+
+	refs = atomic_load_int(&r->r_refs);
+	TRACEINDEX(refcnt, r->r_id, r, refs, 0);
+	return (refs > 1);
 }
 
 unsigned int
 refcnt_read(struct refcnt *r)
 {
-	return (atomic_load_int(&r->r_refs));
+	u_int refs;
+
+	refs = atomic_load_int(&r->r_refs);
+	TRACEINDEX(refcnt, r->r_id, r, refs, 0);
+	return (refs);
 }
 
 void

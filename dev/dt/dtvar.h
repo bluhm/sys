@@ -2,6 +2,7 @@
 
 /*
  * Copyright (c) 2019 Martin Pieuchot <mpi@openbsd.org>
+ * Copyright (c) 2022 Alexander Bluhm <bluhm@openbsd.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -313,11 +314,29 @@ extern volatile uint32_t	dt_tracing;	/* currently tracing? */
 #define	DT_STATIC_ENTER(func, name, args...) do {			\
 	extern struct dt_probe _DT_STATIC_P(func, name);		\
 	struct dt_probe *dtp = &_DT_STATIC_P(func, name);		\
-	struct dt_provider *dtpv = dtp->dtp_prov;			\
 									\
 	if (__predict_false(dt_tracing) &&				\
 	    __predict_false(dtp->dtp_recording)) {			\
+		struct dt_provider *dtpv = dtp->dtp_prov;		\
+									\
 		dtpv->dtpv_enter(dtpv, dtp, args);			\
+	}								\
+} while (0)
+
+#define _DT_INDEX_P(func)		(dtps_index_##func)
+
+#define DT_INDEX_ENTER(func, index, args...) do {			\
+	extern struct dt_probe **_DT_INDEX_P(func);			\
+									\
+	if (__predict_false(dt_tracing) &&				\
+	    _DT_INDEX_P(func) != NULL && index > 0) {			\
+		struct dt_probe *dtp = _DT_INDEX_P(func)[index];	\
+									\
+		    if(__predict_false(dtp->dtp_recording)) {		\
+			struct dt_provider *dtpv = dtp->dtp_prov;	\
+									\
+			dtpv->dtpv_enter(dtpv, dtp, args);		\
+		}							\
 	}								\
 } while (0)
 

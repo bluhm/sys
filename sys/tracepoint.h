@@ -25,11 +25,13 @@
 #if NDT > 0
 #include <dev/dt/dtvar.h>
 
-#define	TRACEPOINT(func, name, args...)	DT_STATIC_ENTER(func, name, args)
+#define TRACEPOINT(func, name, args...)	DT_STATIC_ENTER(func, name, args)
+#define TRACEINDEX(func, index, args...) DT_INDEX_ENTER(func, index, args)
 
 #else /* NDT > 0 */
 
-#define	TRACEPOINT(func, name, args...)
+#define TRACEPOINT(func, name, args...)
+#define TRACEINDEX(func, index, args...)
 
 #endif /* NDT > 0 */
 #endif /* _KERNEL */
