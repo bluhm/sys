@@ -1,4 +1,4 @@
-/*	$OpenBSD: atomic.h,v 1.7 2022/03/10 14:12:40 bluhm Exp $ */
+/*	$OpenBSD: atomic.h,v 1.8 2022/03/11 19:02:15 bluhm Exp $ */
 /*
  * Copyright (c) 2014 David Gwynne <dlg@openbsd.org>
  * Copyright (c) 2022 Alexander Bluhm <bluhm@openbsd.org>
