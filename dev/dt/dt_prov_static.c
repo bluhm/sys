@@ -91,7 +91,7 @@ DT_STATIC_PROBE2(smr, thread, "uint64_t", "uint64_t");
 /*
  * List of all static probes
  */
-struct dt_probe *dtps_static[] = {
+struct dt_probe *const dtps_static[] = {
 	/* Scheduler */
 	&_DT_STATIC_P(sched, dequeue),
 	&_DT_STATIC_P(sched, enqueue),
