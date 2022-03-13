@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_extern.h,v 1.158 2021/06/28 11:19:01 mpi Exp $	*/
+/*	$OpenBSD: uvm_extern.h,v 1.160 2022/03/12 08:11:07 mpi Exp $	*/
 /*	$NetBSD: uvm_extern.h,v 1.57 2001/03/09 01:02:12 chs Exp $	*/
 
 /*

@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_rge.c,v 1.16 2021/11/23 01:44:44 kevlo Exp $	*/
+/*	$OpenBSD: if_rge.c,v 1.18 2022/03/12 06:54:05 jmatthew Exp $	*/
 
 /*
  * Copyright (c) 2019, 2020 Kevin Lo <kevlo@openbsd.org>
@@ -130,7 +130,7 @@ static const struct {
 	RTL8125_MAC_CFG5_MCU
 };
 
-struct cfattach rge_ca = {
+const struct cfattach rge_ca = {
 	sizeof(struct rge_softc), rge_match, rge_attach, NULL, rge_activate
 };
 
