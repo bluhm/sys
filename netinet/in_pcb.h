@@ -65,6 +65,7 @@
 #define _NETINET_IN_PCB_H_
 
 #include <sys/queue.h>
+#include <sys/mutex.h>
 #include <sys/refcnt.h>
 #include <netinet/ip6.h>
 #include <netinet6/ip6_var.h>
