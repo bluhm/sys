@@ -1,4 +1,4 @@
-/*	$OpenBSD: dt_prov_static.c,v 1.12 2022/01/26 06:31:31 kn Exp $ */
+/*	$OpenBSD: dt_prov_static.c,v 1.13 2022/03/17 14:53:59 bluhm Exp $ */
 
 /*
  * Copyright (c) 2019 Martin Pieuchot <mpi@openbsd.org>
