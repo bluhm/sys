@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_synch.c,v 1.184 2022/03/16 14:13:01 visa Exp $	*/
+/*	$OpenBSD: kern_synch.c,v 1.185 2022/03/18 15:32:06 bluhm Exp $	*/
 /*	$NetBSD: kern_synch.c,v 1.37 1996/04/22 01:38:37 christos Exp $	*/
 
 /*
