@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_wg.c,v 1.22 2022/02/22 01:15:02 guenther Exp $ */
+/*	$OpenBSD: if_wg.c,v 1.24 2022/03/17 18:51:56 tb Exp $ */
 
 /*
  * Copyright (C) 2015-2020 Jason A. Donenfeld <Jason@zx2c4.com>. All Rights Reserved.
@@ -325,7 +325,7 @@ void	wg_peer_send_buf(struct wg_peer *, uint8_t *, size_t);
 void	wg_send_initiation(void *);
 void	wg_send_response(struct wg_peer *);
 void	wg_send_cookie(struct wg_softc *, struct cookie_macs *, uint32_t,
-	    struct wg_endpoint *e);
+	    struct wg_endpoint *);
 void	wg_send_keepalive(void *);
 void	wg_peer_clear_secrets(void *);
 void	wg_handshake(struct wg_softc *, struct mbuf *);
@@ -2023,7 +2023,7 @@ wg_input(void *_sc, struct mbuf *m, struct ip *ip, struct ip6_hdr *ip6,
 
 	/*
 	 * Ensure mbuf is contiguous over full length of packet. This is done
-	 * os we can directly read the handshake values in wg_handshake, and so
+	 * so we can directly read the handshake values in wg_handshake, and so
 	 * we can decrypt a transport packet by passing a single buffer to
 	 * noise_remote_decrypt in wg_decap.
 	 */
