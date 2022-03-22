@@ -921,7 +921,7 @@ in_pcbselsrc(struct in_addr **insrc, struct sockaddr_in *sin,
 	 * been set as a multicast option, use the address of that
 	 * interface as our source address.
 	 */
-	if ((IN_MULTICAST(sin->sin_addr.s_addr) || 
+	if ((IN_MULTICAST(sin->sin_addr.s_addr) ||
 	    sin->sin_addr.s_addr == INADDR_BROADCAST) && mopts != NULL) {
 		struct ifnet *ifp;
 
