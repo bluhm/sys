@@ -79,7 +79,7 @@ ENTRY(kcopy)
 	xorq	%rax,%rax
 	RETGUARD_CHECK(kcopy, r10)
 	ret
-	lfence
+	int3
 
 1:	addq	%rcx,%rdi		# copy backward
 	addq	%rcx,%rsi
@@ -102,7 +102,7 @@ ENTRY(kcopy)
 	xorq	%rax,%rax
 	RETGUARD_CHECK(kcopy, r10)
 	ret
-	lfence
+	int3
 
 ENTRY(copyout)
 	RETGUARD_SETUP(kcopy, r10)
@@ -140,7 +140,7 @@ ENTRY(copyout)
 	xorl	%eax,%eax
 	RETGUARD_CHECK(kcopy, r10)
 	ret
-	lfence
+	int3
 
 ENTRY(copyin)
 	RETGUARD_SETUP(kcopy, r10)
@@ -180,7 +180,7 @@ ENTRY(copyin)
 	xorl	%eax,%eax
 	RETGUARD_CHECK(kcopy, r10)
 	ret
-	lfence
+	int3
 
 NENTRY(copy_fault)
 	SMAP_CLAC
@@ -189,7 +189,7 @@ NENTRY(copy_fault)
 	movl	$EFAULT,%eax
 	RETGUARD_CHECK(kcopy, r10)
 	ret
-	lfence
+	int3
 
 ENTRY(copyoutstr)
 	RETGUARD_SETUP(copyoutstr, r10)
@@ -225,6 +225,7 @@ ENTRY(copyoutstr)
 	decq	%rdx
 	xorq	%rax,%rax
 	jmp	copystr_return
+	int3
 
 2:	/* rdx is zero -- return EFAULT or ENAMETOOLONG. */
 	movq	$VM_MAXUSER_ADDRESS,%r11
@@ -232,6 +233,7 @@ ENTRY(copyoutstr)
 	jae	_C_LABEL(copystr_fault)
 	movl	$ENAMETOOLONG,%eax
 	jmp	copystr_return
+	int3
 
 ENTRY(copyinstr)
 	RETGUARD_SETUP(copyoutstr, r10)
@@ -268,6 +270,7 @@ ENTRY(copyinstr)
 	decq	%rdx
 	xorq	%rax,%rax
 	jmp	copystr_return
+	int3
 
 2:	/* edx is zero -- return EFAULT or ENAMETOOLONG. */
 	movq	$VM_MAXUSER_ADDRESS,%r11
@@ -275,6 +278,7 @@ ENTRY(copyinstr)
 	jae	_C_LABEL(copystr_fault)
 	movl	$ENAMETOOLONG,%eax
 	jmp	copystr_return
+	int3
 
 ENTRY(copystr_fault)
 	movl	$EFAULT,%eax
@@ -290,7 +294,7 @@ copystr_return:
 8:
 	RETGUARD_CHECK(copyoutstr, r10)
 	ret
-	lfence
+	int3
 
 ENTRY(copystr)
 	RETGUARD_SETUP(copystr, r10)
@@ -310,6 +314,7 @@ ENTRY(copystr)
 	decq	%rdx
 	xorl	%eax,%eax
 	jmp	6f
+	int3
 
 4:	/* edx is zero -- return ENAMETOOLONG. */
 	movl	$ENAMETOOLONG,%eax
@@ -322,7 +327,7 @@ ENTRY(copystr)
 7:
 	RETGUARD_CHECK(copystr, r10)
 	ret
-	lfence
+	int3
 
 	.section .rodata
 	.globl _C_LABEL(_stac)

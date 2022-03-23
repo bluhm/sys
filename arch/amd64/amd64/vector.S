@@ -99,7 +99,7 @@
 
 /*****************************************************************************/
 
-#define	TRAP(a)		pushq $(a) ; jmp _C_LABEL(alltraps)
+#define	TRAP(a)		pushq $(a) ; jmp _C_LABEL(alltraps) ; int3
 #define	ZTRAP(a)	pushq $0 ; TRAP(a)
 
 IDTVEC(trap00)
@@ -137,6 +137,7 @@ calltrap_specstk:			# special stack path
 	jz	INTRENTRY_LABEL(calltrap_specstk)
 	movq	%rax,%cr3
 	jmp	INTRENTRY_LABEL(calltrap_specstk)
+	int3
 	.text
 	.globl	INTRENTRY_LABEL(calltrap_specstk)
 INTRENTRY_LABEL(calltrap_specstk):
@@ -161,6 +162,7 @@ INTRENTRY_LABEL(calltrap_specstk):
 	popq	%r13
 	popq	%r14
 	jmp	calltrap_specstk_tramp
+	int3
 KUENTRY(calltrap_specstk_tramp)
 	movq	%r15,%cr3		# restore %cr3
 	popq	%r15
@@ -170,6 +172,7 @@ KUENTRY(calltrap_specstk_tramp)
 	addq	$8,%rsp			# ignore tf_trapno
 	popq	%rbp
 	iretq
+	int3
 
 IDTVEC(trap03)
 #if defined(GPROF) || !defined(DDBPROF)
@@ -180,6 +183,7 @@ IDTVEC(trap03)
 	testb	$SEL_RPL,24(%rsp)
 	je	INTRENTRY_LABEL(trap03)
 	jmp	alltraps
+	int3
 	.text
 	.global	INTRENTRY_LABEL(trap03)
 INTRENTRY_LABEL(trap03):
@@ -246,7 +250,8 @@ INTRENTRY_LABEL(trap03):
 
 	/* Finally restore %rax */
 	movq	(TF_RAX + 16)(%rsp),%rax
-	jmp .ret_int3
+	jmp	.ret_int3
+	int3
 
 .Lemulate_ret:
 
@@ -262,6 +267,7 @@ INTRENTRY_LABEL(trap03):
 .ret_int3:
 	addq	$TF_RIP,%rsp
 	iretq
+	int3
 #endif /* !defined(GPROF) && defined(DDBPROF) */
 
 IDTVEC(trap04)
@@ -275,6 +281,7 @@ IDTVEC(trap07)
 IDTVEC(trap08)
 	pushq	$T_DOUBLEFLT
 	jmp	calltrap_specstk
+	int3
 IDTVEC(trap09)
 	ZTRAP(T_FPOPFLT)	# impossible: not generated on amd64
 IDTVEC(trap0a)
@@ -321,16 +328,19 @@ IDTVEC(trap0d)
 	/* rdmsr faulted; just resume in rdmsr_resume */
 	leaq	rdmsr_resume(%rip),%rcx
 	jmp	1f
+	int3
 
 .Lhandle_xrstor:
 	/* xrstor faulted; just resume in xrstor_resume */
 	leaq	xrstor_resume(%rip),%rcx
 	jmp	1f
+	int3
 
 .Lhandle_xsetbv:
 	/* xsetbv faulted; just resume in xsetbv_resume */
 	leaq	xsetbv_resume(%rip),%rcx
 	jmp	1f
+	int3
 
 .Lhandle_doreti:
 	/* iretq faulted; resume in a stub that acts like we got a #GP */
@@ -341,6 +351,7 @@ IDTVEC(trap0d)
 	popq	%rdx
 	addq	$8,%rsp			/* pop the err code */
 	jmp	doreti_iret
+	int3
 .Lhandle_doreti_resume:
 	ZTRAP(T_PROTFLT)
 
@@ -349,6 +360,7 @@ IDTVEC(trap0e)
 IDTVEC(intrspurious)
 IDTVEC_NOALIGN(trap0f)
 	iretq
+	int3
 IDTVEC(trap10)
 	ZTRAP(T_ARITHTRAP)
 IDTVEC(trap11)
@@ -424,6 +436,7 @@ Xalltraps:
 0:	pause
 	lfence
 	jmp	0b
+	int3
 KUTEXT_PAGE_END
 
 KTEXT_PAGE_START
@@ -451,6 +464,7 @@ recall_trap:
 	call	_C_LABEL(usertrap)
 	cli
 	jmp	intr_user_exit
+	int3
 END(alltraps)
 
 /*
@@ -492,6 +506,7 @@ GENTRY(alltraps_kern_meltdown)
 #endif /* DDB */
 	movl	%ebx,CPUVAR(ILEVEL)
 	jmp	2b
+	int3
 
 	.pushsection .rodata
 	.type spl_lowered,@object
@@ -537,7 +552,7 @@ KUENTRY(x2apic_eoi)
 	popq    %rcx
 	popq    %rax
 	ret
-	lfence
+	int3
 END(x2apic_eoi)
 
 #if NLAPIC > 0
@@ -545,6 +560,7 @@ END(x2apic_eoi)
 KIDTVEC(recurse_lapic_ipi)
 	INTR_RECURSE
 	jmp	1f
+	int3
 END(Xrecurse_lapic_ipi)
 IDTVEC(intr_lapic_ipi)
 	INTRENTRY(intr_lapic_ipi)
@@ -565,6 +581,7 @@ KIDTVEC_FALLTHROUGH(resume_lapic_ipi)
 	movq	%rbx,IF_PPL(%rsp)
 	call	_C_LABEL(x86_ipi_handler)
 	jmp	_C_LABEL(Xdoreti)
+	int3
 2:
 	movq	$(1 << LIR_IPI),%rax
 	orq	%rax,CPUVAR(IPENDING)
@@ -589,6 +606,7 @@ IDTVEC(ipi_invltlb)
 
 	popq	%rax
 	iretq
+	int3
 END(Xipi_invltlb)
 
 /* invalidate a single page, no PCIDs version */
@@ -605,6 +623,7 @@ IDTVEC(ipi_invlpg)
 
 	popq	%rax
 	iretq
+	int3
 END(Xipi_invlpg)
 
 /* invalidate a range of pages, no PCIDs version */
@@ -627,6 +646,7 @@ IDTVEC(ipi_invlrange)
 	popq	%rdx
 	popq	%rax
 	iretq
+	int3
 END(Xipi_invlrange)
 
 /*
@@ -660,6 +680,7 @@ IDTVEC(ipi_invltlb_pcid)
 	popq	%rax
 	popq	%rax
 	iretq
+	int3
 END(Xipi_invltlb_pcid)
 
 /*
@@ -697,6 +718,7 @@ IDTVEC(ipi_invlpg_pcid)
 	addq	$16,%rsp
 	popq	%rax
 	iretq
+	int3
 END(Xipi_invlpg_pcid)
 
 /*
@@ -741,6 +763,7 @@ IDTVEC(ipi_invlrange_pcid)
 	popq	%rdx
 	popq	%rax
 	iretq
+	int3
 END(Xipi_invlrange_pcid)
 
 #endif /* MULTIPROCESSOR */
@@ -751,6 +774,7 @@ END(Xipi_invlrange_pcid)
 KIDTVEC(recurse_lapic_ltimer)
 	INTR_RECURSE
 	jmp	1f
+	int3
 END(Xrecurse_lapic_ltimer)
 IDTVEC(intr_lapic_ltimer)
 	INTRENTRY(intr_lapic_ltimer)
@@ -772,6 +796,7 @@ KIDTVEC_FALLTHROUGH(resume_lapic_ltimer)
 	xorq	%rdi,%rdi
 	call	_C_LABEL(lapic_clockintr)
 	jmp	_C_LABEL(Xdoreti)
+	int3
 2:
 	movq	$(1 << LIR_TIMER),%rax
 	orq	%rax,CPUVAR(IPENDING)
@@ -786,6 +811,7 @@ END(Xresume_lapic_ltimer)
 KIDTVEC(recurse_xen_upcall)
 	INTR_RECURSE
 	jmp	1f
+	int3
 END(Xrecurse_xen_upcall)
 IDTVEC(intr_xen_upcall)
 	INTRENTRY(intr_xen_upcall)
@@ -804,6 +830,7 @@ KIDTVEC_FALLTHROUGH(resume_xen_upcall)
 	movq	%rbx,IF_PPL(%rsp)
 	call	_C_LABEL(xen_intr)
 	jmp	_C_LABEL(Xdoreti)
+	int3
 2:
 	movq	$(1 << LIR_XEN),%rax
 	orq	%rax,CPUVAR(IPENDING)
@@ -819,6 +846,7 @@ END(Xresume_xen_upcall)
 KIDTVEC(recurse_hyperv_upcall)
 	INTR_RECURSE
 	jmp	1f
+	int3
 END(Xrecurse_hyperv_upcall)
 IDTVEC(intr_hyperv_upcall)
 	INTRENTRY(intr_hyperv_upcall)
@@ -836,6 +864,7 @@ KIDTVEC_FALLTHROUGH(resume_hyperv_upcall)
 	movq	%rbx,IF_PPL(%rsp)
 	call	_C_LABEL(hv_intr)
 	jmp	_C_LABEL(Xdoreti)
+	int3
 2:
 	movq	$(1 << LIR_HYPERV),%rax
 	orq	%rax,CPUVAR(IPENDING)
@@ -862,6 +891,7 @@ KIDTVEC_FALLTHROUGH(resume_##name##num)					\
 	movq	CPUVAR(ISOURCES) + (num) * 8, %r14			;\
 	movl	IS_MAXLEVEL(%r14),%ebx					;\
 	jmp	1f							;\
+	int3								;\
 END(Xresume_##name##num)						;\
 IDTVEC(intr_##name##num)						;\
 	INTRENTRY(intr_##name##num)					;\
@@ -907,6 +937,7 @@ IDTVEC(intr_##name##num)						;\
 	late_ack(num)							;\
 	sti								;\
 	jmp	_C_LABEL(Xdoreti)	/* lower spl and do ASTs */	;\
+	int3								;\
 7:	/* current IPL > handler's ih_level */				\
 	cli								;\
 	movq	$(1 << num),%rax					;\
@@ -915,6 +946,7 @@ IDTVEC(intr_##name##num)						;\
 	late_ack(num)							;\
 	sti								;\
 	jmp	_C_LABEL(Xdoreti)	/* lower spl and do ASTs */	;\
+	int3								;\
 10:	/* currently masked */						\
 	cli								;\
 	movq	$(1 << num),%rax					;\
@@ -1424,6 +1456,7 @@ KIDTVEC(softtty)
 	call	_C_LABEL(softintr_dispatch)
 	decl	CPUVAR(IDEPTH)
 	jmp	retpoline_r13
+	int3
 END(Xsofttty)
 
 KIDTVEC(softnet)
@@ -1434,6 +1467,7 @@ KIDTVEC(softnet)
 	call	_C_LABEL(softintr_dispatch)
 	decl	CPUVAR(IDEPTH)
 	jmp	retpoline_r13
+	int3
 END(Xsoftnet)
 
 KIDTVEC(softclock)
@@ -1444,4 +1478,5 @@ KIDTVEC(softclock)
 	call	_C_LABEL(softintr_dispatch)
 	decl	CPUVAR(IDEPTH)
 	jmp	retpoline_r13
+	int3
 END(Xsoftclock)

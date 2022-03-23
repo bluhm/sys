@@ -47,7 +47,7 @@ ENTRY(mds_handler_ivb)
 	movdqa	CPUVAR(MDS_TMP),%xmm0
 	RETGUARD_CHECK(mds_handler_ivb, r11)
 	retq
-	lfence
+	int3
 END(mds_handler_ivb)
 
 ENTRY(mds_handler_bdw)
@@ -71,7 +71,7 @@ ENTRY(mds_handler_bdw)
 	movdqa	CPUVAR(MDS_TMP),%xmm0
 	RETGUARD_CHECK(mds_handler_bdw, r11)
 	retq
-	lfence
+	int3
 END(mds_handler_bdw)
 
 ENTRY(mds_handler_skl)
@@ -80,6 +80,7 @@ ENTRY(mds_handler_skl)
 	testb	$XCR0_AVX,%al
 	jne	mds_handler_skl_avx
 	jmp	mds_handler_skl_sse
+	int3
 END(mds_handler_skl)
 
 ENTRY(mds_handler_skl_sse)
@@ -106,7 +107,7 @@ ENTRY(mds_handler_skl_sse)
 	movdqa	CPUVAR(MDS_TMP),%xmm0
 	RETGUARD_CHECK(mds_handler_skl_sse, r11)
 	retq
-	lfence
+	int3
 END(mds_handler_skl_sse)
 
 ENTRY(mds_handler_skl_avx)
@@ -133,7 +134,7 @@ ENTRY(mds_handler_skl_avx)
 	vmovdqa	CPUVAR(MDS_TMP),%ymm0
 	RETGUARD_CHECK(mds_handler_skl_avx, r11)
 	retq
-	lfence
+	int3
 END(mds_handler_skl_avx)
 
 /* we don't support AVX512 yet */
@@ -162,7 +163,7 @@ ENTRY(mds_handler_skl_avx512)
 	vmovdqa64	CPUVAR(MDS_TMP),%zmm0
 	RETGUARD_CHECK(mds_handler_skl_avx512, r11)
 	retq
-	lfence
+	int3
 END(mds_handler_skl_avx512)
 #endif
 
@@ -182,7 +183,7 @@ ENTRY(mds_handler_silvermont)
 	movdqa	CPUVAR(MDS_TMP),%xmm0
 	RETGUARD_CHECK(mds_handler_silvermont, r11)
 	retq
-	lfence
+	int3
 END(mds_handler_silvermont)
 
 ENTRY(mds_handler_knights)
@@ -196,5 +197,5 @@ ENTRY(mds_handler_knights)
 	mfence
 	RETGUARD_CHECK(mds_handler_knights, r11)
 	retq
-	lfence
+	int3
 END(mds_handler_knights)

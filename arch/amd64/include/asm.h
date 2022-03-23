@@ -139,7 +139,7 @@
 	cmpq (__retguard_ ## x)(%rip), %reg; \
 	je 66f; \
 	int3; int3; \
-	.zero (0xf - ((. + 3 - x) & 0xf)), 0xcc; \
+	.zero (0xf - ((. + 1 - x) & 0xf)), 0xcc; \
 66:
 # define RETGUARD_PUSH(reg) \
 	pushq %reg
@@ -196,9 +196,10 @@
 	68:	pause			; \
 		lfence			; \
 		jmp	68b		; \
+		int3			; \
 		_ALIGN_TRAPS		; \
 	69:	mov	%reg,(%rsp)	; \
 		ret			; \
-		lfence
+		int3
 
 #endif /* !_MACHINE_ASM_H_ */

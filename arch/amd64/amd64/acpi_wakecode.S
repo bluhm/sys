@@ -134,6 +134,7 @@ _ACPI_TRMP_OFFSET(.Lacpi_s3_vector_real)
 	 */
 	jmp	1f
 1:	jmp	1f
+	int3
 1:
 
 	/*
@@ -159,6 +160,7 @@ _ACPI_TRMP_OFFSET(.Lacpi_s3_vector_real)
 	 * to fixup the jump target address previously.
 	 */
 	ljmpl	$0x8, $.Lacpi_protected_mode_trampoline
+	int3
 
 	.code32
 	.align 16, 0xcc
@@ -213,6 +215,7 @@ _C_LABEL(acpi_protected_mode_resume):
 	/* Flush the prefetch queue again */
 	jmp	1f
 1:	jmp	1f
+	int3
 1:
 
 	/* Reenable paging by setting the appropriate bits in CR0 */
@@ -223,10 +226,12 @@ _C_LABEL(acpi_protected_mode_resume):
 	/* Flush the prefetch queue again */
 	jmp	1f
 1:	jmp	1f
+	int3
 1:
 
 	/* Enter long mode by making another intersegment jump */
 	ljmp	$0x8, $.Lacpi_long_mode_trampoline
+	int3
 
 	.code64
 	.align 16, 0xcc
@@ -303,6 +308,7 @@ _C_LABEL(acpi_long_mode_resume):
 	/* Flush the prefetch queue again */
 	jmp	1f
 1:	jmp	1f
+	int3
 1:
 
 	movq	.Lacpi_saved_cr2, %rax
@@ -313,6 +319,7 @@ _C_LABEL(acpi_long_mode_resume):
 	/* Flush the prefetch queue again */
 	jmp	1f
 1:	jmp	1f
+	int3
 1:
 
 	lldt	.Lacpi_saved_ldt
@@ -351,6 +358,7 @@ _C_LABEL(acpi_long_mode_resume):
 
 	xorq	%rax, %rax
 	jmp	*.Lacpi_saved_ret
+	int3
 
 #ifdef HIBERNATE
 	/*
@@ -393,6 +401,7 @@ NENTRY(hibernate_resume_machdep)
 	/* Jump to the identity mapped version of ourself */
 	mov	$.Lhibernate_resume_vector_2, %rax
 	jmp	*%rax
+	int3
 _ACPI_TRMP_LABEL(.Lhibernate_resume_vector_2)
 
 	/* Get out of 64 bit CS */
@@ -400,6 +409,7 @@ _ACPI_TRMP_LABEL(.Lhibernate_resume_vector_2)
 
 	/* Jump out of 64 bit mode, to hibernate_resume_vector_3 below */
 	ljmp	*(.Lhibernate_indirect_16)
+	int3
 
 _ACPI_TRMP_OFFSET(.Lhibernate_resume_vector_3)
 	.code16
@@ -428,6 +438,7 @@ _ACPI_TRMP_OFFSET(.Lhibernate_resume_vector_3)
 
 	/* Jump to the S3 resume vector */
 	ljmp	$(_ACPI_RM_CODE_SEG), $.Lacpi_s3_vector_real
+	int3
 
 NENTRY(hibernate_drop_to_real_mode)
 	.code64
@@ -435,6 +446,7 @@ NENTRY(hibernate_drop_to_real_mode)
 	/* Jump to the identity mapped version of ourself */
 	mov	$.Lhibernate_resume_vector_2b, %rax
 	jmp	*%rax
+	int3
 _ACPI_TRMP_LABEL(.Lhibernate_resume_vector_2b)
 
 	/* Get out of 64 bit CS */
@@ -442,6 +454,7 @@ _ACPI_TRMP_LABEL(.Lhibernate_resume_vector_2b)
 
 	/* Jump out of 64 bit mode, to hibernate_resume_vector_3b below */
 	ljmp	*(.Lhibernate_indirect_16b)
+	int3
 
 _ACPI_TRMP_OFFSET(.Lhibernate_resume_vector_3b)
 	.code16
@@ -471,6 +484,7 @@ _ACPI_TRMP_OFFSET(.Lhibernate_resume_vector_3b)
 _ACPI_TRMP_OFFSET(.Lhib_hlt_real)
 	hlt
 	ljmp	$(_ACPI_RM_CODE_SEG), $.Lhib_hlt_real
+	int3
 
 	.code64
 	/* Switch to hibernate resume pagetable */
@@ -488,10 +502,11 @@ NENTRY(hibernate_activate_resume_pt_machdep)
 	movq	$HIBERNATE_PML4T, %rax
 	movq	%rax,	%cr3
 	jmp	1f
+	int3
 
 1:	RETGUARD_CHECK(hibernate_activate_resume_pt_machdep, r11)
 	ret
-	lfence
+	int3
 
 	/*
 	 * Switch to the private resume-time hibernate stack
@@ -506,14 +521,14 @@ NENTRY(hibernate_switch_stack_machdep)
 	/* On our own stack from here onward */
 	RETGUARD_CHECK(hibernate_switch_stack_machdep, r11)
 	ret
-	lfence
+	int3
 
 NENTRY(hibernate_flush)
 	RETGUARD_SETUP(hibernate_flush, r11)
 	invlpg	HIBERNATE_INFLATE_PAGE
 	RETGUARD_CHECK(hibernate_flush, r11)
 	ret
-	lfence
+	int3
 #endif /* HIBERNATE */
 
 	/*
@@ -809,4 +824,4 @@ NENTRY(acpi_savecpu)
 	movl	$1, %eax
 	RETGUARD_CHECK(acpi_savecpu, r11)
 	ret
-	lfence
+	int3

@@ -73,12 +73,14 @@
 	movq	%rax,%cr3		; \
 	CODEPATCH_END(CPTAG_MELTDOWN_NOP);\
 	jmp	98f			; \
+	int3				; \
 END(X##label)				; \
 _ENTRY(INTRENTRY_LABEL(label)) /* from kernel */ \
 	FENCE_NO_SAFE_SMAP		; \
 	subq	$TF_RIP,%rsp		; \
 	movq	%rcx,TF_RCX(%rsp)	; \
 	jmp	99f			; \
+	int3				; \
 	_ALIGN_TRAPS			; \
 98:	/* from userspace */		  \
 	movq	CPUVAR(KERN_RSP),%rax	; \
@@ -102,7 +104,8 @@ _ENTRY(INTRENTRY_LABEL(label)) /* from kernel */ \
 	movq	%rax,TF_ERR(%rsp)
 
 #define INTRFASTEXIT \
-	jmp	intr_fast_exit
+	jmp	intr_fast_exit		; \
+	int3
 
 /*
  * Entry for faking up an interrupt frame after spllower() unblocks

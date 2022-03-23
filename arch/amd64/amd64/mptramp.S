@@ -118,6 +118,7 @@ _C_LABEL(cpu_spinup_trampoline):
 	orl	$CR0_PE, %eax	# enable protected mode
 	movl	%eax, %cr0	# doit
 	ljmpl	$0x8, $.Lmp_startup
+	int3
 
 _TRMP_LABEL(.Lmp_startup)
 	.code32
@@ -180,12 +181,17 @@ _TRMP_LABEL(.Lmp_startup)
 	orl	$CR0_DEFAULT,%ecx
 	movl	%ecx, %cr0
 
-	ljmp	*(%eax)
+	movl	*(%eax), %eax
+	lfence
+	ljmp	*%eax
+	int3
 
 _TRMP_LABEL(.Lmptramp_longmode)
 	.code64
 	movabsq	$_C_LABEL(cpu_spinup_trampoline_end),%rax
+	lfence
 	jmp	*%rax
+	int3
 
 
 _C_LABEL(cpu_spinup_trampoline_end):	#end of code copied to MP_TRAMPOLINE
@@ -203,6 +209,7 @@ _C_LABEL(cpu_spinup_trampoline_end):	#end of code copied to MP_TRAMPOLINE
 	rdmsr
 	andl	$X2APIC_ID_MASK,%eax
 	jmp	2f
+	int3
 1:
 	movl	_C_LABEL(local_apic)+LAPIC_ID,%eax
 	shrl	$LAPIC_ID_SHIFT,%eax

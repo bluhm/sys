@@ -58,7 +58,7 @@ _C_LABEL(vmm_dispatch_intr):
 	cli
 	callq	*%rdi
 	ret
-	lfence
+	int3
 
 _C_LABEL(vmxon):
 	RETGUARD_SETUP(vmxon, r11)
@@ -68,12 +68,12 @@ _C_LABEL(vmxon):
 	xorq	%rax, %rax
 	RETGUARD_CHECK(vmxon, r11)
 	ret
-	lfence
+	int3
 failed_on:
 	movq	$0x01, %rax
 	RETGUARD_CHECK(vmxon, r11)
 	ret
-	lfence
+	int3
 
 _C_LABEL(vmxoff):
 	RETGUARD_SETUP(vmxoff, r11)
@@ -83,12 +83,12 @@ _C_LABEL(vmxoff):
 	xorq	%rax, %rax
 	RETGUARD_CHECK(vmxoff, r11)
 	ret
-	lfence
+	int3
 failed_off:
 	movq	$0x01, %rax
 	RETGUARD_CHECK(vmxoff, r11)
 	ret
-	lfence
+	int3
 
 _C_LABEL(vmclear):
 	RETGUARD_SETUP(vmclear, r11)
@@ -98,12 +98,12 @@ _C_LABEL(vmclear):
 	xorq	%rax, %rax
 	RETGUARD_CHECK(vmclear, r11)
 	ret
-	lfence
+	int3
 failed_clear:
 	movq	$0x01, %rax
 	RETGUARD_CHECK(vmclear, r11)
 	ret
-	lfence
+	int3
 
 _C_LABEL(vmptrld):
 	RETGUARD_SETUP(vmptrld, r11)
@@ -113,12 +113,12 @@ _C_LABEL(vmptrld):
 	xorq	%rax, %rax
 	RETGUARD_CHECK(vmptrld, r11)
 	ret
-	lfence
+	int3
 failed_ptrld:
 	movq	$0x01, %rax
 	RETGUARD_CHECK(vmptrld, r11)
 	ret
-	lfence
+	int3
 
 _C_LABEL(vmptrst):
 	RETGUARD_SETUP(vmptrst, r11)
@@ -128,12 +128,12 @@ _C_LABEL(vmptrst):
 	xorq	%rax, %rax
 	RETGUARD_CHECK(vmptrst, r11)
 	ret
-	lfence
+	int3
 failed_ptrst:
 	movq	$0x01, %rax
 	RETGUARD_CHECK(vmptrst, r11)
 	ret
-	lfence
+	int3
 
 _C_LABEL(vmwrite):
 	RETGUARD_SETUP(vmwrite, r11)
@@ -143,12 +143,12 @@ _C_LABEL(vmwrite):
 	xorq	%rax, %rax
 	RETGUARD_CHECK(vmwrite, r11)
 	ret
-	lfence
+	int3
 failed_write:
 	movq	$0x01, %rax
 	RETGUARD_CHECK(vmwrite, r11)
 	ret
-	lfence
+	int3
 
 _C_LABEL(vmread):
 	RETGUARD_SETUP(vmread, r11)
@@ -158,19 +158,19 @@ _C_LABEL(vmread):
 	xorq	%rax, %rax
 	RETGUARD_CHECK(vmread, r11)
 	ret
-	lfence
+	int3
 failed_read:
 	movq	$0x01, %rax
 	RETGUARD_CHECK(vmread, r11)
 	ret
-	lfence
+	int3
 
 _C_LABEL(invvpid):
 	RETGUARD_SETUP(invvpid, r11)
 	invvpid (%rsi), %rdi
 	RETGUARD_CHECK(invvpid, r11)
 	ret
-	lfence
+	int3
 
 _C_LABEL(invept):
 	RETGUARD_SETUP(invept, r11)
@@ -309,6 +309,7 @@ skip_init:
 	movq	$FLUSH_CMD_L1D_FLUSH, %rax
 	wrmsr
 	jmp	done_flush
+	int3
 
 no_l1df_msr:
 	xorq	%r9, %r9
@@ -319,6 +320,7 @@ l1df_tlb_loop:
 	movb	l1tf_flush_region(%r9), %al
 	addq	$PAGE_SIZE, %r9
 	jmp	l1df_tlb_loop
+	int3
 
 l1df_tlb_done:
 	/*
@@ -377,6 +379,7 @@ done_flush:
 
 	vmlaunch
 	jmp	fail_launch_or_resume
+	int3
 do_resume:
 	/* Restore guest registers */
 	movq	0xa0(%rsi), %rax
@@ -425,11 +428,13 @@ fail_launch_unknown:
 	movq	$VMX_FAIL_LAUNCH_UNKNOWN, %rdi
 	popq	%rsi
 	jmp	restore_host
+	int3
 
 fail_launch_invalid_vmcs:
 	movq	$VMX_FAIL_LAUNCH_INVALID_VMCS, %rdi
 	popq	%rsi
 	jmp	restore_host
+	int3
 
 fail_launch_valid_vmcs:
 	movq	$VMCS_INSTRUCTION_ERROR, %rdi
@@ -439,6 +444,7 @@ fail_launch_valid_vmcs:
 	movl	%eax, 0x80(%rsi)
 	movq	$VMX_FAIL_LAUNCH_VALID_VMCS, %rdi
 	jmp	restore_host
+	int3
 
 vmx_exit_handler_asm:
 	/* Preserve guest registers not saved in VMCS */
@@ -551,7 +557,7 @@ restore_host:
 	movq	%rdi, %rax
 	RETGUARD_CHECK(vmx_enter_guest, r11)
 	ret
-	lfence
+	int3
 
 _C_LABEL(svm_enter_guest):
 	RETGUARD_SETUP(svm_enter_guest, r11)
@@ -779,4 +785,4 @@ restore_host_svm:
 
 	RETGUARD_CHECK(svm_enter_guest, r11)
 	ret
-	lfence
+	int3

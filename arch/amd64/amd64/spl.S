@@ -89,7 +89,7 @@ _C_LABEL(splhigh):
 	xchgl	%eax,CPUVAR(ILEVEL)
 	RETGUARD_CHECK(splhigh, r11)
 	ret
-	lfence
+	int3
 
 	.align 16, 0xcc
 _C_LABEL(splx):
@@ -100,7 +100,7 @@ _C_LABEL(splx):
 	jnz	_C_LABEL(Xspllower)
 	RETGUARD_CHECK(splx, r11)
 	ret
-	lfence
+	int3
 #endif /* PROF || GPROF */
 #endif
 
@@ -138,12 +138,13 @@ KIDTVEC(spllower)
 	popq	%rbx
 	RETGUARD_CHECK(Xspllower, r11)
 	ret
-	lfence
+	int3
 2:	bsrq	%rax,%rax
 	btrq	%rax,CPUVAR(IPENDING)
 	movq	CPUVAR(ISOURCES)(,%rax,8),%rax
 	movq    IS_RECURSE(%rax),%rax
 	jmp     retpoline_rax
+	int3
 
 /*
  * Handle return from interrupt after device handler finishes.
@@ -170,3 +171,4 @@ KIDTVEC(doreti)
 	movq	CPUVAR(ISOURCES)(,%rax, 8),%rax
 	movq    IS_RESUME(%rax),%rax
 	jmp     retpoline_rax
+	int3

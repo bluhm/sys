@@ -257,7 +257,7 @@ NENTRY(lgdt)
 	lgdt	(%rax)
 	/* Flush the prefetch q. */
 	jmp	1f
-	nop
+	int3
 1:	/* Reload "stale" selectors. */
 	movl	$GSEL(GDATA_SEL, SEL_KPL),%eax
 	movl	%eax,%ds
@@ -269,6 +269,7 @@ NENTRY(lgdt)
 	pushq	%rax
 	RETGUARD_CHECK(lgdt, r11)
 	lretq
+	int3
 END(lgdt)
 
 #ifdef DDB
@@ -292,7 +293,7 @@ ENTRY(setjmp)
 	xorl	%eax,%eax
 	RETGUARD_CHECK(setjmp, r11)
 	ret
-	lfence
+	int3
 END(setjmp)
 
 ENTRY(longjmp)
@@ -311,7 +312,7 @@ ENTRY(longjmp)
 	incl	%eax
 	RETGUARD_CHECK(longjmp, r11)
 	ret
-	lfence
+	int3
 END(longjmp)
 #endif /* DDB */
 
@@ -510,7 +511,7 @@ switch_restored:
 	popq	%rbx
 	RETGUARD_CHECK(cpu_switchto, r11)
 	ret
-	lfence
+	int3
 
 #ifdef DIAGNOSTIC
 	.globl	_C_LABEL(panic)
@@ -527,12 +528,12 @@ END(cpu_switchto)
 
 ENTRY(cpu_idle_enter)
 	ret
-	lfence
+	int3
 END(cpu_idle_enter)
 
 ENTRY(cpu_idle_leave)
 	ret
-	lfence
+	int3
 END(cpu_idle_leave)
 
 /* placed here for correct static branch prediction in cpu_idle_* */
@@ -548,7 +549,7 @@ ENTRY(cpu_idle_cycle)
 	hlt
 	RETGUARD_CHECK(cpu_idle_cycle, r11)
 	ret
-	lfence
+	int3
 END(cpu_idle_cycle)
 
 /*
@@ -562,11 +563,12 @@ ENTRY(savectx)
 	movq	%rbp,PCB_RBP(%rdi)
 	RETGUARD_CHECK(savectx, r11)
 	ret
-	lfence
+	int3
 END(savectx)
 
 IDTVEC(syscall32)
 	sysret		/* go away please */
+	int3
 END(Xsyscall32)
 
 /*
@@ -600,6 +602,7 @@ XUsyscall_meltdown:
 0:	pause
 	lfence
 	jmp	0b
+	int3
 KUTEXT_PAGE_END
 
 KTEXT_PAGE_START
@@ -630,6 +633,7 @@ IDTVEC_NOALIGN(syscall)
 	movq	%rsp,%rdi
 	call	_C_LABEL(ast)
 	jmp	.Lsyscall_check_asts
+	int3
 
 2:
 #ifdef DIAGNOSTIC
@@ -692,9 +696,11 @@ Xsyscall_trampback:
 0:	pause
 	lfence
 	jmp	0b
+	int3
 	CODEPATCH_END(CPTAG_MELTDOWN_NOP)
 	swapgs
 	sysretq
+	int3
 END(Xsyscall)
 END(Xsyscall_meltdown)
 KTEXT_PAGE_END
@@ -706,6 +712,7 @@ KUTEXT_PAGE_START
 	movq	CPUVAR(SCRATCH),%rax
 	swapgs
 	sysretq
+	int3
 KUTEXT_PAGE_END
 
 	.text
@@ -715,6 +722,7 @@ KUTEXT_PAGE_END
 	orl	$CPUF_USERSEGS,CPUVAR(FLAGS)
 	movq	CPUVAR(CURPCB),%rdi
 	jmp	.Lsyscall_restore_fsbase_real
+	int3
 
 	_ALIGN_TRAPS
 .Lsyscall_restore_xstate:	/* CPU doesn't have curproc's xstate */
@@ -740,6 +748,7 @@ KUTEXT_PAGE_END
 	movl	$MSR_FSBASE,%ecx
 	wrmsr
 	jmp	.Lsyscall_restore_registers
+	int3
 
 #ifdef DIAGNOSTIC
 .Lsyscall_spl_not_lowered:
@@ -755,6 +764,7 @@ KUTEXT_PAGE_END
 #endif /* DDB */
 	movl	$IPL_NONE,CPUVAR(ILEVEL)
 	jmp	.Lsyscall_check_asts
+	int3
 
 	.section .rodata
 spl_lowered:
@@ -772,6 +782,7 @@ NENTRY(proc_trampoline)
 	call	retpoline_rax
 	movq	CPUVAR(CURPROC),%r14
 	jmp	.Lsyscall_check_asts
+	int3
 END(proc_trampoline)
 
 
@@ -809,6 +820,7 @@ GENTRY(intr_user_exit)
 	call	_C_LABEL(ast)
 	cli
 	jmp	intr_user_exit
+	int3
 
 intr_user_exit_post_ast:
 	/* Restore FPU/"extended CPU state" if it's not already in the CPU */
@@ -885,6 +897,7 @@ KUTEXT_PAGE_START
 	swapgs
 doreti_iret_meltdown:
 	iretq
+	int3
 KUTEXT_PAGE_END
 /*
  * Back to the "KTEXT" page to fill in the speculation trap and the
@@ -898,6 +911,7 @@ KTEXT_PAGE_START
 0:	pause
 	lfence
 	jmp	0b
+	int3
 	.space	(.Liretq_swapgs - XUsyscall_meltdown) - \
 		(. - Xsyscall_meltdown), 0xcc
 	CODEPATCH_END(CPTAG_MELTDOWN_NOP)
@@ -906,6 +920,7 @@ KTEXT_PAGE_START
 	.globl	_C_LABEL(doreti_iret)
 _C_LABEL(doreti_iret):
 	iretq
+	int3
 KTEXT_PAGE_END
 
 	.text
@@ -929,6 +944,7 @@ KTEXT_PAGE_END
 	movl	$MSR_FSBASE,%ecx
 	wrmsr
 	jmp	.Lintr_restore_registers
+	int3
 
 .Lintr_xrstor_faulted:
 	/*
@@ -945,6 +961,7 @@ KTEXT_PAGE_END
 	CODEPATCH_END(CPTAG_XRSTOR)
 	movq	$T_PROTFLT,TF_TRAPNO(%rsp)
 	jmp	recall_trap
+	int3
 
 #ifdef DIAGNOSTIC
 .Lintr_user_exit_not_blocked:
@@ -960,6 +977,7 @@ KTEXT_PAGE_END
 #endif /* DDB */
 1:	cli
 	jmp	intr_user_exit
+	int3
 
 .Luser_spl_not_lowered:
 	sti
@@ -974,6 +992,7 @@ KTEXT_PAGE_END
 	movl	$0,CPUVAR(ILEVEL)
 	cli
 	jmp	intr_user_exit
+	int3
 
 	.section .rodata
 intr_spl_lowered:
@@ -1010,6 +1029,7 @@ NENTRY(intr_fast_exit)
 	movq	TF_RAX(%rsp),%rax
 	addq	$TF_RIP,%rsp
 	iretq
+	int3
 
 #ifdef DIAGNOSTIC
 .Lintr_exit_not_blocked:
@@ -1025,6 +1045,7 @@ NENTRY(intr_fast_exit)
 #endif /* DDB */
 1:	cli
 	jmp	intr_fast_exit
+	int3
 
 	.data
 .global warn_once
@@ -1062,12 +1083,12 @@ xrstor_fault:
 	xorl	%eax, %eax
 	RETGUARD_CHECK(xrstor_user, r11)
 	ret
-	lfence
+	int3
 NENTRY(xrstor_resume)
 	movl	$1, %eax
 	RETGUARD_CHECK(xrstor_user, r11)
 	ret
-	lfence
+	int3
 END(xrstor_user)
 
 ENTRY(fpusave)
@@ -1080,7 +1101,7 @@ ENTRY(fpusave)
 	CODEPATCH_END(CPTAG_XSAVE)
 	RETGUARD_CHECK(fpusave, r11)
 	ret
-	lfence
+	int3
 END(fpusave)
 
 ENTRY(fpusavereset)
@@ -1100,7 +1121,7 @@ ENTRY(fpusavereset)
 	CODEPATCH_END(CPTAG_XRSTOR)
 	RETGUARD_CHECK(fpusavereset, r11)
 	ret
-	lfence
+	int3
 END(fpusavereset)
 
 ENTRY(xsetbv_user)
@@ -1115,12 +1136,12 @@ xsetbv_fault:
 	xorl	%eax, %eax
 	RETGUARD_CHECK(xsetbv_user, r11)
 	ret
-	lfence
+	int3
 NENTRY(xsetbv_resume)
 	movl	$1, %eax
 	RETGUARD_CHECK(xsetbv_user, r11)
 	ret
-	lfence
+	int3
 END(xsetbv_user)
 
 	.section .rodata
@@ -1155,7 +1176,7 @@ ENTRY(pagezero)
 	sfence
 	RETGUARD_CHECK(pagezero, r11)
 	ret
-	lfence
+	int3
 END(pagezero)
 
 /* int rdmsr_safe(u_int msr, uint64_t *data) */
@@ -1174,13 +1195,13 @@ rdmsr_safe_fault:
 
 	RETGUARD_CHECK(rdmsr_safe, r10)
 	ret
-	lfence
+	int3
 
 NENTRY(rdmsr_resume)
 	movl	$0x1, %eax
 	RETGUARD_CHECK(rdmsr_safe, r10)
 	ret
-	lfence
+	int3
 END(rdmsr_safe)
 
 #if NXEN > 0
