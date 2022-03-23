@@ -109,11 +109,8 @@ struct inpcbtable rawcbtable;
 void
 rip_init(void)
 {
-
 	in_pcbinit(&rawcbtable, 1);
 }
-
-struct sockaddr_in ripsrc = { sizeof(ripsrc), AF_INET };
 
 struct mbuf	*rip_chkhdr(struct mbuf *, struct mbuf *);
 
@@ -127,10 +124,15 @@ rip_input(struct mbuf **mp, int *offp, int proto, int af)
 	struct in_addr *key;
 	struct counters_ref ref;
 	uint64_t *counters;
+	struct sockaddr_in ripsrc;
 
 	KASSERT(af == AF_INET);
 
+	memset(&ripsrc, 0, sizeof(ripsrc));
+	ripsrc.sin_family = AF_INET;
+	ripsrc.sin_len = sizeof(ripsrc);
 	ripsrc.sin_addr = ip->ip_src;
+
 	key = &ip->ip_dst;
 #if NPF > 0
 	if (m->m_pkthdr.pf.flags & PF_TAG_DIVERTED) {
