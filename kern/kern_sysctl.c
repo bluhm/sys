@@ -473,8 +473,10 @@ kern_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		return (0);
 #if NDT > 0
 	case KERN_ALLOWDT:
-		return (sysctl_securelevel_int(oldp, oldlenp, newp, newlen,
-		    &allowdt));
+		error = sysctl_securelevel_int(oldp, oldlenp, newp, newlen,
+		    &allowdt);
+		allowdt = 0;
+		return (error);
 #endif
 	case KERN_ALLOWKMEM:
 		return (sysctl_securelevel_int(oldp, oldlenp, newp, newlen,
