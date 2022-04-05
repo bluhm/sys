@@ -1,4 +1,4 @@
-/*	$OpenBSD: tty_nmea.c,v 1.49 2019/08/15 15:08:14 otto Exp $ */
+/*	$OpenBSD: tty_nmea.c,v 1.51 2022/04/02 22:45:18 mlarkin Exp $ */
 
 /*
  * Copyright (c) 2006, 2007, 2008 Marc Balmer <mbalmer@openbsd.org>
@@ -16,7 +16,10 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* A tty line discipline to decode NMEA 0183 data to get the time. */
+/*
+ * A tty line discipline to decode NMEA 0183 data to get the time
+ * and GPS position data
+ */
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -294,7 +297,7 @@ nmea_scan(struct nmea *np, struct tty *tp)
 	    strncmp(fld[0], "GN", 2) &&
 	    strncmp(fld[0], "GP", 2))
 		return;
-		
+
 	/* we look for the RMC & GGA messages */
 	if (strncmp(fld[0] + 2, "RMC", 3) &&
 	    strncmp(fld[0] + 2, "GGA", 3))
