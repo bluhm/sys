@@ -405,6 +405,7 @@ struct tdb {				/* tunnel descriptor block */
 	u_int8_t	tdb_wnd;	/* Replay window */
 	u_int8_t	tdb_satype;	/* SA type (RFC2367, PF_KEY) */
 	u_int8_t	tdb_updates;	/* pfsync update counter */
+	u_int8_t	tdb_snapped;		/* dispatched by pfsync(4) */
 
 	union sockaddr_union	tdb_dst;	/* [N] Destination address */
 	union sockaddr_union	tdb_src;	/* [N] Source address */
@@ -439,6 +440,7 @@ struct tdb {				/* tunnel descriptor block */
 
 	TAILQ_HEAD(tdb_policy_head, ipsec_policy) tdb_policy_head; /* [p] */
 	TAILQ_ENTRY(tdb)	tdb_sync_entry;
+	TAILQ_ENTRY(tdb)	tdb_sync_snap;
 };
 
 enum tdb_counters {

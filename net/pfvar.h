@@ -749,6 +749,7 @@ struct pf_state {
 	u_int8_t		 pad[3];
 
 	TAILQ_ENTRY(pf_state)	 sync_list;
+	TAILQ_ENTRY(pf_state)	 sync_snap;
 	TAILQ_ENTRY(pf_state)	 entry_list;
 	SLIST_ENTRY(pf_state)	 gc_list;
 	RB_ENTRY(pf_state)	 entry_id;
@@ -797,6 +798,7 @@ struct pf_state {
 	pf_refcnt_t		 refcnt;
 	u_int16_t		 delay;
 	u_int8_t		 rt;
+	u_int8_t		 snapped;
 };
 
 /*

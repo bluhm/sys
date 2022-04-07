@@ -181,6 +181,7 @@ void	pfsync_q_del(struct pf_state *);
 
 struct pfsync_upd_req_item {
 	TAILQ_ENTRY(pfsync_upd_req_item)	ur_entry;
+	TAILQ_ENTRY(pfsync_upd_req_item)	ur_snap;
 	struct pfsync_upd_req			ur_msg;
 };
 TAILQ_HEAD(pfsync_upd_reqs, pfsync_upd_req_item);
@@ -295,7 +296,7 @@ void	pfsync_bulk_update(void *);
 void	pfsync_bulk_fail(void *);
 
 void	pfsync_grab_snapshot(struct pfsync_snapshot *, struct pfsync_softc *);
-void	pfsync_drop_snapshot(struct pfsync_snapshot *, struct pfsync_softc *);
+void	pfsync_drop_snapshot(struct pfsync_snapshot *);
 
 void	pfsync_send_dispatch(void *);
 void	pfsync_send_pkt(struct mbuf *);
@@ -1574,6 +1575,9 @@ void
 pfsync_grab_snapshot(struct pfsync_snapshot *sn, struct pfsync_softc *sc)
 {
 	int q;
+	struct pf_state *st;
+	struct pfsync_upd_req_item *ur;
+	struct tdb *tdb;
 
 	sn->sn_sc = sc;
 
@@ -1583,14 +1587,33 @@ pfsync_grab_snapshot(struct pfsync_snapshot *sn, struct pfsync_softc *sc)
 
 	for (q = 0; q < PFSYNC_S_COUNT; q++) {
 		TAILQ_INIT(&sn->sn_qs[q]);
-		TAILQ_CONCAT(&sn->sn_qs[q], &sc->sc_qs[q], sync_list);
+
+		while ((st = TAILQ_FIRST(&sc->sc_qs[q])) != NULL) {
+#ifdef PFSYNC_DEBUG
+			KASSERT(st->snapped == 0);
+#endif
+			TAILQ_REMOVE(&sc->sc_qs[q], st, sync_list);
+			TAILQ_INSERT_TAIL(&sn->sn_qs[q], st, sync_snap);
+			st->snapped = 1;
+		}
 	}
 
 	TAILQ_INIT(&sn->sn_upd_req_list);
-	TAILQ_CONCAT(&sn->sn_upd_req_list, &sc->sc_upd_req_list, ur_entry);
+	while (!TAILQ_EMPTY(&sc->sc_upd_req_list)) {
+		ur = TAILQ_FIRST(&sc->sc_upd_req_list);
+		TAILQ_REMOVE(&sc->sc_upd_req_list, ur, ur_entry);
+		TAILQ_INSERT_TAIL(&sn->sn_upd_req_list, ur, ur_snap);
+	}
 
 	TAILQ_INIT(&sn->sn_tdb_q);
-	TAILQ_CONCAT(&sn->sn_tdb_q, &sc->sc_tdb_q, tdb_sync_entry);
+	while ((tdb = TAILQ_FIRST(&sc->sc_tdb_q)) != NULL) {
+#ifdef PFSYNC_DEBUG
+		KASSERT(tdb->snapped == 0);
+#endif
+		TAILQ_REMOVE(&sc->sc_tdb_q, tdb, tdb_sync_entry);
+		TAILQ_INSERT_TAIL(&sn->sn_tdb_q, tdb, tdb_sync_snap);
+		tdb->tdb_snapped = 1;
+	}
 
 	sn->sn_len = sc->sc_len;
 	sc->sc_len = PFSYNC_MINPKT;
@@ -1606,41 +1629,44 @@ pfsync_grab_snapshot(struct pfsync_snapshot *sn, struct pfsync_softc *sc)
 }
 
 void
-pfsync_drop_snapshot(struct pfsync_snapshot *sn, struct pfsync_softc * sc)
+pfsync_drop_snapshot(struct pfsync_snapshot *sn)
 {
 	struct pf_state *st;
 	struct pfsync_upd_req_item *ur;
 	struct tdb *t;
 	int q;
 
-
 	for (q = 0; q < PFSYNC_S_COUNT; q++) {
 		if (TAILQ_EMPTY(&sn->sn_qs[q]))
 			continue;
 
 		while ((st = TAILQ_FIRST(&sn->sn_qs[q])) != NULL) {
-			TAILQ_REMOVE(&sn->sn_qs[q], st, sync_list);
 #ifdef PFSYNC_DEBUG
 			KASSERT(st->sync_state == q);
+			KASSERT(st->snapped == 1);
 #endif
+			TAILQ_REMOVE(&sn->sn_qs[q], st, sync_snap);
 			st->sync_state = PFSYNC_S_NONE;
+			st->snapped = 0;
 			pf_state_unref(st);
 		}
 	}
 
 	while ((ur = TAILQ_FIRST(&sn->sn_upd_req_list)) != NULL) {
-		TAILQ_REMOVE(&sn->sn_upd_req_list, ur, ur_entry);
+		TAILQ_REMOVE(&sn->sn_upd_req_list, ur, ur_snap);
 		pool_put(&sn->sn_sc->sc_pool, ur);
 	}
 
-	mtx_enter(&sc->sc_tdb_mtx);
 	while ((t = TAILQ_FIRST(&sn->sn_tdb_q)) != NULL) {
-		TAILQ_REMOVE(&sn->sn_tdb_q, t, tdb_sync_entry);
+		TAILQ_REMOVE(&sn->sn_tdb_q, t, tdb_sync_snap);
 		mtx_enter(&t->tdb_mtx);
+#ifdef PFSYNC_DEBUG
+		KASSERT(t->tdb_snapped == 1);
+#endif
+		t->tdb_snapped = 0;
 		CLR(t->tdb_flags, TDBF_PFSYNC);
 		mtx_leave(&t->tdb_mtx);
 	}
-	mtx_leave(&sc->sc_tdb_mtx);
 }
 
 int
@@ -1667,7 +1693,7 @@ pfsync_drop(struct pfsync_softc *sc)
 	struct pfsync_snapshot	sn;
 
 	pfsync_grab_snapshot(&sn, sc);
-	pfsync_drop_snapshot(&sn, sc);
+	pfsync_drop_snapshot(&sn);
 }
 
 void
@@ -1759,7 +1785,7 @@ pfsync_sendout(void)
 	if (m == NULL) {
 		sc->sc_if.if_oerrors++;
 		pfsyncstat_inc(pfsyncs_onomem);
-		pfsync_drop_snapshot(&sn, sc);
+		pfsync_drop_snapshot(&sn);
 		return;
 	}
 
@@ -1769,7 +1795,7 @@ pfsync_sendout(void)
 			m_free(m);
 			sc->sc_if.if_oerrors++;
 			pfsyncstat_inc(pfsyncs_onomem);
-			pfsync_drop_snapshot(&sn, sc);
+			pfsync_drop_snapshot(&sn);
 			return;
 		}
 	}
@@ -1799,7 +1825,7 @@ pfsync_sendout(void)
 
 		count = 0;
 		while ((ur = TAILQ_FIRST(&sn.sn_upd_req_list)) != NULL) {
-			TAILQ_REMOVE(&sn.sn_upd_req_list, ur, ur_entry);
+			TAILQ_REMOVE(&sn.sn_upd_req_list, ur, ur_snap);
 
 			bcopy(&ur->ur_msg, m->m_data + offset,
 			    sizeof(ur->ur_msg));
@@ -1827,18 +1853,20 @@ pfsync_sendout(void)
 		subh = (struct pfsync_subheader *)(m->m_data + offset);
 		offset += sizeof(*subh);
 
-		mtx_enter(&sc->sc_tdb_mtx);
 		count = 0;
 		while ((t = TAILQ_FIRST(&sn.sn_tdb_q)) != NULL) {
-			TAILQ_REMOVE(&sn.sn_tdb_q, t, tdb_sync_entry);
+			TAILQ_REMOVE(&sn.sn_tdb_q, t, tdb_sync_snap);
 			pfsync_out_tdb(t, m->m_data + offset);
 			offset += sizeof(struct pfsync_tdb);
+#ifdef PFSYNC_DEBUG
+			KASSERT(t->tdb_snapped == 1);
+#endif
+			t->tdb_snapped = 0;
 			mtx_enter(&t->tdb_mtx);
 			CLR(t->tdb_flags, TDBF_PFSYNC);
 			mtx_leave(&t->tdb_mtx);
 			count++;
 		}
-		mtx_leave(&sc->sc_tdb_mtx);
 
 		bzero(subh, sizeof(*subh));
 		subh->action = PFSYNC_ACT_TDB;
@@ -1856,11 +1884,13 @@ pfsync_sendout(void)
 
 		count = 0;
 		while ((st = TAILQ_FIRST(&sn.sn_qs[q])) != NULL) {
-			TAILQ_REMOVE(&sn.sn_qs[q], st, sync_list);
+			TAILQ_REMOVE(&sn.sn_qs[q], st, sync_snap);
 #ifdef PFSYNC_DEBUG
 			KASSERT(st->sync_state == q);
+			KASSERT(st->snapped == 1);
 #endif
 			st->sync_state = PFSYNC_S_NONE;
+			st->snapped = 0;
 			pfsync_qs[q].write(st, m->m_data + offset);
 			offset += pfsync_qs[q].len;
 
@@ -2411,8 +2441,9 @@ pfsync_q_ins(struct pf_state *st, int q)
 		mtx_enter(&sc->sc_st_mtx);
 
 		/*
-		 * If two threads are competing to insert the same state, then
-		 * there must be just single winner.
+		 * There are either two threads trying to update the
+		 * the same state, or the state is just being processed
+		 * (is on snapshot queue).
 		 */
 		if (st->sync_state != PFSYNC_S_NONE) {
 			mtx_leave(&sc->sc_st_mtx);
@@ -2450,6 +2481,15 @@ pfsync_q_del(struct pf_state *st)
 
 	mtx_enter(&sc->sc_st_mtx);
 	q = st->sync_state;
+	/*
+	 * re-check under mutex
+	 * if state is snapped already, then just bail out, because we came
+	 * too late, the state is being just processed/dispatched to peer.
+	 */
+	if ((q == PFSYNC_S_NONE) || (st->snapped)) {
+		mtx_leave(&sc->sc_st_mtx);
+		return;
+	}
 	atomic_sub_long(&sc->sc_len, pfsync_qs[q].len);
 	TAILQ_REMOVE(&sc->sc_qs[q], st, sync_list);
 	if (TAILQ_EMPTY(&sc->sc_qs[q]))
@@ -2525,7 +2565,17 @@ pfsync_delete_tdb(struct tdb *t)
 
 	mtx_enter(&sc->sc_tdb_mtx);
 
+	/*
+	 * if tdb entry is just being processed (found in snapshot),
+	 * then it can not be deleted. we just came too late
+	 */
+	if (t->tdb_snapped) {
+		mtx_leave(&sc->sc_tdb_mtx);
+		return;
+	}
+
 	TAILQ_REMOVE(&sc->sc_tdb_q, t, tdb_sync_entry);
+
 	mtx_enter(&t->tdb_mtx);
 	CLR(t->tdb_flags, TDBF_PFSYNC);
 	mtx_leave(&t->tdb_mtx);
