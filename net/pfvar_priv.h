@@ -249,11 +249,11 @@ extern struct rwlock	pf_state_lock;
 	} while (0)
 
 #define PF_STATE_EXIT_WRITE()	do {			\
-		PF_ASSERT_STATE_LOCKED();		\
+		PF_STATE_ASSERT_LOCKED();		\
 		rw_exit_write(&pf_state_lock);		\
 	} while (0)
 
-#define PF_ASSERT_STATE_LOCKED()	do {		\
+#define PF_STATE_ASSERT_LOCKED()	do {		\
 		if (rw_status(&pf_state_lock) != RW_WRITE)\
 			splassert_fail(RW_WRITE,	\
 			    rw_status(&pf_state_lock), __func__);\
