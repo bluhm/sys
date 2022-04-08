@@ -415,8 +415,7 @@ pfsync_syncdev_state(void *arg)
 	struct pfsync_softc *sc = arg;
 	struct ifnet *ifp;
 
-	KERNEL_ASSERT_LOCKED();
-	netisr_conf_assert_write_lock();
+	NET_ASSERT_LOCKED();
 
 	if ((sc->sc_if.if_flags & IFF_UP) == 0)
 		return;
@@ -576,7 +575,7 @@ pfsync_state_import(struct pfsync_state *sp, int flags)
 		return (EINVAL);
 	}
 
-	if ((kif = pfi_kif_get(sp->ifname)) == NULL) {
+	if ((kif = pfi_kif_get(sp->ifname, NULL)) == NULL) {
 		DPFPRINTF(LOG_NOTICE, "pfsync_state_import: "
 		    "unknown interface: %s", sp->ifname);
 		if (flags & PFSYNC_SI_IOCTL)
@@ -707,11 +706,6 @@ pfsync_state_import(struct pfsync_state *sp, int flags)
 	st->pfsync_time = getuptime();
 	st->sync_state = PFSYNC_S_NONE;
 
-	mtx_init(&st->smtx, IPL_NET);
-	rte_timer_init(&st->rte_timo);
-	st->removed = 0;
-	st->ready = 0;
-
 	if (!ISSET(flags, PFSYNC_SI_IOCTL))
 		SET(st->state_flags, PFSTATE_NOSYNC);
 
@@ -738,7 +732,7 @@ pfsync_state_import(struct pfsync_state *sp, int flags)
 		goto cleanup_state;
 	}
 
-	pf_state_assert_locked(st);
+	PF_STATE_ASSERT_LOCKED();
 
 	if (!ISSET(flags, PFSYNC_SI_IOCTL)) {
 		CLR(st->state_flags, PFSTATE_NOSYNC);
@@ -956,7 +950,7 @@ pfsync_in_iack(caddr_t buf, int len, int count, int flags)
 		st = pf_find_state_byid(ia->id, ia->creatorid);
 		if (st == NULL)
 			continue;
-		pf_state_assert_locked(st);
+		PF_STATE_ASSERT_LOCKED();
 		pf_state_unlock(st);
 	}
 
@@ -1024,7 +1018,7 @@ pfsync_in_upd(caddr_t buf, int len, int count, int flags)
 				pfsyncstat_inc(pfsyncs_badstate);
 			continue;
 		}
-		pf_state_assert_locked(st);
+		PF_STATE_ASSERT_LOCKED();
 
 		if (st->key[PF_SK_WIRE]->proto == IPPROTO_TCP)
 			sync = pfsync_upd_tcp(st, &sp->src, &sp->dst);
@@ -1094,7 +1088,7 @@ pfsync_in_upd_c(caddr_t buf, int len, int count, int flags)
 			pfsync_request_update(up->creatorid, up->id);
 			continue;
 		}
-		pf_state_assert_locked(st);
+		PF_STATE_ASSERT_LOCKED();
 
 		if (st->key[PF_SK_WIRE]->proto == IPPROTO_TCP)
 			sync = pfsync_upd_tcp(st, &up->src, &up->dst);
@@ -1164,7 +1158,7 @@ pfsync_in_ureq(caddr_t buf, int len, int count, int flags)
 				pfsyncstat_inc(pfsyncs_badstate);
 				continue;
 			}
-			pf_state_assert_locked(st);
+			PF_STATE_ASSERT_LOCKED();
 			pfsync_update_state_req(st);
 			pf_state_unlock(st);
 		}
@@ -1189,7 +1183,7 @@ pfsync_in_del(caddr_t buf, int len, int count, int flags)
 			pfsyncstat_inc(pfsyncs_badstate);
 			continue;
 		}
-		pf_state_assert_locked(st);
+		PF_STATE_ASSERT_LOCKED();
 		SET(st->state_flags, PFSTATE_NOSYNC);
 		pf_state_unlock(st);
 
@@ -1214,7 +1208,7 @@ pfsync_in_del_c(caddr_t buf, int len, int count, int flags)
 			pfsyncstat_inc(pfsyncs_badstate);
 			continue;
 		}
-		pf_state_assert_locked(st);
+		PF_STATE_ASSERT_LOCKED();
 		SET(st->state_flags, PFSTATE_NOSYNC);
 		pf_state_unlock(st);
 
@@ -1620,7 +1614,7 @@ pfsync_insert_state(struct pf_state *st)
 {
 	struct pfsync_softc *sc = pfsyncif;
 
-	pf_state_assert_locked(st);
+	PF_STATE_ASSERT_LOCKED();
 
 	KASSERT(st->sync_state == PFSYNC_S_NONE);
 
@@ -1654,7 +1648,7 @@ pfsync_update_state(struct pf_state *st)
 {
 	struct pfsync_softc *sc = pfsyncif;
 
-	pf_state_assert_locked(st);
+	PF_STATE_ASSERT_LOCKED();
 
 	if (sc == NULL || !ISSET(sc->sc_if.if_flags, IFF_RUNNING) ||
 	    ISSET(st->state_flags, PFSTATE_NOSYNC))
@@ -1754,7 +1748,7 @@ pfsync_update_state_req(struct pf_state *st)
 {
 	struct pfsync_softc *sc = pfsyncif;
 
-	pf_state_assert_locked(st);
+	PF_STATE_ASSERT_LOCKED();
 
 	if (sc == NULL)
 		panic("pfsync_update_state_req: nonexistant instance");
@@ -1792,7 +1786,7 @@ pfsync_update_state_req(struct pf_state *st)
 int
 pfsync_delete_state(struct pf_state *st)
 {
-	pf_state_assert_locked(st);
+	PF_STATE_ASSERT_LOCKED();
 
 	if (st->sync_state == PFSYNC_S_NONE)
 		pfsync_q_ins(st, PFSYNC_S_DEL);
@@ -1836,7 +1830,7 @@ pfsync_q_ins(struct pf_state *st, int q)
 	struct pfsync_softc *sc = pfsyncif;
 	struct pfsync_local *lo;
 
-	pf_state_assert_locked(st);
+	PF_STATE_ASSERT_LOCKED();
 
 	KASSERT(st->sync_state == PFSYNC_S_NONE);
 
@@ -2007,7 +2001,7 @@ pfsync_sendout_bpf(struct pf_state *st, int act)
 	    sizeof(struct pfsync_state);
 #endif
 
-	pf_state_assert_locked(st);
+	PF_STATE_ASSERT_LOCKED();
 
 	if (!ISSET(sc->sc_if.if_flags, IFF_RUNNING) ||
 	    (ifp->if_bpf == NULL))

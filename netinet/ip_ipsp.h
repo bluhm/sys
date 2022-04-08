@@ -57,6 +57,10 @@
 #include <sys/types.h>
 #include <netinet/in.h>
 
+#ifdef _KERNEL
+#include <net/if_pfsync_var.h>
+#endif
+
 union sockaddr_union {
 	struct sockaddr		sa;
 	struct sockaddr_in	sin;
@@ -365,6 +369,7 @@ struct tdb {				/* tunnel descriptor block */
 	"\25ESN")
 
 	u_int32_t	tdb_flags;	/* [m] Flags related to this TDB */
+	struct pfsync_msg tdb_sync_msg;	/* if tdb_sync == 1, msg will be sent */
 
 	struct timeout	tdb_timer_tmo;
 	struct timeout	tdb_first_tmo;

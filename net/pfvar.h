@@ -45,6 +45,7 @@
 
 #include <net/radix.h>
 #include <net/route.h>
+#include <net/if_pfsync_var.h>
 
 struct ip;
 struct ip6_hdr;
@@ -752,6 +753,7 @@ struct pf_state {
 	TAILQ_ENTRY(pf_state)	 entry_list;
 	SLIST_ENTRY(pf_state)	 gc_list;
 	RB_ENTRY(pf_state)	 entry_id;
+	struct pfsync_msg	 sync_msg;
 	struct pf_state_peer	 src;
 	struct pf_state_peer	 dst;
 	struct pf_rule_slist	 match_rules;
