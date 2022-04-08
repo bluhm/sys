@@ -1,4 +1,4 @@
-/*	$OpenBSD: pfvar_priv.h,v 1.8 2022/01/02 22:36:04 jsg Exp $	*/
+/*	$OpenBSD: pfvar_priv.h,v 1.9 2022/04/08 18:17:24 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
