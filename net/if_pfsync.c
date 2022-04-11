@@ -740,9 +740,9 @@ pfsync_state_import(struct pfsync_state *sp, int flags)
 			printf("%s: PFSYNC_S_IACK unimplemented\n", __func__);
 	}
 	CLR(st->state_flags, PFSTATE_ACK);
-	st->ready = 1;
-	pf_state_update_timeout_off(st, st->timeout, PFSYNC_TIMEOUT_OFF);
-	pf_state_unlock(st);
+//	st->ready = 1;
+//	pf_state_update_timeout_off(st, st->timeout, PFSYNC_TIMEOUT_OFF);
+	PF_STATE_EXIT_WRITE();
 
 	return (0);
 
