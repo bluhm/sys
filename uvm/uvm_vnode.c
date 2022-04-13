@@ -748,7 +748,7 @@ ReTry:
 			 */
 #ifdef DIAGNOSTIC
 			if (flags & PGO_SYNCIO)
-	panic("uvn_flush: PGO_SYNCIO return 'try again' error (impossible)");
+	panic("%s: PGO_SYNCIO return 'try again' error (impossible)", __func__);
 #endif
 			flags |= PGO_SYNCIO;
 			if (flags & PGO_FREE)
@@ -812,14 +812,20 @@ ReTry:
 			} else if (flags & PGO_FREE &&
 			    result != VM_PAGER_PEND) {
 				if (result != VM_PAGER_OK) {
-					printf("uvn_flush: obj=%p, "
-					   "offset=0x%llx.  error "
-					   "during pageout.\n",
-					    pp->uobject,
-					    (long long)pp->offset);
-					printf("uvn_flush: WARNING: "
-					    "changes to page may be "
-					    "lost!\n");
+					static struct timeval lasttime;
+					static const struct timeval interval =
+					    { 5, 0 };
+
+					if (ratecheck(&lasttime, &interval)) {
+						printf("%s: obj=%p, "
+						   "offset=0x%llx.  error "
+						   "during pageout.\n",
+						    __func__, pp->uobject,
+						    (long long)pp->offset);
+						printf("%s: WARNING: "
+						    "changes to page may be "
+						    "lost!\n", __func__);
+					}
 					retval = FALSE;
 				}
 				pmap_page_protect(ptmp, PROT_NONE);
