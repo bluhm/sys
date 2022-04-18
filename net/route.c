@@ -190,6 +190,8 @@ route_init(void)
 	while (rt_hashjitter == 0)
 		rt_hashjitter = arc4random();
 
+	rt_timer_init();
+
 #ifdef BFD
 	bfdinit();
 #endif
@@ -1362,7 +1364,6 @@ rt_ifa_purge_walker(struct rtentry *rt, void *vifa, unsigned int rtableid)
  */
 
 LIST_HEAD(, rttimer_queue)	rttimer_queue_head;
-static int			rt_init_done = 0;
 
 #define RTTIMER_CALLOUT(r)	{					\
 	if (r->rtt_func != NULL) {					\
@@ -1389,25 +1390,18 @@ rt_timer_init(void)
 {
 	static struct timeout	rt_timer_timeout;
 
-	if (rt_init_done)
-		panic("rt_timer_init: already initialized");
-
 	pool_init(&rttimer_pool, sizeof(struct rttimer), 0, IPL_SOFTNET, 0,
 	    "rttmr", NULL);
 
 	LIST_INIT(&rttimer_queue_head);
 	timeout_set_proc(&rt_timer_timeout, rt_timer_timer, &rt_timer_timeout);
 	timeout_add_sec(&rt_timer_timeout, 1);
-	rt_init_done = 1;
 }
 
 struct rttimer_queue *
 rt_timer_queue_create(u_int timeout)
 {
 	struct rttimer_queue	*rtq;
-
-	if (rt_init_done == 0)
-		rt_timer_init();
 
 	if ((rtq = malloc(sizeof(*rtq), M_RTABLE, M_NOWAIT|M_ZERO)) == NULL)
 		return (NULL);
