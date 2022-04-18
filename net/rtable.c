@@ -184,6 +184,8 @@ rtable_init(void)
 
 	if (rtable_add(0) != 0)
 		panic("unable to create default routing table");
+
+	rt_timer_init();
 }
 
 int

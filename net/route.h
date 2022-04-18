@@ -451,6 +451,7 @@ void	 rtm_proposal(struct ifnet *, struct rt_addrinfo *, int, uint8_t);
 int	 rt_setgate(struct rtentry *, struct sockaddr *, u_int);
 struct rtentry *rt_getll(struct rtentry *);
 
+void			 rt_timer_init(void);
 int			 rt_timer_add(struct rtentry *,
 		             void(*)(struct rtentry *, struct rttimer *),
 			     struct rttimer_queue *, u_int);
