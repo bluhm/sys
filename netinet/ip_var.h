@@ -204,7 +204,7 @@ extern int ip_defttl;			/* default IP ttl */
 #define IPMTUDISCTIMEOUT (10 * 60)	/* as per RFC 1191 */
 
 extern int ip_mtudisc;			/* mtu discovery */
-extern u_int ip_mtudisc_timeout;	/* seconds to timeout mtu discovery */
+extern int ip_mtudisc_timeout;		/* seconds to timeout mtu discovery */
 
 extern int ipport_firstauto;		/* min port for port allocation */
 extern int ipport_lastauto;		/* max port for port allocation */

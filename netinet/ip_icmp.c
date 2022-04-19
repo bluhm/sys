@@ -882,8 +882,8 @@ icmp_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 	switch (name[0]) {
 	case ICMPCTL_REDIRTIMEOUT:
 		NET_LOCK();
-		error = sysctl_int(oldp, oldlenp, newp, newlen,
-		    &icmp_redirtimeout);
+		error = sysctl_int_bounded(oldp, oldlenp, newp, newlen,
+		    &icmp_redirtimeout, 0, INT_MAX);
 		rt_timer_queue_change(icmp_redirect_timeout_q,
 		    icmp_redirtimeout);
 		NET_UNLOCK();

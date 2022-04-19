@@ -91,7 +91,7 @@ int	ipsendredirects = 1;
 int	ip_dosourceroute = 0;
 int	ip_defttl = IPDEFTTL;
 int	ip_mtudisc = 1;
-u_int	ip_mtudisc_timeout = IPMTUDISCTIMEOUT;
+int	ip_mtudisc_timeout = IPMTUDISCTIMEOUT;
 int	ip_directedbcast = 0;
 
 struct rttimer_queue *ip_mtudisc_timeout_q;
@@ -1624,8 +1624,8 @@ ip_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		return error;
 	case IPCTL_MTUDISCTIMEOUT:
 		NET_LOCK();
-		error = sysctl_int(oldp, oldlenp, newp, newlen,
-		    &ip_mtudisc_timeout);
+		error = sysctl_int_bounded(oldp, oldlenp, newp, newlen,
+		    &ip_mtudisc_timeout, 0, INT_MAX);
 		rt_timer_queue_change(ip_mtudisc_timeout_q,
 		    ip_mtudisc_timeout);
 		NET_UNLOCK();

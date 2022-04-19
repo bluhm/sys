@@ -1880,7 +1880,6 @@ icmp6_redirect_timeout(struct rtentry *rt, struct rttimer *r)
 }
 
 const struct sysctl_bounded_args icmpv6ctl_vars[] = {
-	{ ICMPV6CTL_REDIRTIMEOUT, &icmp6_redirtimeout, 0, INT_MAX },
 	{ ICMPV6CTL_ND6_DELAY, &nd6_delay, 0, INT_MAX },
 	{ ICMPV6CTL_ND6_UMAXTRIES, &nd6_umaxtries, 0, INT_MAX },
 	{ ICMPV6CTL_ND6_MMAXTRIES, &nd6_mmaxtries, 0, INT_MAX },
@@ -1915,19 +1914,30 @@ icmp6_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 
 	/* All sysctl names at this level are terminal. */
 	if (namelen != 1)
-		return ENOTDIR;
+		return (ENOTDIR);
 
 	switch (name[0]) {
+	case ICMPV6CTL_REDIRTIMEOUT:
+		NET_LOCK();
+		error = sysctl_int_bounded(oldp, oldlenp, newp, newlen,
+		    &icmp6_redirtimeout, 0, INT_MAX);
+		rt_timer_queue_change(icmp6_redirect_timeout_q,
+		    icmp6_redirtimeout);
+		NET_UNLOCK();
+		break;
 
 	case ICMPV6CTL_STATS:
-		return icmp6_sysctl_icmp6stat(oldp, oldlenp, newp);
+		error = icmp6_sysctl_icmp6stat(oldp, oldlenp, newp);
+		break;
+
 	default:
 		NET_LOCK();
 		error = sysctl_bounded_arr(icmpv6ctl_vars,
 		    nitems(icmpv6ctl_vars), name, namelen, oldp, oldlenp, newp,
 		    newlen);
 		NET_UNLOCK();
-		return (error);
+		break;
 	}
-	/* NOTREACHED */
+
+	return (error);
 }

@@ -411,10 +411,10 @@ struct rttimer {
 };
 
 struct rttimer_queue {
-	long				rtq_timeout;
-	unsigned long			rtq_count;
 	TAILQ_HEAD(, rttimer)		rtq_head;
 	LIST_ENTRY(rttimer_queue)	rtq_link;
+	unsigned long			rtq_count;
+	int				rtq_timeout;
 };
 
 const char	*rtlabel_id2name(u_int16_t);
@@ -456,8 +456,8 @@ int			 rt_timer_add(struct rtentry *,
 		             void(*)(struct rtentry *, struct rttimer *),
 			     struct rttimer_queue *, u_int);
 void			 rt_timer_remove_all(struct rtentry *);
-struct rttimer_queue	*rt_timer_queue_create(u_int);
-void			 rt_timer_queue_change(struct rttimer_queue *, long);
+struct rttimer_queue	*rt_timer_queue_create(int);
+void			 rt_timer_queue_change(struct rttimer_queue *, int);
 void			 rt_timer_queue_destroy(struct rttimer_queue *);
 unsigned long		 rt_timer_queue_count(struct rttimer_queue *);
 void			 rt_timer_timer(void *);
