@@ -1403,9 +1403,7 @@ rt_timer_queue_create(u_int timeout)
 {
 	struct rttimer_queue	*rtq;
 
-	rtq = pool_get(&rttimer_queue_pool, PR_NOWAIT | PR_ZERO);
-	if (rtq == NULL)
-		return (NULL);
+	rtq = pool_get(&rttimer_queue_pool, PR_WAITOK | PR_ZERO);
 
 	rtq->rtq_timeout = timeout;
 	rtq->rtq_count = 0;

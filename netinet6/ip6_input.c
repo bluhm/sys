@@ -1456,9 +1456,8 @@ ip6_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 		NET_LOCK();
 		error = sysctl_int(oldp, oldlenp, newp, newlen,
 		    &ip6_mtudisc_timeout);
-		if (icmp6_mtudisc_timeout_q != NULL)
-			rt_timer_queue_change(icmp6_mtudisc_timeout_q,
-			    ip6_mtudisc_timeout);
+		rt_timer_queue_change(icmp6_mtudisc_timeout_q,
+		    ip6_mtudisc_timeout);
 		NET_UNLOCK();
 		return (error);
 	case IPV6CTL_IFQUEUE:
