@@ -217,7 +217,7 @@ extern int ipmforwarding;		/* enable multicast forwarding */
 extern int ipmultipath;			/* enable multipath routing */
 extern int la_hold_total;
 
-extern struct rttimer_queue *ip_mtudisc_timeout_q;
+extern struct rttimer_queue *icmp_mtudisc_timeout_q;
 extern struct pool ipqent_pool;
 struct route;
 struct inpcb;

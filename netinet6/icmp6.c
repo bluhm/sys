@@ -118,7 +118,7 @@ struct icmp6_mtudisc_callback {
 LIST_HEAD(, icmp6_mtudisc_callback) icmp6_mtudisc_callbacks =
     LIST_HEAD_INITIALIZER(icmp6_mtudisc_callbacks);
 
-struct rttimer_queue *icmp6_mtudisc_timeout_q = NULL;
+struct rttimer_queue *icmp6_mtudisc_timeout_q;
 
 /* XXX do these values make any sense? */
 static int icmp6_mtudisc_hiwat = 1280;
@@ -127,7 +127,7 @@ static int icmp6_mtudisc_lowat = 256;
 /*
  * keep track of # of redirect routes.
  */
-static struct rttimer_queue *icmp6_redirect_timeout_q = NULL;
+struct rttimer_queue *icmp6_redirect_timeout_q;
 
 /* XXX experimental, turned off */
 static int icmp6_redirect_lowat = -1;
@@ -1404,9 +1404,8 @@ icmp6_redirect_input(struct mbuf *m, int off)
 		memcpy(&ssrc.sin6_addr, &src6, sizeof(struct in6_addr));
 		rtredirect(sin6tosa(&sdst), sin6tosa(&sgw), sin6tosa(&ssrc),
 		    &newrt, m->m_pkthdr.ph_rtableid);
-
 		if (newrt) {
-			(void)rt_timer_add(newrt, icmp6_redirect_timeout,
+			rt_timer_add(newrt, icmp6_redirect_timeout,
 			    icmp6_redirect_timeout_q, m->m_pkthdr.ph_rtableid);
 			rtfree(newrt);
 		}
