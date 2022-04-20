@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_pfsync.c,v 1.303 2022/04/14 11:39:44 bluhm Exp $	*/
+/*	$OpenBSD: if_pfsync.c,v 1.304 2022/04/20 20:51:09 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2002 Michael Shalayeff
