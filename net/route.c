@@ -223,8 +223,8 @@ rtisvalid(struct rtentry *rt)
  * Return the best matching entry for the destination ``dst''.
  *
  * "RT_RESOLVE" means that a corresponding L2 entry should
- *   be added to the routing table and resolved (via ARP or
- *   NDP), if it does not exist.
+ * be added to the routing table and resolved (via ARP or
+ * NDP), if it does not exist.
  */
 struct rtentry *
 rt_match(struct sockaddr *dst, uint32_t *src, int flags, unsigned int tableid)
@@ -724,7 +724,7 @@ rtflushclone1(struct rtentry *rt, void *arg, u_int id)
 	 */
 	ifp = if_get(rt->rt_ifidx);
 	if (ifp == NULL)
-	        return 0;
+		return 0;
 
 	if_put(ifp);
 	return EEXIST;
@@ -1370,7 +1370,7 @@ LIST_HEAD(, rttimer_queue)	rttimer_queue_head;
 		struct ifnet *ifp;					\
 									\
 		ifp = if_get(r->rtt_rt->rt_ifidx);			\
-		if (ifp != NULL) 					\
+		if (ifp != NULL)					\
 			rtdeletemsg(r->rtt_rt, ifp, r->rtt_tableid);	\
 		if_put(ifp);						\
 	}								\
