@@ -1,4 +1,4 @@
-/*	$OpenBSD: route.c,v 1.404 2022/04/19 19:19:31 bluhm Exp $	*/
+/*	$OpenBSD: route.c,v 1.405 2022/04/20 09:38:25 bluhm Exp $	*/
 /*	$NetBSD: route.c,v 1.14 1996/02/13 22:00:46 christos Exp $	*/
 
 /*
