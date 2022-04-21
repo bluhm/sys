@@ -1487,10 +1487,20 @@ int
 rt_timer_add(struct rtentry *rt, void (*func)(struct rtentry *,
     struct rttimer *), struct rttimer_queue *queue, u_int rtableid)
 {
-	struct rttimer	*r;
+	struct rttimer	*r, *rnew;
 	time_t		 current_time;
 
+	rnew = pool_get(&rttimer_pool, PR_NOWAIT | PR_ZERO);
+	if (rnew == NULL)
+		return (ENOBUFS);
+
 	current_time = getuptime();
+
+	rnew->rtt_rt = rt;
+	rnew->rtt_time = current_time;
+	rnew->rtt_func = func;
+	rnew->rtt_queue = queue;
+	rnew->rtt_tableid = rtableid;
 
 	mtx_enter(&rttimer_mtx);
 	rt->rt_expire = current_time + queue->rtq_timeout;
@@ -1507,26 +1517,14 @@ rt_timer_add(struct rtentry *rt, void (*func)(struct rtentry *,
 			break;  /* only one per list, so we can quit... */
 		}
 	}
+
+	LIST_INSERT_HEAD(&rt->rt_timer, rnew, rtt_link);
+	TAILQ_INSERT_TAIL(&queue->rtq_head, rnew, rtt_next);
+	rnew->rtt_queue->rtq_count++;
 	mtx_leave(&rttimer_mtx);
 
-	if (r == NULL) {
-		r = pool_get(&rttimer_pool, PR_NOWAIT | PR_ZERO);
-		if (r == NULL)
-			return (ENOBUFS);
-	} else
-		memset(r, 0, sizeof(*r));
-
-	r->rtt_rt = rt;
-	r->rtt_time = current_time;
-	r->rtt_func = func;
-	r->rtt_queue = queue;
-	r->rtt_tableid = rtableid;
-
-	mtx_enter(&rttimer_mtx);
-	LIST_INSERT_HEAD(&rt->rt_timer, r, rtt_link);
-	TAILQ_INSERT_TAIL(&queue->rtq_head, r, rtt_next);
-	r->rtt_queue->rtq_count++;
-	mtx_leave(&rttimer_mtx);
+	if (r != NULL)
+		pool_put(&rttimer_pool, r);
 
 	return (0);
 }
