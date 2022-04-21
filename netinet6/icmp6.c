@@ -987,7 +987,9 @@ icmp6_mtudisc_update(struct ip6ctlparam *ip6cp, int validated)
 	 * allow non-validated cases if memory is plenty, to make traffic
 	 * from non-connected pcb happy.
 	 */
+	KERNEL_LOCK();
 	rtcount = rt_timer_queue_count(icmp6_mtudisc_timeout_q);
+	KERNEL_UNLOCK();
 	if (validated) {
 		if (0 <= icmp6_mtudisc_hiwat && rtcount > icmp6_mtudisc_hiwat)
 			return;
@@ -1383,7 +1385,9 @@ icmp6_redirect_input(struct mbuf *m, int off)
 		 * work just fine even if we do not install redirect route
 		 * (there will be additional hops, though).
 		 */
+		KERNEL_LOCK();
 		rtcount = rt_timer_queue_count(icmp6_redirect_timeout_q);
+		KERNEL_UNLOCK();
 		if (0 <= ip6_maxdynroutes && rtcount >= ip6_maxdynroutes)
 			goto freeit;
 		else if (0 <= icmp6_redirect_lowat &&
@@ -1405,8 +1409,10 @@ icmp6_redirect_input(struct mbuf *m, int off)
 		rtredirect(sin6tosa(&sdst), sin6tosa(&sgw), sin6tosa(&ssrc),
 		    &newrt, m->m_pkthdr.ph_rtableid);
 		if (newrt != NULL && icmp6_redirtimeout > 0) {
+			KERNEL_LOCK();
 			rt_timer_add(newrt, icmp6_redirect_timeout,
 			    icmp6_redirect_timeout_q, m->m_pkthdr.ph_rtableid);
+			KERNEL_UNLOCK();
 		}
 		rtfree(newrt);
 	}
@@ -1829,8 +1835,10 @@ icmp6_mtudisc_clone(struct sockaddr_in6 *dst, u_int rtableid, int ipsec)
 		rt = nrt;
 		rtm_send(rt, RTM_ADD, 0, rtableid);
 	}
+	KERNEL_LOCK();
 	error = rt_timer_add(rt, icmp6_mtudisc_timeout, icmp6_mtudisc_timeout_q,
 	    rtableid);
+	KERNEL_UNLOCK();
 	if (error)
 		goto bad;
 
@@ -1921,8 +1929,10 @@ icmp6_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 		NET_LOCK();
 		error = sysctl_int_bounded(oldp, oldlenp, newp, newlen,
 		    &icmp6_redirtimeout, 0, INT_MAX);
+		KERNEL_LOCK();
 		rt_timer_queue_change(icmp6_redirect_timeout_q,
 		    icmp6_redirtimeout);
+		KERNEL_UNLOCK();
 		NET_UNLOCK();
 		break;
 

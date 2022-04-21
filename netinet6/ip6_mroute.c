@@ -494,7 +494,9 @@ ip6_mrouter_init(struct socket *so, int v, int cmd)
 
 	ip6_mrouter[rtableid] = so;
 	ip6_mrouter_ver = cmd;
+	KERNEL_LOCK();
 	mrouter6q[rtableid] = rt_timer_queue_create(MCAST_EXPIRE_TIMEOUT);
+	KERNEL_UNLOCK();
 
 	return (0);
 }
@@ -544,7 +546,9 @@ ip6_mrouter_done(struct socket *so)
 		ip6_mrouter_detach(ifp);
 	}
 
+	KERNEL_LOCK();
 	rt_timer_queue_destroy(mrouter6q[rtableid]);
+	KERNEL_UNLOCK();
 	ip6_mrouter[inp->inp_rtableid] = NULL;
 	ip6_mrouter_ver = 0;
 	mrouter6q[rtableid] = NULL;
@@ -682,7 +686,9 @@ mf6c_add_route(struct ifnet *ifp, struct sockaddr *origin,
 	}
 
 	rt->rt_llinfo = (caddr_t)mf6c;
+	KERNEL_LOCK();
 	rt_timer_add(rt, mf6c_expire_route, mrouter6q[rtableid], rtableid);
+	KERNEL_UNLOCK();
 	mf6c->mf6c_parent = mf6cc->mf6cc_parent;
 	rtfree(rt);
 
@@ -1010,8 +1016,10 @@ mf6c_expire_route(struct rtentry *rt, struct rttimer *rtt)
 
 	if (mf6c->mf6c_expire == 0) {
 		mf6c->mf6c_expire = 1;
+		KERNEL_LOCK();
 		rt_timer_add(rt, mf6c_expire_route, mrouter6q[rtableid],
 		    rtableid);
+		KERNEL_UNLOCK();
 		return;
 	}
 
@@ -1272,7 +1280,9 @@ mrt6_mcast_del(struct rtentry *rt, unsigned int rtableid)
 	int error;
 
 	/* Remove all timers related to this route. */
+	KERNEL_LOCK();
 	rt_timer_remove_all(rt);
+	KERNEL_UNLOCK();
 
 	free(rt->rt_llinfo, M_MRTABLE, sizeof(struct mf6c));
 	rt->rt_llinfo = NULL;

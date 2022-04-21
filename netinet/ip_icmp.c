@@ -634,8 +634,10 @@ reflect:
 		rtredirect(sintosa(&sdst), sintosa(&sgw),
 		    sintosa(&ssrc), &newrt, m->m_pkthdr.ph_rtableid);
 		if (newrt != NULL && icmp_redirtimeout > 0) {
+			KERNEL_LOCK();
 			rt_timer_add(newrt, icmp_redirect_timeout,
 			    icmp_redirect_timeout_q, m->m_pkthdr.ph_rtableid);
+			KERNEL_UNLOCK();
 		}
 		rtfree(newrt);
 		pfctlinput(PRC_REDIRECT_HOST, sintosa(&sdst));
@@ -884,8 +886,10 @@ icmp_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		NET_LOCK();
 		error = sysctl_int_bounded(oldp, oldlenp, newp, newlen,
 		    &icmp_redirtimeout, 0, INT_MAX);
+		KERNEL_LOCK();
 		rt_timer_queue_change(icmp_redirect_timeout_q,
 		    icmp_redirtimeout);
+		KERNEL_UNLOCK();
 		NET_UNLOCK();
 		break;
 
@@ -975,8 +979,10 @@ icmp_mtudisc_clone(struct in_addr dst, u_int rtableid, int ipsec)
 		rt = nrt;
 		rtm_send(rt, RTM_ADD, 0, rtableid);
 	}
+	KERNEL_LOCK();
 	error = rt_timer_add(rt, icmp_mtudisc_timeout, ip_mtudisc_timeout_q,
 	    rtableid);
+	KERNEL_UNLOCK();
 	if (error)
 		goto bad;
 

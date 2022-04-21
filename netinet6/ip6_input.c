@@ -1456,8 +1456,10 @@ ip6_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 		NET_LOCK();
 		error = sysctl_int_bounded(oldp, oldlenp, newp, newlen,
 		    &ip6_mtudisc_timeout, 0, INT_MAX);
+		KERNEL_LOCK();
 		rt_timer_queue_change(icmp6_mtudisc_timeout_q,
 		    ip6_mtudisc_timeout);
+		KERNEL_UNLOCK();
 		NET_UNLOCK();
 		return (error);
 	case IPV6CTL_IFQUEUE:

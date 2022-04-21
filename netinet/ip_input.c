@@ -1616,9 +1616,11 @@ ip_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		NET_LOCK();
 		error = sysctl_int(oldp, oldlenp, newp, newlen, &ip_mtudisc);
 		if (ip_mtudisc == 0) {
+			KERNEL_LOCK();
 			rt_timer_queue_destroy(ip_mtudisc_timeout_q);
 			ip_mtudisc_timeout_q =
 			    rt_timer_queue_create(ip_mtudisc_timeout);
+			KERNEL_UNLOCK();
 		}
 		NET_UNLOCK();
 		return error;
@@ -1626,8 +1628,10 @@ ip_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		NET_LOCK();
 		error = sysctl_int_bounded(oldp, oldlenp, newp, newlen,
 		    &ip_mtudisc_timeout, 0, INT_MAX);
+		KERNEL_LOCK();
 		rt_timer_queue_change(ip_mtudisc_timeout_q,
 		    ip_mtudisc_timeout);
+		KERNEL_UNLOCK();
 		NET_UNLOCK();
 		return (error);
 #ifdef IPSEC

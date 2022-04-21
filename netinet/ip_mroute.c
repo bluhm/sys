@@ -520,7 +520,9 @@ ip_mrouter_init(struct socket *so, struct mbuf *m)
 		return (EADDRINUSE);
 
 	ip_mrouter[rtableid] = so;
+	KERNEL_LOCK();
 	mrouterq[rtableid] = rt_timer_queue_create(MCAST_EXPIRE_FREQUENCY);
+	KERNEL_UNLOCK();
 
 	return (0);
 }
@@ -572,7 +574,9 @@ ip_mrouter_done(struct socket *so)
 
 	mrt_api_config = 0;
 
+	KERNEL_LOCK();
 	rt_timer_queue_destroy(mrouterq[rtableid]);
+	KERNEL_UNLOCK();
 	mrouterq[rtableid] = NULL;
 	ip_mrouter[rtableid] = NULL;
 	mrt_count[rtableid] = 0;
@@ -799,8 +803,10 @@ mfc_expire_route(struct rtentry *rt, struct rttimer *rtt)
 	/* Not expired, add it back to the queue. */
 	if (mfc->mfc_expire == 0) {
 		mfc->mfc_expire = 1;
+		KERNEL_LOCK();
 		rt_timer_add(rt, mfc_expire_route, mrouterq[rtableid],
 		    rtableid);
+		KERNEL_UNLOCK();
 		return;
 	}
 
@@ -834,8 +840,10 @@ mfc_add_route(struct ifnet *ifp, struct sockaddr *origin,
 
 	rt->rt_llinfo = (caddr_t)mfc;
 
+	KERNEL_LOCK();
 	rt_timer_add(rt, mfc_expire_route, mrouterq[rtableid],
 	    rtableid);
+	KERNEL_UNLOCK();
 
 	mfc->mfc_parent = mfccp->mfcc_parent;
 	mfc->mfc_pkt_cnt = 0;
@@ -1342,7 +1350,9 @@ mrt_mcast_del(struct rtentry *rt, unsigned int rtableid)
 	int			 error;
 
 	/* Remove all timers related to this route. */
+	KERNEL_LOCK();
 	rt_timer_remove_all(rt);
+	KERNEL_UNLOCK();
 
 	free(rt->rt_llinfo, M_MRTABLE, sizeof(struct mfc));
 	rt->rt_llinfo = NULL;
