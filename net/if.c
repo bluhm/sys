@@ -900,6 +900,12 @@ if_netisr(void *unused)
 			KERNEL_UNLOCK();
 		}
 #endif
+		if (n & (1 << NETISR_IP))
+			ipintr();
+#ifdef INET6
+		if (n & (1 << NETISR_IPV6))
+			ip6intr();
+#endif
 #if NPPP > 0
 		if (n & (1 << NETISR_PPP)) {
 			KERNEL_LOCK();
