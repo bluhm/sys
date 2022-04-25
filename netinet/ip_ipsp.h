@@ -235,14 +235,12 @@ struct ipsec_id {
 };
 
 struct ipsec_ids {
-	LIST_ENTRY(ipsec_ids)	id_gc_list;	/* [F] */
 	RBT_ENTRY(ipsec_ids)	id_node_id;	/* [F] */
 	RBT_ENTRY(ipsec_ids)	id_node_flow;	/* [F] */
+	struct refcnt		id_refcnt;
 	struct ipsec_id		*id_local;	/* [I] */
 	struct ipsec_id		*id_remote;	/* [I] */
 	u_int32_t		id_flow;	/* [I] */
-	u_int			id_refcount;	/* [a] */
-	u_int			id_gc_ttl;	/* [F] */
 };
 RBT_HEAD(ipsec_ids_flows, ipsec_ids);
 RBT_HEAD(ipsec_ids_tree, ipsec_ids);
@@ -674,7 +672,7 @@ int	ipsp_aux_match(struct tdb *, struct ipsec_ids *,
 int	ipsp_ids_match(struct ipsec_ids *, struct ipsec_ids *);
 struct ipsec_ids *ipsp_ids_insert(struct ipsec_ids *);
 struct ipsec_ids *ipsp_ids_lookup(u_int32_t);
-void	ipsp_ids_free(struct ipsec_ids *);
+void	ipsp_ids_unref(struct ipsec_ids *);
 
 void	ipsp_init(void);
 void	ipsec_init(void);

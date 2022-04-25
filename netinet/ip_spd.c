@@ -538,7 +538,7 @@ ipsp_spd_lookup(struct mbuf *m, int af, int hlen, int direction,
 				goto nomatchin;
 
 			/* Match source/dest IDs. */
-			if (ipo->ipo_ids)
+			if (ipo->ipo_ids != NULL)
 				if (tdbp->tdb_ids == NULL ||
 				    !ipsp_ids_match(ipo->ipo_ids, tdbp->tdb_ids))
 					goto nomatchin;
@@ -696,8 +696,8 @@ ipsec_delete_policy(struct ipsec_policy *ipo)
 
 	TAILQ_REMOVE(&ipsec_policy_head, ipo, ipo_list);
 
-	if (ipo->ipo_ids)
-		ipsp_ids_free(ipo->ipo_ids);
+	if (ipo->ipo_ids != NULL)
+		ipsp_ids_unref(ipo->ipo_ids);
 
 	ipsec_in_use--;
 

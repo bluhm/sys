@@ -549,7 +549,8 @@ ip_output_ipsec_lookup(struct mbuf *m, int hlen, struct inpcb *inp,
 		ids = ipsp_ids_lookup(ipsecflowinfo);
 	error = ipsp_spd_lookup(m, AF_INET, hlen, IPSP_DIRECTION_OUT,
 	    NULL, inp, &tdb, ids);
-	ipsp_ids_free(ids);
+	if (ids != NULL)
+		ipsp_ids_unref(ids);
 	if (error || tdb == NULL) {
 		*tdbout = NULL;
 		return error;

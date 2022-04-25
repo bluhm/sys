@@ -1969,8 +1969,8 @@ pfkeyv2_send(struct socket *so, void *message, int len)
 
 		ipo->ipo_sproto = SADB_X_GETSPROTO(smsg->sadb_msg_satype);
 
-		if (ipo->ipo_ids) {
-			ipsp_ids_free(ipo->ipo_ids);
+		if (ipo->ipo_ids != NULL) {
+			ipsp_ids_unref(ipo->ipo_ids);
 			ipo->ipo_ids = NULL;
 		}
 
@@ -2015,8 +2015,8 @@ pfkeyv2_send(struct socket *so, void *message, int len)
 					ipo->ipo_tdb = NULL;
 				}
 				mtx_leave(&ipo_tdb_mtx);
-				if (ipo->ipo_ids)
-					ipsp_ids_free(ipo->ipo_ids);
+				if (ipo->ipo_ids != NULL)
+					ipsp_ids_unref(ipo->ipo_ids);
 				pool_put(&ipsec_policy_pool, ipo);
 				NET_UNLOCK();
 				goto ret;

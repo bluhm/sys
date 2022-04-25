@@ -752,6 +752,7 @@ import_identities(struct ipsec_ids **ids, int swapped,
 	import_identity(&tmp->id_local, swapped ? dstid: srcid, &id_local_sz);
 	import_identity(&tmp->id_remote, swapped ? srcid: dstid, &id_remote_sz);
 	if (tmp->id_local != NULL && tmp->id_remote != NULL) {
+		/* ipsp_ids_insert increments refcount, ref stored in *ids */
 		*ids = ipsp_ids_insert(tmp);
 		if (*ids == tmp)
 			return;

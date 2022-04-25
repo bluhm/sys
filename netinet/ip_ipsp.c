@@ -113,13 +113,6 @@ struct ipsec_ids_flows ipsec_ids_flows;		/* [F] */
 struct ipsec_policy_head ipsec_policy_head =
     TAILQ_HEAD_INITIALIZER(ipsec_policy_head);
 
-void ipsp_ids_gc(void *);
-
-LIST_HEAD(, ipsec_ids) ipsp_ids_gc_list =
-    LIST_HEAD_INITIALIZER(ipsp_ids_gc_list);	/* [F] */
-struct timeout ipsp_ids_gc_timeout =
-    TIMEOUT_INITIALIZER_FLAGS(ipsp_ids_gc, NULL, TIMEOUT_PROC);
-
 static inline int ipsp_ids_cmp(const struct ipsec_ids *,
     const struct ipsec_ids *);
 static inline int ipsp_ids_flow_cmp(const struct ipsec_ids *,
@@ -1088,16 +1081,12 @@ tdb_free(struct tdb *tdbp)
 
 	KASSERT(TAILQ_EMPTY(&tdbp->tdb_policy_head));
 
-	if (tdbp->tdb_ids) {
-		ipsp_ids_free(tdbp->tdb_ids);
-		tdbp->tdb_ids = NULL;
-	}
+	if (tdbp->tdb_ids != NULL)
+		ipsp_ids_unref(tdbp->tdb_ids);
 
 #if NPF > 0
-	if (tdbp->tdb_tag) {
+	if (tdbp->tdb_tag)
 		pf_tag_unref(tdbp->tdb_tag);
-		tdbp->tdb_tag = 0;
-	}
 #endif
 
 	counters_free(tdbp->tdb_counters, tdb_ncounters);
@@ -1204,19 +1193,13 @@ ipsp_ids_insert(struct ipsec_ids *ids)
 
 	found = RBT_INSERT(ipsec_ids_tree, &ipsec_ids_tree, ids);
 	if (found) {
-		/* if refcount was zero, then timeout is running */
-		if (atomic_inc_int_nv(&found->id_refcount) == 1) {
-			LIST_REMOVE(found, id_gc_list);
-
-			if (LIST_EMPTY(&ipsp_ids_gc_list))
-				timeout_del(&ipsp_ids_gc_timeout);
-		}
+		refcnt_take(&found->id_refcnt);
 		mtx_leave (&ipsec_flows_mtx);
 		DPRINTF("ids %p count %d", found, found->id_refcount);
 		return found;
 	}
 
-	ids->id_refcount = 1;
+	refcnt_init(&ids->id_refcnt);
 	ids->id_flow = start_flow = ipsec_ids_next_flow;
 
 	if (++ipsec_ids_next_flow == 0)
@@ -1233,7 +1216,11 @@ ipsp_ids_insert(struct ipsec_ids *ids)
 			return NULL;
 		}
 	}
+	/* one ref count for the RB trees and one for the return value */
+	refcnt_take(&ids->id_refcnt);
+
 	mtx_leave(&ipsec_flows_mtx);
+
 	DPRINTF("new ids %p flow %u", ids, ids->id_flow);
 	return ids;
 }
@@ -1248,71 +1235,26 @@ ipsp_ids_lookup(u_int32_t ipsecflowinfo)
 
 	mtx_enter(&ipsec_flows_mtx);
 	ids = RBT_FIND(ipsec_ids_flows, &ipsec_ids_flows, &key);
-	atomic_inc_int(&ids->id_refcount);
+	refcnt_take(&ids->id_refcnt);
 	mtx_leave(&ipsec_flows_mtx);
 
 	return ids;
 }
 
-/* free ids only from delayed timeout */
 void
-ipsp_ids_gc(void *arg)
+ipsp_ids_unref(struct ipsec_ids *ids)
 {
-	struct ipsec_ids *ids, *tids;
-
-	mtx_enter(&ipsec_flows_mtx);
-
-	LIST_FOREACH_SAFE(ids, &ipsp_ids_gc_list, id_gc_list, tids) {
-		KASSERT(ids->id_refcount == 0);
-		DPRINTF("ids %p count %d", ids, ids->id_refcount);
-
-		if ((--ids->id_gc_ttl) > 0)
-			continue;
-
-		LIST_REMOVE(ids, id_gc_list);
-		RBT_REMOVE(ipsec_ids_tree, &ipsec_ids_tree, ids);
-		RBT_REMOVE(ipsec_ids_flows, &ipsec_ids_flows, ids);
-		free(ids->id_local, M_CREDENTIALS, 0);
-		free(ids->id_remote, M_CREDENTIALS, 0);
-		free(ids, M_CREDENTIALS, 0);
-	}
-
-	if (!LIST_EMPTY(&ipsp_ids_gc_list))
-		timeout_add_sec(&ipsp_ids_gc_timeout, 1);
-
-	mtx_leave(&ipsec_flows_mtx);
-}
-
-/* decrements refcount, actual free happens in gc */
-void
-ipsp_ids_free(struct ipsec_ids *ids)
-{
-	if (ids == NULL)
-		return;
-
-	/*
-	 * If the refcount becomes zero, then a timeout is started. This
-	 * timeout must be cancelled if refcount is increased from zero.
-	 */
-	DPRINTF("ids %p count %d", ids, ids->id_refcount);
-	KASSERT(ids->id_refcount > 0);
-
-	if (atomic_dec_int_nv(&ids->id_refcount) > 0)
+	if (refcnt_rele(&ids->id_refcnt) == 0)
 		return;
 
 	mtx_enter(&ipsec_flows_mtx);
-
-	/*
-	 * Add second for the case ipsp_ids_gc() is already running and
-	 * awaits netlock to be released.
-	 */
-	ids->id_gc_ttl = ipsec_ids_idle + 1;
-
-	if (LIST_EMPTY(&ipsp_ids_gc_list))
-		timeout_add_sec(&ipsp_ids_gc_timeout, 1);
-	LIST_INSERT_HEAD(&ipsp_ids_gc_list, ids, id_gc_list);
-
+	RBT_REMOVE(ipsec_ids_tree, &ipsec_ids_tree, ids);
+	RBT_REMOVE(ipsec_ids_flows, &ipsec_ids_flows, ids);
 	mtx_leave(&ipsec_flows_mtx);
+
+	free(ids->id_local, M_CREDENTIALS, 0);
+	free(ids->id_remote, M_CREDENTIALS, 0);
+	free(ids, M_CREDENTIALS, sizeof(*ids));
 }
 
 static int
