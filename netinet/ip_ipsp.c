@@ -105,6 +105,7 @@ u_int64_t ipsec_last_added = 0;
 int ipsec_ids_idle = 100;		/* keep free ids for 100s */
 
 struct pool tdb_pool;
+struct pool ipsp_ids_pool;
 
 /* Protected by the NET_LOCK(). */
 u_int32_t ipsec_ids_next_flow = 1;		/* [F] may not be zero */
@@ -208,6 +209,8 @@ ipsp_init(void)
 {
 	pool_init(&tdb_pool, sizeof(struct tdb), 0, IPL_SOFTNET, 0,
 	    "tdb", NULL);
+	pool_init(&ipsp_ids_pool, sizeof(struct ipsec_ids), 0, IPL_SOFTNET, 0,
+	    "ipsecids", NULL);
 
 	arc4random_buf(&tdbkey, sizeof(tdbkey));
 	tdbh = mallocarray(tdb_hashmask + 1, sizeof(struct tdb *), M_TDB,
@@ -1274,7 +1277,7 @@ ipsp_ids_gc(void *arg)
 		RBT_REMOVE(ipsec_ids_flows, &ipsec_ids_flows, ids);
 		free(ids->id_local, M_CREDENTIALS, 0);
 		free(ids->id_remote, M_CREDENTIALS, 0);
-		free(ids, M_CREDENTIALS, 0);
+		pool_put(&ipsp_ids_pool, ids);
 	}
 
 	if (!LIST_EMPTY(&ipsp_ids_gc_list))

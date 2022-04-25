@@ -97,6 +97,7 @@
 #include <sys/systm.h>
 #include <sys/mbuf.h>
 #include <sys/kernel.h>
+#include <sys/pool.h>
 #include <sys/socket.h>
 #include <sys/timeout.h>
 #include <net/route.h>
@@ -748,7 +749,7 @@ import_identities(struct ipsec_ids **ids, int swapped,
 	size_t id_local_sz, id_remote_sz;
 
 	*ids = NULL;
-	tmp = malloc(sizeof(struct ipsec_ids), M_CREDENTIALS, M_WAITOK);
+	tmp = pool_get(&ipsp_ids_pool, PR_WAITOK);
 	import_identity(&tmp->id_local, swapped ? dstid: srcid, &id_local_sz);
 	import_identity(&tmp->id_remote, swapped ? srcid: dstid, &id_remote_sz);
 	if (tmp->id_local != NULL && tmp->id_remote != NULL) {
@@ -758,7 +759,7 @@ import_identities(struct ipsec_ids **ids, int swapped,
 	}
 	free(tmp->id_local, M_CREDENTIALS, id_local_sz);
 	free(tmp->id_remote, M_CREDENTIALS, id_remote_sz);
-	free(tmp, M_CREDENTIALS, sizeof(*tmp));
+	pool_put(&ipsp_ids_pool, tmp);
 }
 
 static void

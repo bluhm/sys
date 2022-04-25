@@ -531,6 +531,7 @@ extern int ipsec_in_use;
 extern u_int64_t ipsec_last_added;
 extern int encdebug;			/* enable message reporting */
 extern struct pool tdb_pool;
+extern struct pool ipsp_ids_pool;
 
 extern int ipsec_keep_invalid;		/* lifetime of embryonic SAs (in sec) */
 extern int ipsec_require_pfs;		/* use Perfect Forward Secrecy */
