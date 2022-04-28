@@ -6681,6 +6681,12 @@ pf_walk_header6(struct pf_pdesc *pd, struct ip6_hdr *h, u_short *reason)
 			pd->proto = ext.ip6e_nxt;
 			break;
 		case IPPROTO_ICMPV6:
+			/* fragments may be short, ignore inner header then */
+			if (pd->fragoff != 0 && end < pd->off + sizeof(icmp6)) {
+				pd->off = pd->fragoff;
+				pd->proto = IPPROTO_FRAGMENT;
+				return (PF_PASS);
+			}
 			if (!pf_pull_hdr(pd->m, pd->off, &icmp6, sizeof(icmp6),
 			    NULL, reason, AF_INET6)) {
 				DPFPRINTF(LOG_NOTICE, "IPv6 short icmp6hdr");
@@ -6695,7 +6701,7 @@ pf_walk_header6(struct pf_pdesc *pd, struct ip6_hdr *h, u_short *reason)
 				CLR(pd->badopts, PF_OPT_ROUTER_ALERT);
 				break;
 			}
-			/* FALLTHROUGH */
+			return (PF_PASS);
 		case IPPROTO_TCP:
 		case IPPROTO_UDP:
 			/* fragments may be short, ignore inner header then */
