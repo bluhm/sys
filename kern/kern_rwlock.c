@@ -81,7 +81,7 @@ static const struct rwlock_op {
 	},
 	{	/* RW_READ */
 		RWLOCK_READ_INCR,
-		RWLOCK_WRLOCK,
+		RWLOCK_WRLOCK | RWLOCK_WRWANT,
 		RWLOCK_WAIT,
 		0,
 		PLOCK
@@ -103,7 +103,7 @@ rw_enter_read(struct rwlock *rwl)
 {
 	unsigned long owner = rwl->rwl_owner;
 
-	if (__predict_false((owner & RWLOCK_WRLOCK) ||
+	if (__predict_false((owner & (RWLOCK_WRLOCK | RWLOCK_WRWANT)) ||
 	    rw_cas(&rwl->rwl_owner, owner, owner + RWLOCK_READ_INCR)))
 		rw_enter(rwl, RW_READ);
 	else {
