@@ -188,7 +188,6 @@ malloc(size_t size, int type, int flags)
 	if (size > 65535 * PAGE_SIZE) {
 		if (flags & M_CANFAIL) {
 #ifndef SMALL_KERNEL
-			/* XXX lock */
 			if (ratecheck(&malloc_lasterr, &malloc_errintvl))
 				printf("malloc(): allocation too large, "
 				    "type = %d, size = %lu\n", type, size);
