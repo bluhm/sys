@@ -7403,13 +7403,13 @@ done:
 	case PF_DIVERT:
 		switch (pd.af) {
 		case AF_INET:
-			if (!divert_packet(pd.m, pd.dir, r->divert.port))
-				pd.m = NULL;
+			divert_packet(pd.m, pd.dir, r->divert.port);
+			pd.m = NULL;
 			break;
 #ifdef INET6
 		case AF_INET6:
-			if (!divert6_packet(pd.m, pd.dir, r->divert.port))
-				pd.m = NULL;
+			divert6_packet(pd.m, pd.dir, r->divert.port);
+			pd.m = NULL;
 			break;
 #endif /* INET6 */
 		}

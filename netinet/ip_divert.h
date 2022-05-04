@@ -66,7 +66,7 @@ divstat_inc(enum divstat_counters c)
 extern struct	inpcbtable	divbtable;
 
 void	 divert_init(void);
-int	 divert_packet(struct mbuf *, int, u_int16_t);
+void	 divert_packet(struct mbuf *, int, u_int16_t);
 int	 divert_sysctl(int *, u_int, void *, size_t *, void *, size_t);
 int	 divert_usrreq(struct socket *,
 	    int, struct mbuf *, struct mbuf *, struct mbuf *, struct proc *);

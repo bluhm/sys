@@ -66,7 +66,7 @@ div6stat_inc(enum div6stat_counters c)
 extern struct	inpcbtable	divb6table;
 
 void	 divert6_init(void);
-int	 divert6_packet(struct mbuf *, int, u_int16_t);
+void	 divert6_packet(struct mbuf *, int, u_int16_t);
 int	 divert6_sysctl(int *, u_int, void *, size_t *, void *, size_t);
 int	 divert6_usrreq(struct socket *,
 	    int, struct mbuf *, struct mbuf *, struct mbuf *, struct proc *);

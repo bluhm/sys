@@ -171,30 +171,37 @@ fail:
 	return (error ? error : EINVAL);
 }
 
-int
+void
 divert_packet(struct mbuf *m, int dir, u_int16_t divert_port)
 {
-	struct inpcb *inp;
-	struct socket *sa = NULL;
-	struct sockaddr_in addr;
+	struct inpcb *inp = NULL;
+	struct socket *so;
+	struct sockaddr_in sin;
 
-	inp = NULL;
 	divstat_inc(divs_ipackets);
 
 	if (m->m_len < sizeof(struct ip) &&
 	    (m = m_pullup(m, sizeof(struct ip))) == NULL) {
 		divstat_inc(divs_errors);
-		return (0);
+		goto bad;
 	}
 
+	mtx_enter(&divbtable.inpt_mtx);
 	TAILQ_FOREACH(inp, &divbtable.inpt_queue, inp_queue) {
-		if (inp->inp_lport == divert_port)
-			break;
+		if (inp->inp_lport != divert_port)
+			continue;
+		in_pcbref(inp);
+		break;
+	}
+	mtx_leave(&divbtable.inpt_mtx);
+	if (inp == NULL) {
+		divstat_inc(divs_noport);
+		goto bad;
 	}
 
-	memset(&addr, 0, sizeof(addr));
-	addr.sin_family = AF_INET;
-	addr.sin_len = sizeof(addr);
+	memset(&sin, 0, sizeof(sin));
+	sin.sin_family = AF_INET;
+	sin.sin_len = sizeof(sin);
 
 	if (dir == PF_IN) {
 		struct ifaddr *ifa;
@@ -202,37 +209,34 @@ divert_packet(struct mbuf *m, int dir, u_int16_t divert_port)
 
 		ifp = if_get(m->m_pkthdr.ph_ifidx);
 		if (ifp == NULL) {
-			m_freem(m);
-			return (0);
+			divstat_inc(divs_errors);
+			goto bad;
 		}
 		TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
 			if (ifa->ifa_addr->sa_family != AF_INET)
 				continue;
-			addr.sin_addr.s_addr = satosin(
-			    ifa->ifa_addr)->sin_addr.s_addr;
+			sin.sin_addr = satosin(ifa->ifa_addr)->sin_addr;
 			break;
 		}
 		if_put(ifp);
 	}
 
-	if (inp) {
-		sa = inp->inp_socket;
-		if (sbappendaddr(sa, &sa->so_rcv, sintosa(&addr), m, NULL) == 0) {
-			divstat_inc(divs_fullsock);
-			m_freem(m);
-			return (0);
-		} else {
-			KERNEL_LOCK();
-			sorwakeup(inp->inp_socket);
-			KERNEL_UNLOCK();
-		}
+	so = inp->inp_socket;
+	if (sbappendaddr(so, &so->so_rcv, sintosa(&sin), m, NULL) == 0) {
+		divstat_inc(divs_fullsock);
+		goto bad;
 	}
+	KERNEL_LOCK();
+	sorwakeup(inp->inp_socket);
+	KERNEL_UNLOCK();
 
-	if (sa == NULL) {
-		divstat_inc(divs_noport);
-		m_freem(m);
-	}
-	return (0);
+	in_pcbunref(inp);
+	return;
+
+ bad:
+	if (inp != NULL)
+		in_pcbunref(inp);
+	m_freem(m);
 }
 
 /*ARGSUSED*/
