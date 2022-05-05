@@ -36,6 +36,7 @@
 #include <sys/resourcevar.h>
 #include <sys/kernel.h>
 #include <sys/systm.h>
+#include <sys/mutex.h>
 #include <sys/rwlock.h>
 #include <sys/proc.h>
 #include <sys/ktrace.h>
@@ -775,6 +776,8 @@ itimerdecr(struct itimerspec *itp, long nsec)
 	return (0);
 }
 
+struct mutex ratecheck_mtx = MUTEX_INITIALIZER(IPL_HIGH);
+
 /*
  * ratecheck(): simple time-based rate-limit checking.  see ratecheck(9)
  * for usage and rationale.
@@ -782,13 +785,12 @@ itimerdecr(struct itimerspec *itp, long nsec)
 int
 ratecheck(struct timeval *lasttime, const struct timeval *mininterval)
 {
-	static struct mutex mtx = MUTEX_INITIALIZER(IPL_HIGH);
 	struct timeval tv, delta;
 	int rv = 0;
 
 	getmicrouptime(&tv);
 
-	mtx_enter(&mtx);
+	mtx_enter(&ratecheck_mtx);
 	timersub(&tv, lasttime, &delta);
 
 	/*
@@ -800,10 +802,12 @@ ratecheck(struct timeval *lasttime, const struct timeval *mininterval)
 		*lasttime = tv;
 		rv = 1;
 	}
-	mtx_leave(&mtx);
+	mtx_leave(&ratecheck_mtx);
 
 	return (rv);
 }
+
+struct mutex ppsratecheck_mtx = MUTEX_INITIALIZER(IPL_HIGH);
 
 /*
  * ppsratecheck(): packets (or events) per second limitation.
@@ -811,13 +815,12 @@ ratecheck(struct timeval *lasttime, const struct timeval *mininterval)
 int
 ppsratecheck(struct timeval *lasttime, int *curpps, int maxpps)
 {
-	static struct mutex mtx = MUTEX_INITIALIZER(IPL_HIGH);
 	struct timeval tv, delta;
 	int rv;
 
 	microuptime(&tv);
 
-	mtx_enter(&mtx);
+	mtx_enter(&ppsratecheck_mtx);
 	timersub(&tv, lasttime, &delta);
 
 	/*
@@ -846,7 +849,7 @@ ppsratecheck(struct timeval *lasttime, int *curpps, int maxpps)
 	if (*curpps + 1 > *curpps)
 		*curpps = *curpps + 1;
 
-	mtx_leave(&mtx);
+	mtx_leave(&ppsratecheck_mtx);
 
 	return (rv);
 }
