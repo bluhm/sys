@@ -345,6 +345,10 @@ rw_do_exit(struct rwlock *rwl, unsigned long wrlock)
 		else
 			set = (owner - RWLOCK_READ_INCR) &
 				~(RWLOCK_WAIT|RWLOCK_WRWANT);
+		/*
+		 * Potential MP race here.  If the owner had WRWANT set, we
+		 * cleared it and a reader can sneak in before a writer.
+		 */
 	} while (__predict_false(rw_cas(&rwl->rwl_owner, owner, set)));
 
 	if (owner & RWLOCK_WAIT)
