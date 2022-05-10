@@ -1540,9 +1540,12 @@ pfr_add_tables(struct pfr_table *tbl, int size, int *nadd, int flags)
 				pfr_destroy_ktable(p->pfrkt_root, 0);
 				p->pfrkt_root = NULL;
 				pfr_destroy_ktable(p, 0);
+				p = NULL;
 				break;
 			}
 		}
+		if (q != NULL)
+			continue;
 
 		SLIST_INSERT_HEAD(&auxq, p, pfrkt_workq);
 	}
@@ -1559,7 +1562,8 @@ pfr_add_tables(struct pfr_table *tbl, int size, int *nadd, int flags)
 		if (p == NULL) {
 			SLIST_REMOVE(&auxq, n, pfr_ktable, pfrkt_workq);
 			SLIST_INSERT_HEAD(&addq, n, pfrkt_workq);
-		} else if (!(flags & PFR_FLAG_DUMMY)) {
+		} else if (!(flags & PFR_FLAG_DUMMY) &&
+		    !(p->pfrkt_flags & PFR_TFLAG_ACTIVE)) {
 			p->pfrkt_nflags = (p->pfrkt_flags &
 			    ~PFR_TFLAG_USRMASK) | key.pfrkt_flags;
 			SLIST_INSERT_HEAD(&changeq, p, pfrkt_workq);
@@ -1618,9 +1622,12 @@ pfr_add_tables(struct pfr_table *tbl, int size, int *nadd, int flags)
 					p->pfrkt_root = r;
 					SLIST_INSERT_HEAD(&auxq, q,
 					    pfrkt_workq);
-					continue;
+					break;
 				}
 			}
+			if (r != NULL)
+				continue;
+
 			q->pfrkt_rs = pf_find_or_create_ruleset(
 			    q->pfrkt_root->pfrkt_anchor);
 			/*
