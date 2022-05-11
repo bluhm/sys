@@ -1,4 +1,4 @@
-/*	$OpenBSD: init_sysent.c,v 1.236 2022/05/01 23:00:04 tedu Exp $	*/
+/*	$OpenBSD$	*/
 
 /*
  * System call switch table.
@@ -152,7 +152,7 @@ const struct sysent sysent[] = {
 	    sys_readlink },			/* 58 = readlink */
 	{ 3, s(struct sys_execve_args), 0,
 	    sys_execve },			/* 59 = execve */
-	{ 1, s(struct sys_umask_args), 0,
+	{ 1, s(struct sys_umask_args), SY_NOLOCK | 0,
 	    sys_umask },			/* 60 = umask */
 	{ 1, s(struct sys_chroot_args), 0,
 	    sys_chroot },			/* 61 = chroot */

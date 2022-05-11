@@ -1,4 +1,4 @@
-/*	$OpenBSD: syscallargs.h,v 1.236 2022/05/01 23:00:04 tedu Exp $	*/
+/*	$OpenBSD$	*/
 
 /*
  * System call argument lists.

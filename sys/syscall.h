@@ -1,4 +1,4 @@
-/*	$OpenBSD: syscall.h,v 1.233 2022/05/01 23:00:04 tedu Exp $	*/
+/*	$OpenBSD$	*/
 
 /*
  * System call numbers.
