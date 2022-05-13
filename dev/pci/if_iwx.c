@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_iwx.c,v 1.144 2022/05/10 09:11:44 stsp Exp $	*/
+/*	$OpenBSD: if_iwx.c,v 1.148 2022/05/13 08:48:40 stsp Exp $	*/
 
 /*
  * Copyright (c) 2014, 2016 genua gmbh <info@genua.de>
@@ -1173,6 +1173,7 @@ iwx_fw_info_free(struct iwx_fw_info *fw)
 int
 iwx_read_firmware(struct iwx_softc *sc)
 {
+	struct ieee80211com *ic = &sc->sc_ic;
 	struct iwx_fw_info *fw = &sc->sc_fw;
 	struct iwx_tlv_ucode_header *uhdr;
 	struct iwx_ucode_tlv tlv;
@@ -1198,6 +1199,9 @@ iwx_read_firmware(struct iwx_softc *sc)
 		    DEVNAME(sc), sc->sc_fwname, err);
 		goto out;
 	}
+
+	if (ic->ic_if.if_flags & IFF_DEBUG)
+		printf("%s: using firmware %s\n", DEVNAME(sc), sc->sc_fwname);
 
 	sc->sc_capaflags = 0;
 	sc->sc_capa_n_scan_channels = IWX_DEFAULT_SCAN_CHANNELS;
@@ -5883,7 +5887,10 @@ iwx_tx_fill_cmd(struct iwx_softc *sc, struct iwx_node *in,
 		else if (IEEE80211_CHAN_40MHZ_ALLOWED(ni->ni_chan) &&
 		    ieee80211_node_supports_ht_chan40(ni))
 			sco = (ni->ni_htop0 & IEEE80211_HTOP0_SCO_MASK);
-		rate_flags |= IWX_RATE_MCS_HT_MSK; 
+		if (ni->ni_flags & IEEE80211_NODE_VHT)
+			rate_flags |= IWX_RATE_MCS_VHT_MSK; 
+		else
+			rate_flags |= IWX_RATE_MCS_HT_MSK; 
 		if (vht_chan_width == IEEE80211_VHTOP0_CHAN_WIDTH_80 &&
 		    in->in_phyctxt != NULL &&
 		    in->in_phyctxt->vht_chan_width == vht_chan_width) {
@@ -9983,6 +9990,13 @@ static const struct pci_matchid iwx_devices[] = {
 	{ PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_WL_22500_7,},
 	{ PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_WL_22500_8,},
 	{ PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_WL_22500_9,},
+	{ PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_WL_22500_10,},
+	{ PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_WL_22500_11,},
+	{ PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_WL_22500_12,},
+	{ PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_WL_22500_13,},
+	/* _14 is an MA device, not yet supported */
+	{ PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_WL_22500_15,},
+	{ PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_WL_22500_16,},
 };
 
 
@@ -10258,6 +10272,40 @@ static const struct iwx_dev_info iwx_dev_info_table[] = {
 		      IWX_CFG_RF_TYPE_JF1, IWX_CFG_RF_ID_JF1_DIV,
 		      IWX_CFG_NO_160, IWX_CFG_CORES_BT, IWX_CFG_NO_CDB,
 		      IWX_CFG_ANY, iwx_2ax_cfg_so_jf_b0), /* 9462 */
+
+	/* So with Hr */
+	_IWX_DEV_INFO(IWX_CFG_ANY, IWX_CFG_ANY,
+		      IWX_CFG_MAC_TYPE_SO, IWX_CFG_ANY,
+		      IWX_CFG_RF_TYPE_HR2, IWX_CFG_ANY,
+		      IWX_CFG_NO_160, IWX_CFG_ANY, IWX_CFG_NO_CDB, IWX_CFG_ANY,
+		      iwx_cfg_so_a0_hr_b0), /* AX203 */
+	_IWX_DEV_INFO(IWX_CFG_ANY, IWX_CFG_ANY,
+		      IWX_CFG_MAC_TYPE_SO, IWX_CFG_ANY,
+		      IWX_CFG_RF_TYPE_HR1, IWX_CFG_ANY,
+		      IWX_CFG_160, IWX_CFG_ANY, IWX_CFG_NO_CDB, IWX_CFG_ANY,
+		      iwx_cfg_so_a0_hr_b0), /* ax101 */
+	_IWX_DEV_INFO(IWX_CFG_ANY, IWX_CFG_ANY,
+		      IWX_CFG_MAC_TYPE_SO, IWX_CFG_ANY,
+		      IWX_CFG_RF_TYPE_HR2, IWX_CFG_ANY,
+		      IWX_CFG_160, IWX_CFG_ANY, IWX_CFG_NO_CDB, IWX_CFG_ANY,
+		      iwx_cfg_so_a0_hr_b0), /* ax201 */
+
+	/* So-F with Hr */
+	_IWX_DEV_INFO(IWX_CFG_ANY, IWX_CFG_ANY,
+		      IWX_CFG_MAC_TYPE_SOF, IWX_CFG_ANY,
+		      IWX_CFG_RF_TYPE_HR2, IWX_CFG_ANY,
+		      IWX_CFG_NO_160, IWX_CFG_ANY, IWX_CFG_NO_CDB, IWX_CFG_ANY,
+		      iwx_cfg_so_a0_hr_b0), /* AX203 */
+	_IWX_DEV_INFO(IWX_CFG_ANY, IWX_CFG_ANY,
+		      IWX_CFG_MAC_TYPE_SOF, IWX_CFG_ANY,
+		      IWX_CFG_RF_TYPE_HR1, IWX_CFG_ANY,
+		      IWX_CFG_160, IWX_CFG_ANY, IWX_CFG_NO_CDB, IWX_CFG_ANY,
+		      iwx_cfg_so_a0_hr_b0), /* AX101 */
+	_IWX_DEV_INFO(IWX_CFG_ANY, IWX_CFG_ANY,
+		      IWX_CFG_MAC_TYPE_SOF, IWX_CFG_ANY,
+		      IWX_CFG_RF_TYPE_HR2, IWX_CFG_ANY,
+		      IWX_CFG_160, IWX_CFG_ANY, IWX_CFG_NO_CDB, IWX_CFG_ANY,
+		      iwx_cfg_so_a0_hr_b0), /* AX201 */
 
 	/* So-F with GF */
 	_IWX_DEV_INFO(IWX_CFG_ANY, IWX_CFG_ANY,
