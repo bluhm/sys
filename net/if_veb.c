@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_veb.c,v 1.27 2022/05/15 03:54:07 deraadt Exp $ */
+/*	$OpenBSD: if_veb.c,v 1.28 2022/05/15 21:37:29 bluhm Exp $ */
 
 /*
  * Copyright (c) 2021 David Gwynne <dlg@openbsd.org>
