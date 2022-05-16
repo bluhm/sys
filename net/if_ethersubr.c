@@ -221,10 +221,7 @@ ether_resolve(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst,
 
 	switch (af) {
 	case AF_INET:
-		KERNEL_LOCK();
-		/* XXXSMP there is a MP race in arpresolve() */
 		error = arpresolve(ifp, rt, m, dst, eh->ether_dhost);
-		KERNEL_UNLOCK();
 		if (error)
 			return (error);
 		eh->ether_type = htons(ETHERTYPE_IP);
@@ -285,10 +282,7 @@ ether_resolve(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst,
 			break;
 #endif
 		case AF_INET:
-			KERNEL_LOCK();
-			/* XXXSMP there is a MP race in arpresolve() */
 			error = arpresolve(ifp, rt, m, dst, eh->ether_dhost);
-			KERNEL_UNLOCK();
 			if (error)
 				return (error);
 			break;
