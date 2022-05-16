@@ -93,6 +93,8 @@ pfi_kif_alloc(const char *kif_name, int mflags)
 	struct pfi_kif *kif;
 
 	kif = malloc(sizeof(*pfi_all), PFI_MTYPE, mflags|M_ZERO);
+	if (kif == NULL)
+		return (NULL);
 	strlcpy(kif->pfik_name, kif_name, sizeof(kif->pfik_name));
 	kif->pfik_tzero = gettime();
 	TAILQ_INIT(&kif->pfik_dynaddrs);
