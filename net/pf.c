@@ -6384,6 +6384,13 @@ pf_walk_option(struct pf_pdesc *pd, struct ip *h, int off, int end,
 {
 	uint8_t	type, length, opts[15 * 4 - sizeof(struct ip)];
 
+	/* IP header in payload of ICMP packet may be too short */
+	if (pd->m->m_pkthdr.len < end) {
+		DPFPRINTF(LOG_NOTICE, "IP option too short");
+		REASON_SET(reason, PFRES_SHORT);
+		return (PF_DROP);
+	}
+
 	KASSERT(end - off <= sizeof(opts));
 	m_copydata(pd->m, off, end - off, opts);
 	end -= off;
