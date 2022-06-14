@@ -714,7 +714,10 @@ ipsp_delete_acquire_timer(void *v)
 {
 	struct ipsec_acquire *ipa = v;
 
-	ipsp_delete_acquire(ipa);
+	mtx_enter(&ipsec_acquire_mtx);
+	refcnt_rele(&ipa->ipa_refcnt);
+	ipsp_delete_acquire_locked(ipa);
+	mtx_leave(&ipsec_acquire_mtx);
 }
 
 /*
