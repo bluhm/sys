@@ -1,4 +1,4 @@
-/*	$OpenBSD: vfs_lockf.c,v 1.46 2022/04/27 18:01:23 anton Exp $	*/
+/*	$OpenBSD: vfs_lockf.c,v 1.49 2022/06/02 05:32:28 anton Exp $	*/
 /*	$NetBSD: vfs_lockf.c,v 1.7 1996/02/04 02:18:21 christos Exp $	*/
 
 /*
@@ -148,10 +148,8 @@ ls_rele(struct lockf_state *ls)
 	if (--ls->ls_refs > 0)
 		return;
 
-#ifdef LOCKF_DIAGNOSTIC
 	KASSERT(TAILQ_EMPTY(&ls->ls_locks));
 	KASSERT(TAILQ_EMPTY(&ls->ls_pending));
-#endif
 
 	*ls->ls_owner = NULL;
 	pool_put(&lockf_state_pool, ls);
@@ -201,9 +199,7 @@ lf_free(struct lockf *lock)
 
 	LFPRINT(("lf_free", lock), DEBUG_LINK);
 
-#ifdef LOCKF_DIAGNOSTIC
 	KASSERT(TAILQ_EMPTY(&lock->lf_blkhd));
-#endif /* LOCKF_DIAGNOSTIC */
 
 	ls_rele(lock->lf_state);
 
@@ -251,10 +247,13 @@ lf_advlock(struct lockf_state **state, off_t size, caddr_t id, int op,
 		if (fl->l_len - 1 > LLONG_MAX - start)
 			return (EOVERFLOW);
 		end = start + (fl->l_len - 1);
+		/* Avoid ambiguity at the end of the range. */
+		if (end == LLONG_MAX)
+			end = -1;
 	} else if (fl->l_len < 0) {
-		if (fl->l_start + fl->l_len < 0)
+		if (start + fl->l_len < 0)
 			return (EINVAL);
-		end = fl->l_start - 1;
+		end = start - 1;
 		start += fl->l_len;
 	} else {
 		end = -1;
@@ -755,9 +754,7 @@ lf_purgelocks(struct lockf_state **state)
 	}
 
 	/* This is the last expected thread to hold a lock state reference. */
-#ifdef LOCKF_DIAGNOSTIC
 	KASSERT(ls->ls_refs == 1);
-#endif
 	ls_rele(ls);
 
 out:

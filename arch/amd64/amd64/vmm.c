@@ -1,4 +1,4 @@
-/*	$OpenBSD: vmm.c,v 1.311 2022/05/20 22:42:09 dv Exp $	*/
+/*	$OpenBSD: vmm.c,v 1.313 2022/06/12 19:48:12 dv Exp $	*/
 /*
  * Copyright (c) 2014 Mike Larkin <mlarkin@openbsd.org>
  *
@@ -1805,14 +1805,7 @@ vm_impl_init_vmx(struct vm *vm, struct proc *p)
 		}
 	}
 
-	ret = pmap_convert(vm->vm_map->pmap, PMAP_TYPE_EPT);
-	if (ret) {
-		printf("%s: pmap_convert failed\n", __func__);
-		/* uvmspace_free calls pmap_destroy for us */
-		uvmspace_free(vm->vm_vmspace);
-		vm->vm_vmspace = NULL;
-		return (ENOMEM);
-	}
+	pmap_convert(vm->vm_map->pmap, PMAP_TYPE_EPT);
 
 	return (0);
 }
@@ -1869,9 +1862,9 @@ vm_impl_init_svm(struct vm *vm, struct proc *p)
 	}
 
 	/* Convert pmap to RVI */
-	ret = pmap_convert(vm->vm_map->pmap, PMAP_TYPE_RVI);
+	pmap_convert(vm->vm_map->pmap, PMAP_TYPE_RVI);
 
-	return (ret);
+	return (0);
 }
 
 /*
@@ -4495,22 +4488,8 @@ vm_run(struct vm_run_params *vrp)
 		ret = vcpu_run_svm(vcpu, vrp);
 	}
 
-	/*
-	 * We can set the VCPU states here without CAS because once
-	 * a VCPU is in state RUNNING or REQTERM, only the VCPU itself
-	 * can switch the state.
-	 */
 	atomic_dec_int(&vm->vm_vcpus_running);
-	if (vcpu->vc_state == VCPU_STATE_REQTERM) {
-		vrp->vrp_exit_reason = VM_EXIT_TERMINATED;
-		vcpu->vc_state = VCPU_STATE_TERMINATED;
-		if (vm->vm_vcpus_running == 0) {
-			rw_enter_write(&vmm_softc->vm_lock);
-			vm_teardown(vm);
-			rw_exit_write(&vmm_softc->vm_lock);
-		}
-		ret = 0;
-	} else if (ret == 0 || ret == EAGAIN) {
+	if (ret == 0 || ret == EAGAIN) {
 		/* If we are exiting, populate exit data so vmd can help. */
 		vrp->vrp_exit_reason = (ret == 0) ? VM_EXIT_NONE
 		    : vcpu->vc_gueststate.vg_exit_reason;
