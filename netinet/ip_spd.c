@@ -1,4 +1,4 @@
-/* $OpenBSD: ip_spd.c,v 1.116 2022/05/04 15:29:58 bluhm Exp $ */
+/* $OpenBSD: ip_spd.c,v 1.117 2022/06/17 13:40:21 bluhm Exp $ */
 /*
  * The author of this code is Angelos D. Keromytis (angelos@cis.upenn.edu)
  *
