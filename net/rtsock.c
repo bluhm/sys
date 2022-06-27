@@ -2003,7 +2003,7 @@ sysctl_dumpentry(struct rtentry *rt, void *v, unsigned int id)
 		rtm->rtm_priority = rt->rt_priority & RTP_MASK;
 		rtm_getmetrics(rt, &rtm->rtm_rmx);
 		/* Do not account the routing table's reference. */
-		rtm->rtm_rmx.rmx_refcnt = rt->rt_refcnt - 1;
+		rtm->rtm_rmx.rmx_refcnt = refcnt_read(&rt->rt_refcnt) - 1;
 		rtm->rtm_index = rt->rt_ifidx;
 		rtm->rtm_addrs = info.rti_addrs;
 		rtm->rtm_tableid = id;

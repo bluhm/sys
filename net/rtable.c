@@ -681,7 +681,7 @@ rtable_delete(unsigned int rtableid, struct sockaddr *dst,
 		npaths++;
 
 	if (npaths > 1) {
-		KASSERT(rt->rt_refcnt >= 1);
+		KASSERT(refcnt_read(&rt->rt_refcnt) >= 1);
 		SRPL_REMOVE_LOCKED(&rt_rc, &an->an_rtlist, rt, rtentry,
 		    rt_next);
 
@@ -695,7 +695,7 @@ rtable_delete(unsigned int rtableid, struct sockaddr *dst,
 	if (art_delete(ar, an, addr, plen) == NULL)
 		panic("art_delete failed to find node %p", an);
 
-	KASSERT(rt->rt_refcnt >= 1);
+	KASSERT(refcnt_read(&rt->rt_refcnt) >= 1);
 	SRPL_REMOVE_LOCKED(&rt_rc, &an->an_rtlist, rt, rtentry, rt_next);
 	art_put(an);
 
