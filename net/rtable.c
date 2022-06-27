@@ -574,7 +574,8 @@ rtable_insert(unsigned int rtableid, struct sockaddr *dst,
 
 			if (!mpathok ||
 			    (mrt->rt_gateway->sa_len == gateway->sa_len &&
-			    !memcmp(mrt->rt_gateway, gateway, gateway->sa_len))){
+			    memcmp(mrt->rt_gateway, gateway,
+			    gateway->sa_len) == 0)) {
 				error = EEXIST;
 				goto leave;
 			}
