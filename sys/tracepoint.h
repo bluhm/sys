@@ -1,4 +1,4 @@
-/*	$OpenBSD: tracepoint.h,v 1.1 2020/01/21 16:16:23 mpi Exp $ */
+/*	$OpenBSD: tracepoint.h,v 1.2 2022/06/28 09:32:28 bluhm Exp $ */
 
 /*
  * Copyright (c) 2019 Martin Pieuchot <mpi@openbsd.org>

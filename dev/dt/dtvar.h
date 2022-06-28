@@ -1,4 +1,4 @@
-/*	$OpenBSD: dtvar.h,v 1.13 2022/02/27 10:14:01 bluhm Exp $ */
+/*	$OpenBSD: dtvar.h,v 1.14 2022/06/28 09:32:27 bluhm Exp $ */
 
 /*
  * Copyright (c) 2019 Martin Pieuchot <mpi@openbsd.org>
@@ -310,7 +310,7 @@ extern volatile uint32_t	dt_tracing;	/* currently tracing? */
 #define	DT_STATIC_PROBE5(func, name, arg0, arg1, arg2, arg3, arg4)	\
 	_DT_STATIC_PROBEN(func, name, arg0, arg1, arg2, arg3, arg4, 5)
 
-#define	DT_STATIC_ENTER(func, name, args...) do {			\
+#define DT_STATIC_ENTER(func, name, args...) do {			\
 	extern struct dt_probe _DT_STATIC_P(func, name);		\
 	struct dt_probe *dtp = &_DT_STATIC_P(func, name);		\
 									\
