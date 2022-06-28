@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.c,v 1.654 2022/06/27 15:11:23 jan Exp $	*/
+/*	$OpenBSD: if.c,v 1.656 2022/06/28 09:41:24 jan Exp $	*/
 /*	$NetBSD: if.c,v 1.35 1996/05/07 05:26:04 thorpej Exp $	*/
 
 /*
@@ -913,6 +913,10 @@ if_netisr(void *unused)
 #if NBRIDGE > 0
 		if (n & (1 << NETISR_BRIDGE))
 			bridgeintr();
+#endif
+#ifdef PIPEX
+		if (n & (1 << NETISR_PIPEX))
+			pipexintr();
 #endif
 		t |= n;
 	}
@@ -2050,6 +2054,10 @@ ifioctl(struct socket *so, u_long cmd, caddr_t data, struct proc *p)
 			}
 
 			splx(s);
+		} else if (!ISSET(ifp->if_capabilities, IFCAP_TSO) &&
+		    ISSET(ifr->ifr_flags, IFXF_TSO)) {
+			ifr->ifr_flags &= ~IFXF_TSO;
+			error = ENOTSUP;
 		}
 #endif
 
