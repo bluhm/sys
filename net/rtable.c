@@ -693,7 +693,7 @@ rtable_delete(unsigned int rtableid, struct sockaddr *dst,
 		if (npaths == 2)
 			mrt->rt_flags &= ~RTF_MPATH;
 
-		goto leave;
+		goto srp_final;
 	}
 
 	if (art_delete(ar, an, addr, plen) == NULL)
@@ -702,7 +702,8 @@ rtable_delete(unsigned int rtableid, struct sockaddr *dst,
 	KASSERT(refcnt_read(&rt->rt_refcnt) >= 1);
 	SRPL_REMOVE_LOCKED(&rt_rc, &an->an_rtlist, rt, rtentry, rt_next);
 	art_put(an);
-
+srp_final:
+	srp_finalize(rt, "rtdel");
 leave:
 	rw_exit_write(&ar->ar_lock);
 	rtfree(rt);
