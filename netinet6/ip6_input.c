@@ -596,6 +596,7 @@ ip6_local(struct mbuf **mp, int *offp, int nxt, int af)
 	return nxt;
 }
 
+/* On error free mbuf and return IPPROTO_DONE. */
 int
 ip6_hbhchcheck(struct mbuf **mp, int *offp, int *oursp)
 {
@@ -752,6 +753,7 @@ ip6_check_rh0hdr(struct mbuf *m, int *offp)
 /*
  * Hop-by-Hop options header processing. If a valid jumbo payload option is
  * included, the real payload length will be stored in plenp.
+ * On error free mbuf and return -1.
  *
  * rtalertp - XXX: should be stored in a more smart way
  */
