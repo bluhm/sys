@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_pager.c,v 1.78 2022/02/18 09:04:38 kettenis Exp $	*/
+/*	$OpenBSD: uvm_pager.c,v 1.81 2022/06/28 19:07:40 mpi Exp $	*/
 /*	$NetBSD: uvm_pager.c,v 1.36 2000/11/27 18:26:41 chs Exp $	*/
 
 /*
@@ -58,8 +58,8 @@ const struct uvm_pagerops *uvmpagerops[] = {
  * The number of uvm_pseg instances is dynamic using an array segs.
  * At most UVM_PSEG_COUNT instances can exist.
  *
- * psegs[0] always exists (so that the pager can always map in pages).
- * psegs[0] element 0 is always reserved for the pagedaemon.
+ * psegs[0/1] always exist (so that the pager can always map in pages).
+ * psegs[0/1] element 0 are always reserved for the pagedaemon.
  *
  * Any other pseg is automatically created when no space is available
  * and automatically destroyed when it is no longer in use.
@@ -93,6 +93,7 @@ uvm_pager_init(void)
 
 	/* init pager map */
 	uvm_pseg_init(&psegs[0]);
+	uvm_pseg_init(&psegs[1]);
 	mtx_init(&uvm_pseg_lck, IPL_VM);
 
 	/* init ASYNC I/O queue */
@@ -168,9 +169,10 @@ pager_seg_restart:
 				goto pager_seg_fail;
 		}
 
-		/* Keep index 0 reserved for pagedaemon. */
-		if (pseg == &psegs[0] && curproc != uvm.pagedaemon_proc)
-			i = 1;
+		/* Keep indexes 0,1 reserved for pagedaemon. */
+		if ((pseg == &psegs[0] || pseg == &psegs[1]) &&
+		    (curproc != uvm.pagedaemon_proc))
+			i = 2;
 		else
 			i = 0;
 
@@ -229,7 +231,7 @@ uvm_pseg_release(vaddr_t segaddr)
 	pseg->use &= ~(1 << id);
 	wakeup(&psegs);
 
-	if (pseg != &psegs[0] && UVM_PSEG_EMPTY(pseg)) {
+	if ((pseg != &psegs[0] && pseg != &psegs[1]) && UVM_PSEG_EMPTY(pseg)) {
 		va = pseg->start;
 		pseg->start = 0;
 	}
@@ -675,14 +677,8 @@ uvm_pager_dropcluster(struct uvm_object *uobj, struct vm_page *pg,
 		/* if page was released, release it.  otherwise un-busy it */
 		if (ppsp[lcv]->pg_flags & PG_RELEASED &&
 		    ppsp[lcv]->pg_flags & PQ_ANON) {
-				/* so that anfree will free */
-				atomic_clearbits_int(&ppsp[lcv]->pg_flags,
-				    PG_BUSY);
-				UVM_PAGE_OWN(ppsp[lcv], NULL);
-
 				/* kills anon and frees pg */
 				uvm_anon_release(ppsp[lcv]->uanon);
-
 				continue;
 		} else {
 			/*
@@ -735,39 +731,17 @@ uvm_aio_biodone(struct buf *bp)
 	mtx_leave(&uvm.aiodoned_lock);
 }
 
-/*
- * uvm_aio_aiodone: do iodone processing for async i/os.
- * this should be called in thread context, not interrupt context.
- */
 void
-uvm_aio_aiodone(struct buf *bp)
+uvm_aio_aiodone_pages(struct vm_page **pgs, int npages, boolean_t write,
+    int error)
 {
-	int npages = bp->b_bufsize >> PAGE_SHIFT;
-	struct vm_page *pg, *pgs[MAXPHYS >> PAGE_SHIFT];
+	struct vm_page *pg;
 	struct uvm_object *uobj;
-	int i, error;
-	boolean_t write, swap;
-
-	KASSERT(npages <= MAXPHYS >> PAGE_SHIFT);
-	splassert(IPL_BIO);
-
-	error = (bp->b_flags & B_ERROR) ? (bp->b_error ? bp->b_error : EIO) : 0;
-	write = (bp->b_flags & B_READ) == 0;
+	boolean_t swap;
+	int i;
 
 	uobj = NULL;
-	for (i = 0; i < npages; i++)
-		pgs[i] = uvm_atopg((vaddr_t)bp->b_data +
-		    ((vsize_t)i << PAGE_SHIFT));
-	uvm_pagermapout((vaddr_t)bp->b_data, npages);
-#ifdef UVM_SWAP_ENCRYPT
-	/*
-	 * XXX - assumes that we only get ASYNC writes. used to be above.
-	 */
-	if (pgs[0]->pg_flags & PQ_ENCRYPT) {
-		uvm_swap_freepages(pgs, npages);
-		goto freed;
-	}
-#endif /* UVM_SWAP_ENCRYPT */
+
 	for (i = 0; i < npages; i++) {
 		pg = pgs[i];
 
@@ -806,6 +780,41 @@ uvm_aio_aiodone(struct buf *bp)
 	if (!swap) {
 		rw_exit(uobj->vmobjlock);
 	}
+}
+
+/*
+ * uvm_aio_aiodone: do iodone processing for async i/os.
+ * this should be called in thread context, not interrupt context.
+ */
+void
+uvm_aio_aiodone(struct buf *bp)
+{
+	int npages = bp->b_bufsize >> PAGE_SHIFT;
+	struct vm_page *pgs[MAXPHYS >> PAGE_SHIFT];
+	int i, error;
+	boolean_t write;
+
+	KASSERT(npages <= MAXPHYS >> PAGE_SHIFT);
+	splassert(IPL_BIO);
+
+	error = (bp->b_flags & B_ERROR) ? (bp->b_error ? bp->b_error : EIO) : 0;
+	write = (bp->b_flags & B_READ) == 0;
+
+	for (i = 0; i < npages; i++)
+		pgs[i] = uvm_atopg((vaddr_t)bp->b_data +
+		    ((vsize_t)i << PAGE_SHIFT));
+	uvm_pagermapout((vaddr_t)bp->b_data, npages);
+#ifdef UVM_SWAP_ENCRYPT
+	/*
+	 * XXX - assumes that we only get ASYNC writes. used to be above.
+	 */
+	if (pgs[0]->pg_flags & PQ_ENCRYPT) {
+		uvm_swap_freepages(pgs, npages);
+		goto freed;
+	}
+#endif /* UVM_SWAP_ENCRYPT */
+
+	uvm_aio_aiodone_pages(pgs, npages, write, error);
 
 #ifdef UVM_SWAP_ENCRYPT
 freed:

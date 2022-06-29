@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_fault.c,v 1.129 2022/04/04 09:27:05 kettenis Exp $	*/
+/*	$OpenBSD: uvm_fault.c,v 1.131 2022/06/28 10:45:55 mpi Exp $	*/
 /*	$NetBSD: uvm_fault.c,v 1.51 2000/08/06 00:22:53 thorpej Exp $	*/
 
 /*
@@ -389,10 +389,6 @@ uvmfault_anonget(struct uvm_faultinfo *ufi, struct vm_amap *amap,
 			if (pg->pg_flags & PG_WANTED) {
 				wakeup(pg);
 			}
-			/* un-busy! */
-			atomic_clearbits_int(&pg->pg_flags,
-			    PG_WANTED|PG_BUSY|PG_FAKE);
-			UVM_PAGE_OWN(pg, NULL);
 
 			/*
 			 * if we were RELEASED during I/O, then our anon is
@@ -450,6 +446,9 @@ uvmfault_anonget(struct uvm_faultinfo *ufi, struct vm_amap *amap,
 			uvm_lock_pageq();
 			uvm_pageactivate(pg);
 			uvm_unlock_pageq();
+			atomic_clearbits_int(&pg->pg_flags,
+			    PG_WANTED|PG_BUSY|PG_FAKE);
+			UVM_PAGE_OWN(pg, NULL);
 		}
 
 		/*
@@ -734,6 +733,16 @@ uvm_fault_check(struct uvm_faultinfo *ufi, struct uvm_faultctx *flt,
 	if (amap == NULL && uobj == NULL) {
 		uvmfault_unlockmaps(ufi, FALSE);
 		return EFAULT;
+	}
+
+	/*
+	 * for a case 2B fault waste no time on adjacent pages because
+	 * they are likely already entered.
+	 */
+	if (uobj != NULL && amap != NULL &&
+	    (flt->access_type & PROT_WRITE) != 0) {
+		/* wide fault (!narrow) */
+		flt->narrow = TRUE;
 	}
 
 	/*

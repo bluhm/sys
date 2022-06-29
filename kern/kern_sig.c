@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_sig.c,v 1.296 2022/05/13 15:32:00 claudio Exp $	*/
+/*	$OpenBSD: kern_sig.c,v 1.298 2022/06/29 10:48:22 claudio Exp $	*/
 /*	$NetBSD: kern_sig.c,v 1.54 1996/04/22 01:38:32 christos Exp $	*/
 
 /*
@@ -2028,9 +2028,6 @@ single_thread_check_locked(struct proc *p, int deep, int s)
 				if (pr->ps_flags & PS_SINGLEEXIT)
 					return (EINTR);
 			}
-
-			if (pr->ps_single == NULL)
-				continue;
 
 			if (atomic_dec_int_nv(&pr->ps_singlecount) == 0)
 				wakeup(&pr->ps_singlecount);
