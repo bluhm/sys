@@ -486,6 +486,10 @@ rtable_match(unsigned int rtableid, struct sockaddr *dst, uint32_t *src)
 		goto out;
 
 	rt = SRPL_FIRST(&sr, &an->an_rtlist);
+	if (rt == NULL) {
+		SRPL_LEAVE(&sr);
+		goto out;
+	}
 	rtref(rt);
 	SRPL_LEAVE(&sr);
 
