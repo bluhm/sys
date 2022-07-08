@@ -1,4 +1,4 @@
-/*	$OpenBSD: bpf.c,v 1.216 2022/03/17 14:22:03 visa Exp $	*/
+/*	$OpenBSD: bpf.c,v 1.218 2022/07/05 15:06:16 visa Exp $	*/
 /*	$NetBSD: bpf.c,v 1.33 1997/02/21 23:59:35 thorpej Exp $	*/
 
 /*
@@ -50,7 +50,6 @@
 #include <sys/vnode.h>
 #include <sys/fcntl.h>
 #include <sys/socket.h>
-#include <sys/poll.h>
 #include <sys/kernel.h>
 #include <sys/sysctl.h>
 #include <sys/rwlock.h>
@@ -98,7 +97,6 @@ void	bpf_mcopy(const void *, void *, size_t);
 int	bpf_movein(struct uio *, struct bpf_d *, struct mbuf **,
 	    struct sockaddr *);
 int	bpf_setif(struct bpf_d *, struct ifreq *);
-int	bpfpoll(dev_t, int, struct proc *);
 int	bpfkqfilter(dev_t, struct knote *);
 void	bpf_wakeup(struct bpf_d *);
 void	bpf_wakeup_cb(void *);
@@ -590,11 +588,11 @@ bpf_wakeup(struct bpf_d *d)
 	KNOTE(&d->bd_sel.si_note, 0);
 
 	/*
-	 * As long as pgsigio() and selwakeup() need to be protected
+	 * As long as pgsigio() needs to be protected
 	 * by the KERNEL_LOCK() we have to delay the wakeup to
 	 * another context to keep the hot path KERNEL_LOCK()-free.
 	 */
-	if ((d->bd_async && d->bd_sig) || d->bd_sel.si_seltid != 0) {
+	if (d->bd_async && d->bd_sig) {
 		bpf_get(d);
 		if (!task_add(systq, &d->bd_wake_task))
 			bpf_put(d);
@@ -609,9 +607,6 @@ bpf_wakeup_cb(void *xd)
 	if (d->bd_async && d->bd_sig)
 		pgsigio(&d->bd_sigio, d->bd_sig, 0);
 
-	mtx_enter(&d->bd_mtx);
-	selwakeup(&d->bd_sel);
-	mtx_leave(&d->bd_mtx);
 	bpf_put(d);
 }
 
@@ -1143,46 +1138,6 @@ bpf_ifname(struct bpf_if *bif, struct ifreq *ifr)
 	bcopy(bif->bif_name, ifr->ifr_name, sizeof(ifr->ifr_name));
 }
 
-/*
- * Support for poll() system call
- */
-int
-bpfpoll(dev_t dev, int events, struct proc *p)
-{
-	struct bpf_d *d;
-	int revents;
-
-	KERNEL_ASSERT_LOCKED();
-
-	/*
-	 * An imitation of the FIONREAD ioctl code.
-	 */
-	d = bpfilter_lookup(minor(dev));
-
-	/*
-	 * XXX The USB stack manages it to trigger some race condition
-	 * which causes bpfilter_lookup to return NULL when a USB device
-	 * gets detached while it is up and has an open bpf handler (e.g.
-	 * dhclient).  We still should recheck if we can fix the root
-	 * cause of this issue.
-	 */
-	if (d == NULL)
-		return (POLLERR);
-
-	/* Always ready to write data */
-	revents = events & (POLLOUT | POLLWRNORM);
-
-	if (events & (POLLIN | POLLRDNORM)) {
-		mtx_enter(&d->bd_mtx);
-		if (d->bd_hlen != 0 || (d->bd_immediate && d->bd_slen != 0))
-			revents |= events & (POLLIN | POLLRDNORM);
-		else
-			selrecord(p, &d->bd_sel);
-		mtx_leave(&d->bd_mtx);
-	}
-	return (revents);
-}
-
 const struct filterops bpfread_filtops = {
 	.f_flags	= FILTEROP_ISFD | FILTEROP_MPSAFE,
 	.f_attach	= NULL,
@@ -1233,9 +1188,6 @@ int
 filt_bpfread(struct knote *kn, long hint)
 {
 	struct bpf_d *d = kn->kn_hook;
-
-	if (hint == NOTE_SUBMIT) /* ignore activation from selwakeup */
-		return (0);
 
 	MUTEX_ASSERT_LOCKED(&d->bd_mtx);
 
