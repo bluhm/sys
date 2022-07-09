@@ -1622,7 +1622,7 @@ pcn_init(struct ifnet *ifp)
 	}
 
 	/* Set the media. */
-	(void) (*sc->sc_mii.mii_media.ifm_change)(ifp);
+	(void) (*sc->sc_mii.mii_media.ifm_change_cb)(ifp);
 
 	/* Enable interrupts and external activity (and ACK IDON). */
 	pcn_csr_write(sc, LE_CSR0, LE_C0_INEA|LE_C0_STRT|LE_C0_IDON);

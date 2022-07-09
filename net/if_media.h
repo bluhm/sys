@@ -98,8 +98,8 @@ struct ifmedia {
 	uint64_t	ifm_media;	/* current user-set media word */
 	struct ifmedia_entry *ifm_cur;	/* currently selected media */
 	TAILQ_HEAD(, ifmedia_entry) ifm_list; /* list of all supported media */
-	ifm_change_cb_t	ifm_change;	/* media change driver callback */
-	ifm_stat_cb_t	ifm_status;	/* media status driver callback */
+	ifm_change_cb_t	ifm_change_cb;	/* media change driver callback */
+	ifm_stat_cb_t	ifm_status_cb;	/* media status driver callback */
 };
 
 /* Initialize an interface's struct if_media field. */

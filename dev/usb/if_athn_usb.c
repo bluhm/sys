@@ -354,7 +354,7 @@ athn_usb_attachhook(struct device *self)
 	ic->ic_ampdu_tx_stop = athn_usb_ampdu_tx_stop;
 #endif
 	ic->ic_newstate = athn_usb_newstate;
-	ic->ic_media.ifm_change = athn_usb_media_change;
+	ic->ic_media.ifm_change_cb = athn_usb_media_change;
 	timeout_set(&sc->scan_to, athn_usb_next_scan, usc);
 
 	ops->rx_enable = athn_usb_rx_enable;
