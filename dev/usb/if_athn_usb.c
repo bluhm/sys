@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_athn_usb.c,v 1.64 2022/04/21 21:03:03 stsp Exp $	*/
+/*	$OpenBSD: if_athn_usb.c,v 1.65 2022/07/10 21:13:41 bluhm Exp $	*/
 
 /*-
  * Copyright (c) 2011 Damien Bergamini <damien.bergamini@free.fr>

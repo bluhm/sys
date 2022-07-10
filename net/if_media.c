@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_media.c,v 1.32 2022/04/07 16:41:13 naddy Exp $	*/
+/*	$OpenBSD: if_media.c,v 1.33 2022/07/10 21:13:41 bluhm Exp $	*/
 /*	$NetBSD: if_media.c,v 1.10 2000/03/13 23:52:39 soren Exp $	*/
 
 /*-
