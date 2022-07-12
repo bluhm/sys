@@ -2707,7 +2707,7 @@ wi_sync_media(struct wi_softc *sc, int ptype, int txrate)
 	}
 	media = IFM_MAKEWORD(IFM_TYPE(media), subtype, options,
 	IFM_INST(media));
-	if (ifmedia_match(&sc->sc_media, media, sc->sc_media.ifm_mask) == NULL)
+	if (!ifmedia_match(&sc->sc_media, media, sc->sc_media.ifm_mask))
 		return (EINVAL);
 	ifmedia_set(&sc->sc_media, media);
 	sc->wi_ptype = ptype;
