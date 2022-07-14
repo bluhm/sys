@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_wi.c,v 1.176 2022/01/09 05:42:38 jsg Exp $	*/
+/*	$OpenBSD: if_wi.c,v 1.177 2022/07/14 13:46:24 bluhm Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998, 1999
