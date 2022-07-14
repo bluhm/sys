@@ -147,12 +147,12 @@ ifmedia_add(struct ifmedia *ifm, uint64_t mword, int data, void *aux)
 	if (entry == NULL)
 		panic("ifmedia_add: can't malloc entry");
 
-	entry->ifm_media = mword;
-	entry->ifm_data = data;
-	entry->ifm_aux = aux;
+	entry->ife_media = mword;
+	entry->ife_data = data;
+	entry->ife_aux = aux;
 
 	mtx_enter(&ifmedia_mtx);
-	TAILQ_INSERT_TAIL(&ifm->ifm_list, entry, ifm_list);
+	TAILQ_INSERT_TAIL(&ifm->ifm_list, entry, ife_list);
 	ifm->ifm_nwords++;
 	mtx_leave(&ifmedia_mtx);
 }
@@ -166,9 +166,10 @@ ifmedia_list_add(struct ifmedia *ifm, struct ifmedia_entry *lp, int count)
 {
 	int i;
 
-	for (i = 0; i < count; i++)
-		ifmedia_add(ifm, lp[i].ifm_media, lp[i].ifm_data,
-		    lp[i].ifm_aux);
+	for (i = 0; i < count; i++) {
+		ifmedia_add(ifm, lp[i].ife_media, lp[i].ife_data,
+		    lp[i].ife_aux);
+	}
 }
 
 /*
@@ -322,7 +323,7 @@ ifmedia_ioctl(struct ifnet *ifp, struct ifreq *ifr, struct ifmedia *ifm,
 
 		mtx_enter(&ifmedia_mtx);
 		ifmr->ifm_active = ifmr->ifm_current = ifm->ifm_cur ?
-		    ifm->ifm_cur->ifm_media : IFM_NONE;
+		    ifm->ifm_cur->ife_media : IFM_NONE;
 		ifmr->ifm_mask = ifm->ifm_mask;
 		ifmr->ifm_status = 0;
 		mtx_leave(&ifmedia_mtx);
@@ -367,8 +368,8 @@ ifmedia_ioctl(struct ifnet *ifp, struct ifreq *ifr, struct ifmedia *ifm,
 			 * Get the media words from the interface's list.
 			 */
 			nwords = 0;
-			TAILQ_FOREACH(ife, &ifm->ifm_list, ifm_list) {
-				kptr[nwords++] = ife->ifm_media;
+			TAILQ_FOREACH(ife, &ifm->ifm_list, ife_list) {
+				kptr[nwords++] = ife->ife_media;
 			}
 			KASSERT(nwords == ifm->ifm_nwords);
 			mtx_leave(&ifmedia_mtx);
@@ -414,13 +415,13 @@ ifmedia_get(struct ifmedia *ifm, uint64_t target, uint64_t mask)
 	mask = ~mask;
 
 	mtx_enter(&ifmedia_mtx);
-	TAILQ_FOREACH(next, &ifm->ifm_list, ifm_list) {
-		if ((next->ifm_media & mask) == (target & mask)) {
+	TAILQ_FOREACH(next, &ifm->ifm_list, ife_list) {
+		if ((next->ife_media & mask) == (target & mask)) {
 			if (match) {
 #if defined(IFMEDIA_DEBUG) || defined(DIAGNOSTIC)
 				printf("%s: multiple match for 0x%llx/0x%llx, "
 				    "selected instance %lld\n", __func__,
-				    target, mask, IFM_INST(match->ifm_media));
+				    target, mask, IFM_INST(match->ife_media));
 #endif
 				break;
 			}
@@ -444,12 +445,12 @@ ifmedia_delete_instance(struct ifmedia *ifm, uint64_t inst)
 	TAILQ_INIT(&ifmlist);
 
 	mtx_enter(&ifmedia_mtx);
-	TAILQ_FOREACH_SAFE(ife, &ifm->ifm_list, ifm_list, nife) {
+	TAILQ_FOREACH_SAFE(ife, &ifm->ifm_list, ife_list, nife) {
 		if (inst == IFM_INST_ANY ||
-		    inst == IFM_INST(ife->ifm_media)) {
-			TAILQ_REMOVE(&ifm->ifm_list, ife, ifm_list);
+		    inst == IFM_INST(ife->ife_media)) {
+			TAILQ_REMOVE(&ifm->ifm_list, ife, ife_list);
 			ifm->ifm_nwords--;
-			TAILQ_INSERT_TAIL(&ifmlist, ife, ifm_list);
+			TAILQ_INSERT_TAIL(&ifmlist, ife, ife_list);
 		}
 	}
 	ifm->ifm_cur = NULL;
@@ -457,7 +458,7 @@ ifmedia_delete_instance(struct ifmedia *ifm, uint64_t inst)
 
 	/* Do not hold mutex longer than necessary, call free() without. */
 	while((ife = TAILQ_FIRST(&ifmlist)) != NULL) {
-		TAILQ_REMOVE(&ifmlist, ife, ifm_list);
+		TAILQ_REMOVE(&ifmlist, ife, ife_list);
 		free(ife, M_IFADDR, sizeof *ife);
 	}
 }

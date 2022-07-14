@@ -89,10 +89,10 @@ typedef	void (*ifm_stat_cb_t)(struct ifnet *, struct ifmediareq *);
  * In-kernel representation of a single supported media type.
  */
 struct ifmedia_entry {
-	TAILQ_ENTRY(ifmedia_entry) ifm_list;
-	uint64_t	ifm_media;	/* description of this media attachment */
-	u_int	ifm_data;	/* for driver-specific use */
-	void	*ifm_aux;	/* for driver-specific use */
+	TAILQ_ENTRY(ifmedia_entry) ife_list;	/* [M] ifmedia list entry */
+	uint64_t	ife_media;	/* description of this media entry */
+	u_int		ife_data;	/* for driver-specific use */
+	void		*ife_aux;	/* for driver-specific use */
 };
 
 TAILQ_HEAD(ifmedia_list, ifmedia_entry);
