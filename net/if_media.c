@@ -105,7 +105,7 @@ static	void ifmedia_printword(uint64_t);
 
 struct mutex ifmedia_mtx = MUTEX_INITIALIZER(IPL_NET);
 
-struct	ifmedia_entry *ifmedia_match_get(struct ifmedia *, uint64_t, uint64_t);
+struct	ifmedia_entry *ifmedia_get(struct ifmedia *, uint64_t, uint64_t);
 
 /*
  * Initialize if_media struct for a specific interface instance.
@@ -184,7 +184,7 @@ ifmedia_set(struct ifmedia *ifm, uint64_t target)
 	struct ifmedia_entry *match;
 
 	mtx_enter(&ifmedia_mtx);
-	match = ifmedia_match_get(ifm, target, ifm->ifm_mask);
+	match = ifmedia_get(ifm, target, ifm->ifm_mask);
 
 	/*
 	 * If we didn't find the requested media, then we try to fall
@@ -204,12 +204,12 @@ ifmedia_set(struct ifmedia *ifm, uint64_t target)
 		printf("%s: no match for 0x%llx/0x%llx\n", __func__,
 		    target, ~ifm->ifm_mask);
 		target = (target & IFM_NMASK) | IFM_NONE;
-		match = ifmedia_match_get(ifm, target, ifm->ifm_mask);
+		match = ifmedia_get(ifm, target, ifm->ifm_mask);
 		if (match == NULL) {
 			mtx_leave(&ifmedia_mtx);
 			ifmedia_add(ifm, target, 0, NULL);
 			mtx_enter(&ifmedia_mtx);
-			match = ifmedia_match_get(ifm, target, ifm->ifm_mask);
+			match = ifmedia_get(ifm, target, ifm->ifm_mask);
 			if (match == NULL) {
 				mtx_leave(&ifmedia_mtx);
 				panic("ifmedia_set failed");
@@ -254,7 +254,7 @@ ifmedia_ioctl(struct ifnet *ifp, struct ifreq *ifr, struct ifmedia *ifm,
 		uint64_t newmedia = ifr->ifr_media;
 
 		mtx_enter(&ifmedia_mtx);
-		match = ifmedia_match_get(ifm, newmedia, ifm->ifm_mask);
+		match = ifmedia_get(ifm, newmedia, ifm->ifm_mask);
 		if (match == NULL) {
 			mtx_leave(&ifmedia_mtx);
 #ifdef IFMEDIA_DEBUG
@@ -397,14 +397,14 @@ ifmedia_match(struct ifmedia *ifm, uint64_t target, uint64_t mask)
 	struct ifmedia_entry *match;
 
 	mtx_enter(&ifmedia_mtx);
-	match = ifmedia_match_get(ifm, target, mask);
+	match = ifmedia_get(ifm, target, mask);
 	mtx_leave(&ifmedia_mtx);
 
 	return (match != NULL);
 }
 
 struct ifmedia_entry *
-ifmedia_match_get(struct ifmedia *ifm, uint64_t target, uint64_t mask)
+ifmedia_get(struct ifmedia *ifm, uint64_t target, uint64_t mask)
 {
 	struct ifmedia_entry *match, *next;
 
