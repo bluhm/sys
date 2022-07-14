@@ -312,7 +312,7 @@ ifmedia_ioctl(struct ifnet *ifp, struct ifreq *ifr, struct ifmedia *ifm,
 	/*
 	 * Get list of available media and current media on interface.
 	 */
-	case  SIOCGIFMEDIA:
+	case SIOCGIFMEDIA:
 	{
 		struct ifmediareq *ifmr = (struct ifmediareq *) ifr;
 		size_t nwords;

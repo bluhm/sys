@@ -2305,6 +2305,15 @@ forceup:
 		error = ((*ifp->if_ioctl)(ifp, cmd, data));
 		break;
 
+	case SIOCSIFMEDIA:
+		if ((error = suser(p)) != 0)
+			break;
+		/* FALLTHROUGH */
+	case SIOCGIFMEDIA:
+		/* net lock is not needed */
+		error = ((*ifp->if_ioctl)(ifp, cmd, data));
+		break;
+
 	case SIOCSETKALIVE:
 	case SIOCDIFPHYADDR:
 	case SIOCSLIFPHYADDR:
@@ -2314,7 +2323,6 @@ forceup:
 	case SIOCSLIFPHYECN:
 	case SIOCADDMULTI:
 	case SIOCDELMULTI:
-	case SIOCSIFMEDIA:
 	case SIOCSVNETID:
 	case SIOCDVNETID:
 	case SIOCSVNETFLOWID:

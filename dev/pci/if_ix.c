@@ -1576,6 +1576,8 @@ ixgbe_update_link_status(struct ix_softc *sc)
 	struct ifnet	*ifp = &sc->arpcom.ac_if;
 	int		link_state = LINK_STATE_DOWN;
 
+	KERNEL_ASSERT_LOCKED();
+
 	ixgbe_check_link(&sc->hw, &sc->link_speed, &sc->link_up, 0);
 
 	ifp->if_baudrate = 0;
