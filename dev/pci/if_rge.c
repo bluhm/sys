@@ -303,7 +303,7 @@ rge_attach(struct device *parent, struct device *self, void *aux)
 	rge_add_media_types(sc);
 	ifmedia_add(&sc->sc_media, IFM_ETHER | IFM_AUTO, 0, NULL);
 	ifmedia_set(&sc->sc_media, IFM_ETHER | IFM_AUTO);
-	sc->sc_media.ifm_media = sc->sc_media.ifm_cur->ifm_media;
+	ifmedia_current(&sc->sc_media, &sc->sc_media.ifm_media, NULL);
 
 	if_attach(ifp);
 	ether_ifattach(ifp);

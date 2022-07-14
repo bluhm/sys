@@ -2659,9 +2659,10 @@ wi_get_id(struct wi_softc *sc)
 STATIC int
 wi_sync_media(struct wi_softc *sc, int ptype, int txrate)
 {
-	uint64_t media = sc->sc_media.ifm_cur->ifm_media;
-	uint64_t options = IFM_OPTIONS(media);
-	uint64_t subtype;
+	uint64_t media, options, subtype;
+
+	ifmedia_current(&sc->sc_media, &media, NULL);
+	options = IFM_OPTIONS(media);
 
 	switch (txrate) {
 	case 1:
@@ -2719,17 +2720,20 @@ STATIC int
 wi_media_change(struct ifnet *ifp)
 {
 	struct wi_softc *sc = ifp->if_softc;
+	uint64_t media;
 	int otype = sc->wi_ptype;
 	int orate = sc->wi_tx_rate;
 	int ocreate_ibss = sc->wi_create_ibss;
 
-	if ((sc->sc_media.ifm_cur->ifm_media & IFM_IEEE80211_HOSTAP) &&
+	ifmedia_current(&sc->sc_media, &media, NULL);
+
+	if ((media & IFM_IEEE80211_HOSTAP) &&
 	    sc->sc_firmware_type != WI_INTERSIL)
 		return (EINVAL);
 
 	sc->wi_create_ibss = 0;
 
-	switch (sc->sc_media.ifm_cur->ifm_media & IFM_OMASK) {
+	switch (media & IFM_OMASK) {
 	case 0:
 		sc->wi_ptype = WI_PORTTYPE_BSS;
 		break;
@@ -2753,7 +2757,7 @@ wi_media_change(struct ifnet *ifp)
 		return (EINVAL);
 	}
 
-	switch (IFM_SUBTYPE(sc->sc_media.ifm_cur->ifm_media)) {
+	switch (IFM_SUBTYPE(media)) {
 	case IFM_IEEE80211_DS1:
 		sc->wi_tx_rate = 1;
 		break;
@@ -2777,7 +2781,8 @@ wi_media_change(struct ifnet *ifp)
 			wi_init(sc);
 	}
 
-	ifp->if_baudrate = ifmedia_baudrate(sc->sc_media.ifm_cur->ifm_media);
+	ifmedia_current(&sc->sc_media, &media, NULL);
+	ifp->if_baudrate = ifmedia_baudrate(media);
 
 	return (0);
 }
@@ -2816,7 +2821,7 @@ wi_media_status(struct ifnet *ifp, struct ifmediareq *imr)
 			}
 		}
 	} else {
-		imr->ifm_active = sc->sc_media.ifm_cur->ifm_media;
+		ifmedia_current(&sc->sc_media, &imr->ifm_active, NULL);
 	}
 
 	imr->ifm_status = IFM_AVALID;

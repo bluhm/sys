@@ -1179,8 +1179,11 @@ nge_tick(void *xsc)
 	}
 
 	if (sc->nge_tbi) {
-		if (IFM_SUBTYPE(sc->nge_ifmedia.ifm_cur->ifm_media)
-		    == IFM_AUTO) {
+		uint64_t media;
+
+		ifmedia_current(&sc->nge_ifmedia, &media, NULL);
+
+		if (IFM_SUBTYPE(media) == IFM_AUTO) {
 			u_int32_t bmsr, anlpar, txcfg, rxcfg;
 
 			bmsr = CSR_READ_4(sc, NGE_TBI_BMSR);
@@ -1558,7 +1561,7 @@ nge_init(void *xsc)
 
 	/* Set full/half duplex mode. */
 	if (sc->nge_tbi)
-		media = sc->nge_ifmedia.ifm_cur->ifm_media;
+		ifmedia_current(&sc->nge_ifmedia, &media, NULL);
 	else
 		media = mii->mii_media_active;
 
@@ -1670,13 +1673,15 @@ int
 nge_ifmedia_tbi_upd(struct ifnet *ifp)
 {
 	struct nge_softc	*sc = ifp->if_softc;
+	uint64_t media;
 
 	DPRINTFN(2, ("%s: nge_ifmedia_tbi_upd\n", sc->sc_dv.dv_xname));
 
 	sc->nge_link = 0;
 
-	if (IFM_SUBTYPE(sc->nge_ifmedia.ifm_cur->ifm_media) 
-	    == IFM_AUTO) {
+	ifmedia_current(&sc->nge_ifmedia, &media, NULL);
+
+	if (IFM_SUBTYPE(media) == IFM_AUTO) {
 		u_int32_t anar, bmcr;
 		anar = CSR_READ_4(sc, NGE_TBI_ANAR);
 		anar |= (NGE_TBIANAR_HDX | NGE_TBIANAR_FDX);
@@ -1693,8 +1698,7 @@ nge_ifmedia_tbi_upd(struct ifnet *ifp)
 		txcfg = CSR_READ_4(sc, NGE_TX_CFG);
 		rxcfg = CSR_READ_4(sc, NGE_RX_CFG);
 
-		if ((sc->nge_ifmedia.ifm_cur->ifm_media & IFM_GMASK)
-		    == IFM_FDX) {
+		if ((media & IFM_GMASK) == IFM_FDX) {
 			txcfg |= NGE_TXCFG_IGN_HBEAT|NGE_TXCFG_IGN_CARR;
 			rxcfg |= NGE_RXCFG_RX_FDX;
 		} else {
@@ -1719,11 +1723,14 @@ void
 nge_ifmedia_tbi_sts(struct ifnet *ifp, struct ifmediareq *ifmr)
 {
 	struct nge_softc	*sc = ifp->if_softc;
+	uint64_t		media;
 	u_int32_t		bmcr;
 
 	bmcr = CSR_READ_4(sc, NGE_TBI_BMCR);
 	
-	if (IFM_SUBTYPE(sc->nge_ifmedia.ifm_cur->ifm_media) == IFM_AUTO) {
+	ifmedia_current(&sc->nge_ifmedia, &media, NULL);
+
+	if (IFM_SUBTYPE(media) == IFM_AUTO) {
 		u_int32_t bmsr = CSR_READ_4(sc, NGE_TBI_BMSR);
 		DPRINTFN(2, ("%s: nge_ifmedia_tbi_sts bmsr=%#x, bmcr=%#x\n",
 			     sc->sc_dv.dv_xname, bmsr, bmcr));
@@ -1744,7 +1751,7 @@ nge_ifmedia_tbi_sts(struct ifnet *ifp, struct ifmediareq *ifmr)
 	if (bmcr & NGE_TBIBMCR_LOOPBACK)
 		ifmr->ifm_active |= IFM_LOOP;
 	
-	if (IFM_SUBTYPE(sc->nge_ifmedia.ifm_cur->ifm_media) == IFM_AUTO) {
+	if (IFM_SUBTYPE(media) == IFM_AUTO) {
 		u_int32_t anlpar = CSR_READ_4(sc, NGE_TBI_ANLPAR);
 		DPRINTFN(2, ("%s: nge_ifmedia_tbi_sts anlpar=%#x\n",
 			     sc->sc_dv.dv_xname, anlpar));
@@ -1757,7 +1764,7 @@ nge_ifmedia_tbi_sts(struct ifnet *ifp, struct ifmediareq *ifmr)
 		} else
 			ifmr->ifm_active |= IFM_FDX;
 		
-	} else if ((sc->nge_ifmedia.ifm_cur->ifm_media & IFM_GMASK) == IFM_FDX)
+	} else if ((media & IFM_GMASK) == IFM_FDX)
 		ifmr->ifm_active |= IFM_FDX;
 	else
 		ifmr->ifm_active |= IFM_HDX;

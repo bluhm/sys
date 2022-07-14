@@ -1861,7 +1861,11 @@ int
 pcn_79c970_mediachange(struct ifnet *ifp)
 {
 	struct pcn_softc *sc = ifp->if_softc;
+	uint64_t media;
+	u_int data;
 	uint32_t reg;
+
+	ifmedia_current(&sc->sc_mii.mii_media, &media, &data);
 
 	if (IFM_SUBTYPE(sc->sc_mii.mii_media.ifm_media) == IFM_AUTO) {
 		/*
@@ -1880,7 +1884,7 @@ pcn_79c970_mediachange(struct ifnet *ifp)
 
 		reg = pcn_csr_read(sc, LE_CSR15);
 		reg = (reg & ~LE_C15_PORTSEL(PORTSEL_MASK)) |
-		    LE_C15_PORTSEL(sc->sc_mii.mii_media.ifm_cur->ifm_data);
+		    LE_C15_PORTSEL(data);
 		pcn_csr_write(sc, LE_CSR15, reg);
 	}
 

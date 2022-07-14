@@ -719,21 +719,20 @@ ec_mediachange(struct dp8390_softc *sc)
 void
 ec_mediastatus(struct dp8390_softc *sc, struct ifmediareq *ifmr)
 {
-	struct ifmedia *ifm = &sc->sc_media;
-
 	/*
 	 * The currently selected media is always the active media.
 	 */
-	ifmr->ifm_active = ifm->ifm_cur->ifm_media;
+	ifmedia_current(&sc->sc_media, &ifmr->ifm_active, NULL);
 }
 
 void
 ec_init_card(struct dp8390_softc *sc)
 {
 	struct ec_softc *esc = (struct ec_softc *)sc;
-	struct ifmedia *ifm = &sc->sc_media;
+	uint64_t media;
 
-	(void) ec_set_media(esc, ifm->ifm_cur->ifm_media);
+	ifmedia_current(&sc->sc_media, &media, NULL);
+	(void) ec_set_media(esc, media);
 }
 
 int

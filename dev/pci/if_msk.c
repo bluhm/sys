@@ -442,13 +442,15 @@ msk_miibus_statchg(struct device *dev)
 {
 	struct sk_if_softc *sc_if = (struct sk_if_softc *)dev;
 	struct mii_data *mii = &sc_if->sk_mii;
-	struct ifmedia_entry *ife = mii->mii_media.ifm_cur;
+	uint64_t media;
 	int gpcr;
 
 	gpcr = SK_YU_READ_2(sc_if, YUKON_GPCR);
 	gpcr &= (YU_GPCR_TXEN | YU_GPCR_RXEN);
 
-	if (IFM_SUBTYPE(ife->ifm_media) != IFM_AUTO ||
+	ifmedia_current(&mii->mii_media, &media, NULL);
+
+	if (IFM_SUBTYPE(media) != IFM_AUTO ||
 	    sc_if->sk_softc->sk_type == SK_YUKON_FE_P) {
 		/* Set speed. */
 		gpcr |= YU_GPCR_SPEED_DIS;

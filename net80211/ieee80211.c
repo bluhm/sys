@@ -508,16 +508,17 @@ int
 ieee80211_media_change(struct ifnet *ifp)
 {
 	struct ieee80211com *ic = (void *)ifp;
-	struct ifmedia_entry *ime;
 	enum ieee80211_opmode newopmode;
 	enum ieee80211_phymode newphymode;
+	uint64_t media;
 	int i, j, newrate, error = 0;
 
-	ime = ic->ic_media.ifm_cur;
+	ifmedia_current(&ic->ic_media, &media, NULL);
+
 	/*
 	 * First, identify the phy mode.
 	 */
-	switch (IFM_MODE(ime->ifm_media)) {
+	switch (IFM_MODE(media)) {
 	case IFM_IEEE80211_11A:
 		newphymode = IEEE80211_MODE_11A;
 		break;
@@ -550,32 +551,32 @@ ieee80211_media_change(struct ifnet *ifp)
 	 * Next, the fixed/variable rate.
 	 */
 	i = -1;
-	if (IFM_SUBTYPE(ime->ifm_media) >= IFM_IEEE80211_VHT_MCS0 &&
-	    IFM_SUBTYPE(ime->ifm_media) <= IFM_IEEE80211_VHT_MCS9) {
+	if (IFM_SUBTYPE(media) >= IFM_IEEE80211_VHT_MCS0 &&
+	    IFM_SUBTYPE(media) <= IFM_IEEE80211_VHT_MCS9) {
 		if ((ic->ic_modecaps & (1 << IEEE80211_MODE_11AC)) == 0)
 			return EINVAL;
 		if (newphymode != IEEE80211_MODE_AUTO &&
 		    newphymode != IEEE80211_MODE_11AC)
 			return EINVAL;
-		i = ieee80211_media2mcs(ime->ifm_media);
+		i = ieee80211_media2mcs(media);
 		/* TODO: Obtain VHT MCS information from VHT CAP IE. */
 		if (i == -1 /* || !vht_mcs_supported */)
 			return EINVAL;
-	} else if (IFM_SUBTYPE(ime->ifm_media) >= IFM_IEEE80211_HT_MCS0 &&
-	    IFM_SUBTYPE(ime->ifm_media) <= IFM_IEEE80211_HT_MCS76) {
+	} else if (IFM_SUBTYPE(media) >= IFM_IEEE80211_HT_MCS0 &&
+	    IFM_SUBTYPE(media) <= IFM_IEEE80211_HT_MCS76) {
 		if ((ic->ic_modecaps & (1 << IEEE80211_MODE_11N)) == 0)
 			return EINVAL;
 		if (newphymode != IEEE80211_MODE_AUTO &&
 		    newphymode != IEEE80211_MODE_11N)
 			return EINVAL;
-		i = ieee80211_media2mcs(ime->ifm_media);
+		i = ieee80211_media2mcs(media);
 		if (i == -1 || isclr(ic->ic_sup_mcs, i))
 			return EINVAL;
-	} else if (IFM_SUBTYPE(ime->ifm_media) != IFM_AUTO) {
+	} else if (IFM_SUBTYPE(media) != IFM_AUTO) {
 		/*
 		 * Convert media subtype to rate.
 		 */
-		newrate = ieee80211_media2rate(ime->ifm_media);
+		newrate = ieee80211_media2rate(media);
 		if (newrate == 0)
 			return EINVAL;
 		/*
@@ -608,15 +609,15 @@ ieee80211_media_change(struct ifnet *ifp)
 	 * Deduce new operating mode but don't install it just yet.
 	 */
 #ifndef IEEE80211_STA_ONLY
-	if (ime->ifm_media & IFM_IEEE80211_ADHOC)
+	if (media & IFM_IEEE80211_ADHOC)
 		newopmode = IEEE80211_M_AHDEMO;
-	else if (ime->ifm_media & IFM_IEEE80211_HOSTAP)
+	else if (media & IFM_IEEE80211_HOSTAP)
 		newopmode = IEEE80211_M_HOSTAP;
-	else if (ime->ifm_media & IFM_IEEE80211_IBSS)
+	else if (media & IFM_IEEE80211_IBSS)
 		newopmode = IEEE80211_M_IBSS;
 	else
 #endif
-	if (ime->ifm_media & IFM_IEEE80211_MONITOR)
+	if (media & IFM_IEEE80211_MONITOR)
 		newopmode = IEEE80211_M_MONITOR;
 	else
 		newopmode = IEEE80211_M_STA;
@@ -712,7 +713,7 @@ ieee80211_media_change(struct ifnet *ifp)
 	}
 #ifdef notdef
 	if (error == 0)
-		ifp->if_baudrate = ifmedia_baudrate(ime->ifm_media);
+		ifp->if_baudrate = ifmedia_baudrate(media);
 #endif
 	return error;
 }
@@ -1119,13 +1120,16 @@ enum ieee80211_phymode
 ieee80211_next_mode(struct ifnet *ifp)
 {
 	struct ieee80211com *ic = (void *)ifp;
+	uint64_t media;
 	uint16_t mode;
+
+	ifmedia_current(&ic->ic_media, &media, NULL);
 
 	/*
 	 * Indicate a wrap-around if we're running in a fixed, user-specified
 	 * phy mode.
 	 */
-	if (IFM_MODE(ic->ic_media.ifm_cur->ifm_media) != IFM_AUTO)
+	if (IFM_MODE(media) != IFM_AUTO)
 		return (IEEE80211_MODE_AUTO);
 
 	/*

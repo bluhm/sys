@@ -789,12 +789,10 @@ we_mediachange(struct dp8390_softc *sc)
 void
 we_mediastatus(struct dp8390_softc *sc, struct ifmediareq *ifmr)
 {
-	struct ifmedia *ifm = &sc->sc_media;
-
 	/*
 	 * The currently selected media is always the active media.
 	 */
-	ifmr->ifm_active = ifm->ifm_cur->ifm_media;
+	ifmedia_current(&sc->sc_media, &ifmr->ifm_active, NULL);
 }
 
 const char *

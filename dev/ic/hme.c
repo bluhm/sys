@@ -1103,9 +1103,12 @@ hme_mediachange(struct ifnet *ifp)
 	bus_space_tag_t t = sc->sc_bustag;
 	bus_space_handle_t mif = sc->sc_mif;
 	bus_space_handle_t mac = sc->sc_mac;
-	uint64_t instance = IFM_INST(sc->sc_mii.mii_media.ifm_cur->ifm_media);
-	int phy = sc->sc_phys[instance];
+	uint64_t media;
+	int phy;
 	u_int32_t v;
+
+	ifmedia_current(&sc->sc_mii.mii_media, &media, NULL);
+	phy = sc->sc_phys[IFM_INST(media)];
 
 #ifdef HMEDEBUG
 	if (sc->sc_debug)

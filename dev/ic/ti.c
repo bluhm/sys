@@ -2085,7 +2085,7 @@ ti_init2(struct ti_softc *sc)
 	 */
 	ifm = &sc->ifmedia;
 	tmp = ifm->ifm_media;
-	ifm->ifm_media = ifm->ifm_cur->ifm_media;
+	ifmedia_current(ifm, &ifm->ifm_media, NULL);
 	ti_ifmedia_upd(ifp);
 	ifm->ifm_media = tmp;
 }

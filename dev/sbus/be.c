@@ -1321,13 +1321,15 @@ be_mii_statchg(struct device *self)
 	struct be_softc *sc = (struct be_softc *)self;
 	bus_space_tag_t t = sc->sc_bustag;
 	bus_space_handle_t br = sc->sc_br;
-	u_int64_t instance;
+	u_int64_t media;
 	u_int32_t v;
 
-	instance = IFM_INST(sc->sc_mii.mii_media.ifm_cur->ifm_media);
+	ifmedia_current(&sc->sc_mii.mii_media, &media, NULL);
 #ifdef DIAGNOSTIC
-	if (instance > 1)
-		panic("be_mii_statchg: instance %lld out of range", instance);
+	if (IFM_INST(media) > 1) {
+		panic("%s: instance %lld out of range",
+		    __func__, IFM_INST(media));
+	}
 #endif
 
 	/* Update duplex mode in TX configuration */
@@ -1339,7 +1341,7 @@ be_mii_statchg(struct device *self)
 	bus_space_write_4(t, br, BE_BRI_TXCFG, v);
 
 	/* Change to appropriate gate in transceiver PAL */
-	be_pal_gate(sc, sc->sc_phys[instance]);
+	be_pal_gate(sc, sc->sc_phys[IFM_INST(media)]);
 }
 
 /*
@@ -1379,16 +1381,18 @@ be_ifmedia_upd(struct ifnet *ifp)
 int
 be_intphy_service(struct be_softc *sc, struct mii_data *mii, int cmd)
 {
-	struct ifmedia_entry *ife = mii->mii_media.ifm_cur;
+	uint64_t media;
 	int bmcr, bmsr;
 	int error;
+
+	ifmedia_current(&mii->mii_media, &media, NULL);
 
 	switch (cmd) {
 	case MII_POLLSTAT:
 		/*
 		 * If we're not polling our PHY instance, just return.
 		 */
-		if (IFM_INST(ife->ifm_media) != sc->sc_mii_inst)
+		if (IFM_INST(media) != sc->sc_mii_inst)
 			return (0);
 
 		break;
@@ -1399,7 +1403,7 @@ be_intphy_service(struct be_softc *sc, struct mii_data *mii, int cmd)
 		 * If the media indicates a different PHY instance,
 		 * isolate ourselves.
 		 */
-		if (IFM_INST(ife->ifm_media) != sc->sc_mii_inst) {
+		if (IFM_INST(media) != sc->sc_mii_inst) {
 			bmcr = be_mii_readreg((void *)sc,
 			    BE_PHY_INTERNAL, MII_BMCR);
 			be_mii_writereg((void *)sc,
@@ -1418,11 +1422,11 @@ be_intphy_service(struct be_softc *sc, struct mii_data *mii, int cmd)
 		/*
 		 * Select the new mode and take out of isolation
 		 */
-		if (IFM_SUBTYPE(ife->ifm_media) == IFM_100_TX)
+		if (IFM_SUBTYPE(media) == IFM_100_TX)
 			bmcr |= BMCR_S100;
-		else if (IFM_SUBTYPE(ife->ifm_media) == IFM_10_T)
+		else if (IFM_SUBTYPE(media) == IFM_10_T)
 			bmcr &= ~BMCR_S100;
-		else if (IFM_SUBTYPE(ife->ifm_media) == IFM_AUTO) {
+		else if (IFM_SUBTYPE(media) == IFM_AUTO) {
 			if ((sc->sc_mii_flags & MIIF_HAVELINK) != 0) {
 				bmcr &= ~BMCR_S100;
 				bmcr |= sc->sc_intphy_curspeed;
@@ -1433,7 +1437,7 @@ be_intphy_service(struct be_softc *sc, struct mii_data *mii, int cmd)
 			}
 		}
 
-		if ((IFM_OPTIONS(ife->ifm_media) & IFM_FDX) != 0)
+		if ((IFM_OPTIONS(media) & IFM_FDX) != 0)
 			bmcr |= BMCR_FDX;
 		else
 			bmcr &= ~BMCR_FDX;
@@ -1445,11 +1449,11 @@ be_intphy_service(struct be_softc *sc, struct mii_data *mii, int cmd)
 		/*
 		 * If we're not currently selected, just return.
 		 */
-		if (IFM_INST(ife->ifm_media) != sc->sc_mii_inst)
+		if (IFM_INST(media) != sc->sc_mii_inst)
 			return (0);
 
 		/* Only used for automatic media selection */
-		if (IFM_SUBTYPE(ife->ifm_media) != IFM_AUTO)
+		if (IFM_SUBTYPE(media) != IFM_AUTO)
 			return (0);
 
 		/* Is the interface even up? */

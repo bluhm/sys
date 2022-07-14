@@ -1496,17 +1496,18 @@ void
 cas_mii_statchg(struct device *dev)
 {
 	struct cas_softc *sc = (void *)dev;
-#ifdef CAS_DEBUG
-	uint64_t instance = IFM_INST(sc->sc_mii.mii_media.ifm_cur->ifm_media);
-#endif
 	bus_space_tag_t t = sc->sc_memt;
 	bus_space_handle_t mac = sc->sc_memh;
 	u_int32_t v;
 
 #ifdef CAS_DEBUG
-	if (sc->sc_debug)
-		printf("cas_mii_statchg: status change: phy = %d\n",
-		    sc->sc_phys[instance]);
+	if (sc->sc_debug) {
+		uint64_t media;
+
+		ifmedia_current(&sc->sc_mii.mii_media, &media, NULL);
+		printf("%s: status change: phy = %d\n",
+		    __func__, sc->sc_phys[IFM_INST(media)]);
+	}
 #endif
 
 	/* Set tx full duplex options */

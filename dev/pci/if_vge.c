@@ -1674,11 +1674,10 @@ void
 vge_miibus_statchg(struct device *dev)
 {
 	struct vge_softc	*sc = (struct vge_softc *)dev;
-	struct mii_data		*mii;
-	struct ifmedia_entry	*ife;
+	struct mii_data		*mii = &sc->sc_mii;
+	uint64_t media;
 
-	mii = &sc->sc_mii;
-	ife = mii->mii_media.ifm_cur;
+	ifmedia_current(&mii->mii_media, &media, NULL);
 
 	/*
 	 * If the user manually selects a media mode, we need to turn
@@ -1691,7 +1690,7 @@ vge_miibus_statchg(struct device *dev)
 	 * the FDX bit cleared.
 	 */
 
-	switch (IFM_SUBTYPE(ife->ifm_media)) {
+	switch (IFM_SUBTYPE(media)) {
 	case IFM_AUTO:
 		CSR_CLRBIT_1(sc, VGE_DIAGCTL, VGE_DIAGCTL_MACFORCE);
 		CSR_CLRBIT_1(sc, VGE_DIAGCTL, VGE_DIAGCTL_FDXFORCE);
@@ -1703,7 +1702,7 @@ vge_miibus_statchg(struct device *dev)
 	case IFM_100_TX:
 	case IFM_10_T:
 		CSR_SETBIT_1(sc, VGE_DIAGCTL, VGE_DIAGCTL_MACFORCE);
-		if ((ife->ifm_media & IFM_GMASK) == IFM_FDX) {
+		if ((media & IFM_GMASK) == IFM_FDX) {
 			CSR_SETBIT_1(sc, VGE_DIAGCTL, VGE_DIAGCTL_FDXFORCE);
 		} else {
 			CSR_CLRBIT_1(sc, VGE_DIAGCTL, VGE_DIAGCTL_FDXFORCE);
@@ -1711,7 +1710,7 @@ vge_miibus_statchg(struct device *dev)
 		break;
 	default:
 		printf("%s: unknown media type: %llx\n",
-		    sc->vge_dev.dv_xname, IFM_SUBTYPE(ife->ifm_media));
+		    sc->vge_dev.dv_xname, IFM_SUBTYPE(media));
 		break;
 	}
 

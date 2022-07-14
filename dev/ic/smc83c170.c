@@ -1404,14 +1404,15 @@ epic_mediachange(struct ifnet *ifp)
 {
 	struct epic_softc *sc = ifp->if_softc;
 	struct mii_data *mii = &sc->sc_mii;
-	struct ifmedia *ifm = &mii->mii_media;
-	uint64_t media = ifm->ifm_cur->ifm_media;
+	uint64_t media;
 	u_int32_t miicfg;
 	struct mii_softc *miisc;
 	int cfg;
 
 	if (!(ifp->if_flags & IFF_UP))
 		return (0);
+
+	ifmedia_current(&mii->mii_media, &media, NULL);
 
 	if (IFM_INST(media) != sc->sc_serinst) {
 		/* If we're not selecting serial interface, select MII mode */

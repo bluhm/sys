@@ -571,6 +571,7 @@ epinit(struct ep_softc *sc)
 	register struct ifnet *ifp = &sc->sc_arpcom.ac_if;
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
+	u_int data;
 	int i;
 
 	/* make sure any pending reset has completed before touching board */
@@ -650,7 +651,8 @@ epinit(struct ep_softc *sc)
 	bus_space_write_2(iot, ioh, EP_COMMAND, ACK_INTR | 0xff);
 
 	epsetfilter(sc);
-	epsetmedia(sc, sc->sc_mii.mii_media.ifm_cur->ifm_data);
+	ifmedia_current(&sc->sc_mii.mii_media, NULL, &data);
+	epsetmedia(sc, data);
 
 	bus_space_write_2(iot, ioh, EP_COMMAND, RX_ENABLE);
 	bus_space_write_2(iot, ioh, EP_COMMAND, TX_ENABLE);
@@ -687,8 +689,10 @@ int
 ep_media_change(struct ifnet *ifp)
 {
 	register struct ep_softc *sc = ifp->if_softc;
+	u_int data;
 
-	return	epsetmedia(sc, sc->sc_mii.mii_media.ifm_cur->ifm_data);
+	ifmedia_current(&sc->sc_mii.mii_media, NULL, &data);
+	return	epsetmedia(sc, data);
 }
 
 /*
@@ -887,8 +891,8 @@ ep_media_status(struct ifnet *ifp, struct ifmediareq *req)
 	}
 
 	/* XXX read from softc when we start autosensing media */
-	req->ifm_active = sc->sc_mii.mii_media.ifm_cur->ifm_media;
-	
+	ifmedia_current(&sc->sc_mii.mii_media, &req->ifm_active, NULL);
+
 	switch (sc->ep_chipset) {
 	case EP_CHIPSET_VORTEX:
 	case EP_CHIPSET_BOOMERANG:

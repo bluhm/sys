@@ -394,6 +394,7 @@ smc91cxx_init(struct smc91cxx_softc *sc)
 	struct ifnet *ifp = &sc->sc_arpcom.ac_if;
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
+	uint64_t media;
 	u_int16_t tmp;
 	int s, i;
 
@@ -444,7 +445,8 @@ smc91cxx_init(struct smc91cxx_softc *sc)
 	/*
 	 * Set current media.
 	 */
-	smc91cxx_set_media(sc, sc->sc_mii.mii_media.ifm_cur->ifm_media);
+	ifmedia_current(&sc->sc_mii.mii_media, &media, NULL);
+	smc91cxx_set_media(sc, media);
 
 	/*
 	 * Set the receive filter.  We want receive enable and auto

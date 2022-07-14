@@ -8493,6 +8493,7 @@ iwm_scan(struct iwm_softc *sc)
 {
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ifnet *ifp = IC2IFP(ic);
+	uint64_t media;
 	int err;
 
 	if (sc->sc_flags & IWM_FLAG_BGSCAN) {
@@ -8513,11 +8514,13 @@ iwm_scan(struct iwm_softc *sc)
 		return err;
 	}
 
+	ifmedia_current(&ic->ic_media, &media, NULL);
+
 	/*
 	 * The current mode might have been fixed during association.
 	 * Ensure all channels get scanned.
 	 */
-	if (IFM_MODE(ic->ic_media.ifm_cur->ifm_media) == IFM_AUTO)
+	if (IFM_MODE(media) == IFM_AUTO)
 		ieee80211_setmode(ic, IEEE80211_MODE_AUTO);
 
 	sc->sc_flags |= IWM_FLAG_SCANNING;

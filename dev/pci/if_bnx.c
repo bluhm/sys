@@ -1240,6 +1240,7 @@ bnx_miibus_statchg(struct device *dev)
 {
 	struct bnx_softc	*sc = (struct bnx_softc *)dev;
 	struct mii_data		*mii = &sc->bnx_mii;
+	uint64_t		media;
 	u_int32_t		rx_mode = sc->rx_mode;
 	int			val;
 
@@ -1248,10 +1249,12 @@ bnx_miibus_statchg(struct device *dev)
 		BNX_EMAC_MODE_MAC_LOOP | BNX_EMAC_MODE_FORCE_LINK | 
 		BNX_EMAC_MODE_25G);
 
+	ifmedia_current(&mii->mii_media, &media, NULL);
+
 	/*
 	 * Get flow control negotiation result.
 	 */
-	if (IFM_SUBTYPE(mii->mii_media.ifm_cur->ifm_media) == IFM_AUTO &&
+	if (IFM_SUBTYPE(media) == IFM_AUTO &&
 	    (mii->mii_media_active & IFM_ETH_FMASK) != sc->bnx_flowflags) {
 		sc->bnx_flowflags = mii->mii_media_active & IFM_ETH_FMASK;
 		mii->mii_media_active &= ~IFM_ETH_FMASK;

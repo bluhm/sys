@@ -5355,11 +5355,14 @@ iwn_scan(struct iwn_softc *sc, uint16_t flags, int bgscan)
 
 	error = iwn_cmd(sc, IWN_CMD_SCAN, buf, buflen, 1);
 	if (error == 0) {
+		uint64_t media;
+
 		/*
 		 * The current mode might have been fixed during association.
 		 * Ensure all channels get scanned.
 		 */
-		if (IFM_MODE(ic->ic_media.ifm_cur->ifm_media) == IFM_AUTO)
+		ifmedia_current(&ic->ic_media, &media, NULL);
+		if (IFM_MODE(media) == IFM_AUTO)
 			ieee80211_setmode(ic, IEEE80211_MODE_AUTO);
 
 		sc->sc_flags |= IWN_FLAG_SCANNING;

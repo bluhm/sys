@@ -1988,7 +1988,6 @@ tl_attach(struct device *parent, struct device *self, void *aux)
 	mii_attach(self, &sc->sc_mii, 0xffffffff, MII_PHY_ANY, MII_OFFSET_ANY,
 	    0);
 	if (LIST_FIRST(&sc->sc_mii.mii_phys) == NULL) {
-		struct ifmedia *ifm;
 		sc->tl_bitrate = 1;
 		ifmedia_init(&sc->ifmedia, 0, tl_ifmedia_upd, tl_ifmedia_sts);
 		ifmedia_add(&sc->ifmedia, IFM_ETHER|IFM_10_T, 0, NULL);
@@ -1998,8 +1997,7 @@ tl_attach(struct device *parent, struct device *self, void *aux)
 		ifmedia_set(&sc->ifmedia, IFM_ETHER|IFM_10_T);
 		/* Reset again, this time setting bitrate mode. */
 		tl_softreset(sc, 1);
-		ifm = &sc->ifmedia;
-		ifm->ifm_media = ifm->ifm_cur->ifm_media;
+		ifmedia_current(&sc->ifmedia, &sc->ifmedia.ifm_media, NULL);
 		tl_ifmedia_upd(ifp);
 	} else
 		ifmedia_set(&sc->sc_mii.mii_media, IFM_ETHER|IFM_AUTO);

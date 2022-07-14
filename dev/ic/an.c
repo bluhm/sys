@@ -1277,17 +1277,18 @@ an_media_change(struct ifnet *ifp)
 {
 	struct an_softc *sc = ifp->if_softc;
 	struct ieee80211com *ic = &sc->sc_ic;
-	struct ifmedia_entry *ime;
+	uint64_t media;
 	enum ieee80211_opmode newmode;
 	int i, rate, error = 0;
 
-	ime = ic->ic_media.ifm_cur;
-	if (IFM_SUBTYPE(ime->ifm_media) == IFM_AUTO) {
+	ifmedia_current(&ic->ic_media, &media, NULL);
+
+	if (IFM_SUBTYPE(media) == IFM_AUTO) {
 		i = -1;
 	} else {
 		struct ieee80211_rateset *rs =
 		    &ic->ic_sup_rates[IEEE80211_MODE_11B];
-		rate = ieee80211_media2rate(ime->ifm_media);
+		rate = ieee80211_media2rate(media);
 		if (rate == 0)
 			return EINVAL;
 		for (i = 0; i < rs->rs_nrates; i++) {
@@ -1303,13 +1304,13 @@ an_media_change(struct ifnet *ifp)
 	}
 
 #ifndef IEEE80211_STA_ONLY
-	if (ime->ifm_media & IFM_IEEE80211_ADHOC)
+	if (media & IFM_IEEE80211_ADHOC)
 		newmode = IEEE80211_M_IBSS;
-	else if (ime->ifm_media & IFM_IEEE80211_HOSTAP)
+	else if (media & IFM_IEEE80211_HOSTAP)
 		newmode = IEEE80211_M_HOSTAP;
 	else
 #endif
-	if (ime->ifm_media & IFM_IEEE80211_MONITOR)
+	if (media & IFM_IEEE80211_MONITOR)
 		newmode = IEEE80211_M_MONITOR;
 	else
 		newmode = IEEE80211_M_STA;
@@ -1323,7 +1324,8 @@ an_media_change(struct ifnet *ifp)
 		else
 			error = 0;
 	}
-	ifp->if_baudrate = ifmedia_baudrate(ic->ic_media.ifm_cur->ifm_media);
+	ifmedia_current(&ic->ic_media, &media, NULL);
+	ifp->if_baudrate = ifmedia_baudrate(media);
 
 	return error;
 }

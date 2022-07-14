@@ -836,6 +836,7 @@ void
 ieee80211_begin_scan(struct ifnet *ifp)
 {
 	struct ieee80211com *ic = (void *)ifp;
+	uint64_t media;
 
 	/*
 	 * In all but hostap mode scanning starts off in
@@ -863,11 +864,13 @@ ieee80211_begin_scan(struct ifnet *ifp)
 		ieee80211_iterate_nodes(ic, ieee80211_node_raise_inact, NULL);
 	}
 
+	ifmedia_current(&ic->ic_media, &media, NULL);
+
 	/*
 	 * Reset the current mode. Setting the current mode will also
 	 * reset scan state.
 	 */
-	if (IFM_MODE(ic->ic_media.ifm_cur->ifm_media) == IFM_AUTO)
+	if (IFM_MODE(media) == IFM_AUTO)
 		ic->ic_curmode = IEEE80211_MODE_AUTO;
 	ieee80211_setmode(ic, ic->ic_curmode);
 

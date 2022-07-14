@@ -1661,7 +1661,6 @@ void
 txp_ifmedia_sts(struct ifnet *ifp, struct ifmediareq *ifmr)
 {
 	struct txp_softc *sc = ifp->if_softc;
-	struct ifmedia *ifm = &sc->sc_ifmedia;
 	u_int16_t bmsr, bmcr, anar, anlpar;
 
 	ifmr->ifm_status = IFM_AVALID;
@@ -1718,7 +1717,8 @@ txp_ifmedia_sts(struct ifnet *ifp, struct ifmediareq *ifmr)
 		else
 			ifmr->ifm_active |= IFM_NONE;
 	} else
-		ifmr->ifm_active = ifm->ifm_cur->ifm_media;
+		ifmedia_current(&sc->sc_ifmedia, &ifmr->ifm_active, NULL);
+
 	return;
 
 bail:
