@@ -413,6 +413,7 @@ ifmedia_get(struct ifmedia *ifm, uint64_t target, uint64_t mask)
 	match = NULL;
 	mask = ~mask;
 
+	mtx_enter(&ifmedia_mtx);
 	TAILQ_FOREACH(next, &ifm->ifm_list, ifm_list) {
 		if ((next->ifm_media & mask) == (target & mask)) {
 			if (match) {
@@ -426,6 +427,7 @@ ifmedia_get(struct ifmedia *ifm, uint64_t target, uint64_t mask)
 			match = next;
 		}
 	}
+	mtx_leave(&ifmedia_mtx);
 
 	return (match);
 }
