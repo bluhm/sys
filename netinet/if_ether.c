@@ -67,15 +67,15 @@
 
 /*
  *  Locks used to protect struct members in this file:
+ *	A	arp_mtx		 	mutex for arp list and route llinfo
  *	a	atomic operations
  *	I	immutable after creation
  *	K	kernel lock
- *	m	arp mutex, needed when net lock is shared
  *	N	net lock
  */
 
 struct llinfo_arp {
-	LIST_ENTRY(llinfo_arp)	 la_list;	/* [mN] global arp_list */
+	LIST_ENTRY(llinfo_arp)	 la_list;	/* [AN] global arp_list */
 	struct rtentry		*la_rt;		/* [I] backpointer to rtentry */
 	struct mbuf_queue	 la_mq;		/* packet hold queue */
 	time_t			 la_refreshed;	/* when was refresh sent */
@@ -105,7 +105,7 @@ struct niqueue arpinq = NIQUEUE_INITIALIZER(50, NETISR_ARP);
 /* llinfo_arp live time, rt_llinfo and RTF_LLINFO are protected by arp_mtx */
 struct mutex arp_mtx = MUTEX_INITIALIZER(IPL_SOFTNET);
 
-LIST_HEAD(, llinfo_arp) arp_list; /* [mN] list of all llinfo_arp structures */
+LIST_HEAD(, llinfo_arp) arp_list; /* [AN] list of all llinfo_arp structures */
 struct	pool arp_pool;		/* [I] pool for llinfo_arp structures */
 int	arp_maxtries = 5;	/* [I] arp requests before set to rejected */
 int	la_hold_total;		/* [a] packets currently in the arp queue */
@@ -169,21 +169,24 @@ arp_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 	uptime = getuptime();
 	switch (req) {
 	case RTM_ADD:
-		if (rt->rt_flags & RTF_CLONING) {
+		if (ISSET(rt->rt_flags, RTF_CLONING)) {
 			rt->rt_expire = 0;
 			break;
 		}
-		if ((rt->rt_flags & RTF_LOCAL) && rt->rt_llinfo == NULL)
+		if (ISSET(rt->rt_flags, RTF_LOCAL) &&
+		    !ISSET(rt->rt_flags, RTF_LLINFO)) {
 			rt->rt_expire = 0;
+		}
 		/*
 		 * Announce a new entry if requested or warn the user
 		 * if another station has this IP address.
 		 */
-		if (rt->rt_flags & (RTF_ANNOUNCE|RTF_LOCAL))
+		if (ISSET(rt->rt_flags, RTF_ANNOUNCE|RTF_LOCAL)) {
 			arprequest(ifp,
 			    &satosin(rt_key(rt))->sin_addr.s_addr,
 			    &satosin(rt_key(rt))->sin_addr.s_addr,
 			    (u_char *)LLADDR(satosdl(gate)));
+		}
 		/*FALLTHROUGH*/
 	case RTM_RESOLVE:
 		if (gate->sa_family != AF_LINK ||
@@ -205,18 +208,19 @@ arp_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 		}
 
 		mtx_enter(&arp_mtx);
-		if (rt->rt_llinfo != NULL) {
+		if (ISSET(rt->rt_flags, RTF_LLINFO)) {
 			/* we lost the race, another thread has entered it */
 			mtx_leave(&arp_mtx);
 			pool_put(&arp_pool, la);
 			break;
 		}
+		KASSERT(rt->rt_llinfo == NULL);
 		mq_init(&la->la_mq, LA_HOLD_QUEUE, IPL_SOFTNET);
+		SET(rt->rt_flags, RTF_LLINFO);
 		rt->rt_llinfo = (caddr_t)la;
 		la->la_rt = rt;
-		rt->rt_flags |= RTF_LLINFO;
 		LIST_INSERT_HEAD(&arp_list, la, la_list);
-		if ((rt->rt_flags & RTF_LOCAL) == 0)
+		if (!ISSET(rt->rt_flags, RTF_LOCAL))
 			rt->rt_expire = uptime;
 		mtx_leave(&arp_mtx);
 
@@ -224,15 +228,16 @@ arp_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 
 	case RTM_DELETE:
 		mtx_enter(&arp_mtx);
-		la = (struct llinfo_arp *)rt->rt_llinfo;
-		if (la == NULL) {
+		if (!ISSET(rt->rt_flags, RTF_LLINFO)) {
 			/* we lost the race, another thread has removed it */
 			mtx_leave(&arp_mtx);
 			break;
 		}
+		la = (struct llinfo_arp *)rt->rt_llinfo;
+		KASSERT(la != NULL);
 		LIST_REMOVE(la, la_list);
 		rt->rt_llinfo = NULL;
-		rt->rt_flags &= ~RTF_LLINFO;
+		CLR(rt->rt_flags, RTF_LLINFO);
 		atomic_sub_int(&la_hold_total, mq_purge(&la->la_mq));
 		mtx_leave(&arp_mtx);
 
@@ -240,8 +245,7 @@ arp_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 		break;
 
 	case RTM_INVALIDATE:
-		if (!ISSET(rt->rt_flags, RTF_LOCAL))
-			arpinvalidate(rt);
+		arpinvalidate(rt);
 		break;
 	}
 }
@@ -750,11 +754,12 @@ arpinvalidate(struct rtentry *rt)
 	struct sockaddr_dl *sdl = satosdl(rt->rt_gateway);
 
 	mtx_enter(&arp_mtx);
-	la = (struct llinfo_arp *)rt->rt_llinfo;
-	if (la == NULL) {
+	if (!ISSET(rt->rt_flags, RTF_LLINFO)) {
 		mtx_leave(&arp_mtx);
 		return;
 	}
+	la = (struct llinfo_arp *)rt->rt_llinfo;
+	KASSERT(la != NULL);
 	atomic_sub_int(&la_hold_total, mq_purge(&la->la_mq));
 	sdl->sdl_alen = 0;
 	la->la_asked = 0;
@@ -769,7 +774,6 @@ arptfree(struct rtentry *rt)
 {
 	struct ifnet *ifp;
 
-	KASSERT(!ISSET(rt->rt_flags, RTF_LOCAL));
 	arpinvalidate(rt);
 
 	ifp = if_get(rt->rt_ifidx);

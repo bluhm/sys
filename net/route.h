@@ -37,6 +37,7 @@
 
 /*
  * Locks used to protect struct members in this file:
+ *	A	arp_mtx			mutex for arp list and route llinfo
  *	I	immutable after creation
  *	T	rttimer_mtx		route timer lists
  */
@@ -109,7 +110,8 @@ struct rtentry {
 	struct sockaddr	*rt_gateway;	/* value */
 	struct ifaddr	*rt_ifa;	/* the answer: interface addr to use */
 	caddr_t		 rt_llinfo;	/* pointer to link level info cache or
-					   to an MPLS structure */
+					   to an MPLS structure
+					   [A] for ARP llinfo_arp  */
 	union {
 		struct rtentry	*_nh;	/* implied entry for gatewayed routes */
 		unsigned int	 _ref;	/* # gatewayed caching this route */
@@ -120,7 +122,8 @@ struct rtentry {
 	LIST_HEAD(, rttimer) rt_timer;  /* queue of timeouts for misc funcs */
 	struct rt_kmetrics rt_rmx;	/* metrics used by rx'ing protocols */
 	unsigned int	 rt_ifidx;	/* the answer: interface to use */
-	unsigned int	 rt_flags;	/* up/down?, host/net */
+	unsigned int	 rt_flags;	/* up/down?, host/net
+					   [A] for ARP RTF_LLINFO */
 	struct refcnt	 rt_refcnt;	/* # held references */
 	int		 rt_plen;	/* prefix length */
 	uint16_t	 rt_labelid;	/* route label ID */
