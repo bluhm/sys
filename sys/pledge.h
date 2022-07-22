@@ -1,4 +1,4 @@
-/*	$OpenBSD: pledge.h,v 1.42 2021/06/11 04:44:25 deraadt Exp $	*/
+/*	$OpenBSD: pledge.h,v 1.46 2022/07/18 18:02:27 jca Exp $	*/
 
 /*
  * Copyright (c) 2015 Nicholas Marriott <nicm@openbsd.org>
@@ -69,7 +69,6 @@
  * to track program behaviours which have been observed.
  */
 #define PLEDGE_USERSET	0x0fffffffffffffffULL
-#define PLEDGE_YPACTIVE	0x8000000000000000ULL	/* YP use detected and allowed */
 
 #ifdef PLEDGENAMES
 static const struct {
@@ -137,7 +136,7 @@ int	pledge_ioctl_drm(struct proc *p, long com, dev_t device);
 int	pledge_ioctl_vmm(struct proc *p, long com);
 int	pledge_flock(struct proc *p);
 int	pledge_fcntl(struct proc *p, int cmd);
-int	pledge_swapctl(struct proc *p);
+int	pledge_swapctl(struct proc *p, int cmd);
 int	pledge_kill(struct proc *p, pid_t pid);
 int	pledge_protexec(struct proc *p, int prot);
 void	ppath_destroy(struct process *ps);
