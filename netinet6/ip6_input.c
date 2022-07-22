@@ -448,8 +448,7 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 
 			if (ours) {
 				if (af == AF_UNSPEC)
-					nxt = ip_deliver(mp, offp, nxt,
-					    AF_INET6);
+					nxt = ip6_ours(mp, offp, nxt, af);
 				goto out;
 			}
 			goto bad;
@@ -550,7 +549,7 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 
 	if (ours) {
 		if (af == AF_UNSPEC)
-			nxt = ip_deliver(mp, offp, nxt, AF_INET6);
+			nxt = ip6_ours(mp, offp, nxt, af);
 		goto out;
 	}
 
@@ -584,8 +583,6 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 int
 ip6_local(struct mbuf **mp, int *offp, int nxt, int af)
 {
-	NET_ASSERT_WLOCKED();
-
 	nxt = ip6_hbhchcheck(mp, offp, NULL);
 	if (nxt == IPPROTO_DONE)
 		return IPPROTO_DONE;
