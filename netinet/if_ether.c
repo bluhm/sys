@@ -197,6 +197,9 @@ arp_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 		}
 		satosdl(gate)->sdl_type = ifp->if_type;
 		satosdl(gate)->sdl_index = ifp->if_index;
+
+		if (ISSET(rt->rt_flags, RTF_LOCAL))
+			break;
 		/*
 		 * Case 2:  This route may come from cloning, or a manual route
 		 * add with a LL address.
@@ -227,6 +230,8 @@ arp_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 		break;
 
 	case RTM_DELETE:
+		if (ISSET(rt->rt_flags, RTF_LOCAL))
+			break;
 		mtx_enter(&arp_mtx);
 		if (!ISSET(rt->rt_flags, RTF_LLINFO)) {
 			/* we lost the race, another thread has removed it */
@@ -245,6 +250,8 @@ arp_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 		break;
 
 	case RTM_INVALIDATE:
+		if (ISSET(rt->rt_flags, RTF_LOCAL))
+			break;
 		arpinvalidate(rt);
 		break;
 	}
