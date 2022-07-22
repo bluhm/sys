@@ -223,9 +223,7 @@ struct route;
 struct inpcb;
 
 int	 ip_ctloutput(int, struct socket *, int, int, struct mbuf *);
-void	 ip_flush(void);
 int	 ip_fragment(struct mbuf *, struct mbuf_list *, struct ifnet *, u_long);
-void	 ip_freef(struct ipq *);
 void	 ip_freemoptions(struct ip_moptions *);
 int	 ip_getmoptions(int, struct ip_moptions *, struct mbuf *);
 void	 ip_init(void);
@@ -235,8 +233,6 @@ int	 ip_mforward(struct mbuf *, struct ifnet *);
 int	 ip_optcopy(struct ip *, struct ip *);
 int	 ip_output(struct mbuf *, struct mbuf *, struct route *, int,
 	    struct ip_moptions *, struct inpcb *, u_int32_t);
-struct mbuf *
-	 ip_reass(struct ipqent *, struct ipq *);
 u_int16_t
 	 ip_randomid(void);
 void	 ip_send(struct mbuf *);
