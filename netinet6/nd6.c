@@ -1,4 +1,4 @@
-/*	$OpenBSD: nd6.c,v 1.238 2022/02/22 01:15:02 guenther Exp $	*/
+/*	$OpenBSD: nd6.c,v 1.241 2022/07/22 20:29:27 kn Exp $	*/
 /*	$KAME: nd6.c,v 1.280 2002/06/08 19:52:07 itojun Exp $	*/
 
 /*
@@ -86,9 +86,7 @@ int nd6_debug = 0;
 
 TAILQ_HEAD(llinfo_nd6_head, llinfo_nd6) nd6_list;
 struct	pool nd6_pool;		/* pool for llinfo_nd6 structures */
-int	nd6_inuse, nd6_allocated;
-
-int nd6_recalc_reachtm_interval = ND6_RECALC_REACHTM_INTERVAL;
+int	nd6_inuse;
 
 void nd6_timer(void *);
 void nd6_slowtimo(void *);
@@ -122,7 +120,7 @@ nd6_init(void)
 	nd6_init_done = 1;
 
 	/* start timer */
-	timeout_set_proc(&nd6_timer_to, nd6_timer, &nd6_timer_to);
+	timeout_set_proc(&nd6_timer_to, nd6_timer, NULL);
 	timeout_set_proc(&nd6_slowtimo_ch, nd6_slowtimo, NULL);
 	timeout_add_sec(&nd6_slowtimo_ch, ND6_SLOWTIMER_INTERVAL);
 	timeout_set(&nd6_expire_timeout, nd6_expire_timer, NULL);
@@ -318,7 +316,7 @@ nd6_llinfo_settimer(struct llinfo_nd6 *ln, unsigned int secs)
 }
 
 void
-nd6_timer(void *arg)
+nd6_timer(void *unused)
 {
 	struct llinfo_nd6 *ln, *nln;
 	time_t expire = getuptime() + nd6_gctimer;
@@ -885,7 +883,6 @@ nd6_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 			break;
 		}
 		nd6_inuse++;
-		nd6_allocated++;
 		ln->ln_rt = rt;
 		/* this is required for "ndp" command. - shin */
 		if (req == RTM_ADD) {
@@ -1319,7 +1316,7 @@ nd6_slowtimo(void *ignored_arg)
 			 * value gets recomputed at least once every few hours.
 			 * (RFC 2461, 6.3.4)
 			 */
-			nd6if->recalctm = nd6_recalc_reachtm_interval;
+			nd6if->recalctm = ND6_RECALC_REACHTM_INTERVAL;
 			nd6if->reachable = ND_COMPUTE_RTIME(nd6if->basereachable);
 		}
 	}
