@@ -1054,12 +1054,15 @@ bge_miibus_statchg(struct device *dev)
 {
 	struct bge_softc *sc = (struct bge_softc *)dev;
 	struct mii_data *mii = &sc->bge_mii;
+	uint64_t media;
 	u_int32_t mac_mode, rx_mode, tx_mode;
+
+	ifmedia_current(&mii->mii_media, &media, NULL);
 
 	/*
 	 * Get flow control negotiation result.
 	 */
-	if (IFM_SUBTYPE(mii->mii_media.ifm_cur->ifm_media) == IFM_AUTO &&
+	if (IFM_SUBTYPE(media) == IFM_AUTO &&
 	    (mii->mii_media_active & IFM_ETH_FMASK) != sc->bge_flowflags)
 		sc->bge_flowflags = mii->mii_media_active & IFM_ETH_FMASK;
 
@@ -3095,7 +3098,8 @@ bge_attach(struct device *parent, struct device *self, void *aux)
 			    0, NULL);
 		ifmedia_add(&sc->bge_ifmedia, IFM_ETHER|IFM_AUTO, 0, NULL);
 		ifmedia_set(&sc->bge_ifmedia, IFM_ETHER|IFM_AUTO);
-		sc->bge_ifmedia.ifm_media = sc->bge_ifmedia.ifm_cur->ifm_media;
+		ifmedia_current(&sc->bge_ifmedia, &sc->bge_ifmedia.ifm_media,
+		    NULL);
 	} else {
 		int mii_flags;
 

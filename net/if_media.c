@@ -430,6 +430,21 @@ ifmedia_get(struct ifmedia *ifm, uint64_t target, uint64_t mask)
 	return (match);
 }
 
+void
+ifmedia_current(struct ifmedia *ifm, uint64_t *media, u_int *data)
+{
+	struct ifmedia_entry *ife;
+
+	mtx_enter(&ifmedia_mtx);
+	ife = ifm->ifm_cur;
+	KASSERT(ife != NULL);
+	if (media != NULL)
+		*media = ife->ifm_media;
+	if (data != NULL)
+		*data = ife->ifm_data;
+	mtx_leave(&ifmedia_mtx);
+}
+
 /*
  * Delete all media for a given instance.
  */

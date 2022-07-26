@@ -1348,16 +1348,18 @@ void
 gem_mii_statchg(struct device *dev)
 {
 	struct gem_softc *sc = (void *)dev;
-#ifdef GEM_DEBUG
-	uint64_t instance = IFM_INST(sc->sc_mii.mii_media.ifm_cur->ifm_media);
-#endif
 	bus_space_tag_t t = sc->sc_bustag;
 	bus_space_handle_t mac = sc->sc_h1;
 	u_int32_t v;
 
 #ifdef GEM_DEBUG
-	if (sc->sc_debug)
-		printf("gem_mii_statchg: status change: phy = %lld\n", instance);
+	if (sc->sc_debug) {
+		uint64_t media;
+
+		ifmedia_current(&sc->sc_mii.mii_media, &media, NULL);
+		printf("%s: status change: phy = %lld\n",
+		    __func__, IFM_INST(media));
+	}
 #endif
 
 	/* Set tx full duplex options */

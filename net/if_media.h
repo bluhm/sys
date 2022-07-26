@@ -131,6 +131,9 @@ int	ifmedia_ioctl(struct ifnet *, struct ifreq *, struct ifmedia *,
 /* Locate a media entry */
 int	ifmedia_match(struct ifmedia *, uint64_t, uint64_t);
 
+/* Get current media and data */
+void	ifmedia_current(struct ifmedia *, uint64_t *, u_int *);
+
 /* Delete all media for a given media instance */
 void	ifmedia_delete_instance(struct ifmedia *, uint64_t);
 
