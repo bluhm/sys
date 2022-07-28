@@ -1,4 +1,4 @@
-/*	$OpenBSD: db_command.c,v 1.94 2022/04/14 19:47:12 naddy Exp $	*/
+/*	$OpenBSD: db_command.c,v 1.95 2022/07/28 22:19:09 bluhm Exp $	*/
 /*	$NetBSD: db_command.c,v 1.20 1996/03/30 22:30:05 christos Exp $	*/
 
 /*
