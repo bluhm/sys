@@ -838,13 +838,14 @@ sbappendaddr(struct socket *so, struct sockbuf *sb, const struct sockaddr *asa,
 		if (n->m_next == NULL)	/* keep pointer to last control buf */
 			break;
 	}
+	mtx_enter(&sb->sb_mtx);
 	if (space > sbspace(so, sb))
-		return (0);
+		goto bad;
 	if (asa->sa_len > MLEN)
-		return (0);
+		goto bad;
 	MGET(m, M_DONTWAIT, MT_SONAME);
 	if (m == NULL)
-		return (0);
+		goto bad;
 	m->m_len = asa->sa_len;
 	memcpy(mtod(m, caddr_t), asa, asa->sa_len);
 	if (n)
@@ -866,7 +867,12 @@ sbappendaddr(struct socket *so, struct sockbuf *sb, const struct sockaddr *asa,
 
 	SBLASTRECORDCHK(sb, "sbappendaddr 2");
 
+	mtx_leave(&sb->sb_mtx);
 	return (1);
+
+ bad:
+	mtx_leave(&sb->sb_mtx);
+	return (0);
 }
 
 int
