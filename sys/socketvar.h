@@ -32,6 +32,7 @@
  *	@(#)socketvar.h	8.1 (Berkeley) 6/2/93
  */
 
+#include <sys/mutex.h>
 #include <sys/selinfo.h>			/* for struct selinfo */
 #include <sys/queue.h>
 #include <sys/sigio.h>				/* for struct sigio_ref */
@@ -120,6 +121,7 @@ struct socket {
 #define	sb_endzero	sb_flags
 		uint64_t sb_timeo_nsecs;/* timeout for read/write */
 		struct	selinfo sb_sel;	/* process selecting read/write */
+		struct  mutex sb_mtx;
 	} so_rcv, so_snd;
 #define	SB_MAX		(2*1024*1024)	/* default for max chars in sockbuf */
 #define	SB_LOCK		0x01		/* lock on data queue */
