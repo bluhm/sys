@@ -836,10 +836,10 @@ bad:
 	if (mp)
 		*mp = NULL;
 
-	solock(so);
+	solock_shared(so);
 restart:
 	if ((error = sblock(so, &so->so_rcv, SBLOCKWAIT(flags))) != 0) {
-		sounlock(so);
+		sounlock_shared(so);
 		return (error);
 	}
 
@@ -909,7 +909,7 @@ restart:
 		sbunlock(so, &so->so_rcv);
 		error = sbwait(so, &so->so_rcv);
 		if (error) {
-			sounlock(so);
+			sounlock_shared(so);
 			return (error);
 		}
 		goto restart;
@@ -979,11 +979,11 @@ dontblock:
 			if (controlp) {
 				if (pr->pr_domain->dom_externalize) {
 					mtx_leave(&so->so_rcv.sb_mtx);
-					sounlock(so);
+					sounlock_shared(so);
 					error =
 					    (*pr->pr_domain->dom_externalize)
 					    (cm, controllen, flags);
-					solock(so);
+					solock_shared(so);
 					mtx_enter(&so->so_rcv.sb_mtx);
 				}
 				*controlp = cm;
@@ -1059,9 +1059,9 @@ dontblock:
 			SBLASTMBUFCHK(&so->so_rcv, "soreceive uiomove");
 			mtx_leave(&so->so_rcv.sb_mtx);
 			resid = uio->uio_resid;
-			sounlock(so);
+			sounlock_shared(so);
 			uio_error = uiomove(mtod(m, caddr_t) + moff, len, uio);
-			solock(so);
+			solock_shared(so);
 			if (uio_error)
 				uio->uio_resid = resid - len;
 			mtx_enter(&so->so_rcv.sb_mtx);
@@ -1147,7 +1147,7 @@ dontblock:
 			error = sbwait(so, &so->so_rcv);
 			if (error) {
 				sbunlock(so, &so->so_rcv);
-				sounlock(so);
+				sounlock_shared(so);
 				return (0);
 			}
 			mtx_enter(&so->so_rcv.sb_mtx);
@@ -1196,7 +1196,7 @@ dontblock:
 release:
 	mtx_leave(&so->so_rcv.sb_mtx);
 	sbunlock(so, &so->so_rcv);
-	sounlock(so);
+	sounlock_shared(so);
 	return (error);
 }
 

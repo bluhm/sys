@@ -360,6 +360,25 @@ solock(struct socket *so)
 	}
 }
 
+void
+solock_shared(struct socket *so)
+{
+	switch (so->so_proto->pr_domain->dom_family) {
+	case PF_INET:
+	case PF_INET6:
+		if (ISSET(so->so_proto->pr_flags, PR_MPSAFE)) {
+			rw_enter_read(&netlock);
+			// XXX need mutex
+			break;
+		}
+		NET_LOCK();
+		break;
+	default:
+		rw_enter_write(&so->so_lock);
+		break;
+	}
+}
+
 int
 solock_persocket(struct socket *so)
 {
@@ -394,6 +413,25 @@ sounlock(struct socket *so)
 	switch (so->so_proto->pr_domain->dom_family) {
 	case PF_INET:
 	case PF_INET6:
+		NET_UNLOCK();
+		break;
+	default:
+		rw_exit_write(&so->so_lock);
+		break;
+	}
+}
+
+void
+sounlock_shared(struct socket *so)
+{
+	switch (so->so_proto->pr_domain->dom_family) {
+	case PF_INET:
+	case PF_INET6:
+		if (ISSET(so->so_proto->pr_flags, PR_MPSAFE)) {
+			rw_exit_read(&netlock);
+			// XXX need mutex
+			break;
+		}
 		NET_UNLOCK();
 		break;
 	default:
