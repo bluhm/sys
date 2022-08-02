@@ -843,6 +843,7 @@ restart:
 		return (error);
 	}
 
+	mtx_enter(&so->so_rcv.sb_mtx);
 	m = so->so_rcv.sb_mb;
 #ifdef SOCKET_SPLICE
 	if (isspliced(so))
@@ -904,6 +905,7 @@ restart:
 		}
 		SBLASTRECORDCHK(&so->so_rcv, "soreceive sbwait 1");
 		SBLASTMBUFCHK(&so->so_rcv, "soreceive sbwait 1");
+		mtx_leave(&so->so_rcv.sb_mtx);
 		sbunlock(so, &so->so_rcv);
 		error = sbwait(so, &so->so_rcv);
 		if (error) {
@@ -976,11 +978,13 @@ dontblock:
 			sbsync(&so->so_rcv, nextrecord);
 			if (controlp) {
 				if (pr->pr_domain->dom_externalize) {
+					mtx_leave(&so->so_rcv.sb_mtx);
 					sounlock(so);
 					error =
 					    (*pr->pr_domain->dom_externalize)
 					    (cm, controllen, flags);
 					solock(so);
+					mtx_enter(&so->so_rcv.sb_mtx);
 				}
 				*controlp = cm;
 			} else {
@@ -1053,12 +1057,14 @@ dontblock:
 		if (mp == NULL && uio_error == 0) {
 			SBLASTRECORDCHK(&so->so_rcv, "soreceive uiomove");
 			SBLASTMBUFCHK(&so->so_rcv, "soreceive uiomove");
+			mtx_leave(&so->so_rcv.sb_mtx);
 			resid = uio->uio_resid;
 			sounlock(so);
 			uio_error = uiomove(mtod(m, caddr_t) + moff, len, uio);
 			solock(so);
 			if (uio_error)
 				uio->uio_resid = resid - len;
+			mtx_enter(&so->so_rcv.sb_mtx);
 		} else
 			uio->uio_resid -= len;
 		if (len == m->m_len - moff) {
@@ -1137,12 +1143,14 @@ dontblock:
 				break;
 			SBLASTRECORDCHK(&so->so_rcv, "soreceive sbwait 2");
 			SBLASTMBUFCHK(&so->so_rcv, "soreceive sbwait 2");
+			mtx_leave(&so->so_rcv.sb_mtx);
 			error = sbwait(so, &so->so_rcv);
 			if (error) {
 				sbunlock(so, &so->so_rcv);
 				sounlock(so);
 				return (0);
 			}
+			mtx_enter(&so->so_rcv.sb_mtx);
 			if ((m = so->so_rcv.sb_mb) != NULL)
 				nextrecord = m->m_nextpkt;
 		}
@@ -1175,6 +1183,7 @@ dontblock:
 	}
 	if (orig_resid == uio->uio_resid && orig_resid &&
 	    (flags & MSG_EOR) == 0 && (so->so_state & SS_CANTRCVMORE) == 0) {
+		mtx_leave(&so->so_rcv.sb_mtx);
 		sbunlock(so, &so->so_rcv);
 		goto restart;
 	}
@@ -1185,6 +1194,7 @@ dontblock:
 	if (flagsp)
 		*flagsp |= flags;
 release:
+	mtx_leave(&so->so_rcv.sb_mtx);
 	sbunlock(so, &so->so_rcv);
 	sounlock(so);
 	return (error);
