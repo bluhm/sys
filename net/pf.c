@@ -3375,6 +3375,7 @@ pf_socket_lookup(struct pf_pdesc *pd)
 	pd->lookup.uid = inp->inp_socket->so_euid;
 	pd->lookup.gid = inp->inp_socket->so_egid;
 	pd->lookup.pid = inp->inp_socket->so_cpid;
+	in_pcbunref(inp);
 	return (1);
 }
 
@@ -7531,6 +7532,7 @@ pf_inp_lookup(struct mbuf *m)
 	if (inp && inp->inp_pf_sk)
 		KASSERT(m->m_pkthdr.pf.statekey == inp->inp_pf_sk);
 
+	in_pcbref(inp);
 	return (inp);
 }
 
