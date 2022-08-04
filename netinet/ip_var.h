@@ -174,7 +174,7 @@ struct ipqent {
 	LIST_ENTRY(ipqent) ipqe_q;
 	struct ip	*ipqe_ip;
 	struct mbuf	*ipqe_m;	/* mbuf contains packet */
-	u_int8_t	ipqe_mff;	/* for IP fragmentation */
+	uint16_t	 ipqe_mff;	/* for IP fragmentation */
 };
 
 /*

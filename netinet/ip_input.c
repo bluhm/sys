@@ -577,7 +577,8 @@ ip_fragcheck(struct mbuf **mp, int *offp)
 	struct ip *ip;
 	struct ipq *fp;
 	struct ipqent *ipqe;
-	int mff, hlen;
+	int hlen;
+	uint16_t mff;
 
 	ip = mtod(*mp, struct ip *);
 	hlen = ip->ip_hl << 2;
