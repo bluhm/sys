@@ -375,7 +375,7 @@ in6_pcbnotify(struct inpcbtable *table, struct sockaddr_in6 *dst,
 	u_int32_t flowinfo;
 	u_int rdomain;
 
-	NET_ASSERT_WLOCKED();
+	NET_ASSERT_LOCKED_EXCLUSIVE();
 
 	if ((unsigned)cmd >= PRC_NCMDS)
 		return;

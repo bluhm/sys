@@ -364,7 +364,7 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 		 * Locate pcb(s) for datagram.
 		 * (Algorithm copied from raw_intr().)
 		 */
-		NET_ASSERT_WLOCKED();
+		NET_ASSERT_LOCKED_EXCLUSIVE();
 		SIMPLEQ_INIT(&inpcblist);
 		mtx_enter(&udbtable.inpt_mtx);
 		TAILQ_FOREACH(inp, &udbtable.inpt_queue, inp_queue) {

@@ -644,7 +644,7 @@ tdb_walk(u_int rdomain, int (*walker)(struct tdb *, void *, int), void *arg)
 	 * traversing the tdb_hnext list.  Create a new tdb_walk list with
 	 * exclusive netlock protection.
 	 */
-	NET_ASSERT_WLOCKED();
+	NET_ASSERT_LOCKED_EXCLUSIVE();
 	SIMPLEQ_INIT(&tdblist);
 
 	mtx_enter(&tdb_sadb_mtx);

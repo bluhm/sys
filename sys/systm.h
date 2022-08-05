@@ -329,8 +329,8 @@ extern struct rwlock netlock;
  * ioctl(2) to not block.
  * Shared lock can be grabbed instead of the exclusive version if no field
  * protected by the NET_LOCK() is modified by the ioctl/sysctl.
- * Socket system call can use shared netlock if it has addition locks
- * to protect its data structures.
+ * Socket system call can use shared netlock if it has additional locks
+ * to protect socket and pcb data structures.
  */
 #define	NET_LOCK_SHARED()	do { rw_enter_read(&netlock); } while (0)
 #define	NET_UNLOCK_SHARED()	do { rw_exit_read(&netlock); } while (0)

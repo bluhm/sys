@@ -569,7 +569,7 @@ in_ioctl_get(u_long cmd, caddr_t data, struct ifnet *ifp)
 			return (error);
 	}
 
-	NET_RLOCK_IN_IOCTL();
+	NET_LOCK_SHARED();
 
 	TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
 		if (ifa->ifa_addr->sa_family != AF_INET)
@@ -620,7 +620,7 @@ in_ioctl_get(u_long cmd, caddr_t data, struct ifnet *ifp)
 	}
 
 err:
-	NET_RUNLOCK_IN_IOCTL();
+	NET_UNLOCK_SHARED();
 	return (error);
 }
 

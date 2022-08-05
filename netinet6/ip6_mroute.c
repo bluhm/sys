@@ -247,16 +247,16 @@ mrt6_ioctl(struct socket *so, u_long cmd, caddr_t data)
 
 	switch (cmd) {
 	case SIOCGETSGCNT_IN6:
-		NET_RLOCK_IN_IOCTL();
+		NET_LOCK_SHARED();
 		error = get_sg6_cnt((struct sioc_sg_req6 *)data,
 		    inp->inp_rtableid);
-		NET_RUNLOCK_IN_IOCTL();
+		NET_UNLOCK_SHARED();
 		break;
 	case SIOCGETMIFCNT_IN6:
-		NET_RLOCK_IN_IOCTL();
+		NET_LOCK_SHARED();
 		error = get_mif6_cnt((struct sioc_mif_req6 *)data,
 		    inp->inp_rtableid);
-		NET_RUNLOCK_IN_IOCTL();
+		NET_UNLOCK_SHARED();
 		break;
 	default:
 		error = ENOTTY;

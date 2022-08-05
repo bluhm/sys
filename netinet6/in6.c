@@ -418,7 +418,7 @@ in6_ioctl_get(u_long cmd, caddr_t data, struct ifnet *ifp)
 			return (error);
 	}
 
-	NET_RLOCK_IN_IOCTL();
+	NET_LOCK_SHARED();
 
 	if (sa6 != NULL) {
 		error = in6_check_embed_scope(sa6, ifp->if_index);
@@ -512,7 +512,7 @@ in6_ioctl_get(u_long cmd, caddr_t data, struct ifnet *ifp)
 	}
 
 err:
-	NET_RUNLOCK_IN_IOCTL();
+	NET_UNLOCK_SHARED();
 	return (error);
 }
 
