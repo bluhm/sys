@@ -729,6 +729,12 @@ reroute:
 		mtu = IPV6_MAXPACKET;
 
 	/*
+	 * If we are doing fragmentation, we can't defer TCP/UDP
+	 * checksumming; compute the checksum and clear the flag.
+	 */
+        in6_proto_cksum_out(m, NULL);
+
+	/*
 	 * Change the next header field of the last header in the
 	 * unfragmentable part.
 	 */
