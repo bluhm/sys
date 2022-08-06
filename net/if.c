@@ -871,7 +871,7 @@ if_input_process(struct ifnet *ifp, struct mbuf_list *ml)
 	/*
 	 * We grab the shared netlock for packet processing in the softnet
 	 * threads.  Packets can regrab the exclusive lock via queues.
-	 * ioctl, sysctl, and socket syscall may use shared lock if they
+	 * ioctl, sysctl, and socket syscall may use shared lock if access is
 	 * read only or MP safe.  Usually they hold the exclusive net lock.
 	 */
 
