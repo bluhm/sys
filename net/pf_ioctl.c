@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf_ioctl.c,v 1.384 2022/07/28 12:27:29 mbuhl Exp $ */
+/*	$OpenBSD: pf_ioctl.c,v 1.385 2022/08/06 15:57:58 bluhm Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier

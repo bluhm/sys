@@ -1,4 +1,4 @@
-/*	$OpenBSD: systm.h,v 1.157 2022/07/12 17:12:31 jca Exp $	*/
+/*	$OpenBSD: systm.h,v 1.158 2022/08/06 15:57:59 bluhm Exp $	*/
 /*	$NetBSD: systm.h,v 1.50 1996/06/09 04:55:09 briggs Exp $	*/
 
 /*-
