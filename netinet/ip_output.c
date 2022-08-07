@@ -690,7 +690,7 @@ ip_fragment(struct mbuf *m0, struct mbuf_list *fml, struct ifnet *ifp,
 
 	ip = mtod(m0, struct ip *);
 	hlen = ip->ip_hl << 2;
-	tlen = ntohs(ip->ip_len);
+	tlen = m0->m_pkthdr.len;
 	len = (mtu - hlen) &~ 7;
 	if (len < 8) {
 		error = EMSGSIZE;
@@ -765,7 +765,6 @@ ip_fragment(struct mbuf *m0, struct mbuf_list *fml, struct ifnet *ifp,
 	m = m0;
 	m_adj(m, hlen + firstlen - tlen);
 	ip->ip_off |= htons(IP_MF);
-	m->m_pkthdr.len = hlen + firstlen;
 	ip->ip_len = htons(m->m_pkthdr.len);
 
 	ip->ip_sum = 0;
