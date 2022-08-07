@@ -811,7 +811,7 @@ ip6_fragment(struct mbuf *m0, struct mbuf_list *fml, int hlen,
 	id = htonl(ip6_randomid());
 
 	/*
-	 * Loop through length of segment after first fragment,
+	 * Loop through length of segment,
 	 * make new header and copy data of each part and link onto chain.
 	 */
 	for (off = hlen; off < tlen; off += len) {

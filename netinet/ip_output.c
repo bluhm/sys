@@ -708,7 +708,7 @@ ip_fragment(struct mbuf *m0, struct mbuf_list *fml, struct ifnet *ifp,
 	 * Loop through length of segment after first fragment,
 	 * make new header and copy data of each part and link onto chain.
 	 */
-	for (off = hlen + len; off < tlen; off += len) {
+	for (off = hlen + firstlen; off < tlen; off += len) {
 		struct ip *mhip;
 		int mhlen;
 
