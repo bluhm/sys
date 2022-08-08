@@ -1,4 +1,4 @@
-/*	$OpenBSD: nd6.c,v 1.243 2022/08/06 15:57:59 bluhm Exp $	*/
+/*	$OpenBSD: nd6.c,v 1.245 2022/08/08 17:47:59 kn Exp $	*/
 /*	$KAME: nd6.c,v 1.280 2002/06/08 19:52:07 itojun Exp $	*/
 
 /*
@@ -301,7 +301,7 @@ skip1:
  * ND6 timer routine to handle ND6 entries
  */
 void
-nd6_llinfo_settimer(struct llinfo_nd6 *ln, unsigned int secs)
+nd6_llinfo_settimer(const struct llinfo_nd6 *ln, unsigned int secs)
 {
 	time_t expire = getuptime() + secs;
 
@@ -319,14 +319,16 @@ void
 nd6_timer(void *unused)
 {
 	struct llinfo_nd6 *ln, *nln;
-	time_t expire = getuptime() + nd6_gctimer;
-	int secs;
+	time_t uptime, expire;
+
+	uptime = getuptime();
+	expire = uptime + nd6_gctimer;
 
 	NET_LOCK();
 	TAILQ_FOREACH_SAFE(ln, &nd6_list, ln_list, nln) {
 		struct rtentry *rt = ln->ln_rt;
 
-		if (rt->rt_expire && rt->rt_expire <= getuptime())
+		if (rt->rt_expire && rt->rt_expire <= uptime)
 			if (nd6_llinfo_timer(rt))
 				continue;
 
@@ -334,12 +336,9 @@ nd6_timer(void *unused)
 			expire = rt->rt_expire;
 	}
 
-	secs = expire - getuptime();
-	if (secs < 0)
-		secs = 0;
 	if (!TAILQ_EMPTY(&nd6_list)) {
-		nd6_timer_next = getuptime() + secs;
-		timeout_add_sec(&nd6_timer_to, secs);
+		nd6_timer_next = expire;
+		timeout_add_sec(&nd6_timer_to, nd6_gctimer);
 	}
 
 	NET_UNLOCK();
@@ -444,7 +443,6 @@ void
 nd6_expire_timer_update(struct in6_ifaddr *ia6)
 {
 	time_t expire_time = INT64_MAX;
-	int secs;
 
 	KERNEL_ASSERT_LOCKED();
 
@@ -469,6 +467,8 @@ nd6_expire_timer_update(struct in6_ifaddr *ia6)
 
 	if (!timeout_pending(&nd6_expire_timeout) ||
 	    nd6_expire_next > expire_time) {
+		int secs;
+
 		secs = expire_time - getuptime();
 		if (secs < 0)
 			secs = 0;
@@ -547,7 +547,7 @@ nd6_purge(struct ifnet *ifp)
 }
 
 struct rtentry *
-nd6_lookup(struct in6_addr *addr6, int create, struct ifnet *ifp,
+nd6_lookup(const struct in6_addr *addr6, int create, struct ifnet *ifp,
     u_int rtableid)
 {
 	struct rtentry *rt;
@@ -641,7 +641,7 @@ nd6_lookup(struct in6_addr *addr6, int create, struct ifnet *ifp,
  * XXX: should take care of the destination of a p2p link?
  */
 int
-nd6_is_addr_neighbor(struct sockaddr_in6 *addr, struct ifnet *ifp)
+nd6_is_addr_neighbor(const struct sockaddr_in6 *addr, struct ifnet *ifp)
 {
 	struct in6_ifaddr *ia6;
 	struct ifaddr *ifa;
@@ -1079,7 +1079,7 @@ nd6_ioctl(u_long cmd, caddr_t data, struct ifnet *ifp)
  * code - type dependent information
  */
 void
-nd6_cache_lladdr(struct ifnet *ifp, struct in6_addr *from, char *lladdr,
+nd6_cache_lladdr(struct ifnet *ifp, const struct in6_addr *from, char *lladdr,
     int lladdrlen, int type, int code)
 {
 	struct rtentry *rt = NULL;
