@@ -1219,8 +1219,10 @@ ip6_pullexthdr(struct mbuf *m, size_t off, int nxt)
 			n = NULL;
 		}
 	}
-	if (!n)
+	if (n == NULL) {
+		ip6stat_inc(ip6s_idropped);
 		return NULL;
+	}
 
 	n->m_len = 0;
 	if (elen >= m_trailingspace(n)) {
