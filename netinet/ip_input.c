@@ -683,18 +683,6 @@ ip_deliver(struct mbuf **mp, int *offp, int nxt, int af)
 
 	NET_ASSERT_LOCKED_EXCLUSIVE();
 
-	/* pf might have modified stuff, might have to chksum */
-	switch (af) {
-	case AF_INET:
-		in_proto_cksum_out(*mp, NULL);
-		break;
-#ifdef INET6
-	case AF_INET6:
-		in6_proto_cksum_out(*mp, NULL);
-		break;
-#endif /* INET6 */
-	}
-
 	/*
 	 * Tell launch routine the next header
 	 */
