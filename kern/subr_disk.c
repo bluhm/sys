@@ -1,4 +1,4 @@
-/*	$OpenBSD: subr_disk.c,v 1.249 2022/08/06 14:48:33 krw Exp $	*/
+/*	$OpenBSD: subr_disk.c,v 1.251 2022/08/12 00:32:59 krw Exp $	*/
 /*	$NetBSD: subr_disk.c,v 1.17 1996/03/16 23:17:08 christos Exp $	*/
 
 /*
@@ -470,7 +470,7 @@ gpt_get_hdr(struct buf *bp, void (*strat)(struct buf *), struct disklabel *lp,
 	uint64_t		partlba;
 	uint64_t		lbaend, lbastart;
 	uint32_t		csum;
-	uint32_t		size, partsize, partspersec;
+	uint32_t		size, partsize;
 
 
 	error = readdisksector(bp, strat, lp, sector);
@@ -481,14 +481,13 @@ gpt_get_hdr(struct buf *bp, void (*strat)(struct buf *), struct disklabel *lp,
 
 	size = letoh32(ngh.gh_size);
 	partsize = letoh32(ngh.gh_part_size);
-	partspersec = lp->d_secsize / partsize;
 	partlba = letoh64(ngh.gh_part_lba);
 	lbaend = letoh64(ngh.gh_lba_end);
 	lbastart = letoh64(ngh.gh_lba_start);
 
 	csum = ngh.gh_csum;
 	ngh.gh_csum = 0;
-	ngh.gh_csum = htole32(crc32(0, (unsigned char *)&ngh, size));
+	ngh.gh_csum = htole32(crc32(0, (unsigned char *)&ngh, GPTMINHDRSIZE));
 
 	if (letoh64(ngh.gh_sig) == GPTSIGNATURE &&
 	    letoh32(ngh.gh_rev) == GPTREVISION &&
@@ -516,7 +515,8 @@ gpt_get_parts(struct buf *bp, void (*strat)(struct buf *), struct disklabel *lp,
 	partnum = letoh32(gh->gh_part_num);
 	partsize = letoh32(gh->gh_part_size);
 
-	sectors = (partnum * partsize + lp->d_secsize - 1) / lp->d_secsize;
+	sectors = ((uint64_t)partnum * partsize + lp->d_secsize - 1) /
+	    lp->d_secsize;
 
 	ngp = mallocarray(sectors, lp->d_secsize, M_DEVBUF, M_NOWAIT | M_ZERO);
 	if (ngp == NULL) {
