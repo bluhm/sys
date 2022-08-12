@@ -338,7 +338,7 @@ ifmedia_ioctl(struct ifnet *ifp, struct ifreq *ifr, struct ifmedia *ifm,
 			return (0);
 		}
 
-		do {
+		while (1) {
 			struct ifmedia_entry *ife;
 			uint64_t *kptr;
 			size_t ksiz;
@@ -376,7 +376,8 @@ ifmedia_ioctl(struct ifnet *ifp, struct ifreq *ifr, struct ifmedia *ifm,
 			error = copyout(kptr, ifmr->ifm_ulist,
 			    nwords * sizeof(*kptr));
 			free(kptr, M_TEMP, ksiz);
-		} while (0);
+			break;
+		}
 		ifmr->ifm_count = nwords;
 		break;
 	}
