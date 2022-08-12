@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip6_var.h,v 1.93 2022/06/29 22:45:24 bluhm Exp $	*/
+/*	$OpenBSD: ip6_var.h,v 1.94 2022/08/12 14:49:15 bluhm Exp $	*/
 /*	$KAME: ip6_var.h,v 1.33 2000/06/11 14:59:20 jinmei Exp $	*/
 
 /*
