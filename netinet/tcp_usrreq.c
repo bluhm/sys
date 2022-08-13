@@ -78,7 +78,6 @@
 #include <sys/sysctl.h>
 #include <sys/domain.h>
 #include <sys/kernel.h>
-#include <sys/pledge.h>
 #include <sys/pool.h>
 #include <sys/proc.h>
 
