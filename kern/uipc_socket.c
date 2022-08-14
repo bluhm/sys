@@ -1,4 +1,4 @@
-/*	$OpenBSD: uipc_socket.c,v 1.280 2022/07/25 07:28:22 visa Exp $	*/
+/*	$OpenBSD: uipc_socket.c,v 1.282 2022/08/14 01:58:28 jsg Exp $	*/
 /*	$NetBSD: uipc_socket.c,v 1.21 1996/02/04 02:17:52 christos Exp $	*/
 
 /*
@@ -40,14 +40,12 @@
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
 #include <sys/domain.h>
-#include <sys/kernel.h>
 #include <sys/event.h>
 #include <sys/protosw.h>
 #include <sys/socket.h>
 #include <sys/unpcb.h>
 #include <sys/socketvar.h>
 #include <sys/signalvar.h>
-#include <net/if.h>
 #include <sys/pool.h>
 #include <sys/atomic.h>
 #include <sys/rwlock.h>
@@ -195,7 +193,7 @@ socreate(int dom, struct socket **aso, int type, int proto)
 	so->so_rcv.sb_timeo_nsecs = INFSLP;
 
 	solock(so);
-	error = (*prp->pr_attach)(so, proto);
+	error = pru_attach(so, proto);
 	if (error) {
 		so->so_state |= SS_NOFDREF;
 		/* sofree() calls sounlock(). */
@@ -210,12 +208,8 @@ socreate(int dom, struct socket **aso, int type, int proto)
 int
 sobind(struct socket *so, struct mbuf *nam, struct proc *p)
 {
-	int error;
-
 	soassertlocked(so);
-
-	error = (*so->so_proto->pr_usrreq)(so, PRU_BIND, NULL, nam, NULL, p);
-	return (error);
+	return pru_bind(so, nam, p);
 }
 
 int
@@ -231,8 +225,7 @@ solisten(struct socket *so, int backlog)
 	if (isspliced(so) || issplicedback(so))
 		return (EOPNOTSUPP);
 #endif /* SOCKET_SPLICE */
-	error = (*so->so_proto->pr_usrreq)(so, PRU_LISTEN, NULL, NULL, NULL,
-	    curproc);
+	error = pru_listen(so);
 	if (error)
 		return (error);
 	if (TAILQ_FIRST(&so->so_q) == NULL)
@@ -392,8 +385,7 @@ soclose(struct socket *so, int flags)
 drop:
 	if (so->so_pcb) {
 		int error2;
-		KASSERT(so->so_proto->pr_detach);
-		error2 = (*so->so_proto->pr_detach)(so);
+		error2 = pru_detach(so);
 		if (error == 0)
 			error = error2;
 	}
@@ -444,8 +436,7 @@ soabort(struct socket *so)
 {
 	soassertlocked(so);
 
-	return (*so->so_proto->pr_usrreq)(so, PRU_ABORT, NULL, NULL, NULL,
-	   curproc);
+	return pru_abort(so);
 }
 
 int
@@ -460,8 +451,7 @@ soaccept(struct socket *so, struct mbuf *nam)
 	so->so_state &= ~SS_NOFDREF;
 	if ((so->so_state & SS_ISDISCONNECTED) == 0 ||
 	    (so->so_proto->pr_flags & PR_ABRTACPTDIS) == 0)
-		error = (*so->so_proto->pr_usrreq)(so, PRU_ACCEPT, NULL,
-		    nam, NULL, curproc);
+		error = pru_accept(so, nam);
 	else
 		error = ECONNABORTED;
 	return (error);
@@ -487,8 +477,7 @@ soconnect(struct socket *so, struct mbuf *nam)
 	    (error = sodisconnect(so))))
 		error = EISCONN;
 	else
-		error = (*so->so_proto->pr_usrreq)(so, PRU_CONNECT,
-		    NULL, nam, NULL, curproc);
+		error = pru_connect(so, nam);
 	return (error);
 }
 
@@ -502,8 +491,7 @@ soconnect2(struct socket *so1, struct socket *so2)
 	else
 		solock(so1);
 
-	error = (*so1->so_proto->pr_usrreq)(so1, PRU_CONNECT2, NULL,
-	    (struct mbuf *)so2, NULL, curproc);
+	error = pru_connect2(so1, so2);
 
 	if (persocket)
 		sounlock(so2);
@@ -522,8 +510,7 @@ sodisconnect(struct socket *so)
 		return (ENOTCONN);
 	if (so->so_state & SS_ISDISCONNECTING)
 		return (EALREADY);
-	error = (*so->so_proto->pr_usrreq)(so, PRU_DISCONNECT, NULL, NULL,
-	    NULL, curproc);
+	error = pru_disconnect(so);
 	return (error);
 }
 
@@ -654,9 +641,10 @@ restart:
 				so->so_state &= ~SS_ISSENDING;
 			if (top && so->so_options & SO_ZEROIZE)
 				top->m_flags |= M_ZEROIZE;
-			error = (*so->so_proto->pr_usrreq)(so,
-			    (flags & MSG_OOB) ? PRU_SENDOOB : PRU_SEND,
-			    top, addr, control, curproc);
+			if (flags & MSG_OOB)
+				error = pru_sendoob(so, top, addr, control);
+			else
+				error = pru_send(so, top, addr, control);
 			clen = 0;
 			control = NULL;
 			top = NULL;
@@ -819,8 +807,7 @@ soreceive(struct socket *so, struct mbuf **paddr, struct uio *uio,
 	if (flags & MSG_OOB) {
 		m = m_get(M_WAIT, MT_DATA);
 		solock(so);
-		error = (*pr->pr_usrreq)(so, PRU_RCVOOB, m,
-		    (struct mbuf *)(long)(flags & MSG_PEEK), NULL, curproc);
+		error = pru_rcvoob(so, m, flags & MSG_PEEK);
 		sounlock(so);
 		if (error)
 			goto bad;
@@ -1170,8 +1157,7 @@ dontblock:
 		SBLASTRECORDCHK(&so->so_rcv, "soreceive 4");
 		SBLASTMBUFCHK(&so->so_rcv, "soreceive 4");
 		if (pr->pr_flags & PR_WANTRCVD && so->so_pcb)
-			(*pr->pr_usrreq)(so, PRU_RCVD, NULL,
-			    (struct mbuf *)(long)flags, NULL, curproc);
+			pru_rcvd(so, flags);
 	}
 	if (orig_resid == uio->uio_resid && orig_resid &&
 	    (flags & MSG_EOR) == 0 && (so->so_state & SS_CANTRCVMORE) == 0) {
@@ -1193,7 +1179,6 @@ release:
 int
 soshutdown(struct socket *so, int how)
 {
-	const struct protosw *pr = so->so_proto;
 	int error = 0;
 
 	solock(so);
@@ -1205,8 +1190,7 @@ soshutdown(struct socket *so, int how)
 		sorflush(so);
 		/* FALLTHROUGH */
 	case SHUT_WR:
-		error = (*pr->pr_usrreq)(so, PRU_SHUTDOWN, NULL, NULL, NULL,
-		    curproc);
+		error = pru_shutdown(so);
 		break;
 	default:
 		error = EINVAL;
@@ -1538,8 +1522,7 @@ somove(struct socket *so, int wait)
 	if (m == NULL) {
 		sbdroprecord(so, &so->so_rcv);
 		if (so->so_proto->pr_flags & PR_WANTRCVD && so->so_pcb)
-			(so->so_proto->pr_usrreq)(so, PRU_RCVD, NULL,
-			    NULL, NULL, NULL);
+			pru_rcvd(so, 0);
 		goto nextpkt;
 	}
 
@@ -1645,8 +1628,7 @@ somove(struct socket *so, int wait)
 
 	/* Send window update to source peer as receive buffer has changed. */
 	if (so->so_proto->pr_flags & PR_WANTRCVD && so->so_pcb)
-		(so->so_proto->pr_usrreq)(so, PRU_RCVD, NULL,
-		    NULL, NULL, NULL);
+		pru_rcvd(so, 0);
 
 	/* Receive buffer did shrink by len bytes, adjust oob. */
 	state = so->so_state;
@@ -1674,8 +1656,7 @@ somove(struct socket *so, int wait)
 		} else if (oobmark) {
 			o = m_split(m, oobmark, wait);
 			if (o) {
-				error = (*sosp->so_proto->pr_usrreq)(sosp,
-				    PRU_SEND, m, NULL, NULL, NULL);
+				error = pru_send(sosp, m, NULL, NULL);
 				if (error) {
 					if (sosp->so_state & SS_CANTSENDMORE)
 						error = EPIPE;
@@ -1692,8 +1673,7 @@ somove(struct socket *so, int wait)
 		if (o) {
 			o->m_len = 1;
 			*mtod(o, caddr_t) = *mtod(m, caddr_t);
-			error = (*sosp->so_proto->pr_usrreq)(sosp, PRU_SENDOOB,
-			    o, NULL, NULL, NULL);
+			error = pru_sendoob(sosp, o, NULL, NULL);
 			if (error) {
 				if (sosp->so_state & SS_CANTSENDMORE)
 					error = EPIPE;
@@ -1714,8 +1694,7 @@ somove(struct socket *so, int wait)
 	/* Append all remaining data to drain socket. */
 	if (so->so_rcv.sb_cc == 0 || maxreached)
 		sosp->so_state &= ~SS_ISSENDING;
-	error = (*sosp->so_proto->pr_usrreq)(sosp, PRU_SEND, m, NULL, NULL,
-	    NULL);
+	error = pru_send(sosp, m, NULL, NULL);
 	if (error) {
 		if (sosp->so_state & SS_CANTSENDMORE)
 			error = EPIPE;

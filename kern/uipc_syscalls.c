@@ -1,4 +1,4 @@
-/*	$OpenBSD: uipc_syscalls.c,v 1.199 2022/07/18 04:42:37 deraadt Exp $	*/
+/*	$OpenBSD: uipc_syscalls.c,v 1.201 2022/08/14 01:58:28 jsg Exp $	*/
 /*	$NetBSD: uipc_syscalls.c,v 1.19 1996/02/09 19:00:48 christos Exp $	*/
 
 /*
@@ -42,7 +42,6 @@
 #include <sys/kernel.h>
 #include <sys/file.h>
 #include <sys/vnode.h>
-#include <sys/ioctl.h>
 #include <sys/malloc.h>
 #include <sys/event.h>
 #include <sys/mbuf.h>
@@ -51,8 +50,6 @@
 #include <sys/socketvar.h>
 #include <sys/signalvar.h>
 #include <sys/pledge.h>
-#include <sys/unpcb.h>
-#include <sys/un.h>
 #ifdef KTRACE
 #include <sys/ktrace.h>
 #endif
@@ -63,7 +60,7 @@
 
 #include <sys/domain.h>
 #include <netinet/in.h>
-#include <net/route.h>
+#include <net/rtable.h>
 
 int	copyaddrout(struct proc *, struct mbuf *, struct sockaddr *, socklen_t,
 	    socklen_t *);
@@ -1100,7 +1097,7 @@ sys_getsockname(struct proc *p, void *v, register_t *retval)
 	}
 	m = m_getclr(M_WAIT, MT_SONAME);
 	solock(so);
-	error = (*so->so_proto->pr_usrreq)(so, PRU_SOCKADDR, NULL, m, NULL, p);
+	error = pru_sockaddr(so, m);
 	sounlock(so);
 	if (error)
 		goto bad;
@@ -1147,7 +1144,7 @@ sys_getpeername(struct proc *p, void *v, register_t *retval)
 		goto bad;
 	m = m_getclr(M_WAIT, MT_SONAME);
 	solock(so);
-	error = (*so->so_proto->pr_usrreq)(so, PRU_PEERADDR, NULL, m, NULL, p);
+	error = pru_peeraddr(so, m);
 	sounlock(so);
 	if (error)
 		goto bad;
