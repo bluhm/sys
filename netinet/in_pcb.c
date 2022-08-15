@@ -175,6 +175,7 @@ void
 in_pcbinit(struct inpcbtable *table, int hashsize)
 {
 	mtx_init(&table->inpt_mtx, IPL_SOFTNET);
+	rw_init(&table->inpt_notify, "inpnotify");
 	TAILQ_INIT(&table->inpt_queue);
 	table->inpt_hashtbl = hashinit(hashsize, M_PCB, M_WAITOK,
 	    &table->inpt_mask);
@@ -696,8 +697,6 @@ in_pcbnotifyall(struct inpcbtable *table, struct sockaddr *dst, u_int rtable,
 	struct in_addr faddr;
 	u_int rdomain;
 
-	NET_ASSERT_LOCKED_EXCLUSIVE();
-
 	if (dst->sa_family != AF_INET)
 		return;
 	faddr = satosin(dst)->sin_addr;
@@ -708,6 +707,7 @@ in_pcbnotifyall(struct inpcbtable *table, struct sockaddr *dst, u_int rtable,
 
 	SIMPLEQ_INIT(&inpcblist);
 	rdomain = rtable_l2(rtable);
+	rw_enter_write(&table->inpt_notify);
 	mtx_enter(&table->inpt_mtx);
 	TAILQ_FOREACH(inp, &table->inpt_queue, inp_queue) {
 #ifdef INET6
@@ -729,6 +729,7 @@ in_pcbnotifyall(struct inpcbtable *table, struct sockaddr *dst, u_int rtable,
 		(*notify)(inp, errno);
 		in_pcbunref(inp);
 	}
+	rw_exit_write(&table->inpt_notify);
 }
 
 /*
