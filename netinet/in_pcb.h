@@ -79,6 +79,7 @@
  *	I	immutable after creation
  *	N	net lock
  *	t	inpt_mtx		pcb table mutex
+ *	p	inpcb_mtx		pcb mutex
  */
 
 struct pf_state_key;
@@ -121,6 +122,7 @@ struct inpcb {
 #define	inp_route	inp_ru.ru_route
 #define	inp_route6	inp_ru.ru_route6
 	struct    refcnt inp_refcnt;	/* refcount PCB, delay memory free */
+	struct	  mutex inp_mtx;	/* protect PCB and socket members */
 	int	  inp_flags;		/* generic IP/datagram flags */
 	union {				/* Header prototype. */
 		struct ip hu_ip;
