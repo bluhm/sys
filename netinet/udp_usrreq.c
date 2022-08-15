@@ -657,12 +657,17 @@ udp_sbappend(struct inpcb *inp, struct mbuf *m, struct ip *ip,
 	}
 #endif
 	m_adj(m, hlen);
+
+	mtx_enter(&inp->inp_mtx);
 	if (sbappendaddr(so, &so->so_rcv, srcaddr, m, opts) == 0) {
+		mtx_leave(&inp->inp_mtx);
 		udpstat_inc(udps_fullsock);
 		m_freem(m);
 		m_freem(opts);
 		return;
 	}
+	mtx_leave(&inp->inp_mtx);
+
 	sorwakeup(so);
 }
 
