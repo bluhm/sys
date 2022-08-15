@@ -66,6 +66,8 @@ struct pr_usrreqs {
 
 	int	(*pru_attach)(struct socket *, int);
 	int	(*pru_detach)(struct socket *);
+	void	(*pru_lock)(struct socket *);
+	void	(*pru_unlock)(struct socket *);
 };
 
 struct protosw {
@@ -259,6 +261,18 @@ static inline int
 pru_detach(struct socket *so)
 {
 	return (*so->so_proto->pr_usrreqs->pru_detach)(so);
+}
+
+static inline void
+pru_lock(struct socket *so)
+{
+	(*so->so_proto->pr_usrreqs->pru_lock)(so);
+}
+
+static inline void
+pru_unlock(struct socket *so)
+{
+	(*so->so_proto->pr_usrreqs->pru_unlock)(so);
 }
 
 static inline int

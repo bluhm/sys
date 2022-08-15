@@ -66,6 +66,8 @@ const struct pr_usrreqs divert_usrreqs = {
 	.pru_usrreq	= divert_usrreq,
 	.pru_attach	= divert_attach,
 	.pru_detach	= divert_detach,
+	.pru_lock	= divert_lock,
+	.pru_unlock	= divert_unlock,
 };
 
 int divbhashsize = DIVERTHASHSIZE;
@@ -355,6 +357,24 @@ divert_detach(struct socket *so)
 
 	in_pcbdetach(inp);
 	return (0);
+}
+
+void
+divert_lock(struct socket *so)
+{
+	struct inpcb *inp = sotoinpcb(so);
+
+	NET_ASSERT_LOCKED();
+	mtx_enter(&inp->inp_mtx);
+}
+
+void
+divert_unlock(struct socket *so)
+{
+	struct inpcb *inp = sotoinpcb(so);
+
+	NET_ASSERT_LOCKED();
+	mtx_leave(&inp->inp_mtx);
 }
 
 int
