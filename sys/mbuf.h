@@ -1,4 +1,4 @@
-/*	$OpenBSD: mbuf.h,v 1.254 2022/02/14 04:33:18 dlg Exp $	*/
+/*	$OpenBSD: mbuf.h,v 1.255 2022/08/15 16:15:37 bluhm Exp $	*/
 /*	$NetBSD: mbuf.h,v 1.19 1996/02/09 18:25:14 christos Exp $	*/
 
 /*
