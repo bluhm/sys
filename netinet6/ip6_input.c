@@ -120,7 +120,7 @@ struct cpumem *ip6counters;
 uint8_t ip6_soiikey[IP6_SOIIKEY_LEN];
 
 int ip6_ours(struct mbuf **, int *, int, int);
-int ip6_local(struct mbuf **, int *, int, int);
+int ip6_local(struct mbuf **, int *, int);
 int ip6_check_rh0hdr(struct mbuf *, int *);
 int ip6_hbhchcheck(struct mbuf **, int *, int *);
 int ip6_hopopts_input(struct mbuf **, int *, u_int32_t *, u_int32_t *);
@@ -189,7 +189,7 @@ ip6_ours(struct mbuf **mp, int *offp, int nxt, int af)
 
 	/* We are already in a IPv4/IPv6 local deliver loop. */
 	if (af != AF_UNSPEC)
-		return ip6_local(mp, offp, nxt, af);
+		return nxt;
 
 	/* save values for later, use after dequeue */
 	if (*offp != sizeof(struct ip6_hdr)) {
@@ -232,7 +232,7 @@ ip6intr(void)
 			panic("ip6intr no HDR");
 #endif
 		off = 0;
-		nxt = ip6_local(&m, &off, IPPROTO_IPV6, AF_UNSPEC);
+		nxt = ip6_local(&m, &off, IPPROTO_IPV6);
 		KASSERT(nxt == IPPROTO_DONE);
 	}
 }
@@ -614,7 +614,7 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 }
 
 int
-ip6_local(struct mbuf **mp, int *offp, int nxt, int af)
+ip6_local(struct mbuf **mp, int *offp, int nxt)
 {
 	if (*offp == 0) {
 		struct m_tag *mtag;
@@ -638,10 +638,7 @@ ip6_local(struct mbuf **mp, int *offp, int nxt, int af)
 		}
 	}
 
-	/* Check whether we are already in a IPv4/IPv6 local deliver loop. */
-	if (af == AF_UNSPEC)
-		nxt = ip_deliver(mp, offp, nxt, AF_INET6);
-	return nxt;
+	return ip_deliver(mp, offp, nxt, AF_INET6);
 }
 
 /* On error free mbuf and return IPPROTO_DONE. */
