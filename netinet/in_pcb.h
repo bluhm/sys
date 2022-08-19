@@ -295,7 +295,7 @@ struct inpcb *
 	    struct mbuf *, u_int);
 #ifdef INET6
 struct inpcbhead *
-	 in6_pcbhash(struct inpcbtable *, int, const struct in6_addr *,
+	 in6_pcbhash(struct inpcbtable *, u_int, const struct in6_addr *,
 	    u_short, const struct in6_addr *, u_short);
 struct inpcb *
 	 in6_pcblookup(struct inpcbtable *, const struct in6_addr *,

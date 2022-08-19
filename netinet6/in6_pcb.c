@@ -127,12 +127,12 @@
 const struct in6_addr zeroin6_addr;
 
 struct inpcbhead *
-in6_pcbhash(struct inpcbtable *table, int rdom,
+in6_pcbhash(struct inpcbtable *table, u_int rdomain,
     const struct in6_addr *faddr, u_short fport,
     const struct in6_addr *laddr, u_short lport)
 {
 	SIPHASH_CTX ctx;
-	u_int32_t nrdom = htonl(rdom);
+	u_int32_t nrdom = htonl(rdomain);
 
 	SipHash24_Init(&ctx, &table->inpt_key);
 	SipHash24_Update(&ctx, &nrdom, sizeof(nrdom));

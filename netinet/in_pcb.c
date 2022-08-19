@@ -125,9 +125,9 @@ int	in_pcbresize(struct inpcbtable *, int);
 
 #define	INPCBHASH_LOADFACTOR(_x)	(((_x) * 3) / 4)
 
-struct inpcbhead *in_pcbhash(struct inpcbtable *, int,
+struct inpcbhead *in_pcbhash(struct inpcbtable *, u_int,
     const struct in_addr *, u_short, const struct in_addr *, u_short);
-struct inpcbhead *in_pcblhash(struct inpcbtable *, int, u_short);
+struct inpcbhead *in_pcblhash(struct inpcbtable *, u_int, u_short);
 
 /*
  * in_pcb is used for inet and inet6.  in6_pcb only contains special
@@ -141,12 +141,12 @@ in_init(void)
 }
 
 struct inpcbhead *
-in_pcbhash(struct inpcbtable *table, int rdom,
+in_pcbhash(struct inpcbtable *table, u_int rdomain,
     const struct in_addr *faddr, u_short fport,
     const struct in_addr *laddr, u_short lport)
 {
 	SIPHASH_CTX ctx;
-	u_int32_t nrdom = htonl(rdom);
+	u_int32_t nrdom = htonl(rdomain);
 
 	SipHash24_Init(&ctx, &table->inpt_key);
 	SipHash24_Update(&ctx, &nrdom, sizeof(nrdom));
@@ -159,10 +159,10 @@ in_pcbhash(struct inpcbtable *table, int rdom,
 }
 
 struct inpcbhead *
-in_pcblhash(struct inpcbtable *table, int rdom, u_short lport)
+in_pcblhash(struct inpcbtable *table, u_int rdomain, u_short lport)
 {
 	SIPHASH_CTX ctx;
-	u_int32_t nrdom = htonl(rdom);
+	u_int32_t nrdom = htonl(rdomain);
 
 	SipHash24_Init(&ctx, &table->inpt_lkey);
 	SipHash24_Update(&ctx, &nrdom, sizeof(nrdom));
