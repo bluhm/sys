@@ -126,6 +126,9 @@
 
 const struct in6_addr zeroin6_addr;
 
+struct inpcb *in6_pcbhash_lookup(struct inpcbtable *, u_int,
+    const struct in6_addr *, u_short, const struct in6_addr *, u_short);
+
 struct inpcbhead *
 in6_pcbhash(struct inpcbtable *table, u_int rdomain,
     const struct in6_addr *faddr, u_short fport,
@@ -516,37 +519,51 @@ in6_pcbnotify(struct inpcbtable *table, struct sockaddr_in6 *dst,
 }
 
 struct inpcb *
-in6_pcblookup(struct inpcbtable *table, const struct in6_addr *faddr,
-    u_int fport_arg, const struct in6_addr *laddr, u_int lport_arg,
-    u_int rtable)
+in6_pcbhash_lookup(struct inpcbtable *table, u_int rdomain,
+    const struct in6_addr *faddr, u_short fport,
+    const struct in6_addr *laddr, u_short lport)
 {
 	struct inpcbhead *head;
 	struct inpcb *inp;
-	u_int16_t fport = fport_arg, lport = lport_arg;
+
+	NET_ASSERT_LOCKED();
+	MUTEX_ASSERT_LOCKED(&table->inpt_mtx);
+
+	head = in6_pcbhash(table, rdomain, faddr, fport, laddr, lport);
+	LIST_FOREACH(inp, head, inp_hash) {
+		if (!ISSET(inp->inp_flags, INP_IPV6))
+			continue;
+		if (inp->inp_fport == fport && inp->inp_lport == lport &&
+		    IN6_ARE_ADDR_EQUAL(&inp->inp_faddr6, faddr) &&
+		    IN6_ARE_ADDR_EQUAL(&inp->inp_laddr6, laddr) &&
+		    rtable_l2(inp->inp_rtableid) == rdomain) {
+			break;
+		}
+	}
+	if (inp != NULL) {
+		/*
+		 * Move this PCB to the head of hash chain so that
+		 * repeated accesses are quicker.  This is analogous to
+		 * the historic single-entry PCB cache.
+		 */
+		if (inp != LIST_FIRST(head)) {
+			LIST_REMOVE(inp, inp_hash);
+			LIST_INSERT_HEAD(head, inp, inp_hash);
+		}
+	}
+	return (inp);
+}
+
+struct inpcb *
+in6_pcblookup(struct inpcbtable *table, const struct in6_addr *faddr,
+    u_int fport, const struct in6_addr *laddr, u_int lport, u_int rtable)
+{
+	struct inpcb *inp;
 	u_int rdomain;
 
 	rdomain = rtable_l2(rtable);
 	mtx_enter(&table->inpt_mtx);
-	head = in6_pcbhash(table, rdomain, faddr, fport, laddr, lport);
-	LIST_FOREACH(inp, head, inp_hash) {
-		if (!(inp->inp_flags & INP_IPV6))
-			continue;
-		if (IN6_ARE_ADDR_EQUAL(&inp->inp_faddr6, faddr) &&
-		    inp->inp_fport == fport && inp->inp_lport == lport &&
-		    IN6_ARE_ADDR_EQUAL(&inp->inp_laddr6, laddr) &&
-		    rtable_l2(inp->inp_rtableid) == rdomain) {
-			/*
-			 * Move this PCB to the head of hash chain so that
-			 * repeated accesses are quicker.  This is analogous to
-			 * the historic single-entry PCB cache.
-			 */
-			if (inp != LIST_FIRST(head)) {
-				LIST_REMOVE(inp, inp_hash);
-				LIST_INSERT_HEAD(head, inp, inp_hash);
-			}
-			break;
-		}
-	}
+	inp = in6_pcbhash_lookup(table, rdomain, faddr, fport, laddr, lport);
 	in_pcbref(inp);
 	mtx_leave(&table->inpt_mtx);
 #ifdef DIAGNOSTIC
@@ -560,12 +577,10 @@ in6_pcblookup(struct inpcbtable *table, const struct in6_addr *faddr,
 
 struct inpcb *
 in6_pcblookup_listen(struct inpcbtable *table, struct in6_addr *laddr,
-    u_int lport_arg, struct mbuf *m, u_int rtable)
+    u_int lport, struct mbuf *m, u_int rtable)
 {
-	struct inpcbhead *head;
 	const struct in6_addr *key1, *key2;
 	struct inpcb *inp;
-	u_int16_t lport = lport_arg;
 	u_int rdomain;
 
 	key1 = laddr;
@@ -600,37 +615,10 @@ in6_pcblookup_listen(struct inpcbtable *table, struct in6_addr *laddr,
 
 	rdomain = rtable_l2(rtable);
 	mtx_enter(&table->inpt_mtx);
-	head = in6_pcbhash(table, rdomain, &zeroin6_addr, 0, key1, lport);
-	LIST_FOREACH(inp, head, inp_hash) {
-		if (!(inp->inp_flags & INP_IPV6))
-			continue;
-		if (inp->inp_lport == lport && inp->inp_fport == 0 &&
-		    IN6_ARE_ADDR_EQUAL(&inp->inp_laddr6, key1) &&
-		    IN6_IS_ADDR_UNSPECIFIED(&inp->inp_faddr6) &&
-		    rtable_l2(inp->inp_rtableid) == rdomain)
-			break;
-	}
+	inp = in6_pcbhash_lookup(table, rdomain, &zeroin6_addr, 0, key1, lport);
 	if (inp == NULL && ! IN6_ARE_ADDR_EQUAL(key1, key2)) {
-		head = in6_pcbhash(table, rdomain,
+		inp = in6_pcbhash_lookup(table, rdomain,
 		    &zeroin6_addr, 0, key2, lport);
-		LIST_FOREACH(inp, head, inp_hash) {
-			if (!(inp->inp_flags & INP_IPV6))
-				continue;
-			if (inp->inp_lport == lport && inp->inp_fport == 0 &&
-			    IN6_ARE_ADDR_EQUAL(&inp->inp_laddr6, key2) &&
-			    IN6_IS_ADDR_UNSPECIFIED(&inp->inp_faddr6) &&
-			    rtable_l2(inp->inp_rtableid) == rdomain)
-				break;
-		}
-	}
-	/*
-	 * Move this PCB to the head of hash chain so that
-	 * repeated accesses are quicker.  This is analogous to
-	 * the historic single-entry PCB cache.
-	 */
-	if (inp != NULL && inp != LIST_FIRST(head)) {
-		LIST_REMOVE(inp, inp_hash);
-		LIST_INSERT_HEAD(head, inp, inp_hash);
 	}
 	in_pcbref(inp);
 	mtx_leave(&table->inpt_mtx);
