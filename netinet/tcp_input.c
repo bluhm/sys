@@ -531,13 +531,13 @@ findpcb:
 		switch (af) {
 #ifdef INET6
 		case AF_INET6:
-			inp = in6_pcbhashlookup(&tcbtable, &ip6->ip6_src,
+			inp = in6_pcblookup(&tcbtable, &ip6->ip6_src,
 			    th->th_sport, &ip6->ip6_dst, th->th_dport,
 			    m->m_pkthdr.ph_rtableid);
 			break;
 #endif
 		case AF_INET:
-			inp = in_pcbhashlookup(&tcbtable, ip->ip_src,
+			inp = in_pcblookup(&tcbtable, ip->ip_src,
 			    th->th_sport, ip->ip_dst, th->th_dport,
 			    m->m_pkthdr.ph_rtableid);
 			break;

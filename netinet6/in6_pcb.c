@@ -280,7 +280,7 @@ in6_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 
 	inp->inp_ipv6.ip6_hlim = (u_int8_t)in6_selecthlim(inp);
 
-	t = in6_pcbhashlookup(inp->inp_table, &sin6->sin6_addr, sin6->sin6_port,
+	t = in6_pcblookup(inp->inp_table, &sin6->sin6_addr, sin6->sin6_port,
 	    IN6_IS_ADDR_UNSPECIFIED(&inp->inp_laddr6) ? in6a : &inp->inp_laddr6,
 	    inp->inp_lport, inp->inp_rtableid);
 	if (t != NULL) {
@@ -295,7 +295,7 @@ in6_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 			error = in_pcbbind(inp, NULL, curproc);
 			if (error)
 				return (error);
-			t = in6_pcbhashlookup(inp->inp_table, &sin6->sin6_addr,
+			t = in6_pcblookup(inp->inp_table, &sin6->sin6_addr,
 			    sin6->sin6_port, in6a, inp->inp_lport,
 			    inp->inp_rtableid);
 			if (t != NULL) {
@@ -516,7 +516,7 @@ in6_pcbnotify(struct inpcbtable *table, struct sockaddr_in6 *dst,
 }
 
 struct inpcb *
-in6_pcbhashlookup(struct inpcbtable *table, const struct in6_addr *faddr,
+in6_pcblookup(struct inpcbtable *table, const struct in6_addr *faddr,
     u_int fport_arg, const struct in6_addr *laddr, u_int lport_arg,
     u_int rtable)
 {

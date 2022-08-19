@@ -288,7 +288,7 @@ struct inpcb *
 void	 in_pcbunref(struct inpcb *);
 void	 in_pcbdisconnect(struct inpcb *);
 struct inpcb *
-	 in_pcbhashlookup(struct inpcbtable *, struct in_addr,
+	 in_pcblookup(struct inpcbtable *, struct in_addr,
 			       u_int, struct in_addr, u_int, u_int);
 struct inpcb *
 	 in_pcblookup_listen(struct inpcbtable *, struct in_addr, u_int,
@@ -298,7 +298,7 @@ struct inpcbhead *
 	 in6_pcbhash(struct inpcbtable *, int, const struct in6_addr *,
 	    u_short, const struct in6_addr *, u_short);
 struct inpcb *
-	 in6_pcbhashlookup(struct inpcbtable *, const struct in6_addr *,
+	 in6_pcblookup(struct inpcbtable *, const struct in6_addr *,
 			       u_int, const struct in6_addr *, u_int, u_int);
 struct inpcb *
 	 in6_pcblookup_listen(struct inpcbtable *, struct in6_addr *, u_int,

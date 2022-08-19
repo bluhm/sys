@@ -331,7 +331,7 @@ rip6_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *d)
 		 * XXX chase extension headers, or pass final nxt value
 		 * from icmp6_notify_error()
 		 */
-		in6p = in6_pcbhashlookup(&rawin6pcbtable, &sa6->sin6_addr, 0,
+		in6p = in6_pcblookup(&rawin6pcbtable, &sa6->sin6_addr, 0,
 		    &sa6_src->sin6_addr, 0, rdomain);
 
 		if (in6p && in6p->inp_ipv6.ip6_nxt &&

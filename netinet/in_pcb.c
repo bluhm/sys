@@ -500,7 +500,7 @@ in_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 	if (error)
 		return (error);
 
-	t = in_pcbhashlookup(inp->inp_table, sin->sin_addr, sin->sin_port,
+	t = in_pcblookup(inp->inp_table, sin->sin_addr, sin->sin_port,
 	    ina, inp->inp_lport, inp->inp_rtableid);
 	if (t != NULL) {
 		in_pcbunref(t);
@@ -514,7 +514,7 @@ in_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 			error = in_pcbbind(inp, NULL, curproc);
 			if (error)
 				return (error);
-			t = in_pcbhashlookup(inp->inp_table, sin->sin_addr,
+			t = in_pcblookup(inp->inp_table, sin->sin_addr,
 			    sin->sin_port, ina, inp->inp_lport,
 			    inp->inp_rtableid);
 			if (t != NULL) {
@@ -1100,7 +1100,7 @@ int	in_pcbnotifymiss = 0;
 #endif
 
 /*
- * The in(6)_pcbhashlookup functions are used to locate connected sockets
+ * The in(6)_pcblookup functions are used to locate connected sockets
  * quickly:
  *     faddr.fport <-> laddr.lport
  * No wildcard matching is done so that listening sockets are not found.
@@ -1109,7 +1109,7 @@ int	in_pcbnotifymiss = 0;
  * After those two lookups no other are necessary.
  */
 struct inpcb *
-in_pcbhashlookup(struct inpcbtable *table, struct in_addr faddr,
+in_pcblookup(struct inpcbtable *table, struct in_addr faddr,
     u_int fport_arg, struct in_addr laddr, u_int lport_arg, u_int rtable)
 {
 	struct inpcbhead *head;
