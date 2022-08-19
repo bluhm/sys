@@ -120,7 +120,7 @@ struct baddynamicports baddynamicports;
 struct baddynamicports rootonlyports;
 struct pool inpcb_pool;
 
-void	in_pcbrehash_locked(struct inpcb *);
+void	in_pcbhash_insert(struct inpcb *);
 int	in_pcbresize(struct inpcbtable *, int);
 
 #define	INPCBHASH_LOADFACTOR(_x)	(((_x) * 3) / 4)
@@ -227,7 +227,6 @@ int
 in_pcballoc(struct socket *so, struct inpcbtable *table)
 {
 	struct inpcb *inp;
-	struct inpcbhead *head;
 
 	NET_ASSERT_LOCKED();
 
@@ -259,19 +258,7 @@ in_pcballoc(struct socket *so, struct inpcbtable *table)
 	if (table->inpt_count++ > INPCBHASH_LOADFACTOR(table->inpt_size))
 		(void)in_pcbresize(table, table->inpt_size * 2);
 	TAILQ_INSERT_HEAD(&table->inpt_queue, inp, inp_queue);
-	head = in_pcblhash(table, inp->inp_rtableid, inp->inp_lport);
-	LIST_INSERT_HEAD(head, inp, inp_lhash);
-#ifdef INET6
-	if (sotopf(so) == PF_INET6)
-		head = in6_pcbhash(table, rtable_l2(inp->inp_rtableid),
-		    &inp->inp_faddr6, inp->inp_fport,
-		    &inp->inp_laddr6, inp->inp_lport);
-	else
-#endif /* INET6 */
-		head = in_pcbhash(table, rtable_l2(inp->inp_rtableid),
-		    &inp->inp_faddr, inp->inp_fport,
-		    &inp->inp_laddr, inp->inp_lport);
-	LIST_INSERT_HEAD(head, inp, inp_hash);
+	in_pcbhash_insert(inp);
 	mtx_leave(&table->inpt_mtx);
 
 	so->so_pcb = inp;
@@ -1037,12 +1024,14 @@ in_pcbrehash(struct inpcb *inp)
 	struct inpcbtable *table = inp->inp_table;
 
 	mtx_enter(&table->inpt_mtx);
-	in_pcbrehash_locked(inp);
+	LIST_REMOVE(inp, inp_lhash);
+	LIST_REMOVE(inp, inp_hash);
+	in_pcbhash_insert(inp);
 	mtx_leave(&table->inpt_mtx);
 }
 
 void
-in_pcbrehash_locked(struct inpcb *inp)
+in_pcbhash_insert(struct inpcb *inp)
 {
 	struct inpcbtable *table = inp->inp_table;
 	struct inpcbhead *head;
@@ -1050,10 +1039,8 @@ in_pcbrehash_locked(struct inpcb *inp)
 	NET_ASSERT_LOCKED();
 	MUTEX_ASSERT_LOCKED(&table->inpt_mtx);
 
-	LIST_REMOVE(inp, inp_lhash);
 	head = in_pcblhash(table, inp->inp_rtableid, inp->inp_lport);
 	LIST_INSERT_HEAD(head, inp, inp_lhash);
-	LIST_REMOVE(inp, inp_hash);
 #ifdef INET6
 	if (inp->inp_flags & INP_IPV6)
 		head = in6_pcbhash(table, rtable_l2(inp->inp_rtableid),
@@ -1098,7 +1085,9 @@ in_pcbresize(struct inpcbtable *table, int hashsize)
 	arc4random_buf(&table->inpt_lkey, sizeof(table->inpt_lkey));
 
 	TAILQ_FOREACH(inp, &table->inpt_queue, inp_queue) {
-		in_pcbrehash_locked(inp);
+		LIST_REMOVE(inp, inp_lhash);
+		LIST_REMOVE(inp, inp_hash);
+		in_pcbhash_insert(inp);
 	}
 	hashfree(ohashtbl, osize, M_PCB);
 	hashfree(olhashtbl, osize, M_PCB);
