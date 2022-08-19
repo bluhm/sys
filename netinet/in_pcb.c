@@ -230,8 +230,6 @@ in_pcballoc(struct socket *so, struct inpcbtable *table)
 {
 	struct inpcb *inp;
 
-	NET_ASSERT_LOCKED();
-
 	inp = pool_get(&inpcb_pool, PR_NOWAIT|PR_ZERO);
 	if (inp == NULL)
 		return (ENOBUFS);
@@ -570,8 +568,6 @@ in_pcbdetach(struct inpcb *inp)
 {
 	struct socket *so = inp->inp_socket;
 	struct inpcbtable *table = inp->inp_table;
-
-	NET_ASSERT_LOCKED();
 
 	so->so_pcb = NULL;
 	/*
