@@ -1599,7 +1599,7 @@ bridge_ipsec(struct ifnet *ifp, struct ether_header *eh, int hassnap,
 			    off);
 			tdb_unref(tdb);
 			if (prot != IPPROTO_DONE)
-				ip_deliver(&m, &hlen, prot, af);
+				ip_deliver(&m, &hlen, prot, af, 0);
 			return (1);
 		} else {
 			tdb_unref(tdb);
