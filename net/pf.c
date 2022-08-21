@@ -1301,7 +1301,7 @@ pf_purge(void *xnloops)
 		pf_purge_expired_states(1 + (pf_status.states
 		    / pf_default_rule.timeout[PFTM_INTERVAL]));
 
-	NET_LOCK();
+	NET_LOCK_SHARED();
 
 	PF_LOCK();
 	/* purge other expired types every PFTM_INTERVAL seconds */
@@ -1318,7 +1318,7 @@ pf_purge(void *xnloops)
 		pf_purge_expired_fragments();
 		*nloops = 0;
 	}
-	NET_UNLOCK();
+	NET_UNLOCK_SHARED();
 
 	timeout_add_sec(&pf_purge_to, 1);
 }
@@ -1564,7 +1564,7 @@ pf_purge_expired_states(u_int32_t maxcheck)
 	if (SLIST_EMPTY(&gcl))
 		return;
 
-	NET_LOCK();
+	NET_LOCK_SHARED();
 	rw_enter_write(&pf_state_list.pfs_rwl);
 	PF_LOCK();
 	PF_STATE_ENTER_WRITE();
@@ -1577,7 +1577,7 @@ pf_purge_expired_states(u_int32_t maxcheck)
 	PF_STATE_EXIT_WRITE();
 	PF_UNLOCK();
 	rw_exit_write(&pf_state_list.pfs_rwl);
-	NET_UNLOCK();
+	NET_UNLOCK_SHARED();
 
 	while ((st = SLIST_FIRST(&gcl)) != NULL) {
 		SLIST_REMOVE_HEAD(&gcl, gc_list);
