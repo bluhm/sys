@@ -138,7 +138,6 @@ static struct mbuf_queue	ipsendraw_mq;
 extern struct niqueue		arpinq;
 
 int	ip_ours(struct mbuf **, int *, int, int);
-int	ip_local(struct mbuf **, int *, int);
 int	ip_dooptions(struct mbuf *, struct ifnet *);
 int	in_ouraddr(struct mbuf *, struct ifnet *, struct rtentry **);
 
@@ -260,15 +259,20 @@ void
 ipintr(void)
 {
 	struct mbuf *m;
-	int off, nxt;
 
 	while ((m = niq_dequeue(&ipintrq)) != NULL) {
+		struct ip *ip;
+		int off, nxt;
+
 #ifdef DIAGNOSTIC
 		if ((m->m_flags & M_PKTHDR) == 0)
 			panic("ipintr no HDR");
 #endif
-		off = 0;
-		nxt = ip_local(&m, &off, IPPROTO_IPV4);
+		ip = mtod(m, struct ip *);
+		off = ip->ip_hl << 2;
+		nxt = ip->ip_p;
+
+		nxt = ip_deliver(&m, &off, nxt, AF_INET);
 		KASSERT(nxt == IPPROTO_DONE);
 	}
 }
@@ -550,25 +554,6 @@ ip_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
  out:
 	rtfree(rt);
 	return nxt;
-}
-
-/*
- * IPv4 local-delivery routine.
- *
- * If fragmented try to reassemble.  Pass to next level.
- */
-int
-ip_local(struct mbuf **mp, int *offp, int nxt)
-{
-	if (*offp == 0) {
-		struct ip *ip;
-
-		ip = mtod(*mp, struct ip *);
-		*offp = ip->ip_hl << 2;
-		nxt = ip->ip_p;
-	}
-
-	return ip_deliver(mp, offp, nxt, AF_INET);
 }
 
 int

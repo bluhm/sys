@@ -120,7 +120,6 @@ struct cpumem *ip6counters;
 uint8_t ip6_soiikey[IP6_SOIIKEY_LEN];
 
 int ip6_ours(struct mbuf **, int *, int, int);
-int ip6_local(struct mbuf **, int *, int);
 int ip6_check_rh0hdr(struct mbuf *, int *);
 int ip6_hbhchcheck(struct mbuf **, int *, int *);
 int ip6_hopopts_input(struct mbuf **, int *, u_int32_t *, u_int32_t *);
@@ -224,15 +223,32 @@ void
 ip6intr(void)
 {
 	struct mbuf *m;
-	int off, nxt;
 
 	while ((m = niq_dequeue(&ip6intrq)) != NULL) {
+		struct m_tag *mtag;
+		int off, nxt;
+
 #ifdef DIAGNOSTIC
 		if ((m->m_flags & M_PKTHDR) == 0)
 			panic("ip6intr no HDR");
 #endif
-		off = 0;
-		nxt = ip6_local(&m, &off, IPPROTO_IPV6);
+		mtag = m_tag_find(m, PACKET_TAG_IP6_OFFNXT, NULL);
+		if (mtag != NULL) {
+			struct ip6_offnxt *ion;
+
+			ion = (struct ip6_offnxt *)(mtag + 1);
+			off = ion->ion_off;
+			nxt = ion->ion_nxt;
+
+			m_tag_delete(m, mtag);
+		} else {
+			struct ip6_hdr *ip6;
+
+			ip6 = mtod(m, struct ip6_hdr *);
+			off = sizeof(struct ip6_hdr);
+			nxt = ip6->ip6_nxt;
+		}
+		nxt = ip_deliver(&m, &off, nxt, AF_INET6);
 		KASSERT(nxt == IPPROTO_DONE);
 	}
 }
@@ -611,34 +627,6 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
  out:
 	rtfree(rt);
 	return nxt;
-}
-
-int
-ip6_local(struct mbuf **mp, int *offp, int nxt)
-{
-	if (*offp == 0) {
-		struct m_tag *mtag;
-
-		mtag = m_tag_find(*mp, PACKET_TAG_IP6_OFFNXT, NULL);
-		if (mtag != NULL) {
-			struct ip6_offnxt *ion;
-
-			ion = (struct ip6_offnxt *)(mtag + 1);
-			*offp = ion->ion_off;
-			nxt = ion->ion_nxt;
-
-			m_tag_delete(*mp, mtag);
-		} else {
-			struct ip6_hdr *ip6;
-
-			ip6 = mtod(*mp, struct ip6_hdr *);
-			*offp = sizeof(struct ip6_hdr);
-			nxt = ip6->ip6_nxt;
-			
-		}
-	}
-
-	return ip_deliver(mp, offp, nxt, AF_INET6);
 }
 
 /* On error free mbuf and return IPPROTO_DONE. */
