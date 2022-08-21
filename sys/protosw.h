@@ -131,6 +131,7 @@ struct protosw {
 #define PR_ABRTACPTDIS	0x0020		/* abort on accept(2) to disconnected
 					   socket */
 #define PR_SPLICE	0x0040		/* socket splicing is possible */
+#define PR_MPINPUT	0x0080		/* input runs with shared netlock */
 
 /*
  * The arguments to usrreq are:

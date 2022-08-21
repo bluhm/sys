@@ -194,6 +194,11 @@ struct ipq {
 	struct	  in_addr ipq_src, ipq_dst;
 };
 
+struct ipoffnxt {
+	int	ion_off;
+	int	ion_nxt;
+};
+
 /* flags passed to ip_output */
 #define	IP_FORWARDING		0x1		/* most of ip header exists */
 #define	IP_RAWOUTPUT		0x2		/* raw ip header exists */
@@ -249,7 +254,7 @@ int	 ip_sysctl(int *, u_int, void *, size_t *, void *, size_t);
 void	 ip_savecontrol(struct inpcb *, struct mbuf **, struct ip *,
 	    struct mbuf *);
 int	 ip_input_if(struct mbuf **, int *, int, int, struct ifnet *);
-int	 ip_deliver(struct mbuf **, int *, int, int);
+int	 ip_deliver(struct mbuf **, int *, int, int, int);
 void	 ip_forward(struct mbuf *, struct ifnet *, struct rtentry *, int);
 int	 rip_ctloutput(int, struct socket *, int, int, struct mbuf *);
 void	 rip_init(void);
