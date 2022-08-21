@@ -473,6 +473,8 @@ struct m_tag *m_tag_next(struct mbuf *, struct m_tag *);
 #define PACKET_TAG_IPSEC_IN_DONE	0x0001  /* IPsec applied, in */
 #define PACKET_TAG_IPSEC_OUT_DONE	0x0002  /* IPsec applied, out */
 #define PACKET_TAG_IPSEC_FLOWINFO	0x0004	/* IPsec flowinfo */
+#define PACKET_TAG_IP_OFFNXT		0x0010  /* IPv4 offset and next proto */
+#define PACKET_TAG_IP6_OFFNXT		0x0020  /* IPv6 offset and next proto */
 #define PACKET_TAG_WIREGUARD		0x0040  /* WireGuard data */
 #define PACKET_TAG_GRE			0x0080  /* GRE processing done */
 #define PACKET_TAG_DLT			0x0100 /* data link layer type */
@@ -481,7 +483,6 @@ struct m_tag *m_tag_next(struct mbuf *, struct m_tag *);
 #define PACKET_TAG_SRCROUTE		0x1000 /* IPv4 source routing options */
 #define PACKET_TAG_TUNNEL		0x2000	/* Tunnel endpoint address */
 #define PACKET_TAG_CARP_BAL_IP		0x4000  /* carp(4) ip balanced marker */
-#define PACKET_TAG_IP6_OFFNXT		0x8000  /* IPv6 offset and next proto */
 
 #define MTAG_BITS \
     ("\20\1IPSEC_IN_DONE\2IPSEC_OUT_DONE\3IPSEC_FLOWINFO" \
