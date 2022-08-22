@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf_norm.c,v 1.223 2021/03/10 10:21:48 jsg Exp $ */
+/*	$OpenBSD: pf_norm.c,v 1.224 2022/08/22 20:35:39 bluhm Exp $ */
 
 /*
  * Copyright 2001 Niels Provos <provos@citi.umich.edu>
