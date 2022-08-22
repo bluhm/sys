@@ -1,4 +1,4 @@
-/*	$OpenBSD: locore.s,v 1.195 2022/08/15 04:17:50 daniel Exp $	*/
+/*	$OpenBSD: locore.s,v 1.197 2022/08/22 09:33:40 jsg Exp $	*/
 /*	$NetBSD: locore.s,v 1.145 1996/05/03 19:41:19 christos Exp $	*/
 
 /*-
@@ -221,7 +221,7 @@ INTRENTRY_LABEL(label):	/* from kernel */	; \
  */
 	.data
 
-	.globl	_C_LABEL(cpu), _C_LABEL(cpu_id), _C_LABEL(cpu_vendor)
+	.globl	_C_LABEL(cpu_id), _C_LABEL(cpu_vendor)
 	.globl	_C_LABEL(cpu_brandstr)
 	.globl	_C_LABEL(cpuid_level)
 	.globl	_C_LABEL(cpu_miscinfo)
@@ -266,7 +266,6 @@ _C_LABEL(lapic_tpr):
 	.long	0
 #endif
 
-_C_LABEL(cpu):		.long	0	# are we 486, 586 or 686
 _C_LABEL(cpu_id):	.long	0	# saved from 'cpuid' instruction
 _C_LABEL(cpu_pae):	.long	0	# are we using PAE paging mode?
 _C_LABEL(cpu_miscinfo):	.long	0	# misc info (apic/brand id) from 'cpuid'
@@ -1518,73 +1517,6 @@ _C_LABEL(doreti_iret):
 
 #include <i386/i386/vector.s>
 #include <i386/isa/icu.s>
-
-/*
- * bzero (void *b, size_t len)
- *	write len zero bytes to the string b.
- */
-
-ENTRY(bzero)
-	pushl	%edi
-	movl	8(%esp),%edi
-	movl	12(%esp),%edx
-
-	xorl	%eax,%eax		/* set fill data to 0 */
-
-	/*
-	 * if the string is too short, it's really not worth the overhead
-	 * of aligning to word boundaries, etc.  So we jump to a plain
-	 * unaligned set.
-	 */
-	cmpl	$16,%edx
-	jb	7f
-
-	movl	%edi,%ecx		/* compute misalignment */
-	negl	%ecx
-	andl	$3,%ecx
-	subl	%ecx,%edx
-	rep				/* zero until word aligned */
-	stosb
-
-	cmpl	$CPUCLASS_486,_C_LABEL(cpu_class)
-	jne	8f
-
-	movl	%edx,%ecx
-	shrl	$6,%ecx
-	jz	8f
-	andl	$63,%edx
-1:	movl	%eax,(%edi)
-	movl	%eax,4(%edi)
-	movl	%eax,8(%edi)
-	movl	%eax,12(%edi)
-	movl	%eax,16(%edi)
-	movl	%eax,20(%edi)
-	movl	%eax,24(%edi)
-	movl	%eax,28(%edi)
-	movl	%eax,32(%edi)
-	movl	%eax,36(%edi)
-	movl	%eax,40(%edi)
-	movl	%eax,44(%edi)
-	movl	%eax,48(%edi)
-	movl	%eax,52(%edi)
-	movl	%eax,56(%edi)
-	movl	%eax,60(%edi)
-	addl	$64,%edi
-	decl	%ecx
-	jnz	1b
-
-8:	movl	%edx,%ecx		/* zero by words */
-	shrl	$2,%ecx
-	andl	$3,%edx
-	rep
-	stosl
-
-7:	movl	%edx,%ecx		/* zero remainder bytes */
-	rep
-	stosb
-
-	popl	%edi
-	ret
 
 #if !defined(SMALL_KERNEL)
 ENTRY(sse2_pagezero)
