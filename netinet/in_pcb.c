@@ -705,6 +705,15 @@ in_pcbnotifyall(struct inpcbtable *table, struct sockaddr *dst, u_int rtable,
 	if (notify == NULL)
 		return;
 
+	/*
+	 * Use a temporary notify list protected by rwlock to run over
+	 * selected PCB.  This is necessary as the list of all PCB is
+	 * protected by a mutex.  Notify may call ip_output() eventually
+	 * which may sleep as pf lock is a rwlock.  Also the SRP
+	 * implementation of the routing table might sleep.
+	 * The same inp_notify list entry and inpt_notify rwlock are
+	 * used for UDP multicast and raw IP delivery.
+	 */
 	SIMPLEQ_INIT(&inpcblist);
 	rdomain = rtable_l2(rtable);
 	rw_enter_write(&table->inpt_notify);
