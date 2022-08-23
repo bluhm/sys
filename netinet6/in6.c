@@ -647,6 +647,8 @@ in6_update_ifa(struct ifnet *ifp, struct in6_aliasreq *ifra,
 	if (ia6 == NULL) {
 		hostIsNew = 1;
 		ia6 = malloc(sizeof(*ia6), M_IFADDR, M_WAITOK | M_ZERO);
+		refcnt_init_trace(&ia6->ia_ifa.ifa_refcnt,
+		    DT_REFCNT_IDX_IFADDR);
 		LIST_INIT(&ia6->ia6_memberships);
 		/* Initialize the address and masks, and put time stamp */
 		ia6->ia_ifa.ifa_addr = sin6tosa(&ia6->ia_addr);
@@ -938,7 +940,6 @@ void
 in6_unlink_ifa(struct in6_ifaddr *ia6, struct ifnet *ifp)
 {
 	struct ifaddr *ifa = &ia6->ia_ifa;
-	extern int ifatrash;
 	int plen;
 
 	NET_ASSERT_LOCKED();
@@ -953,7 +954,6 @@ in6_unlink_ifa(struct in6_ifaddr *ia6, struct ifnet *ifp)
 	rt_ifa_purge(ifa);
 	ifa_del(ifp, ifa);
 
-	ifatrash++;
 	ia6->ia_ifp = NULL;
 	ifafree(&ia6->ia_ifa);
 }

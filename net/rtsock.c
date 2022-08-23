@@ -1145,8 +1145,7 @@ rtm_output(struct rt_msghdr *rtm, struct rtentry **prt,
 				ifp->if_rtrequest(ifp, RTM_DELETE, rt);
 				ifafree(rt->rt_ifa);
 
-				ifa->ifa_refcnt++;
-				rt->rt_ifa = ifa;
+				rt->rt_ifa = ifaref(ifa);
 				rt->rt_ifidx = ifa->ifa_ifp->if_index;
 				/* recheck link state after ifp change */
 				rt_if_linkstate_change(rt, ifa->ifa_ifp,

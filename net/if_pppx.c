@@ -659,6 +659,7 @@ pppx_add_session(struct pppx_dev *pxd, struct pipex_session_req *req)
 	ifaddr.sin_addr = req->pr_ip_srcaddr;
 
 	ia = malloc(sizeof (*ia), M_IFADDR, M_WAITOK | M_ZERO);
+	refcnt_init_trace(&ia->ia_ifa.ifa_refcnt, DT_REFCNT_IDX_IFADDR);
 
 	ia->ia_addr.sin_family = AF_INET;
 	ia->ia_addr.sin_len = sizeof(struct sockaddr_in);

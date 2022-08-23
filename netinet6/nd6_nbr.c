@@ -1124,8 +1124,7 @@ nd6_dad_start(struct ifaddr *ifa)
 	 * first packet to be sent from the interface after interface
 	 * (re)initialization.
 	 */
-	dp->dad_ifa = ifa;
-	ifa->ifa_refcnt++;	/* just for safety */
+	dp->dad_ifa = ifaref(ifa);
 	dp->dad_count = ip6_dad_count;
 	dp->dad_ns_icount = dp->dad_na_icount = 0;
 	dp->dad_ns_ocount = dp->dad_ns_tcount = 0;

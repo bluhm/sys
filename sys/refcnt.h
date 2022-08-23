@@ -43,8 +43,10 @@ void	refcnt_finalize(struct refcnt *, const char *);
 int	refcnt_shared(struct refcnt *);
 unsigned int	refcnt_read(struct refcnt *);
 
-#define DT_REFCNT_IDX_INPCB	1
-#define DT_REFCNT_IDX_TDB	2
+/* sorted alphabetically, keep in sync with dev/dt/dt_prov_static.c */
+#define DT_REFCNT_IDX_IFADDR	1
+#define DT_REFCNT_IDX_INPCB	2
+#define DT_REFCNT_IDX_TDB	3
 
 #endif /* _KERNEL */
 
