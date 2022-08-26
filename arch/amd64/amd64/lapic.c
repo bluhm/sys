@@ -1,4 +1,4 @@
-/*	$OpenBSD: lapic.c,v 1.60 2022/08/15 04:17:50 daniel Exp $	*/
+/*	$OpenBSD: lapic.c,v 1.62 2022/08/25 20:43:17 cheloha Exp $	*/
 /* $NetBSD: lapic.c,v 1.2 2003/05/08 01:04:35 fvdl Exp $ */
 
 /*-
@@ -486,8 +486,6 @@ wait_next_cycle(void)
 	}
 }
 
-extern void tsc_delay(int);
-
 /*
  * Calibrate the local apic count-down timer (which is running at
  * bus-clock speed) vs. the i8254 counter/timer (which is running at
@@ -592,8 +590,7 @@ skip_calibration:
 		 * Now that the timer's calibrated, use the apic timer routines
 		 * for all our timing needs..
 		 */
-		if (delay_func == i8254_delay)
-			delay_func = lapic_delay;
+		delay_init(lapic_delay, 3000);
 		initclock_func = lapic_initclocks;
 	}
 }
