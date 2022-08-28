@@ -1,4 +1,4 @@
-/*      $OpenBSD: ip_divert.c,v 1.76 2022/08/22 21:18:48 mvs Exp $ */
+/*      $OpenBSD: ip_divert.c,v 1.78 2022/08/27 20:28:01 mvs Exp $ */
 
 /*
  * Copyright (c) 2009 Michele Marchetto <michele@openbsd.org>
@@ -68,6 +68,7 @@ const struct pr_usrreqs divert_usrreqs = {
 	.pru_detach	= divert_detach,
 	.pru_bind	= divert_bind,
 	.pru_shutdown	= divert_shutdown,
+	.pru_send	= divert_send,
 };
 
 int divbhashsize = DIVERTHASHSIZE;
@@ -269,9 +270,6 @@ divert_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *addr,
 	}
 	switch (req) {
 
-	case PRU_SEND:
-		return (divert_output(inp, m, addr, control));
-
 	case PRU_ABORT:
 		soisdisconnected(so);
 		in_pcbdetach(inp);
@@ -294,7 +292,6 @@ divert_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *addr,
 	case PRU_SLOWTIMO:
 	case PRU_PROTORCV:
 	case PRU_PROTOSEND:
-	case PRU_RCVD:
 	case PRU_RCVOOB:
 		error =  EOPNOTSUPP;
 		break;
@@ -362,6 +359,16 @@ divert_shutdown(struct socket *so)
 	soassertlocked(so);
 	socantsendmore(so);
 	return (0);
+}
+
+int
+divert_send(struct socket *so, struct mbuf *m, struct mbuf *addr,
+    struct mbuf *control)
+{
+	struct inpcb *inp = sotoinpcb(so);
+
+	soassertlocked(so);
+	return (divert_output(inp, m, addr, control));
 }
 
 int
