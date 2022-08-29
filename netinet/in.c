@@ -1,4 +1,4 @@
-/*	$OpenBSD: in.c,v 1.175 2022/08/06 15:57:59 bluhm Exp $	*/
+/*	$OpenBSD: in.c,v 1.176 2022/08/29 07:51:45 bluhm Exp $	*/
 /*	$NetBSD: in.c,v 1.26 1996/02/13 23:41:39 christos Exp $	*/
 
 /*
