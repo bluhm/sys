@@ -7,3 +7,5 @@ option	MULTIPROCESSOR
 #option	WITNESS
 
 cpu*		at mainbus?
+
+pseudo-device	kcov	1

@@ -10,3 +10,5 @@ option		MULTIPROCESSOR	# Multiple processor support
 #option		WITNESS
 
 cpu*		at mainbus?
+
+pseudo-device	kcov	1
