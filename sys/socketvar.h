@@ -348,9 +348,11 @@ int	sockargs(struct mbuf **, const void *, size_t, int);
 
 int	sosleep_nsec(struct socket *, void *, int, const char *, uint64_t);
 void	solock(struct socket *);
+void	solock_shared(struct socket *);
 int	solock_persocket(struct socket *);
 void	solock_pair(struct socket *, struct socket *);
 void	sounlock(struct socket *);
+void	sounlock_shared(struct socket *);
 
 int	sendit(struct proc *, int, struct msghdr *, int, register_t *);
 int	recvit(struct proc *, int, struct msghdr *, caddr_t, register_t *);

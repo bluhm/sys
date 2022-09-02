@@ -64,6 +64,8 @@ struct ifnet;
 struct pr_usrreqs {
 	int	(*pru_attach)(struct socket *, int);
 	int	(*pru_detach)(struct socket *);
+	void	(*pru_lock)(struct socket *);
+	void	(*pru_unlock)(struct socket *);
 	int	(*pru_bind)(struct socket *, struct mbuf *, struct proc *);
 	int	(*pru_listen)(struct socket *);
 	int	(*pru_connect)(struct socket *, struct mbuf *);
@@ -274,6 +276,18 @@ static inline int
 pru_detach(struct socket *so)
 {
 	return (*so->so_proto->pr_usrreqs->pru_detach)(so);
+}
+
+static inline void
+pru_lock(struct socket *so)
+{
+	(*so->so_proto->pr_usrreqs->pru_lock)(so);
+}
+
+static inline void
+pru_unlock(struct socket *so)
+{
+	(*so->so_proto->pr_usrreqs->pru_unlock)(so);
 }
 
 static inline int
