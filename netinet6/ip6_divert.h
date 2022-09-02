@@ -74,6 +74,8 @@ int	 divert6_usrreq(struct socket *,
 	    int, struct mbuf *, struct mbuf *, struct mbuf *, struct proc *);
 int	 divert6_attach(struct socket *, int);
 int	 divert6_detach(struct socket *);
+void	 divert6_lock(struct socket *);
+void	 divert6_unlock(struct socket *);
 int	 divert6_bind(struct socket *, struct mbuf *, struct proc *);
 int	 divert6_shutdown(struct socket *);
 int	 divert6_send(struct socket *, struct mbuf *, struct mbuf *,
