@@ -1,4 +1,4 @@
-/*	$OpenBSD: subr_disk.c,v 1.255 2022/09/01 13:45:27 krw Exp $	*/
+/*	$OpenBSD: subr_disk.c,v 1.257 2022/09/02 12:28:12 krw Exp $	*/
 /*	$NetBSD: subr_disk.c,v 1.17 1996/03/16 23:17:08 christos Exp $	*/
 
 /*
@@ -460,7 +460,6 @@ gpt_get_hdr(struct buf *bp, void (*strat)(struct buf *), struct disklabel *lp,
 {
 	struct gpt_header	ngh;
 	int			error;
-	uint64_t		partlba;
 	uint64_t		lbaend, lbastart;
 	uint32_t		csum;
 	uint32_t		size, partsize;
@@ -474,7 +473,6 @@ gpt_get_hdr(struct buf *bp, void (*strat)(struct buf *), struct disklabel *lp,
 
 	size = letoh32(ngh.gh_size);
 	partsize = letoh32(ngh.gh_part_size);
-	partlba = letoh64(ngh.gh_part_lba);
 	lbaend = letoh64(ngh.gh_lba_end);
 	lbastart = letoh64(ngh.gh_lba_start);
 
@@ -484,8 +482,7 @@ gpt_get_hdr(struct buf *bp, void (*strat)(struct buf *), struct disklabel *lp,
 
 	if (letoh64(ngh.gh_sig) == GPTSIGNATURE &&
 	    letoh32(ngh.gh_rev) == GPTREVISION &&
-	    size == GPTMINHDRSIZE && lbastart < lbaend &&
-	    lbastart < DL_GETDSIZE(lp) && lbaend < DL_GETDSIZE(lp) &&
+	    size == GPTMINHDRSIZE && lbastart <= lbaend &&
 	    partsize == GPTMINPARTSIZE && lp->d_secsize % partsize == 0 &&
 	    csum == ngh.gh_csum)
 		*gh = ngh;
