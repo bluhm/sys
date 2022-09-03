@@ -105,7 +105,7 @@
  *	T	tcp_timer_mtx		global tcp timer data structures
  */
 
-struct mutex tcp_timer_mtx;
+struct mutex tcp_timer_mtx = MUTEX_INITIALIZER(IPL_SOFTNET);
 
 /* patchable/settable parameters for tcp */
 int	tcp_mssdflt = TCP_MSS;
