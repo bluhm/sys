@@ -1,4 +1,4 @@
-/*	$OpenBSD: tcp_var.h,v 1.155 2022/09/03 18:48:50 mvs Exp $	*/
+/*	$OpenBSD: tcp_var.h,v 1.156 2022/09/03 19:22:19 bluhm Exp $	*/
 /*	$NetBSD: tcp_var.h,v 1.17 1996/02/13 23:44:24 christos Exp $	*/
 
 /*
