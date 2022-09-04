@@ -1293,7 +1293,8 @@ sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
 	if ((error = getsock(curproc, fd, &fp)) != 0)
 		return (error);
 	sosp = fp->f_data;
-	if (sosp->so_proto->pr_type != so->so_proto->pr_type) {
+	if (sosp->so_proto->pr_usrreqs->pru_send !=
+	    so->so_proto->pr_usrreqs->pru_send) {
 		error = EPROTONOSUPPORT;
 		goto frele;
 	}
