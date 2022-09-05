@@ -1,4 +1,4 @@
-/*	$OpenBSD: udp_var.h,v 1.46 2022/09/03 22:43:38 mvs Exp $	*/
+/*	$OpenBSD: udp_var.h,v 1.47 2022/09/05 14:56:09 bluhm Exp $	*/
 /*	$NetBSD: udp_var.h,v 1.12 1996/02/13 23:44:41 christos Exp $	*/
 
 /*
