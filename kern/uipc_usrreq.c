@@ -1,4 +1,4 @@
-/*	$OpenBSD: uipc_usrreq.c,v 1.185 2022/09/03 22:43:38 mvs Exp $	*/
+/*	$OpenBSD: uipc_usrreq.c,v 1.187 2022/09/14 22:28:52 deraadt Exp $	*/
 /*	$NetBSD: uipc_usrreq.c,v 1.18 1996/02/09 19:00:50 christos Exp $	*/
 
 /*
@@ -363,7 +363,7 @@ uipc_shutdown(struct socket *so)
 	return (0);
 }
 
-int
+void
 uipc_rcvd(struct socket *so)
 {
 	struct socket *so2;
@@ -390,8 +390,6 @@ uipc_rcvd(struct socket *so)
 	default:
 		panic("uipc 2");
 	}
-
-	return (0);
 }
 
 int
@@ -736,6 +734,7 @@ unp_bind(struct unpcb *unp, struct mbuf *nam, struct proc *p)
 	NDINIT(&nd, CREATE, NOFOLLOW | LOCKPARENT, UIO_SYSSPACE,
 	    soun->sun_path, p);
 	nd.ni_pledge = PLEDGE_UNIX;
+	nd.ni_unveil = UNVEIL_CREATE;
 
 	KERNEL_LOCK();
 /* SHOULD BE ABLE TO ADOPT EXISTING AND wakeup() ALA FIFO's */
