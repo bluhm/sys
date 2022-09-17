@@ -213,6 +213,7 @@ counters_zero(struct cpumem *cm, unsigned int n)
 	unsigned int i;
 
 	counters = cpumem_first(&cmi, cm);
+	membar_producer();
 	do {
 		for (i = 0; i < n; i++)
 			counters[i] = 0;
