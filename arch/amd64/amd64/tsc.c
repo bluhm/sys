@@ -1,4 +1,4 @@
-/*	$OpenBSD: tsc.c,v 1.27 2022/09/15 19:30:51 cheloha Exp $	*/
+/*	$OpenBSD: tsc.c,v 1.29 2022/09/22 04:57:08 robert Exp $	*/
 /*
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
  * Copyright (c) 2016,2017 Reyk Floeter <reyk@openbsd.org>
@@ -36,7 +36,8 @@ int		tsc_recalibrate;
 uint64_t	tsc_frequency;
 int		tsc_is_invariant;
 
-u_int		tsc_get_timecount(struct timecounter *tc);
+u_int		tsc_get_timecount_lfence(struct timecounter *tc);
+u_int		tsc_get_timecount_rdtscp(struct timecounter *tc);
 void		tsc_delay(int usecs);
 
 #include "lapic.h"
@@ -44,15 +45,17 @@ void		tsc_delay(int usecs);
 extern u_int32_t lapic_per_second;
 #endif
 
+u_int64_t (*tsc_rdtsc)(void) = rdtsc_lfence;
+
 struct timecounter tsc_timecounter = {
-	.tc_get_timecount = tsc_get_timecount,
+	.tc_get_timecount = tsc_get_timecount_lfence,
 	.tc_poll_pps = NULL,
 	.tc_counter_mask = ~0u,
 	.tc_frequency = 0,
 	.tc_name = "tsc",
 	.tc_quality = -1000,
 	.tc_priv = NULL,
-	.tc_user = TC_TSC,
+	.tc_user = TC_TSC_LFENCE,
 };
 
 uint64_t
@@ -105,6 +108,13 @@ tsc_identify(struct cpu_info *ci)
 	    !(ci->ci_flags & CPUF_INVAR_TSC))
 		return;
 
+	/* Prefer RDTSCP where supported. */
+	if (ISSET(ci->ci_feature_eflags, CPUID_RDTSCP)) {
+		tsc_rdtsc = rdtscp;
+		tsc_timecounter.tc_get_timecount = tsc_get_timecount_rdtscp;
+		tsc_timecounter.tc_user = TC_TSC_RDTSCP;
+	}
+
 	tsc_is_invariant = 1;
 
 	tsc_frequency = tsc_freq_cpuid(ci);
@@ -119,9 +129,9 @@ get_tsc_and_timecount(struct timecounter *tc, uint64_t *tsc, uint64_t *count)
 	int i;
 
 	for (i = 0; i < RECALIBRATE_MAX_RETRIES; i++) {
-		tsc1 = rdtsc_lfence();
+		tsc1 = tsc_rdtsc();
 		n = (tc->tc_get_timecount(tc) & tc->tc_counter_mask);
-		tsc2 = rdtsc_lfence();
+		tsc2 = tsc_rdtsc();
 
 		if ((tsc2 - tsc1) < RECALIBRATE_SMI_THRESHOLD) {
 			*count = n;
@@ -227,9 +237,15 @@ cpu_recalibrate_tsc(struct timecounter *tc)
 }
 
 u_int
-tsc_get_timecount(struct timecounter *tc)
+tsc_get_timecount_lfence(struct timecounter *tc)
 {
 	return rdtsc_lfence();
+}
+
+u_int
+tsc_get_timecount_rdtscp(struct timecounter *tc)
+{
+	return rdtscp();
 }
 
 void
@@ -260,14 +276,12 @@ tsc_delay(int usecs)
 	uint64_t interval, start;
 
 	interval = (uint64_t)usecs * tsc_frequency / 1000000;
-	start = rdtsc_lfence();
-	while (rdtsc_lfence() - start < interval)
+	start = tsc_rdtsc();
+	while (tsc_rdtsc() - start < interval)
 		CPU_BUSY_CYCLE();
 }
 
 #ifdef MULTIPROCESSOR
-
-#define TSC_DEBUG 1
 
 /*
  * Protections for global variables in this code:
@@ -405,6 +419,7 @@ tsc_test_sync_ap(struct cpu_info *ci)
 void
 tsc_report_test_results(void)
 {
+#ifdef TSC_DEBUG
 	u_int round = TSC_TEST_ROUNDS - tsc_test_rounds + 1;
 
 	if (tsc_bp_status.adj != 0) {
@@ -429,6 +444,10 @@ tsc_report_test_results(void)
 		    tsc_ap_name, tsc_ap_name, tsc_ap_status.lag_count,
 		    tsc_ap_status.lag_max);
 	}
+#else
+	if (tsc_ap_status.lag_count > 0 || tsc_bp_status.lag_count > 0)
+		printf("tsc: cpu0/%s: sync test failed\n", tsc_ap_name);
+#endif /* TSC_DEBUG */
 }
 
 /*
@@ -449,7 +468,7 @@ tsc_test_ap(void)
 {
 	uint64_t ap_val, bp_val, end, lag;
 
-	ap_val = rdtsc_lfence();
+	ap_val = tsc_rdtsc();
 	end = ap_val + tsc_test_cycles;
 	while (__predict_true(ap_val < end)) {
 		/*
@@ -460,7 +479,7 @@ tsc_test_ap(void)
 		 * the BP and the counters cannot be synchronized.
 		 */
 		bp_val = tsc_bp_status.val;
-		ap_val = rdtsc_lfence();
+		ap_val = tsc_rdtsc();
 		tsc_ap_status.val = ap_val;
 
 		/*
@@ -485,11 +504,11 @@ tsc_test_bp(void)
 {
 	uint64_t ap_val, bp_val, end, lag;
 
-	bp_val = rdtsc_lfence();
+	bp_val = tsc_rdtsc();
 	end = bp_val + tsc_test_cycles;
 	while (__predict_true(bp_val < end)) {
 		ap_val = tsc_ap_status.val;
-		bp_val = rdtsc_lfence();
+		bp_val = tsc_rdtsc();
 		tsc_bp_status.val = bp_val;
 
 		if (__predict_false(bp_val < ap_val)) {

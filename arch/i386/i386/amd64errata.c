@@ -1,4 +1,4 @@
-/*	$OpenBSD: amd64errata.c,v 1.12 2018/03/31 22:52:30 bluhm Exp $	*/
+/*	$OpenBSD: amd64errata.c,v 1.14 2022/09/23 01:25:39 jsg Exp $	*/
 /*	$NetBSD: errata.c,v 1.6 2007/02/05 21:05:45 ad Exp $	*/
 
 /*-
@@ -50,7 +50,6 @@
 #include <machine/cpufunc.h>
 #include <machine/specialreg.h>
 
-
 typedef struct errata {
 	u_short		e_num;
 	u_short		e_reported;
@@ -64,7 +63,7 @@ typedef enum cpurev {
 	BH_E4, CH_CG, CH_D0, DH_CG, DH_D0, DH_E3, DH_E6, JH_E1,
 	JH_E6, SH_B0, SH_B3, SH_C0, SH_CG, SH_D0, SH_E4, SH_E5,
 	DR_BA, DR_B2, DR_B3, RB_C2, RB_C3, BL_C2, BL_C3, DA_C2,
-	DA_C3, HY_D0, HY_D1, HY_D1_G34R1,  PH_E0, LN_B0,
+	DA_C3, HY_D0, HY_D1, PH_E0, LN_B0,
 	OINK
 } cpurev_t;
 
@@ -82,7 +81,7 @@ static const u_int cpurevs[] = {
 	DR_BA, 0x0100f2a, DR_B2, 0x0100f22, DR_B3, 0x0100f23,
 	RB_C2, 0x0100f42, RB_C3, 0x0100f43, BL_C2, 0x0100f52,
 	BL_C3, 0x0100f53, DA_C2, 0x0100f62, DA_C3, 0x0100f63,
-	HY_D0, 0x0100f80, HY_D1, 0x0100f81, HY_D1_G34R1, 0x0100f91,
+	HY_D0, 0x0100f80, HY_D1, 0x0100f81, HY_D1, 0x0100f91,
 	PH_E0, 0x0100fa0, LN_B0, 0x0300f10,
 	OINK
 };
@@ -129,7 +128,7 @@ static const uint8_t amd64_errata_set8[] = {
 
 static const uint8_t amd64_errata_set9[] = {
 	DR_BA, DR_B2, DR_B3, RB_C2, RB_C3, BL_C2, BL_C3, DA_C2,
-	DA_C3, HY_D0, HY_D1, HY_D1_G34R1,  PH_E0, LN_B0, OINK
+	DA_C3, HY_D0, HY_D1, PH_E0, LN_B0, OINK
 };
 
 int amd64_errata_setmsr(struct cpu_info *, errata_t *);
@@ -295,6 +294,7 @@ amd64_errata(struct cpu_info *ci)
 	int found = 0;
 	int corrected = 0;
 	u_int32_t regs[4];
+	static int printed = 0;
 
 	cpuid(0x80000001, regs);
 
@@ -363,17 +363,22 @@ amd64_errata(struct cpu_info *ci)
 		int first = 1;
 
 		/* Print out found and corrected */
-		printf("%s: AMD %s", ci->ci_dev->dv_xname,
-		    (corrected == 1) ? "erratum" : "errata");
+		if (!printed) {
+			printf("%s: AMD %s", ci->ci_dev->dv_xname,
+			    (corrected == 1) ? "erratum" : "errata");
+		}
 		for (e = errata; e < ex; e++) {
 			if (e->e_reported == 2) {
-				if (! first)
-					printf(",");
-				printf(" %d", e->e_num);
+				if (!printed) {
+					if (! first)
+						printf(",");
+					printf(" %d", e->e_num);
+				}
 				first = 0;
 			}
 		}
-		printf(" detected and fixed\n");
+		if (!printed)
+			printf(" detected and fixed\n");
 	}
 #endif
 
@@ -381,16 +386,24 @@ amd64_errata(struct cpu_info *ci)
 		int first = 1;
 
 		/* Print out found but not corrected */
-		printf("%s: AMD %s", ci->ci_dev->dv_xname,
-		    (found == 1) ? "erratum" : "errata");
+		if (!printed) {
+			printf("%s: AMD %s", ci->ci_dev->dv_xname,
+			    (found == 1) ? "erratum" : "errata");
+		}
 		for (e = errata; e < ex; e++) {
 			if (e->e_reported == 1) {
-				if (! first)
-					printf(",");
-				printf(" %d", e->e_num);
+				if (!printed) {
+					if (! first)
+						printf(",");
+					printf(" %d", e->e_num);
+				}
 				first = 0;
 			}
 		}
-		printf(" present, BIOS upgrade may be required\n");
+		if (!printed)
+			printf(" present, BIOS upgrade may be required\n");
 	}
+
+	/* Print only one time for the first CPU */
+	printed = 1;
 }
