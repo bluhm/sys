@@ -129,6 +129,24 @@ rw_enter_write(struct rwlock *rwl)
 	}
 }
 
+int
+rw_enter_write_sleepfail(struct rwlock *rwl)
+{
+	struct proc *p = curproc;
+	int error = 0;
+
+	if (__predict_false(rw_cas(&rwl->rwl_owner, 0,
+	    RW_PROC(p) | RWLOCK_WRLOCK))) {
+		error = rw_enter(rwl, RW_WRITE | RW_SLEEPFAIL);
+	} else {
+		membar_enter_after_atomic();
+		WITNESS_CHECKORDER(&rwl->rwl_lock_obj,
+		    LOP_EXCLUSIVE | LOP_NEWORDER, NULL);
+		WITNESS_LOCK(&rwl->rwl_lock_obj, LOP_EXCLUSIVE);
+	}
+	return error;
+}
+
 void
 rw_exit_read(struct rwlock *rwl)
 {
