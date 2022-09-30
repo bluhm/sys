@@ -1441,9 +1441,11 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 					continue;
 				FILLIT(fp, fdp, i, NULL, pr);
 				FRELE(fp, p);
-				if (error == EAGAIN) {
+				if (error) {
 					NET_UNLOCK_SHARED();
-					goto retry_bypid;
+					if (error == EAGAIN)
+						goto retry_bypid;
+					goto out;
 				}
 			}
 		}
@@ -1478,9 +1480,11 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 					continue;
 				FILLIT(fp, fdp, i, NULL, pr);
 				FRELE(fp, p);
-				if (error == EAGAIN) {
+				if (error) {
 					NET_UNLOCK_SHARED();
-					goto retry_byuid;
+					if (error == EAGAIN)
+						goto retry_byuid;
+					goto out;
 				}
 			}
 		}
@@ -1490,6 +1494,7 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 		error = EINVAL;
 		break;
 	}
+ out:
 	free(kf, M_TEMP, sizeof(*kf));
 
 	if (!error) {
