@@ -1163,23 +1163,8 @@ fill_file(struct kinfo_file *kf, struct file *fp, struct filedesc *fdp,
 		break;
 
 	case DTYPE_SOCKET: {
-		int locked = 0;
-
-		if (so == NULL) {
-			int error;
-
+		if (so == NULL)
 			so = (struct socket *)fp->f_data;
-			/* if so is passed as parameter it is already locked */
-			switch (so->so_proto->pr_domain->dom_family) {
-			case AF_INET:
-			case AF_INET6:
-				error = rw_enter_write_sleepfail(&netlock);
-				if (error)
-					return error;
-				locked = 1;
-				break;
-			}
-		}
 
 		kf->so_type = so->so_type;
 		kf->so_state = so->so_state;
@@ -1198,11 +1183,8 @@ fill_file(struct kinfo_file *kf, struct file *fp, struct filedesc *fdp,
 			kf->so_splicelen = so->so_sp->ssp_len;
 		} else if (issplicedback(so))
 			kf->so_splicelen = -1;
-		if (so->so_pcb == NULL) {
-			if (locked)
-				NET_UNLOCK();
+		if (so->so_pcb == NULL)
 			break;
-		}
 		switch (kf->so_family) {
 		case AF_INET: {
 			struct inpcb *inpcb = so->so_pcb;
@@ -1275,8 +1257,6 @@ fill_file(struct kinfo_file *kf, struct file *fp, struct filedesc *fdp,
 			break;
 		    }
 		}
-		if (locked)
-			NET_UNLOCK();
 		break;
 	    }
 
@@ -1310,7 +1290,6 @@ fill_file(struct kinfo_file *kf, struct file *fp, struct filedesc *fdp,
 		int error;
 
 		/* implement fdplock(fdp) with sleepfail */
-		NET_ASSERT_UNLOCKED();
 		error = rw_enter_write_sleepfail(&(fdp)->fd_lock);
 		if (error)
 			return error;
@@ -1389,7 +1368,7 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 		if (arg == DTYPE_SOCKET) {
 			struct inpcb *inp;
 
-			NET_LOCK();
+			NET_LOCK_SHARED();
 			mtx_enter(&tcbtable.inpt_mtx);
 			TAILQ_FOREACH(inp, &tcbtable.inpt_queue, inp_queue)
 				FILLSO(inp->inp_socket);
@@ -1409,7 +1388,7 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 				FILLSO(inp->inp_socket);
 			mtx_leave(&rawin6pcbtable.inpt_mtx);
 #endif
-			NET_UNLOCK();
+			NET_UNLOCK_SHARED();
 		}
 		fp = NULL;
 		while ((fp = fd_iterfile(fp, p)) != NULL) {
@@ -1435,6 +1414,7 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
  retry_bypid:
 		FILLINIT();
 		matched = 0;
+		NET_LOCK_SHARED();
 		LIST_FOREACH(pr, &allprocess, ps_list) {
 			/*
 			 * skip system, exiting, embryonic and undead
@@ -1461,16 +1441,20 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 					continue;
 				FILLIT(fp, fdp, i, NULL, pr);
 				FRELE(fp, p);
-				if (error == EAGAIN)
+				if (error == EAGAIN) {
+					NET_UNLOCK_SHARED();
 					goto retry_bypid;
+				}
 			}
 		}
+		NET_UNLOCK_SHARED();
 		if (!matched)
 			error = ESRCH;
 		break;
 	case KERN_FILE_BYUID:
  retry_byuid:
 		FILLINIT();
+		NET_LOCK_SHARED();
 		LIST_FOREACH(pr, &allprocess, ps_list) {
 			/*
 			 * skip system, exiting, embryonic and undead
@@ -1494,10 +1478,13 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 					continue;
 				FILLIT(fp, fdp, i, NULL, pr);
 				FRELE(fp, p);
-				if (error == EAGAIN)
+				if (error == EAGAIN) {
+					NET_UNLOCK_SHARED();
 					goto retry_byuid;
+				}
 			}
 		}
+		NET_UNLOCK_SHARED();
 		break;
 	default:
 		error = EINVAL;
