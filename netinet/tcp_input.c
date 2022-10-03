@@ -3505,7 +3505,7 @@ syn_cache_get(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 	 * the connection, abort it.
 	 */
 	oso = so;
-	so = sonewconn(so, SS_ISCONNECTED);
+	so = sonewconn(so, SS_ISCONNECTED, M_DONTWAIT);
 	if (so == NULL)
 		goto resetandabort;
 

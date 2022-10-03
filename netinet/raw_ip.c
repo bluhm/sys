@@ -468,7 +468,7 @@ u_long	rip_sendspace = RIPSNDQ;
 u_long	rip_recvspace = RIPRCVQ;
 
 int
-rip_attach(struct socket *so, int proto)
+rip_attach(struct socket *so, int proto, int wait)
 {
 	struct inpcb *inp;
 	int error;
@@ -483,7 +483,7 @@ rip_attach(struct socket *so, int proto)
 	if ((error = soreserve(so, rip_sendspace, rip_recvspace)))
 		return error;
 	NET_ASSERT_LOCKED();
-	if ((error = in_pcballoc(so, &rawcbtable)))
+	if ((error = in_pcballoc(so, &rawcbtable, wait)))
 		return error;
 	inp = sotoinpcb(so);
 	inp->inp_ip.ip_p = proto;

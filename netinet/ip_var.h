@@ -256,7 +256,7 @@ void	 rip_init(void);
 int	 rip_input(struct mbuf **, int *, int, int);
 int	 rip_output(struct mbuf *, struct socket *, struct sockaddr *,
 	    struct mbuf *);
-int	 rip_attach(struct socket *, int);
+int	 rip_attach(struct socket *, int, int);
 int	 rip_detach(struct socket *);
 void	 rip_lock(struct socket *);
 void	 rip_unlock(struct socket *);

@@ -70,7 +70,7 @@ extern const struct pr_usrreqs divert6_usrreqs;
 void	 divert6_init(void);
 void	 divert6_packet(struct mbuf *, int, u_int16_t);
 int	 divert6_sysctl(int *, u_int, void *, size_t *, void *, size_t);
-int	 divert6_attach(struct socket *, int);
+int	 divert6_attach(struct socket *, int, int);
 int	 divert6_detach(struct socket *);
 void	 divert6_lock(struct socket *);
 void	 divert6_unlock(struct socket *);

@@ -277,7 +277,7 @@ extern int in_pcbnotifymiss;
 
 void	 in_init(void);
 void	 in_losing(struct inpcb *);
-int	 in_pcballoc(struct socket *, struct inpcbtable *);
+int	 in_pcballoc(struct socket *, struct inpcbtable *, int);
 int	 in_pcbbind(struct inpcb *, struct mbuf *, struct proc *);
 int	 in_pcbaddrisavail(struct inpcb *, struct sockaddr_in *, int,
 	    struct proc *);

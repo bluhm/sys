@@ -1079,7 +1079,7 @@ release:
 }
 
 int
-udp_attach(struct socket *so, int proto)
+udp_attach(struct socket *so, int proto, int wait)
 {
 	int error;
 
@@ -1090,7 +1090,7 @@ udp_attach(struct socket *so, int proto)
 		return error;
 
 	NET_ASSERT_LOCKED();
-	if ((error = in_pcballoc(so, &udbtable)))
+	if ((error = in_pcballoc(so, &udbtable, wait)))
 		return error;
 #ifdef INET6
 	if (sotoinpcb(so)->inp_flags & INP_IPV6)

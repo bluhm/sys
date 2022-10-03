@@ -143,7 +143,7 @@ int	 udp6_output(struct inpcb *, struct mbuf *, struct mbuf *,
 	struct mbuf *);
 #endif /* INET6 */
 int	 udp_sysctl(int *, u_int, void *, size_t *, void *, size_t);
-int	 udp_attach(struct socket *, int);
+int	 udp_attach(struct socket *, int, int);
 int	 udp_detach(struct socket *);
 void	 udp_lock(struct socket *);
 void	 udp_unlock(struct socket *);

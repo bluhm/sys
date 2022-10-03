@@ -112,7 +112,7 @@ struct fdpass {
 
 extern const struct pr_usrreqs uipc_usrreqs;
 
-int	uipc_attach(struct socket *, int);
+int	uipc_attach(struct socket *, int, int);
 int	uipc_detach(struct socket *);
 int	uipc_bind(struct socket *, struct mbuf *, struct proc *);
 int	uipc_listen(struct socket *);

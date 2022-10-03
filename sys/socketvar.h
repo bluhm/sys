@@ -331,7 +331,7 @@ void	soisconnecting(struct socket *);
 void	soisdisconnected(struct socket *);
 void	soisdisconnecting(struct socket *);
 int	solisten(struct socket *, int);
-struct socket *sonewconn(struct socket *, int);
+struct socket *sonewconn(struct socket *, int, int);
 void	soqinsque(struct socket *, struct socket *, int);
 int	soqremque(struct socket *, int);
 int	soreceive(struct socket *, struct mbuf **, struct uio *,

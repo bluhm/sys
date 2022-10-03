@@ -226,11 +226,12 @@ in_rootonly(u_int16_t port, u_int16_t proto)
 }
 
 int
-in_pcballoc(struct socket *so, struct inpcbtable *table)
+in_pcballoc(struct socket *so, struct inpcbtable *table, int wait)
 {
 	struct inpcb *inp;
 
-	inp = pool_get(&inpcb_pool, PR_NOWAIT|PR_ZERO);
+	inp = pool_get(&inpcb_pool, (wait == M_WAIT ? PR_WAITOK : PR_NOWAIT) |
+	    PR_ZERO);
 	if (inp == NULL)
 		return (ENOBUFS);
 	inp->inp_table = table;

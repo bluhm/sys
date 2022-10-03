@@ -351,7 +351,7 @@ void	rip6_ctlinput(int, struct sockaddr *, u_int, void *);
 int	rip6_ctloutput(int, struct socket *, int, int, struct mbuf *);
 int	rip6_output(struct mbuf *, struct socket *, struct sockaddr *,
 	    struct mbuf *);
-int	rip6_attach(struct socket *, int);
+int	rip6_attach(struct socket *, int, int);
 int	rip6_detach(struct socket *);
 void	rip6_lock(struct socket *);
 void	rip6_unlock(struct socket *);
