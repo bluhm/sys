@@ -1,4 +1,4 @@
-/*	$OpenBSD: raw_ip6.c,v 1.169 2022/09/13 09:05:02 mvs Exp $	*/
+/*	$OpenBSD: raw_ip6.c,v 1.170 2022/10/03 16:43:52 bluhm Exp $	*/
 /*	$KAME: raw_ip6.c,v 1.69 2001/03/04 15:55:44 itojun Exp $	*/
 
 /*

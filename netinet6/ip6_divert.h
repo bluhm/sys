@@ -1,4 +1,4 @@
-/*      $OpenBSD: ip6_divert.h,v 1.20 2022/09/05 14:56:09 bluhm Exp $ */
+/*      $OpenBSD: ip6_divert.h,v 1.21 2022/10/03 16:43:52 bluhm Exp $ */
 
 /*
  * Copyright (c) 2009 Michele Marchetto <michele@openbsd.org>
