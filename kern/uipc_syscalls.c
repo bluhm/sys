@@ -487,6 +487,7 @@ sys_socketpair(struct proc *p, void *v, register_t *retval)
 		if (error != 0)
 			goto free2;
 	}
+
 	fdplock(fdp);
 	if ((error = falloc(p, &fp1, &sv[0])) != 0)
 		goto free3;
@@ -500,20 +501,30 @@ sys_socketpair(struct proc *p, void *v, register_t *retval)
 	fp2->f_type = DTYPE_SOCKET;
 	fp2->f_ops = &socketops;
 	fp2->f_data = so2;
+
+	fdinsert(fdp, sv[0], cloexec, fp1);
+	fdinsert(fdp, sv[1], cloexec, fp2);
+	fdpunlock(fdp);
+
 	error = copyout(sv, SCARG(uap, rsv), 2 * sizeof (int));
 	if (error == 0) {
-		fdinsert(fdp, sv[0], cloexec, fp1);
-		fdinsert(fdp, sv[1], cloexec, fp2);
-		fdpunlock(fdp);
 #ifdef KTRACE
 		if (KTRPOINT(p, KTR_STRUCT))
 			ktrfds(p, sv, 2);
 #endif
-		FRELE(fp1, p);
-		FRELE(fp2, p);
-		return (0);
+	} else {
+		/* fdrelease() unlocks fdp. */
+		fdplock(fdp);
+		fdrelease(p, sv[0]);
+		fdplock(fdp);
+		fdrelease(p, sv[1]);
 	}
-	fdremove(fdp, sv[1]);
+
+	FRELE(fp1, p);
+	FRELE(fp2, p);
+	return (error);
+
+
 free4:
 	fdremove(fdp, sv[0]);
 free3:

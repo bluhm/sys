@@ -186,7 +186,6 @@ dopipe(struct proc *p, int *ufds, int flags)
 	rpipe = &pp->pp_rpipe;
 
 	fdplock(fdp);
-
 	error = falloc(p, &rf, &fds[0]);
 	if (error != 0)
 		goto free2;
@@ -194,7 +193,6 @@ dopipe(struct proc *p, int *ufds, int flags)
 	rf->f_type = DTYPE_PIPE;
 	rf->f_data = rpipe;
 	rf->f_ops = &pipeops;
-
 	error = falloc(p, &wf, &fds[1]);
 	if (error != 0)
 		goto free3;
@@ -205,16 +203,17 @@ dopipe(struct proc *p, int *ufds, int flags)
 
 	fdinsert(fdp, fds[0], cloexec, rf);
 	fdinsert(fdp, fds[1], cloexec, wf);
+	fdpunlock(fdp);
 
 	error = copyout(fds, ufds, sizeof(fds));
 	if (error == 0) {
-		fdpunlock(fdp);
 #ifdef KTRACE
 		if (KTRPOINT(p, KTR_STRUCT))
 			ktrfds(p, fds, 2);
 #endif
 	} else {
 		/* fdrelease() unlocks fdp. */
+		fdplock(fdp);
 		fdrelease(p, fds[0]);
 		fdplock(fdp);
 		fdrelease(p, fds[1]);
