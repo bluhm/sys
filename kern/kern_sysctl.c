@@ -142,7 +142,7 @@ int sysctl_video(int *, u_int, void *, size_t *, void *, size_t);
 int sysctl_cpustats(int *, u_int, void *, size_t *, void *, size_t);
 int sysctl_utc_offset(void *, size_t *, void *, size_t);
 
-int fill_file(struct kinfo_file *, struct file *, struct filedesc *, int,
+void fill_file(struct kinfo_file *, struct file *, struct filedesc *, int,
     struct vnode *, struct process *, struct proc *, struct socket *, int);
 void fill_kproc(struct process *, struct kinfo_proc *, struct proc *, int);
 
@@ -1082,7 +1082,7 @@ sysctl_rdstruct(void *oldp, size_t *oldlenp, void *newp, const void *sp,
 extern int rw_enter_write_sleepfail(struct rwlock *);
 
 #ifndef SMALL_KERNEL
-int
+void
 fill_file(struct kinfo_file *kf, struct file *fp, struct filedesc *fdp,
 	  int fd, struct vnode *vp, struct process *pr, struct proc *p,
 	  struct socket *so, int show_pointers)
@@ -1287,16 +1287,9 @@ fill_file(struct kinfo_file *kf, struct file *fp, struct filedesc *fdp,
 		strlcpy(kf->p_comm, pr->ps_comm, sizeof(kf->p_comm));
 	}
 	if (fdp != NULL) {
-		int error;
-
-		/* implement fdplock(fdp) with sleepfail */
-		error = rw_enter_write_sleepfail(&(fdp)->fd_lock);
-		if (error)
-			return error;
+		fdpassertlocked(fdp);
 		kf->fd_ofileflags = fdp->fd_ofileflags[fd];
-		fdpunlock(fdp);
 	}
-	return 0;
 }
 
 /*
@@ -1344,10 +1337,8 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 } while (0)
 #define FILLIT2(fp, fdp, i, vp, pr, so) do {				\
 	if (buflen >= elem_size && elem_count > 0) {			\
-		error = fill_file(kf, fp, fdp, i, vp, pr, p, so,	\
+		fill_file(kf, fp, fdp, i, vp, pr, p, so,		\
 		    show_pointers);					\
-		if (error)						\
-			break;						\
 		error = copyout(kf, dp, outsize);			\
 		if (error)						\
 			break;						\
@@ -1436,18 +1427,21 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 				FILLIT(NULL, NULL, KERN_FILE_RDIR, fdp->fd_rdir, pr);
 			if (pr->ps_tracevp)
 				FILLIT(NULL, NULL, KERN_FILE_TRACE, pr->ps_tracevp, pr);
+			/* implement fdplock(fdp) with sleepfail */
+			error = rw_enter_write_sleepfail(&fdp->fd_lock);
+			if (error) {
+				NET_UNLOCK_SHARED();
+				if (error == EAGAIN)
+					goto retry_bypid;
+				goto out;
+			}
 			for (i = 0; i < fdp->fd_nfiles; i++) {
 				if ((fp = fd_getfile(fdp, i)) == NULL)
 					continue;
 				FILLIT(fp, fdp, i, NULL, pr);
 				FRELE(fp, p);
-				if (error) {
-					NET_UNLOCK_SHARED();
-					if (error == EAGAIN)
-						goto retry_bypid;
-					goto out;
-				}
 			}
+			fdpunlock(fdp);
 		}
 		NET_UNLOCK_SHARED();
 		if (!matched)
@@ -1475,18 +1469,21 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 				FILLIT(NULL, NULL, KERN_FILE_RDIR, fdp->fd_rdir, pr);
 			if (pr->ps_tracevp)
 				FILLIT(NULL, NULL, KERN_FILE_TRACE, pr->ps_tracevp, pr);
+			/* implement fdplock(fdp) with sleepfail */
+			error = rw_enter_write_sleepfail(&fdp->fd_lock);
+			if (error) {
+				NET_UNLOCK_SHARED();
+				if (error == EAGAIN)
+					goto retry_byuid;
+				goto out;
+			}
 			for (i = 0; i < fdp->fd_nfiles; i++) {
 				if ((fp = fd_getfile(fdp, i)) == NULL)
 					continue;
 				FILLIT(fp, fdp, i, NULL, pr);
 				FRELE(fp, p);
-				if (error) {
-					NET_UNLOCK_SHARED();
-					if (error == EAGAIN)
-						goto retry_byuid;
-					goto out;
-				}
 			}
+			fdpunlock(fdp);
 		}
 		NET_UNLOCK_SHARED();
 		break;
