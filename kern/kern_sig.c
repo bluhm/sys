@@ -1566,13 +1566,17 @@ sigexit(struct proc *p, int signum)
 
 	p->p_p->ps_acflag |= AXSIG;
 	if (sigprop[signum] & SA_CORE) {
+		int error;
 		p->p_sisig = signum;
 
 		/* if there are other threads, pause them */
 		if (P_HASSIBLING(p))
 			single_thread_set(p, SINGLE_SUSPEND, 1);
 
-		if (coredump(p) == 0)
+		error = coredump(p);
+		if (error)
+			printf("%s: coredump error: %d\n", __func__, error);
+		else
 			signum |= WCOREFLAG;
 	}
 	exit1(p, 0, signum, EXIT_NORMAL);

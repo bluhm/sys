@@ -931,18 +931,24 @@ coredump_elf(struct proc *p, void *cookie)
 	 */
 	error = uvm_coredump_walkmap(p, coredump_setup_elf,
 	    coredump_walk_elf, &ws);
-	if (error)
+	if (error) {
+		printf("%s: uvm_coredump_walkmap error: %d\n", __func__, error);
 		goto out;
+	}
 
 	error = coredump_write(cookie, UIO_SYSSPACE, ws.psections,
 	    ws.psectionslen);
-	if (error)
+	if (error) {
+		printf("%s: coredump_write sys error: %d\n", __func__, error);
 		goto out;
+	}
 
 	/* Write out the notes. */
 	error = coredump_notes_elf(p, cookie, &notesize);
-	if (error)
+	if (error) {
+		printf("%s: coredump_notes_elf error: %d\n", __func__, error);
 		goto out;
+	}
 
 #ifdef DIAGNOSTIC
 	if (notesize != ws.notesize)
@@ -969,8 +975,10 @@ coredump_elf(struct proc *p, void *cookie)
 
 		error = coredump_write(cookie, UIO_USERSPACE,
 		    (void *)(vaddr_t)pent->p_vaddr, pent->p_filesz);
-		if (error)
+		if (error) {
+			printf("%s: coredump_write user error: %d\n", __func__, error);
 			goto out;
+		}
 
 		coredump_unmap(cookie, (vaddr_t)pent->p_vaddr,
 		    (vaddr_t)pent->p_vaddr + pent->p_filesz);
@@ -1030,8 +1038,10 @@ coredump_setup_elf(int segment_count, void *cookie)
 
 	/* Get the size of the notes. */
 	error = coredump_notes_elf(ws->p, NULL, &ws->notesize);
-	if (error)
+	if (error) {
+		printf("%s: coredump_notes_elf error: %d\n", __func__, error);
 		return error;
+	}
 
 	/* Setup the ELF header */
 	memset(&ehdr, 0, sizeof(ehdr));
@@ -1152,9 +1162,6 @@ coredump_walk_elf(vaddr_t start, vaddr_t realend, vaddr_t end, vm_prot_t prot,
 int
 coredump_notes_elf(struct proc *p, void *iocookie, size_t *sizep)
 {
-	struct ps_strings pss;
-	struct iovec iov;
-	struct uio uio;
 	struct elfcore_procinfo cpi;
 	Elf_Note nhdr;
 	struct process *pr = p->p_p;
@@ -1205,15 +1212,22 @@ coredump_notes_elf(struct proc *p, void *iocookie, size_t *sizep)
 
 		error = coredump_writenote_elf(p, iocookie, &nhdr,
 		    "OpenBSD", &cpi);
-		if (error)
+		if (error) {
+			printf("%s: coredump_writenote_elf error: %d\n", __func__, error);
 			return (error);
+		}
 	}
 	size += notesize;
 
+#if 0
 	/* Second, write an NT_OPENBSD_AUXV note. */
 	notesize = sizeof(nhdr) + elfround(sizeof("OpenBSD")) +
 	    elfround(ELF_AUX_WORDS * sizeof(char *));
 	if (iocookie) {
+		struct ps_strings pss;
+		struct iovec iov;
+		struct uio uio;
+
 		iov.iov_base = &pss;
 		iov.iov_len = sizeof(pss);
 		uio.uio_iov = &iov;
@@ -1225,8 +1239,10 @@ coredump_notes_elf(struct proc *p, void *iocookie, size_t *sizep)
 		uio.uio_procp = NULL;
 
 		error = uvm_io(&p->p_vmspace->vm_map, &uio, 0);
-		if (error)
+		if (error) {
+			printf("%s: uvm_io error: %d\n", __func__, error);
 			return (error);
+		}
 
 		if (pss.ps_envstr == NULL)
 			return (EIO);
@@ -1237,20 +1253,28 @@ coredump_notes_elf(struct proc *p, void *iocookie, size_t *sizep)
 
 		error = coredump_write(iocookie, UIO_SYSSPACE,
 		    &nhdr, sizeof(nhdr));
-		if (error)
+		if (error) {
+			printf("%s: coredump_write nhdr error: %d\n", __func__, error);
 			return (error);
+		}
 
 		error = coredump_write(iocookie, UIO_SYSSPACE,
 		    "OpenBSD", elfround(nhdr.namesz));
-		if (error)
+		if (error) {
+			printf("%s: coredump_write OpenBSD error: %d\n", __func__, error);
 			return (error);
+		}
 
 		error = coredump_write(iocookie, UIO_USERSPACE,
 		    pss.ps_envstr + pss.ps_nenvstr + 1, nhdr.descsz);
-		if (error)
+		if (error) {
+			printf("%s: coredump_write pss error: %d\n", __func__, error);
+			printf("ps_envstr %p, ps_nenvstr %d, descsz %u\n", pss.ps_envstr, pss.ps_nenvstr, nhdr.descsz);
 			return (error);
+		}
 	}
 	size += notesize;
+#endif
 
 #ifdef PT_WCOOKIE
 	notesize = sizeof(nhdr) + elfround(sizeof("OpenBSD")) +
@@ -1265,8 +1289,10 @@ coredump_notes_elf(struct proc *p, void *iocookie, size_t *sizep)
 		wcookie = process_get_wcookie(p);
 		error = coredump_writenote_elf(p, iocookie, &nhdr,
 		    "OpenBSD", &wcookie);
-		if (error)
+		if (error) {
+			printf("%s: coredump_writenote_elf OpenBSD error: %d\n", __func__, error);
 			return (error);
+		}
 	}
 	size += notesize;
 #endif
@@ -1276,8 +1302,10 @@ coredump_notes_elf(struct proc *p, void *iocookie, size_t *sizep)
 	 * coredump.
 	 */
 	error = coredump_note_elf(p, iocookie, &notesize);
-	if (error)
+	if (error) {
+		printf("%s: coredump_note_elf iocookie error: %d\n", __func__, error);
 		return (error);
+	}
 	size += notesize;
 
 	/*
@@ -1290,8 +1318,10 @@ coredump_notes_elf(struct proc *p, void *iocookie, size_t *sizep)
 		if (q == p)		/* we've taken care of this thread */
 			continue;
 		error = coredump_note_elf(q, iocookie, &notesize);
-		if (error)
+		if (error) {
+			printf("%s: coredump_note_elf iocookie loop error: %d\n", __func__, error);
 			return (error);
+		}
 		size += notesize;
 	}
 
