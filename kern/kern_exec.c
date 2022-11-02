@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_exec.c,v 1.234 2022/10/08 17:03:09 deraadt Exp $	*/
+/*	$OpenBSD: kern_exec.c,v 1.238 2022/10/30 17:43:40 guenther Exp $	*/
 /*	$NetBSD: kern_exec.c,v 1.75 1996/02/09 18:59:28 christos Exp $	*/
 
 /*-
@@ -466,18 +466,15 @@ sys_execve(struct proc *p, void *v, register_t *retval)
 #ifdef MACHINE_STACK_GROWS_UP
 	pr->ps_strings = (vaddr_t)vm->vm_maxsaddr + sgap;
         if (uvm_map_protect(&vm->vm_map, (vaddr_t)vm->vm_maxsaddr,
-            trunc_page(pr->ps_strings), PROT_NONE, TRUE, TRUE))
+            trunc_page(pr->ps_strings), PROT_NONE, TRUE, FALSE))
                 goto exec_abort;
 #else
 	pr->ps_strings = (vaddr_t)vm->vm_minsaddr - sizeof(arginfo) - sgap;
         if (uvm_map_protect(&vm->vm_map,
             round_page(pr->ps_strings + sizeof(arginfo)),
-            (vaddr_t)vm->vm_minsaddr, PROT_NONE, TRUE, TRUE))
+            (vaddr_t)vm->vm_minsaddr, PROT_NONE, TRUE, FALSE))
                 goto exec_abort;
 #endif
-
-	uvm_map_immutable(&p->p_vmspace->vm_map, (vaddr_t)vm->vm_maxsaddr,
-	    (vaddr_t)vm->vm_minsaddr, 1, "stack");
 
 	memset(&arginfo, 0, sizeof(arginfo));
 
@@ -682,9 +679,9 @@ sys_execve(struct proc *p, void *v, register_t *retval)
 	if (exec_elf_fixup(p, &pack) != 0)
 		goto free_pack_abort;
 #ifdef MACHINE_STACK_GROWS_UP
-	setregs(p, &pack, (u_long)stack + slen, retval);
+	setregs(p, &pack, (u_long)stack + slen, &arginfo);
 #else
-	setregs(p, &pack, (u_long)stack, retval);
+	setregs(p, &pack, (u_long)stack, &arginfo);
 #endif
 
 	/* map the process's signal trampoline code */
@@ -714,7 +711,8 @@ sys_execve(struct proc *p, void *v, register_t *retval)
 	atomic_clearbits_int(&pr->ps_flags, PS_INEXEC);
 	single_thread_clear(p, P_SUSPSIG);
 
-	return (0);
+	/* setregs() sets up all the registers, so just 'return' */
+	return EJUSTRETURN;
 
 bad:
 	/* free the vmspace-creation commands, and release their references */
@@ -867,7 +865,7 @@ exec_sigcode_map(struct process *pr)
 		return (ENOMEM);
 	}
 	uvm_map_immutable(&pr->ps_vmspace->vm_map, pr->ps_sigcode,
-	    pr->ps_sigcode + round_page(sz), 1, "sig");
+	    pr->ps_sigcode + round_page(sz), 1);
 
 	/* Calculate PC at point of sigreturn entry */
 	pr->ps_sigcoderet = pr->ps_sigcode + (sigcoderet - sigcode);
@@ -917,7 +915,7 @@ exec_timekeep_map(struct process *pr)
 		return (ENOMEM);
 	}
 	uvm_map_immutable(&pr->ps_vmspace->vm_map, pr->ps_timekeep,
-	    pr->ps_timekeep + timekeep_sz, 1, "time");
+	    pr->ps_timekeep + timekeep_sz, 1);
 
 	return (0);
 }

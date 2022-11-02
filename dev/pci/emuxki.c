@@ -1,4 +1,4 @@
-/*	$OpenBSD: emuxki.c,v 1.58 2022/03/21 19:22:41 miod Exp $	*/
+/*	$OpenBSD: emuxki.c,v 1.61 2022/10/26 20:19:08 kn Exp $	*/
 /*	$NetBSD: emuxki.c,v 1.1 2001/10/17 18:39:41 jdolecek Exp $	*/
 
 /*-
@@ -178,8 +178,6 @@ int	emuxki_query_devinfo(void *, mixer_devinfo_t *);
 void   *emuxki_allocm(void *, int, size_t, int, int);
 void	emuxki_freem(void *, void *, int);
 
-int	emuxki_get_props(void *);
-
 /* Interrupt handler */
 int  emuxki_intr(void *);
 
@@ -212,28 +210,20 @@ const struct cfattach emu_ca = {
 };
 
 const struct audio_hw_if emuxki_hw_if = {
-	emuxki_open,
-	emuxki_close,
-	emuxki_set_params,
-	emuxki_round_blocksize,
-	NULL,			/* commit settings */
-	NULL,			/* init_output */
-	NULL,			/* init_input */
-	NULL,			/* start_output */
-	NULL,			/* start_input */
-	emuxki_halt_output,
-	emuxki_halt_input,
-	NULL,			/* speaker_ctl */
-	NULL,			/* setfd */
-	emuxki_set_port,
-	emuxki_get_port,
-	emuxki_query_devinfo,
-	emuxki_allocm,
-	emuxki_freem,
-	emuxki_round_buffersize,
-	emuxki_get_props,
-	emuxki_trigger_output,
-	emuxki_trigger_input
+	.open = emuxki_open,
+	.close = emuxki_close,
+	.set_params = emuxki_set_params,
+	.round_blocksize = emuxki_round_blocksize,
+	.halt_output = emuxki_halt_output,
+	.halt_input = emuxki_halt_input,
+	.set_port = emuxki_set_port,
+	.get_port = emuxki_get_port,
+	.query_devinfo = emuxki_query_devinfo,
+	.allocm = emuxki_allocm,
+	.freem = emuxki_freem,
+	.round_buffersize = emuxki_round_buffersize,
+	.trigger_output = emuxki_trigger_output,
+	.trigger_input = emuxki_trigger_input,
 };
 
 #if 0
@@ -2264,13 +2254,6 @@ emuxki_round_buffersize(void *addr, int direction, size_t bsize)
 	}
 
 	return (bsize);
-}
-
-int
-emuxki_get_props(void *addr)
-{
-	return (AUDIO_PROP_MMAP | AUDIO_PROP_INDEPENDENT |
-		AUDIO_PROP_FULLDUPLEX);
 }
 
 int

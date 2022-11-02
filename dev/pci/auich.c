@@ -1,4 +1,4 @@
-/*	$OpenBSD: auich.c,v 1.116 2022/03/21 19:22:40 miod Exp $	*/
+/*	$OpenBSD: auich.c,v 1.119 2022/10/26 20:19:08 kn Exp $	*/
 
 /*
  * Copyright (c) 2000,2001 Michael Shalayeff
@@ -302,7 +302,6 @@ int auich_query_devinfo(void *, mixer_devinfo_t *);
 void *auich_allocm(void *, int, size_t, int, int);
 void auich_freem(void *, void *, int);
 size_t auich_round_buffersize(void *, int, size_t);
-int auich_get_props(void *);
 void auich_trigger_pipe(struct auich_softc *, int, struct auich_ring *);
 void auich_intr_pipe(struct auich_softc *, int, struct auich_ring *);
 int auich_trigger_output(void *, void *, void *, int, void (*)(void *),
@@ -316,28 +315,20 @@ void auich_freemem(struct auich_softc *, struct auich_dma *);
 void auich_resume(struct auich_softc *);
 
 const struct audio_hw_if auich_hw_if = {
-	auich_open,
-	auich_close,
-	auich_set_params,
-	auich_round_blocksize,
-	NULL,			/* commit_setting */
-	NULL,			/* init_output */
-	NULL,			/* init_input */
-	NULL,			/* start_output */
-	NULL,			/* start_input */
-	auich_halt_output,
-	auich_halt_input,
-	NULL,			/* speaker_ctl */
-	NULL,			/* getfd */
-	auich_set_port,
-	auich_get_port,
-	auich_query_devinfo,
-	auich_allocm,
-	auich_freem,
-	auich_round_buffersize,
-	auich_get_props,
-	auich_trigger_output,
-	auich_trigger_input
+	.open = auich_open,
+	.close = auich_close,
+	.set_params = auich_set_params,
+	.round_blocksize = auich_round_blocksize,
+	.halt_output = auich_halt_output,
+	.halt_input = auich_halt_input,
+	.set_port = auich_set_port,
+	.get_port = auich_get_port,
+	.query_devinfo = auich_query_devinfo,
+	.allocm = auich_allocm,
+	.freem = auich_freem,
+	.round_buffersize = auich_round_buffersize,
+	.trigger_output = auich_trigger_output,
+	.trigger_input = auich_trigger_input,
 };
 
 int  auich_attach_codec(void *, struct ac97_codec_if *);
@@ -922,12 +913,6 @@ auich_round_buffersize(void *v, int direction, size_t size)
 		size = AUICH_DMALIST_MAX * AUICH_DMASEG_MAX;
 
 	return size;
-}
-
-int
-auich_get_props(void *v)
-{
-	return AUDIO_PROP_MMAP | AUDIO_PROP_INDEPENDENT | AUDIO_PROP_FULLDUPLEX;
 }
 
 int

@@ -1,4 +1,4 @@
-/*	$OpenBSD: cs4281.c,v 1.42 2022/03/21 19:22:41 miod Exp $ */
+/*	$OpenBSD: cs4281.c,v 1.45 2022/10/26 20:19:08 kn Exp $ */
 /*	$Tera: cs4281.c,v 1.18 2000/12/27 14:24:45 tacha Exp $	*/
 
 /*
@@ -166,7 +166,6 @@ int cs4281_init(struct cs4281_softc *);
 int cs4281_open(void *, int);
 void cs4281_close(void *);
 int cs4281_round_blocksize(void *, int);
-int cs4281_get_props(void *);
 int cs4281_attach_codec(void *, struct ac97_codec_if *);
 int cs4281_read_codec(void *, u_int8_t , u_int16_t *);
 int cs4281_write_codec(void *, u_int8_t, u_int16_t);
@@ -195,28 +194,20 @@ int cs4281_debug = 5;
 #endif
 
 const struct audio_hw_if cs4281_hw_if = {
-	cs4281_open,
-	cs4281_close,
-	cs4281_set_params,
-	cs4281_round_blocksize,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	cs4281_halt_output,
-	cs4281_halt_input,
-	NULL,
-	NULL,
-	cs4281_mixer_set_port,
-	cs4281_mixer_get_port,
-	cs4281_query_devinfo,
-	cs4281_malloc,
-	cs4281_free,
-	cs4281_round_buffersize,
-	cs4281_get_props,
-	cs4281_trigger_output,
-	cs4281_trigger_input
+	.open = cs4281_open,
+	.close = cs4281_close,
+	.set_params = cs4281_set_params,
+	.round_blocksize = cs4281_round_blocksize,
+	.halt_output = cs4281_halt_output,
+	.halt_input = cs4281_halt_input,
+	.set_port = cs4281_mixer_set_port,
+	.get_port = cs4281_mixer_get_port,
+	.query_devinfo = cs4281_query_devinfo,
+	.allocm = cs4281_malloc,
+	.freem = cs4281_free,
+	.round_buffersize = cs4281_round_buffersize,
+	.trigger_output = cs4281_trigger_output,
+	.trigger_input = cs4281_trigger_input,
 };
 
 #if NMIDI > 0
@@ -1190,18 +1181,6 @@ size_t
 cs4281_round_buffersize(void *addr, int direction, size_t size)
 {
 	return (DMA_SIZE);
-}
-
-int
-cs4281_get_props(void *addr)
-{
-	int retval;
-
-	retval = AUDIO_PROP_INDEPENDENT | AUDIO_PROP_FULLDUPLEX;
-#ifdef MMAP_READY
-	retval |= AUDIO_PROP_MMAP;
-#endif
-	return (retval);
 }
 
 /* AC97 */

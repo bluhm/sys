@@ -1,4 +1,4 @@
-/*	$OpenBSD: azalia.c,v 1.276 2022/09/08 01:28:46 jsg Exp $	*/
+/*	$OpenBSD: azalia.c,v 1.280 2022/10/26 20:19:08 kn Exp $	*/
 /*	$NetBSD: azalia.c,v 1.20 2006/05/07 08:31:44 kent Exp $	*/
 
 /*-
@@ -264,7 +264,6 @@ int	azalia_query_devinfo(void *, mixer_devinfo_t *);
 void	*azalia_allocm(void *, int, size_t, int, int);
 void	azalia_freem(void *, void *, int);
 size_t	azalia_round_buffersize(void *, int, size_t);
-int	azalia_get_props(void *);
 int	azalia_trigger_output(void *, void *, void *, int,
 	void (*)(void *), void *, audio_params_t *);
 int	azalia_trigger_input(void *, void *, void *, int,
@@ -290,32 +289,21 @@ struct cfdriver azalia_cd = {
 };
 
 const struct audio_hw_if azalia_hw_if = {
-	azalia_open,
-	azalia_close,
-	azalia_set_params,
-	NULL,			/* round_blocksize */
-	NULL,			/* commit_settings */
-	NULL,			/* init_output */
-	NULL,			/* init_input */
-	NULL,			/* start_output */
-	NULL,			/* start_input */
-	azalia_halt_output,
-	azalia_halt_input,
-	NULL,			/* speaker_ctl */
-	NULL,			/* setfd */
-	azalia_set_port,
-	azalia_get_port,
-	azalia_query_devinfo,
-	azalia_allocm,
-	azalia_freem,
-	azalia_round_buffersize,
-	azalia_get_props,
-	azalia_trigger_output,
-	azalia_trigger_input,
-	NULL,			/* copy_output */
-	NULL,			/* underrun */
-	azalia_set_blksz,
-	azalia_set_nblks
+	.open = azalia_open,
+	.close = azalia_close,
+	.set_params = azalia_set_params,
+	.halt_output = azalia_halt_output,
+	.halt_input = azalia_halt_input,
+	.set_port = azalia_set_port,
+	.get_port = azalia_get_port,
+	.query_devinfo = azalia_query_devinfo,
+	.allocm = azalia_allocm,
+	.freem = azalia_freem,
+	.round_buffersize = azalia_round_buffersize,
+	.trigger_output = azalia_trigger_output,
+	.trigger_input = azalia_trigger_input,
+	.set_blksz = azalia_set_blksz,
+	.set_nblks = azalia_set_nblks,
 };
 
 static const char *pin_devices[16] = {
@@ -474,6 +462,7 @@ azalia_configure_pci(azalia_t *az)
 	case PCI_PRODUCT_INTEL_500SERIES_LP_HDA:
 	case PCI_PRODUCT_INTEL_600SERIES_HDA:
 	case PCI_PRODUCT_INTEL_600SERIES_LP_HDA:
+	case PCI_PRODUCT_INTEL_700SERIES_HDA:
 	case PCI_PRODUCT_INTEL_C600_HDA:
 	case PCI_PRODUCT_INTEL_C610_HDA_1:
 	case PCI_PRODUCT_INTEL_C610_HDA_2:
@@ -4144,12 +4133,6 @@ azalia_round_buffersize(void *v, int dir, size_t size)
 	if (size <= 0)
 		size = 128;
 	return size;
-}
-
-int
-azalia_get_props(void *v)
-{
-	return AUDIO_PROP_INDEPENDENT | AUDIO_PROP_FULLDUPLEX;
 }
 
 int

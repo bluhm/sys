@@ -1,4 +1,4 @@
-/*	$OpenBSD: auvia.c,v 1.63 2022/03/21 19:22:41 miod Exp $ */
+/*	$OpenBSD: auvia.c,v 1.66 2022/10/26 20:19:08 kn Exp $ */
 /*	$NetBSD: auvia.c,v 1.28 2002/11/04 16:38:49 kent Exp $	*/
 
 /*-
@@ -87,7 +87,6 @@ int	auvia_query_devinfo(void *, mixer_devinfo_t *);
 void *	auvia_malloc(void *, int, size_t, int, int);
 void	auvia_free(void *, void *, int);
 size_t	auvia_round_buffersize(void *, int, size_t);
-int	auvia_get_props(void *);
 int	auvia_build_dma_ops(struct auvia_softc *, struct auvia_softc_chan *,
 	struct auvia_dma *, void *, void *, int);
 int	auvia_trigger_output(void *, void *, void *, int, void (*)(void *),
@@ -179,28 +178,20 @@ const struct cfattach auvia_ca = {
 #define TIMEOUT	50
 
 const struct audio_hw_if auvia_hw_if = {
-	auvia_open,
-	auvia_close,
-	auvia_set_params,
-	auvia_round_blocksize,
-	NULL, /* commit_settings */
-	NULL, /* init_output */
-	NULL, /* init_input */
-	NULL, /* start_output */
-	NULL, /* start_input */
-	auvia_halt_output,
-	auvia_halt_input,
-	NULL, /* speaker_ctl */
-	NULL, /* setfd */
-	auvia_set_port,
-	auvia_get_port,
-	auvia_query_devinfo,
-	auvia_malloc,
-	auvia_free,
-	auvia_round_buffersize,
-	auvia_get_props,
-	auvia_trigger_output,
-	auvia_trigger_input
+	.open = auvia_open,
+	.close = auvia_close,
+	.set_params = auvia_set_params,
+	.round_blocksize = auvia_round_blocksize,
+	.halt_output = auvia_halt_output,
+	.halt_input = auvia_halt_input,
+	.set_port = auvia_set_port,
+	.get_port = auvia_get_port,
+	.query_devinfo = auvia_query_devinfo,
+	.allocm = auvia_malloc,
+	.freem = auvia_free,
+	.round_buffersize = auvia_round_buffersize,
+	.trigger_output = auvia_trigger_output,
+	.trigger_input = auvia_trigger_input,
 };
 
 int	auvia_attach_codec(void *, struct ac97_codec_if *);
@@ -796,16 +787,6 @@ auvia_round_buffersize(void *addr, int direction, size_t bufsize)
 
 	sc->bufsize = bufsize;
 	return bufsize;
-}
-
-int
-auvia_get_props(void *addr)
-{
-	int props;
-
-	props = AUDIO_PROP_MMAP|AUDIO_PROP_INDEPENDENT|AUDIO_PROP_FULLDUPLEX;
-
-	return  props;
 }
 
 

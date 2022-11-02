@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_map.c,v 1.295 2022/10/07 14:59:39 deraadt Exp $	*/
+/*	$OpenBSD: uvm_map.c,v 1.302 2022/10/31 10:46:24 mpi Exp $	*/
 /*	$NetBSD: uvm_map.c,v 1.86 2000/11/27 08:40:03 chs Exp $	*/
 
 /*
@@ -793,12 +793,14 @@ uvm_mapanon(struct vm_map *map, vaddr_t *addr, vsize_t sz,
 		/* Check that the space is available. */
 		if (flags & UVM_FLAG_UNMAP) {
 			if ((flags & UVM_FLAG_STACK) &&
-			    !uvm_map_is_stack_remappable(map, *addr, sz)) {
+			    !uvm_map_is_stack_remappable(map, *addr, sz,
+				(flags & UVM_FLAG_SIGALTSTACK))) {
 				error = EINVAL;
 				goto unlock;
 			}
 			if (uvm_unmap_remove(map, *addr, *addr + sz, &dead,
-			    FALSE, TRUE, TRUE) != 0) {
+			    FALSE, TRUE,
+			    (flags & UVM_FLAG_SIGALTSTACK) ? FALSE : TRUE) != 0) {
 				error = EPERM;	/* immutable entries found */
 				goto unlock;
 			}
@@ -1696,7 +1698,8 @@ uvm_map_inentry(struct proc *p, struct p_inentry *ie, vaddr_t addr,
  * Must be called with map locked.
  */
 boolean_t
-uvm_map_is_stack_remappable(struct vm_map *map, vaddr_t addr, vaddr_t sz)
+uvm_map_is_stack_remappable(struct vm_map *map, vaddr_t addr, vaddr_t sz,
+    int sigaltstack_check)
 {
 	vaddr_t end = addr + sz;
 	struct vm_map_entry *first, *iter, *prev = NULL;
@@ -1733,6 +1736,12 @@ uvm_map_is_stack_remappable(struct vm_map *map, vaddr_t addr, vaddr_t sz)
 			    "hole in range\n", addr, end, map);
 			return FALSE;
 		}
+		if (sigaltstack_check) {
+			if ((iter->etype & UVM_ET_SYSCALL))
+				return FALSE;
+			if (iter->protection != (PROT_READ | PROT_WRITE))
+				return FALSE;
+		}
 	}
 
 	return TRUE;
@@ -1757,7 +1766,7 @@ uvm_map_remap_as_stack(struct proc *p, vaddr_t addr, vaddr_t sz)
 	    PROT_READ | PROT_WRITE | PROT_EXEC,
 	    MAP_INHERIT_COPY, MADV_NORMAL,
 	    UVM_FLAG_STACK | UVM_FLAG_FIXED | UVM_FLAG_UNMAP |
-	    UVM_FLAG_COPYONW);
+	    UVM_FLAG_COPYONW | UVM_FLAG_SIGALTSTACK);
 
 	start = round_page(addr);
 	end = trunc_page(addr + sz);
@@ -1772,6 +1781,13 @@ uvm_map_remap_as_stack(struct proc *p, vaddr_t addr, vaddr_t sz)
 	if (start < map->min_offset || end >= map->max_offset || end < start)
 		return EINVAL;
 
+	/*
+	 * UVM_FLAG_SIGALTSTACK indicates that immutable may be bypassed,
+	 * but the range is checked that it is contigous, is not a syscall
+	 * mapping, and protection RW.  Then, a new mapping (all zero) is
+	 * placed upon the region, which prevents an attacker from pivoting
+	 * into pre-placed MAP_STACK space.
+	 */
 	error = uvm_mapanon(map, &start, end - start, 0, flags);
 	if (error != 0)
 		printf("map stack for pid %d failed\n", p->p_p->ps_pid);
@@ -1993,9 +2009,14 @@ uvm_unmap_remove(struct vm_map *map, vaddr_t start, vaddr_t end,
 		struct vm_map_entry *entry1 = entry;
 
 		/* Refuse to unmap if any entries are immutable */
+		if (entry1->end <= start)
+			entry1 = RBT_NEXT(uvm_map_addr, entry1);
 		for (; entry1 != NULL && entry1->start < end; entry1 = next) {
 			KDASSERT(entry1->start >= start);
 			next = RBT_NEXT(uvm_map_addr, entry1);
+			/* Treat memory holes as free space. */
+			if (entry1->start == entry1->end || UVM_ET_ISHOLE(entry1))
+				continue;
 			if (entry1->etype & UVM_ET_IMMUTABLE)
 				return EPERM;
 		}
@@ -2794,7 +2815,7 @@ vmspace_validate(struct vm_map *map)
 		imin = imax = iter->start;
 
 		if (UVM_ET_ISHOLE(iter) || iter->object.uvm_obj != NULL ||
-		    iter->prot != PROT_NONE)
+		    iter->protection != PROT_NONE)
 			continue;
 
 		/*
@@ -2826,7 +2847,7 @@ vmspace_validate(struct vm_map *map)
 		printf("vmspace stack range: 0x%lx-0x%lx\n",
 		    stack_begin, stack_end);
 		panic("vmspace_validate: vmspace.vm_dused invalid, "
-		    "expected %ld pgs, got %ld pgs in map %p",
+		    "expected %ld pgs, got %d pgs in map %p",
 		    heap, vm->vm_dused,
 		    map);
 	}
@@ -3123,8 +3144,14 @@ uvm_map_protect(struct vm_map *map, vaddr_t start, vaddr_t end,
 
 		if (checkimmutable &&
 		    (iter->etype & UVM_ET_IMMUTABLE)) {
-			error = EPERM;
-			goto out;
+			if (iter->protection == (PROT_READ | PROT_WRITE) &&
+			    new_prot == PROT_READ) {
+				/* Permit RW to R as a data-locking mechanism */
+				;
+			} else {
+				error = EPERM;
+				goto out;
+			}
 		}
 		old_prot = iter->protection;
 		if (old_prot == PROT_NONE && new_prot != old_prot) {
@@ -4217,7 +4244,7 @@ uvm_map_syscall(struct vm_map *map, vaddr_t start, vaddr_t end)
  * => map must be unlocked
  */
 int
-uvm_map_immutable(struct vm_map *map, vaddr_t start, vaddr_t end, int imut, char *name)
+uvm_map_immutable(struct vm_map *map, vaddr_t start, vaddr_t end, int imut)
 {
 	struct vm_map_entry *entry;
 

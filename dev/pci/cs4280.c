@@ -1,4 +1,4 @@
-/*	$OpenBSD: cs4280.c,v 1.57 2022/03/21 19:22:41 miod Exp $	*/
+/*	$OpenBSD: cs4280.c,v 1.60 2022/10/26 20:19:08 kn Exp $	*/
 /*	$NetBSD: cs4280.c,v 1.5 2000/06/26 04:56:23 simonb Exp $	*/
 
 /*
@@ -206,7 +206,6 @@ int	cs4280_mixer_get_port(void *, mixer_ctrl_t *);
 int	cs4280_query_devinfo(void *addr, mixer_devinfo_t *dip);
 void   *cs4280_malloc(void *, int, size_t, int, int);
 void	cs4280_free(void *, void *, int);
-int	cs4280_get_props(void *);
 int	cs4280_trigger_output(void *, void *, void *, int, void (*)(void *),
 	    void *, struct audio_params *);
 int	cs4280_trigger_input(void *, void *, void *, int, void (*)(void *),
@@ -234,28 +233,19 @@ int	cs4280_midi_output(void *, int);
 #endif
 
 const struct audio_hw_if cs4280_hw_if = {
-	cs4280_open,
-	cs4280_close,
-	cs4280_set_params,
-	cs4280_round_blocksize,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	cs4280_halt_output,
-	cs4280_halt_input,
-	NULL,
-	NULL,
-	cs4280_mixer_set_port,
-	cs4280_mixer_get_port,
-	cs4280_query_devinfo,
-	cs4280_malloc,
-	cs4280_free,
-	NULL,
-	cs4280_get_props,
-	cs4280_trigger_output,
-	cs4280_trigger_input
+	.open = cs4280_open,
+	.close = cs4280_close,
+	.set_params = cs4280_set_params,
+	.round_blocksize = cs4280_round_blocksize,
+	.halt_output = cs4280_halt_output,
+	.halt_input = cs4280_halt_input,
+	.set_port = cs4280_mixer_set_port,
+	.get_port = cs4280_mixer_get_port,
+	.query_devinfo = cs4280_query_devinfo,
+	.allocm = cs4280_malloc,
+	.freem = cs4280_free,
+	.trigger_output = cs4280_trigger_output,
+	.trigger_input = cs4280_trigger_input,
 };
 
 #if NMIDI > 0
@@ -1057,12 +1047,6 @@ int
 cs4280_round_blocksize(void *hdl, int blk)
 {
 	return (blk < CS4280_ICHUNK ? CS4280_ICHUNK : blk & -CS4280_ICHUNK);
-}
-
-int
-cs4280_get_props(void *hdl)
-{
-	return (AUDIO_PROP_INDEPENDENT | AUDIO_PROP_FULLDUPLEX); 
 }
 
 int

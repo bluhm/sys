@@ -1,4 +1,4 @@
-/*	$OpenBSD: yds.c,v 1.60 2022/08/29 06:08:04 jsg Exp $	*/
+/*	$OpenBSD: yds.c,v 1.63 2022/10/26 20:19:08 kn Exp $	*/
 /*	$NetBSD: yds.c,v 1.5 2001/05/21 23:55:04 minoura Exp $	*/
 
 /*
@@ -166,7 +166,6 @@ int	yds_mixer_get_port(void *, mixer_ctrl_t *);
 void   *yds_malloc(void *, int, size_t, int, int);
 void	yds_free(void *, void *, int);
 size_t	yds_round_buffersize(void *, int, size_t);
-int	yds_get_props(void *);
 int	yds_query_devinfo(void *addr, mixer_devinfo_t *dip);
 
 int     yds_attach_codec(void *sc, struct ac97_codec_if *);
@@ -200,28 +199,20 @@ static void yds_dump_play_slot(struct yds_softc *, int);
 #endif /* AUDIO_DEBUG */
 
 static const struct audio_hw_if yds_hw_if = {
-	yds_open,
-	yds_close,
-	yds_set_params,
-	yds_round_blocksize,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	yds_halt_output,
-	yds_halt_input,
-	NULL,
-	NULL,
-	yds_mixer_set_port,
-	yds_mixer_get_port,
-	yds_query_devinfo,
-	yds_malloc,
-	yds_free,
-	yds_round_buffersize,
-	yds_get_props,
-	yds_trigger_output,
-	yds_trigger_input
+	.open = yds_open,
+	.close = yds_close,
+	.set_params = yds_set_params,
+	.round_blocksize = yds_round_blocksize,
+	.halt_output = yds_halt_output,
+	.halt_input = yds_halt_input,
+	.set_port = yds_mixer_set_port,
+	.get_port = yds_mixer_get_port,
+	.query_devinfo = yds_query_devinfo,
+	.allocm = yds_malloc,
+	.freem = yds_free,
+	.round_buffersize = yds_round_buffersize,
+	.trigger_output = yds_trigger_output,
+	.trigger_input = yds_trigger_input,
 };
 
 static const struct {
@@ -1565,13 +1556,6 @@ yds_round_buffersize(void *addr, int direction, size_t size)
 	if (size < 1024 * 3)
 		size = 1024 * 3;
 	return (size);
-}
-
-int
-yds_get_props(void *addr)
-{
-	return (AUDIO_PROP_MMAP | AUDIO_PROP_INDEPENDENT | 
-		AUDIO_PROP_FULLDUPLEX);
 }
 
 int

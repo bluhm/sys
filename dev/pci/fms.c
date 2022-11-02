@@ -1,4 +1,4 @@
-/*	$OpenBSD: fms.c,v 1.33 2022/03/21 19:22:41 miod Exp $ */
+/*	$OpenBSD: fms.c,v 1.36 2022/10/26 20:19:08 kn Exp $ */
 /*	$NetBSD: fms.c,v 1.5.4.1 2000/06/30 16:27:50 simonb Exp $	*/
 
 /*-
@@ -85,7 +85,6 @@ int	fms_get_port(void *, mixer_ctrl_t *);
 int	fms_query_devinfo(void *, mixer_devinfo_t *);
 void	*fms_malloc(void *, int, size_t, int, int);
 void	fms_free(void *, void *, int);
-int	fms_get_props(void *);
 int	fms_trigger_output(void *, void *, void *, int, void (*)(void *),
 			   void *, struct audio_params *);
 int	fms_trigger_input(void *, void *, void *, int, void (*)(void *),
@@ -100,28 +99,19 @@ const struct cfattach fms_ca = {
 };
 
 const struct audio_hw_if fms_hw_if = {
-	fms_open,
-	fms_close,
-	fms_set_params,
-	fms_round_blocksize,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	fms_halt_output,
-	fms_halt_input,
-	NULL,
-	NULL,
-	fms_set_port,
-	fms_get_port,
-	fms_query_devinfo,
-	fms_malloc,
-	fms_free,
-	NULL,
-	fms_get_props,
-	fms_trigger_output,
-	fms_trigger_input
+	.open = fms_open,
+	.close = fms_close,
+	.set_params = fms_set_params,
+	.round_blocksize = fms_round_blocksize,
+	.halt_output = fms_halt_output,
+	.halt_input = fms_halt_input,
+	.set_port = fms_set_port,
+	.get_port = fms_get_port,
+	.query_devinfo = fms_query_devinfo,
+	.allocm = fms_malloc,
+	.freem = fms_free,
+	.trigger_output = fms_trigger_output,
+	.trigger_input = fms_trigger_input,
 };
 
 int	fms_attach_codec(void *, struct ac97_codec_if *);
@@ -630,13 +620,6 @@ fms_free(void *addr, void *ptr, int pool)
 		}
 
 	panic("fms_free: trying to free unallocated memory");
-}
-
-int
-fms_get_props(void *addr)
-{
-	return AUDIO_PROP_MMAP | AUDIO_PROP_INDEPENDENT | 
-	       AUDIO_PROP_FULLDUPLEX;
 }
 
 int

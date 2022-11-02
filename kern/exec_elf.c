@@ -1,4 +1,4 @@
-/*	$OpenBSD: exec_elf.c,v 1.168 2022/08/29 16:53:46 deraadt Exp $	*/
+/*	$OpenBSD: exec_elf.c,v 1.173 2022/10/27 22:48:17 deraadt Exp $	*/
 
 /*
  * Copyright (c) 1996 Per Fogelstrom
@@ -194,6 +194,17 @@ elf_load_psection(struct exec_vmcmd_set *vcset, struct vnode *vp,
 	*prot |= (ph->p_flags & PF_W) ? PROT_WRITE : 0;
 	if ((ph->p_flags & PF_W) == 0)
 		*prot |= (ph->p_flags & PF_X) ? PROT_EXEC : 0;
+
+	/*
+	 * Apply immutability as much as possible, but not text-segments
+	 * of textrel binaries, or RELRO or PT_OPENBSD_MUTABLE sections,
+	 * or LOADS marked PF_OPENBSD_MUTABLE, or LOADS which violate W^X.
+	 * Userland (meaning crt0 or ld.so) will repair those regions.
+	 */
+	if ((ph->p_flags & (PF_X | PF_W)) != (PF_X | PF_W) &&
+	    ((ph->p_flags & PF_OPENBSD_MUTABLE) == 0) &&
+	    ((flags & VMCMD_TEXTREL) == 0 && (ph->p_flags & PF_X) == 0))
+		flags |= VMCMD_IMMUTABLE;
 
 	msize = ph->p_memsz + diff;
 	offset = ph->p_offset - bdiff;
@@ -417,7 +428,6 @@ elf_load_file(struct proc *p, char *path, struct exec_package *epp,
 			addr += size;
 			break;
 
-		case PT_DYNAMIC:
 		case PT_PHDR:
 		case PT_NOTE:
 			break;
@@ -429,6 +439,19 @@ elf_load_file(struct proc *p, char *path, struct exec_package *epp,
 			}
 			randomizequota -= ph[i].p_memsz;
 			NEW_VMCMD(&epp->ep_vmcmds, vmcmd_randomize,
+			    ph[i].p_memsz, ph[i].p_vaddr + pos, NULLVP, 0, 0);
+			break;
+
+		case PT_DYNAMIC:
+#if defined (__mips__)
+			/* DT_DEBUG is not ready on mips */
+			NEW_VMCMD(&epp->ep_vmcmds, vmcmd_mutable,
+			    ph[i].p_memsz, ph[i].p_vaddr + pos, NULLVP, 0, 0);
+#endif
+			break;
+		case PT_GNU_RELRO:
+		case PT_OPENBSD_MUTABLE:
+			NEW_VMCMD(&epp->ep_vmcmds, vmcmd_mutable,
 			    ph[i].p_memsz, ph[i].p_vaddr + pos, NULLVP, 0, 0);
 			break;
 
@@ -463,7 +486,7 @@ exec_elf_makecmds(struct proc *p, struct exec_package *epp)
 	Elf_Ehdr *eh = epp->ep_hdr;
 	Elf_Phdr *ph, *pp, *base_ph = NULL;
 	Elf_Addr phdr = 0, exe_base = 0;
-	int error, i, has_phdr = 0, names = 0;
+	int error, i, has_phdr = 0, names = 0, textrel = 0;
 	char *interp = NULL;
 	u_long phsize;
 	size_t randomizequota = ELF_RANDOMIZE_LIMIT;
@@ -524,16 +547,6 @@ exec_elf_makecmds(struct proc *p, struct exec_package *epp)
 		}
 	}
 
-	if (eh->e_type == ET_DYN) {
-		/* need phdr and load sections for PIE */
-		if (!has_phdr || base_ph == NULL) {
-			error = EINVAL;
-			goto bad;
-		}
-		/* randomize exe_base for PIE */
-		exe_base = uvm_map_pie(base_ph->p_align);
-	}
-
 	/*
 	 * Verify this is an OpenBSD executable.  If it's marked that way
 	 * via a PT_NOTE then also check for a PT_OPENBSD_WXNEEDED segment.
@@ -543,12 +556,54 @@ exec_elf_makecmds(struct proc *p, struct exec_package *epp)
 	if (eh->e_ident[EI_OSABI] == ELFOSABI_OPENBSD)
 		names |= ELF_NOTE_NAME_OPENBSD;
 
+	if (eh->e_type == ET_DYN) {
+		/* need phdr and load sections for PIE */
+		if (!has_phdr || base_ph == NULL) {
+			error = EINVAL;
+			goto bad;
+		}
+		/* randomize exe_base for PIE */
+		exe_base = uvm_map_pie(base_ph->p_align);
+
+		/*
+		 * Check if DYNAMIC contains DT_TEXTREL
+		 */
+		for (i = 0, pp = ph; i < eh->e_phnum; i++, pp++) {
+			Elf32_Dyn *dt;
+			int j;
+
+			switch (pp->p_type) {
+			case PT_DYNAMIC:
+				if (pp->p_filesz > 64*1024)
+					break;
+				dt = malloc(pp->p_filesz, M_TEMP, M_WAITOK);
+				error = vn_rdwr(UIO_READ, epp->ep_vp,
+				    (caddr_t)dt, pp->p_filesz, pp->p_offset,
+				    UIO_SYSSPACE, IO_UNIT, p->p_ucred, NULL, p);
+				if (error) {
+					free(dt, M_TEMP, pp->p_filesz);
+					break;
+				}
+				for (j = 0; j * sizeof(*dt) < pp->p_filesz; j++) {
+					if (dt[j].d_tag == DT_TEXTREL) {
+						textrel = VMCMD_TEXTREL;
+						break;
+					}
+				}
+				free(dt, M_TEMP, pp->p_filesz);
+				break;
+			default:
+				break;
+			}
+		}
+	}
+
 	/*
 	 * Load all the necessary sections
 	 */
 	for (i = 0, pp = ph; i < eh->e_phnum; i++, pp++) {
 		Elf_Addr addr, size = 0;
-		int prot = 0;
+		int prot = 0, syscall = 0;
 		int flags = 0;
 
 		switch (pp->p_type) {
@@ -567,7 +622,7 @@ exec_elf_makecmds(struct proc *p, struct exec_package *epp)
 			/* Permit system calls in specific main-programs */
 			if (interp == NULL) {
 				/* statics. Also block the ld.so syscall-grant */
-				flags |= VMCMD_SYSCALL;
+				syscall = VMCMD_SYSCALL;
 				p->p_vmspace->vm_map.flags |= VM_MAP_SYSCALL_ONCE;
 			}
 
@@ -579,7 +634,7 @@ exec_elf_makecmds(struct proc *p, struct exec_package *epp)
 			 * for DATA_PLT, is fine for TEXT_PLT.
 			 */
 			elf_load_psection(&epp->ep_vmcmds, epp->ep_vp,
-			    pp, &addr, &size, &prot, flags);
+			    pp, &addr, &size, &prot, flags | textrel | syscall);
 
 			/*
 			 * Update exe_base in case alignment was off.
@@ -636,7 +691,6 @@ exec_elf_makecmds(struct proc *p, struct exec_package *epp)
 
 		case PT_INTERP:
 			/* Already did this one */
-		case PT_DYNAMIC:
 		case PT_NOTE:
 			break;
 
@@ -652,6 +706,19 @@ exec_elf_makecmds(struct proc *p, struct exec_package *epp)
 			}
 			randomizequota -= ph[i].p_memsz;
 			NEW_VMCMD(&epp->ep_vmcmds, vmcmd_randomize,
+			    ph[i].p_memsz, ph[i].p_vaddr + exe_base, NULLVP, 0, 0);
+			break;
+
+		case PT_DYNAMIC:
+#if defined (__mips__)
+			/* DT_DEBUG is not ready on mips */
+			NEW_VMCMD(&epp->ep_vmcmds, vmcmd_mutable,
+			    ph[i].p_memsz, ph[i].p_vaddr + exe_base, NULLVP, 0, 0);
+#endif
+			break;
+		case PT_GNU_RELRO:
+		case PT_OPENBSD_MUTABLE:
+			NEW_VMCMD(&epp->ep_vmcmds, vmcmd_mutable,
 			    ph[i].p_memsz, ph[i].p_vaddr + exe_base, NULLVP, 0, 0);
 			break;
 

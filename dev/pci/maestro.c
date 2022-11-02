@@ -1,4 +1,4 @@
-/*	$OpenBSD: maestro.c,v 1.46 2022/03/21 19:22:41 miod Exp $	*/
+/*	$OpenBSD: maestro.c,v 1.50 2022/10/28 15:09:46 kn Exp $	*/
 /* $FreeBSD: /c/ncvs/src/sys/dev/sound/pci/maestro.c,v 1.3 2000/11/21 12:22:11 julian Exp $ */
 /*
  * FreeBSD's ESS Agogo/Maestro driver 
@@ -476,7 +476,6 @@ int	maestro_get_port(void *, mixer_ctrl_t *);
 int	maestro_query_devinfo(void *, mixer_devinfo_t *);
 void	*maestro_malloc(void *, int, size_t, int, int);
 void	maestro_free(void *, void *, int);
-int	maestro_get_props(void *);
 int	maestro_trigger_output(void *, void *, void *, int, void (*)(void *),
 				void *, struct audio_params *);
 int	maestro_trigger_input(void *, void *, void *, int, void (*)(void *),
@@ -528,31 +527,22 @@ const struct cfattach maestro_ca = {
 };
 
 const struct audio_hw_if maestro_hw_if = {
-	maestro_open,
-	maestro_close,
-	maestro_set_params,
-	maestro_round_blocksize,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	maestro_halt_output,
-	maestro_halt_input,
-	NULL,
-	NULL,
-	maestro_set_port,
-	maestro_get_port,
-	maestro_query_devinfo,
-	maestro_malloc,
-	maestro_free,
-	NULL,
-	maestro_get_props,
-	maestro_trigger_output,
-	maestro_trigger_input
+	.open = maestro_open,
+	.close = maestro_close,
+	.set_params = maestro_set_params,
+	.round_blocksize = maestro_round_blocksize,
+	.halt_output = maestro_halt_output,
+	.halt_input = maestro_halt_input,
+	.set_port = maestro_set_port,
+	.get_port = maestro_get_port,
+	.query_devinfo = maestro_query_devinfo,
+	.allocm = maestro_malloc,
+	.freem = maestro_free,
+	.trigger_output = maestro_trigger_output,
+	.trigger_input = maestro_trigger_input,
 };
 
-struct {
+const struct {
 	u_short vendor, product;
 	int flags;
 } maestro_pcitab[] = {
@@ -848,14 +838,6 @@ maestro_free(void *self, void *ptr, int pool)
 }
 
 int
-maestro_get_props(void *self)
-{
-	/* struct maestro_softc *sc = (struct maestro_softc *)self; */
-
-	return (AUDIO_PROP_MMAP | AUDIO_PROP_INDEPENDENT); /* XXX */
-}
-
-int
 maestro_set_port(void *self, mixer_ctrl_t *cp)
 {
 	struct ac97_codec_if *c = ((struct maestro_softc *)self)->codec_if;
@@ -1006,6 +988,9 @@ maestro_open(void *hdl, int flags)
 {
 	struct maestro_softc *sc = (struct maestro_softc *)hdl;
 	DPRINTF(("%s: open(%d)\n", sc->dev.dv_xname, flags));
+
+	if ((flags & (FWRITE | FREAD)) == (FWRITE | FREAD))
+		return ENXIO;	/* XXX */
 
 /* XXX work around VM brokeness */
 #if 0

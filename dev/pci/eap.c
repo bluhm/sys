@@ -1,4 +1,4 @@
-/*      $OpenBSD: eap.c,v 1.61 2022/03/21 19:22:41 miod Exp $ */
+/*      $OpenBSD: eap.c,v 1.64 2022/10/26 20:19:08 kn Exp $ */
 /*	$NetBSD: eap.c,v 1.46 2001/09/03 15:07:37 reinoud Exp $ */
 
 /*
@@ -176,7 +176,6 @@ int	eap1371_mixer_get_port(void *, mixer_ctrl_t *);
 int	eap1370_query_devinfo(void *, mixer_devinfo_t *);
 void   *eap_malloc(void *, int, size_t, int, int);
 void	eap_free(void *, void *, int);
-int	eap_get_props(void *);
 void	eap1370_set_mixer(struct eap_softc *sc, int a, int d);
 u_int32_t eap1371_src_wait(struct eap_softc *sc);
 void	eap1371_src_write(struct eap_softc *sc, int a, int d);
@@ -195,53 +194,35 @@ int	eap_midi_output(void *, int);
 #endif
 
 const struct audio_hw_if eap1370_hw_if = {
-	eap_open,
-	eap_close,
-	eap_set_params,
-	eap_round_blocksize,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	eap_halt_output,
-	eap_halt_input,
-	NULL,
-	NULL,
-	eap1370_mixer_set_port,
-	eap1370_mixer_get_port,
-	eap1370_query_devinfo,
-	eap_malloc,
-	eap_free,
-	NULL,
-	eap_get_props,
-	eap_trigger_output,
-	eap_trigger_input
+	.open = eap_open,
+	.close = eap_close,
+	.set_params = eap_set_params,
+	.round_blocksize = eap_round_blocksize,
+	.halt_output = eap_halt_output,
+	.halt_input = eap_halt_input,
+	.set_port = eap1370_mixer_set_port,
+	.get_port = eap1370_mixer_get_port,
+	.query_devinfo = eap1370_query_devinfo,
+	.allocm = eap_malloc,
+	.freem = eap_free,
+	.trigger_output = eap_trigger_output,
+	.trigger_input = eap_trigger_input,
 };
 
 const struct audio_hw_if eap1371_hw_if = {
-	eap_open,
-	eap_close,
-	eap_set_params,
-	eap_round_blocksize,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	eap_halt_output,
-	eap_halt_input,
-	NULL,
-	NULL,
-	eap1371_mixer_set_port,
-	eap1371_mixer_get_port,
-	eap1371_query_devinfo,
-	eap_malloc,
-	eap_free,
-	NULL,
-	eap_get_props,
-	eap_trigger_output,
-	eap_trigger_input
+	.open = eap_open,
+	.close = eap_close,
+	.set_params = eap_set_params,
+	.round_blocksize = eap_round_blocksize,
+	.halt_output = eap_halt_output,
+	.halt_input = eap_halt_input,
+	.set_port = eap1371_mixer_set_port,
+	.get_port = eap1371_mixer_get_port,
+	.query_devinfo = eap1371_query_devinfo,
+	.allocm = eap_malloc,
+	.freem = eap_free,
+	.trigger_output = eap_trigger_output,
+	.trigger_input = eap_trigger_input,
 };
 
 #if NMIDI > 0
@@ -1493,13 +1474,6 @@ eap_free(void *addr, void *ptr, int pool)
 			return;
 		}
 	}
-}
-
-int
-eap_get_props(void *addr)
-{
-	return (AUDIO_PROP_MMAP | AUDIO_PROP_INDEPENDENT |
-	    AUDIO_PROP_FULLDUPLEX);
 }
 
 enum ac97_host_flags

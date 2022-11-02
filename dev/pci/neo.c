@@ -1,4 +1,4 @@
-/*      $OpenBSD: neo.c,v 1.37 2022/03/21 19:22:41 miod Exp $       */
+/*      $OpenBSD: neo.c,v 1.40 2022/10/26 20:19:08 kn Exp $       */
 
 /*
  * Copyright (c) 1999 Cameron Grant <gandalf@vilnya.demon.co.uk>
@@ -199,7 +199,6 @@ int	neo_query_devinfo(void *, mixer_devinfo_t *);
 void   *neo_malloc(void *, int, size_t, int, int);
 void	neo_free(void *, void *, int);
 size_t	neo_round_buffersize(void *, int, size_t);
-int	neo_get_props(void *);
 void	neo_set_mixer(struct neo_softc *sc, int a, int d);
 
 struct cfdriver neo_cd = {
@@ -238,32 +237,20 @@ static int samplerates[9] = {
 /* -------------------------------------------------------------------- */
 
 const struct audio_hw_if neo_hw_if = {
-	neo_open,
-	neo_close,
-	neo_set_params,
-#if 1
-	neo_round_blocksize,
-#else
-	NULL,
-#endif
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	neo_halt_output,
-	neo_halt_input,
-	NULL,
-	NULL,
-	neo_mixer_set_port,
-	neo_mixer_get_port,
-	neo_query_devinfo,
-	neo_malloc,
-	neo_free,
-	neo_round_buffersize,
-	neo_get_props,
-	neo_trigger_output,
-	neo_trigger_input
+	.open = neo_open,
+	.close = neo_close,
+	.set_params = neo_set_params,
+	.round_blocksize = neo_round_blocksize,
+	.halt_output = neo_halt_output,
+	.halt_input = neo_halt_input,
+	.set_port = neo_mixer_set_port,
+	.get_port = neo_mixer_get_port,
+	.query_devinfo = neo_query_devinfo,
+	.allocm = neo_malloc,
+	.freem = neo_free,
+	.round_buffersize = neo_round_buffersize,
+	.trigger_output = neo_trigger_output,
+	.trigger_input = neo_trigger_input,
 
 };
 
@@ -935,11 +922,4 @@ size_t
 neo_round_buffersize(void *addr, int direction, size_t size)
 {
 	return (NM_BUFFSIZE);
-}
-
-
-int
-neo_get_props(void *addr)
-{
-	return (AUDIO_PROP_INDEPENDENT | AUDIO_PROP_FULLDUPLEX);
 }

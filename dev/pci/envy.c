@@ -1,4 +1,4 @@
-/*	$OpenBSD: envy.c,v 1.84 2022/03/21 19:22:41 miod Exp $	*/
+/*	$OpenBSD: envy.c,v 1.87 2022/10/26 20:19:08 kn Exp $	*/
 /*
  * Copyright (c) 2007 Alexandre Ratchov <alex@caoua.org>
  *
@@ -111,7 +111,6 @@ int envy_halt_input(void *);
 int envy_query_devinfo(void *, struct mixer_devinfo *);
 int envy_get_port(void *, struct mixer_ctrl *);
 int envy_set_port(void *, struct mixer_ctrl *);
-int envy_get_props(void *);
 #if NMIDI > 0
 int envy_midi_open(void *, int, void (*)(void *, int),
     void (*)(void *), void *);
@@ -180,28 +179,19 @@ struct cfdriver envy_cd = {
 };
 
 const struct audio_hw_if envy_hw_if = {
-	envy_open,		/* open */
-	envy_close,		/* close */
-	envy_set_params,	/* set_params */
-	envy_round_blocksize,	/* round_blocksize */
-	NULL,			/* commit_settings */
-	NULL,			/* init_output */
-	NULL,			/* init_input */
-	NULL,			/* start_output */
-	NULL,			/* start_input */
-	envy_halt_output,	/* halt_output */
-	envy_halt_input,	/* halt_input */
-	NULL,			/* speaker_ctl */
-	NULL,			/* setfd */
-	envy_set_port,		/* set_port */
-	envy_get_port,		/* get_port */
-	envy_query_devinfo,	/* query_devinfo */
-	envy_allocm,		/* malloc */
-	envy_freem,		/* free */
-	NULL,			/* round_buffersize */
-	envy_get_props,		/* get_props */
-	envy_trigger_output,	/* trigger_output */
-	envy_trigger_input	/* trigger_input */
+	.open = envy_open,
+	.close = envy_close,
+	.set_params = envy_set_params,
+	.round_blocksize = envy_round_blocksize,
+	.halt_output = envy_halt_output,
+	.halt_input = envy_halt_input,
+	.set_port = envy_set_port,
+	.get_port = envy_get_port,
+	.query_devinfo = envy_query_devinfo,
+	.allocm = envy_allocm,
+	.freem = envy_freem,
+	.trigger_output = envy_trigger_output,
+	.trigger_input = envy_trigger_input,
 };
 
 #if NMIDI > 0
@@ -2437,12 +2427,6 @@ envy_set_port(void *self, struct mixer_ctrl *ctl)
 	if (idx < ndev)
 		return sc->card->dac->set(sc, ctl, idx);
 	return ENXIO;
-}
-
-int
-envy_get_props(void *self)
-{
-	return AUDIO_PROP_FULLDUPLEX | AUDIO_PROP_INDEPENDENT;
 }
 
 #if NMIDI > 0

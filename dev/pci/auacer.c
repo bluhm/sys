@@ -1,4 +1,4 @@
-/*	$OpenBSD: auacer.c,v 1.25 2022/03/21 19:22:40 miod Exp $	*/
+/*	$OpenBSD: auacer.c,v 1.28 2022/10/26 20:19:07 kn Exp $	*/
 /*	$NetBSD: auacer.c,v 1.3 2004/11/10 04:20:26 kent Exp $	*/
 
 /*-
@@ -162,7 +162,6 @@ int	auacer_query_devinfo(void *, mixer_devinfo_t *);
 void	*auacer_allocm(void *, int, size_t, int, int);
 void	auacer_freem(void *, void *, int);
 size_t	auacer_round_buffersize(void *, int, size_t);
-int	auacer_get_props(void *);
 int	auacer_trigger_output(void *, void *, void *, int, void (*)(void *),
 	    void *, struct audio_params *);
 int	auacer_trigger_input(void *, void *, void *, int, void (*)(void *),
@@ -180,28 +179,20 @@ void	auacer_finish_attach(struct device *);
 static	void auacer_reset(struct auacer_softc *sc);
 
 const struct audio_hw_if auacer_hw_if = {
-	auacer_open,
-	auacer_close,
-	auacer_set_params,
-	auacer_round_blocksize,
-	NULL,			/* commit_setting */
-	NULL,			/* init_output */
-	NULL,			/* init_input */
-	NULL,			/* start_output */
-	NULL,			/* start_input */
-	auacer_halt_output,
-	auacer_halt_input,
-	NULL,			/* speaker_ctl */
-	NULL,			/* getfd */
-	auacer_set_port,
-	auacer_get_port,
-	auacer_query_devinfo,
-	auacer_allocm,
-	auacer_freem,
-	auacer_round_buffersize,
-	auacer_get_props,
-	auacer_trigger_output,
-	auacer_trigger_input
+	.open = auacer_open,
+	.close = auacer_close,
+	.set_params = auacer_set_params,
+	.round_blocksize = auacer_round_blocksize,
+	.halt_output = auacer_halt_output,
+	.halt_input = auacer_halt_input,
+	.set_port = auacer_set_port,
+	.get_port = auacer_get_port,
+	.query_devinfo = auacer_query_devinfo,
+	.allocm = auacer_allocm,
+	.freem = auacer_freem,
+	.round_buffersize = auacer_round_buffersize,
+	.trigger_output = auacer_trigger_output,
+	.trigger_input = auacer_trigger_input,
 };
 
 int	auacer_attach_codec(void *, struct ac97_codec_if *);
@@ -637,13 +628,6 @@ auacer_round_buffersize(void *v, int direction, size_t size)
 		size = ALI_DMALIST_MAX * ALI_DMASEG_MAX;
 
 	return size;
-}
-
-int
-auacer_get_props(void *v)
-{
-	return (AUDIO_PROP_INDEPENDENT | AUDIO_PROP_FULLDUPLEX |
-	    AUDIO_PROP_MMAP);
 }
 
 static void

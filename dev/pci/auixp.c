@@ -1,4 +1,4 @@
-/* $OpenBSD: auixp.c,v 1.48 2022/03/21 19:22:40 miod Exp $ */
+/* $OpenBSD: auixp.c,v 1.51 2022/10/26 20:19:08 kn Exp $ */
 /* $NetBSD: auixp.c,v 1.9 2005/06/27 21:13:09 thorpej Exp $ */
 
 /*
@@ -117,7 +117,6 @@ int	auixp_get_port(void *, mixer_ctrl_t *);
 int	auixp_query_devinfo(void *, mixer_devinfo_t *);
 void *	auixp_malloc(void *, int, size_t, int, int);
 void	auixp_free(void *, void *, int);
-int	auixp_get_props(void *);
 int	auixp_intr(void *);
 int	auixp_allocmem(struct auixp_softc *, size_t, size_t,
     struct auixp_dma *);
@@ -155,28 +154,20 @@ void	auixp_update_busbusy(struct auixp_softc *);
 #endif
 
 const struct audio_hw_if auixp_hw_if = {
-	auixp_open,
-	auixp_close,
-	auixp_set_params,
-	auixp_round_blocksize,
-	auixp_commit_settings,
-	NULL,			/* init_output  */
-	NULL,			/* init_input   */
-	NULL,			/* start_output */
-	NULL,			/* start_input  */
-	auixp_halt_output,
-	auixp_halt_input,
-	NULL,			/* speaker_ctl */
-	NULL,			/* getfd */
-	auixp_set_port,
-	auixp_get_port,
-	auixp_query_devinfo,
-	auixp_malloc,
-	auixp_free,
-	NULL,			/* round_buffersize */
-	auixp_get_props,
-	auixp_trigger_output,
-	auixp_trigger_input
+	.open = auixp_open,
+	.close = auixp_close,
+	.set_params = auixp_set_params,
+	.round_blocksize = auixp_round_blocksize,
+	.commit_settings = auixp_commit_settings,
+	.halt_output = auixp_halt_output,
+	.halt_input = auixp_halt_input,
+	.set_port = auixp_set_port,
+	.get_port = auixp_get_port,
+	.query_devinfo = auixp_query_devinfo,
+	.allocm = auixp_malloc,
+	.freem = auixp_free,
+	.trigger_output = auixp_trigger_output,
+	.trigger_input = auixp_trigger_input,
 };
 
 int
@@ -443,13 +434,6 @@ auixp_query_devinfo(void *hdl, mixer_devinfo_t *di)
 
 	co = (struct auixp_codec *) hdl;
 	return co->codec_if->vtbl->query_devinfo(co->codec_if, di);
-}
-
-int
-auixp_get_props(void *hdl)
-{
-
-	return AUDIO_PROP_MMAP | AUDIO_PROP_INDEPENDENT | AUDIO_PROP_FULLDUPLEX;
 }
 
 
