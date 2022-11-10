@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf_ioctl.c,v 1.385 2022/08/06 15:57:58 bluhm Exp $ */
+/*	$OpenBSD: pf_ioctl.c,v 1.390 2022/11/09 23:00:00 sashan Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -54,6 +54,7 @@
 #include <sys/proc.h>
 #include <sys/rwlock.h>
 #include <sys/syslog.h>
+#include <sys/specdev.h>
 #include <uvm/uvm_extern.h>
 
 #include <crypto/md5.h>
@@ -265,16 +266,17 @@ pfattach(int num)
 int
 pfopen(dev_t dev, int flags, int fmt, struct proc *p)
 {
-	if (minor(dev) >= 1)
+	int unit = minor(dev);
+
+	if (unit & ((1 << CLONE_SHIFT) - 1))
 		return (ENXIO);
+
 	return (0);
 }
 
 int
 pfclose(dev_t dev, int flags, int fmt, struct proc *p)
 {
-	if (minor(dev) >= 1)
-		return (ENXIO);
 	return (0);
 }
 
@@ -344,27 +346,6 @@ pf_rm_rule(struct pf_rulequeue *rulequeue, struct pf_rule *rule)
 	pfi_kif_unref(rule->route.kif, PFI_KIF_REF_RULE);
 	pf_remove_anchor(rule);
 	pool_put(&pf_rule_pl, rule);
-}
-
-void
-pf_purge_rule(struct pf_rule *rule)
-{
-	u_int32_t		 nr = 0;
-	struct pf_ruleset	*ruleset;
-
-	KASSERT((rule != NULL) && (rule->ruleset != NULL));
-	ruleset = rule->ruleset;
-
-	pf_rm_rule(ruleset->rules.active.ptr, rule);
-	ruleset->rules.active.rcount--;
-	TAILQ_FOREACH(rule, ruleset->rules.active.ptr, entries)
-		rule->nr = nr++;
-	ruleset->rules.active.ticket++;
-	pf_calc_skip_steps(ruleset->rules.active.ptr);
-	pf_remove_if_empty_ruleset(ruleset);
-
-	if (ruleset == &pf_main_ruleset)
-		pf_calc_chksum(ruleset);
 }
 
 u_int16_t
@@ -834,9 +815,6 @@ pf_commit_rules(u_int32_t ticket, char *anchor)
 	struct pf_rule		*rule;
 	struct pf_rulequeue	*old_rules;
 	u_int32_t		 old_rcount;
-
-	/* Make sure any expired rules get removed from active rules first. */
-	pf_purge_expired_rules();
 
 	rs = pf_find_ruleset(anchor);
 	if (rs == NULL || !rs->rules.inactive.open ||
@@ -1444,7 +1422,6 @@ pfioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 		}
 		TAILQ_INSERT_TAIL(ruleset->rules.inactive.ptr,
 		    rule, entries);
-		rule->ruleset = ruleset;
 		ruleset->rules.inactive.rcount++;
 		PF_UNLOCK();
 		NET_UNLOCK();
@@ -1518,8 +1495,6 @@ pfioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 		pr->rule.anchor = NULL;
 		pr->rule.overload_tbl = NULL;
 		pr->rule.pktrate.limit /= PF_THRESHOLD_MULT;
-		memset(&pr->rule.gcle, 0, sizeof(pr->rule.gcle));
-		pr->rule.ruleset = NULL;
 		if (pf_anchor_copyout(ruleset, rule, pr)) {
 			error = EBUSY;
 			PF_UNLOCK();
@@ -1710,7 +1685,6 @@ pfioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 				    ruleset->rules.active.ptr,
 				    oldrule, newrule, entries);
 			ruleset->rules.active.rcount++;
-			newrule->ruleset = ruleset;
 		}
 
 		nr = 0;
@@ -1880,7 +1854,7 @@ pfioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 		}
 		NET_LOCK();
 		PF_LOCK();
-		error = pfsync_state_import(sp, PFSYNC_SI_IOCTL);
+		error = pf_state_import(sp, PFSYNC_SI_IOCTL);
 		PF_UNLOCK();
 		NET_UNLOCK();
 		break;

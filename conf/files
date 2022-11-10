@@ -1,4 +1,4 @@
-#	$OpenBSD: files,v 1.716 2022/07/29 17:47:11 semarie Exp $
+#	$OpenBSD: files,v 1.719 2022/11/06 15:36:13 patrick Exp $
 #	$NetBSD: files,v 1.87 1996/05/19 17:17:50 jonathan Exp $
 
 #	@(#)files.newconf	7.5 (Berkeley) 5/10/93
@@ -530,6 +530,12 @@ file	dev/ic/dwiic.c			dwiic
 device	imxiic: i2cbus
 file	dev/ic/imxiic.c			imxiic
 
+# Qualcomm GPIO controller
+device	qcgpio
+
+# Qualcomm I2C controller
+device	qciic: i2cbus
+
 # legitimate pseudo-devices
 pseudo-device vnd: disk
 pseudo-device rd: disk
@@ -676,6 +682,7 @@ file kern/init_sysent.c
 file kern/kern_acct.c			accounting
 file kern/kern_bufq.c
 file kern/kern_clock.c
+file kern/kern_clockintr.c
 file kern/kern_descrip.c
 file kern/kern_event.c
 file kern/kern_exec.c

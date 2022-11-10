@@ -1,4 +1,4 @@
-/*	$OpenBSD: cpu.h,v 1.151 2022/09/20 14:28:27 robert Exp $	*/
+/*	$OpenBSD: cpu.h,v 1.153 2022/11/08 17:34:13 cheloha Exp $	*/
 /*	$NetBSD: cpu.h,v 1.1 2003/04/26 18:39:39 fvdl Exp $	*/
 
 /*-
@@ -47,6 +47,7 @@
 #include <machine/intrdefs.h>
 #endif /* _KERNEL */
 
+#include <sys/clockintr.h>
 #include <sys/device.h>
 #include <sys/rwlock.h>
 #include <sys/sched.h>
@@ -221,6 +222,8 @@ struct cpu_info {
 
 	paddr_t		ci_vmcs_pa;
 	struct rwlock	ci_vmcs_lock;
+
+	struct clockintr_queue ci_queue;
 };
 
 #define CPUF_BSP	0x0001		/* CPU is the original BSP */
@@ -360,6 +363,7 @@ void signotify(struct proc *);
  * We need a machine-independent name for this.
  */
 extern void (*delay_func)(int);
+void delay_fini(void (*)(int));
 void delay_init(void (*)(int), int);
 struct timeval;
 

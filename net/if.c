@@ -1,4 +1,4 @@
-/*	$OpenBSD: if.c,v 1.665 2022/09/08 10:22:06 kn Exp $	*/
+/*	$OpenBSD: if.c,v 1.676 2022/11/09 22:15:50 dlg Exp $	*/
 /*	$NetBSD: if.c,v 1.35 1996/05/07 05:26:04 thorpej Exp $	*/
 
 /*
@@ -228,8 +228,9 @@ void	if_idxmap_remove(struct ifnet *);
 
 TAILQ_HEAD(, ifg_group) ifg_head = TAILQ_HEAD_INITIALIZER(ifg_head);
 
-LIST_HEAD(, if_clone) if_cloners = LIST_HEAD_INITIALIZER(if_cloners);
-int if_cloners_count;
+LIST_HEAD(, if_clone) if_cloners =
+    LIST_HEAD_INITIALIZER(if_cloners);	/* [I] list of clonable interfaces */
+int if_cloners_count;	/* [I] number of clonable interfaces */
 
 struct rwlock if_cloners_lock = RWLOCK_INITIALIZER("clonelk");
 
@@ -1942,19 +1943,25 @@ ifioctl(struct socket *so, u_long cmd, caddr_t data, struct proc *p)
 	case SIOCIFCREATE:
 		if ((error = suser(p)) != 0)
 			return (error);
+		KERNEL_LOCK();
 		error = if_clone_create(ifr->ifr_name, 0);
+		KERNEL_UNLOCK();
 		return (error);
 	case SIOCIFDESTROY:
 		if ((error = suser(p)) != 0)
 			return (error);
+		KERNEL_LOCK();
 		error = if_clone_destroy(ifr->ifr_name);
+		KERNEL_UNLOCK();
 		return (error);
 	case SIOCSIFGATTR:
 		if ((error = suser(p)) != 0)
 			return (error);
+		KERNEL_LOCK();
 		NET_LOCK();
 		error = if_setgroupattribs(data);
 		NET_UNLOCK();
+		KERNEL_UNLOCK();
 		return (error);
 	case SIOCGIFCONF:
 	case SIOCIFGCLONERS:
@@ -1973,12 +1980,17 @@ ifioctl(struct socket *so, u_long cmd, caddr_t data, struct proc *p)
 	case SIOCGIFRDOMAIN:
 	case SIOCGIFGROUP:
 	case SIOCGIFLLPRIO:
-		return (ifioctl_get(cmd, data));
+		error = ifioctl_get(cmd, data);
+		return (error);
 	}
 
+	KERNEL_LOCK();
+
 	ifp = if_unit(ifr->ifr_name);
-	if (ifp == NULL)
+	if (ifp == NULL) {
+		KERNEL_UNLOCK();
 		return (ENXIO);
+	}
 	oif_flags = ifp->if_flags;
 	oif_xflags = ifp->if_xflags;
 
@@ -2397,6 +2409,8 @@ forceup:
 	if (((oif_flags ^ ifp->if_flags) & IFF_UP) != 0)
 		getmicrotime(&ifp->if_lastchange);
 
+	KERNEL_UNLOCK();
+
 	if_put(ifp);
 
 	return (error);
@@ -2415,33 +2429,45 @@ ifioctl_get(u_long cmd, caddr_t data)
 
 	switch(cmd) {
 	case SIOCGIFCONF:
+		KERNEL_LOCK();
 		NET_LOCK_SHARED();
 		error = ifconf(data);
 		NET_UNLOCK_SHARED();
+		KERNEL_UNLOCK();
 		return (error);
 	case SIOCIFGCLONERS:
 		error = if_clone_list((struct if_clonereq *)data);
 		return (error);
 	case SIOCGIFGMEMB:
+		KERNEL_LOCK();
 		NET_LOCK_SHARED();
 		error = if_getgroupmembers(data);
 		NET_UNLOCK_SHARED();
+		KERNEL_UNLOCK();
 		return (error);
 	case SIOCGIFGATTR:
+		KERNEL_LOCK();
 		NET_LOCK_SHARED();
 		error = if_getgroupattribs(data);
 		NET_UNLOCK_SHARED();
+		KERNEL_UNLOCK();
 		return (error);
 	case SIOCGIFGLIST:
+		KERNEL_LOCK();
 		NET_LOCK_SHARED();
 		error = if_getgrouplist(data);
 		NET_UNLOCK_SHARED();
+		KERNEL_UNLOCK();
 		return (error);
 	}
 
+	KERNEL_LOCK();
+
 	ifp = if_unit(ifr->ifr_name);
-	if (ifp == NULL)
+	if (ifp == NULL) {
+		KERNEL_UNLOCK();
 		return (ENXIO);
+	}
 
 	NET_LOCK_SHARED();
 
@@ -2512,6 +2538,8 @@ ifioctl_get(u_long cmd, caddr_t data)
 	}
 
 	NET_UNLOCK_SHARED();
+
+	KERNEL_UNLOCK();
 
 	if_put(ifp);
 

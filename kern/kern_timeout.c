@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_timeout.c,v 1.85 2021/06/19 02:05:33 cheloha Exp $	*/
+/*	$OpenBSD: kern_timeout.c,v 1.87 2022/11/09 17:12:50 cheloha Exp $	*/
 /*
  * Copyright (c) 2001 Thomas Nordin <nordin@openbsd.org>
  * Copyright (c) 2000-2001 Artur Grabowski <art@openbsd.org>
@@ -166,7 +166,6 @@ struct lock_type timeout_spinlock_type = {
 	((needsproc) ? &timeout_sleeplock_obj : &timeout_spinlock_obj)
 #endif
 
-void kclock_nanotime(int, struct timespec *);
 void softclock(void *);
 void softclock_create_thread(void *);
 void softclock_process_kclock_timeout(struct timeout *, int);
@@ -284,7 +283,7 @@ void
 timeout_set_kclock(struct timeout *to, void (*fn)(void *), void *arg,
     int kclock, int flags)
 {
-	_timeout_set(to, fn, arg, kclock, flags | TIMEOUT_KCLOCK);
+	_timeout_set(to, fn, arg, kclock, flags);
 }
 
 int
@@ -294,7 +293,6 @@ timeout_add(struct timeout *new, int to_ticks)
 	int ret = 1;
 
 	KASSERT(ISSET(new->to_flags, TIMEOUT_INITIALIZED));
-	KASSERT(!ISSET(new->to_flags, TIMEOUT_KCLOCK));
 	KASSERT(new->to_kclock == KCLOCK_NONE);
 	KASSERT(to_ticks >= 0);
 
@@ -402,7 +400,7 @@ timeout_at_ts(struct timeout *to, const struct timespec *abstime)
 
 	mtx_enter(&timeout_mutex);
 
-	KASSERT(ISSET(to->to_flags, TIMEOUT_INITIALIZED | TIMEOUT_KCLOCK));
+	KASSERT(ISSET(to->to_flags, TIMEOUT_INITIALIZED));
 	KASSERT(to->to_kclock != KCLOCK_NONE);
 
 	old_abstime = to->to_abstime;
@@ -428,30 +426,6 @@ timeout_at_ts(struct timeout *to, const struct timespec *abstime)
 	mtx_leave(&timeout_mutex);
 
 	return ret;
-}
-
-int
-timeout_in_nsec(struct timeout *to, uint64_t nsecs)
-{
-	struct timespec abstime, interval, now;
-
-	kclock_nanotime(to->to_kclock, &now);
-	NSEC_TO_TIMESPEC(nsecs, &interval);
-	timespecadd(&now, &interval, &abstime);
-
-	return timeout_at_ts(to, &abstime);
-}
-
-void
-kclock_nanotime(int kclock, struct timespec *now)
-{
-	switch (kclock) {
-	case KCLOCK_UPTIME:
-		nanouptime(now);
-		break;
-	default:
-		panic("invalid kclock: 0x%x", kclock);
-	}
 }
 
 int
@@ -531,13 +505,14 @@ timeout_barrier_timeout(void *arg)
 uint32_t
 timeout_bucket(const struct timeout *to)
 {
-	struct kclock *kc = &timeout_kclock[to->to_kclock];
 	struct timespec diff, shifted_abstime;
+	struct kclock *kc;
 	uint32_t level;
 
-	KASSERT(ISSET(to->to_flags, TIMEOUT_KCLOCK));
-	KASSERT(timespeccmp(&kc->kc_lastscan, &to->to_abstime, <));
+	KASSERT(to->to_kclock == KCLOCK_UPTIME);
+	kc = &timeout_kclock[to->to_kclock];
 
+	KASSERT(timespeccmp(&kc->kc_lastscan, &to->to_abstime, <));
 	timespecsub(&to->to_abstime, &kc->kc_lastscan, &diff);
 	for (level = 0; level < nitems(timeout_level_width) - 1; level++) {
 		if (diff.tv_sec < timeout_level_width[level])
@@ -750,7 +725,7 @@ softclock(void *arg)
 		CIRCQ_REMOVE(&to->to_list);
 		if (to == first_new)
 			new = 1;
-		if (ISSET(to->to_flags, TIMEOUT_KCLOCK))
+		if (to->to_kclock != KCLOCK_NONE)
 			softclock_process_kclock_timeout(to, new);
 		else
 			softclock_process_tick_timeout(to, new);
@@ -915,7 +890,7 @@ db_show_timeout(struct timeout *to, struct circq *bucket)
 	else if (bucket == &timeout_proc)
 		where = "thread";
 	else {
-		if (ISSET(to->to_flags, TIMEOUT_KCLOCK))
+		if (to->to_kclock != KCLOCK_NONE)
 			wheel = timeout_wheel_kc;
 		else
 			wheel = timeout_wheel;
@@ -924,7 +899,7 @@ db_show_timeout(struct timeout *to, struct circq *bucket)
 		    (bucket - wheel) / WHEELSIZE);
 		where = buf;
 	}
-	if (ISSET(to->to_flags, TIMEOUT_KCLOCK)) {
+	if (to->to_kclock != KCLOCK_NONE) {
 		kc = &timeout_kclock[to->to_kclock];
 		timespecsub(&to->to_abstime, &kc->kc_lastscan, &remaining);
 		db_printf("%20s  %8s  %7s  0x%0*lx  %s\n",

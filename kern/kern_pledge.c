@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_pledge.c,v 1.296 2022/10/07 14:59:39 deraadt Exp $	*/
+/*	$OpenBSD: kern_pledge.c,v 1.299 2022/11/10 00:14:11 jsg Exp $	*/
 
 /*
  * Copyright (c) 2015 Nicholas Marriott <nicm@openbsd.org>
@@ -964,6 +964,7 @@ pledge_sysctl(struct proc *p, int miblen, int *mib, void *new)
 			case KERN_NGROUPS:	/* kern.ngroups */
 			case KERN_SYSVSHM:	/* kern.sysvshm */
 			case KERN_POSIX1:	/* kern.posix1version */
+			case KERN_AUTOCONF_SERIAL:	/* kern.autoconf_serial */
 				return (0);
 			}
 			break;
@@ -1373,6 +1374,12 @@ pledge_sockopt(struct proc *p, int set, int level, int optname)
 			return (0);
 		}
 		break;
+	case IPPROTO_TCP:
+		switch (optname) {
+		case TCP_NODELAY:
+			return (0);
+		}
+		break;
 	}
 
 	if ((pledge & PLEDGE_WROUTE)) {
@@ -1425,7 +1432,6 @@ pledge_sockopt(struct proc *p, int set, int level, int optname)
 	switch (level) {
 	case IPPROTO_TCP:
 		switch (optname) {
-		case TCP_NODELAY:
 		case TCP_MD5SIG:
 		case TCP_SACK_ENABLE:
 		case TCP_MAXSEG:

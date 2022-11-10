@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf.c,v 1.1141 2022/10/10 16:43:12 bket Exp $ */
+/*	$OpenBSD: pf.c,v 1.1146 2022/11/09 23:00:00 sashan Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -316,9 +316,6 @@ RB_GENERATE(pf_src_tree, pf_src_node, entry, pf_src_compare);
 RB_GENERATE(pf_state_tree, pf_state_key, entry, pf_state_compare_key);
 RB_GENERATE(pf_state_tree_id, pf_state,
     entry_id, pf_state_compare_id);
-
-SLIST_HEAD(pf_rule_gcl, pf_rule)	pf_rule_gcl =
-	SLIST_HEAD_INITIALIZER(pf_rule_gcl);
 
 __inline int
 pf_addr_compare(struct pf_addr *a, struct pf_addr *b, sa_family_t af)
@@ -1023,10 +1020,10 @@ pf_state_insert(struct pfi_kif *kif, struct pf_state_key **skw,
 	pf_status.fcounters[FCNT_STATE_INSERT]++;
 	pf_status.states++;
 	pfi_kif_ref(kif, PFI_KIF_REF_STATE);
-	PF_STATE_EXIT_WRITE();
 #if NPFSYNC > 0
 	pfsync_insert_state(s);
 #endif	/* NPFSYNC > 0 */
+	PF_STATE_EXIT_WRITE();
 	return (0);
 }
 
@@ -1261,24 +1258,226 @@ pf_state_export(struct pfsync_state *sp, struct pf_state *st)
 	sp->set_prio[1] = st->set_prio[1];
 }
 
-/* END state table stuff */
-
-void
-pf_purge_expired_rules(void)
+int
+pf_state_alloc_scrub_memory(const struct pfsync_state_peer *s,
+    struct pf_state_peer *d)
 {
-	struct pf_rule	*r;
+	if (s->scrub.scrub_flag && d->scrub == NULL)
+		return (pf_normalize_tcp_alloc(d));
 
-	PF_ASSERT_LOCKED();
-
-	if (SLIST_EMPTY(&pf_rule_gcl))
-		return;
-
-	while ((r = SLIST_FIRST(&pf_rule_gcl)) != NULL) {
-		SLIST_REMOVE(&pf_rule_gcl, r, pf_rule, gcle);
-		KASSERT(r->rule_flag & PFRULE_EXPIRED);
-		pf_purge_rule(r);
-	}
+	return (0);
 }
+
+int
+pf_state_import(const struct pfsync_state *sp, int flags)
+{
+	struct pf_state *st = NULL;
+	struct pf_state_key *skw = NULL, *sks = NULL;
+	struct pf_rule *r = NULL;
+	struct pfi_kif  *kif;
+	int pool_flags;
+	int error = ENOMEM;
+	int n = 0;
+
+	if (sp->creatorid == 0) {
+		DPFPRINTF(LOG_NOTICE, "%s: invalid creator id: %08x", __func__,
+		    ntohl(sp->creatorid));
+		return (EINVAL);
+	}
+
+	if ((kif = pfi_kif_get(sp->ifname, NULL)) == NULL) {
+		DPFPRINTF(LOG_NOTICE, "%s: unknown interface: %s", __func__,
+		    sp->ifname);
+		if (flags & PFSYNC_SI_IOCTL)
+			return (EINVAL);
+		return (0);	/* skip this state */
+	}
+
+	if (sp->af == 0)
+		return (0);	/* skip this state */
+
+	/*
+	 * If the ruleset checksums match or the state is coming from the ioctl,
+	 * it's safe to associate the state with the rule of that number.
+	 */
+	if (sp->rule != htonl(-1) && sp->anchor == htonl(-1) &&
+	    (flags & (PFSYNC_SI_IOCTL | PFSYNC_SI_CKSUM)) &&
+	    ntohl(sp->rule) < pf_main_ruleset.rules.active.rcount) {
+		TAILQ_FOREACH(r, pf_main_ruleset.rules.active.ptr, entries)
+			if (ntohl(sp->rule) == n++)
+				break;
+	} else
+		r = &pf_default_rule;
+
+	if ((r->max_states && r->states_cur >= r->max_states))
+		goto cleanup;
+
+	if (flags & PFSYNC_SI_IOCTL)
+		pool_flags = PR_WAITOK | PR_LIMITFAIL | PR_ZERO;
+	else
+		pool_flags = PR_NOWAIT | PR_LIMITFAIL | PR_ZERO;
+
+	if ((st = pool_get(&pf_state_pl, pool_flags)) == NULL)
+		goto cleanup;
+
+	if ((skw = pf_alloc_state_key(pool_flags)) == NULL)
+		goto cleanup;
+
+	if ((sp->key[PF_SK_WIRE].af &&
+	    (sp->key[PF_SK_WIRE].af != sp->key[PF_SK_STACK].af)) ||
+	    PF_ANEQ(&sp->key[PF_SK_WIRE].addr[0],
+	    &sp->key[PF_SK_STACK].addr[0], sp->af) ||
+	    PF_ANEQ(&sp->key[PF_SK_WIRE].addr[1],
+	    &sp->key[PF_SK_STACK].addr[1], sp->af) ||
+	    sp->key[PF_SK_WIRE].port[0] != sp->key[PF_SK_STACK].port[0] ||
+	    sp->key[PF_SK_WIRE].port[1] != sp->key[PF_SK_STACK].port[1] ||
+	    sp->key[PF_SK_WIRE].rdomain != sp->key[PF_SK_STACK].rdomain) {
+		if ((sks = pf_alloc_state_key(pool_flags)) == NULL)
+			goto cleanup;
+	} else
+		sks = skw;
+
+	/* allocate memory for scrub info */
+	if (pf_state_alloc_scrub_memory(&sp->src, &st->src) ||
+	    pf_state_alloc_scrub_memory(&sp->dst, &st->dst))
+		goto cleanup;
+
+	/* copy to state key(s) */
+	skw->addr[0] = sp->key[PF_SK_WIRE].addr[0];
+	skw->addr[1] = sp->key[PF_SK_WIRE].addr[1];
+	skw->port[0] = sp->key[PF_SK_WIRE].port[0];
+	skw->port[1] = sp->key[PF_SK_WIRE].port[1];
+	skw->rdomain = ntohs(sp->key[PF_SK_WIRE].rdomain);
+	PF_REF_INIT(skw->refcnt);
+	skw->proto = sp->proto;
+	if (!(skw->af = sp->key[PF_SK_WIRE].af))
+		skw->af = sp->af;
+	if (sks != skw) {
+		sks->addr[0] = sp->key[PF_SK_STACK].addr[0];
+		sks->addr[1] = sp->key[PF_SK_STACK].addr[1];
+		sks->port[0] = sp->key[PF_SK_STACK].port[0];
+		sks->port[1] = sp->key[PF_SK_STACK].port[1];
+		sks->rdomain = ntohs(sp->key[PF_SK_STACK].rdomain);
+		PF_REF_INIT(sks->refcnt);
+		if (!(sks->af = sp->key[PF_SK_STACK].af))
+			sks->af = sp->af;
+		if (sks->af != skw->af) {
+			switch (sp->proto) {
+			case IPPROTO_ICMP:
+				sks->proto = IPPROTO_ICMPV6;
+				break;
+			case IPPROTO_ICMPV6:
+				sks->proto = IPPROTO_ICMP;
+				break;
+			default:
+				sks->proto = sp->proto;
+			}
+		} else
+			sks->proto = sp->proto;
+
+		if (((sks->af != AF_INET) && (sks->af != AF_INET6)) ||
+		    ((skw->af != AF_INET) && (skw->af != AF_INET6))) {
+			error = EINVAL;
+			goto cleanup;
+		}
+
+	} else if ((sks->af != AF_INET) && (sks->af != AF_INET6)) {
+		error = EINVAL;
+		goto cleanup;
+	}
+	st->rtableid[PF_SK_WIRE] = ntohl(sp->rtableid[PF_SK_WIRE]);
+	st->rtableid[PF_SK_STACK] = ntohl(sp->rtableid[PF_SK_STACK]);
+
+	/* copy to state */
+	st->rt_addr = sp->rt_addr;
+	st->rt = sp->rt;
+	st->creation = getuptime() - ntohl(sp->creation);
+	st->expire = getuptime();
+	if (ntohl(sp->expire)) {
+		u_int32_t timeout;
+
+		timeout = r->timeout[sp->timeout];
+		if (!timeout)
+			timeout = pf_default_rule.timeout[sp->timeout];
+
+		/* sp->expire may have been adaptively scaled by export. */
+		st->expire -= timeout - ntohl(sp->expire);
+	}
+
+	st->direction = sp->direction;
+	st->log = sp->log;
+	st->timeout = sp->timeout;
+	st->state_flags = ntohs(sp->state_flags);
+	st->max_mss = ntohs(sp->max_mss);
+	st->min_ttl = sp->min_ttl;
+	st->set_tos = sp->set_tos;
+	st->set_prio[0] = sp->set_prio[0];
+	st->set_prio[1] = sp->set_prio[1];
+
+	st->id = sp->id;
+	st->creatorid = sp->creatorid;
+	pf_state_peer_ntoh(&sp->src, &st->src);
+	pf_state_peer_ntoh(&sp->dst, &st->dst);
+
+	st->rule.ptr = r;
+	st->anchor.ptr = NULL;
+
+	st->pfsync_time = getuptime();
+	st->sync_state = PFSYNC_S_NONE;
+
+	refcnt_init(&st->refcnt);
+
+	/* XXX when we have anchors, use STATE_INC_COUNTERS */
+	r->states_cur++;
+	r->states_tot++;
+
+#if NPFSYNC > 0
+	if (!ISSET(flags, PFSYNC_SI_IOCTL))
+		SET(st->state_flags, PFSTATE_NOSYNC);
+#endif
+
+	/*
+	 * We just set PFSTATE_NOSYNC bit, which prevents
+	 * pfsync_insert_state() to insert state to pfsync.
+	 */
+	if (pf_state_insert(kif, &skw, &sks, st) != 0) {
+		/* XXX when we have anchors, use STATE_DEC_COUNTERS */
+		r->states_cur--;
+		error = EEXIST;
+		goto cleanup_state;
+	}
+
+#if NPFSYNC > 0
+	if (!ISSET(flags, PFSYNC_SI_IOCTL)) {
+		CLR(st->state_flags, PFSTATE_NOSYNC);
+		if (ISSET(st->state_flags, PFSTATE_ACK))
+			pfsync_iack(st);
+	}
+	CLR(st->state_flags, PFSTATE_ACK);
+#endif
+
+	return (0);
+
+ cleanup:
+	if (skw == sks)
+		sks = NULL;
+	if (skw != NULL)
+		pool_put(&pf_state_key_pl, skw);
+	if (sks != NULL)
+		pool_put(&pf_state_key_pl, sks);
+
+ cleanup_state: /* pf_state_insert frees the state keys */
+	if (st) {
+		if (st->dst.scrub)
+			pool_put(&pf_state_scrub_pl, st->dst.scrub);
+		if (st->src.scrub)
+			pool_put(&pf_state_scrub_pl, st->src.scrub);
+		pool_put(&pf_state_pl, st);
+	}
+	return (error);
+}
+
+/* END state table stuff */
 
 void
 pf_purge_timeout(void *unused)
@@ -1307,10 +1506,8 @@ pf_purge(void *xnloops)
 
 	PF_LOCK();
 	/* purge other expired types every PFTM_INTERVAL seconds */
-	if (++(*nloops) >= pf_default_rule.timeout[PFTM_INTERVAL]) {
+	if (++(*nloops) >= pf_default_rule.timeout[PFTM_INTERVAL])
 		pf_purge_expired_src_nodes();
-		pf_purge_expired_rules();
-	}
 	PF_UNLOCK();
 
 	/*
@@ -3625,8 +3822,11 @@ pf_match_rule(struct pf_test_ctx *ctx, struct pf_ruleset *ruleset)
 	struct pf_rule	*save_a;
 	struct pf_ruleset	*save_aruleset;
 
+retry:
 	r = TAILQ_FIRST(ruleset->rules.active.ptr);
 	while (r != NULL) {
+		PF_TEST_ATTRIB(r->rule_flag & PFRULE_EXPIRED,
+		    TAILQ_NEXT(r, entries));
 		r->evaluations++;
 		PF_TEST_ATTRIB(
 		    (pfi_kif_match(r->kif, ctx->pd->kif) == r->ifnot),
@@ -3751,6 +3951,19 @@ pf_match_rule(struct pf_test_ctx *ctx, struct pf_ruleset *ruleset)
 		if (r->tag)
 			ctx->tag = r->tag;
 		if (r->anchor == NULL) {
+
+			if (r->rule_flag & PFRULE_ONCE) {
+				u_int32_t	rule_flag;
+
+				rule_flag = r->rule_flag;
+				if (((rule_flag & PFRULE_EXPIRED) == 0) &&
+				    atomic_cas_uint(&r->rule_flag, rule_flag,
+				    rule_flag | PFRULE_EXPIRED) == rule_flag)
+					r->exptime = gettime();
+				else
+					goto retry;
+			}
+
 			if (r->action == PF_MATCH) {
 				if ((ctx->ri = pool_get(&pf_rule_item_pl,
 				    PR_NOWAIT)) == NULL) {
@@ -3962,13 +4175,6 @@ pf_test_rule(struct pf_pdesc *pd, struct pf_rule **rm, struct pf_state **sm,
 	if (r->action == PF_DROP)
 		goto cleanup;
 
-	/*
-	 * If an expired "once" rule has not been purged, drop any new matching
-	 * packets.
-	 */
-	if (r->rule_flag & PFRULE_EXPIRED)
-		goto cleanup;
-
 	pf_tag_packet(pd->m, ctx.tag, ctx.act.rtableid);
 	if (ctx.act.rtableid >= 0 &&
 	    rtable_l2(ctx.act.rtableid) != pd->rdomain)
@@ -4037,22 +4243,6 @@ pf_test_rule(struct pf_pdesc *pd, struct pf_rule **rm, struct pf_state **sm,
 	/* copy back packet headers if needed */
 	if (rewrite && pd->hdrlen) {
 		m_copyback(pd->m, pd->off, pd->hdrlen, &pd->hdr, M_NOWAIT);
-	}
-
-	if (r->rule_flag & PFRULE_ONCE) {
-		u_int32_t	rule_flag;
-
-		/*
-		 * Use atomic_cas() to determine a clear winner, which will
-		 * insert an expired rule to gcl.
-		 */
-		rule_flag = r->rule_flag;
-		if (((rule_flag & PFRULE_EXPIRED) == 0) &&
-		    atomic_cas_uint(&r->rule_flag, rule_flag,
-			rule_flag | PFRULE_EXPIRED) == rule_flag) {
-			r->exptime = gettime();
-			SLIST_INSERT_HEAD(&pf_rule_gcl, r, gcle);
-		}
 	}
 
 #if NPFSYNC > 0
