@@ -66,6 +66,7 @@
 #include <netinet/if_ether.h>
 #include <netinet/ip.h>
 #include <netinet/ip6.h>
+#include <netinet/tcp.h>
 
 #if NBPFILTER > 0
 #include <net/bpf.h>

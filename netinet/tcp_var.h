@@ -94,6 +94,7 @@ struct tcpcb {
 #define TF_DISABLE_ECN	0x00040000U	/* disable ECN for this connection */
 #endif
 #define TF_LASTIDLE	0x00100000U	/* no outstanding ACK on last send */
+#define TF_TSO		0x00200000U	/* TCP Segment Offloading */
 #define TF_PMTUD_PEND	0x00400000U	/* Path MTU Discovery pending */
 #define TF_NEEDOUTPUT	0x00800000U	/* call tcp_output after tcp_input */
 #define TF_BLOCKOUTPUT	0x01000000U	/* avert tcp_output during tcp_input */
@@ -198,6 +199,8 @@ struct tcpcb {
 	u_int	t_pmtud_nextmtu;	/* Advertised Next-Hop MTU from ICMP */
 	u_short	t_pmtud_ip_len;		/* IP length from ICMP payload */
 	u_short	t_pmtud_ip_hl;		/* IP header length from ICMP payload */
+
+	u_int	t_tsomax;		/* TSO maximum size in bytes */
 
 	int pf;
 

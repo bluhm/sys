@@ -673,12 +673,12 @@ reroute:
 	 *
 	 * the logic here is rather complex:
 	 * 1: normal case (dontfrag == 0)
-	 * 1-a: send as is if tlen <= path mtu
+	 * 1-a: send as is if tlen <= path mtu or TSO is in use
 	 * 1-b: fragment if tlen > path mtu
 	 *
 	 * 2: if user asks us not to fragment (dontfrag == 1)
-	 * 2-a: send as is if tlen <= interface mtu
-	 * 2-b: error if tlen > interface mtu
+	 * 2-a: send as is if tlen <= interface mtu or TSO is in use
+	 * 2-b: error if tlen > interface mtu and TSO is not in use
 	 */
 	tlen = m->m_pkthdr.len;
 
@@ -689,7 +689,8 @@ reroute:
 		dontfrag = 1;
 	else
 		dontfrag = 0;
-	if (dontfrag && tlen > ifp->if_mtu) {	/* case 2-b */
+	if (dontfrag && tlen > ifp->if_mtu &&
+	    !ISSET(m->m_pkthdr.csum_flags, M_TCP_TSO)) {	/* case 2-b */
 #ifdef IPSEC
 		if (ip_mtudisc)
 			ipsec_adjust_mtu(m, mtu);
@@ -701,7 +702,9 @@ reroute:
 	/*
 	 * transmit packet without fragmentation
 	 */
-	if (dontfrag || (tlen <= mtu)) {	/* case 1-a and 2-a */
+	if (dontfrag || (tlen <= mtu) || (ISSET(ifp->if_xflags, IFXF_TSO)
+	    && ISSET(m->m_pkthdr.csum_flags, M_TCP_TSO))) {
+		/* case 1-a and 2-a */
 		error = ifp->if_output(ifp, m, sin6tosa(dst), ro->ro_rt);
 		goto done;
 	}
@@ -2715,8 +2718,12 @@ in6_proto_cksum_out(struct mbuf *m, struct ifnet *ifp)
 		u_int16_t csum;
 
 		offset = ip6_lasthdr(m, 0, IPPROTO_IPV6, &nxt);
-		csum = in6_cksum_phdr(&ip6->ip6_src, &ip6->ip6_dst,
-		    htonl(m->m_pkthdr.len - offset), htonl(nxt));
+		if (m->m_pkthdr.csum_flags & M_TCP_TSO)
+			csum = in6_cksum_phdr(&ip6->ip6_src, &ip6->ip6_dst, 0,
+			    htonl(nxt));
+		else
+			csum = in6_cksum_phdr(&ip6->ip6_src, &ip6->ip6_dst,
+			    htonl(m->m_pkthdr.len - offset), htonl(nxt));
 		if (nxt == IPPROTO_TCP)
 			offset += offsetof(struct tcphdr, th_sum);
 		else if (nxt == IPPROTO_UDP)

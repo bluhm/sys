@@ -210,6 +210,7 @@ tcp_output(struct tcpcb *tp)
 #ifdef TCP_ECN
 	int needect;
 #endif
+	int tso;	/* TCP segmentation offloading */
 
 	if (tp->t_flags & TF_BLOCKOUTPUT) {
 		tp->t_flags |= TF_NEEDOUTPUT;
@@ -279,6 +280,7 @@ again:
 	}
 
 	sendalot = 0;
+	tso = 0;
 	/*
 	 * If in persist timeout with window of 0, send 1 byte.
 	 * Otherwise, if window is small but nonzero
@@ -346,8 +348,17 @@ again:
 	txmaxseg = ulmin(so->so_snd.sb_hiwat / 2, tp->t_maxseg);
 
 	if (len > txmaxseg) {
-		len = txmaxseg;
-		sendalot = 1;
+		if ((tp->t_flags & TF_TSO) &&
+#ifdef TCP_SIGNATURE
+		    ((tp->t_flags & TF_SIGNATURE) == 0) &&
+#endif
+		    tp->rcv_numsacks == 0 && sack_rxmit == 0 &&
+		    !(flags & (TH_SYN|TH_RST|TH_FIN))) {
+			tso = 1;
+		} else {
+			len = txmaxseg;
+			sendalot = 1;
+		}
 	}
 	if (off + len < so->so_snd.sb_cc)
 		flags &= ~TH_FIN;
@@ -365,7 +376,7 @@ again:
 	 * to send into a small window), then must resend.
 	 */
 	if (len) {
-		if (len == txmaxseg)
+		if (len >= txmaxseg)
 			goto send;
 		if ((idle || (tp->t_flags & TF_NODELAY)) &&
 		    len + off >= so->so_snd.sb_cc && !soissending(so) &&
@@ -616,12 +627,20 @@ send:
 	/*
 	 * Adjust data length if insertion of options will
 	 * bump the packet length beyond the t_maxopd length.
+	 * Clear the FIN bit because we cut off the tail of
+	 * the segment.
 	 */
 	if (len > tp->t_maxopd - optlen) {
-		len = tp->t_maxopd - optlen;
-		sendalot = 1;
 		flags &= ~TH_FIN;
-	 }
+
+		if (tso) {
+			if (len + hdrlen + max_linkhdr > tp->t_tsomax)
+				len = tp->t_tsomax - hdrlen - max_linkhdr;
+		} else {
+			len = tp->t_maxopd - optlen;
+			sendalot = 1;
+		}
+	}
 
 #ifdef DIAGNOSTIC
 	if (max_linkhdr + hdrlen > MCLBYTES)
@@ -722,6 +741,12 @@ send:
 	}
 	m->m_pkthdr.ph_ifidx = 0;
 	m->m_pkthdr.len = hdrlen + len;
+
+	/* Enable TSO and specify the size of the resulting segments. */
+	if (tso) {
+		m->m_pkthdr.csum_flags |= M_TCP_TSO;
+		m->m_pkthdr.ph_mss = tp->t_maxseg;
+	}
 
 	if (!tp->t_template)
 		panic("tcp_output");

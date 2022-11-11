@@ -2863,6 +2863,11 @@ tcp_mss(struct tcpcb *tp, int offer)
 		mssopt = ifp->if_mtu - iphlen - sizeof(struct tcphdr);
 		mssopt = max(tcp_mssdflt, mssopt);
 	}
+
+	if (ISSET(ifp->if_xflags, IFXF_TSO)) {
+		tp->t_flags |= TF_TSO;
+		tp->t_tsomax = MIN(ifp->if_hw_tsomax, MAXMCLBYTES);
+	}
  out:
 	if_put(ifp);
 	/*

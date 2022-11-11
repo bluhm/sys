@@ -780,6 +780,7 @@ int	   in_canforward(struct in_addr);
 int	   in_cksum(struct mbuf *, int);
 int	   in4_cksum(struct mbuf *, u_int8_t, int, int);
 void	   in_proto_cksum_out(struct mbuf *, struct ifnet *);
+int	   in_ifcap_cksum(struct mbuf *, struct ifnet *, int);
 void	   in_ifdetach(struct ifnet *);
 int	   in_mask2len(struct in_addr *);
 void	   in_len2mask(struct in_addr *, int);

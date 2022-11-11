@@ -158,6 +158,7 @@ struct ifnet {				/* and the entries */
 	struct	timeout if_slowtimo;	/* [I] watchdog timeout */
 	struct	task if_watchdogtask;	/* [I] watchdog task */
 	struct	task if_linkstatetask;	/* [I] task to do route updates */
+	unsigned int if_hw_tsomax;	/* [I] TSO maximum size in bytes */
 
 	/* procedure handles */
 	void	(*if_input)(struct ifnet *, struct mbuf *);

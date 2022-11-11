@@ -456,7 +456,8 @@ sendit:
 	/*
 	 * If small enough for interface, can just send directly.
 	 */
-	if (ntohs(ip->ip_len) <= mtu) {
+	if (ntohs(ip->ip_len) <= mtu || (ISSET(ifp->if_xflags, IFXF_TSO)
+	    && ISSET(m->m_pkthdr.csum_flags, M_TCP_TSO))) {
 		ip->ip_sum = 0;
 		if (in_ifcap_cksum(m, ifp, IFCAP_CSUM_IPv4))
 			m->m_pkthdr.csum_flags |= M_IPV4_CSUM_OUT;
@@ -1870,7 +1871,10 @@ in_proto_cksum_out(struct mbuf *m, struct ifnet *ifp)
 		u_int16_t csum = 0, offset;
 
 		offset = ip->ip_hl << 2;
-		if (m->m_pkthdr.csum_flags & (M_TCP_CSUM_OUT|M_UDP_CSUM_OUT))
+		if (m->m_pkthdr.csum_flags & M_TCP_TSO)
+			csum = in_cksum_phdr(ip->ip_src.s_addr,
+			    ip->ip_dst.s_addr, htonl(ip->ip_p));
+		else if (m->m_pkthdr.csum_flags & (M_TCP_CSUM_OUT|M_UDP_CSUM_OUT))
 			csum = in_cksum_phdr(ip->ip_src.s_addr,
 			    ip->ip_dst.s_addr, htonl(ntohs(ip->ip_len) -
 			    offset + ip->ip_p));
