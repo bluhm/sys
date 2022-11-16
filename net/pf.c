@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf.c,v 1.1150 2022/11/11 11:47:12 dlg Exp $ */
+/*	$OpenBSD: pf.c,v 1.1153 2022/11/12 02:48:14 kn Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -119,10 +119,6 @@ SHA2_CTX		 pf_tcp_secret_ctx;
 u_char			 pf_tcp_secret[16];
 int			 pf_tcp_secret_init;
 int			 pf_tcp_iss_off;
-
-int		 pf_npurge;
-struct task	 pf_purge_task = TASK_INITIALIZER(pf_purge, &pf_npurge);
-struct timeout	 pf_purge_to = TIMEOUT_INITIALIZER(pf_purge_timeout, NULL);
 
 enum pf_test_status {
 	PF_TEST_FAIL = -1,
@@ -1306,6 +1302,7 @@ pf_state_alloc_scrub_memory(const struct pfsync_state_peer *s,
 	return (0);
 }
 
+#if NPFSYNC > 0
 int
 pf_state_import(const struct pfsync_state *sp, int flags)
 {
@@ -1464,6 +1461,7 @@ pf_state_import(const struct pfsync_state *sp, int flags)
 	st->sync_state = PFSYNC_S_NONE;
 
 	refcnt_init(&st->refcnt);
+	mtx_init(&st->mtx, IPL_NET);
 
 	/* XXX when we have anchors, use STATE_INC_COUNTERS */
 	r->states_cur++;
@@ -1514,50 +1512,114 @@ pf_state_import(const struct pfsync_state *sp, int flags)
 	}
 	return (error);
 }
+#endif /* NPFSYNC > 0 */
 
 /* END state table stuff */
 
-void
-pf_purge_timeout(void *unused)
-{
-	/* XXX move to systqmp to avoid KERNEL_LOCK */
-	task_add(systq, &pf_purge_task);
-}
+void		 pf_purge_states(void *);
+struct task	 pf_purge_states_task =
+		     TASK_INITIALIZER(pf_purge_states, NULL);
+
+void		 pf_purge_states_tick(void *);
+struct timeout	 pf_purge_states_to =
+		     TIMEOUT_INITIALIZER(pf_purge_states_tick, NULL);
+
+unsigned int	 pf_purge_expired_states(unsigned int, unsigned int);
+
+/*
+ * how many states to scan this interval.
+ *
+ * this is set when the timeout fires, and reduced by the task. the
+ * task will reschedule itself until the limit is reduced to zero,
+ * and then it adds the timeout again.
+ */
+unsigned int pf_purge_states_limit;
+
+/*
+ * limit how many states are processed with locks held per run of
+ * the state purge task.
+ */
+unsigned int pf_purge_states_collect = 64;
 
 void
-pf_purge(void *xnloops)
+pf_purge_states_tick(void *null)
 {
-	int *nloops = xnloops;
+	unsigned int limit = pf_status.states;
+	unsigned int interval = pf_default_rule.timeout[PFTM_INTERVAL];
+
+	if (limit == 0) {
+		timeout_add_sec(&pf_purge_states_to, 1);
+		return;
+	}
 
 	/*
 	 * process a fraction of the state table every second
-	 * Note:
-	 *     we no longer need PF_LOCK() here, because
-	 *     pf_purge_expired_states() uses pf_state_lock to maintain
-	 *     consistency.
 	 */
-	if (pf_default_rule.timeout[PFTM_INTERVAL] > 0)
-		pf_purge_expired_states(1 + (pf_status.states
-		    / pf_default_rule.timeout[PFTM_INTERVAL]));
 
+	if (interval > 1)
+		limit /= interval;
+
+	pf_purge_states_limit = limit;
+	task_add(systqmp, &pf_purge_states_task);
+}
+
+void
+pf_purge_states(void *null)
+{
+	unsigned int limit;
+	unsigned int scanned;
+
+	limit = pf_purge_states_limit;
+	if (limit < pf_purge_states_collect)
+		limit = pf_purge_states_collect;
+
+	scanned = pf_purge_expired_states(limit, pf_purge_states_collect);
+	if (scanned >= pf_purge_states_limit) {
+		/* we've run out of states to scan this "interval" */
+		timeout_add_sec(&pf_purge_states_to, 1);
+		return;
+	}
+
+	pf_purge_states_limit -= scanned;
+	task_add(systqmp, &pf_purge_states_task);
+}
+
+void		 pf_purge_tick(void *);
+struct timeout	 pf_purge_to =
+		     TIMEOUT_INITIALIZER(pf_purge_tick, NULL);
+
+void		 pf_purge(void *);
+struct task	 pf_purge_task =
+		     TASK_INITIALIZER(pf_purge, NULL);
+
+void
+pf_purge_tick(void *null)
+{
+	task_add(systqmp, &pf_purge_task);
+}
+
+void
+pf_purge(void *null)
+{
+	unsigned int interval = max(1, pf_default_rule.timeout[PFTM_INTERVAL]);
+
+	/* XXX is NET_LOCK necessary? */
 	NET_LOCK();
 
 	PF_LOCK();
-	/* purge other expired types every PFTM_INTERVAL seconds */
-	if (++(*nloops) >= pf_default_rule.timeout[PFTM_INTERVAL])
-		pf_purge_expired_src_nodes();
+
+	pf_purge_expired_src_nodes();
+
 	PF_UNLOCK();
 
 	/*
 	 * Fragments don't require PF_LOCK(), they use their own lock.
 	 */
-	if ((*nloops) >= pf_default_rule.timeout[PFTM_INTERVAL]) {
-		pf_purge_expired_fragments();
-		*nloops = 0;
-	}
+	pf_purge_expired_fragments();
 	NET_UNLOCK();
 
-	timeout_add_sec(&pf_purge_to, 1);
+	/* interpret the interval as idle time between runs */
+	timeout_add_sec(&pf_purge_to, interval);
 }
 
 int32_t
@@ -1757,8 +1819,8 @@ pf_free_state(struct pf_state *cur)
 	pf_status.states--;
 }
 
-void
-pf_purge_expired_states(u_int32_t maxcheck)
+unsigned int
+pf_purge_expired_states(const unsigned int limit, const unsigned int collect)
 {
 	/*
 	 * this task/thread/context/whatever is the only thing that
@@ -1772,6 +1834,8 @@ pf_purge_expired_states(u_int32_t maxcheck)
 	struct pf_state		*st;
 	SLIST_HEAD(pf_state_gcl, pf_state) gcl = SLIST_HEAD_INITIALIZER(gcl);
 	time_t			 now;
+	unsigned int		 scanned;
+	unsigned int		 collected = 0;
 
 	PF_ASSERT_UNLOCKED();
 
@@ -1785,7 +1849,7 @@ pf_purge_expired_states(u_int32_t maxcheck)
 	if (head == NULL) {
 		/* the list is empty */
 		rw_exit_read(&pf_state_list.pfs_rwl);
-		return;
+		return (limit);
 	}
 
 	/* (re)start at the front of the list */
@@ -1794,28 +1858,38 @@ pf_purge_expired_states(u_int32_t maxcheck)
 
 	now = getuptime();
 
-	do {
+	for (scanned = 0; scanned < limit; scanned++) {
 		uint8_t stimeout = cur->timeout;
+		unsigned int limited = 0;
 
 		if ((stimeout == PFTM_UNLINKED) ||
 		    (pf_state_expires(cur, stimeout) <= now)) {
 			st = pf_state_ref(cur);
 			SLIST_INSERT_HEAD(&gcl, st, gc_list);
+
+			if (++collected >= collect)
+				limited = 1;
 		}
 
 		/* don't iterate past the end of our view of the list */
 		if (cur == tail) {
+			scanned = limit;
 			cur = NULL;
 			break;
 		}
 
 		cur = TAILQ_NEXT(cur, entry_list);
-	} while (maxcheck--);
+
+		/* don't spend too much time here. */
+		if (ISSET(READ_ONCE(curcpu()->ci_schedstate.spc_schedflags),
+		     SPCF_SHOULDYIELD) || limited)
+			break;
+	}
 
 	rw_exit_read(&pf_state_list.pfs_rwl);
 
 	if (SLIST_EMPTY(&gcl))
-		return;
+		return (scanned);
 
 	NET_LOCK();
 	rw_enter_write(&pf_state_list.pfs_rwl);
@@ -1836,6 +1910,8 @@ pf_purge_expired_states(u_int32_t maxcheck)
 		SLIST_REMOVE_HEAD(&gcl, gc_list);
 		pf_state_unref(st);
 	}
+
+	return (scanned);
 }
 
 int
@@ -4357,6 +4433,7 @@ pf_create_state(struct pf_pdesc *pd, struct pf_rule *r, struct pf_rule *a,
 	 * pf_state_inserts() grabs reference for pfsync!
 	 */
 	refcnt_init(&s->refcnt);
+	mtx_init(&s->mtx, IPL_NET);
 
 	switch (pd->proto) {
 	case IPPROTO_TCP:

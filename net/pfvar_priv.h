@@ -1,4 +1,4 @@
-/*	$OpenBSD: pfvar_priv.h,v 1.18 2022/11/11 12:50:45 dlg Exp $	*/
+/*	$OpenBSD: pfvar_priv.h,v 1.21 2022/11/11 17:12:30 dlg Exp $	*/
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -43,6 +43,7 @@
 /*
  * Protection/ownership of pf_state members:
  *	I	immutable after creation
+ *	M	pf_state mtx
  *	P	PF_STATE_LOCK
  *	S	pfsync mutex
  *	L	pf_state_list
@@ -68,8 +69,10 @@ struct pf_state {
 	union pf_rule_ptr	 natrule;	/* [I] */
 	struct pf_addr		 rt_addr;	/* [I] */
 	struct pf_sn_head	 src_nodes;	/* [I] */
-	struct pf_state_key	*key[2];	/* [ddresses stack and wire  */
+	struct pf_state_key	*key[2];	/* stack and wire  */
 	struct pfi_kif		*kif;		/* [I] */
+	struct mutex		 mtx;
+	pf_refcnt_t		 refcnt;
 	u_int64_t		 packets[2];
 	u_int64_t		 bytes[2];
 	int32_t			 creation;	/* [I] */
@@ -90,7 +93,6 @@ struct pf_state {
 	u_int16_t		 max_mss;	/* [I] */
 	u_int16_t		 if_index_in;	/* [I] */
 	u_int16_t		 if_index_out;	/* [I] */
-	pf_refcnt_t		 refcnt;
 	u_int16_t		 delay;		/* [I] */
 	u_int8_t		 rt;		/* [I] */
 	u_int8_t		 snapped;	/* [S] */
@@ -265,6 +267,7 @@ struct pf_pdesc {
 	} hdr;
 };
 
+extern struct timeout	pf_purge_states_to;
 extern struct task	pf_purge_task;
 extern struct timeout	pf_purge_to;
 
@@ -317,9 +320,6 @@ extern struct rwlock	pf_state_lock;
 			splassert_fail(RW_WRITE,	\
 			    rw_status(&pf_state_lock), __func__);\
 	} while (0)
-
-extern void			 pf_purge_timeout(void *);
-extern void			 pf_purge(void *);
 
 /* for copies to/from network byte order */
 void			pf_state_peer_hton(const struct pf_state_peer *,
