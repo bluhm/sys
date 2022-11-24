@@ -1,4 +1,4 @@
-/*	$OpenBSD: nd6.h,v 1.83 2022/11/23 07:57:39 kn Exp $	*/
+/*	$OpenBSD: nd6.h,v 1.89 2022/11/23 19:35:42 kn Exp $	*/
 /*	$KAME: nd6.h,v 1.95 2002/06/08 11:31:06 itojun Exp $	*/
 
 /*
@@ -60,27 +60,10 @@ struct in6_nbrinfo {
 	int	state;		/* reachability state */
 };
 
-struct prf_ra {
-	u_int onlink : 1;
-	u_int autonomous : 1;
-	u_int router : 1;
-	u_int reserved : 5;
-};
-
 struct	in6_ndireq {
 	char ifname[IFNAMSIZ];
 	struct nd_ifinfo ndi;
 };
-
-struct	in6_ndifreq {
-	char ifname[IFNAMSIZ];
-	u_long ifindex;
-};
-
-/* Prefix status */
-#define NDPRF_ONLINK		0x1
-#define NDPRF_DETACHED		0x2
-#define NDPRF_HOME		0x4
 
 /* protocol constants */
 #define MAX_RTR_SOLICITATION_DELAY	1	/*1sec*/
@@ -92,9 +75,6 @@ struct	in6_ndifreq {
 #ifdef _KERNEL
 
 #include <sys/queue.h>
-
-#define ND_IFINFO(ifp) \
-	((struct nd_ifinfo *)(ifp)->if_afdata[AF_INET6])
 
 struct	llinfo_nd6 {
 	TAILQ_ENTRY(llinfo_nd6)	ln_list;
@@ -152,8 +132,8 @@ union nd_opts {
 #define nd_opts_done		nd_opt_each.done
 
 void nd6_init(void);
-struct nd_ifinfo *nd6_ifattach(struct ifnet *);
-void nd6_ifdetach(struct nd_ifinfo *);
+void nd6_ifattach(struct ifnet *);
+void nd6_ifdetach(struct ifnet *);
 int nd6_is_addr_neighbor(const struct sockaddr_in6 *, struct ifnet *);
 void nd6_option_init(void *, int, union nd_opts *);
 struct nd_opt_hdr *nd6_option(union nd_opts *);
