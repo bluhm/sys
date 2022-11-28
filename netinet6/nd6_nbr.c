@@ -1,4 +1,4 @@
-/*	$OpenBSD: nd6_nbr.c,v 1.134 2022/11/23 16:59:10 kn Exp $	*/
+/*	$OpenBSD: nd6_nbr.c,v 1.136 2022/11/28 13:08:53 kn Exp $	*/
 /*	$KAME: nd6_nbr.c,v 1.61 2001/02/10 16:06:14 jinmei Exp $	*/
 
 /*
@@ -62,7 +62,8 @@
 #include <netinet/ip_carp.h>
 #endif
 
-TAILQ_HEAD(dadq_head, dadq);
+static TAILQ_HEAD(, dadq) dadq =
+    TAILQ_HEAD_INITIALIZER(dadq);	/* list of addresses to run DAD on */
 struct dadq {
 	TAILQ_ENTRY(dadq) dad_list;
 	struct ifaddr *dad_ifa;
@@ -1036,9 +1037,6 @@ nd6_ifptomac(struct ifnet *ifp)
 	}
 }
 
-static struct dadq_head dadq;
-static int dad_init = 0;
-
 struct dadq *
 nd6_dad_find(struct ifaddr *ifa)
 {
@@ -1078,11 +1076,6 @@ nd6_dad_start(struct ifaddr *ifa)
 
 	NET_ASSERT_LOCKED();
 
-	if (!dad_init) {
-		TAILQ_INIT(&dadq);
-		dad_init++;
-	}
-
 	/*
 	 * If we don't need DAD, don't do it.
 	 * There are several cases:
@@ -1112,7 +1105,7 @@ nd6_dad_start(struct ifaddr *ifa)
 	}
 	bzero(&dp->dad_timer_ch, sizeof(dp->dad_timer_ch));
 
-	TAILQ_INSERT_TAIL(&dadq, (struct dadq *)dp, dad_list);
+	TAILQ_INSERT_TAIL(&dadq, dp, dad_list);
 	ip6_dad_pending++;
 
 	nd6log((LOG_DEBUG, "%s: starting DAD for %s\n", ifa->ifa_ifp->if_xname,
@@ -1140,8 +1133,6 @@ nd6_dad_stop(struct ifaddr *ifa)
 {
 	struct dadq *dp;
 
-	if (!dad_init)
-		return;
 	dp = nd6_dad_find(ifa);
 	if (!dp) {
 		/* DAD wasn't started yet */
@@ -1150,7 +1141,7 @@ nd6_dad_stop(struct ifaddr *ifa)
 
 	nd6_dad_stoptimer(dp);
 
-	TAILQ_REMOVE(&dadq, (struct dadq *)dp, dad_list);
+	TAILQ_REMOVE(&dadq, dp, dad_list);
 	free(dp, M_IP6NDP, sizeof(*dp));
 	dp = NULL;
 	ifafree(ifa);
@@ -1197,7 +1188,7 @@ nd6_dad_timer(void *xifa)
 		nd6log((LOG_INFO, "%s: could not run DAD, driver problem?\n",
 			ifa->ifa_ifp->if_xname));
 
-		TAILQ_REMOVE(&dadq, (struct dadq *)dp, dad_list);
+		TAILQ_REMOVE(&dadq, dp, dad_list);
 		free(dp, M_IP6NDP, sizeof(*dp));
 		dp = NULL;
 		ifafree(ifa);
@@ -1248,7 +1239,7 @@ nd6_dad_timer(void *xifa)
 			    inet_ntop(AF_INET6, &ia6->ia_addr.sin6_addr,
 				addr, sizeof(addr))));
 
-			TAILQ_REMOVE(&dadq, (struct dadq *)dp, dad_list);
+			TAILQ_REMOVE(&dadq, dp, dad_list);
 			free(dp, M_IP6NDP, sizeof(*dp));
 			dp = NULL;
 			ifafree(ifa);
