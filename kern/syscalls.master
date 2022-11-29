@@ -249,7 +249,7 @@
 			    struct timespec *timeout); }
 117	STD NOLOCK	{ int sys_sendmmsg(int s,  struct mmsghdr *mmsg,\
 			    unsigned int vlen, int flags); }
-118	STD		{ int sys_getsockopt(int s, int level, int name, \
+118	STD NOLOCK	{ int sys_getsockopt(int s, int level, int name, \
 			    void *val, socklen_t *avalsize); }
 119	STD		{ int sys_thrkill(pid_t tid, int signum, void *tcb); }
 120	STD NOLOCK	{ ssize_t sys_readv(int fd, \
