@@ -223,7 +223,7 @@
 103	STD		{ int sys_sigreturn(struct sigcontext *sigcntxp); }
 104	STD		{ int sys_bind(int s, const struct sockaddr *name, \
 			    socklen_t namelen); }
-105	STD		{ int sys_setsockopt(int s, int level, int name, \
+105	STD NOLOCK	{ int sys_setsockopt(int s, int level, int name, \
 			    const void *val, socklen_t valsize); }
 106	STD		{ int sys_listen(int s, int backlog); }
 107	STD		{ int sys_chflagsat(int fd, const char *path, \

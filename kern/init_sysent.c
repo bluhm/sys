@@ -242,7 +242,7 @@ const struct sysent sysent[] = {
 	    sys_sigreturn },			/* 103 = sigreturn */
 	{ 3, s(struct sys_bind_args), 0,
 	    sys_bind },				/* 104 = bind */
-	{ 5, s(struct sys_setsockopt_args), 0,
+	{ 5, s(struct sys_setsockopt_args), SY_NOLOCK | 0,
 	    sys_setsockopt },			/* 105 = setsockopt */
 	{ 2, s(struct sys_listen_args), 0,
 	    sys_listen },			/* 106 = listen */
