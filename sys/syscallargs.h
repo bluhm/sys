@@ -1,4 +1,4 @@
-/*	$OpenBSD: syscallargs.h,v 1.253 2022/11/09 10:27:01 mpi Exp $	*/
+/*	$OpenBSD$	*/
 
 /*
  * System call argument lists.

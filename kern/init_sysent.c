@@ -1,4 +1,4 @@
-/*	$OpenBSD: init_sysent.c,v 1.253 2022/11/09 10:27:01 mpi Exp $	*/
+/*	$OpenBSD$	*/
 
 /*
  * System call switch table.
@@ -268,7 +268,7 @@ const struct sysent sysent[] = {
 	    sys_recvmmsg },			/* 116 = recvmmsg */
 	{ 4, s(struct sys_sendmmsg_args), SY_NOLOCK | 0,
 	    sys_sendmmsg },			/* 117 = sendmmsg */
-	{ 5, s(struct sys_getsockopt_args), 0,
+	{ 5, s(struct sys_getsockopt_args), SY_NOLOCK | 0,
 	    sys_getsockopt },			/* 118 = getsockopt */
 	{ 3, s(struct sys_thrkill_args), 0,
 	    sys_thrkill },			/* 119 = thrkill */
