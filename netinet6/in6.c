@@ -1,4 +1,4 @@
-/*	$OpenBSD: in6.c,v 1.256 2022/11/23 14:48:28 kn Exp $	*/
+/*	$OpenBSD: in6.c,v 1.259 2022/12/06 22:19:39 mvs Exp $	*/
 /*	$KAME: in6.c,v 1.372 2004/06/14 08:14:21 itojun Exp $	*/
 
 /*
@@ -213,9 +213,7 @@ in6_control(struct socket *so, u_long cmd, caddr_t data, struct ifnet *ifp)
 		break;
 #endif /* MROUTING */
 	default:
-		KERNEL_LOCK();
 		error = in6_ioctl(cmd, data, ifp, privileged);
-		KERNEL_UNLOCK();
 		break;
 	}
 
@@ -296,6 +294,7 @@ in6_ioctl_change_ifaddr(u_long cmd, caddr_t data, struct ifnet *ifp)
 			return (error);
 	}
 
+	KERNEL_LOCK();
 	NET_LOCK();
 
 	if (sa6 != NULL) {
@@ -402,6 +401,7 @@ in6_ioctl_change_ifaddr(u_long cmd, caddr_t data, struct ifnet *ifp)
 
 err:
 	NET_UNLOCK();
+	KERNEL_UNLOCK();
 	return (error);
 }
 
@@ -1063,7 +1063,9 @@ in6_addmulti(struct in6_addr *maddr6, struct ifnet *ifp, int *errorp)
 		 * filter appropriately for the new address.
 		 */
 		memcpy(&ifr.ifr_addr, &in6m->in6m_sin, sizeof(in6m->in6m_sin));
+		KERNEL_LOCK();
 		*errorp = (*ifp->if_ioctl)(ifp, SIOCADDMULTI, (caddr_t)&ifr);
+		KERNEL_UNLOCK();
 		if (*errorp) {
 			free(in6m, M_IPMADDR, sizeof(*in6m));
 			return (NULL);

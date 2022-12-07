@@ -1,4 +1,4 @@
-/*	$OpenBSD: uipc_syscalls.c,v 1.204 2022/09/03 21:13:48 mbuhl Exp $	*/
+/*	$OpenBSD: uipc_syscalls.c,v 1.207 2022/12/07 01:02:28 deraadt Exp $	*/
 /*	$NetBSD: uipc_syscalls.c,v 1.19 1996/02/09 19:00:48 christos Exp $	*/
 
 /*
@@ -60,6 +60,9 @@
 
 #include <sys/domain.h>
 #include <netinet/in.h>
+#include <netinet/ip.h>
+#include <net/route.h>
+#include <netinet/in_pcb.h>
 #include <net/rtable.h>
 
 int	copyaddrout(struct proc *, struct mbuf *, struct sockaddr *, socklen_t,
@@ -1268,9 +1271,9 @@ sys_getsockopt(struct proc *p, void *v, register_t *retval)
 		valsize = 0;
 	m = m_get(M_WAIT, MT_SOOPTS);
 	so = fp->f_data;
-	solock(so);
+	solock_shared(so);
 	error = sogetopt(so, SCARG(uap, level), SCARG(uap, name), m);
-	sounlock(so);
+	sounlock_shared(so);
 	if (error == 0 && SCARG(uap, val) && valsize && m != NULL) {
 		if (valsize > m->m_len)
 			valsize = m->m_len;
@@ -1320,9 +1323,9 @@ sys_getsockname(struct proc *p, void *v, register_t *retval)
 		goto bad;
 	}
 	m = m_getclr(M_WAIT, MT_SONAME);
-	solock(so);
+	solock_shared(so);
 	error = pru_sockaddr(so, m);
-	sounlock(so);
+	sounlock_shared(so);
 	if (error)
 		goto bad;
 	error = copyaddrout(p, m, SCARG(uap, asa), len, SCARG(uap, alen));
@@ -1367,9 +1370,9 @@ sys_getpeername(struct proc *p, void *v, register_t *retval)
 	if (error)
 		goto bad;
 	m = m_getclr(M_WAIT, MT_SONAME);
-	solock(so);
+	solock_shared(so);
 	error = pru_peeraddr(so, m);
-	sounlock(so);
+	sounlock_shared(so);
 	if (error)
 		goto bad;
 	error = copyaddrout(p, m, SCARG(uap, asa), len, SCARG(uap, alen));
@@ -1636,18 +1639,23 @@ out:
 	error = socreate(AF_INET, &so, SCARG(uap, type), 0);
 	if (error)
 		return (error);
-	
+
 	error = ypsockargs(&nam, &ypsin, sizeof ypsin, MT_SONAME);
 	if (error) {
 		soclose(so, MSG_DONTWAIT);
 		return (error);
 	}
-	
+
 #ifdef KTRACE
 	if (KTRPOINT(p, KTR_STRUCT))
 		ktrsockaddr(p, mtod(nam, caddr_t), sizeof(struct sockaddr_in));
 #endif
 	solock(so);
+
+	/* Secure YP maps require reserved ports */
+	if (suser(p) == 0)
+		sotoinpcb(so)->inp_flags |= INP_LOWPORT;
+
 	error = soconnect(so, nam);
 	while ((so->so_state & SS_ISCONNECTING) && so->so_error == 0) {
 		error = sosleep_nsec(so, &so->so_timeo, PSOCK | PCATCH,
