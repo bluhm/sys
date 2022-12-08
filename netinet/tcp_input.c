@@ -2685,8 +2685,7 @@ tcp_pulloutofband(struct socket *so, u_int urgent, struct mbuf *m, int off)
 void
 tcp_xmit_timer(struct tcpcb *tp, int rtt)
 {
-	short delta;
-	short rttmin;
+	int delta, rttmin;
 
 	if (rtt < 0)
 		rtt = 0;
