@@ -48,3 +48,5 @@ ENTRY(skpc)
 	movl	%ecx,%eax
 	RETGUARD_CHECK(skpc, r10)
 	ret
+	lfence
+END(skpc)

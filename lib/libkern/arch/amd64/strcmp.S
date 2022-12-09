@@ -1,4 +1,4 @@
-/*	$OpenBSD: strcmp.S,v 1.4 2018/07/03 23:22:48 mortimer Exp $	*/
+/*	$OpenBSD: strcmp.S,v 1.6 2022/12/07 19:26:39 guenther Exp $	*/
 /*	$NetBSD: strcmp.S,v 1.2 2014/03/22 19:16:34 jakllsch Exp $	*/
 
 /*
@@ -71,3 +71,5 @@ ENTRY(strcmp)
 	subq	%rdx,%rax
 	RETGUARD_CHECK(strcmp, r10)
 	ret
+	lfence
+END(strcmp)
