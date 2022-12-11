@@ -1,4 +1,4 @@
-/*	$OpenBSD: nd6_rtr.c,v 1.167 2019/06/21 17:11:43 mpi Exp $	*/
+/*	$OpenBSD: nd6_rtr.c,v 1.169 2022/12/10 21:26:21 kn Exp $	*/
 /*	$KAME: nd6_rtr.c,v 1.97 2001/02/07 11:09:13 itojun Exp $	*/
 
 /*
@@ -73,7 +73,7 @@ nd6_rtr_cache(struct mbuf *m, int off, int icmp6len, int icmp6_type)
 	struct in6_addr saddr6 = ip6->ip6_src;
 	char *lladdr = NULL;
 	int lladdrlen = 0;
-	union nd_opts ndopts;
+	struct nd_opts ndopts;
 	char src[INET6_ADDRSTRLEN], dst[INET6_ADDRSTRLEN];
 
 	KASSERT(icmp6_type == ND_ROUTER_SOLICIT || icmp6_type ==
@@ -107,7 +107,12 @@ nd6_rtr_cache(struct mbuf *m, int off, int icmp6len, int icmp6_type)
 		}
 
 		icmp6len -= sizeof(*nd_rs);
-		nd6_option_init(nd_rs + 1, icmp6len, &ndopts);
+		if (nd6_options(nd_rs + 1, icmp6len, &ndopts) < 0) {
+			nd6log((LOG_INFO,
+			    "%s: invalid ND option, ignored\n", __func__));
+			/* nd6_options have incremented stats */
+			goto freeit;
+		}
 		break;
 	case ND_ROUTER_ADVERT:
 		if (!IN6_IS_ADDR_LINKLOCAL(&saddr6)) {
@@ -125,15 +130,13 @@ nd6_rtr_cache(struct mbuf *m, int off, int icmp6len, int icmp6_type)
 		}
 
 		icmp6len -= sizeof(*nd_ra);
-		nd6_option_init(nd_ra + 1, icmp6len, &ndopts);
+		if (nd6_options(nd_ra + 1, icmp6len, &ndopts) < 0) {
+			nd6log((LOG_INFO,
+			    "%s: invalid ND option, ignored\n", __func__));
+			/* nd6_options have incremented stats */
+			goto freeit;
+		}
 		break;
-	}
-
-	if (nd6_options(&ndopts) < 0) {
-		nd6log((LOG_INFO,
-		    "%s: invalid ND option, ignored\n", __func__));
-		/* nd6_options have incremented stats */
-		goto freeit;
 	}
 
 	if (ndopts.nd_opts_src_lladdr) {

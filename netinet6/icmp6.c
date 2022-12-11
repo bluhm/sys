@@ -1,4 +1,4 @@
-/*	$OpenBSD: icmp6.c,v 1.242 2022/05/05 13:57:40 claudio Exp $	*/
+/*	$OpenBSD: icmp6.c,v 1.247 2022/12/10 23:45:51 kn Exp $	*/
 /*	$KAME: icmp6.c,v 1.217 2001/06/20 15:03:29 jinmei Exp $	*/
 
 /*
@@ -128,9 +128,6 @@ static int icmp6_mtudisc_lowat = 256;
  * keep track of # of redirect routes.
  */
 struct rttimer_queue icmp6_redirect_timeout_q;
-
-/* XXX experimental, turned off */
-static int icmp6_redirect_lowat = -1;
 
 void	icmp6_errcount(int, int);
 int	icmp6_ratelimit(const struct in6_addr *, const int, const int);
@@ -381,7 +378,7 @@ icmp6_error(struct mbuf *m, int type, int code, int param)
 		if (!icmp6_reflect(&n, sizeof(struct ip6_hdr), NULL))
 			ip6_send(n);
 	}
-}                                                                    
+}
 
 /*
  * Process a received ICMP6 message.
@@ -396,7 +393,7 @@ icmp6_input(struct mbuf **mp, int *offp, int proto, int af)
 	struct ip6_hdr *ip6, *nip6;
 	struct icmp6_hdr *icmp6, *nicmp6;
 	int off = *offp;
-	int icmp6len = m->m_pkthdr.len - *offp;
+	int icmp6len = m->m_pkthdr.len - off;
 	int code, sum, noff;
 	char src[INET6_ADDRSTRLEN], dst[INET6_ADDRSTRLEN];
 
@@ -1234,7 +1231,7 @@ icmp6_redirect_input(struct mbuf *m, int off)
 	struct in6_addr src6 = ip6->ip6_src;
 	struct in6_addr redtgt6;
 	struct in6_addr reddst6;
-	union nd_opts ndopts;
+	struct nd_opts ndopts;
 	char addr[INET6_ADDRSTRLEN];
 
 	ifp = if_get(m->m_pkthdr.ph_ifidx);
@@ -1342,8 +1339,7 @@ icmp6_redirect_input(struct mbuf *m, int off)
 	/* validation passed */
 
 	icmp6len -= sizeof(*nd_rd);
-	nd6_option_init(nd_rd + 1, icmp6len, &ndopts);
-	if (nd6_options(&ndopts) < 0) {
+	if (nd6_options(nd_rd + 1, icmp6len, &ndopts) < 0) {
 		nd6log((LOG_INFO, "icmp6_redirect_input: "
 			"invalid ND option, rejected: %s\n",
 			icmp6_redirect_diag(&src6, &reddst6, &redtgt6)));
@@ -1387,12 +1383,6 @@ icmp6_redirect_input(struct mbuf *m, int off)
 		rtcount = rt_timer_queue_count(&icmp6_redirect_timeout_q);
 		if (0 <= ip6_maxdynroutes && rtcount >= ip6_maxdynroutes)
 			goto freeit;
-		else if (0 <= icmp6_redirect_lowat &&
-		    rtcount > icmp6_redirect_lowat) {
-			/*
-			 * XXX nuke a victim, install the new one.
-			 */
-		}
 
 		bzero(&sdst, sizeof(sdst));
 		bzero(&sgw, sizeof(sgw));

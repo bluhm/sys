@@ -1,4 +1,4 @@
-/*	$OpenBSD: nd6_nbr.c,v 1.138 2022/12/02 15:35:35 kn Exp $	*/
+/*	$OpenBSD: nd6_nbr.c,v 1.141 2022/12/10 21:29:10 mvs Exp $	*/
 /*	$KAME: nd6_nbr.c,v 1.61 2001/02/10 16:06:14 jinmei Exp $	*/
 
 /*
@@ -109,7 +109,7 @@ nd6_ns_input(struct mbuf *m, int off, int icmp6len)
 	int anycast = 0, proxy = 0, tentative = 0;
 	int router = ip6_forwarding;
 	int tlladdr;
-	union nd_opts ndopts;
+	struct nd_opts ndopts;
 	struct sockaddr_dl *proxydl = NULL;
 	char addr[INET6_ADDRSTRLEN], addr0[INET6_ADDRSTRLEN];
 
@@ -170,8 +170,7 @@ nd6_ns_input(struct mbuf *m, int off, int icmp6len)
 		taddr6.s6_addr16[1] = htons(ifp->if_index);
 
 	icmp6len -= sizeof(*nd_ns);
-	nd6_option_init(nd_ns + 1, icmp6len, &ndopts);
-	if (nd6_options(&ndopts) < 0) {
+	if (nd6_options(nd_ns + 1, icmp6len, &ndopts) < 0) {
 		nd6log((LOG_INFO,
 		    "nd6_ns_input: invalid ND option, ignored\n"));
 		/* nd6_options have incremented stats */
@@ -573,7 +572,7 @@ nd6_na_input(struct mbuf *m, int off, int icmp6len)
 	struct llinfo_nd6 *ln;
 	struct rtentry *rt = NULL;
 	struct sockaddr_dl *sdl;
-	union nd_opts ndopts;
+	struct nd_opts ndopts;
 	char addr[INET6_ADDRSTRLEN], addr0[INET6_ADDRSTRLEN];
 
 	NET_ASSERT_LOCKED();
@@ -620,8 +619,7 @@ nd6_na_input(struct mbuf *m, int off, int icmp6len)
 	}
 
 	icmp6len -= sizeof(*nd_na);
-	nd6_option_init(nd_na + 1, icmp6len, &ndopts);
-	if (nd6_options(&ndopts) < 0) {
+	if (nd6_options(nd_na + 1, icmp6len, &ndopts) < 0) {
 		nd6log((LOG_INFO,
 		    "nd6_na_input: invalid ND option, ignored\n"));
 		/* nd6_options have incremented stats */
@@ -1101,7 +1099,6 @@ nd6_dad_start(struct ifaddr *ifa)
 			ifa->ifa_ifp ? ifa->ifa_ifp->if_xname : "???");
 		return;
 	}
-	bzero(&dp->dad_timer_ch, sizeof(dp->dad_timer_ch));
 
 	TAILQ_INSERT_TAIL(&dadq, dp, dad_list);
 	ip6_dad_pending++;
