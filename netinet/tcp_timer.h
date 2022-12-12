@@ -91,8 +91,8 @@
 					   if 0, no idea yet */
 #define	TCPTV_SRTTDFLT	TCP_TIME_MSEC(1500) /* assumed RTT if no info */
 
-#define	TCPTV_PERSMIN	5		/* retransmit persistence */
-#define	TCPTV_PERSMAX	60		/* maximum persist interval */
+#define	TCPTV_PERSMIN	TCP_TIME(5)	/* retransmit persistence */
+#define	TCPTV_PERSMAX	TCP_TIME(60)	/* maximum persist interval */
 
 #define	TCPTV_KEEP_INIT	75		/* initial connect keep alive */
 #define	TCPTV_KEEP_IDLE	120*60		/* dflt time before probing */
