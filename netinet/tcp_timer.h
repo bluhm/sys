@@ -86,7 +86,7 @@
 /*
  * Time constants.
  */
-#define	TCPTV_MSL	30		/* max seg lifetime (hah!) */
+#define	TCPTV_MSL	TCP_TIME(30)	/* max seg lifetime (hah!) */
 #define	TCPTV_SRTTBASE	0		/* base roundtrip time;
 					   if 0, no idea yet */
 #define	TCPTV_SRTTDFLT	TCP_TIME_MSEC(1500) /* assumed RTT if no info */

@@ -1810,8 +1810,7 @@ trimthenstep6:
 			if (ourfinisacked) {
 				tp->t_state = TCPS_TIME_WAIT;
 				tcp_canceltimers(tp);
-				TCP_TIMER_ARM(tp, TCPT_2MSL,
-				    TCP_TIME(2 * TCPTV_MSL));
+				TCP_TIMER_ARM(tp, TCPT_2MSL, TCPTV_MSL);
 				tp->t_flags |= TF_BLOCKOUTPUT;
 				soisdisconnected(so);
 				tp->t_flags &= ~TF_BLOCKOUTPUT;
@@ -1837,7 +1836,7 @@ trimthenstep6:
 		 * it and restart the finack timer.
 		 */
 		case TCPS_TIME_WAIT:
-			TCP_TIMER_ARM(tp, TCPT_2MSL, TCP_TIME(2 * TCPTV_MSL));
+			TCP_TIMER_ARM(tp, TCPT_2MSL, TCPTV_MSL);
 			goto dropafterack;
 		}
 	}
@@ -2013,7 +2012,7 @@ dodata:							/* XXX */
 		case TCPS_FIN_WAIT_2:
 			tp->t_state = TCPS_TIME_WAIT;
 			tcp_canceltimers(tp);
-			TCP_TIMER_ARM(tp, TCPT_2MSL, TCP_TIME(2 * TCPTV_MSL));
+			TCP_TIMER_ARM(tp, TCPT_2MSL, TCPTV_MSL);
 			tp->t_flags |= TF_BLOCKOUTPUT;
 			soisdisconnected(so);
 			tp->t_flags &= ~TF_BLOCKOUTPUT;
@@ -2023,7 +2022,7 @@ dodata:							/* XXX */
 		 * In TIME_WAIT state restart the 2 MSL time_wait timer.
 		 */
 		case TCPS_TIME_WAIT:
-			TCP_TIMER_ARM(tp, TCPT_2MSL, TCP_TIME(2 * TCPTV_MSL));
+			TCP_TIMER_ARM(tp, TCPT_2MSL, TCPTV_MSL);
 			break;
 		}
 	}
