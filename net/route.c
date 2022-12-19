@@ -1356,7 +1356,7 @@ struct rttimer {
 	LIST_ENTRY(rttimer)	rtt_link;	/* [T] timers per rtentry */
 	struct timeout		rtt_timeout;	/* [I] timeout for this entry */
 	struct rttimer_queue	*rtt_queue;	/* [I] back pointer to queue */
-	struct rtentry		*rtt_rt;	/* [T] back pointer to route */
+	struct rtentry		*rtt_rt;	/* [NT] back pointer to route */
 	time_t			rtt_expire;	/* [I] rt expire time */
 	u_int			rtt_tableid;	/* [I] rtable id of rtt_rt */
 };
@@ -1431,6 +1431,12 @@ rt_timer_queue_flush(struct rttimer_queue *rtq)
 	while ((r = TAILQ_FIRST(&rttlist)) != NULL) {
 		TAILQ_REMOVE(&rttlist, r, rtt_next);
 		RTTIMER_CALLOUT(r);
+		/* netlock prevents timeout to free rttimer */
+		if (timeout_del(&r->rtt_timeout) == 0) {
+			/* timeout fired, so rt_timer_timer will do cleanup */
+			r->rtt_rt = NULL;
+			continue;
+		}
 		pool_put(&rttimer_pool, r);
 	}
 }
@@ -1447,16 +1453,15 @@ rt_timer_unlink(struct rttimer *r)
 	MUTEX_ASSERT_LOCKED(&rttimer_mtx);
 
 	LIST_REMOVE(r, rtt_link);
+	TAILQ_REMOVE(&r->rtt_queue->rtq_head, r, rtt_next);
+	KASSERT(r->rtt_queue->rtq_count > 0);
+	r->rtt_queue->rtq_count--;
 	r->rtt_rt = NULL;
 
 	if (timeout_del(&r->rtt_timeout) == 0) {
 		/* timeout fired, so rt_timer_timer will do the cleanup */
 		return NULL;
 	}
-
-	TAILQ_REMOVE(&r->rtt_queue->rtq_head, r, rtt_next);
-	KASSERT(r->rtt_queue->rtq_count > 0);
-	r->rtt_queue->rtq_count--;
 	return r;
 }
 
@@ -1545,12 +1550,12 @@ rt_timer_timer(void *arg)
 	NET_LOCK();
 	mtx_enter(&rttimer_mtx);
 
-	if (r->rtt_rt != NULL)
+	if (r->rtt_rt != NULL) {
 		LIST_REMOVE(r, rtt_link);
-	TAILQ_REMOVE(&rtq->rtq_head, r, rtt_next);
-	KASSERT(rtq->rtq_count > 0);
-	rtq->rtq_count--;
-
+		TAILQ_REMOVE(&rtq->rtq_head, r, rtt_next);
+		KASSERT(rtq->rtq_count > 0);
+		rtq->rtq_count--;
+	}
 	mtx_leave(&rttimer_mtx);
 
 	if (r->rtt_rt != NULL)

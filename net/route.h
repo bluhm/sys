@@ -117,7 +117,7 @@ struct rtentry {
 #define rt_gwroute	 RT_gw._nh
 #define rt_cachecnt	 RT_gw._ref
 	struct rtentry	*rt_parent;	/* If cloned, parent of this route. */
-	LIST_HEAD(, rttimer) rt_timer;  /* queue of timeouts for misc funcs */
+	LIST_HEAD(, rttimer) rt_timer;  /* [T] queue of timeouts for funcs */
 	struct rt_kmetrics rt_rmx;	/* metrics used by rx'ing protocols */
 	unsigned int	 rt_ifidx;	/* the answer: interface to use */
 	unsigned int	 rt_flags;	/* up/down?, host/net */
@@ -409,7 +409,6 @@ rtstat_inc(enum rtstat_counters c)
  */
 struct rttimer_queue {
 	TAILQ_HEAD(, rttimer)		rtq_head;	/* [T] */
-	LIST_ENTRY(rttimer_queue)	rtq_link;	/* [T] */
 	void				(*rtq_func)	/* [I] callback */
 					    (struct rtentry *, u_int);
 	unsigned long			rtq_count;	/* [T] */
