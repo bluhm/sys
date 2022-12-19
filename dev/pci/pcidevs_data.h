@@ -2,7 +2,7 @@
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	OpenBSD: pcidevs,v 1.2014 2022/12/04 03:13:52 jsg Exp 
+ *	OpenBSD: pcidevs,v 1.2016 2022/12/18 10:29:28 kettenis Exp 
  */
 
 /*	$NetBSD: pcidevs,v 1.30 1997/06/24 06:20:24 thorpej Exp $	*/
@@ -6474,6 +6474,10 @@ static const struct pci_known_product pci_known_products[] = {
 	{
 	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_BEIGE_GOBY_6,
 	    "Navi 24",
+	},
+	{
+	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_NAVI31_1,
+	    "Navi 31",
 	},
 	{
 	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_RADEON_9000IGP,
@@ -32332,6 +32336,14 @@ static const struct pci_known_product pci_known_products[] = {
 	    "SD",
 	},
 	{
+	    PCI_VENDOR_TRANSMETA, PCI_PRODUCT_TRANSMETA_TM8000_HB,
+	    "TM8000 Host",
+	},
+	{
+	    PCI_VENDOR_TRANSMETA, PCI_PRODUCT_TRANSMETA_TM8000_AGP,
+	    "TM8000 AGP",
+	},
+	{
 	    PCI_VENDOR_TRANSMETA, PCI_PRODUCT_TRANSMETA_NB,
 	    "Northbridge",
 	},
@@ -32626,6 +32638,14 @@ static const struct pci_known_product pci_known_products[] = {
 	{
 	    PCI_VENDOR_UMIS, PCI_PRODUCT_UMIS_NVME,
 	    "NVMe",
+	},
+	{
+	    PCI_VENDOR_UMIS, PCI_PRODUCT_UMIS_AM620,
+	    "AM620",
+	},
+	{
+	    PCI_VENDOR_UMIS, PCI_PRODUCT_UMIS_AM630,
+	    "AM630",
 	},
 	{
 	    PCI_VENDOR_USR, PCI_PRODUCT_USR_3CP5610,

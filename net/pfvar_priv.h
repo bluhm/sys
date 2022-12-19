@@ -1,4 +1,4 @@
-/*	$OpenBSD: pfvar_priv.h,v 1.23 2022/11/25 20:27:53 bluhm Exp $	*/
+/*	$OpenBSD: pfvar_priv.h,v 1.25 2022/12/19 04:35:34 dlg Exp $	*/
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -40,9 +40,34 @@
 #include <sys/rwlock.h>
 #include <sys/mutex.h>
 
+struct pf_state_item {
+	TAILQ_ENTRY(pf_state_item)	 entry;
+	struct pf_state			*s;
+};
+
+TAILQ_HEAD(pf_statelisthead, pf_state_item);
+
+struct pf_state_key {
+	struct pf_addr	 addr[2];
+	u_int16_t	 port[2];
+	u_int16_t	 rdomain;
+	sa_family_t	 af;
+	u_int8_t	 proto;
+
+	RB_ENTRY(pf_state_key)	 entry;
+	struct pf_statelisthead	 states;
+	struct pf_state_key	*reverse;
+	struct inpcb		*inp;
+	pf_refcnt_t		 refcnt;
+	u_int8_t		 removed;
+};
+#define PF_REVERSED_KEY(key, family)				\
+	((key[PF_SK_WIRE]->af != key[PF_SK_STACK]->af) &&	\
+	 (key[PF_SK_WIRE]->af != (family)))
+
 /*
  * Protection/ownership of pf_state members:
- *	I	immutable after creation
+ *	I	immutable after pf_state_insert()
  *	M	pf_state mtx
  *	P	PF_STATE_LOCK
  *	S	pfsync mutex
@@ -69,7 +94,7 @@ struct pf_state {
 	union pf_rule_ptr	 natrule;	/* [I] */
 	struct pf_addr		 rt_addr;	/* [I] */
 	struct pf_sn_head	 src_nodes;	/* [I] */
-	struct pf_state_key	*key[2];	/* stack and wire  */
+	struct pf_state_key	*key[2];	/* [I] stack and wire  */
 	struct pfi_kif		*kif;		/* [I] */
 	struct mutex		 mtx;
 	pf_refcnt_t		 refcnt;

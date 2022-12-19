@@ -1,4 +1,4 @@
-$OpenBSD: pcidevs,v 1.2014 2022/12/04 03:13:52 jsg Exp $
+$OpenBSD: pcidevs,v 1.2017 2022/12/18 17:42:23 daniel Exp $
 /*	$NetBSD: pcidevs,v 1.30 1997/06/24 06:20:24 thorpej Exp $	*/
 
 /*
@@ -2079,6 +2079,7 @@ product ATI BEIGE_GOBY_3	0x7422	Navi 24
 product ATI BEIGE_GOBY_4	0x7423	Navi 24
 product ATI BEIGE_GOBY_5	0x7424	Navi 24
 product ATI BEIGE_GOBY_6	0x743f	Navi 24
+product ATI NAVI31_1		0x744c	Navi 31
 product ATI RADEON_9000IGP	0x7834	Radeon 9000/9100 IGP
 product ATI RADEON_RS350IGP	0x7835	Radeon RS350IGP
 product ATI RS690_HB		0x7910	RS690 Host
@@ -9030,6 +9031,8 @@ product TOSHIBA2 TFIRO		0x0701	Infrared
 product TOSHIBA2 SDCARD		0x0805	SD
 
 /* Transmeta products */
+product TRANSMETA TM8000_HT	0x0060	TM8000 HyperTransport
+product TRANSMETA TM8000_AGP	0x0061	TM8000 AGP
 product TRANSMETA NB		0x0295	Northbridge
 product TRANSMETA LONGRUN_NB	0x0395	LongRun Northbridge
 product TRANSMETA SDRAM		0x0396	SDRAM
@@ -9126,6 +9129,8 @@ product UMC UM8891N		0xe891	UM8891N
 
 /* Shenzhen Unionmemory Information System products */
 product UMIS NVME		0x2263	NVMe
+product UMIS AM620		0x6202	AM620
+product UMIS AM630		0x6303	AM630
 
 /* US Robotics */
 product USR 3CP5610		0x1008	3CP5610

@@ -1,4 +1,4 @@
-/*	$OpenBSD: sys_socket.c,v 1.56 2022/11/19 14:26:39 kn Exp $	*/
+/*	$OpenBSD: sys_socket.c,v 1.58 2022/12/12 08:30:22 tb Exp $	*/
 /*	$NetBSD: sys_socket.c,v 1.13 1995/08/12 23:59:09 mycroft Exp $	*/
 
 /*

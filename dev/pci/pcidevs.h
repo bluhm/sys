@@ -2,7 +2,7 @@
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	OpenBSD: pcidevs,v 1.2014 2022/12/04 03:13:52 jsg Exp 
+ *	OpenBSD: pcidevs,v 1.2016 2022/12/18 10:29:28 kettenis Exp 
  */
 /*	$NetBSD: pcidevs,v 1.30 1997/06/24 06:20:24 thorpej Exp $	*/
 
@@ -2084,6 +2084,7 @@
 #define	PCI_PRODUCT_ATI_BEIGE_GOBY_4	0x7423		/* Navi 24 */
 #define	PCI_PRODUCT_ATI_BEIGE_GOBY_5	0x7424		/* Navi 24 */
 #define	PCI_PRODUCT_ATI_BEIGE_GOBY_6	0x743f		/* Navi 24 */
+#define	PCI_PRODUCT_ATI_NAVI31_1	0x744c		/* Navi 31 */
 #define	PCI_PRODUCT_ATI_RADEON_9000IGP	0x7834		/* Radeon 9000/9100 IGP */
 #define	PCI_PRODUCT_ATI_RADEON_RS350IGP	0x7835		/* Radeon RS350IGP */
 #define	PCI_PRODUCT_ATI_RS690_HB	0x7910		/* RS690 Host */
@@ -9035,6 +9036,8 @@
 #define	PCI_PRODUCT_TOSHIBA2_SDCARD	0x0805		/* SD */
 
 /* Transmeta products */
+#define	PCI_PRODUCT_TRANSMETA_TM8000_HB	0x0060		/* TM8000 Host */
+#define	PCI_PRODUCT_TRANSMETA_TM8000_AGP	0x0061		/* TM8000 AGP */
 #define	PCI_PRODUCT_TRANSMETA_NB	0x0295		/* Northbridge */
 #define	PCI_PRODUCT_TRANSMETA_LONGRUN_NB	0x0395		/* LongRun Northbridge */
 #define	PCI_PRODUCT_TRANSMETA_SDRAM	0x0396		/* SDRAM */
@@ -9131,6 +9134,8 @@
 
 /* Shenzhen Unionmemory Information System products */
 #define	PCI_PRODUCT_UMIS_NVME	0x2263		/* NVMe */
+#define	PCI_PRODUCT_UMIS_AM620	0x6202		/* AM620 */
+#define	PCI_PRODUCT_UMIS_AM630	0x6303		/* AM630 */
 
 /* US Robotics */
 #define	PCI_PRODUCT_USR_3CP5610	0x1008		/* 3CP5610 */

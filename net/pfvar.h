@@ -1,4 +1,4 @@
-/*	$OpenBSD: pfvar.h,v 1.521 2022/11/25 20:27:53 bluhm Exp $ */
+/*	$OpenBSD: pfvar.h,v 1.523 2022/12/19 04:35:33 dlg Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -707,31 +707,6 @@ struct pf_state_key_cmp {
 	sa_family_t	 af;
 	u_int8_t	 proto;
 };
-
-struct pf_state_item {
-	TAILQ_ENTRY(pf_state_item)	 entry;
-	struct pf_state			*s;
-};
-
-TAILQ_HEAD(pf_statelisthead, pf_state_item);
-
-struct pf_state_key {
-	struct pf_addr	 addr[2];
-	u_int16_t	 port[2];
-	u_int16_t	 rdomain;
-	sa_family_t	 af;
-	u_int8_t	 proto;
-
-	RB_ENTRY(pf_state_key)	 entry;
-	struct pf_statelisthead	 states;
-	struct pf_state_key	*reverse;
-	struct inpcb		*inp;
-	pf_refcnt_t		 refcnt;
-	u_int8_t		 removed;
-};
-#define PF_REVERSED_KEY(key, family)				\
-	((key[PF_SK_WIRE]->af != key[PF_SK_STACK]->af) &&	\
-	 (key[PF_SK_WIRE]->af != (family)))
 
 /* keep synced with struct pf_state, used in RB_FIND */
 struct pf_state_cmp {
@@ -1731,7 +1706,6 @@ void	pf_pkt_addr_changed(struct mbuf *);
 struct inpcb *pf_inp_lookup(struct mbuf *);
 void	pf_inp_link(struct mbuf *, struct inpcb *);
 void	pf_inp_unlink(struct inpcb *);
-int	pf_state_key_attach(struct pf_state_key *, struct pf_state *, int);
 int	pf_translate(struct pf_pdesc *, struct pf_addr *, u_int16_t,
 	    struct pf_addr *, u_int16_t, u_int16_t, int);
 int	pf_translate_af(struct pf_pdesc *);

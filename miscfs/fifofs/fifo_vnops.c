@@ -1,4 +1,4 @@
-/*	$OpenBSD: fifo_vnops.c,v 1.96 2022/07/01 09:56:17 mvs Exp $	*/
+/*	$OpenBSD: fifo_vnops.c,v 1.98 2022/12/12 08:30:22 tb Exp $	*/
 /*	$NetBSD: fifo_vnops.c,v 1.18 1996/03/16 23:52:42 christos Exp $	*/
 
 /*
