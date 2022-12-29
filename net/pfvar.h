@@ -1,4 +1,4 @@
-/*	$OpenBSD: pfvar.h,v 1.523 2022/12/19 04:35:33 dlg Exp $ */
+/*	$OpenBSD: pfvar.h,v 1.525 2022/12/22 05:59:27 dlg Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -704,6 +704,7 @@ struct pf_state_key_cmp {
 	struct pf_addr	 addr[2];
 	u_int16_t	 port[2];
 	u_int16_t	 rdomain;
+	u_int16_t	 hash;
 	sa_family_t	 af;
 	u_int8_t	 proto;
 };
@@ -1033,7 +1034,7 @@ struct pfr_ktable {
 #define pfrkt_tzero	pfrkt_ts.pfrts_tzero
 
 RB_HEAD(pf_state_tree, pf_state_key);
-RB_PROTOTYPE(pf_state_tree, pf_state_key, entry, pf_state_compare_key)
+RB_PROTOTYPE(pf_state_tree, pf_state_key, sk_entry, pf_state_compare_key)
 
 RB_HEAD(pf_state_tree_ext_gwy, pf_state_key);
 RB_PROTOTYPE(pf_state_tree_ext_gwy, pf_state_key,
