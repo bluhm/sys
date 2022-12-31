@@ -7254,7 +7254,8 @@ pf_setup_pdesc(struct pf_pdesc *pd, sa_family_t af, int dir,
 		    NULL, reason, pd->af))
 			return (PF_DROP);
 		pd->hdrlen = sizeof(*th);
-		if (pd->off + (th->th_off << 2) > pd->tot_len ||
+		if (th->th_dport == 0 ||
+		    pd->off + (th->th_off << 2) > pd->tot_len ||
 		    (th->th_off << 2) < sizeof(struct tcphdr)) {
 			REASON_SET(reason, PFRES_SHORT);
 			return (PF_DROP);
