@@ -522,6 +522,11 @@ tcp_input(struct mbuf **mp, int *offp, int proto, int af)
 	th->th_win = ntohs(th->th_win);
 	th->th_urp = ntohs(th->th_urp);
 
+	if (th->th_dport == 0) {
+		tcpstat_inc(tcps_noport);
+		goto dropwithreset_ratelim;
+	}
+
 	/*
 	 * Locate pcb for segment.
 	 */
