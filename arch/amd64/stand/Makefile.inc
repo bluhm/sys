@@ -1,4 +1,4 @@
-#	$OpenBSD: Makefile.inc,v 1.18 2017/07/25 13:32:14 robert Exp $
+#	$OpenBSD: Makefile.inc,v 1.20 2022/12/30 06:50:27 jca Exp $
 
 CFLAGS=${DEBUG} ${COPTS} -Oz -Wall -Werror
 CFLAGS+=	-ffreestanding -fno-stack-protector -DMDRANDOM
@@ -25,6 +25,9 @@ SACFLAGS+=-nostdinc -fno-builtin -fpack-struct
 
 .include <bsd.own.mk>
 .if ${COMPILER_VERSION:Mclang}
+# XXX Workaround for zlib + clang 15
+# https://github.com/madler/zlib/issues/633
+CFLAGS+=	-Wno-deprecated-non-prototype -Wno-unknown-warning-option
 NO_INTEGR_AS=	-no-integrated-as
 .endif
 
