@@ -1,4 +1,4 @@
-/*	$OpenBSD: proc.h,v 1.336 2022/12/07 20:08:29 mvs Exp $	*/
+/*	$OpenBSD: proc.h,v 1.338 2023/01/07 05:24:58 guenther Exp $	*/
 /*	$NetBSD: proc.h,v 1.44 1996/04/22 01:23:21 christos Exp $	*/
 
 /*-
@@ -367,6 +367,7 @@ struct proc {
 #define	p_startcopy	p_sigmask
 	sigset_t p_sigmask;		/* [a] Current signal mask */
 
+	char	p_name[_MAXCOMLEN];	/* thread name, incl NUL */
 	u_char	p_slppri;		/* [S] Sleeping priority */
 	u_char	p_usrpri;	/* [S] Priority based on p_estcpu & ps_nice */
 	u_int	p_estcpu;		/* [S] Time averaged val of p_cpticks */
@@ -524,6 +525,8 @@ struct process *prfind(pid_t);	/* Find process by id. */
 struct process *zombiefind(pid_t); /* Find zombie process by id. */
 struct proc *tfind(pid_t);	/* Find thread by id. */
 struct pgrp *pgfind(pid_t);	/* Find process group by id. */
+struct proc *tfind_user(pid_t, struct process *);
+				/* Find thread by userspace id. */
 void	proc_printit(struct proc *p, const char *modif,
     int (*pr)(const char *, ...));
 

@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_time.c,v 1.159 2022/12/05 23:18:37 deraadt Exp $	*/
+/*	$OpenBSD: kern_time.c,v 1.161 2023/01/02 23:09:48 guenther Exp $	*/
 /*	$NetBSD: kern_time.c,v 1.20 1996/02/18 11:57:06 fvdl Exp $	*/
 
 /*
@@ -139,8 +139,8 @@ clock_gettime(struct proc *p, clockid_t clock_id, struct timespec *tp)
 		/* check for clock from pthread_getcpuclockid() */
 		if (__CLOCK_TYPE(clock_id) == CLOCK_THREAD_CPUTIME_ID) {
 			KERNEL_LOCK();
-			q = tfind(__CLOCK_PTID(clock_id) - THREAD_PID_OFFSET);
-			if (q == NULL || q->p_p != p->p_p)
+			q = tfind_user(__CLOCK_PTID(clock_id), p->p_p);
+			if (q == NULL)
 				error = ESRCH;
 			else
 				*tp = q->p_tu.tu_runtime;
@@ -244,8 +244,8 @@ sys_clock_getres(struct proc *p, void *v, register_t *retval)
 		/* check for clock from pthread_getcpuclockid() */
 		if (__CLOCK_TYPE(clock_id) == CLOCK_THREAD_CPUTIME_ID) {
 			KERNEL_LOCK();
-			q = tfind(__CLOCK_PTID(clock_id) - THREAD_PID_OFFSET);
-			if (q == NULL || q->p_p != p->p_p)
+			q = tfind_user(__CLOCK_PTID(clock_id), p->p_p);
+			if (q == NULL)
 				error = ESRCH;
 			else
 				ts.tv_nsec = 1000000000 / realstathz;
@@ -548,7 +548,7 @@ setitimer(int which, const struct itimerval *itv, struct itimerval *olditv)
 		if (which == ITIMER_REAL) {
 			if (timespecisset(&its.it_value)) {
 				timespecadd(&its.it_value, &now, &its.it_value);
-				timeout_at_ts(&pr->ps_realit_to, &its.it_value);
+				timeout_abs_ts(&pr->ps_realit_to,&its.it_value);
 			} else
 				timeout_del(&pr->ps_realit_to);
 		}
@@ -691,7 +691,7 @@ realitexpire(void *arg)
 	while (timespeccmp(&tp->it_value, &cts, <=))
 		timespecadd(&tp->it_value, &tp->it_interval, &tp->it_value);
 	if ((pr->ps_flags & PS_EXITING) == 0)
-		timeout_at_ts(&pr->ps_realit_to, &tp->it_value);
+		timeout_abs_ts(&pr->ps_realit_to, &tp->it_value);
 
 out:
 	mtx_leave(&pr->ps_mtx);

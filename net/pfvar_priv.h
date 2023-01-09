@@ -1,4 +1,4 @@
-/*	$OpenBSD: pfvar_priv.h,v 1.27 2022/12/22 05:59:27 dlg Exp $	*/
+/*	$OpenBSD: pfvar_priv.h,v 1.30 2023/01/06 17:44:34 sashan Exp $	*/
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -39,6 +39,7 @@
 
 #include <sys/rwlock.h>
 #include <sys/mutex.h>
+#include <sys/percpu.h>
 
 struct pf_state_item {
 	TAILQ_ENTRY(pf_state_item)
@@ -63,6 +64,10 @@ struct pf_state_key {
 	pf_refcnt_t		 sk_refcnt;
 	u_int8_t		 sk_removed;
 };
+
+RBT_HEAD(pf_state_tree, pf_state_key);
+RBT_PROTOTYPE(pf_state_tree, pf_state_key, sk_entry, pf_state_compare_key);
+
 #define PF_REVERSED_KEY(key, family)				\
 	((key[PF_SK_WIRE]->af != key[PF_SK_STACK]->af) &&	\
 	 (key[PF_SK_WIRE]->af != (family)))
@@ -124,6 +129,10 @@ struct pf_state {
 	u_int8_t		 rt;		/* [I] */
 	u_int8_t		 snapped;	/* [S] */
 };
+
+RBT_HEAD(pf_state_tree_id, pf_state);
+RBT_PROTOTYPE(pf_state_tree_id, pf_state, entry_id, pf_state_compare_id);
+extern struct pf_state_tree_id tree_id;
 
 /*
  *
@@ -294,6 +303,24 @@ struct pf_pdesc {
 #endif /* INET6 */
 	} hdr;
 };
+
+struct pf_anchor_stackframe {
+	struct pf_ruleset	*sf_rs;
+	union {
+		struct pf_rule			*u_r;
+		struct pf_anchor_stackframe	*u_stack_top;
+	} u;
+	struct pf_anchor	*sf_child;
+	int			 sf_jump_target;
+};
+#define sf_r		u.u_r
+#define sf_stack_top	u.u_stack_top
+enum {
+	PF_NEXT_RULE,
+	PF_NEXT_CHILD
+};
+
+extern struct cpumem *pf_anchor_stack;
 
 extern struct task	pf_purge_task;
 extern struct timeout	pf_purge_to;

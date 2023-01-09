@@ -1,4 +1,4 @@
-/*	$OpenBSD: nd6.c,v 1.260 2022/12/10 21:26:21 kn Exp $	*/
+/*	$OpenBSD: nd6.c,v 1.264 2023/01/06 14:35:34 kn Exp $	*/
 /*	$KAME: nd6.c,v 1.280 2002/06/08 19:52:07 itojun Exp $	*/
 
 /*
@@ -101,8 +101,6 @@ struct timeout nd6_slowtimo_ch;
 struct timeout nd6_expire_timeout;
 struct task nd6_expire_task;
 
-struct nd_opt_hdr *nd6_option(struct nd_opts *);
-
 void
 nd6_init(void)
 {
@@ -140,51 +138,6 @@ nd6_ifdetach(struct ifnet *ifp)
 }
 
 /*
- * Take one ND option.
- */
-struct nd_opt_hdr *
-nd6_option(struct nd_opts *ndopts)
-{
-	struct nd_opt_hdr *nd_opt;
-	int olen;
-
-	if (!ndopts->nd_opts_search)
-		return NULL;
-	if (ndopts->nd_opts_done)
-		return NULL;
-
-	nd_opt = ndopts->nd_opts_search;
-
-	/* make sure nd_opt_len is inside the buffer */
-	if ((caddr_t)&nd_opt->nd_opt_len >= (caddr_t)ndopts->nd_opts_last) {
-		bzero(ndopts, sizeof(*ndopts));
-		return NULL;
-	}
-
-	olen = nd_opt->nd_opt_len << 3;
-	if (olen == 0) {
-		/*
-		 * Message validation requires that all included
-		 * options have a length that is greater than zero.
-		 */
-		bzero(ndopts, sizeof(*ndopts));
-		return NULL;
-	}
-
-	ndopts->nd_opts_search = (struct nd_opt_hdr *)((caddr_t)nd_opt + olen);
-	if (ndopts->nd_opts_search > ndopts->nd_opts_last) {
-		/* option overruns the end of buffer, invalid */
-		bzero(ndopts, sizeof(*ndopts));
-		return NULL;
-	} else if (ndopts->nd_opts_search == ndopts->nd_opts_last) {
-		/* reached the end of options chain */
-		ndopts->nd_opts_done = 1;
-		ndopts->nd_opts_search = NULL;
-	}
-	return nd_opt;
-}
-
-/*
  * Parse multiple ND options.
  * This function is much easier to use, for ND routines that do not need
  * multiple options of the same type.
@@ -192,34 +145,42 @@ nd6_option(struct nd_opts *ndopts)
 int
 nd6_options(void *opt, int icmp6len, struct nd_opts *ndopts)
 {
-	struct nd_opt_hdr *nd_opt = opt;
+	struct nd_opt_hdr *nd_opt = opt, *next_opt, *last_opt;
 	int i = 0;
 
 	bzero(ndopts, sizeof(*ndopts));
-	ndopts->nd_opts_search = nd_opt;
-	ndopts->nd_opts_last =
-	    (struct nd_opt_hdr *)(((u_char *)nd_opt) + icmp6len);
 
-	if (icmp6len == 0) {
-		ndopts->nd_opts_done = 1;
-		ndopts->nd_opts_search = NULL;
+	if (icmp6len == 0)
 		return 0;
-	}
+
+	next_opt = nd_opt;
+	last_opt = (struct nd_opt_hdr *)((u_char *)nd_opt + icmp6len);
 
 	while (1) {
-		nd_opt = nd6_option(ndopts);
-		if (nd_opt == NULL && ndopts->nd_opts_last == NULL) {
-			/*
-			 * Message validation requires that all included
-			 * options have a length that is greater than zero.
-			 */
-			icmp6stat_inc(icp6s_nd_badopt);
-			bzero(ndopts, sizeof(*ndopts));
-			return -1;
-		}
+		int olen;
 
-		if (nd_opt == NULL)
+		if (next_opt == NULL)
 			goto skip1;
+
+		nd_opt = next_opt;
+
+		/* make sure nd_opt_len is inside the buffer */
+		if ((caddr_t)&nd_opt->nd_opt_len >= (caddr_t)last_opt)
+			goto invalid;
+
+		/* every option must have a length greater than zero */
+		olen = nd_opt->nd_opt_len << 3;
+		if (olen == 0)
+			goto invalid;
+
+		next_opt = (struct nd_opt_hdr *)((caddr_t)nd_opt + olen);
+		if (next_opt > last_opt) {
+			/* option overruns the end of buffer */
+			goto invalid;
+		} else if (next_opt == last_opt) {
+			/* reached the end of options chain */
+			next_opt = NULL;
+		}
 
 		switch (nd_opt->nd_opt_type) {
 		case ND_OPT_SOURCE_LINKADDR:
@@ -262,11 +223,16 @@ skip1:
 			break;
 		}
 
-		if (ndopts->nd_opts_done)
+		if (next_opt == NULL)
 			break;
 	}
 
 	return 0;
+
+invalid:
+	bzero(ndopts, sizeof(*ndopts));
+	icmp6stat_inc(icp6s_nd_badopt);
+	return -1;
 }
 
 /*
