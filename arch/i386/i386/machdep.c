@@ -1,4 +1,4 @@
-/*	$OpenBSD: machdep.c,v 1.658 2022/11/08 14:49:20 cheloha Exp $	*/
+/*	$OpenBSD: machdep.c,v 1.662 2023/01/11 02:49:34 cheloha Exp $	*/
 /*	$NetBSD: machdep.c,v 1.214 1996/11/10 03:16:17 thorpej Exp $	*/
 
 /*-
@@ -1038,6 +1038,7 @@ const struct cpu_cpuid_feature cpu_seff0_ecxfeatures[] = {
 	{ SEFF0ECX_UMIP,	"UMIP" },
 	{ SEFF0ECX_AVX512VBMI,	"AVX512VBMI" },
 	{ SEFF0ECX_PKU,		"PKU" },
+	{ SEFF0ECX_WAITPKG,	"WAITPKG" },
 };
 
 const struct cpu_cpuid_feature cpu_seff0_edxfeatures[] = {
