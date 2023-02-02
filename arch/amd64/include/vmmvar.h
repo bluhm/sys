@@ -1,4 +1,4 @@
-/*	$OpenBSD: vmmvar.h,v 1.86 2023/01/10 01:09:14 dv Exp $	*/
+/*	$OpenBSD: vmmvar.h,v 1.89 2023/01/30 02:32:01 dv Exp $	*/
 /*
  * Copyright (c) 2014 Mike Larkin <mlarkin@openbsd.org>
  *
@@ -36,10 +36,6 @@
 
 #define VMM_PCI_MMIO_BAR_BASE	0xF0000000ULL
 #define VMM_PCI_MMIO_BAR_END	0xFFDFFFFFULL		/* 2 MiB below 4 GiB */
-#define VMM_PCI_MMIO_BAR_SIZE	0x00010000
-#define VMM_PCI_IO_BAR_BASE	0x1000
-#define VMM_PCI_IO_BAR_END	0xFFFF
-#define VMM_PCI_IO_BAR_SIZE	0x1000
 
 /* VMX: Basic Exit Reasons */
 #define VMX_EXIT_NMI				0
@@ -662,7 +658,6 @@ struct vm_mprotect_ept_params {
  *  MPX (SEFF0EBX_MPX)
  *  PCOMMIT (SEFF0EBX_PCOMMIT)
  *  PT (SEFF0EBX_PT)
- *  AVX512VBMI (SEFF0ECX_AVX512VBMI)
  */
 #define VMM_SEFF0EBX_MASK ~(SEFF0EBX_TSC_ADJUST | SEFF0EBX_SGX | \
     SEFF0EBX_HLE | SEFF0EBX_INVPCID | \
@@ -674,7 +669,7 @@ struct vm_mprotect_ept_params {
     SEFF0EBX_AVX512BW | SEFF0EBX_AVX512VL)
 
 /* ECX mask contains the bits to include */
-#define VMM_SEFF0ECX_MASK (SEFF0ECX_PREFETCHWT1 | SEFF0ECX_UMIP | SEFF0ECX_PKU)
+#define VMM_SEFF0ECX_MASK (SEFF0ECX_UMIP)
 
 /* EDX mask contains the bits to include */
 #define VMM_SEFF0EDX_MASK (SEFF0EDX_MD_CLEAR)
@@ -961,6 +956,9 @@ struct vcpu {
 
 	/* Shadowed MSRs */
 	uint64_t vc_shadow_pat;			/* [v] */
+
+	/* Userland Protection Keys */
+	uint32_t vc_pkru;			/* [v] */
 
 	/* VMX only (all requiring [v]) */
 	uint64_t vc_vmx_basic;

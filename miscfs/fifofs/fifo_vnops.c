@@ -1,4 +1,4 @@
-/*	$OpenBSD: fifo_vnops.c,v 1.98 2022/12/12 08:30:22 tb Exp $	*/
+/*	$OpenBSD: fifo_vnops.c,v 1.101 2023/01/27 18:46:34 mvs Exp $	*/
 /*	$NetBSD: fifo_vnops.c,v 1.18 1996/03/16 23:52:42 christos Exp $	*/
 
 /*
@@ -174,7 +174,7 @@ fifo_open(void *v)
 		}
 		fip->fi_readers = fip->fi_writers = 0;
 		solock(wso);
-		wso->so_state |= SS_CANTSENDMORE;
+		wso->so_snd.sb_state |= SS_CANTSENDMORE;
 		wso->so_snd.sb_lowat = PIPE_BUF;
 		sounlock(wso);
 	} else {
@@ -185,7 +185,7 @@ fifo_open(void *v)
 		fip->fi_readers++;
 		if (fip->fi_readers == 1) {
 			solock(wso);
-			wso->so_state &= ~SS_CANTSENDMORE;
+			wso->so_snd.sb_state &= ~SS_CANTSENDMORE;
 			sounlock(wso);
 			if (fip->fi_writers > 0)
 				wakeup(&fip->fi_writers);
@@ -199,7 +199,8 @@ fifo_open(void *v)
 		}
 		if (fip->fi_writers == 1) {
 			solock(rso);
-			rso->so_state &= ~(SS_CANTRCVMORE|SS_ISDISCONNECTED);
+			rso->so_state &= ~SS_ISDISCONNECTED;
+			rso->so_rcv.sb_state &= ~SS_CANTRCVMORE;
 			sounlock(rso);
 			if (fip->fi_readers > 0)
 				wakeup(&fip->fi_readers);
@@ -503,7 +504,7 @@ fifo_kqfilter(void *v)
 
 	ap->a_kn->kn_hook = so;
 
-	klist_insert(&sb->sb_sel.si_note, ap->a_kn);
+	klist_insert(&sb->sb_klist, ap->a_kn);
 
 	return (0);
 }
@@ -513,7 +514,7 @@ filt_fifordetach(struct knote *kn)
 {
 	struct socket *so = (struct socket *)kn->kn_hook;
 
-	klist_remove(&so->so_rcv.sb_sel.si_note, kn);
+	klist_remove(&so->so_rcv.sb_klist, kn);
 }
 
 int
@@ -525,7 +526,7 @@ filt_fiforead(struct knote *kn, long hint)
 	soassertlocked(so);
 
 	kn->kn_data = so->so_rcv.sb_cc;
-	if (so->so_state & SS_CANTRCVMORE) {
+	if (so->so_rcv.sb_state & SS_CANTRCVMORE) {
 		kn->kn_flags |= EV_EOF;
 		if (kn->kn_flags & __EV_POLL) {
 			if (so->so_state & SS_ISDISCONNECTED)
@@ -547,7 +548,7 @@ filt_fifowdetach(struct knote *kn)
 {
 	struct socket *so = (struct socket *)kn->kn_hook;
 
-	klist_remove(&so->so_snd.sb_sel.si_note, kn);
+	klist_remove(&so->so_snd.sb_klist, kn);
 }
 
 int
@@ -559,7 +560,7 @@ filt_fifowrite(struct knote *kn, long hint)
 	soassertlocked(so);
 
 	kn->kn_data = sbspace(so, &so->so_snd);
-	if (so->so_state & SS_CANTSENDMORE) {
+	if (so->so_snd.sb_state & SS_CANTSENDMORE) {
 		kn->kn_flags |= EV_EOF;
 		rv = 1;
 	} else {

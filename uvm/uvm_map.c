@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_map.c,v 1.305 2022/12/18 23:41:17 deraadt Exp $	*/
+/*	$OpenBSD: uvm_map.c,v 1.309 2023/01/31 15:18:55 deraadt Exp $	*/
 /*	$NetBSD: uvm_map.c,v 1.86 2000/11/27 08:40:03 chs Exp $	*/
 
 /*
@@ -3472,6 +3472,9 @@ uvmspace_exec(struct proc *p, vaddr_t start, vaddr_t end)
 
 		uvmspace_free(ovm);
 	}
+#ifdef PMAP_CHECK_COPYIN
+	p->p_vmspace->vm_map.check_copyin_count = 0;	/* disable checks */
+#endif
 
 	/* Release dead entries */
 	uvm_unmap_detach(&dead_entries, 0);
@@ -4225,6 +4228,39 @@ uvm_map_inherit(struct vm_map *map, vaddr_t start, vaddr_t end,
 	return (0);
 }
 
+#ifdef PMAP_CHECK_COPYIN
+static void inline
+check_copyin_add(struct vm_map *map, vaddr_t start, vaddr_t end)
+{
+	if (PMAP_CHECK_COPYIN == 0 ||
+	    map->check_copyin_count >= UVM_MAP_CHECK_COPYIN_MAX)
+		return;
+	map->check_copyin[map->check_copyin_count].start = start;
+	map->check_copyin[map->check_copyin_count].end = end;
+	membar_producer();
+	map->check_copyin_count++;
+}
+
+/* 
+ * uvm_map_check_copyin_add: remember regions which are X-only for copyin(),
+ * copyinstr(), uiomove(), and others
+ *
+ * => map must be unlocked
+ */
+int
+uvm_map_check_copyin_add(struct vm_map *map, vaddr_t start, vaddr_t end)
+{
+	if (start > end)
+		return EINVAL;
+	start = MAX(start, map->min_offset);
+	end = MIN(end, map->max_offset);
+	if (start >= end)
+		return 0;
+	check_copyin_add(map, start, end);
+	return (0);
+}
+#endif /* PMAP_CHECK_COPYIN */
+
 /* 
  * uvm_map_syscall: permit system calls for range of addrs in map.
  *
@@ -4258,6 +4294,9 @@ uvm_map_syscall(struct vm_map *map, vaddr_t start, vaddr_t end)
 		entry = RBT_NEXT(uvm_map_addr, entry);
 	}
 
+#ifdef PMAP_CHECK_COPYIN
+	check_copyin_add(map, start, end);	/* Add libc's text segment */
+#endif
 	map->wserial++;
 	map->flags |= VM_MAP_SYSCALL_ONCE;
 	vm_map_unlock(map);
@@ -4469,8 +4508,12 @@ uvm_map_extract(struct vm_map *srcmap, vaddr_t start, vsize_t len,
 			goto fail2_unmap;
 		}
 		kernel_map->size += cp_len;
-		if (flags & UVM_EXTRACT_FIXPROT)
+
+		/* Figure out the best protection */ 
+		if ((flags & UVM_EXTRACT_FIXPROT) &&
+		    newentry->protection != PROT_NONE)
 			newentry->protection = newentry->max_protection;
+		newentry->protection &= ~PROT_EXEC;
 
 		/*
 		 * Step 2: perform pmap copy.

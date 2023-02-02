@@ -1,4 +1,4 @@
-/*	$OpenBSD: vmm.c,v 1.334 2022/12/26 23:50:20 dv Exp $	*/
+/*	$OpenBSD: vmm.c,v 1.337 2023/01/30 14:05:36 dv Exp $	*/
 /*
  * Copyright (c) 2014 Mike Larkin <mlarkin@openbsd.org>
  *
@@ -128,6 +128,7 @@ struct vmm_softc {
 	uint32_t		nr_svm_cpus;	/* [I] */
 	uint32_t		nr_rvi_cpus;	/* [I] */
 	uint32_t		nr_ept_cpus;	/* [I] */
+	uint8_t			pkru_enabled;	/* [I] */
 
 	/* Managed VMs */
 	struct vmlist_head	vm_list;	/* [v] */
@@ -429,6 +430,10 @@ vmm_attach(struct device *parent, struct device *self, void *aux)
 			sc->nr_ept_cpus++;
 	}
 
+	sc->pkru_enabled = 0;
+	if (rcr4() & CR4_PKE)
+		sc->pkru_enabled = 1;
+
 	SLIST_INIT(&sc->vm_list);
 	rw_init(&sc->vm_lock, "vm_list");
 
@@ -651,13 +656,13 @@ vmmioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 
 	ret = rw_enter(&vmm_softc->sc_slock, RW_READ | RW_INTR);
 	if (ret != 0)
-		return (ret);
+		goto out;
 	while (vmm_softc->sc_status != VMM_ACTIVE) {
 		ret = rwsleep_nsec(&vmm_softc->sc_status, &vmm_softc->sc_slock,
 		    PWAIT | PCATCH, "vmmresume", INFSLP);
 		if (ret != 0) {
 			rw_exit(&vmm_softc->sc_slock);
-			return (ret);
+			goto out;
 		}
 	}
 	refcnt_take(&vmm_softc->sc_refcnt);
@@ -708,7 +713,7 @@ vmmioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 	}
 
 	refcnt_rele_wake(&vmm_softc->sc_refcnt);
-
+out:
 	KERNEL_LOCK();
 
 	return (ret);
@@ -5029,10 +5034,20 @@ vcpu_run_vmx(struct vcpu *vcpu, struct vm_run_params *vrp)
 
 		TRACEPOINT(vmm, guest_enter, vcpu, vrp);
 
+		/* Restore any guest PKRU state. */
+		if (vmm_softc->pkru_enabled)
+			wrpkru(vcpu->vc_pkru);
+
 		ret = vmx_enter_guest(&vcpu->vc_control_pa,
 		    &vcpu->vc_gueststate,
 		    (vcpu->vc_vmx_vmcs_state == VMCS_LAUNCHED),
 		    ci->ci_vmm_cap.vcc_vmx.vmx_has_l1_flush_msr);
+
+		/* Restore host PKRU state. */
+		if (vmm_softc->pkru_enabled) {
+			vcpu->vc_pkru = rdpkru(0);
+			wrpkru(PGK_VALUE);
+		}
 
 		bare_lgdt(&gdtr);
 		lidt(&idtr);
@@ -7020,6 +7035,14 @@ vmm_handle_cpuid(struct vcpu *vcpu)
 			*rbx = curcpu()->ci_feature_sefflags_ebx & VMM_SEFF0EBX_MASK;
 			*rcx = curcpu()->ci_feature_sefflags_ecx & VMM_SEFF0ECX_MASK;
 			*rdx = curcpu()->ci_feature_sefflags_edx & VMM_SEFF0EDX_MASK;
+			/*
+			 * Only expose PKU support if we've detected it in use
+			 * on the host.
+			 */
+			if (vmm_softc->pkru_enabled)
+				*rcx |= SEFF0ECX_PKU;
+			else
+				*rcx &= ~SEFF0ECX_PKU;
 		} else {
 			/* Unsupported subleaf */
 			DPRINTF("%s: function 0x07 (SEFF) unsupported subleaf "
@@ -7331,11 +7354,21 @@ vcpu_run_svm(struct vcpu *vcpu, struct vm_run_params *vrp)
 			break;
 		}
 
+		/* Restore any guest PKRU state. */
+		if (vmm_softc->pkru_enabled)
+			wrpkru(vcpu->vc_pkru);
+
 		KASSERT(vmcb->v_intercept1 & SVM_INTERCEPT_INTR);
 		wrmsr(MSR_AMD_VM_HSAVE_PA, vcpu->vc_svm_hsa_pa);
 
 		ret = svm_enter_guest(vcpu->vc_control_pa,
 		    &vcpu->vc_gueststate, &gdt);
+
+		/* Restore host PKRU state. */
+		if (vmm_softc->pkru_enabled) {
+			vcpu->vc_pkru = rdpkru(0);
+			wrpkru(PGK_VALUE);
+		}
 
 		/*
 		 * On exit, interrupts are disabled, and we are running with

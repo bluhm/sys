@@ -1,4 +1,4 @@
-/*	$OpenBSD: pmap.h,v 1.82 2022/10/16 15:03:39 kettenis Exp $	*/
+/*	$OpenBSD: pmap.h,v 1.85 2023/01/31 15:18:54 deraadt Exp $	*/
 /*	$NetBSD: pmap.h,v 1.1 2003/04/26 18:39:46 fvdl Exp $	*/
 
 /*
@@ -70,6 +70,7 @@
 
 #ifndef _LOCORE
 #ifdef _KERNEL
+#include <lib/libkern/libkern.h>	/* for KASSERT() */
 #include <machine/cpufunc.h>
 #endif /* _KERNEL */
 #include <sys/mutex.h>
@@ -419,6 +420,8 @@ void	pmap_flush_cache(vaddr_t, vsize_t);
 	pmap_flush_cache(PMAP_DIRECT_MAP(paddr), PAGE_SIZE);		\
 } while (/* CONSTCOND */ 0)
 
+#define PMAP_CHECK_COPYIN	(pg_xo == 0)
+
 #define	PMAP_STEAL_MEMORY	/* enable pmap_steal_memory() */
 #define PMAP_GROWKERNEL		/* turn on pmap_growkernel interface */
 
@@ -455,12 +458,11 @@ pmap_update_pg(vaddr_t va)
 static inline void
 pmap_page_protect(struct vm_page *pg, vm_prot_t prot)
 {
-	if ((prot & PROT_WRITE) == 0) {
-		if (prot & (PROT_READ | PROT_EXEC)) {
-			(void) pmap_clear_attrs(pg, PG_RW);
-		} else {
-			pmap_page_remove(pg);
-		}
+	if (prot == PROT_READ) {
+		(void) pmap_clear_attrs(pg, PG_RW);
+	} else {
+		KASSERT(prot == PROT_NONE);
+		pmap_page_remove(pg);
 	}
 }
 
@@ -475,12 +477,10 @@ pmap_page_protect(struct vm_page *pg, vm_prot_t prot)
 static inline void
 pmap_protect(struct pmap *pmap, vaddr_t sva, vaddr_t eva, vm_prot_t prot)
 {
-	if ((prot & PROT_WRITE) == 0) {
-		if (prot & (PROT_READ| PROT_EXEC)) {
-			pmap_write_protect(pmap, sva, eva, prot);
-		} else {
-			pmap_remove(pmap, sva, eva);
-		}
+	if (prot != PROT_NONE) {
+		pmap_write_protect(pmap, sva, eva, prot);
+	} else {
+		pmap_remove(pmap, sva, eva);
 	}
 }
 

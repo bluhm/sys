@@ -2,7 +2,7 @@
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	OpenBSD: pcidevs,v 1.2016 2022/12/18 10:29:28 kettenis Exp 
+ *	OpenBSD: pcidevs,v 1.2019 2023/01/23 10:13:46 jsg Exp 
  */
 
 /*	$NetBSD: pcidevs,v 1.30 1997/06/24 06:20:24 thorpej Exp $	*/
@@ -3212,6 +3212,10 @@ static const struct pci_known_product pci_known_products[] = {
 	    "Cyan Skillfish",
 	},
 	{
+	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_CYAN_SKILLFISH_2,
+	    "Cyan Skillfish",
+	},
+	{
 	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_PPB_1,
 	    "PCIE",
 	},
@@ -3265,7 +3269,7 @@ static const struct pci_known_product pci_known_products[] = {
 	},
 	{
 	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_YELLOW_CARP_1,
-	    "Yellow Carp",
+	    "Rembrandt",
 	},
 	{
 	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_RAPHAEL,
@@ -3273,7 +3277,7 @@ static const struct pci_known_product pci_known_products[] = {
 	},
 	{
 	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_YELLOW_CARP_2,
-	    "Yellow Carp",
+	    "Rembrandt",
 	},
 	{
 	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_RADEON_HD6500D_HDA,
@@ -6450,6 +6454,22 @@ static const struct pci_known_product pci_known_products[] = {
 	{
 	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_DIMGREY_CAVEFISH_12,
 	    "Navi 23",
+	},
+	{
+	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_ALDEBARAN_1,
+	    "Aldebaran",
+	},
+	{
+	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_ALDEBARAN_2,
+	    "Aldebaran",
+	},
+	{
+	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_ALDEBARAN_3,
+	    "Aldebaran",
+	},
+	{
+	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_ALDEBARAN_4,
+	    "Aldebaran",
 	},
 	{
 	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_BEIGE_GOBY_1,
@@ -32336,8 +32356,8 @@ static const struct pci_known_product pci_known_products[] = {
 	    "SD",
 	},
 	{
-	    PCI_VENDOR_TRANSMETA, PCI_PRODUCT_TRANSMETA_TM8000_HB,
-	    "TM8000 Host",
+	    PCI_VENDOR_TRANSMETA, PCI_PRODUCT_TRANSMETA_TM8000_HT,
+	    "TM8000 HyperTransport",
 	},
 	{
 	    PCI_VENDOR_TRANSMETA, PCI_PRODUCT_TRANSMETA_TM8000_AGP,

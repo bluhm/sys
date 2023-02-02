@@ -2,7 +2,7 @@
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	OpenBSD: pcidevs,v 1.2016 2022/12/18 10:29:28 kettenis Exp 
+ *	OpenBSD: pcidevs,v 1.2019 2023/01/23 10:13:46 jsg Exp 
  */
 /*	$NetBSD: pcidevs,v 1.30 1997/06/24 06:20:24 thorpej Exp $	*/
 
@@ -1268,6 +1268,7 @@
 #define	PCI_PRODUCT_ATI_KAVERI_21	0x131c		/* Kaveri Radeon R7 */
 #define	PCI_PRODUCT_ATI_KAVERI_22	0x131d		/* Kaveri Radeon R6 */
 #define	PCI_PRODUCT_ATI_CYAN_SKILLFISH_1	0x13fe		/* Cyan Skillfish */
+#define	PCI_PRODUCT_ATI_CYAN_SKILLFISH_2	0x143f		/* Cyan Skillfish */
 #define	PCI_PRODUCT_ATI_PPB_1	0x1478		/* PCIE */
 #define	PCI_PRODUCT_ATI_PPB_2	0x1479		/* PCIE */
 #define	PCI_PRODUCT_ATI_MENDOCINO	0x1506		/* Mendocino */
@@ -1281,9 +1282,9 @@
 #define	PCI_PRODUCT_ATI_VANGOGH	0x163f		/* Van Gogh */
 #define	PCI_PRODUCT_ATI_VANGOGH_HDA	0x1640		/* Van Gogh HD Audio */
 #define	PCI_PRODUCT_ATI_LUCIENNE	0x164c		/* Lucienne */
-#define	PCI_PRODUCT_ATI_YELLOW_CARP_1	0x164d		/* Yellow Carp */
+#define	PCI_PRODUCT_ATI_YELLOW_CARP_1	0x164d		/* Rembrandt */
 #define	PCI_PRODUCT_ATI_RAPHAEL	0x164e		/* Raphael */
-#define	PCI_PRODUCT_ATI_YELLOW_CARP_2	0x1681		/* Yellow Carp */
+#define	PCI_PRODUCT_ATI_YELLOW_CARP_2	0x1681		/* Rembrandt */
 #define	PCI_PRODUCT_ATI_RADEON_HD6500D_HDA	0x1714		/* Radeon HD 6500D HD Audio */
 #define	PCI_PRODUCT_ATI_RADEON_M241P	0x3150		/* Mobility Radeon X600 */
 #define	PCI_PRODUCT_ATI_FIREMV_2400_1	0x3151		/* FireMV 2400 */
@@ -2078,6 +2079,10 @@
 #define	PCI_PRODUCT_ATI_DIMGREY_CAVEFISH_10	0x73ed		/* Navi 23 */
 #define	PCI_PRODUCT_ATI_DIMGREY_CAVEFISH_11	0x73ef		/* Navi 23 */
 #define	PCI_PRODUCT_ATI_DIMGREY_CAVEFISH_12	0x73ff		/* Navi 23 */
+#define	PCI_PRODUCT_ATI_ALDEBARAN_1	0x7408		/* Aldebaran */
+#define	PCI_PRODUCT_ATI_ALDEBARAN_2	0x740c		/* Aldebaran */
+#define	PCI_PRODUCT_ATI_ALDEBARAN_3	0x740f		/* Aldebaran */
+#define	PCI_PRODUCT_ATI_ALDEBARAN_4	0x7410		/* Aldebaran */
 #define	PCI_PRODUCT_ATI_BEIGE_GOBY_1	0x7420		/* Navi 24 */
 #define	PCI_PRODUCT_ATI_BEIGE_GOBY_2	0x7421		/* Navi 24 */
 #define	PCI_PRODUCT_ATI_BEIGE_GOBY_3	0x7422		/* Navi 24 */
@@ -9036,7 +9041,7 @@
 #define	PCI_PRODUCT_TOSHIBA2_SDCARD	0x0805		/* SD */
 
 /* Transmeta products */
-#define	PCI_PRODUCT_TRANSMETA_TM8000_HB	0x0060		/* TM8000 Host */
+#define	PCI_PRODUCT_TRANSMETA_TM8000_HT	0x0060		/* TM8000 HyperTransport */
 #define	PCI_PRODUCT_TRANSMETA_TM8000_AGP	0x0061		/* TM8000 AGP */
 #define	PCI_PRODUCT_TRANSMETA_NB	0x0295		/* Northbridge */
 #define	PCI_PRODUCT_TRANSMETA_LONGRUN_NB	0x0395		/* LongRun Northbridge */

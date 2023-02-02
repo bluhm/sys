@@ -1,4 +1,4 @@
-/*	$OpenBSD: uipc_syscalls.c,v 1.208 2023/01/12 10:59:36 mvs Exp $	*/
+/*	$OpenBSD: uipc_syscalls.c,v 1.211 2023/01/27 21:01:59 mvs Exp $	*/
 /*	$NetBSD: uipc_syscalls.c,v 1.19 1996/02/09 19:00:48 christos Exp $	*/
 
 /*
@@ -288,14 +288,14 @@ doaccept(struct proc *p, int sock, struct sockaddr *name, socklen_t *anamelen,
 		goto out_unlock;
 	}
 	if ((headfp->f_flag & FNONBLOCK) && head->so_qlen == 0) {
-		if (head->so_state & SS_CANTRCVMORE)
+		if (head->so_rcv.sb_state & SS_CANTRCVMORE)
 			error = ECONNABORTED;
 		else
 			error = EWOULDBLOCK;
 		goto out_unlock;
 	}
 	while (head->so_qlen == 0 && head->so_error == 0) {
-		if (head->so_state & SS_CANTRCVMORE) {
+		if (head->so_rcv.sb_state & SS_CANTRCVMORE) {
 			head->so_error = ECONNABORTED;
 			break;
 		}
@@ -326,7 +326,7 @@ doaccept(struct proc *p, int sock, struct sockaddr *name, socklen_t *anamelen,
 	    : (flags & SOCK_NONBLOCK ? FNONBLOCK : 0);
 
 	/* connection has been removed from the listen queue */
-	KNOTE(&head->so_rcv.sb_sel.si_note, 0);
+	KNOTE(&head->so_rcv.sb_klist, 0);
 
 	if (persocket)
 		sounlock(head);
@@ -1271,9 +1271,7 @@ sys_getsockopt(struct proc *p, void *v, register_t *retval)
 		valsize = 0;
 	m = m_get(M_WAIT, MT_SOOPTS);
 	so = fp->f_data;
-	solock(so);
 	error = sogetopt(so, SCARG(uap, level), SCARG(uap, name), m);
-	sounlock(so);
 	if (error == 0 && SCARG(uap, val) && valsize && m != NULL) {
 		if (valsize > m->m_len)
 			valsize = m->m_len;

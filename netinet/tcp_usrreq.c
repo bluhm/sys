@@ -1,4 +1,4 @@
-/*	$OpenBSD: tcp_usrreq.c,v 1.214 2022/12/12 08:30:22 tb Exp $	*/
+/*	$OpenBSD: tcp_usrreq.c,v 1.216 2023/01/22 12:05:44 mvs Exp $	*/
 /*	$NetBSD: tcp_usrreq.c,v 1.20 1996/02/13 23:44:16 christos Exp $	*/
 
 /*
@@ -773,7 +773,7 @@ tcp_shutdown(struct socket *so)
 		ostate = tp->t_state;
 	}
 
-	if (so->so_state & SS_CANTSENDMORE)
+	if (so->so_snd.sb_state & SS_CANTSENDMORE)
 		goto out;
 
 	socantsendmore(so);
@@ -918,7 +918,7 @@ tcp_rcvoob(struct socket *so, struct mbuf *m, int flags)
 		return (error);
 
 	if ((so->so_oobmark == 0 &&
-	    (so->so_state & SS_RCVATMARK) == 0) ||
+	    (so->so_rcv.sb_state & SS_RCVATMARK) == 0) ||
 	    so->so_options & SO_OOBINLINE ||
 	    tp->t_oobflags & TCPOOB_HADDATA) {
 		error = EINVAL;

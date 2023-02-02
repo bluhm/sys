@@ -1,4 +1,4 @@
-/*	$OpenBSD: hibernate_machdep.c,v 1.59 2022/09/02 12:46:18 mlarkin Exp $	*/
+/*	$OpenBSD: hibernate_machdep.c,v 1.61 2023/01/30 10:49:05 jsg Exp $	*/
 
 /*
  * Copyright (c) 2011 Mike Larkin <mlarkin@openbsd.org>
@@ -18,17 +18,12 @@
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/buf.h>
-#include <sys/conf.h>
 #include <sys/device.h>
 #include <sys/disk.h>
 #include <sys/disklabel.h>
 #include <sys/hibernate.h>
-#include <sys/timeout.h>
-#include <sys/malloc.h>
 
 #include <uvm/uvm_extern.h>
-#include <uvm/uvm_pmemrange.h>
 
 #include <machine/biosvar.h>
 #include <machine/hibernate.h>
@@ -110,7 +105,7 @@ get_hibernate_io_function(dev_t dev)
 #if NSOFTRAID > 0
 			{ "softraid", sr_hibernate_io },
 #endif
-#if SDMMC > 0
+#if NSDMMC > 0
 			{ "sdmmc", sdmmc_scsi_hibernate_io },
 #endif
 		};

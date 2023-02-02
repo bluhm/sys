@@ -1,4 +1,4 @@
-/*	$OpenBSD: pte.h,v 1.14 2018/01/07 19:56:19 mlarkin Exp $	*/
+/*	$OpenBSD: pte.h,v 1.17 2023/01/20 16:01:04 deraadt Exp $	*/
 /*	$NetBSD: pte.h,v 1.1 2003/04/26 18:39:47 fvdl Exp $	*/
 
 /*
@@ -122,10 +122,14 @@ typedef u_int64_t pt_entry_t;		/* PTE */
 #define	PG_AVAIL2	0x0000000000000400UL
 #define	PG_AVAIL3	0x0000000000000800UL
 #define	PG_PATLG	0x0000000000001000UL	/* PAT on large pages */
+#define	PG_PKMASK	0x7800000000000000UL	/* Protection Key Mask */
+#define	PG_XO		0x0800000000000000UL	/* key1 used for execute-only */
 #define	PG_NX		0x8000000000000000UL	/* non-executable */
 #define	PG_FRAME	0x000ffffffffff000UL
 
 #define	PG_LGFRAME	0x000fffffffe00000UL	/* large (2M) page frame mask */
+
+#define PGK_VALUE	0xfffffffc		/* key0 is normal */
 
 /* EPT PTE bits */
 #define EPT_R		(1ULL << 0)
@@ -155,8 +159,10 @@ typedef u_int64_t pt_entry_t;		/* PTE */
 #define PGEX_W		0x02	/* exception during a write cycle */
 #define PGEX_U		0x04	/* exception while in user mode (upl) */
 #define PGEX_I		0x10	/* instruction fetch blocked by NX */
+#define PGEX_PK		0x20	/* protection-key violation */
 
 #ifdef _KERNEL
+extern pt_entry_t pg_xo;	/* XO pte bits using PKU key1 */
 extern pt_entry_t pg_nx;	/* NX pte bit */
 extern pt_entry_t pg_g_kern;	/* PG_G if glbl mappings can be used in kern */
 #endif /* _KERNEL */

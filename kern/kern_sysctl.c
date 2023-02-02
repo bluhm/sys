@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_sysctl.c,v 1.408 2022/11/07 14:25:44 robert Exp $	*/
+/*	$OpenBSD: kern_sysctl.c,v 1.411 2023/01/22 12:05:44 mvs Exp $	*/
 /*	$NetBSD: kern_sysctl.c,v 1.17 1996/05/20 17:49:05 mrg Exp $	*/
 
 /*-
@@ -1184,7 +1184,8 @@ fill_file(struct kinfo_file *kf, struct file *fp, struct filedesc *fdp,
 		}
 
 		kf->so_type = so->so_type;
-		kf->so_state = so->so_state;
+		kf->so_state = so->so_state | so->so_snd.sb_state |
+		    so->so_rcv.sb_state;
 		if (show_pointers)
 			kf->so_pcb = PTRTOINT64(so->so_pcb);
 		else
@@ -2510,6 +2511,7 @@ sysctl_cpustats(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 	if (!found)
 		return (ENOENT);
 
+	memset(&cs, 0, sizeof cs);
 	memcpy(&cs.cs_time, &ci->ci_schedstate.spc_cp_time, sizeof(cs.cs_time));
 	cs.cs_flags = 0;
 	if (cpu_is_online(ci))
