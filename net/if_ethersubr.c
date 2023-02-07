@@ -1058,7 +1058,7 @@ ether_extract_headers(struct mbuf *mp, struct ether_extracted *ext)
 	switch (ntohs(ext->eh->ether_type)) {
 	case ETHERTYPE_IP:
 		m = m_getptr(mp, sizeof(*ext->eh), &hoff);
-		if (m == NULL || m->m_len - hoff < sizeof(*ext->ip4))
+		if (m == NULL || m->m_len < sizeof(*ext->ip4) + hoff)
 			return;
 		ext->ip4 = (struct ip *)(mtod(m, caddr_t) + hoff);
 
@@ -1072,7 +1072,7 @@ ether_extract_headers(struct mbuf *mp, struct ether_extracted *ext)
 #ifdef INET6
 	case ETHERTYPE_IPV6:
 		m = m_getptr(mp, sizeof(*ext->eh), &hoff);
-		if (m == NULL || m->m_len - hoff < sizeof(*ext->ip6))
+		if (m == NULL || m->m_len < sizeof(*ext->ip6) + hoff)
 			return;
 		ext->ip6 = (struct ip6_hdr *)(mtod(m, caddr_t) + hoff);
 
@@ -1088,14 +1088,14 @@ ether_extract_headers(struct mbuf *mp, struct ether_extracted *ext)
 	switch (ipproto) {
 	case IPPROTO_TCP:
 		m = m_getptr(m, hoff + hlen, &hoff);
-		if (m == NULL || m->m_len - hoff < sizeof(*ext->tcp))
+		if (m == NULL || m->m_len < sizeof(*ext->tcp) + hoff)
 			return;
 		ext->tcp = (struct tcphdr *)(mtod(m, caddr_t) + hoff);
 		break;
 
 	case IPPROTO_UDP:
 		m = m_getptr(m, hoff + hlen, &hoff);
-		if (m == NULL || m->m_len - hoff < sizeof(*ext->udp))
+		if (m == NULL || m->m_len < sizeof(*ext->udp) + hoff)
 			return;
 		ext->udp = (struct udphdr *)(mtod(m, caddr_t) + hoff);
 		break;
