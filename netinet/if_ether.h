@@ -300,9 +300,7 @@ void		ether_e64_to_addr(struct ether_addr *, uint64_t);
 struct ether_extracted {
 	struct ether_header	*eh;
 	struct ip		*ip4;
-#ifdef INET6
 	struct ip6_hdr		*ip6;
-#endif
 	struct tcphdr		*tcp;
 	struct udphdr		*udp;
 };
