@@ -1156,6 +1156,10 @@ ip_dooptions(struct mbuf *m, struct ifnet *ifp)
 				code = ICMP_UNREACH_SRCFAIL;
 				goto bad;
 			}
+			if (optlen < IPOPT_OFFSET + sizeof(*cp)) {
+				code = &cp[IPOPT_OLEN] - (u_char *)ip;
+				goto bad;
+			}
 			if ((off = cp[IPOPT_OFFSET]) < IPOPT_MINOFF) {
 				code = &cp[IPOPT_OFFSET] - (u_char *)ip;
 				goto bad;
