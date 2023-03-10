@@ -1,4 +1,4 @@
-/*	$OpenBSD: dt_dev.c,v 1.24 2023/03/10 11:04:26 claudio Exp $ */
+/*	$OpenBSD: dt_dev.c,v 1.25 2023/03/10 22:14:32 bluhm Exp $ */
 
 /*
  * Copyright (c) 2019 Martin Pieuchot <mpi@openbsd.org>

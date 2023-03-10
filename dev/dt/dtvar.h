@@ -1,4 +1,4 @@
-/*	$OpenBSD: dtvar.h,v 1.14 2022/06/28 09:32:27 bluhm Exp $ */
+/*	$OpenBSD: dtvar.h,v 1.15 2023/03/10 22:14:32 bluhm Exp $ */
 
 /*
  * Copyright (c) 2019 Martin Pieuchot <mpi@openbsd.org>
