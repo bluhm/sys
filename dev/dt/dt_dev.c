@@ -1,4 +1,4 @@
-/*	$OpenBSD: dt_dev.c,v 1.22 2022/02/27 10:14:01 bluhm Exp $ */
+/*	$OpenBSD: dt_dev.c,v 1.24 2023/03/10 11:04:26 claudio Exp $ */
 
 /*
  * Copyright (c) 2019 Martin Pieuchot <mpi@openbsd.org>
@@ -54,8 +54,14 @@
  *	proc_trampoline+0x1c
  */
 #if defined(__amd64__)
-#define DT_FA_PROFILE	5
+#define DT_FA_PROFILE	7
 #define DT_FA_STATIC	2
+#elif defined(__i386__)
+#define DT_FA_PROFILE	8
+#define DT_FA_STATIC	2
+#elif defined(__macppc__)
+#define DT_FA_PROFILE  7
+#define DT_FA_STATIC   2
 #elif defined(__octeon__)
 #define DT_FA_PROFILE	6
 #define DT_FA_STATIC	2
@@ -63,7 +69,7 @@
 #define DT_FA_PROFILE	6
 #define DT_FA_STATIC	2
 #elif defined(__sparc64__)
-#define DT_FA_PROFILE	5
+#define DT_FA_PROFILE	7
 #define DT_FA_STATIC	1
 #else
 #define DT_FA_STATIC	0

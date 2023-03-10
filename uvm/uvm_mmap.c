@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_mmap.c,v 1.178 2023/02/11 23:22:19 deraadt Exp $	*/
+/*	$OpenBSD: uvm_mmap.c,v 1.180 2023/03/08 04:43:09 guenther Exp $	*/
 /*	$NetBSD: uvm_mmap.c,v 1.49 2001/02/18 21:19:08 chs Exp $	*/
 
 /*
@@ -68,6 +68,7 @@
 
 #include <machine/exec.h>	/* for __LDPGSZ */
 
+#include <sys/syscall.h>
 #include <sys/syscallargs.h>
 
 #include <uvm/uvm.h>
@@ -616,6 +617,38 @@ sys_msyscall(struct proc *p, void *v, register_t *retval)
 }
 
 /*
+ * sys_pinsyscall
+ */
+int
+sys_pinsyscall(struct proc *p, void *v, register_t *retval)
+{
+	struct sys_pinsyscall_args /* {
+		syscallarg(int) syscall;
+		syscallarg(void *) addr;
+		syscallarg(size_t) len;
+	} */ *uap = v;
+	struct vmspace *vm = p->p_vmspace;
+	vm_map_t map = &p->p_vmspace->vm_map;
+	vaddr_t start, end;
+
+	if (SCARG(uap, syscall) != SYS_execve)
+		return (EINVAL);
+	start = (vaddr_t)SCARG(uap, addr);
+	end = start + (vsize_t)SCARG(uap, len);
+	if (start >= end || start < map->min_offset || end > map->max_offset)
+		return (EFAULT);
+	vm_map_lock(map);
+	if (vm->vm_execve) {
+		vm_map_unlock(map);
+		return (EPERM);
+	}
+	vm->vm_execve = start;
+	vm->vm_execve_end = end;
+	vm_map_unlock(map);
+	return (0);
+}
+
+/*
  * sys_mimmutable: the mimmutable system call
  */
 int
@@ -674,7 +707,6 @@ sys_minherit(struct proc *p, void *v, register_t *retval)
 /*
  * sys_madvise: give advice about memory usage.
  */
-/* ARGSUSED */
 int
 sys_madvise(struct proc *p, void *v, register_t *retval)
 {
