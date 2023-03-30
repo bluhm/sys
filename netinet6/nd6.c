@@ -1291,6 +1291,7 @@ nd6_resolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 	}
 
 	uptime = getuptime();
+
 	rt = rt_getll(rt0);
 	ND6_RT_RLOCK(rt);
 
@@ -1330,10 +1331,10 @@ nd6_resolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 	 */
 	ND6_RT_RUNLOCK(rt);
 	ND6_RT_LOCK(rt);
+	NET_LOCK();
 	TAILQ_REMOVE(&nd6_list, ln, ln_list);
 	TAILQ_INSERT_HEAD(&nd6_list, ln, ln_list);
-	ND6_RT_UNLOCK(rt);
-	ND6_RT_RLOCK(rt);
+	NET_UNLOCK();
 
 	/*
 	 * The first time we send a packet to a neighbor whose entry is
@@ -1343,14 +1344,12 @@ nd6_resolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 	 * (RFC 2461 7.3.3)
 	 */
 	if (ln->ln_state == ND6_LLINFO_STALE) {
-		ND6_RT_RUNLOCK(rt);
-		ND6_RT_LOCK(rt);
 		ln->ln_asked = 0;
 		ln->ln_state = ND6_LLINFO_DELAY;
 		nd6_llinfo_settimer(ln, nd6_delay);
-		ND6_RT_UNLOCK(rt);
-		ND6_RT_RLOCK(rt);
 	}
+	ND6_RT_UNLOCK(rt);
+	ND6_RT_RLOCK(rt);
 
 	/*
 	 * If the neighbor cache entry has a state other than INCOMPLETE
@@ -1403,7 +1402,7 @@ nd6_resolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 
 bad:
 	m_freem(m);
-	ND6_RT_RUNLOCK(rt);
+	ND6_RT_UNLOCK(rt);
 	return (EINVAL);
 }
 
