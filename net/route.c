@@ -871,6 +871,7 @@ rtrequest(int req, struct rt_addrinfo *info, u_int8_t prio,
 		rt->rt_flags = info->rti_flags | RTF_UP;
 		rt->rt_priority = prio;	/* init routing priority */
 		LIST_INIT(&rt->rt_timer);
+		rw_init(&rt->rt_llck, "rt_llck");
 
 		/* Check the link state if the table supports it. */
 		if (rtable_mpath_capable(tableid, ndst->sa_family) &&

@@ -110,6 +110,7 @@ struct rtentry {
 	struct ifaddr	*rt_ifa;	/* the answer: interface addr to use */
 	caddr_t		 rt_llinfo;	/* pointer to link level info cache or
 					   to an MPLS structure */
+	struct rwlock	 rt_llck;	/* protect rt_llinfo, e.g. NDP */
 	union {
 		struct rtentry	*_nh;	/* implied entry for gatewayed routes */
 		unsigned int	 _ref;	/* # gatewayed caching this route */

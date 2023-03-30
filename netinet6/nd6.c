@@ -237,6 +237,7 @@ nd6_llinfo_settimer(const struct llinfo_nd6 *ln, unsigned int secs)
 	time_t expire = getuptime() + secs;
 
 	NET_ASSERT_LOCKED();
+	ND6_RT_ASSERT_LOCKED(ln->ln_rt);
 	KASSERT(!ISSET(ln->ln_rt->rt_flags, RTF_LOCAL));
 
 	ln->ln_rt->rt_expire = expire;
@@ -257,9 +258,14 @@ nd6_timer(void *unused)
 	TAILQ_FOREACH_SAFE(ln, &nd6_list, ln_list, nln) {
 		struct rtentry *rt = ln->ln_rt;
 
-		if (rt->rt_expire && rt->rt_expire <= getuptime())
-			if (nd6_llinfo_timer(rt))
+		if (rt->rt_expire && rt->rt_expire <= getuptime()) {
+			ND6_RT_LOCK(rt);
+			if (nd6_llinfo_timer(rt)) {
+				/* is unlocked, ln invalid */
 				continue;
+			}
+			ND6_RT_UNLOCK(rt);
+		}
 
 		if (rt->rt_expire && rt->rt_expire < expire)
 			expire = rt->rt_expire;
@@ -290,15 +296,21 @@ nd6_llinfo_timer(struct rtentry *rt)
 
 	NET_ASSERT_LOCKED();
 
-	if ((ifp = if_get(rt->rt_ifidx)) == NULL)
+	if ((ifp = if_get(rt->rt_ifidx)) == NULL) {
+		ND6_RT_UNLOCK(rt);
 		return 1;
+	}
+
+	ND6_RT_ASSERT_LOCKED(rt);
 
 	switch (ln->ln_state) {
 	case ND6_LLINFO_INCOMPLETE:
 		if (ln->ln_asked < nd6_mmaxtries) {
 			ln->ln_asked++;
 			nd6_llinfo_settimer(ln, RETRANS_TIMER / 1000);
+			ND6_RT_UNLOCK(rt);
 			nd6_ns_output(ifp, NULL, &dst->sin6_addr, ln, 0);
+			ND6_RT_LOCK(rt);
 		} else {
 			struct mbuf *m = ln->ln_hold;
 			if (m) {
@@ -345,14 +357,18 @@ nd6_llinfo_timer(struct rtentry *rt)
 		ln->ln_asked = 1;
 		ln->ln_state = ND6_LLINFO_PROBE;
 		nd6_llinfo_settimer(ln, RETRANS_TIMER / 1000);
+		ND6_RT_UNLOCK(rt);
 		nd6_ns_output(ifp, &dst->sin6_addr, &dst->sin6_addr, ln, 0);
+		ND6_RT_LOCK(rt);
 		break;
 	case ND6_LLINFO_PROBE:
 		if (ln->ln_asked < nd6_umaxtries) {
 			ln->ln_asked++;
 			nd6_llinfo_settimer(ln, RETRANS_TIMER / 1000);
+			ND6_RT_UNLOCK(rt);
 			nd6_ns_output(ifp, &dst->sin6_addr,
 			    &dst->sin6_addr, ln, 0);
+			ND6_RT_LOCK(rt);
 		} else {
 			nd6_free(rt);
 			ln = NULL;
@@ -461,8 +477,11 @@ nd6_purge(struct ifnet *ifp)
 		if (rt != NULL && rt->rt_gateway != NULL &&
 		    rt->rt_gateway->sa_family == AF_LINK) {
 			sdl = satosdl(rt->rt_gateway);
-			if (sdl->sdl_index == ifp->if_index)
+			if (sdl->sdl_index == ifp->if_index) {
+				ND6_RT_LOCK(rt);
 				nd6_free(rt);
+				/* is unlocked */
+			}
 		}
 	}
 }
@@ -613,6 +632,7 @@ nd6_invalidate(struct rtentry *rt)
 	struct llinfo_nd6 *ln = (struct llinfo_nd6 *)rt->rt_llinfo;
 	struct sockaddr_dl *sdl = satosdl(rt->rt_gateway);
 
+	ND6_RT_ASSERT_LOCKED(rt);
 	m_freem(ln->ln_hold);
 	sdl->sdl_alen = 0;
 	ln->ln_hold = NULL;
@@ -631,6 +651,7 @@ nd6_free(struct rtentry *rt)
 	struct ifnet *ifp;
 
 	NET_ASSERT_LOCKED();
+	ND6_RT_ASSERT_LOCKED(rt);	/* we release the lock */
 
 	ifp = if_get(rt->rt_ifidx);
 
@@ -653,6 +674,7 @@ nd6_free(struct rtentry *rt)
 	 * caches, and disable the route entry not to be used in already
 	 * cached routes.
 	 */
+	ND6_RT_UNLOCK(rt);
 	if (!ISSET(rt->rt_flags, RTF_STATIC|RTF_CACHED))
 		rtdeletemsg(rt, ifp, ifp->if_rdomain);
 
@@ -674,6 +696,7 @@ nd6_nud_hint(struct rtentry *rt)
 	if (ifp == NULL)
 		return;
 
+	ND6_RT_LOCK(rt);
 	if ((rt->rt_flags & RTF_GATEWAY) != 0 ||
 	    (rt->rt_flags & RTF_LLINFO) == 0 ||
 	    rt->rt_llinfo == NULL || rt->rt_gateway == NULL ||
@@ -698,6 +721,7 @@ nd6_nud_hint(struct rtentry *rt)
 	if (!ND6_LLINFO_PERMANENT(ln))
 		nd6_llinfo_settimer(ln, ifp->if_nd->reachable);
 out:
+	ND6_RT_UNLOCK(rt);
 	if_put(ifp);
 }
 
@@ -705,7 +729,7 @@ void
 nd6_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 {
 	struct sockaddr *gate = rt->rt_gateway;
-	struct llinfo_nd6 *ln = (struct llinfo_nd6 *)rt->rt_llinfo;
+	struct llinfo_nd6 *ln;
 	struct ifaddr *ifa;
 	struct in6_ifaddr *ifa6;
 
@@ -741,6 +765,9 @@ nd6_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 		rt->rt_flags &= ~RTF_LLINFO;
 		return;
 	}
+
+	ND6_RT_LOCK(rt);
+	ln = (struct llinfo_nd6 *)rt->rt_llinfo;
 
 	switch (req) {
 	case RTM_ADD:
@@ -847,11 +874,13 @@ nd6_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 				if (ND6_LLINFO_PERMANENT(ln_end))
 					continue;
 
+				ND6_RT_LOCK(ln_end->ln_rt);
 				if (ln_end->ln_state > ND6_LLINFO_INCOMPLETE)
 					ln_end->ln_state = ND6_LLINFO_STALE;
 				else
 					ln_end->ln_state = ND6_LLINFO_PURGE;
 				nd6_llinfo_settimer(ln_end, 0);
+				ND6_RT_UNLOCK(ln_end->ln_rt);
 			}
 		}
 
@@ -932,6 +961,7 @@ nd6_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 			nd6_invalidate(rt);
 		break;
 	}
+	ND6_RT_UNLOCK(rt);
 }
 
 int
@@ -967,8 +997,10 @@ nd6_ioctl(u_long cmd, caddr_t data, struct ifnet *ifp)
 		}
 
 		rt = nd6_lookup(&nb_addr, 0, ifp, ifp->if_rdomain);
+		ND6_RT_LOCK(rt);
 		if (rt == NULL ||
 		    (ln = (struct llinfo_nd6 *)rt->rt_llinfo) == NULL) {
+			ND6_RT_UNLOCK(rt);
 			rtfree(rt);
 			NET_UNLOCK_SHARED();
 			return (EINVAL);
@@ -984,6 +1016,7 @@ nd6_ioctl(u_long cmd, caddr_t data, struct ifnet *ifp)
 		nbi->isrouter = ln->ln_router;
 		nbi->expire = expire;
 
+		ND6_RT_UNLOCK(rt);
 		rtfree(rt);
 		NET_UNLOCK_SHARED();
 		return (0);
@@ -1046,9 +1079,11 @@ nd6_cache_lladdr(struct ifnet *ifp, const struct in6_addr *from, char *lladdr,
 
 	if (!rt)
 		return;
+	ND6_RT_LOCK(rt);
 	if ((rt->rt_flags & (RTF_GATEWAY | RTF_LLINFO)) != RTF_LLINFO) {
 fail:
 		nd6_free(rt);
+		/* is unlocked */
 		rtfree(rt);
 		return;
 	}
@@ -1211,6 +1246,7 @@ fail:
 		break;
 	}
 
+	ND6_RT_UNLOCK(rt);
 	rtfree(rt);
 }
 
@@ -1256,10 +1292,12 @@ nd6_resolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 
 	uptime = getuptime();
 	rt = rt_getll(rt0);
+	ND6_RT_RLOCK(rt);
 
 	if (ISSET(rt->rt_flags, RTF_REJECT) &&
 	    (rt->rt_expire == 0 || rt->rt_expire > uptime)) {
 		m_freem(m);
+		ND6_RT_RUNLOCK(rt);
 		return (rt == rt0 ? EHOSTDOWN : EHOSTUNREACH);
 	}
 
@@ -1290,8 +1328,12 @@ nd6_resolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 	 * for this entry to be a target of forced garbage collection (see
 	 * nd6_rtrequest()).
 	 */
+	ND6_RT_RUNLOCK(rt);
+	ND6_RT_LOCK(rt);
 	TAILQ_REMOVE(&nd6_list, ln, ln_list);
 	TAILQ_INSERT_HEAD(&nd6_list, ln, ln_list);
+	ND6_RT_UNLOCK(rt);
+	ND6_RT_RLOCK(rt);
 
 	/*
 	 * The first time we send a packet to a neighbor whose entry is
@@ -1301,9 +1343,13 @@ nd6_resolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 	 * (RFC 2461 7.3.3)
 	 */
 	if (ln->ln_state == ND6_LLINFO_STALE) {
+		ND6_RT_RUNLOCK(rt);
+		ND6_RT_LOCK(rt);
 		ln->ln_asked = 0;
 		ln->ln_state = ND6_LLINFO_DELAY;
 		nd6_llinfo_settimer(ln, nd6_delay);
+		ND6_RT_UNLOCK(rt);
+		ND6_RT_RLOCK(rt);
 	}
 
 	/*
@@ -1323,8 +1369,11 @@ nd6_resolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 		}
 
 		bcopy(LLADDR(sdl), desten, sdl->sdl_alen);
+		ND6_RT_RUNLOCK(rt);
 		return (0);
 	}
+	ND6_RT_RUNLOCK(rt);
+	ND6_RT_LOCK(rt);
 
 	/*
 	 * There is a neighbor cache entry, but no ethernet address
@@ -1343,12 +1392,18 @@ nd6_resolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 	if (!ND6_LLINFO_PERMANENT(ln) && ln->ln_asked == 0) {
 		ln->ln_asked++;
 		nd6_llinfo_settimer(ln, RETRANS_TIMER / 1000);
+		ND6_RT_UNLOCK(rt);
+		KERNEL_LOCK();
 		nd6_ns_output(ifp, NULL, &satosin6(dst)->sin6_addr, ln, 0);
+		KERNEL_UNLOCK();
+		ND6_RT_LOCK(rt);
 	}
+	ND6_RT_UNLOCK(rt);
 	return (EAGAIN);
 
 bad:
 	m_freem(m);
+	ND6_RT_RUNLOCK(rt);
 	return (EINVAL);
 }
 

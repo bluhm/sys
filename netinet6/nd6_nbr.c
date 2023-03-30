@@ -692,6 +692,7 @@ nd6_na_input(struct mbuf *m, int off, int icmp6len)
 	 * discarded.
 	 */
 	rt = nd6_lookup(&taddr6, 0, ifp, ifp->if_rdomain);
+	ND6_RT_LOCK(rt);
 	if ((rt == NULL) ||
 	   ((ln = (struct llinfo_nd6 *)rt->rt_llinfo) == NULL) ||
 	   ((sdl = satosdl(rt->rt_gateway)) == NULL))
@@ -839,7 +840,9 @@ nd6_na_input(struct mbuf *m, int off, int icmp6len)
 		 * we assume ifp is not a loopback here, so just set the 2nd
 		 * argument as the 1st one.
 		 */
+		ND6_RT_UNLOCK(rt);
 		ifp->if_output(ifp, n, rt_key(rt), rt);
+		ND6_RT_LOCK(rt);
 		if (ln->ln_hold == n) {
 			/* n is back in ln_hold. Discard. */
 			m_freem(ln->ln_hold);
@@ -848,6 +851,7 @@ nd6_na_input(struct mbuf *m, int off, int icmp6len)
 	}
 
  freeit:
+	ND6_RT_UNLOCK(rt);
 	rtfree(rt);
 	m_freem(m);
 	if_put(ifp);

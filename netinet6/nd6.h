@@ -90,6 +90,17 @@ struct	llinfo_nd6 {
 
 #define ND6_LLINFO_PERMANENT(n)	((n)->ln_rt->rt_expire == 0)
 
+/* llinfo_nd6 is protected by rt_llck in ln_rt */
+#define ND6_RT_LOCK(rt) \
+	do { if (rt != NULL) rw_enter_write(&rt->rt_llck); } while(0)
+#define ND6_RT_UNLOCK(rt) \
+	do { if (rt != NULL) rw_exit_write(&rt->rt_llck); } while(0)
+#define ND6_RT_RLOCK(rt) \
+	do { if (rt != NULL) rw_enter_read(&rt->rt_llck); } while(0)
+#define ND6_RT_RUNLOCK(rt) \
+	do { if (rt != NULL) rw_exit_read(&rt->rt_llck); } while(0)
+#define ND6_RT_ASSERT_LOCKED(rt)	rw_assert_wrlock(&rt->rt_llck)
+
 /* node constants */
 #define REACHABLE_TIME			30000	/* msec */
 #define RETRANS_TIMER			1000	/* msec */
