@@ -1324,17 +1324,20 @@ nd6_resolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 	ln = (struct llinfo_nd6 *)rt->rt_llinfo;
 	KASSERT(ln != NULL);
 
+#if 0
+	/*
+	 * XXXSMP Shared netlock is not sufficient to protect nd6_list.
+	 * Disable this optimization until we have a dedicated lock
+	 * for nd6_list.
+	 */
 	/*
 	 * Move this entry to the head of the queue so that it is less likely
 	 * for this entry to be a target of forced garbage collection (see
 	 * nd6_rtrequest()).
 	 */
-	ND6_RT_RUNLOCK(rt);
-	NET_LOCK();
-	ND6_RT_LOCK(rt);
 	TAILQ_REMOVE(&nd6_list, ln, ln_list);
 	TAILQ_INSERT_HEAD(&nd6_list, ln, ln_list);
-	NET_UNLOCK();
+#endif
 
 	/*
 	 * The first time we send a packet to a neighbor whose entry is
@@ -1344,12 +1347,14 @@ nd6_resolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 	 * (RFC 2461 7.3.3)
 	 */
 	if (ln->ln_state == ND6_LLINFO_STALE) {
+		ND6_RT_RUNLOCK(rt);
+		ND6_RT_LOCK(rt);
 		ln->ln_asked = 0;
 		ln->ln_state = ND6_LLINFO_DELAY;
 		nd6_llinfo_settimer(ln, nd6_delay);
+		ND6_RT_UNLOCK(rt);
+		ND6_RT_RLOCK(rt);
 	}
-	ND6_RT_UNLOCK(rt);
-	ND6_RT_RLOCK(rt);
 
 	/*
 	 * If the neighbor cache entry has a state other than INCOMPLETE
@@ -1402,7 +1407,7 @@ nd6_resolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 
 bad:
 	m_freem(m);
-	ND6_RT_UNLOCK(rt);
+	ND6_RT_RUNLOCK(rt);
 	return (EINVAL);
 }
 
