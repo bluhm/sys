@@ -1330,8 +1330,8 @@ nd6_resolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 	 * nd6_rtrequest()).
 	 */
 	ND6_RT_RUNLOCK(rt);
-	ND6_RT_LOCK(rt);
 	NET_LOCK();
+	ND6_RT_LOCK(rt);
 	TAILQ_REMOVE(&nd6_list, ln, ln_list);
 	TAILQ_INSERT_HEAD(&nd6_list, ln, ln_list);
 	NET_UNLOCK();
