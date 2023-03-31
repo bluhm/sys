@@ -60,7 +60,7 @@
 int rt6_deleteroute(struct rtentry *, void *, unsigned int);
 
 /*
- * Process Source Link-layer Address Options from 
+ * Process Source Link-layer Address Options from
  * Router Solicitation / Advertisement Messages.
  */
 void
