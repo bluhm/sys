@@ -753,6 +753,27 @@ if_enqueue_ifq(struct ifnet *ifp, struct mbuf *m)
 }
 
 void
+if_mqoutput(struct ifnet *ifp, struct mbuf_queue *mq, unsigned int *total,
+    struct sockaddr *dst, struct rtentry *rt)
+{
+	struct mbuf_list ml;
+	struct mbuf *m;
+	unsigned int len;
+
+	mq_delist(mq, &ml);
+	len = ml_len(&ml);
+	while ((m = ml_dequeue(&ml)) != NULL)
+		ifp->if_output(ifp, m, rt_key(rt), rt);
+
+	/* XXXSMP we also discard if other CPU enqueues */
+	if (mq_len(mq) > 0) {
+		/* mbuf is back in queue. Discard. */
+		atomic_sub_int(total, len + mq_purge(mq));
+	} else
+		atomic_sub_int(total, len);
+}
+
+void
 if_input(struct ifnet *ifp, struct mbuf_list *ml)
 {
 	ifiq_input(&ifp->if_rcv, ml);
