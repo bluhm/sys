@@ -240,8 +240,8 @@ divert6_packet(struct mbuf *m, int dir, u_int16_t divert_port)
 		if_put(ifp);
 	} else {
 		/*
-		 * Recalculate IP and protocol checksums for the outbound packet
-		 * to not trip up IDS/IPS applications listening.
+		 * Calculate protocol checksum for outbound packet diverted
+		 * to userland.  pf out rule diverts before cksum offload.
 		 */
 		in6_proto_cksum_out(m, NULL);
 	}

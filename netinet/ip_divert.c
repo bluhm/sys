@@ -236,8 +236,8 @@ divert_packet(struct mbuf *m, int dir, u_int16_t divert_port)
 		if_put(ifp);
 	} else {
 		/*
-		 * Recalculate IP and protocol checksums for the outbound packet
-		 * to not trip up IDS/IPS applications listening.
+		 * Calculate IP and protocol checksums for outbound packet 
+		 * diverted to userland.  pf rule diverts before cksum offload.
 		 */
 		ip = mtod(m, struct ip *);
 		off = ip->ip_hl << 2;
@@ -246,7 +246,6 @@ divert_packet(struct mbuf *m, int dir, u_int16_t divert_port)
 		ip->ip_sum = in_cksum(m, off);
 		in_proto_cksum_out(m, NULL);
 	}
-
 
 	mtx_enter(&inp->inp_mtx);
 	so = inp->inp_socket;
