@@ -203,6 +203,7 @@ arp_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 			log(LOG_DEBUG, "%s: pool get failed\n", __func__);
 			break;
 		}
+		mq_init(&la->la_mq, LA_HOLD_QUEUE, IPL_SOFTNET);
 
 		mtx_enter(&arp_mtx);
 		if (rt->rt_llinfo != NULL) {
@@ -211,7 +212,6 @@ arp_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 			pool_put(&arp_pool, la);
 			break;
 		}
-		mq_init(&la->la_mq, LA_HOLD_QUEUE, IPL_SOFTNET);
 		rt->rt_llinfo = (caddr_t)la;
 		la->la_rt = rt;
 		rt->rt_flags |= RTF_LLINFO;
@@ -233,9 +233,9 @@ arp_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 		LIST_REMOVE(la, la_list);
 		rt->rt_llinfo = NULL;
 		rt->rt_flags &= ~RTF_LLINFO;
-		atomic_sub_int(&la_hold_total, mq_purge(&la->la_mq));
 		mtx_leave(&arp_mtx);
 
+		atomic_sub_int(&la_hold_total, mq_purge(&la->la_mq));
 		pool_put(&arp_pool, la);
 		break;
 
@@ -755,10 +755,11 @@ arpinvalidate(struct rtentry *rt)
 		mtx_leave(&arp_mtx);
 		return;
 	}
-	atomic_sub_int(&la_hold_total, mq_purge(&la->la_mq));
 	sdl->sdl_alen = 0;
 	la->la_asked = 0;
 	mtx_leave(&arp_mtx);
+
+	atomic_sub_int(&la_hold_total, mq_purge(&la->la_mq));
 }
 
 /*
