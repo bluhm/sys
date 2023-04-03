@@ -1,4 +1,4 @@
-/*	$OpenBSD: umsm.c,v 1.122 2022/08/23 08:12:30 jsg Exp $	*/
+/*	$OpenBSD: umsm.c,v 1.125 2023/04/02 23:57:57 dlg Exp $	*/
 
 /*
  * Copyright (c) 2008 Yojiro UO <yuo@nui.org>
@@ -173,7 +173,20 @@ static const struct umsm_type umsm_devs[] = {
 	{{ USB_VENDOR_QUANTA2, USB_PRODUCT_QUANTA2_UMASS }, DEV_UMASS4},
 	{{ USB_VENDOR_QUANTA2, USB_PRODUCT_QUANTA2_Q101 }, 0},
 
+	{{ USB_VENDOR_QUECTEL, USB_PRODUCT_QUECTEL_EC21 }, 0},
 	{{ USB_VENDOR_QUECTEL, USB_PRODUCT_QUECTEL_EC25 }, 0},
+	{{ USB_VENDOR_QUECTEL, USB_PRODUCT_QUECTEL_EG91 }, 0},
+	{{ USB_VENDOR_QUECTEL, USB_PRODUCT_QUECTEL_EG95 }, 0},
+	{{ USB_VENDOR_QUECTEL, USB_PRODUCT_QUECTEL_BG96 }, 0},
+	{{ USB_VENDOR_QUECTEL, USB_PRODUCT_QUECTEL_EG06 }, 0},
+	{{ USB_VENDOR_QUECTEL, USB_PRODUCT_QUECTEL_AG15 }, 0},
+	{{ USB_VENDOR_QUECTEL, USB_PRODUCT_QUECTEL_AG35 }, 0},
+	{{ USB_VENDOR_QUECTEL, USB_PRODUCT_QUECTEL_AG520R }, 0},
+	{{ USB_VENDOR_QUECTEL, USB_PRODUCT_QUECTEL_AG525R }, 0},
+	{{ USB_VENDOR_QUECTEL, USB_PRODUCT_QUECTEL_EG12 }, 0},
+	{{ USB_VENDOR_QUECTEL, USB_PRODUCT_QUECTEL_EG20 }, 0},
+	{{ USB_VENDOR_QUECTEL, USB_PRODUCT_QUECTEL_BG95 }, 0},
+	{{ USB_VENDOR_QUECTEL, USB_PRODUCT_QUECTEL_RG5XXQ }, 0},
 
 	{{ USB_VENDOR_ZTE, USB_PRODUCT_ZTE_AC2746 }, 0},
 	{{ USB_VENDOR_ZTE, USB_PRODUCT_ZTE_UMASS_INSTALLER }, DEV_UMASS4},
@@ -293,53 +306,66 @@ int
 umsm_match(struct device *parent, void *match, void *aux)
 {
 	struct usb_attach_arg *uaa = aux;
+	const struct umsm_type *umsmt;
 	usb_interface_descriptor_t *id;
 	uint16_t flag;
 
 	if (uaa->iface == NULL)
 		return UMATCH_NONE;
 
+	umsmt = umsm_lookup(uaa->vendor, uaa->product);
+	if (umsmt == NULL)
+		return UMATCH_NONE;
+
 	/*
 	 * Some devices (eg Huawei E220) have multiple interfaces and some
 	 * of them are of class umass. Don't claim ownership in such case.
 	 */
-	if (umsm_lookup(uaa->vendor, uaa->product) != NULL) {
-		id = usbd_get_interface_descriptor(uaa->iface);
-		flag = umsm_lookup(uaa->vendor, uaa->product)->umsm_flag;
 
-		if (id == NULL || id->bInterfaceClass == UICLASS_MASS) {
-			/*
-			 * Some high-speed modems require special care.
-			 */
-			if (flag & DEV_HUAWEI) {
-				if (uaa->ifaceno != 2)
-					return UMATCH_VENDOR_IFACESUBCLASS;
-				else
-					return UMATCH_NONE;
-			} else if (flag & DEV_UMASS) {
-				return UMATCH_VENDOR_IFACESUBCLASS;
-			} else if (flag & DEV_TRUINSTALL) {
-				return UMATCH_VENDOR_IFACESUBCLASS;
-			} else
-				return UMATCH_NONE;
+	id = usbd_get_interface_descriptor(uaa->iface);
+	flag = umsmt->umsm_flag;
+
+	if (id == NULL || id->bInterfaceClass == UICLASS_MASS) {
 		/*
-		 * Some devices have interfaces which fail to attach but in
-		 * addition seem to make the remaining interfaces unusable. Only
-		 * attach whitelisted interfaces in this case.
+		 * Some high-speed modems require special care.
 		 */
-		} else if ((uaa->vendor == USB_VENDOR_MEDIATEK &&
-			    uaa->product == USB_PRODUCT_MEDIATEK_DC_4COM) &&
-			   !(id->bInterfaceClass == UICLASS_VENDOR &&
-			    ((id->bInterfaceSubClass == 0x02 &&
-			      id->bInterfaceProtocol == 0x01) ||
-			     (id->bInterfaceSubClass == 0x00 &&
-			      id->bInterfaceProtocol == 0x00)))) {
-			return UMATCH_NONE;
-		} else
+		if (flag & DEV_HUAWEI) {
+			if (uaa->ifaceno != 2)
+				return UMATCH_VENDOR_IFACESUBCLASS;
+			else
+				return UMATCH_NONE;
+		} else if (flag & DEV_UMASS) {
 			return UMATCH_VENDOR_IFACESUBCLASS;
+		} else if (flag & DEV_TRUINSTALL) {
+			return UMATCH_VENDOR_IFACESUBCLASS;
+		} else
+			return UMATCH_NONE;
+	/*
+	 * Some devices have interfaces which fail to attach but in
+	 * addition seem to make the remaining interfaces unusable. Only
+	 * attach whitelisted interfaces in this case.
+	 */
+	} else if ((uaa->vendor == USB_VENDOR_MEDIATEK &&
+		    uaa->product == USB_PRODUCT_MEDIATEK_DC_4COM) &&
+		   !(id->bInterfaceClass == UICLASS_VENDOR &&
+		    ((id->bInterfaceSubClass == 0x02 &&
+		      id->bInterfaceProtocol == 0x01) ||
+		     (id->bInterfaceSubClass == 0x00 &&
+		      id->bInterfaceProtocol == 0x00)))) {
+		return UMATCH_NONE;
+
+	/* See the Quectel LTE&5G Linux USB Driver User Guide */ 
+	} else if (uaa->vendor == USB_VENDOR_QUECTEL) {
+		/* Some interfaces can be used as network devices */
+		if (id->bInterfaceClass != UICLASS_VENDOR)
+			return UMATCH_NONE;
+
+		/* Interface 4 can be used as a network device */
+		if (uaa->ifaceno >= 4)
+			return UMATCH_NONE;
 	}
 
-	return UMATCH_NONE;
+	return UMATCH_VENDOR_IFACESUBCLASS;
 }
 
 void
