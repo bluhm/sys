@@ -190,6 +190,8 @@ divert_packet(struct mbuf *m, int dir, u_int16_t divert_port)
 	struct inpcb *inp = NULL;
 	struct socket *so;
 	struct sockaddr_in sin;
+	struct ip *ip;
+	int off;
 
 	divstat_inc(divs_ipackets);
 
@@ -232,7 +234,19 @@ divert_packet(struct mbuf *m, int dir, u_int16_t divert_port)
 			break;
 		}
 		if_put(ifp);
+	} else {
+		/*
+		 * Recalculate IP and protocol checksums for the outbound packet
+		 * to not trip up IDS/IPS applications listening.
+		 */
+		ip = mtod(m, struct ip *);
+		off = ip->ip_hl << 2;
+
+		ip->ip_sum = 0;
+		ip->ip_sum = in_cksum(m, off);
+		in_proto_cksum_out(m, NULL);
 	}
+
 
 	mtx_enter(&inp->inp_mtx);
 	so = inp->inp_socket;

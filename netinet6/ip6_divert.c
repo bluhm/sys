@@ -238,6 +238,12 @@ divert6_packet(struct mbuf *m, int dir, u_int16_t divert_port)
 			break;
 		}
 		if_put(ifp);
+	} else {
+		/*
+		 * Recalculate IP and protocol checksums for the outbound packet
+		 * to not trip up IDS/IPS applications listening.
+		 */
+		in6_proto_cksum_out(m, NULL);
 	}
 
 	mtx_enter(&inp->inp_mtx);
