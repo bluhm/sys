@@ -1255,11 +1255,16 @@ nd6_resolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 	}
 
 	uptime = getuptime();
+
+	/* XXXSMP there is a MP race in nd6_resolve() */
+	KERNEL_LOCK();
+
 	rt = rt_getll(rt0);
 
 	if (ISSET(rt->rt_flags, RTF_REJECT) &&
 	    (rt->rt_expire == 0 || rt->rt_expire > uptime)) {
 		m_freem(m);
+		KERNEL_UNLOCK();
 		return (rt == rt0 ? EHOSTDOWN : EHOSTUNREACH);
 	}
 
@@ -1323,6 +1328,7 @@ nd6_resolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 		}
 
 		bcopy(LLADDR(sdl), desten, sdl->sdl_alen);
+		KERNEL_UNLOCK();
 		return (0);
 	}
 
@@ -1355,10 +1361,12 @@ nd6_resolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 		nd6_llinfo_settimer(ln, RETRANS_TIMER / 1000);
 		nd6_ns_output(ifp, NULL, &satosin6(dst)->sin6_addr, ln, 0);
 	}
+	KERNEL_UNLOCK();
 	return (EAGAIN);
 
 bad:
 	m_freem(m);
+	KERNEL_UNLOCK();
 	return (EINVAL);
 }
 
