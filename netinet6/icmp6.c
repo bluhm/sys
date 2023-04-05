@@ -1902,6 +1902,11 @@ icmp6_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 		error = icmp6_sysctl_icmp6stat(oldp, oldlenp, newp);
 		break;
 
+	case ICMPV6CTL_ND6_QUEUED:
+		error = sysctl_rdint(oldp, oldlenp, newp,
+		    atomic_load_int(&ln_hold_total));
+		break;
+
 	default:
 		NET_LOCK();
 		error = sysctl_bounded_arr(icmpv6ctl_vars,
