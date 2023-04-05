@@ -1698,7 +1698,8 @@ ip_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		return (sysctl_niq(name + 1, namelen - 1,
 		    oldp, oldlenp, newp, newlen, &arpinq));
 	case IPCTL_ARPQUEUED:
-		return (sysctl_rdint(oldp, oldlenp, newp, la_hold_total));
+		return (sysctl_rdint(oldp, oldlenp, newp,
+		    atomic_load_int(&la_hold_total)));
 	case IPCTL_STATS:
 		return (ip_sysctl_ipstat(oldp, oldlenp, newp));
 #ifdef MROUTING

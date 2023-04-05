@@ -217,7 +217,7 @@ extern int ipforwarding;		/* enable IP forwarding */
 extern int ipmforwarding;		/* enable multicast forwarding */
 #endif
 extern int ipmultipath;			/* enable multipath routing */
-extern int la_hold_total;
+extern unsigned int la_hold_total;
 
 extern const struct pr_usrreqs rip_usrreqs;
 

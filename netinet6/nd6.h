@@ -91,7 +91,7 @@ struct	llinfo_nd6 {
 #define LN_HOLD_QUEUE 10
 #define LN_HOLD_TOTAL 100
 
-extern int ln_hold_total;
+extern unsigned int ln_hold_total;
 
 #define ND6_LLINFO_PERMANENT(n)	((n)->ln_rt->rt_expire == 0)
 
