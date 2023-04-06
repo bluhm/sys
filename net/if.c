@@ -927,11 +927,8 @@ if_netisr(void *unused)
 		atomic_clearbits_int(&netisr, n);
 
 #if NETHER > 0
-		if (n & (1 << NETISR_ARP)) {
-			KERNEL_LOCK();
+		if (n & (1 << NETISR_ARP))
 			arpintr();
-			KERNEL_UNLOCK();
-		}
 #endif
 		if (n & (1 << NETISR_IP))
 			ipintr();
