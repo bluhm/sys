@@ -1266,6 +1266,8 @@ sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
 	}
 	if (sosplice_taskq == NULL)
 		return (ENOMEM);
+	/* Ensure the taskq is fully visible on this CPU. */
+	membar_consumer();
 
 	if ((so->so_proto->pr_flags & PR_SPLICE) == 0)
 		return (EPROTONOSUPPORT);
