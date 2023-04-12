@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_dwqe_fdt.c,v 1.6 2023/04/06 00:09:39 dlg Exp $	*/
+/*	$OpenBSD: if_dwqe_fdt.c,v 1.9 2023/04/07 22:55:26 dlg Exp $	*/
 /*
  * Copyright (c) 2008, 2019 Mark Kettenis <kettenis@openbsd.org>
  * Copyright (c) 2017, 2022 Patrick Wildt <patrick@blueri.se>
@@ -86,8 +86,10 @@ dwqe_fdt_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct dwqe_softc *sc = (void *)self;
 	struct fdt_attach_args *faa = aux;
+	char phy_mode[16] = { 0 };
 	uint32_t phy, phy_supply;
 	uint32_t axi_config;
+	struct ifnet *ifp;
 	int i, node;
 
 	sc->sc_node = faa->fa_node;
@@ -111,6 +113,20 @@ dwqe_fdt_attach(struct device *parent, struct device *self, void *aux)
 		printf(": unknown controller\n");
 		return;
 	}
+
+	printf(" gmac %d", sc->sc_gmac_id);
+
+	OF_getprop(faa->fa_node, "phy-mode", phy_mode, sizeof(phy_mode));
+	if (strcmp(phy_mode, "rgmii") == 0)
+		sc->sc_phy_mode = DWQE_PHY_MODE_RGMII;
+	else if (strcmp(phy_mode, "rgmii-rxid") == 0)
+		sc->sc_phy_mode = DWQE_PHY_MODE_RGMII_RXID;
+	else if (strcmp(phy_mode, "rgmii-txid") == 0)
+		sc->sc_phy_mode = DWQE_PHY_MODE_RGMII_TXID;
+	else if (strcmp(phy_mode, "rgmii-id") == 0)
+		sc->sc_phy_mode = DWQE_PHY_MODE_RGMII_ID;
+	else
+		sc->sc_phy_mode = DWQE_PHY_MODE_UNKNOWN;
 
 	/* Lookup PHY. */
 	phy = OF_getpropint(faa->fa_node, "phy", 0);
@@ -210,6 +226,11 @@ dwqe_fdt_attach(struct device *parent, struct device *self, void *aux)
 	    dwqe_intr, sc, sc->sc_dev.dv_xname);
 	if (sc->sc_ih == NULL)
 		printf("%s: can't establish interrupt\n", sc->sc_dev.dv_xname);
+
+	ifp = &sc->sc_ac.ac_if;
+	sc->sc_ifd.if_node = faa->fa_node;
+	sc->sc_ifd.if_ifp = ifp;
+	if_register(&sc->sc_ifd);
 }
 
 void
