@@ -411,16 +411,9 @@ arpresolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 	if (ifp->if_flags & (IFF_NOARP|IFF_STATICARP))
 		goto bad;
 
-	KERNEL_LOCK();
-	/*
-	 * Re-check since we grab the kernel lock after the first check.
-	 * rtrequest_delete() can be called with shared netlock.  From
-	 * there arp_rtrequest() is reached which touches RTF_LLINFO
-	 * and rt_llinfo.  As this is called with kernel lock we grab the
-	 * kernel lock here and are safe.  XXXSMP
-	 */
+	mtx_enter(&arp_mtx);
 	if (!ISSET(rt->rt_flags, RTF_LLINFO)) {
-		KERNEL_UNLOCK();
+		mtx_leave(&arp_mtx);
 		goto bad;
 	}
 	la = (struct llinfo_arp *)rt->rt_llinfo;
@@ -467,7 +460,7 @@ arpresolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 		}
 	}
 
-	KERNEL_UNLOCK();
+	mtx_leave(&arp_mtx);
 	if (refresh)
 		arprequest(ifp, &satosin(rt->rt_ifa->ifa_addr)->sin_addr.s_addr,
 		    &satosin(dst)->sin_addr.s_addr, ac->ac_enaddr);
