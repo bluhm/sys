@@ -1,4 +1,4 @@
-/*	$OpenBSD: trap.c,v 1.97 2023/02/11 23:07:26 deraadt Exp $	*/
+/*	$OpenBSD: trap.c,v 1.100 2023/04/16 06:43:49 jsg Exp $	*/
 /*	$NetBSD: trap.c,v 1.2 2003/05/04 23:51:56 fvdl Exp $	*/
 
 /*-
@@ -121,6 +121,8 @@ const char * const trap_type[] = {
 	"stack fault",				/* 17 T_STKFLT */
 	"machine check",			/* 18 T_MCA */
 	"SSE FP exception",			/* 19 T_XMM */
+	"virtualization exception",		/* 20 T_VE */
+	"control protection exception",		/* 21 T_CP */
 };
 const int	trap_types = nitems(trap_type);
 
@@ -327,7 +329,7 @@ kerntrap(struct trapframe *frame)
 	default:
 	we_re_toast:
 #ifdef DDB
-		if (db_ktrap(type, 0, frame))
+		if (db_ktrap(type, frame->tf_err, frame))
 			return;
 #endif
 		trap_print(frame, type);
@@ -428,6 +430,11 @@ usertrap(struct trapframe *frame)
 	case T_TRCTRAP:			/* trace trap */
 		sig = SIGTRAP;
 		code = TRAP_BRKPT;
+		break;
+	case T_CP:
+		sig = SIGILL;
+		code = (frame->tf_err & 0x7fff) < 4 ? ILL_ILLOPC
+		    : ILL_BADSTK;
 		break;
 
 	case T_PAGEFLT:			/* page fault */
