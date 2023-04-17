@@ -376,6 +376,8 @@ rtable_setsource(unsigned int rtableid, int af, struct sockaddr *src)
 {
 	struct art_root		*ar;
 
+	NET_ASSERT_LOCKED_EXCLUSIVE();
+
 	if ((ar = rtable_get(rtableid, af)) == NULL)
 		return (EAFNOSUPPORT);
 
@@ -388,6 +390,8 @@ struct sockaddr *
 rtable_getsource(unsigned int rtableid, int af)
 {
 	struct art_root		*ar;
+
+	NET_ASSERT_LOCKED();
 
 	ar = rtable_get(rtableid, af);
 	if (ar == NULL)

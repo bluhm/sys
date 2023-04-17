@@ -41,7 +41,7 @@ struct art_root {
 	uint8_t			 ar_nlvl;	/* [I] Number of levels */
 	uint8_t			 ar_alen;	/* [I] Address length in bits */
 	uint8_t			 ar_off;	/* [I] Offset of key in bytes */
-	struct sockaddr		*ar_source;	/* [K] optional src addr to use */
+	struct sockaddr		*ar_source;	/* [N] use optional src addr */
 };
 
 #define ISLEAF(e)	(((unsigned long)(e) & 1) == 0)

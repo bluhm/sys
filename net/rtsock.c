@@ -864,7 +864,9 @@ route_output(struct mbuf *m, struct socket *so)
 			type = rtm->rtm_type;
 			seq = rtm->rtm_seq;
 			free(rtm, M_RTABLE, len);
+			NET_LOCK_SHARED();
 			rtm = rtm_report(rt, type, seq, tableid);
+			NET_UNLOCK_SHARED();
 			len = rtm->rtm_msglen;
 		}
 	}
