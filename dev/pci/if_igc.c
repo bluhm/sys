@@ -1209,9 +1209,8 @@ igc_rxrinfo(struct igc_softc *sc, struct if_rxrinfo *ifri)
 	struct rx_ring *rxr;
 	int error, i, n = 0;
 
-	if ((ifr = mallocarray(sc->sc_nqueues, sizeof(*ifr), M_DEVBUF,
-	    M_WAITOK | M_ZERO)) == NULL)
-		return ENOMEM;
+	ifr = mallocarray(sc->sc_nqueues, sizeof(*ifr), M_DEVBUF,
+	    M_WAITOK | M_ZERO);
 
 	for (i = 0; i < sc->sc_nqueues; i++) {
 		rxr = &sc->rx_rings[i];

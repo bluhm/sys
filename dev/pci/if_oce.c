@@ -902,9 +902,8 @@ oce_rxrinfo(struct oce_softc *sc, struct if_rxrinfo *ifri)
 	u_int n = 0;
 
 	if (sc->sc_nrq > 1) {
-		if ((ifr = mallocarray(sc->sc_nrq, sizeof(*ifr), M_DEVBUF,
-		    M_WAITOK | M_ZERO)) == NULL)
-			return (ENOMEM);
+		ifr = mallocarray(sc->sc_nrq, sizeof(*ifr), M_DEVBUF,
+		    M_WAITOK | M_ZERO);
 	} else
 		ifr = &ifr1;
 
