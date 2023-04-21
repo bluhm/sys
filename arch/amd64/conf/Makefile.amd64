@@ -177,7 +177,7 @@ ld.script: ${_machdir}/conf/ld.script
 
 gapdummy.o:
 	echo '__asm(".section .rodata,\"a\"");' > gapdummy.c
-	${CC} -c ${CFLAGS} ${CPPFLAGS} gapdummy.c -o $@
+	${CC} -c ${CFLAGS} ${CPPFLAGS} -fcf-protection=none gapdummy.c -o $@
 
 makegap.sh:
 	cp $S/conf/makegap.sh $@
