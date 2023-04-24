@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_dwqe_fdt.c,v 1.9 2023/04/07 22:55:26 dlg Exp $	*/
+/*	$OpenBSD: if_dwqe_fdt.c,v 1.11 2023/04/24 01:33:32 dlg Exp $	*/
 /*
  * Copyright (c) 2008, 2019 Mark Kettenis <kettenis@openbsd.org>
  * Copyright (c) 2017, 2022 Patrick Wildt <patrick@blueri.se>
@@ -89,7 +89,7 @@ dwqe_fdt_attach(struct device *parent, struct device *self, void *aux)
 	char phy_mode[16] = { 0 };
 	uint32_t phy, phy_supply;
 	uint32_t axi_config;
-	struct ifnet *ifp;
+	struct ifnet *ifp = &sc->sc_ac.ac_if;
 	int i, node;
 
 	sc->sc_node = faa->fa_node;
@@ -164,6 +164,15 @@ dwqe_fdt_attach(struct device *parent, struct device *self, void *aux)
 	/* Reset PHY */
 	dwqe_reset_phy(sc, phy);
 
+	node = OF_getnodebyname(sc->sc_node, "fixed-link");
+	if (node) {
+		sc->sc_fixed_link = 1;
+
+		ifp->if_baudrate = IF_Mbps(OF_getpropint(node, "speed", 0));
+		ifp->if_link_state = OF_getpropbool(node, "full-duplex") ?
+		    LINK_STATE_FULL_DUPLEX : LINK_STATE_HALF_DUPLEX;
+	}
+
 	sc->sc_clk = clock_get_frequency(faa->fa_node, "stmmaceth");
 	if (sc->sc_clk > 500000000)
 		sc->sc_clk = GMAC_MAC_MDIO_ADDR_CR_500_800;
@@ -227,10 +236,13 @@ dwqe_fdt_attach(struct device *parent, struct device *self, void *aux)
 	if (sc->sc_ih == NULL)
 		printf("%s: can't establish interrupt\n", sc->sc_dev.dv_xname);
 
-	ifp = &sc->sc_ac.ac_if;
 	sc->sc_ifd.if_node = faa->fa_node;
 	sc->sc_ifd.if_ifp = ifp;
 	if_register(&sc->sc_ifd);
+
+	/* force a configuraton of the clocks/mac */
+	if (sc->sc_fixed_link)
+		sc->sc_mii.mii_statchg(self);
 }
 
 void
@@ -349,17 +361,18 @@ void
 dwqe_mii_statchg_rk3568_task(void *arg)
 {
 	struct dwqe_softc *sc = arg;
+	struct ifnet *ifp = &sc->sc_ac.ac_if;
 
 	dwqe_mii_statchg(&sc->sc_dev);
 
-	switch (IFM_SUBTYPE(sc->sc_mii.mii_media_active)) {
-	case IFM_10_T:
+	switch (ifp->if_baudrate) {
+	case IF_Mbps(10):
 		clock_set_frequency(sc->sc_node, "clk_mac_speed", 2500000);
 		break;
-	case IFM_100_TX:
+	case IF_Mbps(100):
 		clock_set_frequency(sc->sc_node, "clk_mac_speed", 25000000);
 		break;
-	case IFM_1000_T:
+	case IF_Mbps(1000):
 		clock_set_frequency(sc->sc_node, "clk_mac_speed", 125000000);
 		break;
 	}
@@ -377,6 +390,7 @@ void
 dwqe_mii_statchg_rk3588(struct device *self)
 {
 	struct dwqe_softc *sc = (void *)self;
+	struct ifnet *ifp = &sc->sc_ac.ac_if;
 	struct regmap *rm;
 	uint32_t grf;
 	uint32_t gmac_clk_sel = 0;
@@ -388,14 +402,14 @@ dwqe_mii_statchg_rk3588(struct device *self)
 	if (rm == NULL)
 		return;
 
-	switch (IFM_SUBTYPE(sc->sc_mii.mii_media_active)) {
-	case IFM_10_T:
+	switch (ifp->if_baudrate) {
+	case IF_Mbps(10):
 		gmac_clk_sel = sc->sc_clk_sel_2_5;
 		break;
-	case IFM_100_TX:
+	case IF_Mbps(100):
 		gmac_clk_sel = sc->sc_clk_sel_25;
 		break;
-	case IFM_1000_T:
+	case IF_Mbps(1000):
 		gmac_clk_sel = sc->sc_clk_sel_125;
 		break;
 	}

@@ -1,4 +1,4 @@
-/*	$OpenBSD: dwqevar.h,v 1.4 2023/04/07 09:33:51 dlg Exp $	*/
+/*	$OpenBSD: dwqevar.h,v 1.6 2023/04/24 01:33:32 dlg Exp $	*/
 /*
  * Copyright (c) 2008, 2019 Mark Kettenis <kettenis@openbsd.org>
  * Copyright (c) 2017, 2022 Patrick Wildt <patrick@blueri.se>
@@ -62,6 +62,8 @@ struct dwqe_softc {
 	int			sc_link;
 	int			sc_phyloc;
 	enum dwqe_phy_mode	sc_phy_mode;
+	struct timeout		sc_phy_tick;
+	int			sc_fixed_link;
 
 	struct dwqe_dmamem	*sc_txring;
 	struct dwqe_buf		*sc_txbuf;
@@ -76,7 +78,6 @@ struct dwqe_softc {
 	struct if_rxring	sc_rx_ring;
 	int			sc_rx_cons;
 
-	struct timeout		sc_tick;
 	struct timeout		sc_rxto;
 	struct task		sc_statchg_task;
 

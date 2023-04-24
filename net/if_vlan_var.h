@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_vlan_var.h,v 1.43 2021/08/19 10:22:00 dlg Exp $	*/
+/*	$OpenBSD: if_vlan_var.h,v 1.45 2023/04/22 04:39:46 dlg Exp $	*/
 
 /*
  * Copyright 1998 Massachusetts Institute of Technology
