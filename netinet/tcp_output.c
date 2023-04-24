@@ -1178,3 +1178,154 @@ tcp_setpersist(struct tcpcb *tp)
 	if (tp->t_rxtshift < TCP_MAXRXTSHIFT)
 		tp->t_rxtshift++;
 }
+
+int
+tcp_split_segment(struct mbuf *m0, struct mbuf_list *fml, struct ifnet *ifp,
+    u_long mss)
+{
+	struct mbuf	*m;
+	struct ip	*ip = NULL, *mhip = NULL;
+#ifdef INET6
+	struct ip6_hdr	*ip6 = NULL, *mhip6;
+#endif
+	struct tcphdr	*th, *mhth;
+	uint32_t	 iphlen;
+	int		 hoff, off;
+	int		 tlen, hlen, len;
+	int		 error;
+
+	ml_init(fml);
+
+	tlen = m0->m_pkthdr.len;
+	CLR(m0->m_pkthdr.csum_flags, M_TCP_TSO);
+
+	/* parsing header */
+	if (m0->m_len < sizeof(*ip) && (m0 = m_pullup(m0, sizeof(*ip))) == NULL)
+	{
+			error = ENOBUFS;
+			goto bad;
+	}
+
+	ip = mtod(m0, struct ip *);
+	switch (ip->ip_v) {
+	case 4:
+		hlen = iphlen = ip->ip_hl << 2;
+		KASSERT(ip->ip_p == IPPROTO_TCP);
+		break;
+#ifdef INET6
+	case 6: {
+		int nxt;
+
+		ip = NULL;
+		if (m0->m_len < sizeof(*ip6) &&
+		    (m0 = m_pullup(m0, sizeof(*ip6))) == NULL) {
+			error = ENOBUFS;
+			goto bad;
+		}
+		ip6 = mtod(m0, struct ip6_hdr *);
+		hlen = iphlen = ip6_lasthdr(m0, 0, IPPROTO_IPV6, &nxt);
+		KASSERT(nxt == IPPROTO_TCP);
+		break;
+	}
+#endif
+	default:
+		panic("unknown ip version");
+	}
+
+	m = m_getptr(m0, iphlen, &hoff);
+	if (m->m_len < sizeof(*th) && (m = m_pullup(m, sizeof(*th))) == NULL) {
+		error = ENOBUFS;
+		goto bad;
+	}
+
+	th = (struct tcphdr *)(mtod(m, caddr_t) + hoff);
+	hlen += th->th_off << 2;
+
+	len = mss;
+
+	/* splitting */
+	for (off = hlen; off < tlen; off += len) {
+		len = MIN(tlen - off, len);
+
+		MGETHDR(m, M_DONTWAIT, MT_HEADER);
+		if (m == NULL) {
+			error = ENOBUFS;
+			goto bad;
+		}
+		ml_enqueue(fml, m);
+		if ((error = m_dup_pkthdr(m, m0, M_DONTWAIT)) != 0) {
+			error = ENOBUFS;
+			goto bad;
+		}
+
+		/* space for link layer header */
+		m->m_len = 0;
+		if (m_trailingspace(m) < max_linkhdr + hlen) {
+			m = MCLGETL(m, M_DONTWAIT, max_linkhdr + hlen);
+			if (m == NULL) {
+				error = ENOBUFS;
+				goto bad;
+			}
+			m_align(m, max_linkhdr + hlen);
+		}
+		m->m_data += max_linkhdr;
+
+		/* copy and adjust ip header */
+		if (ip) {
+			mhip = mtod(m, struct ip *);
+			memcpy(mhip, ip, iphlen);
+
+			mhip->ip_len = htons((u_int16_t)(hlen + len));
+			mhip->ip_id = htons(ip_randomid());
+			mhip->ip_sum = 0;
+			if (ifp && in_ifcap_cksum(m, ifp, IFCAP_CSUM_IPv4))
+				m->m_pkthdr.csum_flags |= M_IPV4_CSUM_OUT;
+			else {
+				m->m_len = iphlen;
+				ipstat_inc(ips_outswcsum);
+				mhip->ip_sum = in_cksum(m, iphlen);
+			}
+#ifdef INET6
+		} else {
+			mhip6 = mtod(m, struct ip6_hdr *);
+			memcpy(mhip6, ip6, iphlen);
+
+			mhip6->ip6_plen = htons(hlen - iphlen + len);
+#endif
+		}
+		mhth = (struct tcphdr *)(mtod(m, caddr_t) + iphlen);
+		memcpy(mhth, th, hlen - iphlen);
+		mhth->th_seq = htonl(ntohl(mhth->th_seq) + (off - hlen));
+
+		m->m_len = hlen;
+		m->m_pkthdr.len = hlen + len;
+
+		if ((m->m_next = m_copym(m0, off, len, M_DONTWAIT)) == NULL) {
+			error = ENOBUFS;
+			goto bad;
+		}
+
+		SET(m->m_pkthdr.csum_flags, M_TCP_CSUM_OUT);
+		mhth->th_sum = 0;
+		if (ip)
+			in_proto_cksum_out(m, ifp);
+#ifdef INET6
+		else
+			in6_proto_cksum_out(m, ifp);
+#endif
+	}
+
+	m_freem(m0);
+	return 0;
+ bad:
+	if (ip)
+		ipstat_inc(ips_odropped);
+#ifdef INET6
+	else
+		ip6stat_inc(ip6s_odropped);
+#endif
+
+	ml_purge(fml);
+	m_freem(m0);
+	return error;
+}

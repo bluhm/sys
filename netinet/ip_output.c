@@ -84,7 +84,6 @@ void ip_mloopback(struct ifnet *, struct mbuf *, struct sockaddr_in *);
 static __inline u_int16_t __attribute__((__unused__))
     in_cksum_phdr(u_int32_t, u_int32_t, u_int32_t);
 void in_delayed_cksum(struct mbuf *);
-int in_ifcap_cksum(struct mbuf *, struct ifnet *, int);
 
 int ip_output_ipsec_lookup(struct mbuf *m, int hlen, struct inpcb *inp,
     struct tdb **, int ipsecflowinfo);
@@ -473,7 +472,8 @@ sendit:
 	 * Too large for interface; fragment if possible.
 	 * Must be able to put at least 8 bytes per fragment.
 	 */
-	if (ip->ip_off & htons(IP_DF)) {
+	if (ip->ip_off & htons(IP_DF) &&
+	    !ISSET(m->m_pkthdr.csum_flags, M_TCP_TSO)) {
 #ifdef IPSEC
 		if (ip_mtudisc)
 			ipsec_adjust_mtu(m, ifp->if_mtu);
@@ -505,7 +505,10 @@ sendit:
 		goto bad;
 	}
 
-	error = ip_fragment(m, &fml, ifp, mtu);
+	if (ISSET(m->m_pkthdr.csum_flags, M_TCP_TSO))
+		error = tcp_split_segment(m, &fml, ifp, m->m_pkthdr.ph_mss);
+	else
+		error = ip_fragment(m, &fml, ifp, mtu);
 	if (error)
 		goto done;
 

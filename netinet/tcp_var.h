@@ -706,6 +706,8 @@ struct tcpcb *
 	 tcp_newtcpcb(struct inpcb *, int);
 void	 tcp_notify(struct inpcb *, int);
 int	 tcp_output(struct tcpcb *);
+int	 tcp_split_segment(struct mbuf *, struct mbuf_list *, struct ifnet *,
+	     u_long);
 void	 tcp_pulloutofband(struct socket *, u_int, struct mbuf *, int);
 int	 tcp_reass(struct tcpcb *, struct tcphdr *, struct mbuf *, int *);
 void	 tcp_rscale(struct tcpcb *, u_long);

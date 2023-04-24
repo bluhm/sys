@@ -708,7 +708,7 @@ reroute:
 	/*
 	 * try to fragment the packet.  case 1-b
 	 */
-	if (mtu < IPV6_MMTU) {
+	if (mtu < IPV6_MMTU && !ISSET(m->m_pkthdr.csum_flags, M_TCP_TSO)) {
 		/* path MTU cannot be less than IPV6_MMTU */
 		error = EMSGSIZE;
 		goto bad;
@@ -751,7 +751,10 @@ reroute:
 		ip6->ip6_nxt = IPPROTO_FRAGMENT;
 	}
 
-	error = ip6_fragment(m, &fml, hlen, nextproto, mtu);
+	if (ISSET(m->m_pkthdr.csum_flags, M_TCP_TSO))
+		error = tcp_split_segment(m, &fml, ifp, m->m_pkthdr.ph_mss);
+	else
+		error = ip6_fragment(m, &fml, hlen, nextproto, mtu);
 	if (error)
 		goto done;
 
