@@ -1335,6 +1335,10 @@ tcp_sysctl_tcpstat(void *oldp, size_t *oldlenp, void *newp)
 	ASSIGN(tcps_sack_rcv_opts);
 	ASSIGN(tcps_sack_snd_opts);
 	ASSIGN(tcps_sack_drop_opts);
+	ASSIGN(tcps_outswtso);
+	ASSIGN(tcps_outhwtso);
+	ASSIGN(tcps_outpkttso);
+	ASSIGN(tcps_outbadtso);
 
 #undef ASSIGN
 

@@ -686,7 +686,9 @@ reroute:
 		dontfrag = 1;
 	else
 		dontfrag = 0;
-	if (dontfrag && tlen > ifp->if_mtu) {	/* case 2-b */
+	if (dontfrag &&					/* case 2-b */
+	    (ISSET(m->m_pkthdr.csum_flags, M_TCP_TSO) ?
+	    m->m_pkthdr.csum_flags : tlen) > ifp->if_mtu) {
 #ifdef IPSEC
 		if (ip_mtudisc)
 			ipsec_adjust_mtu(m, mtu);
@@ -698,11 +700,21 @@ reroute:
 	/*
 	 * transmit packet without fragmentation
 	 */
-	if (dontfrag || (tlen <= mtu)) {	/* case 1-a and 2-a */
+	if (dontfrag || tlen <= mtu) {			/* case 1-a and 2-a */
 		in6_proto_cksum_out(m, ifp);
 		error = ifp->if_output(ifp, m, sin6tosa(dst), ro->ro_rt);
 		goto done;
 	}
+
+	if (ISSET(m->m_pkthdr.csum_flags, M_TCP_TSO) &&
+	    m->m_pkthdr.ph_mss <= mtu) {
+		if ((error = tcp_chopper(m, &ml, ifp, m->m_pkthdr.ph_mss)) ||
+		    (error = if_output_ml(ifp, &ml, sin6tosa(dst), ro->ro_rt)))
+			goto done;
+		tcpstat_inc(tcps_outswtso);
+		goto done;
+	}
+	CLR(m->m_pkthdr.csum_flags, M_TCP_TSO);
 
 	/*
 	 * try to fragment the packet.  case 1-b

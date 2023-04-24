@@ -84,7 +84,6 @@ void ip_mloopback(struct ifnet *, struct mbuf *, struct sockaddr_in *);
 static __inline u_int16_t __attribute__((__unused__))
     in_cksum_phdr(u_int32_t, u_int32_t, u_int32_t);
 void in_delayed_cksum(struct mbuf *);
-int in_ifcap_cksum(struct mbuf *, struct ifnet *, int);
 
 int ip_output_ipsec_lookup(struct mbuf *m, int hlen, struct inpcb *inp,
     struct tdb **, int ipsecflowinfo);
@@ -467,6 +466,16 @@ sendit:
 		error = ifp->if_output(ifp, m, sintosa(dst), ro->ro_rt);
 		goto done;
 	}
+
+	if (ISSET(m->m_pkthdr.csum_flags, M_TCP_TSO) &&
+	    m->m_pkthdr.ph_mss <= mtu) {
+		if ((error = tcp_chopper(m, &ml, ifp, m->m_pkthdr.ph_mss)) ||
+		    (error = if_output_ml(ifp, &ml, sintosa(dst), ro->ro_rt)))
+			goto done;
+		tcpstat_inc(tcps_outswtso);
+		goto done;
+	}
+	CLR(m->m_pkthdr.csum_flags, M_TCP_TSO);
 
 	/*
 	 * Too large for interface; fragment if possible.
