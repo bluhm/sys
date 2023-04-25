@@ -165,7 +165,7 @@ ip6_output(struct mbuf *m, struct ip6_pktopts *opt, struct route_in6 *ro,
 {
 	struct ip6_hdr *ip6;
 	struct ifnet *ifp = NULL;
-	struct mbuf_list fml;
+	struct mbuf_list ml;
 	int hlen, tlen;
 	struct route_in6 ip6route;
 	struct rtentry *rt = NULL;
@@ -708,17 +708,17 @@ reroute:
 
 	if (ISSET(m->m_pkthdr.csum_flags, M_TCP_TSO) &&
 	    m->m_pkthdr.ph_mss <= mtu) {
-		error = tcp_split_segment(m, &fml, ifp, m->m_pkthdr.ph_mss);
+		error = tcp_chopper(m, &ml, ifp, m->m_pkthdr.ph_mss);
 		if (error)
 			goto done;
 
-		while ((m = ml_dequeue(&fml)) != NULL) {
+		while ((m = ml_dequeue(&ml)) != NULL) {
 			error = ifp->if_output(ifp, m, sin6tosa(dst), ro->ro_rt);
 			if (error)
 				break;
 		}
 		if (error)
-			ml_purge(&fml);
+			ml_purge(&ml);
 		else
 			tcpstat_inc(tcps_outswtso);
 		goto done;
@@ -770,17 +770,17 @@ reroute:
 		ip6->ip6_nxt = IPPROTO_FRAGMENT;
 	}
 
-	error = ip6_fragment(m, &fml, hlen, nextproto, mtu);
+	error = ip6_fragment(m, &ml, hlen, nextproto, mtu);
 	if (error)
 		goto done;
 
-	while ((m = ml_dequeue(&fml)) != NULL) {
+	while ((m = ml_dequeue(&ml)) != NULL) {
 		error = ifp->if_output(ifp, m, sin6tosa(dst), ro->ro_rt);
 		if (error)
 			break;
 	}
 	if (error)
-		ml_purge(&fml);
+		ml_purge(&ml);
 	else
 		ip6stat_inc(ip6s_fragmented);
 
@@ -808,16 +808,15 @@ bad:
 }
 
 int
-ip6_fragment(struct mbuf *m0, struct mbuf_list *fml, int hlen,
-    u_char nextproto, u_long mtu)
+ip6_fragment(struct mbuf *m0, struct mbuf_list *ml, int hlen, u_char nextproto,
+    u_long mtu)
 {
-	struct mbuf *m;
 	struct ip6_hdr *ip6;
 	u_int32_t id;
 	int tlen, len, off;
 	int error;
 
-	ml_init(fml);
+	ml_init(ml);
 
 	ip6 = mtod(m0, struct ip6_hdr *);
 	tlen = m0->m_pkthdr.len;
@@ -829,10 +828,11 @@ ip6_fragment(struct mbuf *m0, struct mbuf_list *fml, int hlen,
 	id = htonl(ip6_randomid());
 
 	/*
-	 * Loop through length of segment,
+	 * Loop through length of payload,
 	 * make new header and copy data of each part and link onto chain.
 	 */
 	for (off = hlen; off < tlen; off += len) {
+		struct mbuf *m;
 		struct mbuf *mlast;
 		struct ip6_hdr *mhip6;
 		struct ip6_frag *ip6f;
@@ -842,7 +842,7 @@ ip6_fragment(struct mbuf *m0, struct mbuf_list *fml, int hlen,
 			error = ENOBUFS;
 			goto bad;
 		}
-		ml_enqueue(fml, m);
+		ml_enqueue(ml, m);
 
 		if ((error = m_dup_pkthdr(m, m0, M_DONTWAIT)) != 0)
 			goto bad;
@@ -875,13 +875,13 @@ ip6_fragment(struct mbuf *m0, struct mbuf_list *fml, int hlen,
 		ip6f->ip6f_nxt = nextproto;
 	}
 
-	ip6stat_add(ip6s_ofragments, ml_len(fml));
+	ip6stat_add(ip6s_ofragments, ml_len(ml));
 	m_freem(m0);
 	return (0);
 
 bad:
 	ip6stat_inc(ip6s_odropped);
-	ml_purge(fml);
+	ml_purge(ml);
 	m_freem(m0);
 	return (error);
 }
