@@ -442,6 +442,8 @@ struct	tcpstat {
 	u_int64_t tcps_sack_rcv_opts;		/* SACK options received */
 	u_int64_t tcps_sack_snd_opts;		/* SACK options sent */
 	u_int64_t tcps_sack_drop_opts;		/* SACK options dropped */
+
+	u_int32_t tcps_outswtso;	/* output software chopped packets */
 };
 
 /*
@@ -614,6 +616,7 @@ enum tcpstat_counters {
 	tcps_sack_rcv_opts,
 	tcps_sack_snd_opts,
 	tcps_sack_drop_opts,
+	tcps_outswtso,
 	tcps_ncounters,
 };
 

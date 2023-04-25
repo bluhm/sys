@@ -468,12 +468,29 @@ sendit:
 		goto done;
 	}
 
+	if (ISSET(m->m_pkthdr.csum_flags, M_TCP_TSO) &&
+	    m->m_pkthdr.ph_mss <= mtu) {
+		error = tcp_split_segment(m, &fml, ifp, m->m_pkthdr.ph_mss);
+		if (error)
+			goto done;
+
+		while ((m = ml_dequeue(&fml)) != NULL) {
+			error = ifp->if_output(ifp, m, sintosa(dst), ro->ro_rt);
+			if (error)
+				break;
+		}
+		if (error)
+			ml_purge(&fml);
+		else
+			tcpstat_inc(tcps_outswtso);
+		goto done;
+	}
+
 	/*
 	 * Too large for interface; fragment if possible.
 	 * Must be able to put at least 8 bytes per fragment.
 	 */
-	if (ip->ip_off & htons(IP_DF) &&
-	    !ISSET(m->m_pkthdr.csum_flags, M_TCP_TSO)) {
+	if (ip->ip_off & htons(IP_DF)) {
 #ifdef IPSEC
 		if (ip_mtudisc)
 			ipsec_adjust_mtu(m, ifp->if_mtu);
@@ -505,10 +522,7 @@ sendit:
 		goto bad;
 	}
 
-	if (ISSET(m->m_pkthdr.csum_flags, M_TCP_TSO))
-		error = tcp_split_segment(m, &fml, ifp, m->m_pkthdr.ph_mss);
-	else
-		error = ip_fragment(m, &fml, ifp, mtu);
+	error = ip_fragment(m, &fml, ifp, mtu);
 	if (error)
 		goto done;
 
@@ -1873,7 +1887,11 @@ in_proto_cksum_out(struct mbuf *m, struct ifnet *ifp)
 		u_int16_t csum = 0, offset;
 
 		offset = ip->ip_hl << 2;
-		if (m->m_pkthdr.csum_flags & (M_TCP_CSUM_OUT|M_UDP_CSUM_OUT))
+		if (m->m_pkthdr.csum_flags & M_TCP_TSO)
+			csum = in_cksum_phdr(ip->ip_src.s_addr,
+			    ip->ip_dst.s_addr, htonl(ip->ip_p));
+		else if (m->m_pkthdr.csum_flags &
+		    (M_TCP_CSUM_OUT|M_UDP_CSUM_OUT))
 			csum = in_cksum_phdr(ip->ip_src.s_addr,
 			    ip->ip_dst.s_addr, htonl(ntohs(ip->ip_len) -
 			    offset + ip->ip_p));

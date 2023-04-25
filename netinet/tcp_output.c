@@ -1262,6 +1262,18 @@ tcp_split_segment(struct mbuf *m0, struct mbuf_list *tml, struct ifnet *ifp,
 	CLR(m0->m_pkthdr.csum_flags, M_TCP_TSO);
 
 	if (tlen - hlen <= mss) {
+		if (ip) {
+			ip->ip_sum = 0;
+			if (ifp && in_ifcap_cksum(m0, ifp, IFCAP_CSUM_IPv4)) {
+				m0->m_pkthdr.csum_flags |= M_IPV4_CSUM_OUT;
+			} else {
+				ipstat_inc(ips_outswcsum);
+				ip->ip_sum = in_cksum(m0, iphlen);
+			}
+			in_proto_cksum_out(m0, ifp);
+		}
+		if (ip6)
+			in6_proto_cksum_out(m0, ifp);
 		ml_enqueue(tml, m0);
 		return 0;
 	}
@@ -1271,6 +1283,8 @@ tcp_split_segment(struct mbuf *m0, struct mbuf_list *tml, struct ifnet *ifp,
 		struct mbuf	*m;
 		struct tcphdr	*tth;
 		int		 len;
+		CTASSERT(sizeof(struct ip6_hdr) + sizeof(struct tcphdr) +
+		    MAX_TCPOPTLEN <= MHLEN);
 
 		len = MIN(tlen - off, mss);
 
@@ -1285,12 +1299,9 @@ tcp_split_segment(struct mbuf *m0, struct mbuf_list *tml, struct ifnet *ifp,
 			goto bad;
 		}
 
-		/* space for link layer header */
-		m->m_len = 0;
-		m_align(m, max_linkhdr);
-		m->m_data += max_linkhdr;
-		KASSERT(m_trailingspace(m) >= hlen);
+		/* IP and TCP header to the end, space for link layer header */
 		m->m_len = hlen;
+		m_align(m, hlen);
 
 		/* copy and adjust ip header */
 		if (ip) {
@@ -1305,7 +1316,7 @@ tcp_split_segment(struct mbuf *m0, struct mbuf_list *tml, struct ifnet *ifp,
 				m->m_pkthdr.csum_flags |= M_IPV4_CSUM_OUT;
 			} else {
 				ipstat_inc(ips_outswcsum);
-				ip->ip_sum = in_cksum(m, iphlen);
+				tip->ip_sum = in_cksum(m, iphlen);
 			}
 		}
 #ifdef INET6
@@ -1320,6 +1331,8 @@ tcp_split_segment(struct mbuf *m0, struct mbuf_list *tml, struct ifnet *ifp,
 		tth = (struct tcphdr *)(mtod(m, caddr_t) + iphlen);
 		memcpy(tth, th, hlen - iphlen);
 		tth->th_seq = htonl(ntohl(th->th_seq) + (off - hlen));
+		if (off + len < tlen)
+			CLR(tth->th_flags, TH_PUSH|TH_FIN);
 
 		m->m_pkthdr.len = hlen + len;
 		if ((m->m_next = m_copym(m0, off, len, M_DONTWAIT)) == NULL) {

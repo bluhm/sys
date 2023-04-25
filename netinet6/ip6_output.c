@@ -688,7 +688,8 @@ reroute:
 		dontfrag = 1;
 	else
 		dontfrag = 0;
-	if (dontfrag && tlen > ifp->if_mtu) {	/* case 2-b */
+	if (dontfrag && tlen > ifp->if_mtu &&
+	    !ISSET(m->m_pkthdr.csum_flags, M_TCP_TSO)) {	/* case 2-b */
 #ifdef IPSEC
 		if (ip_mtudisc)
 			ipsec_adjust_mtu(m, mtu);
@@ -705,10 +706,28 @@ reroute:
 		goto done;
 	}
 
+	if (ISSET(m->m_pkthdr.csum_flags, M_TCP_TSO) &&
+	    m->m_pkthdr.ph_mss <= mtu) {
+		error = tcp_split_segment(m, &fml, ifp, m->m_pkthdr.ph_mss);
+		if (error)
+			goto done;
+
+		while ((m = ml_dequeue(&fml)) != NULL) {
+			error = ifp->if_output(ifp, m, sin6tosa(dst), ro->ro_rt);
+			if (error)
+				break;
+		}
+		if (error)
+			ml_purge(&fml);
+		else
+			tcpstat_inc(tcps_outswtso);
+		goto done;
+	}
+
 	/*
 	 * try to fragment the packet.  case 1-b
 	 */
-	if (mtu < IPV6_MMTU && !ISSET(m->m_pkthdr.csum_flags, M_TCP_TSO)) {
+	if (mtu < IPV6_MMTU) {
 		/* path MTU cannot be less than IPV6_MMTU */
 		error = EMSGSIZE;
 		goto bad;
@@ -751,10 +770,7 @@ reroute:
 		ip6->ip6_nxt = IPPROTO_FRAGMENT;
 	}
 
-	if (ISSET(m->m_pkthdr.csum_flags, M_TCP_TSO))
-		error = tcp_split_segment(m, &fml, ifp, m->m_pkthdr.ph_mss);
-	else
-		error = ip6_fragment(m, &fml, hlen, nextproto, mtu);
+	error = ip6_fragment(m, &fml, hlen, nextproto, mtu);
 	if (error)
 		goto done;
 
@@ -2717,8 +2733,12 @@ in6_proto_cksum_out(struct mbuf *m, struct ifnet *ifp)
 		u_int16_t csum;
 
 		offset = ip6_lasthdr(m, 0, IPPROTO_IPV6, &nxt);
-		csum = in6_cksum_phdr(&ip6->ip6_src, &ip6->ip6_dst,
-		    htonl(m->m_pkthdr.len - offset), htonl(nxt));
+		if (m->m_pkthdr.csum_flags & M_TCP_TSO)
+			csum = in6_cksum_phdr(&ip6->ip6_src, &ip6->ip6_dst, 0,
+			    htonl(nxt));
+		else
+			csum = in6_cksum_phdr(&ip6->ip6_src, &ip6->ip6_dst,
+			    htonl(m->m_pkthdr.len - offset), htonl(nxt));
 		if (nxt == IPPROTO_TCP)
 			offset += offsetof(struct tcphdr, th_sum);
 		else if (nxt == IPPROTO_UDP)
