@@ -1,4 +1,4 @@
-/*	$OpenBSD: route.c,v 1.416 2023/01/28 10:17:16 mvs Exp $	*/
+/*	$OpenBSD: route.c,v 1.418 2023/04/26 16:09:44 kn Exp $	*/
 /*	$NetBSD: route.c,v 1.14 1996/02/13 22:00:46 christos Exp $	*/
 
 /*
@@ -1341,7 +1341,7 @@ rt_ifa_purge_walker(struct rtentry *rt, void *vifa, unsigned int rtableid)
 }
 
 /*
- * Route timer routines.  These routes allow functions to be called
+ * Route timer routines.  These routines allow functions to be called
  * for various routes at any time.  This is useful in supporting
  * path MTU discovery and redirect route deletion.
  *
@@ -1375,13 +1375,6 @@ struct rttimer {
 		if_put(ifp);						\
 	}								\
 }
-
-/*
- * Some subtle order problems with domain initialization mean that
- * we cannot count on this being run from rt_init before various
- * protocol initializations are done.  Therefore, we make sure
- * that this is run when the first queue is added...
- */
 
 void
 rt_timer_init(void)
@@ -1486,7 +1479,7 @@ rt_timer_get_expire(const struct rtentry *rt)
 {
 	const struct rttimer	*r;
 	time_t			 expire = 0;
-	
+
 	mtx_enter(&rttimer_mtx);
 	LIST_FOREACH(r, &rt->rt_timer, rtt_link) {
 		if (expire == 0 || expire > r->rtt_expire)
