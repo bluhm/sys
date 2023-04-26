@@ -274,7 +274,6 @@ struct vm_map {
 	int			ref_count;	/* [a] Reference count */
 	int			flags;		/* flags */
 	unsigned int		timestamp;	/* Version number */
-	struct proc		*busy;		/* [v] thread holding map busy*/
 
 	vaddr_t			min_offset;	/* [I] First address in map. */
 	vaddr_t			max_offset;	/* [I] Last address in map. */
