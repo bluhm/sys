@@ -1593,11 +1593,16 @@ rt_mpls_set(struct rtentry *rt, struct sockaddr *src, uint8_t op)
 void
 rt_mpls_clear(struct rtentry *rt)
 {
+	if (!ISSET(rt->rt_flags, RTF_MPLS))
+		return;
+
+	KERNEL_LOCK();
 	if (rt->rt_llinfo != NULL && rt->rt_flags & RTF_MPLS) {
 		free(rt->rt_llinfo, M_TEMP, sizeof(struct rt_mpls));
 		rt->rt_llinfo = NULL;
 	}
 	rt->rt_flags &= ~RTF_MPLS;
+	KERNEL_UNLOCK();
 }
 #endif
 
