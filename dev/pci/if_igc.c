@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_igc.c,v 1.12 2023/03/09 00:13:47 chris Exp $	*/
+/*	$OpenBSD: if_igc.c,v 1.13 2023/04/28 10:18:57 bluhm Exp $	*/
 /*-
  * SPDX-License-Identifier: BSD-2-Clause
  *
