@@ -1258,16 +1258,19 @@ sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
 		if (sosplice_taskq == NULL) {
 			tq = taskq_create("sosplice", 1, IPL_SOFTNET,
 			    TASKQ_MPSAFE);
+			if (tq == NULL) {
+				rw_exit_write(&sosplice_lock);
+				return (ENOMEM);
+			}
 			/* Ensure the taskq is fully visible to other CPUs. */
 			membar_producer();
 			sosplice_taskq = tq;
 		}
 		rw_exit_write(&sosplice_lock);
+	} else {
+		/* Ensure the taskq is fully visible on this CPU. */
+		membar_consumer();
 	}
-	if (sosplice_taskq == NULL)
-		return (ENOMEM);
-	/* Ensure the taskq is fully visible on this CPU. */
-	membar_consumer();
 
 	if ((so->so_proto->pr_flags & PR_SPLICE) == 0)
 		return (EPROTONOSUPPORT);
