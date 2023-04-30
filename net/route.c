@@ -1,4 +1,4 @@
-/*	$OpenBSD: route.c,v 1.418 2023/04/26 16:09:44 kn Exp $	*/
+/*	$OpenBSD: route.c,v 1.422 2023/04/28 20:03:14 mvs Exp $	*/
 /*	$NetBSD: route.c,v 1.14 1996/02/13 22:00:46 christos Exp $	*/
 
 /*
@@ -113,6 +113,7 @@
 #include <sys/queue.h>
 #include <sys/pool.h>
 #include <sys/atomic.h>
+#include <sys/mutex.h>
 
 #include <net/if.h>
 #include <net/if_var.h>
@@ -136,6 +137,13 @@
 #ifdef BFD
 #include <net/bfd.h>
 #endif
+
+/*
+ * Locks used to protect struct members:
+ *      I       immutable after creation
+ *      L       rtlabel_mtx
+ *      T       rttimer_mtx
+ */
 
 #define ROUNDUP(a) (a>0 ? (1 + (((a) - 1) | (sizeof(long) - 1))) : sizeof(long))
 
@@ -163,13 +171,15 @@ static int rt_copysa(struct sockaddr *, struct sockaddr *, struct sockaddr **);
 #define	LABELID_MAX	50000
 
 struct rt_label {
-	TAILQ_ENTRY(rt_label)	rtl_entry;
-	char			rtl_name[RTLABEL_LEN];
-	u_int16_t		rtl_id;
-	int			rtl_ref;
+	TAILQ_ENTRY(rt_label)	rtl_entry;		/* [L] */
+	char			rtl_name[RTLABEL_LEN];	/* [I] */
+	u_int16_t		rtl_id;			/* [I] */
+	int			rtl_ref;		/* [L] */
 };
 
-TAILQ_HEAD(rt_labels, rt_label)	rt_labels = TAILQ_HEAD_INITIALIZER(rt_labels);
+TAILQ_HEAD(rt_labels, rt_label)	rt_labels =
+    TAILQ_HEAD_INITIALIZER(rt_labels);		/* [L] */
+struct mutex rtlabel_mtx = MUTEX_INITIALIZER(IPL_NET);
 
 void
 route_init(void)
@@ -497,7 +507,6 @@ rtfree(struct rtentry *rt)
 	KASSERT(!RT_ROOT(rt));
 	atomic_dec_int(&rttrash);
 
-	KERNEL_LOCK();
 	rt_timer_remove_all(rt);
 	ifafree(rt->rt_ifa);
 	rtlabel_unref(rt->rt_labelid);
@@ -506,7 +515,6 @@ rtfree(struct rtentry *rt)
 #endif
 	free(rt->rt_gateway, M_RTABLE, ROUNDUP(rt->rt_gateway->sa_len));
 	free(rt_key(rt), M_RTABLE, rt_key(rt)->sa_len);
-	KERNEL_UNLOCK();
 
 	pool_put(&rtentry_pool, rt);
 }
@@ -867,7 +875,7 @@ rtrequest(int req, struct rt_addrinfo *info, u_int8_t prio,
 			return (ENOBUFS);
 		}
 
-		refcnt_init(&rt->rt_refcnt);
+		refcnt_init_trace(&rt->rt_refcnt, DT_REFCNT_IDX_RTENTRY);
 		rt->rt_flags = info->rti_flags | RTF_UP;
 		rt->rt_priority = prio;	/* init routing priority */
 		LIST_INIT(&rt->rt_timer);
@@ -1596,15 +1604,17 @@ u_int16_t
 rtlabel_name2id(char *name)
 {
 	struct rt_label		*label, *p;
-	u_int16_t		 new_id = 1;
+	u_int16_t		 new_id = 1, id = 0;
 
 	if (!name[0])
 		return (0);
 
+	mtx_enter(&rtlabel_mtx);
 	TAILQ_FOREACH(label, &rt_labels, rtl_entry)
 		if (strcmp(name, label->rtl_name) == 0) {
 			label->rtl_ref++;
-			return (label->rtl_id);
+			id = label->rtl_id;
+			goto out;
 		}
 
 	/*
@@ -1618,11 +1628,11 @@ rtlabel_name2id(char *name)
 		new_id = p->rtl_id + 1;
 	}
 	if (new_id > LABELID_MAX)
-		return (0);
+		goto out;
 
 	label = malloc(sizeof(*label), M_RTABLE, M_NOWAIT|M_ZERO);
 	if (label == NULL)
-		return (0);
+		goto out;
 	strlcpy(label->rtl_name, name, sizeof(label->rtl_name));
 	label->rtl_id = new_id;
 	label->rtl_ref++;
@@ -1632,13 +1642,19 @@ rtlabel_name2id(char *name)
 	else		/* either list empty or no free slot in between */
 		TAILQ_INSERT_TAIL(&rt_labels, label, rtl_entry);
 
-	return (label->rtl_id);
+	id = label->rtl_id;
+out:
+	mtx_leave(&rtlabel_mtx);
+
+	return (id);
 }
 
 const char *
-rtlabel_id2name(u_int16_t id)
+rtlabel_id2name_locked(u_int16_t id)
 {
 	struct rt_label	*label;
+
+	MUTEX_ASSERT_LOCKED(&rtlabel_mtx);
 
 	TAILQ_FOREACH(label, &rt_labels, rtl_entry)
 		if (label->rtl_id == id)
@@ -1647,18 +1663,44 @@ rtlabel_id2name(u_int16_t id)
 	return (NULL);
 }
 
+const char *
+rtlabel_id2name(u_int16_t id, char *rtlabelbuf, size_t sz)
+{
+	const char *label;
+
+	if (id == 0)
+		return (NULL);
+
+	mtx_enter(&rtlabel_mtx);
+	if ((label = rtlabel_id2name_locked(id)) != NULL)
+		strlcpy(rtlabelbuf, label, sz);
+	mtx_leave(&rtlabel_mtx);
+
+	if (label == NULL)
+		return (NULL);
+
+	return (rtlabelbuf);
+}
+
 struct sockaddr *
 rtlabel_id2sa(u_int16_t labelid, struct sockaddr_rtlabel *sa_rl)
 {
 	const char	*label;
 
-	if (labelid == 0 || (label = rtlabel_id2name(labelid)) == NULL)
+	if (labelid == 0)
 		return (NULL);
 
-	bzero(sa_rl, sizeof(*sa_rl));
-	sa_rl->sr_len = sizeof(*sa_rl);
-	sa_rl->sr_family = AF_UNSPEC;
-	strlcpy(sa_rl->sr_label, label, sizeof(sa_rl->sr_label));
+	mtx_enter(&rtlabel_mtx);
+	if ((label = rtlabel_id2name_locked(labelid)) != NULL) {
+		bzero(sa_rl, sizeof(*sa_rl));
+		sa_rl->sr_len = sizeof(*sa_rl);
+		sa_rl->sr_family = AF_UNSPEC;
+		strlcpy(sa_rl->sr_label, label, sizeof(sa_rl->sr_label));
+	}
+	mtx_leave(&rtlabel_mtx);
+
+	if (label == NULL)
+		return (NULL);
 
 	return ((struct sockaddr *)sa_rl);
 }
@@ -1671,6 +1713,7 @@ rtlabel_unref(u_int16_t id)
 	if (id == 0)
 		return;
 
+	mtx_enter(&rtlabel_mtx);
 	TAILQ_FOREACH_SAFE(p, &rt_labels, rtl_entry, next) {
 		if (id == p->rtl_id) {
 			if (--p->rtl_ref == 0) {
@@ -1680,6 +1723,7 @@ rtlabel_unref(u_int16_t id)
 			break;
 		}
 	}
+	mtx_leave(&rtlabel_mtx);
 }
 
 int
