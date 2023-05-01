@@ -337,9 +337,8 @@ arpresolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 	struct llinfo_arp *la;
 	struct sockaddr_dl *sdl;
 	struct rtentry *rt = NULL;
-	char addr[INET_ADDRSTRLEN];
 	time_t uptime;
-	int refresh = 0, reject = 0;
+	int request = 0, expire = 0, reject = 0;
 
 	if (m->m_flags & M_BCAST) {	/* broadcast */
 		memcpy(desten, etherbroadcastaddr, sizeof(etherbroadcastaddr));
@@ -360,6 +359,8 @@ arpresolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 	}
 
 	if (!ISSET(rt->rt_flags, RTF_LLINFO)) {
+		char addr[INET_ADDRSTRLEN];
+
 		log(LOG_DEBUG, "%s: %s: route contains no arp information\n",
 		    __func__, inet_ntop(AF_INET, &satosin(rt_key(rt))->sin_addr,
 		    addr, sizeof(addr)));
@@ -368,6 +369,8 @@ arpresolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 
 	sdl = satosdl(rt->rt_gateway);
 	if (sdl->sdl_alen > 0 && sdl->sdl_alen != ETHER_ADDR_LEN) {
+		char addr[INET_ADDRSTRLEN];
+
 		log(LOG_DEBUG, "%s: %s: incorrect arp information\n", __func__,
 		    inet_ntop(AF_INET, &satosin(dst)->sin_addr,
 			addr, sizeof(addr)));
@@ -394,12 +397,12 @@ arpresolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 
 				if (la->la_refreshed + 30 < uptime) {
 					la->la_refreshed = uptime;
-					refresh = 1;
+					request = 1;
 				}
 			}
 			mtx_leave(&arp_mtx);
 		}
-		if (refresh) {
+		if (request) {
 			arprequest(ifp,
 			    &satosin(rt->rt_ifa->ifa_addr)->sin_addr.s_addr,
 			    &satosin(dst)->sin_addr.s_addr,
@@ -444,13 +447,13 @@ arpresolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 	}
 #endif
 	if (rt->rt_expire) {
-		reject = ~RTF_REJECT;
+		expire = 1;
 		if (la->la_asked == 0 || rt->rt_expire != uptime) {
 			rt->rt_expire = uptime;
 			if (la->la_asked++ < arp_maxtries)
-				refresh = 1;
+				request = 1;
 			else {
-				reject = RTF_REJECT;
+				reject = 1;
 				rt->rt_expire += arpt_down;
 				la->la_asked = 0;
 				la->la_refreshed = 0;
@@ -461,17 +464,19 @@ arpresolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 	}
 	mtx_leave(&arp_mtx);
 
-	if (reject == RTF_REJECT && !ISSET(rt->rt_flags, RTF_REJECT)) {
-		KERNEL_LOCK();
-		SET(rt->rt_flags, RTF_REJECT);
-		KERNEL_UNLOCK();
+	if (expire) {
+		if (reject && !ISSET(rt->rt_flags, RTF_REJECT)) {
+			KERNEL_LOCK();
+			SET(rt->rt_flags, RTF_REJECT);
+			KERNEL_UNLOCK();
+		}
+		if (!reject && ISSET(rt->rt_flags, RTF_REJECT)) {
+			KERNEL_LOCK();
+			CLR(rt->rt_flags, RTF_REJECT);
+			KERNEL_UNLOCK();
+		}
 	}
-	if (reject == ~RTF_REJECT && ISSET(rt->rt_flags, RTF_REJECT)) {
-		KERNEL_LOCK();
-		CLR(rt->rt_flags, RTF_REJECT);
-		KERNEL_UNLOCK();
-	}
-	if (refresh)
+	if (request)
 		arprequest(ifp, &satosin(rt->rt_ifa->ifa_addr)->sin_addr.s_addr,
 		    &satosin(dst)->sin_addr.s_addr, ac->ac_enaddr);
 	return (EAGAIN);
