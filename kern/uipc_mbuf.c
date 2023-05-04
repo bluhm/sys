@@ -1776,6 +1776,14 @@ mq_hdatalen(struct mbuf_queue *mq)
 	return (hdatalen);
 }
 
+void
+mq_set_maxlen(struct mbuf_queue *mq, u_int maxlen)
+{
+	mtx_enter(&mq->mq_mtx);
+	mq->mq_maxlen = maxlen;
+	mtx_leave(&mq->mq_mtx);
+}
+
 int
 sysctl_mq(int *name, u_int namelen, void *oldp, size_t *oldlenp,
     void *newp, size_t newlen, struct mbuf_queue *mq)
@@ -1793,11 +1801,8 @@ sysctl_mq(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 	case IFQCTL_MAXLEN:
 		maxlen = mq->mq_maxlen;
 		error = sysctl_int(oldp, oldlenp, newp, newlen, &maxlen);
-		if (!error && maxlen != mq->mq_maxlen) {
-			mtx_enter(&mq->mq_mtx);
-			mq->mq_maxlen = maxlen;
-			mtx_leave(&mq->mq_mtx);
-		}
+		if (!error && maxlen != mq->mq_maxlen)
+			mq_set_maxlen(mq, maxlen);
 		return (error);
 	case IFQCTL_DROPS:
 		return (sysctl_rdint(oldp, oldlenp, newp, mq_drops(mq)));
