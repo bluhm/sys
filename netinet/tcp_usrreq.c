@@ -211,7 +211,7 @@ tcp_fill_info(struct tcpcb *tp, struct socket *so, struct mbuf *m)
 	struct proc *p = curproc;
 	struct tcp_info *ti;
 	u_int t = 1000;		/* msec => usec */
-	uint32_t now;
+	uint64_t now;
 
 	if (sizeof(*ti) > MLEN) {
 		MCLGETL(m, M_WAITOK, sizeof(*ti));

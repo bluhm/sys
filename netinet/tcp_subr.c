@@ -137,6 +137,7 @@ struct cpumem *tcpcounters;		/* tcp statistics */
 u_char		tcp_secret[16];	/* [I] */
 SHA2_CTX	tcp_secret_ctx;	/* [I] */
 tcp_seq		tcp_iss;	/* [T] updated by timer and connection */
+uint32_t	tcp_starttime;	/* [I] random offset for tcp_now() */
 
 /*
  * Tcp initialization
@@ -145,6 +146,7 @@ void
 tcp_init(void)
 {
 	tcp_iss = 1;		/* wrong */
+	tcp_starttime = arc4random();
 	pool_init(&tcpcb_pool, sizeof(struct tcpcb), 0, IPL_SOFTNET, 0,
 	    "tcpcb", NULL);
 	pool_init(&tcpqe_pool, sizeof(struct tcpqent), 0, IPL_SOFTNET, 0,
@@ -289,7 +291,7 @@ tcp_template(struct tcpcb *tp)
  */
 void
 tcp_respond(struct tcpcb *tp, caddr_t template, struct tcphdr *th0,
-    tcp_seq ack, tcp_seq seq, int flags, u_int rtableid, uint32_t now)
+    tcp_seq ack, tcp_seq seq, int flags, u_int rtableid, uint64_t now)
 {
 	int tlen;
 	int win = 0;

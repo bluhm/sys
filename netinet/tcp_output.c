@@ -204,7 +204,7 @@ tcp_output(struct tcpcb *tp)
 	int idle, sendalot = 0;
 	int i, sack_rxmit = 0;
 	struct sackhole *p;
-	uint32_t now;
+	uint64_t now;
 #ifdef TCP_SIGNATURE
 	unsigned int sigoff;
 #endif /* TCP_SIGNATURE */

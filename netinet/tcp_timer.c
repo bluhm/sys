@@ -394,7 +394,7 @@ tcp_timer_persist(void *arg)
 	struct tcpcb *otp = NULL, *tp = arg;
 	uint32_t rto;
 	short ostate;
-	uint32_t now;
+	uint64_t now;
 
 	NET_LOCK();
 	/* Ignore canceled timeouts or timeouts that have been rescheduled. */
@@ -463,7 +463,7 @@ tcp_timer_keep(void *arg)
 	    tp->t_inpcb->inp_socket->so_options & SO_KEEPALIVE) &&
 	    tp->t_state <= TCPS_CLOSING) {
 		int maxidle;
-		uint32_t now;
+		uint64_t now;
 
 		maxidle = READ_ONCE(tcp_maxidle);
 		now = tcp_now();
@@ -506,7 +506,7 @@ tcp_timer_2msl(void *arg)
 	struct tcpcb *otp = NULL, *tp = arg;
 	short ostate;
 	int maxidle;
-	uint32_t now;
+	uint64_t now;
 
 	NET_LOCK();
 	/* Ignore canceled timeouts or timeouts that have been rescheduled. */
