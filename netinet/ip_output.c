@@ -443,7 +443,6 @@ sendit:
 		goto reroute;
 	}
 #endif
-	in_proto_cksum_out(m, ifp);
 
 #ifdef IPSEC
 	if (ipsec_in_use && (flags & IP_FORWARDING) && (ipforwarding == 2) &&
@@ -464,7 +463,7 @@ sendit:
 			ipstat_inc(ips_outswcsum);
 			ip->ip_sum = in_cksum(m, hlen);
 		}
-
+		in_proto_cksum_out(m, ifp);
 		error = ifp->if_output(ifp, m, sintosa(dst), ro->ro_rt);
 		goto done;
 	}
