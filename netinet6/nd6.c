@@ -1181,7 +1181,7 @@ fail:
 			 * meaningless.
 			 */
 			nd6_llinfo_settimer(ln, nd6_gctimer);
-			if_mqoutput(ifp, &ln->ln_mq, &ln_hold_total,
+			if_output_mq(ifp, &ln->ln_mq, &ln_hold_total,
 			    rt_key(rt), rt);
 		} else if (ln->ln_state == ND6_LLINFO_INCOMPLETE) {
 			/* probe right away */

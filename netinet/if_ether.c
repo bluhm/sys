@@ -723,7 +723,7 @@ arpcache(struct ifnet *ifp, struct ether_arp *ea, struct rtentry *rt)
 
 	la->la_asked = 0;
 	la->la_refreshed = 0;
-	if_mqoutput(ifp, &la->la_mq, &la_hold_total, rt_key(rt), rt);
+	if_output_mq(ifp, &la->la_mq, &la_hold_total, rt_key(rt), rt);
 
 	return (0);
 }

@@ -321,12 +321,14 @@ extern struct ifnet_head ifnetlist;
 void	if_start(struct ifnet *);
 int	if_enqueue(struct ifnet *, struct mbuf *);
 int	if_enqueue_ifq(struct ifnet *, struct mbuf *);
-void	if_mqoutput(struct ifnet *, struct mbuf_queue *, unsigned int *,
-	    struct sockaddr *, struct rtentry *);
 void	if_input(struct ifnet *, struct mbuf_list *);
 void	if_vinput(struct ifnet *, struct mbuf *);
 void	if_input_process(struct ifnet *, struct mbuf_list *);
 int	if_input_local(struct ifnet *, struct mbuf *, sa_family_t);
+int	if_output_ml(struct ifnet *, struct mbuf_list *,
+	    struct sockaddr *, struct rtentry *);
+int	if_output_mq(struct ifnet *, struct mbuf_queue *, unsigned int *,
+	    struct sockaddr *, struct rtentry *);
 int	if_output_local(struct ifnet *, struct mbuf *, sa_family_t);
 void	if_rtrequest_dummy(struct ifnet *, int, struct rtentry *);
 void	p2p_rtrequest(struct ifnet *, int, struct rtentry *);

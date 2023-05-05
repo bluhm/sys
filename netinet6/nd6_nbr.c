@@ -851,7 +851,7 @@ nd6_na_input(struct mbuf *m, int off, int icmp6len)
 	}
 	rt->rt_flags &= ~RTF_REJECT;
 	ln->ln_asked = 0;
-	if_mqoutput(ifp, &ln->ln_mq, &ln_hold_total, rt_key(rt), rt);
+	if_output_mq(ifp, &ln->ln_mq, &ln_hold_total, rt_key(rt), rt);
 
  freeit:
 	rtfree(rt);
