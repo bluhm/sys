@@ -119,6 +119,7 @@ int	tcp_ack_on_push = 0;	/* set to enable immediate ACK-on-PUSH */
 int	tcp_do_ecn = 0;		/* RFC3168 ECN enabled/disabled? */
 #endif
 int	tcp_do_rfc3390 = 2;	/* Increase TCP's Initial Window to 10*mss */
+int	tcp_do_tso = 1;		/* TCP segmentation offload for output */
 
 #ifndef TCB_INITIAL_HASH_SIZE
 #define	TCB_INITIAL_HASH_SIZE	128

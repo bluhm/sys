@@ -348,7 +348,7 @@ again:
 	txmaxseg = ulmin(so->so_snd.sb_hiwat / 2, tp->t_maxseg);
 
 	if (len > txmaxseg) {
-		if (1 &&
+		if (tcp_do_tso &&
 		    tp->t_inpcb->inp_options == NULL &&
 		    tp->t_inpcb->inp_outputopts6 == NULL &&
 #ifdef TCP_SIGNATURE

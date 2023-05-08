@@ -478,7 +478,8 @@ struct	tcpstat {
 #define	TCPCTL_SYN_USE_LIMIT   23 /* number of uses before reseeding hash */
 #define TCPCTL_ROOTONLY	       24 /* return root only port bitmap */
 #define	TCPCTL_SYN_HASH_SIZE   25 /* number of buckets in the hash */
-#define	TCPCTL_MAXID	       26
+#define	TCPCTL_TSO	       26 /* enable TCP segmentation offload */
+#define	TCPCTL_MAXID	       27
 
 #define	TCPCTL_NAMES { \
 	{ 0, 0 }, \
@@ -505,8 +506,9 @@ struct	tcpstat {
 	{ "stats",	CTLTYPE_STRUCT }, \
 	{ "always_keepalive",	CTLTYPE_INT }, \
 	{ "synuselimit", 	CTLTYPE_INT }, \
-	{ "rootonly", CTLTYPE_STRUCT }, \
+	{ "rootonly",	CTLTYPE_STRUCT }, \
 	{ "synhashsize", 	CTLTYPE_INT }, \
+	{ "tso",	CTLTYPE_INT }, \
 }
 
 struct tcp_ident_mapping {
@@ -674,6 +676,7 @@ extern	struct pool sackhl_pool;
 extern	int tcp_sackhole_limit;	/* max entries for tcp sack queues */
 extern	int tcp_do_ecn;		/* RFC3168 ECN enabled/disabled? */
 extern	int tcp_do_rfc3390;	/* RFC3390 Increasing TCP's Initial Window */
+extern	int tcp_do_tso;		/* enable TSO for TCP output packets */
 
 extern	struct pool tcpqe_pool;
 extern	int tcp_reass_limit;	/* max entries for tcp reass queues */

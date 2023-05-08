@@ -166,6 +166,7 @@ const struct sysctl_bounded_args tcpctl_vars[] = {
 	{ TCPCTL_SYN_BUCKET_LIMIT, &tcp_syn_bucket_limit, 1, INT_MAX },
 	{ TCPCTL_RFC3390, &tcp_do_rfc3390, 0, 2 },
 	{ TCPCTL_ALWAYS_KEEPALIVE, &tcp_always_keepalive, 0, 1 },
+	{ TCPCTL_TSO, &tcp_do_tso, 0, 1 },
 };
 
 struct	inpcbtable tcbtable;
@@ -1498,8 +1499,8 @@ tcp_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 
 	default:
 		NET_LOCK();
-		error = sysctl_bounded_arr(tcpctl_vars, nitems(tcpctl_vars), name,
-		     namelen, oldp, oldlenp, newp, newlen);
+		error = sysctl_bounded_arr(tcpctl_vars, nitems(tcpctl_vars),
+		    name, namelen, oldp, oldlenp, newp, newlen);
 		NET_UNLOCK();
 		return (error);
 	}
