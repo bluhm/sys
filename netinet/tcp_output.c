@@ -1190,7 +1190,7 @@ tcp_setpersist(struct tcpcb *tp)
 
 int
 tcp_chopper(struct mbuf *m0, struct mbuf_list *ml, struct ifnet *ifp,
-    u_long mss)
+    u_int mss)
 {
 	struct ip *ip = NULL;
 #ifdef INET6
@@ -1232,7 +1232,7 @@ tcp_chopper(struct mbuf *m0, struct mbuf_list *ml, struct ifnet *ifp,
 
 	tlen = m0->m_pkthdr.len;
 	if (tlen < iphlen + sizeof(struct tcphdr)) {
-		error = EMSGSIZE;
+		error = ENOPROTOOPT;
 		goto bad;
 	}
 	/* IP and TCP header should be contiguous, this check is paranoia */
@@ -1247,7 +1247,7 @@ tcp_chopper(struct mbuf *m0, struct mbuf_list *ml, struct ifnet *ifp,
 	th = (struct tcphdr *)(mtod(m0, caddr_t) + iphlen);
 	hlen = iphlen + (th->th_off << 2);
 	if (tlen < hlen) {
-		error = EMSGSIZE;
+		error = ENOPROTOOPT;
 		goto bad;
 	}
 	firstlen = MIN(tlen - hlen, mss);
