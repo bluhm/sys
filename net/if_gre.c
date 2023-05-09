@@ -3028,8 +3028,7 @@ gre_keepalive_send(void *arg)
 
 		ip = mtod(m, struct ip *);
 		ip->ip_id = htons(ip_randomid());
-		ip->ip_sum = 0;
-		ip->ip_sum = in_cksum(m, sizeof(*ip));
+		in_hdr_cksum_out(m, NULL);
 
 		proto = htons(ETHERTYPE_IP);
 		break;

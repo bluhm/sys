@@ -39,7 +39,6 @@
 #define MPLS_LABEL_GET(l)	((ntohl((l) & MPLS_LABEL_MASK)) >> MPLS_LABEL_OFFSET)
 #endif
 
-void		mpls_do_cksum(struct mbuf *);
 u_int8_t	mpls_getttl(struct mbuf *, sa_family_t);
 
 int
@@ -62,7 +61,9 @@ mpls_output(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst,
 	}
 
 	/* need to calculate checksums now if necessary */
-	mpls_do_cksum(m);
+	if (m->m_pkthdr.csum_flags & M_IPV4_CSUM_OUT)
+		in_hdr_cksum_out(m, NULL);
+	in_proto_cksum_out(m, NULL);
 
 	/* initialize sockaddr_mpls */
 	bzero(&sa_mpls, sizeof(sa_mpls));
@@ -141,22 +142,6 @@ mpls_output(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst,
 bad:
 	m_freem(m);
 	return (error);
-}
-
-void
-mpls_do_cksum(struct mbuf *m)
-{
-	struct ip *ip;
-	u_int16_t hlen;
-
-	in_proto_cksum_out(m, NULL);
-
-	if (m->m_pkthdr.csum_flags & M_IPV4_CSUM_OUT) {
-		ip = mtod(m, struct ip *);
-		hlen = ip->ip_hl << 2;
-		ip->ip_sum = in_cksum(m, hlen);
-		m->m_pkthdr.csum_flags &= ~M_IPV4_CSUM_OUT;
-	}
 }
 
 u_int8_t

@@ -416,8 +416,7 @@ mpls_do_error(struct mbuf *m, int type, int code, int destmtu)
 		/* stuff to fix up which is normally done in ip_output */
 		ip->ip_v = IPVERSION;
 		ip->ip_id = htons(ip_randomid());
-		ip->ip_sum = 0;
-		ip->ip_sum = in_cksum(m, sizeof(*ip));
+		in_hdr_cksum_out(m, NULL);
 
 		/* stolen from icmp_send() */
 		icp = (struct icmp *)(mtod(m, caddr_t) + sizeof(*ip));
