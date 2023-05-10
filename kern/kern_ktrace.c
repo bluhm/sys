@@ -160,7 +160,7 @@ ktrsyscall(struct proc *p, register_t code, size_t argsize, register_t args[])
 	u_int nargs = 0;
 	int i;
 
-	if (code == SYS_sysctl) {
+	if ((code & KTRC_CODE_MASK) == SYS_sysctl) {
 		/*
 		 * The sysctl encoding stores the mib[]
 		 * array because it is interesting.
