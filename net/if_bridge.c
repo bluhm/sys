@@ -338,7 +338,7 @@ bridge_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		 */
 
 		NET_LOCK();
-		ifsettso(ifs, 0);
+		ifsetlro(ifs, 0);
 		NET_UNLOCK();
 
 		bif->bridge_sc = sc;
@@ -401,7 +401,7 @@ bridge_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		}
 
 		NET_LOCK();
-		ifsettso(ifs, 0);
+		ifsetlro(ifs, 0);
 		NET_UNLOCK();
 
 		bif->bridge_sc = sc;
