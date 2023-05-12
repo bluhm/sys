@@ -1368,9 +1368,12 @@ tcp_if_output_tso(struct ifnet *ifp, struct mbuf **mp, struct sockaddr *dst,
 
 	/* network interface hardware will do TSO */
 	if (in_ifcap_cksum(*mp, ifp, ifcap)) {
-		if (ISSET(ifcap, IFCAP_TSOv4))
+		if (ISSET(ifcap, IFCAP_TSOv4)) {
 			in_hdr_cksum_out(*mp, ifp);
-		in_proto_cksum_out(*mp, ifp);
+			in_proto_cksum_out(*mp, ifp);
+		}
+		if (ISSET(ifcap, IFCAP_TSOv6))
+			in6_proto_cksum_out(*mp, ifp);
 		if ((error = ifp->if_output(ifp, *mp, dst, rt))) {
 			tcpstat_inc(tcps_outbadtso);
 			goto done;

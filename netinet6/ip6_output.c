@@ -2710,8 +2710,13 @@ in6_proto_cksum_out(struct mbuf *m, struct ifnet *ifp)
 		u_int16_t csum;
 
 		offset = ip6_lasthdr(m, 0, IPPROTO_IPV6, &nxt);
-		csum = in6_cksum_phdr(&ip6->ip6_src, &ip6->ip6_dst,
-		    htonl(m->m_pkthdr.len - offset), htonl(nxt));
+		if (ISSET(m->m_pkthdr.csum_flags, M_TCP_TSO)) {
+			csum = in6_cksum_phdr(&ip6->ip6_src, &ip6->ip6_dst,
+			    htonl(0), htonl(nxt));
+		} else {
+			csum = in6_cksum_phdr(&ip6->ip6_src, &ip6->ip6_dst,
+			    htonl(m->m_pkthdr.len - offset), htonl(nxt));
+		}
 		if (nxt == IPPROTO_TCP)
 			offset += offsetof(struct tcphdr, th_sum);
 		else if (nxt == IPPROTO_UDP)
