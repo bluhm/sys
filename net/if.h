@@ -259,7 +259,9 @@ struct if_status_description {
 #define IFCAP_CSUM_MASK		(IFCAP_CSUM_IPv4 | IFCAP_CSUM_TCPv4 | \
     IFCAP_CSUM_UDPv4 | IFCAP_CSUM_TCPv6 | IFCAP_CSUM_UDPv6)
 
-#define IFCAP_TSO	(IFCAP_TSOv4 | IFCAP_TSOv6)
+/* feature flags are misnamed */
+#define IFCAP_TSO	IFCAP_LRO
+#define IFXF_TSO	IFXF_LRO
 
 /* symbolic names for terminal (per-protocol) CTL_IFQ_ nodes */
 #define IFQCTL_LEN 1
@@ -548,7 +550,7 @@ void	if_getdata(struct ifnet *, struct if_data *);
 void	ifinit(void);
 int	ifioctl(struct socket *, u_long, caddr_t, struct proc *);
 int	ifpromisc(struct ifnet *, int);
-int	ifsetlro(struct ifnet *, int);
+int	ifsettso(struct ifnet *, int);
 struct	ifg_group *if_creategroup(const char *);
 int	if_addgroup(struct ifnet *, const char *);
 int	if_delgroup(struct ifnet *, const char *);

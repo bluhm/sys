@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ix.c,v 1.192 2023/02/06 20:27:44 jan Exp $	*/
+/*	$OpenBSD: if_ix.c,v 1.193 2023/04/28 10:18:57 bluhm Exp $	*/
 
 /******************************************************************************
 
@@ -640,9 +640,8 @@ ixgbe_rxrinfo(struct ix_softc *sc, struct if_rxrinfo *ifri)
 	u_int n = 0;
 
 	if (sc->num_queues > 1) {
-		if ((ifr = mallocarray(sc->num_queues, sizeof(*ifr), M_DEVBUF,
-		    M_WAITOK | M_ZERO)) == NULL)
-			return (ENOMEM);
+		ifr = mallocarray(sc->num_queues, sizeof(*ifr), M_DEVBUF,
+		    M_WAITOK | M_ZERO);
 	} else
 		ifr = &ifr1;
 
@@ -1926,7 +1925,7 @@ ixgbe_setup_interface(struct ix_softc *sc)
 	ifp->if_capabilities |= IFCAP_CSUM_IPv4;
 
 	if (sc->hw.mac.type != ixgbe_mac_82598EB)
-		ifp->if_capabilities |= IFCAP_LRO | IFCAP_TSO;
+		ifp->if_capabilities |= IFCAP_LRO | IFCAP_TSOv4 | IFCAP_TSOv6;
 
 	/*
 	 * Specify the media types supported by this sc and register
@@ -3204,16 +3203,12 @@ ixgbe_rxeof(struct rx_ring *rxr)
 		sendmp = rxbuf->fmp;
 		rxbuf->buf = rxbuf->fmp = NULL;
 
-		if (sendmp != NULL) { /* secondary frag */
+		if (sendmp != NULL) /* secondary frag */
 			sendmp->m_pkthdr.len += mp->m_len;
-			if (rsccnt)
-				sendmp->m_pkthdr.ph_mss += rsccnt - 1;
-		} else {
+		else {
 			/* first desc of a non-ps chain */
 			sendmp = mp;
 			sendmp->m_pkthdr.len = mp->m_len;
-			if (rsccnt)
-				sendmp->m_pkthdr.ph_mss = rsccnt - 1;
 #if NVLAN > 0
 			if (sc->vlan_stripping && staterr & IXGBE_RXD_STAT_VP) {
 				sendmp->m_pkthdr.ether_vtag = vtag;
@@ -3233,20 +3228,6 @@ ixgbe_rxeof(struct rx_ring *rxr)
 			if (hashtype != IXGBE_RXDADV_RSSTYPE_NONE) {
 				sendmp->m_pkthdr.ph_flowid = hash;
 				SET(sendmp->m_pkthdr.csum_flags, M_FLOWID);
-			}
-
-			if (sendmp->m_pkthdr.ph_mss == 1)
-				sendmp->m_pkthdr.ph_mss = 0;
-
-			if (sendmp->m_pkthdr.ph_mss > 0) {
-				sendmp->m_pkthdr.csum_flags |= M_TCP_TSO;
-				sendmp->m_pkthdr.ph_mss =
-				    (sendmp->m_pkthdr.len - 66) / sendmp->m_pkthdr.ph_mss;
-				/*
-				 * If we gonna forward this packet, the TCP
-				 * checksum has to be recalculated.
-				 */
-				sendmp->m_pkthdr.csum_flags |= M_TCP_CSUM_OUT;
 			}
 
 			ml_enqueue(&ml, sendmp);

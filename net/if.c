@@ -2109,9 +2109,10 @@ ifioctl(struct socket *so, u_long cmd, caddr_t data, struct proc *p)
 			error = ENOTSUP;
 		}
 #endif
-		if (ISSET(ifr->ifr_flags, IFXF_LRO) !=
-		    ISSET(ifp->if_xflags, IFXF_LRO))
-			error = ifsetlro(ifp, ISSET(ifr->ifr_flags, IFXF_LRO));
+
+		if (ISSET(ifr->ifr_flags, IFXF_TSO) !=
+		    ISSET(ifp->if_xflags, IFXF_TSO))
+			error = ifsettso(ifp, ISSET(ifr->ifr_flags, IFXF_TSO));
 
 		if (error == 0)
 			ifp->if_xflags = (ifp->if_xflags & IFXF_CANTCHANGE) |
@@ -3152,32 +3153,36 @@ ifpromisc(struct ifnet *ifp, int pswitch)
 	return (error);
 }
 
-/* Set/clear LRO flag and restart interface if needed. */
+/* Set/clear TSO flag and restart interface if needed. */
 int
-ifsetlro(struct ifnet *ifp, int on)
+ifsettso(struct ifnet *ifp, int on)
 {
 	struct ifreq ifrq;
 	int error = 0;
 	int s = splnet();
 
-	if (!ISSET(ifp->if_capabilities, IFCAP_LRO)) {
-		error = ENOTSUP;
-		goto out;
-	}
-
 	NET_ASSERT_LOCKED();	/* for ioctl */
 	KERNEL_ASSERT_LOCKED();	/* for if_flags */
 
-	if (on && !ISSET(ifp->if_xflags, IFXF_LRO)) {
+	if (on && !ISSET(ifp->if_xflags, IFXF_TSO)) {
+		if (!ISSET(ifp->if_capabilities, IFCAP_TSO)) {
+			error = ENOTSUP;
+			goto out;
+		}
 		if (ether_brport_isset(ifp)) {
 			error = EBUSY;
 			goto out;
 		}
-		SET(ifp->if_xflags, IFXF_LRO);
-	} else if (!on && ISSET(ifp->if_xflags, IFXF_LRO))
-		CLR(ifp->if_xflags, IFXF_LRO);
+		SET(ifp->if_xflags, IFXF_TSO);
+	} else if (!on && ISSET(ifp->if_xflags, IFXF_TSO))
+		CLR(ifp->if_xflags, IFXF_TSO);
 	else
 		goto out;
+
+#if NVLAN > 0
+	/* Change TSO flag also on attached vlan(4) interfaces. */
+	vlan_flags_from_parent(ifp, IFXF_TSO);
+#endif
 
 	/* restart interface */
 	if (ISSET(ifp->if_flags, IFF_UP)) {
