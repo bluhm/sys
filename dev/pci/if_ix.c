@@ -1924,8 +1924,9 @@ ixgbe_setup_interface(struct ix_softc *sc)
 	ifp->if_capabilities |= IFCAP_CSUM_TCPv6 | IFCAP_CSUM_UDPv6;
 	ifp->if_capabilities |= IFCAP_CSUM_IPv4;
 
+	ifp->if_capabilities |= IFCAP_TSOv4 | IFCAP_TSOv6;
 	if (sc->hw.mac.type != ixgbe_mac_82598EB)
-		ifp->if_capabilities |= IFCAP_LRO | IFCAP_TSOv4 | IFCAP_TSOv6;
+		ifp->if_capabilities |= IFCAP_LRO;
 
 	/*
 	 * Specify the media types supported by this sc and register
