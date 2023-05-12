@@ -1882,10 +1882,15 @@ in_proto_cksum_out(struct mbuf *m, struct ifnet *ifp)
 		u_int16_t csum = 0, offset;
 
 		offset = ip->ip_hl << 2;
-		if (m->m_pkthdr.csum_flags & (M_TCP_CSUM_OUT|M_UDP_CSUM_OUT))
+		if (ISSET(m->m_pkthdr.csum_flags, M_TCP_TSO)) {
+			csum = in_cksum_phdr(ip->ip_src.s_addr,
+			    ip->ip_dst.s_addr, htonl(ip->ip_p));
+		} else if (ISSET(m->m_pkthdr.csum_flags,
+		    M_TCP_CSUM_OUT|M_UDP_CSUM_OUT)) {
 			csum = in_cksum_phdr(ip->ip_src.s_addr,
 			    ip->ip_dst.s_addr, htonl(ntohs(ip->ip_len) -
 			    offset + ip->ip_p));
+		}
 		if (ip->ip_p == IPPROTO_TCP)
 			offset += offsetof(struct tcphdr, th_sum);
 		else if (ip->ip_p == IPPROTO_UDP)
