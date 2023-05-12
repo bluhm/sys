@@ -2508,6 +2508,8 @@ ixgbe_tx_offload(struct mbuf *mp, uint32_t *vlan_macip_lens,
 		*type_tucmd_mlhl |= IXGBE_ADVTXD_TUCMD_IPV6;
 #endif
 	} else {
+		if (mp->m_pkthdr.csum_flags & M_TCP_TSO)
+			tcpstat_inc(tcps_outbadtso);
 		return offload;
 	}
 
@@ -2519,8 +2521,16 @@ ixgbe_tx_offload(struct mbuf *mp, uint32_t *vlan_macip_lens,
 			*olinfo_status |= IXGBE_TXD_POPTS_TXSM << 8;
 			offload = 1;
 		}
+	} else if (ext.udp) {
+		*type_tucmd_mlhl |= IXGBE_ADVTXD_TUCMD_L4T_UDP;
+		if (ISSET(mp->m_pkthdr.csum_flags, M_UDP_CSUM_OUT)) {
+			*olinfo_status |= IXGBE_TXD_POPTS_TXSM << 8;
+			offload = 1;
+		}
+	}
 
-		if (mp->m_pkthdr.csum_flags & M_TCP_TSO) {
+	if (mp->m_pkthdr.csum_flags & M_TCP_TSO) {
+		if (ext.tcp) {
 			uint32_t pktlen, hdrlen, thlen, outlen;
 
 			thlen = ext.tcp->th_off << 2;
@@ -2541,13 +2551,8 @@ ixgbe_tx_offload(struct mbuf *mp, uint32_t *vlan_macip_lens,
 			outlen = hdrlen + mp->m_pkthdr.ph_mss;
 			tcpstat_add(tcps_outpkttso,
 			    (pktlen + outlen - 1) / outlen);
-		}
-	} else if (ext.udp) {
-		*type_tucmd_mlhl |= IXGBE_ADVTXD_TUCMD_L4T_UDP;
-		if (ISSET(mp->m_pkthdr.csum_flags, M_UDP_CSUM_OUT)) {
-			*olinfo_status |= IXGBE_TXD_POPTS_TXSM << 8;
-			offload = 1;
-		}
+		} else
+			tcpstat_inc(tcps_outbadtso);
 	}
 
 	return offload;
