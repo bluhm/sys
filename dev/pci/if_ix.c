@@ -2485,11 +2485,12 @@ ixgbe_tx_offload(struct mbuf *mp, uint32_t *vlan_macip_lens,
 {
 	struct ether_extracted ext;
 	int offload = 0;
-	uint32_t iphlen;
+	uint32_t ethlen, iphlen;
 
 	ether_extract_headers(mp, &ext);
+	ethlen = sizeof(*ext.eh);
 
-	*vlan_macip_lens |= (sizeof(*ext.eh) << IXGBE_ADVTXD_MACLEN_SHIFT);
+	*vlan_macip_lens |= (ethlen << IXGBE_ADVTXD_MACLEN_SHIFT);
 
 	if (ext.ip4) {
 		iphlen = ext.ip4->ip_hl << 2;
@@ -2520,22 +2521,26 @@ ixgbe_tx_offload(struct mbuf *mp, uint32_t *vlan_macip_lens,
 		}
 
 		if (mp->m_pkthdr.csum_flags & M_TCP_TSO) {
-			uint32_t l4len, pktlen;
+			uint32_t pktlen, hdrlen, thlen, outlen;
 
-			l4len = ext.tcp->th_off << 2;
+			thlen = ext.tcp->th_off << 2;
 
 			*mss_l4len_idx |= (uint32_t)(mp->m_pkthdr.ph_mss
 			    << IXGBE_ADVTXD_MSS_SHIFT);
-			*mss_l4len_idx |= l4len << IXGBE_ADVTXD_L4LEN_SHIFT;
+			*mss_l4len_idx |= thlen << IXGBE_ADVTXD_L4LEN_SHIFT;
 
-			pktlen = mp->m_pkthdr.len - sizeof(*ext.eh) - iphlen
-			    - l4len;
+			hdrlen = ethlen + iphlen + thlen;
+			pktlen = mp->m_pkthdr.len - hdrlen;
 			CLR(*olinfo_status, IXGBE_ADVTXD_PAYLEN_MASK
 			    << IXGBE_ADVTXD_PAYLEN_SHIFT);
 			*olinfo_status |= pktlen << IXGBE_ADVTXD_PAYLEN_SHIFT;
 
 			*cmd_type_len |= IXGBE_ADVTXD_DCMD_TSE;
 			offload = 1;
+
+			outlen = hdrlen + mp->m_pkthdr.ph_mss;
+			tcpstat_add(tcps_outpkttso,
+			    (pktlen + outlen - 1) / outlen);
 		}
 	} else if (ext.udp) {
 		*type_tucmd_mlhl |= IXGBE_ADVTXD_TUCMD_L4T_UDP;
@@ -2559,6 +2564,7 @@ ixgbe_tx_ctx_setup(struct tx_ring *txr, struct mbuf *mp,
 	int	ctxd = txr->next_avail_desc;
 	int	offload = 0;
 
+	/* Indicate the whole packet as payload when not doing TSO */
 	*olinfo_status |= mp->m_pkthdr.len << IXGBE_ADVTXD_PAYLEN_SHIFT;
 
 #if NVLAN > 0

@@ -60,13 +60,18 @@
 
 #include <net/if.h>
 #include <net/if_media.h>
+#include <net/route.h>
 #include <net/toeplitz.h>
+
+struct tdb;
 
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
 #include <netinet/ip.h>
 #include <netinet/ip6.h>
 #include <netinet/tcp.h>
+#include <netinet/tcp_timer.h>
+#include <netinet/tcp_var.h>
 
 #if NBPFILTER > 0
 #include <net/bpf.h>

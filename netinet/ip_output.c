@@ -460,15 +460,10 @@ sendit:
 		goto done;
 	}
 
-	if (ISSET(m->m_pkthdr.csum_flags, M_TCP_TSO) &&
-	    m->m_pkthdr.ph_mss <= mtu) {
-		if ((error = tcp_chopper(m, &ml, ifp, m->m_pkthdr.ph_mss)) ||
-		    (error = if_output_ml(ifp, &ml, sintosa(dst), ro->ro_rt)))
-			goto done;
-		tcpstat_inc(tcps_outswtso);
+	error = tcp_if_output_tso(ifp, &m, sintosa(dst), ro->ro_rt,
+	    IFCAP_TSOv4, mtu);
+	if (error || m == NULL)
 		goto done;
-	}
-	CLR(m->m_pkthdr.csum_flags, M_TCP_TSO);
 
 	/*
 	 * Too large for interface; fragment if possible.

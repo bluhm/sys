@@ -259,7 +259,7 @@ struct if_status_description {
 #define IFCAP_CSUM_MASK		(IFCAP_CSUM_IPv4 | IFCAP_CSUM_TCPv4 | \
     IFCAP_CSUM_UDPv4 | IFCAP_CSUM_TCPv6 | IFCAP_CSUM_UDPv6)
 
-/* feature flags are misnamed */
+/* XXX feature flags are misnamed */
 #define IFCAP_TSO	IFCAP_LRO
 #define IFXF_TSO	IFXF_LRO
 
