@@ -327,6 +327,11 @@ reroute:
 		goto out;
 	}
 
+	if (!type && mcopy) {
+		m_freem(mcopy);
+		mcopy = NULL;
+	}
+
 	error = ifp->if_output(ifp, m, sin6tosa(sin6), rt);
 	if (error) {
 		ip6stat_inc(ip6s_cantforward);
