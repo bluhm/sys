@@ -1,4 +1,4 @@
-/* $OpenBSD: mpls_output.c,v 1.28 2019/09/03 10:39:08 jsg Exp $ */
+/* $OpenBSD: mpls_output.c,v 1.29 2023/05/13 13:35:18 bluhm Exp $ */
 
 /*
  * Copyright (c) 2008 Claudio Jeker <claudio@openbsd.org>
