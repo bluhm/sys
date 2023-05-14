@@ -1374,10 +1374,8 @@ tcp_if_output_tso(struct ifnet *ifp, struct mbuf **mp, struct sockaddr *dst,
 		}
 		if (ISSET(ifcap, IFCAP_TSOv6))
 			in6_proto_cksum_out(*mp, ifp);
-		if ((error = ifp->if_output(ifp, *mp, dst, rt))) {
-			tcpstat_inc(tcps_outbadtso);
+		if ((error = ifp->if_output(ifp, *mp, dst, rt)))
 			goto done;
-		}
 		tcpstat_inc(tcps_outhwtso);
 		goto done;
 	}
