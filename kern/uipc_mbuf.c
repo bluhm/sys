@@ -1788,7 +1788,7 @@ int
 sysctl_mq(int *name, u_int namelen, void *oldp, size_t *oldlenp,
     void *newp, size_t newlen, struct mbuf_queue *mq)
 {
-	unsigned int maxlen;
+	unsigned int oldmax, newmax;
 	int error;
 
 	/* All sysctl names at this level are terminal. */
@@ -1799,10 +1799,10 @@ sysctl_mq(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 	case IFQCTL_LEN:
 		return (sysctl_rdint(oldp, oldlenp, newp, mq_len(mq)));
 	case IFQCTL_MAXLEN:
-		maxlen = mq->mq_maxlen;
-		error = sysctl_int(oldp, oldlenp, newp, newlen, &maxlen);
-		if (!error && maxlen != mq->mq_maxlen)
-			mq_set_maxlen(mq, maxlen);
+		oldmax = newmax = READ_ONCE(mq->mq_maxlen);
+		error = sysctl_int(oldp, oldlenp, newp, newlen, &newmax);
+		if (!error && oldmax != newmax)
+			mq_set_maxlen(mq, newmax);
 		return (error);
 	case IFQCTL_DROPS:
 		return (sysctl_rdint(oldp, oldlenp, newp, mq_drops(mq)));
