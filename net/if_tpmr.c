@@ -521,7 +521,7 @@ tpmr_add_port(struct tpmr_softc *sc, const struct ifbreq *req)
 		goto put;
 	}
 
-	ifsettso(ifp0, 0);
+	ifsetlro(ifp0, 0);
 
 	p->p_ifp0 = ifp0;
 	p->p_tpmr = sc;

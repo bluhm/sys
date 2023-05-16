@@ -2618,6 +2618,9 @@ aggr_update_capabilities(struct aggr_softc *sc)
 	uint32_t capabilities = ~0;
 	int set = 0;
 
+	/* Do not inherit LRO capabilities. */
+	CLR(capabilities, IFCAP_LRO);
+
 	rw_enter_read(&sc->sc_lock);
 	TAILQ_FOREACH(p, &sc->sc_ports, p_entry) {
 		struct ifnet *ifp0 = p->p_ifp0;

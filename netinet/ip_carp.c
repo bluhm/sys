@@ -1693,7 +1693,7 @@ carp_set_ifp(struct carp_softc *sc, struct ifnet *ifp0)
 
 	sc->sc_carpdevidx = ifp0->if_index;
 	sc->sc_if.if_capabilities = ifp0->if_capabilities &
-	    IFCAP_CSUM_MASK;
+	    (IFCAP_CSUM_MASK | IFCAP_TSOv4 | IFCAP_TSOv6);
 
 	SRPL_FOREACH_LOCKED(vr, cif, sc_list) {
 		struct carp_vhost_entry *vrhead, *schead;

@@ -1465,7 +1465,7 @@ veb_add_port(struct veb_softc *sc, const struct ifbreq *req, unsigned int span)
 		goto put;
 	}
 
-	ifsettso(ifp0, 0);
+	ifsetlro(ifp0, 0);
 
 	p->p_ifp0 = ifp0;
 	p->p_veb = sc;
