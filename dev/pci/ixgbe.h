@@ -63,8 +63,6 @@
 #include <net/route.h>
 #include <net/toeplitz.h>
 
-struct tdb;
-
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
 #include <netinet/ip.h>

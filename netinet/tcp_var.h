@@ -688,6 +688,8 @@ extern	int tcp_syn_use_limit;   /* number of uses before reseeding hash */
 extern	struct syn_cache_set tcp_syn_cache[];
 extern	int tcp_syn_cache_active; /* active syn cache, may be 0 or 1 */
 
+struct tdb;
+
 void	 tcp_canceltimers(struct tcpcb *);
 struct tcpcb *
 	 tcp_close(struct tcpcb *);
