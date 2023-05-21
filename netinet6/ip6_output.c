@@ -2710,7 +2710,8 @@ in6_proto_cksum_out(struct mbuf *m, struct ifnet *ifp)
 		u_int16_t csum;
 
 		offset = ip6_lasthdr(m, 0, IPPROTO_IPV6, &nxt);
-		if (ISSET(m->m_pkthdr.csum_flags, M_TCP_TSO)) {
+		if (ISSET(m->m_pkthdr.csum_flags, M_TCP_TSO) && ifp != NULL &&
+		    ISSET(ifp->if_capabilities, IFCAP_TSOv6)) {
 			csum = in6_cksum_phdr(&ip6->ip6_src, &ip6->ip6_dst,
 			    htonl(0), htonl(nxt));
 		} else {

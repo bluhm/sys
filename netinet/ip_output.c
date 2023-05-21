@@ -1882,7 +1882,8 @@ in_proto_cksum_out(struct mbuf *m, struct ifnet *ifp)
 		u_int16_t csum = 0, offset;
 
 		offset = ip->ip_hl << 2;
-		if (ISSET(m->m_pkthdr.csum_flags, M_TCP_TSO)) {
+		if (ISSET(m->m_pkthdr.csum_flags, M_TCP_TSO) && ifp != NULL &&
+		    ISSET(ifp->if_capabilities, IFCAP_TSOv4)) {
 			csum = in_cksum_phdr(ip->ip_src.s_addr,
 			    ip->ip_dst.s_addr, htonl(ip->ip_p));
 		} else if (ISSET(m->m_pkthdr.csum_flags,
