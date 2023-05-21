@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_sysctl.c,v 1.412 2023/05/04 09:40:36 mvs Exp $	*/
+/*	$OpenBSD: kern_sysctl.c,v 1.415 2023/05/21 12:47:54 claudio Exp $	*/
 /*	$NetBSD: kern_sysctl.c,v 1.17 1996/05/20 17:49:05 mrg Exp $	*/
 
 /*-
@@ -143,6 +143,7 @@ int sysctl_audio(int *, u_int, void *, size_t *, void *, size_t);
 int sysctl_video(int *, u_int, void *, size_t *, void *, size_t);
 int sysctl_cpustats(int *, u_int, void *, size_t *, void *, size_t);
 int sysctl_utc_offset(void *, size_t *, void *, size_t);
+int sysctl_hwbattery(int *, u_int, void *, size_t *, void *, size_t);
 
 void fill_file(struct kinfo_file *, struct file *, struct filedesc *, int,
     struct vnode *, struct process *, struct proc *, struct socket *, int);
@@ -168,7 +169,7 @@ sys_sysctl(struct proc *p, void *v, register_t *retval)
 		syscallarg(void *) new;
 		syscallarg(size_t) newlen;
 	} */ *uap = v;
-	int error, dokernellock = 1, dolock = 1;
+	int error, dolock = 1;
 	size_t savelen = 0, oldlen = 0;
 	sysctlfn *fn;
 	int name[CTL_MAXNAME];
@@ -203,7 +204,6 @@ sys_sysctl(struct proc *p, void *v, register_t *retval)
 		break;
 	case CTL_NET:
 		fn = net_sysctl;
-		dokernellock = 0;
 		break;
 	case CTL_FS:
 		fn = fs_sysctl;
@@ -231,22 +231,19 @@ sys_sysctl(struct proc *p, void *v, register_t *retval)
 	if (SCARG(uap, oldlenp) &&
 	    (error = copyin(SCARG(uap, oldlenp), &oldlen, sizeof(oldlen))))
 		return (error);
-	if (dokernellock)
-		KERNEL_LOCK();
 	if (SCARG(uap, old) != NULL) {
 		if ((error = rw_enter(&sysctl_lock, RW_WRITE|RW_INTR)) != 0)
-			goto unlock;
+			return (error);
 		if (dolock) {
 			if (atop(oldlen) > uvmexp.wiredmax - uvmexp.wired) {
 				rw_exit_write(&sysctl_lock);
-				error = ENOMEM;
-				goto unlock;
+				return (ENOMEM);
 			}
 			error = uvm_vslock(p, SCARG(uap, old), oldlen,
 			    PROT_READ | PROT_WRITE);
 			if (error) {
 				rw_exit_write(&sysctl_lock);
-				goto unlock;
+				return (error);
 			}
 		}
 		savelen = oldlen;
@@ -258,9 +255,6 @@ sys_sysctl(struct proc *p, void *v, register_t *retval)
 			uvm_vsunlock(p, SCARG(uap, old), savelen);
 		rw_exit_write(&sysctl_lock);
 	}
-unlock:
-	if (dokernellock)
-		KERNEL_UNLOCK();
 	if (error)
 		return (error);
 	if (SCARG(uap, oldlenp))
@@ -689,8 +683,11 @@ hw_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 	extern char machine[], cpu_model[];
 	int err, cpuspeed;
 
-	/* all sysctl names at this level except sensors are terminal */
-	if (name[0] != HW_SENSORS && namelen != 1)
+	/*
+	 * all sysctl names at this level except sensors and battery
+	 * are terminal
+	 */
+	if (name[0] != HW_SENSORS && name[0] != HW_BATTERY && namelen != 1)
 		return (ENOTDIR);		/* overloaded */
 
 	switch (name[0]) {
@@ -777,12 +774,108 @@ hw_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 	case HW_SMT:
 		return (sysctl_hwsmt(oldp, oldlenp, newp, newlen));
 #endif
+#ifndef SMALL_KERNEL
+	case HW_BATTERY:
+		return (sysctl_hwbattery(name + 1, namelen - 1, oldp, oldlenp,
+		    newp, newlen));
+#endif
 	default:
 		return sysctl_bounded_arr(hw_vars, nitems(hw_vars), name,
 		    namelen, oldp, oldlenp, newp, newlen);
 	}
 	/* NOTREACHED */
 }
+
+#ifndef SMALL_KERNEL
+
+int hw_battery_chargemode;
+int hw_battery_chargestart;
+int hw_battery_chargestop;
+int (*hw_battery_setchargemode)(int);
+int (*hw_battery_setchargestart)(int);
+int (*hw_battery_setchargestop)(int);
+
+int
+sysctl_hwchargemode(void *oldp, size_t *oldlenp, void *newp, size_t newlen)
+{
+	int mode = hw_battery_chargemode;
+	int error;
+
+	if (!hw_battery_setchargemode)
+		return EOPNOTSUPP;
+
+	error = sysctl_int_bounded(oldp, oldlenp, newp, newlen,
+	    &mode, -1, 1);
+	if (error)
+		return error;
+
+	if (newp != NULL)
+		error = hw_battery_setchargemode(mode);
+
+	return error;
+}
+
+int
+sysctl_hwchargestart(void *oldp, size_t *oldlenp, void *newp, size_t newlen)
+{
+	int start = hw_battery_chargestart;
+	int error;
+
+	if (!hw_battery_setchargestart)
+		return EOPNOTSUPP;
+
+	error = sysctl_int_bounded(oldp, oldlenp, newp, newlen,
+	    &start, 0, 100);
+	if (error)
+		return error;
+
+	if (newp != NULL)
+		error = hw_battery_setchargestart(start);
+
+	return error;
+}
+
+int
+sysctl_hwchargestop(void *oldp, size_t *oldlenp, void *newp, size_t newlen)
+{
+	int stop = hw_battery_chargestop;
+	int error;
+
+	if (!hw_battery_setchargestop)
+		return EOPNOTSUPP;
+
+	error = sysctl_int_bounded(oldp, oldlenp, newp, newlen,
+	    &stop, 0, 100);
+	if (error)
+		return error;
+
+	if (newp != NULL)
+		error = hw_battery_setchargestop(stop);
+
+	return error;
+}
+
+int
+sysctl_hwbattery(int *name, u_int namelen, void *oldp, size_t *oldlenp,
+    void *newp, size_t newlen)
+{
+	if (namelen != 1)
+		return (ENOTDIR);
+
+	switch (name[0]) {
+	case HW_BATTERY_CHARGEMODE:
+		return (sysctl_hwchargemode(oldp, oldlenp, newp, newlen));
+	case HW_BATTERY_CHARGESTART:
+		return (sysctl_hwchargestart(oldp, oldlenp, newp, newlen));
+	case HW_BATTERY_CHARGESTOP:
+		return (sysctl_hwchargestop(oldp, oldlenp, newp, newlen));
+	default:
+		return (EOPNOTSUPP);
+	}
+	/* NOTREACHED */
+}
+
+#endif
 
 #ifdef DEBUG_SYSCTL
 /*
