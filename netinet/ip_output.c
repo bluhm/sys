@@ -1801,7 +1801,7 @@ in_hdr_cksum_out(struct mbuf *m, struct ifnet *ifp)
 	struct ip *ip = mtod(m, struct ip *);
 
 	ip->ip_sum = 0;
-	if (ifp && in_ifcap_cksum(m, ifp, IFCAP_CSUM_IPv4)) {
+	if (in_ifcap_cksum(m, ifp, IFCAP_CSUM_IPv4)) {
 		SET(m->m_pkthdr.csum_flags, M_IPV4_CSUM_OUT);
 	} else {
 		ipstat_inc(ips_outswcsum);
