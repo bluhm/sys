@@ -1295,7 +1295,6 @@ tcp_chopper(struct mbuf *m0, struct mbuf_list *ml, struct ifnet *ifp,
 
 		/* copy and adjust IP header, calculate checksum */
 		SET(m->m_pkthdr.csum_flags, M_TCP_CSUM_OUT);
-		mhth->th_sum = 0;
 		if (ip) {
 			struct ip *mhip;
 
@@ -1328,10 +1327,8 @@ tcp_chopper(struct mbuf *m0, struct mbuf_list *ml, struct ifnet *ifp,
 	}
 	/* adjust IP header, calculate checksum */
 	SET(m0->m_pkthdr.csum_flags, M_TCP_CSUM_OUT);
-	th->th_sum = 0;
 	if (ip) {
 		ip->ip_len = htons(m0->m_pkthdr.len);
-		ip->ip_sum = 0;
 		in_hdr_cksum_out(m0, ifp);
 		in_proto_cksum_out(m0, ifp);
 	}
