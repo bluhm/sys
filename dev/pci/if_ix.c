@@ -3257,13 +3257,40 @@ ixgbe_rxeof(struct rx_ring *rxr)
 
 			if (sendmp->m_pkthdr.ph_mss > 0) {
 				struct ether_extracted ext;
+				uint64_t hlen;
 				uint16_t pkts = sendmp->m_pkthdr.ph_mss;
 
+				/* Calculate header size. */
 				ether_extract_headers(sendmp, &ext);
-				if (ext.tcp)
+				hlen = sizeof(*ext.eh);
+				if (ext.ip4) {
+					hlen += ext.ip4->ip_hl << 2;
+				} else if (ext.ip6) {
+					if (ext.ip6->ip6_nxt == IPPROTO_TCP)
+						hlen += sizeof(*ext.ip6);
+					else
+						tcpstat_inc(tcps_inbadlro);
+				}
+				if (ext.tcp) {
 					tcpstat_inc(tcps_inhwlro);
-				else
+					hlen += ext.tcp->th_off << 2;
+				} else {
 					tcpstat_inc(tcps_inbadlro);
+				}
+
+				/*
+				 * If we gonna forward this packet, we have to
+				 * mark it as TSO, recalculate the TCP checksum
+				 * and set a correct mss.
+				 */
+				sendmp->m_pkthdr.ph_mss =
+				    (sendmp->m_pkthdr.len - hlen) / pkts;
+
+				if (sendmp->m_pkthdr.ph_mss != 0) {
+					SET(sendmp->m_pkthdr.csum_flags,
+					    M_TCP_CSUM_OUT | M_TCP_TSO);
+				}
+
 				tcpstat_add(tcps_inpktlro, pkts);
 			}
 
