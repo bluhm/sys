@@ -334,7 +334,6 @@ reroute:
 	}
 
 	in6_proto_cksum_out(m, ifp);
-
 	error = ifp->if_output(ifp, m, sin6tosa(sin6), rt);
 	if (error) {
 		ip6stat_inc(ip6s_cantforward);

@@ -3245,6 +3245,8 @@ ixgbe_rxeof(struct rx_ring *rxr)
 			sendmp = NULL;
 			mp->m_next = nxbuf->buf;
 		} else { /* Sending this frame? */
+			uint16_t pkts;
+
 			ixgbe_rx_checksum(staterr, sendmp);
 
 			if (hashtype != IXGBE_RXDADV_RSSTYPE_NONE) {
@@ -3252,28 +3254,24 @@ ixgbe_rxeof(struct rx_ring *rxr)
 				SET(sendmp->m_pkthdr.csum_flags, M_FLOWID);
 			}
 
-			if (sendmp->m_pkthdr.ph_mss == 1)
-				sendmp->m_pkthdr.ph_mss = 0;
+			pkts = sendmp->m_pkthdr.ph_mss;
+			sendmp->m_pkthdr.ph_mss = 0;
 
-			if (sendmp->m_pkthdr.ph_mss > 0) {
+			if (pkts > 1) {
 				struct ether_extracted ext;
-				uint64_t hlen;
-				uint16_t pkts = sendmp->m_pkthdr.ph_mss;
+				uint32_t hdrlen, paylen;
 
 				/* Calculate header size. */
 				ether_extract_headers(sendmp, &ext);
-				hlen = sizeof(*ext.eh);
-				if (ext.ip4) {
-					hlen += ext.ip4->ip_hl << 2;
-				} else if (ext.ip6) {
-					if (ext.ip6->ip6_nxt == IPPROTO_TCP)
-						hlen += sizeof(*ext.ip6);
-					else
-						tcpstat_inc(tcps_inbadlro);
-				}
+				hdrlen = sizeof(*ext.eh);
+				if (ext.ip4)
+					hdrlen += ext.ip4->ip_hl << 2;
+				if (ext.ip6)
+					hdrlen += sizeof(*ext.ip6);
 				if (ext.tcp) {
+					hdrlen += ext.tcp->th_off << 2;
 					tcpstat_inc(tcps_inhwlro);
-					hlen += ext.tcp->th_off << 2;
+					tcpstat_add(tcps_inpktlro, pkts);
 				} else {
 					tcpstat_inc(tcps_inbadlro);
 				}
@@ -3283,15 +3281,12 @@ ixgbe_rxeof(struct rx_ring *rxr)
 				 * mark it as TSO, recalculate the TCP checksum
 				 * and set a correct mss.
 				 */
-				sendmp->m_pkthdr.ph_mss =
-				    (sendmp->m_pkthdr.len - hlen) / pkts;
-
-				if (sendmp->m_pkthdr.ph_mss != 0) {
+				paylen = sendmp->m_pkthdr.len - hdrlen;
+				if (ext.tcp && paylen >= pkts) {
 					SET(sendmp->m_pkthdr.csum_flags,
 					    M_TCP_CSUM_OUT | M_TCP_TSO);
+					sendmp->m_pkthdr.ph_mss = paylen / pkts;
 				}
-
-				tcpstat_add(tcps_inpktlro, pkts);
 			}
 
 			ml_enqueue(&ml, sendmp);
