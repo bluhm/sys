@@ -1386,6 +1386,7 @@ tcp_if_output_tso(struct ifnet *ifp, struct mbuf **mp, struct sockaddr *dst,
 	if ((error = tcp_chopper(*mp, &ml, ifp, (*mp)->m_pkthdr.ph_mss)) ||
 	    (error = if_output_ml(ifp, &ml, dst, rt)))
 		goto done;
+	printf("%s: soft TSO ifname: %s\n", __func__, ifp->if_xname);
 	tcpstat_inc(tcps_outswtso);
 
  done:
