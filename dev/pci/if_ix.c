@@ -3278,14 +3278,20 @@ ixgbe_rxeof(struct rx_ring *rxr)
 
 				/*
 				 * If we gonna forward this packet, we have to
-				 * mark it as TSO, recalculate the TCP checksum
-				 * and set a correct mss.
+				 * mark it as TSO, set a correct mss,
+				 * and recalculate the TCP checksum.
 				 */
 				paylen = sendmp->m_pkthdr.len - hdrlen;
 				if (ext.tcp && paylen >= pkts) {
 					SET(sendmp->m_pkthdr.csum_flags,
-					    M_TCP_CSUM_OUT | M_TCP_TSO);
+					    M_TCP_TSO);
 					sendmp->m_pkthdr.ph_mss = paylen / pkts;
+				}
+				if (ext.tcp &&
+				    ISSET(sendmp->m_pkthdr.csum_flags,
+				    M_TCP_CSUM_IN_OK)) {
+					SET(sendmp->m_pkthdr.csum_flags,
+					    M_TCP_CSUM_OUT);
 				}
 			}
 
