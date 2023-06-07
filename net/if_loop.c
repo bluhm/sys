@@ -175,7 +175,8 @@ loop_clone_create(struct if_clone *ifc, int unit)
 	ifp->if_xflags = IFXF_CLONED;
 	ifp->if_capabilities = IFCAP_CSUM_IPv4 |
 	    IFCAP_CSUM_TCPv4 | IFCAP_CSUM_UDPv4 |
-	    IFCAP_CSUM_TCPv6 | IFCAP_CSUM_UDPv6;
+	    IFCAP_CSUM_TCPv6 | IFCAP_CSUM_UDPv6 |
+	    IFCAP_LRO;
 	ifp->if_rtrequest = lortrequest;
 	ifp->if_ioctl = loioctl;
 	ifp->if_input = loinput;
@@ -281,6 +282,10 @@ loioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 
 	switch (cmd) {
 	case SIOCSIFFLAGS:
+		if (ISSET(ifp->if_xflags, IFXF_LRO))
+			SET(ifp->if_capabilities, IFCAP_TSOv4 | IFCAP_TSOv6);
+		else
+			CLR(ifp->if_capabilities, IFCAP_TSOv4 | IFCAP_TSOv6);
 		break;
 
 	case SIOCSIFADDR:

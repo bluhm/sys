@@ -1340,6 +1340,7 @@ tcp_sysctl_tcpstat(void *oldp, size_t *oldlenp, void *newp)
 	ASSIGN(tcps_outhwtso);
 	ASSIGN(tcps_outpkttso);
 	ASSIGN(tcps_outbadtso);
+	ASSIGN(tcps_inswlro);
 	ASSIGN(tcps_inhwlro);
 	ASSIGN(tcps_inpktlro);
 	ASSIGN(tcps_inbadlro);
