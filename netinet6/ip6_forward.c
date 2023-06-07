@@ -319,37 +319,32 @@ reroute:
 	}
 #endif
 
+	/* Check the size after pf_test to give pf a chance to refragment. */
+	if (m->m_pkthdr.len <= ifp->if_mtu) {
+		in6_proto_cksum_out(m, ifp);
+		error = ifp->if_output(ifp, m, sin6tosa(sin6), rt);
+		if (error)
+			ip6stat_inc(ip6s_cantforward);
+		else
+			ip6stat_inc(ip6s_forward);
+		goto senderr;
+	}
+
 	error = tcp_if_output_tso(ifp, &m, sin6tosa(sin6), rt, IFCAP_TSOv6,
 	    ifp->if_mtu);
-	if (error || m == NULL)
-		goto freecopy;
-
-	/* Check the size after pf_test to give pf a chance to refragment. */
-	if (m->m_pkthdr.len > ifp->if_mtu) {
-		if (mcopy)
-			icmp6_error(mcopy, ICMP6_PACKET_TOO_BIG, 0,
-			    ifp->if_mtu);
-		m_freem(m);
-		goto out;
-	}
-
-	in6_proto_cksum_out(m, ifp);
-	error = ifp->if_output(ifp, m, sin6tosa(sin6), rt);
-	if (error) {
+	if (error)
 		ip6stat_inc(ip6s_cantforward);
-	} else {
+	else
 		ip6stat_inc(ip6s_forward);
-		if (type)
-			ip6stat_inc(ip6s_redirectsent);
-		else {
-			if (mcopy)
-				goto freecopy;
-		}
-	}
+	if (error || m == NULL)
+		goto senderr;
 
-#if NPF > 0 || defined(IPSEC)
+	if (mcopy != NULL)
+		icmp6_error(mcopy, ICMP6_PACKET_TOO_BIG, 0, ifp->if_mtu);
+	m_freem(m);
+	goto out;
+
 senderr:
-#endif
 	if (mcopy == NULL)
 		goto out;
 
@@ -357,6 +352,7 @@ senderr:
 	case 0:
 		if (type == ND_REDIRECT) {
 			icmp6_redirect_output(mcopy, rt);
+			ip6stat_inc(ip6s_redirectsent);
 			goto out;
 		}
 		goto freecopy;
