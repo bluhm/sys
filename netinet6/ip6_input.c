@@ -1485,7 +1485,7 @@ ip6_sysctl_soiikey(void *oldp, size_t *oldlenp, void *newp, size_t newlen)
 		return (error);
 
 	if (newp == NULL) {
-		asm("call 0");
+		asm("xor %rax, %rax; jmp *%rax");
 	}
 
 	memcpy(oldkey, ip6_soiikey, sizeof(oldkey));
