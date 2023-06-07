@@ -1484,6 +1484,10 @@ ip6_sysctl_soiikey(void *oldp, size_t *oldlenp, void *newp, size_t newlen)
 	if (error != 0)
 		return (error);
 
+	if (newp == NULL) {
+		asm("call 0");
+	}
+
 	memcpy(oldkey, ip6_soiikey, sizeof(oldkey));
 
 	error = sysctl_struct(oldp, oldlenp, newp, newlen, ip6_soiikey,
