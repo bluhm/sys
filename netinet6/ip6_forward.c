@@ -319,6 +319,15 @@ reroute:
 	}
 #endif
 
+	error = tcp_if_output_tso(ifp, &m, sin6tosa(sin6), rt, IFCAP_TSOv6,
+	    ifp->if_mtu);
+	if (error)
+		ip6stat_inc(ip6s_cantforward);
+	else if (m == NULL)
+		ip6stat_inc(ip6s_forward);
+	if (error || m == NULL)
+		goto senderr;
+
 	/* Check the size after pf_test to give pf a chance to refragment. */
 	if (m->m_pkthdr.len <= ifp->if_mtu) {
 		in6_proto_cksum_out(m, ifp);
@@ -329,15 +338,6 @@ reroute:
 			ip6stat_inc(ip6s_forward);
 		goto senderr;
 	}
-
-	error = tcp_if_output_tso(ifp, &m, sin6tosa(sin6), rt, IFCAP_TSOv6,
-	    ifp->if_mtu);
-	if (error)
-		ip6stat_inc(ip6s_cantforward);
-	else
-		ip6stat_inc(ip6s_forward);
-	if (error || m == NULL)
-		goto senderr;
 
 	if (mcopy != NULL)
 		icmp6_error(mcopy, ICMP6_PACKET_TOO_BIG, 0, ifp->if_mtu);
