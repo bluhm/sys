@@ -1,4 +1,4 @@
-/* $OpenBSD: kern_clockintr.c,v 1.22 2023/06/15 22:18:06 cheloha Exp $ */
+/* $OpenBSD: kern_clockintr.c,v 1.24 2023/06/18 23:19:01 cheloha Exp $ */
 /*
  * Copyright (c) 2003 Dale Rahn <drahn@openbsd.org>
  * Copyright (c) 2020 Mark Kettenis <kettenis@openbsd.org>
@@ -64,6 +64,7 @@ uint64_t clockintr_nsecuptime(const struct clockintr *);
 void clockintr_schedclock(struct clockintr *, void *);
 void clockintr_schedule(struct clockintr *, uint64_t);
 void clockintr_schedule_locked(struct clockintr *, uint64_t);
+void clockintr_stagger(struct clockintr *, uint64_t, u_int, u_int);
 void clockintr_statclock(struct clockintr *, void *);
 void clockintr_statvar_init(int, uint32_t *, uint32_t *, uint32_t *);
 uint64_t clockqueue_next(const struct clockintr_queue *);
@@ -106,7 +107,7 @@ clockintr_init(u_int flags)
 void
 clockintr_cpu_init(const struct intrclock *ic)
 {
-	uint64_t multiplier = 0, offset;
+	uint64_t multiplier = 0;
 	struct cpu_info *ci = curcpu();
 	struct clockintr_queue *cq = &ci->ci_queue;
 	int reset_cq_intrclock = 0;
@@ -169,8 +170,8 @@ clockintr_cpu_init(const struct intrclock *ic)
 			clockintr_advance(cq->cq_hardclock, hardclock_period);
 	} else {
 		if (cq->cq_hardclock->cl_expiration == 0) {
-			offset = hardclock_period / ncpus * multiplier;
-			cq->cq_hardclock->cl_expiration =  offset;
+			clockintr_stagger(cq->cq_hardclock, hardclock_period,
+			    multiplier, ncpus);
 		}
 		clockintr_advance(cq->cq_hardclock, hardclock_period);
 	}
@@ -178,12 +179,16 @@ clockintr_cpu_init(const struct intrclock *ic)
 	/*
 	 * We can always advance the statclock and schedclock.
 	 */
-	offset = statclock_avg / ncpus * multiplier;
-	clockintr_schedule(cq->cq_statclock, offset);
+	if (cq->cq_statclock->cl_expiration == 0) {
+		clockintr_stagger(cq->cq_statclock, statclock_avg, multiplier,
+		    ncpus);
+	}
 	clockintr_advance(cq->cq_statclock, statclock_avg);
 	if (schedhz != 0) {
-		offset = schedclock_period / ncpus * multiplier;
-		clockintr_schedule(cq->cq_schedclock, offset);
+		if (cq->cq_schedclock->cl_expiration == 0) {
+			clockintr_stagger(cq->cq_schedclock, schedclock_period,
+			    multiplier, ncpus);
+		}
 		clockintr_advance(cq->cq_schedclock, schedclock_period);
 	}
 
@@ -457,6 +462,20 @@ clockintr_schedule_locked(struct clockintr *cl, uint64_t expiration)
 	else
 		TAILQ_INSERT_BEFORE(elm, cl, cl_plink);
 	SET(cl->cl_flags, CLST_PENDING);
+}
+
+void
+clockintr_stagger(struct clockintr *cl, uint64_t period, u_int n, u_int count)
+{
+	struct clockintr_queue *cq = cl->cl_queue;
+
+	KASSERT(n < count);
+
+	mtx_enter(&cq->cq_mtx);
+	if (ISSET(cl->cl_flags, CLST_PENDING))
+		panic("%s: clock interrupt pending", __func__);
+	cl->cl_expiration = period / count * n;
+	mtx_leave(&cq->cq_mtx);
 }
 
 /*
