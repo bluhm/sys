@@ -1059,7 +1059,6 @@ in_pcbhash_insert(struct inpcb *inp)
 	struct inpcbhead *head;
 	uint64_t hash, lhash;
 
-	NET_ASSERT_LOCKED();
 	MUTEX_ASSERT_LOCKED(&table->inpt_mtx);
 
 	lhash = in_pcblhash(table, inp->inp_rtableid, inp->inp_lport);
@@ -1087,7 +1086,6 @@ in_pcbhash_lookup(struct inpcbtable *table, uint64_t hash, u_int rdomain,
 	struct inpcbhead *head;
 	struct inpcb *inp;
 
-	NET_ASSERT_LOCKED();
 	MUTEX_ASSERT_LOCKED(&table->inpt_mtx);
 
 	head = &table->inpt_hashtbl[hash & table->inpt_mask];
