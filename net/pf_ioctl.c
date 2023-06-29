@@ -118,7 +118,7 @@ int			 pf_states_clr(struct pfioc_state_kill *);
 int			 pf_states_get(struct pfioc_states *);
 
 struct pf_trans		*pf_open_trans(uint32_t);
-void			 pf_close_all_trans(uint32_t);
+void			 pf_close_limit_trans(uint32_t, int);
 struct pf_trans		*pf_find_trans(uint32_t, uint64_t);
 void			 pf_free_trans(struct pf_trans *);
 void			 pf_rollback_trans(struct pf_trans *);
@@ -1492,7 +1492,7 @@ pfioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 		PF_UNLOCK();
 		NET_UNLOCK();
 
-		pf_close_all_trans(minor(dev));
+		pf_close_limit_trans(minor(dev), PF_ANCHOR_STACK_MAX);
 		t = pf_open_trans(minor(dev));
 		pf_init_tgetrule(t, ruleset->anchor, ruleset_version, rule);
 		pr->ticket = t->pft_ticket;
@@ -3276,15 +3276,19 @@ pf_open_trans(uint32_t unit)
 }
 
 void
-pf_close_all_trans(uint32_t unit)
+pf_close_limit_trans(uint32_t unit, int limit)
 {
 	struct pf_trans	*t, *nt;
+	int count = 0;
 
 	rw_assert_wrlock(&pfioctl_rw);
 
 	LIST_FOREACH_SAFE(t, &pf_ioctl_trans, pft_entry, nt) {
-		if (t->pft_unit == unit)
-			pf_rollback_trans(t);
+		if (t->pft_unit == unit) {
+			count++;
+			if (count > limit)
+				pf_rollback_trans(t);
+		}
 	}
 }
 
