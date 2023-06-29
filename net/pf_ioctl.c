@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf_ioctl.c,v 1.405 2023/05/26 12:13:26 kn Exp $ */
+/*	$OpenBSD: pf_ioctl.c,v 1.410 2023/06/28 21:33:35 sashan Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -1506,11 +1506,15 @@ pfioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 		int			 i;
 
 		t = pf_find_trans(minor(dev), pr->ticket);
-		if (t == NULL)
-			return (ENXIO);
+		if (t == NULL) {
+			error = ENXIO;
+			goto fail;
+		}
 		KASSERT(t->pft_unit == minor(dev));
-		if (t->pft_type != PF_TRANS_GETRULE)
-			return (EINVAL);
+		if (t->pft_type != PF_TRANS_GETRULE) {
+			error = EINVAL;
+			goto fail;
+		}
 
 		NET_LOCK();
 		PF_LOCK();
@@ -2942,11 +2946,11 @@ pfioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 			goto fail;
 		}
 
-		NET_LOCK();
+		NET_LOCK_SHARED();
 		PF_LOCK();
 		pfi_get_ifaces(io->pfiio_name, kif_buf, &io->pfiio_size);
 		PF_UNLOCK();
-		NET_UNLOCK();
+		NET_UNLOCK_SHARED();
 		if (copyout(kif_buf, io->pfiio_buffer, sizeof(*kif_buf) *
 		    io->pfiio_size))
 			error = EFAULT;
@@ -2962,11 +2966,9 @@ pfioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 			goto fail;
 		}
 
-		NET_LOCK();
 		PF_LOCK();
 		error = pfi_set_flags(io->pfiio_name, io->pfiio_flags);
 		PF_UNLOCK();
-		NET_UNLOCK();
 		break;
 	}
 
@@ -2978,11 +2980,9 @@ pfioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 			goto fail;
 		}
 
-		NET_LOCK();
 		PF_LOCK();
 		error = pfi_clear_flags(io->pfiio_name, io->pfiio_flags);
 		PF_UNLOCK();
-		NET_UNLOCK();
 		break;
 	}
 
