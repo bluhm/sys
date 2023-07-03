@@ -886,6 +886,57 @@ if_output_ml(struct ifnet *ifp, struct mbuf_list *ml,
 }
 
 int
+if_output_tso(struct ifnet *ifp, struct mbuf **mp, struct sockaddr *dst,
+    struct rtentry *rt, u_int mtu)
+{
+	uint32_t ifcap;
+	int error;
+
+	switch (dst->sa_family) {
+	case AF_INET:
+		ifcap = IFCAP_TSOv4;
+		break;
+#ifdef INET6
+	case AF_INET6:
+		ifcap = IFCAP_TSOv6;
+		break;
+#endif
+	default:
+		unhandled_af(dst->sa_family);
+	}
+
+	/*
+	 * Try to send with TSO first.  When forwarding LRO may set
+	 * maximium segment size in mbuf header.  Chop TCP segment
+	 * even if it would fit interface MTU to preserve maximum
+	 * path MTU.
+	 */
+	error = tcp_if_output_tso(ifp, mp, dst, rt, ifcap, mtu);
+	if (error || *mp == NULL)
+		return error;
+
+	if ((*mp)->m_pkthdr.len <= mtu) {
+		switch (dst->sa_family) {
+		case AF_INET:
+			in_hdr_cksum_out(*mp, ifp);
+			in_proto_cksum_out(*mp, ifp);
+			break;
+#ifdef INET6
+		case AF_INET6:
+			in6_proto_cksum_out(*mp, ifp);
+			break;
+#endif
+		}
+		error = ifp->if_output(ifp, *mp, dst, rt);
+		*mp = NULL;
+		return error;
+	}
+
+	/* mp still contains mbuf that has to be fragmented or dropped. */
+	return 0;
+}
+
+int
 if_output_mq(struct ifnet *ifp, struct mbuf_queue *mq, unsigned int *total,
     struct sockaddr *dst, struct rtentry *rt)
 {

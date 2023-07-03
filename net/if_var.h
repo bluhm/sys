@@ -329,6 +329,8 @@ int	if_output_ml(struct ifnet *, struct mbuf_list *,
 	    struct sockaddr *, struct rtentry *);
 int	if_output_mq(struct ifnet *, struct mbuf_queue *, unsigned int *,
 	    struct sockaddr *, struct rtentry *);
+int	if_output_tso(struct ifnet *, struct mbuf **, struct sockaddr *,
+	    struct rtentry *, u_int);
 int	if_output_local(struct ifnet *, struct mbuf *, sa_family_t);
 void	if_rtrequest_dummy(struct ifnet *, int, struct rtentry *);
 void	p2p_rtrequest(struct ifnet *, int, struct rtentry *);

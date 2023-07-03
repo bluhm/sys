@@ -451,17 +451,9 @@ sendit:
 #endif
 
 	/*
-	 * If small enough for interface, can just send directly.
+	 * If TSO or small enough for interface, can just send directly.
 	 */
-	if (ntohs(ip->ip_len) <= mtu) {
-		in_hdr_cksum_out(m, ifp);
-		in_proto_cksum_out(m, ifp);
-		error = ifp->if_output(ifp, m, sintosa(dst), ro->ro_rt);
-		goto done;
-	}
-
-	error = tcp_if_output_tso(ifp, &m, sintosa(dst), ro->ro_rt,
-	    IFCAP_TSOv4, mtu);
+	error = if_output_tso(ifp, &m, sintosa(dst), ro->ro_rt, mtu);
 	if (error || m == NULL)
 		goto done;
 
