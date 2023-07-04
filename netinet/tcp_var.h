@@ -654,13 +654,13 @@ tcpstat_pkt(enum tcpstat_counters pcounter, enum tcpstat_counters bcounter,
 	counters_pkt(tcpcounters, pcounter, bcounter, v);
 }
 
-extern uint32_t tcp_starttime;
+extern uint64_t tcp_starttime;
 
 static inline uint64_t
 tcp_now(void)
 {
-	/* 0 is treated special, guarantee positive value by adding 1 */
-	return (1ULL + tcp_starttime + (getnsecruntime() / 1000000ULL));
+	/* TCP time ticks in 63 bit milliseconds with 63 bit random offset. */
+	return tcp_starttime + (getnsecruntime() / 1000000ULL);
 }
 
 #define TCP_TIME(_sec)	((_sec) * 1000)	/* tcp_now() is in milliseconds */
