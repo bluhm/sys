@@ -489,6 +489,8 @@ rtable_match(unsigned int rtableid, struct sockaddr *dst, uint32_t *src)
 	if (an == NULL)
 		goto out;
 
+	delay(10);  /* triggers crash */
+
 	rt = SRPL_FIRST(&sr, &an->an_rtlist);
 	if (rt == NULL) {
 		SRPL_LEAVE(&sr);
