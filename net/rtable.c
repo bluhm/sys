@@ -604,6 +604,11 @@ rtable_insert(unsigned int rtableid, struct sockaddr *dst,
 	SRPL_INSERT_HEAD_LOCKED(&rt_rc, &an->an_rtlist, rt, rt_next);
 
 	prev = art_insert(ar, an, addr, plen);
+	if (prev == an) {
+		rw_exit_write(&ar->ar_lock);
+		/* keep the refcount for rt while it is in an_rtlist */
+		return (0);
+	}
 	if (prev != an) {
 		SRPL_REMOVE_LOCKED(&rt_rc, &an->an_rtlist, rt, rtentry,
 		    rt_next);
@@ -689,9 +694,10 @@ rtable_delete(unsigned int rtableid, struct sockaddr *dst,
 		npaths++;
 
 	if (npaths > 1) {
-		KASSERT(refcnt_read(&rt->rt_refcnt) >= 1);
+		KASSERT(refcnt_read(&rt->rt_refcnt) >= 2);
 		SRPL_REMOVE_LOCKED(&rt_rc, &an->an_rtlist, rt, rtentry,
 		    rt_next);
+		rtfree(rt);
 
 		mrt = SRPL_FIRST_LOCKED(&an->an_rtlist);
 		if (npaths == 2)
@@ -703,8 +709,9 @@ rtable_delete(unsigned int rtableid, struct sockaddr *dst,
 	if (art_delete(ar, an, addr, plen) == NULL)
 		panic("art_delete failed to find node %p", an);
 
-	KASSERT(refcnt_read(&rt->rt_refcnt) >= 1);
+	KASSERT(refcnt_read(&rt->rt_refcnt) >= 2);
 	SRPL_REMOVE_LOCKED(&rt_rc, &an->an_rtlist, rt, rtentry, rt_next);
+	rtfree(rt);
 	art_put(an);
 
 leave:
@@ -821,12 +828,10 @@ rtable_mpath_reprio(unsigned int rtableid, struct sockaddr *dst,
 		 */
 		rt->rt_priority = prio;
 	} else {
-		rtref(rt); /* keep rt alive in between remove and insert */
 		SRPL_REMOVE_LOCKED(&rt_rc, &an->an_rtlist,
 		    rt, rtentry, rt_next);
 		rt->rt_priority = prio;
 		rtable_mpath_insert(an, rt);
-		rtfree(rt);
 		error = EAGAIN;
 	}
 	rw_exit_write(&ar->ar_lock);
@@ -839,6 +844,9 @@ rtable_mpath_insert(struct art_node *an, struct rtentry *rt)
 {
 	struct rtentry			*mrt, *prt = NULL;
 	uint8_t				 prio = rt->rt_priority;
+
+	/* increment the refcount for rt while it is in an_rtlist */
+	rtref(rt);
 
 	if ((mrt = SRPL_FIRST_LOCKED(&an->an_rtlist)) == NULL) {
 		SRPL_INSERT_HEAD_LOCKED(&rt_rc, &an->an_rtlist, rt, rt_next);
