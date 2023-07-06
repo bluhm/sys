@@ -609,44 +609,42 @@ rtable_insert(unsigned int rtableid, struct sockaddr *dst,
 		/* keep the refcount for rt while it is in an_rtlist */
 		return (0);
 	}
-	if (prev != an) {
-		SRPL_REMOVE_LOCKED(&rt_rc, &an->an_rtlist, rt, rtentry,
-		    rt_next);
-		rt->rt_flags = rt_flags;
-		art_put(an);
 
-		if (prev == NULL) {
-			error = ESRCH;
-			goto leave;
-		}
+	SRPL_REMOVE_LOCKED(&rt_rc, &an->an_rtlist, rt, rtentry, rt_next);
+	rt->rt_flags = rt_flags;
+	art_put(an);
 
-		an = prev;
+	if (prev == NULL) {
+		error = ESRCH;
+		goto leave;
+	}
 
-		mrt = SRPL_FIRST_LOCKED(&an->an_rtlist);
-		KASSERT(mrt != NULL);
-		KASSERT((rt->rt_flags & RTF_MPATH) || mrt->rt_priority != prio);
+	an = prev;
 
+	mrt = SRPL_FIRST_LOCKED(&an->an_rtlist);
+	KASSERT(mrt != NULL);
+	KASSERT((rt->rt_flags & RTF_MPATH) || mrt->rt_priority != prio);
+
+	/*
+	 * An ART node with the same destination/netmask already
+	 * exists, MPATH conflict must have been already checked.
+	 */
+	if (rt->rt_flags & RTF_MPATH) {
 		/*
-		 * An ART node with the same destination/netmask already
-		 * exists, MPATH conflict must have been already checked.
+		 * Only keep the RTF_MPATH flag if two routes have
+		 * the same gateway.
 		 */
-		if (rt->rt_flags & RTF_MPATH) {
-			/*
-			 * Only keep the RTF_MPATH flag if two routes have
-			 * the same gateway.
-			 */
-			rt->rt_flags &= ~RTF_MPATH;
-			SRPL_FOREACH_LOCKED(mrt, &an->an_rtlist, rt_next) {
-				if (mrt->rt_priority == prio) {
-					mrt->rt_flags |= RTF_MPATH;
-					rt->rt_flags |= RTF_MPATH;
-				}
+		rt->rt_flags &= ~RTF_MPATH;
+		SRPL_FOREACH_LOCKED(mrt, &an->an_rtlist, rt_next) {
+			if (mrt->rt_priority == prio) {
+				mrt->rt_flags |= RTF_MPATH;
+				rt->rt_flags |= RTF_MPATH;
 			}
 		}
-
-		/* Put newly inserted entry at the right place. */
-		rtable_mpath_insert(an, rt);
 	}
+
+	/* Put newly inserted entry at the right place. */
+	rtable_mpath_insert(an, rt);
 leave:
 	rw_exit_write(&ar->ar_lock);
 	rtfree(rt);
