@@ -372,7 +372,7 @@ struct mbstat {
 	u_long	m_drops;	/* times failed to find space */
 	u_long	m_wait;		/* times waited for space */
 	u_long	m_drain;	/* times drained protocols for space */
-	u_short	m_mtypes[256];	/* type specific mbuf allocations */
+	u_long	m_mtypes[256];	/* type specific mbuf allocations */
 };
 
 #define MBSTAT_TYPES           MT_NTYPES
