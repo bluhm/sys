@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_sig.c,v 1.307 2023/06/28 08:23:25 claudio Exp $	*/
+/*	$OpenBSD: kern_sig.c,v 1.310 2023/07/14 07:07:08 claudio Exp $	*/
 /*	$NetBSD: kern_sig.c,v 1.54 1996/04/22 01:38:32 christos Exp $	*/
 
 /*
@@ -1151,7 +1151,7 @@ ptsignal(struct proc *p, int signum, enum signal_type type)
 				atomic_clearbits_int(siglist, mask);
 			if (action == SIG_CATCH)
 				goto runfast;
-			if (p->p_wchan == NULL)
+			if (p->p_wchan == NULL || p->p_flag & P_WSLEEP)
 				goto run;
 			p->p_stat = SSLEEP;
 			goto out;
@@ -1699,7 +1699,7 @@ coredump(struct proc *p)
 	}
 
 	/* incrash should be 0 or KERNELPATH only */
-	NDINIT(&nd, 0, incrash, UIO_SYSSPACE, name, p);
+	NDINIT(&nd, 0, BYPASSUNVEIL | incrash, UIO_SYSSPACE, name, p);
 
 	error = vn_open(&nd, O_CREAT | FWRITE | O_NOFOLLOW | O_NONBLOCK,
 	    S_IRUSR | S_IWUSR);
@@ -2164,15 +2164,14 @@ single_thread_set(struct proc *p, enum single_thread_mode mode, int wait)
 int
 single_thread_wait(struct process *pr, int recheck)
 {
-	struct sleep_state sls;
 	int wait;
 
 	/* wait until they're all suspended */
 	wait = pr->ps_singlecount > 0;
 	while (wait) {
-		sleep_setup(&sls, &pr->ps_singlecount, PWAIT, "suspend");
+		sleep_setup(&pr->ps_singlecount, PWAIT, "suspend");
 		wait = pr->ps_singlecount > 0;
-		sleep_finish(&sls, PWAIT, 0, wait);
+		sleep_finish(0, wait);
 		if (!recheck)
 			break;
 	}
@@ -2204,7 +2203,7 @@ single_thread_clear(struct proc *p, int flag)
 		 * it back into some sleep queue
 		 */
 		if (q->p_stat == SSTOP && (q->p_flag & flag) == 0) {
-			if (q->p_wchan == NULL)
+			if (p->p_wchan == NULL || p->p_flag & P_WSLEEP)
 				setrunnable(q);
 			else
 				q->p_stat = SSLEEP;

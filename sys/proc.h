@@ -1,4 +1,4 @@
-/*	$OpenBSD: proc.h,v 1.343 2023/07/04 11:14:00 jsg Exp $	*/
+/*	$OpenBSD: proc.h,v 1.346 2023/07/14 07:07:08 claudio Exp $	*/
 /*	$NetBSD: proc.h,v 1.44 1996/04/22 01:23:21 christos Exp $	*/
 
 /*-
@@ -281,6 +281,7 @@ struct process {
 #define	PS_EXECPLEDGE	0x00400000	/* Has exec pledges */
 #define	PS_ORPHAN	0x00800000	/* Process is on an orphan list */
 #define	PS_CHROOT	0x01000000	/* Process is chrooted */
+#define	PS_NOBTCFI	0x02000000	/* No Branch Target CFI */
 
 #define	PS_BITS \
     ("\20" "\01CONTROLT" "\02EXEC" "\03INEXEC" "\04EXITING" "\05SUGID" \
@@ -288,7 +289,7 @@ struct process {
      "\013WAITED" "\014COREDUMP" "\015SINGLEEXIT" "\016SINGLEUNWIND" \
      "\017NOZOMBIE" "\020STOPPED" "\021SYSTEM" "\022EMBRYO" "\023ZOMBIE" \
      "\024NOBROADCASTKILL" "\025PLEDGE" "\026WXNEEDED" "\027EXECPLEDGE" \
-     "\030ORPHAN" "\031CHROOT")
+     "\030ORPHAN" "\031CHROOT" "\032NOBTCFI")
 
 
 struct kcov_dev;
@@ -413,6 +414,7 @@ struct proc {
 #define	P_ALRMPEND	0x00000004	/* SIGVTALRM needs to be posted */
 #define	P_SIGSUSPEND	0x00000008	/* Need to restore before-suspend mask*/
 #define	P_CANTSLEEP	0x00000010	/* insomniac thread */
+#define	P_WSLEEP	0x00000020	/* Working on going to sleep. */
 #define	P_SINTR		0x00000080	/* Sleep is interruptible. */
 #define	P_SYSTEM	0x00000200	/* No sigs, stats or swapping. */
 #define	P_TIMEOUT	0x00000400	/* Timing out during sleep. */
@@ -427,7 +429,7 @@ struct proc {
 
 #define	P_BITS \
     ("\20" "\01INKTR" "\02PROFPEND" "\03ALRMPEND" "\04SIGSUSPEND" \
-     "\05CANTSLEEP" "\010SINTR" "\012SYSTEM" "\013TIMEOUT" \
+     "\05CANTSLEEP" "\06WSLEEP" "\010SINTR" "\012SYSTEM" "\013TIMEOUT" \
      "\016WEXIT" "\020OWEUPC" "\024SUSPSINGLE" "\027XX" \
      "\030CONTINUED" "\033THREAD" "\034SUSPSIG" "\035SOFTDEP" "\037CPUPEG")
 
@@ -582,10 +584,6 @@ int	single_thread_check(struct proc *, int);
 void	child_return(void *);
 
 int	proc_cansugid(struct proc *);
-
-struct sleep_state {
-	int sls_s;
-};
 
 struct cond {
 	unsigned int	c_wait;		/* [a] initialized and waiting */

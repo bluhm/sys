@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_sched.c,v 1.77 2023/06/28 08:23:25 claudio Exp $	*/
+/*	$OpenBSD: kern_sched.c,v 1.79 2023/07/14 07:07:08 claudio Exp $	*/
 /*
  * Copyright (c) 2007, 2008 Artur Grabowski <art@openbsd.org>
  *
@@ -248,6 +248,7 @@ setrunqueue(struct cpu_info *ci, struct proc *p, uint8_t prio)
 
 	KASSERT(ci != NULL);
 	SCHED_ASSERT_LOCKED();
+	KASSERT(!ISSET(p->p_flag, P_WSLEEP) || p->p_stat == SSTOP);
 
 	p->p_cpu = ci;
 	p->p_stat = SRUN;
@@ -668,13 +669,12 @@ sched_stop_secondary_cpus(void)
 	}
 	CPU_INFO_FOREACH(cii, ci) {
 		struct schedstate_percpu *spc = &ci->ci_schedstate;
-		struct sleep_state sls;
 
 		if (CPU_IS_PRIMARY(ci) || !CPU_IS_RUNNING(ci))
 			continue;
 		while ((spc->spc_schedflags & SPCF_HALTED) == 0) {
-			sleep_setup(&sls, spc, PZERO, "schedstate");
-			sleep_finish(&sls, PZERO, 0,
+			sleep_setup(spc, PZERO, "schedstate");
+			sleep_finish(0,
 			    (spc->spc_schedflags & SPCF_HALTED) == 0);
 		}
 	}
