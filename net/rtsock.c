@@ -1,4 +1,4 @@
-/*	$OpenBSD: rtsock.c,v 1.367 2023/06/26 07:52:18 claudio Exp $	*/
+/*	$OpenBSD: rtsock.c,v 1.369 2023/07/28 09:33:16 mvs Exp $	*/
 /*	$NetBSD: rtsock.c,v 1.18 1996/03/29 00:32:10 cgd Exp $	*/
 
 /*
@@ -690,7 +690,7 @@ route_output(struct mbuf *m, struct socket *so)
 	u_char			 vers, type;
 
 	if (m == NULL || ((m->m_len < sizeof(int32_t)) &&
-	    (m = m_pullup(m, sizeof(int32_t))) == 0))
+	    (m = m_pullup(m, sizeof(int32_t))) == NULL))
 		return (ENOBUFS);
 	if ((m->m_flags & M_PKTHDR) == 0)
 		panic("route_output");
@@ -705,7 +705,8 @@ route_output(struct mbuf *m, struct socket *so)
 	sounlock(so);
 
 	len = m->m_pkthdr.len;
-	if (len < offsetof(struct rt_msghdr, rtm_hdrlen) + 1 ||
+	if (len < offsetof(struct rt_msghdr, rtm_hdrlen) +
+	    sizeof(rtm->rtm_hdrlen) ||
 	    len != mtod(m, struct rt_msghdr *)->rtm_msglen) {
 		error = EINVAL;
 		goto fail;
