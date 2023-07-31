@@ -1,4 +1,4 @@
-/*      $OpenBSD: codepatch.h,v 1.16 2023/07/28 06:18:35 guenther Exp $    */
+/*      $OpenBSD: codepatch.h,v 1.18 2023/07/31 04:01:07 guenther Exp $    */
 /*
  * Copyright (c) 2014-2015 Stefan Fritsch <sf@sfritsch.de>
  *
@@ -29,7 +29,7 @@ __cptext void *codepatch_maprw(vaddr_t *nva, vaddr_t dest);
 __cptext void codepatch_unmaprw(vaddr_t nva);
 __cptext void codepatch_fill_nop(void *caddr, uint16_t len);
 __cptext void codepatch_nop(uint16_t tag);
-__cptext void codepatch_replace(uint16_t tag, void *code, size_t len);
+__cptext void codepatch_replace(uint16_t tag, const void *code, size_t len);
 __cptext void codepatch_call(uint16_t _tag, void *_func);
 __cptext void codepatch_jmp(uint16_t _tag, void *_func);
 void codepatch_disable(void);
@@ -66,6 +66,9 @@ void codepatch_disable(void);
 #define CPTAG_FENCE_SWAPGS_MIS_TAKEN	11
 #define CPTAG_FENCE_NO_SAFE_SMAP	12
 #define CPTAG_XRSTORS			13
+#define CPTAG_RETPOLINE_RAX		14
+#define CPTAG_RETPOLINE_R11		15
+#define CPTAG_RETPOLINE_R13		16
 
 /*
  * stac/clac SMAP instructions have lfence like semantics.  Let's

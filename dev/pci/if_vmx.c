@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_vmx.c,v 1.70 2022/09/11 08:38:39 yasuoka Exp $	*/
+/*	$OpenBSD: if_vmx.c,v 1.78 2023/07/30 04:27:01 dlg Exp $	*/
 
 /*
  * Copyright (c) 2013 Tsubai Masanari
@@ -61,31 +61,49 @@
 #define VMX_RX_GEN	htole32(VMXNET3_RX_GEN_M << VMXNET3_RX_GEN_S)
 #define VMX_RXC_GEN	htole32(VMXNET3_RXC_GEN_M << VMXNET3_RXC_GEN_S)
 
+struct vmx_dmamem {
+	bus_dmamap_t		vdm_map;
+	bus_dma_segment_t	vdm_seg;
+	int			vdm_nsegs;
+	size_t			vdm_size;
+	caddr_t			vdm_kva;
+};
+
+#define VMX_DMA_MAP(_vdm)	((_vdm)->vdm_map)
+#define VMX_DMA_DVA(_vdm)	((_vdm)->vdm_map->dm_segs[0].ds_addr)
+#define VMX_DMA_KVA(_vdm)	((void *)(_vdm)->vdm_kva)
+#define VMX_DMA_LEN(_vdm)	((_vdm)->vdm_size)
+
 struct vmxnet3_softc;
 
 struct vmxnet3_txring {
+	struct vmx_dmamem dmamem;
 	struct mbuf *m[NTXDESC];
 	bus_dmamap_t dmap[NTXDESC];
 	struct vmxnet3_txdesc *txd;
 	u_int32_t gen;
-	u_int prod;
-	u_int cons;
+	volatile u_int prod;
+	volatile u_int cons;
 };
 
 struct vmxnet3_rxring {
 	struct vmxnet3_softc *sc;
+	struct vmxnet3_rxq_shared *rs; /* copy of the rxqueue rs */
+	struct vmx_dmamem dmamem;
 	struct mbuf *m[NRXDESC];
 	bus_dmamap_t dmap[NRXDESC];
 	struct mutex mtx;
 	struct if_rxring rxr;
 	struct timeout refill;
 	struct vmxnet3_rxdesc *rxd;
+	bus_size_t rxh;
 	u_int fill;
 	u_int32_t gen;
 	u_int8_t rid;
 };
 
 struct vmxnet3_comp_ring {
+	struct vmx_dmamem dmamem;
 	union {
 		struct vmxnet3_txcompdesc *txcd;
 		struct vmxnet3_rxcompdesc *rxcd;
@@ -101,6 +119,7 @@ struct vmxnet3_txqueue {
 	struct vmxnet3_txq_shared *ts;
 	struct ifqueue *ifq;
 	struct kstat *txkstat;
+	unsigned int queue;
 } __aligned(64);
 
 struct vmxnet3_rxqueue {
@@ -192,6 +211,12 @@ void vmxnet3_watchdog(struct ifnet *);
 void vmxnet3_media_status(struct ifnet *, struct ifmediareq *);
 int vmxnet3_media_change(struct ifnet *);
 void *vmxnet3_dma_allocmem(struct vmxnet3_softc *, u_int, u_int, bus_addr_t *);
+
+static int	vmx_dmamem_alloc(struct vmxnet3_softc *, struct vmx_dmamem *,
+		    bus_size_t, u_int);
+#ifdef notyet
+static void	vmx_dmamem_free(struct vmxnet3_softc *, struct vmx_dmamem *);
+#endif
 
 #if NKSTAT > 0
 static void	vmx_kstat_init(struct vmxnet3_softc *);
@@ -532,16 +557,18 @@ vmxnet3_alloc_txring(struct vmxnet3_softc *sc, int queue, int intr)
 	struct vmxnet3_txq_shared *ts;
 	struct vmxnet3_txring *ring = &tq->cmd_ring;
 	struct vmxnet3_comp_ring *comp_ring = &tq->comp_ring;
-	bus_addr_t pa, comp_pa;
 	int idx;
 
-	ring->txd = vmxnet3_dma_allocmem(sc, NTXDESC * sizeof ring->txd[0], 512, &pa);
-	if (ring->txd == NULL)
+	tq->queue = queue;
+
+	if (vmx_dmamem_alloc(sc, &ring->dmamem,
+	    NTXDESC * sizeof(struct vmxnet3_txdesc), 512) != 0)
 		return -1;
-	comp_ring->txcd = vmxnet3_dma_allocmem(sc,
-	    NTXCOMPDESC * sizeof comp_ring->txcd[0], 512, &comp_pa);
-	if (comp_ring->txcd == NULL)
+	ring->txd = VMX_DMA_KVA(&ring->dmamem);
+	if (vmx_dmamem_alloc(sc, &comp_ring->dmamem,
+	    NTXCOMPDESC * sizeof(comp_ring->txcd[0]), 512) != 0)
 		return -1;
+	comp_ring->txcd = VMX_DMA_KVA(&comp_ring->dmamem);
 
 	for (idx = 0; idx < NTXDESC; idx++) {
 		if (bus_dmamap_create(sc->sc_dmat, JUMBO_LEN, NTXSEGS,
@@ -553,9 +580,9 @@ vmxnet3_alloc_txring(struct vmxnet3_softc *sc, int queue, int intr)
 	bzero(ts, sizeof *ts);
 	ts->npending = 0;
 	ts->intr_threshold = 1;
-	ts->cmd_ring = pa;
+	ts->cmd_ring = VMX_DMA_DVA(&ring->dmamem);
 	ts->cmd_ring_len = NTXDESC;
-	ts->comp_ring = comp_pa;
+	ts->comp_ring = VMX_DMA_DVA(&comp_ring->dmamem);
 	ts->comp_ring_len = NTXCOMPDESC;
 	ts->driver_data = ~0ULL;
 	ts->driver_data_len = 0;
@@ -572,21 +599,20 @@ vmxnet3_alloc_rxring(struct vmxnet3_softc *sc, int queue, int intr)
 	struct vmxnet3_rxq_shared *rs;
 	struct vmxnet3_rxring *ring;
 	struct vmxnet3_comp_ring *comp_ring;
-	bus_addr_t pa[2], comp_pa;
 	int i, idx;
 
 	for (i = 0; i < 2; i++) {
 		ring = &rq->cmd_ring[i];
-		ring->rxd = vmxnet3_dma_allocmem(sc, NRXDESC * sizeof ring->rxd[0],
-		    512, &pa[i]);
-		if (ring->rxd == NULL)
+		if (vmx_dmamem_alloc(sc, &ring->dmamem,
+		    NRXDESC * sizeof(struct vmxnet3_rxdesc), 512) != 0)
 			return -1;
+		ring->rxd = VMX_DMA_KVA(&ring->dmamem);
 	}
 	comp_ring = &rq->comp_ring;
-	comp_ring->rxcd = vmxnet3_dma_allocmem(sc,
-	    NRXCOMPDESC * sizeof comp_ring->rxcd[0], 512, &comp_pa);
-	if (comp_ring->rxcd == NULL)
+	if (vmx_dmamem_alloc(sc, &comp_ring->dmamem,
+	    NRXCOMPDESC * sizeof(comp_ring->rxcd[0]), 512) != 0)
 		return -1;
+	comp_ring->rxcd = VMX_DMA_KVA(&comp_ring->dmamem);
 
 	for (i = 0; i < 2; i++) {
 		ring = &rq->cmd_ring[i];
@@ -599,15 +625,19 @@ vmxnet3_alloc_rxring(struct vmxnet3_softc *sc, int queue, int intr)
 			    JUMBO_LEN, 0, BUS_DMA_NOWAIT, &ring->dmap[idx]))
 				return -1;
 		}
+
+		ring->rs = rq->rs;
+		ring->rxh = (i == 0) ?
+		    VMXNET3_BAR0_RXH1(queue) : VMXNET3_BAR0_RXH2(queue);
 	}
 
 	rs = rq->rs;
 	bzero(rs, sizeof *rs);
-	rs->cmd_ring[0] = pa[0];
-	rs->cmd_ring[1] = pa[1];
+	rs->cmd_ring[0] = VMX_DMA_DVA(&rq->cmd_ring[0].dmamem);
+	rs->cmd_ring[1] = VMX_DMA_DVA(&rq->cmd_ring[1].dmamem);
 	rs->cmd_ring_len[0] = NRXDESC;
 	rs->cmd_ring_len[1] = NRXDESC;
-	rs->comp_ring = comp_pa;
+	rs->comp_ring = VMX_DMA_DVA(&comp_ring->dmamem);
 	rs->comp_ring_len = NRXCOMPDESC;
 	rs->driver_data = ~0ULL;
 	rs->driver_data_len = 0;
@@ -627,8 +657,16 @@ vmxnet3_txinit(struct vmxnet3_softc *sc, struct vmxnet3_txqueue *tq)
 	ring->gen = VMX_TX_GEN;
 	comp_ring->next = 0;
 	comp_ring->gen = VMX_TXC_GEN;
-	bzero(ring->txd, NTXDESC * sizeof ring->txd[0]);
-	bzero(comp_ring->txcd, NTXCOMPDESC * sizeof comp_ring->txcd[0]);
+	memset(VMX_DMA_KVA(&ring->dmamem), 0,
+	    VMX_DMA_LEN(&ring->dmamem));
+	bus_dmamap_sync(sc->sc_dmat, VMX_DMA_MAP(&ring->dmamem),
+	    0, VMX_DMA_LEN(&ring->dmamem), BUS_DMASYNC_PREWRITE);
+	memset(VMX_DMA_KVA(&comp_ring->dmamem), 0,
+	    VMX_DMA_LEN(&comp_ring->dmamem));
+	bus_dmamap_sync(sc->sc_dmat, VMX_DMA_MAP(&comp_ring->dmamem),
+	    0, VMX_DMA_LEN(&comp_ring->dmamem), BUS_DMASYNC_PREREAD);
+
+	ifq_clr_oactive(tq->ifq);
 }
 
 void
@@ -657,10 +695,17 @@ vmxnet3_rxfill(struct vmxnet3_rxring *ring)
 
 	MUTEX_ASSERT_LOCKED(&ring->mtx);
 
+	slots = if_rxr_get(&ring->rxr, NRXDESC);
+	if (slots == 0)
+		return;
+
 	prod = ring->fill;
 	rgen = ring->gen;
 
-	for (slots = if_rxr_get(&ring->rxr, NRXDESC); slots > 0; slots--) {
+	bus_dmamap_sync(sc->sc_dmat, VMX_DMA_MAP(&ring->dmamem),
+	    0, VMX_DMA_LEN(&ring->dmamem), BUS_DMASYNC_POSTWRITE);
+
+	do {
 		KASSERT(ring->m[prod] == NULL);
 
 		m = MCLGETL(NULL, M_DONTWAIT, JUMBO_LEN);
@@ -681,7 +726,9 @@ vmxnet3_rxfill(struct vmxnet3_rxring *ring)
 
 		rxd = &ring->rxd[prod];
 		rxd->rx_addr = htole64(DMAADDR(map));
-		membar_producer();
+		bus_dmamap_sync(sc->sc_dmat, VMX_DMA_MAP(&ring->dmamem),
+		    0, VMX_DMA_LEN(&ring->dmamem),
+		    BUS_DMASYNC_PREWRITE|BUS_DMASYNC_POSTWRITE);
 		rxd->rx_word2 = (htole32(m->m_pkthdr.len & VMXNET3_RX_LEN_M) <<
 		    VMXNET3_RX_LEN_S) | type | rgen;
 
@@ -689,7 +736,11 @@ vmxnet3_rxfill(struct vmxnet3_rxring *ring)
 			prod = 0;
 			rgen ^= VMX_RX_GEN;
 		}
-	}
+	} while (--slots > 0);
+
+	bus_dmamap_sync(sc->sc_dmat, VMX_DMA_MAP(&ring->dmamem),
+	    0, VMX_DMA_LEN(&ring->dmamem), BUS_DMASYNC_PREWRITE);
+
 	if_rxr_put(&ring->rxr, slots);
 
 	ring->fill = prod;
@@ -697,6 +748,9 @@ vmxnet3_rxfill(struct vmxnet3_rxring *ring)
 
 	if (if_rxr_inuse(&ring->rxr) == 0)
 		timeout_add(&ring->refill, 1);
+
+	if (ring->rs->update_rxhead)
+		WRITE_BAR0(sc, ring->rxh, prod);
 }
 
 void
@@ -708,10 +762,14 @@ vmxnet3_rxinit(struct vmxnet3_softc *sc, struct vmxnet3_rxqueue *rq)
 
 	for (i = 0; i < 2; i++) {
 		ring = &rq->cmd_ring[i];
+		if_rxr_init(&ring->rxr, 2, NRXDESC - 1);
 		ring->fill = 0;
 		ring->gen = VMX_RX_GEN;
-		bzero(ring->rxd, NRXDESC * sizeof ring->rxd[0]);
-		if_rxr_init(&ring->rxr, 2, NRXDESC - 1);
+
+		memset(VMX_DMA_KVA(&ring->dmamem), 0,
+		    VMX_DMA_LEN(&ring->dmamem));
+		bus_dmamap_sync(sc->sc_dmat, VMX_DMA_MAP(&ring->dmamem),
+		    0, VMX_DMA_LEN(&ring->dmamem), BUS_DMASYNC_PREWRITE);
 	}
 
 	/* XXX only fill ring 0 */
@@ -723,14 +781,25 @@ vmxnet3_rxinit(struct vmxnet3_softc *sc, struct vmxnet3_rxqueue *rq)
 	comp_ring = &rq->comp_ring;
 	comp_ring->next = 0;
 	comp_ring->gen = VMX_RXC_GEN;
-	bzero(comp_ring->rxcd, NRXCOMPDESC * sizeof comp_ring->rxcd[0]);
+
+	memset(VMX_DMA_KVA(&comp_ring->dmamem), 0,
+	    VMX_DMA_LEN(&comp_ring->dmamem));
+	bus_dmamap_sync(sc->sc_dmat, VMX_DMA_MAP(&comp_ring->dmamem),
+	    0, VMX_DMA_LEN(&comp_ring->dmamem), BUS_DMASYNC_PREREAD);
 }
 
 void
 vmxnet3_txstop(struct vmxnet3_softc *sc, struct vmxnet3_txqueue *tq)
 {
 	struct vmxnet3_txring *ring = &tq->cmd_ring;
+	struct vmxnet3_comp_ring *comp_ring = &tq->comp_ring;
+	struct ifqueue *ifq = tq->ifq;
 	int idx;
+
+	bus_dmamap_sync(sc->sc_dmat, VMX_DMA_MAP(&comp_ring->dmamem),
+	    0, VMX_DMA_LEN(&comp_ring->dmamem), BUS_DMASYNC_POSTREAD);
+	bus_dmamap_sync(sc->sc_dmat, VMX_DMA_MAP(&ring->dmamem),
+	    0, VMX_DMA_LEN(&ring->dmamem), BUS_DMASYNC_POSTWRITE);
 
 	for (idx = 0; idx < NTXDESC; idx++) {
 		if (ring->m[idx]) {
@@ -739,16 +808,25 @@ vmxnet3_txstop(struct vmxnet3_softc *sc, struct vmxnet3_txqueue *tq)
 			ring->m[idx] = NULL;
 		}
 	}
+
+	ifq_purge(ifq);
+	ifq_clr_oactive(ifq);
 }
 
 void
 vmxnet3_rxstop(struct vmxnet3_softc *sc, struct vmxnet3_rxqueue *rq)
 {
 	struct vmxnet3_rxring *ring;
+	struct vmxnet3_comp_ring *comp_ring = &rq->comp_ring;
 	int i, idx;
+
+	bus_dmamap_sync(sc->sc_dmat, VMX_DMA_MAP(&comp_ring->dmamem),
+	    0, VMX_DMA_LEN(&comp_ring->dmamem), BUS_DMASYNC_POSTREAD);
 
 	for (i = 0; i < 2; i++) {
 		ring = &rq->cmd_ring[i];
+		bus_dmamap_sync(sc->sc_dmat, VMX_DMA_MAP(&ring->dmamem),
+		    0, VMX_DMA_LEN(&ring->dmamem), BUS_DMASYNC_POSTWRITE);
 		timeout_del(&ring->refill);
 		for (idx = 0; idx < NRXDESC; idx++) {
 			struct mbuf *m = ring->m[idx];
@@ -924,18 +1002,22 @@ vmxnet3_txintr(struct vmxnet3_softc *sc, struct vmxnet3_txqueue *tq)
 	struct vmxnet3_txcompdesc *txcd;
 	bus_dmamap_t map;
 	struct mbuf *m;
-	u_int cons, next;
+	u_int prod, cons, next;
 	uint32_t rgen;
 
+	prod = ring->prod;
 	cons = ring->cons;
-	if (cons == ring->prod)
+
+	if (cons == prod)
 		return;
 
 	next = comp_ring->next;
 	rgen = comp_ring->gen;
 
-	/* postread */
-	for (;;) {
+	bus_dmamap_sync(sc->sc_dmat, VMX_DMA_MAP(&comp_ring->dmamem),
+	    0, VMX_DMA_LEN(&comp_ring->dmamem), BUS_DMASYNC_POSTREAD);
+
+	do {
 		txcd = &comp_ring->txcd[next];
 		if ((txcd->txc_word3 & VMX_TXC_GEN) != rgen)
 			break;
@@ -958,8 +1040,10 @@ vmxnet3_txintr(struct vmxnet3_softc *sc, struct vmxnet3_txqueue *tq)
 		    VMXNET3_TXC_EOPIDX_M;
 		cons++;
 		cons %= NTXDESC;
-	}
-	/* preread */
+	} while (cons != prod);
+
+	bus_dmamap_sync(sc->sc_dmat, VMX_DMA_MAP(&comp_ring->dmamem),
+	    0, VMX_DMA_LEN(&comp_ring->dmamem), BUS_DMASYNC_PREREAD);
 
 	comp_ring->next = next;
 	comp_ring->gen = rgen;
@@ -985,6 +1069,9 @@ vmxnet3_rxintr(struct vmxnet3_softc *sc, struct vmxnet3_rxqueue *rq)
 
 	next = comp_ring->next;
 	rgen = comp_ring->gen;
+
+	bus_dmamap_sync(sc->sc_dmat, VMX_DMA_MAP(&comp_ring->dmamem),
+	    0, VMX_DMA_LEN(&comp_ring->dmamem), BUS_DMASYNC_POSTREAD);
 
 	for (;;) {
 		rxcd = &comp_ring->rxcd[next];
@@ -1018,14 +1105,14 @@ vmxnet3_rxintr(struct vmxnet3_softc *sc, struct vmxnet3_rxqueue *rq)
 		if (letoh32(rxcd->rxc_word2 & VMXNET3_RXC_ERROR)) {
 			ifp->if_ierrors++;
 			m_freem(m);
-			goto skip_buffer;
+			continue;
 		}
 
 		len = letoh32((rxcd->rxc_word2 >> VMXNET3_RXC_LEN_S) &
 		    VMXNET3_RXC_LEN_M);
 		if (len < VMXNET3_MIN_MTU) {
 			m_freem(m);
-			goto skip_buffer;
+			continue;
 		}
 		m->m_pkthdr.len = m->m_len = len;
 
@@ -1042,21 +1129,10 @@ vmxnet3_rxintr(struct vmxnet3_softc *sc, struct vmxnet3_rxqueue *rq)
 		}
 
 		ml_enqueue(&ml, m);
-
-skip_buffer:
-		if (rq->rs->update_rxhead) {
-			u_int qid = letoh32((rxcd->rxc_word0 >>
-			    VMXNET3_RXC_QID_S) & VMXNET3_RXC_QID_M);
-
-			idx = (idx + 1) % NRXDESC;
-			if (qid < sc->sc_nqueues) {
-				WRITE_BAR0(sc, VMXNET3_BAR0_RXH1(qid), idx);
-			} else {
-				qid -= sc->sc_nqueues;
-				WRITE_BAR0(sc, VMXNET3_BAR0_RXH2(qid), idx);
-			}
-		}
 	}
+
+	bus_dmamap_sync(sc->sc_dmat, VMX_DMA_MAP(&comp_ring->dmamem),
+	    0, VMX_DMA_LEN(&comp_ring->dmamem), BUS_DMASYNC_PREREAD);
 
 	comp_ring->next = next;
 	comp_ring->gen = rgen;
@@ -1152,7 +1228,6 @@ vmxnet3_stop(struct ifnet *ifp)
 	int queue;
 
 	ifp->if_flags &= ~IFF_RUNNING;
-	ifq_clr_oactive(&ifp->if_snd);
 	ifp->if_timer = 0;
 
 	vmxnet3_disable_all_intrs(sc);
@@ -1218,7 +1293,6 @@ vmxnet3_init(struct vmxnet3_softc *sc)
 	vmxnet3_link_state(sc);
 
 	ifp->if_flags |= IFF_RUNNING;
-	ifq_clr_oactive(&ifp->if_snd);
 
 	return 0;
 }
@@ -1325,7 +1399,7 @@ vmxnet3_start(struct ifqueue *ifq)
 	struct vmxnet3_txring *ring = &tq->cmd_ring;
 	struct vmxnet3_txdesc *txd, *sop;
 	bus_dmamap_t map;
-        unsigned int prod, free, i;
+	unsigned int prod, free, i;
 	unsigned int post = 0;
 	uint32_t rgen, gen;
 
@@ -1336,6 +1410,9 @@ vmxnet3_start(struct ifqueue *ifq)
 	if (free <= prod)
 		free += NTXDESC;
 	free -= prod;
+
+	bus_dmamap_sync(sc->sc_dmat, VMX_DMA_MAP(&ring->dmamem),
+	    0, VMX_DMA_LEN(&ring->dmamem), BUS_DMASYNC_POSTWRITE);
 
 	rgen = ring->gen;
 
@@ -1391,21 +1468,26 @@ vmxnet3_start(struct ifqueue *ifq)
 			    VMXNET3_TX_VLANTAG_M) << VMXNET3_TX_VLANTAG_S);
 		}
 
+		ring->prod = prod;
 		/* Change the ownership by flipping the "generation" bit */
-		membar_producer();
+		bus_dmamap_sync(sc->sc_dmat, VMX_DMA_MAP(&ring->dmamem),
+		    0, VMX_DMA_LEN(&ring->dmamem),
+		    BUS_DMASYNC_PREWRITE|BUS_DMASYNC_POSTWRITE);
 		sop->tx_word2 ^= VMX_TX_GEN;
 
 		free -= i;
 		post = 1;
 	}
 
+	bus_dmamap_sync(sc->sc_dmat, VMX_DMA_MAP(&ring->dmamem),
+	    0, VMX_DMA_LEN(&ring->dmamem), BUS_DMASYNC_PREWRITE);
+
 	if (!post)
 		return;
 
-	ring->prod = prod;
 	ring->gen = rgen;
 
-	WRITE_BAR0(sc, VMXNET3_BAR0_TXH(0), prod);
+	WRITE_BAR0(sc, VMXNET3_BAR0_TXH(tq->queue), prod);
 }
 
 void
@@ -1468,6 +1550,49 @@ vmxnet3_dma_allocmem(struct vmxnet3_softc *sc, u_int size, u_int align, bus_addr
 	bus_dmamap_destroy(t, map);
 	return va;
 }
+
+static int
+vmx_dmamem_alloc(struct vmxnet3_softc *sc, struct vmx_dmamem *vdm,
+    bus_size_t size, u_int align)
+{
+	vdm->vdm_size = size;
+
+	if (bus_dmamap_create(sc->sc_dmat, vdm->vdm_size, 1,
+	    vdm->vdm_size, 0,
+	    BUS_DMA_WAITOK | BUS_DMA_ALLOCNOW | BUS_DMA_64BIT,
+	    &vdm->vdm_map) != 0)
+		return (1);
+	if (bus_dmamem_alloc(sc->sc_dmat, vdm->vdm_size,
+	    align, 0, &vdm->vdm_seg, 1, &vdm->vdm_nsegs,
+	    BUS_DMA_WAITOK | BUS_DMA_ZERO) != 0)
+		goto destroy;
+	if (bus_dmamem_map(sc->sc_dmat, &vdm->vdm_seg, vdm->vdm_nsegs,
+	    vdm->vdm_size, &vdm->vdm_kva, BUS_DMA_WAITOK) != 0)
+		goto free;
+	if (bus_dmamap_load(sc->sc_dmat, vdm->vdm_map, vdm->vdm_kva,
+	    vdm->vdm_size, NULL, BUS_DMA_WAITOK) != 0)
+		goto unmap;
+
+	return (0);
+unmap:
+	bus_dmamem_unmap(sc->sc_dmat, vdm->vdm_kva, vdm->vdm_size);
+free:
+	bus_dmamem_free(sc->sc_dmat, &vdm->vdm_seg, 1);
+destroy:
+	bus_dmamap_destroy(sc->sc_dmat, vdm->vdm_map);
+	return (1);
+}
+
+#ifdef notyet
+static void
+vmx_dmamem_free(struct vmxnet3_softc *sc, struct vmx_dmamem *vdm)
+{
+	bus_dmamap_unload(sc->sc_dmat, vdm->vdm_map);
+	bus_dmamem_unmap(sc->sc_dmat, vdm->vdm_kva, vdm->vdm_size);
+	bus_dmamem_free(sc->sc_dmat, &vdm->vdm_seg, 1);
+	bus_dmamap_destroy(sc->sc_dmat, vdm->vdm_map);
+}
+#endif
 
 #if NKSTAT > 0
 /*
@@ -1536,7 +1661,7 @@ vmx_kstat_read(struct kstat *ks)
 	for (i = 0; i < n; i++)
 		kstat_kv_u64(&kvs[i]) = lemtoh64(&vs[i]);
 
- 	TIMEVAL_TO_TIMESPEC(&sc->sc_kstat_updated, &ks->ks_updated);
+	TIMEVAL_TO_TIMESPEC(&sc->sc_kstat_updated, &ks->ks_updated);
 
 	return (0);
 }
