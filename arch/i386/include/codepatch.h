@@ -1,4 +1,4 @@
-/*      $OpenBSD: codepatch.h,v 1.2 2017/07/01 19:42:59 sf Exp $    */
+/*      $OpenBSD: codepatch.h,v 1.3 2023/07/31 17:10:31 bluhm Exp $    */
 /*
  * Copyright (c) 2014-2015 Stefan Fritsch <sf@sfritsch.de>
  *
