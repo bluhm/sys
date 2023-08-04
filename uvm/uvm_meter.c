@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_meter.c,v 1.44 2023/06/21 21:16:21 cheloha Exp $	*/
+/*	$OpenBSD: uvm_meter.c,v 1.48 2023/08/03 16:12:08 claudio Exp $	*/
 /*	$NetBSD: uvm_meter.c,v 1.21 2001/07/14 06:36:03 matt Exp $	*/
 
 /*
@@ -70,7 +70,7 @@ struct loadavg averunnable;
  * 5 second intervals.
  */
 
-static fixpt_t cexp[3] = {
+static const fixpt_t cexp[3] = {
 	0.9200444146293232 * FSCALE,	/* exp(-1/12) */
 	0.9834714538216174 * FSCALE,	/* exp(-1/60) */
 	0.9944598480048967 * FSCALE,	/* exp(-1/180) */
@@ -82,15 +82,13 @@ void uvm_total(struct vmtotal *);
 void uvmexp_read(struct uvmexp *);
 
 /*
- * uvm_meter: calculate load average and wake up the swapper (if needed)
+ * uvm_meter: calculate load average
  */
 void
 uvm_meter(void)
 {
 	if ((gettime() % 5) == 0)
 		uvm_loadav(&averunnable);
-	if (proc0.p_slptime > (maxslp / 2))
-		wakeup(&proc0);
 }
 
 /*
@@ -100,45 +98,20 @@ uvm_meter(void)
 static void
 uvm_loadav(struct loadavg *avg)
 {
+	extern struct cpuset sched_idle_cpus;
 	CPU_INFO_ITERATOR cii;
 	struct cpu_info *ci;
-	int i, nrun;
-	struct proc *p;
-	int nrun_cpu[MAXCPUS];
+	u_int i, nrun = 0;
 
-	nrun = 0;
-	memset(nrun_cpu, 0, sizeof(nrun_cpu));
-
-	LIST_FOREACH(p, &allproc, p_list) {
-		switch (p->p_stat) {
-		case SSTOP:
-		case SSLEEP:
-			break;
-		case SRUN:
-		case SONPROC:
-			if (p == p->p_cpu->ci_schedstate.spc_idleproc)
-				continue;
-		/* FALLTHROUGH */
-		case SIDL:
+	CPU_INFO_FOREACH(cii, ci) {
+		if (!cpuset_isset(&sched_idle_cpus, ci))
 			nrun++;
-			if (p->p_cpu)
-				nrun_cpu[CPU_INFO_UNIT(p->p_cpu)]++;
-		}
+		nrun += ci->ci_schedstate.spc_nrun;
 	}
 
 	for (i = 0; i < 3; i++) {
 		avg->ldavg[i] = (cexp[i] * avg->ldavg[i] +
 		    nrun * FSCALE * (FSCALE - cexp[i])) >> FSHIFT;
-	}
-
-	CPU_INFO_FOREACH(cii, ci) {
-		struct schedstate_percpu *spc = &ci->ci_schedstate;
-
-		if (nrun_cpu[CPU_INFO_UNIT(ci)] == 0)
-			continue;
-		spc->spc_ldavg = (cexp[0] * spc->spc_ldavg +
-		    nrun_cpu[CPU_INFO_UNIT(ci)] * FSCALE *
-		    (FSCALE - cexp[0])) >> FSHIFT;
 	}
 }
 
