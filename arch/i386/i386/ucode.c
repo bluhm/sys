@@ -28,7 +28,7 @@
 #include <machine/specialreg.h>
 #include <machine/biosvar.h>
 
-/* #define UCODE_DEBUG */
+#define UCODE_DEBUG
 #ifdef UCODE_DEBUG
 #define DPRINTF(x)	do { if (cpu_ucode_debug > 0) printf x; } while (0)
 #define DPRINTFN(n, x)	do { if (cpu_ucode_debug >= (n)) printf x; } while (0)
