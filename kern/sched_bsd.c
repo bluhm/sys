@@ -1,4 +1,4 @@
-/*	$OpenBSD: sched_bsd.c,v 1.79 2023/08/05 20:07:55 cheloha Exp $	*/
+/*	$OpenBSD: sched_bsd.c,v 1.81 2023/08/14 08:33:24 mpi Exp $	*/
 /*	$NetBSD: kern_synch.c,v 1.37 1996/04/22 01:38:37 christos Exp $	*/
 
 /*-
@@ -54,9 +54,8 @@
 #include <sys/ktrace.h>
 #endif
 
-
+uint32_t roundrobin_period;	/* [I] roundrobin period (ns) */
 int	lbolt;			/* once a second sleep address */
-int	rrticks_init;		/* # of hardclock ticks per roundrobin() */
 
 #ifdef MULTIPROCESSOR
 struct __mp_lock sched_lock;
@@ -69,21 +68,23 @@ uint32_t		decay_aftersleep(uint32_t, uint32_t);
  * Force switch among equal priority processes every 100ms.
  */
 void
-roundrobin(struct cpu_info *ci)
+roundrobin(struct clockintr *cl, void *cf)
 {
+	uint64_t count;
+	struct cpu_info *ci = curcpu();
 	struct schedstate_percpu *spc = &ci->ci_schedstate;
 
-	spc->spc_rrticks = rrticks_init;
+	count = clockintr_advance(cl, roundrobin_period);
 
 	if (ci->ci_curproc != NULL) {
-		if (spc->spc_schedflags & SPCF_SEENRR) {
+		if (spc->spc_schedflags & SPCF_SEENRR || count >= 2) {
 			/*
 			 * The process has already been through a roundrobin
 			 * without switching and may be hogging the CPU.
 			 * Indicate that the process should yield.
 			 */
 			atomic_setbits_int(&spc->spc_schedflags,
-			    SPCF_SHOULDYIELD);
+			    SPCF_SEENRR | SPCF_SHOULDYIELD);
 		} else {
 			atomic_setbits_int(&spc->spc_schedflags,
 			    SPCF_SEENRR);
@@ -461,6 +462,7 @@ setrunnable(struct proc *p)
 			atomic_setbits_int(&p->p_siglist, sigmask(pr->ps_xsig));
 		prio = p->p_usrpri;
 		unsleep(p);
+		setrunqueue(NULL, p, prio);
 		break;
 	case SSLEEP:
 		prio = p->p_slppri;
@@ -469,9 +471,11 @@ setrunnable(struct proc *p)
 		/* if not yet asleep, don't add to runqueue */
 		if (ISSET(p->p_flag, P_WSLEEP))
 			return;
+		setrunqueue(NULL, p, prio);
+		TRACEPOINT(sched, wakeup, p->p_tid + THREAD_PID_OFFSET,
+		    p->p_p->ps_pid, CPU_INFO_UNIT(p->p_cpu));
 		break;
 	}
-	setrunqueue(NULL, p, prio);
 	if (p->p_slptime > 1) {
 		uint32_t newcpu;
 
@@ -695,8 +699,6 @@ scheduler_start(void)
 	 * its job.
 	 */
 	timeout_set(&schedcpu_to, schedcpu, &schedcpu_to);
-
-	rrticks_init = hz / 10;
 	schedcpu(&schedcpu_to);
 
 #ifndef SMALL_KERNEL
