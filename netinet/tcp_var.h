@@ -236,6 +236,7 @@ union syn_cache_sa {
 
 struct syn_cache {
 	TAILQ_ENTRY(syn_cache) sc_bucketq;	/* link on bucket list */
+	struct refcnt sc_refcnt;		/* ref count list and timer */
 	struct timeout sc_timer;		/* rexmt timer */
 	union {					/* cached route */
 		struct route route4;

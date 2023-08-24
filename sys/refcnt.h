@@ -49,7 +49,8 @@ unsigned int	refcnt_read(struct refcnt *);
 #define DT_REFCNT_IDX_IFMADDR	3
 #define DT_REFCNT_IDX_INPCB	4
 #define DT_REFCNT_IDX_RTENTRY	5
-#define DT_REFCNT_IDX_TDB	6
+#define DT_REFCNT_IDX_SYNCACHE	6
+#define DT_REFCNT_IDX_TDB	7
 
 #endif /* _KERNEL */
 
