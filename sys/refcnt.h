@@ -1,4 +1,4 @@
-/*	$OpenBSD: refcnt.h,v 1.11 2023/07/06 19:46:53 kn Exp $ */
+/*	$OpenBSD: refcnt.h,v 1.12 2023/08/28 14:50:02 bluhm Exp $ */
 
 /*
  * Copyright (c) 2015 David Gwynne <dlg@openbsd.org>
