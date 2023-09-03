@@ -144,7 +144,6 @@ struct pf_test_ctx {
 	struct pf_ruleset	**rsm;
 	struct pf_ruleset	 *arsm;
 	struct pf_ruleset	 *aruleset;
-	struct tcphdr		 *th;
 };
 
 struct pool		 pf_src_tree_pl, pf_rule_pl, pf_queue_pl;
@@ -4099,8 +4098,8 @@ enter_ruleset:
 			break;
 
 		case IPPROTO_TCP:
-			PF_TEST_ATTRIB(((r->flagset & ctx->th->th_flags) !=
-			    r->flags),
+			PF_TEST_ATTRIB(((r->flagset & ctx->pd->hdr.tcp.th_flags)
+			    != r->flags),
 				TAILQ_NEXT(r, entries));
 			PF_TEST_ATTRIB((r->os_fingerprint != PF_OSFP_ANY &&
 			    !pf_osfp_match(pf_osfp_fingerprint(ctx->pd),
@@ -4325,6 +4324,7 @@ pf_test_rule(struct pf_pdesc *pd, struct pf_rule **rm, struct pf_state **sm,
 	struct pf_rule		*a = NULL;
 	struct pf_ruleset	*ruleset = NULL;
 	struct pf_state_key	*skw = NULL, *sks = NULL;
+	struct tcphdr		*th = &pd->hdr.tcp;
 	int			 rewrite = 0;
 	u_int16_t		 virtual_type, virtual_id;
 	int			 action = PF_DROP;
@@ -4338,7 +4338,6 @@ pf_test_rule(struct pf_pdesc *pd, struct pf_rule **rm, struct pf_state **sm,
 	ctx.rm = rm;
 	ctx.am = am;
 	ctx.rsm = rsm;
-	ctx.th = &pd->hdr.tcp;
 	ctx.act.rtableid = pd->rdomain;
 	ctx.tag = -1;
 	SLIST_INIT(&ctx.rules);
@@ -4418,21 +4417,21 @@ pf_test_rule(struct pf_pdesc *pd, struct pf_rule **rm, struct pf_state **sm,
 		if (pd->proto == IPPROTO_TCP &&
 		    ((r->rule_flag & PFRULE_RETURNRST) ||
 		    (r->rule_flag & PFRULE_RETURN)) &&
-		    !(ctx.th->th_flags & TH_RST)) {
+		    !(th->th_flags & TH_RST)) {
 			u_int32_t	 ack =
-			    ntohl(ctx.th->th_seq) + pd->p_len;
+			    ntohl(th->th_seq) + pd->p_len;
 
 			if (pf_check_tcp_cksum(pd->m, pd->off,
 			    pd->tot_len - pd->off, pd->af))
 				REASON_SET(&ctx.reason, PFRES_PROTCKSUM);
 			else {
-				if (ctx.th->th_flags & TH_SYN)
+				if (th->th_flags & TH_SYN)
 					ack++;
-				if (ctx.th->th_flags & TH_FIN)
+				if (th->th_flags & TH_FIN)
 					ack++;
 				pf_send_tcp(r, pd->af, pd->dst,
-				    pd->src, ctx.th->th_dport,
-				    ctx.th->th_sport, ntohl(ctx.th->th_ack),
+				    pd->src, th->th_dport, th->th_sport,
+				    ntohl(th->th_ack),
 				    ack, TH_RST|TH_ACK, 0, 0, r->return_ttl,
 				    1, 0, pd->rdomain);
 			}
