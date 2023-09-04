@@ -3086,13 +3086,14 @@ tcp_mss_adv(struct mbuf *m, int af)
 
 /* syn hash parameters */
 int	tcp_syn_hash_size = TCP_SYN_HASH_SIZE;
-int	tcp_syn_cache_limit = TCP_SYN_HASH_SIZE*TCP_SYN_BUCKET_SIZE;
+int	tcp_syn_cache_limit = TCP_SYN_HASH_SIZE * TCP_SYN_BUCKET_SIZE;
 int	tcp_syn_bucket_limit = 3*TCP_SYN_BUCKET_SIZE;
 int	tcp_syn_use_limit = 100000;
 
 struct pool syn_cache_pool;
 struct syn_cache_set tcp_syn_cache[2];
 int tcp_syn_cache_active;
+struct mutex syn_cache_mtx = MUTEX_INITIALIZER(SPL_SOFTNET);
 
 #define SYN_HASH(sa, sp, dp, rand) \
 	(((sa)->s_addr ^ (rand)[0]) *				\
