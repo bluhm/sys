@@ -3084,15 +3084,24 @@ tcp_mss_adv(struct mbuf *m, int af)
  * state for SYN_RECEIVED.
  */
 
+/*
+ * Locks used to protect global data and struct members:
+ *	N	net lock
+ *	S	syn_cache_mtx		tcp syn cache global mutex
+ */
+
 /* syn hash parameters */
-int	tcp_syn_hash_size = TCP_SYN_HASH_SIZE;
-int	tcp_syn_cache_limit = TCP_SYN_HASH_SIZE*TCP_SYN_BUCKET_SIZE;
-int	tcp_syn_bucket_limit = 3*TCP_SYN_BUCKET_SIZE;
-int	tcp_syn_use_limit = 100000;
+int	tcp_syn_hash_size = TCP_SYN_HASH_SIZE;	/* [N] size of hash table */
+int	tcp_syn_cache_limit =			/* [N] global entry limit */
+	    TCP_SYN_HASH_SIZE * TCP_SYN_BUCKET_SIZE;
+int	tcp_syn_bucket_limit =			/* [N] per bucket limit */
+	    3 * TCP_SYN_BUCKET_SIZE;
+int	tcp_syn_use_limit = 100000;		/* [N] reseed after uses */
 
 struct pool syn_cache_pool;
 struct syn_cache_set tcp_syn_cache[2];
 int tcp_syn_cache_active;
+struct mutex syn_cache_mtx = MUTEX_INITIALIZER(IPL_SOFTNET);
 
 #define SYN_HASH(sa, sp, dp, rand) \
 	(((sa)->s_addr ^ (rand)[0]) *				\
@@ -3134,7 +3143,10 @@ do {									\
 void
 syn_cache_rm(struct syn_cache *sc)
 {
-	sc->sc_flags |= SCF_DEAD;
+	MUTEX_ASSERT_LOCKED(&syn_cache_mtx);
+
+	KASSERT(!sc->sc_dead);
+	sc->sc_dead = 1;
 	TAILQ_REMOVE(&sc->sc_buckethead->sch_bucket, sc, sc_bucketq);
 	sc->sc_tp = NULL;
 	LIST_REMOVE(sc, sc_tpq);
@@ -3151,11 +3163,10 @@ syn_cache_put(struct syn_cache *sc)
 	if (refcnt_rele(&sc->sc_refcnt) == 0)
 		return;
 
+	/* Dealing with last reference, no lock needed. */
 	m_free(sc->sc_ipopts);
-	if (sc->sc_route4.ro_rt != NULL) {
-		rtfree(sc->sc_route4.ro_rt);
-		sc->sc_route4.ro_rt = NULL;
-	}
+	rtfree(sc->sc_route4.ro_rt);
+
 	pool_put(&syn_cache_pool, sc);
 }
 
@@ -3190,6 +3201,7 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 	int i;
 
 	NET_ASSERT_LOCKED();
+	MUTEX_ASSERT_LOCKED(&syn_cache_mtx);
 
 	/*
 	 * If there are no entries in the hash table, reinitialize
@@ -3333,11 +3345,9 @@ syn_cache_timer(void *arg)
 	uint64_t now;
 	int lastref;
 
-	NET_LOCK();
-	if (sc->sc_flags & SCF_DEAD)
+	mtx_enter(&syn_cache_mtx);
+	if (sc->sc_dead)
 		goto freeit;
-
-	now = tcp_now();
 
 	if (__predict_false(sc->sc_rxtshift == TCP_MAXRXTSHIFT)) {
 		/* Drop it -- too many retransmissions. */
@@ -3353,18 +3363,22 @@ syn_cache_timer(void *arg)
 	if (sc->sc_rxttot >= tcptv_keep_init)
 		goto dropit;
 
-	tcpstat_inc(tcps_sc_retransmitted);
-	(void) syn_cache_respond(sc, NULL, now);
-
 	/* Advance the timer back-off. */
 	sc->sc_rxtshift++;
 	TCPT_RANGESET(sc->sc_rxtcur,
 	    TCPTV_SRTTDFLT * tcp_backoff[sc->sc_rxtshift], TCPTV_MIN,
 	    TCPTV_REXMTMAX);
-	if (!timeout_add_msec(&sc->sc_timer, sc->sc_rxtcur))
-		syn_cache_put(sc);
+	if (timeout_add_msec(&sc->sc_timer, sc->sc_rxtcur))
+		refcnt_take(&sc->sc_refcnt);
+	mtx_leave(&syn_cache_mtx);
 
+	NET_LOCK();
+	tcpstat_inc(tcps_sc_retransmitted);
+	now = tcp_now();
+	(void) syn_cache_respond(sc, NULL, now);
 	NET_UNLOCK();
+
+	syn_cache_put(sc);
 	return;
 
  dropit:
@@ -3375,8 +3389,8 @@ syn_cache_timer(void *arg)
 	KASSERT(lastref == 0);
 	(void)lastref;
  freeit:
+	mtx_leave(&syn_cache_mtx);
 	syn_cache_put(sc);
-	NET_UNLOCK();
 }
 
 /*
@@ -3391,6 +3405,7 @@ syn_cache_cleanup(struct tcpcb *tp)
 
 	NET_ASSERT_LOCKED();
 
+	mtx_enter(&syn_cache_mtx);
 	LIST_FOREACH_SAFE(sc, &tp->t_sc, sc_tpq, nsc) {
 #ifdef DIAGNOSTIC
 		if (sc->sc_tp != tp)
@@ -3399,8 +3414,8 @@ syn_cache_cleanup(struct tcpcb *tp)
 		syn_cache_rm(sc);
 		syn_cache_put(sc);
 	}
-	/* just for safety */
-	LIST_INIT(&tp->t_sc);
+	mtx_leave(&syn_cache_mtx);
+	KASSERT(LIST_EMPTY(&tp->t_sc));
 }
 
 /*
@@ -3417,6 +3432,7 @@ syn_cache_lookup(struct sockaddr *src, struct sockaddr *dst,
 	int i;
 
 	NET_ASSERT_LOCKED();
+	MUTEX_ASSERT_LOCKED(&syn_cache_mtx);
 
 	/* Check the active cache first, the passive cache is likely empty. */
 	sets[0] = &tcp_syn_cache[tcp_syn_cache_active];
@@ -3475,9 +3491,12 @@ syn_cache_get(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 
 	NET_ASSERT_LOCKED();
 
+	mtx_enter(&syn_cache_mtx);
 	sc = syn_cache_lookup(src, dst, &scp, sotoinpcb(so)->inp_rtableid);
-	if (sc == NULL)
+	if (sc == NULL) {
+		mtx_leave(&syn_cache_mtx);
 		return (NULL);
+	}
 
 	/*
 	 * Verify the sequence and ack numbers.  Try getting the correct
@@ -3486,12 +3505,14 @@ syn_cache_get(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 	if ((th->th_ack != sc->sc_iss + 1) ||
 	    SEQ_LEQ(th->th_seq, sc->sc_irs) ||
 	    SEQ_GT(th->th_seq, sc->sc_irs + 1 + sc->sc_win)) {
+		mtx_leave(&syn_cache_mtx);
 		(void) syn_cache_respond(sc, m, now);
 		return ((struct socket *)(-1));
 	}
 
 	/* Remove this cache entry */
 	syn_cache_rm(sc);
+	mtx_leave(&syn_cache_mtx);
 
 	/*
 	 * Ok, create the full blown connection, and set things up
@@ -3678,12 +3699,19 @@ syn_cache_reset(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 
 	NET_ASSERT_LOCKED();
 
-	if ((sc = syn_cache_lookup(src, dst, &scp, rtableid)) == NULL)
+	mtx_enter(&syn_cache_mtx);
+	sc = syn_cache_lookup(src, dst, &scp, rtableid);
+	if (sc == NULL) {
+		mtx_leave(&syn_cache_mtx);
 		return;
+	}
 	if (SEQ_LT(th->th_seq, sc->sc_irs) ||
-	    SEQ_GT(th->th_seq, sc->sc_irs + 1))
+	    SEQ_GT(th->th_seq, sc->sc_irs + 1)) {
+		mtx_leave(&syn_cache_mtx);
 		return;
+	}
 	syn_cache_rm(sc);
+	mtx_leave(&syn_cache_mtx);
 	tcpstat_inc(tcps_sc_reset);
 	syn_cache_put(sc);
 }
@@ -3697,10 +3725,15 @@ syn_cache_unreach(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 
 	NET_ASSERT_LOCKED();
 
-	if ((sc = syn_cache_lookup(src, dst, &scp, rtableid)) == NULL)
+	mtx_enter(&syn_cache_mtx);
+	sc = syn_cache_lookup(src, dst, &scp, rtableid);
+	if (sc == NULL) {
+		mtx_leave(&syn_cache_mtx);
 		return;
+	}
 	/* If the sequence number != sc_iss, then it's a bogus ICMP msg */
 	if (ntohl (th->th_seq) != sc->sc_iss) {
+		mtx_leave(&syn_cache_mtx);
 		return;
 	}
 
@@ -3713,11 +3746,13 @@ syn_cache_unreach(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 	 * See tcp_notify().
 	 */
 	if ((sc->sc_flags & SCF_UNREACH) == 0 || sc->sc_rxtshift < 3) {
+		mtx_leave(&syn_cache_mtx);
 		sc->sc_flags |= SCF_UNREACH;
 		return;
 	}
 
 	syn_cache_rm(sc);
+	mtx_leave(&syn_cache_mtx);
 	tcpstat_inc(tcps_sc_unreach);
 	syn_cache_put(sc);
 }
@@ -3746,6 +3781,8 @@ syn_cache_add(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 	struct syn_cache *sc;
 	struct syn_cache_head *scp;
 	struct mbuf *ipopts;
+
+	NET_ASSERT_LOCKED();
 
 	tp = sototcpcb(so);
 
@@ -3797,7 +3834,9 @@ syn_cache_add(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 	 * If we do, resend the SYN,ACK.  We do not count this
 	 * as a retransmission (XXX though maybe we should).
 	 */
+	mtx_enter(&syn_cache_mtx);
 	sc = syn_cache_lookup(src, dst, &scp, sotoinpcb(so)->inp_rtableid);
+	mtx_leave(&syn_cache_mtx);
 	if (sc != NULL) {
 		tcpstat_inc(tcps_sc_dupesyn);
 		if (ipopts) {
@@ -3896,7 +3935,14 @@ syn_cache_add(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 #endif
 	sc->sc_tp = tp;
 	if (syn_cache_respond(sc, m, now) == 0) {
+		mtx_enter(&syn_cache_mtx);
+		/*
+		 * XXXSMP Currently exclusive netlock prevents another insert 
+		 * after our syn_cache_lookup() and before syn_cache_insert().
+		 * Double insert should be handled and not rely on netlock.
+		 */
 		syn_cache_insert(sc, tp);
+		mtx_leave(&syn_cache_mtx);
 		tcpstat_inc(tcps_sndacks);
 		tcpstat_inc(tcps_sndtotal);
 	} else {
@@ -3920,6 +3966,8 @@ syn_cache_respond(struct syn_cache *sc, struct mbuf *m, uint64_t now)
 	struct tcphdr *th;
 	u_int hlen;
 	struct inpcb *inp;
+
+	NET_ASSERT_LOCKED();
 
 	switch (sc->sc_src.sa.sa_family) {
 	case AF_INET:
