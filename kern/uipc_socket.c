@@ -1745,9 +1745,34 @@ somove(struct socket *so, int wait)
 void
 sorwakeup(struct socket *so)
 {
+	struct socket *sosp = NULL;
+	int spliced, locked = 0;
+
 	soassertlocked(so);
 
 #ifdef SOCKET_SPLICE
+	if ((so->so_proto->pr_flags & PR_WANTRCVD) == 0 &&
+	    (so->so_rcv.sb_flags & SB_SPLICE)) {
+		pru_lock(so);
+		locked = 1;
+		sosp = so->so_sp->ssp_socket;
+		if (sosp == NULL) {
+			;
+		} else if (so < sosp) {
+			pru_lock(sosp);
+		} else {
+			pru_unlock(so);
+			pru_lock(sosp);
+			pru_lock(so);
+		}
+	}
+	/*
+	 * Creating splice uses exclusive netlock.  Check again SB_SPLICE
+	 * while holding pcb mutex to protect against unsplice with
+	 * shared netlock.  This ensures that ssp_socket during somove()
+	 * is valid.  Just adding a task does not need a lock.  This
+	 * path is only used by TCP which always uses exclusice lock.
+	 */
 	if (so->so_rcv.sb_flags & SB_SPLICE) {
 		/*
 		 * TCP has a sendbuffer that can handle multiple packets
@@ -1762,7 +1787,13 @@ sorwakeup(struct socket *so)
 		else
 			somove(so, M_DONTWAIT);
 	}
-	if (isspliced(so))
+	spliced = isspliced(so);
+	if (locked) {
+		pru_unlock(so);
+		if (sosp != NULL)
+			pru_unlock(sosp);
+	}
+	if (spliced)
 		return;
 #endif
 	sowakeup(so, &so->so_rcv);
@@ -1773,12 +1804,28 @@ sorwakeup(struct socket *so)
 void
 sowwakeup(struct socket *so)
 {
+	int spliced, locked = 0;
+
 	soassertlocked(so);
 
 #ifdef SOCKET_SPLICE
+	if ((so->so_proto->pr_flags & PR_WANTRCVD) == 0 &&
+	    (so->so_snd.sb_flags & SB_SPLICE)) {
+		pru_lock(so);
+		locked = 1;
+	}
+	/*
+	 * Creating splice uses exclusive netlock.  Check again SB_SPLICE
+	 * while holding pcb mutex to protect against unsplice with
+	 * shared netlock.  This ensures that ssp_soback is valid.
+	 * TCP always uses exclusice lock and does not need PCB lock.
+	 */
 	if (so->so_snd.sb_flags & SB_SPLICE)
 		task_add(sosplice_taskq, &so->so_sp->ssp_soback->so_splicetask);
-	if (issplicedback(so))
+	spliced = issplicedback(so);
+	if (locked)
+		pru_unlock(so);
+	if (spliced)
 		return;
 #endif
 	sowakeup(so, &so->so_snd);
