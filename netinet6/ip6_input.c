@@ -1572,11 +1572,11 @@ ip6_send_dispatch(void *xmq)
 	if (ml_empty(&ml))
 		return;
 
-	NET_LOCK();
+	NET_LOCK_SHARED();
 	while ((m = ml_dequeue(&ml)) != NULL) {
 		ip6_output(m, NULL, NULL, 0, NULL, NULL);
 	}
-	NET_UNLOCK();
+	NET_UNLOCK_SHARED();
 }
 
 void

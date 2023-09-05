@@ -1851,7 +1851,7 @@ ip_send_do_dispatch(void *xmq, int flags)
 	if (ml_empty(&ml))
 		return;
 
-	NET_LOCK();
+	NET_LOCK_SHARED();
 	while ((m = ml_dequeue(&ml)) != NULL) {
 		u_int32_t ipsecflowinfo = 0;
 
@@ -1862,7 +1862,7 @@ ip_send_do_dispatch(void *xmq, int flags)
 		}
 		ip_output(m, NULL, NULL, flags, NULL, NULL, ipsecflowinfo);
 	}
-	NET_UNLOCK();
+	NET_UNLOCK_SHARED();
 }
 
 void
