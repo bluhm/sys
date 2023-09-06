@@ -3084,16 +3084,24 @@ tcp_mss_adv(struct mbuf *m, int af)
  * state for SYN_RECEIVED.
  */
 
+/*
+ * Locks used to protect global data and struct members:
+ *	N	net lock
+ *	S	syn_cache_mtx		tcp syn cache global mutex
+ */
+
 /* syn hash parameters */
-int	tcp_syn_hash_size = TCP_SYN_HASH_SIZE;
-int	tcp_syn_cache_limit = TCP_SYN_HASH_SIZE * TCP_SYN_BUCKET_SIZE;
-int	tcp_syn_bucket_limit = 3*TCP_SYN_BUCKET_SIZE;
-int	tcp_syn_use_limit = 100000;
+int	tcp_syn_hash_size = TCP_SYN_HASH_SIZE;	/* [N] size of hash table */
+int	tcp_syn_cache_limit =			/* [N] global entry limit */
+	    TCP_SYN_HASH_SIZE * TCP_SYN_BUCKET_SIZE;
+int	tcp_syn_bucket_limit =			/* [N] per bucket limit */
+	    3 * TCP_SYN_BUCKET_SIZE;
+int	tcp_syn_use_limit = 100000;		/* [N] reseed after uses */
 
 struct pool syn_cache_pool;
 struct syn_cache_set tcp_syn_cache[2];
 int tcp_syn_cache_active;
-struct mutex syn_cache_mtx = MUTEX_INITIALIZER(SPL_SOFTNET);
+struct mutex syn_cache_mtx = MUTEX_INITIALIZER(IPL_SOFTNET);
 
 #define SYN_HASH(sa, sp, dp, rand) \
 	(((sa)->s_addr ^ (rand)[0]) *				\
@@ -3152,11 +3160,10 @@ syn_cache_put(struct syn_cache *sc)
 	if (refcnt_rele(&sc->sc_refcnt) == 0)
 		return;
 
+	/* Dealing with last reference, no lock needed. */
 	m_free(sc->sc_ipopts);
-	if (sc->sc_route4.ro_rt != NULL) {
-		rtfree(sc->sc_route4.ro_rt);
-		sc->sc_route4.ro_rt = NULL;
-	}
+	rtfree(sc->sc_route4.ro_rt);
+
 	pool_put(&syn_cache_pool, sc);
 }
 
@@ -3191,6 +3198,7 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 	int i;
 
 	NET_ASSERT_LOCKED();
+	MUTEX_ASSERT_LOCKED(&syn_cache_mtx);
 
 	/*
 	 * If there are no entries in the hash table, reinitialize
@@ -3334,11 +3342,9 @@ syn_cache_timer(void *arg)
 	uint64_t now;
 	int lastref;
 
-	NET_LOCK();
+	mtx_enter(&syn_cache_mtx);
 	if (sc->sc_flags & SCF_DEAD)
 		goto freeit;
-
-	now = tcp_now();
 
 	if (__predict_false(sc->sc_rxtshift == TCP_MAXRXTSHIFT)) {
 		/* Drop it -- too many retransmissions. */
@@ -3354,18 +3360,22 @@ syn_cache_timer(void *arg)
 	if (sc->sc_rxttot >= tcptv_keep_init)
 		goto dropit;
 
-	tcpstat_inc(tcps_sc_retransmitted);
-	(void) syn_cache_respond(sc, NULL, now);
-
 	/* Advance the timer back-off. */
 	sc->sc_rxtshift++;
 	TCPT_RANGESET(sc->sc_rxtcur,
 	    TCPTV_SRTTDFLT * tcp_backoff[sc->sc_rxtshift], TCPTV_MIN,
 	    TCPTV_REXMTMAX);
-	if (!timeout_add_msec(&sc->sc_timer, sc->sc_rxtcur))
-		syn_cache_put(sc);
+	if (timeout_add_msec(&sc->sc_timer, sc->sc_rxtcur))
+		refcnt_take(&sc->sc_refcnt);
+	mtx_leave(&syn_cache_mtx);
 
-	NET_UNLOCK();
+	NET_LOCK_SHARED();
+	tcpstat_inc(tcps_sc_retransmitted);
+	now = tcp_now();
+	(void) syn_cache_respond(sc, NULL, now);
+	NET_UNLOCK_SHARED();
+
+	syn_cache_put(sc);
 	return;
 
  dropit:
@@ -3376,8 +3386,8 @@ syn_cache_timer(void *arg)
 	KASSERT(lastref == 0);
 	(void)lastref;
  freeit:
+	mtx_leave(&syn_cache_mtx);
 	syn_cache_put(sc);
-	NET_UNLOCK();
 }
 
 /*
@@ -3418,6 +3428,7 @@ syn_cache_lookup(struct sockaddr *src, struct sockaddr *dst,
 	int i;
 
 	NET_ASSERT_LOCKED();
+	MUTEX_ASSERT_LOCKED(&syn_cache_mtx);
 
 	/* Check the active cache first, the passive cache is likely empty. */
 	sets[0] = &tcp_syn_cache[tcp_syn_cache_active];

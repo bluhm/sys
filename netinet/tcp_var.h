@@ -225,6 +225,13 @@ struct tcp_opt_info {
  * Data for the TCP compressed state engine.
  */
 
+/*
+ * Locks used to protect global data and struct members:
+ *	I	immutable after creation
+ *      N       net lock
+ *      S       syn_cache_mtx           tcp syn cache global mutex
+ */
+
 #define	TCP_SYN_HASH_SIZE	293
 #define	TCP_SYN_BUCKET_SIZE	35
 
@@ -244,25 +251,25 @@ struct syn_cache {
 		struct route_in6 route6;
 #endif
 	} sc_route_u;
-#define sc_route4	sc_route_u.route4
+#define sc_route4	sc_route_u.route4	/* [S] [N] XXX */
 #ifdef INET6
 #define sc_route6	sc_route_u.route6
 #endif
-	long sc_win;				/* advertised window */
+	long sc_win;				/* [I] advertised window */
 	struct syn_cache_head *sc_buckethead;	/* our bucket index */
 	struct syn_cache_set *sc_set;		/* our syn cache set */
-	u_int64_t sc_timestamp;			/* timestamp from SYN */
+	u_int64_t sc_timestamp;		/* [I] timestamp from SYN */
 	u_int32_t sc_hash;
-	u_int32_t sc_modulate;			/* our timestamp modulator */
-	union syn_cache_sa sc_src;
-	union syn_cache_sa sc_dst;
-	tcp_seq sc_irs;
-	tcp_seq sc_iss;
-	u_int sc_rtableid;
-	u_int sc_rxtcur;			/* current rxt timeout */
-	u_int sc_rxttot;			/* total time spend on queues */
-	u_short sc_rxtshift;			/* for computing backoff */
-	u_short sc_flags;
+	u_int32_t sc_modulate;		/* [I] our timestamp modulator */
+	union syn_cache_sa sc_src;	/* [I] */
+	union syn_cache_sa sc_dst;	/* [I] */
+	tcp_seq sc_irs;			/* [I] */
+	tcp_seq sc_iss;			/* [I] */
+	u_int sc_rtableid;		/* [I] */
+	u_int sc_rxtcur;		/* [S] current rxt timeout */
+	u_int sc_rxttot;		/* [S] total time spend on queues */
+	u_short sc_rxtshift;		/* [S] for computing backoff */
+	u_short sc_flags;		/* [S] [I] XXX */
 
 #define	SCF_UNREACH		0x0001		/* we've had an unreach error */
 #define	SCF_TIMESTAMP		0x0002		/* peer will do timestamps */
@@ -271,13 +278,13 @@ struct syn_cache {
 #define	SCF_ECN_PERMIT		0x0010		/* permit ecn */
 #define	SCF_SIGNATURE		0x0020		/* enforce tcp signatures */
 
-	struct mbuf *sc_ipopts;			/* IP options */
+	struct mbuf *sc_ipopts;			/* [N] [S] XXX IP options */
 	u_int16_t sc_peermaxseg;
-	u_int16_t sc_ourmaxseg;
-	u_int     sc_request_r_scale	: 4,
+	u_int16_t sc_ourmaxseg;			/* [I] */
+	u_int     sc_request_r_scale	: 4,	/* [I] */
 		  sc_requested_s_scale	: 4;
 
-	struct tcpcb *sc_tp;			/* tcb for listening socket */
+	struct tcpcb *sc_tp;		/* [N] tcb for listening socket */
 	LIST_ENTRY(syn_cache) sc_tpq;		/* list of entries by same tp */
 };
 
@@ -289,7 +296,7 @@ struct syn_cache_head {
 struct syn_cache_set {
 	struct		syn_cache_head *scs_buckethead;
 	long		scs_use;
-	int		scs_size;
+	int		scs_size;	/* [S] current size of hash table */
 	int		scs_count;
 	u_int32_t	scs_random[5];
 };
