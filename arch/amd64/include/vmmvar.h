@@ -1,4 +1,4 @@
-/*	$OpenBSD: vmmvar.h,v 1.92 2023/09/03 09:30:43 mlarkin Exp $	*/
+/*	$OpenBSD: vmmvar.h,v 1.94 2023/09/06 03:35:57 dv Exp $	*/
 /*
  * Copyright (c) 2014 Mike Larkin <mlarkin@openbsd.org>
  *
@@ -456,6 +456,7 @@ struct vm_run_params {
 	uint32_t	vrp_vcpu_id;
 	uint8_t		vrp_continue;		/* Continuing from an exit */
 	uint16_t	vrp_irq;		/* IRQ to inject */
+	uint8_t		vrp_intr_pending;	/* Additional intrs pending? */
 
 	/* Input/output parameter to VMM_IOC_RUN */
 	struct vm_exit	*vrp_exit;		/* updated exit data */
@@ -559,7 +560,9 @@ struct vm_mprotect_ept_params {
     CPUIDEBX_STIBP | CPUIDEBX_IBRS_ALWAYSON | CPUIDEBX_STIBP_ALWAYSON | \
     CPUIDEBX_IBRS_PREF | CPUIDEBX_SSBD | CPUIDEBX_VIRT_SSBD | \
     CPUIDEBX_SSBD_NOTREQ)
-#define VMM_APMI_EDX_MASK ~(CPUIDEDX_HWPSTATE)
+
+/* This mask is an include list for bits we want to expose */
+#define VMM_APMI_EDX_INCLUDE_MASK (CPUIDEDX_ITSC)
 
 /*
  * SEFF flags - copy from host minus:

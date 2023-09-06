@@ -1,4 +1,4 @@
-/* $OpenBSD: kern_clockintr.c,v 1.33 2023/08/26 22:21:00 cheloha Exp $ */
+/* $OpenBSD: kern_clockintr.c,v 1.38 2023/09/06 02:33:18 cheloha Exp $ */
 /*
  * Copyright (c) 2003 Dale Rahn <drahn@openbsd.org>
  * Copyright (c) 2020 Mark Kettenis <kettenis@openbsd.org>
@@ -36,16 +36,15 @@
  *
  *	I	Immutable after initialization.
  */
-u_int clockintr_flags;			/* [I] global state + behavior flags */
+uint32_t clockintr_flags;		/* [I] global state + behavior flags */
 uint32_t hardclock_period;		/* [I] hardclock period (ns) */
 uint32_t statclock_avg;			/* [I] average statclock period (ns) */
 uint32_t statclock_min;			/* [I] minimum statclock period (ns) */
 uint32_t statclock_mask;		/* [I] set of allowed offsets */
 
+uint64_t clockintr_advance_random(struct clockintr *, uint64_t, uint32_t);
 void clockintr_cancel_locked(struct clockintr *);
-uint64_t clockintr_expiration(const struct clockintr *);
 void clockintr_hardclock(struct clockintr *, void *);
-uint64_t clockintr_nsecuptime(const struct clockintr *);
 void clockintr_schedule(struct clockintr *, uint64_t);
 void clockintr_schedule_locked(struct clockintr *, uint64_t);
 void clockintr_statclock(struct clockintr *, void *);
@@ -59,7 +58,7 @@ uint64_t nsec_advance(uint64_t *, uint64_t, uint64_t);
  * Initialize global state.  Set flags and compute intervals.
  */
 void
-clockintr_init(u_int flags)
+clockintr_init(uint32_t flags)
 {
 	uint32_t half_avg, var;
 
@@ -113,12 +112,12 @@ clockintr_cpu_init(const struct intrclock *ic)
 
 	/* TODO: Remove these from struct clockintr_queue. */
 	if (cq->cq_hardclock == NULL) {
-		cq->cq_hardclock = clockintr_establish(cq, clockintr_hardclock);
+		cq->cq_hardclock = clockintr_establish(ci, clockintr_hardclock);
 		if (cq->cq_hardclock == NULL)
 			panic("%s: failed to establish hardclock", __func__);
 	}
 	if (cq->cq_statclock == NULL) {
-		cq->cq_statclock = clockintr_establish(cq, clockintr_statclock);
+		cq->cq_statclock = clockintr_establish(ci, clockintr_statclock);
 		if (cq->cq_statclock == NULL)
 			panic("%s: failed to establish statclock", __func__);
 	}
@@ -220,7 +219,7 @@ clockintr_dispatch(void *frame)
 	struct cpu_info *ci = curcpu();
 	struct clockintr *cl;
 	struct clockintr_queue *cq = &ci->ci_queue;
-	u_int ogen;
+	uint32_t ogen;
 
 	if (cq->cq_dispatch != 0)
 		panic("%s: recursive dispatch", __func__);
@@ -345,6 +344,25 @@ clockintr_advance(struct clockintr *cl, uint64_t period)
 	return count;
 }
 
+uint64_t
+clockintr_advance_random(struct clockintr *cl, uint64_t min, uint32_t mask)
+{
+	uint64_t count = 0;
+	struct clockintr_queue *cq = cl->cl_queue;
+	uint32_t off;
+
+	KASSERT(cl == &cq->cq_shadow);
+
+	while (cl->cl_expiration <= cq->cq_uptime) {
+		while ((off = (random() & mask)) == 0)
+			continue;
+		cl->cl_expiration += min + off;
+		count++;
+	}
+	SET(cl->cl_flags, CLST_SHADOW_PENDING);
+	return count;
+}
+
 void
 clockintr_cancel(struct clockintr *cl)
 {
@@ -385,10 +403,11 @@ clockintr_cancel_locked(struct clockintr *cl)
 }
 
 struct clockintr *
-clockintr_establish(struct clockintr_queue *cq,
+clockintr_establish(struct cpu_info *ci,
     void (*func)(struct clockintr *, void *))
 {
 	struct clockintr *cl;
+	struct clockintr_queue *cq = &ci->ci_queue;
 
 	cl = malloc(sizeof *cl, M_DEVBUF, M_NOWAIT | M_ZERO);
 	if (cl == NULL)
@@ -400,21 +419,6 @@ clockintr_establish(struct clockintr_queue *cq,
 	TAILQ_INSERT_TAIL(&cq->cq_est, cl, cl_elink);
 	mtx_leave(&cq->cq_mtx);
 	return cl;
-}
-
-uint64_t
-clockintr_expiration(const struct clockintr *cl)
-{
-	uint64_t expiration;
-	struct clockintr_queue *cq = cl->cl_queue;
-
-	if (cl == &cq->cq_shadow)
-		return cl->cl_expiration;
-
-	mtx_enter(&cq->cq_mtx);
-	expiration = cl->cl_expiration;
-	mtx_leave(&cq->cq_mtx);
-	return expiration;
 }
 
 void
@@ -465,7 +469,8 @@ clockintr_schedule_locked(struct clockintr *cl, uint64_t expiration)
 }
 
 void
-clockintr_stagger(struct clockintr *cl, uint64_t period, u_int n, u_int count)
+clockintr_stagger(struct clockintr *cl, uint64_t period, uint32_t n,
+    uint32_t count)
 {
 	struct clockintr_queue *cq = cl->cl_queue;
 
@@ -476,13 +481,6 @@ clockintr_stagger(struct clockintr *cl, uint64_t period, u_int n, u_int count)
 		panic("%s: clock interrupt pending", __func__);
 	cl->cl_expiration = period / count * n;
 	mtx_leave(&cq->cq_mtx);
-}
-
-uint64_t
-clockintr_nsecuptime(const struct clockintr *cl)
-{
-	KASSERT(cl == &cl->cl_queue->cq_shadow);
-	return cl->cl_queue->cq_uptime;
 }
 
 void
@@ -498,20 +496,11 @@ clockintr_hardclock(struct clockintr *cl, void *frame)
 void
 clockintr_statclock(struct clockintr *cl, void *frame)
 {
-	uint64_t count, expiration, i, uptime;
-	uint32_t off;
+	uint64_t count, i;
 
 	if (ISSET(clockintr_flags, CL_RNDSTAT)) {
-		count = 0;
-		expiration = clockintr_expiration(cl);
-		uptime = clockintr_nsecuptime(cl);
-		while (expiration <= uptime) {
-			while ((off = (random() & statclock_mask)) == 0)
-				continue;
-			expiration += statclock_min + off;
-			count++;
-		}
-		clockintr_schedule(cl, expiration);
+		count = clockintr_advance_random(cl, statclock_min,
+		    statclock_mask);
 	} else {
 		count = clockintr_advance(cl, statclock_avg);
 	}
@@ -601,7 +590,7 @@ sysctl_clockintr(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 	struct clockintr_queue *cq;
 	struct cpu_info *ci;
 	CPU_INFO_ITERATOR cii;
-	u_int gen;
+	uint32_t gen;
 
 	if (namelen != 1)
 		return ENOTDIR;
