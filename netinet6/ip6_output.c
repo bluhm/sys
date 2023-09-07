@@ -160,8 +160,8 @@ struct idgen32_ctx ip6_id_ctx;
  * We use u_long to hold largest one, * which is rt_mtu.
  */
 int
-ip6_output(struct mbuf *m, struct ip6_pktopts *opt, struct route_in6 *ro,
-    int flags, struct ip6_moptions *im6o, struct inpcb *inp)
+ip6_output(struct mbuf *m, const struct ip6_pktopts *opt, struct route_in6 *ro,
+    int flags, const struct ip6_moptions *im6o, struct inpcb *inp)
 {
 	struct ip6_hdr *ip6;
 	struct ifnet *ifp = NULL;
@@ -399,8 +399,10 @@ reroute:
 		bzero((caddr_t)ro, sizeof(*ro));
 	}
 	ro_pmtu = ro;
-	if (opt && opt->ip6po_rthdr)
-		ro = &opt->ip6po_route;
+	if (opt && opt->ip6po_rthdr && ro != &ip6route) {
+		ro = &ip6route;
+		bzero((caddr_t)ro, sizeof(*ro));
+	}
 	dst = &ro->ro_dst;
 
 	/*
@@ -1819,10 +1821,6 @@ ip6_clearpktopts(struct ip6_pktopts *pktopt, int optname)
 		if (pktopt->ip6po_rhinfo.ip6po_rhi_rthdr)
 			free(pktopt->ip6po_rhinfo.ip6po_rhi_rthdr, M_IP6OPT, 0);
 		pktopt->ip6po_rhinfo.ip6po_rhi_rthdr = NULL;
-		if (pktopt->ip6po_route.ro_rt) {
-			rtfree(pktopt->ip6po_route.ro_rt);
-			pktopt->ip6po_route.ro_rt = NULL;
-		}
 	}
 	if (optname == -1 || optname == IPV6_DSTOPTS) {
 		if (pktopt->ip6po_dest2)

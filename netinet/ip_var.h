@@ -232,11 +232,11 @@ void	 ip_freemoptions(struct ip_moptions *);
 int	 ip_getmoptions(int, struct ip_moptions *, struct mbuf *);
 void	 ip_init(void);
 struct mbuf*
-	 ip_insertoptions(struct mbuf *, struct mbuf *, int *);
+	 ip_insertoptions(struct mbuf *, const struct mbuf *, int *);
 int	 ip_mforward(struct mbuf *, struct ifnet *);
 int	 ip_optcopy(struct ip *, struct ip *);
-int	 ip_output(struct mbuf *, struct mbuf *, struct route *, int,
-	    struct ip_moptions *, struct inpcb *, u_int32_t);
+int	 ip_output(struct mbuf *, const struct mbuf *, struct route *, int,
+	    const struct ip_moptions *, struct inpcb *, u_int32_t);
 u_int16_t
 	 ip_randomid(void);
 void	 ip_send(struct mbuf *);

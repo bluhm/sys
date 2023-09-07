@@ -97,8 +97,8 @@ int ip_output_ipsec_send(struct tdb *, struct mbuf *, struct route *, int);
  * The mbuf opt, if present, will not be freed.
  */
 int
-ip_output(struct mbuf *m, struct mbuf *opt, struct route *ro, int flags,
-    struct ip_moptions *imo, struct inpcb *inp, u_int32_t ipsecflowinfo)
+ip_output(struct mbuf *m, const struct mbuf *opt, struct route *ro, int flags,
+    const struct ip_moptions *imo, struct inpcb *inp, u_int32_t ipsecflowinfo)
 {
 	struct ip *ip;
 	struct ifnet *ifp = NULL;
@@ -782,9 +782,9 @@ bad:
  * as indicated by a non-zero in_addr at the start of the options.
  */
 struct mbuf *
-ip_insertoptions(struct mbuf *m, struct mbuf *opt, int *phlen)
+ip_insertoptions(struct mbuf *m, const struct mbuf *opt, int *phlen)
 {
-	struct ipoption *p = mtod(opt, struct ipoption *);
+	const struct ipoption *p = mtod(opt, struct ipoption *);
 	struct mbuf *n;
 	struct ip *ip = mtod(m, struct ip *);
 	unsigned int optlen;

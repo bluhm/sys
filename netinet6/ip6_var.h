@@ -103,10 +103,8 @@ struct	ip6_moptions {
 /* Routing header related info */
 struct	ip6po_rhinfo {
 	struct	ip6_rthdr *ip6po_rhi_rthdr; /* Routing header */
-	struct	route_in6 ip6po_rhi_route; /* Route to the 1st hop */
 };
 #define ip6po_rthdr	ip6po_rhinfo.ip6po_rhi_rthdr
-#define ip6po_route	ip6po_rhinfo.ip6po_rhi_route
 
 struct	ip6_pktopts {
 	/* Hoplimit for outgoing packets */
@@ -324,8 +322,9 @@ int	ip6_sysctl(int *, u_int, void *, size_t *, void *, size_t);
 void	ip6_forward(struct mbuf *, struct rtentry *, int);
 
 void	ip6_mloopback(struct ifnet *, struct mbuf *, struct sockaddr_in6 *);
-int	ip6_output(struct mbuf *, struct ip6_pktopts *, struct route_in6 *, int,
-	    struct ip6_moptions *, struct inpcb *);
+int	ip6_output(struct mbuf *, const struct ip6_pktopts *,
+	    struct route_in6 *, int, const struct ip6_moptions *,
+	    struct inpcb *);
 int	ip6_fragment(struct mbuf *, struct mbuf_list *, int, u_char, u_long);
 int	ip6_ctloutput(int, struct socket *, int, int, struct mbuf *);
 int	ip6_raw_ctloutput(int, struct socket *, int, int, struct mbuf *);
@@ -369,8 +368,9 @@ int	in6_pcbselsrc(struct in6_addr **, struct sockaddr_in6 *,
 	    struct inpcb *, struct ip6_pktopts *);
 int	in6_selectsrc(struct in6_addr **, struct sockaddr_in6 *,
 	    struct ip6_moptions *, unsigned int);
-struct rtentry *in6_selectroute(struct sockaddr_in6 *, struct ip6_pktopts *,
-	    struct route_in6 *, unsigned int rtableid);
+struct rtentry *in6_selectroute(struct sockaddr_in6 *,
+	    const struct ip6_pktopts *, struct route_in6 *,
+	    unsigned int rtableid);
 
 u_int32_t ip6_randomflowlabel(void);
 

@@ -331,7 +331,7 @@ struct rtentry *
 void	in6_pcbnotify(struct inpcbtable *, struct sockaddr_in6 *,
 	u_int, const struct sockaddr_in6 *, u_int, u_int, int, void *,
 	void (*)(struct inpcb *, int));
-int	in6_selecthlim(struct inpcb *);
+int	in6_selecthlim(const struct inpcb *);
 int	in_pcbpickport(u_int16_t *, void *, int, struct inpcb *, struct proc *);
 #endif /* _KERNEL */
 #endif /* _NETINET_IN_PCB_H_ */

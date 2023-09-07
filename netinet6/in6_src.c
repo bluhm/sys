@@ -312,7 +312,7 @@ in6_selectsrc(struct in6_addr **in6src, struct sockaddr_in6 *dstsock,
 }
 
 struct rtentry *
-in6_selectroute(struct sockaddr_in6 *dstsock, struct ip6_pktopts *opts,
+in6_selectroute(struct sockaddr_in6 *dstsock, const struct ip6_pktopts *opts,
     struct route_in6 *ro, unsigned int rtableid)
 {
 	struct in6_addr *dst;
@@ -422,7 +422,7 @@ in6_selectif(struct sockaddr_in6 *dstsock, struct ip6_pktopts *opts,
 }
 
 int
-in6_selecthlim(struct inpcb *in6p)
+in6_selecthlim(const struct inpcb *in6p)
 {
 	if (in6p && in6p->inp_hops >= 0)
 		return (in6p->inp_hops);
