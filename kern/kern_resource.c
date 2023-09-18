@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_resource.c,v 1.78 2023/08/29 16:19:34 claudio Exp $	*/
+/*	$OpenBSD: kern_resource.c,v 1.80 2023/09/13 14:25:49 claudio Exp $	*/
 /*	$NetBSD: kern_resource.c,v 1.38 1996/10/23 07:19:38 matthias Exp $	*/
 
 /*-

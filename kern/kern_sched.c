@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_sched.c,v 1.89 2023/09/06 02:09:58 cheloha Exp $	*/
+/*	$OpenBSD: kern_sched.c,v 1.91 2023/09/14 22:07:11 cheloha Exp $	*/
 /*
  * Copyright (c) 2007, 2008 Artur Grabowski <art@openbsd.org>
  *
@@ -88,15 +88,18 @@ sched_init_cpu(struct cpu_info *ci)
 
 	spc->spc_idleproc = NULL;
 
-	spc->spc_itimer = clockintr_establish(ci, itimer_update);
+	spc->spc_itimer = clockintr_establish(ci, itimer_update, NULL);
 	if (spc->spc_itimer == NULL)
 		panic("%s: clockintr_establish itimer_update", __func__);
-	spc->spc_profclock = clockintr_establish(ci, profclock);
+	spc->spc_profclock = clockintr_establish(ci, profclock, NULL);
 	if (spc->spc_profclock == NULL)
 		panic("%s: clockintr_establish profclock", __func__);
-	spc->spc_roundrobin = clockintr_establish(ci, roundrobin);
+	spc->spc_roundrobin = clockintr_establish(ci, roundrobin, NULL);
 	if (spc->spc_roundrobin == NULL)
 		panic("%s: clockintr_establish roundrobin", __func__);
+	spc->spc_statclock = clockintr_establish(ci, statclock, NULL);
+	if (spc->spc_statclock == NULL)
+		panic("%s: clockintr_establish statclock", __func__);
 
 	kthread_create_deferred(sched_kthreads_create, ci);
 
