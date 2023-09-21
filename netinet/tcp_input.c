@@ -3143,7 +3143,9 @@ do {									\
 void
 syn_cache_rm(struct syn_cache *sc)
 {
-	sc->sc_flags |= SCF_DEAD;
+	MUTEX_ASSERT_LOCKED(&syn_cache_mtx);
+
+	sc->sc_dead = 1;
 	TAILQ_REMOVE(&sc->sc_buckethead->sch_bucket, sc, sc_bucketq);
 	sc->sc_tp = NULL;
 	LIST_REMOVE(sc, sc_tpq);
@@ -3343,7 +3345,7 @@ syn_cache_timer(void *arg)
 	int lastref;
 
 	mtx_enter(&syn_cache_mtx);
-	if (sc->sc_flags & SCF_DEAD)
+	if (sc->sc_dead)
 		goto freeit;
 
 	if (__predict_false(sc->sc_rxtshift == TCP_MAXRXTSHIFT)) {
@@ -3369,11 +3371,11 @@ syn_cache_timer(void *arg)
 		refcnt_take(&sc->sc_refcnt);
 	mtx_leave(&syn_cache_mtx);
 
-	NET_LOCK_SHARED();
+	NET_LOCK();
 	tcpstat_inc(tcps_sc_retransmitted);
 	now = tcp_now();
 	(void) syn_cache_respond(sc, NULL, now);
-	NET_UNLOCK_SHARED();
+	NET_UNLOCK();
 
 	syn_cache_put(sc);
 	return;
@@ -3759,6 +3761,8 @@ syn_cache_add(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 	struct syn_cache_head *scp;
 	struct mbuf *ipopts;
 
+	NET_ASSERT_LOCKED();
+
 	tp = sototcpcb(so);
 
 	/*
@@ -3932,6 +3936,8 @@ syn_cache_respond(struct syn_cache *sc, struct mbuf *m, uint64_t now)
 	struct tcphdr *th;
 	u_int hlen;
 	struct inpcb *inp;
+
+	NET_ASSERT_LOCKED();
 
 	switch (sc->sc_src.sa.sa_family) {
 	case AF_INET:
