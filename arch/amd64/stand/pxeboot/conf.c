@@ -53,9 +53,6 @@ void (*sa_cleanup)(void) = pxe_shutdown;
 void (*i386_probe1[])(void) = {
 	gateA20on, cninit, pxeprobe, memprobe
 };
-void (*i386_probe2[])(void) = {
-	diskprobe
-};
 void (*i386_probe3[])(void) = {
 	pxeinfo
 /*	netprobe_pxe, netprobe_mac, netprobe_inet4, netprobe_bootdev */
@@ -63,7 +60,6 @@ void (*i386_probe3[])(void) = {
 
 struct i386_boot_probes probe_list[] = {
 	{ "probing", i386_probe1, nitems(i386_probe1) },
-	{ "disk",    i386_probe2, nitems(i386_probe2) },
 	{ "net",     i386_probe3, nitems(i386_probe3) },
 };
 int nibprobes = nitems(probe_list);

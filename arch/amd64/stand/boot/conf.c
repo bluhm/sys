@@ -51,13 +51,9 @@ void (*sa_cleanup)(void) = NULL;
 void (*i386_probe1[])(void) = {
 	gateA20on, cninit, memprobe
 };
-void (*i386_probe2[])(void) = {
- 	diskprobe
-};
 
 struct i386_boot_probes probe_list[] = {
 	{ "probing", i386_probe1, nitems(i386_probe1) },
-	{ "disk",    i386_probe2, nitems(i386_probe2) }
 };
 int nibprobes = nitems(probe_list);
 

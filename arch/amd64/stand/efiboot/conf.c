@@ -50,15 +50,11 @@ void (*sa_cleanup)(void) = NULL;
 
 
 void (*i386_probe1[])(void) = {
-	cninit, efi_memprobe
-};
-void (*i386_probe2[])(void) = {
-	efi_pxeprobe, efi_diskprobe, diskprobe
+	cninit, efi_pxeprobe, efi_memprobe
 };
 
 struct i386_boot_probes probe_list[] = {
 	{ "probing",  i386_probe1, nitems(i386_probe1) },
-	{ "disk",     i386_probe2, nitems(i386_probe2) }
 };
 int nibprobes = nitems(probe_list);
 
