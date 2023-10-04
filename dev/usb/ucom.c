@@ -1,4 +1,4 @@
-/*	$OpenBSD: ucom.c,v 1.75 2023/09/21 00:05:36 krw Exp $ */
+/*	$OpenBSD: ucom.c,v 1.77 2023/10/02 23:38:11 krw Exp $ */
 /*	$NetBSD: ucom.c,v 1.49 2003/01/01 00:10:25 thorpej Exp $	*/
 
 /*
@@ -44,6 +44,7 @@
 #include <sys/fcntl.h>
 #include <sys/vnode.h>
 #include <sys/device.h>
+#include <sys/malloc.h>
 
 #include <dev/usb/usb.h>
 
@@ -73,6 +74,9 @@ int ucomdebug = 0;
 
 #define	UCOMUNIT(x)		(minor(x) & UCOMUNIT_MASK)
 #define	UCOMCUA(x)		(minor(x) & UCOMCUA_MASK)
+
+#define ROUTEROOTPORT(_x)	((_x) & 0xff)
+#define ROUTESTRING(_x)		(((_x) >> 8) & 0xfffff)
 
 struct ucom_softc {
 	struct device		sc_dev;		/* base device */
@@ -153,6 +157,9 @@ const struct cfattach ucom_ca = {
 	ucom_detach,
 };
 
+static int ucom_change;
+struct rwlock sysctl_ucomlock = RWLOCK_INITIALIZER("sysctlulk");
+
 void
 ucom_lock(struct ucom_softc *sc)
 {
@@ -174,13 +181,15 @@ ucom_match(struct device *parent, void *match, void *aux)
 void
 ucom_attach(struct device *parent, struct device *self, void *aux)
 {
+	char path[32];	/* "usb000.000.00000.000" */
 	struct ucom_softc *sc = (struct ucom_softc *)self;
 	struct ucom_attach_args *uca = aux;
 	struct tty *tp;
+	uint32_t route;
+	uint8_t bus, ifaceno;
 
 	if (uca->info != NULL)
 		printf(", %s", uca->info);
-	printf("\n");
 
 	sc->sc_uparent = uca->device;
 	sc->sc_iface = uca->iface;
@@ -195,12 +204,22 @@ ucom_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_parent = uca->arg;
 	sc->sc_portno = uca->portno;
 
+	if (usbd_get_location(sc->sc_uparent, sc->sc_iface, &bus, &route,
+	    &ifaceno) == 0) {
+		if (snprintf(path, sizeof(path), "usb%u.%u.%05x.%u", bus,
+		    ROUTEROOTPORT(route), ROUTESTRING(route), ifaceno) <
+		    sizeof(path))
+			printf(": %s", path);
+	}
+	printf("\n");
+
 	tp = ttymalloc(1000000);
 	tp->t_oproc = ucomstart;
 	tp->t_param = ucomparam;
 	sc->sc_tty = tp;
 	sc->sc_cua = 0;
 
+	ucom_change = 1;
 	rw_init(&sc->sc_lock, "ucomlk");
 }
 
@@ -273,6 +292,7 @@ ucom_detach(struct device *self, int flags)
 		sc->sc_tty = NULL;
 	}
 
+	ucom_change = 1;
 	return (0);
 }
 
@@ -1223,7 +1243,55 @@ ucom_cleanup(struct ucom_softc *sc)
 	}
 }
 
-#endif /* NUCOM > 0 */
+/*
+ * Update ucom names for export by sysctl.
+ */
+char *
+sysctl_ucominit(void)
+{
+	static char *ucoms = NULL;
+	static size_t ucomslen = 0;
+	char name[64];	/* dv_xname + ":usb000.000.00000.000," */
+	struct ucom_softc *sc;
+	int rslt;
+	unsigned int unit;
+	uint32_t route;
+	uint8_t bus, ifaceidx;
+
+	KERNEL_ASSERT_LOCKED();
+
+	if (rw_enter(&sysctl_ucomlock, RW_WRITE|RW_INTR) != 0)
+		return NULL;
+
+	if (ucoms == NULL || ucom_change) {
+		free(ucoms, M_SYSCTL, ucomslen);
+		ucomslen = ucom_cd.cd_ndevs * sizeof(name);
+		ucoms = malloc(ucomslen, M_SYSCTL, M_WAITOK | M_ZERO);
+		for (unit = 0; unit < ucom_cd.cd_ndevs; unit++) {
+			sc = ucom_cd.cd_devs[unit];
+			if (sc == NULL || sc->sc_iface == NULL)
+				continue;
+			if (usbd_get_location(sc->sc_uparent, sc->sc_iface,
+			    &bus, &route, &ifaceidx) == -1)
+				continue;
+			rslt = snprintf(name, sizeof(name),
+			    "%s:usb%u.%u.%05x.%u,", sc->sc_dev.dv_xname, bus,
+			    ROUTEROOTPORT(route), ROUTESTRING(route), ifaceidx);
+			if (rslt < sizeof(name) && (strlen(ucoms) + rslt) <
+			    ucomslen)
+				strlcat(ucoms, name, ucomslen);
+		}
+	}
+
+	/* Remove trailing ','. */
+	if (strlen(ucoms))
+		ucoms[strlen(ucoms) - 1] = '\0';
+
+	rw_exit_write(&sysctl_ucomlock);
+
+	return ucoms;
+}
+#endif	/* NUCOM > 0 */
 
 int
 ucomprint(void *aux, const char *pnp)
