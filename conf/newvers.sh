@@ -42,7 +42,6 @@ fi
 touch version
 v=`cat version` u=`logname` d=${PWD%/obj} h=`hostname` t=`date`
 id=`basename "${d}"`
-git=`git rev-parse --abbrev-ref HEAD`
 
 # additional things which need version number upgrades:
 #	sys/sys/param.h:
@@ -85,7 +84,7 @@ const char osversion[] = "${id}#${v}";
 const char sccs[] =
     "    @(#)${ost} ${osr}" STATUS " (${id}) #${v}: ${t}\n";
 const char version[512] =
-    "${ost} ${osr}" STATUS " (${id}) #${v}: ${t}\n    ${u}@${h}:${d}*${git}\n";
+    "${ost} ${osr}" STATUS " (${id}) #${v}: ${t}\n    ${u}@${h}:${d}\n";
 eof
 
 expr ${v} + 1 > version
