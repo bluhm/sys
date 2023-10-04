@@ -529,6 +529,14 @@ ifq_hdatalen(struct ifqueue *ifq)
 	return (len);
 }
 
+void
+ifq_set_maxlen(struct ifqueue *ifq, unsigned int maxlen)
+{
+	mtx_enter(&ifq->ifq_mtx);
+	ifq->ifq_maxlen = maxlen;
+	mtx_leave(&ifq->ifq_mtx);
+}
+
 unsigned int
 ifq_purge(struct ifqueue *ifq)
 {
