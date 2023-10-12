@@ -1,4 +1,4 @@
-/*	$OpenBSD: dwqevar.h,v 1.6 2023/04/24 01:33:32 dlg Exp $	*/
+/*	$OpenBSD: dwqevar.h,v 1.9 2023/10/11 12:52:00 stsp Exp $	*/
 /*
  * Copyright (c) 2008, 2019 Mark Kettenis <kettenis@openbsd.org>
  * Copyright (c) 2017, 2022 Patrick Wildt <patrick@blueri.se>
@@ -53,8 +53,6 @@ struct dwqe_softc {
 	bus_dma_tag_t		sc_dmat;
 	void			*sc_ih;
 
-	struct if_device	sc_ifd;
-
 	struct arpcom		sc_ac;
 #define sc_lladdr	sc_ac.ac_enaddr
 	struct mii_data		sc_mii;
@@ -82,13 +80,13 @@ struct dwqe_softc {
 	struct task		sc_statchg_task;
 
 	uint32_t		sc_clk;
+	uint32_t		sc_clkrate;
 
 	bus_size_t		sc_clk_sel;
 	uint32_t		sc_clk_sel_125;
 	uint32_t		sc_clk_sel_25;
 	uint32_t		sc_clk_sel_2_5;
 
-	int			sc_gmac_id;
 	int			sc_hw_feature[4];
 
 	int			sc_force_thresh_dma_mode;
@@ -99,6 +97,8 @@ struct dwqe_softc {
 	int			sc_pbl;
 	int			sc_txpbl;
 	int			sc_rxpbl;
+	int			sc_txfifo_size;
+	int			sc_rxfifo_size;
 	int			sc_axi_config;
 	int			sc_lpi_en;
 	int			sc_xit_frm;

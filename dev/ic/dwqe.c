@@ -1,4 +1,4 @@
-/*	$OpenBSD: dwqe.c,v 1.11 2023/08/07 20:28:47 kettenis Exp $	*/
+/*	$OpenBSD: dwqe.c,v 1.14 2023/10/11 12:52:00 stsp Exp $	*/
 /*
  * Copyright (c) 2008, 2019 Mark Kettenis <kettenis@openbsd.org>
  * Copyright (c) 2017, 2022 Patrick Wildt <patrick@blueri.se>
@@ -34,18 +34,9 @@
 #include <sys/timeout.h>
 
 #include <machine/bus.h>
-#include <machine/fdt.h>
 
 #include <net/if.h>
 #include <net/if_media.h>
-
-#include <dev/ofw/openfirm.h>
-#include <dev/ofw/ofw_clock.h>
-#include <dev/ofw/ofw_gpio.h>
-#include <dev/ofw/ofw_misc.h>
-#include <dev/ofw/ofw_pinctrl.h>
-#include <dev/ofw/ofw_regulator.h>
-#include <dev/ofw/fdt.h>
 
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
@@ -714,7 +705,7 @@ dwqe_up(struct dwqe_softc *sc)
 {
 	struct ifnet *ifp = &sc->sc_ac.ac_if;
 	struct dwqe_buf *txb, *rxb;
-	uint32_t mode, reg, tqs, rqs;
+	uint32_t mode, reg, fifosz, tqs, rqs;
 	int i;
 
 	/* Allocate Tx descriptor ring. */
@@ -781,7 +772,7 @@ dwqe_up(struct dwqe_softc *sc)
 	ifp->if_flags |= IFF_RUNNING;
 	ifq_clr_oactive(&ifp->if_snd);
 
-	dwqe_write(sc, GMAC_MAC_1US_TIC_CTR, (sc->sc_clk / 1000000) - 1);
+	dwqe_write(sc, GMAC_MAC_1US_TIC_CTR, (sc->sc_clkrate / 1000000) - 1);
 
 	/* Start receive DMA */
 	reg = dwqe_read(sc, GMAC_CHAN_RX_CONTROL(0));
@@ -802,9 +793,21 @@ dwqe_up(struct dwqe_softc *sc)
 		mode |= GMAC_MTL_CHAN_RX_OP_MODE_RSF;
 	}
 	mode &= ~GMAC_MTL_CHAN_RX_OP_MODE_RQS_MASK;
-	rqs = (128 << GMAC_MAC_HW_FEATURE1_RXFIFOSIZE(sc->sc_hw_feature[1]) /
-	    256) - 1;
-	mode |= rqs << GMAC_MTL_CHAN_RX_OP_MODE_RQS_SHIFT;
+	if (sc->sc_rxfifo_size)
+		fifosz = sc->sc_rxfifo_size;
+	else
+		fifosz = (128 <<
+		    GMAC_MAC_HW_FEATURE1_RXFIFOSIZE(sc->sc_hw_feature[1]));
+	rqs = fifosz / 256 - 1;
+	mode |= (rqs << GMAC_MTL_CHAN_RX_OP_MODE_RQS_SHIFT) &
+	   GMAC_MTL_CHAN_RX_OP_MODE_RQS_MASK;
+	if (fifosz >= 4096) {
+		mode |= GMAC_MTL_CHAN_RX_OP_MODE_EHFC; 
+		mode &= ~GMAC_MTL_CHAN_RX_OP_MODE_RFD_MASK;
+		mode |= 0x3 << GMAC_MTL_CHAN_RX_OP_MODE_RFD_SHIFT;
+		mode &= ~GMAC_MTL_CHAN_RX_OP_MODE_RFA_MASK;
+		mode |= 0x1 << GMAC_MTL_CHAN_RX_OP_MODE_RFA_SHIFT;
+	}
 	dwqe_write(sc, GMAC_MTL_CHAN_RX_OP_MODE(0), mode);
 
 	mode = dwqe_read(sc, GMAC_MTL_CHAN_TX_OP_MODE(0));
@@ -818,9 +821,14 @@ dwqe_up(struct dwqe_softc *sc)
 	mode &= ~GMAC_MTL_CHAN_TX_OP_MODE_TXQEN_MASK;
 	mode |= GMAC_MTL_CHAN_TX_OP_MODE_TXQEN;
 	mode &= ~GMAC_MTL_CHAN_TX_OP_MODE_TQS_MASK;
-	tqs = (128 << GMAC_MAC_HW_FEATURE1_TXFIFOSIZE(sc->sc_hw_feature[1]) /
-	    256) - 1;
-	mode |= tqs << GMAC_MTL_CHAN_TX_OP_MODE_TQS_SHIFT;
+	if (sc->sc_txfifo_size)
+		fifosz = sc->sc_txfifo_size;
+	else
+		fifosz = (128 <<
+		    GMAC_MAC_HW_FEATURE1_TXFIFOSIZE(sc->sc_hw_feature[1]));
+	tqs = (fifosz / 256) - 1;
+	mode |= (tqs << GMAC_MTL_CHAN_TX_OP_MODE_TQS_SHIFT) &
+	    GMAC_MTL_CHAN_TX_OP_MODE_TQS_MASK;
 	dwqe_write(sc, GMAC_MTL_CHAN_TX_OP_MODE(0), mode);
 
 	reg = dwqe_read(sc, GMAC_QX_TX_FLOW_CTRL(0));
