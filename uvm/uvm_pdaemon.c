@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_pdaemon.c,v 1.107 2023/10/16 11:32:54 mpi Exp $	*/
+/*	$OpenBSD: uvm_pdaemon.c,v 1.109 2023/10/27 19:18:53 mpi Exp $	*/
 /*	$NetBSD: uvm_pdaemon.c,v 1.23 2000/08/20 10:24:14 bjh21 Exp $	*/
 
 /*
@@ -595,11 +595,8 @@ uvmpd_scan_inactive(struct uvm_pmalloc *pma,
 			 * is full, free any swap allocated to the page
 			 * so that other pages can be paged out.
 			 */
-			KASSERT(uvmexp.swpginuse <= uvmexp.swpages);
-			if ((p->pg_flags & PQ_SWAPBACKED) &&
-			    uvmexp.swpginuse == uvmexp.swpages) {
+			if ((p->pg_flags & PQ_SWAPBACKED) && uvm_swapisfilled())
 				uvmpd_dropswap(p);
-			}
 
 			/*
 			 * the page we are looking at is dirty.   we must
@@ -650,6 +647,11 @@ uvmpd_scan_inactive(struct uvm_pmalloc *pma,
 					    p->offset >> PAGE_SHIFT,
 					    swslot + swcpages);
 				swcpages++;
+				rw_exit(slock);
+
+				/* cluster not full yet? */
+				if (swcpages < swnpages)
+					continue;
 			}
 		} else {
 			/* if p == NULL we must be doing a last swap i/o */
@@ -666,14 +668,6 @@ uvmpd_scan_inactive(struct uvm_pmalloc *pma,
 		 * for object pages, we always do the pageout.
 		 */
 		if (swap_backed) {
-			if (p) {	/* if we just added a page to cluster */
-				rw_exit(slock);
-
-				/* cluster not full yet? */
-				if (swcpages < swnpages)
-					continue;
-			}
-
 			/* starting I/O now... set up for it */
 			npages = swcpages;
 			ppsp = swpps;
@@ -920,9 +914,7 @@ uvmpd_scan(struct uvm_pmalloc *pma, struct uvm_constraint_range *constraint)
 	 */
 	free = uvmexp.free - BUFPAGES_DEFICIT;
 	swap_shortage = 0;
-	if (free < uvmexp.freetarg &&
-	    uvmexp.swpginuse == uvmexp.swpages &&
-	    !uvm_swapisfull() &&
+	if (free < uvmexp.freetarg && uvm_swapisfilled() && !uvm_swapisfull() &&
 	    pages_freed == 0) {
 		swap_shortage = uvmexp.freetarg - free;
 	}
