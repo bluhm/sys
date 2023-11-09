@@ -149,7 +149,8 @@ arpinit(void)
 	pool_init(&arp_pool, sizeof(struct llinfo_arp), 0,
 	    IPL_SOFTNET, 0, "arp", NULL);
 
-	timeout_set_proc(&arptimer_to, arptimer, &arptimer_to);
+	timeout_set_flags(&arptimer_to, arptimer, &arptimer_to,
+	    KCLOCK_NONE, TIMEOUT_PROC | TIMEOUT_MPSAFE);
 	timeout_add_sec(&arptimer_to, arpt_prune);
 }
 
