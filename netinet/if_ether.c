@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ether.c,v 1.265 2023/05/12 12:40:49 bluhm Exp $	*/
+/*	$OpenBSD: if_ether.c,v 1.266 2023/11/09 21:45:18 bluhm Exp $	*/
 /*	$NetBSD: if_ether.c,v 1.31 1996/05/11 12:59:58 mycroft Exp $	*/
 
 /*
