@@ -645,7 +645,7 @@ bnxt_attach(struct device *parent, struct device *self, void *aux)
 #if NVLAN > 0
 	ifp->if_capabilities |= IFCAP_VLAN_HWTAGGING;
 #endif
-	ifq_set_maxlen(&ifp->if_snd, 1024);	/* ? */
+	ifq_init_maxlen(&ifp->if_snd, 1024);	/* ? */
 
 	ifmedia_init(&sc->sc_media, IFM_IMASK, bnxt_media_change,
 	    bnxt_media_status);

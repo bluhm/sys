@@ -1697,7 +1697,7 @@ hasmac:
 	ifp->if_ioctl = dc_ioctl;
 	ifp->if_start = dc_start;
 	ifp->if_watchdog = dc_watchdog;
-	ifq_set_maxlen(&ifp->if_snd, DC_TX_LIST_CNT - 1);
+	ifq_init_maxlen(&ifp->if_snd, DC_TX_LIST_CNT - 1);
 	bcopy(sc->sc_dev.dv_xname, ifp->if_xname, IFNAMSIZ);
 
 	ifp->if_capabilities = IFCAP_VLAN_MTU;

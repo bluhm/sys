@@ -1024,7 +1024,7 @@ ngbe_setup_interface(struct ngbe_softc *sc)
 	ifp->if_watchdog = ngbe_watchdog;
 	ifp->if_hardmtu = NGBE_MAX_JUMBO_FRAME_SIZE - ETHER_HDR_LEN - 
 	    ETHER_CRC_LEN;
-	ifq_set_maxlen(&ifp->if_snd, sc->num_tx_desc - 1);
+	ifq_init_maxlen(&ifp->if_snd, sc->num_tx_desc - 1);
 
 	ifp->if_capabilities = IFCAP_VLAN_MTU;
 

@@ -329,7 +329,7 @@ vte_attach(struct device *parent, struct device *self, void *aux)
 	ifp->if_ioctl = vte_ioctl;
 	ifp->if_start = vte_start;
 	ifp->if_watchdog = vte_watchdog;
-	ifq_set_maxlen(&ifp->if_snd, VTE_TX_RING_CNT - 1);
+	ifq_init_maxlen(&ifp->if_snd, VTE_TX_RING_CNT - 1);
 	bcopy(sc->vte_eaddr, sc->sc_arpcom.ac_enaddr, ETHER_ADDR_LEN);
 	bcopy(sc->sc_dev.dv_xname, ifp->if_xname, IFNAMSIZ);
 

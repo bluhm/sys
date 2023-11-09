@@ -288,7 +288,7 @@ rge_attach(struct device *parent, struct device *self, void *aux)
 	ifp->if_ioctl = rge_ioctl;
 	ifp->if_qstart = rge_start;
 	ifp->if_watchdog = rge_watchdog;
-	ifq_set_maxlen(&ifp->if_snd, RGE_TX_LIST_CNT - 1);
+	ifq_init_maxlen(&ifp->if_snd, RGE_TX_LIST_CNT - 1);
 	ifp->if_hardmtu = RGE_JUMBO_MTU;
 
 	ifp->if_capabilities = IFCAP_VLAN_MTU | IFCAP_CSUM_IPv4 |

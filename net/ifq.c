@@ -287,7 +287,7 @@ ifq_init(struct ifqueue *ifq, struct ifnet *ifp, unsigned int idx)
 	task_set(&ifq->ifq_restart, ifq_restart_task, ifq);
 
 	if (ifq->ifq_maxlen == 0)
-		ifq_set_maxlen(ifq, IFQ_MAXLEN);
+		ifq_init_maxlen(ifq, IFQ_MAXLEN);
 
 	ifq->ifq_idx = idx;
 
@@ -530,11 +530,10 @@ ifq_hdatalen(struct ifqueue *ifq)
 }
 
 void
-ifq_set_maxlen(struct ifqueue *ifq, unsigned int maxlen)
+ifq_init_maxlen(struct ifqueue *ifq, unsigned int maxlen)
 {
-	mtx_enter(&ifq->ifq_mtx);
+	/* this is not MP safe, use only during attach */
 	ifq->ifq_maxlen = maxlen;
-	mtx_leave(&ifq->ifq_mtx);
 }
 
 unsigned int

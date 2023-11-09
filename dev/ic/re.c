@@ -1016,7 +1016,7 @@ re_attach(struct rl_softc *sc, const char *intrstr)
 	ifp->if_qstart = re_start;
 	ifp->if_watchdog = re_watchdog;
 	ifp->if_hardmtu = sc->rl_max_mtu;
-	ifq_set_maxlen(&ifp->if_snd, sc->rl_ldata.rl_tx_desc_cnt);
+	ifq_init_maxlen(&ifp->if_snd, sc->rl_ldata.rl_tx_desc_cnt);
 
 	ifp->if_capabilities = IFCAP_VLAN_MTU | IFCAP_CSUM_TCPv4 |
 	    IFCAP_CSUM_UDPv4;

@@ -690,7 +690,7 @@ se_attach(struct device *parent, struct device *self, void *aux)
 	ifp->if_ioctl = se_ioctl;
 	ifp->if_start = se_start;
 	ifp->if_watchdog = se_watchdog;
-	ifq_set_maxlen(&ifp->if_snd, SE_TX_RING_CNT - 1);
+	ifq_init_maxlen(&ifp->if_snd, SE_TX_RING_CNT - 1);
 	bcopy(sc->sc_dev.dv_xname, ifp->if_xname, IFNAMSIZ);
 
 	ifp->if_capabilities = IFCAP_VLAN_MTU;

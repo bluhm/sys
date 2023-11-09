@@ -278,7 +278,7 @@ epic_attach(struct epic_softc *sc, const char *intrstr)
 	ifp->if_ioctl = epic_ioctl;
 	ifp->if_start = epic_start;
 	ifp->if_watchdog = epic_watchdog;
-	ifq_set_maxlen(&ifp->if_snd, EPIC_NTXDESC - 1);
+	ifq_init_maxlen(&ifp->if_snd, EPIC_NTXDESC - 1);
 
 	ifp->if_capabilities = IFCAP_VLAN_MTU;
 

@@ -284,7 +284,7 @@ acx_attach(struct acx_softc *sc)
 	ifp->if_watchdog = acx_watchdog;
 	ifp->if_flags = IFF_SIMPLEX | IFF_BROADCAST | IFF_MULTICAST;
 	strlcpy(ifp->if_xname, sc->sc_dev.dv_xname, IFNAMSIZ);
-	ifq_set_maxlen(&ifp->if_snd, IFQ_MAXLEN);
+	ifq_init_maxlen(&ifp->if_snd, IFQ_MAXLEN);
 
 	/* Set channels */
 	for (i = 1; i <= 14; ++i) {

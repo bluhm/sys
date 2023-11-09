@@ -769,7 +769,7 @@ pcn_attach(struct device *parent, struct device *self, void *aux)
 	ifp->if_ioctl = pcn_ioctl;
 	ifp->if_start = pcn_start;
 	ifp->if_watchdog = pcn_watchdog;
-	ifq_set_maxlen(&ifp->if_snd, PCN_NTXDESC -1);
+	ifq_init_maxlen(&ifp->if_snd, PCN_NTXDESC -1);
 
 	/* Attach the interface. */
 	if_attach(ifp);

@@ -877,7 +877,7 @@ bnx_attachhook(struct device *self)
 	ifp->if_watchdog = bnx_watchdog;
 	ifp->if_hardmtu = BNX_MAX_JUMBO_ETHER_MTU_VLAN -
 	    sizeof(struct ether_header);
-	ifq_set_maxlen(&ifp->if_snd, USABLE_TX_BD - 1);
+	ifq_init_maxlen(&ifp->if_snd, USABLE_TX_BD - 1);
 	bcopy(sc->eaddr, sc->arpcom.ac_enaddr, ETHER_ADDR_LEN);
 	bcopy(sc->bnx_dev.dv_xname, ifp->if_xname, IFNAMSIZ);
 

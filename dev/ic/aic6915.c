@@ -289,7 +289,7 @@ sf_attach(struct sf_softc *sc)
 	ifp->if_ioctl = sf_ioctl;
 	ifp->if_start = sf_start;
 	ifp->if_watchdog = sf_watchdog;
-	ifq_set_maxlen(&ifp->if_snd, SF_NTXDESC_MASK);
+	ifq_init_maxlen(&ifp->if_snd, SF_NTXDESC_MASK);
 
 	/*
 	 * Attach the interface.

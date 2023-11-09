@@ -758,7 +758,7 @@ wb_attach(struct device *parent, struct device *self, void *aux)
 	ifp->if_ioctl = wb_ioctl;
 	ifp->if_start = wb_start;
 	ifp->if_watchdog = wb_watchdog;
-	ifq_set_maxlen(&ifp->if_snd, WB_TX_LIST_CNT - 1);
+	ifq_init_maxlen(&ifp->if_snd, WB_TX_LIST_CNT - 1);
 
 	bcopy(sc->sc_dev.dv_xname, ifp->if_xname, IFNAMSIZ);
 

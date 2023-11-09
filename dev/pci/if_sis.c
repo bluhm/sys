@@ -1184,7 +1184,7 @@ sis_attach(struct device *parent, struct device *self, void *aux)
 	ifp->if_ioctl = sis_ioctl;
 	ifp->if_start = sis_start;
 	ifp->if_watchdog = sis_watchdog;
-	ifq_set_maxlen(&ifp->if_snd, SIS_TX_LIST_CNT - 1);
+	ifq_init_maxlen(&ifp->if_snd, SIS_TX_LIST_CNT - 1);
 	bcopy(sc->sc_dev.dv_xname, ifp->if_xname, IFNAMSIZ);
 	ifp->if_hardmtu = 1518; /* determined experimentally on DP83815 */
 

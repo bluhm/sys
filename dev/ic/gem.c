@@ -222,7 +222,7 @@ gem_config(struct gem_softc *sc)
 	ifp->if_qstart = gem_start;
 	ifp->if_ioctl = gem_ioctl;
 	ifp->if_watchdog = gem_watchdog;
-	ifq_set_maxlen(&ifp->if_snd, GEM_NTXDESC - 1);
+	ifq_init_maxlen(&ifp->if_snd, GEM_NTXDESC - 1);
 
 	ifp->if_capabilities = IFCAP_VLAN_MTU;
 

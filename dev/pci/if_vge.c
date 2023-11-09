@@ -777,7 +777,7 @@ vge_attach(struct device *parent, struct device *self, void *aux)
 #ifdef VGE_JUMBO
 	ifp->if_hardmtu = VGE_JUMBO_MTU;
 #endif
-	ifq_set_maxlen(&ifp->if_snd, VGE_IFQ_MAXLEN);
+	ifq_init_maxlen(&ifp->if_snd, VGE_IFQ_MAXLEN);
 
 	ifp->if_capabilities = IFCAP_VLAN_MTU | IFCAP_CSUM_IPv4 |
 				IFCAP_CSUM_TCPv4 | IFCAP_CSUM_UDPv4;

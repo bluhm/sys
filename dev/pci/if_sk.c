@@ -998,7 +998,7 @@ sk_attach(struct device *parent, struct device *self, void *aux)
 	ifp->if_start = sk_start;
 	ifp->if_watchdog = sk_watchdog;
 	ifp->if_hardmtu = SK_JUMBO_MTU;
-	ifq_set_maxlen(&ifp->if_snd, SK_TX_RING_CNT - 1);
+	ifq_init_maxlen(&ifp->if_snd, SK_TX_RING_CNT - 1);
 	bcopy(sc_if->sk_dev.dv_xname, ifp->if_xname, IFNAMSIZ);
 
 	ifp->if_capabilities = IFCAP_VLAN_MTU;

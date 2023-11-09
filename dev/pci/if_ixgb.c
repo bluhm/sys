@@ -1011,7 +1011,7 @@ ixgb_setup_interface(struct ixgb_softc *sc)
 	ifp->if_watchdog = ixgb_watchdog;
 	ifp->if_hardmtu =
 		IXGB_MAX_JUMBO_FRAME_SIZE - ETHER_HDR_LEN - ETHER_CRC_LEN;
-	ifq_set_maxlen(&ifp->if_snd, sc->num_tx_desc - 1);
+	ifq_init_maxlen(&ifp->if_snd, sc->num_tx_desc - 1);
 
 	ifp->if_capabilities = IFCAP_VLAN_MTU;
 

@@ -245,7 +245,7 @@ et_attach(struct device *parent, struct device *self, void *aux)
 	ifp->if_ioctl = et_ioctl;
 	ifp->if_start = et_start;
 	ifp->if_watchdog = et_watchdog;
-	ifq_set_maxlen(&ifp->if_snd, ET_TX_NDESC);
+	ifq_init_maxlen(&ifp->if_snd, ET_TX_NDESC);
 	strlcpy(ifp->if_xname, sc->sc_dev.dv_xname, IFNAMSIZ);
 
 	ifp->if_capabilities = IFCAP_VLAN_MTU;

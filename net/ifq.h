@@ -435,7 +435,7 @@ void		 ifq_deq_commit(struct ifqueue *, struct mbuf *);
 void		 ifq_deq_rollback(struct ifqueue *, struct mbuf *);
 struct mbuf	*ifq_dequeue(struct ifqueue *);
 int		 ifq_hdatalen(struct ifqueue *);
-void		 ifq_set_maxlen(struct ifqueue *, unsigned int);
+void		 ifq_init_maxlen(struct ifqueue *, unsigned int);
 void		 ifq_mfreem(struct ifqueue *, struct mbuf *);
 void		 ifq_mfreeml(struct ifqueue *, struct mbuf_list *);
 unsigned int	 ifq_purge(struct ifqueue *);

@@ -786,7 +786,7 @@ igc_setup_interface(struct igc_softc *sc)
 	ifp->if_watchdog = igc_watchdog;
 	ifp->if_hardmtu = sc->hw.mac.max_frame_size - ETHER_HDR_LEN -
 	    ETHER_CRC_LEN;
-	ifq_set_maxlen(&ifp->if_snd, sc->num_tx_desc - 1);
+	ifq_init_maxlen(&ifp->if_snd, sc->num_tx_desc - 1);
 
 	ifp->if_capabilities = IFCAP_VLAN_MTU;
 

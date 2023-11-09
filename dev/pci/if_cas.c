@@ -493,7 +493,7 @@ cas_config(struct cas_softc *sc)
 	ifp->if_start = cas_start;
 	ifp->if_ioctl = cas_ioctl;
 	ifp->if_watchdog = cas_watchdog;
-	ifq_set_maxlen(&ifp->if_snd, CAS_NTXDESC - 1);
+	ifq_init_maxlen(&ifp->if_snd, CAS_NTXDESC - 1);
 
 	ifp->if_capabilities = IFCAP_VLAN_MTU;
 

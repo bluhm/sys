@@ -592,7 +592,7 @@ vio_attach(struct device *parent, struct device *self, void *aux)
 	ifp->if_capabilities = IFCAP_VLAN_MTU;
 	if (virtio_has_feature(vsc, VIRTIO_NET_F_CSUM))
 		ifp->if_capabilities |= IFCAP_CSUM_TCPv4|IFCAP_CSUM_UDPv4;
-	ifq_set_maxlen(&ifp->if_snd, vsc->sc_vqs[1].vq_num - 1);
+	ifq_init_maxlen(&ifp->if_snd, vsc->sc_vqs[1].vq_num - 1);
 	ifmedia_init(&sc->sc_media, 0, vio_media_change, vio_media_status);
 	ifmedia_add(&sc->sc_media, IFM_ETHER | IFM_AUTO, 0, NULL);
 	ifmedia_set(&sc->sc_media, IFM_ETHER | IFM_AUTO);

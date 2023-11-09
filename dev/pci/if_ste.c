@@ -899,7 +899,7 @@ ste_attach(struct device *parent, struct device *self, void *aux)
 	ifp->if_ioctl = ste_ioctl;
 	ifp->if_start = ste_start;
 	ifp->if_watchdog = ste_watchdog;
-	ifq_set_maxlen(&ifp->if_snd, STE_TX_LIST_CNT - 1);
+	ifq_init_maxlen(&ifp->if_snd, STE_TX_LIST_CNT - 1);
 	bcopy(sc->sc_dev.dv_xname, ifp->if_xname, IFNAMSIZ);
 	ifp->if_capabilities = IFCAP_VLAN_MTU;
 

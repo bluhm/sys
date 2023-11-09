@@ -220,7 +220,7 @@ age_attach(struct device *parent, struct device *self, void *aux)
 	ifp->if_ioctl = age_ioctl;
 	ifp->if_start = age_start;
 	ifp->if_watchdog = age_watchdog;
-	ifq_set_maxlen(&ifp->if_snd, AGE_TX_RING_CNT - 1);
+	ifq_init_maxlen(&ifp->if_snd, AGE_TX_RING_CNT - 1);
 	bcopy(sc->age_eaddr, sc->sc_arpcom.ac_enaddr, ETHER_ADDR_LEN);
 	bcopy(sc->sc_dev.dv_xname, ifp->if_xname, IFNAMSIZ);
 

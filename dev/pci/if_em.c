@@ -1963,7 +1963,7 @@ em_setup_interface(struct em_softc *sc)
 	ifp->if_watchdog = em_watchdog;
 	ifp->if_hardmtu =
 		sc->hw.max_frame_size - ETHER_HDR_LEN - ETHER_CRC_LEN;
-	ifq_set_maxlen(&ifp->if_snd, sc->sc_tx_slots - 1);
+	ifq_init_maxlen(&ifp->if_snd, sc->sc_tx_slots - 1);
 
 	ifp->if_capabilities = IFCAP_VLAN_MTU;
 

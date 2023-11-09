@@ -890,7 +890,7 @@ iavf_attach(struct device *parent, struct device *self, void *aux)
 	if (ifp->if_hardmtu == 0)
 		ifp->if_hardmtu = IAVF_HARDMTU;
 	strlcpy(ifp->if_xname, DEVNAME(sc), IFNAMSIZ);
-	ifq_set_maxlen(&ifp->if_snd, sc->sc_tx_ring_ndescs);
+	ifq_init_maxlen(&ifp->if_snd, sc->sc_tx_ring_ndescs);
 
 	ifp->if_capabilities = IFCAP_VLAN_MTU | IFCAP_VLAN_HWTAGGING;
 #if 0

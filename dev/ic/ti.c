@@ -1443,7 +1443,7 @@ ti_attach(struct ti_softc *sc)
 	ifp->if_start = ti_start;
 	ifp->if_watchdog = ti_watchdog;
 	ifp->if_hardmtu = TI_JUMBO_FRAMELEN - ETHER_HDR_LEN;
-	ifq_set_maxlen(&ifp->if_snd, TI_TX_RING_CNT - 1);
+	ifq_init_maxlen(&ifp->if_snd, TI_TX_RING_CNT - 1);
 	bcopy(sc->sc_dv.dv_xname, ifp->if_xname, IFNAMSIZ);
 
 	ifp->if_capabilities = IFCAP_VLAN_MTU;

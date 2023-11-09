@@ -3061,7 +3061,7 @@ bge_attach(struct device *parent, struct device *self, void *aux)
 	ifp->if_ioctl = bge_ioctl;
 	ifp->if_qstart = bge_start;
 	ifp->if_watchdog = bge_watchdog;
-	ifq_set_maxlen(&ifp->if_snd, BGE_TX_RING_CNT - 1);
+	ifq_init_maxlen(&ifp->if_snd, BGE_TX_RING_CNT - 1);
 
 	DPRINTFN(5, ("bcopy\n"));
 	bcopy(sc->bge_dev.dv_xname, ifp->if_xname, IFNAMSIZ);

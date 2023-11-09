@@ -1877,7 +1877,7 @@ pgt_net_attach(struct pgt_softc *sc)
 	ifp->if_flags = IFF_SIMPLEX | IFF_BROADCAST | IFF_MULTICAST;
 	strlcpy(ifp->if_xname, sc->sc_dev.dv_xname, IFNAMSIZ);
 
-	ifq_set_maxlen(&ifp->if_snd, IFQ_MAXLEN);
+	ifq_init_maxlen(&ifp->if_snd, IFQ_MAXLEN);
 
 	/*
 	 * Set channels

@@ -320,7 +320,7 @@ nfe_attach(struct device *parent, struct device *self, void *aux)
 	ifp->if_ioctl = nfe_ioctl;
 	ifp->if_start = nfe_start;
 	ifp->if_watchdog = nfe_watchdog;
-	ifq_set_maxlen(&ifp->if_snd, NFE_IFQ_MAXLEN);
+	ifq_init_maxlen(&ifp->if_snd, NFE_IFQ_MAXLEN);
 	strlcpy(ifp->if_xname, sc->sc_dev.dv_xname, IFNAMSIZ);
 
 	ifp->if_capabilities = IFCAP_VLAN_MTU;

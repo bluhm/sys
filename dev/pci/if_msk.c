@@ -1068,7 +1068,7 @@ msk_attach(struct device *parent, struct device *self, void *aux)
 	if (sc->sk_type != SK_YUKON_FE &&
 	    sc->sk_type != SK_YUKON_FE_P)
 		ifp->if_hardmtu = SK_JUMBO_MTU;
-	ifq_set_maxlen(&ifp->if_snd, MSK_TX_RING_CNT - 1);
+	ifq_init_maxlen(&ifp->if_snd, MSK_TX_RING_CNT - 1);
 	bcopy(sc_if->sk_dev.dv_xname, ifp->if_xname, IFNAMSIZ);
 
 	ifp->if_capabilities = IFCAP_VLAN_MTU;

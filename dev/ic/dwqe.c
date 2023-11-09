@@ -117,7 +117,7 @@ dwqe_attach(struct dwqe_softc *sc)
 	ifp->if_ioctl = dwqe_ioctl;
 	ifp->if_qstart = dwqe_start;
 	ifp->if_watchdog = dwqe_watchdog;
-	ifq_set_maxlen(&ifp->if_snd, DWQE_NTXDESC - 1);
+	ifq_init_maxlen(&ifp->if_snd, DWQE_NTXDESC - 1);
 	bcopy(sc->sc_dev.dv_xname, ifp->if_xname, IFNAMSIZ);
 
 	ifp->if_capabilities = IFCAP_VLAN_MTU;

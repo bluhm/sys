@@ -919,7 +919,7 @@ nxe_attach(struct device *parent, struct device *self, void *aux)
 	ifp->if_watchdog = nxe_watchdog;
 	ifp->if_hardmtu = MCLBYTES - ETHER_HDR_LEN - ETHER_CRC_LEN;
 	strlcpy(ifp->if_xname, DEVNAME(sc), IFNAMSIZ);
-	ifq_set_maxlen(&ifp->if_snd, 512); /* XXX */
+	ifq_init_maxlen(&ifp->if_snd, 512); /* XXX */
 
 	ifmedia_init(&sc->sc_media, 0, nxe_media_change, nxe_media_status);
 	ifmedia_add(&sc->sc_media, IFM_ETHER|IFM_AUTO, 0, NULL);

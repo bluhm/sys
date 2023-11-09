@@ -713,7 +713,7 @@ sppp_attach(struct ifnet *ifp)
 	sp->pp_if.if_type = IFT_PPP;
 	sp->pp_if.if_output = sppp_output;
 	sp->pp_if.if_rtrequest = sppp_rtrequest;
-	ifq_set_maxlen(&sp->pp_if.if_snd, 50);
+	ifq_init_maxlen(&sp->pp_if.if_snd, 50);
 	mq_init(&sp->pp_cpq, 50, IPL_NET);
 	sp->pp_loopcnt = 0;
 	sp->pp_alivecnt = 0;

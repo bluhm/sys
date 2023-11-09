@@ -429,7 +429,7 @@ fxp_attach(struct fxp_softc *sc, const char *intrstr)
 	ifp->if_ioctl = fxp_ioctl;
 	ifp->if_start = fxp_start;
 	ifp->if_watchdog = fxp_watchdog;
-	ifq_set_maxlen(&ifp->if_snd, FXP_NTXCB - 1);
+	ifq_init_maxlen(&ifp->if_snd, FXP_NTXCB - 1);
 
 	ifp->if_capabilities = IFCAP_VLAN_MTU;
 

@@ -213,7 +213,7 @@ txp_attachhook(struct device *self)
 	ifp->if_start = txp_start;
 	ifp->if_watchdog = txp_watchdog;
 	ifp->if_baudrate = IF_Mbps(10);
-	ifq_set_maxlen(&ifp->if_snd, TX_ENTRIES);
+	ifq_init_maxlen(&ifp->if_snd, TX_ENTRIES);
 	bcopy(sc->sc_dev.dv_xname, ifp->if_xname, IFNAMSIZ);
 
 	txp_capabilities(sc);

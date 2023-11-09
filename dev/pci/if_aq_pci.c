@@ -1365,7 +1365,7 @@ aq_attach(struct device *parent, struct device *self, void *aux)
 #if NVLAN > 0
 	ifp->if_capabilities |= IFCAP_VLAN_HWTAGGING;
 #endif
-	ifq_set_maxlen(&ifp->if_snd, AQ_TXD_NUM);
+	ifq_init_maxlen(&ifp->if_snd, AQ_TXD_NUM);
 
 	ifmedia_init(&sc->sc_media, IFM_IMASK, aq_ifmedia_change,
 	    aq_ifmedia_status);
