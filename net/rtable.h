@@ -1,4 +1,4 @@
-/*	$OpenBSD: rtable.h,v 1.26 2020/11/07 09:51:40 denis Exp $ */
+/*	$OpenBSD: rtable.h,v 1.27 2023/11/10 20:05:22 bluhm Exp $ */
 
 /*
  * Copyright (c) 2014-2016 Martin Pieuchot

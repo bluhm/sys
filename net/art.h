@@ -1,4 +1,4 @@
-/* $OpenBSD: art.h,v 1.23 2023/04/19 17:42:47 bluhm Exp $ */
+/* $OpenBSD: art.h,v 1.24 2023/11/10 20:05:22 bluhm Exp $ */
 
 /*
  * Copyright (c) 2015 Martin Pieuchot

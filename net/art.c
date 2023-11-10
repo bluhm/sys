@@ -1,4 +1,4 @@
-/*	$OpenBSD: art.c,v 1.29 2020/11/12 15:25:28 mpi Exp $ */
+/*	$OpenBSD: art.c,v 1.30 2023/11/10 20:05:22 bluhm Exp $ */
 
 /*
  * Copyright (c) 2015 Martin Pieuchot

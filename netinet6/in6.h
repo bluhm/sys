@@ -1,4 +1,4 @@
-/*	$OpenBSD: in6.h,v 1.109 2021/06/02 00:20:50 dlg Exp $	*/
+/*	$OpenBSD: in6.h,v 1.110 2023/11/10 20:05:23 bluhm Exp $	*/
 /*	$KAME: in6.h,v 1.83 2001/03/29 02:55:07 jinmei Exp $	*/
 
 /*
