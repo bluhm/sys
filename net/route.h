@@ -467,7 +467,7 @@ int	 rt_mpls_set(struct rtentry *, struct sockaddr *, uint8_t);
 void	 rt_mpls_clear(struct rtentry *);
 
 int	 rtisvalid(struct rtentry *);
-int	 rt_hash(struct rtentry *, struct sockaddr *, uint32_t *);
+int	 rt_hash(struct rtentry *, const struct sockaddr *, uint32_t *);
 struct	 rtentry *rtalloc_mpath(struct sockaddr *, uint32_t *, u_int);
 struct	 rtentry *rtalloc(struct sockaddr *, int, unsigned int);
 void	 rtref(struct rtentry *);

@@ -44,7 +44,8 @@ struct sockaddr *rtable_getsource(unsigned int, int);
 void		 rtable_clearsource(unsigned int, struct sockaddr *);
 struct rtentry	*rtable_lookup(unsigned int, struct sockaddr *,
 		     struct sockaddr *, struct sockaddr *, uint8_t);
-struct rtentry	*rtable_match(unsigned int, struct sockaddr *, uint32_t *);
+struct rtentry	*rtable_match(unsigned int, const struct sockaddr *,
+		     uint32_t *);
 struct rtentry	*rtable_iterate(struct rtentry *);
 int		 rtable_insert(unsigned int, struct sockaddr *,
 		     struct sockaddr *, struct sockaddr *, uint8_t,

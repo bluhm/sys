@@ -95,13 +95,13 @@ struct art_node {
 #define an_gc		an_pointer.an__gc
 
 void		 art_init(void);
-struct art_root	*art_alloc(unsigned int, unsigned int, unsigned int);
-struct art_node *art_insert(struct art_root *, struct art_node *, void *,
+struct art_root *art_alloc(unsigned int, unsigned int, unsigned int);
+struct art_node *art_insert(struct art_root *, struct art_node *, const void *,
 		     int);
-struct art_node *art_delete(struct art_root *, struct art_node *, void *,
+struct art_node *art_delete(struct art_root *, struct art_node *, const void *,
 		     int);
-struct art_node	*art_match(struct art_root *, void *, struct srp_ref *);
-struct art_node *art_lookup(struct art_root *, void *, int,
+struct art_node *art_match(struct art_root *, const void *, struct srp_ref *);
+struct art_node *art_lookup(struct art_root *, const void *, int,
 		     struct srp_ref *);
 int		 art_walk(struct art_root *,
 		     int (*)(struct art_node *, void *), void *);

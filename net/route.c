@@ -294,7 +294,7 @@ rt_clone(struct rtentry **rtp, struct sockaddr *dst, unsigned int rtableid)
 } while (0)
 
 int
-rt_hash(struct rtentry *rt, struct sockaddr *dst, uint32_t *src)
+rt_hash(struct rtentry *rt, const struct sockaddr *dst, uint32_t *src)
 {
 	uint32_t a, b, c;
 
