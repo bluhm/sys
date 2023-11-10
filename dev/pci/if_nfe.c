@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_nfe.c,v 1.124 2022/03/11 18:00:48 mpi Exp $	*/
+/*	$OpenBSD: if_nfe.c,v 1.125 2023/11/10 15:51:20 bluhm Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007 Damien Bergamini <damien.bergamini@free.fr>

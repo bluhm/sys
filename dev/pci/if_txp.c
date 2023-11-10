@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_txp.c,v 1.129 2022/03/11 18:00:50 mpi Exp $	*/
+/*	$OpenBSD: if_txp.c,v 1.130 2023/11/10 15:51:24 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2001

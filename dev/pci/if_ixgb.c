@@ -31,7 +31,7 @@ POSSIBILITY OF SUCH DAMAGE.
 
 ***************************************************************************/
 
-/* $OpenBSD: if_ixgb.c,v 1.75 2022/03/11 18:00:45 mpi Exp $ */
+/* $OpenBSD: if_ixgb.c,v 1.76 2023/11/10 15:51:20 bluhm Exp $ */
 
 #include <dev/pci/if_ixgb.h>
 

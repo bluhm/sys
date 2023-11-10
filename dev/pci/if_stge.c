@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_stge.c,v 1.72 2022/03/11 18:00:48 mpi Exp $	*/
+/*	$OpenBSD: if_stge.c,v 1.73 2023/11/10 15:51:24 bluhm Exp $	*/
 /*	$NetBSD: if_stge.c,v 1.27 2005/05/16 21:35:32 bouyer Exp $	*/
 
 /*-

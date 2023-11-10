@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_sis.c,v 1.142 2022/03/11 18:00:48 mpi Exp $ */
+/*	$OpenBSD: if_sis.c,v 1.143 2023/11/10 15:51:20 bluhm Exp $ */
 /*
  * Copyright (c) 1997, 1998, 1999
  *	Bill Paul <wpaul@ctr.columbia.edu>.  All rights reserved.

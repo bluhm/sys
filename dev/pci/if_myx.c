@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_myx.c,v 1.118 2023/07/14 07:07:08 claudio Exp $	*/
+/*	$OpenBSD: if_myx.c,v 1.119 2023/11/10 15:51:20 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2007 Reyk Floeter <reyk@openbsd.org>

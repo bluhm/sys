@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_oce.c,v 1.107 2023/04/28 10:18:58 bluhm Exp $	*/
+/*	$OpenBSD: if_oce.c,v 1.108 2023/11/10 15:51:20 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2012 Mike Belopuhov

@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_lge.c,v 1.79 2022/10/09 02:32:02 kevlo Exp $	*/
+/*	$OpenBSD: if_lge.c,v 1.80 2023/11/10 15:51:20 bluhm Exp $	*/
 /*
  * Copyright (c) 2001 Wind River Systems
  * Copyright (c) 1997, 1998, 1999, 2000, 2001

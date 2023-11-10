@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_tht.c,v 1.146 2022/08/29 06:08:04 jsg Exp $ */
+/*	$OpenBSD: if_tht.c,v 1.147 2023/11/10 15:51:24 bluhm Exp $ */
 
 /*
  * Copyright (c) 2007 David Gwynne <dlg@openbsd.org>

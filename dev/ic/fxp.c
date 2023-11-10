@@ -1,4 +1,4 @@
-/*	$OpenBSD: fxp.c,v 1.132 2020/07/10 13:26:37 patrick Exp $	*/
+/*	$OpenBSD: fxp.c,v 1.133 2023/11/10 15:51:20 bluhm Exp $	*/
 /*	$NetBSD: if_fxp.c,v 1.2 1997/06/05 02:01:55 thorpej Exp $	*/
 
 /*

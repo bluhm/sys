@@ -1,4 +1,4 @@
-/*	$OpenBSD: re.c,v 1.215 2022/11/17 01:30:57 dlg Exp $	*/
+/*	$OpenBSD: re.c,v 1.216 2023/11/10 15:51:20 bluhm Exp $	*/
 /*	$FreeBSD: if_re.c,v 1.31 2004/09/04 07:54:05 ru Exp $	*/
 /*
  * Copyright (c) 1997, 1998-2003

@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_msk.c,v 1.142 2022/03/11 18:00:46 mpi Exp $	*/
+/*	$OpenBSD: if_msk.c,v 1.143 2023/11/10 15:51:20 bluhm Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998, 1999, 2000

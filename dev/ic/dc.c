@@ -1,4 +1,4 @@
-/*	$OpenBSD: dc.c,v 1.155 2022/02/22 01:15:01 guenther Exp $	*/
+/*	$OpenBSD: dc.c,v 1.156 2023/11/10 15:51:20 bluhm Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998, 1999

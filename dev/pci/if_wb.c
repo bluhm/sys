@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_wb.c,v 1.74 2022/03/11 18:00:50 mpi Exp $	*/
+/*	$OpenBSD: if_wb.c,v 1.75 2023/11/10 15:51:24 bluhm Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998

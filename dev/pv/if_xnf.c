@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_xnf.c,v 1.68 2022/03/23 13:03:36 jsg Exp $	*/
+/*	$OpenBSD: if_xnf.c,v 1.69 2023/11/10 15:51:24 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2015, 2016 Mike Belopuhov

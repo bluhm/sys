@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_vge.c,v 1.76 2022/03/11 18:00:50 mpi Exp $	*/
+/*	$OpenBSD: if_vge.c,v 1.77 2023/11/10 15:51:24 bluhm Exp $	*/
 /*	$FreeBSD: if_vge.c,v 1.3 2004/09/11 22:13:25 wpaul Exp $	*/
 /*
  * Copyright (c) 2004

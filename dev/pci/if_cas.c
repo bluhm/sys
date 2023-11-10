@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_cas.c,v 1.54 2022/03/11 18:00:45 mpi Exp $	*/
+/*	$OpenBSD: if_cas.c,v 1.55 2023/11/10 15:51:20 bluhm Exp $	*/
 
 /*
  *

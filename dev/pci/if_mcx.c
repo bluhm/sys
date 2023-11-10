@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_mcx.c,v 1.110 2023/09/18 06:47:21 jmatthew Exp $ */
+/*	$OpenBSD: if_mcx.c,v 1.111 2023/11/10 15:51:20 bluhm Exp $ */
 
 /*
  * Copyright (c) 2017 David Gwynne <dlg@openbsd.org>

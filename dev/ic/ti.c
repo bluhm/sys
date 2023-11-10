@@ -1,4 +1,4 @@
-/*	$OpenBSD: ti.c,v 1.29 2022/01/09 05:42:42 jsg Exp $	*/
+/*	$OpenBSD: ti.c,v 1.30 2023/11/10 15:51:20 bluhm Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998, 1999

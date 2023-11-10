@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_nxe.c,v 1.79 2022/03/11 18:00:48 mpi Exp $ */
+/*	$OpenBSD: if_nxe.c,v 1.80 2023/11/10 15:51:20 bluhm Exp $ */
 
 /*
  * Copyright (c) 2007 David Gwynne <dlg@openbsd.org>

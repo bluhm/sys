@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_alc.c,v 1.56 2022/05/19 00:52:37 kevlo Exp $	*/
+/*	$OpenBSD: if_alc.c,v 1.57 2023/11/10 15:51:20 bluhm Exp $	*/
 /*-
  * Copyright (c) 2009, Pyun YongHyeon <yongari@FreeBSD.org>
  * All rights reserved.

@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_et.c,v 1.42 2022/03/11 18:00:45 mpi Exp $	*/
+/*	$OpenBSD: if_et.c,v 1.43 2023/11/10 15:51:20 bluhm Exp $	*/
 /*
  * Copyright (c) 2007 The DragonFly Project.  All rights reserved.
  * 

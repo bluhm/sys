@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_tl.c,v 1.77 2023/04/11 00:45:08 jsg Exp $	*/
+/*	$OpenBSD: if_tl.c,v 1.78 2023/11/10 15:51:24 bluhm Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998

@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_jme.c,v 1.56 2022/03/11 18:00:45 mpi Exp $	*/
+/*	$OpenBSD: if_jme.c,v 1.57 2023/11/10 15:51:20 bluhm Exp $	*/
 /*-
  * Copyright (c) 2008, Pyun YongHyeon <yongari@FreeBSD.org>
  * All rights reserved.

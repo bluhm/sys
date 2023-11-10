@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_se.c,v 1.23 2022/01/09 05:42:54 jsg Exp $	*/
+/*	$OpenBSD: if_se.c,v 1.24 2023/11/10 15:51:20 bluhm Exp $	*/
 
 /*-
  * Copyright (c) 2009, 2010 Christopher Zimmermann <madroach@zakweb.de>

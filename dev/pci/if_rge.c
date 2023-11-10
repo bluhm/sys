@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_rge.c,v 1.21 2022/12/21 02:31:09 kevlo Exp $	*/
+/*	$OpenBSD: if_rge.c,v 1.22 2023/11/10 15:51:20 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2019, 2020 Kevin Lo <kevlo@openbsd.org>

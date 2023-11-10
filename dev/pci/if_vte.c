@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_vte.c,v 1.26 2022/04/19 03:25:46 kevlo Exp $	*/
+/*	$OpenBSD: if_vte.c,v 1.27 2023/11/10 15:51:24 bluhm Exp $	*/
 /*-
  * Copyright (c) 2010, Pyun YongHyeon <yongari@FreeBSD.org>
  * All rights reserved.

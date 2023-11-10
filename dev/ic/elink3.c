@@ -1,4 +1,4 @@
-/*	$OpenBSD: elink3.c,v 1.100 2023/09/11 08:41:26 mvs Exp $	*/
+/*	$OpenBSD: elink3.c,v 1.101 2023/11/10 15:51:20 bluhm Exp $	*/
 /*	$NetBSD: elink3.c,v 1.32 1997/05/14 00:22:00 thorpej Exp $	*/
 
 /*
