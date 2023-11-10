@@ -79,6 +79,12 @@ satosdl(struct sockaddr *sa)
 	return ((struct sockaddr_dl *)(sa));
 }
 
+static inline const struct sockaddr_dl *
+satosdl_const(const struct sockaddr *sa)
+{
+	return ((const struct sockaddr_dl *)(sa));
+}
+
 static inline struct sockaddr *
 sdltosa(struct sockaddr_dl *sdl)
 {
