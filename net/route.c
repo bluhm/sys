@@ -384,7 +384,7 @@ rt_setgwroute(struct rtentry *rt, u_int rtableid)
 	unsigned int rdomain = rtable_l2(rtableid);
 	int error;
 
-	NET_ASSERT_LOCKED();
+	NET_ASSERT_LOCKED_EXCLUSIVE();
 
 	KASSERT(ISSET(rt->rt_flags, RTF_GATEWAY));
 
@@ -472,7 +472,7 @@ rt_putgwroute(struct rtentry *rt)
 {
 	struct rtentry *nhrt = rt->rt_gwroute;
 
-	NET_ASSERT_LOCKED();
+	NET_ASSERT_LOCKED_EXCLUSIVE();
 
 	if (!ISSET(rt->rt_flags, RTF_GATEWAY) || nhrt == NULL)
 		return;
@@ -553,7 +553,7 @@ rtredirect(struct sockaddr *dst, struct sockaddr *gateway,
 	int			 flags = RTF_GATEWAY|RTF_HOST;
 	uint8_t			 prio = RTP_NONE;
 
-	NET_ASSERT_LOCKED();
+	NET_ASSERT_LOCKED_EXCLUSIVE();
 
 	/* verify the gateway is directly reachable */
 	rt = rtalloc(gateway, 0, rdomain);
@@ -768,7 +768,7 @@ rtrequest_delete(struct rt_addrinfo *info, u_int8_t prio, struct ifnet *ifp,
 	struct rtentry	*rt;
 	int		 error;
 
-	NET_ASSERT_LOCKED();
+	NET_ASSERT_LOCKED_EXCLUSIVE();
 
 	if (!rtable_exists(tableid))
 		return (EAFNOSUPPORT);
@@ -832,7 +832,7 @@ rtrequest(int req, struct rt_addrinfo *info, u_int8_t prio,
 	struct sockaddr_dl	 sa_dl = { sizeof(sa_dl), AF_LINK };
 	int			 error;
 
-	NET_ASSERT_LOCKED();
+	NET_ASSERT_LOCKED_EXCLUSIVE();
 
 	if (!rtable_exists(tableid))
 		return (EAFNOSUPPORT);
@@ -992,6 +992,8 @@ rt_setgate(struct rtentry *rt, struct sockaddr *gate, u_int rtableid)
 {
 	int glen = ROUNDUP(gate->sa_len);
 	struct sockaddr *sa;
+
+	NET_ASSERT_LOCKED_EXCLUSIVE();
 
 	if (rt->rt_gateway == NULL || glen != ROUNDUP(rt->rt_gateway->sa_len)) {
 		sa = malloc(glen, M_RTABLE, M_NOWAIT);
@@ -1770,6 +1772,8 @@ rt_if_linkstate_change(struct rtentry *rt, void *arg, u_int id)
 	struct ifnet *ifp = arg;
 	struct sockaddr_in6 sa_mask;
 	int error;
+
+	NET_ASSERT_LOCKED_EXCLUSIVE();
 
 	if (rt->rt_ifidx != ifp->if_index)
 		return (0);
