@@ -810,6 +810,12 @@ satosin(struct sockaddr *sa)
 	return ((struct sockaddr_in *)(sa));
 }
 
+static inline const struct sockaddr_in *
+satosin_const(const struct sockaddr *sa)
+{
+	return ((const struct sockaddr_in *)(sa));
+}
+
 static inline struct sockaddr *
 sintosa(struct sockaddr_in *sin)
 {

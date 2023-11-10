@@ -446,6 +446,12 @@ satosin6(struct sockaddr *sa)
 	return ((struct sockaddr_in6 *)(sa));
 }
 
+static inline const struct sockaddr_in6 *
+satosin6_const(const struct sockaddr *sa)
+{
+	return ((const struct sockaddr_in6 *)(sa));
+}
+
 static inline struct sockaddr *
 sin6tosa(struct sockaddr_in6 *sin6)
 {
