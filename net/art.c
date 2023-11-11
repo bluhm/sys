@@ -889,7 +889,7 @@ moveup:
 }
 
 struct art_node *
-art_get(void *dst, uint8_t plen)
+art_get(uint8_t plen)
 {
 	struct art_node		*an;
 

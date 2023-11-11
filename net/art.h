@@ -106,7 +106,7 @@ struct art_node *art_lookup(struct art_root *, const void *, int,
 int		 art_walk(struct art_root *,
 		     int (*)(struct art_node *, void *), void *);
 
-struct art_node	*art_get(void *, uint8_t);
+struct art_node *art_get(uint8_t);
 void		 art_put(struct art_node *);
 
 #endif /* _NET_ART_H_ */

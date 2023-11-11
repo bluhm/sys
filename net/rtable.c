@@ -591,7 +591,7 @@ rtable_insert(unsigned int rtableid, struct sockaddr *dst,
 		}
 	}
 
-	an = art_get(dst, plen);
+	an = art_get(plen);
 	if (an == NULL) {
 		error = ENOBUFS;
 		goto leave;
