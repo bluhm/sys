@@ -337,9 +337,9 @@ void	p2p_rtrequest(struct ifnet *, int, struct rtentry *);
 void	p2p_input(struct ifnet *, struct mbuf *);
 int	p2p_bpf_mtap(caddr_t, const struct mbuf *, u_int);
 
-struct	ifaddr *ifa_ifwithaddr(struct sockaddr *, u_int);
-struct	ifaddr *ifa_ifwithdstaddr(struct sockaddr *, u_int);
-struct	ifaddr *ifaof_ifpforaddr(struct sockaddr *, struct ifnet *);
+struct	ifaddr *ifa_ifwithaddr(const struct sockaddr *, u_int);
+struct	ifaddr *ifa_ifwithdstaddr(const struct sockaddr *, u_int);
+struct	ifaddr *ifaof_ifpforaddr(const struct sockaddr *, struct ifnet *);
 struct	ifaddr *ifaref(struct ifaddr *);
 void	ifafree(struct ifaddr *);
 

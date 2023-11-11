@@ -550,7 +550,7 @@ int	ifsetlro(struct ifnet *, int);
 struct	ifg_group *if_creategroup(const char *);
 int	if_addgroup(struct ifnet *, const char *);
 int	if_delgroup(struct ifnet *, const char *);
-void	if_group_routechange(struct sockaddr *, struct sockaddr *);
+void	if_group_routechange(const struct sockaddr *, const struct sockaddr *);
 struct	ifnet *if_unit(const char *);
 struct	ifnet *if_get(unsigned int);
 void	if_put(struct ifnet *);
