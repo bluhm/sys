@@ -1529,8 +1529,15 @@ rtm_xaddrs(caddr_t cp, caddr_t cplim, struct rt_addrinfo *rtinfo)
 			}
 			break;
 		case RTAX_STATIC:
-			if (sa->sa_family != AF_UNSPEC)
+			switch (sa->sa_family) {
+			case AF_INET:
+#ifdef INET6
+			case AF_INET6:
+#endif
+				break;
+			default:
 				return (EAFNOSUPPORT);
+			}
 			maxlen = RTSTATIC_LEN;
 			size = sizeof(struct sockaddr_rtstatic);
 			break;
