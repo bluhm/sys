@@ -1,4 +1,4 @@
-/*	$OpenBSD: rtable.c,v 1.84 2023/11/11 12:17:50 bluhm Exp $ */
+/*	$OpenBSD: rtable.c,v 1.85 2023/11/12 17:51:40 bluhm Exp $ */
 
 /*
  * Copyright (c) 2014-2016 Martin Pieuchot
