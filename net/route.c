@@ -517,7 +517,10 @@ rtfree(struct rtentry *rt)
 #ifdef MPLS
 	rt_mpls_clear(rt);
 #endif
-	free(rt->rt_gateway, M_RTABLE, ROUNDUP(rt->rt_gateway->sa_len));
+	if (rt->rt_gateway != NULL) {
+		free(rt->rt_gateway, M_RTABLE,
+		    ROUNDUP(rt->rt_gateway->sa_len));
+	}
 	free(rt_key(rt), M_RTABLE, rt_key(rt)->sa_len);
 
 	pool_put(&rtentry_pool, rt);
@@ -937,8 +940,10 @@ rtrequest(int req, struct rt_addrinfo *info, u_int8_t prio,
 			ifafree(ifa);
 			rtfree(rt->rt_parent);
 			rt_putgwroute(rt, NULL);
-			free(rt->rt_gateway, M_RTABLE,
-			    ROUNDUP(rt->rt_gateway->sa_len));
+			if (rt->rt_gateway != NULL) {
+				free(rt->rt_gateway, M_RTABLE,
+				    ROUNDUP(rt->rt_gateway->sa_len));
+			}
 			free(ndst, M_RTABLE, ndst->sa_len);
 			pool_put(&rtentry_pool, rt);
 			return (error);
@@ -970,8 +975,10 @@ rtrequest(int req, struct rt_addrinfo *info, u_int8_t prio,
 			ifafree(ifa);
 			rtfree(rt->rt_parent);
 			rt_putgwroute(rt, NULL);
-			free(rt->rt_gateway, M_RTABLE,
-			    ROUNDUP(rt->rt_gateway->sa_len));
+			if (rt->rt_gateway != NULL) {
+				free(rt->rt_gateway, M_RTABLE,
+				    ROUNDUP(rt->rt_gateway->sa_len));
+			}
 			free(ndst, M_RTABLE, ndst->sa_len);
 			pool_put(&rtentry_pool, rt);
 			return (EEXIST);
