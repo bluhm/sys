@@ -1003,6 +1003,7 @@ rt_setgate(struct rtentry *rt, const struct sockaddr *gate, u_int rtableid)
 {
 	int glen = ROUNDUP(gate->sa_len);
 	struct sockaddr *sa, *osa;
+	int error = 0;
 
 	KASSERT(gate != NULL);
 	if (rt->rt_gateway == gate) {
@@ -1016,23 +1017,17 @@ rt_setgate(struct rtentry *rt, const struct sockaddr *gate, u_int rtableid)
 	memcpy(sa, gate, gate->sa_len);
 
 	KERNEL_LOCK(); /* see [X] in route.h */
-	if (ISSET(rt->rt_flags, RTF_GATEWAY)) {
-		int error = rt_setgwroute(rt, gate, rtableid);
-		if (error != 0) {
-			KERNEL_UNLOCK();
-			free(sa, M_RTABLE, glen);
-			return (error);
-		}
-	}
-
 	osa = rt->rt_gateway;
 	rt->rt_gateway = sa;
+
+	if (ISSET(rt->rt_flags, RTF_GATEWAY))
+		error = rt_setgwroute(rt, gate, rtableid);
 	KERNEL_UNLOCK();
 
 	if (osa != NULL)
 		free(osa, M_RTABLE, ROUNDUP(osa->sa_len));
 
-	return (0);
+	return (error);
 }
 
 /*
