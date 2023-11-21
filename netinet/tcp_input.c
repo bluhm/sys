@@ -706,12 +706,14 @@ findpcb:
 				so = syn_cache_get(&src.sa, &dst.sa,
 				    th, iphlen, tlen, so, m, now);
 				if (so == NULL) {
+printf("%s: syn_cache_get so == NULL\n", __func__);
 					/*
 					 * We don't have a SYN for
 					 * this ACK; send an RST.
 					 */
 					goto badsyn;
 				} else if (so == (struct socket *)(-1)) {
+printf("%s: syn_cache_get so == (struct socket *)(-1)\n", __func__);
 					/*
 					 * We were unable to create
 					 * the connection.  If the
@@ -725,6 +727,7 @@ findpcb:
 					m = *mp = NULL;
 					goto drop;
 				} else {
+printf("%s: syn_cache_get success\n", __func__);
 					/*
 					 * We have created a
 					 * full-blown connection.
