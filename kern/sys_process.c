@@ -818,6 +818,7 @@ process_checktracestate(struct process *curpr, struct process *tr,
 	return 0;
 }
 
+#endif /* PTRACE */
 
 /*
  * Check if a process is allowed to fiddle with the memory of another.
@@ -886,4 +887,3 @@ process_domem(struct proc *curp, struct process *tr, struct uio *uio, int req)
 
 	return error;
 }
-#endif
