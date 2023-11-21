@@ -4884,6 +4884,7 @@ pf_tcp_track_full(struct pf_pdesc *pd, struct pf_state **stp, u_short *reason,
 		end = seq + pd->p_len;
 		if (th->th_flags & TH_SYN) {
 			end++;
+			src->seqsyn = seq + 1;
 			if (dst->wscale & PF_WSCALE_FLAG) {
 				src->wscale = pf_get_wscale(pd);
 				if (src->wscale & PF_WSCALE_FLAG) {
@@ -4936,6 +4937,10 @@ pf_tcp_track_full(struct pf_pdesc *pd, struct pf_state **stp, u_short *reason,
 		data_end = end;
 		if (th->th_flags & TH_FIN)
 			end++;
+		if (SEQ_LT(end, src->seqsyn)) {
+			/* Warparound, disable ghost check */
+			src->seqsyn = 0;
+		}
 	}
 
 	if ((th->th_flags & TH_ACK) == 0) {
@@ -4988,6 +4993,8 @@ pf_tcp_track_full(struct pf_pdesc *pd, struct pf_state **stp, u_short *reason,
 	    /* Acking not more than one reassembled fragment backwards */
 	    (ackskew <= (MAXACKWINDOW << sws)) &&
 	    /* Acking not more than one window forward */
+	    (dst->seqsyn == 0 || SEQ_GEQ(ack, dst->seqsyn)) &&
+	    /* Acking not more than was ever sent, drop ghost ACKs */
 	    ((th->th_flags & TH_RST) == 0 || orig_seq == src->seqlo ||
 	    (orig_seq == src->seqlo + 1) || (orig_seq + 1 == src->seqlo))) {
 	    /* Require an exact/+1 sequence match on resets when possible */
@@ -5142,15 +5149,23 @@ pf_tcp_track_full(struct pf_pdesc *pd, struct pf_state **stp, u_short *reason,
 			    (*stp)->packets[0], (*stp)->packets[1],
 			    pd->dir == PF_IN ? "in" : "out",
 			    pd->dir == (*stp)->direction ? "fwd" : "rev");
-			addlog("pf: State failure on: %c %c %c %c | %c %c\n",
+			addlog("pf: State failure on: |%c%c%c%c%c%c|%c%c|\n",
 			    SEQ_GEQ(src->seqhi, data_end) ? ' ' : '1',
 			    SEQ_GEQ(seq, src->seqlo - (dst->max_win << dws)) ?
-			    ' ': '2',
+			    ' ' : '2',
 			    (ackskew >= -MAXACKWINDOW) ? ' ' : '3',
 			    (ackskew <= (MAXACKWINDOW << sws)) ? ' ' : '4',
+			    (dst->seqsyn == 0 || SEQ_GEQ(ack, dst->seqsyn)) ?
+			    ' ' : '5',
+			    ((th->th_flags & TH_RST) == 0 ||
+			    orig_seq == src->seqlo ||
+			    (orig_seq == src->seqlo + 1) ||
+			    (orig_seq + 1 == src->seqlo)) ?
+			    ' ' : '6',
 			    SEQ_GEQ(src->seqhi + MAXACKWINDOW, data_end) ?
-			    ' ' :'5',
-			    SEQ_GEQ(seq, src->seqlo - MAXACKWINDOW) ?' ' :'6');
+			    ' ' : '7',
+			    SEQ_GEQ(seq, src->seqlo - MAXACKWINDOW) ?
+			    ' ' : '8');
 		}
 		REASON_SET(reason, PFRES_BADSTATE);
 		return (PF_DROP);

@@ -695,6 +695,7 @@ struct pf_state_peer {
 	u_int8_t	wscale;		/* window scaling factor	*/
 	u_int8_t	tcp_est;	/* Did we reach TCPS_ESTABLISHED */
 	u_int8_t	pad[1];
+	u_int32_t	seqsyn;		/* Sequence number of SYN packet */
 };
 
 TAILQ_HEAD(pf_state_queue, pf_state);
