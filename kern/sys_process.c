@@ -1,4 +1,4 @@
-/*	$OpenBSD: sys_process.c,v 1.94 2023/06/10 19:30:48 kettenis Exp $	*/
+/*	$OpenBSD: sys_process.c,v 1.95 2023/11/21 14:00:13 bluhm Exp $	*/
 /*	$NetBSD: sys_process.c,v 1.55 1996/05/15 06:17:47 tls Exp $	*/
 
 /*-
