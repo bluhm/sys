@@ -1023,10 +1023,11 @@ cpu_hatch(void *v)
 
 		identifycpu(ci);
 
-		/* Signal we're done */
-		atomic_clearbits_int(&ci->ci_flags, CPUF_IDENTIFY);
 		/* Prevent identifycpu() from running again */
 		atomic_setbits_int(&ci->ci_flags, CPUF_IDENTIFIED);
+
+		/* Signal we're done */
+		atomic_clearbits_int(&ci->ci_flags, CPUF_IDENTIFY);
 	}
 
 	/* These have to run after identifycpu() */ 
