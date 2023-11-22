@@ -341,8 +341,10 @@ tcp_flush_queue(struct tcpcb *tp)
 		ND6_HINT(tp);
 		if (so->so_rcv.sb_state & SS_CANTRCVMORE)
 			m_freem(q->tcpqe_m);
-		else
+		else {
+printf("%s: sbappendstream m_len %d\n", __func__, q->tcpqe_m->m_len);
 			sbappendstream(so, &so->so_rcv, q->tcpqe_m);
+		}
 		pool_put(&tcpqe_pool, q);
 		q = nq;
 	} while (q != NULL && q->tcpqe_tcp->th_seq == tp->rcv_nxt);
@@ -1056,6 +1058,7 @@ printf("%s: syn_cache_get success\n", __func__);
 				} else
 					tp->rfbuf_cnt += tlen;
 				m_adj(m, iphlen + off);
+printf("%s: sbappendstream ack==una m_len %d\n", __func__, m->m_len);
 				sbappendstream(so, &so->so_rcv, m);
 			}
 			tp->t_flags |= TF_BLOCKOUTPUT;
@@ -1540,6 +1543,9 @@ trimthenstep6:
 			 */
 			if (tlen) {
 				/* Drop very old ACKs unless th_seq matches */
+printf("%s: drop old if seq %d and ack %d\n", __func__,
+    th->th_seq != tp->rcv_nxt,
+    SEQ_LT(th->th_ack, tp->snd_una - tp->max_sndwnd));
 				if (th->th_seq != tp->rcv_nxt &&
 				   SEQ_LT(th->th_ack,
 				   tp->snd_una - tp->max_sndwnd)) {
@@ -1950,6 +1956,7 @@ dodata:							/* XXX */
 				m_freem(m);
 			else {
 				m_adj(m, hdroptlen);
+printf("%s: sbappendstream dodata m_len %d\n", __func__, m->m_len);
 				sbappendstream(so, &so->so_rcv, m);
 			}
 			tp->t_flags |= TF_BLOCKOUTPUT;
