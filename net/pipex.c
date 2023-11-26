@@ -1920,8 +1920,7 @@ pipex_l2tp_output(struct mbuf *m0, struct pipex_session *session)
 		ip6->ip6_vfc |= IPV6_VERSION;
 		ip6->ip6_nxt = IPPROTO_UDP;
 		ip6->ip6_src = session->local.sin6.sin6_addr;
-		(void)in6_embedscope(&ip6->ip6_dst,
-		    &session->peer.sin6, NULL);
+		in6_embedscope(&ip6->ip6_dst, &session->peer.sin6, NULL, NULL);
 		/* ip6->ip6_plen will be filled in ip6_output. */
 
 		ip6_send(m0);

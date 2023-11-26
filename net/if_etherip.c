@@ -422,11 +422,11 @@ etherip_set_tunnel(struct etherip_softc *sc, struct if_laddrreq *req)
 		    IN6_IS_ADDR_MULTICAST(&dst6->sin6_addr))
 			return (EINVAL);
 
-		error = in6_embedscope(&sc->sc_tunnel.t_src6, src6, NULL);
+		error = in6_embedscope(&sc->sc_tunnel.t_src6, src6, NULL, NULL);
 		if (error != 0)
 			return (error);
 
-		error = in6_embedscope(&sc->sc_tunnel.t_dst6, dst6, NULL);
+		error = in6_embedscope(&sc->sc_tunnel.t_dst6, dst6, NULL, NULL);
 		if (error != 0)
 			return (error);
 

@@ -2379,7 +2379,7 @@ mgre_set_tunnel(struct mgre_softc *sc, struct if_laddrreq *req)
 		    IN6_IS_ADDR_MULTICAST(&addr6->sin6_addr))
 			return (EINVAL);
 
-		error = in6_embedscope(&tunnel->t_src6, addr6, NULL);
+		error = in6_embedscope(&tunnel->t_src6, addr6, NULL, NULL);
 		if (error != 0)
 			return (error);
 
@@ -3122,11 +3122,11 @@ gre_set_tunnel(struct gre_tunnel *tunnel, struct if_laddrreq *req, int ucast)
 		if (src6->sin6_scope_id != dst6->sin6_scope_id)
 			return (EINVAL);
 
-		error = in6_embedscope(&tunnel->t_src6, src6, NULL);
+		error = in6_embedscope(&tunnel->t_src6, src6, NULL, NULL);
 		if (error != 0)
 			return (error);
 
-		error = in6_embedscope(&tunnel->t_dst6, dst6, NULL);
+		error = in6_embedscope(&tunnel->t_dst6, dst6, NULL, NULL);
 		if (error != 0)
 			return (error);
 
@@ -3609,7 +3609,7 @@ nvgre_add_addr(struct nvgre_softc *sc, const struct ifbareq *ifba)
 		if (src6.sin6_scope_id != sin6->sin6_scope_id)
 			return (EADDRNOTAVAIL);
 
-		error = in6_embedscope(&endpoint.in6, sin6, NULL);
+		error = in6_embedscope(&endpoint.in6, sin6, NULL, NULL);
 		if (error != 0)
 			return (error);
 

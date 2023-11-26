@@ -2808,7 +2808,7 @@ ip6_output_ipsec_pmtu_update(struct tdb *tdb, struct route_in6 *ro,
 		sin6.sin6_len = sizeof(sin6);
 		sin6.sin6_addr = *dst;
 		sin6.sin6_scope_id = in6_addr2scopeid(ifidx, dst);
-		error = in6_embedscope(dst, &sin6, NULL);
+		error = in6_embedscope(dst, &sin6, NULL, NULL);
 		if (error) {
 			/* should be impossible */
 			return error;

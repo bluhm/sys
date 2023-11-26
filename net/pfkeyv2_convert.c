@@ -484,10 +484,8 @@ import_flow(struct sockaddr_encap *flow, struct sockaddr_encap *flowmask,
 
 #ifdef INET6
 	case AF_INET6:
-		in6_embedscope(&src->sin6.sin6_addr, &src->sin6,
-		    NULL);
-		in6_embedscope(&dst->sin6.sin6_addr, &dst->sin6,
-		    NULL);
+		in6_embedscope(&src->sin6.sin6_addr, &src->sin6, NULL, NULL);
+		in6_embedscope(&dst->sin6.sin6_addr, &dst->sin6, NULL, NULL);
 
 		/* netmask handling */
 		rt_maskedcopy(&src->sa, &src->sa, &srcmask->sa);

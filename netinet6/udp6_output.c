@@ -143,7 +143,8 @@ udp6_output(struct inpcb *in6p, struct mbuf *m, struct mbuf *addr6,
 		fport = sin6->sin6_port; /* allow 0 port */
 
 		/* KAME hack: embed scopeid */
-		if (in6_embedscope(&sin6->sin6_addr, sin6, in6p) != 0) {
+		if (in6_embedscope(&sin6->sin6_addr, sin6,
+		    in6p->inp_outputopts6, in6p->inp_moptions6) != 0) {
 			error = EINVAL;
 			goto release;
 		}

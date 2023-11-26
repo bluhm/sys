@@ -157,7 +157,8 @@ in6_pcbaddrisavail(struct inpcb *inp, struct sockaddr_in6 *sin6, int wild,
 
 	wild |= INPLOOKUP_IPV6;
 	/* KAME hack: embed scopeid */
-	if (in6_embedscope(&sin6->sin6_addr, sin6, inp) != 0)
+	if (in6_embedscope(&sin6->sin6_addr, sin6,
+	    inp->inp_outputopts6, inp->inp_moptions6) != 0)
 		return (EINVAL);
 	/* this must be cleared for ifa_ifwithaddr() */
 	sin6->sin6_scope_id = 0;
@@ -265,8 +266,9 @@ in6_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 	sin6 = &tmp;
 
 	/* KAME hack: embed scopeid */
-	if (in6_embedscope(&sin6->sin6_addr, sin6, inp) != 0)
-		return EINVAL;
+	if (in6_embedscope(&sin6->sin6_addr, sin6,
+	    inp->inp_outputopts6, inp->inp_moptions6) != 0)
+		return (EINVAL);
 	/* this must be cleared for ifa_ifwithaddr() */
 	sin6->sin6_scope_id = 0;
 

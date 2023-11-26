@@ -384,7 +384,7 @@ rip6_output(struct mbuf *m, struct socket *so, struct sockaddr *dstaddr,
 	struct inpcb *in6p;
 	u_int	plen = m->m_pkthdr.len;
 	int error = 0;
-	struct ip6_pktopts opt, *optp = NULL, *origoptp;
+	struct ip6_pktopts opt, *optp = NULL;
 	int type;		/* for ICMPv6 output statistics only */
 	int priv = 0;
 	int flags;
@@ -441,13 +441,11 @@ rip6_output(struct mbuf *m, struct socket *so, struct sockaddr *dstaddr,
 	ip6->ip6_dst = *dst;
 
 	/* KAME hack: embed scopeid */
-	origoptp = in6p->inp_outputopts6;
-	in6p->inp_outputopts6 = optp;
-	if (in6_embedscope(&ip6->ip6_dst, satosin6(dstaddr), in6p) != 0) {
+	if (in6_embedscope(&ip6->ip6_dst, satosin6(dstaddr),
+	    optp, in6p->inp_moptions6) != 0) {
 		error = EINVAL;
 		goto bad;
 	}
-	in6p->inp_outputopts6 = origoptp;
 
 	/*
 	 * Source address selection.

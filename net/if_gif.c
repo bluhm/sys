@@ -687,11 +687,11 @@ gif_set_tunnel(struct gif_softc *sc, struct if_laddrreq *req)
 		if (IN6_IS_ADDR_MULTICAST(&dst6->sin6_addr))
 			return (EINVAL);
 
-		error = in6_embedscope(&tunnel->t_src6, src6, NULL);
+		error = in6_embedscope(&tunnel->t_src6, src6, NULL, NULL);
 		if (error != 0)
 			return (error);
 
-		error = in6_embedscope(&tunnel->t_dst6, dst6, NULL);
+		error = in6_embedscope(&tunnel->t_dst6, dst6, NULL, NULL);
 		if (error != 0)
 			return (error);
 
