@@ -185,9 +185,9 @@ sys_bind(struct proc *p, void *v, register_t *retval)
 	if (KTRPOINT(p, KTR_STRUCT))
 		ktrsockaddr(p, mtod(nam, caddr_t), SCARG(uap, namelen));
 #endif
-	solock(so);
+	solock_shared(so);
 	error = sobind(so, nam, p);
-	sounlock(so);
+	sounlock_shared(so);
 	m_freem(nam);
 out:
 	FRELE(fp, p);
