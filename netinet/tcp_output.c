@@ -1087,8 +1087,9 @@ send:
 		SET(m->m_pkthdr.csum_flags, M_FLOWID);
 #endif
 		error = ip_output(m, tp->t_inpcb->inp_options,
-			&tp->t_inpcb->inp_route,
-			(ip_mtudisc ? IP_MTUDISC : 0), NULL, tp->t_inpcb, 0);
+		    &tp->t_inpcb->inp_route,
+		    (ip_mtudisc ? IP_MTUDISC : 0), NULL,
+		    tp->t_inpcb->inp_seclevel, 0);
 		break;
 #ifdef INET6
 	case AF_INET6:
@@ -1107,7 +1108,8 @@ send:
 #endif
 		}
 		error = ip6_output(m, tp->t_inpcb->inp_outputopts6,
-		    &tp->t_inpcb->inp_route6, 0, NULL, tp->t_inpcb);
+		    &tp->t_inpcb->inp_route6, 0, NULL,
+		    tp->t_inpcb->inp_seclevel);
 		break;
 #endif /* INET6 */
 	}

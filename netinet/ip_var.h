@@ -236,7 +236,7 @@ struct mbuf*
 int	 ip_mforward(struct mbuf *, struct ifnet *);
 int	 ip_optcopy(struct ip *, struct ip *);
 int	 ip_output(struct mbuf *, struct mbuf *, struct route *, int,
-	    struct ip_moptions *, struct inpcb *, u_int32_t);
+	    struct ip_moptions *, const u_char[], u_int32_t);
 u_int16_t
 	 ip_randomid(void);
 void	 ip_send(struct mbuf *);

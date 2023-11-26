@@ -232,7 +232,7 @@ udp6_output(struct inpcb *in6p, struct mbuf *m, struct mbuf *addr6,
 #endif
 
 	error = ip6_output(m, optp, &in6p->inp_route6,
-	    flags, in6p->inp_moptions6, in6p);
+	    flags, in6p->inp_moptions6, in6p->inp_seclevel);
 	goto releaseopt;
 
 release:

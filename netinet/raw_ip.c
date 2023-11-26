@@ -326,7 +326,7 @@ rip_output(struct mbuf *m, struct socket *so, struct sockaddr *dstaddr,
 #endif
 
 	error = ip_output(m, inp->inp_options, &inp->inp_route, flags,
-	    inp->inp_moptions, inp, 0);
+	    inp->inp_moptions, inp->inp_seclevel, 0);
 	return (error);
 }
 

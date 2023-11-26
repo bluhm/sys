@@ -543,7 +543,7 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 		} else
 			tdb = NULL;
 		error = ipsp_spd_lookup(m, af, iphlen, IPSP_DIRECTION_IN,
-		    tdb, inp, NULL, NULL);
+		    tdb, inp->inp_seclevel, NULL, NULL);
 		if (error) {
 			udpstat_inc(udps_nosec);
 			tdb_unref(tdb);
@@ -1065,7 +1065,7 @@ udp_output(struct inpcb *inp, struct mbuf *m, struct mbuf *addr,
 
 	error = ip_output(m, inp->inp_options, &inp->inp_route,
 	    (inp->inp_socket->so_options & SO_BROADCAST), inp->inp_moptions,
-	    inp, ipsecflowinfo);
+	    inp->inp_seclevel, ipsecflowinfo);
 
 bail:
 	m_freem(control);
