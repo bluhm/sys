@@ -4175,7 +4175,7 @@ syn_cache_respond(struct syn_cache *sc, struct mbuf *m, uint64_t now)
 		/* leave flowlabel = 0, it is legal and require no state mgmt */
 
 		error = ip6_output(m, NULL /*XXX*/, &sc->sc_route6, 0,
-		    NULL, NULL);
+		    NULL, inp ? inp->inp_seclevel : NULL);
 		break;
 #endif
 	}
