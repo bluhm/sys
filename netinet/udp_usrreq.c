@@ -898,7 +898,7 @@ udp_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 		inp = in_pcblookup(&udbtable,
 		    ip->ip_dst, uhp->uh_dport, ip->ip_src, uhp->uh_sport,
 		    rdomain);
-		if (inp && inp->inp_socket != NULL)
+		if (inp != NULL)
 			notify(inp, errno);
 		in_pcbunref(inp);
 	} else
