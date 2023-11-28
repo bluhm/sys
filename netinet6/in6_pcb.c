@@ -1,4 +1,4 @@
-/*	$OpenBSD: in6_pcb.c,v 1.124 2023/06/24 20:54:46 bluhm Exp $	*/
+/*	$OpenBSD: in6_pcb.c,v 1.125 2023/11/28 13:23:20 bluhm Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
