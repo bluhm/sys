@@ -656,6 +656,7 @@ tcp_connect(struct socket *so, struct mbuf *nam)
 
 	tp->t_template = tcp_template(tp);
 	if (tp->t_template == 0) {
+		in_pcbunset_faddr(inp);
 		in_pcbdisconnect(inp);
 		error = ENOBUFS;
 		goto out;

@@ -1082,12 +1082,7 @@ ip_ctloutput(int op, struct socket *so, int level, int optname,
 				error = EINVAL;
 				break;
 			}
-			if (inp->inp_lport) {
-				error = EBUSY;
-				break;
-			}
-			inp->inp_rtableid = rtid;
-			in_pcbrehash(inp);
+			error = in_pcbset_rtableid(inp, rtid);
 			break;
 		case IP_PIPEX:
 			if (m != NULL && m->m_len == sizeof(int))

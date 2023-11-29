@@ -84,8 +84,8 @@ void __mtx_init(struct mutex *, int);
 		panic("mutex %p held in %s", (mtx), __func__);		\
 } while (0)
 #else
-#define MUTEX_ASSERT_LOCKED(mtx) do { } while (0)
-#define MUTEX_ASSERT_UNLOCKED(mtx) do { } while (0)
+#define MUTEX_ASSERT_LOCKED(mtx) do { (void)(mtx); } while (0)
+#define MUTEX_ASSERT_UNLOCKED(mtx) do { (void)(mtx); } while (0)
 #endif
 
 #define MUTEX_LOCK_OBJECT(mtx)	(&(mtx)->mtx_lock_obj)

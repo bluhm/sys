@@ -1184,14 +1184,7 @@ udp_disconnect(struct socket *so)
 		if (inp->inp_faddr.s_addr == INADDR_ANY)
 			return (ENOTCONN);
 	}
-
-#ifdef INET6
-	if (inp->inp_flags & INP_IPV6)
-		inp->inp_laddr6 = in6addr_any;
-	else
-#endif /* INET6 */
-		inp->inp_laddr.s_addr = INADDR_ANY;
-
+	in_pcbunset_laddr(inp);
 	in_pcbdisconnect(inp);
 	so->so_state &= ~SS_ISCONNECTED;		/* XXX */
 
