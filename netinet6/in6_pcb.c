@@ -461,7 +461,7 @@ in6_pcbnotify(struct inpcbtable *table, struct sockaddr_in6 *dst,
 	rw_enter_write(&table->inpt_notify);
 	mtx_enter(&table->inpt_mtx);
 	TAILQ_FOREACH(inp, &table->inpt_queue, inp_queue) {
-		if ((inp->inp_flags & INP_IPV6) == 0)
+		if (!ISSET(inp->inp_flags, INP_IPV6))
 			continue;
 
 		/*

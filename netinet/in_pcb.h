@@ -205,7 +205,7 @@ struct inpcbtable {
  * These flags' values should be determined by either the transport
  * protocol at PRU_BIND, PRU_LISTEN, PRU_CONNECT, etc, or by in_pcb*().
  */
-#define	INP_IPV6	0x100	/* sotopf(inp->inp_socket) == PF_INET6 */
+#define INP_IPV6	0x100	/* socket, proto, domain, family is PF_INET6 */
 
 /*
  * Flags in inp_flags for IPV6
@@ -272,8 +272,6 @@ extern struct inpcbtable rawcbtable, rawin6pcbtable;
 extern struct baddynamicports baddynamicports;
 extern struct baddynamicports rootonlyports;
 extern int in_pcbnotifymiss;
-
-#define sotopf(so)  (so->so_proto->pr_domain->dom_family)
 
 void	 in_init(void);
 void	 in_losing(struct inpcb *);
