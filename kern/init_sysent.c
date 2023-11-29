@@ -1,4 +1,4 @@
-/*	$OpenBSD$	*/
+/*	$OpenBSD: init_sysent.c,v 1.269 2023/11/29 20:46:23 bluhm Exp $	*/
 
 /*
  * System call switch table.

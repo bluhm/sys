@@ -1,4 +1,4 @@
-/*	$OpenBSD$	*/
+/*	$OpenBSD: syscalls.c,v 1.267 2023/11/29 20:46:23 bluhm Exp $	*/
 
 /*
  * System call names.
