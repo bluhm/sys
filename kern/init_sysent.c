@@ -1,4 +1,4 @@
-/*	$OpenBSD: init_sysent.c,v 1.268 2023/08/20 15:14:20 visa Exp $	*/
+/*	$OpenBSD$	*/
 
 /*
  * System call switch table.
@@ -240,7 +240,7 @@ const struct sysent sysent[] = {
 	    sys_dup3 },				/* 102 = dup3 */
 	{ 1, s(struct sys_sigreturn_args), 0,
 	    sys_sigreturn },			/* 103 = sigreturn */
-	{ 3, s(struct sys_bind_args), 0,
+	{ 3, s(struct sys_bind_args), SY_NOLOCK | 0,
 	    sys_bind },				/* 104 = bind */
 	{ 5, s(struct sys_setsockopt_args), SY_NOLOCK | 0,
 	    sys_setsockopt },			/* 105 = setsockopt */

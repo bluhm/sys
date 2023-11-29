@@ -1,4 +1,4 @@
-/*	$OpenBSD: syscalls.c,v 1.266 2023/08/20 15:14:20 visa Exp $	*/
+/*	$OpenBSD$	*/
 
 /*
  * System call names.
