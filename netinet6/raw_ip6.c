@@ -451,7 +451,7 @@ rip6_output(struct mbuf *m, struct socket *so, struct sockaddr *dstaddr,
 	 * Source address selection.
 	 */
 	{
-		struct in6_addr *in6a;
+		const struct in6_addr *in6a;
 
 		error = in6_pcbselsrc(&in6a, satosin6(dstaddr), in6p, optp);
 		if (error)
@@ -683,7 +683,7 @@ rip6_connect(struct socket *so, struct mbuf *nam)
 {
 	struct inpcb *in6p = sotoinpcb(so);
 	struct sockaddr_in6 *addr;
-	struct in6_addr *in6a = NULL;
+	const struct in6_addr *in6a;
 	int error;
 
 	soassertlocked(so);

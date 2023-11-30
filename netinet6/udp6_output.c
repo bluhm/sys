@@ -101,7 +101,7 @@ udp6_output(struct inpcb *in6p, struct mbuf *m, struct mbuf *addr6,
 	int error = 0, priv = 0, hlen, flags;
 	struct ip6_hdr *ip6;
 	struct udphdr *udp6;
-	struct in6_addr *laddr, *faddr;
+	const struct in6_addr *laddr, *faddr;
 	struct ip6_pktopts *optp, opt;
 	struct sockaddr_in6 tmp, valid;
 	struct proc *p = curproc;	/* XXX */

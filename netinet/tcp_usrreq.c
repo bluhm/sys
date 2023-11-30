@@ -635,7 +635,6 @@ tcp_connect(struct socket *so, struct mbuf *nam)
 			error = EINVAL;
 			goto out;
 		}
-		error = in6_pcbconnect(inp, nam);
 	} else
 #endif /* INET6 */
 	{
@@ -650,8 +649,8 @@ tcp_connect(struct socket *so, struct mbuf *nam)
 			error = EINVAL;
 			goto out;
 		}
-		error = in_pcbconnect(inp, nam);
 	}
+	error = in_pcbconnect(inp, nam);
 	if (error)
 		goto out;
 

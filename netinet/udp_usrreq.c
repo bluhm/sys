@@ -1153,15 +1153,13 @@ udp_connect(struct socket *so, struct mbuf *addr)
 	if (inp->inp_flags & INP_IPV6) {
 		if (!IN6_IS_ADDR_UNSPECIFIED(&inp->inp_faddr6))
 			return (EISCONN);
-		error = in6_pcbconnect(inp, addr);
 	} else
 #endif /* INET6 */
 	{
 		if (inp->inp_faddr.s_addr != INADDR_ANY)
 			return (EISCONN);
-		error = in_pcbconnect(inp, addr);
 	}
-
+	error = in_pcbconnect(inp, addr);
 	if (error)
 		return (error);
 

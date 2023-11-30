@@ -245,7 +245,7 @@ in6_pcbaddrisavail(struct inpcb *inp, struct sockaddr_in6 *sin6, int wild,
 int
 in6_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 {
-	struct in6_addr *in6a = NULL;
+	const struct in6_addr *in6a;
 	struct sockaddr_in6 *sin6;
 	struct inpcb *t;
 	int error;
