@@ -422,10 +422,10 @@ in6_selectif(struct sockaddr_in6 *dstsock, struct ip6_pktopts *opts,
 }
 
 int
-in6_selecthlim(struct inpcb *in6p)
+in6_selecthlim(struct inpcb *inp)
 {
-	if (in6p && in6p->inp_hops >= 0)
-		return (in6p->inp_hops);
+	if (inp && inp->inp_hops >= 0)
+		return (inp->inp_hops);
 
 	return (ip6_defhlim);
 }
