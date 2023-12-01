@@ -1,4 +1,4 @@
-/*	$OpenBSD: udp6_output.c,v 1.61 2023/11/28 13:23:20 bluhm Exp $	*/
+/*	$OpenBSD: udp6_output.c,v 1.62 2023/12/01 14:08:04 bluhm Exp $	*/
 /*	$KAME: udp6_output.c,v 1.21 2001/02/07 11:51:54 itojun Exp $	*/
 
 /*
