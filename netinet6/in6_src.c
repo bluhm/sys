@@ -1,4 +1,4 @@
-/*	$OpenBSD: in6_src.c,v 1.88 2023/12/01 14:08:04 bluhm Exp $	*/
+/*	$OpenBSD: in6_src.c,v 1.89 2023/12/03 20:36:24 bluhm Exp $	*/
 /*	$KAME: in6_src.c,v 1.36 2001/02/06 04:08:17 itojun Exp $	*/
 
 /*
