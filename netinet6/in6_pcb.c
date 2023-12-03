@@ -252,7 +252,7 @@ in6_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 	int error;
 	struct sockaddr_in6 tmp;
 
-	KASSERT(inp->inp_flags & INP_IPV6);
+	KASSERT(ISSET(inp->inp_flags, INP_IPV6));
 
 	if ((error = in6_nam2sin6(nam, &sin6)))
 		return (error);
