@@ -853,11 +853,18 @@ del_m6fc(struct socket *so, struct mf6cctl *mfccp)
 }
 
 int
-socket6_send(struct socket *s, struct mbuf *mm, struct sockaddr_in6 *src)
+socket6_send(struct socket *so, struct mbuf *mm, struct sockaddr_in6 *src)
 {
-	if (s) {
-		if (sbappendaddr(s, &s->so_rcv, sin6tosa(src), mm, NULL) != 0) {
-			sorwakeup(s);
+	if (so != NULL) {
+		struct inpcb *inp = sotoinpcb(so);
+		int ret;
+
+		mtx_enter(&inp->inp_mtx);
+		ret = sbappendaddr(so, &so->so_rcv, sin6tosa(src), mm, NULL);
+		mtx_leave(&inp->inp_mtx);
+
+		if (ret != 0) {
+			sorwakeup(so);
 			return 0;
 		}
 	}
