@@ -304,7 +304,7 @@ in_pcbbind_locked(struct inpcb *inp, struct mbuf *nam, struct proc *p)
 			if ((error = in6_nam2sin6(nam, &sin6)))
 				return (error);
 			if ((error = in6_pcbaddrisavail_lock(inp, sin6, wild,
-			    p, 0)))
+			    p, IN_PCBLOCK_HOLD)))
 				return (error);
 			laddr = &sin6->sin6_addr;
 			lport = sin6->sin6_port;
@@ -321,7 +321,7 @@ in_pcbbind_locked(struct inpcb *inp, struct mbuf *nam, struct proc *p)
 			if ((error = in_nam2sin(nam, &sin)))
 				return (error);
 			if ((error = in_pcbaddrisavail_lock(inp, sin, wild,
-			    p, 0)))
+			    p, IN_PCBLOCK_HOLD)))
 				return (error);
 			laddr = &sin->sin_addr;
 			lport = sin->sin_port;
@@ -417,7 +417,7 @@ in_pcbaddrisavail_lock(struct inpcb *inp, struct sockaddr_in *sin, int wild,
 			    lport, INPLOOKUP_WILDCARD, inp->inp_rtableid, lock);
 			if (t && (so->so_euid != t->inp_socket->so_euid))
 				error = EADDRINUSE;
-			if (lock)
+			if (lock == IN_PCBLOCK_GRAB)
 				in_pcbunref(t);
 			if (error)
 				return (error);
@@ -426,7 +426,7 @@ in_pcbaddrisavail_lock(struct inpcb *inp, struct sockaddr_in *sin, int wild,
 		    wild, inp->inp_rtableid, lock);
 		if (t && (reuseport & t->inp_socket->so_options) == 0)
 			error = EADDRINUSE;
-		if (lock)
+		if (lock == IN_PCBLOCK_GRAB)
 			in_pcbunref(t);
 		if (error)
 			return (error);
@@ -439,7 +439,7 @@ int
 in_pcbaddrisavail(struct inpcb *inp, struct sockaddr_in *sin, int wild,
     struct proc *p)
 {
-	return in_pcbaddrisavail_lock(inp, sin, wild, p, 1);
+	return in_pcbaddrisavail_lock(inp, sin, wild, p, IN_PCBLOCK_GRAB);
 }
 
 int
@@ -492,7 +492,7 @@ in_pcbpickport(u_int16_t *lport, const void *laddr, int wild,
 			localport = htons(candidate);
 		} while (in_baddynamic(candidate, so->so_proto->pr_protocol));
 		t = in_pcblookup_local_lock(table, laddr, localport, wild,
-		    inp->inp_rtableid, 0);
+		    inp->inp_rtableid, IN_PCBLOCK_HOLD);
 	} while (t != NULL);
 	*lport = localport;
 
@@ -531,7 +531,7 @@ in_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 	mtx_enter(&table->inpt_mtx);
 
 	t = in_pcblookup_lock(inp->inp_table, sin->sin_addr, sin->sin_port,
-	    ina, inp->inp_lport, inp->inp_rtableid, 0);
+	    ina, inp->inp_lport, inp->inp_rtableid, IN_PCBLOCK_HOLD);
 	if (t != NULL) {
 		mtx_leave(&table->inpt_mtx);
 		return (EADDRINUSE);
@@ -548,7 +548,7 @@ in_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 			}
 			t = in_pcblookup_lock(inp->inp_table, sin->sin_addr,
 			    sin->sin_port, ina, inp->inp_lport,
-			    inp->inp_rtableid, 0);
+			    inp->inp_rtableid, IN_PCBLOCK_HOLD);
 			if (t != NULL) {
 				inp->inp_lport = 0;
 				mtx_leave(&table->inpt_mtx);
@@ -853,9 +853,10 @@ in_pcblookup_local_lock(struct inpcbtable *table, const void *laddrp,
 	rdomain = rtable_l2(rtable);
 	lhash = in_pcblhash(table, rdomain, lport);
 
-	if (lock) {
+	if (lock == IN_PCBLOCK_GRAB) {
 		mtx_enter(&table->inpt_mtx);
 	} else {
+		KASSERT(lock == IN_PCBLOCK_HOLD);
 		MUTEX_ASSERT_LOCKED(&table->inpt_mtx);
 	}
 	head = &table->inpt_lhashtbl[lhash & table->inpt_lmask];
@@ -908,7 +909,7 @@ in_pcblookup_local_lock(struct inpcbtable *table, const void *laddrp,
 				break;
 		}
 	}
-	if (lock) {
+	if (lock == IN_PCBLOCK_GRAB) {
 		in_pcbref(match);
 		mtx_leave(&table->inpt_mtx);
 	}
@@ -1211,14 +1212,15 @@ in_pcblookup_lock(struct inpcbtable *table, struct in_addr faddr,
 	rdomain = rtable_l2(rtable);
 	hash = in_pcbhash(table, rdomain, &faddr, fport, &laddr, lport);
 
-	if (lock) {
+	if (lock == IN_PCBLOCK_GRAB) {
 		mtx_enter(&table->inpt_mtx);
 	} else {
+		KASSERT(lock == IN_PCBLOCK_HOLD);
 		MUTEX_ASSERT_LOCKED(&table->inpt_mtx);
 	}
 	inp = in_pcbhash_lookup(table, hash, rdomain,
 	    &faddr, fport, &laddr, lport);
-	if (lock) {
+	if (lock == IN_PCBLOCK_GRAB) {
 		in_pcbref(inp);
 		mtx_leave(&table->inpt_mtx);
 	}
@@ -1237,7 +1239,8 @@ struct inpcb *
 in_pcblookup(struct inpcbtable *table, struct in_addr faddr,
     u_int fport, struct in_addr laddr, u_int lport, u_int rtable)
 {
-	return in_pcblookup_lock(table, faddr, fport, laddr, lport, rtable, 1);
+	return in_pcblookup_lock(table, faddr, fport, laddr, lport, rtable,
+	    IN_PCBLOCK_GRAB);
 }
 
 /*

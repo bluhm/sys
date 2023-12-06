@@ -222,7 +222,7 @@ in6_pcbaddrisavail_lock(struct inpcb *inp, struct sockaddr_in6 *sin6, int wild,
 			    inp->inp_rtableid, lock);
 			if (t && (so->so_euid != t->inp_socket->so_euid))
 				error = EADDRINUSE;
-			if (lock)
+			if (lock == IN_PCBLOCK_GRAB)
 				in_pcbunref(t);
 			if (error)
 				return (error);
@@ -231,7 +231,7 @@ in6_pcbaddrisavail_lock(struct inpcb *inp, struct sockaddr_in6 *sin6, int wild,
 		    wild, inp->inp_rtableid, lock);
 		if (t && (reuseport & t->inp_socket->so_options) == 0)
 			error = EADDRINUSE;
-		if (lock)
+		if (lock == IN_PCBLOCK_GRAB)
 			in_pcbunref(t);
 		if (error)
 			return (error);
@@ -243,7 +243,7 @@ int
 in6_pcbaddrisavail(struct inpcb *inp, struct sockaddr_in6 *sin6, int wild,
     struct proc *p)
 {
-	return in6_pcbaddrisavail_lock(inp, sin6, wild, p, 1);
+	return in6_pcbaddrisavail_lock(inp, sin6, wild, p, IN_PCBLOCK_GRAB);
 }
 
 /*
@@ -303,7 +303,7 @@ in6_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 	t = in6_pcblookup_lock(inp->inp_table, &sin6->sin6_addr,
 	    sin6->sin6_port,
 	    IN6_IS_ADDR_UNSPECIFIED(&inp->inp_laddr6) ? in6a : &inp->inp_laddr6,
-	    inp->inp_lport, inp->inp_rtableid, 0);
+	    inp->inp_lport, inp->inp_rtableid, IN_PCBLOCK_HOLD);
 	if (t != NULL) {
 		mtx_leave(&table->inpt_mtx);
 		return (EADDRINUSE);
@@ -320,7 +320,7 @@ in6_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 			}
 			t = in6_pcblookup_lock(inp->inp_table, &sin6->sin6_addr,
 			    sin6->sin6_port, in6a, inp->inp_lport,
-			    inp->inp_rtableid, 0);
+			    inp->inp_rtableid, IN_PCBLOCK_HOLD);
 			if (t != NULL) {
 				inp->inp_lport = 0;
 				mtx_leave(&table->inpt_mtx);
@@ -609,14 +609,15 @@ in6_pcblookup_lock(struct inpcbtable *table, const struct in6_addr *faddr,
 	rdomain = rtable_l2(rtable);
 	hash = in6_pcbhash(table, rdomain, faddr, fport, laddr, lport);
 
-	if (lock) {
+	if (lock == IN_PCBLOCK_GRAB) {
 		mtx_enter(&table->inpt_mtx);
 	} else {
+		KASSERT(lock == IN_PCBLOCK_HOLD);
 		MUTEX_ASSERT_LOCKED(&table->inpt_mtx);
 	}
 	inp = in6_pcbhash_lookup(table, hash, rdomain,
 	    faddr, fport, laddr, lport);
-	if (lock) {
+	if (lock == IN_PCBLOCK_GRAB) {
 		in_pcbref(inp);
 		mtx_leave(&table->inpt_mtx);
 	}
@@ -634,7 +635,8 @@ struct inpcb *
 in6_pcblookup(struct inpcbtable *table, const struct in6_addr *faddr,
     u_int fport, const struct in6_addr *laddr, u_int lport, u_int rtable)
 {
-	return in6_pcblookup_lock(table, faddr, fport, laddr, lport, rtable, 1);
+	return in6_pcblookup_lock(table, faddr, fport, laddr, lport, rtable,
+	    IN_PCBLOCK_GRAB);
 }
 
 struct inpcb *

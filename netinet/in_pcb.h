@@ -268,6 +268,9 @@ struct baddynamicports {
 
 #ifdef _KERNEL
 
+#define IN_PCBLOCK_HOLD	1
+#define IN_PCBLOCK_GRAB	2
+
 extern struct inpcbtable rawcbtable, rawin6pcbtable;
 extern struct baddynamicports baddynamicports;
 extern struct baddynamicports rootonlyports;
