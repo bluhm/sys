@@ -85,7 +85,7 @@ gre_send(struct socket *so, struct mbuf *m, struct mbuf *nam,
 
 	if (inp->inp_pipex) {
 		struct sockaddr_in *sin4;
-		struct in_addr *ina_dst;
+		const struct in_addr *ina_dst;
 
 		ina_dst = NULL;
 		if ((so->so_state & SS_ISCONNECTED) != 0)

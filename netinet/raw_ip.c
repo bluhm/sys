@@ -545,7 +545,9 @@ rip_bind(struct socket *so, struct mbuf *nam, struct proc *p)
 	    ifa_ifwithaddr(sintosa(addr), inp->inp_rtableid)))
 		return (EADDRNOTAVAIL);
 
+	mtx_enter(&rawcbtable.inpt_mtx);
 	inp->inp_laddr = addr->sin_addr;
+	mtx_leave(&rawcbtable.inpt_mtx);
 	
 	return (0);
 }
@@ -562,7 +564,9 @@ rip_connect(struct socket *so, struct mbuf *nam)
 	if ((error = in_nam2sin(nam, &addr)))
 		return (error);
 	
+	mtx_enter(&rawcbtable.inpt_mtx);
 	inp->inp_faddr = addr->sin_addr;
+	mtx_leave(&rawcbtable.inpt_mtx);
 	soisconnected(so);
 
 	return (0);
@@ -579,7 +583,9 @@ rip_disconnect(struct socket *so)
 		return (ENOTCONN);
 
 	soisdisconnected(so);
+	mtx_enter(&rawcbtable.inpt_mtx);
 	inp->inp_faddr.s_addr = INADDR_ANY;
+	mtx_leave(&rawcbtable.inpt_mtx);
 
 	return (0);
 }
