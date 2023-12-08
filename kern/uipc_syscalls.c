@@ -409,7 +409,7 @@ sys_connect(struct proc *p, void *v, register_t *retval)
 	if (KTRPOINT(p, KTR_STRUCT))
 		ktrsockaddr(p, mtod(nam, caddr_t), SCARG(uap, namelen));
 #endif
-	solock(so);
+	solock_shared(so);
 	if (isdnssocket(so)) {
 		error = dns_portcheck(p, so, mtod(nam, void *), nam->m_len);
 		if (error)
@@ -443,7 +443,7 @@ bad:
 	if (!interrupted)
 		so->so_state &= ~SS_ISCONNECTING;
 unlock:
-	sounlock(so);
+	sounlock_shared(so);
 	m_freem(nam);
 out:
 	FRELE(fp, p);
