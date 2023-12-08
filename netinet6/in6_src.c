@@ -96,7 +96,7 @@ in6_pcbselsrc(const struct in6_addr **in6src, struct sockaddr_in6 *dstsock,
 {
 	struct ip6_moptions *mopts = inp->inp_moptions6;
 	struct route_in6 *ro = &inp->inp_route6;
-	struct in6_addr *laddr = &inp->inp_laddr6;
+	const struct in6_addr *laddr = &inp->inp_laddr6;
 	u_int rtableid = inp->inp_rtableid;
 	struct ifnet *ifp = NULL;
 	struct sockaddr	*ip6_source = NULL;
