@@ -284,13 +284,15 @@ pru_detach(struct socket *so)
 static inline void
 pru_lock(struct socket *so)
 {
-	(*so->so_proto->pr_usrreqs->pru_lock)(so);
+	if (so->so_proto->pr_usrreqs->pru_lock)
+		(*so->so_proto->pr_usrreqs->pru_lock)(so);
 }
 
 static inline void
 pru_unlock(struct socket *so)
 {
-	(*so->so_proto->pr_usrreqs->pru_unlock)(so);
+	if (so->so_proto->pr_usrreqs->pru_unlock)
+		(*so->so_proto->pr_usrreqs->pru_unlock)(so);
 }
 
 static inline int
