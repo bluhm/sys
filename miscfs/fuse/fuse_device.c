@@ -19,13 +19,14 @@
 #include <sys/systm.h>
 #include <sys/fcntl.h>
 #include <sys/ioctl.h>
+#include <sys/event.h>
 #include <sys/malloc.h>
 #include <sys/mount.h>
+#include <sys/mutex.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
 #include <sys/vnode.h>
 #include <sys/fusebuf.h>
-#include <sys/selinfo.h>
 
 #include "fusefs_node.h"
 #include "fusefs.h"
@@ -36,18 +37,24 @@
 #define	DPRINTF(fmt, arg...)
 #endif
 
+/*
+ * Locks used to protect struct members and global data
+ *	m	fd_mtx
+ */
+
 SIMPLEQ_HEAD(fusebuf_head, fusebuf);
 
 struct fuse_d {
+	struct mutex fd_mtx;
 	struct fusefs_mnt *fd_fmp;
 	int fd_unit;
 
 	/*fusebufs queues*/
-	struct fusebuf_head fd_fbufs_in;
+	struct fusebuf_head fd_fbufs_in;	/* [m] */
 	struct fusebuf_head fd_fbufs_wait;
 
 	/* kq fields */
-	struct selinfo fd_rsel;
+	struct klist fd_rklist;			/* [m] */
 	LIST_ENTRY(fuse_d) fd_list;
 };
 
@@ -67,12 +74,16 @@ int	fusewrite(dev_t, struct uio *, int);
 int	fusekqfilter(dev_t dev, struct knote *kn);
 int	filt_fuse_read(struct knote *, long);
 void	filt_fuse_rdetach(struct knote *);
+int	filt_fuse_modify(struct kevent *, struct knote *);
+int	filt_fuse_process(struct knote *, struct kevent *);
 
 static const struct filterops fuse_rd_filtops = {
-	.f_flags	= FILTEROP_ISFD,
+	.f_flags	= FILTEROP_ISFD | FILTEROP_MPSAFE,
 	.f_attach	= NULL,
 	.f_detach	= filt_fuse_rdetach,
 	.f_event	= filt_fuse_read,
+	.f_modify	= filt_fuse_modify,
+	.f_process	= filt_fuse_process,
 };
 
 #ifdef FUSE_DEBUG
@@ -142,6 +153,7 @@ fuse_device_cleanup(dev_t dev)
 
 	/* clear FIFO IN */
 	lprev = NULL;
+	mtx_enter(&fd->fd_mtx);
 	SIMPLEQ_FOREACH_SAFE(f, &fd->fd_fbufs_in, fb_next, ftmp) {
 		DPRINTF("cleanup unprocessed msg in sc_fbufs_in\n");
 		if (lprev == NULL)
@@ -155,6 +167,7 @@ fuse_device_cleanup(dev_t dev)
 		wakeup(f);
 		lprev = f;
 	}
+	mtx_leave(&fd->fd_mtx);
 
 	/* clear FIFO WAIT*/
 	lprev = NULL;
@@ -182,9 +195,11 @@ fuse_device_queue_fbuf(dev_t dev, struct fusebuf *fbuf)
 	if (fd == NULL)
 		return;
 
+	mtx_enter(&fd->fd_mtx);
 	SIMPLEQ_INSERT_TAIL(&fd->fd_fbufs_in, fbuf, fb_next);
+	knote_locked(&fd->fd_rklist, 0);
+	mtx_leave(&fd->fd_mtx);
 	stat_fbufs_in++;
-	selwakeup(&fd->fd_rsel);
 }
 
 void
@@ -221,6 +236,9 @@ fuseopen(dev_t dev, int flags, int fmt, struct proc * p)
 	fd->fd_unit = unit;
 	SIMPLEQ_INIT(&fd->fd_fbufs_in);
 	SIMPLEQ_INIT(&fd->fd_fbufs_wait);
+	mtx_init(&fd->fd_mtx, IPL_MPFLOOR);
+	klist_init_mutex(&fd->fd_rklist, &fd->fd_mtx);
+
 	LIST_INSERT_HEAD(&fuse_d_list, fd, fd_list);
 
 	stat_opened_fusedev++;
@@ -278,6 +296,7 @@ fuseioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 		ioexch = (struct fb_ioctl_xch *)addr;
 
 		/* Looking for uuid in fd_fbufs_in */
+		mtx_enter(&fd->fd_mtx);
 		SIMPLEQ_FOREACH(fbuf, &fd->fd_fbufs_in, fb_next) {
 			if (fbuf->fb_uuid == ioexch->fbxch_uuid)
 				break;
@@ -285,6 +304,7 @@ fuseioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 			lastfbuf = fbuf;
 		}
 		if (fbuf == NULL) {
+			mtx_leave(&fd->fd_mtx);
 			printf("fuse: Cannot find fusebuf\n");
 			return (EINVAL);
 		}
@@ -295,6 +315,8 @@ fuseioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 		else
 			SIMPLEQ_REMOVE_AFTER(&fd->fd_fbufs_in, lastfbuf,
 			    fb_next);
+		mtx_leave(&fd->fd_mtx);
+	
 		stat_fbufs_in--;
 
 		/* Do not handle fbufs with bad len */
@@ -389,13 +411,17 @@ fuseread(dev_t dev, struct uio *uio, int ioflag)
 	if (fd == NULL)
 		return (ENXIO);
 
+	mtx_enter(&fd->fd_mtx);
 	if (SIMPLEQ_EMPTY(&fd->fd_fbufs_in)) {
+		mtx_leave(&fd->fd_mtx);
+
 		if (ioflag & O_NONBLOCK)
 			return (EAGAIN);
 
 		goto end;
 	}
 	fbuf = SIMPLEQ_FIRST(&fd->fd_fbufs_in);
+	mtx_leave(&fd->fd_mtx);
 
 	/* We get the whole fusebuf or nothing */
 	if (uio->uio_resid != FUSEBUFSIZE)
@@ -419,7 +445,9 @@ fuseread(dev_t dev, struct uio *uio, int ioflag)
 
 	/* Remove the fbuf if it does not contains data */
 	if (fbuf->fb_len == 0) {
+		mtx_enter(&fd->fd_mtx);
 		SIMPLEQ_REMOVE_HEAD(&fd->fd_fbufs_in, fb_next);
+		mtx_leave(&fd->fd_mtx);
 		stat_fbufs_in--;
 		SIMPLEQ_INSERT_TAIL(&fd->fd_fbufs_wait, fbuf, fb_next);
 		stat_fbufs_wait++;
@@ -519,7 +547,7 @@ fusekqfilter(dev_t dev, struct knote *kn)
 
 	switch (kn->kn_filter) {
 	case EVFILT_READ:
-		klist = &fd->fd_rsel.si_note;
+		klist = &fd->fd_rklist;
 		kn->kn_fop = &fuse_rd_filtops;
 		break;
 	case EVFILT_WRITE:
@@ -530,7 +558,7 @@ fusekqfilter(dev_t dev, struct knote *kn)
 
 	kn->kn_hook = fd;
 
-	klist_insert_locked(klist, kn);
+	klist_insert(klist, kn);
 
 	return (0);
 }
@@ -539,9 +567,9 @@ void
 filt_fuse_rdetach(struct knote *kn)
 {
 	struct fuse_d *fd = kn->kn_hook;
-	struct klist *klist = &fd->fd_rsel.si_note;
+	struct klist *klist = &fd->fd_rklist;
 
-	klist_remove_locked(klist, kn);
+	klist_remove(klist, kn);
 }
 
 int
@@ -554,4 +582,30 @@ filt_fuse_read(struct knote *kn, long hint)
 		event = 1;
 
 	return (event);
+}
+
+int
+filt_fuse_modify(struct kevent *kev, struct knote *kn)
+{
+	struct fuse_d *fd = kn->kn_hook;
+	int active;
+
+	mtx_enter(&fd->fd_mtx);
+	active = knote_modify(kev, kn);
+	mtx_leave(&fd->fd_mtx);
+
+	return (active);
+}
+
+int
+filt_fuse_process(struct knote *kn, struct kevent *kev)
+{
+	struct fuse_d *fd = kn->kn_hook;
+	int active;
+
+	mtx_enter(&fd->fd_mtx);
+	active = knote_process(kn, kev); 
+	mtx_leave(&fd->fd_mtx);
+
+	return (active);
 }
