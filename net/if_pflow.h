@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_pflow.h,v 1.20 2023/12/08 23:13:40 mvs Exp $	*/
+/*	$OpenBSD: if_pflow.h,v 1.22 2023/12/12 00:03:31 mvs Exp $	*/
 
 /*
  * Copyright (c) 2008 Henning Brauer <henning@openbsd.org>
@@ -169,6 +169,8 @@ struct pflow_ipfix_flow6 {
 
 #ifdef _KERNEL
 
+#include <sys/smr.h>
+
 /*
  * Locks used to protect struct members and global data
  *       I       immutable after creation
@@ -190,7 +192,7 @@ struct pflow_softc {
 	unsigned int		 sc_maxcount;	/* [m] */
 	unsigned int		 sc_maxcount4;	/* [m] */
 	unsigned int		 sc_maxcount6;	/* [m] */
-	u_int64_t		 sc_gcounter;	/* [m] */
+	u_int32_t		 sc_gcounter;	/* [m] */
 	u_int32_t		 sc_sequence;	/* [m] */
 	struct timeout		 sc_tmo;
 	struct timeout		 sc_tmo6;
@@ -207,7 +209,7 @@ struct pflow_softc {
 						    mbuf */
 	struct mbuf		*sc_mbuf6;	/* [m] current cumulative
 						    mbuf */
-	SLIST_ENTRY(pflow_softc) sc_next;
+	SMR_SLIST_ENTRY(pflow_softc) sc_next;
 };
 
 extern struct pflow_softc	*pflowif;
