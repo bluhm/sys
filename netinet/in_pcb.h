@@ -83,6 +83,7 @@
  *	y	inpt_notify		pcb table rwlock for notify
  *	p	inpcb_mtx		pcb mutex
  *	L	pf_inp_mtx		link pf to inp mutex
+ *	s	so_lock			socket rwlock
  */
 
 /*
@@ -194,7 +195,7 @@ struct inpcb {
 	void	*inp_upcall_arg;
 	u_int	inp_rtableid;		/* [t] */
 	int	inp_pipex;		/* pipex indication */
-	uint16_t inp_flowid;
+	uint16_t inp_flowid;		/* [s] */
 };
 
 LIST_HEAD(inpcbhead, inpcb);
