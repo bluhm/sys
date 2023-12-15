@@ -82,6 +82,7 @@
  *	t	inpt_mtx		pcb table mutex
  *	y	inpt_notify		pcb table rwlock for notify
  *	p	inpcb_mtx		pcb mutex
+ *	L	pf_inp_mtx		link pf to inp mutex
  */
 
 /*
@@ -187,7 +188,7 @@ struct inpcb {
 #define inp_csumoffset	inp_cksum6
 #endif
 	struct	icmp6_filter *inp_icmp6filt;
-	struct	pf_state_key *inp_pf_sk;
+	struct	pf_state_key *inp_pf_sk; /* [L] */
 	struct	mbuf *(*inp_upcall)(void *, struct mbuf *,
 		    struct ip *, struct ip6_hdr *, void *, int);
 	void	*inp_upcall_arg;

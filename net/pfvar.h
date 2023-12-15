@@ -1600,7 +1600,7 @@ extern void			 pf_calc_skip_steps(struct pf_rulequeue *);
 extern void			 pf_purge_expired_src_nodes(void);
 extern void			 pf_purge_expired_rules(void);
 extern void			 pf_remove_state(struct pf_state *);
-extern void			 pf_remove_divert_state(struct pf_state_key *);
+extern void			 pf_remove_divert_state(struct inpcb *);
 extern void			 pf_free_state(struct pf_state *);
 int				 pf_insert_src_node(struct pf_src_node **,
 				    struct pf_rule *, enum pf_sn_types,
