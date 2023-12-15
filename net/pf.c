@@ -256,7 +256,6 @@ void			 pf_state_key_unlink_reverse(struct pf_state_key *);
 void			 pf_state_key_link_inpcb(struct pf_state_key *,
 			    struct inpcb *);
 void			 pf_state_key_unlink_inpcb(struct pf_state_key *);
-void			 pf_inpcb_unlink_state_key(struct inpcb *);
 void			 pf_pktenqueue_delayed(void *);
 int32_t			 pf_state_expires(const struct pf_state *, uint8_t);
 
@@ -1128,7 +1127,7 @@ int
 pf_find_state(struct pf_pdesc *pd, struct pf_state_key_cmp *key,
     struct pf_state **stp)
 {
-	struct pf_state_key	*sk, *pkt_sk, *inp_sk;
+	struct pf_state_key	*sk, *pkt_sk;
 	struct pf_state_item	*si;
 	struct pf_state		*st = NULL;
 
@@ -1140,7 +1139,6 @@ pf_find_state(struct pf_pdesc *pd, struct pf_state_key_cmp *key,
 		addlog("\n");
 	}
 
-	inp_sk = NULL;
 	pkt_sk = NULL;
 	sk = NULL;
 	if (pd->dir == PF_OUT) {
@@ -1156,14 +1154,27 @@ pf_find_state(struct pf_pdesc *pd, struct pf_state_key_cmp *key,
 			sk = pkt_sk->sk_reverse;
 
 		if (pkt_sk == NULL) {
+			struct inpcb *inp = pd->m->m_pkthdr.pf.inp;
+
 			/* here we deal with local outbound packet */
-			if (pd->m->m_pkthdr.pf.inp != NULL) {
-				inp_sk = pd->m->m_pkthdr.pf.inp->inp_pf_sk;
-				if (pf_state_key_isvalid(inp_sk))
+			if (inp != NULL) {
+				struct pf_state_key	*inp_sk;
+
+				mtx_enter(&inp->inp_mtx);
+				inp_sk = inp->inp_pf_sk;
+				if (pf_state_key_isvalid(inp_sk)) {
 					sk = inp_sk;
-				else
-					pf_inpcb_unlink_state_key(
-					    pd->m->m_pkthdr.pf.inp);
+					mtx_leave(&inp->inp_mtx);
+				} else if (inp_sk != NULL) {
+					KASSERT(inp_sk->sk_inp == inp);
+					inp_sk->sk_inp = NULL;
+					inp->inp_pf_sk = NULL;
+					mtx_leave(&inp->inp_mtx);
+
+					pf_state_key_unref(inp_sk);
+					in_pcbunref(inp);
+				} else
+					mtx_leave(&inp->inp_mtx);
 			}
 		}
 	}
@@ -1175,8 +1186,7 @@ pf_find_state(struct pf_pdesc *pd, struct pf_state_key_cmp *key,
 		if (pd->dir == PF_OUT && pkt_sk &&
 		    pf_compare_state_keys(pkt_sk, sk, pd->kif, pd->dir) == 0)
 			pf_state_key_link_reverse(sk, pkt_sk);
-		else if (pd->dir == PF_OUT && pd->m->m_pkthdr.pf.inp &&
-		    !pd->m->m_pkthdr.pf.inp->inp_pf_sk && !sk->sk_inp)
+		else if (pd->dir == PF_OUT)
 			pf_state_key_link_inpcb(sk, pd->m->m_pkthdr.pf.inp);
 	}
 
@@ -7842,9 +7852,7 @@ done:
 		pd.m->m_pkthdr.pf.qid = qid;
 	if (pd.dir == PF_IN && st && st->key[PF_SK_STACK])
 		pf_mbuf_link_state_key(pd.m, st->key[PF_SK_STACK]);
-	if (pd.dir == PF_OUT &&
-	    pd.m->m_pkthdr.pf.inp && !pd.m->m_pkthdr.pf.inp->inp_pf_sk &&
-	    st && st->key[PF_SK_STACK] && !st->key[PF_SK_STACK]->sk_inp)
+	if (pd.dir == PF_OUT && st && st->key[PF_SK_STACK])
 		pf_state_key_link_inpcb(st->key[PF_SK_STACK],
 		    pd.m->m_pkthdr.pf.inp);
 
@@ -8015,7 +8023,7 @@ pf_ouraddr(struct mbuf *m)
 
 	sk = m->m_pkthdr.pf.statekey;
 	if (sk != NULL) {
-		if (sk->sk_inp != NULL)
+		if (READ_ONCE(sk->sk_inp) != NULL)
 			return (1);
 	}
 
@@ -8042,10 +8050,7 @@ pf_inp_lookup(struct mbuf *m)
 	if (!pf_state_key_isvalid(sk))
 		pf_mbuf_unlink_state_key(m);
 	else
-		inp = m->m_pkthdr.pf.statekey->sk_inp;
-
-	if (inp && inp->inp_pf_sk)
-		KASSERT(m->m_pkthdr.pf.statekey == inp->inp_pf_sk);
+		inp = READ_ONCE(sk->sk_inp);
 
 	in_pcbref(inp);
 	return (inp);
@@ -8066,8 +8071,7 @@ pf_inp_link(struct mbuf *m, struct inpcb *inp)
 	 * state, which might be just being marked as deleted by another
 	 * thread.
 	 */
-	if (inp && !sk->sk_inp && !inp->inp_pf_sk)
-		pf_state_key_link_inpcb(sk, inp);
+	pf_state_key_link_inpcb(sk, inp);
 
 	/* The statekey has finished finding the inp, it is no longer needed. */
 	pf_mbuf_unlink_state_key(m);
@@ -8076,7 +8080,21 @@ pf_inp_link(struct mbuf *m, struct inpcb *inp)
 void
 pf_inp_unlink(struct inpcb *inp)
 {
-	pf_inpcb_unlink_state_key(inp);
+	struct pf_state_key *sk;
+
+	mtx_enter(&inp->inp_mtx);
+	sk = inp->inp_pf_sk;
+	if (sk == NULL) {
+		mtx_leave(&inp->inp_mtx);
+		return;
+	}
+	KASSERT(sk->sk_inp == inp);
+	sk->sk_inp = NULL;
+	inp->inp_pf_sk = NULL;
+	mtx_leave(&inp->inp_mtx);
+
+	pf_state_key_unref(sk);
+	in_pcbunref(inp);
 }
 
 void
@@ -8189,24 +8207,18 @@ pf_mbuf_unlink_inpcb(struct mbuf *m)
 void
 pf_state_key_link_inpcb(struct pf_state_key *sk, struct inpcb *inp)
 {
+	if (inp == NULL || sk->sk_inp != NULL)
+		return;
+
+	mtx_enter(&inp->inp_mtx);
+	if (inp->inp_pf_sk != NULL || sk->sk_inp != NULL) {
+		mtx_leave(&inp->inp_mtx);
+		return;
+	}
 	KASSERT(sk->sk_inp == NULL);
 	sk->sk_inp = in_pcbref(inp);
-	KASSERT(inp->inp_pf_sk == NULL);
 	inp->inp_pf_sk = pf_state_key_ref(sk);
-}
-
-void
-pf_inpcb_unlink_state_key(struct inpcb *inp)
-{
-	struct pf_state_key *sk = inp->inp_pf_sk;
-
-	if (sk != NULL) {
-		KASSERT(sk->sk_inp == inp);
-		sk->sk_inp = NULL;
-		inp->inp_pf_sk = NULL;
-		pf_state_key_unref(sk);
-		in_pcbunref(inp);
-	}
+	mtx_leave(&inp->inp_mtx);
 }
 
 void
@@ -8214,13 +8226,16 @@ pf_state_key_unlink_inpcb(struct pf_state_key *sk)
 {
 	struct inpcb *inp = sk->sk_inp;
 
-	if (inp != NULL) {
-		KASSERT(inp->inp_pf_sk == sk);
-		sk->sk_inp = NULL;
-		inp->inp_pf_sk = NULL;
-		pf_state_key_unref(sk);
-		in_pcbunref(inp);
-	}
+	if (inp == NULL)
+		return;
+	mtx_enter(&inp->inp_mtx);
+	KASSERT(inp->inp_pf_sk == sk);
+	sk->sk_inp = NULL;
+	inp->inp_pf_sk = NULL;
+	mtx_leave(&inp->inp_mtx);
+
+	pf_state_key_unref(sk);
+	in_pcbunref(inp);
 }
 
 void

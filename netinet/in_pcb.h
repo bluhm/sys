@@ -187,7 +187,7 @@ struct inpcb {
 #define inp_csumoffset	inp_cksum6
 #endif
 	struct	icmp6_filter *inp_icmp6filt;
-	struct	pf_state_key *inp_pf_sk;
+	struct	pf_state_key *inp_pf_sk; /* [p] */
 	struct	mbuf *(*inp_upcall)(void *, struct mbuf *,
 		    struct ip *, struct ip6_hdr *, void *, int);
 	void	*inp_upcall_arg;
