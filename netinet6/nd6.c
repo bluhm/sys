@@ -107,7 +107,7 @@ void nd6_slowtimo(void *);
 void nd6_expire(void *);
 void nd6_expire_timer(void *);
 void nd6_invalidate(struct rtentry *);
-void nd6_free(struct rtentry *);
+void nd6_free(struct rtentry *, struct ifnet *);
 int nd6_llinfo_timer(struct rtentry *);
 
 struct timeout nd6_timer_to;
@@ -346,7 +346,7 @@ nd6_llinfo_timer(struct rtentry *rt)
 			} else
 				atomic_sub_int(&ln_hold_total, len);
 
-			nd6_free(rt);
+			nd6_free(rt, ifp);
 			ln = NULL;
 		}
 		break;
@@ -362,7 +362,7 @@ nd6_llinfo_timer(struct rtentry *rt)
 	case ND6_LLINFO_PURGE:
 		/* Garbage Collection(RFC 2461 5.3) */
 		if (!ND6_LLINFO_PERMANENT(ln)) {
-			nd6_free(rt);
+			nd6_free(rt, ifp);
 			ln = NULL;
 		}
 		break;
@@ -383,7 +383,7 @@ nd6_llinfo_timer(struct rtentry *rt)
 			nd6_ns_output(ifp, &dst->sin6_addr, &dst->sin6_addr,
 			    &ln->ln_saddr6, 0);
 		} else {
-			nd6_free(rt);
+			nd6_free(rt, ifp);
 			ln = NULL;
 		}
 		break;
@@ -492,7 +492,7 @@ nd6_purge(struct ifnet *ifp)
 		    rt->rt_gateway->sa_family == AF_LINK) {
 			sdl = satosdl(rt->rt_gateway);
 			if (sdl->sdl_index == ifp->if_index)
-				nd6_free(rt);
+				nd6_free(rt, ifp);
 		}
 	}
 }
@@ -661,15 +661,12 @@ nd6_invalidate(struct rtentry *rt)
  * Free an nd6 llinfo entry.
  */
 void
-nd6_free(struct rtentry *rt)
+nd6_free(struct rtentry *rt, struct ifnet *ifp)
 {
 	struct llinfo_nd6 *ln = (struct llinfo_nd6 *)rt->rt_llinfo;
 	struct in6_addr in6 = satosin6(rt_key(rt))->sin6_addr;
-	struct ifnet *ifp;
 
 	NET_ASSERT_LOCKED_EXCLUSIVE();
-
-	ifp = if_get(rt->rt_ifidx);
 
 	if (!ip6_forwarding) {
 		if (ln->ln_router) {
@@ -692,8 +689,6 @@ nd6_free(struct rtentry *rt)
 	 */
 	if (!ISSET(rt->rt_flags, RTF_STATIC|RTF_CACHED))
 		rtdeletemsg(rt, ifp, ifp->if_rdomain);
-
-	if_put(ifp);
 }
 
 /*
@@ -1080,7 +1075,7 @@ nd6_cache_lladdr(struct ifnet *ifp, const struct in6_addr *from, char *lladdr,
 		return;
 	if ((rt->rt_flags & (RTF_GATEWAY | RTF_LLINFO)) != RTF_LLINFO) {
 fail:
-		nd6_free(rt);
+		nd6_free(rt, ifp);
 		rtfree(rt);
 		return;
 	}
