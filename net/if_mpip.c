@@ -121,6 +121,7 @@ mpip_clone_create(struct if_clone *ifc, int unit)
 	ifp->if_hardmtu = 65535;
 
 	if_attach(ifp);
+	if_counters_alloc(ifp);
 	if_alloc_sadl(ifp);
 
 #if NBPFILTER > 0

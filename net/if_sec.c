@@ -147,6 +147,7 @@ sec_clone_create(struct if_clone *ifc, int unit)
 	ifp->if_ioctl = sec_ioctl;
 	ifp->if_rtrequest = p2p_rtrequest;
 
+	if_counters_alloc(ifp);
 	if_attach(ifp);
 	if_alloc_sadl(ifp);
 

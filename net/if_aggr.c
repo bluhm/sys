@@ -562,6 +562,7 @@ aggr_clone_create(struct if_clone *ifc, int unit)
 	ifp->if_link_state = LINK_STATE_DOWN;
 	ether_fakeaddr(ifp);
 
+	if_counters_alloc(ifp);
 	if_attach(ifp);
 	ether_ifattach(ifp);
 

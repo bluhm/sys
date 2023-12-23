@@ -115,6 +115,7 @@ mpw_clone_create(struct if_clone *ifc, int unit)
 
 	sc->sc_dead = 0;
 
+	if_counters_alloc(ifp);
 	if_attach(ifp);
 	ether_ifattach(ifp);
 

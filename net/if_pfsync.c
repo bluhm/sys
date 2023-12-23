@@ -444,6 +444,7 @@ pfsync_clone_create(struct if_clone *ifc, int unit)
 #endif
 	}
 
+	if_counters_alloc(ifp);
 	if_attach(ifp);
 	if_alloc_sadl(ifp);
 

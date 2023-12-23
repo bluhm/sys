@@ -246,6 +246,8 @@ tun_create(struct if_clone *ifc, int unit, int flags)
 	ifp->if_hardmtu = TUNMRU;
 	ifp->if_link_state = LINK_STATE_DOWN;
 
+	if_counters_alloc(ifp);
+
 	if ((flags & TUN_LAYER2) == 0) {
 #if NBPFILTER > 0
 		ifp->if_bpf_mtap = bpf_mtap;

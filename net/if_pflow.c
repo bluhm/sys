@@ -279,6 +279,7 @@ pflow_clone_create(struct if_clone *ifc, int unit)
 
 	task_set(&pflowif->sc_outputtask, pflow_output_process, pflowif);
 
+	if_counters_alloc(ifp);
 	if_attach(ifp);
 	if_alloc_sadl(ifp);
 

@@ -119,6 +119,7 @@ mpe_clone_create(struct if_clone *ifc, int unit)
 
 	if_attach(ifp);
 	if_alloc_sadl(ifp);
+	if_counters_alloc(ifp);
 
 #if NBPFILTER > 0
 	bpfattach(&ifp->if_bpf, ifp, DLT_LOOP, sizeof(u_int32_t));

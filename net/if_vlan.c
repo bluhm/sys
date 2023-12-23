@@ -215,6 +215,7 @@ vlan_clone_create(struct if_clone *ifc, int unit)
 	ifp->if_hardmtu = 0xffff;
 	ifp->if_link_state = LINK_STATE_DOWN;
 
+	if_counters_alloc(ifp);
 	if_attach(ifp);
 	ether_ifattach(ifp);
 	ifp->if_hdrlen = EVL_ENCAPLEN;
