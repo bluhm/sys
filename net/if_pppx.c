@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_pppx.c,v 1.127 2023/12/22 23:01:50 mvs Exp $ */
+/*	$OpenBSD: if_pppx.c,v 1.128 2023/12/23 10:52:54 bluhm Exp $ */
 
 /*
  * Copyright (c) 2010 Claudio Jeker <claudio@openbsd.org>

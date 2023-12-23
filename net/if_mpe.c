@@ -1,4 +1,4 @@
-/* $OpenBSD: if_mpe.c,v 1.103 2023/12/22 23:01:50 mvs Exp $ */
+/* $OpenBSD: if_mpe.c,v 1.104 2023/12/23 10:52:54 bluhm Exp $ */
 
 /*
  * Copyright (c) 2008 Pierre-Yves Ritschard <pyr@spootnik.org>

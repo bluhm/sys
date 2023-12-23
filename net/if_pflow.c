@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_pflow.c,v 1.108 2023/12/22 23:01:50 mvs Exp $	*/
+/*	$OpenBSD: if_pflow.c,v 1.109 2023/12/23 10:52:54 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2011 Florian Obser <florian@narrans.de>
