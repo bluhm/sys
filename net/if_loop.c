@@ -185,6 +185,7 @@ loop_clone_create(struct if_clone *ifc, int unit)
 	ifp->if_output = looutput;
 	ifp->if_type = IFT_LOOP;
 	ifp->if_hdrlen = sizeof(u_int32_t);
+	if_counters_alloc(ifp);
 	if (unit == 0) {
 		if_attachhead(ifp);
 		if_addgroup(ifp, ifc->ifc_name);
@@ -250,7 +251,7 @@ loinput(struct ifnet *ifp, struct mbuf *m)
 
 	error = if_input_local(ifp, m, m->m_pkthdr.ph_family);
 	if (error)
-		ifp->if_ierrors++;
+		counters_inc(ifp->if_counters, ifc_ierrors);
 }
 
 int
