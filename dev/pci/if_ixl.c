@@ -900,7 +900,7 @@ struct ixl_rx_wb_desc_32 {
 	uint64_t		qword3;
 } __packed __aligned(16);
 
-#define IXL_TX_PKT_DESCS		32
+#define IXL_TX_PKT_DESCS		8
 #define IXL_TX_QUEUE_ALIGN		128
 #define IXL_RX_QUEUE_ALIGN		128
 
