@@ -839,11 +839,8 @@ if_input_local(struct ifnet *ifp, struct mbuf *m, sa_family_t af)
 	if (ISSET(keepcksum, M_ICMP_CSUM_OUT))
 		m->m_pkthdr.csum_flags |= M_ICMP_CSUM_IN_OK;
 
-	if (ifp->if_counters == NULL) {
-		/* XXXSMP multicast loopback and simplex interfaces */
-		ifp->if_opackets++;
-		ifp->if_obytes += m->m_pkthdr.len;
-	} else {
+	/* do not count multicast loopback and simplex interfaces */
+	if (ISSET(ifp->if_flags, IFF_LOOPBACK)) {
 		counters_pkt(ifp->if_counters, ifc_opackets, ifc_obytes,
 		    m->m_pkthdr.len);
 	}
