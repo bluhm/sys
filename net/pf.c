@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf.c,v 1.1191 2024/01/01 17:00:57 bluhm Exp $ */
+/*	$OpenBSD: pf.c,v 1.1192 2024/01/01 22:16:51 bluhm Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
