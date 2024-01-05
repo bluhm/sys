@@ -231,6 +231,8 @@ int	 ip_fragment(struct mbuf *, struct mbuf_list *, struct ifnet *, u_long);
 void	 ip_freemoptions(struct ip_moptions *);
 int	 ip_getmoptions(int, struct ip_moptions *, struct mbuf *);
 void	 ip_init(void);
+int	 ip_setpktopts(struct mbuf *, struct sockaddr_in *, u_int32_t *,
+	    const struct inpcb *);
 struct mbuf*
 	 ip_insertoptions(struct mbuf *, struct mbuf *, int *);
 int	 ip_mforward(struct mbuf *, struct ifnet *);

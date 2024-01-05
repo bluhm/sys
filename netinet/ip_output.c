@@ -85,7 +85,7 @@ static u_int16_t in_cksum_phdr(u_int32_t, u_int32_t, u_int32_t);
 void in_delayed_cksum(struct mbuf *);
 
 int ip_output_ipsec_lookup(struct mbuf *m, int hlen, const u_char seclevel[],
-    struct tdb **, int ipsecflowinfo);
+    struct tdb **, u_int32_t ipsecflowinfo);
 void ip_output_ipsec_pmtu_update(struct tdb *, struct route *, struct in_addr,
     int, int);
 int ip_output_ipsec_send(struct tdb *, struct mbuf *, struct route *, int);
@@ -510,7 +510,7 @@ bad:
 #ifdef IPSEC
 int
 ip_output_ipsec_lookup(struct mbuf *m, int hlen, const u_char seclevel[],
-    struct tdb **tdbout, int ipsecflowinfo)
+    struct tdb **tdbout, u_int32_t ipsecflowinfo)
 {
 	struct m_tag *mtag;
 	struct tdb_ident *tdbi;
@@ -1755,6 +1755,72 @@ ip_freemoptions(struct ip_moptions *imo)
 		    imo->imo_max_memberships * sizeof(struct in_multi *));
 		free(imo, M_IPMOPTS, sizeof(*imo));
 	}
+}
+
+int
+ip_setpktopts(struct mbuf *control, struct sockaddr_in *src,
+    u_int32_t *ipsecflowinfo, const struct inpcb *inp)
+{
+	caddr_t cmsgs;
+	u_int clen;
+	int error;
+
+	if (control == NULL)
+		return (EINVAL);
+
+	/*
+	 * XXX: Currently, we assume all the optional information is stored
+	 * in a single mbuf.
+	 */
+	if (control->m_next)
+		return (EINVAL);
+
+	clen = control->m_len;
+	cmsgs = mtod(control, caddr_t);
+	do {
+		struct cmsghdr *cm;
+
+		if (clen < CMSG_LEN(0))
+			return (EINVAL);
+		cm = (struct cmsghdr *)cmsgs;
+		if (cm->cmsg_len < CMSG_LEN(0) || cm->cmsg_len > clen ||
+		    CMSG_ALIGN(cm->cmsg_len) > clen)
+			return (EINVAL);
+		if (cm->cmsg_level == IPPROTO_IP) {
+			switch (cm->cmsg_type) {
+#ifdef IPSEC
+			case IP_IPSECFLOWINFO:
+				if (cm->cmsg_len !=
+				    CMSG_LEN(sizeof(u_int32_t)))
+					return (EINVAL);
+				if (!ISSET(inp->inp_flags, INP_IPSECFLOWINFO))
+					break;
+				*ipsecflowinfo = *(u_int32_t *)CMSG_DATA(cm);
+				break;
+#endif
+			case IP_SENDSRCADDR:
+				if (cm->cmsg_len !=
+				    CMSG_LEN(sizeof(struct in_addr)))
+					return (EINVAL);
+				src->sin_family = AF_INET;
+				src->sin_len = sizeof(struct sockaddr_in);
+				memcpy(&src->sin_addr, CMSG_DATA(cm),
+				    sizeof(struct in_addr));
+				/* no check on reuse when sin->sin_port == 0 */
+				error = in_pcbaddrisavail(inp, src, 0,
+				    curproc);
+				if (error)
+					return (error);
+				break;
+			default:
+				return (ENOPROTOOPT);
+			}
+		}
+		clen -= CMSG_ALIGN(cm->cmsg_len);
+		cmsgs += CMSG_ALIGN(cm->cmsg_len);
+	} while (clen);
+
+	return (0);
 }
 
 /*

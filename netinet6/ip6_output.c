@@ -2218,9 +2218,8 @@ int
 ip6_setpktopts(struct mbuf *control, struct ip6_pktopts *opt,
     struct ip6_pktopts *stickyopt, int priv, int uproto)
 {
-	u_int clen;
-	struct cmsghdr *cm = 0;
 	caddr_t cmsgs;
+	u_int clen;
 	int error;
 
 	if (control == NULL || opt == NULL)
@@ -2228,8 +2227,6 @@ ip6_setpktopts(struct mbuf *control, struct ip6_pktopts *opt,
 
 	ip6_initpktopts(opt);
 	if (stickyopt) {
-		int error;
-
 		/*
 		 * If stickyopt is provided, make a local copy of the options
 		 * for this particular packet, then override them by ancillary
@@ -2253,6 +2250,8 @@ ip6_setpktopts(struct mbuf *control, struct ip6_pktopts *opt,
 	clen = control->m_len;
 	cmsgs = mtod(control, caddr_t);
 	do {
+		struct cmsghdr *cm;
+
 		if (clen < CMSG_LEN(0))
 			return (EINVAL);
 		cm = (struct cmsghdr *)cmsgs;
@@ -2281,8 +2280,6 @@ int
 ip6_setpktopt(int optname, u_char *buf, int len, struct ip6_pktopts *opt,
     int priv, int sticky, int uproto)
 {
-	int minmtupolicy;
-
 	switch (optname) {
 	case IPV6_PKTINFO:
 	{
@@ -2493,6 +2490,9 @@ ip6_setpktopt(int optname, u_char *buf, int len, struct ip6_pktopts *opt,
 	}
 
 	case IPV6_USE_MIN_MTU:
+	{
+		int minmtupolicy;
+
 		if (len != sizeof(int))
 			return (EINVAL);
 		minmtupolicy = *(int *)buf;
@@ -2503,6 +2503,7 @@ ip6_setpktopt(int optname, u_char *buf, int len, struct ip6_pktopts *opt,
 		}
 		opt->ip6po_minmtu = minmtupolicy;
 		break;
+	}
 
 	case IPV6_DONTFRAG:
 		if (len != sizeof(int))

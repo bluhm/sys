@@ -932,57 +932,10 @@ udp_output(struct inpcb *inp, struct mbuf *m, struct mbuf *addr,
 	}
 
 	memset(&src_sin, 0, sizeof(src_sin));
-
 	if (control) {
-		u_int clen;
-		struct cmsghdr *cm;
-		caddr_t cmsgs;
-
-		/*
-		 * XXX: Currently, we assume all the optional information is
-		 * stored in a single mbuf.
-		 */
-		if (control->m_next) {
-			error = EINVAL;
+		error = ip_setpktopts(control, &src_sin, &ipsecflowinfo, inp);
+		if (error)
 			goto release;
-		}
-
-		clen = control->m_len;
-		cmsgs = mtod(control, caddr_t);
-		do {
-			if (clen < CMSG_LEN(0)) {
-				error = EINVAL;
-				goto release;
-			}
-			cm = (struct cmsghdr *)cmsgs;
-			if (cm->cmsg_len < CMSG_LEN(0) ||
-			    CMSG_ALIGN(cm->cmsg_len) > clen) {
-				error = EINVAL;
-				goto release;
-			}
-#ifdef IPSEC
-			if ((inp->inp_flags & INP_IPSECFLOWINFO) != 0 &&
-			    cm->cmsg_len == CMSG_LEN(sizeof(ipsecflowinfo)) &&
-			    cm->cmsg_level == IPPROTO_IP &&
-			    cm->cmsg_type == IP_IPSECFLOWINFO) {
-				ipsecflowinfo = *(u_int32_t *)CMSG_DATA(cm);
-			} else
-#endif
-			if (cm->cmsg_len == CMSG_LEN(sizeof(struct in_addr)) &&
-			    cm->cmsg_level == IPPROTO_IP &&
-			    cm->cmsg_type == IP_SENDSRCADDR) {
-				memcpy(&src_sin.sin_addr, CMSG_DATA(cm),
-				    sizeof(struct in_addr));
-				src_sin.sin_family = AF_INET;
-				src_sin.sin_len = sizeof(src_sin);
-				/* no check on reuse when sin->sin_port == 0 */
-				if ((error = in_pcbaddrisavail(inp, &src_sin,
-				    0, curproc)))
-					goto release;
-			}
-			clen -= CMSG_ALIGN(cm->cmsg_len);
-			cmsgs += CMSG_ALIGN(cm->cmsg_len);
-		} while (clen);
 	}
 
 	if (addr) {
