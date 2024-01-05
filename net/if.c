@@ -1774,16 +1774,16 @@ if_linkstate_task(void *xifidx)
 	unsigned int ifidx = (unsigned long)xifidx;
 	struct ifnet *ifp;
 
-	KERNEL_LOCK();
 	NET_LOCK();
+	KERNEL_LOCK();
 
 	ifp = if_get(ifidx);
 	if (ifp != NULL)
 		if_linkstate(ifp);
 	if_put(ifp);
 
-	NET_UNLOCK();
 	KERNEL_UNLOCK();
+	NET_UNLOCK();
 }
 
 void
