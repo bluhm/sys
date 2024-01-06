@@ -150,8 +150,8 @@ in6_pcbhash(struct inpcbtable *table, u_int rdomain,
 }
 
 int
-in6_pcbaddrisavail_lock(struct inpcb *inp, struct sockaddr_in6 *sin6, int wild,
-    struct proc *p, int lock)
+in6_pcbaddrisavail_lock(const struct inpcb *inp, struct sockaddr_in6 *sin6,
+    int wild, struct proc *p, int lock)
 {
 	struct socket *so = inp->inp_socket;
 	struct inpcbtable *table = inp->inp_table;
@@ -240,8 +240,8 @@ in6_pcbaddrisavail_lock(struct inpcb *inp, struct sockaddr_in6 *sin6, int wild,
 }
 
 int
-in6_pcbaddrisavail(struct inpcb *inp, struct sockaddr_in6 *sin6, int wild,
-    struct proc *p)
+in6_pcbaddrisavail(const struct inpcb *inp, struct sockaddr_in6 *sin6,
+    int wild, struct proc *p)
 {
 	return in6_pcbaddrisavail_lock(inp, sin6, wild, p, IN_PCBLOCK_GRAB);
 }
