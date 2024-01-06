@@ -839,10 +839,19 @@ if_input_local(struct ifnet *ifp, struct mbuf *m, sa_family_t af)
 	if (ISSET(keepcksum, M_ICMP_CSUM_OUT))
 		m->m_pkthdr.csum_flags |= M_ICMP_CSUM_IN_OK;
 
-	/* do not count multicast loopback and simplex interfaces */
 	if (ISSET(ifp->if_flags, IFF_LOOPBACK)) {
 		counters_pkt(ifp->if_counters, ifc_opackets, ifc_obytes,
 		    m->m_pkthdr.len);
+	} else {
+		struct ifnet *ifplo;
+
+		/* count multicast loopback and simplex interfaces at lo */
+		ifplo = if_get(rtable_loindex(ifp->if_rdomain));
+		if (ifplo != NULL && ISSET(ifplo->if_flags, IFF_LOOPBACK)) {
+			counters_pkt(ifplo->if_counters, ifc_opackets,
+			    ifc_obytes, m->m_pkthdr.len);
+		}
+		if_put(ifplo);
 	}
 
 	switch (af) {
