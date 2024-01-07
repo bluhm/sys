@@ -3841,6 +3841,8 @@ pf_socket_lookup(struct pf_pdesc *pd)
 		break;
 #ifdef INET6
 	case AF_INET6:
+		if (pd->virtual_proto == IPPROTO_UDP)
+			tb = &udb6table;
 		inp = in6_pcblookup(tb, &saddr->v6, sport, &daddr->v6,
 		    dport, pd->rdomain);
 		if (inp == NULL) {

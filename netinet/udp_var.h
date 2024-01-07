@@ -123,7 +123,7 @@ udpstat_inc(enum udpstat_counters c)
 	counters_inc(udpcounters, c);
 }
 
-extern struct	inpcbtable udbtable;
+extern struct	inpcbtable udbtable, udb6table;
 extern struct	udpstat udpstat;
 
 extern const struct pr_usrreqs udp_usrreqs;
