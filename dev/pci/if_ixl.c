@@ -71,7 +71,6 @@
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_media.h>
-#include <net/route.h>
 #include <net/toeplitz.h>
 
 #if NBPFILTER > 0
@@ -86,8 +85,6 @@
 #include <netinet/ip.h>
 #include <netinet/ip6.h>
 #include <netinet/tcp.h>
-#include <netinet/tcp_timer.h>
-#include <netinet/tcp_var.h>
 #include <netinet/udp.h>
 #include <netinet/if_ether.h>
 
@@ -830,10 +827,6 @@ struct ixl_tx_desc {
 #define IXL_TX_DESC_BSIZE_MASK		\
 	(IXL_TX_DESC_BSIZE_MAX << IXL_TX_DESC_BSIZE_SHIFT)
 
-#define IXL_TX_CTX_DESC_CMD_TSO		0x10
-#define IXL_TX_CTX_DESC_TLEN_SHIFT	30
-#define IXL_TX_CTX_DESC_MSS_SHIFT	50
-
 #define IXL_TX_DESC_L2TAG1_SHIFT	48
 } __packed __aligned(16);
 
@@ -905,14 +898,6 @@ struct ixl_rx_wb_desc_32 {
 #define IXL_RX_QUEUE_ALIGN		128
 
 #define IXL_HARDMTU			9712 /* 9726 - ETHER_HDR_LEN */
-#define IXL_TSO_SIZE			((255 * 1024) - 1)
-#define IXL_MAX_DMA_SEG_SIZE		((16 * 1024) - 1)
-
-/*
- * Our TCP/IP Stack is unable handle packets greater than MAXMCLBYTES.
- * This interface is unable handle packets greater than IXL_TSO_SIZE.
- */
-CTASSERT(MAXMCLBYTES < IXL_TSO_SIZE);
 
 #define IXL_PCIREG			PCI_MAPREG_START
 
@@ -1974,7 +1959,6 @@ ixl_attach(struct device *parent, struct device *self, void *aux)
 	ifp->if_capabilities |= IFCAP_CSUM_IPv4 |
 	    IFCAP_CSUM_TCPv4 | IFCAP_CSUM_UDPv4 |
 	    IFCAP_CSUM_TCPv6 | IFCAP_CSUM_UDPv6;
-	ifp->if_capabilities |= IFCAP_TSOv4 | IFCAP_TSOv6;
 
 	ifmedia_init(&sc->sc_media, 0, ixl_media_change, ixl_media_status);
 
@@ -1988,6 +1972,7 @@ ixl_attach(struct device *parent, struct device *self, void *aux)
 	if_attach_queues(ifp, nqueues);
 	if_attach_iqueues(ifp, nqueues);
 
+	mtx_init(&sc->sc_link_state_mtx, IPL_NET);
 	task_set(&sc->sc_link_state_task, ixl_link_state_update, sc);
 	ixl_wr(sc, I40E_PFINT_ICR0_ENA,
 	    I40E_PFINT_ICR0_ENA_LINK_STAT_CHANGE_MASK |
@@ -2619,7 +2604,7 @@ ixl_txr_alloc(struct ixl_softc *sc, unsigned int qid)
 		txm = &maps[i];
 
 		if (bus_dmamap_create(sc->sc_dmat,
-		    MAXMCLBYTES, IXL_TX_PKT_DESCS, IXL_MAX_DMA_SEG_SIZE, 0,
+		    IXL_HARDMTU, IXL_TX_PKT_DESCS, IXL_HARDMTU, 0,
 		    BUS_DMA_WAITOK | BUS_DMA_ALLOCNOW | BUS_DMA_64BIT,
 		    &txm->txm_map) != 0)
 			goto uncreate;
@@ -2803,8 +2788,7 @@ ixl_load_mbuf(bus_dma_tag_t dmat, bus_dmamap_t map, struct mbuf *m)
 }
 
 static uint64_t
-ixl_tx_setup_offload(struct mbuf *m0, struct ixl_tx_ring *txr,
-    unsigned int prod)
+ixl_tx_setup_offload(struct mbuf *m0)
 {
 	struct ether_extracted ext;
 	uint64_t hlen;
@@ -2817,7 +2801,7 @@ ixl_tx_setup_offload(struct mbuf *m0, struct ixl_tx_ring *txr,
 	}
 
 	if (!ISSET(m0->m_pkthdr.csum_flags,
-	    M_IPV4_CSUM_OUT|M_TCP_CSUM_OUT|M_UDP_CSUM_OUT|M_TCP_TSO))
+	    M_IPV4_CSUM_OUT|M_TCP_CSUM_OUT|M_UDP_CSUM_OUT))
 		return (offload);
 
 	ether_extract_headers(m0, &ext);
@@ -2848,33 +2832,6 @@ ixl_tx_setup_offload(struct mbuf *m0, struct ixl_tx_ring *txr,
 	} else if (ext.udp && ISSET(m0->m_pkthdr.csum_flags, M_UDP_CSUM_OUT)) {
 		offload |= IXL_TX_DESC_CMD_L4T_EOFT_UDP;
 		offload |= (sizeof(*ext.udp) >> 2) << IXL_TX_DESC_L4LEN_SHIFT;
-	}
-
-	if (ISSET(m0->m_pkthdr.csum_flags, M_TCP_TSO)) {
-		if (ext.tcp) {
-			struct ixl_tx_desc *ring, *txd;
-			uint64_t cmd = 0, paylen, outlen;
-
-			hlen += ext.tcp->th_off << 2;
-
-			outlen = m0->m_pkthdr.ph_mss;
-			paylen = m0->m_pkthdr.len - ETHER_HDR_LEN - hlen;
-
-			ring = IXL_DMA_KVA(&txr->txr_mem);
-			txd = &ring[prod];
-
-			cmd |= IXL_TX_DESC_DTYPE_CONTEXT;
-			cmd |= IXL_TX_CTX_DESC_CMD_TSO;
-			cmd |= paylen << IXL_TX_CTX_DESC_TLEN_SHIFT;
-			cmd |= outlen << IXL_TX_CTX_DESC_MSS_SHIFT;
-
-			htolem64(&txd->addr, 0);
-			htolem64(&txd->cmd, cmd);
-
-			tcpstat_add(tcps_outpkttso,
-			    (paylen + outlen - 1) / outlen);
-		} else
-			tcpstat_inc(tcps_outbadtso);
 	}
 
 	return (offload);
@@ -2917,8 +2874,7 @@ ixl_start(struct ifqueue *ifq)
 	mask = sc->sc_tx_ring_ndescs - 1;
 
 	for (;;) {
-		/* We need one extra descriptor for TSO packets. */
-		if (free <= (IXL_TX_PKT_DESCS + 1)) {
+		if (free <= IXL_TX_PKT_DESCS) {
 			ifq_set_oactive(ifq);
 			break;
 		}
@@ -2927,16 +2883,10 @@ ixl_start(struct ifqueue *ifq)
 		if (m == NULL)
 			break;
 
-		offload = ixl_tx_setup_offload(m, txr, prod);
+		offload = ixl_tx_setup_offload(m);
 
 		txm = &txr->txr_maps[prod];
 		map = txm->txm_map;
-
-		if (ISSET(m->m_pkthdr.csum_flags, M_TCP_TSO)) {
-			prod++;
-			prod &= mask;
-			free--;
-		}
 
 		if (ixl_load_mbuf(sc->sc_dmat, map, m) != 0) {
 			ifq->ifq_errors++;
