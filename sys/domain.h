@@ -1,4 +1,4 @@
-/*	$OpenBSD: domain.h,v 1.23 2022/11/23 14:50:59 kn Exp $	*/
+/*	$OpenBSD: domain.h,v 1.24 2024/01/11 14:15:12 bluhm Exp $	*/
 /*	$NetBSD: domain.h,v 1.10 1996/02/09 18:25:07 christos Exp $	*/
 
 /*
