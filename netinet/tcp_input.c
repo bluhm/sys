@@ -540,7 +540,7 @@ findpcb:
 		switch (af) {
 #ifdef INET6
 		case AF_INET6:
-			inp = in6_pcblookup(&tcbtable, &ip6->ip6_src,
+			inp = in6_pcblookup(&tcb6table, &ip6->ip6_src,
 			    th->th_sport, &ip6->ip6_dst, th->th_dport,
 			    m->m_pkthdr.ph_rtableid);
 			break;
@@ -557,10 +557,10 @@ findpcb:
 		switch (af) {
 #ifdef INET6
 		case AF_INET6:
-			inp = in6_pcblookup_listen(&tcbtable, &ip6->ip6_dst,
+			inp = in6_pcblookup_listen(&tcb6table, &ip6->ip6_dst,
 			    th->th_dport, m, m->m_pkthdr.ph_rtableid);
 			break;
-#endif /* INET6 */
+#endif
 		case AF_INET:
 			inp = in_pcblookup_listen(&tcbtable, ip->ip_dst,
 			    th->th_dport, m, m->m_pkthdr.ph_rtableid);

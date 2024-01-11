@@ -171,6 +171,9 @@ const struct sysctl_bounded_args tcpctl_vars[] = {
 };
 
 struct	inpcbtable tcbtable;
+#ifdef INET6
+struct	inpcbtable tcb6table;
+#endif
 
 int	tcp_fill_info(struct tcpcb *, struct socket *, struct mbuf *);
 int	tcp_ident(void *, size_t *, void *, size_t, int);
@@ -452,6 +455,7 @@ tcp_ctloutput(int op, struct socket *so, int level, int optname,
 int
 tcp_attach(struct socket *so, int proto, int wait)
 {
+	struct inpcbtable *table;
 	struct tcpcb *tp;
 	struct inpcb *inp;
 	int error;
@@ -467,7 +471,13 @@ tcp_attach(struct socket *so, int proto, int wait)
 	}
 
 	NET_ASSERT_LOCKED();
-	error = in_pcballoc(so, &tcbtable, wait);
+#ifdef INET6
+	if (so->so_proto->pr_domain->dom_family == PF_INET6)
+		table = &tcb6table;
+	else
+#endif
+		table = &tcbtable;
+	error = in_pcballoc(so, table, wait);
 	if (error)
 		return (error);
 	inp = sotoinpcb(so);
@@ -1148,7 +1158,7 @@ tcp_ident(void *oldp, size_t *oldlenp, void *newp, size_t newlen, int dodrop)
 	switch (tir.faddr.ss_family) {
 #ifdef INET6
 	case AF_INET6:
-		inp = in6_pcblookup(&tcbtable, &f6,
+		inp = in6_pcblookup(&tcb6table, &f6,
 		    fin6->sin6_port, &l6, lin6->sin6_port, tir.rdomain);
 		break;
 #endif
@@ -1175,7 +1185,7 @@ tcp_ident(void *oldp, size_t *oldlenp, void *newp, size_t newlen, int dodrop)
 		switch (tir.faddr.ss_family) {
 #ifdef INET6
 		case AF_INET6:
-			inp = in6_pcblookup_listen(&tcbtable,
+			inp = in6_pcblookup_listen(&tcb6table,
 			    &l6, lin6->sin6_port, NULL, tir.rdomain);
 			break;
 #endif

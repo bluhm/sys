@@ -159,6 +159,9 @@ tcp_init(void)
 	    "sackhl", NULL);
 	pool_sethardlimit(&sackhl_pool, tcp_sackhole_limit, NULL, 0);
 	in_pcbinit(&tcbtable, TCB_INITIAL_HASH_SIZE);
+#ifdef INET6
+	in_pcbinit(&tcb6table, TCB_INITIAL_HASH_SIZE);
+#endif
 	tcpcounters = counters_alloc(tcps_ncounters);
 
 	arc4random_buf(tcp_secret, sizeof(tcp_secret));
@@ -675,7 +678,7 @@ tcp6_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *d)
 		 * corresponding to the address in the ICMPv6 message
 		 * payload.
 		 */
-		inp = in6_pcblookup(&tcbtable, &sa6->sin6_addr,
+		inp = in6_pcblookup(&tcb6table, &sa6->sin6_addr,
 		    th.th_dport, &sa6_src->sin6_addr, th.th_sport, rdomain);
 		if (cmd == PRC_MSGSIZE) {
 			/*
@@ -703,7 +706,7 @@ tcp6_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *d)
 			    rdomain);
 		in_pcbunref(inp);
 	} else {
-		in6_pcbnotify(&tcbtable, sa6, 0,
+		in6_pcbnotify(&tcb6table, sa6, 0,
 		    sa6_src, 0, rdomain, cmd, NULL, notify);
 	}
 }
@@ -845,7 +848,7 @@ tcp_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 void
 tcp6_mtudisc_callback(struct sockaddr_in6 *sin6, u_int rdomain)
 {
-	in6_pcbnotify(&tcbtable, sin6, 0,
+	in6_pcbnotify(&tcb6table, sin6, 0,
 	    &sa6_any, 0, rdomain, PRC_MSGSIZE, NULL, tcp_mtudisc);
 }
 #endif /* INET6 */

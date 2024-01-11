@@ -676,7 +676,7 @@ extern	const struct pr_usrreqs tcp6_usrreqs;
 #endif
 
 extern	struct pool tcpcb_pool;
-extern	struct inpcbtable tcbtable;	/* head of queue of active tcpcb's */
+extern	struct inpcbtable tcbtable, tcb6table;	/* queue of active tcpcb's */
 extern	int tcp_do_rfc1323;	/* enabled/disabled? */
 extern	int tcptv_keep_init;	/* [N] time to keep alive initial SYN packet */
 extern	int tcp_mssdflt;	/* default maximum segment size */
