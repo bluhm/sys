@@ -49,7 +49,7 @@ struct	ifnet;
 
 struct domain {
 	int	dom_family;		/* AF_xxx */
-	char	*dom_name;
+	const	char *dom_name;
 	void	(*dom_init)(void);	/* initialize domain data structures */
 					/* externalize access rights */
 	int	(*dom_externalize)(struct mbuf *, socklen_t, int);

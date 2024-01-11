@@ -188,7 +188,7 @@ sonewconn(struct socket *head, int connstatus, int wait)
 		return (NULL);
 	if (head->so_qlen + head->so_q0len > head->so_qlimit * 3)
 		return (NULL);
-	so = soalloc(wait);
+	so = soalloc(head->so_proto->pr_domain, wait);
 	if (so == NULL)
 		return (NULL);
 	so->so_type = head->so_type;

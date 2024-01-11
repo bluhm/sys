@@ -259,6 +259,7 @@ struct ifnet;
 struct sockaddr;
 const struct protosw *pffindproto(int, int, int);
 const struct protosw *pffindtype(int, int);
+const struct domain *pffinddomain(int);
 void pfctlinput(int, struct sockaddr *);
 
 extern u_char ip_protox[];

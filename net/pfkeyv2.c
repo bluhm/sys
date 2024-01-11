@@ -225,7 +225,7 @@ const struct protosw pfkeysw[] = {
 
 const struct domain pfkeydomain = {
   .dom_family = PF_KEY,
-  .dom_name = "PF_KEY",
+  .dom_name = "pfkey",
   .dom_init = pfkey_init,
   .dom_protosw = pfkeysw,
   .dom_protoswNPROTOSW = &pfkeysw[nitems(pfkeysw)],

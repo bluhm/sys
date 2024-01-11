@@ -62,7 +62,6 @@ const struct domain *const domains[] = {
 
 void		pffasttimo(void *);
 void		pfslowtimo(void *);
-const struct domain *	pffinddomain(int);
 
 void
 domaininit(void)

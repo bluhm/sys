@@ -387,7 +387,7 @@ const struct protosw inetsw[] = {
 
 const struct domain inetdomain = {
   .dom_family = AF_INET,
-  .dom_name = "internet",
+  .dom_name = "inet",
   .dom_init = in_init,
   .dom_protosw = inetsw,
   .dom_protoswNPROTOSW = &inetsw[nitems(inetsw)],
