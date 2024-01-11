@@ -517,7 +517,7 @@ in_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 #ifdef INET6
 	if (ISSET(inp->inp_flags, INP_IPV6))
 		return (in6_pcbconnect(inp, nam));
-#endif /* INET6 */
+#endif
 
 	if ((error = in_nam2sin(nam, &sin)))
 		return (error);
@@ -652,6 +652,13 @@ in_setsockaddr(struct inpcb *inp, struct mbuf *nam)
 {
 	struct sockaddr_in *sin;
 
+#ifdef INET6
+	if (ISSET(inp->inp_flags, INP_IPV6)) {
+		in6_setsockaddr(inp, nam);
+		return;
+	}
+#endif
+
 	nam->m_len = sizeof(*sin);
 	sin = mtod(nam, struct sockaddr_in *);
 	memset(sin, 0, sizeof(*sin));
@@ -671,7 +678,7 @@ in_setpeeraddr(struct inpcb *inp, struct mbuf *nam)
 		in6_setpeeraddr(inp, nam);
 		return;
 	}
-#endif /* INET6 */
+#endif
 
 	nam->m_len = sizeof(*sin);
 	sin = mtod(nam, struct sockaddr_in *);

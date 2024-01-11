@@ -936,9 +936,9 @@ udp_output(struct inpcb *inp, struct mbuf *m, struct mbuf *addr,
 	struct in_addr laddr;
 	int error = 0;
 
-#ifdef DIAGNOSTIC
-	if ((inp->inp_flags & INP_IPV6) != 0)
-		panic("IPv6 inpcb to %s", __func__);
+#ifdef INET6
+	if (ISSET(inp->inp_flags, INP_IPV6))
+		return (udp6_output(inp, m, addr, control));
 #endif
 
 	/*
@@ -1230,7 +1230,6 @@ udp_send(struct socket *so, struct mbuf *m, struct mbuf *addr,
     struct mbuf *control)
 {
 	struct inpcb *inp = sotoinpcb(so);
-	int error;
 
 	soassertlocked(so);
 
@@ -1265,14 +1264,7 @@ udp_send(struct socket *so, struct mbuf *m, struct mbuf *addr,
 	}
 #endif
 
-#ifdef INET6
-	if (inp->inp_flags & INP_IPV6)
-		error = udp6_output(inp, m, addr, control);
-	else
-#endif
-		error = udp_output(inp, m, addr, control);
-
-	return (error);
+	return (udp_output(inp, m, addr, control));
 }
 
 /*
