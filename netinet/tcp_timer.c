@@ -367,7 +367,9 @@ tcp_timer_rexmt(void *arg)
 	 * to go below this.)
 	 */
 	{
-		u_long win = ulmin(tp->snd_wnd, tp->snd_cwnd) / 2 / tp->t_maxseg;
+		u_long win;
+
+		win = ulmin(tp->snd_wnd, tp->snd_cwnd) / 2 / tp->t_maxseg;
 		if (win < 2)
 			win = 2;
 		tp->snd_cwnd = tp->t_maxseg;

@@ -175,7 +175,7 @@ int	tcp_fill_info(struct tcpcb *, struct socket *, struct mbuf *);
 int	tcp_ident(void *, size_t *, void *, size_t, int);
 
 static inline int tcp_sogetpcb(struct socket *, struct inpcb **,
-                      struct tcpcb **);
+		    struct tcpcb **);
 
 static inline int
 tcp_sogetpcb(struct socket *so, struct inpcb **rinp, struct tcpcb **rtp)
@@ -579,7 +579,7 @@ tcp_listen(struct socket *so)
 	if (inp->inp_lport == 0)
 		if ((error = in_pcbbind(inp, NULL, curproc)))
 			goto out;
-	
+
 	/*
 	 * If the in_pcbbind() above is called, the tp->pf
 	 * should still be whatever it was before.
