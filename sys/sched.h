@@ -1,4 +1,4 @@
-/*	$OpenBSD: sched.h,v 1.67 2023/10/24 13:20:11 claudio Exp $	*/
+/*	$OpenBSD: sched.h,v 1.69 2024/01/14 17:23:56 cheloha Exp $	*/
 /* $NetBSD: sched.h,v 1.2 1999/02/28 18:14:58 ross Exp $ */
 
 /*-
@@ -69,8 +69,6 @@
 #ifndef	_SYS_SCHED_H_
 #define	_SYS_SCHED_H_
 
-#include <sys/queue.h>
-
 /*
  * Posix defines a <sched.h> which may want to include <sys/sched.h>
  */
@@ -87,6 +85,17 @@
 #define CP_INTR		4
 #define CP_IDLE		5
 #define CPUSTATES	6
+
+struct cpustats {
+	uint64_t	cs_time[CPUSTATES];	/* CPU state statistics */
+	uint64_t	cs_flags;		/* see below */
+};
+
+#define CPUSTATS_ONLINE		0x0001	/* CPU is schedulable */
+
+#ifdef	_KERNEL
+
+#include <sys/queue.h>
 
 #define	SCHED_NQS	32			/* 32 run queues. */
 
@@ -123,15 +132,6 @@ struct schedstate_percpu {
 					 * without delay */
 	u_char spc_smrgp;		/* this CPU's view of grace period */
 };
-
-struct cpustats {
-	uint64_t	cs_time[CPUSTATES];	/* CPU state statistics */
-	uint64_t	cs_flags;		/* see below */
-};
-
-#define CPUSTATS_ONLINE		0x0001	/* CPU is schedulable */
-
-#ifdef	_KERNEL
 
 /* spc_flags */
 #define SPCF_SEENRR             0x0001  /* process has seen roundrobin() */
