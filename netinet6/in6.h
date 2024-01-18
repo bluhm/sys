@@ -459,6 +459,12 @@ sin6tosa(struct sockaddr_in6 *sin6)
 	return ((struct sockaddr *)(sin6));
 }
 
+static inline const struct sockaddr *
+sin6tosa_const(const struct sockaddr_in6 *sin6)
+{
+	return ((const struct sockaddr *)(sin6));
+}
+
 static inline struct in6_ifaddr *
 ifatoia6(struct ifaddr *ifa)
 {
