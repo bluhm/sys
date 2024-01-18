@@ -423,7 +423,7 @@ in6_peeraddr(struct socket *so, struct mbuf *nam)
  *    once PCB to be notified has been located.
  */
 void
-in6_pcbnotify(struct inpcbtable *table, struct sockaddr_in6 *dst,
+in6_pcbnotify(struct inpcbtable *table, const struct sockaddr_in6 *dst,
     uint fport_arg, const struct sockaddr_in6 *src, uint lport_arg,
     u_int rtable, int cmd, void *cmdarg, void (*notify)(struct inpcb *, int))
 {

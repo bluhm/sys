@@ -367,7 +367,7 @@ struct rtentry *
 	in_pcbrtentry(struct inpcb *);
 
 /* INET6 stuff */
-void	in6_pcbnotify(struct inpcbtable *, struct sockaddr_in6 *,
+void	in6_pcbnotify(struct inpcbtable *, const struct sockaddr_in6 *,
 	u_int, const struct sockaddr_in6 *, u_int, u_int, int, void *,
 	void (*)(struct inpcb *, int));
 int	in6_selecthlim(const struct inpcb *);
