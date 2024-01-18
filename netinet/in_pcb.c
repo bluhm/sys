@@ -960,7 +960,7 @@ in_pcbrtentry(struct inpcb *inp)
  * an entry to the caller for later use.
  */
 int
-in_pcbselsrc(struct in_addr *insrc, struct sockaddr_in *sin,
+in_pcbselsrc(struct in_addr *insrc, const struct sockaddr_in *dst,
     struct inpcb *inp)
 {
 	struct ip_moptions *mopts = inp->inp_moptions;
@@ -968,8 +968,6 @@ in_pcbselsrc(struct in_addr *insrc, struct sockaddr_in *sin,
 	const struct in_addr *laddr = &inp->inp_laddr;
 	u_int rtableid = inp->inp_rtableid;
 	struct sockaddr	*ip4_source = NULL;
-
-	struct sockaddr_in *sin2;
 	struct in_ifaddr *ia = NULL;
 
 	/*
@@ -988,8 +986,8 @@ in_pcbselsrc(struct in_addr *insrc, struct sockaddr_in *sin,
 	 * been set as a multicast option, use the address of that
 	 * interface as our source address.
 	 */
-	if ((IN_MULTICAST(sin->sin_addr.s_addr) ||
-	    sin->sin_addr.s_addr == INADDR_BROADCAST) && mopts != NULL) {
+	if ((IN_MULTICAST(dst->sin_addr.s_addr) ||
+	    dst->sin_addr.s_addr == INADDR_BROADCAST) && mopts != NULL) {
 		struct ifnet *ifp;
 
 		ifp = if_get(mopts->imo_ifidx);
@@ -1012,15 +1010,17 @@ in_pcbselsrc(struct in_addr *insrc, struct sockaddr_in *sin,
 	 * our src addr is taken from the i/f, else punt.
 	 */
 	if (!rtisvalid(ro->ro_rt) || (ro->ro_tableid != rtableid) ||
-	    (satosin(&ro->ro_dst)->sin_addr.s_addr != sin->sin_addr.s_addr)) {
+	    (satosin(&ro->ro_dst)->sin_addr.s_addr != dst->sin_addr.s_addr)) {
 		rtfree(ro->ro_rt);
 		ro->ro_rt = NULL;
 	}
 	if (ro->ro_rt == NULL) {
+		struct sockaddr_in *sin;
+
 		/* No route yet, so try to acquire one */
 		ro->ro_dst.sa_family = AF_INET;
 		ro->ro_dst.sa_len = sizeof(struct sockaddr_in);
-		satosin(&ro->ro_dst)->sin_addr = sin->sin_addr;
+		satosin(&ro->ro_dst)->sin_addr = dst->sin_addr;
 		ro->ro_tableid = rtableid;
 		ro->ro_rt = rtalloc_mpath(&ro->ro_dst, NULL, ro->ro_tableid);
 
@@ -1028,8 +1028,8 @@ in_pcbselsrc(struct in_addr *insrc, struct sockaddr_in *sin,
 		 * It is important to zero out the rest of the
 		 * struct sockaddr_in when mixing v6 & v4!
 		 */
-		sin2 = satosin(&ro->ro_dst);
-		memset(sin2->sin_zero, 0, sizeof(sin2->sin_zero));
+		sin = satosin(&ro->ro_dst);
+		memset(sin->sin_zero, 0, sizeof(sin->sin_zero));
 	}
 
 	/*
