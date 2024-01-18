@@ -352,7 +352,7 @@ void	 in_pcbinit(struct inpcbtable *, int);
 struct inpcb *
 	 in_pcblookup_local_lock(struct inpcbtable *, const void *, u_int, int,
 	    u_int, int);
-void	 in_pcbnotifyall(struct inpcbtable *, struct sockaddr *,
+void	 in_pcbnotifyall(struct inpcbtable *, const struct sockaddr_in *,
 	    u_int, int, void (*)(struct inpcb *, int));
 void	 in_pcbrehash(struct inpcb *);
 void	 in_rtchange(struct inpcb *, int);

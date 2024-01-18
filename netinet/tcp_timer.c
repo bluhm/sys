@@ -236,8 +236,8 @@ tcp_timer_rexmt(void *arg)
 		sin.sin_len = sizeof(sin);
 		sin.sin_family = AF_INET;
 		sin.sin_addr = inp->inp_faddr;
-		in_pcbnotifyall(&tcbtable, sintosa(&sin), inp->inp_rtableid,
-		    EMSGSIZE, tcp_mtudisc);
+		in_pcbnotifyall(&tcbtable, &sin, inp->inp_rtableid, EMSGSIZE,
+		    tcp_mtudisc);
 		goto out;
 	}
 

@@ -919,7 +919,7 @@ udp_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 			notify(inp, errno);
 		in_pcbunref(inp);
 	} else
-		in_pcbnotifyall(&udbtable, sa, rdomain, errno, notify);
+		in_pcbnotifyall(&udbtable, satosin(sa), rdomain, errno, notify);
 }
 
 int
