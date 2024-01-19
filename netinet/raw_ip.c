@@ -171,12 +171,10 @@ rip_input(struct mbuf **mp, int *offp, int proto, int af)
 	rw_enter_write(&rawcbtable.inpt_notify);
 	mtx_enter(&rawcbtable.inpt_mtx);
 	TAILQ_FOREACH(inp, &rawcbtable.inpt_queue, inp_queue) {
+		KASSERT(!ISSET(inp->inp_flags, INP_IPV6));
+
 		if (inp->inp_socket->so_rcv.sb_state & SS_CANTRCVMORE)
 			continue;
-#ifdef INET6
-		if (inp->inp_flags & INP_IPV6)
-			continue;
-#endif
 		if (rtable_l2(inp->inp_rtableid) !=
 		    rtable_l2(m->m_pkthdr.ph_rtableid))
 			continue;
