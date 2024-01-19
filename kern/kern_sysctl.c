@@ -1529,7 +1529,7 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 			break;
 		}
 		matched = 0;
-		for (pr = priterator(NULL); pr != NULL; pr = priterator(pr)) {
+		LIST_FOREACH(pr, &allprocess, ps_list) {
 			/*
 			 * skip system, exiting, embryonic and undead
 			 * processes
@@ -1561,7 +1561,7 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 			error = ESRCH;
 		break;
 	case KERN_FILE_BYUID:
-		for (pr = priterator(NULL); pr != NULL; pr = priterator(pr)) {
+		LIST_FOREACH(pr, &allprocess, ps_list) {
 			/*
 			 * skip system, exiting, embryonic and undead
 			 * processes

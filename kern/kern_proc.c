@@ -231,26 +231,6 @@ prfind(pid_t pid)
 	return (NULL);
 }
 
-struct process *
-priterator(struct process *ps)
-{
-	struct process *nps;
-
-	KERNEL_ASSERT_LOCKED();
-
-	if (ps == NULL)
-		nps = LIST_FIRST(&allprocess);
-	else
-		nps = LIST_NEXT(ps, ps_list);
-
-	if (nps)
-		refcnt_take(&nps->ps_refcnt);
-	if (ps)
-		refcnt_rele_wake(&ps->ps_refcnt);
-
-	return nps;
-}
-
 /*
  * Locate a process group by number
  */

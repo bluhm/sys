@@ -197,7 +197,6 @@ process_initialize(struct process *pr, struct proc *p)
 	LIST_INIT(&pr->ps_sigiolst);
 	TAILQ_INIT(&pr->ps_tslpqueue);
 
-	refcnt_init(&pr->ps_refcnt);
 	rw_init(&pr->ps_lock, "pslock");
 	mtx_init(&pr->ps_mtx, IPL_HIGH);
 
