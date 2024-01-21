@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_map.c,v 1.320 2024/01/16 19:05:01 deraadt Exp $	*/
+/*	$OpenBSD: uvm_map.c,v 1.323 2024/01/21 00:26:14 deraadt Exp $	*/
 /*	$NetBSD: uvm_map.c,v 1.86 2000/11/27 08:40:03 chs Exp $	*/
 
 /*
@@ -3144,13 +3144,15 @@ uvm_map_protect(struct vm_map *map, vaddr_t start, vaddr_t end,
 		if (iter->start == iter->end || UVM_ET_ISHOLE(iter))
 			continue;
 
-		if (checkimmutable &&
-		    (iter->etype & UVM_ET_IMMUTABLE)) {
+		if (checkimmutable && (iter->etype & UVM_ET_IMMUTABLE)) {
+#ifdef SMALL_KERNEL
 			if (iter->protection == (PROT_READ | PROT_WRITE) &&
 			    new_prot == PROT_READ) {
 				/* Permit RW to R as a data-locking mechanism */
 				;
-			} else {
+			} else
+#endif
+			{
 				error = EPERM;
 				goto out;
 			}
