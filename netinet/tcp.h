@@ -51,11 +51,11 @@ struct tcphdr {
 	tcp_seq	  th_seq;		/* sequence number */
 	tcp_seq	  th_ack;		/* acknowledgement number */
 #if _BYTE_ORDER == _LITTLE_ENDIAN
-	u_int32_t th_x2:4,		/* (unused) */
+	u_int8_t  th_x2:4,		/* (unused) */
 		  th_off:4;		/* data offset */
 #endif
 #if _BYTE_ORDER == _BIG_ENDIAN
-	u_int32_t th_off:4,		/* data offset */
+	u_int8_t  th_off:4,		/* data offset */
 		  th_x2:4;		/* (unused) */
 #endif
 	u_int8_t  th_flags;
