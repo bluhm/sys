@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_map.c,v 1.323 2024/01/21 00:26:14 deraadt Exp $	*/
+/*	$OpenBSD: uvm_map.c,v 1.326 2024/01/21 17:21:55 deraadt Exp $	*/
 /*	$NetBSD: uvm_map.c,v 1.86 2000/11/27 08:40:03 chs Exp $	*/
 
 /*
@@ -3145,17 +3145,8 @@ uvm_map_protect(struct vm_map *map, vaddr_t start, vaddr_t end,
 			continue;
 
 		if (checkimmutable && (iter->etype & UVM_ET_IMMUTABLE)) {
-#ifdef SMALL_KERNEL
-			if (iter->protection == (PROT_READ | PROT_WRITE) &&
-			    new_prot == PROT_READ) {
-				/* Permit RW to R as a data-locking mechanism */
-				;
-			} else
-#endif
-			{
-				error = EPERM;
-				goto out;
-			}
+			error = EPERM;
+			goto out;
 		}
 		old_prot = iter->protection;
 		if (old_prot == PROT_NONE && new_prot != old_prot) {
@@ -4166,7 +4157,8 @@ int
 uvm_map_inherit(struct vm_map *map, vaddr_t start, vaddr_t end,
     vm_inherit_t new_inheritance)
 {
-	struct vm_map_entry *entry;
+	struct vm_map_entry *entry, *entry1;
+	int error = EPERM;
 
 	switch (new_inheritance) {
 	case MAP_INHERIT_NONE:
@@ -4193,14 +4185,27 @@ uvm_map_inherit(struct vm_map *map, vaddr_t start, vaddr_t end,
 	else
 		entry = RBT_NEXT(uvm_map_addr, entry);
 
+	/* First check for illegal operations */
+	entry1 = entry;
+	while (entry1 != NULL && entry1->start < end) {
+		if (entry1->etype & UVM_ET_IMMUTABLE)
+			goto out;
+		if (new_inheritance == MAP_INHERIT_ZERO &&
+		    (entry1->protection & PROT_WRITE) == 0)
+			goto out;
+		entry1 = RBT_NEXT(uvm_map_addr, entry1);
+	}
+
 	while (entry != NULL && entry->start < end) {
 		UVM_MAP_CLIP_END(map, entry, end);
 		entry->inheritance = new_inheritance;
 		entry = RBT_NEXT(uvm_map_addr, entry);
 	}
 
+	error = 0;
+out:
 	vm_map_unlock(map);
-	return (0);
+	return (error);
 }
 
 #ifdef PMAP_CHECK_COPYIN
@@ -4289,7 +4294,8 @@ uvm_map_syscall(struct vm_map *map, vaddr_t start, vaddr_t end)
 int
 uvm_map_immutable(struct vm_map *map, vaddr_t start, vaddr_t end, int imut)
 {
-	struct vm_map_entry *entry;
+	struct vm_map_entry *entry, *entry1;
+	int error = EPERM;
 
 	if (start > end)
 		return EINVAL;
@@ -4306,6 +4312,14 @@ uvm_map_immutable(struct vm_map *map, vaddr_t start, vaddr_t end, int imut)
 	else
 		entry = RBT_NEXT(uvm_map_addr, entry);
 
+	/* First check for illegal operations */
+	entry1 = entry;
+	while (entry1 != NULL && entry1->start < end) {
+		if (entry1->inheritance == MAP_INHERIT_ZERO)
+			goto out;
+		entry1 = RBT_NEXT(uvm_map_addr, entry1);
+	}
+	
 	while (entry != NULL && entry->start < end) {
 		UVM_MAP_CLIP_END(map, entry, end);
 		if (imut)
@@ -4316,6 +4330,8 @@ uvm_map_immutable(struct vm_map *map, vaddr_t start, vaddr_t end, int imut)
 	}
 
 	map->wserial++;
+	error = 0;
+out:
 	vm_map_unlock(map);
 	return (0);
 }
@@ -4553,9 +4569,13 @@ uvm_map_clean(struct vm_map *map, vaddr_t start, vaddr_t end, int flags)
 	vm_map_lock(map);
 	first = uvm_map_entrybyaddr(&map->addr, start);
 
-	/* Make a first pass to check for holes. */
+	/* Make a first pass to check for various conditions. */
 	for (entry = first; entry != NULL && entry->start < end;
 	    entry = RBT_NEXT(uvm_map_addr, entry)) {
+		if (entry->etype & UVM_ET_IMMUTABLE) {
+			vm_map_unlock(map);
+			return EPERM;
+		}
 		if (UVM_ET_ISSUBMAP(entry)) {
 			vm_map_unlock(map);
 			return EINVAL;
