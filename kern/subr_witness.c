@@ -2108,6 +2108,8 @@ db_witness_list_all(db_expr_t addr, int have_addr, db_expr_t count, char *modif)
 	 * by WITNESS.
 	 */
 	LIST_FOREACH(pr, &allprocess, ps_list) {
+		if (PROCESS_IS_ITERATOR(pr))
+			continue;
 		if (!witness_process_has_locks(pr))
 			continue;
 		TAILQ_FOREACH(p, &pr->ps_threads, p_thr_link) {

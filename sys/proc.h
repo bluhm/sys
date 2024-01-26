@@ -50,6 +50,7 @@
 #include <sys/resource.h>		/* For struct rusage */
 #include <sys/rwlock.h>			/* For struct rwlock */
 #include <sys/sigio.h>			/* For struct sigio */
+#include <sys/refcnt.h>
 
 #ifdef _KERNEL
 #include <sys/atomic.h>
@@ -171,6 +172,7 @@ struct process {
 
 	struct	futex_list ps_ftlist;	/* futexes attached to this process */
 	struct	tslpqueue ps_tslpqueue;	/* [p] queue of threads in thrsleep */
+	struct	refcnt	ps_refcnt;
 	struct	rwlock	ps_lock;	/* per-process rwlock */
 	struct  mutex	ps_mtx;		/* per-process mutex */
 
@@ -304,6 +306,17 @@ struct process {
      "\024NOBROADCASTKILL" "\025PLEDGE" "\026WXNEEDED" "\027EXECPLEDGE" \
      "\030ORPHAN" "\031CHROOT" "\032NOBTCFI" "\033ITIMER")
 
+struct process_iterator {
+	void *ps_mainproc;
+	void *ps_ucred;
+	LIST_ENTRY(process) ps_list;	/* List of all processes. */
+};
+
+#define PROCESS_ITERATOR(__iter) \
+	struct process_iterator (__iter) = {.ps_mainproc = NULL,}
+
+#define PROCESS_IS_ITERATOR(__ps) \
+	((struct proccess *)(__ps)->ps_mainproc == NULL)
 
 struct kcov_dev;
 struct lock_list_entry;
@@ -538,6 +551,7 @@ void	freepid(pid_t);
 
 struct process *prfind(pid_t);	/* Find process by id. */
 struct process *zombiefind(pid_t); /* Find zombie process by id. */
+struct process *priterator(struct process *, struct process_iterator *);
 struct proc *tfind(pid_t);	/* Find thread by id. */
 struct pgrp *pgfind(pid_t);	/* Find process group by id. */
 struct proc *tfind_user(pid_t, struct process *);

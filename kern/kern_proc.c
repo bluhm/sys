@@ -231,6 +231,35 @@ prfind(pid_t pid)
 	return (NULL);
 }
 
+struct process *
+priterator(struct process *ps, struct process_iterator *iter)
+{
+	struct process *nps;
+
+	KERNEL_ASSERT_LOCKED();
+
+	if (ps)
+		nps = LIST_NEXT(ps, ps_list);
+	else
+		nps = LIST_FIRST(&allprocess);
+
+	while (nps && PROCESS_IS_ITERATOR(nps))
+		nps = LIST_NEXT(nps, ps_list);
+
+	if (ps)
+		LIST_REMOVE(iter, ps_list);
+
+	if (nps) {
+		LIST_INSERT_AFTER(nps, (struct process *)iter, ps_list);
+		refcnt_take(&nps->ps_refcnt);
+	}
+
+	if (ps)
+		refcnt_rele_wake(&ps->ps_refcnt);
+
+	return nps;
+}
+
 /*
  * Locate a process group by number
  */
@@ -642,7 +671,11 @@ db_show_all_procs(db_expr_t addr, int haddr, db_expr_t count, char *modif)
 				}
 			}
 		}
-		pr = LIST_NEXT(pr, ps_list);
+		while ((pr = LIST_NEXT(pr, ps_list))) {
+			if (PROCESS_IS_ITERATOR(pr))
+				continue;
+			break;
+		}	
 		if (pr == NULL && skipzomb == 0) {
 			skipzomb = 1;
 			pr = LIST_FIRST(&zombprocess);

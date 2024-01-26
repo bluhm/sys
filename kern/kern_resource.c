@@ -123,6 +123,8 @@ sys_getpriority(struct proc *curp, void *v, register_t *retval)
 		if (SCARG(uap, who) == 0)
 			SCARG(uap, who) = curp->p_ucred->cr_uid;
 		LIST_FOREACH(pr, &allprocess, ps_list)
+			if (PROCESS_IS_ITERATOR(pr))
+				continue;
 			if (pr->ps_ucred->cr_uid == SCARG(uap, who) &&
 			    pr->ps_nice < low)
 				low = pr->ps_nice;
@@ -179,6 +181,8 @@ sys_setpriority(struct proc *curp, void *v, register_t *retval)
 		if (SCARG(uap, who) == 0)
 			SCARG(uap, who) = curp->p_ucred->cr_uid;
 		LIST_FOREACH(pr, &allprocess, ps_list)
+			if (PROCESS_IS_ITERATOR(pr))
+				continue;
 			if (pr->ps_ucred->cr_uid == SCARG(uap, who)) {
 				error = donice(curp, pr, SCARG(uap, prio));
 				found = 1;

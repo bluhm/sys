@@ -826,6 +826,9 @@ unveil_removevnode(struct vnode *vp)
 	LIST_FOREACH(pr, &allprocess, ps_list) {
 		struct unveil * uv;
 
+		if (PROCESS_IS_ITERATOR(pr))
+			continue;
+
 		if ((uv = unveil_lookup(vp, pr, NULL)) != NULL &&
 		    uv->uv_vp != NULL) {
 			uv->uv_vp = NULL;

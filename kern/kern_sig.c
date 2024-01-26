@@ -671,6 +671,8 @@ killpg1(struct proc *cp, int signum, int pgid, int all)
 		 * broadcast
 		 */
 		LIST_FOREACH(pr, &allprocess, ps_list) {
+			if (PROCESS_IS_ITERATOR(pr))
+				continue;
 			if (pr->ps_pid <= 1 ||
 			    pr->ps_flags & (PS_SYSTEM | PS_NOBROADCASTKILL) ||
 			    pr == cp->p_p || !cansignal(cp, pr, signum))
@@ -1445,6 +1447,8 @@ proc_stop_sweep(void *v)
 	struct process *pr;
 
 	LIST_FOREACH(pr, &allprocess, ps_list) {
+		if (PROCESS_IS_ITERATOR(pr))
+			continue;
 		if ((pr->ps_flags & PS_STOPPED) == 0)
 			continue;
 		atomic_clearbits_int(&pr->ps_flags, PS_STOPPED);

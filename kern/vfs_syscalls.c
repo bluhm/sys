@@ -325,6 +325,9 @@ checkdirs(struct vnode *olddp)
 	if (VFS_ROOT(olddp->v_mountedhere, &newdp))
 		panic("mount: lost mount");
 	LIST_FOREACH(pr, &allprocess, ps_list) {
+		if (PROCESS_IS_ITERATOR(pr))
+			continue;
+
 		fdp = pr->ps_fd;
 		if (fdp->fd_cdir == olddp) {
 			free_count++;

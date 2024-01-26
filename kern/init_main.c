@@ -485,6 +485,8 @@ main(void *framep)
 	 * from the file system. 
 	 */
 	LIST_FOREACH(pr, &allprocess, ps_list) {
+		if (PROCESS_IS_ITERATOR(pr))
+			continue;
 		nanouptime(&pr->ps_start);
 	}
 	nanouptime(&curcpu()->ci_schedstate.spc_runtime);

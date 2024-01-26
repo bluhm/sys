@@ -165,6 +165,8 @@ exit1(struct proc *p, int xexit, int xsig, int flags)
 		/* main thread gotta wait because it has the pid, et al */
 		while (pr->ps_threadcnt > 1)
 			tsleep_nsec(&pr->ps_threads, PWAIT, "thrdeath", INFSLP);
+		LIST_REMOVE(pr, ps_list);
+		refcnt_finalize(&pr->ps_refcnt, "psdtor");
 	}
 
 	rup = pr->ps_ru;
@@ -257,7 +259,6 @@ exit1(struct proc *p, int xexit, int xsig, int flags)
 
 	if ((p->p_flag & P_THREAD) == 0) {
 		LIST_REMOVE(pr, ps_hash);
-		LIST_REMOVE(pr, ps_list);
 
 		if ((pr->ps_flags & PS_NOZOMBIE) == 0)
 			LIST_INSERT_HEAD(&zombprocess, pr, ps_list);

@@ -453,6 +453,9 @@ doktrace(struct vnode *vp, int ops, int facs, pid_t pid, struct proc *p)
 	 */
 	if (ops == KTROP_CLEARFILE) {
 		LIST_FOREACH(pr, &allprocess, ps_list) {
+			if (PROCESS_IS_ITERATOR(pr))
+				continue;
+
 			if (pr->ps_tracevp == vp) {
 				if (ktrcanset(p, pr))
 					ktrcleartrace(pr);
@@ -693,6 +696,8 @@ bad:
 	log(LOG_NOTICE, "ktrace write failed, errno %d, tracing stopped\n",
 	    error);
 	LIST_FOREACH(pr, &allprocess, ps_list) {
+		if (PROCESS_IS_ITERATOR(pr))
+			continue;
 		if (pr == curp->p_p)
 			continue;
 		if (pr->ps_tracevp == vp && pr->ps_tracecred == cred)

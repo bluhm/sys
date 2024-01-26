@@ -364,6 +364,8 @@ uvm_swapout_threads(void)
 	outpr = NULL;
 	outpri = 0;
 	LIST_FOREACH(pr, &allprocess, ps_list) {
+		if (PROCESS_IS_ITERATOR(pr))
+			continue;
 		if (pr->ps_flags & (PS_SYSTEM | PS_EXITING))
 			continue;
 

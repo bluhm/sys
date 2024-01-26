@@ -1522,14 +1522,17 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 			}
 		}
 		break;
-	case KERN_FILE_BYPID:
+	case KERN_FILE_BYPID: {
+		PROCESS_ITERATOR(iter);
+
 		/* A arg of -1 indicates all processes */
 		if (arg < -1) {
 			error = EINVAL;
 			break;
 		}
 		matched = 0;
-		LIST_FOREACH(pr, &allprocess, ps_list) {
+		for (pr = priterator(NULL, &iter); pr != NULL;
+		    pr = priterator(pr, &iter)) {
 			/*
 			 * skip system, exiting, embryonic and undead
 			 * processes
@@ -1560,8 +1563,12 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 		if (!matched)
 			error = ESRCH;
 		break;
-	case KERN_FILE_BYUID:
-		LIST_FOREACH(pr, &allprocess, ps_list) {
+	}
+	case KERN_FILE_BYUID: {
+		PROCESS_ITERATOR(iter);
+
+		for (pr = priterator(NULL, &iter); pr != NULL;
+		    pr = priterator(pr, &iter)) {
 			/*
 			 * skip system, exiting, embryonic and undead
 			 * processes
@@ -1587,6 +1594,7 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 			}
 		}
 		break;
+	}
 	default:
 		error = EINVAL;
 		break;
@@ -1645,6 +1653,8 @@ sysctl_doproc(int *name, u_int namelen, char *where, size_t *sizep)
 	doingzomb = 0;
 again:
 	for (; pr != NULL; pr = LIST_NEXT(pr, ps_list)) {
+		if (PROCESS_IS_ITERATOR(pr))
+			continue;
 		/* XXX skip processes in the middle of being zapped */
 		if (pr->ps_pgrp == NULL)
 			continue;
