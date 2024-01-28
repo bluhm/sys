@@ -916,24 +916,10 @@ in_pcbrtentry(struct inpcb *inp)
 
 	ro = &inp->inp_route;
 
-	/* check if route is still valid */
-	if (!rtisvalid(ro->ro_rt)) {
-		rtfree(ro->ro_rt);
-		ro->ro_rt = NULL;
-	}
-
-	/*
-	 * No route yet, so try to acquire one.
-	 */
+	if (inp->inp_faddr.s_addr == INADDR_ANY)
+		return (NULL);
+	route_cache(ro, inp->inp_faddr, inp->inp_rtableid);
 	if (ro->ro_rt == NULL) {
-		memset(ro, 0, sizeof(struct route));
-
-		if (inp->inp_faddr.s_addr == INADDR_ANY)
-			return (NULL);
-		ro->ro_dst.sa_family = AF_INET;
-		ro->ro_dst.sa_len = sizeof(struct sockaddr_in);
-		satosin(&ro->ro_dst)->sin_addr = inp->inp_faddr;
-		ro->ro_tableid = inp->inp_rtableid;
 		ro->ro_rt = rtalloc_mpath(&ro->ro_dst,
 		    &inp->inp_laddr.s_addr, ro->ro_tableid);
 	}

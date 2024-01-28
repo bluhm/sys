@@ -230,6 +230,34 @@ route_cache(struct route *ro, struct in_addr addr, u_int rtableid)
 	satosin(&ro->ro_dst)->sin_addr = addr;
 }
 
+void
+route6_cache(struct route_in6 *ro, const struct in6_addr *addr,
+    u_int rtableid)
+{
+	u_long gen;
+
+	gen = atomic_load_long(&rtgeneration);
+	membar_consumer();
+
+	if (rtisvalid(ro->ro_rt) &&
+	    ro->ro_generation == gen &&
+	    ro->ro_tableid == rtableid &&
+	    ro->ro_dst.sin6_family == AF_INET6 &&
+	    IN6_ARE_ADDR_EQUAL(&ro->ro_dst.sin6_addr, addr)) {
+		    return;
+	}
+
+	rtfree(ro->ro_rt);
+	ro->ro_rt = NULL;
+	ro->ro_generation = gen;
+	ro->ro_tableid = rtableid;
+
+	memset(&ro->ro_dst, 0, sizeof(ro->ro_dst));
+	ro->ro_dst.sin6_family = AF_INET6;
+	ro->ro_dst.sin6_len = sizeof(struct sockaddr_in6);
+	ro->ro_dst.sin6_addr = *addr;
+}
+
 /*
  * Returns 1 if the (cached) ``rt'' entry is still valid, 0 otherwise.
  */
