@@ -159,28 +159,15 @@ reroute:
 	 */
 	if (ro == NULL) {
 		ro = &iproute;
-		memset(ro, 0, sizeof(*ro));
+		ro->ro_rt = NULL;
 	}
-
-	dst = satosin(&ro->ro_dst);
 
 	/*
 	 * If there is a cached route, check that it is to the same
 	 * destination and is still up.  If not, free it and try again.
 	 */
-	if (!rtisvalid(ro->ro_rt) ||
-	    dst->sin_addr.s_addr != ip->ip_dst.s_addr ||
-	    ro->ro_tableid != m->m_pkthdr.ph_rtableid) {
-		rtfree(ro->ro_rt);
-		ro->ro_rt = NULL;
-	}
-
-	if (ro->ro_rt == NULL) {
-		dst->sin_family = AF_INET;
-		dst->sin_len = sizeof(*dst);
-		dst->sin_addr = ip->ip_dst;
-		ro->ro_tableid = m->m_pkthdr.ph_rtableid;
-	}
+	route_validate(ro, ip->ip_dst, m->m_pkthdr.ph_rtableid);
+	dst = satosin(&ro->ro_dst);
 
 	if ((IN_MULTICAST(ip->ip_dst.s_addr) ||
 	    (ip->ip_dst.s_addr == INADDR_BROADCAST)) &&

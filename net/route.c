@@ -201,6 +201,33 @@ route_init(void)
 #endif
 }
 
+void
+route_validate(struct route *ro, struct in_addr addr, u_int rtableid)
+{
+	u_long gen;
+
+	gen = atomic_load_long(&rtgeneration);
+	membar_consumer();
+
+	if (rtisvalid(ro->ro_rt) &&
+	    ro->ro_generation == gen &&
+	    ro->ro_tableid == rtableid &&
+	    ro->ro_dst.sa_family == AF_INET &&
+	    satosin(&ro->ro_dst)->sin_addr.s_addr == addr.s_addr) {
+		return;
+	}
+
+	rtfree(ro->ro_rt);
+	ro->ro_rt = NULL;
+	ro->ro_generation = gen;
+	ro->ro_tableid = rtableid;
+
+	memset(&ro->ro_dst, 0, sizeof(ro->ro_dst));
+	satosin(&ro->ro_dst)->sin_family = AF_INET;
+	satosin(&ro->ro_dst)->sin_len = sizeof(struct sockaddr_in);
+	satosin(&ro->ro_dst)->sin_addr = addr;
+}
+
 /*
  * Returns 1 if the (cached) ``rt'' entry is still valid, 0 otherwise.
  */
