@@ -377,6 +377,7 @@ struct sockaddr_rtsearch {
  */
 struct route {
 	struct	rtentry *ro_rt;
+	u_long		 ro_generation;
 	u_long		 ro_tableid;	/* u_long because of alignment */
 	struct	sockaddr ro_dst;
 };
@@ -438,6 +439,7 @@ void		 rtlabel_unref(u_int16_t);
 #define	RT_RESOLVE	1
 
 extern struct rtstat rtstat;
+extern u_long rtgeneration;
 
 struct mbuf;
 struct socket;

@@ -140,6 +140,7 @@
 
 /*
  * Locks used to protect struct members:
+ *      a       atomic operations
  *      I       immutable after creation
  *      L       rtlabel_mtx
  *      T       rttimer_mtx
@@ -152,8 +153,9 @@ static uint32_t		rt_hashjitter;
 
 extern unsigned int	rtmap_limit;
 
-struct cpumem *		rtcounters;
-int			rttrash;	/* routes not in table but not freed */
+struct cpumem	*rtcounters;
+int		 rttrash;	/* [a] routes not in table but not freed */
+u_long		 rtgeneration;	/* [a] generation number, routes changed */
 
 struct pool	rtentry_pool;		/* pool for rtentry structures */
 struct pool	rttimer_pool;		/* pool for rttimer structures */
@@ -824,6 +826,9 @@ rtrequest_delete(struct rt_addrinfo *info, u_int8_t prio, struct ifnet *ifp,
 	else
 		rtfree(rt);
 
+	membar_producer();
+	atomic_inc_long(&rtgeneration);
+
 	return (0);
 }
 
@@ -992,6 +997,10 @@ rtrequest(int req, struct rt_addrinfo *info, u_int8_t prio,
 			*ret_nrt = rt;
 		else
 			rtfree(rt);
+
+		membar_producer();
+		atomic_inc_long(&rtgeneration);
+
 		break;
 	}
 
@@ -1828,6 +1837,9 @@ rt_if_linkstate_change(struct rtentry *rt, void *arg, u_int id)
 		    rt->rt_priority | RTP_DOWN, rt);
 	}
 	if_group_routechange(rt_key(rt), rt_plen2mask(rt, &sa_mask));
+
+	membar_producer();
+	atomic_inc_long(&rtgeneration);
 
 	return (error);
 }
