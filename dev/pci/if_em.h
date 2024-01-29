@@ -55,11 +55,14 @@ POSSIBILITY OF SUCH DAMAGE.
 
 #include <net/if.h>
 #include <net/if_media.h>
+#include <net/route.h>
 
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <netinet/if_ether.h>
 #include <netinet/tcp.h>
+#include <netinet/tcp_timer.h>
+#include <netinet/tcp_var.h>
 #include <netinet/udp.h>
 
 #if NBPFILTER > 0
@@ -269,6 +272,7 @@ typedef int	boolean_t;
 
 #define EM_MAX_SCATTER		64
 #define EM_TSO_SIZE		65535
+#define EM_TSO_SEG_SIZE		4096	/* Max dma segment size */
 
 struct em_packet {
 	int		 pkt_eop;	/* Index of the desc to watch */
