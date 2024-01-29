@@ -145,10 +145,11 @@ extern const struct in6_addr in6addr_linklocal_allrouters;
 
 #if __BSD_VISIBLE
 /*
- * IPv6 route structure
+ * IPv6 route structure, keep fields in sync with struct route
  */
 struct route_in6 {
 	struct	rtentry *ro_rt;
+	u_long		 ro_generation;
 	u_long		 ro_tableid;	/* padded to long for alignment */
 	struct	sockaddr_in6 ro_dst;
 };
