@@ -367,6 +367,8 @@ struct rtentry *
 	in_pcbrtentry(struct inpcb *);
 
 /* INET6 stuff */
+struct rtentry *
+	in6_pcbrtentry(struct inpcb *);
 void	in6_pcbnotify(struct inpcbtable *, const struct sockaddr_in6 *,
 	u_int, const struct sockaddr_in6 *, u_int, u_int, int, void *,
 	void (*)(struct inpcb *, int));

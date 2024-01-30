@@ -561,6 +561,35 @@ in6_pcbnotify(struct inpcbtable *table, const struct sockaddr_in6 *dst,
 	rw_exit_write(&table->inpt_notify);
 }
 
+struct rtentry *
+in6_pcbrtentry(struct inpcb *inp)
+{
+	struct route_in6 *ro = &inp->inp_route6;
+
+	/* check if route is still valid */
+	if (!rtisvalid(ro->ro_rt)) {
+		rtfree(ro->ro_rt);
+		ro->ro_rt = NULL;
+	}
+
+	/*
+	 * No route yet, so try to acquire one.
+	 */
+	if (ro->ro_rt == NULL) {
+		memset(ro, 0, sizeof(struct route_in6));
+
+		if (IN6_IS_ADDR_UNSPECIFIED(&inp->inp_faddr6))
+			return (NULL);
+		ro->ro_dst.sin6_family = AF_INET6;
+		ro->ro_dst.sin6_len = sizeof(struct sockaddr_in6);
+		ro->ro_dst.sin6_addr = inp->inp_faddr6;
+		ro->ro_tableid = inp->inp_rtableid;
+		ro->ro_rt = rtalloc_mpath(sin6tosa(&ro->ro_dst),
+		    &inp->inp_laddr6.s6_addr32[0], ro->ro_tableid);
+	}
+	return (ro->ro_rt);
+}
+
 struct inpcb *
 in6_pcbhash_lookup(struct inpcbtable *table, uint64_t hash, u_int rdomain,
     const struct in6_addr *faddr, u_short fport,

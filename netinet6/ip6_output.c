@@ -1486,7 +1486,7 @@ do { \
 			if (!(so->so_state & SS_ISCONNECTED))
 				return (ENOTCONN);
 
-			rt = in_pcbrtentry(inp);
+			rt = in6_pcbrtentry(inp);
 			if (!rtisvalid(rt))
 				return (EHOSTUNREACH);
 
