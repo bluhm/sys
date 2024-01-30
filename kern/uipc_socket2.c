@@ -548,7 +548,7 @@ sblock(struct socket *so, struct sockbuf *sb, int flags)
 out:
 	mtx_leave(&sb->sb_mtx);
 
-	return (0);
+	return (error);
 }
 
 void
