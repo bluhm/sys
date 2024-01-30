@@ -127,6 +127,9 @@ void	mtx_leave(struct mutex *);
 
 #define mtx_init(m, ipl)	mtx_init_flags(m, ipl, NULL, 0)
 
+#define mtx_owned(mtx) \
+	(((mtx)->mtx_owner == curcpu()) || panicstr || db_active)
+
 #ifdef WITNESS
 
 void	_mtx_init_flags(struct mutex *, int, const char *, int,

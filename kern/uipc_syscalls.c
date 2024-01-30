@@ -326,7 +326,9 @@ doaccept(struct proc *p, int sock, struct sockaddr *name, socklen_t *anamelen,
 	    : (flags & SOCK_NONBLOCK ? FNONBLOCK : 0);
 
 	/* connection has been removed from the listen queue */
+	mtx_enter(&head->so_rcv.sb_mtx);
 	knote_locked(&head->so_rcv.sb_klist, 0);
+	mtx_leave(&head->so_rcv.sb_mtx);
 
 	if (persocket)
 		sounlock(head);

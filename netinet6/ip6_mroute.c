@@ -861,12 +861,12 @@ socket6_send(struct socket *so, struct mbuf *mm, struct sockaddr_in6 *src)
 
 		mtx_enter(&inp->inp_mtx);
 		ret = sbappendaddr(so, &so->so_rcv, sin6tosa(src), mm, NULL);
+		if (ret != 0)
+			sorwakeup(so);
 		mtx_leave(&inp->inp_mtx);
 
-		if (ret != 0) {
-			sorwakeup(so);
+		if (ret != 0)
 			return 0;
-		}
 	}
 	m_freem(mm);
 	return -1;

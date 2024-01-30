@@ -127,6 +127,7 @@ const struct pr_usrreqs udp_usrreqs = {
 	.pru_detach	= udp_detach,
 	.pru_lock	= udp_lock,
 	.pru_unlock	= udp_unlock,
+	.pru_locked	= udp_locked,
 	.pru_bind	= udp_bind,
 	.pru_connect	= udp_connect,
 	.pru_disconnect	= udp_disconnect,
@@ -143,6 +144,7 @@ const struct pr_usrreqs udp6_usrreqs = {
 	.pru_detach	= udp_detach,
 	.pru_lock	= udp_lock,
 	.pru_unlock	= udp_unlock,
+	.pru_locked	= udp_locked,
 	.pru_bind	= udp_bind,
 	.pru_connect	= udp_connect,
 	.pru_disconnect	= udp_disconnect,
@@ -1154,6 +1156,14 @@ udp_unlock(struct socket *so)
 
 	NET_ASSERT_LOCKED();
 	mtx_leave(&inp->inp_mtx);
+}
+
+int
+udp_locked(struct socket *so)
+{
+	struct inpcb *inp = sotoinpcb(so);
+
+	return mtx_owned(&inp->inp_mtx);
 }
 
 int

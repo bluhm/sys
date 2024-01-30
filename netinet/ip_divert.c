@@ -67,6 +67,7 @@ const struct pr_usrreqs divert_usrreqs = {
 	.pru_detach	= divert_detach,
 	.pru_lock	= divert_lock,
 	.pru_unlock	= divert_unlock,
+	.pru_locked	= divert_locked,
 	.pru_bind	= divert_bind,
 	.pru_shutdown	= divert_shutdown,
 	.pru_send	= divert_send,
@@ -311,6 +312,14 @@ divert_unlock(struct socket *so)
 
 	NET_ASSERT_LOCKED();
 	mtx_leave(&inp->inp_mtx);
+}
+
+int
+divert_locked(struct socket *so)
+{
+	struct inpcb *inp = sotoinpcb(so);
+
+	return mtx_owned(&inp->inp_mtx);
 }
 
 int
