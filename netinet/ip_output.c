@@ -166,7 +166,7 @@ reroute:
 	 * If there is a cached route, check that it is to the same
 	 * destination and is still up.  If not, free it and try again.
 	 */
-	route_validate(ro, ip->ip_dst, m->m_pkthdr.ph_rtableid);
+	route_cache(ro, ip->ip_dst, m->m_pkthdr.ph_rtableid);
 	dst = satosin(&ro->ro_dst);
 
 	if ((IN_MULTICAST(ip->ip_dst.s_addr) ||

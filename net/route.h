@@ -450,7 +450,7 @@ struct if_ieee80211_data;
 struct bfd_config;
 
 void	 route_init(void);
-void	 route_validate(struct route *, struct in_addr, u_int);
+void	 route_cache(struct route *, struct in_addr, u_int);
 void	 rtm_ifchg(struct ifnet *);
 void	 rtm_ifannounce(struct ifnet *, int);
 void	 rtm_bfd(struct bfd_config *);

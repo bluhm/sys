@@ -202,7 +202,7 @@ route_init(void)
 }
 
 void
-route_validate(struct route *ro, struct in_addr addr, u_int rtableid)
+route_cache(struct route *ro, struct in_addr addr, u_int rtableid)
 {
 	u_long gen;
 
