@@ -166,7 +166,7 @@ reroute:
 #endif /* IPSEC */
 
 	ro.ro_rt = NULL;
-	route6_validate(&ro, &ip6->ip6_dst, m->m_pkthdr.ph_rtableid);
+	route6_cache(&ro, &ip6->ip6_dst, m->m_pkthdr.ph_rtableid);
 	dst = sin6tosa(&ro.ro_dst);
 	if (!rtisvalid(rt)) {
 		rtfree(rt);

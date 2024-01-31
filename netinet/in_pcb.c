@@ -918,7 +918,7 @@ in_pcbrtentry(struct inpcb *inp)
 
 	if (inp->inp_faddr.s_addr == INADDR_ANY)
 		return (NULL);
-	route_validate(ro, inp->inp_faddr, inp->inp_rtableid);
+	route_cache(ro, inp->inp_faddr, inp->inp_rtableid);
 	if (ro->ro_rt == NULL) {
 		ro->ro_rt = rtalloc_mpath(&ro->ro_dst,
 		    &inp->inp_laddr.s_addr, ro->ro_tableid);
