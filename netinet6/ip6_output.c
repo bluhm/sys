@@ -480,10 +480,7 @@ reroute:
 			goto bad;
 		}
 	} else {
-		bzero(dst, sizeof(*dst));
-		dst->sin6_family = AF_INET6;
-		dst->sin6_len = sizeof(struct sockaddr_in6);
-		dst->sin6_addr = ip6->ip6_dst;
+		route6_cache(ro, &ip6->ip6_dst, m->m_pkthdr.ph_rtableid);
 	}
 
 	if (rt && (rt->rt_flags & RTF_GATEWAY) &&
