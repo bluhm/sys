@@ -1047,13 +1047,14 @@ ether_extract_headers(struct mbuf *mp, struct ether_extracted *ext)
 
 	if (mp->m_len < sizeof(*ext->eh))
 		return;
-
 	ext->eh = mtod(mp, struct ether_header *);
 	ether_type = ntohs(ext->eh->ether_type);
 	hlen = sizeof(*ext->eh);
 
 #if NVLAN > 0
 	if (ether_type == ETHERTYPE_VLAN) {
+		if (mp->m_len < sizeof(*ext->evh))
+			return;
 		ext->evh = mtod(mp, struct ether_vlan_header *);
 		ether_type = ntohs(ext->evh->evl_proto);
 		hlen = sizeof(*ext->evh);
@@ -1067,12 +1068,15 @@ ether_extract_headers(struct mbuf *mp, struct ether_extracted *ext)
 			return;
 		ext->ip4 = (struct ip *)(mtod(m, caddr_t) + hoff);
 
-		if (ISSET(ntohs(ext->ip4->ip_off), IP_MF|IP_OFFMASK))
-			return;
-
 		hlen = ext->ip4->ip_hl << 2;
+		if (m->m_len - hoff < hlen) {
+			ext->ip4 = NULL;
+			return;
+		}
 		ipproto = ext->ip4->ip_p;
 
+		if (ISSET(ntohs(ext->ip4->ip_off), IP_MF|IP_OFFMASK))
+			return;
 		break;
 #ifdef INET6
 	case ETHERTYPE_IPV6:
@@ -1083,7 +1087,6 @@ ether_extract_headers(struct mbuf *mp, struct ether_extracted *ext)
 
 		hlen = sizeof(*ext->ip6);
 		ipproto = ext->ip6->ip6_nxt;
-
 		break;
 #endif
 	default:
@@ -1096,6 +1099,12 @@ ether_extract_headers(struct mbuf *mp, struct ether_extracted *ext)
 		if (m == NULL || m->m_len - hoff < sizeof(*ext->tcp))
 			return;
 		ext->tcp = (struct tcphdr *)(mtod(m, caddr_t) + hoff);
+
+		hlen = ext->tcp->th_off << 2;
+		if (m->m_len - hoff < hlen) {
+			ext->tcp = NULL;
+			return;
+		}
 		break;
 
 	case IPPROTO_UDP:
