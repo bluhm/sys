@@ -911,7 +911,7 @@ in_pcbrtentry(struct inpcb *inp)
 
 #ifdef INET6
 	if (ISSET(inp->inp_flags, INP_IPV6))
-		in6_pcbrtentry(inp);
+		return in6_pcbrtentry(inp);
 #endif
 
 	ro = &inp->inp_route;
