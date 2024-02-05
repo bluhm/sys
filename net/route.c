@@ -214,9 +214,11 @@ route_cache(struct route *ro, struct in_addr addr, u_int rtableid)
 	    ro->ro_tableid == rtableid &&
 	    ro->ro_dst.sa_family == AF_INET &&
 	    satosin(&ro->ro_dst)->sin_addr.s_addr == addr.s_addr) {
+		ipstat_inc(ips_rtcachehit);
 		return;
 	}
 
+	ipstat_inc(ips_rtcachemiss);
 	rtfree(ro->ro_rt);
 	ro->ro_rt = NULL;
 	ro->ro_generation = gen;
