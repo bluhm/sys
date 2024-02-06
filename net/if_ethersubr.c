@@ -140,6 +140,20 @@ didn't get a copy, you may request one from <license@ipv6.nrl.navy.mil>.
 #include <netmpls/mpls.h>
 #endif /* MPLS */
 
+/* #define ETHERDEBUG 1 */
+#ifdef ETHERDEBUG
+int etherdebug = ETHERDEBUG;
+#define DNPRINTF(level, fmt, args...)					\
+	do {								\
+		if (etherdebug >= level)				\
+			printf("%s: " fmt "\n", __func__, ## args);	\
+	} while (0)
+#else
+#define DNPRINTF(level, fmt, args...)					\
+	do { } while (0)
+#endif
+#define DPRINTF(fmt, args...)	DNPRINTF(1, fmt, args)
+
 u_int8_t etherbroadcastaddr[ETHER_ADDR_LEN] =
     { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
 u_int8_t etheranyaddr[ETHER_ADDR_LEN] =
@@ -1069,16 +1083,22 @@ ether_extract_headers(struct mbuf *mp, struct ether_extracted *ext)
 	/* Return NULL if header was not recognized. */
 	memset(ext, 0, sizeof(*ext));
 
-	if (mp->m_len < sizeof(*ext->eh))
+	if (mp->m_len < sizeof(*ext->eh)) {
+		DPRINTF("m_len %d, eh %zu",
+		    mp->m_len, sizeof(*ext->eh));
 		return;
+	}
 	ext->eh = mtod(mp, struct ether_header *);
 	ether_type = ntohs(ext->eh->ether_type);
 	hlen = sizeof(*ext->eh);
 
 #if NVLAN > 0
 	if (ether_type == ETHERTYPE_VLAN) {
-		if (mp->m_len < sizeof(*ext->evh))
+		if (mp->m_len < sizeof(*ext->evh)) {
+			DPRINTF("m_len %d, evh %zu",
+			    mp->m_len, sizeof(*ext->evh));
 			return;
+		}
 		ext->evh = mtod(mp, struct ether_vlan_header *);
 		ether_type = ntohs(ext->evh->evl_proto);
 		hlen = sizeof(*ext->evh);
@@ -1088,13 +1108,18 @@ ether_extract_headers(struct mbuf *mp, struct ether_extracted *ext)
 	switch (ether_type) {
 	case ETHERTYPE_IP:
 		m = m_getptr(mp, hlen, &hoff);
-		if (m == NULL || m->m_len - hoff < sizeof(*ext->ip4))
+		if (m == NULL || m->m_len - hoff < sizeof(*ext->ip4)) {
+			DPRINTF("m_len %d, hoff %d, ip4 %zu",
+			    m ? m->m_len : -1, hoff, sizeof(*ext->ip4));
 			return;
+		}
 		ext->ip4 = (struct ip *)(mtod(m, caddr_t) + hoff);
 
 		memcpy(&hdrcpy.hc_data, ext->ip4, 1);
 		hlen = hdrcpy.hc_ip.hl << 2;
 		if (m->m_len - hoff < hlen) {
+			DPRINTF("m_len %d, hoff %d, iphl %zu",
+			    m ? m->m_len : -1, hoff, hlen);
 			ext->ip4 = NULL;
 			return;
 		}
@@ -1107,8 +1132,11 @@ ether_extract_headers(struct mbuf *mp, struct ether_extracted *ext)
 #ifdef INET6
 	case ETHERTYPE_IPV6:
 		m = m_getptr(mp, hlen, &hoff);
-		if (m == NULL || m->m_len - hoff < sizeof(*ext->ip6))
+		if (m == NULL || m->m_len - hoff < sizeof(*ext->ip6)) {
+			DPRINTF("m_len %d, hoff %d, ip6 %zu",
+			    m ? m->m_len : -1, hoff, sizeof(*ext->ip6));
 			return;
+		}
 		ext->ip6 = (struct ip6_hdr *)(mtod(m, caddr_t) + hoff);
 
 		hlen = sizeof(*ext->ip6);
@@ -1122,13 +1150,18 @@ ether_extract_headers(struct mbuf *mp, struct ether_extracted *ext)
 	switch (ipproto) {
 	case IPPROTO_TCP:
 		m = m_getptr(m, hoff + hlen, &hoff);
-		if (m == NULL || m->m_len - hoff < sizeof(*ext->tcp))
+		if (m == NULL || m->m_len - hoff < sizeof(*ext->tcp)) {
+			DPRINTF("m_len %d, hoff %d, tcp %zu",
+			    m ? m->m_len : -1, hoff, sizeof(*ext->tcp));
 			return;
+		}
 		ext->tcp = (struct tcphdr *)(mtod(m, caddr_t) + hoff);
 
 		memcpy(&hdrcpy.hc_data, &ext->tcp->th_flags - 1, 1);
 		hlen = hdrcpy.hc_th.off << 2;
 		if (m->m_len - hoff < hlen) {
+			DPRINTF("m_len %d, hoff %d, thoff %zu",
+			    m ? m->m_len : -1, hoff, hlen);
 			ext->tcp = NULL;
 			return;
 		}
@@ -1137,9 +1170,18 @@ ether_extract_headers(struct mbuf *mp, struct ether_extracted *ext)
 
 	case IPPROTO_UDP:
 		m = m_getptr(m, hoff + hlen, &hoff);
-		if (m == NULL || m->m_len - hoff < sizeof(*ext->udp))
+		if (m == NULL || m->m_len - hoff < sizeof(*ext->udp)) {
+			DPRINTF("m_len %d, hoff %d, tcp %zu",
+			    m ? m->m_len : -1, hoff, sizeof(*ext->tcp));
 			return;
+		}
 		ext->udp = (struct udphdr *)(mtod(m, caddr_t) + hoff);
 		break;
 	}
+
+	DNPRINTF(2, "%s%s%s%s%s%s ip4h %u, tcph %u",
+	    ext->eh ? "eh," : "", ext->evh ? "evh," : "",
+	    ext->ip4 ? "ip4," : "", ext->ip6 ? "ip6," : "",
+	    ext->tcp ? "tcp," : "", ext->udp ? "udp," : "",
+	    ext->ip4hlen, ext->tcphlen);
 }
