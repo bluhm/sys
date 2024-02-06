@@ -2502,7 +2502,7 @@ ixgbe_tx_offload(struct mbuf *mp, uint32_t *vlan_macip_lens,
 	*vlan_macip_lens |= (ethlen << IXGBE_ADVTXD_MACLEN_SHIFT);
 
 	if (ext.ip4) {
-		iphlen = ext.ip4->ip_hl << 2;
+		iphlen = ext.ip4hlen;
 
 		if (ISSET(mp->m_pkthdr.csum_flags, M_IPV4_CSUM_OUT)) {
 			*olinfo_status |= IXGBE_TXD_POPTS_IXSM << 8;
@@ -2542,7 +2542,7 @@ ixgbe_tx_offload(struct mbuf *mp, uint32_t *vlan_macip_lens,
 		if (ext.tcp) {
 			uint32_t hdrlen, thlen, paylen, outlen;
 
-			thlen = ext.tcp->th_off << 2;
+			thlen = ext.tcphlen;
 
 			outlen = mp->m_pkthdr.ph_mss;
 			*mss_l4len_idx |= outlen << IXGBE_ADVTXD_MSS_SHIFT;
@@ -3277,11 +3277,11 @@ ixgbe_rxeof(struct rx_ring *rxr)
 					hdrlen += ETHER_VLAN_ENCAP_LEN;
 #endif
 				if (ext.ip4)
-					hdrlen += ext.ip4->ip_hl << 2;
+					hdrlen += ext.ip4hlen;
 				if (ext.ip6)
 					hdrlen += sizeof(*ext.ip6);
 				if (ext.tcp) {
-					hdrlen += ext.tcp->th_off << 2;
+					hdrlen += ext.tcphlen;
 					tcpstat_inc(tcps_inhwlro);
 					tcpstat_add(tcps_inpktlro, pkts);
 				} else {

@@ -1098,7 +1098,7 @@ ether_extract_headers(struct mbuf *mp, struct ether_extracted *ext)
 			ext->ip4 = NULL;
 			return;
 		}
-		ext->iphlen = hlen;
+		ext->ip4hlen = hlen;
 		ipproto = ext->ip4->ip_p;
 
 		if (ISSET(ntohs(ext->ip4->ip_off), IP_MF|IP_OFFMASK))

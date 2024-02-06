@@ -1433,13 +1433,13 @@ bnxt_start(struct ifqueue *ifq)
 				lflags |= TX_BD_LONG_LFLAGS_LSO;
 				hdrsize = sizeof(*ext.eh);
 				if (ext.ip4)
-					hdrsize += ext.ip4->ip_hl << 2;
+					hdrsize += ext.ip4hlen;
 				else if (ext.ip6)
 					hdrsize += sizeof(*ext.ip6);
 				else
 					tcpstat_inc(tcps_outbadtso);
 
-				hdrsize += ext.tcp->th_off << 2;
+				hdrsize += ext.tcphlen;
 				txhi->hdr_size = htole16(hdrsize / 2);
 
 				outlen = m->m_pkthdr.ph_mss;
