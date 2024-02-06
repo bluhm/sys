@@ -1788,7 +1788,7 @@ if_linkstate(struct ifnet *ifp)
 {
 	NET_ASSERT_LOCKED();
 
-	if (panicstr != NULL) {
+	if (panicstr == NULL) {
 		rtm_ifchg(ifp);
 		rt_if_track(ifp);
 	}
