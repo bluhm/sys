@@ -1037,10 +1037,34 @@ void
 ether_extract_headers(struct mbuf *mp, struct ether_extracted *ext)
 {
 	struct mbuf	*m;
-	uint64_t	 hlen;
+	size_t		 hlen;
 	int		 hoff;
 	uint8_t		 ipproto;
 	uint16_t	 ether_type;
+	/* gcc 4.2.1 on sparc64 may create 32 bit loads on unaligned mbuf */
+	union {
+		u_char	hc_data;
+#if _BYTE_ORDER == _LITTLE_ENDIAN
+		struct {
+			u_int	hl:4,	/* header length */
+				v:4;	/* version */
+		} hc_ip;
+		struct {
+			u_int	x2:4,	/* (unused) */
+				off:4;	/* data offset */
+		} hc_th;
+#endif
+#if _BYTE_ORDER == _BIG_ENDIAN
+		struct {
+			u_int	v:4,	/* version */
+				hl:4;	/* header length */
+		} hc_ip;
+		struct {
+			u_int	off:4,	/* data offset */
+				x2:4;	/* (unused) */
+		} hc_th;
+#endif
+	} hdrcpy;
 
 	/* Return NULL if header was not recognized. */
 	memset(ext, 0, sizeof(*ext));
@@ -1068,11 +1092,13 @@ ether_extract_headers(struct mbuf *mp, struct ether_extracted *ext)
 			return;
 		ext->ip4 = (struct ip *)(mtod(m, caddr_t) + hoff);
 
-		hlen = ext->ip4->ip_hl << 2;
+		memcpy(&hdrcpy.hc_data, ext->ip4, 1);
+		hlen = hdrcpy.hc_ip.hl << 2;
 		if (m->m_len - hoff < hlen) {
 			ext->ip4 = NULL;
 			return;
 		}
+		ext->iphlen = hlen;
 		ipproto = ext->ip4->ip_p;
 
 		if (ISSET(ntohs(ext->ip4->ip_off), IP_MF|IP_OFFMASK))
@@ -1100,11 +1126,13 @@ ether_extract_headers(struct mbuf *mp, struct ether_extracted *ext)
 			return;
 		ext->tcp = (struct tcphdr *)(mtod(m, caddr_t) + hoff);
 
-		hlen = ext->tcp->th_off << 2;
+		memcpy(&hdrcpy.hc_data, &ext->tcp->th_flags - 1, 1);
+		hlen = hdrcpy.hc_th.off << 2;
 		if (m->m_len - hoff < hlen) {
 			ext->tcp = NULL;
 			return;
 		}
+		ext->tcphlen = hlen;
 		break;
 
 	case IPPROTO_UDP:
