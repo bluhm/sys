@@ -309,6 +309,7 @@ struct ether_extracted {
 	struct udphdr			*udp;
 	u_int				 ip4hlen;
 	u_int				 tcphlen;
+	u_int				 paylen;
 };
 
 void ether_extract_headers(struct mbuf *, struct ether_extracted *);

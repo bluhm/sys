@@ -1048,7 +1048,7 @@ ether_e64_to_addr(struct ether_addr *ea, uint64_t e64)
 
 /* Parse different TCP/IP protocol headers for a quick view inside an mbuf. */
 void
-ether_extract_headers(struct mbuf *mp, struct ether_extracted *ext)
+ether_extract_headers(struct mbuf *m0, struct ether_extracted *ext)
 {
 	struct mbuf	*m;
 	size_t		 hlen;
@@ -1083,31 +1083,46 @@ ether_extract_headers(struct mbuf *mp, struct ether_extracted *ext)
 	/* Return NULL if header was not recognized. */
 	memset(ext, 0, sizeof(*ext));
 
-	if (mp->m_len < sizeof(*ext->eh)) {
-		DPRINTF("m_len %d, eh %zu",
-		    mp->m_len, sizeof(*ext->eh));
+	KASSERT(ISSET(m0->m_flags, M_PKTHDR));
+	ext->paylen = m0->m_pkthdr.len;
+
+	if (m0->m_len < sizeof(*ext->eh)) {
+		DPRINTF("m_len %d, eh %zu", m0->m_len, sizeof(*ext->eh));
 		return;
 	}
-	ext->eh = mtod(mp, struct ether_header *);
+	ext->eh = mtod(m0, struct ether_header *);
 	ether_type = ntohs(ext->eh->ether_type);
 	hlen = sizeof(*ext->eh);
+	if (ext->paylen < hlen) {
+		DPRINTF("paylen %u, ehlen %zu", ext->paylen, hlen);
+		ext->eh = NULL;
+		return;
+	}
+	ext->paylen -= hlen;
 
 #if NVLAN > 0
 	if (ether_type == ETHERTYPE_VLAN) {
-		if (mp->m_len < sizeof(*ext->evh)) {
+		if (m0->m_len < sizeof(*ext->evh)) {
 			DPRINTF("m_len %d, evh %zu",
-			    mp->m_len, sizeof(*ext->evh));
+			    m0->m_len, sizeof(*ext->evh));
 			return;
 		}
-		ext->evh = mtod(mp, struct ether_vlan_header *);
+		ext->evh = mtod(m0, struct ether_vlan_header *);
 		ether_type = ntohs(ext->evh->evl_proto);
 		hlen = sizeof(*ext->evh);
+		if (sizeof(*ext->eh) + ext->paylen < hlen) {
+			DPRINTF("paylen %zu, evhlen %zu",
+			    sizeof(*ext->eh) + ext->paylen, hlen);
+			ext->evh = NULL;
+			return;
+		}
+		ext->paylen = sizeof(*ext->eh) + ext->paylen - hlen;
 	}
 #endif
 
 	switch (ether_type) {
 	case ETHERTYPE_IP:
-		m = m_getptr(mp, hlen, &hoff);
+		m = m_getptr(m0, hlen, &hoff);
 		if (m == NULL || m->m_len - hoff < sizeof(*ext->ip4)) {
 			DPRINTF("m_len %d, hoff %d, ip4 %zu",
 			    m ? m->m_len : -1, hoff, sizeof(*ext->ip4));
@@ -1123,7 +1138,13 @@ ether_extract_headers(struct mbuf *mp, struct ether_extracted *ext)
 			ext->ip4 = NULL;
 			return;
 		}
+		if (ext->paylen < hlen) {
+			DPRINTF("paylen %u, ip4hlen %zu", ext->paylen, hlen);
+			ext->ip4 = NULL;
+			return;
+		}
 		ext->ip4hlen = hlen;
+		ext->paylen -= hlen;
 		ipproto = ext->ip4->ip_p;
 
 		if (ISSET(ntohs(ext->ip4->ip_off), IP_MF|IP_OFFMASK))
@@ -1131,7 +1152,7 @@ ether_extract_headers(struct mbuf *mp, struct ether_extracted *ext)
 		break;
 #ifdef INET6
 	case ETHERTYPE_IPV6:
-		m = m_getptr(mp, hlen, &hoff);
+		m = m_getptr(m0, hlen, &hoff);
 		if (m == NULL || m->m_len - hoff < sizeof(*ext->ip6)) {
 			DPRINTF("m_len %d, hoff %d, ip6 %zu",
 			    m ? m->m_len : -1, hoff, sizeof(*ext->ip6));
@@ -1140,6 +1161,12 @@ ether_extract_headers(struct mbuf *mp, struct ether_extracted *ext)
 		ext->ip6 = (struct ip6_hdr *)(mtod(m, caddr_t) + hoff);
 
 		hlen = sizeof(*ext->ip6);
+		if (ext->paylen < hlen) {
+			DPRINTF("paylen %u, ip6hlen %zu", ext->paylen, hlen);
+			ext->ip6 = NULL;
+			return;
+		}
+		ext->paylen -= hlen;
 		ipproto = ext->ip6->ip6_nxt;
 		break;
 #endif
@@ -1165,7 +1192,13 @@ ether_extract_headers(struct mbuf *mp, struct ether_extracted *ext)
 			ext->tcp = NULL;
 			return;
 		}
+		if (ext->paylen < hlen) {
+			DPRINTF("paylen %u, tcphlen %zu", ext->paylen, hlen);
+			ext->tcp = NULL;
+			return;
+		}
 		ext->tcphlen = hlen;
+		ext->paylen -= hlen;
 		break;
 
 	case IPPROTO_UDP:
@@ -1176,12 +1209,19 @@ ether_extract_headers(struct mbuf *mp, struct ether_extracted *ext)
 			return;
 		}
 		ext->udp = (struct udphdr *)(mtod(m, caddr_t) + hoff);
+
+		hlen = sizeof(*ext->udp);
+		if (ext->paylen < hlen) {
+			DPRINTF("paylen %u, udphlen %zu", ext->paylen, hlen);
+			ext->udp = NULL;
+			return;
+		}
 		break;
 	}
 
-	DNPRINTF(2, "%s%s%s%s%s%s ip4h %u, tcph %u",
+	DNPRINTF(2, "%s%s%s%s%s%s ip4h %u, tcph %u, payl %u",
 	    ext->eh ? "eh," : "", ext->evh ? "evh," : "",
 	    ext->ip4 ? "ip4," : "", ext->ip6 ? "ip6," : "",
 	    ext->tcp ? "tcp," : "", ext->udp ? "udp," : "",
-	    ext->ip4hlen, ext->tcphlen);
+	    ext->ip4hlen, ext->tcphlen, ext->paylen);
 }
