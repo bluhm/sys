@@ -244,9 +244,11 @@ route6_cache(struct route_in6 *ro, const struct in6_addr *addr,
 	    ro->ro_tableid == rtableid &&
 	    ro->ro_dst.sin6_family == AF_INET6 &&
 	    IN6_ARE_ADDR_EQUAL(&ro->ro_dst.sin6_addr, addr)) {
-		    return;
+		ip6stat_inc(ip6s_rtcachehit);
+		return;
 	}
 
+	ip6stat_inc(ip6s_rtcachemiss);
 	rtfree(ro->ro_rt);
 	ro->ro_rt = NULL;
 	ro->ro_generation = gen;
