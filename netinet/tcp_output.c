@@ -1360,6 +1360,12 @@ tcp_if_output_tso(struct ifnet *ifp, struct mbuf **mp, struct sockaddr *dst,
 	/* caller must fail later or fragment */
 	if (!ISSET((*mp)->m_pkthdr.csum_flags, M_TCP_TSO))
 		return 0;
+	/* send without hardware TSO if interface can handle packet size */
+	if ((*mp)->m_pkthdr.len <= mtu) {
+		CLR((*mp)->m_pkthdr.csum_flags, M_TCP_TSO);
+		return 0;
+	}
+	/* fragment or fail if interface cannot handle size after chopping */
 	if ((*mp)->m_pkthdr.ph_mss > mtu) {
 		CLR((*mp)->m_pkthdr.csum_flags, M_TCP_TSO);
 		return 0;
