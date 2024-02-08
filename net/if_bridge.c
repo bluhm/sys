@@ -48,6 +48,7 @@
 #include <net/if_types.h>
 #include <net/if_llc.h>
 #include <net/netisr.h>
+#include <net/route.h>
 
 #include <netinet/in.h>
 #include <netinet/ip.h>

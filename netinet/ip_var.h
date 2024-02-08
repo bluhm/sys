@@ -227,6 +227,7 @@ extern const struct pr_usrreqs rip_usrreqs;
 
 extern struct rttimer_queue ip_mtudisc_timeout_q;
 extern struct pool ipqent_pool;
+struct rtentry;
 struct route;
 struct inpcb;
 

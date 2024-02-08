@@ -150,12 +150,7 @@ struct inpcb {
 	u_int16_t inp_lport;		/* [t] local port */
 	struct	  socket *inp_socket;	/* [I] back pointer to socket */
 	caddr_t	  inp_ppcb;		/* pointer to per-protocol pcb */
-	union {				/* Route (notice increased size). */
-		struct route ru_route;
-		struct route_in6 ru_route6;
-	} inp_ru;
-#define	inp_route	inp_ru.ru_route
-#define	inp_route6	inp_ru.ru_route6
+	struct    route inp_route;	/* cached route */
 	struct    refcnt inp_refcnt;	/* refcount PCB, delay memory free */
 	struct	  mutex inp_mtx;	/* protect PCB and socket members */
 	int	  inp_flags;		/* generic IP/datagram flags */

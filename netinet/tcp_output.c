@@ -1109,7 +1109,7 @@ send:
 #endif
 		}
 		error = ip6_output(m, tp->t_inpcb->inp_outputopts6,
-		    &tp->t_inpcb->inp_route6, 0, NULL,
+		    &tp->t_inpcb->inp_route, 0, NULL,
 		    tp->t_inpcb->inp_seclevel);
 		break;
 #endif /* INET6 */

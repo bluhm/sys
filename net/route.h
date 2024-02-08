@@ -370,18 +370,6 @@ struct sockaddr_rtsearch {
 	char		sr_search[RTSEARCH_LEN];
 };
 
-/*
- * A route consists of a destination address and a reference
- * to a routing entry.  These are often held by protocols
- * in their control blocks, e.g. inpcb.
- */
-struct route {
-	struct	rtentry *ro_rt;
-	u_long		 ro_generation;
-	u_long		 ro_tableid;	/* u_long because of alignment */
-	struct	sockaddr ro_dst;
-};
-
 struct rt_addrinfo {
 	int	rti_addrs;
 	const	struct sockaddr *rti_info[RTAX_MAX];
@@ -392,6 +380,27 @@ struct rt_addrinfo {
 };
 
 #ifdef _KERNEL
+
+#include <netinet/in.h>
+
+/*
+ * A route consists of a destination address and a reference
+ * to a routing entry.  These are often held by protocols
+ * in their control blocks, e.g. inpcb.
+ */
+struct route {
+	struct	rtentry *ro_rt;
+	u_long		 ro_generation;
+	u_long		 ro_tableid;	/* u_long because of alignment */
+	union {
+		struct	sockaddr	rod_sa;
+		struct	sockaddr_in	rod_sin;
+		struct	sockaddr_in6	rod_sin6;
+	} ro_dst;
+#define ro_dstsa	ro_dst.rod_sa
+#define ro_dstsin	ro_dst.rod_sin
+#define ro_dstsin6	ro_dst.rod_sin6
+};
 
 #include <sys/percpu.h>
 
@@ -449,6 +458,8 @@ struct if_ieee80211_data;
 struct bfd_config;
 
 void	 route_init(void);
+int	 route_cache(struct route *, struct in_addr, u_int);
+int	 route6_cache(struct route *, const struct in6_addr *, u_int);
 void	 rtm_ifchg(struct ifnet *);
 void	 rtm_ifannounce(struct ifnet *, int);
 void	 rtm_bfd(struct bfd_config *);

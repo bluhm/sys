@@ -401,7 +401,7 @@ tcp_respond(struct tcpcb *tp, caddr_t template, struct tcphdr *th0,
 		ip6->ip6_plen = tlen - sizeof(struct ip6_hdr);
 		ip6->ip6_plen = htons(ip6->ip6_plen);
 		ip6_output(m, tp ? tp->t_inpcb->inp_outputopts6 : NULL,
-		    tp ? &tp->t_inpcb->inp_route6 : NULL,
+		    tp ? &tp->t_inpcb->inp_route : NULL,
 		    0, NULL,
 		    tp ? tp->t_inpcb->inp_seclevel : NULL);
 		break;

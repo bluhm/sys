@@ -1494,7 +1494,7 @@ ip_forward(struct mbuf *m, struct ifnet *ifp, struct rtentry *rt, int srcrt)
 	route_cache(&ro, ip->ip_dst, m->m_pkthdr.ph_rtableid);
 	if (!rtisvalid(rt)) {
 		rtfree(rt);
-		rt = rtalloc_mpath(&ro.ro_dst, &ip->ip_src.s_addr,
+		rt = rtalloc_mpath(&ro.ro_dstsa, &ip->ip_src.s_addr,
 		    m->m_pkthdr.ph_rtableid);
 		if (rt == NULL) {
 			ipstat_inc(ips_noroute);

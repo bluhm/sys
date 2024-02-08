@@ -247,16 +247,7 @@ struct syn_cache {
 	TAILQ_ENTRY(syn_cache) sc_bucketq;	/* [S] link on bucket list */
 	struct refcnt sc_refcnt;		/* ref count list and timer */
 	struct timeout sc_timer;		/* rexmt timer */
-	union {					/* cached route */
-		struct route route4;
-#ifdef INET6
-		struct route_in6 route6;
-#endif
-	} sc_route_u;
-#define sc_route4	sc_route_u.route4	/* [N] */
-#ifdef INET6
-#define sc_route6	sc_route_u.route6	/* [N] */
-#endif
+	struct route sc_route;			/* [N] cached route */
 	long sc_win;				/* [I] advertised window */
 	struct syn_cache_head *sc_buckethead;	/* [S] our bucket index */
 	struct syn_cache_set *sc_set;		/* [S] our syn cache set */
