@@ -379,7 +379,7 @@ struct rt_addrinfo {
 	u_char	rti_mpls;
 };
 
-#ifdef _KERNEL
+#ifdef __BSD_VISIBLE
 
 #include <netinet/in.h>
 
@@ -401,6 +401,10 @@ struct route {
 #define ro_dstsin	ro_dst.rod_sin
 #define ro_dstsin6	ro_dst.rod_sin6
 };
+
+#endif /* __BSD_VISIBLE */
+
+#ifdef _KERNEL
 
 #include <sys/percpu.h>
 
