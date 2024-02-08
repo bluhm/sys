@@ -3272,8 +3272,7 @@ ixgbe_rxeof(struct rx_ring *rxr)
 				ether_extract_headers(sendmp, &ext);
 				hdrlen = sizeof(*ext.eh);
 #if NVLAN > 0
-				if (ISSET(sendmp->m_flags, M_VLANTAG) ||
-				    ext.evh)
+				if (ext.evh)
 					hdrlen += ETHER_VLAN_ENCAP_LEN;
 #endif
 				if (ext.ip4)
