@@ -179,8 +179,7 @@ in6_pcbselsrc(const struct in6_addr **in6src, struct sockaddr_in6 *dstsock,
 	 * If route is known or can be allocated now,
 	 * our src addr is taken from the i/f, else punt.
 	 */
-	route6_cache(ro, dst, rtableid);
-	if (ro->ro_rt == NULL) {
+	if (route6_cache(ro, dst, rtableid)) {
 		ro->ro_rt = rtalloc(sin6tosa(&ro->ro_dst),
 		    RT_RESOLVE, ro->ro_tableid);
 	}
@@ -306,8 +305,7 @@ in6_selectroute(const struct in6_addr *dst, struct ip6_pktopts *opts,
 	 * a new one.
 	 */
 	if (ro) {
-		route6_cache(ro, dst, rtableid);
-		if (ro->ro_rt == NULL) {
+		if (route6_cache(ro, dst, rtableid)) {
 			/* No route yet, so try to acquire one */
 			ro->ro_rt = rtalloc_mpath(sin6tosa(&ro->ro_dst),
 			    NULL, ro->ro_tableid);
