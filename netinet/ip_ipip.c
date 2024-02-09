@@ -60,6 +60,7 @@
 #include <netinet/ip.h>
 #include <netinet/in_pcb.h>
 #include <netinet/ip_var.h>
+#include <netinet6/ip6_var.h>
 #include <netinet/ip_ecn.h>
 #include <netinet/ip_ipip.h>
 

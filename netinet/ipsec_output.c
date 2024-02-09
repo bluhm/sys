@@ -36,6 +36,7 @@
 #include <netinet/ip.h>
 #include <netinet/in_pcb.h>
 #include <netinet/ip_var.h>
+#include <netinet6/ip6_var.h>
 
 #if NPF > 0
 #include <net/pfvar.h>

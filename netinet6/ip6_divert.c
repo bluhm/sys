@@ -35,6 +35,7 @@
 #include <netinet/in_pcb.h>
 #include <netinet/ip_divert.h>
 #include <netinet/ip6.h>
+#include <netinet6/ip6_var.h>
 #include <netinet6/in6_var.h>
 #include <netinet6/ip6_divert.h>
 #include <netinet/tcp.h>

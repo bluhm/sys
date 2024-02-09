@@ -90,6 +90,7 @@
 #include <netinet/in_var.h>
 #include <netinet/ip.h>
 #include <netinet/ip_var.h>
+#include <netinet6/ip6_var.h>
 #include <netinet/in_pcb.h>
 #ifdef IPSEC
 #include <netinet/ip_esp.h>
