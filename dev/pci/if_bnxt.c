@@ -1432,10 +1432,8 @@ bnxt_start(struct ifqueue *ifq)
 			if (ext.tcp) {
 				lflags |= TX_BD_LONG_LFLAGS_LSO;
 				hdrsize = sizeof(*ext.eh);
-				if (ext.ip4)
-					hdrsize += ext.ip4hlen;
-				else if (ext.ip6)
-					hdrsize += sizeof(*ext.ip6);
+				if (ext.ip4 || ext.ip6)
+					hdrsize += ext.iphlen;
 				else
 					tcpstat_inc(tcps_outbadtso);
 

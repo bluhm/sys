@@ -2413,7 +2413,6 @@ em_tx_ctx_setup(struct em_queue *que, struct mbuf *mp, u_int head,
 	struct e1000_adv_tx_context_desc *TD;
 	uint32_t vlan_macip_lens = 0, type_tucmd_mlhl = 0, mss_l4len_idx = 0;
 	int off = 0;
-	uint8_t iphlen;
 
 	*olinfo_status = 0;
 	*cmd_type_len = 0;
@@ -2433,27 +2432,19 @@ em_tx_ctx_setup(struct em_queue *que, struct mbuf *mp, u_int head,
 	vlan_macip_lens |= (sizeof(*ext.eh) << E1000_ADVTXD_MACLEN_SHIFT);
 
 	if (ext.ip4) {
-		iphlen = ext.ip4hlen;
-
 		type_tucmd_mlhl |= E1000_ADVTXD_TUCMD_IPV4;
 		if (ISSET(mp->m_pkthdr.csum_flags, M_IPV4_CSUM_OUT)) {
 			*olinfo_status |= E1000_TXD_POPTS_IXSM << 8;
 			off = 1;
 		}
-#ifdef INET6
 	} else if (ext.ip6) {
-		iphlen = sizeof(*ext.ip6);
-
 		type_tucmd_mlhl |= E1000_ADVTXD_TUCMD_IPV6;
-#endif
-	} else {
-		iphlen = 0;
 	}
 
 	*cmd_type_len |= E1000_ADVTXD_DTYP_DATA | E1000_ADVTXD_DCMD_IFCS;
 	*cmd_type_len |= E1000_ADVTXD_DCMD_DEXT;
 	*olinfo_status |= mp->m_pkthdr.len << E1000_ADVTXD_PAYLEN_SHIFT;
-	vlan_macip_lens |= iphlen;
+	vlan_macip_lens |= ext.iphlen;
 	type_tucmd_mlhl |= E1000_ADVTXD_DCMD_DEXT | E1000_ADVTXD_DTYP_CTXT;
 
 	if (ext.tcp) {
