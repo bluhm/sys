@@ -1051,7 +1051,7 @@ void
 ether_extract_headers(struct mbuf *m0, struct ether_extracted *ext)
 {
 	struct mbuf	*m;
-	size_t		 hlen;
+	size_t		 hlen, iplen;
 	int		 hoff;
 	uint8_t		 ipproto;
 	uint16_t	 ether_type;
@@ -1143,6 +1143,13 @@ ether_extract_headers(struct mbuf *m0, struct ether_extracted *ext)
 			ext->ip4 = NULL;
 			return;
 		}
+		iplen = ntohs(ext->ip4->ip_len);
+		if (ext->paylen < iplen) {
+			DPRINTF("paylen %u, iplen %zu", ext->paylen, iplen);
+			ext->ip4 = NULL;
+			return;
+		}
+		ext->iplen = iplen;
 		ext->ip4hlen = hlen;
 		ext->paylen -= hlen;
 		ipproto = ext->ip4->ip_p;
@@ -1166,6 +1173,13 @@ ether_extract_headers(struct mbuf *m0, struct ether_extracted *ext)
 			ext->ip6 = NULL;
 			return;
 		}
+		iplen = hlen + ntohs(ext->ip6->ip6_plen);
+		if (ext->paylen < iplen) {
+			DPRINTF("paylen %u, iplen %zu", ext->paylen, iplen);
+			ext->ip6 = NULL;
+			return;
+		}
+		ext->iplen = iplen;
 		ext->paylen -= hlen;
 		ipproto = ext->ip6->ip6_nxt;
 		break;

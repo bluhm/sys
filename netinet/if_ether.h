@@ -307,6 +307,7 @@ struct ether_extracted {
 	struct ip6_hdr			*ip6;
 	struct tcphdr			*tcp;
 	struct udphdr			*udp;
+	u_int				 iplen;
 	u_int				 ip4hlen;
 	u_int				 tcphlen;
 	u_int				 paylen;
