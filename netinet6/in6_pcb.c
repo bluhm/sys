@@ -565,7 +565,8 @@ in6_pcbrtentry(struct inpcb *inp)
 
 	if (IN6_IS_ADDR_UNSPECIFIED(&inp->inp_faddr6))
 		return (NULL);
-	if (route6_cache(ro, &inp->inp_faddr6, inp->inp_rtableid)) {
+	if (route6_cache(ro, &inp->inp_faddr6, &inp->inp_laddr6,
+	    inp->inp_rtableid)) {
 		ro->ro_rt = rtalloc_mpath(&ro->ro_dstsa,
 		    &inp->inp_laddr6.s6_addr32[0], ro->ro_tableid);
 	}

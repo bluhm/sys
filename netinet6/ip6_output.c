@@ -480,7 +480,7 @@ reroute:
 			goto bad;
 		}
 	} else {
-		route6_cache(ro, &ip6->ip6_dst, m->m_pkthdr.ph_rtableid);
+		route6_cache(ro, &ip6->ip6_dst, NULL, m->m_pkthdr.ph_rtableid);
 	}
 
 	if (rt && (rt->rt_flags & RTF_GATEWAY) &&

@@ -400,6 +400,13 @@ struct route {
 #define ro_dstsa	ro_dst.rod_sa
 #define ro_dstsin	ro_dst.rod_sin
 #define ro_dstsin6	ro_dst.rod_sin6
+	union {
+		struct	in_addr		ros_in;
+		struct	in6_addr	ros_in6;
+	} ro_src;
+#define ro_srcin	ro_src.ros_in
+#define ro_srcin6	ro_src.ros_in6
+	u_int		ro_flags;
 };
 
 #endif /* __BSD_VISIBLE */
@@ -462,8 +469,10 @@ struct if_ieee80211_data;
 struct bfd_config;
 
 void	 route_init(void);
-int	 route_cache(struct route *, struct in_addr, u_int);
-int	 route6_cache(struct route *, const struct in6_addr *, u_int);
+int	 route_cache(struct route *, struct in_addr, const struct in_addr *,
+	    u_int);
+int	 route6_cache(struct route *, const struct in6_addr *,
+	    const struct in6_addr *, u_int);
 void	 rtm_ifchg(struct ifnet *);
 void	 rtm_ifannounce(struct ifnet *, int);
 void	 rtm_bfd(struct bfd_config *);

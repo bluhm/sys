@@ -166,7 +166,8 @@ reroute:
 #endif /* IPSEC */
 
 	ro.ro_rt = NULL;
-	route6_cache(&ro, &ip6->ip6_dst, m->m_pkthdr.ph_rtableid);
+	route6_cache(&ro, &ip6->ip6_dst, &ip6->ip6_src,
+	    m->m_pkthdr.ph_rtableid);
 	dst = &ro.ro_dstsa;
 	if (!rtisvalid(rt)) {
 		rtfree(rt);
