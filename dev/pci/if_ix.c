@@ -2506,8 +2506,10 @@ ixgbe_tx_offload(struct mbuf *mp, uint32_t *vlan_macip_lens,
 		}
 
 		*type_tucmd_mlhl |= IXGBE_ADVTXD_TUCMD_IPV4;
+#ifdef INET6
 	} else if (ext.ip6) {
 		*type_tucmd_mlhl |= IXGBE_ADVTXD_TUCMD_IPV6;
+#endif
 	} else {
 		if (mp->m_pkthdr.csum_flags & M_TCP_TSO)
 			tcpstat_inc(tcps_outbadtso);

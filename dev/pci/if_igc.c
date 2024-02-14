@@ -2032,8 +2032,10 @@ igc_tx_ctx_setup(struct tx_ring *txr, struct mbuf *mp, int prod,
 			*olinfo_status |= IGC_TXD_POPTS_IXSM << 8;
 			off = 1;
 		}
+#ifdef INET6
 	} else if (ext.ip6) {
 		type_tucmd_mlhl |= IGC_ADVTXD_TUCMD_IPV6;
+#endif
 	} else {
 		return 0;
 	}

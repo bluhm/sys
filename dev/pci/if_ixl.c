@@ -2826,8 +2826,10 @@ ixl_tx_setup_offload(struct mbuf *m0, struct ixl_tx_ring *txr,
 		offload |= ISSET(m0->m_pkthdr.csum_flags, M_IPV4_CSUM_OUT) ?
 		    IXL_TX_DESC_CMD_IIPT_IPV4_CSUM :
 		    IXL_TX_DESC_CMD_IIPT_IPV4;
+#ifdef INET6
 	} else if (ext.ip6) {
 		offload |= IXL_TX_DESC_CMD_IIPT_IPV6;
+#endif
 	} else {
 		panic("CSUM_OUT set for non-IP packet");
 		/* NOTREACHED */

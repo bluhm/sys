@@ -2437,8 +2437,10 @@ em_tx_ctx_setup(struct em_queue *que, struct mbuf *mp, u_int head,
 			*olinfo_status |= E1000_TXD_POPTS_IXSM << 8;
 			off = 1;
 		}
+#ifdef INET6
 	} else if (ext.ip6) {
 		type_tucmd_mlhl |= E1000_ADVTXD_TUCMD_IPV6;
+#endif
 	}
 
 	*cmd_type_len |= E1000_ADVTXD_DTYP_DATA | E1000_ADVTXD_DCMD_IFCS;
