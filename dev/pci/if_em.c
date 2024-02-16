@@ -2478,7 +2478,7 @@ em_tso_setup(struct em_queue *que, struct mbuf *mp, u_int head,
 	*olinfo_status |= E1000_TXD_POPTS_TXSM << 8;
 
 	mss_l4len_idx |= mp->m_pkthdr.ph_mss << E1000_ADVTXD_MSS_SHIFT;
-	mss_l4len_idx |= (ext.tcp->th_off << 2) << E1000_ADVTXD_L4LEN_SHIFT;
+	mss_l4len_idx |= ext.tcphlen << E1000_ADVTXD_L4LEN_SHIFT;
 	/* 82575 needs the queue index added */
 	if (que->sc->hw.mac_type == em_82575)
 		mss_l4len_idx |= (que->me & 0xff) << 4;
