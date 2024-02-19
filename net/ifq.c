@@ -378,6 +378,11 @@ ifq_enqueue(struct ifqueue *ifq, struct mbuf *m)
 {
 	struct mbuf *dm;
 
+	if (((u_long)(m->m_data) & 0x3) != 2) {
+		printf("%s: mbuf %p, m_data %p aligned\n",
+		    __func__, m, m->m_data);
+	}
+
 	mtx_enter(&ifq->ifq_mtx);
 	dm = ifq->ifq_ops->ifqop_enq(ifq, m);
 	if (dm != m) {
