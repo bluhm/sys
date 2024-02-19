@@ -1091,6 +1091,11 @@ ether_extract_headers(struct mbuf *m0, struct ether_extracted *ext)
 		return;
 	}
 	ext->eh = mtod(m0, struct ether_header *);
+	if (((u_long)(ext->eh) & 0x3) != 2) {
+		printf("%s: mbuf %p, eh %p aligned\n",
+		    __func__, m0, ext->eh);
+	}
+
 	ether_type = ntohs(ext->eh->ether_type);
 	hlen = sizeof(*ext->eh);
 	if (ext->paylen < hlen) {
@@ -1108,6 +1113,11 @@ ether_extract_headers(struct mbuf *m0, struct ether_extracted *ext)
 			return;
 		}
 		ext->evh = mtod(m0, struct ether_vlan_header *);
+		if (((u_long)(ext->evh) & 0x3) != 2) {
+			printf("%s: mbuf %p, evh %p aligned\n",
+			    __func__, m0, ext->evh);
+		}
+
 		ether_type = ntohs(ext->evh->evl_proto);
 		hlen = sizeof(*ext->evh);
 		if (sizeof(*ext->eh) + ext->paylen < hlen) {
@@ -1129,6 +1139,10 @@ ether_extract_headers(struct mbuf *m0, struct ether_extracted *ext)
 			return;
 		}
 		ext->ip4 = (struct ip *)(mtod(m, caddr_t) + hoff);
+		if ((u_long)(ext->ip4) & 0x3) {
+			printf("%s: mbuf %p, ip4 %p not aligned\n",
+			    __func__, m, ext->ip4);
+		}
 
 		memcpy(&hdrcpy.hc_data, ext->ip4, 1);
 		hlen = hdrcpy.hc_ip.hl << 2;
@@ -1171,6 +1185,10 @@ ether_extract_headers(struct mbuf *m0, struct ether_extracted *ext)
 			return;
 		}
 		ext->ip6 = (struct ip6_hdr *)(mtod(m, caddr_t) + hoff);
+		if ((u_long)(ext->ip6) & 0x3) {
+			printf("%s: mbuf %p, ip6 %p not aligned\n",
+			    __func__, m, ext->ip6);
+		}
 
 		hlen = sizeof(*ext->ip6);
 		if (ext->paylen < hlen) {
