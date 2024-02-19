@@ -1361,6 +1361,10 @@ tcp_if_output_tso(struct ifnet *ifp, struct mbuf **mp, struct sockaddr *dst,
 	/* caller must fail later or fragment */
 	if (!ISSET((*mp)->m_pkthdr.csum_flags, M_TCP_TSO))
 		return 0;
+	if ((u_long)((*mp)->m_data) & 0x3) {
+		printf("%s: mbuf %p, m_data %p not aligned\n",
+		    __func__, *mp, (*mp)->m_data);
+	}
 	if ((*mp)->m_pkthdr.ph_mss > mtu) {
 		CLR((*mp)->m_pkthdr.csum_flags, M_TCP_TSO);
 		return 0;
