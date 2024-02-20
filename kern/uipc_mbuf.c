@@ -586,9 +586,9 @@ m_defrag(struct mbuf *m, int how)
 		memcpy(&m->m_ext, &m0->m_ext, sizeof(struct mbuf_ext));
 		MCLINITREFERENCE(m);
 		m->m_flags |= m0->m_flags & (M_EXT|M_EXTWR);
-		m->m_data = m->m_ext.ext_buf;
+		m->m_data = m->m_ext.ext_buf + adj;
 	} else {
-		m->m_data = m->m_pktdat;
+		m->m_data = m->m_pktdat + adj;
 		memcpy(m->m_data, m0->m_data, m0->m_len);
 	}
 	m->m_pkthdr.len = m->m_len = m0->m_len;
