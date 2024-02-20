@@ -215,7 +215,7 @@ route_cache(struct route *ro, struct in_addr dst, const struct in_addr *src,
 	    ro->ro_tableid == rtableid &&
 	    ro->ro_dstsa.sa_family == AF_INET &&
 	    ro->ro_dstsin.sin_addr.s_addr == dst.s_addr) {
-		if (src == NULL ||
+		if (src == NULL || !ipmultipath ||
 		    !ISSET(ro->ro_rt->rt_flags, RTF_MPATH) ||
 		    (ISSET(ro->ro_flags, RTF_MPATH) &&
 		    ro->ro_srcin.s_addr == src->s_addr)) {
@@ -256,7 +256,7 @@ route6_cache(struct route *ro, const struct in6_addr *dst,
 	    ro->ro_tableid == rtableid &&
 	    ro->ro_dstsa.sa_family == AF_INET6 &&
 	    IN6_ARE_ADDR_EQUAL(&ro->ro_dstsin6.sin6_addr, dst)) {
-		if (src == NULL ||
+		if (src == NULL || !ip6_multipath ||
 		    !ISSET(ro->ro_rt->rt_flags, RTF_MPATH) ||
 		    (ISSET(ro->ro_flags, RTF_MPATH) &&
 		    IN6_ARE_ADDR_EQUAL(&ro->ro_srcin6, src))) {
