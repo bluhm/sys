@@ -393,19 +393,14 @@ struct route {
 	u_long		 ro_generation;
 	u_long		 ro_tableid;	/* u_long because of alignment */
 	union {
-		struct	sockaddr	rod_sa;
-		struct	sockaddr_in	rod_sin;
-		struct	sockaddr_in6	rod_sin6;
-	} ro_dst;
-#define ro_dstsa	ro_dst.rod_sa
-#define ro_dstsin	ro_dst.rod_sin
-#define ro_dstsin6	ro_dst.rod_sin6
+		struct	sockaddr	ro_dstsa;
+		struct	sockaddr_in	ro_dstsin;
+		struct	sockaddr_in6	ro_dstsin6;
+	};
 	union {
-		struct	in_addr		ros_in;
-		struct	in6_addr	ros_in6;
-	} ro_src;
-#define ro_srcin	ro_src.ros_in
-#define ro_srcin6	ro_src.ros_in6
+		struct	in_addr		ro_srcin;
+		struct	in6_addr	ro_srcin6;
+	};
 	u_int		ro_flags;
 };
 
