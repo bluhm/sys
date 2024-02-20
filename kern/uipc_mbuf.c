@@ -550,21 +550,24 @@ int
 m_defrag(struct mbuf *m, int how)
 {
 	struct mbuf *m0;
+	unsigned int adj;
 
 	if (m->m_next == NULL)
 		return (0);
 
 	KASSERT(m->m_flags & M_PKTHDR);
 
+	adj = mtod(m, unsigned long) & (sizeof(long) - 1);
 	if ((m0 = m_gethdr(how, m->m_type)) == NULL)
 		return (ENOBUFS);
-	if (m->m_pkthdr.len > MHLEN) {
-		MCLGETL(m0, how, m->m_pkthdr.len);
+	if (m->m_pkthdr.len + adj > MHLEN) {
+		MCLGETL(m0, how, m->m_pkthdr.len + adj);
 		if (!(m0->m_flags & M_EXT)) {
 			m_free(m0);
 			return (ENOBUFS);
 		}
 	}
+	m0->m_data += adj;
 	m_copydata(m, 0, m->m_pkthdr.len, mtod(m0, caddr_t));
 	m0->m_pkthdr.len = m0->m_len = m->m_pkthdr.len;
 
