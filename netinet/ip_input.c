@@ -1490,7 +1490,7 @@ ip_forward(struct mbuf *m, struct ifnet *ifp, struct rtentry *rt, int srcrt)
 	}
 
 	ro.ro_rt = NULL;
-	route_cache(&ro, ip->ip_dst, &ip->ip_src, m->m_pkthdr.ph_rtableid);
+	route_cache(&ro, &ip->ip_dst, &ip->ip_src, m->m_pkthdr.ph_rtableid);
 	if (!rtisvalid(rt)) {
 		rtfree(rt);
 		rt = rtalloc_mpath(&ro.ro_dstsa, &ip->ip_src.s_addr,

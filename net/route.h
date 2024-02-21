@@ -464,8 +464,8 @@ struct if_ieee80211_data;
 struct bfd_config;
 
 void	 route_init(void);
-int	 route_cache(struct route *, struct in_addr, const struct in_addr *,
-	    u_int);
+int	 route_cache(struct route *, const struct in_addr *,
+	    const struct in_addr *, u_int);
 int	 route6_cache(struct route *, const struct in6_addr *,
 	    const struct in6_addr *, u_int);
 void	 rtm_ifchg(struct ifnet *);

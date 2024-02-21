@@ -202,8 +202,8 @@ route_init(void)
 }
 
 int
-route_cache(struct route *ro, struct in_addr dst, const struct in_addr *src,
-    u_int rtableid)
+route_cache(struct route *ro, const struct in_addr *dst,
+    const struct in_addr *src, u_int rtableid)
 {
 	u_long gen;
 
@@ -214,7 +214,7 @@ route_cache(struct route *ro, struct in_addr dst, const struct in_addr *src,
 	    ro->ro_generation == gen &&
 	    ro->ro_tableid == rtableid &&
 	    ro->ro_dstsa.sa_family == AF_INET &&
-	    ro->ro_dstsin.sin_addr.s_addr == dst.s_addr) {
+	    ro->ro_dstsin.sin_addr.s_addr == dst->s_addr) {
 		if (src == NULL || !ipmultipath ||
 		    !ISSET(ro->ro_rt->rt_flags, RTF_MPATH) ||
 		    (ISSET(ro->ro_flags, RTF_MPATH) &&
@@ -232,7 +232,7 @@ route_cache(struct route *ro, struct in_addr dst, const struct in_addr *src,
 
 	ro->ro_dstsin.sin_family = AF_INET;
 	ro->ro_dstsin.sin_len = sizeof(struct sockaddr_in);
-	ro->ro_dstsin.sin_addr = dst;
+	ro->ro_dstsin.sin_addr = *dst;
 	if (src != NULL) {
 		ro->ro_srcin = *src;
 		SET(ro->ro_flags, RTF_MPATH);
