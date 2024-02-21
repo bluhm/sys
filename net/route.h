@@ -401,7 +401,6 @@ struct route {
 		struct	in_addr		ro_srcin;
 		struct	in6_addr	ro_srcin6;
 	};
-	u_int		ro_flags;
 };
 
 #endif /* __BSD_VISIBLE */

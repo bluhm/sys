@@ -217,7 +217,7 @@ route_cache(struct route *ro, const struct in_addr *dst,
 	    ro->ro_dstsin.sin_addr.s_addr == dst->s_addr) {
 		if (src == NULL || !ipmultipath ||
 		    !ISSET(ro->ro_rt->rt_flags, RTF_MPATH) ||
-		    (ISSET(ro->ro_flags, RTF_MPATH) &&
+		    (ro->ro_srcin.s_addr != INADDR_ANY &&
 		    ro->ro_srcin.s_addr == src->s_addr)) {
 			ipstat_inc(ips_rtcachehit);
 			return (0);
@@ -233,10 +233,8 @@ route_cache(struct route *ro, const struct in_addr *dst,
 	ro->ro_dstsin.sin_family = AF_INET;
 	ro->ro_dstsin.sin_len = sizeof(struct sockaddr_in);
 	ro->ro_dstsin.sin_addr = *dst;
-	if (src != NULL) {
+	if (src != NULL)
 		ro->ro_srcin = *src;
-		SET(ro->ro_flags, RTF_MPATH);
-	}
 
 	return (ESRCH);
 }
@@ -258,7 +256,7 @@ route6_cache(struct route *ro, const struct in6_addr *dst,
 	    IN6_ARE_ADDR_EQUAL(&ro->ro_dstsin6.sin6_addr, dst)) {
 		if (src == NULL || !ip6_multipath ||
 		    !ISSET(ro->ro_rt->rt_flags, RTF_MPATH) ||
-		    (ISSET(ro->ro_flags, RTF_MPATH) &&
+		    (!IN6_IS_ADDR_UNSPECIFIED(&ro->ro_srcin6) &&
 		    IN6_ARE_ADDR_EQUAL(&ro->ro_srcin6, src))) {
 			ip6stat_inc(ip6s_rtcachehit);
 			return (0);
@@ -274,10 +272,8 @@ route6_cache(struct route *ro, const struct in6_addr *dst,
 	ro->ro_dstsin6.sin6_family = AF_INET6;
 	ro->ro_dstsin6.sin6_len = sizeof(struct sockaddr_in6);
 	ro->ro_dstsin6.sin6_addr = *dst;
-	if (src != NULL) {
+	if (src != NULL)
 		ro->ro_srcin6 = *src;
-		SET(ro->ro_flags, RTF_MPATH);
-	}
 
 	return (ESRCH);
 }
