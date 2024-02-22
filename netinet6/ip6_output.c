@@ -391,7 +391,7 @@ reroute:
 	/* initialize cached route */
 	if (ro == NULL) {
 		ro = &iproute;
-		bzero((caddr_t)ro, sizeof(*ro));
+		ro->ro_rt = NULL;
 	}
 	ro_pmtu = ro;
 	if (opt && opt->ip6po_rthdr)
