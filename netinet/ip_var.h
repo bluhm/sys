@@ -260,7 +260,7 @@ void	 ip_savecontrol(struct inpcb *, struct mbuf **, struct ip *,
 	    struct mbuf *);
 int	 ip_input_if(struct mbuf **, int *, int, int, struct ifnet *);
 int	 ip_deliver(struct mbuf **, int *, int, int, int);
-void	 ip_forward(struct mbuf *, struct ifnet *, struct rtentry *, int);
+void	 ip_forward(struct mbuf *, struct ifnet *, struct route *, int);
 int	 rip_ctloutput(int, struct socket *, int, int, struct mbuf *);
 void	 rip_init(void);
 int	 rip_input(struct mbuf **, int *, int, int);
