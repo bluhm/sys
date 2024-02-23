@@ -545,6 +545,7 @@ m_purge(struct mbuf *m)
  * mbuf chain defragmenter. This function uses some evil tricks to defragment
  * an mbuf chain into a single buffer without changing the mbuf pointer.
  * This needs to know a lot of the mbuf internals to make this work.
+ * The resulting mbuf is not aligned to IP header to assist DMA transfers.
  */
 int
 m_defrag(struct mbuf *m, int how)
