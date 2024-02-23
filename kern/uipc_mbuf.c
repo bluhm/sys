@@ -550,24 +550,21 @@ int
 m_defrag(struct mbuf *m, int how)
 {
 	struct mbuf *m0;
-	unsigned int adj;
 
 	if (m->m_next == NULL)
 		return (0);
 
 	KASSERT(m->m_flags & M_PKTHDR);
 
-	adj = mtod(m, unsigned long) & (sizeof(long) - 1);
 	if ((m0 = m_gethdr(how, m->m_type)) == NULL)
 		return (ENOBUFS);
-	if (m->m_pkthdr.len + adj > MHLEN) {
-		MCLGETL(m0, how, m->m_pkthdr.len + adj);
+	if (m->m_pkthdr.len > MHLEN) {
+		MCLGETL(m0, how, m->m_pkthdr.len);
 		if (!(m0->m_flags & M_EXT)) {
 			m_free(m0);
 			return (ENOBUFS);
 		}
 	}
-	m0->m_data += adj;
 	m_copydata(m, 0, m->m_pkthdr.len, mtod(m0, caddr_t));
 	m0->m_pkthdr.len = m0->m_len = m->m_pkthdr.len;
 
@@ -586,9 +583,9 @@ m_defrag(struct mbuf *m, int how)
 		memcpy(&m->m_ext, &m0->m_ext, sizeof(struct mbuf_ext));
 		MCLINITREFERENCE(m);
 		m->m_flags |= m0->m_flags & (M_EXT|M_EXTWR);
-		m->m_data = m->m_ext.ext_buf + adj;
+		m->m_data = m->m_ext.ext_buf;
 	} else {
-		m->m_data = m->m_pktdat + adj;
+		m->m_data = m->m_pktdat;
 		memcpy(m->m_data, m0->m_data, m0->m_len);
 	}
 	m->m_pkthdr.len = m->m_len = m0->m_len;
