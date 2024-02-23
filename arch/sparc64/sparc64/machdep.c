@@ -1044,7 +1044,7 @@ _bus_dmamap_load_mbuf(bus_dma_tag_t t, bus_dma_tag_t t0, bus_dmamap_t map,
 			i++;
 		}
 		m = m->m_next;
-		if (m && i >= MAX_DMA_SEGS) {
+		if ((m && i >= MAX_DMA_SEGS) || i > map->_dm_segcnt) {
 			/* Exceeded the size of our dmamap */
 			map->_dm_type = 0;
 			map->_dm_source = NULL;
