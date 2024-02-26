@@ -371,11 +371,10 @@ in6_selectif(const struct in6_addr *dst, struct ip6_pktopts *opts,
 	 * Although this may not be very harmful, it should still be confusing.
 	 * We thus reject the case here.
 	 */
-	if (rt && (rt->rt_flags & (RTF_REJECT | RTF_BLACKHOLE)))
+	if (ISSET(rt->rt_flags, RTF_REJECT | RTF_BLACKHOLE))
 		return (rt->rt_flags & RTF_HOST ? EHOSTUNREACH : ENETUNREACH);
 
-	if (rt != NULL)
-		*retifp = if_get(rt->rt_ifidx);
+	*retifp = if_get(rt->rt_ifidx);
 
 	return (0);
 }
