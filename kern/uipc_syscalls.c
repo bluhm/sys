@@ -1560,12 +1560,12 @@ sys_ypconnect(struct proc *p, void *v, register_t *retval)
 
 	if (p->p_p->ps_flags & PS_CHROOT)
 		return EACCES;
+	KERNEL_LOCK();
 	name = pool_get(&namei_pool, PR_WAITOK);
 	snprintf(name, MAXPATHLEN, "/var/yp/binding/%s.2", domainname);
 	NDINIT(&nid, 0, NOFOLLOW|LOCKLEAF|KERNELPATH, UIO_SYSSPACE, name, p);
 	nid.ni_pledge = PLEDGE_RPATH;
 
-	KERNEL_LOCK();
 	error = namei(&nid);
 	pool_put(&namei_pool, name);
 	if (error)
