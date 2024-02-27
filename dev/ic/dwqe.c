@@ -754,7 +754,7 @@ dwqe_up(struct dwqe_softc *sc)
 		rxb->tb_m = NULL;
 	}
 
-	if_rxr_init(&sc->sc_rx_ring, 2, DWQE_NRXDESC);
+	if_rxr_init(&sc->sc_rx_ring, 2, DWQE_NRXDESC - 1);
 
 	dwqe_write(sc, GMAC_CHAN_RX_BASE_ADDR_HI(0), DWQE_DMA_DVA(sc->sc_rxring) >> 32);
 	dwqe_write(sc, GMAC_CHAN_RX_BASE_ADDR(0), DWQE_DMA_DVA(sc->sc_rxring));
