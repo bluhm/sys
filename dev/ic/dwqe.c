@@ -522,7 +522,11 @@ void
 dwqe_tick(void *arg)
 {
 	struct dwqe_softc *sc = arg;
+	struct ifnet *ifp = &sc->sc_ac.ac_if;
 	int s;
+
+	if ((ifp->if_flags & IFF_RUNNING) == 0)
+		return;
 
 	s = splnet();
 	mii_tick(&sc->sc_mii);
@@ -535,7 +539,11 @@ void
 dwqe_rxtick(void *arg)
 {
 	struct dwqe_softc *sc = arg;
+	struct ifnet *ifp = &sc->sc_ac.ac_if;
 	int s;
+
+	if ((ifp->if_flags & IFF_RUNNING) == 0)
+		return;
 
 	s = splnet();
 
