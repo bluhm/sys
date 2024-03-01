@@ -1,4 +1,4 @@
-/*	$OpenBSD: uipc_syscalls.c,v 1.217 2024/02/03 22:50:09 mvs Exp $	*/
+/*	$OpenBSD: uipc_syscalls.c,v 1.218 2024/03/01 14:15:01 bluhm Exp $	*/
 /*	$NetBSD: uipc_syscalls.c,v 1.19 1996/02/09 19:00:48 christos Exp $	*/
 
 /*
