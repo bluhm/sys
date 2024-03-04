@@ -1,4 +1,4 @@
-$OpenBSD: pcidevs,v 1.2064 2024/02/29 10:09:54 jsg Exp $
+$OpenBSD: pcidevs,v 1.2066 2024/03/04 05:34:07 jsg Exp $
 /*	$NetBSD: pcidevs,v 1.30 1997/06/24 06:20:24 thorpej Exp $	*/
 
 /*
@@ -6032,8 +6032,8 @@ product INTEL DG2_G10_3		0x5692	Arc A550M
 product INTEL DG2_G11_1		0x5693	Arc A370M
 product INTEL DG2_G11_2		0x5694	Arc A350M
 product INTEL DG2_G11_3		0x5695	Graphics
-product INTEL DG2_G12_1		0x5696	Graphics
-product INTEL DG2_G12_2		0x5697	Graphics
+product INTEL DG2_G12_1		0x5696	Arc A570M
+product INTEL DG2_G12_2		0x5697	Arc A530M
 product INTEL DG2_G10_4		0x56a0	Arc A770
 product INTEL DG2_G10_5		0x56a1	Arc A750
 product INTEL DG2_G10_6		0x56a2	Arc A580
@@ -6043,8 +6043,8 @@ product INTEL DG2_G11_4		0x56a5	Arc A380
 product INTEL DG2_G11_5		0x56a6	Arc A310
 product INTEL DG2_G11_6		0x56b0	Arc Pro A30M
 product INTEL DG2_G11_7		0x56b1	Arc Pro A40/A50
-product INTEL DG2_G12_5		0x56b2	Graphics
-product INTEL DG2_G12_6		0x56b3	Graphics
+product INTEL DG2_G12_5		0x56b2	Arc Pro A60M
+product INTEL DG2_G12_6		0x56b3	Arc Pro A60
 product INTEL ATS_M150		0x56c0	Flex 170
 product INTEL ATS_M75		0x56c1	Flex 140
 product INTEL I219_LM24		0x57a0	I219-LM
@@ -8537,6 +8537,7 @@ product QUMRANET VIO1_NET	0x1041	Virtio 1.x Network
 product QUMRANET VIO1_BLOCK	0x1042	Virtio 1.x Storage
 product QUMRANET VIO1_CONS	0x1043	Virtio 1.x Console
 product QUMRANET VIO1_RNG	0x1044	Virtio 1.x RNG
+product QUMRANET VIO1_MEM	0x1045	Virtio 1.x Memory Balloon
 product QUMRANET VIO1_SCSI	0x1048	Virtio 1.x SCSI
 product QUMRANET VIO1_GPU	0x1050	Virtio 1.x GPU
 product QUMRANET VIO1_INPUT	0x1052	Virtio 1.x Input
@@ -8702,6 +8703,10 @@ product REDHAT SERIAL2		0x0003	Qemu Serial 2x
 product REDHAT SERIAL4		0x0004	Qemu Serial 4x
 product REDHAT SDMMC		0x0007	SD/MMC
 product REDHAT HB		0x0008	Host
+product REDHAT PCIE		0x000c	PCIE
+product REDHAT XHCI		0x000d	xHCI
+product REDHAT PCI		0x000e	PCI
+product REDHAT NVME		0x0010	NVMe
 product REDHAT QXL		0x0100	QXL Video
 
 /* Rendition products */

@@ -2,7 +2,7 @@
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	OpenBSD: pcidevs,v 1.2064 2024/02/29 10:09:54 jsg Exp 
+ *	OpenBSD: pcidevs,v 1.2066 2024/03/04 05:34:07 jsg Exp 
  */
 /*	$NetBSD: pcidevs,v 1.30 1997/06/24 06:20:24 thorpej Exp $	*/
 
@@ -6037,8 +6037,8 @@
 #define	PCI_PRODUCT_INTEL_DG2_G11_1	0x5693		/* Arc A370M */
 #define	PCI_PRODUCT_INTEL_DG2_G11_2	0x5694		/* Arc A350M */
 #define	PCI_PRODUCT_INTEL_DG2_G11_3	0x5695		/* Graphics */
-#define	PCI_PRODUCT_INTEL_DG2_G12_1	0x5696		/* Graphics */
-#define	PCI_PRODUCT_INTEL_DG2_G12_2	0x5697		/* Graphics */
+#define	PCI_PRODUCT_INTEL_DG2_G12_1	0x5696		/* Arc A570M */
+#define	PCI_PRODUCT_INTEL_DG2_G12_2	0x5697		/* Arc A530M */
 #define	PCI_PRODUCT_INTEL_DG2_G10_4	0x56a0		/* Arc A770 */
 #define	PCI_PRODUCT_INTEL_DG2_G10_5	0x56a1		/* Arc A750 */
 #define	PCI_PRODUCT_INTEL_DG2_G10_6	0x56a2		/* Arc A580 */
@@ -6048,8 +6048,8 @@
 #define	PCI_PRODUCT_INTEL_DG2_G11_5	0x56a6		/* Arc A310 */
 #define	PCI_PRODUCT_INTEL_DG2_G11_6	0x56b0		/* Arc Pro A30M */
 #define	PCI_PRODUCT_INTEL_DG2_G11_7	0x56b1		/* Arc Pro A40/A50 */
-#define	PCI_PRODUCT_INTEL_DG2_G12_5	0x56b2		/* Graphics */
-#define	PCI_PRODUCT_INTEL_DG2_G12_6	0x56b3		/* Graphics */
+#define	PCI_PRODUCT_INTEL_DG2_G12_5	0x56b2		/* Arc Pro A60M */
+#define	PCI_PRODUCT_INTEL_DG2_G12_6	0x56b3		/* Arc Pro A60 */
 #define	PCI_PRODUCT_INTEL_ATS_M150	0x56c0		/* Flex 170 */
 #define	PCI_PRODUCT_INTEL_ATS_M75	0x56c1		/* Flex 140 */
 #define	PCI_PRODUCT_INTEL_I219_LM24	0x57a0		/* I219-LM */
@@ -8542,6 +8542,7 @@
 #define	PCI_PRODUCT_QUMRANET_VIO1_BLOCK	0x1042		/* Virtio 1.x Storage */
 #define	PCI_PRODUCT_QUMRANET_VIO1_CONS	0x1043		/* Virtio 1.x Console */
 #define	PCI_PRODUCT_QUMRANET_VIO1_RNG	0x1044		/* Virtio 1.x RNG */
+#define	PCI_PRODUCT_QUMRANET_VIO1_MEM	0x1045		/* Virtio 1.x Memory Balloon */
 #define	PCI_PRODUCT_QUMRANET_VIO1_SCSI	0x1048		/* Virtio 1.x SCSI */
 #define	PCI_PRODUCT_QUMRANET_VIO1_GPU	0x1050		/* Virtio 1.x GPU */
 #define	PCI_PRODUCT_QUMRANET_VIO1_INPUT	0x1052		/* Virtio 1.x Input */
@@ -8707,6 +8708,10 @@
 #define	PCI_PRODUCT_REDHAT_SERIAL4	0x0004		/* Qemu Serial 4x */
 #define	PCI_PRODUCT_REDHAT_SDMMC	0x0007		/* SD/MMC */
 #define	PCI_PRODUCT_REDHAT_HB	0x0008		/* Host */
+#define	PCI_PRODUCT_REDHAT_PCIE	0x000c		/* PCIE */
+#define	PCI_PRODUCT_REDHAT_XHCI	0x000d		/* xHCI */
+#define	PCI_PRODUCT_REDHAT_PCI	0x000e		/* PCI */
+#define	PCI_PRODUCT_REDHAT_NVME	0x0010		/* NVMe */
 #define	PCI_PRODUCT_REDHAT_QXL	0x0100		/* QXL Video */
 
 /* Rendition products */
