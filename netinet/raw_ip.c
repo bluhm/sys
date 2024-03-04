@@ -128,8 +128,6 @@ rip_init(void)
 	in_pcbinit(&rawcbtable, 1);
 }
 
-struct mbuf	*rip_chkhdr(struct mbuf *, struct mbuf *);
-
 int
 rip_input(struct mbuf **mp, int *offp, int proto, int af)
 {
