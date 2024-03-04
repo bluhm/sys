@@ -1,4 +1,4 @@
-/*	$OpenBSD: dwqe.c,v 1.16 2023/12/28 14:30:28 uwe Exp $	*/
+/*	$OpenBSD: dwqe.c,v 1.17 2024/03/04 23:50:20 bluhm Exp $	*/
 /*
  * Copyright (c) 2008, 2019 Mark Kettenis <kettenis@openbsd.org>
  * Copyright (c) 2017, 2022 Patrick Wildt <patrick@blueri.se>
