@@ -3239,6 +3239,7 @@ ixgbe_rxeof(struct rx_ring *rxr)
 		if (eop == 0) {
 			nxbuf->fmp = sendmp;
 			sendmp = NULL;
+			CLR(nxbuf->buf->m_flags, M_PKTHDR);
 			mp->m_next = nxbuf->buf;
 		} else { /* Sending this frame? */
 			uint16_t pkts;
