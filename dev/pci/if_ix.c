@@ -3172,13 +3172,13 @@ ixgbe_rxeof(struct rx_ring *rxr)
 		rsccnt >>= IXGBE_RXDADV_RSCCNT_SHIFT;
 
 		if (staterr & IXGBE_RXDADV_ERR_FRAME_ERR_MASK) {
+			if (ISSET(mp->m_flags, M_PKTHDR))
+				m_freem(mp);
+			rxbuf->buf = NULL;
 			if (rxbuf->fmp) {
 				m_freem(rxbuf->fmp);
 				rxbuf->fmp = NULL;
 			}
-
-			m_freem(mp);
-			rxbuf->buf = NULL;
 			goto next_desc;
 		}
 
