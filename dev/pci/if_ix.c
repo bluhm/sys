@@ -1081,9 +1081,11 @@ ixgbe_queue_intr(void *vque)
 	struct ix_txring	*txr = que->txr;
 
 	if (ISSET(ifp->if_flags, IFF_RUNNING)) {
+		mtx_enter(&rxr->rx_mtx);
 		ixgbe_rxeof(rxr);
 		ixgbe_txeof(txr);
 		ixgbe_rxrefill_locked(rxr);
+		mtx_leave(&rxr->rx_mtx);
 	}
 
 	ixgbe_enable_queue(sc, que->msix);
@@ -1112,9 +1114,11 @@ ixgbe_legacy_intr(void *arg)
 	}
 
 	if (ISSET(ifp->if_flags, IFF_RUNNING)) {
+		mtx_enter(&rxr->rx_mtx);
 		ixgbe_rxeof(rxr);
 		ixgbe_txeof(txr);
 		ixgbe_rxrefill_locked(rxr);
+		mtx_leave(&rxr->rx_mtx);
 	}
 
 	ixgbe_enable_queues(sc);
@@ -2205,6 +2209,7 @@ ixgbe_allocate_queues(struct ix_softc *sc)
 		rxr->sc = sc;
 		rxr->me = i;
 		timeout_set(&rxr->rx_refill, ixgbe_rxrefill, rxr);
+		mtx_init(&rxr->rx_mtx, IPL_NET);
 
 		if (ixgbe_dma_malloc(sc, rsize,
 			&rxr->rxdma, BUS_DMA_NOWAIT)) {
@@ -2846,9 +2851,9 @@ ixgbe_rxrefill(void *xrxr)
 	struct ix_rxring *rxr = xrxr;
 	int s;
 
-	s = splnet();
+	mtx_enter(&rxr->rx_mtx);
 	ixgbe_rxrefill_locked(rxr);
-	splx(s);
+	mtx_leave(&rxr->rx_mtx);
 }
 
 void
