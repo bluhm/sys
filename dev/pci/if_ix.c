@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ix.c,v 1.209 2024/02/15 10:56:53 mglocker Exp $	*/
+/*	$OpenBSD: if_ix.c,v 1.211 2024/03/07 17:09:02 jan Exp $	*/
 
 /******************************************************************************
 
@@ -1932,7 +1932,9 @@ ixgbe_setup_interface(struct ix_softc *sc)
 
 	ifp->if_capabilities |= IFCAP_TSOv4 | IFCAP_TSOv6;
 	if (sc->hw.mac.type != ixgbe_mac_82598EB) {
+#ifndef __sparc64__
 		ifp->if_xflags |= IFXF_LRO;
+#endif
 		ifp->if_capabilities |= IFCAP_LRO;
 	}
 
@@ -3174,10 +3176,10 @@ ixgbe_rxeof(struct rx_ring *rxr)
 		if (staterr & IXGBE_RXDADV_ERR_FRAME_ERR_MASK) {
 			if (rxbuf->fmp) {
 				m_freem(rxbuf->fmp);
-				rxbuf->fmp = NULL;
+			} else {
+				m_freem(mp);
 			}
-
-			m_freem(mp);
+			rxbuf->fmp = NULL;
 			rxbuf->buf = NULL;
 			goto next_desc;
 		}
@@ -3224,6 +3226,8 @@ ixgbe_rxeof(struct rx_ring *rxr)
 			sendmp = mp;
 			sendmp->m_pkthdr.len = 0;
 			sendmp->m_pkthdr.ph_mss = 0;
+		} else {
+			mp->m_flags &= ~M_PKTHDR;
 		}
 		sendmp->m_pkthdr.len += mp->m_len;
 		/*
