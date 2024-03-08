@@ -2701,9 +2701,15 @@ ixgbe_get_buf(struct ix_rxring *rxr, int i)
 	rxbuf = &rxr->rx_buffers[i];
 	rxdesc = &rxr->rx_base[i];
 	if (rxbuf->buf) {
-		printf("%s: ixgbe_get_buf: slot %d already has an mbuf\n",
-		    sc->dev.dv_xname, i);
+		printf("%s: %s slot %d already has an mbuf\n",
+		    __func__, sc->dev.dv_xname, i);
 		return (ENOBUFS);
+	}
+	if (rxbuf->fmp) {
+		printf("%s: %s slot %d already has a first mbuf\n",
+		    __func__, sc->dev.dv_xname, i);
+		m_freem(rxbuf->fmp);
+		rxbuf->fmp = NULL;
 	}
 
 	/* needed in any case so prealocate since this one will fail for sure */
@@ -2851,6 +2857,7 @@ ixgbe_rxrefill(void *xrxr)
 	struct ix_rxring *rxr = xrxr;
 
 	mtx_enter(&rxr->rx_mtx);
+	printf("%s: if_rxr_inuse %u\n", __func__, if_rxr_inuse(&rxr->rx_ring));
 	ixgbe_rxrefill_locked(rxr);
 	mtx_leave(&rxr->rx_mtx);
 }
@@ -3107,9 +3114,13 @@ ixgbe_free_receive_buffers(struct ix_rxring *rxr)
 				    BUS_DMASYNC_POSTREAD);
 				bus_dmamap_unload(rxr->rxdma.dma_tag,
 				    rxbuf->map);
-				m_freem(rxbuf->buf);
-				rxbuf->buf = NULL;
 			}
+			if (rxbuf->fmp) {
+				m_freem(rxbuf->fmp);
+			} else {
+				m_freem(rxbuf->buf);
+			}
+			rxbuf->fmp = rxbuf->buf = NULL;
 			if (rxbuf->map != NULL) {
 				bus_dmamap_destroy(rxr->rxdma.dma_tag,
 				    rxbuf->map);
@@ -3189,10 +3200,9 @@ ixgbe_rxeof(struct ix_rxring *rxr)
 			if (rxbuf->fmp) {
 				m_freem(rxbuf->fmp);
 			} else {
-				m_freem(mp);
+				m_freem(rxbuf->buf);
 			}
-			rxbuf->fmp = NULL;
-			rxbuf->buf = NULL;
+			rxbuf->fmp = rxbuf->buf = NULL;
 			goto next_desc;
 		}
 
@@ -3252,7 +3262,9 @@ ixgbe_rxeof(struct ix_rxring *rxr)
 			sendmp->m_pkthdr.ph_mss += rsccnt - 1;
 
 		/* Pass the head pointer on */
-		if (eop == 0) {
+		if (!eop) {
+			if (nxbuf->fmp)
+				printf("%s: fmp exists\n", __func__);
 			nxbuf->fmp = sendmp;
 			sendmp = NULL;
 			mp->m_next = nxbuf->buf;
