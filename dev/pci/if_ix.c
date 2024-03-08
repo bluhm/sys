@@ -147,6 +147,7 @@ void	ixgbe_free_receive_buffers(struct ix_rxring *);
 void	ixgbe_initialize_rss_mapping(struct ix_softc *);
 int	ixgbe_rxfill(struct ix_rxring *);
 void	ixgbe_rxrefill(void *);
+void	ixgbe_rxrefill_locked(struct ix_rxring *);
 
 int	ixgbe_intr(struct ix_softc *sc);
 void	ixgbe_enable_intr(struct ix_softc *);
@@ -1082,7 +1083,7 @@ ixgbe_queue_intr(void *vque)
 	if (ISSET(ifp->if_flags, IFF_RUNNING)) {
 		ixgbe_rxeof(rxr);
 		ixgbe_txeof(txr);
-		ixgbe_rxrefill(rxr);
+		ixgbe_rxrefill_locked(rxr);
 	}
 
 	ixgbe_enable_queue(sc, que->msix);
@@ -1113,7 +1114,7 @@ ixgbe_legacy_intr(void *arg)
 	if (ISSET(ifp->if_flags, IFF_RUNNING)) {
 		ixgbe_rxeof(rxr);
 		ixgbe_txeof(txr);
-		ixgbe_rxrefill(rxr);
+		ixgbe_rxrefill_locked(rxr);
 	}
 
 	ixgbe_enable_queues(sc);
@@ -2843,6 +2844,16 @@ void
 ixgbe_rxrefill(void *xrxr)
 {
 	struct ix_rxring *rxr = xrxr;
+	int s;
+
+	s = splnet();
+	ixgbe_rxrefill_locked(rxr);
+	splx(s);
+}
+
+void
+ixgbe_rxrefill_locked(struct ix_rxring *rxr)
+{
 	struct ix_softc *sc = rxr->sc;
 
 	if (ixgbe_rxfill(rxr)) {
@@ -2851,7 +2862,6 @@ ixgbe_rxrefill(void *xrxr)
 		    rxr->last_desc_filled);
 	} else if (if_rxr_inuse(&rxr->rx_ring) == 0)
 		timeout_add(&rxr->rx_refill, 1);
-
 }
 
 /*********************************************************************
