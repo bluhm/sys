@@ -2732,6 +2732,7 @@ ixgbe_get_buf(struct ix_rxring *rxr, int i)
 	rxbuf->buf = mp;
 
 	rxdesc->read.pkt_addr = htole64(rxbuf->map->dm_segs[0].ds_addr);
+	rxdesc->wb.upper.status_error = 0;
 
 	return (0);
 }
