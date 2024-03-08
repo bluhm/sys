@@ -2849,7 +2849,6 @@ void
 ixgbe_rxrefill(void *xrxr)
 {
 	struct ix_rxring *rxr = xrxr;
-	int s;
 
 	mtx_enter(&rxr->rx_mtx);
 	ixgbe_rxrefill_locked(rxr);
