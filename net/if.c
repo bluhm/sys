@@ -3469,10 +3469,20 @@ if_rxr_get(struct if_rxring *rxr, u_int max)
 	if (rxr->rxr_alive >= rxr->rxr_cwm)
 		return (0);
 
+	KASSERT(rxr->rxr_cwm >= rxr->rxr_alive);
 	diff = min(rxr->rxr_cwm - rxr->rxr_alive, max);
 	rxr->rxr_alive += diff;
+	KASSERT(rxr->rxr_alive < INT_MAX);
 
 	return (diff);
+}
+
+void
+if_rxr_put(struct if_rxring *rxr, u_int diff)
+{
+	KASSERT(diff < INT_MAX);
+	KASSERT(rxr->rxr_alive >=  diff);
+	rxr->rxr_alive -= diff;
 }
 
 int
