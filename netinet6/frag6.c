@@ -404,6 +404,10 @@ frag6_input(struct mbuf **mp, int *offp, int proto, int af)
 	/* adjust offset to point where the original next header starts */
 	offset = ip6af->ip6af_offset - sizeof(struct ip6_frag);
 	pool_put(&ip6af_pool, ip6af);
+	if (next + offset - sizeof(struct ip6_hdr) > IPV6_MAXPACKET) {
+		frag6_freef(q6);
+		goto dropfrag;
+	}
 	ip6 = mtod(m, struct ip6_hdr *);
 	ip6->ip6_plen = htons((u_short)next + offset - sizeof(struct ip6_hdr));
 	ip6->ip6_src = q6->ip6q_src;
