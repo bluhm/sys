@@ -404,12 +404,17 @@ frag6_input(struct mbuf **mp, int *offp, int proto, int af)
 	/* adjust offset to point where the original next header starts */
 	offset = ip6af->ip6af_offset - sizeof(struct ip6_frag);
 	pool_put(&ip6af_pool, ip6af);
-	if (next + offset - sizeof(struct ip6_hdr) > IPV6_MAXPACKET) {
-		frag6_freef(q6);
+	next += offset - sizeof(struct ip6_hdr);
+	if ((u_int)next > IPV6_MAXPACKET) {
+		TAILQ_REMOVE(&frag6_queue, q6, ip6q_queue);
+		frag6_nfrags -= q6->ip6q_nfrag;
+		frag6_nfragpackets--;
+		mtx_leave(&frag6_mutex);
+		pool_put(&ip6q_pool, q6);
 		goto dropfrag;
 	}
 	ip6 = mtod(m, struct ip6_hdr *);
-	ip6->ip6_plen = htons((u_short)next + offset - sizeof(struct ip6_hdr));
+	ip6->ip6_plen = htons(next);
 	ip6->ip6_src = q6->ip6q_src;
 	ip6->ip6_dst = q6->ip6q_dst;
 	if (q6->ip6q_ecn == IPTOS_ECN_CE)
