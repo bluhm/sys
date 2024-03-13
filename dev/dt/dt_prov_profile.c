@@ -1,4 +1,4 @@
-/*	$OpenBSD: dt_prov_profile.c,v 1.6 2024/02/09 17:42:18 cheloha Exp $ */
+/*	$OpenBSD: dt_prov_profile.c,v 1.7 2024/03/13 13:13:57 bluhm Exp $ */
 
 /*
  * Copyright (c) 2019 Martin Pieuchot <mpi@openbsd.org>
