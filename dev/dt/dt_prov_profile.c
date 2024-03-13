@@ -53,13 +53,13 @@ int
 dt_prov_profile_init(void)
 {
 	dtpp_profile = dt_dev_alloc_probe("hz", "97", &dt_prov_profile);
-	dt_dev_register_probe(dtpp_profile);
 	if (dtpp_profile == NULL)
 		return 0;
+	dt_dev_register_probe(dtpp_profile);
 	dtpp_interval = dt_dev_alloc_probe("hz", "1", &dt_prov_interval);
-	dt_dev_register_probe(dtpp_interval);
 	if (dtpp_interval == NULL)
 		return 1;
+	dt_dev_register_probe(dtpp_interval);
 	return 2;
 }
 
