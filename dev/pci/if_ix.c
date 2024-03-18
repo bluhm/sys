@@ -3174,6 +3174,8 @@ ixgbe_rxeof(struct ix_rxring *rxr)
 			break;
 		}
 
+		/* Zero out the receive descriptors status  */
+		rxdesc->wb.upper.status_error = 0;
 		rxbuf = &rxr->rx_buffers[i];
 
 		/* pull the mbuf off the ring */
