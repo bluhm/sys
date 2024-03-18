@@ -1935,9 +1935,7 @@ ixgbe_setup_interface(struct ix_softc *sc)
 
 	ifp->if_capabilities |= IFCAP_TSOv4 | IFCAP_TSOv6;
 	if (sc->hw.mac.type != ixgbe_mac_82598EB) {
-#ifndef __sparc64__
 		ifp->if_xflags |= IFXF_LRO;
-#endif
 		ifp->if_capabilities |= IFCAP_LRO;
 	}
 
