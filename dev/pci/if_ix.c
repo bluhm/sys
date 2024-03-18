@@ -2900,7 +2900,6 @@ fail:
  *  Setup receive registers and features.
  *
  **********************************************************************/
-#define IXGBE_SRRCTL_BSIZEHDRSIZE_SHIFT 2
 
 void
 ixgbe_initialize_receive_units(struct ix_softc *sc)
@@ -2961,6 +2960,7 @@ ixgbe_initialize_receive_units(struct ix_softc *sc)
 
 		/* Set up the SRRCTL register */
 		srrctl = bufsz | IXGBE_SRRCTL_DESCTYPE_ADV_ONEBUF;
+		srrctl |= IXGBE_SRRCTL_DROP_EN;
 		IXGBE_WRITE_REG(hw, IXGBE_SRRCTL(i), srrctl);
 
 		if (ISSET(ifp->if_xflags, IFXF_LRO)) {
