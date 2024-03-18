@@ -2830,7 +2830,7 @@ ixgbe_rxfill(struct ix_rxring *rxr)
 
 	i = rxr->last_desc_filled;
 	for (slots = if_rxr_get(&rxr->rx_ring, sc->num_rx_desc);
-	    slots > 0; slots--) {
+	    slots > 1; slots--) {
 		if (++i == sc->num_rx_desc)
 			i = 0;
 
