@@ -205,6 +205,7 @@ struct ix_rxring {
 	uint			next_to_refresh;
 	uint			next_to_check;
 	uint			last_desc_filled;
+	uint			rx_idx;
 	struct timeout		rx_refill;
 	struct mutex		rx_mtx;
 	struct if_rxring	rx_ring;

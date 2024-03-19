@@ -2840,6 +2840,10 @@ ixgbe_rxfill(struct ix_rxring *rxr)
 		rxr->last_desc_filled = i;
 		post = 1;
 	}
+	if (i == rxr->next_to_check) {
+		printf("%s: queue %u full at %u\n", __func__,
+		    rxr->rx_idx, i);
+	}
 
 	bus_dmamap_sync(rxr->rxdma.dma_tag, rxr->rxdma.dma_map,
 	    0, rxr->rxdma.dma_map->dm_mapsize,
@@ -2950,6 +2954,8 @@ ixgbe_initialize_receive_units(struct ix_softc *sc)
 
 	for (i = 0; i < sc->num_queues; i++, rxr++) {
 		uint64_t rdba = rxr->rxdma.dma_map->dm_segs[0].ds_addr;
+
+		rxr->rx_idx = i;
 
 		/* Setup the Base and Length of the Rx Descriptor Ring */
 		IXGBE_WRITE_REG(hw, IXGBE_RDBAL(i),
@@ -3154,7 +3160,7 @@ ixgbe_rxeof(struct ix_rxring *rxr)
 	struct ixgbe_rx_buf	*rxbuf, *nxbuf;
 	union ixgbe_adv_rx_desc	*rxdesc;
 	size_t			 dsize = sizeof(union ixgbe_adv_rx_desc);
-	int			 i, nextp, rsccnt;
+	u_int			 i, nextp, rsccnt;
 
 	if (!ISSET(ifp->if_flags, IFF_RUNNING))
 		return FALSE;
@@ -3289,6 +3295,11 @@ next_desc:
 		/* Advance our pointers to the next descriptor. */
 		if (++i == sc->num_rx_desc)
 			i = 0;
+
+		if (i == rxr->last_desc_filled) {
+			printf("%s: queue %u empty at %u\n", __func__,
+			    rxr->rx_idx, i);
+		}
 	}
 	rxr->next_to_check = i;
 
