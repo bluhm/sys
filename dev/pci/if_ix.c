@@ -2803,8 +2803,13 @@ ixgbe_setup_receive_ring(struct ix_rxring *rxr)
 	rxr->next_to_check = 0;
 	rxr->last_desc_filled = sc->num_rx_desc - 1;
 
+#if 0
 	if_rxr_init(&rxr->rx_ring, 2 * ((ifp->if_hardmtu / MCLBYTES) + 1),
 	    sc->num_rx_desc - 1);
+#else
+	(void)ifp;
+	if_rxr_init(&rxr->rx_ring, sc->num_rx_desc - 1, sc->num_rx_desc - 1);
+#endif
 
 	ixgbe_rxfill(rxr);
 	if (if_rxr_inuse(&rxr->rx_ring) == 0) {
