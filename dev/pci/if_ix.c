@@ -3084,6 +3084,8 @@ ixgbe_free_receive_structures(struct ix_softc *sc)
 	struct ix_rxring *rxr;
 	int		i;
 
+	printf("%s: called\n", __func__);
+
 	for (i = 0, rxr = sc->rx_rings; i < sc->num_queues; i++, rxr++)
 		if_rxr_init(&rxr->rx_ring, 0, 0);
 
@@ -3183,7 +3185,6 @@ ixgbe_rxeof(struct ix_rxring *rxr)
 		    rxbuf->map->dm_mapsize, BUS_DMASYNC_POSTREAD);
 		bus_dmamap_unload(rxr->rxdma.dma_tag, rxbuf->map);
 
-		mp = rxbuf->buf;
 		len = letoh16(rxdesc->wb.upper.length);
 		vtag = letoh16(rxdesc->wb.upper.vlan);
 		eop = ((staterr & IXGBE_RXD_STAT_EOP) != 0);
@@ -3205,6 +3206,8 @@ ixgbe_rxeof(struct ix_rxring *rxr)
 			goto next_desc;
 		}
 
+		mp = rxbuf->buf;
+		rxbuf->buf = NULL;
 		if (mp == NULL) {
 			panic("%s: ixgbe_rxeof: NULL mbuf in slot %d "
 			    "(nrx %d, filled %d)", sc->dev.dv_xname,
@@ -3240,7 +3243,7 @@ ixgbe_rxeof(struct ix_rxring *rxr)
 		 * that determines what we are
 		 */
 		sendmp = rxbuf->fmp;
-		rxbuf->buf = rxbuf->fmp = NULL;
+		rxbuf->fmp = NULL;
 
 		if (sendmp == NULL) {
 			/* first desc of a non-ps chain */
