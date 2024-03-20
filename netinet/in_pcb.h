@@ -195,6 +195,10 @@ struct inpcbtable {
 	SIPHASH_KEY inpt_key, inpt_lkey;	/* [I] secrets for hashes */
 	u_long	inpt_mask, inpt_lmask;		/* [t] hash masks */
 	int	inpt_count, inpt_size;		/* [t] queue count, hash size */
+	uint16_t *inpt_prevlports;		/* [t] array of used ports */
+	int	inpt_lportsize;			/* [t] local port hash size */
+	int	inpt_connecthigh;		/* [t] connects last minute */
+	int	inpt_connectlow;		/* [t] busy for 10 minutes */
 };
 
 /* flags in inp_flags: */
@@ -300,7 +304,7 @@ void	 in_init(void);
 void	 in_losing(struct inpcb *);
 int	 in_pcballoc(struct socket *, struct inpcbtable *, int);
 int	 in_pcbbind_locked(struct inpcb *, struct mbuf *, const void *,
-	    struct proc *);
+	    const void *, struct proc *);
 int	 in_pcbbind(struct inpcb *, struct mbuf *, struct proc *);
 int	 in_pcbaddrisavail(const struct inpcb *, struct sockaddr_in *, int,
 	    struct proc *);
@@ -352,6 +356,8 @@ int	 in_rootonly(u_int16_t, u_int16_t);
 int	 in_pcbselsrc(struct in_addr *, struct sockaddr_in *, struct inpcb *);
 struct rtentry *
 	in_pcbrtentry(struct inpcb *);
+int	in_pcbport_linear(struct inpcbtable *, int);
+void	in_pcbtimo_linear(struct inpcbtable *, int);
 
 /* INET6 stuff */
 struct rtentry *

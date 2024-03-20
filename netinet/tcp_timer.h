@@ -159,6 +159,7 @@ extern int tcp_always_keepalive;	/* assume SO_KEEPALIVE is always set */
 extern int tcp_keepidle;		/* time before keepalive probes begin */
 extern int tcp_keepintvl;		/* time between keepalive probes */
 extern int tcp_maxidle;			/* time to drop after starting probes */
+extern int tcp_lportrate;		/* connection rate for linear port */
 extern int tcp_ttl;			/* time to live for TCP segs */
 extern int tcp_backoff[];
 

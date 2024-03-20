@@ -65,6 +65,7 @@ int	tcp_keepidle;
 int	tcp_keepintvl;
 int	tcp_maxpersistidle;	/* max idle time in persist */
 int	tcp_maxidle;		/* [T] max idle time for keep alive */
+int	tcp_lportrate = 1000;
 
 /*
  * Time to delay the ACK.  This is initialized in tcp_init(), unless
@@ -149,10 +150,23 @@ tcp_timer_delack(void *arg)
 void
 tcp_slowtimo(void)
 {
+	int connectrate, minute = 0;
+	static int counter;
+
 	mtx_enter(&tcp_timer_mtx);
 	tcp_maxidle = TCPTV_KEEPCNT * tcp_keepintvl;
 	tcp_iss += TCP_ISSINCR2/PR_SLOWHZ;		/* increment iss */
+	if (++counter % 120 == 0)
+		minute = 1;
 	mtx_leave(&tcp_timer_mtx);
+
+	if (minute) {
+		connectrate = READ_ONCE(tcp_lportrate);
+		in_pcbtimo_linear(&tcbtable, connectrate);
+#ifdef INET6
+		in_pcbtimo_linear(&tcb6table, connectrate);
+#endif
+	}
 }
 
 /*
