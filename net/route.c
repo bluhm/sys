@@ -253,10 +253,6 @@ route_mpath(struct route *ro, const struct in_addr *dst,
 		if (ro->ro_srcin.s_addr != INADDR_ANY)
 			s = &ro->ro_srcin.s_addr;
 		ro->ro_rt = rtalloc_mpath(&ro->ro_dstsa, s, ro->ro_tableid);
-		if (!rtisvalid(ro->ro_rt)) {
-			rtfree(ro->ro_rt);
-			ro->ro_rt = NULL;
-		}
 	}
 	return (ro->ro_rt);
 }
@@ -310,10 +306,6 @@ route6_mpath(struct route *ro, const struct in6_addr *dst,
 		if (!IN6_IS_ADDR_UNSPECIFIED(&ro->ro_srcin6))
 			s = &ro->ro_srcin6.s6_addr32[0];
 		ro->ro_rt = rtalloc_mpath(&ro->ro_dstsa, s, ro->ro_tableid);
-		if (!rtisvalid(ro->ro_rt)) {
-			rtfree(ro->ro_rt);
-			ro->ro_rt = NULL;
-		}
 	}
 	return (ro->ro_rt);
 }
