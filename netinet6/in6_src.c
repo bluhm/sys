@@ -205,7 +205,8 @@ in6_pcbselsrc(const struct in6_addr **in6src, struct sockaddr_in6 *dstsock,
 	 * - preferred source address is set
 	 * - output interface is UP
 	 */
-	if (rt && !(rt->rt_flags & RTF_LLINFO) && !(rt->rt_flags & RTF_HOST)) {
+	if (rt != NULL && !(rt->rt_flags & RTF_LLINFO) &&
+	    !(rt->rt_flags & RTF_HOST)) {
 		ip6_source = rtable_getsource(rtableid, AF_INET6);
 		if (ip6_source != NULL) {
 			struct ifaddr *ifa;

@@ -986,7 +986,8 @@ in_pcbselsrc(struct in_addr *insrc, struct sockaddr_in *sin,
 	 * - preferred source address is set
 	 * - output interface is UP
 	 */
-	if (rt && !(rt->rt_flags & RTF_LLINFO) && !(rt->rt_flags & RTF_HOST)) {
+	if (rt != NULL && !(rt->rt_flags & RTF_LLINFO) &&
+	    !(rt->rt_flags & RTF_HOST)) {
 		ip4_source = rtable_getsource(rtableid, AF_INET);
 		if (ip4_source != NULL) {
 			struct ifaddr *ifa;
