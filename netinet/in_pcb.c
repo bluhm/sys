@@ -102,11 +102,7 @@
 #endif
 
 const struct in_addr zeroin_addr;
-
-const union {
-	struct in_addr	za_in;
-	struct in6_addr	za_in6;
-} zeroin46_addr;
+const union inpaddru zeroin46_addr;
 
 /*
  * These configure the range of local port addresses assigned to
