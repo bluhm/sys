@@ -313,7 +313,7 @@ in6_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 
 	if (IN6_IS_ADDR_UNSPECIFIED(&inp->inp_laddr6)) {
 		if (inp->inp_lport == 0) {
-			error = in_pcbbind_locked(inp, NULL, curproc);
+			error = in_pcbbind_locked(inp, NULL, in6a, curproc);
 			if (error) {
 				mtx_leave(&table->inpt_mtx);
 				return (error);
