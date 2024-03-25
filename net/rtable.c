@@ -875,7 +875,7 @@ an_match(struct art_node *an, const struct sockaddr *dst, int plen)
 		return (0);
 
 	rt = SRPL_FIRST(&sr, &an->an_rtlist);
-	match = (memcmp(rt->rt_dest, dst, dst->sa_len) == 0);
+	match = (rt != NULL && memcmp(rt->rt_dest, dst, dst->sa_len) == 0);
 	SRPL_LEAVE(&sr);
 
 	return (match);
