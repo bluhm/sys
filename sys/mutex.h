@@ -40,7 +40,7 @@
 #include <sys/_lock.h>
 
 struct mutex {
-	volatile void *mtx_owner;
+	void *volatile mtx_owner;
 	int mtx_wantipl;
 	int mtx_oldipl;
 #ifdef WITNESS
