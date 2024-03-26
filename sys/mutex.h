@@ -1,4 +1,4 @@
-/*	$OpenBSD: mutex.h,v 1.20 2024/02/03 22:50:09 mvs Exp $	*/
+/*	$OpenBSD: mutex.h,v 1.21 2024/03/26 18:18:30 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2004 Artur Grabowski <art@openbsd.org>

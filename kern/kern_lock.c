@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_lock.c,v 1.72 2022/04/26 15:31:14 dv Exp $	*/
+/*	$OpenBSD: kern_lock.c,v 1.73 2024/03/26 18:18:30 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2017 Visa Hankala
