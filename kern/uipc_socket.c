@@ -1,4 +1,4 @@
-/*	$OpenBSD: uipc_socket.c,v 1.323 2024/03/27 22:47:53 mvs Exp $	*/
+/*	$OpenBSD: uipc_socket.c,v 1.325 2024/03/31 14:01:28 mvs Exp $	*/
 /*	$NetBSD: uipc_socket.c,v 1.21 1996/02/04 02:17:52 christos Exp $	*/
 
 /*
@@ -155,6 +155,8 @@ soalloc(const struct protosw *prp, int wait)
 	case AF_INET6:
 		switch (prp->pr_type) {
 		case SOCK_DGRAM:
+			so->so_rcv.sb_flags |= SB_OWNLOCK;
+			/* FALLTHROUGH */
 		case SOCK_RAW:
 			so->so_rcv.sb_flags |= SB_MTXLOCK;
 			break;
@@ -230,6 +232,14 @@ solisten(struct socket *so, int backlog)
 	int somaxconn_local = READ_ONCE(somaxconn);
 	int sominconn_local = READ_ONCE(sominconn);
 	int error;
+
+	switch (so->so_type) {
+	case SOCK_STREAM:
+	case SOCK_SEQPACKET:
+		break;
+	default:
+		return (EOPNOTSUPP);
+	}
 
 	soassertlocked(so);
 
@@ -1392,7 +1402,9 @@ sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
 	 * we sleep, the socket buffers are not marked as spliced yet.
 	 */
 	if (somove(so, M_WAIT)) {
+		mtx_enter(&so->so_rcv.sb_mtx);
 		so->so_rcv.sb_flags |= SB_SPLICE;
+		mtx_leave(&so->so_rcv.sb_mtx);
 		sosp->so_snd.sb_flags |= SB_SPLICE;
 	}
 
@@ -1420,7 +1432,9 @@ sounsplice(struct socket *so, struct socket *sosp, int freeing)
 	task_del(sosplice_taskq, &so->so_splicetask);
 	timeout_del(&so->so_idleto);
 	sosp->so_snd.sb_flags &= ~SB_SPLICE;
+	mtx_enter(&so->so_rcv.sb_mtx);
 	so->so_rcv.sb_flags &= ~SB_SPLICE;
+	mtx_leave(&so->so_rcv.sb_mtx);
 	so->so_sp->ssp_socket = sosp->so_sp->ssp_soback = NULL;
 	/* Do not wakeup a socket that is about to be freed. */
 	if ((freeing & SOSP_FREEING_READ) == 0 && soreadable(so))
@@ -1678,6 +1692,7 @@ somove(struct socket *so, int wait)
 		pru_rcvd(so);
 
 	/* Receive buffer did shrink by len bytes, adjust oob. */
+	mtx_enter(&so->so_rcv.sb_mtx);
 	rcvstate = so->so_rcv.sb_state;
 	so->so_rcv.sb_state &= ~SS_RCVATMARK;
 	oobmark = so->so_oobmark;
@@ -1688,6 +1703,7 @@ somove(struct socket *so, int wait)
 		if (oobmark >= len)
 			oobmark = 0;
 	}
+	mtx_leave(&so->so_rcv.sb_mtx);
 
 	/*
 	 * Handle oob data.  If any malloc fails, ignore error.
