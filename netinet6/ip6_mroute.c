@@ -451,7 +451,7 @@ mrt6_sysctl_mfc(void *oldp, size_t *oldlenp)
 		return EINVAL;
 
 	memset(&msa, 0, sizeof(msa));
-	if (oldp != NULL) {
+	if (oldp != NULL && *oldlenp > 0) {
 		msa.ms6a_minfos = malloc(*oldlenp, M_TEMP, M_WAITOK | M_ZERO);
 		msa.ms6a_len = *oldlenp;
 	}
@@ -463,11 +463,11 @@ mrt6_sysctl_mfc(void *oldp, size_t *oldlenp)
 
 	if (msa.ms6a_minfos != NULL && msa.ms6a_needed > 0 &&
 	    (error = copyout(msa.ms6a_minfos, oldp, msa.ms6a_needed)) != 0) {
-		free(msa.ms6a_minfos, M_TEMP, *oldlenp);
+		free(msa.ms6a_minfos, M_TEMP, msa.ms6a_len);
 		return error;
 	}
 
-	free(msa.ms6a_minfos, M_TEMP, *oldlenp);
+	free(msa.ms6a_minfos, M_TEMP, msa.ms6a_len);
 	*oldlenp = msa.ms6a_needed;
 
 	return 0;
