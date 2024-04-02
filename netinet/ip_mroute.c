@@ -430,8 +430,9 @@ mrt_rtwalk_mfcsysctl(struct rtentry *rt, void *arg, unsigned int rtableid)
 	}
 
 	for (minfo = msa->msa_minfos;
-	     (uint8_t *)minfo < ((uint8_t *)msa->msa_minfos + msa->msa_len);
-	     minfo++) {
+	    (uint8_t *)(minfo + 1) <=
+	    (uint8_t *)msa->msa_minfos + msa->msa_len;
+	    minfo++) {
 		/* Find a new entry or update old entry. */
 		if (minfo->mfc_origin.s_addr !=
 		    satosin(rt->rt_gateway)->sin_addr.s_addr ||
@@ -471,13 +472,11 @@ mrt_sysctl_mfc(void *oldp, size_t *oldlenp)
 	if (oldp != NULL && *oldlenp > MAXPHYS)
 		return (EINVAL);
 
-	if (oldp != NULL)
+	memset(&msa, 0, sizeof(msa));
+	if (oldp != NULL) {
 		msa.msa_minfos = malloc(*oldlenp, M_TEMP, M_WAITOK | M_ZERO);
-	else
-		msa.msa_minfos = NULL;
-
-	msa.msa_len = *oldlenp;
-	msa.msa_needed = 0;
+		msa.msa_len = *oldlenp;
+	}
 
 	for (rtableid = 0; rtableid <= RT_TABLEID_MAX; rtableid++) {
 		rtable_walk(rtableid, AF_INET, NULL, mrt_rtwalk_mfcsysctl,
