@@ -1,4 +1,4 @@
-/*	$OpenBSD: uipc_socket.c,v 1.325 2024/03/31 14:01:28 mvs Exp $	*/
+/*	$OpenBSD: uipc_socket.c,v 1.327 2024/04/02 14:23:15 claudio Exp $	*/
 /*	$NetBSD: uipc_socket.c,v 1.21 1996/02/04 02:17:52 christos Exp $	*/
 
 /*
@@ -2050,6 +2050,7 @@ sogetopt(struct socket *so, int level, int optname, struct mbuf *m)
 		case SO_REUSEPORT:
 		case SO_BROADCAST:
 		case SO_OOBINLINE:
+		case SO_ACCEPTCONN:
 		case SO_TIMESTAMP:
 		case SO_ZEROIZE:
 			*mtod(m, int *) = so->so_options & optname;
@@ -2290,7 +2291,7 @@ filt_soread(struct knote *kn, long hint)
 		}
 		kn->kn_fflags = so->so_error;
 		rv = 1;
-	} else if (so->so_error) {	/* temporary udp error */
+	} else if (so->so_error) {
 		rv = 1;
 	} else if (kn->kn_sfflags & NOTE_LOWAT) {
 		rv = (kn->kn_data >= kn->kn_sdata);
@@ -2327,7 +2328,7 @@ filt_sowrite(struct knote *kn, long hint)
 		}
 		kn->kn_fflags = so->so_error;
 		rv = 1;
-	} else if (so->so_error) {	/* temporary udp error */
+	} else if (so->so_error) {
 		rv = 1;
 	} else if (((so->so_state & SS_ISCONNECTED) == 0) &&
 	    (so->so_proto->pr_flags & PR_CONNREQUIRED)) {
