@@ -417,6 +417,8 @@ sendit:
 	else if (m->m_pkthdr.pf.flags & PF_TAG_REROUTE) {
 		/* tag as generated to skip over pf_test on rerun */
 		m->m_pkthdr.pf.flags |= PF_TAG_GENERATED;
+		if (ro == &iproute && ro->ro_rt)
+			rtfree(ro->ro_rt);
 		ro = NULL;
 		if_put(ifp); /* drop reference since target changed */
 		ifp = NULL;
