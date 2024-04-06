@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_mroute.c,v 1.141 2024/02/11 18:14:26 mvs Exp $	*/
+/*	$OpenBSD: ip_mroute.c,v 1.142 2024/04/06 14:23:27 bluhm Exp $	*/
 /*	$NetBSD: ip_mroute.c,v 1.85 2004/04/26 01:31:57 matt Exp $	*/
 
 /*
