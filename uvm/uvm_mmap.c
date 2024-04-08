@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_mmap.c,v 1.188 2024/04/03 22:21:48 kettenis Exp $	*/
+/*	$OpenBSD: uvm_mmap.c,v 1.191 2024/04/05 14:16:05 deraadt Exp $	*/
 /*	$NetBSD: uvm_mmap.c,v 1.49 2001/02/18 21:19:08 chs Exp $	*/
 
 /*
@@ -587,15 +587,6 @@ sys_mprotect(struct proc *p, void *v, register_t *retval)
 }
 
 /*
- * sys_msyscall: the msyscall system call
- */
-int
-sys_msyscall(struct proc *p, void *v, register_t *retval)
-{
-	return 0;
-}
-
-/*
  * sys_pinsyscalls.  The caller is required to normalize base,len
  * to the minimum .text region, and adjust pintable offsets relative
  * to that base.
@@ -610,6 +601,7 @@ sys_pinsyscalls(struct proc *p, void *v, register_t *retval)
 		syscallarg(int) npins;
 	} */ *uap = v;
 	struct process *pr = p->p_p;
+	struct vm_map *map = &p->p_vmspace->vm_map;
 	int npins, error = 0, i;
 	vaddr_t base;
 	size_t len;
@@ -622,6 +614,8 @@ sys_pinsyscalls(struct proc *p, void *v, register_t *retval)
 	len = (vsize_t)SCARG(uap, len);
 	if (base > SIZE_MAX - len)
 		return (EINVAL);	/* disallow wrap-around. */
+	if (base < map->min_offset || base+len > map->max_offset)
+		return (EINVAL);
 
 	/* XXX MP unlock */
 
@@ -654,6 +648,12 @@ err:
 	pr->ps_libcpin.pn_pins = pins;
 	pr->ps_libcpin.pn_npins = npins;
 	pr->ps_flags |= PS_LIBCPIN;
+
+#ifdef PMAP_CHECK_COPYIN
+	/* Assume (and insist) on libc.so text being execute-only */
+	if (PMAP_CHECK_COPYIN)
+		uvm_map_check_copyin_add(map, base, base+len);
+#endif
 	return (0);
 }
 
