@@ -417,7 +417,7 @@ sendit:
 	else if (m->m_pkthdr.pf.flags & PF_TAG_REROUTE) {
 		/* tag as generated to skip over pf_test on rerun */
 		m->m_pkthdr.pf.flags |= PF_TAG_GENERATED;
-		if (ro == &iproute && ro->ro_rt)
+		if (ro == &iproute)
 			rtfree(ro->ro_rt);
 		ro = NULL;
 		if_put(ifp); /* drop reference since target changed */
@@ -483,7 +483,7 @@ sendit:
 	ipstat_inc(ips_fragmented);
 
 done:
-	if (ro == &iproute && ro->ro_rt)
+	if (ro == &iproute)
 		rtfree(ro->ro_rt);
 	if_put(ifp);
 #ifdef IPSEC

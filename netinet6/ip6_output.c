@@ -635,7 +635,7 @@ reroute:
 		/* tag as generated to skip over pf_test on rerun */
 		m->m_pkthdr.pf.flags |= PF_TAG_GENERATED;
 		finaldst = ip6->ip6_dst;
-		if (ro == &iproute && ro->ro_rt)
+		if (ro == &iproute)
 			rtfree(ro->ro_rt);
 		ro = NULL;
 		if_put(ifp); /* drop reference since destination changed */
@@ -760,11 +760,10 @@ reroute:
  bad:
 	m_freem(m);
  done:
-	if (ro == &iproute && ro->ro_rt) {
+	if (ro == &iproute)
 		rtfree(ro->ro_rt);
-	} else if (ro_pmtu == &iproute && ro_pmtu->ro_rt) {
+	else if (ro_pmtu == &iproute)
 		rtfree(ro_pmtu->ro_rt);
-	}
 	if_put(ifp);
 #ifdef IPSEC
 	tdb_unref(tdb);
