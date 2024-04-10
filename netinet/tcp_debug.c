@@ -120,7 +120,7 @@ int	tcp_debx;				/* [D] */
 /*
  * Tcp debug routines
  */
-void
+static void
 tcp_trace_locked(short act, short ostate, struct tcpcb *tp, struct tcpcb *otp,
     caddr_t headers, int req, int len)
 {
