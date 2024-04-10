@@ -120,8 +120,8 @@ int	tcp_debx;				/* [D] */
 /*
  * Tcp debug routines
  */
-static void
-tcp_trace_locked(short act, short ostate, struct tcpcb *tp, struct tcpcb *otp,
+void
+tcp_trace(short act, short ostate, struct tcpcb *tp, struct tcpcb *otp,
     caddr_t headers, int req, int len)
 {
 #ifdef TCPDEBUG
@@ -130,9 +130,15 @@ tcp_trace_locked(short act, short ostate, struct tcpcb *tp, struct tcpcb *otp,
 	int flags;
 #endif
 	int pf = PF_UNSPEC;
-	struct tcp_debug *td = &tcp_debug[tcp_debx++];
-	struct tcpiphdr *ti = (struct tcpiphdr *)headers;
-	struct tcpipv6hdr *ti6 = (struct tcpipv6hdr *)headers;
+	struct tcp_debug *td;
+	struct tcpiphdr *ti;
+	struct tcpipv6hdr *ti6;
+
+	mtx_enter(&tcp_debug_mtx);
+
+	td = &tcp_debug[tcp_debx++];
+	ti = (struct tcpiphdr *)headers;
+	ti6 = (struct tcpipv6hdr *)headers;
 
 	if (tcp_debx == TCP_NDEBUG)
 		tcp_debx = 0;
@@ -188,7 +194,7 @@ tcp_trace_locked(short act, short ostate, struct tcpcb *tp, struct tcpcb *otp,
 	td->td_req = req;
 #ifdef TCPDEBUG
 	if (tcpconsdebug == 0)
-		return;
+		goto done;
 	if (otp)
 		printf("%p %s:", otp, tcpstates[ostate]);
 	else
@@ -234,20 +240,14 @@ tcp_trace_locked(short act, short ostate, struct tcpcb *tp, struct tcpcb *otp,
 	/* print out internal state of tp !?! */
 	printf("\n");
 	if (tp == NULL)
-		return;
+		goto done;
 	printf("\trcv_(nxt,wnd,up) (%x,%lx,%x) snd_(una,nxt,max) (%x,%x,%x)\n",
 	    tp->rcv_nxt, tp->rcv_wnd, tp->rcv_up, tp->snd_una, tp->snd_nxt,
 	    tp->snd_max);
 	printf("\tsnd_(wl1,wl2,wnd) (%x,%x,%lx)\n",
 	    tp->snd_wl1, tp->snd_wl2, tp->snd_wnd);
-#endif /* TCPDEBUG */
-}
 
-void
-tcp_trace(short act, short ostate, struct tcpcb *tp, struct tcpcb *otp,
-    caddr_t headers, int req, int len)
-{
-	mtx_enter(&tcp_debug_mtx);
-	tcp_trace_locked(act, ostate, tp, otp, headers, req, len);
+ done:
+#endif /* TCPDEBUG */
 	mtx_leave(&tcp_debug_mtx);
 }
