@@ -79,6 +79,7 @@
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/mbuf.h>
+#include <sys/mutex.h>
 #include <sys/socket.h>
 
 #include <net/route.h>
@@ -98,18 +99,25 @@
 #include <netinet/ip6.h>
 #endif /* INET6 */
 
+/*
+ *  Locks used to protect struct members in this file:
+ *	D	TCP debug global mutex
+ */
+
+struct mutex tcp_debug_mtx = MUTEX_INITIALIZER(IPL_SOFTNET);
+
 #ifdef TCPDEBUG
 int	tcpconsdebug = 0;
 #endif
 
-struct	tcp_debug tcp_debug[TCP_NDEBUG];
-int	tcp_debx;
+struct	tcp_debug tcp_debug[TCP_NDEBUG];	/* [D] */
+int	tcp_debx;				/* [D] */
 
 /*
  * Tcp debug routines
  */
 void
-tcp_trace(short act, short ostate, struct tcpcb *tp, struct tcpcb *otp,
+tcp_trace_locked(short act, short ostate, struct tcpcb *tp, struct tcpcb *otp,
     caddr_t headers, int req, int len)
 {
 #ifdef TCPDEBUG
@@ -225,4 +233,13 @@ tcp_trace(short act, short ostate, struct tcpcb *tp, struct tcpcb *otp,
 	printf("\tsnd_(wl1,wl2,wnd) (%x,%x,%lx)\n",
 	    tp->snd_wl1, tp->snd_wl2, tp->snd_wnd);
 #endif /* TCPDEBUG */
+}
+
+void
+tcp_trace(short act, short ostate, struct tcpcb *tp, struct tcpcb *otp,
+    caddr_t headers, int req, int len)
+{
+	mtx_enter(&tcp_debug_mtx);
+	tcp_trace_locked(act, ostate, tp, otp, headers, req, len);
+	mtx_leave(&tcp_debug_mtx);
 }
