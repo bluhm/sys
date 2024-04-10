@@ -99,6 +99,10 @@
 #include <netinet/ip6.h>
 #endif /* INET6 */
 
+#ifdef TCPDEBUG
+#include <sys/protosw.h>
+#endif
+
 /*
  *  Locks used to protect struct members in this file:
  *	D	TCP debug global mutex
@@ -121,6 +125,7 @@ tcp_trace_locked(short act, short ostate, struct tcpcb *tp, struct tcpcb *otp,
     caddr_t headers, int req, int len)
 {
 #ifdef TCPDEBUG
+	struct tcphdr *th;
 	tcp_seq seq, ack;
 	int flags;
 #endif
@@ -128,7 +133,6 @@ tcp_trace_locked(short act, short ostate, struct tcpcb *tp, struct tcpcb *otp,
 	struct tcp_debug *td = &tcp_debug[tcp_debx++];
 	struct tcpiphdr *ti = (struct tcpiphdr *)headers;
 	struct tcpipv6hdr *ti6 = (struct tcpipv6hdr *)headers;
-	struct tcphdr *th;
 
 	if (tcp_debx == TCP_NDEBUG)
 		tcp_debx = 0;
@@ -161,13 +165,17 @@ tcp_trace_locked(short act, short ostate, struct tcpcb *tp, struct tcpcb *otp,
 		switch (pf) {
 #ifdef INET6
 		case PF_INET6:
+#ifdef TCPDEBUG
 			th = &ti6->ti6_t;
+#endif
 			td->td_ti6 = *ti6;
 			td->td_ti6.ti6_plen = len;
 			break;
 #endif /* INET6 */
 		case PF_INET:
+#ifdef TCPDEBUG
 			th = &ti->ti_t;
+#endif
 			td->td_ti = *ti;
 			td->td_ti.ti_len = len;
 			break;
