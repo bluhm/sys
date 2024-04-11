@@ -430,8 +430,9 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 				continue;
 #ifdef INET6
 			if (ip6) {
-				if (inp->inp_ip6_minhlim &&
-				    inp->inp_ip6_minhlim > ip6->ip6_hlim)
+				u_int minhlim = READ_ONCE(inp->inp_ip6_minhlim);
+
+				if (minhlim && minhlim > ip6->ip6_hlim)
 					continue;
 				if (!IN6_IS_ADDR_UNSPECIFIED(&inp->inp_laddr6))
 					if (!IN6_ARE_ADDR_EQUAL(
@@ -440,10 +441,10 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 			} else
 #endif /* INET6 */
 			{
-				if (inp->inp_ip_minttl &&
-				    inp->inp_ip_minttl > ip->ip_ttl)
-					continue;
+				u_int minttl = READ_ONCE(inp->inp_ip_minttl);
 
+				if (minttl && minttl > ip->ip_ttl)
+					continue;
 				if (inp->inp_laddr.s_addr != INADDR_ANY) {
 					if (inp->inp_laddr.s_addr !=
 					    ip->ip_dst.s_addr)
@@ -600,15 +601,20 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 	KASSERT(sotoinpcb(inp->inp_socket) == inp);
 	soassertlocked(inp->inp_socket);
 
+	/* Check the minimum TTL for socket. */
 #ifdef INET6
-	if (ip6 && inp->inp_ip6_minhlim &&
-	    inp->inp_ip6_minhlim > ip6->ip6_hlim) {
-		goto bad;
+	if (ip6) {
+		u_int minhlim = READ_ONCE(inp->inp_ip6_minhlim);
+
+		if (minhlim && minhlim > ip6->ip6_hlim)
+			goto bad;
 	} else
 #endif
-	if (ip && inp->inp_ip_minttl &&
-	    inp->inp_ip_minttl > ip->ip_ttl) {
-		goto bad;
+	{
+		u_int minttl = READ_ONCE(inp->inp_ip_minttl);
+ 
+		if (minttl && minttl > ip->ip_ttl)
+			goto bad;
 	}
 
 #if NPF > 0

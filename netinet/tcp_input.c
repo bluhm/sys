@@ -608,18 +608,19 @@ findpcb:
 	soassertlocked(inp->inp_socket);
 
 	/* Check the minimum TTL for socket. */
-	switch (af) {
-	case AF_INET:
-		if (inp->inp_ip_minttl && inp->inp_ip_minttl > ip->ip_ttl)
-			goto drop;
-		break;
 #ifdef INET6
-	case AF_INET6:
-		if (inp->inp_ip6_minhlim &&
-		    inp->inp_ip6_minhlim > ip6->ip6_hlim)
+	if (ip6) {
+		u_int minhlim = READ_ONCE(inp->inp_ip6_minhlim);
+
+		if (minhlim && minhlim > ip6->ip6_hlim)
 			goto drop;
-		break;
+	} else
 #endif
+	{
+		u_int minttl = READ_ONCE(inp->inp_ip_minttl);
+
+		if (minttl && minttl > ip->ip_ttl)
+			goto drop;
 	}
 
 	tp = intotcpcb(inp);
