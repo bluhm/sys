@@ -140,7 +140,8 @@ struct timeval tcp_ackdrop_ppslim_last;
 #ifdef INET6
 #define ND6_HINT(tp) \
 do { \
-	if (tp && tp->t_inpcb && (tp->t_inpcb->inp_flags & INP_IPV6) &&	\
+	if (tp && tp->t_inpcb &&					\
+	    ISSET(tp->t_inpcb->inp_flags, INP_IPV6) &&			\
 	    rtisvalid(tp->t_inpcb->inp_route.ro_rt)) {			\
 		nd6_nud_hint(tp->t_inpcb->inp_route.ro_rt);		\
 	} \
@@ -3543,17 +3544,16 @@ syn_cache_get(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 	    sizeof(oldinp->inp_seclevel));
 #endif /* IPSEC */
 #ifdef INET6
-	/*
-	 * inp still has the OLD in_pcb stuff, set the
-	 * v6-related flags on the new guy, too.
-	 */
-	inp->inp_flags |= (oldinp->inp_flags & INP_IPV6);
-	if (inp->inp_flags & INP_IPV6) {
+	if (ISSET(inp->inp_flags, INP_IPV6)) {
+		KASSERT(ISSET(oldinp->inp_flags, INP_IPV6));
+
 		inp->inp_ipv6.ip6_hlim = oldinp->inp_ipv6.ip6_hlim;
 		inp->inp_hops = oldinp->inp_hops;
 	} else
-#endif /* INET6 */
+#endif
 	{
+		KASSERT(!ISSET(oldinp->inp_flags, INP_IPV6));
+
 		inp->inp_ip.ip_ttl = oldinp->inp_ip.ip_ttl;
 		inp->inp_options = ip_srcroute(m);
 		if (inp->inp_options == NULL) {

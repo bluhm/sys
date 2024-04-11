@@ -464,21 +464,15 @@ tcp_newtcpcb(struct inpcb *inp, int wait)
 	tp->t_pmtud_mss_acked = 0;
 
 #ifdef INET6
-	/* we disallow IPv4 mapped address completely. */
-	if ((inp->inp_flags & INP_IPV6) == 0)
-		tp->pf = PF_INET;
-	else
+	if (ISSET(inp->inp_flags, INP_IPV6)) {
 		tp->pf = PF_INET6;
-#else
-	tp->pf = PF_INET;
-#endif
-
-#ifdef INET6
-	if (inp->inp_flags & INP_IPV6)
 		inp->inp_ipv6.ip6_hlim = ip6_defhlim;
-	else
-#endif /* INET6 */
+	} else
+#endif
+	{
+		tp->pf = PF_INET;
 		inp->inp_ip.ip_ttl = ip_defttl;
+	}
 
 	inp->inp_ppcb = (caddr_t)tp;
 	return (tp);

@@ -479,8 +479,7 @@ in6_pcbnotify(struct inpcbtable *table, const struct sockaddr_in6 *dst,
 	rw_enter_write(&table->inpt_notify);
 	mtx_enter(&table->inpt_mtx);
 	TAILQ_FOREACH(inp, &table->inpt_queue, inp_queue) {
-		if (!ISSET(inp->inp_flags, INP_IPV6))
-			continue;
+		KASSERT(ISSET(inp->inp_flags, INP_IPV6));
 
 		/*
 		 * Under the following condition, notify of redirects
@@ -580,8 +579,8 @@ in6_pcbhash_lookup(struct inpcbtable *table, uint64_t hash, u_int rdomain,
 
 	head = &table->inpt_hashtbl[hash & table->inpt_mask];
 	LIST_FOREACH(inp, head, inp_hash) {
-		if (!ISSET(inp->inp_flags, INP_IPV6))
-			continue;
+		KASSERT(ISSET(inp->inp_flags, INP_IPV6));
+
 		if (inp->inp_fport == fport && inp->inp_lport == lport &&
 		    IN6_ARE_ADDR_EQUAL(&inp->inp_faddr6, faddr) &&
 		    IN6_ARE_ADDR_EQUAL(&inp->inp_laddr6, laddr) &&

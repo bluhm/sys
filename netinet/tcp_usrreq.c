@@ -320,7 +320,7 @@ tcp_ctloutput(int op, struct socket *so, int level, int optname,
 		if (ISSET(inp->inp_flags, INP_IPV6))
 			error = ip6_ctloutput(op, so, level, optname, m);
 		else
-#endif /* INET6 */
+#endif
 			error = ip_ctloutput(op, so, level, optname, m);
 		return (error);
 	}
@@ -492,14 +492,11 @@ tcp_attach(struct socket *so, int proto, int wait)
 	}
 	tp->t_state = TCPS_CLOSED;
 #ifdef INET6
-	/* we disallow IPv4 mapped address completely. */
-	if (inp->inp_flags & INP_IPV6)
+	if (ISSET(inp->inp_flags, INP_IPV6))
 		tp->pf = PF_INET6;
 	else
-		tp->pf = PF_INET;
-#else
-	tp->pf = PF_INET;
 #endif
+		tp->pf = PF_INET;
 	if ((so->so_options & SO_LINGER) && so->so_linger == 0)
 		so->so_linger = TCP_LINGERTIME;
 
@@ -629,7 +626,7 @@ tcp_connect(struct socket *so, struct mbuf *nam)
 	}
 
 #ifdef INET6
-	if (inp->inp_flags & INP_IPV6) {
+	if (ISSET(inp->inp_flags, INP_IPV6)) {
 		struct sockaddr_in6 *sin6;
 
 		if ((error = in6_nam2sin6(nam, &sin6)))
@@ -640,7 +637,7 @@ tcp_connect(struct socket *so, struct mbuf *nam)
 			goto out;
 		}
 	} else
-#endif /* INET6 */
+#endif
 	{
 		struct sockaddr_in *sin;
 
