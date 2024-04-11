@@ -219,7 +219,7 @@ struct if_status_description {
 
 /* flags set internally only: */
 #define	IFF_CANTCHANGE \
-	(IFF_BROADCAST|IFF_POINTOPOINT|IFF_RUNNING|IFF_OACTIVE|\
+	(IFF_BROADCAST|IFF_LOOPBACK|IFF_POINTOPOINT|IFF_RUNNING|IFF_OACTIVE|\
 	    IFF_SIMPLEX|IFF_MULTICAST|IFF_ALLMULTI)
 
 #define	IFXF_MPSAFE		0x1	/* [I] if_start is mpsafe */
