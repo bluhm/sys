@@ -257,6 +257,7 @@ int  em_intr(void *);
 int  em_allocate_legacy(struct em_softc *);
 void em_start(struct ifqueue *);
 int  em_ioctl(struct ifnet *, u_long, caddr_t);
+int  em_rxrinfo(struct em_softc *, struct if_rxrinfo *);
 void em_watchdog(struct ifnet *);
 void em_init(void *);
 void em_stop(void *, int);
@@ -322,8 +323,10 @@ int  em_setup_queues_msix(struct em_softc *);
 int  em_queue_intr_msix(void *);
 int  em_link_intr_msix(void *);
 void em_enable_queue_intr_msix(struct em_queue *);
+void em_setup_rss(struct em_softc *);
 #else
 #define em_allocate_msix(_sc) 	(-1)
+#define em_setup_rss(_sc)	0
 #endif
 
 #if NKSTAT > 0
@@ -346,7 +349,6 @@ struct cfdriver em_cd = {
 };
 
 static int em_smart_pwr_down = FALSE;
-int em_enable_msix = 0;
 
 /*********************************************************************
  *  Device identification routine
@@ -642,12 +644,12 @@ err_pci:
 void
 em_start(struct ifqueue *ifq)
 {
+	struct em_queue *que = ifq->ifq_softc;
 	struct ifnet *ifp = ifq->ifq_if;
 	struct em_softc *sc = ifp->if_softc;
 	u_int head, free, used;
 	struct mbuf *m;
 	int post = 0;
-	struct em_queue *que = sc->queues; /* Use only first queue. */
 
 	if (!sc->link_active) {
 		ifq_purge(ifq);
@@ -782,8 +784,7 @@ em_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 		break;
 
 	case SIOCGIFRXR:
-		error = if_rxr_ioctl((struct if_rxrinfo *)ifr->ifr_data,
-		    NULL, EM_MCLBYTES, &sc->queues->rx.sc_rx_ring);
+		error = em_rxrinfo(sc, (struct if_rxrinfo *)ifr->ifr_data);
 		break;
 
 	case SIOCGIFSFFPAGE:
@@ -814,6 +815,32 @@ em_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 	return (error);
 }
 
+int
+em_rxrinfo(struct em_softc *sc, struct if_rxrinfo *ifri)
+{
+	struct if_rxring_info *ifr;
+	struct em_queue *que;
+	int i;
+	int error;
+
+	ifr = mallocarray(sc->num_queues, sizeof(*ifr), M_TEMP,
+	    M_WAITOK | M_ZERO | M_CANFAIL);
+	if (ifr == NULL)
+		return (ENOMEM);
+
+	i = 0;
+	FOREACH_QUEUE(sc, que) {
+		ifr[i].ifr_size = EM_MCLBYTES;
+		ifr[i].ifr_info = que->rx.sc_rx_ring;
+		i++;
+	}
+
+	error = if_rxr_info_ioctl(ifri, sc->num_queues, ifr);
+	free(ifr, M_TEMP, sc->num_queues * sizeof(*ifr));
+
+	return (error);
+}
+
 /*********************************************************************
  *  Watchdog entry point
  *
@@ -825,21 +852,22 @@ void
 em_watchdog(struct ifnet *ifp)
 {
 	struct em_softc *sc = ifp->if_softc;
-	struct em_queue *que = sc->queues; /* Use only first queue. */
+	struct em_queue *que;
 
-
-	/* If we are in this routine because of pause frames, then
-	 * don't reset the hardware.
-	 */
-	if (E1000_READ_REG(&sc->hw, STATUS) & E1000_STATUS_TXOFF) {
-		ifp->if_timer = EM_TX_TIMEOUT;
-		return;
+	FOREACH_QUEUE(sc, que) {
+		/* If we are in this routine because of pause frames, then
+		 * don't reset the hardware.
+		 */
+		if (E1000_READ_REG(&sc->hw, STATUS) & E1000_STATUS_TXOFF) {
+			ifp->if_timer = EM_TX_TIMEOUT;
+			return;
+		}
+		printf("%s: watchdog queue %d: head %u tail %u TDH %u TDT %u\n",
+		    DEVNAME(sc), que->me,
+		    que->tx.sc_tx_desc_head, que->tx.sc_tx_desc_tail,
+		    E1000_READ_REG(&sc->hw, TDH(que->me)),
+		    E1000_READ_REG(&sc->hw, TDT(que->me)));
 	}
-	printf("%s: watchdog: head %u tail %u TDH %u TDT %u\n",
-	    DEVNAME(sc),
-	    que->tx.sc_tx_desc_head, que->tx.sc_tx_desc_tail,
-	    E1000_READ_REG(&sc->hw, TDH(que->me)),
-	    E1000_READ_REG(&sc->hw, TDT(que->me)));
 
 	em_init(sc);
 
@@ -1705,7 +1733,6 @@ em_allocate_pci_resources(struct em_softc *sc)
 {
 	int		val, rid;
 	struct pci_attach_args *pa = &sc->osdep.em_pa;
-	struct em_queue	       *que = NULL;
 
 	val = pci_conf_read(pa->pa_pc, pa->pa_tag, EM_MMBA);
 	if (PCI_MAPREG_TYPE(val) != PCI_MAPREG_TYPE_MEM) {
@@ -1778,18 +1805,6 @@ em_allocate_pci_resources(struct em_softc *sc)
 	sc->osdep.dev = (struct device *)sc;
 	sc->hw.back = &sc->osdep;
 
-	/* Only one queue for the moment. */
-	que = malloc(sizeof(struct em_queue), M_DEVBUF, M_NOWAIT | M_ZERO);
-	if (que == NULL) {
-		printf(": unable to allocate queue memory\n");
-		return (ENOMEM);
-	}
-	que->me = 0;
-	que->sc = sc;
-	timeout_set(&que->rx_refill, em_rxrefill, que);
-
-	sc->queues = que;
-	sc->num_queues = 1;
 	sc->msix = 0;
 	sc->legacy_irq = 0;
 	if (em_allocate_msix(sc) && em_allocate_legacy(sc))
@@ -1862,11 +1877,7 @@ em_free_pci_resources(struct em_softc *sc)
 	sc->legacy_irq = 0;
 	sc->msix_linkvec = 0;
 	sc->msix_queuesmask = 0;
-	if (sc->queues)
-		free(sc->queues, M_DEVBUF,
-		    sc->num_queues * sizeof(struct em_queue));
 	sc->num_queues = 0;
-	sc->queues = NULL;
 }
 
 /*********************************************************************
@@ -1985,8 +1996,10 @@ void
 em_setup_interface(struct em_softc *sc)
 {
 	struct ifnet   *ifp;
+	struct em_queue *que;
 	uint64_t fiber_type = IFM_1000_SX;
-
+	int i;
+	
 	INIT_DEBUGOUT("em_setup_interface: begin");
 
 	ifp = &sc->sc_ac.ac_if;
@@ -2049,6 +2062,22 @@ em_setup_interface(struct em_softc *sc)
 
 	if_attach(ifp);
 	ether_ifattach(ifp);
+
+	if_attach_iqueues(ifp, sc->num_queues);
+	if_attach_queues(ifp, sc->num_queues);
+
+	i = 0;
+	FOREACH_QUEUE(sc, que) {
+		que->me = i;
+		que->sc = sc;
+
+		ifp->if_iqs[i]->ifiq_softc = que;
+		ifp->if_ifqs[i]->ifq_softc = que;
+
+		timeout_set(&que->rx_refill, em_rxrefill, que);
+		i++;
+	}
+
 	em_enable_intr(sc);
 }
 
@@ -2917,6 +2946,9 @@ em_initialize_receive_unit(struct em_softc *sc)
 	if (sc->hw.mac_type == em_82573)
 		E1000_WRITE_REG(&sc->hw, RDTR, 0x20);
 
+	if (sc->num_queues > 1)
+		em_setup_rss(sc);
+
 	FOREACH_QUEUE(sc, que) {
 		if (sc->num_queues > 1) {
 			/*
@@ -3594,6 +3626,12 @@ em_allocate_legacy(struct em_softc *sc)
 		}
 		sc->legacy_irq = 1;
 	}
+	sc->num_queues = 1;
+	sc->queues = malloc(sizeof(struct em_queue), M_DEVBUF, M_NOWAIT | M_ZERO);
+	if (sc->queues == NULL) {
+		printf(": couldn't allocate queues\n");
+		return (ENOMEM);
+	}
 
 	intrstr = pci_intr_string(pc, ih);
 	sc->sc_intrhand = pci_intr_establish(pc, ih, IPL_NET | IPL_MPSAFE,
@@ -3976,44 +4014,66 @@ em_allocate_msix(struct em_softc *sc)
 	const char		*intrstr = NULL;
 	struct pci_attach_args	*pa = &sc->osdep.em_pa;
 	pci_chipset_tag_t	 pc = pa->pa_pc;
-	struct em_queue		*que = sc->queues; /* Use only first queue. */
+	struct em_queue		*que;
+	int			 nmsix;
 	int			 vec;
-
-	if (!em_enable_msix)
-		return (ENODEV);
+	int			 max_queues;
 
 	switch (sc->hw.mac_type) {
 	case em_82576:
 	case em_82580:
 	case em_i350:
+		max_queues = 8;
+		break;
 	case em_i210:
+		if (sc->hw.device_id == PCI_PRODUCT_INTEL_I211_COPPER)
+			max_queues = 2;
+		else
+			max_queues = 4;
 		break;
 	default:
 		return (ENODEV);
 	}
+
+	/* if we only have one vector, just use msi */
+	nmsix = pci_intr_msix_count(pa);
+	if (nmsix < 2)
+		return (ENODEV);
 
 	vec = 0;
 	if (pci_intr_map_msix(pa, vec, &ih))
 		return (ENODEV);
 	sc->msix = 1;
 
-	que->me = vec;
-	que->eims = 1 << vec;
-	snprintf(que->name, sizeof(que->name), "%s:%d", DEVNAME(sc), vec);
+	nmsix--;
+	sc->intrmap = intrmap_create(&sc->sc_dev, nmsix, max_queues, INTRMAP_POWEROF2);
+	sc->num_queues = intrmap_count(sc->intrmap);
+	KASSERT(sc->num_queues > 0);
+	KASSERT(powerof2(sc->num_queues));
 
-	intrstr = pci_intr_string(pc, ih);
-	que->tag = pci_intr_establish(pc, ih, IPL_NET | IPL_MPSAFE,
-	    em_queue_intr_msix, que, que->name);
-	if (que->tag == NULL) {
-		printf(": couldn't establish interrupt");
-		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
-		return (ENXIO);
+	sc->queues = mallocarray(sizeof(*que), sc->num_queues, M_DEVBUF, M_NOWAIT | M_ZERO);
+	if (sc->queues == NULL)
+		return (ENOMEM);
+
+	FOREACH_QUEUE(sc, que) {
+		que->eims = 1 << vec;
+		snprintf(que->name, sizeof(que->name), "%s:%d", DEVNAME(sc), vec);
+
+		if (pci_intr_map_msix(pa, vec, &ih)) {
+			printf(": unable to map msi-x vector %d", vec);
+			return (ENXIO);
+		}
+
+		que->tag = pci_intr_establish_cpu(pc, ih, IPL_NET | IPL_MPSAFE,
+		    intrmap_cpu(sc->intrmap, vec), em_queue_intr_msix, que, que->name);
+		if (que->tag == NULL) {
+			printf(": couldn't establish queue interrupt %d\n", vec);
+			return (ENXIO);
+		}
+		vec++;
 	}
 
 	/* Setup linkvector, use last queue vector + 1 */
-	vec++;
 	sc->msix_linkvec = vec;
 	if (pci_intr_map_msix(pa, sc->msix_linkvec, &ih)) {
 		printf(": couldn't map link vector\n");
@@ -4203,6 +4263,40 @@ void
 em_enable_queue_intr_msix(struct em_queue *que)
 {
 	E1000_WRITE_REG(&que->sc->hw, EIMS, que->eims);
+}
+
+void
+em_setup_rss(struct em_softc *sc)
+{
+	uint32_t rss_key[10];
+	uint32_t mrqc;
+	uint32_t reta;
+	int i;
+	int queue_id;
+
+	/* set redirection table to round robin across queues */
+	reta = 0;
+	for (i = 0; i < 128; i++) {
+		queue_id = i % sc->num_queues;
+		reta = reta >> 8;
+		reta = reta | (((uint32_t) queue_id) << 24);
+		if ((i & 3) == 3) {
+			E1000_WRITE_REG(&sc->hw, RETA(i >> 2), reta);
+			reta = 0;
+		}
+	}
+
+	stoeplitz_to_key(rss_key, sizeof(rss_key));
+	for (i = 0; i < nitems(rss_key); i++)
+		E1000_WRITE_REG_ARRAY(&sc->hw, RSSRK(0), i, rss_key[i]);
+
+	mrqc = E1000_MRQC_ENABLE_RSS_8Q;
+	mrqc |= E1000_MRQC_RSS_FIELD_IPV4 | E1000_MRQC_RSS_FIELD_IPV4_TCP
+	    | E1000_MRQC_RSS_FIELD_IPV6 | E1000_MRQC_RSS_FIELD_IPV6_TCP
+	    | E1000_MRQC_RSS_FIELD_IPV4_UDP | E1000_MRQC_RSS_FIELD_IPV6_UDP
+	    | E1000_MRQC_RSS_FIELD_IPV6_UDP_EX | E1000_MRQC_RSS_FIELD_IPV6_TCP_EX;
+	mrqc |= 0 << 3;		/* default queue */
+	E1000_WRITE_REG(&sc->hw, MRQC, mrqc);
 }
 #endif /* !SMALL_KERNEL */
 

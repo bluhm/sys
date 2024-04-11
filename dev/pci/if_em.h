@@ -52,10 +52,12 @@ POSSIBILITY OF SUCH DAMAGE.
 #include <sys/timeout.h>
 #include <sys/atomic.h>
 #include <sys/kstat.h>
+#include <sys/intrmap.h>
 
 #include <net/if.h>
 #include <net/if_media.h>
 #include <net/route.h>
+#include <net/toeplitz.h>
 
 #include <netinet/in.h>
 #include <netinet/ip.h>
@@ -453,6 +455,7 @@ struct em_softc {
 	uint32_t		 msix_queuesmask;
 	int			 num_queues;
 	struct em_queue		*queues;
+	struct intrmap		*intrmap;
 
 	struct kstat		*kstat;
 	struct mutex		 kstat_mtx;
