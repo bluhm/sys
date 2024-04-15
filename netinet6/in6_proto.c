@@ -158,7 +158,7 @@ const struct protosw inet6sw[] = {
   .pr_type	= SOCK_RAW,
   .pr_domain	= &inet6domain,
   .pr_protocol	= IPPROTO_RAW,
-  .pr_flags	= PR_ATOMIC|PR_ADDR,
+  .pr_flags	= PR_ATOMIC|PR_ADDR|PR_MPINPUT,
   .pr_input	= rip6_input,
   .pr_ctlinput	= rip6_ctlinput,
   .pr_ctloutput	= rip6_ctloutput,
@@ -322,7 +322,7 @@ const struct protosw inet6sw[] = {
   /* raw wildcard */
   .pr_type	= SOCK_RAW,
   .pr_domain	= &inet6domain,
-  .pr_flags	= PR_ATOMIC|PR_ADDR,
+  .pr_flags	= PR_ATOMIC|PR_ADDR|PR_MPINPUT,
   .pr_input	= rip6_input,
   .pr_ctloutput	= rip6_ctloutput,
   .pr_usrreqs	= &rip6_usrreqs,
