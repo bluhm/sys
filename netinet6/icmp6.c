@@ -1702,24 +1702,20 @@ icmp6_ctloutput(int op, struct socket *so, int level, int optname,
 	case PRCO_SETOPT:
 		switch (optname) {
 		case ICMP6_FILTER:
-		    {
-			struct icmp6_filter *p;
-
-			if (m == NULL || m->m_len != sizeof(*p)) {
+			if (m == NULL ||
+			    m->m_len != sizeof(struct icmp6_filter)) {
 				error = EMSGSIZE;
 				break;
 			}
-			p = mtod(m, struct icmp6_filter *);
-			if (!p || !inp->inp_icmp6filt) {
-				error = EINVAL;
-				break;
+			if (inp->inp_icmp6filt == NULL) {
+				inp->inp_icmp6filt = malloc(
+				    sizeof(struct icmp6_filter), M_PCB,
+				    M_WAITOK);
 			}
-			bcopy(p, inp->inp_icmp6filt,
-				sizeof(struct icmp6_filter));
-			error = 0;
+			memcpy(inp->inp_icmp6filt,
+			    mtod(m, struct icmp6_filter *),
+			    sizeof(struct icmp6_filter));
 			break;
-		    }
-
 		default:
 			error = ENOPROTOOPT;
 			break;
@@ -1729,21 +1725,16 @@ icmp6_ctloutput(int op, struct socket *so, int level, int optname,
 	case PRCO_GETOPT:
 		switch (optname) {
 		case ICMP6_FILTER:
-		    {
-			struct icmp6_filter *p;
-
-			if (!inp->inp_icmp6filt) {
-				error = EINVAL;
+			m->m_len = sizeof(struct icmp6_filter);
+			if (inp->inp_icmp6filt == NULL) {
+				ICMP6_FILTER_SETPASSALL(
+				    mtod(m, struct icmp6_filter *));
 				break;
 			}
-			m->m_len = sizeof(struct icmp6_filter);
-			p = mtod(m, struct icmp6_filter *);
-			bcopy(inp->inp_icmp6filt, p,
-				sizeof(struct icmp6_filter));
-			error = 0;
+			memcpy(mtod(m, struct icmp6_filter *),
+			    inp->inp_icmp6filt,
+			    sizeof(struct icmp6_filter));
 			break;
-		    }
-
 		default:
 			error = ENOPROTOOPT;
 			break;

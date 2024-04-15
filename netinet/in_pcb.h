@@ -175,9 +175,9 @@ struct inpcb {
 #define inp_ip6_minhlim inp_ip_minttl	/* minimum Hop Limit or drop */
 #define	inp_flowinfo	inp_hu.hu_ipv6.ip6_flow
 
-	int	inp_cksum6;
-	struct	icmp6_filter *inp_icmp6filt;
-	struct	pf_state_key *inp_pf_sk; /* [L] */
+	int	inp_cksum6;			/* [N] */
+	struct	icmp6_filter *inp_icmp6filt;	/* [N] */
+	struct	pf_state_key *inp_pf_sk;	/* [L] */
 	struct	mbuf *(*inp_upcall)(void *, struct mbuf *,
 		    struct ip *, struct ip6_hdr *, void *, int);
 	void	*inp_upcall_arg;

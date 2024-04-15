@@ -207,7 +207,7 @@ rip6_input(struct mbuf **mp, int *offp, int proto, int af)
 		if (!IN6_IS_ADDR_UNSPECIFIED(&inp->inp_faddr6) &&
 		    !IN6_ARE_ADDR_EQUAL(&inp->inp_faddr6, &ip6->ip6_src))
 			continue;
-		if (proto == IPPROTO_ICMPV6 && inp->inp_icmp6filt) {
+		if (proto == IPPROTO_ICMPV6 && inp->inp_icmp6filt != NULL) {
 			if (ICMP6_FILTER_WILLBLOCK(type, inp->inp_icmp6filt))
 				continue;
 		}
@@ -613,13 +613,6 @@ rip6_attach(struct socket *so, int proto, int wait)
 	inp->inp_ipv6.ip6_nxt = proto;
 	inp->inp_cksum6 = -1;
 
-	inp->inp_icmp6filt = malloc(sizeof(struct icmp6_filter), M_PCB,
-	    wait == M_WAIT ? M_WAITOK : M_NOWAIT);
-	if (inp->inp_icmp6filt == NULL) {
-		in_pcbdetach(inp);
-		return ENOMEM;
-	}
-	ICMP6_FILTER_SETPASSALL(inp->inp_icmp6filt);
 	return 0;
 }
 
