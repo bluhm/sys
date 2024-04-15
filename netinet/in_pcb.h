@@ -157,8 +157,10 @@ struct inpcb {
 	} inp_hu;
 #define	inp_ip		inp_hu.hu_ip
 #define	inp_ipv6	inp_hu.hu_ipv6
-	struct	  mbuf *inp_options;	/* IP options */
-	struct ip6_pktopts *inp_outputopts6; /* IP6 options for outgoing packets */
+	union {
+		struct	mbuf *inp_options;	/* IP options */
+		struct	ip6_pktopts *inp_outputopts6;	/* IP6 options */
+	};
 	int inp_hops;
 	union {
 		struct ip_moptions *mou_mo;
