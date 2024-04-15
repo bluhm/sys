@@ -176,9 +176,6 @@ struct inpcb {
 #define	inp_flowinfo	inp_hu.hu_ipv6.ip6_flow
 
 	int	inp_cksum6;
-#ifndef _KERNEL
-#define inp_csumoffset	inp_cksum6
-#endif
 	struct	icmp6_filter *inp_icmp6filt;
 	struct	pf_state_key *inp_pf_sk; /* [L] */
 	struct	mbuf *(*inp_upcall)(void *, struct mbuf *,
