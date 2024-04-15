@@ -598,7 +598,7 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 	}
 
 	KASSERT(sotoinpcb(inp->inp_socket) == inp);
-	soassertlocked(inp->inp_socket);
+	soassertlocked_readonly(inp->inp_socket);
 
 #ifdef INET6
 	if (ip6 && inp->inp_ip6_minhlim &&
@@ -1239,7 +1239,7 @@ udp_send(struct socket *so, struct mbuf *m, struct mbuf *addr,
 {
 	struct inpcb *inp = sotoinpcb(so);
 
-	soassertlocked(so);
+	soassertlocked_readonly(so);
 
 #ifdef PIPEX
 	if (inp->inp_pipex) {

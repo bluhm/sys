@@ -1556,7 +1556,7 @@ somove(struct socket *so, int wait)
 	int		 error = 0, maxreached = 0;
 	unsigned int	 rcvstate;
 
-	soassertlocked(so);
+	soassertlocked_readonly(so);
 
  nextpkt:
 	if (so->so_error) {
