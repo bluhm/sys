@@ -158,8 +158,8 @@ struct inpcb {
 #define	inp_ip		inp_hu.hu_ip
 #define	inp_ipv6	inp_hu.hu_ipv6
 	union {
-		struct	mbuf *inp_options;	/* IP options */
-		struct	ip6_pktopts *inp_outputopts6;	/* IP6 options */
+		struct	mbuf *inp_options;		/* IPv4 options */
+		struct	ip6_pktopts *inp_outputopts6;	/* IPv6 options */
 	};
 	int inp_hops;
 	union {
