@@ -124,13 +124,6 @@ union inpaddru {
 	struct in6_addr iau_addr6;
 };
 
-struct ipsec_level {
-	u_char	sl_auth;	/* Authentication level */
-	u_char	sl_esp_trans;	/* ESP transport level */
-	u_char	sl_esp_network;	/* ESP network (encapsulation) level */
-	u_char	sl_ipcomp;	/* Compression level */
-};
-
 /*
  * Common structure pcb for internet protocol implementation.
  * Here are stored pointers to local and foreign host table

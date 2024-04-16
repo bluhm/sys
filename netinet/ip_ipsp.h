@@ -149,6 +149,13 @@ struct ipsecstat {
 	uint64_t	ipsec_exctdb;		/* TDBs with hardlimit excess */
 };
 
+struct ipsec_level {
+	u_char	sl_auth;	/* Authentication level */
+	u_char	sl_esp_trans;	/* ESP transport level */
+	u_char	sl_esp_network;	/* ESP network (encapsulation) level */
+	u_char	sl_ipcomp;	/* Compression level */
+};
+
 #ifdef _KERNEL
 
 #include <sys/timeout.h>
@@ -202,7 +209,6 @@ ipsecstat_pkt(enum ipsec_counters p, enum ipsec_counters b, uint64_t v)
 }
 
 struct m_tag;
-struct ipsec_level;
 
 #define	sen_data		Sen.Data
 #define	sen_ip_src		Sen.Sip4.Src
