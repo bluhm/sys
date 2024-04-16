@@ -124,6 +124,13 @@ union inpaddru {
 	struct in6_addr iau_addr6;
 };
 
+struct ipsec_level {
+	u_char	sl_auth;	/* Authentication level */
+	u_char	sl_esp_trans;	/* ESP transport level */
+	u_char	sl_esp_network;	/* ESP network (encapsulation) level */
+	u_char	sl_ipcomp;	/* Compression level */
+};
+
 /*
  * Common structure pcb for internet protocol implementation.
  * Here are stored pointers to local and foreign host table
@@ -166,11 +173,7 @@ struct inpcb {
 	} inp_mou;
 #define inp_moptions inp_mou.mou_mo	/* [N] IPv4 multicast options */
 #define inp_moptions6 inp_mou.mou_mo6	/* [N] IPv6 multicast options */
-	u_char	  inp_seclevel[4];	/* [N] IPsec level of socket */
-#define SL_AUTH           0             /* Authentication level */
-#define SL_ESP_TRANS      1             /* ESP transport level */
-#define SL_ESP_NETWORK    2             /* ESP network (encapsulation) level */
-#define SL_IPCOMP         3             /* Compression level */
+	struct	ipsec_level   inp_seclevel;	/* [N] IPsec level of socket */
 	u_char	inp_ip_minttl;		/* minimum TTL or drop */
 #define inp_ip6_minhlim inp_ip_minttl	/* minimum Hop Limit or drop */
 #define	inp_flowinfo	inp_hu.hu_ipv6.ip6_flow

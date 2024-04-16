@@ -202,6 +202,7 @@ ipsecstat_pkt(enum ipsec_counters p, enum ipsec_counters b, uint64_t v)
 }
 
 struct m_tag;
+struct ipsec_level;
 
 #define	sen_data		Sen.Data
 #define	sen_ip_src		Sen.Sip4.Src
@@ -671,7 +672,7 @@ int	checkreplaywindow(struct tdb *, u_int64_t, u_int32_t, u_int32_t *, int);
 int	ipsp_process_packet(struct mbuf *, struct tdb *, int, int);
 int	ipsp_process_done(struct mbuf *, struct tdb *);
 int	ipsp_spd_lookup(struct mbuf *, int, int, int, struct tdb *,
-	    const u_char[], struct tdb **, struct ipsec_ids *);
+	    const struct ipsec_level *, struct tdb **, struct ipsec_ids *);
 int	ipsp_is_unspecified(union sockaddr_union);
 int	ipsp_aux_match(struct tdb *, struct ipsec_ids *,
 	    struct sockaddr_encap *, struct sockaddr_encap *);

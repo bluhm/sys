@@ -240,10 +240,10 @@ in_pcballoc(struct socket *so, struct inpcbtable *table, int wait)
 	inp->inp_socket = so;
 	refcnt_init_trace(&inp->inp_refcnt, DT_REFCNT_IDX_INPCB);
 	mtx_init(&inp->inp_mtx, IPL_SOFTNET);
-	inp->inp_seclevel[SL_AUTH] = IPSEC_AUTH_LEVEL_DEFAULT;
-	inp->inp_seclevel[SL_ESP_TRANS] = IPSEC_ESP_TRANS_LEVEL_DEFAULT;
-	inp->inp_seclevel[SL_ESP_NETWORK] = IPSEC_ESP_NETWORK_LEVEL_DEFAULT;
-	inp->inp_seclevel[SL_IPCOMP] = IPSEC_IPCOMP_LEVEL_DEFAULT;
+	inp->inp_seclevel.sl_auth = IPSEC_AUTH_LEVEL_DEFAULT;
+	inp->inp_seclevel.sl_esp_trans = IPSEC_ESP_TRANS_LEVEL_DEFAULT;
+	inp->inp_seclevel.sl_esp_network = IPSEC_ESP_NETWORK_LEVEL_DEFAULT;
+	inp->inp_seclevel.sl_ipcomp = IPSEC_IPCOMP_LEVEL_DEFAULT;
 	inp->inp_rtableid = curproc->p_p->ps_rtableid;
 	inp->inp_hops = -1;
 #ifdef INET6

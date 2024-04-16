@@ -521,7 +521,7 @@ rip6_output(struct mbuf *m, struct socket *so, struct sockaddr *dstaddr,
 #endif
 
 	error = ip6_output(m, optp, &inp->inp_route, flags,
-	    inp->inp_moptions6, inp->inp_seclevel);
+	    inp->inp_moptions6, &inp->inp_seclevel);
 	if (so->so_proto->pr_protocol == IPPROTO_ICMPV6) {
 		icmp6stat_inc(icp6s_outhist + type);
 	} else
