@@ -2001,6 +2001,10 @@ pfioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 		memset(pf_status.counters, 0, sizeof(pf_status.counters));
 		memset(pf_status.fcounters, 0, sizeof(pf_status.fcounters));
 		memset(pf_status.scounters, 0, sizeof(pf_status.scounters));
+		memset(pf_status.ncounters, 0, sizeof(pf_status.ncounters));
+		PF_FRAG_LOCK();
+		memset(pf_nfrentcounters, 0, sizeof(pf_nfrentcounters));
+		PF_FRAG_UNLOCK();
 		pf_status.since = getuptime();
 
 		PF_UNLOCK();
@@ -3276,6 +3280,11 @@ pf_sysctl(void *oldp, size_t *oldlenp, void *newp, size_t newlen)
 
 	NET_LOCK_SHARED();
 	PF_LOCK();
+	PF_FRAG_LOCK();
+	pf_status.fragments = pf_nfrents;
+	memcpy(pf_status.ncounters, pf_nfrentcounters,
+	    sizeof(pf_status.ncounters));
+	PF_FRAG_UNLOCK();
 	memcpy(&pfs, &pf_status, sizeof(struct pf_status));
 	pfi_update_status(pfs.ifname, &pfs);
 	PF_UNLOCK();

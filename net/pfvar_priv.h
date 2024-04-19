@@ -369,7 +369,7 @@ struct pf_state		*pf_state_ref(struct pf_state *);
 void			 pf_state_unref(struct pf_state *);
 
 extern uint32_t		pf_nfrents;
-extern uint64_t		pf_nfrentcounters[];
+extern uint64_t		pf_nfrentcounters[NCNT_MAX];
 
 extern struct rwlock	pf_lock;
 extern struct rwlock	pf_state_lock;
