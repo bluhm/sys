@@ -1578,7 +1578,13 @@ rt_timer_queue_flush(struct rttimer_queue *rtq)
 unsigned long
 rt_timer_queue_count(struct rttimer_queue *rtq)
 {
-	return (rtq->rtq_count);
+	unsigned long count;
+
+	mtx_enter(&rttimer_mtx);
+	count = rtq->rtq_count;
+	mtx_leave(&rttimer_mtx);
+
+	return count;
 }
 
 static inline struct rttimer *

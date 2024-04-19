@@ -101,11 +101,19 @@
 #include <net/pfvar.h>
 #endif
 
+/*
+ * Locks used to protect variables in this file:
+ *	I	immutable after creation
+ *	N	net lock
+ *	P	global ppsratecheck mutex
+ */
+
 struct cpumem *icmp6counters;
 
-extern int icmp6errppslim;
-static int icmp6errpps_count = 0;
-static struct timeval icmp6errppslim_last;
+int	icmp6_redirtimeout = 10 * 60;		/* [N] redirect 10 minutes */
+int	icmp6errppslim = 100;			/* [N] ratelimit 100pps */
+static	int icmp6errpps_count;			/* [P] ppsratecheck */
+static	struct timeval icmp6errppslim_last;	/* [P] ppsratecheck */
 
 /*
  * List of callbacks to notify when Path MTU changes are made.
@@ -117,12 +125,13 @@ struct icmp6_mtudisc_callback {
 
 LIST_HEAD(, icmp6_mtudisc_callback) icmp6_mtudisc_callbacks =
     LIST_HEAD_INITIALIZER(icmp6_mtudisc_callbacks);
+    /* [I] register callbacks during protocol init functions */
 
 struct rttimer_queue icmp6_mtudisc_timeout_q;
 
 /* XXX do these values make any sense? */
-static int icmp6_mtudisc_hiwat = 1280;
-static int icmp6_mtudisc_lowat = 256;
+int icmp6_mtudisc_hiwat = 1280;		/* [N] */
+int icmp6_mtudisc_lowat = 256;		/* [N] */
 
 /*
  * keep track of # of redirect routes.
@@ -219,9 +228,7 @@ icmp6_mtudisc_callback_register(void (*func)(struct sockaddr_in6 *, u_int))
 			return;
 	}
 
-	mc = malloc(sizeof(*mc), M_PCB, M_NOWAIT);
-	if (mc == NULL)
-		panic("%s", __func__);
+	mc = malloc(sizeof(*mc), M_PCB, M_WAITOK);
 
 	mc->mc_func = func;
 	LIST_INSERT_HEAD(&icmp6_mtudisc_callbacks, mc, mc_list);
@@ -623,11 +630,15 @@ icmp6_input(struct mbuf **mp, int *offp, int proto, int af)
 			goto badlen;
 		if ((n = m_copym(m, 0, M_COPYALL, M_DONTWAIT)) == NULL) {
 			/* give up local */
+			KERNEL_LOCK();
 			mld6_input(m, off);
+			KERNEL_UNLOCK();
 			m = NULL;
 			goto freeit;
 		}
+		KERNEL_LOCK();
 		mld6_input(n, off);
+		KERNEL_UNLOCK();
 		/* m stays. */
 		break;
 
@@ -1198,7 +1209,7 @@ icmp6_reflect(struct mbuf **mp, size_t off, struct sockaddr *sa)
 void
 icmp6_fasttimo(void)
 {
-
+	KERNEL_ASSERT_LOCKED();
 	mld6_fasttimeo();
 }
 

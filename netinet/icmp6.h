@@ -606,7 +606,5 @@ struct	ip6ctlparam;
 void	icmp6_mtudisc_update(struct ip6ctlparam *, int);
 void	icmp6_mtudisc_callback_register(void (*)(struct sockaddr_in6 *, u_int));
 
-extern int	icmp6_redirtimeout;	/* cache time for redirect routes */
-
 #endif /* _KERNEL */
 #endif /* _NETINET_ICMP6_H_ */

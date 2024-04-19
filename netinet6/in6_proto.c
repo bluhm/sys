@@ -372,7 +372,4 @@ time_t	ip6_log_time = (time_t)0L;
 u_long	rip6_sendspace = RIPV6SNDQ;
 u_long	rip6_recvspace = RIPV6RCVQ;
 
-/* ICMPV6 parameters */
-int	icmp6_redirtimeout = 10 * 60;	/* 10 minutes */
-int	icmp6errppslim = 100;		/* 100pps */
 int	ip6_mtudisc_timeout = IPMTUDISCTIMEOUT;
