@@ -150,13 +150,12 @@ int			 pf_reassemble6(struct mbuf **, struct ip6_frag *,
 /* Globals */
 struct pool		 pf_frent_pl, pf_frag_pl, pf_frnode_pl;
 struct pool		 pf_state_scrub_pl;
-int			 pf_nfrents;
+uint32_t		 pf_nfrents;
+uint64_t		 pf_nfrentcounters[NCNT_MAX];
 
 struct mutex		 pf_frag_mtx;
 
 #define PF_FRAG_LOCK_INIT()	mtx_init(&pf_frag_mtx, IPL_SOFTNET)
-#define PF_FRAG_LOCK()		mtx_enter(&pf_frag_mtx)
-#define PF_FRAG_UNLOCK()	mtx_leave(&pf_frag_mtx)
 
 void
 pf_normalize_init(void)
@@ -233,7 +232,7 @@ void
 pf_flush_fragments(void)
 {
 	struct pf_fragment	*frag;
-	int			 goal;
+	u_int			 goal;
 
 	goal = pf_nfrents * 9 / 10;
 	DPFPRINTF(LOG_NOTICE, "trying to free > %d frents", pf_nfrents - goal);
@@ -268,6 +267,7 @@ pf_free_fragment(struct pf_fragment *frag)
 	/* Free all fragment entries */
 	while ((frent = TAILQ_FIRST(&frag->fr_queue)) != NULL) {
 		TAILQ_REMOVE(&frag->fr_queue, frent, fr_next);
+		pf_nfrentcounters[NCNT_FRAG_REMOVALS]++;
 		m_freem(frent->fe_m);
 		pool_put(&pf_frent_pl, frent);
 		pf_nfrents--;
@@ -283,6 +283,7 @@ pf_find_fragment(struct pf_frnode *key, u_int32_t id)
 	u_int32_t		 stale;
 
 	frnode = RB_FIND(pf_frnode_tree, &pf_frnode_tree, key);
+	pf_nfrentcounters[NCNT_FRAG_SEARCH]++;
 	if (frnode == NULL)
 		return (NULL);
 	KASSERT(frnode->fn_fragments >= 1);
@@ -405,6 +406,7 @@ pf_frent_insert(struct pf_fragment *frag, struct pf_frent *frent,
 		KASSERT(prev->fe_off + prev->fe_len <= frent->fe_off);
 		TAILQ_INSERT_AFTER(&frag->fr_queue, prev, frent, fr_next);
 	}
+	pf_nfrentcounters[NCNT_FRAG_INSERT]++;
 
 	if (frag->fr_firstoff[index] == NULL) {
 		KASSERT(prev == NULL || pf_frent_index(prev) < index);
@@ -456,6 +458,7 @@ pf_frent_remove(struct pf_fragment *frag, struct pf_frent *frent)
 	}
 
 	TAILQ_REMOVE(&frag->fr_queue, frent, fr_next);
+	pf_nfrentcounters[NCNT_FRAG_REMOVALS]++;
 
 	KASSERT(frag->fr_entries[index] > 0);
 	frag->fr_entries[index]--;
@@ -742,6 +745,7 @@ pf_join_fragment(struct pf_fragment *frag)
 
 	frent = TAILQ_FIRST(&frag->fr_queue);
 	TAILQ_REMOVE(&frag->fr_queue, frent, fr_next);
+	pf_nfrentcounters[NCNT_FRAG_REMOVALS]++;
 
 	m = frent->fe_m;
 	/* Strip off any trailing bytes */
@@ -756,6 +760,7 @@ pf_join_fragment(struct pf_fragment *frag)
 
 	while ((frent = TAILQ_FIRST(&frag->fr_queue)) != NULL) {
 		TAILQ_REMOVE(&frag->fr_queue, frent, fr_next);
+		pf_nfrentcounters[NCNT_FRAG_REMOVALS]++;
 		m2 = frent->fe_m;
 		/* Strip off ip header */
 		m_adj(m2, frent->fe_hdrlen);

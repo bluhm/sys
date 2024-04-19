@@ -1955,6 +1955,11 @@ pfioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 		struct pf_status *s = (struct pf_status *)addr;
 		NET_LOCK();
 		PF_LOCK();
+		PF_FRAG_LOCK();
+		pf_status.fragments = pf_nfrents;
+		memcpy(pf_status.ncounters, pf_nfrentcounters,
+		    sizeof(pf_status.ncounters));
+		PF_FRAG_UNLOCK();
 		memcpy(s, &pf_status, sizeof(struct pf_status));
 		pfi_update_status(s->ifname, s);
 		PF_UNLOCK();
