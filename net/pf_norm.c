@@ -233,7 +233,7 @@ pf_flush_fragments(void)
 	u_int			 goal;
 
 	goal = pf_status.fragments * 9 / 10;
-	DPFPRINTF(LOG_NOTICE, "trying to free > %d frents",
+	DPFPRINTF(LOG_NOTICE, "trying to free > %u frents",
 	    pf_status.fragments - goal);
 	while (goal < pf_status.fragments) {
 		if ((frag = TAILQ_LAST(&pf_fragqueue, pf_fragqueue)) == NULL)
