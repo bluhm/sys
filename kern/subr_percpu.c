@@ -212,20 +212,26 @@ void
 counters_zero(struct cpumem *cm, unsigned int n)
 {
 	struct cpumem_iter cmi;
-	uint64_t *counters;
+	uint64_t *gen, *counters;
 	unsigned int i;
 
-	counters = cpumem_first(&cmi, cm);
-	membar_producer();
+	gen = cpumem_first(&cmi, cm);
 	do {
+		counters = gen + 1;
+
+		/* make the generation number odd */
+		++(*gen);
+
+		membar_producer();
 		for (i = 0; i < n; i++)
 			counters[i] = 0;
+
 		/* zero the generation numbers too */
 		membar_producer();
-		counters[i] = 0;
+		*gen = 0;
 
-		counters = cpumem_next(&cmi, cm);
-	} while (counters != NULL);
+		gen = cpumem_next(&cmi, cm);
+	} while (gen != NULL);
 }
 
 #else /* MULTIPROCESSOR */
