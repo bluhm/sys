@@ -1198,7 +1198,6 @@ icmp6_reflect(struct mbuf **mp, size_t off, struct sockaddr *sa)
 void
 icmp6_fasttimo(void)
 {
-
 	mld6_fasttimeo();
 }
 

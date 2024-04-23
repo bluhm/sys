@@ -90,8 +90,10 @@ domaininit(void)
 		max_linkhdr = 64;
 
 	max_hdr = max_linkhdr + max_protohdr;
-	timeout_set_proc(&pffast_timeout, pffasttimo, &pffast_timeout);
-	timeout_set_proc(&pfslow_timeout, pfslowtimo, &pfslow_timeout);
+	timeout_set_flags(&pffast_timeout, pffasttimo, &pffast_timeout,
+	    KCLOCK_NONE, TIMEOUT_PROC | TIMEOUT_MPSAFE);
+	timeout_set_flags(&pfslow_timeout, pfslowtimo, &pfslow_timeout,
+	    KCLOCK_NONE, TIMEOUT_PROC | TIMEOUT_MPSAFE);
 	timeout_add(&pffast_timeout, 1);
 	timeout_add(&pfslow_timeout, 1);
 }
