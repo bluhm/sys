@@ -300,7 +300,7 @@ doaccept(struct proc *p, int sock, struct sockaddr *name, socklen_t *anamelen,
 			break;
 		}
 		error = sosleep_nsec(head, &head->so_timeo, PSOCK | PCATCH,
-		    "netcon", INFSLP);
+		    "netacc", INFSLP);
 		if (error)
 			goto out_unlock;
 	}
@@ -428,7 +428,7 @@ sys_connect(struct proc *p, void *v, register_t *retval)
 	}
 	while ((so->so_state & SS_ISCONNECTING) && so->so_error == 0) {
 		error = sosleep_nsec(so, &so->so_timeo, PSOCK | PCATCH,
-		    "netcon2", INFSLP);
+		    "netcon", INFSLP);
 		if (error) {
 			if (error == EINTR || error == ERESTART)
 				interrupted = 1;
@@ -1651,7 +1651,7 @@ out:
 	error = soconnect(so, nam);
 	while ((so->so_state & SS_ISCONNECTING) && so->so_error == 0) {
 		error = sosleep_nsec(so, &so->so_timeo, PSOCK | PCATCH,
-		    "netcon2", INFSLP);
+		    "ypcon", INFSLP);
 		if (error)
 			break;
 	}
