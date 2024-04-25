@@ -559,7 +559,7 @@ sblock(struct socket *so, struct sockbuf *sb, int flags)
 	while (sb->sb_flags & SB_LOCK) {
 		sb->sb_flags |= SB_WANT;
 		mtx_leave(&sb->sb_mtx);
-		error = sosleep_nsec(so, &sb->sb_flags, prio, "netlck", INFSLP);
+		error = sosleep_nsec(so, &sb->sb_flags, prio, "sblock", INFSLP);
 		if (error)
 			return (error);
 		mtx_enter(&sb->sb_mtx);
