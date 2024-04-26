@@ -667,11 +667,13 @@ restart:
 				if (flags & MSG_EOR)
 					top->m_flags |= M_EOR;
 			} else {
+				sb_mtx_unlock(&so->so_snd);
 				if (dosolock)
 					sounlock_shared(so);
 				error = m_getuio(&top, atomic, space, uio);
 				if (dosolock)
 					solock_shared(so);
+				sb_mtx_lock(&so->so_snd);
 				if (error)
 					goto release;
 				space -= top->m_pkthdr.len;
