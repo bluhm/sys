@@ -326,7 +326,8 @@ reroute:
 			 * above, will be forwarded by the ip_input() routine,
 			 * if necessary.
 			 */
-			if (ipmforwarding && ip_mrouter[ifp->if_rdomain] &&
+			if (READ_ONCE(ipmforwarding) &&
+			    ip_mrouter[ifp->if_rdomain] &&
 			    (flags & IP_FORWARDING) == 0) {
 				int rv;
 

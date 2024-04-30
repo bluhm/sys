@@ -92,7 +92,7 @@
 
 /* values controllable via sysctl */
 int	ip_forwarding = 0;			/* [a] */
-int	ipmforwarding = 0;
+int	ipmforwarding = 0;			/* [a] */
 int	ipmultipath = 0;			/* [N] */
 int	ip_sendredirects = 1;			/* [a] */
 int	ip_dosourceroute = 0;
@@ -108,7 +108,7 @@ struct mutex	ipq_mutex = MUTEX_INITIALIZER(IPL_SOFTNET);
 LIST_HEAD(, ipq) ipq;
 
 /* Keep track of memory used for reassembly */
-int	ip_maxqueue = 300;
+int	ip_maxqueue = 300;	/* [a] maximum fragments in reassembly queue */
 int	ip_frags = 0;
 
 const struct sysctl_bounded_args ipctl_vars_unlocked[] = {
@@ -522,7 +522,7 @@ ip_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 		m->m_flags |= M_MCAST;
 
 #ifdef MROUTING
-		if (ipmforwarding && ip_mrouter[ifp->if_rdomain]) {
+		if (READ_ONCE(ipmforwarding) && ip_mrouter[ifp->if_rdomain]) {
 			int error;
 
 			if (m->m_flags & M_EXT) {
@@ -689,7 +689,7 @@ ip_fragcheck(struct mbuf **mp, int *offp)
 		 */
 		if (mff || ip->ip_off) {
 			ipstat_inc(ips_fragments);
-			if (ip_frags + 1 > ip_maxqueue) {
+			if (ip_frags + 1 > READ_ONCE(ip_maxqueue)) {
 				ip_flush();
 				ipstat_inc(ips_rcvmemdrop);
 				goto bad;
@@ -1156,11 +1156,13 @@ ip_slowtimo(void)
 void
 ip_flush(void)
 {
-	int max = 50;
+	int limit, max = 50;
 
 	MUTEX_ASSERT_LOCKED(&ipq_mutex);
 
-	while (!LIST_EMPTY(&ipq) && ip_frags > ip_maxqueue * 3 / 4 && --max) {
+	limit = READ_ONCE(ip_maxqueue) * 3 / 4;
+
+	while (!LIST_EMPTY(&ipq) && ip_frags > limit && --max) {
 		ipstat_inc(ips_fragdropped);
 		ip_freef(LIST_FIRST(&ipq));
 	}
