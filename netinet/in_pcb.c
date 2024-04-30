@@ -108,10 +108,10 @@ const union inpaddru zeroin46_addr;
  * These configure the range of local port addresses assigned to
  * "unspecified" outgoing connections/packets/whatever.
  */
-int ipport_firstauto = IPPORT_RESERVED;
-int ipport_lastauto = IPPORT_USERRESERVED;
-int ipport_hifirstauto = IPPORT_HIFIRSTAUTO;
-int ipport_hilastauto = IPPORT_HILASTAUTO;
+int ipport_firstauto = IPPORT_RESERVED;		/* [a] */
+int ipport_lastauto = IPPORT_USERRESERVED;	/* [a] */
+int ipport_hifirstauto = IPPORT_HIFIRSTAUTO;	/* [a] */
+int ipport_hilastauto = IPPORT_HILASTAUTO;	/* [a] */
 
 struct baddynamicports baddynamicports;
 struct baddynamicports rootonlyports;
@@ -451,16 +451,16 @@ in_pcbpickport(u_int16_t *lport, const void *laddr, int wild,
 	MUTEX_ASSERT_LOCKED(&table->inpt_mtx);
 
 	if (inp->inp_flags & INP_HIGHPORT) {
-		first = ipport_hifirstauto;	/* sysctl */
-		last = ipport_hilastauto;
+		first = READ_ONCE(ipport_hifirstauto);	/* sysctl */
+		last = READ_ONCE(ipport_hilastauto);
 	} else if (inp->inp_flags & INP_LOWPORT) {
 		if (suser(p))
 			return (EACCES);
 		first = IPPORT_RESERVED-1; /* 1023 */
 		last = 600;		   /* not IPPORT_RESERVED/2 */
 	} else {
-		first = ipport_firstauto;	/* sysctl */
-		last = ipport_lastauto;
+		first = READ_ONCE(ipport_firstauto);	/* sysctl */
+		last = READ_ONCE(ipport_lastauto);
 	}
 	if (first < last) {
 		lower = first;
