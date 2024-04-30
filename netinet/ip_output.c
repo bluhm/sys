@@ -428,8 +428,9 @@ sendit:
 #endif
 
 #ifdef IPSEC
-	if (ipsec_in_use && (flags & IP_FORWARDING) && (ipforwarding == 2) &&
-	    (m_tag_find(m, PACKET_TAG_IPSEC_IN_DONE, NULL) == NULL)) {
+	if ((flags & IP_FORWARDING) && ipforwarding == 2 &&
+	    (!ipsec_in_use ||
+	    m_tag_find(m, PACKET_TAG_IPSEC_IN_DONE, NULL) == NULL)) {
 		error = EHOSTUNREACH;
 		goto bad;
 	}
