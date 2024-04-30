@@ -98,7 +98,7 @@ int mcast_debug = 1;
 struct socket	*ip_mrouter[RT_TABLEID_MAX + 1];
 struct rttimer_queue ip_mrouterq;
 uint64_t	 mrt_count[RT_TABLEID_MAX + 1];
-int		ip_mrtproto = IGMP_DVMRP;    /* for netstat only */
+int		ip_mrtproto = IGMP_DVMRP;    /* [I] for netstat only */
 
 struct mrtstat	mrtstat;
 

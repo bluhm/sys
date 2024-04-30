@@ -93,7 +93,7 @@
 /* values controllable via sysctl */
 int	ip_forwarding = 0;			/* [a] */
 int	ipmforwarding = 0;
-int	ipmultipath = 0;
+int	ipmultipath = 0;			/* [N] */
 int	ip_sendredirects = 1;			/* [a] */
 int	ip_dosourceroute = 0;
 int	ip_defttl = IPDEFTTL;
