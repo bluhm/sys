@@ -152,7 +152,7 @@ gif_clone_create(struct if_clone *ifc, int unit)
 	ifp = &sc->sc_if;
 
 	sc->sc_df = htons(0);
-	sc->sc_ttl = ip_defttl;
+	sc->sc_ttl = READ_ONCE(ip_defttl);
 	sc->sc_txhprio = IF_HDRPRIO_PAYLOAD;
 	sc->sc_rxhprio = IF_HDRPRIO_PAYLOAD;
 	sc->sc_ecn = ECN_ALLOWED;

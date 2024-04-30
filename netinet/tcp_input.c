@@ -4138,7 +4138,7 @@ syn_cache_respond(struct syn_cache *sc, struct mbuf *m, uint64_t now)
 	switch (sc->sc_src.sa.sa_family) {
 	case AF_INET:
 		ip->ip_len = htons(tlen);
-		ip->ip_ttl = inp ? inp->inp_ip.ip_ttl : ip_defttl;
+		ip->ip_ttl = inp ? inp->inp_ip.ip_ttl : READ_ONCE(ip_defttl);
 		if (inp != NULL)
 			ip->ip_tos = inp->inp_ip.ip_tos;
 

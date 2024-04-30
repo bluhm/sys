@@ -907,7 +907,8 @@ ip_ctloutput(int op, struct socket *so, int level, int optname,
 					if (optval > 0 && optval <= MAXTTL)
 						inp->inp_ip.ip_ttl = optval;
 					else if (optval == -1)
-						inp->inp_ip.ip_ttl = ip_defttl;
+						inp->inp_ip.ip_ttl =	
+						    READ_ONCE(ip_defttl);
 					else
 						error = EINVAL;
 					break;
@@ -1123,7 +1124,7 @@ ip_ctloutput(int op, struct socket *so, int level, int optname,
 				break;
 
 			case IP_IPDEFTTL:
-				optval = ip_defttl;
+				optval = READ_ONCE(ip_defttl);
 				break;
 
 #define	OPTBIT(bit)	(inp->inp_flags & bit ? 1 : 0)

@@ -142,7 +142,7 @@ etherip_clone_create(struct if_clone *ifc, int unit)
 	snprintf(ifp->if_xname, sizeof(ifp->if_xname), "%s%d",
 	    ifc->ifc_name, unit);
 
-	sc->sc_ttl = ip_defttl;
+	sc->sc_ttl = READ_ONCE(ip_defttl);
 	sc->sc_txhprio = IFQ_TOS2PRIO(IPTOS_PREC_ROUTINE); /* 0 */
 	sc->sc_rxhprio = IF_HDRPRIO_PACKET;
 	sc->sc_df = htons(0);

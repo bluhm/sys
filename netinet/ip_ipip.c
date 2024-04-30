@@ -381,7 +381,7 @@ ipip_output(struct mbuf **mp, struct tdb *tdb)
 		ipo->ip_v = IPVERSION;
 		ipo->ip_hl = 5;
 		ipo->ip_len = htons(m->m_pkthdr.len);
-		ipo->ip_ttl = ip_defttl;
+		ipo->ip_ttl = READ_ONCE(ip_defttl);
 		ipo->ip_sum = 0;
 		ipo->ip_src = tdb->tdb_src.sin.sin_addr;
 		ipo->ip_dst = tdb->tdb_dst.sin.sin_addr;

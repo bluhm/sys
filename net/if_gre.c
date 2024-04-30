@@ -582,7 +582,7 @@ gre_clone_create(struct if_clone *ifc, int unit)
 	ifp->if_ioctl = gre_ioctl;
 	ifp->if_rtrequest = p2p_rtrequest;
 
-	sc->sc_tunnel.t_ttl = ip_defttl;
+	sc->sc_tunnel.t_ttl = READ_ONCE(ip_defttl);
 	sc->sc_tunnel.t_txhprio = IF_HDRPRIO_PAYLOAD;
 	sc->sc_tunnel.t_rxhprio = IF_HDRPRIO_PACKET;
 	sc->sc_tunnel.t_df = htons(0);
@@ -653,7 +653,7 @@ mgre_clone_create(struct if_clone *ifc, int unit)
 	ifp->if_start = mgre_start;
 	ifp->if_ioctl = mgre_ioctl;
 
-	sc->sc_tunnel.t_ttl = ip_defttl;
+	sc->sc_tunnel.t_ttl = READ_ONCE(ip_defttl);
 	sc->sc_tunnel.t_txhprio = IF_HDRPRIO_PAYLOAD;
 	sc->sc_tunnel.t_rxhprio = IF_HDRPRIO_PACKET;
 	sc->sc_tunnel.t_df = htons(0);
@@ -707,7 +707,7 @@ egre_clone_create(struct if_clone *ifc, int unit)
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
 	ether_fakeaddr(ifp);
 
-	sc->sc_tunnel.t_ttl = ip_defttl;
+	sc->sc_tunnel.t_ttl = READ_ONCE(ip_defttl);
 	sc->sc_tunnel.t_txhprio = 0;
 	sc->sc_tunnel.t_rxhprio = IF_HDRPRIO_PACKET;
 	sc->sc_tunnel.t_df = htons(0);
@@ -842,7 +842,7 @@ eoip_clone_create(struct if_clone *ifc, int unit)
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
 	ether_fakeaddr(ifp);
 
-	sc->sc_tunnel.t_ttl = ip_defttl;
+	sc->sc_tunnel.t_ttl = READ_ONCE(ip_defttl);
 	sc->sc_tunnel.t_txhprio = 0;
 	sc->sc_tunnel.t_rxhprio = IF_HDRPRIO_PACKET;
 	sc->sc_tunnel.t_df = htons(0);
@@ -3006,7 +3006,8 @@ gre_keepalive_send(void *arg)
 	SipHash24_Update(&ctx, &gk->gk_random, sizeof(gk->gk_random));
 	SipHash24_Final(gk->gk_digest, &ctx);
 
-	ttl = sc->sc_tunnel.t_ttl == -1 ? ip_defttl : sc->sc_tunnel.t_ttl;
+	ttl = sc->sc_tunnel.t_ttl == -1 ? READ_ONCE(ip_defttl) :
+	    sc->sc_tunnel.t_ttl;
 
 	m->m_pkthdr.pf.prio = sc->sc_if.if_llprio;
 	tos = gre_l3_tos(&sc->sc_tunnel, m, IFQ_PRIO2TOS(m->m_pkthdr.pf.prio));

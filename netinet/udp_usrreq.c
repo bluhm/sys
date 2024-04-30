@@ -1115,7 +1115,7 @@ udp_attach(struct socket *so, int proto, int wait)
 		sotoinpcb(so)->inp_ipv6.ip6_hlim = ip6_defhlim;
 	else
 #endif
-		sotoinpcb(so)->inp_ip.ip_ttl = ip_defttl;
+		sotoinpcb(so)->inp_ip.ip_ttl = READ_ONCE(ip_defttl);
 	return 0;
 }
 
