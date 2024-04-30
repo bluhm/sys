@@ -7978,7 +7978,7 @@ done:
 					action = PF_DROP;
 					goto out;
 				}
-				if (ip_directedbcast)
+				if (READ_ONCE(ip_directedbcast))
 					SET(flags, IP_ALLOWBROADCAST);
 				ip_forward(pd.m, ifp, NULL, flags);
 			} else
