@@ -386,7 +386,7 @@ arpresolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 
 		/* refresh ARP entry when timeout gets close */
 		if (rt->rt_expire != 0 &&
-		    rt->rt_expire - arpt_keep / 8 < uptime) {
+		    rt->rt_expire - READ_ONCE(arpt_keep) / 8 < uptime) {
 
 			mtx_enter(&arp_mtx);
 			la = (struct llinfo_arp *)rt->rt_llinfo;
@@ -449,7 +449,7 @@ arpresolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 				refresh = 1;
 			else {
 				reject = RTF_REJECT;
-				rt->rt_expire += arpt_down;
+				rt->rt_expire += READ_ONCE(arpt_down);
 				la->la_asked = 0;
 				la->la_refreshed = 0;
 				atomic_sub_int(&la_hold_total,
@@ -711,7 +711,7 @@ arpcache(struct ifnet *ifp, struct ether_arp *ea, struct rtentry *rt)
 	sdl->sdl_alen = sizeof(ea->arp_sha);
 	memcpy(LLADDR(sdl), ea->arp_sha, sizeof(ea->arp_sha));
 	if (rt->rt_expire)
-		rt->rt_expire = uptime + arpt_keep;
+		rt->rt_expire = uptime + READ_ONCE(arpt_keep);
 	rt->rt_flags &= ~RTF_REJECT;
 
 	/* Notify userland that an ARP resolution has been done. */
