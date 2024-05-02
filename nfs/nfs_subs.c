@@ -1,4 +1,4 @@
-/*	$OpenBSD: nfs_subs.c,v 1.146 2022/01/12 20:17:08 mbuhl Exp $	*/
+/*	$OpenBSD: nfs_subs.c,v 1.149 2024/05/01 13:15:59 jsg Exp $	*/
 /*	$NetBSD: nfs_subs.c,v 1.27.4.3 1996/07/08 20:34:24 jtc Exp $	*/
 
 /*
@@ -37,9 +37,9 @@
 
 
 /*
- * These functions support the macros and help fiddle mbuf chains for
- * the nfs op functions. They do things like create the rpc header and
- * copy data between mbuf chains and uio lists.
+ * These functions support the nfsm_subs.h inline functions and help fiddle
+ * mbuf chains for the nfs op functions. They do things such as creating the
+ * rpc header and copying data between mbuf chains and uio lists.
  */
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,11 +59,9 @@
 #include <nfs/nfsnode.h>
 #include <nfs/nfs.h>
 #include <nfs/xdr_subs.h>
-#include <nfs/nfsm_subs.h>
 #include <nfs/nfsmount.h>
 #include <nfs/nfs_var.h>
-
-#include <uvm/uvm_extern.h>
+#include <nfs/nfsm_subs.h>
 
 #include <netinet/in.h>
 
@@ -82,19 +80,21 @@ u_int32_t rpc_call, rpc_vers, rpc_reply, rpc_msgdenied, rpc_autherr,
 u_int32_t nfs_prog, nfs_true, nfs_false;
 
 /* And other global data */
-nfstype nfsv2_type[9] = { NFNON, NFREG, NFDIR, NFBLK, NFCHR, NFLNK, NFNON,
-		      NFCHR, NFNON };
-nfstype nfsv3_type[9] = { NFNON, NFREG, NFDIR, NFBLK, NFCHR, NFLNK, NFSOCK,
-		      NFFIFO, NFNON };
-enum vtype nv2tov_type[8] = { VNON, VREG, VDIR, VBLK, VCHR, VLNK, VNON, VNON };
-enum vtype nv3tov_type[8]={ VNON, VREG, VDIR, VBLK, VCHR, VLNK, VSOCK, VFIFO };
+const nfstype nfsv2_type[9] =
+    { NFNON, NFREG, NFDIR, NFBLK, NFCHR, NFLNK, NFNON, NFCHR, NFNON };
+const nfstype nfsv3_type[9] =
+    { NFNON, NFREG, NFDIR, NFBLK, NFCHR, NFLNK, NFSOCK, NFFIFO, NFNON };
+const enum vtype nv2tov_type[8] =
+    { VNON, VREG, VDIR, VBLK, VCHR, VLNK, VNON, VNON };
+const enum vtype nv3tov_type[8]=
+    { VNON, VREG, VDIR, VBLK, VCHR, VLNK, VSOCK, VFIFO };
 int nfs_ticks;
 struct nfsstats nfsstats;
 
 /*
  * Mapping of old NFS Version 2 RPC numbers to generic numbers.
  */
-int nfsv3_procid[NFS_NPROCS] = {
+const int nfsv3_procid[NFS_NPROCS] = {
 	NFSPROC_NULL,
 	NFSPROC_GETATTR,
 	NFSPROC_SETATTR,
@@ -123,7 +123,7 @@ int nfsv3_procid[NFS_NPROCS] = {
 /*
  * and the reverse mapping from generic to Version 2 procedure numbers
  */
-int nfsv2_procid[NFS_NPROCS] = {
+const int nfsv2_procid[NFS_NPROCS] = {
 	NFSV2PROC_NULL,
 	NFSV2PROC_GETATTR,
 	NFSV2PROC_SETATTR,
@@ -154,7 +154,7 @@ int nfsv2_procid[NFS_NPROCS] = {
  * Use NFSERR_IO as the catch all for ones not specifically defined in
  * RFC 1094.
  */
-static u_char nfsrv_v2errmap[] = {
+static const u_char nfsrv_v2errmap[] = {
   NFSERR_PERM,	NFSERR_NOENT,	NFSERR_IO,	NFSERR_IO,	NFSERR_IO,
   NFSERR_NXIO,	NFSERR_IO,	NFSERR_IO,	NFSERR_IO,	NFSERR_IO,
   NFSERR_IO,	NFSERR_IO,	NFSERR_ACCES,	NFSERR_IO,	NFSERR_IO,
@@ -183,12 +183,12 @@ static u_char nfsrv_v2errmap[] = {
  * The first entry is the default error return and the rest are the valid
  * errors for that RPC in increasing numeric order.
  */
-static short nfsv3err_null[] = {
+static const short nfsv3err_null[] = {
 	0,
 	0,
 };
 
-static short nfsv3err_getattr[] = {
+static const short nfsv3err_getattr[] = {
 	NFSERR_IO,
 	NFSERR_IO,
 	NFSERR_STALE,
@@ -197,7 +197,7 @@ static short nfsv3err_getattr[] = {
 	0,
 };
 
-static short nfsv3err_setattr[] = {
+static const short nfsv3err_setattr[] = {
 	NFSERR_IO,
 	NFSERR_PERM,
 	NFSERR_IO,
@@ -213,7 +213,7 @@ static short nfsv3err_setattr[] = {
 	0,
 };
 
-static short nfsv3err_lookup[] = {
+static const short nfsv3err_lookup[] = {
 	NFSERR_IO,
 	NFSERR_NOENT,
 	NFSERR_IO,
@@ -226,7 +226,7 @@ static short nfsv3err_lookup[] = {
 	0,
 };
 
-static short nfsv3err_access[] = {
+static const short nfsv3err_access[] = {
 	NFSERR_IO,
 	NFSERR_IO,
 	NFSERR_STALE,
@@ -235,7 +235,7 @@ static short nfsv3err_access[] = {
 	0,
 };
 
-static short nfsv3err_readlink[] = {
+static const short nfsv3err_readlink[] = {
 	NFSERR_IO,
 	NFSERR_IO,
 	NFSERR_ACCES,
@@ -247,7 +247,7 @@ static short nfsv3err_readlink[] = {
 	0,
 };
 
-static short nfsv3err_read[] = {
+static const short nfsv3err_read[] = {
 	NFSERR_IO,
 	NFSERR_IO,
 	NFSERR_NXIO,
@@ -259,7 +259,7 @@ static short nfsv3err_read[] = {
 	0,
 };
 
-static short nfsv3err_write[] = {
+static const short nfsv3err_write[] = {
 	NFSERR_IO,
 	NFSERR_IO,
 	NFSERR_ACCES,
@@ -274,7 +274,7 @@ static short nfsv3err_write[] = {
 	0,
 };
 
-static short nfsv3err_create[] = {
+static const short nfsv3err_create[] = {
 	NFSERR_IO,
 	NFSERR_IO,
 	NFSERR_ACCES,
@@ -291,7 +291,7 @@ static short nfsv3err_create[] = {
 	0,
 };
 
-static short nfsv3err_mkdir[] = {
+static const short nfsv3err_mkdir[] = {
 	NFSERR_IO,
 	NFSERR_IO,
 	NFSERR_ACCES,
@@ -308,7 +308,7 @@ static short nfsv3err_mkdir[] = {
 	0,
 };
 
-static short nfsv3err_symlink[] = {
+static const short nfsv3err_symlink[] = {
 	NFSERR_IO,
 	NFSERR_IO,
 	NFSERR_ACCES,
@@ -325,7 +325,7 @@ static short nfsv3err_symlink[] = {
 	0,
 };
 
-static short nfsv3err_mknod[] = {
+static const short nfsv3err_mknod[] = {
 	NFSERR_IO,
 	NFSERR_IO,
 	NFSERR_ACCES,
@@ -343,7 +343,7 @@ static short nfsv3err_mknod[] = {
 	0,
 };
 
-static short nfsv3err_remove[] = {
+static const short nfsv3err_remove[] = {
 	NFSERR_IO,
 	NFSERR_NOENT,
 	NFSERR_IO,
@@ -357,7 +357,7 @@ static short nfsv3err_remove[] = {
 	0,
 };
 
-static short nfsv3err_rmdir[] = {
+static const short nfsv3err_rmdir[] = {
 	NFSERR_IO,
 	NFSERR_NOENT,
 	NFSERR_IO,
@@ -375,7 +375,7 @@ static short nfsv3err_rmdir[] = {
 	0,
 };
 
-static short nfsv3err_rename[] = {
+static const short nfsv3err_rename[] = {
 	NFSERR_IO,
 	NFSERR_NOENT,
 	NFSERR_IO,
@@ -398,7 +398,7 @@ static short nfsv3err_rename[] = {
 	0,
 };
 
-static short nfsv3err_link[] = {
+static const short nfsv3err_link[] = {
 	NFSERR_IO,
 	NFSERR_IO,
 	NFSERR_ACCES,
@@ -418,7 +418,7 @@ static short nfsv3err_link[] = {
 	0,
 };
 
-static short nfsv3err_readdir[] = {
+static const short nfsv3err_readdir[] = {
 	NFSERR_IO,
 	NFSERR_IO,
 	NFSERR_ACCES,
@@ -431,7 +431,7 @@ static short nfsv3err_readdir[] = {
 	0,
 };
 
-static short nfsv3err_readdirplus[] = {
+static const short nfsv3err_readdirplus[] = {
 	NFSERR_IO,
 	NFSERR_IO,
 	NFSERR_ACCES,
@@ -445,7 +445,7 @@ static short nfsv3err_readdirplus[] = {
 	0,
 };
 
-static short nfsv3err_fsstat[] = {
+static const short nfsv3err_fsstat[] = {
 	NFSERR_IO,
 	NFSERR_IO,
 	NFSERR_STALE,
@@ -454,7 +454,7 @@ static short nfsv3err_fsstat[] = {
 	0,
 };
 
-static short nfsv3err_fsinfo[] = {
+static const short nfsv3err_fsinfo[] = {
 	NFSERR_STALE,
 	NFSERR_STALE,
 	NFSERR_BADHANDLE,
@@ -462,7 +462,7 @@ static short nfsv3err_fsinfo[] = {
 	0,
 };
 
-static short nfsv3err_pathconf[] = {
+static const short nfsv3err_pathconf[] = {
 	NFSERR_STALE,
 	NFSERR_STALE,
 	NFSERR_BADHANDLE,
@@ -470,7 +470,7 @@ static short nfsv3err_pathconf[] = {
 	0,
 };
 
-static short nfsv3err_commit[] = {
+static const short nfsv3err_commit[] = {
 	NFSERR_IO,
 	NFSERR_IO,
 	NFSERR_STALE,
@@ -479,7 +479,7 @@ static short nfsv3err_commit[] = {
 	0,
 };
 
-static short *nfsrv_v3errmap[] = {
+static const short *nfsrv_v3errmap[] = {
 	nfsv3err_null,
 	nfsv3err_getattr,
 	nfsv3err_setattr,
@@ -791,8 +791,7 @@ nfsm_strtombuf(struct mbuf **mp, void *str, size_t len)
 /*
  * Help break down an mbuf chain by setting the first siz bytes contiguous
  * pointed to by returned val.
- * This is used by the macros nfsm_dissect and nfsm_dissecton for tough
- * cases. (The macros use the vars. dpos and dpos2)
+ * This is used by nfsm_dissect for tough cases.
  */
 int
 nfsm_disct(struct mbuf **mdp, caddr_t *dposp, int siz, int left, caddr_t *cp2)
@@ -824,7 +823,7 @@ nfsm_disct(struct mbuf **mdp, caddr_t *dposp, int siz, int left, caddr_t *cp2)
 		mp = mp2;
 		*cp2 = p = mtod(mp, caddr_t);
 		bcopy(*dposp, p, left);		/* Copy what was left */
-		siz2 = siz-left;
+		siz2 = siz - left;
 		p += left;
 		mp2 = mp->m_next;
 		/* Loop around copying up the siz2 bytes */
@@ -939,8 +938,7 @@ nfs_loadattrcache(struct vnode **vpp, struct mbuf **mdp, caddr_t *dposp,
 	struct nfs_fattr *fp;
 	extern const struct vops nfs_specvops;
 	struct nfsnode *np;
-	int32_t t1;
-	caddr_t cp2;
+	int32_t avail;
 	int error = 0;
 	int32_t rdev;
 	struct mbuf *md;
@@ -953,11 +951,10 @@ nfs_loadattrcache(struct vnode **vpp, struct mbuf **mdp, caddr_t *dposp,
 	gid_t gid;
 
 	md = *mdp;
-	t1 = (mtod(md, caddr_t) + md->m_len) - *dposp;
-	error = nfsm_disct(mdp, dposp, NFSX_FATTR(v3), t1, &cp2);
+	avail = (mtod(md, caddr_t) + md->m_len) - *dposp;
+	error = nfsm_disct(mdp, dposp, NFSX_FATTR(v3), avail, (caddr_t *)&fp);
 	if (error)
 		return (error);
-	fp = (struct nfs_fattr *)cp2;
 	if (v3) {
 		vtyp = nfsv3tov_type(fp->fa_type);
 		vmode = fxdr_unsigned(mode_t, fp->fa_mode);
@@ -1050,34 +1047,29 @@ nfs_loadattrcache(struct vnode **vpp, struct mbuf **mdp, caddr_t *dposp,
 		     fxdr_unsigned(int32_t, fp->fa2_blocksize);
 		break;
 	}
+	vap->va_nlink = fxdr_unsigned(nlink_t, fp->fa_nlink);
+	vap->va_uid = fxdr_unsigned(uid_t, fp->fa_uid);
+	vap->va_gid = fxdr_unsigned(gid_t, fp->fa_gid);
 	if (v3) {
-		vap->va_nlink = fxdr_unsigned(nlink_t, fp->fa_nlink);
-		vap->va_uid = fxdr_unsigned(uid_t, fp->fa_uid);
-		vap->va_gid = fxdr_unsigned(gid_t, fp->fa_gid);
 		vap->va_size = fxdr_hyper(&fp->fa3_size);
 		vap->va_bytes = fxdr_hyper(&fp->fa3_used);
 		vap->va_fileid = fxdr_hyper(&fp->fa3_fileid);
 		fxdr_nfsv3time(&fp->fa3_atime, &vap->va_atime);
 		fxdr_nfsv3time(&fp->fa3_ctime, &vap->va_ctime);
-		vap->va_flags = 0;
-		vap->va_filerev = 0;
 	} else {
-		vap->va_nlink = fxdr_unsigned(nlink_t, fp->fa_nlink);
-		vap->va_uid = fxdr_unsigned(uid_t, fp->fa_uid);
-		vap->va_gid = fxdr_unsigned(gid_t, fp->fa_gid);
 		vap->va_size = fxdr_unsigned(u_int32_t, fp->fa2_size);
 		vap->va_bytes =
 		    (u_quad_t)fxdr_unsigned(int32_t, fp->fa2_blocks) *
 		    NFS_FABLKSIZE;
 		vap->va_fileid = fxdr_unsigned(int32_t, fp->fa2_fileid);
 		fxdr_nfsv2time(&fp->fa2_atime, &vap->va_atime);
-		vap->va_flags = 0;
 		vap->va_ctime.tv_sec = fxdr_unsigned(u_int32_t,
 		    fp->fa2_ctime.nfsv2_sec);
 		vap->va_ctime.tv_nsec = 0;
 		vap->va_gen = fxdr_unsigned(u_int32_t,fp->fa2_ctime.nfsv2_usec);
-		vap->va_filerev = 0;
 	}
+	vap->va_flags = 0;
+	vap->va_filerev = 0;
 
 	if (vap->va_size != np->n_size) {
 		if (vap->va_type == VREG) {
@@ -1116,8 +1108,7 @@ nfs_attrtimeo(struct nfsnode *np)
 	if (vp->v_type == VDIR) {
 		maxto = nmp->nm_acdirmax;
 		minto = nmp->nm_acdirmin;
-	}
-	else {
+	} else {
 		maxto = nmp->nm_acregmax;
 		minto = nmp->nm_acregmin;
 	}
@@ -1338,7 +1329,7 @@ nfsm_adj(struct mbuf *mp, int len, int nul)
 }
 
 /*
- * Make these functions instead of macros, so that the kernel text size
+ * Make these non-inline functions, so that the kernel text size
  * doesn't get too big...
  */
 void
@@ -1687,7 +1678,7 @@ nfs_del_tobecommitted_range(struct vnode *vp, struct buf *bp)
 int
 nfsrv_errmap(struct nfsrv_descript *nd, int err)
 {
-	short *defaulterrp, *errp;
+	const short *defaulterrp, *errp;
 
 	if (nd->nd_flag & ND_NFSV3) {
 	    if (nd->nd_procnum <= NFSPROC_COMMIT) {
@@ -1835,44 +1826,64 @@ nfsm_srvsattr(struct mbuf **mp, struct vattr *va, struct mbuf *mrep,
     caddr_t *dposp)
 {
 	struct nfsm_info	info;
-	uint32_t *tl, t1;
-	caddr_t cp2;
 	int error = 0;
+	uint32_t *tl;
 
 	info.nmi_md = *mp;
 	info.nmi_dpos = *dposp;
 	info.nmi_mrep = mrep;
+	info.nmi_errorp = &error;
 
-	nfsm_dissect(tl, u_int32_t *, NFSX_UNSIGNED);
+	tl = (uint32_t *)nfsm_dissect(&info, NFSX_UNSIGNED);
+	if (tl == NULL)
+		return error;
 	if (*tl == nfs_true) {
-		nfsm_dissect(tl, u_int32_t *, NFSX_UNSIGNED);
+		tl = (uint32_t *)nfsm_dissect(&info, NFSX_UNSIGNED);
+		if (tl == NULL)
+			return error;
 		va->va_mode = nfstov_mode(*tl);
 	}
 
-	nfsm_dissect(tl, u_int32_t *, NFSX_UNSIGNED);
+	tl = (uint32_t *)nfsm_dissect(&info, NFSX_UNSIGNED);
+	if (tl == NULL)
+		return error;
 	if (*tl == nfs_true) {
-		nfsm_dissect(tl, u_int32_t *, NFSX_UNSIGNED);
+		tl = (uint32_t *)nfsm_dissect(&info, NFSX_UNSIGNED);
+		if (tl == NULL)
+			return error;
 		va->va_uid = fxdr_unsigned(uid_t, *tl);
 	}
 
-	nfsm_dissect(tl, u_int32_t *, NFSX_UNSIGNED);
+	tl = (uint32_t *)nfsm_dissect(&info, NFSX_UNSIGNED);
+	if (tl == NULL)
+		return error;
 	if (*tl == nfs_true) {
-		nfsm_dissect(tl, u_int32_t *, NFSX_UNSIGNED);
+		tl = (uint32_t *)nfsm_dissect(&info, NFSX_UNSIGNED);
+		if (tl == NULL)
+			return error;
 		va->va_gid = fxdr_unsigned(gid_t, *tl);
 	}
 
-	nfsm_dissect(tl, u_int32_t *, NFSX_UNSIGNED);
+	tl = (uint32_t *)nfsm_dissect(&info, NFSX_UNSIGNED);
+	if (tl == NULL)
+		return error;
 	if (*tl == nfs_true) {
-		nfsm_dissect(tl, u_int32_t *, 2 * NFSX_UNSIGNED);
+		tl = (uint32_t *)nfsm_dissect(&info, 2 * NFSX_UNSIGNED);
+		if (tl == NULL)
+			return error;
 		va->va_size = fxdr_hyper(tl);
 	}
 
-	nfsm_dissect(tl, u_int32_t *, NFSX_UNSIGNED);
+	tl = (uint32_t *)nfsm_dissect(&info, NFSX_UNSIGNED);
+	if (tl == NULL)
+		return error;
 	switch (fxdr_unsigned(int, *tl)) {
 	case NFSV3SATTRTIME_TOCLIENT:
 		va->va_vaflags |= VA_UTIMES_CHANGE;
 		va->va_vaflags &= ~VA_UTIMES_NULL;
-		nfsm_dissect(tl, u_int32_t *, 2 * NFSX_UNSIGNED);
+		tl = (uint32_t *)nfsm_dissect(&info, 2 * NFSX_UNSIGNED);
+		if (tl == NULL)
+			return error;
 		fxdr_nfsv3time(tl, &va->va_atime);
 		break;
 	case NFSV3SATTRTIME_TOSERVER:
@@ -1881,12 +1892,16 @@ nfsm_srvsattr(struct mbuf **mp, struct vattr *va, struct mbuf *mrep,
 		break;
 	};
 
-	nfsm_dissect(tl, u_int32_t *, NFSX_UNSIGNED);
+	tl = (uint32_t *)nfsm_dissect(&info, NFSX_UNSIGNED);
+	if (tl == NULL)
+		return error;
 	switch (fxdr_unsigned(int, *tl)) {
 	case NFSV3SATTRTIME_TOCLIENT:
 		va->va_vaflags |= VA_UTIMES_CHANGE;
 		va->va_vaflags &= ~VA_UTIMES_NULL;
-		nfsm_dissect(tl, u_int32_t *, 2 * NFSX_UNSIGNED);
+		tl = (uint32_t *)nfsm_dissect(&info, 2 * NFSX_UNSIGNED);
+		if (tl == NULL)
+			return error;
 		fxdr_nfsv3time(tl, &va->va_mtime);
 		break;
 	case NFSV3SATTRTIME_TOSERVER:
@@ -1897,8 +1912,7 @@ nfsm_srvsattr(struct mbuf **mp, struct vattr *va, struct mbuf *mrep,
 
 	*dposp = info.nmi_dpos;
 	*mp = info.nmi_md;
-nfsmout:
-	return (error);
+	return 0;
 }
 
 void
