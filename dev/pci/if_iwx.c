@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_iwx.c,v 1.183 2024/04/13 23:44:11 jsg Exp $	*/
+/*	$OpenBSD: if_iwx.c,v 1.185 2024/05/13 01:15:51 jsg Exp $	*/
 
 /*
  * Copyright (c) 2014, 2016 genua gmbh <info@genua.de>
@@ -453,7 +453,6 @@ uint16_t iwx_rs_vht_rates(struct iwx_softc *, struct ieee80211_node *, int);
 int	iwx_rs_init_v3(struct iwx_softc *, struct iwx_node *);
 int	iwx_rs_init_v4(struct iwx_softc *, struct iwx_node *);
 int	iwx_rs_init(struct iwx_softc *, struct iwx_node *);
-int	iwx_enable_data_tx_queues(struct iwx_softc *);
 int	iwx_phy_send_rlc(struct iwx_softc *, struct iwx_phy_ctxt *,
 	    uint8_t, uint8_t);
 int	iwx_phy_ctxt_update(struct iwx_softc *, struct iwx_phy_ctxt *,
@@ -8323,15 +8322,15 @@ iwx_run(struct iwx_softc *sc)
 		return err;
 	}
 #endif
+	if (ic->ic_opmode == IEEE80211_M_MONITOR)
+		return 0;
+
 	err = iwx_power_mac_update_mode(sc, in);
 	if (err) {
 		printf("%s: could not update MAC power (error %d)\n",
 		    DEVNAME(sc), err);
 		return err;
 	}
-
-	if (ic->ic_opmode == IEEE80211_M_MONITOR)
-		return 0;
 
 	/* Start at lowest available bit-rate. Firmware will raise. */
 	in->in_ni.ni_txrate = 0;

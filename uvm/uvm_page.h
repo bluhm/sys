@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_page.h,v 1.69 2022/08/01 14:15:46 mpi Exp $	*/
+/*	$OpenBSD: uvm_page.h,v 1.71 2024/05/13 01:15:53 jsg Exp $	*/
 /*	$NetBSD: uvm_page.h,v 1.19 2000/12/28 08:24:55 chs Exp $	*/
 
 /* 
@@ -199,12 +199,6 @@ struct vm_physseg {
 #ifdef _KERNEL
 
 /*
- * globals
- */
-
-extern boolean_t vm_page_zero_enable;
-
-/*
  * physical memory config is stored in vm_physmem.
  */
 
@@ -234,7 +228,6 @@ void		uvm_page_unbusy(struct vm_page **, int);
 struct vm_page	*uvm_pagelookup(struct uvm_object *, voff_t);
 void		uvm_pageunwire(struct vm_page *);
 void		uvm_pagewait(struct vm_page *, struct rwlock *, const char *);
-void		uvm_pagewake(struct vm_page *);
 void		uvm_pagewire(struct vm_page *);
 void		uvm_pagezero(struct vm_page *);
 void		uvm_pagealloc_pg(struct vm_page *, struct uvm_object *,
