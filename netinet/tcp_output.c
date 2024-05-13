@@ -1207,6 +1207,11 @@ tcp_chopper(struct mbuf *m0, struct mbuf_list *ml, struct ifnet *ifp,
 	ml_init(ml);
 	ml_enqueue(ml, m0);
 
+	if (mss == 0) {
+		error = EINVAL;
+		goto bad;
+	}
+
 	ip = mtod(m0, struct ip *);
 	switch (ip->ip_v) {
 	case 4:
