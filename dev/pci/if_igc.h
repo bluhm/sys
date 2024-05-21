@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_igc.h,v 1.3 2024/05/06 04:25:52 dlg Exp $	*/
+/*	$OpenBSD: if_igc.h,v 1.4 2024/05/21 11:19:39 bluhm Exp $	*/
 /*-
  * SPDX-License-Identifier: BSD-2-Clause
  *
