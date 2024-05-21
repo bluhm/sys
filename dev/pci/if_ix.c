@@ -2727,6 +2727,7 @@ ixgbe_get_buf(struct ix_rxring *rxr, int i)
 
 	bus_dmamap_sync(rxr->rxdma.dma_tag, rxbuf->map,
 	    0, rxbuf->map->dm_mapsize, BUS_DMASYNC_PREREAD);
+	membar_producer();
 	rxbuf->buf = mp;
 
 	rxdesc->read.pkt_addr = htole64(rxbuf->map->dm_segs[0].ds_addr);
@@ -3217,6 +3218,7 @@ ixgbe_rxeof(struct ix_rxring *rxr)
 			goto next_desc;
 		}
 
+		membar_consumer();
 		mp = rxbuf->buf;
 		rxbuf->buf = NULL;
 		if (mp == NULL) {
@@ -3253,6 +3255,7 @@ ixgbe_rxeof(struct ix_rxring *rxr)
 		 * See if there is a stored head
 		 * that determines what we are
 		 */
+		membar_consumer();
 		sendmp = rxbuf->fmp;
 		rxbuf->fmp = NULL;
 
@@ -3278,6 +3281,7 @@ ixgbe_rxeof(struct ix_rxring *rxr)
 		if (!eop) {
 			if (nxbuf->fmp)
 				printf("%s: fmp exists\n", __func__);
+			membar_producer();
 			nxbuf->fmp = sendmp;
 			sendmp = NULL;
 			mp->m_next = nxbuf->buf;
