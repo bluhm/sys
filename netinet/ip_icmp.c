@@ -589,7 +589,7 @@ reflect:
 		struct sockaddr_in ssrc;
 		struct rtentry *newrt = NULL;
 
-		if (icmp_rediraccept == 0 || ipforwarding == 1)
+		if (icmp_rediraccept == 0 || ip_forwarding == 1)
 			goto freeit;
 		if (code > 3)
 			goto badcode;
