@@ -1,4 +1,4 @@
-/*	$OpenBSD: umsm.c,v 1.125 2023/04/02 23:57:57 dlg Exp $	*/
+/*	$OpenBSD: umsm.c,v 1.127 2024/05/23 08:06:22 kevlo Exp $	*/
 
 /*
  * Copyright (c) 2008 Yojiro UO <yuo@nui.org>
@@ -21,10 +21,8 @@
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/kernel.h>
 #include <sys/malloc.h>
 #include <sys/device.h>
-#include <sys/conf.h>
 #include <sys/tty.h>
 
 #include <dev/usb/usb.h>
@@ -179,6 +177,7 @@ static const struct umsm_type umsm_devs[] = {
 	{{ USB_VENDOR_QUECTEL, USB_PRODUCT_QUECTEL_EG95 }, 0},
 	{{ USB_VENDOR_QUECTEL, USB_PRODUCT_QUECTEL_BG96 }, 0},
 	{{ USB_VENDOR_QUECTEL, USB_PRODUCT_QUECTEL_EG06 }, 0},
+	{{ USB_VENDOR_QUECTEL, USB_PRODUCT_QUECTEL_EM060K }, 0},
 	{{ USB_VENDOR_QUECTEL, USB_PRODUCT_QUECTEL_AG15 }, 0},
 	{{ USB_VENDOR_QUECTEL, USB_PRODUCT_QUECTEL_AG35 }, 0},
 	{{ USB_VENDOR_QUECTEL, USB_PRODUCT_QUECTEL_AG520R }, 0},

@@ -1,4 +1,4 @@
-/*	$OpenBSD: ums.c,v 1.51 2021/11/22 11:29:17 anton Exp $ */
+/*	$OpenBSD: ums.c,v 1.53 2024/05/26 20:06:27 mglocker Exp $ */
 /*	$NetBSD: ums.c,v 1.60 2003/03/11 16:44:00 augustss Exp $	*/
 
 /*
@@ -37,9 +37,7 @@
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/kernel.h>
 #include <sys/device.h>
-#include <sys/ioctl.h>
 
 #include <dev/usb/usb.h>
 #include <dev/usb/usbhid.h>
@@ -180,14 +178,14 @@ ums_attach(struct device *parent, struct device *self, void *aux)
 		ms->sc_loc_btn[2].pos = 2;
 	}
 
-	hidms_attach(ms, &ums_accessops);
-
 	if (sc->sc_quirks & UQ_ALWAYS_OPEN) {
 		/* open uhidev and keep it open */
 		ums_enable(sc);
 		/* but mark the hidms not in use */
 		ums_disable(sc);
 	}
+
+	hidms_attach(ms, &ums_accessops);
 }
 
 int

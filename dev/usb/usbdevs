@@ -1,4 +1,4 @@
-$OpenBSD: usbdevs,v 1.764 2024/05/21 07:13:29 jsg Exp $
+$OpenBSD: usbdevs,v 1.766 2024/05/29 06:48:43 jsg Exp $
 /* $NetBSD: usbdevs,v 1.322 2003/05/10 17:47:14 hamajima Exp $ */
 
 /*
@@ -1023,6 +1023,7 @@ product APPLE IPHONE_4S		0x12a0	iPhone 4S
 product APPLE IPHONE_6		0x12a8	iPhone 6
 product APPLE ETHERNET		0x1402	Ethernet A1277
 product APPLE BLUETOOTH2	0x8205	Bluetooth
+product APPLE BLUETOOTH3	0x8207	Bluetooth
 product APPLE BLUETOOTH		0x8300	Bluetooth
 product APPLE ISIGHT_1		0x8501	iSight
 product APPLE ISIGHT		0x8502	iSight
@@ -3726,6 +3727,7 @@ product QUECTEL EG91		0x0191	EG91
 product QUECTEL EG95		0x0195	EG95
 product QUECTEL BG96		0x0296	BG96
 product QUECTEL EG06		0x0306	EG06/EP06/EM06
+product QUECTEL EM060K		0x030b	EM060K
 product QUECTEL AG15		0x0415	AG15
 product QUECTEL AG35		0x0435	AG35
 product QUECTEL AG520R		0x0452	AG520R

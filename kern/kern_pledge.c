@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_pledge.c,v 1.314 2024/05/18 05:20:22 guenther Exp $	*/
+/*	$OpenBSD: kern_pledge.c,v 1.316 2024/06/03 03:41:47 deraadt Exp $	*/
 
 /*
  * Copyright (c) 2015 Nicholas Marriott <nicm@openbsd.org>
@@ -574,7 +574,7 @@ pledge_fail(struct proc *p, int error, uint64_t code)
 		return (ENOSYS);
 
 	KERNEL_LOCK();
-	log(LOG_ERR, "%s[%d]: pledge \"%s\", syscall %d\n",
+	uprintf("%s[%d]: pledge \"%s\", syscall %d\n",
 	    p->p_p->ps_comm, p->p_p->ps_pid, codes, p->p_pledge_syscall);
 	p->p_p->ps_acflag |= APLEDGE;
 
@@ -1002,10 +1002,10 @@ pledge_sysctl(struct proc *p, int miblen, int *mib, void *new)
 	snprintf(buf, sizeof(buf), "%s(%d): pledge sysctl %d:",
 	    p->p_p->ps_comm, p->p_p->ps_pid, miblen);
 	for (i = 0; i < miblen; i++) {
-		char *p = buf + strlen(buf);
-		snprintf(p, sizeof(buf) - (p - buf), " %d", mib[i]);
+		char *s = buf + strlen(buf);
+		snprintf(s, sizeof(buf) - (s - buf), " %d", mib[i]);
 	}
-	log(LOG_ERR, "%s\n", buf);
+	uprintf("%s\n", buf);
 
 	return pledge_fail(p, EINVAL, 0);
 }

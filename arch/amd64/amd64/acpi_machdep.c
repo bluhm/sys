@@ -1,4 +1,4 @@
-/*	$OpenBSD: acpi_machdep.c,v 1.108 2023/06/07 04:46:09 deraadt Exp $	*/
+/*	$OpenBSD: acpi_machdep.c,v 1.110 2024/05/29 12:21:33 kettenis Exp $	*/
 /*
  * Copyright (c) 2005 Thorsten Lockert <tholo@sigmasoft.com>
  *
@@ -333,7 +333,8 @@ acpi_attach_machdep(struct acpi_softc *sc)
 	extern void (*cpuresetfn)(void);
 
 	sc->sc_interrupt = isa_intr_establish(NULL, sc->sc_fadt->sci_int,
-	    IST_LEVEL, IPL_BIO, acpi_interrupt, sc, sc->sc_dev.dv_xname);
+	    IST_LEVEL, IPL_BIO | IPL_WAKEUP, acpi_interrupt,
+	    sc, sc->sc_dev.dv_xname);
 	cpuresetfn = acpi_reset;
 
 #ifndef SMALL_KERNEL
@@ -376,6 +377,9 @@ acpi_attach_machdep(struct acpi_softc *sc)
 int
 acpi_sleep_cpu(struct acpi_softc *sc, int state)
 {
+	if (state == ACPI_STATE_S0)
+		return cpu_suspend_primary();
+
 	rtcstop();
 #if NLAPIC > 0
 	lapic_disable();
@@ -457,6 +461,9 @@ acpi_sleep_cpu(struct acpi_softc *sc, int state)
 void
 acpi_resume_cpu(struct acpi_softc *sc, int state)
 {
+	if (state == ACPI_STATE_S0)
+		return;
+
 	cpu_init_msrs(&cpu_info_primary);
 	cpu_fix_msrs(&cpu_info_primary);
 

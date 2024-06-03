@@ -1,4 +1,4 @@
-/* $OpenBSD: acpi.c,v 1.428 2024/05/13 19:56:37 kettenis Exp $ */
+/* $OpenBSD: acpi.c,v 1.430 2024/06/02 11:08:41 kettenis Exp $ */
 /*
  * Copyright (c) 2005 Thorsten Lockert <tholo@sigmasoft.com>
  * Copyright (c) 2005 Jordan Hargrave <jordan@openbsd.org>
@@ -611,6 +611,10 @@ acpi_getpci(struct aml_node *node, void *arg)
 		aml_nodename(node));
 
 	/* Collect device power state information. */
+	if (aml_evalinteger(sc, node, "_S0W", 0, NULL, &val) == 0)
+		pci->_s0w = val;
+	else
+		pci->_s0w = -1;
 	if (aml_evalinteger(sc, node, "_S3D", 0, NULL, &val) == 0)
 		pci->_s3d = val;
 	else
@@ -721,6 +725,10 @@ acpi_pci_min_powerstate(pci_chipset_tag_t pc, pcitag_t tag)
 	TAILQ_FOREACH(pdev, &acpi_pcidevs, next) {
 		if (pdev->bus == bus && pdev->dev == dev && pdev->fun == fun) {
 			switch (acpi_softc->sc_state) {
+			case ACPI_STATE_S0:
+				defaultstate = PCI_PMCSR_STATE_D3;
+				state = pdev->_s0w;
+				break;
 			case ACPI_STATE_S3:
 				defaultstate = PCI_PMCSR_STATE_D3;
 				state = MAX(pdev->_s3d, pdev->_s3w);
@@ -2085,6 +2093,7 @@ acpi_powerdown_task(void *arg0, int dummy)
 int
 acpi_interrupt(void *arg)
 {
+	extern int cpu_suspended;
 	struct acpi_softc *sc = (struct acpi_softc *)arg;
 	uint32_t processed = 0, idx, jdx;
 	uint16_t sts, en;
@@ -2136,6 +2145,9 @@ acpi_interrupt(void *arg)
 			acpi_write_pmreg(sc, ACPIREG_PM1_STS, 0,
 			    ACPI_PM1_PWRBTN_STS);
 			sts &= ~ACPI_PM1_PWRBTN_STS;
+
+			if (cpu_suspended)
+				cpu_suspended = 0;
 
 			acpi_addtask(sc, acpi_pbtn_task, sc, 0);
 		}

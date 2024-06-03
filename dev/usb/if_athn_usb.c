@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_athn_usb.c,v 1.65 2022/07/10 21:13:41 bluhm Exp $	*/
+/*	$OpenBSD: if_athn_usb.c,v 1.67 2024/05/29 07:27:33 stsp Exp $	*/
 
 /*-
  * Copyright (c) 2011 Damien Bergamini <damien.bergamini@free.fr>
@@ -26,11 +26,8 @@
 #include <sys/param.h>
 #include <sys/sockio.h>
 #include <sys/mbuf.h>
-#include <sys/kernel.h>
-#include <sys/socket.h>
 #include <sys/systm.h>
 #include <sys/timeout.h>
-#include <sys/conf.h>
 #include <sys/device.h>
 #include <sys/endian.h>
 
@@ -58,7 +55,6 @@
 
 #include <dev/usb/usb.h>
 #include <dev/usb/usbdi.h>
-#include <dev/usb/usbdi_util.h>
 #include <dev/usb/usbdevs.h>
 
 #include <dev/usb/if_athn_usb.h>
@@ -1644,6 +1640,11 @@ athn_usb_set_key(struct ieee80211com *ic, struct ieee80211_node *ni,
 	    (IFF_UP | IFF_RUNNING))
 		return (0);
 
+	if (k->k_cipher != IEEE80211_CIPHER_CCMP) {
+		/* Use software crypto for ciphers other than CCMP. */
+		return ieee80211_set_key(ic, ni, k);
+	}
+
 	/* Do it in a process context. */
 	cmd.ni = (ni != NULL) ? ieee80211_ref_node(ni) : NULL;
 	cmd.key = k;
@@ -1685,6 +1686,11 @@ athn_usb_delete_key(struct ieee80211com *ic, struct ieee80211_node *ni,
 	if (!(ic->ic_if.if_flags & IFF_RUNNING) ||
 	    ic->ic_state != IEEE80211_S_RUN)
 		return;	/* Nothing to do. */
+
+	if (k->k_cipher != IEEE80211_CIPHER_CCMP) {
+		ieee80211_delete_key(ic, ni, k);
+		return;
+	}
 
 	/* Do it in a process context. */
 	cmd.ni = (ni != NULL) ? ieee80211_ref_node(ni) : NULL;
