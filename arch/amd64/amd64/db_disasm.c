@@ -793,7 +793,7 @@ struct inst db_inst_table[256] = {
 /*e6*/	{ "out",   0, BYTE,  op2(A, Ib),  0 },
 /*e7*/	{ "out",   0, LONG,  op2(A, Ib) , 0 },
 
-/*e8*/	{ "call",  0, QUAD,  op1(Dl),     0 },
+/*e8*/	{ "call",  0, NONE,  op1(Dl),     0 },
 /*e9*/	{ "jmp",   0, NONE,  op1(Dl),     0 },
 /*ea*/	{ "",      0, NONE,  op1(OS),     0 },
 /*eb*/	{ "jmp",   0, NONE,  op1(Db),     0 },
