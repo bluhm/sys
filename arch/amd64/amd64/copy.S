@@ -189,6 +189,7 @@ ENTRY(_copyin)
 
 NENTRY(copy_fault)
 DECLARE_ONFAULT(copy_fault)
+	cld
 	SMAP_CLAC
 	movq	CPUVAR(CURPCB),%rdx
 	popq	PCB_ONFAULT(%rdx)

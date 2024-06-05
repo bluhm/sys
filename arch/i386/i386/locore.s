@@ -555,6 +555,7 @@ ENTRY(_copyin)
 	ret
 
 ENTRY(copy_fault)
+	cld
 	SMAP_CLAC
 	GET_CURPCB(%edx)
 	popl	PCB_ONFAULT(%edx)
