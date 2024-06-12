@@ -1,4 +1,4 @@
-/*	$OpenBSD: conf.h,v 1.161 2023/01/14 12:11:11 kettenis Exp $	*/
+/*	$OpenBSD: conf.h,v 1.163 2024/06/11 01:49:17 jsg Exp $	*/
 /*	$NetBSD: conf.h,v 1.33 1996/05/03 20:03:32 christos Exp $	*/
 
 /*-
@@ -582,8 +582,6 @@ cdev_decl(ch);
 bdev_decl(sd);
 cdev_decl(sd);
 
-cdev_decl(ses);
-
 cdev_decl(st);
 
 bdev_decl(cd);
@@ -621,7 +619,6 @@ cdev_decl(kstat);
 cdev_decl(bio);
 cdev_decl(vscsi);
 
-cdev_decl(gpr);
 cdev_decl(bktr);
 
 cdev_decl(usb);
@@ -631,7 +628,6 @@ cdev_decl(fido);
 cdev_decl(ujoy);
 cdev_decl(ucom);
 cdev_decl(ulpt);
-cdev_decl(urio);
 
 cdev_decl(hotplug);
 cdev_decl(gpio);

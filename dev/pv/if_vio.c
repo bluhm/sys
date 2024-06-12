@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_vio.c,v 1.37 2024/06/04 09:51:52 jan Exp $	*/
+/*	$OpenBSD: if_vio.c,v 1.40 2024/06/10 19:26:17 jan Exp $	*/
 
 /*
  * Copyright (c) 2012 Stefan Fritsch, Alexander Fiveg.
@@ -169,6 +169,9 @@ struct virtio_net_ctrl_cmd {
 # define VIRTIO_NET_CTRL_VLAN_ADD	0
 # define VIRTIO_NET_CTRL_VLAN_DEL	1
 
+#define VIRTIO_NET_CTRL_GUEST_OFFLOADS	5
+# define VIRTIO_NET_CTRL_GUEST_OFFLOADS_SET	0
+
 struct virtio_net_ctrl_status {
 	uint8_t	ack;
 } __packed;
@@ -177,6 +180,10 @@ struct virtio_net_ctrl_status {
 
 struct virtio_net_ctrl_rx {
 	uint8_t	onoff;
+} __packed;
+
+struct virtio_net_ctrl_guest_offloads {
+	uint64_t offloads;
 } __packed;
 
 struct virtio_net_ctrl_mac_tbl {
@@ -220,6 +227,7 @@ struct vio_softc {
 	struct virtio_net_ctrl_cmd *sc_ctrl_cmd;
 	struct virtio_net_ctrl_status *sc_ctrl_status;
 	struct virtio_net_ctrl_rx *sc_ctrl_rx;
+	struct virtio_net_ctrl_guest_offloads *sc_ctrl_guest_offloads;
 	struct virtio_net_ctrl_mac_tbl *sc_ctrl_mac_tbl_uc;
 #define sc_ctrl_mac_info sc_ctrl_mac_tbl_uc
 	struct virtio_net_ctrl_mac_tbl *sc_ctrl_mac_tbl_mc;
@@ -289,6 +297,7 @@ void	vio_txtick(void *);
 void	vio_link_state(struct ifnet *);
 int	vio_config_change(struct virtio_softc *);
 int	vio_ctrl_rx(struct vio_softc *, int, int);
+int	vio_ctrl_guest_offloads(struct vio_softc *, uint64_t);
 int	vio_set_rx_filter(struct vio_softc *);
 void	vio_iff(struct vio_softc *);
 int	vio_media_change(struct ifnet *);
@@ -414,6 +423,7 @@ vio_alloc_mem(struct vio_softc *sc)
 		allocsize += sizeof(struct virtio_net_ctrl_cmd) * 1;
 		allocsize += sizeof(struct virtio_net_ctrl_status) * 1;
 		allocsize += sizeof(struct virtio_net_ctrl_rx) * 1;
+		allocsize += sizeof(struct virtio_net_ctrl_guest_offloads) * 1;
 		allocsize += VIO_CTRL_MAC_INFO_SIZE;
 	}
 	sc->sc_dma_size = allocsize;
@@ -433,6 +443,8 @@ vio_alloc_mem(struct vio_softc *sc)
 		offset += sizeof(*sc->sc_ctrl_status);
 		sc->sc_ctrl_rx = (void*)(kva + offset);
 		offset += sizeof(*sc->sc_ctrl_rx);
+		sc->sc_ctrl_guest_offloads = (void*)(kva + offset);
+		offset += sizeof(*sc->sc_ctrl_guest_offloads);
 		sc->sc_ctrl_mac_tbl_uc = (void*)(kva + offset);
 		offset += sizeof(*sc->sc_ctrl_mac_tbl_uc) +
 		    ETHER_ADDR_LEN * VIRTIO_NET_CTRL_MAC_UC_ENTRIES;
@@ -454,7 +466,8 @@ vio_alloc_mem(struct vio_softc *sc)
 	sc->sc_tx_mbufs = sc->sc_rx_mbufs + rxqsize;
 
 	for (i = 0; i < rxqsize; i++) {
-		r = bus_dmamap_create(vsc->sc_dmat, MCLBYTES, 1, MCLBYTES, 0,
+		r = bus_dmamap_create(vsc->sc_dmat, MAXMCLBYTES,
+		    MAXMCLBYTES/PAGE_SIZE + 1, MCLBYTES, 0,
 		    BUS_DMA_NOWAIT|BUS_DMA_ALLOCNOW, &sc->sc_rx_dmamaps[i]);
 		if (r != 0)
 			goto err_reqs;
@@ -550,6 +563,10 @@ vio_attach(struct device *parent, struct device *self, void *aux)
 	vsc->sc_driver_features |= VIRTIO_NET_F_HOST_TSO4;
 	vsc->sc_driver_features |= VIRTIO_NET_F_HOST_TSO6;
 
+	vsc->sc_driver_features |= VIRTIO_NET_F_CTRL_GUEST_OFFLOADS;
+	vsc->sc_driver_features |= VIRTIO_NET_F_GUEST_TSO4;
+	vsc->sc_driver_features |= VIRTIO_NET_F_GUEST_TSO6;
+
 	virtio_negotiate_features(vsc, virtio_net_feature_names);
 	if (virtio_has_feature(vsc, VIRTIO_NET_F_MAC)) {
 		vio_get_lladdr(&sc->sc_ac, vsc);
@@ -604,7 +621,11 @@ vio_attach(struct device *parent, struct device *self, void *aux)
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
 	ifp->if_start = vio_start;
 	ifp->if_ioctl = vio_ioctl;
-	ifp->if_capabilities = IFCAP_VLAN_MTU;
+	ifp->if_capabilities = 0;
+#if NVLAN > 0
+	ifp->if_capabilities |= IFCAP_VLAN_MTU;
+	ifp->if_capabilities |= IFCAP_VLAN_HWOFFLOAD;
+#endif
 	if (virtio_has_feature(vsc, VIRTIO_NET_F_CSUM))
 		ifp->if_capabilities |= IFCAP_CSUM_TCPv4|IFCAP_CSUM_UDPv4|
 		    IFCAP_CSUM_TCPv6|IFCAP_CSUM_UDPv6;
@@ -612,6 +633,14 @@ vio_attach(struct device *parent, struct device *self, void *aux)
 		ifp->if_capabilities |= IFCAP_TSOv4;
 	if (virtio_has_feature(vsc, VIRTIO_NET_F_HOST_TSO6))
 		ifp->if_capabilities |= IFCAP_TSOv6;
+
+	if (virtio_has_feature(vsc, VIRTIO_NET_F_CTRL_GUEST_OFFLOADS) &&
+	    (virtio_has_feature(vsc, VIRTIO_NET_F_GUEST_TSO4) ||
+	     virtio_has_feature(vsc, VIRTIO_NET_F_GUEST_TSO6))) {
+		ifp->if_xflags |= IFXF_LRO;
+		ifp->if_capabilities |= IFCAP_LRO;
+	}
+
 	ifq_init_maxlen(&ifp->if_snd, vsc->sc_vqs[1].vq_num - 1);
 	ifmedia_init(&sc->sc_media, 0, vio_media_change, vio_media_status);
 	ifmedia_add(&sc->sc_media, IFM_ETHER | IFM_AUTO, 0, NULL);
@@ -688,6 +717,7 @@ int
 vio_init(struct ifnet *ifp)
 {
 	struct vio_softc *sc = ifp->if_softc;
+	struct virtio_softc *vsc = sc->sc_virtio;
 
 	vio_stop(ifp, 0);
 	if_rxr_init(&sc->sc_rx_ring, 2 * ((ifp->if_hardmtu / MCLBYTES) + 1),
@@ -697,6 +727,22 @@ vio_init(struct ifnet *ifp)
 	ifq_clr_oactive(&ifp->if_snd);
 	vio_iff(sc);
 	vio_link_state(ifp);
+
+	if (virtio_has_feature(vsc, VIRTIO_NET_F_CTRL_GUEST_OFFLOADS)) {
+		uint64_t features = 0;
+
+		SET(features, VIRTIO_NET_F_GUEST_CSUM);
+
+		if (ISSET(ifp->if_xflags, IFXF_LRO)) {
+			if (virtio_has_feature(vsc, VIRTIO_NET_F_GUEST_TSO4))
+				SET(features, VIRTIO_NET_F_GUEST_TSO4);
+			if (virtio_has_feature(vsc, VIRTIO_NET_F_GUEST_TSO6))
+				SET(features, VIRTIO_NET_F_GUEST_TSO6);
+		}
+
+		vio_ctrl_guest_offloads(sc, features);
+	}
+
 	return 0;
 }
 
@@ -840,7 +886,8 @@ again:
 			break;
 		}
 		if (r != 0)
-			panic("enqueue_prep for a tx buffer: %d", r);
+			panic("%s: enqueue_prep for tx buffer: %d",
+			    sc->sc_dev.dv_xname, r);
 
 		hdr = &sc->sc_tx_hdrs[slot];
 		memset(hdr, 0, sc->sc_hdr_size);
@@ -1021,7 +1068,8 @@ vio_populate_rx_mbufs(struct vio_softc *sc)
 		if (r == EAGAIN)
 			break;
 		if (r != 0)
-			panic("enqueue_prep for rx buffers: %d", r);
+			panic("%s: enqueue_prep for rx buffer: %d",
+			    sc->sc_dev.dv_xname, r);
 		if (sc->sc_rx_mbufs[slot] == NULL) {
 			r = vio_add_rx_mbuf(sc, slot);
 			if (r != 0) {
@@ -1082,6 +1130,24 @@ vio_rx_offload(struct mbuf *m, struct virtio_net_hdr *hdr)
 		SET(m->m_pkthdr.csum_flags, M_UDP_CSUM_IN_OK);
 		if (ISSET(hdr->flags, VIRTIO_NET_HDR_F_NEEDS_CSUM))
 			SET(m->m_pkthdr.csum_flags, M_UDP_CSUM_OUT);
+	}
+
+	if (hdr->gso_type == VIRTIO_NET_HDR_GSO_TCPV4 ||
+	    hdr->gso_type == VIRTIO_NET_HDR_GSO_TCPV6) {
+		uint16_t mss = hdr->gso_size;
+
+		if (!ext.tcp || mss == 0) {
+			tcpstat_inc(tcps_inbadlro);
+			return;
+		}
+
+		if ((ext.paylen + mss - 1) / mss <= 1)
+			return;
+
+		tcpstat_inc(tcps_inhwlro);
+		tcpstat_add(tcps_inpktlro, (ext.paylen + mss - 1) / mss);
+		SET(m->m_pkthdr.csum_flags, M_TCP_TSO);
+		m->m_pkthdr.ph_mss = mss;
 	}
 }
 
@@ -1337,10 +1403,12 @@ vio_ctrl_rx(struct vio_softc *sc, int cmd, int onoff)
 
 	r = virtio_enqueue_prep(vq, &slot);
 	if (r != 0)
-		panic("%s: control vq busy!?", sc->sc_dev.dv_xname);
+		panic("%s: %s virtio_enqueue_prep: control vq busy",
+		    sc->sc_dev.dv_xname, __func__);
 	r = virtio_enqueue_reserve(vq, slot, 3);
 	if (r != 0)
-		panic("%s: control vq busy!?", sc->sc_dev.dv_xname);
+		panic("%s: %s virtio_enqueue_reserve: control vq busy",
+		    sc->sc_dev.dv_xname, __func__);
 	VIO_DMAMEM_ENQUEUE(sc, vq, slot, sc->sc_ctrl_cmd,
 	    sizeof(*sc->sc_ctrl_cmd), 1);
 	VIO_DMAMEM_ENQUEUE(sc, vq, slot, sc->sc_ctrl_rx,
@@ -1368,6 +1436,69 @@ vio_ctrl_rx(struct vio_softc *sc, int cmd, int onoff)
 
 	DPRINTF("%s: cmd %d %d: %d\n", __func__, cmd, onoff, r);
 out:
+	vio_ctrl_wakeup(sc, FREE);
+	return r;
+}
+
+int
+vio_ctrl_guest_offloads(struct vio_softc *sc, uint64_t features)
+{
+	struct virtio_softc *vsc = sc->sc_virtio;
+	struct virtqueue *vq = &sc->sc_vq[VQCTL];
+	int r, slot;
+
+	splassert(IPL_NET);
+
+	if ((r = vio_wait_ctrl(sc)) != 0)
+		return r;
+
+	sc->sc_ctrl_cmd->class = VIRTIO_NET_CTRL_GUEST_OFFLOADS;
+	sc->sc_ctrl_cmd->command = VIRTIO_NET_CTRL_GUEST_OFFLOADS_SET;
+	sc->sc_ctrl_guest_offloads->offloads = features;
+
+	VIO_DMAMEM_SYNC(vsc, sc, sc->sc_ctrl_cmd,
+	    sizeof(*sc->sc_ctrl_cmd), BUS_DMASYNC_PREWRITE);
+	VIO_DMAMEM_SYNC(vsc, sc, sc->sc_ctrl_guest_offloads,
+	    sizeof(*sc->sc_ctrl_guest_offloads), BUS_DMASYNC_PREWRITE);
+	VIO_DMAMEM_SYNC(vsc, sc, sc->sc_ctrl_status,
+	    sizeof(*sc->sc_ctrl_status), BUS_DMASYNC_PREREAD);
+
+	r = virtio_enqueue_prep(vq, &slot);
+	if (r != 0)
+		panic("%s: %s virtio_enqueue_prep: control vq busy",
+		    sc->sc_dev.dv_xname, __func__);
+	r = virtio_enqueue_reserve(vq, slot, 3);
+	if (r != 0)
+		panic("%s: %s virtio_enqueue_reserve: control vq busy",
+		    sc->sc_dev.dv_xname, __func__);
+	VIO_DMAMEM_ENQUEUE(sc, vq, slot, sc->sc_ctrl_cmd,
+	    sizeof(*sc->sc_ctrl_cmd), 1);
+	VIO_DMAMEM_ENQUEUE(sc, vq, slot, sc->sc_ctrl_guest_offloads,
+	    sizeof(*sc->sc_ctrl_guest_offloads), 1);
+	VIO_DMAMEM_ENQUEUE(sc, vq, slot, sc->sc_ctrl_status,
+	    sizeof(*sc->sc_ctrl_status), 0);
+	virtio_enqueue_commit(vsc, vq, slot, 1);
+
+	if ((r = vio_wait_ctrl_done(sc)) != 0)
+		goto out;
+
+	VIO_DMAMEM_SYNC(vsc, sc, sc->sc_ctrl_cmd,
+	    sizeof(*sc->sc_ctrl_cmd), BUS_DMASYNC_POSTWRITE);
+	VIO_DMAMEM_SYNC(vsc, sc, sc->sc_ctrl_guest_offloads,
+	    sizeof(*sc->sc_ctrl_guest_offloads), BUS_DMASYNC_POSTWRITE);
+	VIO_DMAMEM_SYNC(vsc, sc, sc->sc_ctrl_status,
+	    sizeof(*sc->sc_ctrl_status), BUS_DMASYNC_POSTREAD);
+
+	if (sc->sc_ctrl_status->ack == VIRTIO_NET_OK) {
+		r = 0;
+	} else {
+		printf("%s: features 0x%llx failed\n", sc->sc_dev.dv_xname,
+		    features);
+		r = EIO;
+	}
+
+	DPRINTF("%s: features 0x%llx: %d\n", __func__, features, r);
+ out:
 	vio_ctrl_wakeup(sc, FREE);
 	return r;
 }
@@ -1459,10 +1590,12 @@ vio_set_rx_filter(struct vio_softc *sc)
 
 	r = virtio_enqueue_prep(vq, &slot);
 	if (r != 0)
-		panic("%s: control vq busy!?", sc->sc_dev.dv_xname);
+		panic("%s: %s virtio_enqueue_prep: control vq busy",
+		    sc->sc_dev.dv_xname, __func__);
 	r = virtio_enqueue_reserve(vq, slot, 4);
 	if (r != 0)
-		panic("%s: control vq busy!?", sc->sc_dev.dv_xname);
+		panic("%s: %s virtio_enqueue_reserve: control vq busy",
+		    sc->sc_dev.dv_xname, __func__);
 	VIO_DMAMEM_ENQUEUE(sc, vq, slot, sc->sc_ctrl_cmd,
 	    sizeof(*sc->sc_ctrl_cmd), 1);
 	VIO_DMAMEM_ENQUEUE(sc, vq, slot, sc->sc_ctrl_mac_tbl_uc,
