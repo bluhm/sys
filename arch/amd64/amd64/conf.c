@@ -1,4 +1,4 @@
-/*	$OpenBSD: conf.c,v 1.80 2024/06/11 09:21:32 jsg Exp $	*/
+/*	$OpenBSD: conf.c,v 1.81 2024/06/12 12:54:54 bluhm Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Charles M. Hannum.  All rights reserved.
