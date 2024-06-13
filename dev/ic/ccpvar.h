@@ -26,7 +26,6 @@ struct ccp_softc {
 
 	struct timeout		sc_tick;
 
-	bus_size_t		sc_size;
 	int			sc_psp_attached;
 
 #ifdef __amd64__
