@@ -1644,6 +1644,7 @@ vmxnet3_start(struct ifqueue *ifq)
 		if (ISSET(m->m_pkthdr.csum_flags, M_TCP_TSO) &&
 		    m->m_len < hdrlen && hdrlen <= m->m_pkthdr.len) {
 			hdrlen = MHLEN;
+			/* m_pullup preserves alignment, reserve space */
 			hdrlen -= mtod(m, unsigned long) & (sizeof(long) - 1);
 			if (hdrlen > m->m_pkthdr.len)
 				hdrlen = m->m_pkthdr.len;
