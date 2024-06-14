@@ -671,7 +671,7 @@ nd6_free(struct rtentry *rt)
 
 	ifp = if_get(rt->rt_ifidx);
 
-	if (!ip6_forwarding) {
+	if (ip6_forwarding == 0) {
 		if (ln->ln_router) {
 			/*
 			 * rt6_flush must be called whether or not the neighbor

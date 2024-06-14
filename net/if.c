@@ -3378,7 +3378,7 @@ ifnewlladdr(struct ifnet *ifp)
 	 * Update the link-local address.  Don't do it if we're
 	 * a router to avoid confusing hosts on the network.
 	 */
-	if (!ip6_forwarding) {
+	if (ip6_forwarding == 0) {
 		ifa = &in6ifa_ifpforlinklocal(ifp, 0)->ia_ifa;
 		if (ifa) {
 			in6_purgeaddr(ifa);
