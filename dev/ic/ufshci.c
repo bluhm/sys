@@ -1,4 +1,4 @@
-/*	$OpenBSD: ufshci.c,v 1.35 2024/06/09 03:21:54 jsg Exp $ */
+/*	$OpenBSD: ufshci.c,v 1.38 2024/06/15 18:26:25 mglocker Exp $ */
 
 /*
  * Copyright (c) 2022 Marcus Glocker <mglocker@openbsd.org>
@@ -68,7 +68,7 @@ void			 ufshci_dmamem_free(struct ufshci_softc *,
 			     struct ufshci_dmamem *);
 int			 ufshci_alloc(struct ufshci_softc *);
 int			 ufshci_init(struct ufshci_softc *);
-int			 ufshci_disable(struct ufshci_softc *);
+void			 ufshci_disable(struct ufshci_softc *);
 int			 ufshci_doorbell_read(struct ufshci_softc *);
 void			 ufshci_doorbell_write(struct ufshci_softc *, int);
 int			 ufshci_doorbell_poll(struct ufshci_softc *, int,
@@ -88,7 +88,7 @@ int			 ufshci_utr_cmd_io(struct ufshci_softc *,
 int			 ufshci_utr_cmd_sync(struct ufshci_softc *,
 			     struct ufshci_ccb *, struct scsi_xfer *,
 			     uint32_t, uint16_t);
-int			 ufshci_xfer_complete(struct ufshci_softc *);
+void			 ufshci_xfer_complete(struct ufshci_softc *);
 
 /* SCSI */
 int			 ufshci_ccb_alloc(struct ufshci_softc *, int);
@@ -131,7 +131,7 @@ ufshci_intr(void *arg)
 	DPRINTF(3, "%s: status=0x%08x\n", __func__, status);
 
 	if (status == 0)
-		return 0;
+		return handled;
 
 	if (status & UFSHCI_REG_IS_UCCS) {
 		DPRINTF(3, "%s: UCCS interrupt\n", __func__);
@@ -149,11 +149,13 @@ ufshci_intr(void *arg)
 		hcs = UFSHCI_READ_4(sc, UFSHCI_REG_HCS);
 		printf("%s: Auto-Hibernate enter error UPMCRS=0x%x\n",
 		    __func__, UFSHCI_REG_HCS_UPMCRS(hcs));
+		handled = 1;
 	}
 	if (status & UFSHCI_REG_IS_UHXS) {
 		hcs = UFSHCI_READ_4(sc, UFSHCI_REG_HCS);
 		printf("%s: Auto-Hibernate exit error UPMCRS=0x%x\n",
 		    __func__, UFSHCI_REG_HCS_UPMCRS(hcs));
+		handled = 1;
 	}
 
 	if (handled == 0) {
@@ -164,7 +166,7 @@ ufshci_intr(void *arg)
 	/* ACK interrupt */
 	UFSHCI_WRITE_4(sc, UFSHCI_REG_IS, status);
 
-	return 1;
+	return handled;
 }
 
 int
@@ -177,7 +179,8 @@ ufshci_attach(struct ufshci_softc *sc)
 	SIMPLEQ_INIT(&sc->sc_ccb_list);
 	scsi_iopool_init(&sc->sc_iopool, sc, ufshci_ccb_get, ufshci_ccb_put);
 
-	ufshci_reset(sc);
+	if (ufshci_reset(sc))
+		return 1;
 
 	sc->sc_ver = UFSHCI_READ_4(sc, UFSHCI_REG_VER);
 	printf(", UFSHCI %d.%d%d\n",
@@ -240,8 +243,10 @@ ufshci_attach(struct ufshci_softc *sc)
 	sc->sc_flags |= UFSHCI_FLAGS_AGGR_INTR;	/* Enable intr. aggregation */
 #endif
 	/* Allocate the DMA buffers and initialize the controller. */
-	ufshci_alloc(sc);
-	ufshci_init(sc);
+	if (ufshci_alloc(sc))
+		return 1;
+	if (ufshci_init(sc))
+		return 1;
 
 	if (ufshci_ccb_alloc(sc, sc->sc_nutrs) != 0) {
 		printf("%s: %s: Can't allocate CCBs\n",
@@ -258,8 +263,8 @@ ufshci_attach(struct ufshci_softc *sc)
 	/* Attach to SCSI layer */
 	saa.saa_adapter = &ufshci_switch;
 	saa.saa_adapter_softc = sc;
-	saa.saa_adapter_buswidth = 2; /* XXX: What's the right value? */
-	saa.saa_luns = 1; /* XXX: Should we use ufshci_utr_cmd_lun() */
+	saa.saa_adapter_buswidth = UFSHCI_TARGETS_MAX + 1;
+	saa.saa_luns = 1;
 	saa.saa_adapter_target = 0;
 	saa.saa_openings = sc->sc_nutrs;
 	saa.saa_pool = &sc->sc_iopool;
@@ -294,7 +299,7 @@ ufshci_reset(struct ufshci_softc *sc)
 	if (i == retry) {
 		printf("%s: Enabling Host Controller failed!\n",
 		    sc->sc_dev.dv_xname);
-		return -1;
+		return 1;
 	}
 
 	DPRINTF(2, "\n%s: Host Controller enabled (i=%d)\n", __func__, i);
@@ -318,7 +323,7 @@ ufshci_is_poll(struct ufshci_softc *sc, uint32_t type)
 	}
 	if (i == retry) {
 		printf("%s: %s: timeout\n", sc->sc_dev.dv_xname, __func__);
-		return -1;
+		return 1;
 	}
 	DPRINTF(3, "%s: completed after %d retries\n", __func__, i);
 
@@ -394,7 +399,7 @@ ufshci_alloc(struct ufshci_softc *sc)
 	if (sc->sc_dmamem_utmrd == NULL) {
 		printf("%s: Can't allocate DMA memory for UTMRD\n",
 		    sc->sc_dev.dv_xname);
-		return -1;
+		return 1;
 	}
 
 	/* 7.1.1 Host Controller Initialization: 15) */
@@ -403,7 +408,7 @@ ufshci_alloc(struct ufshci_softc *sc)
 	if (sc->sc_dmamem_utrd == NULL) {
 		printf("%s: Can't allocate DMA memory for UTRD\n",
 		    sc->sc_dev.dv_xname);
-		return -1;
+		return 1;
 	}
 
 	/* Allocate UCDs. */
@@ -412,7 +417,7 @@ ufshci_alloc(struct ufshci_softc *sc)
 	if (sc->sc_dmamem_ucd == NULL) {
 		printf("%s: Can't allocate DMA memory for UCD\n",
 		    sc->sc_dev.dv_xname);
-		return -1;
+		return 1;
 	}
 
 	return 0;
@@ -442,8 +447,8 @@ ufshci_init(struct ufshci_softc *sc)
 	/* 7.1.1 Host Controller Initialization: 6) */
 	UFSHCI_WRITE_4(sc, UFSHCI_REG_UICCMD,
 	    UFSHCI_REG_UICCMD_CMDOP_DME_LINKSTARTUP);
-	if (ufshci_is_poll(sc, UFSHCI_REG_IS_UCCS) != 0)
-		return -1;
+	if (ufshci_is_poll(sc, UFSHCI_REG_IS_UCCS))
+		return 1;
 
 	/*
 	 * 7.1.1 Host Controller Initialization: 7), 8), 9)
@@ -503,7 +508,7 @@ ufshci_init(struct ufshci_softc *sc)
 	return 0;
 }
 
-int
+void
 ufshci_disable(struct ufshci_softc *sc)
 {
 	/* Stop run queues. */
@@ -512,8 +517,6 @@ ufshci_disable(struct ufshci_softc *sc)
 
 	/* Disable interrupts. */
 	UFSHCI_WRITE_4(sc, UFSHCI_REG_IE, 0);
-
-	return 0;
 }
 
 int
@@ -553,7 +556,7 @@ ufshci_doorbell_poll(struct ufshci_softc *sc, int slot, uint32_t timeout_ms)
 	}
 	if (timeout_us == 0) {
 		printf("%s: %s: timeout\n", sc->sc_dev.dv_xname, __func__);
-		return -1;
+		return 1;
 	}
 
 	return 0;
@@ -636,7 +639,7 @@ ufshci_utr_cmd_nop(struct ufshci_softc *sc, struct ufshci_ccb *ccb,
 	if (UFSHCI_READ_4(sc, UFSHCI_REG_UTRLRSR) != 1) {
 		printf("%s: %s: UTRLRSR not set\n",
 		    sc->sc_dev.dv_xname, __func__);
-		return -1;
+		return 1;
 	}
 
 	bus_dmamap_sync(sc->sc_dmat, UFSHCI_DMA_MAP(sc->sc_dmamem_utrd),
@@ -746,7 +749,7 @@ ufshci_utr_cmd_lun(struct ufshci_softc *sc, struct ufshci_ccb *ccb,
 	if (UFSHCI_READ_4(sc, UFSHCI_REG_UTRLRSR) != 1) {
 		printf("%s: %s: UTRLRSR not set\n",
 		    sc->sc_dev.dv_xname, __func__);
-		return -1;
+		return 1;
 	}
 
 	bus_dmamap_sync(sc->sc_dmat, UFSHCI_DMA_MAP(sc->sc_dmamem_utrd),
@@ -854,7 +857,7 @@ ufshci_utr_cmd_inquiry(struct ufshci_softc *sc, struct ufshci_ccb *ccb,
 	if (UFSHCI_READ_4(sc, UFSHCI_REG_UTRLRSR) != 1) {
 		printf("%s: %s: UTRLRSR not set\n",
 		    sc->sc_dev.dv_xname, __func__);
-		return -1;
+		return 1;
 	}
 
 	bus_dmamap_sync(sc->sc_dmat, UFSHCI_DMA_MAP(sc->sc_dmamem_utrd),
@@ -866,7 +869,7 @@ ufshci_utr_cmd_inquiry(struct ufshci_softc *sc, struct ufshci_ccb *ccb,
 	ccb->ccb_status = CCB_STATUS_INPROGRESS;
 	ufshci_doorbell_write(sc, slot);
 
-	return slot;
+	return 0;
 }
 
 int
@@ -966,7 +969,7 @@ ufshci_utr_cmd_capacity16(struct ufshci_softc *sc, struct ufshci_ccb *ccb,
 	if (UFSHCI_READ_4(sc, UFSHCI_REG_UTRLRSR) != 1) {
 		printf("%s: %s: UTRLRSR not set\n",
 		    sc->sc_dev.dv_xname, __func__);
-		return -1;
+		return 1;
 	}
 
 	bus_dmamap_sync(sc->sc_dmat, UFSHCI_DMA_MAP(sc->sc_dmamem_utrd),
@@ -978,7 +981,7 @@ ufshci_utr_cmd_capacity16(struct ufshci_softc *sc, struct ufshci_ccb *ccb,
 	ccb->ccb_status = CCB_STATUS_INPROGRESS;
 	ufshci_doorbell_write(sc, slot);
 
-	return slot;
+	return 0;
 }
 
 int
@@ -1077,7 +1080,7 @@ ufshci_utr_cmd_capacity(struct ufshci_softc *sc, struct ufshci_ccb *ccb,
 	if (UFSHCI_READ_4(sc, UFSHCI_REG_UTRLRSR) != 1) {
 		printf("%s: %s: UTRLRSR not set\n",
 		    sc->sc_dev.dv_xname, __func__);
-		return -1;
+		return 1;
 	}
 
 	bus_dmamap_sync(sc->sc_dmat, UFSHCI_DMA_MAP(sc->sc_dmamem_utrd),
@@ -1089,7 +1092,7 @@ ufshci_utr_cmd_capacity(struct ufshci_softc *sc, struct ufshci_ccb *ccb,
 	ccb->ccb_status = CCB_STATUS_INPROGRESS;
 	ufshci_doorbell_write(sc, slot);
 
-	return slot;
+	return 0;
 }
 
 int
@@ -1200,7 +1203,7 @@ ufshci_utr_cmd_io(struct ufshci_softc *sc, struct ufshci_ccb *ccb,
 	if (UFSHCI_READ_4(sc, UFSHCI_REG_UTRLRSR) != 1) {
 		printf("%s: %s: UTRLRSR not set\n",
 		    sc->sc_dev.dv_xname, __func__);
-		return -1;
+		return 1;
 	}
 
 	bus_dmamap_sync(sc->sc_dmat, UFSHCI_DMA_MAP(sc->sc_dmamem_utrd),
@@ -1212,7 +1215,7 @@ ufshci_utr_cmd_io(struct ufshci_softc *sc, struct ufshci_ccb *ccb,
 	ccb->ccb_status = CCB_STATUS_INPROGRESS;
 	ufshci_doorbell_write(sc, slot);
 
-	return slot;
+	return 0;
 }
 
 int
@@ -1302,7 +1305,7 @@ ufshci_utr_cmd_sync(struct ufshci_softc *sc, struct ufshci_ccb *ccb,
 	if (UFSHCI_READ_4(sc, UFSHCI_REG_UTRLRSR) != 1) {
 		printf("%s: %s: UTRLRSR not set\n",
 		    sc->sc_dev.dv_xname, __func__);
-		return -1;
+		return 1;
 	}
 
 	bus_dmamap_sync(sc->sc_dmat, UFSHCI_DMA_MAP(sc->sc_dmamem_utrd),
@@ -1314,10 +1317,10 @@ ufshci_utr_cmd_sync(struct ufshci_softc *sc, struct ufshci_ccb *ccb,
 	ccb->ccb_status = CCB_STATUS_INPROGRESS;
 	ufshci_doorbell_write(sc, slot);
 
-	return slot;
+	return 0;
 }
 
-int
+void
 ufshci_xfer_complete(struct ufshci_softc *sc)
 {
 	struct ufshci_ccb *ccb;
@@ -1374,8 +1377,6 @@ ufshci_xfer_complete(struct ufshci_softc *sc)
 		if (ccb->ccb_status == CCB_STATUS_READY2FREE)
 			ccb->ccb_done(sc, ccb);
 	}
-
-	return 0;
 }
 
 int
@@ -1589,7 +1590,7 @@ ufshci_scsi_inquiry(struct scsi_xfer *xs)
 
 	error = bus_dmamap_load(sc->sc_dmat, dmap, xs->data, xs->datalen, NULL,
 	    ISSET(xs->flags, SCSI_NOSLEEP) ? BUS_DMA_NOWAIT : BUS_DMA_WAITOK);
-	if (error != 0) {
+	if (error) {
 		printf("%s: bus_dmamap_load error=%d\n", __func__, error);
 		goto error1;
 	}
@@ -1602,7 +1603,7 @@ ufshci_scsi_inquiry(struct scsi_xfer *xs)
 
 	/* Response length should be UPIU_SCSI_RSP_INQUIRY_SIZE. */
 	error = ufshci_utr_cmd_inquiry(sc, ccb, xs);
-	if (error == -1)
+	if (error)
 		goto error2;
 
 	if (ISSET(xs->flags, SCSI_POLL)) {
@@ -1644,7 +1645,7 @@ ufshci_scsi_capacity16(struct scsi_xfer *xs)
 
 	error = bus_dmamap_load(sc->sc_dmat, dmap, xs->data, xs->datalen, NULL,
 	    ISSET(xs->flags, SCSI_NOSLEEP) ? BUS_DMA_NOWAIT : BUS_DMA_WAITOK);
-	if (error != 0) {
+	if (error) {
 		printf("%s: bus_dmamap_load error=%d\n", __func__, error);
 		goto error1;
 	}
@@ -1657,7 +1658,7 @@ ufshci_scsi_capacity16(struct scsi_xfer *xs)
 
 	/* Response length should be UPIU_SCSI_RSP_CAPACITY16_SIZE. */
 	error = ufshci_utr_cmd_capacity16(sc, ccb, xs);
-	if (error == -1)
+	if (error)
 		goto error2;
 
 	if (ISSET(xs->flags, SCSI_POLL)) {
@@ -1699,7 +1700,7 @@ ufshci_scsi_capacity(struct scsi_xfer *xs)
 
 	error = bus_dmamap_load(sc->sc_dmat, dmap, xs->data, xs->datalen, NULL,
 	    ISSET(xs->flags, SCSI_NOSLEEP) ? BUS_DMA_NOWAIT : BUS_DMA_WAITOK);
-	if (error != 0) {
+	if (error) {
 		printf("%s: bus_dmamap_load error=%d\n", __func__, error);
 		goto error1;
         }
@@ -1712,7 +1713,7 @@ ufshci_scsi_capacity(struct scsi_xfer *xs)
 
 	/* Response length should be UPIU_SCSI_RSP_CAPACITY_SIZE */
 	error = ufshci_utr_cmd_capacity(sc, ccb, xs);
-	if (error == -1)
+	if (error)
 		goto error2;
 
 	if (ISSET(xs->flags, SCSI_POLL)) {
@@ -1757,7 +1758,7 @@ ufshci_scsi_sync(struct scsi_xfer *xs)
 
 	error = ufshci_utr_cmd_sync(sc, ccb, xs, (uint32_t)lba,
 	    (uint16_t)blocks);
-	if (error == -1)
+	if (error)
 		goto error;
 
 	if (ISSET(xs->flags, SCSI_POLL)) {
@@ -1797,7 +1798,7 @@ ufshci_scsi_io(struct scsi_xfer *xs, int dir)
 
 	error = bus_dmamap_load(sc->sc_dmat, dmap, xs->data, xs->datalen, NULL,
 	    ISSET(xs->flags, SCSI_NOSLEEP) ? BUS_DMA_NOWAIT : BUS_DMA_WAITOK);
-	if (error != 0) {
+	if (error) {
 		printf("%s: bus_dmamap_load error=%d\n", __func__, error);
 		goto error1;
 	}
@@ -1813,7 +1814,7 @@ ufshci_scsi_io(struct scsi_xfer *xs, int dir)
 		error = ufshci_utr_cmd_io(sc, ccb, xs, SCSI_DATA_IN);
 	else
 		error = ufshci_utr_cmd_io(sc, ccb, xs, SCSI_DATA_OUT);
-	if (error == -1)
+	if (error)
 		goto error2;
 
 	if (ISSET(xs->flags, SCSI_POLL)) {
