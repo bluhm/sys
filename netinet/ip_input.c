@@ -465,8 +465,14 @@ ip_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 		SET(flags, IP_REDIRECT);
 #endif
 
-	if (ip_forwarding != 0)
+	switch (ip_forwarding) {
+	case 2:
+		SET(flags, IP_FORWARDING_IPSEC);
+		/* FALLTHROUGH */
+	case 1:
 		SET(flags, IP_FORWARDING);
+		break;
+	}
 	if (ip_directedbcast)
 		SET(flags, IP_ALLOWBROADCAST);
 
@@ -529,7 +535,7 @@ ip_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 			 * ip_output().)
 			 */
 			KERNEL_LOCK();
-			error = ip_mforward(m, ifp);
+			error = ip_mforward(m, ifp, flags);
 			KERNEL_UNLOCK();
 			if (error) {
 				ipstat_inc(ips_cantforward);
@@ -883,7 +889,8 @@ in_ouraddr(struct mbuf *m, struct ifnet *ifp, struct route *ro, int flags)
 				break;
 			}
 		}
-	} else if (!ISSET(flags, IP_FORWARDING) &&
+	} else if ((!ISSET(flags, IP_FORWARDING) ||
+	    ISSET(flags, IP_FORWARDING_IPSEC)) &&
 	    rt->rt_ifidx != ifp->if_index &&
 	    !((ifp->if_flags & IFF_LOOPBACK) || (ifp->if_type == IFT_ENC) ||
 	    (m->m_pkthdr.pf.flags & PF_TAG_TRANSLATE_LOCALHOST))) {
