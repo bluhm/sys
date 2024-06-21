@@ -331,7 +331,7 @@ reroute:
 				int rv;
 
 				KERNEL_LOCK();
-				rv = ip_mforward(m, ifp);
+				rv = ip_mforward(m, ifp, flags);
 				KERNEL_UNLOCK();
 				if (rv != 0)
 					goto bad;
@@ -428,9 +428,8 @@ sendit:
 #endif
 
 #ifdef IPSEC
-	if ((flags & IP_FORWARDING) && ip_forwarding == 2 &&
-	    (!ipsec_in_use ||
-	    m_tag_find(m, PACKET_TAG_IPSEC_IN_DONE, NULL) == NULL)) {
+	if (ISSET(flags, IP_FORWARDING) && ISSET(flags, IP_FORWARDING_IPSEC) &&
+	    !ISSET(m->m_pkthdr.ph_tagsset, PACKET_TAG_IPSEC_IN_DONE)) {
 		error = EHOSTUNREACH;
 		goto bad;
 	}
