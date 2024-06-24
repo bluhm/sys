@@ -170,6 +170,10 @@ struct cpu_info {
 	u_int32_t	ci_feature_sefflags_ecx;/* [I] */
 	u_int32_t	ci_feature_sefflags_edx;/* [I] */
 	u_int32_t	ci_feature_amdspec_ebx;	/* [I] */
+	u_int32_t	ci_feature_amdsev_eax;	/* [I] */
+	u_int32_t	ci_feature_amdsev_ebx;	/* [I] */
+	u_int32_t	ci_feature_amdsev_ecx;	/* [I] */
+	u_int32_t	ci_feature_amdsev_edx;	/* [I] */
 	u_int32_t	ci_feature_tpmflags;	/* [I] */
 	u_int32_t	ci_pnfeatset;		/* [I] */
 	u_int32_t	ci_efeature_eax;	/* [I] */

@@ -66,6 +66,7 @@ char cpu_model[48];
 int cpuspeed;
 
 int amd64_has_xcrypt;
+int amd64_pos_cbit;
 int has_rdrand;
 int has_rdseed;
 
@@ -693,6 +694,22 @@ identifycpu(struct cpu_info *ci)
 		}
 		if (cpu_meltdown && CPU_IS_PRIMARY(ci))
 			printf("\n%s: MELTDOWN", ci->ci_dev->dv_xname);
+	}
+
+	/* AMD secure memory encryption and encrypted virtualization features */
+	if (ci->ci_vendor == CPUV_AMD &&
+	    ci->ci_pnfeatset >= CPUID_AMD_SEV_CAP) {
+		CPUID(CPUID_AMD_SEV_CAP, ci->ci_feature_amdsev_eax,
+		    ci->ci_feature_amdsev_ebx, ci->ci_feature_amdsev_ecx,
+		    ci->ci_feature_amdsev_edx);
+		pcpuid3(ci, "8000001F",
+		    'a', CPUID_MEMBER(ci_feature_amdsev_eax),
+		    CPUID_AMDSEV_EAX_BITS,
+		    'c', CPUID_MEMBER(ci_feature_amdsev_ecx),
+		    CPUID_AMDSEV_ECX_BITS,
+		    'd', CPUID_MEMBER(ci_feature_amdsev_edx),
+		    CPUID_AMDSEV_EDX_BITS);
+		amd64_pos_cbit = (ci->ci_feature_amdsev_ebx & 0x3f);
 	}
 
 	printf("\n");
