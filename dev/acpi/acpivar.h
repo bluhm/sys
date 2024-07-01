@@ -1,4 +1,4 @@
-/*	$OpenBSD: acpivar.h,v 1.128 2024/06/25 11:57:10 kettenis Exp $	*/
+/*	$OpenBSD: acpivar.h,v 1.131 2024/06/30 00:29:36 jsg Exp $	*/
 /*
  * Copyright (c) 2005 Thorsten Lockert <tholo@sigmasoft.com>
  *
@@ -153,12 +153,6 @@ typedef SIMPLEQ_HEAD(, acpi_wakeq) acpi_wakeqhead_t;
 #define ACPI_SST_SLEEPING	3
 #define ACPI_SST_SLEEP_CONTEXT	4
 
-struct acpi_parsestate {
-	uint8_t			*start;
-	uint8_t			*end;
-	uint8_t			*pos;
-};
-
 struct acpi_reg_map {
 	bus_space_handle_t	ioh;
 	int			addr;
@@ -299,22 +293,6 @@ extern struct acpi_softc *acpi_softc;
 #define GPE_NONE	0x00
 #define GPE_LEVEL	0x01
 #define GPE_EDGE	0x02
-
-struct acpi_table {
-	int	offset;
-	size_t	size;
-	void	*table;
-};
-
-struct acpi_dev_rank {
-	struct device	*dev;
-	int		rank;
-	TAILQ_ENTRY(acpi_dev_rank) link;
-};
-
-#define	ACPI_IOC_GETFACS	_IOR('A', 0, struct acpi_facs)
-#define	ACPI_IOC_GETTABLE	_IOWR('A', 1, struct acpi_table)
-#define ACPI_IOC_SETSLEEPSTATE	_IOW('A', 2, int)
 
 #if defined(_KERNEL)
 
