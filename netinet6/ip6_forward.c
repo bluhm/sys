@@ -93,9 +93,9 @@ ip6_forward(struct mbuf *m, struct route *ro, int flags)
 	u_int ifidx = m->m_pkthdr.ph_ifidx;
 	u_int8_t loopcnt = m->m_pkthdr.ph_loopcnt;
 	u_int icmp_len;
-	char icmp_buf[sizeof(struct ip6_hdr) + sizeof(struct tcphdr) +
-	    MAX_TCPOPTLEN];
-	CTASSERT(sizeof(icmp_buf) <= MHLEN);
+	char icmp_buf[MHLEN];
+	CTASSERT(sizeof(struct ip6_hdr) + sizeof(struct tcphdr) +
+	    MAX_TCPOPTLEN <= sizeof(icmp_buf));
 	u_short mflags, pfflags;
 	struct mbuf *mcopy;
 	int error = 0, type = 0, code = 0, destmtu = 0;
@@ -143,34 +143,12 @@ ip6_forward(struct mbuf *m, struct route *ro, int flags)
 	 * size of IPv6 + ICMPv6 headers) bytes of the packet in case
 	 * we need to generate an ICMP6 message to the src.
 	 * Thanks to M_EXT, in most cases copy will not occur.
-	 *
-	 * For final protocol header like TCP or UDP, full header chain in
-	 * ICMP6 packet is not necessary.  In this case only copy small
-	 * part of original packet and save it on stack instead of mbuf.
-	 * Although this violates RFC 4443 2.4. (c), it avoids additional
-	 * mbuf allocations.  Also pf nat and rdr do not affect the shared
-	 * mbuf cluster.
+	 * For small packets copy original onto stack instead of mbuf.
 	 *
 	 * It is important to save it before IPsec processing as IPsec
 	 * processing may modify the mbuf.
 	 */
-	switch (ip6->ip6_nxt) {
-	case IPPROTO_TCP:
-		icmp_len = sizeof(struct ip6_hdr) + sizeof(struct tcphdr) +
-		    MAX_TCPOPTLEN;
-		break;
-	case IPPROTO_UDP:
-		icmp_len = sizeof(struct ip6_hdr) + sizeof(struct udphdr);
-		break;
-	case IPPROTO_ESP:
-		icmp_len = sizeof(struct ip6_hdr) + 2 * sizeof(u_int32_t);
-		break;
-	default:
-		icmp_len = ICMPV6_PLD_MAXLEN;
-		break;
-	}
-	if (icmp_len > m->m_pkthdr.len)
-		icmp_len = m->m_pkthdr.len;
+	icmp_len = min(m->m_pkthdr.len, ICMPV6_PLD_MAXLEN);
 	if (icmp_len <= sizeof(icmp_buf)) {
 		mflags = m->m_flags;
 		pfflags = m->m_pkthdr.pf.flags;
