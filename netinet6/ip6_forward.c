@@ -315,6 +315,15 @@ reroute:
 	}
 #endif
 
+#ifdef IPSEC
+	if (ISSET(flags, IPV6_FORWARDING) &&
+	    ISSET(flags, IPV6_FORWARDING_IPSEC) &&
+	    !ISSET(m->m_pkthdr.ph_tagsset, PACKET_TAG_IPSEC_IN_DONE)) {
+		error = EHOSTUNREACH;
+		goto senderr;
+	}
+#endif
+
 	error = if_output_tso(ifp, &m, dst, rt, ifp->if_mtu);
 	if (error)
 		ip6stat_inc(ip6s_cantforward);

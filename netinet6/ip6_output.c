@@ -533,7 +533,7 @@ reroute:
 			 */
 			if (ip6_mforwarding && ip6_mrouter[ifp->if_rdomain] &&
 			    (flags & IPV6_FORWARDING) == 0) {
-				if (ip6_mforward(ip6, ifp, m) != 0) {
+				if (ip6_mforward(ip6, ifp, m, flags) != 0) {
 					m_freem(m);
 					goto done;
 				}
@@ -641,6 +641,15 @@ reroute:
 		if_put(ifp); /* drop reference since destination changed */
 		ifp = NULL;
 		goto reroute;
+	}
+#endif
+
+#ifdef IPSEC
+	if (ISSET(flags, IPV6_FORWARDING) &&
+	    ISSET(flags, IPV6_FORWARDING_IPSEC) &&
+	    !ISSET(m->m_pkthdr.ph_tagsset, PACKET_TAG_IPSEC_IN_DONE)) {
+		error = EHOSTUNREACH;
+		goto bad;
 	}
 #endif
 

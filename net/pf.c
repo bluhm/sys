@@ -7986,14 +7986,20 @@ done:
 			break;
 		case AF_INET6:
 			if (pd.dir == PF_IN) {
-				int flags;
+				int flags = IPV6_REDIRECT;
 
-				if (ip6_forwarding == 0) {
+				switch (ip6_forwarding) {
+				case 2:
+					SET(flags, IPV6_FORWARDING_IPSEC);
+					/* FALLTHROUGH */
+				case 1:
+					SET(flags, IPV6_FORWARDING);
+					break;
+				default:
 					ip6stat_inc(ip6s_cantforward);
 					action = PF_DROP;
 					goto out;
 				}
-				flags = IPV6_FORWARDING | IPV6_REDIRECT;
 				ip6_forward(pd.m, NULL, flags);
 			} else
 				ip6_output(pd.m, NULL, NULL, 0, NULL, NULL);

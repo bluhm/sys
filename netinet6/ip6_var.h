@@ -270,6 +270,7 @@ ip6stat_add(enum ip6stat_counters c, uint64_t v)
 #define IPV6_FORWARDING		0x02	/* most of IPv6 header exists */
 #define IPV6_MINMTU		0x04	/* use minimum MTU (IPV6_USE_MIN_MTU) */
 #define IPV6_REDIRECT		0x08	/* redirected by pf */
+#define IPV6_FORWARDING_IPSEC	0x10	/* most of IPv6 header exists */
 
 extern int ip6_mtudisc_timeout;		/* mtu discovery */
 extern struct rttimer_queue icmp6_mtudisc_timeout_q;
@@ -316,7 +317,7 @@ int	ip6_unknown_opt(struct mbuf **, u_int8_t *, int);
 int	ip6_get_prevhdr(struct mbuf *, int);
 int	ip6_nexthdr(struct mbuf *, int, int, int *);
 int	ip6_lasthdr(struct mbuf *, int, int, int *);
-int	ip6_mforward(struct ip6_hdr *, struct ifnet *, struct mbuf *);
+int	ip6_mforward(struct ip6_hdr *, struct ifnet *, struct mbuf *, int);
 int	ip6_process_hopopts(struct mbuf **, u_int8_t *, int, u_int32_t *,
 	     u_int32_t *);
 void	ip6_savecontrol(struct inpcb *, struct mbuf *, struct mbuf **);
