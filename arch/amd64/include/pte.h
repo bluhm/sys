@@ -164,6 +164,7 @@ typedef u_int64_t pt_entry_t;		/* PTE */
 #ifdef _KERNEL
 extern pt_entry_t pg_xo;	/* XO pte bits using PKU key1 */
 extern pt_entry_t pg_nx;	/* NX pte bit */
+extern pt_entry_t pg_crypt;	/* C pte bit */
 extern pt_entry_t pg_g_kern;	/* PG_G if glbl mappings can be used in kern */
 #endif /* _KERNEL */
 

@@ -320,6 +320,7 @@ struct pmap {
 };
 
 #define PMAP_EFI	PMAP_MD0
+#define PMAP_NOCRYPT	PMAP_MD1
 
 /*
  * MD flags that we use for pmap_enter (in the pa):
