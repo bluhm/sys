@@ -270,7 +270,7 @@ ip6stat_add(enum ip6stat_counters c, uint64_t v)
 #define IPV6_FORWARDING		0x02	/* most of IPv6 header exists */
 #define IPV6_MINMTU		0x04	/* use minimum MTU (IPV6_USE_MIN_MTU) */
 #define IPV6_REDIRECT		0x08	/* redirected by pf */
-#define IPV6_FORWARDING_IPSEC	0x10	/* most of IPv6 header exists */
+#define IPV6_FORWARDING_IPSEC	0x10	/* only packets processed by IPsec */
 
 extern int ip6_mtudisc_timeout;		/* mtu discovery */
 extern struct rttimer_queue icmp6_mtudisc_timeout_q;
