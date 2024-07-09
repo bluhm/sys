@@ -1575,7 +1575,7 @@ pmap_extract(struct pmap *pmap, vaddr_t va, paddr_t *pap)
 	}
 	if (level == 1 && (pte & (PG_PS|PG_V)) == (PG_PS|PG_V)) {
 		if (pap != NULL)
-			*pap = (pte & PG_LGFRAME) | (va & PAGE_MASK_L2);
+			*pap = (pte & pg_lgframe) | (va & PAGE_MASK_L2);
 		return 1;
 	}
 
