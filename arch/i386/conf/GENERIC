@@ -13,6 +13,8 @@ machine		i386
 include		"../../../conf/GENERIC"
 maxusers	80			# estimated number of users
 
+option		TCPDEBUG
+
 option		USER_PCICONF	# user-space PCI configuration
 
 option		APERTURE	# in-kernel aperture driver for XFree86
