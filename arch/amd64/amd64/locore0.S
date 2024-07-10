@@ -317,7 +317,7 @@ cont:
 	pushl	%ebp				;	/* save */ \
 	movl	RELOC((pg_crypt + 4)), %ebp	;	/* C bit? */ \
 1:	movl	%eax,(%ebx)			;	/* store phys addr */ \
-	movl	%ebp,4(%ebx)			;	/* upper 32 bits C */ \
+	movl	%ebp,4(%ebx)			;	/* upper 32 bits */ \
 	addl	$8,%ebx				;	/* next pte/pde */ \
 	addl	$NBPG,%eax			;	/* next phys page */ \
 	loop	1b				;	/* till finished */ \
@@ -326,11 +326,10 @@ cont:
 
 #define fillkpt_nx \
 	pushl	%ebp				;	/* save */ \
-1:	movl	%eax,(%ebx)			;	/* store phys addr */ \
 	movl	RELOC((pg_nx + 4)), %ebp	;	/* NX bit? */ \
+	orl	RELOC((pg_crypt + 4)), %ebp	;	/* C bit? */ \
+1:	movl	%eax,(%ebx)			;	/* store phys addr */ \
 	movl	%ebp,4(%ebx)			;	/* upper 32 bits */ \
-	movl	RELOC((pg_crypt + 4)), %ebp	;	/* C bit? */ \
-	orl	%ebp,4(%ebx)			;	/* apply */ \
 	addl	$8,%ebx				;	/* next pte/pde */ \
 	addl	$NBPG,%eax			;	/* next phys page */ \
 	loop	1b				;	/* till finished */ \
@@ -515,9 +514,8 @@ store_pte:
 	movl	%eax, (%ebx)
 	pushl	%ebp
 	movl	RELOC((pg_nx + 4)), %ebp
+	orl	RELOC((pg_crypt + 4)), %ebp
 	movl	%ebp, 4(%ebx)
-	movl	RELOC((pg_crypt + 4)), %ebp
-	orl	%ebp, 4(%ebx)
 	popl	%ebp
 	addl	$8, %ebx
 	addl	$NBPD_L2, %eax
@@ -542,9 +540,8 @@ store_pte:
 	movl	%eax,(%ebx)
 	pushl	%ebp
 	movl	RELOC((pg_nx + 4)), %ebp
+	orl	RELOC((pg_crypt + 4)), %ebp
 	movl	%ebp, 4(%ebx)
-	movl	RELOC((pg_crypt + 4)), %ebp
-	orl	%ebp, 4(%ebx)
 	popl	%ebp
 
 	/*
