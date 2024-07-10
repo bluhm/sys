@@ -7966,7 +7966,7 @@ done:
 			if (pd.dir == PF_IN) {
 				int flags = IP_REDIRECT;
 
-				switch (ip_forwarding) {
+				switch (READ_ONCE(ip_forwarding)) {
 				case 2:
 					SET(flags, IP_FORWARDING_IPSEC);
 					/* FALLTHROUGH */
