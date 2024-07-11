@@ -471,7 +471,7 @@ ip_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 		SET(flags, IP_REDIRECT);
 #endif
 
-	switch (READ_ONCE(ip_forwarding)) {
+	switch (atomic_load_int(&ip_forwarding)) {
 	case 2:
 		SET(flags, IP_FORWARDING_IPSEC);
 		/* FALLTHROUGH */
