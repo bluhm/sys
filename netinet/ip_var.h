@@ -274,9 +274,6 @@ struct mbuf *
 	 rip_chkhdr(struct mbuf *, struct mbuf *);
 int	 rip_attach(struct socket *, int, int);
 int	 rip_detach(struct socket *);
-void	 rip_lock(struct socket *);
-void	 rip_unlock(struct socket *);
-int	 rip_locked(struct socket *);
 int	 rip_bind(struct socket *, struct mbuf *, struct proc *);
 int	 rip_connect(struct socket *, struct mbuf *);
 int	 rip_disconnect(struct socket *);

@@ -354,9 +354,6 @@ int	rip6_output(struct mbuf *, struct socket *, struct sockaddr *,
 	    struct mbuf *);
 int	rip6_attach(struct socket *, int, int);
 int	rip6_detach(struct socket *);
-void	rip6_lock(struct socket *);
-void	rip6_unlock(struct socket *);
-int	rip6_locked(struct socket *);
 int	rip6_bind(struct socket *, struct mbuf *, struct proc *);
 int	rip6_connect(struct socket *, struct mbuf *);
 int	rip6_disconnect(struct socket *);

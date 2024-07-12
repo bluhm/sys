@@ -106,9 +106,6 @@ struct inpcbtable rawcbtable;
 const struct pr_usrreqs rip_usrreqs = {
 	.pru_attach	= rip_attach,
 	.pru_detach	= rip_detach,
-	.pru_lock	= rip_lock,
-	.pru_unlock	= rip_unlock,
-	.pru_locked	= rip_locked,
 	.pru_bind	= rip_bind,
 	.pru_connect	= rip_connect,
 	.pru_disconnect	= rip_disconnect,
@@ -512,32 +509,6 @@ rip_detach(struct socket *so)
 	in_pcbdetach(inp);
 
 	return (0);
-}
-
-void
-rip_lock(struct socket *so)
-{
-	struct inpcb *inp = sotoinpcb(so);
-
-	NET_ASSERT_LOCKED();
-	mtx_enter(&inp->inp_mtx);
-}
-
-void
-rip_unlock(struct socket *so)
-{
-	struct inpcb *inp = sotoinpcb(so);
-
-	NET_ASSERT_LOCKED();
-	mtx_leave(&inp->inp_mtx);
-}
-
-int
-rip_locked(struct socket *so)
-{
-	struct inpcb *inp = sotoinpcb(so);
-
-	return mtx_owned(&inp->inp_mtx);
 }
 
 int
