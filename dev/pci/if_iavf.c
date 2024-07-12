@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_iavf.c,v 1.13 2024/05/24 06:02:53 jsg Exp $	*/
+/*	$OpenBSD: if_iavf.c,v 1.17 2024/07/10 09:50:28 jmatthew Exp $	*/
 
 /*
  * Copyright (c) 2013-2015, Intel Corporation
@@ -954,7 +954,7 @@ iavf_media_status(struct ifnet *ifp, struct ifmediareq *ifm)
 {
 	struct iavf_softc *sc = ifp->if_softc;
 
-	NET_ASSERT_LOCKED();
+	KERNEL_ASSERT_LOCKED();
 
 	ifm->ifm_status = sc->sc_media_status;
 	ifm->ifm_active = sc->sc_media_active;
@@ -1115,7 +1115,7 @@ iavf_config_hena(struct iavf_softc *sc)
 	iaq.iaq_flags = htole16(IAVF_AQ_BUF | IAVF_AQ_RD);
 	iaq.iaq_opcode = htole16(IAVF_AQ_OP_SEND_TO_PF);
 	iaq.iaq_vc_opcode = htole32(IAVF_VC_OP_SET_RSS_HENA);
-	iaq.iaq_datalen = htole32(sizeof(*caps));
+	iaq.iaq_datalen = htole16(sizeof(*caps));
 	iavf_aq_dva(&iaq, IAVF_DMA_DVA(&sc->sc_scratch));
 
 	caps = IAVF_DMA_KVA(&sc->sc_scratch);
@@ -2393,11 +2393,15 @@ iavf_atq_done(struct iavf_softc *sc)
 	unsigned int cons;
 	unsigned int prod;
 
+	mtx_enter(&sc->sc_atq_mtx);
+
 	prod = sc->sc_atq_prod;
 	cons = sc->sc_atq_cons;
 
-	if (prod == cons)
+	if (prod == cons) {
+		mtx_leave(&sc->sc_atq_mtx);
 		return;
+	}
 
 	atq = IAVF_DMA_KVA(&sc->sc_atq);
 
@@ -2421,6 +2425,8 @@ iavf_atq_done(struct iavf_softc *sc)
 	    BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE);
 
 	sc->sc_atq_cons = cons;
+
+	mtx_leave(&sc->sc_atq_mtx);
 }
 
 static int
@@ -2428,6 +2434,8 @@ iavf_atq_post(struct iavf_softc *sc, struct iavf_aq_desc *iaq)
 {
 	struct iavf_aq_desc *atq, *slot;
 	unsigned int prod;
+
+	mtx_enter(&sc->sc_atq_mtx);
 
 	atq = IAVF_DMA_KVA(&sc->sc_atq);
 	prod = sc->sc_atq_prod;
@@ -2446,6 +2454,9 @@ iavf_atq_post(struct iavf_softc *sc, struct iavf_aq_desc *iaq)
 	prod &= IAVF_AQ_MASK;
 	sc->sc_atq_prod = prod;
 	iavf_wr(sc, sc->sc_aq_regs->atq_tail, prod);
+
+	mtx_leave(&sc->sc_atq_mtx);
+
 	return (prod);
 }
 
@@ -2554,15 +2565,15 @@ iavf_config_irq_map(struct iavf_softc *sc)
 	iavf_aq_dva(&iaq, IAVF_DMA_DVA(&sc->sc_scratch));
 
 	map = IAVF_DMA_KVA(&sc->sc_scratch);
-	map->num_vectors = letoh16(1);
+	map->num_vectors = htole16(1);
 
 	vec = map->vecmap;
-	vec[0].vsi_id = letoh16(sc->sc_vsi_id);
+	vec[0].vsi_id = htole16(sc->sc_vsi_id);
 	vec[0].vector_id = 0;
-	vec[0].rxq_map = letoh16(iavf_allqueues(sc));
-	vec[0].txq_map = letoh16(iavf_allqueues(sc));
-	vec[0].rxitr_idx = IAVF_NOITR;
-	vec[0].txitr_idx = IAVF_NOITR;
+	vec[0].rxq_map = htole16(iavf_allqueues(sc));
+	vec[0].txq_map = htole16(iavf_allqueues(sc));
+	vec[0].rxitr_idx = htole16(IAVF_NOITR);
+	vec[0].txitr_idx = htole16(IAVF_NOITR);
 
 	bus_dmamap_sync(sc->sc_dmat, IAVF_DMA_MAP(&sc->sc_scratch), 0, IAVF_DMA_LEN(&sc->sc_scratch),
 	    BUS_DMASYNC_PREREAD);
