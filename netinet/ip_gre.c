@@ -36,10 +36,6 @@
  * This currently handles IPPROTO_GRE, IPPROTO_MOBILE
  */
 
-
-#include "gre.h"
-#if NGRE > 0
-
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/mbuf.h>
@@ -114,5 +110,3 @@ gre_send(struct socket *so, struct mbuf *m, struct mbuf *nam,
 #endif
 	return rip_send(so, m, nam, control);
 }
-
-#endif /* if NGRE > 0 */
