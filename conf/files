@@ -898,7 +898,7 @@ file netinet/tcp_subr.c
 file netinet/tcp_timer.c
 file netinet/tcp_usrreq.c
 file netinet/udp_usrreq.c
-file netinet/ip_gre.c			gre			needs-count
+file netinet/ip_gre.c			gre
 file netinet/ip_ipsp.c			ipsec | tcp_signature
 file netinet/ip_spd.c			ipsec | tcp_signature
 file netinet/ip_ipip.c
