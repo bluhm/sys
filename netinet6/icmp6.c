@@ -1,4 +1,4 @@
-/*	$OpenBSD: icmp6.c,v 1.253 2024/06/20 19:25:42 bluhm Exp $	*/
+/*	$OpenBSD: icmp6.c,v 1.254 2024/07/14 18:53:39 bluhm Exp $	*/
 /*	$KAME: icmp6.c,v 1.217 2001/06/20 15:03:29 jinmei Exp $	*/
 
 /*
