@@ -1367,7 +1367,7 @@ icmp6_redirect_input(struct mbuf *m, int off)
 
 	/* RFC 2461 8.3 */
 	nd6_cache_lladdr(ifp, &redtgt6, lladdr, lladdrlen, ND_REDIRECT,
-			 is_onlink ? ND_REDIRECT_ONLINK : ND_REDIRECT_ROUTER);
+	    is_onlink ? ND_REDIRECT_ONLINK : ND_REDIRECT_ROUTER, i_am_router);
 
 	if (!is_onlink) {	/* better router case.  perform rtredirect. */
 		/* perform rtredirect */

@@ -323,7 +323,7 @@ nd6_ns_input(struct mbuf *m, int off, int icmp6len)
 	}
 
 	nd6_cache_lladdr(ifp, &saddr6, lladdr, lladdrlen, ND_NEIGHBOR_SOLICIT,
-	    0);
+	    0, i_am_router);
 
 	nd6_na_output(ifp, &saddr6, &taddr6,
 	    ((anycast || proxy || !tlladdr) ? 0 : ND_NA_FLAG_OVERRIDE) |
