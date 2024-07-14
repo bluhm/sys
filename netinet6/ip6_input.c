@@ -416,7 +416,7 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 		SET(flags, IPV6_REDIRECT);
 #endif
 
-	switch (ip6_forwarding) {
+	switch (atomic_load_int(&ip6_forwarding)) {
 	case 2:
 		SET(flags, IPV6_FORWARDING_IPSEC);
 		/* FALLTHROUGH */

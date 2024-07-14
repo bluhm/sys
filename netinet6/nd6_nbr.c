@@ -108,7 +108,7 @@ nd6_ns_input(struct mbuf *m, int off, int icmp6len)
 	struct ifaddr *ifa = NULL;
 	int lladdrlen = 0;
 	int anycast = 0, proxy = 0, tentative = 0;
-	int i_am_router = (ip6_forwarding != 0);
+	int i_am_router = (atomic_load_int(&ip6_forwarding) != 0);
 	int tlladdr;
 	struct nd_opts ndopts;
 	struct sockaddr_dl *proxydl = NULL;
@@ -559,7 +559,7 @@ nd6_na_input(struct mbuf *m, int off, int icmp6len)
 	int is_override;
 	char *lladdr = NULL;
 	int lladdrlen = 0;
-	int i_am_router = (ip6_forwarding != 0);
+	int i_am_router = (atomic_load_int(&ip6_forwarding) != 0);
 	struct ifaddr *ifa;
 	struct in6_ifaddr *ifa6;
 	struct llinfo_nd6 *ln;

@@ -7988,7 +7988,7 @@ done:
 			if (pd.dir == PF_IN) {
 				int flags = IPV6_REDIRECT;
 
-				switch (ip6_forwarding) {
+				switch (atomic_load_int(&ip6_forwarding)) {
 				case 2:
 					SET(flags, IPV6_FORWARDING_IPSEC);
 					/* FALLTHROUGH */

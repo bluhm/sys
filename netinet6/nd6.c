@@ -666,12 +666,13 @@ nd6_free(struct rtentry *rt)
 	struct llinfo_nd6 *ln = (struct llinfo_nd6 *)rt->rt_llinfo;
 	struct in6_addr in6 = satosin6(rt_key(rt))->sin6_addr;
 	struct ifnet *ifp;
+	int i_am_router = (atomic_load_int(&ip6_forwarding) != 0);
 
 	NET_ASSERT_LOCKED_EXCLUSIVE();
 
 	ifp = if_get(rt->rt_ifidx);
 
-	if (ip6_forwarding == 0) {
+	if (!i_am_router) {
 		if (ln->ln_router) {
 			/*
 			 * rt6_flush must be called whether or not the neighbor

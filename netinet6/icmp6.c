@@ -1228,6 +1228,7 @@ icmp6_redirect_input(struct mbuf *m, int off)
 	char *lladdr = NULL;
 	int lladdrlen = 0;
 	struct rtentry *rt = NULL;
+	int i_am_router = (atomic_load_int(&ip6_forwarding) != 0);
 	int is_router;
 	int is_onlink;
 	struct in6_addr src6 = ip6->ip6_src;
@@ -1241,7 +1242,7 @@ icmp6_redirect_input(struct mbuf *m, int off)
 		return;
 
 	/* if we are router, we don't update route by icmp6 redirect */
-	if (ip6_forwarding != 0)
+	if (i_am_router)
 		goto freeit;
 	if (!(ifp->if_xflags & IFXF_AUTOCONF6))
 		goto freeit;
@@ -1438,11 +1439,12 @@ icmp6_redirect_output(struct mbuf *m0, struct rtentry *rt)
 	size_t maxlen;
 	u_char *p;
 	struct sockaddr_in6 src_sa;
+	int i_am_router = (atomic_load_int(&ip6_forwarding) != 0);
 
 	icmp6_errcount(ND_REDIRECT, 0);
 
 	/* if we are not router, we don't send icmp6 redirect */
-	if (ip6_forwarding == 0)
+	if (!i_am_router)
 		goto fail;
 
 	/* sanity check */
