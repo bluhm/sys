@@ -588,9 +588,9 @@ reflect:
 		struct sockaddr_in sgw;
 		struct sockaddr_in ssrc;
 		struct rtentry *newrt = NULL;
+		int i_am_router = (atomic_load_int(&ip_forwarding) != 0);
 
-		if (icmp_rediraccept == 0 ||
-		    atomic_load_int(&ip_forwarding) != 0)
+		if (icmp_rediraccept == 0 || i_am_router)
 			goto freeit;
 		if (code > 3)
 			goto badcode;
