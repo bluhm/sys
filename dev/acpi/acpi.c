@@ -1,4 +1,4 @@
-/* $OpenBSD: acpi.c,v 1.433 2024/07/02 08:27:04 kettenis Exp $ */
+/* $OpenBSD: acpi.c,v 1.435 2024/07/14 13:58:57 jmatthew Exp $ */
 /*
  * Copyright (c) 2005 Thorsten Lockert <tholo@sigmasoft.com>
  * Copyright (c) 2005 Jordan Hargrave <jordan@openbsd.org>
@@ -65,6 +65,7 @@ void	 acpi_pci_set_powerstate(pci_chipset_tag_t, pcitag_t, int, int);
 int	acpi_pci_notify(struct aml_node *, int, void *);
 
 int	acpi_submatch(struct device *, void *, void *);
+int	acpi_noprint(void *, const char *);
 int	acpi_print(void *, const char *);
 
 void	acpi_map_pmregs(struct acpi_softc *);
@@ -756,9 +757,10 @@ acpi_pci_min_powerstate(pci_chipset_tag_t pc, pcitag_t tag)
 void
 acpi_pci_set_powerstate(pci_chipset_tag_t pc, pcitag_t tag, int state, int pre)
 {
-#if NACPIPWRRES > 0
 	struct acpi_softc *sc = acpi_softc;
+#if NACPIPWRRES > 0
 	struct acpi_pwrres *pr;
+#endif
 	struct acpi_pci *pdev;
 	int bus, dev, fun;
 	char name[5];
@@ -769,10 +771,15 @@ acpi_pci_set_powerstate(pci_chipset_tag_t pc, pcitag_t tag, int state, int pre)
 			break;
 	}
 
-	/* XXX Add a check to discard nodes without Power Resources? */
 	if (pdev == NULL)
 		return;
 
+	if (state != ACPI_STATE_D0 && !pre) {
+		snprintf(name, sizeof(name), "_PS%d", state);
+		aml_evalname(sc, pdev->node, name, 0, NULL, NULL);
+	}
+
+#if NACPIPWRRES > 0
 	SIMPLEQ_FOREACH(pr, &sc->sc_pwrresdevs, p_next) {
 		if (pr->p_node != pdev->node)
 			continue;
@@ -811,6 +818,9 @@ acpi_pci_set_powerstate(pci_chipset_tag_t pc, pcitag_t tag, int state, int pre)
 
 	}
 #endif /* NACPIPWRRES > 0 */
+
+	if (state == ACPI_STATE_D0 && pre)
+		aml_evalname(sc, pdev->node, "_PS0", 0, NULL, NULL);
 }
 
 int
@@ -1305,6 +1315,12 @@ acpi_submatch(struct device *parent, void *match, void *aux)
 	if (aaa->aaa_table == NULL)
 		return (0);
 	return ((*cf->cf_attach->ca_match)(parent, match, aux));
+}
+
+int
+acpi_noprint(void *aux, const char *pnp)
+{
+	return (QUIET);
 }
 
 int
@@ -3001,6 +3017,12 @@ const char *acpi_isa_hids[] = {
 	NULL
 };
 
+/* Overly abundant devices to avoid printing details for */
+const char *acpi_quiet_hids[] = {
+	"ACPI0007",
+	NULL
+};
+
 void
 acpi_attach_deps(struct acpi_softc *sc, struct aml_node *node)
 {
@@ -3220,7 +3242,10 @@ acpi_foundhid(struct aml_node *node, void *arg)
 
 	if (!node->parent->attached) {
 		node->parent->attached = 1;
-		config_found(self, &aaa, acpi_print);
+		if (acpi_matchhids(&aaa, acpi_quiet_hids, "none"))
+			config_found(self, &aaa, acpi_noprint);
+		else
+			config_found(self, &aaa, acpi_print);
 	}
 
 	return (0);
