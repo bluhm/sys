@@ -1443,12 +1443,15 @@ const u_char inet6ctlerrmap[PRC_NCMDS] = {
 extern int ip6_mrtproto;
 #endif
 
+const struct sysctl_bounded_args ipv6ctl_vars_unlocked[] = {
+	{ IPV6CTL_FORWARDING, &ip6_forwarding, 0, 2 },
+};
+
 const struct sysctl_bounded_args ipv6ctl_vars[] = {
 	{ IPV6CTL_DAD_PENDING, &ip6_dad_pending, SYSCTL_INT_READONLY },
 #ifdef MROUTING
 	{ IPV6CTL_MRTPROTO, &ip6_mrtproto, SYSCTL_INT_READONLY },
 #endif
-	{ IPV6CTL_FORWARDING, &ip6_forwarding, 0, 2 },
 	{ IPV6CTL_SENDREDIRECTS, &ip6_sendredirects, 0, 1 },
 	{ IPV6CTL_DEFHLIM, &ip6_defhlim, 0, 255 },
 	{ IPV6CTL_MAXFRAGPACKETS, &ip6_maxfragpackets, 0, 1000 },
@@ -1568,6 +1571,10 @@ ip6_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 			atomic_inc_long(&rtgeneration);
 		NET_UNLOCK();
 		return (error);
+	case IPV6CTL_FORWARDING:
+		return (sysctl_bounded_arr(
+		    ipv6ctl_vars_unlocked, nitems(ipv6ctl_vars_unlocked),
+		    name, namelen, oldp, oldlenp, newp, newlen));
 	default:
 		NET_LOCK();
 		error = sysctl_bounded_arr(ipv6ctl_vars, nitems(ipv6ctl_vars),

@@ -111,6 +111,10 @@ LIST_HEAD(, ipq) ipq;
 int	ip_maxqueue = 300;
 int	ip_frags = 0;
 
+const struct sysctl_bounded_args ipctl_vars_unlocked[] = {
+	{ IPCTL_FORWARDING, &ip_forwarding, 0, 2 },
+};
+
 const struct sysctl_bounded_args ipctl_vars[] = {
 #ifdef MROUTING
 	{ IPCTL_MRTPROTO, &ip_mrtproto, SYSCTL_INT_READONLY },
@@ -1799,8 +1803,9 @@ ip_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		NET_UNLOCK();
 		return (error);
 	case IPCTL_FORWARDING:
-		return (sysctl_int_bounded(oldp, oldlenp, newp, newlen,
-		    &ip_forwarding, 0, 2));
+		return (sysctl_bounded_arr(
+		    ipctl_vars_unlocked, nitems(ipctl_vars_unlocked),
+		    name, namelen, oldp, oldlenp, newp, newlen));
 	default:
 		NET_LOCK();
 		error = sysctl_bounded_arr(ipctl_vars, nitems(ipctl_vars),
