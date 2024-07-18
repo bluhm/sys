@@ -287,7 +287,7 @@ pfattach(int num)
 	 */
 	pf_anchor_stack = cpumem_malloc(
 	    sizeof(struct pf_anchor_stackframe) * (PF_ANCHOR_STACK_MAX + 2),
-	    M_WAITOK|M_ZERO);
+	    M_PF);
 	CPUMEM_FOREACH(sf, &cmi, pf_anchor_stack)
 		sf[PF_ANCHOR_STACK_MAX].sf_stack_top = &sf[0];
 }
