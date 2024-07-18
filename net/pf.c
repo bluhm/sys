@@ -113,6 +113,7 @@ struct pf_queuehead	*pf_queues_inactive;
 struct pf_status	 pf_status;
 
 struct mutex		 pf_inp_mtx = MUTEX_INITIALIZER(IPL_SOFTNET);
+struct mutex		 pf_st_ro_mtx = MUTEX_INITIALIZER(IPL_SOFTNET);
 
 int			 pf_hdr_limit = 20;  /* arbitrary limit, tune in ddb */
 
@@ -8040,11 +8041,46 @@ done:
 			action = pf_refragment6(&pd.m, mtag, NULL, NULL, NULL);
 	}
 #endif	/* INET6 */
+	/* update interface index for pflow(4) */
 	if (st && action != PF_DROP) {
 		if (!st->if_index_in && dir == PF_IN)
 			st->if_index_in = ifp->if_index;
 		else if (!st->if_index_out && dir == PF_OUT)
 			st->if_index_out = ifp->if_index;
+	}
+	/* the pf state keeps cache of route */
+	if (ro && st && pd.m && action == PF_PASS && pf_ouraddr(pd.m) != 1) {
+		/* check cache without lock, worst case is additional lookup */
+		if (memcmp(ro, &st->route, sizeof(*ro)) != 0) {
+			mtx_enter(&pf_st_ro_mtx);
+			if (st->route.ro_rt != NULL) {
+				rtfree(ro->ro_rt);
+				*ro = st->route;
+				rtref(ro->ro_rt);
+			}
+			mtx_leave(&pf_st_ro_mtx);
+		}
+		switch (pd.naf) {
+		case AF_INET:
+			route_mpath(ro, &pd.ndaddr.v4, &pd.nsaddr.v4,
+			    pd.m->m_pkthdr.ph_rtableid);
+			break;
+#ifdef INET6
+		case AF_INET6:
+			route6_mpath(ro, &pd.ndaddr.v6, &pd.nsaddr.v6,
+			    pd.m->m_pkthdr.ph_rtableid);
+			break;
+#endif /* INET6 */
+		}
+		if (ro->ro_rt != NULL) {
+			if (memcmp(&st->route, ro, sizeof(*ro)) != 0) {
+				mtx_enter(&pf_st_ro_mtx);
+				rtfree(st->route.ro_rt);
+				st->route = *ro;
+				rtref(st->route.ro_rt);
+				mtx_leave(&pf_st_ro_mtx);
+			}
+		}
 	}
 
  out:
@@ -8328,6 +8364,7 @@ pf_state_unref(struct pf_state *st)
 
 		pf_state_key_unref(st->key[PF_SK_WIRE]);
 		pf_state_key_unref(st->key[PF_SK_STACK]);
+		rtfree(st->route.ro_rt);
 
 		pool_put(&pf_state_pl, st);
 	}
