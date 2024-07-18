@@ -322,7 +322,7 @@ reroute:
 		ip6->ip6_dst.s6_addr16[1] = 0;
 
 #if NPF > 0
-	if (pf_test(AF_INET6, PF_FWD, ifp, &m) != PF_PASS) {
+	if (pf_test(AF_INET6, PF_FWD, ifp, &m, NULL) != PF_PASS) {
 		m_freem(m);
 		goto senderr;
 	}

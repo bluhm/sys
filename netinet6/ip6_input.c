@@ -405,7 +405,7 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 	 * Packet filter
 	 */
 	odst = ip6->ip6_dst;
-	if (pf_test(AF_INET6, PF_IN, ifp, mp) != PF_PASS)
+	if (pf_test(AF_INET6, PF_IN, ifp, mp, &ro) != PF_PASS)
 		goto bad;
 	m = *mp;
 	if (m == NULL)

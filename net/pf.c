@@ -6638,7 +6638,7 @@ pf_route(struct pf_pdesc *pd, struct pf_state *st)
 		ip->ip_src = ifatoia(rt->rt_ifa)->ia_addr.sin_addr;
 
 	if (st->rt != PF_DUPTO && pd->dir == PF_IN) {
-		if (pf_test(AF_INET, PF_OUT, ifp, &m0) != PF_PASS)
+		if (pf_test(AF_INET, PF_OUT, ifp, &m0, NULL) != PF_PASS)
 			goto bad;
 		else if (m0 == NULL)
 			goto done;
@@ -6758,7 +6758,7 @@ pf_route6(struct pf_pdesc *pd, struct pf_state *st)
 		ip6->ip6_src = ifatoia6(rt->rt_ifa)->ia_addr.sin6_addr;
 
 	if (st->rt != PF_DUPTO && pd->dir == PF_IN) {
-		if (pf_test(AF_INET6, PF_OUT, ifp, &m0) != PF_PASS)
+		if (pf_test(AF_INET6, PF_OUT, ifp, &m0, NULL) != PF_PASS)
 			goto bad;
 		else if (m0 == NULL)
 			goto done;
@@ -7533,7 +7533,8 @@ pf_counters_inc(int action, struct pf_pdesc *pd, struct pf_state *st,
 }
 
 int
-pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
+pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0,
+    struct route *ro)
 {
 #if NCARP > 0
 	struct ifnet		*ifp0;
@@ -7761,7 +7762,7 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 		    pf_syncookie_validate(&pd)) {
 			struct mbuf	*msyn = pf_syncookie_recreate_syn(&pd);
 			if (msyn) {
-				action = pf_test(af, fwdir, ifp, &msyn);
+				action = pf_test(af, fwdir, ifp, &msyn, NULL);
 				m_freem(msyn);
 				if (action == PF_PASS || action == PF_AFRT) {
 					PF_STATE_ENTER_READ();

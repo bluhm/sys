@@ -580,7 +580,7 @@ ipsec_common_input_cb(struct mbuf **mp, struct tdb *tdbp, int skip, int protoff)
 		if ((ifp = if_get(m->m_pkthdr.ph_ifidx)) == NULL) {
 			goto baddone;
 		}
-		if (pf_test(af, PF_IN, ifp, mp) != PF_PASS) {
+		if (pf_test(af, PF_IN, ifp, mp, NULL) != PF_PASS) {
 			if_put(ifp);
 			goto baddone;
 		}

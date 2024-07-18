@@ -1640,7 +1640,8 @@ int				 pf_setup_pdesc(struct pf_pdesc *, sa_family_t,
 				    int, struct pfi_kif *, struct mbuf *,
 				    u_short *);
 
-int	pf_test(sa_family_t, int, struct ifnet *, struct mbuf **);
+int	pf_test(sa_family_t, int, struct ifnet *, struct mbuf **,
+	    struct route *);
 
 void	pf_poolmask(struct pf_addr *, struct pf_addr*,
 	    struct pf_addr *, struct pf_addr *, sa_family_t);

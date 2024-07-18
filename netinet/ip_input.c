@@ -464,7 +464,7 @@ ip_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 	 * Packet filter
 	 */
 	odst = ip->ip_dst;
-	if (pf_test(AF_INET, PF_IN, ifp, mp) != PF_PASS)
+	if (pf_test(AF_INET, PF_IN, ifp, mp, &ro) != PF_PASS)
 		goto bad;
 	m = *mp;
 	if (m == NULL)

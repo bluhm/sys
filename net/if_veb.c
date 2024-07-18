@@ -644,7 +644,7 @@ veb_pf(struct ifnet *ifp0, int dir, struct mbuf *m)
 	if (m == NULL)
 		return (NULL);
 
-	if (pf_test(fam->af, dir, ifp0, &m) != PF_PASS) {
+	if (pf_test(fam->af, dir, ifp0, &m, NULL) != PF_PASS) {
 		m_freem(m);
 		return (NULL);
 	}
@@ -839,7 +839,7 @@ veb_ipsec_proto_out(struct mbuf *m, sa_family_t af, int iphlen)
 #if NPF > 0
 	encifp = enc_getif(tdb->tdb_rdomain, tdb->tdb_tap);
 	if (encifp != NULL) {
-		if (pf_test(af, PF_OUT, encifp, &m) != PF_PASS) {
+		if (pf_test(af, PF_OUT, encifp, &m, NULL) != PF_PASS) {
 			m_freem(m);
 			return (NULL);
 		}

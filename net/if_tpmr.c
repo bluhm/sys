@@ -295,7 +295,7 @@ tpmr_pf(struct ifnet *ifp0, int dir, struct mbuf *m)
 			return (NULL);
 	}
 
-	if (pf_test(fam->af, dir, ifp0, &m) != PF_PASS) {
+	if (pf_test(fam->af, dir, ifp0, &m, NULL) != PF_PASS) {
 		m_freem(m);
 		return (NULL);
 	}

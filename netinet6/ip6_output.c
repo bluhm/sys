@@ -619,7 +619,7 @@ reroute:
 	}
 
 #if NPF > 0
-	if (pf_test(AF_INET6, PF_OUT, ifp, &m) != PF_PASS) {
+	if (pf_test(AF_INET6, PF_OUT, ifp, &m, NULL) != PF_PASS) {
 		error = EACCES;
 		m_freem(m);
 		goto done;
@@ -2840,7 +2840,8 @@ ip6_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct route *ro,
 	 * Packet filter
 	 */
 	if ((encif = enc_getif(tdb->tdb_rdomain, tdb->tdb_tap)) == NULL ||
-	    pf_test(AF_INET6, fwd ? PF_FWD : PF_OUT, encif, &m) != PF_PASS) {
+	    pf_test(AF_INET6, fwd ? PF_FWD : PF_OUT, encif, &m, NULL)
+	    != PF_PASS) {
 		m_freem(m);
 		return EACCES;
 	}
