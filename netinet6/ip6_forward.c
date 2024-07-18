@@ -280,8 +280,9 @@ reroute:
 		goto freecopy;
 	}
 	if (rt->rt_ifidx == ifidx &&
-	    ip6_sendredirects && !ISSET(flags, IPV6_REDIRECT) &&
-	    (rt->rt_flags & (RTF_DYNAMIC|RTF_MODIFIED)) == 0) {
+	    !ISSET(rt->rt_flags, RTF_DYNAMIC|RTF_MODIFIED) &&
+	    !ISSET(flags, IPV6_REDIRECT) &&
+	    atomic_load_int(&ip6_sendredirects)) {
 		if ((ifp->if_flags & IFF_POINTOPOINT) &&
 		    nd6_is_addr_neighbor(&ro->ro_dstsin6, ifp)) {
 			/*
