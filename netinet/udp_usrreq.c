@@ -1209,6 +1209,11 @@ udp_send(struct socket *so, struct mbuf *m, struct mbuf *addr,
 
 	soassertlocked_readonly(so);
 
+	if (inp == NULL) {
+		/* PCB could be destroyed, but socket still spliced. */
+		return (EINVAL);
+	}
+
 #ifdef PIPEX
 	if (inp->inp_pipex) {
 		struct pipex_session *session;

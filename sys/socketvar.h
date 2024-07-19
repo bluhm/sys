@@ -330,6 +330,12 @@ int sblock(struct sockbuf *, int);
 /* release lock on sockbuf sb */
 void sbunlock(struct sockbuf *);
 
+static inline void
+sbassertlocked(struct sockbuf *sb)
+{
+	rw_assert_wrlock(&sb->sb_lock);
+}
+
 #define	SB_EMPTY_FIXUP(sb) do {						\
 	if ((sb)->sb_mb == NULL) {					\
 		(sb)->sb_mbtail = NULL;					\
