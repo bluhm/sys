@@ -402,7 +402,7 @@ viogpu_send_cmd(struct viogpu_softc *sc, void *cmd, size_t cmd_size, void *ret,
 	virtio_enqueue_p(vq, slot, sc->sc_dma_map, cmd_size, ret_size, 0);
 	virtio_enqueue_commit(vsc, vq, slot, 1);
 
-	viogpu_vq_wait(vq);
+	virtio_check_vq(vsc, vq);
 
 	bus_dmamap_sync(vsc->sc_dmat, sc->sc_dma_map, 0, cmd_size,
 	    BUS_DMASYNC_POSTWRITE);

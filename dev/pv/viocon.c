@@ -463,7 +463,7 @@ vioconhwiflow(struct tty *tp, int stop)
 		virtio_stop_vq_intr(vp->vp_sc->sc_virtio, vp->vp_rx);
 	} else {
 		virtio_start_vq_intr(vp->vp_sc->sc_virtio, vp->vp_rx);
-		softintr_schedule(vp->vp_si);
+		virtio_check_vq(vp->vp_sc->sc_virtio, vp->vp_rx);
 	}
 	splx(s);
 	return 1;
