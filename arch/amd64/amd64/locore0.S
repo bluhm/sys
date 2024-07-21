@@ -273,11 +273,11 @@ cont:
 	 */
 	movl	$RELOC(cpu_vendor),%ebp
 	cmpl $0x68747541, (%ebp)	/* "Auth" */
-	jne	.Lno_semsev
+	jne	.Lno_smesev
 	cmpl $0x69746e65, 4(%ebp)	/* "enti" */
-	jne	.Lno_semsev
+	jne	.Lno_smesev
 	cmpl $0x444d4163, 8(%ebp)	/* "cAMD" */
-	jne	.Lno_semsev
+	jne	.Lno_smesev
 
 	/* AMD CPU, check for SME and SEV. */
 	movl	$0x8000001f, %eax
@@ -285,21 +285,21 @@ cont:
 	pushl	%eax
 	andl	$CPUIDEAX_SME, %eax	/* SME */
 	popl	%eax
-	jz	.Lno_semsev
+	jz	.Lno_smesev
 	andl	$CPUIDEAX_SEV, %eax	/* SEV */
-	jz	.Lno_semsev
+	jz	.Lno_smesev
 
 	/* Are we in guest mode with SEV enabled? */
 	movl	$MSR_SEV_STATUS, %ecx
 	rdmsr
 	andl	$SEV_STAT_ENABLED, %eax
-	jz	.Lno_semsev
+	jz	.Lno_smesev
 
 	/* Determine C bit position */
 	movl	%ebx, %ecx	/* %ebx from previous cpuid */
 	andl	$0x3f, %ecx
 	cmpl	$0x20, %ecx	/* must be at least bit 32 (counting from 0) */
-	jl	.Lno_semsev
+	jl	.Lno_smesev
 	xorl	%eax, %eax
 	movl	%eax, RELOC(pg_crypt)
 	subl	$0x20, %ecx
@@ -316,7 +316,7 @@ cont:
 	 * similarly.
 	 *
 	 * According to the number of reduction bits we shrink the
-	 * page frame masks beginnig at bit 51.
+	 * page frame masks beginning at bit 51.
 	 *
 	 * E.g. with a 5 bit reduction PG_FRAME will be reduced from
 	 * 0x000ffffffffff000 to 0x00007ffffffff000.
@@ -338,7 +338,7 @@ cont:
 
 	movl	$0x1, RELOC(cpu_sev_guestmode)	/* we are a SEV guest */
 
-.Lno_semsev:
+.Lno_smesev:
 
 	/*
 	 * Finished with old stack; load new %esp now instead of later so we
