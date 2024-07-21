@@ -660,6 +660,8 @@ pmap_bootstrap(paddr_t first_avail, paddr_t max_pa)
 	vaddr_t kva, kva_end;
 	pt_entry_t *pml3, *pml2;
 
+	KASSERT(((0x1000ULL | pg_crypt) & pg_frame) == 0x1000ULL);
+
 	/*
 	 * define the boundaries of the managed kernel virtual address
 	 * space.

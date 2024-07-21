@@ -398,6 +398,7 @@ extern int cpu_feature;
 extern int cpu_ebxfeature;
 extern int cpu_ecxfeature;
 extern int ecpu_ecxfeature;
+extern int cpu_sev_guestmode;
 extern int cpu_id;
 extern char cpu_vendor[];
 extern int cpuid_level;

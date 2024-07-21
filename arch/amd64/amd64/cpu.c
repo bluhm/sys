@@ -157,6 +157,7 @@ int cpu_ebxfeature = 0;		/* cpuid(1).ebx */
 int cpu_ecxfeature = 0;		/* INTERSECTION(cpuid(1).ecx) */
 int cpu_feature = 0;		/* cpuid(1).edx */
 int ecpu_ecxfeature = 0;	/* cpuid(0x80000001).ecx */
+int cpu_sev_guestmode = 0;
 int cpu_meltdown = 0;
 int cpu_use_xsaves = 0;
 int need_retpoline = 1;		/* most systems need retpoline */
