@@ -1,4 +1,4 @@
-/*	$OpenBSD: specialreg.h,v 1.114 2024/07/14 07:57:42 dv Exp $	*/
+/*	$OpenBSD: specialreg.h,v 1.115 2024/07/21 19:41:31 bluhm Exp $	*/
 /*	$NetBSD: specialreg.h,v 1.1 2003/04/26 18:39:48 fvdl Exp $	*/
 /*	$NetBSD: x86/specialreg.h,v 1.2 2003/04/25 21:54:30 fvdl Exp $	*/
 
