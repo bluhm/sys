@@ -1,4 +1,4 @@
-/*	$OpenBSD: virtio.c,v 1.25 2024/05/24 10:05:55 jsg Exp $	*/
+/*	$OpenBSD: virtio.c,v 1.28 2024/07/26 07:55:23 sf Exp $	*/
 /*	$NetBSD: virtio.c,v 1.3 2011/11/02 23:05:52 njoly Exp $	*/
 
 /*
@@ -81,10 +81,19 @@ virtio_device_string(int id)
 #if VIRTIO_DEBUG
 static const struct virtio_feature_name transport_feature_names[] = {
 	{ VIRTIO_F_NOTIFY_ON_EMPTY,	"NotifyOnEmpty"},
+	{ VIRTIO_F_ANY_LAYOUT,		"AnyLayout"},
 	{ VIRTIO_F_RING_INDIRECT_DESC,	"RingIndirectDesc"},
 	{ VIRTIO_F_RING_EVENT_IDX,	"RingEventIdx"},
 	{ VIRTIO_F_BAD_FEATURE,		"BadFeature"},
 	{ VIRTIO_F_VERSION_1,		"Version1"},
+	{ VIRTIO_F_ACCESS_PLATFORM,	"AccessPlatf"},
+	{ VIRTIO_F_RING_PACKED,		"RingPacked"},
+	{ VIRTIO_F_IN_ORDER,		"InOrder"},
+	{ VIRTIO_F_ORDER_PLATFORM,	"OrderPlatf"},
+	{ VIRTIO_F_SR_IOV,		"SrIov"},
+	{ VIRTIO_F_NOTIFICATION_DATA,	"NotifData"},
+	{ VIRTIO_F_NOTIF_CONFIG_DATA,	"NotifConfData"},
+	{ VIRTIO_F_RING_RESET,		"RingReset"},
 	{ 0,				NULL}
 };
 
@@ -807,7 +816,7 @@ virtio_dequeue(struct virtio_softc *sc, struct virtqueue *vq,
  *                 if you forget to call this the slot will be leaked.
  *
  *                 Don't call this if you use statically allocated slots
- *                 and virtio_dequeue_trim().
+ *                 and virtio_enqueue_trim().
  */
 int
 virtio_dequeue_commit(struct virtqueue *vq, int slot)
@@ -946,21 +955,43 @@ virtio_nused(struct virtqueue *vq)
 void
 virtio_vq_dump(struct virtqueue *vq)
 {
+#if VIRTIO_DEBUG >= 2
+	int i;
+#endif
 	/* Common fields */
+	printf(" + addr: %p\n", vq);
 	printf(" + vq num: %d\n", vq->vq_num);
 	printf(" + vq mask: 0x%X\n", vq->vq_mask);
 	printf(" + vq index: %d\n", vq->vq_index);
 	printf(" + vq used idx: %d\n", vq->vq_used_idx);
 	printf(" + vq avail idx: %d\n", vq->vq_avail_idx);
 	printf(" + vq queued: %d\n",vq->vq_queued);
+#if VIRTIO_DEBUG >= 2
+	for (i = 0; i < vq->vq_num; i++) {
+		struct vring_desc *desc = &vq->vq_desc[i];
+		printf("  D%-3d len:%d flags:%d next:%d\n", i, desc->len,
+		    desc->flags, desc->next);
+	}
+#endif
 	/* Avail ring fields */
 	printf(" + avail flags: 0x%X\n", vq->vq_avail->flags);
 	printf(" + avail idx: %d\n", vq->vq_avail->idx);
 	printf(" + avail event: %d\n", VQ_AVAIL_EVENT(vq));
+#if VIRTIO_DEBUG >= 2
+	for (i = 0; i < vq->vq_num; i++)
+		printf("  A%-3d idx:%d\n", i, vq->vq_avail->ring[i]);
+#endif
 	/* Used ring fields */
 	printf(" + used flags: 0x%X\n",vq->vq_used->flags);
 	printf(" + used idx: %d\n",vq->vq_used->idx);
 	printf(" + used event: %d\n", VQ_USED_EVENT(vq));
+#if VIRTIO_DEBUG >= 2
+	for (i = 0; i < vq->vq_num; i++) {
+		printf("  U%-3d id:%d len:%d\n", i,
+				vq->vq_used->ring[i].id,
+				vq->vq_used->ring[i].len);
+	}
+#endif
 	printf(" +++++++++++++++++++++++++++\n");
 }
 #endif

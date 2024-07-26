@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_exit.c,v 1.225 2024/07/22 08:18:53 claudio Exp $	*/
+/*	$OpenBSD: kern_exit.c,v 1.227 2024/07/24 15:30:17 claudio Exp $	*/
 /*	$NetBSD: kern_exit.c,v 1.39 1996/04/22 01:38:25 christos Exp $	*/
 
 /*
@@ -458,8 +458,6 @@ reaper(void *arg)
 
 		WITNESS_THREAD_EXIT(p);
 
-		KERNEL_LOCK();
-
 		/*
 		 * Free the VM resources we're still holding on to.
 		 * We must do this from a valid thread because doing
@@ -470,13 +468,16 @@ reaper(void *arg)
 
 		if (p->p_flag & P_THREAD) {
 			/* Just a thread */
+			KERNEL_LOCK();
 			proc_free(p);
+			KERNEL_UNLOCK();
 		} else {
 			struct process *pr = p->p_p;
 
 			/* Release the rest of the process's vmspace */
 			uvm_exit(pr);
 
+			KERNEL_LOCK();
 			if ((pr->ps_flags & PS_NOZOMBIE) == 0) {
 				/* Process is now a true zombie. */
 				atomic_setbits_int(&pr->ps_flags, PS_ZOMBIE);
@@ -493,9 +494,8 @@ reaper(void *arg)
 				/* No one will wait for us, just zap it. */
 				process_zap(pr);
 			}
+			KERNEL_UNLOCK();
 		}
-
-		KERNEL_UNLOCK();
 	}
 }
 
@@ -550,10 +550,9 @@ loop:
 			return (0);
 		}
 		if ((options & WTRAPPED) &&
-		    pr->ps_flags & PS_TRACED &&
+		    (pr->ps_flags & PS_TRACED) &&
 		    (pr->ps_flags & PS_WAITED) == 0 && pr->ps_single &&
-		    pr->ps_single->p_stat == SSTOP &&
-		    (pr->ps_single->p_flag & P_SUSPSINGLE) == 0) {
+		    pr->ps_single->p_stat == SSTOP) {
 			if (single_thread_wait(pr, 0))
 				goto loop;
 
@@ -578,8 +577,8 @@ loop:
 		if (p->p_stat == SSTOP &&
 		    (pr->ps_flags & PS_WAITED) == 0 &&
 		    (p->p_flag & P_SUSPSINGLE) == 0 &&
-		    (pr->ps_flags & PS_TRACED ||
-		    options & WUNTRACED)) {
+		    ((pr->ps_flags & PS_TRACED) ||
+		    (options & WUNTRACED))) {
 			if ((options & WNOWAIT) == 0)
 				atomic_setbits_int(&pr->ps_flags, PS_WAITED);
 
