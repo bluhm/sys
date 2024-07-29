@@ -1675,15 +1675,22 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 			break;
 		}
 		matched = 0;
+ restart:
 		LIST_FOREACH(pr, &allprocess, ps_list) {
+			if (arg >= 0 && pr->ps_pid != (pid_t)arg) {
+				/* not the pid we are looking for */
+				continue;
+			}
 			/*
 			 * skip system, exiting, embryonic and undead
 			 * processes
 			 */
-			if (pr->ps_flags & (PS_SYSTEM | PS_EMBRYO | PS_EXITING))
-				continue;
-			if (arg >= 0 && pr->ps_pid != (pid_t)arg) {
-				/* not the pid we are looking for */
+			if (rw_enter(&pr->ps_lock,
+			    arg >= 0 ? RW_READ | RW_SLEEPFAIL : RW_READ))
+				goto restart;
+			if (ISSET(pr->ps_flags,
+			    PS_SYSTEM | PS_EMBRYO | PS_EXITING)) {
+				rw_exit_read(&pr->ps_lock);
 				continue;
 			}
 			matched = 1;
@@ -1702,6 +1709,7 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 				FILLIT(fp, fdp, i, NULL, pr);
 				FRELE(fp, p);
 			}
+			rw_exit_read(&pr->ps_lock);
 			/* pid is unique, stop searching */
 			if (arg >= 0)
 				break;

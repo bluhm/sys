@@ -137,7 +137,9 @@ exit1(struct proc *p, int xexit, int xsig, int flags)
 		if (pr->ps_pid == 1)
 			panic("init died (signal %d, exit %d)", xsig, xexit);
 
+		rw_enter_write(&pr->ps_lock);
 		atomic_setbits_int(&pr->ps_flags, PS_EXITING);
+		rw_exit_write(&pr->ps_lock);
 		pr->ps_xexit = xexit;
 		pr->ps_xsig  = xsig;
 
