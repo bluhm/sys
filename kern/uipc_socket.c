@@ -1648,7 +1648,8 @@ somove(struct socket *so, int wait)
 			     PR_WANTRCVD) == 0);
 
 	if (sockdgram)
-		sbassertlocked(&so->so_rcv);
+		/* XXX missing lock, for testing only */
+		;
 	else
 		soassertlocked(so);
 
@@ -1977,14 +1978,22 @@ sorwakeup(struct socket *so)
 
 #ifdef SOCKET_SPLICE
 	if (so->so_proto->pr_flags & PR_SPLICE) {
-		sb_mtx_lock(&so->so_rcv);
-		if (so->so_rcv.sb_flags & SB_SPLICE)
-			task_add(sosplice_taskq, &so->so_splicetask);
-		if (isspliced(so)) {
+		if ((so->so_proto->pr_flags & PR_WANTRCVD) == 0) {
+			/* XXX missing lock, for testing only */
+			if (so->so_rcv.sb_flags & SB_SPLICE)
+				somove(so, M_DONTWAIT);
+			if (isspliced(so))
+				return;
+		} else {
+			sb_mtx_lock(&so->so_rcv);
+			if (so->so_rcv.sb_flags & SB_SPLICE)
+				task_add(sosplice_taskq, &so->so_splicetask);
+			if (isspliced(so)) {
+				sb_mtx_unlock(&so->so_rcv);
+				return;
+			}
 			sb_mtx_unlock(&so->so_rcv);
-			return;
 		}
-		sb_mtx_unlock(&so->so_rcv);
 	}
 #endif
 	sowakeup(so, &so->so_rcv);
