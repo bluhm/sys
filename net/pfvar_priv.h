@@ -97,7 +97,7 @@ RBT_PROTOTYPE(pf_state_tree, pf_state_key, sk_entry, pf_state_compare_key);
  *	S	pfsync
  *	L	pf_state_list
  *	g	pf_purge gc
- *	R	pf_st_ro_mtx
+ *	m	mtx
  */
 
 struct pf_state {
@@ -121,7 +121,7 @@ struct pf_state {
 	struct pf_sn_head	 src_nodes;	/* [I] */
 	struct pf_state_key	*key[2];	/* [I] stack and wire */
 	struct pfi_kif		*kif;		/* [I] */
-	struct route		 route;		/* [R] */
+	struct route		 route;		/* [m] */
 	struct mutex		 mtx;
 	pf_refcnt_t		 refcnt;
 	u_int64_t		 packets[2];
@@ -135,7 +135,7 @@ struct pf_state {
 	u_int16_t		 tag;		/* [I] */
 	u_int16_t		 state_flags;	/* [M] */
 	u_int8_t		 log;		/* [I] */
-	u_int8_t		 timeout;
+	u_int8_t		 timeout;	/* [m] */
 	u_int8_t		 sync_state;	/* [S] PFSYNC_S_x */
 	u_int8_t		 sync_updates;	/* [S] */
 	u_int8_t		 min_ttl;	/* [I] */

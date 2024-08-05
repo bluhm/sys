@@ -113,7 +113,6 @@ struct pf_queuehead	*pf_queues_inactive;
 struct pf_status	 pf_status;
 
 struct mutex		 pf_inp_mtx = MUTEX_INITIALIZER(IPL_SOFTNET);
-struct mutex		 pf_st_ro_mtx = MUTEX_INITIALIZER(IPL_SOFTNET);
 
 int			 pf_hdr_limit = 20;  /* arbitrary limit, tune in ddb */
 
@@ -8052,13 +8051,13 @@ done:
 	if (ro && st && pd.m && action == PF_PASS && pf_ouraddr(pd.m) != 1) {
 		/* check cache without lock, worst case is additional lookup */
 		if (memcmp(ro, &st->route, sizeof(*ro)) != 0) {
-			mtx_enter(&pf_st_ro_mtx);
+			mtx_enter(&st->mtx);
 			if (st->route.ro_rt != NULL) {
 				rtfree(ro->ro_rt);
 				*ro = st->route;
 				rtref(ro->ro_rt);
 			}
-			mtx_leave(&pf_st_ro_mtx);
+			mtx_leave(&st->mtx);
 		}
 		switch (pd.naf) {
 		case AF_INET:
@@ -8074,11 +8073,11 @@ done:
 		}
 		if (ro->ro_rt != NULL) {
 			if (memcmp(&st->route, ro, sizeof(*ro)) != 0) {
-				mtx_enter(&pf_st_ro_mtx);
+				mtx_enter(&st->mtx);
 				rtfree(st->route.ro_rt);
 				st->route = *ro;
 				rtref(st->route.ro_rt);
-				mtx_leave(&pf_st_ro_mtx);
+				mtx_leave(&st->mtx);
 			}
 		}
 	}
