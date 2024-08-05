@@ -70,7 +70,7 @@
 #if NPF > 0
 #include <net/pfvar.h>
 #define	BRIDGE_IN	PF_IN
-#define	BRIDGE_OUT	PF_OUT
+#define	BRIDGE_OUT	PF_FWD
 #else
 #define	BRIDGE_IN	0
 #define	BRIDGE_OUT	1
