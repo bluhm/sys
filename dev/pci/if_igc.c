@@ -2159,7 +2159,7 @@ igc_allocate_receive_buffers(struct igc_rxring *rxr)
 	rxbuf = rxr->rx_buffers;
 	for (i = 0; i < sc->num_rx_desc; i++, rxbuf++) {
 		error = bus_dmamap_create(rxr->rxdma.dma_tag,
-		    MAX_JUMBO_FRAME_SIZE, IGC_MAX_SCATTER, MCLBYTES, 0,
+		    MAX_JUMBO_FRAME_SIZE, IGC_MAX_GATHER, MCLBYTES, 0,
 		    BUS_DMA_NOWAIT, &rxbuf->map);
 		if (error) {
 			printf("%s: Unable to create RX DMA map\n",

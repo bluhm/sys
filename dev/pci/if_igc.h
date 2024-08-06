@@ -191,6 +191,7 @@
 #define roundup2(size, unit)	(((size) + (unit) - 1) & ~((unit) - 1))
 #define msec_delay(x)		DELAY(1000 * (x))
 
+#define IGC_MAX_GATHER		5
 #define IGC_MAX_SCATTER		40
 #define IGC_TSO_SIZE		65535
 
