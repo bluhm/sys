@@ -3527,11 +3527,13 @@ syn_cache_get(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 	u_int rtableid;
 
 	NET_ASSERT_LOCKED();
+	rw_enter_write(&so->so_lock);
 
 	mtx_enter(&syn_cache_mtx);
 	sc = syn_cache_lookup(src, dst, &scp, sotoinpcb(so)->inp_rtableid);
 	if (sc == NULL) {
 		mtx_leave(&syn_cache_mtx);
+		rw_exit_write(&so->so_lock);
 		return (NULL);
 	}
 
@@ -3545,6 +3547,7 @@ syn_cache_get(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 		refcnt_take(&sc->sc_refcnt);
 		mtx_leave(&syn_cache_mtx);
 		(void) syn_cache_respond(sc, m, now);
+		rw_exit_write(&so->so_lock);
 		syn_cache_put(sc);
 		return ((struct socket *)(-1));
 	}
@@ -3688,6 +3691,7 @@ syn_cache_get(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 		tp->rcv_adv = tp->rcv_nxt + sc->sc_win;
 	tp->last_ack_sent = tp->rcv_nxt;
 
+	rw_exit_write(&oso->so_lock);
 	tcpstat_inc(tcps_sc_completed);
 	syn_cache_put(sc);
 	return (so);
@@ -3696,6 +3700,7 @@ resetandabort:
 	tcp_respond(NULL, mtod(m, caddr_t), th, (tcp_seq)0, th->th_ack, TH_RST,
 	    m->m_pkthdr.ph_rtableid, now);
 abort:
+	rw_exit_write(&oso->so_lock);
 	m_freem(m);
 	if (so != NULL)
 		soabort(so);
@@ -3803,7 +3808,7 @@ syn_cache_add(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 	struct mbuf *ipopts;
 
 	NET_ASSERT_LOCKED();
-
+	rw_enter_write(&so->so_lock);
 	tp = sototcpcb(so);
 
 	/*
@@ -3835,8 +3840,10 @@ syn_cache_add(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 #endif
 		tb.t_state = TCPS_LISTEN;
 		if (tcp_dooptions(&tb, optp, optlen, th, m, iphlen, oi,
-		    sotoinpcb(so)->inp_rtableid, now))
+		    sotoinpcb(so)->inp_rtableid, now)) {
+			rw_exit_write(&so->so_lock);
 			return (-1);
+		}
 	}
 
 	switch (src->sa_family) {
@@ -3874,6 +3881,7 @@ syn_cache_add(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 			tcpstat_inc(tcps_sndacks);
 			tcpstat_inc(tcps_sndtotal);
 		}
+		rw_exit_write(&so->so_lock);
 		syn_cache_put(sc);
 		return (0);
 	}
@@ -3881,6 +3889,7 @@ syn_cache_add(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 
 	sc = pool_get(&syn_cache_pool, PR_NOWAIT|PR_ZERO);
 	if (sc == NULL) {
+		rw_exit_write(&so->so_lock);
 		m_free(ipopts);
 		return (-1);
 	}
@@ -3961,15 +3970,16 @@ syn_cache_add(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 	if (syn_cache_respond(sc, m, now) == 0) {
 		mtx_enter(&syn_cache_mtx);
 		/*
-		 * XXXSMP Currently exclusive netlock prevents another insert
-		 * after our syn_cache_lookup() and before syn_cache_insert().
-		 * Double insert should be handled and not rely on netlock.
+		 * Socket lock prevents another insert after our
+		 * syn_cache_lookup() and before syn_cache_insert().
 		 */
 		syn_cache_insert(sc, tp);
 		mtx_leave(&syn_cache_mtx);
+		rw_exit_write(&so->so_lock);
 		tcpstat_inc(tcps_sndacks);
 		tcpstat_inc(tcps_sndtotal);
 	} else {
+		rw_exit_write(&so->so_lock);
 		in_pcbunref(sc->sc_inplisten);
 		syn_cache_put(sc);
 		tcpstat_inc(tcps_sc_dropped);
