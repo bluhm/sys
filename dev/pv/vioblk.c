@@ -156,8 +156,8 @@ const struct scsi_adapter vioblk_switch = {
 int
 vioblk_match(struct device *parent, void *match, void *aux)
 {
-	struct virtio_softc *va = aux;
-	if (va->sc_childdevid == PCI_PRODUCT_VIRTIO_BLOCK)
+	struct virtio_attach_args *va = aux;
+	if (va->va_devid == PCI_PRODUCT_VIRTIO_BLOCK)
 		return 1;
 	return 0;
 }

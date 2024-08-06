@@ -162,8 +162,8 @@ dev2port(dev_t dev)
 int
 viocon_match(struct device *parent, void *match, void *aux)
 {
-	struct virtio_softc *va = aux;
-	if (va->sc_childdevid == PCI_PRODUCT_VIRTIO_CONSOLE)
+	struct virtio_attach_args *va = aux;
+	if (va->va_devid == PCI_PRODUCT_VIRTIO_CONSOLE)
 		return 1;
 	return 0;
 }

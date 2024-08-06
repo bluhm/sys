@@ -102,6 +102,9 @@ void		virtio_mmio_set_status(struct virtio_softc *, int);
 int		virtio_mmio_negotiate_features(struct virtio_softc *,
     const struct virtio_feature_name *);
 int		virtio_mmio_intr(void *);
+int             virtio_mmio_intr_establish(struct virtio_softc *, struct virtio_attach_args *,
+    int, struct cpu_info *, int (*)(void *), void *);
+
 
 struct virtio_mmio_softc {
 	struct virtio_softc	sc_sc;
@@ -149,6 +152,7 @@ struct virtio_ops virtio_mmio_ops = {
 	virtio_mmio_set_status,
 	virtio_mmio_negotiate_features,
 	virtio_mmio_intr,
+	virtio_mmio_intr_establish,
 };
 
 uint16_t
@@ -241,6 +245,7 @@ virtio_mmio_attach(struct device *parent, struct device *self, void *aux)
 	struct virtio_mmio_softc *sc = (struct virtio_mmio_softc *)self;
 	struct virtio_softc *vsc = &sc->sc_sc;
 	uint32_t id, magic;
+	struct virtio_attach_args va = { 1 };
 
 	if (faa->fa_nreg < 1) {
 		printf(": no register data\n");
@@ -289,10 +294,9 @@ virtio_mmio_attach(struct device *parent, struct device *self, void *aux)
 	virtio_mmio_set_status(vsc, VIRTIO_CONFIG_DEVICE_STATUS_ACK);
 	virtio_mmio_set_status(vsc, VIRTIO_CONFIG_DEVICE_STATUS_DRIVER);
 
-	/* XXX: use softc as aux... */
-	vsc->sc_childdevid = id;
+	va->sc_devid = id;
 	vsc->sc_child = NULL;
-	config_found(self, sc, NULL);
+	config_found(self, &va, NULL);
 	if (vsc->sc_child == NULL) {
 		printf("%s: no matching child driver; not configured\n",
 		    vsc->sc_dev.dv_xname);
@@ -513,4 +517,12 @@ virtio_mmio_kick(struct virtio_softc *vsc, uint16_t idx)
 	struct virtio_mmio_softc *sc = (struct virtio_mmio_softc *)vsc;
 	bus_space_write_4(sc->sc_iot, sc->sc_ioh, VIRTIO_MMIO_QUEUE_NOTIFY,
 	    idx);
+}
+
+int
+virtio_mmio_intr_establish(struct virtio_softc *vsc,
+    struct virtio_attach_args *va, int vec, struct cpu_info *ci,
+    int (*func)(void *), void *arg)
+{
+	return ENXIO;
 }

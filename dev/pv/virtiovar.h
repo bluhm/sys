@@ -76,7 +76,7 @@
 #include <dev/pv/virtioreg.h>
 
 #ifndef VIRTIO_DEBUG
-#define VIRTIO_DEBUG		0
+#define VIRTIO_DEBUG		1
 #endif
 
 /* flags for config(8) */
@@ -84,6 +84,11 @@
 #define VIRTIO_CF_NO_EVENT_IDX		2
 #define VIRTIO_CF_PREFER_VERSION_1	4
 #define VIRTIO_CF_NO_VERSION_1		8
+
+struct virtio_attach_args {
+	int			 va_devid;	/* virtio device id */
+	unsigned int		 va_nintr;	/* number of intr vectors */
+};
 
 struct vq_entry {
 	SLIST_ENTRY(vq_entry)	 qe_list;	/* free list */
@@ -98,7 +103,8 @@ struct vq_entry {
 
 struct virtqueue {
 	struct virtio_softc	*vq_owner;
-	unsigned int		vq_num;  /* queue size (# of entries) */
+	unsigned int		vq_num;  /* queue size (# of entries),
+					  * 0 if unused/non-existant */
 	unsigned int		vq_mask; /* (1 << vq_num - 1) */
 	int			vq_index; /* queue number (0, 1, ...) */
 
@@ -122,19 +128,20 @@ struct virtqueue {
 	/* free entry management */
 	struct vq_entry		*vq_entries;
 	SLIST_HEAD(, vq_entry) vq_freelist;
-	struct mutex		*vq_freelist_lock;
+	struct mutex		*vq_freelist_lock;	// XXX unused
 
 	/* enqueue/dequeue status */
 	uint16_t		vq_avail_idx;
 	uint16_t		vq_used_idx;
 	int			vq_queued;
-	struct mutex		*vq_aring_lock;
-	struct mutex		*vq_uring_lock;
+	struct mutex		*vq_aring_lock;	// XXX unused
+	struct mutex		*vq_uring_lock;	// XXX unused
 
 	/* interrupt handler */
 	int			(*vq_done)(struct virtqueue*);
 	/* 1.x only: offset for notify address calculation */
 	uint32_t		vq_notify_off;
+	int			vq_intr_vec;
 };
 
 struct virtio_feature_name {
@@ -158,6 +165,8 @@ struct virtio_ops {
 	void		(*set_status)(struct virtio_softc *, int);
 	int		(*neg_features)(struct virtio_softc *, const struct virtio_feature_name *);
 	int		(*poll_intr)(void *);
+	int		(*intr_establish)(struct virtio_softc *, struct virtio_attach_args *,
+			    int, struct cpu_info *, int (*)(void *), void *);
 };
 
 #define VIRTIO_CHILD_ERROR	((void*)1)
@@ -174,7 +183,7 @@ struct virtio_softc {
 	int			 sc_indirect;
 	int			 sc_version_1;
 
-	int			 sc_nvqs;	/* set by child */
+	int			 sc_nvqs;	/* size of sc_vqs, set by child */
 	struct virtqueue	*sc_vqs;	/* set by child */
 
 	int			 sc_childdevid;	/* set by transport */
@@ -200,6 +209,7 @@ struct virtio_softc {
 #define	virtio_poll_intr(sc)			(sc)->sc_ops->poll_intr(sc)
 #define	virtio_get_status(sc)			(sc)->sc_ops->get_status(sc)
 #define	virtio_set_status(sc, i)		(sc)->sc_ops->set_status(sc, i)
+#define	virtio_intr_establish(sc, va, v, ci, fn, a)	(sc)->sc_ops->intr_establish(sc, va, v, ci, fn, a)
 
 /* only for transport drivers */
 #define	virtio_device_reset(sc)			virtio_set_status((sc), 0)

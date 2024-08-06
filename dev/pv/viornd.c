@@ -72,8 +72,8 @@ struct cfdriver viornd_cd = {
 int
 viornd_match(struct device *parent, void *match, void *aux)
 {
-	struct virtio_softc *va = aux;
-	if (va->sc_childdevid == PCI_PRODUCT_VIRTIO_ENTROPY)
+	struct virtio_attach_args *va = aux;
+	if (va->va_devid == PCI_PRODUCT_VIRTIO_ENTROPY)
 		return 1;
 	return 0;
 }

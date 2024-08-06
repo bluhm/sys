@@ -93,9 +93,9 @@ const char *const vioscsi_vq_names[] = {
 int
 vioscsi_match(struct device *parent, void *self, void *aux)
 {
-	struct virtio_softc *va = (struct virtio_softc *)aux;
+	struct virtio_attach_args *va = aux;
 
-	if (va->sc_childdevid == PCI_PRODUCT_VIRTIO_SCSI)
+	if (va->va_devid == PCI_PRODUCT_VIRTIO_SCSI)
 		return (1);
 	return (0);
 }

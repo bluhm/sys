@@ -106,6 +106,7 @@ virtio_log_features(uint64_t host, uint64_t neg,
 	char c;
 	uint64_t bit;
 
+	printf("\n");
 	for (i = 0; i < 64; i++) {
 		if (i == 30) {
 			/*
@@ -131,6 +132,7 @@ virtio_log_features(uint64_t host, uint64_t neg,
 		else
 			printf(" %cUnknown(%d)", c, i);
 	}
+	printf("\n");
 }
 #endif
 
@@ -165,9 +167,10 @@ virtio_reinit_start(struct virtio_softc *sc)
 	for (i = 0; i < sc->sc_nvqs; i++) {
 		int n;
 		struct virtqueue *vq = &sc->sc_vqs[i];
-		n = virtio_read_queue_size(sc, vq->vq_index);
-		if (n == 0)	/* vq disappeared */
+		if (vq->vq_num == 0)	/* not used */
 			continue;
+		printf("%s: %d\n", __func__, i);
+		n = virtio_read_queue_size(sc, vq->vq_index);
 		if (n != vq->vq_num) {
 			panic("%s: virtqueue size changed, vq index %d",
 			    sc->sc_dev.dv_xname, vq->vq_index);
@@ -254,8 +257,11 @@ virtio_check_vqs(struct virtio_softc *sc)
 	int i, r = 0;
 
 	/* going backwards is better for if_vio */
-	for (i = sc->sc_nvqs - 1; i >= 0; i--)
+	for (i = sc->sc_nvqs - 1; i >= 0; i--) {
+		if (sc->sc_vqs[i].vq_num == 0)	/* not used */
+			continue;
 		r |= virtio_check_vq(sc, &sc->sc_vqs[i]);
+	}
 
 	return r;
 }
@@ -325,6 +331,8 @@ virtio_init_vq(struct virtio_softc *sc, struct virtqueue *vq)
  * maxnsegs denotes how much space should be allocated for indirect
  * descriptors. maxnsegs == 1 can be used to disable use indirect
  * descriptors for this queue.
+ *
+ * XXX maxsegsize unused
  */
 int
 virtio_alloc_vq(struct virtio_softc *sc, struct virtqueue *vq, int index,
@@ -447,6 +455,11 @@ virtio_free_vq(struct virtio_softc *sc, struct virtqueue *vq)
 {
 	struct vq_entry *qe;
 	int i = 0;
+
+	if (vq->vq_num == 0) {
+		/* virtio_alloc_vq() was never called */
+		return 0;
+	}
 
 	/* device must be already deactivated */
 	/* confirm the vq is empty */
@@ -577,6 +590,7 @@ virtio_enqueue_reserve(struct virtqueue *vq, int slot, int nsegs)
 	struct vq_entry *qe1 = &vq->vq_entries[slot];
 
 	VIRTIO_ASSERT(qe1->qe_next == -1);
+	VIRTIO_ASSERT(vq->vq_num >= 0);
 	VIRTIO_ASSERT(1 <= nsegs && nsegs <= vq->vq_num);
 
 	if (vq->vq_indirect != NULL && nsegs > 1 && nsegs <= vq->vq_maxnsegs) {
@@ -846,22 +860,25 @@ virtio_dequeue(struct virtio_softc *sc, struct virtqueue *vq,
  *
  *                 Don't call this if you use statically allocated slots
  *                 and virtio_enqueue_trim().
+ *
+ *                 returns the number of freed slots.
  */
 int
 virtio_dequeue_commit(struct virtqueue *vq, int slot)
 {
 	struct vq_entry *qe = &vq->vq_entries[slot];
 	struct vring_desc *vd = &vq->vq_desc[0];
-	int s = slot;
+	int s = slot, r = 1;
 
 	while (vd[s].flags & VRING_DESC_F_NEXT) {
 		s = vd[s].next;
 		vq_free_entry(vq, qe);
 		qe = &vq->vq_entries[s];
+		r++;
 	}
 	vq_free_entry(vq, qe);
 
-	return 0;
+	return r;
 }
 
 /*

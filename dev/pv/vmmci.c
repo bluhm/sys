@@ -78,8 +78,8 @@ struct cfdriver vmmci_cd = {
 int
 vmmci_match(struct device *parent, void *match, void *aux)
 {
-	struct virtio_softc *va = aux;
-	if (va->sc_childdevid == PCI_PRODUCT_VIRTIO_VMMCI)
+	struct virtio_attach_args *va = aux;
+	if (va->va_devid == PCI_PRODUCT_VIRTIO_VMMCI)
 		return (1);
 	return (0);
 }

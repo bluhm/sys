@@ -137,9 +137,9 @@ struct cfdriver viogpu_cd = {
 int
 viogpu_match(struct device *parent, void *match, void *aux)
 {
-	struct virtio_softc *va = aux;
+	struct virtio_attach_args *va = aux;
 
-	if (va->sc_childdevid == PCI_PRODUCT_VIRTIO_GPU)
+	if (va->va_devid == PCI_PRODUCT_VIRTIO_GPU)
 		return 1;
 
 	return 0;

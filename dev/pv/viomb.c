@@ -124,8 +124,8 @@ struct cfdriver viomb_cd = {
 int
 viomb_match(struct device *parent, void *match, void *aux)
 {
-	struct virtio_softc *va = aux;
-	if (va->sc_childdevid == PCI_PRODUCT_VIRTIO_BALLOON)
+	struct virtio_attach_args *va = aux;
+	if (va->va_devid == PCI_PRODUCT_VIRTIO_BALLOON)
 		return (1);
 	return (0);
 }
