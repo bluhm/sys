@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_sysctl.c,v 1.430 2024/08/02 14:34:45 mvs Exp $	*/
+/*	$OpenBSD: kern_sysctl.c,v 1.434 2024/08/06 12:36:54 mvs Exp $	*/
 /*	$NetBSD: kern_sysctl.c,v 1.17 1996/05/20 17:49:05 mrg Exp $	*/
 
 /*-
@@ -172,26 +172,25 @@ sysctl_vslock(void *addr, size_t len)
 {
 	int error;
 
-	KERNEL_LOCK();
 	error = rw_enter(&sysctl_lock, RW_WRITE|RW_INTR);
 	if (error)
-		goto out;
+		return (error);
+	KERNEL_LOCK();
 
 	if (addr) {
 		if (atop(len) > uvmexp.wiredmax - uvmexp.wired) {
 			error = ENOMEM;
-			goto out2;
+			goto out;
 		}
 		error = uvm_vslock(curproc, addr, len, PROT_READ | PROT_WRITE);
 		if (error)
-			goto out2;
+			goto out;
 	}
 
 	return (0);
-out2:
-	rw_exit_write(&sysctl_lock);
 out:
 	KERNEL_UNLOCK();
+	rw_exit_write(&sysctl_lock);
 	return (error);
 }
 
@@ -202,8 +201,8 @@ sysctl_vsunlock(void *addr, size_t len)
 
 	if (addr)
 		uvm_vsunlock(curproc, addr, len);
-	rw_exit_write(&sysctl_lock);
 	KERNEL_UNLOCK();
+	rw_exit_write(&sysctl_lock);
 }
 
 int
@@ -508,6 +507,14 @@ kern_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		return (sysctl_rdstring(oldp, oldlenp, newp, version));
 	case KERN_NUMVNODES:  /* XXX numvnodes is a long */
 		return (sysctl_rdint(oldp, oldlenp, newp, numvnodes));
+	case KERN_CLOCKRATE:
+		return (sysctl_clockrate(oldp, oldlenp, newp));
+	case KERN_BOOTTIME: {
+		struct timeval bt;
+		memset(&bt, 0, sizeof bt);
+		microboottime(&bt);
+		return (sysctl_rdstruct(oldp, oldlenp, newp, &bt, sizeof bt));
+	}
 	case KERN_MBSTAT: {
 		extern struct cpumem *mbstat;
 		uint64_t counters[MBSTAT_COUNT];
@@ -526,6 +533,30 @@ kern_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		return (sysctl_rdstruct(oldp, oldlenp, newp,
 		    &mbs, sizeof(mbs)));
 	}
+	case KERN_OSREV:
+	case KERN_NFILES:
+	case KERN_TTYCOUNT:
+	case KERN_ARGMAX:
+	case KERN_POSIX1:
+	case KERN_NGROUPS:
+	case KERN_JOB_CONTROL:
+	case KERN_SAVED_IDS:
+	case KERN_MAXPARTITIONS:
+	case KERN_RAWPARTITION:
+	case KERN_NTHREADS:
+	case KERN_SOMAXCONN:
+	case KERN_SOMINCONN:
+	case KERN_FSYNC:
+	case KERN_SYSVMSG:
+	case KERN_SYSVSEM:
+	case KERN_SYSVSHM:
+	case KERN_FSCALE:
+	case KERN_CCPU:
+	case KERN_NPROCS:
+	case KERN_NETLIVELOCKS:
+	case KERN_AUTOCONF_SERIAL:
+		return (sysctl_bounded_arr(kern_vars, nitems(kern_vars), name,
+		    namelen, oldp, oldlenp, newp, newlen));
 	}
 
 	savelen = *oldlenp;
@@ -585,14 +616,6 @@ kern_sysctl_locked(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 		error =  sysctl_int(oldp, oldlenp, newp, newlen, &inthostid);
 		hostid = inthostid;
 		return (error);
-	case KERN_CLOCKRATE:
-		return (sysctl_clockrate(oldp, oldlenp, newp));
-	case KERN_BOOTTIME: {
-		struct timeval bt;
-		memset(&bt, 0, sizeof bt);
-		microboottime(&bt);
-		return (sysctl_rdstruct(oldp, oldlenp, newp, &bt, sizeof bt));
-	  }
 	case KERN_MSGBUFSIZE:
 	case KERN_CONSBUFSIZE: {
 		struct msgbuf *mp;

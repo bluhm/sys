@@ -1,4 +1,4 @@
-/*	$OpenBSD: qcpas.c,v 1.3 2024/07/25 20:21:40 kettenis Exp $	*/
+/*	$OpenBSD: qcpas.c,v 1.6 2024/08/05 18:36:28 kettenis Exp $	*/
 /*
  * Copyright (c) 2023 Patrick Wildt <patrick@blueri.se>
  *
@@ -21,6 +21,7 @@
 #include <sys/malloc.h>
 #include <sys/atomic.h>
 #include <sys/exec_elf.h>
+#include <sys/sensors.h>
 #include <sys/task.h>
 
 #include <machine/apmvar.h>
@@ -35,6 +36,11 @@
 #include <dev/ofw/fdt.h>
 
 #include "apm.h"
+
+extern int qcscm_pas_init_image(uint32_t, paddr_t);
+extern int qcscm_pas_mem_setup(uint32_t, paddr_t, size_t);
+extern int qcscm_pas_auth_and_reset(uint32_t);
+extern int qcscm_pas_shutdown(uint32_t);
 
 #define MDT_TYPE_MASK				(7 << 24)
 #define MDT_TYPE_HASH				(2 << 24)
@@ -65,15 +71,17 @@ struct qcpas_softc {
 
 	void			*sc_ih[6];
 
-	paddr_t			sc_mem_phys;
-	size_t			sc_mem_size;
-	void			*sc_mem_region;
-	vaddr_t			sc_mem_reloc;
+	paddr_t			sc_mem_phys[2];
+	size_t			sc_mem_size[2];
+	void			*sc_mem_region[2];
+	vaddr_t			sc_mem_reloc[2];
 
 	uint32_t		sc_pas_id;
+	uint32_t		sc_dtb_pas_id;
+	uint32_t		sc_lite_pas_id;
 	char			*sc_load_state;
 
-	struct qcpas_dmamem	*sc_metadata;
+	struct qcpas_dmamem	*sc_metadata[2];
 
 	/* GLINK */
 	volatile uint32_t	*sc_tx_tail;
@@ -95,6 +103,14 @@ struct qcpas_softc {
 	struct task		sc_glink_rx;
 	uint32_t		sc_glink_max_channel;
 	TAILQ_HEAD(,qcpas_glink_channel) sc_glink_channels;
+
+#ifndef SMALL_KERNEL
+	uint32_t		sc_last_full_capacity;
+	uint32_t		sc_warning_capacity;
+	uint32_t		sc_low_capacity;
+	struct ksensor		sc_sens[11];
+	struct ksensordev	sc_sensdev;
+#endif
 };
 
 int	qcpas_match(struct device *, void *, void *);
@@ -110,7 +126,7 @@ struct cfdriver qcpas_cd = {
 
 void	qcpas_mountroot(struct device *);
 int	qcpas_map_memory(struct qcpas_softc *);
-int	qcpas_mdt_init(struct qcpas_softc *, u_char *, size_t);
+int	qcpas_mdt_init(struct qcpas_softc *, int, u_char *, size_t);
 void	qcpas_glink_attach(struct qcpas_softc *, int);
 
 struct qcpas_dmamem *
@@ -130,7 +146,8 @@ qcpas_match(struct device *parent, void *match, void *aux)
 {
 	struct fdt_attach_args *faa = aux;
 
-	return OF_is_compatible(faa->fa_node, "qcom,sc8280xp-adsp-pas");
+	return OF_is_compatible(faa->fa_node, "qcom,sc8280xp-adsp-pas") ||
+	    OF_is_compatible(faa->fa_node, "qcom,x1e80100-adsp-pas");
 }
 
 void
@@ -164,6 +181,13 @@ qcpas_attach(struct device *parent, struct device *self, void *aux)
 		sc->sc_pas_id = 30;
 	}
 
+	if (OF_is_compatible(faa->fa_node, "qcom,x1e80100-adsp-pas")) {
+		sc->sc_pas_id = 1;
+		sc->sc_dtb_pas_id = 36;
+		sc->sc_lite_pas_id = 31;
+		sc->sc_load_state = "adsp";
+	}
+
 	qcpas_intr_establish(sc, 0, "wdog", qcpas_intr_wdog);
 	qcpas_intr_establish(sc, 1, "fatal", qcpas_intr_fatal);
 	qcpas_intr_establish(sc, 2, "ready", qcpas_intr_ready);
@@ -182,10 +206,11 @@ void
 qcpas_mountroot(struct device *self)
 {
 	struct qcpas_softc *sc = (struct qcpas_softc *)self;
-	char fwname[64];
-	size_t fwlen;
-	u_char *fw;
+	char fwname[128];
+	size_t fwlen, dtb_fwlen;
+	u_char *fw, *dtb_fw;
 	int node, ret;
+	int error;
 
 	if (qcpas_map_memory(sc) != 0)
 		return;
@@ -195,10 +220,32 @@ qcpas_mountroot(struct device *self)
 	OF_getprop(sc->sc_node, "firmware-name", fwname, sizeof(fwname));
 	fwname[sizeof(fwname) - 1] = '\0';
 
-	if (loadfirmware(fwname, &fw, &fwlen) != 0) {
-		printf("%s: failed to load %s\n",
-		    sc->sc_dev.dv_xname, fwname);
+	/* If we need a second firmware, make sure we have a name for it. */
+	if (sc->sc_dtb_pas_id && strlen(fwname) == sizeof(fwname) - 1)
 		return;
+
+	error = loadfirmware(fwname, &fw, &fwlen);
+	if (error) {
+		printf("%s: failed to load %s: %d\n",
+		    sc->sc_dev.dv_xname, fwname, error);
+		return;
+	}
+
+	if (sc->sc_lite_pas_id) {
+		if (qcscm_pas_shutdown(sc->sc_lite_pas_id)) {
+			printf("%s: failed to shutdown lite firmware\n",
+			    sc->sc_dev.dv_xname);
+		}
+	}
+
+	if (sc->sc_dtb_pas_id) {
+		error = loadfirmware(fwname + strlen(fwname) + 1,
+		    &dtb_fw, &dtb_fwlen);
+		if (error) {
+			printf("%s: failed to load %s: %d\n",
+			    sc->sc_dev.dv_xname, fwname, error);
+			return;
+		}
 	}
 
 	if (sc->sc_load_state) {
@@ -217,7 +264,12 @@ qcpas_mountroot(struct device *self)
 	power_domain_enable_all(sc->sc_node);
 	clock_enable(sc->sc_node, "xo");
 
-	ret = qcpas_mdt_init(sc, fw, fwlen);
+	if (sc->sc_dtb_pas_id) {
+		qcpas_mdt_init(sc, sc->sc_dtb_pas_id, dtb_fw, dtb_fwlen);
+		free(dtb_fw, M_DEVBUF, dtb_fwlen);
+	}
+
+	ret = qcpas_mdt_init(sc, sc->sc_pas_id, fw, fwlen);
 	free(fw, M_DEVBUF, fwlen);
 	if (ret != 0) {
 		printf("%s: failed to boot coprocessor\n",
@@ -228,49 +280,125 @@ qcpas_mountroot(struct device *self)
 	node = OF_getnodebyname(sc->sc_node, "glink-edge");
 	if (node)
 		qcpas_glink_attach(sc, node);
+
+#ifndef SMALL_KERNEL
+	strlcpy(sc->sc_sensdev.xname, sc->sc_dev.dv_xname,
+	    sizeof(sc->sc_sensdev.xname));
+
+	strlcpy(sc->sc_sens[0].desc, "last full capacity",
+	    sizeof(sc->sc_sens[0].desc));
+	sc->sc_sens[0].type = SENSOR_WATTHOUR;
+	sc->sc_sens[0].flags = SENSOR_FUNKNOWN;
+	sensor_attach(&sc->sc_sensdev, &sc->sc_sens[0]);
+
+	strlcpy(sc->sc_sens[1].desc, "warning capacity",
+	    sizeof(sc->sc_sens[1].desc));
+	sc->sc_sens[1].type = SENSOR_WATTHOUR;
+	sc->sc_sens[1].flags = SENSOR_FUNKNOWN;
+	sensor_attach(&sc->sc_sensdev, &sc->sc_sens[1]);
+	
+	strlcpy(sc->sc_sens[2].desc, "low capacity",
+	    sizeof(sc->sc_sens[2].desc));
+	sc->sc_sens[2].type = SENSOR_WATTHOUR;
+	sc->sc_sens[2].flags = SENSOR_FUNKNOWN;
+	sensor_attach(&sc->sc_sensdev, &sc->sc_sens[2]);
+
+	strlcpy(sc->sc_sens[3].desc, "voltage", sizeof(sc->sc_sens[3].desc));
+	sc->sc_sens[3].type = SENSOR_VOLTS_DC;
+	sc->sc_sens[3].flags = SENSOR_FUNKNOWN;
+	sensor_attach(&sc->sc_sensdev, &sc->sc_sens[3]);
+
+	strlcpy(sc->sc_sens[4].desc, "battery unknown",
+	    sizeof(sc->sc_sens[4].desc));
+	sc->sc_sens[4].type = SENSOR_INTEGER;
+	sc->sc_sens[4].flags = SENSOR_FUNKNOWN;
+	sensor_attach(&sc->sc_sensdev, &sc->sc_sens[4]);
+
+	strlcpy(sc->sc_sens[5].desc, "rate", sizeof(sc->sc_sens[5].desc));
+	sc->sc_sens[5].type =SENSOR_WATTS;
+	sc->sc_sens[5].flags = SENSOR_FUNKNOWN;
+	sensor_attach(&sc->sc_sensdev, &sc->sc_sens[5]);
+
+	strlcpy(sc->sc_sens[6].desc, "remaining capacity",
+	    sizeof(sc->sc_sens[6].desc));
+	sc->sc_sens[6].type = SENSOR_WATTHOUR;
+	sc->sc_sens[6].flags = SENSOR_FUNKNOWN;
+	sensor_attach(&sc->sc_sensdev, &sc->sc_sens[6]);
+
+	strlcpy(sc->sc_sens[7].desc, "current voltage",
+	    sizeof(sc->sc_sens[7].desc));
+	sc->sc_sens[7].type = SENSOR_VOLTS_DC;
+	sc->sc_sens[7].flags = SENSOR_FUNKNOWN;
+	sensor_attach(&sc->sc_sensdev, &sc->sc_sens[7]);
+
+	strlcpy(sc->sc_sens[8].desc, "design capacity",
+	    sizeof(sc->sc_sens[8].desc));
+	sc->sc_sens[8].type = SENSOR_WATTHOUR;
+	sc->sc_sens[8].flags = SENSOR_FUNKNOWN;
+	sensor_attach(&sc->sc_sensdev, &sc->sc_sens[8]);
+
+	strlcpy(sc->sc_sens[9].desc, "discharge cycles",
+	    sizeof(sc->sc_sens[9].desc));
+	sc->sc_sens[9].type = SENSOR_INTEGER;
+	sc->sc_sens[9].flags = SENSOR_FUNKNOWN;
+	sensor_attach(&sc->sc_sensdev, &sc->sc_sens[9]);
+
+	strlcpy(sc->sc_sens[10].desc, "temperature",
+	    sizeof(sc->sc_sens[10].desc));
+	sc->sc_sens[10].type = SENSOR_TEMP;
+	sc->sc_sens[10].flags = SENSOR_FUNKNOWN;
+	sensor_attach(&sc->sc_sensdev, &sc->sc_sens[10]);
+
+	sensordev_install(&sc->sc_sensdev);
+#endif
 }
 
 int
 qcpas_map_memory(struct qcpas_softc *sc)
 {
-	uint32_t phandle, reg[4];
+	uint32_t memreg[2] = {};
+	uint32_t reg[4];
 	size_t off;
 	int node;
+	int i;
 
-	phandle = OF_getpropint(sc->sc_node, "memory-region", 0);
-	if (phandle == 0)
-		return EINVAL;
-	node = OF_getnodebyphandle(phandle);
-	if (node == 0)
-		return EINVAL;
-	if (OF_getpropintarray(node, "reg", reg, sizeof(reg)) != sizeof(reg))
+	OF_getpropintarray(sc->sc_node, "memory-region",
+	    memreg, sizeof(memreg));
+	if (memreg[0] == 0)
 		return EINVAL;
 
-	sc->sc_mem_phys = (uint64_t)reg[0] << 32 | reg[1];
-	KASSERT((sc->sc_mem_phys & PAGE_MASK) == 0);
-	sc->sc_mem_size = (uint64_t)reg[2] << 32 | reg[3];
-	KASSERT((sc->sc_mem_size & PAGE_MASK) == 0);
+	for (i = 0; i < nitems(memreg); i++) {
+		if (memreg[i] == 0)
+			break;
+		node = OF_getnodebyphandle(memreg[i]);
+		if (node == 0)
+			return EINVAL;
+		if (OF_getpropintarray(node, "reg", reg,
+		    sizeof(reg)) != sizeof(reg))
+			return EINVAL;
 
-	sc->sc_mem_region = km_alloc(sc->sc_mem_size, &kv_any, &kp_none,
-	    &kd_nowait);
-	if (!sc->sc_mem_region)
-		return ENOMEM;
+		sc->sc_mem_phys[i] = (uint64_t)reg[0] << 32 | reg[1];
+		KASSERT((sc->sc_mem_phys[i] & PAGE_MASK) == 0);
+		sc->sc_mem_size[i] = (uint64_t)reg[2] << 32 | reg[3];
+		KASSERT((sc->sc_mem_size[i] & PAGE_MASK) == 0);
 
-	for (off = 0; off < sc->sc_mem_size; off += PAGE_SIZE) {
-		pmap_kenter_cache((vaddr_t)sc->sc_mem_region + off,
-		    sc->sc_mem_phys + off, PROT_READ | PROT_WRITE,
-		    PMAP_CACHE_DEV_NGNRNE);
+		sc->sc_mem_region[i] = km_alloc(sc->sc_mem_size[i],
+		    &kv_any, &kp_none, &kd_nowait);
+		if (!sc->sc_mem_region[i])
+			return ENOMEM;
+
+		for (off = 0; off < sc->sc_mem_size[i]; off += PAGE_SIZE) {
+			pmap_kenter_cache((vaddr_t)sc->sc_mem_region[i] + off,
+			    sc->sc_mem_phys[i] + off, PROT_READ | PROT_WRITE,
+			    PMAP_CACHE_DEV_NGNRNE);
+		}
 	}
 
 	return 0;
 }
 
-extern int qcscm_pas_init_image(uint32_t, paddr_t);
-extern int qcscm_pas_mem_setup(uint32_t, paddr_t, size_t);
-extern int qcscm_pas_auth_and_reset(uint32_t);
-
 int
-qcpas_mdt_init(struct qcpas_softc *sc, u_char *fw, size_t fwlen)
+qcpas_mdt_init(struct qcpas_softc *sc, int pas_id, u_char *fw, size_t fwlen)
 {
 	Elf32_Ehdr *ehdr;
 	Elf32_Phdr *phdr;
@@ -278,6 +406,12 @@ qcpas_mdt_init(struct qcpas_softc *sc, u_char *fw, size_t fwlen)
 	int i, hashseg = 0, relocate = 0;
 	int error;
 	ssize_t off;
+	int idx;
+
+	if (pas_id == sc->sc_dtb_pas_id)
+		idx = 1;
+	else
+		idx = 0;
 
 	ehdr = (Elf32_Ehdr *)fw;
 	phdr = (Elf32_Phdr *)&ehdr[1];
@@ -306,17 +440,17 @@ qcpas_mdt_init(struct qcpas_softc *sc, u_char *fw, size_t fwlen)
 	if (!hashseg)
 		return EINVAL;
 
-	sc->sc_metadata = qcpas_dmamem_alloc(sc, phdr[0].p_filesz +
+	sc->sc_metadata[idx] = qcpas_dmamem_alloc(sc, phdr[0].p_filesz +
 	    phdr[hashseg].p_filesz, PAGE_SIZE);
-	if (sc->sc_metadata == NULL)
+	if (sc->sc_metadata[idx] == NULL)
 		return EINVAL;
 
-	memcpy(QCPAS_DMA_KVA(sc->sc_metadata), fw, phdr[0].p_filesz);
+	memcpy(QCPAS_DMA_KVA(sc->sc_metadata[idx]), fw, phdr[0].p_filesz);
 	if (phdr[0].p_filesz + phdr[hashseg].p_filesz == fwlen) {
-		memcpy(QCPAS_DMA_KVA(sc->sc_metadata) + phdr[0].p_filesz,
+		memcpy(QCPAS_DMA_KVA(sc->sc_metadata[idx]) + phdr[0].p_filesz,
 		    fw + phdr[0].p_filesz, phdr[hashseg].p_filesz);
 	} else if (phdr[hashseg].p_offset + phdr[hashseg].p_filesz <= fwlen) {
-		memcpy(QCPAS_DMA_KVA(sc->sc_metadata) + phdr[0].p_filesz,
+		memcpy(QCPAS_DMA_KVA(sc->sc_metadata[idx]) + phdr[0].p_filesz,
 		    fw + phdr[hashseg].p_offset, phdr[hashseg].p_filesz);
 	} else {
 		printf("%s: metadata split segment not supported\n",
@@ -326,36 +460,36 @@ qcpas_mdt_init(struct qcpas_softc *sc, u_char *fw, size_t fwlen)
 
 	membar_producer();
 
-	if (qcscm_pas_init_image(sc->sc_pas_id,
-	    QCPAS_DMA_DVA(sc->sc_metadata)) != 0) {
+	if (qcscm_pas_init_image(pas_id,
+	    QCPAS_DMA_DVA(sc->sc_metadata[idx])) != 0) {
 		printf("%s: init image failed\n", sc->sc_dev.dv_xname);
-		qcpas_dmamem_free(sc, sc->sc_metadata);
+		qcpas_dmamem_free(sc, sc->sc_metadata[idx]);
 		return EINVAL;
 	}
 
-	if (qcscm_pas_mem_setup(sc->sc_pas_id,
-	    sc->sc_mem_phys, maxpa - minpa) != 0) {
+	if (qcscm_pas_mem_setup(pas_id,
+	    sc->sc_mem_phys[idx], maxpa - minpa) != 0) {
 		printf("%s: mem setup failed\n", sc->sc_dev.dv_xname);
-		qcpas_dmamem_free(sc, sc->sc_metadata);
+		qcpas_dmamem_free(sc, sc->sc_metadata[idx]);
 		return EINVAL;
 	}
 
-	sc->sc_mem_reloc = relocate ? minpa : sc->sc_mem_phys;
+	sc->sc_mem_reloc[idx] = relocate ? minpa : sc->sc_mem_phys[idx];
 
 	for (i = 0; i < ehdr->e_phnum; i++) {
 		if ((phdr[i].p_flags & MDT_TYPE_MASK) == MDT_TYPE_HASH ||
 		    phdr[i].p_type != PT_LOAD || phdr[i].p_memsz == 0)
 			continue;
-		off = phdr[i].p_paddr - sc->sc_mem_reloc;
-		if (off < 0 || off + phdr[i].p_memsz > sc->sc_mem_size)
+		off = phdr[i].p_paddr - sc->sc_mem_reloc[idx];
+		if (off < 0 || off + phdr[i].p_memsz > sc->sc_mem_size[0])
 			return EINVAL;
 		if (phdr[i].p_filesz > phdr[i].p_memsz)
 			return EINVAL;
 
 		if (phdr[i].p_filesz && phdr[i].p_offset < fwlen &&
 		    phdr[i].p_offset + phdr[i].p_filesz <= fwlen) {
-			memcpy(sc->sc_mem_region + off, fw + phdr[i].p_offset,
-			    phdr[i].p_filesz);
+			memcpy(sc->sc_mem_region[idx] + off,
+			    fw + phdr[i].p_offset, phdr[i].p_filesz);
 		} else if (phdr[i].p_filesz) {
 			printf("%s: firmware split segment not supported\n",
 			    sc->sc_dev.dv_xname);
@@ -363,17 +497,20 @@ qcpas_mdt_init(struct qcpas_softc *sc, u_char *fw, size_t fwlen)
 		}
 
 		if (phdr[i].p_memsz > phdr[i].p_filesz)
-			memset(sc->sc_mem_region + off + phdr[i].p_filesz, 0,
-			    phdr[i].p_memsz - phdr[i].p_filesz);
+			memset(sc->sc_mem_region[idx] + off + phdr[i].p_filesz,
+			    0, phdr[i].p_memsz - phdr[i].p_filesz);
 	}
 
 	membar_producer();
 
-	if (qcscm_pas_auth_and_reset(sc->sc_pas_id) != 0) {
+	if (qcscm_pas_auth_and_reset(pas_id) != 0) {
 		printf("%s: auth and reset failed\n", sc->sc_dev.dv_xname);
-		qcpas_dmamem_free(sc, sc->sc_metadata);
+		qcpas_dmamem_free(sc, sc->sc_metadata[idx]);
 		return EINVAL;
 	}
+
+	if (pas_id == sc->sc_dtb_pas_id)
+		return 0;
 
 	error = tsleep_nsec(sc, PWAIT, "qcpas", SEC_TO_NSEC(5));
 	if (error) {
@@ -1121,6 +1258,12 @@ struct battmgr_bat_status {
 	uint32_t temperature;
 };
 
+void	qcpas_pmic_rtr_refresh(void *);
+void	qcpas_pmic_rtr_bat_info(struct qcpas_softc *,
+	    struct battmgr_bat_info *);
+void	qcpas_pmic_rtr_bat_status(struct qcpas_softc *,
+	    struct battmgr_bat_status *);
+
 void
 qcpas_pmic_rtr_battmgr_req_info(void *cookie)
 {
@@ -1171,18 +1314,19 @@ qcpas_pmic_rtr_init(void *cookie)
 	qcpas_pmic_rtr_apm_cookie = cookie;
 	apm_setinfohook(qcpas_pmic_rtr_apminfo);
 #endif
+#ifndef SMALL_KERNEL
+	sensor_task_register(cookie, qcpas_pmic_rtr_refresh, 5);
+#endif
 	return 0;
 }
 
 int
 qcpas_pmic_rtr_recv(void *cookie, uint8_t *buf, int len)
 {
-#if NAPM > 0
-	static uint32_t last_full_capacity;
-#endif
+	struct qcpas_glink_channel *ch = cookie;
+	struct qcpas_softc *sc = ch->ch_sc;
 	struct pmic_glink_hdr hdr;
 	uint32_t notification;
-	extern int hw_power;
 
 	if (len < sizeof(hdr)) {
 		printf("%s: pmic glink message too small\n",
@@ -1219,73 +1363,27 @@ qcpas_pmic_rtr_recv(void *cookie, uint8_t *buf, int len)
 			break;
 		case BATTMGR_OPCODE_BAT_INFO: {
 			struct battmgr_bat_info *bat;
-			if (len - sizeof(hdr) != sizeof(*bat)) {
+			if (len - sizeof(hdr) < sizeof(*bat)) {
 				printf("%s: invalid battgmr bat info\n",
 				    __func__);
 				return 0;
 			}
 			bat = malloc(sizeof(*bat), M_TEMP, M_WAITOK);
-			memcpy((void *)bat, buf + sizeof(hdr), sizeof(*bat));
-#if NAPM > 0
-			last_full_capacity = bat->last_full_capacity;
-#endif
+			memcpy(bat, buf + sizeof(hdr), sizeof(*bat));
+			qcpas_pmic_rtr_bat_info(sc, bat);
 			free(bat, M_TEMP, sizeof(*bat));
 			break;
 		}
 		case BATTMGR_OPCODE_BAT_STATUS: {
 			struct battmgr_bat_status *bat;
-#if NAPM > 0
-			struct apm_power_info *info;
-			uint32_t delta;
-#endif
 			if (len - sizeof(hdr) != sizeof(*bat)) {
 				printf("%s: invalid battgmr bat status\n",
 				    __func__);
 				return 0;
 			}
-#if NAPM > 0
-			/* Needs BAT_INFO fist */
-			if (last_full_capacity == 0) {
-				wakeup(&qcpas_pmic_rtr_apm_power_info);
-				return 0;
-			}
-#endif
 			bat = malloc(sizeof(*bat), M_TEMP, M_WAITOK);
-			memcpy((void *)bat, buf + sizeof(hdr), sizeof(*bat));
-#if NAPM > 0
-			info = &qcpas_pmic_rtr_apm_power_info;
-			info->battery_life = ((bat->capacity * 100) /
-			    last_full_capacity);
-			if (info->battery_life > 50)
-				info->battery_state = APM_BATT_HIGH;
-			else if (info->battery_life > 25)
-				info->battery_state = APM_BATT_LOW;
-			else
-				info->battery_state = APM_BATT_CRITICAL;
-			if (bat->battery_state & BATTMGR_BAT_STATE_CHARGING)
-				info->battery_state = APM_BATT_CHARGING;
-			else if (bat->battery_state & BATTMGR_BAT_STATE_CRITICAL_LOW)
-				info->battery_state = APM_BATT_CRITICAL;
-
-			if (bat->rate < 0)
-				delta = bat->capacity;
-			else
-				delta = last_full_capacity - bat->capacity;
-			if (bat->rate == 0)
-				info->minutes_left = -1;
-			else
-				info->minutes_left =
-				    (60 * delta) / abs(bat->rate);
-
-			if (bat->power_state & BATTMGR_PWR_STATE_AC_ON) {
-				info->ac_state = APM_AC_ON;
-				hw_power = 1;
-			} else {
-				info->ac_state = APM_AC_OFF;
-				hw_power = 0;
-			}
-			wakeup(&qcpas_pmic_rtr_apm_power_info);
-#endif
+			memcpy(bat, buf + sizeof(hdr), sizeof(*bat));
+			qcpas_pmic_rtr_bat_status(sc, bat);
 			free(bat, M_TEMP, sizeof(*bat));
 			break;
 		}
@@ -1320,3 +1418,127 @@ qcpas_pmic_rtr_apminfo(struct apm_power_info *info)
 	return 0;
 }
 #endif
+
+void
+qcpas_pmic_rtr_refresh(void *arg)
+{
+	qcpas_pmic_rtr_battmgr_req_status(arg);
+}
+
+void
+qcpas_pmic_rtr_bat_info(struct qcpas_softc *sc, struct battmgr_bat_info *bat)
+{
+#ifndef SMALL_KERNEL
+	sc->sc_last_full_capacity = bat->last_full_capacity;
+	sc->sc_warning_capacity = bat->capacity_warning;
+	sc->sc_low_capacity = bat->capacity_low;
+
+	sc->sc_sens[0].value = bat->last_full_capacity * 1000;
+	sc->sc_sens[0].flags &= ~SENSOR_FUNKNOWN;
+
+	sc->sc_sens[1].value = bat->capacity_warning * 1000;
+	sc->sc_sens[1].flags &= ~SENSOR_FUNKNOWN;
+
+	sc->sc_sens[2].value = bat->capacity_low * 1000;
+	sc->sc_sens[2].flags &= ~SENSOR_FUNKNOWN;
+
+	sc->sc_sens[3].value = bat->design_voltage * 1000;
+	sc->sc_sens[3].flags &= ~SENSOR_FUNKNOWN;
+
+	sc->sc_sens[8].value = bat->design_capacity * 1000;
+	sc->sc_sens[8].flags &= ~SENSOR_FUNKNOWN;
+
+	sc->sc_sens[9].value = bat->cycle_count;
+	sc->sc_sens[9].flags &= ~SENSOR_FUNKNOWN;
+#endif
+}
+
+void
+qcpas_pmic_rtr_bat_status(struct qcpas_softc *sc,
+    struct battmgr_bat_status *bat)
+{
+#if NAPM > 0
+	extern int hw_power;
+	struct apm_power_info *info = &qcpas_pmic_rtr_apm_power_info;
+	uint32_t delta;
+#endif
+
+#ifndef SMALL_KERNEL
+	if (bat->capacity >= sc->sc_last_full_capacity)
+		strlcpy(sc->sc_sens[4].desc, "battery full",
+		    sizeof(sc->sc_sens[4].desc));
+	else if (bat->battery_state & BATTMGR_BAT_STATE_DISCHARGE)
+		strlcpy(sc->sc_sens[4].desc, "battery discharging",
+		    sizeof(sc->sc_sens[4].desc));
+	else if (bat->battery_state & BATTMGR_BAT_STATE_CHARGING)
+		strlcpy(sc->sc_sens[4].desc, "battery charging",
+		    sizeof(sc->sc_sens[4].desc));
+	else
+		strlcpy(sc->sc_sens[4].desc, "battery idle",
+		    sizeof(sc->sc_sens[4].desc));
+	if (bat->battery_state & BATTMGR_BAT_STATE_CRITICAL_LOW)
+		sc->sc_sens[4].status = SENSOR_S_CRIT;
+	else
+		sc->sc_sens[4].status = SENSOR_S_OK;
+	sc->sc_sens[4].value = bat->battery_state;
+	sc->sc_sens[4].flags &= ~SENSOR_FUNKNOWN;
+
+	sc->sc_sens[5].value = abs(bat->rate) * 1000;
+	sc->sc_sens[5].flags &= ~SENSOR_FUNKNOWN;
+
+	sc->sc_sens[6].value = bat->capacity * 1000;
+	if (bat->capacity < sc->sc_low_capacity)
+		sc->sc_sens[6].status = SENSOR_S_CRIT;
+	else if (bat->capacity < sc->sc_warning_capacity)
+		sc->sc_sens[6].status = SENSOR_S_WARN;
+	else
+		sc->sc_sens[6].status = SENSOR_S_OK;
+	sc->sc_sens[6].flags &= ~SENSOR_FUNKNOWN;
+
+	sc->sc_sens[7].value = bat->battery_voltage * 1000;
+	sc->sc_sens[7].flags &= ~SENSOR_FUNKNOWN;
+
+	sc->sc_sens[10].value = (bat->temperature * 10000) + 273150000;
+	sc->sc_sens[10].flags &= ~SENSOR_FUNKNOWN;
+#endif
+
+#if NAPM > 0
+	/* Needs BAT_INFO fist */
+	if (sc->sc_last_full_capacity == 0) {
+		wakeup(&qcpas_pmic_rtr_apm_power_info);
+		return;
+	}
+
+	info->battery_life =
+	    ((bat->capacity * 100) / sc->sc_last_full_capacity);
+	if (info->battery_life > 50)
+		info->battery_state = APM_BATT_HIGH;
+	else if (info->battery_life > 25)
+		info->battery_state = APM_BATT_LOW;
+	else
+		info->battery_state = APM_BATT_CRITICAL;
+	if (bat->battery_state & BATTMGR_BAT_STATE_CHARGING)
+		info->battery_state = APM_BATT_CHARGING;
+	else if (bat->battery_state & BATTMGR_BAT_STATE_CRITICAL_LOW)
+		info->battery_state = APM_BATT_CRITICAL;
+
+	if (bat->rate < 0)
+		delta = bat->capacity;
+	else
+		delta = sc->sc_last_full_capacity - bat->capacity;
+	if (bat->rate == 0)
+		info->minutes_left = -1;
+	else
+		info->minutes_left = (60 * delta) / abs(bat->rate);
+
+	if (bat->power_state & BATTMGR_PWR_STATE_AC_ON) {
+		info->ac_state = APM_AC_ON;
+		hw_power = 1;
+	} else {
+		info->ac_state = APM_AC_OFF;
+		hw_power = 0;
+	}
+
+	wakeup(&qcpas_pmic_rtr_apm_power_info);
+#endif
+}
