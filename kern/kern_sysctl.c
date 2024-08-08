@@ -1682,7 +1682,7 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 			 */
 			if (pr->ps_flags & (PS_SYSTEM | PS_EMBRYO | PS_EXITING))
 				continue;
-			if (arg > 0 && pr->ps_pid != (pid_t)arg) {
+			if (arg >= 0 && pr->ps_pid != (pid_t)arg) {
 				/* not the pid we are looking for */
 				continue;
 			}
@@ -1702,6 +1702,9 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 				FILLIT(fp, fdp, i, NULL, pr);
 				FRELE(fp, p);
 			}
+			/* pid is unique, stop searching */
+			if (arg >= 0)
+				break;
 		}
 		if (!matched)
 			error = ESRCH;
