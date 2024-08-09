@@ -881,7 +881,7 @@ igc_init(void *arg)
 	}
 	igc_initialize_transmit_unit(sc);
 
-	sc->rx_mbuf_sz = MCLBYTES;
+	sc->rx_mbuf_sz = MCLBYTES + ETHER_ALIGN;
 	/* Prepare receive descriptors and buffers. */
 	if (igc_setup_receive_structures(sc)) {
 		printf("%s: Could not setup receive structures\n",
