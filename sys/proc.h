@@ -1,4 +1,4 @@
-/*	$OpenBSD: proc.h,v 1.367 2024/08/06 08:44:54 claudio Exp $	*/
+/*	$OpenBSD: proc.h,v 1.369 2024/08/11 21:07:05 mvs Exp $	*/
 /*	$NetBSD: proc.h,v 1.44 1996/04/22 01:23:21 christos Exp $	*/
 
 /*-
@@ -50,6 +50,7 @@
 #include <sys/resource.h>		/* For struct rusage */
 #include <sys/rwlock.h>			/* For struct rwlock */
 #include <sys/sigio.h>			/* For struct sigio */
+#include <sys/refcnt.h>			/* For struct refcnt */
 
 #ifdef _KERNEL
 #include <sys/atomic.h>
@@ -142,6 +143,8 @@ struct pinsyscall {
  *	T	itimer_mtx
  */
 struct process {
+	struct refcnt ps_refcnt;
+
 	/*
 	 * ps_mainproc is the original thread in the process.
 	 * It's only still special for the handling of
