@@ -96,7 +96,7 @@ int	ipmforwarding = 0;
 int	ipmultipath = 0;
 int	ip_sendredirects = 1;			/* [a] */
 int	ip_dosourceroute = 0;
-int	ip_defttl = IPDEFTTL;
+int	ip_defttl = IPDEFTTL;			/* [a] */
 int	ip_mtudisc = 1;
 int	ip_mtudisc_timeout = IPMTUDISCTIMEOUT;
 int	ip_directedbcast = 0;			/* [a] */
@@ -115,13 +115,13 @@ const struct sysctl_bounded_args ipctl_vars_unlocked[] = {
 	{ IPCTL_FORWARDING, &ip_forwarding, 0, 2 },
 	{ IPCTL_SENDREDIRECTS, &ip_sendredirects, 0, 1 },
 	{ IPCTL_DIRECTEDBCAST, &ip_directedbcast, 0, 1 },
+	{ IPCTL_DEFTTL, &ip_defttl, 0, 255 },
 };
 
 const struct sysctl_bounded_args ipctl_vars[] = {
 #ifdef MROUTING
 	{ IPCTL_MRTPROTO, &ip_mrtproto, SYSCTL_INT_READONLY },
 #endif
-	{ IPCTL_DEFTTL, &ip_defttl, 0, 255 },
 	{ IPCTL_IPPORT_FIRSTAUTO, &ipport_firstauto, 0, 65535 },
 	{ IPCTL_IPPORT_LASTAUTO, &ipport_lastauto, 0, 65535 },
 	{ IPCTL_IPPORT_HIFIRSTAUTO, &ipport_hifirstauto, 0, 65535 },
@@ -1806,6 +1806,7 @@ ip_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 	case IPCTL_FORWARDING:
 	case IPCTL_SENDREDIRECTS:
 	case IPCTL_DIRECTEDBCAST:
+	case IPCTL_DEFTTL:
 		return (sysctl_bounded_arr(
 		    ipctl_vars_unlocked, nitems(ipctl_vars_unlocked),
 		    name, namelen, oldp, oldlenp, newp, newlen));
