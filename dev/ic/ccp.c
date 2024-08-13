@@ -228,7 +228,7 @@ ccp_docmd(struct ccp_softc *sc, int cmd, uint64_t paddr)
 
 	plo = ((paddr >> 0) & 0xffffffff);
 	phi = ((paddr >> 32) & 0xffffffff);
-	cmdword = (cmd & 0x3f) << 16;
+	cmdword = (cmd & 0x3ff) << 16;
 	if (!cold)
 		cmdword |= PSP_CMDRESP_IOC;
 
