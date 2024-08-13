@@ -91,6 +91,7 @@ struct etherip_softc {
 	int			sc_rxhprio;
 	uint16_t		sc_df;
 	uint8_t			sc_ttl;
+	uint8_t			sc_hlim;
 };
 
 /*
@@ -142,7 +143,8 @@ etherip_clone_create(struct if_clone *ifc, int unit)
 	snprintf(ifp->if_xname, sizeof(ifp->if_xname), "%s%d",
 	    ifc->ifc_name, unit);
 
-	sc->sc_ttl = ip_defttl;
+	sc->sc_ttl = atomic_load_int(&ip_defttl);
+	sc->sc_hlim = atomic_load_int(&ip6_defhlim);
 	sc->sc_txhprio = IFQ_TOS2PRIO(IPTOS_PREC_ROUTINE); /* 0 */
 	sc->sc_rxhprio = IF_HDRPRIO_PACKET;
 	sc->sc_df = htons(0);
@@ -338,10 +340,10 @@ etherip_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		}
 
 		/* commit */
-		sc->sc_ttl = (uint8_t)ifr->ifr_ttl;
+		sc->sc_ttl = sc->sc_hlim = ifr->ifr_ttl;
 		break;
 	case SIOCGLIFPHYTTL:
-		ifr->ifr_ttl = (int)sc->sc_ttl;
+		ifr->ifr_ttl = sc->sc_ttl;
 		break;
 
 	case SIOCSLIFPHYDF:
@@ -726,7 +728,7 @@ ip6_etherip_output(struct ifnet *ifp, struct mbuf *m)
 	ip6 = mtod(m, struct ip6_hdr *);
 	htobem32(&ip6->ip6_flow, flow);
 	ip6->ip6_nxt  = IPPROTO_ETHERIP;
-	ip6->ip6_hlim = sc->sc_ttl;
+	ip6->ip6_hlim = sc->sc_hlim;
 	ip6->ip6_plen = htons(len);
 	memcpy(&ip6->ip6_src, &sc->sc_tunnel.t_src6, sizeof(ip6->ip6_src));
 	memcpy(&ip6->ip6_dst, &sc->sc_tunnel.t_dst6, sizeof(ip6->ip6_dst));

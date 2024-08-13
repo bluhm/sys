@@ -103,11 +103,11 @@ static inline int	gif_cmp(const struct gif_tunnel *,
 struct gif_softc {
 	struct gif_tunnel	sc_tunnel; /* must be first */
 	struct ifnet		sc_if;
-	uint16_t		sc_df;
-	int			sc_ttl;
 	int			sc_txhprio;
 	int			sc_rxhprio;
 	int			sc_ecn;
+	int			sc_ttl;
+	uint16_t		sc_df;
 };
 
 struct gif_list gif_list = TAILQ_HEAD_INITIALIZER(gif_list);
@@ -152,7 +152,8 @@ gif_clone_create(struct if_clone *ifc, int unit)
 	ifp = &sc->sc_if;
 
 	sc->sc_df = htons(0);
-	sc->sc_ttl = ip_defttl;
+	sc->sc_ttl = atomic_load_int(ip_defttl);
+	sc->sc_hlim = atomic_load_int(&ip6_defhlim);
 	sc->sc_txhprio = IF_HDRPRIO_PAYLOAD;
 	sc->sc_rxhprio = IF_HDRPRIO_PAYLOAD;
 	sc->sc_ecn = ECN_ALLOWED;
@@ -215,9 +216,7 @@ gif_start(struct ifnet *ifp)
 	caddr_t if_bpf;
 #endif
 	uint8_t proto, ttl, tos;
-	int ttloff, tttl;
-
-	tttl = sc->sc_ttl;
+	int ttloff;
 
 	while ((m = ifq_dequeue(&ifp->if_snd)) != NULL) {
 #if NBPFILTER > 0
@@ -239,6 +238,7 @@ gif_start(struct ifnet *ifp)
 			ip = mtod(m, struct ip *);
 			tos = ip->ip_tos;
 
+			
 			ttloff = offsetof(struct ip, ip_ttl);
 			proto = IPPROTO_IPV4;
 			break;
@@ -532,7 +532,7 @@ gif_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		}
 
 		/* commit */
-		sc->sc_ttl = ifr->ifr_ttl;
+		sc->sc_ttl = sc->sc_hlim = ifr->ifr_ttl;
 		break;
 	case SIOCGLIFPHYTTL:
 		ifr->ifr_ttl = sc->sc_ttl;
