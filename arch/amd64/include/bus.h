@@ -1,4 +1,4 @@
-/*	$OpenBSD: bus.h,v 1.35 2020/10/28 09:58:57 jsg Exp $	*/
+/*	$OpenBSD: bus.h,v 1.36 2024/08/14 18:31:33 bluhm Exp $	*/
 /*	$NetBSD: bus.h,v 1.6 1996/11/10 03:19:25 thorpej Exp $	*/
 
 /*-
