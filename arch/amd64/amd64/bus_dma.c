@@ -96,7 +96,7 @@
 
 #include <uvm/uvm_extern.h>
 
-#define FORCE_BOUNCE_BUFFER	1
+/* #define FORCE_BOUNCE_BUFFER	1 */
 #ifndef FORCE_BOUNCE_BUFFER
 #define FORCE_BOUNCE_BUFFER	0
 #endif
