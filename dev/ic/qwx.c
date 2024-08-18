@@ -1,4 +1,4 @@
-/*	$OpenBSD: qwx.c,v 1.63 2024/06/11 10:06:35 stsp Exp $	*/
+/*	$OpenBSD: qwx.c,v 1.65 2024/08/18 07:34:45 stsp Exp $	*/
 
 /*
  * Copyright 2023 Stefan Sperling <stsp@openbsd.org>
@@ -158,6 +158,7 @@ int qwx_wmi_vdev_install_key(struct qwx_softc *,
 int qwx_dp_peer_rx_pn_replay_config(struct qwx_softc *, struct qwx_vif *,
     struct ieee80211_node *, struct ieee80211_key *, int);
 void qwx_setkey_clear(struct qwx_softc *);
+void qwx_vif_free_all(struct qwx_softc *);
 
 int qwx_scan(struct qwx_softc *);
 void qwx_scan_abort(struct qwx_softc *);
@@ -347,6 +348,8 @@ qwx_stop(struct ifnet *ifp)
 
 	/* power off hardware */
 	qwx_core_deinit(sc);
+
+	qwx_vif_free_all(sc);
 
 	splx(s);
 }
@@ -19836,10 +19839,7 @@ qwx_core_qmi_firmware_ready(struct qwx_softc *sc)
 		goto err_core_stop;
 	}
 
-#if 0 /* TODO: Is this in the right spot for OpenBSD? */
 	sc->ops.irq_enable(sc);
-#endif
-
 #if 0
 	mutex_unlock(&ab->core_lock);
 #endif
@@ -22818,6 +22818,18 @@ qwx_vif_free(struct qwx_softc *sc, struct qwx_vif *arvif)
 	free(arvif, M_DEVBUF, sizeof(*arvif));
 }
 
+void
+qwx_vif_free_all(struct qwx_softc *sc)
+{
+	struct qwx_vif *arvif;
+
+	while (!TAILQ_EMPTY(&sc->vif_list)) {
+		arvif = TAILQ_FIRST(&sc->vif_list);
+		TAILQ_REMOVE(&sc->vif_list, arvif, entry);
+		qwx_vif_free(sc, arvif);
+	}
+}
+
 struct qwx_vif *
 qwx_vif_alloc(struct qwx_softc *sc)
 {
@@ -25389,9 +25401,6 @@ qwx_run(struct qwx_softc *sc)
 		   sc->sc_dev.dv_xname, ret);
 		return ret;
 	}
-
-	/* Enable "ext" IRQs for datapath. */
-	sc->ops.irq_enable(sc);
 
 	return 0;
 }

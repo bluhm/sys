@@ -1,4 +1,4 @@
-/* $OpenBSD: dwiic_pci.c,v 1.27 2024/05/24 06:02:53 jsg Exp $ */
+/* $OpenBSD: dwiic_pci.c,v 1.30 2024/08/17 02:31:15 deraadt Exp $ */
 /*
  * Synopsys DesignWare I2C controller
  * PCI attachment
@@ -293,15 +293,14 @@ dwiic_pci_activate(struct device *self, int act)
 	struct dwiic_softc *sc = (struct dwiic_softc *)self;
 
 	switch (act) {
-	case DVACT_WAKEUP:
+	case DVACT_RESUME:
+		DELAY(10000);	/* 10 msec */
 		bus_space_write_4(sc->sc_iot, sc->sc_ioh, LPSS_RESETS,
 		    (LPSS_RESETS_I2C | LPSS_RESETS_IDMA));
+		DELAY(10000);	/* 10 msec */
 		break;
 	}
-
-	dwiic_activate(self, act);
-
-	return 0;
+	return dwiic_activate(self, act);
 }
 
 void

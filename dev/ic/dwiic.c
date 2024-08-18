@@ -1,4 +1,4 @@
-/* $OpenBSD: dwiic.c,v 1.15 2023/08/29 12:09:40 kettenis Exp $ */
+/* $OpenBSD: dwiic.c,v 1.21 2024/08/17 02:35:00 deraadt Exp $ */
 /*
  * Synopsys DesignWare I2C controller
  *
@@ -21,14 +21,6 @@
 #include <sys/systm.h>
 #include <sys/kernel.h>
 
-#ifdef __HAVE_ACPI
-#include <dev/acpi/acpireg.h>
-#include <dev/acpi/acpivar.h>
-#include <dev/acpi/acpidev.h>
-#include <dev/acpi/amltypes.h>
-#include <dev/acpi/dsdt.h>
-#endif
-
 #include <dev/i2c/i2cvar.h>
 
 #include <dev/ic/dwiicvar.h>
@@ -41,34 +33,50 @@ int
 dwiic_activate(struct device *self, int act)
 {
 	struct dwiic_softc *sc = (struct dwiic_softc *)self;
+	int rv;
 
 	switch (act) {
 	case DVACT_SUSPEND:
+		rv = config_activate_children(self, act);
 		/* disable controller */
 		dwiic_enable(sc, 0);
 
 		/* disable interrupts */
 		dwiic_write(sc, DW_IC_INTR_MASK, 0);
 		dwiic_read(sc, DW_IC_CLR_INTR);
-
-#if notyet
-		/* power down the controller */
-		dwiic_acpi_power(sc, 0);
-#endif
 		break;
-	case DVACT_WAKEUP:
-#if notyet
-		/* power up the controller */
-		dwiic_acpi_power(sc, 1);
-#endif
-		dwiic_init(sc);
+	case DVACT_RESUME:
+		/* if it became enabled for some reason, force it down */
+		dwiic_enable(sc, 0);
 
+		dwiic_write(sc, DW_IC_INTR_MASK, 0);
+		dwiic_read(sc, DW_IC_CLR_INTR);
+
+		/* write standard-mode SCL timing parameters */
+		dwiic_write(sc, DW_IC_SS_SCL_HCNT, sc->ss_hcnt);
+		dwiic_write(sc, DW_IC_SS_SCL_LCNT, sc->ss_lcnt);
+
+		/* and fast-mode SCL timing parameters */
+		dwiic_write(sc, DW_IC_FS_SCL_HCNT, sc->fs_hcnt);
+		dwiic_write(sc, DW_IC_FS_SCL_LCNT, sc->fs_lcnt);
+
+		/* SDA hold time */
+		dwiic_write(sc, DW_IC_SDA_HOLD, sc->sda_hold_time);
+
+		dwiic_write(sc, DW_IC_TX_TL, sc->tx_fifo_depth / 2);
+		dwiic_write(sc, DW_IC_RX_TL, 0);
+
+		/* configure as i2c master with fast speed */
+		sc->master_cfg = DW_IC_CON_MASTER | DW_IC_CON_SLAVE_DISABLE |
+		    DW_IC_CON_RESTART_EN | DW_IC_CON_SPEED_FAST;
+		dwiic_write(sc, DW_IC_CON, sc->master_cfg);
+		rv = config_activate_children(self, act);
+		break;
+	default:
+		rv = config_activate_children(self, act);
 		break;
 	}
-
-	config_activate_children(self, act);
-
-	return 0;
+	return rv;
 }
 
 int
@@ -489,32 +497,32 @@ dwiic_i2c_exec(void *cookie, i2c_op_t op, i2c_addr_t addr, const void *cmdbuf,
 uint32_t
 dwiic_read_clear_intrbits(struct dwiic_softc *sc)
 {
-       uint32_t stat;
+	uint32_t stat;
 
-       stat = dwiic_read(sc, DW_IC_INTR_STAT);
+	stat = dwiic_read(sc, DW_IC_INTR_STAT);
 
-       if (stat & DW_IC_INTR_RX_UNDER)
-	       dwiic_read(sc, DW_IC_CLR_RX_UNDER);
-       if (stat & DW_IC_INTR_RX_OVER)
-	       dwiic_read(sc, DW_IC_CLR_RX_OVER);
-       if (stat & DW_IC_INTR_TX_OVER)
-	       dwiic_read(sc, DW_IC_CLR_TX_OVER);
-       if (stat & DW_IC_INTR_RD_REQ)
-	       dwiic_read(sc, DW_IC_CLR_RD_REQ);
-       if (stat & DW_IC_INTR_TX_ABRT)
-	       dwiic_read(sc, DW_IC_CLR_TX_ABRT);
-       if (stat & DW_IC_INTR_RX_DONE)
-	       dwiic_read(sc, DW_IC_CLR_RX_DONE);
-       if (stat & DW_IC_INTR_ACTIVITY)
-	       dwiic_read(sc, DW_IC_CLR_ACTIVITY);
-       if (stat & DW_IC_INTR_STOP_DET)
-	       dwiic_read(sc, DW_IC_CLR_STOP_DET);
-       if (stat & DW_IC_INTR_START_DET)
-	       dwiic_read(sc, DW_IC_CLR_START_DET);
-       if (stat & DW_IC_INTR_GEN_CALL)
-	       dwiic_read(sc, DW_IC_CLR_GEN_CALL);
+	if (stat & DW_IC_INTR_RX_UNDER)
+		dwiic_read(sc, DW_IC_CLR_RX_UNDER);
+	if (stat & DW_IC_INTR_RX_OVER)
+		dwiic_read(sc, DW_IC_CLR_RX_OVER);
+	if (stat & DW_IC_INTR_TX_OVER)
+		dwiic_read(sc, DW_IC_CLR_TX_OVER);
+	if (stat & DW_IC_INTR_RD_REQ)
+		dwiic_read(sc, DW_IC_CLR_RD_REQ);
+	if (stat & DW_IC_INTR_TX_ABRT)
+		dwiic_read(sc, DW_IC_CLR_TX_ABRT);
+	if (stat & DW_IC_INTR_RX_DONE)
+		dwiic_read(sc, DW_IC_CLR_RX_DONE);
+	if (stat & DW_IC_INTR_ACTIVITY)
+		dwiic_read(sc, DW_IC_CLR_ACTIVITY);
+	if (stat & DW_IC_INTR_STOP_DET)
+		dwiic_read(sc, DW_IC_CLR_STOP_DET);
+	if (stat & DW_IC_INTR_START_DET)
+		dwiic_read(sc, DW_IC_CLR_START_DET);
+	if (stat & DW_IC_INTR_GEN_CALL)
+		dwiic_read(sc, DW_IC_CLR_GEN_CALL);
 
-       return stat;
+	return stat;
 }
 
 int

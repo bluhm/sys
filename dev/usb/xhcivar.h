@@ -1,4 +1,4 @@
-/* $OpenBSD: xhcivar.h,v 1.14 2022/12/12 19:18:25 kettenis Exp $ */
+/* $OpenBSD: xhcivar.h,v 1.16 2024/08/17 01:55:03 jsg Exp $ */
 
 /*
  * Copyright (c) 2014 Martin Pieuchot
@@ -89,6 +89,7 @@ struct xhci_softc {
 	bus_size_t		 sc_size;
 
 	int			 sc_dead;
+	int			 sc_saved_state;
 
 	bus_size_t		 sc_oper_off;	/* Operational Register space */
 	bus_size_t		 sc_runt_off;	/* Runtime */
@@ -120,6 +121,9 @@ struct xhci_softc {
 
 	char			 sc_vendor[16];	/* Vendor string for root hub */
 	int			 sc_id_vendor;	/* Vendor ID for root hub */
+	
+	int			 sc_flags;
+#define XHCI_NOCSS		 0x01
 };
 
 int	xhci_init(struct xhci_softc *);

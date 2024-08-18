@@ -1,4 +1,4 @@
-/*	$OpenBSD: azalia.c,v 1.288 2024/08/13 22:32:58 deraadt Exp $	*/
+/*	$OpenBSD: azalia.c,v 1.290 2024/08/18 14:42:56 deraadt Exp $	*/
 /*	$NetBSD: azalia.c,v 1.20 2006/05/07 08:31:44 kent Exp $	*/
 
 /*-
@@ -598,13 +598,12 @@ azalia_pci_activate(struct device *self, int act)
 	azalia_t *sc = (azalia_t*)self;
 	int rv = 0; 
 
+	if (sc->detached)
+		return (0);
+
 	switch (act) {
 	case DVACT_QUIESCE:
 		rv = config_activate_children(self, act);
-
-		if (sc->detached)
-			break;
-	
 		/* stop interrupts and clear status registers */
 		AZ_WRITE_4(sc, INTCTL, 0);
 		AZ_WRITE_2(sc, STATESTS, HDA_STATESTS_SDIWAKE);
@@ -612,14 +611,16 @@ azalia_pci_activate(struct device *self, int act)
 		(void) AZ_READ_4(sc, INTSTS);
 		break;
 	case DVACT_SUSPEND:
+		rv = config_activate_children(self, act);
 		azalia_suspend(sc);
-		break;
-	case DVACT_POWERDOWN:
-		azalia_shutdown(sc);
 		break;
 	case DVACT_RESUME:
 		azalia_resume(sc);
 		rv = config_activate_children(self, act);
+		break;
+	case DVACT_POWERDOWN:
+		rv = config_activate_children(self, act);
+		azalia_shutdown(sc);
 		break;
 	default:
 		rv = config_activate_children(self, act);

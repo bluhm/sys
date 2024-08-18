@@ -1,4 +1,4 @@
-/* $OpenBSD: xhci.c,v 1.132 2024/08/06 17:30:04 kettenis Exp $ */
+/* $OpenBSD: xhci.c,v 1.134 2024/08/17 01:55:03 jsg Exp $ */
 
 /*
  * Copyright (c) 2014-2015 Martin Pieuchot
@@ -415,6 +415,7 @@ xhci_config(struct xhci_softc *sc)
 {
 	uint64_t paddr;
 	uint32_t hcr;
+	int i;
 
 	/* Make sure to program a number of device slots we can handle. */
 	if (sc->sc_noslot > USB_MAX_DEVICES)
@@ -456,6 +457,27 @@ xhci_config(struct xhci_softc *sc)
 
 	DPRINTF(("%s: ERDP=%#x%#x\n", DEVNAME(sc),
 	    XRREAD4(sc, XHCI_ERDP_HI(0)), XRREAD4(sc, XHCI_ERDP_LO(0))));
+
+	/*
+	 * If we successfully saved the state during suspend, restore
+	 * it here.  Otherwise some Intel controllers don't function
+	 * correctly after resume.
+	 */
+	if (sc->sc_saved_state) {
+		XOWRITE4(sc, XHCI_USBCMD, XHCI_CMD_CRS); /* Restore state */
+		hcr = XOREAD4(sc, XHCI_USBSTS);
+		for (i = 0; i < 100; i++) {
+			usb_delay_ms(&sc->sc_bus, 1);
+			hcr = XOREAD4(sc, XHCI_USBSTS) & XHCI_STS_RSS;
+			if (!hcr)
+				break;
+		}
+
+		if (hcr)
+			printf("%s: restore state timeout\n", DEVNAME(sc));
+
+		sc->sc_saved_state = 0;
+	}
 
 	/* Enable interrupts. */
 	hcr = XRREAD4(sc, XHCI_IMAN(0));
@@ -603,25 +625,24 @@ xhci_suspend(struct xhci_softc *sc)
 	 * unless they have seen a save state command.  This in turn
 	 * will prevent the SoC from reaching its lowest idle state.
 	 * So save the state here.
-	 *
-	 * Note that we don't restore this saved state anywhere.
-	 * Instead we reset the controller and reinitialize it from
-	 * scratch when we resume.
 	 */
+	if ((sc->sc_flags & XHCI_NOCSS) == 0) {
+		XOWRITE4(sc, XHCI_USBCMD, XHCI_CMD_CSS); /* Save state */
+		hcr = XOREAD4(sc, XHCI_USBSTS);
+		for (i = 0; i < 100; i++) {
+			usb_delay_ms(&sc->sc_bus, 1);
+			hcr = XOREAD4(sc, XHCI_USBSTS) & XHCI_STS_SSS;
+			if (!hcr)
+				break;
+		}
 
-	XOWRITE4(sc, XHCI_USBCMD, XHCI_CMD_CSS); /* Save state */
-	hcr = XOREAD4(sc, XHCI_USBSTS);
-	for (i = 0; i < 100; i++) {
-		usb_delay_ms(&sc->sc_bus, 1);
-		hcr = XOREAD4(sc, XHCI_USBSTS) & XHCI_STS_SSS;
-		if (!hcr)
-			break;
-	}
+		if (hcr) {
+			printf("%s: save state timeout\n", DEVNAME(sc));
+			xhci_reset(sc);
+			return;
+		}
 
-	if (hcr) {
-		printf("%s: save state timeout\n", DEVNAME(sc));
-		xhci_reset(sc);
-		return;
+		sc->sc_saved_state = 1;
 	}
 
 	/* Disable interrupts. */
