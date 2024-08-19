@@ -3380,11 +3380,14 @@ syn_cache_timer(void *arg)
 
 	now = tcp_now();
 	NET_LOCK_SHARED();
-	rw_enter_write(&inp->inp_socket->so_lock);
-	(void) syn_cache_respond(sc, NULL, now);
-	rw_exit_write(&inp->inp_socket->so_lock);
+	if (inp->inp_socket != NULL) {
+		/* only repond if socket has not been freed */
+		rw_enter_write(&inp->inp_socket->so_lock);
+		(void) syn_cache_respond(sc, NULL, now);
+		rw_exit_write(&inp->inp_socket->so_lock);
+		tcpstat_inc(tcps_sc_retransmitted);
+	}
 	NET_UNLOCK_SHARED();
-	tcpstat_inc(tcps_sc_retransmitted);
 
 	in_pcbunref(inp);
 	syn_cache_put(sc);
