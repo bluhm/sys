@@ -591,6 +591,7 @@ in_pcbdetach(struct inpcb *inp)
 	 * points.
 	 */
 	sofree(so, 1);
+	inp->inp_socket = NULL;
 	if (inp->inp_route.ro_rt) {
 		rtfree(inp->inp_route.ro_rt);
 		inp->inp_route.ro_rt = NULL;

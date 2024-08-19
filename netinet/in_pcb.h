@@ -138,7 +138,7 @@ struct inpcb {
 #define	inp_laddr6	inp_laddru.iau_addr6
 	u_int16_t inp_fport;		/* [t] foreign port */
 	u_int16_t inp_lport;		/* [t] local port */
-	struct	  socket *inp_socket;	/* [I] back pointer to socket */
+	struct	  socket *inp_socket;	/* [N] back pointer to socket */
 	caddr_t	  inp_ppcb;		/* pointer to per-protocol pcb */
 	struct    route inp_route;	/* cached route */
 	struct    refcnt inp_refcnt;	/* refcount PCB, delay memory free */
