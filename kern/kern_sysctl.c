@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_sysctl.c,v 1.439 2024/08/14 17:52:47 mvs Exp $	*/
+/*	$OpenBSD: kern_sysctl.c,v 1.441 2024/08/20 07:48:23 mvs Exp $	*/
 /*	$NetBSD: kern_sysctl.c,v 1.17 1996/05/20 17:49:05 mrg Exp $	*/
 
 /*-
@@ -455,11 +455,6 @@ kern_sysctl_dirs(int top_name, int *name, u_int namelen,
 		return witness_sysctl(name, namelen, oldp, oldlenp,
 		    newp, newlen);
 #endif
-#if NAUDIO > 0
-	case KERN_AUDIO:
-		return (sysctl_audio(name, namelen, oldp, oldlenp,
-		    newp, newlen));
-#endif
 #if NVIDEO > 0
 	case KERN_VIDEO:
 		return (sysctl_video(name, namelen, oldp, oldlenp,
@@ -488,6 +483,16 @@ kern_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 
 	/* dispatch the non-terminal nodes first */
 	if (namelen != 1) {
+		switch (name[0]) {
+#if NAUDIO > 0
+		case KERN_AUDIO:
+			return (sysctl_audio(name, namelen, oldp, oldlenp,
+			    newp, newlen));
+#endif
+		default:
+			break;
+		}
+
 		savelen = *oldlenp;
 		if ((error = sysctl_vslock(oldp, savelen)))
 			return (error);
@@ -549,6 +554,7 @@ kern_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		return (sysctl_rdint(oldp, oldlenp, newp, mp->msg_bufs));
 	}
 	case KERN_OSREV:
+	case KERN_MAXPROC:
 	case KERN_NFILES:
 	case KERN_TTYCOUNT:
 	case KERN_ARGMAX:
@@ -558,6 +564,7 @@ kern_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 	case KERN_SAVED_IDS:
 	case KERN_MAXPARTITIONS:
 	case KERN_RAWPARTITION:
+	case KERN_MAXTHREAD:
 	case KERN_NTHREADS:
 	case KERN_SOMAXCONN:
 	case KERN_SOMINCONN:
