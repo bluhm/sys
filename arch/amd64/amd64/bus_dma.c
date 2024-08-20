@@ -474,6 +474,18 @@ _bus_dmamap_load_raw(bus_dma_tag_t t, bus_dmamap_t map, bus_dma_segment_t *segs,
 void
 _bus_dmamap_unload(bus_dma_tag_t t, bus_dmamap_t map)
 {
+	int page;
+
+	for (page = 0; page < map->_dm_nused; page++) {
+		struct vm_page *pg;
+		vaddr_t pgva;
+		int *p;
+
+		pg = map->_dm_pages[page];
+		pgva = map->_dm_pgva + (page << PGSHIFT);
+		for (p = (void *)pgva; (vaddr_t)p < pgva + PAGE_SIZE; p++)
+			*p = 0xb19b00b5;
+	}
 	/*
 	 * No resources to free; just mark the mappings as
 	 * invalid.
