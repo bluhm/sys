@@ -538,6 +538,9 @@ _bus_dmamap_sync(bus_dma_tag_t t, bus_dmamap_t map, bus_addr_t addr,
 
 		off = 0;
 	}
+	if (size > 0 || (i == 0 && map->_dm_segcnt > 1))
+		printf("%s: size %lu, i %d, segcnt %d\n", __func__,
+		    size, i, map->_dm_segcnt);
 }
 
 /*
