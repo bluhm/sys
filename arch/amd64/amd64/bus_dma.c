@@ -1,4 +1,4 @@
-/*	$OpenBSD: bus_dma.c,v 1.56 2024/08/20 15:30:29 bluhm Exp $	*/
+/*	$OpenBSD: bus_dma.c,v 1.57 2024/08/22 11:36:24 bluhm Exp $	*/
 /*	$NetBSD: bus_dma.c,v 1.3 2003/05/07 21:33:58 fvdl Exp $	*/
 
 /*-
