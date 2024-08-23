@@ -49,9 +49,12 @@ struct vm_create_params {
 	size_t			vcp_ncpus;
 	struct vm_mem_range	vcp_memranges[VMM_MAX_MEM_RANGES];
 	char			vcp_name[VMM_MAX_NAME_LEN];
+	int			vcp_sev;
 
         /* Output parameter from VMM_IOC_CREATE */
         uint32_t		vcp_id;
+        uint32_t		vcp_poscbit;
+        uint32_t		vcp_asid[VMM_MAX_VCPUS];
 };
 
 struct vm_info_result {

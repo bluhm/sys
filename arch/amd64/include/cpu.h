@@ -415,6 +415,7 @@ void	x86_print_cacheinfo(struct cpu_info *);
 void	identifycpu(struct cpu_info *);
 int	cpu_amd64speed(int *);
 extern int cpuspeed;
+extern int amd64_pos_cbit;
 
 /* machdep.c */
 void	dumpconf(void);

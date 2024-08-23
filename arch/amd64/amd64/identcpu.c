@@ -66,7 +66,7 @@ char cpu_model[48];
 int cpuspeed;
 
 int amd64_has_xcrypt;
-int amd64_pos_cbit;
+int amd64_pos_cbit;	/* C bit position for SEV */
 int has_rdrand;
 int has_rdseed;
 
