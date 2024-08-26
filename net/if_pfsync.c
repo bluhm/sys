@@ -1234,6 +1234,7 @@ pfsync_down(struct pfsync_softc *sc)
 		TAILQ_REMOVE(&pds, pd, pd_entry);
 
 		pfsync_defer_output(pd);
+		printf("%s: deferred\n", __func__);
 	}
 
 	return (0);
@@ -1958,6 +1959,7 @@ pfsync_defer(struct pf_state *st, struct mbuf *m)
 	st->sync_defer = pd;
 
 	sched = s->s_deferred++;
+	printf("%s: deferred %d\n", __func__, s->s_deferred);
 	TAILQ_INSERT_TAIL(&s->s_deferrals, pd, pd_entry);
 
 	if (sched == 0)
@@ -1997,8 +1999,10 @@ pfsync_deferred(struct pfsync_softc *sc, struct pf_state *st)
 	}
 	pfsync_slice_leave(sc, s);
 
-	if (pd != NULL)
+	if (pd != NULL) {
 		pfsync_defer_output(pd);
+		printf("%s: deferred %d\n", __func__, s->s_deferred);
+	}
 }
 
 static void
@@ -2061,6 +2065,7 @@ pfsync_deferrals_task(void *arg)
 		TAILQ_REMOVE(&pds, pd, pd_entry);
 
 		pfsync_defer_output(pd);
+		printf("%s: deferred %d\n", __func__, s->s_deferred);
 	}
 	NET_UNLOCK();
 }
@@ -2075,6 +2080,8 @@ pfsync_defer_output(struct pfsync_deferral *pd)
 		if (pf_setup_pdesc(&pdesc, st->key[PF_SK_WIRE]->af,
 		    st->direction, NULL, pd->pd_m, NULL) != PF_PASS)
 			return;
+		printf("%s: pf_route af %d, rt %d\n", __func__,
+		    st->key[PF_SK_WIRE]->af, st->rt);
 		switch (st->key[PF_SK_WIRE]->af) {
 		case AF_INET:
 			pf_route(&pdesc, st);
@@ -2089,6 +2096,8 @@ pfsync_defer_output(struct pfsync_deferral *pd)
 		}
 		pd->pd_m = pdesc.m;
 	} else {
+		printf("%s: ip_output af %d, rt %d\n", __func__,
+		    st->key[PF_SK_WIRE]->af, st->rt);
 		switch (st->key[PF_SK_WIRE]->af) {
 		case AF_INET:
 			ip_output(pd->pd_m, NULL, NULL, 0, NULL, NULL, 0);
