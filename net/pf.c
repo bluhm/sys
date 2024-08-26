@@ -4566,14 +4566,14 @@ pf_test_rule(struct pf_pdesc *pd, struct pf_rule **rm, struct pf_state **sm,
 
 #if NPFSYNC > 0
 	if (*sm != NULL && !ISSET((*sm)->state_flags, PFSTATE_NOSYNC) &&
-	    pd->dir == PF_OUT && pfsync_is_up()) {
+	    pfsync_is_up()) {
 		/*
 		 * We want the state created, but we dont
 		 * want to send this in case a partner
 		 * firewall has to know about it to allow
 		 * replies through it.
 		 */
-		if (pfsync_defer(*sm, pd->m))
+		if (pfsync_defer(*sm, pd->m, pd->dir))
 			return (PF_DEFER);
 	}
 #endif	/* NPFSYNC > 0 */

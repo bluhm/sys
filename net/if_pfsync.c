@@ -111,6 +111,7 @@ struct pfsync_deferral {
 	struct pf_state				*pd_st;
 	struct mbuf				*pd_m;
 	uint64_t				 pd_deadline;
+	uint8_t					 pd_dir;
 };
 TAILQ_HEAD(pfsync_deferrals, pfsync_deferral);
 
@@ -1926,7 +1927,7 @@ pfsync_state_in_use(struct pf_state *st)
 }
 
 int
-pfsync_defer(struct pf_state *st, struct mbuf *m)
+pfsync_defer(struct pf_state *st, struct mbuf *m, int dir)
 {
 	struct pfsync_softc *sc;
 	struct pfsync_slice *s;
@@ -1954,6 +1955,7 @@ pfsync_defer(struct pf_state *st, struct mbuf *m)
 	pd->pd_st = pf_state_ref(st);
 	pd->pd_m = m;
 	pd->pd_deadline = getnsecuptime() + PFSYNC_DEFER_NSEC;
+	pd->pd_dir = dir;
 
 	m->m_pkthdr.pf.flags |= PF_TAG_GENERATED;
 	st->sync_defer = pd;
@@ -2076,9 +2078,10 @@ pfsync_defer_output(struct pfsync_deferral *pd)
 	struct pf_pdesc pdesc;
 	struct pf_state *st = pd->pd_st;
 
-	if (st->rt == PF_ROUTETO) {
+	if ((st->rt == PF_ROUTETO && st->direction == pd->pd_dir) ||
+	    (st->rt == PF_REPLYTO && st->direction != pd->pd_dir)) {
 		if (pf_setup_pdesc(&pdesc, st->key[PF_SK_WIRE]->af,
-		    st->direction, NULL, pd->pd_m, NULL) != PF_PASS)
+		    pd->pd_dir, NULL, pd->pd_m, NULL) != PF_PASS)
 			return;
 		printf("%s: pf_route af %d, rt %d\n", __func__,
 		    st->key[PF_SK_WIRE]->af, st->rt);
