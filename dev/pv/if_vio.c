@@ -599,7 +599,7 @@ vio_attach(struct device *parent, struct device *self, void *aux)
 	if (virtio_has_feature(vsc, VIRTIO_NET_F_MRG_RXBUF))
 		ifp->if_hardmtu = MAXMCLBYTES;
 	else
-		ifp->if_hardmtu = MAXMCLBYTES - sc->sc_hdr_size - ETHER_HDR_LEN;
+		ifp->if_hardmtu = MCLBYTES - sc->sc_hdr_size - ETHER_HDR_LEN;
 
 	if (virtio_alloc_vq(vsc, &sc->sc_vq[VQRX], 0, MCLBYTES, 2, "rx") != 0)
 		goto err;
