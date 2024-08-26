@@ -4566,7 +4566,7 @@ pf_test_rule(struct pf_pdesc *pd, struct pf_rule **rm, struct pf_state **sm,
 
 #if NPFSYNC > 0
 	if (*sm != NULL && !ISSET((*sm)->state_flags, PFSTATE_NOSYNC) &&
-	    pfsync_is_up()) {
+	    pd->m->m_pkthdr.pf.pad[0] != 1 && pfsync_is_up()) {
 		/*
 		 * We want the state created, but we dont
 		 * want to send this in case a partner
