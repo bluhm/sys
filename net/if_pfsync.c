@@ -1957,7 +1957,6 @@ pfsync_defer(struct pf_state *st, struct mbuf *m, int dir)
 	pd->pd_deadline = getnsecuptime() + PFSYNC_DEFER_NSEC;
 	pd->pd_dir = dir;
 
-	m->m_pkthdr.pf.flags |= PF_TAG_GENERATED;
 	st->sync_defer = pd;
 
 	sched = s->s_deferred++;
