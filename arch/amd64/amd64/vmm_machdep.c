@@ -83,7 +83,7 @@ int vcpu_reset_regs_vmx(struct vcpu *, struct vcpu_reg_state *);
 int vcpu_reset_regs_svm(struct vcpu *, struct vcpu_reg_state *);
 int vcpu_reload_vmcs_vmx(struct vcpu *);
 int vcpu_init(struct vcpu *, struct vm_create_params *);
-int vcpu_init_vmx(struct vcpu *, struct vm_create_params *);
+int vcpu_init_vmx(struct vcpu *);
 int vcpu_init_svm(struct vcpu *, struct vm_create_params *);
 int vcpu_run_vmx(struct vcpu *, struct vm_run_params *);
 int vcpu_run_svm(struct vcpu *, struct vm_run_params *);
@@ -2818,7 +2818,6 @@ exit:
  *
  * Parameters:
  *  vcpu: the VCPU structure being initialized
- *  vcp: parameters provided by vmd(8)
  *
  * Return values:
  *  0: the VCPU was initialized successfully
@@ -2826,7 +2825,7 @@ exit:
  *  EINVAL: an error occurred during VCPU initialization
  */
 int
-vcpu_init_vmx(struct vcpu *vcpu, struct vm_create_params *vcp)
+vcpu_init_vmx(struct vcpu *vcpu)
 {
 	struct vmcs *vmcs;
 	uint64_t msr, eptp;
@@ -3187,7 +3186,7 @@ vcpu_init_svm(struct vcpu *vcpu, struct vm_create_params *vcp)
 
 	/* Inform vmd(8) about ASID and C bit position. */
 	vcp->vcp_poscbit = amd64_pos_cbit;
-	vcp->vcp_asid[vcpu->vc_parent->vm_vcpu_ct] = vcpu->vc_vpid;
+	vcp->vcp_asid[vcpu->vc_id] = vcpu->vc_vpid;
 
 exit:
 	if (ret)
@@ -3218,7 +3217,7 @@ vcpu_init(struct vcpu *vcpu, struct vm_create_params *vcp)
 	vcpu->vc_shadow_pat = rdmsr(MSR_CR_PAT);
 
 	if (vmm_softc->mode == VMM_MODE_EPT)
-		ret = vcpu_init_vmx(vcpu, vcp);
+		ret = vcpu_init_vmx(vcpu);
 	else if (vmm_softc->mode == VMM_MODE_RVI)
 		ret = vcpu_init_svm(vcpu, vcp);
 	else

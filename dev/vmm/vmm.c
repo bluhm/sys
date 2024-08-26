@@ -399,13 +399,13 @@ vm_create(struct vm_create_params *vcp, struct proc *p)
 		vcpu = pool_get(&vcpu_pool, PR_WAITOK | PR_ZERO);
 
 		vcpu->vc_parent = vm;
+		vcpu->vc_id = vm->vm_vcpu_ct;
+		vm->vm_vcpu_ct++;
 		if ((ret = vcpu_init(vcpu, vcp)) != 0) {
 			printf("failed to init vcpu %d for vm %p\n", i, vm);
 			vm_teardown(&vm);
 			return (ret);
 		}
-		vcpu->vc_id = vm->vm_vcpu_ct;
-		vm->vm_vcpu_ct++;
 		/* Publish vcpu to list, inheriting the reference. */
 		SLIST_INSERT_HEAD(&vm->vm_vcpu_list, vcpu, vc_vcpu_link);
 	}
