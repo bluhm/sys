@@ -2083,8 +2083,9 @@ pfsync_defer_output(struct pfsync_deferral *pd)
 		if (pf_setup_pdesc(&pdesc, st->key[PF_SK_WIRE]->af,
 		    pd->pd_dir, NULL, pd->pd_m, NULL) != PF_PASS)
 			return;
-		printf("%s: pf_route af %d, rt %d\n", __func__,
-		    st->key[PF_SK_WIRE]->af, st->rt);
+		printf("%s: pf_route af %d, rt %d, st dir %d, pd dir %d\n",
+		    __func__, st->key[PF_SK_WIRE]->af, st->rt,
+		    st->direction, pd->pd_dir);
 		switch (st->key[PF_SK_WIRE]->af) {
 		case AF_INET:
 			pf_route(&pdesc, st);
@@ -2099,8 +2100,9 @@ pfsync_defer_output(struct pfsync_deferral *pd)
 		}
 		pd->pd_m = pdesc.m;
 	} else {
-		printf("%s: ip_output af %d, rt %d\n", __func__,
-		    st->key[PF_SK_WIRE]->af, st->rt);
+		printf("%s: ip_output af %d, rt %d, st dir %d, pd dir %d\n",
+		    __func__, st->key[PF_SK_WIRE]->af, st->rt,
+		    st->direction, pd->pd_dir);
 		switch (st->key[PF_SK_WIRE]->af) {
 		case AF_INET:
 			ip_output(pd->pd_m, NULL, NULL, 0, NULL, NULL, 0);
