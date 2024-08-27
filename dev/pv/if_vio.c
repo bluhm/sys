@@ -912,6 +912,8 @@ again:
 			ifq_deq_commit(&ifp->if_snd, m);
 			m_freem(m);
 			ifp->if_oerrors++;
+			printf("%s: if_oerrors %llu\n", __func__,
+			    ifp->if_oerrors);
 			continue;
 		}
 		r = virtio_enqueue_reserve(vq, slot,
@@ -1354,13 +1356,24 @@ vio_encap(struct vio_softc *sc, int slot, struct mbuf *m)
 	case 0:
 		break;
 	case EFBIG:
-		if (m_defrag(m, M_DONTWAIT) == 0 &&
-		    bus_dmamap_load_mbuf(vsc->sc_dmat, dmap, m,
-		    BUS_DMA_WRITE|BUS_DMA_NOWAIT) == 0)
-			break;
+		printf("%s: EFBIG %d\n", __func__, r);
+		r = m_defrag(m, M_DONTWAIT);
+		if (r) {
+			printf("%s: m_defrag %d\n", __func__, r);
+		} else {
+			r = bus_dmamap_load_mbuf(vsc->sc_dmat, dmap, m,
+			    BUS_DMA_WRITE|BUS_DMA_NOWAIT);
+			if (r) {
+				printf("%s: bus_dmamap_load_mbuf %d\n",
+				    __func__, r);
+			} else {
+				break;
+			}
+		}
 
 		/* FALLTHROUGH */
 	default:
+		printf("%s: ENOBUFS %d\n", __func__, r);
 		return ENOBUFS;
 	}
 	sc->sc_tx_mbufs[slot] = m;
