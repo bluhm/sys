@@ -436,8 +436,10 @@ _bus_dmamap_load_raw(bus_dma_tag_t t, bus_dmamap_t map, bus_dma_segment_t *segs,
 				map->dm_segs[seg].ds_len = sgsize;
 				first = 0;
 			} else {
-				if (paddr == (map->dm_segs[seg].ds_addr +
-				    map->dm_segs[seg].ds_len) &&
+				bus_addr_t lastaddr = map->dm_segs[seg].ds_addr
+				    + map->dm_segs[seg].ds_len;
+
+				if (paddr == lastaddr &&
 				    (map->dm_segs[seg].ds_len + sgsize) <=
 				     map->_dm_maxsegsz &&
 				    (map->_dm_boundary == 0 ||
@@ -756,15 +758,18 @@ _bus_dmamap_load_buffer(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
 			map->dm_segs[seg]._ds_bounce_va = pgva;
 			first = 0;
 		} else {
-			if (curaddr == (map->dm_segs[seg].ds_addr +
-			    map->dm_segs[seg].ds_len) &&
+			bus_addr_t lastaddr = map->dm_segs[seg].ds_addr +
+			    map->dm_segs[seg].ds_len;
+			vaddr_t lastva = map->dm_segs[seg]._ds_va +
+			    map->dm_segs[seg].ds_len;
+
+			if (curaddr == lastaddr &&
 			    (map->dm_segs[seg].ds_len + sgsize) <=
 			     map->_dm_maxsegsz &&
 			    (map->_dm_boundary == 0 ||
 			     (map->dm_segs[seg].ds_addr & bmask) ==
 			     (curaddr & bmask)) &&
-			    (!use_bounce_buffer || (map->dm_segs[seg]._ds_va +
-			     map->dm_segs[seg].ds_len) == vaddr)) {
+			    (!use_bounce_buffer || vaddr == lastva)) {
 				map->dm_segs[seg].ds_len += sgsize;
 			} else {
 				if (++seg >= map->_dm_segcnt)
