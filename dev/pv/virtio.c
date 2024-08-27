@@ -316,7 +316,7 @@ virtio_init_vq(struct virtio_softc *sc, struct virtqueue *vq)
 	/* enqueue/dequeue status */
 	vq->vq_avail_idx = 0;
 	vq->vq_used_idx = 0;
-	vq_sync_uring(sc, vq, BUS_DMASYNC_PREREAD);
+	vq_sync_uring(sc, vq, BUS_DMASYNC_POSTREAD);
 	vq->vq_queued = 1;
 }
 
