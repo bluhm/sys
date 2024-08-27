@@ -726,7 +726,7 @@ _bus_dmamap_load_buffer(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
 
 		if (use_bounce_buffer) {
 			if (page >= map->_dm_npages)
-				return (ENOMEM);
+				return (EFBIG);
 
 			off = vaddr & PAGE_MASK;
 			pg = map->_dm_pages[page];
