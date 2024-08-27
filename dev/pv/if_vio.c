@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_vio.c,v 1.46 2024/08/16 13:02:44 jan Exp $	*/
+/*	$OpenBSD: if_vio.c,v 1.48 2024/08/26 19:37:54 sf Exp $	*/
 
 /*
  * Copyright (c) 2012 Stefan Fritsch, Alexander Fiveg.
@@ -330,9 +330,9 @@ void	vio_dump(struct vio_softc *);
 int
 vio_match(struct device *parent, void *match, void *aux)
 {
-	struct virtio_softc *va = aux;
+	struct virtio_attach_args *va = aux;
 
-	if (va->sc_childdevid == PCI_PRODUCT_VIRTIO_NETWORK)
+	if (va->va_devid == PCI_PRODUCT_VIRTIO_NETWORK)
 		return 1;
 
 	return 0;
@@ -599,7 +599,7 @@ vio_attach(struct device *parent, struct device *self, void *aux)
 	if (virtio_has_feature(vsc, VIRTIO_NET_F_MRG_RXBUF))
 		ifp->if_hardmtu = MAXMCLBYTES;
 	else
-		ifp->if_hardmtu = MAXMCLBYTES - sc->sc_hdr_size - ETHER_HDR_LEN;
+		ifp->if_hardmtu = MCLBYTES - sc->sc_hdr_size - ETHER_HDR_LEN;
 
 	if (virtio_alloc_vq(vsc, &sc->sc_vq[VQRX], 0, MCLBYTES, 2, "rx") != 0)
 		goto err;
