@@ -203,6 +203,7 @@ vq_sync_aring(struct virtio_softc *sc, struct virtqueue *vq, int ops)
 	bus_dmamap_sync(sc->sc_dmat, vq->vq_dmamap, vq->vq_availoffset,
 	    offsetof(struct vring_avail, ring) + vq->vq_num * sizeof(uint16_t),
 	    ops);
+	virtio_membar_sync();
 }
 
 static inline void
@@ -211,12 +212,14 @@ vq_sync_aring_used_event(struct virtio_softc *sc, struct virtqueue *vq, int ops)
 	bus_dmamap_sync(sc->sc_dmat, vq->vq_dmamap, vq->vq_availoffset +
 	    offsetof(struct vring_avail, ring) + vq->vq_num * sizeof(uint16_t),
 	    sizeof(uint16_t), ops);
+	virtio_membar_sync();
 }
 
 
 static inline void
 vq_sync_uring(struct virtio_softc *sc, struct virtqueue *vq, int ops)
 {
+	virtio_membar_sync();
 	bus_dmamap_sync(sc->sc_dmat, vq->vq_dmamap, vq->vq_usedoffset,
 	    offsetof(struct vring_used, ring) + vq->vq_num *
 	    sizeof(struct vring_used_elem), ops);
@@ -225,6 +228,7 @@ vq_sync_uring(struct virtio_softc *sc, struct virtqueue *vq, int ops)
 static inline void
 vq_sync_uring_avail_event(struct virtio_softc *sc, struct virtqueue *vq, int ops)
 {
+	virtio_membar_sync();
 	bus_dmamap_sync(sc->sc_dmat, vq->vq_dmamap,
 	    vq->vq_usedoffset + offsetof(struct vring_used, ring) +
 	    vq->vq_num * sizeof(struct vring_used_elem), sizeof(uint16_t),
@@ -698,7 +702,6 @@ publish_avail_idx(struct virtio_softc *sc, struct virtqueue *vq)
 	/* first make sure the avail ring entries are visible to the device */
 	vq_sync_aring(sc, vq, BUS_DMASYNC_PREWRITE);
 
-	virtio_membar_producer();
 	vq->vq_avail->idx = vq->vq_avail_idx;
 	/* make the avail idx visible to the device */
 	vq_sync_aring(sc, vq, BUS_DMASYNC_PREWRITE);
@@ -730,7 +733,6 @@ notify:
 			uint16_t t;
 			publish_avail_idx(sc, vq);
 
-			virtio_membar_sync();
 			vq_sync_uring_avail_event(sc, vq, BUS_DMASYNC_POSTREAD);
 			t = VQ_AVAIL_EVENT(vq) + 1;
 			if ((uint16_t)(n - t) < (uint16_t)(n - o))
@@ -738,7 +740,6 @@ notify:
 		} else {
 			publish_avail_idx(sc, vq);
 
-			virtio_membar_sync();
 			vq_sync_uring(sc, vq, BUS_DMASYNC_POSTREAD);
 			if (!(vq->vq_used->flags & VRING_USED_F_NO_NOTIFY))
 				sc->sc_ops->kick(sc, vq->vq_index);
@@ -826,7 +827,6 @@ virtio_dequeue(struct virtio_softc *sc, struct virtqueue *vq,
 	usedidx = vq->vq_used_idx++;
 	usedidx &= vq->vq_mask;
 
-	virtio_membar_consumer();
 	vq_sync_uring(sc, vq, BUS_DMASYNC_POSTREAD);
 	slot = vq->vq_used->ring[usedidx].id;
 	qe = &vq->vq_entries[slot];
@@ -881,9 +881,8 @@ virtio_postpone_intr(struct virtqueue *vq, uint16_t nslots)
 
 	/* set the new event index: avail_ring->used_event = idx */
 	VQ_USED_EVENT(vq) = idx;
-	virtio_membar_sync();
-
 	vq_sync_aring_used_event(vq->vq_owner, vq, BUS_DMASYNC_PREWRITE);
+
 	vq->vq_queued++;
 
 	if (nslots < virtio_nused(vq))
@@ -959,8 +958,6 @@ virtio_start_vq_intr(struct virtio_softc *sc, struct virtqueue *vq)
 		vq->vq_avail->flags &= ~VRING_AVAIL_F_NO_INTERRUPT;
 		vq_sync_aring(sc, vq, BUS_DMASYNC_PREWRITE);
 	}
-
-	virtio_membar_sync();
 
 	vq->vq_queued++;
 
