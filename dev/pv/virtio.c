@@ -820,6 +820,7 @@ virtio_dequeue(struct virtio_softc *sc, struct virtqueue *vq,
 	uint16_t slot, usedidx;
 	struct vq_entry *qe;
 
+	vq_sync_uring(vq->vq_owner, vq, BUS_DMASYNC_POSTREAD);
 	if (vq->vq_used_idx == vq->vq_used->idx)
 		return ENOENT;
 	usedidx = vq->vq_used_idx++;
