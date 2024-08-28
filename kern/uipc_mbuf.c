@@ -1533,6 +1533,44 @@ m_print(void *v,
 
 	}
 }
+
+void
+m_print_chain(void *v,
+    int (*pr)(const char *, ...) __attribute__((__format__(__kprintf__,1,2))))
+{
+	struct mbuf *m;
+	const char *indent = "+--";
+	u_int len = 0, size = 0;
+
+	for (m = v; m != NULL; m = m->m_next) {
+		(*pr)("%s mbuf %p, len %u", indent, m, m->m_len);
+		len += m->m_len;
+		if (m->m_flags & M_PKTHDR)
+			(*pr)(", pktlen %d", m->m_pkthdr.len);
+		if (m->m_flags & M_EXT) {
+			(*pr)(", clsize %u", m->m_ext.ext_size);
+			size += m->m_ext.ext_size;
+		} else if (m->m_flags & M_PKTHDR)
+			size +=  MHLEN;
+		else
+			size += MLEN;
+		(*pr)("\n");
+		indent = " +-";
+	}
+	indent = " \\-";
+	if (v != NULL)
+		(*pr)("%s total len %u, size %u\n", indent, len, size);
+}
+
+void
+m_print_packet(void *v,
+    int (*pr)(const char *, ...) __attribute__((__format__(__kprintf__,1,2))))
+{
+	struct mbuf *m;
+
+	for (m = v; m != NULL; m = m->m_nextpkt)
+		m_print_chain(m, pr);
+}
 #endif
 
 /*

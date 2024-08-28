@@ -340,7 +340,17 @@ db_malloc_print_cmd(db_expr_t addr, int have_addr, db_expr_t count, char *modif)
 void
 db_mbuf_print_cmd(db_expr_t addr, int have_addr, db_expr_t count, char *modif)
 {
-	m_print((void *)addr, db_printf);
+	switch (modif[0]) {
+	case 'c':
+		m_print_chain((void *)addr, db_printf);
+		break;
+	case 'p':
+		m_print_packet((void *)addr, db_printf);
+		break;
+	default:
+		m_print((void *)addr, db_printf);
+		break;
+	}
 }
 
 void
