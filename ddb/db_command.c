@@ -340,17 +340,15 @@ db_malloc_print_cmd(db_expr_t addr, int have_addr, db_expr_t count, char *modif)
 void
 db_mbuf_print_cmd(db_expr_t addr, int have_addr, db_expr_t count, char *modif)
 {
-	switch (modif[0]) {
-	case 'c':
-		m_print_chain((void *)addr, db_printf);
-		break;
-	case 'p':
-		m_print_packet((void *)addr, db_printf);
-		break;
-	default:
+	if ((modif[0] == 'c' && modif[1] == 'p') ||
+	    (modif[0] == 'p' && modif[1] == 'c'))
+		m_print_packet((void *)addr, 1, db_printf);
+	else if (modif[0] == 'c')
+		m_print_chain((void *)addr, 0, db_printf);
+	else if (modif[0] == 'p')
+		m_print_packet((void *)addr, 0, db_printf);
+	else
 		m_print((void *)addr, db_printf);
-		break;
-	}
 }
 
 void

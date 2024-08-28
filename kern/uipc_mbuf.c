@@ -1535,14 +1535,15 @@ m_print(void *v,
 }
 
 void
-m_print_chain(void *v,
+m_print_chain(void *v, int deep,
     int (*pr)(const char *, ...) __attribute__((__format__(__kprintf__,1,2))))
 {
 	struct mbuf *m;
-	const char *indent = "+--";
-	u_int len = 0, size = 0;
+	const char *indent = deep ? "++-" : "-+-";
+	size_t chain = 0, len = 0, size = 0;
 
 	for (m = v; m != NULL; m = m->m_next) {
+		chain++;
 		(*pr)("%s mbuf %p, len %u", indent, m, m->m_len);
 		len += m->m_len;
 		if (m->m_flags & M_PKTHDR)
@@ -1551,25 +1552,53 @@ m_print_chain(void *v,
 			(*pr)(", clsize %u", m->m_ext.ext_size);
 			size += m->m_ext.ext_size;
 		} else if (m->m_flags & M_PKTHDR)
-			size +=  MHLEN;
+			size += MHLEN;
 		else
 			size += MLEN;
 		(*pr)("\n");
-		indent = " +-";
+		indent = deep ? "|+-" : " +-";
 	}
-	indent = " \\-";
-	if (v != NULL)
-		(*pr)("%s total len %u, size %u\n", indent, len, size);
+	indent = deep ? "|\\-" : " \\-";
+	if (v != NULL) {
+		(*pr)("%s total chain %zu, len %zu, size %zu\n",
+		    indent, chain, len, size);
+	}
 }
 
 void
-m_print_packet(void *v,
+m_print_packet(void *v, int deep,
     int (*pr)(const char *, ...) __attribute__((__format__(__kprintf__,1,2))))
 {
-	struct mbuf *m;
+	struct mbuf *m, *n;
+	const char *indent = "+--";
+	size_t pkts = 0;
 
-	for (m = v; m != NULL; m = m->m_nextpkt)
-		m_print_chain(m, pr);
+	for (m = v; m != NULL; m = m->m_nextpkt) {
+		size_t chain = 0, len = 0, size = 0;
+
+		pkts++;
+		if (deep) {
+			m_print_chain(m, deep, pr);
+			continue;
+		}
+		for (n = m; n != NULL; n = n->m_next) {
+			chain++;
+			len += n->m_len;
+			if (n->m_flags & M_EXT)
+				size += n->m_ext.ext_size;
+			else if (n->m_flags & M_PKTHDR)
+				size += MHLEN;
+			else
+				size += MLEN;
+		}
+		(*pr)("%s mbuf %p, chain %zu", indent, m, chain);
+		if (m->m_flags & M_PKTHDR)
+			(*pr)(", pktlen %d", m->m_pkthdr.len);
+		(*pr)(", len %zu, size %zu\n", len, size);
+	}
+	indent = "\\--";
+	if (v != NULL)
+		(*pr)("%s total packets %zu\n", indent, pkts);
 }
 #endif
 

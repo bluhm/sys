@@ -61,8 +61,8 @@ void db_show_all_pools(db_expr_t, int, db_expr_t, char *);
 
 /* kern/uipc_mbuf.c */
 void m_print(void *, int (*)(const char *, ...));
-void m_print_chain(void *, int (*)(const char *, ...));
-void m_print_packet(void *, int (*)(const char *, ...));
+void m_print_chain(void *, int, int (*)(const char *, ...));
+void m_print_packet(void *, int, int (*)(const char *, ...));
 
 /* kern/uipc_socket.c */
 void so_print(void *, int (*)(const char *, ...));
