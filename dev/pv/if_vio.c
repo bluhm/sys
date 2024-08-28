@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_vio.c,v 1.48 2024/08/26 19:37:54 sf Exp $	*/
+/*	$OpenBSD: if_vio.c,v 1.50 2024/08/27 19:11:20 sf Exp $	*/
 
 /*
  * Copyright (c) 2012 Stefan Fritsch, Alexander Fiveg.
@@ -443,7 +443,7 @@ vio_alloc_mem(struct vio_softc *sc)
 
 	if (vio_alloc_dmamem(sc) != 0) {
 		printf("unable to allocate dma region\n");
-		return  -1;
+		return -1;
 	}
 
 	kva = sc->sc_dma_kva;
@@ -588,7 +588,7 @@ vio_attach(struct device *parent, struct device *self, void *aux)
 		ether_fakeaddr(ifp);
 		vio_put_lladdr(&sc->sc_ac, vsc);
 	}
-	printf(": address %s\n", ether_sprintf(sc->sc_ac.ac_enaddr));
+	printf(", address %s\n", ether_sprintf(sc->sc_ac.ac_enaddr));
 
 	if (virtio_has_feature(vsc, VIRTIO_NET_F_MRG_RXBUF) ||
 	    vsc->sc_version_1) {
@@ -601,12 +601,11 @@ vio_attach(struct device *parent, struct device *self, void *aux)
 	else
 		ifp->if_hardmtu = MCLBYTES - sc->sc_hdr_size - ETHER_HDR_LEN;
 
-	if (virtio_alloc_vq(vsc, &sc->sc_vq[VQRX], 0, MCLBYTES, 2, "rx") != 0)
+	if (virtio_alloc_vq(vsc, &sc->sc_vq[VQRX], 0, 2, "rx") != 0)
 		goto err;
 	vsc->sc_nvqs = 1;
 	sc->sc_vq[VQRX].vq_done = vio_rx_intr;
 	if (virtio_alloc_vq(vsc, &sc->sc_vq[VQTX], 1,
-	    sc->sc_hdr_size + ifp->if_hardmtu + ETHER_HDR_LEN,
 	    VIRTIO_NET_TX_MAXNSEGS + 1, "tx") != 0) {
 		goto err;
 	}
@@ -618,7 +617,7 @@ vio_attach(struct device *parent, struct device *self, void *aux)
 	else
 		virtio_stop_vq_intr(vsc, &sc->sc_vq[VQTX]);
 	if (virtio_has_feature(vsc, VIRTIO_NET_F_CTRL_VQ)) {
-		if (virtio_alloc_vq(vsc, &sc->sc_vq[VQCTL], 2, NBPG, 1,
+		if (virtio_alloc_vq(vsc, &sc->sc_vq[VQCTL], 2, 1,
 		    "control") == 0) {
 			sc->sc_vq[VQCTL].vq_done = vio_ctrleof;
 			virtio_start_vq_intr(vsc, &sc->sc_vq[VQCTL]);
@@ -1503,8 +1502,8 @@ vio_ctrl_guest_offloads(struct vio_softc *sc, uint64_t features)
 	if (sc->sc_ctrl_status->ack == VIRTIO_NET_OK) {
 		r = 0;
 	} else {
-		printf("%s: features 0x%llx failed\n", sc->sc_dev.dv_xname,
-		    features);
+		printf("%s: offload features 0x%llx failed\n",
+		    sc->sc_dev.dv_xname, features);
 		r = EIO;
 	}
 
