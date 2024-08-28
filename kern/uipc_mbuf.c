@@ -234,8 +234,6 @@ struct mbuf *
 m_get(int nowait, int type)
 {
 	struct mbuf *m;
-	struct counters_ref cr;
-	uint64_t *counters;
 	int s;
 
 	KASSERT(type >= 0 && type < MT_NTYPES);
@@ -245,9 +243,7 @@ m_get(int nowait, int type)
 		return (NULL);
 
 	s = splnet();
-	counters = counters_enter(&cr, mbstat);
-	counters[type]++;
-	counters_leave(&cr, mbstat);
+	counters_inc(mbstat, type);
 	splx(s);
 
 	m->m_type = type;
@@ -267,8 +263,6 @@ struct mbuf *
 m_gethdr(int nowait, int type)
 {
 	struct mbuf *m;
-	struct counters_ref cr;
-	uint64_t *counters;
 	int s;
 
 	KASSERT(type >= 0 && type < MT_NTYPES);
@@ -278,9 +272,7 @@ m_gethdr(int nowait, int type)
 		return (NULL);
 
 	s = splnet();
-	counters = counters_enter(&cr, mbstat);
-	counters[type]++;
-	counters_leave(&cr, mbstat);
+	counters_inc(mbstat, type);
 	splx(s);
 
 	m->m_type = type;
@@ -417,17 +409,13 @@ struct mbuf *
 m_free(struct mbuf *m)
 {
 	struct mbuf *n;
-	struct counters_ref cr;
-	uint64_t *counters;
 	int s;
 
 	if (m == NULL)
 		return (NULL);
 
 	s = splnet();
-	counters = counters_enter(&cr, mbstat);
-	counters[m->m_type]--;
-	counters_leave(&cr, mbstat);
+	counters_dec(mbstat, m->m_type);
 	splx(s);
 
 	n = m->m_next;
