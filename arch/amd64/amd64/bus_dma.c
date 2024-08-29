@@ -140,7 +140,7 @@ _bus_dmamap_create(bus_dma_tag_t t, bus_size_t size, int nsegments,
 
 	if (use_bounce_buffer) {
 		/* this many pages plus one in case we get split */
-		npages = round_page(size) / PAGE_SIZE + 1;
+		npages = round_page(size) / PAGE_SIZE + nsegments;
 		if (npages < nsegments)
 			npages = nsegments;
 		mapsize += sizeof(struct vm_page *) * npages;
