@@ -171,7 +171,7 @@ m_pulldown(struct mbuf *m, int off, int len, int *offp)
 		n->m_next->m_data -= hlen;
 		n->m_next->m_len += hlen;
 		counters_inc(mbstat, MBSTAT_PULLDOWN_COPY);
-		memmove(mtod(n->m_next, caddr_t), mtod(n, caddr_t) + off, hlen);
+		memcpy(mtod(n->m_next, caddr_t), mtod(n, caddr_t) + off, hlen);
 		n->m_len -= hlen;
 		n = n->m_next;
 		off = 0;
@@ -201,7 +201,7 @@ m_pulldown(struct mbuf *m, int off, int len, int *offp)
 	}
 	/* get hlen from <n, off> into <o, 0> */
 	o->m_len = hlen;
-	memmove(mtod(o, caddr_t), mtod(n, caddr_t) + off, hlen);
+	memcpy(mtod(o, caddr_t), mtod(n, caddr_t) + off, hlen);
 	n->m_len -= hlen;
 	/* get tlen from <n->m_next, 0> into <o, hlen> */
 	m_copydata(n->m_next, 0, tlen, mtod(o, caddr_t) + o->m_len);
