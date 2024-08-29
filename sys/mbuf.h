@@ -373,7 +373,7 @@ u_int mextfree_register(void (*)(caddr_t, u_int, void *));
 #define MBSTAT_PULLUP_COPY	(MBSTAT_TYPES + 6)
 #define MBSTAT_PULLDOWN_ALLOC	(MBSTAT_TYPES + 7)
 #define MBSTAT_PULLDOWN_COPY	(MBSTAT_TYPES + 8)
-#define MBSTAT_COUNT		(MBSTAT_TYPES + 10)
+#define MBSTAT_COUNT		(MBSTAT_TYPES + 9)
 
 /*
  * Mbuf statistics.
