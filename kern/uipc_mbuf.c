@@ -1534,6 +1534,17 @@ m_print(void *v,
 	}
 }
 
+const char *m_types[MT_NTYPES] = {
+	"fre",
+	"dat",
+	"hdr",
+	"nam",
+	"opt",
+	"ftb",
+	"ctl",
+	"oob",
+};
+
 void
 m_print_chain(void *v, int deep,
     int (*pr)(const char *, ...) __attribute__((__format__(__kprintf__,1,2))))
@@ -1543,18 +1554,19 @@ m_print_chain(void *v, int deep,
 	size_t chain = 0, len = 0, size = 0;
 
 	for (m = v; m != NULL; m = m->m_next) {
+		const char *type;
+
 		chain++;
-		(*pr)("%s mbuf %p, len %u", indent, m, m->m_len);
 		len += m->m_len;
+		size += M_SIZE(m);
+		type = (m->m_type >= 0 && m->m_type < MT_NTYPES) ?
+		    m_types[m->m_type] : "???";
+		(*pr)("%s mbuf %p, %s, off %zd, len %u", indent, m, type,
+		    m->m_data - M_DATABUF(m), m->m_len);
 		if (m->m_flags & M_PKTHDR)
 			(*pr)(", pktlen %d", m->m_pkthdr.len);
-		if (m->m_flags & M_EXT) {
+		if (m->m_flags & M_EXT)
 			(*pr)(", clsize %u", m->m_ext.ext_size);
-			size += m->m_ext.ext_size;
-		} else if (m->m_flags & M_PKTHDR)
-			size += MHLEN;
-		else
-			size += MLEN;
 		(*pr)("\n");
 		indent = deep ? "|+-" : " +-";
 	}
@@ -1584,12 +1596,7 @@ m_print_packet(void *v, int deep,
 		for (n = m; n != NULL; n = n->m_next) {
 			chain++;
 			len += n->m_len;
-			if (n->m_flags & M_EXT)
-				size += n->m_ext.ext_size;
-			else if (n->m_flags & M_PKTHDR)
-				size += MHLEN;
-			else
-				size += MLEN;
+			size += M_SIZE(n);
 		}
 		(*pr)("%s mbuf %p, chain %zu", indent, m, chain);
 		if (m->m_flags & M_PKTHDR)
