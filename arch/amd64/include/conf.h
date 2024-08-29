@@ -54,3 +54,6 @@ cdev_decl(pctr);
 
 #include "vmm.h"
 cdev_decl(vmm);
+
+#include "ccp.h"
+cdev_decl(psp);

@@ -134,6 +134,7 @@ int	pledge_socket(struct proc *p, int domain, unsigned int state);
 int	pledge_ioctl(struct proc *p, long com, struct file *);
 int	pledge_ioctl_drm(struct proc *p, long com, dev_t device);
 int	pledge_ioctl_vmm(struct proc *p, long com);
+int	pledge_ioctl_psp(struct proc *p, long com);
 int	pledge_flock(struct proc *p);
 int	pledge_fcntl(struct proc *p, int cmd);
 int	pledge_swapctl(struct proc *p, int cmd);

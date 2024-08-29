@@ -76,6 +76,7 @@
 #if NVMM > 0
 #include <machine/conf.h>
 #endif
+#include "ccp.h"
 #endif
 
 #include "drm.h"
@@ -1345,6 +1346,18 @@ pledge_ioctl(struct proc *p, long com, struct file *fp)
 			error = pledge_ioctl_vmm(p, com);
 			if (error == 0)
 				return 0;
+		}
+	}
+#endif
+
+#if defined(__amd64__) && NCCP > 0
+	if ((pledge & PLEDGE_VMM)) {
+		if ((fp->f_type == DTYPE_VNODE) &&
+		    (vp->v_type == VCHR) &&
+		    (cdevsw[major(vp->v_rdev)].d_open == pspopen)) {
+			error = pledge_ioctl_psp(p, com);
+			if (error == 0)
+				return (0);
 		}
 	}
 #endif
