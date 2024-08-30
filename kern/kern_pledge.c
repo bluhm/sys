@@ -1350,7 +1350,7 @@ pledge_ioctl(struct proc *p, long com, struct file *fp)
 	}
 #endif
 
-#if defined(__amd64__) && NCCP > 0
+#if defined(__amd64__) && NCCP > 0 && NVMM > 0
 	if ((pledge & PLEDGE_VMM)) {
 		if ((fp->f_type == DTYPE_VNODE) &&
 		    (vp->v_type == VCHR) &&
