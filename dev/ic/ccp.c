@@ -1,4 +1,4 @@
-/*	$OpenBSD: ccp.c,v 1.7 2024/09/01 03:08:56 jsg Exp $ */
+/*	$OpenBSD: ccp.c,v 1.8 2024/09/01 17:13:46 bluhm Exp $ */
 
 /*
  * Copyright (c) 2018 David Gwynne <dlg@openbsd.org>

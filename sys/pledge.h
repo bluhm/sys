@@ -1,4 +1,4 @@
-/*	$OpenBSD: pledge.h,v 1.48 2023/06/02 17:44:29 cheloha Exp $	*/
+/*	$OpenBSD: pledge.h,v 1.49 2024/09/01 17:13:46 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2015 Nicholas Marriott <nicm@openbsd.org>
