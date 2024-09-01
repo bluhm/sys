@@ -1,4 +1,4 @@
-/*	$OpenBSD: ccpvar.h,v 1.3 2024/06/13 17:59:08 bluhm Exp $ */
+/*	$OpenBSD: ccpvar.h,v 1.4 2024/09/01 19:25:06 bluhm Exp $ */
 
 /*
  * Copyright (c) 2018 David Gwynne <dlg@openbsd.org>
