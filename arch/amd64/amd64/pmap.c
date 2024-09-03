@@ -2159,8 +2159,8 @@ pmap_write_protect(struct pmap *pmap, vaddr_t sva, vaddr_t eva, vm_prot_t prot)
 	shootself = (scr3 == 0);
 
 	/* should be ok, but just in case ... */
-	sva &= pg_frame;
-	eva &= pg_frame;
+	sva &= PG_FRAME;
+	eva &= PG_FRAME;
 
 	if (!(prot & PROT_READ))
 		set |= pg_xo;
