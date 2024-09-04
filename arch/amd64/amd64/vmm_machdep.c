@@ -1,4 +1,4 @@
-/* $OpenBSD: vmm_machdep.c,v 1.34 2024/09/03 13:36:19 dv Exp $ */
+/* $OpenBSD: vmm_machdep.c,v 1.36 2024/09/04 16:12:40 dv Exp $ */
 /*
  * Copyright (c) 2014 Mike Larkin <mlarkin@openbsd.org>
  *
@@ -4181,7 +4181,8 @@ vcpu_run_vmx(struct vcpu *vcpu, struct vm_run_params *vrp)
 				break;
 			}
 			if (!(exitinfo & VMX_EXIT_INFO_HAVE_REASON)) {
-				printf("%s: cant read exit reason\n", __func__);
+				printf("%s: can't read exit reason\n",
+				    __func__);
 				ret = EINVAL;
 				break;
 			}
@@ -6281,7 +6282,8 @@ vmm_handle_cpuid(struct vcpu *vcpu)
 		*rdx = 0;
 		break;
 	case 0x80000000:	/* Extended function level */
-		*rax = 0x8000001f; /* curcpu()->ci_pnfeatset */
+		/* We don't emulate past 0x8000001f currently. */
+		*rax = min(curcpu()->ci_pnfeatset, 0x8000001f);
 		*rbx = 0;
 		*rcx = 0;
 		*rdx = 0;
