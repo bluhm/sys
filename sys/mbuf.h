@@ -84,7 +84,7 @@ struct m_hdr {
 	struct	mbuf *mh_nextpkt;	/* next chain in queue/record */
 	caddr_t	mh_data;		/* location of data */
 	u_int	mh_len;			/* amount of data in this mbuf */
-	short	mh_type;		/* type of data in this mbuf */
+	u_short	mh_type;		/* type of data in this mbuf */
 	u_short	mh_flags;		/* flags; see below */
 #ifndef __LP64__
 	u_int	mh_pad;			/* pad to 8-byte boundary */
