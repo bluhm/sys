@@ -90,6 +90,7 @@
 
 #ifdef DDB
 #include <machine/db_machdep.h>
+#include <ddb/db_interface.h>
 #endif
 
 #if NPF > 0
@@ -1567,6 +1568,9 @@ m_print_chain(void *v, int deep,
 			(*pr)(", pktlen %d", m->m_pkthdr.len);
 		if (m->m_flags & M_EXT)
 			(*pr)(", clsize %u", m->m_ext.ext_size);
+		else
+			(*pr)(", size %u", 
+			    (m)->m_flags & M_PKTHDR ? MHLEN : MLEN);
 		(*pr)("\n");
 		indent = deep ? "|+-" : " +-";
 	}
