@@ -91,6 +91,7 @@
 #ifdef DDB
 #include <machine/db_machdep.h>
 #include <ddb/db_interface.h>
+#include <ddb/db_output.h>
 #endif
 
 #if NPF > 0
@@ -226,6 +227,19 @@ nmbclust_update(long newval)
 		pool_wakeup(&mclpools[i]);
 
 	return 0;
+}
+
+void
+m_print_debug(struct mbuf *m, const char *name, int len)
+{
+	static struct timeval lasttime;
+	const struct timeval mininterval = { 1, 0 };
+
+	if (ratecheck(&lasttime, &mininterval)) {
+		printf("%s: len %d\n", name, len);
+		m_print_chain(m, 0, printf);
+		db_stack_dump();
+	}
 }
 
 /*
@@ -547,6 +561,7 @@ m_defrag(struct mbuf *m, int how)
 	KASSERT(m->m_flags & M_PKTHDR);
 
 	counters_inc(mbstat, MBSTAT_DEFRAG_ALLOC);
+	m_print_debug(m, __func__, m->m_pkthdr.len);
 	if ((m0 = m_gethdr(how, m->m_type)) == NULL)
 		return (ENOBUFS);
 	if (m->m_pkthdr.len > MHLEN) {
@@ -607,6 +622,7 @@ m_prepend(struct mbuf *m, int len, int how)
 		m->m_len += len;
 	} else {
 		counters_inc(mbstat, MBSTAT_PREPEND_ALLOC);
+		m_print_debug(m, __func__, len);
 		MGET(mn, how, m->m_type);
 		if (mn == NULL) {
 			m_freem(m);
