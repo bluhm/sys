@@ -481,6 +481,7 @@ ixgbe_start(struct ifqueue *ifq)
 
 		used = ixgbe_encap(txr, m_head);
 		if (used == 0) {
+			ifq->ifq_errors++;
 			m_freem(m_head);
 			continue;
 		}
@@ -2708,6 +2709,7 @@ ixgbe_get_buf(struct ix_rxring *rxr, int i)
 	error = bus_dmamap_load_mbuf(rxr->rxdma.dma_tag, rxbuf->map,
 	    mp, BUS_DMA_NOWAIT);
 	if (error) {
+		rxr->ifiq->ifiq_errors++;
 		m_freem(mp);
 		return (error);
 	}

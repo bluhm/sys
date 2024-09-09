@@ -1683,6 +1683,7 @@ igc_get_buf(struct igc_rxring *rxr, int i)
 	error = bus_dmamap_load_mbuf(rxr->rxdma.dma_tag, rxbuf->map, m,
 	    BUS_DMA_NOWAIT);
 	if (error) {
+		rxr->ifiq->ifiq_errors++;
 		m_freem(m);
 		return error;
 	}
