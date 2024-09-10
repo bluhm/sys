@@ -1569,7 +1569,7 @@ m_print_chain(void *v, int deep,
 		if (m->m_flags & M_EXT)
 			(*pr)(", clsize %u", m->m_ext.ext_size);
 		else
-			(*pr)(", size %u",
+			(*pr)(", size %zu",
 			    m->m_flags & M_PKTHDR ? MHLEN : MLEN);
 		(*pr)("\n");
 		indent = deep ? "|+-" : " +-";
