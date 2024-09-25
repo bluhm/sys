@@ -1,4 +1,4 @@
-/*	$OpenBSD: subr_witness.c,v 1.53 2024/06/03 14:34:19 claudio Exp $	*/
+/*	$OpenBSD: subr_witness.c,v 1.54 2024/09/25 18:24:13 bluhm Exp $	*/
 
 /*-
  * Copyright (c) 2008 Isilon Systems, Inc.
