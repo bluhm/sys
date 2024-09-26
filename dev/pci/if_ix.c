@@ -2200,6 +2200,7 @@ ixgbe_allocate_queues(struct ix_softc *sc)
 		/* Set up some basics */
 		rxr->sc = sc;
 		rxr->me = i;
+		mtx_init(&rxr->rx_mtx, IPL_NET);
 		timeout_set(&rxr->rx_refill, ixgbe_rxrefill, rxr);
 
 		if (ixgbe_dma_malloc(sc, rsize,
@@ -2842,12 +2843,14 @@ ixgbe_rxrefill(void *xrxr)
 	struct ix_rxring *rxr = xrxr;
 	struct ix_softc *sc = rxr->sc;
 
+	mtx_enter(&rxr->rx_mtx);
 	if (ixgbe_rxfill(rxr)) {
 		/* Advance the Rx Queue "Tail Pointer" */
 		IXGBE_WRITE_REG(&sc->hw, IXGBE_RDT(rxr->me),
 		    rxr->last_desc_filled);
 	} else if (if_rxr_inuse(&rxr->rx_ring) == 0)
 		timeout_add(&rxr->rx_refill, 1);
+	mtx_leave(&rxr->rx_mtx);
 
 }
 
