@@ -1216,6 +1216,7 @@ struct ixl_rx_ring {
 	struct ifiqueue		*rxr_ifiq;
 
 	struct if_rxring	 rxr_acct;
+	struct mutex		 rxr_mtx;
 	struct timeout		 rxr_refill;
 
 	unsigned int		 rxr_prod;
@@ -1408,7 +1409,7 @@ static void	ixl_rxr_unconfig(struct ixl_softc *, struct ixl_rx_ring *);
 static void	ixl_rxr_clean(struct ixl_softc *, struct ixl_rx_ring *);
 static void	ixl_rxr_free(struct ixl_softc *, struct ixl_rx_ring *);
 static int	ixl_rxeof(struct ixl_softc *, struct ixl_rx_ring *);
-static void	ixl_rxfill(struct ixl_softc *, struct ixl_rx_ring *);
+static int	ixl_rxfill(struct ixl_softc *, struct ixl_rx_ring *);
 static void	ixl_rxrefill(void *);
 static int	ixl_rxrinfo(struct ixl_softc *, struct if_rxrinfo *);
 static void	ixl_rx_checksum(struct mbuf *, uint64_t);
@@ -2323,6 +2324,7 @@ ixl_up(struct ixl_softc *sc)
 
 		ixl_wr(sc, rxr->rxr_tail, 0);
 		ixl_rxfill(sc, rxr);
+		ixl_wr(sc, rxr->rxr_tail, rxr->rxr_prod);
 
 		reg = ixl_rd(sc, I40E_QRX_ENA(i));
 		SET(reg, I40E_QRX_ENA_QENA_REQ_MASK);
@@ -3084,6 +3086,7 @@ ixl_rxr_alloc(struct ixl_softc *sc, unsigned int qid)
 
 	rxr->rxr_sc = sc;
 	if_rxr_init(&rxr->rxr_acct, 17, sc->sc_rx_ring_ndescs - 1);
+	mtx_init(&rxr->rxr_mtx, IPL_NET);
 	timeout_set(&rxr->rxr_refill, ixl_rxrefill, rxr);
 	rxr->rxr_cons = rxr->rxr_prod = 0;
 	rxr->rxr_m_head = NULL;
@@ -3336,7 +3339,7 @@ ixl_rxeof(struct ixl_softc *sc, struct ixl_rx_ring *rxr)
 		rxr->rxr_cons = cons;
 		if (ifiq_input(ifiq, &ml))
 			if_rxr_livelocked(&rxr->rxr_acct);
-		ixl_rxfill(sc, rxr);
+		ixl_rxrefill(rxr);
 	}
 
 	bus_dmamap_sync(sc->sc_dmat, IXL_DMA_MAP(&rxr->rxr_mem),
@@ -3346,7 +3349,7 @@ ixl_rxeof(struct ixl_softc *sc, struct ixl_rx_ring *rxr)
 	return (done);
 }
 
-static void
+static int
 ixl_rxfill(struct ixl_softc *sc, struct ixl_rx_ring *rxr)
 {
 	struct ixl_rx_rd_desc_16 *ring, *rxd;
@@ -3360,7 +3363,7 @@ ixl_rxfill(struct ixl_softc *sc, struct ixl_rx_ring *rxr)
 
 	slots = if_rxr_get(&rxr->rxr_acct, sc->sc_rx_ring_ndescs);
 	if (slots == 0)
-		return;
+		return (0);
 
 	prod = rxr->rxr_prod;
 
@@ -3400,14 +3403,10 @@ ixl_rxfill(struct ixl_softc *sc, struct ixl_rx_ring *rxr)
 		post = 1;
 	} while (--slots);
 
+	rxr->rxr_prod = prod;
 	if_rxr_put(&rxr->rxr_acct, slots);
 
-	if (if_rxr_inuse(&rxr->rxr_acct) == 0)
-		timeout_add(&rxr->rxr_refill, 1);
-	else if (post) {
-		rxr->rxr_prod = prod;
-		ixl_wr(sc, rxr->rxr_tail, prod);
-	}
+	return (post);
 }
 
 void
@@ -3416,7 +3415,12 @@ ixl_rxrefill(void *arg)
 	struct ixl_rx_ring *rxr = arg;
 	struct ixl_softc *sc = rxr->rxr_sc;
 
-	ixl_rxfill(sc, rxr);
+	mtx_enter(&rxr->rxr_mtx);
+	if (ixl_rxfill(sc, rxr)) {
+		ixl_wr(sc, rxr->rxr_tail, rxr->rxr_prod);
+	} else if (if_rxr_inuse(&rxr->rxr_acct) == 0)
+		timeout_add(&rxr->rxr_refill, 1);
+	mtx_leave(&rxr->rxr_mtx);
 }
 
 static int
