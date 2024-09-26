@@ -198,6 +198,7 @@ struct bnxt_rx_queue {
 	int			rx_cons;
 	int			rx_ag_prod;
 	int			rx_ag_cons;
+	struct mutex		rx_mtx;
 	struct timeout		rx_refill;
 };
 
@@ -671,6 +672,7 @@ bnxt_attach(struct device *parent, struct device *self, void *aux)
 
 		rx->rx_softc = sc;
 		rx->rx_ifiq = ifiq;
+		mtx_init(&rx->rx_mtx, IPL_NET);
 		timeout_set(&rx->rx_refill, bnxt_refill, bq);
 		ifiq->ifiq_softc = rx;
 
@@ -1642,6 +1644,7 @@ bnxt_intr(void *xq)
 	    (cpr->commit_cons+1) % cpr->ring.ring_size, 1);
 
 	if (rxfree != 0) {
+		mtx_enter(&rx->rx_mtx);
 		rx->rx_cons += rxfree;
 		if (rx->rx_cons >= rx->rx_ring.ring_size)
 			rx->rx_cons -= rx->rx_ring.ring_size;
@@ -1662,6 +1665,7 @@ bnxt_intr(void *xq)
 		if ((rx->rx_cons == rx->rx_prod) ||
 		    (rx->rx_ag_cons == rx->rx_ag_prod))
 			timeout_add(&rx->rx_refill, 0);
+		mtx_leave(&rx->rx_mtx);
 	}
 	if (txfree != 0) {
 		if (ifq_is_oactive(tx->tx_ifq))
@@ -2253,10 +2257,11 @@ bnxt_refill(void *xq)
 	struct bnxt_queue *q = xq;
 	struct bnxt_rx_queue *rx = &q->q_rx;
 
+	mtx_enter(&rx->rx_mtx);
 	bnxt_rx_fill(q);
-
 	if (rx->rx_cons == rx->rx_prod)
 		timeout_add(&rx->rx_refill, 1);
+	mtx_leave(&rx->rx_mtx);
 }
 
 int
@@ -2286,6 +2291,8 @@ bnxt_rx(struct bnxt_softc *sc, struct bnxt_rx_queue *rx,
 			return (1);
 		}
 	}
+
+	mtx_enter(&rx->rx_mtx);
 
 	bs = &rx->rx_slots[rxlo->opaque];
 	bus_dmamap_sync(sc->sc_dmat, bs->bs_map, 0, bs->bs_map->dm_mapsize,
@@ -2335,6 +2342,8 @@ bnxt_rx(struct bnxt_softc *sc, struct bnxt_rx_queue *rx,
 		m->m_pkthdr.len += am->m_len;
 		(*agslots)++;
 	}
+
+	mtx_leave(&rx->rx_mtx);
 
 	ml_enqueue(ml, m);
 	return (0);
