@@ -282,6 +282,7 @@ struct igc_rxring {
 	struct igc_dma_alloc	rxdma;
 	uint32_t		last_desc_filled;
 	uint32_t		next_to_check;
+	struct mutex		rx_mtx;
 	struct timeout		rx_refill;
 	struct if_rxring	rx_ring;
 };

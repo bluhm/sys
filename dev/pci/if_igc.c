@@ -428,6 +428,7 @@ igc_allocate_queues(struct igc_softc *sc)
 		rxr = &sc->rx_rings[i];
 		rxr->sc = sc;
 		rxr->me = i;
+		mtx_init(&rxr->rx_mtx, IPL_NET);
 		timeout_set(&rxr->rx_refill, igc_rxrefill, rxr);
 
 		if (igc_dma_malloc(sc, rsize, &rxr->rxdma)) {
@@ -1281,12 +1282,13 @@ igc_rxrefill(void *xrxr)
 	struct igc_rxring *rxr = xrxr;
 	struct igc_softc *sc = rxr->sc;
 
+	mtx_enter(&rxr->rx_mtx);
 	if (igc_rxfill(rxr)) {
 		IGC_WRITE_REG(&sc->hw, IGC_RDT(rxr->me),
 		    (rxr->last_desc_filled + 1) % sc->num_rx_desc);
-	}
-	else if (if_rxr_inuse(&rxr->rx_ring) == 0)
+	} else if (if_rxr_inuse(&rxr->rx_ring) == 0)
 		timeout_add(&rxr->rx_refill, 1);
+	mtx_leave(&rxr->rx_mtx);
 }
 
 /*********************************************************************
