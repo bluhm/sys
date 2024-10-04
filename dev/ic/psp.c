@@ -1,4 +1,4 @@
-/*	$OpenBSD: psp.c,v 1.4 2024/09/04 08:14:18 jsg Exp $ */
+/*	$OpenBSD: psp.c,v 1.5 2024/10/04 16:58:26 bluhm Exp $ */
 
 /*
  * Copyright (c) 2023, 2024 Hans-Joerg Hoexer <hshoexer@genua.de>
