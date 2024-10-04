@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_resource.c,v 1.88 2024/08/20 13:29:25 mvs Exp $	*/
+/*	$OpenBSD: kern_resource.c,v 1.90 2024/10/03 10:20:05 claudio Exp $	*/
 /*	$NetBSD: kern_resource.c,v 1.38 1996/10/23 07:19:38 matthias Exp $	*/
 
 /*-
@@ -555,9 +555,10 @@ dogetrusage(struct proc *p, int who, struct rusage *rup)
 }
 
 void
-ruadd(struct rusage *ru, struct rusage *ru2)
+ruadd(struct rusage *ru, const struct rusage *ru2)
 {
-	long *ip, *ip2;
+	long *ip;
+	const long *ip2;
 	int i;
 
 	timeradd(&ru->ru_utime, &ru2->ru_utime, &ru->ru_utime);
@@ -577,18 +578,21 @@ void
 rucheck(void *arg)
 {
 	struct rlimit rlim;
+	struct tusage tu = { 0 };
 	struct process *pr = arg;
+	struct proc *q;
 	time_t runtime;
 
 	KERNEL_ASSERT_LOCKED();
 
-	SCHED_LOCK();
-	runtime = pr->ps_tu.tu_runtime.tv_sec;
-	SCHED_UNLOCK();
-
 	mtx_enter(&pr->ps_mtx);
 	rlim = pr->ps_limit->pl_rlimit[RLIMIT_CPU];
+	tuagg_sumup(&tu, &pr->ps_tu);
+	TAILQ_FOREACH(q, &pr->ps_threads, p_thr_link)
+		tuagg_sumup(&tu, &q->p_tu);
 	mtx_leave(&pr->ps_mtx);
+
+	runtime = tu.tu_runtime.tv_sec;
 
 	if ((rlim_t)runtime >= rlim.rlim_cur) {
 		if ((rlim_t)runtime >= rlim.rlim_max) {
