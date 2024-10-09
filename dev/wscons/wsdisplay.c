@@ -1016,7 +1016,9 @@ wsdisplaywrite(dev_t dev, struct uio *uio, int flag)
 	struct wsscreen *scr;
 
 	unit = WSDISPLAYUNIT(dev);
-	sc = wsdisplay_cd.cd_devs[unit];
+	if (unit >= wsdisplay_cd.cd_ndevs ||	/* make sure it was attached */
+	    (sc = wsdisplay_cd.cd_devs[unit]) == NULL)
+		return (ENXIO);
 
 	if (ISWSDISPLAYCTL(dev))
 		return (0);
