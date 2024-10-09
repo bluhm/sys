@@ -19,6 +19,13 @@
 #include <sys/ioctl.h>
 
 /* AMD 17h */
+#define PSPv1_REG_INTEN		0x10610
+#define PSPv1_REG_INTSTS	0x10614
+#define PSPv1_REG_CMDRESP	0x10580
+#define PSPv1_REG_ADDRLO	0x105e0
+#define PSPv1_REG_ADDRHI	0x105e4
+#define PSPv1_REG_CAPABILITIES	0x105fc
+
 #define PSP_REG_INTEN		0x10690
 #define PSP_REG_INTSTS		0x10694
 #define PSP_REG_CMDRESP		0x10980
@@ -252,10 +259,18 @@ struct psp_attach_args {
 
 	bus_dma_tag_t		dmat;
 	uint32_t		capabilities;
+	int			version;
 };
 
 int pspsubmatch(struct device *, void *, void *);
 int pspprint(void *aux, const char *pnp);
 int psp_sev_intr(void *);
+
+struct ccp_softc;
+struct pci_attach_args;
+
+int psp_pci_match(struct ccp_softc *, struct pci_attach_args *);
+void psp_pci_intr_map(struct ccp_softc *, struct pci_attach_args *);
+void psp_pci_attach(struct ccp_softc *, struct pci_attach_args *);
 
 #endif	/* _KERNEL */

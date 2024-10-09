@@ -830,6 +830,7 @@ file	dev/pci/if_bwfm_pci.c		bwfm_pci
 # AMD Cryptographic Co-processor
 attach	ccp at pci with ccp_pci
 file	dev/pci/ccp_pci.c		ccp_pci
+file	dev/pci/psp_pci.c		psp
 
 # Broadcom NetXtreme-C/E
 device	bnxt: ether, ifnet, ifmedia, intrmap, stoeplitz
