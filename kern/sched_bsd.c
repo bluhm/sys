@@ -1,4 +1,4 @@
-/*	$OpenBSD: sched_bsd.c,v 1.94 2024/07/08 13:17:12 claudio Exp $	*/
+/*	$OpenBSD: sched_bsd.c,v 1.96 2024/10/09 08:58:19 claudio Exp $	*/
 /*	$NetBSD: kern_synch.c,v 1.37 1996/04/22 01:38:37 christos Exp $	*/
 
 /*-
@@ -344,7 +344,6 @@ mi_switch(void)
 	struct schedstate_percpu *spc = &curcpu()->ci_schedstate;
 	struct proc *p = curproc;
 	struct proc *nextproc;
-	struct timespec ts;
 	int oldipl;
 #ifdef MULTIPROCESSOR
 	int hold_count;
@@ -364,26 +363,8 @@ mi_switch(void)
 		hold_count = 0;
 #endif
 
-	/*
-	 * Compute the amount of time during which the current
-	 * process was running, and add that to its total so far.
-	 */
-	nanouptime(&ts);
-	if (timespeccmp(&ts, &spc->spc_runtime, <)) {
-#if 0
-		printf("uptime is not monotonic! "
-		    "ts=%lld.%09lu, runtime=%lld.%09lu\n",
-		    (long long)tv.tv_sec, tv.tv_nsec,
-		    (long long)spc->spc_runtime.tv_sec,
-		    spc->spc_runtime.tv_nsec);
-#endif
-		timespecclear(&ts);
-	} else {
-		timespecsub(&ts, &spc->spc_runtime, &ts);
-	}
-	tu_enter(&p->p_tu);
-	timespecadd(&p->p_tu.tu_runtime, &ts, &p->p_tu.tu_runtime);
-	tu_leave(&p->p_tu);
+	/* Update thread runtime */
+	tuagg_add_runtime();
 
 	/* Stop any optional clock interrupts. */
 	if (ISSET(spc->spc_schedflags, SPCF_ITIMER)) {
@@ -483,12 +464,6 @@ setrunnable(struct proc *p)
 	default:
 		panic("setrunnable");
 	case SSTOP:
-		/*
-		 * If we're being traced (possibly because someone attached us
-		 * while we were stopped), check for a signal from the debugger.
-		 */
-		if ((pr->ps_flags & PS_TRACED) != 0 && pr->ps_xsig != 0)
-			atomic_setbits_int(&p->p_siglist, sigmask(pr->ps_xsig));
 		prio = p->p_usrpri;
 		setrunqueue(NULL, p, prio);
 		break;

@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_sched.c,v 1.100 2024/07/09 08:44:36 claudio Exp $	*/
+/*	$OpenBSD: kern_sched.c,v 1.102 2024/10/08 11:57:59 claudio Exp $	*/
 /*
  * Copyright (c) 2007, 2008 Artur Grabowski <art@openbsd.org>
  *
@@ -213,21 +213,10 @@ void
 sched_exit(struct proc *p)
 {
 	struct schedstate_percpu *spc = &curcpu()->ci_schedstate;
-	struct timespec ts;
 
 	LIST_INSERT_HEAD(&spc->spc_deadproc, p, p_hash);
 
-	/* update the tu_runtime one last time */
-	nanouptime(&ts);
-	if (timespeccmp(&ts, &spc->spc_runtime, <))
-		timespecclear(&ts);
-	else
-		timespecsub(&ts, &spc->spc_runtime, &ts);
-
-	/* add the time counts for this thread */
-	tu_enter(&p->p_tu);
-	timespecadd(&p->p_tu.tu_runtime, &ts, &p->p_tu.tu_runtime);
-	tu_leave(&p->p_tu);
+	tuagg_add_runtime();
 
 	KERNEL_ASSERT_LOCKED();
 	sched_toidle();
@@ -580,7 +569,6 @@ log2(unsigned int i)
  * Just total guesstimates for now.
  */
 
-int sched_cost_load = 1;
 int sched_cost_priority = 1;
 int sched_cost_runnable = 3;
 int sched_cost_resident = 1;
