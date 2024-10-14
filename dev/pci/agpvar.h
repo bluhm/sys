@@ -1,4 +1,4 @@
-/*	$OpenBSD: agpvar.h,v 1.37 2024/07/02 04:29:01 jsg Exp $	*/
+/*	$OpenBSD: agpvar.h,v 1.40 2024/10/10 03:36:10 jsg Exp $	*/
 /*	$NetBSD: agpvar.h,v 1.4 2001/10/01 21:54:48 fvdl Exp $	*/
 
 /*-
@@ -32,15 +32,6 @@
 #ifndef _PCI_AGPVAR_H_
 #define _PCI_AGPVAR_H_
 
-/* #define	AGP_DEBUG */
-#ifdef AGP_DEBUG
-#define AGP_DPF(fmt, arg...) do { printf("agp: " fmt ,##arg); } while (0)
-#else
-#define AGP_DPF(fmt, arg...) do {} while (0)
-#endif
-
-#define AGPUNIT(x)	minor(x)
-
 struct agp_attach_args {
 	char			*aa_busname;
 	struct pci_attach_args	*aa_pa;
@@ -72,13 +63,6 @@ struct agp_info {
 	u_int32_t       ai_devid;
 };
 
-struct agp_memory_info {
-        vsize_t         ami_size;       /* size in bytes */
-        bus_addr_t      ami_physical;   /* bogus hack for i810 */
-        off_t           ami_offset;     /* page offset if bound */
-        int             ami_is_bound;   /* non-zero if bound */
-};
-
 struct agp_methods {
 	void	(*bind_page)(void *, bus_addr_t, paddr_t, int);
 	void	(*unbind_page)(void *, bus_addr_t);
@@ -101,12 +85,9 @@ struct agp_softc {
 	pcitag_t			 sc_pcitag;
 	bus_addr_t			 sc_apaddr;
 	bus_size_t			 sc_apsize;
-	uint32_t			 sc_stolen_entries;
 	pcireg_t			 sc_id;
 
-	int				 sc_opened;
 	int				 sc_capoff;			
-	int				 sc_nextid;	/* next mem block id */
 	enum agp_acquire_state		 sc_state;
 
 	u_int32_t			 sc_maxmem;	/* mem upper bound */
