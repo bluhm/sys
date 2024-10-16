@@ -57,6 +57,7 @@ struct taskq {
 	unsigned int		 tq_running;
 	unsigned int		 tq_nthreads;
 	unsigned int		 tq_flags;
+	unsigned int		 tq_exec;	/* [m] # executing runners */
 	const char		*tq_name;
 
 	struct mutex		 tq_mtx;
@@ -79,6 +80,7 @@ struct taskq taskq_sys = {
 	.tq_running	= 0,
 	.tq_nthreads	= 1,
 	.tq_flags	= 0,
+	.tq_exec	= 0,
 	.tq_name	= taskq_sys_name,
 	.tq_mtx		= MUTEX_INITIALIZER_FLAGS(IPL_HIGH,
 			      taskq_sys_name, 0),
@@ -104,6 +106,7 @@ struct taskq taskq_sys_mp = {
 	.tq_running	= 0,
 	.tq_nthreads	= 1,
 	.tq_flags	= TASKQ_MPSAFE,
+	.tq_exec	= 0,
 	.tq_name	= taskq_sys_mp_name,
 	.tq_mtx		= MUTEX_INITIALIZER_FLAGS(IPL_HIGH,
 			      taskq_sys_mp_name, 0),
@@ -155,6 +158,7 @@ taskq_create(const char *name, unsigned int nthreads, int ipl,
 	tq->tq_nthreads = nthreads;
 	tq->tq_name = name;
 	tq->tq_flags = flags;
+	tq->tq_exec = 0;
 
 	mtx_init_flags(&tq->tq_mtx, ipl, name, 0);
 	TAILQ_INIT(&tq->tq_worklist);
@@ -350,7 +354,7 @@ task_set(struct task *t, void (*fn)(void *), void *arg)
 int
 task_add(struct taskq *tq, struct task *w)
 {
-	int rv = 0;
+	int rv = 0, wake = 0;
 
 	if (ISSET(w->t_flags, TASK_ONQUEUE))
 		return (0);
@@ -358,6 +362,8 @@ task_add(struct taskq *tq, struct task *w)
 	mtx_enter(&tq->tq_mtx);
 	if (!ISSET(w->t_flags, TASK_ONQUEUE)) {
 		rv = 1;
+		if (tq->tq_exec < tq->tq_running)
+			wake = 1;
 		SET(w->t_flags, TASK_ONQUEUE);
 		TAILQ_INSERT_TAIL(&tq->tq_worklist, w, t_entry);
 #if NKCOV > 0
@@ -367,7 +373,7 @@ task_add(struct taskq *tq, struct task *w)
 	}
 	mtx_leave(&tq->tq_mtx);
 
-	if (rv)
+	if (wake)
 		wakeup_one(tq);
 
 	return (rv);
@@ -399,12 +405,14 @@ taskq_next_work(struct taskq *tq, struct task *work)
 
 	mtx_enter(&tq->tq_mtx);
 	while ((next = TAILQ_FIRST(&tq->tq_worklist)) == NULL) {
+		tq->tq_exec--;
 		if (tq->tq_state != TQ_S_RUNNING) {
 			mtx_leave(&tq->tq_mtx);
 			return (0);
 		}
 
 		msleep_nsec(tq, &tq->tq_mtx, PWAIT, "bored", INFSLP);
+		tq->tq_exec++;
 	}
 
 	TAILQ_REMOVE(&tq->tq_worklist, next, t_entry);
@@ -434,6 +442,7 @@ taskq_thread(void *xtq)
 
 	mtx_enter(&tq->tq_mtx);
 	SLIST_INSERT_HEAD(&tq->tq_threads, &self, tt_entry);
+	tq->tq_exec++;
 	mtx_leave(&tq->tq_mtx);
 
 	WITNESS_CHECKORDER(&tq->tq_lock_object, LOP_NEWORDER, NULL);
