@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_exit.c,v 1.237 2024/10/08 12:02:24 claudio Exp $	*/
+/*	$OpenBSD: kern_exit.c,v 1.239 2024/10/15 13:49:26 claudio Exp $	*/
 /*	$NetBSD: kern_exit.c,v 1.39 1996/04/22 01:38:25 christos Exp $	*/
 
 /*
@@ -172,7 +172,7 @@ exit1(struct proc *p, int xexit, int xsig, int flags)
 
 	/* proc is off ps_threads list so update accounting of process now */
 	tuagg_add_runtime();
-	tuagg_add_process(p->p_p, p);
+	tuagg_add_process(pr, p);
 
 	if ((p->p_flag & P_THREAD) == 0) {
 		/* main thread gotta wait because it has the pid, et al */
@@ -502,7 +502,6 @@ dowait6(struct proc *q, idtype_t idtype, id_t id, int *statusp, int options,
 {
 	int nfound;
 	struct process *pr;
-	struct proc *p;
 	int error;
 
 	if (info != NULL)
@@ -515,8 +514,6 @@ loop:
 		    (idtype == P_PID && id != pr->ps_pid) ||
 		    (idtype == P_PGID && id != pr->ps_pgid))
 			continue;
-
-		p = pr->ps_mainproc;
 
 		nfound++;
 		if ((options & WEXITED) && (pr->ps_flags & PS_ZOMBIE)) {
@@ -571,11 +568,9 @@ loop:
 				memset(rusage, 0, sizeof(*rusage));
 			return (0);
 		}
-		if (p->p_stat == SSTOP &&
+		if (((pr->ps_flags & PS_TRACED) || (options & WUNTRACED)) &&
 		    (pr->ps_flags & PS_WAITED) == 0 &&
-		    (p->p_flag & P_SUSPSINGLE) == 0 &&
-		    ((pr->ps_flags & PS_TRACED) ||
-		    (options & WUNTRACED))) {
+		    (pr->ps_flags & PS_STOPPED)) {
 			if ((options & WNOWAIT) == 0)
 				atomic_setbits_int(&pr->ps_flags, PS_WAITED);
 
