@@ -32,6 +32,7 @@
 static const struct pci_matchid psp_pci_devices[] = {
 	{ PCI_VENDOR_AMD,	PCI_PRODUCT_AMD_17_CCP_1 },
 	{ PCI_VENDOR_AMD,	PCI_PRODUCT_AMD_17_3X_CCP },
+	{ PCI_VENDOR_AMD,	PCI_PRODUCT_AMD_19_1X_PSP },
 };
 
 int
@@ -44,7 +45,7 @@ psp_pci_match(struct ccp_softc *sc, struct pci_attach_args *pa)
 		return (0);
 
 	if (PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_AMD_17_CCP_1)
-		reg_capabilities = PSPv1_REG_CAPABILITIES;
+		reg_capabilities = PSPV1_REG_CAPABILITIES;
 	else
 		reg_capabilities = PSP_REG_CAPABILITIES;
 	capabilities = bus_space_read_4(sc->sc_iot, sc->sc_ioh,
@@ -64,8 +65,8 @@ psp_pci_intr_map(struct ccp_softc *sc, struct pci_attach_args *pa)
 
 	/* clear and disable interrupts */
 	if (PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_AMD_17_CCP_1) {
-		reg_inten = PSPv1_REG_INTEN;
-		reg_intsts = PSPv1_REG_INTSTS;
+		reg_inten = PSPV1_REG_INTEN;
+		reg_intsts = PSPV1_REG_INTSTS;
 	} else {
 		reg_inten = PSP_REG_INTEN;
 		reg_intsts = PSP_REG_INTSTS;
@@ -100,11 +101,16 @@ psp_pci_attach(struct ccp_softc *sc, struct pci_attach_args *pa)
 	switch (PCI_PRODUCT(pa->pa_id)) {
 	case PCI_PRODUCT_AMD_17_CCP_1:
 		arg.version = 1;
-		reg_capabilities = PSPv1_REG_CAPABILITIES;
+		reg_capabilities = PSPV1_REG_CAPABILITIES;
 		break;
 	case PCI_PRODUCT_AMD_17_3X_CCP:
 		arg.version = 2;
-		/* FALLTHROUGH */
+		reg_capabilities = PSP_REG_CAPABILITIES;
+		break;
+	case PCI_PRODUCT_AMD_19_1X_PSP:
+		arg.version = 4;
+		reg_capabilities = PSP_REG_CAPABILITIES;
+		break;
 	default:
 		reg_capabilities = PSP_REG_CAPABILITIES;
 		break;

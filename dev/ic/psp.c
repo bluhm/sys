@@ -111,11 +111,11 @@ psp_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_ioh = arg->ioh;
 	sc->sc_dmat = arg->dmat;
 	if (arg->version == 1) {
-		sc->sc_reg_inten = PSPv1_REG_INTEN;
-		sc->sc_reg_intsts = PSPv1_REG_INTSTS;
-		sc->sc_reg_cmdresp = PSPv1_REG_CMDRESP;
-		sc->sc_reg_addrlo = PSPv1_REG_ADDRLO;
-		sc->sc_reg_addrhi = PSPv1_REG_ADDRHI;
+		sc->sc_reg_inten = PSPV1_REG_INTEN;
+		sc->sc_reg_intsts = PSPV1_REG_INTSTS;
+		sc->sc_reg_cmdresp = PSPV1_REG_CMDRESP;
+		sc->sc_reg_addrlo = PSPV1_REG_ADDRLO;
+		sc->sc_reg_addrhi = PSPV1_REG_ADDRHI;
 	} else {
 		sc->sc_reg_inten = PSP_REG_INTEN;
 		sc->sc_reg_intsts = PSP_REG_INTSTS;
