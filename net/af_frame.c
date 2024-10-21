@@ -40,7 +40,7 @@ static const struct protosw framesw[] = {
 		.pr_type	= SOCK_DGRAM,
 		.pr_domain	= &framedomain,
 		.pr_protocol	= IFT_ETHER,
-		.pr_flags	= PR_ATOMIC|PR_ADDR|PR_MPINPUT|PR_MPSOCKET,
+		.pr_flags	= PR_ATOMIC|PR_ADDR|PR_MPINPUT,
 
 		.pr_ctloutput	= ether_frm_ctloutput,
 		.pr_usrreqs	= &ether_frm_usrreqs,
