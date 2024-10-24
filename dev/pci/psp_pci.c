@@ -1,4 +1,4 @@
-/*	$OpenBSD$	*/
+/*	$OpenBSD: psp_pci.c,v 1.1 2024/10/24 18:52:59 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2023-2024 Hans-Joerg Hoexer <hshoexer@genua.de>

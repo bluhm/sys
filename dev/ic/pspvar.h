@@ -1,4 +1,4 @@
-/*	$OpenBSD: pspvar.h,v 1.2 2024/09/04 07:45:08 jsg Exp $ */
+/*	$OpenBSD: pspvar.h,v 1.3 2024/10/24 18:52:59 bluhm Exp $ */
 
 /*
  * Copyright (c) 2023, 2024 Hans-Joerg Hoexer <hshoexer@genua.de>

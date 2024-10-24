@@ -1,4 +1,4 @@
-/*	$OpenBSD: ccp_pci.c,v 1.13 2024/09/04 07:45:08 jsg Exp $ */
+/*	$OpenBSD: ccp_pci.c,v 1.14 2024/10/24 18:52:59 bluhm Exp $ */
 
 /*
  * Copyright (c) 2018 David Gwynne <dlg@openbsd.org>
