@@ -1,4 +1,4 @@
-/*	$OpenBSD: pledge.h,v 1.49 2024/09/01 17:13:46 bluhm Exp $	*/
+/*	$OpenBSD: pledge.h,v 1.51 2024/10/29 12:40:17 jsg Exp $	*/
 
 /*
  * Copyright (c) 2015 Nicholas Marriott <nicm@openbsd.org>
@@ -19,8 +19,6 @@
 
 #ifndef _SYS_PLEDGE_H_
 #define _SYS_PLEDGE_H_
-
-#include <sys/cdefs.h>
 
 /*
  * pledge(2) requests
@@ -120,7 +118,6 @@ static const struct {
 int	pledge_syscall(struct proc *, int, uint64_t *);
 int	pledge_fail(struct proc *, int, uint64_t);
 
-struct mbuf;
 struct nameidata;
 int	pledge_namei(struct proc *, struct nameidata *, char *);
 int	pledge_sendfd(struct proc *p, struct file *);
