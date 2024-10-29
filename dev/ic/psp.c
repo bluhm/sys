@@ -161,8 +161,8 @@ psp_attach(struct device *parent, struct device *self, void *aux)
 	printf(" api %u.%u, build %u, SEV, SEV-ES",
 	    pst.api_major, pst.api_minor, pst.cfges_build >> 24);
 
-        /* enable interrupts */
-        bus_space_write_4(sc->sc_iot, sc->sc_ioh, sc->sc_reg_inten, -1);
+	/* enable interrupts */
+	bus_space_write_4(sc->sc_iot, sc->sc_ioh, sc->sc_reg_inten, -1);
 
 	printf("\n");
 
@@ -279,8 +279,8 @@ psp_reinit(struct psp_softc *sc)
 		return (EINVAL);
 
 	/*
-         * create and map Trusted Memory Region (TMR); size 1 Mbyte,
-         * needs to be aligend to 1 Mbyte.
+	 * create and map Trusted Memory Region (TMR); size 1 Mbyte,
+	 * needs to be aligend to 1 Mbyte.
 	 */
 	sc->sc_tmr_size = size = PSP_TMR_SIZE;
 	if (bus_dmamap_create(sc->sc_dmat, size, 1, size, 0,
