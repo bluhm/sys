@@ -19,9 +19,9 @@
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
+#include <sys/malloc.h>
 #include <sys/pledge.h>
 #include <sys/rwlock.h>
-#include <sys/malloc.h>
 
 #include <machine/bus.h>
 
