@@ -837,7 +837,7 @@ pspsubmatch(struct device *parent, void *match, void *aux)
 
 struct ucode {
 	uint8_t		 family;
-	uint8_t	 	 model;
+	uint8_t		 model;
 	const char	*uname;
 } const psp_ucode_table[] = {
 	{ 0x17, 0x0, "amdsev/amd_sev_fam17h_model0xh.sbin" },
@@ -856,22 +856,24 @@ psp_load_ucode(struct psp_softc *sc)
 	uint8_t			 family, model;
 	int			 error;
 
-	if ((sc->sc_flags & PSPF_UCODELOADED) || (sc->sc_flags & PSPF_NOUCODE)
-	    || (sc->sc_flags & PSPF_INITIALIZED))
+	if ((sc->sc_flags & PSPF_UCODELOADED) ||
+	    (sc->sc_flags & PSPF_NOUCODE) ||
+	    (sc->sc_flags & PSPF_INITIALIZED))
 		return;
 
 	family = ci->ci_family;
 	model = (ci->ci_model & 0xf0) >> 4;
 
-	for (uc = psp_ucode_table; uc->uname; uc++)
+	for (uc = psp_ucode_table; uc->uname; uc++) {
 		if ((uc->family == family) && (uc->model == model))
 			break;
+	}
 
 	if (uc->uname == NULL) {
 		printf("%s: no firmware found, CPU family 0x%x model 0x%x\n",
 		    sc->sc_dev.dv_xname, family, model);
 		sc->sc_flags |= PSPF_NOUCODE;
-		return;	/* no firmware found */
+		return;
 	}
 
 	error = loadfirmware(uc->uname, &sc->sc_ucodebuf, &sc->sc_ucodelen);
