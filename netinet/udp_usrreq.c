@@ -298,6 +298,7 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 			}
 		}
 	}
+	CLR(m->m_pkthdr.csum_flags, M_UDP_CSUM_OUT);
 
 #ifdef IPSEC
 	if (udpencap_enable && udpencap_port && esp_enable &&
