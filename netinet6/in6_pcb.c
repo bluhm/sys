@@ -479,6 +479,8 @@ in6_pcbnotify(struct inpcbtable *table, const struct sockaddr_in6 *dst,
 	rw_enter_write(&table->inpt_notify);
 	mtx_enter(&table->inpt_mtx);
 	TAILQ_FOREACH(inp, &table->inpt_queue, inp_queue) {
+		if (in_pcb_is_iterator(inp))
+			continue;
 		KASSERT(ISSET(inp->inp_flags, INP_IPV6));
 
 		/*

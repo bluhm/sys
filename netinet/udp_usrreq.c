@@ -382,7 +382,8 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 	}
 
 	if (m->m_flags & (M_BCAST|M_MCAST)) {
-		SIMPLEQ_HEAD(, inpcb) inpcblist;
+		struct inpcb_iterator iter = {.inp_table = NULL};
+		struct inpcb *tinp = NULL;
 		struct inpcbtable *table;
 
 		/*
@@ -401,11 +402,6 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 		 * fixing the interface.  Maybe 4.5BSD will remedy this?)
 		 */
 
-		/*
-		 * Locate pcb(s) for datagram.
-		 * (Algorithm copied from raw_intr().)
-		 */
-		SIMPLEQ_INIT(&inpcblist);
 #ifdef INET6
 		if (ip6)
 			table = &udb6table;
@@ -413,9 +409,8 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 #endif
 			table = &udbtable;
 
-		rw_enter_write(&table->inpt_notify);
-		mtx_enter(&table->inpt_mtx);
-		TAILQ_FOREACH(inp, &table->inpt_queue, inp_queue) {
+		inp = NULL;
+		while ((inp = in_pcb_iterator(table, inp, &iter)) != NULL){
 			if (ip6)
 				KASSERT(ISSET(inp->inp_flags, INP_IPV6));
 			else
@@ -466,8 +461,18 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 					continue;
 			}
 
-			in_pcbref(inp);
-			SIMPLEQ_INSERT_TAIL(&inpcblist, inp, inp_notify);
+			if (tinp != NULL) {
+				struct mbuf *n;
+				
+				n = m_copym(m, 0, M_COPYALL, M_NOWAIT);
+				if (n != NULL) {
+					udp_sbappend(tinp, n, ip, ip6, iphlen,
+					    uh, &srcsa.sa, 0);
+				}
+				in_pcbunref(tinp);
+			}
+
+			tinp = in_pcbref(inp);
 
 			/*
 			 * Don't look for additional matches if this one does
@@ -478,14 +483,13 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 			 * clear these options after setting them.
 			 */
 			if ((inp->inp_socket->so_options & (SO_REUSEPORT |
-			    SO_REUSEADDR)) == 0)
+			    SO_REUSEADDR)) == 0) {
+				in_pcbunref(inp);
 				break;
+			}
 		}
-		mtx_leave(&table->inpt_mtx);
 
-		if (SIMPLEQ_EMPTY(&inpcblist)) {
-			rw_exit_write(&table->inpt_notify);
-
+		if (tinp == NULL) {
 			/*
 			 * No matching pcb found; discard datagram.
 			 * (No need to send an ICMP Port Unreachable
@@ -495,21 +499,8 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 			goto bad;
 		}
 
-		while ((inp = SIMPLEQ_FIRST(&inpcblist)) != NULL) {
-			struct mbuf *n;
-
-			SIMPLEQ_REMOVE_HEAD(&inpcblist, inp_notify);
-			if (SIMPLEQ_EMPTY(&inpcblist))
-				n = m;
-			else
-				n = m_copym(m, 0, M_COPYALL, M_NOWAIT);
-			if (n != NULL) {
-				udp_sbappend(inp, n, ip, ip6, iphlen, uh,
-				    &srcsa.sa, 0);
-			}
-			in_pcbunref(inp);
-		}
-		rw_exit_write(&table->inpt_notify);
+		udp_sbappend(tinp, m, ip, ip6, iphlen, uh, &srcsa.sa, 0);
+		in_pcbunref(tinp);
 
 		return IPPROTO_DONE;
 	}

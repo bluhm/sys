@@ -167,6 +167,8 @@ rip_input(struct mbuf **mp, int *offp, int proto, int af)
 	rw_enter_write(&rawcbtable.inpt_notify);
 	mtx_enter(&rawcbtable.inpt_mtx);
 	TAILQ_FOREACH(inp, &rawcbtable.inpt_queue, inp_queue) {
+		if (in_pcb_is_iterator(inp))
+			continue;
 		KASSERT(!ISSET(inp->inp_flags, INP_IPV6));
 
 		/*

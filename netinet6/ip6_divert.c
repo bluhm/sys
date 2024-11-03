@@ -212,6 +212,8 @@ divert6_packet(struct mbuf *m, int dir, u_int16_t divert_port)
 
 	mtx_enter(&divb6table.inpt_mtx);
 	TAILQ_FOREACH(inp, &divb6table.inpt_queue, inp_queue) {
+		if (in_pcb_is_iterator(inp))
+			continue;
 		if (inp->inp_lport != divert_port)
 			continue;
 		in_pcbref(inp);
