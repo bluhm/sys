@@ -653,7 +653,7 @@ in_pcb_iterator(struct inpcbtable *table, struct inpcb *inp,
 	mtx_enter(&table->inpt_mtx);
 
 	if (inp)
-		tmp = TAILQ_NEXT(inp, inp_queue);
+		tmp = TAILQ_NEXT((struct inpcb *)iter, inp_queue);
 	else
 		tmp = TAILQ_FIRST(&table->inpt_queue);
 
@@ -671,8 +671,7 @@ in_pcb_iterator(struct inpcbtable *table, struct inpcb *inp,
 
 	mtx_leave(&table->inpt_mtx);
 
-	if (inp)
-		in_pcbunref(inp);
+	in_pcbunref(inp);
 	
 	return tmp;
 }
