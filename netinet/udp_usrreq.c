@@ -383,7 +383,7 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 
 	if (m->m_flags & (M_BCAST|M_MCAST)) {
 		struct inpcb_iterator iter = {.inp_table = NULL};
-		struct inpcb *tinp = NULL;
+		struct inpcb *last;
 		struct inpcbtable *table;
 
 		/*
@@ -409,7 +409,7 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 #endif
 			table = &udbtable;
 
-		inp = NULL;
+		last = inp = NULL;
 		while ((inp = in_pcb_iterator(table, inp, &iter)) != NULL){
 			if (ip6)
 				KASSERT(ISSET(inp->inp_flags, INP_IPV6));
@@ -461,18 +461,18 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 					continue;
 			}
 
-			if (tinp != NULL) {
+			if (last != NULL) {
 				struct mbuf *n;
 				
 				n = m_copym(m, 0, M_COPYALL, M_NOWAIT);
 				if (n != NULL) {
-					udp_sbappend(tinp, n, ip, ip6, iphlen,
+					udp_sbappend(last, n, ip, ip6, iphlen,
 					    uh, &srcsa.sa, 0);
 				}
-				in_pcbunref(tinp);
+				in_pcbunref(last);
 			}
 
-			tinp = in_pcbref(inp);
+			last = in_pcbref(inp);
 
 			/*
 			 * Don't look for additional matches if this one does
@@ -489,7 +489,7 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 			}
 		}
 
-		if (tinp == NULL) {
+		if (last == NULL) {
 			/*
 			 * No matching pcb found; discard datagram.
 			 * (No need to send an ICMP Port Unreachable
@@ -499,8 +499,8 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 			goto bad;
 		}
 
-		udp_sbappend(tinp, m, ip, ip6, iphlen, uh, &srcsa.sa, 0);
-		in_pcbunref(tinp);
+		udp_sbappend(last, m, ip, ip6, iphlen, uh, &srcsa.sa, 0);
+		in_pcbunref(last);
 
 		return IPPROTO_DONE;
 	}
