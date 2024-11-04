@@ -411,7 +411,7 @@ struct mbuf_queue {
 struct pool;
 
 extern	long nmbclust;			/* limit on the # of clusters */
-extern	int max_linkhdr;		/* largest link-level header */
+extern	int max_linkhdr;		/* [I] largest link-level header */
 extern	int max_protohdr;		/* largest protocol header */
 extern	int max_hdr;			/* largest link+protocol header */
 extern	struct cpumem *mbstat;		/* mbuf statistics counter */
