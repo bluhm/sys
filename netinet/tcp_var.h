@@ -229,6 +229,7 @@ struct tcp_opt_info {
  * Locks used to protect global data and struct members:
  *	a	atomic operations
  *	I	immutable after creation
+ *	a	atomic operations
  *	N	net lock
  *	S	syn_cache_mtx		tcp syn cache global mutex
  */
@@ -679,6 +680,7 @@ extern	const struct pr_usrreqs tcp6_usrreqs;
 extern	struct pool tcpcb_pool;
 extern	struct inpcbtable tcbtable, tcb6table;	/* queue of active tcpcb's */
 extern	int tcp_do_rfc1323;	/* enabled/disabled? */
+extern	int tcprexmtthresh;	/* [I] */
 extern	int tcptv_keep_init;	/* [N] time to keep alive initial SYN packet */
 extern	int tcp_mssdflt;	/* [N] default maximum segment size */
 extern	int tcp_rst_ppslim;	/* maximum outgoing RST packet per second */
@@ -686,9 +688,9 @@ extern	int tcp_ack_on_push;	/* ACK immediately on PUSH */
 extern	int tcp_do_sack;	/* SACK enabled/disabled */
 extern	struct pool sackhl_pool;
 extern	int tcp_sackhole_limit;	/* max entries for tcp sack queues */
-extern	int tcp_do_ecn;		/* RFC3168 ECN enabled/disabled? */
+extern	int tcp_do_ecn;		/* [N] RFC3168 ECN enabled/disabled? */
 extern	int tcp_do_rfc3390;	/* [a] RFC3390 Increasing TCP Initial Window */
-extern	int tcp_do_tso;		/* enable TSO for TCP output packets */
+extern	int tcp_do_tso;		/* [a] enable TSO for TCP output packets */
 
 extern	struct pool tcpqe_pool;
 extern	int tcp_reass_limit;	/* max entries for tcp reass queues */
