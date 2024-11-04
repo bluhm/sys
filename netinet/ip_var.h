@@ -36,6 +36,13 @@
 #define _NETINET_IP_VAR_H_
 
 /*
+ * Locks used to protect global variables in this file:
+ *	I	immutable after creation
+ *	a	atomic operations
+ *	N	net lock
+ */
+
+/*
  * Structure stored in mbuf in inpcb.ip_options
  * and passed to ip_output when ip options are in use.
  * The actual length of the options (including ipopt_dst)
@@ -216,19 +223,20 @@ extern int ip_defttl;			/* default IP ttl */
 
 #define IPMTUDISCTIMEOUT (10 * 60)	/* as per RFC 1191 */
 
-extern int ip_mtudisc;			/* mtu discovery */
+extern int ip_mtudisc;			/* [N] mtu discovery */
 extern int ip_mtudisc_timeout;		/* seconds to timeout mtu discovery */
 
 extern int ipport_firstauto;		/* min port for port allocation */
 extern int ipport_lastauto;		/* max port for port allocation */
 extern int ipport_hifirstauto;		/* min dynamic/private port number */
 extern int ipport_hilastauto;		/* max dynamic/private port number */
-extern int ip_forwarding;		/* enable IP forwarding */
+extern int ip_forwarding;		/* [a] enable IP forwarding */
 #ifdef MROUTING
 extern int ipmforwarding;		/* enable multicast forwarding */
 #endif
 extern int ipmultipath;			/* enable multipath routing */
-extern int ip_directedbcast;		/* accept all broadcast packets */
+extern int ip_sendredirects;		/* [a] send icmp redirect while forwd */
+extern int ip_directedbcast;		/* [a] accept all broadcast packets */
 extern unsigned int la_hold_total;
 
 extern const struct pr_usrreqs rip_usrreqs;

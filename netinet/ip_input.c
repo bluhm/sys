@@ -83,23 +83,16 @@
 #include <netinet/ip_carp.h>
 #endif
 
-/*
- * Locks used to protect global variables in this file:
- *	I	immutable after creation
- *	a	atomic operations
- *	N	net lock
- */
-
 /* values controllable via sysctl */
-int	ip_forwarding = 0;			/* [a] */
+int	ip_forwarding = 0;
 int	ipmforwarding = 0;
 int	ipmultipath = 0;
-int	ip_sendredirects = 1;			/* [a] */
+int	ip_sendredirects = 1;
 int	ip_dosourceroute = 0;
 int	ip_defttl = IPDEFTTL;
 int	ip_mtudisc = 1;
 int	ip_mtudisc_timeout = IPMTUDISCTIMEOUT;
-int	ip_directedbcast = 0;			/* [a] */
+int	ip_directedbcast = 0;
 
 /* Protects `ipq' and `ip_frags'. */
 struct mutex	ipq_mutex = MUTEX_INITIALIZER(IPL_SOFTNET);
