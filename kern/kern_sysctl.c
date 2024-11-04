@@ -1679,19 +1679,13 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 
 			NET_LOCK();
 			mtx_enter(&tcbtable.inpt_mtx);
-			TAILQ_FOREACH(inp, &tcbtable.inpt_queue, inp_queue) {
-				if (in_pcb_is_iterator(inp))
-					continue;
+			TAILQ_FOREACH(inp, &tcbtable.inpt_queue, inp_queue)
 				FILLSO(inp->inp_socket);
-			}
 			mtx_leave(&tcbtable.inpt_mtx);
 #ifdef INET6
 			mtx_enter(&tcb6table.inpt_mtx);
-			TAILQ_FOREACH(inp, &tcb6table.inpt_queue, inp_queue) {
-				if (in_pcb_is_iterator(inp))
-					continue;
+			TAILQ_FOREACH(inp, &tcb6table.inpt_queue, inp_queue)
 				FILLSO(inp->inp_socket);
-			}
 			mtx_leave(&tcb6table.inpt_mtx);
 #endif
 			mtx_enter(&udbtable.inpt_mtx);
@@ -1711,20 +1705,14 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 			mtx_leave(&udb6table.inpt_mtx);
 #endif
 			mtx_enter(&rawcbtable.inpt_mtx);
-			TAILQ_FOREACH(inp, &rawcbtable.inpt_queue, inp_queue) {
-				if (in_pcb_is_iterator(inp))
-					continue;
+			TAILQ_FOREACH(inp, &rawcbtable.inpt_queue, inp_queue)
 				FILLSO(inp->inp_socket);
-			}
 			mtx_leave(&rawcbtable.inpt_mtx);
 #ifdef INET6
 			mtx_enter(&rawin6pcbtable.inpt_mtx);
 			TAILQ_FOREACH(inp, &rawin6pcbtable.inpt_queue,
-			    inp_queue) {
-				if (in_pcb_is_iterator(inp))
-					continue;
+			    inp_queue)
 				FILLSO(inp->inp_socket);
-			}
 			mtx_leave(&rawin6pcbtable.inpt_mtx);
 #endif
 			NET_UNLOCK();
