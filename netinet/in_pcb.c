@@ -660,9 +660,10 @@ in_pcb_iterator(struct inpcbtable *table, struct inpcb *inp,
 	while (tmp && tmp->inp_table == NULL)
 		tmp = TAILQ_NEXT(tmp, inp_queue);
 
-	if (inp)
+	if (inp) {
 		TAILQ_REMOVE(&table->inpt_queue, (struct inpcb *)iter,
 		    inp_queue);
+	}
 	if (tmp) {
 		TAILQ_INSERT_AFTER(&table->inpt_queue, tmp,
 		    (struct inpcb *)iter, inp_queue);
@@ -674,6 +675,22 @@ in_pcb_iterator(struct inpcbtable *table, struct inpcb *inp,
 	in_pcbunref(inp);
 	
 	return tmp;
+}
+
+void
+in_pcb_iterator_abort(struct inpcbtable *table, struct inpcb *inp,
+    struct inpcb_iterator *iter)
+{
+	mtx_enter(&table->inpt_mtx);
+
+	if (inp) {
+		TAILQ_REMOVE(&table->inpt_queue, (struct inpcb *)iter,
+		    inp_queue);
+	}
+
+	mtx_leave(&table->inpt_mtx);
+
+	in_pcbunref(inp);
 }
 
 void

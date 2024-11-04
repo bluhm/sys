@@ -319,6 +319,8 @@ void	 in_pcbdisconnect(struct inpcb *);
 struct inpcb *
 	 in_pcb_iterator(struct inpcbtable *, struct inpcb *,
 	    struct inpcb_iterator *);
+void	 in_pcb_iterator_abort(struct inpcbtable *, struct inpcb *,
+	    struct inpcb_iterator *);
 struct inpcb *
 	 in_pcblookup(struct inpcbtable *, struct in_addr,
 			       u_int, struct in_addr, u_int, u_int);

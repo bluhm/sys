@@ -410,7 +410,7 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 			table = &udbtable;
 
 		last = inp = NULL;
-		while ((inp = in_pcb_iterator(table, inp, &iter)) != NULL){
+		while ((inp = in_pcb_iterator(table, inp, &iter)) != NULL) {
 			if (ip6)
 				KASSERT(ISSET(inp->inp_flags, INP_IPV6));
 			else
@@ -484,7 +484,7 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 			 */
 			if ((inp->inp_socket->so_options & (SO_REUSEPORT |
 			    SO_REUSEADDR)) == 0) {
-				in_pcbunref(inp);
+				in_pcb_iterator_abort(table, inp, &iter);
 				break;
 			}
 		}
