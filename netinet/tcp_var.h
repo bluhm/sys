@@ -227,6 +227,7 @@ struct tcp_opt_info {
 
 /*
  * Locks used to protect global data and struct members:
+ *	a	atomic operations
  *	I	immutable after creation
  *	N	net lock
  *	S	syn_cache_mtx		tcp syn cache global mutex
