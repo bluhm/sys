@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_fault.c,v 1.138 2024/11/03 08:00:36 mpi Exp $	*/
+/*	$OpenBSD: uvm_fault.c,v 1.142 2024/11/05 08:16:40 mpi Exp $	*/
 /*	$NetBSD: uvm_fault.c,v 1.51 2000/08/06 00:22:53 thorpej Exp $	*/
 
 /*
@@ -587,6 +587,7 @@ uvm_fault(vm_map_t orig_map, vaddr_t vaddr, vm_fault_t fault_type,
 	ufi.orig_size = PAGE_SIZE;	/* can't get any smaller than this */
 	flt.access_type = access_type;
 	flt.narrow = FALSE;		/* assume normal fault for now */
+	flt.wired = FALSE;		/* assume non-wired fault for now */
 
 	error = ERESTART;
 	while (error == ERESTART) { /* ReFault: */

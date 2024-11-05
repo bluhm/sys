@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_sig.c,v 1.344 2024/10/22 11:54:04 claudio Exp $	*/
+/*	$OpenBSD: kern_sig.c,v 1.347 2024/11/05 09:14:19 claudio Exp $	*/
 /*	$NetBSD: kern_sig.c,v 1.54 1996/04/22 01:38:32 christos Exp $	*/
 
 /*
@@ -123,6 +123,8 @@ void setsigctx(struct proc *, int, struct sigctx *);
 void postsig_done(struct proc *, int, sigset_t, int);
 void postsig(struct proc *, int, struct sigctx *);
 int cansignal(struct proc *, struct process *, int);
+
+void ptsignal_locked(struct proc *, int, enum signal_type);
 
 struct pool sigacts_pool;	/* memory pool for sigacts structures */
 
@@ -877,9 +879,7 @@ trapsignal(struct proc *p, int signum, u_long trapno, int code,
 			sigexit(p, signum);
 			/* NOTREACHED */
 		}
-		KERNEL_LOCK();
 		ptsignal(p, signum, STHREAD);
-		KERNEL_UNLOCK();
 	}
 }
 
@@ -905,11 +905,14 @@ psignal(struct proc *p, int signum)
 void
 prsignal(struct process *pr, int signum)
 {
+	mtx_enter(&pr->ps_mtx);
 	/* Ignore signal if the target process is exiting */
 	if (pr->ps_flags & PS_EXITING) {
+		mtx_leave(&pr->ps_mtx);
 		return;
 	}
-	ptsignal(TAILQ_FIRST(&pr->ps_threads), signum, SPROCESS);
+	ptsignal_locked(TAILQ_FIRST(&pr->ps_threads), signum, SPROCESS);
+	mtx_leave(&pr->ps_mtx);
 }
 
 /*
@@ -920,6 +923,16 @@ prsignal(struct process *pr, int signum)
 void
 ptsignal(struct proc *p, int signum, enum signal_type type)
 {
+	struct process *pr = p->p_p;
+
+	mtx_enter(&pr->ps_mtx);
+	ptsignal_locked(p, signum, type);
+	mtx_leave(&pr->ps_mtx);
+}
+
+void
+ptsignal_locked(struct proc *p, int signum, enum signal_type type)
+{
 	int prop;
 	sig_t action, altaction = SIG_DFL;
 	sigset_t mask, sigmask;
@@ -928,7 +941,7 @@ ptsignal(struct proc *p, int signum, enum signal_type type)
 	struct proc *q;
 	int wakeparent = 0;
 
-	KERNEL_ASSERT_LOCKED();
+	MUTEX_ASSERT_LOCKED(&pr->ps_mtx);
 
 #ifdef DIAGNOSTIC
 	if ((u_int)signum >= NSIG || signum == 0)
@@ -998,7 +1011,7 @@ ptsignal(struct proc *p, int signum, enum signal_type type)
 	}
 
 	if (type != SPROPAGATED)
-		knote(&pr->ps_klist, NOTE_SIGNAL | signum);
+		knote_locked(&pr->ps_klist, NOTE_SIGNAL | signum);
 
 	prop = sigprop[signum];
 
@@ -1017,10 +1030,8 @@ ptsignal(struct proc *p, int signum, enum signal_type type)
 		 * and if it is set to SIG_IGN,
 		 * action will be SIG_DFL here.)
 		 */
-		mtx_enter(&pr->ps_mtx);
 		sigignore = pr->ps_sigacts->ps_sigignore;
 		sigcatch = pr->ps_sigacts->ps_sigcatch;
-		mtx_leave(&pr->ps_mtx);
 
 		if (sigignore & mask)
 			return;
@@ -1061,7 +1072,7 @@ ptsignal(struct proc *p, int signum, enum signal_type type)
 	if (prop & (SA_CONT | SA_STOP) && type != SPROPAGATED)
 		TAILQ_FOREACH(q, &pr->ps_threads, p_thr_link)
 			if (q != p)
-				ptsignal(q, signum, SPROPAGATED);
+				ptsignal_locked(q, signum, SPROPAGATED);
 
 	SCHED_LOCK();
 
@@ -1276,10 +1287,11 @@ out:
 void
 setsigctx(struct proc *p, int signum, struct sigctx *sctx)
 {
-	struct sigacts *ps = p->p_p->ps_sigacts;
+	struct process *pr = p->p_p;
+	struct sigacts *ps = pr->ps_sigacts;
 	sigset_t mask;
 
-	mtx_enter(&p->p_p->ps_mtx);
+	mtx_enter(&pr->ps_mtx);
 	mask = sigmask(signum);
 	sctx->sig_action = ps->ps_sigact[signum];
 	sctx->sig_catchmask = ps->ps_catchmask[signum];
@@ -1289,7 +1301,21 @@ setsigctx(struct proc *p, int signum, struct sigctx *sctx)
 	sctx->sig_onstack = (ps->ps_sigonstack & mask) != 0;
 	sctx->sig_ignore = (ps->ps_sigignore & mask) != 0;
 	sctx->sig_catch = (ps->ps_sigcatch & mask) != 0;
-	mtx_leave(&p->p_p->ps_mtx);
+	sctx->sig_stop = sigprop[signum] & SA_STOP && 
+	    (long)sctx->sig_action == (long)SIG_DFL;
+	if (sctx->sig_stop) {
+		/* 
+		 * If the process is a member of an orphaned
+		 * process group, ignore tty stop signals.
+		 */
+		if (pr->ps_flags & PS_TRACED ||
+		    (pr->ps_pgrp->pg_jobc == 0 &&
+		    sigprop[signum] & SA_TTYSTOP)) {
+			sctx->sig_stop = 0;
+			sctx->sig_ignore = 1;
+		}
+	}
+	mtx_leave(&pr->ps_mtx);
 }
 
 /*
@@ -1431,11 +1457,9 @@ cursig(struct proc *p, struct sigctx *sctx, int deep)
 			/*
 			 * If there is a pending stop signal to process
 			 * with default action, stop here,
-			 * then clear the signal.  However,
-			 * if process is member of an orphaned
-			 * process group, ignore tty stop signals.
+			 * then clear the signal.
 			 */
-			if (prop & SA_STOP) {
+			if (sctx->sig_stop) {
 				mtx_enter(&pr->ps_mtx);
 				if (pr->ps_flags & PS_TRACED ||
 		    		    (pr->ps_pgrp->pg_jobc == 0 &&
@@ -1806,7 +1830,7 @@ coredump(struct proc *p)
 		vn_close(vp, FWRITE, cred, p);
 		goto out;
 	}
-	VATTR_NULL(&vattr);
+	vattr_null(&vattr);
 	vattr.va_size = 0;
 	VOP_SETATTR(vp, &vattr, cred, p);
 	pr->ps_acflag |= ACORE;
@@ -2007,15 +2031,11 @@ userret(struct proc *p)
 	/* send SIGPROF or SIGVTALRM if their timers interrupted this thread */
 	if (p->p_flag & P_PROFPEND) {
 		atomic_clearbits_int(&p->p_flag, P_PROFPEND);
-		KERNEL_LOCK();
 		psignal(p, SIGPROF);
-		KERNEL_UNLOCK();
 	}
 	if (p->p_flag & P_ALRMPEND) {
 		atomic_clearbits_int(&p->p_flag, P_ALRMPEND);
-		KERNEL_LOCK();
 		psignal(p, SIGVTALRM);
-		KERNEL_UNLOCK();
 	}
 
 	if (SIGPENDING(p) != 0) {
