@@ -463,7 +463,7 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 
 			if (last != NULL) {
 				struct mbuf *n;
-				
+
 				n = m_copym(m, 0, M_COPYALL, M_NOWAIT);
 				if (n != NULL) {
 					udp_sbappend(last, n, ip, ip6, iphlen,

@@ -673,7 +673,7 @@ in_pcb_iterator(struct inpcbtable *table, struct inpcb *inp,
 	mtx_leave(&table->inpt_mtx);
 
 	in_pcbunref(inp);
-	
+
 	return tmp;
 }
 
