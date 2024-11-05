@@ -329,6 +329,35 @@ fail_0:
 }
 
 int
+psp_shutdown(struct psp_softc *sc)
+{
+	int ret;
+
+	if (sc->sc_tmr_map == NULL)
+		return (EINVAL);
+
+	ret = ccp_docmd(sc, PSP_CMD_SHUTDOWN, 0x0);
+
+	if (ret != 0)
+		return (EIO);
+
+	/* wbinvd right after SHUTDOWN */
+	wbinvd_on_all_cpus();
+
+	/* release TMR */
+	bus_dmamap_unload(sc->sc_dmat, sc->sc_tmr_map);
+	bus_dmamem_unmap(sc->sc_dmat, sc->sc_tmr_kva, sc->sc_tmr_size);
+	bus_dmamem_free(sc->sc_dmat, &sc->sc_tmr_seg, 1);
+	bus_dmamap_destroy(sc->sc_dmat, sc->sc_tmr_map);
+	sc->sc_tmr_map = NULL;
+
+	/* reset flags */
+	sc->sc_flags = 0;
+
+	return (0);
+}
+
+int
 psp_get_pstatus(struct psp_softc *sc, struct psp_platform_status *ustatus)
 {
 	struct psp_platform_status *status;
@@ -747,6 +776,9 @@ pspioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 	switch (cmd) {
 	case PSP_IOC_INIT:
 		ret = psp_reinit(sc);
+		break;
+	case PSP_IOC_SHUTDOWN:
+		ret = psp_shutdown(sc);
 		break;
 	case PSP_IOC_GET_PSTATUS:
 		ret = psp_get_pstatus(sc, (struct psp_platform_status *)data);
