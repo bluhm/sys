@@ -1705,8 +1705,11 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 			mtx_leave(&udb6table.inpt_mtx);
 #endif
 			mtx_enter(&rawcbtable.inpt_mtx);
-			TAILQ_FOREACH(inp, &rawcbtable.inpt_queue, inp_queue)
+			TAILQ_FOREACH(inp, &rawcbtable.inpt_queue, inp_queue) {
+				if (in_pcb_is_iterator(inp))
+					continue;
 				FILLSO(inp->inp_socket);
+			}
 			mtx_leave(&rawcbtable.inpt_mtx);
 #ifdef INET6
 			mtx_enter(&rawin6pcbtable.inpt_mtx);

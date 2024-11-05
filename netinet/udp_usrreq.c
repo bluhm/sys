@@ -409,6 +409,7 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 #endif
 			table = &udbtable;
 
+		mtx_enter(&table->inpt_mtx);
 		last = inp = NULL;
 		while ((inp = in_pcb_iterator(table, inp, &iter)) != NULL) {
 			if (ip6)
@@ -464,12 +465,16 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 			if (last != NULL) {
 				struct mbuf *n;
 
+				mtx_leave(&table->inpt_mtx);
+
 				n = m_copym(m, 0, M_COPYALL, M_NOWAIT);
 				if (n != NULL) {
 					udp_sbappend(last, n, ip, ip6, iphlen,
 					    uh, &srcsa.sa, 0);
 				}
 				in_pcbunref(last);
+
+				mtx_enter(&table->inpt_mtx);
 			}
 			last = in_pcbref(inp);
 
@@ -487,6 +492,7 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 				break;
 			}
 		}
+		mtx_leave(&table->inpt_mtx);
 
 		if (last == NULL) {
 			/*
@@ -495,7 +501,8 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 			 * for a broadcast or multicast datgram.)
 			 */
 			udpstat_inc(udps_noportbcast);
-			goto bad;
+			m_freem(m);
+			return IPPROTO_DONE;
 		}
 
 		udp_sbappend(last, m, ip, ip6, iphlen, uh, &srcsa.sa, 0);
