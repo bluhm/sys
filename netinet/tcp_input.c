@@ -2790,11 +2790,11 @@ tcp_xmit_timer(struct tcpcb *tp, int32_t rtt)
 int
 tcp_mss(struct tcpcb *tp, int offer)
 {
+	struct inpcb *inp;
 	struct rtentry *rt;
 	struct ifnet *ifp = NULL;
-	int mss, mssopt;
-	int iphlen;
-	struct inpcb *inp;
+	int mss, mssopt, iphlen, do_rfc3390;
+	u_int rtmtu;
 
 	inp = tp->t_inpcb;
 
@@ -2827,12 +2827,13 @@ tcp_mss(struct tcpcb *tp, int offer)
 	 * if there's an mtu associated with the route and we support
 	 * path MTU discovery for the underlying protocol family, use it.
 	 */
-	if (rt->rt_mtu) {
+	rtmtu = atomic_load_int(&rt->rt_mtu);
+	if (rtmtu) {
 		/*
 		 * One may wish to lower MSS to take into account options,
 		 * especially security-related options.
 		 */
-		if (tp->pf == AF_INET6 && rt->rt_mtu < IPV6_MMTU) {
+		if (tp->pf == AF_INET6 && rtmtu < IPV6_MMTU) {
 			/*
 			 * RFC2460 section 5, last paragraph: if path MTU is
 			 * smaller than 1280, use 1280 as packet size and
@@ -2841,8 +2842,7 @@ tcp_mss(struct tcpcb *tp, int offer)
 			mss = IPV6_MMTU - iphlen - sizeof(struct ip6_frag) -
 			    sizeof(struct tcphdr);
 		} else {
-			mss = rt->rt_mtu - iphlen -
-			    sizeof(struct tcphdr);
+			mss = rtmtu - iphlen - sizeof(struct tcphdr);
 		}
 	} else if (ifp->if_flags & IFF_LOOPBACK) {
 		mss = ifp->if_mtu - iphlen - sizeof(struct tcphdr);
@@ -2902,6 +2902,7 @@ tcp_mss(struct tcpcb *tp, int offer)
 		mss -= TCPOLEN_SIGLEN;
 #endif
 
+	do_rfc3390 = atomic_load_int(&tcp_do_rfc3390);
 	if (offer == -1) {
 		/* mss changed due to Path MTU discovery */
 		tp->t_flags &= ~TF_PMTUD_PEND;
@@ -2916,10 +2917,10 @@ tcp_mss(struct tcpcb *tp, int offer)
 			tp->snd_cwnd = ulmax((tp->snd_cwnd / tp->t_maxseg) *
 			    mss, mss);
 		}
-	} else if (tcp_do_rfc3390 == 2) {
+	} else if (do_rfc3390 == 2) {
 		/* increase initial window  */
 		tp->snd_cwnd = ulmin(10 * mss, ulmax(2 * mss, 14600));
-	} else if (tcp_do_rfc3390) {
+	} else if (do_rfc3390) {
 		/* increase initial window  */
 		tp->snd_cwnd = ulmin(4 * mss, ulmax(2 * mss, 4380));
 	} else
