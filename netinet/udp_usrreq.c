@@ -382,9 +382,9 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 	}
 
 	if (m->m_flags & (M_BCAST|M_MCAST)) {
-		struct inpcb_iterator iter = {.inp_table = NULL};
-		struct inpcb *last;
 		struct inpcbtable *table;
+		struct inpcb_iterator iter = { .inp_table = NULL };
+		struct inpcb *last;
 
 		/*
 		 * Deliver a multicast or broadcast datagram to *all* sockets
@@ -471,7 +471,6 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af)
 				}
 				in_pcbunref(last);
 			}
-
 			last = in_pcbref(inp);
 
 			/*
