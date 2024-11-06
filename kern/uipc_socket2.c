@@ -684,14 +684,20 @@ int
 sbchecklowmem(void)
 {
 	static int sblowmem;
-	unsigned int used = m_pool_used();
+	unsigned int used;
 
+	/*
+	 * m_pool_used() is thread safe.  Global variable sblowmem is updated
+	 * by multiple CPUs, but most times with the same value.  And even
+	 * if the value is not correct for a short time, it does not matter.
+	 */
+	used = m_pool_used();
 	if (used < 60)
-		sblowmem = 0;
+		atomic_store_int(&sblowmem, 0);
 	else if (used > 80)
-		sblowmem = 1;
+		atomic_store_int(&sblowmem, 1);
 
-	return (sblowmem);
+	return (atomic_load_int(&sblowmem));
 }
 
 /*
