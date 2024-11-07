@@ -775,6 +775,17 @@ IDTVEC(ipi_invlrange_pcid)
 	iretq
 END(Xipi_invlrange_pcid)
 
+IDTVEC(ipi_wbinvd)
+	ioapic_asm_ack()
+
+	wbinvd
+
+	lock
+	decq	wbinvd_wait
+
+	iretq
+END(Xipi_wbinvd)
+
 #endif /* MULTIPROCESSOR */
 
 	/*

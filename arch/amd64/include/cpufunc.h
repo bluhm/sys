@@ -285,6 +285,7 @@ wbinvd(void)
 
 #ifdef MULTIPROCESSOR
 int wbinvd_on_all_cpus(void);
+void wbinvd_on_all_cpus_acked(void);
 #else
 static inline int
 wbinvd_on_all_cpus(void)
