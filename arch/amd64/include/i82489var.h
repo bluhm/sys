@@ -1,4 +1,4 @@
-/*	$OpenBSD: i82489var.h,v 1.20 2024/09/26 13:18:25 dv Exp $	*/
+/*	$OpenBSD: i82489var.h,v 1.21 2024/11/07 17:24:42 bluhm Exp $	*/
 /*	$NetBSD: i82489var.h,v 1.1 2003/02/26 21:26:10 fvdl Exp $	*/
 
 /*-
