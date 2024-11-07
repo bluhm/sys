@@ -1714,8 +1714,11 @@ sysctl_file(int *name, u_int namelen, char *where, size_t *sizep,
 #ifdef INET6
 			mtx_enter(&rawin6pcbtable.inpt_mtx);
 			TAILQ_FOREACH(inp, &rawin6pcbtable.inpt_queue,
-			    inp_queue)
+			    inp_queue) {
+				if (in_pcb_is_iterator(inp))
+					continue;
 				FILLSO(inp->inp_socket);
+			}
 			mtx_leave(&rawin6pcbtable.inpt_mtx);
 #endif
 			NET_UNLOCK();
