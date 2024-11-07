@@ -275,8 +275,8 @@ rip6_input(struct mbuf **mp, int *offp, int proto, int af)
 }
 
 void
-rip6_sbappend(struct inpcb *inp, struct mbuf *m, struct ip6_hdr *ip6,
-    int hlen, struct sockaddr_in6 *rip6src)
+rip6_sbappend(struct inpcb *inp, struct mbuf *m, struct ip6_hdr *ip6, int hlen,
+    struct sockaddr_in6 *rip6src)
 {
 	struct socket *so = inp->inp_socket;
 	struct mbuf *opts = NULL;
