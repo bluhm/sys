@@ -1513,7 +1513,7 @@ wbinvd_on_all_cpus_acked(void)
 	while (wbinvd_wait != 0)
 		CPU_BUSY_CYCLE();
 }
-#endif
+#endif /* MULTIPROCESSOR */
 
 int cpu_suspended;
 int cpu_wakeups;
