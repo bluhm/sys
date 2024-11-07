@@ -1473,7 +1473,6 @@ wbinvd_on_all_cpus(void)
 	return 0;
 }
 
-
 volatile long wbinvd_wait __attribute__((section(".kudata")));
 
 void
