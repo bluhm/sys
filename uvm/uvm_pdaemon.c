@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_pdaemon.c,v 1.122 2024/11/06 10:45:51 mpi Exp $	*/
+/*	$OpenBSD: uvm_pdaemon.c,v 1.129 2024/11/07 10:46:52 mpi Exp $	*/
 /*	$NetBSD: uvm_pdaemon.c,v 1.23 2000/08/20 10:24:14 bjh21 Exp $	*/
 
 /*
@@ -102,10 +102,9 @@ extern unsigned long drmbackoff(long);
  */
 
 struct rwlock	*uvmpd_trylockowner(struct vm_page *);
-void		uvmpd_scan(struct uvm_pmalloc *, int, int,
-		    struct uvm_constraint_range *);
-int		uvmpd_scan_inactive(struct uvm_pmalloc *, int,
-		    struct uvm_constraint_range *);
+void		uvmpd_scan(struct uvm_pmalloc *, int, int);
+int		uvmpd_scan_inactive(struct uvm_pmalloc *, int);
+void		uvmpd_scan_active(struct uvm_pmalloc *, int, int);
 void		uvmpd_tune(void);
 void		uvmpd_drop(struct pglist *);
 int		uvmpd_dropswap(struct vm_page *);
@@ -196,7 +195,15 @@ uvmpd_tune(void)
  * recover at least some memory in the most restricted region (assumed
  * to be dma_constraint).
  */
-volatile int uvm_nowait_failed;
+struct uvm_pmalloc nowait_pma;
+
+static inline int
+uvmpd_pma_done(struct uvm_pmalloc *pma)
+{
+	if (pma == NULL || (pma->pm_flags & UVM_PMA_FREED))
+		return 1;
+	return 0;
+}
 
 /*
  * uvm_pageout: the main loop for the pagedaemon
@@ -213,11 +220,19 @@ uvm_pageout(void *arg)
 	(void) spl0();
 	uvmpd_tune();
 
+	/*
+	 * XXX realistically, this is what our nowait callers probably
+	 * care about.
+	 */
+	nowait_pma.pm_constraint = dma_constraint;
+	nowait_pma.pm_size = (16 << PAGE_SHIFT); /* XXX */
+	nowait_pma.pm_flags = 0;
+
 	for (;;) {
 		long size;
 
 		uvm_lock_fpageq();
-		if (!uvm_nowait_failed && TAILQ_EMPTY(&uvm.pmr_control.allocs)) {
+		if (TAILQ_EMPTY(&uvm.pmr_control.allocs)) {
 			msleep_nsec(&uvm.pagedaemon, &uvm.fpageqlock, PVM,
 			    "pgdaemon", INFSLP);
 			uvmexp.pdwoke++;
@@ -227,15 +242,7 @@ uvm_pageout(void *arg)
 			pma->pm_flags |= UVM_PMA_BUSY;
 			constraint = pma->pm_constraint;
 		} else {
-			if (uvm_nowait_failed) {
-				/*
-				 * XXX realistically, this is what our
-				 * nowait callers probably care about
-				 */
-				constraint = dma_constraint;
-				uvm_nowait_failed = 0;
-			} else
-				constraint = no_constraint;
+			constraint = no_constraint;
 		}
 		/* How many pages do we need to free during this round? */
 		shortage = uvmexp.freetarg - uvmexp.free + BUFPAGES_DEFICIT;
@@ -253,15 +260,27 @@ uvm_pageout(void *arg)
 			uvmexp.inactarg - uvmexp.inactive - BUFPAGES_INACT;
 		uvm_unlock_pageq();
 
-		/* Reclaim pages from the buffer cache if possible. */
 		size = 0;
 		if (pma != NULL)
 			size += pma->pm_size >> PAGE_SHIFT;
 		if (shortage > 0)
 			size += shortage;
-		if (size == 0)
-			size = 16; /* XXX */
 
+		if (size == 0) {
+			/*
+			 * Since the inactive target just got updated
+			 * above, both `size' and `inactive_shortage' can
+			 * be 0.
+			 */
+			if (inactive_shortage) {
+				uvm_lock_pageq();
+				uvmpd_scan_active(NULL, 0, inactive_shortage);
+				uvm_unlock_pageq();
+			}
+			continue;
+		}
+
+		/* Reclaim pages from the buffer cache if possible. */
 		shortage -= bufbackoff(&constraint, size * 2);
 #if NDRM > 0
 		shortage -= drmbackoff(size * 2);
@@ -273,9 +292,9 @@ uvm_pageout(void *arg)
 		 * scan if needed
 		 */
 		uvm_lock_pageq();
-		if (pma != NULL || (shortage > 0) || (inactive_shortage > 0)) {
-			uvmpd_scan(pma, shortage, inactive_shortage,
-			    &constraint);
+		if (!uvmpd_pma_done(pma) ||
+		    (shortage > 0) || (inactive_shortage > 0)) {
+			uvmpd_scan(pma, shortage, inactive_shortage);
 		}
 
 		/*
@@ -297,8 +316,7 @@ uvm_pageout(void *arg)
 			pma->pm_flags &= ~UVM_PMA_BUSY;
 			if (pma->pm_flags & UVM_PMA_FREED) {
 				pma->pm_flags &= ~UVM_PMA_LINKED;
-				TAILQ_REMOVE(&uvm.pmr_control.allocs, pma,
-				    pmq);
+				TAILQ_REMOVE(&uvm.pmr_control.allocs, pma, pmq);
 				wakeup(pma);
 			}
 		}
@@ -414,6 +432,23 @@ uvmpd_dropswap(struct vm_page *pg)
 }
 
 /*
+ * Return 1 if the page `p' belongs to the memory range described by
+ * 'constraint', 0 otherwise.
+ */
+static inline int
+uvmpd_match_constraint(struct vm_page *p,
+    struct uvm_constraint_range *constraint)
+{
+	paddr_t paddr;
+
+	paddr = atop(VM_PAGE_TO_PHYS(p));
+	if (paddr >= constraint->ucr_low && paddr < constraint->ucr_high)
+		return 1;
+
+	return 0;
+}
+
+/*
  * uvmpd_scan_inactive: scan an inactive list for pages to clean or free.
  *
  * => called with page queues locked
@@ -423,8 +458,7 @@ uvmpd_dropswap(struct vm_page *pg)
  * => we return TRUE if we are exiting because we met our target
  */
 int
-uvmpd_scan_inactive(struct uvm_pmalloc *pma, int shortage,
-    struct uvm_constraint_range *constraint)
+uvmpd_scan_inactive(struct uvm_pmalloc *pma, int shortage)
 {
 	struct pglist *pglst = &uvm.page_inactive;
 	int result, freed = 0;
@@ -440,7 +474,6 @@ uvmpd_scan_inactive(struct uvm_pmalloc *pma, int shortage,
 	boolean_t swap_backed;
 	vaddr_t start;
 	int dirtyreacts;
-	paddr_t paddr;
 
 	/*
 	 * swslot is non-zero if we are building a swap cluster.  we want
@@ -452,11 +485,14 @@ uvmpd_scan_inactive(struct uvm_pmalloc *pma, int shortage,
 	dirtyreacts = 0;
 	p = NULL;
 
-	/* Start with the first page on the list that fit in `constraint' */
+	/*
+	 * If a thread is waiting for us to release memory from a specific
+	 * memory range start with the first page on the list that fits in
+	 * it.
+	 */
 	TAILQ_FOREACH(p, pglst, pageq) {
-		paddr = atop(VM_PAGE_TO_PHYS(p));
-		if (paddr >= constraint->ucr_low &&
-		    paddr < constraint->ucr_high)
+		if (uvmpd_pma_done(pma) ||
+		    uvmpd_match_constraint(p, &pma->pm_constraint))
 			break;
 	}
 
@@ -471,7 +507,7 @@ uvmpd_scan_inactive(struct uvm_pmalloc *pma, int shortage,
 			/*
 			 * see if we've met our target
 			 */
-			if (((pma == NULL || (pma->pm_flags & UVM_PMA_FREED)) &&
+			if ((uvmpd_pma_done(pma) &&
 			    (uvmexp.paging >= (shortage - freed))) ||
 			    dirtyreacts == UVMPD_NUMDIRTYREACTS) {
 				if (swslot == 0) {
@@ -490,6 +526,16 @@ uvmpd_scan_inactive(struct uvm_pmalloc *pma, int shortage,
 			 */
 			uvmexp.pdscans++;
 			nextpg = TAILQ_NEXT(p, pageq);
+
+			/*
+			 * If we are not short on memory and only interested
+			 * in releasing pages from a given memory range, do not
+			 * bother with other pages.
+			 */
+			if (uvmexp.paging >= (shortage - freed) &&
+			    !uvmpd_pma_done(pma) &&
+			    !uvmpd_match_constraint(p, &pma->pm_constraint))
+				continue;
 
 			anon = p->uanon;
 			uobj = p->uobject;
@@ -568,7 +614,7 @@ uvmpd_scan_inactive(struct uvm_pmalloc *pma, int shortage,
 			 * this page is dirty, skip it if we'll have met our
 			 * free target when all the current pageouts complete.
 			 */
-			if ((pma == NULL || (pma->pm_flags & UVM_PMA_FREED)) &&
+			if (uvmpd_pma_done(pma) &&
 			    (uvmexp.paging > (shortage - freed))) {
 				rw_exit(slock);
 				continue;
@@ -861,13 +907,9 @@ uvmpd_scan_inactive(struct uvm_pmalloc *pma, int shortage,
  */
 
 void
-uvmpd_scan(struct uvm_pmalloc *pma, int shortage, int inactive_shortage,
-    struct uvm_constraint_range *constraint)
+uvmpd_scan(struct uvm_pmalloc *pma, int shortage, int inactive_shortage)
 {
 	int swap_shortage, pages_freed;
-	struct vm_page *p, *nextpg;
-	struct rwlock *slock;
-	paddr_t paddr;
 
 	MUTEX_ASSERT_LOCKED(&uvm.pageqlock);
 
@@ -893,7 +935,7 @@ uvmpd_scan(struct uvm_pmalloc *pma, int shortage, int inactive_shortage,
 	 * we work on meeting our inactive target by converting active pages
 	 * to inactive ones.
 	 */
-	pages_freed = uvmpd_scan_inactive(pma, shortage, constraint);
+	pages_freed = uvmpd_scan_inactive(pma, shortage);
 	uvmexp.pdfreed += pages_freed;
 	shortage -= pages_freed;
 
@@ -910,6 +952,18 @@ uvmpd_scan(struct uvm_pmalloc *pma, int shortage, int inactive_shortage,
 		swap_shortage = shortage;
 	}
 
+	uvmpd_scan_active(pma, swap_shortage, inactive_shortage);
+}
+
+void
+uvmpd_scan_active(struct uvm_pmalloc *pma, int swap_shortage,
+    int inactive_shortage)
+{
+	struct vm_page *p, *nextpg;
+	struct rwlock *slock;
+
+	MUTEX_ASSERT_LOCKED(&uvm.pageqlock);
+
 	for (p = TAILQ_FIRST(&uvm.page_active);
 	     p != NULL && (inactive_shortage > 0 || swap_shortage > 0);
 	     p = nextpg) {
@@ -919,11 +973,16 @@ uvmpd_scan(struct uvm_pmalloc *pma, int shortage, int inactive_shortage,
 		}
 
 		/*
-		 * skip this page if it doesn't match the constraint.
+		 * If we couldn't release enough pages from a given memory
+		 * range try to deactivate them first...
+		 *
+		 * ...unless we are low on swap slots, in such case we are
+		 * probably OOM and want to release swap resources as quickly
+		 * as possible.
 		 */
-		paddr = atop(VM_PAGE_TO_PHYS(p));
-		if (paddr < constraint->ucr_low &&
-		    paddr >= constraint->ucr_high)
+		if (inactive_shortage > 0 && swap_shortage == 0 &&
+		    !uvmpd_pma_done(pma) &&
+		    !uvmpd_match_constraint(p, &pma->pm_constraint))
 			continue;
 
 		/*

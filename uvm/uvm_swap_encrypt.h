@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_swap_encrypt.h,v 1.12 2024/05/28 12:31:24 jsg Exp $	*/
+/*	$OpenBSD: uvm_swap_encrypt.h,v 1.14 2024/11/07 09:04:55 jsg Exp $	*/
 
 /*
  * Copyright 1999 Niels Provos <provos@citi.umich.edu>
@@ -44,7 +44,6 @@
 	{ "keysdeleted", CTLTYPE_INT }, \
 }
 
-#define SWAP_KEY_EXPIRE (120 /*60 * 60*/)	/* time after that keys expire */
 #define SWAP_KEY_SIZE	4		/* 128-bit keys */
 
 struct swap_key {
@@ -61,22 +60,24 @@ void swap_decrypt(struct swap_key *,caddr_t, caddr_t, u_int64_t, size_t);
 void swap_key_cleanup(struct swap_key *);
 void swap_key_prepare(struct swap_key *, int);
 
-#define SWAP_KEY_GET(s,x)	do {					\
-					if ((x)->refcount == 0) {	\
-						swap_key_create(x);	\
-					}				\
-					(x)->refcount++;		\
-				} while(0);
-
-#define SWAP_KEY_PUT(s,x)	do {					\
-					(x)->refcount--;		\
-					if ((x)->refcount == 0) {	\
-						swap_key_delete(x);	\
-					}				\
-				} while(0);
-
 void swap_key_create(struct swap_key *);
 void swap_key_delete(struct swap_key *);
+
+static inline void
+swap_key_get(struct swap_key *key)
+{
+	if (key->refcount == 0)
+		swap_key_create(key);
+	key->refcount++;
+}
+
+static inline void
+swap_key_put(struct swap_key *key)
+{
+	key->refcount--;
+	if (key->refcount == 0)
+		swap_key_delete(key);
+}
 
 extern int uvm_doswapencrypt;		/* swapencrypt enabled/disabled */
 extern int swap_encrypt_initialized;
