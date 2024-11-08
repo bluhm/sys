@@ -1,4 +1,4 @@
-/*	$OpenBSD: tcp_usrreq.c,v 1.231 2024/04/12 16:07:09 bluhm Exp $	*/
+/*	$OpenBSD: tcp_usrreq.c,v 1.232 2024/11/08 15:46:55 bluhm Exp $	*/
 /*	$NetBSD: tcp_usrreq.c,v 1.20 1996/02/13 23:44:16 christos Exp $	*/
 
 /*
