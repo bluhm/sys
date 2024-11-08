@@ -50,8 +50,8 @@ psp_pci_match(struct ccp_softc *sc, struct pci_attach_args *pa)
 		reg_capabilities = PSP_REG_CAPABILITIES;
 	capabilities = bus_space_read_4(sc->sc_iot, sc->sc_ioh,
 	    reg_capabilities);
-        if (!ISSET(capabilities, PSP_CAP_SEV))
-                return (0);
+	if (!ISSET(capabilities, PSP_CAP_SEV))
+		return (0);
 
 	return (1);
 }

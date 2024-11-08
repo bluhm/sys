@@ -200,6 +200,8 @@ ccp_wait(struct psp_softc *sc, uint32_t *status, int poll)
 	uint32_t	cmdword;
 	int		count;
 
+	MUTEX_ASSERT_LOCKED(&sc->psp_lock);
+
 	if (poll) {
 		count = 0;
 		while (count++ < 400) {
