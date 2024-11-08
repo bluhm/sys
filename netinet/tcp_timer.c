@@ -167,10 +167,10 @@ tcp_canceltimers(struct tcpcb *tp)
 		TCP_TIMER_DISARM(tp, i);
 }
 
-int	tcp_backoff[TCP_MAXRXTSHIFT + 1] =
+const int tcp_backoff[TCP_MAXRXTSHIFT + 1] =
     { 1, 2, 4, 8, 16, 32, 64, 64, 64, 64, 64, 64, 64 };
 
-int tcp_totbackoff = 511;	/* sum of tcp_backoff[] */
+const int tcp_totbackoff = 511;	/* sum of tcp_backoff[] */
 
 /*
  * TCP timer processing.

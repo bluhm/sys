@@ -68,7 +68,7 @@
  * determined by state, with the proviso that TH_FIN is sent only
  * if all data queued for output is included in the segment.
  */
-u_char	tcp_outflags[TCP_NSTATES] = {
+const u_char tcp_outflags[TCP_NSTATES] = {
     TH_RST|TH_ACK, 0, TH_SYN, TH_SYN|TH_ACK,
     TH_ACK, TH_ACK,
     TH_FIN|TH_ACK, TH_FIN|TH_ACK, TH_FIN|TH_ACK, TH_ACK, TH_ACK,
@@ -76,7 +76,7 @@ u_char	tcp_outflags[TCP_NSTATES] = {
 #endif /* TCPOUTFLAGS */
 
 #ifdef	TCPSTATES
-const char *tcpstates[] = {
+const char *const tcpstates[] = {
 	"CLOSED",	"LISTEN",	"SYN_SENT",	"SYN_RCVD",
 	"ESTABLISHED",	"CLOSE_WAIT",	"FIN_WAIT_1",	"CLOSING",
 	"LAST_ACK",	"FIN_WAIT_2",	"TIME_WAIT",
