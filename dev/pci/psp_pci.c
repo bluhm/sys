@@ -81,8 +81,8 @@ psp_pci_intr_map(struct ccp_softc *sc, struct pci_attach_args *pa)
 	}
 
 	intrstr = pci_intr_string(pa->pa_pc, ih);
-	sc->sc_irqh = pci_intr_establish(pa->pa_pc, ih, IPL_BIO, psp_sev_intr,
-	    sc, sc->sc_dev.dv_xname);
+	sc->sc_irqh = pci_intr_establish(pa->pa_pc, ih, IPL_BIO | IPL_MPSAFE,
+	    psp_sev_intr, sc, sc->sc_dev.dv_xname);
 	if (sc->sc_irqh != NULL)
 		printf(": %s", intrstr);
 }
