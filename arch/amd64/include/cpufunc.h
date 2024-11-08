@@ -293,7 +293,14 @@ wbinvd_on_all_cpus(void)
 	wbinvd();
 	return 0;
 }
-#endif
+
+static inline int
+wbinvd_on_all_cpus_acked(void)
+{
+	wbinvd();
+	return 0;
+}
+#endif /* MULTIPROCESSOR */
 
 static __inline void
 clflush(u_int64_t addr)
