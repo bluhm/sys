@@ -153,8 +153,10 @@ soo_stat(struct file *fp, struct stat *ub, struct proc *p)
 	    so->so_rcv.sb_cc != 0)
 		ub->st_mode |= S_IRUSR | S_IRGRP | S_IROTH;
 	mtx_leave(&so->so_rcv.sb_mtx);
+	mtx_enter(&so->so_snd.sb_mtx);
 	if ((so->so_snd.sb_state & SS_CANTSENDMORE) == 0)
 		ub->st_mode |= S_IWUSR | S_IWGRP | S_IWOTH;
+	mtx_leave(&so->so_snd.sb_mtx);
 	ub->st_uid = so->so_euid;
 	ub->st_gid = so->so_egid;
 	(void)pru_sense(so, ub);
