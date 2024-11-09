@@ -111,14 +111,14 @@ void tcp_print_holes(struct tcpcb *tp);
 void
 tcp_print_holes(struct tcpcb *tp)
 {
-	struct sackhole *p = tp->snd_holes;
-	if (p == NULL)
+	struct sackhole *p;
+
+	if (SLIST_EMTPY(tp->snd_holes))
 		return;
 	printf("Hole report: start--end dups rxmit\n");
-	while (p) {
+	SLIST_FOREACH(p, tp->snd_holes, next) {
 		printf("%x--%x d %d r %x\n", p->start, p->end, p->dups,
 		    p->rxmit);
-		p = p->next;
 	}
 	printf("\n");
 }
@@ -135,11 +135,10 @@ tcp_sack_output(struct tcpcb *tp)
 
 	if (!tp->sack_enable)
 		return (NULL);
-	p = tp->snd_holes;
-	while (p) {
+	SLIST_FOREACH(p, tp->snd_holes, next) {
 		if (p->dups >= tcprexmtthresh && SEQ_LT(p->rxmit, p->end)) {
-			if (SEQ_LT(p->rxmit, tp->snd_una)) {/* old SACK hole */
-				p = p->next;
+			if (SEQ_LT(p->rxmit, tp->snd_una)) {
+				/* old SACK hole */
 				continue;
 			}
 #ifdef TCP_SACK_DEBUG
@@ -148,7 +147,6 @@ tcp_sack_output(struct tcpcb *tp)
 #endif
 			return (p);
 		}
-		p = p->next;
 	}
 	return (NULL);
 }
@@ -162,8 +160,9 @@ tcp_sack_output(struct tcpcb *tp)
 void
 tcp_sack_adjust(struct tcpcb *tp)
 {
-	struct sackhole *cur = tp->snd_holes;
-	if (cur == NULL)
+	struct sackhole *cur;
+
+	if (SLIST_EMPTY(tp->snd_holes))
 		return; /* No holes */
 	if (SEQ_GEQ(tp->snd_nxt, tp->rcv_lastsack))
 		return; /* We're already beyond any SACKed blocks */
@@ -172,13 +171,13 @@ tcp_sack_adjust(struct tcpcb *tp)
 	 * i) snd_nxt lies between end of one hole and beginning of another
 	 * ii) snd_nxt lies between end of last hole and rcv_lastsack
 	 */
-	while (cur->next) {
+	for (cur = SLIST_FIRST(tp->snd_holes);
+	    SLIST_NEXT(cur, next);
+	    cur = SLIST_NEXT(cur, next)) {
 		if (SEQ_LT(tp->snd_nxt, cur->end))
 			return;
-		if (SEQ_GEQ(tp->snd_nxt, cur->next->start))
-			cur = cur->next;
-		else {
-			tp->snd_nxt = cur->next->start;
+		if (!SEQ_GEQ(tp->snd_nxt, SLIST_NEXT(cur, next)->start)) {
+			tp->snd_nxt = SLIST_NEXT(cur, next)->start;
 			return;
 		}
 	}

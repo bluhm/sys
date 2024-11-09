@@ -511,7 +511,7 @@ tcp_close(struct tcpcb *tp)
 {
 	struct inpcb *inp = tp->t_inpcb;
 	struct socket *so = inp->inp_socket;
-	struct sackhole *p, *q;
+	struct sackhole *p;
 
 	/* free the reassembly queue, if any */
 	tcp_freeq(tp);
@@ -520,11 +520,9 @@ tcp_close(struct tcpcb *tp)
 	syn_cache_cleanup(tp);
 
 	/* Free SACK holes. */
-	q = p = tp->snd_holes;
-	while (p != 0) {
-		q = p->next;
+	while ((p = SLIST_FIRST(tp->snd_holes)) != NULL) {
+		SLIST_REMOVE_HEAD(tp->snd_holes, next);
 		pool_put(&sackhl_pool, p);
-		p = q;
 	}
 
 	m_free(tp->t_template);
