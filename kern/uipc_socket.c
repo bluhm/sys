@@ -927,9 +927,11 @@ soreceive(struct socket *so, struct mbuf **paddr, struct uio *uio,
 		flags = 0;
 	if (flags & MSG_OOB) {
 		m = m_get(M_WAIT, MT_DATA);
-		solock(so);
+		if (dosolock)
+			solock_shared(so);
 		error = pru_rcvoob(so, m, flags & MSG_PEEK);
-		sounlock(so);
+		if (dosolock)
+			sounlock_shared(so);
 		if (error)
 			goto bad;
 		do {
