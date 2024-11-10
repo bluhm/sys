@@ -1,4 +1,4 @@
-/*	$OpenBSD: sys_socket.c,v 1.65 2024/04/30 17:59:15 mvs Exp $	*/
+/*	$OpenBSD: sys_socket.c,v 1.66 2024/11/10 13:03:22 bluhm Exp $	*/
 /*	$NetBSD: sys_socket.c,v 1.13 1995/08/12 23:59:09 mycroft Exp $	*/
 
 /*
