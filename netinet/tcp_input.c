@@ -3000,8 +3000,10 @@ tcp_mss_update(struct tcpcb *tp)
 	if (rt == NULL)
 		return;
 
+	mtx_enter(&so->so_snd.sb_mtx);
 	bufsize = so->so_snd.sb_hiwat;
 	if (bufsize < mss) {
+		mtx_leave(&so->so_snd.sb_mtx);
 		mss = bufsize;
 		/* Update t_maxseg and t_maxopd */
 		tcp_mss(tp, mss);
@@ -3010,6 +3012,7 @@ tcp_mss_update(struct tcpcb *tp)
 		if (bufsize > sb_max)
 			bufsize = sb_max;
 		(void)sbreserve(so, &so->so_snd, bufsize);
+		mtx_leave(&so->so_snd.sb_mtx);
 	}
 
 	mtx_enter(&so->so_rcv.sb_mtx);
@@ -3021,7 +3024,6 @@ tcp_mss_update(struct tcpcb *tp)
 		(void)sbreserve(so, &so->so_rcv, bufsize);
 	}
 	mtx_leave(&so->so_rcv.sb_mtx);
-
 }
 
 /*
