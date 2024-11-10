@@ -3067,32 +3067,36 @@ tcp_newreno_partialack(struct tcpcb *tp, struct tcphdr *th)
 int
 tcp_mss_adv(struct mbuf *m, int af)
 {
-	int mss = 0;
-	int iphlen;
-	struct ifnet *ifp = NULL;
+	struct ifnet *ifp;
+	int iphlen, mss, mssdflt;
 
-	if (m && (m->m_flags & M_PKTHDR))
-		ifp = if_get(m->m_pkthdr.ph_ifidx);
+	mssdflt = atomic_load_int(&tcp_mssdflt);
+
+	if (m == NULL || (m->m_flags & M_PKTHDR) == 0)
+		return mssdflt;
+
+	ifp = if_get(m->m_pkthdr.ph_ifidx);
+	if (ifp == NULL)
+		return mssdflt;
 
 	switch (af) {
 	case AF_INET:
-		if (ifp != NULL)
-			mss = ifp->if_mtu;
 		iphlen = sizeof(struct ip);
 		break;
 #ifdef INET6
 	case AF_INET6:
-		if (ifp != NULL)
-			mss = ifp->if_mtu;
 		iphlen = sizeof(struct ip6_hdr);
 		break;
 #endif
 	default:
 		unhandled_af(af);
 	}
+	mss = ifp->if_mtu - iphlen - sizeof(struct tcphdr);
 	if_put(ifp);
-	mss = mss - iphlen - sizeof(struct tcphdr);
-	return (max(mss, tcp_mssdflt));
+
+	if (mss < mssdflt)
+		return mssdflt;
+	return mss;
 }
 
 /*
