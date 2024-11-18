@@ -152,7 +152,7 @@ psp_attach(struct device *parent, struct device *self, void *aux)
 
 	error = bus_dmamem_alloc(sc->sc_dmat, size, 0, 0, &sc->sc_cmd_seg, 1,
 	    &nsegs, BUS_DMA_WAITOK | BUS_DMA_ZERO);
-	if (error || nsegs != 1)
+	if (error)
 		goto fail_1;
 
 	error = bus_dmamem_map(sc->sc_dmat, &sc->sc_cmd_seg, nsegs, size,
@@ -188,7 +188,7 @@ fail_4:
 fail_3:
 	bus_dmamem_unmap(sc->sc_dmat, sc->sc_cmd_kva, size);
 fail_2:
-	bus_dmamem_free(sc->sc_dmat, &sc->sc_cmd_seg, 1);
+	bus_dmamem_free(sc->sc_dmat, &sc->sc_cmd_seg, nsegs);
 fail_1:
 	bus_dmamap_destroy(sc->sc_dmat, sc->sc_cmd_map);
 fail_0:
@@ -310,7 +310,7 @@ psp_reinit(struct psp_softc *sc)
 
 	error = bus_dmamem_alloc(sc->sc_dmat, size, size, 0, &sc->sc_tmr_seg, 1,
 	    &nsegs, BUS_DMA_WAITOK | BUS_DMA_ZERO);
-	if (error || nsegs != 1)
+	if (error)
 		goto fail_1;
 
 	error = bus_dmamem_map(sc->sc_dmat, &sc->sc_tmr_seg, nsegs, size,
@@ -337,7 +337,7 @@ fail_4:
 fail_3:
 	bus_dmamem_unmap(sc->sc_dmat, sc->sc_tmr_kva, size);
 fail_2:
-	bus_dmamem_free(sc->sc_dmat, &sc->sc_tmr_seg, 1);
+	bus_dmamem_free(sc->sc_dmat, &sc->sc_tmr_seg, nsegs);
 fail_1:
 	bus_dmamap_destroy(sc->sc_dmat, sc->sc_tmr_map);
 fail_0:
@@ -671,10 +671,6 @@ psp_downloadfirmware(struct psp_softc *sc, struct psp_downloadfirmware *udlfw)
 	    &nsegs, BUS_DMA_WAITOK | BUS_DMA_ZERO);
 	if (error)
 		goto fail_1;
-	if (nsegs != 1) {
-		error = ERANGE;
-		goto fail_1;
-	}
 
 	error = bus_dmamem_map(sc->sc_dmat, &seg, nsegs, udlfw->fw_len, &kva,
 	    BUS_DMA_WAITOK);
@@ -698,7 +694,7 @@ psp_downloadfirmware(struct psp_softc *sc, struct psp_downloadfirmware *udlfw)
 fail_3:
 	bus_dmamem_unmap(sc->sc_dmat, kva, udlfw->fw_len);
 fail_2:
-	bus_dmamem_free(sc->sc_dmat, &seg, 1);
+	bus_dmamem_free(sc->sc_dmat, &seg, nsegs);
 fail_1:
 	bus_dmamap_destroy(sc->sc_dmat, map);
 fail_0:
