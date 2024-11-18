@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ice.c,v 1.2 2024/11/13 16:32:18 stsp Exp $	*/
+/*	$OpenBSD: if_ice.c,v 1.9 2024/11/15 15:43:49 stsp Exp $	*/
 
 /*  Copyright (c) 2024, Intel Corporation
  *  All rights reserved.
@@ -328,6 +328,8 @@ struct ice_softc {
 	bool link_up;
 
 	int rebuild_ticks;
+
+	int sw_intr[ICE_MAX_VECTORS];
 };
 
 /**
@@ -1817,6 +1819,7 @@ void
 ice_debug_cq(struct ice_hw *hw, struct ice_ctl_q_info *cq,
 	     void *desc, void *buf, uint16_t buf_len, bool response)
 {
+#ifdef ICE_DEBUG
 	struct ice_aq_desc *cq_desc = (struct ice_aq_desc *)desc;
 	uint16_t datalen, flags;
 
@@ -1852,6 +1855,7 @@ ice_debug_cq(struct ice_hw *hw, struct ice_ctl_q_info *cq,
 		ice_debug_array(hw, ICE_DBG_AQ_DESC_BUF, 16, 1, (uint8_t *)buf,
 		    MIN(buf_len, datalen));
 	}
+#endif
 }
 
 /*
@@ -6466,6 +6470,7 @@ ice_fw_supports_link_override(struct ice_hw *hw)
 
 #define ice_arr_elem_idx(idx, val)	[(idx)] = (val)
 
+#ifdef ICE_DEBUG
 static const char * const ice_link_mode_str_low[] = {
 	ice_arr_elem_idx(0, "100BASE_TX"),
 	ice_arr_elem_idx(1, "100M_SGMII"),
@@ -6540,6 +6545,7 @@ static const char * const ice_link_mode_str_high[] = {
 	ice_arr_elem_idx(3, "100G_AUI2_AOC_ACC"),
 	ice_arr_elem_idx(4, "100G_AUI2"),
 };
+#endif
 
 /**
  * ice_dump_phy_type - helper function to dump phy_type
@@ -6552,6 +6558,7 @@ void
 ice_dump_phy_type(struct ice_hw *hw, uint64_t low, uint64_t high,
     const char *prefix)
 {
+#ifdef ICE_DEBUG
 	uint32_t i;
 
 	DNPRINTF(ICE_DBG_PHY, "%s: phy_type_low: 0x%016llx\n", prefix,
@@ -6571,6 +6578,7 @@ ice_dump_phy_type(struct ice_hw *hw, uint64_t low, uint64_t high,
 			DNPRINTF(ICE_DBG_PHY, "%s:   bit(%d): %s\n",
 				  prefix, i, ice_link_mode_str_high[i]);
 	}
+#endif
 }
 
 /**
@@ -7938,6 +7946,10 @@ ice_update_laa_mac(struct ice_softc *sc)
 	struct ice_hw *hw = &sc->hw;
 	enum ice_status status;
 
+	/* Desired address already set in hardware? */
+	if (!memcmp(lladdr, hw->port_info->mac.lan_addr, ETHER_ADDR_LEN))
+		return;
+
 	status = ice_aq_manage_mac_write(hw, lladdr,
 	    ICE_AQC_MAN_MAC_UPDATE_LAA_WOL, NULL);
 	if (status) {
@@ -7945,7 +7957,11 @@ ice_update_laa_mac(struct ice_softc *sc)
 		    "err %s aq_err %s\n", sc->sc_dev.dv_xname,
 		    ether_sprintf(lladdr), ice_status_str(status),
 		    ice_aq_str(hw->adminq.sq_last_status));
+		return;
 	}
+
+	/* Cache current hardware address. */
+	memcpy(hw->port_info->mac.lan_addr, lladdr, ETHER_ADDR_LEN);
 }
 
 /**
@@ -9121,13 +9137,12 @@ free_mac_list:
 int
 ice_cfg_pf_default_mac_filters(struct ice_softc *sc)
 {
+	struct ice_hw *hw = &sc->hw;
 	struct ice_vsi *vsi = &sc->pf_vsi;
-	struct ifnet *ifp = &sc->sc_ac.ac_if;
-	uint8_t *lladdr = ((struct arpcom *)ifp)->ac_enaddr;
 	int err;
 
 	/* Add the LAN MAC address */
-	err = ice_add_vsi_mac_filter(vsi, lladdr);
+	err = ice_add_vsi_mac_filter(vsi, hw->port_info->mac.lan_addr);
 	if (err)
 		return err;
 
@@ -13221,13 +13236,15 @@ ice_rm_pf_default_mac_filters(struct ice_softc *sc)
 void
 ice_flush_rxq_interrupts(struct ice_vsi *vsi)
 {
-	struct ice_hw *hw = &vsi->sc->hw;
+	struct ice_softc *sc = vsi->sc;
+	struct ice_hw *hw = &sc->hw;
 	int i;
 
 	for (i = 0; i < vsi->num_rx_queues; i++) {
 		struct ice_rx_queue *rxq = &vsi->rx_queues[i];
 		uint32_t reg, val;
 		int v = rxq->irqv->iv_qid + 1;
+		int tries = 0;
 
 		/* Clear the CAUSE_ENA flag */
 		reg = vsi->rx_qmap[rxq->me];
@@ -13240,8 +13257,23 @@ ice_flush_rxq_interrupts(struct ice_vsi *vsi)
 		/* Trigger a software interrupt to complete interrupt
 		 * dissociation.
 		 */
+		sc->sw_intr[v] = -1;
 		ICE_WRITE(hw, GLINT_DYN_CTL(v),
 		     GLINT_DYN_CTL_SWINT_TRIG_M | GLINT_DYN_CTL_INTENA_MSK_M);
+		do {
+			int ret;
+
+			/* Sleep to allow interrupt processing to occur. */
+			ret = tsleep_nsec(&sc->sw_intr[v], 0, "iceswi",
+			    USEC_TO_NSEC(1));
+			if (ret == 0 && sc->sw_intr[v] == 1) {
+				sc->sw_intr[v] = 0;
+				break;
+			}
+			tries++;
+		} while (tries < 10);
+		if (tries == 10)
+			DPRINTF("%s: missed software interrupt\n", __func__);
 	}
 }
 
@@ -13259,13 +13291,15 @@ ice_flush_rxq_interrupts(struct ice_vsi *vsi)
 void
 ice_flush_txq_interrupts(struct ice_vsi *vsi)
 {
-	struct ice_hw *hw = &vsi->sc->hw;
+	struct ice_softc *sc = vsi->sc;
+	struct ice_hw *hw = &sc->hw;
 	int i;
 
 	for (i = 0; i < vsi->num_tx_queues; i++) {
 		struct ice_tx_queue *txq = &vsi->tx_queues[i];
 		uint32_t reg, val;
 		int v = txq->irqv->iv_qid + 1;
+		int tries = 0;
 
 		/* Clear the CAUSE_ENA flag */
 		reg = vsi->tx_qmap[txq->me];
@@ -13278,8 +13312,23 @@ ice_flush_txq_interrupts(struct ice_vsi *vsi)
 		/* Trigger a software interrupt to complete interrupt
 		 * dissociation.
 		 */
+		sc->sw_intr[v] = -1;
 		ICE_WRITE(hw, GLINT_DYN_CTL(v),
 		     GLINT_DYN_CTL_SWINT_TRIG_M | GLINT_DYN_CTL_INTENA_MSK_M);
+		do {
+			int ret;
+
+			/* Sleep to allow interrupt processing to occur. */
+			ret = tsleep_nsec(&sc->sw_intr[v], 0, "iceswi",
+			    USEC_TO_NSEC(1));
+			if (ret == 0 && sc->sw_intr[v] == 1) {
+				sc->sw_intr[v] = 0;
+				break;
+			}
+			tries++;
+		} while (tries < 10);
+		if (tries == 10)
+			DPRINTF("%s: missed software interrupt\n", __func__);
 	}
 }
 
@@ -13339,15 +13388,6 @@ ice_down(struct ice_softc *sc)
 }
 
 int
-ice_iff(struct ice_softc *sc)
-{
-	/* Configure promiscuous mode */
-	ice_if_promisc_set(sc);
-
-	return 0;
-}
-
-int
 ice_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 {
 	struct ice_softc *sc = ifp->if_softc;
@@ -13382,7 +13422,12 @@ ice_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 	}
 
 	if (error == ENETRESET) {
-		error = ice_iff(sc);
+		error = 0;
+		if ((ifp->if_flags & (IFF_UP | IFF_RUNNING)) ==
+		    (IFF_UP | IFF_RUNNING)) {
+			ice_down(sc);
+			error = ice_up(sc);
+		}
 	}
 
 	splx(s);
@@ -14873,7 +14918,7 @@ ice_print_nvm_version(struct ice_softc *sc)
 
 	printf("%s: %s, address %s\n", sc->sc_dev.dv_xname,
 	    ice_nvm_version_str(hw, buf, sizeof(buf)),
-	    ether_sprintf(hw->port_info->mac.lan_addr));
+	    ether_sprintf(hw->port_info->mac.perm_addr));
 }
 
 /**
@@ -15190,6 +15235,8 @@ void
 ice_setup_vsi_common(struct ice_softc *sc, struct ice_vsi *vsi,
 		     enum ice_vsi_type type, int idx, bool dynamic)
 {
+	struct ice_hw *hw = &sc->hw;
+
 	/* Store important values in VSI struct */
 	vsi->type = type;
 	vsi->sc = sc;
@@ -15205,6 +15252,7 @@ ice_setup_vsi_common(struct ice_softc *sc, struct ice_vsi *vsi,
 	ice_add_vsi_tunables(vsi, sc->vsi_sysctls);
 #endif
 	vsi->mbuf_sz = MCLBYTES + ETHER_ALIGN;
+	vsi->max_frame_size = hw->port_info->phy.link_info.max_frame_size;
 }
 
 /**
@@ -21067,6 +21115,7 @@ void
 ice_debug_print_mib_change_event(struct ice_softc *sc,
     struct ice_rq_event_info *event)
 {
+#ifdef ICE_DEBUG
 	struct ice_aqc_lldp_get_mib *params =
 	    (struct ice_aqc_lldp_get_mib *)&event->desc.params.lldp_get_mib;
 	uint8_t mib_type, bridge_type, tx_status;
@@ -21109,6 +21158,7 @@ ice_debug_print_mib_change_event(struct ice_softc *sc,
 	DNPRINTF(ICE_DBG_DCB, "- %s contents:\n", mib_type_strings[mib_type]);
 	ice_debug_array(&sc->hw, ICE_DBG_DCB, 16, 1, event->msg_buf,
 			event->msg_len);
+#endif
 }
 
 /**
@@ -22173,6 +22223,7 @@ void
 ice_handle_lan_overflow_event(struct ice_softc *sc,
     struct ice_rq_event_info *event)
 {
+#ifdef ICE_DEBUG
 	struct ice_aqc_event_lan_overflow *params =
 	    (struct ice_aqc_event_lan_overflow *)&event->desc.params.lan_overflow;
 
@@ -22180,6 +22231,7 @@ ice_handle_lan_overflow_event(struct ice_softc *sc,
 	    "prtdcb_ruptq=0x%08x, qtx_ctl=0x%08x\n",
 	    sc->sc_dev.dv_xname, le32toh(params->prtdcb_ruptq),
 	    le32toh(params->qtx_ctl));
+#endif
 }
 
 /**
@@ -22946,11 +22998,160 @@ ice_intr0(void *xsc)
 	return 1;
 }
 
-int
-ice_intr_vector(void *v)
+/*
+ * Macro to help extract the NIC mode flexible Rx descriptor fields from the
+ * advanced 32byte Rx descriptors.
+ */
+#define ICE_RX_FLEX_NIC(desc, field) \
+	(((struct ice_32b_rx_flex_desc_nic *)desc)->field)
+
+void
+ice_rx_checksum(struct mbuf *m, uint16_t status0)
 {
-	printf("%s\n", __func__);
-	return 1;
+	/* TODO */
+}
+
+int
+ice_rxeof(struct ice_softc *sc, struct ice_rx_queue *rxq)
+{
+	struct ifiqueue *ifiq = rxq->rxq_ifiq;
+	struct ifnet *ifp = &sc->sc_ac.ac_if;
+	union ice_32b_rx_flex_desc *ring, *cur;
+	struct ice_rx_map *rxm;
+	bus_dmamap_t map;
+	unsigned int cons, prod;
+	struct mbuf_list ml = MBUF_LIST_INITIALIZER();
+	struct mbuf *m;
+	uint16_t status0;
+	unsigned int eop;
+	unsigned int len;
+	unsigned int mask;
+	int done = 0;
+
+	prod = rxq->rxq_prod;
+	cons = rxq->rxq_cons;
+
+	if (cons == prod)
+		return (0);
+
+	rxm = &rxq->rx_map[cons];
+	map = rxm->rxm_map;
+	bus_dmamap_sync(sc->sc_dmat, map, 0, map->dm_mapsize,
+	    BUS_DMASYNC_POSTREAD|BUS_DMASYNC_POSTWRITE);
+
+	ring = ICE_DMA_KVA(&rxq->rx_desc_mem);
+	mask = rxq->desc_count - 1;
+
+	do {
+		cur = &ring[cons];
+
+		status0 = le16toh(cur->wb.status_error0);
+		if ((status0 & BIT(ICE_RX_FLEX_DESC_STATUS0_DD_S)) == 0)
+			break;
+
+		if_rxr_put(&rxq->rxq_acct, 1);
+
+		rxm = &rxq->rx_map[cons];
+
+		map = rxm->rxm_map;
+		bus_dmamap_sync(sc->sc_dmat, map, 0, map->dm_mapsize,
+		    BUS_DMASYNC_POSTREAD);
+		bus_dmamap_unload(sc->sc_dmat, map);
+		
+		m = rxm->rxm_m;
+		rxm->rxm_m = NULL;
+
+		len = le16toh(cur->wb.pkt_len) & ICE_RX_FLX_DESC_PKT_LEN_M;
+		m->m_len = len;
+		m->m_pkthdr.len = 0;
+
+		m->m_next = NULL;
+		*rxq->rxq_m_tail = m;
+		rxq->rxq_m_tail = &m->m_next;
+
+		m = rxq->rxq_m_head;
+		m->m_pkthdr.len += len;
+
+		eop = !!(status0 & BIT(ICE_RX_FLEX_DESC_STATUS0_EOF_S));
+		if (eop && (status0 & BIT(ICE_RX_FLEX_DESC_STATUS0_RXE_S))) {
+			/*
+			 * Make sure packets with bad L2 values are discarded.
+			 * This bit is only valid in the last descriptor.
+			 */
+			ifp->if_ierrors++;
+			m_freem(m);
+			m = NULL;
+			rxq->rxq_m_head = NULL;
+			rxq->rxq_m_tail = &rxq->rxq_m_head;
+		} else if (eop) {
+#if NVLAN > 0
+			if (status0 & BIT(ICE_RX_FLEX_DESC_STATUS0_L2TAG1P_S)) {
+				m->m_pkthdr.ether_vtag =
+				    le16toh(cur->wb.l2tag1);
+				SET(m->m_flags, M_VLANTAG);
+			}
+#endif
+			if (status0 &
+			    BIT(ICE_RX_FLEX_DESC_STATUS0_RSS_VALID_S)) {
+				m->m_pkthdr.ph_flowid = le32toh(
+				    ICE_RX_FLEX_NIC(&cur->wb, rss_hash));
+				m->m_pkthdr.csum_flags |= M_FLOWID;
+			}
+
+			ice_rx_checksum(m, status0);
+			ml_enqueue(&ml, m);
+
+			rxq->rxq_m_head = NULL;
+			rxq->rxq_m_tail = &rxq->rxq_m_head;
+		}
+
+		cons++;
+		cons &= mask;
+
+		done = 1;
+	} while (cons != prod);
+
+	if (done) {
+		rxq->rxq_cons = cons;
+		if (ifiq_input(ifiq, &ml))
+			if_rxr_livelocked(&rxq->rxq_acct);
+		ice_rxfill(sc, rxq);
+	}
+
+	bus_dmamap_sync(sc->sc_dmat, map, 0, map->dm_mapsize,
+	    BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE);
+
+	return (done);
+}
+
+int
+ice_txeof(struct ice_softc *sc, struct ice_tx_queue *rxq)
+{
+	/* TODO */
+	return 0;
+}
+
+int
+ice_intr_vector(void *ivp)
+{
+	struct ice_intr_vector *iv = ivp;
+	struct ice_softc *sc = iv->iv_sc;
+	struct ifnet *ifp = &sc->sc_ac.ac_if;
+	int rv = 0, v = iv->iv_qid + 1;
+
+	if (ISSET(ifp->if_flags, IFF_RUNNING)) {
+		rv |= ice_rxeof(sc, iv->iv_rxq);
+		rv |= ice_txeof(sc, iv->iv_txq);
+	}
+
+	/* Wake threads waiting for software interrupt confirmation. */
+	if (sc->sw_intr[v] == -1) {
+		sc->sw_intr[v] = 1;
+		wakeup(&sc->sw_intr[v]);
+	}
+		
+	ice_enable_intr(&sc->hw, v);
+	return rv;
 }
 
 /**
@@ -23301,6 +23502,10 @@ ice_rx_queues_alloc(struct ice_softc *sc)
 		if_rxr_init(&rxq->rxq_acct, ICE_MIN_DESC_COUNT,
 		    rxq->desc_count - 1);
 		timeout_set(&rxq->rxq_refill, ice_rxrefill, rxq);
+
+		rxq->rxq_cons = rxq->rxq_prod = 0;
+		rxq->rxq_m_head = NULL;
+		rxq->rxq_m_tail = &rxq->rxq_m_head;
 	}
 
 	vsi->num_rx_queues = sc->sc_nqueues;
@@ -23677,7 +23882,6 @@ ice_init_saved_phy_cfg(struct ice_softc *sc)
 {
 	struct ice_port_info *pi = sc->hw.port_info;
 	struct ice_aqc_get_phy_caps_data pcaps = { 0 };
-	struct ice_hw *hw = &sc->hw;
 	enum ice_status status;
 	uint64_t phy_low, phy_high;
 	uint8_t report_mode = ICE_AQC_REPORT_TOPO_CAP_MEDIA;
@@ -23690,7 +23894,7 @@ ice_init_saved_phy_cfg(struct ice_softc *sc)
 		    "aq_err %s\n", __func__,
 		    report_mode == ICE_AQC_REPORT_DFLT_CFG ? "DFLT" : "w/MEDIA",
 		    ice_status_str(status),
-		    ice_aq_str(hw->adminq.sq_last_status));
+		    ice_aq_str(sc->hw.adminq.sq_last_status));
 		return;
 	}
 
@@ -23883,7 +24087,7 @@ ice_attach_hook(struct device *self)
 	ice_print_nvm_version(sc);
 
 	/* Setup the MAC address */
-	err = if_setlladdr(ifp,  hw->port_info->mac.lan_addr);
+	err = if_setlladdr(ifp, hw->port_info->mac.perm_addr);
 	if (err)
 		printf("%s: could not set MAC address (error %d)\n",
 		    sc->sc_dev.dv_xname, err);
