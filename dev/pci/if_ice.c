@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ice.c,v 1.9 2024/11/15 15:43:49 stsp Exp $	*/
+/*	$OpenBSD: if_ice.c,v 1.11 2024/11/19 09:41:32 stsp Exp $	*/
 
 /*  Copyright (c) 2024, Intel Corporation
  *  All rights reserved.
@@ -77,6 +77,7 @@
 #endif
 #include <net/if.h>
 #include <net/if_media.h>
+#include <net/ethertypes.h>
 
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
@@ -178,6 +179,9 @@ uint32_t	ice_debug = 0xffffffff & ~(ICE_DBG_AQ);
 
 #define ICE_READ(hw, reg)						\
 	bus_space_read_4((hw)->hw_sc->sc_st, (hw)->hw_sc->sc_sh, (reg))
+
+#define ICE_READ_8(hw, reg)						\
+	bus_space_read_8((hw)->hw_sc->sc_st, (hw)->hw_sc->sc_sh, (reg))
 
 #define ICE_WRITE(hw, reg, val)						\
 	bus_space_write_4((hw)->hw_sc->sc_st, (hw)->hw_sc->sc_sh, (reg), (val))
@@ -313,6 +317,10 @@ struct ice_softc {
 	/* Tx/Rx queue managers */
 	struct ice_resmgr tx_qmgr;
 	struct ice_resmgr rx_qmgr;
+
+	/* device statistics */
+	struct ice_pf_hw_stats stats;
+	struct ice_pf_sw_stats soft_stats;
 
 	struct ice_vsi **all_vsi;	/* Array of VSI pointers */
 	uint16_t num_available_vsi;	/* Size of VSI array */
@@ -17771,11 +17779,9 @@ ice_clean_all_vsi_rss_cfg(struct ice_softc *sc)
 void
 ice_reset_pf_stats(struct ice_softc *sc)
 {
-#if 0
 	memset(&sc->stats.prev, 0, sizeof(sc->stats.prev));
 	memset(&sc->stats.cur, 0, sizeof(sc->stats.cur));
 	sc->stats.offsets_loaded = false;
-#endif
 }
 
 /**
@@ -19628,6 +19634,138 @@ ice_init_health_events(struct ice_softc *sc)
 }
 
 /**
+ * ice_fw_supports_lldp_fltr_ctrl - check NVM version supports lldp_fltr_ctrl
+ * @hw: pointer to HW struct
+ */
+bool
+ice_fw_supports_lldp_fltr_ctrl(struct ice_hw *hw)
+{
+	if (hw->mac_type != ICE_MAC_E810 && hw->mac_type != ICE_MAC_GENERIC)
+		return false;
+
+	return ice_is_fw_api_min_ver(hw, ICE_FW_API_LLDP_FLTR_MAJ,
+				     ICE_FW_API_LLDP_FLTR_MIN,
+				     ICE_FW_API_LLDP_FLTR_PATCH);
+}
+
+/**
+ * ice_add_ethertype_to_list - Add an Ethertype filter to a filter list
+ * @vsi: the VSI to target packets to
+ * @list: the list to add the filter to
+ * @ethertype: the Ethertype to filter on
+ * @direction: The direction of the filter (Tx or Rx)
+ * @action: the action to take
+ *
+ * Add an Ethertype filter to a filter list. Used to forward a series of
+ * filters to the firmware for configuring the switch.
+ *
+ * Returns 0 on success, and an error code on failure.
+ */
+int
+ice_add_ethertype_to_list(struct ice_vsi *vsi, struct ice_fltr_list_head *list,
+    uint16_t ethertype, uint16_t direction, enum ice_sw_fwd_act_type action)
+{
+	struct ice_fltr_list_entry *entry;
+
+	KASSERT((direction == ICE_FLTR_TX) || (direction == ICE_FLTR_RX));
+
+	entry = malloc(sizeof(*entry), M_DEVBUF, M_NOWAIT|M_ZERO);
+	if (!entry)
+		return (ENOMEM);
+
+	entry->fltr_info.flag = direction;
+	entry->fltr_info.src_id = ICE_SRC_ID_VSI;
+	entry->fltr_info.lkup_type = ICE_SW_LKUP_ETHERTYPE;
+	entry->fltr_info.fltr_act = action;
+	entry->fltr_info.vsi_handle = vsi->idx;
+	entry->fltr_info.l_data.ethertype_mac.ethertype = ethertype;
+
+	TAILQ_INSERT_HEAD(list, entry, list_entry);
+
+	return 0;
+}
+
+/**
+ * ice_lldp_fltr_add_remove - add or remove a LLDP Rx switch filter
+ * @hw: pointer to HW struct
+ * @vsi_num: absolute HW index for VSI
+ * @add: boolean for if adding or removing a filter
+ */
+enum ice_status
+ice_lldp_fltr_add_remove(struct ice_hw *hw, uint16_t vsi_num, bool add)
+{
+	struct ice_aqc_lldp_filter_ctrl *cmd;
+	struct ice_aq_desc desc;
+
+	cmd = &desc.params.lldp_filter_ctrl;
+
+	ice_fill_dflt_direct_cmd_desc(&desc, ice_aqc_opc_lldp_filter_ctrl);
+
+	if (add)
+		cmd->cmd_flags = ICE_AQC_LLDP_FILTER_ACTION_ADD;
+	else
+		cmd->cmd_flags = ICE_AQC_LLDP_FILTER_ACTION_DELETE;
+
+	cmd->vsi_num = htole16(vsi_num);
+
+	return ice_aq_send_cmd(hw, &desc, NULL, 0, NULL);
+}
+
+/**
+ * ice_add_eth_mac_rule - Add ethertype and MAC based filter rule
+ * @hw: pointer to the hardware structure
+ * @em_list: list of ether type MAC filter, MAC is optional
+ * @sw: pointer to switch info struct for which function add rule
+ * @lport: logic port number on which function add rule
+ *
+ * This function requires the caller to populate the entries in
+ * the filter list with the necessary fields (including flags to
+ * indicate Tx or Rx rules).
+ */
+enum ice_status
+ice_add_eth_mac_rule(struct ice_hw *hw, struct ice_fltr_list_head *em_list,
+		     struct ice_switch_info *sw, uint8_t lport)
+{
+	struct ice_fltr_list_entry *em_list_itr;
+
+	TAILQ_FOREACH(em_list_itr, em_list, list_entry) {
+		struct ice_sw_recipe *recp_list;
+		enum ice_sw_lkup_type l_type;
+
+		l_type = em_list_itr->fltr_info.lkup_type;
+		recp_list = &sw->recp_list[l_type];
+
+		if (l_type != ICE_SW_LKUP_ETHERTYPE_MAC &&
+		    l_type != ICE_SW_LKUP_ETHERTYPE)
+			return ICE_ERR_PARAM;
+
+		em_list_itr->status = ice_add_rule_internal(hw, recp_list,
+							    lport,
+							    em_list_itr);
+		if (em_list_itr->status)
+			return em_list_itr->status;
+	}
+	return ICE_SUCCESS;
+}
+
+/**
+ * ice_add_eth_mac - Add a ethertype based filter rule
+ * @hw: pointer to the hardware structure
+ * @em_list: list of ethertype and forwarding information
+ *
+ * Function add ethertype rule for logical port from HW struct
+ */
+enum ice_status
+ice_add_eth_mac(struct ice_hw *hw, struct ice_fltr_list_head *em_list)
+{
+	if (!em_list || !hw)
+		return ICE_ERR_PARAM;
+
+	return ice_add_eth_mac_rule(hw, em_list, hw->switch_info,
+				    hw->port_info->lport);
+}
+
+/**
  * ice_add_rx_lldp_filter - add ethertype filter for Rx LLDP frames
  * @sc: the device private structure
  *
@@ -19638,25 +19776,23 @@ ice_init_health_events(struct ice_softc *sc)
 void
 ice_add_rx_lldp_filter(struct ice_softc *sc)
 {
-#if 0
-	struct ice_list_head ethertype_list;
+	struct ice_fltr_list_head ethertype_list;
 	struct ice_vsi *vsi = &sc->pf_vsi;
 	struct ice_hw *hw = &sc->hw;
-	device_t dev = sc->dev;
 	enum ice_status status;
 	int err;
-	u16 vsi_num;
+	uint16_t vsi_num;
 
 	/*
 	 * If FW is new enough, use a direct AQ command to perform the filter
 	 * addition.
 	 */
 	if (ice_fw_supports_lldp_fltr_ctrl(hw)) {
-		vsi_num = ice_get_hw_vsi_num(hw, vsi->idx);
+		vsi_num = hw->vsi_ctx[vsi->idx]->vsi_num;
 		status = ice_lldp_fltr_add_remove(hw, vsi_num, true);
 		if (status) {
-			device_printf(dev,
-			    "Failed to add Rx LLDP filter, err %s aq_err %s\n",
+			DPRINTF("%s: failed to add Rx LLDP filter, "
+			    "err %s aq_err %s\n", __func__,
 			    ice_status_str(status),
 			    ice_aq_str(hw->adminq.sq_last_status));
 		} else
@@ -19665,25 +19801,22 @@ ice_add_rx_lldp_filter(struct ice_softc *sc)
 		return;
 	}
 
-	INIT_LIST_HEAD(&ethertype_list);
+	TAILQ_INIT(&ethertype_list);
 
 	/* Forward Rx LLDP frames to the stack */
-	err = ice_add_ethertype_to_list(vsi, &ethertype_list,
-					ETHERTYPE_LLDP_FRAMES,
+	err = ice_add_ethertype_to_list(vsi, &ethertype_list, ETHERTYPE_LLDP,
 					ICE_FLTR_RX, ICE_FWD_TO_VSI);
 	if (err) {
-		device_printf(dev,
-			      "Failed to add Rx LLDP filter, err %s\n",
-			      ice_err_str(err));
+		DPRINTF("%s: failed to add Rx LLDP filter, err %d\n",
+		    __func__, err);
 		goto free_ethertype_list;
 	}
 
 	status = ice_add_eth_mac(hw, &ethertype_list);
 	if (status && status != ICE_ERR_ALREADY_EXISTS) {
-		device_printf(dev,
-			      "Failed to add Rx LLDP filter, err %s aq_err %s\n",
-			      ice_status_str(status),
-			      ice_aq_str(hw->adminq.sq_last_status));
+		DPRINTF("%s: failed to add Rx LLDP filter, err %s aq_err %s\n",
+		    __func__, ice_status_str(status),
+		    ice_aq_str(hw->adminq.sq_last_status));
 	} else {
 		/*
 		 * If status == ICE_ERR_ALREADY_EXISTS, we won't treat an
@@ -19694,9 +19827,6 @@ ice_add_rx_lldp_filter(struct ice_softc *sc)
 
 free_ethertype_list:
 	ice_free_fltr_list(&ethertype_list);
-#else
-	printf("%s: not implemented\n", __func__);
-#endif
 }
 
 /**
@@ -22665,6 +22795,302 @@ ice_poll_for_media_avail(struct ice_softc *sc)
 }
 
 /**
+ * ice_stat_update40 - read 40 bit stat from the chip and update stat values
+ * @hw: ptr to the hardware info
+ * @reg: offset of 64 bit HW register to read from
+ * @prev_stat_loaded: bool to specify if previous stats are loaded
+ * @prev_stat: ptr to previous loaded stat value
+ * @cur_stat: ptr to current stat value
+ */
+void
+ice_stat_update40(struct ice_hw *hw, uint32_t reg, bool prev_stat_loaded,
+		  uint64_t *prev_stat, uint64_t *cur_stat)
+{
+	uint64_t new_data = ICE_READ_8(hw, reg) & (BIT_ULL(40) - 1);
+
+	/*
+	 * Device stats are not reset at PFR, they likely will not be zeroed
+	 * when the driver starts. Thus, save the value from the first read
+	 * without adding to the statistic value so that we report stats which
+	 * count up from zero.
+	 */
+	if (!prev_stat_loaded) {
+		*prev_stat = new_data;
+		return;
+	}
+
+	/*
+	 * Calculate the difference between the new and old values, and then
+	 * add it to the software stat value.
+	 */
+	if (new_data >= *prev_stat)
+		*cur_stat += new_data - *prev_stat;
+	else
+		/* to manage the potential roll-over */
+		*cur_stat += (new_data + BIT_ULL(40)) - *prev_stat;
+
+	/* Update the previously stored value to prepare for next read */
+	*prev_stat = new_data;
+}
+
+/**
+ * ice_stat_update32 - read 32 bit stat from the chip and update stat values
+ * @hw: ptr to the hardware info
+ * @reg: offset of HW register to read from
+ * @prev_stat_loaded: bool to specify if previous stats are loaded
+ * @prev_stat: ptr to previous loaded stat value
+ * @cur_stat: ptr to current stat value
+ */
+void
+ice_stat_update32(struct ice_hw *hw, uint32_t reg, bool prev_stat_loaded,
+		  uint64_t *prev_stat, uint64_t *cur_stat)
+{
+	uint32_t new_data;
+
+	new_data = ICE_READ(hw, reg);
+
+	/*
+	 * Device stats are not reset at PFR, they likely will not be zeroed
+	 * when the driver starts. Thus, save the value from the first read
+	 * without adding to the statistic value so that we report stats which
+	 * count up from zero.
+	 */
+	if (!prev_stat_loaded) {
+		*prev_stat = new_data;
+		return;
+	}
+
+	/*
+	 * Calculate the difference between the new and old values, and then
+	 * add it to the software stat value.
+	 */
+	if (new_data >= *prev_stat)
+		*cur_stat += new_data - *prev_stat;
+	else
+		/* to manage the potential roll-over */
+		*cur_stat += (new_data + BIT_ULL(32)) - *prev_stat;
+
+	/* Update the previously stored value to prepare for next read */
+	*prev_stat = new_data;
+}
+
+/**
+ * ice_stat_update_repc - read GLV_REPC stats from chip and update stat values
+ * @hw: ptr to the hardware info
+ * @vsi_handle: VSI handle
+ * @prev_stat_loaded: bool to specify if the previous stat values are loaded
+ * @cur_stats: ptr to current stats structure
+ *
+ * The GLV_REPC statistic register actually tracks two 16bit statistics, and
+ * thus cannot be read using the normal ice_stat_update32 function.
+ *
+ * Read the GLV_REPC register associated with the given VSI, and update the
+ * rx_no_desc and rx_error values in the ice_eth_stats structure.
+ *
+ * Because the statistics in GLV_REPC stick at 0xFFFF, the register must be
+ * cleared each time it's read.
+ *
+ * Note that the GLV_RDPC register also counts the causes that would trigger
+ * GLV_REPC. However, it does not give the finer grained detail about why the
+ * packets are being dropped. The GLV_REPC values can be used to distinguish
+ * whether Rx packets are dropped due to errors or due to no available
+ * descriptors.
+ */
+void
+ice_stat_update_repc(struct ice_hw *hw, uint16_t vsi_handle,
+    bool prev_stat_loaded, struct ice_eth_stats *cur_stats)
+{
+	uint16_t vsi_num, no_desc, error_cnt;
+	uint32_t repc;
+
+	if (!ice_is_vsi_valid(hw, vsi_handle))
+		return;
+
+	vsi_num = hw->vsi_ctx[vsi_handle]->vsi_num;
+
+	/* If we haven't loaded stats yet, just clear the current value */
+	if (!prev_stat_loaded) {
+		ICE_WRITE(hw, GLV_REPC(vsi_num), 0);
+		return;
+	}
+
+	repc = ICE_READ(hw, GLV_REPC(vsi_num));
+	no_desc = (repc & GLV_REPC_NO_DESC_CNT_M) >> GLV_REPC_NO_DESC_CNT_S;
+	error_cnt = (repc & GLV_REPC_ERROR_CNT_M) >> GLV_REPC_ERROR_CNT_S;
+
+	/* Clear the count by writing to the stats register */
+	ICE_WRITE(hw, GLV_REPC(vsi_num), 0);
+
+	cur_stats->rx_no_desc += no_desc;
+	cur_stats->rx_errors += error_cnt;
+}
+
+/**
+ * ice_update_pf_stats - Update port stats counters
+ * @sc: device private softc structure
+ *
+ * Reads hardware statistics registers and updates the software tracking
+ * structure with new values.
+ */
+void
+ice_update_pf_stats(struct ice_softc *sc)
+{
+	struct ice_hw_port_stats *prev_ps, *cur_ps;
+	struct ice_hw *hw = &sc->hw;
+	uint8_t lport;
+
+	KASSERT(hw->port_info);
+
+	prev_ps = &sc->stats.prev;
+	cur_ps = &sc->stats.cur;
+	lport = hw->port_info->lport;
+
+#define ICE_PF_STAT_PFC(name, location, index) \
+	ice_stat_update40(hw, name(lport, index), \
+			  sc->stats.offsets_loaded, \
+			  &prev_ps->location[index], &cur_ps->location[index])
+
+#define ICE_PF_STAT40(name, location) \
+	ice_stat_update40(hw, name ## L(lport), \
+			  sc->stats.offsets_loaded, \
+			  &prev_ps->location, &cur_ps->location)
+
+#define ICE_PF_STAT32(name, location) \
+	ice_stat_update32(hw, name(lport), \
+			  sc->stats.offsets_loaded, \
+			  &prev_ps->location, &cur_ps->location)
+
+	ICE_PF_STAT40(GLPRT_GORC, eth.rx_bytes);
+	ICE_PF_STAT40(GLPRT_UPRC, eth.rx_unicast);
+	ICE_PF_STAT40(GLPRT_MPRC, eth.rx_multicast);
+	ICE_PF_STAT40(GLPRT_BPRC, eth.rx_broadcast);
+	ICE_PF_STAT40(GLPRT_GOTC, eth.tx_bytes);
+	ICE_PF_STAT40(GLPRT_UPTC, eth.tx_unicast);
+	ICE_PF_STAT40(GLPRT_MPTC, eth.tx_multicast);
+	ICE_PF_STAT40(GLPRT_BPTC, eth.tx_broadcast);
+	/* This stat register doesn't have an lport */
+	ice_stat_update32(hw, PRTRPB_RDPC,
+			  sc->stats.offsets_loaded,
+			  &prev_ps->eth.rx_discards, &cur_ps->eth.rx_discards);
+
+	ICE_PF_STAT32(GLPRT_TDOLD, tx_dropped_link_down);
+	ICE_PF_STAT40(GLPRT_PRC64, rx_size_64);
+	ICE_PF_STAT40(GLPRT_PRC127, rx_size_127);
+	ICE_PF_STAT40(GLPRT_PRC255, rx_size_255);
+	ICE_PF_STAT40(GLPRT_PRC511, rx_size_511);
+	ICE_PF_STAT40(GLPRT_PRC1023, rx_size_1023);
+	ICE_PF_STAT40(GLPRT_PRC1522, rx_size_1522);
+	ICE_PF_STAT40(GLPRT_PRC9522, rx_size_big);
+	ICE_PF_STAT40(GLPRT_PTC64, tx_size_64);
+	ICE_PF_STAT40(GLPRT_PTC127, tx_size_127);
+	ICE_PF_STAT40(GLPRT_PTC255, tx_size_255);
+	ICE_PF_STAT40(GLPRT_PTC511, tx_size_511);
+	ICE_PF_STAT40(GLPRT_PTC1023, tx_size_1023);
+	ICE_PF_STAT40(GLPRT_PTC1522, tx_size_1522);
+	ICE_PF_STAT40(GLPRT_PTC9522, tx_size_big);
+
+	/* Update Priority Flow Control Stats */
+	for (int i = 0; i <= GLPRT_PXOFFRXC_MAX_INDEX; i++) {
+		ICE_PF_STAT_PFC(GLPRT_PXONRXC, priority_xon_rx, i);
+		ICE_PF_STAT_PFC(GLPRT_PXOFFRXC, priority_xoff_rx, i);
+		ICE_PF_STAT_PFC(GLPRT_PXONTXC, priority_xon_tx, i);
+		ICE_PF_STAT_PFC(GLPRT_PXOFFTXC, priority_xoff_tx, i);
+		ICE_PF_STAT_PFC(GLPRT_RXON2OFFCNT, priority_xon_2_xoff, i);
+	}
+
+	ICE_PF_STAT32(GLPRT_LXONRXC, link_xon_rx);
+	ICE_PF_STAT32(GLPRT_LXOFFRXC, link_xoff_rx);
+	ICE_PF_STAT32(GLPRT_LXONTXC, link_xon_tx);
+	ICE_PF_STAT32(GLPRT_LXOFFTXC, link_xoff_tx);
+	ICE_PF_STAT32(GLPRT_CRCERRS, crc_errors);
+	ICE_PF_STAT32(GLPRT_ILLERRC, illegal_bytes);
+	ICE_PF_STAT32(GLPRT_MLFC, mac_local_faults);
+	ICE_PF_STAT32(GLPRT_MRFC, mac_remote_faults);
+	ICE_PF_STAT32(GLPRT_RLEC, rx_len_errors);
+	ICE_PF_STAT32(GLPRT_RUC, rx_undersize);
+	ICE_PF_STAT32(GLPRT_RFC, rx_fragments);
+	ICE_PF_STAT32(GLPRT_ROC, rx_oversize);
+	ICE_PF_STAT32(GLPRT_RJC, rx_jabber);
+
+#undef ICE_PF_STAT40
+#undef ICE_PF_STAT32
+#undef ICE_PF_STAT_PFC
+
+	sc->stats.offsets_loaded = true;
+}
+
+/**
+ * ice_update_vsi_hw_stats - Update VSI-specific ethernet statistics counters
+ * @vsi: the VSI to be updated
+ *
+ * Reads hardware stats and updates the ice_vsi_hw_stats tracking structure with
+ * the updated values.
+ */
+void
+ice_update_vsi_hw_stats(struct ice_vsi *vsi)
+{
+	struct ice_eth_stats *prev_es, *cur_es;
+	struct ice_hw *hw = &vsi->sc->hw;
+	uint16_t vsi_num;
+
+	if (!ice_is_vsi_valid(hw, vsi->idx))
+		return;
+
+	/* HW absolute index of a VSI */
+	vsi_num = hw->vsi_ctx[vsi->idx]->vsi_num;
+	prev_es = &vsi->hw_stats.prev;
+	cur_es = &vsi->hw_stats.cur;
+
+#define ICE_VSI_STAT40(name, location) \
+	ice_stat_update40(hw, name ## L(vsi_num), \
+			  vsi->hw_stats.offsets_loaded, \
+			  &prev_es->location, &cur_es->location)
+
+#define ICE_VSI_STAT32(name, location) \
+	ice_stat_update32(hw, name(vsi_num), \
+			  vsi->hw_stats.offsets_loaded, \
+			  &prev_es->location, &cur_es->location)
+
+	ICE_VSI_STAT40(GLV_GORC, rx_bytes);
+	ICE_VSI_STAT40(GLV_UPRC, rx_unicast);
+	ICE_VSI_STAT40(GLV_MPRC, rx_multicast);
+	ICE_VSI_STAT40(GLV_BPRC, rx_broadcast);
+	ICE_VSI_STAT32(GLV_RDPC, rx_discards);
+	ICE_VSI_STAT40(GLV_GOTC, tx_bytes);
+	ICE_VSI_STAT40(GLV_UPTC, tx_unicast);
+	ICE_VSI_STAT40(GLV_MPTC, tx_multicast);
+	ICE_VSI_STAT40(GLV_BPTC, tx_broadcast);
+	ICE_VSI_STAT32(GLV_TEPC, tx_errors);
+
+	ice_stat_update_repc(hw, vsi->idx, vsi->hw_stats.offsets_loaded,
+			     cur_es);
+
+#undef ICE_VSI_STAT40
+#undef ICE_VSI_STAT32
+
+	vsi->hw_stats.offsets_loaded = true;
+}
+
+void
+ice_update_stats(struct ice_softc *sc)
+{
+	/* Do not attempt to update stats when in recovery mode */
+	if (ice_test_state(&sc->state, ICE_STATE_RECOVERY_MODE))
+		return;
+
+	/* Update device statistics */
+	ice_update_pf_stats(sc);
+
+	/* Update the primary VSI stats */
+	ice_update_vsi_hw_stats(&sc->pf_vsi);
+#if 0
+	/* Update mirror VSI stats */
+	if (sc->mirr_if && sc->mirr_if->if_attached)
+		ice_update_vsi_hw_stats(sc->mirr_if->vsi);
+#endif
+}
+
+/**
  * ice_if_update_admin_status - update admin status
  * @ctx: iflib ctx structure
  *
@@ -22746,6 +23172,9 @@ ice_if_update_admin_status(void *arg)
 
 	/* Check and update link status */
 	ice_update_link_status(sc, false);
+
+	/* Update statistics. */
+	ice_update_stats(sc);
 
 	/*
 	 * If there are still messages to process, we need to reschedule
