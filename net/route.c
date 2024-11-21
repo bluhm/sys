@@ -981,7 +981,8 @@ rtrequest(int req, struct rt_addrinfo *info, u_int8_t prio,
 			return (EINVAL);
 		info->rti_ifa = rt->rt_ifa;
 		info->rti_flags = rt->rt_flags | (RTF_CLONED|RTF_HOST);
-		info->rti_flags &= ~(RTF_CLONING|RTF_CONNECTED|RTF_STATIC|RTF_MPATH);
+		info->rti_flags &=
+		    ~(RTF_CLONING|RTF_CONNECTED|RTF_STATIC|RTF_MPATH);
 		info->rti_info[RTAX_GATEWAY] = sdltosa(&sa_dl);
 		info->rti_info[RTAX_LABEL] =
 		    rtlabel_id2sa(rt->rt_labelid, &sa_rl2);
