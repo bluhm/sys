@@ -146,6 +146,7 @@ static struct mbuf_queue	ipsendraw_mq;
 
 extern struct niqueue		arpinq;
 
+int	ip_ours(struct mbuf **, int *, int, int);
 int	ip_ours_enqueue(struct mbuf **mp, int *offp, int nxt);
 int	ip_dooptions(struct mbuf *, struct ifnet *, int);
 int	in_ouraddr(struct mbuf *, struct ifnet *, struct route *, int);
