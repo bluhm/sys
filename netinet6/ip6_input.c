@@ -189,6 +189,12 @@ ip6_ours(struct mbuf **mp, int *offp, int nxt, int af, int flags)
 	if (nxt == IPPROTO_DONE)
 		return IPPROTO_DONE;
 
+	return ip6_ours_enqueue(mp, offp, nxt);
+}
+
+int
+ip6_ours_enqueue(struct mbuf **mp, int *offp, int nxt)
+{
 	/* save values for later, use after dequeue */
 	if (*offp != sizeof(struct ip6_hdr)) {
 		struct m_tag *mtag;
