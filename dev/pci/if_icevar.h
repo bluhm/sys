@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_icevar.h,v 1.3 2024/11/19 09:41:32 stsp Exp $	*/
+/*	$OpenBSD: if_icevar.h,v 1.5 2024/11/26 17:34:00 stsp Exp $	*/
 
 /*  Copyright (c) 2024, Intel Corporation
  *  All rights reserved.
@@ -3559,7 +3559,6 @@ struct ice_hw {
 #endif
 	/* PSM clock frequency for calculating RL profile params */
 	uint32_t psm_clk_freq;
-	uint64_t debug_mask;		/* BITMAP for debug mask */
 	enum ice_mac_type mac_type;
 #if 0
 	/* pci info */
@@ -4253,6 +4252,11 @@ struct ice_tx_queue {
 	uint16_t		tx_rs_cidx;
 	uint16_t		tx_rs_pidx;
 	uint16_t		tx_cidx_processed;
+
+	struct ifqueue		*txq_ifq;
+
+	unsigned int		txq_prod;
+	unsigned int		txq_cons;
 };
 
 struct ice_rx_map {

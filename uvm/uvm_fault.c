@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_fault.c,v 1.143 2024/11/05 15:32:08 mpi Exp $	*/
+/*	$OpenBSD: uvm_fault.c,v 1.145 2024/11/26 10:10:28 mpi Exp $	*/
 /*	$NetBSD: uvm_fault.c,v 1.51 2000/08/06 00:22:53 thorpej Exp $	*/
 
 /*
@@ -315,7 +315,7 @@ uvmfault_anonget(struct uvm_faultinfo *ufi, struct vm_amap *amap,
 			 * try again.
 			 */
 			if ((pg->pg_flags & (PG_BUSY|PG_RELEASED)) == 0)
-				return (VM_PAGER_OK);
+				return 0;
 			atomic_setbits_int(&pg->pg_flags, PG_WANTED);
 			counters_inc(uvmexp_counters, flt_pgwait);
 
@@ -404,7 +404,7 @@ uvmfault_anonget(struct uvm_faultinfo *ufi, struct vm_amap *amap,
 					uvmfault_unlockall(ufi, NULL, NULL);
 				uvm_anon_release(anon);	/* frees page for us */
 				counters_inc(uvmexp_counters, flt_pgrele);
-				return (VM_PAGER_REFAULT);	/* refault! */
+				return ERESTART;	/* refault! */
 			}
 
 			if (error != VM_PAGER_OK) {
@@ -435,7 +435,12 @@ uvmfault_anonget(struct uvm_faultinfo *ufi, struct vm_amap *amap,
 					uvmfault_unlockall(ufi, NULL, NULL);
 				}
 				rw_exit(anon->an_lock);
-				return (VM_PAGER_ERROR);
+				/*
+				 * An error occurred while trying to bring
+				 * in the page -- this is the only error we
+				 * return right now.
+				 */
+				return EACCES;	/* XXX */
 			}
 
 			/*
@@ -457,7 +462,7 @@ uvmfault_anonget(struct uvm_faultinfo *ufi, struct vm_amap *amap,
 			if (we_own) {
 				rw_exit(anon->an_lock);
 			}
-			return (VM_PAGER_REFAULT);
+			return ERESTART;
 		}
 
 		/*
@@ -468,7 +473,7 @@ uvmfault_anonget(struct uvm_faultinfo *ufi, struct vm_amap *amap,
 				ufi->orig_rvaddr - ufi->entry->start) != anon) {
 
 			uvmfault_unlockall(ufi, amap, NULL);
-			return (VM_PAGER_REFAULT);
+			return ERESTART;
 		}
 
 		/*
@@ -557,14 +562,14 @@ int		uvm_fault_check(
 
 int		uvm_fault_upper(
 		    struct uvm_faultinfo *, struct uvm_faultctx *,
-		    struct vm_anon **, vm_fault_t);
+		    struct vm_anon **);
 boolean_t	uvm_fault_upper_lookup(
 		    struct uvm_faultinfo *, const struct uvm_faultctx *,
 		    struct vm_anon **, struct vm_page **);
 
 int		uvm_fault_lower(
 		    struct uvm_faultinfo *, struct uvm_faultctx *,
-		    struct vm_page **, vm_fault_t);
+		    struct vm_page **);
 int		uvm_fault_lower_io(
 		    struct uvm_faultinfo *, struct uvm_faultctx *,
 		    struct uvm_object **, struct vm_page **);
@@ -605,7 +610,7 @@ uvm_fault(vm_map_t orig_map, vaddr_t vaddr, vm_fault_t fault_type,
 		shadowed = uvm_fault_upper_lookup(&ufi, &flt, anons, pages);
 		if (shadowed == TRUE) {
 			/* case 1: fault on an anon in our amap */
-			error = uvm_fault_upper(&ufi, &flt, anons, fault_type);
+			error = uvm_fault_upper(&ufi, &flt, anons);
 		} else {
 			struct uvm_object *uobj = ufi.entry->object.uvm_obj;
 
@@ -634,8 +639,7 @@ uvm_fault(vm_map_t orig_map, vaddr_t vaddr, vm_fault_t fault_type,
 					error = EACCES;
 			} else {
 				/* case 2: fault on backing obj or zero fill */
-				error = uvm_fault_lower(&ufi, &flt, pages,
-				    fault_type);
+				error = uvm_fault_lower(&ufi, &flt, pages);
 			}
 		}
 	}
@@ -918,7 +922,7 @@ uvm_fault_upper_lookup(struct uvm_faultinfo *ufi,
  */
 int
 uvm_fault_upper(struct uvm_faultinfo *ufi, struct uvm_faultctx *flt,
-   struct vm_anon **anons, vm_fault_t fault_type)
+   struct vm_anon **anons)
 {
 	struct vm_amap *amap = ufi->entry->aref.ar_amap;
 	struct vm_anon *oanon, *anon = anons[flt->centeridx];
@@ -943,25 +947,14 @@ uvm_fault_upper(struct uvm_faultinfo *ufi, struct uvm_faultctx *flt,
 	 */
 	error = uvmfault_anonget(ufi, amap, anon);
 	switch (error) {
-	case VM_PAGER_OK:
+	case 0:
 		break;
 
-	case VM_PAGER_REFAULT:
+	case ERESTART:
 		return ERESTART;
 
-	case VM_PAGER_ERROR:
-		/*
-		 * An error occurred while trying to bring in the
-		 * page -- this is the only error we return right
-		 * now.
-		 */
-		return EACCES;	/* XXX */
 	default:
-#ifdef DIAGNOSTIC
-		panic("uvm_fault: uvmfault_anonget -> %d", error);
-#else
-		return EACCES;
-#endif
+		return error;
 	}
 
 	KASSERT(rw_write_held(amap->am_lock));
@@ -1213,7 +1206,7 @@ uvm_fault_lower_lookup(
  */
 int
 uvm_fault_lower(struct uvm_faultinfo *ufi, struct uvm_faultctx *flt,
-   struct vm_page **pages, vm_fault_t fault_type)
+   struct vm_page **pages)
 {
 	struct vm_amap *amap = ufi->entry->aref.ar_amap;
 	struct uvm_object *uobj = ufi->entry->object.uvm_obj;
