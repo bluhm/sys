@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_fault.c,v 1.145 2024/11/26 10:10:28 mpi Exp $	*/
+/*	$OpenBSD: uvm_fault.c,v 1.148 2024/11/29 06:44:57 mpi Exp $	*/
 /*	$NetBSD: uvm_fault.c,v 1.51 2000/08/06 00:22:53 thorpej Exp $	*/
 
 /*
@@ -841,10 +841,11 @@ uvm_fault_upper_lookup(struct uvm_faultinfo *ufi,
 {
 	struct vm_amap *amap = ufi->entry->aref.ar_amap;
 	struct vm_anon *anon;
+	struct vm_page *pg;
 	boolean_t shadowed;
 	vaddr_t currva;
 	paddr_t pa;
-	int lcv;
+	int lcv, entered = 0;
 
 	/* locked: maps(read), amap(if there) */
 	KASSERT(amap == NULL ||
@@ -858,16 +859,6 @@ uvm_fault_upper_lookup(struct uvm_faultinfo *ufi,
 	currva = flt->startva;
 	shadowed = FALSE;
 	for (lcv = 0; lcv < flt->npages; lcv++, currva += PAGE_SIZE) {
-		/*
-		 * dont play with VAs that are already mapped
-		 * except for center)
-		 */
-		if (lcv != flt->centeridx &&
-		    pmap_extract(ufi->orig_map->pmap, currva, &pa)) {
-			pages[lcv] = PGO_DONTCARE;
-			continue;
-		}
-
 		/*
 		 * unmapped or center page.   check if any anon at this level.
 		 */
@@ -884,14 +875,25 @@ uvm_fault_upper_lookup(struct uvm_faultinfo *ufi,
 			shadowed = TRUE;
 			continue;
 		}
+
 		anon = anons[lcv];
+		pg = anon->an_page;
+
 		KASSERT(anon->an_lock == amap->am_lock);
-		if (anon->an_page &&
-		    (anon->an_page->pg_flags & (PG_RELEASED|PG_BUSY)) == 0) {
+
+		/*
+		 * ignore busy pages.
+		 * don't play with VAs that are already mapped.
+		 */
+		if (pg && (pg->pg_flags & (PG_RELEASED|PG_BUSY)) == 0 &&
+		    !pmap_extract(ufi->orig_map->pmap, currva, &pa)) {
 			uvm_lock_pageq();
-			uvm_pageactivate(anon->an_page);	/* reactivate */
+			uvm_pageactivate(pg);	/* reactivate */
 			uvm_unlock_pageq();
 			counters_inc(uvmexp_counters, flt_namap);
+
+			/* No fault-ahead when wired. */
+			KASSERT(flt->wired == FALSE);
 
 			/*
 			 * Since this isn't the page that's actually faulting,
@@ -899,14 +901,14 @@ uvm_fault_upper_lookup(struct uvm_faultinfo *ufi,
 			 * that we enter these right now.
 			 */
 			(void) pmap_enter(ufi->orig_map->pmap, currva,
-			    VM_PAGE_TO_PHYS(anon->an_page) | flt->pa_flags,
+			    VM_PAGE_TO_PHYS(pg) | flt->pa_flags,
 			    (anon->an_ref > 1) ?
 			    (flt->enter_prot & ~PROT_WRITE) : flt->enter_prot,
-			    PMAP_CANFAIL |
-			     (VM_MAPENT_ISWIRED(ufi->entry) ? PMAP_WIRED : 0));
+			    PMAP_CANFAIL);
+			entered++;
 		}
 	}
-	if (flt->npages > 1)
+	if (entered > 0)
 		pmap_update(ufi->orig_map->pmap);
 
 	return shadowed;
@@ -1113,8 +1115,9 @@ uvm_fault_lower_lookup(
 {
 	struct uvm_object *uobj = ufi->entry->object.uvm_obj;
 	struct vm_page *uobjpage = NULL;
-	int lcv, gotpages;
+	int lcv, gotpages, entered;
 	vaddr_t currva;
+	paddr_t pa;
 
 	rw_enter(uobj->vmobjlock, RW_WRITE);
 
@@ -1133,6 +1136,7 @@ uvm_fault_lower_lookup(
 		return NULL;
 	}
 
+	entered = 0;
 	currva = flt->startva;
 	for (lcv = 0; lcv < flt->npages; lcv++, currva += PAGE_SIZE) {
 		if (pages[lcv] == NULL ||
@@ -1153,19 +1157,18 @@ uvm_fault_lower_lookup(
 			continue;
 		}
 
-		/*
-		 * note: calling pgo_get with locked data
-		 * structures returns us pages which are
-		 * neither busy nor released, so we don't
-		 * need to check for this.   we can just
-		 * directly enter the page (after moving it
-		 * to the head of the active queue [useful?]).
-		 */
+		if (pmap_extract(ufi->orig_map->pmap, currva, &pa))
+			goto next;
 
-		uvm_lock_pageq();
-		uvm_pageactivate(pages[lcv]);	/* reactivate */
-		uvm_unlock_pageq();
+		if (pages[lcv]->wire_count == 0) {
+			uvm_lock_pageq();
+			uvm_pageactivate(pages[lcv]);
+			uvm_unlock_pageq();
+		}
 		counters_inc(uvmexp_counters, flt_nomap);
+
+		/* No fault-ahead when wired. */
+		KASSERT(flt->wired == FALSE);
 
 		/*
 		 * Since this page isn't the page that's
@@ -1175,19 +1178,20 @@ uvm_fault_lower_lookup(
 		 */
 		(void) pmap_enter(ufi->orig_map->pmap, currva,
 		    VM_PAGE_TO_PHYS(pages[lcv]) | flt->pa_flags,
-		    flt->enter_prot & MASK(ufi->entry),
-		    PMAP_CANFAIL |
-		     (flt->wired ? PMAP_WIRED : 0));
+		    flt->enter_prot & MASK(ufi->entry), PMAP_CANFAIL);
+		entered++;
 
 		/*
 		 * NOTE: page can't be PG_WANTED because
 		 * we've held the lock the whole time
 		 * we've had the handle.
 		 */
+next:
 		atomic_clearbits_int(&pages[lcv]->pg_flags, PG_BUSY);
 		UVM_PAGE_OWN(pages[lcv], NULL);
 	}
-	pmap_update(ufi->orig_map->pmap);
+	if (entered > 0)
+		pmap_update(ufi->orig_map->pmap);
 
 	return uobjpage;
 }
