@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_fault.c,v 1.148 2024/11/29 06:44:57 mpi Exp $	*/
+/*	$OpenBSD: uvm_fault.c,v 1.150 2024/12/03 07:54:20 mpi Exp $	*/
 /*	$NetBSD: uvm_fault.c,v 1.51 2000/08/06 00:22:53 thorpej Exp $	*/
 
 /*
@@ -316,7 +316,6 @@ uvmfault_anonget(struct uvm_faultinfo *ufi, struct vm_amap *amap,
 			 */
 			if ((pg->pg_flags & (PG_BUSY|PG_RELEASED)) == 0)
 				return 0;
-			atomic_setbits_int(&pg->pg_flags, PG_WANTED);
 			counters_inc(uvmexp_counters, flt_pgwait);
 
 			/*
@@ -326,13 +325,12 @@ uvmfault_anonget(struct uvm_faultinfo *ufi, struct vm_amap *amap,
 			if (pg->uobject) {
 				/* Owner of page is UVM object. */
 				uvmfault_unlockall(ufi, amap, NULL);
-				rwsleep_nsec(pg, pg->uobject->vmobjlock,
-				    PVM | PNORELOCK, "anonget1", INFSLP);
+				uvm_pagewait(pg, pg->uobject->vmobjlock,
+				    "anonget1");
 			} else {
 				/* Owner of page is anon. */
 				uvmfault_unlockall(ufi, NULL, NULL);
-				rwsleep_nsec(pg, anon->an_lock, PVM | PNORELOCK,
-				    "anonget2", INFSLP);
+				uvm_pagewait(pg, anon->an_lock, "anonget2");
 			}
 		} else {
 			/*
@@ -1420,6 +1418,12 @@ uvm_fault_lower(struct uvm_faultinfo *ufi, struct uvm_faultctx *flt,
 
 		if (amap_add(&ufi->entry->aref,
 		    ufi->orig_rvaddr - ufi->entry->start, anon, 0)) {
+			if (pg->pg_flags & PG_WANTED)
+				wakeup(pg);
+
+			atomic_clearbits_int(&pg->pg_flags,
+			    PG_BUSY|PG_FAKE|PG_WANTED);
+			UVM_PAGE_OWN(pg, NULL);
 			uvmfault_unlockall(ufi, amap, uobj);
 			uvm_anfree(anon);
 			counters_inc(uvmexp_counters, flt_noamap);
