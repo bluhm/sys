@@ -1,4 +1,4 @@
-/*	$OpenBSD: in_proto.c,v 1.113 2024/08/22 10:58:31 mvs Exp $	*/
+/*	$OpenBSD: in_proto.c,v 1.117 2024/12/19 22:10:35 mvs Exp $	*/
 /*	$NetBSD: in_proto.c,v 1.14 1996/02/18 18:58:32 christos Exp $	*/
 
 /*
@@ -185,7 +185,8 @@ const struct protosw inetsw[] = {
   .pr_type	= SOCK_DGRAM,
   .pr_domain	= &inetdomain,
   .pr_protocol	= IPPROTO_UDP,
-  .pr_flags	= PR_ATOMIC|PR_ADDR|PR_SPLICE|PR_MPINPUT|PR_MPSOCKET,
+  .pr_flags	= PR_ATOMIC|PR_ADDR|PR_SPLICE|PR_MPINPUT|PR_MPSOCKET|
+		      PR_MPSYSCTL,
   .pr_input	= udp_input,
   .pr_ctlinput	= udp_ctlinput,
   .pr_ctloutput	= ip_ctloutput,
@@ -219,7 +220,7 @@ const struct protosw inetsw[] = {
   .pr_type	= SOCK_RAW,
   .pr_domain	= &inetdomain,
   .pr_protocol	= IPPROTO_ICMP,
-  .pr_flags	= PR_ATOMIC|PR_ADDR|PR_MPSOCKET,
+  .pr_flags	= PR_ATOMIC|PR_ADDR|PR_MPSOCKET|PR_MPSYSCTL,
   .pr_input	= icmp_input,
   .pr_ctloutput	= rip_ctloutput,
   .pr_usrreqs	= &rip_usrreqs,
@@ -318,7 +319,7 @@ const struct protosw inetsw[] = {
   .pr_type	= SOCK_RAW,
   .pr_domain	= &inetdomain,
   .pr_protocol	= IPPROTO_GRE,
-  .pr_flags	= PR_ATOMIC|PR_ADDR|PR_MPSOCKET,
+  .pr_flags	= PR_ATOMIC|PR_ADDR|PR_MPSOCKET|PR_MPSYSCTL,
   .pr_input	= gre_input,
   .pr_ctloutput	= rip_ctloutput,
   .pr_usrreqs	= &gre_usrreqs,
@@ -330,7 +331,7 @@ const struct protosw inetsw[] = {
   .pr_type	= SOCK_RAW,
   .pr_domain	= &inetdomain,
   .pr_protocol	= IPPROTO_CARP,
-  .pr_flags	= PR_ATOMIC|PR_ADDR|PR_MPSOCKET,
+  .pr_flags	= PR_ATOMIC|PR_ADDR|PR_MPSOCKET|PR_MPSYSCTL,
   .pr_input	= carp_proto_input,
   .pr_ctloutput	= rip_ctloutput,
   .pr_usrreqs	= &rip_usrreqs,

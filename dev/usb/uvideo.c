@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvideo.c,v 1.225 2024/12/01 10:38:47 mglocker Exp $ */
+/*	$OpenBSD: uvideo.c,v 1.228 2024/12/14 09:58:04 kirill Exp $ */
 
 /*
  * Copyright (c) 2008 Robert Nagy <robert@openbsd.org>
@@ -298,7 +298,6 @@ const struct video_hw_if uvideo_hw_if = {
 #define UVIDEO_FLAG_REATTACH			0x2
 #define UVIDEO_FLAG_VENDOR_CLASS		0x4
 #define UVIDEO_FLAG_NOATTACH			0x8
-#define UVIDEO_FLAG_RENEGOTIATE_AFTER_SET_ALT	0x10
 const struct uvideo_devs {
 	struct usb_devno	 uv_dev;
 	char			*ucode_name;
@@ -379,12 +378,6 @@ const struct uvideo_devs {
 	    NULL,
 	    NULL,
 	    UVIDEO_FLAG_NOATTACH
-	},
-	{   /* Needs renegotiate after setting alternate interface */
-	    { USB_VENDOR_GN_NETCOM, USB_PRODUCT_GN_NETCOM_JABRA_PANACAST_20 },
-	    NULL,
-	    NULL,
-	    UVIDEO_FLAG_RENEGOTIATE_AFTER_SET_ALT
 	},
 };
 #define uvideo_lookup(v, p) \
@@ -1889,6 +1882,10 @@ uvideo_vs_open(struct uvideo_softc *sc)
 			return (error);
 	}
 
+	/* 2.4.3 the bulk endpoint only supports the alternative setting of 0 */
+	if (sc->sc_vs_cur->bulk_endpoint)
+		goto skip_set_alt;
+
 	error = uvideo_vs_set_alt(sc, sc->sc_vs_cur->ifaceh,
 	    UGETDW(sc->sc_desc_probe.dwMaxPayloadTransferSize));
 	if (error != USBD_NORMAL_COMPLETION) {
@@ -1906,17 +1903,7 @@ uvideo_vs_open(struct uvideo_softc *sc)
 		return (USBD_INVAL);
 	}
 
-	/* renegotiate with commit after setting alternate interface */
-	if (sc->sc_quirk &&
-	    sc->sc_quirk->flags & UVIDEO_FLAG_RENEGOTIATE_AFTER_SET_ALT) {
-		error = uvideo_vs_negotiation(sc, 1);
-		if (error != USBD_NORMAL_COMPLETION) {
-			printf("%s: could not renegotiate after setting "
-			    "alternate interface!\n", DEVNAME(sc));
-			return (error);
-		}
-	}
-
+skip_set_alt:
 	DPRINTF(1, "%s: open pipe for bEndpointAddress=0x%02x\n",
 	    DEVNAME(sc), sc->sc_vs_cur->endpoint);
 	error = usbd_open_pipe(
@@ -2051,6 +2038,9 @@ uvideo_vs_start_bulk_thread(void *arg)
 			    DEVNAME(sc), usbd_errstr(error));
 			break;
 		}
+
+		usbd_get_xfer_status(sc->sc_vs_cur->bxfer.xfer,
+		    NULL, NULL, &size, NULL);
 
 		DPRINTF(2, "%s: *** buffer len = %d\n", DEVNAME(sc), size);
 

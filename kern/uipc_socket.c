@@ -1,4 +1,4 @@
-/*	$OpenBSD: uipc_socket.c,v 1.345 2024/11/08 21:47:03 bluhm Exp $	*/
+/*	$OpenBSD: uipc_socket.c,v 1.347 2024/12/19 22:11:35 mvs Exp $	*/
 /*	$NetBSD: uipc_socket.c,v 1.21 1996/02/04 02:17:52 christos Exp $	*/
 
 /*
@@ -160,6 +160,8 @@ soalloc(const struct protosw *prp, int wait)
 		case SOCK_RAW:
 		case SOCK_DGRAM:
 			so->so_snd.sb_flags |= SB_MTXLOCK;
+			/* FALLTHROUGH */
+		case SOCK_STREAM:
 			so->so_rcv.sb_flags |= SB_MTXLOCK;
 			break;
 		}
@@ -167,6 +169,7 @@ soalloc(const struct protosw *prp, int wait)
 	case AF_KEY:
 	case AF_ROUTE:
 	case AF_UNIX:
+	case AF_FRAME:
 		so->so_snd.sb_flags |= SB_MTXLOCK;
 		so->so_rcv.sb_flags |= SB_MTXLOCK;
 		break;

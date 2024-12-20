@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ice.c,v 1.24 2024/11/27 15:23:58 stsp Exp $	*/
+/*	$OpenBSD: if_ice.c,v 1.28 2024/12/17 05:32:31 stsp Exp $	*/
 
 /*  Copyright (c) 2024, Intel Corporation
  *  All rights reserved.
@@ -50,6 +50,7 @@
  */
 
 #include "bpfilter.h"
+#include "vlan.h"
 
 #include <sys/param.h>
 #include <sys/atomic.h>
@@ -13504,9 +13505,9 @@ ice_tx_setup_offload(struct mbuf *m0, struct ice_tx_queue *txq,
 
 #if NVLAN > 0
 	if (ISSET(m0->m_flags, M_VLANTAG)) {
-		uint16_t vtag = m0->m_pkthdr.ether_vtag;
+		uint64_t vtag = m0->m_pkthdr.ether_vtag;
 		offload |= (ICE_TX_DESC_CMD_IL2TAG1 << ICE_TXD_QW1_CMD_S) |
-		    (htole16(vtag) << ICE_TXD_QW1_L2TAG1_S);
+		    (vtag << ICE_TXD_QW1_L2TAG1_S);
 	}
 #endif
 	if (!ISSET(m0->m_pkthdr.csum_flags,
@@ -13688,7 +13689,7 @@ ice_media_change(struct ifnet *ifp)
  * be called. If phy_type_low is zero, call ice_phy_type_high.
  */
 uint64_t
-ice_get_phy_type_low(uint64_t phy_type_low)
+ice_get_phy_type_low(struct ice_softc *sc, uint64_t phy_type_low)
 {
 	switch (phy_type_low) {
 	case ICE_PHY_TYPE_LOW_100BASE_TX:
@@ -13844,6 +13845,8 @@ ice_get_phy_type_low(uint64_t phy_type_low)
 		return IFM_100G_DR;
 #endif
 	default:
+		printf("%s: unhandled low PHY type 0x%llx\n",
+		    sc->sc_dev.dv_xname, phy_type_low);
 		return IFM_INST_ANY;
 	}
 }
@@ -13858,7 +13861,7 @@ ice_get_phy_type_low(uint64_t phy_type_low)
  * called. If phy_type_high is zero, call ice_get_phy_type_low.
  */
 uint64_t
-ice_get_phy_type_high(uint64_t phy_type_high)
+ice_get_phy_type_high(struct ice_softc *sc, uint64_t phy_type_high)
 {
 	switch (phy_type_high) {
 #if 0
@@ -13874,6 +13877,8 @@ ice_get_phy_type_high(uint64_t phy_type_high)
 		return IFM_100G_AUI2;
 #endif
 	default:
+		printf("%s: unhandled high PHY type 0x%llx\n",
+		    sc->sc_dev.dv_xname, phy_type_high);
 		return IFM_INST_ANY;
 	}
 }
@@ -13883,6 +13888,7 @@ ice_media_status(struct ifnet *ifp, struct ifmediareq *ifmr)
 {
 	struct ice_softc *sc = ifp->if_softc;
 	struct ice_link_status *li = &sc->hw.port_info->phy.link_info;
+	uint64_t media;
 
 	ifmr->ifm_status = IFM_AVALID;
 	ifmr->ifm_active = IFM_ETHER;
@@ -13897,10 +13903,15 @@ ice_media_status(struct ifnet *ifp, struct ifmediareq *ifmr)
 	ifmr->ifm_status |= IFM_ACTIVE;
 	ifmr->ifm_active |= IFM_FDX;
 
-	if (li->phy_type_low)
-		ifmr->ifm_active |= ice_get_phy_type_low(li->phy_type_low);
-	else if (li->phy_type_high)
-		ifmr->ifm_active |= ice_get_phy_type_high(li->phy_type_high);
+	if (li->phy_type_low) {
+		media = ice_get_phy_type_low(sc, li->phy_type_low);
+		if (media != IFM_INST_ANY)
+			ifmr->ifm_active |= media;
+	} else if (li->phy_type_high) {
+		media = ice_get_phy_type_high(sc, li->phy_type_high);
+		if (media != IFM_INST_ANY)
+			ifmr->ifm_active |= media;
+	}
 
 	/* Report flow control status as well */
 	if (li->an_info & ICE_AQ_LINK_PAUSE_TX)
@@ -13961,7 +13972,7 @@ ice_add_media_types(struct ice_softc *sc, struct ifmedia *media)
 			continue;
 
 		/* get the OS media type */
-		ostype = ice_get_phy_type_low(type);
+		ostype = ice_get_phy_type_low(sc, type);
 	
 		/* don't bother adding the unknown type */
 		if (ostype == IFM_INST_ANY)
@@ -13984,7 +13995,7 @@ ice_add_media_types(struct ice_softc *sc, struct ifmedia *media)
 			continue;
 
 		/* get the OS media type */
-		ostype = ice_get_phy_type_high(type);
+		ostype = ice_get_phy_type_high(sc, type);
 
 		/* don't bother adding the unknown type */
 		if (ostype == IFM_INST_ANY)
@@ -27426,6 +27437,11 @@ ice_attach_hook(struct device *self)
 	ifp->if_hardmtu = ice_hardmtu(hw);
 
 	ifq_init_maxlen(&ifp->if_snd, ICE_DEFAULT_DESC_COUNT);
+
+	ifp->if_capabilities = IFCAP_VLAN_MTU;
+#if NVLAN > 0
+	ifp->if_capabilities |= IFCAP_VLAN_HWTAGGING;
+#endif
 
 	if_attach(ifp);
 	ether_ifattach(ifp);
