@@ -138,7 +138,7 @@ struct inpcb {
 	u_int16_t inp_lport;		/* [t] local port */
 	struct	  socket *inp_socket;	/* [I] back pointer to socket */
 	caddr_t	  inp_ppcb;		/* pointer to per-protocol pcb */
-	struct    route inp_route;	/* cached route */
+	struct    route inp_route;	/* [s] cached route */
 	struct    refcnt inp_refcnt;	/* refcount PCB, delay memory free */
 	int	  inp_flags;		/* generic IP/datagram flags */
 	union {				/* Header prototype. */

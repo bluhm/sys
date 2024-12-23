@@ -923,6 +923,8 @@ in_pcblookup_local_lock(struct inpcbtable *table, const void *laddrp,
 struct rtentry *
 in_pcbrtentry(struct inpcb *inp)
 {
+	soassertlocked(inp->inp_socket);
+
 #ifdef INET6
 	if (ISSET(inp->inp_flags, INP_IPV6))
 		return in6_pcbrtentry(inp);
