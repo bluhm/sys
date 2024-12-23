@@ -1,4 +1,4 @@
-/*	$OpenBSD: qwz.c,v 1.16 2024/12/11 04:53:17 patrick Exp $	*/
+/*	$OpenBSD: qwz.c,v 1.18 2024/12/23 00:12:44 patrick Exp $	*/
 
 /*
  * Copyright 2023 Stefan Sperling <stsp@openbsd.org>
@@ -16170,11 +16170,8 @@ qwz_wmi_copy_scan_event_cntrl_flags(struct wmi_start_scan_cmd *cmd,
 		cmd->scan_ctrl_flags |=
 			 WMI_SCAN_ENABLE_IE_WHTELIST_IN_PROBE_REQ;
 
-	/* for adaptive scan mode using 3 bits (21 - 23 bits) */
-	WMI_SCAN_SET_DWELL_MODE(cmd->scan_ctrl_flags,
+	cmd->scan_ctrl_flags |= FIELD_PREP(WMI_SCAN_DWELL_MODE_MASK,
 	    param->adaptive_dwell_time_mode);
-
-	cmd->scan_ctrl_flags_ext = param->scan_ctrl_flags_ext;
 }
 
 int
@@ -16208,13 +16205,6 @@ qwz_wmi_send_scan_start_cmd(struct qwz_softc *sc,
 	if (params->num_bssid)
 		len += sizeof(*bssid) * params->num_bssid;
 
-	len += TLV_HDR_SIZE;
-	if (params->extraie.len && params->extraie.len <= 0xFFFF) {
-		extraie_len_with_pad = roundup(params->extraie.len,
-		    sizeof(uint32_t));
-	}
-	len += extraie_len_with_pad;
-
 	if (params->num_hint_bssid) {
 		len += TLV_HDR_SIZE +
 		    params->num_hint_bssid * sizeof(struct hint_bssid);
@@ -16223,6 +16213,19 @@ qwz_wmi_send_scan_start_cmd(struct qwz_softc *sc,
 	if (params->num_hint_s_ssid) {
 		len += TLV_HDR_SIZE +
 		    params->num_hint_s_ssid * sizeof(struct hint_short_ssid);
+	}
+
+	len += TLV_HDR_SIZE;
+	if (params->extraie.len)
+		extraie_len_with_pad = roundup(params->extraie.len,
+		    sizeof(uint32_t));
+	if (extraie_len_with_pad <=
+	    (wmi->wmi->max_msg_len[params->pdev_id] - len)) {
+		len += extraie_len_with_pad;
+	} else {
+		printf("%s: discard large size %d bytes extraie for scan start\n",
+				__func__, params->extraie.len);
+		extraie_len_with_pad = 0;
 	}
 
 	m = qwz_wmi_alloc_mbuf(len);
@@ -16262,8 +16265,6 @@ qwz_wmi_send_scan_start_cmd(struct qwz_softc *sc,
 	cmd->num_ssids = params->num_ssids;
 	cmd->ie_len = params->extraie.len;
 	cmd->n_probes = params->n_probes;
-	IEEE80211_ADDR_COPY(cmd->mac_addr.addr, params->mac_addr.addr);
-	IEEE80211_ADDR_COPY(cmd->mac_mask.addr, params->mac_mask.addr);
 
 	ptr += sizeof(*cmd);
 
@@ -17578,6 +17579,16 @@ qwz_wmi_vdev_start(struct qwz_softc *sc, struct wmi_vdev_start_req_arg *arg,
 	   arg->channel.freq, arg->channel.mode);
 
 	return ret;
+}
+
+uint32_t
+qwz_core_get_max_peers_per_radio(struct qwz_softc *sc)
+{
+	if (sc->num_radios == 2)
+		return TARGET_NUM_PEERS_PDEV_DBS;
+	else if (sc->num_radios == 3)
+		return TARGET_NUM_PEERS_PDEV_DBS_SBS;
+	return TARGET_NUM_PEERS_PDEV_SINGLE;
 }
 
 int
@@ -20312,7 +20323,7 @@ qwz_mac_register(struct qwz_softc *sc)
 	/* Initialize channel counters frequency value in hertz */
 	sc->cc_freq_hz = IPQ8074_CC_FREQ_HERTZ;
 
-	sc->free_vdev_map = (1U << (sc->num_radios * TARGET_NUM_VDEVS(sc))) - 1;
+	sc->free_vdev_map = (1U << (sc->num_radios * TARGET_NUM_VDEVS)) - 1;
 
 	if (IEEE80211_ADDR_EQ(etheranyaddr, sc->sc_ic.ic_myaddr))
 		IEEE80211_ADDR_COPY(sc->sc_ic.ic_myaddr, sc->mac_addr);
@@ -20896,10 +20907,10 @@ qwz_mac_op_add_interface(struct qwz_pdev *pdev)
 		goto err;
 	}
 #endif
-	if (sc->num_created_vdevs > (TARGET_NUM_VDEVS(sc) - 1)) {
+	if (sc->num_created_vdevs > (TARGET_NUM_VDEVS - 1)) {
 		printf("%s: failed to create vdev %u, reached vdev limit %d\n",
 		    sc->sc_dev.dv_xname, sc->num_created_vdevs,
-		    TARGET_NUM_VDEVS(sc));
+		    TARGET_NUM_VDEVS);
 		ret = EBUSY;
 		goto err;
 	}
@@ -21391,7 +21402,7 @@ qwz_peer_create(struct qwz_softc *sc, struct qwz_vif *arvif, uint8_t pdev_id,
 #ifdef notyet
 	lockdep_assert_held(&ar->conf_mutex);
 #endif
-	if (sc->num_peers > (TARGET_NUM_PEERS_PDEV(sc) - 1)) {
+	if (sc->num_peers > (qwz_core_get_max_peers_per_radio(sc) - 1)) {
 		DPRINTF("%s: failed to create peer due to insufficient "
 		    "peer entry resource in firmware\n", __func__);
 		return ENOBUFS;
@@ -22619,11 +22630,6 @@ qwz_wmi_start_scan_init(struct qwz_softc *sc, struct scan_req_params *arg)
 	    WMI_SCAN_EVENT_FOREIGN_CHAN | WMI_SCAN_EVENT_DEQUEUED;
 	arg->scan_flags |= WMI_SCAN_CHAN_STAT_EVENT;
 
-	if (isset(sc->wmi.svc_map,
-	    WMI_TLV_SERVICE_PASSIVE_SCAN_START_TIME_ENHANCE))
-		arg->scan_ctrl_flags_ext |=
-		    WMI_SCAN_FLAG_EXT_PASSIVE_SCAN_START_TIME_ENHANCE;
-
 	arg->num_bssid = 1;
 
 	/* fill bssid_list[0] with 0xff, otherwise bssid and RA will be
@@ -22938,27 +22944,7 @@ qwz_scan(struct qwz_softc *sc)
 		for (chan = &ic->ic_channels[1]; chan <= lastc; chan++) {
 			if (chan->ic_flags == 0)
 				continue;
-			if (isset(sc->wmi.svc_map,
-			    WMI_TLV_SERVICE_SCAN_CONFIG_PER_CHANNEL)) {
-				arg->chan_list[i++] = chan->ic_freq &
-				    WMI_SCAN_CONFIG_PER_CHANNEL_MASK;
-#if 0
-				/* If NL80211_SCAN_FLAG_COLOCATED_6GHZ is set in scan
-				 * flags, then scan all PSC channels in 6 GHz band and
-				 * those non-PSC channels where RNR IE is found during
-				 * the legacy 2.4/5 GHz scan.
-				 * If NL80211_SCAN_FLAG_COLOCATED_6GHZ is not set,
-				 * then all channels in 6 GHz will be scanned.
-				 */
-				if (req->channels[i]->band == NL80211_BAND_6GHZ &&
-				    req->flags & NL80211_SCAN_FLAG_COLOCATED_6GHZ &&
-				    !cfg80211_channel_is_psc(req->channels[i]))
-					arg->chan_list[i] |=
-						WMI_SCAN_CH_FLAG_SCAN_ONLY_IF_RNR_FOUND;
-#endif
-			} else {
-				arg->chan_list[i++] = chan->ic_freq;
-			}
+			arg->chan_list[i++] = chan->ic_freq;
 		}
 	}
 #if 0
