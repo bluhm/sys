@@ -202,13 +202,13 @@ atomic_sub_long_nv(volatile unsigned long *p, unsigned long v)
  */
 
 static inline unsigned int
-atomic_load_int(volatile unsigned int *p)
+atomic_load_int(volatile const unsigned int *p)
 {
 	return *p;
 }
 
 static inline unsigned long
-atomic_load_long(volatile unsigned long *p)
+atomic_load_long(volatile const unsigned long *p)
 {
 	return *p;
 }

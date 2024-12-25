@@ -1650,8 +1650,11 @@ ip_forward(struct mbuf *m, struct ifnet *ifp, struct route *ro, int flags)
 		type = ICMP_UNREACH;
 		code = ICMP_UNREACH_NEEDFRAG;
 		if (rt != NULL) {
-			if (rt->rt_mtu) {
-				destmtu = rt->rt_mtu;
+			u_int rtmtu;
+
+			rtmtu = atomic_load_int(&rt->rt_mtu);
+			if (rtmtu != 0) {
+				destmtu = rtmtu;
 			} else {
 				struct ifnet *destifp;
 

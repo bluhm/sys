@@ -2842,7 +2842,7 @@ tcp_mss(struct tcpcb *tp, int offer)
 	 * if there's an mtu associated with the route and we support
 	 * path MTU discovery for the underlying protocol family, use it.
 	 */
-	rtmtu = READ_ONCE(rt->rt_mtu);
+	rtmtu = atomic_load_int(&rt->rt_mtu);
 	if (rtmtu) {
 		/*
 		 * One may wish to lower MSS to take into account options,

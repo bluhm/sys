@@ -277,8 +277,8 @@ looutput(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst,
 void
 lortrequest(struct ifnet *ifp, int cmd, struct rtentry *rt)
 {
-	if (rt && rt->rt_mtu == 0)
-		rt->rt_mtu = LOMTU;
+	if (rt != NULL)
+		atomic_cas_uint(&rt->rt_mtu, 0, LOMTU);
 }
 
 /*

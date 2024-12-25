@@ -61,7 +61,7 @@ struct rt_kmetrics {
 	u_int64_t	rmx_pksent;	/* packets sent using this route */
 	int64_t		rmx_expire;	/* lifetime for route, e.g. redirect */
 	u_int		rmx_locks;	/* Kernel must leave these values */
-	u_int		rmx_mtu;	/* MTU for this path */
+	u_int		rmx_mtu;	/* [a] MTU for this path */
 };
 #endif
 
