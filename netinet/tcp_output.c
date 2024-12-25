@@ -103,8 +103,6 @@
 extern struct mbuf *m_copypack();
 #endif
 
-extern int tcprexmtthresh;
-
 #ifdef TCP_SACK_DEBUG
 void tcp_print_holes(struct tcpcb *tp);
 

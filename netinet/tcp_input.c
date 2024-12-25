@@ -108,8 +108,8 @@ int tcp_flush_queue(struct tcpcb *);
 #include <netinet6/nd6.h>
 #endif /* INET6 */
 
-int	tcprexmtthresh = 3;
-int	tcptv_keep_init = TCPTV_KEEP_INIT;
+const int tcprexmtthresh = 3;
+int tcptv_keep_init = TCPTV_KEEP_INIT;
 
 int tcp_rst_ppslim = 100;		/* 100pps */
 int tcp_rst_ppslim_count = 0;
