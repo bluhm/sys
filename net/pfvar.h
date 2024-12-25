@@ -1858,7 +1858,7 @@ void			 pf_mbuf_unlink_inpcb(struct mbuf *);
 u_int8_t*		 pf_find_tcpopt(u_int8_t *, u_int8_t *, size_t,
 			    u_int8_t, u_int8_t);
 u_int8_t		 pf_get_wscale(struct pf_pdesc *);
-u_int16_t		 pf_get_mss(struct pf_pdesc *);
+u_int16_t		 pf_get_mss(struct pf_pdesc *, uint16_t);
 struct mbuf *		 pf_build_tcp(const struct pf_rule *, sa_family_t,
 			    const struct pf_addr *, const struct pf_addr *,
 			    u_int16_t, u_int16_t, u_int32_t, u_int32_t,

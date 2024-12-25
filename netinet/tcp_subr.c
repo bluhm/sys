@@ -437,7 +437,7 @@ tcp_newtcpcb(struct inpcb *inp, int wait)
 	if (tp == NULL)
 		return (NULL);
 	TAILQ_INIT(&tp->t_segq);
-	tp->t_maxseg = tcp_mssdflt;
+	tp->t_maxseg = atomic_load_int(&tcp_mssdflt);
 	tp->t_maxopd = 0;
 
 	for (i = 0; i < TCPT_NTIMERS; i++)

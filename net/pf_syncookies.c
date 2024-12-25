@@ -199,10 +199,11 @@ pf_synflood_check(struct pf_pdesc *pd)
 void
 pf_syncookie_send(struct pf_pdesc *pd)
 {
-	uint16_t	mss;
+	uint16_t	mss, mssdflt;
 	uint32_t	iss;
 
-	mss = max(tcp_mssdflt, pf_get_mss(pd));
+	mssdflt = atomic_load_int(&tcp_mssdflt);
+	mss = max(pf_get_mss(pd, mssdflt), mssdflt);
 	iss = pf_syncookie_generate(pd, mss);
 	pf_send_tcp(NULL, pd->af, pd->dst, pd->src, *pd->dport, *pd->sport,
 	    iss, ntohl(pd->hdr.tcp.th_seq) + 1, TH_SYN|TH_ACK, 0, mss,
