@@ -47,7 +47,7 @@
  * Primitive routines for operating on sockets and socket buffers
  */
 
-const u_long sb_max = SB_MAX;		/* patchable */
+u_long sb_max = SB_MAX;		/* [I] patchable */
 
 extern struct pool mclpools[];
 extern struct pool mbpool;

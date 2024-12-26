@@ -376,7 +376,7 @@ sbassertlocked(struct sockbuf *sb)
 	}								\
 } while (/*CONSTCOND*/0)
 
-extern const u_long sb_max;
+extern u_long sb_max;
 
 extern struct pool	socket_pool;
 
