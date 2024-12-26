@@ -1,4 +1,4 @@
-/*	$OpenBSD: subr_hibernate.c,v 1.144 2024/12/24 14:24:58 krw Exp $	*/
+/*	$OpenBSD: subr_hibernate.c,v 1.146 2024/12/26 02:46:38 krw Exp $	*/
 
 /*
  * Copyright (c) 2011 Ariane van der Steldt <ariane@stack.nl>
@@ -1444,7 +1444,7 @@ hibernate_write_rle(union hibernate_info *hib, paddr_t inaddr,
 		if ((err = hibernate_write(hib, *blkctr,
 			(vaddr_t)hibernate_io_page, PAGE_SIZE, IO_TYPE_IMG))) {
 				DPRINTF("hib write error %d\n", err);
-				return (err);
+				return -1;
 		}
 
 		*blkctr += btodb(PAGE_SIZE);
@@ -1569,6 +1569,7 @@ hibernate_write_chunks(union hibernate_info *hib)
 
 				/* Deflate from temp_inaddr to IO page */
 				if (inaddr != range_end) {
+					rle = 0;
 					if (inaddr % PAGE_SIZE == 0) {
 						rle = hibernate_write_rle(hib,
 							inaddr,
@@ -1577,7 +1578,10 @@ hibernate_write_chunks(union hibernate_info *hib)
 							&out_remaining);
 					}
 
-					if (rle == 0) {
+					switch (rle) {
+					case -1:
+						return EIO;
+					case 0:
 						pmap_kenter_pa(hibernate_temp_page,
 							inaddr & PMAP_PA_MASK,
 							PROT_READ);
@@ -1588,10 +1592,12 @@ hibernate_write_chunks(union hibernate_info *hib)
 						inaddr += hibernate_deflate(hib,
 							temp_inaddr,
 							&out_remaining);
-					} else {
+						break;
+					default:
 						inaddr += rle * PAGE_SIZE;
 						if (inaddr > range_end)
 							inaddr = range_end;
+						break;
 					}
 
 				}
@@ -1973,7 +1979,7 @@ hibernate_suspend(void)
 	hib->image_offset = ctod(start);
 	hib->image_size = ctod(end - start + 1) -
 	    btodb(HIBERNATE_CHUNK_TABLE_SIZE);
-	hib->chunktable_offset = hib->image_offset + hib->image_size
+	hib->chunktable_offset = hib->image_offset + hib->image_size;
 
 	DPRINTF("hibernate @ block %lld chunks-length %lu blocks, "
 	    "chunktable-length %d blocks\n", hib->image_offset, hib->image_size,
