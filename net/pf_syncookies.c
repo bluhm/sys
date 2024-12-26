@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf_syncookies.c,v 1.7 2018/09/10 15:54:28 henning Exp $ */
+/*	$OpenBSD: pf_syncookies.c,v 1.8 2024/12/26 10:15:27 bluhm Exp $ */
 
 /* Copyright (c) 2016,2017 Henning Brauer <henning@openbsd.org>
  * Copyright (c) 2016 Alexandr Nedvedicky <sashan@openbsd.org>
