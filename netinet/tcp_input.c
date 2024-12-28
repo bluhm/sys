@@ -3108,16 +3108,16 @@ tcp_mss_adv(struct mbuf *m, int af)
  */
 
 /* syn hash parameters */
-int	tcp_syn_hash_size = TCP_SYN_HASH_SIZE;	/* [N] size of hash table */
+int	tcp_syn_hash_size = TCP_SYN_HASH_SIZE;	/* [S] size of hash table */
 int	tcp_syn_cache_limit =			/* [a] global entry limit */
 	    TCP_SYN_HASH_SIZE * TCP_SYN_BUCKET_SIZE;
 int	tcp_syn_bucket_limit =			/* [a] per bucket limit */
 	    3 * TCP_SYN_BUCKET_SIZE;
-int	tcp_syn_use_limit = 100000;		/* [N] reseed after uses */
+int	tcp_syn_use_limit = 100000;		/* [S] reseed after uses */
 
 struct pool syn_cache_pool;
-struct syn_cache_set tcp_syn_cache[2];
-int tcp_syn_cache_active;
+struct syn_cache_set tcp_syn_cache[2];		/* [S] */
+int tcp_syn_cache_active;			/* [S] */
 struct mutex syn_cache_mtx = MUTEX_INITIALIZER(IPL_SOFTNET);
 
 #define SYN_HASH(sa, sp, dp, rand) \
@@ -3212,13 +3212,15 @@ syn_cache_init(void)
 void
 syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 {
-	struct syn_cache_set *set = &tcp_syn_cache[tcp_syn_cache_active];
+	struct syn_cache_set *set;
 	struct syn_cache_head *scp;
 	struct syn_cache *sc2;
 	int i;
 
 	NET_ASSERT_LOCKED();
 	MUTEX_ASSERT_LOCKED(&syn_cache_mtx);
+
+	set = &tcp_syn_cache[tcp_syn_cache_active];
 
 	/*
 	 * If there are no entries in the hash table, reinitialize
