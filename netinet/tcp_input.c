@@ -3109,9 +3109,9 @@ tcp_mss_adv(struct mbuf *m, int af)
 
 /* syn hash parameters */
 int	tcp_syn_hash_size = TCP_SYN_HASH_SIZE;	/* [N] size of hash table */
-int	tcp_syn_cache_limit =			/* [N] global entry limit */
+int	tcp_syn_cache_limit =			/* [a] global entry limit */
 	    TCP_SYN_HASH_SIZE * TCP_SYN_BUCKET_SIZE;
-int	tcp_syn_bucket_limit =			/* [N] per bucket limit */
+int	tcp_syn_bucket_limit =			/* [a] per bucket limit */
 	    3 * TCP_SYN_BUCKET_SIZE;
 int	tcp_syn_use_limit = 100000;		/* [N] reseed after uses */
 
@@ -3257,7 +3257,7 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 	 * Make sure that we don't overflow the per-bucket
 	 * limit or the total cache size limit.
 	 */
-	if (scp->sch_length >= tcp_syn_bucket_limit) {
+	if (scp->sch_length >= atomic_load_int(&tcp_syn_bucket_limit)) {
 		tcpstat_inc(tcps_sc_bucketoverflow);
 		/*
 		 * Someone might attack our bucket hash function.  Reseed
@@ -3279,7 +3279,7 @@ syn_cache_insert(struct syn_cache *sc, struct tcpcb *tp)
 #endif
 		syn_cache_rm(sc2);
 		syn_cache_put(sc2);
-	} else if (set->scs_count >= tcp_syn_cache_limit) {
+	} else if (set->scs_count >= atomic_load_int(&tcp_syn_cache_limit)) {
 		struct syn_cache_head *scp2, *sce;
 
 		tcpstat_inc(tcps_sc_overflowed);

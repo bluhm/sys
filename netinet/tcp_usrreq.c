@@ -1341,7 +1341,7 @@ tcp_sysctl_tcpstat(void *oldp, size_t *oldlenp, void *newp)
 	set = &tcp_syn_cache[tcp_syn_cache_active];
 	tcpstat.tcps_sc_hash_size = set->scs_size;
 	tcpstat.tcps_sc_entry_count = set->scs_count;
-	tcpstat.tcps_sc_entry_limit = tcp_syn_cache_limit;
+	tcpstat.tcps_sc_entry_limit = atomic_load_int(&tcp_syn_cache_limit);
 	tcpstat.tcps_sc_bucket_maxlen = 0;
 	for (i = 0; i < set->scs_size; i++) {
 		if (tcpstat.tcps_sc_bucket_maxlen <
@@ -1349,7 +1349,7 @@ tcp_sysctl_tcpstat(void *oldp, size_t *oldlenp, void *newp)
 			tcpstat.tcps_sc_bucket_maxlen =
 				set->scs_buckethead[i].sch_length;
 	}
-	tcpstat.tcps_sc_bucket_limit = tcp_syn_bucket_limit;
+	tcpstat.tcps_sc_bucket_limit = atomic_load_int(&tcp_syn_bucket_limit);
 	tcpstat.tcps_sc_uses_left = set->scs_use;
 	mtx_leave(&syn_cache_mtx);
 
