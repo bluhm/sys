@@ -3809,7 +3809,8 @@ syn_cache_add(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 	    ) {
 		tb.pf = tp->pf;
 		tb.sack_enable = tp->sack_enable;
-		tb.t_flags = tcp_do_rfc1323 ? (TF_REQ_SCALE|TF_REQ_TSTMP) : 0;
+		tb.t_flags = atomic_load_int(&tcp_do_rfc1323) ?
+		    (TF_REQ_SCALE|TF_REQ_TSTMP) : 0;
 #ifdef TCP_SIGNATURE
 		if (tp->t_flags & TF_SIGNATURE)
 			tb.t_flags |= TF_SIGNATURE;
