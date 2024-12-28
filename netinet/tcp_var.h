@@ -278,7 +278,7 @@ struct syn_cache {
 	u_int     sc_request_r_scale	: 4,	/* [I] */
 		  sc_requested_s_scale	: 4;	/* [I] */
 
-	struct tcpcb *sc_tp;		/* [S] tcb for listening socket */
+	struct inpcb *sc_inplisten;	/* [S] inpcb for listening socket */
 	LIST_ENTRY(syn_cache) sc_tpq;	/* [S] list of entries by same tp */
 };
 
