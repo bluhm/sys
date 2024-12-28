@@ -683,7 +683,7 @@ extern	int tcptv_keep_init;	/* [N] time to keep alive initial SYN packet */
 extern	int tcp_mssdflt;	/* [a] default maximum segment size */
 extern	int tcp_rst_ppslim;	/* maximum outgoing RST packet per second */
 extern	int tcp_ack_on_push;	/* ACK immediately on PUSH */
-extern	int tcp_do_sack;	/* SACK enabled/disabled */
+extern	int tcp_do_sack;	/* [a] SACK enabled/disabled */
 extern	struct pool sackhl_pool;
 extern	int tcp_sackhole_limit;	/* max entries for tcp sack queues */
 extern	int tcp_do_ecn;		/* RFC3168 ECN enabled/disabled? */

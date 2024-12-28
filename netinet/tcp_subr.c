@@ -443,7 +443,7 @@ tcp_newtcpcb(struct inpcb *inp, int wait)
 	for (i = 0; i < TCPT_NTIMERS; i++)
 		TCP_TIMER_INIT(tp, i);
 
-	tp->sack_enable = tcp_do_sack;
+	tp->sack_enable = atomic_load_int(&tcp_do_sack);
 	tp->t_flags = atomic_load_int(&tcp_do_rfc1323) ?
 	    (TF_REQ_SCALE|TF_REQ_TSTMP) : 0;
 	tp->t_inpcb = inp;
