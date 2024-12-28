@@ -687,7 +687,7 @@ extern	int tcp_do_sack;	/* [a] SACK enabled/disabled */
 extern	struct pool sackhl_pool;
 extern	int tcp_sackhole_limit;	/* max entries for tcp sack queues */
 extern	int tcp_do_ecn;		/* RFC3168 ECN enabled/disabled? */
-extern	int tcp_do_rfc3390;	/* RFC3390 Increasing TCP's Initial Window */
+extern	int tcp_do_rfc3390;	/* [a] RFC3390 Increasing TCP Initial Window */
 extern	int tcp_do_tso;		/* enable TSO for TCP output packets */
 
 extern	struct pool tcpqe_pool;
