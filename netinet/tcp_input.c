@@ -2091,7 +2091,7 @@ dropwithreset_ratelim:
 	 * a port for which we have no socket.
 	 */
 	if (ppsratecheck(&tcp_rst_ppslim_last, &tcp_rst_ppslim_count,
-	    tcp_rst_ppslim) == 0) {
+	    atomic_load_int(&tcp_rst_ppslim)) == 0) {
 		/* XXX stat */
 		goto drop;
 	}
