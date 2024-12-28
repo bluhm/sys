@@ -465,7 +465,7 @@ tcp_timer_keep(void *arg)
 	tcpstat_inc(tcps_keeptimeo);
 	if (TCPS_HAVEESTABLISHED(tp->t_state) == 0)
 		goto dropit;
-	if ((tcp_always_keepalive ||
+	if ((atomic_load_int(&tcp_always_keepalive) ||
 	    tp->t_inpcb->inp_socket->so_options & SO_KEEPALIVE) &&
 	    tp->t_state <= TCPS_CLOSING) {
 		int maxidle;

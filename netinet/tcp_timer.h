@@ -155,7 +155,7 @@ extern const tcp_timer_func_t tcp_timer_funcs[TCPT_NTIMERS];
 
 extern int tcp_delack_msecs;		/* delayed ACK timeout in millisecs */
 extern int tcptv_keep_init;
-extern int tcp_always_keepalive;	/* assume SO_KEEPALIVE is always set */
+extern int tcp_always_keepalive;	/* [a] assume SO_KEEPALIVE always set */
 extern int tcp_keepidle;		/* time before keepalive probes begin */
 extern int tcp_keepintvl;		/* time between keepalive probes */
 extern int tcp_maxidle;			/* time to drop after starting probes */
