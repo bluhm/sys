@@ -42,10 +42,9 @@
 #define	TCPT_PERSIST	1		/* retransmit persistence */
 #define	TCPT_KEEP	2		/* keep alive */
 #define	TCPT_2MSL	3		/* 2*msl quiet time timer */
-#define	TCPT_REAPER	4		/* delayed cleanup timeout */
-#define	TCPT_DELACK	5		/* delayed ack timeout */
+#define	TCPT_DELACK	4		/* delayed ack timeout */
 
-#define	TCPT_NTIMERS	6
+#define	TCPT_NTIMERS	5
 
 /*
  * The TCPT_REXMT timer is used to force retransmissions.
@@ -110,7 +109,7 @@
 
 #ifdef	TCPTIMERS
 const char *tcptimers[TCPT_NTIMERS] =
-    { "REXMT", "PERSIST", "KEEP", "2MSL", "REAPER", "DELACK" };
+    { "REXMT", "PERSIST", "KEEP", "2MSL", "DELACK" };
 #endif /* TCPTIMERS */
 
 /*
@@ -165,5 +164,7 @@ extern int tcp_ttl;			/* time to live for TCP segs */
 extern const int tcp_backoff[];
 
 void	tcp_timer_init(void);
+void	tcp_timer_reaper(void *);
+
 #endif /* _KERNEL */
 #endif /* _NETINET_TCP_TIMER_H_ */

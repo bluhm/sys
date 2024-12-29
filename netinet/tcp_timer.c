@@ -76,7 +76,6 @@ void	tcp_timer_rexmt(void *);
 void	tcp_timer_persist(void *);
 void	tcp_timer_keep(void *);
 void	tcp_timer_2msl(void *);
-void	tcp_timer_reaper(void *);
 void	tcp_timer_delack(void *);
 
 const tcp_timer_func_t tcp_timer_funcs[TCPT_NTIMERS] = {
@@ -84,7 +83,6 @@ const tcp_timer_func_t tcp_timer_funcs[TCPT_NTIMERS] = {
 	tcp_timer_persist,
 	tcp_timer_keep,
 	tcp_timer_2msl,
-	tcp_timer_reaper,
 	tcp_timer_delack,
 };
 
@@ -550,8 +548,7 @@ tcp_timer_2msl(void *arg)
 void
 tcp_timer_reaper(void *arg)
 {
-	struct inpcb *inp = arg;
-	struct tcpcb *tp = intotcpcb(inp);
+	struct tcpcb *tp = arg;
 
 	/*
 	 * This timer is necessary to delay the pool_put() after all timers
@@ -562,6 +559,4 @@ tcp_timer_reaper(void *arg)
 	 * Freeing may run in parallel as it does not grab the net lock.
 	 */
 	pool_put(&tcpcb_pool, tp);
-	tcpstat_inc(tcps_closed);
-	in_pcbunref(inp);
 }

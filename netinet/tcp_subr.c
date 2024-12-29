@@ -443,6 +443,8 @@ tcp_newtcpcb(struct inpcb *inp, int wait)
 	tp->t_inpcb = inp;
 	for (i = 0; i < TCPT_NTIMERS; i++)
 		TCP_TIMER_INIT(tp, i);
+	timeout_set_flags(&tp->t_timer_reaper, tcp_timer_reaper, tp,
+	    KCLOCK_NONE, TIMEOUT_PROC | TIMEOUT_MPSAFE);
 
 	tp->sack_enable = atomic_load_int(&tcp_do_sack);
 	tp->t_flags = atomic_load_int(&tcp_do_rfc1323) ?
@@ -530,11 +532,11 @@ tcp_close(struct tcpcb *tp)
 
 	m_free(tp->t_template);
 	/* Free tcpcb after all pending timers have been run. */
-	TCP_TIMER_ARM(tp, TCPT_REAPER, 1);
-
+	timeout_add(&tp->t_timer_reaper, 0);
 	inp->inp_ppcb = NULL;
 	soisdisconnected(so);
 	in_pcbdetach(inp);
+	tcpstat_inc(tcps_closed);
 	return (NULL);
 }
 
