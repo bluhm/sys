@@ -123,10 +123,10 @@ tcp_timer_delack(void *arg)
 	 */
 	NET_LOCK();
 	/* Ignore canceled timeouts or timeouts that have been rescheduled. */
-	if (!ISSET((tp)->t_flags, TF_TMR_DELACK) ||
+	if (tp == NULL || !ISSET(tp->t_flags, TF_TMR_DELACK) ||
 	    timeout_pending(&tp->t_timer[TCPT_DELACK]))
 		goto out;
-	CLR((tp)->t_flags, TF_TMR_DELACK);
+	CLR(tp->t_flags, TF_TMR_DELACK);
 
 	if (inp->inp_socket->so_options & SO_DEBUG) {
 		otp = tp;
@@ -204,10 +204,10 @@ tcp_timer_rexmt(void *arg)
 
 	NET_LOCK();
 	/* Ignore canceled timeouts or timeouts that have been rescheduled. */
-	if (!ISSET((tp)->t_flags, TF_TMR_REXMT) ||
+	if (tp == NULL || !ISSET(tp->t_flags, TF_TMR_REXMT) ||
 	    timeout_pending(&tp->t_timer[TCPT_REXMT]))
 		goto out;
-	CLR((tp)->t_flags, TF_TMR_REXMT);
+	CLR(tp->t_flags, TF_TMR_REXMT);
 
 	if ((tp->t_flags & TF_PMTUD_PEND) && inp &&
 	    SEQ_GEQ(tp->t_pmtud_th_seq, tp->snd_una) &&
@@ -404,10 +404,10 @@ tcp_timer_persist(void *arg)
 
 	NET_LOCK();
 	/* Ignore canceled timeouts or timeouts that have been rescheduled. */
-	if (!ISSET((tp)->t_flags, TF_TMR_PERSIST) ||
+	if (tp == NULL || !ISSET(tp->t_flags, TF_TMR_PERSIST) ||
 	    timeout_pending(&tp->t_timer[TCPT_PERSIST]))
 		goto out;
-	CLR((tp)->t_flags, TF_TMR_PERSIST);
+	CLR(tp->t_flags, TF_TMR_PERSIST);
 
 	if (TCP_TIMER_ISARMED(tp, TCPT_REXMT))
 		goto out;
@@ -455,10 +455,10 @@ tcp_timer_keep(void *arg)
 
 	NET_LOCK();
 	/* Ignore canceled timeouts or timeouts that have been rescheduled. */
-	if (!ISSET((tp)->t_flags, TF_TMR_KEEP) ||
+	if (tp == NULL || !ISSET(tp->t_flags, TF_TMR_KEEP) ||
 	    timeout_pending(&tp->t_timer[TCPT_KEEP]))
 		goto out;
-	CLR((tp)->t_flags, TF_TMR_KEEP);
+	CLR(tp->t_flags, TF_TMR_KEEP);
 
 	if (inp->inp_socket->so_options & SO_DEBUG) {
 		otp = tp;
@@ -520,10 +520,10 @@ tcp_timer_2msl(void *arg)
 
 	NET_LOCK();
 	/* Ignore canceled timeouts or timeouts that have been rescheduled. */
-	if (!ISSET((tp)->t_flags, TF_TMR_2MSL) ||
+	if (tp == NULL || !ISSET(tp->t_flags, TF_TMR_2MSL) ||
 	    timeout_pending(&tp->t_timer[TCPT_2MSL]))
 		goto out;
-	CLR((tp)->t_flags, TF_TMR_2MSL);
+	CLR(tp->t_flags, TF_TMR_2MSL);
 
 	if (inp->inp_socket->so_options & SO_DEBUG) {
 		otp = tp;
