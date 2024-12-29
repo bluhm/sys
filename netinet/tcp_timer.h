@@ -118,19 +118,21 @@ const char *tcptimers[TCPT_NTIMERS] =
  */
 #define	TCP_TIMER_INIT(tp, timer)					\
 	timeout_set_flags(&(tp)->t_timer[(timer)],			\
-	    tcp_timer_funcs[(timer)], tp, KCLOCK_NONE,			\
-	    TIMEOUT_PROC | TIMEOUT_MPSAFE)
+	    tcp_timer_funcs[(timer)], (tp)->t_inpcb,			\
+	    KCLOCK_NONE, TIMEOUT_PROC | TIMEOUT_MPSAFE)
 
 #define	TCP_TIMER_ARM(tp, timer, msecs)					\
 do {									\
 	SET((tp)->t_flags, TF_TIMER << (timer));			\
-	timeout_add_msec(&(tp)->t_timer[(timer)], (msecs));		\
+	if (timeout_add_msec(&(tp)->t_timer[(timer)], (msecs)))		\
+		in_pcbref((tp)->t_inpcb);				\
 } while (0)
 
 #define	TCP_TIMER_DISARM(tp, timer)					\
 do {									\
 	CLR((tp)->t_flags, TF_TIMER << (timer));			\
-	timeout_del(&(tp)->t_timer[(timer)]);				\
+	if (timeout_del(&(tp)->t_timer[(timer)]))			\
+		in_pcbunref((tp)->t_inpcb);				\
 } while (0)
 
 #define	TCP_TIMER_ISARMED(tp, timer)					\

@@ -114,7 +114,8 @@ tcp_timer_init(void)
 void
 tcp_timer_delack(void *arg)
 {
-	struct tcpcb *otp = NULL, *tp = arg;
+	struct inpcb *inp = arg;
+	struct tcpcb *otp = NULL, *tp = intotcpcb(inp);
 	short ostate;
 
 	/*
@@ -129,7 +130,7 @@ tcp_timer_delack(void *arg)
 		goto out;
 	CLR((tp)->t_flags, TF_TMR_DELACK);
 
-	if (tp->t_inpcb->inp_socket->so_options & SO_DEBUG) {
+	if (inp->inp_socket->so_options & SO_DEBUG) {
 		otp = tp;
 		ostate = tp->t_state;
 	}
@@ -139,6 +140,7 @@ tcp_timer_delack(void *arg)
 		tcp_trace(TA_TIMER, ostate, tp, otp, NULL, TCPT_DELACK, 0);
  out:
 	NET_UNLOCK();
+	in_pcbunref(inp);
 }
 
 /*
@@ -197,14 +199,12 @@ tcp_timer_freesack(struct tcpcb *tp)
 void
 tcp_timer_rexmt(void *arg)
 {
-	struct tcpcb *otp = NULL, *tp = arg;
-	struct inpcb *inp;
+	struct inpcb *inp = arg;
+	struct tcpcb *otp = NULL, *tp = intotcpcb(inp);
 	uint32_t rto;
 	short ostate;
 
 	NET_LOCK();
-	inp = tp->t_inpcb;
-
 	/* Ignore canceled timeouts or timeouts that have been rescheduled. */
 	if (!ISSET((tp)->t_flags, TF_TMR_REXMT) ||
 	    timeout_pending(&tp->t_timer[TCPT_REXMT]))
@@ -392,12 +392,14 @@ tcp_timer_rexmt(void *arg)
 		tcp_trace(TA_TIMER, ostate, tp, otp, NULL, TCPT_REXMT, 0);
  out:
 	NET_UNLOCK();
+	in_pcbunref(inp);
 }
 
 void
 tcp_timer_persist(void *arg)
 {
-	struct tcpcb *otp = NULL, *tp = arg;
+	struct inpcb *inp = arg;
+	struct tcpcb *otp = NULL, *tp = intotcpcb(inp);
 	uint32_t rto;
 	short ostate;
 	uint64_t now;
@@ -412,7 +414,7 @@ tcp_timer_persist(void *arg)
 	if (TCP_TIMER_ISARMED(tp, TCPT_REXMT))
 		goto out;
 
-	if (tp->t_inpcb->inp_socket->so_options & SO_DEBUG) {
+	if (inp->inp_socket->so_options & SO_DEBUG) {
 		otp = tp;
 		ostate = tp->t_state;
 	}
@@ -443,12 +445,14 @@ tcp_timer_persist(void *arg)
 		tcp_trace(TA_TIMER, ostate, tp, otp, NULL, TCPT_PERSIST, 0);
  out:
 	NET_UNLOCK();
+	in_pcbunref(inp);
 }
 
 void
 tcp_timer_keep(void *arg)
 {
-	struct tcpcb *otp = NULL, *tp = arg;
+	struct inpcb *inp = arg;
+	struct tcpcb *otp = NULL, *tp = intotcpcb(inp);
 	short ostate;
 
 	NET_LOCK();
@@ -458,15 +462,18 @@ tcp_timer_keep(void *arg)
 		goto out;
 	CLR((tp)->t_flags, TF_TMR_KEEP);
 
-	if (tp->t_inpcb->inp_socket->so_options & SO_DEBUG) {
+	if (inp->inp_socket->so_options & SO_DEBUG) {
 		otp = tp;
 		ostate = tp->t_state;
 	}
 	tcpstat_inc(tcps_keeptimeo);
-	if (TCPS_HAVEESTABLISHED(tp->t_state) == 0)
-		goto dropit;
+	if (TCPS_HAVEESTABLISHED(tp->t_state) == 0) {
+		tcpstat_inc(tcps_keepdrops);
+		tp = tcp_drop(tp, ETIMEDOUT);
+		goto out;
+	}
 	if ((atomic_load_int(&tcp_always_keepalive) ||
-	    tp->t_inpcb->inp_socket->so_options & SO_KEEPALIVE) &&
+	    inp->inp_socket->so_options & SO_KEEPALIVE) &&
 	    tp->t_state <= TCPS_CLOSING) {
 		int maxidle;
 		uint64_t now;
@@ -474,8 +481,11 @@ tcp_timer_keep(void *arg)
 		maxidle = READ_ONCE(tcp_maxidle);
 		now = tcp_now();
 		if ((maxidle > 0) &&
-		    ((now - tp->t_rcvtime) >= tcp_keepidle + maxidle))
-			goto dropit;
+		    ((now - tp->t_rcvtime) >= tcp_keepidle + maxidle)) {
+			tcpstat_inc(tcps_keepdrops);
+			tp = tcp_drop(tp, ETIMEDOUT);
+			goto out;
+		}
 		/*
 		 * Send a packet designed to force a response
 		 * if the peer is up and reachable:
@@ -498,18 +508,14 @@ tcp_timer_keep(void *arg)
 		tcp_trace(TA_TIMER, ostate, tp, otp, NULL, TCPT_KEEP, 0);
  out:
 	NET_UNLOCK();
-	return;
-
- dropit:
-	tcpstat_inc(tcps_keepdrops);
-	tp = tcp_drop(tp, ETIMEDOUT);
-	NET_UNLOCK();
+	in_pcbunref(inp);
 }
 
 void
 tcp_timer_2msl(void *arg)
 {
-	struct tcpcb *otp = NULL, *tp = arg;
+	struct inpcb *inp = arg;
+	struct tcpcb *otp = NULL, *tp = intotcpcb(inp);
 	short ostate;
 	int maxidle;
 	uint64_t now;
@@ -521,7 +527,7 @@ tcp_timer_2msl(void *arg)
 		goto out;
 	CLR((tp)->t_flags, TF_TMR_2MSL);
 
-	if (tp->t_inpcb->inp_socket->so_options & SO_DEBUG) {
+	if (inp->inp_socket->so_options & SO_DEBUG) {
 		otp = tp;
 		ostate = tp->t_state;
 	}
@@ -538,12 +544,14 @@ tcp_timer_2msl(void *arg)
 		tcp_trace(TA_TIMER, ostate, tp, otp, NULL, TCPT_2MSL, 0);
  out:
 	NET_UNLOCK();
+	in_pcbunref(inp);
 }
 
 void
 tcp_timer_reaper(void *arg)
 {
-	struct tcpcb *tp = arg;
+	struct inpcb *inp = arg;
+	struct tcpcb *tp = intotcpcb(inp);
 
 	/*
 	 * This timer is necessary to delay the pool_put() after all timers
@@ -555,4 +563,5 @@ tcp_timer_reaper(void *arg)
 	 */
 	pool_put(&tcpcb_pool, tp);
 	tcpstat_inc(tcps_closed);
+	in_pcbunref(inp);
 }
