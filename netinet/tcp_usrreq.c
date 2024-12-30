@@ -1506,10 +1506,8 @@ tcp_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		return (error);
 
 	default:
-		NET_LOCK();
 		error = sysctl_bounded_arr(tcpctl_vars, nitems(tcpctl_vars),
 		    name, namelen, oldp, oldlenp, newp, newlen);
-		NET_UNLOCK();
 		return (error);
 	}
 	/* NOTREACHED */
