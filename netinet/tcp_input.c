@@ -3103,6 +3103,7 @@ tcp_mss_adv(struct mbuf *m, int af)
 
 /*
  * Locks used to protect global data and struct members:
+ *	a	atomic operations
  *	N	net lock
  *	S	syn_cache_mtx		tcp syn cache global mutex
  */
