@@ -236,7 +236,7 @@ divert_packet(struct mbuf *m, int dir, u_int16_t divert_port)
 		if_put(ifp);
 	} else {
 		/*
-		 * Calculate IP and protocol checksums for outbound packet 
+		 * Calculate IP and protocol checksums for outbound packet
 		 * diverted to userland.  pf rule diverts before cksum offload.
 		 */
 		in_hdr_cksum_out(m, NULL);

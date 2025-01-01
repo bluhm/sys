@@ -1273,7 +1273,7 @@ udp_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		if ((error = sysctl_vslock(oldp, savelen)))
 			return (error);
 		error = udp_sysctl_locked(name, namelen, oldp, oldlenp,
-		    newp, newlen);	
+		    newp, newlen);
 		sysctl_vsunlock(oldp, savelen);
 
 		return (error);

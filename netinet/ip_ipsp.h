@@ -364,7 +364,7 @@ struct tdb {				/* tunnel descriptor block */
 #define	TDBF_PFSYNC_RPL		0x80000	/* Replay counter should be bumped */
 #define	TDBF_ESN		0x100000 /* 64-bit sequence numbers (ESN) */
 #define	TDBF_PFSYNC_SNAPPED	0x200000 /* entry is being dispatched to peer */
-#define	TDBF_IFACE		0x400000 /* entry policy is via sec(4) */ 
+#define	TDBF_IFACE		0x400000 /* entry policy is via sec(4) */
 
 #define TDBF_BITS ("\20" \
 	"\1UNIQUE\2TIMER\3BYTES\4ALLOCATIONS" \

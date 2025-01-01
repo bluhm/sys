@@ -229,4 +229,3 @@ ip6_randomflowlabel(void)
 {
 	return ip6id_randomid(&randomtab_20) & 0xfffff;
 }
-

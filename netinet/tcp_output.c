@@ -377,7 +377,7 @@ again:
 
 	mtx_enter(&so->so_rcv.sb_mtx);
 	win = sbspace_locked(so, &so->so_rcv);
-	rcv_hiwat = (long) so->so_rcv.sb_hiwat; 
+	rcv_hiwat = (long) so->so_rcv.sb_hiwat;
 	mtx_leave(&so->so_rcv.sb_mtx);
 
 	/*

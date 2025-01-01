@@ -1516,7 +1516,7 @@ sotask(void *arg)
 
 	/*
 	 * sblock() on `so_rcv' protects sockets from being unspliced
-	 * for UDP case. TCP sockets still rely on solock(). 
+	 * for UDP case. TCP sockets still rely on solock().
 	 */
 
 	sblock(&so->so_rcv, SBL_WAIT | SBL_NOINTR);

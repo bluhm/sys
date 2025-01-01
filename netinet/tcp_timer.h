@@ -118,7 +118,7 @@ const char *tcptimers[TCPT_NTIMERS] =
  */
 #define	TCP_TIMER_INIT(tp, timer)					\
 	timeout_set_flags(&(tp)->t_timer[(timer)],			\
-	    tcp_timer_funcs[(timer)], tp, KCLOCK_NONE, 			\
+	    tcp_timer_funcs[(timer)], tp, KCLOCK_NONE,			\
 	    TIMEOUT_PROC | TIMEOUT_MPSAFE)
 
 #define	TCP_TIMER_ARM(tp, timer, msecs)					\

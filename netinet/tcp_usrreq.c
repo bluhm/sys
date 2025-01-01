@@ -1574,7 +1574,7 @@ tcp_update_rcvspace(struct tcpcb *tp)
 	struct socket *so = tp->t_inpcb->inp_socket;
 	u_long nmax;
 
-	mtx_enter(&so->so_rcv.sb_mtx);	
+	mtx_enter(&so->so_rcv.sb_mtx);
 
 	nmax = so->so_rcv.sb_hiwat;
 
@@ -1605,5 +1605,5 @@ tcp_update_rcvspace(struct tcpcb *tp)
 		sbreserve(so, &so->so_rcv, nmax);
 	}
 
-	mtx_leave(&so->so_rcv.sb_mtx);	
+	mtx_leave(&so->so_rcv.sb_mtx);
 }

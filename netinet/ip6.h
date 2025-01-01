@@ -157,7 +157,7 @@ struct ip6_dest {
 #define IP6OPT_RTALERT_LEN	4
 #define IP6OPT_RTALERT_MLD	0	/* Datagram contains an MLD message */
 #define IP6OPT_RTALERT_RSVP	1	/* Datagram contains an RSVP message */
-#define IP6OPT_RTALERT_ACTNET	2 	/* contains an Active Networks msg */
+#define IP6OPT_RTALERT_ACTNET	2	/* contains an Active Networks msg */
 #define IP6OPT_MINLEN		2
 
 #define IP6OPT_TYPE(o)		((o) & 0xC0)

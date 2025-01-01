@@ -1489,7 +1489,7 @@ m_pool_init(struct pool *pp, u_int size, u_int align, const char *wmesg)
 u_int
 m_pool_used(void)
 {
-	return ((atomic_load_long(&mbuf_mem_alloc) * 100) / 
+	return ((atomic_load_long(&mbuf_mem_alloc) * 100) /
 	    atomic_load_long(&mbuf_mem_limit));
 }
 

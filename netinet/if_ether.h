@@ -85,11 +85,11 @@ struct	ether_header {
  */
 
 struct  ether_vlan_header {
-        u_char  evl_dhost[ETHER_ADDR_LEN];
-        u_char  evl_shost[ETHER_ADDR_LEN];
-        u_int16_t evl_encap_proto;
-        u_int16_t evl_tag;
-        u_int16_t evl_proto;
+	u_char  evl_dhost[ETHER_ADDR_LEN];
+	u_char  evl_shost[ETHER_ADDR_LEN];
+	u_int16_t evl_encap_proto;
+	u_int16_t evl_tag;
+	u_int16_t evl_proto;
 };
 
 #define EVL_VLID_MASK	0xFFF

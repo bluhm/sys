@@ -110,10 +110,10 @@ enum espstat_counters {
 					 * IP_MAXPACKET */
 	esps_pdrops,			/* Packet blocked due to policy */
 	esps_crypto,			/* Crypto processing failure */
-	esps_udpencin,  		/* Input ESP-in-UDP packets */
-	esps_udpencout, 		/* Output ESP-in-UDP packets */
-	esps_udpinval,  		/* Invalid input ESP-in-UDP packets */
-	esps_udpneeded, 		/* Trying to use a ESP-in-UDP TDB */
+	esps_udpencin,			/* Input ESP-in-UDP packets */
+	esps_udpencout,			/* Output ESP-in-UDP packets */
+	esps_udpinval,			/* Invalid input ESP-in-UDP packets */
+	esps_udpneeded,			/* Trying to use a ESP-in-UDP TDB */
 	esps_outfail,			/* Packet output failure */
 
 	esps_ncounters

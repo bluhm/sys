@@ -76,7 +76,7 @@ int
 gre_send(struct socket *so, struct mbuf *m, struct mbuf *nam,
     struct mbuf *control)
 {
-#ifdef  PIPEX 
+#ifdef PIPEX
 	struct inpcb *inp = sotoinpcb(so);
 
 	if (inp->inp_pipex) {

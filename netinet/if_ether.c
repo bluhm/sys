@@ -85,9 +85,9 @@ struct llinfo_arp {
 #define LA_HOLD_TOTAL 100
 
 /* timer values */
-int 	arpt_prune = (5 * 60);	/* [I] walk list every 5 minutes */
-int 	arpt_keep = (20 * 60);	/* [a] once resolved, cache for 20 minutes */
-int 	arpt_down = 20;	/* [a] once declared down, don't send for 20 secs */
+int	arpt_prune = (5 * 60);	/* [I] walk list every 5 minutes */
+int	arpt_keep = (20 * 60);	/* [a] once resolved, cache for 20 minutes */
+int	arpt_down = 20;	/* [a] once declared down, don't send for 20 secs */
 
 struct mbuf *arppullup(struct mbuf *m);
 void arpinvalidate(struct rtentry *);
