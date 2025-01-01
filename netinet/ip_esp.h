@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_esp.h,v 1.47 2020/09/01 01:53:34 gnezdo Exp $	*/
+/*	$OpenBSD: ip_esp.h,v 1.48 2025/01/01 13:44:22 bluhm Exp $	*/
 /*
  * The authors of this code are John Ioannidis (ji@tla.org),
  * Angelos D. Keromytis (kermit@csd.uch.gr) and

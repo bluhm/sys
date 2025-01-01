@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_id.c,v 1.25 2021/03/10 10:21:48 jsg Exp $ */
+/*	$OpenBSD: ip_id.c,v 1.26 2025/01/01 13:44:22 bluhm Exp $ */
 
 /*
  * Copyright (c) 2008 Theo de Raadt, Ryan McBride
