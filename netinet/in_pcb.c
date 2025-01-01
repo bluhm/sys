@@ -237,6 +237,7 @@ in_pcballoc(struct socket *so, struct inpcbtable *table, int wait)
 		return (ENOBUFS);
 	inp->inp_table = table;
 	inp->inp_socket = so;
+	mtx_init(&inp->inp_sofree_mtx, IPL_SOFTNET);
 	refcnt_init_trace(&inp->inp_refcnt, DT_REFCNT_IDX_INPCB);
 	inp->inp_seclevel.sl_auth = IPSEC_AUTH_LEVEL_DEFAULT;
 	inp->inp_seclevel.sl_esp_trans = IPSEC_ESP_TRANS_LEVEL_DEFAULT;
@@ -584,6 +585,9 @@ in_pcbdetach(struct inpcb *inp)
 	struct inpcbtable *table = inp->inp_table;
 
 	so->so_pcb = NULL;
+	mtx_enter(&inp->inp_sofree_mtx);
+	inp->inp_socket = NULL;
+	mtx_leave(&inp->inp_sofree_mtx);
 	/*
 	 * As long as the NET_LOCK() is the default lock for Internet
 	 * sockets, do not release it to not introduce new sleeping

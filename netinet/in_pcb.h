@@ -81,6 +81,7 @@
  *	t	inpt_mtx		pcb table mutex
  *	L	pf_inp_mtx		link pf to inp mutex
  *	s	so_lock			socket rwlock
+ *	f	inp_sofree_mtx		socket detach and lock
  */
 
 /*
@@ -136,7 +137,8 @@ struct inpcb {
 #define	inp_laddr6	inp_laddru.iau_addr6
 	u_int16_t inp_fport;		/* [t] foreign port */
 	u_int16_t inp_lport;		/* [t] local port */
-	struct	  socket *inp_socket;	/* [I] back pointer to socket */
+	struct	  socket *inp_socket;	/* [f] back pointer to socket */
+	struct	  mutex inp_sofree_mtx;	/* protect socket free */
 	caddr_t	  inp_ppcb;		/* pointer to per-protocol pcb */
 	struct    route inp_route;	/* [s] cached route */
 	struct    refcnt inp_refcnt;	/* refcount PCB, delay memory free */
