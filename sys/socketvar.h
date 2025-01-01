@@ -209,10 +209,13 @@ struct socket {
 void	soassertlocked(struct socket *);
 void	soassertlocked_readonly(struct socket *);
 
-static inline void
+static inline struct socket *
 soref(struct socket *so)
 {
+	if (so == NULL)
+		return NULL;
 	refcnt_take(&so->so_refcnt);
+	return so;
 }
 
 /*

@@ -622,6 +622,32 @@ in_pcbdetach(struct inpcb *inp)
 	in_pcbunref(inp);
 }
 
+struct socket *
+in_pcbsolock(struct inpcb *inp)
+{
+	struct socket *so;
+
+	NET_ASSERT_LOCKED();
+
+	mtx_enter(&inp->inp_sofree_mtx);
+	so = soref(inp->inp_socket);
+	mtx_leave(&inp->inp_sofree_mtx);
+	if (so == NULL)
+		return NULL;
+
+	rw_enter_write(&so->so_lock);
+	sorele(so, 1);
+
+	return so;
+}
+
+void
+in_pcbsounlock(struct inpcb *inp, struct socket *so)
+{
+	KASSERT(inp->inp_socket == so);
+	rw_exit_write(&so->so_lock);
+}
+
 struct inpcb *
 in_pcbref(struct inpcb *inp)
 {
