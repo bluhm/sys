@@ -113,7 +113,7 @@ void
 tcp_timer_delack(void *arg)
 {
 	struct inpcb *inp = arg;
-	struct tcpcb *otp = NULL, *tp = intotcpcb(inp);
+	struct tcpcb *otp = NULL, *tp;
 	short ostate;
 
 	/*
@@ -122,6 +122,7 @@ tcp_timer_delack(void *arg)
 	 * ACK callout.
 	 */
 	NET_LOCK();
+	tp = intotcpcb(inp);
 	/* Ignore canceled timeouts or timeouts that have been rescheduled. */
 	if (tp == NULL || !ISSET(tp->t_flags, TF_TMR_DELACK) ||
 	    timeout_pending(&tp->t_timer[TCPT_DELACK]))
@@ -198,11 +199,12 @@ void
 tcp_timer_rexmt(void *arg)
 {
 	struct inpcb *inp = arg;
-	struct tcpcb *otp = NULL, *tp = intotcpcb(inp);
+	struct tcpcb *otp = NULL, *tp;
 	uint32_t rto;
 	short ostate;
 
 	NET_LOCK();
+	tp = intotcpcb(inp);
 	/* Ignore canceled timeouts or timeouts that have been rescheduled. */
 	if (tp == NULL || !ISSET(tp->t_flags, TF_TMR_REXMT) ||
 	    timeout_pending(&tp->t_timer[TCPT_REXMT]))
@@ -397,12 +399,13 @@ void
 tcp_timer_persist(void *arg)
 {
 	struct inpcb *inp = arg;
-	struct tcpcb *otp = NULL, *tp = intotcpcb(inp);
+	struct tcpcb *otp = NULL, *tp;
 	uint32_t rto;
 	short ostate;
 	uint64_t now;
 
 	NET_LOCK();
+	tp = intotcpcb(inp);
 	/* Ignore canceled timeouts or timeouts that have been rescheduled. */
 	if (tp == NULL || !ISSET(tp->t_flags, TF_TMR_PERSIST) ||
 	    timeout_pending(&tp->t_timer[TCPT_PERSIST]))
@@ -450,10 +453,11 @@ void
 tcp_timer_keep(void *arg)
 {
 	struct inpcb *inp = arg;
-	struct tcpcb *otp = NULL, *tp = intotcpcb(inp);
+	struct tcpcb *otp = NULL, *tp;
 	short ostate;
 
 	NET_LOCK();
+	tp = intotcpcb(inp);
 	/* Ignore canceled timeouts or timeouts that have been rescheduled. */
 	if (tp == NULL || !ISSET(tp->t_flags, TF_TMR_KEEP) ||
 	    timeout_pending(&tp->t_timer[TCPT_KEEP]))
@@ -513,12 +517,13 @@ void
 tcp_timer_2msl(void *arg)
 {
 	struct inpcb *inp = arg;
-	struct tcpcb *otp = NULL, *tp = intotcpcb(inp);
+	struct tcpcb *otp = NULL, *tp;
 	short ostate;
 	int maxidle;
 	uint64_t now;
 
 	NET_LOCK();
+	tp = intotcpcb(inp);
 	/* Ignore canceled timeouts or timeouts that have been rescheduled. */
 	if (tp == NULL || !ISSET(tp->t_flags, TF_TMR_2MSL) ||
 	    timeout_pending(&tp->t_timer[TCPT_2MSL]))
