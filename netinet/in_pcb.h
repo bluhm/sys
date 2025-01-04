@@ -125,10 +125,11 @@ union inpaddru {
  * control block.
  */
 struct inpcb {
+	struct	  inpcbtable *inp_table;	/* [I] inet queue/hash table */
+	TAILQ_ENTRY(inpcb) inp_queue;		/* [t] inet PCB queue */
+	/* keep fields above in sync with struct inpcb_iterator */
 	LIST_ENTRY(inpcb) inp_hash;		/* [t] local and foreign hash */
 	LIST_ENTRY(inpcb) inp_lhash;		/* [t] local port hash */
-	TAILQ_ENTRY(inpcb) inp_queue;		/* [t] inet PCB queue */
-	struct	  inpcbtable *inp_table;	/* [I] inet queue/hash table */
 	union	  inpaddru inp_faddru;		/* [t] Foreign address. */
 	union	  inpaddru inp_laddru;		/* [t] Local address. */
 #define	inp_faddr	inp_faddru.iau_addr
@@ -179,11 +180,9 @@ struct inpcb {
 LIST_HEAD(inpcbhead, inpcb);
 
 struct inpcb_iterator {
-	LIST_ENTRY(inpcb) inp_hash;		/* unused */
-	LIST_ENTRY(inpcb) inp_lhash;		/* unused */
-	TAILQ_ENTRY(inpcb) inp_queue;		/* [t] inet PCB queue */
-	SIMPLEQ_ENTRY(inpcb) inp_notify;	/* unused */
 	struct	  inpcbtable *inp_table;	/* [I] always NULL */
+	TAILQ_ENTRY(inpcb) inp_queue;		/* [t] inet PCB queue */
+	/* keep fields above in sync with struct inpcb */
 };
 
 static inline int
