@@ -1,4 +1,4 @@
-/*	$OpenBSD: af_frame.c,v 1.1 2024/12/15 11:00:05 dlg Exp $ */
+/*	$OpenBSD: af_frame.c,v 1.2 2025/01/05 12:36:48 bluhm Exp $ */
 
 /*
  * Copyright (c) 2024 David Gwynne <dlg@openbsd.org>
