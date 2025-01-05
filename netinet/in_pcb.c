@@ -634,18 +634,18 @@ in_pcbsolock(struct inpcb *inp)
 	mtx_leave(&inp->inp_sofree_mtx);
 	if (so == NULL)
 		return NULL;
-
 	rw_enter_write(&so->so_lock);
-	sorele(so);
-
 	return so;
 }
 
 void
 in_pcbsounlock(struct inpcb *inp, struct socket *so)
 {
-	KASSERT(inp->inp_socket == so);
+	if (so == NULL)
+		return;
+	KASSERT(inp->inp_socket == NULL || inp->inp_socket == so);
 	rw_exit_write(&so->so_lock);
+	sorele(so);
 }
 
 struct inpcb *
