@@ -220,6 +220,8 @@ sonewconn(struct socket *head, int connstatus, int wait)
 	 */
 	if (persocket)
 		solock(so);
+	else
+		rw_enter_write(&so->so_lock);
 
 	/*
 	 * Inherit watermarks but those may get clamped in low mem situations.
@@ -260,6 +262,8 @@ sonewconn(struct socket *head, int connstatus, int wait)
 fail:
 	if (persocket)
 		sounlock(so);
+	else
+		rw_exit_write(&so->so_lock);
 	sigio_free(&so->so_sigio);
 	klist_free(&so->so_rcv.sb_klist);
 	klist_free(&so->so_snd.sb_klist);

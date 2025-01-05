@@ -709,7 +709,9 @@ nd6_nud_hint(struct rtentry *rt)
 	struct llinfo_nd6 *ln;
 	struct ifnet *ifp;
 
+	/* XXX
 	NET_ASSERT_LOCKED_EXCLUSIVE();
+	*/
 
 	ifp = if_get(rt->rt_ifidx);
 	if (ifp == NULL)
