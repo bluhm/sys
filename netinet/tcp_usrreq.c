@@ -1154,6 +1154,10 @@ tcp_ident(void *oldp, size_t *oldlenp, void *newp, size_t newlen, int dodrop)
 	switch (tir.faddr.ss_family) {
 #ifdef INET6
 	case AF_INET6:
+		if (tir.laddr.ss_family != AF_INET6) {
+			NET_UNLOCK_SHARED();
+			return (EAFNOSUPPORT);
+		}
 		fin6 = (struct sockaddr_in6 *)&tir.faddr;
 		error = in6_embedscope(&f6, fin6, NULL, NULL);
 		if (error) {
@@ -1169,6 +1173,10 @@ tcp_ident(void *oldp, size_t *oldlenp, void *newp, size_t newlen, int dodrop)
 		break;
 #endif
 	case AF_INET:
+		if (tir.laddr.ss_family != AF_INET) {
+			NET_UNLOCK_SHARED();
+			return (EAFNOSUPPORT);
+		}
 		fin = (struct sockaddr_in *)&tir.faddr;
 		lin = (struct sockaddr_in *)&tir.laddr;
 		break;
