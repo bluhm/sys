@@ -113,6 +113,7 @@ void
 tcp_timer_delack(void *arg)
 {
 	struct inpcb *inp = arg;
+	struct socket *so;
 	struct tcpcb *otp = NULL, *tp;
 	short ostate;
 
@@ -121,7 +122,10 @@ tcp_timer_delack(void *arg)
 	 * for whatever reason, it will restart the delayed
 	 * ACK callout.
 	 */
-	NET_LOCK();
+	NET_LOCK_SHARED();
+	so = in_pcbsolock(inp);
+	if (so == NULL)
+		goto out;
 	tp = intotcpcb(inp);
 	/* Ignore canceled timeouts or timeouts that have been rescheduled. */
 	if (tp == NULL || !ISSET(tp->t_flags, TF_TMR_DELACK) ||
@@ -138,7 +142,8 @@ tcp_timer_delack(void *arg)
 	if (otp)
 		tcp_trace(TA_TIMER, ostate, tp, otp, NULL, TCPT_DELACK, 0);
  out:
-	NET_UNLOCK();
+	in_pcbsounlock(inp, so);
+	NET_UNLOCK_SHARED();
 	in_pcbunref(inp);
 }
 
@@ -199,11 +204,15 @@ void
 tcp_timer_rexmt(void *arg)
 {
 	struct inpcb *inp = arg;
+	struct socket *so;
 	struct tcpcb *otp = NULL, *tp;
-	uint32_t rto;
 	short ostate;
+	uint32_t rto;
 
-	NET_LOCK();
+	NET_LOCK_SHARED();
+	so = in_pcbsolock(inp);
+	if (so == NULL)
+		goto out;
 	tp = intotcpcb(inp);
 	/* Ignore canceled timeouts or timeouts that have been rescheduled. */
 	if (tp == NULL || !ISSET(tp->t_flags, TF_TMR_REXMT) ||
@@ -391,7 +400,8 @@ tcp_timer_rexmt(void *arg)
 	if (otp)
 		tcp_trace(TA_TIMER, ostate, tp, otp, NULL, TCPT_REXMT, 0);
  out:
-	NET_UNLOCK();
+	in_pcbsounlock(inp, so);
+	NET_UNLOCK_SHARED();
 	in_pcbunref(inp);
 }
 
@@ -399,12 +409,16 @@ void
 tcp_timer_persist(void *arg)
 {
 	struct inpcb *inp = arg;
+	struct socket *so;
 	struct tcpcb *otp = NULL, *tp;
-	uint32_t rto;
 	short ostate;
 	uint64_t now;
+	uint32_t rto;
 
-	NET_LOCK();
+	NET_LOCK_SHARED();
+	so = in_pcbsolock(inp);
+	if (so == NULL)
+		goto out;
 	tp = intotcpcb(inp);
 	/* Ignore canceled timeouts or timeouts that have been rescheduled. */
 	if (tp == NULL || !ISSET(tp->t_flags, TF_TMR_PERSIST) ||
@@ -445,7 +459,8 @@ tcp_timer_persist(void *arg)
 	if (otp)
 		tcp_trace(TA_TIMER, ostate, tp, otp, NULL, TCPT_PERSIST, 0);
  out:
-	NET_UNLOCK();
+	in_pcbsounlock(inp, so);
+	NET_UNLOCK_SHARED();
 	in_pcbunref(inp);
 }
 
@@ -453,10 +468,14 @@ void
 tcp_timer_keep(void *arg)
 {
 	struct inpcb *inp = arg;
+	struct socket *so;
 	struct tcpcb *otp = NULL, *tp;
 	short ostate;
 
-	NET_LOCK();
+	NET_LOCK_SHARED();
+	so = in_pcbsolock(inp);
+	if (so == NULL)
+		goto out;
 	tp = intotcpcb(inp);
 	/* Ignore canceled timeouts or timeouts that have been rescheduled. */
 	if (tp == NULL || !ISSET(tp->t_flags, TF_TMR_KEEP) ||
@@ -509,7 +528,8 @@ tcp_timer_keep(void *arg)
 	if (otp)
 		tcp_trace(TA_TIMER, ostate, tp, otp, NULL, TCPT_KEEP, 0);
  out:
-	NET_UNLOCK();
+	in_pcbsounlock(inp, so);
+	NET_UNLOCK_SHARED();
 	in_pcbunref(inp);
 }
 
@@ -517,12 +537,16 @@ void
 tcp_timer_2msl(void *arg)
 {
 	struct inpcb *inp = arg;
+	struct socket *so;
 	struct tcpcb *otp = NULL, *tp;
 	short ostate;
-	int maxidle;
 	uint64_t now;
+	int maxidle;
 
-	NET_LOCK();
+	NET_LOCK_SHARED();
+	so = in_pcbsolock(inp);
+	if (so == NULL)
+		goto out;
 	tp = intotcpcb(inp);
 	/* Ignore canceled timeouts or timeouts that have been rescheduled. */
 	if (tp == NULL || !ISSET(tp->t_flags, TF_TMR_2MSL) ||
@@ -546,7 +570,8 @@ tcp_timer_2msl(void *arg)
 	if (otp)
 		tcp_trace(TA_TIMER, ostate, tp, otp, NULL, TCPT_2MSL, 0);
  out:
-	NET_UNLOCK();
+	in_pcbsounlock(inp, so);
+	NET_UNLOCK_SHARED();
 	in_pcbunref(inp);
 }
 
