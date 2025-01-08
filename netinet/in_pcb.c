@@ -623,7 +623,7 @@ in_pcbdetach(struct inpcb *inp)
 }
 
 struct socket *
-in_pcbsolock(struct inpcb *inp)
+in_pcbsolock_ref(struct inpcb *inp)
 {
 	struct socket *so;
 
@@ -639,7 +639,7 @@ in_pcbsolock(struct inpcb *inp)
 }
 
 void
-in_pcbsounlock(struct inpcb *inp, struct socket *so)
+in_pcbsounlock_rele(struct inpcb *inp, struct socket *so)
 {
 	if (so == NULL)
 		return;
