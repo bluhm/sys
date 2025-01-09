@@ -359,7 +359,7 @@ int
 route_peeraddr(struct socket *so, struct mbuf *nam)
 {
 	/* minimal support, just implement a fake peer address */
-	bcopy(&route_src, mtod(nam, caddr_t), route_src.sa_len);
+	memcpy(mtod(nam, caddr_t), &route_src, route_src.sa_len);
 	nam->m_len = route_src.sa_len;
 	return (0);
 }
