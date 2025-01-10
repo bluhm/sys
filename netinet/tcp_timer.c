@@ -155,7 +155,7 @@ tcp_timer_delack(void *arg)
 	if (tcp_timer_enter(inp, &so, &tp, TCPT_DELACK))
 		goto out;
 
-	if (inp->inp_socket->so_options & SO_DEBUG) {
+	if (so->so_options & SO_DEBUG) {
 		otp = tp;
 		ostate = tp->t_state;
 	}
@@ -270,7 +270,7 @@ tcp_timer_rexmt(void *arg)
 		    tp->t_softerror : ETIMEDOUT);
 		goto out;
 	}
-	if (inp->inp_socket->so_options & SO_DEBUG) {
+	if (so->so_options & SO_DEBUG) {
 		otp = tp;
 		ostate = tp->t_state;
 	}
@@ -297,7 +297,7 @@ tcp_timer_rexmt(void *arg)
 		struct rtentry *rt = NULL;
 
 		/* No data to send means path mtu is not a problem */
-		if (!inp->inp_socket->so_snd.sb_cc)
+		if (!so->so_snd.sb_cc)
 			goto leave;
 
 		rt = in_pcbrtentry(inp);
@@ -431,7 +431,7 @@ tcp_timer_persist(void *arg)
 	if (TCP_TIMER_ISARMED(tp, TCPT_REXMT))
 		goto out;
 
-	if (inp->inp_socket->so_options & SO_DEBUG) {
+	if (so->so_options & SO_DEBUG) {
 		otp = tp;
 		ostate = tp->t_state;
 	}
@@ -475,7 +475,7 @@ tcp_timer_keep(void *arg)
 	if (tcp_timer_enter(inp, &so, &tp, TCPT_KEEP))
 		goto out;
 
-	if (inp->inp_socket->so_options & SO_DEBUG) {
+	if (so->so_options & SO_DEBUG) {
 		otp = tp;
 		ostate = tp->t_state;
 	}
@@ -486,7 +486,7 @@ tcp_timer_keep(void *arg)
 		goto out;
 	}
 	if ((atomic_load_int(&tcp_always_keepalive) ||
-	    inp->inp_socket->so_options & SO_KEEPALIVE) &&
+	    so->so_options & SO_KEEPALIVE) &&
 	    tp->t_state <= TCPS_CLOSING) {
 		int maxidle;
 		uint64_t now;
@@ -536,7 +536,7 @@ tcp_timer_2msl(void *arg)
 	if (tcp_timer_enter(inp, &so, &tp, TCPT_2MSL))
 		goto out;
 
-	if (inp->inp_socket->so_options & SO_DEBUG) {
+	if (so->so_options & SO_DEBUG) {
 		otp = tp;
 		ostate = tp->t_state;
 	}
