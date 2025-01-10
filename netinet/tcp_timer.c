@@ -232,7 +232,7 @@ tcp_timer_rexmt(void *arg)
 	if (tcp_timer_enter(inp, &so, &tp, TCPT_REXMT))
 		goto out;
 
-	if ((tp->t_flags & TF_PMTUD_PEND) && inp &&
+	if ((tp->t_flags & TF_PMTUD_PEND) &&
 	    SEQ_GEQ(tp->t_pmtud_th_seq, tp->snd_una) &&
 	    SEQ_LT(tp->t_pmtud_th_seq, (int)(tp->snd_una + tp->t_maxseg))) {
 		struct sockaddr_in sin;
@@ -291,13 +291,13 @@ tcp_timer_rexmt(void *arg)
 	 * lots more sophisticated searching to find the right
 	 * value here...
 	 */
-	if (ip_mtudisc && inp &&
+	if (ip_mtudisc &&
 	    TCPS_HAVEESTABLISHED(tp->t_state) &&
 	    tp->t_rxtshift > TCP_MAXRXTSHIFT / 6) {
 		struct rtentry *rt = NULL;
 
 		/* No data to send means path mtu is not a problem */
-		if (!so->so_snd.sb_cc)
+		if (!READ_ONCE(so->so_snd.sb_cc))
 			goto leave;
 
 		rt = in_pcbrtentry(inp);
