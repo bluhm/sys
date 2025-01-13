@@ -1047,7 +1047,7 @@ ip6_getpmtu(struct rtentry *rt, struct ifnet *ifp, u_long *mtup)
 			 * field isn't locked).
 			 */
 			mtu = ifp->if_mtu;
-			if (!(rt->rt_locks & RTV_MTU))
+			if (!ISSET(atomic_load_int(&rt->rt_locks), RTV_MTU))
 				atomic_cas_uint(&rt->rt_mtu, rtmtu, mtu);
 		}
 	} else {

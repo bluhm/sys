@@ -868,7 +868,8 @@ tcp_mtudisc(struct inpcb *inp, int errno)
 
 	rt = in_pcbrtentry(inp);
 	if (rt != NULL) {
-		unsigned int orig_mtulock = (rt->rt_locks & RTV_MTU);
+		unsigned int orig_mtulock =
+		    (atomic_load_int(&rt->rt_locks) & RTV_MTU);
 
 		/*
 		 * If this was not a host route, remove and realloc.
@@ -878,7 +879,7 @@ tcp_mtudisc(struct inpcb *inp, int errno)
 			if ((rt = in_pcbrtentry(inp)) == NULL)
 				return;
 		}
-		if (orig_mtulock < (rt->rt_locks & RTV_MTU))
+		if (orig_mtulock < (atomic_load_int(&rt->rt_locks) & RTV_MTU))
 			change = 1;
 	}
 	tcp_mss(tp, -1);

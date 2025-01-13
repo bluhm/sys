@@ -282,7 +282,7 @@ tcp_timer_rexmt(void *arg)
 		rt = in_pcbrtentry(inp);
 		/* Check if path MTU discovery is disabled already */
 		if (rt && (rt->rt_flags & RTF_HOST) &&
-		    (rt->rt_locks & RTV_MTU))
+		    ISSET(atomic_load_int(&rt->rt_locks), RTV_MTU))
 			goto leave;
 
 		rt = NULL;
@@ -303,8 +303,8 @@ tcp_timer_rexmt(void *arg)
 		}
 		if (rt != NULL) {
 			/* Disable path MTU discovery */
-			if ((rt->rt_locks & RTV_MTU) == 0) {
-				rt->rt_locks |= RTV_MTU;
+			if (!ISSET(atomic_load_int(&rt->rt_locks), RTV_MTU)) {
+				atomic_setbits_int(&rt->rt_locks, RTV_MTU);
 				in_rtchange(inp, 0);
 			}
 

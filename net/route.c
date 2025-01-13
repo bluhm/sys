@@ -557,7 +557,7 @@ rt_setgwroute(struct rtentry *rt, const struct sockaddr *gate, u_int rtableid)
 	 * If the MTU of next hop is 0, this will reset the MTU of the
 	 * route to run PMTUD again from scratch.
 	 */
-	if (!ISSET(rt->rt_locks, RTV_MTU)) {
+	if (!ISSET(atomic_load_int(&rt->rt_locks), RTV_MTU)) {
 		u_int mtu, nhmtu;
 
 		mtu = atomic_load_int(&rt->rt_mtu);

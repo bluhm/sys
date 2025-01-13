@@ -1198,8 +1198,9 @@ change:
 		}
 		if_group_routechange(info->rti_info[RTAX_DST],
 		    info->rti_info[RTAX_NETMASK]);
-		rt->rt_locks &= ~(rtm->rtm_inits);
-		rt->rt_locks |= (rtm->rtm_inits & rtm->rtm_rmx.rmx_locks);
+		atomic_clearbits_int(&rt->rt_locks, rtm->rtm_inits);
+		atomic_setbits_int(&rt->rt_locks,
+		     rtm->rtm_inits & rtm->rtm_rmx.rmx_locks);
 		NET_UNLOCK();
 		break;
 	case RTM_GET:
@@ -1344,7 +1345,7 @@ route_cleargateway(struct rtentry *rt, void *arg, unsigned int rtableid)
 	struct rtentry *nhrt = arg;
 
 	if (ISSET(rt->rt_flags, RTF_GATEWAY) && rt->rt_gwroute == nhrt &&
-	    !ISSET(rt->rt_locks, RTV_MTU))
+	    !ISSET(atomic_load_int(&rt->rt_locks), RTV_MTU))
 		atomic_store_int(&rt->rt_mtu, 0);
 
 	return (0);
@@ -1420,7 +1421,7 @@ rtm_getmetrics(const struct rtentry *rt, struct rt_metrics *out)
 	}
 
 	bzero(out, sizeof(*out));
-	out->rmx_locks = in->rmx_locks;
+	out->rmx_locks = atomic_load_int(&in->rmx_locks);
 	out->rmx_mtu = atomic_load_int(&in->rmx_mtu);
 	out->rmx_expire = expire;
 	out->rmx_pksent = in->rmx_pksent;

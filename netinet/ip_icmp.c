@@ -1054,9 +1054,9 @@ icmp_mtudisc(struct icmp *icp, u_int rtableid)
 	 *	  on a route.  We should be using a separate flag
 	 *	  for the kernel to indicate this.
 	 */
-	if ((rt->rt_locks & RTV_MTU) == 0) {
+	if (!ISSET(atomic_load_int(&rt->rt_locks), RTV_MTU)) {
 		if (mtu < 296 || mtu > ifp->if_mtu)
-			rt->rt_locks |= RTV_MTU;
+			atomic_setbits_int(&rt->rt_locks, RTV_MTU);
 		else if (rtmtu > mtu || rtmtu == 0)
 			atomic_cas_uint(&rt->rt_mtu, rtmtu, mtu);
 	}
@@ -1090,7 +1090,7 @@ icmp_mtudisc_timeout(struct rtentry *rt, u_int rtableid)
 			(*ctlfunc)(PRC_MTUINC, sintosa(&sin),
 			    rtableid, NULL);
 	} else {
-		if ((rt->rt_locks & RTV_MTU) == 0)
+		if (!ISSET(atomic_load_int(&rt->rt_locks), RTV_MTU))
 			atomic_store_int(&rt->rt_mtu, 0);
 	}
 

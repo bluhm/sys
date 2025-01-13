@@ -38,6 +38,7 @@
 /*
  * Locks used to protect struct members in this file:
  *	I	immutable after creation
+ *	a	atomic operations
  *	N	net lock
  *	X	exclusive net lock, or shared net lock + kernel lock
  *	R	art (rtable) lock
@@ -60,7 +61,7 @@
 struct rt_kmetrics {
 	u_int64_t	rmx_pksent;	/* packets sent using this route */
 	int64_t		rmx_expire;	/* lifetime for route, e.g. redirect */
-	u_int		rmx_locks;	/* Kernel must leave these values */
+	u_int		rmx_locks;	/* [a] Kernel must leave these values */
 	u_int		rmx_mtu;	/* [a] MTU for this path */
 };
 #endif

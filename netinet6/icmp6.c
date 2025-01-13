@@ -1016,7 +1016,7 @@ icmp6_mtudisc_update(struct ip6ctlparam *ip6cp, int validated)
 	rt = icmp6_mtudisc_clone(&sin6, m->m_pkthdr.ph_rtableid, 0);
 
 	if (rt != NULL && ISSET(rt->rt_flags, RTF_HOST) &&
-	    !(rt->rt_locks & RTV_MTU)) {
+	    !ISSET(atomic_load_int(&rt->rt_locks), RTV_MTU)) {
 		u_int rtmtu;
 
 		rtmtu = atomic_load_int(&rt->rt_mtu);
@@ -1851,7 +1851,7 @@ icmp6_mtudisc_timeout(struct rtentry *rt, u_int rtableid)
 	if ((rt->rt_flags & (RTF_DYNAMIC|RTF_HOST)) == (RTF_DYNAMIC|RTF_HOST)) {
 		rtdeletemsg(rt, ifp, rtableid);
 	} else {
-		if (!(rt->rt_locks & RTV_MTU))
+		if (!ISSET(atomic_load_int(&rt->rt_locks), RTV_MTU))
 			atomic_store_int(&rt->rt_mtu, 0);
 	}
 

@@ -384,7 +384,7 @@ sendit:
 	 * the route's MTU is locked.
 	 */
 	if ((flags & IP_MTUDISC) && ro && ro->ro_rt &&
-	    (ro->ro_rt->rt_locks & RTV_MTU) == 0)
+	    (!ISSET(atomic_load_int(&ro->ro_rt->rt_locks), RTV_MTU)))
 		ip->ip_off |= htons(IP_DF);
 
 #ifdef IPSEC
@@ -471,7 +471,7 @@ sendit:
 		 */
 		if (rtisvalid(ro->ro_rt) &&
 		    ISSET(ro->ro_rt->rt_flags, RTF_HOST) &&
-		    !(ro->ro_rt->rt_locks & RTV_MTU)) {
+		    !ISSET(atomic_load_int(&ro->ro_rt->rt_locks), RTV_MTU)) {
 			u_int rtmtu;
 
 			rtmtu = atomic_load_int(&ro->ro_rt->rt_mtu);
