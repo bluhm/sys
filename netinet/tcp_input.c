@@ -3394,7 +3394,7 @@ syn_cache_timer(void *arg)
 	 * than the keep alive timer would allow, expire it.
 	 */
 	sc->sc_rxttot += sc->sc_rxtcur;
-	if (sc->sc_rxttot >= READ_ONCE(tcptv_keep_init))
+	if (sc->sc_rxttot >= atomic_load_int(&tcptv_keep_init) * TCP_TIME(1))
 		goto dropit;
 
 	/* Advance the timer back-off. */
@@ -3673,7 +3673,8 @@ syn_cache_get(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 	tp->t_sndtime = now;
 	tp->t_rcvacktime = now;
 	tp->t_sndacktime = now;
-	TCP_TIMER_ARM(tp, TCPT_KEEP, tcptv_keep_init);
+	TCP_TIMER_ARM(tp, TCPT_KEEP,
+	    atomic_load_int(&tcptv_keep_init) * TCP_TIME(1));
 	tcpstat_inc(tcps_accepts);
 
 	tcp_mss(tp, sc->sc_peermaxseg);	 /* sets t_maxseg */

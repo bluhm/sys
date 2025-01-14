@@ -679,7 +679,6 @@ extern	struct pool tcpcb_pool;
 extern	struct inpcbtable tcbtable, tcb6table;	/* queue of active tcpcb's */
 extern	int tcp_do_rfc1323;	/* [a] enabled/disabled? */
 extern	const int tcprexmtthresh;
-extern	int tcptv_keep_init;	/* [N] time to keep alive initial SYN packet */
 extern	int tcp_mssdflt;	/* [a] default maximum segment size */
 extern	int tcp_rst_ppslim;	/* [a] maximum outgoing RST packet per second */
 extern	int tcp_ack_on_push;	/* [a] ACK immediately on PUSH */

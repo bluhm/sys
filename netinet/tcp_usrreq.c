@@ -160,6 +160,7 @@ const struct pr_usrreqs tcp6_usrreqs = {
 #endif
 
 const struct sysctl_bounded_args tcpctl_vars[] = {
+	{ TCPCTL_KEEPINITTIME, &tcptv_keep_init, 1, 3 * TCPTV_KEEP_INIT },
 	{ TCPCTL_RFC1323, &tcp_do_rfc1323, 0, 1 },
 	{ TCPCTL_SACK, &tcp_do_sack, 0, 1 },
 	{ TCPCTL_MSSDFLT, &tcp_mssdflt, TCP_MSS, 65535 },
@@ -682,7 +683,8 @@ tcp_connect(struct socket *so, struct mbuf *nam)
 	soisconnecting(so);
 	tcpstat_inc(tcps_connattempt);
 	tp->t_state = TCPS_SYN_SENT;
-	TCP_TIMER_ARM(tp, TCPT_KEEP, tcptv_keep_init);
+	TCP_TIMER_ARM(tp, TCPT_KEEP,
+	    atomic_load_int(&tcptv_keep_init) * TCP_TIME(1));
 	tcp_set_iss_tsm(tp);
 	tcp_sendseqinit(tp);
 	tp->snd_last = tp->snd_una;
@@ -1409,16 +1411,6 @@ tcp_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		return (ENOTDIR);
 
 	switch (name[0]) {
-	case TCPCTL_KEEPINITTIME:
-		NET_LOCK();
-		nval = tcptv_keep_init / TCP_TIME(1);
-		error = sysctl_int_bounded(oldp, oldlenp, newp, newlen, &nval,
-		    1, 3 * (TCPTV_KEEP_INIT / TCP_TIME(1)));
-		if (!error)
-			tcptv_keep_init = TCP_TIME(nval);
-		NET_UNLOCK();
-		return (error);
-
 	case TCPCTL_KEEPIDLE:
 		NET_LOCK();
 		nval = tcp_keepidle / TCP_TIME(1);
