@@ -1,4 +1,4 @@
-/*	$OpenBSD: virtio_mmio.c,v 1.21 2024/12/20 22:18:27 sf Exp $	*/
+/*	$OpenBSD: virtio_mmio.c,v 1.23 2025/01/14 14:28:38 sf Exp $	*/
 /*	$NetBSD: virtio.c,v 1.3 2011/11/02 23:05:52 njoly Exp $	*/
 
 /*
@@ -105,6 +105,8 @@ int		virtio_mmio_negotiate_features(struct virtio_softc *,
     const struct virtio_feature_name *);
 int		virtio_mmio_intr(void *);
 void		virtio_mmio_intr_barrier(struct virtio_softc *);
+int		virtio_mmio_intr_establish(struct virtio_softc *, struct virtio_attach_args *,
+    int, struct cpu_info *, int (*)(void *), void *);
 
 struct virtio_mmio_softc {
 	struct virtio_softc	sc_sc;
@@ -122,7 +124,7 @@ struct virtio_mmio_softc {
 
 struct virtio_mmio_attach_args {
 	struct virtio_attach_args	 vma_va;
-	struct fdt_attach_args          *vma_fa;
+	struct fdt_attach_args		*vma_fa;
 };
 
 const struct cfattach virtio_mmio_ca = {
@@ -160,6 +162,7 @@ const struct virtio_ops virtio_mmio_ops = {
 	virtio_mmio_attach_finish,
 	virtio_mmio_intr,
 	virtio_mmio_intr_barrier,
+	virtio_mmio_intr_establish,
 };
 
 uint16_t
@@ -234,7 +237,7 @@ virtio_mmio_set_status(struct virtio_softc *vsc, int status)
 		    VIRTIO_MMIO_STATUS) != 0) {
 			CPU_BUSY_CYCLE();
 		}
-	} else  {
+	} else {
 		old = bus_space_read_4(sc->sc_iot, sc->sc_ioh,
 		    VIRTIO_MMIO_STATUS);
 		bus_space_write_4(sc->sc_iot, sc->sc_ioh, VIRTIO_MMIO_STATUS,
@@ -545,4 +548,12 @@ virtio_mmio_intr_barrier(struct virtio_softc *vsc)
 	struct virtio_mmio_softc *sc = (struct virtio_mmio_softc *)vsc;
 	if (sc->sc_ih)
 		intr_barrier(sc->sc_ih);
+}
+
+int
+virtio_mmio_intr_establish(struct virtio_softc *vsc,
+    struct virtio_attach_args *va, int vec, struct cpu_info *ci,
+    int (*func)(void *), void *arg)
+{
+	return ENXIO;
 }
