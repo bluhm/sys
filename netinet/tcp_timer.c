@@ -114,7 +114,7 @@ tcp_timer_enter(struct inpcb *inp, struct socket **so, struct tcpcb **tp,
 
 	NET_LOCK_SHARED();
 	*so = in_pcbsolock_ref(inp);
-	if (so == NULL) {
+	if (*so == NULL) {
 		*tp = NULL;
 		return -1;
 	}
