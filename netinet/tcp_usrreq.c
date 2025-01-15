@@ -1508,30 +1508,24 @@ tcp_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		}
 		return (error);
 
-	case TCPCTL_KEEPINITTIME:
-		error = sysctl_bounded_arr(tcpctl_vars, nitems(tcpctl_vars),
-		    name, namelen, oldp, oldlenp, newp, newlen);
-		atomic_store_int(&tcp_keepinit,
-		    atomic_load_int(&tcp_keepinit_sec) * TCP_TIME(1));
-		return (error);
-
-	case TCPCTL_KEEPIDLE:
-		error = sysctl_bounded_arr(tcpctl_vars, nitems(tcpctl_vars),
-		    name, namelen, oldp, oldlenp, newp, newlen);
-		atomic_store_int(&tcp_keepidle,
-		    atomic_load_int(&tcp_keepidle_sec) * TCP_TIME(1));
-		return (error);
-
-	case TCPCTL_KEEPINTVL:
-		error = sysctl_bounded_arr(tcpctl_vars, nitems(tcpctl_vars),
-		    name, namelen, oldp, oldlenp, newp, newlen);
-		atomic_store_int(&tcp_keepintvl,
-		    atomic_load_int(&tcp_keepintvl_sec) * TCP_TIME(1));
-		return (error);
-
 	default:
-		return sysctl_bounded_arr(tcpctl_vars, nitems(tcpctl_vars),
+		error = sysctl_bounded_arr(tcpctl_vars, nitems(tcpctl_vars),
 		    name, namelen, oldp, oldlenp, newp, newlen);
+		switch (name[0]) {
+		case TCPCTL_KEEPINITTIME:
+			atomic_store_int(&tcp_keepinit,
+			    atomic_load_int(&tcp_keepinit_sec) * TCP_TIME(1));
+			break;
+		case TCPCTL_KEEPIDLE:
+			atomic_store_int(&tcp_keepidle,
+			    atomic_load_int(&tcp_keepidle_sec) * TCP_TIME(1));
+			break;
+		case TCPCTL_KEEPINTVL:
+			atomic_store_int(&tcp_keepintvl,
+			    atomic_load_int(&tcp_keepintvl_sec) * TCP_TIME(1));
+			break;
+		}
+		return (error);
 	}
 	/* NOTREACHED */
 }
