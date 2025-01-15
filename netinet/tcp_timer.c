@@ -61,13 +61,13 @@
  */
 
 int	tcp_always_keepalive;
-int	tcptv_keep_init = TCPTV_KEEP_INIT;
-int	tcp_keepidle = TCPTV_KEEP_IDLE;
+int	tcp_keepinit = TCPTV_KEEPINIT;
+int	tcp_keepidle = TCPTV_KEEPIDLE;
 int	tcp_keepintvl = TCPTV_KEEPINTVL;
-int	tcptv_keep_init_sec = TCPTV_KEEP_INIT / TCP_TIME(1);
-int	tcp_keepidle_sec = TCPTV_KEEP_IDLE / TCP_TIME(1);
+int	tcp_keepinit_sec = TCPTV_KEEPINIT / TCP_TIME(1);
+int	tcp_keepidle_sec = TCPTV_KEEPIDLE / TCP_TIME(1);
 int	tcp_keepintvl_sec = TCPTV_KEEPINTVL / TCP_TIME(1);
-int	tcp_maxpersistidle = TCPTV_KEEP_IDLE;	/* max idle time in persist */
+int	tcp_maxpersistidle = TCPTV_KEEPIDLE;	/* max idle time in persist */
 int	tcp_delack_msecs = TCP_DELACK_MSECS;	/* time to delay the ACK */
 
 void	tcp_timer_rexmt(void *);

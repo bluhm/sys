@@ -160,10 +160,10 @@ const struct pr_usrreqs tcp6_usrreqs = {
 #endif
 
 const struct sysctl_bounded_args tcpctl_vars[] = {
-	{ TCPCTL_KEEPINITTIME, &tcptv_keep_init_sec, 1,
-	    3 * TCPTV_KEEP_INIT / TCP_TIME(1) },
+	{ TCPCTL_KEEPINITTIME, &tcp_keepinit_sec, 1,
+	    3 * TCPTV_KEEPINIT / TCP_TIME(1) },
 	{ TCPCTL_KEEPIDLE, &tcp_keepidle_sec, 1,
-	    5 * TCPTV_KEEP_IDLE / TCP_TIME(1) },
+	    5 * TCPTV_KEEPIDLE / TCP_TIME(1) },
 	{ TCPCTL_KEEPINTVL, &tcp_keepintvl_sec, 1,
 	    3 * TCPTV_KEEPINTVL / TCP_TIME(1) },
 	{ TCPCTL_RFC1323, &tcp_do_rfc1323, 0, 1 },
@@ -688,7 +688,7 @@ tcp_connect(struct socket *so, struct mbuf *nam)
 	soisconnecting(so);
 	tcpstat_inc(tcps_connattempt);
 	tp->t_state = TCPS_SYN_SENT;
-	TCP_TIMER_ARM(tp, TCPT_KEEP, atomic_load_int(&tcptv_keep_init));
+	TCP_TIMER_ARM(tp, TCPT_KEEP, atomic_load_int(&tcp_keepinit));
 	tcp_set_iss_tsm(tp);
 	tcp_sendseqinit(tp);
 	tp->snd_last = tp->snd_una;
@@ -1511,15 +1511,15 @@ tcp_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 	case TCPCTL_KEEPINITTIME:
 		error = sysctl_bounded_arr(tcpctl_vars, nitems(tcpctl_vars),
 		    name, namelen, oldp, oldlenp, newp, newlen);
-		atomic_store_int(&tcptv_keep_init,
-		    atomic_load_int(&tcptv_keep_init_sec) * TCP_TIME(1));
+		atomic_store_int(&tcp_keepinit,
+		    atomic_load_int(&tcp_keepinit_sec) * TCP_TIME(1));
 		return (error);
 
 	case TCPCTL_KEEPIDLE:
 		error = sysctl_bounded_arr(tcpctl_vars, nitems(tcpctl_vars),
 		    name, namelen, oldp, oldlenp, newp, newlen);
 		atomic_store_int(&tcp_keepidle,
-		    atomic_load_int(&tcptv_keep_init_sec) * TCP_TIME(1));
+		    atomic_load_int(&tcp_keepidle_sec) * TCP_TIME(1));
 		return (error);
 
 	case TCPCTL_KEEPINTVL:
