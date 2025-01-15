@@ -869,8 +869,10 @@ findpcb:
 	 * Reset idle time and keep-alive timer.
 	 */
 	tp->t_rcvtime = now;
-	if (TCPS_HAVEESTABLISHED(tp->t_state))
-		TCP_TIMER_ARM(tp, TCPT_KEEP, tcp_keepidle);
+	if (TCPS_HAVEESTABLISHED(tp->t_state)) {
+		TCP_TIMER_ARM(tp, TCPT_KEEP,
+		    atomic_load_int(&tcp_keepidle) * TCP_TIME(1));
+	}
 
 	if (tp->sack_enable)
 		tcp_del_sackholes(tp, th); /* Delete stale SACK holes */
@@ -1187,7 +1189,8 @@ findpcb:
 			soisconnected(so);
 			tp->t_flags &= ~TF_BLOCKOUTPUT;
 			tp->t_state = TCPS_ESTABLISHED;
-			TCP_TIMER_ARM(tp, TCPT_KEEP, tcp_keepidle);
+			TCP_TIMER_ARM(tp, TCPT_KEEP,
+			    atomic_load_int(&tcp_keepidle) * TCP_TIME(1));
 			/* Do window scaling on this connection? */
 			if ((tp->t_flags & (TF_RCVD_SCALE|TF_REQ_SCALE)) ==
 				(TF_RCVD_SCALE|TF_REQ_SCALE)) {
@@ -1473,7 +1476,8 @@ trimthenstep6:
 		soisconnected(so);
 		tp->t_flags &= ~TF_BLOCKOUTPUT;
 		tp->t_state = TCPS_ESTABLISHED;
-		TCP_TIMER_ARM(tp, TCPT_KEEP, tcp_keepidle);
+		TCP_TIMER_ARM(tp, TCPT_KEEP,
+		    atomic_load_int(&tcp_keepidle) * TCP_TIME(1));
 		/* Do window scaling? */
 		if ((tp->t_flags & (TF_RCVD_SCALE|TF_REQ_SCALE)) ==
 			(TF_RCVD_SCALE|TF_REQ_SCALE)) {

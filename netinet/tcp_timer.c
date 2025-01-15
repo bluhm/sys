@@ -100,7 +100,7 @@ tcp_timer_init(void)
 		tcp_keepintvl = TCPTV_KEEPINTVL;
 
 	if (tcp_maxpersistidle == 0)
-		tcp_maxpersistidle = TCPTV_KEEP_IDLE;
+		tcp_maxpersistidle = TCPTV_KEEP_IDLE * TCP_TIME(1);
 
 	if (tcp_delack_msecs == 0)
 		tcp_delack_msecs = TCP_DELACK_MSECS;
@@ -493,8 +493,8 @@ tcp_timer_keep(void *arg)
 
 		maxidle = READ_ONCE(tcp_maxidle);
 		now = tcp_now();
-		if ((maxidle > 0) &&
-		    ((now - tp->t_rcvtime) >= tcp_keepidle + maxidle)) {
+		if ((maxidle > 0) && (now - tp->t_rcvtime >=
+		    atomic_load_int(&tcp_keepidle) * TCP_TIME(1) + maxidle)) {
 			tcpstat_inc(tcps_keepdrops);
 			tp = tcp_drop(tp, ETIMEDOUT);
 			goto out;
@@ -515,8 +515,10 @@ tcp_timer_keep(void *arg)
 		tcp_respond(tp, mtod(tp->t_template, caddr_t),
 		    NULL, tp->rcv_nxt, tp->snd_una - 1, 0, 0, now);
 		TCP_TIMER_ARM(tp, TCPT_KEEP, tcp_keepintvl);
-	} else
-		TCP_TIMER_ARM(tp, TCPT_KEEP, tcp_keepidle);
+	} else {
+		TCP_TIMER_ARM(tp, TCPT_KEEP,
+		    atomic_load_int(&tcp_keepidle) * TCP_TIME(1));
+	}
 	if (otp)
 		tcp_trace(TA_TIMER, ostate, tp, otp, NULL, TCPT_KEEP, 0);
  out:
