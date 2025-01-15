@@ -120,6 +120,13 @@ const char *tcptimers[TCPT_NTIMERS] =
 	    tcp_timer_funcs[(timer)], (tp)->t_inpcb,			\
 	    KCLOCK_NONE, TIMEOUT_PROC | TIMEOUT_MPSAFE)
 
+#define	TCP_TIMER_ARM_SEC(tp, timer, secs)				\
+do {									\
+	SET((tp)->t_flags, TF_TIMER << (timer));			\
+	if (timeout_add_sec(&(tp)->t_timer[(timer)], (secs)))		\
+		in_pcbref((tp)->t_inpcb);				\
+} while (0)
+
 #define	TCP_TIMER_ARM(tp, timer, msecs)					\
 do {									\
 	SET((tp)->t_flags, TF_TIMER << (timer));			\

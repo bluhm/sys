@@ -870,8 +870,8 @@ findpcb:
 	 */
 	tp->t_rcvtime = now;
 	if (TCPS_HAVEESTABLISHED(tp->t_state)) {
-		TCP_TIMER_ARM(tp, TCPT_KEEP,
-		    atomic_load_int(&tcp_keepidle) * TCP_TIME(1));
+		TCP_TIMER_ARM_SEC(tp, TCPT_KEEP,
+		    atomic_load_int(&tcp_keepidle));
 	}
 
 	if (tp->sack_enable)
@@ -1189,8 +1189,8 @@ findpcb:
 			soisconnected(so);
 			tp->t_flags &= ~TF_BLOCKOUTPUT;
 			tp->t_state = TCPS_ESTABLISHED;
-			TCP_TIMER_ARM(tp, TCPT_KEEP,
-			    atomic_load_int(&tcp_keepidle) * TCP_TIME(1));
+			TCP_TIMER_ARM_SEC(tp, TCPT_KEEP,
+			    atomic_load_int(&tcp_keepidle));
 			/* Do window scaling on this connection? */
 			if ((tp->t_flags & (TF_RCVD_SCALE|TF_REQ_SCALE)) ==
 				(TF_RCVD_SCALE|TF_REQ_SCALE)) {
@@ -1476,8 +1476,8 @@ trimthenstep6:
 		soisconnected(so);
 		tp->t_flags &= ~TF_BLOCKOUTPUT;
 		tp->t_state = TCPS_ESTABLISHED;
-		TCP_TIMER_ARM(tp, TCPT_KEEP,
-		    atomic_load_int(&tcp_keepidle) * TCP_TIME(1));
+		TCP_TIMER_ARM_SEC(tp, TCPT_KEEP,
+		    atomic_load_int(&tcp_keepidle));
 		/* Do window scaling? */
 		if ((tp->t_flags & (TF_RCVD_SCALE|TF_REQ_SCALE)) ==
 			(TF_RCVD_SCALE|TF_REQ_SCALE)) {
@@ -1816,7 +1816,8 @@ trimthenstep6:
 					tp->t_flags |= TF_BLOCKOUTPUT;
 					soisdisconnected(so);
 					tp->t_flags &= ~TF_BLOCKOUTPUT;
-					TCP_TIMER_ARM(tp, TCPT_2MSL, tcp_maxidle);
+					TCP_TIMER_ARM(tp, TCPT_2MSL,
+					    tcp_maxidle);
 				}
 				tp->t_state = TCPS_FIN_WAIT_2;
 			}
@@ -3677,8 +3678,7 @@ syn_cache_get(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 	tp->t_sndtime = now;
 	tp->t_rcvacktime = now;
 	tp->t_sndacktime = now;
-	TCP_TIMER_ARM(tp, TCPT_KEEP,
-	    atomic_load_int(&tcptv_keep_init) * TCP_TIME(1));
+	TCP_TIMER_ARM_SEC(tp, TCPT_KEEP, atomic_load_int(&tcptv_keep_init));
 	tcpstat_inc(tcps_accepts);
 
 	tcp_mss(tp, sc->sc_peermaxseg);	 /* sets t_maxseg */

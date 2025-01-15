@@ -685,8 +685,7 @@ tcp_connect(struct socket *so, struct mbuf *nam)
 	soisconnecting(so);
 	tcpstat_inc(tcps_connattempt);
 	tp->t_state = TCPS_SYN_SENT;
-	TCP_TIMER_ARM(tp, TCPT_KEEP,
-	    atomic_load_int(&tcptv_keep_init) * TCP_TIME(1));
+	TCP_TIMER_ARM_SEC(tp, TCPT_KEEP, atomic_load_int(&tcptv_keep_init));
 	tcp_set_iss_tsm(tp);
 	tcp_sendseqinit(tp);
 	tp->snd_last = tp->snd_una;
