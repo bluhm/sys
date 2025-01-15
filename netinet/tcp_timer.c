@@ -176,7 +176,8 @@ void
 tcp_slowtimo(void)
 {
 	mtx_enter(&tcp_timer_mtx);
-	tcp_maxidle = TCPTV_KEEPCNT * tcp_keepintvl;
+	tcp_maxidle = TCPTV_KEEPCNT *
+	    atomic_load_int(&tcp_keepintvl) * TCP_TIME(1);
 	tcp_iss += TCP_ISSINCR2/PR_SLOWHZ;		/* increment iss */
 	mtx_leave(&tcp_timer_mtx);
 }
@@ -493,7 +494,7 @@ tcp_timer_keep(void *arg)
 
 		maxidle = READ_ONCE(tcp_maxidle);
 		now = tcp_now();
-		if ((maxidle > 0) && (now - tp->t_rcvtime >=
+		if ((maxidle > 0) && ((now - tp->t_rcvtime) >=
 		    atomic_load_int(&tcp_keepidle) * TCP_TIME(1) + maxidle)) {
 			tcpstat_inc(tcps_keepdrops);
 			tp = tcp_drop(tp, ETIMEDOUT);
@@ -514,7 +515,8 @@ tcp_timer_keep(void *arg)
 		tcpstat_inc(tcps_keepprobe);
 		tcp_respond(tp, mtod(tp->t_template, caddr_t),
 		    NULL, tp->rcv_nxt, tp->snd_una - 1, 0, 0, now);
-		TCP_TIMER_ARM(tp, TCPT_KEEP, tcp_keepintvl);
+		TCP_TIMER_ARM(tp, TCPT_KEEP,
+		    atomic_load_int(&tcp_keepintvl) * TCP_TIME(1));
 	} else {
 		TCP_TIMER_ARM(tp, TCPT_KEEP,
 		    atomic_load_int(&tcp_keepidle) * TCP_TIME(1));
@@ -547,9 +549,10 @@ tcp_timer_2msl(void *arg)
 	maxidle = READ_ONCE(tcp_maxidle);
 	now = tcp_now();
 	if (tp->t_state != TCPS_TIME_WAIT &&
-	    ((maxidle == 0) || ((now - tp->t_rcvtime) <= maxidle)))
-		TCP_TIMER_ARM(tp, TCPT_2MSL, tcp_keepintvl);
-	else
+	    ((maxidle == 0) || ((now - tp->t_rcvtime) <= maxidle))) {
+		TCP_TIMER_ARM(tp, TCPT_2MSL,
+		    atomic_load_int(&tcp_keepintvl) * TCP_TIME(1));
+	} else
 		tp = tcp_close(tp);
 	if (otp)
 		tcp_trace(TA_TIMER, ostate, tp, otp, NULL, TCPT_2MSL, 0);

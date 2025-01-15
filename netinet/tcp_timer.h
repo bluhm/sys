@@ -95,7 +95,7 @@
 
 #define	TCPTV_KEEP_INIT	75		/* initial connect keep alive */
 #define	TCPTV_KEEP_IDLE	(120*60)	/* dflt time before probing */
-#define	TCPTV_KEEPINTVL	TCP_TIME(75)	/* default probe interval */
+#define	TCPTV_KEEPINTVL	75		/* default probe interval */
 #define	TCPTV_KEEPCNT	8		/* max probes before drop */
 
 #define	TCPTV_MIN	TCP_TIME(1)	/* minimum allowable value */
@@ -158,7 +158,7 @@ extern int tcp_delack_msecs;	/* delayed ACK timeout in millisecs */
 extern int tcp_always_keepalive;/* [a] assume SO_KEEPALIVE always set */
 extern int tcptv_keep_init;	/* [a] time to keep alive initial SYN packet */
 extern int tcp_keepidle;	/* [a] time before keepalive probes begin */
-extern int tcp_keepintvl;	/* time between keepalive probes */
+extern int tcp_keepintvl;	/* [a] time between keepalive probes */
 extern int tcp_maxidle;		/* time to drop after starting probes */
 extern int tcp_ttl;		/* time to live for TCP segs */
 extern const int tcp_backoff[];
