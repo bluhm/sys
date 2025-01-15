@@ -109,7 +109,6 @@ int tcp_flush_queue(struct tcpcb *);
 #endif /* INET6 */
 
 const int tcprexmtthresh = 3;
-int tcptv_keep_init = TCPTV_KEEP_INIT;
 
 int tcp_rst_ppslim = 100;		/* 100pps */
 int tcp_rst_ppslim_count = 0;
@@ -869,10 +868,8 @@ findpcb:
 	 * Reset idle time and keep-alive timer.
 	 */
 	tp->t_rcvtime = now;
-	if (TCPS_HAVEESTABLISHED(tp->t_state)) {
-		TCP_TIMER_ARM_SEC(tp, TCPT_KEEP,
-		    atomic_load_int(&tcp_keepidle));
-	}
+	if (TCPS_HAVEESTABLISHED(tp->t_state))
+		TCP_TIMER_ARM(tp, TCPT_KEEP, atomic_load_int(&tcp_keepidle));
 
 	if (tp->sack_enable)
 		tcp_del_sackholes(tp, th); /* Delete stale SACK holes */
@@ -1189,7 +1186,7 @@ findpcb:
 			soisconnected(so);
 			tp->t_flags &= ~TF_BLOCKOUTPUT;
 			tp->t_state = TCPS_ESTABLISHED;
-			TCP_TIMER_ARM_SEC(tp, TCPT_KEEP,
+			TCP_TIMER_ARM(tp, TCPT_KEEP,
 			    atomic_load_int(&tcp_keepidle));
 			/* Do window scaling on this connection? */
 			if ((tp->t_flags & (TF_RCVD_SCALE|TF_REQ_SCALE)) ==
@@ -1476,8 +1473,7 @@ trimthenstep6:
 		soisconnected(so);
 		tp->t_flags &= ~TF_BLOCKOUTPUT;
 		tp->t_state = TCPS_ESTABLISHED;
-		TCP_TIMER_ARM_SEC(tp, TCPT_KEEP,
-		    atomic_load_int(&tcp_keepidle));
+		TCP_TIMER_ARM(tp, TCPT_KEEP, atomic_load_int(&tcp_keepidle));
 		/* Do window scaling? */
 		if ((tp->t_flags & (TF_RCVD_SCALE|TF_REQ_SCALE)) ==
 			(TF_RCVD_SCALE|TF_REQ_SCALE)) {
@@ -1813,11 +1809,14 @@ trimthenstep6:
 				 * we'll hang forever.
 				 */
 				if (so->so_rcv.sb_state & SS_CANTRCVMORE) {
+					int maxidle;
+
 					tp->t_flags |= TF_BLOCKOUTPUT;
 					soisdisconnected(so);
 					tp->t_flags &= ~TF_BLOCKOUTPUT;
-					TCP_TIMER_ARM(tp, TCPT_2MSL,
-					    tcp_maxidle);
+					maxidle = TCPTV_KEEPCNT *
+					    atomic_load_int(&tcp_keepidle);
+					TCP_TIMER_ARM(tp, TCPT_2MSL, maxidle);
 				}
 				tp->t_state = TCPS_FIN_WAIT_2;
 			}
@@ -3399,7 +3398,7 @@ syn_cache_timer(void *arg)
 	 * than the keep alive timer would allow, expire it.
 	 */
 	sc->sc_rxttot += sc->sc_rxtcur;
-	if (sc->sc_rxttot >= atomic_load_int(&tcptv_keep_init) * TCP_TIME(1))
+	if (sc->sc_rxttot >= atomic_load_int(&tcptv_keep_init))
 		goto dropit;
 
 	/* Advance the timer back-off. */
@@ -3678,7 +3677,7 @@ syn_cache_get(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 	tp->t_sndtime = now;
 	tp->t_rcvacktime = now;
 	tp->t_sndacktime = now;
-	TCP_TIMER_ARM_SEC(tp, TCPT_KEEP, atomic_load_int(&tcptv_keep_init));
+	TCP_TIMER_ARM(tp, TCPT_KEEP, atomic_load_int(&tcptv_keep_init));
 	tcpstat_inc(tcps_accepts);
 
 	tcp_mss(tp, sc->sc_peermaxseg);	 /* sets t_maxseg */

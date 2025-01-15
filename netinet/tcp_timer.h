@@ -93,9 +93,9 @@
 #define	TCPTV_PERSMIN	TCP_TIME(5)	/* retransmit persistence */
 #define	TCPTV_PERSMAX	TCP_TIME(60)	/* maximum persist interval */
 
-#define	TCPTV_KEEP_INIT	75		/* initial connect keep alive */
-#define	TCPTV_KEEP_IDLE	(120*60)	/* dflt time before probing */
-#define	TCPTV_KEEPINTVL	75		/* default probe interval */
+#define	TCPTV_KEEP_INIT	TCP_TIME(75)	/* initial connect keep alive */
+#define	TCPTV_KEEP_IDLE	TCP_TIME(120*60) /* dflt time before probing */
+#define	TCPTV_KEEPINTVL	TCP_TIME(75)	/* default probe interval */
 #define	TCPTV_KEEPCNT	8		/* max probes before drop */
 
 #define	TCPTV_MIN	TCP_TIME(1)	/* minimum allowable value */
@@ -119,13 +119,6 @@ const char *tcptimers[TCPT_NTIMERS] =
 	timeout_set_flags(&(tp)->t_timer[(timer)],			\
 	    tcp_timer_funcs[(timer)], (tp)->t_inpcb,			\
 	    KCLOCK_NONE, TIMEOUT_PROC | TIMEOUT_MPSAFE)
-
-#define	TCP_TIMER_ARM_SEC(tp, timer, secs)				\
-do {									\
-	SET((tp)->t_flags, TF_TIMER << (timer));			\
-	if (timeout_add_sec(&(tp)->t_timer[(timer)], (secs)))		\
-		in_pcbref((tp)->t_inpcb);				\
-} while (0)
 
 #define	TCP_TIMER_ARM(tp, timer, msecs)					\
 do {									\
@@ -161,16 +154,17 @@ typedef void (*tcp_timer_func_t)(void *);
 
 extern const tcp_timer_func_t tcp_timer_funcs[TCPT_NTIMERS];
 
-extern int tcp_delack_msecs;	/* delayed ACK timeout in millisecs */
+extern int tcp_delack_msecs;	/* [I] delayed ACK timeout in millisecs */
 extern int tcp_always_keepalive;/* [a] assume SO_KEEPALIVE always set */
 extern int tcptv_keep_init;	/* [a] time to keep alive initial SYN packet */
 extern int tcp_keepidle;	/* [a] time before keepalive probes begin */
 extern int tcp_keepintvl;	/* [a] time between keepalive probes */
-extern int tcp_maxidle;		/* time to drop after starting probes */
+extern int tcptv_keep_init_sec;	/* [a] copy of above in seconds for sysctl */
+extern int tcp_keepidle_sec;	/* [a] copy of above in seconds for sysctl */
+extern int tcp_keepintvl_sec;	/* [a] copy of above in seconds for sysctl */
 extern int tcp_ttl;		/* time to live for TCP segs */
 extern const int tcp_backoff[];
 
-void	tcp_timer_init(void);
 void	tcp_timer_reaper(void *);
 
 #endif /* _KERNEL */

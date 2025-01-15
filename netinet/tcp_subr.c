@@ -184,9 +184,6 @@ tcp_init(void)
 
 	/* Initialize the compressed state engine. */
 	syn_cache_init();
-
-	/* Initialize timer state. */
-	tcp_timer_init();
 }
 
 /*

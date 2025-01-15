@@ -160,9 +160,12 @@ const struct pr_usrreqs tcp6_usrreqs = {
 #endif
 
 const struct sysctl_bounded_args tcpctl_vars[] = {
-	{ TCPCTL_KEEPINITTIME, &tcptv_keep_init, 1, 3 * TCPTV_KEEP_INIT },
-	{ TCPCTL_KEEPIDLE, &tcp_keepidle, 1, 5 * TCPTV_KEEP_IDLE },
-	{ TCPCTL_KEEPINTVL, &tcp_keepintvl, 1, 3 * TCPTV_KEEPINTVL },
+	{ TCPCTL_KEEPINITTIME, &tcptv_keep_init_sec, 1,
+	    3 * TCPTV_KEEP_INIT / TCP_TIME(1) },
+	{ TCPCTL_KEEPIDLE, &tcp_keepidle_sec, 1,
+	    5 * TCPTV_KEEP_IDLE / TCP_TIME(1) },
+	{ TCPCTL_KEEPINTVL, &tcp_keepintvl_sec, 1,
+	    3 * TCPTV_KEEPINTVL / TCP_TIME(1) },
 	{ TCPCTL_RFC1323, &tcp_do_rfc1323, 0, 1 },
 	{ TCPCTL_SACK, &tcp_do_sack, 0, 1 },
 	{ TCPCTL_MSSDFLT, &tcp_mssdflt, TCP_MSS, 65535 },
@@ -685,7 +688,7 @@ tcp_connect(struct socket *so, struct mbuf *nam)
 	soisconnecting(so);
 	tcpstat_inc(tcps_connattempt);
 	tp->t_state = TCPS_SYN_SENT;
-	TCP_TIMER_ARM_SEC(tp, TCPT_KEEP, atomic_load_int(&tcptv_keep_init));
+	TCP_TIMER_ARM(tp, TCPT_KEEP, atomic_load_int(&tcptv_keep_init));
 	tcp_set_iss_tsm(tp);
 	tcp_sendseqinit(tp);
 	tp->snd_last = tp->snd_una;
@@ -1110,8 +1113,13 @@ tcp_usrclosed(struct tcpcb *tp)
 		 * a full close, we start a timer to make sure sockets are
 		 * not left in FIN_WAIT_2 forever.
 		 */
-		if (tp->t_state == TCPS_FIN_WAIT_2)
-			TCP_TIMER_ARM(tp, TCPT_2MSL, tcp_maxidle);
+		if (tp->t_state == TCPS_FIN_WAIT_2) {
+			int maxidle;
+
+			maxidle = TCPTV_KEEPCNT *
+			    atomic_load_int(&tcp_keepidle);
+			TCP_TIMER_ARM(tp, TCPT_2MSL, maxidle);
+		}
 	}
 	return (tp);
 }
@@ -1498,6 +1506,27 @@ tcp_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 			tcp_syn_hash_size = nval;
 			mtx_leave(&syn_cache_mtx);
 		}
+		return (error);
+
+	case TCPCTL_KEEPINITTIME:
+		error = sysctl_bounded_arr(tcpctl_vars, nitems(tcpctl_vars),
+		    name, namelen, oldp, oldlenp, newp, newlen);
+		atomic_store_int(&tcptv_keep_init,
+		    atomic_load_int(&tcptv_keep_init_sec) * TCP_TIME(1));
+		return (error);
+
+	case TCPCTL_KEEPIDLE:
+		error = sysctl_bounded_arr(tcpctl_vars, nitems(tcpctl_vars),
+		    name, namelen, oldp, oldlenp, newp, newlen);
+		atomic_store_int(&tcp_keepidle,
+		    atomic_load_int(&tcptv_keep_init_sec) * TCP_TIME(1));
+		return (error);
+
+	case TCPCTL_KEEPINTVL:
+		error = sysctl_bounded_arr(tcpctl_vars, nitems(tcpctl_vars),
+		    name, namelen, oldp, oldlenp, newp, newlen);
+		atomic_store_int(&tcp_keepintvl,
+		    atomic_load_int(&tcp_keepintvl_sec) * TCP_TIME(1));
 		return (error);
 
 	default:
