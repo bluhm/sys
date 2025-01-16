@@ -1,4 +1,4 @@
-/*	$OpenBSD: socketvar.h,v 1.138 2025/01/03 12:56:15 mvs Exp $	*/
+/*	$OpenBSD: socketvar.h,v 1.139 2025/01/16 16:35:01 bluhm Exp $	*/
 /*	$NetBSD: socketvar.h,v 1.18 1996/02/09 18:25:38 christos Exp $	*/
 
 /*-
