@@ -656,7 +656,7 @@ uipc_abort(struct socket *so)
 	struct unpcb *unp = sotounpcb(so);
 
 	unp_detach(unp);
-	sofree(so, 0);
+	sofree(so, 1);
 }
 
 int

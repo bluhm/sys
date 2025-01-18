@@ -399,23 +399,27 @@ drop:
 	if (so->so_options & SO_ACCEPTCONN) {
 		int persocket = solock_persocket(so);
 
+		if (!TAILQ_EMPTY(&so->so_q0))
+			KASSERT(persocket);
 		while ((so2 = TAILQ_FIRST(&so->so_q0)) != NULL) {
-			if (persocket)
-				solock(so2);
+			soref(so2);
+			solock(so2);
 			(void) soqremque(so2, 0);
-			if (persocket)
-				sounlock(so);
+			sounlock(so);
 			soabort(so2);
-			if (persocket)
-				solock(so);
+			sounlock(so2);
+			sorele(so2);
+			solock(so);
 		}
 		while ((so2 = TAILQ_FIRST(&so->so_q)) != NULL) {
-			if (persocket)
-				solock(so2);
+			soref(so2);
+			solock_nonet(so2);
 			(void) soqremque(so2, 1);
 			if (persocket)
 				sounlock(so);
 			soabort(so2);
+			sounlock_nonet(so2);
+			sorele(so2);
 			if (persocket)
 				solock(so);
 		}
