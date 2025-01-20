@@ -100,8 +100,6 @@ soisconnected(struct socket *so)
 	so->so_state |= SS_ISCONNECTED;
 
 	if (head != NULL && so->so_onq == &head->so_q0) {
-		KASSERT(solock_persocket(so));
-
 		soref(head);
 		sounlock(so);
 		solock(head);

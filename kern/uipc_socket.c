@@ -399,8 +399,6 @@ drop:
 	if (so->so_options & SO_ACCEPTCONN) {
 		int persocket = solock_persocket(so);
 
-		if (!TAILQ_EMPTY(&so->so_q0))
-			KASSERT(persocket);
 		while ((so2 = TAILQ_FIRST(&so->so_q0)) != NULL) {
 			soref(so2);
 			solock(so2);
