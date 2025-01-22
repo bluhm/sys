@@ -1754,17 +1754,6 @@ somove(struct socket *so, int wait)
 		m->m_pkthdr.len = len;
 	}
 
-	/* Send window update to source peer as receive buffer has changed. */
-	if (so->so_proto->pr_flags & PR_WANTRCVD) {
-		mtx_leave(&sosp->so_snd.sb_mtx);
-		mtx_leave(&so->so_rcv.sb_mtx);
-		solock_shared(so);
-		pru_rcvd(so);
-		sounlock_shared(so);
-		mtx_enter(&so->so_rcv.sb_mtx);
-		mtx_enter(&sosp->so_snd.sb_mtx);
-	}
-
 	/* Receive buffer did shrink by len bytes, adjust oob. */
 	rcvstate = so->so_rcv.sb_state;
 	so->so_rcv.sb_state &= ~SS_RCVATMARK;
@@ -1775,6 +1764,17 @@ somove(struct socket *so, int wait)
 			so->so_rcv.sb_state |= SS_RCVATMARK;
 		if (oobmark >= len)
 			oobmark = 0;
+	}
+
+	/* Send window update to source peer as receive buffer has changed. */
+	if (so->so_proto->pr_flags & PR_WANTRCVD) {
+		mtx_leave(&sosp->so_snd.sb_mtx);
+		mtx_leave(&so->so_rcv.sb_mtx);
+		solock_shared(so);
+		pru_rcvd(so);
+		sounlock_shared(so);
+		mtx_enter(&so->so_rcv.sb_mtx);
+		mtx_enter(&sosp->so_snd.sb_mtx);
 	}
 
 	/*
