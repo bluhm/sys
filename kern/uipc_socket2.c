@@ -237,8 +237,6 @@ sonewconn(struct socket *head, int connstatus, int wait)
 		wakeup(&head->so_timeo);
 	}
 
-	sounlock_nonet(so);
-
 	return (so);
 
 fail:
