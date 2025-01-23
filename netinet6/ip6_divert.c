@@ -280,12 +280,11 @@ divert6_attach(struct socket *so, int proto, int wait)
 	if ((so->so_state & SS_PRIV) == 0)
 		return EACCES;
 
-	error = in_pcballoc(so, &divb6table, wait);
-	if (error)
-		return (error);
-
 	error = soreserve(so, atomic_load_int(&divert6_sendspace),
 	    atomic_load_int(&divert6_recvspace));
+	if (error)
+		return (error);
+	error = in_pcballoc(so, &divb6table, wait);
 	if (error)
 		return (error);
 
