@@ -709,21 +709,25 @@ nd6_nud_hint(struct rtentry *rt)
 	struct llinfo_nd6 *ln;
 	struct ifnet *ifp;
 
-	NET_ASSERT_LOCKED_EXCLUSIVE();
+	NET_ASSERT_LOCKED();
+
+	if ((rt->rt_flags & RTF_GATEWAY) != 0 ||
+	    (rt->rt_flags & RTF_LLINFO) == 0 ||
+	    rt->rt_gateway == NULL ||
+	    rt->rt_gateway->sa_family != AF_LINK) {
+		/* This is not a host route. */
+		return;
+	}
 
 	ifp = if_get(rt->rt_ifidx);
 	if (ifp == NULL)
 		return;
 
-	if ((rt->rt_flags & RTF_GATEWAY) != 0 ||
-	    (rt->rt_flags & RTF_LLINFO) == 0 ||
-	    rt->rt_llinfo == NULL || rt->rt_gateway == NULL ||
-	    rt->rt_gateway->sa_family != AF_LINK) {
-		/* This is not a host route. */
-		goto out;
-	}
+	mtx_enter(&nd6_mtx);
 
 	ln = (struct llinfo_nd6 *)rt->rt_llinfo;
+	if (ln == NULL)
+		goto out;
 	if (ln->ln_state < ND6_LLINFO_REACHABLE)
 		goto out;
 
@@ -739,6 +743,7 @@ nd6_nud_hint(struct rtentry *rt)
 	if (!ND6_LLINFO_PERMANENT(ln))
 		nd6_llinfo_settimer(ln, ifp->if_nd->reachable);
 out:
+	mtx_leave(&nd6_mtx);
 	if_put(ifp);
 }
 
