@@ -560,7 +560,10 @@ void	if_congestion(void);
 int	if_congested(void);
 __dead void	unhandled_af(int);
 int	if_setlladdr(struct ifnet *, const uint8_t *);
-struct taskq * net_tq(unsigned int);
+struct softnet *
+	net_sn(unsigned int);
+struct taskq *
+	net_tq(unsigned int);
 void	net_tq_barriers(const char *);
 
 #endif /* _KERNEL */

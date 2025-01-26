@@ -860,7 +860,7 @@ ifiq_process(void *arg)
 	ml_init(&ifiq->ifiq_ml);
 	mtx_leave(&ifiq->ifiq_mtx);
 
-	if_input_process(ifiq->ifiq_if, &ml);
+	if_input_process(ifiq->ifiq_if, &ml, ifiq->ifiq_idx);
 }
 
 int

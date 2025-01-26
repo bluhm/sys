@@ -245,11 +245,6 @@ int	ifq_congestion;
 
 int		 netisr;
 
-struct softnet {
-	char		 sn_name[16];
-	struct taskq	*sn_taskq;
-};
-
 #define	NET_TASKQ	4
 struct softnet	softnets[NET_TASKQ];
 
@@ -979,9 +974,10 @@ if_output_local(struct ifnet *ifp, struct mbuf *m, sa_family_t af)
 }
 
 void
-if_input_process(struct ifnet *ifp, struct mbuf_list *ml)
+if_input_process(struct ifnet *ifp, struct mbuf_list *ml, unsigned int idx)
 {
 	struct mbuf *m;
+	struct softnet *sn;
 
 	if (ml_empty(ml))
 		return;
@@ -996,9 +992,24 @@ if_input_process(struct ifnet *ifp, struct mbuf_list *ml)
 	 * read only or MP safe.  Usually they hold the exclusive net lock.
 	 */
 
+	sn = net_sn(idx);
+	ml_init(&sn->sn_tcp_ml);
+#ifdef INET6
+	ml_init(&sn->sn_tcp6_ml);
+#endif
+
 	NET_LOCK_SHARED();
-	while ((m = ml_dequeue(ml)) != NULL)
+
+	while ((m = ml_dequeue(ml)) != NULL) {
+		/* add 1 to index, 0 means not set */
+		m->m_pkthdr.ph_cookie = (void *)(((long)idx << 16) + idx + 1);
 		(*ifp->if_input)(ifp, m);
+	}
+	tcp_input_mlist(&sn->sn_tcp_ml, AF_INET);
+#ifdef INET6
+	tcp_input_mlist(&sn->sn_tcp6_ml, AF_INET6);
+#endif
+
 	NET_UNLOCK_SHARED();
 }
 
@@ -3655,18 +3666,21 @@ unhandled_af(int af)
 	panic("unhandled af %d", af);
 }
 
-struct taskq *
-net_tq(unsigned int ifindex)
+struct softnet *
+net_sn(unsigned int ifindex)
 {
-	struct softnet *sn;
 	static int nettaskqs;
 
 	if (nettaskqs == 0)
 		nettaskqs = min(NET_TASKQ, ncpus);
 
-	sn = &softnets[ifindex % nettaskqs];
+	return (&softnets[ifindex % nettaskqs]);
+}
 
-	return (sn->sn_taskq);
+struct taskq *
+net_tq(unsigned int ifindex)
+{
+	return (net_sn(ifindex)->sn_taskq);
 }
 
 void
