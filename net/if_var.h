@@ -301,6 +301,13 @@ struct ifg_list {
 #define IF_WWAN_DEFAULT_PRIORITY	6
 #define IF_CARP_DEFAULT_PRIORITY	15
 
+struct softnet {
+	char			 sn_name[16];
+	struct taskq		*sn_taskq;
+	struct mbuf_list	 sn_tcp_ml;
+	struct mbuf_list	 sn_tcp6_ml;
+};
+
 /*
  * Network stack input queues.
  */
@@ -331,7 +338,7 @@ int	if_enqueue(struct ifnet *, struct mbuf *);
 int	if_enqueue_ifq(struct ifnet *, struct mbuf *);
 void	if_input(struct ifnet *, struct mbuf_list *);
 void	if_vinput(struct ifnet *, struct mbuf *);
-void	if_input_process(struct ifnet *, struct mbuf_list *);
+void	if_input_process(struct ifnet *, struct mbuf_list *, unsigned int);
 int	if_input_local(struct ifnet *, struct mbuf *, sa_family_t);
 int	if_output_ml(struct ifnet *, struct mbuf_list *,
 	    struct sockaddr *, struct rtentry *);
