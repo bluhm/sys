@@ -1,4 +1,4 @@
-/*	$OpenBSD: socketvar.h,v 1.140 2025/01/22 15:05:49 mvs Exp $	*/
+/*	$OpenBSD: socketvar.h,v 1.142 2025/01/27 14:57:13 mvs Exp $	*/
 /*	$NetBSD: socketvar.h,v 1.18 1996/02/09 18:25:38 christos Exp $	*/
 
 /*-
@@ -301,7 +301,7 @@ sowriteable(struct socket *so)
 
 /* adjust counters in sb reflecting allocation of m */
 static inline void
-sballoc(struct socket *so, struct sockbuf *sb, struct mbuf *m)
+sballoc(struct sockbuf *sb, struct mbuf *m)
 {
 	sb->sb_cc += m->m_len;
 	if (m->m_type != MT_CONTROL && m->m_type != MT_SONAME)
@@ -313,7 +313,7 @@ sballoc(struct socket *so, struct sockbuf *sb, struct mbuf *m)
 
 /* adjust counters in sb reflecting freeing of m */
 static inline void
-sbfree(struct socket *so, struct sockbuf *sb, struct mbuf *m)
+sbfree(struct sockbuf *sb, struct mbuf *m)
 {
 	sb->sb_cc -= m->m_len;
 	if (m->m_type != MT_CONTROL && m->m_type != MT_SONAME)

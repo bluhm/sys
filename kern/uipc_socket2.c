@@ -1,4 +1,4 @@
-/*	$OpenBSD: uipc_socket2.c,v 1.169 2025/01/25 22:06:41 bluhm Exp $	*/
+/*	$OpenBSD: uipc_socket2.c,v 1.171 2025/01/27 14:57:13 mvs Exp $	*/
 /*	$NetBSD: uipc_socket2.c,v 1.11 1996/02/04 02:17:55 christos Exp $	*/
 
 /*
@@ -856,7 +856,7 @@ sbappendrecord(struct socket *so, struct sockbuf *sb, struct mbuf *m0)
 	 * Put the first mbuf on the queue.
 	 * Note this permits zero length records.
 	 */
-	sballoc(so, sb, m0);
+	sballoc(sb, m0);
 	SBLASTRECORDCHK(sb, "sbappendrecord 1");
 	SBLINKRECORD(sb, m0);
 	m = m0->m_next;
@@ -911,8 +911,8 @@ sbappendaddr(struct socket *so, struct sockbuf *sb, const struct sockaddr *asa,
 	SBLASTRECORDCHK(sb, "sbappendaddr 1");
 
 	for (n = m; n->m_next != NULL; n = n->m_next)
-		sballoc(so, sb, n);
-	sballoc(so, sb, n);
+		sballoc(sb, n);
+	sballoc(sb, n);
 	nlast = n;
 	SBLINKRECORD(sb, m);
 
@@ -958,8 +958,8 @@ sbappendcontrol(struct socket *so, struct sockbuf *sb, struct mbuf *m0,
 	SBLASTRECORDCHK(sb, "sbappendcontrol 1");
 
 	for (m = control; m->m_next != NULL; m = m->m_next)
-		sballoc(so, sb, m);
-	sballoc(so, sb, m);
+		sballoc(sb, m);
+	sballoc(sb, m);
 	mlast = m;
 	SBLINKRECORD(sb, control);
 
@@ -1014,7 +1014,7 @@ sbcompress(struct socket *so, struct sockbuf *sb, struct mbuf *m,
 		else
 			sb->sb_mb = m;
 		sb->sb_mbtail = m;
-		sballoc(so, sb, m);
+		sballoc(sb, m);
 		n = m;
 		m->m_flags &= ~M_EOR;
 		m = m->m_next;
@@ -1078,12 +1078,12 @@ sbdrop(struct socket *so, struct sockbuf *sb, int len)
 			break;
 		}
 		len -= m->m_len;
-		sbfree(so, sb, m);
+		sbfree(sb, m);
 		mn = m_free(m);
 		m = mn;
 	}
 	while (m && m->m_len == 0) {
-		sbfree(so, sb, m);
+		sbfree(sb, m);
 		mn = m_free(m);
 		m = mn;
 	}
@@ -1118,7 +1118,7 @@ sbdroprecord(struct socket *so, struct sockbuf *sb)
 	if (m) {
 		sb->sb_mb = m->m_nextpkt;
 		do {
-			sbfree(so, sb, m);
+			sbfree(sb, m);
 			mn = m_free(m);
 		} while ((m = mn) != NULL);
 	}
