@@ -373,16 +373,22 @@ solock_persocket(struct socket *so)
 void
 solock_pair(struct socket *so1, struct socket *so2)
 {
-	KASSERT(so1 != so2);
 	KASSERT(so1->so_type == so2->so_type);
-	KASSERT(solock_persocket(so1));
 
-	if (so1 < so2) {
-		solock(so1);
-		solock(so2);
+	switch (so1->so_proto->pr_domain->dom_family) {
+	case PF_INET:
+	case PF_INET6:
+		NET_LOCK_SHARED();
+		break;
+	}
+	if (so1 == so2) {
+		rw_enter_write(&so1->so_lock);
+	} else if (so1 < so2) {
+		rw_enter_write(&so1->so_lock);
+		rw_enter_write(&so2->so_lock);
 	} else {
-		solock(so2);
-		solock(so1);
+		rw_enter_write(&so2->so_lock);
+		rw_enter_write(&so1->so_lock);
 	}
 }
 
@@ -416,6 +422,26 @@ void
 sounlock_nonet(struct socket *so)
 {
 	rw_exit_write(&so->so_lock);
+}
+
+void
+sounlock_pair(struct socket *so1, struct socket *so2)
+{
+	if (so1 == so2)
+		rw_exit_write(&so1->so_lock);
+	else if (so1 < so2) {
+		rw_exit_write(&so2->so_lock);
+		rw_exit_write(&so1->so_lock);
+	} else {
+		rw_exit_write(&so1->so_lock);
+		rw_exit_write(&so2->so_lock);
+	}
+	switch (so1->so_proto->pr_domain->dom_family) {
+	case PF_INET:
+	case PF_INET6:
+		NET_UNLOCK_SHARED();
+		break;
+	}
 }
 
 void

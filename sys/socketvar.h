@@ -436,6 +436,7 @@ void	solock_pair(struct socket *, struct socket *);
 void	sounlock(struct socket *);
 void	sounlock_shared(struct socket *);
 void	sounlock_nonet(struct socket *);
+void	sounlock_pair(struct socket *, struct socket *);
 
 int	sendit(struct proc *, int, struct msghdr *, int, register_t *);
 int	recvit(struct proc *, int, struct msghdr *, caddr_t, register_t *);
