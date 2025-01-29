@@ -672,8 +672,10 @@ pf_fillup_fragment(struct pf_frnode *key, u_int32_t id,
 			DPFPRINTF(LOG_NOTICE, "frag tail overlap %d", aftercut);
 			m_adj(after->fe_m, aftercut);
 			old_index = pf_frent_index(after);
+			frag->fr_holes -= pf_frent_holes(after);
 			after->fe_off += aftercut;
 			after->fe_len -= aftercut;
+			frag->fr_holes += pf_frent_holes(after);
 			new_index = pf_frent_index(after);
 			if (old_index != new_index) {
 				DPFPRINTF(LOG_DEBUG, "frag index %d, new %d",
