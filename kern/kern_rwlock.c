@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_rwlock.c,v 1.53 2025/01/04 02:34:11 dlg Exp $	*/
+/*	$OpenBSD: kern_rwlock.c,v 1.55 2025/01/29 15:10:09 mpi Exp $	*/
 
 /*
  * Copyright (c) 2002, 2003 Artur Grabowski <art@openbsd.org>
@@ -74,6 +74,7 @@ static int	rw_do_enter_read(struct rwlock *, int);
 static void	rw_do_exit_read(struct rwlock *, unsigned long);
 static int	rw_do_enter_write(struct rwlock *, int);
 static int	rw_downgrade(struct rwlock *, int);
+static int	rw_upgrade(struct rwlock *, int);
 
 static void	rw_exited(struct rwlock *);
 
@@ -203,6 +204,9 @@ rw_enter(struct rwlock *rwl, int flags)
 	case RW_DOWNGRADE:
 		error = rw_downgrade(rwl, flags);
 		break;
+	case RW_UPGRADE:
+		error = rw_upgrade(rwl, flags);
+		break;
 	default:
 		panic("%s rwlock %p: %s unexpected op 0x%x",
 		    rwl->rwl_name, rwl, __func__, op);
@@ -246,6 +250,7 @@ rw_do_enter_write(struct rwlock *rwl, int flags)
 	 * can progress. Hence no spinning if we hold the kernel lock.
 	 */
 	if (!_kernel_lock_held()) {
+		struct schedstate_percpu *spc = &curcpu()->ci_schedstate;
 		int spins;
 
 		/*
@@ -253,6 +258,7 @@ rw_do_enter_write(struct rwlock *rwl, int flags)
 		 * is acquired by writer.
 		 */
 
+		spc->spc_spinning++;
 		for (spins = 0; spins < RW_SPINS; spins++) {
 			CPU_BUSY_CYCLE();
 			owner = atomic_load_long(&rwl->rwl_owner);
@@ -261,10 +267,12 @@ rw_do_enter_write(struct rwlock *rwl, int flags)
 
 			owner = rw_cas(&rwl->rwl_owner, 0, self);
 			if (owner == 0) {
+				spc->spc_spinning--;
 				/* ok, we won now. */
 				goto locked;
 			}
 		}
+		spc->spc_spinning--;
 	}
 #endif
 
@@ -430,6 +438,41 @@ rw_downgrade(struct rwlock *rwl, int flags)
 	if (atomic_load_int(&rwl->rwl_waiters) == 0 &&
 	    atomic_load_int(&rwl->rwl_readers) > 0)
 		wakeup(&rwl->rwl_readers);
+
+	return (0);
+}
+
+static int
+rw_upgrade(struct rwlock *rwl, int flags)
+{
+	unsigned long self = rw_self();
+	unsigned long owner;
+
+	KASSERTMSG(ISSET(flags, RW_NOSLEEP), "RW_UPGRADE without RW_NOSLEEP");
+
+	owner = atomic_cas_ulong(&rwl->rwl_owner, RWLOCK_READ_INCR, self);
+	if (owner != RWLOCK_READ_INCR) {
+		if (__predict_false(owner == 0)) {
+			panic("%s rwlock %p: upgrade on unowned lock",
+			    rwl->rwl_name, rwl);
+		}
+		if (__predict_false(ISSET(owner, RWLOCK_WRLOCK))) {
+			panic("%s rwlock %p: upgrade on write locked lock"
+			    "(owner 0x%lx, self 0x%lx)", rwl->rwl_name, rwl,
+			    owner, self);
+		}
+
+		return (EBUSY);
+	}
+
+#ifdef WITNESS
+	{
+		int lop_flags = LOP_NEWORDER;
+		if (ISSET(flags, RW_DUPOK))
+			lop_flags |= LOP_DUPOK;
+		WITNESS_UPGRADE(&rwl->rwl_lock_obj, lop_flags);
+	}
+#endif
 
 	return (0);
 }
