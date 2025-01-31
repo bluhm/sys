@@ -1,4 +1,4 @@
-/*	$OpenBSD: uipc_socket2.c,v 1.171 2025/01/27 14:57:13 mvs Exp $	*/
+/*	$OpenBSD: uipc_socket2.c,v 1.173 2025/01/31 07:53:10 mvs Exp $	*/
 /*	$NetBSD: uipc_socket2.c,v 1.11 1996/02/04 02:17:55 christos Exp $	*/
 
 /*
@@ -789,7 +789,7 @@ sbappend(struct socket *so, struct sockbuf *sb, struct mbuf *m)
 		 */
 		sb->sb_lastrecord = m;
 	}
-	sbcompress(so, sb, m, n);
+	sbcompress(sb, m, n);
 	SBLASTRECORDCHK(sb, "sbappend 2");
 }
 
@@ -807,7 +807,7 @@ sbappendstream(struct socket *so, struct sockbuf *sb, struct mbuf *m)
 
 	SBLASTMBUFCHK(sb, __func__);
 
-	sbcompress(so, sb, m, sb->sb_mbtail);
+	sbcompress(sb, m, sb->sb_mbtail);
 
 	sb->sb_lastrecord = sb->sb_mb;
 	SBLASTRECORDCHK(sb, __func__);
@@ -865,7 +865,7 @@ sbappendrecord(struct socket *so, struct sockbuf *sb, struct mbuf *m0)
 		m0->m_flags &= ~M_EOR;
 		m->m_flags |= M_EOR;
 	}
-	sbcompress(so, sb, m, m0);
+	sbcompress(sb, m, m0);
 	SBLASTRECORDCHK(sb, "sbappendrecord 2");
 }
 
@@ -893,7 +893,7 @@ sbappendaddr(struct socket *so, struct sockbuf *sb, const struct sockaddr *asa,
 		if (n->m_next == NULL)	/* keep pointer to last control buf */
 			break;
 	}
-	if (space > sbspace_locked(so, sb))
+	if (space > sbspace_locked(sb))
 		return (0);
 	if (asa->sa_len > MLEN)
 		return (0);
@@ -951,7 +951,7 @@ sbappendcontrol(struct socket *so, struct sockbuf *sb, struct mbuf *m0,
 				m->m_flags &= ~M_EOR;
 		}
 	}
-	if (space > sbspace_locked(so, sb))
+	if (space > sbspace_locked(sb))
 		return (0);
 	n->m_next = m0;			/* concatenate data to control */
 
@@ -977,8 +977,7 @@ sbappendcontrol(struct socket *so, struct sockbuf *sb, struct mbuf *m0,
  * is null, the buffer is presumed empty.
  */
 void
-sbcompress(struct socket *so, struct sockbuf *sb, struct mbuf *m,
-    struct mbuf *n)
+sbcompress(struct sockbuf *sb, struct mbuf *m, struct mbuf *n)
 {
 	int eor = 0;
 	struct mbuf *o;
