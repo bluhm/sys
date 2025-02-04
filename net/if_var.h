@@ -307,6 +307,8 @@ struct softnet {
 	struct mbuf_list	 sn_tcp_ml;
 	struct mbuf_list	 sn_tcp6_ml;
 };
+#define NET_TASKQ	4
+extern struct softnet	softnets[NET_TASKQ];
 
 /*
  * Network stack input queues.
