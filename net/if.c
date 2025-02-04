@@ -241,14 +241,10 @@ struct rwlock if_tmplist_lock = RWLOCK_INITIALIZER("iftmplk");
 struct mutex if_hooks_mtx = MUTEX_INITIALIZER(IPL_NONE);
 void	if_hooks_run(struct task_list *);
 
-int	ifq_congestion;
-
-int		 netisr;
-
-#define	NET_TASKQ	4
+int		ifq_congestion;
+int		netisr;
 struct softnet	softnets[NET_TASKQ];
-
-struct task if_input_task_locked = TASK_INITIALIZER(if_netisr, NULL);
+struct task	if_input_task_locked = TASK_INITIALIZER(if_netisr, NULL);
 
 /*
  * Serialize socket operations to ensure no new sleeping points
@@ -1001,8 +997,7 @@ if_input_process(struct ifnet *ifp, struct mbuf_list *ml, unsigned int idx)
 	NET_LOCK_SHARED();
 
 	while ((m = ml_dequeue(ml)) != NULL) {
-		/* add 1 to index, 0 means not set */
-		m->m_pkthdr.ph_cookie = (void *)(((long)idx << 16) + idx + 1);
+		m->m_pkthdr.ph_cookie = sn;
 		(*ifp->if_input)(ifp, m);
 	}
 	tcp_input_mlist(&sn->sn_tcp_ml, AF_INET);

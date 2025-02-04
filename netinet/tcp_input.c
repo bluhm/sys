@@ -351,14 +351,12 @@ int
 tcp_input(struct mbuf **mp, int *offp, int proto, int af)
 {
 	struct softnet *sn;
-	unsigned int idx;
 
 	if ((*mp)->m_pkthdr.ph_cookie == NULL)
 		return tcp_input_solocked(mp, offp, proto, af, NULL);
-	idx = (long)((*mp)->m_pkthdr.ph_cookie);
+	sn = (*mp)->m_pkthdr.ph_cookie;
 	/* sanity check that noone else uses mbuf cookie */
-	KASSERT((idx >> 16) == ((idx - 1) & 0xffff));
-	sn = net_sn((idx - 1) & 0xffff);
+	KASSERT(sn >= softnets && sn < softnets + sizeof(softnets));
 	(*mp)->m_pkthdr.ph_cookie = (void *)(long)(*offp);
 	switch (af) {
 	case AF_INET:
