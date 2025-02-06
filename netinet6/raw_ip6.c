@@ -308,7 +308,7 @@ rip6_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *d)
 	struct sockaddr_in6 *sa6 = satosin6(sa);
 	const struct sockaddr_in6 *sa6_src = NULL;
 	void *cmdarg;
-	void (*notify)(struct inpcb *, int) = in_rtchange;
+	void (*notify)(struct inpcb *, int) = in_pcbrtchange;
 	int nxt;
 
 	if (sa->sa_family != AF_INET6 ||
@@ -318,7 +318,7 @@ rip6_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *d)
 	if ((unsigned)cmd >= PRC_NCMDS)
 		return;
 	if (PRC_IS_REDIRECT(cmd))
-		notify = in_rtchange, d = NULL;
+		notify = in_pcbrtchange, d = NULL;
 	else if (cmd == PRC_HOSTDEAD)
 		d = NULL;
 	else if (cmd == PRC_MSGSIZE)

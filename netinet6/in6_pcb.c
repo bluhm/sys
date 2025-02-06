@@ -456,8 +456,8 @@ in6_pcbnotify(struct inpcbtable *table, const struct sockaddr_in6 *dst,
 
 	/*
 	 * Redirects go to all references to the destination,
-	 * and use in_rtchange to invalidate the route cache.
-	 * Dead host indications: also use in_rtchange to invalidate
+	 * and use in_pcbrtchange to invalidate the route cache.
+	 * Dead host indications: also use in_pcbrtchange to invalidate
 	 * the cache, and deliver the error to all the sockets.
 	 * Otherwise, if we have knowledge of the local port and address,
 	 * deliver only to that socket.
@@ -468,7 +468,7 @@ in6_pcbnotify(struct inpcbtable *table, const struct sockaddr_in6 *dst,
 		sa6_src.sin6_addr = in6addr_any;
 
 		if (cmd != PRC_HOSTDEAD)
-			notify = in_rtchange;
+			notify = in_pcbrtchange;
 	}
 	errno = inet6ctlerrmap[cmd];
 	if (notify == NULL)
@@ -477,6 +477,8 @@ in6_pcbnotify(struct inpcbtable *table, const struct sockaddr_in6 *dst,
 	rdomain = rtable_l2(rtable);
 	mtx_enter(&table->inpt_mtx);
 	while ((inp = in_pcb_iterator(table, inp, &iter)) != NULL) {
+		struct socket *so;
+
 		KASSERT(ISSET(inp->inp_flags, INP_IPV6));
 
 		/*
@@ -543,7 +545,10 @@ in6_pcbnotify(struct inpcbtable *table, const struct sockaddr_in6 *dst,
 		}
 	  do_notify:
 		mtx_leave(&table->inpt_mtx);
-		(*notify)(inp, errno);
+		so = in_pcbsolock_ref(inp);
+		if (so != NULL)
+			(*notify)(inp, errno);
+		in_pcbsounlock_rele(inp, so);
 		mtx_enter(&table->inpt_mtx);
 	}
 	mtx_leave(&table->inpt_mtx);

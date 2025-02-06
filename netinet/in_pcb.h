@@ -354,7 +354,7 @@ struct inpcb *
 void	 in_pcbnotifyall(struct inpcbtable *, const struct sockaddr_in *,
 	    u_int, int, void (*)(struct inpcb *, int));
 void	 in_pcbrehash(struct inpcb *);
-void	 in_rtchange(struct inpcb *, int);
+void	 in_pcbrtchange(struct inpcb *, int);
 void	 in_setpeeraddr(struct inpcb *, struct mbuf *);
 void	 in_setsockaddr(struct inpcb *, struct mbuf *);
 int	 in_sockaddr(struct socket *, struct mbuf *);
