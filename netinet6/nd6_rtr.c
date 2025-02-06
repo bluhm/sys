@@ -204,8 +204,10 @@ rt6_flush(struct in6_addr *gateway, struct ifnet *ifp)
 			info.rti_info[RTAX_GATEWAY] = rt->rt_gateway;
 			info.rti_info[RTAX_NETMASK] = rt_plen2mask(rt,
 			    &sa_mask);
+			KERNEL_LOCK();
 			error = rtrequest_delete(&info, RTP_ANY, ifp, NULL,
 			    ifp->if_rdomain);
+			KERNEL_UNLOCK();
 			if (error == 0)
 				error = EAGAIN;
 		}

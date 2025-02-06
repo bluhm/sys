@@ -808,7 +808,9 @@ rtdeletemsg(struct rtentry *rt, struct ifnet *ifp, u_int tableid)
 	info.rti_flags = rt->rt_flags;
 	info.rti_info[RTAX_IFP] = sdltosa(ifp->if_sadl);
 	info.rti_info[RTAX_IFA] = rt->rt_ifa->ifa_addr;
+	KERNEL_LOCK();
 	error = rtrequest_delete(&info, rt->rt_priority, ifp, &rt, tableid);
+	KERNEL_UNLOCK();
 	rtm_miss(RTM_DELETE, &info, info.rti_flags, rt->rt_priority,
 	    rt->rt_ifidx, error, tableid);
 	if (error == 0)
@@ -1339,7 +1341,9 @@ rt_ifa_del(struct ifaddr *ifa, int flags, struct sockaddr *dst,
 		prio = ifp->if_priority + RTP_CONNECTED;
 
 	rtable_clearsource(rdomain, ifa->ifa_addr);
+	KERNEL_LOCK();
 	error = rtrequest_delete(&info, prio, ifp, &rt, rdomain);
+	KERNEL_UNLOCK();
 	if (error == 0) {
 		rtm_send(rt, RTM_DELETE, 0, rdomain);
 		if (flags & RTF_LOCAL)
