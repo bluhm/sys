@@ -104,6 +104,7 @@
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/mbuf.h>
+#include <sys/smr.h>
 #include <sys/socket.h>
 #include <sys/socketvar.h>
 #include <sys/timeout.h>
@@ -326,18 +327,19 @@ rtisvalid(struct rtentry *rt)
 	if (ISSET(rt->rt_flags, RTF_GATEWAY)) {
 		struct rtentry *gwroute;
 
-		mtx_enter(&rt->rt_mtx);
-		gwroute = rt->rt_gwroute;
+		smr_read_enter();
+		gwroute = SMR_PTR_GET(&rt->rt_gwroute);
 		if (gwroute == NULL) {
-			mtx_leave(&rt->rt_mtx);
+			smr_read_leave();
 			return (0);
 		}
 		KASSERT(!ISSET(gwroute->rt_flags, RTF_GATEWAY));
 		if (!ISSET(gwroute->rt_flags, RTF_UP)) {
-			mtx_leave(&rt->rt_mtx);
+			smr_read_leave();
 			return (0);
 		}
-		mtx_leave(&rt->rt_mtx);
+		smr_read_leave();
+		return (1);
 	}
 
 	return (1);
@@ -609,11 +611,13 @@ rt_putgwroute(struct rtentry *rt, struct rtentry *nhrt)
 	}
 
 	mtx_enter(&rt->rt_mtx);
-	onhrt = rt->rt_gwroute;
-	rt->rt_gwroute = nhrt;
+	onhrt = SMR_PTR_GET_LOCKED(&rt->rt_gwroute);
+	SMR_PTR_SET_LOCKED(&rt->rt_gwroute, nhrt);
 	mtx_leave(&rt->rt_mtx);
 
 	if (onhrt != NULL) {
+		smr_barrier();
+
 		mtx_enter(&onhrt->rt_mtx);
 		KASSERT(onhrt->rt_cachecnt > 0);
 		KASSERT(ISSET(onhrt->rt_flags, RTF_CACHED));
@@ -1182,11 +1186,11 @@ rt_getll(struct rtentry *rt)
 	if (ISSET(rt->rt_flags, RTF_GATEWAY)) {
 		struct rtentry *gwroute;
 
-		mtx_enter(&rt->rt_mtx);
-		gwroute = rt->rt_gwroute;
+		smr_read_enter();
+		gwroute = SMR_PTR_GET(&rt->rt_gwroute);
 		if (gwroute != NULL)
 			rtref(gwroute);
-		mtx_leave(&rt->rt_mtx);
+		smr_read_leave();
 	 	/* We may return NULL here. */
 		return (gwroute);
 	}
