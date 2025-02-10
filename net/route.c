@@ -1174,7 +1174,7 @@ rt_setgate(struct rtentry *rt, const struct sockaddr *gate, u_int rtableid)
 
 /*
  * Return the route entry containing the next hop link-layer
- * address corresponding to ``rt''.
+ * address corresponding to ``rt''.  The caller has to free.
  */
 struct rtentry *
 rt_getll(struct rtentry *rt)
@@ -1184,11 +1184,14 @@ rt_getll(struct rtentry *rt)
 
 		mtx_enter(&rt->rt_mtx);
 		gwroute = rt->rt_gwroute;
+		if (gwroute != NULL)
+			rtref(gwroute);
 		mtx_leave(&rt->rt_mtx);
 	 	/* We may return NULL here. */
 		return (gwroute);
 	}
 
+	rtref(rt);
 	return (rt);
 }
 
