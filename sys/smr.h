@@ -69,7 +69,11 @@ smr_init(struct smr_entry *smr)
 
 #endif /* _KERNEL */
 
-#define SMR_PTR_GET(pptr)		READ_ONCE(*pptr)
+#define SMR_PTR_GET(pptr) ({						\
+	typeof(*pptr) __ptr = *(volatile typeof(*pptr) *)(pptr);	\
+	membar_consumer();						\
+	__ptr;								\
+})
 
 #define SMR_PTR_GET_LOCKED(pptr)	(*(pptr))
 
