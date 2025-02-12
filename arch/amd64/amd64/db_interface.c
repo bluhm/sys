@@ -172,10 +172,10 @@ db_sysregs_cmd(db_expr_t addr, int have_addr, db_expr_t count, char *modif)
 	uint64_t gsb;
 
 	__asm__ volatile("sidt %0" : "=m" (idtr));
-	db_printf("idtr:   0x%08llx/%04hx\n", idtr.rd_base, idtr.rd_limit);
+	db_printf("idtr:   0x%08llx/%04x\n", idtr.rd_base, idtr.rd_limit);
 
 	__asm__ volatile("sgdt %0" : "=m" (gdtr));
-	db_printf("gdtr:   0x%08llx/%04hx\n", gdtr.rd_base, gdtr.rd_limit);
+	db_printf("gdtr:   0x%08llx/%04x\n", gdtr.rd_base, gdtr.rd_limit);
 
 	__asm__ volatile("sldt %0" : "=g" (ldtr));
 	db_printf("ldtr:   0x%04x\n", ldtr);
