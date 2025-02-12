@@ -410,8 +410,8 @@ const struct db_command db_machine_command_table[] = {
 	{ "startcpu",	db_startproc_cmd,	0,	0 },
 	{ "stopcpu",	db_stopproc_cmd,	0,	0 },
 	{ "ddbcpu",	db_ddbproc_cmd,		0,	0 },
-	{ "sysregs",	db_sysregs_cmd,		0,	0 },
 #endif
+	{ "sysregs",	db_sysregs_cmd,		0,	0 },
 #if NACPI > 0
 	{ "acpi",	NULL,			0,	db_acpi_cmds },
 #endif /* NACPI > 0 */
