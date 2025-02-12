@@ -329,6 +329,7 @@ rtisvalid(struct rtentry *rt)
 
 		smr_read_enter();
 		rt = SMR_PTR_GET(&rt->rt_gwroute);
+		KASSERT(rt != NULL);
 		KASSERT(!ISSET(rt->rt_flags, RTF_GATEWAY));
 		up = ISSET(rt->rt_flags, RTF_UP) ? 1 : 0;
 		smr_read_leave();
@@ -1175,6 +1176,7 @@ rt_getll(struct rtentry *rt)
 	if (ISSET(rt->rt_flags, RTF_GATEWAY)) {
 		smr_read_enter();
 		rt = SMR_PTR_GET(&rt->rt_gwroute);
+		KASSERT(rt != NULL);
 		rtref(rt);
 		smr_read_leave();
 		return (rt);
