@@ -144,7 +144,7 @@ static __inline u_int16_t __attribute__((__unused__))
 void in6_delayed_cksum(struct mbuf *, u_int8_t);
 
 int ip6_output_ipsec_pmtu_update(struct tdb *, struct route *,
-    struct in6_addr *, int, int, int);
+    struct in6_addr *, int, int);
 
 /* Context for non-repeating IDs */
 struct idgen32_ctx ip6_id_ctx;
@@ -2781,10 +2781,12 @@ ip6_output_ipsec_lookup(struct mbuf *m, const struct ipsec_level *seclevel,
 
 int
 ip6_output_ipsec_pmtu_update(struct tdb *tdb, struct route *ro,
-    struct in6_addr *dst, int ifidx, int rtableid, int transportmode)
+    struct in6_addr *dst, int ifidx, int rtableid)
 {
 	struct rtentry *rt = NULL;
 	int rt_mtucloned = 0;
+	int transportmode = (tdb->tdb_dst.sa.sa_family == AF_INET6) &&
+	    (IN6_ARE_ADDR_EQUAL(&tdb->tdb_dst.sin6.sin6_addr, dst));
 
 	/* Find a host route to store the mtu in */
 	if (ro != NULL)
@@ -2870,12 +2872,8 @@ ip6_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct route *ro,
 	rtableid = m->m_pkthdr.ph_rtableid;
 	if (ip_mtudisc && tdb->tdb_mtu &&
 	    len > tdb->tdb_mtu && tdb->tdb_mtutimeout > gettime()) {
-		int transportmode;
-
-		transportmode = (tdb->tdb_dst.sa.sa_family == AF_INET6) &&
-		    (IN6_ARE_ADDR_EQUAL(&tdb->tdb_dst.sin6.sin6_addr, &dst));
 		error = ip6_output_ipsec_pmtu_update(tdb, ro, &dst, ifidx,
-		    rtableid, transportmode);
+		    rtableid);
 		if (error) {
 			ipsecstat_inc(ipsec_odrops);
 			tdbstat_inc(tdb, tdb_odrops);
@@ -2925,7 +2923,7 @@ ip6_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct route *ro,
 	if (!error && tso)
 		tcpstat_inc(tcps_outswtso);
 	if (ip_mtudisc && error == EMSGSIZE)
-		ip6_output_ipsec_pmtu_update(tdb, ro, &dst, ifidx, rtableid, 0);
+		ip6_output_ipsec_pmtu_update(tdb, ro, &dst, ifidx, rtableid);
 	return error;
 }
 #endif /* IPSEC */
