@@ -681,6 +681,14 @@ sbchecklowmem(void)
 	return (atomic_load_int(&sblowmem));
 }
 
+long
+sbspace_locked(struct sockbuf *sb)
+{
+	MUTEX_ASSERT_LOCKED(&sb->sb_mtx);
+
+	return lmin(sb->sb_hiwat - sb->sb_cc, sb->sb_mbmax - sb->sb_mbcnt);
+}
+
 /*
  * Free mbufs held by a socket, and reserved mbuf space.
  */

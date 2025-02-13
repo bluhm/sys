@@ -248,20 +248,12 @@ sb_notify(struct sockbuf *sb)
  */
 
 static inline long
-sbspace_locked(struct sockbuf *sb)
-{
-	MUTEX_ASSERT_LOCKED(&sb->sb_mtx);
-
-	return lmin(sb->sb_hiwat - sb->sb_cc, sb->sb_mbmax - sb->sb_mbcnt);
-}
-
-static inline long
 sbspace(struct sockbuf *sb)
 {
 	long ret;
 
 	mtx_enter(&sb->sb_mtx);
-	ret = sbspace_locked(sb);
+	ret = lmin(sb->sb_hiwat - sb->sb_cc, sb->sb_mbmax - sb->sb_mbcnt);
 	mtx_leave(&sb->sb_mtx);
 
 	return ret;
@@ -387,6 +379,7 @@ void	sbflush(struct sockbuf *);
 void	sbrelease(struct socket *, struct sockbuf *);
 int	sbcheckreserve(u_long, u_long);
 int	sbchecklowmem(void);
+long	sbspace_locked(struct sockbuf *);
 int	sbreserve(struct socket *, struct sockbuf *, u_long);
 int	sbwait(struct sockbuf *);
 void	soinit(void);
