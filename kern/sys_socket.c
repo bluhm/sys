@@ -87,7 +87,7 @@ soo_ioctl(struct file *fp, u_long cmd, caddr_t data, struct proc *p)
 	switch (cmd) {
 
 	case FIOASYNC:
-		solock(so);
+		solock_shared(so);
 		mtx_enter(&so->so_rcv.sb_mtx);
 		mtx_enter(&so->so_snd.sb_mtx);
 		if (*(int *)data) {
@@ -99,7 +99,7 @@ soo_ioctl(struct file *fp, u_long cmd, caddr_t data, struct proc *p)
 		}
 		mtx_leave(&so->so_snd.sb_mtx);
 		mtx_leave(&so->so_rcv.sb_mtx);
-		sounlock(so);
+		sounlock_shared(so);
 		break;
 
 	case FIONREAD:
