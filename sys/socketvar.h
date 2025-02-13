@@ -224,8 +224,6 @@ soref(struct socket *so)
 #define isspliced(so)		((so)->so_sp && (so)->so_sp->ssp_socket)
 #define issplicedback(so)	((so)->so_sp && (so)->so_sp->ssp_soback)
 
-void	sbmtxassertlocked(struct sockbuf *);
-
 /*
  * Do we need to notify the other side when I/O is possible?
  */
@@ -252,7 +250,7 @@ sb_notify(struct sockbuf *sb)
 static inline long
 sbspace_locked(struct sockbuf *sb)
 {
-	sbmtxassertlocked(sb);
+	MUTEX_ASSERT_LOCKED(&sb->sb_mtx);
 
 	return lmin(sb->sb_hiwat - sb->sb_cc, sb->sb_mbmax - sb->sb_mbcnt);
 }

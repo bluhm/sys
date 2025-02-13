@@ -502,13 +502,6 @@ sosleep_nsec(struct socket *so, void *ident, int prio, const char *wmesg,
 	return ret;
 }
 
-void
-sbmtxassertlocked(struct sockbuf *sb)
-{
-	if (splassert_ctl > 0 && mtx_owned(&sb->sb_mtx) == 0)
-		splassert_fail(0, RW_WRITE, __func__);
-}
-
 /*
  * Wait for data to arrive at/drain from a socket buffer.
  */
@@ -646,7 +639,7 @@ bad:
 int
 sbreserve(struct socket *so, struct sockbuf *sb, u_long cc)
 {
-	sbmtxassertlocked(sb);
+	MUTEX_ASSERT_LOCKED(&sb->sb_mtx);
 
 	if (cc == 0 || cc > sb_max)
 		return (1);
@@ -790,10 +783,11 @@ sbappend(struct socket *so, struct sockbuf *sb, struct mbuf *m)
 {
 	struct mbuf *n;
 
+	MUTEX_ASSERT_LOCKED(&sb->sb_mtx);
+
 	if (m == NULL)
 		return;
 
-	sbmtxassertlocked(sb);
 	SBLASTRECORDCHK(sb, "sbappend 1");
 
 	if ((n = sb->sb_lastrecord) != NULL) {
@@ -827,7 +821,7 @@ sbappend(struct socket *so, struct sockbuf *sb, struct mbuf *m)
 void
 sbappendstream(struct socket *so, struct sockbuf *sb, struct mbuf *m)
 {
-	sbmtxassertlocked(sb);
+	MUTEX_ASSERT_LOCKED(&sb->sb_mtx);
 	KDASSERT(m->m_nextpkt == NULL);
 	KASSERT(sb->sb_mb == sb->sb_lastrecord);
 
@@ -873,7 +867,7 @@ sbappendrecord(struct socket *so, struct sockbuf *sb, struct mbuf *m0)
 {
 	struct mbuf *m;
 
-	sbmtxassertlocked(sb);
+	MUTEX_ASSERT_LOCKED(&sb->sb_mtx);
 
 	if (m0 == NULL)
 		return;
@@ -908,7 +902,7 @@ sbappendaddr(struct socket *so, struct sockbuf *sb, const struct sockaddr *asa,
 	struct mbuf *m, *n, *nlast;
 	int space = asa->sa_len;
 
-	sbmtxassertlocked(sb);
+	MUTEX_ASSERT_LOCKED(&sb->sb_mtx);
 
 	if (m0 && (m0->m_flags & M_PKTHDR) == 0)
 		panic("sbappendaddr");
@@ -957,7 +951,7 @@ sbappendcontrol(struct socket *so, struct sockbuf *sb, struct mbuf *m0,
 	struct mbuf *m, *mlast, *n;
 	int eor = 0, space = 0;
 
-	sbmtxassertlocked(sb);
+	MUTEX_ASSERT_LOCKED(&sb->sb_mtx);
 
 	if (control == NULL)
 		panic("sbappendcontrol");
@@ -1082,7 +1076,7 @@ sbdrop(struct sockbuf *sb, int len)
 	struct mbuf *m, *mn;
 	struct mbuf *next;
 
-	sbmtxassertlocked(sb);
+	MUTEX_ASSERT_LOCKED(&sb->sb_mtx);
 
 	next = (m = sb->sb_mb) ? m->m_nextpkt : NULL;
 	while (len > 0) {
