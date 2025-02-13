@@ -41,9 +41,9 @@
  *	N	net lock
  *	X	exclusive net lock, or shared net lock + kernel lock
  *	R	art (rtable) lock
- *	r	per route entry lock
+ *	r	per rtentry lock rt_mtx
  *	L	arp/nd6/etc lock for updates, net lock for reads
- *	T	rttimer_mtx		route timer lists
+ 	T	rttimer_mtx		route timer lists
  */
 
 /*
@@ -115,7 +115,7 @@ struct rttimer;
  */
 
 struct rtentry {
-	struct rwlock	 rt_lock;
+	struct mutex	 rt_mtx;
 	struct sockaddr	*rt_dest;	/* [I] destination */
 	SRPL_ENTRY(rtentry) rt_next;	/* [R] next mpath entry to our dst */
 	struct sockaddr	*rt_gateway;	/* [X] gateway address */
@@ -131,7 +131,7 @@ struct rtentry {
 	struct rtentry	*rt_parent;	/* [N] if cloned, parent rtentry */
 	LIST_HEAD(, rttimer) rt_timer;  /* queue of timeouts for misc funcs */
 	struct rt_kmetrics rt_rmx;	/* metrics used by rx'ing protocols */
-	unsigned int	 rt_ifidx;	/* [N] interface to use */
+	unsigned int	 rt_ifidx;	/* [I] interface to use */
 	unsigned int	 rt_flags;	/* [X] up/down?, host/net */
 	struct refcnt	 rt_refcnt;	/* # held references */
 	int		 rt_plen;	/* [I] prefix length */

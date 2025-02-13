@@ -578,10 +578,10 @@ rt_setgwroute(struct rtentry *rt, const struct sockaddr *gate, u_int rtableid)
 	 * of a cached entry is greater than the bigger lifetime of the
 	 * gateway entries it is pointed by.
 	 */
-	rw_enter_write(&nhrt->rt_lock);
+	mtx_enter(&nhrt->rt_mtx);
 	nhrt->rt_flags |= RTF_CACHED;
 	nhrt->rt_cachecnt++;
-	rw_exit_write(&nhrt->rt_lock);
+	mtx_leave(&nhrt->rt_mtx);
 
 	/* commit */
 	rt_putgwroute(rt, nhrt);
@@ -602,20 +602,20 @@ rt_putgwroute(struct rtentry *rt, struct rtentry *nhrt)
 	if (!ISSET(rt->rt_flags, RTF_GATEWAY))
 		return;
 
-	rw_enter_write(&rt->rt_lock);
+	mtx_enter(&rt->rt_mtx);
 	onhrt = SMR_PTR_GET_LOCKED(&rt->rt_gwroute);
 	SMR_PTR_SET_LOCKED(&rt->rt_gwroute, nhrt);
-	rw_exit_write(&rt->rt_lock);
+	mtx_leave(&rt->rt_mtx);
 
 	if (onhrt != NULL) {
 		smr_barrier();
-		rw_enter_write(&onhrt->rt_lock);
+		mtx_enter(&onhrt->rt_mtx);
 		KASSERT(onhrt->rt_cachecnt > 0);
 		KASSERT(ISSET(onhrt->rt_flags, RTF_CACHED));
 		--onhrt->rt_cachecnt;
 		if (onhrt->rt_cachecnt == 0)
 			CLR(onhrt->rt_flags, RTF_CACHED);
-		rw_exit_write(&onhrt->rt_lock);
+		mtx_leave(&onhrt->rt_mtx);
 		rtfree(onhrt);
 	}
 }
@@ -1013,7 +1013,7 @@ rtrequest(int req, struct rt_addrinfo *info, u_int8_t prio,
 			return (ENOBUFS);
 		}
 
-		rw_init(&rt->rt_lock, "rtentry");
+		mtx_init_flags(&rt->rt_mtx, IPL_SOFTNET, "rtentry", 0);
 		refcnt_init_trace(&rt->rt_refcnt, DT_REFCNT_IDX_RTENTRY);
 		rt->rt_flags = info->rti_flags | RTF_UP;
 		rt->rt_priority = prio;	/* init routing priority */

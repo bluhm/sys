@@ -1343,11 +1343,11 @@ route_cleargateway(struct rtentry *rt, void *arg, unsigned int rtableid)
 {
 	struct rtentry *nhrt = arg;
 
-	rw_enter_read(&rt->rt_lock);
+	mtx_enter(&rt->rt_mtx);
 	if (ISSET(rt->rt_flags, RTF_GATEWAY) && rt->rt_gwroute == nhrt &&
 	    !ISSET(rt->rt_locks, RTV_MTU))
 		atomic_store_int(&rt->rt_mtu, 0);
-	rw_exit_read(&rt->rt_lock);
+	mtx_leave(&rt->rt_mtx);
 
 	return (0);
 }
