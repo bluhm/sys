@@ -1072,6 +1072,10 @@ send:
 #if NPF > 0
 	pf_mbuf_link_inpcb(m, tp->t_inpcb);
 #endif
+#if NSTOEPLITZ > 0
+	m->m_pkthdr.ph_flowid = tp->t_inpcb->inp_flowid;
+	SET(m->m_pkthdr.csum_flags, M_FLOWID);
+#endif
 
 	switch (tp->pf) {
 	case 0:	/*default to PF_INET*/
@@ -1089,10 +1093,6 @@ send:
 				ip->ip_tos |= IPTOS_ECN_ECT0;
 #endif
 		}
-#if NSTOEPLITZ > 0
-		m->m_pkthdr.ph_flowid = tp->t_inpcb->inp_flowid;
-		SET(m->m_pkthdr.csum_flags, M_FLOWID);
-#endif
 		error = ip_output(m, tp->t_inpcb->inp_options,
 		    &tp->t_inpcb->inp_route,
 		    (ip_mtudisc ? IP_MTUDISC : 0), NULL,
