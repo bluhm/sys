@@ -505,8 +505,7 @@ sosleep_nsec(struct socket *so, void *ident, int prio, const char *wmesg,
 void
 sbmtxassertlocked(struct sockbuf *sb)
 {
-	if (splassert_ctl > 0 && mtx_owned(&sb->sb_mtx) == 0)
-		splassert_fail(0, RW_WRITE, __func__);
+	MUTEX_ASSERT_LOCKED(&sb->sb_mtx);
 }
 
 /*
