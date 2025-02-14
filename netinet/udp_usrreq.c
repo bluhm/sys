@@ -68,6 +68,9 @@
  * Research Laboratory (NRL).
  */
 
+#include "pf.h"
+#include "stoeplitz.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/mbuf.h>
@@ -102,7 +105,6 @@
 #include <netinet6/ip6protosw.h>
 #endif /* INET6 */
 
-#include "pf.h"
 #if NPF > 0
 #include <net/pfvar.h>
 #endif
@@ -1081,10 +1083,15 @@ udp_output(struct inpcb *inp, struct mbuf *m, struct mbuf *addr,
 	/* force routing table */
 	m->m_pkthdr.ph_rtableid = inp->inp_rtableid;
 
+	if (inp->inp_socket->so_state & SS_ISCONNECTED) {
 #if NPF > 0
-	if (inp->inp_socket->so_state & SS_ISCONNECTED)
 		pf_mbuf_link_inpcb(m, inp);
 #endif
+#if NSTOEPLITZ > 0
+		m->m_pkthdr.ph_flowid = inp->inp_flowid;
+		SET(m->m_pkthdr.csum_flags, M_FLOWID);
+#endif
+	}
 
 	error = ip_output(m, inp->inp_options, &inp->inp_route,
 	    (inp->inp_socket->so_options & SO_BROADCAST), inp->inp_moptions,
