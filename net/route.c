@@ -976,7 +976,6 @@ rtrequest(int req, struct rt_addrinfo *info, u_int8_t prio,
 			return (EINVAL);
 		if ((rt->rt_flags & RTF_CLONING) == 0)
 			return (EINVAL);
-		KASSERT(rt->rt_ifa->ifa_ifp != NULL);
 		info->rti_ifa = rt->rt_ifa;
 		info->rti_flags = rt->rt_flags | (RTF_CLONED|RTF_HOST);
 		info->rti_flags &= ~(RTF_CLONING|RTF_CONNECTED|RTF_STATIC);
@@ -988,6 +987,7 @@ rtrequest(int req, struct rt_addrinfo *info, u_int8_t prio,
 	case RTM_ADD:
 		if (info->rti_ifa == NULL)
 			return (EINVAL);
+		KASSERT(info->rti_ifa->ifa_ifp != NULL);
 		ifa = info->rti_ifa;
 		ifp = ifa->ifa_ifp;
 		if (prio == 0)
