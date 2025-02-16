@@ -1,4 +1,4 @@
-/*	$OpenBSD: nfs_syscalls.c,v 1.128 2024/09/18 05:21:19 jsg Exp $	*/
+/*	$OpenBSD: nfs_syscalls.c,v 1.129 2025/02/16 16:05:07 bluhm Exp $	*/
 /*	$NetBSD: nfs_syscalls.c,v 1.19 1996/02/18 11:53:52 fvdl Exp $	*/
 
 /*
