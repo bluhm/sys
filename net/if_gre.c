@@ -1671,7 +1671,7 @@ mgre_output(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dest,
 	rt = rt_getll(rt0);
 
 	/* check rt_expire? */
-	if (ISSET(rt->rt_flags, RTF_REJECT)) {
+	if (rt == NULL || ISSET(rt->rt_flags, RTF_REJECT)) {
 		error = (rt == rt0) ? EHOSTDOWN : EHOSTUNREACH;
 		goto drop;
 	}

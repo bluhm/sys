@@ -324,7 +324,8 @@ rtisvalid(struct rtentry *rt)
 		return (0);
 
 	if (ISSET(rt->rt_flags, RTF_GATEWAY)) {
-		KASSERT(rt->rt_gwroute != NULL);
+		if (rt->rt_gwroute == NULL)
+			return (0);
 		KASSERT(!ISSET(rt->rt_gwroute->rt_flags, RTF_GATEWAY));
 		if (!ISSET(rt->rt_gwroute->rt_flags, RTF_UP))
 			return (0);
@@ -1163,7 +1164,11 @@ struct rtentry *
 rt_getll(struct rtentry *rt)
 {
 	if (ISSET(rt->rt_flags, RTF_GATEWAY)) {
-		KASSERT(rt->rt_gwroute != NULL);
+	 	/*
+		 * While rtrequest_delete() is setting rt_gwroute to NULL,
+		 * RTF_GATEWAY is set and another thread is using the route.
+		 * We may return NULL here.
+		 */
 		return (rt->rt_gwroute);
 	}
 
