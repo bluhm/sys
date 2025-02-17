@@ -1164,11 +1164,7 @@ struct rtentry *
 rt_getll(struct rtentry *rt)
 {
 	if (ISSET(rt->rt_flags, RTF_GATEWAY)) {
-	 	/*
-		 * While rtrequest_delete() is setting rt_gwroute to NULL,
-		 * RTF_GATEWAY is set and another thread is using the route.
-		 * We may return NULL here.
-		 */
+	 	/* We may return NULL here. */
 		return (rt->rt_gwroute);
 	}
 
