@@ -172,7 +172,7 @@ struct trunk_port {
 	int	(*tp_ioctl)(struct ifnet *, u_long, caddr_t);
 	int	(*tp_output)(struct ifnet *, struct mbuf *, struct sockaddr *,
 		    struct rtentry *);
-	void	(*tp_input)(struct ifnet *, struct mbuf *);
+	void	(*tp_input)(struct ifnet *, struct mbuf *, struct netstack *);
 
 	SLIST_ENTRY(trunk_port)		tp_entries;
 };

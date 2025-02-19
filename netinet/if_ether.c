@@ -515,7 +515,7 @@ arppullup(struct mbuf *m)
  * then the protocol-specific routine is called.
  */
 void
-arpinput(struct ifnet *ifp, struct mbuf *m)
+arpinput(struct ifnet *ifp, struct mbuf *m, struct netstack *ns)
 {
 	if ((m = arppullup(m)) == NULL)
 		return;
@@ -844,7 +844,7 @@ arpproxy(struct in_addr in, unsigned int rtableid)
  * then the protocol-specific routine is called.
  */
 void
-revarpinput(struct ifnet *ifp, struct mbuf *m)
+revarpinput(struct ifnet *ifp, struct mbuf *m, struct netstack *ns)
 {
 	if ((m = arppullup(m)) == NULL)
 		return;

@@ -209,12 +209,14 @@ carp_strict_addr_chk(struct ifnet *ifp_a, struct ifnet *ifp_b)
 	    ifp_a->if_carpdevidx == ifp_b->if_carpdevidx));
 }
 
-struct mbuf	*carp_input(struct ifnet *, struct mbuf *, uint64_t);
-
-int		 carp_proto_input(struct mbuf **, int *, int, int);
+struct mbuf	*carp_input(struct ifnet *, struct mbuf *, uint64_t,
+		    struct netstack *);
+int		 carp_proto_input(struct mbuf **, int *, int, int,
+		    struct netstack *);
 void		 carp_carpdev_state(void *);
 void		 carp_group_demote_adj(struct ifnet *, int, char *);
-int		 carp6_proto_input(struct mbuf **, int *, int, int);
+int		 carp6_proto_input(struct mbuf **, int *, int, int,
+		    struct netstack *);
 int		 carp_iamatch(struct ifnet *);
 int		 carp_ourether(struct ifnet *, u_int8_t *);
 int		 carp_output(struct ifnet *, struct mbuf *, struct sockaddr *,

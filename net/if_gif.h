@@ -37,7 +37,7 @@
 #ifndef _NET_IF_GIF_H_
 #define _NET_IF_GIF_H_
 
-int in_gif_input(struct mbuf **, int *, int, int);
-int in6_gif_input(struct mbuf **, int *, int, int);
+int in_gif_input(struct mbuf **, int *, int, int, struct netstack *);
+int in6_gif_input(struct mbuf **, int *, int, int, struct netstack *);
 
 #endif /* _NET_IF_GIF_H_ */

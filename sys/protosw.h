@@ -63,6 +63,7 @@ struct domain;
 struct proc;
 struct stat;
 struct ifnet;
+struct netstack;
 
 struct pr_usrreqs {
 	int	(*pru_attach)(struct socket *, int, int);
@@ -96,7 +97,7 @@ struct protosw {
 
 /* protocol-protocol hooks */
 					/* input to protocol (from below) */
-	int	(*pr_input)(struct mbuf **, int *, int, int);
+	int	(*pr_input)(struct mbuf **, int *, int, int, struct netstack *);
 					/* control input (from below) */
 	void	(*pr_ctlinput)(int, struct sockaddr *, u_int, void *);
 					/* control output (from above) */

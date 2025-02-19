@@ -384,7 +384,8 @@ icmp6_error(struct mbuf *m, int type, int code, int param)
  * Process a received ICMP6 message.
  */
 int
-icmp6_input(struct mbuf **mp, int *offp, int proto, int af)
+icmp6_input(struct mbuf **mp, int *offp, int proto, int af,
+    struct netstack *ns)
 {
 #if NCARP > 0
 	struct ifnet *ifp;
@@ -757,7 +758,7 @@ badlen:
 raw:
 #endif
 	/* deliver the packet to appropriate sockets */
-	return rip6_input(mp, offp, proto, af);
+	return rip6_input(mp, offp, proto, af, ns);
 
  freeit:
 	m_freem(m);
