@@ -771,8 +771,9 @@ struct sockaddr_in;
 struct ifaddr;
 struct in_ifaddr;
 struct route;
+struct netstack;
 
-void	   ipv4_input(struct ifnet *, struct mbuf *);
+void	   ipv4_input(struct ifnet *, struct mbuf *, struct netstack *);
 struct mbuf *
 	   ipv4_check(struct ifnet *, struct mbuf *);
 

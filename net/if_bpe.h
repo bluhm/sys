@@ -20,7 +20,7 @@
 #define _NET_IF_BPE_H
 
 #ifdef _KERNEL
-void	bpe_input(struct ifnet *, struct mbuf *);
+void	bpe_input(struct ifnet *, struct mbuf *, struct netstack *);
 #endif
 
 #endif /* _NET_IF_GRE_H_ */

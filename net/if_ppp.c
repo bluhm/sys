@@ -1410,7 +1410,7 @@ ppp_inproc(struct ppp_softc *sc, struct mbuf *m)
 		m->m_data += PPP_HDRLEN;
 		m->m_len -= PPP_HDRLEN;
 
-		ipv4_input(ifp, m);
+		ipv4_input(ifp, m, NULL);
 		rv = 1;
 		break;
 #ifdef INET6
@@ -1428,7 +1428,7 @@ ppp_inproc(struct ppp_softc *sc, struct mbuf *m)
 		m->m_data += PPP_HDRLEN;
 		m->m_len -= PPP_HDRLEN;
 
-		ipv6_input(ifp, m);
+		ipv6_input(ifp, m, NULL);
 		rv = 1;
 		break;
 #endif

@@ -352,7 +352,7 @@ tcp_flush_queue(struct tcpcb *tp)
  * protocol specification dated September, 1981 very closely.
  */
 int
-tcp_input(struct mbuf **mp, int *offp, int proto, int af)
+tcp_input(struct mbuf **mp, int *offp, int proto, int af, struct netstack *ns)
 {
 	struct mbuf *m = *mp;
 	int iphlen = *offp;

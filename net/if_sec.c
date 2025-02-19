@@ -448,7 +448,8 @@ sec_get(unsigned int unit)
 }
 
 void
-sec_input(struct sec_softc *sc, int af, int proto, struct mbuf *m)
+sec_input(struct sec_softc *sc, int af, int proto, struct mbuf *m,
+    struct netstack *ns)
 {
 	struct ip *iph;
 	int hlen;
@@ -486,7 +487,7 @@ sec_input(struct sec_softc *sc, int af, int proto, struct mbuf *m)
 
 	m->m_pkthdr.ph_family = af;
 
-	if_vinput(&sc->sc_if, m);
+	if_vinput(&sc->sc_if, m, ns);
 }
 
 void

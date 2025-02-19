@@ -51,7 +51,8 @@
  */
 
 int
-route6_input(struct mbuf **mp, int *offp, int proto, int af)
+route6_input(struct mbuf **mp, int *offp, int proto, int af,
+    struct netstack *ns)
 {
 	struct ip6_hdr *ip6;
 	struct mbuf *m = *mp;

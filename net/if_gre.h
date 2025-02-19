@@ -115,7 +115,7 @@ struct mobip_h {
 
 #ifdef _KERNEL
 int	gre_sysctl(int *, u_int, void *, size_t *, void *, size_t);
-int	gre_input(struct mbuf **, int *, int, int);
-int	gre_input6(struct mbuf **, int *, int, int);
+int	gre_input(struct mbuf **, int *, int, int, struct netstack *);
+int	gre_input6(struct mbuf **, int *, int, int, struct netstack *);
 #endif
 #endif /* _NET_IF_GRE_H_ */

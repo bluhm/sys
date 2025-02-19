@@ -2567,7 +2567,7 @@ ip6_mloopback(struct ifnet *ifp, struct mbuf *m, struct sockaddr_in6 *dst)
 	if (IN6_IS_SCOPE_EMBED(&ip6->ip6_dst))
 		ip6->ip6_dst.s6_addr16[1] = 0;
 
-	if_input_local(ifp, copym, dst->sin6_family);
+	if_input_local(ifp, copym, dst->sin6_family, NULL);
 }
 
 /*

@@ -74,7 +74,7 @@ static int	rport_output(struct ifnet *, struct mbuf *, struct sockaddr *,
 		    struct rtentry *);
 static int	rport_enqueue(struct ifnet *, struct mbuf *);
 static void	rport_start(struct ifqueue *);
-static void	rport_input(struct ifnet *, struct mbuf *);
+static void	rport_input(struct ifnet *, struct mbuf *, struct netstack *);
 
 static int	rport_up(struct rport_softc *);
 static int	rport_down(struct rport_softc *);
@@ -255,7 +255,7 @@ rport_start(struct ifqueue *ifq)
 		}
 #endif
 
-		if_vinput(ifp0, m);
+		if_vinput(ifp0, m, NULL);
 	}
 	NET_UNLOCK_SHARED();
 
@@ -263,20 +263,20 @@ rport_start(struct ifqueue *ifq)
 }
 
 static void
-rport_input(struct ifnet *ifp, struct mbuf *m)
+rport_input(struct ifnet *ifp, struct mbuf *m, struct netstack *ns)
 {
         switch (m->m_pkthdr.ph_family) {
         case AF_INET:
-                ipv4_input(ifp, m);
+                ipv4_input(ifp, m, ns);
                 break;
 #ifdef INET6
         case AF_INET6:
-                ipv6_input(ifp, m);
+                ipv6_input(ifp, m, ns);
                 break;
 #endif
 #ifdef MPLS
         case AF_MPLS:
-                mpls_input(ifp, m);
+                mpls_input(ifp, m, ns);
                 break;
 #endif
         default:

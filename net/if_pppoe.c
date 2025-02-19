@@ -727,7 +727,7 @@ pppoe_disc_input(struct mbuf *m)
 }
 
 struct mbuf *
-pppoe_vinput(struct ifnet *ifp0, struct mbuf *m)
+pppoe_vinput(struct ifnet *ifp0, struct mbuf *m, struct netstack *ns)
 {
 	struct pppoe_softc *sc;
 	struct ifnet *ifp;
@@ -816,7 +816,7 @@ pppoe_vinput(struct ifnet *ifp0, struct mbuf *m)
 		sc->sc_sppp.pp_last_activity = now;
 
 	m->m_pkthdr.ph_family = af;
-	if_vinput(ifp, m);
+	if_vinput(ifp, m, ns);
 done:
 	m = NULL;
 put:

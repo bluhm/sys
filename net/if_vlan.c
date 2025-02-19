@@ -374,7 +374,8 @@ vlan_inject(struct mbuf *m, uint16_t type, uint16_t tag)
 }
 
 struct mbuf *
-vlan_input(struct ifnet *ifp0, struct mbuf *m, unsigned int *sdelim)
+vlan_input(struct ifnet *ifp0, struct mbuf *m, unsigned int *sdelim,
+    struct netstack *ns)
 {
 	struct vlan_softc *sc;
 	struct ifnet *ifp;
@@ -471,7 +472,7 @@ vlan_input(struct ifnet *ifp0, struct mbuf *m, unsigned int *sdelim)
 		break;
 	}
 
-	if_vinput(ifp, m);
+	if_vinput(ifp, m, ns);
 leave:
 	refcnt_rele_wake(&sc->sc_refcnt);
 	return (NULL);

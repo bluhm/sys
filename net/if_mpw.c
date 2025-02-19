@@ -614,7 +614,7 @@ mpw_input(struct mpw_softc *sc, struct mbuf *m)
 	/* packet has not been processed by PF yet. */
 	KASSERT(m->m_pkthdr.pf.statekey == NULL);
 
-	if_vinput(ifp, m);
+	if_vinput(ifp, m, NULL);
 	return;
 drop:
 	m_freem(m);

@@ -737,7 +737,7 @@ bpe_find(struct ifnet *ifp0, uint32_t isid)
 }
 
 void
-bpe_input(struct ifnet *ifp0, struct mbuf *m)
+bpe_input(struct ifnet *ifp0, struct mbuf *m, struct netstack *ns)
 {
 	struct bpe_softc *sc;
 	struct ifnet *ifp;
@@ -817,7 +817,7 @@ bpe_input(struct ifnet *ifp0, struct mbuf *m)
 	pf_pkt_addr_changed(m);
 #endif
 
-	if_vinput(ifp, m);
+	if_vinput(ifp, m, ns);
 	return;
 
 drop:

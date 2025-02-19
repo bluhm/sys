@@ -1763,7 +1763,7 @@ ip_mloopback(struct ifnet *ifp, struct mbuf *m, struct sockaddr_in *dst)
 		 * than the interface's MTU.  Can this possibly matter?
 		 */
 		in_hdr_cksum_out(copym, NULL);
-		if_input_local(ifp, copym, dst->sin_family);
+		if_input_local(ifp, copym, dst->sin_family, NULL);
 	}
 }
 

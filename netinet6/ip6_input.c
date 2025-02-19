@@ -119,7 +119,7 @@ struct cpumem *ip6counters;
 
 uint8_t ip6_soiikey[IP6_SOIIKEY_LEN];
 
-int ip6_ours(struct mbuf **, int *, int, int, int);
+int ip6_ours(struct mbuf **, int *, int, int, int, struct netstack *);
 int ip6_check_rh0hdr(struct mbuf *, int *);
 int ip6_hbhchcheck(struct mbuf **, int *, int *, int);
 int ip6_hopopts_input(struct mbuf **, int *, u_int32_t *, u_int32_t *);
@@ -172,7 +172,8 @@ ip6_init(void)
  * NET_LOCK_SHARED() and the transport layer needing it exclusively.
  */
 int
-ip6_ours(struct mbuf **mp, int *offp, int nxt, int af, int flags)
+ip6_ours(struct mbuf **mp, int *offp, int nxt, int af, int flags,
+    struct netstack *ns)
 {
 	/* ip6_hbhchcheck() may be run before, then off and nxt are set */
 	if (*offp == 0) {
@@ -185,7 +186,7 @@ ip6_ours(struct mbuf **mp, int *offp, int nxt, int af, int flags)
 	if (af != AF_UNSPEC)
 		return nxt;
 
-	nxt = ip_deliver(mp, offp, nxt, AF_INET6, 1);
+	nxt = ip_deliver(mp, offp, nxt, AF_INET6, 1, ns);
 	if (nxt == IPPROTO_DONE)
 		return IPPROTO_DONE;
 
@@ -253,18 +254,18 @@ ip6intr(void)
 			off = sizeof(struct ip6_hdr);
 			nxt = ip6->ip6_nxt;
 		}
-		nxt = ip_deliver(&m, &off, nxt, AF_INET6, 0);
+		nxt = ip_deliver(&m, &off, nxt, AF_INET6, 0, NULL);
 		KASSERT(nxt == IPPROTO_DONE);
 	}
 }
 
 void
-ipv6_input(struct ifnet *ifp, struct mbuf *m)
+ipv6_input(struct ifnet *ifp, struct mbuf *m, struct netstack *ns)
 {
 	int off, nxt;
 
 	off = 0;
-	nxt = ip6_input_if(&m, &off, IPPROTO_IPV6, AF_UNSPEC, ifp);
+	nxt = ip6_input_if(&m, &off, IPPROTO_IPV6, AF_UNSPEC, ifp, ns);
 	KASSERT(nxt == IPPROTO_DONE);
 }
 
@@ -360,7 +361,8 @@ bad:
 }
 
 int
-ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
+ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp,
+    struct netstack *ns)
 {
 	struct route ro;
 	struct mbuf *m;
@@ -461,7 +463,7 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 
 #if NPF > 0
 	if (pf_ouraddr(m) == 1) {
-		nxt = ip6_ours(mp, offp, nxt, af, flags);
+		nxt = ip6_ours(mp, offp, nxt, af, flags, ns);
 		goto out;
 	}
 #endif
@@ -513,7 +515,7 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 			if (ours) {
 				if (af == AF_UNSPEC)
 					nxt = ip6_ours(mp, offp, nxt, af,
-					    flags);
+					    flags, ns);
 				goto out;
 			}
 			goto bad;
@@ -525,7 +527,7 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 				ip6stat_inc(ip6s_cantforward);
 			goto bad;
 		}
-		nxt = ip6_ours(mp, offp, nxt, af, flags);
+		nxt = ip6_ours(mp, offp, nxt, af, flags, ns);
 		goto out;
 	}
 
@@ -585,7 +587,7 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 
 			goto bad;
 		} else {
-			nxt = ip6_ours(mp, offp, nxt, af, flags);
+			nxt = ip6_ours(mp, offp, nxt, af, flags, ns);
 			goto out;
 		}
 	}
@@ -611,7 +613,7 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp)
 
 	if (ours) {
 		if (af == AF_UNSPEC)
-			nxt = ip6_ours(mp, offp, nxt, af, flags);
+			nxt = ip6_ours(mp, offp, nxt, af, flags, ns);
 		goto out;
 	}
 

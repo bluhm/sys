@@ -405,8 +405,9 @@ struct ifaddr;
 struct in6_ifaddr;
 struct ifnet;
 struct rtentry;
+struct netstack;
 
-void	ipv6_input(struct ifnet *, struct mbuf *);
+void	ipv6_input(struct ifnet *, struct mbuf *, struct netstack *);
 struct mbuf *
 	ipv6_check(struct ifnet *, struct mbuf *);
 

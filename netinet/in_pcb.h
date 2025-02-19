@@ -170,7 +170,7 @@ struct inpcb {
 	struct	icmp6_filter *inp_icmp6filt;
 	struct	pf_state_key *inp_pf_sk; /* [L] */
 	struct	mbuf *(*inp_upcall)(void *, struct mbuf *,
-		    struct ip *, struct ip6_hdr *, void *, int);
+	    struct ip *, struct ip6_hdr *, void *, int, struct netstack *);
 	void	*inp_upcall_arg;
 	u_int	inp_rtableid;		/* [t] */
 	int	inp_pipex;		/* pipex indication */

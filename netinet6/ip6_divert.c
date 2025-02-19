@@ -177,7 +177,7 @@ divert6_output(struct inpcb *inp, struct mbuf *m, struct mbuf *nam,
 			error = ENETDOWN;
 			goto fail;
 		}
-		ipv6_input(ifp, m);
+		ipv6_input(ifp, m, NULL);
 		if_put(ifp);
 	} else {
 		m->m_pkthdr.ph_rtableid = inp->inp_rtableid;

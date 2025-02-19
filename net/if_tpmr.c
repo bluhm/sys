@@ -249,7 +249,8 @@ tpmr_8021q_filter(const struct mbuf *m, uint64_t dst)
 struct tpmr_pf_ip_family {
 	sa_family_t	   af;
 	struct mbuf	*(*ip_check)(struct ifnet *, struct mbuf *);
-	void		 (*ip_input)(struct ifnet *, struct mbuf *);
+	void		 (*ip_input)(struct ifnet *, struct mbuf *,
+			    struct netstack *);
 };
 
 static const struct tpmr_pf_ip_family tpmr_pf_ipv4 = {
@@ -267,7 +268,7 @@ static const struct tpmr_pf_ip_family tpmr_pf_ipv6 = {
 #endif
 
 static struct mbuf *
-tpmr_pf(struct ifnet *ifp0, int dir, struct mbuf *m)
+tpmr_pf(struct ifnet *ifp0, int dir, struct mbuf *m, struct netstack *ns)
 {
 	struct ether_header *eh, copy;
 	const struct tpmr_pf_ip_family *fam;
@@ -305,7 +306,7 @@ tpmr_pf(struct ifnet *ifp0, int dir, struct mbuf *m)
 	if (dir == PF_IN && ISSET(m->m_pkthdr.pf.flags, PF_TAG_DIVERTED)) {
 		pf_mbuf_unlink_state_key(m);
 		pf_mbuf_unlink_inpcb(m);
-		(*fam->ip_input)(ifp0, m);
+		(*fam->ip_input)(ifp0, m, ns);
 		return (NULL);
 	}
 
@@ -323,7 +324,8 @@ tpmr_pf(struct ifnet *ifp0, int dir, struct mbuf *m)
 #endif /* NPF > 0 */
 
 static struct mbuf *
-tpmr_input(struct ifnet *ifp0, struct mbuf *m, uint64_t dst, void *brport)
+tpmr_input(struct ifnet *ifp0, struct mbuf *m, uint64_t dst, void *brport,
+ struct netstack *ns)
 {
 	struct tpmr_port *p = brport;
 	struct tpmr_softc *sc = p->p_tpmr;
@@ -364,7 +366,7 @@ tpmr_input(struct ifnet *ifp0, struct mbuf *m, uint64_t dst, void *brport)
 
 #if NPF > 0
 	if (!ISSET(iff, IFF_LINK1) &&
-	    (m = tpmr_pf(ifp0, PF_IN, m)) == NULL)
+	    (m = tpmr_pf(ifp0, PF_IN, m, ns)) == NULL)
 		return (NULL);
 #endif
 
@@ -390,7 +392,7 @@ tpmr_input(struct ifnet *ifp0, struct mbuf *m, uint64_t dst, void *brport)
 	ifpn = pn->p_ifp0;
 #if NPF > 0
 	if (!ISSET(iff, IFF_LINK1) &&
-	    (m = tpmr_pf(ifpn, PF_OUT, m)) == NULL) {
+	    (m = tpmr_pf(ifpn, PF_OUT, m, ns)) == NULL) {
 		tpmr_p_rele(pn);
 		return (NULL);
 	}
