@@ -113,8 +113,9 @@ ipipstat_pkt(enum ipipstat_counters p, enum ipipstat_counters b, uint64_t v)
 struct tdb;
 
 void	ipip_init(void);
-int	ipip_input(struct mbuf **, int *, int, int);
-int	ipip_input_if(struct mbuf **, int *, int, int, int, struct ifnet *);
+int	ipip_input(struct mbuf **, int *, int, int, struct netstack *);
+int	ipip_input_if(struct mbuf **, int *, int, int, int, struct ifnet *,
+	    struct netstack *);
 int	ipip_output(struct mbuf **, struct tdb *);
 int	ipip_sysctl(int *, u_int, void *, size_t *, void *, size_t);
 

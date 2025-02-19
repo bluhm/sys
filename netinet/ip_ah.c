@@ -527,7 +527,8 @@ error6:
  * passes authentication.
  */
 int
-ah_input(struct mbuf **mp, struct tdb *tdb, int skip, int protoff)
+ah_input(struct mbuf **mp, struct tdb *tdb, int skip, int protoff,
+    struct netstack *ns)
 {
 	const struct auth_hash *ahx = tdb->tdb_authalgxform;
 	struct mbuf *m = *mp, *m1, *m0;
@@ -842,7 +843,7 @@ ah_input(struct mbuf **mp, struct tdb *tdb, int skip, int protoff)
 			m->m_pkthdr.len -= rplen + ahx->authsize;
 		}
 
-	return ipsec_common_input_cb(mp, tdb, skip, protoff);
+	return ipsec_common_input_cb(mp, tdb, skip, protoff, ns);
 
  drop:
 	free(ptr, M_XDATA, 0);

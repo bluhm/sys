@@ -132,7 +132,7 @@ rip6_init(void)
 }
 
 int
-rip6_input(struct mbuf **mp, int *offp, int proto, int af)
+rip6_input(struct mbuf **mp, int *offp, int proto, int af, struct netstack *ns)
 {
 	struct mbuf *m = *mp;
 	struct ip6_hdr *ip6 = mtod(m, struct ip6_hdr *);

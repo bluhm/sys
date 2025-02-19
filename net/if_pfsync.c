@@ -3318,7 +3318,8 @@ pfsync_in_tdb(struct pfsync_softc *sc,
 }
 
 int
-pfsync_input4(struct mbuf **mp, int *offp, int proto, int af)
+pfsync_input4(struct mbuf **mp, int *offp, int proto, int af,
+    struct netstack *ns)
 {
 	struct mbuf *m = *mp;
 	struct ip *ip;

@@ -161,6 +161,6 @@ struct mbuf	*mpls_ip6_adjttl(struct mbuf *, u_int8_t);
 
 int		 mpls_output(struct ifnet *, struct mbuf *, struct sockaddr *,
 		    struct rtentry *);
-void		 mpls_input(struct ifnet *, struct mbuf *);
+void		 mpls_input(struct ifnet *, struct mbuf *, struct netstack *);
 
 #endif /* _KERNEL */

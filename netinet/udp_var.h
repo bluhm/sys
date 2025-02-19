@@ -137,7 +137,7 @@ void	udp6_ctlinput(int, struct sockaddr *, u_int, void *);
 #endif /* INET6 */
 void	 udp_ctlinput(int, struct sockaddr *, u_int, void *);
 void	 udp_init(void);
-int	 udp_input(struct mbuf **, int *, int, int);
+int	 udp_input(struct mbuf **, int *, int, int, struct netstack *);
 #ifdef INET6
 int	 udp6_output(struct inpcb *, struct mbuf *, struct mbuf *,
 	struct mbuf *);

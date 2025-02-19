@@ -608,7 +608,7 @@ mpip_input(struct mpip_softc *sc, struct mbuf *m)
 		break;
 	}
 
-	if_vinput(ifp, m);
+	if_vinput(ifp, m, NULL);
 	return;
 drop:
 	m_freem(m);

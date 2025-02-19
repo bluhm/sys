@@ -1021,7 +1021,7 @@ tcp_signature_tdb_zeroize(struct tdb *tdbp)
 
 int
 tcp_signature_tdb_input(struct mbuf **mp, struct tdb *tdbp, int skip,
-    int protoff)
+    int protoff, struct netstack *sn)
 {
 	m_freemp(mp);
 	return (IPPROTO_DONE);

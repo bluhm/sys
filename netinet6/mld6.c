@@ -489,6 +489,5 @@ mld6_sendpkt(struct in6_multi *in6m, int type, const struct in6_addr *dst)
 	if_put(ifp);
 
 	icmp6stat_inc(icp6s_outhist + type);
-	ip6_output(mh, &ip6_opts, NULL, ia6 ? 0 : IPV6_UNSPECSRC, &im6o,
-	    NULL);
+	ip6_output(mh, &ip6_opts, NULL, ia6 ? 0 : IPV6_UNSPECSRC, &im6o, NULL);
 }

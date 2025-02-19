@@ -76,7 +76,7 @@ int	 trunk_ether_delmulti(struct trunk_softc *, struct ifreq *);
 void	 trunk_ether_purgemulti(struct trunk_softc *);
 int	 trunk_ether_cmdmulti(struct trunk_port *, u_long);
 int	 trunk_ioctl_allports(struct trunk_softc *, u_long, caddr_t);
-void	 trunk_input(struct ifnet *, struct mbuf *);
+void	 trunk_input(struct ifnet *, struct mbuf *, struct netstack *);
 void	 trunk_start(struct ifnet *);
 void	 trunk_init(struct ifnet *);
 void	 trunk_stop(struct ifnet *);
@@ -1148,7 +1148,7 @@ trunk_stop(struct ifnet *ifp)
 }
 
 void
-trunk_input(struct ifnet *ifp, struct mbuf *m)
+trunk_input(struct ifnet *ifp, struct mbuf *m, struct netstack *ns)
 {
 	struct arpcom *ac0 = (struct arpcom *)ifp;
 	struct trunk_port *tp;
@@ -1201,7 +1201,7 @@ trunk_input(struct ifnet *ifp, struct mbuf *m)
 	}
 
 
-	if_vinput(trifp, m);
+	if_vinput(trifp, m, ns);
 	return;
 
  bad:

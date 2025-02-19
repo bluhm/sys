@@ -308,7 +308,8 @@ enum pfsync_counters {
 #define PFSYNC_S_PFSYNC	0xd2
 #define PFSYNC_S_DEAD	0xde
 
-int			pfsync_input4(struct mbuf **, int *, int, int);
+int			pfsync_input4(struct mbuf **, int *, int, int,
+			    struct netstack *);
 int			pfsync_sysctl(int *, u_int,  void *, size_t *,
 			    void *, size_t);
 

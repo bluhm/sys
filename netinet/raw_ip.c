@@ -129,7 +129,7 @@ rip_init(void)
 }
 
 int
-rip_input(struct mbuf **mp, int *offp, int proto, int af)
+rip_input(struct mbuf **mp, int *offp, int proto, int af, struct netstack *ns)
 {
 	struct mbuf *m = *mp;
 	struct ip *ip = mtod(m, struct ip *);

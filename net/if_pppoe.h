@@ -70,7 +70,7 @@ extern struct mbuf_queue pppoediscinq;
 extern struct mbuf_queue pppoeinq;
 
 int		 pppoe_if_exists(void);
-struct mbuf	*pppoe_vinput(struct ifnet *, struct mbuf *);
+struct mbuf	*pppoe_vinput(struct ifnet *, struct mbuf *, struct netstack *);
 
 #endif /* _KERNEL */
 #endif /* _NET_IF_PPPOE_H_ */
