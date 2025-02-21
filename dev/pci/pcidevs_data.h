@@ -2,7 +2,7 @@
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	OpenBSD: pcidevs,v 1.2095 2025/01/08 02:12:24 jsg Exp 
+ *	OpenBSD: pcidevs,v 1.2097 2025/02/19 10:38:14 jsg Exp 
  */
 
 /*	$NetBSD: pcidevs,v 1.30 1997/06/24 06:20:24 thorpej Exp $	*/
@@ -3436,6 +3436,10 @@ static const struct pci_known_product pci_known_products[] = {
 	    "AR5211Ref",
 	},
 	{
+	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_KRACKAN_POINT,
+	    "Krackan Point",
+	},
+	{
 	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_KAVERI_1,
 	    "Kaveri",
 	},
@@ -3562,6 +3566,10 @@ static const struct pci_known_product pci_known_products[] = {
 	{
 	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_STRIX_POINT,
 	    "Strix Point",
+	},
+	{
+	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_STRIX_HALO,
+	    "Strix Halo",
 	},
 	{
 	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_PHOENIX_1,
@@ -6849,6 +6857,10 @@ static const struct pci_known_product pci_known_products[] = {
 	},
 	{
 	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_NAVI31_2,
+	    "Navi 31",
+	},
+	{
+	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_NAVI31_5,
 	    "Navi 31",
 	},
 	{
