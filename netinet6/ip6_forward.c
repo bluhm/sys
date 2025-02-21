@@ -97,6 +97,7 @@ ip6_forward(struct mbuf *m, struct route *ro, int flags)
 	u_short mflags, pfflags;
 	struct mbuf *mcopy;
 	int error = 0, type = 0, code = 0, destmtu = 0;
+	u_int orig_rtableid;
 #ifdef IPSEC
 	struct tdb *tdb = NULL;
 #endif /* IPSEC */
@@ -180,6 +181,7 @@ ip6_forward(struct mbuf *m, struct route *ro, int flags)
 		icmp_len = 0;
 	}
 
+	orig_rtableid = m->m_pkthdr.ph_rtableid;
 #if NPF > 0
 reroute:
 #endif
@@ -254,7 +256,7 @@ reroute:
 	 */
 	if (tdb != NULL) {
 		/* Callee frees mbuf */
-		error = ip6_output_ipsec_send(tdb, m, ro, 0, 1);
+		error = ip6_output_ipsec_send(tdb, m, ro, orig_rtableid, 0, 1);
 		rt = ro->ro_rt;
 		if (error)
 			goto senderr;
