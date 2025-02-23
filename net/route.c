@@ -567,15 +567,6 @@ rt_setgwroute(struct rtentry *rt, const struct sockaddr *gate, u_int rtableid)
 			atomic_cas_uint(&rt->rt_mtu, mtu, nhmtu);
 	}
 
-	/*
-	 * To avoid reference counting problems when writing link-layer
-	 * addresses in an outgoing packet, we ensure that the lifetime
-	 * of a cached entry is greater than the bigger lifetime of the
-	 * gateway entries it is pointed by.
-	 */
-	nhrt->rt_flags |= RTF_CACHED;
-	nhrt->rt_cachecnt++;
-
 	/* commit */
 	rt_putgwroute(rt, nhrt);
 
@@ -595,17 +586,31 @@ rt_putgwroute(struct rtentry *rt, struct rtentry *nhrt)
 	if (!ISSET(rt->rt_flags, RTF_GATEWAY))
 		return;
 
+	/*
+	 * To avoid reference counting problems when writing link-layer
+	 * addresses in an outgoing packet, we ensure that the lifetime
+	 * of a cached entry is greater than the bigger lifetime of the
+	 * gateway entries it is pointed by.
+	 */
+	if (nhrt != NULL) {
+		mtx_enter(&nhrt->rt_mtx);
+		SET(nhrt->rt_flags, RTF_CACHED);
+		nhrt->rt_cachecnt++;
+		mtx_leave(&nhrt->rt_mtx);
+	}
+
 	/* this is protected as per [X] in route.h */
 	onhrt = rt->rt_gwroute;
 	rt->rt_gwroute = nhrt;
 
 	if (onhrt != NULL) {
+		mtx_enter(&onhrt->rt_mtx);
 		KASSERT(onhrt->rt_cachecnt > 0);
 		KASSERT(ISSET(onhrt->rt_flags, RTF_CACHED));
-
-		--onhrt->rt_cachecnt;
+		onhrt->rt_cachecnt--;
 		if (onhrt->rt_cachecnt == 0)
 			CLR(onhrt->rt_flags, RTF_CACHED);
+		mtx_leave(&onhrt->rt_mtx);
 
 		rtfree(onhrt);
 	}
@@ -750,7 +755,9 @@ create:
 			 * Smash the current notion of the gateway to
 			 * this destination.  Should check about netmask!!!
 			 */
-			rt->rt_flags |= RTF_MODIFIED;
+			mtx_enter(&rt->rt_mtx);
+			SET(rt->rt_flags, RTF_MODIFIED);
+			mtx_leave(&rt->rt_mtx);
 			flags |= RTF_MODIFIED;
 			prio = rt->rt_priority;
 			stat = rts_newgateway;
@@ -861,7 +868,7 @@ rtflushclone(struct rtentry *parent, unsigned int rtableid)
 	int error;
 
 #ifdef DIAGNOSTIC
-	if (!parent || (parent->rt_flags & RTF_CLONING) == 0)
+	if (!parent || !ISSET(parent->rt_flags, RTF_CLONING))
 		panic("rtflushclone: called with a non-cloning route");
 #endif
 
@@ -931,7 +938,9 @@ rtrequest_delete(struct rt_addrinfo *info, u_int8_t prio, struct ifnet *ifp,
 	rtfree(rt->rt_parent);
 	rt->rt_parent = NULL;
 
-	rt->rt_flags &= ~RTF_UP;
+	mtx_enter(&rt->rt_mtx);
+	CLR(rt->rt_flags, RTF_UP);
+	mtx_leave(&rt->rt_mtx);
 
 	KASSERT(ifp->if_index == rt->rt_ifidx);
 	ifp->if_rtrequest(ifp, RTM_DELETE, rt);
@@ -974,7 +983,7 @@ rtrequest(int req, struct rt_addrinfo *info, u_int8_t prio,
 	case RTM_RESOLVE:
 		if (ret_nrt == NULL || (rt = *ret_nrt) == NULL)
 			return (EINVAL);
-		if ((rt->rt_flags & RTF_CLONING) == 0)
+		if (!ISSET(rt->rt_flags, RTF_CLONING))
 			return (EINVAL);
 		info->rti_ifa = rt->rt_ifa;
 		info->rti_flags = rt->rt_flags | (RTF_CLONED|RTF_HOST);
@@ -1004,6 +1013,7 @@ rtrequest(int req, struct rt_addrinfo *info, u_int8_t prio,
 			return (ENOBUFS);
 		}
 
+		mtx_init_flags(&rt->rt_mtx, IPL_SOFTNET, "rtentry", 0);
 		refcnt_init_trace(&rt->rt_refcnt, DT_REFCNT_IDX_RTENTRY);
 		rt->rt_flags = info->rti_flags | RTF_UP;
 		rt->rt_priority = prio;	/* init routing priority */
@@ -1014,7 +1024,7 @@ rtrequest(int req, struct rt_addrinfo *info, u_int8_t prio,
 		    !ISSET(rt->rt_flags, RTF_LOCAL) &&
 		    (!LINK_STATE_IS_UP(ifp->if_link_state) ||
 		    !ISSET(ifp->if_flags, IFF_UP))) {
-			rt->rt_flags &= ~RTF_UP;
+			CLR(rt->rt_flags, RTF_UP);
 			rt->rt_priority |= RTP_DOWN;
 		}
 
@@ -1523,7 +1533,7 @@ struct rttimer {
 									\
 		ifp = if_get(r->rtt_rt->rt_ifidx);			\
 		if (ifp != NULL &&					\
-		    (r->rtt_rt->rt_flags & (RTF_DYNAMIC|RTF_HOST)) ==	\
+		    ISSET(r->rtt_rt->rt_flags, RTF_DYNAMIC|RTF_HOST) ==	\
 		    (RTF_DYNAMIC|RTF_HOST))				\
 			rtdeletemsg(r->rtt_rt, ifp, r->rtt_tableid);	\
 		if_put(ifp);						\
@@ -1712,7 +1722,7 @@ int
 rt_mpls_set(struct rtentry *rt, const struct sockaddr *src, uint8_t op)
 {
 	struct sockaddr_mpls	*psa_mpls = (struct sockaddr_mpls *)src;
-	struct rt_mpls		*rt_mpls;
+	struct rt_mpls		*mpls;
 
 	if (psa_mpls == NULL && op != MPLS_OP_POP)
 		return (EOPNOTSUPP);
@@ -1721,16 +1731,18 @@ rt_mpls_set(struct rtentry *rt, const struct sockaddr *src, uint8_t op)
 	if (psa_mpls != NULL && psa_mpls->smpls_family != AF_MPLS)
 		return (EAFNOSUPPORT);
 
-	rt->rt_llinfo = malloc(sizeof(struct rt_mpls), M_TEMP, M_NOWAIT|M_ZERO);
-	if (rt->rt_llinfo == NULL)
+	mpls = malloc(sizeof(struct rt_mpls), M_TEMP, M_NOWAIT|M_ZERO);
+	if (mpls == NULL)
 		return (ENOMEM);
 
-	rt_mpls = (struct rt_mpls *)rt->rt_llinfo;
 	if (psa_mpls != NULL)
-		rt_mpls->mpls_label = psa_mpls->smpls_label;
-	rt_mpls->mpls_operation = op;
-	/* XXX: set experimental bits */
-	rt->rt_flags |= RTF_MPLS;
+		mpls->mpls_label = psa_mpls->smpls_label;
+	mpls->mpls_operation = op;
+
+	mtx_enter(&rt->rt_mtx);
+	rt->rt_llinfo = (caddr_t)mpls;
+	SET(rt->rt_flags, RTF_MPLS);
+	mtx_leave(&rt->rt_mtx);
 
 	return (0);
 }
@@ -1738,11 +1750,17 @@ rt_mpls_set(struct rtentry *rt, const struct sockaddr *src, uint8_t op)
 void
 rt_mpls_clear(struct rtentry *rt)
 {
-	if (rt->rt_llinfo != NULL && rt->rt_flags & RTF_MPLS) {
-		free(rt->rt_llinfo, M_TEMP, sizeof(struct rt_mpls));
+	struct rt_mpls *mpls = NULL;
+
+	mtx_enter(&rt->rt_mtx);
+	if (rt->rt_llinfo != NULL && ISSET(rt->rt_flags, RTF_MPLS)) {
+		mpls = (struct rt_mpls *)rt->rt_llinfo;
 		rt->rt_llinfo = NULL;
 	}
-	rt->rt_flags &= ~RTF_MPLS;
+	CLR(rt->rt_flags, RTF_MPLS);
+	mtx_leave(&rt->rt_mtx);
+
+	free(mpls, M_TEMP, sizeof(struct rt_mpls));
 }
 #endif
 
@@ -1921,17 +1939,22 @@ rt_if_linkstate_change(struct rtentry *rt, void *arg, u_int id)
 		return (0);
 
 	/* Local routes are always usable. */
-	if (rt->rt_flags & RTF_LOCAL) {
-		rt->rt_flags |= RTF_UP;
+	if (ISSET(rt->rt_flags, RTF_LOCAL)) {
+		mtx_enter(&rt->rt_mtx);
+		SET(rt->rt_flags, RTF_UP);
+		mtx_leave(&rt->rt_mtx);
 		return (0);
 	}
 
 	if (LINK_STATE_IS_UP(ifp->if_link_state) && ifp->if_flags & IFF_UP) {
-		if (ISSET(rt->rt_flags, RTF_UP))
+		mtx_enter(&rt->rt_mtx);
+		if (ISSET(rt->rt_flags, RTF_UP)) {
+			mtx_leave(&rt->rt_mtx);
 			return (0);
-
+		}
 		/* bring route up */
-		rt->rt_flags |= RTF_UP;
+		SET(rt->rt_flags, RTF_UP);
+		mtx_leave(&rt->rt_mtx);
 		error = rtable_mpath_reprio(id, rt_key(rt), rt_plen(rt),
 		    rt->rt_priority & RTP_MASK, rt);
 	} else {
@@ -1945,11 +1968,14 @@ rt_if_linkstate_change(struct rtentry *rt, void *arg, u_int id)
 			return (EEXIST);
 		}
 
-		if (!ISSET(rt->rt_flags, RTF_UP))
+		mtx_enter(&rt->rt_mtx);
+		if (!ISSET(rt->rt_flags, RTF_UP)) {
+			mtx_leave(&rt->rt_mtx);
 			return (0);
-
+		}
 		/* take route down */
-		rt->rt_flags &= ~RTF_UP;
+		CLR(rt->rt_flags, RTF_UP);
+		mtx_leave(&rt->rt_mtx);
 		error = rtable_mpath_reprio(id, rt_key(rt), rt_plen(rt),
 		    rt->rt_priority | RTP_DOWN, rt);
 	}
