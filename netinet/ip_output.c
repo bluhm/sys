@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_output.c,v 1.404 2025/02/14 13:14:13 dlg Exp $	*/
+/*	$OpenBSD: ip_output.c,v 1.405 2025/02/24 20:16:14 bluhm Exp $	*/
 /*	$NetBSD: ip_output.c,v 1.28 1996/02/13 23:43:07 christos Exp $	*/
 
 /*
