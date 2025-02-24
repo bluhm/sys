@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_mmap.c,v 1.193 2024/12/14 12:07:38 mvs Exp $	*/
+/*	$OpenBSD: uvm_mmap.c,v 1.196 2025/02/24 18:07:50 tb Exp $	*/
 /*	$NetBSD: uvm_mmap.c,v 1.49 2001/02/18 21:19:08 chs Exp $	*/
 
 /*
@@ -611,10 +611,16 @@ sys_pinsyscalls(struct proc *p, void *v, register_t *retval)
 	vaddr_t base;
 	size_t len;
 	u_int *pins;
+	u_int8_t map_flags;
 
-	if (pr->ps_libcpin.pn_start ||
-	    (pr->ps_vmspace->vm_map.flags & VM_MAP_PINSYSCALL_ONCE))
+	/* Only allow libc syscall pinning once per process */
+	mtx_enter(&pr->ps_vmspace->vm_map.flags_lock);
+	map_flags = pr->ps_vmspace->vm_map.flags;
+	pr->ps_vmspace->vm_map.flags |= VM_MAP_PINSYSCALL_ONCE;
+	mtx_leave(&pr->ps_vmspace->vm_map.flags_lock);
+	if (map_flags & VM_MAP_PINSYSCALL_ONCE)
 		return (EPERM);
+
 	base = (vaddr_t)SCARG(uap, base);
 	len = (vsize_t)SCARG(uap, len);
 	if (base > SIZE_MAX - len)
@@ -622,12 +628,10 @@ sys_pinsyscalls(struct proc *p, void *v, register_t *retval)
 	if (base < map->min_offset || base+len > map->max_offset)
 		return (EINVAL);
 
-	/* XXX MP unlock */
-
 	npins = SCARG(uap, npins);
 	if (npins < 1 || npins > SYS_MAXSYSCALL)
 		return (E2BIG);
-	pins = malloc(npins * sizeof(u_int), M_PINSYSCALL, M_WAITOK|M_ZERO);
+	pins = mallocarray(npins, sizeof(u_int), M_PINSYSCALL, M_WAITOK|M_ZERO);
 	if (pins == NULL)
 		return (ENOMEM);
 	error = copyin(SCARG(uap, pins), pins, npins * sizeof(u_int));
