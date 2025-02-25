@@ -87,7 +87,7 @@ void in_delayed_cksum(struct mbuf *);
 int ip_output_ipsec_lookup(struct mbuf *m, int hlen,
     const struct ipsec_level *seclevel, struct tdb **, int ipsecflowinfo);
 void ip_output_ipsec_pmtu_update(struct tdb *, struct route *, struct in_addr,
-    int);
+    u_int, int);
 int ip_output_ipsec_send(struct tdb *, struct mbuf *, struct route *, u_int,
     int);
 
@@ -545,12 +545,10 @@ ip_output_ipsec_lookup(struct mbuf *m, int hlen,
 
 void
 ip_output_ipsec_pmtu_update(struct tdb *tdb, struct route *ro,
-    struct in_addr dst, int rtableid)
+    struct in_addr dst, u_int rtableid, int transportmode)
 {
 	struct rtentry *rt = NULL;
 	int rt_mtucloned = 0;
-	int transportmode = (tdb->tdb_dst.sa.sa_family == AF_INET) &&
-	    (tdb->tdb_dst.sin.sin_addr.s_addr == dst.s_addr);
 
 	/* Find a host route to store the mtu in */
 	if (ro != NULL)
@@ -621,7 +619,12 @@ ip_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct route *ro,
 	dst = ip->ip_dst;
 	if (ip_mtudisc && (ip->ip_off & htons(IP_DF)) && tdb->tdb_mtu &&
 	    len > tdb->tdb_mtu && tdb->tdb_mtutimeout > gettime()) {
-		ip_output_ipsec_pmtu_update(tdb, ro, dst, rtableid);
+		int transportmode;
+
+		transportmode = (tdb->tdb_dst.sa.sa_family == AF_INET) &&
+		    (tdb->tdb_dst.sin.sin_addr.s_addr == dst.s_addr);
+		ip_output_ipsec_pmtu_update(tdb, ro, dst, rtableid,
+		    transportmode);
 		ipsec_adjust_mtu(m, tdb->tdb_mtu);
 		m_freem(m);
 		return EMSGSIZE;
@@ -665,7 +668,7 @@ ip_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct route *ro,
 	if (!error && tso)
 		tcpstat_inc(tcps_outswtso);
 	if (ip_mtudisc && error == EMSGSIZE)
-		ip_output_ipsec_pmtu_update(tdb, ro, dst, rtableid);
+		ip_output_ipsec_pmtu_update(tdb, ro, dst, rtableid, 0);
 	return error;
 }
 #endif /* IPSEC */
