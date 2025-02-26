@@ -442,7 +442,7 @@ int
 ip_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp,
     struct netstack *ns)
 {
-	struct route ro;
+	struct route iproute, *ro = NULL;
 	struct mbuf *m;
 	struct ip *ip;
 	int hlen;
@@ -453,7 +453,6 @@ ip_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp,
 
 	KASSERT(*offp == 0);
 
-	ro.ro_rt = NULL;
 	ipstat_inc(ips_total);
 	m = *mp = ipv4_check(ifp, *mp);
 	if (m == NULL)
@@ -513,7 +512,13 @@ ip_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp,
 		goto out;
 	}
 
-	switch(in_ouraddr(m, ifp, &ro, flags)) {
+	if (ns == NULL) {
+		ro = &iproute;
+		ro->ro_rt = NULL;
+	} else {
+		ro = &ns->ns_route;
+	}
+	switch(in_ouraddr(m, ifp, ro, flags)) {
 	case 2:
 		goto bad;
 	case 1:
@@ -615,15 +620,17 @@ ip_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp,
 	}
 #endif /* IPSEC */
 
-	ip_forward(m, ifp, &ro, flags);
+	ip_forward(m, ifp, ro, flags);
 	*mp = NULL;
-	rtfree(ro.ro_rt);
+	if (ro == &iproute)
+		rtfree(ro->ro_rt);
 	return IPPROTO_DONE;
  bad:
 	nxt = IPPROTO_DONE;
 	m_freemp(mp);
  out:
-	rtfree(ro.ro_rt);
+	if (ro == &iproute)
+		rtfree(ro->ro_rt);
 	return nxt;
 }
 

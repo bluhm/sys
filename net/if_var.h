@@ -46,6 +46,7 @@
 #include <sys/timeout.h>
 
 #include <net/ifq.h>
+#include <net/route.h>
 
 /*
  * Structures defining a network interface, providing a packet
@@ -91,7 +92,7 @@ struct task;
 struct cpumem;
 
 struct netstack {
-	/* to be filled */
+	struct route	ns_route;
 };
 
 /*
