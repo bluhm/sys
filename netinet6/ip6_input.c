@@ -364,7 +364,7 @@ int
 ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp,
     struct netstack *ns)
 {
-	struct route ro;
+	struct route iproute, *ro = NULL;
 	struct mbuf *m;
 	struct ip6_hdr *ip6;
 	struct rtentry *rt;
@@ -377,7 +377,6 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp,
 
 	KASSERT(*offp == 0);
 
-	ro.ro_rt = NULL;
 	ip6stat_inc(ip6s_total);
 	m = *mp = ipv6_check(ifp, *mp);
 	if (m == NULL)
@@ -535,7 +534,13 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp,
 	/*
 	 *  Unicast check
 	 */
-	rt = route6_mpath(&ro, &ip6->ip6_dst, &ip6->ip6_src,
+	if (ns == NULL) {
+		ro = &iproute;
+		ro->ro_rt = NULL;
+	} else {
+		ro = &ns->ns_route;
+	}
+	rt = route6_mpath(ro, &ip6->ip6_dst, &ip6->ip6_src,
 	    m->m_pkthdr.ph_rtableid);
 
 	/*
@@ -633,15 +638,17 @@ ip6_input_if(struct mbuf **mp, int *offp, int nxt, int af, struct ifnet *ifp,
 	}
 #endif /* IPSEC */
 
-	ip6_forward(m, &ro, flags);
+	ip6_forward(m, ro, flags);
 	*mp = NULL;
-	rtfree(ro.ro_rt);
+	if (ro == &iproute)
+		rtfree(ro->ro_rt);
 	return IPPROTO_DONE;
  bad:
 	nxt = IPPROTO_DONE;
 	m_freemp(mp);
  out:
-	rtfree(ro.ro_rt);
+	if (ro == &iproute)
+		rtfree(ro->ro_rt);
 	return nxt;
 }
 
