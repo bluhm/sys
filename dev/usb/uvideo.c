@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvideo.c,v 1.244 2025/02/25 22:13:44 kirill Exp $ */
+/*	$OpenBSD: uvideo.c,v 1.246 2025/02/26 21:03:52 mglocker Exp $ */
 
 /*
  * Copyright (c) 2008 Robert Nagy <robert@openbsd.org>
@@ -101,7 +101,7 @@ struct uvideo_softc {
 	void					 (*sc_uplayer_intr)(void *);
 
 	const struct uvideo_devs		*sc_quirk;
-	usbd_status				(*sc_decode_stream_header)
+	void					(*sc_decode_stream_header)
 						    (struct uvideo_softc *,
 						    uint8_t *, int);
 };
@@ -131,6 +131,8 @@ usbd_status	uvideo_vs_parse_desc(struct uvideo_softc *,
 usbd_status	uvideo_vs_parse_desc_input_header(struct uvideo_softc *,
 		    const usb_descriptor_t *);
 usbd_status	uvideo_vs_parse_desc_format(struct uvideo_softc *);
+usbd_status	uvideo_vs_parse_desc_colorformat(struct uvideo_softc *,
+		    const usb_descriptor_t *);
 usbd_status	uvideo_vs_parse_desc_format_mjpeg(struct uvideo_softc *,
 		    const usb_descriptor_t *);
 usbd_status	uvideo_vs_parse_desc_format_uncompressed(struct uvideo_softc *,
@@ -165,11 +167,11 @@ void		uvideo_vs_start_isoc_ixfer(struct uvideo_softc *,
 		    struct uvideo_isoc_xfer *);
 void		uvideo_vs_cb(struct usbd_xfer *, void *,
 		    usbd_status);
-usbd_status	uvideo_vs_decode_stream_header(struct uvideo_softc *,
+void		uvideo_vs_decode_stream_header(struct uvideo_softc *,
 		    uint8_t *, int); 
-usbd_status	uvideo_vs_decode_stream_header_isight(struct uvideo_softc *,
+void		uvideo_vs_decode_stream_header_isight(struct uvideo_softc *,
 		    uint8_t *, int);
-int		uvideo_mmap_queue(struct uvideo_softc *, uint8_t *, int, int);
+void		uvideo_mmap_queue(struct uvideo_softc *, uint8_t *, int, int);
 void		uvideo_read(struct uvideo_softc *, uint8_t *, int);
 usbd_status	uvideo_usb_control(struct uvideo_softc *, uint8_t, uint8_t,
 		    uint16_t, uint8_t *, size_t);
@@ -419,6 +421,35 @@ const struct uvideo_map_fmts {
 	{ UVIDEO_FORMAT_GUID_GR16, V4L2_PIX_FMT_SGRBG16 },
 	{ UVIDEO_FORMAT_GUID_INVZ, V4L2_PIX_FMT_Z16 },
 	{ UVIDEO_FORMAT_GUID_INVI, V4L2_PIX_FMT_Y10 },
+};
+
+const enum v4l2_colorspace uvideo_color_primaries[] = {
+	V4L2_COLORSPACE_SRGB,		/* Unspecified */
+	V4L2_COLORSPACE_SRGB,
+	V4L2_COLORSPACE_470_SYSTEM_M,
+	V4L2_COLORSPACE_470_SYSTEM_BG,
+	V4L2_COLORSPACE_SMPTE170M,
+	V4L2_COLORSPACE_SMPTE240M,
+};
+
+const enum v4l2_xfer_func uvideo_xfer_characteristics[] = {
+	V4L2_XFER_FUNC_DEFAULT,		/* Unspecified */
+	V4L2_XFER_FUNC_709,
+	V4L2_XFER_FUNC_709,		/* Substitution for BT.470-2 M */
+	V4L2_XFER_FUNC_709,		/* Substitution for BT.470-2 B, G */
+	V4L2_XFER_FUNC_709,		/* Substitution for SMPTE 170M */
+	V4L2_XFER_FUNC_SMPTE240M,
+	V4L2_XFER_FUNC_NONE,
+	V4L2_XFER_FUNC_SRGB,
+};
+
+const enum v4l2_ycbcr_encoding uvideo_matrix_coefficients[] = {
+	V4L2_YCBCR_ENC_DEFAULT,		/* Unspecified */
+	V4L2_YCBCR_ENC_709,
+	V4L2_YCBCR_ENC_601,		/* Substitution for FCC */
+	V4L2_YCBCR_ENC_601,		/* Substitution for BT.470-2 B, G */
+	V4L2_YCBCR_ENC_601,
+	V4L2_YCBCR_ENC_SMPTE240M,
 };
 
 int
@@ -1011,6 +1042,12 @@ uvideo_vs_parse_desc_format(struct uvideo_softc *sc)
 		}
 
 		switch (desc->bDescriptorSubtype) {
+		case UDESCSUB_VS_COLORFORMAT:
+			if (desc->bLength == 6) {
+				(void)uvideo_vs_parse_desc_colorformat(
+				    sc, desc);
+			}
+			break;
 		case UDESCSUB_VS_FORMAT_MJPEG:
 			if (desc->bLength == 11) {
 				(void)uvideo_vs_parse_desc_format_mjpeg(
@@ -1036,6 +1073,42 @@ uvideo_vs_parse_desc_format(struct uvideo_softc *sc)
 	}
 	DPRINTF(1, "%s: number of total format descriptors=%d\n",
 	    DEVNAME(sc), sc->sc_fmtgrp_num);
+
+	return (USBD_NORMAL_COMPLETION);
+}
+
+usbd_status
+uvideo_vs_parse_desc_colorformat(struct uvideo_softc *sc,
+    const usb_descriptor_t *desc)
+{
+	int fmtidx;
+	struct usb_video_colorformat_desc *d;
+
+	d = (struct usb_video_colorformat_desc *)(uint8_t *)desc;
+
+	fmtidx = sc->sc_fmtgrp_idx - 1;
+	if (fmtidx < 0 || sc->sc_fmtgrp[fmtidx].has_colorformat)
+		return (USBD_INVAL);
+
+	if (d->bColorPrimaries < nitems(uvideo_color_primaries))
+		sc->sc_fmtgrp[fmtidx].colorspace =
+		    uvideo_color_primaries[d->bColorPrimaries];
+	else
+		sc->sc_fmtgrp[fmtidx].colorspace = V4L2_COLORSPACE_SRGB;
+
+	if (d->bTransferCharacteristics < nitems(uvideo_xfer_characteristics))
+		sc->sc_fmtgrp[fmtidx].xfer_func =
+		    uvideo_xfer_characteristics[d->bTransferCharacteristics];
+	else
+		sc->sc_fmtgrp[fmtidx].xfer_func = V4L2_XFER_FUNC_DEFAULT;
+
+	if (d->bMatrixCoefficients < nitems(uvideo_matrix_coefficients))
+		sc->sc_fmtgrp[fmtidx].ycbcr_enc =
+		    uvideo_matrix_coefficients[d->bMatrixCoefficients];
+	else
+		sc->sc_fmtgrp[fmtidx].ycbcr_enc = V4L2_YCBCR_ENC_DEFAULT;
+
+	sc->sc_fmtgrp[fmtidx].has_colorformat = 1;
 
 	return (USBD_NORMAL_COMPLETION);
 }
@@ -2149,8 +2222,7 @@ uvideo_vs_start_bulk_thread(void *arg)
 
 		DPRINTF(2, "%s: *** buffer len = %d\n", DEVNAME(sc), size);
 
-		(void)sc->sc_decode_stream_header(sc,
-		    sc->sc_vs_cur->bxfer.buf, size);
+		sc->sc_decode_stream_header(sc, sc->sc_vs_cur->bxfer.buf, size);
 	}
 	usbd_ref_decr(sc->sc_udev);
 
@@ -2205,7 +2277,6 @@ uvideo_vs_cb(struct usbd_xfer *xfer, void *priv,
 	struct uvideo_softc *sc = ixfer->sc;
 	int len, i, frame_size;
 	uint8_t *frame;
-	usbd_status error;
 
 	DPRINTF(2, "%s: %s\n", DEVNAME(sc), __func__);
 
@@ -2228,27 +2299,24 @@ uvideo_vs_cb(struct usbd_xfer *xfer, void *priv,
 			/* frame is empty */
 			continue;
 
-		error = sc->sc_decode_stream_header(sc, frame, frame_size);
-		if (error == USBD_CANCELLED)
-			break;
+		sc->sc_decode_stream_header(sc, frame, frame_size);
 	}
 
 skip:	/* setup new transfer */
 	uvideo_vs_start_isoc_ixfer(sc, ixfer);
 }
 
-usbd_status
+void
 uvideo_vs_decode_stream_header(struct uvideo_softc *sc, uint8_t *frame,
     int frame_size)
 {
 	struct uvideo_frame_buffer *fb = &sc->sc_frame_buffer;
 	struct usb_video_stream_header *sh;
 	int sample_len;
-	usbd_status ret = USBD_NORMAL_COMPLETION;
 
 	if (frame_size < UVIDEO_SH_MIN_LEN)
 		/* frame too small to contain a valid stream header */
-		return (USBD_INVAL);
+		return;
 
 	sh = (struct usb_video_stream_header *)frame;
 
@@ -2256,7 +2324,7 @@ uvideo_vs_decode_stream_header(struct uvideo_softc *sc, uint8_t *frame,
 
 	if (sh->bLength > frame_size || sh->bLength < UVIDEO_SH_MIN_LEN)
 		/* invalid header size */
-		return (USBD_INVAL);
+		return;
 
 	DPRINTF(2, "%s: frame_size = %d\n", DEVNAME(sc), frame_size);
 
@@ -2326,9 +2394,7 @@ uvideo_vs_decode_stream_header(struct uvideo_softc *sc, uint8_t *frame,
 #endif
 		if (sc->sc_mmap_flag) {
 			/* mmap */
-			if (uvideo_mmap_queue(sc, fb->buf, fb->offset,
-				    fb->error))
-				ret = USBD_NOMEM;
+			uvideo_mmap_queue(sc, fb->buf, fb->offset, fb->error);
 		} else if (fb->error) {
 			DPRINTF(1, "%s: %s: error frame, skipped!\n",
 			    DEVNAME(sc), __func__);
@@ -2341,8 +2407,6 @@ uvideo_vs_decode_stream_header(struct uvideo_softc *sc, uint8_t *frame,
 		fb->fid = 0;
 		fb->error = 0;
 	}
-
-	return (ret);
 }
 
 /*
@@ -2361,13 +2425,12 @@ uvideo_vs_decode_stream_header(struct uvideo_softc *sc, uint8_t *frame,
  * Sometimes the stream header is prefixed by a unknown byte.  Therefore
  * we check for the magic value on two offsets.
  */
-usbd_status
+void
 uvideo_vs_decode_stream_header_isight(struct uvideo_softc *sc, uint8_t *frame,
     int frame_size)
 {
 	struct uvideo_frame_buffer *fb = &sc->sc_frame_buffer;
 	int sample_len, header = 0;
-	usbd_status ret = USBD_NORMAL_COMPLETION;
 	uint8_t magic[] = {
 	    0x11, 0x22, 0x33, 0x44,
 	    0xde, 0xad, 0xbe, 0xef, 0xde, 0xad, 0xfa, 0xce };
@@ -2379,14 +2442,13 @@ uvideo_vs_decode_stream_header_isight(struct uvideo_softc *sc, uint8_t *frame,
 
 	if (header && fb->fid == 0) {
 		fb->fid = 1;
-		return (USBD_NORMAL_COMPLETION);
+		return;
 	}
 
 	if (header) {
 		if (sc->sc_mmap_flag) {
 			/* mmap */
-			if (uvideo_mmap_queue(sc, fb->buf, fb->offset, 0))
-				ret = USBD_NOMEM;
+			uvideo_mmap_queue(sc, fb->buf, fb->offset, 0);
 		} else {
 			/* read */
 			uvideo_read(sc, fb->buf, fb->offset);
@@ -2400,11 +2462,9 @@ uvideo_vs_decode_stream_header_isight(struct uvideo_softc *sc, uint8_t *frame,
 			fb->offset += sample_len;
 		}
 	}
-
-	return (ret);
 }
 
-int
+void
 uvideo_mmap_queue(struct uvideo_softc *sc, uint8_t *buf, int len, int err)
 {
 	int i;
@@ -2420,7 +2480,7 @@ uvideo_mmap_queue(struct uvideo_softc *sc, uint8_t *buf, int len, int err)
 	if (i == sc->sc_mmap_count) {
 		DPRINTF(1, "%s: %s: mmap queue is full!\n",
 		    DEVNAME(sc), __func__);
-		return ENOMEM;
+		return;
 	}
 
 	/* copy frame to mmap buffer and report length */
@@ -2454,8 +2514,6 @@ uvideo_mmap_queue(struct uvideo_softc *sc, uint8_t *buf, int len, int err)
 	 * ready to dequeue.
 	 */
 	sc->sc_uplayer_intr(sc->sc_uplayer_arg);
-
-	return 0;
 }
 
 void
@@ -3279,6 +3337,17 @@ uvideo_g_fmt(void *v, struct v4l2_format *fmt)
 	fmt->fmt.pix.width = UGETW(sc->sc_fmtgrp_cur->frame_cur->wWidth);
 	fmt->fmt.pix.height = UGETW(sc->sc_fmtgrp_cur->frame_cur->wHeight);
 	fmt->fmt.pix.sizeimage = UGETDW(sc->sc_desc_probe.dwMaxVideoFrameSize);
+
+	if (sc->sc_fmtgrp_cur->has_colorformat) {
+		fmt->fmt.pix.colorspace = sc->sc_fmtgrp_cur->colorspace;
+		fmt->fmt.pix.xfer_func = sc->sc_fmtgrp_cur->xfer_func;
+		fmt->fmt.pix.ycbcr_enc = sc->sc_fmtgrp_cur->ycbcr_enc;
+
+		DPRINTF(1, "%s: %s: use color format"
+		    " colorspace=%d, xfer_func=%d, ycbcr_enc=%d\n",
+		    DEVNAME(sc), __func__, fmt->fmt.pix.colorspace,
+		    fmt->fmt.pix.xfer_func, fmt->fmt.pix.ycbcr_enc);
+	}
 
 	DPRINTF(1, "%s: %s: current width=%d, height=%d\n",
 	    DEVNAME(sc), __func__, fmt->fmt.pix.width, fmt->fmt.pix.height);
