@@ -469,8 +469,7 @@ tcp_input(struct mbuf **mp, int *offp, int proto, int af)
 			break;
 #ifdef INET6
 		case AF_INET6:
-			sum = in6_cksum(m, IPPROTO_TCP, sizeof(struct ip6_hdr),
-			    tlen);
+			sum = in6_cksum(m, IPPROTO_TCP, iphlen, tlen);
 			break;
 #endif
 		}
