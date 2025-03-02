@@ -999,10 +999,21 @@ if_input_process(struct ifnet *ifp, struct mbuf_list *ml, unsigned int idx)
 	 */
 
 	sn = net_sn(idx);
+	ml_init(&sn->sn_netstack.ns_tcp_ml);
+#ifdef INET6
+	ml_init(&sn->sn_netstack.ns_tcp6_ml);
+#endif
 
 	NET_LOCK_SHARED();
+
 	while ((m = ml_dequeue(ml)) != NULL)
 		(*ifp->if_input)(ifp, m, &sn->sn_netstack);
+
+	tcp_input_mlist(&sn->sn_netstack.ns_tcp_ml, AF_INET);
+#ifdef INET6
+	tcp_input_mlist(&sn->sn_netstack.ns_tcp6_ml, AF_INET6);
+#endif
+
 	NET_UNLOCK_SHARED();
 }
 

@@ -718,6 +718,7 @@ int	 tcp_dooptions(struct tcpcb *, u_char *, int, struct tcphdr *,
 		struct mbuf *, int, struct tcp_opt_info *, u_int, uint64_t);
 void	 tcp_init(void);
 int	 tcp_input(struct mbuf **, int *, int, int, struct netstack *);
+void	 tcp_input_mlist(struct mbuf_list *, int);
 int	 tcp_mss(struct tcpcb *, int);
 void	 tcp_mss_update(struct tcpcb *);
 void	 tcp_softlro_glue(struct mbuf_list *, struct mbuf *, struct ifnet *);
