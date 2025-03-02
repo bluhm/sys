@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_etherip.c,v 1.56 2024/08/20 07:47:25 mvs Exp $	*/
+/*	$OpenBSD: if_etherip.c,v 1.57 2025/03/02 21:28:31 bluhm Exp $	*/
 /*
  * Copyright (c) 2015 Kazuya GODA <goda@openbsd.org>
  *

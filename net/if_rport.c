@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_rport.c,v 1.1 2024/08/31 04:17:14 dlg Exp $ */
+/*	$OpenBSD: if_rport.c,v 1.2 2025/03/02 21:28:32 bluhm Exp $ */
 
 /*
  * Copyright (c) 2023 David Gwynne <dlg@openbsd.org>

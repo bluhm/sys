@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_bpe.c,v 1.23 2025/02/24 09:40:01 jan Exp $ */
+/*	$OpenBSD: if_bpe.c,v 1.24 2025/03/02 21:28:31 bluhm Exp $ */
 /*
  * Copyright (c) 2018 David Gwynne <dlg@openbsd.org>
  *

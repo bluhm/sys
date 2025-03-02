@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_sec.c,v 1.12 2025/02/14 13:14:13 dlg Exp $ */
+/*	$OpenBSD: if_sec.c,v 1.13 2025/03/02 21:28:32 bluhm Exp $ */
 
 /*
  * Copyright (c) 2022 The University of Queensland

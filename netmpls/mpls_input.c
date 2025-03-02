@@ -1,4 +1,4 @@
-/*	$OpenBSD: mpls_input.c,v 1.79 2023/05/13 13:35:18 bluhm Exp $	*/
+/*	$OpenBSD: mpls_input.c,v 1.80 2025/03/02 21:28:32 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2008 Claudio Jeker <claudio@openbsd.org>

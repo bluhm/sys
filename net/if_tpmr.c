@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_tpmr.c,v 1.35 2023/12/23 10:52:54 bluhm Exp $ */
+/*	$OpenBSD: if_tpmr.c,v 1.36 2025/03/02 21:28:32 bluhm Exp $ */
 
 /*
  * Copyright (c) 2019 The University of Queensland

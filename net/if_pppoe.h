@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_pppoe.h,v 1.9 2025/01/15 06:15:44 dlg Exp $ */
+/*	$OpenBSD: if_pppoe.h,v 1.10 2025/03/02 21:28:32 bluhm Exp $ */
 /*	$NetBSD: if_pppoe.h,v 1.5 2003/11/28 08:56:48 keihan Exp $ */
 
 /*

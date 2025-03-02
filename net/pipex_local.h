@@ -1,4 +1,4 @@
-/*	$OpenBSD: pipex_local.h,v 1.53 2024/07/26 15:51:09 yasuoka Exp $	*/
+/*	$OpenBSD: pipex_local.h,v 1.54 2025/03/02 21:28:32 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2009 Internet Initiative Japan Inc.

@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_wg.c,v 1.40 2025/01/25 14:51:34 mvs Exp $ */
+/*	$OpenBSD: if_wg.c,v 1.41 2025/03/02 21:28:32 bluhm Exp $ */
 
 /*
  * Copyright (C) 2015-2020 Jason A. Donenfeld <Jason@zx2c4.com>. All Rights Reserved.
