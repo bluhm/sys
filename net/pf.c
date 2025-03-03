@@ -5928,10 +5928,10 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **stp,
 					pd->m->m_pkthdr.ph_rtableid =
 					    nk->rdomain;
 					pd->destchg = 1;
-					pf_addrcpy(&pd->ndaddr,
-					    &nk->addr[pd2.didx], nk->af);
 					pf_addrcpy(&pd->nsaddr,
 					    &nk->addr[pd2.sidx], nk->af);
+					pf_addrcpy(&pd->ndaddr,
+					    &nk->addr[pd2.didx], nk->af);
 					if (nk->af == AF_INET) {
 						pd->proto = IPPROTO_ICMP;
 					} else {
@@ -6058,10 +6058,10 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **stp,
 					pd->m->m_pkthdr.ph_rtableid =
 					    nk->rdomain;
 					pd->destchg = 1;
-					pf_addrcpy(&pd->ndaddr,
-					    &nk->addr[pd2.didx], nk->af);
 					pf_addrcpy(&pd->nsaddr,
 					    &nk->addr[pd2.sidx], nk->af);
+					pf_addrcpy(&pd->ndaddr,
+					    &nk->addr[pd2.didx], nk->af);
 					if (nk->af == AF_INET) {
 						pd->proto = IPPROTO_ICMP;
 					} else {
@@ -6212,7 +6212,8 @@ pf_test_state_icmp(struct pf_pdesc *pd, struct pf_state **stp,
 					 * IPv6 address to keep traceroute
 					 * working.
 					 */
-					pd->nsaddr.addr32[3] = pd->src->addr32[0];
+					pd->nsaddr.addr32[3] =
+					    pd->src->addr32[0];
 					pd->naf = nk->af;
 					return (PF_AFRT);
 				}
