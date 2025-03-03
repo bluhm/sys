@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_vxlan.c,v 1.102 2025/03/02 21:28:32 bluhm Exp $ */
+/*	$OpenBSD: if_vxlan.c,v 1.103 2025/03/03 22:25:58 bluhm Exp $ */
 
 /*
  * Copyright (c) 2021 David Gwynne <dlg@openbsd.org>
