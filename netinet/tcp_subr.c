@@ -156,8 +156,10 @@ tcp_init(void)
 	    "sackhl", NULL);
 	pool_sethardlimit(&sackhl_pool, tcp_sackhole_limit);
 	in_pcbinit(&tcbtable, TCB_INITIAL_HASH_SIZE);
+	in_pcbport_linear(&tcbtable, 100);
 #ifdef INET6
 	in_pcbinit(&tcb6table, TCB_INITIAL_HASH_SIZE);
+	in_pcbport_linear(&tcb6table, 100);
 #endif
 	tcpcounters = counters_alloc(tcps_ncounters);
 

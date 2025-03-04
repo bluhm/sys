@@ -483,7 +483,9 @@ struct	tcpstat {
 #define TCPCTL_ROOTONLY	       24 /* return root only port bitmap */
 #define	TCPCTL_SYN_HASH_SIZE   25 /* number of buckets in the hash */
 #define	TCPCTL_TSO	       26 /* enable TCP segmentation offload */
-#define	TCPCTL_MAXID	       27
+#define	TCPCTL_LPORT_SIZE      27 /* linear port selection hash size */
+#define	TCPCTL_LPORT_RATE      28 /* connect per minute activate linear port */
+#define	TCPCTL_MAXID	       29
 
 #define	TCPCTL_NAMES { \
 	{ 0, 0 }, \
@@ -513,6 +515,8 @@ struct	tcpstat {
 	{ "rootonly",	CTLTYPE_STRUCT }, \
 	{ "synhashsize",	CTLTYPE_INT }, \
 	{ "tso",	CTLTYPE_INT }, \
+	{ "linearport",	CTLTYPE_INT }, \
+	{ "linearrate",	CTLTYPE_INT }, \
 }
 
 struct tcp_ident_mapping {

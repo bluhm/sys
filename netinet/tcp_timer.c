@@ -67,6 +67,7 @@ int	tcp_keepidle_sec = TCPTV_KEEPIDLE / TCP_TIME(1);
 int	tcp_keepintvl_sec = TCPTV_KEEPINTVL / TCP_TIME(1);
 int	tcp_maxpersistidle = TCPTV_KEEPIDLE;	/* max idle time in persist */
 int	tcp_delack_msecs = TCP_DELACK_MSECS;	/* time to delay the ACK */
+int	tcp_lportrate = 1000;
 
 void	tcp_timer_rexmt(void *);
 void	tcp_timer_persist(void *);
@@ -151,9 +152,22 @@ tcp_timer_delack(void *arg)
 void
 tcp_slowtimo(void)
 {
+	int connectrate, minute = 0;
+	static int counter;
+
 	mtx_enter(&tcp_timer_mtx);
 	tcp_iss += TCP_ISSINCR2/PR_SLOWHZ;		/* increment iss */
+	if (++counter % 120 == 0)
+		minute = 1;
 	mtx_leave(&tcp_timer_mtx);
+
+	if (minute) {
+		connectrate = READ_ONCE(tcp_lportrate);
+		in_pcbtimo_linear(&tcbtable, connectrate);
+#ifdef INET6
+		in_pcbtimo_linear(&tcb6table, connectrate);
+#endif
+	}
 }
 
 /*

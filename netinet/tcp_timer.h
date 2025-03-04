@@ -162,6 +162,7 @@ extern int tcp_keepintvl;	/* [a] time between keepalive probes */
 extern int tcp_keepinit_sec;	/* [a] copy of above in seconds for sysctl */
 extern int tcp_keepidle_sec;	/* [a] copy of above in seconds for sysctl */
 extern int tcp_keepintvl_sec;	/* [a] copy of above in seconds for sysctl */
+extern int tcp_lportrate;		/* connection rate for linear port */
 extern int tcp_ttl;		/* time to live for TCP segs */
 extern const int tcp_backoff[];
 #endif /* _KERNEL */

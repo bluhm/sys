@@ -1533,6 +1533,38 @@ tcp_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		}
 		return (error);
 
+	case TCPCTL_LPORT_SIZE:
+		/* Linear port selection based on hash of local address. */
+		NET_LOCK();
+		nval = tcbtable.inpt_lportsize;
+		error = sysctl_int_bounded(oldp, oldlenp, newp, newlen, &nval,
+		    0, 0x10000);
+		if (!error && newp != NULL) {
+			error = in_pcbport_linear(&tcbtable, nval);
+			in_pcbtimo_linear(&tcbtable, tcp_lportrate);
+#ifdef INET6
+			if (!error) {
+				error = in_pcbport_linear(&tcb6table, nval);
+				in_pcbtimo_linear(&tcb6table, tcp_lportrate);
+			}
+#endif
+		}
+		NET_UNLOCK();
+		return (error);
+
+	case TCPCTL_LPORT_RATE:
+		NET_LOCK();
+		error = sysctl_int_bounded(oldp, oldlenp, newp, newlen,
+		    &tcp_lportrate, 0, 100000);
+		if (!error && newp != NULL) {
+			in_pcbtimo_linear(&tcbtable, tcp_lportrate);
+#ifdef INET6
+			in_pcbtimo_linear(&tcb6table, tcp_lportrate);
+#endif
+		}
+		NET_UNLOCK();
+		return (error);
+
 	default:
 		error = sysctl_bounded_arr(tcpctl_vars, nitems(tcpctl_vars),
 		    name, namelen, oldp, oldlenp, newp, newlen);
