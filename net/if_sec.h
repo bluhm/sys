@@ -29,7 +29,7 @@ struct tdb;
 
 struct sec_softc	*sec_get(unsigned int);
 void			 sec_input(struct sec_softc * , int, int,
-			     struct mbuf *);
+			     struct mbuf *, struct netstack *);
 void			 sec_put(struct sec_softc *);
 
 /*

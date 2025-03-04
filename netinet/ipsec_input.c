@@ -564,7 +564,7 @@ ipsec_common_input_cb(struct mbuf **mp, struct tdb *tdbp, int skip,
 			if (sc == NULL)
 				goto baddone;
 
-			sec_input(sc, af, prot, m);
+			sec_input(sc, af, prot, m, ns);
 			sec_put(sc);
 			return IPPROTO_DONE;
 		}

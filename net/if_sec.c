@@ -43,6 +43,7 @@
 
 #include <net/if.h>
 #include <net/if_var.h>
+#include <net/if_sec.h>
 #include <net/if_types.h>
 #include <net/toeplitz.h>
 
