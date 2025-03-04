@@ -1535,6 +1535,12 @@ tcp_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		}
 		return (error);
 
+	case TCPCTL_LPORT_SIZE:
+		/* Linear port selection based on hash of local address. */
+		error = in_pcbsysctl_lport(&tcbtable, oldp, oldlenp, newp,
+		    newlen);
+		return (error);
+
 	default:
 		error = sysctl_bounded_arr(tcpctl_vars, nitems(tcpctl_vars),
 		    name, namelen, oldp, oldlenp, newp, newlen);

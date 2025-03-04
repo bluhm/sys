@@ -197,6 +197,8 @@ struct inpcbtable {
 	SIPHASH_KEY inpt_key, inpt_lkey;	/* [I] secrets for hashes */
 	u_long	inpt_mask, inpt_lmask;		/* [t] hash masks */
 	int	inpt_count, inpt_size;		/* [t] queue count, hash size */
+	uint16_t *inpt_prevlports;		/* [t] array of used ports */
+	int	inpt_lportsize;			/* [t] local port hash size */
 };
 
 /* flags in inp_flags: */
@@ -364,6 +366,8 @@ int	 in_pcbselsrc(struct in_addr *, const struct sockaddr_in *,
 	    struct inpcb *);
 struct rtentry *
 	in_pcbrtentry(struct inpcb *);
+int	in_pcbsysctl_lport(struct inpcbtable *, void *, size_t *, void *,
+	    size_t);
 
 /* INET6 stuff */
 struct rtentry *

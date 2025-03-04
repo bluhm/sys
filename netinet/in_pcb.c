@@ -78,6 +78,7 @@
 #include <sys/domain.h>
 #include <sys/pool.h>
 #include <sys/proc.h>
+#include <sys/sysctl.h>
 
 #include <net/if.h>
 #include <net/if_var.h>
@@ -191,6 +192,8 @@ in_pcbinit(struct inpcbtable *table, int hashsize)
 	table->inpt_size = hashsize;
 	arc4random_buf(&table->inpt_key, sizeof(table->inpt_key));
 	arc4random_buf(&table->inpt_lkey, sizeof(table->inpt_lkey));
+	table->inpt_prevlports = NULL;
+	table->inpt_lportsize = 0;
 }
 
 /*
@@ -449,6 +452,7 @@ in_pcbpickport(u_int16_t *lport, const void *laddr, int wild,
 	struct inpcb *t;
 	u_int16_t first, last, lower, higher, candidate, localport;
 	int count;
+	uint32_t addrhash;
 
 	MUTEX_ASSERT_LOCKED(&table->inpt_mtx);
 
@@ -478,7 +482,25 @@ in_pcbpickport(u_int16_t *lport, const void *laddr, int wild,
 	 */
 
 	count = higher - lower;
-	candidate = lower + arc4random_uniform(count);
+	if (table->inpt_prevlports != NULL &&
+	    !ISSET(inp->inp_flags, INP_HIGHPORT | INP_LOWPORT)) {
+		addrhash = rtable_l2(inp->inp_rtableid);
+#ifdef INET6
+		if (ISSET(inp->inp_flags, INP_IPV6)) {
+			const struct in6_addr *laddr6 = laddr;
+
+			addrhash ^= laddr6->s6_addr32[0];
+			addrhash ^= laddr6->s6_addr32[1];
+			addrhash ^= laddr6->s6_addr32[2];
+			addrhash ^= laddr6->s6_addr32[3];
+		} else
+#endif
+			addrhash ^= ((const struct in_addr *)laddr)->s_addr;
+		addrhash ^= addrhash >> 16;
+		addrhash %= table->inpt_lportsize;
+		candidate = table->inpt_prevlports[addrhash];
+	} else
+		candidate = lower + arc4random_uniform(count);
 
 	do {
 		do {
@@ -493,6 +515,10 @@ in_pcbpickport(u_int16_t *lport, const void *laddr, int wild,
 		    inp->inp_rtableid, IN_PCBLOCK_HOLD);
 	} while (t != NULL);
 	*lport = localport;
+	if (table->inpt_prevlports != NULL &&
+	    !ISSET(inp->inp_flags, INP_HIGHPORT | INP_LOWPORT)) {
+		table->inpt_prevlports[addrhash] = candidate;
+	}
 
 	return (0);
 }
@@ -1416,4 +1442,36 @@ in_pcbunset_laddr(struct inpcb *inp)
 	inp->inp_fport = 0;
 	in_pcbrehash(inp);
 	mtx_leave(&table->inpt_mtx);
+}
+
+int
+in_pcbsysctl_lport(struct inpcbtable *table, void *oldp, size_t *oldlenp,
+    void *newp, size_t newlen)
+{
+	uint16_t *ports = NULL;
+	int error, size;
+
+	mtx_enter(&table->inpt_mtx);
+	size = table->inpt_lportsize;
+	mtx_leave(&table->inpt_mtx);
+	error = sysctl_int_bounded(oldp, oldlenp, newp, newlen, &size,
+	    0, 0x10000);
+	if (error || newp == NULL)
+		return error;
+
+	if (size > 0) {
+		ports = mallocarray(size, sizeof(uint16_t), M_PCB, M_WAITOK);
+		if (ports == NULL)
+			return ENOMEM;
+		arc4random_buf(ports, size * sizeof(uint16_t));
+	}
+
+	mtx_enter(&table->inpt_mtx);
+	free(table->inpt_prevlports, M_PCB,
+	    table->inpt_lportsize * sizeof(uint16_t));
+	table->inpt_prevlports = ports;
+	table->inpt_lportsize = size;
+	mtx_leave(&table->inpt_mtx);
+
+	return 0;
 }
