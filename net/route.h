@@ -123,7 +123,7 @@ struct rtentry {
 	caddr_t		 rt_llinfo;	/* [L] pointer to link level info or
 					   an MPLS structure */
 	union {
-		struct rtentry	*_nh;	/* [X] rtentry for rt_gateway */
+		struct rtentry	*_nh;	/* [r] rtentry for rt_gateway */
 		unsigned int	 _ref;	/* [r] # gateway rtentry refs */
 	} RT_gw;
 #define rt_gwroute	 RT_gw._nh
