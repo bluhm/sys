@@ -326,12 +326,18 @@ rtisvalid(struct rtentry *rt)
 	if (ISSET(rt->rt_flags, RTF_GATEWAY)) {
 		struct rtentry *gwroute;
 
-		gwroute = READ_ONCE(rt->rt_gwroute);
-		if (gwroute == NULL)
+		mtx_enter(&rt->rt_mtx);
+		gwroute = rt->rt_gwroute;
+		if (gwroute == NULL) {
+			mtx_leave(&rt->rt_mtx);
 			return (0);
+		}
 		KASSERT(!ISSET(gwroute->rt_flags, RTF_GATEWAY));
-		if (!ISSET(gwroute->rt_flags, RTF_UP))
+		if (!ISSET(gwroute->rt_flags, RTF_UP)) {
+			mtx_leave(&rt->rt_mtx);
 			return (0);
+		}
+		mtx_leave(&rt->rt_mtx);
 	}
 
 	return (1);
@@ -1176,7 +1182,9 @@ rt_getll(struct rtentry *rt)
 	if (ISSET(rt->rt_flags, RTF_GATEWAY)) {
 		struct rtentry *gwroute;
 
-		gwroute = READ_ONCE(rt->rt_gwroute);
+		mtx_enter(&rt->rt_mtx);
+		gwroute = rt->rt_gwroute;
+		mtx_leave(&rt->rt_mtx);
 	 	/* We may return NULL here. */
 		return (gwroute);
 	}
