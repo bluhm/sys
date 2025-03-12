@@ -605,6 +605,7 @@ rt_putgwroute(struct rtentry *rt, struct rtentry *nhrt)
 	 */
 	if (nhrt != NULL) {
 		mtx_enter(&nhrt->rt_mtx);
+		KASSERT(!ISSET(nhrt->rt_flags, RTF_GATEWAY));
 		SET(nhrt->rt_flags, RTF_CACHED);
 		nhrt->rt_cachecnt++;
 		mtx_leave(&nhrt->rt_mtx);
@@ -619,6 +620,7 @@ rt_putgwroute(struct rtentry *rt, struct rtentry *nhrt)
 		smr_barrier();
 
 		mtx_enter(&onhrt->rt_mtx);
+		KASSERT(!ISSET(onhrt->rt_flags, RTF_GATEWAY));
 		KASSERT(onhrt->rt_cachecnt > 0);
 		KASSERT(ISSET(onhrt->rt_flags, RTF_CACHED));
 		onhrt->rt_cachecnt--;
@@ -1190,6 +1192,7 @@ rt_getll(struct rtentry *rt)
 		gwroute = SMR_PTR_GET(&rt->rt_gwroute);
 		if (gwroute != NULL)
 			rtref(gwroute);
+		KASSERT(!ISSET(gwroute->rt_flags, RTF_GATEWAY));
 		smr_read_leave();
 	 	/* We may return NULL here. */
 		return (gwroute);
