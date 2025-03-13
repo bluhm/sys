@@ -1,4 +1,4 @@
-/*	$OpenBSD: udp_usrreq.c,v 1.334 2025/03/02 21:28:32 bluhm Exp $	*/
+/*	$OpenBSD: udp_usrreq.c,v 1.336 2025/03/11 15:31:03 mvs Exp $	*/
 /*	$NetBSD: udp_usrreq.c,v 1.28 1996/03/16 23:54:03 christos Exp $	*/
 
 /*
@@ -159,8 +159,8 @@ const struct pr_usrreqs udp6_usrreqs = {
 
 const struct sysctl_bounded_args udpctl_vars[] = {
 	{ UDPCTL_CHECKSUM, &udpcksum, 0, 1 },
-	{ UDPCTL_RECVSPACE, &udp_recvspace, 0, INT_MAX },
-	{ UDPCTL_SENDSPACE, &udp_sendspace, 0, INT_MAX },
+	{ UDPCTL_RECVSPACE, &udp_recvspace, 0, SB_MAX },
+	{ UDPCTL_SENDSPACE, &udp_sendspace, 0, SB_MAX },
 };
 
 struct	inpcbtable udbtable;
@@ -700,7 +700,7 @@ udp_sbappend(struct inpcb *inp, struct mbuf *m, struct ip *ip,
 	m_adj(m, hlen);
 
 	mtx_enter(&so->so_rcv.sb_mtx);
-	if (sbappendaddr(so, &so->so_rcv, srcaddr, m, opts) == 0) {
+	if (sbappendaddr(&so->so_rcv, srcaddr, m, opts) == 0) {
 		mtx_leave(&so->so_rcv.sb_mtx);
 		udpstat_inc(udps_fullsock);
 		m_freem(m);

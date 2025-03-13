@@ -1,4 +1,4 @@
-/*      $OpenBSD: ip6_divert.c,v 1.99 2025/03/02 21:28:32 bluhm Exp $ */
+/*      $OpenBSD: ip6_divert.c,v 1.101 2025/03/11 15:31:03 mvs Exp $ */
 
 /*
  * Copyright (c) 2009 Michele Marchetto <michele@openbsd.org>
@@ -66,8 +66,8 @@ u_int   divert6_recvspace = DIVERT_RECVSPACE;	/* [a] */
 #endif
 
 const struct sysctl_bounded_args divert6ctl_vars[] = {
-	{ DIVERT6CTL_RECVSPACE, &divert6_recvspace, 0, INT_MAX },
-	{ DIVERT6CTL_SENDSPACE, &divert6_sendspace, 0, INT_MAX },
+	{ DIVERT6CTL_RECVSPACE, &divert6_recvspace, 0, SB_MAX },
+	{ DIVERT6CTL_SENDSPACE, &divert6_sendspace, 0, SB_MAX },
 };
 
 const struct pr_usrreqs divert6_usrreqs = {
@@ -253,7 +253,7 @@ divert6_packet(struct mbuf *m, int dir, u_int16_t divert_port)
 
 	so = inp->inp_socket;
 	mtx_enter(&so->so_rcv.sb_mtx);
-	if (sbappendaddr(so, &so->so_rcv, sin6tosa(&sin6), m, NULL) == 0) {
+	if (sbappendaddr(&so->so_rcv, sin6tosa(&sin6), m, NULL) == 0) {
 		mtx_leave(&so->so_rcv.sb_mtx);
 		div6stat_inc(div6s_fullsock);
 		goto bad;

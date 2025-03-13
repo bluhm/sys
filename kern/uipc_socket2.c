@@ -1,4 +1,4 @@
-/*	$OpenBSD: uipc_socket2.c,v 1.182 2025/03/06 13:35:34 mvs Exp $	*/
+/*	$OpenBSD: uipc_socket2.c,v 1.185 2025/03/12 14:08:31 mvs Exp $	*/
 /*	$NetBSD: uipc_socket2.c,v 1.11 1996/02/04 02:17:55 christos Exp $	*/
 
 /*
@@ -824,7 +824,7 @@ sbappend(struct sockbuf *sb, struct mbuf *m)
  * in the socket buffer, that is, a stream protocol (such as TCP).
  */
 void
-sbappendstream(struct socket *so, struct sockbuf *sb, struct mbuf *m)
+sbappendstream(struct sockbuf *sb, struct mbuf *m)
 {
 	sbmtxassertlocked(sb);
 	KDASSERT(m->m_nextpkt == NULL);
@@ -901,8 +901,8 @@ sbappendrecord(struct sockbuf *sb, struct mbuf *m0)
  * Returns 0 if no space in sockbuf or insufficient mbufs.
  */
 int
-sbappendaddr(struct socket *so, struct sockbuf *sb, const struct sockaddr *asa,
-    struct mbuf *m0, struct mbuf *control)
+sbappendaddr(struct sockbuf *sb, const struct sockaddr *asa, struct mbuf *m0,
+    struct mbuf *control)
 {
 	struct mbuf *m, *n, *nlast;
 	int space = asa->sa_len;
@@ -950,8 +950,7 @@ sbappendaddr(struct socket *so, struct sockbuf *sb, const struct sockaddr *asa,
 }
 
 int
-sbappendcontrol(struct socket *so, struct sockbuf *sb, struct mbuf *m0,
-    struct mbuf *control)
+sbappendcontrol(struct sockbuf *sb, struct mbuf *m0, struct mbuf *control)
 {
 	struct mbuf *m, *mlast, *n;
 	int eor = 0, space = 0;
