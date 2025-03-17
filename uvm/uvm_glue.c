@@ -114,7 +114,7 @@ uvm_vslock(struct proc *p, caddr_t addr, size_t len, vm_prot_t access_type)
 	if (end <= start)
 		return (EINVAL);
 
-	return uvm_fault_wire(map, start, end, access_type);
+	return uvm_map_pageable(map, start, end, FALSE, 0);
 }
 
 /*
@@ -125,13 +125,14 @@ uvm_vslock(struct proc *p, caddr_t addr, size_t len, vm_prot_t access_type)
 void
 uvm_vsunlock(struct proc *p, caddr_t addr, size_t len)
 {
+	struct vm_map *map = &p->p_vmspace->vm_map;
 	vaddr_t start, end;
 
 	start = trunc_page((vaddr_t)addr);
 	end = round_page((vaddr_t)addr + len);
 	KASSERT(end > start);
 
-	uvm_fault_unwire(&p->p_vmspace->vm_map, start, end);
+	uvm_map_pageable(map, start, end, TRUE, 0);
 }
 
 /*
