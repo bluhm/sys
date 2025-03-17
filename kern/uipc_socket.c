@@ -1252,9 +1252,9 @@ soshutdown(struct socket *so, int how)
 		sorflush(so);
 		/* FALLTHROUGH */
 	case SHUT_WR:
-		solock(so);
+		solock_shared(so);
 		error = pru_shutdown(so);
-		sounlock(so);
+		sounlock_shared(so);
 		break;
 	default:
 		error = EINVAL;
