@@ -1977,9 +1977,11 @@ ixl_attach(struct device *parent, struct device *self, void *aux)
 	    IFCAP_CSUM_TCPv4 | IFCAP_CSUM_UDPv4 |
 	    IFCAP_CSUM_TCPv6 | IFCAP_CSUM_UDPv6;
 	ifp->if_capabilities |= IFCAP_TSOv4 | IFCAP_TSOv6;
-
-	ifp->if_xflags |= IFXF_LRO;
 	ifp->if_capabilities |= IFCAP_LRO;
+#if 0
+	/* for now tcplro at ixl(4) is default off */
+	ifp->if_xflags |= IFXF_LRO;
+#endif
 
 	ifmedia_init(&sc->sc_media, 0, ixl_media_change, ixl_media_status);
 
@@ -3260,8 +3262,8 @@ ixl_rxeof(struct ixl_softc *sc, struct ixl_rx_ring *rxr)
 	struct ixl_rx_map *rxm;
 	bus_dmamap_t map;
 	unsigned int cons, prod;
-	struct mbuf_list mlt = MBUF_LIST_INITIALIZER();
-	struct mbuf_list mlo = MBUF_LIST_INITIALIZER();
+	struct mbuf_list mltcp = MBUF_LIST_INITIALIZER();
+	struct mbuf_list ml = MBUF_LIST_INITIALIZER();
 	struct mbuf *m;
 	uint64_t word;
 	unsigned int ptype;
@@ -3323,7 +3325,6 @@ ixl_rxeof(struct ixl_softc *sc, struct ixl_rx_ring *rxr)
 					    lemtoh32(&rxd->filter_status);
 					m->m_pkthdr.csum_flags |= M_FLOWID;
 				}
-
 #if NVLAN > 0
 				if (ISSET(word, IXL_RX_DESC_L2TAG1P)) {
 					m->m_pkthdr.ether_vtag =
@@ -3331,14 +3332,14 @@ ixl_rxeof(struct ixl_softc *sc, struct ixl_rx_ring *rxr)
 					SET(m->m_flags, M_VLANTAG);
 				}
 #endif
-
 				ixl_rx_checksum(m, word);
 
-				if (ptype == IXL_RX_DESC_PTYPE_MAC_IPV4_TCP ||
-				    ptype == IXL_RX_DESC_PTYPE_MAC_IPV6_TCP)
-					tcp_softlro_enqueue(ifp, &mlt, m);
+				if (ISSET(ifp->if_xflags, IFXF_LRO) &&
+				    (ptype == IXL_RX_DESC_PTYPE_MAC_IPV4_TCP ||
+				    ptype == IXL_RX_DESC_PTYPE_MAC_IPV6_TCP))
+					tcp_enqueue_lro(&mltcp, m);
 				else
-					ml_enqueue(&mlo, m);
+					ml_enqueue(&ml, m);
 			} else {
 				ifp->if_ierrors++; /* XXX */
 				m_freem(m);
@@ -3355,8 +3356,14 @@ ixl_rxeof(struct ixl_softc *sc, struct ixl_rx_ring *rxr)
 	} while (cons != prod);
 
 	if (done) {
+		int livelocked = 0;
+
 		rxr->rxr_cons = cons;
-		if (ifiq_input(ifiq, &mlt) || ifiq_input(ifiq, &mlo))
+		if (ifiq_input(ifiq, &mltcp))
+			livelocked = 1;
+		if (ifiq_input(ifiq, &ml))
+			livelocked = 1;
+		if (livelocked)
 			if_rxr_livelocked(&rxr->rxr_acct);
 		ixl_rxfill(sc, rxr);
 	}
