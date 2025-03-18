@@ -720,6 +720,7 @@ void	 tcp_init(void);
 int	 tcp_input(struct mbuf **, int *, int, int, struct netstack *);
 int	 tcp_mss(struct tcpcb *, int);
 void	 tcp_mss_update(struct tcpcb *);
+void	 tcp_softlro_enqueue(struct ifnet *, struct mbuf_list *, struct mbuf *);
 u_int	 tcp_hdrsz(struct tcpcb *);
 void	 tcp_mtudisc(struct inpcb *, int);
 void	 tcp_mtudisc_increase(struct inpcb *, int);
