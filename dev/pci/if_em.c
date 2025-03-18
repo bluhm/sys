@@ -2013,9 +2013,6 @@ em_setup_interface(struct em_softc *sc)
 		ifp->if_capabilities |= IFCAP_TSOv4 | IFCAP_TSOv6;
 	}
 
-	ifp->if_xflags |= IFXF_LRO;
-	ifp->if_capabilities |= IFCAP_LRO;
-
 	/* 
 	 * Specify the media types supported by this adapter and register
 	 * callbacks to update media and link information
@@ -3188,8 +3185,7 @@ em_rxeof(struct em_queue *que)
 					m->m_flags |= M_VLANTAG;
 				}
 #endif
-
-				tcp_softlro_enqueue(ifp, &ml, m);
+				ml_enqueue(&ml, m);
 
 				que->rx.fmp = NULL;
 				que->rx.lmp = NULL;

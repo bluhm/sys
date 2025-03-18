@@ -646,8 +646,6 @@ bnxt_attach(struct device *parent, struct device *self, void *aux)
 	    IFCAP_CSUM_UDPv4 | IFCAP_CSUM_TCPv4 | IFCAP_CSUM_UDPv6 |
 	    IFCAP_CSUM_TCPv6;
 	ifp->if_capabilities |= IFCAP_TSOv4 | IFCAP_TSOv6;
-	ifp->if_xflags |= IFXF_LRO;
-	ifp->if_capabilities |= IFCAP_LRO;
 #if NVLAN > 0
 	ifp->if_capabilities |= IFCAP_VLAN_HWTAGGING;
 #endif
@@ -2285,7 +2283,6 @@ bnxt_rx(struct bnxt_softc *sc, struct bnxt_rx_queue *rx,
     struct bnxt_cp_ring *cpr, struct mbuf_list *ml, int *slots, int *agslots,
     struct cmpl_base *cmpl)
 {
-	struct ifnet *ifp = &sc->sc_ac.ac_if;
 	struct mbuf *m, *am;
 	struct bnxt_slot *bs;
 	struct rx_pkt_cmpl *rxlo = (struct rx_pkt_cmpl *)cmpl;
@@ -2358,7 +2355,7 @@ bnxt_rx(struct bnxt_softc *sc, struct bnxt_rx_queue *rx,
 		(*agslots)++;
 	}
 
-	tcp_softlro_enqueue(ifp, ml, m);
+	ml_enqueue(ml, m);
 	return (0);
 }
 

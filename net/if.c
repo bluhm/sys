@@ -3388,7 +3388,6 @@ ifsetlro(struct ifnet *ifp, int on)
 	} else if (!on && ISSET(ifp->if_xflags, IFXF_LRO))
 		CLR(ifp->if_xflags, IFXF_LRO);
 
-	error = 0;
  out:
 	splx(s);
 

@@ -4422,12 +4422,9 @@ tcp_softlro(struct mbuf *mhead, struct mbuf *mtail)
 }
 
 void
-tcp_softlro_enqueue(struct ifnet *ifp, struct mbuf_list *ml, struct mbuf *mtail)
+tcp_enqueue_lro(struct mbuf_list *ml, struct mbuf *mtail)
 {
 	struct mbuf *mhead;
-
-	if (!ISSET(ifp->if_xflags, IFXF_LRO))
-		goto out;
 
 	/* Don't merge packets with invalid header checksum. */
 	if (!ISSET(mtail->m_pkthdr.csum_flags, M_TCP_CSUM_IN_OK))
