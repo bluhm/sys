@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ice.c,v 1.28 2024/12/17 05:32:31 stsp Exp $	*/
+/*	$OpenBSD: if_ice.c,v 1.32 2025/03/28 16:13:54 stsp Exp $	*/
 
 /*  Copyright (c) 2024, Intel Corporation
  *  All rights reserved.
@@ -13374,11 +13374,73 @@ ice_flush_txq_interrupts(struct ice_vsi *vsi)
 	}
 }
 
+void
+ice_txq_clean(struct ice_softc *sc, struct ice_tx_queue *txq)
+{
+	struct ice_tx_map *txm;
+	bus_dmamap_t map;
+	unsigned int i;
+
+	for (i = 0; i < txq->desc_count; i++) {
+		txm = &txq->tx_map[i];
+
+		if (txm->txm_m == NULL)
+			continue;
+
+		map = txm->txm_map;
+		bus_dmamap_sync(sc->sc_dmat, map, 0, map->dm_mapsize,
+		    BUS_DMASYNC_POSTWRITE);
+		bus_dmamap_unload(sc->sc_dmat, map);
+
+		m_freem(txm->txm_m);
+		txm->txm_m = NULL;
+		txm->txm_eop = -1;
+	}
+
+	txq->txq_cons = txq->txq_prod = 0;
+}
+
+void
+ice_rxq_clean(struct ice_softc *sc, struct ice_rx_queue *rxq)
+{
+	struct ice_rx_map *rxm;
+	bus_dmamap_t map;
+	unsigned int i;
+
+	timeout_del_barrier(&rxq->rxq_refill);
+
+	for (i = 0; i < rxq->desc_count; i++) {
+		rxm = &rxq->rx_map[i];
+
+		if (rxm->rxm_m == NULL)
+			continue;
+
+		map = rxm->rxm_map;
+		bus_dmamap_sync(sc->sc_dmat, map, 0, map->dm_mapsize,
+		    BUS_DMASYNC_POSTWRITE);
+		bus_dmamap_unload(sc->sc_dmat, map);
+
+		m_freem(rxm->rxm_m);
+		rxm->rxm_m = NULL;
+	}
+
+	if_rxr_init(&rxq->rxq_acct, ICE_MIN_DESC_COUNT, rxq->desc_count - 1);
+
+	m_freem(rxq->rxq_m_head);
+	rxq->rxq_m_head = NULL;
+	rxq->rxq_m_tail = &rxq->rxq_m_head;
+
+	rxq->rxq_prod = rxq->rxq_cons = 0;
+}
+
 int
 ice_down(struct ice_softc *sc)
 {
 	struct ifnet *ifp = &sc->sc_ac.ac_if;
 	struct ice_hw *hw = &sc->hw;
+	struct ice_vsi *vsi = &sc->pf_vsi;
+	struct ice_tx_queue *txq;
+	struct ice_rx_queue *rxq;
 	int i;
 
 	rw_enter_write(&sc->sc_cfg_lock);
@@ -13444,6 +13506,11 @@ ice_down(struct ice_softc *sc)
 	}
 #endif
 
+	for (i = 0, txq = vsi->tx_queues; i < vsi->num_tx_queues; i++, txq++)
+		ice_txq_clean(sc, txq);
+	for (i = 0, rxq = vsi->rx_queues; i < vsi->num_rx_queues; i++, rxq++)
+		ice_rxq_clean(sc, rxq);
+
 	rw_exit_write(&sc->sc_cfg_lock);
 	NET_LOCK();
 	return 0;
@@ -13505,7 +13572,7 @@ ice_tx_setup_offload(struct mbuf *m0, struct ice_tx_queue *txq,
 
 #if NVLAN > 0
 	if (ISSET(m0->m_flags, M_VLANTAG)) {
-		uint64_t vtag = m0->m_pkthdr.ether_vtag;
+		uint64_t vtag = htole16(m0->m_pkthdr.ether_vtag);
 		offload |= (ICE_TX_DESC_CMD_IL2TAG1 << ICE_TXD_QW1_CMD_S) |
 		    (vtag << ICE_TXD_QW1_L2TAG1_S);
 	}
@@ -13845,7 +13912,7 @@ ice_get_phy_type_low(struct ice_softc *sc, uint64_t phy_type_low)
 		return IFM_100G_DR;
 #endif
 	default:
-		printf("%s: unhandled low PHY type 0x%llx\n",
+		DPRINTF("%s: unhandled low PHY type 0x%llx\n",
 		    sc->sc_dev.dv_xname, phy_type_low);
 		return IFM_INST_ANY;
 	}
@@ -13877,7 +13944,7 @@ ice_get_phy_type_high(struct ice_softc *sc, uint64_t phy_type_high)
 		return IFM_100G_AUI2;
 #endif
 	default:
-		printf("%s: unhandled high PHY type 0x%llx\n",
+		DPRINTF("%s: unhandled high PHY type 0x%llx\n",
 		    sc->sc_dev.dv_xname, phy_type_high);
 		return IFM_INST_ANY;
 	}
@@ -13907,10 +13974,14 @@ ice_media_status(struct ifnet *ifp, struct ifmediareq *ifmr)
 		media = ice_get_phy_type_low(sc, li->phy_type_low);
 		if (media != IFM_INST_ANY)
 			ifmr->ifm_active |= media;
+		else
+			ifmr->ifm_active |= IFM_ETHER;
 	} else if (li->phy_type_high) {
 		media = ice_get_phy_type_high(sc, li->phy_type_high);
 		if (media != IFM_INST_ANY)
 			ifmr->ifm_active |= media;
+		else
+			ifmr->ifm_active |= IFM_ETHER;
 	}
 
 	/* Report flow control status as well */
@@ -27389,6 +27460,34 @@ ice_attach_hook(struct device *self)
 
 	ice_get_and_print_bus_info(sc);
 #endif
+
+	/*
+	 * At this point we are committed to attaching the driver.
+	 * Network stack needs to be wired up before ice_update_link_status()
+	 * calls if_link_state_change().
+	 */
+	ifp->if_softc = sc;
+	strlcpy(ifp->if_xname, sc->sc_dev.dv_xname, IFNAMSIZ);
+	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
+	ifp->if_xflags = IFXF_MPSAFE;
+	ifp->if_ioctl = ice_ioctl;
+	ifp->if_qstart = ice_start;
+	ifp->if_watchdog = ice_watchdog;
+	ifp->if_hardmtu = ice_hardmtu(hw);
+
+	ifq_init_maxlen(&ifp->if_snd, ICE_DEFAULT_DESC_COUNT);
+
+	ifp->if_capabilities = IFCAP_VLAN_MTU;
+#if NVLAN > 0
+	ifp->if_capabilities |= IFCAP_VLAN_HWTAGGING;
+#endif
+
+	if_attach(ifp);
+	ether_ifattach(ifp);
+
+	if_attach_queues(ifp, sc->sc_nqueues);
+	if_attach_iqueues(ifp, sc->sc_nqueues);
+
 	ice_set_link_management_mode(sc);
 
 	ice_init_saved_phy_cfg(sc);
@@ -27426,28 +27525,6 @@ ice_attach_hook(struct device *self)
 	if (ice_test_state(&sc->state, ICE_STATE_LINK_ACTIVE_ON_DOWN) &&
 		 !ice_test_state(&sc->state, ICE_STATE_NO_MEDIA))
 		ice_set_state(&sc->state, ICE_STATE_FIRST_INIT_LINK);
-
-	ifp->if_softc = sc;
-	strlcpy(ifp->if_xname, sc->sc_dev.dv_xname, IFNAMSIZ);
-	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
-	ifp->if_xflags = IFXF_MPSAFE;
-	ifp->if_ioctl = ice_ioctl;
-	ifp->if_qstart = ice_start;
-	ifp->if_watchdog = ice_watchdog;
-	ifp->if_hardmtu = ice_hardmtu(hw);
-
-	ifq_init_maxlen(&ifp->if_snd, ICE_DEFAULT_DESC_COUNT);
-
-	ifp->if_capabilities = IFCAP_VLAN_MTU;
-#if NVLAN > 0
-	ifp->if_capabilities |= IFCAP_VLAN_HWTAGGING;
-#endif
-
-	if_attach(ifp);
-	ether_ifattach(ifp);
-
-	if_attach_queues(ifp, sc->sc_nqueues);
-	if_attach_iqueues(ifp, sc->sc_nqueues);
 
 	/* Setup the MAC address */
 	err = if_setlladdr(ifp, hw->port_info->mac.perm_addr);
