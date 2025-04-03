@@ -2949,6 +2949,14 @@ ixl_start(struct ifqueue *ifq)
 			continue;
 		}
 
+		if (ISSET(m->m_pkthdr.csum_flags, M_TCP_TSO)) {
+			struct ether_extracted ext;
+
+			ether_extract_headers(m, &ext);
+			KASSERT(m->m_pkthdr.len == ext.iplen + (ext.evh ?
+			    sizeof(*ext.evh) : sizeof(*ext.eh)));
+		}
+
 		bus_dmamap_sync(sc->sc_dmat, map, 0,
 		    map->dm_mapsize, BUS_DMASYNC_PREWRITE);
 
