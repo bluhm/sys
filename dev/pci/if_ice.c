@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ice.c,v 1.37 2025/04/04 12:50:07 stsp Exp $	*/
+/*	$OpenBSD: if_ice.c,v 1.39 2025/04/08 07:36:02 stsp Exp $	*/
 
 /*  Copyright (c) 2024, Intel Corporation
  *  All rights reserved.
@@ -13546,7 +13546,13 @@ ice_down(struct ice_softc *sc)
 
 	/* Disable the Tx and Rx queues */
 	ice_vsi_disable_tx(&sc->pf_vsi);
+	for (i = 0, txq = vsi->tx_queues; i < vsi->num_tx_queues; i++, txq++) {
+		ifq_barrier(txq->txq_ifq);
+		intr_barrier(txq->irqv->iv_ihc);
+	}
 	ice_control_all_rx_queues(&sc->pf_vsi, false);
+	for (i = 0, rxq = vsi->rx_queues; i < vsi->num_rx_queues; i++, rxq++)
+		timeout_del_barrier(&rxq->rxq_refill);
 
 	if (!ice_test_state(&sc->state, ICE_STATE_LINK_ACTIVE_ON_DOWN) &&
 		 !(ifp->if_flags & IFF_UP) && sc->link_up)
@@ -28772,8 +28778,8 @@ ice_tx_queues_alloc(struct ice_softc *sc)
 
 		for (j = 0; j < sc->isc_ntxd[i]; j++) {
 			map = &txq->tx_map[j];
-			if (bus_dmamap_create(sc->sc_dmat, ICE_MAX_FRAME_SIZE, 1,
-			    ICE_MAX_FRAME_SIZE, 0,
+			if (bus_dmamap_create(sc->sc_dmat, ICE_MAX_FRAME_SIZE,
+			    ICE_MAX_TX_SEGS, ICE_MAX_FRAME_SIZE, 0,
 			    BUS_DMA_WAITOK | BUS_DMA_ALLOCNOW | BUS_DMA_64BIT,
 			    &map->txm_map) != 0) {
 				printf("%s: could not allocate Tx DMA map\n",
