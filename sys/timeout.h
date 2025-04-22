@@ -55,7 +55,7 @@ struct timeout {
 #define TIMEOUT_RUNNING		0x04	/* currently running */
 #define TIMEOUT_INITIALIZED	0x08	/* initialized */
 #define TIMEOUT_TRIGGERED	0x10	/* running or ran */
-#define TIMEOUT_MPSAFE		0x12	/* run without kernel lock */
+#define TIMEOUT_MPSAFE		0x20	/* run without kernel lock */
 
 struct timeoutstat {
 	uint64_t tos_added;		/* timeout_add*(9) calls */
