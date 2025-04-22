@@ -452,12 +452,18 @@ timeout_del(struct timeout *to)
 int
 timeout_del_barrier(struct timeout *to)
 {
-	int removed;
+	int removed, running;
 
 	timeout_sync_order(ISSET(to->to_flags, TIMEOUT_PROC));
 
 	removed = timeout_del(to);
-	timeout_barrier(to);
+
+	mtx_enter(&timeout_mutex);
+	running = ISSET(to->to_flags, TIMEOUT_RUNNING);
+	mtx_leave(&timeout_mutex);
+
+	if (running)
+		timeout_barrier(to);
 
 	return removed;
 }
@@ -644,6 +650,7 @@ timeout_run(struct timeout *to)
 
 	CLR(to->to_flags, TIMEOUT_ONQUEUE);
 	SET(to->to_flags, TIMEOUT_TRIGGERED);
+	SET(to->to_flags, TIMEOUT_RUNNING);
 
 	fn = to->to_func;
 	arg = to->to_arg;
@@ -663,6 +670,7 @@ timeout_run(struct timeout *to)
 #endif
 	timeout_sync_leave(needsproc);
 	mtx_enter(&timeout_mutex);
+	CLR(to->to_flags, TIMEOUT_RUNNING);
 }
 
 void
