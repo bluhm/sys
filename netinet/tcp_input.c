@@ -4457,17 +4457,17 @@ tcp_softlro_glue(struct mbuf_list *ml, struct mbuf *mtail, struct ifnet *ifp)
 	if (!ISSET(ifp->if_xflags, IFXF_LRO))
 		goto out;
 
-        ether_extract_headers(mtail, &tail);
-        if (!tcp_softlro_check(mtail, &tail)) {
-                mtail->m_pkthdr.ph_mss = 0;
-                goto out;
-        }
-        mtail->m_pkthdr.ph_mss = tail.paylen;
+	ether_extract_headers(mtail, &tail);
+	if (!tcp_softlro_check(mtail, &tail)) {
+		mtail->m_pkthdr.ph_mss = 0;
+		goto out;
+	}
+	mtail->m_pkthdr.ph_mss = tail.paylen;
 
 	for (mhead = ml->ml_head; mhead != NULL; mhead = mhead->m_nextpkt) {
-                /* This packet has been checked and was not mergable before. */
-                if (mhead->m_pkthdr.ph_mss == 0)
-                        continue;
+		/* This packet has been checked and was not mergable before. */
+		if (mhead->m_pkthdr.ph_mss == 0)
+			continue;
 
 		/* Use RSS hash to skip packets of different connections. */
 		if (ISSET(mhead->m_pkthdr.csum_flags, M_FLOWID) &&
