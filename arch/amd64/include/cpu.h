@@ -416,6 +416,7 @@ void	identifycpu(struct cpu_info *);
 int	cpu_amd64speed(int *);
 extern int cpuspeed;
 extern int amd64_pos_cbit;
+extern int amd64_min_noes_asid;
 
 /* machdep.c */
 void	dumpconf(void);

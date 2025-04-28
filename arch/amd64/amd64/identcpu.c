@@ -67,6 +67,7 @@ int cpuspeed;
 
 int amd64_has_xcrypt;
 int amd64_pos_cbit;	/* C bit position for SEV */
+int amd64_min_noes_asid;
 int has_rdrand;
 int has_rdseed;
 
@@ -710,6 +711,7 @@ identifycpu(struct cpu_info *ci)
 		    'd', CPUID_MEMBER(ci_feature_amdsev_edx),
 		    CPUID_AMDSEV_EDX_BITS);
 		amd64_pos_cbit = (ci->ci_feature_amdsev_ebx & 0x3f);
+		amd64_min_noes_asid = (ci->ci_feature_amdsev_edx);
 	}
 
 	printf("\n");
