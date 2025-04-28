@@ -1,4 +1,4 @@
-/*	$OpenBSD: qwx.c,v 1.69 2025/03/28 13:55:27 kevlo Exp $	*/
+/*	$OpenBSD: qwx.c,v 1.75 2025/04/26 19:59:46 stsp Exp $	*/
 
 /*
  * Copyright 2023 Stefan Sperling <stsp@openbsd.org>
@@ -159,6 +159,8 @@ int qwx_dp_peer_rx_pn_replay_config(struct qwx_softc *, struct qwx_vif *,
     struct ieee80211_node *, struct ieee80211_key *, int);
 void qwx_setkey_clear(struct qwx_softc *);
 void qwx_vif_free_all(struct qwx_softc *);
+void qwx_dp_stop_shadow_timers(struct qwx_softc *);
+void qwx_ce_stop_shadow_timers(struct qwx_softc *);
 
 int qwx_scan(struct qwx_softc *);
 void qwx_scan_abort(struct qwx_softc *);
@@ -322,6 +324,8 @@ qwx_stop(struct ifnet *ifp)
 	rw_assert_wrlock(&sc->ioctl_rwl);
 
 	timeout_del(&sc->mon_reap_timer);
+	qwx_dp_stop_shadow_timers(sc);
+	qwx_ce_stop_shadow_timers(sc);
 
 	/* Disallow new tasks. */
 	set_bit(ATH11K_FLAG_CRASH_FLUSH, sc->sc_flags);
@@ -334,15 +338,31 @@ qwx_stop(struct ifnet *ifp)
 
 	qwx_setkey_clear(sc);
 
-	clear_bit(ATH11K_FLAG_CRASH_FLUSH, sc->sc_flags);
-
 	ifp->if_timer = sc->sc_tx_timer = 0;
 
 	ifp->if_flags &= ~IFF_RUNNING;
 	ifq_clr_oactive(&ifp->if_snd);
 
-	sc->sc_newstate(ic, IEEE80211_S_INIT, -1);
-	sc->ns_nstate = IEEE80211_S_INIT;
+	clear_bit(ATH11K_FLAG_CRASH_FLUSH, sc->sc_flags);
+
+	/*
+	 * Manually run the newstate task's code for switching to INIT state.
+	 * This reconfigures firmware state to stop scanning, or disassociate
+	 * from our current AP, and/or stop the VIF, etc.
+	 */
+	if (ic->ic_state != IEEE80211_S_INIT) {
+		sc->ns_nstate = IEEE80211_S_INIT;
+		sc->ns_arg = -1; /* do not send management frames */
+		refcnt_init(&sc->task_refs);
+		refcnt_take(&sc->task_refs);
+		qwx_newstate_task(sc);
+		if (ic->ic_state != IEEE80211_S_INIT) { /* task code failed */
+			task_del(systq, &sc->init_task);
+			sc->sc_newstate(ic, IEEE80211_S_INIT, -1);
+		}
+		refcnt_finalize(&sc->task_refs, "qwxstop");
+	}
+
 	sc->scan.state = ATH11K_SCAN_IDLE;
 	sc->vdev_id_11d_scan = QWX_11D_INVALID_VDEV_ID;
 	sc->pdevs_active = 0;
@@ -826,6 +846,10 @@ qwx_newstate(struct ieee80211com *ic, enum ieee80211_state nstate, int arg)
 	struct ifnet *ifp = &ic->ic_if;
 	struct qwx_softc *sc = ifp->if_softc;
 
+	/* We may get triggered by received frames during qwx_stop(). */
+	if (!(ifp->if_flags & IFF_RUNNING))
+		return 0;
+
 	/*
 	 * Prevent attempts to transition towards the same state, unless
 	 * we are scanning in which case a SCAN -> SCAN transition
@@ -899,6 +923,9 @@ qwx_newstate_task(void *arg)
 			}
 			/* FALLTHROUGH */
 		case IEEE80211_S_SCAN:
+			if (nstate < IEEE80211_S_SCAN)
+				qwx_scan_abort(sc);
+			break;
 		case IEEE80211_S_INIT:
 			break;
 		}
@@ -954,7 +981,8 @@ out:
 			task_add(systq, &sc->init_task);
 		else
 			sc->sc_newstate(ic, nstate, sc->ns_arg);
-	}
+	} else if (err == 0)
+		sc->sc_newstate(ic, nstate, sc->ns_arg);
 	refcnt_rele_wake(&sc->task_refs);
 	splx(s);
 }
@@ -12952,7 +12980,6 @@ qwx_wmi_event_scan_start_failed(struct qwx_softc *sc)
 		    qwx_scan_state_str(sc->scan.state), sc->scan.state);
 		break;
 	case ATH11K_SCAN_STARTING:
-		wakeup(&sc->scan.state);
 		qwx_mac_scan_finish(sc);
 		break;
 	}
@@ -15454,6 +15481,16 @@ config_refill_ring:
 }
 
 void
+qwx_dp_mon_link_free(struct qwx_softc *sc)
+{
+	struct qwx_pdev_dp *dp = &sc->pdev_dp;
+	struct qwx_mon_data *pmon = &dp->mon_data;
+
+	qwx_dp_link_desc_cleanup(sc, pmon->link_desc_banks,
+	    HAL_RXDMA_MONITOR_DESC, &dp->rxdma_mon_desc_ring);
+}
+
+void
 qwx_dp_pdev_free(struct qwx_softc *sc)
 {
 	int i;
@@ -15462,6 +15499,8 @@ qwx_dp_pdev_free(struct qwx_softc *sc)
 
 	for (i = 0; i < sc->num_radios; i++)
 		qwx_dp_rx_pdev_free(sc, i);
+	
+	qwx_dp_mon_link_free(sc);
 }
 
 int
@@ -16058,7 +16097,7 @@ qwx_dp_process_rx_err_buf(struct qwx_softc *sc, uint32_t *ring_desc,
 }
 
 int
-qwx_dp_process_rx_err(struct qwx_softc *sc)
+qwx_dp_process_rx_err(struct qwx_softc *sc, int purge)
 {
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ifnet *ifp = &ic->ic_if;
@@ -16077,7 +16116,7 @@ qwx_dp_process_rx_err(struct qwx_softc *sc)
 	uint64_t paddr;
 	uint32_t *desc;
 	int is_frag;
-	uint8_t drop = 0;
+	uint8_t drop = purge ? 1 : 0;
 
 	tot_n_bufs_reaped = 0;
 
@@ -16149,14 +16188,17 @@ qwx_dp_process_rx_err(struct qwx_softc *sc)
 #ifdef notyet
 	spin_unlock_bh(&srng->lock);
 #endif
-	for (i = 0; i < sc->num_radios; i++) {
-		if (!n_bufs_reaped[i])
-			continue;
+	if (!purge) {
+		for (i = 0; i < sc->num_radios; i++) {
+			if (!n_bufs_reaped[i])
+				continue;
 
-		rx_ring = &sc->pdev_dp.rx_refill_buf_ring;
+			rx_ring = &sc->pdev_dp.rx_refill_buf_ring;
 
-		qwx_dp_rxbufs_replenish(sc, i, rx_ring, n_bufs_reaped[i],
-		    sc->hw_params.hal_params->rx_buf_rbm);
+			qwx_dp_rxbufs_replenish(sc, i, rx_ring,
+			    n_bufs_reaped[i],
+			    sc->hw_params.hal_params->rx_buf_rbm);
+		}
 	}
 
 	ifp->if_ierrors += tot_n_bufs_reaped;
@@ -16306,7 +16348,7 @@ qwx_dp_rx_wbm_err(struct qwx_softc *sc, struct qwx_rx_msdu *msdu,
 }
 
 int
-qwx_dp_rx_process_wbm_err(struct qwx_softc *sc)
+qwx_dp_rx_process_wbm_err(struct qwx_softc *sc, int purge)
 {
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ifnet *ifp = &ic->ic_if;
@@ -16381,6 +16423,18 @@ qwx_dp_rx_process_wbm_err(struct qwx_softc *sc)
 #endif
 	if (!total_num_buffs_reaped)
 		goto done;
+
+	if (purge) {
+		for (i = 0; i < sc->num_radios; i++) {
+			while ((msdu = TAILQ_FIRST(msdu_list))) {
+				TAILQ_REMOVE(msdu_list, msdu, entry);
+				m_freem(msdu->m);
+				msdu->m = NULL;
+			}
+		}
+
+		goto done;
+	}
 
 	for (i = 0; i < sc->num_radios; i++) {
 		if (!num_buffs_reaped[i])
@@ -16894,7 +16948,7 @@ qwx_dp_rx_process_received_packets(struct qwx_softc *sc,
 }
 
 int
-qwx_dp_process_rx(struct qwx_softc *sc, int ring_id)
+qwx_dp_process_rx(struct qwx_softc *sc, int ring_id, int purge)
 {
 	struct qwx_dp *dp = &sc->dp;
 	struct qwx_pdev_dp *pdev_dp = &sc->pdev_dp;
@@ -17006,6 +17060,16 @@ try_again:
 		if (!num_buffs_reaped[i])
 			continue;
 
+		if (purge) {
+			while ((msdu = TAILQ_FIRST(&msdu_list[i]))) {
+				TAILQ_REMOVE(msdu_list, msdu, entry);
+				m_freem(msdu->m);
+				msdu->m = NULL;
+			}
+
+			continue;
+		}
+
 		qwx_dp_rx_process_received_packets(sc, &msdu_list[i], i);
 
 		rx_ring = &sc->pdev_dp.rx_refill_buf_ring;
@@ -17073,7 +17137,7 @@ fail_free_mbuf:
 
 int
 qwx_dp_rx_reap_mon_status_ring(struct qwx_softc *sc, int mac_id,
-    struct mbuf_list *ml)
+    struct mbuf_list *ml, int purge)
 {
 	const struct ath11k_hw_hal_params *hal_params;
 	struct qwx_pdev_dp *dp;
@@ -17154,6 +17218,15 @@ qwx_dp_rx_reap_mon_status_ring(struct qwx_softc *sc, int mac_id,
 			pmon->buf_state = DP_MON_STATUS_REPLINISH;
 		}
 move_next:
+		if (purge) {
+			hal_params = sc->hw_params.hal_params;
+			qwx_hal_rx_buf_addr_info_set(rx_mon_status_desc, 0, 0,
+			    hal_params->rx_buf_rbm);
+			qwx_hal_srng_src_get_next_entry(sc, srng);
+			num_buffs_reaped++;
+			continue;
+		}
+
 		m = qwx_dp_rx_alloc_mon_status_buf(sc, rx_ring, &buf_idx);
 		if (!m) {
 			hal_params = sc->hw_params.hal_params;
@@ -17209,7 +17282,7 @@ qwx_dp_rx_process_mon_status(struct qwx_softc *sc, int mac_id)
 #endif
 	struct hal_rx_mon_ppdu_info *ppdu_info = &pmon->mon_ppdu_info;
 
-	num_buffs_reaped = qwx_dp_rx_reap_mon_status_ring(sc, mac_id, &ml);
+	num_buffs_reaped = qwx_dp_rx_reap_mon_status_ring(sc, mac_id, &ml, 0);
 	if (!num_buffs_reaped)
 		goto exit;
 
@@ -17310,7 +17383,7 @@ qwx_dp_service_mon_ring(void *arg)
 }
 
 int
-qwx_dp_process_rxdma_err(struct qwx_softc *sc, int mac_id)
+qwx_dp_process_rxdma_err(struct qwx_softc *sc, int mac_id, int purge)
 {
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ifnet *ifp = &ic->ic_if;
@@ -17382,7 +17455,7 @@ qwx_dp_process_rxdma_err(struct qwx_softc *sc, int mac_id)
 #ifdef notyet
 	spin_unlock_bh(&srng->lock);
 #endif
-	if (num_buf_freed)
+	if (num_buf_freed && !purge)
 		qwx_dp_rxbufs_replenish(sc, mac_id, rx_ring, num_buf_freed,
 		    sc->hw_params.hal_params->rx_buf_rbm);
 
@@ -17605,7 +17678,7 @@ qwx_hal_reo_update_rx_reo_queue_status(struct qwx_softc *ab, uint32_t *reo_desc,
 }
 
 int
-qwx_dp_process_reo_status(struct qwx_softc *sc)
+qwx_dp_process_reo_status(struct qwx_softc *sc, int purge)
 {
 	struct qwx_dp *dp = &sc->dp;
 	struct hal_srng *srng;
@@ -17623,7 +17696,10 @@ qwx_dp_process_reo_status(struct qwx_softc *sc)
 	qwx_hal_srng_access_begin(sc, srng);
 
 	while ((reo_desc = qwx_hal_srng_dst_get_next_entry(sc, srng))) {
-		ret = 1;
+		ret++;
+
+		if (purge)
+			continue;
 
 		tag = FIELD_GET(HAL_SRNG_TLV_HDR_TAG, *reo_desc);
 		switch (tag) {
@@ -17705,16 +17781,16 @@ qwx_dp_service_srng(struct qwx_softc *sc, int grp_id)
 	}
 
 	if (sc->hw_params.ring_mask->rx_err[grp_id] &&
-	    qwx_dp_process_rx_err(sc))
+	    qwx_dp_process_rx_err(sc, 0))
 		ret = 1;
 
 	if (sc->hw_params.ring_mask->rx_wbm_rel[grp_id] &&
-	    qwx_dp_rx_process_wbm_err(sc))
+	    qwx_dp_rx_process_wbm_err(sc, 0))
 		ret = 1;
 
 	if (sc->hw_params.ring_mask->rx[grp_id]) {
 		i = fls(sc->hw_params.ring_mask->rx[grp_id]) - 1;
-		if (qwx_dp_process_rx(sc, i))
+		if (qwx_dp_process_rx(sc, i, 0))
 			ret = 1;
 	}
 
@@ -17732,7 +17808,7 @@ qwx_dp_service_srng(struct qwx_softc *sc, int grp_id)
 	}
 
 	if (sc->hw_params.ring_mask->reo_status[grp_id] &&
-	    qwx_dp_process_reo_status(sc))
+	    qwx_dp_process_reo_status(sc, 0))
 		ret = 1;
 
 	for (i = 0; i < sc->num_radios; i++) {
@@ -17741,7 +17817,7 @@ qwx_dp_service_srng(struct qwx_softc *sc, int grp_id)
 
 			if (sc->hw_params.ring_mask->rxdma2host[grp_id] &
 			   (1 << (id))) {
-				if (qwx_dp_process_rxdma_err(sc, id))
+				if (qwx_dp_process_rxdma_err(sc, id, 0))
 					ret = 1;
 			}
 
@@ -19860,11 +19936,53 @@ err_wmi_detach:
 }
 
 void
+qwx_flush_rx_rings(struct qwx_softc *sc)
+{
+	struct mbuf_list ml = MBUF_LIST_INITIALIZER();
+	int i, j, n;
+
+	do {
+		n = qwx_dp_process_rx_err(sc, 1);
+	} while (n > 0);
+
+	do {
+		n = qwx_dp_rx_process_wbm_err(sc, 1);
+	} while (n > 0);
+
+	do {
+		n = qwx_dp_process_reo_status(sc, 1);
+	} while (n > 0);
+
+	for (i = 0; i < DP_REO_DST_RING_MAX; i++) {
+		do {
+			n = qwx_dp_process_rx(sc, i, 1);
+		} while (n > 0);
+	}
+
+	for (i = 0; i < sc->num_radios; i++) {
+		for (j = 0; j < sc->hw_params.num_rxmda_per_pdev; j++) {
+			int mac_id = i * sc->hw_params.num_rxmda_per_pdev + j;
+
+			do {
+				n = qwx_dp_process_rxdma_err(sc, mac_id, 1);
+			} while (n > 0);
+			do {
+				n = qwx_dp_rx_reap_mon_status_ring(sc,
+				    mac_id, &ml, 1);
+				ml_purge(&ml);
+			} while (n > 0);
+		}
+	}
+}
+
+void
 qwx_core_stop(struct qwx_softc *sc)
 {
 	if (!test_bit(ATH11K_FLAG_CRASH_FLUSH, sc->sc_flags))
 		qwx_qmi_firmware_stop(sc);
 	
+	qwx_flush_rx_rings(sc);
+
 	sc->ops.stop(sc);
 	qwx_wmi_detach(sc);
 	qwx_dp_pdev_reo_cleanup(sc);
@@ -23458,9 +23576,8 @@ qwx_mac_scan_finish(struct qwx_softc *sc)
 		timeout_del(&sc->scan.timeout);
 		if (!sc->scan.is_roc)
 			ieee80211_end_scan(ifp);
-#if 0
-		complete_all(&ar->scan.completed);
-#endif
+
+		wakeup(&sc->scan.state);
 		break;
 	}
 }
