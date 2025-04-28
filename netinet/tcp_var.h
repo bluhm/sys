@@ -265,7 +265,6 @@ struct syn_cache {
 	u_int sc_rxtshift;		/* [S] for computing backoff */
 	u_int sc_dynflags;		/* [S] flags accessed with mutex */
 #define SCF_UNREACH	0x0001U		/* we've had an unreach error */
-#define SCF_DEAD	0x0002U		/* this entry to be released */
 
 	u_short sc_fixflags;		/* [I] set during initialization */
 #define SCF_TIMESTAMP	0x0010U		/* peer will do timestamps */

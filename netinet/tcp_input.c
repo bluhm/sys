@@ -3188,8 +3188,6 @@ syn_cache_rm(struct syn_cache *sc)
 {
 	MUTEX_ASSERT_LOCKED(&syn_cache_mtx);
 
-	KASSERT(!ISSET(sc->sc_dynflags, SCF_DEAD));
-	SET(sc->sc_dynflags, SCF_DEAD);
 	TAILQ_REMOVE(&sc->sc_buckethead->sch_bucket, sc, sc_bucketq);
 	in_pcbunref(sc->sc_inplisten);
 	sc->sc_inplisten = NULL;
@@ -3394,7 +3392,8 @@ syn_cache_timer(void *arg)
 	int lastref, do_ecn = 0;
 
 	mtx_enter(&syn_cache_mtx);
-	if (ISSET(sc->sc_dynflags, SCF_DEAD))
+	inp = in_pcbref(sc->sc_inplisten);
+	if (inp == NULL)
 		goto freeit;
 
 	if (__predict_false(sc->sc_rxtshift == TCP_MAXRXTSHIFT)) {
@@ -3418,9 +3417,6 @@ syn_cache_timer(void *arg)
 	    TCPTV_REXMTMAX);
 	if (timeout_add_msec(&sc->sc_timer, sc->sc_rxtcur))
 		refcnt_take(&sc->sc_refcnt);
-	inp = in_pcbref(sc->sc_inplisten);
-	if (inp == NULL)
-		goto freeit;
 	mtx_leave(&syn_cache_mtx);
 
 	NET_LOCK_SHARED();
@@ -3443,6 +3439,7 @@ syn_cache_timer(void *arg)
  dropit:
 	tcpstat_inc(tcps_sc_timed_out);
 	syn_cache_rm(sc);
+	in_pcbunref(inp);
 	/* Decrement reference of the timer and free object after remove. */
 	lastref = refcnt_rele(&sc->sc_refcnt);
 	KASSERT(lastref == 0);
