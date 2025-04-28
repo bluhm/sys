@@ -1,4 +1,4 @@
-/*	$OpenBSD: identcpu.c,v 1.148 2024/10/07 20:30:17 dv Exp $	*/
+/*	$OpenBSD: identcpu.c,v 1.149 2025/04/28 16:18:25 bluhm Exp $	*/
 /*	$NetBSD: identcpu.c,v 1.1 2003/04/26 18:39:28 fvdl Exp $	*/
 
 /*
