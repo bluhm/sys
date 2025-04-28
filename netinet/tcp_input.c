@@ -4453,6 +4453,18 @@ tcp_softlro_glue(struct mbuf_list *ml, struct mbuf *mtail, struct ifnet *ifp)
 		goto out;
 
 	ether_extract_headers(mtail, &tail);
+
+	if (tail.tcp) {
+		int tcpdatalen;
+
+		/* Remove possible ethernet padding at the end. */
+		tcpdatalen = tail.iplen - tail.iphlen - tail.tcphlen;
+		if (tcpdatalen < tail.paylen ) {
+			m_adj(mtail, tcpdatalen - tail.paylen);
+			tail.paylen = tcpdatalen;
+		}
+	}
+
 	if (!tcp_softlro_check(mtail, &tail)) {
 		mtail->m_pkthdr.ph_mss = 0;
 		goto out;
