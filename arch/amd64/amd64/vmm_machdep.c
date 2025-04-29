@@ -1,4 +1,4 @@
-/* $OpenBSD: vmm_machdep.c,v 1.43 2025/04/28 16:18:25 bluhm Exp $ */
+/* $OpenBSD: vmm_machdep.c,v 1.44 2025/04/29 13:21:52 bluhm Exp $ */
 /*
  * Copyright (c) 2014 Mike Larkin <mlarkin@openbsd.org>
  *
