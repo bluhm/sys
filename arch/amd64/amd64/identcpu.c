@@ -711,7 +711,7 @@ identifycpu(struct cpu_info *ci)
 		    'd', CPUID_MEMBER(ci_feature_amdsev_edx),
 		    CPUID_AMDSEV_EDX_BITS);
 		amd64_pos_cbit = (ci->ci_feature_amdsev_ebx & 0x3f);
-		amd64_min_noes_asid = (ci->ci_feature_amdsev_edx);
+		amd64_min_noes_asid = ci->ci_feature_amdsev_edx;
 	}
 
 	printf("\n");
