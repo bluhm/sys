@@ -1,4 +1,4 @@
-/* $OpenBSD: vmm.h,v 1.8 2025/04/23 21:54:12 bluhm Exp $ */
+/* $OpenBSD: vmm.h,v 1.9 2025/04/30 09:40:37 bluhm Exp $ */
 /*
  * Copyright (c) 2014-2023 Mike Larkin <mlarkin@openbsd.org>
  *
