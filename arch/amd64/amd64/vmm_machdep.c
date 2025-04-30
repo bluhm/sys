@@ -193,9 +193,6 @@ const struct kmem_pa_mode vmm_kp_contig = {
 	.kp_zero = 1,
 };
 
-extern struct cfdriver vmm_cd;
-extern const struct cfattach vmm_ca;
-
 /*
  * Helper struct to easily get the VMCS field IDs needed in vmread/vmwrite
  * to access the individual fields of the guest segment registers. This
@@ -224,12 +221,6 @@ const struct {
 	{ VMCS_GUEST_IA32_TR_SEL, VMCS_GUEST_IA32_TR_LIMIT,
 	  VMCS_GUEST_IA32_TR_AR, VMCS_GUEST_IA32_TR_BASE }
 };
-
-/* Pools for VMs and VCPUs */
-extern struct pool vm_pool;
-extern struct pool vcpu_pool;
-
-extern struct vmm_softc *vmm_softc;
 
 /* IDT information used when populating host state area */
 extern vaddr_t idt_vaddr;

@@ -228,6 +228,12 @@ struct vmm_softc {
 	uint8_t			vpids[512];	/* [p] bitmap of VPID/ASIDs */
 };
 
+extern struct vmm_softc *vmm_softc;
+extern struct pool vm_pool;
+extern struct pool vcpu_pool;
+extern struct cfdriver vmm_cd;
+extern const struct cfattach vmm_ca;
+
 int vmm_probe(struct device *, void *, void *);
 int vmm_activate(struct device *, int);
 void vmm_attach(struct device *, struct device *,  void *);
