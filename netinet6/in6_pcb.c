@@ -129,6 +129,9 @@ const struct in6_addr zeroin6_addr;
 struct inpcb *in6_pcbhash_lookup(struct inpcbtable *, uint64_t, u_int,
     const struct in6_addr *, u_short, const struct in6_addr *, u_short);
 
+struct inpcb * in6_pcblookup_lock(struct inpcbtable *, const struct in6_addr *,
+    u_int, const struct in6_addr *, u_int, u_int, int);
+
 uint64_t
 in6_pcbhash(struct inpcbtable *table, u_int rdomain,
     const struct in6_addr *faddr, u_short fport,
@@ -333,9 +336,10 @@ in6_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 	mtx_leave(&table->inpt_mtx);
 
 	inp->inp_flowinfo &= ~IPV6_FLOWLABEL_MASK;
-	if (ip6_auto_flowlabel)
+	if (ip6_auto_flowlabel) {
 		inp->inp_flowinfo |=
 		    (htonl(ip6_randomflowlabel()) & IPV6_FLOWLABEL_MASK);
+	}
 #if NSTOEPLITZ > 0
 	inp->inp_flowid = stoeplitz_ip6port(&inp->inp_faddr6,
 	    &inp->inp_laddr6, inp->inp_fport, inp->inp_lport);
@@ -699,4 +703,42 @@ in6_pcblookup_listen(struct inpcbtable *table, struct in6_addr *laddr,
 	}
 #endif
 	return (inp);
+}
+
+int
+in6_pcbset_addr(struct inpcb *inp, const struct sockaddr_in6 *fsin6,
+    const struct sockaddr_in6 *lsin6, u_int rtableid)
+{
+	struct inpcbtable *table = inp->inp_table;
+	struct inpcb *t;
+
+	mtx_enter(&table->inpt_mtx);
+
+	t = in6_pcblookup_lock(inp->inp_table, &fsin6->sin6_addr,
+	    fsin6->sin6_port, &lsin6->sin6_addr, lsin6->sin6_port,
+	    rtableid, IN_PCBLOCK_HOLD);
+	if (t != NULL) {
+		mtx_leave(&table->inpt_mtx);
+		return (EADDRINUSE);
+	}
+
+	inp->inp_rtableid = rtableid;
+	inp->inp_laddr6 = lsin6->sin6_addr;
+	inp->inp_lport = lsin6->sin6_port;
+	inp->inp_faddr6 = fsin6->sin6_addr;
+	inp->inp_fport = fsin6->sin6_port;
+	in_pcbrehash(inp);
+
+	mtx_leave(&table->inpt_mtx);
+
+	inp->inp_flowinfo &= ~IPV6_FLOWLABEL_MASK;
+	if (ip6_auto_flowlabel) {
+		inp->inp_flowinfo |=
+		    (htonl(ip6_randomflowlabel()) & IPV6_FLOWLABEL_MASK);
+	}
+#if NSTOEPLITZ > 0
+	inp->inp_flowid = stoeplitz_ip6port(&inp->inp_faddr6,
+	    &inp->inp_laddr6, inp->inp_fport, inp->inp_lport);
+#endif
+	return (0);
 }
