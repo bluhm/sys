@@ -129,9 +129,6 @@ const struct in6_addr zeroin6_addr;
 struct inpcb *in6_pcbhash_lookup(struct inpcbtable *, uint64_t, u_int,
     const struct in6_addr *, u_short, const struct in6_addr *, u_short);
 
-struct inpcb * in6_pcblookup_lock(struct inpcbtable *, const struct in6_addr *,
-    u_int, const struct in6_addr *, u_int, u_int, int);
-
 uint64_t
 in6_pcbhash(struct inpcbtable *table, u_int rdomain,
     const struct in6_addr *faddr, u_short fport,

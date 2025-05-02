@@ -323,8 +323,8 @@ struct inpcb *
 void	 in_pcb_iterator_abort(struct inpcbtable *, struct inpcb *,
 	    struct inpcb_iterator *);
 struct inpcb *
-	 in_pcblookup(struct inpcbtable *, struct in_addr,
-			       u_int, struct in_addr, u_int, u_int);
+	 in_pcblookup(struct inpcbtable *, struct in_addr, u_int,
+	    struct in_addr, u_int, u_int);
 struct inpcb *
 	 in_pcblookup_listen(struct inpcbtable *, struct in_addr, u_int,
 	    struct mbuf *, u_int);
@@ -334,6 +334,9 @@ uint64_t in6_pcbhash(struct inpcbtable *, u_int, const struct in6_addr *,
 struct inpcb *
 	 in6_pcblookup(struct inpcbtable *, const struct in6_addr *,
 	    u_int, const struct in6_addr *, u_int, u_int);
+struct inpcb *
+	in6_pcblookup_lock(struct inpcbtable *, const struct in6_addr *, u_int,
+	    const struct in6_addr *, u_int, u_int, int);
 struct inpcb *
 	 in6_pcblookup_listen(struct inpcbtable *, struct in6_addr *, u_int,
 	    struct mbuf *, u_int);
@@ -373,7 +376,8 @@ void	in6_pcbnotify(struct inpcbtable *, const struct sockaddr_in6 *,
 	void (*)(struct inpcb *, int));
 int	in6_selecthlim(const struct inpcb *);
 int	in_pcbset_rtableid(struct inpcb *, u_int);
-void	in_pcbset_laddr(struct inpcb *, const struct sockaddr *, u_int);
+int	in_pcbset_addr(struct inpcb *, const struct sockaddr *,
+	    const struct sockaddr *, u_int);
 void	in_pcbunset_faddr(struct inpcb *);
 void	in_pcbunset_laddr(struct inpcb *);
 

@@ -1330,33 +1330,63 @@ in_pcbset_rtableid(struct inpcb *inp, u_int rtableid)
 	return (0);
 }
 
-void
-in_pcbset_laddr(struct inpcb *inp, const struct sockaddr *sa, u_int rtableid)
+int
+in_pcbset_addr(struct inpcb *inp, const struct sockaddr *fsa,
+    const struct sockaddr *lsa, u_int rtableid)
 {
 	struct inpcbtable *table = inp->inp_table;
+#ifdef INET6
+	const struct sockaddr_in6 *fsin6, *lsin6;
+#endif
+	const struct sockaddr_in *fsin, *lsin;
+	struct inpcb *t;
 
 	mtx_enter(&table->inpt_mtx);
-	inp->inp_rtableid = rtableid;
 #ifdef INET6
 	if (ISSET(inp->inp_flags, INP_IPV6)) {
-		const struct sockaddr_in6 *sin6;
+		KASSERT(fsa->sa_family == AF_INET6);
+		KASSERT(lsa->sa_family == AF_INET6);
+		fsin6 = satosin6_const(fsa);
+		lsin6 = satosin6_const(lsa);
 
-		KASSERT(sa->sa_family == AF_INET6);
-		sin6 = satosin6_const(sa);
-		inp->inp_lport = sin6->sin6_port;
-		inp->inp_laddr6 = sin6->sin6_addr;
+		t = in6_pcblookup_lock(inp->inp_table, &fsin6->sin6_addr,
+		    fsin6->sin6_port, &lsin6->sin6_addr, lsin6->sin6_port,
+		    rtableid, IN_PCBLOCK_HOLD);
 	} else
 #endif
 	{
-		const struct sockaddr_in *sin;
+		KASSERT(fsa->sa_family == AF_INET);
+		KASSERT(lsa->sa_family == AF_INET);
+		fsin = satosin_const(fsa);
+		lsin = satosin_const(lsa);
+		t = in_pcblookup_lock(inp->inp_table, fsin->sin_addr,
+		    fsin->sin_port, lsin->sin_addr, lsin->sin_port,
+		    rtableid, IN_PCBLOCK_HOLD);
+	}
+	if (t != NULL) {
+		mtx_leave(&table->inpt_mtx);
+		return (EADDRINUSE);
+	}
 
-		KASSERT(sa->sa_family == AF_INET);
-		sin = satosin_const(sa);
-		inp->inp_lport = sin->sin_port;
-		inp->inp_laddr = sin->sin_addr;
+	inp->inp_rtableid = rtableid;
+#ifdef INET6
+	if (ISSET(inp->inp_flags, INP_IPV6)) {
+		inp->inp_laddr6 = lsin6->sin6_addr;
+		inp->inp_lport = lsin6->sin6_port;
+		inp->inp_faddr6 = fsin6->sin6_addr;
+		inp->inp_fport = fsin6->sin6_port;
+	} else
+#endif
+	{
+		inp->inp_laddr = lsin->sin_addr;
+		inp->inp_lport = lsin->sin_port;
+		inp->inp_faddr = fsin->sin_addr;
+		inp->inp_fport = fsin->sin_port;
 	}
 	in_pcbrehash(inp);
 	mtx_leave(&table->inpt_mtx);
+
+	return (0);
 }
 
 void
