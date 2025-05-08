@@ -598,8 +598,8 @@ kern_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		} else 
 			return (0);
 
-		memset(&ump, 0, sizeof(ump));
 		mtx_enter(&log_mtx);
+		memset(&ump, 0, sizeof(ump));
 		ump.msg_magic = mp->msg_magic;
 		ump.msg_bufs = mp->msg_bufs;
 		ump.msg_bufx = mp->msg_bufx;
