@@ -4347,7 +4347,7 @@ tcp_softlro_check(struct mbuf *m, struct ether_extracted *ext)
 		    ((uint32_t *)optp)[0] != htonl(TCPOPT_TSTAMP_HDR))
 			return 0;
 	}
-	
+
 	return 1;
 }
 
