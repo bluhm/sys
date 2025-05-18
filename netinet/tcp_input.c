@@ -4302,6 +4302,7 @@ syn_cache_respond(struct syn_cache *sc, struct mbuf *m, uint64_t now,
 	return (error);
 }
 
+#ifndef SMALL_KERNEL
 static int
 tcp_softlro_check(struct mbuf *m, struct ether_extracted *ext)
 {
@@ -4571,3 +4572,4 @@ tcp_softlro_glue(struct mbuf_list *ml, struct mbuf *mtail, struct ifnet *ifp)
  dontmerge:
 	ml_enqueue(ml, mtail);
 }
+#endif
