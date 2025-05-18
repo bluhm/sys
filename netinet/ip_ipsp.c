@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_ipsp.c,v 1.278 2023/12/03 10:50:25 mvs Exp $	*/
+/*	$OpenBSD: ip_ipsp.c,v 1.280 2025/05/14 14:32:15 mvs Exp $	*/
 /*
  * The authors of this code are John Ioannidis (ji@tla.org),
  * Angelos D. Keromytis (kermit@csd.uch.gr),
@@ -83,7 +83,7 @@ void tdb_hashstats(void);
 #ifdef ENCDEBUG
 #define DPRINTF(fmt, args...)						\
 	do {								\
-		if (encdebug)						\
+		if (atomic_load_int(&encdebug))				\
 			printf("%s: " fmt "\n", __func__, ## args);	\
 	} while (0)
 #else
@@ -256,6 +256,9 @@ reserve_spi(u_int rdomain, u_int32_t sspi, u_int32_t tspi,
 	struct tdb *tdbp, *exists;
 	u_int32_t spi;
 	int nums;
+#ifdef IPSEC
+	int keep_invalid_local = atomic_load_int(&ipsec_keep_invalid);
+#endif
 
 	/* Don't accept ranges only encompassing reserved SPIs. */
 	if (sproto != IPPROTO_IPCOMP &&
@@ -324,12 +327,12 @@ reserve_spi(u_int rdomain, u_int32_t sspi, u_int32_t tspi,
 
 #ifdef IPSEC
 		/* Setup a "silent" expiration (since TDBF_INVALID's set). */
-		if (ipsec_keep_invalid > 0) {
+		if (keep_invalid_local > 0) {
 			mtx_enter(&tdbp->tdb_mtx);
 			tdbp->tdb_flags |= TDBF_TIMER;
-			tdbp->tdb_exp_timeout = ipsec_keep_invalid;
+			tdbp->tdb_exp_timeout = keep_invalid_local;
 			if (timeout_add_sec(&tdbp->tdb_timer_tmo,
-			    ipsec_keep_invalid))
+			    keep_invalid_local))
 				tdb_ref(tdbp);
 			mtx_leave(&tdbp->tdb_mtx);
 		}
