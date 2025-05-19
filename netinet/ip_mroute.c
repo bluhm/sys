@@ -93,13 +93,12 @@ int mcast_debug = 1;
 #endif
 
 /*
- * Globals.  All but ip_mrouter and ip_mrtproto could be static,
+ * Globals.  All but ip_mrouter could be static,
  * except for netstat or debugging purposes.
  */
 struct socket	*ip_mrouter[RT_TABLEID_MAX + 1];
 struct rttimer_queue ip_mrouterq;
 uint64_t	 mrt_count[RT_TABLEID_MAX + 1];
-int		ip_mrtproto = IGMP_DVMRP;    /* for netstat only */
 
 struct cpumem *mrtcounters;
 

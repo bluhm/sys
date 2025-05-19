@@ -1454,10 +1454,6 @@ const u_char inet6ctlerrmap[PRC_NCMDS] = {
 	ENOPROTOOPT
 };
 
-#ifdef MROUTING
-extern int ip6_mrtproto;
-#endif
-
 const struct sysctl_bounded_args ipv6ctl_vars_unlocked[] = {
 	{ IPV6CTL_FORWARDING, &ip6_forwarding, 0, 2 },
 	{ IPV6CTL_SENDREDIRECTS, &ip6_sendredirects, 0, 1 },
@@ -1465,9 +1461,6 @@ const struct sysctl_bounded_args ipv6ctl_vars_unlocked[] = {
 
 const struct sysctl_bounded_args ipv6ctl_vars[] = {
 	{ IPV6CTL_DAD_PENDING, &ip6_dad_pending, SYSCTL_INT_READONLY },
-#ifdef MROUTING
-	{ IPV6CTL_MRTPROTO, &ip6_mrtproto, SYSCTL_INT_READONLY },
-#endif
 	{ IPV6CTL_DEFHLIM, &ip6_defhlim, 0, 255 },
 	{ IPV6CTL_MAXFRAGPACKETS, &ip6_maxfragpackets, 0, 1000 },
 	{ IPV6CTL_LOG_INTERVAL, &ip6_log_interval, 0, INT_MAX },
@@ -1559,7 +1552,6 @@ ip6_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 		return (error);
 #else
 	case IPV6CTL_MRTSTATS:
-	case IPV6CTL_MRTPROTO:
 	case IPV6CTL_MRTMIF:
 	case IPV6CTL_MRTMFC:
 		return (EOPNOTSUPP);

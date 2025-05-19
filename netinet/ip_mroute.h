@@ -197,8 +197,6 @@ mrtstat_inc(enum mrtstat_counters c)
 /* How frequent should we look for expired entries (in seconds). */
 #define MCAST_EXPIRE_FREQUENCY		30
 
-extern int ip_mrtproto;
-
 /*
  * The kernel's virtual-interface structure.
  */

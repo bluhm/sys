@@ -689,7 +689,6 @@ struct ip_mreqn {
 #define	IPCTL_MFORWARDING	31
 #define	IPCTL_MULTIPATH		32
 #define	IPCTL_STATS		33	/* IP statistics */
-#define	IPCTL_MRTPROTO		34	/* type of multicast */
 #define	IPCTL_MRTSTATS		35
 #define	IPCTL_ARPQUEUED		36
 #define	IPCTL_MRTMFC		37
@@ -704,7 +703,7 @@ struct ip_mreqn {
 	{ "forwarding", CTLTYPE_INT }, \
 	{ "redirect", CTLTYPE_INT }, \
 	{ "ttl", CTLTYPE_INT }, \
-	/* { "mtu", CTLTYPE_INT }, */ { 0, 0 }, \
+	{ 0, 0 /* mtu */ }, \
 	{ "sourceroute", CTLTYPE_INT }, \
 	{ "directed-broadcast", CTLTYPE_INT }, \
 	{ "portfirst", CTLTYPE_INT }, \
@@ -734,7 +733,7 @@ struct ip_mreqn {
 	{ "mforwarding", CTLTYPE_INT }, \
 	{ "multipath", CTLTYPE_INT }, \
 	{ "stats", CTLTYPE_STRUCT }, \
-	{ "mrtproto", CTLTYPE_INT }, \
+	{ 0, 0 /* mrtproto */ }, \
 	{ "mrtstats", CTLTYPE_STRUCT }, \
 	{ "arpqueued", CTLTYPE_INT }, \
 	{ "mrtmfc", CTLTYPE_STRUCT }, \

@@ -118,9 +118,6 @@ const struct sysctl_bounded_args ipctl_vars_unlocked[] = {
 };
 
 const struct sysctl_bounded_args ipctl_vars[] = {
-#ifdef MROUTING
-	{ IPCTL_MRTPROTO, &ip_mrtproto, SYSCTL_INT_READONLY },
-#endif
 	{ IPCTL_DEFTTL, &ip_defttl, 0, 255 },
 	{ IPCTL_IPPORT_FIRSTAUTO, &ipport_firstauto, 0, 65535 },
 	{ IPCTL_IPPORT_LASTAUTO, &ipport_lastauto, 0, 65535 },
@@ -1802,7 +1799,6 @@ ip_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		NET_UNLOCK();
 		return (error);
 #else
-	case IPCTL_MRTPROTO:
 	case IPCTL_MRTSTATS:
 	case IPCTL_MRTMFC:
 	case IPCTL_MRTVIF:

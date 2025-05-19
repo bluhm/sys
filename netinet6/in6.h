@@ -574,7 +574,6 @@ ifatoia6(struct ifaddr *ifa)
 #define IPV6CTL_FORWSRCRT	5	/* forward source-routed dgrams */
 #define IPV6CTL_STATS		6	/* stats */
 #define IPV6CTL_MRTSTATS	7	/* multicast forwarding stats */
-#define IPV6CTL_MRTPROTO	8	/* multicast routing protocol */
 #define IPV6CTL_MAXFRAGPACKETS	9	/* max packets reassembly queue */
 #define IPV6CTL_SOURCECHECK	10	/* verify source route and intf */
 #define IPV6CTL_SOURCECHECK_LOGINT 11	/* minimum logging interval */
@@ -612,7 +611,7 @@ ifatoia6(struct ifaddr *ifa)
 	{ "forwsrcrt", CTLTYPE_INT }, \
 	{ 0, 0 }, \
 	{ 0, 0 }, \
-	{ "mrtproto", CTLTYPE_INT }, \
+	{ 0, 0, /* mrtproto */ }, \
 	{ "maxfragpackets", CTLTYPE_INT }, \
 	{ "sourcecheck", CTLTYPE_INT }, \
 	{ "sourcecheck_logint", CTLTYPE_INT }, \
