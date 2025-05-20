@@ -413,9 +413,9 @@ struct mbuf *
 
 int	in6_cksum(struct mbuf *, uint8_t, uint32_t, uint32_t);
 void	in6_proto_cksum_out(struct mbuf *, struct ifnet *);
-int	in6_addrscope(struct in6_addr *);
-struct	in6_ifaddr *in6_ifawithscope(struct ifnet *, struct in6_addr *, u_int,
-	    struct rtentry *);
+int	in6_addrscope(const struct in6_addr *);
+struct	in6_ifaddr *in6_ifawithscope(struct ifnet *, const struct in6_addr *,
+	    u_int, struct rtentry *);
 int	in6_mask2len(struct in6_addr *, u_char *);
 int	in6_nam2sin6(const struct mbuf *, struct sockaddr_in6 **);
 int	in6_sa2sin6(struct sockaddr *, struct sockaddr_in6 **);

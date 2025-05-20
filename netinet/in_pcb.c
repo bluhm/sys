@@ -986,12 +986,13 @@ in_pcbrtentry(struct inpcb *inp)
  * an entry to the caller for later use.
  */
 int
-in_pcbselsrc(struct in_addr *insrc, struct sockaddr_in *sin,
+in_pcbselsrc(struct in_addr *insrc, const struct sockaddr_in *dstsock,
     struct inpcb *inp)
 {
-	struct ip_moptions *mopts = inp->inp_moptions;
-	struct rtentry *rt;
+	const struct in_addr *dst = &dstsock->sin_addr;
 	const struct in_addr *laddr = &inp->inp_laddr;
+	struct rtentry *rt;
+	struct ip_moptions *mopts = inp->inp_moptions;
 	u_int rtableid = inp->inp_rtableid;
 	struct sockaddr	*ip4_source = NULL;
 	struct in_ifaddr *ia = NULL;
@@ -1012,8 +1013,8 @@ in_pcbselsrc(struct in_addr *insrc, struct sockaddr_in *sin,
 	 * been set as a multicast option, use the address of that
 	 * interface as our source address.
 	 */
-	if ((IN_MULTICAST(sin->sin_addr.s_addr) ||
-	    sin->sin_addr.s_addr == INADDR_BROADCAST) && mopts != NULL) {
+	if ((IN_MULTICAST(dst->s_addr) || dst->s_addr == INADDR_BROADCAST) &&
+	    mopts != NULL) {
 		struct ifnet *ifp;
 
 		ifp = if_get(mopts->imo_ifidx);
@@ -1035,7 +1036,7 @@ in_pcbselsrc(struct in_addr *insrc, struct sockaddr_in *sin,
 	 * If route is known or can be allocated now,
 	 * our src addr is taken from the i/f, else punt.
 	 */
-	rt = route_mpath(&inp->inp_route, &sin->sin_addr, NULL, rtableid);
+	rt = route_mpath(&inp->inp_route, dst, NULL, rtableid);
 
 	/*
 	 * If we found a route, use the address

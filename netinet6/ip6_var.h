@@ -366,9 +366,9 @@ int	rip6_sysctl(int *, u_int, void *, size_t *, void *, size_t);
 
 int	dest6_input(struct mbuf **, int *, int, int, struct netstack *);
 
-int	in6_pcbselsrc(const struct in6_addr **, struct sockaddr_in6 *,
+int	in6_pcbselsrc(const struct in6_addr **, const struct sockaddr_in6 *,
 	    struct inpcb *, struct ip6_pktopts *);
-int	in6_selectsrc(const struct in6_addr **, struct sockaddr_in6 *,
+int	in6_selectsrc(const struct in6_addr **, const struct sockaddr_in6 *,
 	    struct ip6_moptions *, unsigned int);
 struct rtentry *in6_selectroute(const struct in6_addr *, struct ip6_pktopts *,
 	    struct route *, unsigned int rtableid);
