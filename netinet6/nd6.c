@@ -1,4 +1,4 @@
-/*	$OpenBSD: nd6.c,v 1.287 2025/02/17 20:31:25 bluhm Exp $	*/
+/*	$OpenBSD: nd6.c,v 1.291 2025/05/19 06:50:00 florian Exp $	*/
 /*	$KAME: nd6.c,v 1.280 2002/06/08 19:52:07 itojun Exp $	*/
 
 /*
@@ -86,12 +86,6 @@ int	nd6_gctimer	= (60 * 60 * 24); /* 1 day: garbage collection timer */
 int nd6_maxndopt = 10;	/* max # of ND options allowed */
 
 int nd6_maxnudhint = 0;	/* max # of subsequent upper layer hints */
-
-#ifdef ND6_DEBUG
-int nd6_debug = 1;
-#else
-int nd6_debug = 0;
-#endif
 
 /* llinfo_nd6 live time, rt_llinfo and RTF_LLINFO are protected by nd6_mtx */
 struct mutex nd6_mtx = MUTEX_INITIALIZER(IPL_SOFTNET);
@@ -194,17 +188,11 @@ nd6_options(void *opt, int icmp6len, struct nd_opts *ndopts)
 
 		switch (nd_opt->nd_opt_type) {
 		case ND_OPT_SOURCE_LINKADDR:
-			if (ndopts->nd_opts_src_lladdr != NULL)
-				nd6log((LOG_INFO, "duplicated ND6 option found "
-				    "(type=%d)\n", nd_opt->nd_opt_type));
-			else
+			if (ndopts->nd_opts_src_lladdr == NULL)
 				ndopts->nd_opts_src_lladdr = nd_opt;
 			break;
 		case ND_OPT_TARGET_LINKADDR:
-			if (ndopts->nd_opts_tgt_lladdr != NULL)
-				nd6log((LOG_INFO, "duplicated ND6 option found "
-				    "(type=%d)\n", nd_opt->nd_opt_type));
-			else
+			if (ndopts->nd_opts_tgt_lladdr == NULL)
 				ndopts->nd_opts_tgt_lladdr = nd_opt;
 			break;
 		case ND_OPT_MTU:
@@ -219,16 +207,12 @@ nd6_options(void *opt, int icmp6len, struct nd_opts *ndopts)
 			 * Unknown options must be silently ignored,
 			 * to accommodate future extension to the protocol.
 			 */
-			nd6log((LOG_DEBUG,
-			    "nd6_options: unsupported option %d - "
-			    "option ignored\n", nd_opt->nd_opt_type));
 			break;
 		}
 
 		i++;
 		if (i > nd6_maxndopt) {
 			icmp6stat_inc(icp6s_nd_toomanyopt);
-			nd6log((LOG_INFO, "too many loop in nd opt\n"));
 			break;
 		}
 	}
@@ -577,13 +561,6 @@ nd6_lookup(const struct in6_addr *addr6, int create, struct ifnet *ifp,
 	if ((rt->rt_flags & RTF_GATEWAY) || (rt->rt_flags & RTF_LLINFO) == 0 ||
 	    rt->rt_gateway->sa_family != AF_LINK || rt->rt_llinfo == NULL ||
 	    (ifp != NULL && rt->rt_ifidx != ifp->if_index)) {
-		if (create) {
-			char addr[INET6_ADDRSTRLEN];
-			nd6log((LOG_DEBUG, "%s: failed to lookup %s (if=%s)\n",
-			    __func__,
-			    inet_ntop(AF_INET6, addr6, addr, sizeof(addr)),
-			    ifp ? ifp->if_xname : "unspec"));
-		}
 		rtfree(rt);
 		return (NULL);
 	}
@@ -910,14 +887,7 @@ nd6_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 			llsol.s6_addr8[12] = 0xff;
 
 			KERNEL_LOCK();
-			if (in6_addmulti(&llsol, ifp, &error)) {
-				char addr[INET6_ADDRSTRLEN];
-				nd6log((LOG_ERR, "%s: failed to join "
-				    "%s (errno=%d)\n", ifp->if_xname,
-				    inet_ntop(AF_INET6, &llsol,
-					addr, sizeof(addr)),
-				    error));
-			}
+			in6_addmulti(&llsol, ifp, &error);
 			KERNEL_UNLOCK();
 		}
 		break;
