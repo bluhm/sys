@@ -627,6 +627,8 @@ struct vmcb_segment {
 #define SVM_ENABLE_SEV		(1ULL << 1)
 #define SVM_SEVES_ENABLE	(1ULL << 2)
 
+#define SMV_GUEST_INTR_MASK	(1ULL << 1)
+
 #define SVM_LBRVIRT_ENABLE	(1ULL << 0)
 
 struct vmcb {
