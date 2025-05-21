@@ -1214,7 +1214,7 @@ tcp_ident(void *oldp, size_t *oldlenp, void *newp, size_t newlen, int dodrop)
 		struct tcpcb *tp = NULL;
 
 		if (inp != NULL) {
-			so = in_pcbsolock_ref(inp);
+			so = in_pcbsolock(inp);
 			if (so != NULL)
 				tp = intotcpcb(inp);
 		}
@@ -1223,7 +1223,7 @@ tcp_ident(void *oldp, size_t *oldlenp, void *newp, size_t newlen, int dodrop)
 		else
 			error = ESRCH;
 
-		in_pcbsounlock_rele(inp, so);
+		in_pcbsounlock(inp, so);
 		NET_UNLOCK_SHARED();
 		in_pcbunref(inp);
 		return (error);
@@ -1246,7 +1246,7 @@ tcp_ident(void *oldp, size_t *oldlenp, void *newp, size_t newlen, int dodrop)
 	}
 
 	if (inp != NULL)
-		so = in_pcbsolock_ref(inp);
+		so = in_pcbsolock(inp);
 
 	if (so != NULL && ISSET(so->so_state, SS_CONNECTOUT)) {
 		tir.ruid = so->so_ruid;
@@ -1256,7 +1256,7 @@ tcp_ident(void *oldp, size_t *oldlenp, void *newp, size_t newlen, int dodrop)
 		tir.euid = -1;
 	}
 
-	in_pcbsounlock_rele(inp, so);
+	in_pcbsounlock(inp, so);
 	NET_UNLOCK_SHARED();
 	in_pcbunref(inp);
 

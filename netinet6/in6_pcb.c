@@ -546,10 +546,10 @@ in6_pcbnotify(struct inpcbtable *table, const struct sockaddr_in6 *dst,
 		}
 	  do_notify:
 		mtx_leave(&table->inpt_mtx);
-		so = in_pcbsolock_ref(inp);
+		so = in_pcbsolock(inp);
 		if (so != NULL)
 			(*notify)(inp, errno);
-		in_pcbsounlock_rele(inp, so);
+		in_pcbsounlock(inp, so);
 		mtx_enter(&table->inpt_mtx);
 	}
 	mtx_leave(&table->inpt_mtx);

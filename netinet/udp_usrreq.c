@@ -921,10 +921,10 @@ udp_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 		    ip->ip_dst, uhp->uh_dport, ip->ip_src, uhp->uh_sport,
 		    rdomain);
 		if (inp != NULL)
-			so = in_pcbsolock_ref(inp);
+			so = in_pcbsolock(inp);
 		if (so != NULL)
 			notify(inp, errno);
-		in_pcbsounlock_rele(inp, so);
+		in_pcbsounlock(inp, so);
 		in_pcbunref(inp);
 	} else
 		in_pcbnotifyall(&udbtable, satosin(sa), rdomain, errno, notify);

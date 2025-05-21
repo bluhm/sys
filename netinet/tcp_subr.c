@@ -692,7 +692,7 @@ tcp6_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *d)
 			return;
 		}
 		if (inp != NULL)
-			so = in_pcbsolock_ref(inp);
+			so = in_pcbsolock(inp);
 		if (so != NULL)
 			tp = intotcpcb(inp);
 		if (tp != NULL) {
@@ -702,7 +702,7 @@ tcp6_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *d)
 			    SEQ_LT(seq, tp->snd_max))
 				notify(inp, inet6ctlerrmap[cmd]);
 		}
-		in_pcbsounlock_rele(inp, so);
+		in_pcbsounlock(inp, so);
 		in_pcbunref(inp);
 
 		if (tp == NULL &&
@@ -762,7 +762,7 @@ tcp_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 		    ip->ip_dst, th->th_dport, ip->ip_src, th->th_sport,
 		    rdomain);
 		if (inp != NULL)
-			so = in_pcbsolock_ref(inp);
+			so = in_pcbsolock(inp);
 		if (so != NULL)
 			tp = intotcpcb(inp);
 		if (tp != NULL &&
@@ -779,7 +779,7 @@ tcp_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 			 */
 			mtu = (u_int)ntohs(icp->icmp_nextmtu);
 			if (mtu >= tp->t_pmtud_mtu_sent) {
-				in_pcbsounlock_rele(inp, so);
+				in_pcbsounlock(inp, so);
 				in_pcbunref(inp);
 				return;
 			}
@@ -800,7 +800,7 @@ tcp_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 				 */
 				if (tp->t_flags & TF_PMTUD_PEND) {
 					if (SEQ_LT(tp->t_pmtud_th_seq, seq)) {
-						in_pcbsounlock_rele(inp, so);
+						in_pcbsounlock(inp, so);
 						in_pcbunref(inp);
 						return;
 					}
@@ -810,17 +810,17 @@ tcp_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 				tp->t_pmtud_nextmtu = icp->icmp_nextmtu;
 				tp->t_pmtud_ip_len = icp->icmp_ip.ip_len;
 				tp->t_pmtud_ip_hl = icp->icmp_ip.ip_hl;
-				in_pcbsounlock_rele(inp, so);
+				in_pcbsounlock(inp, so);
 				in_pcbunref(inp);
 				return;
 			}
 		} else {
 			/* ignore if we don't have a matching connection */
-			in_pcbsounlock_rele(inp, so);
+			in_pcbsounlock(inp, so);
 			in_pcbunref(inp);
 			return;
 		}
-		in_pcbsounlock_rele(inp, so);
+		in_pcbsounlock(inp, so);
 		in_pcbunref(inp);
 		notify = tcp_mtudisc, ip = NULL;
 	} else if (cmd == PRC_MTUINC)
@@ -840,7 +840,7 @@ tcp_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 		    ip->ip_dst, th->th_dport, ip->ip_src, th->th_sport,
 		    rdomain);
 		if (inp != NULL)
-			so = in_pcbsolock_ref(inp);
+			so = in_pcbsolock(inp);
 		if (so != NULL)
 			tp = intotcpcb(inp);
 		if (tp != NULL) {
@@ -849,7 +849,7 @@ tcp_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 			    SEQ_LT(seq, tp->snd_max))
 				notify(inp, errno);
 		}
-		in_pcbsounlock_rele(inp, so);
+		in_pcbsounlock(inp, so);
 		in_pcbunref(inp);
 
 		if (tp == NULL &&

@@ -1728,17 +1728,15 @@ do {									\
 	mtx_enter(&(table)->inpt_mtx);					\
 	while ((inp = in_pcb_iterator(table, inp, &iter)) != NULL) {	\
 		if (buflen >= elem_size && elem_count > 0) {		\
-			mtx_enter(&inp->inp_sofree_mtx);		\
-			so = soref(inp->inp_socket);			\
-			mtx_leave(&inp->inp_sofree_mtx);		\
+			mtx_leave(&(table)->inpt_mtx);			\
+			NET_LOCK_SHARED();				\
+			so = in_pcbsolock(inp);				\
 			if (so == NULL)					\
 				continue;				\
-			mtx_leave(&(table)->inpt_mtx);			\
-			solock_shared(so);				\
 			fill_file(kf, NULL, NULL, 0, NULL, NULL, p,	\
 			    so, show_pointers);				\
-			sounlock_shared(so);				\
-			sorele(so);					\
+			in_pcbsounlock(inp, so);			\
+			NET_UNLOCK_SHARED();				\
 			error = copyout(kf, dp, outsize);		\
 			mtx_enter(&(table)->inpt_mtx);			\
 			if (error) {					\
