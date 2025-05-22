@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_iavf.c,v 1.20 2025/05/20 10:02:32 jmatthew Exp $	*/
+/*	$OpenBSD: if_iavf.c,v 1.22 2025/05/21 12:51:14 jmatthew Exp $	*/
 
 /*
  * Copyright (c) 2013-2015, Intel Corporation
@@ -589,6 +589,7 @@ struct iavf_softc {
 	uint32_t		 sc_major_ver;
 	uint32_t		 sc_minor_ver;
 
+	int			 sc_if_attached;
 	int			 sc_got_vf_resources;
 	int			 sc_got_irq_map;
 	uint32_t		 sc_vf_id;
@@ -748,12 +749,6 @@ iavf_aq_dva(struct iavf_aq_desc *iaq, bus_addr_t addr)
 #endif
 	htolem32(&iaq->iaq_param[3], addr);
 }
-
-#if _BYTE_ORDER == _BIG_ENDIAN
-#define HTOLE16(_x)	(uint16_t)(((_x) & 0xff) << 8 | ((_x) & 0xff00) >> 8)
-#else
-#define HTOLE16(_x)	(_x)
-#endif
 
 static const struct pci_matchid iavf_devices[] = {
 	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_XL710_VF },
@@ -920,6 +915,7 @@ iavf_attach(struct device *parent, struct device *self, void *aux)
 
 	if_attach_queues(ifp, iavf_nqueues(sc));
 	if_attach_iqueues(ifp, iavf_nqueues(sc));
+	sc->sc_if_attached++;
 
 	iavf_intr_enable(sc);
 
@@ -2376,7 +2372,8 @@ iavf_process_vc_event(struct iavf_softc *sc, struct iavf_aq_desc *desc,
 
 		if (ifp->if_link_state != link) {
 			ifp->if_link_state = link;
-			if_link_state_change(ifp);
+			if (sc->sc_if_attached)
+				if_link_state_change(ifp);
 		}
 		break;
 
