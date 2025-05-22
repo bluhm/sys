@@ -265,8 +265,7 @@ divert6_packet(struct mbuf *m, int dir, u_int16_t divert_port)
 	return;
 
  bad:
-	if (inp != NULL)
-		in_pcbunref(inp);
+	in_pcbunref(inp);
 	m_freem(m);
 }
 
