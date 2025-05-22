@@ -179,7 +179,7 @@ mld6_input(struct mbuf *m, int off)
 	/* XXX: These are necessary for KAME's link-local hack */
 	struct in6_addr all_nodes = IN6ADDR_LINKLOCAL_ALLNODES_INIT;
 
-	IP6_EXTHDR_GET(mldh, struct mld_hdr *, m, off, sizeof(*mldh));
+	IP6_EXTHDR_GET(mldh, struct mld_hdr *, &m, off, sizeof(*mldh));
 	if (mldh == NULL) {
 		icmp6stat_inc(icp6s_tooshort);
 		return;
