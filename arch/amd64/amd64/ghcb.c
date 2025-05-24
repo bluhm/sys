@@ -22,7 +22,6 @@
 #include <machine/frame.h>
 #include <machine/ghcb.h>
 
-
 /* Mask for adjusting GPR sizes. */
 const uint64_t ghcb_sz_masks[] = {
     0x00000000000000ffULL, 0x000000000000ffffULL,
@@ -89,7 +88,6 @@ ghcb_valid(struct ghcb_sa *ghcb)
 	    ghcb_valbm_isset(bm, GHCB_SW_EXITINFO1) &&
 	    ghcb_valbm_isset(bm, GHCB_SW_EXITINFO2));
 }
-
 
 /*
  * ghcb_verify_bm
