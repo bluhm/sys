@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_timeout.c,v 1.103 2025/05/02 00:51:09 dlg Exp $	*/
+/*	$OpenBSD: kern_timeout.c,v 1.106 2025/05/24 00:19:09 dlg Exp $	*/
 /*
  * Copyright (c) 2001 Thomas Nordin <nordin@openbsd.org>
  * Copyright (c) 2000-2001 Artur Grabowski <art@openbsd.org>
@@ -358,24 +358,12 @@ timeout_add(struct timeout *new, int to_ticks)
 }
 
 static inline int
-timeout_add_ticks(struct timeout *to, uint64_t to_ticks, int notzero)
+timeout_add_ticks(struct timeout *to, uint64_t to_ticks)
 {
 	if (to_ticks > INT_MAX)
 		to_ticks = INT_MAX;
-	else if (to_ticks == 0 && notzero)
-		to_ticks = 1;
 
 	return timeout_add(to, (int)to_ticks);
-}
-
-int
-timeout_add_tv(struct timeout *to, const struct timeval *tv)
-{
-	uint64_t to_ticks;
-
-	to_ticks = (uint64_t)hz * tv->tv_sec + tv->tv_usec / tick;
-
-	return timeout_add_ticks(to, to_ticks, tv->tv_usec > 0);
 }
 
 int
@@ -383,19 +371,29 @@ timeout_add_sec(struct timeout *to, int secs)
 {
 	uint64_t to_ticks;
 
-	to_ticks = (uint64_t)hz * secs;
+	KASSERT(secs >= 0);
+	/* secs is a 31bit int, so this can't overflow 64bits */
+	to_ticks = (uint64_t)hz * (uint64_t)secs;
 
-	return timeout_add_ticks(to, to_ticks, 1);
+	return timeout_add_ticks(to, to_ticks);
 }
+
+/*
+ * interpret the specified times below as a AT LEAST how long the
+ * system should wait before firing the the timeouts. this requires
+ * rounding up, which has the potential to overflow. if we detect
+ * overflow, interpret it as "wait for as long as possible". this will
+ * be shorter than specified time, which violates the "wait at least
+ * this much time", but it's on the other end of the timescale.
+ */
 
 int
 timeout_add_msec(struct timeout *to, uint64_t msecs)
 {
-	uint64_t to_ticks;
+	if (msecs >= (UINT64_MAX / 1000))
+		return timeout_add(to, INT_MAX);
 
-	to_ticks = msecs * 1000 / tick;
-
-	return timeout_add_ticks(to, to_ticks, msecs > 0);
+	return timeout_add_usec(to, msecs * 1000);
 }
 
 int
@@ -403,9 +401,12 @@ timeout_add_usec(struct timeout *to, uint64_t usecs)
 {
 	uint64_t to_ticks;
 
-	to_ticks = usecs / tick;
+	if (usecs >= (UINT64_MAX - tick))
+		return timeout_add(to, INT_MAX);
 
-	return timeout_add_ticks(to, to_ticks, usecs > 0);
+	to_ticks = (usecs + (tick - 1)) / tick;
+
+	return timeout_add_ticks(to, to_ticks);
 }
 
 int
@@ -413,9 +414,12 @@ timeout_add_nsec(struct timeout *to, uint64_t nsecs)
 {
 	uint64_t to_ticks;
 
-	to_ticks = nsecs / (tick * 1000);
+	if (nsecs >= (UINT64_MAX - tick_nsec))
+		return timeout_add(to, INT_MAX);
 
-	return timeout_add_ticks(to, to_ticks, nsecs > 0);
+	to_ticks = (nsecs + (tick_nsec - 1)) / tick_nsec;
+
+	return timeout_add_ticks(to, to_ticks);
 }
 
 int
