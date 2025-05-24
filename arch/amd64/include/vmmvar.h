@@ -661,7 +661,7 @@ struct vmcb {
 			uint64_t	v_exitintinfo;		/* 088h */
 			uint64_t	v_np_enable;		/* 090h */
 			uint64_t	v_avic_apic_bar;	/* 098h */
-			uint64_t	v_pad4;			/* 0A0h */
+			uint64_t	v_ghcb_gpa;		/* 0A0h */
 			uint64_t	v_eventinj;		/* 0A8h */
 			uint64_t	v_n_cr3;		/* 0B0h */
 			uint64_t	v_lbr_virt_enable;	/* 0B8h */
@@ -1014,6 +1014,8 @@ struct vcpu {
 	paddr_t vc_svm_hsa_pa;
 	vaddr_t vc_svm_vmsa_va;
 	paddr_t vc_svm_vmsa_pa;
+	vaddr_t vc_svm_ghcb_va;
+	paddr_t vc_svm_ghcb_pa;
 	vaddr_t vc_svm_ioio_va;
 	paddr_t vc_svm_ioio_pa;
 	int vc_sev;				/* [I] */
