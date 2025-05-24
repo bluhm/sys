@@ -213,6 +213,7 @@ m_pulldown(struct mbuf *m, int off, int len, int *offp)
 	off = 0;
 
 ok:
+	KASSERT(n->m_len >= off + len);
 	if (offp)
 		*offp = off;
 	return (n);

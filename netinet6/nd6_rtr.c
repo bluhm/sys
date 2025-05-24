@@ -92,8 +92,7 @@ nd6_rtr_cache(struct mbuf *m, int off, int icmp6len, int icmp6_type)
 		if (IN6_IS_ADDR_UNSPECIFIED(&saddr6))
 			goto freeit;
 
-		IP6_EXTHDR_GET(nd_rs, struct nd_router_solicit *, &m, off,
-		    icmp6len);
+		nd_rs = ip6_exthdr_get(&m, off, icmp6len);
 		if (nd_rs == NULL) {
 			icmp6stat_inc(icp6s_tooshort);
 			return;
@@ -109,8 +108,7 @@ nd6_rtr_cache(struct mbuf *m, int off, int icmp6len, int icmp6_type)
 		if (!IN6_IS_ADDR_LINKLOCAL(&saddr6))
 			goto bad;
 
-		IP6_EXTHDR_GET(nd_ra, struct nd_router_advert *, &m, off,
-		    icmp6len);
+		nd_ra = ip6_exthdr_get(&m, off, icmp6len);
 		if (nd_ra == NULL) {
 			icmp6stat_inc(icp6s_tooshort);
 			return;

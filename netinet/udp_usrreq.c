@@ -213,8 +213,8 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af, struct netstack *ns)
 
 	udpstat_inc(udps_ipackets);
 
-	IP6_EXTHDR_GET(uh, struct udphdr *, mp, iphlen, sizeof(struct udphdr));
-	if (!uh) {
+	uh = ip6_exthdr_get(mp, iphlen, sizeof(struct udphdr));
+	if (uh == NULL) {
 		udpstat_inc(udps_hdrops);
 		return IPPROTO_DONE;
 	}

@@ -147,8 +147,7 @@ rip6_input(struct mbuf **mp, int *offp, int proto, int af, struct netstack *ns)
 	if (proto == IPPROTO_ICMPV6) {
 		struct icmp6_hdr *icmp6;
 
-		IP6_EXTHDR_GET(icmp6, struct icmp6_hdr *, mp, *offp,
-		    sizeof(*icmp6));
+		icmp6 = ip6_exthdr_get(mp, *offp, sizeof(*icmp6));
 		if (icmp6 == NULL)
 			return IPPROTO_DONE;
 		type = icmp6->icmp6_type;

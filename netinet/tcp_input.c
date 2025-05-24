@@ -448,8 +448,8 @@ tcp_input_solocked(struct mbuf **mp, int *offp, int proto, int af,
 	 * Get IP and TCP header together in first mbuf.
 	 * Note: IP leaves IP header in first mbuf.
 	 */
-	IP6_EXTHDR_GET(th, struct tcphdr *, mp, iphlen, sizeof(*th));
-	if (!th) {
+	th = ip6_exthdr_get(mp, iphlen, sizeof(*th));
+	if (th == NULL) {
 		tcpstat_inc(tcps_rcvshort);
 		return IPPROTO_DONE;
 	}
@@ -532,8 +532,8 @@ tcp_input_solocked(struct mbuf **mp, int *offp, int proto, int af,
 	}
 	tlen -= off;
 	if (off > sizeof(struct tcphdr)) {
-		IP6_EXTHDR_GET(th, struct tcphdr *, mp, iphlen, off);
-		if (!th) {
+		th = ip6_exthdr_get(mp, iphlen, off);
+		if (th == NULL) {
 			tcpstat_inc(tcps_rcvshort);
 			return IPPROTO_DONE;
 		}

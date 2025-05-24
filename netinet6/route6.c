@@ -59,7 +59,7 @@ route6_input(struct mbuf **mp, int *offp, int proto, int af,
 	int off = *offp, rhlen;
 
 	ip6 = mtod(*mp, struct ip6_hdr *);
-	IP6_EXTHDR_GET(rh, struct ip6_rthdr *, mp, off, sizeof(*rh));
+	rh = ip6_exthdr_get(mp, off, sizeof(*rh));
 	if (rh == NULL) {
 		ip6stat_inc(ip6s_tooshort);
 		return IPPROTO_DONE;

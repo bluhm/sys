@@ -117,7 +117,7 @@ nd6_ns_input(struct mbuf *m, int off, int icmp6len)
 	if (ifp == NULL)
 		goto freeit;
 
-	IP6_EXTHDR_GET(nd_ns, struct nd_neighbor_solicit *, &m, off, icmp6len);
+	nd_ns = ip6_exthdr_get(&m, off, icmp6len);
 	if (nd_ns == NULL) {
 		icmp6stat_inc(icp6s_tooshort);
 		if_put(ifp);
@@ -540,7 +540,7 @@ nd6_na_input(struct mbuf *m, int off, int icmp6len)
 	if (ip6->ip6_hlim != 255)
 		goto bad;
 
-	IP6_EXTHDR_GET(nd_na, struct nd_neighbor_advert *, &m, off, icmp6len);
+	nd_na = ip6_exthdr_get(&m, off, icmp6len);
 	if (nd_na == NULL) {
 		icmp6stat_inc(icp6s_tooshort);
 		if_put(ifp);
