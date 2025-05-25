@@ -1087,7 +1087,8 @@ findpcb:
 					in_pcbsounlock_rele(inp, so);
 				in_pcbunref(inp);
 				return IPPROTO_DONE;
-			}
+			} else if (SEQ_LT(th->th_ack, tp->snd_una))
+				goto drop;
 		} else if (th->th_ack == tp->snd_una &&
 		    TAILQ_EMPTY(&tp->t_segq) &&
 		    tlen <= sbspace(&so->so_rcv)) {
