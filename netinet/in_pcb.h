@@ -140,7 +140,7 @@ struct inpcb {
 	u_int16_t inp_lport;		/* [t] local port */
 	struct	  socket *inp_socket;	/* [f] back pointer to socket */
 	struct	  mutex inp_sofree_mtx;	/* protect socket free */
-	caddr_t	  inp_ppcb;		/* pointer to per-protocol pcb */
+	caddr_t	  inp_ppcb;		/* [s] pointer to per-protocol pcb */
 	struct    route inp_route;	/* [s] cached route */
 	struct    refcnt inp_refcnt;	/* refcount PCB, delay memory free */
 	int	  inp_flags;		/* generic IP/datagram flags */
