@@ -1,4 +1,4 @@
-/* $OpenBSD: vmm_machdep.c,v 1.49 2025/05/20 13:51:27 dv Exp $ */
+/* $OpenBSD: vmm_machdep.c,v 1.50 2025/05/25 03:22:56 bluhm Exp $ */
 /*
  * Copyright (c) 2014 Mike Larkin <mlarkin@openbsd.org>
  *
@@ -4330,8 +4330,8 @@ svm_vmgexit_sync_host(struct vcpu *vcpu)
 
 	if (vcpu->vc_svm_ghcb_va == 0)
 		return (0);
-	ghcb = (struct ghcb_sa *)vcpu->vc_svm_ghcb_va;
 
+	ghcb = (struct ghcb_sa *)vcpu->vc_svm_ghcb_va;
 	if (!ghcb_valid(ghcb))
 		return (EINVAL);
 	valid_bm = ghcb->valid_bitmap;
