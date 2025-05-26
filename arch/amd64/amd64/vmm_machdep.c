@@ -4348,6 +4348,14 @@ svm_vmgexit_sync_host(struct vcpu *vcpu)
 		ghcb_valbm_set(expected_bm, GHCB_RAX);
 		ghcb_valbm_set(expected_bm, GHCB_RCX);
 		break;
+	case SVM_VMEXIT_IOIO:
+		if (ghcb->v_sw_exitinfo1 & 0x1) {
+			/* IN instruction, no registers used */
+		} else {
+			/* OUT instruction */
+			ghcb_valbm_set(expected_bm, GHCB_RAX);
+		}
+		break;
 	case SVM_VMEXIT_MSR:
 		if (ghcb->v_sw_exitinfo1 == 1) {
 			/* WRMSR */
@@ -4357,14 +4365,6 @@ svm_vmgexit_sync_host(struct vcpu *vcpu)
 		} else {
 			/* RDMSR */
 			ghcb_valbm_set(expected_bm, GHCB_RCX);
-		}
-		break;
-	case SVM_VMEXIT_IOIO:
-		if (ghcb->v_sw_exitinfo1 & 0x1) {
-			/* in instruction, no registers used */
-		} else {
-			/* out instruction */
-			ghcb_valbm_set(expected_bm, GHCB_RAX);
 		}
 		break;
 	default:
@@ -4423,21 +4423,21 @@ svm_vmgexit_sync_guest(struct vcpu *vcpu)
 		ghcb_valbm_set(valid_bm, GHCB_RCX);
 		ghcb_valbm_set(valid_bm, GHCB_RDX);
 		break;
+	case SVM_VMEXIT_IOIO:
+		if (svm_sw_exitinfo1 & 0x1) {
+			/* IN instruction */
+			ghcb_valbm_set(valid_bm, GHCB_RAX);
+		} else {
+			/* OUT instruction, nothing to return */
+		}
+		break;
 	case SVM_VMEXIT_MSR:
 		if (svm_sw_exitinfo1 == 1) {
-			/* WRMSR -- nothing to return */
+			/* WRMSR, nothing to return */
 		} else {
 			/* RDMSR */
 			ghcb_valbm_set(valid_bm, GHCB_RAX);
 			ghcb_valbm_set(valid_bm, GHCB_RDX);
-		}
-		break;
-	case SVM_VMEXIT_IOIO:
-		if (svm_sw_exitinfo1 & 0x1) {
-			/* IN */
-			ghcb_valbm_set(valid_bm, GHCB_RAX);
-		} else {
-			/* OUT -- nothing to return */
 		}
 		break;
 	default:
