@@ -99,6 +99,11 @@ struct ghcb_sync {
 	int			sz_d;
 };
 
+/* Definitions used with the MSR protocol */
+#define MSR_PROTO_CPUID_REQ	0x4
+#define MSR_PROTO_CPUID_RESP	0x5
+#define MSR_PROTO_TERMINATE	0x100
+
 void	ghcb_clear(struct ghcb_sa *);
 int	ghcb_valbm_set(uint8_t *, int);
 int	ghcb_valbm_isset(uint8_t *, int);
