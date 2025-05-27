@@ -1,4 +1,4 @@
-/*	$OpenBSD: frag6.c,v 1.91 2025/05/24 12:27:23 bluhm Exp $	*/
+/*	$OpenBSD: frag6.c,v 1.92 2025/05/27 07:52:49 bluhm Exp $	*/
 /*	$KAME: frag6.c,v 1.40 2002/05/27 21:40:31 itojun Exp $	*/
 
 /*
