@@ -37,6 +37,7 @@
 #include <machine/biosvar.h>
 #include <machine/segments.h>
 #include <machine/cpufunc.h>
+#include <machine/ghcb.h>
 #include <machine/vmmvar.h>
 
 #include <dev/isa/isareg.h>
@@ -80,6 +81,7 @@ int vcpu_writeregs_svm(struct vcpu *, uint64_t, struct vcpu_reg_state *);
 int vcpu_reset_regs(struct vcpu *, struct vcpu_reg_state *);
 int vcpu_reset_regs_vmx(struct vcpu *, struct vcpu_reg_state *);
 int vcpu_reset_regs_svm(struct vcpu *, struct vcpu_reg_state *);
+int vcpu_svm_init_vmsa(struct vcpu *, struct vcpu_reg_state *);
 int vcpu_reload_vmcs_vmx(struct vcpu *);
 int vcpu_init(struct vcpu *, struct vm_create_params *);
 int vcpu_init_vmx(struct vcpu *);
@@ -95,6 +97,11 @@ int vmx_get_exit_info(uint64_t *, uint64_t *);
 int vmx_load_pdptes(struct vcpu *);
 int vmx_handle_exit(struct vcpu *);
 int svm_handle_exit(struct vcpu *);
+int svm_gexit_sync_host(struct vcpu *);
+int svm_gexit_sync_guest(struct vcpu *);
+int svm_handle_gexit(struct vcpu *);
+int svm_handle_efercr(struct vcpu *, uint64_t);
+int svm_get_iflag(struct vcpu *, uint64_t);
 int svm_handle_msr(struct vcpu *);
 int vmm_handle_xsetbv(struct vcpu *, uint64_t *);
 int vmx_handle_xsetbv(struct vcpu *);
@@ -125,6 +132,7 @@ int vmx_fault_page(struct vcpu *, paddr_t);
 int vmx_handle_np_fault(struct vcpu *);
 int svm_handle_np_fault(struct vcpu *);
 int vmm_alloc_vpid(uint16_t *);
+int vmm_alloc_asid(uint16_t *, struct vcpu *);
 void vmm_free_vpid(uint16_t);
 const char *vcpu_state_decode(u_int);
 const char *vmx_exit_reason_decode(uint32_t);
@@ -138,6 +146,7 @@ void vmx_setmsrbw(struct vcpu *, uint32_t);
 void vmx_setmsrbrw(struct vcpu *, uint32_t);
 void svm_set_clean(struct vcpu *, uint32_t);
 void svm_set_dirty(struct vcpu *, uint32_t);
+int svm_get_vmsa(uint32_t, uint32_t, uint64_t *);
 
 int vmm_gpa_is_valid(struct vcpu *vcpu, paddr_t gpa, size_t obj_size);
 void vmm_init_pvclock(struct vcpu *, paddr_t);
@@ -231,11 +240,15 @@ extern struct vmm_softc *vmm_softc;
 extern vaddr_t idt_vaddr;
 extern struct gate_descriptor *idt;
 
+/* Minimum ASID value for an SEV enabled, SEV-ES disabled guest. */
+extern int amd64_min_noes_asid;
+
 /* Constants used in "CR access exit" */
 #define CR_WRITE	0
 #define CR_READ		1
 #define CR_CLTS		2
 #define CR_LMSW		3
+
 
 /*
  * vmm_enabled
@@ -1588,6 +1601,7 @@ vcpu_reset_regs_svm(struct vcpu *vcpu, struct vcpu_reg_state *vrs)
 	 * External NMI exiting (SVM_INTERCEPT_NMI)
 	 * CPUID instruction (SVM_INTERCEPT_CPUID)
 	 * HLT instruction (SVM_INTERCEPT_HLT)
+	 * INVLPGA instruction (SVM_INTERCEPT_INVLPGA)
 	 * I/O instructions (SVM_INTERCEPT_INOUT)
 	 * MSR access (SVM_INTERCEPT_MSR)
 	 * shutdown events (SVM_INTERCEPT_SHUTDOWN)
@@ -1617,8 +1631,16 @@ vcpu_reset_regs_svm(struct vcpu *vcpu, struct vcpu_reg_state *vrs)
 	    SVM_INTERCEPT_MWAIT_UNCOND | SVM_INTERCEPT_MONITOR |
 	    SVM_INTERCEPT_MWAIT_COND | SVM_INTERCEPT_RDTSCP;
 
-	if (xsave_mask)
+	if (xsave_mask && !vcpu->vc_seves)	/* XXX hshoexer */
 		vmcb->v_intercept2 |= SVM_INTERCEPT_XSETBV;
+
+	if (vcpu->vc_seves) {
+		/* With SEV-ES also intercept post EFER and CR[048] writes */
+		vmcb->v_intercept2 |= SVM_INTERCEPT_EFER_WRITE;
+		vmcb->v_intercept2 |= SVM_INTERCEPT_CR0_WRITE_POST;
+		vmcb->v_intercept2 |= SVM_INTERCEPT_CR4_WRITE_POST;
+		vmcb->v_intercept2 |= SVM_INTERCEPT_CR8_WRITE_POST;
+	}
 
 	/* Setup I/O bitmap */
 	memset((uint8_t *)vcpu->vc_svm_ioio_va, 0xFF, 3 * PAGE_SIZE);
@@ -1638,9 +1660,18 @@ vcpu_reset_regs_svm(struct vcpu *vcpu, struct vcpu_reg_state *vrs)
 	svm_setmsrbrw(vcpu, MSR_FSBASE);
 	svm_setmsrbrw(vcpu, MSR_GSBASE);
 	svm_setmsrbrw(vcpu, MSR_KERNELGSBASE);
+	svm_setmsrbrw(vcpu, MSR_SEV_GHCB);
 
-	/* EFER is R/O so we can ensure the guest always has SVME */
-	svm_setmsrbr(vcpu, MSR_EFER);
+	/* allow reading SEV status */
+	svm_setmsrbrw(vcpu, MSR_SEV_STATUS);
+
+	if (vcpu->vc_seves) {
+		/* With SEV-ES SVME can not be modified by the guest */
+		svm_setmsrbrw(vcpu, MSR_EFER);
+	} else {
+		/* EFER is R/O so we can ensure the guest always has SVME */
+		svm_setmsrbr(vcpu, MSR_EFER);
+	}
 
 	/* allow reading TSC */
 	svm_setmsrbr(vcpu, MSR_TSC);
@@ -1653,7 +1684,10 @@ vcpu_reset_regs_svm(struct vcpu *vcpu, struct vcpu_reg_state *vrs)
 	vmcb->v_asid = vcpu->vc_vpid;
 
 	/* TLB Control - First time in, flush all*/
-	vmcb->v_tlb_control = SVM_TLB_CONTROL_FLUSH_ALL;
+	if (vcpu->vc_seves)
+		vmcb->v_tlb_control = SVM_TLB_CONTROL_FLUSH_ASID; /* XXX hshoexer */
+	else
+		vmcb->v_tlb_control = SVM_TLB_CONTROL_FLUSH_ALL;
 
 	/* INTR masking */
 	vmcb->v_intr_masking = 1;
@@ -1672,17 +1706,91 @@ vcpu_reset_regs_svm(struct vcpu *vcpu, struct vcpu_reg_state *vrs)
 	if (vcpu->vc_sev)
 		vmcb->v_np_enable |= SVM_ENABLE_SEV;
 
+	/* SEV-ES */
+	if (vcpu->vc_seves) {
+		vmcb->v_np_enable |= SVM_SEVES_ENABLE;
+		vmcb->v_lbr_virt_enable |= SVM_LBRVIRT_ENABLE;
+
+		/* Set VMSA. */
+		vmcb->v_vmsa_pa = vcpu->vc_svm_vmsa_pa;
+
+		/* XXX hshoexer: LBR: guest_state_protected flag? */
+		svm_setmsrbrw(vcpu, MSR_DEBUGCTLMSR);
+		svm_setmsrbrw(vcpu, MSR_LASTBRANCHFROMIP);
+		svm_setmsrbrw(vcpu, MSR_LASTBRANCHTOIP);
+		svm_setmsrbrw(vcpu, MSR_LASTINTFROMIP);
+		svm_setmsrbrw(vcpu, MSR_LASTINTTOIP);
+
+		/* XXX hshoexer: virt vmload/vmsave */
+		vmcb->v_lbr_virt_enable |= 0x2;
+	}
+
 	/* Enable SVME in EFER (must always be set) */
 	vmcb->v_efer |= EFER_SVME;
 
-	ret = vcpu_writeregs_svm(vcpu, VM_RWREGS_ALL, vrs);
+	if ((ret = vcpu_writeregs_svm(vcpu, VM_RWREGS_ALL, vrs)) != 0)
+		goto exit;
 
 	/* xcr0 power on default sets bit 0 (x87 state) */
 	vcpu->vc_gueststate.vg_xcr0 = XFEATURE_X87 & xsave_mask;
 
 	vcpu->vc_parent->vm_map->pmap->eptp = 0;
 
+	if ((ret = vcpu_svm_init_vmsa(vcpu, vrs)) != 0)
+		goto exit;
+
+exit:
 	return ret;
+}
+
+/*
+ * vcpu_svm_init_vmsa
+ *
+ * Initialize VMSA with initial VCPU state.
+ */
+int
+vcpu_svm_init_vmsa(struct vcpu *vcpu, struct vcpu_reg_state *vrs)
+{
+	uint64_t	*gprs = vrs->vrs_gprs;
+	struct vmcb	*vmcb = (struct vmcb *)vcpu->vc_control_va;
+	struct vmsa	*vmsa;
+
+	if (!vcpu->vc_seves)
+		return 0;
+
+	if (vmcb->v_dr7 & ~0x00000400)	/* XXX hshoexer? */
+		return 1;
+
+	vmsa = (struct vmsa *)vcpu->vc_svm_vmsa_va;
+	memcpy(vmsa, &vmcb->vmcb_layout, sizeof(vmcb->vmcb_layout));
+
+	vmsa->v_rax = gprs[VCPU_REGS_RAX];
+	vmsa->v_rbx = gprs[VCPU_REGS_RBX];
+	vmsa->v_rcx = gprs[VCPU_REGS_RCX];
+	vmsa->v_rdx = gprs[VCPU_REGS_RDX];
+	vmsa->v_rsp = gprs[VCPU_REGS_RSP];
+	vmsa->v_rbp = gprs[VCPU_REGS_RBP];
+	vmsa->v_rsi = gprs[VCPU_REGS_RSI];
+	vmsa->v_rdi = gprs[VCPU_REGS_RDI];
+
+	vmsa->v_r8 = gprs[VCPU_REGS_R8];
+	vmsa->v_r9 = gprs[VCPU_REGS_R9];
+	vmsa->v_r10 = gprs[VCPU_REGS_R10];
+	vmsa->v_r11 = gprs[VCPU_REGS_R11];
+	vmsa->v_r12 = gprs[VCPU_REGS_R12];
+	vmsa->v_r13 = gprs[VCPU_REGS_R13];
+	vmsa->v_r14 = gprs[VCPU_REGS_R14];
+	vmsa->v_r15 = gprs[VCPU_REGS_R15];
+
+	vmsa->v_rip = gprs[VCPU_REGS_RIP];
+
+	vmsa->v_xcr0 = vcpu->vc_gueststate.vg_xcr0;
+
+	/* initialize FPU */
+	vmsa->v_x87_fcw = __INITIAL_NPXCW__;
+	vmsa->v_mxcsr = __INITIAL_MXCSR__;
+
+	return 0;
 }
 
 /*
@@ -2765,7 +2873,7 @@ vcpu_init_svm(struct vcpu *vcpu, struct vm_create_params *vcp)
 	int ret = 0;
 
 	/* Allocate an ASID early to avoid km_alloc if we're out of ASIDs. */
-	if (vmm_alloc_vpid(&vcpu->vc_vpid))
+	if (vmm_alloc_asid(&vcpu->vc_vpid, vcpu))
 		return (ENOMEM);
 
 	/* Allocate VMCB VA */
@@ -2829,6 +2937,28 @@ vcpu_init_svm(struct vcpu *vcpu, struct vm_create_params *vcp)
 	    (uint64_t)vcpu->vc_svm_hsa_va,
 	    (uint64_t)vcpu->vc_svm_hsa_pa);
 
+
+	/* Allocate VM save area VA */
+	vcpu->vc_svm_vmsa_va = (vaddr_t)km_alloc(PAGE_SIZE, &kv_page,
+	   &kp_zero, &kd_waitok);
+
+	if (!vcpu->vc_svm_vmsa_va) {
+		ret = ENOMEM;
+		goto exit;
+	}
+
+	/* Compute VM save area PA */
+	if (!pmap_extract(pmap_kernel(), vcpu->vc_svm_vmsa_va,
+	    &vcpu->vc_svm_vmsa_pa)) {
+		ret = ENOMEM;
+		goto exit;
+	}
+
+	DPRINTF("%s: VMSA va @ 0x%llx, pa @ 0x%llx\n", __func__,
+	    (uint64_t)vcpu->vc_svm_vmsa_va,
+	    (uint64_t)vcpu->vc_svm_vmsa_pa);
+
+
 	/* Allocate IOIO area VA (3 pages) */
 	vcpu->vc_svm_ioio_va = (vaddr_t)km_alloc(3 * PAGE_SIZE, &kv_any,
 	   &vmm_kp_contig, &kd_waitok);
@@ -2851,6 +2981,7 @@ vcpu_init_svm(struct vcpu *vcpu, struct vm_create_params *vcp)
 
 	/* Shall we enable SEV? */
 	vcpu->vc_sev = vcp->vcp_sev;
+	vcpu->vc_seves = vcp->vcp_seves;
 
 	/* Inform vmd(8) about ASID and C bit position. */
 	vcp->vcp_poscbit = amd64_pos_cbit;
@@ -2956,6 +3087,11 @@ vcpu_deinit_svm(struct vcpu *vcpu)
 		km_free((void *)vcpu->vc_svm_hsa_va, PAGE_SIZE, &kv_page,
 		    &kp_zero);
 		vcpu->vc_svm_hsa_va = 0;
+	}
+	if (vcpu->vc_svm_vmsa_va) {
+		km_free((void *)vcpu->vc_svm_vmsa_va, PAGE_SIZE, &kv_page,
+		    &kp_zero);
+		vcpu->vc_svm_vmsa_va = 0;
 	}
 	if (vcpu->vc_svm_ioio_va) {
 		km_free((void *)vcpu->vc_svm_ioio_va, 3 * PAGE_SIZE, &kv_any,
@@ -4038,7 +4174,7 @@ svm_handle_hlt(struct vcpu *vcpu)
 	/* All HLT insns are 1 byte */
 	vcpu->vc_gueststate.vg_rip += 1;
 
-	if (!(rflags & PSL_I)) {
+	if (!svm_get_iflag(vcpu, rflags)) {
 		DPRINTF("%s: guest halted with interrupts disabled\n",
 		    __func__);
 		return (EIO);
@@ -4134,7 +4270,7 @@ svm_handle_exit(struct vcpu *vcpu)
 
 	switch (exit_reason) {
 	case SVM_VMEXIT_VINTR:
-		if (!(rflags & PSL_I)) {
+		if (!svm_get_iflag(vcpu, rflags)) {
 			DPRINTF("%s: impossible interrupt window exit "
 			    "config\n", __func__);
 			ret = EINVAL;
@@ -4198,6 +4334,16 @@ svm_handle_exit(struct vcpu *vcpu)
 		ret = vmm_inject_ud(vcpu);
 		update_rip = 0;
 		break;
+	case SVM_VMEXIT_EFER_WRITE_TRAP:
+	case SVM_VMEXIT_CR0_WRITE_TRAP:
+	case SVM_VMEXIT_CR4_WRITE_TRAP:
+	case SVM_VMEXIT_CR8_WRITE_TRAP:
+		ret = svm_handle_efercr(vcpu, exit_reason);
+		update_rip = 0;
+		break;
+	case SVM_VMEXIT_VMGEXIT:
+		ret = svm_handle_gexit(vcpu);
+		break;
 	default:
 		DPRINTF("%s: unhandled exit 0x%llx (pa=0x%llx)\n", __func__,
 		    exit_reason, (uint64_t)vcpu->vc_control_pa);
@@ -4221,6 +4367,328 @@ svm_handle_exit(struct vcpu *vcpu)
 	svm_set_dirty(vcpu, SVM_CLEANBITS_CR);
 
 	return (ret);
+}
+
+/*
+ * sync guest ghcb -> host vmcb/vcpu
+ */
+int
+svm_gexit_sync_host(struct vcpu *vcpu)
+{
+	struct vmcb		*vmcb = (struct vmcb *)vcpu->vc_control_va;
+	struct ghcb_sa		*ghcb;
+	uint64_t		 svm_sw_exitcode;
+	uint8_t			*valid_bm, expected_bm[0x10];
+
+	if (!vcpu->vc_seves)
+		return (0);
+
+	if (vcpu->vc_svm_ghcb_va == 0) {
+		printf("%s: GHCB not set\n", __func__);
+		return (0);
+	}
+	ghcb = (struct ghcb_sa *)vcpu->vc_svm_ghcb_va;
+
+	if (!ghcb_valid(ghcb))
+		return (EINVAL);
+
+	valid_bm = ghcb->valid_bitmap;
+
+	/* Always required. */
+	memset(expected_bm, 0, sizeof(expected_bm));
+	ghcb_valbm_set(expected_bm, GHCB_SW_EXITCODE);
+	ghcb_valbm_set(expected_bm, GHCB_SW_EXITINFO1);
+	ghcb_valbm_set(expected_bm, GHCB_SW_EXITINFO2);
+
+	svm_sw_exitcode = ghcb->v_sw_exitcode;
+	switch (svm_sw_exitcode) {
+	case SVM_VMEXIT_CPUID:
+		ghcb_valbm_set(expected_bm, GHCB_RAX);
+		ghcb_valbm_set(expected_bm, GHCB_RCX);
+		break;
+	case SVM_VMEXIT_MSR:
+		if (ghcb->v_sw_exitinfo1 == 1) {
+			/* WRMSR */
+			ghcb_valbm_set(expected_bm, GHCB_RAX);
+			ghcb_valbm_set(expected_bm, GHCB_RCX);
+			ghcb_valbm_set(expected_bm, GHCB_RDX);
+		} else {
+			/* RDMSR */
+			ghcb_valbm_set(expected_bm, GHCB_RCX);
+		}
+		break;
+	case SVM_VMEXIT_IOIO:
+		if (ghcb->v_sw_exitinfo1 & 0x1) {
+			/* in instruction, no registers used */
+		} else {
+			/* out instruction */
+			ghcb_valbm_set(expected_bm, GHCB_RAX);
+		}
+		break;
+	default:
+		return (EINVAL);
+	}
+
+	if (ghcb_verify_bm(valid_bm, expected_bm) != 0)
+		return (EINVAL);
+
+	/* Always required */
+	vmcb->v_exitcode = vcpu->vc_gueststate.vg_exit_reason =
+	    ghcb->v_sw_exitcode;
+	vmcb->v_exitinfo1 = ghcb->v_sw_exitinfo1;
+	vmcb->v_exitinfo2 = ghcb->v_sw_exitinfo2;
+
+	if (ghcb_valbm_isset(expected_bm, GHCB_RAX))
+		vmcb->v_rax = vcpu->vc_gueststate.vg_rax = ghcb->v_rax;
+	if (ghcb_valbm_isset(expected_bm, GHCB_RBX))
+		vcpu->vc_gueststate.vg_rbx = ghcb->v_rbx;
+	if (ghcb_valbm_isset(expected_bm, GHCB_RCX))
+		vcpu->vc_gueststate.vg_rcx = ghcb->v_rcx;
+	if (ghcb_valbm_isset(expected_bm, GHCB_RDX))
+		vcpu->vc_gueststate.vg_rdx = ghcb->v_rdx;
+
+	return (0);
+}
+
+/*
+ * sync host vmcb/vcpu -> guest ghcb
+ */
+int
+svm_gexit_sync_guest(struct vcpu *vcpu)
+{
+	uint64_t		 svm_sw_exitcode;
+	uint64_t		 svm_sw_exitinfo1, svm_sw_exitinfo2;
+	uint8_t			*valid_bm;
+	struct ghcb_sa		*ghcb;
+
+	if (!vcpu->vc_seves)
+		return (0);
+
+	if (vcpu->vc_svm_ghcb_va == 0)
+		return (0);
+
+	ghcb = (struct ghcb_sa *)vcpu->vc_svm_ghcb_va;
+	svm_sw_exitcode = ghcb->v_sw_exitcode;
+	svm_sw_exitinfo1 = ghcb->v_sw_exitinfo1;
+	svm_sw_exitinfo2 = ghcb->v_sw_exitinfo2;
+	ghcb_clear(ghcb);
+	valid_bm = ghcb->valid_bitmap;
+
+	switch (svm_sw_exitcode) {
+	case SVM_VMEXIT_CPUID:
+		ghcb_valbm_set(valid_bm, GHCB_RAX);
+		ghcb_valbm_set(valid_bm, GHCB_RBX);
+		ghcb_valbm_set(valid_bm, GHCB_RCX);
+		ghcb_valbm_set(valid_bm, GHCB_RDX);
+		break;
+	case SVM_VMEXIT_MSR:
+		if (svm_sw_exitinfo1 == 1) {
+			/* WRMSR -- nothing to return */
+		} else {
+			/* RDMSR */
+			ghcb_valbm_set(valid_bm, GHCB_RAX);
+			ghcb_valbm_set(valid_bm, GHCB_RDX);
+		}
+		break;
+	case SVM_VMEXIT_IOIO:
+		if (svm_sw_exitinfo1 & 0x1) {
+			/* IN */
+			ghcb_valbm_set(valid_bm, GHCB_RAX);
+		} else {
+			/* OUT -- nothing to return */
+		}
+		break;
+	default:
+		return (EINVAL);
+	}
+
+	/* Always required */
+	svm_sw_exitinfo1 = 0;
+	svm_sw_exitinfo2 = 0;
+	ghcb_valbm_set(valid_bm, GHCB_SW_EXITINFO1);
+	ghcb_valbm_set(valid_bm, GHCB_SW_EXITINFO2);
+
+	if (ghcb_valbm_isset(valid_bm, GHCB_RAX))
+		ghcb->v_rax = vcpu->vc_gueststate.vg_rax;
+	if (ghcb_valbm_isset(valid_bm, GHCB_RBX))
+		ghcb->v_rbx = vcpu->vc_gueststate.vg_rbx;
+	if (ghcb_valbm_isset(valid_bm, GHCB_RCX))
+		ghcb->v_rcx = vcpu->vc_gueststate.vg_rcx;
+	if (ghcb_valbm_isset(valid_bm, GHCB_RDX))
+		ghcb->v_rdx = vcpu->vc_gueststate.vg_rdx;
+
+	if (ghcb_valbm_isset(valid_bm, GHCB_SW_EXITINFO1))
+		ghcb->v_sw_exitinfo1 = svm_sw_exitinfo1;
+	if (ghcb_valbm_isset(valid_bm, GHCB_SW_EXITINFO2))
+		ghcb->v_sw_exitinfo2 = svm_sw_exitinfo2;
+
+	return (0);
+}
+
+/*
+ * svm_handle_gexit
+ *
+ * Handle exits initiated by the guest due to #VC exceptions generated
+ * when SEV-ES is enabled.
+ */
+int
+svm_handle_gexit(struct vcpu *vcpu)
+{
+	struct vmcb		*vmcb = (struct vmcb *)vcpu->vc_control_va;
+	struct vm		*vm = vcpu->vc_parent;
+	struct ghcb_sa		*ghcb;
+	paddr_t			 ghcb_gpa, ghcb_hpa;
+	uint32_t		 req, resp;
+	uint64_t		 result;
+	int			 syncout, error = 0;
+
+	if (vcpu->vc_svm_ghcb_va == 0 && (vmcb->v_ghcb_gpa & ~PG_FRAME) == 0 &&
+	    (vmcb->v_ghcb_gpa & PG_FRAME) != 0) {
+		/*
+		 * Guest provides a valid guest physcial address
+		 * for GHCB and it is not set yet -> assign it.
+		 *
+		 * We only accept a GHCB once; we decline re-definition.
+		 */
+		ghcb_gpa = vmcb->v_ghcb_gpa & PG_FRAME;
+		if (!pmap_extract(vm->vm_map->pmap, ghcb_gpa, &ghcb_hpa))
+			return (EINVAL);
+		vcpu->vc_svm_ghcb_va = (vaddr_t)PMAP_DIRECT_MAP(ghcb_hpa);
+	} else if ((vmcb->v_ghcb_gpa & ~PG_FRAME) != 0) {
+		/*
+                 * Low bits in use, thus must be a MSR protocol
+		 * request.
+		 */
+		req = (vmcb->v_ghcb_gpa & 0xffffffff);
+
+		/* We only support cpuid and terminate. */
+		if ((req & ~PG_FRAME) == MSR_PROTO_TERMINATE) {
+			DPRINTF("%s: guest requests termination\n", __func__);
+			return (1);
+		} else if ((req & ~PG_FRAME) != MSR_PROTO_CPUID_REQ)
+			return (EINVAL);
+
+		/* Emulate CPUID */
+		vmcb->v_exitcode = SVM_VMEXIT_CPUID;
+		vmcb->v_rax = vmcb->v_ghcb_gpa >> 32;
+		vcpu->vc_gueststate.vg_rax = 0;
+		vcpu->vc_gueststate.vg_rbx = 0;
+		vcpu->vc_gueststate.vg_rcx = 0;
+		vcpu->vc_gueststate.vg_rdx = 0;
+		error = vmm_handle_cpuid(vcpu);
+		if (error)
+			goto out;
+
+		switch (req >> 30) {
+		case 0:	/* eax: emulate cpuid and return eax */
+			result = vmcb->v_rax;
+			break;
+		case 1:	/* return ebx */
+			result = vcpu->vc_gueststate.vg_rbx;
+			break;
+		case 2: /* return ecx */
+			result = vcpu->vc_gueststate.vg_rcx;
+			break;
+		case 3:	/* return edx */
+			result = vcpu->vc_gueststate.vg_rdx;
+			break;
+		default:
+			DPRINTF("%s: unknown request 0x%x\n", __func__, req);
+			return (EINVAL);
+		}
+
+		/* build response */
+		resp = MSR_PROTO_CPUID_RESP | (req & 0xc0000000);
+		vmcb->v_ghcb_gpa = (result << 32) | resp;
+
+		return (0);
+	}
+
+	/* Verify GHCB and synchronize guest state information. */
+	ghcb = (struct ghcb_sa *)vcpu->vc_svm_ghcb_va;
+	if (svm_gexit_sync_host(vcpu)) {
+		error = EINVAL;
+		goto out;
+	}
+
+	/* Handle GHCB protocol */
+	syncout = 0;
+	switch (vmcb->v_exitcode) {
+	case SVM_VMEXIT_CPUID:
+		error = vmm_handle_cpuid(vcpu);
+		vmcb->v_rip = vcpu->vc_gueststate.vg_rip;
+		vcpu->vc_gueststate.vg_rax = vmcb->v_rax;
+		syncout = 1;
+		break;
+	case SVM_VMEXIT_IOIO:
+		if (svm_handle_inout(vcpu) == 0)
+			error = EAGAIN;
+		break;
+	case SVM_VMEXIT_MSR:
+		error = svm_handle_msr(vcpu);
+		vmcb->v_rip = vcpu->vc_gueststate.vg_rip;
+		syncout = 1;
+		break;
+	default:
+		DPRINTF("%s: unknown exit 0x%llx\n", __func__,
+		    vmcb->v_exitcode);
+		error = EINVAL;
+	}
+
+	if (syncout)
+		error = svm_gexit_sync_guest(vcpu);
+
+out:
+	return (error);
+}
+
+/*
+ * svm_handle_efercr
+ *
+ * With SEV-ES the hypervisor can not intercept and modify writes
+ * to CR and EFER.  However, a post write intercept notifies about
+ * the new state of these registers.
+ */
+int
+svm_handle_efercr(struct vcpu *vcpu, uint64_t exit_reason)
+{
+	struct vmcb	*vmcb = (struct vmcb *)vcpu->vc_control_va;
+
+	switch (exit_reason) {
+	case SVM_VMEXIT_EFER_WRITE_TRAP:
+		vmcb->v_efer = vmcb->v_exitinfo1;
+		break;
+	case SVM_VMEXIT_CR0_WRITE_TRAP:
+		vmcb->v_cr0 = vmcb->v_exitinfo1;
+		break;
+	case SVM_VMEXIT_CR4_WRITE_TRAP:
+		vmcb->v_cr4 = vmcb->v_exitinfo1;
+		break;
+	case SVM_VMEXIT_CR8_WRITE_TRAP:
+		/* XXX hshoexer: no state for CR8? */
+		break;
+	default:
+		return (EINVAL);
+	}
+
+	return (0);
+}
+
+/*
+ * svm_get_iflag
+ *
+ * With SEV-ES the hypervisor has no access to the flags register.
+ * Only the the state of the PSL_I is proivded by v_intr_shadow in
+ * the VMCB.
+ */
+int
+svm_get_iflag(struct vcpu *vcpu, uint64_t rflags)
+{
+	struct vmcb		*vmcb = (struct vmcb *)vcpu->vc_control_va;
+
+	if (vcpu->vc_seves)
+		return (vmcb->v_intr_shadow & SMV_GUEST_INTR_MASK);
+	return (rflags & PSL_I);
 }
 
 /*
@@ -6104,6 +6572,8 @@ vcpu_run_svm(struct vcpu *vcpu, struct vm_run_params *vrp)
 		vcpu->vc_gueststate.vg_rip =
 		    vcpu->vc_exit.vrs.vrs_gprs[VCPU_REGS_RIP];
 		vmcb->v_rip = vcpu->vc_gueststate.vg_rip;
+		if (svm_gexit_sync_guest(vcpu))
+			return (EINVAL);
 		break;
 	case SVM_VMEXIT_NPF:
 		ret = vcpu_writeregs_svm(vcpu, VM_RWREGS_GPRS,
@@ -6235,8 +6705,13 @@ vcpu_run_svm(struct vcpu *vcpu, struct vm_run_params *vrp)
 		KASSERT(vmcb->v_intercept1 & SVM_INTERCEPT_INTR);
 		wrmsr(MSR_AMD_VM_HSAVE_PA, vcpu->vc_svm_hsa_pa);
 
-		ret = svm_enter_guest(vcpu->vc_control_pa,
-		    &vcpu->vc_gueststate, &gdt);
+		if (vcpu->vc_seves) {
+			ret = svm_seves_enter_guest(vcpu->vc_control_pa,
+			    vcpu->vc_svm_hsa_va + SVM_HSA_OFFSET, &gdt);
+		} else {
+			ret = svm_enter_guest(vcpu->vc_control_pa,
+			    &vcpu->vc_gueststate, &gdt);
+		}
 
 		/* Restore host PKRU state. */
 		if (vmm_softc->sc_md.pkru_enabled) {
@@ -6248,6 +6723,8 @@ vcpu_run_svm(struct vcpu *vcpu, struct vm_run_params *vrp)
 		 * On exit, interrupts are disabled, and we are running with
 		 * the guest FPU state still possibly on the CPU. Save the FPU
 		 * state before re-enabling interrupts.
+		 *
+		 * XXX hshoexer:  With SEV-ES we should be able to skip this.
 		 */
 		vmm_fpusave(vcpu);
 
@@ -6275,7 +6752,7 @@ vcpu_run_svm(struct vcpu *vcpu, struct vm_run_params *vrp)
 			 */
 			ret = svm_handle_exit(vcpu);
 
-			if (vcpu->vc_gueststate.vg_rflags & PSL_I)
+			if (svm_get_iflag(vcpu, vcpu->vc_gueststate.vg_rflags))
 				vcpu->vc_irqready = 1;
 			else
 				vcpu->vc_irqready = 0;
@@ -6325,27 +6802,32 @@ vcpu_run_svm(struct vcpu *vcpu, struct vm_run_params *vrp)
 }
 
 /*
- * vmm_alloc_vpid
+ * _vmm_alloc_vpid
  *
  * Sets the memory location pointed to by "vpid" to the next available VPID
- * or ASID.
+ * or ASID. For SEV-ES consider minimum ASID value for non-ES enabled guests.
  *
  * Parameters:
  *  vpid: Pointer to location to receive the next VPID/ASID
+ *  vcpu: Pointer to VCPU data structure
  *
  * Return Values:
  *  0: The operation completed successfully
  *  ENOMEM: No VPIDs/ASIDs were available. Content of 'vpid' is unchanged.
  */
 int
-vmm_alloc_vpid(uint16_t *vpid)
+_vmm_alloc_vpid(uint16_t *vpid, struct vcpu *vcpu)
 {
-	uint16_t i;
+	uint16_t i, minasid;
 	uint8_t idx, bit;
 	struct vmm_softc *sc = vmm_softc;
 
 	rw_enter_write(&vmm_softc->vpid_lock);
-	for (i = 1; i <= sc->max_vpid; i++) {
+	if (vcpu == NULL || vcpu->vc_seves)
+		minasid = 1;
+	else
+		minasid = amd64_min_noes_asid;
+	for (i = minasid; i <= sc->max_vpid; i++) {
 		idx = i / 8;
 		bit = i - (idx * 8);
 
@@ -6365,6 +6847,18 @@ vmm_alloc_vpid(uint16_t *vpid)
 
 	rw_exit_write(&vmm_softc->vpid_lock);
 	return ENOMEM;
+}
+
+int
+vmm_alloc_vpid(uint16_t *vpid)
+{
+	return _vmm_alloc_vpid(vpid, NULL);
+}
+
+int
+vmm_alloc_asid(uint16_t *asid, struct vcpu *vcpu)
+{
+	return _vmm_alloc_vpid(asid, vcpu);
 }
 
 /*
@@ -6777,6 +7271,36 @@ vcpu_state_decode(u_int state)
 	case VCPU_STATE_UNKNOWN: return "unknown";
 	default: return "invalid";
 	}
+}
+
+/*
+ * svm_get_vmsa
+ *
+ * Return physical address of VMSA for specified VCPU.
+ */
+int
+svm_get_vmsa(uint32_t vmid, uint32_t vcpuid, uint64_t *vmsapa)
+{
+	struct vm	*vm;
+	struct vcpu	*vcpu;
+	int		 error, ret = 0;
+
+	error = vm_find(vmid, &vm);
+	if (error)
+		return (error);
+
+	vcpu = vm_find_vcpu(vm, vcpuid);
+	if (vcpu == NULL) {
+		ret = ENOENT;
+		goto out;
+	}
+
+	if (vmsapa)
+		*vmsapa = vcpu->vc_svm_vmsa_pa;
+
+out:
+	refcnt_rele_wake(&vm->vm_refcnt);
+	return (ret);
 }
 
 #ifdef VMM_DEBUG
