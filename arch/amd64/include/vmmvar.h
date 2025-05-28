@@ -1053,7 +1053,7 @@ int	vcpu_init(struct vcpu *, struct vm_create_params *);
 void	vcpu_deinit(struct vcpu *);
 int	vm_rwregs(struct vm_rwregs_params *, int);
 int	vcpu_reset_regs(struct vcpu *, struct vcpu_reg_state *);
-int	svm_get_vmsa(uint32_t, uint32_t, uint64_t *);
+int	svm_get_vmsa_pa(uint32_t, uint32_t, uint64_t *);
 
 #endif /* _KERNEL */
 

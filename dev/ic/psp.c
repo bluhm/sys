@@ -667,7 +667,7 @@ psp_encrypt_state(struct psp_softc *sc, struct psp_encrypt_state *ues)
 	uint64_t			vmsa_paddr;
 	int				error;
 
-	error = svm_get_vmsa(ues->vmid, ues->vcpuid, &vmsa_paddr);
+	error = svm_get_vmsa_pa(ues->vmid, ues->vcpuid, &vmsa_paddr);
 	if (error != 0)
 		return (error);
 

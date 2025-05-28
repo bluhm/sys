@@ -149,7 +149,7 @@ void vmx_setmsrbw(struct vcpu *, uint32_t);
 void vmx_setmsrbrw(struct vcpu *, uint32_t);
 void svm_set_clean(struct vcpu *, uint32_t);
 void svm_set_dirty(struct vcpu *, uint32_t);
-int svm_get_vmsa(uint32_t, uint32_t, uint64_t *);
+int svm_get_vmsa_pa(uint32_t, uint32_t, uint64_t *);
 
 int vmm_gpa_is_valid(struct vcpu *vcpu, paddr_t gpa, size_t obj_size);
 void vmm_init_pvclock(struct vcpu *, paddr_t);
@@ -7311,12 +7311,12 @@ vcpu_state_decode(u_int state)
 }
 
 /*
- * svm_get_vmsa
+ * svm_get_vmsa_pa
  *
  * Return physical address of VMSA for specified VCPU.
  */
 int
-svm_get_vmsa(uint32_t vmid, uint32_t vcpuid, uint64_t *vmsapa)
+svm_get_vmsa_pa(uint32_t vmid, uint32_t vcpuid, uint64_t *vmsapa)
 {
 	struct vm	*vm;
 	struct vcpu	*vcpu;
