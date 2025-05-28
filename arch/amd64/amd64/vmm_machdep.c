@@ -98,8 +98,8 @@ int vmx_get_exit_info(uint64_t *, uint64_t *);
 int vmx_load_pdptes(struct vcpu *);
 int vmx_handle_exit(struct vcpu *);
 int svm_handle_exit(struct vcpu *);
-int svm_gexit_sync_host(struct vcpu *);
-int svm_gexit_sync_guest(struct vcpu *);
+int svm_vmgexit_sync_host(struct vcpu *);
+int svm_vmgexit_sync_guest(struct vcpu *);
 int svm_handle_gexit(struct vcpu *);
 int svm_handle_efercr(struct vcpu *, uint64_t);
 int svm_get_iflag(struct vcpu *, uint64_t);
@@ -4338,7 +4338,7 @@ svm_handle_exit(struct vcpu *vcpu)
  * sync guest ghcb -> host vmcb/vcpu
  */
 int
-svm_gexit_sync_host(struct vcpu *vcpu)
+svm_vmgexit_sync_host(struct vcpu *vcpu)
 {
 	struct vmcb		*vmcb = (struct vmcb *)vcpu->vc_control_va;
 	struct ghcb_sa		*ghcb;
@@ -4419,7 +4419,7 @@ svm_gexit_sync_host(struct vcpu *vcpu)
  * sync host vmcb/vcpu -> guest ghcb
  */
 int
-svm_gexit_sync_guest(struct vcpu *vcpu)
+svm_vmgexit_sync_guest(struct vcpu *vcpu)
 {
 	uint64_t		 svm_sw_exitcode;
 	uint64_t		 svm_sw_exitinfo1, svm_sw_exitinfo2;
@@ -4571,7 +4571,7 @@ svm_handle_gexit(struct vcpu *vcpu)
 
 	/* Verify GHCB and synchronize guest state information. */
 	ghcb = (struct ghcb_sa *)vcpu->vc_svm_ghcb_va;
-	if (svm_gexit_sync_host(vcpu)) {
+	if (svm_vmgexit_sync_host(vcpu)) {
 		error = EINVAL;
 		goto out;
 	}
@@ -4601,7 +4601,7 @@ svm_handle_gexit(struct vcpu *vcpu)
 	}
 
 	if (syncout)
-		error = svm_gexit_sync_guest(vcpu);
+		error = svm_vmgexit_sync_guest(vcpu);
 
 out:
 	return (error);
@@ -6617,7 +6617,7 @@ vcpu_run_svm(struct vcpu *vcpu, struct vm_run_params *vrp)
 		vcpu->vc_gueststate.vg_rip =
 		    vcpu->vc_exit.vrs.vrs_gprs[VCPU_REGS_RIP];
 		vmcb->v_rip = vcpu->vc_gueststate.vg_rip;
-		if (svm_gexit_sync_guest(vcpu))
+		if (svm_vmgexit_sync_guest(vcpu))
 			return (EINVAL);
 		break;
 	case SVM_VMEXIT_NPF:
