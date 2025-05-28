@@ -4503,8 +4503,11 @@ svm_handle_vmgexit(struct vcpu *vcpu)
 		 */
 		req = (vmcb->v_ghcb_gpa & 0xffffffff);
 
-		/* we only support cpuid */
-		if ((req & ~PG_FRAME) != MSR_PROTO_CPUID_REQ)
+		/* We only support cpuid and terminate. */
+		if ((req & ~PG_FRAME) == MSR_PROTO_TERMINATE) {
+			DPRINTF("%s: guest requests termination\n", __func__);
+			return (1);
+		} else if ((req & ~PG_FRAME) != MSR_PROTO_CPUID_REQ)
 			return (EINVAL);
 
 		/* Emulate CPUID */
