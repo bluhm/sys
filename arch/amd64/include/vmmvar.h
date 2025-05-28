@@ -623,8 +623,8 @@ struct vmcb_segment {
 	uint64_t			vs_base;		/* 008h */
 };
 
-#define SVM_ENABLE_NP		(1ULL << 0)
-#define SVM_ENABLE_SEV		(1ULL << 1)
+#define SVM_ENABLE_NP	(1ULL << 0)
+#define SVM_ENABLE_SEV	(1ULL << 1)
 #define SVM_SEVES_ENABLE	(1ULL << 2)
 
 #define SMV_GUEST_INTR_MASK	(1ULL << 1)
@@ -853,7 +853,7 @@ struct vmsa {
 };
 
 /*
- * With SEV-ES the host save area (HSA) has the same layout as the
+ * With SEV-ES the host save are (HSA) has the same layout as the
  * VMSA.  However, it has the offset 0x400 into the HSA page.
  * See AMD APM Vol 2, Appendix B.
  */
@@ -1053,7 +1053,7 @@ int	vcpu_init(struct vcpu *, struct vm_create_params *);
 void	vcpu_deinit(struct vcpu *);
 int	vm_rwregs(struct vm_rwregs_params *, int);
 int	vcpu_reset_regs(struct vcpu *, struct vcpu_reg_state *);
-int	svm_get_vmsa_pa(uint32_t, uint32_t, uint64_t *);
+int	svm_get_vmsa(uint32_t, uint32_t, uint64_t *);
 
 #endif /* _KERNEL */
 

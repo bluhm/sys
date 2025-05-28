@@ -455,6 +455,8 @@ vm_create(struct vm_create_params *vcp, struct proc *p)
 		vcpu->vc_parent = vm;
 		vcpu->vc_id = vm->vm_vcpu_ct;
 		vm->vm_vcpu_ct++;
+		vcpu->vc_sev = vcp->vcp_sev;
+		vcpu->vc_seves = vcp->vcp_seves;
 		if ((ret = vcpu_init(vcpu, vcp)) != 0) {
 			printf("failed to init vcpu %d for vm %p\n", i, vm);
 			vm_teardown(&vm);
