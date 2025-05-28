@@ -6863,7 +6863,7 @@ vcpu_run_svm(struct vcpu *vcpu, struct vm_run_params *vrp)
 }
 
 /*
- * _vmm_alloc_vpid
+ * vmm_alloc_vpid_vcpu
  *
  * Sets the memory location pointed to by "vpid" to the next available VPID
  * or ASID. For SEV-ES consider minimum ASID value for non-ES enabled guests.
@@ -6877,7 +6877,7 @@ vcpu_run_svm(struct vcpu *vcpu, struct vm_run_params *vrp)
  *  ENOMEM: No VPIDs/ASIDs were available. Content of 'vpid' is unchanged.
  */
 int
-_vmm_alloc_vpid(uint16_t *vpid, struct vcpu *vcpu)
+vmm_alloc_vpid_vcpu(uint16_t *vpid, struct vcpu *vcpu)
 {
 	uint16_t i, minasid;
 	uint8_t idx, bit;
@@ -6913,13 +6913,13 @@ _vmm_alloc_vpid(uint16_t *vpid, struct vcpu *vcpu)
 int
 vmm_alloc_vpid(uint16_t *vpid)
 {
-	return _vmm_alloc_vpid(vpid, NULL);
+	return vmm_alloc_vpid_vcpu(vpid, NULL);
 }
 
 int
 vmm_alloc_asid(uint16_t *asid, struct vcpu *vcpu)
 {
-	return _vmm_alloc_vpid(asid, vcpu);
+	return vmm_alloc_vpid_vcpu(asid, vcpu);
 }
 
 /*
