@@ -623,8 +623,8 @@ struct vmcb_segment {
 	uint64_t			vs_base;		/* 008h */
 };
 
-#define SVM_ENABLE_NP	(1ULL << 0)
-#define SVM_ENABLE_SEV	(1ULL << 1)
+#define SVM_ENABLE_NP		(1ULL << 0)
+#define SVM_ENABLE_SEV		(1ULL << 1)
 #define SVM_SEVES_ENABLE	(1ULL << 2)
 
 #define SMV_GUEST_INTR_MASK	(1ULL << 1)

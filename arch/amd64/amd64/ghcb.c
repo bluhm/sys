@@ -86,7 +86,6 @@ ghcb_valid(struct ghcb_sa *ghcb)
 	    ghcb_valbm_isset(bm, GHCB_SW_EXITINFO2));
 }
 
-
 /*
  * ghcb_verify_bm
  *
