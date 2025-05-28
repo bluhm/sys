@@ -246,6 +246,7 @@ bi_size_ok:
 	movl	$RELOC(idtlc), %eax
 	lidt	(%eax)
 
+	/* Reset debug control registers */
 	xorl	%eax,%eax
 	movl	%eax,%dr6
 	movl	%eax,%dr7

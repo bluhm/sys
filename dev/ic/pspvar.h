@@ -143,9 +143,7 @@ struct psp_launch_update_vmsa {
 } __packed;
 
 struct psp_encrypt_state {
-	/*
-	 * Input parameters state encryption
-	 */
+	/* Input parameters state encryption */
 	uint32_t		handle;
 	uint32_t		asid;
 	uint32_t		vmid;
