@@ -236,9 +236,6 @@ const struct {
 extern vaddr_t idt_vaddr;
 extern struct gate_descriptor *idt;
 
-/* Minimum ASID value for an SEV enabled, SEV-ES disabled guest. */
-extern int amd64_min_noes_asid;
-
 /* Constants used in "CR access exit" */
 #define CR_WRITE	0
 #define CR_READ		1
