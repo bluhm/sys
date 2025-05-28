@@ -853,7 +853,7 @@ struct vmsa {
 };
 
 /*
- * With SEV-ES the host save are (HSA) has the same layout as the
+ * With SEV-ES the host save area (HSA) has the same layout as the
  * VMSA.  However, it has the offset 0x400 into the HSA page.
  * See AMD APM Vol 2, Appendix B.
  */

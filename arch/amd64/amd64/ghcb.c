@@ -126,6 +126,10 @@ ghcb_verify_bm_guest(uint8_t *valid_bm, uint8_t *expected_bm)
 }
 
 /*
+ * ghcb_sync_val
+ *
+ * Record a value for synchronization to GHCB in the valid bitmap.
+ * For GPRs A to D also record size.
  */
 void
 ghcb_sync_val(int type, int size, struct ghcb_sync *gs)
@@ -160,6 +164,11 @@ ghcb_sync_val(int type, int size, struct ghcb_sync *gs)
 }
 
 /*
+ * ghcb_sync_out
+ *
+ * Copy values provided in trap frame (GPRs) and additional arguments
+ * according to valid bitmap to GHCB.  For GPRs respect given size.
+ * Used by guest only.
  */
 void
 ghcb_sync_out(struct trapframe *frame, uint64_t exitcode, uint64_t exitinfo1,
