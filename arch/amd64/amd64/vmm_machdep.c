@@ -240,7 +240,6 @@ extern struct gate_descriptor *idt;
 #define CR_CLTS		2
 #define CR_LMSW		3
 
-
 /*
  * vmm_enabled
  *
@@ -4346,11 +4345,10 @@ svm_vmgexit_sync_host(struct vcpu *vcpu)
 		printf("%s: GHCB not set\n", __func__);
 		return (0);
 	}
-	ghcb = (struct ghcb_sa *)vcpu->vc_svm_ghcb_va;
 
+	ghcb = (struct ghcb_sa *)vcpu->vc_svm_ghcb_va;
 	if (!ghcb_valid(ghcb))
 		return (EINVAL);
-
 	valid_bm = ghcb->valid_bitmap;
 
 	/* Always required. */
@@ -4515,7 +4513,7 @@ svm_handle_vmgexit(struct vcpu *vcpu)
 		vcpu->vc_svm_ghcb_va = (vaddr_t)PMAP_DIRECT_MAP(ghcb_hpa);
 	} else if ((vmcb->v_ghcb_gpa & ~PG_FRAME) != 0) {
 		/*
-                 * Low bits in use, thus must be a MSR protocol
+		 * Low bits in use, thus must be a MSR protocol
 		 * request.
 		 */
 		req = (vmcb->v_ghcb_gpa & 0xffffffff);
@@ -4545,7 +4543,7 @@ svm_handle_vmgexit(struct vcpu *vcpu)
 		case 1:	/* return ebx */
 			result = vcpu->vc_gueststate.vg_rbx;
 			break;
-		case 2: /* return ecx */
+		case 2:	/* return ecx */
 			result = vcpu->vc_gueststate.vg_rcx;
 			break;
 		case 3:	/* return edx */

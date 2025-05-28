@@ -494,7 +494,6 @@ extern int amd64_has_xcrypt;
 extern int need_retpoline;
 extern int cpu_sev_guestmode;
 
-
 const struct sysctl_bounded_args cpuctl_vars[] = {
 	{ CPU_LIDACTION, &lid_action, -1, 2 },
 	{ CPU_PWRACTION, &pwr_action, 0, 2 },

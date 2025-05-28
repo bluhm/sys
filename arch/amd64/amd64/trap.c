@@ -446,7 +446,6 @@ vctrap(struct trapframe *frame, int user)
 	return 1;
 }
 
-
 /*
  * kerntrap(frame):
  *	Exception, fault, and trap interface to BSD kernel. This
