@@ -667,7 +667,7 @@ psp_encrypt_state(struct psp_softc *sc, struct psp_encrypt_state *ues)
 	uint64_t			vmsa_paddr;
 	int				error;
 
-	error = svm_get_vmsa_pa(ues->vmid, ues->vcpuid, &vmsa_paddr);
+	error = svm_get_vmsa(ues->vmid, ues->vcpuid, &vmsa_paddr);
 	if (error != 0)
 		return (error);
 
@@ -860,6 +860,10 @@ pspioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 	case PSP_IOC_LAUNCH_UPDATE_DATA:
 		error = psp_launch_update_data(sc,
 		    (struct psp_launch_update_data *)data, p);
+		break;
+	case PSP_IOC_LAUNCH_UPDATE_VMSA:
+		error = psp_launch_update_vmsa(sc,
+		    (struct psp_launch_update_vmsa *)data);
 		break;
 	case PSP_IOC_LAUNCH_MEASURE:
 		error = psp_launch_measure(sc,

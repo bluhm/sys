@@ -86,6 +86,8 @@
 #include <machine/fpu.h>
 #include <machine/psl.h>
 #include <machine/trap.h>
+#include <machine/ghcb.h>
+#include <machine/vmmvar.h>
 #ifdef DDB
 #include <ddb/db_output.h>
 #include <machine/db_machdep.h>
@@ -95,6 +97,7 @@
 
 int	upageflttrap(struct trapframe *, uint64_t);
 int	kpageflttrap(struct trapframe *, uint64_t);
+int	vctrap(struct trapframe *, int);
 void	kerntrap(struct trapframe *);
 void	usertrap(struct trapframe *);
 void	ast(struct trapframe *);
@@ -123,6 +126,7 @@ const char * const trap_type[] = {
 	"SSE FP exception",			/* 19 T_XMM */
 	"virtualization exception",		/* 20 T_VE */
 	"control protection exception",		/* 21 T_CP */
+	"VMM communication exception",		/* 29 T_VC */
 };
 const int	trap_types = nitems(trap_type);
 
@@ -297,6 +301,151 @@ kpageflttrap(struct trapframe *frame, uint64_t cr2)
 	return 1;
 }
 
+int
+vctrap(struct trapframe *frame, int user)
+{
+	uint64_t	 sw_exitcode, sw_exitinfo1, sw_exitinfo2;
+	uint8_t		*rip = (uint8_t *)(frame->tf_rip);
+	uint16_t	 port;
+	struct ghcb_sync syncout, syncin;
+	struct ghcb_sa	*ghcb;
+
+	intr_disable();
+
+	memset(&syncout, 0, sizeof(syncout));
+	memset(&syncin, 0, sizeof(syncin));
+
+	sw_exitcode = frame->tf_err;
+	sw_exitinfo1 = 0;
+	sw_exitinfo2 = 0;
+
+	switch (sw_exitcode) {
+	case SVM_VMEXIT_CPUID:
+		ghcb_sync_val(GHCB_RAX, GHCB_SZ32, &syncout);
+		ghcb_sync_val(GHCB_RCX, GHCB_SZ32, &syncout);
+		ghcb_sync_val(GHCB_RAX, GHCB_SZ32, &syncin);
+		ghcb_sync_val(GHCB_RBX, GHCB_SZ32, &syncin);
+		ghcb_sync_val(GHCB_RCX, GHCB_SZ32, &syncin);
+		ghcb_sync_val(GHCB_RDX, GHCB_SZ32, &syncin);
+		frame->tf_rip += 2;
+		break;
+	case SVM_VMEXIT_MSR: {
+		if (user)
+			return 0;	/* not allowed from userspace */
+		if (*rip == 0x0f && *(rip + 1) == 0x30) {
+			/* WRMSR */
+			ghcb_sync_val(GHCB_RAX, GHCB_SZ32, &syncout);
+			ghcb_sync_val(GHCB_RCX, GHCB_SZ32, &syncout);
+			ghcb_sync_val(GHCB_RDX, GHCB_SZ32, &syncout);
+			sw_exitinfo1 = 1;
+		} else if (*rip == 0x0f && *(rip + 1) == 0x32) {
+			/* RDMSR */
+			ghcb_sync_val(GHCB_RCX, GHCB_SZ32, &syncout);
+			ghcb_sync_val(GHCB_RAX, GHCB_SZ32, &syncin);
+			ghcb_sync_val(GHCB_RDX, GHCB_SZ32, &syncin);
+		} else
+			panic("failed to decode MSR");
+		frame->tf_rip += 2;
+		break;
+	    }
+	case SVM_VMEXIT_IOIO: {
+		if (user)
+			return 0;	/* not allowed from userspace */
+		switch (*rip) {
+		case 0x66: {
+			switch (*(rip + 1)) {
+			case 0xef:	/* out %ax,(%dx) */
+				ghcb_sync_val(GHCB_RAX, GHCB_SZ16, &syncout);
+				port = (uint16_t)frame->tf_rdx;
+				sw_exitinfo1 = (port << 16) |
+				    (1ULL << 5);
+				frame->tf_rip += 2;
+				break;
+			case 0xed:	/* in (%dx),%ax */
+				ghcb_sync_val(GHCB_RAX, GHCB_SZ16, &syncin);
+				port = (uint16_t)frame->tf_rdx;
+				sw_exitinfo1 = (port << 16) |
+				    (1ULL << 5) | (1ULL << 0);
+				frame->tf_rip += 2;
+				break;
+			default:
+				panic("failed to decode prefixed IOIO");
+			}
+			break;
+		    }
+		case 0xe4:	/* in $0x71,%al */
+			ghcb_sync_val(GHCB_RAX, GHCB_SZ8, &syncin);
+			port = *(rip + 1);
+			sw_exitinfo1 = (port << 16) | (1ULL << 4) |
+			    (1ULL << 0);
+			frame->tf_rip += 2;
+			break;
+		case 0xe6:	/* outb %al,$0x43 */
+			ghcb_sync_val(GHCB_RAX, GHCB_SZ8, &syncout);
+			port = *(rip + 1);
+			sw_exitinfo1 = (port << 16) | (1ULL << 4);
+			frame->tf_rip += 2;
+			break;
+		case 0xec:	/* in (%dx),%al */
+			ghcb_sync_val(GHCB_RAX, GHCB_SZ8, &syncin);
+			port = (uint16_t)frame->tf_rdx;
+			sw_exitinfo1 = (port << 16) | (1ULL << 4) |
+			    (1ULL << 0);
+			frame->tf_rip += 1;
+			break;
+		case 0xed:	/* in (%dx),%eax */
+			ghcb_sync_val(GHCB_RAX, GHCB_SZ32, &syncin);
+			port = (uint16_t)frame->tf_rdx;
+			sw_exitinfo1 = (port << 16) | (1ULL << 6) |
+			    (1ULL << 0);
+			frame->tf_rip += 1;
+			break;
+		case 0xee:	/* out %al,(%dx) */
+			ghcb_sync_val(GHCB_RAX, GHCB_SZ8, &syncout);
+			port = (uint16_t)frame->tf_rdx;
+			sw_exitinfo1 = (port << 16) | (1ULL << 4);
+			frame->tf_rip += 1;
+			break;
+		case 0xef:	/* out %eax,(%dx) */
+			ghcb_sync_val(GHCB_RAX, GHCB_SZ32, &syncout);
+			port = (uint16_t)frame->tf_rdx;
+			sw_exitinfo1 = (port << 16) | (1ULL << 6);
+			frame->tf_rip += 1;
+			break;
+		default:
+			panic("failed to decode IOIO");
+		}
+		break;
+	    }
+	default:
+		panic("invalid exit code 0x%llx", sw_exitcode);
+	}
+
+	/* Always required */
+	ghcb_sync_val(GHCB_SW_EXITCODE, GHCB_SZ64, &syncout);
+	ghcb_sync_val(GHCB_SW_EXITINFO1, GHCB_SZ64, &syncout);
+	ghcb_sync_val(GHCB_SW_EXITINFO2, GHCB_SZ64, &syncout);
+
+	/* Sync out to GHCB */
+	ghcb = (struct ghcb_sa *)ghcb_vaddr;
+	ghcb_sync_out(frame, sw_exitcode, sw_exitinfo1, sw_exitinfo2, ghcb,
+	    &syncout);
+
+	/* Call hypervisor. */
+	vmgexit();
+
+	/* Verify response */
+	if (ghcb_verify_bm_guest(ghcb->valid_bitmap, syncin.valid_bitmap)) {
+		ghcb_clear(ghcb);
+		panic("invalid hypervisor response");
+	}
+
+	/* Sync in from GHCB */
+	ghcb_sync_in(frame, ghcb, &syncin);
+
+	return 1;
+}
+
 
 /*
  * kerntrap(frame):
@@ -348,6 +497,11 @@ kerntrap(struct trapframe *frame)
 		else
 			return;
 #endif /* NISA > 0 */
+
+	case T_VC:
+		if (vctrap(frame, 0))
+			return;
+		goto we_re_toast;
 	}
 }
 
@@ -427,7 +581,12 @@ usertrap(struct trapframe *frame)
 		code = (frame->tf_err & 0x7fff) < 4 ? ILL_BTCFI
 		    : ILL_BADSTK;
 		break;
-
+	case T_VC:
+		if (vctrap(frame, 1))
+			goto out;
+		sig = SIGILL;
+		code = ILL_PRVOPC;
+		break;
 	case T_PAGEFLT:			/* page fault */
 		if (!uvm_map_inentry(p, &p->p_spinentry, PROC_STACK(p),
 		    "[%s]%d/%d sp=%lx inside %lx-%lx: not MAP_STACK\n",
