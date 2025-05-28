@@ -4508,7 +4508,7 @@ svm_handle_vmgexit(struct vcpu *vcpu)
 		 * We only accept a GHCB once; we decline re-definition.
 		 */
 		ghcb_gpa = vmcb->v_ghcb_gpa & PG_FRAME;
-		if (!pmap_extract(vm->vm_map->pmap, ghcb_gpa, &ghcb_hpa))
+		if (!pmap_extract(vm->vm_pmap, ghcb_gpa, &ghcb_hpa))
 			return (EINVAL);
 		vcpu->vc_svm_ghcb_va = (vaddr_t)PMAP_DIRECT_MAP(ghcb_hpa);
 	} else if ((vmcb->v_ghcb_gpa & ~PG_FRAME) != 0) {
