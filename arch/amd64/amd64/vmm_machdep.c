@@ -100,7 +100,7 @@ int vmx_handle_exit(struct vcpu *);
 int svm_handle_exit(struct vcpu *);
 int svm_vmgexit_sync_host(struct vcpu *);
 int svm_vmgexit_sync_guest(struct vcpu *);
-int svm_handle_gexit(struct vcpu *);
+int svm_handle_vmgexit(struct vcpu *);
 int svm_handle_efercr(struct vcpu *, uint64_t);
 int svm_get_iflag(struct vcpu *, uint64_t);
 int svm_handle_msr(struct vcpu *);
@@ -4309,7 +4309,7 @@ svm_handle_exit(struct vcpu *vcpu)
 		update_rip = 0;
 		break;
 	case SVM_VMEXIT_VMGEXIT:
-		ret = svm_handle_gexit(vcpu);
+		ret = svm_handle_vmgexit(vcpu);
 		break;
 	default:
 		DPRINTF("%s: unhandled exit 0x%llx (pa=0x%llx)\n", __func__,
@@ -4493,13 +4493,13 @@ svm_vmgexit_sync_guest(struct vcpu *vcpu)
 }
 
 /*
- * svm_handle_gexit
+ * svm_handle_vmgexit
  *
  * Handle exits initiated by the guest due to #VC exceptions generated
  * when SEV-ES is enabled.
  */
 int
-svm_handle_gexit(struct vcpu *vcpu)
+svm_handle_vmgexit(struct vcpu *vcpu)
 {
 	struct vmcb		*vmcb = (struct vmcb *)vcpu->vc_control_va;
 	struct vm		*vm = vcpu->vc_parent;
