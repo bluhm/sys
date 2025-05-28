@@ -1699,9 +1699,6 @@ vcpu_reset_regs_svm(struct vcpu *vcpu, struct vcpu_reg_state *vrs)
 
 	ret = vcpu_svm_init_vmsa(vcpu, vrs);
 
-	if ((ret = vcpu_svm_init_vmsa(vcpu, vrs)) != 0)
-		goto exit;
-
 exit:
 	return ret;
 }
