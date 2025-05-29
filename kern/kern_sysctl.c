@@ -1560,51 +1560,48 @@ fill_file(struct kinfo_file *kf, struct file *fp, struct filedesc *fdp,
 			break;
 		}
 		switch (kf->so_family) {
-		case AF_INET: {
-			struct inpcb *inpcb = so->so_pcb;
-
-			soassertlocked(so);
-			if (show_pointers)
-				kf->inp_ppcb = PTRTOINT64(inpcb->inp_ppcb);
-			kf->inp_lport = inpcb->inp_lport;
-			kf->inp_laddru[0] = inpcb->inp_laddr.s_addr;
-			kf->inp_fport = inpcb->inp_fport;
-			kf->inp_faddru[0] = inpcb->inp_faddr.s_addr;
-			kf->inp_rtableid = inpcb->inp_rtableid;
-			if (so->so_type == SOCK_RAW)
-				kf->inp_proto = inpcb->inp_ip.ip_p;
-			if (so->so_proto->pr_protocol == IPPROTO_TCP) {
-				struct tcpcb *tcpcb = (void *)inpcb->inp_ppcb;
-				kf->t_rcv_wnd = tcpcb->rcv_wnd;
-				kf->t_snd_wnd = tcpcb->snd_wnd;
-				kf->t_snd_cwnd = tcpcb->snd_cwnd;
-				kf->t_state = tcpcb->t_state;
-			}
-			break;
-		    }
+		case AF_INET:
 		case AF_INET6: {
 			struct inpcb *inpcb = so->so_pcb;
 
 			soassertlocked(so);
+			if (kf->so_family == AF_INET6) {
+				kf->inp_laddru[0] =
+				    inpcb->inp_laddr6.s6_addr32[0];
+				kf->inp_laddru[1] =
+				    inpcb->inp_laddr6.s6_addr32[1];
+				kf->inp_laddru[2] =
+				    inpcb->inp_laddr6.s6_addr32[2];
+				kf->inp_laddru[3] =
+				    inpcb->inp_laddr6.s6_addr32[3];
+				kf->inp_faddru[0] =
+				    inpcb->inp_faddr6.s6_addr32[0];
+				kf->inp_faddru[1] =
+				    inpcb->inp_faddr6.s6_addr32[1];
+				kf->inp_faddru[2] =
+				    inpcb->inp_faddr6.s6_addr32[2];
+				kf->inp_faddru[3] =
+				    inpcb->inp_faddr6.s6_addr32[3];
+			} else {
+				kf->inp_laddru[0] = inpcb->inp_laddr.s_addr;
+				kf->inp_faddru[0] = inpcb->inp_faddr.s_addr;
+			}
+			kf->inp_lport = inpcb->inp_lport;
+			kf->inp_fport = inpcb->inp_fport;
+			kf->inp_rtableid = inpcb->inp_rtableid;
+			if (so->so_type == SOCK_RAW) {
+				kf->inp_proto = kf->so_family == AF_INET6 ?
+				    inpcb->inp_ipv6.ip6_nxt :
+				    inpcb->inp_ip.ip_p;
+			}
 			if (show_pointers)
 				kf->inp_ppcb = PTRTOINT64(inpcb->inp_ppcb);
-			kf->inp_lport = inpcb->inp_lport;
-			kf->inp_laddru[0] = inpcb->inp_laddr6.s6_addr32[0];
-			kf->inp_laddru[1] = inpcb->inp_laddr6.s6_addr32[1];
-			kf->inp_laddru[2] = inpcb->inp_laddr6.s6_addr32[2];
-			kf->inp_laddru[3] = inpcb->inp_laddr6.s6_addr32[3];
-			kf->inp_fport = inpcb->inp_fport;
-			kf->inp_faddru[0] = inpcb->inp_faddr6.s6_addr32[0];
-			kf->inp_faddru[1] = inpcb->inp_faddr6.s6_addr32[1];
-			kf->inp_faddru[2] = inpcb->inp_faddr6.s6_addr32[2];
-			kf->inp_faddru[3] = inpcb->inp_faddr6.s6_addr32[3];
-			kf->inp_rtableid = inpcb->inp_rtableid;
-			if (so->so_type == SOCK_RAW)
-				kf->inp_proto = inpcb->inp_ipv6.ip6_nxt;
 			if (so->so_proto->pr_protocol == IPPROTO_TCP) {
 				struct tcpcb *tcpcb = (void *)inpcb->inp_ppcb;
+
 				kf->t_rcv_wnd = tcpcb->rcv_wnd;
 				kf->t_snd_wnd = tcpcb->snd_wnd;
+				kf->t_snd_cwnd = tcpcb->snd_cwnd;
 				kf->t_state = tcpcb->t_state;
 			}
 			break;
