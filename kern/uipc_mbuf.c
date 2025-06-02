@@ -129,6 +129,9 @@ struct	mutex m_extref_mtx = MUTEX_INITIALIZER(IPL_NET);
 void	m_extfree(struct mbuf *);
 void	m_zero(struct mbuf *);
 
+/* keep nmbclust and mbuf_mem_limit in sync */
+struct mutex mbuf_nmbclust_mtx = MUTEX_INITIALIZER(IPL_NET);
+
 unsigned long mbuf_mem_limit;	/* [a] how much memory can be allocated */
 unsigned long mbuf_mem_alloc;	/* [a] how much memory has been allocated */
 
@@ -218,8 +221,10 @@ nmbclust_update(long newval)
 	if (newval <= 0 || newval > LONG_MAX / MCLBYTES)
 		return ERANGE;
 	/* update the global mbuf memory limit */
-	nmbclust = newval;
-	atomic_store_long(&mbuf_mem_limit, nmbclust * MCLBYTES);
+	mtx_enter(&mbuf_nmbclust_mtx);
+	atomic_store_long(&nmbclust, newval);
+	atomic_store_long(&mbuf_mem_limit, newval * MCLBYTES);
+	mtx_leave(&mbuf_nmbclust_mtx);
 
 	pool_wakeup(&mbpool);
 	for (i = 0; i < nitems(mclsizes); i++)

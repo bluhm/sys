@@ -759,10 +759,12 @@ kern_sysctl_locked(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 		stackgap_random = stackgap;
 		return (0);
 	case KERN_MAXCLUSTERS: {
-		int val = nmbclust;
-		error = sysctl_int(oldp, oldlenp, newp, newlen, &val);
-		if (error == 0 && val != nmbclust)
-			error = nmbclust_update(val);
+		int oval, nval;
+
+		oval = nval = atomic_load_long(&nmbclust);
+		error = sysctl_int(oldp, oldlenp, newp, newlen, &nval);
+		if (error == 0 && oval != nval)
+			error = nmbclust_update(nval);
 		return (error);
 	}
 	case KERN_CACHEPCT: {

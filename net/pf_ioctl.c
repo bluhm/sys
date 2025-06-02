@@ -2134,7 +2134,8 @@ pfioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 			goto fail;
 		}
 		/* Fragments reference mbuf clusters. */
-		if (pl->index == PF_LIMIT_FRAGS && pl->limit > nmbclust) {
+		if (pl->index == PF_LIMIT_FRAGS && pl->limit >
+		    (long)atomic_load_long(&nmbclust)) {
 			error = EINVAL;
 			PF_UNLOCK();
 			goto fail;
