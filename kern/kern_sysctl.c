@@ -553,6 +553,15 @@ kern_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		microboottime(&bt);
 		return (sysctl_rdstruct(oldp, oldlenp, newp, &bt, sizeof bt));
 	}
+	case KERN_MAXCLUSTERS: {
+		int oval, nval;
+
+		oval = nval = atomic_load_long(&nmbclust);
+		error = sysctl_int(oldp, oldlenp, newp, newlen, &nval);
+		if (error == 0 && oval != nval)
+			error = nmbclust_update(nval);
+		return (error);
+	}
 	case KERN_MBSTAT: {
 		uint64_t counters[MBSTAT_COUNT];
 		struct mbstat mbs;
@@ -758,15 +767,6 @@ kern_sysctl_locked(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 			return (EINVAL);
 		stackgap_random = stackgap;
 		return (0);
-	case KERN_MAXCLUSTERS: {
-		int oval, nval;
-
-		oval = nval = atomic_load_long(&nmbclust);
-		error = sysctl_int(oldp, oldlenp, newp, newlen, &nval);
-		if (error == 0 && oval != nval)
-			error = nmbclust_update(nval);
-		return (error);
-	}
 	case KERN_CACHEPCT: {
 		u_int64_t dmapages;
 		int opct, pgs;
