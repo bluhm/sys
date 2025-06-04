@@ -661,10 +661,9 @@ findpcb:
 		so = in_pcbsolock(inp);
 	}
 	if (so == NULL) {
-		tcpstat_inc(tcps_noport);
+		tcpstat_inc(tcps_closing);
 		goto dropwithreset_ratelim;
 	}
-
 	KASSERT(sotoinpcb(inp->inp_socket) == inp);
 	KASSERT(intotcpcb(inp) == NULL || intotcpcb(inp)->t_inpcb == inp);
 	soassertlocked(inp->inp_socket);

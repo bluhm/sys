@@ -392,6 +392,7 @@ struct	tcpstat {
 
 	u_int32_t tcps_pcbhashmiss;	/* input packets missing pcb hash */
 	u_int32_t tcps_noport;		/* no socket on port */
+	u_int32_t tcps_closing;		/* inpcb exists, socket is closing */
 	u_int32_t tcps_badsyn;		/* SYN packet with src==dst rcv'ed */
 	u_int32_t tcps_dropsyn;		/* SYN packet dropped */
 
@@ -582,6 +583,7 @@ enum tcpstat_counters {
 	tcps_preddat,
 	tcps_pcbhashmiss,
 	tcps_noport,
+	tcps_closing,
 	tcps_badsyn,
 	tcps_dropsyn,
 	tcps_rcvbadsig,
