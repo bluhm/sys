@@ -22,6 +22,7 @@
 struct divstat {
 	u_long	divs_ipackets;	/* total input packets */
 	u_long	divs_noport;	/* no socket on port */
+	u_long	divs_closing;	/* inpcb exists, socket is closing */
 	u_long	divs_fullsock;	/* not delivered, input socket full */
 	u_long	divs_opackets;	/* total output packets */
 	u_long	divs_errors;	/* generic errors */
@@ -53,6 +54,7 @@ struct divstat {
 enum divstat_counters {
 	divs_ipackets,
 	divs_noport,
+	divs_closing,
 	divs_fullsock,
 	divs_opackets,
 	divs_errors,
