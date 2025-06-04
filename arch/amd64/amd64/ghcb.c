@@ -22,6 +22,12 @@
 #include <machine/frame.h>
 #include <machine/ghcb.h>
 
+/* Mask for adjusting GPR sizes. */
+const uint64_t ghcb_sz_masks[] = {
+    0x00000000000000ffULL, 0x000000000000ffffULL,
+    0x00000000ffffffffULL, 0xffffffffffffffffULL
+};
+
 vaddr_t ghcb_vaddr;
 paddr_t ghcb_paddr;
 
@@ -174,23 +180,19 @@ void
 ghcb_sync_out(struct trapframe *frame, uint64_t exitcode, uint64_t exitinfo1,
     uint64_t exitinfo2, struct ghcb_sa *ghcb, struct ghcb_sync *gsout)
 {
-	uint64_t masks[] = {
-	    0x00000000000000ffULL, 0x000000000000ffffULL,
-	    0x00000000ffffffffULL, 0xffffffffffffffffULL };
-
 	ghcb_clear(ghcb);
 
 	memcpy(ghcb->valid_bitmap, gsout->valid_bitmap,
 	    sizeof(ghcb->valid_bitmap));
 
 	if (ghcb_valbm_isset(gsout->valid_bitmap, GHCB_RAX))
-		ghcb->v_rax = frame->tf_rax & masks[gsout->sz_a];
+		ghcb->v_rax = frame->tf_rax & ghcb_sz_masks[gsout->sz_a];
 	if (ghcb_valbm_isset(gsout->valid_bitmap, GHCB_RBX))
-		ghcb->v_rbx = frame->tf_rbx & masks[gsout->sz_b];
+		ghcb->v_rbx = frame->tf_rbx & ghcb_sz_masks[gsout->sz_b];
 	if (ghcb_valbm_isset(gsout->valid_bitmap, GHCB_RCX))
-		ghcb->v_rcx = frame->tf_rcx & masks[gsout->sz_c];
+		ghcb->v_rcx = frame->tf_rcx & ghcb_sz_masks[gsout->sz_c];
 	if (ghcb_valbm_isset(gsout->valid_bitmap, GHCB_RDX))
-		ghcb->v_rdx = frame->tf_rdx & masks[gsout->sz_d];
+		ghcb->v_rdx = frame->tf_rdx & ghcb_sz_masks[gsout->sz_d];
 
 	if (ghcb_valbm_isset(gsout->valid_bitmap, GHCB_SW_EXITCODE))
 		ghcb->v_sw_exitcode = exitcode;
@@ -210,25 +212,21 @@ void
 ghcb_sync_in(struct trapframe *frame, struct ghcb_sa *ghcb,
     struct ghcb_sync *gsin)
 {
-	uint64_t masks[] = {
-	    0x00000000000000ffULL, 0x000000000000ffffULL,
-	    0x00000000ffffffffULL, 0xffffffffffffffffULL };
-
 	if (ghcb_valbm_isset(gsin->valid_bitmap, GHCB_RAX)) {
-		frame->tf_rax &= ~masks[gsin->sz_a];
-		frame->tf_rax |= (ghcb->v_rax & masks[gsin->sz_a]);
+		frame->tf_rax &= ~ghcb_sz_masks[gsin->sz_a];
+		frame->tf_rax |= (ghcb->v_rax & ghcb_sz_masks[gsin->sz_a]);
 	}
 	if (ghcb_valbm_isset(gsin->valid_bitmap, GHCB_RBX)) {
-		frame->tf_rbx &= ~masks[gsin->sz_b];
-		frame->tf_rbx |= (ghcb->v_rbx & masks[gsin->sz_b]);
+		frame->tf_rbx &= ~ghcb_sz_masks[gsin->sz_b];
+		frame->tf_rbx |= (ghcb->v_rbx & ghcb_sz_masks[gsin->sz_b]);
 	}
 	if (ghcb_valbm_isset(gsin->valid_bitmap, GHCB_RCX)) {
-		frame->tf_rcx &= ~masks[gsin->sz_c];
-		frame->tf_rcx |= (ghcb->v_rcx & masks[gsin->sz_c]);
+		frame->tf_rcx &= ~ghcb_sz_masks[gsin->sz_c];
+		frame->tf_rcx |= (ghcb->v_rcx & ghcb_sz_masks[gsin->sz_c]);
 	}
 	if (ghcb_valbm_isset(gsin->valid_bitmap, GHCB_RDX)) {
-		frame->tf_rdx &= ~masks[gsin->sz_d];
-		frame->tf_rdx |= (ghcb->v_rdx & masks[gsin->sz_d]);
+		frame->tf_rdx &= ~ghcb_sz_masks[gsin->sz_d];
+		frame->tf_rdx |= (ghcb->v_rdx & ghcb_sz_masks[gsin->sz_d]);
 	}
 
 	ghcb_clear(ghcb);
