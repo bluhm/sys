@@ -1736,8 +1736,10 @@ do {									\
 			mtx_leave(&(table)->inpt_mtx);			\
 			NET_LOCK_SHARED();				\
 			so = in_pcbsolock(inp);				\
-			if (so == NULL)					\
+			if (so == NULL)	{				\
+				mtx_enter(&(table)->inpt_mtx);		\
 				continue;				\
+			}						\
 			fill_file(kf, NULL, NULL, 0, NULL, NULL, p,	\
 			    so, show_pointers);				\
 			in_pcbsounlock(inp, so);			\
