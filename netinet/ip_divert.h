@@ -46,6 +46,10 @@ struct divstat {
 
 #include <sys/percpu.h>
 
+#define DIVERT_SENDSPACE	(65536 + 100)
+#define DIVERT_RECVSPACE	(65536 + 100)
+#define DIVERT_HASHSIZE		128
+
 enum divstat_counters {
 	divs_ipackets,
 	divs_noport,
