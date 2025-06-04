@@ -138,6 +138,7 @@ rip6_input(struct mbuf **mp, int *offp, int proto, int af, struct netstack *ns)
 	struct ip6_hdr *ip6 = mtod(m, struct ip6_hdr *);
 	struct inpcb_iterator iter = { .inp_table = NULL };
 	struct inpcb *inp, *last;
+	void *pcb;
 	struct in6_addr *key;
 	struct sockaddr_in6 rip6src;
 	uint8_t type;
@@ -184,6 +185,12 @@ rip6_input(struct mbuf **mp, int *offp, int proto, int af, struct netstack *ns)
 	while ((inp = in_pcb_iterator(&rawin6pcbtable, inp, &iter)) != NULL) {
 		KASSERT(ISSET(inp->inp_flags, INP_IPV6));
 
+		pcb = READ_ONCE(inp->inp_socket->so_pcb);
+		if (pcb == NULL) {
+			rip6stat_inc(rip6s_closing);
+			continue;
+		}
+		KASSERT(pcb == inp);
 		/*
 		 * Packet must not be inserted after disconnected wakeup
 		 * call.  To avoid race, check again when holding receive
