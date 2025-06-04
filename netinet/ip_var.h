@@ -68,6 +68,7 @@ struct	ipstat {
 	u_long	ips_cantforward;	/* packets rcvd for unreachable dest */
 	u_long	ips_redirectsent;	/* packets forwarded on same net */
 	u_long	ips_noproto;		/* unknown or unsupported protocol */
+	u_long	ips_closing;		/* inpcb exists, socket is closing */
 	u_long	ips_delivered;		/* datagrams delivered to upper level*/
 	u_long	ips_localout;		/* total ip packets generated here */
 	u_long	ips_odropped;		/* lost output due to nobufs, etc. */
@@ -116,6 +117,7 @@ enum ipstat_counters {
 	ips_cantforward,	/* packets rcvd for unreachable dest */
 	ips_redirectsent,	/* packets forwarded on same net */
 	ips_noproto,		/* unknown or unsupported protocol */
+	ips_closing,		/* inpcb exists, socket is closing */
 	ips_delivered,		/* datagrams delivered to upper level*/
 	ips_localout,		/* total ip packets generated here */
 	ips_odropped,		/* lost output packets due to nobufs, etc. */
