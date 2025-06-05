@@ -42,7 +42,6 @@ struct rip6stat {
 	u_int64_t rip6s_badsum;		/* of above, checksum error */
 	u_int64_t rip6s_nosock;		/* no matching socket */
 	u_int64_t rip6s_nosockmcast;	/* of above, arrived as multicast */
-	u_int64_t rip6s_closing;	/* inpcb exists, socket is closing */
 	u_int64_t rip6s_fullsock;	/* not delivered, input socket full */
 
 	u_int64_t rip6s_opackets;	/* total output packets */
@@ -69,7 +68,6 @@ enum rip6stat_counters {
 	rip6s_badsum,
 	rip6s_nosock,
 	rip6s_nosockmcast,
-	rip6s_closing,
 	rip6s_fullsock,
 	rip6s_opackets,
 	rip6s_ncounters,
