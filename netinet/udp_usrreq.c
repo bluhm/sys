@@ -427,10 +427,8 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af, struct netstack *ns)
 				KASSERT(!ISSET(inp->inp_flags, INP_IPV6));
 
 			pcb = READ_ONCE(inp->inp_socket->so_pcb);
-			if (pcb == NULL) {
-				udpstat_inc(udps_closing);
+			if (pcb == NULL)
 				continue;
-			}
 			KASSERT(pcb == inp);
 			if (inp->inp_socket->so_rcv.sb_state & SS_CANTRCVMORE)
 				continue;
