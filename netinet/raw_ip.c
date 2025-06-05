@@ -171,10 +171,8 @@ rip_input(struct mbuf **mp, int *offp, int proto, int af, struct netstack *ns)
 		KASSERT(!ISSET(inp->inp_flags, INP_IPV6));
 
 		pcb = READ_ONCE(inp->inp_socket->so_pcb);
-		if (pcb == NULL) {
-			ipstat_inc(ips_closing);
+		if (pcb == NULL)
 			continue;
-		}
 		KASSERT(pcb == inp);
 		/*
 		 * Packet must not be inserted after disconnected wakeup
