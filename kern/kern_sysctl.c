@@ -1737,6 +1737,7 @@ do {									\
 			NET_LOCK_SHARED();				\
 			so = in_pcbsolock(inp);				\
 			if (so == NULL)	{				\
+				NET_UNLOCK_SHARED();			\
 				mtx_enter(&(table)->inpt_mtx);		\
 				continue;				\
 			}						\
