@@ -1,4 +1,4 @@
-/*	$OpenBSD: tcp_subr.c,v 1.211 2025/06/03 16:51:26 bluhm Exp $	*/
+/*	$OpenBSD: tcp_subr.c,v 1.212 2025/06/08 17:06:19 bluhm Exp $	*/
 /*	$NetBSD: tcp_subr.c,v 1.22 1996/02/13 23:44:00 christos Exp $	*/
 
 /*
