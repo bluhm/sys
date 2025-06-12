@@ -1205,12 +1205,13 @@ if_detach(struct ifnet *ifp)
 	ifq_barrier(&ifp->if_snd);
 	ifq_clr_oactive(&ifp->if_snd);
 
+	NET_LOCK();
+	s = splnet();
+
 #if NBPFILTER > 0
 	bpfdetach(ifp);
 #endif
 
-	NET_LOCK();
-	s = splnet();
 	ifp->if_ioctl = if_detached_ioctl;
 	ifp->if_watchdog = NULL;
 
