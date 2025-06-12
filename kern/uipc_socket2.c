@@ -409,13 +409,13 @@ sounlock(struct socket *so)
 void
 sounlock_shared(struct socket *so)
 {
-	rw_exit_write(&so->so_lock);
 	switch (so->so_proto->pr_domain->dom_family) {
 	case PF_INET:
 	case PF_INET6:
 		NET_UNLOCK_SHARED();
 		break;
 	}
+	rw_exit_write(&so->so_lock);
 }
 
 void
@@ -427,6 +427,12 @@ sounlock_nonet(struct socket *so)
 void
 sounlock_pair(struct socket *so1, struct socket *so2)
 {
+	switch (so1->so_proto->pr_domain->dom_family) {
+	case PF_INET:
+	case PF_INET6:
+		NET_UNLOCK_SHARED();
+		break;
+	}
 	if (so1 == so2)
 		rw_exit_write(&so1->so_lock);
 	else if (so1 < so2) {
@@ -435,12 +441,6 @@ sounlock_pair(struct socket *so1, struct socket *so2)
 	} else {
 		rw_exit_write(&so1->so_lock);
 		rw_exit_write(&so2->so_lock);
-	}
-	switch (so1->so_proto->pr_domain->dom_family) {
-	case PF_INET:
-	case PF_INET6:
-		NET_UNLOCK_SHARED();
-		break;
 	}
 }
 
