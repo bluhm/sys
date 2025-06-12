@@ -3654,6 +3654,7 @@ syn_cache_get(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 	 */
 	listenso = so;
 	listeninp = inp;
+	inp = NULL;
 	so = sonewconn(listenso, SS_ISCONNECTED, M_DONTWAIT);
 	if (so == NULL)
 		goto resetandabort;
