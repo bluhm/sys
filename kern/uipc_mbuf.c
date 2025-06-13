@@ -1,4 +1,4 @@
-/*	$OpenBSD: uipc_mbuf.c,v 1.296 2025/01/01 13:44:22 bluhm Exp $	*/
+/*	$OpenBSD: uipc_mbuf.c,v 1.298 2025/06/13 07:05:27 sf Exp $	*/
 /*	$NetBSD: uipc_mbuf.c,v 1.15.4.1 1996/06/13 17:11:44 cgd Exp $	*/
 
 /*
@@ -1467,6 +1467,7 @@ m_pool_alloc(struct pool *pp, int flags, int *slowdown)
 		return (v);
 
  fail:
+	counters_inc(mbstat, MBSTAT_DROPS);
 	atomic_sub_long(&mbuf_mem_alloc, pp->pr_pgsize);
 	return (NULL);
 }
@@ -1852,6 +1853,7 @@ mq_set_maxlen(struct mbuf_queue *mq, u_int maxlen)
 	mtx_leave(&mq->mq_mtx);
 }
 
+#ifndef SMALL_KERNEL
 int
 sysctl_mq(int *name, u_int namelen, void *oldp, size_t *oldlenp,
     void *newp, size_t newlen, struct mbuf_queue *mq)
@@ -1879,3 +1881,4 @@ sysctl_mq(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 	}
 	/* NOTREACHED */
 }
+#endif /* SMALL_KERNEL */
