@@ -29,8 +29,8 @@
 
 #define	DIVERT6CTL_NAMES { \
 	{ 0, 0 }, \
-	{ "recvspace",	CTLTYPE_INT }, \
-	{ "sendspace",	CTLTYPE_INT }, \
+	{ NULL,	0 }, \
+	{ NULL,	0 }, \
 	{ "stats",	CTLTYPE_STRUCT } \
 }
 

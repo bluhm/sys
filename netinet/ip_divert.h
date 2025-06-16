@@ -67,8 +67,9 @@ divstat_inc(enum divstat_counters c)
 	counters_inc(divcounters, c);
 }
 
-extern struct	inpcbtable	divbtable;
-
+extern u_int divert_sendspace;
+extern u_int divert_recvspace;
+extern struct inpcbtable divbtable;
 extern const struct pr_usrreqs divert_usrreqs;
 
 void	 divert_init(void);
