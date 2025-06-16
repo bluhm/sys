@@ -200,7 +200,6 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af, struct netstack *ns)
 	struct ip *ip = NULL;
 	struct udphdr *uh;
 	struct inpcb *inp = NULL;
-	void *pcb;
 	struct ip save_ip;
 	int len;
 	u_int16_t savesum;
@@ -426,10 +425,6 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af, struct netstack *ns)
 			else
 				KASSERT(!ISSET(inp->inp_flags, INP_IPV6));
 
-			pcb = READ_ONCE(inp->inp_socket->so_pcb);
-			if (pcb == NULL)
-				continue;
-			KASSERT(pcb == inp);
 			if (inp->inp_socket->so_rcv.sb_state & SS_CANTRCVMORE)
 				continue;
 			if (rtable_l2(inp->inp_rtableid) !=
@@ -607,12 +602,6 @@ udp_input(struct mbuf **mp, int *offp, int proto, int af, struct netstack *ns)
 		return IPPROTO_DONE;
 	}
 
-	pcb = READ_ONCE(inp->inp_socket->so_pcb);
-	if (pcb == NULL) {
-		udpstat_inc(udps_closing);
-		goto bad;
-	}
-	KASSERT(pcb == inp);
 	soassertlocked_readonly(inp->inp_socket);
 
 #ifdef INET6

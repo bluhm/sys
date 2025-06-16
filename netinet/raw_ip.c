@@ -135,7 +135,6 @@ rip_input(struct mbuf **mp, int *offp, int proto, int af, struct netstack *ns)
 	struct ip *ip = mtod(m, struct ip *);
 	struct inpcb_iterator iter = { .inp_table = NULL };
 	struct inpcb *inp, *last;
-	void *pcb;
 	struct in_addr *key;
 	struct sockaddr_in ripsrc;
 
@@ -170,10 +169,6 @@ rip_input(struct mbuf **mp, int *offp, int proto, int af, struct netstack *ns)
 	while ((inp = in_pcb_iterator(&rawcbtable, inp, &iter)) != NULL) {
 		KASSERT(!ISSET(inp->inp_flags, INP_IPV6));
 
-		pcb = READ_ONCE(inp->inp_socket->so_pcb);
-		if (pcb == NULL)
-			continue;
-		KASSERT(pcb == inp);
 		/*
 		 * Packet must not be inserted after disconnected wakeup
 		 * call.  To avoid race, check again when holding receive

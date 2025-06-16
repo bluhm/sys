@@ -178,7 +178,6 @@ void
 divert_packet(struct mbuf *m, int dir, u_int16_t divert_port)
 {
 	struct inpcb *inp = NULL;
-	void *pcb;
 	struct socket *so;
 	struct sockaddr_in sin;
 
@@ -202,12 +201,6 @@ divert_packet(struct mbuf *m, int dir, u_int16_t divert_port)
 		divstat_inc(divs_noport);
 		goto bad;
 	}
-	pcb = READ_ONCE(inp->inp_socket->so_pcb);
-	if (pcb == NULL) {
-		divstat_inc(divs_closing);
-		goto bad;
-	}
-	KASSERT(pcb == inp);
 
 	memset(&sin, 0, sizeof(sin));
 	sin.sin_family = AF_INET;

@@ -61,7 +61,6 @@ struct	udpstat {
 	u_long	udps_badlen;		/* data length larger than packet */
 	u_long	udps_noport;		/* no socket on port */
 	u_long	udps_noportbcast;	/* of above, arrived as broadcast */
-	u_long	udps_closing;		/* inpcb exists, socket is closing */
 	u_long	udps_nosec;		/* dropped for lack of ipsec */
 	u_long	udps_fullsock;		/* not delivered, input socket full */
 	u_long	udps_pcbhashmiss;	/* input packets missing pcb hash */
@@ -105,7 +104,6 @@ enum udpstat_counters {
 	udps_badlen,		/* data length larger than packet */
 	udps_noport,		/* no socket on port */
 	udps_noportbcast,	/* of above, arrived as broadcast */
-	udps_closing,		/* inpcb exists, socket is closing */
 	udps_nosec,		/* dropped for lack of ipsec */
 	udps_fullsock,		/* not delivered, input socket full */
 	udps_pcbhashmiss,	/* input packets missing pcb hash */
