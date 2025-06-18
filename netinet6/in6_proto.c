@@ -302,7 +302,6 @@ const struct protosw inet6sw[] = {
   .pr_ctloutput	= rip6_ctloutput,
   .pr_usrreqs	= &divert6_usrreqs,
   .pr_init	= divert6_init,
-  .pr_sysctl	= divert6_sysctl
 },
 #endif /* NPF > 0 */
 #if NETHERIP > 0
