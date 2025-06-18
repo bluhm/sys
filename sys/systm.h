@@ -1,4 +1,4 @@
-/*	$OpenBSD: systm.h,v 1.173 2025/06/03 00:20:31 dlg Exp $	*/
+/*	$OpenBSD: systm.h,v 1.175 2025/06/18 15:05:53 jca Exp $	*/
 /*	$NetBSD: systm.h,v 1.50 1996/06/09 04:55:09 briggs Exp $	*/
 
 /*-
@@ -106,6 +106,10 @@ extern dev_t swapdev;		/* swapping device */
 extern struct vnode *swapdev_vp;/* vnode equivalent to above */
 
 extern int nowake;		/* dead wakeup(9) channel */
+
+#ifdef MP_LOCKDEBUG
+extern int __mp_lock_spinout;
+#endif
 
 struct proc;
 struct process;
@@ -383,6 +387,8 @@ void	consinit(void);
 void	cpu_startup(void);
 void	cpu_configure(void);
 void	diskconf(void);
+
+void	powerbutton_event(void);
 
 int nfs_mountroot(void);
 int dk_mountroot(void);

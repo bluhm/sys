@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_urtwn.c,v 1.112 2024/10/22 22:21:25 jsg Exp $	*/
+/*	$OpenBSD: if_urtwn.c,v 1.114 2025/06/18 13:48:23 jcs Exp $	*/
 
 /*-
  * Copyright (c) 2010 Damien Bergamini <damien.bergamini@free.fr>
