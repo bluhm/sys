@@ -210,9 +210,9 @@ sys_listen(struct proc *p, void *v, register_t *retval)
 	so = fp->f_data;
 	if (so->so_state & SS_YP)
 		return ENOTSOCK;
-	solock(so);
+	solock_shared(so);
 	error = solisten(so, SCARG(uap, backlog));
-	sounlock(so);
+	sounlock_shared(so);
 	FRELE(fp, p);
 	return (error);
 }
