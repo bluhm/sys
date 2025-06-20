@@ -21,6 +21,8 @@
 #ifndef _MACHINE_VMMVAR_H_
 #define _MACHINE_VMMVAR_H_
 
+#ifndef _LOCORE
+
 #define VMM_HV_SIGNATURE 	"OpenBSDVMM58"
 
 /* VMX: Basic Exit Reasons */
@@ -93,6 +95,8 @@
  */
 #define VMX_MAX_CR3_TARGETS			256
 #define VMX_VMCS_PA_CLEAR			0xFFFFFFFFFFFFFFFFUL
+
+#endif	/* ! _LOCORE */
 
 /*
  * SVM: Intercept codes (exit reasons)
@@ -261,6 +265,8 @@
 #define SVM_AVIC_NOACCEL			0x402
 #define SVM_VMEXIT_VMGEXIT			0x403
 #define SVM_VMEXIT_INVALID			-1
+
+#ifndef _LOCORE
 
 /*
  * Exception injection vectors (these correspond to the CPU exception types
@@ -1056,5 +1062,7 @@ int	vcpu_reset_regs(struct vcpu *, struct vcpu_reg_state *);
 int	svm_get_vmsa_pa(uint32_t, uint32_t, uint64_t *);
 
 #endif /* _KERNEL */
+
+#endif	/* ! _LOCORE */
 
 #endif /* ! _MACHINE_VMMVAR_H_ */

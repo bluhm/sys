@@ -62,3 +62,4 @@
 #define	T_XMM		19	/* SSE FP exception */
 #define	T_VE		20	/* virtualization exception */
 #define	T_CP		21	/* control protection exception */
+#define	T_VC		29	/* VMM communication exception */
