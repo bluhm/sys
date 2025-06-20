@@ -913,7 +913,7 @@ refcnt_take(struct refcnt *r)
 	u_int refs;
 
 	refs = atomic_inc_int_nv(&r->r_refs);
-	KASSERT(refs != 0);
+	KASSERT(refs > 1);
 	TRACEINDEX(refcnt, r->r_traceidx, r, refs - 1, +1);
 	(void)refs;
 }
