@@ -106,7 +106,7 @@
 
 #include "pf.h"
 #if NPF > 0
-#include <netinet6/ip6_divert.h>
+#include <netinet/ip_divert.h>
 #endif
 
 #include "etherip.h"

@@ -84,7 +84,6 @@
 #include <netinet6/ip6_var.h>
 #include <netinet/icmp6.h>
 #include <netinet6/nd6.h>
-#include <netinet6/ip6_divert.h>
 #endif /* INET6 */
 
 #include <net/pfvar.h>
