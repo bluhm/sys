@@ -1,4 +1,4 @@
-/*	$OpenBSD: vmmvar.h,v 1.114 2025/05/24 12:47:00 bluhm Exp $	*/
+/*	$OpenBSD: vmmvar.h,v 1.115 2025/06/23 11:33:39 bluhm Exp $	*/
 /*
  * Copyright (c) 2014 Mike Larkin <mlarkin@openbsd.org>
  *
