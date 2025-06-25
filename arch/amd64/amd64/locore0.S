@@ -348,8 +348,9 @@ cont:
 	/* Are we in guest mode with SEV enabled? */
 	movl	$MSR_SEV_STATUS, %ecx
 	rdmsr
-	andl	$SEV_STAT_ENABLED, %eax
+	testl	$SEV_STAT_ENABLED, %eax
 	jz	.Lno_sev
+	movl	%eax, RELOC(cpu_sev_guestmode)	/* we are a SEV-* guest */
 
 	/* Determine C bit position */
 	movl	%ebx, %ecx	/* %ebx from previous cpuid */
@@ -391,8 +392,6 @@ cont:
 
 	andl	%eax, RELOC(pg_frame + 4)	/* apply mask */
 	andl	%eax, RELOC(pg_lgframe + 4)
-
-	movl	$0x1, RELOC(cpu_sev_guestmode)	/* we are a SEV guest */
 
 .Lno_sev:
 
