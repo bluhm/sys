@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip6_input.c,v 1.275 2025/06/23 09:16:32 mvs Exp $	*/
+/*	$OpenBSD: ip6_input.c,v 1.278 2025/06/25 10:33:53 mvs Exp $	*/
 /*	$KAME: ip6_input.c,v 1.188 2001/03/29 05:34:31 itojun Exp $	*/
 
 /*
@@ -1450,13 +1450,13 @@ extern int ip6_mrtproto;
 const struct sysctl_bounded_args ipv6ctl_vars_unlocked[] = {
 	{ IPV6CTL_FORWARDING, &ip6_forwarding, 0, 2 },
 	{ IPV6CTL_SENDREDIRECTS, &ip6_sendredirects, 0, 1 },
-};
-
-const struct sysctl_bounded_args ipv6ctl_vars[] = {
 	{ IPV6CTL_DAD_PENDING, &ip6_dad_pending, SYSCTL_INT_READONLY },
 #ifdef MROUTING
 	{ IPV6CTL_MRTPROTO, &ip6_mrtproto, SYSCTL_INT_READONLY },
 #endif
+};
+
+const struct sysctl_bounded_args ipv6ctl_vars[] = {
 	{ IPV6CTL_DEFHLIM, &ip6_defhlim, 0, 255 },
 	{ IPV6CTL_MAXFRAGPACKETS, &ip6_maxfragpackets, 0, 1000 },
 	{ IPV6CTL_LOG_INTERVAL, &ip6_log_interval, 0, INT_MAX },
@@ -1494,19 +1494,14 @@ ip6_sysctl_ip6stat(void *oldp, size_t *oldlenp, void *newp)
 int
 ip6_sysctl_soiikey(void *oldp, size_t *oldlenp, void *newp, size_t newlen)
 {
-	uint8_t oldkey[IP6_SOIIKEY_LEN];
 	int error;
 
 	error = suser(curproc);
 	if (error != 0)
 		return (error);
 
-	memcpy(oldkey, ip6_soiikey, sizeof(oldkey));
-
-	error = sysctl_struct(oldp, oldlenp, newp, newlen, ip6_soiikey,
-	    sizeof(ip6_soiikey));
-
-	return (error);
+	return (sysctl_struct(oldp, oldlenp, newp, newlen, ip6_soiikey,
+	    sizeof(ip6_soiikey)));
 }
 
 int
@@ -1536,10 +1531,7 @@ ip6_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 	case IPV6CTL_MRTMFC:
 		if (newp)
 			return (EPERM);
-		NET_LOCK();
-		error = mrt6_sysctl_mfc(oldp, oldlenp);
-		NET_UNLOCK();
-		return (error);
+		return (mrt6_sysctl_mfc(oldp, oldlenp));
 #else
 	case IPV6CTL_MRTSTATS:
 	case IPV6CTL_MRTPROTO:
@@ -1581,6 +1573,10 @@ ip6_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 	}
 	case IPV6CTL_FORWARDING:
 	case IPV6CTL_SENDREDIRECTS:
+	case IPV6CTL_DAD_PENDING:
+#ifdef MROUTING
+	case IPV6CTL_MRTPROTO:
+#endif
 		return (sysctl_bounded_arr(
 		    ipv6ctl_vars_unlocked, nitems(ipv6ctl_vars_unlocked),
 		    name, namelen, oldp, oldlenp, newp, newlen));

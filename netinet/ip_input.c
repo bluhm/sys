@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_input.c,v 1.411 2025/06/23 09:16:32 mvs Exp $	*/
+/*	$OpenBSD: ip_input.c,v 1.415 2025/06/25 10:33:53 mvs Exp $	*/
 /*	$NetBSD: ip_input.c,v 1.30 1996/03/16 23:53:58 christos Exp $	*/
 
 /*
@@ -97,7 +97,7 @@ int	ipmultipath = 0;			/* [a] */
 int	ip_sendredirects = 1;			/* [a] */
 int	ip_dosourceroute = 0;			/* [a] */
 int	ip_defttl = IPDEFTTL;
-int	ip_mtudisc = 1;
+int	ip_mtudisc = 1;				/* [a] */
 int	ip_mtudisc_timeout = IPMTUDISCTIMEOUT;	/* [a] */
 int	ip_directedbcast = 0;			/* [a] */
 
@@ -116,17 +116,17 @@ const struct sysctl_bounded_args ipctl_vars_unlocked[] = {
 	{ IPCTL_FORWARDING, &ip_forwarding, 0, 2 },
 	{ IPCTL_SENDREDIRECTS, &ip_sendredirects, 0, 1 },
 	{ IPCTL_DIRECTEDBCAST, &ip_directedbcast, 0, 1 },
-};
-
-const struct sysctl_bounded_args ipctl_vars[] = {
 #ifdef MROUTING
 	{ IPCTL_MRTPROTO, &ip_mrtproto, SYSCTL_INT_READONLY },
 #endif
-	{ IPCTL_DEFTTL, &ip_defttl, 0, 255 },
 	{ IPCTL_IPPORT_FIRSTAUTO, &ipport_firstauto, 0, 65535 },
 	{ IPCTL_IPPORT_LASTAUTO, &ipport_lastauto, 0, 65535 },
 	{ IPCTL_IPPORT_HIFIRSTAUTO, &ipport_hifirstauto, 0, 65535 },
 	{ IPCTL_IPPORT_HILASTAUTO, &ipport_hilastauto, 0, 65535 },
+};
+
+const struct sysctl_bounded_args ipctl_vars[] = {
+	{ IPCTL_DEFTTL, &ip_defttl, 0, 255 },
 	{ IPCTL_IPPORT_MAXQUEUE, &ip_maxqueue, 0, 10000 },
 	{ IPCTL_MFORWARDING, &ipmforwarding, 0, 1 },
 	{ IPCTL_ARPTIMEOUT, &arpt_keep, 0, INT_MAX },
@@ -1743,12 +1743,18 @@ ip_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		return (sysctl_securelevel_int(oldp, oldlenp, newp, newlen,
 		    &ip_dosourceroute));
 	case IPCTL_MTUDISC:
-		NET_LOCK();
-		error = sysctl_int(oldp, oldlenp, newp, newlen, &ip_mtudisc);
-		if (ip_mtudisc == 0)
+		oldval = newval = atomic_load_int(&ip_mtudisc);
+		error = sysctl_int_bounded(oldp, oldlenp, newp, newlen,
+		    &newval, 0, 1);
+		if (error == 0 && oldval != newval &&
+		    oldval == atomic_cas_uint(&ip_mtudisc, oldval, newval) &&
+		    newval == 0) {
+			NET_LOCK();
 			rt_timer_queue_flush(&ip_mtudisc_timeout_q);
-		NET_UNLOCK();
-		return error;
+			NET_UNLOCK();
+		}
+
+		return (error);
 	case IPCTL_MTUDISCTIMEOUT:
 		oldval = newval = atomic_load_int(&ip_mtudisc_timeout);
 		error = sysctl_int_bounded(oldp, oldlenp, newp, newlen,
@@ -1798,10 +1804,7 @@ ip_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 	case IPCTL_MRTMFC:
 		if (newp)
 			return (EPERM);
-		NET_LOCK();
-		error = mrt_sysctl_mfc(oldp, oldlenp);
-		NET_UNLOCK();
-		return (error);
+		return (mrt_sysctl_mfc(oldp, oldlenp));
 	case IPCTL_MRTVIF:
 		if (newp)
 			return (EPERM);
@@ -1830,6 +1833,13 @@ ip_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 	case IPCTL_FORWARDING:
 	case IPCTL_SENDREDIRECTS:
 	case IPCTL_DIRECTEDBCAST:
+#ifdef MROUTING
+	case IPCTL_MRTPROTO:
+#endif
+	case IPCTL_IPPORT_FIRSTAUTO:
+	case IPCTL_IPPORT_LASTAUTO:
+	case IPCTL_IPPORT_HIFIRSTAUTO:
+	case IPCTL_IPPORT_HILASTAUTO:
 		return (sysctl_bounded_arr(
 		    ipctl_vars_unlocked, nitems(ipctl_vars_unlocked),
 		    name, namelen, oldp, oldlenp, newp, newlen));

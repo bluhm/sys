@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip6_mroute.c,v 1.147 2025/05/20 05:50:18 jan Exp $	*/
+/*	$OpenBSD: ip6_mroute.c,v 1.149 2025/06/25 10:33:53 mvs Exp $	*/
 /*	$NetBSD: ip6_mroute.c,v 1.59 2003/12/10 09:28:38 itojun Exp $	*/
 /*	$KAME: ip6_mroute.c,v 1.45 2001/03/25 08:38:51 itojun Exp $	*/
 
@@ -107,6 +107,11 @@
 #include <netinet6/ip6_mroute.h>
 #include <netinet/in_pcb.h>
 
+/*
+ * Locks used to protect data:
+ *	I	immutable after creation
+ */
+
 /* #define MCAST_DEBUG */
 
 #ifdef MCAST_DEBUG
@@ -132,7 +137,7 @@ void phyint_send6(struct ifnet *, struct ip6_hdr *, struct mbuf *, int);
 struct socket  *ip6_mrouter[RT_TABLEID_MAX + 1];
 struct rttimer_queue ip6_mrouterq;
 int		ip6_mrouter_ver = 0;
-int		ip6_mrtproto;    /* for netstat only */
+int		ip6_mrtproto;    /* [I] for netstat only */
 struct cpumem *mrt6counters;
 
 int get_sg6_cnt(struct sioc_sg_req6 *, unsigned int);
@@ -467,10 +472,12 @@ mrt6_sysctl_mfc(void *oldp, size_t *oldlenp)
 		msa.ms6a_len = *oldlenp;
 	}
 
+	NET_LOCK();
 	for (rtableid = 0; rtableid <= RT_TABLEID_MAX; rtableid++) {
 		rtable_walk(rtableid, AF_INET6, NULL, mrt6_rtwalk_mf6csysctl,
 		    &msa);
 	}
+	NET_UNLOCK();
 
 	if (msa.ms6a_minfos != NULL && msa.ms6a_needed > 0 &&
 	    (error = copyout(msa.ms6a_minfos, oldp, msa.ms6a_needed)) != 0) {
