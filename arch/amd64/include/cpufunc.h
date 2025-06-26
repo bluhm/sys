@@ -443,6 +443,7 @@ breakpoint(void)
 static __inline void
 vmgexit(void)
 {
+	/* rep; vmmcall encodes the vmgexit instruction */
 	__asm volatile("rep; vmmcall");
 }
 
