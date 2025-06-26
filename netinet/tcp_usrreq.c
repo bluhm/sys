@@ -1335,6 +1335,7 @@ tcp_sysctl_tcpstat(void *oldp, size_t *oldlenp, void *newp)
 	ASSIGN(tcps_preddat);
 	ASSIGN(tcps_pcbhashmiss);
 	ASSIGN(tcps_noport);
+	ASSIGN(tcps_closing);
 	ASSIGN(tcps_badsyn);
 	ASSIGN(tcps_dropsyn);
 	ASSIGN(tcps_rcvbadsig);
