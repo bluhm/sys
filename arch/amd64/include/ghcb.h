@@ -109,6 +109,9 @@ struct ghcb_sync {
 
 #ifndef _LOCORE
 
+extern vaddr_t ghcb_vaddr;
+extern paddr_t ghcb_paddr;
+
 void	ghcb_clear(struct ghcb_sa *);
 int	ghcb_valbm_set(uint8_t *, int);
 int	ghcb_valbm_isset(uint8_t *, int);

@@ -28,6 +28,9 @@ const uint64_t ghcb_sz_masks[] = {
     0x00000000ffffffffULL, 0xffffffffffffffffULL
 };
 
+vaddr_t ghcb_vaddr;
+paddr_t ghcb_paddr;
+
 /*
  * ghcb_clear
  *

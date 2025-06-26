@@ -151,6 +151,7 @@ struct region_descriptor {
 
 #ifdef _KERNEL
 extern struct gate_descriptor *idt;
+extern struct gate_descriptor early_idt[];
 
 void setgate(struct gate_descriptor *, void *, int, int, int, int);
 void unsetgate(struct gate_descriptor *);

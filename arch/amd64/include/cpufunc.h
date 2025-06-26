@@ -439,6 +439,13 @@ breakpoint(void)
 	__asm volatile("int $3");
 }
 
+/* VMGEXIT */
+static __inline void
+vmgexit(void)
+{
+	__asm volatile("rep; vmmcall");
+}
+
 void amd64_errata(struct cpu_info *);
 void cpu_ucode_setup(void);
 void cpu_ucode_apply(struct cpu_info *);

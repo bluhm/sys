@@ -513,6 +513,15 @@ END(alltraps_kern)
 END(alltraps_kern_meltdown)
 KTEXT_PAGE_END
 
+/* #VC trap entry for early bootstrap */
+IDTVEC(vctrap_early)
+	pushq	$T_VC
+	TRAP_ENTRY_KERN		/* early #VC has to be in kernel mode */
+	cld
+	movq	%rsp, %rdi
+	call	vctrap
+	movq	$0,-8(%rsp)
+	INTRFASTEXIT
 
 /*
  * Macros for interrupt entry, call to handler, and exit.
