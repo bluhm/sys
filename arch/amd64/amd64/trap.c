@@ -308,7 +308,7 @@ vctrap(struct trapframe *frame)
 	struct ghcb_sync syncout, syncin;
 	struct ghcb_sa	*ghcb;
 
-	intr_disable();
+	KASSERT(!ISSET(read_rflags(), PSL_I));
 
 	memset(&syncout, 0, sizeof(syncout));
 	memset(&syncin, 0, sizeof(syncin));
