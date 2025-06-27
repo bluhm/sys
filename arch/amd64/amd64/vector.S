@@ -1,4 +1,4 @@
-/*	$OpenBSD: vector.S,v 1.100 2025/04/23 15:08:05 visa Exp $	*/
+/*	$OpenBSD: vector.S,v 1.101 2025/06/27 17:23:49 bluhm Exp $	*/
 /*	$NetBSD: vector.S,v 1.5 2004/06/28 09:13:11 fvdl Exp $	*/
 
 /*

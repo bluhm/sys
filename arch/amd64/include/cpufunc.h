@@ -1,4 +1,4 @@
-/*	$OpenBSD: cpufunc.h,v 1.44 2025/05/05 23:02:39 guenther Exp $	*/
+/*	$OpenBSD: cpufunc.h,v 1.45 2025/06/27 17:23:49 bluhm Exp $	*/
 /*	$NetBSD: cpufunc.h,v 1.3 2003/05/08 10:27:43 fvdl Exp $	*/
 
 /*-
