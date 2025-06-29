@@ -447,6 +447,20 @@ vmgexit(void)
 	__asm volatile("rep; vmmcall");
 }
 
+/* Request VM termination from hypervisor. */
+static __inline void
+vmterminate(void)
+{
+	__asm volatile(
+		"	movl	$MSRPROTO_TERM_REQ, %%rdx	;"
+		"	movl	$MSR_SEV_GHCB, %%rcx		;"
+		"	wrmsr					;"
+		"	rep	vmmcall				;"
+		"1:	hlt					;"
+		"	jmp	1b				;"
+	    : :);
+}
+
 void amd64_errata(struct cpu_info *);
 void cpu_ucode_setup(void);
 void cpu_ucode_apply(struct cpu_info *);
