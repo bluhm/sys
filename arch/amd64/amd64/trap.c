@@ -97,7 +97,7 @@
 
 int	upageflttrap(struct trapframe *, uint64_t);
 int	kpageflttrap(struct trapframe *, uint64_t);
-int	vctrap(struct trapframe *);
+int	vctrap(struct trapframe *, int);
 void	kerntrap(struct trapframe *);
 void	usertrap(struct trapframe *);
 void	ast(struct trapframe *);
@@ -302,7 +302,7 @@ kpageflttrap(struct trapframe *frame, uint64_t cr2)
 }
 
 int
-vctrap(struct trapframe *frame)
+vctrap(struct trapframe *frame, int user)
 {
 	uint64_t	 sw_exitcode, sw_exitinfo1, sw_exitinfo2;
 	struct ghcb_sync syncout, syncin;
@@ -400,7 +400,7 @@ kerntrap(struct trapframe *frame)
 #endif /* NISA > 0 */
 
 	case T_VC:
-		if (vctrap(frame))
+		if (vctrap(frame, 0))
 			return;
 		goto we_re_toast;
 	}
@@ -483,9 +483,11 @@ usertrap(struct trapframe *frame)
 		    : ILL_BADSTK;
 		break;
 	case T_VC:
-		vctrap(frame);
-		goto out;
-
+		if (vctrap(frame, 1))
+			goto out;
+		sig = SIGILL;
+		code = ILL_PRVOPC;
+		break;
 	case T_PAGEFLT:			/* page fault */
 		if (!uvm_map_inentry(p, &p->p_spinentry, PROC_STACK(p),
 		    "[%s]%d/%d sp=%lx inside %lx-%lx: not MAP_STACK\n",
