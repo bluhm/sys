@@ -275,6 +275,8 @@ struct psp_snp_platform_status {
 #define PSP_IOC_SNP_GET_PSTATUS	_IOR('P', 11, struct psp_snp_platform_status)
 #define PSP_IOC_INIT		_IO('P', 12)
 #define PSP_IOC_SHUTDOWN	_IO('P', 13)
+#define PSP_IOC_LAUNCH_UPDATE_VMSA \
+				_IOW('P', 14, struct psp_launch_update_vmsa)
 #define PSP_IOC_ENCRYPT_STATE	_IOW('P', 254, struct psp_encrypt_state)
 #define PSP_IOC_GUEST_SHUTDOWN	_IOW('P', 255, struct psp_guest_shutdown)
 

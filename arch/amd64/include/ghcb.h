@@ -27,7 +27,6 @@
 #define GHCB_IDX(m)			(GHCB_OFFSET((m)) / 8)
 #define GHCB_BIT(m)			(GHCB_OFFSET((m)) % 8)
 
-#define GHCB_XSS			0x140
 #define GHCB_RAX			0x1F8
 #define GHCB_RBX			0x318
 #define GHCB_RCX			0x308
@@ -35,8 +34,6 @@
 #define GHCB_SW_EXITCODE		0x390
 #define GHCB_SW_EXITINFO1		0x398
 #define GHCB_SW_EXITINFO2		0x3A0
-#define GHCB_SW_SCRATCH			0x3A8
-#define GHCB_XCR0			0x3E8
 
 #define GHCB_MAX			0xFFF
 
@@ -115,8 +112,9 @@ extern paddr_t ghcb_paddr;
 void	ghcb_clear(struct ghcb_sa *);
 int	ghcb_valbm_set(uint8_t *, int);
 int	ghcb_valbm_isset(uint8_t *, int);
-int	ghcb_verify_bm(uint8_t *, uint8_t *);
 int	ghcb_valid(struct ghcb_sa *);
+int	ghcb_verify_bm(uint8_t *, uint8_t *);
+int	ghcb_verify_bm_guest(uint8_t *, uint8_t *);
 
 void	ghcb_sync_val(int, int, struct ghcb_sync *);
 void	ghcb_sync_out(struct trapframe *, uint64_t, uint64_t, uint64_t,

@@ -1587,15 +1587,15 @@ vcpu_reset_regs_svm(struct vcpu *vcpu, struct vcpu_reg_state *vrs)
 	    SVM_INTERCEPT_MWAIT_UNCOND | SVM_INTERCEPT_MONITOR |
 	    SVM_INTERCEPT_MWAIT_COND | SVM_INTERCEPT_RDTSCP;
 
-	/* With SEV-ES we cannot force access XCR0, thus no intercept */
-	if (xsave_mask && !vcpu->vc_seves)
+	if (xsave_mask && !vcpu->vc_seves)	/* XXX hshoexer */
 		vmcb->v_intercept2 |= SVM_INTERCEPT_XSETBV;
 
 	if (vcpu->vc_seves) {
-		/* With SEV-ES also intercept post EFER and CR[04] writes */
+		/* With SEV-ES also intercept post EFER and CR[048] writes */
 		vmcb->v_intercept2 |= SVM_INTERCEPT_EFER_WRITE;
 		vmcb->v_intercept2 |= SVM_INTERCEPT_CR0_WRITE_POST;
 		vmcb->v_intercept2 |= SVM_INTERCEPT_CR4_WRITE_POST;
+		vmcb->v_intercept2 |= SVM_INTERCEPT_CR8_WRITE_POST;
 	}
 
 	/* Setup I/O bitmap */
@@ -1616,22 +1616,13 @@ vcpu_reset_regs_svm(struct vcpu *vcpu, struct vcpu_reg_state *vrs)
 	svm_setmsrbrw(vcpu, MSR_FSBASE);
 	svm_setmsrbrw(vcpu, MSR_GSBASE);
 	svm_setmsrbrw(vcpu, MSR_KERNELGSBASE);
+	svm_setmsrbrw(vcpu, MSR_SEV_GHCB);
 
 	/* allow reading SEV status */
 	svm_setmsrbrw(vcpu, MSR_SEV_STATUS);
 
 	if (vcpu->vc_seves) {
-		/* Allow read/write GHCB guest physical address */
-		svm_setmsrbrw(vcpu, MSR_SEV_GHCB);
-
-		/* Allow reading MSR_XSS; for CPUID Extended State Enum. */
-		svm_setmsrbr(vcpu, MSR_XSS);
-
-		/*
-		 * With SEV-ES SVME can't be modified by the guest;
-		 * host can only intercept post-write (see
-		 * SVM_INTERCEPT_EFER_WRITE above).
-		 */
+		/* With SEV-ES SVME can not be modified by the guest */
 		svm_setmsrbrw(vcpu, MSR_EFER);
 	} else {
 		/* EFER is R/O so we can ensure the guest always has SVME */
@@ -1649,7 +1640,10 @@ vcpu_reset_regs_svm(struct vcpu *vcpu, struct vcpu_reg_state *vrs)
 	vmcb->v_asid = vcpu->vc_vpid;
 
 	/* TLB Control - First time in, flush all*/
-	vmcb->v_tlb_control = SVM_TLB_CONTROL_FLUSH_ALL;
+	if (vcpu->vc_seves)
+		vmcb->v_tlb_control = SVM_TLB_CONTROL_FLUSH_ASID; /* XXX hshoexer */
+	else
+		vmcb->v_tlb_control = SVM_TLB_CONTROL_FLUSH_ALL;
 
 	/* INTR masking */
 	vmcb->v_intr_masking = 1;
@@ -1675,13 +1669,23 @@ vcpu_reset_regs_svm(struct vcpu *vcpu, struct vcpu_reg_state *vrs)
 
 		/* Set VMSA. */
 		vmcb->v_vmsa_pa = vcpu->vc_svm_vmsa_pa;
+
+		/* XXX hshoexer: LBR: guest_state_protected flag? */
+		svm_setmsrbrw(vcpu, MSR_DEBUGCTLMSR);
+		svm_setmsrbrw(vcpu, MSR_LASTBRANCHFROMIP);
+		svm_setmsrbrw(vcpu, MSR_LASTBRANCHTOIP);
+		svm_setmsrbrw(vcpu, MSR_LASTINTFROMIP);
+		svm_setmsrbrw(vcpu, MSR_LASTINTTOIP);
+
+		/* XXX hshoexer: virt vmload/vmsave */
+		vmcb->v_lbr_virt_enable |= 0x2;
 	}
 
 	/* Enable SVME in EFER (must always be set) */
 	vmcb->v_efer |= EFER_SVME;
 
 	if ((ret = vcpu_writeregs_svm(vcpu, VM_RWREGS_ALL, vrs)) != 0)
-		return ret;
+		goto exit;
 
 	/* xcr0 power on default sets bit 0 (x87 state) */
 	vcpu->vc_gueststate.vg_xcr0 = XFEATURE_X87 & xsave_mask;
@@ -1690,6 +1694,7 @@ vcpu_reset_regs_svm(struct vcpu *vcpu, struct vcpu_reg_state *vrs)
 
 	ret = vcpu_svm_init_vmsa(vcpu, vrs);
 
+exit:
 	return ret;
 }
 
@@ -1707,6 +1712,9 @@ vcpu_svm_init_vmsa(struct vcpu *vcpu, struct vcpu_reg_state *vrs)
 
 	if (!vcpu->vc_seves)
 		return 0;
+
+	if (vmcb->v_dr7 & ~0x00000400)	/* XXX hshoexer? */
+		return 1;
 
 	vmsa = (struct vmsa *)vcpu->vc_svm_vmsa_va;
 	memcpy(vmsa, &vmcb->vmcb_layout, sizeof(vmcb->vmcb_layout));
@@ -2888,6 +2896,28 @@ vcpu_init_svm(struct vcpu *vcpu, struct vm_create_params *vcp)
 	    (uint64_t)vcpu->vc_svm_hsa_va,
 	    (uint64_t)vcpu->vc_svm_hsa_pa);
 
+
+	/* Allocate VM save area VA */
+	vcpu->vc_svm_vmsa_va = (vaddr_t)km_alloc(PAGE_SIZE, &kv_page,
+	   &kp_zero, &kd_waitok);
+
+	if (!vcpu->vc_svm_vmsa_va) {
+		ret = ENOMEM;
+		goto exit;
+	}
+
+	/* Compute VM save area PA */
+	if (!pmap_extract(pmap_kernel(), vcpu->vc_svm_vmsa_va,
+	    &vcpu->vc_svm_vmsa_pa)) {
+		ret = ENOMEM;
+		goto exit;
+	}
+
+	DPRINTF("%s: VMSA va @ 0x%llx, pa @ 0x%llx\n", __func__,
+	    (uint64_t)vcpu->vc_svm_vmsa_va,
+	    (uint64_t)vcpu->vc_svm_vmsa_pa);
+
+
 	/* Allocate IOIO area VA (3 pages) */
 	vcpu->vc_svm_ioio_va = (vaddr_t)km_alloc(3 * PAGE_SIZE, &kv_any,
 	   &vmm_kp_contig, &kd_waitok);
@@ -2908,27 +2938,9 @@ vcpu_init_svm(struct vcpu *vcpu, struct vm_create_params *vcp)
 	    (uint64_t)vcpu->vc_svm_ioio_va,
 	    (uint64_t)vcpu->vc_svm_ioio_pa);
 
-	if (vcpu->vc_seves) {
-		/* Allocate VM save area VA */
-		vcpu->vc_svm_vmsa_va = (vaddr_t)km_alloc(PAGE_SIZE, &kv_page,
-		   &kp_zero, &kd_waitok);
-
-		if (!vcpu->vc_svm_vmsa_va) {
-			ret = ENOMEM;
-			goto exit;
-		}
-
-		/* Compute VM save area PA */
-		if (!pmap_extract(pmap_kernel(), vcpu->vc_svm_vmsa_va,
-		    &vcpu->vc_svm_vmsa_pa)) {
-			ret = ENOMEM;
-			goto exit;
-		}
-
-		DPRINTF("%s: VMSA va @ 0x%llx, pa @ 0x%llx\n", __func__,
-		    (uint64_t)vcpu->vc_svm_vmsa_va,
-		    (uint64_t)vcpu->vc_svm_vmsa_pa);
-	}
+	/* Shall we enable SEV? */
+	vcpu->vc_sev = vcp->vcp_sev;
+	vcpu->vc_seves = vcp->vcp_seves;
 
 	/* Inform vmd(8) about ASID and C bit position. */
 	vcp->vcp_poscbit = amd64_pos_cbit;
@@ -4284,6 +4296,7 @@ svm_handle_exit(struct vcpu *vcpu)
 	case SVM_VMEXIT_EFER_WRITE_TRAP:
 	case SVM_VMEXIT_CR0_WRITE_TRAP:
 	case SVM_VMEXIT_CR4_WRITE_TRAP:
+	case SVM_VMEXIT_CR8_WRITE_TRAP:
 		ret = svm_handle_efercr(vcpu, exit_reason);
 		update_rip = 0;
 		break;
@@ -4329,8 +4342,10 @@ svm_vmgexit_sync_host(struct vcpu *vcpu)
 	if (!vcpu->vc_seves)
 		return (0);
 
-	if (vcpu->vc_svm_ghcb_va == 0)
+	if (vcpu->vc_svm_ghcb_va == 0) {
+		printf("%s: GHCB not set\n", __func__);
 		return (0);
+	}
 
 	ghcb = (struct ghcb_sa *)vcpu->vc_svm_ghcb_va;
 	if (!ghcb_valid(ghcb))
@@ -4606,6 +4621,8 @@ svm_handle_efercr(struct vcpu *vcpu, uint64_t exit_reason)
 		break;
 	case SVM_VMEXIT_CR4_WRITE_TRAP:
 		vmcb->v_cr4 = vmcb->v_exitinfo1;
+		break;
+		/* XXX hshoexer: no state for CR8? */
 		break;
 	default:
 		return (EINVAL);
@@ -6766,6 +6783,8 @@ vcpu_run_svm(struct vcpu *vcpu, struct vm_run_params *vrp)
 		 * On exit, interrupts are disabled, and we are running with
 		 * the guest FPU state still possibly on the CPU. Save the FPU
 		 * state before re-enabling interrupts.
+		 *
+		 * XXX hshoexer:  With SEV-ES we should be able to skip this.
 		 */
 		vmm_fpusave(vcpu);
 
@@ -7361,7 +7380,7 @@ svm_get_vmsa_pa(uint32_t vmid, uint32_t vcpuid, uint64_t *vmsapa)
 		return (error);
 
 	vcpu = vm_find_vcpu(vm, vcpuid);
-	if (vcpu == NULL || !vcpu->vc_seves) {
+	if (vcpu == NULL) {
 		ret = ENOENT;
 		goto out;
 	}
