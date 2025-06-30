@@ -67,6 +67,7 @@ int cpuspeed;
 
 int amd64_has_xcrypt;
 int amd64_pos_cbit;	/* C bit position for SEV */
+/* Minimum ASID value for an SEV enabled, SEV-ES disabled guest. */
 int amd64_min_noes_asid;
 int has_rdrand;
 int has_rdseed;

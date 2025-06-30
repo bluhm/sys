@@ -861,6 +861,10 @@ pspioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 		error = psp_launch_update_data(sc,
 		    (struct psp_launch_update_data *)data, p);
 		break;
+	case PSP_IOC_LAUNCH_UPDATE_VMSA:
+		error = psp_launch_update_vmsa(sc,
+		    (struct psp_launch_update_vmsa *)data);
+		break;
 	case PSP_IOC_LAUNCH_MEASURE:
 		error = psp_launch_measure(sc,
 		    (struct psp_launch_measure *)data);

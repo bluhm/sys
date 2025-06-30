@@ -445,7 +445,7 @@ vctrap(struct trapframe *frame, int user)
 	vmgexit();
 
 	/* Verify response */
-	if (ghcb_verify_bm(ghcb->valid_bitmap, syncin.valid_bitmap)) {
+	if (ghcb_verify_bm_guest(ghcb->valid_bitmap, syncin.valid_bitmap)) {
 		ghcb_clear(ghcb);
 		panic("invalid hypervisor response");
 	}
@@ -455,7 +455,6 @@ vctrap(struct trapframe *frame, int user)
 
 	return 1;
 }
-
 
 /*
  * kerntrap(frame):

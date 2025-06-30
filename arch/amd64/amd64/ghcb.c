@@ -110,12 +110,27 @@ ghcb_valid(struct ghcb_sa *ghcb)
 /*
  * ghcb_verify_bm
  *
- * To be verified positive, the given expected bitmap must be at
- * least a subset of the provided valid bitmap.
- * Used by host and guest.
+ * To be verified positive, the given valid bitmap must exactly
+ * match the expected bitmap.
+ * Used by host only.
  */
 int
 ghcb_verify_bm(uint8_t *valid_bm, uint8_t *expected_bm)
+{
+	return (memcmp(valid_bm, expected_bm, GHCB_VB_SZ));
+}
+
+/*
+ * ghcb_verify_bm_guest
+ *
+ * To be verified positive, the given expected bitmap must be at
+ * least a subset of the provided valid bitmap. This ensures, the
+ * host provides at least the information requested by the guest.
+ * Used by guest only.
+ * This is required for running on a Linux/KVM host.
+ */
+int
+ghcb_verify_bm_guest(uint8_t *valid_bm, uint8_t *expected_bm)
 {
 	return ((ghcb_valbm_isset(expected_bm, GHCB_RAX) &&
 	    !ghcb_valbm_isset(valid_bm, GHCB_RAX)) ||
@@ -125,18 +140,10 @@ ghcb_verify_bm(uint8_t *valid_bm, uint8_t *expected_bm)
 	    !ghcb_valbm_isset(valid_bm, GHCB_RCX)) ||
 	    (ghcb_valbm_isset(expected_bm, GHCB_RDX) &&
 	    !ghcb_valbm_isset(valid_bm, GHCB_RDX)) ||
-	    (ghcb_valbm_isset(expected_bm, GHCB_SW_EXITCODE) &&
-	    !ghcb_valbm_isset(valid_bm, GHCB_SW_EXITCODE)) ||
 	    (ghcb_valbm_isset(expected_bm, GHCB_SW_EXITINFO1) &&
 	    !ghcb_valbm_isset(valid_bm, GHCB_SW_EXITINFO1)) ||
 	    (ghcb_valbm_isset(expected_bm, GHCB_SW_EXITINFO2) &&
-	    !ghcb_valbm_isset(valid_bm, GHCB_SW_EXITINFO2)) ||
-	    (ghcb_valbm_isset(expected_bm, GHCB_SW_SCRATCH) &&
-	    !ghcb_valbm_isset(valid_bm, GHCB_SW_SCRATCH)) ||
-	    (ghcb_valbm_isset(expected_bm, GHCB_XCR0) &&
-	    !ghcb_valbm_isset(valid_bm, GHCB_XCR0)) ||
-	    (ghcb_valbm_isset(expected_bm, GHCB_XSS) &&
-	    !ghcb_valbm_isset(valid_bm, GHCB_XSS)));
+	    !ghcb_valbm_isset(valid_bm, GHCB_SW_EXITINFO2)));
 }
 
 /*

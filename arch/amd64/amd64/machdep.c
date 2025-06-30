@@ -502,6 +502,7 @@ const struct sysctl_bounded_args cpuctl_vars[] = {
 	{ CPU_XCRYPT, &amd64_has_xcrypt, SYSCTL_INT_READONLY },
 	{ CPU_INVARIANTTSC, &tsc_is_invariant, SYSCTL_INT_READONLY },
 	{ CPU_RETPOLINE, &need_retpoline, SYSCTL_INT_READONLY },
+	{ CPU_SEVGUESTMODE, &cpu_sev_guestmode, SYSCTL_INT_READONLY },
 };
 
 /*
@@ -1323,6 +1324,8 @@ cpu_init_early_vctrap(paddr_t addr)
 {
 	struct region_descriptor region;
 
+	extern struct region_descriptor gdt64;
+	extern struct gate_descriptor early_idt[NIDT];
 	extern void Xvctrap_early(void);
 
 	/* Setup temporary "early" longmode GDT, will be reset soon */
@@ -1340,6 +1343,8 @@ cpu_init_early_vctrap(paddr_t addr)
 	setgate(&idt[T_VC], Xvctrap_early, 0, SDT_SYS386IGT, SEL_KPL,
 	    GSEL(GCODE_SEL, SEL_KPL));
 	cpu_init_idt();
+	setregion(&region, early_idt, NIDT * sizeof(idt[0]) - 1);
+	lidt(&region);
 
 	/* Tell vmm(4) about our GHCB. */
 	ghcb_paddr = addr;
