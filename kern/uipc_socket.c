@@ -1409,8 +1409,8 @@ sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
 	/* Splice so and sosp together. */
 	mtx_enter(&so->so_rcv.sb_mtx);
 	mtx_enter(&sosp->so_snd.sb_mtx);
-	so->so_sp->ssp_socket = sosp;
-	sosp->so_sp->ssp_soback = so;
+	so->so_sp->ssp_socket = soref(sosp);
+	sosp->so_sp->ssp_soback = soref(so);
 	mtx_leave(&sosp->so_snd.sb_mtx);
 	mtx_leave(&so->so_rcv.sb_mtx);
 
@@ -1448,6 +1448,8 @@ sounsplice(struct socket *so, struct socket *sosp, int freeing)
 	mtx_enter(&sosp->so_snd.sb_mtx);
 	so->so_rcv.sb_flags &= ~SB_SPLICE;
 	sosp->so_snd.sb_flags &= ~SB_SPLICE;
+	KASSERT(so->so_sp->ssp_socket == sosp);
+	KASSERT(sosp->so_sp->ssp_soback == so);
 	so->so_sp->ssp_socket = sosp->so_sp->ssp_soback = NULL;
 	mtx_leave(&sosp->so_snd.sb_mtx);
 	mtx_leave(&so->so_rcv.sb_mtx);
@@ -1473,6 +1475,9 @@ sounsplice(struct socket *so, struct socket *sosp, int freeing)
 			sowwakeup(sosp);
 		sounlock_shared(sosp);
 	}
+
+	sorele(sosp);
+	sorele(so);
 }
 
 void
