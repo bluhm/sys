@@ -553,6 +553,7 @@ IDTVEC(vctrap_early)
 	TRAP_ENTRY_KERN		/* early #VC has to be in kernel mode */
 	cld
 	movq	%rsp, %rdi
+	movq	$0x0, %rsi
 	call	vctrap
 	movq	$0,-8(%rsp)
 	INTRFASTEXIT
