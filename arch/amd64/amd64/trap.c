@@ -1,4 +1,4 @@
-/*	$OpenBSD: trap.c,v 1.109 2025/06/30 13:27:28 bluhm Exp $	*/
+/*	$OpenBSD: trap.c,v 1.110 2025/07/02 21:28:46 bluhm Exp $	*/
 /*	$NetBSD: trap.c,v 1.2 2003/05/04 23:51:56 fvdl Exp $	*/
 
 /*-
