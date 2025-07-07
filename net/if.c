@@ -239,7 +239,7 @@ struct softnet {
 	struct taskq	*sn_taskq;
 	struct netstack	 sn_netstack;
 } __aligned(64);
-#define NET_TASKQ	4
+#define NET_TASKQ	12
 struct softnet	softnets[NET_TASKQ];
 
 struct task	if_input_task_locked = TASK_INITIALIZER(if_netisr, NULL);
