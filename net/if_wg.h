@@ -46,6 +46,7 @@ struct wg_aip_io {
 	sa_family_t	 a_af;
 	int		 a_cidr;
 	union wg_aip_addr {
+		uint8_t			addr_bytes;
 		struct in_addr		addr_ipv4;
 		struct in6_addr		addr_ipv6;
 	}		 a_addr;

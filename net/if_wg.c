@@ -31,6 +31,7 @@
 #include <sys/ioctl.h>
 #include <sys/mbuf.h>
 #include <sys/syslog.h>
+#include <sys/smr.h>
 
 #include <net/if.h>
 #include <net/if_var.h>
@@ -251,10 +252,11 @@ struct wg_softc {
 	struct socket		*sc_so6;
 #endif
 
+	struct rwlock		 sc_aip_lock;
 	size_t			 sc_aip_num;
-	struct art_root		*sc_aip4;
+	struct art		*sc_aip4;
 #ifdef INET6
-	struct art_root		*sc_aip6;
+	struct art		*sc_aip6;
 #endif
 
 	struct rwlock		 sc_peer_lock;
@@ -290,7 +292,7 @@ void	wg_peer_counters_add(struct wg_peer *, uint64_t, uint64_t);
 
 int	wg_aip_add(struct wg_softc *, struct wg_peer *, struct wg_aip_io *);
 struct wg_peer *
-	wg_aip_lookup(struct art_root *, void *);
+	wg_aip_lookup(struct art *, void *);
 int	wg_aip_remove(struct wg_softc *, struct wg_peer *,
 	    struct wg_aip_io *);
 
@@ -609,7 +611,7 @@ wg_peer_counters_add(struct wg_peer *peer, uint64_t tx, uint64_t rx)
 int
 wg_aip_add(struct wg_softc *sc, struct wg_peer *peer, struct wg_aip_io *d)
 {
-	struct art_root	*root;
+	struct art	*root;
 	struct art_node	*node;
 	struct wg_aip	*aip;
 	int		 ret = 0;
@@ -625,8 +627,10 @@ wg_aip_add(struct wg_softc *sc, struct wg_peer *peer, struct wg_aip_io *d)
 	if ((aip = pool_get(&wg_aip_pool, PR_NOWAIT|PR_ZERO)) == NULL)
 		return ENOBUFS;
 
-	rw_enter_write(&root->ar_lock);
-	node = art_insert(root, &aip->a_node, &d->a_addr, d->a_cidr);
+	art_node_init(&aip->a_node, &d->a_addr.addr_bytes, d->a_cidr);
+
+	rw_enter_write(&sc->sc_aip_lock);
+	node = art_insert(root, &aip->a_node);
 
 	if (node == &aip->a_node) {
 		aip->a_peer = peer;
@@ -642,18 +646,18 @@ wg_aip_add(struct wg_softc *sc, struct wg_peer *peer, struct wg_aip_io *d)
 			aip->a_peer = peer;
 		}
 	}
-	rw_exit_write(&root->ar_lock);
+	rw_exit_write(&sc->sc_aip_lock);
 	return ret;
 }
 
 struct wg_peer *
-wg_aip_lookup(struct art_root *root, void *addr)
+wg_aip_lookup(struct art *root, void *addr)
 {
-	struct srp_ref	 sr;
 	struct art_node	*node;
 
-	node = art_match(root, addr, &sr);
-	srp_leave(&sr);
+	smr_read_enter();
+	node = art_match(root, addr);
+	smr_read_leave();
 
 	return node == NULL ? NULL : ((struct wg_aip *) node)->a_peer;
 }
@@ -661,8 +665,7 @@ wg_aip_lookup(struct art_root *root, void *addr)
 int
 wg_aip_remove(struct wg_softc *sc, struct wg_peer *peer, struct wg_aip_io *d)
 {
-	struct srp_ref	 sr;
-	struct art_root	*root;
+	struct art	*root;
 	struct art_node	*node;
 	struct wg_aip	*aip;
 	int		 ret = 0;
@@ -675,23 +678,24 @@ wg_aip_remove(struct wg_softc *sc, struct wg_peer *peer, struct wg_aip_io *d)
 	default: return EAFNOSUPPORT;
 	}
 
-	rw_enter_write(&root->ar_lock);
-	if ((node = art_lookup(root, &d->a_addr, d->a_cidr, &sr)) == NULL) {
+	rw_enter_write(&sc->sc_aip_lock);
+	smr_read_enter();
+	node = art_lookup(root, &d->a_addr, d->a_cidr);
+	smr_read_leave();
+	if (node == NULL) {
 		ret = ENOENT;
 	} else if (((struct wg_aip *) node)->a_peer != peer) {
 		ret = EXDEV;
 	} else {
 		aip = (struct wg_aip *)node;
-		if (art_delete(root, node, &d->a_addr, d->a_cidr) == NULL)
+		if (art_delete(root, &d->a_addr, d->a_cidr) == NULL)
 			panic("art_delete failed to delete node %p", node);
 
 		sc->sc_aip_num--;
 		LIST_REMOVE(aip, a_entry);
 		pool_put(&wg_aip_pool, aip);
 	}
-
-	srp_leave(&sr);
-	rw_exit_write(&root->ar_lock);
+	rw_exit_write(&sc->sc_aip_lock);
 	return ret;
 }
 
@@ -2726,10 +2730,11 @@ wg_clone_create(struct if_clone *ifc, int unit)
 #endif
 
 	sc->sc_aip_num = 0;
-	if ((sc->sc_aip4 = art_alloc(0, 32, 0)) == NULL)
+	rw_init(&sc->sc_aip_lock, "wgaip");
+	if ((sc->sc_aip4 = art_alloc(32)) == NULL)
 		goto ret_02;
 #ifdef INET6
-	if ((sc->sc_aip6 = art_alloc(0, 128, 0)) == NULL)
+	if ((sc->sc_aip6 = art_alloc(128)) == NULL)
 		goto ret_03;
 #endif
 

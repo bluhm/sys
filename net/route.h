@@ -40,7 +40,7 @@
  *	I	immutable after creation
  *	N	net lock
  *	X	exclusive net lock, or shared net lock + kernel lock
- *	R	art (rtable) lock
+ *	R	rtable lock
  *	r	per route entry mutex	rt_mtx
  *	L	arp/nd6/etc lock for updates, net lock for reads
  *	T	rttimer_mtx		route timer lists
@@ -117,7 +117,7 @@ struct rttimer;
 
 struct rtentry {
 	struct sockaddr	*rt_dest;	/* [I] destination */
-	SRPL_ENTRY(rtentry) rt_next;	/* [R] next mpath entry to our dst */
+	struct rtentry	*rt_next;	/* [R] next mpath entry to our dst */
 	struct sockaddr	*rt_gateway;	/* [X] gateway address */
 	struct ifaddr	*rt_ifa;	/* [N] interface addr to use */
 	caddr_t		 rt_llinfo;	/* [L] pointer to link level info or
