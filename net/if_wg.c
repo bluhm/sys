@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_wg.c,v 1.42 2025/04/17 12:42:50 tb Exp $ */
+/*	$OpenBSD: if_wg.c,v 1.44 2025/07/07 07:09:05 dlg Exp $ */
 
 /*
  * Copyright (C) 2015-2020 Jason A. Donenfeld <Jason@zx2c4.com>. All Rights Reserved.
@@ -41,7 +41,6 @@
 #include <net/wg_cookie.h>
 
 #include <net/pfvar.h>
-#include <net/route.h>
 #include <net/bpf.h>
 #include <net/art.h>
 
@@ -2726,10 +2725,10 @@ wg_clone_create(struct if_clone *ifc, int unit)
 #endif
 
 	sc->sc_aip_num = 0;
-	if ((sc->sc_aip4 = art_alloc(0, 32, 0)) == NULL)
+	if ((sc->sc_aip4 = art_alloc(0, 32)) == NULL)
 		goto ret_02;
 #ifdef INET6
-	if ((sc->sc_aip6 = art_alloc(0, 128, 0)) == NULL)
+	if ((sc->sc_aip6 = art_alloc(0, 128)) == NULL)
 		goto ret_03;
 #endif
 

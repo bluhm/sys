@@ -1,4 +1,4 @@
-/*	$OpenBSD: rtable.h,v 1.30 2024/05/13 01:15:53 jsg Exp $ */
+/*	$OpenBSD: rtable.h,v 1.33 2025/07/07 07:09:05 dlg Exp $ */
 
 /*
  * Copyright (c) 2014-2016 Martin Pieuchot
@@ -18,6 +18,21 @@
 
 #ifndef	_NET_RTABLE_H_
 #define	_NET_RTABLE_H_
+
+struct art_root;
+
+/*
+ *  Locks used to protect struct members in this file:
+ *	I	immutable after creation
+ *	N	net lock
+ */
+
+struct rtable {
+	struct art_root		*r_art;		/* [I] */
+	unsigned int		 r_off;		/* [I] Offset of key in bytes */
+
+	struct sockaddr		*r_source;	/* [N] use optional src addr */
+};
 
 /*
  * Newer routing table implementation based on ART (Allotment Routing

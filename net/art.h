@@ -1,4 +1,4 @@
-/* $OpenBSD: art.h,v 1.25 2023/11/11 12:17:50 bluhm Exp $ */
+/* $OpenBSD: art.h,v 1.27 2025/07/07 07:09:05 dlg Exp $ */
 
 /*
  * Copyright (c) 2015 Martin Pieuchot
@@ -40,8 +40,6 @@ struct art_root {
 	uint8_t			 ar_bits[ART_MAXLVL]; /* [I] Per level stride */
 	uint8_t			 ar_nlvl;	/* [I] Number of levels */
 	uint8_t			 ar_alen;	/* [I] Address length in bits */
-	uint8_t			 ar_off;	/* [I] Offset of key in bytes */
-	struct sockaddr		*ar_source;	/* [N] use optional src addr */
 };
 
 #define ISLEAF(e)	(((unsigned long)(e) & 1) == 0)
@@ -95,7 +93,7 @@ struct art_node {
 #define an_gc		an_pointer.an__gc
 
 void		 art_init(void);
-struct art_root *art_alloc(unsigned int, unsigned int, unsigned int);
+struct art_root *art_alloc(unsigned int, unsigned int);
 struct art_node *art_insert(struct art_root *, struct art_node *, const void *,
 		     int);
 struct art_node *art_delete(struct art_root *, struct art_node *, const void *,
