@@ -1470,9 +1470,10 @@ init_x86_64(paddr_t first_avail)
 	/*
 	 * locore0 mapped 2 pages for use as GHCB before pmap is initialized.
 	 */
-	if (ISSET(cpu_sev_guestmode, SEV_STAT_ES_ENABLED))
+	if (ISSET(cpu_sev_guestmode, SEV_STAT_ES_ENABLED)) {
 		cpu_init_early_vctrap(first_avail);
-	first_avail += 2 * NBPG;
+		first_avail += 2 * NBPG;
+	}
 
 	/*
 	 * locore0 mapped 3 pages for use before the pmap is initialized
