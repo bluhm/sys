@@ -589,11 +589,6 @@ in_pcbdetach(struct inpcb *inp)
 	soassertlocked(so);
 
 	so->so_pcb = NULL;
-	/*
-	 * As long as the NET_LOCK() is the default lock for Internet
-	 * sockets, do not release it to not introduce new sleeping
-	 * points.
-	 */
 	sofree(so, 1);
 	if (inp->inp_route.ro_rt) {
 		rtfree(inp->inp_route.ro_rt);
