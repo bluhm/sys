@@ -1,4 +1,4 @@
-/*	$OpenBSD: ghcb.c,v 1.3 2025/07/04 10:11:28 jsg Exp $	*/
+/*	$OpenBSD: ghcb.c,v 1.4 2025/07/14 22:14:20 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2024, 2025 Hans-Joerg Hoexer <hshoexer@genua.de>
