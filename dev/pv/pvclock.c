@@ -27,6 +27,7 @@
 
 #include <machine/cpu.h>
 #include <machine/atomic.h>
+#include <machine/ghcb.h>
 #include <uvm/uvm_extern.h>
 
 #include <dev/pv/pvvar.h>
@@ -201,7 +202,11 @@ pvclock_attach(struct device *parent, struct device *self, void *aux)
 	pmap_update(pmap_kernel());
 	memset(sc->sc_page, 0, PAGE_SIZE);
 
-	wrmsr(KVM_MSR_SYSTEM_TIME, pa | PVCLOCK_SYSTEM_TIME_ENABLE);
+	if (ISSET(cpu_sev_guestmode, SEV_STAT_ES_ENABLED))
+		ghcb_wrmsr(KVM_MSR_SYSTEM_TIME,
+		    pa | PVCLOCK_SYSTEM_TIME_ENABLE);
+	else
+		wrmsr(KVM_MSR_SYSTEM_TIME, pa | PVCLOCK_SYSTEM_TIME_ENABLE);
 	sc->sc_paddr = pa;
 
 	ti = &sc->sc_page->ti;
@@ -261,10 +266,22 @@ pvclock_activate(struct device *self, int act)
 
 	switch (act) {
 	case DVACT_POWERDOWN:
-		wrmsr(KVM_MSR_SYSTEM_TIME, pa & ~PVCLOCK_SYSTEM_TIME_ENABLE);
+		if (ISSET(cpu_sev_guestmode, SEV_STAT_ES_ENABLED)) {
+			ghcb_wrmsr(KVM_MSR_SYSTEM_TIME,
+			    pa & ~PVCLOCK_SYSTEM_TIME_ENABLE);
+		} else {
+			wrmsr(KVM_MSR_SYSTEM_TIME,
+			    pa & ~PVCLOCK_SYSTEM_TIME_ENABLE);
+		}
 		break;
 	case DVACT_RESUME:
-		wrmsr(KVM_MSR_SYSTEM_TIME, pa | PVCLOCK_SYSTEM_TIME_ENABLE);
+		if (ISSET(cpu_sev_guestmode, SEV_STAT_ES_ENABLED)) {
+			ghcb_wrmsr(KVM_MSR_SYSTEM_TIME,
+			    pa | PVCLOCK_SYSTEM_TIME_ENABLE);
+		} else {
+			wrmsr(KVM_MSR_SYSTEM_TIME,
+			    pa | PVCLOCK_SYSTEM_TIME_ENABLE);
+		}
 		break;
 	}
 
@@ -369,7 +386,13 @@ pvclock_tick(void *arg)
 	struct pvclock_wall_clock	*wc = &sc->sc_page->wc;
 	int64_t				 value;
 
-	wrmsr(KVM_MSR_WALL_CLOCK, sc->sc_paddr + offsetof(struct pvpage, wc));
+	if (ISSET(cpu_sev_guestmode, SEV_STAT_ES_ENABLED)) {
+		ghcb_wrmsr(KVM_MSR_WALL_CLOCK,
+		    sc->sc_paddr + offsetof(struct pvpage, wc));
+	} else {
+		wrmsr(KVM_MSR_WALL_CLOCK,
+		    sc->sc_paddr + offsetof(struct pvpage, wc));
+	}
 	while (wc->wc_version & 0x1)
 		virtio_membar_sync();
 	if (wc->wc_sec) {

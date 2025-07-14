@@ -47,6 +47,7 @@
 #include <machine/mpbiosvar.h>
 #include <machine/specialreg.h>
 #include <machine/segments.h>
+#include <machine/ghcb.h>
 
 #include <machine/i82489reg.h>
 #include <machine/i82489var.h>
@@ -99,6 +100,7 @@ struct pic local_pic = {
 };
 
 extern int x2apic_eoi;
+extern int ghcb_x2apic_eoi;
 int x2apic_enabled = 0;
 
 u_int32_t x2apic_readreg(int reg);
@@ -152,6 +154,10 @@ x2apic_cpu_number(void)
 void
 x2apic_writereg(int reg, u_int32_t val)
 {
+	if (ISSET(cpu_sev_guestmode, SEV_STAT_ES_ENABLED)) {
+		ghcb_wrmsr(MSR_X2APIC_BASE + (reg >> 4), val);
+		return;
+	}
 	wrmsr(MSR_X2APIC_BASE + (reg >> 4), val);
 }
 
@@ -208,7 +214,10 @@ lapic_map(paddr_t lapic_base)
 		x86_ipi = x2apic_ipi;
 #endif
 		x2apic_enabled = 1;
-		codepatch_call(CPTAG_EOI, &x2apic_eoi);
+		if (ISSET(cpu_sev_guestmode, SEV_STAT_ES_ENABLED))
+			codepatch_call(CPTAG_EOI, &ghcb_x2apic_eoi);
+		else
+			codepatch_call(CPTAG_EOI, &x2apic_eoi);
 
 		lapic_writereg(LAPIC_TPRI, tpr);
 		va = (vaddr_t)&local_apic;

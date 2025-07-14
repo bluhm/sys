@@ -590,6 +590,21 @@ KUENTRY(x2apic_eoi)
 	lfence
 END(x2apic_eoi)
 
+NENTRY(ghcb_x2apic_eoi)
+	cld
+	pushq	%rdi
+	pushq	%rsi
+	movq	$MSR_X2APIC_EOI,%rdi
+	movq	$0,%rsi
+	call	ghcb_wrmsr
+	movq	$0,-8(%rsp)
+	popq	%rsi
+	popq	%rdi
+	ret
+	lfence
+END(x2apic_eoi_ghcb)
+
+
 #if NLAPIC > 0
 #ifdef MULTIPROCESSOR
 KIDTVEC(recurse_lapic_ipi)

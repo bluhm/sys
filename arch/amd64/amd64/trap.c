@@ -306,7 +306,6 @@ vctrap(struct trapframe *frame, int user)
 {
 	uint64_t	 sw_exitcode, sw_exitinfo1, sw_exitinfo2;
 	uint8_t		*rip = (uint8_t *)(frame->tf_rip);
-	uint16_t	 port;
 	struct ghcb_sync syncout, syncin;
 	struct ghcb_sa	*ghcb;
 
@@ -333,6 +332,16 @@ vctrap(struct trapframe *frame, int user)
 	case SVM_VMEXIT_CPUID:
 		ghcb_sync_val(GHCB_RAX, GHCB_SZ32, &syncout);
 		ghcb_sync_val(GHCB_RCX, GHCB_SZ32, &syncout);
+
+		/*
+		 * For Extended State Enumeration we have to forward
+		 * XCRO and XSS.
+		 */
+		if ((uint32_t)frame->tf_rax == 0xd) {
+			ghcb_sync_val(GHCB_XSS, GHCB_SZ64, &syncout);
+			ghcb_sync_val(GHCB_XCR0, GHCB_SZ64, &syncout);
+		}
+
 		ghcb_sync_val(GHCB_RAX, GHCB_SZ32, &syncin);
 		ghcb_sync_val(GHCB_RBX, GHCB_SZ32, &syncin);
 		ghcb_sync_val(GHCB_RCX, GHCB_SZ32, &syncin);
@@ -358,75 +367,6 @@ vctrap(struct trapframe *frame, int user)
 		frame->tf_rip += 2;
 		break;
 	    }
-	case SVM_VMEXIT_IOIO: {
-		if (user)
-			return 0;	/* not allowed from userspace */
-		switch (*rip) {
-		case 0x66: {
-			switch (*(rip + 1)) {
-			case 0xef:	/* out %ax,(%dx) */
-				ghcb_sync_val(GHCB_RAX, GHCB_SZ16, &syncout);
-				port = (uint16_t)frame->tf_rdx;
-				sw_exitinfo1 = (port << 16) |
-				    (1ULL << 5);
-				frame->tf_rip += 2;
-				break;
-			case 0xed:	/* in (%dx),%ax */
-				ghcb_sync_val(GHCB_RAX, GHCB_SZ16, &syncin);
-				port = (uint16_t)frame->tf_rdx;
-				sw_exitinfo1 = (port << 16) |
-				    (1ULL << 5) | (1ULL << 0);
-				frame->tf_rip += 2;
-				break;
-			default:
-				panic("failed to decode prefixed IOIO");
-			}
-			break;
-		    }
-		case 0xe4:	/* in $port,%al */
-			ghcb_sync_val(GHCB_RAX, GHCB_SZ8, &syncin);
-			port = *(rip + 1);
-			sw_exitinfo1 = (port << 16) | (1ULL << 4) |
-			    (1ULL << 0);
-			frame->tf_rip += 2;
-			break;
-		case 0xe6:	/* outb %al,$port */
-			ghcb_sync_val(GHCB_RAX, GHCB_SZ8, &syncout);
-			port = *(rip + 1);
-			sw_exitinfo1 = (port << 16) | (1ULL << 4);
-			frame->tf_rip += 2;
-			break;
-		case 0xec:	/* in (%dx),%al */
-			ghcb_sync_val(GHCB_RAX, GHCB_SZ8, &syncin);
-			port = (uint16_t)frame->tf_rdx;
-			sw_exitinfo1 = (port << 16) | (1ULL << 4) |
-			    (1ULL << 0);
-			frame->tf_rip += 1;
-			break;
-		case 0xed:	/* in (%dx),%eax */
-			ghcb_sync_val(GHCB_RAX, GHCB_SZ32, &syncin);
-			port = (uint16_t)frame->tf_rdx;
-			sw_exitinfo1 = (port << 16) | (1ULL << 6) |
-			    (1ULL << 0);
-			frame->tf_rip += 1;
-			break;
-		case 0xee:	/* out %al,(%dx) */
-			ghcb_sync_val(GHCB_RAX, GHCB_SZ8, &syncout);
-			port = (uint16_t)frame->tf_rdx;
-			sw_exitinfo1 = (port << 16) | (1ULL << 4);
-			frame->tf_rip += 1;
-			break;
-		case 0xef:	/* out %eax,(%dx) */
-			ghcb_sync_val(GHCB_RAX, GHCB_SZ32, &syncout);
-			port = (uint16_t)frame->tf_rdx;
-			sw_exitinfo1 = (port << 16) | (1ULL << 6);
-			frame->tf_rip += 1;
-			break;
-		default:
-			panic("failed to decode IOIO");
-		}
-		break;
-	    }
 	default:
 		panic("invalid exit code 0x%llx", sw_exitcode);
 	}
@@ -438,8 +378,8 @@ vctrap(struct trapframe *frame, int user)
 
 	/* Sync out to GHCB */
 	ghcb = (struct ghcb_sa *)ghcb_vaddr;
-	ghcb_sync_out(frame, sw_exitcode, sw_exitinfo1, sw_exitinfo2, ghcb,
-	    &syncout);
+	ghcb_sync_out(frame, sw_exitcode, sw_exitinfo1, sw_exitinfo2, 0, 0,
+	    ghcb, &syncout);
 
 	/* Call hypervisor. */
 	vmgexit();
@@ -451,7 +391,7 @@ vctrap(struct trapframe *frame, int user)
 	}
 
 	/* Sync in from GHCB */
-	ghcb_sync_in(frame, ghcb, &syncin);
+	ghcb_sync_in(frame, NULL, ghcb, &syncin);
 
 	return 1;
 }

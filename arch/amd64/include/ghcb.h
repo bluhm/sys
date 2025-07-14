@@ -120,8 +120,25 @@ int	ghcb_valid(struct ghcb_sa *);
 
 void	ghcb_sync_val(int, int, struct ghcb_sync *);
 void	ghcb_sync_out(struct trapframe *, uint64_t, uint64_t, uint64_t,
-	    struct ghcb_sa *, struct ghcb_sync *);
-void	ghcb_sync_in(struct trapframe *, struct ghcb_sa *, struct ghcb_sync *);
+	    uint64_t, uint64_t, struct ghcb_sa *, struct ghcb_sync *);
+void	ghcb_sync_in(struct trapframe *, uint64_t *, struct ghcb_sa *,
+	    struct ghcb_sync *);
+
+uint8_t		ghcb_io_read_1(unsigned int);
+uint16_t	ghcb_io_read_2(unsigned int);
+uint32_t	ghcb_io_read_4(unsigned int);
+void		ghcb_io_write_1(unsigned int, uint8_t);
+void		ghcb_io_write_2(unsigned int, uint16_t);
+void		ghcb_io_write_4(unsigned int, uint32_t);
+uint8_t		ghcb_mem_read_1(uint64_t);
+uint16_t	ghcb_mem_read_2(uint64_t);
+uint32_t	ghcb_mem_read_4(uint64_t);
+uint64_t	ghcb_mem_read_8(uint64_t);
+void		ghcb_mem_write_1(uint64_t, uint8_t);
+void		ghcb_mem_write_2(uint64_t, uint16_t);
+void		ghcb_mem_write_4(uint64_t, uint32_t);
+void		ghcb_mem_write_8(uint64_t, uint64_t);
+void		ghcb_wrmsr(int, uint64_t);
 
 #endif /* !_LOCORE */
 
