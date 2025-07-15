@@ -2244,7 +2244,7 @@ void
 pool_lock_rw_init(struct pool *pp, union pool_lock *lock,
     const struct lock_type *type)
 {
-	_rw_init_flags(&lock->prl_rwlock, pp->pr_wchan, 0, type);
+	_rw_init_flags(&lock->prl_rwlock, pp->pr_wchan, 0, type, 0);
 }
 
 void

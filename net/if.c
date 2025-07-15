@@ -246,7 +246,8 @@ struct task	if_input_task_locked = TASK_INITIALIZER(if_netisr, NULL);
  * Serialize socket operations to ensure no new sleeping points
  * are introduced in IP output paths.
  */
-struct rwlock netlock = RWLOCK_INITIALIZER("netlock");
+struct rwlock netlock = RWLOCK_INITIALIZER_TRACE("netlock",
+    DT_RWLOCK_IDX_NETLOCK);
 
 /*
  * Network interface utility routines.
