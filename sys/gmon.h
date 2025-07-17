@@ -1,4 +1,4 @@
-/*	$OpenBSD: gmon.h,v 1.10 2025/05/24 06:49:16 deraadt Exp $	*/
+/*	$OpenBSD: gmon.h,v 1.12 2025/07/16 16:22:58 deraadt Exp $	*/
 /*	$NetBSD: gmon.h,v 1.5 1996/04/09 20:55:30 cgd Exp $	*/
 
 /*-
@@ -35,6 +35,7 @@
 #ifndef _SYS_GMON_H_
 #define _SYS_GMON_H_
 
+#include <sys/queue.h>
 #include <machine/profile.h>
 
 /*
@@ -141,6 +142,7 @@ struct gmonparam {
 	size_t		outbuflen;
 	void		*rawarcs;
 	int		dirfd;
+	SLIST_ENTRY(gmonparam)	list;
 };
 
 /*
@@ -172,8 +174,7 @@ extern struct gmonparam _gmonparam;
 void	_mcleanup(void);
 void	_monstartup(u_long, u_long);
 void	moncontrol(int);
-/* XXX remove end of may 2025 */
-void	monstartup(u_long, u_long);
+struct gmonparam *_gmon_alloc(void);
 __END_DECLS
 
 #endif /* !_KERNEL */
