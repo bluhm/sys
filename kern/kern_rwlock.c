@@ -465,7 +465,6 @@ rw_upgrade(struct rwlock *rwl, int flags)
 			    "(owner 0x%lx, self 0x%lx)", rwl->rwl_name, rwl,
 			    owner, self);
 		}
-
 		TRACEINDEX(rwlock, rwl->rwl_traceidx, rwl, 3, 4);
 		return (EBUSY);
 	}
