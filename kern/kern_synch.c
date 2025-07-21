@@ -900,9 +900,9 @@ refcnt_init(struct refcnt *r)
 }
 
 void
-refcnt_init_trace(struct refcnt *r, int idx)
+refcnt_init_trace(struct refcnt *r, int trace)
 {
-	r->r_traceidx = idx;
+	r->r_traceidx = trace;
 	atomic_store_int(&r->r_refs, 1);
 	TRACEINDEX(refcnt, r->r_traceidx, r, 0, +1);
 }

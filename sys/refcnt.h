@@ -35,7 +35,7 @@ struct refcnt {
 #ifdef _KERNEL
 
 void	refcnt_init(struct refcnt *);
-void	refcnt_init_trace(struct refcnt *, int id);
+void	refcnt_init_trace(struct refcnt *, int);
 void	refcnt_take(struct refcnt *);
 int	refcnt_rele(struct refcnt *);
 void	refcnt_rele_wake(struct refcnt *);
