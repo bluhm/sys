@@ -1496,20 +1496,11 @@ void
 sotask(void *arg)
 {
 	struct socket *so = arg;
-	int doyield = 0;
 
 	sblock(&so->so_rcv, SBL_WAIT | SBL_NOINTR);
-	if (so->so_rcv.sb_flags & SB_SPLICE) {
-		if (so->so_proto->pr_flags & PR_WANTRCVD)
-			doyield = 1;
+	if (so->so_rcv.sb_flags & SB_SPLICE)
 		somove(so, M_DONTWAIT);
-	}
 	sbunlock(&so->so_rcv);
-
-	if (doyield) {
-		/* Avoid user land starvation. */
-		yield();
-	}
 }
 
 /*
