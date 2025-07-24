@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip6_input.c,v 1.281 2025/07/21 11:07:31 mvs Exp $	*/
+/*	$OpenBSD: ip6_input.c,v 1.284 2025/07/23 22:32:49 mvs Exp $	*/
 /*	$KAME: ip6_input.c,v 1.188 2001/03/29 05:34:31 itojun Exp $	*/
 
 /*
@@ -1448,12 +1448,12 @@ const struct sysctl_bounded_args ipv6ctl_vars_unlocked[] = {
 #endif
 	{ IPV6CTL_DEFHLIM, &ip6_defhlim, 0, 255 },
 	{ IPV6CTL_MAXFRAGPACKETS, &ip6_maxfragpackets, 0, 1000 },
-};
-
-const struct sysctl_bounded_args ipv6ctl_vars[] = {
 	{ IPV6CTL_LOG_INTERVAL, &ip6_log_interval, 0, INT_MAX },
 	{ IPV6CTL_HDRNESTLIMIT, &ip6_hdrnestlimit, 0, 100 },
 	{ IPV6CTL_DAD_COUNT, &ip6_dad_count, 0, 10 },
+};
+
+const struct sysctl_bounded_args ipv6ctl_vars[] = {
 	{ IPV6CTL_AUTO_FLOWLABEL, &ip6_auto_flowlabel, 0, 1 },
 	{ IPV6CTL_DEFMCASTHLIM, &ip6_defmcasthlim, 0, 255 },
 	{ IPV6CTL_USE_DEPRECATED, &ip6_use_deprecated, 0, 1 },
@@ -1571,6 +1571,9 @@ ip6_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 #endif
 	case IPV6CTL_DEFHLIM:
 	case IPV6CTL_MAXFRAGPACKETS:
+	case IPV6CTL_LOG_INTERVAL:
+	case IPV6CTL_HDRNESTLIMIT:
+	case IPV6CTL_DAD_COUNT:
 		return (sysctl_bounded_arr(
 		    ipv6ctl_vars_unlocked, nitems(ipv6ctl_vars_unlocked),
 		    name, namelen, oldp, oldlenp, newp, newlen));
