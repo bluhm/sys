@@ -50,6 +50,7 @@ typedef	__socklen_t	socklen_t;	/* length type for network syscalls */
 #endif
 
 TAILQ_HEAD(soqhead, socket);
+struct soqueue;
 
 /*
  * Locks used to protect global data and struct members:
@@ -74,6 +75,8 @@ struct sosplice {
 	struct	timeval ssp_idletv;	/* [I] idle timeout */
 	struct	timeout ssp_idleto;
 	struct	task ssp_task;		/* task for somove */
+	struct	soqueue *ssp_qhead;	/* [a] softnet queue in netstack */
+	TAILQ_ENTRY(socket) ssp_qentry;	/* softnet queue instead of task */
 };
 
 /*
@@ -249,6 +252,7 @@ int	sodisconnect(struct socket *);
 struct socket *soalloc(const struct protosw *, int);
 void	sofree(struct socket *, int);
 void	sorele(struct socket *);
+void	sosp_processq(struct netstack *);
 int	sogetopt(struct socket *, int, int, struct mbuf *);
 void	sohasoutofband(struct socket *);
 void	soisconnected(struct socket *);
@@ -267,8 +271,8 @@ int	sosend(struct socket *, struct mbuf *, struct uio *,
 int	sosetopt(struct socket *, int, int, struct mbuf *);
 int	soshutdown(struct socket *, int);
 void	sowakeup(struct socket *, struct sockbuf *);
-void	sorwakeup(struct socket *);
-void	sowwakeup(struct socket *);
+void	sorwakeup(struct socket *, struct netstack *);
+void	sowwakeup(struct socket *, struct netstack *);
 int	sockargs(struct mbuf **, const void *, size_t, int);
 
 int	sosleep_nsec(struct socket *, void *, int, const char *, uint64_t);

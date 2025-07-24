@@ -973,6 +973,7 @@ if_input_process(struct ifnet *ifp, struct mbuf_list *ml, unsigned int idx)
 {
 	struct mbuf *m;
 	struct softnet *sn;
+	struct netstack *ns;
 
 	if (ml_empty(ml))
 		return;
@@ -988,22 +989,28 @@ if_input_process(struct ifnet *ifp, struct mbuf_list *ml, unsigned int idx)
 	 */
 
 	sn = net_sn(idx);
-	ml_init(&sn->sn_netstack.ns_tcp_ml);
+	ns = &sn->sn_netstack;
+	ml_init(&ns->ns_tcp_ml);
 #ifdef INET6
-	ml_init(&sn->sn_netstack.ns_tcp6_ml);
+	ml_init(&ns->ns_tcp6_ml);
 #endif
+	TAILQ_INIT(&ns->ns_spliceq);
 
 	NET_LOCK_SHARED();
 
 	while ((m = ml_dequeue(ml)) != NULL)
-		(*ifp->if_input)(ifp, m, &sn->sn_netstack);
+		(*ifp->if_input)(ifp, m, ns);
 
-	tcp_input_mlist(&sn->sn_netstack.ns_tcp_ml, AF_INET);
+	tcp_input_mlist(&ns->ns_tcp_ml, AF_INET, ns);
 #ifdef INET6
-	tcp_input_mlist(&sn->sn_netstack.ns_tcp6_ml, AF_INET6);
+	tcp_input_mlist(&ns->ns_tcp6_ml, AF_INET6, ns);
 #endif
 
 	NET_UNLOCK_SHARED();
+
+#ifdef SOCKET_SPLICE
+	sosp_processq(ns);
+#endif
 }
 
 void

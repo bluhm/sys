@@ -91,10 +91,13 @@ struct ifnet;
 struct task;
 struct cpumem;
 
+TAILQ_HEAD(soqueue, socket);
+
 struct netstack {
-	struct route		ns_route;
-	struct mbuf_list	ns_tcp_ml;
-	struct mbuf_list	ns_tcp6_ml;
+	struct route		 ns_route;
+	struct mbuf_list	 ns_tcp_ml;
+	struct mbuf_list	 ns_tcp6_ml;
+	struct soqueue		 ns_spliceq;
 };
 
 /*

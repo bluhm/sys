@@ -725,7 +725,7 @@ int	 tcp_dooptions(struct tcpcb *, u_char *, int, struct tcphdr *,
 		struct mbuf *, int, struct tcp_opt_info *, u_int, uint64_t);
 void	 tcp_init(void);
 int	 tcp_input(struct mbuf **, int *, int, int, struct netstack *);
-void	 tcp_input_mlist(struct mbuf_list *, int);
+void	 tcp_input_mlist(struct mbuf_list *, int, struct netstack *);
 int	 tcp_mss(struct tcpcb *, int);
 void	 tcp_mss_update(struct tcpcb *);
 void	 tcp_softlro_glue(struct mbuf_list *, struct mbuf *, struct ifnet *);
@@ -744,7 +744,8 @@ int	 tcp_softtso_chop(struct mbuf_list *, struct mbuf *, struct ifnet *,
 int	 tcp_if_output_tso(struct ifnet *, struct mbuf **, struct sockaddr *,
 	    struct rtentry *, uint32_t, u_int);
 void	 tcp_pulloutofband(struct socket *, u_int, struct mbuf *, int);
-int	 tcp_reass(struct tcpcb *, struct tcphdr *, struct mbuf *, int *);
+int	 tcp_reass(struct tcpcb *, struct tcphdr *, struct mbuf *, int *,
+	    struct netstack *);
 void	 tcp_rscale(struct tcpcb *, u_long);
 void	 tcp_respond(struct tcpcb *, caddr_t, struct tcphdr *, tcp_seq,
 		tcp_seq, int, u_int, uint64_t);

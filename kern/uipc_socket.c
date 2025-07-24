@@ -52,6 +52,9 @@
 #include <sys/time.h>
 #include <sys/refcnt.h>
 
+#include <net/if.h>
+#include <net/if_var.h>
+
 #ifdef DDB
 #include <machine/db_machdep.h>
 #endif
@@ -62,6 +65,7 @@ int	sosplice(struct socket *, int, off_t, struct timeval *);
 void	sounsplice(struct socket *, struct socket *, int);
 void	soidle(void *);
 void	sotask(void *);
+void	sosp_insertq(struct socket *, struct netstack *);
 int	somove(struct socket *, int);
 void	sorflush(struct socket *);
 
@@ -125,6 +129,8 @@ struct rwlock sosplice_lock = RWLOCK_INITIALIZER("sosplicelk");
 #define so_spliceidletv	so_sp->ssp_idletv
 #define so_spliceidleto	so_sp->ssp_idleto
 #define so_splicetask	so_sp->ssp_task
+#define so_spliceqhead	so_sp->ssp_qhead
+#define so_spliceqentry	so_sp->ssp_qentry
 #endif
 
 void
@@ -475,8 +481,7 @@ notsplicedback:
 		sbunlock(&so->so_rcv);
 
 		timeout_del_barrier(&so->so_spliceidleto);
-		task_del(sosplice_taskq, &so->so_splicetask);
-		taskq_barrier(sosplice_taskq);
+		taskq_del_barrier(sosplice_taskq, &so->so_splicetask);
 
 		solock_shared(so);
 	}
@@ -1441,8 +1446,8 @@ sounsplice(struct socket *so, struct socket *sosp, int freeing)
 	mtx_leave(&sosp->so_snd.sb_mtx);
 	mtx_leave(&so->so_rcv.sb_mtx);
 
-	task_del(sosplice_taskq, &so->so_splicetask);
 	timeout_del(&so->so_spliceidleto);
+	task_del(sosplice_taskq, &so->so_splicetask);
 
 	/* Do not wakeup a socket that is about to be freed. */
 	if ((freeing & SOSP_FREEING_READ) == 0) {
@@ -1453,13 +1458,13 @@ sounsplice(struct socket *so, struct socket *sosp, int freeing)
 		readable = so->so_qlen || soreadable(so);
 		mtx_leave(&so->so_rcv.sb_mtx);
 		if (readable)
-			sorwakeup(so);
+			sorwakeup(so, NULL);
 		sounlock_shared(so);
 	}
 	if ((freeing & SOSP_FREEING_WRITE) == 0) {
 		solock_shared(sosp);
 		if (sowriteable(sosp))
-			sowwakeup(sosp);
+			sowwakeup(sosp, NULL);
 		sounlock_shared(sosp);
 	}
 
@@ -1484,20 +1489,52 @@ void
 sotask(void *arg)
 {
 	struct socket *so = arg;
-	int doyield = 0;
 
 	sblock(&so->so_rcv, SBL_WAIT | SBL_NOINTR);
-	if (so->so_rcv.sb_flags & SB_SPLICE) {
-		if (so->so_proto->pr_flags & PR_WANTRCVD)
-			doyield = 1;
+	if (so->so_rcv.sb_flags & SB_SPLICE)
 		somove(so, M_DONTWAIT);
-	}
 	sbunlock(&so->so_rcv);
+}
 
-	if (doyield) {
-		/* Avoid user land starvation. */
-		yield();
+void
+sosp_processq(struct netstack *ns)
+{
+	struct socket *so;
+
+	/*
+	 * Socket queue is not locked as insert and process run on same
+	 * softnet thread.  so_spliceqhead is atomic to prevent double insert.
+	 * New entries can be added while procesing queue.  Mbuf ph_loopcnt
+	 * prevents endless looping.
+	 */
+	while ((so = TAILQ_FIRST(&ns->ns_spliceq)) != NULL) {
+		KASSERT(so->so_spliceqhead == &ns->ns_spliceq);
+		TAILQ_REMOVE(so->so_spliceqhead, so, so_spliceqentry);
+		membar_exit();
+		WRITE_ONCE(so->so_spliceqhead, NULL);
+		sotask(so);
+		sorele(so);
 	}
+}
+
+void
+sosp_insertq(struct socket *so, struct netstack *ns)
+{
+	if (ns == NULL) {
+		/* no network stack available, use task if not queued */
+		if (READ_ONCE(so->so_spliceqhead) == NULL)
+			task_add(sosplice_taskq, &so->so_splicetask);
+		return;
+	}
+	if (atomic_cas_ptr(&so->so_spliceqhead, NULL, &ns->ns_spliceq) ==
+	    NULL) {
+		/* not queued yet, add to current softnet task */
+		soref(so);
+		membar_enter_after_atomic();
+		TAILQ_INSERT_TAIL(so->so_spliceqhead, so, so_spliceqentry);
+		return;
+	}
+	/* some other softnet task will process this socket on its queue */
 }
 
 /*
@@ -1853,13 +1890,13 @@ somove(struct socket *so, int wait)
 #endif /* SOCKET_SPLICE */
 
 void
-sorwakeup(struct socket *so)
+sorwakeup(struct socket *so, struct netstack *ns)
 {
 #ifdef SOCKET_SPLICE
 	if (so->so_proto->pr_flags & PR_SPLICE) {
 		mtx_enter(&so->so_rcv.sb_mtx);
 		if (so->so_rcv.sb_flags & SB_SPLICE)
-			task_add(sosplice_taskq, &so->so_splicetask);
+			sosp_insertq(so, ns);
 		if (isspliced(so)) {
 			mtx_leave(&so->so_rcv.sb_mtx);
 			return;
@@ -1873,14 +1910,13 @@ sorwakeup(struct socket *so)
 }
 
 void
-sowwakeup(struct socket *so)
+sowwakeup(struct socket *so, struct netstack *ns)
 {
 #ifdef SOCKET_SPLICE
 	if (so->so_proto->pr_flags & PR_SPLICE) {
 		mtx_enter(&so->so_snd.sb_mtx);
 		if (so->so_snd.sb_flags & SB_SPLICE)
-			task_add(sosplice_taskq,
-			    &so->so_sp->ssp_soback->so_splicetask);
+			sosp_insertq(so->so_sp->ssp_soback, ns);
 		if (issplicedback(so)) {
 			mtx_leave(&so->so_snd.sb_mtx);
 			return;
