@@ -357,6 +357,7 @@ void	 in_setpeeraddr(struct inpcb *, struct mbuf *);
 void	 in_setsockaddr(struct inpcb *, struct mbuf *);
 int	 in_sockaddr(struct socket *, struct mbuf *);
 int	 in_peeraddr(struct socket *, struct mbuf *);
+int	 in_flowid(struct socket *);
 int	 in_baddynamic(u_int16_t, u_int16_t);
 int	 in_rootonly(u_int16_t, u_int16_t);
 int	 in_pcbselsrc(struct in_addr *, const struct sockaddr_in *,

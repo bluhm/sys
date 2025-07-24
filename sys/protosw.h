@@ -86,6 +86,7 @@ struct pr_usrreqs {
 		    struct mbuf *);
 	int	(*pru_sockaddr)(struct socket *, struct mbuf *);
 	int	(*pru_peeraddr)(struct socket *, struct mbuf *);
+	int	(*pru_flowid)(struct socket *);
 	int	(*pru_connect2)(struct socket *, struct socket *);
 };
 
@@ -392,6 +393,12 @@ static inline int
 pru_peeraddr(struct socket *so, struct mbuf *addr)
 {
 	return (*so->so_proto->pr_usrreqs->pru_peeraddr)(so, addr);
+}
+
+static inline int
+pru_flowid(struct socket *so)
+{
+	return (*so->so_proto->pr_usrreqs->pru_flowid)(so);
 }
 
 static inline int

@@ -131,6 +131,7 @@ const struct pr_usrreqs tcp_usrreqs = {
 	.pru_control	= in_control,
 	.pru_sockaddr	= tcp_sockaddr,
 	.pru_peeraddr	= tcp_peeraddr,
+	.pru_flowid	= in_flowid,
 };
 
 #ifdef INET6
@@ -152,6 +153,7 @@ const struct pr_usrreqs tcp6_usrreqs = {
 	.pru_control	= in6_control,
 	.pru_sockaddr	= tcp_sockaddr,
 	.pru_peeraddr	= tcp_peeraddr,
+	.pru_flowid	= in_flowid,
 };
 #endif
 

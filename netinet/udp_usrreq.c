@@ -136,6 +136,7 @@ const struct pr_usrreqs udp_usrreqs = {
 	.pru_control	= in_control,
 	.pru_sockaddr	= in_sockaddr,
 	.pru_peeraddr	= in_peeraddr,
+	.pru_flowid	= in_flowid,
 };
 
 #ifdef INET6
@@ -150,6 +151,7 @@ const struct pr_usrreqs udp6_usrreqs = {
 	.pru_control	= in6_control,
 	.pru_sockaddr	= in6_sockaddr,
 	.pru_peeraddr	= in6_peeraddr,
+	.pru_flowid	= in_flowid,
 };
 #endif
 

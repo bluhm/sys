@@ -779,6 +779,17 @@ in_peeraddr(struct socket *so, struct mbuf *nam)
 	return (0);
 }
 
+int
+in_flowid(struct socket *so)
+{
+	struct inpcb *inp;
+
+	inp = sotoinpcb(so);
+	if (inp == NULL)
+		return (0);
+	return (inp->inp_flowid);
+}
+
 /*
  * Pass some notification to all connections of a protocol
  * associated with address dst.  The "usual action" will be
