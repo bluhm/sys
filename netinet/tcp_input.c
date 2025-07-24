@@ -174,9 +174,10 @@ do { \
 	if_put(ifp); \
 } while (0)
 
-int	 tcp_input_solocked(struct mbuf **, int *, int, int, struct socket **);
+int	 tcp_input_solocked(struct mbuf **, int *, int, int, struct socket **,
+	    struct netstack *);
 int	 tcp_mss_adv(struct rtentry *, int);
-int	 tcp_flush_queue(struct tcpcb *);
+int	 tcp_flush_queue(struct tcpcb *, struct netstack *);
 void	 tcp_sack_partialack(struct tcpcb *, struct tcphdr *);
 void	 tcp_newreno_partialack(struct tcpcb *, struct tcphdr *);
 
@@ -208,7 +209,8 @@ struct syn_cache *syn_cache_lookup(const struct sockaddr *,
  */
 
 int
-tcp_reass(struct tcpcb *tp, struct tcphdr *th, struct mbuf *m, int *tlen)
+tcp_reass(struct tcpcb *tp, struct tcphdr *th, struct mbuf *m, int *tlen,
+    struct netstack *ns)
 {
 	struct tcpqent *p, *q, *nq, *tiqe;
 
@@ -303,11 +305,11 @@ tcp_reass(struct tcpcb *tp, struct tcphdr *th, struct mbuf *m, int *tlen)
 	if (th->th_seq != tp->rcv_nxt)
 		return (0);
 
-	return (tcp_flush_queue(tp));
+	return (tcp_flush_queue(tp, ns));
 }
 
 int
-tcp_flush_queue(struct tcpcb *tp)
+tcp_flush_queue(struct tcpcb *tp, struct netstack *ns)
 {
 	struct socket *so = tp->t_inpcb->inp_socket;
 	struct tcpqent *q, *nq;
@@ -342,7 +344,7 @@ tcp_flush_queue(struct tcpcb *tp)
 		q = nq;
 	} while (q != NULL && q->tcpqe_tcp->th_seq == tp->rcv_nxt);
 	tp->t_flags |= TF_BLOCKOUTPUT;
-	sorwakeup(so);
+	sorwakeup(so, ns);
 	tp->t_flags &= ~TF_BLOCKOUTPUT;
 	return (flags);
 }
@@ -351,7 +353,7 @@ int
 tcp_input(struct mbuf **mp, int *offp, int proto, int af, struct netstack *ns)
 {
 	if (ns == NULL)
-		return tcp_input_solocked(mp, offp, proto, af, NULL);
+		return tcp_input_solocked(mp, offp, proto, af, NULL, ns);
 	(*mp)->m_pkthdr.ph_cookie = (void *)(long)(*offp);
 	switch (af) {
 	case AF_INET:
@@ -370,7 +372,7 @@ tcp_input(struct mbuf **mp, int *offp, int proto, int af, struct netstack *ns)
 }
 
 void
-tcp_input_mlist(struct mbuf_list *ml, int af)
+tcp_input_mlist(struct mbuf_list *ml, int af, struct netstack *ns)
 {
 	struct socket *so = NULL;
 	struct mbuf *m;
@@ -380,7 +382,7 @@ tcp_input_mlist(struct mbuf_list *ml, int af)
 
 		off = (long)m->m_pkthdr.ph_cookie;
 		m->m_pkthdr.ph_cookie = NULL;
-		nxt = tcp_input_solocked(&m, &off, IPPROTO_TCP, af, &so);
+		nxt = tcp_input_solocked(&m, &off, IPPROTO_TCP, af, &so, ns);
 		KASSERT(nxt == IPPROTO_DONE);
 	}
 
@@ -393,7 +395,7 @@ tcp_input_mlist(struct mbuf_list *ml, int af)
  */
 int
 tcp_input_solocked(struct mbuf **mp, int *offp, int proto, int af,
-    struct socket **solocked)
+    struct socket **solocked, struct netstack *ns)
 {
 	struct mbuf *m = *mp;
 	int iphlen = *offp;
@@ -1075,7 +1077,7 @@ findpcb:
 				tcp_update_sndspace(tp);
 				if (sb_notify(&so->so_snd)) {
 					tp->t_flags |= TF_BLOCKOUTPUT;
-					sowwakeup(so);
+					sowwakeup(so, ns);
 					tp->t_flags &= ~TF_BLOCKOUTPUT;
 				}
 				if (so->so_snd.sb_cc ||
@@ -1131,7 +1133,7 @@ findpcb:
 				mtx_leave(&so->so_rcv.sb_mtx);
 			}
 			tp->t_flags |= TF_BLOCKOUTPUT;
-			sorwakeup(so);
+			sorwakeup(so, ns);
 			tp->t_flags &= ~TF_BLOCKOUTPUT;
 			if (tp->t_flags & (TF_ACKNOW|TF_NEEDOUTPUT))
 				(void) tcp_output(tp);
@@ -1264,7 +1266,7 @@ findpcb:
 				tp->snd_scale = tp->requested_s_scale;
 				tp->rcv_scale = tp->request_r_scale;
 			}
-			tcp_flush_queue(tp);
+			tcp_flush_queue(tp, ns);
 
 			/*
 			 * if we didn't have to retransmit the SYN,
@@ -1553,7 +1555,7 @@ trimthenstep6:
 			tp->rcv_scale = tp->request_r_scale;
 			tiwin = th->th_win << tp->snd_scale;
 		}
-		tcp_flush_queue(tp);
+		tcp_flush_queue(tp, ns);
 		tp->snd_wl1 = th->th_seq - 1;
 		/* fall into ... */
 
@@ -1835,7 +1837,7 @@ trimthenstep6:
 		tcp_update_sndspace(tp);
 		if (sb_notify(&so->so_snd)) {
 			tp->t_flags |= TF_BLOCKOUTPUT;
-			sowwakeup(so);
+			sowwakeup(so, ns);
 			tp->t_flags &= ~TF_BLOCKOUTPUT;
 		}
 
@@ -2051,11 +2053,11 @@ dodata:							/* XXX */
 				mtx_leave(&so->so_rcv.sb_mtx);
 			}
 			tp->t_flags |= TF_BLOCKOUTPUT;
-			sorwakeup(so);
+			sorwakeup(so, ns);
 			tp->t_flags &= ~TF_BLOCKOUTPUT;
 		} else {
 			m_adj(m, hdroptlen);
-			tiflags = tcp_reass(tp, th, m, &tlen);
+			tiflags = tcp_reass(tp, th, m, &tlen, ns);
 			tp->t_flags |= TF_ACKNOW;
 		}
 		if (tp->sack_enable)

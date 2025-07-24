@@ -709,7 +709,7 @@ udp_sbappend(struct inpcb *inp, struct mbuf *m, struct ip *ip,
 	}
 	mtx_leave(&so->so_rcv.sb_mtx);
 
-	sorwakeup(so);
+	sorwakeup(so, ns);
 }
 
 /*
@@ -720,8 +720,8 @@ void
 udp_notify(struct inpcb *inp, int errno)
 {
 	inp->inp_socket->so_error = errno;
-	sorwakeup(inp->inp_socket);
-	sowwakeup(inp->inp_socket);
+	sorwakeup(inp->inp_socket, NULL);
+	sowwakeup(inp->inp_socket, NULL);
 }
 
 #ifdef INET6

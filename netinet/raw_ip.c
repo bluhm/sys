@@ -115,7 +115,7 @@ const struct pr_usrreqs rip_usrreqs = {
 };
 
 void    rip_sbappend(struct inpcb *, struct mbuf *, struct ip *,
-	    struct sockaddr_in *);
+	    struct sockaddr_in *, struct netstack *);
 
 /*
  * Initialize raw connection block q.
@@ -195,7 +195,7 @@ rip_input(struct mbuf **mp, int *offp, int proto, int af, struct netstack *ns)
 
 			n = m_copym(m, 0, M_COPYALL, M_NOWAIT);
 			if (n != NULL)
-				rip_sbappend(last, n, ip, &ripsrc);
+				rip_sbappend(last, n, ip, &ripsrc, ns);
 			in_pcbunref(last);
 
 			mtx_enter(&rawcbtable.inpt_mtx);
@@ -222,7 +222,7 @@ rip_input(struct mbuf **mp, int *offp, int proto, int af, struct netstack *ns)
 		return IPPROTO_DONE;
 	}
 
-	rip_sbappend(last, m, ip, &ripsrc);
+	rip_sbappend(last, m, ip, &ripsrc, ns);
 	in_pcbunref(last);
 
 	return IPPROTO_DONE;
@@ -230,7 +230,7 @@ rip_input(struct mbuf **mp, int *offp, int proto, int af, struct netstack *ns)
 
 void
 rip_sbappend(struct inpcb *inp, struct mbuf *m, struct ip *ip,
-    struct sockaddr_in *ripsrc)
+    struct sockaddr_in *ripsrc, struct netstack *ns)
 {
 	struct socket *so = inp->inp_socket;
 	struct mbuf *opts = NULL;
@@ -249,7 +249,7 @@ rip_sbappend(struct inpcb *inp, struct mbuf *m, struct ip *ip,
 		m_freem(opts);
 		ipstat_inc(ips_noproto);
 	} else
-		sorwakeup(so);
+		sorwakeup(so, ns);
 }
 
 /*

@@ -235,7 +235,7 @@ divert6_packet(struct mbuf *m, int dir, u_int16_t divert_port)
 		goto bad;
 	}
 	mtx_leave(&so->so_rcv.sb_mtx);
-	sorwakeup(so);
+	sorwakeup(so, NULL);
 
 	in_pcbunref(inp);
 	return;

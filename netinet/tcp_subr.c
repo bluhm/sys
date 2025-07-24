@@ -589,8 +589,8 @@ tcp_notify(struct inpcb *inp, int error)
 	else
 		tp->t_softerror = error;
 	wakeup((caddr_t) &so->so_timeo);
-	sorwakeup(so);
-	sowwakeup(so);
+	sorwakeup(so, NULL);
+	sowwakeup(so, NULL);
 }
 
 #ifdef INET6

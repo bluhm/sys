@@ -457,7 +457,7 @@ pfkey_sendup(struct pkpcb *kp, struct mbuf *m0, int more)
 		return (ENOBUFS);
 	}
 
-	sorwakeup(so);
+	sorwakeup(so, NULL);
 	return (0);
 }
 
