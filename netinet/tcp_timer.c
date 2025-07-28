@@ -218,6 +218,8 @@ tcp_timer_rexmt(void *arg)
 		KASSERT(!ISSET(inp->inp_flags, INP_IPV6));
 		tp->t_flags &= ~TF_PMTUD_PEND;
 
+if (tp->t_state > TCPS_CLOSE_WAIT && tp->t_state < TCPS_FIN_WAIT_2) printf("rexmt timer path mtu, state %d\n", tp->t_state);
+
 		rtableid = inp->inp_rtableid;
 
 		/* XXX create fake icmp message with relevant entries */

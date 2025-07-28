@@ -408,7 +408,7 @@ tcp_input_solocked(struct mbuf **mp, int *offp, int proto, int af,
 	struct tcpcb *otp = NULL, *tp = NULL;
 	int tiflags;
 	struct socket *so = NULL;
-	int todrop, acked, ourfinisacked;
+	int todrop, acked, ourfinisacked = 2;
 	int hdroptlen = 0;
 	short ostate;
 	union {
@@ -1084,7 +1084,7 @@ findpcb:
 					sowwakeup(so);
 					tp->t_flags &= ~TF_BLOCKOUTPUT;
 				}
-				if (so->so_snd.sb_cc ||
+				if (READ_ONCE(so->so_snd.sb_cc) ||
 				    tp->t_flags & TF_NEEDOUTPUT)
 					(void) tcp_output(tp);
 				if (solocked != NULL)
@@ -1818,25 +1818,23 @@ trimthenstep6:
 			    TCP_MAXWIN << tp->snd_scale);
 		}
 		ND6_HINT(tp, nd6_maxnudhint_local);
+		mtx_enter(&so->so_snd.sb_mtx);
 		if (acked > so->so_snd.sb_cc) {
 			if (tp->snd_wnd > so->so_snd.sb_cc)
 				tp->snd_wnd -= so->so_snd.sb_cc;
 			else
 				tp->snd_wnd = 0;
-			mtx_enter(&so->so_snd.sb_mtx);
 			sbdrop(&so->so_snd, (int)so->so_snd.sb_cc);
-			mtx_leave(&so->so_snd.sb_mtx);
 			ourfinisacked = 1;
 		} else {
-			mtx_enter(&so->so_snd.sb_mtx);
 			sbdrop(&so->so_snd, acked);
-			mtx_leave(&so->so_snd.sb_mtx);
 			if (tp->snd_wnd > acked)
 				tp->snd_wnd -= acked;
 			else
 				tp->snd_wnd = 0;
 			ourfinisacked = 0;
 		}
+		mtx_leave(&so->so_snd.sb_mtx);
 
 		tcp_update_sndspace(tp);
 		if (sb_notify(&so->so_snd)) {
@@ -2028,6 +2026,7 @@ step6:
 			tp->rcv_up = tp->rcv_nxt;
 dodata:							/* XXX */
 
+if (tp->t_state == TCPS_CLOSING && !ISSET(tp->t_flags, TF_TMR_REXMT|TF_TMR_PERSIST)) printf("no closing timer, tiflags %02x, t_flags %08x\n", tiflags, tp->t_flags);
 	/*
 	 * Process the segment text, merging it into the TCP sequencing queue,
 	 * and arranging for acknowledgment of receipt if necessary.
@@ -2085,7 +2084,7 @@ dodata:							/* XXX */
 	}
 
 	/*
-	 * If FIN is received ACK the FIN and let the user know
+	 * If FIN is received, ACK the FIN and let the user know
 	 * that the connection is closing.  Ignore a FIN received before
 	 * the connection is fully established.
 	 */
@@ -2107,10 +2106,11 @@ dodata:							/* XXX */
 			break;
 
 		/*
-		 * If still in FIN_WAIT_1 STATE FIN has not been acked so
+		 * If still in FIN_WAIT_1 STATE, FIN has not been acked so
 		 * enter the CLOSING state.
 		 */
 		case TCPS_FIN_WAIT_1:
+if (!ISSET(tp->t_flags, TF_TMR_REXMT|TF_TMR_PERSIST)) printf("no closing timer, state %d, ourfinisacked %d\n", tp->t_state, ourfinisacked);
 			tp->t_state = TCPS_CLOSING;
 			break;
 
@@ -2136,6 +2136,7 @@ dodata:							/* XXX */
 			break;
 		}
 	}
+if (tp->t_state == TCPS_CLOSING && !ISSET(tp->t_flags, TF_TMR_REXMT|TF_TMR_PERSIST)) printf("no closing timer, tiflags %0x, tlen %d\n", tiflags, tlen);
 	if (otp)
 		tcp_trace(TA_INPUT, ostate, tp, otp, &saveti.caddr, 0, tlen);
 
@@ -2143,7 +2144,10 @@ dodata:							/* XXX */
 	 * Return any desired output.
 	 */
 	if (tp->t_flags & (TF_ACKNOW|TF_NEEDOUTPUT))
+{
 		(void) tcp_output(tp);
+if ((tp->t_state > TCPS_CLOSE_WAIT && tp->t_state < TCPS_FIN_WAIT_2) && !ISSET(tp->t_flags, TF_TMR_REXMT|TF_TMR_PERSIST)) printf("no closing timer in input, state %d, ourfinisacked %d\n", tp->t_state, ourfinisacked);
+}
 	if (solocked != NULL)
 		*solocked = so;
 	else

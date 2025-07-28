@@ -1121,6 +1121,7 @@ send:
 	if (error) {
 out:
 		if (error == ENOBUFS) {
+if ((tp->t_state > TCPS_CLOSE_WAIT && tp->t_state < TCPS_FIN_WAIT_2) && !ISSET(tp->t_flags, TF_TMR_REXMT|TF_TMR_PERSIST)) printf("no closing timer ENOBUFS, state %d\n", tp->t_state);
 			/*
 			 * If the interface queue is full, or IP cannot
 			 * get an mbuf, trigger TCP slow start.

@@ -783,7 +783,10 @@ tcp_shutdown(struct socket *so)
 	socantsendmore(so);
 	tp = tcp_usrclosed(tp);
 	if (tp)
+{
 		error = tcp_output(tp);
+if (tp->t_state == TCPS_FIN_WAIT_1 && !ISSET(tp->t_flags, TF_TMR_REXMT|TF_TMR_PERSIST)) printf("no closing timer in shutdown\n");
+}
 
 out:
 	if (otp)
@@ -1064,7 +1067,10 @@ tcp_dodisconnect(struct tcpcb *tp)
 		mtx_leave(&so->so_rcv.sb_mtx);
 		tp = tcp_usrclosed(tp);
 		if (tp)
+{
 			(void) tcp_output(tp);
+if (tp->t_state == TCPS_FIN_WAIT_1 && !ISSET(tp->t_flags, TF_TMR_REXMT|TF_TMR_PERSIST)) printf("no closing timer in dodisconnect\n");
+}
 	}
 	return (tp);
 }
