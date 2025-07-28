@@ -1,4 +1,4 @@
-/*	$OpenBSD: in6_proto.c,v 1.144 2025/07/24 22:57:24 mvs Exp $	*/
+/*	$OpenBSD: in6_proto.c,v 1.148 2025/07/27 17:46:58 mvs Exp $	*/
 /*	$KAME: in6_proto.c,v 1.66 2000/10/10 15:35:47 itojun Exp $	*/
 
 /*
@@ -349,7 +349,7 @@ const struct domain inet6domain = {
  * Internet configuration info
  */
 int	ip6_forwarding = 0;	/* [a] no forwarding unless sysctl to enable */
-int	ip6_mforwarding = 0;	/* no multicast forwarding unless ... */
+int	ip6_mforwarding = 0;	/* [a] no multicast forwarding unless ... */
 int	ip6_multipath = 0;	/* [a] no using multipath routes unless ... */
 int	ip6_sendredirects = 1;	/* [a] */
 int	ip6_defhlim = IPV6_DEFHLIM;			/* [a] */
@@ -362,9 +362,9 @@ int	ip6_dad_count = 1;	/* [a] DupAddrDetectionTransmits */
 int	ip6_dad_pending;	/* number of currently running DADs */
 int	ip6_auto_flowlabel = 1;	/* [a] */
 int	ip6_use_deprecated = 1;	/* [a] allow deprecated addr (RFC2462 5.5.4) */
-int	ip6_mcast_pmtu = 0;	/* enable pMTU discovery for multicast? */
-int	ip6_neighborgcthresh = 2048; /* Threshold # of NDP entries for GC */
-int	ip6_maxdynroutes = 4096; /* Max # of routes created via redirect */
+int	ip6_mcast_pmtu = 0;	/* [a] enable pMTU discovery for multicast? */
+int	ip6_neighborgcthresh = 2048; /* [a] Threshold # of NDP entries for GC */
+int	ip6_maxdynroutes = 4096; /* [a] Max # of routes created via redirect */
 time_t	ip6_log_time = (time_t)0L;
 
 /* raw IP6 parameters */
