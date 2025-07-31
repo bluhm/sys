@@ -1,4 +1,4 @@
-/*	$OpenBSD: dt_dev.c,v 1.44 2025/06/03 00:20:31 dlg Exp $ */
+/*	$OpenBSD: dt_dev.c,v 1.45 2025/07/31 15:07:59 bluhm Exp $ */
 
 /*
  * Copyright (c) 2019 Martin Pieuchot <mpi@openbsd.org>
