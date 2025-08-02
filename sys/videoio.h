@@ -1,4 +1,4 @@
-/*	$OpenBSD: videoio.h,v 1.24 2025/08/02 07:36:09 kirill Exp $	*/
+/*	$OpenBSD: videoio.h,v 1.26 2025/08/02 09:27:59 kirill Exp $	*/
 
 /*
  *  Video for Linux Two header file
