@@ -348,8 +348,6 @@ mrt6_sysctl_mif(void *oldp, size_t *oldlenp)
 
 		needed += sizeof(minfo);
 		if (where && needed <= given) {
-			int error;
-
 			error = copyout(&minfo, where, sizeof(minfo));
 			if (error)
 				break;
