@@ -328,6 +328,7 @@ main(void *framep)
 
 	/* Initialize the interface/address trees */
 	ifinit();
+	softnet_init();
 
 	/* Lock the kernel on behalf of proc0. */
 	KERNEL_LOCK();
@@ -345,6 +346,9 @@ main(void *framep)
 
 	/* Per CPU memory allocation */
 	percpu_init();
+
+	/* Reduce softnet threads to number of CPU */
+	softnet_percpu();
 
 	/* Initialize the file systems. */
 #if defined(NFSSERVER) || defined(NFSCLIENT)

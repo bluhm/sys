@@ -178,8 +178,8 @@ loop_clone_create(struct if_clone *ifc, int unit)
 		rtable_l2set(0, 0, ifp->if_index);
 	} else
 		if_attach(ifp);
-	if_attach_queues(ifp, net_sn_count());
-	if_attach_iqueues(ifp, net_sn_count());
+	if_attach_queues(ifp, softnet_count());
+	if_attach_iqueues(ifp, softnet_count());
 	if_alloc_sadl(ifp);
 #if NBPFILTER > 0
 	bpfattach(&ifp->if_bpf, ifp, DLT_LOOP, sizeof(u_int32_t));
