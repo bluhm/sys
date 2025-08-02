@@ -283,12 +283,35 @@ softnet_init(void)
 	}
 }
 
+#ifdef MULTIPROCESSOR
+static void
+softnet_pegcpu_task(void *arg)
+{
+	struct cpu_info *ci = arg;
+
+	sched_peg_curproc(ci);
+}
+#endif /* MULTIPROCESSOR */
+
 void
 softnet_percpu(void)
 {
 #ifdef MULTIPROCESSOR
-	unsigned int i;
+	unsigned int i, cii;
+	struct cpu_info *ci;
+	static struct task pegtask[NET_TASKQ];
 
+	/* Run task that pins each softnet thread to CPU with same index. */
+	i = 0;
+	CPU_INFO_FOREACH(cii, ci) {
+		if (i < NET_TASKQ) {
+			struct softnet *sn = &softnets[i];
+
+			task_set(&pegtask[i], softnet_pegcpu_task, ci);
+			task_add(sn->sn_taskq, &pegtask[i]);
+		}
+		i++;
+	}
 	/* After attaching all CPUs and interfaces, remove useless threads. */
 	for (i = softnet_count(); i < NET_TASKQ; i++) {
 		struct softnet *sn = &softnets[i];
