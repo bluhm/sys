@@ -916,6 +916,11 @@ locore_vc_trap32:
 	pushl	%ecx
 	pushl	%edx
 
+	cmpl	$SVM_VMEXIT_DR6_WRITE, 16(%esp)
+	je	.Lskip_movdb32
+	cmpl	$SVM_VMEXIT_DR7_WRITE, 16(%esp)
+	je	.Lskip_movdb32
+
 	cmpl	$SVM_VMEXIT_CPUID, 16(%esp)
 	jne	.Lterminate32
 
@@ -942,7 +947,16 @@ locore_vc_trap32:
 	popl	%ebx
 	popl	%eax
 	addl	$4, %esp
-	addl	$2, (%esp)
+	addl	$2, (%esp)		/* skip cpuid */
+	iret
+
+.Lskip_movdb32:
+	popl	%edx
+	popl	%ecx
+	popl	%ebx
+	popl	%eax
+	addl	$4, %esp
+	addl	$3, (%esp)		/* skip mov,%db */
 	iret
 
 .Lterminate32:
