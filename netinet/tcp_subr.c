@@ -294,7 +294,7 @@ tcp_respond(struct tcpcb *tp, caddr_t template, struct tcphdr *th0,
     tcp_seq ack, tcp_seq seq, int flags, u_int rtableid, uint64_t now)
 {
 	int tlen;
-	int win = 0;
+	long win = 0;
 	struct mbuf *m = NULL;
 	struct tcphdr *th;
 	struct ip *ip;

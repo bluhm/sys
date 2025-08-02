@@ -690,7 +690,7 @@ findpcb:
 
 	/* Unscale the window into a 32-bit value. */
 	if ((tiflags & TH_SYN) == 0)
-		tiwin = th->th_win << tp->snd_scale;
+		tiwin = (u_long)th->th_win << tp->snd_scale;
 	else
 		tiwin = th->th_win;
 
@@ -1156,12 +1156,12 @@ findpcb:
 	 * but not less than advertised window.
 	 */
 	{
-		int win;
+		long win;
 
 		win = sbspace(&so->so_rcv);
 		if (win < 0)
 			win = 0;
-		tp->rcv_wnd = imax(win, (int)(tp->rcv_adv - tp->rcv_nxt));
+		tp->rcv_wnd = lmax(win, (int)(tp->rcv_adv - tp->rcv_nxt));
 	}
 
 	switch (tp->t_state) {
@@ -1551,7 +1551,7 @@ trimthenstep6:
 			(TF_RCVD_SCALE|TF_REQ_SCALE)) {
 			tp->snd_scale = tp->requested_s_scale;
 			tp->rcv_scale = tp->request_r_scale;
-			tiwin = th->th_win << tp->snd_scale;
+			tiwin = (u_long)th->th_win << tp->snd_scale;
 		}
 		tcp_flush_queue(tp);
 		tp->snd_wl1 = th->th_seq - 1;
@@ -1582,11 +1582,13 @@ trimthenstep6:
 		if (do_ecn && (tiflags & TH_ECE)) {
 			if ((tp->t_flags & TF_ECN_PERMIT) &&
 			    SEQ_GEQ(tp->snd_una, tp->snd_last)) {
-				u_int win;
+				u_long win;
 
-				win = min(tp->snd_wnd, tp->snd_cwnd) / tp->t_maxseg;
+				win = ulmin(tp->snd_wnd, tp->snd_cwnd) /
+				    tp->t_maxseg;
 				if (win > 1) {
-					tp->snd_ssthresh = win / 2 * tp->t_maxseg;
+					tp->snd_ssthresh = win / 2 *
+					    tp->t_maxseg;
 					tp->snd_cwnd = tp->snd_ssthresh;
 					tp->snd_last = tp->snd_max;
 					tp->t_flags |= TF_SEND_CWR;

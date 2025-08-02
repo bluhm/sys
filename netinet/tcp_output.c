@@ -418,7 +418,7 @@ again:
 		 * taking into account that we are limited by
 		 * TCP_MAXWIN << tp->rcv_scale.
 		 */
-		long adv = lmin(win, (long)TCP_MAXWIN << tp->rcv_scale) -
+		long adv = lmin(win, TCP_MAXWIN << tp->rcv_scale) -
 			(tp->rcv_adv - tp->rcv_nxt);
 
 		if (adv >= (long) (2 * tp->t_maxseg))
@@ -859,13 +859,13 @@ send:
 	 */
 	if (win < (rcv_hiwat / 4) && win < (long)tp->t_maxseg)
 		win = 0;
-	if (win > (long)TCP_MAXWIN << tp->rcv_scale)
-		win = (long)TCP_MAXWIN << tp->rcv_scale;
-	if (win < (long)(int32_t)(tp->rcv_adv - tp->rcv_nxt))
-		win = (long)(int32_t)(tp->rcv_adv - tp->rcv_nxt);
+	if (win > TCP_MAXWIN << tp->rcv_scale)
+		win = TCP_MAXWIN << tp->rcv_scale;
+	if (win < (int32_t)(tp->rcv_adv - tp->rcv_nxt))
+		win = (int32_t)(tp->rcv_adv - tp->rcv_nxt);
 	if (flags & TH_RST)
 		win = 0;
-	th->th_win = htons((u_int16_t) (win>>tp->rcv_scale));
+	th->th_win = htons((u_int16_t)(win >> tp->rcv_scale));
 	if (th->th_win == 0)
 		tp->t_sndzerowin++;
 	if (SEQ_GT(tp->snd_up, tp->snd_nxt)) {
@@ -1164,7 +1164,7 @@ out:
 	 * then remember the size of the advertised window.
 	 * Any pending ACK has now been sent.
 	 */
-	if (win > 0 && SEQ_GT(tp->rcv_nxt+win, tp->rcv_adv))
+	if (win > 0 && SEQ_GT(tp->rcv_nxt + win, tp->rcv_adv))
 		tp->rcv_adv = tp->rcv_nxt + win;
 	tp->last_ack_sent = tp->rcv_nxt;
 	tp->t_sndacktime = now;
