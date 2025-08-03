@@ -1078,7 +1078,7 @@ findpcb:
 					sowwakeup(so);
 					tp->t_flags &= ~TF_BLOCKOUTPUT;
 				}
-				if (so->so_snd.sb_cc ||
+				if (READ_ONCE(so->so_snd.sb_cc) ||
 				    tp->t_flags & TF_NEEDOUTPUT)
 					(void) tcp_output(tp);
 				if (solocked != NULL)
@@ -1812,25 +1812,23 @@ trimthenstep6:
 			    TCP_MAXWIN << tp->snd_scale);
 		}
 		ND6_HINT(tp);
+		mtx_enter(&so->so_snd.sb_mtx);
 		if (acked > so->so_snd.sb_cc) {
 			if (tp->snd_wnd > so->so_snd.sb_cc)
 				tp->snd_wnd -= so->so_snd.sb_cc;
 			else
 				tp->snd_wnd = 0;
-			mtx_enter(&so->so_snd.sb_mtx);
 			sbdrop(&so->so_snd, (int)so->so_snd.sb_cc);
-			mtx_leave(&so->so_snd.sb_mtx);
 			ourfinisacked = 1;
 		} else {
-			mtx_enter(&so->so_snd.sb_mtx);
 			sbdrop(&so->so_snd, acked);
-			mtx_leave(&so->so_snd.sb_mtx);
 			if (tp->snd_wnd > acked)
 				tp->snd_wnd -= acked;
 			else
 				tp->snd_wnd = 0;
 			ourfinisacked = 0;
 		}
+		mtx_leave(&so->so_snd.sb_mtx);
 
 		tcp_update_sndspace(tp);
 		if (sb_notify(&so->so_snd)) {
