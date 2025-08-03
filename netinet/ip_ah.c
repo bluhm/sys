@@ -363,7 +363,7 @@ ah_massage_headers(struct mbuf **mp, int af, int skip, int alg, int out)
 		}
 
 		/* Let's deal with the remaining headers (if any). */
-		if (skip - sizeof(struct ip6_hdr) > 0) {
+		if (skip > sizeof(struct ip6_hdr)) {
 			if (m->m_len <= skip) {
 				ptr = malloc(skip - sizeof(struct ip6_hdr),
 				    M_XDATA, M_NOWAIT);
@@ -393,9 +393,9 @@ ah_massage_headers(struct mbuf **mp, int af, int skip, int alg, int out)
 
 		nxt = ip6.ip6_nxt;  /* Next header type. */
 
-		for (off = 0; off < skip - sizeof(struct ip6_hdr);) {
-			if (off + sizeof(struct ip6_ext) >
-			    skip - sizeof(struct ip6_hdr))
+		for (off = 0; off + sizeof(struct ip6_hdr) < skip;) {
+			if (off + sizeof(struct ip6_hdr) +
+			    sizeof(struct ip6_ext) > skip)
 				goto error6;
 			ip6e = (struct ip6_ext *)(ptr + off);
 
@@ -405,7 +405,7 @@ ah_massage_headers(struct mbuf **mp, int af, int skip, int alg, int out)
 				noff = off + ((ip6e->ip6e_len + 1) << 3);
 
 				/* Sanity check. */
-				if (noff > skip - sizeof(struct ip6_hdr))
+				if (noff + sizeof(struct ip6_hdr) > skip)
 					goto error6;
 
 				/*
