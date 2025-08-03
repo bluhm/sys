@@ -1,4 +1,4 @@
-/*	$OpenBSD: nd6.c,v 1.293 2025/07/26 01:16:59 mvs Exp $	*/
+/*	$OpenBSD: nd6.c,v 1.295 2025/08/03 04:11:57 mvs Exp $	*/
 /*	$KAME: nd6.c,v 1.280 2002/06/08 19:52:07 itojun Exp $	*/
 
 /*
@@ -75,7 +75,7 @@
 /* timer values */
 int	nd6_timer_next	= -1;	/* at which uptime nd6_timer runs */
 time_t	nd6_expire_next	= -1;	/* at which uptime nd6_expire runs */
-int	nd6_delay	= 5;	/* delay first probe time 5 second */
+int	nd6_delay	= 5;	/* [a] delay first probe time 5 second */
 int	nd6_umaxtries	= 3;	/* maximum unicast query */
 int	nd6_mmaxtries	= 3;	/* maximum multicast query */
 int	nd6_gctimer	= (60 * 60 * 24); /* 1 day: garbage collection timer */
@@ -729,7 +729,6 @@ nd6_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 	struct llinfo_nd6 *ln;
 	struct ifaddr *ifa;
 	struct in6_ifaddr *ifa6;
-	int ip6_neighborgcthresh_local;
 
 	if (ISSET(rt->rt_flags, RTF_GATEWAY|RTF_MULTICAST|RTF_MPLS))
 		return;
@@ -830,11 +829,7 @@ nd6_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 		 * cause re-entering rtable related routines triggering
 		 * lock-order-reversal problems.
 		 */
-		ip6_neighborgcthresh_local =
-		    atomic_load_int(&ip6_neighborgcthresh);
-
-		if (ip6_neighborgcthresh_local >= 0 &&
-		    nd6_inuse >= ip6_neighborgcthresh_local) {
+		if (nd6_inuse >= atomic_load_int(&ip6_neighborgcthresh)) {
 			int i;
 
 			for (i = 0; i < 10; i++) {
@@ -1307,7 +1302,7 @@ nd6_resolve(struct ifnet *ifp, struct rtentry *rt0, struct mbuf *m,
 	if (ln->ln_state == ND6_LLINFO_STALE) {
 		ln->ln_asked = 0;
 		ln->ln_state = ND6_LLINFO_DELAY;
-		nd6_llinfo_settimer(ln, nd6_delay);
+		nd6_llinfo_settimer(ln, atomic_load_int(&nd6_delay));
 	}
 
 	/*
