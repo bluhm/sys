@@ -647,6 +647,7 @@ nd6_free(struct rtentry *rt, int i_am_router)
 	NET_ASSERT_LOCKED_EXCLUSIVE();
 
 	ifp = if_get(rt->rt_ifidx);
+	KASSERT(ifp != NULL);
 
 	if (!i_am_router) {
 		if (ln->ln_router) {

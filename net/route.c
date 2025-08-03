@@ -907,7 +907,7 @@ rtrequest_delete(struct rt_addrinfo *info, u_int8_t prio, struct ifnet *ifp,
 		return (ESRCH);
 
 	/* Make sure that's the route the caller want to delete. */
-	if (ifp != NULL && ifp->if_index != rt->rt_ifidx) {
+	if (ifp->if_index != rt->rt_ifidx) {
 		rtfree(rt);
 		return (ESRCH);
 	}
