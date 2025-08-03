@@ -267,8 +267,8 @@ nd6_timer(void *unused)
 	}
 
 	secs = expire - uptime;
-	if (secs < 0)
-		secs = 0;
+	if (secs < 1)
+		secs = 1;
 	if (!TAILQ_EMPTY(&nd6_list)) {
 		nd6_timer_next = uptime + secs;
 		timeout_add_sec(&nd6_timer_to, secs);
