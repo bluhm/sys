@@ -258,10 +258,11 @@ nd6_timer(void *unused)
 	TAILQ_FOREACH_SAFE(ln, &nd6_list, ln_list, nln) {
 		struct rtentry *rt = ln->ln_rt;
 
-		if (rt->rt_expire && rt->rt_expire <= uptime)
+		if (rt->rt_expire && rt->rt_expire <= uptime) {
+			rt->rt_expire = 0;
 			if (nd6_llinfo_timer(rt, i_am_router))
 				continue;
-
+		}
 		if (rt->rt_expire && rt->rt_expire < expire)
 			expire = rt->rt_expire;
 	}
