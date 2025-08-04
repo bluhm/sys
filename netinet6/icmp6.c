@@ -1,4 +1,4 @@
-/*	$OpenBSD: icmp6.c,v 1.273 2025/08/02 12:53:04 mvs Exp $	*/
+/*	$OpenBSD: icmp6.c,v 1.275 2025/08/03 11:12:58 mvs Exp $	*/
 /*	$KAME: icmp6.c,v 1.217 2001/06/20 15:03:29 jinmei Exp $	*/
 
 /*
@@ -1292,7 +1292,6 @@ icmp6_redirect_input(struct mbuf *m, int off)
 		struct sockaddr_in6 ssrc;
 		unsigned long rtcount;
 		struct rtentry *newrt = NULL;
-		int ip6_maxdynroutes_local = atomic_load_int(&ip6_maxdynroutes);
 
 		/*
 		 * do not install redirect route, if the number of entries
@@ -1301,8 +1300,7 @@ icmp6_redirect_input(struct mbuf *m, int off)
 		 * (there will be additional hops, though).
 		 */
 		rtcount = rt_timer_queue_count(&icmp6_redirect_timeout_q);
-		if (ip6_maxdynroutes_local >= 0 &&
-		    rtcount >= ip6_maxdynroutes_local)
+		if (rtcount >= atomic_load_int(&ip6_maxdynroutes))
 			goto freeit;
 
 		bzero(&sdst, sizeof(sdst));
@@ -1776,10 +1774,10 @@ icmp6_mtudisc_timeout(struct rtentry *rt, u_int rtableid)
 #ifndef SMALL_KERNEL
 const struct sysctl_bounded_args icmpv6ctl_vars_unlocked[] = {
 	{ ICMPV6CTL_ND6_DELAY, &nd6_delay, 0, INT_MAX },
+	{ ICMPV6CTL_ND6_UMAXTRIES, &nd6_umaxtries, 0, INT_MAX },
 };
 
 const struct sysctl_bounded_args icmpv6ctl_vars[] = {
-	{ ICMPV6CTL_ND6_UMAXTRIES, &nd6_umaxtries, 0, INT_MAX },
 	{ ICMPV6CTL_ND6_MMAXTRIES, &nd6_mmaxtries, 0, INT_MAX },
 	{ ICMPV6CTL_ERRPPSLIMIT, &icmp6errppslim, -1, 1000 },
 	{ ICMPV6CTL_ND6_MAXNUDHINT, &nd6_maxnudhint, 0, INT_MAX },
@@ -1847,6 +1845,7 @@ icmp6_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 		break;
 
 	case ICMPV6CTL_ND6_DELAY:
+	case ICMPV6CTL_ND6_UMAXTRIES:
 		error = sysctl_bounded_arr(icmpv6ctl_vars_unlocked,
 		    nitems(icmpv6ctl_vars_unlocked), name, namelen,
 		    oldp, oldlenp, newp, newlen);
