@@ -184,7 +184,7 @@ struct acpi_softc *acpi_softc;
 extern struct aml_node aml_root;
 
 struct cfdriver acpi_cd = {
-	NULL, "acpi", DV_DULL
+	NULL, "acpi", DV_DULL, CD_SEVVM
 };
 
 uint8_t

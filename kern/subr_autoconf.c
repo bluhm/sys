@@ -216,6 +216,9 @@ config_search(cfmatch_t fn, struct device *parent, void *aux)
 			if (cf->cf_driver->cd_class == DV_TAPE)
 				continue;
 		}
+		if (ISSET(boothowto, RB_SEVVM) &&
+		    !ISSET(cf->cf_driver->cd_mode, CD_SEVVM))
+			continue;
 		for (p = cf->cf_parents; *p >= 0; p++)
 			if (parent->dv_cfdata == &cfdata[*p])
 				mapply(&m, cf);

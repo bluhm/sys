@@ -48,7 +48,7 @@ const struct cfattach acpimadt_ca = {
 };
 
 struct cfdriver acpimadt_cd = {
-	NULL, "acpimadt", DV_DULL
+	NULL, "acpimadt", DV_DULL, CD_SEVVM
 };
 
 int acpimadt_validate(struct acpi_madt *);
