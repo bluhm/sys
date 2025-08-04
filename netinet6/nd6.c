@@ -73,7 +73,7 @@
 #define ND6_RECALC_REACHTM_INTERVAL (60 * 120) /* 2 hours */
 
 /* timer values */
-int	nd6_timer_next	= -1;	/* at which uptime nd6_timer runs */
+time_t	nd6_timer_next	= -1;	/* at which uptime nd6_timer runs */
 time_t	nd6_expire_next	= -1;	/* at which uptime nd6_expire runs */
 int	nd6_delay	= 5;	/* [a] delay first probe time 5 second */
 int	nd6_umaxtries	= 3;	/* [a] maximum unicast query */
