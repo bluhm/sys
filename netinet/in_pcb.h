@@ -366,8 +366,7 @@ int	 in_pcbselsrc(struct in_addr *, const struct sockaddr_in *,
 	    struct inpcb *);
 struct rtentry *
 	in_pcbrtentry(struct inpcb *);
-int	in_pcbsysctl_lport(struct inpcbtable *, void *, size_t *, void *,
-	    size_t);
+int	in_pcbport_linear(struct inpcbtable *, int);
 
 /* INET6 stuff */
 struct rtentry *

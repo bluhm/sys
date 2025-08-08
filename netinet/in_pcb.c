@@ -78,7 +78,6 @@
 #include <sys/domain.h>
 #include <sys/pool.h>
 #include <sys/proc.h>
-#include <sys/sysctl.h>
 
 #include <net/if.h>
 #include <net/if_var.h>
@@ -1445,19 +1444,9 @@ in_pcbunset_laddr(struct inpcb *inp)
 }
 
 int
-in_pcbsysctl_lport(struct inpcbtable *table, void *oldp, size_t *oldlenp,
-    void *newp, size_t newlen)
+in_pcbport_linear(struct inpcbtable *table, int size)
 {
 	uint16_t *ports = NULL;
-	int error, size;
-
-	mtx_enter(&table->inpt_mtx);
-	size = table->inpt_lportsize;
-	mtx_leave(&table->inpt_mtx);
-	error = sysctl_int_bounded(oldp, oldlenp, newp, newlen, &size,
-	    0, 0x10000);
-	if (error || newp == NULL)
-		return error;
 
 	if (size > 0) {
 		ports = mallocarray(size, sizeof(uint16_t), M_PCB, M_WAITOK);

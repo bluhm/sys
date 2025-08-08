@@ -112,6 +112,7 @@ u_int	tcp_sendspace = TCP_SENDSPACE;		/* [I] */
 #endif
 u_int	tcp_recvspace = TCP_RECVSPACE;		/* [I] */
 u_int	tcp_autorcvbuf_inc = 16 * 1024;		/* [I] */
+u_int	tcp_lportsize;				/* [a] */
 
 const struct pr_usrreqs tcp_usrreqs = {
 	.pru_attach	= tcp_attach,
@@ -1536,9 +1537,20 @@ tcp_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		return (error);
 
 	case TCPCTL_LPORT_SIZE:
-		/* Linear port selection based on hash of local address. */
-		error = in_pcbsysctl_lport(&tcbtable, oldp, oldlenp, newp,
-		    newlen);
+		oval = nval = atomic_load_int(&tcp_lportsize);
+		error = sysctl_int_bounded(oldp, oldlenp, newp, newlen, &nval,
+		    0, 0x10000);
+		if (!error && newp != NULL) {
+			rw_enter_write(&sysctl_lock);
+			error = in_pcbport_linear(&tcbtable, nval);
+#ifdef INET6
+                        if (!error)
+				error = in_pcbport_linear(&tcb6table, nval);
+#endif
+			if (!error)
+				atomic_store_int(&tcp_lportsize, nval);
+			rw_exit_write(&sysctl_lock);
+		}
 		return (error);
 
 	default:
