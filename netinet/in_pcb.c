@@ -135,8 +135,8 @@ struct inpcb *in_pcblookup_lock(struct inpcbtable *, struct in_addr, u_int,
     struct in_addr, u_int, u_int, int);
 int	in_pcbaddrisavail_lock(const struct inpcb *, struct sockaddr_in *, int,
     struct proc *, int);
-int	in_pcbpickport(u_int16_t *, const void *, int, const struct inpcb *,
-    struct proc *);
+int	in_pcbpickport(u_int16_t *, const void *, const void *, uint16_t, int,
+    const struct inpcb *, struct proc *);
 
 /*
  * in_pcb is used for inet and inet6.  in6_pcb only contains special
@@ -277,7 +277,7 @@ in_pcballoc(struct socket *so, struct inpcbtable *table, int wait)
 
 int
 in_pcbbind_locked(struct inpcb *inp, struct mbuf *nam, const void *laddr,
-    struct proc *p)
+    const void *faddr, uint16_t fport, struct proc *p)
 {
 	struct socket *so = inp->inp_socket;
 	u_int16_t lport = 0;
@@ -329,7 +329,8 @@ in_pcbbind_locked(struct inpcb *inp, struct mbuf *nam, const void *laddr,
 	}
 
 	if (lport == 0) {
-		if ((error = in_pcbpickport(&lport, laddr, wild, inp, p)))
+		if ((error = in_pcbpickport(&lport, laddr, faddr, fport, wild,
+		    inp, p)))
 			return (error);
 	} else {
 		if (in_rootonly(ntohs(lport), so->so_proto->pr_protocol) &&
@@ -358,7 +359,8 @@ in_pcbbind(struct inpcb *inp, struct mbuf *nam, struct proc *p)
 
 	/* keep lookup, modification, and rehash in sync */
 	mtx_enter(&table->inpt_mtx);
-	error = in_pcbbind_locked(inp, nam, &zeroin46_addr, p);
+	error = in_pcbbind_locked(inp, nam, &zeroin46_addr, &zeroin46_addr, 0,
+	    p);
 	mtx_leave(&table->inpt_mtx);
 
 	return error;
@@ -442,16 +444,59 @@ in_pcbaddrisavail(const struct inpcb *inp, struct sockaddr_in *sin,
 	return in_pcbaddrisavail_lock(inp, sin, wild, p, IN_PCBLOCK_GRAB);
 }
 
+static uint16_t
+in_pcbport_hash(sa_family_t af, const void *laddr, const void *faddr,
+    uint16_t fport, unsigned int rtable, uint32_t rand[])
+{
+	uint32_t hash;
+
+	hash = rtable ^ rand[9];
+	hash *= fport ^ rand[8];
+	switch (af) {
+	case AF_INET: {
+		const struct in_addr *addr;
+
+		addr = laddr;
+		hash *= addr->s_addr ^ rand[0];
+		addr = faddr;
+		hash *= addr->s_addr ^ rand[4];
+		break;
+	    }
+#ifdef INET6
+	case AF_INET6: {
+		const struct in6_addr *addr6;
+
+		addr6 = laddr;
+		hash *= addr6->s6_addr32[0] ^ rand[0];
+		hash *= addr6->s6_addr32[1] ^ rand[1];
+		hash *= addr6->s6_addr32[2] ^ rand[2];
+		hash *= addr6->s6_addr32[3] ^ rand[3];
+		addr6 = faddr;
+		hash *= addr6->s6_addr32[0] ^ rand[4];
+		hash *= addr6->s6_addr32[1] ^ rand[5];
+		hash *= addr6->s6_addr32[2] ^ rand[6];
+		hash *= addr6->s6_addr32[3] ^ rand[7];
+		break;
+	    }
+#endif
+	default:
+		unhandled_af(af);
+	}
+	hash = (hash >> 16) ^ (hash & 0xffff);
+
+	return hash;
+}
+
 int
-in_pcbpickport(u_int16_t *lport, const void *laddr, int wild,
-    const struct inpcb *inp, struct proc *p)
+in_pcbpickport(u_int16_t *lport, const void *laddr, const void *faddr,
+    uint16_t fport, int wild, const struct inpcb *inp, struct proc *p)
 {
 	struct socket *so = inp->inp_socket;
 	struct inpcbtable *table = inp->inp_table;
 	struct inpcb *t;
 	u_int16_t first, last, lower, higher, candidate, localport;
 	int count;
-	uint32_t addrhash;
+	uint32_t hash;
 
 	MUTEX_ASSERT_LOCKED(&table->inpt_mtx);
 
@@ -479,25 +524,16 @@ in_pcbpickport(u_int16_t *lport, const void *laddr, int wild,
 	 * Simple check to ensure all ports are not used up causing
 	 * a deadlock here.
 	 */
-
 	count = higher - lower;
+
 	if (table->inpt_prevlports != NULL &&
 	    !ISSET(inp->inp_flags, INP_HIGHPORT | INP_LOWPORT)) {
-		addrhash = rtable_l2(inp->inp_rtableid);
-#ifdef INET6
-		if (ISSET(inp->inp_flags, INP_IPV6)) {
-			const struct in6_addr *laddr6 = laddr;
-
-			addrhash ^= laddr6->s6_addr32[0];
-			addrhash ^= laddr6->s6_addr32[1];
-			addrhash ^= laddr6->s6_addr32[2];
-			addrhash ^= laddr6->s6_addr32[3];
-		} else
-#endif
-			addrhash ^= ((const struct in_addr *)laddr)->s_addr;
-		addrhash ^= addrhash >> 16;
-		addrhash %= table->inpt_lportsize;
-		candidate = table->inpt_prevlports[addrhash];
+		hash = in_pcbport_hash(
+		    ISSET(inp->inp_flags, INP_IPV6) ? AF_INET6 : AF_INET,
+		    laddr, faddr, fport, rtable_l2(inp->inp_rtableid),
+		    table->inpt_lportrand);
+		hash %= table->inpt_lportsize;
+		candidate = table->inpt_prevlports[hash];
 	} else
 		candidate = lower + arc4random_uniform(count);
 
@@ -516,7 +552,7 @@ in_pcbpickport(u_int16_t *lport, const void *laddr, int wild,
 	*lport = localport;
 	if (table->inpt_prevlports != NULL &&
 	    !ISSET(inp->inp_flags, INP_HIGHPORT | INP_LOWPORT)) {
-		table->inpt_prevlports[addrhash] = candidate;
+		table->inpt_prevlports[hash] = candidate;
 	}
 
 	return (0);
@@ -564,7 +600,8 @@ in_pcbconnect(struct inpcb *inp, struct mbuf *nam)
 
 	if (inp->inp_laddr.s_addr == INADDR_ANY) {
 		if (inp->inp_lport == 0) {
-			error = in_pcbbind_locked(inp, NULL, &ina, curproc);
+			error = in_pcbbind_locked(inp, NULL, &ina,
+			    &sin->sin_addr, sin->sin_port, curproc);
 			if (error) {
 				mtx_leave(&table->inpt_mtx);
 				return (error);
@@ -1460,6 +1497,7 @@ in_pcbport_linear(struct inpcbtable *table, int size)
 	    table->inpt_lportsize * sizeof(uint16_t));
 	table->inpt_prevlports = ports;
 	table->inpt_lportsize = size;
+	arc4random_buf(table->inpt_lportrand, sizeof(table->inpt_lportrand));
 	mtx_leave(&table->inpt_mtx);
 
 	return 0;
