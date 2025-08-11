@@ -990,7 +990,7 @@ findpcb:
 #endif
 	    (!opti.ts_present || TSTMP_GEQ(opti.ts_val, tp->ts_recent)) &&
 	    th->th_seq == tp->rcv_nxt &&
-	    tiwin && tiwin == tp->snd_wnd &&
+	    tiwin > 0 && tiwin == tp->snd_wnd &&
 	    tp->snd_nxt == tp->snd_max) {
 
 		/*
@@ -1156,11 +1156,9 @@ findpcb:
 	 * but not less than advertised window.
 	 */
 	{
-		long win;
+		u_long win;
 
-		win = sbspace(&so->so_rcv);
-		if (win < 0)
-			win = 0;
+		win = lmax(sbspace(&so->so_rcv), 0);
 		tp->rcv_wnd = lmax(win, (int)(tp->rcv_adv - tp->rcv_nxt));
 	}
 
@@ -3883,7 +3881,7 @@ syn_cache_add(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
     struct tcp_opt_info *oi, tcp_seq *issp, uint64_t now, int do_ecn)
 {
 	struct tcpcb tb, *tp;
-	long win;
+	u_long win;
 	struct syn_cache *sc;
 	struct syn_cache_head *scp;
 	struct mbuf *ipopts;
@@ -3902,7 +3900,7 @@ syn_cache_add(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 	/*
 	 * Initialize some local state.
 	 */
-	win = sbspace(&so->so_rcv);
+	win = lmax(sbspace(&so->so_rcv), 0);
 	if (win > TCP_MAXWIN)
 		win = TCP_MAXWIN;
 

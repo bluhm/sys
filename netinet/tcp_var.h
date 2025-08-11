@@ -248,7 +248,7 @@ struct syn_cache {
 	struct refcnt sc_refcnt;		/* ref count list and timer */
 	struct timeout sc_timer;		/* rexmt timer */
 	struct route sc_route;			/* [s] cached route */
-	long sc_win;				/* [I] advertised window */
+	u_long sc_win;				/* [I] advertised window */
 	struct syn_cache_head *sc_buckethead;	/* [S] our bucket index */
 	struct syn_cache_set *sc_set;		/* [S] our syn cache set */
 	u_int64_t sc_timestamp;		/* [s] timestamp from SYN */

@@ -294,7 +294,7 @@ tcp_respond(struct tcpcb *tp, caddr_t template, struct tcphdr *th0,
     tcp_seq ack, tcp_seq seq, int flags, u_int rtableid, uint64_t now)
 {
 	int tlen;
-	long win = 0;
+	u_long win = 0;
 	struct mbuf *m = NULL;
 	struct tcphdr *th;
 	struct ip *ip;
@@ -305,7 +305,7 @@ tcp_respond(struct tcpcb *tp, caddr_t template, struct tcphdr *th0,
 
 	if (tp) {
 		struct socket *so = tp->t_inpcb->inp_socket;
-		win = sbspace(&so->so_rcv);
+		win = lmax(sbspace(&so->so_rcv), 0);
 		/*
 		 * If this is called with an unconnected
 		 * socket/tp/pcb (tp->pf is 0), we lose.
@@ -364,7 +364,7 @@ tcp_respond(struct tcpcb *tp, caddr_t template, struct tcphdr *th0,
 		win >>= tp->rcv_scale;
 	if (win > TCP_MAXWIN)
 		win = TCP_MAXWIN;
-	th->th_win = htons((u_int16_t)win);
+	th->th_win = htons(win);
 	th->th_urp = 0;
 
 	if (tp && (tp->t_flags & (TF_REQ_TSTMP|TF_NOOPT)) == TF_REQ_TSTMP &&

@@ -190,7 +190,8 @@ int
 tcp_output(struct tcpcb *tp)
 {
 	struct socket *so = tp->t_inpcb->inp_socket;
-	long len, win, rcv_hiwat, txmaxseg;
+	u_long win;
+	long len, rcv_hiwat, txmaxseg;
 	int off, flags, error;
 	struct mbuf *m;
 	struct tcphdr *th;
@@ -374,7 +375,7 @@ again:
 		flags &= ~TH_FIN;
 
 	mtx_enter(&so->so_rcv.sb_mtx);
-	win = sbspace_locked(&so->so_rcv);
+	win = lmax(sbspace_locked(&so->so_rcv), 0);
 	rcv_hiwat = (long) so->so_rcv.sb_hiwat;
 	mtx_leave(&so->so_rcv.sb_mtx);
 
@@ -418,7 +419,7 @@ again:
 		 * taking into account that we are limited by
 		 * TCP_MAXWIN << tp->rcv_scale.
 		 */
-		long adv = lmin(win, TCP_MAXWIN << tp->rcv_scale) -
+		long adv = ulmin(win, TCP_MAXWIN << tp->rcv_scale) -
 			(tp->rcv_adv - tp->rcv_nxt);
 
 		if (adv >= (long) (2 * tp->t_maxseg))
@@ -857,7 +858,7 @@ send:
 	 * Calculate receive window.  Don't shrink window,
 	 * but avoid silly window syndrome.
 	 */
-	if (win < (rcv_hiwat / 4) && win < (long)tp->t_maxseg)
+	if (win < (rcv_hiwat / 4) && win < tp->t_maxseg)
 		win = 0;
 	if (win > TCP_MAXWIN << tp->rcv_scale)
 		win = TCP_MAXWIN << tp->rcv_scale;
@@ -865,7 +866,7 @@ send:
 		win = (int32_t)(tp->rcv_adv - tp->rcv_nxt);
 	if (flags & TH_RST)
 		win = 0;
-	th->th_win = htons((u_int16_t)(win >> tp->rcv_scale));
+	th->th_win = htons(win >> tp->rcv_scale);
 	if (th->th_win == 0)
 		tp->t_sndzerowin++;
 	if (SEQ_GT(tp->snd_up, tp->snd_nxt)) {
