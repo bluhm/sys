@@ -1,4 +1,4 @@
-/*	$OpenBSD: uipc_syscalls.c,v 1.224 2025/08/04 04:59:31 guenther Exp $	*/
+/*	$OpenBSD: uipc_syscalls.c,v 1.226 2025/08/10 07:50:58 deraadt Exp $	*/
 /*	$NetBSD: uipc_syscalls.c,v 1.19 1996/02/09 19:00:48 christos Exp $	*/
 
 /*
@@ -170,14 +170,14 @@ sys_bind(struct proc *p, void *v, register_t *retval)
 	if ((error = getsock(p, SCARG(uap, s), &fp)) != 0)
 		return (error);
 	so = fp->f_data;
-	error = pledge_socket(p, so->so_proto->pr_domain->dom_family,
-	    so->so_state);
-	if (error)
-		goto out;
 	if (so->so_state & SS_YP) {
 		error = ENOTSOCK;
 		goto out;
 	}
+	error = pledge_socket(p, so->so_proto->pr_domain->dom_family,
+	    so->so_state);
+	if (error)
+		goto out;
 	error = sockargs(&nam, SCARG(uap, name), SCARG(uap, namelen),
 	    MT_SONAME);
 	if (error)
@@ -209,11 +209,14 @@ sys_listen(struct proc *p, void *v, register_t *retval)
 	if ((error = getsock(p, SCARG(uap, s), &fp)) != 0)
 		return (error);
 	so = fp->f_data;
-	if (so->so_state & SS_YP)
-		return ENOTSOCK;
+	if (so->so_state & SS_YP) {
+		error = ENOTSOCK;
+		goto out;
+	}
 	solock_shared(so);
 	error = solisten(so, SCARG(uap, backlog));
 	sounlock_shared(so);
+out:
 	FRELE(fp, p);
 	return (error);
 }
@@ -388,14 +391,14 @@ sys_connect(struct proc *p, void *v, register_t *retval)
 	if ((error = getsock(p, SCARG(uap, s), &fp)) != 0)
 		return (error);
 	so = fp->f_data;
-	error = pledge_socket(p, so->so_proto->pr_domain->dom_family,
-	    so->so_state);
-	if (error)
-		goto out;
 	if (so->so_state & SS_YP) {
 		error = ENOTSOCK;
 		goto out;
 	}
+	error = pledge_socket(p, so->so_proto->pr_domain->dom_family,
+	    so->so_state);
+	if (error)
+		goto out;
 	error = sockargs(&nam, SCARG(uap, name), SCARG(uap, namelen),
 	    MT_SONAME);
 	if (error)
@@ -1292,29 +1295,22 @@ sys_getsockname(struct proc *p, void *v, register_t *retval)
 
 	if ((error = getsock(p, SCARG(uap, fdes), &fp)) != 0)
 		return (error);
-	error = copyin(SCARG(uap, alen), &len, sizeof (len));
-	if (error)
-		goto bad;
 	so = fp->f_data;
 	if (so->so_state & SS_YP) {
 		error = ENOTSOCK;
-		goto bad;
+		goto out;
 	}
-	error = pledge_socket(p, -1, so->so_state);
+	error = copyin(SCARG(uap, alen), &len, sizeof (len));
 	if (error)
-		goto bad;
-	if (so->so_state & SS_YP) {
-		error = ENOTSOCK;
-		goto bad;
-	}
+		goto out;
 	m = m_getclr(M_WAIT, MT_SONAME);
 	solock_shared(so);
 	error = pru_sockaddr(so, m);
 	sounlock_shared(so);
 	if (error)
-		goto bad;
+		goto out;
 	error = copyaddrout(p, m, SCARG(uap, asa), len, SCARG(uap, alen));
-bad:
+out:
 	FRELE(fp, p);
 	m_freem(m);
 	return (error);
@@ -1340,9 +1336,6 @@ sys_getpeername(struct proc *p, void *v, register_t *retval)
 	if ((error = getsock(p, SCARG(uap, fdes), &fp)) != 0)
 		return (error);
 	so = fp->f_data;
-	error = pledge_socket(p, -1, so->so_state);
-	if (error)
-		goto bad;
 	if (so->so_state & SS_YP) {
 		error = ENOTSOCK;
 		goto bad;

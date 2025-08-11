@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_pledge.c,v 1.329 2025/07/17 04:58:00 deraadt Exp $	*/
+/*	$OpenBSD: kern_pledge.c,v 1.331 2025/08/10 07:50:58 deraadt Exp $	*/
 
 /*
  * Copyright (c) 2015 Nicholas Marriott <nicm@openbsd.org>
@@ -350,12 +350,12 @@ const uint64_t pledge_syscalls[SYS_MAXSYSCALL] = {
 	[SYS_socket] = PLEDGE_INET | PLEDGE_UNIX | PLEDGE_DNS,
 	[SYS_connect] = PLEDGE_INET | PLEDGE_UNIX | PLEDGE_DNS,
 	[SYS_bind] = PLEDGE_INET | PLEDGE_UNIX | PLEDGE_DNS,
-	[SYS_getsockname] = PLEDGE_INET | PLEDGE_UNIX | PLEDGE_DNS,
+	[SYS_getsockname] = PLEDGE_STDIO,
 
 	[SYS_listen] = PLEDGE_INET | PLEDGE_UNIX,
 	[SYS_accept4] = PLEDGE_INET | PLEDGE_UNIX,
 	[SYS_accept] = PLEDGE_INET | PLEDGE_UNIX,
-	[SYS_getpeername] = PLEDGE_INET | PLEDGE_UNIX,
+	[SYS_getpeername] = PLEDGE_STDIO,
 
 	[SYS_flock] = PLEDGE_FLOCK,
 
@@ -1384,6 +1384,18 @@ pledge_sockopt(struct proc *p, int set, int level, int optname)
 			return (0);
 		}
 		break;
+	case IPPROTO_IP:
+		switch (optname) {
+		case IP_TOS:
+			return (0);
+		}
+		break;
+	case IPPROTO_IPV6:
+		switch (optname) {
+		case IPV6_TCLASS:
+			return (0);
+		}
+		break;
 	}
 
 	if ((pledge & PLEDGE_WROUTE)) {
@@ -1450,7 +1462,6 @@ pledge_sockopt(struct proc *p, int set, int level, int optname)
 			if (!set)
 				return (0);
 			break;
-		case IP_TOS:
 		case IP_TTL:
 		case IP_MINTTL:
 		case IP_IPDEFTTL:
@@ -1472,7 +1483,6 @@ pledge_sockopt(struct proc *p, int set, int level, int optname)
 		break;
 	case IPPROTO_IPV6:
 		switch (optname) {
-		case IPV6_TCLASS:
 		case IPV6_DONTFRAG:
 		case IPV6_UNICAST_HOPS:
 		case IPV6_MINHOPCOUNT:
