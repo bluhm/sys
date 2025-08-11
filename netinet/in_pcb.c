@@ -359,8 +359,7 @@ in_pcbbind(struct inpcb *inp, struct mbuf *nam, struct proc *p)
 
 	/* keep lookup, modification, and rehash in sync */
 	mtx_enter(&table->inpt_mtx);
-	error = in_pcbbind_locked(inp, nam, &zeroin46_addr, &zeroin46_addr, 0,
-	    p);
+	error = in_pcbbind_locked(inp, nam, &zeroin46_addr, NULL, 0, p);
 	mtx_leave(&table->inpt_mtx);
 
 	return error;
@@ -526,7 +525,7 @@ in_pcbpickport(u_int16_t *lport, const void *laddr, const void *faddr,
 	 */
 	count = higher - lower;
 
-	if (table->inpt_prevlports != NULL &&
+	if (table->inpt_prevlports != NULL && faddr != NULL &&
 	    !ISSET(inp->inp_flags, INP_HIGHPORT | INP_LOWPORT)) {
 		hash = in_pcbport_hash(
 		    ISSET(inp->inp_flags, INP_IPV6) ? AF_INET6 : AF_INET,
@@ -550,7 +549,7 @@ in_pcbpickport(u_int16_t *lport, const void *laddr, const void *faddr,
 		    inp->inp_rtableid, IN_PCBLOCK_HOLD);
 	} while (t != NULL);
 	*lport = localport;
-	if (table->inpt_prevlports != NULL &&
+	if (table->inpt_prevlports != NULL && faddr != NULL &&
 	    !ISSET(inp->inp_flags, INP_HIGHPORT | INP_LOWPORT)) {
 		table->inpt_prevlports[hash] = candidate;
 	}
