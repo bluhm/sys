@@ -439,6 +439,8 @@ vctrap(struct trapframe *frame, int user)
 	ghcb = (struct ghcb_sa *)ghcb_vaddr;
 	ghcb_sync_out(frame, &ghcb_regs, ghcb, &syncout);
 
+	wrmsr(MSR_SEV_GHCB, ghcb_paddr);
+
 	/* Call hypervisor. */
 	vmgexit();
 
@@ -449,7 +451,7 @@ vctrap(struct trapframe *frame, int user)
 	}
 
 	/* Sync in from GHCB */
-	ghcb_sync_in(frame, ghcb, &syncin);
+	ghcb_sync_in(frame, NULL, ghcb, &syncin);
 
 	return 1;
 }
