@@ -71,6 +71,7 @@
 #include <sys/malloc.h>
 
 #include <machine/bus.h>
+#include <machine/ghcb.h>
 
 #include <uvm/uvm_extern.h>
 #include <machine/i82093reg.h>
@@ -133,6 +134,11 @@ ioapic_read_ul(struct ioapic_softc *sc,int regid)
 {
 	u_int32_t val;
 
+	if (ISSET(cpu_sev_guestmode, SEV_STAT_ES_ENABLED)) {
+		ghcb_mem_write_4((paddr_t)sc->sc_reg, regid);
+		return ghcb_mem_read_4((paddr_t)sc->sc_data);
+	}
+
 	*(sc->sc_reg) = regid;
 	val = *sc->sc_data;
 
@@ -142,6 +148,12 @@ ioapic_read_ul(struct ioapic_softc *sc,int regid)
 static __inline void
 ioapic_write_ul(struct ioapic_softc *sc,int regid, u_int32_t val)
 {
+	if (ISSET(cpu_sev_guestmode, SEV_STAT_ES_ENABLED)) {
+		ghcb_mem_write_4((paddr_t)sc->sc_reg, regid);
+		ghcb_mem_write_4((paddr_t)sc->sc_data, val);
+		return;
+	}
+
 	*(sc->sc_reg) = regid;
 	*(sc->sc_data) = val;
 }
