@@ -266,6 +266,12 @@
 #define SVM_VMEXIT_VMGEXIT			0x403
 #define SVM_VMEXIT_INVALID			-1
 
+/*
+ *  Additional VMEXIT codes used in SEV-ES/SNP in the GHCB
+ */
+#define SEV_VMGEXIT_MMIO_READ			0x80000001
+#define SEV_VMGEXIT_MMIO_WRITE			0x80000002
+
 #ifndef _LOCORE
 
 /*
