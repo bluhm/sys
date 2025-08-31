@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_bnxt.c,v 1.52 2024/10/06 23:43:18 jmatthew Exp $	*/
+/*	$OpenBSD: if_bnxt.c,v 1.55 2025/08/29 14:53:55 stsp Exp $	*/
 /*-
  * Broadcom NetXtreme-C/E network driver.
  *
@@ -423,11 +423,12 @@ bnxt_dmamem_alloc(struct bnxt_softc *sc, size_t size)
 	m->bdm_size = size;
 
 	if (bus_dmamap_create(sc->sc_dmat, size, 1, size, 0,
-	    BUS_DMA_NOWAIT | BUS_DMA_ALLOCNOW, &m->bdm_map) != 0)
+	    BUS_DMA_NOWAIT | BUS_DMA_ALLOCNOW | BUS_DMA_64BIT,
+	    &m->bdm_map) != 0)
 		goto bdmfree;
 
 	if (bus_dmamem_alloc(sc->sc_dmat, size, PAGE_SIZE, 0, &m->bdm_seg, 1,
-	    &nsegs, BUS_DMA_NOWAIT | BUS_DMA_ZERO) != 0)
+	    &nsegs, BUS_DMA_NOWAIT | BUS_DMA_ZERO | BUS_DMA_64BIT) != 0)
 		goto destroy;
 
 	if (bus_dmamem_map(sc->sc_dmat, &m->bdm_seg, nsegs, size, &m->bdm_kva,
@@ -899,7 +900,8 @@ bnxt_queue_up(struct bnxt_softc *sc, struct bnxt_queue *bq)
 	for (i = 0; i < rx->rx_ring.ring_size; i++) {
 		bs = &rx->rx_slots[i];
 		if (bus_dmamap_create(sc->sc_dmat, MCLBYTES, 1, MCLBYTES, 0,
-		    BUS_DMA_WAITOK | BUS_DMA_ALLOCNOW, &bs->bs_map) != 0) {
+		    BUS_DMA_WAITOK | BUS_DMA_ALLOCNOW | BUS_DMA_64BIT,
+		    &bs->bs_map) != 0) {
 			printf("%s: failed to allocate rx dma maps\n",
 			    DEVNAME(sc));
 			goto destroy_rx_slots;
@@ -916,7 +918,8 @@ bnxt_queue_up(struct bnxt_softc *sc, struct bnxt_queue *bq)
 	for (i = 0; i < rx->rx_ag_ring.ring_size; i++) {
 		bs = &rx->rx_ag_slots[i];
 		if (bus_dmamap_create(sc->sc_dmat, BNXT_AG_BUFFER_SIZE, 1,
-		    BNXT_AG_BUFFER_SIZE, 0, BUS_DMA_WAITOK | BUS_DMA_ALLOCNOW,
+		    BNXT_AG_BUFFER_SIZE, 0,
+		    BUS_DMA_WAITOK | BUS_DMA_ALLOCNOW | BUS_DMA_64BIT,
 		    &bs->bs_map) != 0) {
 			printf("%s: failed to allocate rx ag dma maps\n",
 			    DEVNAME(sc));
@@ -934,7 +937,8 @@ bnxt_queue_up(struct bnxt_softc *sc, struct bnxt_queue *bq)
 	for (i = 0; i < tx->tx_ring.ring_size; i++) {
 		bs = &tx->tx_slots[i];
 		if (bus_dmamap_create(sc->sc_dmat, MAXMCLBYTES, BNXT_MAX_TX_SEGS,
-		    BNXT_MAX_MTU, 0, BUS_DMA_WAITOK | BUS_DMA_ALLOCNOW,
+		    BNXT_MAX_MTU, 0,
+		    BUS_DMA_WAITOK | BUS_DMA_ALLOCNOW | BUS_DMA_64BIT,
 		    &bs->bs_map) != 0) {
 			printf("%s: failed to allocate tx dma maps\n",
 			    DEVNAME(sc));
@@ -1360,8 +1364,8 @@ bnxt_start(struct ifqueue *ifq)
 	used = 0;
 
 	for (;;) {
-		/* +1 for tx_bd_long_hi */
-		if (used + BNXT_MAX_TX_SEGS + 1 > free) {
+		/* +1 for tx_bd_long_hi, + 1 to leave a slot free */
+		if (used + BNXT_MAX_TX_SEGS + 2 > free) {
 			ifq_set_oactive(ifq);
 			break;
 		}
