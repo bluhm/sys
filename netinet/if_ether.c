@@ -796,6 +796,12 @@ arptfree(struct rtentry *rt)
 {
 	struct ifnet *ifp;
 
+	NET_ASSERT_LOCKED_EXCLUSIVE();
+
+	/* might have been freed between leave arp_mtx and enter net lock */
+	if (!ISSET(rt->rt_flags, RTF_LLINFO))
+		return;
+
 	KASSERT(!ISSET(rt->rt_flags, RTF_LOCAL));
 	arpinvalidate(rt);
 
