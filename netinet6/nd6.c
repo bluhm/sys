@@ -329,6 +329,10 @@ nd6_llinfo_timer(struct rtentry *rt, int i_am_router)
 
 	NET_ASSERT_LOCKED_EXCLUSIVE();
 
+	/* might have been freed between leave nd6_mtx and enter net lock */
+	if (!ISSET(rt->rt_flags, RTF_LLINFO))
+		return 0;
+
 	if ((ifp = if_get(rt->rt_ifidx)) == NULL)
 		return 1;
 
