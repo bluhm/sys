@@ -1,4 +1,4 @@
-/* $OpenBSD: fusebuf.h,v 1.13 2018/06/19 11:27:54 helg Exp $ */
+/* $OpenBSD: fusebuf.h,v 1.15 2025/09/02 17:18:40 helg Exp $ */
 /*
  * Copyright (c) 2013 Sylvestre Gallon
  * Copyright (c) 2013 Martin Pieuchot
