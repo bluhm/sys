@@ -283,11 +283,10 @@ softnet_init(void)
 	}
 }
 
-#ifdef MULTIPROCESSOR
-
 void
 softnet_percpu(void)
 {
+#ifdef MULTIPROCESSOR
 	unsigned int i;
 
 	/* After attaching all CPUs and interfaces, remove useless threads. */
@@ -297,16 +296,8 @@ softnet_percpu(void)
 		taskq_destroy(sn->sn_taskq);
 		sn->sn_taskq = NULL;
 	}
-}
-
-#else /* MULTIPROCESSOR */
-
-void
-softnet_percpu(void)
-{
-}
-
 #endif /* MULTIPROCESSOR */
+}
 
 static struct if_idxmap if_idxmap;
 
