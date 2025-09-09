@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_loop.c,v 1.102 2025/07/07 02:28:50 jsg Exp $	*/
+/*	$OpenBSD: if_loop.c,v 1.103 2025/09/09 09:16:18 bluhm Exp $	*/
 /*	$NetBSD: if_loop.c,v 1.15 1996/05/07 02:40:33 thorpej Exp $	*/
 
 /*
