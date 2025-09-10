@@ -210,12 +210,6 @@ tcp_output(struct tcpcb *tp)
 #endif
 	int tso;
 
-	if (tp->t_flags & TF_BLOCKOUTPUT) {
-		tp->t_flags |= TF_NEEDOUTPUT;
-		return (0);
-	} else
-		tp->t_flags &= ~TF_NEEDOUTPUT;
-
 #if defined(TCP_SIGNATURE) && defined(DIAGNOSTIC)
 	if (tp->sack_enable && (tp->t_flags & TF_SIGNATURE))
 		return (EINVAL);
