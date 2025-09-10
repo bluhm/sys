@@ -344,9 +344,7 @@ tcp_flush_queue(struct tcpcb *tp)
 		pool_put(&tcpqe_pool, q);
 		q = nq;
 	} while (q != NULL && q->tcpqe_tcp->th_seq == tp->rcv_nxt);
-	tp->t_flags |= TF_BLOCKOUTPUT;
 	sorwakeup(so);
-	tp->t_flags &= ~TF_BLOCKOUTPUT;
 	return (flags);
 }
 
@@ -1080,9 +1078,7 @@ findpcb:
 
 				tcp_update_sndspace(tp);
 				if (sb_notify(&so->so_snd)) {
-					tp->t_flags |= TF_BLOCKOUTPUT;
 					sowwakeup(so);
-					tp->t_flags &= ~TF_BLOCKOUTPUT;
 				}
 				if (so->so_snd.sb_cc ||
 				    tp->t_flags & TF_NEEDOUTPUT)
@@ -1136,9 +1132,7 @@ findpcb:
 				sbappendstream(&so->so_rcv, m);
 				mtx_leave(&so->so_rcv.sb_mtx);
 			}
-			tp->t_flags |= TF_BLOCKOUTPUT;
 			sorwakeup(so);
-			tp->t_flags &= ~TF_BLOCKOUTPUT;
 			if (tp->t_flags & (TF_ACKNOW|TF_NEEDOUTPUT))
 				(void) tcp_output(tp);
 			if (solocked != NULL)
@@ -1258,9 +1252,7 @@ findpcb:
 
 		if (tiflags & TH_ACK && SEQ_GT(tp->snd_una, tp->iss)) {
 			tcpstat_inc(tcps_connects);
-			tp->t_flags |= TF_BLOCKOUTPUT;
 			soisconnected(so);
-			tp->t_flags &= ~TF_BLOCKOUTPUT;
 			tp->t_state = TCPS_ESTABLISHED;
 			TCP_TIMER_ARM(tp, TCPT_KEEP,
 			    atomic_load_int(&tcp_keepidle));
@@ -1547,9 +1539,7 @@ trimthenstep6:
 	 */
 	case TCPS_SYN_RECEIVED:
 		tcpstat_inc(tcps_connects);
-		tp->t_flags |= TF_BLOCKOUTPUT;
 		soisconnected(so);
-		tp->t_flags &= ~TF_BLOCKOUTPUT;
 		tp->t_state = TCPS_ESTABLISHED;
 		TCP_TIMER_ARM(tp, TCPT_KEEP, atomic_load_int(&tcp_keepidle));
 		/* Do window scaling? */
@@ -1839,11 +1829,8 @@ trimthenstep6:
 		}
 
 		tcp_update_sndspace(tp);
-		if (sb_notify(&so->so_snd)) {
-			tp->t_flags |= TF_BLOCKOUTPUT;
+		if (sb_notify(&so->so_snd))
 			sowwakeup(so);
-			tp->t_flags &= ~TF_BLOCKOUTPUT;
-		}
 
 		/*
 		 * If we had a pending ICMP message that referred to data
@@ -1889,9 +1876,7 @@ trimthenstep6:
 				if (so->so_rcv.sb_state & SS_CANTRCVMORE) {
 					int maxidle;
 
-					tp->t_flags |= TF_BLOCKOUTPUT;
 					soisdisconnected(so);
-					tp->t_flags &= ~TF_BLOCKOUTPUT;
 					maxidle = TCPTV_KEEPCNT *
 					    atomic_load_int(&tcp_keepidle);
 					TCP_TIMER_ARM(tp, TCPT_2MSL, maxidle);
@@ -1911,9 +1896,7 @@ trimthenstep6:
 				tp->t_state = TCPS_TIME_WAIT;
 				tcp_canceltimers(tp);
 				TCP_TIMER_ARM(tp, TCPT_2MSL, 2 * TCPTV_MSL);
-				tp->t_flags |= TF_BLOCKOUTPUT;
 				soisdisconnected(so);
-				tp->t_flags &= ~TF_BLOCKOUTPUT;
 			}
 			break;
 
@@ -2056,9 +2039,7 @@ dodata:							/* XXX */
 				sbappendstream(&so->so_rcv, m);
 				mtx_leave(&so->so_rcv.sb_mtx);
 			}
-			tp->t_flags |= TF_BLOCKOUTPUT;
 			sorwakeup(so);
-			tp->t_flags &= ~TF_BLOCKOUTPUT;
 		} else {
 			m_adj(m, hdroptlen);
 			tiflags = tcp_reass(tp, th, m, &tlen);
@@ -2091,9 +2072,7 @@ dodata:							/* XXX */
 	 */
 	if ((tiflags & TH_FIN) && TCPS_HAVEESTABLISHED(tp->t_state)) {
 		if (TCPS_HAVERCVDFIN(tp->t_state) == 0) {
-			tp->t_flags |= TF_BLOCKOUTPUT;
 			socantrcvmore(so);
-			tp->t_flags &= ~TF_BLOCKOUTPUT;
 			tp->t_flags |= TF_ACKNOW;
 			tp->rcv_nxt++;
 		}
@@ -2123,9 +2102,7 @@ dodata:							/* XXX */
 			tp->t_state = TCPS_TIME_WAIT;
 			tcp_canceltimers(tp);
 			TCP_TIMER_ARM(tp, TCPT_2MSL, 2 * TCPTV_MSL);
-			tp->t_flags |= TF_BLOCKOUTPUT;
 			soisdisconnected(so);
-			tp->t_flags &= ~TF_BLOCKOUTPUT;
 			break;
 
 		/*
