@@ -210,6 +210,8 @@ tcp_output(struct tcpcb *tp)
 #endif
 	int tso;
 
+	soassertlocked(so);
+
 #if defined(TCP_SIGNATURE) && defined(DIAGNOSTIC)
 	if (tp->sack_enable && (tp->t_flags & TF_SIGNATURE))
 		return (EINVAL);

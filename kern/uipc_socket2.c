@@ -556,6 +556,11 @@ sowakeup(struct socket *so, struct sockbuf *sb)
 {
 	int dowakeup = 0, dopgsigio = 0;
 
+	if ((so->so_proto->pr_flags & PR_WANTRCVD) &&
+	    (so->so_proto->pr_domain->dom_family == PF_INET ||
+	    so->so_proto->pr_domain->dom_family == PF_INET6))
+		soassertlocked(so);
+
 	mtx_enter(&sb->sb_mtx);
 	if (sb->sb_flags & SB_WAIT) {
 		sb->sb_flags &= ~SB_WAIT;
