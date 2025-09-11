@@ -73,6 +73,7 @@ struct dadq {
 
 struct dadq *nd6_dad_find(struct ifaddr *);
 void nd6_dad_destroy(struct dadq *);
+void nd6_dad_reaper(void *);
 void nd6_dad_starttimer(struct dadq *);
 void nd6_dad_stoptimer(struct dadq *);
 void nd6_dad_timer(void *);
@@ -994,9 +995,18 @@ void
 nd6_dad_destroy(struct dadq *dp)
 {
 	TAILQ_REMOVE(&dadq, dp, dad_list);
+	ip6_dad_pending--;
+	timeout_set_proc(&dp->dad_timer_ch, nd6_dad_reaper, dp);
+	timeout_add(&dp->dad_timer_ch, 0);
+}
+
+void
+nd6_dad_reaper(void *arg)
+{
+	struct dadq *dp = arg;
+
 	ifafree(dp->dad_ifa);
 	free(dp, M_IP6NDP, sizeof(*dp));
-	ip6_dad_pending--;
 }
 
 void
