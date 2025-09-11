@@ -1099,9 +1099,9 @@ nd6_dad_stop(struct ifaddr *ifa)
 }
 
 void
-nd6_dad_timer(void *xifa)
+nd6_dad_timer(void *arg)
 {
-	struct ifaddr *ifa;
+	struct ifaddr *ifa = arg;
 	struct in6_ifaddr *ia6;
 	struct in6_addr daddr6, taddr6;
 	struct ifnet *ifp;
@@ -1110,12 +1110,6 @@ nd6_dad_timer(void *xifa)
 
 	NET_LOCK();
 
-	/* Sanity check */
-	if (xifa == NULL) {
-		log(LOG_ERR, "%s: called with null parameter\n", __func__);
-		goto done;
-	}
-	ifa = xifa;
 	ia6 = ifatoia6(ifa);
 	taddr6 = ia6->ia_addr.sin6_addr;
 	ifp = ifa->ifa_ifp;
