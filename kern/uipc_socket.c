@@ -1855,6 +1855,11 @@ somove(struct socket *so, int wait)
 void
 sorwakeup(struct socket *so)
 {
+	if ((so->so_proto->pr_flags & PR_WANTRCVD) &&
+	    (so->so_proto->pr_domain->dom_family == PF_INET ||
+	    so->so_proto->pr_domain->dom_family == PF_INET6))
+		soassertlocked(so);
+
 #ifdef SOCKET_SPLICE
 	if (so->so_proto->pr_flags & PR_SPLICE) {
 		mtx_enter(&so->so_rcv.sb_mtx);
@@ -1875,6 +1880,11 @@ sorwakeup(struct socket *so)
 void
 sowwakeup(struct socket *so)
 {
+	if ((so->so_proto->pr_flags & PR_WANTRCVD) &&
+	    (so->so_proto->pr_domain->dom_family == PF_INET ||
+	    so->so_proto->pr_domain->dom_family == PF_INET6))
+		soassertlocked(so);
+
 #ifdef SOCKET_SPLICE
 	if (so->so_proto->pr_flags & PR_SPLICE) {
 		mtx_enter(&so->so_snd.sb_mtx);
