@@ -135,6 +135,7 @@ tcp_timer_delack(void *arg)
 		otp = tp;
 		ostate = tp->t_state;
 	}
+	soassertlocked(so);
 	tp->t_flags |= TF_ACKNOW;
 	(void) tcp_output(tp);
 	if (otp)
@@ -216,6 +217,7 @@ tcp_timer_rexmt(void *arg)
 
 		/* TF_PMTUD_PEND is set in tcp_ctlinput() which is IPv4 only */
 		KASSERT(!ISSET(inp->inp_flags, INP_IPV6));
+		soassertlocked(so);
 		tp->t_flags &= ~TF_PMTUD_PEND;
 
 		rtableid = inp->inp_rtableid;
@@ -347,6 +349,7 @@ tcp_timer_rexmt(void *arg)
 	 * if ECN is enabled, there might be a broken firewall which
 	 * blocks ecn packets.  fall back to non-ecn.
 	 */
+	soassertlocked(so);
 	if ((tp->t_state == TCPS_SYN_SENT || tp->t_state == TCPS_SYN_RECEIVED)
 	    && atomic_load_int(&tcp_do_ecn) && !(tp->t_flags & TF_DISABLE_ECN))
 		tp->t_flags |= TF_DISABLE_ECN;
@@ -386,6 +389,7 @@ tcp_timer_rexmt(void *arg)
 		tp->t_dupacks = 0;
 #ifdef TCP_ECN
 		tp->snd_last = tp->snd_max;
+		soassertlocked(so);
 		tp->t_flags |= TF_SEND_CWR;
 #endif
 #if 1 /* TCP_ECN */

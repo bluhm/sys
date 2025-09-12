@@ -782,6 +782,7 @@ tcp_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 				 * Calculate new MTU, and create corresponding
 				 * route (traditional PMTUD).
 				 */
+				soassertlocked(so);
 				tp->t_flags &= ~TF_PMTUD_PEND;
 				icmp_mtudisc(icp, inp->inp_rtableid);
 			} else {
@@ -798,8 +799,10 @@ tcp_ctlinput(int cmd, struct sockaddr *sa, u_int rdomain, void *v)
 						in_pcbunref(inp);
 						return;
 					}
-				} else
+				} else {
+					soassertlocked(so);
 					tp->t_flags |= TF_PMTUD_PEND;
+				}
 				tp->t_pmtud_th_seq = seq;
 				tp->t_pmtud_nextmtu = icp->icmp_nextmtu;
 				tp->t_pmtud_ip_len = icp->icmp_ip.ip_len;

@@ -343,6 +343,7 @@ tcp_ctloutput(int op, struct socket *so, int level, int optname,
 
 	switch (op) {
 
+	soassertlocked(so);
 	case PRCO_SETOPT:
 		switch (optname) {
 

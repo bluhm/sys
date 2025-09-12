@@ -239,6 +239,7 @@ tcp_output(struct tcpcb *tp)
 		tp->snd_cwnd = 2 * tp->t_maxseg;
 
 	/* remember 'idle' for next invocation of tcp_output */
+	soassertlocked(so);
 	if (idle && doing_sosend) {
 		tp->t_flags |= TF_LASTIDLE;
 		idle = 0;
@@ -946,6 +947,7 @@ send:
 			if (flags & TH_SYN)
 				tp->snd_nxt++;
 			if (flags & TH_FIN) {
+				soassertlocked(so);
 				tp->snd_nxt++;
 				tp->t_flags |= TF_SENTFIN;
 			}
@@ -1164,6 +1166,7 @@ out:
 		tp->rcv_adv = tp->rcv_nxt + win;
 	tp->last_ack_sent = tp->rcv_nxt;
 	tp->t_sndacktime = now;
+	soassertlocked(so);
 	tp->t_flags &= ~TF_ACKNOW;
 	TCP_TIMER_DISARM(tp, TCPT_DELACK);
 	if (sendalot)

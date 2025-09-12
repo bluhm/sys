@@ -167,9 +167,10 @@ do { \
 		ifp = if_get(m->m_pkthdr.ph_ifidx); \
 	if (TCP_TIMER_ISARMED(tp, TCPT_DELACK) || \
 	    (atomic_load_int(&tcp_ack_on_push) && (tiflags) & TH_PUSH) || \
-	    (ifp && (ifp->if_flags & IFF_LOOPBACK))) \
+	    (ifp && (ifp->if_flags & IFF_LOOPBACK))) { \
+		soassertlocked(so); \
 		tp->t_flags |= TF_ACKNOW; \
-	else \
+	} else \
 		TCP_TIMER_ARM(tp, TCPT_DELACK, tcp_delack_msecs); \
 	if_put(ifp); \
 } while (0)
@@ -948,6 +949,7 @@ findpcb:
 	    || (tp->t_flags & TF_SIGNATURE)
 #endif
 	    ) {
+		soassertlocked(so);
 		if (tcp_dooptions(tp, optp, optlen, th, m, iphlen, &opti,
 		    m->m_pkthdr.ph_rtableid, now))
 			goto drop;
@@ -968,6 +970,7 @@ findpcb:
 #ifdef TCP_ECN
 	/* if congestion experienced, set ECE bit in subsequent packets. */
 	if ((iptos & IPTOS_ECN_MASK) == IPTOS_ECN_CE) {
+		soassertlocked(so);
 		tp->t_flags |= TF_RCVD_CE;
 		tcpstat_inc(tcps_ecn_rcvce);
 	}
@@ -1037,6 +1040,7 @@ findpcb:
 				 * acknowledged, disregard the recorded ICMP
 				 * message.
 				 */
+				soassertlocked(so);
 				if ((tp->t_flags & TF_PMTUD_PEND) &&
 				    SEQ_GT(th->th_ack, tp->t_pmtud_th_seq))
 					tp->t_flags &= ~TF_PMTUD_PEND;
@@ -1220,11 +1224,13 @@ findpcb:
 		}
 		TCP_TIMER_DISARM(tp, TCPT_REXMT);
 		tp->irs = th->th_seq;
+		soassertlocked(so);
 		tcp_mss(tp, opti.maxseg);
 		/* Reset initial window to 1 segment for retransmit */
 		if (tp->t_rxtshift > 0)
 			tp->snd_cwnd = tp->t_maxseg;
 		tcp_rcvseqinit(tp);
+		soassertlocked(so);
 		tp->t_flags |= TF_ACKNOW;
 		/*
 		 * If we've sent a SACK_PERMITTED option, and the peer
@@ -1243,6 +1249,7 @@ findpcb:
 			switch (tiflags & (TH_ACK|TH_ECE|TH_CWR)) {
 			case TH_ACK|TH_ECE:
 			case TH_ECE|TH_CWR:
+				soassertlocked(so);
 				tp->t_flags |= TF_ECN_PERMIT;
 				tiflags &= ~(TH_ECE|TH_CWR);
 				tcpstat_inc(tcps_ecn_accepts);
@@ -1397,6 +1404,7 @@ trimthenstep6:
 			 * Send ACK to resynchronize, and drop any data,
 			 * but keep on processing for RST or ACK.
 			 */
+			soassertlocked(so);
 			tp->t_flags |= TF_ACKNOW;
 			todrop = tlen;
 			tcpstat_pkt(tcps_rcvduppack, tcps_rcvdupbyte, todrop);
@@ -1443,6 +1451,7 @@ trimthenstep6:
 			 * and ack.
 			 */
 			if (tp->rcv_wnd == 0 && th->th_seq == tp->rcv_nxt) {
+				soassertlocked(so);
 				tp->t_flags |= TF_ACKNOW;
 				tcpstat_inc(tcps_rcvwinprobe);
 			} else
@@ -1585,6 +1594,7 @@ trimthenstep6:
 					tp->snd_ssthresh = win / 2 * tp->t_maxseg;
 					tp->snd_cwnd = tp->snd_ssthresh;
 					tp->snd_last = tp->snd_max;
+					soassertlocked(so);
 					tp->t_flags |= TF_SEND_CWR;
 					tcpstat_inc(tcps_cwr_ecn);
 				}
@@ -1596,6 +1606,7 @@ trimthenstep6:
 		 * its congestion window.  stop sending ecn-echo.
 		 */
 		if ((tiflags & TH_CWR)) {
+			soassertlocked(so);
 			tp->t_flags &= ~TF_RCVD_CE;
 			tcpstat_inc(tcps_ecn_rcvcwr);
 		}
@@ -1684,6 +1695,7 @@ trimthenstep6:
 						TCP_TIMER_DISARM(tp, TCPT_REXMT);
 						tp->t_rtttime = 0;
 #ifdef TCP_ECN
+						soassertlocked(so);
 						tp->t_flags |= TF_SEND_CWR;
 #endif
 						tcpstat_inc(tcps_cwr_frecovery);
@@ -1702,6 +1714,7 @@ trimthenstep6:
 					tp->snd_nxt = th->th_ack;
 					tp->snd_cwnd = tp->t_maxseg;
 #ifdef TCP_ECN
+					soassertlocked(so);
 					tp->t_flags |= TF_SEND_CWR;
 #endif
 					tcpstat_inc(tcps_cwr_frecovery);
@@ -1736,6 +1749,7 @@ trimthenstep6:
 		if (tp->t_dupacks >= tcprexmtthresh) {
 			/* Check for a partial ACK */
 			if (SEQ_LT(th->th_ack, tp->snd_last)) {
+				soassertlocked(so);
 				if (tp->sack_enable)
 					tcp_sack_partialack(tp, th);
 				else
@@ -1787,6 +1801,7 @@ trimthenstep6:
 		 */
 		if (th->th_ack == tp->snd_max) {
 			TCP_TIMER_DISARM(tp, TCPT_REXMT);
+			soassertlocked(so);
 			tp->t_flags |= TF_NEEDOUTPUT;
 		} else if (TCP_TIMER_ISARMED(tp, TCPT_PERSIST) == 0)
 			TCP_TIMER_ARM(tp, TCPT_REXMT, tp->t_rxtcur);
@@ -1837,6 +1852,7 @@ trimthenstep6:
 		 * that have just been acknowledged, disregard the recorded
 		 * ICMP message.
 		 */
+		soassertlocked(so);
 		if ((tp->t_flags & TF_PMTUD_PEND) &&
 		    SEQ_GT(th->th_ack, tp->t_pmtud_th_seq))
 			tp->t_flags &= ~TF_PMTUD_PEND;
@@ -1942,6 +1958,7 @@ step6:
 		tp->snd_wl2 = th->th_ack;
 		if (tp->snd_wnd > tp->max_sndwnd)
 			tp->max_sndwnd = tp->snd_wnd;
+		soassertlocked(so);
 		tp->t_flags |= TF_NEEDOUTPUT;
 	}
 
@@ -2043,6 +2060,7 @@ dodata:							/* XXX */
 		} else {
 			m_adj(m, hdroptlen);
 			tiflags = tcp_reass(tp, th, m, &tlen);
+			soassertlocked(so);
 			tp->t_flags |= TF_ACKNOW;
 		}
 		if (tp->sack_enable)
@@ -2073,6 +2091,7 @@ dodata:							/* XXX */
 	if ((tiflags & TH_FIN) && TCPS_HAVEESTABLISHED(tp->t_state)) {
 		if (TCPS_HAVERCVDFIN(tp->t_state) == 0) {
 			socantrcvmore(so);
+			soassertlocked(so);
 			tp->t_flags |= TF_ACKNOW;
 			tp->rcv_nxt++;
 		}
@@ -2152,6 +2171,7 @@ dropafterack:
 	if (tiflags & TH_RST)
 		goto drop;
 	m_freem(m);
+	soassertlocked(so);
 	tp->t_flags |= TF_ACKNOW;
 	(void) tcp_output(tp);
 	if (solocked != NULL)
@@ -3080,6 +3100,7 @@ tcp_mss_update(struct tcpcb *tp)
 		mtx_leave(&so->so_snd.sb_mtx);
 		mss = bufsize;
 		/* Update t_maxseg and t_maxopd */
+		soassertlocked(so);
 		tcp_mss(tp, mss);
 	} else {
 		bufsize = roundup(bufsize, mss);
@@ -3687,6 +3708,7 @@ syn_cache_get(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 	inp->inp_route = sc->sc_route;		/* struct assignment */
 	sc->sc_route.ro_rt = NULL;
 
+	soassertlocked(so);
 	tp->t_flags = intotcpcb(listeninp)->t_flags & (TF_NOPUSH|TF_NODELAY);
 	if (sc->sc_request_r_scale != 15) {
 		tp->requested_s_scale = sc->sc_requested_s_scale;
@@ -3727,6 +3749,7 @@ syn_cache_get(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 	TCP_TIMER_ARM(tp, TCPT_KEEP, atomic_load_int(&tcp_keepinit));
 	tcpstat_inc(tcps_accepts);
 
+	soassertlocked(so);
 	tcp_mss(tp, sc->sc_peermaxseg);	 /* sets t_maxseg */
 	if (sc->sc_peermaxseg)
 		tcp_mss_update(tp);
@@ -3893,6 +3916,7 @@ syn_cache_add(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 		tb.sack_enable = tp->sack_enable;
 		tb.t_flags = atomic_load_int(&tcp_do_rfc1323) ?
 		    (TF_REQ_SCALE|TF_REQ_TSTMP) : 0;
+		soassertlocked(so);
 #ifdef TCP_SIGNATURE
 		if (tp->t_flags & TF_SIGNATURE)
 			tb.t_flags |= TF_SIGNATURE;
