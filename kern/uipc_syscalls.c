@@ -297,21 +297,22 @@ doaccept(struct proc *p, int sock, struct sockaddr *name, socklen_t *anamelen,
 			error = EWOULDBLOCK;
 		goto out_unlock;
 	}
-	while (head->so_qlen == 0 && head->so_error == 0) {
+	while (head->so_qlen == 0) {
+		error = atomic_swap_uint(&head->so_error, 0);
+		if (error)
+			goto out_unlock;
 		if (head->so_rcv.sb_state & SS_CANTRCVMORE) {
-			head->so_error = ECONNABORTED;
-			break;
+			error = ECONNABORTED;
+			goto out_unlock;
 		}
 		error = sosleep_nsec(head, &head->so_timeo, PSOCK | PCATCH,
 		    "netacc", INFSLP);
 		if (error)
 			goto out_unlock;
 	}
-	if (head->so_error) {
-		error = head->so_error;
-		head->so_error = 0;
+	error = atomic_swap_uint(&head->so_error, 0);
+	if (error)
 		goto out_unlock;
-	}
 
 	/*
 	 * Do not sleep after we have taken the socket out of the queue.
@@ -424,7 +425,10 @@ sys_connect(struct proc *p, void *v, register_t *retval)
 		error = EINPROGRESS;
 		goto unlock;
 	}
-	while ((so->so_state & SS_ISCONNECTING) && so->so_error == 0) {
+	while (so->so_state & SS_ISCONNECTING) {
+		error = atomic_swap_uint(&so->so_error, 0);
+		if (error)
+			goto bad;
 		error = sosleep_nsec(so, &so->so_timeo, PSOCK | PCATCH,
 		    "netcon", INFSLP);
 		if (error) {
@@ -433,10 +437,8 @@ sys_connect(struct proc *p, void *v, register_t *retval)
 			break;
 		}
 	}
-	if (error == 0) {
-		error = so->so_error;
-		so->so_error = 0;
-	}
+	if (error == 0)
+		error = atomic_swap_uint(&so->so_error, 0);
 bad:
 	if (!interrupted)
 		so->so_state &= ~SS_ISCONNECTING;
@@ -1017,7 +1019,7 @@ sys_recvmmsg(struct proc *p, void *v, register_t *retval)
 
 		if (getsock(p, s, &fp) == 0) {
 			so = (struct socket *)fp->f_data;
-			so->so_error = error;
+			atomic_store_int(&so->so_error, error);
 
 			FRELE(fp, p);
 		}
@@ -1635,7 +1637,10 @@ out:
 		sotoinpcb(so)->inp_flags |= INP_LOWPORT;
 
 	error = soconnect(so, nam);
-	while ((so->so_state & SS_ISCONNECTING) && so->so_error == 0) {
+	while (so->so_state & SS_ISCONNECTING) {
+		error = atomic_swap_uint(&so->so_error, 0);
+		if (error)
+			break;
 		error = sosleep_nsec(so, &so->so_timeo, PSOCK | PCATCH,
 		    "ypcon", INFSLP);
 		if (error)

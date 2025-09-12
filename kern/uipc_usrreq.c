@@ -820,7 +820,7 @@ unp_detach(struct unpcb *unp)
 
 		unp2->unp_conn = NULL;
 		SLIST_REMOVE(&unp->unp_refs, unp2, unpcb, unp_nextref);
-		so2->so_error = ECONNRESET;
+		atomic_store_int(&so2->so_error, ECONNRESET);
 		so2->so_state &= ~SS_ISCONNECTED;
 
 		sounlock(so2);

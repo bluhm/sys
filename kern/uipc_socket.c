@@ -635,10 +635,9 @@ restart:
 	do {
 		if (so->so_snd.sb_state & SS_CANTSENDMORE)
 			snderr(EPIPE);
-		if ((error = READ_ONCE(so->so_error))) {
-			so->so_error = 0;
+		error = atomic_swap_uint(&so->so_error, 0);
+		if (error)
 			snderr(error);
-		}
 		if ((so->so_state & SS_ISCONNECTED) == 0) {
 			if (so->so_proto->pr_flags & PR_CONNREQUIRED) {
 				if (!(resid == 0 && clen != 0))
@@ -900,12 +899,14 @@ restart:
 			panic("receive 1: so %p, so_type %d, sb_cc %lu",
 			    so, so->so_type, so->so_rcv.sb_cc);
 #endif
-		if ((error2 = READ_ONCE(so->so_error))) {
+		if (ISSET(flags, MSG_PEEK) || m)
+			error2 = atomic_load_int(&so->so_error);
+		else
+			error2 = atomic_swap_uint(&so->so_error, 0);
+		if (error2) {
 			if (m)
 				goto dontblock;
 			error = error2;
-			if ((flags & MSG_PEEK) == 0)
-				so->so_error = 0;
 			goto release;
 		}
 		if (so->so_rcv.sb_state & SS_CANTRCVMORE) {
@@ -1168,7 +1169,7 @@ dontblock:
 		while (flags & MSG_WAITALL && m == NULL && uio->uio_resid > 0 &&
 		    !sosendallatonce(so) && !nextrecord) {
 			if (so->so_rcv.sb_state & SS_CANTRCVMORE ||
-			    so->so_error)
+			    atomic_load_int(&so->so_error))
 				break;
 			SBLASTRECORDCHK(&so->so_rcv, "soreceive sbwait 2");
 			SBLASTMBUFCHK(&so->so_rcv, "soreceive sbwait 2");
@@ -1474,7 +1475,7 @@ soidle(void *arg)
 
 	sblock(&so->so_rcv, SBL_WAIT | SBL_NOINTR);
 	if (so->so_rcv.sb_flags & SB_SPLICE) {
-		WRITE_ONCE(so->so_error, ETIMEDOUT);
+		atomic_store_int(&so->so_error, ETIMEDOUT);
 		sounsplice(so, so->so_sp->ssp_socket, 0);
 	}
 	sbunlock(&so->so_rcv);
@@ -1525,14 +1526,15 @@ somove(struct socket *so, int wait)
 	mtx_enter(&sosp->so_snd.sb_mtx);
 
  nextpkt:
-	if ((error = READ_ONCE(so->so_error)))
+	error = atomic_load_int(&so->so_error);
+	if (error)
 		goto release;
 	if (sosp->so_snd.sb_state & SS_CANTSENDMORE) {
 		error = EPIPE;
 		goto release;
 	}
 
-	error = READ_ONCE(sosp->so_error);
+	error = atomic_load_int(&sosp->so_error);
 	if (error) {
 		if (error != ETIMEDOUT && error != EFBIG && error != ELOOP)
 			goto release;
@@ -1826,7 +1828,7 @@ somove(struct socket *so, int wait)
 	if (!error && maxreached && so->so_splicemax == so->so_splicelen)
 		error = EFBIG;
 	if (error)
-		WRITE_ONCE(so->so_error, error);
+		atomic_store_int(&so->so_error, error);
 
 	if (((so->so_rcv.sb_state & SS_CANTRCVMORE) &&
 	    so->so_rcv.sb_cc == 0) ||
@@ -2117,11 +2119,7 @@ sogetopt(struct socket *so, int level, int optname, struct mbuf *m)
 			break;
 
 		case SO_ERROR:
-			solock(so);
-			*mtod(m, int *) = so->so_error;
-			so->so_error = 0;
-			sounlock(so);
-
+			*mtod(m, int *) = atomic_swap_uint(&so->so_error, 0);
 			break;
 
 		case SO_DOMAIN:
@@ -2273,8 +2271,7 @@ filt_soread(struct knote *kn, long hint)
 {
 	struct socket *so = kn->kn_fp->f_data;
 	u_int state = READ_ONCE(so->so_state);
-	u_int error = READ_ONCE(so->so_error);
-	int rv = 0;
+	int error, rv = 0;
 
 	MUTEX_ASSERT_LOCKED(&so->so_rcv.sb_mtx);
 
@@ -2298,6 +2295,7 @@ filt_soread(struct knote *kn, long hint)
 		return rv;
 	}
 
+	error = atomic_load_int(&so->so_error);
 	kn->kn_data = so->so_rcv.sb_cc;
 #ifdef SOCKET_SPLICE
 	if (isspliced(so)) {
@@ -2336,11 +2334,11 @@ filt_sowrite(struct knote *kn, long hint)
 {
 	struct socket *so = kn->kn_fp->f_data;
 	u_int state = READ_ONCE(so->so_state);
-	u_int error = READ_ONCE(so->so_error);
-	int rv;
+	int error, rv;
 
 	MUTEX_ASSERT_LOCKED(&so->so_snd.sb_mtx);
 
+	error = atomic_load_int(&so->so_error);
 	kn->kn_data = sbspace_locked(&so->so_snd);
 	if (so->so_snd.sb_state & SS_CANTSENDMORE) {
 		kn->kn_flags |= EV_EOF;

@@ -388,7 +388,8 @@ soreadable(struct socket *so)
 	if (isspliced(so))
 		return 0;
 	return (so->so_rcv.sb_state & SS_CANTRCVMORE) ||
-	    so->so_error || so->so_rcv.sb_cc >= so->so_rcv.sb_lowat;
+	    atomic_load_int(&so->so_error) ||
+	    so->so_rcv.sb_cc >= so->so_rcv.sb_lowat;
 }
 
 /* can we write something to so? */
@@ -399,7 +400,8 @@ sowriteable(struct socket *so)
 	return ((sbspace(&so->so_snd) >= so->so_snd.sb_lowat &&
 	    ((so->so_state & SS_ISCONNECTED) ||
 	    (so->so_proto->pr_flags & PR_CONNREQUIRED)==0)) ||
-	    (so->so_snd.sb_state & SS_CANTSENDMORE) || so->so_error);
+	    (so->so_snd.sb_state & SS_CANTSENDMORE) ||
+	    atomic_load_int(&so->so_error));
 }
 
 /* adjust counters in sb reflecting allocation of m */

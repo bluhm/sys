@@ -719,7 +719,7 @@ udp_sbappend(struct inpcb *inp, struct mbuf *m, struct ip *ip,
 void
 udp_notify(struct inpcb *inp, int errno)
 {
-	inp->inp_socket->so_error = errno;
+	atomic_store_int(&inp->inp_socket->so_error, errno);
 	sorwakeup(inp->inp_socket);
 	sowwakeup(inp->inp_socket);
 }

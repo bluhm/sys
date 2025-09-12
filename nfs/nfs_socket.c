@@ -315,21 +315,24 @@ nfs_connect(struct nfsmount *nmp, struct nfsreq *rep)
 		 * connect system call but with the wait timing out so
 		 * that interruptible mounts don't hang here for a long time.
 		 */
-		while ((so->so_state & SS_ISCONNECTING) && so->so_error == 0) {
+		while (so->so_state & SS_ISCONNECTING) {
+			error = atomic_swap_uint(&so->so_error, 0);
+			if (error)
+				goto bad_locked;
 			sosleep_nsec(so, &so->so_timeo, PSOCK, "nfscon",
 			    SEC_TO_NSEC(2));
-			if ((so->so_state & SS_ISCONNECTING) &&
-			    so->so_error == 0 && rep &&
+			error = atomic_swap_uint(&so->so_error, 0);
+			if (error)
+				goto bad_locked;
+			if ((so->so_state & SS_ISCONNECTING) && rep &&
 			    (error = nfs_sigintr(nmp, rep, rep->r_procp)) != 0){
 				so->so_state &= ~SS_ISCONNECTING;
 				goto bad_locked;
 			}
 		}
-		if (so->so_error) {
-			error = so->so_error;
-			so->so_error = 0;
+		error = atomic_swap_uint(&so->so_error, 0);
+		if (error)
 			goto bad_locked;
-		}
 		sounlock_shared(so);
 	}
 	/*
@@ -777,7 +780,8 @@ nfs_reply(struct nfsreq *myrep)
 			 */
 			if (NFSIGNORE_SOERROR(nmp->nm_soflags, error)) {
 				if (nmp->nm_so)
-					nmp->nm_so->so_error = 0;
+					atomic_store_int(	
+					    &nmp->nm_so->so_error, 0);
 				continue;
 			}
 			return (error);
@@ -1207,7 +1211,7 @@ nfs_timer(void *arg)
 				error = pru_send(so, m, nmp->nm_nam, NULL);
 			if (error) {
 				if (NFSIGNORE_SOERROR(nmp->nm_soflags, error))
-					so->so_error = 0;
+					atomic_store_int(&so->so_error, 0);
 			} else {
 				/*
 				 * Iff first send, start timing

@@ -204,7 +204,8 @@ tcp_sogetpcb(struct socket *so, struct inpcb **rinp, struct tcpcb **rtp)
 	if ((inp = sotoinpcb(so)) == NULL || (tp = intotcpcb(inp)) == NULL) {
 		int error;
 
-		if ((error = READ_ONCE(so->so_error)))
+		error = atomic_load_int(&so->so_error);
+		if (error)
 			return error;
 		return EINVAL;
 	}

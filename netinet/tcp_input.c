@@ -1497,14 +1497,14 @@ trimthenstep6:
 			if (do_ecn && !(tp->t_flags & TF_DISABLE_ECN))
 				goto drop;
 #endif
-			so->so_error = ECONNREFUSED;
+			atomic_store_int(&so->so_error, ECONNREFUSED);
 			goto close;
 
 		case TCPS_ESTABLISHED:
 		case TCPS_FIN_WAIT_1:
 		case TCPS_FIN_WAIT_2:
 		case TCPS_CLOSE_WAIT:
-			so->so_error = ECONNRESET;
+			atomic_store_int(&so->so_error, ECONNRESET);
 		close:
 			tp->t_state = TCPS_CLOSED;
 			tcpstat_inc(tcps_drops);

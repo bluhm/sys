@@ -491,7 +491,7 @@ tcp_drop(struct tcpcb *tp, int errno)
 		tcpstat_inc(tcps_conndrops);
 	if (errno == ETIMEDOUT && tp->t_softerror)
 		errno = tp->t_softerror;
-	so->so_error = errno;
+	atomic_store_int(&so->so_error, errno);
 	return (tcp_close(tp));
 }
 
@@ -585,7 +585,7 @@ tcp_notify(struct inpcb *inp, int error)
 		return;
 	} else if (TCPS_HAVEESTABLISHED(tp->t_state) == 0 &&
 	    tp->t_rxtshift > 3 && tp->t_softerror)
-		so->so_error = error;
+		atomic_store_int(&so->so_error, error);
 	else
 		tp->t_softerror = error;
 	wakeup((caddr_t) &so->so_timeo);
