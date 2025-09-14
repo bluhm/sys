@@ -1,4 +1,4 @@
-/*	$OpenBSD: disklabel.h,v 1.89 2025/07/05 16:36:30 krw Exp $	*/
+/*	$OpenBSD: disklabel.h,v 1.91 2025/09/14 10:54:20 krw Exp $	*/
 /*	$NetBSD: disklabel.h,v 1.41 1996/05/10 23:07:37 mark Exp $	*/
 
 /*
@@ -48,16 +48,6 @@
 #include <machine/disklabel.h>
 
 #include <sys/uuid.h>
-
-/*
- * The absolute maximum number of disk partitions allowed.
- * This is the maximum value of MAXPARTITIONS for which 'struct disklabel'
- * is <= DEV_BSIZE bytes long.  If MAXPARTITIONS is greater than this, beware.
- */
-#define	MAXMAXPARTITIONS	22
-#if MAXPARTITIONS > MAXMAXPARTITIONS
-#warn beware: MAXPARTITIONS bigger than MAXMAXPARTITIONS
-#endif
 
 /*
  * Translate between device numbers and major/disk unit/disk partition.
@@ -128,19 +118,6 @@ struct disklabel {
 		u_int8_t p_fragblock;	/* encoded filesystem frag/block */
 		u_int16_t p_cpg;	/* UFS: FS cylinders per group */
 	} d_partitions[MAXPARTITIONS];	/* actually may be more */
-};
-
-
-struct	__partitionv0 {		/* old (v0) partition table entry */
-	u_int32_t p_size;	/* number of sectors in partition */
-	u_int32_t p_offset;	/* starting sector */
-	u_int32_t p_fsize;	/* filesystem basic fragment size */
-	u_int8_t p_fstype;	/* filesystem type, see below */
-	u_int8_t p_frag;	/* filesystem fragments per block */
-	union {
-		u_int16_t cpg;	/* UFS: FS cylinders per group */
-		u_int16_t sgs;	/* LFS: FS segment shift */
-	} __partitionv0_u1;
 };
 #endif /* _LOCORE */
 
