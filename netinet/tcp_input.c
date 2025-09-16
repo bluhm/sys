@@ -2058,6 +2058,8 @@ dropafterack_ratelim:
 	if (ppsratecheck(&tcp_ackdrop_ppslim_last, &tcp_ackdrop_ppslim_count,
 	    tcp_ackdrop_ppslim) == 0) {
 		/* XXX stat */
+		if ((tiflags & TH_RST) == 0 && (tp->t_flags & TF_NEEDOUTPUT))
+			goto dropafteroutput;
 		goto drop;
 	}
 	/* ...fall into dropafterack... */
@@ -2069,8 +2071,11 @@ dropafterack:
 	 */
 	if (tiflags & TH_RST)
 		goto drop;
-	m_freem(m);
 	tp->t_flags |= TF_ACKNOW;
+	/* ...fall into dropafteroutput... */
+
+dropafteroutput:
+	m_freem(m);
 	(void) tcp_output(tp);
 	if (solocked != NULL)
 		*solocked = so;
