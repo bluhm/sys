@@ -4537,6 +4537,7 @@ struct ice_pf_sw_stats {
 struct ice_tx_map {
 	struct mbuf		*txm_m;
 	bus_dmamap_t		 txm_map;
+	bus_dmamap_t		 txm_map_tso;
 	unsigned int		 txm_eop;
 };
 
