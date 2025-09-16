@@ -73,7 +73,7 @@
 #define ND6_RECALC_REACHTM_INTERVAL (60 * 120) /* 2 hours */
 
 /* timer values */
-time_t	nd6_timer_next	= -1;	/* [N] at which uptime nd6_timer runs */
+time_t	nd6_timer_next	= -1;	/* [m] at which uptime nd6_timer runs */
 time_t	nd6_expire_next	= -1;	/* at which uptime nd6_expire runs */
 int	nd6_delay	= 5;	/* [a] delay first probe time 5 second */
 int	nd6_umaxtries	= 3;	/* [a] maximum unicast query */
@@ -230,7 +230,7 @@ nd6_llinfo_settimer(const struct llinfo_nd6 *ln, unsigned int secs)
 {
 	time_t expire = getuptime() + secs;
 
-	NET_ASSERT_LOCKED();
+	MUTEX_ASSERT_LOCKED(&nd6_mtx);
 	KASSERT(!ISSET(ln->ln_rt->rt_flags, RTF_LOCAL));
 
 	ln->ln_rt->rt_expire = expire;
@@ -282,6 +282,7 @@ nd6_timer(void *unused)
 	expire = uptime + nd6_gctimer;
 
 	mtx_enter(&nd6_mtx);
+
 	while ((ln = nd6_iterator(ln, &iter)) != NULL) {
 		struct rtentry *rt = ln->ln_rt;
 
@@ -299,18 +300,16 @@ nd6_timer(void *unused)
 		} else if (rt->rt_expire && rt->rt_expire < expire)
 			expire = rt->rt_expire;
 	}
-	mtx_leave(&nd6_mtx);
 
 	secs = expire - uptime;
 	if (secs < 1)
 		secs = 1;
-
-	NET_LOCK();
 	if (!TAILQ_EMPTY(&nd6_list)) {
 		nd6_timer_next = uptime + secs;
 		timeout_add_sec(&nd6_timer_to, secs);
 	}
-	NET_UNLOCK();
+
+	mtx_leave(&nd6_mtx);
 }
 
 /*
@@ -334,11 +333,13 @@ nd6_llinfo_timer(struct rtentry *rt, int i_am_router)
 	if ((ifp = if_get(rt->rt_ifidx)) == NULL)
 		return 1;
 
+	mtx_enter(&nd6_mtx);
 	switch (ln->ln_state) {
 	case ND6_LLINFO_INCOMPLETE:
 		if (ln->ln_asked < atomic_load_int(&nd6_mmaxtries)) {
 			ln->ln_asked++;
 			nd6_llinfo_settimer(ln, RETRANS_TIMER / 1000);
+			mtx_leave(&nd6_mtx);
 			nd6_ns_output(ifp, NULL, &dst->sin6_addr,
 			    &ln->ln_saddr6, 0);
 		} else {
@@ -346,6 +347,7 @@ nd6_llinfo_timer(struct rtentry *rt, int i_am_router)
 			struct mbuf *m;
 			unsigned int len;
 
+			mtx_leave(&nd6_mtx);
 			mq_delist(&ln->ln_mq, &ml);
 			len = ml_len(&ml);
 			while ((m = ml_dequeue(&ml)) != NULL) {
@@ -379,15 +381,18 @@ nd6_llinfo_timer(struct rtentry *rt, int i_am_router)
 			ln->ln_state = ND6_LLINFO_STALE;
 			nd6_llinfo_settimer(ln, nd6_gctimer);
 		}
+		mtx_leave(&nd6_mtx);
 		break;
 
 	case ND6_LLINFO_STALE:
 	case ND6_LLINFO_PURGE:
 		/* Garbage Collection(RFC 2461 5.3) */
 		if (!ND6_LLINFO_PERMANENT(ln)) {
+			mtx_leave(&nd6_mtx);
 			nd6_free(rt, ifp, i_am_router);
 			ln = NULL;
-		}
+		} else
+			mtx_leave(&nd6_mtx);
 		break;
 
 	case ND6_LLINFO_DELAY:
@@ -395,6 +400,7 @@ nd6_llinfo_timer(struct rtentry *rt, int i_am_router)
 		ln->ln_asked = 1;
 		ln->ln_state = ND6_LLINFO_PROBE;
 		nd6_llinfo_settimer(ln, RETRANS_TIMER / 1000);
+		mtx_leave(&nd6_mtx);
 		nd6_ns_output(ifp, &dst->sin6_addr, &dst->sin6_addr,
 		    &ln->ln_saddr6, 0);
 		break;
@@ -403,12 +409,18 @@ nd6_llinfo_timer(struct rtentry *rt, int i_am_router)
 		if (ln->ln_asked < atomic_load_int(&nd6_umaxtries)) {
 			ln->ln_asked++;
 			nd6_llinfo_settimer(ln, RETRANS_TIMER / 1000);
+			mtx_leave(&nd6_mtx);
 			nd6_ns_output(ifp, &dst->sin6_addr, &dst->sin6_addr,
 			    &ln->ln_saddr6, 0);
 		} else {
+			mtx_leave(&nd6_mtx);
 			nd6_free(rt, ifp, i_am_router);
 			ln = NULL;
 		}
+		break;
+
+	default:
+		mtx_leave(&nd6_mtx);
 		break;
 	}
 
@@ -1112,6 +1124,7 @@ fail:
 		/*
 		 * Update the state of the neighbor cache.
 		 */
+		mtx_enter(&nd6_mtx);
 		ln->ln_state = newstate;
 
 		if (ln->ln_state == ND6_LLINFO_STALE) {
@@ -1122,11 +1135,13 @@ fail:
 			 * meaningless.
 			 */
 			nd6_llinfo_settimer(ln, nd6_gctimer);
+			mtx_leave(&nd6_mtx);
 			if_output_mq(ifp, &ln->ln_mq, &ln_hold_total,
 			    rt_key(rt), rt);
 		} else if (ln->ln_state == ND6_LLINFO_INCOMPLETE) {
 			/* probe right away */
 			nd6_llinfo_settimer(ln, 0);
+			mtx_leave(&nd6_mtx);
 		}
 	}
 
