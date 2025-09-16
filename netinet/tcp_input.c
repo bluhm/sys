@@ -2058,6 +2058,21 @@ dropafterack_ratelim:
 	if (ppsratecheck(&tcp_ackdrop_ppslim_last, &tcp_ackdrop_ppslim_count,
 	    tcp_ackdrop_ppslim) == 0) {
 		/* XXX stat */
+		if (TCP_TIMER_ISARMED(tp, TCPT_REXMT) == 0 &&
+		    TCP_TIMER_ISARMED(tp, TCPT_PERSIST) == 0) {
+			if (tp->t_flags & TF_NEEDOUTPUT) {
+				printf("%s: ratelim TF_NEEDOUTPUT, state %d\n",
+				    __func__, tp->t_state);
+				TCP_TIMER_ARM(tp, TCPT_REXMT, tp->t_rxtcur);
+			} else if (tp->t_force) {
+				printf("%s: ratelim t_force, state %d\n",
+				    __func__, tp->t_state);
+				tcp_setpersist(tp);
+			} else {
+				printf("%s: ratelim no timer, state %d\n",
+				    __func__, tp->t_state);
+			}
+		}
 		goto drop;
 	}
 	/* ...fall into dropafterack... */
