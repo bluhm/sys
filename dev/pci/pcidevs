@@ -1,4 +1,4 @@
-$OpenBSD: pcidevs,v 1.2109 2025/08/21 02:54:52 jsg Exp $
+$OpenBSD: pcidevs,v 1.2111 2025/09/19 00:39:59 kevlo Exp $
 /*	$NetBSD: pcidevs,v 1.30 1997/06/24 06:20:24 thorpej Exp $	*/
 
 /*
@@ -923,6 +923,8 @@ product AMD 19_4X_XHCI_1	0x161d	19h/4xh xHCI
 product AMD 19_4X_XHCI_2	0x161e	19h/4xh xHCI
 product AMD 19_4X_XHCI_3	0x161f	19h/4xh xHCI
 product AMD 17_90_XHCI_1	0x162c	17h/90h xHCI
+product AMD 19_4X_USB4_1	0x162e	19h/4xh USB4
+product AMD 19_4X_USB4_2	0x162f	19h/4xh USB4
 product AMD 17_6X_RC		0x1630	17h/6xh Root Complex
 product AMD 17_6X_IOMMU		0x1631	17h/6xh IOMMU
 product AMD 17_6X_HB		0x1632	17h/6xh Host
@@ -8964,6 +8966,7 @@ product REALTEK RT8029		0x8029	8029
 product REALTEK RT8139D		0x8039	8139D
 product REALTEK RTL8125		0x8125	RTL8125
 product REALTEK RTL8126		0x8126	RTL8126
+product REALTEK RTL8127		0x8127	RTL8127
 product REALTEK RT8129		0x8129	8129
 product REALTEK RT8101E		0x8136	8101E
 product REALTEK RT8138		0x8138	8138

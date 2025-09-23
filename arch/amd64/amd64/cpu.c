@@ -1,4 +1,4 @@
-/*	$OpenBSD: cpu.c,v 1.198 2025/09/16 13:34:33 dv Exp $	*/
+/*	$OpenBSD: cpu.c,v 1.200 2025/09/22 13:19:03 hshoexer Exp $	*/
 /* $NetBSD: cpu.c,v 1.1 2003/04/26 18:39:26 fvdl Exp $ */
 
 /*-
@@ -482,6 +482,11 @@ cpu_match(struct device *parent, void *match, void *aux)
 		return 0;
 
 	if (cf->cf_unit >= MAXCPUS)
+		return 0;
+
+	/* XXX We don't support MP with SEV-ES, yet */
+	if (ISSET(cpu_sev_guestmode, SEV_STAT_ES_ENABLED) &&
+	    cf->cf_unit >= 1)
 		return 0;
 
 	return 1;
@@ -1482,28 +1487,27 @@ wbinvd_on_all_cpus_acked(void)
 	int s;
 
 	CPU_INFO_FOREACH(cii, ci) {
-		if (ci == self)
+		if (ci == self || !(ci->ci_flags & CPUF_RUNNING))
 			continue;
 		mask |= (1ULL << ci->ci_cpuid);
 		wait++;
 	}
 
-	KASSERT(wait > 0);
-
-	s = splvm();
-	while (atomic_cas_ulong(&wbinvd_wait, 0 , wait) != 0) {
-		while (wbinvd_wait != 0) {
-			CPU_BUSY_CYCLE();
+	if (wait > 0) {
+		s = splvm();
+		while (atomic_cas_ulong(&wbinvd_wait, 0 , wait) != 0) {
+			while (wbinvd_wait != 0)
+				CPU_BUSY_CYCLE();
 		}
-	}
 
-	CPU_INFO_FOREACH(cii, ci) {
-		if ((mask & (1ULL << ci->ci_cpuid)) == 0)
-			continue;
-		if (x86_fast_ipi(ci, LAPIC_IPI_WBINVD) != 0)
-			panic("%s: ipi failed", __func__);
+		CPU_INFO_FOREACH(cii, ci) {
+			if ((mask & (1ULL << ci->ci_cpuid)) == 0)
+				continue;
+			if (x86_fast_ipi(ci, LAPIC_IPI_WBINVD) != 0)
+				panic("%s: ipi failed", __func__);
+		}
+		splx(s);
 	}
-	splx(s);
 
 	wbinvd();
 
