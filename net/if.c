@@ -238,7 +238,7 @@ struct softnet {
 	struct netstack	 sn_netstack;
 } __aligned(64);
 #ifdef MULTIPROCESSOR
-#define NET_TASKQ	8
+#define NET_TASKQ	16
 #else
 #define NET_TASKQ	1
 #endif
