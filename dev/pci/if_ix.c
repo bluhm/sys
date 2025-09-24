@@ -1854,7 +1854,8 @@ ixgbe_setup_msix(struct ix_softc *sc)
 	/* XXX the number of queues is limited to what we can keep stats on */
 	maxq = (sc->hw.mac.type == ixgbe_mac_82598EB) ? 8 : 16;
 
-	sc->sc_intrmap = intrmap_create(&sc->dev, nmsix, maxq, 0);
+	sc->sc_intrmap = intrmap_create(&sc->dev, nmsix,
+	    MIN(maxq, IF_MAX_VECTORS), 0);
 	sc->num_queues = intrmap_count(sc->sc_intrmap);
 }
 

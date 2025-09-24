@@ -255,7 +255,7 @@ void
 ifq_init(struct ifqueue *ifq, struct ifnet *ifp, unsigned int idx)
 {
 	ifq->ifq_if = ifp;
-	ifq->ifq_softnet = net_tq(idx);
+	ifq->ifq_softnet = net_tq(ifp->if_index * IF_MAX_VECTORS + idx);
 	ifq->ifq_softc = NULL;
 
 	mtx_init(&ifq->ifq_mtx, IPL_NET);

@@ -545,9 +545,11 @@ bnxt_attach(struct device *parent, struct device *self, void *aux)
 		nmsix = pci_intr_msix_count(pa);
 		if (nmsix > 1) {
 			sc->sc_ih = pci_intr_establish(sc->sc_pc, ih,
-			    IPL_NET | IPL_MPSAFE, bnxt_admin_intr, sc, DEVNAME(sc));
-			sc->sc_intrmap = intrmap_create(&sc->sc_dev,
-			    nmsix - 1, BNXT_MAX_QUEUES, INTRMAP_POWEROF2);
+			    IPL_NET | IPL_MPSAFE, bnxt_admin_intr, sc,
+			    DEVNAME(sc));
+			sc->sc_intrmap = intrmap_create(&sc->sc_dev, nmsix - 1,
+			    MIN(BNXT_MAX_QUEUES, IF_MAX_VECTORS),
+			    INTRMAP_POWEROF2);
 			sc->sc_nqueues = intrmap_count(sc->sc_intrmap);
 			KASSERT(sc->sc_nqueues > 0);
 			KASSERT(powerof2(sc->sc_nqueues));
