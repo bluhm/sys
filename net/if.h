@@ -526,6 +526,9 @@ struct if_sffpage {
 #include <net/if_arp.h>
 
 #ifdef _KERNEL
+
+#define IF_MAX_VECTORS		8
+
 struct socket;
 struct ifnet;
 struct ifq_ops;
