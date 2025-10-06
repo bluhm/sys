@@ -1,4 +1,4 @@
-/*	$OpenBSD: autoconf.c,v 1.56 2024/05/14 01:42:07 guenther Exp $	*/
+/*	$OpenBSD: autoconf.c,v 1.58 2025/10/05 17:11:21 krw Exp $	*/
 /*	$NetBSD: autoconf.c,v 1.1 2003/04/26 18:39:26 fvdl Exp $	*/
 
 /*-
@@ -52,6 +52,7 @@
 #include <sys/socketvar.h>
 #include <sys/timeout.h>
 #include <sys/hibernate.h>
+#include <sys/disklabel.h>
 #include <uvm/uvm_extern.h>
 
 #include <net/if.h>
@@ -185,7 +186,7 @@ diskconf(void)
 		unit = B_UNIT(bootdev);
 		part = B_PARTITION(bootdev);
 		snprintf(buf, sizeof buf, "%s%d%c", findblkname(majdev),
-		    unit, part + 'a');
+		    unit, DL_PARTNUM2NAME(part));
 		bootdv = parsedisk(buf, strlen(buf), part, &tmpdev);
 	}
 
