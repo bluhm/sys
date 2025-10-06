@@ -775,15 +775,8 @@ ixgbe_init(void *arg)
 	ixgbe_init_hw(&sc->hw);
 	ixgbe_initialize_transmit_units(sc);
 
-	/*
-	 * Use 4k clusters in LRO mode to avoid m_defrag calls in case of
-	 * socket splicing.  Or, use 2k clusters in non-LRO mode, even for
-	 * jumbo frames.
-	 */
-	if (ISSET(ifp->if_xflags, IFXF_LRO))
-		sc->rx_mbuf_sz = MCLBYTES * 2 - ETHER_ALIGN;
-	else
-		sc->rx_mbuf_sz = MCLBYTES + ETHER_ALIGN;
+	/* Use 2k clusters, even for jumbo frames */
+	sc->rx_mbuf_sz = MCLBYTES + ETHER_ALIGN;
 
 	/* Prepare receive descriptors and buffers */
 	if (ixgbe_setup_receive_structures(sc)) {
