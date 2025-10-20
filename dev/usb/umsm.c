@@ -1,4 +1,4 @@
-/*	$OpenBSD: umsm.c,v 1.127 2024/05/23 08:06:22 kevlo Exp $	*/
+/*	$OpenBSD: umsm.c,v 1.129 2025/10/15 03:30:53 dlg Exp $	*/
 
 /*
  * Copyright (c) 2008 Yojiro UO <yuo@nui.org>
@@ -185,6 +185,7 @@ static const struct umsm_type umsm_devs[] = {
 	{{ USB_VENDOR_QUECTEL, USB_PRODUCT_QUECTEL_EG12 }, 0},
 	{{ USB_VENDOR_QUECTEL, USB_PRODUCT_QUECTEL_EG20 }, 0},
 	{{ USB_VENDOR_QUECTEL, USB_PRODUCT_QUECTEL_BG95 }, 0},
+	{{ USB_VENDOR_QUECTEL, USB_PRODUCT_QUECTEL_EC200A }, 0},
 	{{ USB_VENDOR_QUECTEL, USB_PRODUCT_QUECTEL_RG5XXQ }, 0},
 
 	{{ USB_VENDOR_ZTE, USB_PRODUCT_ZTE_AC2746 }, 0},
@@ -356,12 +357,18 @@ umsm_match(struct device *parent, void *match, void *aux)
 	/* See the Quectel LTE&5G Linux USB Driver User Guide */ 
 	} else if (uaa->vendor == USB_VENDOR_QUECTEL) {
 		/* Some interfaces can be used as network devices */
-		if (id->bInterfaceClass != UICLASS_VENDOR)
+		if (id->bInterfaceClass != UICLASS_VENDOR ||
+		    id->bInterfaceSubClass == 0x42)
 			return UMATCH_NONE;
 
-		/* Interface 4 can be used as a network device */
-		if (uaa->ifaceno >= 4)
-			return UMATCH_NONE;
+		if ((uaa->product & 0xf000) == 0x0000) {
+			/* Interface 4 can be used as a network device */
+			if (uaa->ifaceno == 4 &&
+			    id->bNumEndpoints == 3 &&
+			    id->bInterfaceSubClass == UICLASS_VENDOR &&
+			    id->bInterfaceProtocol == UIPROTO_DATA_VENDOR)
+				return UMATCH_NONE;
+		}
 	}
 
 	return UMATCH_VENDOR_IFACESUBCLASS;

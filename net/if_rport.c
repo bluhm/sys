@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_rport.c,v 1.3 2025/07/07 02:28:50 jsg Exp $ */
+/*	$OpenBSD: if_rport.c,v 1.6 2025/10/15 01:38:42 dlg Exp $ */
 
 /*
  * Copyright (c) 2023 David Gwynne <dlg@openbsd.org>
@@ -27,6 +27,11 @@
 #include <net/if_types.h>
 
 #include <netinet/in.h>
+
+/* for lro/tso tcpstat */
+#include <netinet/tcp.h>
+#include <netinet/tcp_timer.h>
+#include <netinet/tcp_var.h>
 
 #include "bpfilter.h"
 #if NBPFILTER > 0
@@ -107,7 +112,13 @@ rport_clone_create(struct if_clone *ifc, int unit)
 	ifp->if_type = IFT_TUNNEL;
 	ifp->if_softc = sc;
 
+	ifp->if_capabilities |= IFCAP_CSUM_IPv4;
+	ifp->if_capabilities |= IFCAP_CSUM_TCPv4 | IFCAP_CSUM_UDPv4;
+	ifp->if_capabilities |= IFCAP_CSUM_TCPv6 | IFCAP_CSUM_UDPv6;
+	ifp->if_capabilities |= IFCAP_TSOv4 | IFCAP_TSOv6;
+
 	if_attach(ifp);
+	if_attach_queues(ifp, softnet_count());
 	if_alloc_sadl(ifp);
 	if_counters_alloc(ifp);
 
@@ -202,6 +213,18 @@ rport_enqueue(struct ifnet *ifp, struct mbuf *m)
 	struct ifqueue *ifq = &ifp->if_snd;
 	int error;
 
+	if (ifp->if_nifqs > 1) {
+		unsigned int idx;
+
+		/*
+		 * use the operations on the first ifq to pick which of
+		 * the array gets this mbuf.
+		 */
+
+		idx = ifq_idx(&ifp->if_snd, ifp->if_nifqs, m);
+		ifq = ifp->if_ifqs[idx];
+	}
+
 	error = ifq_enqueue(ifq, m);
 	if (error)
 		return (error);
@@ -222,6 +245,7 @@ rport_start(struct ifqueue *ifq)
 	struct rport_softc *sc = ifp->if_softc;
 	struct ifnet *ifp0;
 	struct mbuf *m;
+	uint16_t csum;
 
 	ifp0 = if_get(sc->sc_peer_idx);
 	if (ifp0 == NULL || !ISSET(ifp0->if_flags, IFF_RUNNING)) {
@@ -240,6 +264,20 @@ rport_start(struct ifqueue *ifq)
 			continue;
 		}
 #endif
+
+		csum = m->m_pkthdr.csum_flags;
+		if (ISSET(csum, M_IPV4_CSUM_OUT))
+			SET(csum, M_IPV4_CSUM_IN_OK);
+		if (ISSET(csum, M_TCP_CSUM_OUT))
+			SET(csum, M_TCP_CSUM_IN_OK);
+		if (ISSET(csum, M_UDP_CSUM_OUT))
+			SET(csum, M_UDP_CSUM_IN_OK);
+		if (ISSET(csum, M_ICMP_CSUM_OUT))
+			SET(csum, M_ICMP_CSUM_IN_OK);
+		m->m_pkthdr.csum_flags = csum;
+
+		if (ISSET(csum, M_TCP_TSO) && m->m_pkthdr.len > ifp0->if_mtu)
+			tcpstat_inc(tcps_inhwlro);
 
 		if_vinput(ifp0, m, NULL);
 	}

@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ice.c,v 1.59 2025/09/17 12:54:19 jan Exp $	*/
+/*	$OpenBSD: if_ice.c,v 1.63 2025/10/10 11:58:24 claudio Exp $	*/
 
 /*  Copyright (c) 2024, Intel Corporation
  *  All rights reserved.
@@ -187,7 +187,7 @@ ice_match(struct device *parent, ice_match_t match __unused, void *aux)
 				 ICE_DBG_AQ_CMD)
 #define ICE_DBG_PARSER		(1UL << 28)
 #define ICE_DBG_USER		(1UL << 31)
-uint32_t	ice_debug = 0xffffffff & ~(ICE_DBG_AQ);
+uint32_t	ice_debug = 0xffffffff & ~(ICE_DBG_AQ | ICE_DBG_TRACE);
 #else
 #define DPRINTF(x...)
 #define DNPRINTF(n,x...)
@@ -201,6 +201,10 @@ uint32_t	ice_debug = 0xffffffff & ~(ICE_DBG_AQ);
 
 #define ICE_WRITE(hw, reg, val)						\
 	bus_space_write_4((hw)->hw_sc->sc_st, (hw)->hw_sc->sc_sh, (reg), (val))
+
+#define ICE_WRITE_RAW(hw, reg, val)					\
+	bus_space_write_raw_4((hw)->hw_sc->sc_st, (hw)->hw_sc->sc_sh, (reg), \
+	    (val))
 
 #define ice_flush(_hw) ICE_READ((_hw), GLGEN_STAT)
 
@@ -337,6 +341,8 @@ struct ice_softc {
 
 	int sw_intr[ICE_MAX_VECTORS];
 };
+
+static int ice_rxrinfo(struct ice_softc *, struct if_rxrinfo *);
 
 /**
  * ice_driver_is_detaching - Check if the driver is detaching/unloading
@@ -10830,11 +10836,12 @@ ice_copy_rxq_ctx_to_hw(struct ice_hw *hw, uint8_t *ice_rxq_ctx,
 
 	/* Copy each dword separately to HW */
 	for (i = 0; i < ICE_RXQ_CTX_SIZE_DWORDS; i++) {
-		ICE_WRITE(hw, QRX_CONTEXT(i, rxq_index),
+		ICE_WRITE_RAW(hw, QRX_CONTEXT(i, rxq_index),
 		     *((uint32_t *)(ice_rxq_ctx + (i * sizeof(uint32_t)))));
 
 		DNPRINTF(ICE_DBG_QCTX, "%s: qrxdata[%d]: %08X\n", __func__,
-		    i, *((uint32_t *)(ice_rxq_ctx + (i * sizeof(uint32_t)))));
+		    i, le32toh(*((uint32_t *)(ice_rxq_ctx +
+		    (i * sizeof(uint32_t))))));
 	}
 
 	return ICE_SUCCESS;
@@ -13756,6 +13763,9 @@ ice_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 	case SIOCGIFMEDIA:
 		error = ifmedia_ioctl(ifp, ifr, &sc->media, cmd);
 		break;
+	case SIOCGIFRXR:
+		error = ice_rxrinfo(sc, (struct if_rxrinfo *)ifr->ifr_data);
+		break;
 	case SIOCADDMULTI:
 		error = ether_addmulti(ifr, &sc->sc_ac);
 		if (error == ENETRESET) {
@@ -13915,7 +13925,7 @@ ice_tx_setup_offload(struct mbuf *m0, struct ether_extracted *ext)
 
 #if NVLAN > 0
 	if (ISSET(m0->m_flags, M_VLANTAG)) {
-		uint64_t vtag = htole16(m0->m_pkthdr.ether_vtag);
+		uint64_t vtag = m0->m_pkthdr.ether_vtag;
 		offload |= (ICE_TX_DESC_CMD_IL2TAG1 << ICE_TXD_QW1_CMD_S) |
 		    (vtag << ICE_TXD_QW1_L2TAG1_S);
 	}
@@ -17937,9 +17947,10 @@ ice_print_nvm_version(struct ice_softc *sc)
 
 	ice_os_pkg_version_str(hw, os_pkg, sizeof(os_pkg));
 
-	printf("%s: %s%s%s, address %s\n", sc->sc_dev.dv_xname,
+	printf("%s: %s%s%s, %u queue%s, address %s\n", sc->sc_dev.dv_xname,
 	    ice_nvm_version_str(hw, buf, sizeof(buf)),
 	    os_pkg[0] ? " ddp " : "", os_pkg[0] ? os_pkg : "",
+	    sc->sc_nqueues, sc->sc_nqueues > 1 ? "s" : "",
 	    ether_sprintf(hw->port_info->mac.perm_addr));
 }
 
@@ -29479,9 +29490,9 @@ ice_txeof(struct ice_softc *sc, struct ice_tx_queue *txq)
 		last = txm->txm_eop;
 		txd = &ring[last];
 
-		dtype = htole64((txd->cmd_type_offset_bsz &
-		    ICE_TXD_QW1_DTYPE_M) >> ICE_TXD_QW1_DTYPE_S);
-		if (dtype != htole64(ICE_TX_DESC_DTYPE_DESC_DONE))
+		dtype = (htole64(txd->cmd_type_offset_bsz) &
+		    ICE_TXD_QW1_DTYPE_M) >> ICE_TXD_QW1_DTYPE_S;
+		if (dtype != ICE_TX_DESC_DTYPE_DESC_DONE)
 			break;
 
 		if (ISSET(txm->txm_m->m_pkthdr.csum_flags, M_TCP_TSO))
@@ -29800,6 +29811,35 @@ ice_rxrefill(void *arg)
 	struct ice_softc *sc = rxq->vsi->sc;
 
 	ice_rxfill(sc, rxq);
+}
+
+static int
+ice_rxrinfo(struct ice_softc *sc, struct if_rxrinfo *ifri)
+{
+	struct ifnet *ifp = &sc->sc_ac.ac_if;
+	struct if_rxring_info *ifr;
+	struct ice_rx_queue *rxq;
+	int i, rv;
+
+	if (!ISSET(ifp->if_flags, IFF_RUNNING))
+		return (ENOTTY);
+
+	ifr = mallocarray(sizeof(*ifr), sc->sc_nqueues, M_TEMP,
+	    M_WAITOK|M_CANFAIL|M_ZERO);
+	if (ifr == NULL)
+		return (ENOMEM);
+
+	for (i = 0; i < sc->sc_nqueues; i++) {
+		rxq = ifp->if_iqs[i]->ifiq_softc;
+		ifr[i].ifr_size = MCLBYTES + ETHER_ALIGN;
+		snprintf(ifr[i].ifr_name, sizeof(ifr[i].ifr_name), "%d", i);
+		ifr[i].ifr_info = rxq->rxq_acct;
+	}
+
+	rv = if_rxr_info_ioctl(ifri, sc->sc_nqueues, ifr);
+	free(ifr, M_TEMP, sc->sc_nqueues * sizeof(*ifr));
+
+	return (rv);
 }
 
 /* ice_rx_queues_alloc - Allocate Rx queue memory */
@@ -30480,8 +30520,6 @@ ice_attach_hook(struct device *self)
 		goto deinit_hw;
 	}
 
-	ice_print_nvm_version(sc);
-
 	ice_setup_scctx(sc);
 	if (ice_is_bit_set(sc->feat_en, ICE_FEATURE_SAFE_MODE))
 		ice_set_safe_mode_caps(hw);
@@ -30509,6 +30547,8 @@ ice_attach_hook(struct device *self)
 	DPRINTF("%s: %d MSIx vector%s available, using %d queue%s\n", __func__,
 	    sc->sc_nmsix, sc->sc_nmsix > 1 ? "s" : "",
 	    sc->sc_nqueues, sc->sc_nqueues > 1 ? "s" : "");
+
+	ice_print_nvm_version(sc);
 
 	/* Initialize the Tx queue manager */
 	err = ice_resmgr_init(&sc->tx_qmgr, sc->sc_nqueues);
