@@ -900,7 +900,11 @@ struct ixl_rx_wb_desc_32 {
 } __packed __aligned(16);
 
 #define IXL_TX_PKT_DESCS		8
-#define IXL_TX_TSO_PKT_DESCS		128
+/*
+ * Hardware supports 128 TSO segments, with 64K packets and 1500 MTU
+ * 50 descriptors is more than enough.  Do not waste devbuf memory.
+ */
+#define IXL_TX_TSO_PKT_DESCS		50
 #define IXL_TX_QUEUE_ALIGN		128
 #define IXL_RX_QUEUE_ALIGN		128
 
