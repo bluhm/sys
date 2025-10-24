@@ -30537,7 +30537,8 @@ ice_attach_hook(struct device *self)
 		goto deinit_hw;
 	}
 	sc->sc_nmsix = nmsix;
-	nqueues_max = MIN(sc->isc_nrxqsets_max, sc->isc_ntxqsets_max);
+	nqueues_max = MIN(MIN(sc->isc_nrxqsets_max, sc->isc_ntxqsets_max),
+	    ICE_MAX_VECTORS);
 	sc->sc_intrmap = intrmap_create(&sc->sc_dev, sc->sc_nmsix - 1,
 	    nqueues_max, INTRMAP_POWEROF2);
 	nqueues = intrmap_count(sc->sc_intrmap);
