@@ -100,7 +100,7 @@
 #define CACHE_LINE_SIZE 64
 #endif
 
-#define IXL_MAX_VECTORS			8 /* XXX this is pretty arbitrary */
+#define IXL_MAX_VECTORS			1536
 
 #define I40E_MASK(mask, shift)		((mask) << (shift))
 #define I40E_PF_RESET_WAIT_COUNT	200

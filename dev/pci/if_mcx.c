@@ -2933,8 +2933,8 @@ mcx_attach(struct device *parent, struct device *self, void *aux)
 	}
 
 	msix--; /* admin ops took one */
-	sc->sc_intrmap = intrmap_create(&sc->sc_dev, msix, MCX_MAX_QUEUES,
-	    INTRMAP_POWEROF2);
+	sc->sc_intrmap = intrmap_create(&sc->sc_dev, msix,
+	    MIN(MCX_MAX_QUEUES, IF_MAX_VECTORS), INTRMAP_POWEROF2);
 	if (sc->sc_intrmap == NULL) {
 		printf(": unable to create interrupt map\n");
 		goto teardown;

@@ -174,7 +174,7 @@
 
 #define IGC_PCIREG		PCI_MAPREG_START
 
-#define IGC_MAX_VECTORS		8
+#define IGC_MAX_VECTORS		4
 
 /* Enable/disable debugging statements in shared code */
 #define DBG	0
