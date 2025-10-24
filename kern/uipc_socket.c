@@ -476,11 +476,11 @@ notsplicedback:
 		sbunlock(&so->so_rcv);
 
 		timeout_barrier(&so->so_spliceidleto);
-		spq = so->so_splicequeue;
+		spq = READ_ONCE(so->so_splicequeue);
 		if (spq != NULL)
 			taskq_barrier(spq);
 		if (soback != NULL) {
-			spqback = soback->so_splicequeue;
+			spqback = READ_ONCE(soback->so_splicequeue);
 			if (spqback != NULL && spqback != spq)
 				taskq_barrier(spqback);
 			sorele(soback);
@@ -1425,7 +1425,8 @@ sounsplice(struct socket *so, struct socket *sosp, int freeing)
 	so->so_rcv.sb_flags &= ~SB_SPLICE;
 	sosp->so_snd.sb_flags &= ~SB_SPLICE;
 	timeout_del(&so->so_spliceidleto);
-	task_del(so->so_splicequeue, &so->so_splicetask);
+	if (so->so_splicequeue != NULL)
+		task_del(so->so_splicequeue, &so->so_splicetask);
 	KASSERT(so->so_sp->ssp_socket == sosp);
 	KASSERT(sosp->so_sp->ssp_soback == so);
 	so->so_sp->ssp_socket = sosp->so_sp->ssp_soback = NULL;
@@ -1837,8 +1838,11 @@ sorwakeup(struct socket *so)
 #ifdef SOCKET_SPLICE
 	if (so->so_proto->pr_flags & PR_SPLICE) {
 		mtx_enter(&so->so_rcv.sb_mtx);
-		if (so->so_rcv.sb_flags & SB_SPLICE)
+		if (so->so_rcv.sb_flags & SB_SPLICE) {
+			atomic_cas_ptr(&so->so_splicequeue, NULL,
+			    net_tq(pru_flowid(so)));
 			task_add(so->so_splicequeue, &so->so_splicetask);
+		}
 		if (isspliced(so)) {
 			mtx_leave(&so->so_rcv.sb_mtx);
 			return;
@@ -1857,9 +1861,14 @@ sowwakeup(struct socket *so)
 #ifdef SOCKET_SPLICE
 	if (so->so_proto->pr_flags & PR_SPLICE) {
 		mtx_enter(&so->so_snd.sb_mtx);
-		if (so->so_snd.sb_flags & SB_SPLICE)
-			task_add(so->so_sp->ssp_soback->so_splicequeue,
-			    &so->so_sp->ssp_soback->so_splicetask);
+		if (so->so_snd.sb_flags & SB_SPLICE) {
+			struct socket *soback = so->so_sp->ssp_soback;
+
+			atomic_cas_ptr(&soback->so_splicequeue, NULL,
+			    net_tq(pru_flowid(soback)));
+			task_add(soback->so_splicequeue,
+			    &soback->so_splicetask);
+		}
 		if (issplicedback(so)) {
 			mtx_leave(&so->so_snd.sb_mtx);
 			return;

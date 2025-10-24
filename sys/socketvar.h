@@ -74,7 +74,7 @@ struct sosplice {
 	struct	timeval ssp_idletv;	/* [I] idle timeout */
 	struct	timeout ssp_idleto;
 	struct	task ssp_task;		/* task for somove */
-	struct	taskq *ssp_queue;	/* [I] softnet queue where we add */
+	struct	taskq *ssp_queue;	/* [a] softnet queue where we add */
 };
 
 /*
