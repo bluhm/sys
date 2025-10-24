@@ -1,4 +1,4 @@
-/*	$OpenBSD: in_pcb.h,v 1.171 2025/07/14 09:01:52 jsg Exp $	*/
+/*	$OpenBSD: in_pcb.h,v 1.172 2025/10/24 15:09:56 bluhm Exp $	*/
 /*	$NetBSD: in_pcb.h,v 1.14 1996/02/13 23:42:00 christos Exp $	*/
 
 /*

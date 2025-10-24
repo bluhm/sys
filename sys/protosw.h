@@ -1,4 +1,4 @@
-/*	$OpenBSD: protosw.h,v 1.72 2025/03/02 21:28:32 bluhm Exp $	*/
+/*	$OpenBSD: protosw.h,v 1.73 2025/10/24 15:09:56 bluhm Exp $	*/
 /*	$NetBSD: protosw.h,v 1.10 1996/04/09 20:55:32 cgd Exp $	*/
 
 /*-

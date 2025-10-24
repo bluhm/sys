@@ -1,4 +1,4 @@
-/*	$OpenBSD: udp_usrreq.c,v 1.349 2025/07/18 08:39:14 mvs Exp $	*/
+/*	$OpenBSD: udp_usrreq.c,v 1.350 2025/10/24 15:09:56 bluhm Exp $	*/
 /*	$NetBSD: udp_usrreq.c,v 1.28 1996/03/16 23:54:03 christos Exp $	*/
 
 /*
