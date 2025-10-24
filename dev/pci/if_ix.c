@@ -37,6 +37,8 @@
 #include <dev/pci/if_ix.h>
 #include <dev/pci/ixgbe_type.h>
 
+#define IX_MAX_VECTORS			64
+
 /*
  * Our TCP/IP Stack is unable to handle packets greater than MAXMCLBYTES.
  * This interface is unable to handle packets greater than IXGBE_TSO_SIZE.
@@ -1851,9 +1853,10 @@ ixgbe_setup_msix(struct ix_softc *sc)
 	/* give one vector to events */
 	nmsix--;
 
+	maxq = IX_MAX_VECTORS;
 	/* XXX the number of queues is limited to what we can keep stats on */
-	maxq = (sc->hw.mac.type == ixgbe_mac_82598EB) ? 8 : 16;
-
+	if (sc->hw.mac.type == ixgbe_mac_82598EB)
+		maxq = 8;
 	sc->sc_intrmap = intrmap_create(&sc->dev, nmsix,
 	    MIN(maxq, IF_MAX_VECTORS), 0);
 	sc->num_queues = intrmap_count(sc->sc_intrmap);
