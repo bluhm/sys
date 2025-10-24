@@ -53,6 +53,7 @@
 #include <sys/refcnt.h>
 
 #include <net/if.h>
+#include <net/if_var.h>
 
 #ifdef DDB
 #include <machine/db_machdep.h>
@@ -1442,13 +1443,13 @@ sounsplice(struct socket *so, struct socket *sosp, int freeing)
 		readable = so->so_qlen || soreadable(so);
 		mtx_leave(&so->so_rcv.sb_mtx);
 		if (readable)
-			sorwakeup(so);
+			sorwakeup(so, NULL);
 		sounlock_shared(so);
 	}
 	if ((freeing & SOSP_FREEING_WRITE) == 0) {
 		solock_shared(sosp);
 		if (sowriteable(sosp))
-			sowwakeup(sosp);
+			sowwakeup(sosp, NULL);
 		sounlock_shared(sosp);
 	}
 
@@ -1833,14 +1834,14 @@ somove(struct socket *so, int wait)
 #endif /* SOCKET_SPLICE */
 
 void
-sorwakeup(struct socket *so)
+sorwakeup(struct socket *so, struct netstack *ns)
 {
 #ifdef SOCKET_SPLICE
 	if (so->so_proto->pr_flags & PR_SPLICE) {
 		mtx_enter(&so->so_rcv.sb_mtx);
 		if (so->so_rcv.sb_flags & SB_SPLICE) {
 			atomic_cas_ptr(&so->so_splicequeue, NULL,
-			    net_tq(pru_flowid(so)));
+			    ns != NULL ? ns->ns_nettaskq : net_tq(0));
 			task_add(so->so_splicequeue, &so->so_splicetask);
 		}
 		if (isspliced(so)) {
@@ -1856,7 +1857,7 @@ sorwakeup(struct socket *so)
 }
 
 void
-sowwakeup(struct socket *so)
+sowwakeup(struct socket *so, struct netstack *ns)
 {
 #ifdef SOCKET_SPLICE
 	if (so->so_proto->pr_flags & PR_SPLICE) {
@@ -1865,7 +1866,7 @@ sowwakeup(struct socket *so)
 			struct socket *soback = so->so_sp->ssp_soback;
 
 			atomic_cas_ptr(&soback->so_splicequeue, NULL,
-			    net_tq(pru_flowid(soback)));
+			    ns != NULL ? ns->ns_nettaskq : net_tq(0));
 			task_add(soback->so_splicequeue,
 			    &soback->so_splicetask);
 		}

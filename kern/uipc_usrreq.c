@@ -502,7 +502,7 @@ uipc_rcvd(struct socket *so)
 	so2->so_snd.sb_cc = so->so_rcv.sb_cc;
 	mtx_leave(&so2->so_snd.sb_mtx);
 	mtx_leave(&so->so_rcv.sb_mtx);
-	sowwakeup(so2);
+	sowwakeup(so2, NULL);
 }
 
 int
@@ -568,7 +568,7 @@ uipc_send(struct socket *so, struct mbuf *m, struct mbuf *nam,
 	mtx_leave(&so2->so_rcv.sb_mtx);
 
 	if (dowakeup)
-		sorwakeup(so2);
+		sorwakeup(so2, NULL);
 
 	m = NULL;
 
@@ -636,7 +636,7 @@ uipc_dgram_send(struct socket *so, struct mbuf *m, struct mbuf *nam,
 	mtx_leave(&so2->so_rcv.sb_mtx);
 
 	if (dowakeup)
-		sorwakeup(so2);
+		sorwakeup(so2, NULL);
 	if (nam)
 		unp_disconnect(unp);
 

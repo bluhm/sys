@@ -113,15 +113,15 @@ soisconnected(struct socket *so)
 
 		soqremque(so, 0);
 		soqinsque(head, so, 1);
-		sorwakeup(head);
+		sorwakeup(head, NULL);
 		wakeup_one(&head->so_timeo);
 
 		sounlock(head);
 		sorele(head);
 	} else {
 		wakeup(&so->so_timeo);
-		sorwakeup(so);
-		sowwakeup(so);
+		sorwakeup(so, NULL);
+		sowwakeup(so, NULL);
 	}
 }
 
@@ -141,8 +141,8 @@ soisdisconnecting(struct socket *so)
 	mtx_leave(&so->so_snd.sb_mtx);
 
 	wakeup(&so->so_timeo);
-	sowwakeup(so);
-	sorwakeup(so);
+	sowwakeup(so, NULL);
+	sorwakeup(so, NULL);
 }
 
 void
@@ -162,8 +162,8 @@ soisdisconnected(struct socket *so)
 	so->so_state |= SS_ISDISCONNECTED;
 
 	wakeup(&so->so_timeo);
-	sowwakeup(so);
-	sorwakeup(so);
+	sowwakeup(so, NULL);
+	sorwakeup(so, NULL);
 }
 
 /*
@@ -233,7 +233,7 @@ sonewconn(struct socket *head, int connstatus, int wait)
 	}
 	if (connstatus) {
 		so->so_state |= connstatus;
-		sorwakeup(head);
+		sorwakeup(head, NULL);
 		wakeup(&head->so_timeo);
 	}
 
@@ -308,7 +308,7 @@ socantsendmore(struct socket *so)
 	mtx_enter(&so->so_snd.sb_mtx);
 	so->so_snd.sb_state |= SS_CANTSENDMORE;
 	mtx_leave(&so->so_snd.sb_mtx);
-	sowwakeup(so);
+	sowwakeup(so, NULL);
 }
 
 void
@@ -317,7 +317,7 @@ socantrcvmore(struct socket *so)
 	mtx_enter(&so->so_rcv.sb_mtx);
 	so->so_rcv.sb_state |= SS_CANTRCVMORE;
 	mtx_leave(&so->so_rcv.sb_mtx);
-	sorwakeup(so);
+	sorwakeup(so, NULL);
 }
 
 void

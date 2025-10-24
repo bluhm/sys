@@ -92,9 +92,10 @@ struct task;
 struct cpumem;
 
 struct netstack {
-	struct route		ns_route;
-	struct mbuf_list	ns_tcp_ml;
-	struct mbuf_list	ns_tcp6_ml;
+	struct route		 ns_route;
+	struct mbuf_list	 ns_tcp_ml;
+	struct mbuf_list	 ns_tcp6_ml;
+	struct taskq		*ns_nettaskq;
 };
 
 /*

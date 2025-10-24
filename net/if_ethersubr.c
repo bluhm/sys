@@ -2108,7 +2108,7 @@ ether_frm_recv(struct socket *so, struct mbuf *m0,
 		return;
 	}
 
-	sorwakeup(so);
+	sorwakeup(so, NULL);
 }
 
 static struct mbuf *

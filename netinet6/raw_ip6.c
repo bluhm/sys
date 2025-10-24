@@ -114,7 +114,7 @@ const struct pr_usrreqs rip6_usrreqs = {
 };
 
 void	rip6_sbappend(struct inpcb *, struct mbuf *, struct ip6_hdr *, int,
-	    struct sockaddr_in6 *);
+	    struct sockaddr_in6 *, struct netstack *);
 
 /*
  * Initialize raw connection block queue.
@@ -229,7 +229,8 @@ rip6_input(struct mbuf **mp, int *offp, int proto, int af, struct netstack *ns)
 
 			n = m_copym(m, 0, M_COPYALL, M_NOWAIT);
 			if (n != NULL)
-				rip6_sbappend(last, n, ip6, *offp, &rip6src);
+				rip6_sbappend(last, n, ip6, *offp, &rip6src,
+				    ns);
 			in_pcbunref(last);
 
 			mtx_enter(&rawin6pcbtable.inpt_mtx);
@@ -262,7 +263,7 @@ rip6_input(struct mbuf **mp, int *offp, int proto, int af, struct netstack *ns)
 		return IPPROTO_DONE;
 	}
 
-	rip6_sbappend(last, m, ip6, *offp, &rip6src);
+	rip6_sbappend(last, m, ip6, *offp, &rip6src, ns);
 	in_pcbunref(last);
 
 	return IPPROTO_DONE;
@@ -270,7 +271,7 @@ rip6_input(struct mbuf **mp, int *offp, int proto, int af, struct netstack *ns)
 
 void
 rip6_sbappend(struct inpcb *inp, struct mbuf *m, struct ip6_hdr *ip6, int hlen,
-    struct sockaddr_in6 *rip6src)
+    struct sockaddr_in6 *rip6src, struct netstack *ns)
 {
 	struct socket *so = inp->inp_socket;
 	struct mbuf *opts = NULL;
@@ -291,7 +292,7 @@ rip6_sbappend(struct inpcb *inp, struct mbuf *m, struct ip6_hdr *ip6, int hlen,
 		m_freem(opts);
 		rip6stat_inc(rip6s_fullsock);
 	} else
-		sorwakeup(so);
+		sorwakeup(so, ns);
 }
 
 void

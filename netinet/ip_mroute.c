@@ -1129,7 +1129,7 @@ socket_send(struct socket *so, struct mbuf *mm, struct sockaddr_in *src)
 		mtx_leave(&so->so_rcv.sb_mtx);
 
 		if (ret != 0) {
-			sorwakeup(so);
+			sorwakeup(so, NULL);
 			return (0);
 		}
 	}

@@ -468,7 +468,7 @@ rtm_senddesync(struct socket *so)
 
 		if (ret != 0) {
 			rop->rop_flags &= ~ROUTECB_FLAG_DESYNC;
-			sorwakeup(rop->rop_socket);
+			sorwakeup(rop->rop_socket, NULL);
 			return;
 		}
 		m_freem(desync_mbuf);
@@ -595,7 +595,7 @@ rtm_sendup(struct socket *so, struct mbuf *m0)
 		return (ENOBUFS);
 	}
 
-	sorwakeup(so);
+	sorwakeup(so, NULL);
 	return (0);
 }
 

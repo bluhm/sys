@@ -268,8 +268,8 @@ int	sosend(struct socket *, struct mbuf *, struct uio *,
 int	sosetopt(struct socket *, int, int, struct mbuf *);
 int	soshutdown(struct socket *, int);
 void	sowakeup(struct socket *, struct sockbuf *);
-void	sorwakeup(struct socket *);
-void	sowwakeup(struct socket *);
+void	sorwakeup(struct socket *, struct netstack *);
+void	sowwakeup(struct socket *, struct netstack *);
 int	sockargs(struct mbuf **, const void *, size_t, int);
 
 int	sosleep_nsec(struct socket *, void *, int, const char *, uint64_t);
