@@ -1232,6 +1232,8 @@ mrt6_iflookupbymif(mifi_t mifi, unsigned int rtableid)
 	struct mif6	*m6;
 	struct ifnet	*ifp;
 
+	NET_ASSERT_LOCKED();
+
 	TAILQ_FOREACH(ifp, &ifnetlist, if_list) {
 		if (ifp->if_rdomain != rtableid)
 			continue;

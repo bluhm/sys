@@ -1358,6 +1358,8 @@ in6_ifawithscope(struct ifnet *oifp, const struct in6_addr *dst, u_int rdomain,
 		return (NULL);
 	}
 
+	NET_ASSERT_LOCKED();
+
 	/* We search for all addresses on all interfaces from the beginning. */
 	TAILQ_FOREACH(ifp, &ifnetlist, if_list) {
 		if (ifp->if_rdomain != rdomain)

@@ -199,6 +199,8 @@ in6_get_ifid(struct ifnet *ifp0, struct in6_addr *in6)
 	if (in6_get_hw_ifid(ifp0, in6) == 0)
 		return;
 
+	NET_ASSERT_LOCKED();
+
 	/* next, try to get it from some other hardware interface */
 	TAILQ_FOREACH(ifp, &ifnetlist, if_list) {
 		if (ifp == ifp0)

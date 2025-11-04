@@ -801,6 +801,8 @@ in_broadcast(struct in_addr in, u_int rtableid)
 	struct ifaddr *ifa;
 	u_int rdomain;
 
+	NET_ASSERT_LOCKED();
+
 	rdomain = rtable_l2(rtableid);
 
 #define ia (ifatoia(ifa))
