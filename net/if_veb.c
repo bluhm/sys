@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_veb.c,v 1.48 2025/11/02 00:15:20 dlg Exp $ */
+/*	$OpenBSD: if_veb.c,v 1.52 2025/11/07 09:57:29 dlg Exp $ */
 
 /*
  * Copyright (c) 2021 David Gwynne <dlg@openbsd.org>
@@ -39,14 +39,6 @@
 
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
-
-#if 0 && defined(IPSEC)
-/*
- * IPsec handling is disabled in veb until getting and using tdbs is mpsafe.
- */
-#include <netinet/ip_ipsp.h>
-#include <net/if_enc.h>
-#endif
 
 #include <net/if_bridge.h>
 #include <net/if_etherbridge.h>
@@ -175,8 +167,6 @@ static int	veb_enqueue(struct ifnet *, struct mbuf *);
 static int	veb_output(struct ifnet *, struct mbuf *, struct sockaddr *,
 		    struct rtentry *);
 static void	veb_start(struct ifqueue *);
-static struct mbuf *
-		veb_offload(struct ifnet *, struct ifnet *, struct mbuf *);
 
 static int	veb_up(struct veb_softc *);
 static int	veb_down(struct veb_softc *);
@@ -464,8 +454,11 @@ veb_span(struct veb_softc *sc, struct mbuf *m0)
 			continue;
 		}
 
-		if ((m = veb_offload(&sc->sc_if, ifp0, m)) == NULL)
+		m = ether_offload_ifcap(ifp0, m);
+		if (m == NULL) {
+			counters_inc(sc->sc_if.if_counters, ifc_oerrors);
 			continue;
+		}
 
 		if_enqueue(ifp0, m); /* XXX count error */
 	}
@@ -708,335 +701,6 @@ veb_pf(struct ifnet *ifp0, int dir, struct mbuf *m, struct netstack *ns)
 }
 #endif /* NPF > 0 */
 
-#if 0 && defined(IPSEC)
-static struct mbuf *
-veb_ipsec_proto_in(struct ifnet *ifp0, struct mbuf *m, int iphlen,
-    /* const */ union sockaddr_union *dst, int poff)
-{
-	struct tdb *tdb;
-	uint16_t cpi;
-	uint32_t spi;
-	uint8_t proto;
-
-	/* ipsec_common_input checks for 8 bytes of input, so we do too */
-	if (m->m_pkthdr.len < iphlen + 2 * sizeof(u_int32_t))
-		return (m); /* decline */
-
-	proto = *(mtod(m, uint8_t *) + poff);
-	/* i'm not a huge fan of how these headers get picked at */
-	switch (proto) {
-	case IPPROTO_ESP:
-		m_copydata(m, iphlen, sizeof(spi), &spi);
-		break;
-	case IPPROTO_AH:
-		m_copydata(m, iphlen + sizeof(uint32_t), sizeof(spi), &spi);
-		break;
-	case IPPROTO_IPCOMP:
-		m_copydata(m, iphlen + sizeof(uint16_t), sizeof(cpi), &cpi);
-		spi = htonl(ntohs(cpi));
-		break;
-	default:
-		return (m); /* decline */
-	}
-
-	tdb = gettdb(m->m_pkthdr.ph_rtableid, spi, dst, proto);
-	if (tdb != NULL && !ISSET(tdb->tdb_flags, TDBF_INVALID) &&
-	    tdb->tdb_xform != NULL) {
-		if (tdb->tdb_first_use == 0) {
-			tdb->tdb_first_use = gettime();
-			if (ISSET(tdb->tdb_flags, TDBF_FIRSTUSE)) {
-				timeout_add_sec(&tdb->tdb_first_tmo,
-				    tdb->tdb_exp_first_use);
-			}
-			if (ISSET(tdb->tdb_flags, TDBF_SOFT_FIRSTUSE)) {
-				timeout_add_sec(&tdb->tdb_sfirst_tmo,
-				    tdb->tdb_soft_first_use);
-			}
-		}
-
-		(*(tdb->tdb_xform->xf_input))(m, tdb, iphlen, poff, NULL);
-		return (NULL);
-	}
-
-	return (m);
-}
-
-static struct mbuf *
-veb_ipsec_ipv4_in(struct ifnet *ifp0, struct mbuf *m)
-{
-	union sockaddr_union su = {
-		.sin.sin_len = sizeof(su.sin),
-		.sin.sin_family = AF_INET,
-	};
-	struct ip *ip;
-	int iphlen;
-
-	if (m->m_len < sizeof(*ip)) {
-		m = m_pullup(m, sizeof(*ip));
-		if (m == NULL)
-			return (NULL);
-	}
-
-	ip = mtod(m, struct ip *);
-	iphlen = ip->ip_hl << 2;
-	if (iphlen < sizeof(*ip)) {
-		/* this is a weird packet, decline */
-		return (m);
-	}
-
-	su.sin.sin_addr = ip->ip_dst;
-
-	return (veb_ipsec_proto_in(ifp0, m, iphlen, &su,
-	    offsetof(struct ip, ip_p)));
-}
-
-#ifdef INET6
-static struct mbuf *
-veb_ipsec_ipv6_in(struct ifnet *ifp0, struct mbuf *m)
-{
-	union sockaddr_union su = {
-		.sin6.sin6_len = sizeof(su.sin6),
-		.sin6.sin6_family = AF_INET6,
-	};
-	struct ip6_hdr *ip6;
-
-	if (m->m_len < sizeof(*ip6)) {
-		m = m_pullup(m, sizeof(*ip6));
-		if (m == NULL)
-			return (NULL);
-	}
-
-	ip6 = mtod(m, struct ip6_hdr *);
-
-	su.sin6.sin6_addr = ip6->ip6_dst;
-
-	/* XXX scope? */
-
-	return (veb_ipsec_proto_in(ifp0, m, sizeof(*ip6), &su,
-	    offsetof(struct ip6_hdr, ip6_nxt)));
-}
-#endif /* INET6 */
-
-static struct mbuf *
-veb_ipsec_in(struct ifnet *ifp0, struct mbuf *m)
-{
-	struct mbuf *(*ipsec_ip_in)(struct ifnet *, struct mbuf *);
-	struct ether_header *eh, copy;
-
-	if (ifp0->if_enqueue == vport_enqueue)
-		return (m);
-
-	eh = mtod(m, struct ether_header *);
-	switch (ntohs(eh->ether_type)) {
-	case ETHERTYPE_IP:
-		ipsec_ip_in = veb_ipsec_ipv4_in;
-		break;
-#ifdef INET6
-	case ETHERTYPE_IPV6:
-		ipsec_ip_in = veb_ipsec_ipv6_in;
-		break;
-#endif /* INET6 */
-	default:
-		return (m);
-	}
-
-	copy = *eh;
-	m_adj(m, sizeof(*eh));
-
-	m = (*ipsec_ip_in)(ifp0, m);
-	if (m == NULL)
-		return (NULL);
-
-	m = m_prepend(m, sizeof(*eh), M_DONTWAIT);
-	if (m == NULL)
-		return (NULL);
-
-	eh = mtod(m, struct ether_header *);
-	*eh = copy;
-
-	return (m);
-}
-
-static struct mbuf *
-veb_ipsec_proto_out(struct mbuf *m, sa_family_t af, int iphlen)
-{
-	struct tdb *tdb;
-	int error;
-#if NPF > 0
-	struct ifnet *encifp;
-#endif
-
-	tdb = ipsp_spd_lookup(m, af, iphlen, &error, IPSP_DIRECTION_OUT,
-	    NULL, NULL, NULL);
-	if (tdb == NULL)
-		return (m);
-
-#if NPF > 0
-	encifp = enc_getif(tdb->tdb_rdomain, tdb->tdb_tap);
-	if (encifp != NULL) {
-		if (pf_test(af, PF_OUT, encifp, &m) != PF_PASS) {
-			m_freem(m);
-			return (NULL);
-		}
-		if (m == NULL)
-			return (NULL);
-	}
-#endif /* NPF > 0 */
-
-	/* XXX mtu checks */
-
-	(void)ipsp_process_packet(m, tdb, af, 0);
-	return (NULL);
-}
-
-static struct mbuf *
-veb_ipsec_ipv4_out(struct mbuf *m)
-{
-	struct ip *ip;
-	int iphlen;
-
-	if (m->m_len < sizeof(*ip)) {
-		m = m_pullup(m, sizeof(*ip));
-		if (m == NULL)
-			return (NULL);
-	}
-
-	ip = mtod(m, struct ip *);
-	iphlen = ip->ip_hl << 2;
-	if (iphlen < sizeof(*ip)) {
-		/* this is a weird packet, decline */
-		return (m);
-	}
-
-	return (veb_ipsec_proto_out(m, AF_INET, iphlen));
-}
-
-#ifdef INET6
-static struct mbuf *
-veb_ipsec_ipv6_out(struct mbuf *m)
-{
-	return (veb_ipsec_proto_out(m, AF_INET6, sizeof(struct ip6_hdr)));
-}
-#endif /* INET6 */
-
-static struct mbuf *
-veb_ipsec_out(struct ifnet *ifp0, struct mbuf *m)
-{
-	struct mbuf *(*ipsec_ip_out)(struct mbuf *);
-	struct ether_header *eh, copy;
-
-	if (ifp0->if_enqueue == vport_enqueue)
-		return (m);
-
-	eh = mtod(m, struct ether_header *);
-	switch (ntohs(eh->ether_type)) {
-	case ETHERTYPE_IP:
-		ipsec_ip_out = veb_ipsec_ipv4_out;
-		break;
-#ifdef INET6
-	case ETHERTYPE_IPV6:
-		ipsec_ip_out = veb_ipsec_ipv6_out;
-		break;
-#endif /* INET6 */
-	default:
-		return (m);
-	}
-
-	copy = *eh;
-	m_adj(m, sizeof(*eh));
-
-	m = (*ipsec_ip_out)(m);
-	if (m == NULL)
-		return (NULL);
-
-	m = m_prepend(m, sizeof(*eh), M_DONTWAIT);
-	if (m == NULL)
-		return (NULL);
-
-	eh = mtod(m, struct ether_header *);
-	*eh = copy;
-
-	return (m);
-}
-#endif /* IPSEC */
-
-static struct mbuf *
-veb_offload(struct ifnet *ifp, struct ifnet *ifp0, struct mbuf *m)
-{
-	struct ether_extracted ext;
-	int csum = 0;
-
-#if NVLAN > 0
-	if (ISSET(m->m_flags, M_VLANTAG) &&
-	    !ISSET(ifp0->if_capabilities, IFCAP_VLAN_HWTAGGING)) {
-		/*
-		 * If the underlying interface has no VLAN hardware tagging
-		 * support, inject one in software.
-		 */
-		m = vlan_inject(m, ETHERTYPE_VLAN, m->m_pkthdr.ether_vtag);
-		if (m == NULL)
-			goto err;
-	}
-#endif
-
-	if (ISSET(m->m_pkthdr.csum_flags, M_IPV4_CSUM_OUT) &&
-	    !ISSET(ifp0->if_capabilities, IFCAP_CSUM_IPv4))
-		csum = 1;
-
-	if (ISSET(m->m_pkthdr.csum_flags, M_TCP_CSUM_OUT) &&
-	    (!ISSET(ifp0->if_capabilities, IFCAP_CSUM_TCPv4) ||
-	     !ISSET(ifp0->if_capabilities, IFCAP_CSUM_TCPv6)))
-		csum = 1;
-
-	if (ISSET(m->m_pkthdr.csum_flags, M_UDP_CSUM_OUT) &&
-	    (!ISSET(ifp0->if_capabilities, IFCAP_CSUM_UDPv4) ||
-	     !ISSET(ifp0->if_capabilities, IFCAP_CSUM_UDPv6)))
-		csum = 1;
-
-	if (csum) {
-		int ethlen;
-		int hlen;
-
-		ether_extract_headers(m, &ext);
-
-		ethlen = sizeof *ext.eh;
-		if (ext.evh)
-			ethlen = sizeof *ext.evh;
-
-		hlen = m->m_pkthdr.len - ext.paylen;
-
-		if (m->m_len < hlen) {
-			m = m_pullup(m, hlen);
-			if (m == NULL)
-				goto err;
-		}
-
-		/* hide ethernet header */
-		m->m_data += ethlen;
-		m->m_len -= ethlen;
-		m->m_pkthdr.len -= ethlen;
-
-		if (ext.ip4) {
-			in_hdr_cksum_out(m, ifp0);
-			in_proto_cksum_out(m, ifp0);
-#ifdef INET6
-		} else if (ext.ip6) {
-			in6_proto_cksum_out(m, ifp0);
-#endif
-		}
-
-		/* show ethernet header again */
-		m->m_data -= ethlen;
-		m->m_len += ethlen;
-		m->m_pkthdr.len += ethlen;
-	}
-
-	return m;
- err:
-	counters_inc(ifp->if_counters, ifc_ierrors);
-	return NULL;
-}
-
 static void
 veb_broadcast(struct veb_softc *sc, struct veb_port *rp, struct mbuf *m0,
     uint64_t src, uint64_t dst, uint16_t vid, struct netstack *ns)
@@ -1058,13 +722,6 @@ veb_broadcast(struct veb_softc *sc, struct veb_port *rp, struct mbuf *m0,
 		 */
 		if (ISSET(ifp->if_flags, IFF_LINK1) &&
 		    (m0 = veb_pf(ifp, PF_FWD, m0, ns)) == NULL)
-			return;
-#endif
-
-#if 0 && defined(IPSEC)
-		/* same goes for ipsec */
-		if (ISSET(ifp->if_flags, IFF_LINK2) &&
-		    (m0 = veb_ipsec_out(ifp, m0)) == NULL)
 			return;
 #endif
 	}
@@ -1122,12 +779,14 @@ veb_broadcast(struct veb_softc *sc, struct veb_port *rp, struct mbuf *m0,
 		if (vid == tp->p_pvid)
 			CLR(m->m_flags, M_VLANTAG);
 
-		if ((m = veb_offload(ifp, ifp0, m)) == NULL)
-			goto rele;
+		m = ether_offload_ifcap(ifp0, m);
+		if (m == NULL) {
+			counters_inc(ifp->if_counters, ifc_oerrors);
+			continue;
+		}
 
 		(*tp->p_enqueue)(ifp0, m); /* XXX count error */
 	}
- rele:
 	refcnt_rele_wake(&pm->m_refs);
 
 done:
@@ -1165,12 +824,6 @@ veb_transmit(struct veb_softc *sc, struct veb_port *rp, struct veb_port *tp,
 	ifp0 = tp->p_ifp0;
 
 	if (vid == tp->p_pvid) {
-#if 0 && defined(IPSEC)
-		if (ISSET(ifp->if_flags, IFF_LINK2) &&
-		    (m = veb_ipsec_out(ifp0, m0)) == NULL)
-			return;
-#endif
-
 #if NPF > 0
 		if (ISSET(ifp->if_flags, IFF_LINK1) &&
 		    (m = veb_pf(ifp0, PF_FWD, m, ns)) == NULL)
@@ -1183,8 +836,11 @@ veb_transmit(struct veb_softc *sc, struct veb_port *rp, struct veb_port *tp,
 	counters_pkt(ifp->if_counters, ifc_opackets, ifc_obytes,
 	    m->m_pkthdr.len);
 
-	if ((m = veb_offload(ifp, ifp0, m)) == NULL)
+	m = ether_offload_ifcap(ifp0, m);
+	if (m == NULL) {
+		counters_inc(ifp->if_counters, ifc_oerrors);
 		goto drop;
+	}
 
 	(*tp->p_enqueue)(ifp0, m); /* XXX count error */
 
@@ -1257,6 +913,11 @@ veb_port_input(struct ifnet *ifp0, struct mbuf *m, uint64_t dst, void *brport,
 		m_adj(m, EVL_ENCAPLEN);
 
 		eh = mtod(m, struct ether_header *);
+	}
+
+	if (eh->ether_type == htons(ETHERTYPE_VLAN)) {
+		/* don't allow double tagging as it enables vlan hopping */
+		goto drop;
 	}
 
 	if (ISSET(m->m_flags, M_VLANTAG)) {
@@ -1350,12 +1011,6 @@ veb_port_input(struct ifnet *ifp0, struct mbuf *m, uint64_t dst, void *brport,
 #if NPF > 0
 	if (ISSET(ifp->if_flags, IFF_LINK1) &&
 	    (m = veb_pf(ifp0, PF_IN, m, ns)) == NULL)
-		return (NULL);
-#endif
-
-#if 0 && defined(IPSEC)
-	if (ISSET(ifp->if_flags, IFF_LINK2) &&
-	    (m = veb_ipsec_in(ifp0, m)) == NULL)
 		return (NULL);
 #endif
 
