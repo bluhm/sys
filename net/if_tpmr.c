@@ -216,6 +216,9 @@ tpmr_vlan_filter(const struct mbuf *m)
 		return (1);
 #endif
 
+	if (ISSET(m->m_flags, M_VLANTAG))
+		return (1);
+
 	eh = mtod(m, struct ether_header *);
 	switch (ntohs(eh->ether_type)) {
 	case ETHERTYPE_VLAN:
@@ -273,6 +276,11 @@ tpmr_pf(struct ifnet *ifp0, int dir, struct mbuf *m, struct netstack *ns)
 {
 	struct ether_header *eh, copy;
 	const struct tpmr_pf_ip_family *fam;
+
+#if NVLAN > 0
+	if (ISSET(m->m_flags, M_VLANTAG))
+		return (m);
+#endif
 
 #if NVLAN > 0
 	if (ISSET(m->m_flags, M_VLANTAG))
@@ -339,6 +347,7 @@ tpmr_input(struct ifnet *ifp0, struct mbuf *m, uint64_t dst, void *brport,
 	struct ifnet *ifpn;
 	unsigned int iff;
 	struct tpmr_port *pn;
+	struct mbuf_list ml;
 	int len;
 #if NBPFILTER > 0
 	caddr_t if_bpf;

@@ -96,6 +96,11 @@ didn't get a copy, you may request one from <license@ipv6.nrl.navy.mil>.
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
 
+/* for tcp_softtso_chop */
+#include <netinet/tcp.h>
+#include <netinet/tcp_timer.h>
+#include <netinet/tcp_var.h>
+
 #if NBPFILTER > 0
 #include <net/bpf.h>
 #endif
@@ -1124,6 +1129,8 @@ ether_extract_headers(struct mbuf *m0, struct ether_extracted *ext)
 	}
 #endif
 
+	ext->ipoff = hlen;
+
 	switch (ether_type) {
 	case ETHERTYPE_IP:
 		m = m_getptr(m0, hlen, &hoff);
@@ -1198,6 +1205,9 @@ ether_extract_headers(struct mbuf *m0, struct ether_extracted *ext)
 		return;
 	}
 
+	ext->ipm = m;
+	ext->ipmoff = hoff;
+
 	switch (ipproto) {
 	case IPPROTO_TCP:
 		m = m_getptr(m, hoff + hlen, &hoff);
@@ -1250,6 +1260,93 @@ ether_extract_headers(struct mbuf *m0, struct ether_extracted *ext)
 	    ext->ip4 ? "ip4," : "", ext->ip6 ? "ip6," : "",
 	    ext->tcp ? "tcp," : "", ext->udp ? "udp," : "",
 	    ext->iplen, ext->iphlen, ext->tcphlen, ext->paylen);
+}
+
+static inline int
+ether_offload_csum(struct ifnet *ifp, struct mbuf *m)
+{
+	if (ISSET(m->m_pkthdr.csum_flags, M_IPV4_CSUM_OUT) &&
+	    !ISSET(ifp->if_capabilities, IFCAP_CSUM_IPv4))
+		return (1);
+
+	if (ISSET(m->m_pkthdr.csum_flags, M_TCP_CSUM_OUT) &&
+	    (!ISSET(ifp->if_capabilities, IFCAP_CSUM_TCPv4) ||
+	     !ISSET(ifp->if_capabilities, IFCAP_CSUM_TCPv6)))
+		return (1);
+
+	if (ISSET(m->m_pkthdr.csum_flags, M_UDP_CSUM_OUT) &&
+	    (!ISSET(ifp->if_capabilities, IFCAP_CSUM_UDPv4) ||
+	     !ISSET(ifp->if_capabilities, IFCAP_CSUM_UDPv6)))
+		return (1);
+
+	return (0);
+}
+
+static inline int
+ether_offload_tso(struct ifnet *ifp, struct mbuf *m)
+{
+	if (ISSET(m->m_pkthdr.csum_flags, M_TCP_TSO) &&
+	    (!ISSET(ifp->if_capabilities, IFCAP_TSOv4) ||
+	     !ISSET(ifp->if_capabilities, IFCAP_TSOv6)))
+		return (1);
+
+	return (0);
+}
+
+int
+ether_offload_ifcap(struct ifnet *ifp, struct mbuf_list *ml, struct mbuf *m)
+{
+#if NVLAN > 0
+	if (ISSET(m->m_flags, M_VLANTAG) &&
+	    !ISSET(ifp->if_capabilities, IFCAP_VLAN_HWTAGGING)) {
+		/*
+		 * If the underlying interface has no VLAN hardware tagging
+		 * support, inject one in software.
+		 */
+		m = vlan_inject(m, ETHERTYPE_VLAN, m->m_pkthdr.ether_vtag);
+		if (m == NULL)
+			return (ENOBUFS);
+	}
+#endif
+
+	if (ether_offload_tso(ifp, m)) {
+		struct ether_extracted ext;
+		ether_extract_headers(m, &ext);
+
+		return (tcp_softtso_chop(ml, m, ifp, ext.ipoff,
+		    m->m_pkthdr.ph_mss));
+	}
+
+	if (ether_offload_csum(ifp, m)) {
+		struct ether_extracted ext;
+		struct mbuf mh, *ipm;
+
+		ether_extract_headers(m, &ext);
+
+		ipm = ext.ipm;
+
+		mh.m_flags = 0;
+		mh.m_data = mtod(ipm, caddr_t) + ext.ipmoff;
+		mh.m_len = ipm->m_len - ext.ipmoff;
+		mh.m_next = ipm->m_next;
+
+		mh.m_pkthdr.len = m->m_pkthdr.len - ext.ipoff;
+		mh.m_pkthdr.csum_flags = m->m_pkthdr.csum_flags;
+
+		if (ext.ip4) {
+			in_hdr_cksum_out(&mh, ifp);
+			in_proto_cksum_out(&mh, ifp);
+#ifdef INET6
+		} else if (ext.ip6) {
+			in6_proto_cksum_out(&mh, ifp);
+#endif
+		}
+
+		m->m_pkthdr.csum_flags = mh.m_pkthdr.csum_flags;
+	}
+
+	ml_init_m(ml, m);
+	return (0);
 }
 
 struct mbuf *

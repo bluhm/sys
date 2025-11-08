@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_veb.c,v 1.52 2025/11/07 09:57:29 dlg Exp $ */
+/*	$OpenBSD: if_veb.c,v 1.43 2025/08/04 13:27:55 jan Exp $ */
 
 /*
  * Copyright (c) 2021 David Gwynne <dlg@openbsd.org>
@@ -711,6 +711,7 @@ veb_broadcast(struct veb_softc *sc, struct veb_port *rp, struct mbuf *m0,
 	struct veb_port *tp;
 	struct ifnet *ifp0;
 	struct mbuf *m;
+	struct mbuf_list ml;
 	unsigned int i;
 
 	if (rp->p_pvid == vid) { /* XXX which vlan is the right one? */
@@ -800,6 +801,7 @@ veb_transmit(struct veb_softc *sc, struct veb_port *rp, struct veb_port *tp,
 {
 	struct ifnet *ifp = &sc->sc_if;
 	struct ifnet *ifp0;
+	struct mbuf_list ml;
 
 	if (tp == NULL)
 		return (m);
@@ -1392,7 +1394,7 @@ veb_add_port(struct veb_softc *sc, const struct ifbreq *req, unsigned int span)
 		goto put;
 	}
 
-	ifsetlro(ifp0, 0);
+	//ifsetlro(ifp0, 0);
 
 	p->p_ifp0 = ifp0;
 	p->p_veb = sc;
@@ -2626,6 +2628,7 @@ vport_clone_create(struct if_clone *ifc, int unit)
 	ifp->if_capabilities |= IFCAP_CSUM_IPv4;
 	ifp->if_capabilities |= IFCAP_CSUM_TCPv4 | IFCAP_CSUM_UDPv4;
 	ifp->if_capabilities |= IFCAP_CSUM_TCPv6 | IFCAP_CSUM_UDPv6;
+	ifp->if_capabilities |= IFCAP_TSOv4 | IFCAP_TSOv6; //|IFCAP_LRO
 
 	ether_fakeaddr(ifp);
 

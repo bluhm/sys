@@ -739,7 +739,7 @@ struct tcpcb *
 void	 tcp_notify(struct inpcb *, int);
 int	 tcp_output(struct tcpcb *);
 int	 tcp_softtso_chop(struct mbuf_list *, struct mbuf *, struct ifnet *,
-	    u_int);
+	    u_int, u_int);
 int	 tcp_if_output_tso(struct ifnet *, struct mbuf **, struct sockaddr *,
 	    struct rtentry *, uint32_t, u_int);
 void	 tcp_pulloutofband(struct socket *, u_int, struct mbuf *, int);
