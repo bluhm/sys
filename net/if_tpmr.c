@@ -399,18 +399,21 @@ tpmr_input(struct ifnet *ifp0, struct mbuf *m, uint64_t dst, void *brport,
 	}
 #endif
 
-	m = ether_offload_ifcap(ifpn, m);
-	if (m == NULL) {
+	if (ether_offload_ifcap(ifpn, &ml, m) != 0) {
 		counters_inc(ifp->if_counters, ifc_oerrors);
 		goto rele;
 	}
 
-	if (if_enqueue(ifpn, m) != 0) {
-		counters_inc(ifp->if_counters, ifc_oerrors);
-		goto rele;
-	}
+	while ((m = ml_dequeue(&ml)) != NULL) {
+		len = m->m_pkthdr.len;
 
-	counters_pkt(ifp->if_counters, ifc_opackets, ifc_obytes, len);
+		if (if_enqueue(ifpn, m)) {
+			counters_inc(ifp->if_counters, ifc_oerrors);
+		} else {
+			counters_pkt(ifp->if_counters, ifc_opackets,
+			    ifc_obytes, len);
+		}
+	}
 
 rele:
 	tpmr_p_rele(pn);

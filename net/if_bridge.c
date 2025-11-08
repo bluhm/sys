@@ -1901,25 +1901,28 @@ bridge_fragment(struct ifnet *brifp, struct ifnet *ifp, struct ether_header *eh,
 int
 bridge_ifenqueue(struct ifnet *brifp, struct ifnet *ifp, struct mbuf *m)
 {
+	struct mbuf_list ml;
 	int error, len;
-
-	m = ether_offload_ifcap(ifp, m);
-	if (m == NULL) {
-		error = ENOBUFS;
-		goto err;
-	}
 
 	/* Loop prevention. */
 	m->m_flags |= M_PROTO1;
 
-	len = m->m_pkthdr.len;
+	error = ether_offload_ifcap(ifp, &ml, m);
+	if (error)
+		goto err;
 
-	error = if_enqueue(ifp, m);
-	if (error) 
-		goto err; 
+	while ((m = ml_dequeue(&ml)) != NULL) {
+		len = m->m_pkthdr.len;
 
-	brifp->if_opackets++;
-	brifp->if_obytes += len;
+		error = if_enqueue(ifp, m);
+		if (error) {
+			ml_purge(&ml);
+			goto err; 
+		}
+
+		brifp->if_opackets++;
+		brifp->if_obytes += len;
+	}
 
 	return (0);
 

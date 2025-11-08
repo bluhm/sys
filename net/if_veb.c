@@ -430,6 +430,7 @@ veb_span(struct veb_softc *sc, struct mbuf *m0)
 	struct veb_port *p;
 	struct ifnet *ifp0;
 	struct mbuf *m;
+	struct mbuf_list ml;
 	unsigned int i;
 
 	smr_read_enter();
@@ -454,8 +455,7 @@ veb_span(struct veb_softc *sc, struct mbuf *m0)
 			continue;
 		}
 
-		m = ether_offload_ifcap(ifp0, m);
-		if (m == NULL) {
+		if (ether_offload_ifcap(ifp0, &ml, m) != 0) {
 			counters_inc(sc->sc_if.if_counters, ifc_oerrors);
 			continue;
 		}
@@ -773,20 +773,20 @@ veb_broadcast(struct veb_softc *sc, struct veb_port *rp, struct mbuf *m0,
 
 		m = m_dup_pkt(m0, max_linkhdr + ETHER_ALIGN, M_NOWAIT);
 		if (m == NULL) {
-			/* XXX count error? */
+			counters_inc(ifp->if_counters, ifc_oerrors);
 			continue;
 		}
 
 		if (vid == tp->p_pvid)
 			CLR(m->m_flags, M_VLANTAG);
 
-		m = ether_offload_ifcap(ifp0, m);
-		if (m == NULL) {
+		if (ether_offload_ifcap(ifp0, &ml, m) != 0) {
 			counters_inc(ifp->if_counters, ifc_oerrors);
 			continue;
 		}
 
-		(*tp->p_enqueue)(ifp0, m); /* XXX count error */
+		while ((m = ml_dequeue(&ml)) != NULL)
+			(*tp->p_enqueue)(ifp0, m); /* XXX count error */
 	}
 	refcnt_rele_wake(&pm->m_refs);
 
@@ -838,13 +838,13 @@ veb_transmit(struct veb_softc *sc, struct veb_port *rp, struct veb_port *tp,
 	counters_pkt(ifp->if_counters, ifc_opackets, ifc_obytes,
 	    m->m_pkthdr.len);
 
-	m = ether_offload_ifcap(ifp0, m);
-	if (m == NULL) {
+	if (ether_offload_ifcap(ifp0, &ml, m)) {
 		counters_inc(ifp->if_counters, ifc_oerrors);
-		goto drop;
+		return (NULL);
 	}
 
-	(*tp->p_enqueue)(ifp0, m); /* XXX count error */
+	while ((m = ml_dequeue(&ml)) != NULL)
+		(*tp->p_enqueue)(ifp0, m); /* XXX count error */
 
 	return (NULL);
 drop:
