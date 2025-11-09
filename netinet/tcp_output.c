@@ -83,6 +83,7 @@
 #include <net/pfvar.h>
 #endif
 
+#include <netinet/if_ether.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <netinet/in_pcb.h>
@@ -1191,124 +1192,87 @@ tcp_setpersist(struct tcpcb *tp)
 
 int
 tcp_softtso_chop(struct mbuf_list *ml, struct mbuf *m0, struct ifnet *ifp,
-    u_int l2hlen, u_int mss)
+    struct ether_extracted *ext, u_int mss)
 {
-	struct mbuf mh;
-	struct mbuf *ipm, *thm;
-	unsigned int ipoff, thoff, hlen;
 	struct ip *ip = NULL;
 #ifdef INET6
 	struct ip6_hdr *ip6 = NULL;
 #endif
-	unsigned int iphlen;
 	struct tcphdr *th;
-	unsigned int thlen;
-	unsigned int tlen, firstlen, off;
-	struct mbuf *m;
+	int firstlen, iphlen, hlen, tlen, off;
 	int error;
 
-	ml_init_m(ml, m0);
+	ml_init(ml);
+	ml_enqueue(ml, m0);
 
 	if (mss == 0) {
 		error = EINVAL;
 		goto bad;
 	}
 
-	tlen = m0->m_pkthdr.len;
-	if (tlen < l2hlen + 1) { /* can we peek at the nibble? */
-		error = ENOPROTOOPT;
-		goto bad;
+	if (ext) {
+		ip = ext->ip4;
+		ip6 = ext->ip6;
+	} else {
+		if (mtod(m0, struct ip *)->ip_v == 4)
+			ip = mtod(m0, struct ip *);
+#ifdef INET6
+		else if (mtod(m0, struct ip *)->ip_v == 6)
+			ip6 = mtod(m0, struct ip6_hdr *);
+#endif
 	}
-
-	ipm = m_getptr(m0, l2hlen, &ipoff);
-	if (ipm == NULL) {
-		error = ENOPROTOOPT;
-		goto bad;
-	}
-
-	ip = (struct ip *)(mtod(ipm, caddr_t) + ipoff);
-	switch (ip->ip_v) {
-	case 4:
+	if (ip) {
 		iphlen = ip->ip_hl << 2;
-		if (iphlen != sizeof(*ip)) {
-			error = EPROTOTYPE;
-			goto bad;
-		}
-
-		hlen = l2hlen + iphlen;
-		if (tlen < hlen) {
-			error = ENOPROTOOPT;
-			goto bad;
-		}
-
 		if (ISSET(ip->ip_off, htons(IP_OFFMASK | IP_MF)) ||
-		    ip->ip_p != IPPROTO_TCP) {
+		    iphlen != sizeof(struct ip) || ip->ip_p != IPPROTO_TCP) {
 			/* only TCP without fragment or IP option supported */
 			error = EPROTOTYPE;
 			goto bad;
 		}
-		break;
 #ifdef INET6
-	case 6:
-		ip6 = (struct ip6_hdr *)ip;
-		ip = NULL;
+	} else if (ip6) {
 		iphlen = sizeof(struct ip6_hdr);
-
-		hlen = l2hlen + iphlen;
-		if (tlen < hlen) {
-			error = ENOPROTOOPT;
-			goto bad;
-		}
-
 		if (ip6->ip6_nxt != IPPROTO_TCP) {
 			/* only TCP without IPv6 header chain supported */
 			error = EPROTOTYPE;
 			goto bad;
 		}
-		break;
 #endif
-	default:
-		panic("%s: unknown ip version %d", __func__, ip->ip_v);
-	}
+	} else
+		panic("%s: unknown ip version", __func__);
+	if (ext)
+		iphlen = ext->iphlen;
 
-	/* Look at the tcp header next. */
-	thm = m_getptr(ipm, ipoff + iphlen, &thoff);
-	if (thm == NULL) {
+	tlen = m0->m_pkthdr.len;
+	if (tlen < iphlen + sizeof(struct tcphdr)) {
 		error = ENOPROTOOPT;
 		goto bad;
 	}
-
-	if (thm->m_len < thoff + sizeof(*th)) {
+	/* IP and TCP header should be contiguous, this check is paranoia */
+	if (m0->m_len < iphlen + sizeof(*th)) {
+		ml_dequeue(ml);
+		if ((m0 = m_pullup(m0, iphlen + sizeof(*th))) == NULL) {
+			error = ENOBUFS;
+			goto bad;
+		}
+		ml_enqueue(ml, m0);
+	}
+	th = (struct tcphdr *)(mtod(m0, caddr_t) + iphlen);
+	hlen = iphlen + (th->th_off << 2);
+	if (tlen < hlen) {
 		error = ENOPROTOOPT;
 		goto bad;
 	}
-	th = (struct tcphdr *)(mtod(thm, caddr_t) + thoff);
-	thlen = th->th_off << 2;
-	if (thlen < sizeof(*th)) {
-		error = ENOPROTOOPT;
-		goto bad;
-	}
-	if (thm->m_len < thlen) {
-		error = ENOPROTOOPT;
-		goto bad;
-	}
-
-	/* Final checks. */
-	hlen += thlen;
-	if (MHLEN < hlen || tlen < hlen) {
-		error = ENOPROTOOPT;
-		goto bad;
-	}
-
-	/* let's go */
-	CLR(m0->m_pkthdr.csum_flags, M_TCP_TSO);
 	firstlen = MIN(tlen - hlen, mss);
+
+	CLR(m0->m_pkthdr.csum_flags, M_TCP_TSO);
 
 	/*
 	 * Loop through length of payload after first segment,
 	 * make new header and copy data of each part and link onto chain.
 	 */
 	for (off = hlen + firstlen; off < tlen; off += mss) {
+		struct mbuf *m;
 		struct tcphdr *mhth;
 		int len;
 
@@ -1323,48 +1287,66 @@ tcp_softtso_chop(struct mbuf_list *ml, struct mbuf *m0, struct ifnet *ifp,
 		if ((error = m_dup_pkthdr(m, m0, M_DONTWAIT)) != 0)
 			goto bad;
 
+		/* IP and TCP header to the end, space for link layer header */
+		m->m_len = hlen;
+		m_align(m, hlen);
+
+		/* copy and adjust TCP header */
+		mhth = (struct tcphdr *)(mtod(m, caddr_t) + iphlen);
+		memcpy(mhth, th, hlen - iphlen);
+		mhth->th_seq = htonl(ntohl(th->th_seq) + (off - hlen));
+		if (off + len < tlen)
+			CLR(mhth->th_flags, TH_PUSH|TH_FIN);
+
 		/* add mbuf chain with payload */
+		m->m_pkthdr.len = hlen + len;
 		if ((m->m_next = m_copym(m0, off, len, M_DONTWAIT)) == NULL) {
 			error = ENOBUFS;
 			goto bad;
 		}
 
-		/* set up TCP header */
-		m->m_data += MHLEN - thlen; /* cheeky */
-		mhth = mtod(m, struct tcphdr *);
-		memcpy(mhth, th, thlen);
-		mhth->th_seq = htonl(ntohl(th->th_seq) + (off - hlen));
-		if (off + len < tlen)
-			CLR(mhth->th_flags, TH_PUSH|TH_FIN);
-
-		/* prepare for IP header */
-		m->m_data -= iphlen; /* m_prepend */
-
-		/* make a real IP packet for cksum to work with */
-		m->m_len = iphlen + thlen;
-		m->m_pkthdr.len = m->m_len + len;
+		if (ext) {
+			/* IP checksum functions must not have ether header */
+			if (ext->evh) {
+				m->m_len -= sizeof(struct ether_vlan_header);
+				m->m_data += sizeof(struct ether_vlan_header);
+			} else if (ext->eh) {
+				m->m_len -= sizeof(struct ether_header);
+				m->m_data += sizeof(struct ether_header);
+			}
+		}
+		/* copy and adjust IP header, calculate checksum */
 		SET(m->m_pkthdr.csum_flags, M_TCP_CSUM_OUT);
 		if (ip) {
-			struct ip *mhip = mtod(m, struct ip *);
+			struct ip *mhip;
+
+			mhip = mtod(m, struct ip *);
 			*mhip = *ip;
-			mhip->ip_len = htons(sizeof(*mhip) + thlen + len);
+			mhip->ip_len = htons(hlen + len);
 			mhip->ip_id = htons(ip_randomid());
 			in_hdr_cksum_out(m, ifp);
 			in_proto_cksum_out(m, ifp);
 #ifdef INET6
 		} else if (ip6) {
-			struct ip6_hdr *mhip6 = mtod(m, struct ip6_hdr *);
-			mhip6->ip6_plen = htons(thlen + len);
+			struct ip6_hdr *mhip6;
+
+			mhip6 = mtod(m, struct ip6_hdr *);
+			*mhip6 = *ip6;
+			mhip6->ip6_plen = htons(hlen - iphlen + len);
 			in6_proto_cksum_out(m, ifp);
 #endif
 		}
-
-		if (l2hlen > 0) {
-			/* m_prepend */
-			m->m_data -= l2hlen;
-			m->m_len += l2hlen;
-			m->m_pkthdr.len += l2hlen;
-			m_copydata(m0, 0, l2hlen, m->m_data);
+		if (ext) {
+			if (ext->evh) {
+				m->m_len += sizeof(struct ether_vlan_header);
+				m->m_data -= sizeof(struct ether_vlan_header);
+				*mtod(m, struct ether_vlan_header *) =
+				    *ext->evh;
+			} else if (ext->eh) {
+				m->m_len += sizeof(struct ether_header);
+				m->m_data -= sizeof(struct ether_header);
+				*mtod(m, struct ether_header *) = *ext->eh;
+			}
 		}
 	}
 
@@ -1376,35 +1358,37 @@ tcp_softtso_chop(struct mbuf_list *ml, struct mbuf *m0, struct ifnet *ifp,
 		m_adj(m0, hlen + firstlen - tlen);
 		CLR(th->th_flags, TH_PUSH|TH_FIN);
 	}
-
-	if (l2hlen > 0) {
-		mh.m_flags = 0;
-		mh.m_data = ipm->m_data + ipoff;
-		mh.m_len = ipm->m_len - ipoff;
-		mh.m_next = ipm->m_next;
-
-		mh.m_pkthdr.len = m0->m_pkthdr.len - l2hlen;
-		mh.m_pkthdr.csum_flags = m0->m_pkthdr.csum_flags;
-
-		m = &mh;
-	} else
-		m = m0;
-
+	if (ext) {
+		/* IP checksum functions must not have ether header */
+		if (ext->evh) {
+			m0->m_len -= sizeof(struct ether_vlan_header);
+			m0->m_data += sizeof(struct ether_vlan_header);
+		} else if (ext->eh) {
+			m0->m_len -= sizeof(struct ether_header);
+			m0->m_data += sizeof(struct ether_header);
+		}
+	}
 	/* adjust IP header, calculate checksum */
-	SET(m->m_pkthdr.csum_flags, M_TCP_CSUM_OUT);
+	SET(m0->m_pkthdr.csum_flags, M_TCP_CSUM_OUT);
 	if (ip) {
-		ip->ip_len = htons(m->m_pkthdr.len);
-		in_hdr_cksum_out(m, ifp);
-		in_proto_cksum_out(m, ifp);
+		ip->ip_len = htons(m0->m_pkthdr.len);
+		in_hdr_cksum_out(m0, ifp);
+		in_proto_cksum_out(m0, ifp);
 #ifdef INET6
 	} else if (ip6) {
-		ip6->ip6_plen = htons(m->m_pkthdr.len - iphlen);
-		in6_proto_cksum_out(m, ifp);
+		ip6->ip6_plen = htons(m0->m_pkthdr.len - iphlen);
+		in6_proto_cksum_out(m0, ifp);
 #endif
 	}
-
-	if (m0 != m)
-		m0->m_pkthdr.csum_flags = m->m_pkthdr.csum_flags;
+	if (ext) {
+		if (ext->evh) {
+			m0->m_len += sizeof(struct ether_vlan_header);
+			m0->m_data -= sizeof(struct ether_vlan_header);
+		} else if (ext->eh) {
+			m0->m_len += sizeof(struct ether_header);
+			m0->m_data -= sizeof(struct ether_header);
+		}
+	}
 
 	tcpstat_add(tcps_outpkttso, ml_len(ml));
 	return 0;
@@ -1447,7 +1431,7 @@ tcp_if_output_tso(struct ifnet *ifp, struct mbuf **mp, struct sockaddr *dst,
 	}
 
 	/* as fallback do TSO in software */
-	if ((error = tcp_softtso_chop(&ml, *mp, ifp, 0,
+	if ((error = tcp_softtso_chop(&ml, *mp, ifp, NULL,
 	    (*mp)->m_pkthdr.ph_mss)) ||
 	    (error = if_output_ml(ifp, &ml, dst, rt)))
 		goto done;
