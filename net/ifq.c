@@ -119,11 +119,8 @@ ifq_serialize(struct ifqueue *ifq, struct task *t)
 void
 ifq_start(struct ifqueue *ifq)
 {
-	if (ifq_len(ifq) >= min(ifq->ifq_if->if_txmit, ifq->ifq_maxlen)) {
-		task_del(ifq->ifq_softnet, &ifq->ifq_bundle);
-		ifq_run_start(ifq);
-	} else
-		task_add(ifq->ifq_softnet, &ifq->ifq_bundle);
+	task_del(ifq->ifq_softnet, &ifq->ifq_bundle);
+	ifq_run_start(ifq);
 }
 
 void
