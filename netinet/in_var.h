@@ -87,11 +87,11 @@ struct in_multi {
 #define inm_refcnt		inm_ifma.ifma_refcnt
 #define inm_ifidx		inm_ifma.ifma_ifidx
 
-	struct sockaddr_in	inm_sin;   /* IPv4 multicast address */
+	struct sockaddr_in	inm_sin;   /* [I] IPv4 multicast address */
 #define inm_addr		inm_sin.sin_addr
 
-	u_int			inm_state; /* state of membership */
-	u_int			inm_timer; /* IGMP membership report timer */
+	u_int			inm_state; /* [m] state of membership */
+	u_int			inm_timer; /* [m] IGMP membership report */
 
 	struct router_info	*inm_rti;  /* router version info */
 };
