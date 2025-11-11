@@ -119,30 +119,9 @@ ifmatoinm(struct ifmaddr *ifma)
        return ((struct in_multi *)(ifma));
 }
 
-/*
- * Macro for looking up the in_multi record for a given IP multicast
- * address on a given interface.  If no matching record is found, "inm"
- * returns NULL.
- */
-#define IN_LOOKUP_MULTI(addr, ifp, inm)					\
-	/* struct in_addr addr; */					\
-	/* struct ifnet *ifp; */					\
-	/* struct in_multi *inm; */					\
-do {									\
-	struct ifmaddr *ifma;						\
-									\
-	(inm) = NULL;							\
-	NET_ASSERT_LOCKED();						\
-	TAILQ_FOREACH(ifma, &(ifp)->if_maddrlist, ifma_list)		\
-		if (ifma->ifma_addr->sa_family == AF_INET &&		\
-		    ifmatoinm(ifma)->inm_addr.s_addr == (addr).s_addr) {\
-			(inm) = ifmatoinm(ifma);			\
-			break;						\
-		}							\
-} while (/* CONSTCOND */ 0)
-
 int	in_ifinit(struct ifnet *,
 	    struct in_ifaddr *, struct sockaddr_in *, int);
+struct	in_multi *in_lookupmulti(struct in_addr *, struct ifnet *);
 struct	in_multi *in_addmulti(struct in_addr *, struct ifnet *);
 void	in_delmulti(struct in_multi *);
 int	in_hasmulti(struct in_addr *, struct ifnet *);
