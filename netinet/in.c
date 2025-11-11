@@ -829,7 +829,7 @@ in_lookupmulti(const struct in_addr *addr, struct ifnet *ifp)
 	struct in_multi *inm = NULL;
 	struct ifmaddr *ifma;
 
-	NET_ASSERT_LOCKED();
+	MUTEX_ASSERT_LOCKED(&ifp->if_maddrmtx);
 
 	TAILQ_FOREACH(ifma, &ifp->if_maddrlist, ifma_list) {
 		if (ifma->ifma_addr->sa_family == AF_INET &&
@@ -847,54 +847,70 @@ in_lookupmulti(const struct in_addr *addr, struct ifnet *ifp)
 struct in_multi *
 in_addmulti(const struct in_addr *addr, struct ifnet *ifp)
 {
-	struct in_multi *inm;
+	struct in_multi *inm, *new_inm = NULL;
+	struct igmp_pktinfo pkt;
 	struct ifreq ifr;
 
 	/*
 	 * See if address already in list.
 	 */
+	mtx_enter(&ifp->if_maddrmtx);
 	inm = in_lookupmulti(addr, ifp);
-	if (inm != NULL) {
-		/*
-		 * Found it; just increment the reference count.
-		 */
-		refcnt_take(&inm->inm_refcnt);
-	} else {
-		/*
-		 * New address; allocate a new multicast record
-		 * and link it into the interface's multicast list.
-		 */
-		inm = malloc(sizeof(*inm), M_IPMADDR, M_WAITOK | M_ZERO);
-		inm->inm_sin.sin_len = sizeof(struct sockaddr_in);
-		inm->inm_sin.sin_family = AF_INET;
-		inm->inm_sin.sin_addr = *addr;
-		refcnt_init_trace(&inm->inm_refcnt, DT_REFCNT_IDX_IFMADDR);
-		inm->inm_ifidx = ifp->if_index;
-		inm->inm_ifma.ifma_addr = sintosa(&inm->inm_sin);
+	if (inm != NULL)
+		goto found;
+	mtx_leave(&ifp->if_maddrmtx);
 
-		/*
-		 * Ask the network driver to update its multicast reception
-		 * filter appropriately for the new address.
-		 */
-		memset(&ifr, 0, sizeof(ifr));
-		memcpy(&ifr.ifr_addr, &inm->inm_sin, sizeof(inm->inm_sin));
-		KERNEL_LOCK();
-		if ((*ifp->if_ioctl)(ifp, SIOCADDMULTI,(caddr_t)&ifr) != 0) {
-			KERNEL_UNLOCK();
-			free(inm, M_IPMADDR, sizeof(*inm));
-			return (NULL);
-		}
+	/*
+	 * New address; allocate a new multicast record
+	 * and link it into the interface's multicast list.
+	 */
+	new_inm = malloc(sizeof(*inm), M_IPMADDR, M_WAITOK | M_ZERO);
+
+	/*
+	 * Ask the network driver to update its multicast reception
+	 * filter appropriately for the new address.
+	 */
+	memset(&ifr, 0, sizeof(ifr));
+	satosin(&ifr.ifr_addr)->sin_len = sizeof(struct sockaddr_in);
+	satosin(&ifr.ifr_addr)->sin_family = AF_INET;
+	satosin(&ifr.ifr_addr)->sin_addr = *addr;
+	KERNEL_LOCK();
+	if ((*ifp->if_ioctl)(ifp, SIOCADDMULTI,(caddr_t)&ifr) != 0) {
 		KERNEL_UNLOCK();
-
-		TAILQ_INSERT_HEAD(&ifp->if_maddrlist, &inm->inm_ifma,
-		    ifma_list);
-
-		/*
-		 * Let IGMP know that we have joined a new IP multicast group.
-		 */
-		igmp_joingroup(inm, ifp);
+		goto out;
 	}
+	KERNEL_UNLOCK();
 
+	mtx_enter(&ifp->if_maddrmtx);
+	/* check again after unlock and lock */
+	inm = in_lookupmulti(addr, ifp);
+	if (inm != NULL)
+		goto found;
+	inm = new_inm;
+	inm->inm_sin.sin_len = sizeof(struct sockaddr_in);
+	inm->inm_sin.sin_family = AF_INET;
+	inm->inm_sin.sin_addr = *addr;
+	refcnt_init_trace(&inm->inm_refcnt, DT_REFCNT_IDX_IFMADDR);
+	inm->inm_ifidx = ifp->if_index;
+	inm->inm_ifma.ifma_addr = sintosa(&inm->inm_sin);
+
+	/*
+	 * Let IGMP know that we have joined a new IP multicast group.
+	 */
+	TAILQ_INSERT_HEAD(&ifp->if_maddrlist, &inm->inm_ifma, ifma_list);
+	pkt.ipi_ifidx = 0;
+	igmp_joingroup(inm, ifp, &pkt);
+	mtx_leave(&ifp->if_maddrmtx);
+
+	if (pkt.ipi_ifidx)
+		igmp_sendpkt(&pkt);
+	return (inm);
+
+ found:
+	refcnt_take(&inm->inm_refcnt);
+	mtx_leave(&ifp->if_maddrmtx);
+ out:
+	free(new_inm, M_IPMADDR, sizeof(*inm));
 	return (inm);
 }
 
@@ -904,6 +920,7 @@ in_addmulti(const struct in_addr *addr, struct ifnet *ifp)
 void
 in_delmulti(struct in_multi *inm)
 {
+	struct igmp_pktinfo pkt;
 	struct ifreq ifr;
 	struct ifnet *ifp;
 
@@ -918,7 +935,14 @@ in_delmulti(struct in_multi *inm)
 		 * No remaining claims to this record; let IGMP know that
 		 * we are leaving the multicast group.
 		 */
-		igmp_leavegroup(inm, ifp);
+		mtx_enter(&ifp->if_maddrmtx);
+		pkt.ipi_ifidx = 0;
+		igmp_leavegroup(inm, ifp, &pkt);
+		TAILQ_REMOVE(&ifp->if_maddrlist, &inm->inm_ifma, ifma_list);
+		mtx_leave(&ifp->if_maddrmtx);
+
+		if (pkt.ipi_ifidx)
+			igmp_sendpkt(&pkt);
 
 		/*
 		 * Notify the network driver to update its multicast
@@ -931,8 +955,6 @@ in_delmulti(struct in_multi *inm)
 		KERNEL_LOCK();
 		(*ifp->if_ioctl)(ifp, SIOCDELMULTI, (caddr_t)&ifr);
 		KERNEL_UNLOCK();
-
-		TAILQ_REMOVE(&ifp->if_maddrlist, &inm->inm_ifma, ifma_list);
 	}
 	if_put(ifp);
 

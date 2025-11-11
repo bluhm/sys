@@ -112,15 +112,6 @@ struct router_info {
 	int		rti_age;	/* [G] time since last v1 query */
 };
 
-struct igmp_pktinfo {
-	STAILQ_ENTRY(igmp_pktinfo)	ipi_list;
-	struct in_addr			ipi_addr;
-	unsigned int			ipi_rdomain;
-	unsigned int			ipi_ifidx;
-	int				ipi_type;
-};
-STAILQ_HEAD(igmp_pktlist, igmp_pktinfo);
-
 int	igmp_timers_are_running;	/* [a] shortcut for fast timer */
 struct mutex igmp_mtx = MUTEX_INITIALIZER(IPL_SOFTNET);
 static LIST_HEAD(, router_info) rti_head;	/* [G] */
@@ -128,7 +119,6 @@ static struct mbuf *router_alert;
 struct cpumem *igmpcounters;
 
 int igmp_checktimer(struct ifnet *, struct igmp_pktlist *);
-void igmp_sendpkt(struct igmp_pktinfo *);
 int rti_fill(struct in_multi *);
 int rti_reset(struct ifnet *);
 int igmp_input_if(struct ifnet *, struct mbuf **, int *, int, int,
@@ -350,6 +340,7 @@ igmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto,
 			 * except those that are already running and those
 			 * that belong to a "local" group (224.0.0.X).
 			 */
+			mtx_enter(&ifp->if_maddrmtx);
 			TAILQ_FOREACH(ifma, &ifp->if_maddrlist, ifma_list) {
 				if (ifma->ifma_addr->sa_family != AF_INET)
 					continue;
@@ -362,6 +353,7 @@ igmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto,
 					running = 1;
 				}
 			}
+			mtx_leave(&ifp->if_maddrmtx);
 		} else {
 			if (!IN_MULTICAST(ip->ip_dst.s_addr)) {
 				igmpstat_inc(igps_rcv_badqueries);
@@ -381,6 +373,7 @@ igmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto,
 			 * timers already running, check if they need to be
 			 * reset.
 			 */
+			mtx_enter(&ifp->if_maddrmtx);
 			TAILQ_FOREACH(ifma, &ifp->if_maddrlist, ifma_list) {
 				if (ifma->ifma_addr->sa_family != AF_INET)
 					continue;
@@ -409,6 +402,7 @@ igmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto,
 					}
 				}
 			}
+			mtx_leave(&ifp->if_maddrmtx);
 		}
 
 		break;
@@ -445,6 +439,7 @@ igmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto,
 		 * If we belong to the group being reported, stop
 		 * our timer for that group.
 		 */
+		mtx_enter(&ifp->if_maddrmtx);
 		inm = in_lookupmulti(&igmp->igmp_group, ifp);
 		if (inm != NULL) {
 			inm->inm_timer = 0;
@@ -465,6 +460,7 @@ igmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto,
 				break;
 			}
 		}
+		mtx_leave(&ifp->if_maddrmtx);
 
 		break;
 
@@ -513,6 +509,7 @@ igmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto,
 		 * If we belong to the group being reported, stop
 		 * our timer for that group.
 		 */
+		mtx_enter(&ifp->if_maddrmtx);
 		inm = in_lookupmulti(&igmp->igmp_group, ifp);
 		if (inm != NULL) {
 			inm->inm_timer = 0;
@@ -529,6 +526,7 @@ igmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto,
 				break;
 			}
 		}
+		mtx_leave(&ifp->if_maddrmtx);
 
 		break;
 
@@ -547,21 +545,22 @@ igmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto,
 }
 
 void
-igmp_joingroup(struct in_multi *inm, struct ifnet *ifp)
+igmp_joingroup(struct in_multi *inm, struct ifnet *ifp,
+    struct igmp_pktinfo *pkt)
 {
 	int running = 0;
+
+	MUTEX_ASSERT_LOCKED(&ifp->if_maddrmtx);
 
 	inm->inm_state = IGMP_IDLE_MEMBER;
 
 	if (!IN_LOCAL_GROUP(inm->inm_addr.s_addr) &&
 	    (ifp->if_flags & IFF_LOOPBACK) == 0) {
-		struct igmp_pktinfo pkt;
+		pkt->ipi_addr = inm->inm_addr;
+		pkt->ipi_rdomain = ifp->if_rdomain;
+		pkt->ipi_ifidx = inm->inm_ifidx;
+		pkt->ipi_type = rti_fill(inm);
 
-		pkt.ipi_addr = inm->inm_addr;
-		pkt.ipi_rdomain = ifp->if_rdomain;
-		pkt.ipi_ifidx = inm->inm_ifidx;
-		pkt.ipi_type = rti_fill(inm);
-		igmp_sendpkt(&pkt);
 		inm->inm_state = IGMP_DELAYING_MEMBER;
 		inm->inm_timer = IGMP_RANDOM_DELAY(
 		    IGMP_MAX_HOST_REPORT_DELAY * PR_FASTHZ);
@@ -576,21 +575,21 @@ igmp_joingroup(struct in_multi *inm, struct ifnet *ifp)
 }
 
 void
-igmp_leavegroup(struct in_multi *inm, struct ifnet *ifp)
+igmp_leavegroup(struct in_multi *inm, struct ifnet *ifp,
+    struct igmp_pktinfo *pkt)
 {
+	MUTEX_ASSERT_LOCKED(&ifp->if_maddrmtx);
+
 	switch (inm->inm_state) {
 	case IGMP_DELAYING_MEMBER:
 	case IGMP_IDLE_MEMBER:
 		if (!IN_LOCAL_GROUP(inm->inm_addr.s_addr) &&
 		    (ifp->if_flags & IFF_LOOPBACK) == 0)
 			if (inm->inm_rti->rti_type != IGMP_v1_ROUTER) {
-				struct igmp_pktinfo pkt;
-
-				pkt.ipi_addr.s_addr = INADDR_ALLROUTERS_GROUP;
-				pkt.ipi_rdomain = ifp->if_rdomain;
-				pkt.ipi_ifidx = inm->inm_ifidx;
-				pkt.ipi_type = IGMP_HOST_LEAVE_MESSAGE;
-				igmp_sendpkt(&pkt);
+				pkt->ipi_addr.s_addr = INADDR_ALLROUTERS_GROUP;
+				pkt->ipi_rdomain = ifp->if_rdomain;
+				pkt->ipi_ifidx = inm->inm_ifidx;
+				pkt->ipi_type = IGMP_HOST_LEAVE_MESSAGE;
 			}
 		break;
 	case IGMP_LAZY_MEMBER:
