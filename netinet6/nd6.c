@@ -912,7 +912,7 @@ nd6_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 			llsol.s6_addr8[12] = 0xff;
 
 			KERNEL_LOCK();
-			IN6_LOOKUP_MULTI(llsol, ifp, in6m);
+			in6m = in6_lookupmulti(&llsol, ifp);
 			if (in6m)
 				in6_delmulti(in6m);
 			KERNEL_UNLOCK();

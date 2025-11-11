@@ -998,11 +998,34 @@ in6_ifinit(struct ifnet *ifp, struct in6_ifaddr *ia6, int newhost)
 }
 
 /*
+ * Function for looking up the in6_multi record for a given IP6 multicast
+ * address on a given interface. If no matching record is found, "in6m"
+ * returns NULL.
+ */
+struct in6_multi *
+in6_lookupmulti(struct in6_addr *addr, struct ifnet *ifp)
+{
+	struct in6_multi *in6m = NULL;
+	struct ifmaddr *ifma;
+
+	NET_ASSERT_LOCKED();
+
+	TAILQ_FOREACH(ifma, &ifp->if_maddrlist, ifma_list) {
+		if (ifma->ifma_addr->sa_family == AF_INET6 &&
+		    IN6_ARE_ADDR_EQUAL(&ifmatoin6m(ifma)->in6m_addr, addr)) {
+			in6m = ifmatoin6m(ifma);
+			break;
+		}
+	}
+	return (in6m);
+}
+
+/*
  * Add an address to the list of IP6 multicast addresses for a
  * given interface.
  */
 struct in6_multi *
-in6_addmulti(struct in6_addr *maddr6, struct ifnet *ifp, int *errorp)
+in6_addmulti(struct in6_addr *addr, struct ifnet *ifp, int *errorp)
 {
 	struct	in6_ifreq ifr;
 	struct	in6_multi *in6m;
@@ -1013,7 +1036,7 @@ in6_addmulti(struct in6_addr *maddr6, struct ifnet *ifp, int *errorp)
 	/*
 	 * See if address already in list.
 	 */
-	IN6_LOOKUP_MULTI(*maddr6, ifp, in6m);
+	in6m = in6_lookupmulti(addr, ifp);
 	if (in6m != NULL) {
 		/*
 		 * Found it; just increment the reference count.
@@ -1032,7 +1055,7 @@ in6_addmulti(struct in6_addr *maddr6, struct ifnet *ifp, int *errorp)
 
 		in6m->in6m_sin.sin6_len = sizeof(struct sockaddr_in6);
 		in6m->in6m_sin.sin6_family = AF_INET6;
-		in6m->in6m_sin.sin6_addr = *maddr6;
+		in6m->in6m_sin.sin6_addr = *addr;
 		refcnt_init_trace(&in6m->in6m_refcnt, DT_REFCNT_IDX_IFMADDR);
 		in6m->in6m_ifidx = ifp->if_index;
 		in6m->in6m_ifma.ifma_addr = sin6tosa(&in6m->in6m_sin);
@@ -1109,12 +1132,12 @@ in6_delmulti(struct in6_multi *in6m)
  * joined by interface ``ifp'', 0 otherwise.
  */
 int
-in6_hasmulti(struct in6_addr *maddr6, struct ifnet *ifp)
+in6_hasmulti(struct in6_addr *addr, struct ifnet *ifp)
 {
 	struct in6_multi *in6m;
 	int joined;
 
-	IN6_LOOKUP_MULTI(*maddr6, ifp, in6m);
+	in6m = in6_lookupmulti(addr, ifp);
 	joined = (in6m != NULL);
 
 	return (joined);
