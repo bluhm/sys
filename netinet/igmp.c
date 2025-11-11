@@ -94,6 +94,16 @@
 
 #define IP_MULTICASTOPTS	0
 
+/*
+ * Per-interface router version information.
+ */
+struct router_info {
+	LIST_ENTRY(router_info)	rti_list;
+	unsigned int	rti_ifidx;
+	int		rti_type;	/* type of router on this interface */
+	int		rti_age;	/* time since last v1 query */
+};
+
 int	igmp_timers_are_running;	/* [a] shortcut for fast timer */
 static LIST_HEAD(, router_info) rti_head;
 static struct mbuf *router_alert;
