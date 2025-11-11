@@ -1554,8 +1554,8 @@ ip_setmoptions(int optname, struct ip_moptions **imop, struct mbuf *m,
 		 */
 		for (i = 0; i < imo->imo_num_memberships; ++i) {
 			if (imo->imo_membership[i]->inm_ifidx == ifidx &&
-			    imo->imo_membership[i]->inm_addr.s_addr
-						== mreqn.imr_multiaddr.s_addr)
+			    imo->imo_membership[i]->inm_addr.s_addr ==
+			    mreqn.imr_multiaddr.s_addr)
 				break;
 		}
 		if (i < imo->imo_num_memberships) {
@@ -1640,8 +1640,8 @@ ip_setmoptions(int optname, struct ip_moptions **imop, struct mbuf *m,
 		for (i = 0; i < imo->imo_num_memberships; ++i) {
 			if ((ifidx == 0 ||
 			    imo->imo_membership[i]->inm_ifidx == ifidx) &&
-			     imo->imo_membership[i]->inm_addr.s_addr ==
-			     mreqn.imr_multiaddr.s_addr)
+			    imo->imo_membership[i]->inm_addr.s_addr ==
+			    mreqn.imr_multiaddr.s_addr)
 				break;
 		}
 		if (i == imo->imo_num_memberships) {
