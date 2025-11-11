@@ -150,6 +150,7 @@ struct ifnet {				/* and the entries */
 	TAILQ_HEAD(, ifaddr) if_addrlist; /* [N] list of addresses per if */
 	TAILQ_HEAD(, ifmaddr) if_maddrlist; /* [N] list of multicast records */
 	TAILQ_HEAD(, ifg_list) if_groups; /* [N] list of groups per if */
+	struct mutex if_maddrmtx;
 	struct task_list if_addrhooks;	/* [I] address change callbacks */
 	struct task_list if_linkstatehooks; /* [I] link change callbacks*/
 	struct task_list if_detachhooks; /* [I] detach callbacks */
