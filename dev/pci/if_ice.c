@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ice.c,v 1.64 2025/10/29 12:43:21 jan Exp $	*/
+/*	$OpenBSD: if_ice.c,v 1.65 2025/11/11 17:43:18 bluhm Exp $	*/
 
 /*  Copyright (c) 2024, Intel Corporation
  *  All rights reserved.

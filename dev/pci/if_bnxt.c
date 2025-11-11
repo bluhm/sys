@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_bnxt.c,v 1.60 2025/10/29 12:43:21 jan Exp $	*/
+/*	$OpenBSD: if_bnxt.c,v 1.61 2025/11/11 17:43:18 bluhm Exp $	*/
 /*-
  * Broadcom NetXtreme-C/E network driver.
  *

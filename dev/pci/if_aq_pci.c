@@ -1,4 +1,4 @@
-/* $OpenBSD: if_aq_pci.c,v 1.32 2025/06/29 19:32:08 miod Exp $ */
+/* $OpenBSD: if_aq_pci.c,v 1.33 2025/11/11 17:43:18 bluhm Exp $ */
 /*	$NetBSD: if_aq.c,v 1.27 2021/06/16 00:21:18 riastradh Exp $	*/
 
 /*

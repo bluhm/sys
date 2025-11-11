@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ngbe.c,v 1.7 2025/06/24 11:04:15 stsp Exp $	*/
+/*	$OpenBSD: if_ngbe.c,v 1.8 2025/11/11 17:43:18 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2015-2017 Beijing WangXun Technology Co., Ltd.

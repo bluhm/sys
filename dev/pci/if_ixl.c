@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ixl.c,v 1.111 2025/10/29 12:43:21 jan Exp $ */
+/*	$OpenBSD: if_ixl.c,v 1.112 2025/11/11 17:43:18 bluhm Exp $ */
 
 /*
  * Copyright (c) 2013-2015, Intel Corporation
