@@ -820,12 +820,11 @@ in_broadcast(struct in_addr in, u_int rtableid)
 }
 
 /*
- * Function for looking up the in_multi record for a given IP multicast
- * address on a given interface.  If no matching record is found, "inm"
- * returns NULL.
+ * Look up the in_multi record for a given IP multicast address
+ * on a given interface.  Return the matching record if found or NULL.
  */
 struct in_multi *
-in_lookupmulti(struct in_addr *addr, struct ifnet *ifp)
+in_lookupmulti(const struct in_addr *addr, struct ifnet *ifp)
 {
 	struct in_multi *inm = NULL;
 	struct ifmaddr *ifma;
@@ -846,7 +845,7 @@ in_lookupmulti(struct in_addr *addr, struct ifnet *ifp)
  * Add an address to the list of IP multicast addresses for a given interface.
  */
 struct in_multi *
-in_addmulti(struct in_addr *addr, struct ifnet *ifp)
+in_addmulti(const struct in_addr *addr, struct ifnet *ifp)
 {
 	struct in_multi *inm;
 	struct ifreq ifr;
@@ -945,7 +944,7 @@ in_delmulti(struct in_multi *inm)
  * joined by interface ``ifp'', 0 otherwise.
  */
 int
-in_hasmulti(struct in_addr *addr, struct ifnet *ifp)
+in_hasmulti(const struct in_addr *addr, struct ifnet *ifp)
 {
 	struct in_multi *inm;
 	int joined;

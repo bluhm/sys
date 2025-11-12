@@ -998,12 +998,11 @@ in6_ifinit(struct ifnet *ifp, struct in6_ifaddr *ia6, int newhost)
 }
 
 /*
- * Function for looking up the in6_multi record for a given IP6 multicast
- * address on a given interface. If no matching record is found, "in6m"
- * returns NULL.
+ * Look up the in6_multi record for a given IP6 multicast address
+ * on a given interface.  Return the matching record if found or NULL.
  */
 struct in6_multi *
-in6_lookupmulti(struct in6_addr *addr, struct ifnet *ifp)
+in6_lookupmulti(const struct in6_addr *addr, struct ifnet *ifp)
 {
 	struct in6_multi *in6m = NULL;
 	struct ifmaddr *ifma;
@@ -1025,7 +1024,7 @@ in6_lookupmulti(struct in6_addr *addr, struct ifnet *ifp)
  * given interface.
  */
 struct in6_multi *
-in6_addmulti(struct in6_addr *addr, struct ifnet *ifp, int *errorp)
+in6_addmulti(const struct in6_addr *addr, struct ifnet *ifp, int *errorp)
 {
 	struct	in6_ifreq ifr;
 	struct	in6_multi *in6m;
@@ -1128,11 +1127,11 @@ in6_delmulti(struct in6_multi *in6m)
 }
 
 /*
- * Return 1 if the multicast group represented by ``maddr6'' has been
+ * Return 1 if the multicast group represented by ``addr'' has been
  * joined by interface ``ifp'', 0 otherwise.
  */
 int
-in6_hasmulti(struct in6_addr *addr, struct ifnet *ifp)
+in6_hasmulti(const struct in6_addr *addr, struct ifnet *ifp)
 {
 	struct in6_multi *in6m;
 	int joined;
@@ -1144,7 +1143,7 @@ in6_hasmulti(struct in6_addr *addr, struct ifnet *ifp)
 }
 
 struct in6_multi_mship *
-in6_joingroup(struct ifnet *ifp, struct in6_addr *addr, int *errorp)
+in6_joingroup(struct ifnet *ifp, const struct in6_addr *addr, int *errorp)
 {
 	struct in6_multi_mship *imm;
 
