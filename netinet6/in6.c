@@ -1023,15 +1023,16 @@ in6_lookupmulti(const struct in6_addr *addr, struct ifnet *ifp)
  * Add an address to the list of IP6 multicast addresses for a
  * given interface.
  */
-struct in6_multi *
-in6_addmulti(const struct in6_addr *addr, struct ifnet *ifp, int *errorp)
+int
+in6_addmulti(const struct in6_addr *addr, struct ifnet *ifp,
+    struct in6_multi **ret)
 {
 	struct	in6_ifreq ifr;
 	struct	in6_multi *in6m;
+	int error;
 
 	NET_ASSERT_LOCKED();
 
-	*errorp = 0;
 	/*
 	 * See if address already in list.
 	 */
@@ -1047,10 +1048,8 @@ in6_addmulti(const struct in6_addr *addr, struct ifnet *ifp, int *errorp)
 		 * and link it into the interface's multicast list.
 		 */
 		in6m = malloc(sizeof(*in6m), M_IPMADDR, M_NOWAIT | M_ZERO);
-		if (in6m == NULL) {
-			*errorp = ENOBUFS;
-			return (NULL);
-		}
+		if (in6m == NULL)
+			return (ENOBUFS);
 
 		in6m->in6m_sin.sin6_len = sizeof(struct sockaddr_in6);
 		in6m->in6m_sin.sin6_family = AF_INET6;
@@ -1065,11 +1064,11 @@ in6_addmulti(const struct in6_addr *addr, struct ifnet *ifp, int *errorp)
 		 */
 		memcpy(&ifr.ifr_addr, &in6m->in6m_sin, sizeof(in6m->in6m_sin));
 		KERNEL_LOCK();
-		*errorp = (*ifp->if_ioctl)(ifp, SIOCADDMULTI, (caddr_t)&ifr);
+		error = (*ifp->if_ioctl)(ifp, SIOCADDMULTI, (caddr_t)&ifr);
 		KERNEL_UNLOCK();
-		if (*errorp) {
+		if (error) {
 			free(in6m, M_IPMADDR, sizeof(*in6m));
-			return (NULL);
+			return (error);
 		}
 
 		TAILQ_INSERT_HEAD(&ifp->if_maddrlist, &in6m->in6m_ifma,
@@ -1082,7 +1081,8 @@ in6_addmulti(const struct in6_addr *addr, struct ifnet *ifp, int *errorp)
 		mld6_start_listening(in6m);
 	}
 
-	return (in6m);
+	*ret = in6m;
+	return (0);
 }
 
 /*
@@ -1152,8 +1152,8 @@ in6_joingroup(struct ifnet *ifp, const struct in6_addr *addr, int *errorp)
 		*errorp = ENOBUFS;
 		return NULL;
 	}
-	imm->i6mm_maddr = in6_addmulti(addr, ifp, errorp);
-	if (!imm->i6mm_maddr) {
+	*errorp = in6_addmulti(addr, ifp, &imm->i6mm_maddr);
+	if (*errorp) {
 		/* *errorp is already set */
 		free(imm, M_IPMADDR, sizeof(*imm));
 		return NULL;

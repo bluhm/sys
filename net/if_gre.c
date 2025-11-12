@@ -3490,7 +3490,6 @@ nvgre_up(struct nvgre_softc *sc)
 {
 	struct gre_tunnel *tunnel = &sc->sc_tunnel;
 	struct ifnet *ifp0;
-	void *inm;
 	int error;
 
 	if (tunnel->t_af == AF_UNSPEC)
@@ -3516,32 +3515,33 @@ nvgre_up(struct nvgre_softc *sc)
 	}
 
 	switch (tunnel->t_af) {
-	case AF_INET:
-		inm = in_addmulti(&tunnel->t_dst4, ifp0);
-		if (inm == NULL) {
-			error = ECONNABORTED;
-			goto remove_ucast;
-		}
+	case AF_INET: {
+		struct in_multi *inm = NULL;
+
+		error = in_addmulti(&tunnel->t_dst4, ifp0, &inm);
+		sc->sc_inm = inm;
 		break;
+	    }
 #ifdef INET6
-	case AF_INET6:
-		inm = in6_addmulti(&tunnel->t_dst6, ifp0, &error);
-		if (inm == NULL) {
-			/* error is already set */
-			goto remove_ucast;
-		}
+	case AF_INET6: {
+		struct in6_multi *in6m = NULL;
+
+		error = in6_addmulti(&tunnel->t_dst6, ifp0, &in6m);
+		sc->sc_inm = in6m;
 		break;
+	    }
 #endif /* INET6 */
 	default:
 		unhandled_af(tunnel->t_af);
 	}
+	if (error)
+		goto remove_ucast;
 
 	if_linkstatehook_add(ifp0, &sc->sc_ltask);
 	if_detachhook_add(ifp0, &sc->sc_dtask);
 
 	if_put(ifp0);
 
-	sc->sc_inm = inm;
 	SET(sc->sc_ac.ac_if.if_flags, IFF_RUNNING);
 
 	return (0);

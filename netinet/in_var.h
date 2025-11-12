@@ -122,7 +122,7 @@ ifmatoinm(struct ifmaddr *ifma)
 int	in_ifinit(struct ifnet *,
 	    struct in_ifaddr *, struct sockaddr_in *, int);
 struct	in_multi *in_lookupmulti(const struct in_addr *, struct ifnet *);
-struct	in_multi *in_addmulti(const struct in_addr *, struct ifnet *);
+int	in_addmulti(const struct in_addr *, struct ifnet *, struct in_multi **);
 void	in_delmulti(struct in_multi *);
 int	in_hasmulti(const struct in_addr *, struct ifnet *);
 void	in_ifscrub(struct ifnet *, struct in_ifaddr *);

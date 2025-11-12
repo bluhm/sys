@@ -1871,13 +1871,15 @@ carp_join_multicast(struct carp_softc *sc)
 	struct ip_moptions *imo = &sc->sc_imo;
 	struct in_multi *imm;
 	struct in_addr addr;
+	int error;
 
 	if (!IN_MULTICAST(sc->sc_peer.s_addr))
 		return (0);
 
 	addr.s_addr = sc->sc_peer.s_addr;
-	if ((imm = in_addmulti(&addr, &sc->sc_if)) == NULL)
-		return (ENOBUFS);
+	error = in_addmulti(&addr, &sc->sc_if, &imm);
+	if (error)
+		return (error);
 
 	imo->imo_membership[0] = imm;
 	imo->imo_num_memberships = 1;

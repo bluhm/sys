@@ -864,6 +864,7 @@ nd6_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 		    (rt->rt_flags & RTF_ANNOUNCE) &&
 		    (ifp->if_flags & IFF_MULTICAST)) {
 			struct in6_addr llsol;
+			struct in6_multi *in6m;
 			int error;
 
 			llsol = satosin6(rt_key(rt))->sin6_addr;
@@ -874,7 +875,7 @@ nd6_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 			llsol.s6_addr8[12] = 0xff;
 
 			KERNEL_LOCK();
-			in6_addmulti(&llsol, ifp, &error);
+			error = in6_addmulti(&llsol, ifp, &in6m);
 			KERNEL_UNLOCK();
 		}
 		break;

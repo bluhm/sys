@@ -1237,20 +1237,26 @@ vxlan_down(struct vxlan_softc *sc)
 static int
 vxlan_addmulti(struct vxlan_softc *sc, struct ifnet *ifp0)
 {
-	int error = 0;
+	int error;
 
 	NET_LOCK();
 
 	switch (sc->sc_af) {
-	case AF_INET:
-		sc->sc_inmulti = in_addmulti(&sc->sc_dst.in4, ifp0);
-		if (sc->sc_inmulti == NULL)
-			error = EADDRNOTAVAIL;
+	case AF_INET: {
+		struct in_multi *inm = NULL;
+
+		error = in_addmulti(&sc->sc_dst.in4, ifp0, &inm);
+		sc->sc_inmulti = inm;
 		break;
+	    }
 #ifdef INET6
-	case AF_INET6:
-		sc->sc_inmulti = in6_addmulti(&sc->sc_dst.in6, ifp0, &error);
+	case AF_INET6: {
+		struct in6_multi *in6m = NULL;
+
+		error = in6_addmulti(&sc->sc_dst.in6, ifp0, &in6m);
+		sc->sc_inmulti = in6m;
 		break;
+	    }
 #endif
 	default:
 		unhandled_af(sc->sc_af);

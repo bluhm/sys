@@ -760,7 +760,7 @@ pfsync_up(struct pfsync_softc *sc)
 {
 	struct ifnet *ifp = &sc->sc_if;
 	struct ifnet *ifp0;
-	void *inm = NULL;
+	struct in_multi *inm = NULL;
 	int error = 0;
 	struct ip *ip;
 
@@ -790,11 +790,9 @@ pfsync_up(struct pfsync_softc *sc)
 			error = ENODEV;
 			goto put;
 		}
-		inm = in_addmulti(&sc->sc_syncpeer, ifp0);
-		if (inm == NULL) {
-			error = ECONNABORTED;
+		error = in_addmulti(&sc->sc_syncpeer, ifp0, &inm);
+		if (error)
 			goto put;
-		}
 	}
 
 	sc->sc_up = 1;

@@ -702,13 +702,13 @@ in_ifinit(struct ifnet *ifp, struct in_ifaddr *ia, struct sockaddr_in *sin,
 
 	/*
 	 * If the interface supports multicast, join the "all hosts"
-	 * multicast group on that interface.
+	 * multicast group on that interface.  Ignore error.
 	 */
 	if ((ifp->if_flags & IFF_MULTICAST) && ia->ia_allhosts == NULL) {
 		struct in_addr addr;
 
 		addr.s_addr = INADDR_ALLHOSTS_GROUP;
-		ia->ia_allhosts = in_addmulti(&addr, ifp);
+		in_addmulti(&addr, ifp, &ia->ia_allhosts);
 	}
 
 out:
@@ -844,11 +844,13 @@ in_lookupmulti(const struct in_addr *addr, struct ifnet *ifp)
 /*
  * Add an address to the list of IP multicast addresses for a given interface.
  */
-struct in_multi *
-in_addmulti(const struct in_addr *addr, struct ifnet *ifp)
+int
+in_addmulti(const struct in_addr *addr, struct ifnet *ifp,
+    struct in_multi **ret)
 {
 	struct in_multi *inm;
 	struct ifreq ifr;
+	int error;
 
 	/*
 	 * See if address already in list.
@@ -879,12 +881,12 @@ in_addmulti(const struct in_addr *addr, struct ifnet *ifp)
 		memset(&ifr, 0, sizeof(ifr));
 		memcpy(&ifr.ifr_addr, &inm->inm_sin, sizeof(inm->inm_sin));
 		KERNEL_LOCK();
-		if ((*ifp->if_ioctl)(ifp, SIOCADDMULTI,(caddr_t)&ifr) != 0) {
-			KERNEL_UNLOCK();
-			free(inm, M_IPMADDR, sizeof(*inm));
-			return (NULL);
-		}
+		error = (*ifp->if_ioctl)(ifp, SIOCADDMULTI,(caddr_t)&ifr);
 		KERNEL_UNLOCK();
+		if  (error) {
+			free(inm, M_IPMADDR, sizeof(*inm));
+			return (error);
+		}
 
 		TAILQ_INSERT_HEAD(&ifp->if_maddrlist, &inm->inm_ifma,
 		    ifma_list);
@@ -895,7 +897,8 @@ in_addmulti(const struct in_addr *addr, struct ifnet *ifp)
 		igmp_joingroup(inm, ifp);
 	}
 
-	return (inm);
+	*ret = inm;
+	return (0);
 }
 
 /*

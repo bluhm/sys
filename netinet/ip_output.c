@@ -1599,13 +1599,10 @@ ip_setmoptions(int optname, struct ip_moptions **imop, struct mbuf *m,
 		 * Everything looks good; add a new record to the multicast
 		 * address list for the given interface.
 		 */
-		if ((imo->imo_membership[i] =
-		    in_addmulti(&mreqn.imr_multiaddr, ifp)) == NULL) {
-			error = ENOBUFS;
-			if_put(ifp);
-			break;
-		}
-		++imo->imo_num_memberships;
+		error = in_addmulti(&mreqn.imr_multiaddr, ifp,
+		    &imo->imo_membership[i]);
+		if (error == 0)
+			++imo->imo_num_memberships;
 		if_put(ifp);
 		break;
 

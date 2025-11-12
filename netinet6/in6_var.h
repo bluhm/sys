@@ -330,7 +330,8 @@ ifmatoin6m(struct ifmaddr *ifma)
 }
 
 struct	in6_multi *in6_lookupmulti(const struct in6_addr *, struct ifnet *);
-struct	in6_multi *in6_addmulti(const struct in6_addr *, struct ifnet *, int *);
+int	in6_addmulti(const struct in6_addr *, struct ifnet *,
+	    struct in6_multi **);
 void	in6_delmulti(struct in6_multi *);
 int	in6_hasmulti(const struct in6_addr *, struct ifnet *);
 struct in6_multi_mship *in6_joingroup(struct ifnet *, const struct in6_addr *,
