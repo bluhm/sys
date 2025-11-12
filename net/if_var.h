@@ -81,6 +81,7 @@
  *	K	kernel lock
  *	N	net lock
  *	T	if_tmplist_lock
+ *	m	interface multicast mutex if_maddrmtx
  *
  *  For SRP related structures that allow lock-free reads, the write lock
  *  is indicated below.
@@ -148,8 +149,9 @@ struct ifnet {				/* and the entries */
 	TAILQ_ENTRY(ifnet) if_list;	/* [NK] all struct ifnets are chained */
 	TAILQ_ENTRY(ifnet) if_tmplist;	/* [T] temporary list */
 	TAILQ_HEAD(, ifaddr) if_addrlist; /* [N] list of addresses per if */
-	TAILQ_HEAD(, ifmaddr) if_maddrlist; /* [N] list of multicast records */
+	TAILQ_HEAD(, ifmaddr) if_maddrlist; /* [Nm] list of multicast records */
 	TAILQ_HEAD(, ifg_list) if_groups; /* [N] list of groups per if */
+	struct mutex if_maddrmtx;
 	struct task_list if_addrhooks;	/* [I] address change callbacks */
 	struct task_list if_linkstatehooks; /* [I] link change callbacks*/
 	struct task_list if_detachhooks; /* [I] detach callbacks */

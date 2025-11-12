@@ -646,6 +646,7 @@ if_attach_common(struct ifnet *ifp)
 	TAILQ_INIT(&ifp->if_addrlist);
 	TAILQ_INIT(&ifp->if_maddrlist);
 	TAILQ_INIT(&ifp->if_groups);
+	mtx_init(&ifp->if_maddrmtx, SPL_SOFTNET);
 
 	if (!ISSET(ifp->if_xflags, IFXF_MPSAFE)) {
 		KASSERTMSG(ifp->if_qstart == NULL,
