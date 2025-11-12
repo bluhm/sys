@@ -1079,7 +1079,7 @@ in6_addmulti(const struct in6_addr *addr, struct ifnet *ifp, int *errorp)
 		 * Let MLD6 know that we have joined a new IP6 multicast
 		 * group.
 		 */
-		mld6_start_listening(in6m);
+		mld6_start_listening(in6m, ifp);
 	}
 
 	return (in6m);
@@ -1096,34 +1096,34 @@ in6_delmulti(struct in6_multi *in6m)
 
 	NET_ASSERT_LOCKED();
 
-	if (refcnt_rele(&in6m->in6m_refcnt) != 0) {
+	if (refcnt_rele(&in6m->in6m_refcnt) == 0)
+		return;
+
+	ifp = if_get(in6m->in6m_ifidx);
+	if (ifp != NULL) {
 		/*
 		 * No remaining claims to this record; let MLD6 know
 		 * that we are leaving the multicast group.
 		 */
-		mld6_stop_listening(in6m);
-		ifp = if_get(in6m->in6m_ifidx);
+		mld6_stop_listening(in6m, ifp);
 
 		/*
 		 * Notify the network driver to update its multicast
 		 * reception filter.
 		 */
-		if (ifp != NULL) {
-			bzero(&ifr.ifr_addr, sizeof(struct sockaddr_in6));
-			ifr.ifr_addr.sin6_len = sizeof(struct sockaddr_in6);
-			ifr.ifr_addr.sin6_family = AF_INET6;
-			ifr.ifr_addr.sin6_addr = in6m->in6m_addr;
-			KERNEL_LOCK();
-			(*ifp->if_ioctl)(ifp, SIOCDELMULTI, (caddr_t)&ifr);
-			KERNEL_UNLOCK();
+		bzero(&ifr.ifr_addr, sizeof(struct sockaddr_in6));
+		ifr.ifr_addr.sin6_len = sizeof(struct sockaddr_in6);
+		ifr.ifr_addr.sin6_family = AF_INET6;
+		ifr.ifr_addr.sin6_addr = in6m->in6m_addr;
+		KERNEL_LOCK();
+		(*ifp->if_ioctl)(ifp, SIOCDELMULTI, (caddr_t)&ifr);
+		KERNEL_UNLOCK();
 
-			TAILQ_REMOVE(&ifp->if_maddrlist, &in6m->in6m_ifma,
-			    ifma_list);
-		}
+		TAILQ_REMOVE(&ifp->if_maddrlist, &in6m->in6m_ifma, ifma_list);
 		if_put(ifp);
-
-		free(in6m, M_IPMADDR, sizeof(*in6m));
 	}
+
+	free(in6m, M_IPMADDR, sizeof(*in6m));
 }
 
 /*
