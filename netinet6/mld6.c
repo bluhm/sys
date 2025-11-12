@@ -1,4 +1,4 @@
-/*	$OpenBSD: mld6.c,v 1.68 2025/07/08 00:47:41 jsg Exp $	*/
+/*	$OpenBSD: mld6.c,v 1.69 2025/11/12 11:37:08 bluhm Exp $	*/
 /*	$KAME: mld6.c,v 1.26 2001/02/16 14:50:35 itojun Exp $	*/
 
 /*
