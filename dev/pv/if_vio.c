@@ -663,7 +663,7 @@ vio_attach(struct device *parent, struct device *self, void *aux)
 		vsc->sc_nvqs = 2 * i + 1;
 		i = MIN(i, VIRTIO_NET_CTRL_MQ_VQ_PAIRS_MAX);
 		sc->sc_intrmap = intrmap_create(&sc->sc_dev, i,
-		    va->va_nintr - 2, 0);
+		    MIN(va->va_nintr - 2, IF_MAX_VECTORS), 0);
 		sc->sc_nqueues = intrmap_count(sc->sc_intrmap);
 		printf(": %u queue%s", sc->sc_nqueues,
 		    sc->sc_nqueues > 1 ? "s" : "");
