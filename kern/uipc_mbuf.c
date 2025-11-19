@@ -124,6 +124,7 @@ int max_protohdr;		/* largest protocol header */
 int max_hdr;			/* largest link+protocol header */
 
 struct	mutex m_extref_mtx = MUTEX_INITIALIZER(IPL_NET);
+struct	cpumem *m_extfree_cpu;
 
 void	m_extfree(struct mbuf *);
 void	m_zero(struct mbuf *);
@@ -207,6 +208,8 @@ mbcpuinit(void)
 
 	for (i = 0; i < nitems(mclsizes); i++)
 		pool_cache_init(&mclpools[i]);
+
+	m_extfree_cpu = cpumem_malloc(sizeof(struct mbuf_list), M_MBUF);
 }
 
 int
@@ -426,9 +429,28 @@ m_free(struct mbuf *m)
 		pf_mbuf_unlink_inpcb(m);
 #endif	/* NPF > 0 */
 	}
-	if (m->m_flags & M_EXT)
-		m_extfree(m);
+	if (m->m_flags & M_EXT) {
+		if (MCLISREFERENCED(m)) {
+			struct mbuf_list *ml;
 
+			ml = cpumem_enter(m_extfree_cpu);
+			s = splnet();
+			ml_enqueue(ml, m);
+			if (ml_len(ml) > 16) {
+				mtx_enter(&m_extref_mtx);
+				MBUF_LIST_FOREACH(ml, m)
+					m_extfree(m);
+				mtx_leave(&m_extref_mtx);
+				while ((m = ml_dequeue(ml)) != NULL)
+					pool_put(&mbpool, m);
+			}
+			splx(s);
+			cpumem_leave(m_extfree_cpu, ml);
+
+			return (n);
+		}
+		m_extfree(m);
+	}
 	pool_put(&mbpool, m);
 
 	return (n);
@@ -456,22 +478,15 @@ m_extref(struct mbuf *o, struct mbuf *n)
 static inline u_int
 m_extunref(struct mbuf *m)
 {
-	int refs = 0;
-
 	if (!MCLISREFERENCED(m))
 		return (0);
 
-	mtx_enter(&m_extref_mtx);
-	if (MCLISREFERENCED(m)) {
-		m->m_ext.ext_nextref->m_ext.ext_prevref =
-		    m->m_ext.ext_prevref;
-		m->m_ext.ext_prevref->m_ext.ext_nextref =
-		    m->m_ext.ext_nextref;
-		refs = 1;
-	}
-	mtx_leave(&m_extref_mtx);
+	MUTEX_ASSERT_LOCKED(&m_extref_mtx);
 
-	return (refs);
+	m->m_ext.ext_nextref->m_ext.ext_prevref = m->m_ext.ext_prevref;
+	m->m_ext.ext_prevref->m_ext.ext_nextref = m->m_ext.ext_nextref;
+
+	return (1);
 }
 
 /*
@@ -555,8 +570,15 @@ m_defrag(struct mbuf *m, int how)
 	/* free chain behind and possible ext buf on the first mbuf */
 	m_freem(m->m_next);
 	m->m_next = NULL;
-	if (m->m_flags & M_EXT)
+	if (m->m_flags & M_EXT) {
+		int lock = MCLISREFERENCED(m);
+
+		if (lock)
+			mtx_enter(&m_extref_mtx);
 		m_extfree(m);
+		if (lock)
+			mtx_leave(&m_extref_mtx);
+	}
 
 	/*
 	 * Bounce copy mbuf over to the original mbuf and set everything up.

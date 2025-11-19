@@ -65,7 +65,7 @@
 #define	M_FREE		0	/* should be on free list */
 /* 1 - free */
 #define	M_DEVBUF	2	/* device driver memory */
-/* 3 - free */
+#define M_MBUF		3	/* mbuf */
 #define	M_PCB		4	/* protocol control blocks */
 #define	M_RTABLE	5	/* routing tables */
 #define	M_PF		6	/* packet filter structures */
