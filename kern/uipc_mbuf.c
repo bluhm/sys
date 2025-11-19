@@ -124,8 +124,9 @@ int max_protohdr;		/* largest protocol header */
 int max_hdr;			/* largest link+protocol header */
 
 struct	mutex m_extref_mtx = MUTEX_INITIALIZER(IPL_NET);
+struct	cpumem *m_extfree_ml;
 
-void	m_extfree(struct mbuf *);
+int	m_extfree(struct mbuf *, int);
 void	m_zero(struct mbuf *);
 
 unsigned long mbuf_mem_limit;	/* [a] how much memory can be allocated */
@@ -207,6 +208,8 @@ mbcpuinit(void)
 
 	for (i = 0; i < nitems(mclsizes); i++)
 		pool_cache_init(&mclpools[i]);
+
+	m_extfree_ml = cpumem_malloc(sizeof(struct mbuf_list), M_MBUF);
 }
 
 int
@@ -426,8 +429,25 @@ m_free(struct mbuf *m)
 		pf_mbuf_unlink_inpcb(m);
 #endif	/* NPF > 0 */
 	}
-	if (m->m_flags & M_EXT)
-		m_extfree(m);
+	if (m->m_flags & M_EXT) {
+		if (m_extfree(m, 0) == 0) {
+			struct mbuf_list *ml;
+
+			ml = cpumem_enter(m_extfree_ml);
+			ml_enqueue(ml, m);
+			if (ml_len(ml) > 1000) {
+				mtx_enter(&m_extref_mtx);
+				MBUF_LIST_FOREACH(ml, m)
+					m_extfree(m, 1);
+				mtx_leave(&m_extref_mtx);
+				while ((m = ml_dequeue(ml)) != NULL)
+					pool_put(&mbpool, m);
+			}
+			cpumem_leave(m_extfree_ml, ml);
+
+			return (n);
+		}
+	}
 
 	pool_put(&mbpool, m);
 
@@ -456,22 +476,17 @@ m_extref(struct mbuf *o, struct mbuf *n)
 static inline u_int
 m_extunref(struct mbuf *m)
 {
-	int refs = 0;
-
 	if (!MCLISREFERENCED(m))
 		return (0);
 
-	mtx_enter(&m_extref_mtx);
-	if (MCLISREFERENCED(m)) {
-		m->m_ext.ext_nextref->m_ext.ext_prevref =
-		    m->m_ext.ext_prevref;
-		m->m_ext.ext_prevref->m_ext.ext_nextref =
-		    m->m_ext.ext_nextref;
-		refs = 1;
-	}
-	mtx_leave(&m_extref_mtx);
+	MUTEX_ASSERT_LOCKED(&m_extref_mtx);
 
-	return (refs);
+	m->m_ext.ext_nextref->m_ext.ext_prevref =
+	    m->m_ext.ext_prevref;
+	m->m_ext.ext_prevref->m_ext.ext_nextref =
+	    m->m_ext.ext_nextref;
+
+	return (1);
 }
 
 /*
@@ -487,9 +502,12 @@ mextfree_register(void (*fn)(caddr_t, u_int, void *))
 	return num_extfree_fns++;
 }
 
-void
-m_extfree(struct mbuf *m)
+int
+m_extfree(struct mbuf *m, int locked)
 {
+	if (MCLISREFERENCED(m) && !locked)
+		return (0);
+
 	if (m_extunref(m) == 0) {
 		KASSERT(m->m_ext.ext_free_fn < num_extfree_fns);
 		mextfree_fns[m->m_ext.ext_free_fn](m->m_ext.ext_buf,
@@ -497,6 +515,7 @@ m_extfree(struct mbuf *m)
 	}
 
 	m->m_flags &= ~(M_EXT|M_EXTWR);
+	return (1);
 }
 
 struct mbuf *
@@ -555,8 +574,15 @@ m_defrag(struct mbuf *m, int how)
 	/* free chain behind and possible ext buf on the first mbuf */
 	m_freem(m->m_next);
 	m->m_next = NULL;
-	if (m->m_flags & M_EXT)
-		m_extfree(m);
+	if (m->m_flags & M_EXT) {
+		if (!MCLISREFERENCED(m)) {
+			m_extfree(m, 0);
+		} else {
+			mtx_enter(&m_extref_mtx);
+			m_extfree(m, 1);
+			mtx_leave(&m_extref_mtx);
+		}
+	}
 
 	/*
 	 * Bounce copy mbuf over to the original mbuf and set everything up.
