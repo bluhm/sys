@@ -883,6 +883,11 @@ in_addmulti(const struct in_addr *addr, struct ifnet *ifp)
 	}
 	KERNEL_UNLOCK();
 
+	/* Ensure router info exists and is not malloced while holding mutex. */
+	inm_new->inm_ifidx = ifp->if_index;
+	/* XXX what about rti_delete() in if_setrdomain() ?
+	rti_fill(new_inm);
+
 	mtx_enter(&ifp->if_maddrmtx);
 	/* check again after unlock and lock */
 	inm = in_lookupmulti(addr, ifp);
