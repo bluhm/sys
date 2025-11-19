@@ -685,6 +685,9 @@ igmp_slowtimo(void)
 {
 	struct router_info *rti;
 
+	if (LIST_EMPTY(&rti_head))
+		return;
+
 	mtx_enter(&igmp_mtx);
 	LIST_FOREACH(rti, &rti_head, rti_list) {
 		if (rti->rti_type == IGMP_v1_ROUTER &&
