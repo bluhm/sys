@@ -1,4 +1,4 @@
-/* $OpenBSD: fuse_device.c,v 1.46 2025/09/20 15:01:23 helg Exp $ */
+/* $OpenBSD: fuse_device.c,v 1.48 2025/11/19 09:12:38 helg Exp $ */
 /*
  * Copyright (c) 2012-2013 Sylvestre Gallon <ccna.syl@gmail.com>
  *
@@ -21,6 +21,7 @@
 #include <sys/event.h>
 #include <sys/malloc.h>
 #include <sys/mount.h>
+#include <sys/refcnt.h>
 #include <sys/rwlock.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
@@ -45,6 +46,7 @@ SIMPLEQ_HEAD(fusebuf_head, fusebuf);
 
 struct fuse_d {
 	struct rwlock fd_lock;
+	struct refcnt fd_refcnt;
 	struct fusefs_mnt *fd_fmp;
 	int fd_unit;
 
@@ -131,8 +133,10 @@ fuse_lookup(int unit)
 	struct fuse_d *fd;
 
 	LIST_FOREACH(fd, &fuse_d_list, fd_list)
-		if (fd->fd_unit == unit)
+		if (fd->fd_unit == unit) {
+			refcnt_take(&fd->fd_refcnt);
 			return (fd);
+		}
 	return (NULL);
 }
 
@@ -162,6 +166,7 @@ fuse_device_cleanup(dev_t dev)
 
 		stat_fbufs_in--;
 		f->fb_err = ENXIO;
+		/* Wakeup up VFS syscall waiting on this fbuf, it will fail */
 		wakeup(f);
 		lprev = f;
 	}
@@ -180,9 +185,12 @@ fuse_device_cleanup(dev_t dev)
 
 		stat_fbufs_wait--;
 		f->fb_err = ENXIO;
+		/* Wakeup up VFS syscall waiting on this fbuf, it will fail */
 		wakeup(f);
 		lprev = f;
 	}
+
+	refcnt_rele_wake(&fd->fd_refcnt);
 }
 
 void
@@ -199,6 +207,11 @@ fuse_device_queue_fbuf(dev_t dev, struct fusebuf *fbuf)
 	knote_locked(&fd->fd_rklist, 0);
 	rw_exit_write(&fd->fd_lock);
 	stat_fbufs_in++;
+
+	/* Let file system daemons know there is a request ready to process */
+	wakeup_one(&fd->fd_fbufs_in);
+
+	refcnt_rele_wake(&fd->fd_refcnt);
 }
 
 void
@@ -210,7 +223,16 @@ fuse_device_set_fmp(struct fusefs_mnt *fmp, int set)
 	if (fd == NULL)
 		return;
 
-	fd->fd_fmp = set ? fmp : NULL;
+	if (set)
+		fd->fd_fmp = fmp;
+	else {
+		fd->fd_fmp = NULL;
+
+		/* Let file system daemons know the device is dead */
+		wakeup(&fd->fd_fbufs_in);
+	}
+
+	refcnt_rele_wake(&fd->fd_refcnt);
 }
 
 void
@@ -228,8 +250,10 @@ fuseopen(dev_t dev, int flags, int fmt, struct proc * p)
 	if (flags & O_EXCL)
 		return (EBUSY); /* No exclusive opens */
 
-	if ((fd = fuse_lookup(unit)) != NULL)
+	if ((fd = fuse_lookup(unit)) != NULL) {
+		refcnt_rele_wake(&fd->fd_refcnt);
 		return (EBUSY);
+	}
 
 	fd = malloc(sizeof(*fd), M_DEVBUF, M_WAITOK | M_ZERO);
 	fd->fd_unit = unit;
@@ -237,6 +261,7 @@ fuseopen(dev_t dev, int flags, int fmt, struct proc * p)
 	SIMPLEQ_INIT(&fd->fd_fbufs_wait);
 	rw_init(&fd->fd_lock, "fusedlk");
 	klist_init_rwlock(&fd->fd_rklist, &fd->fd_lock);
+	refcnt_init(&fd->fd_refcnt);
 
 	LIST_INSERT_HEAD(&fuse_d_list, fd, fd_list);
 
@@ -251,7 +276,7 @@ fuseclose(dev_t dev, int flags, int fmt, struct proc *p)
 
 	fd = fuse_lookup(minor(dev));
 	if (fd == NULL)
-		return (EINVAL);
+		return (EBADF);
 
 	fuse_device_cleanup(dev);
 
@@ -259,11 +284,15 @@ fuseclose(dev_t dev, int flags, int fmt, struct proc *p)
 	 * Let fusefs_unmount know the device is closed so it doesn't try and
 	 * send FBT_DESTROY to a dead file system daemon.
 	 */
-	if (fd->fd_fmp)
+	if (fd->fd_fmp) {
 		fd->fd_fmp->sess_init = 0;
+		fuse_device_set_fmp(fd->fd_fmp, 0);
+	}
 
 	LIST_REMOVE(fd, fd_list);
 
+	refcnt_rele(&fd->fd_refcnt);
+	refcnt_finalize(&fd->fd_refcnt, "fusedfd");
 	free(fd, M_DEVBUF, sizeof(*fd));
 	stat_opened_fusedev--;
 	return (0);
@@ -279,16 +308,38 @@ fuseread(dev_t dev, struct uio *uio, int ioflag)
 
 	fd = fuse_lookup(minor(dev));
 	if (fd == NULL)
-		return (ENXIO);
+		return (ENODEV);
+
+	if (fd->fd_fmp == NULL) {
+		refcnt_rele(&fd->fd_refcnt);
+		return (ENODEV);
+	}
 
 	rw_enter_write(&fd->fd_lock);
 
-	if (SIMPLEQ_EMPTY(&fd->fd_fbufs_in)) {
-		if (ioflag & O_NONBLOCK)
-			error = EAGAIN;
-		goto end;
-	}
+	/* Loop to avoid a race condition with multithreaded daemons. */
 	fbuf = SIMPLEQ_FIRST(&fd->fd_fbufs_in);
+	while (fbuf == NULL) {
+		if (ioflag & IO_NDELAY) {
+			error = EAGAIN;
+			goto end;
+		}
+
+		error = rwsleep_nsec(&fd->fd_fbufs_in, &fd->fd_lock,
+		    PWAIT | PCATCH, "fusedr", INFSLP);
+
+		/* check for unmount during sleep */
+		if (fd->fd_fmp == NULL) {
+			error = ENODEV;
+			goto end;
+		}
+		if (error == EINTR || error == ERESTART) {
+			error = EINTR;
+			goto end;
+		}
+
+		fbuf = SIMPLEQ_FIRST(&fd->fd_fbufs_in);
+	}
 
 	/* We get the whole fusebuf or nothing */
 	if (uio->uio_resid < sizeof(fbuf->fb_hdr) + sizeof(fbuf->FD) +
@@ -330,6 +381,7 @@ fuseread(dev_t dev, struct uio *uio, int ioflag)
 
 end:
 	rw_exit_write(&fd->fd_lock);
+	refcnt_rele_wake(&fd->fd_refcnt);
 	return (error);
 }
 
@@ -347,19 +399,25 @@ fusewrite(dev_t dev, struct uio *uio, int ioflag)
 		return (ENXIO);
 
 	/* Check for sanity - must receive more than just the header */
-	if (uio->uio_resid <= sizeof(hdr))
-		return (EINVAL);
+	if (uio->uio_resid <= sizeof(hdr)) {
+		error = EINVAL;
+		goto out;
+	}
 
 	if ((error = uiomove(&hdr, sizeof(hdr), uio)) != 0)
-		return (error);
+		goto out;
 
 	/* Check for sanity */
-	if (hdr.fh_len > FUSEBUFMAXSIZE)
-		return (EINVAL);
+	if (hdr.fh_len > FUSEBUFMAXSIZE) {
+		error = EINVAL;
+		goto out;
+	}
 
 	/* We get the whole fusebuf or nothing */
-	if (uio->uio_resid != sizeof(fbuf->FD) + hdr.fh_len)
-		return (EINVAL);
+	if (uio->uio_resid != sizeof(fbuf->FD) + hdr.fh_len) {
+		error = EINVAL;
+		goto out;
+	}
 
 	/* looking for uuid in fd_fbufs_wait */
 	SIMPLEQ_FOREACH(fbuf, &fd->fd_fbufs_wait, fb_next) {
@@ -368,8 +426,10 @@ fusewrite(dev_t dev, struct uio *uio, int ioflag)
 
 		lastfbuf = fbuf;
 	}
-	if (fbuf == NULL)
-		return (EINVAL);
+	if (fbuf == NULL) {
+		error = ENOENT;
+		goto out;
+	}
 
 	/* Update fb_hdr */
 	fbuf->fb_len = hdr.fh_len;
@@ -397,7 +457,7 @@ fusewrite(dev_t dev, struct uio *uio, int ioflag)
 		if (error) {
 			free(fbuf->fb_dat, M_FUSEFS, fbuf->fb_len);
 			fbuf->fb_dat = NULL;
-			return (error);
+			goto end;
 		}
 	}
 
@@ -421,11 +481,18 @@ end:
 		SIMPLEQ_REMOVE_AFTER(&fd->fd_fbufs_wait, lastfbuf,
 		    fb_next);
 	stat_fbufs_wait--;
+
+	/*
+	 * FBT_INIT doesn't expect a response. Otherwise let the VFS
+	 * syscall that is waiting on this fbuf know the reponse is ready.
+	 */
 	if (fbuf->fb_type == FBT_INIT)
 		fb_delete(fbuf);
 	else
 		wakeup(fbuf);
 
+out:
+	refcnt_rele_wake(&fd->fd_refcnt);
 	return (error);
 }
 
@@ -434,6 +501,7 @@ fusekqfilter(dev_t dev, struct knote *kn)
 {
 	struct fuse_d *fd;
 	struct klist *klist;
+	int error = 0;
 
 	fd = fuse_lookup(minor(dev));
 	if (fd == NULL)
@@ -445,16 +513,21 @@ fusekqfilter(dev_t dev, struct knote *kn)
 		kn->kn_fop = &fuse_rd_filtops;
 		break;
 	case EVFILT_WRITE:
-		return (seltrue_kqfilter(dev, kn));
+		error = seltrue_kqfilter(dev, kn);
+		goto end;
 	default:
-		return (EINVAL);
+		error = EINVAL;
+		goto end;
 	}
 
 	kn->kn_hook = fd;
 
 	klist_insert(klist, kn);
 
-	return (0);
+end:
+	refcnt_rele_wake(&fd->fd_refcnt);
+
+	return (error);
 }
 
 void
@@ -500,8 +573,9 @@ filt_fuse_process(struct knote *kn, struct kevent *kev)
 	int active;
 
 	rw_enter_write(&fd->fd_lock);
-	active = knote_process(kn, kev); 
+	active = knote_process(kn, kev);
 	rw_exit_write(&fd->fd_lock);
 
 	return (active);
 }
+
