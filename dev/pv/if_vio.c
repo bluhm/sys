@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_vio.c,v 1.72 2025/09/16 12:18:10 hshoexer Exp $	*/
+/*	$OpenBSD: if_vio.c,v 1.73 2025/11/24 14:16:17 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2012 Stefan Fritsch, Alexander Fiveg.
