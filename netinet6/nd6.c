@@ -829,6 +829,9 @@ nd6_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 				ln_end = TAILQ_LAST(&nd6_list, llinfo_nd6_head);
 				if (ln_end == ln)
 					break;
+				/* cannot move the iterator, try next time */
+				if (ln_end->ln_rt == NULL)
+					break;
 
 				/* Move this entry to the head */
 				TAILQ_REMOVE(&nd6_list, ln_end, ln_list);
