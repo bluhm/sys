@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_veb.c,v 1.56 2025/11/25 11:56:46 dlg Exp $ */
+/*	$OpenBSD: if_veb.c,v 1.59 2025/11/26 03:43:29 dlg Exp $ */
 
 /*
  * Copyright (c) 2021 David Gwynne <dlg@openbsd.org>
@@ -1251,7 +1251,7 @@ veb_port_input(struct ifnet *ifp0, struct mbuf *m, uint64_t dst, void *brport,
 		goto drop;
 
 #if NPF > 0
-	if (ISSET(ifp->if_flags, IFF_LINK1) &&
+	if (ISSET(ifp->if_flags, IFF_LINK1) && p->p_pvid == ctx.vs &&
 	    (m = veb_pf(ifp0, PF_IN, m, ctx.ns)) == NULL)
 		return (NULL);
 #endif
@@ -3262,6 +3262,7 @@ vport_clone_create(struct if_clone *ifc, int unit)
 
 	if_counters_alloc(ifp);
 	if_attach(ifp);
+	if_attach_iqueues(ifp, softnet_count());
 	ether_ifattach(ifp);
 
 	return (0);
@@ -3354,6 +3355,7 @@ static int
 vport_if_enqueue(struct ifnet *ifp, struct mbuf *m, struct netstack *ns)
 {
 	uint16_t csum;
+	int rv = 0;
 
 	/*
 	 * switching an l2 packet toward a vport means pushing it
@@ -3373,9 +3375,22 @@ vport_if_enqueue(struct ifnet *ifp, struct mbuf *m, struct netstack *ns)
 		SET(csum, M_ICMP_CSUM_IN_OK);
 	m->m_pkthdr.csum_flags = csum;
 
-	if_vinput(ifp, m, ns);
+	if (ns != NULL) {
+		/* this is already running in a softnet context */
+		if_vinput(ifp, m, ns);
+	} else {
+		/* move the packet to a softnet context for processing */
+		struct ifiqueue *ifiq;
+		unsigned int flow = 0;
 
-	return (0);
+		if (ISSET(m->m_pkthdr.csum_flags, M_FLOWID))
+			flow = m->m_pkthdr.ph_flowid;
+
+		ifiq = ifp->if_iqs[flow % ifp->if_niqs];
+		rv = ifiq_enqueue_qlim(ifiq, m, 8192);
+	}
+
+	return (rv);
 }
 
 static int
