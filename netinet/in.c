@@ -800,12 +800,14 @@ in_broadcast(struct in_addr in, u_int rtableid)
 	struct ifnet *ifn;
 	struct ifaddr *ifa;
 	u_int rdomain;
+	int bcast = 0;
 
 	NET_ASSERT_LOCKED();
 
 	rdomain = rtable_l2(rtableid);
 
 #define ia (ifatoia(ifa))
+	rw_enter_read(&ifnetlock);
 	TAILQ_FOREACH(ifn, &ifnetlist, if_list) {
 		if (ifn->if_rdomain != rdomain)
 			continue;
@@ -814,10 +816,14 @@ in_broadcast(struct in_addr in, u_int rtableid)
 		TAILQ_FOREACH(ifa, &ifn->if_addrlist, ifa_list)
 			if (ifa->ifa_addr->sa_family == AF_INET &&
 			    in.s_addr != ia->ia_addr.sin_addr.s_addr &&
-			    in.s_addr == ia->ia_broadaddr.sin_addr.s_addr)
-				return 1;
+			    in.s_addr == ia->ia_broadaddr.sin_addr.s_addr) {
+				bcast = 1;
+				goto out;
+			}
 	}
-	return (0);
+ out:
+	rw_exit_read(&ifnetlock);
+	return (bcast);
 #undef ia
 }
 

@@ -839,9 +839,11 @@ route_output(struct mbuf *m, struct socket *so)
 		 */
 		if (rtm->rtm_priority == RTP_PROPOSAL_SOLICIT) {
 			NET_LOCK();
+			rw_enter_read(&ifnetlock);
 			TAILQ_FOREACH(ifp, &ifnetlist, if_list) {
 				ifp->if_rtrequest(ifp, RTM_PROPOSAL, NULL);
 			}
+			rw_exit_read(&ifnetlock);
 			NET_UNLOCK();
 		}
 	} else if (rtm->rtm_type == RTM_SOURCE) {
@@ -2057,6 +2059,7 @@ sysctl_iflist(int af, struct walkarg *w)
 	int			 len, error = 0;
 
 	bzero(&info, sizeof(info));
+	rw_enter_read(&ifnetlock);
 	TAILQ_FOREACH(ifp, &ifnetlist, if_list) {
 		if (w->w_arg && w->w_arg != ifp->if_index)
 			continue;
@@ -2074,7 +2077,7 @@ sysctl_iflist(int af, struct walkarg *w)
 			ifm->ifm_addrs = info.rti_addrs;
 			error = copyout(ifm, w->w_where, len);
 			if (error)
-				return (error);
+				goto out;
 			w->w_where += len;
 		}
 		info.rti_info[RTAX_IFP] = NULL;
@@ -2097,14 +2100,16 @@ sysctl_iflist(int af, struct walkarg *w)
 				ifam->ifam_addrs = info.rti_addrs;
 				error = copyout(w->w_tmem, w->w_where, len);
 				if (error)
-					return (error);
+					goto out;
 				w->w_where += len;
 			}
 		}
 		info.rti_info[RTAX_IFA] = info.rti_info[RTAX_NETMASK] =
 		    info.rti_info[RTAX_BRD] = NULL;
 	}
-	return (0);
+ out:
+	rw_exit_read(&ifnetlock);
+	return (error);
 }
 
 int
@@ -2116,7 +2121,7 @@ sysctl_ifnames(struct walkarg *w)
 	int error = 0;
 
 	rw_enter_write(&if_tmplist_lock);
-	NET_LOCK_SHARED();
+	rw_enter_read(&ifnetlock);
 	/* XXX ignore tableid for now */
 	TAILQ_FOREACH(ifp, &ifnetlist, if_list) {
 		if (w->w_arg && w->w_arg != ifp->if_index)
@@ -2124,7 +2129,7 @@ sysctl_ifnames(struct walkarg *w)
 		if_ref(ifp);
 		TAILQ_INSERT_TAIL(&if_tmplist, ifp, if_tmplist);
 	}
-	NET_UNLOCK_SHARED();
+	rw_exit_read(&ifnetlock);
 
 	TAILQ_FOREACH(ifp, &if_tmplist, if_tmplist) {
 		w->w_needed += sizeof(ifn);

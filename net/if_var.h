@@ -330,6 +330,7 @@ int		niq_enqueue(struct niqueue *, struct mbuf *);
     sysctl_mq((_n), (_l), (_op), (_olp), (_np), (_nl), &(_niq)->ni_q)
 
 extern struct rwlock if_tmplist_lock;
+extern struct rwlock ifnetlock;
 extern struct ifnet_head ifnetlist;
 
 void	if_start(struct ifnet *);

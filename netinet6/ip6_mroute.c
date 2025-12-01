@@ -318,15 +318,14 @@ mrt6_sysctl_mif(void *oldp, size_t *oldlenp)
 	memset(&minfo, 0, sizeof minfo);
 
 	rw_enter_write(&if_tmplist_lock);
-	NET_LOCK_SHARED();
-
+	rw_enter_read(&ifnetlock);
 	TAILQ_FOREACH(ifp, &ifnetlist, if_list) {
 		if (ifp->if_mcast6 != NULL) {
 			if_ref(ifp);
 			TAILQ_INSERT_TAIL(&if_tmplist, ifp, if_tmplist);
 		}
 	}
-	NET_UNLOCK_SHARED();
+	rw_exit_read(&ifnetlock);
 
 	TAILQ_FOREACH (ifp, &if_tmplist, if_tmplist) {
 		NET_LOCK_SHARED();
@@ -579,12 +578,14 @@ ip6_mrouter_done(struct socket *so)
 	} while (error == EAGAIN);
 
 	/* Unregister all interfaces in the domain. */
+	rw_enter_read(&ifnetlock);
 	TAILQ_FOREACH(ifp, &ifnetlist, if_list) {
 		if (ifp->if_rdomain != rtableid)
 			continue;
 
 		ip6_mrouter_detach(ifp);
 	}
+	rw_exit_read(&ifnetlock);
 
 	ip6_mrouter[inp->inp_rtableid] = NULL;
 	ip6_mrouter_ver = 0;
@@ -595,13 +596,16 @@ ip6_mrouter_done(struct socket *so)
 void
 ip6_mrouter_detach(struct ifnet *ifp)
 {
-	struct mif6 *m6 = (struct mif6 *)ifp->if_mcast6;
+	struct mif6 *m6;
 	struct in6_ifreq ifr;
 
-	if (m6 == NULL)
+	rw_enter_write(&ifnetlock);
+	if ((m6 = (struct mif6 *)ifp->if_mcast6) == NULL) {
+		rw_exit_write(&ifnetlock);
 		return;
-
+	}
 	ifp->if_mcast6 = NULL;
+	rw_exit_write(&ifnetlock);
 
 	memset(&ifr, 0, sizeof(ifr));
 	ifr.ifr_addr.sin6_family = AF_INET6;
@@ -663,9 +667,12 @@ add_m6if(struct socket *so, struct mif6ctl *mifcp)
 	}
 
 	mifp = malloc(sizeof(*mifp), M_MRTABLE, M_WAITOK | M_ZERO);
-	ifp->if_mcast6	   = (caddr_t)mifp;
-	mifp->m6_mifi	   = mifcp->mif6c_mifi;
-	mifp->m6_flags     = mifcp->mif6c_flags;
+	rw_enter_write(&ifnetlock);
+	ifp->if_mcast6 = (caddr_t)mifp;
+	mifp->m6_mifi = mifcp->mif6c_mifi;
+	rw_exit_write(&ifnetlock);
+
+	mifp->m6_flags = mifcp->mif6c_flags;
 #ifdef notyet
 	/* scaling up here allows division by 1024 in critical code */
 	mifp->m6_rate_limit = mifcp->mif6c_rate_limit * 1024 / 1000;
@@ -1230,22 +1237,21 @@ struct ifnet *
 mrt6_iflookupbymif(mifi_t mifi, unsigned int rtableid)
 {
 	struct mif6	*m6;
-	struct ifnet	*ifp;
+	struct ifnet	*ifp = NULL;
 
-	NET_ASSERT_LOCKED();
-
+	rw_enter_read(&ifnetlock);
 	TAILQ_FOREACH(ifp, &ifnetlist, if_list) {
 		if (ifp->if_rdomain != rtableid)
 			continue;
 		if ((m6 = (struct mif6 *)ifp->if_mcast6) == NULL)
 			continue;
-		if (m6->m6_mifi != mifi)
+		if (m6->m6_mifi == mifi)
 			continue;
 
-		return ifp;
+		break;
 	}
-
-	return NULL;
+	rw_exit_read(&ifnetlock);
+	return (ifp);
 }
 
 struct rtentry *

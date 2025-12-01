@@ -199,16 +199,17 @@ loop_clone_destroy(struct ifnet *ifp)
 			return (EPERM);
 
 		/* if there is any other interface in this rdomain, deny */
-		NET_LOCK_SHARED();
+		rw_enter_read(&ifnetlock);
 		TAILQ_FOREACH(p, &ifnetlist, if_list) {
 			if (p->if_rdomain != ifp->if_rdomain)
 				continue;
 			if (p->if_index == ifp->if_index)
 				continue;
-			NET_UNLOCK_SHARED();
+			rw_exit_read(&ifnetlock);
+
 			return (EBUSY);
 		}
-		NET_UNLOCK_SHARED();
+		rw_exit_read(&ifnetlock);
 
 		rdomain = ifp->if_rdomain;
 	}

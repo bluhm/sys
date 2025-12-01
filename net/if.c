@@ -301,10 +301,7 @@ softnet_percpu(void)
 
 static struct if_idxmap if_idxmap;
 
-/*
- * XXXSMP: For `ifnetlist' modification both kernel and net locks
- * should be taken. For read-only access only one lock of them required.
- */
+struct rwlock ifnetlock = RWLOCK_INITIALIZER("ifnet");
 struct ifnet_head ifnetlist = TAILQ_HEAD_INITIALIZER(ifnetlist);
 
 static inline unsigned int
@@ -573,7 +570,9 @@ if_attachhead(struct ifnet *ifp)
 {
 	if_attach_common(ifp);
 	NET_LOCK();
+	rw_enter_write(&ifnetlock);
 	TAILQ_INSERT_HEAD(&ifnetlist, ifp, if_list);
+	rw_exit_write(&ifnetlock);
 	if_attachsetup(ifp);
 	NET_UNLOCK();
 }
@@ -583,7 +582,9 @@ if_attach(struct ifnet *ifp)
 {
 	if_attach_common(ifp);
 	NET_LOCK();
+	rw_enter_write(&ifnetlock);
 	TAILQ_INSERT_TAIL(&ifnetlist, ifp, if_list);
+	rw_exit_write(&ifnetlock);
 	if_attachsetup(ifp);
 	NET_UNLOCK();
 }
@@ -1149,9 +1150,9 @@ void
 if_remove(struct ifnet *ifp)
 {
 	/* Remove the interface from the list of all interfaces. */
-	NET_LOCK();
+	rw_enter_write(&ifnetlock);
 	TAILQ_REMOVE(&ifnetlist, ifp, if_list);
-	NET_UNLOCK();
+	rw_exit_write(&ifnetlock);
 
 	/* Remove the interface from the interface index map. */
 	if_idxmap_remove(ifp);
@@ -1392,10 +1393,12 @@ if_clone_destroy(const char *name)
 	KERNEL_ASSERT_LOCKED();
 	rw_enter_write(&if_cloners_lock);
 
+	rw_enter_read(&ifnetlock);
 	TAILQ_FOREACH(ifp, &ifnetlist, if_list) {
 		if (strcmp(ifp->if_xname, name) == 0)
 			break;
 	}
+	rw_exit_read(&ifnetlock);
 	if (ifp == NULL) {
 		rw_exit_write(&if_cloners_lock);
 		return (ENXIO);
@@ -1553,12 +1556,13 @@ struct ifaddr *
 ifa_ifwithaddr(const struct sockaddr *addr, u_int rtableid)
 {
 	struct ifnet *ifp;
-	struct ifaddr *ifa;
+	struct ifaddr *ifa = NULL;
 	u_int rdomain;
 
 	NET_ASSERT_LOCKED();
 
 	rdomain = rtable_l2(rtableid);
+	rw_enter_read(&ifnetlock);
 	TAILQ_FOREACH(ifp, &ifnetlist, if_list) {
 		if (ifp->if_rdomain != rdomain)
 			continue;
@@ -1567,12 +1571,13 @@ ifa_ifwithaddr(const struct sockaddr *addr, u_int rtableid)
 			if (ifa->ifa_addr->sa_family != addr->sa_family)
 				continue;
 
-			if (equal(addr, ifa->ifa_addr)) {
-				return (ifa);
-			}
+			if (equal(addr, ifa->ifa_addr))
+				goto out;
 		}
 	}
-	return (NULL);
+ out:
+	rw_exit_read(&ifnetlock);
+	return (ifa);
 }
 
 /*
@@ -1587,6 +1592,7 @@ ifa_ifwithdstaddr(const struct sockaddr *addr, u_int rdomain)
 	NET_ASSERT_LOCKED();
 
 	rdomain = rtable_l2(rdomain);
+	rw_enter_read(&ifnetlock);
 	TAILQ_FOREACH(ifp, &ifnetlist, if_list) {
 		if (ifp->if_rdomain != rdomain)
 			continue;
@@ -1595,12 +1601,13 @@ ifa_ifwithdstaddr(const struct sockaddr *addr, u_int rdomain)
 				if (ifa->ifa_addr->sa_family !=
 				    addr->sa_family || ifa->ifa_dstaddr == NULL)
 					continue;
-				if (equal(addr, ifa->ifa_dstaddr)) {
-					return (ifa);
-				}
+				if (equal(addr, ifa->ifa_dstaddr))
+					goto out;
 			}
 		}
 	}
+ out:
+	rw_exit_read(&ifnetlock);
 	return (NULL);
 }
 
@@ -1742,6 +1749,7 @@ if_downall(void)
 	struct ifnet *ifp;
 
 	NET_LOCK();
+	rw_enter_read(&ifnetlock);
 	TAILQ_FOREACH(ifp, &ifnetlist, if_list) {
 		if ((ifp->if_flags & IFF_UP) == 0)
 			continue;
@@ -1749,6 +1757,7 @@ if_downall(void)
 		ifrq.ifr_flags = ifp->if_flags;
 		(*ifp->if_ioctl)(ifp, SIOCSIFFLAGS, (caddr_t)&ifrq);
 	}
+	rw_exit_read(&ifnetlock);
 	NET_UNLOCK();
 }
 
@@ -1895,18 +1904,17 @@ if_watchdog_task(void *xifidx)
 struct ifnet *
 if_unit(const char *name)
 {
-	struct ifnet *ifp;
+	struct ifnet *ifp = NULL;
 
-	KERNEL_ASSERT_LOCKED();
-
+	rw_enter_read(&ifnetlock);
 	TAILQ_FOREACH(ifp, &ifnetlist, if_list) {
 		if (strcmp(ifp->if_xname, name) == 0) {
 			if_ref(ifp);
-			return (ifp);
+			break;
 		}
 	}
-
-	return (NULL);
+	rw_exit_read(&ifnetlock);
+	return (ifp);
 }
 
 /*
@@ -1988,7 +1996,9 @@ if_createrdomain(int rdomain, struct ifnet *ifp)
 	}
 
 	rtable_l2set(rdomain, rdomain, loifp->if_index);
+	rw_enter_write(&ifnetlock);
 	loifp->if_rdomain = rdomain;
+	rw_exit_write(&ifnetlock);
 	if_put(loifp);
 
 	return (0);
@@ -2046,7 +2056,9 @@ if_setrdomain(struct ifnet *ifp, int rdomain)
 	error = 0;
 
 	/* Add interface to the specified rdomain */
+	rw_enter_write(&ifnetlock);
 	ifp->if_rdomain = rdomain;
+	rw_exit_write(&ifnetlock);
 
 	/* If we took down the IF, bring it back */
 	if (up) {
@@ -2737,7 +2749,7 @@ ifconf(caddr_t data)
 
 	/* If ifc->ifc_len is 0, fill it in with the needed size and return. */
 	if (space == 0) {
-		NET_LOCK_SHARED();
+		rw_enter_read(&ifnetlock);
 		TAILQ_FOREACH(ifp, &ifnetlist, if_list) {
 			struct sockaddr *sa;
 
@@ -2753,7 +2765,7 @@ ifconf(caddr_t data)
 					space += sizeof(ifr);
 				}
 		}
-		NET_UNLOCK_SHARED();
+		rw_exit_read(&ifnetlock);
 		ifc->ifc_len = space;
 		return (0);
 	}
@@ -2765,24 +2777,24 @@ ifconf(caddr_t data)
 	memset(&ifr, 0, sizeof(ifr));
 
 	rw_enter_write(&if_tmplist_lock);
-	NET_LOCK_SHARED();
+	rw_enter_read(&ifnetlock);
 	TAILQ_FOREACH(ifp, &ifnetlist, if_list) {
 		if_ref(ifp);
 		TAILQ_INSERT_TAIL(&if_tmplist, ifp, if_tmplist);
 	}
-	NET_UNLOCK_SHARED();
+	rw_exit_read(&ifnetlock);
 
 	TAILQ_FOREACH(ifp, &if_tmplist, if_tmplist) {
 		if (space < sizeof(ifr))
 			goto free;
 		memcpy(ifr.ifr_name, ifp->if_xname, IFNAMSIZ);
 
-		NET_LOCK_SHARED();
+		rw_enter_read(&ifnetlock);
 		TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
 			ifaref(ifa);
 			TAILQ_INSERT_TAIL(&addr_tmplist, ifa, ifa_tmplist);
 		}
-		NET_UNLOCK_SHARED();
+		rw_exit_read(&ifnetlock);
 
 		if (TAILQ_EMPTY(&addr_tmplist)) {
 			memset(&ifr.ifr_addr, 0, sizeof(ifr.ifr_addr));

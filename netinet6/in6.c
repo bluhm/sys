@@ -1361,6 +1361,7 @@ in6_ifawithscope(struct ifnet *oifp, const struct in6_addr *dst, u_int rdomain,
 	NET_ASSERT_LOCKED();
 
 	/* We search for all addresses on all interfaces from the beginning. */
+	rw_enter_read(&ifnetlock);
 	TAILQ_FOREACH(ifp, &ifnetlist, if_list) {
 		if (ifp->if_rdomain != rdomain)
 			continue;
@@ -1557,6 +1558,7 @@ in6_ifawithscope(struct ifnet *oifp, const struct in6_addr *dst, u_int rdomain,
 			    in6_addrscope(&ia6_best->ia_addr.sin6_addr);
 		}
 	}
+	rw_exit_read(&ifnetlock);
 
 	/* count statistics for future improvements */
 	if (ia6_best == NULL)

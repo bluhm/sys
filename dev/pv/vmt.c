@@ -899,7 +899,7 @@ vmt_tclo_broadcastip(struct vmt_softc *sc)
 	/* find first available ipv4 address */
 	guest_ip = NULL;
 
-	NET_LOCK_SHARED();
+	rw_enter_read(&ifnetlock);
 	TAILQ_FOREACH(iface, &ifnetlist, if_list) {
 		struct ifaddr *iface_addr;
 
@@ -921,7 +921,7 @@ vmt_tclo_broadcastip(struct vmt_softc *sc)
 			break;
 		}
 	}
-	NET_UNLOCK_SHARED();
+	rw_exit_read(&ifnetlock);
 
 	if (guest_ip != NULL) {
 		if (vm_rpc_send_rpci_tx(sc, "info-set guestinfo.ip %s",
@@ -1332,6 +1332,7 @@ vmt_xdr_nic_info(char *data)
 	}
 
 	nics = 0;
+	rw_enter_read(&ifnetlock);
 	TAILQ_FOREACH(iface, &ifnetlist, if_list) {
 		nictotal = vmt_xdr_nic_entry(iface, data);
 		if (nictotal == 0)
@@ -1345,6 +1346,7 @@ vmt_xdr_nic_info(char *data)
 		if (nics == VM_NICINFO_MAX_NICS)
 			break;
 	}
+	rw_exit_read(&ifnetlock);
 
 	if (listdata != NULL) {
 		memset(&nl, 0, sizeof(nl));

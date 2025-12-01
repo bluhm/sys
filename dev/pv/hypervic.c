@@ -862,10 +862,12 @@ kvp_get_ip_info(struct hv_kvp *kvp, const uint8_t *mac, uint8_t *family,
 	KERNEL_LOCK();
 	s = splnet();
 
+	rw_enter_read(&ifnetlock);
 	TAILQ_FOREACH(ifp, &ifnetlist, if_list) {
 		if (!memcmp(LLADDR(ifp->if_sadl), enaddr, ETHER_ADDR_LEN))
 			break;
 	}
+	rw_exit_read(&ifnetlock);
 	if (ifp == NULL) {
 		splx(s);
 		KERNEL_UNLOCK();

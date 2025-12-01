@@ -202,12 +202,17 @@ in6_get_ifid(struct ifnet *ifp0, struct in6_addr *in6)
 	NET_ASSERT_LOCKED();
 
 	/* next, try to get it from some other hardware interface */
+	rw_enter_read(&ifnetlock);
 	TAILQ_FOREACH(ifp, &ifnetlist, if_list) {
 		if (ifp == ifp0)
 			continue;
-		if (in6_get_hw_ifid(ifp, in6) == 0)
-			return;
+		if (in6_get_hw_ifid(ifp, in6) != 0)
+			continue;
+		rw_exit_read(&ifnetlock);
+
+		return;
 	}
+	rw_exit_read(&ifnetlock);
 
 	/* last resort: get from random number source */
 	in6_get_rand_ifid(ifp, in6);

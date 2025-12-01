@@ -357,10 +357,12 @@ mld6_fasttimo(void)
 
 	NET_LOCK();
 
+	rw_enter_read(&ifnetlock);
 	TAILQ_FOREACH(ifp, &ifnetlist, if_list) {
 		if (mld6_checktimer(ifp))
 			running = 1;
 	}
+	rw_exit_read(&ifnetlock);
 
 	membar_producer();
 	atomic_store_int(&mld6_timers_are_running, running);

@@ -464,6 +464,7 @@ nd6_expire(void *unused)
 
 	NET_LOCK();
 
+	rw_enter_read(&ifnetlock);
 	TAILQ_FOREACH(ifp, &ifnetlist, if_list) {
 		struct ifaddr *ifa, *nifa;
 		struct in6_ifaddr *ia6;
@@ -482,6 +483,7 @@ nd6_expire(void *unused)
 			}
 		}
 	}
+	rw_exit_read(&ifnetlock);
 
 	NET_UNLOCK();
 }
@@ -1211,6 +1213,7 @@ nd6_slowtimo(void *ignored_arg)
 
 	timeout_add_sec(&nd6_slowtimo_ch, ND6_SLOWTIMER_INTERVAL);
 
+	rw_enter_read(&ifnetlock);
 	TAILQ_FOREACH(ifp, &ifnetlist, if_list) {
 		nd6if = ifp->if_nd;
 		if ((nd6if->recalctm -= ND6_SLOWTIMER_INTERVAL) <= 0) {
@@ -1224,6 +1227,7 @@ nd6_slowtimo(void *ignored_arg)
 			nd6if->reachable = ND_COMPUTE_RTIME(REACHABLE_TIME);
 		}
 	}
+	rw_exit_read(&ifnetlock);
 	NET_UNLOCK();
 }
 

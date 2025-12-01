@@ -1011,6 +1011,7 @@ carp_send_ad_all(void)
 	if (carp_send_all_recur > 0)
 		return;
 	++carp_send_all_recur;
+	rw_enter_read(&ifnetlock);
 	TAILQ_FOREACH(ifp0, &ifnetlist, if_list) {
 		if (ifp0->if_type != IFT_ETHER)
 			continue;
@@ -1023,6 +1024,7 @@ carp_send_ad_all(void)
 			}
 		}
 	}
+	rw_exit_read(&ifnetlock);
 	--carp_send_all_recur;
 }
 

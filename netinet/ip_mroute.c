@@ -374,15 +374,14 @@ mrt_sysctl_vif(void *oldp, size_t *oldlenp)
 	memset(&vinfo, 0, sizeof vinfo);
 
 	rw_enter_write(&if_tmplist_lock);
-	NET_LOCK_SHARED();
-
+	rw_enter_read(&ifnetlock);
 	TAILQ_FOREACH(ifp, &ifnetlist, if_list) {
 		if (ifp->if_mcast != NULL) {
 			if_ref(ifp);
 			TAILQ_INSERT_TAIL(&if_tmplist, ifp, if_tmplist);
 		}
 	}
-	NET_UNLOCK_SHARED();
+	rw_exit_read(&ifnetlock);
 
 	TAILQ_FOREACH (ifp, &if_tmplist, if_tmplist) {
 		NET_LOCK_SHARED();
@@ -637,12 +636,14 @@ ip_mrouter_done(struct socket *so)
 	} while (error == EAGAIN);
 
 	/* Unregister all interfaces in the domain. */
+	rw_enter_read(&ifnetlock);
 	TAILQ_FOREACH(ifp, &ifnetlist, if_list) {
 		if (ifp->if_rdomain != rtableid)
 			continue;
 
 		vif_delete(ifp);
 	}
+	rw_exit_read(&ifnetlock);
 
 	mrt_api_config = 0;
 
@@ -684,15 +685,18 @@ set_api_config(struct socket *so, struct mbuf *m)
 	 *  - there are no vifs installed
 	 *  - the MFC table is empty
 	 */
+	rw_enter_read(&ifnetlock);
 	TAILQ_FOREACH(ifp, &ifnetlist, if_list) {
 		if (ifp->if_rdomain != rtableid)
 			continue;
 		if (ifp->if_mcast == NULL)
 			continue;
+		rw_exit_read(&ifnetlock);
 
 		*apival = 0;
 		return (EPERM);
 	}
+	rw_exit_read(&ifnetlock);
 	if (mrt_count[rtableid] > 0) {
 		*apival = 0;
 		return (EPERM);
@@ -800,7 +804,9 @@ add_vif(struct socket *so, struct mbuf *m)
 	}
 
 	vifp = malloc(sizeof(*vifp), M_MRTABLE, M_WAITOK | M_ZERO);
+	rw_enter_write(&ifnetlock);
 	ifp->if_mcast = (caddr_t)vifp;
+	rw_exit_read(&ifnetlock);
 
 	vifp->v_id = vifcp->vifc_vifi;
 	vifp->v_flags = vifcp->vifc_flags;
@@ -838,10 +844,13 @@ vif_delete(struct ifnet *ifp)
 	struct vif	*v;
 	struct ifreq	 ifr;
 
-	if ((v = (struct vif *)ifp->if_mcast) == NULL)
+	rw_enter_write(&ifnetlock);
+	if ((v = (struct vif *)ifp->if_mcast) == NULL) {
+		rw_exit_write(&ifnetlock);
 		return;
-
+	}
 	ifp->if_mcast = NULL;
+	rw_exit_write(&ifnetlock);
 
 	memset(&ifr, 0, sizeof(ifr));
 	satosin(&ifr.ifr_addr)->sin_len = sizeof(struct sockaddr_in);
@@ -1364,8 +1373,9 @@ struct ifnet *
 if_lookupbyvif(vifi_t vifi, unsigned int rtableid)
 {
 	struct vif	*v;
-	struct ifnet	*ifp;
+	struct ifnet	*ifp = NULL;
 
+	rw_enter_read(&ifnetlock);
 	TAILQ_FOREACH(ifp, &ifnetlist, if_list) {
 		if (ifp->if_rdomain != rtableid)
 			continue;
@@ -1374,10 +1384,10 @@ if_lookupbyvif(vifi_t vifi, unsigned int rtableid)
 		if (v->v_id != vifi)
 			continue;
 
-		return (ifp);
+		break;
 	}
-
-	return (NULL);
+	rw_exit_read(&ifnetlock);
+	return (ifp);
 }
 
 struct rtentry *
