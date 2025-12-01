@@ -596,7 +596,7 @@ ether_input(struct ifnet *ifp, struct mbuf *m, struct netstack *ns)
 	}
 
 	m_adj(m, sizeof(*eh));
-	(*input)(ifp, m, ns);
+	if_input_proto(ifp, m, input, ns);
 	return;
 dropanyway:
 	m_freem(m);

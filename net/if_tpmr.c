@@ -312,7 +312,7 @@ tpmr_pf(struct ifnet *ifp0, int dir, struct mbuf *m, struct netstack *ns)
 	if (dir == PF_IN && ISSET(m->m_pkthdr.pf.flags, PF_TAG_DIVERTED)) {
 		pf_mbuf_unlink_state_key(m);
 		pf_mbuf_unlink_inpcb(m);
-		(*fam->ip_input)(ifp0, m, ns);
+		if_input_proto(ifp0, m, fam->ip_input, ns);
 		return (NULL);
 	}
 

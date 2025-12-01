@@ -48,6 +48,10 @@
 #include <net/ifq.h>
 #include <net/route.h>
 
+#include <netinet/tcp.h>
+#include <netinet/tcp_timer.h>
+#include <netinet/tcp_var.h>
+
 /*
  * Structures defining a network interface, providing a packet
  * transport mechanism (ala level 0 of the PUP protocols).
@@ -92,9 +96,11 @@ struct task;
 struct cpumem;
 
 struct netstack {
-	struct route		ns_route;
-	struct mbuf_list	ns_tcp_ml;
-	struct mbuf_list	ns_tcp6_ml;
+	struct mbuf_list	*ns_input;
+	struct mbuf_list	 ns_netlocked;
+	struct route		 ns_route;
+	struct mbuf_list	 ns_tcp_ml;
+	struct mbuf_list	 ns_tcp6_ml;
 };
 
 /*
@@ -338,6 +344,9 @@ int	if_enqueue_ifq(struct ifnet *, struct mbuf *);
 void	if_input(struct ifnet *, struct mbuf_list *);
 void	if_vinput(struct ifnet *, struct mbuf *, struct netstack *);
 void	if_input_process(struct ifnet *, struct mbuf_list *, unsigned int);
+void	if_input_proto(struct ifnet *, struct mbuf *,
+	    void (*)(struct ifnet *, struct mbuf *, struct netstack *),
+	    struct netstack *);
 int	if_input_local(struct ifnet *, struct mbuf *, sa_family_t,
 	    struct netstack *);
 int	if_output_ml(struct ifnet *, struct mbuf_list *,
@@ -351,6 +360,15 @@ void	if_rtrequest_dummy(struct ifnet *, int, struct rtentry *);
 void	p2p_rtrequest(struct ifnet *, int, struct rtentry *);
 void	p2p_input(struct ifnet *, struct mbuf *, struct netstack *);
 int	p2p_bpf_mtap(caddr_t, const struct mbuf *, u_int);
+
+/* this is a helper for if_input_process and similar functions */
+static inline void
+if_input_process_proto(struct ifnet *ifp, struct mbuf *m, struct netstack *ns)
+{
+	void (*input)(struct ifnet *, struct mbuf *, struct netstack *);
+	input = m->m_pkthdr.ph_cookie;
+	(*input)(ifp, m, ns);
+}
 
 struct	ifaddr *ifa_ifwithaddr(const struct sockaddr *, u_int);
 struct	ifaddr *ifa_ifwithdstaddr(const struct sockaddr *, u_int);

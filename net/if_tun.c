@@ -115,6 +115,8 @@ int	tun_dev_read(dev_t, struct uio *, int);
 int	tun_dev_write(dev_t, struct uio *, int, int);
 int	tun_dev_kqfilter(dev_t, struct knote *);
 
+void	tun_input_process(struct ifnet *, struct mbuf *);
+
 int	tun_ioctl(struct ifnet *, u_long, caddr_t);
 void	tun_input(struct ifnet *, struct mbuf *, struct netstack *);
 int	tun_output(struct ifnet *, struct mbuf *, struct sockaddr *,
@@ -1034,9 +1036,7 @@ tun_dev_write(dev_t dev, struct uio *uio, int ioflag, int align)
 		m = n;
 	}
 
-	NET_LOCK();
-	if_vinput(ifp, m0, NULL);
-	NET_UNLOCK();
+	tun_input_process(ifp, m0);
 
 	tun_put(sc);
 	return (0);
@@ -1046,6 +1046,89 @@ drop:
 put:
 	tun_put(sc);
 	return (error);
+}
+
+void
+tun_input_process(struct ifnet *ifp, struct mbuf *m)
+{
+	struct mbuf_list ml = MBUF_LIST_INITIALIZER();
+	struct netstack netstack = {
+		.ns_input = &ml,
+		.ns_netlocked = MBUF_LIST_INITIALIZER(),
+		.ns_tcp_ml = MBUF_LIST_INITIALIZER(),
+#ifdef INET6
+		.ns_tcp6_ml = MBUF_LIST_INITIALIZER(),
+#endif
+	};
+	struct netstack *ns = &netstack; /* stupid . vs -> */
+
+	/* this is from if_vinput */
+#if NBPFILTER > 0
+        caddr_t if_bpf;
+#endif
+
+	m->m_pkthdr.ph_ifidx = ifp->if_index;
+	m->m_pkthdr.ph_rtableid = ifp->if_rdomain;
+
+	counters_pkt(ifp->if_counters,
+	    ifc_ipackets, ifc_ibytes, m->m_pkthdr.len);
+
+#if NPF > 0
+	pf_pkt_addr_changed(m);
+#endif
+
+#if NBPFILTER > 0
+	if_bpf = ifp->if_bpf;
+	if (if_bpf) {
+		if ((*ifp->if_bpf_mtap)(if_bpf, m, BPF_DIRECTION_IN)) {
+			m_freem(m);
+			return;
+		}
+	}
+#endif
+
+	if (__predict_false(ISSET(ifp->if_xflags, IFXF_MONITOR))) {
+		m_freem(m);
+		return;
+	}
+
+	/* use the ref we already have to process this first packet */
+	(*ifp->if_input)(ifp, m, ns);
+	/* if_vinput ends here */
+
+	/* the rest is if_input_process */
+	do {
+		while ((m = ml_dequeue(ns->ns_input)) != NULL) {
+			ifp = if_get(m->m_pkthdr.ph_ifidx);
+			if (ifp != NULL)
+				(*ifp->if_input)(ifp, m, ns);
+			else
+				m_freem(m);
+			if_put(ifp);
+		}
+ 
+		m = ml_dequeue(&ns->ns_netlocked);
+		if (m == NULL)
+			break;
+ 
+		NET_LOCK_SHARED();
+		do {
+			ifp = if_get(m->m_pkthdr.ph_ifidx);
+			if (ifp != NULL)
+				if_input_process_proto(ifp, m, ns);
+			else
+				m_freem(m);
+			if_put(ifp);
+		} while ((m = ml_dequeue(&ns->ns_netlocked)) != NULL);
+
+		tcp_input_mlist(&ns->ns_tcp_ml, AF_INET);
+#ifdef INET6
+		tcp_input_mlist(&ns->ns_tcp6_ml, AF_INET6);
+#endif
+		NET_UNLOCK_SHARED();
+	} while (!ml_empty(ns->ns_input));
+
+	rtfree(ns->ns_route.ro_rt);
 }
 
 void
@@ -1059,24 +1142,8 @@ tun_input(struct ifnet *ifp, struct mbuf *m0, struct netstack *ns)
 	/* strip the tunnel header */
 	m_adj(m0, sizeof(af));
 
-	switch (ntohl(af)) {
-	case AF_INET:
-		ipv4_input(ifp, m0, ns);
-		break;
-#ifdef INET6
-	case AF_INET6:
-		ipv6_input(ifp, m0, ns);
-		break;
-#endif
-#ifdef MPLS
-	case AF_MPLS:
-		mpls_input(ifp, m0, ns);
-		break;
-#endif
-	default:
-		m_freem(m0);
-		break;
-	}
+	m0->m_pkthdr.ph_family = ntohl(af);
+	p2p_input(ifp, m0, ns);
 }
 
 int

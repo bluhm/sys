@@ -237,11 +237,13 @@ struct softnet {
 	struct taskq	*sn_taskq;
 	struct netstack	 sn_netstack;
 } __aligned(64);
+
 #ifdef MULTIPROCESSOR
 #define NET_TASKQ	8
 #else
 #define NET_TASKQ	1
 #endif
+
 struct softnet	softnets[NET_TASKQ];
 
 struct task	if_input_task_locked = TASK_INITIALIZER(if_netisr, NULL);
@@ -477,6 +479,22 @@ if_idxmap_remove(struct ifnet *ifp)
 
 	smr_barrier();
 	if_put(ifp);
+}
+
+static inline struct ifnet *
+if_idxmap_get(unsigned int index)
+{
+	struct ifnet **if_map;
+	struct ifnet *ifp = NULL;
+
+	if (index == 0)
+		return (NULL);
+
+	if_map = SMR_PTR_GET(&if_idxmap.map);
+	if (index < if_idxmap_limit(if_map))
+		ifp = SMR_PTR_GET(&if_map[index]);
+
+	return (ifp);
 }
 
 /*
@@ -795,6 +813,7 @@ int
 if_input_local(struct ifnet *ifp, struct mbuf *m, sa_family_t af,
     struct netstack *ns)
 {
+	void (*input)(struct ifnet *, struct mbuf *, struct netstack *);
 	int keepflags, keepcksum;
 	uint16_t keepmss;
 	uint16_t keepflowid;
@@ -864,16 +883,16 @@ if_input_local(struct ifnet *ifp, struct mbuf *m, sa_family_t af,
 	case AF_INET:
 		if (ISSET(keepcksum, M_IPV4_CSUM_OUT))
 			m->m_pkthdr.csum_flags |= M_IPV4_CSUM_IN_OK;
-		ipv4_input(ifp, m, ns);
+		input = ipv4_input;
 		break;
 #ifdef INET6
 	case AF_INET6:
-		ipv6_input(ifp, m, ns);
+		input = ipv6_input;
 		break;
 #endif /* INET6 */
 #ifdef MPLS
 	case AF_MPLS:
-		mpls_input(ifp, m, ns);
+		input = mpls_input;
 		break;
 #endif /* MPLS */
 	default:
@@ -882,6 +901,7 @@ if_input_local(struct ifnet *ifp, struct mbuf *m, sa_family_t af,
 		return (EAFNOSUPPORT);
 	}
 
+	if_input_proto(ifp, m, input, ns);
 	return (0);
 }
 
@@ -983,8 +1003,6 @@ if_output_local(struct ifnet *ifp, struct mbuf *m, sa_family_t af)
 	unsigned int flow = 0;
 
 	m->m_pkthdr.ph_family = af;
-	m->m_pkthdr.ph_ifidx = ifp->if_index;
-	m->m_pkthdr.ph_rtableid = ifp->if_rdomain;
 
 	if (ISSET(m->m_pkthdr.csum_flags, M_FLOWID))
 		flow = m->m_pkthdr.ph_flowid;
@@ -995,10 +1013,26 @@ if_output_local(struct ifnet *ifp, struct mbuf *m, sa_family_t af)
 }
 
 void
+if_input_proto(struct ifnet *ifp, struct mbuf *m, 
+    void (*input)(struct ifnet *, struct mbuf *, struct netstack *),
+    struct netstack *ns)
+{
+	if (ns == NULL) {
+		NET_ASSERT_LOCKED();
+		(*input)(ifp, m, NULL);
+		return;
+	}
+
+	m->m_pkthdr.ph_cookie = input;
+	ml_enqueue(&ns->ns_netlocked, m);
+}
+
+void
 if_input_process(struct ifnet *ifp, struct mbuf_list *ml, unsigned int idx)
 {
 	struct mbuf *m;
 	struct softnet *sn;
+	struct netstack *ns;
 
 	if (ml_empty(ml))
 		return;
@@ -1014,22 +1048,48 @@ if_input_process(struct ifnet *ifp, struct mbuf_list *ml, unsigned int idx)
 	 */
 
 	sn = net_sn(idx);
-	ml_init(&sn->sn_netstack.ns_tcp_ml);
+	ns = &sn->sn_netstack;
+	ml_init(&ns->ns_netlocked);
+
+	ml_init(&ns->ns_tcp_ml);
 #ifdef INET6
-	ml_init(&sn->sn_netstack.ns_tcp6_ml);
+	ml_init(&ns->ns_tcp6_ml);
 #endif
 
-	NET_LOCK_SHARED();
+	ns->ns_input = ml;
+	do {
+		while ((m = ml_dequeue(ns->ns_input)) != NULL) {
+			smr_read_enter();
+			ifp = if_idxmap_get(m->m_pkthdr.ph_ifidx);
+			smr_read_leave();
+			if (ifp != NULL)
+				(*ifp->if_input)(ifp, m, ns);
+			else
+				m_freem(m);
+		}
 
-	while ((m = ml_dequeue(ml)) != NULL)
-		(*ifp->if_input)(ifp, m, &sn->sn_netstack);
+		m = ml_dequeue(&ns->ns_netlocked);
+		if (m == NULL)
+			break;
 
-	tcp_input_mlist(&sn->sn_netstack.ns_tcp_ml, AF_INET);
+		NET_LOCK_SHARED();
+		do {
+			smr_read_enter();
+			ifp = if_idxmap_get(m->m_pkthdr.ph_ifidx);
+			smr_read_leave();
+			if (ifp != NULL)
+				if_input_process_proto(ifp, m, ns);
+			else
+				m_freem(m);
+
+		} while ((m = ml_dequeue(&ns->ns_netlocked)) != NULL);
+
+		tcp_input_mlist(&ns->ns_tcp_ml, AF_INET);
 #ifdef INET6
-	tcp_input_mlist(&sn->sn_netstack.ns_tcp6_ml, AF_INET6);
+		tcp_input_mlist(&ns->ns_tcp6_ml, AF_INET6);
 #endif
-
-	NET_UNLOCK_SHARED();
+		NET_UNLOCK_SHARED();
+	} while (!ml_empty(ns->ns_input));
 }
 
 void
@@ -1059,10 +1119,16 @@ if_vinput(struct ifnet *ifp, struct mbuf *m, struct netstack *ns)
 	}
 #endif
 
-	if (__predict_true(!ISSET(ifp->if_xflags, IFXF_MONITOR)))
-		(*ifp->if_input)(ifp, m, ns);
-	else
+	if (__predict_false(ISSET(ifp->if_xflags, IFXF_MONITOR))) {
 		m_freem(m);
+		return;
+	}
+
+	if (ns != NULL) {
+		/* ml_requeue(ns->ns_input, m); */
+		ml_enqueue(ns->ns_input, m);
+	} else
+		(*ifp->if_input)(ifp, m, ns);
 }
 
 void
@@ -1155,6 +1221,9 @@ if_remove(struct ifnet *ifp)
 
 	/* Remove the interface from the interface index map. */
 	if_idxmap_remove(ifp);
+
+	/* Make sure softnet threads have finished with it */
+	net_tq_barriers("ifrmnet");
 
 	/* Sleep until the last reference is released. */
 	refcnt_finalize(&ifp->if_refcnt, "ifrm");
@@ -1729,7 +1798,7 @@ p2p_input(struct ifnet *ifp, struct mbuf *m, struct netstack *ns)
 		return;
 	}
 
-	(*input)(ifp, m, ns);
+	if_input_proto(ifp, m, input, ns);
 }
 
 /*
@@ -1915,20 +1984,16 @@ if_unit(const char *name)
 struct ifnet *
 if_get(unsigned int index)
 {
-	struct ifnet **if_map;
 	struct ifnet *ifp = NULL;
 
 	if (index == 0)
 		return (NULL);
 
 	smr_read_enter();
-	if_map = SMR_PTR_GET(&if_idxmap.map);
-	if (index < if_idxmap_limit(if_map)) {
-		ifp = SMR_PTR_GET(&if_map[index]);
-		if (ifp != NULL) {
-			KASSERT(ifp->if_index == index);
-			if_ref(ifp);
-		}
+	ifp = if_idxmap_get(index);
+	if (ifp != NULL) {
+		KASSERT(ifp->if_index == index);
+		if_ref(ifp);
 	}
 	smr_read_leave();
 
