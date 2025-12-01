@@ -1,4 +1,4 @@
-/*	$OpenBSD: conf.c,v 1.46 2025/09/16 05:07:33 yasuoka Exp $	*/
+/*	$OpenBSD: conf.c,v 1.48 2025/11/29 09:25:22 dlg Exp $	*/
 
 /*
  * Copyright (c) 1996 Michael Shalayeff
@@ -40,7 +40,7 @@
 #include "efidev.h"
 #include "efipxe.h"
 
-const char version[] = "3.69";
+const char version[] = "3.70";
 
 #ifdef EFI_DEBUG
 int	debug = 0;
@@ -72,6 +72,8 @@ struct fs_ops file_system[] = {
 	  ufs2_stat,   ufs2_readdir, ufs2_fchmod },
 	{ cd9660_open, cd9660_close, cd9660_read, cd9660_write, cd9660_seek,
 	  cd9660_stat, cd9660_readdir },
+	{ esp_open,    esp_close,    esp_read,    esp_write,    esp_seek,
+	  esp_stat,    esp_readdir,  }
 #ifdef notdef
 	{ fat_open,    fat_close,    fat_read,    fat_write,    fat_seek,
 	  fat_stat,    fat_readdir    },
@@ -82,6 +84,7 @@ struct fs_ops file_system[] = {
 int nfsys = nitems(file_system);
 
 struct devsw	devsw[] = {
+	{ "ESP", espstrategy, espopen, espclose, espioctl },
 	{ "TFTP", tftpstrategy, tftpopen, tftpclose, tftpioctl },
 	{ "EFI", efistrategy, efiopen, eficlose, efiioctl },
 };
