@@ -579,6 +579,7 @@ pfi_instance_add(struct ifnet *ifp, u_int8_t net, int flags)
 
 	if (ifp == NULL)
 		return;
+	rw_enter_read(&ifnetlock);
 	TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
 		if (ifa->ifa_addr == NULL)
 			continue;
@@ -625,6 +626,7 @@ pfi_instance_add(struct ifnet *ifp, u_int8_t net, int flags)
 		else
 			pfi_address_add(ifa->ifa_addr, af, net2);
 	}
+	rw_exit_read(&ifnetlock);
 }
 
 void

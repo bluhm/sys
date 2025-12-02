@@ -213,12 +213,14 @@ divert_packet(struct mbuf *m, int dir, u_int16_t divert_port)
 			divstat_inc(divs_errors);
 			goto bad;
 		}
+		rw_enter_read(&ifnetlock);
 		TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
 			if (ifa->ifa_addr->sa_family != AF_INET)
 				continue;
 			sin.sin_addr = satosin(ifa->ifa_addr)->sin_addr;
 			break;
 		}
+		rw_exit_read(&ifnetlock);
 		if_put(ifp);
 	} else {
 		/*

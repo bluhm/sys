@@ -907,7 +907,7 @@ in_ouraddr(struct mbuf *m, struct ifnet *ifp, struct route *ro, int flags)
 		 * interface, and that M_BCAST will only be set on a BROADCAST
 		 * interface.
 		 */
-		NET_ASSERT_LOCKED();
+		rw_enter_read(&ifnetlock);
 		TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
 			if (ifa->ifa_addr->sa_family != AF_INET)
 				continue;
@@ -918,6 +918,7 @@ in_ouraddr(struct mbuf *m, struct ifnet *ifp, struct route *ro, int flags)
 				break;
 			}
 		}
+		rw_exit_read(&ifnetlock);
 	} else if (!ISSET(flags, IP_FORWARDING) &&
 	    rt->rt_ifidx != ifp->if_index &&
 	    !((ifp->if_flags & IFF_LOOPBACK) || (ifp->if_type == IFT_ENC) ||

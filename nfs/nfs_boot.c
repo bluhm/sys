@@ -182,10 +182,12 @@ nfs_boot_init(struct nfs_diskless *nd, struct proc *procp)
 
 	soclose(so, 0);
 
+	rw_enter_read(&ifnetlock);
 	TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
 		if (ifa->ifa_addr->sa_family == AF_INET)
 			break;
 	}
+	rw_exit_read(&ifnetlock);
 	if (ifa == NULL)
 		panic("nfs_boot: address not configured on %s", ifp->if_xname);
 	if_put(ifp);

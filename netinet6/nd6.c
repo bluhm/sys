@@ -633,6 +633,7 @@ nd6_is_addr_neighbor(const struct sockaddr_in6 *addr, struct ifnet *ifp)
 	    ntohs(*(u_int16_t *)&addr->sin6_addr.s6_addr[2]) == ifp->if_index)
 		return (1);
 
+	rw_enter_read(&ifnetlock);
 	TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
 		if (ifa->ifa_addr->sa_family != AF_INET6)
 			continue;
@@ -645,9 +646,12 @@ nd6_is_addr_neighbor(const struct sockaddr_in6 *addr, struct ifnet *ifp)
 
 		if (IN6_ARE_MASKED_ADDR_EQUAL(&addr->sin6_addr,
 		    &ia6->ia_addr.sin6_addr,
-		    &ia6->ia_prefixmask.sin6_addr))
+		    &ia6->ia_prefixmask.sin6_addr)) {
+			rw_exit_read(&ifnetlock);
 			return (1);
+		}
 	}
+	rw_exit_read(&ifnetlock);
 
 	/*
 	 * Even if the address matches none of our addresses, it might be

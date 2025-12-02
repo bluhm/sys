@@ -1680,12 +1680,13 @@ mgre_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 		if (!ISSET(rt->rt_flags, RTF_LOCAL))
 			break;
 
+		rw_enter_read(&ifnetlock);
 		TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
 			if (memcmp(rt_key(rt), ifa->ifa_addr,
 			    rt_key(rt)->sa_len) == 0)
 				break;
 		}
-
+		rw_exit_read(&ifnetlock);
 		if (ifa == NULL)
 			break;
 
@@ -1693,11 +1694,13 @@ mgre_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 
 		lo0ifp = if_get(rtable_loindex(ifp->if_rdomain));
 		KASSERT(lo0ifp != NULL);
+		rw_enter_read(&ifnetlock);
 		TAILQ_FOREACH(lo0ifa, &lo0ifp->if_addrlist, ifa_list) {
 			if (lo0ifa->ifa_addr->sa_family ==
 			    ifa->ifa_addr->sa_family)
 				break;
 		}
+		rw_exit_read(&ifnetlock);
 		if_put(lo0ifp);
 
 		if (lo0ifa == NULL)

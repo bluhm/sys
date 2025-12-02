@@ -4215,8 +4215,8 @@ sppp_get_ip_addrs(struct sppp *sp, u_int32_t *src, u_int32_t *dst,
 	 * aliases don't make any sense on a p2p link anyway.
 	 */
 	si = 0;
-	TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list)
-	{
+	rw_enter_read(&ifnetlock);
+	TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
 		if (ifa->ifa_addr->sa_family == AF_INET) {
 			si = (struct sockaddr_in *)ifa->ifa_addr;
 			sm = (struct sockaddr_in *)ifa->ifa_netmask;
@@ -4224,6 +4224,7 @@ sppp_get_ip_addrs(struct sppp *sp, u_int32_t *src, u_int32_t *dst,
 				break;
 		}
 	}
+	rw_exit_read(&ifnetlock);
 	if (ifa) {
 		if (si && si->sin_addr.s_addr) {
 			ssrc = si->sin_addr.s_addr;
@@ -4298,16 +4299,16 @@ sppp_set_ip_addrs(void *arg1)
 	 */
 
 	si = 0;
-	TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list)
-	{
-		if (ifa->ifa_addr->sa_family == AF_INET)
-		{
+	rw_enter_read(&ifnetlock);
+	TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
+		if (ifa->ifa_addr->sa_family == AF_INET) {
 			si = (struct sockaddr_in *)ifa->ifa_addr;
 			dest = (struct sockaddr_in *)ifa->ifa_dstaddr;
 			if (si)
 				break;
 		}
 	}
+	rw_exit_read(&ifnetlock);
 
 	if (ifa && si) {
 		int error;
@@ -4367,6 +4368,7 @@ sppp_clear_ip_addrs(void *arg1)
 	 */
 
 	si = 0;
+	rw_enter_read(&ifnetlock);
 	TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
 		if (ifa->ifa_addr->sa_family == AF_INET) {
 			si = (struct sockaddr_in *)ifa->ifa_addr;
@@ -4375,6 +4377,7 @@ sppp_clear_ip_addrs(void *arg1)
 				break;
 		}
 	}
+	rw_exit_read(&ifnetlock);
 
 	if (ifa && si) {
 		int error;

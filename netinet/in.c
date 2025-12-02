@@ -260,6 +260,7 @@ in_ioctl(u_long cmd, caddr_t data, struct ifnet *ifp, int privileged)
 	NET_LOCK();
 	KERNEL_LOCK();
 
+	rw_enter_read(&ifnetlock);
 	TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
 		if (ifa->ifa_addr->sa_family != AF_INET)
 			continue;
@@ -274,6 +275,7 @@ in_ioctl(u_long cmd, caddr_t data, struct ifnet *ifp, int privileged)
 			break;
 		}
 	}
+	rw_exit_read(&ifnetlock);
 	if (ia == NULL) {
 		error = EADDRNOTAVAIL;
 		goto err;

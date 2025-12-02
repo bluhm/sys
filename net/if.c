@@ -1254,6 +1254,7 @@ if_detach(struct ifnet *ifp)
 	if_free_sadl(ifp);
 
 	/* We should not have any address left at this point. */
+	rw_enter_write(&ifnetlock);
 	if (!TAILQ_EMPTY(&ifp->if_addrlist)) {
 #ifdef DIAGNOSTIC
 		printf("%s: address list non empty\n", ifp->if_xname);
@@ -1264,6 +1265,7 @@ if_detach(struct ifnet *ifp)
 			ifafree(ifa);
 		}
 	}
+	rw_exit_write(&ifnetlock);
 	splx(s);
 	NET_UNLOCK();
 
@@ -1570,7 +1572,6 @@ ifa_ifwithaddr(const struct sockaddr *addr, u_int rtableid)
 		TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
 			if (ifa->ifa_addr->sa_family != addr->sa_family)
 				continue;
-
 			if (equal(addr, ifa->ifa_addr))
 				goto out;
 		}
@@ -1626,6 +1627,7 @@ ifaof_ifpforaddr(const struct sockaddr *addr, struct ifnet *ifp)
 
 	if (af >= AF_MAX)
 		return (NULL);
+	rw_enter_read(&ifnetlock);
 	TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
 		if (ifa->ifa_addr->sa_family != af)
 			continue;
@@ -1633,8 +1635,11 @@ ifaof_ifpforaddr(const struct sockaddr *addr, struct ifnet *ifp)
 			ifa_maybe = ifa;
 		if (ifa->ifa_netmask == 0 || ifp->if_flags & IFF_POINTOPOINT) {
 			if (equal(addr, ifa->ifa_addr) ||
-			    (ifa->ifa_dstaddr && equal(addr, ifa->ifa_dstaddr)))
+			    (ifa->ifa_dstaddr &&
+			    equal(addr, ifa->ifa_dstaddr))) {
+				rw_exit_read(&ifnetlock);
 				return (ifa);
+			}
 			continue;
 		}
 		cp = addr->sa_data;
@@ -1644,9 +1649,12 @@ ifaof_ifpforaddr(const struct sockaddr *addr, struct ifnet *ifp)
 		for (; cp3 < cplim; cp3++)
 			if ((*cp++ ^ *cp2++) & *cp3)
 				break;
-		if (cp3 == cplim)
+		if (cp3 == cplim) {
+			rw_exit_read(&ifnetlock);
 			return (ifa);
+		}
 	}
+	rw_exit_read(&ifnetlock);
 	return (ifa_maybe);
 }
 
@@ -1670,11 +1678,13 @@ p2p_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 		if (!ISSET(rt->rt_flags, RTF_LOCAL))
 			break;
 
+		rw_enter_read(&ifnetlock);
 		TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
 			if (memcmp(rt_key(rt), ifa->ifa_addr,
 			    rt_key(rt)->sa_len) == 0)
 				break;
 		}
+		rw_exit_read(&ifnetlock);
 
 		if (ifa == NULL)
 			break;
@@ -1683,11 +1693,13 @@ p2p_rtrequest(struct ifnet *ifp, int req, struct rtentry *rt)
 
 		lo0ifp = if_get(rtable_loindex(ifp->if_rdomain));
 		KASSERT(lo0ifp != NULL);
+		rw_enter_read(&ifnetlock);
 		TAILQ_FOREACH(lo0ifa, &lo0ifp->if_addrlist, ifa_list) {
 			if (lo0ifa->ifa_addr->sa_family ==
 			    ifa->ifa_addr->sa_family)
 				break;
 		}
+		rw_exit_read(&ifnetlock);
 		if_put(lo0ifp);
 
 		if (lo0ifa == NULL)
@@ -3492,14 +3504,14 @@ ifsetlro(struct ifnet *ifp, int on)
 void
 ifa_add(struct ifnet *ifp, struct ifaddr *ifa)
 {
-	NET_ASSERT_LOCKED_EXCLUSIVE();
+	rw_assert_wrlock(&ifnetlock);
 	TAILQ_INSERT_TAIL(&ifp->if_addrlist, ifa, ifa_list);
 }
 
 void
 ifa_del(struct ifnet *ifp, struct ifaddr *ifa)
 {
-	NET_ASSERT_LOCKED_EXCLUSIVE();
+	rw_assert_wrlock(&ifnetlock);
 	TAILQ_REMOVE(&ifp->if_addrlist, ifa, ifa_list);
 }
 

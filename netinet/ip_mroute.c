@@ -1397,10 +1397,12 @@ rt_mcast_add(struct ifnet *ifp, struct sockaddr *origin, struct sockaddr *group)
 	int			 rv;
 	unsigned int		 rtableid = ifp->if_rdomain;
 
+	rw_enter_read(&ifnetlock);
 	TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
 		if (ifa->ifa_addr->sa_family == AF_INET)
 			break;
 	}
+	rw_exit_read(&ifnetlock);
 	if (ifa == NULL) {
 		DPRINTF("ifa == NULL");
 		return (NULL);

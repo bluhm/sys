@@ -334,6 +334,7 @@ carp_hmac_prepare_ctx(struct carp_vhost_entry *vhe, u_int8_t ctx)
 		found = 0;
 		last = cur;
 		cur.s_addr = 0xffffffff;
+		rw_enter_read(&ifnetlock);
 		TAILQ_FOREACH(ifa, &sc->sc_if.if_addrlist, ifa_list) {
 			if (ifa->ifa_addr->sa_family != AF_INET)
 				continue;
@@ -344,6 +345,7 @@ carp_hmac_prepare_ctx(struct carp_vhost_entry *vhe, u_int8_t ctx)
 				found++;
 			}
 		}
+		rw_exit_read(&ifnetlock);
 		if (found)
 			SHA1Update(&vhe->vhe_sha1[ctx],
 			    (void *)&cur, sizeof(cur));
@@ -354,6 +356,7 @@ carp_hmac_prepare_ctx(struct carp_vhost_entry *vhe, u_int8_t ctx)
 		found = 0;
 		last6 = cur6;
 		memset(&cur6, 0xff, sizeof(cur6));
+		rw_enter_read(&ifnetlock);
 		TAILQ_FOREACH(ifa, &sc->sc_if.if_addrlist, ifa_list) {
 			if (ifa->ifa_addr->sa_family != AF_INET6)
 				continue;
@@ -369,6 +372,7 @@ carp_hmac_prepare_ctx(struct carp_vhost_entry *vhe, u_int8_t ctx)
 				found++;
 			}
 		}
+		rw_exit_read(&ifnetlock);
 		if (found)
 			SHA1Update(&vhe->vhe_sha1[ctx],
 			    (void *)&cur6, sizeof(cur6));
@@ -1276,14 +1280,15 @@ carp_send_arp(struct carp_softc *sc)
 	struct ifaddr *ifa;
 	in_addr_t in;
 
+	rw_enter_read(&ifnetlock);
 	TAILQ_FOREACH(ifa, &sc->sc_if.if_addrlist, ifa_list) {
-
 		if (ifa->ifa_addr->sa_family != AF_INET)
 			continue;
 
 		in = ifatoia(ifa)->ia_addr.sin_addr.s_addr;
 		arprequest(&sc->sc_if, &in, &in, sc->sc_ac.ac_enaddr);
 	}
+	rw_exit_read(&ifnetlock);
 }
 
 #ifdef INET6
@@ -1299,14 +1304,15 @@ carp_send_na(struct carp_softc *sc)
 		flags |= ND_NA_FLAG_ROUTER;
 	mcast.s6_addr16[1] = htons(sc->sc_if.if_index);
 
+	rw_enter_read(&ifnetlock);
 	TAILQ_FOREACH(ifa, &sc->sc_if.if_addrlist, ifa_list) {
-
 		if (ifa->ifa_addr->sa_family != AF_INET6)
 			continue;
 
 		in6 = &ifatoia6(ifa)->ia_addr.sin6_addr;
 		nd6_na_output(&sc->sc_if, &mcast, in6, flags, 1, NULL);
 	}
+	rw_exit_read(&ifnetlock);
 }
 #endif /* INET6 */
 

@@ -410,12 +410,14 @@ in6_ifdetach(struct ifnet *ifp)
 #endif
 
 	/* nuke any of IPv6 addresses we have */
+	rw_enter_write(&ifnetlock);
 	TAILQ_FOREACH_SAFE(ifa, &ifp->if_addrlist, ifa_list, next) {
 		if (ifa->ifa_addr->sa_family != AF_INET6)
 			continue;
 		in6_purgeaddr(ifa);
 		if_addrhooks_run(ifp);
 	}
+	rw_exit_write(&ifnetlock);
 
 	/*
 	 * Remove neighbor management table.  Must be called after

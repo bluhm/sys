@@ -1377,10 +1377,13 @@ bridge_localbroadcast(struct ifnet *ifp, struct ether_header *eh,
 	etype = ntohs(eh->ether_type);
 	if (!(m->m_flags & M_VLANTAG) && etype == ETHERTYPE_IP) {
 		struct ifaddr *ifa;
+
+		rw_enter_read(&ifnetlock);
 		TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
 			if (ifa->ifa_addr->sa_family == AF_INET)
 				break;
 		}
+		rw_exit_read(&ifnetlock);
 		if (ifa == NULL)
 			return (0);
 	}

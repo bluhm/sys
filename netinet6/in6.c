@@ -958,11 +958,13 @@ in6_ifinit(struct ifnet *ifp, struct in6_ifaddr *ia6, int newhost)
 	 * if this is its first address (or it is a CARP interface)
 	 * and to validate the address if necessary.
 	 */
+	rw_enter_read(&ifnetlock);
 	TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
 		if (ifa->ifa_addr->sa_family != AF_INET6)
 			continue;
 		ifacount++;
 	}
+	rw_exit_read(&ifnetlock);
 
 	if ((ifacount <= 1 || ifp->if_type == IFT_CARP ||
 	    (ifp->if_flags & (IFF_LOOPBACK|IFF_POINTOPOINT))) &&

@@ -86,6 +86,7 @@ struct	in_aliasreq {
 do {									\
 	struct ifaddr *ifa;						\
 	NET_ASSERT_LOCKED();						\
+	/* XXX */							\
 	TAILQ_FOREACH(ifa, &(ifp)->if_addrlist, ifa_list) {		\
 		if (ifa->ifa_addr->sa_family == AF_INET)		\
 			break;						\
