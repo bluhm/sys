@@ -1024,7 +1024,7 @@ in_pcbselsrc(struct in_addr *insrc, const struct sockaddr_in *dstsock,
 		ifp = if_get(mopts->imo_ifidx);
 		if (ifp != NULL) {
 			if (ifp->if_rdomain == rtable_l2(rtableid))
-				IFP_TO_IA(ifp, ia);
+				ia = in_ifp2ia(ifp);
 			if (ia == NULL) {
 				if_put(ifp);
 				return (EADDRNOTAVAIL);

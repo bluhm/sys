@@ -193,6 +193,28 @@ in_sa2sin(struct sockaddr *sa, struct sockaddr_in **sin)
 	return 0;
 }
 
+/*
+ * Finding the internet address structure (in_ifaddr) corresponding
+ * to a given interface (ifnet structure).
+ */
+struct in_ifaddr *
+in_ifp2ia(struct ifnet *ifp)
+{
+	struct in_ifaddr *ia = NULL;
+	struct ifaddr *ifa;
+
+	NET_ASSERT_LOCKED();
+
+	TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
+		if (ifa->ifa_addr->sa_family != AF_INET)
+			continue;
+		ia = ifatoia(ifa);
+		break;
+	}
+
+	return (ia);
+}
+
 int
 in_control(struct socket *so, u_long cmd, caddr_t data, struct ifnet *ifp)
 {
