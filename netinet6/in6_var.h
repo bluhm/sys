@@ -316,11 +316,11 @@ struct in6_multi {
 #define in6m_refcnt		in6m_ifma.ifma_refcnt
 #define in6m_ifidx		in6m_ifma.ifma_ifidx
 
-	struct sockaddr_in6	in6m_sin;   /* IPv6 multicast address */
+	struct sockaddr_in6	in6m_sin;   /* [I] IPv6 multicast address */
 #define in6m_addr		in6m_sin.sin6_addr
 
-	u_int			in6m_state; /* state of membership */
-	u_int			in6m_timer; /* MLD6 membership report timer */
+	u_int			in6m_state; /* [m] state of membership */
+	u_int			in6m_timer; /* [m] MLD6 membership report */
 };
 
 static __inline struct in6_multi *
