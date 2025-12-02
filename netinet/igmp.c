@@ -533,10 +533,8 @@ igmp_input_if(struct ifnet *ifp, struct mbuf **mp, int *offp, int proto,
 
 	}
 
-	if (running) {
-		membar_producer();
-		atomic_store_int(&igmp_timers_are_running, running);
-	}
+	if (running)
+		atomic_store_int(&igmp_timers_are_running, 1);
 
 	/*
 	 * Pass all valid IGMP packets up to any process(es) listening
@@ -565,10 +563,8 @@ igmp_joingroup(struct in_multi *inm, struct ifnet *ifp)
 	} else
 		inm->inm_timer = 0;
 
-	if (running) {
-		membar_producer();
-		atomic_store_int(&igmp_timers_are_running, running);
-	}
+	if (running)
+		atomic_store_int(&igmp_timers_are_running, 1);
 }
 
 void
@@ -608,7 +604,7 @@ igmp_fasttimo(void)
 	 */
 	if (!atomic_load_int(&igmp_timers_are_running))
 		return;
-	membar_consumer();
+	atomic_store_int(&igmp_timers_are_running, 0);
 
 	NET_LOCK_SHARED();
 
@@ -617,10 +613,10 @@ igmp_fasttimo(void)
 			running = 1;
 	}
 
-	membar_producer();
-	atomic_store_int(&igmp_timers_are_running, running);
-
 	NET_UNLOCK_SHARED();
+
+	if (running)
+		atomic_store_int(&igmp_timers_are_running, 1);
 }
 
 int
