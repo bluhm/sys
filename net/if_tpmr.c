@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_tpmr.c,v 1.40 2025/12/01 01:44:24 dlg Exp $ */
+/*	$OpenBSD: if_tpmr.c,v 1.42 2025/12/02 04:15:07 dlg Exp $ */
 
 /*
  * Copyright (c) 2019 The University of Queensland
@@ -80,6 +80,7 @@ struct tpmr_port {
 	unsigned int		 p_slot;
 
 	struct refcnt		 p_refcnt;
+	struct cpumem		*p_percpu;
 
 	struct ether_port	 p_brport;
 };
@@ -123,8 +124,11 @@ static int	tpmr_add_port(struct tpmr_softc *,
 static int	tpmr_del_port(struct tpmr_softc *,
 		    const struct ifbreq *);
 static int	tpmr_port_list(struct tpmr_softc *, struct ifbifconf *);
-static void	tpmr_p_take(void *);
-static void	tpmr_p_rele(void *);
+
+static void	 tpmr_p_take(struct tpmr_port *);
+static void	 tpmr_p_rele(struct tpmr_port *);
+static void	*tpmr_cpu_take(void *);
+static void	 tpmr_cpu_rele(void *, void *);
 
 static struct if_clone tpmr_cloner =
     IF_CLONE_INITIALIZER("tpmr", tpmr_clone_create, tpmr_clone_destroy);
@@ -339,6 +343,7 @@ tpmr_input(struct ifnet *ifp0, struct mbuf *m, uint64_t dst, void *brport,
 	struct ifnet *ifpn;
 	unsigned int iff;
 	struct tpmr_port *pn;
+	void *pnref;
 	int len;
 #if NBPFILTER > 0
 	caddr_t if_bpf;
@@ -376,7 +381,7 @@ tpmr_input(struct ifnet *ifp0, struct mbuf *m, uint64_t dst, void *brport,
 	smr_read_enter();
 	pn = SMR_PTR_GET(&sc->sc_ports[!p->p_slot]);
 	if (pn != NULL)
-		tpmr_p_take(pn);
+		pnref = tpmr_cpu_take(pn);
 	smr_read_leave();
 	if (pn == NULL)
 		goto drop;
@@ -384,10 +389,8 @@ tpmr_input(struct ifnet *ifp0, struct mbuf *m, uint64_t dst, void *brport,
 	ifpn = pn->p_ifp0;
 #if NPF > 0
 	if (!ISSET(iff, IFF_LINK1) &&
-	    (m = tpmr_pf(ifpn, PF_OUT, m, ns)) == NULL) {
-		tpmr_p_rele(pn);
-		return (NULL);
-	}
+	    (m = tpmr_pf(ifpn, PF_OUT, m, ns)) == NULL)
+		goto rele;
 #endif
 
 	m = ether_offload_ifcap(ifpn, m);
@@ -404,7 +407,7 @@ tpmr_input(struct ifnet *ifp0, struct mbuf *m, uint64_t dst, void *brport,
 	counters_pkt(ifp->if_counters, ifc_opackets, ifc_obytes, len);
 
 rele:
-	tpmr_p_rele(pn);
+	tpmr_cpu_rele(pnref, pn);
 
 	return (NULL);
 
@@ -494,6 +497,8 @@ tpmr_add_port(struct tpmr_softc *sc, const struct ifbreq *req)
 	struct ifnet *ifp0;
 	struct tpmr_port **pp;
 	struct tpmr_port *p;
+	struct refcnt *r;
+	struct cpumem_iter cmi;
 	int i;
 	int error;
 
@@ -523,6 +528,13 @@ tpmr_add_port(struct tpmr_softc *sc, const struct ifbreq *req)
 	}
 	refcnt_init(&p->p_refcnt);
 
+	/* create per cpu refcnts as a proxy for the real refcnt */
+	p->p_percpu = cpumem_malloc(sizeof(*r), M_DEVBUF);
+	CPUMEM_FOREACH(r, &cmi, p->p_percpu) {
+		tpmr_p_take(p);
+		refcnt_init(r);
+	}
+
 	ifsetlro(ifp0, 0);
 
 	p->p_ifp0 = ifp0;
@@ -547,8 +559,8 @@ tpmr_add_port(struct tpmr_softc *sc, const struct ifbreq *req)
 	if_detachhook_add(ifp0, &p->p_dtask);
 
 	p->p_brport.ep_input = tpmr_input;
-	p->p_brport.ep_port_take = tpmr_p_take;
-	p->p_brport.ep_port_rele = tpmr_p_rele;
+	p->p_brport.ep_port_take = tpmr_cpu_take;
+	p->p_brport.ep_port_rele = tpmr_cpu_rele;
 	p->p_brport.ep_port = p;
 
 	/* commit */
@@ -578,6 +590,7 @@ tpmr_add_port(struct tpmr_softc *sc, const struct ifbreq *req)
 unpromisc:
 	ifpromisc(ifp0, 0);
 free:
+	cpumem_free(p->p_percpu, M_DEVBUF, sizeof(*r));
 	free(p, M_DEVBUF, sizeof(*p));
 put:
 	if_put(ifp0);
@@ -719,22 +732,41 @@ tpmr_p_output(struct ifnet *ifp0, struct mbuf *m, struct sockaddr *dst,
 }
 
 static void
-tpmr_p_take(void *port)
+tpmr_p_take(struct tpmr_port *p)
 {
-	struct tpmr_port *p = port;
-
 	refcnt_take(&p->p_refcnt);
 }
 
 static void
-tpmr_p_rele(void *port)
+tpmr_p_rele(struct tpmr_port *p)
 {
-	struct tpmr_port *p = port;
-
 	if (refcnt_rele(&p->p_refcnt)) {
 		if_put(p->p_ifp0);
+		cpumem_free(p->p_percpu, M_DEVBUF, sizeof(struct refcnt));
 		free(p, M_DEVBUF, sizeof(*p));
 	}
+}
+
+static void *
+tpmr_cpu_take(void *port)
+{
+	struct tpmr_port *p = port;
+	struct refcnt *r;
+
+	r = cpumem_enter(p->p_percpu);
+	refcnt_take(r);
+	cpumem_leave(p->p_percpu, r);
+
+	return (r);
+}
+
+static void
+tpmr_cpu_rele(void *ref, void *port)
+{
+	struct refcnt *r = ref;
+
+	if (refcnt_rele(r))
+		tpmr_p_rele(port);
 }
 
 static void
@@ -742,6 +774,8 @@ tpmr_p_dtor(struct tpmr_softc *sc, struct tpmr_port *p, const char *op)
 {
 	struct ifnet *ifp = &sc->sc_if;
 	struct ifnet *ifp0 = p->p_ifp0;
+	struct refcnt *r;
+	struct cpumem_iter cmi;
 
 	DPRINTF(sc, "%s %s: destroying port\n",
 	    ifp->if_xname, ifp0->if_xname);
@@ -765,6 +799,8 @@ tpmr_p_dtor(struct tpmr_softc *sc, struct tpmr_port *p, const char *op)
 	/* wait for the sc_ports and brport SMR pointers */
 	smr_barrier();
 
+	CPUMEM_FOREACH(r, &cmi, p->p_percpu)
+		tpmr_cpu_rele(r, p);
 	tpmr_p_rele(p);
 
 	if (ifp->if_link_state != LINK_STATE_DOWN) {
