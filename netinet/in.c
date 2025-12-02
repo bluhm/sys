@@ -194,7 +194,7 @@ in_sa2sin(struct sockaddr *sa, struct sockaddr_in **sin)
 }
 
 /*
- * Finding the internet address structure (in_ifaddr) corresponding
+ * Find the internet address structure (in_ifaddr) corresponding
  * to a given interface (ifnet structure).
  */
 struct in_ifaddr *
