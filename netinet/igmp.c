@@ -565,10 +565,8 @@ igmp_joingroup(struct in_multi *inm, struct ifnet *ifp)
 	} else
 		inm->inm_timer = 0;
 
-	if (running) {
-		membar_producer();
-		atomic_store_int(&igmp_timers_are_running, running);
-	}
+	if (running)
+		atomic_store_int(&igmp_timers_are_running, 1);
 }
 
 void
