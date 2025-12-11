@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf.c,v 1.1220 2025/11/28 22:55:21 dlg Exp $ */
+/*	$OpenBSD: pf.c,v 1.1224 2025/12/11 04:59:26 dlg Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -3914,25 +3914,21 @@ int
 pf_match_rcvif(struct mbuf *m, struct pf_rule *r)
 {
 	struct ifnet *ifp;
-#if NCARP > 0
-	struct ifnet *ifp0;
-#endif
-	struct pfi_kif *kif;
+	struct pfi_kif *kif = NULL;
 
-	ifp = if_get(m->m_pkthdr.ph_ifidx);
-	if (ifp == NULL)
-		return (0);
-
-#if NCARP > 0
-	if (ifp->if_type == IFT_CARP &&
-	    (ifp0 = if_get(ifp->if_carpdevidx)) != NULL) {
-		kif = (struct pfi_kif *)ifp0->if_pf_kif;
-		if_put(ifp0);
-	} else
-#endif /* NCARP */
+	smr_read_enter();
+	ifp = if_get_smr(m->m_pkthdr.ph_ifidx);
+	if (ifp != NULL) {
 		kif = (struct pfi_kif *)ifp->if_pf_kif;
-
-	if_put(ifp);
+#if NCARP > 0
+		if (ifp->if_type == IFT_CARP) {
+			struct ifnet *ifp0 = if_get_smr(ifp->if_carpdevidx);
+			if (ifp0 != NULL)
+				kif = (struct pfi_kif *)ifp0->if_pf_kif;
+		}
+#endif /* NCARP */
+	}
+	smr_read_leave();
 
 	if (kif == NULL) {
 		DPFPRINTF(LOG_ERR,
@@ -7186,14 +7182,15 @@ pf_routable(struct pf_addr *addr, sa_family_t af, struct pfi_kif *kif,
 				ret = 1;
 #if NCARP > 0
 			} else {
-				struct ifnet	*ifp;
+				struct ifnet *ifp;
 
-				ifp = if_get(rt->rt_ifidx);
+				smr_read_enter();
+				ifp = if_get_smr(rt->rt_ifidx);
 				if (ifp != NULL && ifp->if_type == IFT_CARP &&
 				    ifp->if_carpdevidx ==
 				    kif->pfik_ifp->if_index)
 					ret = 1;
-				if_put(ifp);
+				smr_read_leave();
 #endif /* NCARP */
 			}
 
@@ -8218,10 +8215,7 @@ pf_counters_inc(int action, struct pf_pdesc *pd, struct pf_state *st,
 int
 pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 {
-#if NCARP > 0
-	struct ifnet		*ifp0;
-#endif
-	struct pfi_kif		*kif;
+	struct pfi_kif		*kif = NULL;
 	u_short			 action, reason = 0;
 	struct pf_rule		*a = NULL, *r = &pf_default_rule;
 	struct pf_state		*st = NULL;
@@ -8236,10 +8230,14 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 		return (PF_PASS);
 
 #if NCARP > 0
-	if (ifp->if_type == IFT_CARP &&
-		(ifp0 = if_get(ifp->if_carpdevidx)) != NULL) {
-		kif = (struct pfi_kif *)ifp0->if_pf_kif;
-		if_put(ifp0);
+	if (ifp->if_type == IFT_CARP) {
+		struct ifnet *ifp0;
+
+		smr_read_enter();
+		ifp0 = if_get_smr(ifp->if_carpdevidx);
+		if (ifp0 != NULL)
+			kif = (struct pfi_kif *)ifp0->if_pf_kif;
+		smr_read_leave();
 	} else
 #endif /* NCARP */
 		kif = (struct pfi_kif *)ifp->if_pf_kif;
