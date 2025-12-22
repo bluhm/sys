@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf.c,v 1.1224 2025/12/11 04:59:26 dlg Exp $ */
+/*	$OpenBSD: pf.c,v 1.1228 2025/12/19 00:30:13 dlg Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -3916,6 +3916,9 @@ pf_match_rcvif(struct mbuf *m, struct pf_rule *r)
 	struct ifnet *ifp;
 	struct pfi_kif *kif = NULL;
 
+	if (m->m_pkthdr.ph_ifidx == 0)
+		return (0);
+
 	smr_read_enter();
 	ifp = if_get_smr(m->m_pkthdr.ph_ifidx);
 	if (ifp != NULL) {
@@ -5241,9 +5244,9 @@ pf_create_state(struct pf_pdesc *pd, struct pf_rule *r, struct pf_rule *a,
 
 	srlim = ctx->sourcelim;
 	if (srlim != NULL) {
-		struct pf_source *sr = ctx->source;
 		unsigned int gen;
 
+		sr = ctx->source;
 		if (sr == NULL) {
 			sr = pool_get(&pf_source_pl, PR_NOWAIT|PR_ZERO);
 			if (sr == NULL) {
@@ -6036,7 +6039,6 @@ pf_test_state(struct pf_pdesc *pd, struct pf_state **stp, u_short *reason)
 	int			 copyback = 0;
 	struct pf_state_peer	*src, *dst;
 	int			 action;
-	struct inpcb		*inp = pd->m->m_pkthdr.pf.inp;
 	u_int8_t		 psrc, pdst;
 
 	action = PF_PASS;
@@ -6070,7 +6072,6 @@ pf_test_state(struct pf_pdesc *pd, struct pf_state **stp, u_short *reason)
 				pf_update_state_timeout(*stp, PFTM_PURGE);
 				pf_state_unref(*stp);
 				*stp = NULL;
-				pf_mbuf_link_inpcb(pd->m, inp);
 				return (PF_DROP);
 			} else if (dst->state >= TCPS_ESTABLISHED &&
 			    src->state >= TCPS_ESTABLISHED) {
@@ -8402,24 +8403,24 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 	}
 #endif /* INET6 */
 
-	default:
-		if (pd.virtual_proto == IPPROTO_TCP) {
-			if (pd.dir == PF_IN && (pd.hdr.tcp.th_flags &
-			    (TH_SYN|TH_ACK)) == TH_SYN &&
-			    pf_synflood_check(&pd)) {
-				PF_LOCK();
-				have_pf_lock = 1;
-				pf_syncookie_send(&pd, &reason);
-				action = PF_DROP;
-				break;
-			}
-			if ((pd.hdr.tcp.th_flags & TH_ACK) && pd.p_len == 0)
-				pqid = 1;
-			action = pf_normalize_tcp(&pd);
-			if (action == PF_DROP)
-				break;
+	case IPPROTO_TCP:
+		if (pd.dir == PF_IN &&
+		    (pd.hdr.tcp.th_flags & (TH_SYN|TH_ACK)) == TH_SYN &&
+		    pf_synflood_check(&pd)) {
+			PF_LOCK();
+			have_pf_lock = 1;
+			pf_syncookie_send(&pd, &reason);
+			action = PF_DROP;
+			break;
 		}
+		if ((pd.hdr.tcp.th_flags & TH_ACK) && pd.p_len == 0)
+			pqid = 1;
+		action = pf_normalize_tcp(&pd);
+		if (action == PF_DROP)
+			break;
 
+		/* FALLTHROUGH */
+	default:
 		key.af = pd.af;
 		key.proto = pd.virtual_proto;
 		key.rdomain = pd.rdomain;

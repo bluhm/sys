@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_map.c,v 1.349 2025/12/10 08:38:18 mpi Exp $	*/
+/*	$OpenBSD: uvm_map.c,v 1.352 2025/12/22 10:55:07 mpi Exp $	*/
 /*	$NetBSD: uvm_map.c,v 1.86 2000/11/27 08:40:03 chs Exp $	*/
 
 /*
@@ -2947,7 +2947,7 @@ uvm_object_printit(struct uvm_object *uobj, boolean_t full,
  */
 static const char page_flagbits[] =
 	"\20\1BUSY\2WANTED\3TABLED\4CLEAN\5CLEANCHK\6RELEASED\7FAKE\10RDONLY"
-	"\11ZERO\12DEV\15PAGER1\21FREE\22INACTIVE\23ACTIVE\25ANON\26AOBJ"
+	"\11ZERO\12DEV\21FREE\22INACTIVE\23ACTIVE\25ANON\26AOBJ"
 	"\27ENCRYPT\31PMAP0\32PMAP1\33PMAP2\34PMAP3\35PMAP4\36PMAP5";
 
 void
@@ -4052,7 +4052,7 @@ out:
 }
 
 #ifdef PMAP_CHECK_COPYIN
-static void inline
+static inline void
 check_copyin_add(struct vm_map *map, vaddr_t start, vaddr_t end)
 {
 	if (PMAP_CHECK_COPYIN == 0 ||
@@ -4429,10 +4429,7 @@ uvm_map_clean(struct vm_map *map, vaddr_t start, vaddr_t end, int flags)
 
 			switch (flags & (PGO_CLEANIT|PGO_FREE|PGO_DEACTIVATE)) {
 			/*
-			 * XXX In these first 3 cases, we always just
-			 * XXX deactivate the page.  We may want to
-			 * XXX handle the different cases more
-			 * XXX specifically, in the future.
+			 * In these first 3 cases, we just deactivate the page.
 			 */
 			case PGO_CLEANIT|PGO_FREE:
 			case PGO_CLEANIT|PGO_DEACTIVATE:
@@ -4449,7 +4446,7 @@ deactivate_it:
 				if (amap_refs(amap) > 1)
 					goto deactivate_it;
 
-				/* XXX skip the page if it's wired */
+				/* skip the page if it's wired */
 				if (pg->wire_count != 0) {
 					break;
 				}
