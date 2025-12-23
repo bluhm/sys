@@ -355,14 +355,13 @@ vm_find_vcpu(struct vm *vm, uint32_t id)
 int
 vm_create(struct vm_create_params *vcp, struct proc *p)
 {
-	int i, ret = EINVAL;
+	int i, ret;
 	size_t memsize;
 	struct vm *vm;
 	struct vcpu *vcpu;
 	struct uvm_object *uao;
 	struct vm_mem_range *vmr;
 	unsigned int uvmflags = 0;
-	uint32_t vm_id = 0;
 
 	memsize = vm_create_check_mem_ranges(vcp);
 	if (memsize == 0)
@@ -372,27 +371,20 @@ vm_create(struct vm_create_params *vcp, struct proc *p)
 	if (vcp->vcp_ncpus != 1)
 		return (EINVAL);
 
-	/*
-	 * Increment global counts early to see if the capacity limits
-	 * would be violated and prevent vmm(4) from disabling any
-	 * virtualization extensions on the host while creating a vm.
-	 */
-	rw_enter_write(&vmm_softc->vm_lock);
+	/* Bail early if we're already at vcpu capacity. */
+	rw_enter_read(&vmm_softc->vm_lock);
 	if (vmm_softc->vcpu_ct + vcp->vcp_ncpus > vmm_softc->vcpu_max) {
 		DPRINTF("%s: maximum vcpus (%lu) reached\n", __func__,
 		    vmm_softc->vcpu_max);
-		rw_exit_write(&vmm_softc->vm_lock);
+		rw_exit_read(&vmm_softc->vm_lock);
 		return (ENOMEM);
 	}
-	vmm_softc->vcpu_ct += vcp->vcp_ncpus;
-	vm_id = vmm_softc->vm_ct++;
-	rw_exit_write(&vmm_softc->vm_lock);
+	rw_exit_read(&vmm_softc->vm_lock);
 
 	/* Instantiate and configure the new vm. */
 	vm = pool_get(&vm_pool, PR_WAITOK | PR_ZERO);
 
 	/* Create the VM's identity. */
-	vm->vm_id = vm_id;
 	vm->vm_creator_pid = p->p_p->ps_pid;
 	strncpy(vm->vm_name, vcp->vcp_name, VMM_MAX_NAME_LEN - 1);
 
@@ -417,8 +409,8 @@ vm_create(struct vm_create_params *vcp, struct proc *p)
 		if (uao == NULL) {
 			printf("%s: failed to initialize memory slot\n",
 			    __func__);
-			ret = ENOMEM;
-			goto err;
+			vm_teardown(&vm);
+			return (ENOMEM);
 		}
 
 		/* Map the UVM aobj into the process. It owns this reference. */
@@ -427,8 +419,8 @@ vm_create(struct vm_create_params *vcp, struct proc *p)
 		if (ret) {
 			printf("%s: uvm_map failed: %d\n", __func__, ret);
 			uao_detach(uao);
-			ret = ENOMEM;
-			goto err;
+			vm_teardown(&vm);
+			return (ENOMEM);
 		}
 
 		/* Make this mapping immutable so userland cannot change it. */
@@ -439,7 +431,8 @@ vm_create(struct vm_create_params *vcp, struct proc *p)
 			    ret);
 			uvm_unmap(&p->p_vmspace->vm_map, vmr->vmr_va,
 			    vmr->vmr_va + vmr->vmr_size);
-			goto err;
+			vm_teardown(&vm);
+			return (ret);
 		}
 
 		uao_reference(uao);	/* Take a reference for vmm. */
@@ -448,8 +441,8 @@ vm_create(struct vm_create_params *vcp, struct proc *p)
 
 	if (vm_impl_init(vm, p)) {
 		printf("failed to init arch-specific features for vm %p\n", vm);
-		ret = ENOMEM;
-		goto err;
+		vm_teardown(&vm);
+		return (ENOMEM);
 	}
 
 	vm->vm_vcpu_ct = 0;
@@ -462,40 +455,47 @@ vm_create(struct vm_create_params *vcp, struct proc *p)
 		vcpu->vc_parent = vm;
 		vcpu->vc_id = vm->vm_vcpu_ct;
 		vm->vm_vcpu_ct++;
-
 		if ((ret = vcpu_init(vcpu, vcp)) != 0) {
 			printf("failed to init vcpu %d for vm %p\n", i, vm);
 			pool_put(&vcpu_pool, vcpu);
-			goto err;
+			vm_teardown(&vm);
+			return (ret);
 		}
 		/* Publish vcpu to list, inheriting the reference. */
 		SLIST_INSERT_HEAD(&vm->vm_vcpu_list, vcpu, vc_vcpu_link);
 	}
 
-	/* Identify the vm. */
+	/* Attempt to register the vm now that it's configured. */
+	rw_enter_write(&vmm_softc->vm_lock);
+
+	if (vmm_softc->vcpu_ct + vm->vm_vcpu_ct > vmm_softc->vcpu_max) {
+		/* Someone already took our capacity. */
+		printf("%s: maximum vcpus (%lu) reached\n", __func__,
+		    vmm_softc->vcpu_max);
+		rw_exit_write(&vmm_softc->vm_lock);
+		vm_teardown(&vm);
+		return (ENOMEM);
+	}
+
+	/* Update the global index and identify the vm. */
+	vmm_softc->vm_idx++;
+	vm->vm_id = vmm_softc->vm_idx;
 	vcp->vcp_id = vm->vm_id;
 
 	/* Publish the vm into the list and update counts. */
-	rw_enter_write(&vmm_softc->vm_lock);
+	vm->vm_dying = 0;
 	refcnt_init(&vm->vm_refcnt);
 	SLIST_INSERT_HEAD(&vmm_softc->vm_list, vm, vm_link);
-	rw_exit_write(&vmm_softc->vm_lock);
+	vmm_softc->vm_ct++;
+	vmm_softc->vcpu_ct += vm->vm_vcpu_ct;
 
 	/* Update the userland process's view of guest memory. */
 	memcpy(vcp->vcp_memranges, vm->vm_memranges,
 	    vcp->vcp_nmemranges * sizeof(vcp->vcp_memranges[0]));
 
-	return (0);
-
-err:
-	vm_teardown(&vm);
-	rw_enter_write(&vmm_softc->vm_lock);
-	vmm_softc->vm_idx--;
-	vmm_softc->vcpu_ct -= vcp->vcp_ncpus;
-	if (vmm_softc->vm_ct < 1)
-		vmm_stop();
 	rw_exit_write(&vmm_softc->vm_lock);
-	return (ret);
+
+	return (0);
 }
 
 /*
