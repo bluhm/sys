@@ -25,6 +25,7 @@
 #include <sys/witness.h>
 #include <sys/mutex.h>
 #include <sys/pclock.h>
+#include <sys/tracepoint.h>
 
 #include <ddb/db_output.h>
 
@@ -79,6 +80,7 @@ _kernel_lock_init(void)
 #ifdef __USE_MI_MUTEX
 	mtx_init_parking();
 #endif /* __USE_MI_MUTEX */
+	TRACEPOINT(mplock, kernel, cpu_number(), _kernel_lock_depth(), 0);
 }
 
 /*
@@ -91,11 +93,13 @@ _kernel_lock(void)
 {
 	SCHED_ASSERT_UNLOCKED();
 	__mp_lock(&kernel_lock);
+	TRACEPOINT(mplock, kernel, cpu_number(), _kernel_lock_depth() - 1, +1);
 }
 
 void
 _kernel_unlock(void)
 {
+	TRACEPOINT(mplock, kernel, cpu_number(), _kernel_lock_depth(), -1);
 	__mp_unlock(&kernel_lock);
 }
 
@@ -105,6 +109,12 @@ _kernel_lock_held(void)
 	if (panicstr || db_active)
 		return 1;
 	return (__mp_lock_held(&kernel_lock, curcpu()));
+}
+
+int
+_kernel_lock_depth(void)
+{
+	return (__mp_lock_depth(&kernel_lock, curcpu()));
 }
 
 #ifdef __USE_MI_MPLOCK
@@ -236,6 +246,14 @@ __mp_lock_held(struct __mp_lock *mpl, struct cpu_info *ci)
 	struct __mp_lock_cpu *cpu = &mpl->mpl_cpus[CPU_INFO_UNIT(ci)];
 
 	return (cpu->mplc_ticket == mpl->mpl_ticket && cpu->mplc_depth > 0);
+}
+
+u_int
+__mp_lock_depth(struct __mp_lock *mpl, struct cpu_info *ci)
+{
+	struct __mp_lock_cpu *cpu = &mpl->mpl_cpus[CPU_INFO_UNIT(ci)];
+
+	return (cpu->mplc_depth);
 }
 
 #endif /* __USE_MI_MPLOCK */

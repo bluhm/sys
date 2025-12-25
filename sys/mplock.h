@@ -53,6 +53,7 @@ void	__mp_unlock(struct __mp_lock *);
 int	__mp_release_all(struct __mp_lock *);
 void	__mp_acquire_count(struct __mp_lock *, int);
 int	__mp_lock_held(struct __mp_lock *, struct cpu_info *);
+u_int	__mp_lock_depth(struct __mp_lock *, struct cpu_info *);
 
 #ifdef WITNESS
 

@@ -429,6 +429,7 @@ void	_kernel_lock_init(void);
 void	_kernel_lock(void);
 void	_kernel_unlock(void);
 int	_kernel_lock_held(void);
+int	_kernel_lock_depth(void);
 
 #define	KERNEL_LOCK_INIT()		_kernel_lock_init()
 #define	KERNEL_LOCK()			_kernel_lock()

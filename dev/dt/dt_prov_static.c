@@ -114,6 +114,11 @@ DT_STATIC_PROBE3(rwlock, netlock, "void *", "int", "int");
 DT_STATIC_PROBE3(rwlock, solock, "void *", "int", "int");
 
 /*
+ * mp locks, curently only kenrel lock
+ */
+DT_STATIC_PROBE3(mplock, kernel, "int", "int", "int");
+
+/*
  * List of all static probes
  */
 struct dt_probe *const dtps_static[] = {
@@ -172,6 +177,8 @@ struct dt_probe *const dtps_static[] = {
 	&_DT_STATIC_P(rwlock, none),
 	&_DT_STATIC_P(rwlock, netlock),
 	&_DT_STATIC_P(rwlock, solock),
+	/* kernel lock */
+	&_DT_STATIC_P(mplock, kernel),
 };
 
 struct dt_probe *const *dtps_index_refcnt;
