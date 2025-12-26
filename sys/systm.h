@@ -436,6 +436,12 @@ int	_kernel_lock_depth(void);
 #define	KERNEL_UNLOCK()			_kernel_unlock()
 #define	KERNEL_ASSERT_LOCKED()		KASSERT(_kernel_lock_held())
 #define	KERNEL_ASSERT_UNLOCKED()	KASSERT(panicstr || db_active || !_kernel_lock_held())
+#ifdef DIAGNOSTIC
+#define	KERNEL_INIT_DEPTH()		int klock_depth = _kernel_lock_depth()
+#else
+#define KERNEL_INIT_DEPTH()		/* nothing */
+#endif
+#define	KERNEL_ASSERT_DEPTH()		KASSERTMSG(klock_depth == _kernel_lock_depth(), ", before %d, after %d", klock_depth, _kernel_lock_depth())
 
 #else /* ! MULTIPROCESSOR */
 
@@ -444,6 +450,8 @@ int	_kernel_lock_depth(void);
 #define	KERNEL_UNLOCK()			/* nothing */
 #define	KERNEL_ASSERT_LOCKED()		/* nothing */
 #define	KERNEL_ASSERT_UNLOCKED()	/* nothing */
+#define KERNEL_INIT_DEPTH()		/* nothing */
+#define	KERNEL_ASSERT_DEPTH()		/* nothing */
 
 #endif /* MULTIPROCESSOR */
 

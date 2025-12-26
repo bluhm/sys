@@ -475,6 +475,7 @@ lapic_clockintr(void *arg, struct intrframe frame)
 {
 	struct cpu_info *ci = curcpu();
 	int floor;
+	KERNEL_INIT_DEPTH();
 
 	floor = ci->ci_handled_intr_level;
 	ci->ci_handled_intr_level = ci->ci_ilevel;
@@ -482,6 +483,7 @@ lapic_clockintr(void *arg, struct intrframe frame)
 	ci->ci_handled_intr_level = floor;
 
 	evcount_inc(&clk_count);
+	KERNEL_ASSERT_DEPTH();
 }
 
 void

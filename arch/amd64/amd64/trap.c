@@ -498,6 +498,7 @@ kerntrap(struct trapframe *frame)
 {
 	int type = (int)frame->tf_trapno;
 	uint64_t cr2 = rcr2();
+	KERNEL_INIT_DEPTH();
 
 	verify_smap(__func__);
 	uvmexp.traps++;
@@ -509,7 +510,7 @@ kerntrap(struct trapframe *frame)
 	we_re_toast:
 #ifdef DDB
 		if (db_ktrap(type, frame->tf_err, frame))
-			return;
+			goto out;
 #endif
 		trap_print(frame, type);
 		panic("trap type %d, code=%llx, pc=%llx",
@@ -518,7 +519,7 @@ kerntrap(struct trapframe *frame)
 
 	case T_PAGEFLT:			/* allow page faults in kernel mode */
 		if (kpageflttrap(frame, cr2))
-			return;
+			goto out;
 		goto we_re_toast;
 
 #if NISA > 0
@@ -527,21 +528,24 @@ kerntrap(struct trapframe *frame)
 		/* NMI can be hooked up to a pushbutton for debugging */
 		printf ("NMI ... going to debugger\n");
 		if (db_ktrap(type, 0, frame))
-			return;
+			goto out;
 #endif
 		/* machine/parity/power fail/"kitchen sink" faults */
 
 		if (x86_nmi() != 0)
 			goto we_re_toast;
 		else
-			return;
+			goto out;
 #endif /* NISA > 0 */
 
 	case T_VC:
 		if (vctrap(frame, 0, NULL, NULL))
-			return;
+			goto out;
 		goto we_re_toast;
 	}
+
+ out:
+	KERNEL_ASSERT_DEPTH();
 }
 
 /* If we find out userland changed the pkru register, punish the process */
@@ -570,6 +574,7 @@ usertrap(struct trapframe *frame)
 	uint64_t cr2 = rcr2();
 	union sigval sv;
 	int sig, code;
+	KERNEL_INIT_DEPTH();
 
 	verify_smap(__func__);
 	uvmexp.traps++;
@@ -643,6 +648,7 @@ usertrap(struct trapframe *frame)
 
 out:
 	userret(p);
+	KERNEL_ASSERT_DEPTH();
 }
 
 

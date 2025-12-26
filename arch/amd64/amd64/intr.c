@@ -853,6 +853,7 @@ dosoftint(int si_level)
 {
 	struct cpu_info *ci = curcpu();
 	int floor;
+	KERNEL_INIT_DEPTH();
 
 	floor = ci->ci_handled_intr_level;
 	ci->ci_handled_intr_level = ci->ci_ilevel;
@@ -860,4 +861,5 @@ dosoftint(int si_level)
 	softintr_dispatch(si_level);
 
 	ci->ci_handled_intr_level = floor;
+	KERNEL_ASSERT_DEPTH();
 }
