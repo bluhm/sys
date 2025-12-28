@@ -232,6 +232,7 @@ extern struct uvmexp uvmexp;
 /* Constraint ranges, set by MD code. */
 extern struct uvm_constraint_range  isa_constraint;
 extern struct uvm_constraint_range  dma_constraint;
+extern struct uvm_constraint_range  mbuf_constraint;
 extern struct uvm_constraint_range  no_constraint;
 extern struct uvm_constraint_range *uvm_md_constraints[];
 
@@ -358,6 +359,7 @@ extern const struct kmem_pa_mode kp_zero;
 extern const struct kmem_pa_mode kp_dma;
 extern const struct kmem_pa_mode kp_dma_contig;
 extern const struct kmem_pa_mode kp_dma_zero;
+extern const struct kmem_pa_mode kp_mbuf_contig;
 extern const struct kmem_pa_mode kp_pageable;
 extern const struct kmem_pa_mode kp_none;
 

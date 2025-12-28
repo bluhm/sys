@@ -1477,7 +1477,7 @@ void
 m_pool_init(struct pool *pp, u_int size, u_int align, const char *wmesg)
 {
 	pool_init(pp, size, align, IPL_NET, 0, wmesg, &m_pool_allocator);
-	pool_set_constraints(pp, &kp_dma_contig);
+	pool_set_constraints(pp, &kp_mbuf_contig);
 }
 
 u_int
