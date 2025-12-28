@@ -1480,6 +1480,17 @@ m_pool_init(struct pool *pp, u_int size, u_int align, const char *wmesg)
 	pool_set_constraints(pp, &kp_dma_contig);
 }
 
+void
+m_pool_noconstraints(void)
+{
+	int i;
+
+	pool_set_constraints(&mbpool, &kp_mbuf_contig);
+
+	for (i = 0; i < nitems(mclsizes); i++)
+		pool_set_constraints(&mclpools[i], &kp_mbuf_contig);
+}
+
 u_int
 m_pool_used(void)
 {
