@@ -358,6 +358,7 @@ extern const struct kmem_pa_mode kp_zero;
 extern const struct kmem_pa_mode kp_dma;
 extern const struct kmem_pa_mode kp_dma_contig;
 extern const struct kmem_pa_mode kp_dma_zero;
+extern const struct kmem_pa_mode kp_mbuf_contig;
 extern const struct kmem_pa_mode kp_pageable;
 extern const struct kmem_pa_mode kp_none;
 
