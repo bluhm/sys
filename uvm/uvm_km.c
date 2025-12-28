@@ -745,6 +745,11 @@ const struct kmem_pa_mode kp_dma_zero = {
 	.kp_zero = 1
 };
 
+const struct kmem_pa_mode kp_mbuf_contig = {
+	.kp_constraint = &mbuf_constraint,
+	.kp_maxseg = 1
+};
+
 const struct kmem_pa_mode kp_zero = {
 	.kp_constraint = &no_constraint,
 	.kp_zero = 1
