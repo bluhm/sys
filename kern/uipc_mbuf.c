@@ -524,59 +524,38 @@ m_purge(struct mbuf *m)
 }
 
 /*
- * mbuf chain defragmenter. This function uses some evil tricks to defragment
- * an mbuf chain into a single buffer without changing the mbuf pointer.
- * This needs to know a lot of the mbuf internals to make this work.
+ * mbuf chain defragmenter.  Copy all data into a single large cluster.
+ * Modifies the mbuf pointer.  mbuf is freed if an error occurs.
  * The resulting mbuf is not aligned to IP header to assist DMA transfers.
  */
 int
-m_defrag(struct mbuf *m, int how)
+m_defrag(struct mbuf **mp, int how)
 {
 	struct mbuf *m0;
 
-	if (m->m_next == NULL)
+	if ((*mp)->m_next == NULL)
 		return (0);
 
-	KASSERT(m->m_flags & M_PKTHDR);
+	KASSERT((*mp)->m_flags & M_PKTHDR);
 
 	mbstat_inc(mbs_defrag_alloc);
-	if ((m0 = m_gethdr(how, m->m_type)) == NULL)
+	if ((m0 = m_gethdr(how, (*mp)->m_type)) == NULL) {
+		m_freemp(mp);
 		return (ENOBUFS);
-	if (m->m_pkthdr.len > MHLEN) {
-		MCLGETL(m0, how, m->m_pkthdr.len);
+	}
+	if ((*mp)->m_pkthdr.len > MHLEN) {
+		MCLGETL(m0, how, (*mp)->m_pkthdr.len);
 		if (!(m0->m_flags & M_EXT)) {
 			m_free(m0);
+			m_freemp(mp);
 			return (ENOBUFS);
 		}
 	}
-	m_copydata(m, 0, m->m_pkthdr.len, mtod(m0, caddr_t));
-	m0->m_pkthdr.len = m0->m_len = m->m_pkthdr.len;
+	m_copydata((*mp), 0, (*mp)->m_pkthdr.len, mtod(m0, caddr_t));
+	m0->m_pkthdr.len = m0->m_len = (*mp)->m_pkthdr.len;
 
-	/* free chain behind and possible ext buf on the first mbuf */
-	m_freem(m->m_next);
-	m->m_next = NULL;
-	if (m->m_flags & M_EXT)
-		m_extfree(m);
-
-	/*
-	 * Bounce copy mbuf over to the original mbuf and set everything up.
-	 * This needs to reset or clear all pointers that may go into the
-	 * original mbuf chain.
-	 */
-	if (m0->m_flags & M_EXT) {
-		memcpy(&m->m_ext, &m0->m_ext, sizeof(struct mbuf_ext));
-		MCLINITREFERENCE(m);
-		m->m_flags |= m0->m_flags & (M_EXT|M_EXTWR);
-		m->m_data = m->m_ext.ext_buf;
-	} else {
-		m->m_data = m->m_pktdat;
-		memcpy(m->m_data, m0->m_data, m0->m_len);
-	}
-	m->m_pkthdr.len = m->m_len = m0->m_len;
-
-	m0->m_flags &= ~(M_EXT|M_EXTWR);	/* cluster is gone */
-	m_free(m0);
-
+	m_freemp(mp);
+	*mp = m0;
 	return (0);
 }
 

@@ -428,7 +428,7 @@ struct	mbuf *m_inithdr(struct mbuf *);
 void	m_removehdr(struct mbuf *);
 void	m_resethdr(struct mbuf *);
 void	m_calchdrlen(struct mbuf *);
-int	m_defrag(struct mbuf *, int);
+int	m_defrag(struct mbuf **, int);
 struct	mbuf *m_prepend(struct mbuf *, int, int);
 struct	mbuf *m_pulldown(struct mbuf *, int, int, int *);
 struct	mbuf *m_pullup(struct mbuf *, int);
