@@ -160,7 +160,7 @@ void	ixgbe_iff(struct ix_softc *);
 void	ixgbe_map_queue_statistics(struct ix_softc *);
 void	ixgbe_update_link_status(struct ix_softc *);
 int	ixgbe_get_buf(struct ix_rxring *, int);
-int	ixgbe_encap(struct ix_txring *, struct mbuf *);
+int	ixgbe_encap(struct ix_txring *, struct mbuf **);
 int	ixgbe_dma_malloc(struct ix_softc *, bus_size_t,
 		    struct ixgbe_dma_alloc *, int);
 void	ixgbe_dma_free(struct ix_softc *, struct ixgbe_dma_alloc *);
@@ -481,7 +481,7 @@ ixgbe_start(struct ifqueue *ifq)
 		if (m_head == NULL)
 			break;
 
-		used = ixgbe_encap(txr, m_head);
+		used = ixgbe_encap(txr, &m_head);
 		if (used == 0) {
 			m_freem(m_head);
 			continue;
@@ -1441,7 +1441,7 @@ ixgbe_media_change(struct ifnet *ifp)
  **********************************************************************/
 
 int
-ixgbe_encap(struct ix_txring *txr, struct mbuf *m_head)
+ixgbe_encap(struct ix_txring *txr, struct mbuf **mp)
 {
 	struct ix_softc *sc = txr->sc;
 	uint32_t	olinfo_status = 0, cmd_type_len;
@@ -1468,26 +1468,16 @@ ixgbe_encap(struct ix_txring *txr, struct mbuf *m_head)
 	 * Set the appropriate offload context
 	 * this will becomes the first descriptor.
 	 */
-	ntxc = ixgbe_tx_ctx_setup(txr, m_head, &cmd_type_len, &olinfo_status);
+	ntxc = ixgbe_tx_ctx_setup(txr, *mp, &cmd_type_len, &olinfo_status);
 	if (ntxc == -1)
 		goto xmit_fail;
 
 	/*
 	 * Map the packet for DMA.
 	 */
-	switch (bus_dmamap_load_mbuf(txr->txdma.dma_tag, map,
-	    m_head, BUS_DMA_NOWAIT)) {
-	case 0:
-		break;
-	case EFBIG:
-		if (m_defrag(m_head, M_NOWAIT) == 0 &&
-		    bus_dmamap_load_mbuf(txr->txdma.dma_tag, map,
-		     m_head, BUS_DMA_NOWAIT) == 0)
-			break;
-		/* FALLTHROUGH */
-	default:
+	if (bus_dmamap_defrag_mbuf(txr->txdma.dma_tag, map, mp,
+	    BUS_DMA_NOWAIT) != 0)
 		return (0);
-	}
 
 	i = txr->next_avail_desc + ntxc;
 	if (i >= sc->num_tx_desc)
@@ -1513,7 +1503,7 @@ ixgbe_encap(struct ix_txring *txr, struct mbuf *m_head)
 	    BUS_DMASYNC_PREWRITE);
 
 	/* Set the index of the descriptor that will be marked done */
-	txbuf->m_head = m_head;
+	txbuf->m_head = *mp;
 	txbuf->eop_index = last;
 
 	membar_producer();

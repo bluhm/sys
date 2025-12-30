@@ -2747,24 +2747,6 @@ ixl_txr_free(struct ixl_softc *sc, struct ixl_tx_ring *txr)
 	free(txr, M_DEVBUF, sizeof(*txr));
 }
 
-static inline int
-ixl_load_mbuf(bus_dma_tag_t dmat, bus_dmamap_t map, struct mbuf *m)
-{
-	int error;
-
-	error = bus_dmamap_load_mbuf(dmat, map, m,
-	    BUS_DMA_STREAMING | BUS_DMA_NOWAIT);
-	if (error != EFBIG)
-		return (error);
-
-	error = m_defrag(m, M_DONTWAIT);
-	if (error != 0)
-		return (error);
-
-	return (bus_dmamap_load_mbuf(dmat, map, m,
-	    BUS_DMA_STREAMING | BUS_DMA_NOWAIT));
-}
-
 static uint64_t
 ixl_tx_setup_offload(struct mbuf *m0, struct ixl_tx_ring *txr,
     unsigned int prod)
@@ -2906,7 +2888,8 @@ ixl_start(struct ifqueue *ifq)
 			free--;
 		}
 
-		if (ixl_load_mbuf(sc->sc_dmat, map, m) != 0) {
+		if (bus_dmamap_defrag_mbuf(sc->sc_dmat, map, &m,
+		    BUS_DMA_STREAMING | BUS_DMA_NOWAIT) != 0) {
 			ifq->ifq_errors++;
 			m_freem(m);
 			continue;

@@ -13971,24 +13971,6 @@ ice_tx_setup_offload(struct mbuf *m0, struct ether_extracted *ext)
 	return offload;
 }
 
-static inline int
-ice_load_mbuf(bus_dma_tag_t dmat, bus_dmamap_t map, struct mbuf *m)
-{
-	int error;
-
-	error = bus_dmamap_load_mbuf(dmat, map, m,
-	    BUS_DMA_STREAMING | BUS_DMA_NOWAIT);
-	if (error != EFBIG)
-		return (error);
-
-	error = m_defrag(m, M_DONTWAIT);
-	if (error != 0)
-		return (error);
-
-	return (bus_dmamap_load_mbuf(dmat, map, m,
-	    BUS_DMA_STREAMING | BUS_DMA_NOWAIT));
-}
-
 void
 ice_set_tso_context(struct mbuf *m0, struct ice_tx_queue *txq,
     unsigned int prod, struct ether_extracted *ext)
@@ -14089,11 +14071,13 @@ ice_start(struct ifqueue *ifq)
 		else
 			map = txm->txm_map;
 
-		if (ice_load_mbuf(sc->sc_dmat, map, m) != 0) {
+		if (bus_dmamap_defrag_mbuf(sc->sc_dmat, map, &m,
+		    BUS_DMA_STREAMING | BUS_DMA_NOWAIT) != 0) {
 			ifq->ifq_errors++;
 			m_freem(m);
 			continue;
 		}
+		/* defrag may change ext pointers, do not access mbuf memory */
 
 		if (ISSET(m->m_pkthdr.csum_flags, M_TCP_TSO)) {
 			if (ice_tso_detect_sparse(m, &ext, map)) {

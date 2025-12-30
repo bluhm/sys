@@ -1342,28 +1342,6 @@ bnxt_rxrinfo(struct bnxt_softc *sc, struct if_rxrinfo *ifri)
 	return (error);
 }
 
-int
-bnxt_load_mbuf(struct bnxt_softc *sc, struct bnxt_slot *bs, struct mbuf *m)
-{
-	switch (bus_dmamap_load_mbuf(sc->sc_dmat, bs->bs_map, m,
-	    BUS_DMA_STREAMING | BUS_DMA_NOWAIT)) {
-	case 0:
-		break;
-
-	case EFBIG:
-		if (m_defrag(m, M_DONTWAIT) == 0 &&
-		    bus_dmamap_load_mbuf(sc->sc_dmat, bs->bs_map, m,
-		    BUS_DMA_STREAMING | BUS_DMA_NOWAIT) == 0)
-			break;
-
-	default:
-		return (1);
-	}
-
-	bs->bs_m = m;
-	return (0);
-}
-
 void
 bnxt_start(struct ifqueue *ifq)
 {
@@ -1402,11 +1380,13 @@ bnxt_start(struct ifqueue *ifq)
 			break;
 
 		bs = &tx->tx_slots[tx->tx_prod];
-		if (bnxt_load_mbuf(sc, bs, m) != 0) {
+		if (bus_dmamap_defrag_mbuf(sc->sc_dmat, bs->bs_map, &m,
+		    BUS_DMA_STREAMING | BUS_DMA_NOWAIT) != 0) {
 			m_freem(m);
 			ifp->if_oerrors++;
 			continue;
 		}
+		bs->bs_m = m;
 
 #if NBPFILTER > 0
 		if (ifp->if_bpf)

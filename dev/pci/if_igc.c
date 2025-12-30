@@ -938,24 +938,6 @@ igc_init(void *arg)
 	splx(s);
 }
 
-static inline int
-igc_load_mbuf(bus_dma_tag_t dmat, bus_dmamap_t map, struct mbuf *m)
-{
-	int error;
-
-	error = bus_dmamap_load_mbuf(dmat, map, m,
-	    BUS_DMA_STREAMING | BUS_DMA_NOWAIT);
-	if (error != EFBIG)
-		return (error);
-
-	error = m_defrag(m, M_DONTWAIT);
-	if (error != 0)
-		return (error);
-
-	return (bus_dmamap_load_mbuf(dmat, map, m,
-	    BUS_DMA_STREAMING | BUS_DMA_NOWAIT));
-}
-
 void
 igc_start(struct ifqueue *ifq)
 {
@@ -1004,7 +986,8 @@ igc_start(struct ifqueue *ifq)
 		txbuf = &txr->tx_buffers[prod];
 		map = txbuf->map;
 
-		if (igc_load_mbuf(txr->txdma.dma_tag, map, m) != 0) {
+		if (bus_dmamap_defrag_mbuf(txr->txdma.dma_tag, map, &m,
+		    BUS_DMA_STREAMING | BUS_DMA_NOWAIT) != 0) {
 			ifq->ifq_errors++;
 			m_freem(m);
 			continue;
