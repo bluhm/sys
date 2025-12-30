@@ -703,4 +703,7 @@ int	_bus_dmamem_alloc_range(bus_dma_tag_t tag, bus_size_t size,
 	    bus_dma_segment_t *segs, int nsegs, int *rsegs, int flags,
 	    bus_addr_t low, bus_addr_t high);
 
+int	bus_dmamap_defrag_mbuf(bus_dma_tag_t, bus_dmamap_t, struct mbuf **,
+	    int);
+
 #endif /* _MACHINE_BUS_H_ */

@@ -894,3 +894,45 @@ _bus_dmamem_alloc_range(bus_dma_tag_t t, bus_size_t size, bus_size_t alignment,
 
 	return (0);
 }
+
+/*
+ * DMA load mbuf, copy all data into single large cluster, and try again.
+ * May modify the mbuf pointer and data location.
+ */
+int
+bus_dmamap_defrag_mbuf(bus_dma_tag_t dmat, bus_dmamap_t map, struct mbuf **mp,
+    int flags)
+{
+	struct mbuf *m0;
+	int how = flags & BUS_DMA_NOWAIT ? M_DONTWAIT : M_WAIT;
+	int error;
+
+	error = bus_dmamap_load_mbuf(dmat, map, *mp, flags);
+	if (error != EFBIG)
+		return (error);
+
+	/* code copied from m_defrag() */
+
+	if ((*mp)->m_next == NULL)
+		return (error);
+
+	KASSERT((*mp)->m_flags & M_PKTHDR);
+
+	mbstat_inc(mbs_defrag_alloc);
+	if ((m0 = m_gethdr(how, (*mp)->m_type)) == NULL)
+		return (ENOBUFS);
+	if ((*mp)->m_pkthdr.len > MHLEN) {
+		m_clget(m0, how, (*mp)->m_pkthdr.len);
+		if (!(m0->m_flags & M_EXT)) {
+			m_free(m0);
+			return (ENOBUFS);
+		}
+	}
+	m_copydata((*mp), 0, (*mp)->m_pkthdr.len, mtod(m0, caddr_t));
+	m0->m_pkthdr.len = m0->m_len = (*mp)->m_pkthdr.len;
+	m_freemp(mp);
+	*mp = m0;
+
+	error = bus_dmamap_load_mbuf(dmat, map, *mp, flags);
+	return (error);
+}
