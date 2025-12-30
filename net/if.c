@@ -3799,7 +3799,7 @@ softnet_count(void)
 	static unsigned int nsoftnets;
 
 	if (nsoftnets == 0)
-		nsoftnets = min(NET_TASKQ, ncpus);
+		nsoftnets = min(NET_TASKQ, ncpusfound);
 
 	return (nsoftnets);
 }
