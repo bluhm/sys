@@ -1,4 +1,4 @@
-/*	$OpenBSD: pmap.c,v 1.182 2025/08/15 13:40:43 kettenis Exp $	*/
+/*	$OpenBSD: pmap.c,v 1.185 2026/01/02 04:13:12 deraadt Exp $	*/
 /*	$NetBSD: pmap.c,v 1.3 2003/05/08 18:13:13 thorpej Exp $	*/
 
 /*
@@ -3184,7 +3184,7 @@ pmap_steal_memory(vsize_t size, vaddr_t *start, vaddr_t *end)
 #include <ddb/db_output.h>
 #endif
 
-volatile long tlb_shoot_wait __attribute__((section(".kudata")));
+volatile int tlb_shoot_wait __attribute__((section(".kudata")));
 
 volatile vaddr_t tlb_shoot_addr1 __attribute__((section(".kudata")));
 volatile vaddr_t tlb_shoot_addr2 __attribute__((section(".kudata")));
@@ -3198,11 +3198,11 @@ volatile struct vmx_invept_descriptor ept_shoot_vid
 
 /* Obtain the "lock" for TLB shooting */
 static inline int
-pmap_start_tlb_shoot(long wait, const char *func)
+pmap_start_tlb_shoot(int targets, const char *func)
 {
 	int s = splvm();
 
-	while (atomic_cas_ulong(&tlb_shoot_wait, 0, wait) != 0) {
+	while (atomic_cas_uint(&tlb_shoot_wait, 0, targets) != 0) {
 #ifdef MP_LOCKDEBUG
 		long nticks = __mp_lock_spinout;
 #endif
@@ -3222,13 +3222,33 @@ pmap_start_tlb_shoot(long wait, const char *func)
 }
 
 void
+pmap_tlb_shootwait(void)
+{
+#ifdef MP_LOCKDEBUG
+	long nticks = __mp_lock_spinout;
+#endif
+	while (tlb_shoot_wait != 0) {
+		CPU_BUSY_CYCLE();
+#ifdef MP_LOCKDEBUG
+		if (--nticks <= 0) {
+			db_printf("%s: spun out", __func__);
+			db_enter();
+			nticks = __mp_lock_spinout;
+		}
+#endif
+	}
+}
+#endif /* MULTIPROCESSOR */
+
+void
 pmap_tlb_shootpage(struct pmap *pm, vaddr_t va, int shootself)
 {
+	int is_kva = va >= VM_MIN_KERNEL_ADDRESS;
+#ifdef MULTIPROCESSOR
 	struct cpu_info *ci, *self = curcpu();
 	CPU_INFO_ITERATOR cii;
-	long wait = 0;
+	int targets = 0;
 	u_int64_t mask = 0;
-	int is_kva = va >= VM_MIN_KERNEL_ADDRESS;
 
 	CPU_INFO_FOREACH(cii, ci) {
 		if (ci == self || !(ci->ci_flags & CPUF_RUNNING))
@@ -3236,11 +3256,11 @@ pmap_tlb_shootpage(struct pmap *pm, vaddr_t va, int shootself)
 		if (!is_kva && !pmap_is_active(pm, ci))
 			continue;
 		mask |= (1ULL << ci->ci_cpuid);
-		wait++;
+		targets++;
 	}
 
-	if (wait > 0) {
-		int s = pmap_start_tlb_shoot(wait, __func__);
+	if (targets) {
+		int s = pmap_start_tlb_shoot(targets, __func__);
 
 		tlb_shoot_first_pcid = is_kva ? PCID_KERN : PCID_PROC;
 		tlb_shoot_addr1 = va;
@@ -3252,6 +3272,7 @@ pmap_tlb_shootpage(struct pmap *pm, vaddr_t va, int shootself)
 		}
 		splx(s);
 	}
+#endif /* MULTIPROCESSOR */
 
 	if (!pmap_use_pcid) {
 		if (shootself)
@@ -3269,12 +3290,13 @@ pmap_tlb_shootpage(struct pmap *pm, vaddr_t va, int shootself)
 void
 pmap_tlb_shootrange(struct pmap *pm, vaddr_t sva, vaddr_t eva, int shootself)
 {
-	struct cpu_info *ci, *self = curcpu();
-	CPU_INFO_ITERATOR cii;
-	long wait = 0;
-	u_int64_t mask = 0;
 	int is_kva = sva >= VM_MIN_KERNEL_ADDRESS;
 	vaddr_t va;
+#ifdef MULTIPROCESSOR
+	struct cpu_info *ci, *self = curcpu();
+	CPU_INFO_ITERATOR cii;
+	int targets = 0;
+	u_int64_t mask = 0;
 
 	CPU_INFO_FOREACH(cii, ci) {
 		if (ci == self || !(ci->ci_flags & CPUF_RUNNING))
@@ -3282,11 +3304,11 @@ pmap_tlb_shootrange(struct pmap *pm, vaddr_t sva, vaddr_t eva, int shootself)
 		if (!is_kva && !pmap_is_active(pm, ci))
 			continue;
 		mask |= (1ULL << ci->ci_cpuid);
-		wait++;
+		targets++;
 	}
 
-	if (wait > 0) {
-		int s = pmap_start_tlb_shoot(wait, __func__);
+	if (targets) {
+		int s = pmap_start_tlb_shoot(targets, __func__);
 
 		tlb_shoot_first_pcid = is_kva ? PCID_KERN : PCID_PROC;
 		tlb_shoot_addr1 = sva;
@@ -3299,6 +3321,7 @@ pmap_tlb_shootrange(struct pmap *pm, vaddr_t sva, vaddr_t eva, int shootself)
 		}
 		splx(s);
 	}
+#endif /* MULTIPROCESSOR */
 
 	if (!pmap_use_pcid) {
 		if (shootself) {
@@ -3326,9 +3349,10 @@ pmap_tlb_shootrange(struct pmap *pm, vaddr_t sva, vaddr_t eva, int shootself)
 void
 pmap_tlb_shoottlb(struct pmap *pm, int shootself)
 {
+#ifdef MULTIPROCESSOR
 	struct cpu_info *ci, *self = curcpu();
 	CPU_INFO_ITERATOR cii;
-	long wait = 0;
+	int targets = 0;
 	u_int64_t mask = 0;
 
 	KASSERT(pm != pmap_kernel());
@@ -3338,11 +3362,11 @@ pmap_tlb_shoottlb(struct pmap *pm, int shootself)
 		    !(ci->ci_flags & CPUF_RUNNING))
 			continue;
 		mask |= (1ULL << ci->ci_cpuid);
-		wait++;
+		targets++;
 	}
 
-	if (wait) {
-		int s = pmap_start_tlb_shoot(wait, __func__);
+	if (targets) {
+		int s = pmap_start_tlb_shoot(targets, __func__);
 		CPU_INFO_FOREACH(cii, ci) {
 			if ((mask & (1ULL << ci->ci_cpuid)) == 0)
 				continue;
@@ -3351,6 +3375,7 @@ pmap_tlb_shoottlb(struct pmap *pm, int shootself)
 		}
 		splx(s);
 	}
+#endif /* MULTIPROCESSOR */
 
 	if (shootself) {
 		if (!pmap_use_pcid)
@@ -3371,10 +3396,11 @@ pmap_tlb_shoottlb(struct pmap *pm, int shootself)
 void
 pmap_shootept(struct pmap *pm, int shootself)
 {
-	struct cpu_info *ci, *self = curcpu();
-	struct vmx_invept_descriptor vid;
+	struct cpu_info *self = curcpu();
+#ifdef MULTIPROCESSOR
+	struct cpu_info *ci;
 	CPU_INFO_ITERATOR cii;
-	long wait = 0;
+	int targets = 0;
 	u_int64_t mask = 0;
 
 	KASSERT(pmap_is_ept(pm));
@@ -3385,11 +3411,11 @@ pmap_shootept(struct pmap *pm, int shootself)
 		    !(ci->ci_flags & CPUF_VMM))
 			continue;
 		mask |= (1ULL << ci->ci_cpuid);
-		wait++;
+		targets++;
 	}
 
-	if (wait) {
-		int s = pmap_start_tlb_shoot(wait, __func__);
+	if (targets) {
+		int s = pmap_start_tlb_shoot(targets, __func__);
 
 		ept_shoot_mode = self->ci_vmm_cap.vcc_vmx.vmx_invept_mode;
 		ept_shoot_vid.vid_eptp = pm->eptp;
@@ -3404,108 +3430,14 @@ pmap_shootept(struct pmap *pm, int shootself)
 
 		splx(s);
 	}
-
-	if (shootself && (self->ci_flags & CPUF_VMM)) {
-		vid.vid_eptp = pm->eptp;
-		vid.vid_reserved = 0;
-		invept(self->ci_vmm_cap.vcc_vmx.vmx_invept_mode, &vid);
-	}
-}
-#endif /* NVMM > 0 */
-
-void
-pmap_tlb_shootwait(void)
-{
-#ifdef MP_LOCKDEBUG
-	long nticks = __mp_lock_spinout;
-#endif
-	while (tlb_shoot_wait != 0) {
-		CPU_BUSY_CYCLE();
-#ifdef MP_LOCKDEBUG
-		if (--nticks <= 0) {
-			db_printf("%s: spun out", __func__);
-			db_enter();
-			nticks = __mp_lock_spinout;
-		}
-#endif
-	}
-}
-
-#else /* MULTIPROCESSOR */
-
-void
-pmap_tlb_shootpage(struct pmap *pm, vaddr_t va, int shootself)
-{
-	if (!pmap_use_pcid) {
-		if (shootself)
-			pmap_update_pg(va);
-	} else if (va >= VM_MIN_KERNEL_ADDRESS) {
-		invpcid(INVPCID_ADDR, PCID_PROC, va);
-		invpcid(INVPCID_ADDR, PCID_KERN, va);
-	} else if (shootself) {
-		invpcid(INVPCID_ADDR, PCID_PROC, va);
-		if (cpu_meltdown)
-			invpcid(INVPCID_ADDR, PCID_PROC_INTEL, va);
-	}
-}
-
-void
-pmap_tlb_shootrange(struct pmap *pm, vaddr_t sva, vaddr_t eva, int shootself)
-{
-	vaddr_t va;
-
-	if (!pmap_use_pcid) {
-		if (shootself) {
-			for (va = sva; va < eva; va += PAGE_SIZE)
-				pmap_update_pg(va);
-		}
-	} else if (sva >= VM_MIN_KERNEL_ADDRESS) {
-		for (va = sva; va < eva; va += PAGE_SIZE) {
-			invpcid(INVPCID_ADDR, PCID_PROC, va);
-			invpcid(INVPCID_ADDR, PCID_KERN, va);
-		}
-	} else if (shootself) {
-		if (cpu_meltdown) {
-			for (va = sva; va < eva; va += PAGE_SIZE) {
-				invpcid(INVPCID_ADDR, PCID_PROC, va);
-				invpcid(INVPCID_ADDR, PCID_PROC_INTEL, va);
-			}
-		} else {
-			for (va = sva; va < eva; va += PAGE_SIZE)
-				invpcid(INVPCID_ADDR, PCID_PROC, va);
-		}
-	}
-}
-
-void
-pmap_tlb_shoottlb(struct pmap *pm, int shootself)
-{
-	if (shootself) {
-		if (!pmap_use_pcid)
-			tlbflush();
-		else {
-			invpcid(INVPCID_PCID, PCID_PROC, 0);
-			if (cpu_meltdown)
-				invpcid(INVPCID_PCID, PCID_PROC_INTEL, 0);
-		}
-	}
-}
-
-#if NVMM > 0
-void
-pmap_shootept(struct pmap *pm, int shootself)
-{
-	struct cpu_info *self = curcpu();
-	struct vmx_invept_descriptor vid;
-
-	KASSERT(pmap_is_ept(pm));
-
-	if (shootself && (self->ci_flags & CPUF_VMM)) {
-		vid.vid_eptp = pm->eptp;
-		vid.vid_reserved = 0;
-		invept(self->ci_vmm_cap.vcc_vmx.vmx_invept_mode, &vid);
-	}
-}
-#endif /* NVMM > 0 */
-
 #endif /* MULTIPROCESSOR */
+
+	if (shootself && (self->ci_flags & CPUF_VMM)) {
+		struct vmx_invept_descriptor vid;
+
+		vid.vid_eptp = pm->eptp;
+		vid.vid_reserved = 0;
+		invept(self->ci_vmm_cap.vcc_vmx.vmx_invept_mode, &vid);
+	}
+}
+#endif /* NVMM > 0 */
