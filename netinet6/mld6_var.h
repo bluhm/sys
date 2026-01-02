@@ -43,11 +43,24 @@
 #define MLD_OTHERLISTENER			0
 #define MLD_IREPORTEDLAST			1
 
+struct mld6_pktinfo {
+	STAILQ_ENTRY(mld6_pktinfo)	mpi_list;
+	struct in6_addr			mpi_addr;
+	unsigned int			mpi_rdomain;
+	unsigned int			mpi_ifidx;
+	int				mpi_type;
+};
+STAILQ_HEAD(mld6_pktlist, mld6_pktinfo);
+
 void	mld6_init(void);
 void	mld6_input(struct mbuf *, int);
-void	mld6_start_listening(struct in6_multi *, struct ifnet *);
-void	mld6_stop_listening(struct in6_multi *, struct ifnet *);
+void	mld6_start_listening(struct in6_multi *, struct ifnet *,
+	    struct mld6_pktinfo *);
+void	mld6_stop_listening(struct in6_multi *, struct ifnet *,
+	    struct mld6_pktinfo *);
 void	mld6_fasttimo(void);
+void	mld6_sendpkt(const struct mld6_pktinfo *);
+
 #endif /* _KERNEL */
 
 #endif /* _NETINET6_MLD6_VAR_H_ */

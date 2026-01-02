@@ -1027,6 +1027,7 @@ struct in6_multi *
 in6_addmulti(const struct in6_addr *addr, struct ifnet *ifp, int *errorp)
 {
 	struct	in6_multi *in6m, *new_in6m = NULL;
+	struct	mld6_pktinfo pkt;
 	struct	in6_ifreq ifr;
 
 	*errorp = 0;
@@ -1076,13 +1077,16 @@ in6_addmulti(const struct in6_addr *addr, struct ifnet *ifp, int *errorp)
 	in6m->in6m_ifidx = ifp->if_index;
 	in6m->in6m_ifma.ifma_addr = sin6tosa(&in6m->in6m_sin);
 	
-	TAILQ_INSERT_HEAD(&ifp->if_maddrlist, &in6m->in6m_ifma, ifma_list);
-
 	/*
 	 * Let MLD6 know that we have joined a new IP6 multicast group.
 	 */
-	mld6_start_listening(in6m, ifp);
+	TAILQ_INSERT_HEAD(&ifp->if_maddrlist, &in6m->in6m_ifma, ifma_list);
+	pkt.mpi_ifidx = 0;
+	mld6_start_listening(in6m, ifp, &pkt);
 	rw_exit_write(&ifp->if_maddrlock);
+
+	if (pkt.mpi_ifidx)
+		mld6_sendpkt(&pkt);
 
 	return (in6m);
 
@@ -1100,6 +1104,7 @@ in6_addmulti(const struct in6_addr *addr, struct ifnet *ifp, int *errorp)
 void
 in6_delmulti(struct in6_multi *in6m)
 {
+	struct	mld6_pktinfo pkt;
 	struct	in6_ifreq ifr;
 	struct	ifnet *ifp;
 
@@ -1113,10 +1118,13 @@ in6_delmulti(struct in6_multi *in6m)
 		 * No remaining claims to this record; let MLD6 know
 		 * that we are leaving the multicast group.
 		 */
-		mld6_stop_listening(in6m, ifp);
-
+		pkt.mpi_ifidx = 0;
+		mld6_stop_listening(in6m, ifp, &pkt);
 		TAILQ_REMOVE(&ifp->if_maddrlist, &in6m->in6m_ifma, ifma_list);
 		rw_exit_write(&ifp->if_maddrlock);
+
+		if (pkt.mpi_ifidx)
+			mld6_sendpkt(&pkt);
 
 		/*
 		 * Notify the network driver to update its multicast
