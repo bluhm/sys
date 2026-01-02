@@ -140,10 +140,8 @@ mld6_start_listening(struct in6_multi *in6m)
 		running = 1;
 	}
 
-	if (running) {
-		membar_producer();
-		atomic_store_int(&mld6_timers_are_running, running);
-	}
+	if (running)
+		atomic_store_int(&mld6_timers_are_running, 1);
 }
 
 void
@@ -329,10 +327,8 @@ mld6_input(struct mbuf *m, int off)
 		break;
 	}
 
-	if (running) {
-		membar_producer();
-		atomic_store_int(&mld6_timers_are_running, running);
-	}
+	if (running)
+		atomic_store_int(&mld6_timers_are_running, 1);
 
 	if_put(ifp);
 	m_freem(m);
@@ -353,7 +349,7 @@ mld6_fasttimo(void)
 	 */
 	if (!atomic_load_int(&mld6_timers_are_running))
 		return;
-	membar_consumer();
+	atomic_store_int(&mld6_timers_are_running, 0);
 
 	NET_LOCK();
 
@@ -362,10 +358,10 @@ mld6_fasttimo(void)
 			running = 1;
 	}
 
-	membar_producer();
-	atomic_store_int(&mld6_timers_are_running, running);
-
 	NET_UNLOCK();
+
+	if (running)
+		atomic_store_int(&mld6_timers_are_running, 1);
 }
 
 int
