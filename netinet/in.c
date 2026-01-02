@@ -871,7 +871,8 @@ in_lookupmulti(const struct in_addr *addr, struct ifnet *ifp)
 struct in_multi *
 in_addmulti(const struct in_addr *addr, struct ifnet *ifp)
 {
-	struct in_multi *inm;
+	struct in_multi *inm, *new_inm = NULL;
+	struct igmp_pktinfo pkt;
 	struct ifreq ifr;
 
 	/*
@@ -919,6 +920,36 @@ in_addmulti(const struct in_addr *addr, struct ifnet *ifp)
 		igmp_joingroup(inm, ifp);
 	}
 
+	rw_enter_write(&ifp->if_maddrlock);
+	/* check again after unlock and lock */
+	inm = in_lookupmulti(addr, ifp);
+	if (inm != NULL)
+		goto found;
+	inm = new_inm;
+	inm->inm_sin.sin_len = sizeof(struct sockaddr_in);
+	inm->inm_sin.sin_family = AF_INET;
+	inm->inm_sin.sin_addr = *addr;
+	refcnt_init_trace(&inm->inm_refcnt, DT_REFCNT_IDX_IFMADDR);
+	inm->inm_ifidx = ifp->if_index;
+	inm->inm_ifma.ifma_addr = sintosa(&inm->inm_sin);
+
+	/*
+	 * Let IGMP know that we have joined a new IP multicast group.
+	 */
+	TAILQ_INSERT_HEAD(&ifp->if_maddrlist, &inm->inm_ifma, ifma_list);
+	pkt.ipi_ifidx = 0;
+	igmp_joingroup(inm, ifp, &pkt);
+	rw_exit_write(&ifp->if_maddrlock);
+
+	if (pkt.ipi_ifidx)
+		igmp_sendpkt(&pkt);
+	return (inm);
+
+ found:
+	refcnt_take(&inm->inm_refcnt);
+	rw_exit_write(&ifp->if_maddrlock);
+ out:
+	free(new_inm, M_IPMADDR, sizeof(*inm));
 	return (inm);
 }
 
@@ -928,6 +959,7 @@ in_addmulti(const struct in_addr *addr, struct ifnet *ifp)
 void
 in_delmulti(struct in_multi *inm)
 {
+	struct igmp_pktinfo pkt;
 	struct ifreq ifr;
 	struct ifnet *ifp;
 
@@ -942,7 +974,13 @@ in_delmulti(struct in_multi *inm)
 		 * No remaining claims to this record; let IGMP know that
 		 * we are leaving the multicast group.
 		 */
-		igmp_leavegroup(inm, ifp);
+		pkt.ipi_ifidx = 0;
+		igmp_leavegroup(inm, ifp, &pkt);
+		TAILQ_REMOVE(&ifp->if_maddrlist, &inm->inm_ifma, ifma_list);
+		rw_exit_write(&ifp->if_maddrlock);
+
+		if (pkt.ipi_ifidx)
+			igmp_sendpkt(&pkt);
 
 		/*
 		 * Notify the network driver to update its multicast
