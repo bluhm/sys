@@ -1,4 +1,4 @@
-/*	$OpenBSD: mld6_var.h,v 1.7 2025/11/12 19:11:10 bluhm Exp $	*/
+/*	$OpenBSD: mld6_var.h,v 1.8 2026/01/02 13:13:29 bluhm Exp $	*/
 /*	$KAME: mld6_var.h,v 1.4 2000/03/25 07:23:54 sumikawa Exp $	*/
 
 /*
