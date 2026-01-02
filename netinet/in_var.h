@@ -35,6 +35,12 @@
 #ifndef _NETINET_IN_VAR_H_
 #define _NETINET_IN_VAR_H_
 
+/*
+ *  Locks used to protect struct members in this file:
+ *	I	immutable after creation
+ *	m	multicast if_maddrlock rwlock of parent interface
+ */
+
 #include <sys/queue.h>
 
 #ifdef _KERNEL

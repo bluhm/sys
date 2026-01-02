@@ -65,6 +65,12 @@
 #define _NETINET6_IN6_VAR_H_
 
 /*
+ *  Locks used to protect struct members in this file:
+ *	I	immutable after creation
+ *	m	multicast if_maddrlock rwlock of parent interface
+ */
+
+/*
  * Interface address, Internet version.  One of these structures
  * is allocated for each interface with an Internet address.
  * The ifaddr structure contains the protocol-independent part
