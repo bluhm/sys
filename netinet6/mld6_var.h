@@ -45,8 +45,8 @@
 
 void	mld6_init(void);
 void	mld6_input(struct mbuf *, int);
-void	mld6_start_listening(struct in6_multi *, struct ifnet *);
-void	mld6_stop_listening(struct in6_multi *, struct ifnet *);
+void	mld6_start_listening(struct in6_multi *);
+void	mld6_stop_listening(struct in6_multi *);
 void	mld6_fasttimo(void);
 #endif /* _KERNEL */
 
