@@ -35,12 +35,6 @@
 #ifndef _NETINET_IN_VAR_H_
 #define _NETINET_IN_VAR_H_
 
-/*
- *  Locks used to protect struct members in this file:
- *	I	immutable after creation
- *	m	multicast if_maddrlock rwlock of parent interface
- */
-
 #include <sys/queue.h>
 
 #ifdef _KERNEL
@@ -93,11 +87,11 @@ struct in_multi {
 #define inm_refcnt		inm_ifma.ifma_refcnt
 #define inm_ifidx		inm_ifma.ifma_ifidx
 
-	struct sockaddr_in	inm_sin;   /* [I] IPv4 multicast address */
+	struct sockaddr_in	inm_sin;   /* IPv4 multicast address */
 #define inm_addr		inm_sin.sin_addr
 
-	u_int			inm_state; /* [m] state of membership */
-	u_int			inm_timer; /* [m] IGMP membership report */
+	u_int			inm_state; /* state of membership */
+	u_int			inm_timer; /* IGMP membership report timer */
 
 	struct router_info	*inm_rti;  /* router version info */
 };
