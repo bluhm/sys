@@ -1,4 +1,4 @@
-/* $OpenBSD: bcmgenet.c,v 1.8 2024/11/05 18:58:59 miod Exp $ */
+/* $OpenBSD: bcmgenet.c,v 1.10 2026/01/05 11:49:01 mvs Exp $ */
 /* $NetBSD: bcmgenet.c,v 1.3 2020/02/27 17:30:07 jmcneill Exp $ */
 
 /*-
@@ -656,7 +656,6 @@ genet_stop(struct genet_softc *sc)
 
 	ifp->if_flags &= ~IFF_RUNNING;
 	ifq_clr_oactive(&ifp->if_snd);
-	ifp->if_timer = 0;
 
 	intr_barrier(sc->sc_ih);
 
@@ -773,9 +772,6 @@ genet_txintr(struct genet_softc *sc, int qid)
 		--sc->sc_tx.queued;
 	}
 
-	if (sc->sc_tx.queued == 0)
-		ifp->if_timer = 0;
-
 	if (sc->sc_tx.cidx != cidx) {
 		sc->sc_tx.next = i;
 		sc->sc_tx.cidx = cidx;
@@ -792,11 +788,6 @@ genet_start(struct ifnet *ifp)
 	struct mbuf *m;
 	const int qid = GENET_DMA_DEFAULT_QUEUE;
 	int nsegs, index, cnt;
-
-	if ((ifp->if_flags & IFF_RUNNING) == 0)
-		return;
-	if (ifq_is_oactive(&ifp->if_snd))
-		return;
 
 	index = sc->sc_tx.pidx & (TX_DESC_COUNT - 1);
 	cnt = 0;
@@ -828,10 +819,8 @@ genet_start(struct ifnet *ifp)
 		cnt++;
 	}
 
-	if (cnt != 0) {
+	if (cnt != 0)
 		WR4(sc, GENET_TX_DMA_PROD_INDEX(qid), sc->sc_tx.pidx);
-		ifp->if_timer = 5;
-	}
 }
 
 int
