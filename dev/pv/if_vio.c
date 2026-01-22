@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_vio.c,v 1.74 2025/12/22 20:24:49 sf Exp $	*/
+/*	$OpenBSD: if_vio.c,v 1.78 2026/01/15 09:06:19 sf Exp $	*/
 
 /*
  * Copyright (c) 2012 Stefan Fritsch, Alexander Fiveg.
@@ -74,7 +74,8 @@
 #define VIRTIO_NET_CONFIG_DUPLEX	16 /*  8 bit */
 #define VIRTIO_NET_CONFIG_RSS_SIZE	17 /*  8 bit */
 #define VIRTIO_NET_CONFIG_RSS_LEN	18 /* 16 bit */
-#define VIRTIO_NET_CONFIG_HASH_TYPES	20 /* 16 bit */
+#define VIRTIO_NET_CONFIG_HASH_TYPES	20 /* 32 bit */
+#define VIRTIO_NET_CONFIG_TUNNEL_TYPES	24 /* 32 bit */
 
 /* Feature bits */
 #define VIRTIO_NET_F_CSUM			(1ULL<<0)
@@ -82,7 +83,6 @@
 #define VIRTIO_NET_F_CTRL_GUEST_OFFLOADS	(1ULL<<2)
 #define VIRTIO_NET_F_MTU			(1ULL<<3)
 #define VIRTIO_NET_F_MAC			(1ULL<<5)
-#define VIRTIO_NET_F_GSO			(1ULL<<6)
 #define VIRTIO_NET_F_GUEST_TSO4			(1ULL<<7)
 #define VIRTIO_NET_F_GUEST_TSO6			(1ULL<<8)
 #define VIRTIO_NET_F_GUEST_ECN			(1ULL<<9)
@@ -100,6 +100,12 @@
 #define VIRTIO_NET_F_GUEST_ANNOUNCE		(1ULL<<21)
 #define VIRTIO_NET_F_MQ				(1ULL<<22)
 #define VIRTIO_NET_F_CTRL_MAC_ADDR		(1ULL<<23)
+#define VIRTIO_NET_F_DEVICE_STATS		(1ULL<<50)
+#define VIRTIO_NET_F_HASH_TUNNEL		(1ULL<<51)
+#define VIRTIO_NET_F_VQ_NOTF_COAL		(1ULL<<52)
+#define VIRTIO_NET_F_NOTF_COAL			(1ULL<<53)
+#define VIRTIO_NET_F_GUEST_USO4			(1ULL<<54)
+#define VIRTIO_NET_F_GUEST_USO6			(1ULL<<55)
 #define VIRTIO_NET_F_HOST_USO			(1ULL<<56)
 #define VIRTIO_NET_F_HASH_REPORT		(1ULL<<57)
 #define VIRTIO_NET_F_GUEST_HDRLEN		(1ULL<<59)
@@ -121,7 +127,6 @@ static const struct virtio_feature_name virtio_net_feature_names[] = {
 	{ VIRTIO_NET_F_CTRL_GUEST_OFFLOADS,	"CtrlGuestOffl" },
 	{ VIRTIO_NET_F_MTU,			"MTU", },
 	{ VIRTIO_NET_F_MAC,			"MAC" },
-	{ VIRTIO_NET_F_GSO,			"GSO" },
 	{ VIRTIO_NET_F_GUEST_TSO4,		"GuestTSO4" },
 	{ VIRTIO_NET_F_GUEST_TSO6,		"GuestTSO6" },
 	{ VIRTIO_NET_F_GUEST_ECN,		"GuestECN" },
@@ -139,6 +144,12 @@ static const struct virtio_feature_name virtio_net_feature_names[] = {
 	{ VIRTIO_NET_F_GUEST_ANNOUNCE,		"GuestAnnounce" },
 	{ VIRTIO_NET_F_MQ,			"MQ" },
 	{ VIRTIO_NET_F_CTRL_MAC_ADDR,		"CtrlMAC" },
+	{ VIRTIO_NET_F_DEVICE_STATS,		"DevStats" },
+	{ VIRTIO_NET_F_HASH_TUNNEL,		"HashTun" },
+	{ VIRTIO_NET_F_VQ_NOTF_COAL,		"VqNotfCoal" },
+	{ VIRTIO_NET_F_NOTF_COAL,		"NotfCoal" },
+	{ VIRTIO_NET_F_GUEST_USO4,		"GuestUso4" },
+	{ VIRTIO_NET_F_GUEST_USO6,		"GuestUso6" },
 	{ VIRTIO_NET_F_HOST_USO,		"HostUso" },
 	{ VIRTIO_NET_F_HASH_REPORT,		"HashRpt" },
 	{ VIRTIO_NET_F_GUEST_HDRLEN,		"GuestHdrlen" },
@@ -283,6 +294,7 @@ struct vio_softc {
 	struct intrmap		*sc_intrmap;
 	struct vio_queue	*sc_q;
 	uint16_t		sc_nqueues;
+	uint16_t		sc_rxr_lwm;
 	int			sc_tx_slots_per_req;
 	int			sc_rx_mbuf_size;
 
@@ -356,7 +368,7 @@ int	vio_ctrl_start(struct vio_softc *, uint8_t, uint8_t, int, int *);
 int	vio_ctrl_submit(struct vio_softc *, int);
 void	vio_ctrl_finish(struct vio_softc *);
 void	vio_ctrl_wakeup(struct vio_softc *, enum vio_ctrl_state);
-int	vio_alloc_mem(struct vio_softc *, int);
+int	vio_alloc_mem(struct vio_softc *, int, bus_size_t);
 int	vio_alloc_dmamem(struct vio_softc *);
 void	vio_free_dmamem(struct vio_softc *);
 
@@ -455,12 +467,10 @@ vio_free_dmamem(struct vio_softc *sc)
  *   viq_txmbufs[slot]:		mbuf pointer array for sent frames
  */
 int
-vio_alloc_mem(struct vio_softc *sc, int tx_max_segments)
+vio_alloc_mem(struct vio_softc *sc, int tx_max_segments, bus_size_t txsize)
 {
 	struct virtio_softc	*vsc = sc->sc_virtio;
-	struct ifnet		*ifp = &sc->sc_ac.ac_if;
 	size_t			 allocsize, rxqsize, txqsize, offset = 0;
-	bus_size_t		 txsize;
 	caddr_t			 kva;
 	int			 i, qidx, r;
 
@@ -517,11 +527,6 @@ vio_alloc_mem(struct vio_softc *sc, int tx_max_segments)
 	}
 	KASSERT(offset == allocsize);
 
-	if (virtio_has_feature(vsc, VIRTIO_NET_F_HOST_TSO4) ||
-	    virtio_has_feature(vsc, VIRTIO_NET_F_HOST_TSO6))
-		txsize = MAXMCLBYTES + sc->sc_hdr_size + ETHER_HDR_LEN;
-	else
-		txsize = ifp->if_hardmtu + sc->sc_hdr_size + ETHER_HDR_LEN;
 
 	for (qidx = 0; qidx < sc->sc_nqueues; qidx++) {
 		struct vio_queue *vioq = &sc->sc_q[qidx];
@@ -540,8 +545,7 @@ vio_alloc_mem(struct vio_softc *sc, int tx_max_segments)
 
 		for (i = 0; i < rxqsize; i++) {
 			r = bus_dmamap_create(vsc->sc_dmat,
-			    sc->sc_rx_mbuf_size + sc->sc_hdr_size, 2,
-			    sc->sc_rx_mbuf_size, 0,
+			    sc->sc_rx_mbuf_size, 2, sc->sc_rx_mbuf_size, 0,
 			    BUS_DMA_NOWAIT | BUS_DMA_ALLOCNOW | BUS_DMA_64BIT,
 			    &vioq->viq_rxdmamaps[i]);
 			if (r != 0)
@@ -624,7 +628,9 @@ vio_attach(struct device *parent, struct device *self, void *aux)
 	struct vio_softc *sc = (struct vio_softc *)self;
 	struct virtio_softc *vsc = (struct virtio_softc *)parent;
 	struct virtio_attach_args *va = aux;
-	int i, r, tx_max_segments;
+	int i, r, tx_max_segments, want_tso = 1, want_mtu = 1;
+	unsigned int device_mtu = 0;
+	bus_size_t txsize, rxsize;
 	struct ifnet *ifp = &sc->sc_ac.ac_if;
 
 	if (vsc->sc_child != NULL) {
@@ -637,23 +643,67 @@ vio_attach(struct device *parent, struct device *self, void *aux)
 
 	vsc->sc_child = self;
 	vsc->sc_ipl = IPL_NET | IPL_MPSAFE;
-	vsc->sc_driver_features = VIRTIO_NET_F_MAC | VIRTIO_NET_F_STATUS |
-	    VIRTIO_NET_F_CTRL_VQ | VIRTIO_NET_F_CTRL_RX |
-	    VIRTIO_NET_F_MRG_RXBUF | VIRTIO_NET_F_CSUM |
-	    VIRTIO_F_RING_EVENT_IDX | VIRTIO_NET_F_GUEST_CSUM;
 
+negotiate:
+	vsc->sc_driver_features = VIRTIO_F_RING_EVENT_IDX;
+	vsc->sc_driver_features |= VIRTIO_NET_F_MAC;
+	vsc->sc_driver_features |= VIRTIO_NET_F_STATUS;
+	vsc->sc_driver_features |= VIRTIO_NET_F_CTRL_VQ;
+	vsc->sc_driver_features |= VIRTIO_NET_F_CTRL_RX;
+	vsc->sc_driver_features |= VIRTIO_NET_F_MRG_RXBUF;
+	vsc->sc_driver_features |= VIRTIO_NET_F_CSUM;
+	vsc->sc_driver_features |= VIRTIO_NET_F_GUEST_CSUM;
+	if (want_tso) {
+		vsc->sc_driver_features |= VIRTIO_NET_F_CTRL_GUEST_OFFLOADS;
+		vsc->sc_driver_features |= VIRTIO_NET_F_GUEST_TSO4;
+		vsc->sc_driver_features |= VIRTIO_NET_F_GUEST_TSO6;
+		vsc->sc_driver_features |= VIRTIO_NET_F_HOST_TSO4;
+		vsc->sc_driver_features |= VIRTIO_NET_F_HOST_TSO6;
+	}
+	if (want_mtu)
+		vsc->sc_driver_features |= VIRTIO_NET_F_MTU;
 	if (va->va_nintr > 3 && ncpus > 1)
 		vsc->sc_driver_features |= VIRTIO_NET_F_MQ;
 
-	vsc->sc_driver_features |= VIRTIO_NET_F_HOST_TSO4;
-	vsc->sc_driver_features |= VIRTIO_NET_F_HOST_TSO6;
-
-	vsc->sc_driver_features |= VIRTIO_NET_F_CTRL_GUEST_OFFLOADS;
-	vsc->sc_driver_features |= VIRTIO_NET_F_GUEST_TSO4;
-	vsc->sc_driver_features |= VIRTIO_NET_F_GUEST_TSO6;
-
 	if (virtio_negotiate_features(vsc, virtio_net_feature_names) != 0)
 		goto err;
+
+	if ((virtio_has_feature(vsc, VIRTIO_NET_F_GUEST_TSO4) ||
+	     virtio_has_feature(vsc, VIRTIO_NET_F_GUEST_TSO6)) &&
+	    (!virtio_has_feature(vsc, VIRTIO_NET_F_CTRL_GUEST_OFFLOADS) ||
+	     !virtio_has_feature(vsc, VIRTIO_NET_F_MRG_RXBUF))) {
+		/*
+		 * We only support VIRTIO_NET_F_GUEST_TSO4/6 if we also have
+		 * both VIRTIO_NET_F_CTRL_GUEST_OFFLOADS and
+		 * VIRTIO_NET_F_MRG_RXBUF. In order to make this known to the
+		 * hypervisor, we need to redo feature negotiation.
+		 *
+		 * Unfortunately, Apple Virtualisation does not work with
+		 * only VIRTIO_NET_F_HOST_TSO4/6. Therefore we disable all TSO
+		 * in the fallback case.
+		 */
+		want_tso = 0;
+		virtio_reset(vsc);
+		goto negotiate;
+	}
+
+	if (virtio_has_feature(vsc, VIRTIO_NET_F_MTU)) {
+		device_mtu = virtio_read_device_config_2(vsc,
+		    VIRTIO_NET_CONFIG_MTU);
+		if (device_mtu > ETHER_MAX_HARDMTU_LEN) {
+			/*
+			 * According to the standard we MUST supply rx buffers
+			 * for the MTU length, but we only support up to
+			 * ETHER_MAX_HARDMTU_LEN.
+			 */
+			printf("%s: mtu %u not supported\n",
+			    sc->sc_dev.dv_xname, device_mtu);
+			device_mtu = 0;
+			want_mtu = 0;
+			virtio_reset(vsc);
+			goto negotiate;
+		}
+	}
 
 	if (virtio_has_feature(vsc, VIRTIO_NET_F_MQ)) {
 		i = virtio_read_device_config_2(vsc,
@@ -689,7 +739,7 @@ vio_attach(struct device *parent, struct device *self, void *aux)
 		vio_get_lladdr(&sc->sc_ac, vsc);
 	else
 		ether_fakeaddr(ifp);
-	printf(", address %s\n", ether_sprintf(sc->sc_ac.ac_enaddr));
+	printf(", address %s", ether_sprintf(sc->sc_ac.ac_enaddr));
 
 	if (virtio_has_feature(vsc, VIRTIO_NET_F_MRG_RXBUF) ||
 	    vsc->sc_version_1) {
@@ -722,11 +772,31 @@ vio_attach(struct device *parent, struct device *self, void *aux)
 		sc->sc_rx_mbuf_size = 4 * 1024;
 	}
 
-	if (virtio_has_feature(vsc, VIRTIO_NET_F_MRG_RXBUF))
-		ifp->if_hardmtu = MAXMCLBYTES;
-	else
-		ifp->if_hardmtu = sc->sc_rx_mbuf_size - sc->sc_hdr_size -
-		    ETHER_HDR_LEN;
+	ifp->if_hardmtu = ETHER_MAX_HARDMTU_LEN;
+	if (device_mtu) {
+		printf(", mtu %u", device_mtu);
+		ifp->if_hardmtu = device_mtu;
+	}
+	if (!virtio_has_feature(vsc, VIRTIO_NET_F_MRG_RXBUF)) {
+		if (device_mtu)
+			sc->sc_rx_mbuf_size = MAX(sc->sc_rx_mbuf_size,
+			    device_mtu + sc->sc_hdr_size + ETHER_HDR_LEN);
+		ifp->if_hardmtu = MIN(ifp->if_hardmtu,
+		    sc->sc_rx_mbuf_size - sc->sc_hdr_size - ETHER_HDR_LEN);
+	}
+
+	txsize = ifp->if_hardmtu + sc->sc_hdr_size + ETHER_HDR_LEN;
+	if (virtio_has_feature(vsc, VIRTIO_NET_F_HOST_TSO4) ||
+	    virtio_has_feature(vsc, VIRTIO_NET_F_HOST_TSO6))
+		txsize = MAXMCLBYTES + sc->sc_hdr_size;
+
+	rxsize = ifp->if_hardmtu + sc->sc_hdr_size + ETHER_HDR_LEN;
+	if (virtio_has_feature(vsc, VIRTIO_NET_F_GUEST_TSO4) ||
+	    virtio_has_feature(vsc, VIRTIO_NET_F_GUEST_TSO6))
+		rxsize = MAXMCLBYTES + sc->sc_hdr_size;
+
+	printf("\n");
+	sc->sc_rxr_lwm = 2 * howmany(rxsize, sc->sc_rx_mbuf_size);
 
 	/* defrag for longer mbuf chains */
 	tx_max_segments = 16;
@@ -829,7 +899,7 @@ vio_attach(struct device *parent, struct device *self, void *aux)
 		}
 	}
 
-	if (vio_alloc_mem(sc, tx_max_segments) < 0)
+	if (vio_alloc_mem(sc, tx_max_segments, txsize) < 0)
 		goto err;
 
 	strlcpy(ifp->if_xname, self->dv_xname, IFNAMSIZ);
@@ -856,6 +926,8 @@ vio_attach(struct device *parent, struct device *self, void *aux)
 	if_attach(ifp);
 	ether_ifattach(ifp);
 	vio_link_state(ifp);
+	if (device_mtu)
+		ifp->if_mtu = device_mtu;
 
 	if_attach_queues(ifp, sc->sc_nqueues);
 	if_attach_iqueues(ifp, sc->sc_nqueues);
@@ -990,8 +1062,7 @@ vio_init(struct ifnet *ifp)
 		struct vio_queue *vioq = &sc->sc_q[qidx];
 
 		mtx_enter(&vioq->viq_rxmtx);
-		if_rxr_init(&vioq->viq_rxring,
-		    2 * ((ifp->if_hardmtu / sc->sc_rx_mbuf_size) + 1),
+		if_rxr_init(&vioq->viq_rxring, sc->sc_rxr_lwm,
 		    vioq->viq_rxvq->vq_num);
 		vio_populate_rx_mbufs(sc, vioq);
 		ifq_clr_oactive(vioq->viq_ifq);

@@ -1,4 +1,4 @@
-/*	$OpenBSD: nhi.c,v 1.2 2025/12/09 20:27:24 kettenis Exp $ */
+/*	$OpenBSD: nhi.c,v 1.4 2026/01/19 21:12:49 kettenis Exp $ */
 
 /*
  * Copyright (c) 2025 Mark Kettenis <kettenis@openbsd.org>
@@ -64,6 +64,8 @@
 #define NHI_CAPS			0x39640
 #define  NHI_CAPS_VER_MAJ(_x)		(((_x) >> 21) & 0x7)
 #define  NHI_CAPS_VER_MIN(_x)		(((_x) >> 16) & 0x1f)
+#define NHI_RESET			0x39858
+#define  NHI_RESET_RST			(1U << 0)
 
 /* Protocol Defined Field */
 #define PDF_READ		0x1
@@ -181,6 +183,10 @@ static const struct pci_matchid nhi_devices[] = {
 	{ PCI_VENDOR_AMD,	PCI_PRODUCT_AMD_19_4X_USB4_2 },
 	{ PCI_VENDOR_AMD,	PCI_PRODUCT_AMD_19_7X_USB4_1 },
 	{ PCI_VENDOR_AMD,	PCI_PRODUCT_AMD_19_7X_USB4_2 },
+	{ PCI_VENDOR_AMD,	PCI_PRODUCT_AMD_1A_2X_USB4_1 },
+	{ PCI_VENDOR_AMD,	PCI_PRODUCT_AMD_1A_2X_USB4_2 },
+	{ PCI_VENDOR_AMD,	PCI_PRODUCT_AMD_1A_6X_USB4_1 },
+	{ PCI_VENDOR_AMD,	PCI_PRODUCT_AMD_1A_6X_USB4_2 },
 };
 
 int
@@ -346,7 +352,8 @@ nhi_activate(struct device *self, int act)
 void
 nhi_init(struct nhi_softc *sc)
 {
-	int i;
+	uint32_t rst;
+	int i, timo;
 
 	for (i = 0; i < NHI_RX_NDESC; i++) {
 		struct nhi_desc *rxd;
@@ -362,7 +369,18 @@ nhi_init(struct nhi_softc *sc)
 
 	sc->sc_tx_prod = 0;
 	sc->sc_rx_prod = 0;
-	
+
+	/* Reset; should complete within 10 ms (tHIReset). */
+	bus_space_write_4(sc->sc_iot, sc->sc_ioh, NHI_RESET, NHI_RESET_RST);
+	for (timo = 10000; timo > 0; timo--) {
+		rst = bus_space_read_4(sc->sc_iot, sc->sc_ioh, NHI_RESET);
+		if ((rst & NHI_RESET) == 0)
+			break;
+		delay(1);
+	}
+	if (timo == 0)
+		printf("%s: reset failed\n", sc->sc_dev.dv_xname);
+
 	bus_space_write_4(sc->sc_iot, sc->sc_ioh, NHI_TX_RING_BASE_LO(0),
 	    NHI_DMA_DVA(sc->sc_tx_ring));
 	bus_space_write_4(sc->sc_iot, sc->sc_ioh, NHI_TX_RING_BASE_HI(0),
