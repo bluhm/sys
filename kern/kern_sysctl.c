@@ -100,6 +100,7 @@
 #include <netinet/tcp_var.h>
 #include <netinet/udp.h>
 #include <netinet/udp_var.h>
+#include <netinet/ip_divert.h>
 #include <netinet6/ip6_var.h>
 
 #ifdef DDB
@@ -1768,6 +1769,12 @@ do {									\
 			FILLINPTABLE(&rawcbtable);
 #ifdef INET6
 			FILLINPTABLE(&rawin6pcbtable);
+#endif
+#if NPF > 0
+			FILLINPTABLE(&divbtable);
+#ifdef INET6
+			FILLINPTABLE(&divb6table);
+#endif
 #endif
 		}
 		fp = NULL;
