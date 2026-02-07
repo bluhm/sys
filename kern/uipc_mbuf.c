@@ -1621,14 +1621,6 @@ ml_init(struct mbuf_list *ml)
 }
 
 void
-ml_init_m(struct mbuf_list *ml, struct mbuf *m)
-{
-	ml->ml_head = ml->ml_tail = m;
-	m->m_nextpkt = NULL;
-	ml->ml_len = 1;
-}
-
-void
 ml_enqueue(struct mbuf_list *ml, struct mbuf *m)
 {
 	if (ml->ml_tail == NULL)

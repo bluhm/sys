@@ -1356,7 +1356,8 @@ ether_offload_ifcap(struct ifnet *ifp, struct mbuf_list *ml, struct mbuf *m)
 		m->m_pkthdr.csum_flags = mh.m_pkthdr.csum_flags;
 	}
 
-	ml_init_m(ml, m);
+	ml_init(ml);
+	ml_enqueue(ml, m);
 	return (0);
 }
 
