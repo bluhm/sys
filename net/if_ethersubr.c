@@ -96,6 +96,11 @@ didn't get a copy, you may request one from <license@ipv6.nrl.navy.mil>.
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
 
+/* for tcp_softtso_chop */
+#include <netinet/tcp.h>
+#include <netinet/tcp_timer.h>
+#include <netinet/tcp_var.h>
+
 #if NBPFILTER > 0
 #include <net/bpf.h>
 #endif
@@ -1068,7 +1073,7 @@ ether_extract_headers(struct mbuf *m0, struct ether_extracted *ext)
 	struct mbuf	*m;
 	size_t		 hlen, iplen;
 	int		 hoff;
-	uint8_t		 ipproto;
+	int		 ipproto;
 	uint16_t	 ether_type;
 	/* gcc 4.2.1 on sparc64 may create 32 bit loads on unaligned mbuf */
 	union {
@@ -1135,6 +1140,8 @@ ether_extract_headers(struct mbuf *m0, struct ether_extracted *ext)
 	}
 #endif
 
+	ext->ipoff = hlen;
+
 	switch (ether_type) {
 	case ETHERTYPE_IP:
 		m = m_getptr(m0, hlen, &hoff);
@@ -1175,7 +1182,7 @@ ether_extract_headers(struct mbuf *m0, struct ether_extracted *ext)
 		ipproto = ext->ip4->ip_p;
 
 		if (ISSET(ntohs(ext->ip4->ip_off), IP_MF|IP_OFFMASK))
-			return;
+			ipproto = -1;
 		break;
 #ifdef INET6
 	case ETHERTYPE_IPV6:
@@ -1208,6 +1215,9 @@ ether_extract_headers(struct mbuf *m0, struct ether_extracted *ext)
 	default:
 		return;
 	}
+
+	ext->ipm = m;
+	ext->ipmoff = hoff;
 
 	switch (ipproto) {
 	case IPPROTO_TCP:
@@ -1263,12 +1273,40 @@ ether_extract_headers(struct mbuf *m0, struct ether_extracted *ext)
 	    ext->iplen, ext->iphlen, ext->tcphlen, ext->paylen);
 }
 
-struct mbuf *
-ether_offload_ifcap(struct ifnet *ifp, struct mbuf *m)
+static inline int
+ether_offload_csum(struct ifnet *ifp, struct mbuf *m)
 {
-	struct ether_extracted ext;
-	int csum = 0;
+	if (ISSET(m->m_pkthdr.csum_flags, M_IPV4_CSUM_OUT) &&
+	    !ISSET(ifp->if_capabilities, IFCAP_CSUM_IPv4))
+		return (1);
 
+	if (ISSET(m->m_pkthdr.csum_flags, M_TCP_CSUM_OUT) &&
+	    (!ISSET(ifp->if_capabilities, IFCAP_CSUM_TCPv4) ||
+	     !ISSET(ifp->if_capabilities, IFCAP_CSUM_TCPv6)))
+		return (1);
+
+	if (ISSET(m->m_pkthdr.csum_flags, M_UDP_CSUM_OUT) &&
+	    (!ISSET(ifp->if_capabilities, IFCAP_CSUM_UDPv4) ||
+	     !ISSET(ifp->if_capabilities, IFCAP_CSUM_UDPv6)))
+		return (1);
+
+	return (0);
+}
+
+static inline int
+ether_offload_tso(struct ifnet *ifp, struct mbuf *m)
+{
+	if (ISSET(m->m_pkthdr.csum_flags, M_TCP_TSO) &&
+	    (!ISSET(ifp->if_capabilities, IFCAP_TSOv4) ||
+	     !ISSET(ifp->if_capabilities, IFCAP_TSOv6)))
+		return (1);
+
+	return (0);
+}
+
+int
+ether_offload_ifcap(struct ifnet *ifp, struct mbuf_list *ml, struct mbuf *m)
+{
 #if NVLAN > 0
 	if (ISSET(m->m_flags, M_VLANTAG) &&
 	    !ISSET(ifp->if_capabilities, IFCAP_VLAN_HWTAGGING)) {
@@ -1278,63 +1316,48 @@ ether_offload_ifcap(struct ifnet *ifp, struct mbuf *m)
 		 */
 		m = vlan_inject(m, ETHERTYPE_VLAN, m->m_pkthdr.ether_vtag);
 		if (m == NULL)
-			return (NULL);
+			return (ENOBUFS);
 	}
 #endif
 
-	if (ISSET(m->m_pkthdr.csum_flags, M_IPV4_CSUM_OUT) &&
-	    !ISSET(ifp->if_capabilities, IFCAP_CSUM_IPv4))
-		csum = 1;
+	if (ether_offload_tso(ifp, m)) {
+		struct ether_extracted ext;
+		ether_extract_headers(m, &ext);
 
-	if (ISSET(m->m_pkthdr.csum_flags, M_TCP_CSUM_OUT) &&
-	    (!ISSET(ifp->if_capabilities, IFCAP_CSUM_TCPv4) ||
-	     !ISSET(ifp->if_capabilities, IFCAP_CSUM_TCPv6)))
-		csum = 1;
+		return (tcp_softtso_chop(ml, m, ifp, ext.ipoff,
+		    m->m_pkthdr.ph_mss));
+	}
 
-	if (ISSET(m->m_pkthdr.csum_flags, M_UDP_CSUM_OUT) &&
-	    (!ISSET(ifp->if_capabilities, IFCAP_CSUM_UDPv4) ||
-	     !ISSET(ifp->if_capabilities, IFCAP_CSUM_UDPv6)))
-		csum = 1;
-
-	if (csum) {
-		int ethlen;
-		int hlen;
+	if (ether_offload_csum(ifp, m)) {
+		struct ether_extracted ext;
+		struct mbuf mh, *ipm;
 
 		ether_extract_headers(m, &ext);
 
-		ethlen = sizeof *ext.eh;
-		if (ext.evh)
-			ethlen = sizeof *ext.evh;
+		ipm = ext.ipm;
 
-		hlen = m->m_pkthdr.len - ext.paylen;
+		mh.m_flags = 0;
+		mh.m_data = mtod(ipm, caddr_t) + ext.ipmoff;
+		mh.m_len = ipm->m_len - ext.ipmoff;
+		mh.m_next = ipm->m_next;
 
-		if (m->m_len < hlen) {
-			m = m_pullup(m, hlen);
-			if (m == NULL)
-				return (NULL);
-		}
-
-		/* hide ethernet header */
-		m->m_data += ethlen;
-		m->m_len -= ethlen;
-		m->m_pkthdr.len -= ethlen;
+		mh.m_pkthdr.len = m->m_pkthdr.len - ext.ipoff;
+		mh.m_pkthdr.csum_flags = m->m_pkthdr.csum_flags;
 
 		if (ext.ip4) {
-			in_hdr_cksum_out(m, ifp);
-			in_proto_cksum_out(m, ifp);
+			in_hdr_cksum_out(&mh, ifp);
+			in_proto_cksum_out(&mh, ifp);
 #ifdef INET6
 		} else if (ext.ip6) {
-			in6_proto_cksum_out(m, ifp);
+			in6_proto_cksum_out(&mh, ifp);
 #endif
 		}
 
-		/* show ethernet header again */
-		m->m_data -= ethlen;
-		m->m_len += ethlen;
-		m->m_pkthdr.len += ethlen;
+		m->m_pkthdr.csum_flags = mh.m_pkthdr.csum_flags;
 	}
 
-	return m;
+	ml_init_m(ml, m);
+	return (0);
 }
 
 #if NAF_FRAME > 0
