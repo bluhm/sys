@@ -1190,7 +1190,8 @@ tcp_softtso_chop(struct mbuf_list *ml, struct mbuf *m0, struct ifnet *ifp,
 	struct mbuf *m;
 	int error;
 
-	ml_init_m(ml, m0);
+	ml_init(ml);
+	ml_enqueue(ml, m0);
 
 	if (mss == 0) {
 		error = EINVAL;
