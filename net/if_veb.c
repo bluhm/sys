@@ -590,8 +590,10 @@ veb_span(struct veb_softc *sc, struct mbuf *m0)
 	struct veb_port **ps;
 	struct veb_port *p;
 	struct ifnet *ifp0;
+	struct mbuf_list ml;
 	struct mbuf *m;
 	unsigned int i;
+	int error;
 
 	smr_read_enter();
 	sm = SMR_PTR_GET(&sc->sc_spans);
@@ -615,13 +617,14 @@ veb_span(struct veb_softc *sc, struct mbuf *m0)
 			continue;
 		}
 
-		m = ether_offload_ifcap(ifp0, m);
-		if (m == NULL) {
+		error = ether_offload_ifcap(ifp0, &ml, m);
+		if (error != 0) {
 			counters_inc(sc->sc_if.if_counters, ifc_oerrors);
 			continue;
 		}
 
-		if_enqueue(ifp0, m); /* XXX count error */
+		while ((m = ml_dequeue(&ml)) != NULL)
+			if_enqueue(ifp0, m); /* XXX count error */
 	}
 	refcnt_rele_wake(&sm->m_refs);
 }
@@ -934,6 +937,7 @@ veb_broadcast(struct veb_softc *sc, struct veb_ctx *ctx, struct mbuf *m0)
 	struct veb_port **ps;
 	struct ifnet *ifp0;
 	struct mbuf *m;
+	struct mbuf_list ml;
 	unsigned int i;
 
 	if (ctx->p->p_pvid == ctx->vs) { /* XXX which vlan is the right one? */
@@ -1033,13 +1037,13 @@ veb_broadcast(struct veb_softc *sc, struct veb_ctx *ctx, struct mbuf *m0)
 		else
 			CLR(m->m_flags, M_VLANTAG);
 
-		m = ether_offload_ifcap(ifp0, m);
-		if (m == NULL) {
-			counters_inc(ifp->if_counters, ifc_oerrors);
+		if (ether_offload_ifcap(ifp0, &ml, m) != 0) {
+			counters_inc(ifp->if_counters, ifc_ierrors);
 			continue;
 		}
 
-		(*tp->p_enqueue)(ifp0, m, ctx->ns); /* XXX count error */
+		while ((m = ml_dequeue(&ml)) != NULL)
+			(*tp->p_enqueue)(ifp0, m, ctx->ns);
 	}
 	refcnt_rele_wake(&pm->m_refs);
 
@@ -1056,6 +1060,7 @@ veb_transmit(struct veb_softc *sc, struct veb_ctx *ctx, struct mbuf *m,
 	uint16_t pvid, vid = tvs;
 	unsigned int bif_flags = READ_ONCE(tp->p_bif_flags);
 	enum veb_port_counters c;
+	struct mbuf_list ml;
 
 	/*
 	 * don't let Ethernet packets hairpin or move between
@@ -1131,13 +1136,13 @@ veb_transmit(struct veb_softc *sc, struct veb_ctx *ctx, struct mbuf *m,
 	counters_pkt(ifp->if_counters, ifc_opackets, ifc_obytes,
 	    m->m_pkthdr.len);
 
-	m = ether_offload_ifcap(ifp0, m);
-	if (m == NULL) {
-		counters_inc(ifp->if_counters, ifc_oerrors);
+	if (ether_offload_ifcap(ifp0, &ml, m) != 0) {
+		counters_inc(ifp->if_counters, ifc_ierrors);
 		return (NULL);
 	}
-
-	(*tp->p_enqueue)(ifp0, m, ctx->ns); /* XXX count error */
+ 
+	while ((m = ml_dequeue(&ml)) != NULL)
+		(*tp->p_enqueue)(ifp0, m, ctx->ns); /* XXX count error */
 
 	return (NULL);
 drop:
@@ -1772,8 +1777,6 @@ veb_add_port(struct veb_softc *sc, const struct ifbreq *req, unsigned int span)
 		error = ENOMEM;
 		goto put;
 	}
-
-	ifsetlro(ifp0, 0);
 
 	p->p_ifp0 = ifp0;
 	p->p_veb = sc;
@@ -3533,6 +3536,7 @@ vport_clone_create(struct if_clone *ifc, int unit)
 	ifp->if_capabilities |= IFCAP_CSUM_IPv4;
 	ifp->if_capabilities |= IFCAP_CSUM_TCPv4 | IFCAP_CSUM_UDPv4;
 	ifp->if_capabilities |= IFCAP_CSUM_TCPv6 | IFCAP_CSUM_UDPv6;
+	ifp->if_capabilities |= IFCAP_TSOv4 | IFCAP_TSOv6;
 
 	ether_fakeaddr(ifp);
 

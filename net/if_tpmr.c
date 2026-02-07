@@ -343,6 +343,7 @@ tpmr_input(struct ifnet *ifp0, struct mbuf *m, uint64_t dst, void *brport,
 	struct ifnet *ifpn;
 	unsigned int iff;
 	struct tpmr_port *pn;
+	struct mbuf_list ml;
 	void *pnref;
 	int len;
 #if NBPFILTER > 0
@@ -393,18 +394,21 @@ tpmr_input(struct ifnet *ifp0, struct mbuf *m, uint64_t dst, void *brport,
 		goto rele;
 #endif
 
-	m = ether_offload_ifcap(ifpn, m);
-	if (m == NULL) {
+	if (ether_offload_ifcap(ifpn, &ml, m) != 0) {
 		counters_inc(ifp->if_counters, ifc_oerrors);
 		goto rele;
 	}
 
-	if (if_enqueue(ifpn, m) != 0) {
-		counters_inc(ifp->if_counters, ifc_oerrors);
-		goto rele;
-	}
+	while ((m = ml_dequeue(&ml)) != NULL) {
+		len = m->m_pkthdr.len;
 
-	counters_pkt(ifp->if_counters, ifc_opackets, ifc_obytes, len);
+		if (if_enqueue(ifpn, m))
+			counters_inc(ifp->if_counters, ifc_oerrors);
+		else {
+			counters_pkt(ifp->if_counters,
+			    ifc_opackets, ifc_obytes, len);
+		}
+	}
 
 rele:
 	tpmr_cpu_rele(pnref, pn);
@@ -534,8 +538,6 @@ tpmr_add_port(struct tpmr_softc *sc, const struct ifbreq *req)
 		tpmr_p_take(p);
 		refcnt_init(r);
 	}
-
-	ifsetlro(ifp0, 0);
 
 	p->p_ifp0 = ifp0;
 	p->p_tpmr = sc;
