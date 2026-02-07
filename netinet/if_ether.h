@@ -306,14 +306,17 @@ struct ether_extracted {
 	struct ip6_hdr			*ip6;
 	struct tcphdr			*tcp;
 	struct udphdr			*udp;
+	u_int				 ipoff;
 	u_int				 iplen;
 	u_int				 iphlen;
 	u_int				 tcphlen;
 	u_int				 paylen;
+	struct mbuf			*ipm;
+	u_int				 ipmoff;
 };
 
 void ether_extract_headers(struct mbuf *, struct ether_extracted *);
-struct mbuf *ether_offload_ifcap(struct ifnet *, struct mbuf *);
+int ether_offload_ifcap(struct ifnet *, struct mbuf_list *, struct mbuf *);
 
 /*
  * Ethernet multicast address structure.  There is one of these for each

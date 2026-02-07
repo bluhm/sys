@@ -634,7 +634,7 @@ ip_output_ipsec_send(struct tdb *tdb, struct mbuf *m, struct route *ro,
 	m->m_flags &= ~(M_MCAST | M_BCAST);
 
 	if (tso) {
-		error = tcp_softtso_chop(&ml, m, encif, len);
+		error = tcp_softtso_chop(&ml, m, encif, 0, len);
 		if (error)
 			goto done;
 	} else {

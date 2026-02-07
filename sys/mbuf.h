@@ -525,6 +525,7 @@ struct m_tag *m_tag_next(struct mbuf *, struct m_tag *);
 #define MBUF_LIST_INITIALIZER() { NULL, NULL, 0 }
 
 void			ml_init(struct mbuf_list *);
+void			ml_init_m(struct mbuf_list *, struct mbuf *);
 void			ml_enqueue(struct mbuf_list *, struct mbuf *);
 struct mbuf *		ml_dequeue(struct mbuf_list *);
 void			ml_enlist(struct mbuf_list *, struct mbuf_list *);
