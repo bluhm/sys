@@ -1324,8 +1324,7 @@ ether_offload_ifcap(struct ifnet *ifp, struct mbuf_list *ml, struct mbuf *m)
 		struct ether_extracted ext;
 		ether_extract_headers(m, &ext);
 
-		return (tcp_softtso_chop(ml, m, ifp, ext.ipoff,
-		    m->m_pkthdr.ph_mss));
+		return (tcp_softtso_chop(ml, m, ifp, &ext, m->m_pkthdr.ph_mss));
 	}
 
 	if (ether_offload_csum(ifp, m)) {

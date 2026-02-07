@@ -706,6 +706,7 @@ extern	struct syn_cache_set tcp_syn_cache[];
 extern	int tcp_syn_cache_active; /* active syn cache, may be 0 or 1 */
 
 struct tdb;
+struct ether_extracted;
 
 void	 tcp_canceltimers(struct tcpcb *);
 struct tcpcb *
@@ -739,7 +740,7 @@ struct tcpcb *
 void	 tcp_notify(struct inpcb *, int);
 int	 tcp_output(struct tcpcb *);
 int	 tcp_softtso_chop(struct mbuf_list *, struct mbuf *, struct ifnet *,
-	    u_int, u_int);
+	    struct ether_extracted *, u_int);
 int	 tcp_if_output_tso(struct ifnet *, struct mbuf **, struct sockaddr *,
 	    struct rtentry *, uint32_t, u_int);
 void	 tcp_pulloutofband(struct socket *, u_int, struct mbuf *, int);
