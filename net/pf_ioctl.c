@@ -1561,7 +1561,7 @@ pf_sourcelim_add(const struct pfioc_sourcelim *ioc)
 	if (pfsrlim->pfsrlim_overload.name[0] != '\0') {
 		pfsrlim->pfsrlim_overload.table = pfr_attach_table(
 		    &pf_main_ruleset,
-		    pfsrlim->pfsrlim_overload.name, 0);
+		    pfsrlim->pfsrlim_overload.name, PR_WAITOK);
 		if (pfsrlim->pfsrlim_overload.table == NULL) {
 			error = EINVAL;
 			goto unlock;
