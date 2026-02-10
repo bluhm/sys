@@ -737,8 +737,8 @@ igc_dma_malloc(struct igc_softc *sc, bus_size_t size, struct igc_dma_alloc *dma)
 
 	dma->dma_tag = os->os_pa.pa_dmat;
 
-	if (bus_dmamap_create(dma->dma_tag, size, 1, size, 0, BUS_DMA_NOWAIT,
-	    &dma->dma_map))
+	if (bus_dmamap_create(dma->dma_tag, size, 1, size, 0,
+	    BUS_DMA_NOWAIT | BUS_DMA_64BIT, &dma->dma_map))
 		return 1;
 	if (bus_dmamem_alloc(dma->dma_tag, size, PAGE_SIZE, 0, &dma->dma_seg,
 	    1, &dma->dma_nseg, BUS_DMA_NOWAIT))
@@ -796,7 +796,7 @@ igc_setup_interface(struct igc_softc *sc)
 	ifp->if_softc = sc;
 	strlcpy(ifp->if_xname, DEVNAME(sc), IFNAMSIZ);
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
-	ifp->if_xflags = IFXF_MPSAFE;
+	ifp->if_xflags = IFXF_MPSAFE | IFXF_DMA_64BIT;
 	ifp->if_ioctl = igc_ioctl;
 	ifp->if_qstart = igc_start;
 	ifp->if_watchdog = igc_watchdog;
@@ -1855,10 +1855,11 @@ igc_allocate_transmit_buffers(struct igc_txring *txr)
 	for (i = 0; i < sc->num_tx_desc; i++) {
 		txbuf = &txr->tx_buffers[i];
 		error = bus_dmamap_create(txr->txdma.dma_tag, IGC_TSO_SIZE,
-		    IGC_MAX_SCATTER, PAGE_SIZE, 0, BUS_DMA_NOWAIT, &txbuf->map);
+		    IGC_MAX_SCATTER, PAGE_SIZE, 0,
+		    BUS_DMA_NOWAIT | BUS_DMA_64BIT, &txbuf->map);
 		if (error != 0) {
-			printf("%s: Unable to create TX DMA map\n",
-			    DEVNAME(sc));
+			printf("%s: Unable to create TX DMA map, error %d\n",
+			    DEVNAME(sc), error);
 			goto fail;
 		}
 	}
@@ -2161,10 +2162,10 @@ igc_allocate_receive_buffers(struct igc_rxring *rxr)
 	for (i = 0; i < sc->num_rx_desc; i++, rxbuf++) {
 		error = bus_dmamap_create(rxr->rxdma.dma_tag,
 		    sc->rx_mbuf_sz, 1, sc->rx_mbuf_sz, 0,
-		    BUS_DMA_NOWAIT, &rxbuf->map);
+		    BUS_DMA_NOWAIT | BUS_DMA_64BIT, &rxbuf->map);
 		if (error) {
-			printf("%s: Unable to create RX DMA map\n",
-			    DEVNAME(sc));
+			printf("%s: Unable to create RX DMA map, error %d\n",
+			    DEVNAME(sc), error);
 			goto fail;
 		}
 	}
