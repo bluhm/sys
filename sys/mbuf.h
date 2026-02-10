@@ -36,6 +36,7 @@
 #define _SYS_MBUF_H_
 
 #include <sys/queue.h>
+#include <sys/atomic.h>
 
 /*
  * Constants related to network buffer management.
@@ -145,8 +146,8 @@ struct mbuf_ext {
 	void	*ext_arg;
 	u_int	ext_free_fn;		/* index of free function */
 	u_int	ext_size;		/* size of buffer, for ext_free_fn */
-	struct mbuf *ext_nextref;
-	struct mbuf *ext_prevref;
+	struct mbuf *ext_refm;		/* mbuf with ext_refs */
+	u_int	ext_refs;		/* number of refs via ext_refm */
 #ifdef DEBUG
 	const char *ext_ofile;
 	const char *ext_nfile;
@@ -282,13 +283,23 @@ struct mbuf {
 #define MCLREFDEBUGO(m, file, line)
 #endif
 
-#define	MCLISREFERENCED(m)	((m)->m_ext.ext_nextref != (m))
+static inline int
+m_extreferenced(struct mbuf *m)
+{
+	struct mbuf *mr;
 
-#define	MCLADDREFERENCE(o, n)	m_extref((o), (n))
+	mr = m->m_ext.ext_refm;
+	if (mr == NULL)
+		return (0);
+
+	return (atomic_load_int(&mr->m_ext.ext_refs) > 1);
+}
+
+#define	MCLISREFERENCED(m)	m_extreferenced(m)
 
 #define	MCLINITREFERENCE(m)	do {					\
-		(m)->m_ext.ext_prevref = (m);				\
-		(m)->m_ext.ext_nextref = (m);				\
+		(m)->m_ext.ext_refm = NULL;				\
+		(m)->m_ext.ext_refs = 0;				\
 		MCLREFDEBUGO((m), __FILE__, __LINE__);			\
 		MCLREFDEBUGN((m), NULL, 0);				\
 	} while (/* CONSTCOND */ 0)
@@ -546,8 +557,6 @@ unsigned int		ml_hdatalen(struct mbuf_list *);
 /*
  * mbuf queues
  */
-
-#include <sys/atomic.h>
 
 #define MBUF_QUEUE_INITIALIZER(_maxlen, _ipl) \
     { MUTEX_INITIALIZER(_ipl), MBUF_LIST_INITIALIZER(), (_maxlen), 0 }
