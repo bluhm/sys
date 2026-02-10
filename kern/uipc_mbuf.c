@@ -123,8 +123,6 @@ int max_linkhdr;		/* largest link-level header */
 int max_protohdr;		/* largest protocol header */
 int max_hdr;			/* largest link+protocol header */
 
-struct	mutex m_extref_mtx = MUTEX_INITIALIZER(IPL_NET);
-
 void	m_extfree(struct mbuf *);
 void	m_zero(struct mbuf *);
 
@@ -434,21 +432,40 @@ m_free(struct mbuf *m)
 	return (n);
 }
 
+struct mbuf m_extdummy;
+
 void
 m_extref(struct mbuf *o, struct mbuf *n)
 {
+	struct mbuf *next, *prev;
 	int refs = MCLISREFERENCED(o);
 
 	n->m_flags |= o->m_flags & (M_EXT|M_EXTWR);
 
-	if (refs)
-		mtx_enter(&m_extref_mtx);
+	if (refs) {
+		while ((next = atomic_swap_ptr(o->m_ext.ext_nextref,
+		    &m_extdummy)) == &m_extdummy)
+			CPU_BUSY_CYCLE();
+		membar_datadep_consumer();
+		while ((prev = atomic_swap_ptr(next->m_ext.ext_prevref,
+		    &m_extdummy)) == &m_extdummy)
+			CPU_BUSY_CYCLE();
+		KASSERT(prev = next);
+		membar_enter_after_atomic();
+	} else
+		next = o->m_ext.ext_nextref;
+	n->m_ext.ext_nextref = next;
+	n->m_ext.ext_prevref = o;
+	o->m_ext.ext_nextref = n;
+	next->m_ext.ext_prevref = n;
+	/*
 	n->m_ext.ext_nextref = o->m_ext.ext_nextref;
 	n->m_ext.ext_prevref = o;
 	o->m_ext.ext_nextref = n;
 	n->m_ext.ext_nextref->m_ext.ext_prevref = n;
+	*/
 	if (refs)
-		mtx_leave(&m_extref_mtx);
+		membar_exit();
 
 	MCLREFDEBUGN((n), __FILE__, __LINE__);
 }
@@ -456,22 +473,51 @@ m_extref(struct mbuf *o, struct mbuf *n)
 static inline u_int
 m_extunref(struct mbuf *m)
 {
-	int refs = 0;
+	struct mbuf *next, *prev, *self;
 
 	if (!MCLISREFERENCED(m))
 		return (0);
 
-	mtx_enter(&m_extref_mtx);
-	if (MCLISREFERENCED(m)) {
+	while ((next = atomic_swap_ptr(m->m_ext.ext_nextref,
+	    &m_extdummy)) == &m_extdummy)
+		CPU_BUSY_CYCLE();
+	while ((prev = atomic_swap_ptr(m->m_ext.ext_prevref,
+	    &m_extdummy)) == &m_extdummy)
+		CPU_BUSY_CYCLE();
+	membar_datadep_consumer();
+	if (next < prev) {
+		while ((self = atomic_swap_ptr(prev->m_ext.ext_nextref,
+		    &m_extdummy)) == &m_extdummy)
+			CPU_BUSY_CYCLE();
+		KASSERT(m == self);
+		while ((self = atomic_swap_ptr(next->m_ext.ext_prevref,
+		    &m_extdummy)) == &m_extdummy)
+			CPU_BUSY_CYCLE();
+		KASSERT(m == self);
+	} else {
+		while ((self = atomic_swap_ptr(next->m_ext.ext_prevref,
+		    &m_extdummy)) == &m_extdummy)
+			CPU_BUSY_CYCLE();
+		KASSERT(m == self);
+		while ((self = atomic_swap_ptr(prev->m_ext.ext_nextref,
+		    &m_extdummy)) == &m_extdummy)
+			CPU_BUSY_CYCLE();
+		KASSERT(m == self);
+	}
+
+	membar_enter_after_atomic();
+	next->m_ext.ext_prevref = prev;
+	prev->m_ext.ext_nextref = next;
+	membar_exit();
+
+		/*
 		m->m_ext.ext_nextref->m_ext.ext_prevref =
 		    m->m_ext.ext_prevref;
 		m->m_ext.ext_prevref->m_ext.ext_nextref =
 		    m->m_ext.ext_nextref;
-		refs = 1;
-	}
-	mtx_leave(&m_extref_mtx);
+		*/
 
-	return (refs);
+	return (1);
 }
 
 /*
@@ -1272,12 +1318,28 @@ void
 m_zero(struct mbuf *m)
 {
 	if (M_READONLY(m)) {
-		mtx_enter(&m_extref_mtx);
 		if ((m->m_flags & M_EXT) && MCLISREFERENCED(m)) {
+			struct mbuf *next, *prev;
+
+			while ((next = atomic_swap_ptr(m->m_ext.ext_nextref,
+			    &m_extdummy)) == &m_extdummy)
+				CPU_BUSY_CYCLE();
+			while ((prev = atomic_swap_ptr(m->m_ext.ext_prevref,
+			    &m_extdummy)) == &m_extdummy)
+				CPU_BUSY_CYCLE();
+
+			membar_enter_after_atomic();
+			next->m_flags |= M_ZEROIZE;
+			prev->m_flags |= M_ZEROIZE;
+			membar_exit();
+
+			m->m_ext.ext_prevref = prev;
+			m->m_ext.ext_nextref = next;
+			/*
 			m->m_ext.ext_nextref->m_flags |= M_ZEROIZE;
 			m->m_ext.ext_prevref->m_flags |= M_ZEROIZE;
+			*/
 		}
-		mtx_leave(&m_extref_mtx);
 		return;
 	}
 
