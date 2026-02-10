@@ -1994,6 +1994,8 @@ em_setup_interface(struct em_softc *sc)
 	ifp->if_softc = sc;
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
 	ifp->if_xflags = IFXF_MPSAFE;
+	if (ISSET(sc->sc_dmaflags, BUS_DMA_64BIT))
+		ifp->if_xflags |= IFXF_MBUF_64BIT;
 	ifp->if_ioctl = em_ioctl;
 	ifp->if_qstart = em_start;
 	ifp->if_watchdog = em_watchdog;
