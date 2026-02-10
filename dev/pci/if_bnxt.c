@@ -654,7 +654,7 @@ bnxt_attach(struct device *parent, struct device *self, void *aux)
 	strlcpy(ifp->if_xname, DEVNAME(sc), IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_flags = IFF_BROADCAST | IFF_MULTICAST | IFF_SIMPLEX;
-	ifp->if_xflags = IFXF_MPSAFE;
+	ifp->if_xflags = IFXF_MPSAFE | IFXF_DMA_64BIT;
 	ifp->if_ioctl = bnxt_ioctl;
 	ifp->if_qstart = bnxt_start;
 	ifp->if_watchdog = bnxt_watchdog;
