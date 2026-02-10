@@ -1990,7 +1990,7 @@ em_setup_interface(struct em_softc *sc)
 	strlcpy(ifp->if_xname, DEVNAME(sc), IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
-	ifp->if_xflags = IFXF_MPSAFE;
+	ifp->if_xflags = IFXF_MPSAFE | IFXF_DMA_64BIT;
 	ifp->if_ioctl = em_ioctl;
 	ifp->if_qstart = em_start;
 	ifp->if_watchdog = em_watchdog;
@@ -2158,7 +2158,8 @@ em_dma_malloc(struct em_softc *sc, bus_size_t size, struct em_dma_alloc *dma)
 	int r;
 
 	r = bus_dmamap_create(sc->sc_dmat, size, 1,
-	    size, 0, BUS_DMA_WAITOK | BUS_DMA_ALLOCNOW, &dma->dma_map);
+	    size, 0, BUS_DMA_WAITOK | BUS_DMA_ALLOCNOW | BUS_DMA_64BIT,
+	    &dma->dma_map);
 	if (r != 0)
 		return (r);
 
@@ -2250,10 +2251,11 @@ em_setup_transmit_structures(struct em_softc *sc)
 			pkt = &que->tx.sc_tx_pkts_ring[i];
 			error = bus_dmamap_create(sc->sc_dmat, EM_TSO_SIZE,
 			    EM_MAX_SCATTER / (sc->pcix_82544 ? 2 : 1),
-			    EM_TSO_SEG_SIZE, 0, BUS_DMA_NOWAIT, &pkt->pkt_map);
+			    EM_TSO_SEG_SIZE, 0, BUS_DMA_NOWAIT | BUS_DMA_64BIT,
+			    &pkt->pkt_map);
 			if (error != 0) {
-				printf("%s: Unable to create TX DMA map\n",
-				    DEVNAME(sc));
+				printf("%s: Unable to create TX DMA map, "
+				    "error %d\n", DEVNAME(sc), error);
 				goto fail;
 			}
 		}
@@ -2772,11 +2774,11 @@ em_allocate_receive_structures(struct em_softc *sc)
 			pkt = &que->rx.sc_rx_pkts_ring[i];
 
 			error = bus_dmamap_create(sc->sc_dmat, EM_MCLBYTES, 1,
-			    EM_MCLBYTES, 0, BUS_DMA_NOWAIT, &pkt->pkt_map);
+			    EM_MCLBYTES, 0, BUS_DMA_NOWAIT | BUS_DMA_64BIT,
+			    &pkt->pkt_map);
 			if (error != 0) {
-				printf("%s: em_allocate_receive_structures: "
-				    "bus_dmamap_create failed; error %u\n",
-				    DEVNAME(sc), error);
+				printf("%s: Unable to create RX DMA map, "
+				    "error %d\n", DEVNAME(sc), error);
 				goto fail;
 			}
 
