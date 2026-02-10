@@ -123,9 +123,8 @@ int max_linkhdr;		/* largest link-level header */
 int max_protohdr;		/* largest protocol header */
 int max_hdr;			/* largest link+protocol header */
 
-struct	mutex m_extref_mtx = MUTEX_INITIALIZER(IPL_NET);
+static int	m_extfree(struct mbuf *);
 
-void	m_extfree(struct mbuf *);
 void	m_zero(struct mbuf *);
 
 unsigned long mbuf_mem_limit;	/* [a] how much memory can be allocated */
@@ -142,6 +141,8 @@ struct pool_allocator m_pool_allocator = {
 
 static void (*mextfree_fns[4])(caddr_t, u_int, void *);
 static u_int num_extfree_fns;
+
+#define MEXT_FREE_ZERO	0x80000000
 
 #define M_DATABUF(m)	((m)->m_flags & M_EXT ? (m)->m_ext.ext_buf : \
 			(m)->m_flags & M_PKTHDR ? (m)->m_pktdat : (m)->m_dat)
@@ -403,6 +404,7 @@ struct mbuf *
 m_free(struct mbuf *m)
 {
 	struct mbuf *n;
+	int refs = 0;
 	int s;
 
 	if (m == NULL)
@@ -427,51 +429,47 @@ m_free(struct mbuf *m)
 #endif	/* NPF > 0 */
 	}
 	if (m->m_flags & M_EXT)
-		m_extfree(m);
+		refs = m_extfree(m);
 
-	pool_put(&mbpool, m);
+	if (refs == 0)
+		pool_put(&mbpool, m);
 
 	return (n);
 }
 
 void
-m_extref(struct mbuf *o, struct mbuf *n)
+m_extref(struct mbuf *m, struct mbuf *n)
 {
-	int refs = MCLISREFERENCED(o);
+	struct mbuf *mr;
 
-	n->m_flags |= o->m_flags & (M_EXT|M_EXTWR);
+	n->m_flags |= m->m_flags & (M_EXT|M_EXTWR);
+	n->m_ext = m->m_ext;
 
-	if (refs)
-		mtx_enter(&m_extref_mtx);
-	n->m_ext.ext_nextref = o->m_ext.ext_nextref;
-	n->m_ext.ext_prevref = o;
-	o->m_ext.ext_nextref = n;
-	n->m_ext.ext_nextref->m_ext.ext_prevref = n;
-	if (refs)
-		mtx_leave(&m_extref_mtx);
+	/*
+	 * point all the mbufs sharing a cluster at one of them which is
+	 * the "leader" via the ext_refm pointer. an mbuf can
+	 * identify itself as the leader if ext_refm points at itself.
+	 *
+	 * the default state for mbufs with clusters is to not set
+	 * ext_refm so it can avoid doing the reference counting.
+	 *
+	 * if an mbuf becomes a leader, it can't be freed until all
+	 * the other mbufs referring to it have been freed. similarly,
+	 * the cluster can't be removed from a leader until the other
+	 * references are dropped.
+	 */
+
+	mr = m->m_ext.ext_refm;
+	if (mr == NULL) {
+		mr = m;
+		m->m_ext.ext_refs = 2;
+		m->m_ext.ext_refm = mr; /* mark m as the leader */
+	} else
+		atomic_inc_int(&mr->m_ext.ext_refs);
+
+	n->m_ext.ext_refm = mr; /* point n at the leader */
 
 	MCLREFDEBUGN((n), __FILE__, __LINE__);
-}
-
-static inline u_int
-m_extunref(struct mbuf *m)
-{
-	int refs = 0;
-
-	if (!MCLISREFERENCED(m))
-		return (0);
-
-	mtx_enter(&m_extref_mtx);
-	if (MCLISREFERENCED(m)) {
-		m->m_ext.ext_nextref->m_ext.ext_prevref =
-		    m->m_ext.ext_prevref;
-		m->m_ext.ext_prevref->m_ext.ext_nextref =
-		    m->m_ext.ext_nextref;
-		refs = 1;
-	}
-	mtx_leave(&m_extref_mtx);
-
-	return (refs);
 }
 
 /*
@@ -487,16 +485,45 @@ mextfree_register(void (*fn)(caddr_t, u_int, void *))
 	return num_extfree_fns++;
 }
 
-void
+static int
 m_extfree(struct mbuf *m)
 {
-	if (m_extunref(m) == 0) {
-		KASSERT(m->m_ext.ext_free_fn < num_extfree_fns);
-		mextfree_fns[m->m_ext.ext_free_fn](m->m_ext.ext_buf,
-		    m->m_ext.ext_size, m->m_ext.ext_arg);
+	struct mbuf *mr;
+	unsigned int free_fn;
+	unsigned int zero = 0;
+
+	mr = m->m_ext.ext_refm;
+	if (mr == NULL)
+		mr = m;
+	else if (atomic_dec_int_nv(&mr->m_ext.ext_refs) > 0) {
+		/*
+		 * the cluster is still referenced by another mbuf.
+		 * the caller can't free this mbuf if it is the
+		 * leader of a shared cluster.
+		 */
+		return (m == mr);
 	}
 
-	m->m_flags &= ~(M_EXT|M_EXTWR);
+	free_fn = mr->m_ext.ext_free_fn;
+	if (ISSET(free_fn, MEXT_FREE_ZERO)) {
+		zero = 1;
+		CLR(free_fn, MEXT_FREE_ZERO);
+	}
+
+	KASSERTMSG(free_fn < num_extfree_fns,
+	    "mbuf %p ext_free_fn %u >= num_extfree_fns %u",
+	    mr, free_fn, num_extfree_fns);
+
+	if (zero)
+		explicit_bzero(mr->m_ext.ext_buf, mr->m_ext.ext_size);
+
+	mextfree_fns[free_fn](mr->m_ext.ext_buf,
+	    mr->m_ext.ext_size, m->m_ext.ext_arg);
+
+	if (mr != m)
+		pool_put(&mbpool, mr);
+
+	return (0);
 }
 
 struct mbuf *
@@ -524,9 +551,8 @@ m_purge(struct mbuf *m)
 }
 
 /*
- * mbuf chain defragmenter. This function uses some evil tricks to defragment
- * an mbuf chain into a single buffer without changing the mbuf pointer.
- * This needs to know a lot of the mbuf internals to make this work.
+ * mbuf chain defragmenter. This function moves the data to single mbuf
+ * without changing the mbuf pointer.
  * The resulting mbuf is not aligned to IP header to assist DMA transfers.
  */
 int
@@ -540,9 +566,10 @@ m_defrag(struct mbuf *m, int how)
 	KASSERT(m->m_flags & M_PKTHDR);
 
 	mbstat_inc(mbs_defrag_alloc);
-	if ((m0 = m_gethdr(how, m->m_type)) == NULL)
+
+	if ((m0 = m_get(how, m->m_type)) == NULL)
 		return (ENOBUFS);
-	if (m->m_pkthdr.len > MHLEN) {
+	if (m->m_pkthdr.len > MLEN) {
 		MCLGETL(m0, how, m->m_pkthdr.len);
 		if (!(m0->m_flags & M_EXT)) {
 			m_free(m0);
@@ -550,32 +577,12 @@ m_defrag(struct mbuf *m, int how)
 		}
 	}
 	m_copydata(m, 0, m->m_pkthdr.len, mtod(m0, caddr_t));
-	m0->m_pkthdr.len = m0->m_len = m->m_pkthdr.len;
+	m0->m_len = m->m_pkthdr.len;
 
-	/* free chain behind and possible ext buf on the first mbuf */
 	m_freem(m->m_next);
-	m->m_next = NULL;
-	if (m->m_flags & M_EXT)
-		m_extfree(m);
-
-	/*
-	 * Bounce copy mbuf over to the original mbuf and set everything up.
-	 * This needs to reset or clear all pointers that may go into the
-	 * original mbuf chain.
-	 */
-	if (m0->m_flags & M_EXT) {
-		memcpy(&m->m_ext, &m0->m_ext, sizeof(struct mbuf_ext));
-		MCLINITREFERENCE(m);
-		m->m_flags |= m0->m_flags & (M_EXT|M_EXTWR);
-		m->m_data = m->m_ext.ext_buf;
-	} else {
-		m->m_data = m->m_pktdat;
-		memcpy(m->m_data, m0->m_data, m0->m_len);
-	}
-	m->m_pkthdr.len = m->m_len = m0->m_len;
-
-	m0->m_flags &= ~(M_EXT|M_EXTWR);	/* cluster is gone */
-	m_free(m0);
+	m->m_data = NULL;
+	m->m_len = 0;
+	m->m_next = m0;
 
 	return (0);
 }
@@ -656,9 +663,8 @@ m_copym(struct mbuf *m0, int off, int len, int wait)
 		}
 		n->m_len = min(len, m->m_len - off);
 		if (m->m_flags & M_EXT) {
+			m_extref(m, n);
 			n->m_data = m->m_data + off;
-			n->m_ext = m->m_ext;
-			MCLADDREFERENCE(m, n);
 		} else {
 			n->m_data += m->m_data -
 			    (m->m_flags & M_PKTHDR ? m->m_pktdat : m->m_dat);
@@ -1089,8 +1095,7 @@ m_split(struct mbuf *m0, int len0, int wait)
 			return (NULL);
 	}
 	if (m->m_flags & M_EXT) {
-		n->m_ext = m->m_ext;
-		MCLADDREFERENCE(m, n);
+		m_extref(m, n);
 		n->m_data = m->m_data + len;
 	} else {
 		m_align(n, remain);
@@ -1271,13 +1276,16 @@ m_devget(char *buf, int totlen, int off)
 void
 m_zero(struct mbuf *m)
 {
-	if (M_READONLY(m)) {
-		mtx_enter(&m_extref_mtx);
-		if ((m->m_flags & M_EXT) && MCLISREFERENCED(m)) {
-			m->m_ext.ext_nextref->m_flags |= M_ZEROIZE;
-			m->m_ext.ext_prevref->m_flags |= M_ZEROIZE;
-		}
-		mtx_leave(&m_extref_mtx);
+	struct mbuf *mr;
+
+	if (ISSET(m->m_flags, M_EXT) &&
+	    (mr = m->m_ext.ext_refm) != NULL) {
+		/*
+		 * this variable only transitions in one direction,
+		 * so if there is a race it will be toward the same
+		 * result and therefore there is no loss.
+		 */
+		mr->m_ext.ext_free_fn |= MEXT_FREE_ZERO;
 		return;
 	}
 
@@ -1525,9 +1533,8 @@ m_print(void *v,
 		    m->m_ext.ext_buf, m->m_ext.ext_size);
 		(*pr)("m_ext.ext_free_fn: %u\tm_ext.ext_arg: %p\n",
 		    m->m_ext.ext_free_fn, m->m_ext.ext_arg);
-		(*pr)("m_ext.ext_nextref: %p\tm_ext.ext_prevref: %p\n",
-		    m->m_ext.ext_nextref, m->m_ext.ext_prevref);
-
+		(*pr)("m_ext.ext_refm: %p\tm_ext.ext_refs: %u\n",
+		    m->m_ext.ext_refm, m->m_ext.ext_refs);
 	}
 }
 
