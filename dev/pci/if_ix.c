@@ -1929,7 +1929,7 @@ ixgbe_setup_interface(struct ix_softc *sc)
 	strlcpy(ifp->if_xname, sc->dev.dv_xname, IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
-	ifp->if_xflags = IFXF_MPSAFE;
+	ifp->if_xflags = IFXF_MPSAFE | IFXF_DMA_64BIT;
 	ifp->if_ioctl = ixgbe_ioctl;
 	ifp->if_qstart = ixgbe_start;
 	ifp->if_timer = 0;
@@ -2087,7 +2087,7 @@ ixgbe_dma_malloc(struct ix_softc *sc, bus_size_t size,
 
 	dma->dma_tag = os->os_pa.pa_dmat;
 	r = bus_dmamap_create(dma->dma_tag, size, 1,
-	    size, 0, BUS_DMA_NOWAIT, &dma->dma_map);
+	    size, 0, BUS_DMA_NOWAIT | BUS_DMA_64BIT, &dma->dma_map);
 	if (r != 0) {
 		printf("%s: ixgbe_dma_malloc: bus_dmamap_create failed; "
 		       "error %u\n", ifp->if_xname, r);
@@ -2293,11 +2293,11 @@ ixgbe_allocate_transmit_buffers(struct ix_txring *txr)
 		txbuf = &txr->tx_buffers[i];
 		error = bus_dmamap_create(txr->txdma.dma_tag, MAXMCLBYTES,
 			    sc->num_segs, PAGE_SIZE, 0,
-			    BUS_DMA_NOWAIT, &txbuf->map);
+			    BUS_DMA_NOWAIT | BUS_DMA_64BIT, &txbuf->map);
 
 		if (error != 0) {
-			printf("%s: Unable to create TX DMA map\n",
-			    ifp->if_xname);
+			printf("%s: Unable to create TX DMA map, error %d\n",
+			    ifp->if_xname, error);
 			goto fail;
 		}
 	}
@@ -2776,10 +2776,10 @@ ixgbe_allocate_receive_buffers(struct ix_rxring *rxr)
 	rxbuf = rxr->rx_buffers;
 	for (i = 0; i < sc->num_rx_desc; i++, rxbuf++) {
 		error = bus_dmamap_create(rxr->rxdma.dma_tag, 16 * 1024, 1,
-		    16 * 1024, 0, BUS_DMA_NOWAIT, &rxbuf->map);
+		    16 * 1024, 0, BUS_DMA_NOWAIT | BUS_DMA_64BIT, &rxbuf->map);
 		if (error) {
-			printf("%s: Unable to create Pack DMA map\n",
-			    ifp->if_xname);
+			printf("%s: Unable to create RX DMA map, error %d\n",
+			    ifp->if_xname, error);
 			goto fail;
 		}
 	}
