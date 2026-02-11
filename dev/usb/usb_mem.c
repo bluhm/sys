@@ -73,6 +73,8 @@ usbd_status	usb_block_allocmem(bus_dma_tag_t, size_t, size_t,
 		    struct usb_dma_block **, int);
 void		usb_block_freemem(struct usb_dma_block *);
 
+int usb_mbuf_dma_64bit = 1;
+
 LIST_HEAD(, usb_dma_block) usb_blk_freelist =
 	LIST_HEAD_INITIALIZER(usb_blk_freelist);
 int usb_blk_nfree = 0;

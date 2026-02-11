@@ -329,7 +329,10 @@ xhci_init(struct xhci_softc *sc)
 
 	hcr = XREAD4(sc, XHCI_HCCPARAMS);
 	sc->sc_ctxsize = XHCI_HCC_CSZ(hcr) ? 64 : 32;
-	sc->sc_bus.dmaflags |= XHCI_HCC_AC64(hcr) ? BUS_DMA_64BIT : 0;
+	if (XHCI_HCC_AC64(hcr))
+		sc->sc_bus.dmaflags |= BUS_DMA_64BIT;
+	else
+		usb_mbuf_dma_64bit = 0;
 	DPRINTF(("%s: %d bytes context\n", DEVNAME(sc), sc->sc_ctxsize));
 
 #ifdef XHCI_DEBUG

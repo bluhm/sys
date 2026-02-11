@@ -373,6 +373,8 @@ uhci_init(struct uhci_softc *sc)
 		    0, "uhcixfer", NULL);
 	}
 
+	usb_mbuf_dma_64bit = 0;
+
 	/* Restore saved SOF. */
 	UWRITE1(sc, UHCI_SOF, sc->sc_saved_sof);
 

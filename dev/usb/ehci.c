@@ -340,6 +340,8 @@ ehci_init(struct ehci_softc *sc)
 		    0, "ehcixfer", NULL);
 	}
 
+	usb_mbuf_dma_64bit = 0;
+
 	/* frame list size at default, read back what we got and use that */
 	switch (EHCI_CMD_FLS(EOREAD4(sc, EHCI_USBCMD))) {
 	case 0:

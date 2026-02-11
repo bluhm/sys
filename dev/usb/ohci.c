@@ -730,6 +730,8 @@ ohci_init(struct ohci_softc *sc)
 		    0, "ohcixfer", NULL);
 	}
 
+	usb_mbuf_dma_64bit = 0;
+
 	/* XXX determine alignment by R/W */
 	/* Allocate the HCCA area. */
 	err = usb_allocmem(&sc->sc_bus, OHCI_HCCA_SIZE, OHCI_HCCA_ALIGN,
