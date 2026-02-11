@@ -232,7 +232,7 @@ struct if_status_description {
 #define	IFXF_AUTOCONF4		0x80	/* [N] v4 autoconf (aka dhcp) enabled */
 #define	IFXF_MONITOR		0x100	/* [N] only used for bpf */
 #define	IFXF_LRO		0x200	/* [N] TCP large recv offload */
-#define	IFXF_DMA_64BIT		0x400	/* [I] TCP large recv offload */
+#define	IFXF_MBUF_64BIT		0x400	/* [I] mbuf with 64 bit DMA supported */
 
 #define	IFXF_CANTCHANGE \
 	(IFXF_MPSAFE|IFXF_CLONED)

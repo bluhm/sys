@@ -30657,7 +30657,7 @@ ice_attach_hook(struct device *self)
 	ifp->if_softc = sc;
 	strlcpy(ifp->if_xname, sc->sc_dev.dv_xname, IFNAMSIZ);
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
-	ifp->if_xflags = IFXF_MPSAFE | IFXF_DMA_64BIT;
+	ifp->if_xflags = IFXF_MPSAFE | IFXF_MBUF_64BIT;
 	ifp->if_ioctl = ice_ioctl;
 	ifp->if_qstart = ice_start;
 	ifp->if_watchdog = ice_watchdog;

@@ -109,12 +109,12 @@ unmap_startup(void)
 }
 
 void
-if_dma_64bit_enable(void)
+mbuf_dma_64bit_enable(void)
 {
 	struct ifnet *ifp;
 
 	TAILQ_FOREACH(ifp, &ifnetlist, if_list) {
-		if (!ISSET(ifp->if_xflags, IFXF_DMA_64BIT)) {
+		if (!ISSET(ifp->if_xflags, IFXF_MBUF_64BIT)) {
 			printf("%s: restrict all mbufs to low memory\n",
 			    ifp->if_xname);
 			return;
@@ -141,7 +141,7 @@ cpu_configure(void)
 
 	intr_printconfig();
 
-	if_dma_64bit_enable();
+	mbuf_dma_64bit_enable();
 
 #if NIOAPIC > 0
 	lapic_set_lvt();

@@ -1914,7 +1914,7 @@ ixl_attach(struct device *parent, struct device *self, void *aux)
 
 	ifp->if_softc = sc;
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
-	ifp->if_xflags = IFXF_MPSAFE | IFXF_DMA_64BIT;
+	ifp->if_xflags = IFXF_MPSAFE | IFXF_MBUF_64BIT;
 	ifp->if_ioctl = ixl_ioctl;
 	ifp->if_qstart = ixl_start;
 	ifp->if_watchdog = ixl_watchdog;

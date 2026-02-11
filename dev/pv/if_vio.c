@@ -750,7 +750,7 @@ negotiate:
 
 	ifp->if_capabilities = 0;
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
-	ifp->if_xflags = IFXF_MPSAFE | IFXF_DMA_64BIT;
+	ifp->if_xflags = IFXF_MPSAFE | IFXF_MBUF_64BIT;
 #if NVLAN > 0
 	ifp->if_capabilities |= IFCAP_VLAN_MTU;
 	ifp->if_capabilities |= IFCAP_VLAN_HWOFFLOAD;

@@ -1929,7 +1929,7 @@ ixgbe_setup_interface(struct ix_softc *sc)
 	strlcpy(ifp->if_xname, sc->dev.dv_xname, IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
-	ifp->if_xflags = IFXF_MPSAFE | IFXF_DMA_64BIT;
+	ifp->if_xflags = IFXF_MPSAFE | IFXF_MBUF_64BIT;
 	ifp->if_ioctl = ixgbe_ioctl;
 	ifp->if_qstart = ixgbe_start;
 	ifp->if_timer = 0;
