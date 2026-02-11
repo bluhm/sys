@@ -741,6 +741,9 @@ _bus_dmamap_load_buffer(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
 	bmask  = ~(map->_dm_boundary - 1);
 
 	for (seg = *segp; buflen > 0 ; ) {
+		static const struct timeval interval = { 1, 0 };
+		static struct timeval lasttime;
+
 		/*
 		 * Get the physical address for this segment.
 		 */
@@ -750,6 +753,10 @@ _bus_dmamap_load_buffer(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
 		    (map->_dm_flags & BUS_DMA_64BIT) == 0)
 			panic("Non dma-reachable buffer at curaddr %#lx(raw)",
 			    curaddr);
+
+		if (constraint == &mbuf_constraint &&
+		    ratecheck(&lasttime, &interval))
+			printf("mbuf %#lx, phys %#lx\n", vaddr, curaddr);
 
 		if (use_bounce_buffer) {
 			if (page >= map->_dm_npages)
