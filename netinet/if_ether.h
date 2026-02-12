@@ -311,12 +311,10 @@ struct ether_extracted {
 	u_int				 iphlen;
 	u_int				 tcphlen;
 	u_int				 paylen;
-	struct mbuf			*ipm;
-	u_int				 ipmoff;
 };
 
 void ether_extract_headers(struct mbuf *, struct ether_extracted *);
-int ether_offload_ifcap(struct ifnet *, struct mbuf_list *, struct mbuf *);
+struct mbuf *ether_offload_ifcap(struct ifnet *, struct mbuf *);
 
 /*
  * Ethernet multicast address structure.  There is one of these for each
