@@ -409,7 +409,6 @@ struct mbuf_queue {
 
 #ifdef	_KERNEL
 struct pool;
-struct uvm_constraint_range;
 
 extern	long nmbclust;			/* limit on the # of clusters */
 extern	int max_linkhdr;		/* largest link-level header */
@@ -442,7 +441,7 @@ void	m_align(struct mbuf *, int);
 struct mbuf *m_clget(struct mbuf *, int, u_int);
 void	m_extref(struct mbuf *, struct mbuf *);
 void	m_pool_init(struct pool *, u_int, u_int, const char *);
-void	m_pool_constraints(const struct uvm_constraint_range *);
+void	m_pool_noconstraints(void);
 u_int	m_pool_used(void);
 void	m_extfree_pool(caddr_t, u_int, void *);
 void	m_adj(struct mbuf *, int);

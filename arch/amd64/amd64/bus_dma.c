@@ -102,8 +102,7 @@
 #endif
 
 int _bus_dmamap_load_buffer(bus_dma_tag_t, bus_dmamap_t, void *, bus_size_t,
-    struct proc *, int, paddr_t *, int *, int *, int,
-    struct uvm_constraint_range *);
+    struct proc *, int, paddr_t *, int *, int *, int);
 
 /*
  * Common function for DMA map creation.  May be called by bus-specific
@@ -270,7 +269,7 @@ _bus_dmamap_load(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
 	seg = 0;
 	used = 0;
 	error = _bus_dmamap_load_buffer(t, map, buf, buflen, p, flags,
-	    &lastaddr, &seg, &used, 1, &dma_constraint);
+	    &lastaddr, &seg, &used, 1);
 	if (error == 0) {
 		map->dm_mapsize = buflen;
 		map->dm_nsegs = seg + 1;
@@ -312,8 +311,7 @@ _bus_dmamap_load_mbuf(bus_dma_tag_t t, bus_dmamap_t map, struct mbuf *m0,
 		if (m->m_len == 0)
 			continue;
 		error = _bus_dmamap_load_buffer(t, map, m->m_data, m->m_len,
-		    NULL, flags, &lastaddr, &seg, &used, first,
-		    &mbuf_constraint);
+		    NULL, flags, &lastaddr, &seg, &used, first);
 		first = 0;
 	}
 	if (error == 0) {
@@ -368,8 +366,7 @@ _bus_dmamap_load_uio(bus_dma_tag_t t, bus_dmamap_t map, struct uio *uio,
 		addr = (caddr_t)iov[i].iov_base;
 
 		error = _bus_dmamap_load_buffer(t, map, addr, minlen,
-		    p, flags, &lastaddr, &seg, &used, first,
-		    &dma_constraint);
+		    p, flags, &lastaddr, &seg, &used, first);
 		first = 0;
 
 		resid -= minlen;
@@ -724,7 +721,7 @@ _bus_dmamem_mmap(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs, off_t off,
 int
 _bus_dmamap_load_buffer(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
     bus_size_t buflen, struct proc *p, int flags, paddr_t *lastaddrp,
-    int *segp, int *usedp, int first, struct uvm_constraint_range *constraint)
+    int *segp, int *usedp, int first)
 {
 	bus_size_t sgsize;
 	bus_addr_t curaddr, lastaddr, baddr, bmask;
@@ -749,7 +746,7 @@ _bus_dmamap_load_buffer(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
 		 */
 		pmap_extract(pmap, vaddr, (paddr_t *)&curaddr);
 
-		if (curaddr > constraint->ucr_high &&
+		if (curaddr > dma_constraint.ucr_high &&
 		    (map->_dm_flags & BUS_DMA_64BIT) == 0)
 			panic("Non dma-reachable buffer at curaddr %#lx(raw)",
 			    curaddr);

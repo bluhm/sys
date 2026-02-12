@@ -1477,15 +1477,13 @@ void
 m_pool_init(struct pool *pp, u_int size, u_int align, const char *wmesg)
 {
 	pool_init(pp, size, align, IPL_NET, 0, wmesg, &m_pool_allocator);
-	pool_set_constraints(pp, &kp_mbuf_contig);
+	pool_set_constraints(pp, &kp_dma_contig);
 }
 
 void
-m_pool_constraints(const struct uvm_constraint_range *constraint)
+m_pool_noconstraints(void)
 {
 	int i;
-
-	mbuf_constraint = *constraint;
 
 	pool_set_constraints(&mbpool, &kp_mbuf_contig);
 

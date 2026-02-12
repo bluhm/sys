@@ -132,7 +132,7 @@ mbuf_dma_64bit_enable(void)
 	}
 
 	printf("enable mbufs in high memory\n");
-	m_pool_constraints(&no_constraint);
+	m_pool_noconstraints();
 }
 
 /*

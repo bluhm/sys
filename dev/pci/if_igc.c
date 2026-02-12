@@ -741,7 +741,7 @@ igc_dma_malloc(struct igc_softc *sc, bus_size_t size, struct igc_dma_alloc *dma)
 	    BUS_DMA_NOWAIT | BUS_DMA_64BIT, &dma->dma_map))
 		return 1;
 	if (bus_dmamem_alloc(dma->dma_tag, size, PAGE_SIZE, 0, &dma->dma_seg,
-	    1, &dma->dma_nseg, BUS_DMA_NOWAIT))
+	    1, &dma->dma_nseg, BUS_DMA_NOWAIT | BUS_DMA_64BIT))
 		goto destroy;
 	if (bus_dmamem_map(dma->dma_tag, &dma->dma_seg, dma->dma_nseg, size,
 	    &dma->dma_vaddr, BUS_DMA_NOWAIT | BUS_DMA_COHERENT))

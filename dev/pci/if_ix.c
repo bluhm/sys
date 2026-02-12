@@ -2095,7 +2095,7 @@ ixgbe_dma_malloc(struct ix_softc *sc, bus_size_t size,
 	}
 
 	r = bus_dmamem_alloc(dma->dma_tag, size, PAGE_SIZE, 0, &dma->dma_seg,
-	    1, &dma->dma_nseg, BUS_DMA_NOWAIT);
+	    1, &dma->dma_nseg, BUS_DMA_NOWAIT | BUS_DMA_64BIT);
 	if (r != 0) {
 		printf("%s: ixgbe_dma_malloc: bus_dmamem_alloc failed; "
 		       "error %u\n", ifp->if_xname, r);

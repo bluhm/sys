@@ -1321,7 +1321,7 @@ ice_alloc_dma_mem(struct ice_hw *hw, struct ice_dma_mem *mem, uint64_t size)
 		goto fail;
 
 	err = bus_dmamem_alloc(mem->tag, size, 1, 0, &mem->seg, 1, &nsegs,
-	    BUS_DMA_NOWAIT | BUS_DMA_ZERO);
+	    BUS_DMA_NOWAIT | BUS_DMA_ZERO | BUS_DMA_64BIT);
 	if (err || nsegs != 1)
 		goto fail_1;
 

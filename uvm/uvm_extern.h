@@ -232,7 +232,6 @@ extern struct uvmexp uvmexp;
 /* Constraint ranges, set by MD code. */
 extern struct uvm_constraint_range  isa_constraint;
 extern struct uvm_constraint_range  dma_constraint;
-extern struct uvm_constraint_range  mbuf_constraint;
 extern struct uvm_constraint_range  no_constraint;
 extern struct uvm_constraint_range *uvm_md_constraints[];
 

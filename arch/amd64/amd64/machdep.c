@@ -218,11 +218,9 @@ struct vm_map *phys_map = NULL;
 /* UVM constraint ranges. */
 struct uvm_constraint_range  isa_constraint = { 0x0, 0x00ffffffUL };
 struct uvm_constraint_range  dma_constraint = { 0x0, 0xffffffffUL };
-struct uvm_constraint_range  mbuf_constraint = { 0x0, 0xffffffffUL };
 struct uvm_constraint_range *uvm_md_constraints[] = {
     &isa_constraint,
     &dma_constraint,
-    &mbuf_constraint,
     NULL,
 };
 
