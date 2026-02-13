@@ -534,6 +534,23 @@ em_attach(struct device *parent, struct device *self, void *aux)
 	sc->hw.min_frame_size = 
 	    ETHER_MIN_LEN + ETHER_CRC_LEN;
 
+	em_get_bus_info(&sc->hw);
+	switch (sc->hw.bus_type) {
+	case em_bus_type_pcix:
+		/* Identify 82544 on PCI-X */
+		if (sc->hw.mac_type == em_82544)
+			sc->pcix_82544 = TRUE;
+		else
+			sc->pcix_82544 = FALSE;
+		/* FALLTHROUGH */
+	case em_bus_type_pci_express:
+		/* Only PCI-X and PCIe support 64 bit DMA */
+		sc->sc_dmaflags |= BUS_DMA_64BIT;
+		break;
+	default:
+		break;
+	}
+
 	if (em_allocate_desc_rings(sc) != 0) {
 		printf("%s: Unable to allocate descriptor ring memory\n",
 		    DEVNAME(sc));
@@ -608,14 +625,6 @@ em_attach(struct device *parent, struct device *self, void *aux)
 	if (em_check_phy_reset_block(&sc->hw))
 		printf("%s: PHY reset is blocked due to SOL/IDER session.\n",
 		    DEVNAME(sc));
-
-	/* Identify 82544 on PCI-X */
-	em_get_bus_info(&sc->hw);
-	if (sc->hw.bus_type == em_bus_type_pcix &&
-	    sc->hw.mac_type == em_82544)
-		sc->pcix_82544 = TRUE;
-        else
-		sc->pcix_82544 = FALSE;
 
 	sc->hw.icp_xxxx_is_link_up = FALSE;
 
@@ -1990,7 +1999,9 @@ em_setup_interface(struct em_softc *sc)
 	strlcpy(ifp->if_xname, DEVNAME(sc), IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
-	ifp->if_xflags = IFXF_MPSAFE | IFXF_MBUF_64BIT;
+	ifp->if_xflags = IFXF_MPSAFE;
+	if (ISSET(sc->sc_dmaflags, BUS_DMA_64BIT))
+		ifp->if_xflags |= IFXF_MBUF_64BIT;
 	ifp->if_ioctl = em_ioctl;
 	ifp->if_qstart = em_start;
 	ifp->if_watchdog = em_watchdog;
@@ -2158,7 +2169,7 @@ em_dma_malloc(struct em_softc *sc, bus_size_t size, struct em_dma_alloc *dma)
 	int r;
 
 	r = bus_dmamap_create(sc->sc_dmat, size, 1,
-	    size, 0, BUS_DMA_WAITOK | BUS_DMA_ALLOCNOW | BUS_DMA_64BIT,
+	    size, 0, BUS_DMA_WAITOK | BUS_DMA_ALLOCNOW | sc->sc_dmaflags,
 	    &dma->dma_map);
 	if (r != 0)
 		return (r);
@@ -2251,7 +2262,8 @@ em_setup_transmit_structures(struct em_softc *sc)
 			pkt = &que->tx.sc_tx_pkts_ring[i];
 			error = bus_dmamap_create(sc->sc_dmat, EM_TSO_SIZE,
 			    EM_MAX_SCATTER / (sc->pcix_82544 ? 2 : 1),
-			    EM_TSO_SEG_SIZE, 0, BUS_DMA_NOWAIT | BUS_DMA_64BIT,
+			    EM_TSO_SEG_SIZE, 0,
+			    BUS_DMA_NOWAIT | sc->sc_dmaflags,
 			    &pkt->pkt_map);
 			if (error != 0) {
 				printf("%s: Unable to create TX DMA map, "
@@ -2774,7 +2786,7 @@ em_allocate_receive_structures(struct em_softc *sc)
 			pkt = &que->rx.sc_rx_pkts_ring[i];
 
 			error = bus_dmamap_create(sc->sc_dmat, EM_MCLBYTES, 1,
-			    EM_MCLBYTES, 0, BUS_DMA_NOWAIT | BUS_DMA_64BIT,
+			    EM_MCLBYTES, 0, BUS_DMA_NOWAIT | sc->sc_dmaflags,
 			    &pkt->pkt_map);
 			if (error != 0) {
 				printf("%s: Unable to create RX DMA map, "

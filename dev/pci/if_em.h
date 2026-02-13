@@ -385,6 +385,7 @@ struct em_softc {
 	struct arpcom	sc_ac;
 
 	bus_dma_tag_t	sc_dmat;
+	int		sc_dmaflags;
 
 	struct em_hw	hw;
 
