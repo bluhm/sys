@@ -158,17 +158,17 @@ struct uvmexp {
 	int kmapent;	/* [a] number of kernel map entries */
 };
 
-static inline int
-atomic_load_sint(volatile const int *p)
-{
-        return *p;
-}
-
 struct _ps_strings {
 	void	*val;
 };
 
 #ifdef _KERNEL
+
+static inline int
+atomic_load_sint(volatile const int *p)
+{
+        return *p;
+}
 
 /*
  * Per-cpu UVM counters.
