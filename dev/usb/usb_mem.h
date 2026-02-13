@@ -47,8 +47,6 @@ struct usb_dma_block {
 	LIST_ENTRY(usb_dma_block) next;
 };
 
-extern int usb_mbuf_dma_64bit;
-
 #define DMAADDR(dma, o) ((dma)->block->map->dm_segs[0].ds_addr + (dma)->offs + (o))
 #define KERNADDR(dma, o) \
 	((void *)((char *)((dma)->block->kaddr + (dma)->offs) + (o)))

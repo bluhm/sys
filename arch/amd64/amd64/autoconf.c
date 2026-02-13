@@ -60,12 +60,6 @@
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
 
-#include <machine/bus.h>
-#include <dev/usb/usb.h>
-#include <dev/usb/usbdi.h>
-#include <dev/usb/usbdivar.h>
-#include <dev/usb/usb_mem.h>
-
 #include <machine/cpu.h>
 #include <machine/cpufunc.h>
 #include <machine/biosvar.h>
@@ -125,10 +119,6 @@ mbuf_dma_64bit_enable(void)
 			    ifp->if_xname);
 			return;
 		}
-	}
-	if (!usb_mbuf_dma_64bit) {
-		printf("usb: restrict all mbufs to low memory\n");
-		return;
 	}
 
 	printf("enable mbufs in high memory\n");
