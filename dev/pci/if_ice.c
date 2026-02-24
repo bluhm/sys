@@ -308,8 +308,8 @@ struct ice_softc {
 
 	/* isc_* fields inherited from FreeBSD iflib struct if_softc_ctx */
 	int isc_tx_nsegments;
-	int isc_ntxd[8];
-	int isc_nrxd[8];
+	int isc_ntxd[MIN(ICE_MAX_VECTORS, IF_MAX_VECTORS)];
+	int isc_nrxd[MIN(ICE_MAX_VECTORS, IF_MAX_VECTORS)];
 	int isc_tx_tso_segments_max;
 	int isc_tx_tso_size_max;
 	int isc_tx_tso_segsize_max;
@@ -339,7 +339,7 @@ struct ice_softc {
 
 	int rebuild_ticks;
 
-	int sw_intr[ICE_MAX_VECTORS];
+	int sw_intr[MIN(ICE_MAX_VECTORS, IF_MAX_VECTORS) + 1];
 };
 
 static int ice_rxrinfo(struct ice_softc *, struct if_rxrinfo *);
