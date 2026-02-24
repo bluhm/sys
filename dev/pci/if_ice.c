@@ -263,7 +263,7 @@ struct ice_intr_vector {
 	pci_intr_handle_t	 ih;
 };
 
-#define ICE_MAX_VECTORS			8 /* XXX this is pretty arbitrary */
+#define ICE_MAX_VECTORS			1024
 
 static struct rwlock ice_sff_lock = RWLOCK_INITIALIZER("icesff");
 
