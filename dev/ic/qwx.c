@@ -1,4 +1,4 @@
-/*	$OpenBSD: qwx.c,v 1.100 2026/02/18 15:34:49 kettenis Exp $	*/
+/*	$OpenBSD: qwx.c,v 1.102 2026/02/22 21:38:03 kettenis Exp $	*/
 
 /*
  * Copyright 2023 Stefan Sperling <stsp@openbsd.org>
@@ -22218,8 +22218,8 @@ qwx_ce_alloc_ring(struct qwx_softc *sc, int nentries, size_t desc_sz)
 		return NULL;
 	}
 
-	if (bus_dmamap_load(sc->sc_dmat, ce_ring->dmap, ce_ring->base_addr,
-	    dsize, NULL, BUS_DMA_NOWAIT)) {
+	if (bus_dmamap_load_raw(sc->sc_dmat, ce_ring->dmap, &ce_ring->dsegs,
+	    ce_ring->nsegs, dsize, BUS_DMA_NOWAIT)) {
 		qwx_ce_free_ring(sc, ce_ring);
 		return NULL;
 	}
@@ -26824,6 +26824,7 @@ admfree:
 void
 qwx_dmamem_free(bus_dma_tag_t dmat, struct qwx_dmamem *adm)
 {
+	bus_dmamap_unload(dmat, adm->map);
 	bus_dmamem_unmap(dmat, adm->kva, adm->size);
 	bus_dmamem_free(dmat, &adm->seg, 1);
 	bus_dmamap_destroy(dmat, adm->map);
