@@ -2942,7 +2942,7 @@ struct bge_softc {
 	u_int32_t		bge_rx_overruns;
 	u_int32_t		bge_tx_collisions;
 	bus_dmamap_t		bge_txdma[BGE_TX_RING_CNT];
-	int			bge_dma64;
+	int			bge_dmaflags;
 
 	struct mutex		bge_kstat_mtx;
 	struct kstat		*bge_kstat;
