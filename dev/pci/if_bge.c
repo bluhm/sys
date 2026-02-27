@@ -2908,7 +2908,7 @@ bge_attach(struct device *parent, struct device *self, void *aux)
 	    BGE_ASICREV(sc->bge_chipid) == BGE_ASICREV_BCM57780)
 		sc->bge_flags |= BGE_CPMU_PRESENT;
 
-	sc->bge_dma64 = (sc->bge_flags & (BGE_PCIE | BGE_PCIX)) ? BUS_DMA_64BIT : 0;
+	sc->bge_dma64 = (sc->bge_flags & BGE_PCIE) ? BUS_DMA_64BIT : 0;
 
 	if (pci_get_capability(pa->pa_pc, pa->pa_tag, PCI_CAP_MSI,
 	    &sc->bge_msicap, NULL)) {
