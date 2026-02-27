@@ -408,7 +408,7 @@ vmxnet3_attach(struct device *parent, struct device *self, void *aux)
 	strlcpy(ifp->if_xname, self->dv_xname, IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_flags = IFF_BROADCAST | IFF_MULTICAST | IFF_SIMPLEX;
-	ifp->if_xflags = IFXF_MPSAFE;
+	ifp->if_xflags = IFXF_MPSAFE | IFXF_MBUF_64BIT;
 	ifp->if_ioctl = vmxnet3_ioctl;
 	ifp->if_qstart = vmxnet3_start;
 	ifp->if_watchdog = vmxnet3_watchdog;
