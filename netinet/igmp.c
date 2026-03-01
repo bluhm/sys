@@ -556,14 +556,13 @@ igmp_joingroup(struct in_multi *inm, struct ifnet *ifp,
 
 	if (!IN_LOCAL_GROUP(inm->inm_addr.s_addr) &&
 	    (ifp->if_flags & IFF_LOOPBACK) == 0) {
+		inm->inm_state = IGMP_DELAYING_MEMBER;
+		inm->inm_timer = IGMP_RANDOM_DELAY(
+		    IGMP_MAX_HOST_REPORT_DELAY * PR_FASTHZ);
 		pkt->ipi_addr = inm->inm_addr;
 		pkt->ipi_rdomain = ifp->if_rdomain;
 		pkt->ipi_ifidx = inm->inm_ifidx;
 		pkt->ipi_type = rti_fill(inm);
-
-		inm->inm_state = IGMP_DELAYING_MEMBER;
-		inm->inm_timer = IGMP_RANDOM_DELAY(
-		    IGMP_MAX_HOST_REPORT_DELAY * PR_FASTHZ);
 		running = 1;
 	} else
 		inm->inm_timer = 0;

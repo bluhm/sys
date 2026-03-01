@@ -131,16 +131,16 @@ mld6_start_listening(struct in6_multi *in6m, struct ifnet *ifp,
 	if (IN6_ARE_ADDR_EQUAL(&in6m->in6m_addr, &all_nodes) ||
 	    __IPV6_ADDR_MC_SCOPE(&in6m->in6m_addr) <
 	    __IPV6_ADDR_SCOPE_LINKLOCAL) {
-		in6m->in6m_timer = 0;
 		in6m->in6m_state = MLD_OTHERLISTENER;
+		in6m->in6m_timer = 0;
 	} else {
+		in6m->in6m_state = MLD_IREPORTEDLAST;
+		in6m->in6m_timer =
+		    MLD_RANDOM_DELAY(MLD_V1_MAX_RI * PR_FASTHZ);
 		pkt->mpi_addr = in6m->in6m_addr;
 		pkt->mpi_rdomain = ifp->if_rdomain;
 		pkt->mpi_ifidx = in6m->in6m_ifidx;
 		pkt->mpi_type = MLD_LISTENER_REPORT;
-		in6m->in6m_timer =
-		    MLD_RANDOM_DELAY(MLD_V1_MAX_RI * PR_FASTHZ);
-		in6m->in6m_state = MLD_IREPORTEDLAST;
 		running = 1;
 	}
 
@@ -286,8 +286,8 @@ mld6_input(struct mbuf *m, int off)
 					/* send a report immediately */
 					struct mld6_pktinfo *pkt;
 
-					in6m->in6m_timer = 0; /* reset timer */
 					in6m->in6m_state = MLD_IREPORTEDLAST;
+					in6m->in6m_timer = 0; /* reset timer */
 					pkt = malloc(sizeof(*pkt), M_MRTABLE,
 					    M_NOWAIT);
 					if (pkt == NULL)
@@ -347,8 +347,8 @@ mld6_input(struct mbuf *m, int off)
 		rw_enter_write(&ifp->if_maddrlock);
 		in6m = in6_lookupmulti(&mldh->mld_addr, ifp);
 		if (in6m) {
-			in6m->in6m_timer = 0; /* transit to idle state */
 			in6m->in6m_state = MLD_OTHERLISTENER; /* clear flag */
+			in6m->in6m_timer = 0; /* transit to idle state */
 		}
 		rw_exit_write(&ifp->if_maddrlock);
 
