@@ -181,6 +181,15 @@ struct atsr_softc {
 	int			flags;
 };
 
+struct ivmd_entry {
+	TAILQ_ENTRY(ivmd_entry) link;
+	uint64_t		addr;
+	uint64_t		size;
+	uint16_t		start_id;
+	uint16_t		end_id;
+	uint8_t			flags;
+};
+
 struct iommu_pic {
 	struct pic		pic;
 	struct iommu_softc	*iommu;
@@ -273,6 +282,8 @@ struct acpidmar_softc {
 	TAILQ_HEAD(,iommu_softc)sc_drhds;
 	TAILQ_HEAD(,rmrr_softc)	sc_rmrrs;
 	TAILQ_HEAD(,atsr_softc)	sc_atsrs;
+
+	TAILQ_HEAD(,ivmd_entry) sc_ivmds;
 };
 
 int		acpidmar_activate(struct device *, int);
@@ -382,8 +393,6 @@ static int dmar_dmamap_load_uio(bus_dma_tag_t, bus_dmamap_t, struct uio *, int);
 static int dmar_dmamap_load_raw(bus_dma_tag_t, bus_dmamap_t,
     bus_dma_segment_t *, int, bus_size_t, int);
 static void dmar_dmamap_unload(bus_dma_tag_t, bus_dmamap_t);
-static void dmar_dmamap_sync(bus_dma_tag_t, bus_dmamap_t, bus_addr_t,
-    bus_size_t, int);
 static int dmar_dmamem_alloc(bus_dma_tag_t, bus_size_t, bus_size_t, bus_size_t,
     bus_dma_segment_t *, int, int *, int);
 static int dmar_dmamem_alloc_range(bus_dma_tag_t, bus_size_t, bus_size_t,
@@ -1040,28 +1049,6 @@ dmar_dmamap_unload(bus_dma_tag_t tag, bus_dmamap_t dmam)
 	dmar_dumpseg(tag, dmam->dm_nsegs, dmam->dm_segs, __FUNCTION__);
 	domain_unload_map(dom, dmam);
 	_bus_dmamap_unload(tag, dmam);
-}
-
-static void
-dmar_dmamap_sync(bus_dma_tag_t tag, bus_dmamap_t dmam, bus_addr_t offset,
-    bus_size_t len, int ops)
-{
-#if 0
-	struct domain *dom = tag->_cookie;
-	int		flag;
-
-	flag = PTE_P;
-	if (ops == BUS_DMASYNC_PREREAD) {
-		/* make readable */
-		flag |= PTE_R;
-	}
-	else if (ops == BUS_DMASYNC_PREWRITE) {
-		/* make writeable */
-		flag |= PTE_W;
-	}
-	dmar_dumpseg(tag, dmam->dm_nsegs, dmam->dm_segs, __FUNCTION__);
-#endif
-	_bus_dmamap_sync(tag, dmam, offset, len, ops);
 }
 
 static int
@@ -2115,7 +2102,7 @@ domain_create(struct iommu_softc *iommu, int did)
 	dom->dmat._dmamap_load_uio = dmar_dmamap_load_uio;	/* lm */
 	dom->dmat._dmamap_load_raw = dmar_dmamap_load_raw;	/* lm */
 	dom->dmat._dmamap_unload = dmar_dmamap_unload;		/* um */
-	dom->dmat._dmamap_sync = dmar_dmamap_sync;		/* lm */
+	dom->dmat._dmamap_sync = _bus_dmamap_sync;		/* nop */
 	dom->dmat._dmamem_alloc = dmar_dmamem_alloc;		/* nop */
 	dom->dmat._dmamem_alloc_range = dmar_dmamem_alloc_range;	/* nop */
 	dom->dmat._dmamem_free = dmar_dmamem_free;		/* nop */
@@ -2168,11 +2155,23 @@ void
 domain_add_device(struct domain *dom, int sid)
 {
 	struct domain_dev *ddev;
+	struct ivmd_entry *ivmd;
 
 	DPRINTF(0, "add %s to iommu%d.%.4x\n", dmar_bdf(sid), dom->iommu->id, dom->did);
 	ddev = malloc(sizeof(*ddev), M_DEVBUF, M_ZERO | M_WAITOK);
 	ddev->sid = sid;
 	TAILQ_INSERT_TAIL(&dom->devices, ddev, link);
+
+	TAILQ_FOREACH(ivmd, &acpidmar_sc->sc_ivmds, link) {
+		if (sid < ivmd->start_id || sid > ivmd->end_id)
+			continue;
+		if ((ivmd->flags & (IVMD_EXCLRANGE | IVMD_UNITY)) == 0)
+			continue;
+		extent_alloc_region(dom->iovamap, ivmd->addr, ivmd->size,
+		    EX_WAITOK | EX_CONFLICTOK);
+		/* XXX use correct R/W permission for IVMD_UNITY */
+		domain_map_pthru(dom, ivmd->addr, ivmd->addr + ivmd->size);
+	}
 
 	/* Should set context entry here?? */
 }
@@ -3393,6 +3392,35 @@ acpiivrs_ivhd(struct acpidmar_softc *sc, struct acpi_ivhd *ivhd)
 }
 
 void
+acpiivrs_ivmd(struct acpidmar_softc *sc, struct acpi_ivmd *ivmd)
+{
+	struct ivmd_entry *entry;
+
+	entry = malloc(sizeof(*entry), M_DEVBUF, M_WAITOK);
+
+	switch (ivmd->type) {
+	case IVRS_IVMD_ALL:
+		entry->start_id = 0;
+		entry->end_id = 0xffff;
+		break;
+	case IVRS_IVMD_SPECIFIED:
+		entry->start_id = ivmd->devid;
+		entry->end_id = ivmd->devid;
+		break;
+	case IVRS_IVMD_RANGE:
+		entry->start_id = ivmd->devid;
+		entry->end_id = ivmd->auxdata;
+		break;
+	}
+
+	entry->flags = ivmd->flags;
+	entry->addr = ivmd->start_address;
+	entry->size = ivmd->block_length;
+
+	TAILQ_INSERT_TAIL(&sc->sc_ivmds, entry, link);
+}
+
+void
 acpiivrs_init(struct acpidmar_softc *sc, struct acpi_ivrs *ivrs)
 {
 	union acpi_ivrs_entry *ie;
@@ -3430,7 +3458,7 @@ acpiivrs_init(struct acpidmar_softc *sc, struct acpi_ivrs *ivrs)
 		case IVRS_IVMD_ALL:
 		case IVRS_IVMD_SPECIFIED:
 		case IVRS_IVMD_RANGE:
-			DPRINTF(0,"ivmd\n");
+			acpiivrs_ivmd(sc, &ie->ivmd);
 			break;
 		default:
 			DPRINTF(0,"1:unknown: %x\n", ie->type);
@@ -3535,6 +3563,8 @@ acpidmar_attach(struct device *parent, struct device *self, void *aux)
 	struct acpi_dmar *dmar = (struct acpi_dmar *)aaa->aaa_table;
 	struct acpi_ivrs *ivrs = (struct acpi_ivrs *)aaa->aaa_table;
 	struct acpi_table_header *hdr;
+
+	TAILQ_INIT(&sc->sc_ivmds);
 
 	hdr = (struct acpi_table_header *)aaa->aaa_table;
 	sc->sc_memt = aaa->aaa_memt;
