@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_pledge.c,v 1.342 2026/03/08 17:01:00 deraadt Exp $	*/
+/*	$OpenBSD: kern_pledge.c,v 1.344 2026/03/10 05:01:35 deraadt Exp $	*/
 
 /*
  * Copyright (c) 2015 Nicholas Marriott <nicm@openbsd.org>
@@ -215,7 +215,7 @@ const uint64_t pledge_syscalls[SYS_MAXSYSCALL] = {
 	[SYS_dup3] = PLEDGE_STDIO,
 	[SYS_closefrom] = PLEDGE_STDIO,
 	[SYS_shutdown] = PLEDGE_STDIO,
-	[SYS_fchdir] = PLEDGE_STDIO,	/* XXX consider tightening */
+	[SYS_fchdir] = PLEDGE_STDIO,
 
 	[SYS_pipe] = PLEDGE_STDIO,
 	[SYS_pipe2] = PLEDGE_STDIO,
@@ -245,7 +245,7 @@ const uint64_t pledge_syscalls[SYS_MAXSYSCALL] = {
 	[SYS_stat] = PLEDGE_STDIO,
 	[SYS_access] = PLEDGE_STDIO,
 	[SYS_readlink] = PLEDGE_STDIO,
-	[SYS___realpath] = PLEDGE_STDIO,
+	[SYS___realpath] = PLEDGE_RPATH,
 
 	[SYS_adjtime] = PLEDGE_STDIO,   /* setting requires "settime" */
 	[SYS_adjfreq] = PLEDGE_SETTIME,
@@ -253,7 +253,6 @@ const uint64_t pledge_syscalls[SYS_MAXSYSCALL] = {
 
 	/*
 	 * Needed by threaded programs
-	 * XXX should we have a new "threads"?
 	 */
 	[SYS___tfork] = PLEDGE_STDIO,
 	[SYS_sched_yield] = PLEDGE_STDIO,
