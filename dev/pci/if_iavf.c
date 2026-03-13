@@ -3153,7 +3153,7 @@ iavf_dmamem_alloc(struct iavf_softc *sc, struct iavf_dmamem *ixm,
 		return (1);
 	if (bus_dmamem_alloc(sc->sc_dmat, ixm->ixm_size,
 	    align, 0, &ixm->ixm_seg, 1, &ixm->ixm_nsegs,
-	    BUS_DMA_WAITOK | BUS_DMA_ZERO) != 0)
+	    BUS_DMA_WAITOK | BUS_DMA_ZERO | BUS_DMA_64BIT) != 0)
 		goto destroy;
 	if (bus_dmamem_map(sc->sc_dmat, &ixm->ixm_seg, ixm->ixm_nsegs,
 	    ixm->ixm_size, &ixm->ixm_kva, BUS_DMA_WAITOK) != 0)
