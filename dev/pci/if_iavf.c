@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_iavf.c,v 1.27 2025/11/20 01:48:52 jmatthew Exp $	*/
+/*	$OpenBSD: if_iavf.c,v 1.28 2026/03/13 19:14:44 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2013-2015, Intel Corporation
