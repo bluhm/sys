@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_iwxreg.h,v 1.64 2026/03/10 08:00:57 stsp Exp $	*/
+/*	$OpenBSD: if_iwxreg.h,v 1.73 2026/03/13 11:11:02 stsp Exp $	*/
 
 /*-
  * Based on BSD-licensed source modules in the Linux iwlwifi driver,
@@ -517,6 +517,7 @@ struct iwx_context_info_gen3 {
 #define IWX_CSR_GPIO_IN             (0x018) /* read external chip pins */
 #define IWX_CSR_RESET               (0x020) /* busmaster enable, NMI, etc*/
 #define IWX_CSR_GP_CNTRL            (0x024)
+#define IWX_CSR_FUNC_SCRATCH        (0x02c) /* Scratch register - used for FW dbg */
 
 /* 2nd byte of IWX_CSR_INT_COALESCING, not accessible via iwl_write32()! */
 #define IWX_CSR_INT_PERIODIC_REG	(0x005)
@@ -576,8 +577,18 @@ struct iwx_context_info_gen3 {
 /* GIO Chicken Bits (PCI Express bus link power management) */
 #define IWX_CSR_GIO_CHICKEN_BITS    (0x100)
 
+/* Doorbell NMI since Bz. Connected to UREG_DOORBELL_TO_ISR6 (lower 16 bits only). */
+#define IWX_CSR_DOORBELL_VECTOR		(0x130)
+
 #define IWX_CSR_DBG_HPET_MEM_REG	(0x240)
 #define IWX_CSR_DBG_LINK_PWR_MGMT_REG	(0x250)
+
+/*
+ * Scratch register initial configuration - this is set on init, and read
+ * during a error FW error.
+ */
+#define IWX_CSR_FUNC_SCRATCH_INIT_VALUE		(0x01010101)
+#define IWX_CSR_FUNC_SCRATCH_POWER_OFF_MASK	0xFFFF
 
 /* Bits for IWX_CSR_HW_IF_CONFIG_REG */
 #define IWX_CSR_HW_IF_CONFIG_REG_MSK_MAC_DASH	(0x00000003)
@@ -674,6 +685,18 @@ struct iwx_rx_completion_desc {
 	uint8_t reserved2[25];
 };
 
+/**
+ * struct iwx_rx_completion_desc_bz - Bz completion descriptor
+ * @rbid: unique tag of the received buffer
+ * @flags: flags (0: fragmented, all others: reserved)
+ * @reserved: reserved
+ */
+struct iwx_rx_completion_desc_bz {
+	uint16_t rbid;
+	uint8_t flags;
+	uint8_t reserved[1];
+} __packed;
+
 /* RESET */
 #define IWX_CSR_RESET_REG_FLAG_NEVO_RESET                (0x00000001)
 #define IWX_CSR_RESET_REG_FLAG_FORCE_NMI                 (0x00000002)
@@ -731,6 +754,14 @@ struct iwx_rx_completion_desc {
 #define IWX_CSR_GP_CNTRL_REG_FLAG_RFKILL_WAKE_L1A_EN     (0x04000000)
 #define IWX_CSR_GP_CNTRL_REG_FLAG_HW_RF_KILL_SW          (0x08000000)
 
+/* From Bz we use these instead during init/reset flow */
+#define IWX_CSR_GP_CNTRL_REG_FLAG_MAC_INIT			(1 << 6)
+#define IWX_CSR_GP_CNTRL_REG_FLAG_ROM_START			(1 << 7)
+#define IWX_CSR_GP_CNTRL_REG_FLAG_MAC_STATUS			(1 << 20)
+#define IWX_CSR_GP_CNTRL_REG_FLAG_BZ_MAC_ACCESS_REQ		(1 << 21)
+#define IWX_CSR_GP_CNTRL_REG_FLAG_BUS_MASTER_DISABLE_STATUS	(1 << 28)
+#define IWX_CSR_GP_CNTRL_REG_FLAG_BUS_MASTER_DISABLE_REQ	(1 << 29)
+#define IWX_CSR_GP_CNTRL_REG_FLAG_SW_RESET			(1 << 31)
 
 /* HW REV */
 #define IWX_CSR_HW_REV_DASH(_val)          (((_val) & 0x0000003) >> 0)
@@ -1030,6 +1061,14 @@ struct iwx_rx_completion_desc {
 #define IWX_WFPM_AUX_CTL_AUX_IF_MAC_OWNER_MSK	0x08000000
 #define IWX_ENABLE_WFPM				0x80000000
 
+#define IWX_CNVI_AUX_MISC_CHIP			0xA200B0
+#define IWX_CNVI_AUX_MISC_CHIP_MAC_STEP(_val)	(((_val) & 0xf000000) >> 24)
+#define IWX_CNVI_AUX_MISC_CHIP_PROD_TYPE(_val)	((_val) & 0xfff)
+#define IWX_CNVI_AUX_MISC_CHIP_PROD_TYPE_GL	0x910
+#define IWX_CNVI_AUX_MISC_CHIP_PROD_TYPE_BZ_U	0x930
+#define IWX_CNVI_AUX_MISC_CHIP_PROD_TYPE_BZ_I	0x900
+#define IWX_CNVI_AUX_MISC_CHIP_PROD_TYPE_BZ_W	0x901
+
 #define IWX_AUX_MISC_MASTER1_EN			0xa20818
 #define IWX_AUX_MISC_MASTER1_EN_SBE_MSK		0x1
 #define IWX_AUX_MISC_MASTER1_SMPHR_STATUS	0xa20800
@@ -1047,6 +1086,9 @@ struct iwx_rx_completion_desc {
 #define IWX_UREG_CHICK				0xa05c00
 #define IWX_UREG_CHICK_MSI_ENABLE		(1 << 24)
 #define IWX_UREG_CHICK_MSIX_ENABLE		(1 << 25)
+
+#define IWX_SD_REG_VER		0x00a29600
+#define IWX_SD_REG_VER_GEN2	0x00a2b800
 
 #define IWX_HPM_DEBUG			0xa03440
 #define IWX_PERSISTENCE_BIT		(1 << 12)
@@ -1078,6 +1120,9 @@ struct iwx_rx_completion_desc {
  * 11-8:  queue selector
  */
 #define IWX_HBUS_TARG_WRPTR         (IWX_HBUS_BASE+0x060)
+/* Bz: This register is common for Tx and Rx, Rx queues start from 512 */
+#define IWX_HBUS_TARG_WRPTR_Q_SHIFT (16)
+#define IWX_HBUS_TARG_WRPTR_RX_Q(q) (((q) + 512) << IWX_HBUS_TARG_WRPTR_Q_SHIFT)
 
 /**********************************************************
  * CSR values
@@ -1129,6 +1174,7 @@ enum mix_hw_int_causes {
 	IWX_MSIX_HW_INT_CAUSES_REG_ALIVE	= (1 << 0),
 	IWX_MSIX_HW_INT_CAUSES_REG_WAKEUP	= (1 << 1),
 	IWX_MSIX_HW_INT_CAUSES_REG_RESET_DONE	= (1 << 2),
+	IWX_MSIX_HW_INT_CAUSES_REG_TOP_FATAL_ERR= (1 << 3),
 	IWX_MSIX_HW_INT_CAUSES_REG_SW_ERR_V2	= (1 << 5),
 	IWX_MSIX_HW_INT_CAUSES_REG_CT_KILL	= (1 << 6),
 	IWX_MSIX_HW_INT_CAUSES_REG_RF_KILL	= (1 << 7),
@@ -1151,6 +1197,7 @@ enum msix_ivar_for_cause {
 	IWX_MSIX_IVAR_CAUSE_REG_ALIVE		= 0x10,
 	IWX_MSIX_IVAR_CAUSE_REG_WAKEUP		= 0x11,
 	IWX_MSIX_IVAR_CAUSE_REG_RESET_DONE	= 0x12,
+	IWX_MSIX_IVAR_CAUSE_REG_SW_ERR_V2	= 0x15,
 	IWX_MSIX_IVAR_CAUSE_REG_CT_KILL		= 0x16,
 	IWX_MSIX_IVAR_CAUSE_REG_RF_KILL		= 0x17,
 	IWX_MSIX_IVAR_CAUSE_REG_PERIODIC	= 0x18,
@@ -1279,6 +1326,7 @@ enum msix_ivar_for_cause {
 #define IWX_UCODE_TLV_API_ADWELL_HB_DEF_N_AP	57
 #define IWX_UCODE_TLV_API_SCAN_EXT_CHAN_VER	58
 #define IWX_UCODE_TLV_API_BAND_IN_RX_DATA	59
+#define IWX_UCODE_TLV_API_SMART_FIFO_OFFLOAD	68
 #define IWX_NUM_UCODE_TLV_API			128
 
 #define IWX_UCODE_TLV_API_BITS \
@@ -1421,7 +1469,7 @@ enum msix_ivar_for_cause {
 #define IWX_UCODE_TLV_CAPA_RFIM_SUPPORT			102
 #define IWX_UCODE_TLV_CAPA_MLD_API_SUPPORT		110 
 
-#define IWX_NUM_UCODE_TLV_CAPA 128
+#define IWX_NUM_UCODE_TLV_CAPA 160
 
 /*
  * For 16.0 uCode and above, there is no differentiation between sections,
@@ -1802,6 +1850,17 @@ enum iwx_gen2_tx_fifo {
 	IWX_GEN2_TRIG_TX_FIFO_VO,
 };
 
+enum iwx_bz_tx_fifo {
+	IWX_BZ_EDCA_TX_FIFO_BK,
+	IWX_BZ_EDCA_TX_FIFO_BE,
+	IWX_BZ_EDCA_TX_FIFO_VI,
+	IWX_BZ_EDCA_TX_FIFO_VO,
+	IWX_BZ_TRIG_TX_FIFO_BK,
+	IWX_BZ_TRIG_TX_FIFO_BE,
+	IWX_BZ_TRIG_TX_FIFO_VI,
+	IWX_BZ_TRIG_TX_FIFO_VO,
+};
+
 /**
  * TXQ config options
  * @TX_QUEUE_CFG_ENABLE_QUEUE: enable a queue
@@ -1996,6 +2055,7 @@ struct iwx_tx_queue_cfg_rsp {
 #define IWX_MAC_CONF_GROUP	0x3
 #define IWX_PHY_OPS_GROUP	0x4
 #define IWX_DATA_PATH_GROUP	0x5
+#define IWX_BT_COEX_GROUP	0x9
 #define IWX_PROT_OFFLOAD_GROUP	0xb
 #define IWX_REGULATORY_AND_NVM_GROUP	0xc
 #define IWX_XVT_GROUP		0xe
@@ -2018,6 +2078,7 @@ struct iwx_tx_queue_cfg_rsp {
 #define IWX_STA_CONFIG_CMD		0x0a
 #define IWX_STA_REMOVE_CMD		0x0c
 #define IWX_SESSION_PROTECTION_NOTIF	0xfb
+#define IWX_MISSED_BEACONS_NOTIF	0xf6
 
 /* DATA_PATH group subcommand IDs */
 #define IWX_DQA_ENABLE_CMD	0x00
@@ -2029,6 +2090,9 @@ struct iwx_tx_queue_cfg_rsp {
 #define IWX_RX_NO_DATA_NOTIF	0xf5
 #define IWX_THERMAL_DUAL_CHAIN_REQUEST 0xf6
 #define IWX_TLC_MNG_UPDATE_NOTIF 0xf7
+
+/* BT COEX group subcommand IDs */
+#define IWX_PROFILE_NOTIF	0xff
 
 /* REGULATORY_AND_NVM group subcommand IDs */
 #define IWX_NVM_ACCESS_COMPLETE	0x00
@@ -2374,7 +2438,7 @@ struct iwx_alive_resp_v6 {
 	struct iwx_umac_alive umac_data;
 	struct iwx_sku_id sku_id;
 	struct iwx_imr_alive_info imr;
-} __packed; /* UCODE_ALIVE_NTFY_API_S_VER_6 */
+} __packed; /* UCODE_ALIVE_NTFY_API_S_VER_6 / VER_7 */
 
 
 #define IWX_SOC_CONFIG_CMD_FLAGS_DISCRETE	(1 << 0)
@@ -3395,7 +3459,7 @@ struct iwx_fw_channel_info {
 	(0x1 << IWX_PHY_RX_CHAIN_MIMO_FORCE_POS)
 
 /* TODO: fix the value, make it depend on firmware at runtime? */
-#define IWX_NUM_PHY_CTX	3
+#define IWX_NUM_PHY_CTX	1
 
 /**
  * struct iwl_phy_context_cmd - config of the PHY context
@@ -3742,9 +3806,7 @@ struct iwx_rx_mpdu_desc {
 		uint16_t l3l4_flags;
 		uint16_t phy_data4;
 	};
-	uint16_t status;
-	uint8_t hash_filter;
-	uint8_t sta_id_flags;
+	uint32_t status;
 	uint32_t reorder_data;
 	union {
 		struct iwx_rx_mpdu_desc_v1 v1;
@@ -5149,6 +5211,77 @@ struct iwx_mvm_sta_cfg_cmd {
 	struct iwx_he_pkt_ext_v2 pkt_ext;
 	uint32_t htc_flags;
 } __packed; /* STA_CMD_API_S_VER_1 */
+
+/**
+ * struct iwx_sta_cfg_cmd_v2 - cmd structure to add a peer sta to the uCode's
+ *	station table
+ * ( STA_CONFIG_CMD = 0xA )
+ *
+ * @sta_id: index of station in uCode's station table
+ * @link_id: the id of the link that is used to communicate with this sta
+ * @peer_mld_address: the peers mld address
+ * @reserved_for_peer_mld_address: reserved
+ * @peer_link_address: the address of the link that is used to communicate
+ *	with this sta
+ * @reserved_for_peer_link_address: reserved
+ * @station_type: type of this station. See &enum iwl_fw_sta_type
+ * @assoc_id: for GO only
+ * @beamform_flags: beam forming controls
+ * @mfp: indicates whether the STA uses management frame protection or not.
+ * @mimo: indicates whether the sta uses mimo or not
+ * @mimo_protection: indicates whether the sta uses mimo protection or not
+ * @ack_enabled: indicates that the AP supports receiving ACK-
+ *	enabled AGG, i.e. both BACK and non-BACK frames in a single AGG
+ * @trig_rnd_alloc: indicates that trigger based random allocation
+ *	is enabled according to UORA element existence
+ * @tx_ampdu_spacing: minimum A-MPDU spacing:
+ *	4 - 2us density, 5 - 4us density, 6 - 8us density, 7 - 16us density
+ * @tx_ampdu_max_size: maximum A-MPDU length: 0 - 8K, 1 - 16K, 2 - 32K,
+ *	3 - 64K, 4 - 128K, 5 - 256K, 6 - 512K, 7 - 1024K.
+ * @sp_length: the size of the SP in actual number of frames
+ * @uapsd_acs:  4 LS bits are trigger enabled ACs, 4 MS bits are the deliver
+ *	enabled ACs.
+ * @pkt_ext: optional, exists according to PPE-present bit in the HE/EHT-PHY
+ *	capa
+ * @htc_flags: which features are supported in HTC
+ * @use_ldpc_x2_cw: Indicates whether to use LDPC with double CW
+ * @use_icf: Indicates whether to use ICF instead of RTS
+ * @dps_pad_time: DPS (Dynamic Power Save) padding delay resolution to ensure
+ *	proper timing alignment
+ * @dps_trans_delay: DPS minimal time that takes the peer to return to low power
+ * @mic_prep_pad_delay: MIC prep time padding
+ * @mic_compute_pad_delay: MIC compute time padding
+ * @reserved: Reserved for alignment
+ */
+struct iwx_sta_cfg_cmd_v2 {
+	uint32_t sta_id;
+	uint32_t link_id;
+	uint8_t peer_mld_address[ETHER_ADDR_LEN];
+	uint16_t reserved_for_peer_mld_address;
+	uint8_t peer_link_address[ETHER_ADDR_LEN];
+	uint16_t reserved_for_peer_link_address;
+	uint32_t station_type;
+	uint32_t assoc_id;
+	uint32_t beamform_flags;
+	uint32_t mfp;
+	uint32_t mimo;
+	uint32_t mimo_protection;
+	uint32_t ack_enabled;
+	uint32_t trig_rnd_alloc;
+	uint32_t tx_ampdu_spacing;
+	uint32_t tx_ampdu_max_size;
+	uint32_t sp_length;
+	uint32_t uapsd_acs;
+	struct iwx_he_pkt_ext_v2 pkt_ext;
+	uint32_t htc_flags;
+	uint8_t use_ldpc_x2_cw;
+	uint8_t use_icf;
+	uint8_t dps_pad_time;
+	uint8_t dps_trans_delay;
+	uint8_t mic_prep_pad_delay;
+	uint8_t mic_compute_pad_delay;
+	uint8_t reserved[2];
+} __packed; /* STA_CMD_API_S_VER_2 */
 
 /**
  * struct iwx_mvm_remove_sta_cmd - a cmd structure to remove a sta added by
