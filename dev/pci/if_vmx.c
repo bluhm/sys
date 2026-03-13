@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_vmx.c,v 1.94 2025/11/11 17:43:18 bluhm Exp $	*/
+/*	$OpenBSD: if_vmx.c,v 1.95 2026/03/13 17:57:03 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2013 Tsubai Masanari
