@@ -65,7 +65,7 @@
  *	a	atomic operations
  *	I	immutable after creation
  *	K	kernel lock
- *	m	nd6 mutex, needed when net lock is shared
+ *	M	nd6 mutex, needed when net lock is shared
  *	N	net lock
  */
 
@@ -73,7 +73,7 @@
 #define ND6_RECALC_REACHTM_INTERVAL (60 * 120) /* 2 hours */
 
 /* timer values */
-time_t	nd6_timer_next	= -1;	/* [N] at which uptime nd6_timer runs */
+time_t	nd6_timer_next	= -1;	/* [M] at which uptime nd6_timer runs */
 time_t	nd6_expire_next	= -1;	/* at which uptime nd6_expire runs */
 int	nd6_delay	= 5;	/* [a] delay first probe time 5 second */
 int	nd6_umaxtries	= 3;	/* [a] maximum unicast query */
@@ -88,9 +88,9 @@ struct mutex nd6_mtx = MUTEX_INITIALIZER(IPL_SOFTNET);
 
 TAILQ_HEAD(llinfo_nd6_head, llinfo_nd6) nd6_list =
     TAILQ_HEAD_INITIALIZER(nd6_list);
-				/* [m] list of llinfo_nd6 structures */
+				/* [M] list of llinfo_nd6 structures */
 struct	pool nd6_pool;		/* [I] pool for llinfo_nd6 structures */
-int	nd6_inuse;		/* [m] limit neighbor discovery routes */
+int	nd6_inuse;		/* [M] limit neighbor discovery routes */
 unsigned int	ln_hold_total;	/* [a] packets currently in the nd6 queue */
 
 void nd6_timer(void *);
@@ -230,11 +230,12 @@ nd6_llinfo_settimer(const struct llinfo_nd6 *ln, unsigned int secs)
 {
 	time_t expire = getuptime() + secs;
 
-	NET_ASSERT_LOCKED();
+	MUTEX_ASSERT_LOCKED(&nd6_mtx);
 	KASSERT(!ISSET(ln->ln_rt->rt_flags, RTF_LOCAL));
 
 	ln->ln_rt->rt_expire = expire;
-	if (!timeout_pending(&nd6_timer_to) || expire < nd6_timer_next) {
+	if (!timeout_pending(&nd6_timer_to) ||
+	    expire < nd6_timer_next) {
 		nd6_timer_next = expire;
 		timeout_add_sec(&nd6_timer_to, secs);
 	}
@@ -276,7 +277,6 @@ nd6_timer(void *unused)
 	struct llinfo_nd6 *ln = NULL;
 	time_t uptime, expire;
 	int i_am_router = (atomic_load_int(&ip6_forwarding) != 0);
-	int secs;
 
 	uptime = getuptime();
 	expire = uptime + nd6_gctimer;
@@ -299,18 +299,23 @@ nd6_timer(void *unused)
 		} else if (rt->rt_expire && rt->rt_expire < expire)
 			expire = rt->rt_expire;
 	}
-	mtx_leave(&nd6_mtx);
 
-	secs = expire - uptime;
-	if (secs < 1)
-		secs = 1;
-
-	NET_LOCK();
 	if (!TAILQ_EMPTY(&nd6_list)) {
-		nd6_timer_next = uptime + secs;
-		timeout_add_sec(&nd6_timer_to, secs);
+		int secs;
+
+		secs = expire - uptime;
+		if (secs < 1) {
+			secs = 1;
+			expire = uptime + secs;
+		}
+
+		if (!timeout_pending(&nd6_timer_to) ||
+		    expire < nd6_timer_next) {
+			nd6_timer_next = expire;
+			timeout_add_sec(&nd6_timer_to, secs);
+		}
 	}
-	NET_UNLOCK();
+	mtx_leave(&nd6_mtx);
 }
 
 /*
@@ -420,17 +425,17 @@ nd6_llinfo_timer(struct rtentry *rt, int i_am_router)
 void
 nd6_expire_timer_update(struct in6_ifaddr *ia6)
 {
-	time_t expire_time = INT64_MAX;
+	time_t expire = INT64_MAX;
 
 	if (ia6->ia6_lifetime.ia6t_vltime != ND6_INFINITE_LIFETIME)
-		expire_time = ia6->ia6_lifetime.ia6t_expire;
+		expire = ia6->ia6_lifetime.ia6t_expire;
 
 	if (!(ia6->ia6_flags & IN6_IFF_DEPRECATED) &&
 	    ia6->ia6_lifetime.ia6t_pltime != ND6_INFINITE_LIFETIME &&
-	    expire_time > ia6->ia6_lifetime.ia6t_preferred)
-		expire_time = ia6->ia6_lifetime.ia6t_preferred;
+	    expire > ia6->ia6_lifetime.ia6t_preferred)
+		expire = ia6->ia6_lifetime.ia6t_preferred;
 
-	if (expire_time == INT64_MAX)
+	if (expire == INT64_MAX)
 		return;
 
 	/*
@@ -439,18 +444,22 @@ nd6_expire_timer_update(struct in6_ifaddr *ia6)
 	 * Schedule timeout one second later so that either IFA6_IS_INVALID()
 	 * or IFA6_IS_DEPRECATED() is true.
 	 */
-	expire_time++;
+	expire++;
 
 	if (!timeout_pending(&nd6_expire_timeout) ||
-	    nd6_expire_next > expire_time) {
+	    expire < nd6_expire_next) {
+		time_t uptime;
 		int secs;
 
-		secs = expire_time - getuptime();
-		if (secs < 0)
-			secs = 0;
+		uptime = getuptime();
+		secs = expire - uptime;
+		if (secs < 1) {
+			secs = 1;
+			expire = uptime;
+		}
 
+		nd6_expire_next = expire;
 		timeout_add_sec(&nd6_expire_timeout, secs);
-		nd6_expire_next = expire_time;
 	}
 }
 
