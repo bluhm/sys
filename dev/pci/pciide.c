@@ -1,4 +1,4 @@
-/*	$OpenBSD: pciide.c,v 1.366 2024/05/15 07:46:25 jsg Exp $	*/
+/*	$OpenBSD: pciide.c,v 1.368 2026/04/07 00:15:41 jsg Exp $	*/
 /*	$NetBSD: pciide.c,v 1.127 2001/08/03 01:31:08 tsutsui Exp $	*/
 
 /*
@@ -809,6 +809,14 @@ const struct pciide_product_desc pciide_via_products[] =  {
 	  sata_chip_map
 	},
 	{ PCI_PRODUCT_VIATECH_VT8251_SATA, /* VIA VT8251 SATA */
+	  0,
+	  sata_chip_map
+	},
+	{ PCI_PRODUCT_VIATECH_VT8251_SATA_2, /* VIA VT8251(CE) SATA */
+	  0,
+	  sata_chip_map
+	},
+	{ PCI_PRODUCT_VIATECH_VT8261_SATA, /* VIA VT8261 SATA */
 	  0,
 	  sata_chip_map
 	}
@@ -3511,12 +3519,17 @@ apollo_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 			break;
 		case PCI_PRODUCT_VIATECH_VT8231_ISA:
 		case PCI_PRODUCT_VIATECH_VT8233_ISA:
+		case PCI_PRODUCT_VIATECH_VT8233C_ISA:
 			printf(": ATA100");
 			sc->sc_wdcdev.UDMA_cap = 5;
 			break;
 		case PCI_PRODUCT_VIATECH_VT8233A_ISA:
 		case PCI_PRODUCT_VIATECH_VT8235_ISA:
 		case PCI_PRODUCT_VIATECH_VT8237_ISA:
+		case PCI_PRODUCT_VIATECH_VT8237A_ISA:
+		case PCI_PRODUCT_VIATECH_VT8237S_ISA:
+		case PCI_PRODUCT_VIATECH_VT8251_ISA:
+		case PCI_PRODUCT_VIATECH_VT8261_ISA:
 			printf(": ATA133");
 			sc->sc_wdcdev.UDMA_cap = 6;
 			break;

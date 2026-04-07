@@ -1,4 +1,4 @@
-/*	$OpenBSD: com.c,v 1.180 2025/09/16 12:18:10 hshoexer Exp $	*/
+/*	$OpenBSD: com.c,v 1.181 2026/04/06 10:27:53 kettenis Exp $	*/
 /*	$NetBSD: com.c,v 1.82.4.1 1996/06/02 09:08:00 mrg Exp $	*/
 
 /*
@@ -307,6 +307,9 @@ comopen(dev_t dev, int flag, int mode, struct proc *p)
 			case COM_UART_XR17V35X:
 				com_write_reg(sc, UART_EXAR_SLEEP, 0);
 				break;
+			case COM_UART_PXA2X0:
+				com_write_reg(sc, com_ier, IER_EUART);
+				break;
 			}
 		}
 
@@ -363,6 +366,8 @@ comopen(dev_t dev, int flag, int mode, struct proc *p)
 			SET(sc->sc_mcr, MCR_IENABLE);
 		com_write_reg(sc, com_mcr, sc->sc_mcr);
 		sc->sc_ier = IER_ERXRDY | IER_ERLS | IER_EMSC;
+		if (sc->sc_uarttype == COM_UART_PXA2X0)
+			sc->sc_ier |= IER_EUART | IER_ERXTOUT;
 		com_write_reg(sc, com_ier, sc->sc_ier);
 
 		sc->sc_msr = com_read_reg(sc, com_msr);
@@ -465,10 +470,14 @@ void
 compwroff(struct com_softc *sc)
 {
 	struct tty *tp = sc->sc_tty;
+	u_int8_t ier;
 
 	CLR(sc->sc_lcr, LCR_SBREAK);
 	com_write_reg(sc, com_lcr, sc->sc_lcr);
-	com_write_reg(sc, com_ier, 0);
+	ier = 0;
+	if (sc->sc_uarttype == COM_UART_PXA2X0)
+		ier |= IER_EUART;
+	com_write_reg(sc, com_ier, ier);
 	if (ISSET(tp->t_cflag, HUPCL) &&
 	    !ISSET(sc->sc_swflags, COM_SW_SOFTCAR)) {
 		/* XXX perhaps only clear DTR */
@@ -501,6 +510,9 @@ compwroff(struct com_softc *sc)
 			break;
 		case COM_UART_XR17V35X:
 			com_write_reg(sc, UART_EXAR_SLEEP, 0xff);
+			break;
+		case COM_UART_PXA2X0:
+			com_write_reg(sc, com_ier, 0);
 			break;
 		}
 	}
@@ -539,6 +551,9 @@ com_resume(struct com_softc *sc)
 			break;
 		case COM_UART_XR17V35X:
 			com_write_reg(sc, UART_EXAR_SLEEP, 0);
+			break;
+		case COM_UART_PXA2X0:
+			com_write_reg(sc, com_ier, IER_EUART);
 			break;
 		}
 	}
@@ -1304,6 +1319,8 @@ com_attach_subr(struct com_softc *sc)
 	u_int32_t cpr;
 
 	sc->sc_ier = 0;
+	if (sc->sc_uarttype == COM_UART_PXA2X0)
+		sc->sc_ier |= IER_EUART;
 	/* disable interrupts */
 	com_write_reg(sc, com_ier, sc->sc_ier);
 
@@ -1502,6 +1519,11 @@ com_attach_subr(struct com_softc *sc)
 			sc->sc_fifolen = 1;
 		}
 		break;
+	case COM_UART_PXA2X0:
+		printf(": pxa2x0, 32 byte fifo\n");
+		SET(sc->sc_hwflags, COM_HW_FIFO);
+		sc->sc_fifolen = 32;
+		break;
 	default:
 		panic("comattach: bad fifo type");
 	}
@@ -1575,6 +1597,8 @@ com_fifo_probe(struct com_softc *sc)
 		return;
 
 	ier = 0;
+	if (sc->sc_uarttype == COM_UART_PXA2X0)
+		ier |= IER_EUART;
 	com_write_reg(sc, com_ier, ier);
 	com_write_reg(sc, com_lcr, LCR_DLAB);
 	com_write_reg(sc, com_dlbl, 3);

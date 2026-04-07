@@ -1,4 +1,4 @@
-/*	$OpenBSD: pmap.c,v 1.189 2026/03/09 13:24:13 deraadt Exp $	*/
+/*	$OpenBSD: pmap.c,v 1.190 2026/04/06 18:27:33 mlarkin Exp $	*/
 /*	$NetBSD: pmap.c,v 1.3 2003/05/08 18:13:13 thorpej Exp $	*/
 
 /*
@@ -798,6 +798,7 @@ pmap_bootstrap(paddr_t first_avail, paddr_t max_pa)
 	dmpdp = kpm->pm_pdir[PDIR_SLOT_DIRECT] & pg_frame;
 
 	dmpd = first_avail; first_avail += ndmpdp * PAGE_SIZE;
+	memset((void *)PMAP_DIRECT_MAP(dmpd), 0, ndmpdp * PAGE_SIZE);
 
 	for (i = NDML2_ENTRIES; i < NPDPG * ndmpdp; i++) {
 		paddr_t pdp;
@@ -836,6 +837,7 @@ pmap_bootstrap(paddr_t first_avail, paddr_t max_pa)
 			/* Next 512GB, new PML4e and L3(512GB) page */
 			dmpd = first_avail; first_avail += PAGE_SIZE;
 			pml3 = (pt_entry_t *)PMAP_DIRECT_MAP(dmpd);
+			memset(pml3, 0, PAGE_SIZE);
 			kpm->pm_pdir[PDIR_SLOT_DIRECT + curslot] = dmpd |
 			    PG_KW | PG_V | PG_U | PG_M | pg_nx | pg_crypt;
 
@@ -857,6 +859,7 @@ pmap_bootstrap(paddr_t first_avail, paddr_t max_pa)
 			for (i = 0; i < p; i++) {
 				dmpd = first_avail; first_avail += PAGE_SIZE;
 				pml2 = (pt_entry_t *)PMAP_DIRECT_MAP(dmpd);
+				memset(pml2, 0, PAGE_SIZE);
 				pml3[i] = dmpd |
 				    PG_RW | PG_V | PG_U | PG_M | pg_nx |
 				    pg_crypt;

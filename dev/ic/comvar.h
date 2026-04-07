@@ -1,4 +1,4 @@
-/*	$OpenBSD: comvar.h,v 1.61 2024/05/29 00:48:15 jsg Exp $	*/
+/*	$OpenBSD: comvar.h,v 1.62 2026/04/06 10:27:53 kettenis Exp $	*/
 /*	$NetBSD: comvar.h,v 1.5 1996/05/05 19:50:47 christos Exp $	*/
 
 /*
@@ -105,6 +105,7 @@ struct com_softc {
 #define	COM_UART_OX16C950	0x11		/* 128 byte fifo */
 #define	COM_UART_XR17V35X	0x12		/* 256 byte fifo */
 #define	COM_UART_DW_APB		0x13		/* configurable */
+#define	COM_UART_PXA2X0		0x14		/* 32 byte fifo */
 
 	u_char sc_hwflags;
 #define	COM_HW_NOIEN	0x01

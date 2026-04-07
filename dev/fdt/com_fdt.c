@@ -1,4 +1,4 @@
-/* $OpenBSD: com_fdt.c,v 1.9 2024/01/31 01:01:10 hastings Exp $ */
+/* $OpenBSD: com_fdt.c,v 1.10 2026/04/06 10:27:53 kettenis Exp $ */
 /*
  * Copyright (c) 2016 Patrick Wildt <patrick@blueri.se>
  *
@@ -54,6 +54,7 @@ com_fdt_init_cons(void)
 	void *node;
 
 	if ((node = fdt_find_cons("brcm,bcm2835-aux-uart")) == NULL &&
+	    (node = fdt_find_cons("intel,xscale-uart")) == NULL &&
 	    (node = fdt_find_cons("marvell,armada-38x-uart")) == NULL &&
 	    (node = fdt_find_cons("mediatek,mt6577-uart")) == NULL &&
 	    (node = fdt_find_cons("ns16550a")) == NULL &&
@@ -96,6 +97,7 @@ com_fdt_match(struct device *parent, void *match, void *aux)
 	struct fdt_attach_args *faa = aux;
 
 	return (OF_is_compatible(faa->fa_node, "brcm,bcm2835-aux-uart") ||
+	    OF_is_compatible(faa->fa_node, "intel,xscale-uart") ||
 	    OF_is_compatible(faa->fa_node, "marvell,armada-38x-uart") ||
 	    OF_is_compatible(faa->fa_node, "mediatek,mt6577-uart") ||
 	    OF_is_compatible(faa->fa_node, "ns16550a") ||
@@ -142,6 +144,9 @@ com_fdt_attach(struct device *parent, struct device *self, void *aux)
 
 	sc->sc_reg_width = OF_getpropint(faa->fa_node, "reg-io-width", width);
 	sc->sc_reg_shift = OF_getpropint(faa->fa_node, "reg-shift", shift);
+
+	if (OF_is_compatible(faa->fa_node, "intel,xscale-uart"))
+		sc->sc_uarttype = COM_UART_PXA2X0;
 
 	if (OF_is_compatible(faa->fa_node, "mediatek,mt6577-uart"))
 		sc->sc_uarttype = COM_UART_16550A;

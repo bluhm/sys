@@ -1,4 +1,4 @@
-$OpenBSD: pcidevs,v 1.2129 2026/03/19 22:31:02 kn Exp $
+$OpenBSD: pcidevs,v 1.2133 2026/04/06 23:59:43 jsg Exp $
 /*	$NetBSD: pcidevs,v 1.30 1997/06/24 06:20:24 thorpej Exp $	*/
 
 /*
@@ -360,6 +360,7 @@ vendor	SSSTC		0x1e95	SSSTC
 vendor	QUECTEL		0x1eac	Quectel
 vendor	TEHUTI		0x1fc9	Tehuti Networks
 vendor	SUNIX2		0x1fd4	Sunix
+vendor	SPACEMIT	0x201f	SpacemiT
 vendor	KINGSTON	0x2646	Kingston
 vendor	HINT		0x3388	Hint
 vendor	3DLABS		0x3d3d	3D Labs
@@ -6155,6 +6156,8 @@ product INTEL ATS_M150		0x56c0	Flex 170
 product INTEL ATS_M75		0x56c1	Flex 140
 product INTEL I219_LM24		0x57a0	I219-LM
 product INTEL I219_V24		0x57a1	I219-V
+product INTEL I219_LM25		0x57b3	I219-LM
+product INTEL I219_V25		0x57b4	I219-V
 product INTEL QEMU_NVME		0x5845	QEMU NVM Express Controller
 product INTEL KBL_D_GT1		0x5902	HD Graphics 610
 product INTEL CORE7G_U_HB	0x5904	Core 7G Host
@@ -6636,7 +6639,78 @@ product INTEL MTL_PCIE_11	0x7ecb	Core Ultra PCIE
 product INTEL MTL_H_PCIE_12	0x7ecc 	Core Ultra PCIE
 product INTEL MTL_PMC_IOE	0x7ece	Core Ultra PMC
 product INTEL MTL_SRAM_IOE	0x7ecf	Core Ultra SRAM
+product INTEL Q870_ESPI		0x7f03	Q870 eSPI
+product INTEL Z890_ESPI		0x7f04	Z890 eSPI
+product INTEL B860_ESPI		0x7f06	B860 eSPI
+product INTEL H810_ESPI		0x7f07	H810 eSPI
+product INTEL W880_ESPI		0x7f08	W880 eSPI
+product INTEL HM870_ESPI	0x7f0c	HM870 eSPI
+product INTEL WM880_ESPI	0x7f0d	WM880 eSPI
+product INTEL 800SERIES_P2SB	0x7f20	800 Series P2SB
+product INTEL 800SERIES_PMC	0x7f21	800 Series PMC
+product INTEL 800SERIES_SMB	0x7f23	800 Series SMBus
+product INTEL 800SERIES_SPI	0x7f24	800 Series SPI
+product INTEL 800SERIES_TH	0x7f26	800 Series TH
+product INTEL 800SERIES_SRAM	0x7f27	800 Series Shared SRAM
+product INTEL 800SERIES_UART_0	0x7f28	800 Series UART
+product INTEL 800SERIES_UART_1	0x7f29	800 Series UART
+product INTEL 800SERIES_GSPI_0	0x7f2a	800 Series GSPI
+product INTEL 800SERIES_GSPI_1	0x7f2b	800 Series GSPI
+product INTEL 800SERIES_PCIE_9	0x7f30	800 Series PCIE
+product INTEL 800SERIES_PCIE_10	0x7f31	800 Series PCIE
+product INTEL 800SERIES_PCIE_11	0x7f32	800 Series PCIE
+product INTEL 800SERIES_PCIE_12	0x7f33	800 Series PCIE
+product INTEL 800SERIES_PCIE_13	0x7f34	800 Series PCIE
+product INTEL 800SERIES_PCIE_14	0x7f35	800 Series PCIE
+product INTEL 800SERIES_PCIE_15	0x7f36	800 Series PCIE
+product INTEL 800SERIES_PCIE_16	0x7f37	800 Series PCIE
+product INTEL 800SERIES_PCIE_1	0x7f38	800 Series PCIE
+product INTEL 800SERIES_PCIE_2	0x7f39	800 Series PCIE
+product INTEL 800SERIES_PCIE_3	0x7f3a	800 Series PCIE
+product INTEL 800SERIES_PCIE_4	0x7f3b	800 Series PCIE
+product INTEL 800SERIES_PCIE_5	0x7f3c	800 Series PCIE
+product INTEL 800SERIES_PCIE_6	0x7f3d	800 Series PCIE
+product INTEL 800SERIES_PCIE_7	0x7f3e	800 Series PCIE
+product INTEL 800SERIES_PCIE_8	0x7f3f	800 Series PCIE
+product INTEL 800SERIES_PCIE_17	0x7f40	800 Series PCIE
+product INTEL 800SERIES_PCIE_18	0x7f41	800 Series PCIE
+product INTEL 800SERIES_PCIE_19	0x7f42	800 Series PCIE
+product INTEL 800SERIES_PCIE_20	0x7f43	800 Series PCIE
+product INTEL 800SERIES_PCIE_21	0x7f44	800 Series PCIE
+product INTEL 800SERIES_PCIE_22	0x7f45	800 Series PCIE
+product INTEL 800SERIES_PCIE_23	0x7f46	800 Series PCIE
+product INTEL 800SERIES_PCIE_24	0x7f47	800 Series PCIE
+product INTEL 800SERIES_I2C_0	0x7f4c	800 Series I2C
+product INTEL 800SERIES_I2C_1	0x7f4d	800 Series I2C
+product INTEL 800SERIES_I2C_2	0x7f4e	800 Series I2C
+product INTEL 800SERIES_I2C_3	0x7f4f	800 Series I2C
+product INTEL 800SERIES_HDA	0x7f50	800 Series HD Audio
+product INTEL 800SERIES_THC_0_1	0x7f58	800 Series THC
+product INTEL 800SERIES_THC_0_2	0x7f59	800 Series THC
+product INTEL 800SERIES_THC_1_1	0x7f5a	800 Series THC
+product INTEL 800SERIES_THC_1_2	0x7f5b	800 Series THC
+product INTEL 800SERIES_UART_2	0x7f5c	800 Series UART
+product INTEL 800SERIES_UART_3	0x7f5d	800 Series UART
+product INTEL 800SERIES_GSPI_2	0x7f5e	800 Series GSPI
+product INTEL 800SERIES_GSPI_3	0x7f5f	800 Series GSPI
+product INTEL 800SERIES_AHCI	0x7f62	800 Series AHCI
+product INTEL 800SERIES_RAID	0x7f66	800 Series RAID
+product INTEL 800SERIES_HECI_1	0x7f68	800 Series HECI
+product INTEL 800SERIES_HECI_2	0x7f69	800 Series HECI
+product INTEL 800SERIES_IDER	0x7f6a	800 Series IDE-R
+product INTEL 800SERIES_KT	0x7f6b	800 Series KT
+product INTEL 800SERIES_HECI_3	0x7f6c	800 Series HECI
+product INTEL 800SERIES_HECI_4	0x7f6d	800 Series HECI
+product INTEL 800SERIES_XHCI	0x7f6e	800 Series xHCI
+product INTEL 800SERIES_XDCI	0x7f6f	800 Series xDCI
 product INTEL WL_22500_15	0x7f70	Wi-Fi 6 AX211
+product INTEL 800SERIES_ISH	0x7f78	800 Series ISH
+product INTEL 800SERIES_I3C	0x7f79	800 Series I3C
+product INTEL 800SERIES_I2C_4	0x7f7a	800 Series I2C
+product INTEL 800SERIES_I2C_5	0x7f7b	800 Series I2C
+product INTEL 800SERIES_HECI_5	0x7f7c	800 Series HECI
+product INTEL 800SERIES_HECI_6	0x7f7d	800 Series HECI
+product INTEL 800SERIES_HECI_7	0x7f7e	800 Series HECI
 product INTEL US15W_HB		0x8100	US15W Host
 product INTEL US15L_HB		0x8101	US15L/UL11L Host
 product INTEL US15W_IGD		0x8108	US15W Video
@@ -7444,6 +7518,29 @@ product INTEL LNL_I2C_3		0xa87b	Core Ultra I2C
 product INTEL LNL_I3C_1		0xa87c	Core Ultra I3C
 product INTEL LNL_XHCI		0xa87d	Core Ultra xHCI
 product INTEL LNL_SRAM		0xa87f	Core Ultra SRAM
+product INTEL PTL_HB_1		0xb000	Core Ultra Host
+product INTEL PTL_H_HB_1	0xb001	Core Ultra Host
+product INTEL PTL_H_HB_2	0xb002	Core Ultra Host
+product INTEL PTL_HB_2		0xb003	Core Ultra Host
+product INTEL PTL_H_HB_3	0xb004	Core Ultra Host
+product INTEL PTL_H_HB_4	0xb005	Core Ultra Host
+product INTEL PTL_DTT		0xb01d	Core Ultra DTT
+product INTEL PTL_IAA		0xb02d	Core Ultra IAA
+product INTEL PTL_NPU		0xb03e	Core Ultra NPU
+product INTEL PTL_IPU		0xb05d	Core Ultra IPU
+product INTEL PTL_CT		0xb07d	Core Ultra CT
+product INTEL PTL_GT_1		0xb080	Graphics
+product INTEL PTL_GT_2		0xb081	Graphics
+product INTEL PTL_GT_3		0xb082	Graphics
+product INTEL PTL_GT_4		0xb083	Graphics
+product INTEL PTL_GT_5		0xb084	Graphics
+product INTEL PTL_GT_6		0xb085	Graphics
+product INTEL PTL_GT_7		0xb086	Graphics
+product INTEL PTL_GT_8		0xb087	Graphics
+product INTEL PTL_GT_9		0xb08f	Graphics
+product INTEL PTL_GT_10		0xb090	Graphics
+product INTEL PTL_GT_11		0xb0a0	Graphics
+product INTEL PTL_GT_12		0xb0b0	Graphics
 product INTEL 21152		0xb152	S21152BB
 product INTEL 21154		0xb154	21154AE/BE
 product INTEL ARL_S_GT_2	0xb640	Graphics
@@ -7463,6 +7560,131 @@ product INTEL CORE_MANAGEMENT	0xd155	Core Management
 product INTEL CORE_SCRATCH	0xd156	Core Scratch
 product INTEL CORE_CONTROL	0xd157	Core Control
 product INTEL CORE_MISC		0xd158	Core Misc
+product INTEL PTL_P2SB_8B	0xe320	Core Ultra P2SB
+product INTEL PTL_PMC		0xe321	Core Ultra PMC
+product INTEL PTL_SMB		0xe322	Core Ultra SMBus
+product INTEL PTL_SPI		0xe323	Core Ultra SPI
+product INTEL PTL_TH		0xe324	Core Ultra TH
+product INTEL PTL_UART_0	0xe325	Core Ultra UART
+product INTEL PTL_UART_1	0xe326	Core Ultra UART
+product INTEL PTL_GSPI_0	0xe327	Core Ultra GSPI
+product INTEL PTL_H_HDA		0xe328	Core Ultra HD Audio
+product INTEL PTL_GSPI_1	0xe330	Core Ultra GSPI
+product INTEL PTL_TC_XHCI	0xe331	Core Ultra xHCI
+product INTEL PTL_TC_XDCI	0xe332	Core Ultra xDCI
+product INTEL PTL_TBT_DMA0	0xe333	Core Ultra TBT
+product INTEL PTL_TBT_DMA1	0xe334	Core Ultra TBT
+product INTEL PTL_TC_PCIE_24	0xe337	Core Ultra PCIE
+product INTEL PTL_PCIE_1	0xe338	Core Ultra PCIE
+product INTEL PTL_PCIE_2	0xe339	Core Ultra PCIE
+product INTEL PTL_PCIE_3	0xe33a	Core Ultra PCIE
+product INTEL PTL_PCIE_4	0xe33b	Core Ultra PCIE
+product INTEL PTL_PCIE_5	0xe33c	Core Ultra PCIE
+product INTEL PTL_PCIE_6	0xe33d	Core Ultra PCIE
+product INTEL PTL_PCIE_7	0xe33e	Core Ultra PCIE
+product INTEL PTL_PCIE_8	0xe33f	Core Ultra PCIE
+product INTEL PTL_IEH_0		0xe344	Core Ultra IEH
+product INTEL PTL_ISH		0xe345	Core Ultra ISH
+product INTEL PTL_GSPI_2	0xe346	Core Ultra GSPI
+product INTEL PTL_THC_0_1	0xe348	Core Ultra THC
+product INTEL PTL_THC_0_2	0xe349	Core Ultra THC
+product INTEL PTL_THC_1_1	0xe34a	Core Ultra THC
+product INTEL PTL_THC_1_2	0xe34b	Core Ultra THC
+product INTEL PTL_P2SB_16B	0xe34c	Core Ultra P2SB
+product INTEL PTL_IEH_1		0xe34d	Core Ultra IEH
+product INTEL PTL_TC_PCIE_21	0xe34e	Core Ultra PCIE
+product INTEL PTL_TC_PCIE_22	0xe34f	Core Ultra PCIE
+product INTEL PTL_I2C_4		0xe350	Core Ultra I2C
+product INTEL PTL_I2C_5		0xe351	Core Ultra I2C
+product INTEL PTL_UART_2	0xe352	Core Ultra UART
+product INTEL PTL_PCIE_10	0xe35c	Core Ultra PCIE
+product INTEL PTL_HECI_1	0xe35d	Core Ultra HECI
+product INTEL PTL_HECI_2	0xe35e	Core Ultra HECI
+product INTEL PTL_HECI_3	0xe35f	Core Ultra HECI
+product INTEL PTL_TC_PCIE_23	0xe360	Core Ultra PCIE
+product INTEL PTL_PCIE_9	0xe361	Core Ultra PCIE
+product INTEL PTL_HECI_4	0xe362	Core Ultra HECI
+product INTEL PTL_HECI_5	0xe363	Core Ultra HECI
+product INTEL PTL_HECI_6	0xe364	Core Ultra HECI
+product INTEL PTL_PCIE_11	0xe365	Core Ultra PCIE
+product INTEL PTL_PCIE_12	0xe366	Core Ultra PCIE
+product INTEL PTL_I3C_2		0xe36f	Core Ultra I3C
+product INTEL PTL_HECI_7	0xe370	Core Ultra HECI
+product INTEL PTL_HECI_8	0xe371	Core Ultra HECI
+product INTEL PTL_IDER		0xe372	Core Ultra IDE-R
+product INTEL PTL_KT		0xe373	Core Ultra KT
+product INTEL PTL_HECI_9	0xe374	Core Ultra HECI
+product INTEL PTL_HECI_10	0xe375	Core Ultra HECI
+product INTEL PTL_I2C_0		0xe378	Core Ultra I2C
+product INTEL PTL_I2C_1		0xe379	Core Ultra I2C
+product INTEL PTL_I2C_2		0xe37a	Core Ultra I2C
+product INTEL PTL_I2C_3		0xe37b	Core Ultra I2C
+product INTEL PTL_I3C_1		0xe37c	Core Ultra I3C
+product INTEL PTL_XHCI		0xe37d	Core Ultra xHCI
+product INTEL PTL_XDCI		0xe37e	Core Ultra xDCI
+product INTEL PTL_SRAM		0xe37f	Core Ultra SRAM
+product INTEL PTL_H_ESPI	0xe402	Core Ultra eSPI
+product INTEL PTL_H_P2SB_8B	0xe420	Core Ultra P2SB
+product INTEL PTL_H_PMC		0xe421	Core Ultra PMC
+product INTEL PTL_H_SMB		0xe422	Core Ultra SMBus
+product INTEL PTL_H_SPI		0xe423	Core Ultra SPI
+product INTEL PTL_H_TH		0xe424	Core Ultra TH
+product INTEL PTL_H_UART_0	0xe425	Core Ultra UART
+product INTEL PTL_H_UART_1	0xe426	Core Ultra UART
+product INTEL PTL_H_GSPI_0	0xe427	Core Ultra GSPI
+product INTEL PTL_HDA		0xe428	Core Ultra HD Audio
+product INTEL PTL_H_GSPI_1	0xe430	Core Ultra GSPI
+product INTEL PTL_H_TC_XHCI	0xe431	Core Ultra xHCI
+product INTEL PTL_H_TC_XDCI	0xe432	Core Ultra xDCI
+product INTEL PTL_H_TBT_DMA0	0xe433	Core Ultra TBT
+product INTEL PTL_H_TBT_DMA1	0xe434	Core Ultra TBT
+product INTEL PTL_H_TC_PCIE_24	0xe437	Core Ultra PCIE
+product INTEL PTL_H_PCIE_1	0xe438	Core Ultra PCIE
+product INTEL PTL_H_PCIE_2	0xe439	Core Ultra PCIE
+product INTEL PTL_H_PCIE_3	0xe43a	Core Ultra PCIE
+product INTEL PTL_H_PCIE_4	0xe43b	Core Ultra PCIE
+product INTEL PTL_H_PCIE_5	0xe43c	Core Ultra PCIE
+product INTEL PTL_H_PCIE_6	0xe43d	Core Ultra PCIE
+product INTEL PTL_H_PCIE_7	0xe43e	Core Ultra PCIE
+product INTEL PTL_H_PCIE_8	0xe43f	Core Ultra PCIE
+product INTEL PTL_H_IEH_0	0xe444	Core Ultra IEH
+product INTEL PTL_H_ISH		0xe445	Core Ultra ISH
+product INTEL PTL_H_GSPI_2	0xe446	Core Ultra GSPI
+product INTEL PTL_H_THC_0_1	0xe448	Core Ultra THC
+product INTEL PTL_H_THC_0_2	0xe449	Core Ultra THC
+product INTEL PTL_H_THC_1_1	0xe44a	Core Ultra THC
+product INTEL PTL_H_THC_1_2	0xe44b	Core Ultra THC
+product INTEL PTL_H_P2SB_16B	0xe44c	Core Ultra P2SB
+product INTEL PTL_H_IEH_1	0xe44d	Core Ultra IEH
+product INTEL PTL_H_TC_PCIE_21	0xe44e	Core Ultra PCIE
+product INTEL PTL_H_TC_PCIE_22	0xe44f	Core Ultra PCIE
+product INTEL PTL_H_I2C_4	0xe450	Core Ultra I2C
+product INTEL PTL_H_I2C_5	0xe451	Core Ultra I2C
+product INTEL PTL_H_UART_2	0xe452	Core Ultra UART
+product INTEL PTL_H_PCIE_10	0xe45c	Core Ultra PCIE
+product INTEL PTL_H_HECI_8	0xe45d	Core Ultra HECI
+product INTEL PTL_H_HECI_9	0xe45e	Core Ultra HECI
+product INTEL PTL_H_HECI_10	0xe45f	Core Ultra HECI
+product INTEL PTL_H_TC_PCIE_23	0xe460	Core Ultra PCIE
+product INTEL PTL_H_PCIE_9	0xe461	Core Ultra PCIE
+product INTEL PTL_H_HECI_1	0xe462	Core Ultra HECI
+product INTEL PTL_H_HECI_2	0xe463	Core Ultra HECI
+product INTEL PTL_H_HECI_3	0xe464	Core Ultra HECI
+product INTEL PTL_H_I3C_2	0xe46f	Core Ultra I3C
+product INTEL PTL_H_HECI_4	0xe470	Core Ultra HECI
+product INTEL PTL_H_HECI_5	0xe471	Core Ultra HECI
+product INTEL PTL_H_IDER	0xe472	Core Ultra IDE-R
+product INTEL PTL_H_KT		0xe473	Core Ultra KT
+product INTEL PTL_H_HECI_6	0xe474	Core Ultra HECI
+product INTEL PTL_H_HECI_7	0xe475	Core Ultra HECI
+product INTEL PTL_H_I2C_0	0xe478	Core Ultra I2C
+product INTEL PTL_H_I2C_1	0xe479	Core Ultra I2C
+product INTEL PTL_H_I2C_2	0xe47a	Core Ultra I2C
+product INTEL PTL_H_I2C_3	0xe47b	Core Ultra I2C
+product INTEL PTL_H_I3C_1	0xe47c	Core Ultra I3C
+product INTEL PTL_H_XHCI	0xe47d	Core Ultra xHCI
+product INTEL PTL_H_XDCI	0xe47e	Core Ultra xDCI
+product INTEL PTL_H_SRAM	0xe47f	Core Ultra SRAM
 product INTEL 500SERIES_HDA_2	0xf0c8	500 Series HD Audio
 product INTEL NVME_2		0xf1a5	NVMe
 product INTEL NVME_3		0xf1a6	NVMe
@@ -9421,6 +9643,9 @@ product SONY CXD3222		0x8039	CXD3222 FireWire
 product SONY MEMSTICK_SLOT	0x808a	Memory Stick Slot
 product SONY RS780		0x9602	RS780
 
+/* SpacemiT products */
+product SPACEMIT K1		0x0001	K1
+
 /* Solid State Storage Technology Corporation products */
 product SSSTC CL1		0x9100	CL1
 
@@ -9950,6 +10175,7 @@ product VIATECH VT8653_PCI	0x3101	VT8653 PCI
 product VIATECH VT6202		0x3104	VT6202 USB
 product VIATECH VT6105		0x3106	VT6105 RhineIII
 product VIATECH UNICHROME	0x3108	S3 Unichrome PRO IGP
+product VIATECH VT8233C_ISA	0x3109	VT8233C ISA
 product VIATECH VT8361_PCI	0x3112	VT8361 PCI
 product VIATECH VT8101_PPB	0x3113	VT8101 VPX-64
 product VIATECH VT8375		0x3116	VT8375 PCI
@@ -9999,6 +10225,7 @@ product VIATECH CHROME9_HC	0x3371	Chrome9 HC IGP
 product VIATECH VT8237S_ISA	0x3372	VT8237S ISA
 product VIATECH VT8237A_PPB_1	0x337a	VT8237A
 product VIATECH VT8237A_PPB_2	0x337b	VT8237A
+product VIATECH VT8261_ISA	0x3402	VT8261 ISA
 product VIATECH VX900_DRAM	0x3410	VX900 DRAM
 product VIATECH VL80X_XHCI 	0x3432	VL80x xHCI
 product	VIATECH	VL805_XHCI	0x3483	VL805 xHCI
@@ -10018,6 +10245,7 @@ product VIATECH VX800_4		0x4353	VX800 Host
 product VIATECH P4M900_4	0x4364	P4M900 Host
 product VIATECH VX900_1		0x4410	VX900 Host
 product VIATECH K8T890_IOAPIC	0x5238	K8T890 IOAPIC
+product VIATECH VT8251_SATA_2	0x5287	VT8251 SATA
 product VIATECH PT894_IOAPIC	0x5308	PT894 IOAPIC
 product VIATECH CX700_IDE	0x5324	CX700 IDE
 product VIATECH P4M890_IOAPIC	0x5327	P4M890 IOAPIC
@@ -10066,6 +10294,7 @@ product VIATECH VT82C597AGP	0x8597	VT82C597 AGP
 product VIATECH VT82C598AGP	0x8598	VT82C598 AGP
 product VIATECH VT82C601	0x8601	VT82C601 AGP
 product VIATECH VT8605_AGP	0x8605	VT8605 AGP
+product VIATECH VT8261_SATA	0x9000	VT8261 SATA
 product VIATECH VX900_IDE	0x9001	VX900 IDE
 product VIATECH HDA_1		0x9170	HD Audio
 product VIATECH VX800_SDMMC	0x9530	VX800 SD/MMC

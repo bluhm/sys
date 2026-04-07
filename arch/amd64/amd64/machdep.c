@@ -1,4 +1,4 @@
-/*	$OpenBSD: machdep.c,v 1.307 2026/03/11 16:18:42 kettenis Exp $	*/
+/*	$OpenBSD: machdep.c,v 1.309 2026/04/03 14:20:23 kettenis Exp $	*/
 /*	$NetBSD: machdep.c,v 1.3 2003/05/07 22:58:18 fvdl Exp $	*/
 
 /*-
@@ -320,6 +320,8 @@ cpu_startup(void)
 	    ptoa((psize_t)uvmexp.free)/1024/1024);
 
 	bufinit();
+
+	sched_blockcpu = CPUTYP_SMT | CPUTYP_L;
 
 	if (boothowto & RB_CONFIG) {
 #ifdef BOOT_CONFIG
