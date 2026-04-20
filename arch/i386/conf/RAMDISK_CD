@@ -1,4 +1,4 @@
-#	$OpenBSD: RAMDISK_CD,v 1.254 2025/12/23 00:04:48 sthen Exp $
+#	$OpenBSD: RAMDISK_CD,v 1.255 2026/04/18 18:23:50 gnezdo Exp $
 
 machine		i386
 maxusers	4
@@ -184,6 +184,10 @@ wd*		at wdc? flags 0x0000
 wd*		at pciide? flags 0x0000
 atapiscsi*	at wdc?
 atapiscsi*	at pciide?
+
+
+puc*		at pci?			# PCI "universal" communication device
+com*		at puc?
 
 sdhc*		at pci?			# SD Host Controller
 sdmmc*		at sdhc?		# SD/MMC bus

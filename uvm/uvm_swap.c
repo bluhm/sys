@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_swap.c,v 1.179 2026/02/11 22:34:41 deraadt Exp $	*/
+/*	$OpenBSD: uvm_swap.c,v 1.181 2026/04/13 15:23:57 kettenis Exp $	*/
 /*	$NetBSD: uvm_swap.c,v 1.40 2000/11/17 11:39:39 mrg Exp $	*/
 
 /*
@@ -218,6 +218,15 @@ struct swap_priority swap_priority;	/* [S] */
 struct mutex uvm_swap_data_lock = MUTEX_INITIALIZER(IPL_MPFLOOR);
 struct rwlock swap_syscall_lock = RWLOCK_INITIALIZER("swplk");
 
+#define SWAP_ENCRYPT_BUFFERS	32
+struct sebounce {
+	struct vm_page *seb_pps[SWCLUSTPAGES];
+	int		seb_busy;
+} sebounce[SWAP_ENCRYPT_BUFFERS];
+
+struct mutex sebouncemtx = MUTEX_INITIALIZER(IPL_VM);
+volatile int seb_free = nitems(sebounce);
+
 /*
  * prototypes
  */
@@ -240,7 +249,7 @@ void sw_reg_start(struct swapdev *);
 int uvm_swap_io(struct vm_page **, int, int, int);
 
 void swapmount(void);
-boolean_t uvm_swap_allocpages(struct vm_page **, int);
+int uvm_swap_allocpages(struct vm_page **, int, int);
 
 #ifdef UVM_SWAP_ENCRYPT
 /* for swap encrypt */
@@ -248,6 +257,28 @@ void uvm_swap_markdecrypt(struct swapdev *, int, int, int);
 boolean_t uvm_swap_needdecrypt(struct swapdev *, int);
 void uvm_swap_initcrypt(struct swapdev *, int);
 #endif
+
+static int
+uvm_alloc_pps(struct vm_page **pps, int npages)
+{
+	struct pglist pgl;
+	int error, i;
+
+	TAILQ_INIT(&pgl);
+
+	error = uvm_pglistalloc(npages * PAGE_SIZE, dma_constraint.ucr_low,
+	    dma_constraint.ucr_high, 0, 0, &pgl, npages, UVM_PLA_WAITOK);
+	if (error)
+		return error;
+
+	for (i = 0; i < npages; i++) {
+		pps[i] = TAILQ_FIRST(&pgl);
+		atomic_setbits_int(&pps[i]->pg_flags, PG_BUSY);
+		TAILQ_REMOVE(&pgl, pps[i], pageq);
+	}
+
+	return 0;
+}
 
 /*
  * uvm_swap_init: init the swap system data structures and locks
@@ -258,6 +289,8 @@ void uvm_swap_initcrypt(struct swapdev *, int);
 void
 uvm_swap_init(void)
 {
+	int error, slot;
+
 	/*
 	 * first, init the swap list, its counter, and its lock.
 	 * then get a handle on the vnode for /dev/drum by using
@@ -285,6 +318,13 @@ uvm_swap_init(void)
 	    "swp vnx", NULL);
 	pool_init(&vndbuf_pool, sizeof(struct vndbuf), 0, IPL_BIO, 0,
 	    "swp vnd", NULL);
+
+	/* Allocate array of swap-encrypt bounce buffers */
+	for (slot = 0; slot < nitems(sebounce); slot++) {
+		error = uvm_alloc_pps(sebounce[slot].seb_pps, SWCLUSTPAGES);
+		if (error)
+			printf("cannot alloc sebounce %d\n", slot);
+	}
 
 	/* Setup the initial swap partition */
 	swapmount();
@@ -328,35 +368,59 @@ uvm_swap_initcrypt(struct swapdev *sdp, int npages)
 
 #endif /* UVM_SWAP_ENCRYPT */
 
-boolean_t
-uvm_swap_allocpages(struct vm_page **pps, int npages)
+int
+uvm_swap_allocpages(struct vm_page **pps, int npages, int async)
 {
-	struct pglist	pgl;
-	int i;
+	int slot, i;
 
-	TAILQ_INIT(&pgl);
-	if (uvm_pglistalloc(npages * PAGE_SIZE, dma_constraint.ucr_low,
-	    dma_constraint.ucr_high, 0, 0, &pgl, npages, UVM_PLA_NOWAIT))
-		return FALSE;
+	if (!async)
+		return uvm_alloc_pps(pps, npages);
+
+	if (seb_free == 0)
+		return ENOMEM;
+
+	mtx_enter(&sebouncemtx);
+	for (slot = 0; slot < nitems(sebounce); slot++) {
+		if (sebounce[slot].seb_busy == 0)
+			break;
+	}
+	if (slot == nitems(sebounce)) {
+		printf("uvm_swap_allocpages: seb_free inconsistant");
+		mtx_leave(&sebouncemtx);
+		return ENOMEM;
+	}
+	sebounce[slot].seb_busy = 1;
+	atomic_dec_int(&seb_free);
+	mtx_leave(&sebouncemtx);
 
 	for (i = 0; i < npages; i++) {
-		pps[i] = TAILQ_FIRST(&pgl);
-		/* *sigh* */
+		pps[i] = sebounce[slot].seb_pps[i];
 		atomic_setbits_int(&pps[i]->pg_flags, PG_BUSY);
-		TAILQ_REMOVE(&pgl, pps[i], pageq);
 	}
 
-	return TRUE;
+	return 0;
 }
 
 void
 uvm_swap_freepages(struct vm_page **pps, int npages)
 {
-	int i;
+	int i, slot;
 
-	for (i = 0; i < npages; i++)
-		uvm_pagefree(pps[i]);
+	for (slot = 0; slot < nitems(sebounce); slot++)
+		if (pps[0] == sebounce[slot].seb_pps[0])
+			break;
 
+	if (slot == nitems(sebounce)) {
+		/* not pre-allocated; free the pages */
+		for (i = 0; i < npages; i++)
+			uvm_pagefree(pps[i]);
+		return;
+	}
+
+	mtx_enter(&sebouncemtx);
+	sebounce[slot].seb_busy = 0;
+	atomic_inc_int(&seb_free);
+	mtx_leave(&sebouncemtx);
 }
 
 #ifdef UVM_SWAP_ENCRYPT
@@ -1733,7 +1797,7 @@ uvm_swap_io(struct vm_page **pps, int startslot, int npages, int flags)
 		swmapflags = UVMPAGER_MAPIN_READ;
 		if (!async)
 			swmapflags |= UVMPAGER_MAPIN_WAITOK;
-		if (!uvm_swap_allocpages(tpps, npages)) {
+		if (uvm_swap_allocpages(tpps, npages, async)) {
 			uvm_pagermapout(kva, npages);
 			return (VM_PAGER_AGAIN);
 		}

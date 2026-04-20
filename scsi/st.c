@@ -1,4 +1,4 @@
-/*	$OpenBSD: st.c,v 1.191 2024/09/04 07:54:53 mglocker Exp $	*/
+/*	$OpenBSD: st.c,v 1.192 2026/04/18 13:04:02 krw Exp $	*/
 /*	$NetBSD: st.c,v 1.71 1997/02/21 23:03:49 thorpej Exp $	*/
 
 /*
@@ -1420,7 +1420,8 @@ st_mode_select(struct st_softc *st, int flags)
 	struct scsi_blk_desc general;
 	struct scsi_link *link = st->sc_link;
 	u_int8_t *page0 = NULL;
-	int error = 0, big, page0_size;
+	size_t page0_size;
+	int error = 0, big;
 
 	inbuf = dma_alloc(sizeof(*inbuf), PR_NOWAIT);
 	if (inbuf == NULL) {
@@ -1473,6 +1474,8 @@ st_mode_select(struct st_softc *st, int flags)
 		page0_size = inbuf->hdr.data_length +
 		    sizeof(inbuf->hdr.data_length) - sizeof(inbuf->hdr) -
 		    inbuf->hdr.blk_desc_len;
+		page0_size = MIN(page0_size, sizeof(outbuf->buf) -
+		    sizeof(outbuf->hdr) - sizeof(general));
 		memcpy(&outbuf->buf[sizeof(outbuf->hdr)+ sizeof(general)],
 		    page0, page0_size);
 	} else {
@@ -1480,6 +1483,8 @@ st_mode_select(struct st_softc *st, int flags)
 		    sizeof(inbuf->hdr_big.data_length) -
 		    sizeof(inbuf->hdr_big) -
 		    _2btol(inbuf->hdr_big.blk_desc_len);
+		page0_size = MIN(page0_size, sizeof(outbuf->buf) -
+		    sizeof(outbuf->hdr_big) - sizeof(general));
 		memcpy(&outbuf->buf[sizeof(outbuf->hdr_big) + sizeof(general)],
 		    page0, page0_size);
 	}

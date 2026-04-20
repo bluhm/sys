@@ -1,4 +1,4 @@
-/* $OpenBSD: wsdisplay.c,v 1.155 2025/08/04 15:00:57 kettenis Exp $ */
+/* $OpenBSD: wsdisplay.c,v 1.156 2026/04/17 06:18:19 deraadt Exp $ */
 /* $NetBSD: wsdisplay.c,v 1.82 2005/02/27 00:27:52 perry Exp $ */
 
 /*
@@ -1351,6 +1351,13 @@ wsdisplay_cfg_ioctl(struct wsdisplay_softc *sc, u_long cmd, caddr_t data,
 		if (d->fontheight > 64 || d->stride > 8) /* 64x64 pixels */
 			return (EINVAL);
 		if (d->numchars > 65536) /* unicode plane */
+			return (EINVAL);
+		/*
+		 * Some mapchar emulops, such as rasops_mapchar, require the
+		 * availability of the question mark character to use for
+		 * missing glyphs, so make sure it exists.
+		 */
+		if (d->firstchar > '?' || d->firstchar + d->numchars <= '?')
 			return (EINVAL);
 		fontsz = d->fontheight * d->stride * d->numchars;
 		if (fontsz > WSDISPLAY_MAXFONTSZ)

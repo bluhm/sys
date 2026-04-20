@@ -1,4 +1,4 @@
-/*	$OpenBSD: ixgbe_type.h,v 1.40 2024/10/27 04:44:41 yasuoka Exp $	*/
+/*	$OpenBSD: ixgbe_type.h,v 1.41 2026/04/15 17:30:50 stsp Exp $	*/
 
 /******************************************************************************
   SPDX-License-Identifier: BSD-3-Clause
@@ -77,6 +77,14 @@
  * invalid argument, but for when something has occurred that is unsupported
  * (Ex: Flow control autonegotiation or an unsupported SFP+ module.)
  */
+enum {
+	IXGBE_ERROR_SOFTWARE,
+	IXGBE_ERROR_POLLING,
+	IXGBE_ERROR_INVALID_STATE,
+	IXGBE_ERROR_UNSUPPORTED,
+	IXGBE_ERROR_ARGUMENT,
+	IXGBE_ERROR_CAUTION,
+};
 
 /* Vendor ID */
 #define IXGBE_INTEL_VENDOR_ID			0x8086

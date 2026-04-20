@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_sysctl.c,v 1.487 2026/03/31 16:46:22 deraadt Exp $	*/
+/*	$OpenBSD: kern_sysctl.c,v 1.491 2026/04/16 20:03:14 deraadt Exp $	*/
 /*	$NetBSD: kern_sysctl.c,v 1.17 1996/05/20 17:49:05 mrg Exp $	*/
 
 /*-
@@ -1941,7 +1941,7 @@ sysctl_doproc(int *name, u_int namelen, char *where, size_t *sizep)
 	doingzomb = 0;
 again:
 	for (; pr != NULL; pr = LIST_NEXT(pr, ps_list)) {
-		/* XXX skip processes in the middle of being zapped */
+		/* XXX skip processes in the middle of being created or zapped */
 		if (pr->ps_pgrp == NULL)
 			continue;
 
@@ -2537,7 +2537,7 @@ sysctl_proc_vmmap(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 		return (error);
 
 	/* Allocate wired memory to not block. */
-	kve = malloc(oldlen, M_TEMP, M_WAITOK);
+	kve = malloc(oldlen, M_TEMP, M_WAITOK | M_ZERO);
 
 	/* Set the base address and read entries. */
 	kve[0].kve_start = start;
@@ -2763,6 +2763,7 @@ sysctl_sysvipc(int *name, u_int namelen, void *where, size_t *sizep)
 					    dssize);
 				else
 					memset(&semsi->semids[i], 0, dssize);
+				semsi->semids[i].sem_base = NULL;
 				break;
 #endif
 #ifdef SYSVSHM
@@ -2772,6 +2773,7 @@ sysctl_sysvipc(int *name, u_int namelen, void *where, size_t *sizep)
 					    dssize);
 				else
 					memset(&shmsi->shmids[i], 0, dssize);
+				shmsi->shmids[i].shm_internal = NULL;
 				break;
 #endif
 			}

@@ -1,4 +1,4 @@
-/*	$OpenBSD: dwmshc.c,v 1.8 2024/07/15 09:56:30 patrick Exp $ */
+/*	$OpenBSD: dwmshc.c,v 1.9 2026/04/07 23:12:08 jmatthew Exp $ */
 
 /*
  * Copyright (c) 2023 David Gwynne <dlg@openbsd.org>
@@ -102,6 +102,7 @@
 #define  EMMC_DLL_TXCLK_TX_TAP_NUM_SHIFT	0
 #define  EMMC_DLL_TXCLK_TX_TAP_NUM_MASK		0x1f
 #define  EMMC_DLL_TXCLK_TX_TAP_NUM_90_DEG	0x8
+#define  EMMC_DLL_TXCLK_TX_TAP_NUM_135_DEG	0xc
 #define  EMMC_DLL_TXCLK_TX_TAP_NUM_DEFAULT	0x10
 #define  EMMC_DLL_TXCLK_TX_TAP_VALUE_SHIFT	8
 #define  EMMC_DLL_TXCLK_TX_TAP_VALUE_MASK	0xff
@@ -157,10 +158,18 @@
 #define  EMMC_DLL_STATUS1_DLL_STRBIN_DELAY_VALUE_MASK \
 						0xff
 
+struct dwmshc_params {
+	const char		*compatible;
+	uint32_t		 txclk_tapnum;
+	uint32_t		 rxclk;
+	int			 use_dll_tap_value;
+};
+
 struct dwmshc_softc {
 	struct sdhc_softc	 sc_sdhc;
 
 	int			 sc_node;
+	const struct dwmshc_params *sc_params;
 
 	bus_space_tag_t		 sc_iot;
 	bus_space_handle_t	 sc_ioh;
@@ -193,14 +202,43 @@ struct cfdriver dwmshc_cd = {
 	NULL, "dwmshc", DV_DULL
 };
 
+static const struct dwmshc_params dwmshc_hw_params[] = {
+	{
+	  .compatible = "rockchip,rk3528-dwcmshc",
+	  .txclk_tapnum = EMMC_DLL_TXCLK_TX_TAP_NUM_135_DEG,
+	  .rxclk = EMMC_DLL_RXCLK_RX_CLK_OUT_SEL,
+	  .use_dll_tap_value = 1
+	},
+	{
+	  .compatible = "rockchip,rk3568-dwcmshc",
+	  .txclk_tapnum = EMMC_DLL_TXCLK_TX_TAP_NUM_DEFAULT,
+	  .rxclk = EMMC_DLL_RXCLK_RX_CLK_OUT_SEL |
+	      EMMC_DLL_RXCLK_RX_CLK_SRC_SEL,
+	  .use_dll_tap_value = 0
+	},
+	{
+	  .compatible = "rockchip,rk3588-dwcmshc",
+	  .txclk_tapnum = EMMC_DLL_TXCLK_TX_TAP_NUM_DEFAULT,
+	  .rxclk = EMMC_DLL_RXCLK_RX_CLK_OUT_SEL,
+	  .use_dll_tap_value = 0
+	}
+};
+
 int
 dwmshc_match(struct device *parent, void *match, void *aux)
 {
 	struct fdt_attach_args *faa = aux;
+	int i;
 
-	return (OF_is_compatible(faa->fa_node, "rockchip,rk3568-dwcmshc") ||
-	    OF_is_compatible(faa->fa_node, "rockchip,rk3588-dwcmshc"));
+	for (i = 0; i < nitems(dwmshc_hw_params); i++) {
+		if (OF_is_compatible(faa->fa_node,
+		    dwmshc_hw_params[i].compatible))
+			return 1;
+	}
+
+	return 0;
 }
+
 static void
 dwmshc_attach(struct device *parent, struct device *self, void *aux)
 {
@@ -209,7 +247,7 @@ dwmshc_attach(struct device *parent, struct device *self, void *aux)
 	struct fdt_attach_args *faa = aux;
 	uint64_t capmask = 0;
 	uint16_t capset = 0;
-	int bus_width;
+	int bus_width, i;
 	uint32_t freq;
 
 	sc->sc_node = faa->fa_node;
@@ -226,6 +264,14 @@ dwmshc_attach(struct device *parent, struct device *self, void *aux)
 	    faa->fa_reg[0].size, 0, &sc->sc_ioh)) {
 		printf(": can't map registers\n");
 		return;
+	}
+
+	for (i = 0; i < nitems(dwmshc_hw_params); i++) {
+		if (OF_is_compatible(sc->sc_node,
+		    dwmshc_hw_params[i].compatible)) {
+			sc->sc_params = &dwmshc_hw_params[i];
+			break;
+		}
 	}
 
 	pinctrl_byname(sc->sc_node, "default");
@@ -320,7 +366,8 @@ static void
 dwmshc_clock_post(struct sdhc_softc *sdhc, int freq, int timing)
 {
 	struct dwmshc_softc *sc = (struct dwmshc_softc *)sdhc;
-	uint32_t txclk_tapnum = EMMC_DLL_TXCLK_TX_TAP_NUM_DEFAULT;
+	uint32_t txclk_tapnum = sc->sc_params->txclk_tapnum;
+	uint32_t dll_val;
 
 	clock_set_frequency(sc->sc_node, 0, freq * 1000);
 
@@ -341,17 +388,20 @@ dwmshc_clock_post(struct sdhc_softc *sdhc, int freq, int timing)
 	delay(1);
 	dwmshc_wr4(sc, EMMC_DLL_CTRL, 0);
 
-	if (OF_is_compatible(sc->sc_node, "rockchip,rk3568-dwcmshc"))
-		dwmshc_wr4(sc, EMMC_DLL_RXCLK, EMMC_DLL_RXCLK_RX_CLK_OUT_SEL |
-		    EMMC_DLL_RXCLK_RX_CLK_SRC_SEL);
-	else
-		dwmshc_wr4(sc, EMMC_DLL_RXCLK, EMMC_DLL_RXCLK_RX_CLK_OUT_SEL);
 	dwmshc_wr4(sc, EMMC_DLL_CTRL, EMMC_DLL_CTRL_DLL_START |
 	    0x5 << EMMC_DLL_CTRL_DLL_START_POINT_SHIFT |
 	    0x2 << EMMC_DLL_CTRL_DLL_INCREMENT_SHIFT);
 
 	if (dwmshc_dll_wait(sc) != 0)
 		return;
+
+	dll_val = 0;
+	if (sc->sc_params->use_dll_tap_value) {
+		dll_val = EMMC_DLL_RXCLK_RX_TAP_VALUE_SEL |
+		    ((dwmshc_rd4(sc, EMMC_DLL_STATUS0) &
+		    EMMC_DLL_STATUS0_DLL_LOCK_VALUE_MASK) * 2);
+	}
+	dwmshc_wr4(sc, EMMC_DLL_RXCLK, sc->sc_params->rxclk | dll_val);
 
 	dwmshc_wr4(sc, EMMC_AT_CTRL, EMMC_AT_CTRL_TUNE_CLK_STOP_EN |
 	    EMMC_AT_CTRL_PRE_CHANGE_DLY_LT4 |
@@ -377,11 +427,12 @@ dwmshc_clock_post(struct sdhc_softc *sdhc, int freq, int timing)
 
 	dwmshc_wr4(sc, EMMC_DLL_TXCLK, EMMC_DLL_TXCLK_TX_CLK_OUT_SEL |
 	    EMMC_DLL_TXCLK_TX_TAP_NUM_SEL |
-	    txclk_tapnum << EMMC_DLL_TXCLK_TX_TAP_NUM_SHIFT);
+	    txclk_tapnum << EMMC_DLL_TXCLK_TX_TAP_NUM_SHIFT |
+	    dll_val);
 	dwmshc_wr4(sc, EMMC_DLL_STRBIN, EMMC_DLL_STRBIN_DELAY_ENA |
 	    EMMC_DLL_STRBIN_TAP_NUM_SEL |
 	    (EMMC_DLL_STRBIN_TAP_NUM_90_DEG <<
-	     EMMC_DLL_STRBIN_TAP_NUM_SHIFT));
+	     EMMC_DLL_STRBIN_TAP_NUM_SHIFT) | dll_val);
 }
 
 static int

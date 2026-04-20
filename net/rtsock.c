@@ -1,4 +1,4 @@
-/*	$OpenBSD: rtsock.c,v 1.390 2025/11/05 09:15:54 jmatthew Exp $	*/
+/*	$OpenBSD: rtsock.c,v 1.391 2026/04/17 18:30:45 claudio Exp $	*/
 /*	$NetBSD: rtsock.c,v 1.18 1996/03/29 00:32:10 cgd Exp $	*/
 
 /*
@@ -683,6 +683,7 @@ route_output(struct mbuf *m, struct socket *so)
 	u_int			 tableid;
 	u_int8_t		 prio;
 	u_char			 vers, type;
+	sa_family_t		 af = AF_UNSPEC;
 
 	if (m == NULL || ((m->m_len < sizeof(int32_t)) &&
 	    (m = m_pullup(m, sizeof(int32_t))) == NULL))
@@ -824,6 +825,9 @@ route_output(struct mbuf *m, struct socket *so)
 		info.rti_flags |= RTF_LLINFO;
 	}
 
+	if (info.rti_info[RTAX_DST] != NULL)
+		af = info.rti_info[RTAX_DST]->sa_family;
+
 	/*
 	 * Validate RTM_PROPOSAL and pass it along or error out.
 	 */
@@ -890,8 +894,7 @@ route_output(struct mbuf *m, struct socket *so)
 		m_adj(m, len - m->m_pkthdr.len);
 	free(rtm, M_RTABLE, len);
 	if (m)
-		route_input(m, so, info.rti_info[RTAX_DST] ?
-		    info.rti_info[RTAX_DST]->sa_family : AF_UNSPEC);
+		route_input(m, so, af);
 	solock(so);
 
 	return (error);

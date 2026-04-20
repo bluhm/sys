@@ -1,4 +1,4 @@
-/*	$OpenBSD: dwpcie.c,v 1.58 2026/01/25 12:09:50 kettenis Exp $	*/
+/*	$OpenBSD: dwpcie.c,v 1.60 2026/04/18 17:06:22 kettenis Exp $	*/
 /*
  * Copyright (c) 2018 Mark Kettenis <kettenis@openbsd.org>
  *
@@ -322,7 +322,8 @@ dwpcie_match(struct device *parent, void *match, void *aux)
 	    OF_is_compatible(faa->fa_node, "qcom,pcie-x1e80100") ||
 	    OF_is_compatible(faa->fa_node, "rockchip,rk3568-pcie") ||
 	    OF_is_compatible(faa->fa_node, "rockchip,rk3588-pcie") ||
-	    OF_is_compatible(faa->fa_node, "sifive,fu740-pcie"));
+	    OF_is_compatible(faa->fa_node, "sifive,fu740-pcie") ||
+	    OF_is_compatible(faa->fa_node, "spacemit,k1-pcie"));
 }
 
 void	dwpcie_attach_deferred(struct device *);
@@ -344,6 +345,8 @@ int	dwpcie_imx8mq_init(struct dwpcie_softc *);
 int	dwpcie_imx8mq_intr(void *);
 
 int	dwpcie_fu740_init(struct dwpcie_softc *);
+
+int	dwpcie_k1_init(struct dwpcie_softc *);
 
 int	dwpcie_rk3568_init(struct dwpcie_softc *);
 int	dwpcie_rk3568_intr(void *);
@@ -436,6 +439,17 @@ dwpcie_attach(struct device *parent, struct device *self, void *aux)
 		glue = OF_getindex(faa->fa_node, "apb", "reg-names");
 		if (glue < 0 || glue >= faa->fa_nreg) {
 			printf(": no glue registers\n");
+			return;
+		}
+
+		sc->sc_glue_base = faa->fa_reg[glue].addr;
+		sc->sc_glue_size = faa->fa_reg[glue].size;
+	}
+
+	if (OF_is_compatible(faa->fa_node, "spacemit,k1-pcie")) {
+		glue = OF_getindex(faa->fa_node, "link", "reg-names");
+		if (glue < 0 || glue >= faa->fa_nreg) {
+			printf(": no link registers\n");
 			return;
 		}
 
@@ -548,6 +562,8 @@ dwpcie_attach_deferred(struct device *self)
 		error = dwpcie_rk3568_init(sc);
 	if (OF_is_compatible(sc->sc_node, "sifive,fu740-pcie"))
 		error = dwpcie_fu740_init(sc);
+	if (OF_is_compatible(sc->sc_node, "spacemit,k1-pcie"))
+		error = dwpcie_k1_init(sc);
 	if (error != 0) {
 		bus_space_unmap(sc->sc_iot, sc->sc_conf_ioh, sc->sc_conf_size);
 		bus_space_unmap(sc->sc_iot, sc->sc_ioh, sc->sc_ctrl_size);
@@ -752,6 +768,29 @@ dwpcie_attach_deferred(struct device *self)
 	pci_dopm = 1;
 
 	config_found(self, &pba, NULL);
+}
+
+int
+dwpcie_get_capability(struct dwpcie_softc *sc, int capid, int *offset,
+    pcireg_t *value)
+{
+	pcireg_t reg;
+	unsigned int ofs;
+
+	ofs = PCI_CAPLIST_PTR(HREAD4(sc, PCI_CAPLISTPTR_REG));
+	while (ofs != 0) {
+		reg = HREAD4(sc, ofs);
+		if (PCI_CAPLIST_CAP(reg) == capid) {
+			if (offset)
+				*offset = ofs;
+			if (value)
+				*value = reg;
+			return 1;
+		}
+		ofs = PCI_CAPLIST_NEXT(reg);
+	}
+
+	return 0;
 }
 
 void
@@ -1333,6 +1372,127 @@ int
 dwpcie_fu740_init(struct dwpcie_softc *sc)
 {
 	sc->sc_num_viewport = 8;
+
+	return 0;
+}
+
+/* SpacemiT K1 registers */
+#define APMU_PCIE_CLK_RES_CTRL		0x0000
+#define  APMU_PCIE_DEVICE_TYPE_SEL	(1U << 31)
+#define  APMU_PCIE_APP_HOLD_PHY_RST	(1U << 30)
+#define  APMU_PCIE_RC_PERST		(1U << 12)
+#define  APMU_PCIE_SYS_AUX_PWR_DET	(1U << 9)
+#define  APMU_PCIE_LTSSM_EN		(1U << 6)
+#define APMU_PCIE_CTRL_LOGIC		0x0004
+#define  APMU_PCIE_SOFT_RESET		(1U << 0)
+
+#define K1_PHY_AHB_IRQ			0x0000
+#define  K1_PHY_AHB_IRQ_EN		(1U << 0)
+#define K1_PHY_AHB_IRQENABLE_MSI	0x0014
+#define  K1_PHY_AHB_IRQENABLE_MSI_EN	(1U << 11)
+
+int
+dwpcie_k1_init(struct dwpcie_softc *sc)
+{
+	struct regmap *apmu_rm;
+	uint32_t apmu[2], val;
+	int error, off, timo;
+
+	sc->sc_num_viewport = 8;
+
+	if (bus_space_map(sc->sc_iot, sc->sc_glue_base,
+	    sc->sc_glue_size, 0, &sc->sc_glue_ioh))
+		return ENOMEM;
+
+	if (OF_getpropintarray(sc->sc_node, "spacemit,apmu",
+	    apmu, sizeof(apmu)) != sizeof(apmu))
+		return EINVAL;
+
+	apmu_rm = regmap_byphandle(apmu[0]);
+	if (apmu_rm == NULL)
+		return ENXIO;
+
+	/* Hold PHY in reset until starting the link. */
+	val = regmap_read_4(apmu_rm, apmu[1] + APMU_PCIE_CLK_RES_CTRL);
+	val |= APMU_PCIE_APP_HOLD_PHY_RST;
+	val &= ~APMU_PCIE_LTSSM_EN;
+	regmap_write_4(apmu_rm, apmu[1] + APMU_PCIE_CLK_RES_CTRL, val);
+
+	/* Soft reset. */
+	val = regmap_read_4(apmu_rm, apmu[1] + APMU_PCIE_CTRL_LOGIC);
+	regmap_write_4(apmu_rm, apmu[1] + APMU_PCIE_CTRL_LOGIC,
+	    val | APMU_PCIE_SOFT_RESET);
+	regmap_read_4(apmu_rm, apmu[1] + APMU_PCIE_CTRL_LOGIC);
+	delay(2000);
+	regmap_write_4(apmu_rm, apmu[1] + APMU_PCIE_CTRL_LOGIC,
+	    val &= ~APMU_PCIE_SOFT_RESET);
+
+	clock_enable_all(sc->sc_node);
+	reset_deassert_all(sc->sc_node);
+
+	/* Set vendor ID and product ID. (*/
+	HSET4(sc, MISC_CONTROL_1, MISC_CONTROL_1_DBI_RO_WR_EN);
+	HWRITE4(sc, PCI_ID_REG,
+	    PCI_VENDOR_SPACEMIT << PCI_VENDOR_SHIFT |
+	    PCI_PRODUCT_SPACEMIT_K1 << PCI_PRODUCT_SHIFT);
+	HCLR4(sc, MISC_CONTROL_1, MISC_CONTROL_1_DBI_RO_WR_EN);
+
+	/* Assert PERST#. */
+	val = regmap_read_4(apmu_rm, apmu[1] + APMU_PCIE_CLK_RES_CTRL);
+	regmap_write_4(apmu_rm, apmu[1] + APMU_PCIE_CLK_RES_CTRL,
+	    val | APMU_PCIE_RC_PERST);
+	regmap_read_4(apmu_rm, apmu[1] + APMU_PCIE_CLK_RES_CTRL);
+	delay(100000);
+
+	/* Set RC mode; indicate Vaux presence. */
+	val = regmap_read_4(apmu_rm, apmu[1] + APMU_PCIE_CLK_RES_CTRL);
+	regmap_write_4(apmu_rm, apmu[1] + APMU_PCIE_CLK_RES_CTRL,
+	    val | APMU_PCIE_DEVICE_TYPE_SEL | APMU_PCIE_SYS_AUX_PWR_DET);
+
+	phy_enable_idx(OF_child(sc->sc_node), 0);
+
+	/* Deassert PERST#. */
+	val = regmap_read_4(apmu_rm, apmu[1] + APMU_PCIE_CLK_RES_CTRL);
+	regmap_write_4(apmu_rm, apmu[1] + APMU_PCIE_CLK_RES_CTRL,
+	    val & ~APMU_PCIE_RC_PERST);
+
+	/* Disable ASPM L1. */
+	if (!dwpcie_get_capability(sc, PCI_CAP_PCIEXPRESS, &off, NULL))
+		return ENXIO;
+	HSET4(sc, MISC_CONTROL_1, MISC_CONTROL_1_DBI_RO_WR_EN);
+	val = HREAD4(sc, off + PCI_PCIE_LCAP);
+	val &= ~PCI_PCIE_LCAP_ASPM_L1;
+	HWRITE4(sc, off + PCI_PCIE_LCAP, val);
+	HCLR4(sc, MISC_CONTROL_1, MISC_CONTROL_1_DBI_RO_WR_EN);
+
+	error = dwpcie_msi_init(sc);
+	if (error)
+		return error;
+
+	val = regmap_read_4(apmu_rm, apmu[1] + APMU_PCIE_CLK_RES_CTRL);
+	val &= ~APMU_PCIE_APP_HOLD_PHY_RST;
+	val |= APMU_PCIE_LTSSM_EN;
+	regmap_write_4(apmu_rm, apmu[1] + APMU_PCIE_CLK_RES_CTRL, val);
+
+	val = HREAD4(sc, PCIE_LINK_WIDTH_SPEED_CTRL);
+	val |= PCIE_LINK_WIDTH_SPEED_CTRL_CHANGE;
+	HWRITE4(sc, PCIE_LINK_WIDTH_SPEED_CTRL, val);
+
+	/* Enable MSIs */
+	bus_space_write_4(sc->sc_iot, sc->sc_glue_ioh,
+	    K1_PHY_AHB_IRQENABLE_MSI, K1_PHY_AHB_IRQENABLE_MSI_EN);
+	val = bus_space_read_4(sc->sc_iot, sc->sc_glue_ioh, K1_PHY_AHB_IRQ);
+	bus_space_write_4(sc->sc_iot, sc->sc_glue_ioh, K1_PHY_AHB_IRQ,
+	    val | K1_PHY_AHB_IRQ_EN);
+
+	/* Wait for the link to come up. */
+	for (timo = 20000; timo > 0; timo--) {
+		if (dwpcie_link_up(sc))
+			break;
+		delay(10);
+	}
+	if (timo == 0)
+		return ETIMEDOUT;
 
 	return 0;
 }

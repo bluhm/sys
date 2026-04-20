@@ -1,4 +1,4 @@
-/*	$OpenBSD: sysctl.h,v 1.247 2026/03/31 16:46:21 deraadt Exp $	*/
+/*	$OpenBSD: sysctl.h,v 1.248 2026/04/16 14:47:24 deraadt Exp $	*/
 /*	$NetBSD: sysctl.h,v 1.16 1996/04/09 20:55:36 cgd Exp $	*/
 
 /*
@@ -684,7 +684,6 @@ do {									\
 			(kp)->p_vm_dsize = (vm)->vm_dused;		\
 			(kp)->p_vm_ssize = (vm)->vm_ssize;		\
 		}							\
-		(kp)->p_addr = PTRTOINT64((p)->p_addr);			\
 		(kp)->p_stat = (p)->p_stat;				\
 		(kp)->p_slptime = (p)->p_slptime;			\
 		(kp)->p_holdcnt = 1;					\
@@ -693,8 +692,10 @@ do {									\
 		if ((p)->p_wchan && (p)->p_wmesg)			\
 			copy_str((kp)->p_wmesg, (p)->p_wmesg,		\
 			    sizeof((kp)->p_wmesg));			\
-		if (show_addresses)					\
+		if (show_addresses) {					\
 			(kp)->p_wchan = PTRTOINT64((p)->p_wchan);	\
+			(kp)->p_addr = PTRTOINT64((p)->p_addr);		\
+		}							\
 	}								\
 									\
 	if (((pr)->ps_flags & PS_ZOMBIE) == 0) {			\

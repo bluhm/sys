@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_fork.c,v 1.278 2025/08/18 04:15:35 dlg Exp $	*/
+/*	$OpenBSD: kern_fork.c,v 1.279 2026/04/15 18:55:54 deraadt Exp $	*/
 /*	$NetBSD: kern_fork.c,v 1.29 1996/02/09 18:59:34 christos Exp $	*/
 
 /*
@@ -236,6 +236,7 @@ process_new(struct proc *p, struct process *parent, int flags)
 
 	/* post-copy fixups */
 	pr->ps_pptr = parent;
+	pr->ps_pgrp = NULL;
 	pr->ps_ppid = parent->ps_pid;
 
 	WITNESS_SETCHILD(&pr->ps_mtx.mtx_lock_obj,
@@ -456,6 +457,7 @@ fork1(struct proc *curp, int flags, void (*func)(void *), void *arg,
 	LIST_INSERT_HEAD(&allproc, p, p_list);
 	LIST_INSERT_HEAD(TIDHASH(p->p_tid), p, p_hash);
 	LIST_INSERT_HEAD(PIDHASH(pr->ps_pid), pr, ps_hash);
+	pr->ps_pgrp = curpr->ps_pgrp;
 	LIST_INSERT_AFTER(curpr, pr, ps_pglist);
 	LIST_INSERT_HEAD(&curpr->ps_children, pr, ps_sibling);
 

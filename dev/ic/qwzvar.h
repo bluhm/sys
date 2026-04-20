@@ -1,4 +1,4 @@
-/*	$OpenBSD: qwzvar.h,v 1.12 2025/07/07 00:55:15 jsg Exp $	*/
+/*	$OpenBSD: qwzvar.h,v 1.13 2026/04/12 19:52:23 kirill Exp $	*/
 
 /*
  * Copyright (c) 2018-2019 The Linux Foundation.
@@ -257,6 +257,7 @@ struct ath12k_hw_params {
 	bool tcl_ring_retry;
 #endif
 	uint32_t tx_ring_size;
+	uint32_t rddm_size;
 	bool smp2p_wow_exit;
 };
 
@@ -1378,6 +1379,7 @@ struct qwz_wmi_base {
 	uint32_t max_msg_len[QWZ_MAX_RADIOS];
 	int service_ready;
 	int unified_ready;
+	int hw_mode_ready;
 	uint8_t svc_map[howmany(WMI_MAX_EXT2_SERVICE, 8)];
 	int tx_credits;
 	const struct wmi_peer_flags_map *peer_flags;

@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_qwz_pci.c,v 1.6 2024/12/09 09:35:33 patrick Exp $	*/
+/*	$OpenBSD: if_qwz_pci.c,v 1.7 2026/04/12 19:52:23 kirill Exp $	*/
 
 /*
  * Copyright 2023 Stefan Sperling <stsp@openbsd.org>
@@ -370,7 +370,6 @@ struct qwz_pci_softc {
 	struct qwz_dmamem	 *rddm_data;
 	int			 rddm_triggered;
 	struct task		 rddm_task;
-#define	QWZ_RDDM_DUMP_SIZE	0x420000
 
 	struct qwz_dmamem	*chan_ctxt;
 	struct qwz_dmamem	*event_ctxt;
@@ -3287,7 +3286,7 @@ qwz_rddm_prepare(struct qwz_pci_softc *psc)
 	struct qwz_dmamem *data_adm, *vec_adm;
 	uint32_t seq, reg;
 	uint64_t paddr;
-	const size_t len = QWZ_RDDM_DUMP_SIZE;
+	const size_t len = sc->hw_params.rddm_size;
 	const size_t chunk_size = MHI_DMA_VEC_CHUNK_SIZE;
 	size_t nseg, remain, vec_size;
 	int i;
@@ -3358,9 +3357,9 @@ qwz_rddm_task(void *arg)
 	struct qwz_pci_softc *psc = arg;
 	struct qwz_softc *sc = &psc->sc_sc;
 	uint32_t reg, state = MHI_BHIE_RXVECSTATUS_STATUS_RESET;
-	const size_t len = QWZ_RDDM_DUMP_SIZE;
+	const size_t len = sc->hw_params.rddm_size;
 	int i, timeout;
-	const uint32_t msecs = 100, retries = 20;
+	const uint32_t msecs = 2000, retries = 1000;
 	uint8_t *rddm;
 	struct nameidata nd;
 	struct vnode *vp = NULL;

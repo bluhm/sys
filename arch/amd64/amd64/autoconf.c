@@ -1,4 +1,4 @@
-/*	$OpenBSD: autoconf.c,v 1.59 2025/11/12 10:00:27 hshoexer Exp $	*/
+/*	$OpenBSD: autoconf.c,v 1.60 2026/04/19 09:59:22 kettenis Exp $	*/
 /*	$NetBSD: autoconf.c,v 1.1 2003/04/26 18:39:26 fvdl Exp $	*/
 
 /*-
@@ -63,6 +63,7 @@
 #include <machine/cpu.h>
 #include <machine/cpufunc.h>
 #include <machine/biosvar.h>
+#include <machine/bus.h>
 
 #include "ioapic.h"
 #include "lapic.h"
@@ -118,6 +119,7 @@ cpu_configure(void)
 
 	pmap_randomize();
 	map_tramps();
+	bus_dma_init();
 
 	if (config_rootfound("mainbus", NULL) == NULL)
 		panic("configure: mainbus not configured");

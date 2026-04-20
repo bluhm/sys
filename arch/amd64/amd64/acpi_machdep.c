@@ -1,4 +1,4 @@
-/*	$OpenBSD: acpi_machdep.c,v 1.114 2026/03/15 11:16:36 kettenis Exp $	*/
+/*	$OpenBSD: acpi_machdep.c,v 1.115 2026/04/10 16:23:32 kettenis Exp $	*/
 /*
  * Copyright (c) 2005 Thorsten Lockert <tholo@sigmasoft.com>
  *
@@ -476,15 +476,8 @@ acpi_sleep_cpu(struct acpi_softc *sc, int state)
 void
 acpi_resume_cpu(struct acpi_softc *sc, int state)
 {
-	if (sc->sc_fadt->flags & FADT_USE_PLATFORM_CLOCK) {
-		if (rtcalarm_fired())
-			sc->sc_wakegpe = WAKEGPE_RTC;
-	}
-
-	if (state == ACPI_STATE_S0) {
-		rtcalarm_resume();
-		return;
-	}
+	if (state == ACPI_STATE_S0)
+		goto rtc_check;
 
 	cpu_init_msrs(&cpu_info_primary);
 	cpu_fix_msrs(&cpu_info_primary);
@@ -504,7 +497,6 @@ acpi_resume_cpu(struct acpi_softc *sc, int state)
 #endif
 
 	i8254_startclock();
-	rtcalarm_resume();		/* i8254 must be running */
 	if (initclock_func == i8254_initclocks)
 		rtcstart();		/* in i8254 mode, rtc is profclock */
 
@@ -518,6 +510,13 @@ acpi_resume_cpu(struct acpi_softc *sc, int state)
 	/* Re-initialise memory range handling on BSP */
 	if (mem_range_softc.mr_op != NULL)
 		mem_range_softc.mr_op->initAP(&mem_range_softc);
+
+rtc_check:
+	if (sc->sc_fadt->flags & FADT_USE_PLATFORM_CLOCK) {
+		if (rtcalarm_fired())
+			sc->sc_wakegpe = WAKEGPE_RTC;
+	}
+	rtcalarm_resume();
 }
 
 #ifdef MULTIPROCESSOR

@@ -1,4 +1,4 @@
-/*	$OpenBSD: qwz.c,v 1.23 2026/03/29 05:29:02 mglocker Exp $	*/
+/*	$OpenBSD: qwz.c,v 1.24 2026/04/12 19:52:23 kirill Exp $	*/
 
 /*
  * Copyright 2023 Stefan Sperling <stsp@openbsd.org>
@@ -1006,6 +1006,11 @@ qwz_wmi_init_wcn7850(struct qwz_softc *sc,
 	config->num_multicast_filter_entries = 0x20;
 	config->num_wow_filters = 0x16;
 	config->num_keep_alive_pattern = 0;
+
+	if (isset(sc->wmi.svc_map, WMI_TLV_SERVICE_PEER_METADATA_V1A_V1B_SUPPORT))
+		config->peer_metadata_ver = ATH12K_PEER_METADATA_V1A;
+	else
+		config->peer_metadata_ver = sc->dp.peer_metadata_ver;
 }
 
 void
@@ -1735,6 +1740,7 @@ static const struct ath12k_hw_params ath12k_hw_params[] = {
 		.qmi_cnss_feature_bitmap = BIT(CNSS_QDSS_CFG_MISS_V01) |
 					   BIT(CNSS_PCIE_PERST_NO_PULL_V01),
 		.tx_ring_size = DP_TCL_DATA_RING_SIZE,
+		.rddm_size = 0x780000,
 	},
 };
 
@@ -8340,6 +8346,9 @@ qwz_dp_cc_cleanup(struct qwz_softc *sc)
 	/* First ATH12K_NUM_RX_SPT_PAGES of allocated SPT pages are used for RX */
 	for (i = 0; i < ATH12K_NUM_RX_SPT_PAGES; i++) {
 		rx_descs = dp->spt_info->rxbaddr[i];
+		if (!rx_descs)
+			continue;
+
 		for (j = 0; j < ATH12K_MAX_SPT_ENTRIES; j++) {
 			if (!rx_descs[j].m)
 				continue;
@@ -8364,6 +8373,8 @@ qwz_dp_cc_cleanup(struct qwz_softc *sc)
 		for (i = 0; i < ATH12K_TX_SPT_PAGES_PER_POOL; i++) {
 			tx_spt_page = i + pool_id * ATH12K_TX_SPT_PAGES_PER_POOL;
 			tx_descs = dp->spt_info->txbaddr[tx_spt_page];
+			if (!tx_descs)
+				continue;
 
 			for (j = 0; j < ATH12K_MAX_SPT_ENTRIES; j++) {
 				if (!tx_descs[j].m)
@@ -8381,6 +8392,17 @@ qwz_dp_cc_cleanup(struct qwz_softc *sc)
 		spin_unlock_bh(&dp->tx_desc_lock[pool_id]);
 #endif
 	}
+
+	for (i = 0; i < dp->num_spt_pages; i++) {
+		if (!dp->spt_info[i].mem)
+			continue;
+		qwz_dmamem_free(sc->sc_dmat, dp->spt_info[i].mem);
+		dp->spt_info[i].mem = NULL;
+	}
+
+	free(dp->spt_info, M_DEVBUF, dp->num_spt_pages * sizeof(*dp->spt_info));
+	dp->spt_info = NULL;
+	dp->num_spt_pages = 0;
 }
 
 int
@@ -8543,7 +8565,7 @@ qwz_dp_rx_alloc(struct qwz_softc *sc)
 
 	for (i = 0; i < sc->hw_params.num_rxdma_dst_ring; i++) {
 		ret = qwz_dp_srng_setup(sc, &dp->rxdma_err_dst_ring[i],
-		    HAL_RXDMA_BUF, 0, i, DP_RXDMA_ERR_DST_RING_SIZE);
+		    HAL_RXDMA_DST, 0, i, DP_RXDMA_ERR_DST_RING_SIZE);
 		if (ret) {
 			printf("%s: failed to setup "
 			    "rxdma_err_dst_ring %d\n",
@@ -9913,9 +9935,19 @@ qwz_wmi_tlv_svc_rdy_ext2_parse(struct qwz_softc *sc,
     uint16_t tag, uint16_t len, const void *ptr, void *data)
 {
 	struct wmi_tlv_svc_rdy_ext2_parse *parse = data;
+	const struct wmi_service_ready_ext2_event *ev;
 	int ret;
 
 	switch (tag) {
+	case WMI_TAG_SERVICE_READY_EXT2_EVENT:
+		if (len < sizeof(*ev))
+			return EPROTO;
+
+		ev = ptr;
+		sc->dp.peer_metadata_ver = FIELD_GET(
+		    WMI_TARGET_CAP_FLAGS_RX_PEER_METADATA_VERSION,
+		    ev->target_cap_flags);
+		break;
 	case WMI_TAG_ARRAY_STRUCT:
 		if (!parse->dma_ring_cap_done) {
 			ret = qwz_wmi_tlv_dma_ring_caps(sc, len, ptr,
@@ -10476,6 +10508,56 @@ qwz_pull_reg_chan_list_ext_update_ev(struct qwz_softc *sc, struct mbuf *m,
 }
 
 void
+qwz_init_channels_world(struct qwz_softc *sc)
+{
+	struct ieee80211com *ic = &sc->sc_ic;
+	struct ieee80211_channel *chan;
+	uint32_t supported_bands = 0;
+	int i;
+
+	/* Same world fallback channels as ath12k reg.c. */
+	static const uint8_t channels_2ghz[] = {
+		1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
+	};
+	static const uint8_t channels_5ghz[] = {
+		36, 40, 44, 48, 52, 56, 60, 64,
+		149, 153, 157, 161, 165
+	};
+
+	for (i = 0; i < sc->num_radios; i++)
+		supported_bands |= sc->pdevs[i].cap.supported_bands;
+
+	if (!(supported_bands & (WMI_HOST_WLAN_2G_CAP | WMI_HOST_WLAN_5G_CAP)))
+		supported_bands = WMI_HOST_WLAN_2G_CAP | WMI_HOST_WLAN_5G_CAP;
+
+	memset(ic->ic_channels, 0, sizeof(ic->ic_channels));
+
+	if (supported_bands & WMI_HOST_WLAN_2G_CAP) {
+		for (i = 0; i < nitems(channels_2ghz); i++) {
+			chan = &ic->ic_channels[channels_2ghz[i]];
+			chan->ic_freq = ieee80211_ieee2mhz(channels_2ghz[i],
+			    IEEE80211_CHAN_2GHZ);
+			chan->ic_flags = IEEE80211_CHAN_CCK |
+			    IEEE80211_CHAN_OFDM |
+			    IEEE80211_CHAN_DYN |
+			    IEEE80211_CHAN_2GHZ;
+		}
+	}
+
+	if (supported_bands & WMI_HOST_WLAN_5G_CAP) {
+		for (i = 0; i < nitems(channels_5ghz); i++) {
+			chan = &ic->ic_channels[channels_5ghz[i]];
+			chan->ic_freq = ieee80211_ieee2mhz(channels_5ghz[i],
+			    IEEE80211_CHAN_5GHZ);
+			chan->ic_flags = IEEE80211_CHAN_A |
+			    IEEE80211_CHAN_PASSIVE;
+		}
+	}
+
+	ieee80211_channel_init(&ic->ic_if);
+}
+
+void
 qwz_init_channels(struct qwz_softc *sc, struct cur_regulatory_info *reg_info)
 {
 	struct ieee80211com *ic = &sc->sc_ic;
@@ -10587,6 +10669,7 @@ qwz_reg_chan_list_event(struct qwz_softc *sc, struct mbuf *m,
 	if (ret) {
 		printf("%s: failed to extract regulatory info from "
 		    "received event\n", sc->sc_dev.dv_xname);
+		qwz_init_channels_world(sc);
 		goto fallback;
 	}
 
@@ -10599,6 +10682,7 @@ qwz_reg_chan_list_event(struct qwz_softc *sc, struct mbuf *m,
 		 */
 		printf("%s: Failed to set the requested Country "
 		    "regulatory setting\n", __func__);
+		qwz_init_channels_world(sc);
 		goto mem_free;
 	}
 
@@ -11706,7 +11790,8 @@ qwz_wmi_tlv_op_rx(struct qwz_softc *sc, struct mbuf *m)
 		DPRINTF("%s: 0x%x: update fw mem dump\n", __func__, id);
 		break;
 	case WMI_PDEV_SET_HW_MODE_RESP_EVENTID:
-		DPRINTF("%s: 0x%x: set HW mode response event\n", __func__, id);
+		sc->wmi.hw_mode_ready = 1;
+		wakeup(&sc->wmi.hw_mode_ready);
 		break;
 	case WMI_WLAN_FREQ_AVOID_EVENTID:
 		DPRINTF("%s: 0x%x: wlan freq avoid event\n", __func__, id);
@@ -16815,6 +16900,8 @@ void
 qwz_wmi_copy_resource_config(struct wmi_resource_config *wmi_cfg,
     struct wmi_resource_config_arg *tg_cfg)
 {
+	memset(wmi_cfg, 0, sizeof(*wmi_cfg));
+
 	wmi_cfg->num_vdevs = tg_cfg->num_vdevs;
 	wmi_cfg->num_peers = tg_cfg->num_peers;
 	wmi_cfg->num_offload_peers = tg_cfg->num_offload_peers;
@@ -16868,20 +16955,19 @@ qwz_wmi_copy_resource_config(struct wmi_resource_config *wmi_cfg,
 	wmi_cfg->bpf_instruction_size = tg_cfg->bpf_instruction_size;
 	wmi_cfg->max_bssid_rx_filters = tg_cfg->max_bssid_rx_filters;
 	wmi_cfg->use_pdev_id = tg_cfg->use_pdev_id;
-	wmi_cfg->flag1 = tg_cfg->atf_config | WMI_RSRC_CFG_FLAG1_BSS_CHANNEL_INFO_64;
+	wmi_cfg->flag1 = tg_cfg->atf_config | WMI_RSRC_CFG_FLAG1_BSS_CHANNEL_INFO_64 |
+	    WMI_RSRC_CFG_FLAG1_ACK_RSSI;
 	wmi_cfg->peer_map_unmap_version = tg_cfg->peer_map_unmap_version;
 	wmi_cfg->sched_params = tg_cfg->sched_params;
 	wmi_cfg->twt_ap_pdev_count = tg_cfg->twt_ap_pdev_count;
 	wmi_cfg->twt_ap_sta_count = tg_cfg->twt_ap_sta_count;
-#ifdef notyet /* 6 GHz support */
-	wmi_cfg->host_service_flags &=
-	    ~(1 << WMI_CFG_HOST_SERVICE_FLAG_REG_CC_EXT);
-	wmi_cfg->host_service_flags |= (tg_cfg->is_reg_cc_ext_event_supported <<
-	    WMI_CFG_HOST_SERVICE_FLAG_REG_CC_EXT);
-	wmi_cfg->flags2 = WMI_RSRC_CFG_FLAG2_CALC_NEXT_DTIM_COUNT_SET;
+	wmi_cfg->flags2 = FIELD_PREP(WMI_RSRC_CFG_FLAGS2_RX_PEER_METADATA_VERSION,
+	    tg_cfg->peer_metadata_ver);
+	wmi_cfg->host_service_flags =
+	    tg_cfg->is_reg_cc_ext_event_supported << WMI_CFG_HOST_SERVICE_FLAG_REG_CC_EXT;
 	wmi_cfg->ema_max_vap_cnt = tg_cfg->ema_max_vap_cnt;
 	wmi_cfg->ema_max_profile_period = tg_cfg->ema_max_profile_period;
-#endif
+	wmi_cfg->flags2 |= WMI_RSRC_CFG_FLAG2_CALC_NEXT_DTIM_COUNT_SET;
 }
 
 int
@@ -17037,6 +17123,21 @@ qwz_wmi_wait_for_unified_ready(struct qwz_softc *sc)
 
 	while (!sc->wmi.unified_ready) {
 		ret = tsleep_nsec(&sc->wmi.unified_ready, 0, "qwzunfrdy",
+		    SEC_TO_NSEC(5));
+		if (ret)
+			return -1;
+	}
+
+	return 0;
+}
+
+int
+qwz_wmi_wait_for_hw_mode_ready(struct qwz_softc *sc)
+{
+	int ret;
+
+	while (!sc->wmi.hw_mode_ready) {
+		ret = tsleep_nsec(&sc->wmi.hw_mode_ready, 0, "qwzhwmode",
 		    SEC_TO_NSEC(5));
 		if (ret)
 			return -1;
@@ -17685,11 +17786,19 @@ qwz_core_start(struct qwz_softc *sc)
 
 	/* put hardware to DBS mode */
 	if (sc->hw_params.single_pdev_only) {
+		sc->wmi.hw_mode_ready = 0;
 		ret = qwz_wmi_set_hw_mode(sc, WMI_HOST_HW_MODE_DBS);
 		if (ret) {
 			printf("%s: failed to send dbs mode: %d\n",
 			    __func__, ret);
 			goto err_hif_stop;
+		}
+
+		ret = qwz_wmi_wait_for_hw_mode_ready(sc);
+		if (ret) {
+			printf("%s: failed to receive dbs mode response: %d\n",
+			    __func__, ret);
+			goto err_reo_cleanup;
 		}
 	}
 
@@ -20255,12 +20364,13 @@ qwz_reg_update_chan_list(struct qwz_softc *sc, uint8_t pdev_id)
 	for (channel = &ic->ic_channels[1]; channel <= lastc; channel++) {
 		if (channel->ic_flags == 0)
 			continue;
-#ifdef notyet
-		/* TODO: Set to true/false based on some condition? */
+		/*
+		 * XXX We do not populate 6 GHz channels here yet.
+		 * Linux sets these scan capability bits unconditionally too.
+		 */
 		ch->allow_ht = true;
 		ch->allow_vht = true;
 		ch->allow_he = true;
-#endif
 		ch->dfs_set = !!(IEEE80211_IS_CHAN_5GHZ(channel) &&
 		    (channel->ic_flags & IEEE80211_CHAN_PASSIVE));
 		ch->is_chan_passive = !!(channel->ic_flags &
@@ -21269,6 +21379,7 @@ qwz_mac_scan_finish(struct qwz_softc *sc)
 		sc->scan.roc_freq = 0;
 
 		timeout_del(&sc->scan.timeout);
+		wakeup(&sc->scan.state);
 		if (!sc->scan.is_roc)
 			ieee80211_end_scan(ifp);
 #if 0
@@ -22632,7 +22743,7 @@ qwz_wmi_start_scan_init(struct qwz_softc *sc, struct scan_req_params *arg)
 	/* fill bssid_list[0] with 0xff, otherwise bssid and RA will be
 	 * ZEROs in probe request
 	 */
-	IEEE80211_ADDR_COPY(arg->bssid_list[0].addr, etheranyaddr);
+	IEEE80211_ADDR_COPY(arg->bssid_list[0].addr, etherbroadcastaddr);
 }
 
 int
@@ -22834,6 +22945,9 @@ qwz_start_scan(struct qwz_softc *sc, struct scan_req_params *arg)
 			break;
 		}
 	}
+
+	if (ret == 0 && sc->scan.state == ATH12K_SCAN_IDLE)
+		ret = EIO;
 
 #ifdef notyet
 	spin_lock_bh(&ar->data_lock);

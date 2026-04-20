@@ -1,4 +1,4 @@
-/*	$OpenBSD: specialreg.h,v 1.121 2026/01/14 22:42:34 dv Exp $	*/
+/*	$OpenBSD: specialreg.h,v 1.122 2026/04/19 01:10:28 jsg Exp $	*/
 /*	$NetBSD: specialreg.h,v 1.1 2003/04/26 18:39:48 fvdl Exp $	*/
 /*	$NetBSD: x86/specialreg.h,v 1.2 2003/04/25 21:54:30 fvdl Exp $	*/
 
@@ -703,6 +703,8 @@
 #define MSR_PATCH_LOADER	0xc0010020
 #define MSR_INT_PEN_MSG	0xc0010055	/* Interrupt pending message */
 
+#define MSR_FP_CFG	0xc0011028	/* Floating Point Configuration */
+#define FP_CFG_9	(1 << 9)	/* FP-DSS chickenbit */
 #define MSR_DE_CFG	0xc0011029	/* Decode Configuration */
 #define	DE_CFG_721	0x00000001	/* errata 721 */
 #define DE_CFG_SERIALIZE_LFENCE	(1 << 1)	/* Enable serializing lfence */

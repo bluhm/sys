@@ -1,4 +1,4 @@
-/*	$OpenBSD: ixgbe.h,v 1.37 2024/10/27 04:44:41 yasuoka Exp $	*/
+/*	$OpenBSD: ixgbe.h,v 1.38 2026/04/15 17:30:50 stsp Exp $	*/
 
 /******************************************************************************
 
@@ -94,9 +94,10 @@ typedef int	boolean_t;
 	#define DEBUGOUT5(S,A,B,C,D,E)  printf(S "\n",A,B,C,D,E)
 	#define DEBUGOUT6(S,A,B,C,D,E,F)  printf(S "\n",A,B,C,D,E,F)
 	#define DEBUGOUT7(S,A,B,C,D,E,F,G)  printf(S "\n",A,B,C,D,E,F,G)
-	#define ERROR_REPORT1(S,A)      printf(S "\n",A)
-	#define ERROR_REPORT2(S,A,B)    printf(S "\n",A,B)
-	#define ERROR_REPORT3(S,A,B,C)  printf(S "\n",A,B,C)
+	/* Error reports use an error category code C, which we ignore. */
+	#define ERROR_REPORT1(C,S)         printf(S "\n")
+	#define ERROR_REPORT2(C,S,A...)    printf(S "\n",A)
+	#define ERROR_REPORT3(C,S,A,B...)  printf(S "\n",A,B)
 #else
 	#define DEBUGOUT(S)
 	#define DEBUGOUT1(S,A)
@@ -107,9 +108,9 @@ typedef int	boolean_t;
 	#define DEBUGOUT6(S,A,B,C,D,E,F)
 	#define DEBUGOUT7(S,A,B,C,D,E,F,G)
 
-	#define ERROR_REPORT1(S,A)
-	#define ERROR_REPORT2(S,A,B)
-	#define ERROR_REPORT3(S,A,B,C)
+	#define ERROR_REPORT1(C,S)
+	#define ERROR_REPORT2(C,S,A)
+	#define ERROR_REPORT3(C,S,A,B)
 #endif
 
 #define FALSE		    		0

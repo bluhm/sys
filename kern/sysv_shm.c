@@ -1,4 +1,4 @@
-/*	$OpenBSD: sysv_shm.c,v 1.81 2024/11/05 15:34:30 mpi Exp $	*/
+/*	$OpenBSD: sysv_shm.c,v 1.82 2026/04/16 05:07:07 deraadt Exp $	*/
 /*	$NetBSD: sysv_shm.c,v 1.50 1998/10/21 22:24:29 tron Exp $	*/
 
 /*
@@ -306,11 +306,11 @@ sys_shmctl(struct proc *p, void *v, register_t *retval)
 	int		cmd = SCARG(uap, cmd);
 	void		*buf = SCARG(uap, buf);
 	struct ucred	*cred = p->p_ucred;
-	struct shmid_ds	inbuf, *shmseg;
+	struct shmid_ds	shmbuf, *shmseg;
 	int		error;
 
 	if (cmd == IPC_SET) {
-		error = copyin(buf, &inbuf, sizeof(inbuf));
+		error = copyin(buf, &shmbuf, sizeof(shmbuf));
 		if (error)
 			return (error);
 	}
@@ -322,18 +322,20 @@ sys_shmctl(struct proc *p, void *v, register_t *retval)
 	case IPC_STAT:
 		if ((error = ipcperm(cred, &shmseg->shm_perm, IPC_R)) != 0)
 			return (error);
-		error = copyout(shmseg, buf, sizeof(inbuf));
+		memcpy(&shmbuf, shmseg, sizeof(shmbuf));
+		shmbuf.shm_internal = NULL;
+		error = copyout(&shmbuf, buf, sizeof(shmbuf));
 		if (error)
 			return (error);
 		break;
 	case IPC_SET:
 		if ((error = ipcperm(cred, &shmseg->shm_perm, IPC_M)) != 0)
 			return (error);
-		shmseg->shm_perm.uid = inbuf.shm_perm.uid;
-		shmseg->shm_perm.gid = inbuf.shm_perm.gid;
+		shmseg->shm_perm.uid = shmbuf.shm_perm.uid;
+		shmseg->shm_perm.gid = shmbuf.shm_perm.gid;
 		shmseg->shm_perm.mode =
 		    (shmseg->shm_perm.mode & ~ACCESSPERMS) |
-		    (inbuf.shm_perm.mode & ACCESSPERMS);
+		    (shmbuf.shm_perm.mode & ACCESSPERMS);
 		shmseg->shm_ctime = gettime();
 		break;
 	case IPC_RMID:

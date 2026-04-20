@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf_norm.c,v 1.236 2025/07/07 02:28:50 jsg Exp $ */
+/*	$OpenBSD: pf_norm.c,v 1.237 2026/04/12 22:34:19 sashan Exp $ */
 
 /*
  * Copyright 2001 Niels Provos <provos@citi.umich.edu>
@@ -187,10 +187,10 @@ pf_frnode_compare(struct pf_frnode *a, struct pf_frnode *b)
 static __inline int
 pf_frag_compare(struct pf_fragment *a, struct pf_fragment *b)
 {
-	int	diff;
-
-	if ((diff = a->fr_id - b->fr_id) != 0)
-		return (diff);
+	if (a->fr_id > b->fr_id)
+		return (1);
+	if (a->fr_id < b->fr_id)
+		return (-1);
 
 	return (0);
 }

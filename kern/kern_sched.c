@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_sched.c,v 1.114 2026/03/31 16:46:22 deraadt Exp $	*/
+/*	$OpenBSD: kern_sched.c,v 1.116 2026/04/09 01:30:02 jsg Exp $	*/
 /*
  * Copyright (c) 2007, 2008 Artur Grabowski <art@openbsd.org>
  *
@@ -876,19 +876,18 @@ sched_cpuadjust(int newblockcpu)
 int
 sysctl_hwsmt(void *oldp, size_t *oldlenp, void *newp, size_t newlen)
 {
-	int err, newsmt = 1, newblockcpu = 0;
+	int err, newsmt = 1, newblockcpu;
 
-#ifdef CPUTYP_SMT
 	if (sched_blockcpu & CPUTYP_SMT)
 		newsmt = 0;
-#endif
 	err = sysctl_int_bounded(oldp, oldlenp, newp, newlen, &newsmt, 0, 1);
 	if (err || newp == NULL)
 		return err;
-#ifdef CPUTYP_SMT
+	newblockcpu = sched_blockcpu;
 	if (newsmt)
 		newblockcpu &= ~CPUTYP_SMT;
-#endif
+	else
+		newblockcpu |= CPUTYP_SMT;
 	return sched_cpuadjust(newblockcpu);
 } 
 
@@ -898,22 +897,14 @@ sysctl_hwblockcpu(void *oldp, size_t *oldlenp, void *newp, size_t newlen)
 	int err, newblockcpu;
 	char type[8], *typ = type;
 
-#ifdef CPUTYP_SMT
 	if (sched_blockcpu & CPUTYP_SMT)
 		*typ++ = 'S';
-#endif
-#ifdef CPUTYP_P
 	if (sched_blockcpu & CPUTYP_P)
 		*typ++ = 'P';
-#endif
-#ifdef CPUTYP_E
 	if (sched_blockcpu & CPUTYP_E)
 		*typ++ = 'E';
-#endif
-#ifdef CPUTYP_L
 	if (sched_blockcpu & CPUTYP_L)
 		*typ++ = 'L';
-#endif
 	*typ = '\0';
 	if (newp == NULL)
 		return sysctl_rdstring(oldp, oldlenp, newp, type);
@@ -923,26 +914,18 @@ sysctl_hwblockcpu(void *oldp, size_t *oldlenp, void *newp, size_t newlen)
 		return err;
 	for (newblockcpu = 0, typ = type; *typ; typ++) {
 		switch (*typ) {
-#ifdef CPUTYP_SMT
 		case 'S':
 			newblockcpu |= CPUTYP_SMT;
 			break;
-#endif
-#ifdef CPUTYP_P
 		case 'P':
 			newblockcpu |= CPUTYP_P;
 			break;
-#endif
-#ifdef CPUTYP_P
 		case 'E':
 			newblockcpu |= CPUTYP_E;
 			break;
-#endif
-#ifdef CPUTYP_P
 		case 'L':
 			newblockcpu |= CPUTYP_L;
 			break;
-#endif
 		default:
 			return (EINVAL);
 		}

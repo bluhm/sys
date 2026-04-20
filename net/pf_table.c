@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf_table.c,v 1.147 2025/11/11 04:06:20 dlg Exp $	*/
+/*	$OpenBSD: pf_table.c,v 1.148 2026/04/12 22:42:08 sashan Exp $	*/
 
 /*
  * Copyright (c) 2002 Cedric Berger
@@ -2770,7 +2770,7 @@ pfr_pool_get(struct pf_pool *rpool, struct pf_addr **raddr,
 		}
 _next_entry:
 		/* we need to increase the counter past the nested block */
-		pfr_prepare_network(&mask, AF_INET, ke2->pfrke_net);
+		pfr_prepare_network(&mask, af, ke2->pfrke_net);
 		pf_poolmask(addr, addr, SUNION2PF(&mask, af), &pfr_ffaddr, af);
 		pf_addr_inc(addr, af);
 		if (!pf_match_addr(0, *raddr, *rmask, addr, af)) {

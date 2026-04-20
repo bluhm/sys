@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_pdaemon.c,v 1.154 2026/02/11 22:34:41 deraadt Exp $	*/
+/*	$OpenBSD: uvm_pdaemon.c,v 1.157 2026/04/13 14:56:46 deraadt Exp $	*/
 /*	$NetBSD: uvm_pdaemon.c,v 1.23 2000/08/20 10:24:14 bjh21 Exp $	*/
 
 /*
@@ -80,6 +80,7 @@
 #endif
 
 #include <uvm/uvm.h>
+#include <uvm/uvm_swap.h>
 
 #include "drm.h"
 
@@ -201,6 +202,14 @@ struct uvm_pmalloc nowait_pma;
 
 /*
  * uvm_pageout: the main loop for the pagedaemon
+ *
+ * Sleeping pmemrange allocations may have multi-page alignment
+ * requirements which can't be satisfied by the simplistic freeing of
+ * pages.  Our free list could be large enough that we don't need to
+ * free more, but too fragmented to satisfy a pending allocation.  So
+ * we overshoot creation of inactive and free pages each time through
+ * the loop, which will eventually create some defragmention and
+ * satisfy the complex requirement.
  */
 void
 uvm_pageout(void *arg)
@@ -239,6 +248,8 @@ uvm_pageout(void *arg)
 		} else {
 			constraint = no_constraint;
 		}
+		size = MAX(size, 128);
+
 		/* How many pages do we need to free during this round? */
 		shortage = uvmexp.freetarg - atomic_load_sint(&uvmexp.free) +
 		    BUFPAGES_DEFICIT;
@@ -262,8 +273,6 @@ uvm_pageout(void *arg)
 		/* Reclaim pages from the buffer cache if possible. */
 		if (shortage > 0)
 			size += shortage;
-		if (size == 0)
-			size = 16; /* XXX */
 
 		shortage -= bufbackoff(&constraint, size * 2);
 #if NDRM > 0
@@ -273,16 +282,11 @@ uvm_pageout(void *arg)
 		if (shortage > 0)
 			shortage -= uvm_pmr_cache_drain();
 
-		/* XXX remove shortage as parameter below */
-		if (shortage < 0)
-			shortage = 0;
+		shortage = MAX(shortage, size);
+		inactive_shortage = MAX(inactive_shortage, shortage);
 
-		/*
-		 * scan if needed
-		 */
 		uvm_lock_pageq();
-		if (pma || shortage > 0 || inactive_shortage > 0)
-			uvmpd_scan(&constraint, shortage, inactive_shortage);
+		uvmpd_scan(&constraint, shortage, inactive_shortage);
 
 		/*
 		 * if there's any free memory to be had,
@@ -707,6 +711,16 @@ uvmpd_scan_inactive(struct uvm_constraint_range *constraint, int shortage)
 		 */
 		if (atomic_load_sint(&uvmexp.paging) > (shortage - freed)) {
 			rw_exit(slock);
+			continue;
+		}
+
+		/*
+		 * If no swap encrypt buffers left, leave the page on the
+		 * inactive list for future processing
+		 */
+		if (seb_free == 0) {
+			rw_exit(slock);
+			atomic_inc_int(&uvmexp.swpskip);
 			continue;
 		}
 

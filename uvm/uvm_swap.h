@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_swap.h,v 1.21 2025/12/18 16:05:18 mpi Exp $	*/
+/*	$OpenBSD: uvm_swap.h,v 1.22 2026/04/11 01:36:23 deraadt Exp $	*/
 /*	$NetBSD: uvm_swap.h,v 1.5 2000/01/11 06:57:51 chs Exp $	*/
 
 /*
@@ -53,6 +53,8 @@ int			uvm_hibswap(dev_t, u_long *, u_long *);
 void			uvm_swap_initcrypt_all(void);
 void			uvm_swap_finicrypt_all(void);
 #endif
+
+extern volatile int seb_free;
 
 #endif /* _KERNEL */
 

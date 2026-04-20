@@ -1,4 +1,4 @@
-/*	$OpenBSD: exec_elf.c,v 1.195 2026/02/09 21:58:27 deraadt Exp $	*/
+/*	$OpenBSD: exec_elf.c,v 1.196 2026/04/11 16:12:40 deraadt Exp $	*/
 
 /*
  * Copyright (c) 1996 Per Fogelstrom
@@ -551,7 +551,7 @@ elf_load_file(struct proc *p, char *path, struct exec_package *epp,
 		}
 	}
 
-	if (syscall_ph) {
+	if (syscall_ph && text_start != -1) {
 		struct process *pr = p->p_p;
 		vaddr_t base = pos;
 		size_t len = text_end;
@@ -569,7 +569,7 @@ elf_load_file(struct proc *p, char *path, struct exec_package *epp,
 			pr->ps_pin.pn_npins = npins;
 		}
 	} else {
-		error = EINVAL;	/* no pin table */
+		error = EINVAL;	/* nothing executable or no pin table */
 		goto bad1;
 	}
 

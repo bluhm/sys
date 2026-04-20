@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf_ioctl.c,v 1.429 2026/02/11 01:13:20 bluhm Exp $ */
+/*	$OpenBSD: pf_ioctl.c,v 1.430 2026/04/12 22:29:15 sashan Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -1576,8 +1576,8 @@ pf_sourcelim_add(const struct pfioc_sourcelim *ioc)
 
 	if (RBT_INSERT(pf_sourcelim_nm_tree,
 	    &pf_sourcelim_nm_tree_inactive, pfsrlim) != NULL) {
-		RBT_INSERT(pf_sourcelim_nm_tree,
-		    &pf_sourcelim_nm_tree_inactive, pfsrlim);
+		RBT_REMOVE(pf_sourcelim_id_tree,
+		    &pf_sourcelim_id_tree_inactive, pfsrlim);
 		error = EBUSY;
 		goto unlock;
 	}
@@ -1590,6 +1590,8 @@ pf_sourcelim_add(const struct pfioc_sourcelim *ioc)
 	return (0);
 
 unlock:
+	if (pfsrlim->pfsrlim_overload.table != NULL)
+		pfr_detach_table(pfsrlim->pfsrlim_overload.table);
 	PF_UNLOCK();
 	NET_UNLOCK();
 free:

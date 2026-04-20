@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_vio.c,v 1.78 2026/01/15 09:06:19 sf Exp $	*/
+/*	$OpenBSD: if_vio.c,v 1.79 2026/04/16 21:00:00 sf Exp $	*/
 
 /*
  * Copyright (c) 2012 Stefan Fritsch, Alexander Fiveg.
@@ -1661,6 +1661,7 @@ vio_rxtick(void *arg)
 	int i;
 
 	for (i = 0; i < sc->sc_nqueues; i++) {
+		virtio_check_vq(sc->sc_virtio, sc->sc_q[i].viq_rxvq);
 		mtx_enter(&sc->sc_q[i].viq_rxmtx);
 		vio_populate_rx_mbufs(sc, &sc->sc_q[i]);
 		mtx_leave(&sc->sc_q[i].viq_rxmtx);

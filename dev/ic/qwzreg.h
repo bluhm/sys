@@ -1,4 +1,4 @@
-/*	$OpenBSD: qwzreg.h,v 1.11 2024/12/23 00:12:44 patrick Exp $	*/
+/*	$OpenBSD: qwzreg.h,v 1.12 2026/04/12 19:52:23 kirill Exp $	*/
 
 /*
  * Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc.
@@ -1957,6 +1957,8 @@ enum wmi_tlv_tag {
 	WMI_TAG_MAX
 };
 
+#define WMI_TAG_SERVICE_READY_EXT2_EVENT	0x334
+
 enum wmi_tlv_service {
 	WMI_TLV_SERVICE_BEACON_OFFLOAD = 0,
 	WMI_TLV_SERVICE_SCAN_OFFLOAD = 1,
@@ -2190,6 +2192,7 @@ enum wmi_tlv_service {
 	WMI_TLV_SERVICE_BIOS_SAR_SUPPORT = 326,
 	WMI_TLV_SERVICE_SUPPORT_11D_FOR_HOST_SCAN = 357,
 	WMI_TLV_SERVICE_WMSK_COMPACTION_RX_TLVS = 361,
+	WMI_TLV_SERVICE_PEER_METADATA_V1A_V1B_SUPPORT = 365,
 
 	/* The third 128 bits */
 	WMI_MAX_EXT2_SERVICE = 384
@@ -2479,6 +2482,7 @@ struct wmi_init_cmd {
 #define WMI_RSRC_CFG_FLAG1_BSS_CHANNEL_INFO_64 BIT(5)
 #define WMI_RSRC_CFG_FLAG2_CALC_NEXT_DTIM_COUNT_SET BIT(9)
 #define WMI_RSRC_CFG_FLAG1_ACK_RSSI BIT(18)
+#define WMI_RSRC_CFG_FLAGS2_RX_PEER_METADATA_VERSION GENMASK(5, 4)
 
 #define WMI_CFG_HOST_SERVICE_FLAG_REG_CC_EXT 4
 
@@ -2541,7 +2545,6 @@ struct wmi_resource_config {
 	uint32_t sched_params;
 	uint32_t twt_ap_pdev_count;
 	uint32_t twt_ap_sta_count;
-#ifdef notyet /* 6 GHz support */
 	uint32_t max_nlo_ssids;
 	uint32_t num_pkt_filters;
 	uint32_t num_max_sta_vdevs;
@@ -2554,7 +2557,6 @@ struct wmi_resource_config {
 	uint32_t max_rnr_neighbours;
 	uint32_t ema_max_vap_cnt;
 	uint32_t ema_max_profile_period;
-#endif
 } __packed;
 
 struct wmi_service_ready_event {
@@ -2607,6 +2609,19 @@ struct wmi_service_ready_ext_event {
 	uint32_t max_nlo_ssids;
 	uint32_t max_bssid_indicator;
 	uint32_t he_cap_info_ext;
+} __packed;
+
+#define WMI_TARGET_CAP_FLAGS_RX_PEER_METADATA_VERSION	GENMASK(1, 0)
+
+struct wmi_service_ready_ext2_event {
+	uint32_t reg_db_version;
+	uint32_t hw_min_max_tx_power_2ghz;
+	uint32_t hw_min_max_tx_power_5ghz;
+	uint32_t chwidth_num_peer_caps;
+	uint32_t preamble_puncture_bw;
+	uint32_t max_user_per_ppdu_ofdma;
+	uint32_t max_user_per_ppdu_mumimo;
+	uint32_t target_cap_flags;
 } __packed;
 
 struct wmi_soc_mac_phy_hw_mode_caps {

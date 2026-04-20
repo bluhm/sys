@@ -1,4 +1,4 @@
-#	$OpenBSD: RAMDISK,v 1.204 2025/06/11 14:52:50 jsg Exp $
+#	$OpenBSD: RAMDISK,v 1.205 2026/04/17 19:35:22 deraadt Exp $
 
 machine		i386
 maxusers	4
@@ -10,7 +10,7 @@ option		BOOT_CONFIG
 option		RAMDISK_HOOKS
 option		MINIROOTSIZE=3872
 
-option		PCIVERBOSE
+#option		PCIVERBOSE
 option		SCSITERSE
 
 option		FFS

@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_wg.c,v 1.47 2025/09/17 12:35:55 jsg Exp $ */
+/*	$OpenBSD: if_wg.c,v 1.48 2026/04/13 01:10:39 dlg Exp $ */
 
 /*
  * Copyright (C) 2015-2020 Jason A. Donenfeld <Jason@zx2c4.com>. All Rights Reserved.
@@ -627,6 +627,9 @@ wg_aip_add(struct wg_softc *sc, struct wg_peer *peer, struct wg_aip_io *d)
 	default:
 		return EAFNOSUPPORT;
 	}
+
+	if (d->a_cidr > root->art_alen)
+		return EINVAL;
 
 	if ((aip = pool_get(&wg_aip_pool, PR_NOWAIT|PR_ZERO)) == NULL)
 		return ENOBUFS;

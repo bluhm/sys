@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_unveil.c,v 1.56 2026/03/13 00:42:53 beck Exp $	*/
+/*	$OpenBSD: kern_unveil.c,v 1.57 2026/04/11 17:04:55 deraadt Exp $	*/
 
 /*
  * Copyright (c) 2017-2019 Bob Beck <beck@openbsd.org>
@@ -359,19 +359,6 @@ unveil_parsepermissions(const char *permissions, u_char *perms)
 	return 0;
 }
 
-int
-unveil_setflags(u_char *flags, u_char nflags)
-{
-#if 0
-	if (((~(*flags)) & nflags) != 0) {
-		DPRINTF("Flags escalation %llX -> %llX\n", *flags, nflags);
-		return 1;
-	}
-#endif
-	*flags = nflags;
-	return 1;
-}
-
 struct unveil *
 unveil_add_vnode(struct proc *p, struct vnode *vp)
 {
@@ -458,11 +445,8 @@ unveil_add(struct proc *p, struct nameidata *ndp, const char *permissions)
 			DPRINTF("unveil: %s(%d): updating directory vnode %p"
 			    " to unrestricted uvcount %d\n",
 			    pr->ps_comm, pr->ps_pid, vp, vp->v_uvcount);
-
-			if (!unveil_setflags(&uv->uv_flags, flags))
-				ret = EPERM;
-			else
-				ret = 0;
+			uv->uv_flags = flags;
+			ret = 0;
 			goto done;
 		}
 
@@ -478,11 +462,8 @@ unveil_add(struct proc *p, struct nameidata *ndp, const char *permissions)
 				    "in vnode %p, uvcount %d\n",
 				    pr->ps_comm, pr->ps_pid, tname->un_name, vp,
 				    vp->v_uvcount);
-
-				if (!unveil_setflags(&tname->un_flags, flags))
-					ret = EPERM;
-				else
-					ret = 0;
+				tname->un_flags = flags;
+				ret = 0;
 				goto done;
 			}
 		}

@@ -1,4 +1,4 @@
-/*	$OpenBSD: cpu.c,v 1.204 2026/04/03 22:01:46 sf Exp $	*/
+/*	$OpenBSD: cpu.c,v 1.205 2026/04/19 01:10:28 jsg Exp $	*/
 /* $NetBSD: cpu.c,v 1.1 2003/04/26 18:39:26 fvdl Exp $ */
 
 /*-
@@ -1298,6 +1298,17 @@ cpu_fix_msrs(struct cpu_info *ci)
 			nmsr |= DE_CFG_SERIALIZE_9;
 			if (msr != nmsr)
 				wrmsr(MSR_DE_CFG, nmsr);
+		}
+		/*
+		 * Mitigation for Floating Point Divider State Sampling
+		 * from AMD-SB-7053
+		 */
+		if (family == 0x17 && ci->ci_model <= 0x2f &&
+		    (cpu_ecxfeature & CPUIDECX_HV) == 0) {
+			nmsr = msr = rdmsr(MSR_FP_CFG);
+			nmsr |= FP_CFG_9;
+			if (msr != nmsr)
+				wrmsr(MSR_FP_CFG, nmsr);
 		}
 	}
 
