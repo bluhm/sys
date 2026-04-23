@@ -1,4 +1,4 @@
-/*	$OpenBSD: nfs_vnops.c,v 1.209 2025/09/20 13:53:36 mpi Exp $	*/
+/*	$OpenBSD: nfs_vnops.c,v 1.210 2026/04/22 01:43:48 jsg Exp $	*/
 /*	$NetBSD: nfs_vnops.c,v 1.62.4.1 1996/07/08 20:26:52 jtc Exp $	*/
 
 /*
@@ -76,6 +76,7 @@ int nfs_close(void *);
 int nfs_commit(struct vnode *, u_quad_t, int, struct proc *);
 int nfs_create(void *);
 int nfs_flush(struct vnode *, struct ucred *, int, struct proc *, int);
+int nfs_ioctl(void *);
 int nfs_fsync(void *);
 int nfs_getattr(void *);
 int nfs_islocked(void *);
@@ -3020,6 +3021,12 @@ nfs_strategy(void *v)
 	if ((bp->b_flags & B_ASYNC) == 0 || nfs_asyncio(bp, 0))
 		error = nfs_doio(bp, p);
 	return (error);
+}
+
+int
+nfs_ioctl(void *v)
+{
+	return (ENOTTY);
 }
 
 /*

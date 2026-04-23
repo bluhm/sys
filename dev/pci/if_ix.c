@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_ix.c,v 1.223 2026/02/26 23:38:10 bluhm Exp $	*/
+/*	$OpenBSD: if_ix.c,v 1.225 2026/04/22 22:12:49 dlg Exp $	*/
 
 /******************************************************************************
 
@@ -2292,7 +2292,7 @@ ixgbe_allocate_transmit_buffers(struct ix_txring *txr)
 	for (i = 0; i < sc->num_tx_desc; i++) {
 		txbuf = &txr->tx_buffers[i];
 		error = bus_dmamap_create(txr->txdma.dma_tag, MAXMCLBYTES,
-			    sc->num_segs, PAGE_SIZE, 0,
+			    sc->num_segs, 16 * 1024, 0,
 			    BUS_DMA_NOWAIT | BUS_DMA_64BIT, &txbuf->map);
 
 		if (error != 0) {
@@ -3061,8 +3061,13 @@ ixgbe_initialize_rss_mapping(struct ix_softc *sc)
 	}
 
 	/* Now fill our hash function seeds */
-	for (i = 0; i < 10; i++)
-		IXGBE_WRITE_REG(hw, IXGBE_RSSRK(i), rss_key[i]);
+	for (i = 0; i < nitems(rss_key); i++) {
+		/*
+		 * twist the words so the rss key will be handled
+		 * as bytes regardless of the hosts endianness.
+		 */
+		IXGBE_WRITE_REG(hw, IXGBE_RSSRK(i), letoh32(rss_key[i]));
+	}
 
 	/*
 	 * Disable UDP - IP fragments aren't currently being handled

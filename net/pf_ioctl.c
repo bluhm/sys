@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf_ioctl.c,v 1.430 2026/04/12 22:29:15 sashan Exp $ */
+/*	$OpenBSD: pf_ioctl.c,v 1.431 2026/04/23 01:33:01 jsg Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -1087,35 +1087,6 @@ pf_statelim_unlink(struct pf_statelim *pfstlim,
 	pfstlim->pfstlim_inuse = 0;
 
 	PF_STATE_EXIT_WRITE();
-}
-
-int
-pf_statelim_clr(uint32_t id, int rmst)
-{
-	struct pf_statelim key = { .pfstlim_id = id };
-	struct pf_statelim *pfstlim;
-	int error = ESRCH; /* is this right? */
-	struct pf_state_link_list garbage = TAILQ_HEAD_INITIALIZER(garbage);
-	struct pf_state_link *pfl, *npfl;
-
-	if (rmst)
-		return (EOPNOTSUPP);
-
-	NET_LOCK();
-	PF_LOCK();
-	pfstlim = RBT_FIND(pf_statelim_id_tree, &pf_statelim_id_tree_active,
-	    &key);
-	if (pfstlim != NULL) {
-		pf_statelim_unlink(pfstlim, &garbage);
-		error = 0;
-	}
-	PF_UNLOCK();
-	NET_UNLOCK();
-
-	TAILQ_FOREACH_SAFE(pfl, &garbage, pfl_link, npfl)
-		pool_put(&pf_state_link_pl, pfl);
-
-	return (error);
 }
 
 void

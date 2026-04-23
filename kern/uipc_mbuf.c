@@ -1,4 +1,4 @@
-/*	$OpenBSD: uipc_mbuf.c,v 1.304 2026/02/05 03:26:00 dlg Exp $	*/
+/*	$OpenBSD: uipc_mbuf.c,v 1.305 2026/04/22 21:58:53 dlg Exp $	*/
 /*	$NetBSD: uipc_mbuf.c,v 1.15.4.1 1996/06/13 17:11:44 cgd Exp $	*/
 
 /*
@@ -109,12 +109,12 @@ u_int	mclsizes[MCLPOOLS] = {
 	MCLBYTES + 2,	/* ETHER_ALIGNED 2k mbufs */
 	4 * 1024,
 	8 * 1024,
-	9 * 1024,
+	(9 * 1024) + 128, /* use more of the pool page for ETHER_ALIGNED etc */
 	12 * 1024,
 	16 * 1024,
 	64 * 1024
 };
-static	char mclnames[MCLPOOLS][8];
+static	char mclnames[MCLPOOLS][16];
 struct	pool mclpools[MCLPOOLS];
 
 struct pool *m_clpool(u_int);

@@ -1,4 +1,4 @@
-/*	$OpenBSD: art.c,v 1.35 2025/08/15 09:15:55 jsg Exp $ */
+/*	$OpenBSD: art.c,v 1.36 2026/04/23 01:28:03 jsg Exp $ */
 
 /*
  * Copyright (c) 2015 Martin Pieuchot
@@ -826,24 +826,6 @@ art_iter_close(struct art_iter *ai)
 	}
 
 	ai->ai_table = NULL;
-}
-
-int
-art_walk(struct art *art, int (*f)(struct art_node *, void *), void *arg)
-{
-	struct art_iter		 ai;
-	struct art_node		*an;
-	int			 error = 0;
-
-	ART_FOREACH(an, art, &ai) {
-		error = f(an, arg);
-		if (error != 0) {
-			art_iter_close(&ai);
-			return (error);
-		}
-	}
-
-	return (0);
 }
 
 /*

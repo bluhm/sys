@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf_if.c,v 1.112 2025/07/07 02:28:50 jsg Exp $ */
+/*	$OpenBSD: pf_if.c,v 1.113 2026/04/21 06:38:28 sashan Exp $ */
 
 /*
  * Copyright 2005 Henning Brauer <henning@openbsd.org>
@@ -854,8 +854,22 @@ pfi_set_flags(const char *name, int flags)
 			} else
 				panic("%s pfi_kif_get() returned NULL\n",
 				    __func__);
-		} else
+		} else {
+			/*
+			 * pf.conf may accidentally contain two set skip on ...
+			 * statements. For example:
+			 *     set skip lo
+			 *     set skip lo
+			 * We need to grab reference only when skip flag is
+			 * set to avoid tripping assert pfi_clear_flags()
+			 */
+			if (ISSET(flags, PFI_IFLAG_SKIP) &&
+			    !ISSET(p->pfik_flags_new, PFI_IFLAG_SKIP) &&
+			    !ISSET(p->pfik_flags, PFI_IFLAG_SKIP))
+				pfi_kif_ref(p, PFI_KIF_REF_FLAG);
+
 			p->pfik_flags_new = p->pfik_flags | flags;
+		}
 	} else {
 		RB_FOREACH(p, pfi_ifhead, &pfi_ifs)
 			p->pfik_flags_new = p->pfik_flags | flags;

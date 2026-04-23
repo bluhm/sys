@@ -1,4 +1,4 @@
-/*	$OpenBSD: route.c,v 1.450 2025/09/15 13:51:24 bluhm Exp $	*/
+/*	$OpenBSD: route.c,v 1.451 2026/04/22 15:17:43 claudio Exp $	*/
 /*	$NetBSD: route.c,v 1.14 1996/02/13 22:00:46 christos Exp $	*/
 
 /*
@@ -1727,7 +1727,8 @@ rt_mpls_set(struct rtentry *rt, const struct sockaddr *src, uint8_t op)
 	if (psa_mpls != NULL && psa_mpls->smpls_family != AF_MPLS)
 		return (EAFNOSUPPORT);
 
-	rt->rt_llinfo = malloc(sizeof(struct rt_mpls), M_TEMP, M_NOWAIT|M_ZERO);
+	rt->rt_llinfo = malloc(sizeof(struct rt_mpls), M_RTABLE,
+	    M_NOWAIT|M_ZERO);
 	if (rt->rt_llinfo == NULL)
 		return (ENOMEM);
 
@@ -1745,7 +1746,7 @@ void
 rt_mpls_clear(struct rtentry *rt)
 {
 	if (rt->rt_llinfo != NULL && rt->rt_flags & RTF_MPLS) {
-		free(rt->rt_llinfo, M_TEMP, sizeof(struct rt_mpls));
+		free(rt->rt_llinfo, M_RTABLE, sizeof(struct rt_mpls));
 		rt->rt_llinfo = NULL;
 	}
 	rt->rt_flags &= ~RTF_MPLS;

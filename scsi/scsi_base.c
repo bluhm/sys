@@ -1,4 +1,4 @@
-/*	$OpenBSD: scsi_base.c,v 1.284 2024/09/04 07:54:53 mglocker Exp $	*/
+/*	$OpenBSD: scsi_base.c,v 1.285 2026/04/22 12:28:08 claudio Exp $	*/
 /*	$NetBSD: scsi_base.c,v 1.43 1997/04/02 02:29:36 mycroft Exp $	*/
 
 /*
@@ -1618,7 +1618,8 @@ scsi_delay(struct scsi_xfer *xs, int seconds)
 		return EIO;
 	}
 
-	ret = tsleep_nsec(&ret, PRIBIO|PCATCH, "scbusy", SEC_TO_NSEC(seconds));
+	ret = tsleep_nsec(&nowake, PRIBIO|PCATCH, "scbusy",
+	    SEC_TO_NSEC(seconds));
 
 	/* Signal == abort xs. */
 	if (ret == ERESTART || ret == EINTR)

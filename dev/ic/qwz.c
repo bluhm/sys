@@ -1,4 +1,4 @@
-/*	$OpenBSD: qwz.c,v 1.24 2026/04/12 19:52:23 kirill Exp $	*/
+/*	$OpenBSD: qwz.c,v 1.25 2026/04/21 08:56:22 mglocker Exp $	*/
 
 /*
  * Copyright 2023 Stefan Sperling <stsp@openbsd.org>
@@ -13453,6 +13453,76 @@ qwz_dp_rx_pdev_alloc(struct qwz_softc *sc, int mac_id)
 	return 0;
 }
 
+int
+qwz_dp_rxdma_ring_sel_config_wcn7850(struct qwz_softc *sc)
+{
+	struct qwz_dp *dp = &sc->dp;
+	struct htt_rx_ring_tlv_filter tlv_filter = { 0 };
+	uint32_t ring_id;
+	int i, ret = 0;
+
+	tlv_filter.rx_filter = HTT_RX_FILTER_TLV_FLAGS_MPDU_START |
+	    HTT_RX_FILTER_TLV_FLAGS_RX_PACKET |
+	    HTT_RX_FILTER_TLV_FLAGS_MSDU_END;
+	tlv_filter.pkt_filter_flags2 = HTT_RX_FP_CTRL_PKT_FILTER_TLV_FLAGS2_BAR;
+	tlv_filter.pkt_filter_flags3 = HTT_RX_FP_DATA_FILTER_FLASG3;
+
+	for (i = 0; i < sc->hw_params.num_rxmda_per_pdev; i++) {
+		ring_id = dp->rx_mac_buf_ring[i].ring_id;
+		ret = qwz_dp_tx_htt_rx_filter_setup(sc, ring_id, i,
+		    HAL_RXDMA_BUF, DP_RXDMA_REFILL_RING_SIZE, &tlv_filter);
+		if (ret) {
+			printf("%s: failed to configure rx_mac_buf_ring%d "
+			    "filter %d\n", sc->sc_dev.dv_xname, i, ret);
+			return ret;
+		}
+	}
+
+	return ret;
+}
+
+int
+qwz_dp_rx_htt_setup(struct qwz_softc *sc)
+{
+	struct qwz_dp *dp = &sc->dp;
+	uint32_t ring_id;
+	int i, ret;
+
+	/* TODO: Need to verify the HTT setup for QCN9224 */
+	ring_id = dp->rx_refill_buf_ring.refill_buf_ring.ring_id;
+	ret = qwz_dp_tx_htt_srng_setup(sc, ring_id, 0, HAL_RXDMA_BUF);
+	if (ret) {
+		printf("%s: failed to configure rx_refill_buf_ring %d\n",
+		    sc->sc_dev.dv_xname, ret);
+		return ret;
+	}
+
+	if (sc->hw_params.rx_mac_buf_ring) {
+		for (i = 0; i < sc->hw_params.num_rxmda_per_pdev; i++) {
+			ring_id = dp->rx_mac_buf_ring[i].ring_id;
+			ret = qwz_dp_tx_htt_srng_setup(sc, ring_id, i,
+			    HAL_RXDMA_BUF);
+			if (ret) {
+				printf("%s: failed to configure rx_mac_buf_ring"
+				    "%d %d\n", sc->sc_dev.dv_xname, i, ret);
+				return ret;
+			}
+		}
+	}
+
+	for (i = 0; i < sc->hw_params.num_rxdma_dst_ring; i++) {
+		ring_id = dp->rxdma_err_dst_ring[i].ring_id;
+		ret = qwz_dp_tx_htt_srng_setup(sc, ring_id, i, HAL_RXDMA_DST);
+		if (ret) {
+			printf("%s: failed to configure rxdma_err_dst_ring"
+			    "%d %d\n", sc->sc_dev.dv_xname, i, ret);
+			return ret;
+		}
+	}
+
+	return qwz_dp_rxdma_ring_sel_config_wcn7850(sc);
+}
+
 void
 qwz_dp_pdev_free(struct qwz_softc *sc)
 {
@@ -13477,6 +13547,13 @@ qwz_dp_pdev_alloc(struct qwz_softc *sc)
 			    "for pdev_id %d\n", sc->sc_dev.dv_xname, i);
 			goto err;
 		}
+	}
+
+	ret = qwz_dp_rx_htt_setup(sc);
+	if (ret) {
+		printf("%s: failed to setup rx htt %d\n",
+		    sc->sc_dev.dv_xname, ret);
+		goto err;
 	}
 
 	return 0;
@@ -21302,6 +21379,12 @@ qwz_init_task(void *arg)
 void
 qwz_mac_11d_scan_start(struct qwz_softc *sc, struct qwz_vif *arvif)
 {
+/*
+ * XXX:
+ * The 802.11d scanning command is currently causing a firmware error,
+ * hence disabling this function for now.
+ */
+#if 0
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct wmi_11d_scan_start_params param;
 	int ret;
@@ -21349,6 +21432,7 @@ fin:
 	}
 #ifdef notyet
 	mutex_unlock(&ar->ab->vdev_id_11d_lock);
+#endif
 #endif
 }
 

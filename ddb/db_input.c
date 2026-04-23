@@ -1,4 +1,4 @@
-/*	$OpenBSD: db_input.c,v 1.19 2020/10/15 03:14:00 deraadt Exp $	*/
+/*	$OpenBSD: db_input.c,v 1.20 2026/04/23 01:15:07 dlg Exp $	*/
 /*	$NetBSD: db_input.c,v 1.7 1996/02/05 01:57:02 christos Exp $	*/
 
 /*
@@ -171,6 +171,9 @@ db_inputchar(int c)
 		}
 		break;
 	case CTRL('w'):
+		/* erase trailing whitespace after the word */
+		while (db_lc > db_lbuf_start && db_lc[-1] == BLANK)
+			db_delete(1, DEL_BWD);
 		/* erase word back */
 		while (db_lc > db_lbuf_start && db_lc[-1] != BLANK)
 			db_delete(1, DEL_BWD);

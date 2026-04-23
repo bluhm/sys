@@ -1,4 +1,4 @@
-/*	$OpenBSD: nfs_var.h,v 1.66 2024/09/09 03:50:14 jsg Exp $	*/
+/*	$OpenBSD: nfs_var.h,v 1.67 2026/04/22 01:43:48 jsg Exp $	*/
 /*	$NetBSD: nfs_var.h,v 1.3 1996/02/18 11:53:54 fvdl Exp $	*/
 
 /*
@@ -67,8 +67,6 @@ int nfs_readrpc(struct vnode *, struct uio *);
 int nfs_writerpc(struct vnode *, struct uio *, int *, int *);
 int nfs_removeit(struct sillyrename *);
 int nfs_writebp(struct buf *, int);
-
-#define	nfs_ioctl	((int (*)(void *))enoioctl)
 
 /* nfs_serv.c */
 int nfsrv3_access(struct nfsrv_descript *, struct nfssvc_sock *,
