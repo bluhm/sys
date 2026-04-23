@@ -1079,7 +1079,6 @@ m_split(struct mbuf *m0, int len0, int wait)
 	if (m == NULL)
 		return (NULL);
 	remain = m->m_len - len;
-	olen = m0->m_pkthdr.len;
 	if (m0->m_flags & M_PKTHDR) {
 		MGETHDR(n, wait, m0->m_type);
 		if (n == NULL)
@@ -1089,6 +1088,7 @@ m_split(struct mbuf *m0, int len0, int wait)
 			return (NULL);
 		}
 		n->m_pkthdr.len -= len0;
+		olen = m0->m_pkthdr.len;
 		m0->m_pkthdr.len = len0;
 		if (remain == 0) {
 			n->m_next = m->m_next;
@@ -1121,7 +1121,8 @@ m_split(struct mbuf *m0, int len0, int wait)
 	if (m->m_flags & M_EXT) {
 		if (m_extref(m, n, wait) != 0) {
 			m_freem(n);
-			m0->m_pkthdr.len = olen;
+			if (m0->m_flags & M_PKTHDR)
+				m0->m_pkthdr.len = olen;
 			return (NULL);
 		}
 		n->m_data = m->m_data + len;
