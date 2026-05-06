@@ -1,4 +1,4 @@
-/*	$OpenBSD: qwzvar.h,v 1.13 2026/04/12 19:52:23 kirill Exp $	*/
+/*	$OpenBSD: qwzvar.h,v 1.14 2026/04/26 19:25:08 mglocker Exp $	*/
 
 /*
  * Copyright (c) 2018-2019 The Linux Foundation.
@@ -141,6 +141,8 @@ struct hal_tx_info {
 	uint8_t dscp_tid_tbl_idx;
 	bool enable_mesh;
 	uint8_t rbm_id;
+	uint8_t bank_id;	/* WCN7850/WiFi7: pre-configured TX bank index */
+	uint8_t vdev_id;	/* WCN7850/WiFi7: VDEV ID in tcl_data_cmd info3 */
 };
 
 /* TODO: Check if the actual desc macros can be used instead */
@@ -281,9 +283,9 @@ struct hal_rx_ops {
 #ifdef notyet
 	uint8_t (*rx_desc_get_mesh_ctl)(struct hal_rx_desc *desc);
 	bool (*rx_desc_get_mpdu_seq_ctl_vld)(struct hal_rx_desc *desc);
-	bool (*rx_desc_get_mpdu_fc_valid)(struct hal_rx_desc *desc);
 	uint16_t (*rx_desc_get_mpdu_start_seq_no)(struct hal_rx_desc *desc);
 #endif
+	bool (*rx_desc_get_mpdu_fc_valid)(struct hal_rx_desc *desc);
 	uint16_t (*rx_desc_get_msdu_len)(struct hal_rx_desc *desc);
 #ifdef notyet
 	uint8_t (*rx_desc_get_msdu_sgi)(struct hal_rx_desc *desc);
@@ -1103,6 +1105,7 @@ struct ath12k_rx_desc_info {
 	uint32_t magic;
 	uint8_t in_use		: 1,
 	        reserved	: 7;
+	struct qwz_rx_msdu rx_msdu;
 };
 
 struct ath12k_tx_desc_info {
@@ -1798,6 +1801,7 @@ struct qwz_vif {
 	uint16_t tcl_metadata;
 	uint8_t hal_addr_search_flags;
 	uint8_t search_type;
+	int8_t bank_id;	/* WCN7850/WiFi7 TX bank profile id, -1 if unset */
 
 	struct qwz_softc *sc;
 

@@ -1,4 +1,4 @@
-/*	$OpenBSD: trunklacp.c,v 1.33 2025/07/07 02:28:50 jsg Exp $ */
+/*	$OpenBSD: trunklacp.c,v 1.34 2026/04/24 13:25:44 jsg Exp $ */
 /*	$NetBSD: ieee8023ad_lacp.c,v 1.3 2005/12/11 12:24:54 christos Exp $ */
 /*	$FreeBSD:ieee8023ad_lacp.c,v 1.15 2008/03/16 19:25:30 thompsa Exp $ */
 
@@ -176,7 +176,7 @@ const char	*lacp_format_systemid(const struct lacp_systemid *, char *,
 const char	*lacp_format_portid(const struct lacp_portid *, char *,
 		    size_t);
 void		lacp_dprintf(const struct lacp_port *, const char *, ...)
-		    __attribute__((__format__(__printf__, 2, 3)));
+		    __attribute__((__format__(__kprintf__, 2, 3)));
 #define	LACP_DPRINTF(a)	lacp_dprintf a
 #else
 #define LACP_DPRINTF(a) /* nothing */

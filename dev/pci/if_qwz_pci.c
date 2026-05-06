@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_qwz_pci.c,v 1.7 2026/04/12 19:52:23 kirill Exp $	*/
+/*	$OpenBSD: if_qwz_pci.c,v 1.8 2026/04/26 19:25:08 mglocker Exp $	*/
 
 /*
  * Copyright 2023 Stefan Sperling <stsp@openbsd.org>
@@ -1490,9 +1490,10 @@ qwz_pcic_ext_irq_config(struct qwz_softc *sc, struct pci_attach_args *pa)
 
 		if (num_irq) {
 			int irq_idx = irq_grp->irqs[0];
+			int vector = (i % num_vectors) + base_vector;
 			pci_intr_handle_t ih;
 
-			if (pci_intr_map_msivec(pa, irq_idx, &ih) != 0 &&
+			if (pci_intr_map_msivec(pa, vector, &ih) != 0 &&
 			    pci_intr_map(pa, &ih) != 0) {
 				printf("%s: can't map interrupt\n",
 				    sc->sc_dev.dv_xname);

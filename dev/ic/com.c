@@ -1,4 +1,4 @@
-/*	$OpenBSD: com.c,v 1.182 2026/04/19 09:36:56 kettenis Exp $	*/
+/*	$OpenBSD: com.c,v 1.183 2026/04/26 09:27:15 kettenis Exp $	*/
 /*	$NetBSD: com.c,v 1.82.4.1 1996/06/02 09:08:00 mrg Exp $	*/
 
 /*
@@ -459,6 +459,7 @@ compwroff(struct com_softc *sc)
 {
 	struct tty *tp = sc->sc_tty;
 	u_int8_t ier;
+	int timo;
 
 	CLR(sc->sc_lcr, LCR_SBREAK);
 	com_write_reg(sc, com_lcr, sc->sc_lcr);
@@ -472,6 +473,10 @@ compwroff(struct com_softc *sc)
 		sc->sc_mcr = 0;
 		com_write_reg(sc, com_mcr, sc->sc_mcr);
 	}
+
+	timo = 10000;
+	while (!ISSET(com_read_reg(sc, com_lsr), LSR_TSRE) && --timo)
+		delay(1);
 
 	/*
 	 * Turn FIFO off; enter sleep mode if possible.
@@ -1299,6 +1304,7 @@ com_attach_subr(struct com_softc *sc)
 	int probe = 0;
 	u_int8_t lcr, fifo;
 	u_int32_t cpr;
+	int timo;
 
 	sc->sc_ier = 0;
 	if (sc->sc_uarttype == COM_UART_PXA2X0)
@@ -1308,9 +1314,15 @@ com_attach_subr(struct com_softc *sc)
 
 	if (sc->sc_iot == comconsiot && sc->sc_iobase == comconsaddr) {
 		comconsattached = 1;
-		delay(10000);			/* wait for output to finish */
 		SET(sc->sc_hwflags, COM_HW_CONSOLE);
 		SET(sc->sc_swflags, COM_SW_SOFTCAR);
+	}
+
+	if (ISSET(sc->sc_hwflags, COM_HW_CONSOLE)) {
+		/* wait for output to finish */
+		timo = 10000;
+		while (!ISSET(com_read_reg(sc, com_lsr), LSR_TSRE) && --timo)
+			delay(1);
 	}
 
 	/*
@@ -1516,6 +1528,13 @@ com_attach_subr(struct com_softc *sc)
 	if (sc->sc_fifolen == 0) {
 		CLR(sc->sc_hwflags, COM_HW_FIFO);
 		sc->sc_fifolen = 1;
+	}
+
+	if (ISSET(sc->sc_hwflags, COM_HW_CONSOLE)) {
+		/* wait for output to finish */
+		timo = 10000;
+		while (!ISSET(com_read_reg(sc, com_lsr), LSR_TSRE) && --timo)
+			delay(1);
 	}
 
 	/* clear and disable fifo */

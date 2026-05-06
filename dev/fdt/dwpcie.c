@@ -1,4 +1,4 @@
-/*	$OpenBSD: dwpcie.c,v 1.60 2026/04/18 17:06:22 kettenis Exp $	*/
+/*	$OpenBSD: dwpcie.c,v 1.61 2026/04/25 11:41:41 kettenis Exp $	*/
 /*
  * Copyright (c) 2018 Mark Kettenis <kettenis@openbsd.org>
  *
@@ -272,6 +272,7 @@ struct dwpcie_softc {
 
 	struct machine_pci_chipset sc_pc;
 	int			sc_bus;
+	int			sc_link_down;
 
 	int			sc_num_viewport;
 	int			sc_atu_unroll;
@@ -1025,8 +1026,10 @@ dwpcie_armada8k_init(struct dwpcie_softc *sc)
 			break;
 		delay(1000);
 	}
-	if (timo == 0)
-		return ETIMEDOUT;
+	if (timo == 0) {
+		sc->sc_link_down = 1;
+		return 0;
+	}
 
 	sc->sc_ih = fdt_intr_establish(sc->sc_node, IPL_AUDIO | IPL_MPSAFE,
 	    dwpcie_armada8k_intr, sc, sc->sc_dev.dv_xname);
@@ -1115,8 +1118,10 @@ dwpcie_g12a_init(struct dwpcie_softc *sc)
 			break;
 		delay(1000);
 	}
-	if (timo == 0)
-		return ETIMEDOUT;
+	if (timo == 0) {
+		sc->sc_link_down = 1;
+		return 0;
+	}
 
 	error = dwpcie_msi_init(sc);
 	if (error)
@@ -1310,7 +1315,8 @@ dwpcie_imx8mq_init(struct dwpcie_softc *sc)
 		delay(10);
 	}
 	if (timo == 0) {
-		error = ETIMEDOUT;
+		sc->sc_link_down = 1;
+		error = 0;
 		goto err;
 	}
 
@@ -1330,7 +1336,8 @@ dwpcie_imx8mq_init(struct dwpcie_softc *sc)
 			delay(10);
 		}
 		if (timo == 0) {
-			error = ETIMEDOUT;
+			sc->sc_link_down = 1;
+			error = 0;
 			goto err;
 		}
 	}
@@ -1492,7 +1499,7 @@ dwpcie_k1_init(struct dwpcie_softc *sc)
 		delay(10);
 	}
 	if (timo == 0)
-		return ETIMEDOUT;
+		sc->sc_link_down = 1;
 
 	return 0;
 }
@@ -1516,7 +1523,7 @@ dwpcie_rk3568_init(struct dwpcie_softc *sc)
 {
 	uint32_t *reset_gpio;
 	ssize_t reset_gpiolen;
-	int error, idx, node;
+	int idx, node;
 	int pin, timo;
 
 	sc->sc_num_viewport = 8;
@@ -1579,8 +1586,8 @@ dwpcie_rk3568_init(struct dwpcie_softc *sc)
 		delay(10000);
 	}
 	if (timo == 0) {
-		error = ETIMEDOUT;
-		goto err;
+		sc->sc_link_down = 1;
+		goto out;
 	}
 
 	node = OF_getnodebyname(sc->sc_node, "legacy-interrupt-controller");
@@ -1602,12 +1609,11 @@ dwpcie_rk3568_init(struct dwpcie_softc *sc)
 		fdt_intr_register(&sc->sc_ic);
 	}
 
-	error = 0;
-err:
+out:
 	if (reset_gpiolen > 0)
 		free(reset_gpio, M_TEMP, reset_gpiolen);
 	
-	return error;
+	return 0;
 }
 
 int
@@ -1885,6 +1891,9 @@ dwpcie_conf_read(void *v, pcitag_t tag, int reg)
 		return HREAD4(sc, PCITAG_OFFSET(tag) | reg);
 	}
 
+	if (sc->sc_link_down)
+		return 0xffffffff;
+
 	if (bus == sc->sc_bus + 1) {
 		dwpcie_atu_config(sc, IATU_VIEWPORT_INDEX1,
 		    IATU_REGION_CTRL_1_TYPE_CFG0,
@@ -1921,6 +1930,9 @@ dwpcie_conf_write(void *v, pcitag_t tag, int reg, pcireg_t data)
 		HWRITE4(sc, PCITAG_OFFSET(tag) | reg, data);
 		return;
 	}
+
+	if (sc->sc_link_down)
+		return;
 
 	if (bus == sc->sc_bus + 1) {
 		dwpcie_atu_config(sc, IATU_VIEWPORT_INDEX1,
