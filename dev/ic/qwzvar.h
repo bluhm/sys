@@ -1,4 +1,4 @@
-/*	$OpenBSD: qwzvar.h,v 1.14 2026/04/26 19:25:08 mglocker Exp $	*/
+/*	$OpenBSD: qwzvar.h,v 1.17 2026/05/19 04:17:51 mglocker Exp $	*/
 
 /*
  * Copyright (c) 2018-2019 The Linux Foundation.
@@ -1125,7 +1125,7 @@ struct ath12k_spt_info {
 
 struct dp_rx_tid {
 	uint8_t tid;
-	struct qwz_dmamem *mem;
+	const struct qwz_dmamem *mem;
 	uint32_t *vaddr;
 	uint64_t paddr;
 	uint32_t size;
@@ -1291,6 +1291,17 @@ struct qwz_dp {
 	struct dp_srng rx_mac_buf_ring[MAX_RXDMA_PER_PDEV];
 	struct dp_srng rxdma_err_dst_ring[MAX_RXDMA_PER_PDEV];
 	struct dp_rxdma_mon_ring rxdma_mon_buf_ring;
+
+	/*
+	 * Cache of DMA memory regions used for Rx aggregation.
+	 * We used to free these DMA allocations in interrupt context but
+	 * destroying DMA memory in interrupt context is not allowed.
+	 *
+	 * This array contains enough entries for client station mode.
+	 * It will need to grow in order to support multiple clients if
+	 * support for HostAP mode gets added to the driver.
+	 */
+	struct qwz_dmamem *rx_tid_mem[HAL_DESC_REO_NON_QOS_TID + 1];
 };
 
 #define ATH12K_SHADOW_DP_TIMER_INTERVAL 20
@@ -1951,6 +1962,7 @@ struct qwz_softc {
 	struct qwz_survey_info	survey[IEEE80211_CHAN_MAX];
 
 	int			attached;
+	int			fw_initialized;
 	struct {
 		u_char *data;
 		size_t size;
@@ -1982,6 +1994,8 @@ struct qwz_softc {
 
 	uint16_t			qmi_txn_id;
 	int				qmi_cal_done;
+	int				single_chip_mlo_support;
+	uint8_t				qmi_phy_cap_num_phy;
 	struct qwz_qmi_ce_cfg		qmi_ce_cfg;
 	struct qwz_qmi_target_info	qmi_target;
 	struct qwz_qmi_dev_mem_info	qmi_dev_mem[ATH12K_QMI_WLFW_MAX_DEV_MEM_NUM_V01];

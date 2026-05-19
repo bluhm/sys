@@ -272,9 +272,6 @@
 #define	MT_RX_MCU_RING_BASE		0xd4540
 #define	MT_RX_FWDL_RING_BASE		0xd4500
 
-#define	MT_PCIE_MAC_BASE		0x10000
-#define	MT_PCIE_MAC_INT_ENABLE		0x10188
-
 #define	MT_INFRA_CFG_BASE		0xfe000
 #define	MT_HIF_REMAP_L1			0xfe24c
 #define	MT_HIF_REMAP_L1_MASK		0x0000ffff
@@ -288,7 +285,7 @@
 #define	MT_SWDEF_ICAP_MODE		1
 #define	MT_SWDEF_SPECTRUM_MODE		2
 
-#define	MT_DMASHDL_SW_CONTROL		0xd6004
+#define	MT_DMASHDL_SW_CONTROL		0x7c026004
 #define	MT_DMASHDL_DMASHDL_BYPASS	(1U << 28)
 #define	MT_DMASHDL_OPTIONAL		0xd6008
 #define	MT_DMASHDL_PAGE			0xd600c
@@ -1402,5 +1399,13 @@ enum mt76_phy_type {
 #define	PHY_TYPE_BIT_VHT		(1U << 5)
 #define	PHY_TYPE_BIT_HE			(1U << 6)
 
+/* P-RXV DW0 */
+#define	MT_PRXV_RCPIX_MASK		0x000000ff
+#define	MT_PRXV_RCPI0_SHIFT		0
+#define	MT_PRXV_RCPI1_SHIFT		8
+#define	MT_PRXV_RCPI2_SHIFT		16
+#define	MT_PRXV_RCPI3_SHIFT		24
+
 #define	rssi_to_rcpi(rssi)		(2 * (rssi) + 220)
-#define	rcpi_to_rssi(field, rxv)	((FIELD_GET(field, rxv) - 220) / 2)
+#define	rcpi_to_rssi(shift, rxv)	\
+	((((int)(((rxv) >> (shift)) & (MT_PRXV_RCPIX_MASK))) - 220) / 2)

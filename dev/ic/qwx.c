@@ -1,4 +1,4 @@
-/*	$OpenBSD: qwx.c,v 1.103 2026/03/29 05:29:02 mglocker Exp $	*/
+/*	$OpenBSD: qwx.c,v 1.111 2026/05/19 10:36:02 stsp Exp $	*/
 
 /*
  * Copyright 2023 Stefan Sperling <stsp@openbsd.org>
@@ -402,6 +402,12 @@ qwx_stop(struct ifnet *ifp)
 
 	rw_assert_wrlock(&sc->ioctl_rwl);
 
+	if (ic->ic_opmode == IEEE80211_M_STA &&
+	    ic->ic_state == IEEE80211_S_RUN &&
+	    (ic->ic_bss->ni_flags & IEEE80211_NODE_MFP) &&
+	    ic->ic_bss->ni_port_valid)
+		qwx_mfp_leave(sc);
+
 	timeout_del(&sc->mon_reap_timer);
 	qwx_dp_stop_shadow_timers(sc);
 	qwx_ce_stop_shadow_timers(sc);
@@ -417,19 +423,14 @@ qwx_stop(struct ifnet *ifp)
 	qwx_del_task(sc, systq, &sc->bgscan_task);
 	refcnt_finalize(&sc->task_refs, "qwxstop");
 
-	clear_bit(ATH11K_FLAG_CRASH_FLUSH, sc->sc_flags);
-
-	if (ic->ic_opmode == IEEE80211_M_STA &&
-	    ic->ic_state == IEEE80211_S_RUN &&
-	    (ic->ic_bss->ni_flags & IEEE80211_NODE_MFP))
-		qwx_mfp_leave(sc);
-
 	qwx_setkey_clear(sc);
 
 	ifp->if_timer = sc->sc_tx_timer = 0;
 
 	ifp->if_flags &= ~IFF_RUNNING;
 	ifq_clr_oactive(&ifp->if_snd);
+
+	clear_bit(ATH11K_FLAG_CRASH_FLUSH, sc->sc_flags);
 
 	/*
 	 * Manually run the newstate task's code for switching to INIT state.
@@ -1138,6 +1139,14 @@ qwx_newstate_task(void *arg)
 	if (nstate <= ostate) {
 		switch (ostate) {
 		case IEEE80211_S_RUN:
+			if (ic->ic_opmode == IEEE80211_M_STA &&
+			    (ifp->if_flags & IFF_RUNNING) &&
+			    (ic->ic_bss->ni_flags & IEEE80211_NODE_MFP) &&
+			    ic->ic_bss->ni_port_valid &&
+			    (nstate != IEEE80211_S_AUTH ||
+			     sc->ns_arg != IEEE80211_FC0_SUBTYPE_DEAUTH))
+				qwx_mfp_leave(sc);
+
 			err = qwx_run_stop(sc);
 			if (err)
 				goto out;
@@ -10994,6 +11003,15 @@ fail_link_desc_cleanup:
 }
 
 void
+qwx_dp_rx_tid_clear(struct qwx_softc *sc, struct dp_rx_tid *rx_tid)
+{
+	rx_tid->mem = NULL;
+	rx_tid->vaddr = NULL;
+	rx_tid->paddr = 0ULL;
+	rx_tid->size = 0;
+}
+
+void
 qwx_dp_reo_cmd_list_cleanup(struct qwx_softc *sc)
 {
 	struct qwx_dp *dp = &sc->dp;
@@ -11006,13 +11024,7 @@ qwx_dp_reo_cmd_list_cleanup(struct qwx_softc *sc)
 	TAILQ_FOREACH_SAFE(cmd, &dp->reo_cmd_list, entry, tmp) {
 		TAILQ_REMOVE(&dp->reo_cmd_list, cmd, entry);
 		rx_tid = &cmd->data;
-		if (rx_tid->mem) {
-			qwx_dmamem_free(sc->sc_dmat, rx_tid->mem);
-			rx_tid->mem = NULL;
-			rx_tid->vaddr = NULL;
-			rx_tid->paddr = 0ULL;
-			rx_tid->size = 0;
-		}
+		qwx_dp_rx_tid_clear(sc, rx_tid);
 		free(cmd, M_DEVBUF, sizeof(*cmd));
 	}
 
@@ -11021,13 +11033,7 @@ qwx_dp_reo_cmd_list_cleanup(struct qwx_softc *sc)
 		TAILQ_REMOVE(&dp->reo_cmd_cache_flush_list, cmd_cache, entry);
 		dp->reo_cmd_cache_flush_count--;
 		rx_tid = &cmd_cache->data;
-		if (rx_tid->mem) {
-			qwx_dmamem_free(sc->sc_dmat, rx_tid->mem);
-			rx_tid->mem = NULL;
-			rx_tid->vaddr = NULL;
-			rx_tid->paddr = 0ULL;
-			rx_tid->size = 0;
-		}
+		qwx_dp_rx_tid_clear(sc, rx_tid);
 		free(cmd_cache, M_DEVBUF, sizeof(*cmd_cache));
 	}
 #ifdef notyet
@@ -11058,6 +11064,13 @@ qwx_dp_free(struct qwx_softc *sc)
 		free(dp->tx_ring[i].tx_status, M_DEVBUF,
 		    sizeof(struct hal_wbm_release_ring) * DP_TX_COMP_RING_SIZE);
 		dp->tx_ring[i].tx_status = NULL;
+	}
+
+	for (i = 0; i <= HAL_DESC_REO_NON_QOS_TID; i++) {
+		if (dp->rx_tid_mem[i]) {
+			qwx_dmamem_free(sc->sc_dmat, dp->rx_tid_mem[i]);
+			dp->rx_tid_mem[i] = NULL;
+		}
 	}
 
 	/* Deinit any SOC level resource */
@@ -14758,7 +14771,11 @@ qwx_peer_map_event(struct qwx_softc *sc, uint8_t vdev_id, uint16_t peer_id,
 	if (peer == NULL)
 		return;
 
-	ni = ieee80211_find_node(ic, mac_addr);
+	if (ic->ic_opmode == IEEE80211_M_STA && ic->ic_bss != NULL &&
+	    IEEE80211_ADDR_EQ(ic->ic_bss->ni_macaddr, mac_addr))
+		ni = ic->ic_bss;
+	else
+		ni = ieee80211_find_node(ic, mac_addr);
 	if (ni == NULL)
 		return;
 	nq = (struct qwx_node *)ni;
@@ -20386,6 +20403,8 @@ qwx_core_start(struct qwx_softc *sc)
 		goto err_mac_destroy;
 	}
 
+	sc->wmi.unified_ready = 0;
+
 	ret = qwx_wmi_cmd_init(sc);
 	if (ret) {
 		printf("%s: failed to send wmi init cmd: %d\n", __func__, ret);
@@ -24516,13 +24535,7 @@ qwx_dp_reo_cmd_free(struct qwx_dp *dp, void *ctx,
 		printf("%s: failed to flush rx tid hw desc, tid %d status %d\n",
 		    sc->sc_dev.dv_xname, rx_tid->tid, status);
 
-	if (rx_tid->mem) {
-		qwx_dmamem_free(sc->sc_dmat, rx_tid->mem);
-		rx_tid->mem = NULL;
-		rx_tid->vaddr = NULL;
-		rx_tid->paddr = 0ULL;
-		rx_tid->size = 0;
-	}
+	qwx_dp_rx_tid_clear(sc, rx_tid);
 }
 
 void
@@ -24557,13 +24570,7 @@ qwx_dp_reo_cache_flush(struct qwx_softc *sc, struct dp_rx_tid *rx_tid)
 	if (ret) {
 		printf("%s: failed to send HAL_REO_CMD_FLUSH_CACHE cmd, "
 		    "tid %d (%d)\n", sc->sc_dev.dv_xname, rx_tid->tid, ret);
-		if (rx_tid->mem) {
-			qwx_dmamem_free(sc->sc_dmat, rx_tid->mem);
-			rx_tid->mem = NULL;
-			rx_tid->vaddr = NULL;
-			rx_tid->paddr = 0ULL;
-			rx_tid->size = 0;
-		}
+		qwx_dp_rx_tid_clear(sc, rx_tid);
 	}
 }
 
@@ -24577,7 +24584,8 @@ qwx_dp_rx_tid_del_func(struct qwx_dp *dp, void *ctx,
 	uint64_t now;
 
 	if (status == HAL_REO_CMD_DRAIN) {
-		goto free_desc;
+		qwx_dp_rx_tid_clear(sc, rx_tid);
+		return;
 	} else if (status != HAL_REO_CMD_SUCCESS) {
 		/* Shouldn't happen! Cleanup in case of other failure? */
 		printf("%s: failed to delete rx tid %d hw descriptor %d\n",
@@ -24586,17 +24594,16 @@ qwx_dp_rx_tid_del_func(struct qwx_dp *dp, void *ctx,
 	}
 
 	elem = malloc(sizeof(*elem), M_DEVBUF, M_ZERO | M_NOWAIT);
-	if (!elem)
-		goto free_desc;
+	if (!elem) {
+		qwx_dp_rx_tid_clear(sc, rx_tid);
+		return;
+	}
 
 	now = getnsecuptime();
 	elem->ts = now;
 	memcpy(&elem->data, rx_tid, sizeof(*rx_tid));
 
-	rx_tid->mem = NULL;
-	rx_tid->vaddr = NULL;
-	rx_tid->paddr = 0ULL;
-	rx_tid->size = 0;
+	qwx_dp_rx_tid_clear(sc, rx_tid);
 
 #ifdef notyet
 	spin_lock_bh(&dp->reo_cmd_lock);
@@ -24623,15 +24630,6 @@ qwx_dp_rx_tid_del_func(struct qwx_dp *dp, void *ctx,
 #ifdef notyet
 	spin_unlock_bh(&dp->reo_cmd_lock);
 #endif
-	return;
-free_desc:
-	if (rx_tid->mem) {
-		qwx_dmamem_free(sc->sc_dmat, rx_tid->mem);
-		rx_tid->mem = NULL;
-		rx_tid->vaddr = NULL;
-		rx_tid->paddr = 0ULL;
-		rx_tid->size = 0;
-	}
 }
 
 void
@@ -24660,13 +24658,7 @@ qwx_peer_rx_tid_delete(struct qwx_softc *sc, struct ath11k_peer *peer,
 			    sc->sc_dev.dv_xname, tid, ret);
 		}
 
-		if (rx_tid->mem) {
-			qwx_dmamem_free(sc->sc_dmat, rx_tid->mem);
-			rx_tid->mem = NULL;
-			rx_tid->vaddr = NULL;
-			rx_tid->paddr = 0ULL;
-			rx_tid->size = 0;
-		}
+		qwx_dp_rx_tid_clear(sc, rx_tid);
 	}
 }
 
@@ -24781,13 +24773,11 @@ qwx_dp_rx_tid_mem_free(struct qwx_softc *sc, struct ieee80211_node *ni,
 	if (peer) {
 		rx_tid = &peer->rx_tid[tid];
 
-		if (rx_tid->mem) {
-			qwx_dmamem_free(sc->sc_dmat, rx_tid->mem);
-			rx_tid->mem = NULL;
-			rx_tid->vaddr = NULL;
-			rx_tid->paddr = 0ULL;
-			rx_tid->size = 0;
-		}
+		/*
+		 * Nothing to free here since DMA memory pointers are
+		 * managed as part of qwx_softc.
+		 */
+		qwx_dp_rx_tid_clear(sc, rx_tid);
 
 		rx_tid->active = 0;
 	}
@@ -24801,6 +24791,7 @@ qwx_peer_rx_tid_setup(struct qwx_softc *sc, struct ieee80211_node *ni,
     int vdev_id, int pdev_id, uint8_t tid, uint32_t ba_win_sz, uint16_t ssn,
     enum hal_pn_type pn_type)
 {
+	struct qwx_dp *dp = &sc->dp;
 	struct qwx_node *nq = (struct qwx_node *)ni;
 	struct ath11k_peer *peer;
 	struct dp_rx_tid *rx_tid;
@@ -24856,18 +24847,25 @@ qwx_peer_rx_tid_setup(struct qwx_softc *sc, struct ieee80211_node *ni,
 	else
 		hw_desc_sz = qwx_hal_reo_qdesc_size(DP_BA_WIN_SZ_MAX, tid);
 
-	rx_tid->mem = qwx_dmamem_alloc(sc->sc_dmat, hw_desc_sz,
-	    HAL_LINK_DESC_ALIGN);
-	if (rx_tid->mem == NULL) {
+	if (dp->rx_tid_mem[tid] == NULL) {
+		dp->rx_tid_mem[tid] = qwx_dmamem_alloc(sc->sc_dmat, hw_desc_sz,
+		    HAL_LINK_DESC_ALIGN);
+		if (dp->rx_tid_mem[tid] == NULL) {
 #ifdef notyet
-		spin_unlock_bh(&ab->base_lock);
+			spin_unlock_bh(&ab->base_lock);
 #endif
-		return ENOMEM;
+			return ENOMEM;
+		}
 	}
+
+	rx_tid->mem = dp->rx_tid_mem[tid];
 
 	vaddr = QWX_DMA_KVA(rx_tid->mem);
 
 	qwx_hal_reo_qdesc_setup(vaddr, tid, ba_win_sz, ssn, pn_type);
+
+	bus_dmamap_sync(sc->sc_dmat, rx_tid->mem->map,
+	    0, rx_tid->mem->size, BUS_DMASYNC_PREWRITE);
 
 	paddr = QWX_DMA_DVA(rx_tid->mem);
 
@@ -26123,10 +26121,6 @@ qwx_auth(struct qwx_softc *sc)
 	qwx_recalculate_mgmt_rate(sc, ni, arvif->vdev_id, pdev->pdev_id);
 	ni->ni_txrate = 0;
 	
-	ret = qwx_mac_station_add(sc, arvif, pdev->pdev_id, ni);
-	if (ret)
-		return ret;
-
 	/* Start vdev. */
 	ret = qwx_mac_vdev_start(sc, arvif, pdev->pdev_id);
 	if (ret) {
@@ -26141,7 +26135,7 @@ qwx_auth(struct qwx_softc *sc)
 	 */
 	qwx_recalculate_mgmt_rate(sc, ni, arvif->vdev_id, pdev->pdev_id);
 
-	return ret;
+	return qwx_mac_station_add(sc, arvif, pdev->pdev_id, ni);
 }
 
 int
@@ -26191,7 +26185,7 @@ qwx_peer_assoc_h_basic(struct qwx_softc *sc, struct qwx_vif *arvif,
 	arg->vdev_id = arvif->vdev_id;
 	arg->peer_associd = ni->ni_associd;
 	arg->auth_flag = 1;
-	arg->peer_listen_intval = ni->ni_intval;
+	arg->peer_listen_intval = 1;
 	arg->peer_nss = 1;
 	arg->peer_caps = ni->ni_capinfo;
 }

@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf_lb.c,v 1.76 2025/08/18 11:27:58 yasuoka Exp $ */
+/*	$OpenBSD: pf_lb.c,v 1.78 2026/05/12 09:34:00 henning Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
