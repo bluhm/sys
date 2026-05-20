@@ -82,7 +82,7 @@ dest6_input(struct mbuf **mp, int *offp, int proto, int af,
 			break;
 		default:		/* unknown option */
 			optlen = ip6_unknown_opt(mp, opt,
-			    opt - mtod(*mp, u_int8_t *));
+			    *offp + (opt - (u_int8_t *)dstopts));
 			if (optlen == -1)
 				return (IPPROTO_DONE);
 			optlen += 2;
