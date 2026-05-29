@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_qwz_pci.c,v 1.11 2026/05/18 13:47:32 kirill Exp $	*/
+/*	$OpenBSD: if_qwz_pci.c,v 1.13 2026/05/26 14:55:16 kirill Exp $	*/
 
 /*
  * Copyright 2023 Stefan Sperling <stsp@openbsd.org>
@@ -969,8 +969,8 @@ qwz_pci_attach(struct device *parent, struct device *self, void *aux)
 	ic->ic_sup_rates[IEEE80211_MODE_11B] = ieee80211_std_rateset_11b;
 	ic->ic_sup_rates[IEEE80211_MODE_11G] = ieee80211_std_rateset_11g;
 
-	ic->ic_htcaps = IEEE80211_HTCAP_SGI20 | IEEE80211_HTCAP_AMSDU7935;
-	ic->ic_htcaps |=
+	ic->ic_htcaps = IEEE80211_HTCAP_SGI20 | IEEE80211_HTCAP_SGI40 |
+	    IEEE80211_HTCAP_CBW20_40 | IEEE80211_HTCAP_AMSDU7935 |
 	    (IEEE80211_HTCAP_SMPS_DIS << IEEE80211_HTCAP_SMPS_SHIFT);
 	ic->ic_htxcaps = 0;
 	ic->ic_txbfcaps = 0;
@@ -1007,6 +1007,10 @@ qwz_pci_attach(struct device *parent, struct device *self, void *aux)
 	ic->ic_updateedca = qwz_updateedca;
 	ic->ic_updatedtim = qwz_updatedtim;
 #endif
+	ic->ic_ampdu_rx_start = qwz_ampdu_rx_start;
+	ic->ic_ampdu_rx_stop = qwz_ampdu_rx_stop;
+	ic->ic_ampdu_tx_start = qwz_ampdu_tx_start;
+	ic->ic_ampdu_tx_stop = NULL;
 	/*
 	 * We cannot read the MAC address without loading the
 	 * firmware from disk. Postpone until mountroot is done.

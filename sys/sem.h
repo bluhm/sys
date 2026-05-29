@@ -1,4 +1,4 @@
-/*	$OpenBSD: sem.h,v 1.27 2026/05/16 21:17:43 mvs Exp $	*/
+/*	$OpenBSD: sem.h,v 1.29 2026/05/23 07:24:42 jca Exp $	*/
 /*	$NetBSD: sem.h,v 1.8 1996/02/09 18:25:29 christos Exp $	*/
 
 /*
@@ -103,6 +103,7 @@ union semun {
 
 #ifdef _KERNEL
 #include <sys/queue.h>
+#include <sys/refcnt.h>
 
 /*
  * Kernel implementation stuff
@@ -121,6 +122,7 @@ struct semid_ds_kern {
 	time_t		sem_ctime;	/* last change time */
 	    				/* Times measured in secs since */
 	    				/* 00:00:00 GMT, Jan. 1, 1970 */
+	struct refcnt	sem_refcnt;
 };
 
 /*
