@@ -1,4 +1,4 @@
-/*	$OpenBSD: subr_hibernate.c,v 1.155 2026/02/11 22:34:41 deraadt Exp $	*/
+/*	$OpenBSD: subr_hibernate.c,v 1.158 2026/05/30 08:06:09 mlarkin Exp $	*/
 
 /*
  * Copyright (c) 2011 Ariane van der Steldt <ariane@stack.nl>
@@ -1335,6 +1335,15 @@ hibernate_process_chunk(union hibernate_info *hib,
 {
 	char *pva = (char *)hib->piglet_va;
 
+	if (chunk->compressed_size > HIBERNATE_CHUNK_SIZE * 2) {
+		/*
+		 * XXX - this will likely reboot/hang most machines
+		 *       since the console output buffer will be unmapped,
+		 *       but there's not much else we can do here.
+		 */
+		panic("hibernate compressed chunk too large");
+	}
+
 	hibernate_copy_chunk_to_piglet(img_cur,
 	 (vaddr_t)(pva + (HIBERNATE_CHUNK_SIZE * 2)), chunk->compressed_size);
 	hibernate_inflate_region(hib, chunk->base,
@@ -1714,17 +1723,34 @@ hibernate_read_image(union hibernate_info *hib)
 	compressed_size = 0;
 
 	chunks = (struct hibernate_disk_chunk *)chunktable;
+	if (hib->chunk_ctr > (HIBERNATE_CHUNK_TABLE_SIZE /
+	    sizeof(struct hibernate_disk_chunk))) {
+		status = 1;
+		goto unmap;
+	}
 
-	for (i = 0; i < hib->chunk_ctr; i++)
+	for (i = 0; i < hib->chunk_ctr; i++) {
+		/* check for overflow */
+		if (compressed_size + chunks[i].compressed_size <
+		    compressed_size) {
+			status = 1;
+			goto unmap;
+		}
 		compressed_size += chunks[i].compressed_size;
+	}
 
 	disk_size = compressed_size;
 
 	printf("unhibernating @ block %lld length %luMB\n",
 	    hib->image_offset, compressed_size / (1024 * 1024));
 
-	/* Allocate the pig area */
+	/* Allocate the pig area and check for overflow */
 	pig_sz = compressed_size + HIBERNATE_CHUNK_SIZE;
+	if (pig_sz < compressed_size) {
+		status = 1;
+		goto unmap;
+	}
+
 	if (uvm_pmr_alloc_pig(&pig_start, pig_sz, hib->piglet_pa) == ENOMEM) {
 		status = 1;
 		goto unmap;
