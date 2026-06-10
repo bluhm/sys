@@ -1323,8 +1323,11 @@ sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
 	if (fd < 0) {
 		if ((error = sblock(&so->so_rcv, SBL_WAIT)) != 0)
 			return (error);
-		if (so->so_sp && so->so_sp->ssp_socket)
-			sounsplice(so, so->so_sp->ssp_socket, 0);
+		solock(so);
+		sosp = so->so_sp ? so->so_sp->ssp_socket : NULL;
+		sounlock(so);
+		if (sosp != NULL)
+			sounsplice(so, sosp, 0);
 		else
 			error = EPROTO;
 		sbunlock(&so->so_rcv);
