@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_prot.c,v 1.84 2025/12/03 17:05:53 kurt Exp $	*/
+/*	$OpenBSD: kern_prot.c,v 1.86 2026/06/10 04:46:18 mvs Exp $	*/
 /*	$NetBSD: kern_prot.c,v 1.33 1996/02/09 18:59:42 christos Exp $	*/
 
 /*
@@ -1032,11 +1032,13 @@ sys_getlogin_r(struct proc *p, void *v, register_t *retval)
 	} */ *uap = v;
 	size_t namelen = SCARG(uap, namelen);
 	struct session *s = p->p_p->ps_pgrp->pg_session;
+	char buf[sizeof(s->s_login)];
 	int error;
 
 	if (namelen > sizeof(s->s_login))
 		namelen = sizeof(s->s_login);
-	error = copyoutstr(s->s_login, SCARG(uap, namebuf), namelen, NULL);
+	strlcpy(buf, s->s_login, namelen);
+	error = copyoutstr(buf, SCARG(uap, namebuf), namelen, NULL);
 	if (error == ENAMETOOLONG)
 		error = ERANGE;
 	*retval = error;
@@ -1052,16 +1054,17 @@ sys_setlogin(struct proc *p, void *v, register_t *retval)
 	struct sys_setlogin_args /* {
 		syscallarg(const char *) namebuf;
 	} */ *uap = v;
-	struct session *s = p->p_p->ps_pgrp->pg_session;
+	struct session *s;
 	char buf[sizeof(s->s_login)];
 	int error;
 
 	if ((error = suser(p)) != 0)
 		return (error);
 	error = copyinstr(SCARG(uap, namebuf), buf, sizeof(buf), NULL);
-	if (error == 0)
+	if (error == 0) {
+		s = p->p_p->ps_pgrp->pg_session;
 		strlcpy(s->s_login, buf, sizeof(s->s_login));
-	else if (error == ENAMETOOLONG)
+	} else if (error == ENAMETOOLONG)
 		error = EINVAL;
 	return (error);
 }
@@ -1122,6 +1125,7 @@ sys_getthrname(struct proc *curp, void *v, register_t *retval)
 		syscallarg(size_t) len;
 	} */ *uap = v;
 	struct proc *p;
+	char buf[sizeof(p->p_name)];
 	size_t len;
 	int tid = SCARG(uap, tid);
 	int error;
@@ -1129,11 +1133,12 @@ sys_getthrname(struct proc *curp, void *v, register_t *retval)
 	p = tid ? tfind_user(tid, curp->p_p) : curp;
 	if (p == NULL)
                 return ESRCH;
+	strlcpy(buf, p->p_name, sizeof(buf));
 
 	len = SCARG(uap, len);
-	if (len > sizeof(p->p_name))
-		len = sizeof(p->p_name);
-	error = copyoutstr(p->p_name, SCARG(uap, name), len, NULL);
+	if (len > sizeof(buf))
+		len = sizeof(buf);
+	error = copyoutstr(buf, SCARG(uap, name), len, NULL);
 	if (error == ENAMETOOLONG)
 		error = ERANGE;
 	*retval = error;
@@ -1148,21 +1153,21 @@ sys_setthrname(struct proc *curp, void *v, register_t *retval)
 		syscallarg(const char *) name;
 	} */ *uap = v;
 	struct proc *p;
-	char buf[sizeof p->p_name];
+	char buf[sizeof(p->p_name)];
 	int tid = SCARG(uap, tid);
 	int error;
 
-	p = tid ? tfind_user(tid, curp->p_p) : curp;
-	if (p == NULL)
-                return ESRCH;
-
-	error = copyinstr(SCARG(uap, name), buf, sizeof buf, NULL);
+	error = copyinstr(SCARG(uap, name), buf, sizeof(buf), NULL);
 	if (error == ENAMETOOLONG) {
 		buf[sizeof(buf) - 1] = '\0';
 		error = 0;
 	}
-	if (error == 0)
+	if (error == 0) {
+		p = tid ? tfind_user(tid, curp->p_p) : curp;
+		if (p == NULL)
+		        return ESRCH;
 		strlcpy(p->p_name, buf, sizeof(p->p_name));
+	}
 	*retval = error;
 	return 0;
 }

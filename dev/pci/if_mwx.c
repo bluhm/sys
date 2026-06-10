@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_mwx.c,v 1.24 2026/06/04 19:26:48 claudio Exp $ */
+/*	$OpenBSD: if_mwx.c,v 1.27 2026/06/09 21:27:25 claudio Exp $ */
 /*
  * Copyright (c) 2022 Claudio Jeker <claudio@openbsd.org>
  * Copyright (c) 2021 MediaTek Inc.
@@ -281,9 +281,6 @@ enum mwx_hw_type {
 	MWX_HW_MT7925,
 };
 
-#define	MWX_IS_CONNAC3(x)	((x)->sc_hwtype == MWX_HW_MT7925)
-#define	MWX_IS_CONNAC2(x)	(!MWX_IS_CONNAC3(x))
-
 struct mwx_softc {
 	struct device		sc_dev;
 	struct ieee80211com	sc_ic;
@@ -515,7 +512,6 @@ int		mwx_mcu_drv_pmctrl(struct mwx_softc *);
 int		mwx_wfsys_reset(struct mwx_softc *);
 uint32_t	mwx_reg_addr(struct mwx_softc *, uint32_t);
 int		mwx_init_hardware(struct mwx_softc *);
-int		mwx_mcu_init(struct mwx_softc *);
 int		mwx_load_firmware(struct mwx_softc *);
 int		mt7921_mac_wtbl_update(struct mwx_softc *, int);
 void		mt7921_mac_init_band(struct mwx_softc *, uint32_t);
@@ -533,6 +529,7 @@ int		mt7925_mcu_get_nic_capability(struct mwx_softc *);
 int		mt7921_mcu_fw_log_2_host(struct mwx_softc *, uint8_t);
 int		mt7925_mcu_fw_log_2_host(struct mwx_softc *, uint8_t);
 int		mt7921_mcu_set_eeprom(struct mwx_softc *);
+int		mt7925_mcu_set_eeprom(struct mwx_softc *);
 int		mt7921_mcu_set_rts_thresh(struct mwx_softc *, uint32_t,
 		    uint8_t);
 int		mwx_mcu_set_deep_sleep(struct mwx_softc *, int);
@@ -1916,7 +1913,7 @@ mwx_buf_fill(struct mwx_softc *sc, struct mwx_queue_data *md,
 	buf0 = md->md_map->dm_segs[0].ds_addr;
 	len0 = md->md_map->dm_segs[0].ds_len;
 	ctrl = MT_DMA_CTL_SD_LEN0(len0);
-	if (MWX_IS_CONNAC2(sc))
+	if (sc->sc_hwtype != MWX_HW_MT7925)
 		ctrl |= MT_DMA_CTL_LAST_SEC0;
 
 	desc->buf0 = htole32(buf0);
@@ -2962,15 +2959,27 @@ mwx_init_hardware(struct mwx_softc *sc)
 	 * which should be set before firmware download stage.
 	 */
 	mwx_write(sc, MT_SWDEF_MODE, MT_SWDEF_NORMAL_MODE);
-	mwx_barrier(sc);
 
-	rv = mwx_mcu_init(sc);
-	if (rv != 0)
+	if ((rv = mwx_load_firmware(sc)) != 0)
 		goto fail;
-	/* TODO override eeprom for systems with FDT */
-	rv = mt7921_mcu_set_eeprom(sc);
-	if (rv != 0)
-		goto fail;
+
+	if (sc->sc_hwtype == MWX_HW_MT7925) {
+		if (mt7925_mcu_get_nic_capability(sc) != 0)
+			goto fail;
+		if (mt7925_mcu_fw_log_2_host(sc, 1) != 0)
+			goto fail;
+		if (mt7925_mcu_set_eeprom(sc) != 0)
+			goto fail;
+	} else {
+		if (mt7921_mcu_get_nic_capability(sc) != 0)
+			goto fail;
+		if (mt7921_mcu_fw_log_2_host(sc, 1) != 0)
+			goto fail;
+		/* TODO override eeprom for systems with FDT */
+		if (mt7921_mcu_set_eeprom(sc) != 0)
+			goto fail;
+	}
+
 	rv = mt7921_mac_init(sc);
 	if (rv != 0)
 		goto fail;
@@ -2985,31 +2994,6 @@ mwx_init_hardware(struct mwx_softc *sc)
 	if (rv != 0)
 		return rv;
 	return EAGAIN;
-}
-
-int
-mwx_mcu_init(struct mwx_softc *sc)
-{
-	int rv;
-
-	if ((rv = mwx_load_firmware(sc)) != 0)
-		return rv;
-
-	if (sc->sc_hwtype == MWX_HW_MT7925) {
-		if ((rv = mt7925_mcu_get_nic_capability(sc)) != 0)
-			return rv;
-		if ((rv = mt7925_mcu_fw_log_2_host(sc, 1)) != 0)
-			return rv;
-	} else {
-		if ((rv = mt7921_mcu_get_nic_capability(sc)) != 0)
-			return rv;
-		if ((rv = mt7921_mcu_fw_log_2_host(sc, 1)) != 0)
-			return rv;
-	}
-
-	/* TODO mark MCU running */
-
-	return 0;
 }
 
 static inline uint32_t
@@ -3059,11 +3043,13 @@ int
 mwx_load_firmware(struct mwx_softc *sc)
 {
 	const struct mwx_patch_hdr *hdr;
+	const struct mwx_patch_sec *sec;
 	const struct mwx_fw_trailer *fwhdr;
+	const struct mwx_fw_region *region;
 	const char *rompatch, *fw;
 	u_char *buf, *fwbuf, *dl;
 	size_t buflen, fwlen, offset = 0;
-	uint32_t reg, override = 0, option = 0;
+	uint32_t reg, n_region, override = 0, option = 0;
 	int i, rv, sem;
 
 	reg = mwx_read(sc, MT_CONN_ON_MISC) & MT_TOP_MISC2_FW_N9_RDY;
@@ -3114,23 +3100,28 @@ mwx_load_firmware(struct mwx_softc *sc)
 		goto fail;
 
 	if (buflen < sizeof(*hdr)) {
-		DPRINTF("%s: invalid firmware\n", DEVNAME(sc));
+		printf("%s: invalid firmware\n", DEVNAME(sc));
 		rv = EINVAL;
 		goto out;
 	}
 	hdr = (struct mwx_patch_hdr *)buf;
+	n_region = be32toh(hdr->desc.n_region);
+	if (buflen < sizeof(*hdr) + n_region * sizeof(*sec)) {
+		printf("%s: invalid firmware, short header\n", DEVNAME(sc));
+		rv = EINVAL;
+		goto out;
+	}
 	printf("%s: HW/SW version: 0x%x, build time: %.15s\n",
 	    DEVNAME(sc), be32toh(hdr->hw_sw_ver), hdr->build_date);
 
-	for (i = 0; i < be32toh(hdr->desc.n_region); i++) {
-		const struct mwx_patch_sec *sec;
+	for (i = 0; i < n_region; i++) {
 		uint32_t len, addr, mode, sec_info;
 
 		sec = (struct mwx_patch_sec *)(buf + sizeof(*hdr) +
 		    i * sizeof(*sec));
 		if ((be32toh(sec->type) & PATCH_SEC_TYPE_MASK) !=
 		    PATCH_SEC_TYPE_INFO) {
-			DPRINTF("%s: invalid firmware sector\n", DEVNAME(sc));
+			printf("%s: invalid firmware sector\n", DEVNAME(sc));
 			rv = EINVAL;
 			goto out;
 		}
@@ -3140,6 +3131,13 @@ mwx_load_firmware(struct mwx_softc *sc)
 		dl = buf + be32toh(sec->offs);
 		sec_info = be32toh(sec->info.sec_key_idx);
 		mode = mwx_get_data_mode(sc, sec_info);
+
+		if (dl + len > buf + buflen) {
+			printf("%s: firmware sector %d exceeds payload\n",
+			    DEVNAME(sc), i);
+			rv = EINVAL;
+			goto out;
+		}
 
 		rv = mwx_mcu_init_download(sc, addr, len, mode);
 		if (rv != 0) {
@@ -3169,12 +3167,22 @@ out:
 	if (rv != 0)
 		goto fail;
 
+	if (fwlen < sizeof(*fwhdr)) {
+		printf("%s: invalid WM firmware\n", DEVNAME(sc));
+		rv = EINVAL;
+		goto out;
+	}
 	fwhdr = (struct mwx_fw_trailer *)(fwbuf + fwlen - sizeof(*fwhdr));
 	printf("%s: WM firmware version: %.10s, build time: %.15s\n",
 	    DEVNAME(sc), fwhdr->fw_ver, fwhdr->build_date);
 
+	if (fwlen < sizeof(*fwhdr) + fwhdr->n_region * sizeof(*region)) {
+		printf("%s: invalid WM firmware, short header\n", DEVNAME(sc));
+		rv = EINVAL;
+		goto out;
+	}
+
 	for (i = 0; i < fwhdr->n_region; i++) {
-		const struct mwx_fw_region *region;
 		uint32_t len, addr, mode;
 
 		region = (struct mwx_fw_region *)((u_char *)fwhdr -
@@ -3184,11 +3192,21 @@ out:
 		len = le32toh(region->len);
 		mode = mwx_mcu_gen_dl_mode(region->feature_set);
 
+		if (offset + len > fwlen - sizeof(*fwhdr) -
+		    fwhdr->n_region * sizeof(*region)) {
+			printf("%s: WM region %d exceeds firmware payload\n",
+			    DEVNAME(sc), i);
+			rv = EINVAL;
+			goto fail;
+		}
+
 		if (region->feature_set & FW_FEATURE_OVERRIDE_ADDR)
 			override = addr;
 		/* Skip non-download regions */
-		if (region->feature_set & FW_FEATURE_NON_DL)
+		if (region->feature_set & FW_FEATURE_NON_DL) {
+			offset += len;
 			continue;
+		}
 
 		rv = mwx_mcu_init_download(sc, addr, len, mode);
 		if (rv != 0) {
@@ -3634,7 +3652,7 @@ mt7925_mcu_fw_log_2_host(struct mwx_softc *sc, uint8_t ctrl)
 int
 mt7921_mcu_set_eeprom(struct mwx_softc *sc)
 {
-	struct req_hdr {
+	struct {
 		uint8_t	buffer_mode;
 		uint8_t	format;
 		uint8_t pad[2];
@@ -3644,6 +3662,27 @@ mt7921_mcu_set_eeprom(struct mwx_softc *sc)
 	};
 
 	return mwx_mcu_send_wait(sc, MCU_EXT_CMD_EFUSE_BUFFER_MODE, &req,
+	    sizeof(req));
+}
+
+int
+mt7925_mcu_set_eeprom(struct mwx_softc *sc)
+{
+	struct {
+		uint8_t		rsv[4];
+		uint16_t	tag;
+		uint16_t	len;
+		uint8_t		buffer_mode;
+		uint8_t		format;
+		uint16_t	buf_len;
+	} req = {
+		.tag = htole16(UNI_EFUSE_BUFFER_MODE),
+		.len = htole16(sizeof(req) - 4),
+		.buffer_mode = EE_MODE_EFUSE,
+		.format = EE_FORMAT_WHOLE,
+	};
+
+	return mwx_mcu_send_wait(sc, MCU_UNI_CMD_EFUSE_CTRL, &req,
 	    sizeof(req));
 }
 
