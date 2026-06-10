@@ -1323,9 +1323,9 @@ sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
 	if (fd < 0) {
 		if ((error = sblock(&so->so_rcv, SBL_WAIT)) != 0)
 			return (error);
-		solock(so);
+		mtx_enter(&so->so_rcv.sb_mtx);
 		sosp = so->so_sp ? so->so_sp->ssp_socket : NULL;
-		sounlock(so);
+		mtx_leave(&so->so_rcv.sb_mtx);
 		if (sosp != NULL)
 			sounsplice(so, sosp, 0);
 		else
