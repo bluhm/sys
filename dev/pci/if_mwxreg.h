@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_mwxreg.h,v 1.17 2026/06/09 21:27:25 claudio Exp $	*/
+/*	$OpenBSD: if_mwxreg.h,v 1.19 2026/06/10 14:28:59 claudio Exp $	*/
 /*
  * Copyright (c) 2022 Claudio Jeker <claudio@openbsd.org>
  * Copyright (C) 2021 MediaTek Inc.
@@ -28,6 +28,10 @@
 #define	MT_MDP_DCR1			0x820cd004
 #define	MT_MDP_DCR1_MAX_RX_LEN_MASK	0x0000fff8
 #define	MT_MDP_DCR1_MAX_RX_LEN_SHIFT	3
+
+#define	MT7925_MDP_BASE			0x820cc800
+#define	MT7925_MDP_DCR0			0x820cc800
+#define	MT7925_MDP_DCR1			0x820cc804
 
 /* TMAC: band 0 (0x21000), band 1 (0xa1000) */
 #define	MT_BAND_BASE0		0x820f0000
@@ -90,16 +94,34 @@
 #define	MT_WTBLON_TOP_WDUCR_GROUP	0x0007
 
 #define	MT_WTBL_UPDATE			0x820d4230
-#define	MT_WTBL_UPDATE_WLAN_IDX		0x000003ff
-#define	MT_WTBL_UPDATE_ADM_COUNT_CLEAR  (1U << 12)
+#define	MT7925_WTBL_UPDATE		0x820d4380
+#define	MT_WTBL_UPDATE_WLAN_IDX_MASK		0x000003ff
+#define	MT7925_WTBL_UPDATE_WLAN_IDX_MASK	0x00000fff
+#define	MT_WTBL_UPDATE_ADM_COUNT_CLEAR  	(1U << 12)
+#define	MT7925_WTBL_UPDATE_ADM_COUNT_CLEAR  	(1U << 14)
 #define	MT_WTBL_UPDATE_BUSY		(1U << 31)
 
+#define	MT_WTBL_ITCR			0x820d43b0
+#define	MT_WTBL_ITCR_WR			(1U << 16)
+#define	MT_WTBL_ITCR_EXEC		(1U << 31)
+#define	MT_WTBL_ITDR0			0x820d43b8
+#define	MT_WTBL_ITDR1			0x820d43bc
+#define	MT_WTBL_SPE_IDX_SEL		(1U << 6)
+
 #define	MT_WTBL_BASE			0x820d8000
+#if 0
 #define	MT_WTBL_LMAC_ID			GENMASK(14, 8)
 #define	MT_WTBL_LMAC_DW			GENMASK(7, 2)
 #define	MT_WTBL_LMAC_OFFS(_id, _dw)	(MT_WTBL_BASE | \
 					FIELD_PREP(MT_WTBL_LMAC_ID, _id) | \
 					FIELD_PREP(MT_WTBL_LMAC_DW, _dw))
+#endif
+
+#define	MT_WTBLOFF_TOP_RSCR(_band)	MT_BAND_ADDR(_band, 0x9008)
+#define	MT_WTBLOFF_TOP_RSCR_RCPI_MODE_MASK	(0x3U << 30)
+#define	MT_WTBLOFF_TOP_RSCR_RCPI_MODE_SHIFT	30
+#define	MT_WTBLOFF_TOP_RSCR_RCPI_PARAM_MASK	(0x3U << 24)
+#define	MT_WTBLOFF_TOP_RSCR_RCPI_PARAM_SHIFT	24
 
 /* AGG: band 0(0x20800), band 1(0xa0800) */
 #define	MT_AGG_ACR0(_band)		MT_BAND_ADDR(_band, 0x2084)
@@ -613,6 +635,29 @@ struct mt76_txwi {
 #define	MCU_EVENT_RESTART_DL			0xef
 #define	MCU_EVENT_COREDUMP			0xf0
 
+/* unified event commands */
+#define	MCU_UNI_EVENT_RESULT			0x01
+#define	MCU_UNI_EVENT_HIF_CTRL			0x03
+#define	MCU_UNI_EVENT_FW_LOG_2_HOST		0x04
+#define	MCU_UNI_EVENT_ACCESS_REG		0x06
+#define	MCU_UNI_EVENT_IE_COUNTDOWN		0x09
+#define	MCU_UNI_EVENT_COREDUMP			0x0a
+#define	MCU_UNI_EVENT_BSS_BEACON_LOSS		0x0c
+#define	MCU_UNI_EVENT_SCAN_DONE			0x0e
+#define	MCU_UNI_EVENT_RDD_REPORT		0x11
+#define	MCU_UNI_EVENT_ROC			0x27
+#define	MCU_UNI_EVENT_TX_DONE			0x2d
+#define	MCU_UNI_EVENT_THERMAL			0x35
+#define	MCU_UNI_EVENT_RSSI_MONITOR		0x41
+#define	MCU_UNI_EVENT_NIC_CAPAB			0x43
+#define	MCU_UNI_EVENT_WED_RRO			0x57
+#define	MCU_UNI_EVENT_PER_STA_INFO		0x6d
+#define	MCU_UNI_EVENT_ALL_STA_INFO		0x6e
+#define	MCU_UNI_EVENT_SDO			0x83
+
+#define	MCU_UNI_CMD_EVENT			(1U << 1)
+#define	MCU_UNI_CMD_UNSOLICITED_EVENT		(1U << 2)
+
 /* extended event commands */
 #define	MCU_EXT_EVENT_PS_SYNC			0x5
 #define	MCU_EXT_EVENT_FW_LOG_2_HOST		0x13
@@ -994,7 +1039,7 @@ struct mwx_connac_phy_cap {
 	uint8_t		he;
 } __packed;
 
-struct mt76_connac_config {
+struct mwx_connac_config {
 	uint16_t	id;
 	uint8_t		type;
 	uint8_t		resp_type;
