@@ -1323,15 +1323,15 @@ sosplice(struct socket *so, int fd, off_t max, struct timeval *tv)
 	if (fd < 0) {
 		if ((error = sblock(&so->so_rcv, SBL_WAIT)) != 0)
 			return (error);
-		solock_shared(so);
-		mtx_enter(&so->so_rcv.sb_mtx);
-		sosp = so->so_sp ? so->so_sp->ssp_socket : NULL;
-		mtx_leave(&so->so_rcv.sb_mtx);
-		sounlock_shared(so);
-		if (sosp != NULL)
-			sounsplice(so, sosp, 0);
+		if ((error = sblock(&so->so_snd, SBL_WAIT)) != 0) {
+			sbunlock(&so->so_rcv);
+			return (error);
+		}
+		if (so->so_sp && so->so_sp->ssp_socket)
+			sounsplice(so, so->so_sp->ssp_socket, 0);
 		else
 			error = EPROTO;
+		sbunlock(&so->so_snd);
 		sbunlock(&so->so_rcv);
 		return (error);
 	}
