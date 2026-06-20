@@ -1,4 +1,4 @@
-/* $OpenBSD: fuse_lookup.c,v 1.23 2026/01/22 11:53:31 helg Exp $ */
+/* $OpenBSD: fuse_lookup.c,v 1.26 2026/06/20 13:45:13 helg Exp $ */
 /*
  * Copyright (c) 2012-2013 Sylvestre Gallon <ccna.syl@gmail.com>
  *
@@ -59,11 +59,11 @@ fusefs_lookup(void *v)
 	lockparent = flags & LOCKPARENT;
 	wantparent = flags & (LOCKPARENT | WANTPARENT);
 
-	if ((error = VOP_ACCESS(vdp, VEXEC, cred, cnp->cn_proc)) != 0)
+	if ((error = VOP_ACCESS(vdp, VEXEC, cred, p)) != 0)
 		return (error);
 
 	if ((flags & ISLASTCN) && (vdp->v_mount->mnt_flag & MNT_RDONLY) &&
-	    (cnp->cn_nameiop == DELETE || cnp->cn_nameiop == RENAME))
+	    (nameiop == DELETE || nameiop == RENAME))
 		return (EROFS);
 
 	/*
@@ -82,7 +82,7 @@ fusefs_lookup(void *v)
 
 		/* got a real entry */
 		fbuf = fb_setup(cnp->cn_namelen + 1, dp->i_number,
-		    FBT_LOOKUP, p);
+		    FUSE_LOOKUP, p);
 
 		memcpy(fbuf->fb_dat, cnp->cn_nameptr, cnp->cn_namelen);
 		fbuf->fb_dat[cnp->cn_namelen] = '\0';
@@ -102,8 +102,8 @@ fusefs_lookup(void *v)
 				 * Access for write is interpreted as allowing
 				 * creation of files in the directory.
 				 */
-				if ((error = VOP_ACCESS(vdp, VWRITE, cred,
-				    cnp->cn_proc)) != 0)
+				error = VOP_ACCESS(vdp, VWRITE, cred, p);
+				if (error != 0)
 					return (error);
 
 				cnp->cn_flags |= SAVENAME;
@@ -119,8 +119,8 @@ fusefs_lookup(void *v)
 			return (ENOENT);
 		}
 
-		nid = fbuf->fb_ino;
-		nvtype = IFTOVT(fbuf->fb_attr.st_mode);
+		nid = fbuf->op.out.entry.nodeid;
+		nvtype = IFTOVT(fbuf->op.out.entry.attr.mode);
 		fb_delete(fbuf);
 
 		/*
@@ -137,7 +137,7 @@ fusefs_lookup(void *v)
 		/*
 		 * Write access to directory required to delete files.
 		 */
-		error = VOP_ACCESS(vdp, VWRITE, cred, cnp->cn_proc);
+		error = VOP_ACCESS(vdp, VWRITE, cred, p);
 		if (error)
 			goto reclaim;
 
@@ -148,7 +148,7 @@ fusefs_lookup(void *v)
 		/*
 		 * Write access to directory required to delete files.
 		 */
-		if ((error = VOP_ACCESS(vdp, VWRITE, cred, cnp->cn_proc)) != 0)
+		if ((error = VOP_ACCESS(vdp, VWRITE, cred, p)) != 0)
 			goto reclaim;
 
 		if (nid == dp->i_number)
@@ -159,6 +159,7 @@ fusefs_lookup(void *v)
 			goto reclaim;
 
 		tdp->v_type = nvtype;
+		VTOI(tdp)->i_parent_cache = dp->i_number;
 		*vpp = tdp;
 		cnp->cn_flags |= SAVENAME;
 
@@ -172,7 +173,7 @@ fusefs_lookup(void *v)
 		error = VFS_VGET(fmp->mp, nid, &tdp);
 
 		if (!error && tdp->v_type != VDIR) {
-			printf("%s: parent not dir: %s\n", __func__,
+			DPRINTF("%s: parent not dir: %s\n", __func__,
 			    cnp->cn_nameptr);
 			error = EIO;
 		}
@@ -193,6 +194,9 @@ fusefs_lookup(void *v)
 		}
 		*vpp = tdp;
 
+		/* Didn't actually make a call but vget increments lookup */
+		VTOI(tdp)->nlookup--;
+
 	} else if (nid == dp->i_number) {
 		vref(vdp);
 		*vpp = vdp;
@@ -203,6 +207,7 @@ fusefs_lookup(void *v)
 			goto reclaim;
 
 		tdp->v_type = nvtype;
+		VTOI(tdp)->i_parent_cache = dp->i_number;
 
 		/*
 		 * Cache the parent if it's a directory so that we can resolve
@@ -222,11 +227,10 @@ fusefs_lookup(void *v)
 	return (error);
 
 reclaim:
-	if (nid != dp->i_number && nid != FUSE_ROOTINO) {
-		fbuf = fb_setup(0, nid, FBT_RECLAIM, p);
-		if (fb_queue(fmp->dev, fbuf))
-			printf("fusefs: libfuse vnode reclaim failed\n");
-		fb_delete(fbuf);
+	if (nid != dp->i_number && nid != FUSE_ROOT_ID) {
+		fbuf = fb_setup(0, nid, FUSE_FORGET, p);
+		fbuf->op.in.forget.nlookup = 1;
+		fuse_device_queue_fbuf(fmp->dev, fbuf); /* no response */
 	}
 	return (error);
 }
