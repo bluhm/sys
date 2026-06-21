@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_cad.c,v 1.16 2025/09/17 09:17:12 kettenis Exp $	*/
+/*	$OpenBSD: if_cad.c,v 1.17 2026/06/21 14:10:10 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2021-2022 Visa Hankala
