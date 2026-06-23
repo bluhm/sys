@@ -222,7 +222,7 @@ reroute:
 	 */
 	if (tdb != NULL) {
 		/* Callee frees mbuf */
-		error = ip6_output_ipsec_send(tdb, m, ro, orig_rtableid, 0, 1);
+		error = ip6_output_ipsec_send(tdb, m, ro, orig_rtableid, 1);
 		rt = ro->ro_rt;
 		if (error)
 			goto senderr;

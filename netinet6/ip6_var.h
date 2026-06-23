@@ -360,7 +360,7 @@ struct tdb;
 int	ip6_output_ipsec_lookup(struct mbuf *, const struct ipsec_level *,
 	    struct tdb **);
 int	ip6_output_ipsec_send(struct tdb *, struct mbuf *, struct route *,
-	    u_int, int, int);
+	    u_int, int);
 #endif /* IPSEC */
 
 #endif /* _KERNEL */
