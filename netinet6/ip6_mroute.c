@@ -663,9 +663,10 @@ add_m6if(struct socket *so, struct mif6ctl *mifcp)
 	}
 
 	mifp = malloc(sizeof(*mifp), M_MRTABLE, M_WAITOK | M_ZERO);
-	ifp->if_mcast6	   = (caddr_t)mifp;
-	mifp->m6_mifi	   = mifcp->mif6c_mifi;
-	mifp->m6_flags     = mifcp->mif6c_flags;
+	ifp->if_mcast6 = mifp;
+
+	mifp->m6_mifi = mifcp->mif6c_mifi;
+	mifp->m6_flags = mifcp->mif6c_flags;
 #ifdef notyet
 	/* scaling up here allows division by 1024 in critical code */
 	mifp->m6_rate_limit = mifcp->mif6c_rate_limit * 1024 / 1000;

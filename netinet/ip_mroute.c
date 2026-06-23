@@ -800,7 +800,7 @@ add_vif(struct socket *so, struct mbuf *m)
 	}
 
 	vifp = malloc(sizeof(*vifp), M_MRTABLE, M_WAITOK | M_ZERO);
-	ifp->if_mcast = (caddr_t)vifp;
+	ifp->if_mcast = vifp;
 
 	vifp->v_id = vifcp->vifc_vifi;
 	vifp->v_flags = vifcp->vifc_flags;
