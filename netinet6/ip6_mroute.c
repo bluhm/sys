@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip6_mroute.c,v 1.156 2025/11/13 23:30:01 bluhm Exp $	*/
+/*	$OpenBSD: ip6_mroute.c,v 1.157 2026/06/23 18:50:43 bluhm Exp $	*/
 /*	$NetBSD: ip6_mroute.c,v 1.59 2003/12/10 09:28:38 itojun Exp $	*/
 /*	$KAME: ip6_mroute.c,v 1.45 2001/03/25 08:38:51 itojun Exp $	*/
 
