@@ -455,8 +455,8 @@ int	m_apply(struct mbuf *, int, int,
 	    int (*)(caddr_t, caddr_t, unsigned int), caddr_t);
 struct mbuf *m_dup_pkt(struct mbuf *, unsigned int, int);
 int	m_dup_pkthdr(struct mbuf *, struct mbuf *, int);
-
 void	m_microtime(const struct mbuf *, struct timeval *);
+void	mbuf_dma_64bit_enable(void);
 
 static inline struct mbuf *
 m_freemp(struct mbuf **mp)

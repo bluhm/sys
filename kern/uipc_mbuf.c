@@ -84,6 +84,7 @@
 
 #include <sys/socket.h>
 #include <net/if.h>
+#include <net/if_var.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -1496,6 +1497,23 @@ m_pool_used(void)
 {
 	return ((atomic_load_long(&mbuf_mem_alloc) * 100) /
 	    atomic_load_long(&mbuf_mem_limit));
+}
+
+void
+mbuf_dma_64bit_enable(void)
+{
+	struct ifnet *ifp;
+
+	TAILQ_FOREACH(ifp, &ifnetlist, if_list) {
+		if (!ISSET(ifp->if_xflags, IFXF_MBUF_64BIT)) {
+			printf("%s: restrict all mbufs to low memory\n",
+			    ifp->if_xname);
+			return;
+		}
+	}
+
+	printf("enable mbufs in high memory\n");
+	m_pool_noconstraints();
 }
 
 #ifdef DDB
