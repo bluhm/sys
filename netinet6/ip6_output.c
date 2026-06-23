@@ -203,8 +203,6 @@ ip6_output(struct mbuf *m, struct ip6_pktopts *opt, struct route *ro,
 		MAKE_EXTHDR(opt->ip6po_hbh, &exthdrs.ip6e_hbh);
 		/* Destination options header(1st part) */
 		MAKE_EXTHDR(opt->ip6po_dest1, &exthdrs.ip6e_dest1);
-		/* Routing header */
-		MAKE_EXTHDR(opt->ip6po_rthdr, &exthdrs.ip6e_rthdr);
 		/* Destination options header(2nd part) */
 		MAKE_EXTHDR(opt->ip6po_dest2, &exthdrs.ip6e_dest2);
 	}
@@ -392,8 +390,6 @@ reroute:
 		ro->ro_rt = NULL;
 	}
 	ro_pmtu = ro;
-	if (opt && opt->ip6po_rthdr)
-		ro = &opt->ip6po_route;
 	dst = &ro->ro_dstsin6;
 
 	/*
@@ -1726,13 +1722,6 @@ ip6_getpcbopt(struct ip6_pktopts *pktopt, int optname, struct mbuf *m)
 			optdatalen = (ip6e->ip6e_len + 1) << 3;
 		}
 		break;
-	case IPV6_RTHDR:
-		if (pktopt && pktopt->ip6po_rthdr) {
-			optdata = (void *)pktopt->ip6po_rthdr;
-			ip6e = (struct ip6_ext *)pktopt->ip6po_rthdr;
-			optdatalen = (ip6e->ip6e_len + 1) << 3;
-		}
-		break;
 	case IPV6_RTHDRDSTOPTS:
 		if (pktopt && pktopt->ip6po_dest1) {
 			optdata = (void *)pktopt->ip6po_dest1;
@@ -1802,15 +1791,6 @@ ip6_clearpktopts(struct ip6_pktopts *pktopt, int optname)
 			free(pktopt->ip6po_dest1, M_IP6OPT, 0);
 		pktopt->ip6po_dest1 = NULL;
 	}
-	if (optname == -1 || optname == IPV6_RTHDR) {
-		if (pktopt->ip6po_rhinfo.ip6po_rhi_rthdr)
-			free(pktopt->ip6po_rhinfo.ip6po_rhi_rthdr, M_IP6OPT, 0);
-		pktopt->ip6po_rhinfo.ip6po_rhi_rthdr = NULL;
-		if (pktopt->ip6po_route.ro_rt) {
-			rtfree(pktopt->ip6po_route.ro_rt);
-			pktopt->ip6po_route.ro_rt = NULL;
-		}
-	}
 	if (optname == -1 || optname == IPV6_DSTOPTS) {
 		if (pktopt->ip6po_dest2)
 			free(pktopt->ip6po_dest2, M_IP6OPT, 0);
@@ -1846,7 +1826,6 @@ copypktopts(struct ip6_pktopts *dst, struct ip6_pktopts *src)
 	PKTOPT_EXTHDRCPY(ip6po_hbh);
 	PKTOPT_EXTHDRCPY(ip6po_dest1);
 	PKTOPT_EXTHDRCPY(ip6po_dest2);
-	PKTOPT_EXTHDRCPY(ip6po_rthdr); /* not copy the cached route */
 	return (0);
 
   bad:
@@ -2448,45 +2427,6 @@ ip6_setpktopt(int optname, u_char *buf, int len, struct ip6_pktopts *opt,
 			return (ENOBUFS);
 		memcpy(*newdest, dest, destlen);
 
-		break;
-	}
-
-	case IPV6_RTHDR:
-	{
-		struct ip6_rthdr *rth;
-		int rthlen;
-
-		if (len == 0) {
-			ip6_clearpktopts(opt, IPV6_RTHDR);
-			break;	/* just remove the option */
-		}
-
-		/* message length validation */
-		if (len < sizeof(struct ip6_rthdr))
-			return (EINVAL);
-		rth = (struct ip6_rthdr *)buf;
-		rthlen = (rth->ip6r_len + 1) << 3;
-		if (len != rthlen)
-			return (EINVAL);
-
-		switch (rth->ip6r_type) {
-		case IPV6_RTHDR_TYPE_0:
-			if (rth->ip6r_len == 0)	/* must contain one addr */
-				return (EINVAL);
-			if (rth->ip6r_len % 2) /* length must be even */
-				return (EINVAL);
-			if (rth->ip6r_len / 2 != rth->ip6r_segleft)
-				return (EINVAL);
-			break;
-		default:
-			return (EINVAL);	/* not supported */
-		}
-		/* turn off the previous option */
-		ip6_clearpktopts(opt, IPV6_RTHDR);
-		opt->ip6po_rthdr = malloc(rthlen, M_IP6OPT, M_NOWAIT);
-		if (opt->ip6po_rthdr == NULL)
-			return (ENOBUFS);
-		memcpy(opt->ip6po_rthdr, rth, rthlen);
 		break;
 	}
 

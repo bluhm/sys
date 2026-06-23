@@ -164,15 +164,7 @@ struct	ip6_moptions {
  * Control options for outgoing packets
  */
 
-/* Routing header related info */
-struct	ip6po_rhinfo {
-	struct	ip6_rthdr *ip6po_rhi_rthdr; /* Routing header */
-	struct	route ip6po_rhi_route; /* Route to the 1st hop */
-};
-#define ip6po_rthdr	ip6po_rhinfo.ip6po_rhi_rthdr
-#define ip6po_route	ip6po_rhinfo.ip6po_rhi_route
-
-struct	ip6_pktopts {
+struct ip6_pktopts {
 	/* Hoplimit for outgoing packets */
 	int	ip6po_hlim;
 
@@ -184,9 +176,6 @@ struct	ip6_pktopts {
 
 	/* Destination options header (before a routing header) */
 	struct	ip6_dest *ip6po_dest1;
-
-	/* Routing header related info. */
-	struct	ip6po_rhinfo ip6po_rhinfo;
 
 	/* Destination options header (after a routing header) */
 	struct	ip6_dest *ip6po_dest2;
