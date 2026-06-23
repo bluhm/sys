@@ -2418,7 +2418,7 @@ ixgbe_allocate_transmit_buffers(struct ix_txring *txr)
 		txbuf = &txr->tx_buffers[i];
 		error = bus_dmamap_create(txr->txdma.dma_tag, MAXMCLBYTES,
 			    sc->num_segs, 16 * 1024, 0,
-			    BUS_DMA_NOWAIT | BUS_DMA_64BIT, &txbuf->map);
+			    BUS_DMA_NOWAIT | 0, &txbuf->map);
 
 		if (error != 0) {
 			printf("%s: Unable to create TX DMA map, error %d\n",
@@ -2899,7 +2899,7 @@ ixgbe_allocate_receive_buffers(struct ix_rxring *rxr)
 	rxbuf = rxr->rx_buffers;
 	for (i = 0; i < sc->num_rx_desc; i++, rxbuf++) {
 		error = bus_dmamap_create(rxr->rxdma.dma_tag, 16 * 1024, 1,
-		    16 * 1024, 0, BUS_DMA_NOWAIT | BUS_DMA_64BIT, &rxbuf->map);
+		    16 * 1024, 0, BUS_DMA_NOWAIT | 0, &rxbuf->map);
 		if (error) {
 			printf("%s: Unable to create RX DMA map, error %d\n",
 			    ifp->if_xname, error);

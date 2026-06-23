@@ -2583,7 +2583,7 @@ ixl_txr_alloc(struct ixl_softc *sc, unsigned int qid)
 
 		if (bus_dmamap_create(sc->sc_dmat,
 		    MAXMCLBYTES, IXL_TX_PKT_DESCS, IXL_MAX_DMA_SEG_SIZE, 0,
-		    BUS_DMA_WAITOK | BUS_DMA_ALLOCNOW | BUS_DMA_64BIT,
+		    BUS_DMA_WAITOK | BUS_DMA_ALLOCNOW | 0,
 		    &txm->txm_map) != 0)
 			goto uncreate;
 
@@ -3046,7 +3046,7 @@ ixl_rxr_alloc(struct ixl_softc *sc, unsigned int qid)
 
 		if (bus_dmamap_create(sc->sc_dmat,
 		    IXL_HARDMTU, 1, IXL_HARDMTU, 0,
-		    BUS_DMA_WAITOK | BUS_DMA_ALLOCNOW | BUS_DMA_64BIT,
+		    BUS_DMA_WAITOK | BUS_DMA_ALLOCNOW | 0,
 		    &rxm->rxm_map) != 0)
 			goto uncreate;
 

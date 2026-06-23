@@ -29702,7 +29702,7 @@ ice_tx_queues_alloc(struct ice_softc *sc)
 			map = &txq->tx_map[j];
 			if (bus_dmamap_create(sc->sc_dmat, MAXMCLBYTES,
 			    ICE_MAX_TX_SEGS, ICE_MAX_DMA_SEG_SIZE, 0,
-			    BUS_DMA_WAITOK | BUS_DMA_ALLOCNOW | BUS_DMA_64BIT,
+			    BUS_DMA_WAITOK | BUS_DMA_ALLOCNOW | 0,
 			    &map->txm_map) != 0) {
 				printf("%s: could not allocate Tx DMA map\n",
 				    sc->sc_dev.dv_xname);
@@ -29712,7 +29712,7 @@ ice_tx_queues_alloc(struct ice_softc *sc)
 
 			if (bus_dmamap_create(sc->sc_dmat, MAXMCLBYTES,
 			    ICE_MAX_TSO_SEGS, ICE_MAX_DMA_SEG_SIZE, 0,
-			    BUS_DMA_WAITOK | BUS_DMA_ALLOCNOW | BUS_DMA_64BIT,
+			    BUS_DMA_WAITOK | BUS_DMA_ALLOCNOW | 0,
 			    &map->txm_map_tso) != 0) {
 				printf("%s: could not allocate TSO DMA map\n",
 				    sc->sc_dev.dv_xname);
@@ -29903,7 +29903,7 @@ ice_rx_queues_alloc(struct ice_softc *sc)
 			map = &rxq->rx_map[j];
 			if (bus_dmamap_create(sc->sc_dmat, vsi->mbuf_sz, 1,
 			    vsi->mbuf_sz, 0,
-			    BUS_DMA_WAITOK | BUS_DMA_ALLOCNOW | BUS_DMA_64BIT,
+			    BUS_DMA_WAITOK | BUS_DMA_ALLOCNOW | 0,
 			    &map->rxm_map) != 0) {
 				printf("%s: could not allocate Rx DMA map\n",
 				    sc->sc_dev.dv_xname);

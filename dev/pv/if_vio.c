@@ -547,7 +547,7 @@ vio_alloc_mem(struct vio_softc *sc, int tx_max_segments, bus_size_t txsize)
 		for (i = 0; i < rxqsize; i++) {
 			r = bus_dmamap_create(vsc->sc_dmat,
 			    sc->sc_rx_mbuf_size, 2, sc->sc_rx_mbuf_size, 0,
-			    BUS_DMA_NOWAIT | BUS_DMA_ALLOCNOW | BUS_DMA_64BIT,
+			    BUS_DMA_NOWAIT | BUS_DMA_ALLOCNOW | 0,
 			    &vioq->viq_rxdmamaps[i]);
 			if (r != 0)
 				goto destroy;
@@ -556,7 +556,7 @@ vio_alloc_mem(struct vio_softc *sc, int tx_max_segments, bus_size_t txsize)
 		for (i = 0; i < txqsize; i++) {
 			r = bus_dmamap_create(vsc->sc_dmat, txsize,
 			    tx_max_segments, txsize, 0,
-			    BUS_DMA_NOWAIT | BUS_DMA_ALLOCNOW | BUS_DMA_64BIT,
+			    BUS_DMA_NOWAIT | BUS_DMA_ALLOCNOW | 0,
 			    &vioq->viq_txdmamaps[i]);
 			if (r != 0)
 				goto destroy;

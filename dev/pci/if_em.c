@@ -2257,7 +2257,7 @@ em_setup_transmit_structures(struct em_softc *sc)
 			error = bus_dmamap_create(sc->sc_dmat, EM_TSO_SIZE,
 			    EM_MAX_SCATTER / (sc->pcix_82544 ? 2 : 1),
 			    EM_TSO_SEG_SIZE, 0,
-			    BUS_DMA_NOWAIT | sc->sc_dmaflags,
+			    BUS_DMA_NOWAIT | 0,
 			    &pkt->pkt_map);
 			if (error != 0) {
 				printf("%s: Unable to create TX DMA map, "
@@ -2780,7 +2780,7 @@ em_allocate_receive_structures(struct em_softc *sc)
 			pkt = &que->rx.sc_rx_pkts_ring[i];
 
 			error = bus_dmamap_create(sc->sc_dmat, EM_MCLBYTES, 1,
-			    EM_MCLBYTES, 0, BUS_DMA_NOWAIT | sc->sc_dmaflags,
+			    EM_MCLBYTES, 0, BUS_DMA_NOWAIT | 0,
 			    &pkt->pkt_map);
 			if (error != 0) {
 				printf("%s: Unable to create RX DMA map, "

@@ -1856,7 +1856,7 @@ igc_allocate_transmit_buffers(struct igc_txring *txr)
 		txbuf = &txr->tx_buffers[i];
 		error = bus_dmamap_create(txr->txdma.dma_tag, IGC_TSO_SIZE,
 		    IGC_MAX_SCATTER, PAGE_SIZE, 0,
-		    BUS_DMA_NOWAIT | BUS_DMA_64BIT, &txbuf->map);
+		    BUS_DMA_NOWAIT | 0, &txbuf->map);
 		if (error != 0) {
 			printf("%s: Unable to create TX DMA map, error %d\n",
 			    DEVNAME(sc), error);
@@ -2162,7 +2162,7 @@ igc_allocate_receive_buffers(struct igc_rxring *rxr)
 	for (i = 0; i < sc->num_rx_desc; i++, rxbuf++) {
 		error = bus_dmamap_create(rxr->rxdma.dma_tag,
 		    sc->rx_mbuf_sz, 1, sc->rx_mbuf_sz, 0,
-		    BUS_DMA_NOWAIT | BUS_DMA_64BIT, &rxbuf->map);
+		    BUS_DMA_NOWAIT | 0, &rxbuf->map);
 		if (error) {
 			printf("%s: Unable to create RX DMA map, error %d\n",
 			    DEVNAME(sc), error);

@@ -615,7 +615,7 @@ vmxnet3_alloc_txring(struct vmxnet3_softc *sc, int queue, int intr)
 
 	for (idx = 0; idx < NTXDESC; idx++) {
 		if (bus_dmamap_create(sc->sc_dmat, MAXMCLBYTES, NTXSEGS,
-		    VMXNET3_TX_LEN_M, 0, BUS_DMA_NOWAIT | BUS_DMA_64BIT,
+		    VMXNET3_TX_LEN_M, 0, BUS_DMA_NOWAIT | 0,
 		    &ring->dmap[idx]))
 			return -1;
 	}
@@ -666,7 +666,7 @@ vmxnet3_alloc_rxring(struct vmxnet3_softc *sc, int queue, int intr)
 		timeout_set(&ring->refill, vmxnet3_rxfill_tick, ring);
 		for (idx = 0; idx < NRXDESC; idx++) {
 			if (bus_dmamap_create(sc->sc_dmat, JUMBO_LEN, 1,
-			    JUMBO_LEN, 0, BUS_DMA_NOWAIT | BUS_DMA_64BIT,
+			    JUMBO_LEN, 0, BUS_DMA_NOWAIT | 0,
 			    &ring->dmap[idx]))
 				return -1;
 		}

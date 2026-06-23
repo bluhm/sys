@@ -1840,7 +1840,7 @@ iavf_txr_alloc(struct iavf_softc *sc, unsigned int qid)
 
 		if (bus_dmamap_create(sc->sc_dmat,
 		    MAXMCLBYTES, IAVF_TX_PKT_DESCS, IAVF_MAX_DMA_SEG_SIZE, 0,
-		    BUS_DMA_WAITOK | BUS_DMA_ALLOCNOW | BUS_DMA_64BIT,
+		    BUS_DMA_WAITOK | BUS_DMA_ALLOCNOW | 0,
 		    &txm->txm_map) != 0)
 			goto uncreate;
 
@@ -2211,7 +2211,7 @@ iavf_rxr_alloc(struct iavf_softc *sc, unsigned int qid)
 
 		if (bus_dmamap_create(sc->sc_dmat,
 		    IAVF_HARDMTU, 1, IAVF_HARDMTU, 0,
-		    BUS_DMA_WAITOK | BUS_DMA_ALLOCNOW | BUS_DMA_64BIT,
+		    BUS_DMA_WAITOK | BUS_DMA_ALLOCNOW | 0,
 		    &rxm->rxm_map) != 0)
 			goto uncreate;
 
