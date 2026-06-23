@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_km.c,v 1.159 2025/11/13 10:55:51 mpi Exp $	*/
+/*	$OpenBSD: uvm_km.c,v 1.160 2026/06/23 14:40:40 bluhm Exp $	*/
 /*	$NetBSD: uvm_km.c,v 1.42 2001/01/14 02:10:01 thorpej Exp $	*/
 
 /* 
