@@ -504,8 +504,7 @@ rip_detach(struct socket *so)
 		return (EINVAL);
 
 #ifdef MROUTING
-	if (so == ip_mrouter[inp->inp_rtableid])
-		ip_mrouter_done(so);
+	ip_mrouter_done(so);
 #endif
 	in_pcbdetach(inp);
 

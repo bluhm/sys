@@ -325,7 +325,7 @@ reroute:
 			 * if necessary.
 			 */
 			if (atomic_load_int(&ipmforwarding) &&
-			    ip_mrouter[ifp->if_rdomain] &&
+			    ip_mrouter_active(ifp->if_rdomain) &&
 			    (flags & IP_FORWARDING) == 0) {
 				int rv;
 
