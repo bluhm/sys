@@ -105,6 +105,15 @@ struct rttimer_queue ip_mrouterq;
 uint64_t	 mrt_count[RT_TABLEID_MAX + 1];
 int		ip_mrtproto = IGMP_DVMRP;    /* [I] for netstat only */
 
+/*
+ * Kernel multicast routing API capabilities and setup.
+ * If more API capabilities are added to the kernel, they should be
+ * recorded in `mrt_api_support'.
+ */
+static const u_int32_t mrt_api_support =
+    MRT_MFC_FLAGS_DISABLE_WRONGVIF | MRT_MFC_RP;
+uint32_t mrt_api_config[RT_TABLEID_MAX + 1];
+
 struct cpumem *mrtcounters;
 
 struct rtentry	*mfc_find(struct ifnet *, struct in_addr *, unsigned int);
@@ -124,23 +133,13 @@ int add_mfc(struct socket *, struct mbuf *);
 int del_mfc(struct socket *, struct mbuf *);
 int set_api_config(struct socket *, struct mbuf *); /* chose API capabilities */
 int get_api_support(struct mbuf *);
-int get_api_config(struct mbuf *);
-int socket_send(struct socket *, struct mbuf *,
-			    struct sockaddr_in *);
+int get_api_config(struct socket *, struct mbuf *);
+int socket_send(struct socket *, struct mbuf *, struct sockaddr_in *);
 int ip_mdq(struct mbuf *, struct ifnet *, struct rtentry *, int);
 struct ifnet *if_lookupbyvif(vifi_t, unsigned int);
 struct rtentry *rt_mcast_add(struct ifnet *, struct sockaddr *,
     struct sockaddr *);
 void mrt_mcast_del(struct rtentry *, unsigned int);
-
-/*
- * Kernel multicast routing API capabilities and setup.
- * If more API capabilities are added to the kernel, they should be
- * recorded in `mrt_api_support'.
- */
-static const u_int32_t mrt_api_support = (MRT_MFC_FLAGS_DISABLE_WRONGVIF |
-					  MRT_MFC_RP);
-static u_int32_t mrt_api_config = 0;
 
 /*
  * Find a route for a given Multicast group address.
@@ -242,7 +241,7 @@ ip_mrouter_get(struct socket *so, int optname, struct mbuf *m)
 			error = get_api_support(m);
 			break;
 		case MRT_API_CONFIG:
-			error = get_api_config(m);
+			error = get_api_config(so, m);
 			break;
 		default:
 			error = ENOPROTOOPT;
@@ -646,7 +645,7 @@ ip_mrouter_done(struct socket *so)
 		vif_delete(ifp);
 	}
 
-	mrt_api_config = 0;
+	atomic_store_int(&mrt_api_config[rtableid], 0);
 
 	ip_mrouter[rtableid] = NULL;
 	mrt_count[rtableid] = 0;
@@ -672,7 +671,7 @@ set_api_config(struct socket *so, struct mbuf *m)
 {
 	struct inpcb *inp = sotoinpcb(so);
 	struct ifnet *ifp;
-	u_int32_t *apival;
+	uint32_t *apival;
 	unsigned int rtableid = inp->inp_rtableid;
 
 	if (m == NULL || m->m_len < sizeof(u_int32_t))
@@ -700,8 +699,8 @@ set_api_config(struct socket *so, struct mbuf *m)
 		return (EPERM);
 	}
 
-	mrt_api_config = *apival & mrt_api_support;
-	*apival = mrt_api_config;
+	*apival &= mrt_api_support;
+	atomic_store_int(&mrt_api_config[rtableid], *apival);
 
 	return (0);
 }
@@ -712,12 +711,12 @@ set_api_config(struct socket *so, struct mbuf *m)
 int
 get_api_support(struct mbuf *m)
 {
-	u_int32_t *apival;
+	uint32_t *apival;
 
 	if (m == NULL || m->m_len < sizeof(u_int32_t))
 		return (EINVAL);
 
-	apival = mtod(m, u_int32_t *);
+	apival = mtod(m, uint32_t *);
 
 	*apival = mrt_api_support;
 
@@ -728,16 +727,18 @@ get_api_support(struct mbuf *m)
  * Get API configured capabilities
  */
 int
-get_api_config(struct mbuf *m)
+get_api_config(struct socket *so, struct mbuf *m)
 {
-	u_int32_t *apival;
+	struct inpcb *inp = sotoinpcb(so);
+	uint32_t *apival;
+	unsigned int rtableid = inp->inp_rtableid;
 
 	if (m == NULL || m->m_len < sizeof(u_int32_t))
 		return (EINVAL);
 
-	apival = mtod(m, u_int32_t *);
+	apival = mtod(m, uint32_t *);
 
-	*apival = mrt_api_config;
+	*apival = atomic_load_int(&mrt_api_config[rtableid]);
 
 	return (0);
 }
@@ -887,6 +888,7 @@ mfc_add_route(struct ifnet *ifp, struct sockaddr *origin,
 	struct vif		*v = ifp->if_mcast;
 	struct rtentry		*rt;
 	struct mfc		*mfc;
+	uint32_t		 api_config;
 	unsigned int		 rtableid = ifp->if_rdomain;
 
 	rt = rt_mcast_add(ifp, origin, group);
@@ -909,17 +911,19 @@ mfc_add_route(struct ifnet *ifp, struct sockaddr *origin,
 
 	rt_timer_add(rt, &ip_mrouterq, rtableid);
 
+	api_config = atomic_load_int(&mrt_api_config[rtableid]);
+
 	mfc->mfc_parent = mfccp->mfcc_parent;
 	mfc->mfc_pkt_cnt = 0;
 	mfc->mfc_byte_cnt = 0;
 	mfc->mfc_wrong_if = 0;
 	mfc->mfc_ttl = mfccp->mfcc_ttls[v->v_id];
-	mfc->mfc_flags = mfccp->mfcc_flags[v->v_id] & mrt_api_config &
+	mfc->mfc_flags = mfccp->mfcc_flags[v->v_id] & api_config &
 	    MRT_MFC_FLAGS_ALL;
 	mfc->mfc_expire = 0;
 
 	/* set the RP address */
-	if (mrt_api_config & MRT_MFC_RP)
+	if (api_config & MRT_MFC_RP)
 		mfc->mfc_rp = mfccp->mfcc_rp;
 	else
 		mfc->mfc_rp = zeroin_addr;
@@ -1053,11 +1057,14 @@ add_mfc(struct socket *so, struct mbuf *m)
 	struct inpcb *inp = sotoinpcb(so);
 	struct mfcctl2 mfcctl2;
 	int mfcctl_size = sizeof(struct mfcctl);
+	uint32_t api_config;
 	unsigned int rtableid = inp->inp_rtableid;
 
 	NET_ASSERT_LOCKED();
 
-	if (mrt_api_config & MRT_API_FLAGS_ALL)
+	api_config = atomic_load_int(&mrt_api_config[rtableid]);
+
+	if (api_config & MRT_API_FLAGS_ALL)
 		mfcctl_size = sizeof(struct mfcctl2);
 
 	if (m == NULL || m->m_len < mfcctl_size)
@@ -1066,7 +1073,7 @@ add_mfc(struct socket *so, struct mbuf *m)
 	/*
 	 * select data size depending on API version.
 	 */
-	if (mrt_api_config & MRT_API_FLAGS_ALL) {
+	if (api_config & MRT_API_FLAGS_ALL) {
 		struct mfcctl2 *mp2 = mtod(m, struct mfcctl2 *);
 		memcpy((caddr_t)&mfcctl2, mp2, sizeof(*mp2));
 	} else {
