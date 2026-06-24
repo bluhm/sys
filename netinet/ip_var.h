@@ -247,6 +247,7 @@ int	 ip_getmoptions(int, struct ip_moptions *, struct mbuf *);
 void	 ip_init(void);
 struct mbuf*
 	 ip_insertoptions(struct mbuf *, struct mbuf *, int *);
+int	 ip_mrouter_active(u_int);
 int	 ip_mforward(struct mbuf *, struct ifnet *, int);
 int	 ip_optcopy(struct ip *, struct ip *);
 int	 ip_output(struct mbuf *, struct mbuf *, struct route *, int,
@@ -282,9 +283,6 @@ int	 rip_disconnect(struct socket *);
 int	 rip_shutdown(struct socket *);
 int	 rip_send(struct socket *, struct mbuf *, struct mbuf *,
 	     struct mbuf *);
-#ifdef MROUTING
-extern struct socket *ip_mrouter[];	/* multicast routing daemon */
-#endif
 
 #endif /* _KERNEL */
 #endif /* _NETINET_IP_VAR_H_ */

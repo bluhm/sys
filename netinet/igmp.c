@@ -741,7 +741,7 @@ igmp_sendpkt(struct igmp_pktinfo *pkt)
 	 * router, so that the process-level routing daemon can hear it.
 	 */
 #ifdef MROUTING
-	imo.imo_loop = (ip_mrouter[pkt->ipi_rdomain] != NULL);
+	imo.imo_loop = ip_mrouter_active(pkt->ipi_rdomain);
 #else
 	imo.imo_loop = 0;
 #endif /* MROUTING */
