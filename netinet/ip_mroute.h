@@ -165,6 +165,8 @@ struct mrtstat {
 	u_long	mrts_q_overflow;	/* pkts dropped - Q overflow */
 	u_long	mrts_pkt2large;		/* pkts dropped - size > BKT SIZE */
 	u_long	mrts_upq_sockfull;	/* upcalls dropped - socket full */
+	u_long	mrts_time_to_live;	/* ip ttl not above 1 */
+	u_long	mrts_source_route;	/* packet from source-routed tunnel */
 };
 
 #ifdef _KERNEL
@@ -183,6 +185,8 @@ enum mrtstat_counters {
 	mrts_q_overflow,
 	mrts_pkt2large,
 	mrts_upq_sockfull,
+	mrts_time_to_live,
+	mrts_source_route,
 	mrts_ncounters
 };
 

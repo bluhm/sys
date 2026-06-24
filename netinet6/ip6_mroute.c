@@ -474,6 +474,7 @@ mrt6_sysctl_mrt6stat(void *oldp, size_t *oldlenp, void *newp)
 	ASSIGN(mrt6s_q_overflow);
 	ASSIGN(mrt6s_pkt2large);
 	ASSIGN(mrt6s_upq_sockfull);
+	ASSIGN(mrt6s_hop_limit);
 
 #undef ASSIGN
 
@@ -938,6 +939,8 @@ ip6_mforward(struct ip6_hdr *ip6, struct ifnet *ifp, struct mbuf *m, int flags)
 	 * Don't forward a packet with Hop limit of zero or one,
 	 * or a packet destined to a local-only group.
 	 */
+	if (ip6->ip6_hlim <= 1)
+		mrt6stat_inc(mrt6s_hop_limit);
 	if (ip6->ip6_hlim <= 1 || IN6_IS_ADDR_MC_INTFACELOCAL(&ip6->ip6_dst) ||
 	    IN6_IS_ADDR_MC_LINKLOCAL(&ip6->ip6_dst))
 		return 0;

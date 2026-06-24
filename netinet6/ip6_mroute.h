@@ -146,6 +146,7 @@ struct mrt6stat {
 	u_int64_t mrt6s_q_overflow;	/* pkts dropped - Q overflow       */
 	u_int64_t mrt6s_pkt2large;	/* pkts dropped - size > BKT SIZE  */
 	u_int64_t mrt6s_upq_sockfull;	/* upcalls dropped - socket full   */
+	u_int64_t mrt6s_hop_limit;	/* ip6 hlim not above one           */
 };
 
 /*
@@ -206,6 +207,7 @@ enum mrt6stat_counters {
 	mrt6s_q_overflow,
 	mrt6s_pkt2large,
 	mrt6s_upq_sockfull,
+	mrt6s_hop_limit,
 	mrt6s_ncounters
 };
 
