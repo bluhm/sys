@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_mroute.h,v 1.34 2025/05/09 14:43:47 jan Exp $	*/
+/*	$OpenBSD: ip_mroute.h,v 1.35 2026/06/24 12:33:49 bluhm Exp $	*/
 /*	$NetBSD: ip_mroute.h,v 1.23 2004/04/21 17:49:46 itojun Exp $	*/
 
 #ifndef _NETINET_IP_MROUTE_H_
