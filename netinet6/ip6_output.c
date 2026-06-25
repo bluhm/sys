@@ -1682,6 +1682,8 @@ ip6_getpcbopt(struct ip6_pktopts *pktopt, int optname, struct mbuf *m)
 			optdatalen = (ip6e->ip6e_len + 1) << 3;
 		}
 		break;
+	case IPV6_RTHDR:
+		break;
 	case IPV6_RTHDRDSTOPTS:
 		if (pktopt && pktopt->ip6po_dest1) {
 			optdata = (void *)pktopt->ip6po_dest1;
