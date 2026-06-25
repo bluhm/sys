@@ -224,14 +224,19 @@ struct vif {
  * at a future point.)
  */
 struct mfc {
+	struct	 cpumem *mfc_counter;		/* counters for src-grp */
+	u_long	 mfc_expire;			/* expire timer */
+	struct	 in_addr mfc_rp;		/* the RP address */
 	vifi_t	 mfc_parent;			/* incoming vif */
-	u_long	 mfc_pkt_cnt;			/* pkt count for src-grp */
-	u_long	 mfc_byte_cnt;			/* byte count for src-grp */
-	u_long	 mfc_wrong_if;			/* wrong if for src-grp	*/
 	uint8_t	 mfc_ttl;			/* route interface ttl */
 	uint8_t  mfc_flags;			/* MRT_MFC_FLAGS_* flags */
-	struct in_addr	mfc_rp;			/* the RP address	     */
-	u_long	 mfc_expire;			/* expire timer */
+};
+
+enum mfc_counters {
+	mfc_packets,			/* packet count for src-grp */
+	mfc_bytes,			/* byte count for src-grp */
+	mfc_wrong_if,			/* wrong if for src-grp	*/
+	mfc_ncounters
 };
 
 /*

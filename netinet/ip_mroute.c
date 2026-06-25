@@ -318,6 +318,8 @@ get_sg_cnt(unsigned int rtableid, struct sioc_sg_req *req)
 
 	req->pktcnt = req->bytecnt = req->wrong_if = 0;
 	do {
+		uint64_t count[mfc_ncounters], scratch[mfc_ncounters];
+
 		/* Don't consider non multicast routes. */
 		if (ISSET(rt->rt_flags, RTF_HOST | RTF_MULTICAST) !=
 		    (RTF_HOST | RTF_MULTICAST))
@@ -327,9 +329,10 @@ get_sg_cnt(unsigned int rtableid, struct sioc_sg_req *req)
 		if (mfc == NULL)
 			continue;
 
-		req->pktcnt += mfc->mfc_pkt_cnt;
-		req->bytecnt += mfc->mfc_byte_cnt;
-		req->wrong_if += mfc->mfc_wrong_if;
+		counters_read(mfc->mfc_counter, count, mfc_ncounters, scratch);
+		req->pktcnt += count[mfc_packets];
+		req->bytecnt += count[mfc_bytes];
+		req->wrong_if += count[mfc_wrong_if];
 	} while ((rt = rtable_iterate(rt)) != NULL);
 
 	return (0);
@@ -474,6 +477,8 @@ mrt_rtwalk_mfcsysctl(struct rtentry *rt, void *arg, unsigned int rtableid)
 	    (uint8_t *)(minfo + 1) <=
 	    (uint8_t *)msa->msa_minfos + msa->msa_len;
 	    minfo++) {
+		uint64_t count[mfc_ncounters], scratch[mfc_ncounters];
+
 		/* Find a new entry or update old entry. */
 		if (minfo->mfc_origin.s_addr !=
 		    satosin(rt->rt_gateway)->sin_addr.s_addr ||
@@ -489,8 +494,9 @@ mrt_rtwalk_mfcsysctl(struct rtentry *rt, void *arg, unsigned int rtableid)
 		minfo->mfc_origin = satosin(rt->rt_gateway)->sin_addr;
 		minfo->mfc_mcastgrp = satosin(rt_key(rt))->sin_addr;
 		minfo->mfc_parent = mfc->mfc_parent;
-		minfo->mfc_pkt_cnt += mfc->mfc_pkt_cnt;
-		minfo->mfc_byte_cnt += mfc->mfc_byte_cnt;
+		counters_read(mfc->mfc_counter, count, mfc_ncounters, scratch);
+		minfo->mfc_pkt_cnt += count[mfc_packets];
+		minfo->mfc_byte_cnt += count[mfc_bytes];
 		minfo->mfc_ttls[v->v_id] = mfc->mfc_ttl;
 		break;
 	}
@@ -895,11 +901,13 @@ mfc_add_route(struct ifnet *ifp, struct sockaddr *origin,
 
 	mfc = malloc(sizeof(*mfc), M_MRTABLE, wait | M_ZERO);
 	if (mfc == NULL) {
-		DPRINTF("origin %#08X group %#08X parent %d (%s) "
-		    "malloc failed",
-		    satosin(origin)->sin_addr.s_addr,
-		    satosin(group)->sin_addr.s_addr,
-		    mfccp->mfcc_parent, ifp->if_xname);
+		mrt_mcast_del(rt, rtableid);
+		rtfree(rt);
+		return (ENOMEM);
+	}
+	mfc->mfc_counter = counters_alloc_wait(mfc_ncounters, wait);
+	if (mfc->mfc_counter == NULL) {
+		free(mfc, M_MRTABLE, sizeof(struct mfc));
 		mrt_mcast_del(rt, rtableid);
 		rtfree(rt);
 		return (ENOMEM);
@@ -910,9 +918,6 @@ mfc_add_route(struct ifnet *ifp, struct sockaddr *origin,
 	rt_timer_add(rt, &ip_mrouterq, rtableid);
 
 	mfc->mfc_parent = mfccp->mfcc_parent;
-	mfc->mfc_pkt_cnt = 0;
-	mfc->mfc_byte_cnt = 0;
-	mfc->mfc_wrong_if = 0;
 	mfc->mfc_ttl = mfccp->mfcc_ttls[v->v_id];
 	mfc->mfc_flags = mfccp->mfcc_flags[v->v_id] & mrt_api_config &
 	    MRT_MFC_FLAGS_ALL;
@@ -1278,7 +1283,7 @@ ip_mdq(struct mbuf *m, struct ifnet *ifp0, struct rtentry *rt, int flags)
 	if (mfc->mfc_parent != v->v_id) {
 		/* came in the wrong interface */
 		mrtstat_inc(mrts_wrong_if);
-		mfc->mfc_wrong_if++;
+		counters_inc(mfc->mfc_counter, mfc_wrong_if);
 		rtfree(rt);
 		return (0);
 	}
@@ -1308,8 +1313,8 @@ ip_mdq(struct mbuf *m, struct ifnet *ifp0, struct rtentry *rt, int flags)
 		if (mfc == NULL)
 			continue;
 
-		mfc->mfc_pkt_cnt++;
-		mfc->mfc_byte_cnt += m->m_pkthdr.len;
+		counters_pkt(mfc->mfc_counter, mfc_packets, mfc_bytes,
+		    m->m_pkthdr.len);
 
 		/* Don't let this route expire. */
 		mfc->mfc_expire = 0;
@@ -1414,13 +1419,16 @@ void
 mrt_mcast_del(struct rtentry *rt, unsigned int rtableid)
 {
 	struct ifnet		*ifp;
+	struct mfc		*mfc;
 	int			 error;
 
 	/* Remove all timers related to this route. */
 	rt_timer_remove_all(rt);
 
-	free(rt->rt_llinfo, M_MRTABLE, sizeof(struct mfc));
+	mfc = (struct mfc *)rt->rt_llinfo;
 	rt->rt_llinfo = NULL;
+	counters_free(mfc->mfc_counter, mfc_ncounters);
+	free(mfc, M_MRTABLE, sizeof(struct mfc));
 
 	ifp = if_get(rt->rt_ifidx);
 	if (ifp == NULL)
