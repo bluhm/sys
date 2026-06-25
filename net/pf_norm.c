@@ -1653,6 +1653,10 @@ pf_normalize_mss(struct pf_pdesc *pd, u_int16_t maxmss)
 		opt += opt[1];
 	}
 
+	if (ISSET(pd->m->m_pkthdr.csum_flags, M_TCP_TSO) &&
+	    pd->m->m_pkthdr.ph_mss > maxmss)
+		pd->m->m_pkthdr.ph_mss = maxmss;
+
 	return (0);
 }
 
