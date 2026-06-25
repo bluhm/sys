@@ -59,17 +59,17 @@ cpumem_put(struct pool *pp, struct cpumem *cm)
 }
 
 struct cpumem *
-cpumem_malloc(size_t sz, int type)
+cpumem_malloc_wait(size_t sz, int type, int wait)
 {
 	struct cpumem *cm;
 	unsigned int cpu;
 
 	sz = roundup(sz, CACHELINESIZE);
 
-	cm = pool_get(&cpumem_pl, PR_WAITOK);
+	cm = pool_get(&cpumem_pl, wait == M_WAITOK ? PR_WAITOK : PR_NOWAIT);
 
 	for (cpu = 0; cpu < ncpusfound; cpu++)
-		cm[cpu].mem = malloc(sz, type, M_WAITOK | M_ZERO);
+		cm[cpu].mem = malloc(sz, type, wait | M_ZERO);
 
 	return (cm);
 }
@@ -124,7 +124,7 @@ cpumem_next(struct cpumem_iter *i, struct cpumem *cm)
 }
 
 struct cpumem *
-counters_alloc(unsigned int n)
+counters_alloc_wait(unsigned int n, int wait)
 {
 	struct cpumem *cm;
 	struct cpumem_iter cmi;
@@ -134,7 +134,7 @@ counters_alloc(unsigned int n)
 	KASSERT(n > 0);
 
 	n++; /* add space for a generation number */
-	cm = cpumem_malloc(n * sizeof(uint64_t), M_COUNTERS);
+	cm = cpumem_malloc_wait(n * sizeof(uint64_t), M_COUNTERS, wait);
 
 	CPUMEM_FOREACH(counters, &cmi, cm) {
 		for (i = 0; i < n; i++)
@@ -257,9 +257,9 @@ cpumem_put(struct pool *pp, struct cpumem *cm)
 }
 
 struct cpumem *
-cpumem_malloc(size_t sz, int type)
+cpumem_malloc_wait(size_t sz, int type, int wait)
 {
-	return (malloc(sz, type, M_WAITOK | M_ZERO));
+	return (malloc(sz, type, wait | M_ZERO));
 }
 
 struct cpumem *
@@ -287,11 +287,11 @@ cpumem_next(struct cpumem_iter *i, struct cpumem *cm)
 }
 
 struct cpumem *
-counters_alloc(unsigned int n)
+counters_alloc_wait(unsigned int n, int wait)
 {
 	KASSERT(n > 0);
 
-	return (cpumem_malloc(n * sizeof(uint64_t), M_COUNTERS));
+	return (cpumem_malloc_wait(n * sizeof(uint64_t), M_COUNTERS, wait));
 }
 
 struct cpumem *
@@ -339,3 +339,15 @@ counters_zero(struct cpumem *cm, unsigned int n)
 }
 
 #endif /* MULTIPROCESSOR */
+
+struct cpumem *
+cpumem_malloc(size_t sz, int type)
+{
+	return (cpumem_malloc_wait(sz, type, M_WAITOK));
+}
+
+struct cpumem *
+counters_alloc(unsigned int n)
+{
+	return (counters_alloc_wait(n, M_WAITOK));
+}
