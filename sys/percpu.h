@@ -54,6 +54,7 @@ struct cpumem	*cpumem_get(struct pool *);
 void		 cpumem_put(struct pool *, struct cpumem *);
 
 struct cpumem	*cpumem_malloc(size_t, int);
+struct cpumem	*cpumem_malloc_wait(size_t, int, int);
 struct cpumem	*cpumem_malloc_ncpus(struct cpumem *, size_t, int);
 void		 cpumem_free(struct cpumem *, int, size_t);
 
@@ -111,6 +112,7 @@ static struct {								\
  */
 
 struct cpumem	*counters_alloc(unsigned int);
+struct cpumem	*counters_alloc_wait(unsigned int, int);
 struct cpumem	*counters_alloc_ncpus(struct cpumem *, unsigned int);
 void		 counters_free(struct cpumem *, unsigned int);
 void		 counters_read(struct cpumem *, uint64_t *, unsigned int,
