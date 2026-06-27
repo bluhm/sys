@@ -143,9 +143,9 @@ int			 pf_reassemble6(struct mbuf **, struct ip6_frag *,
 struct pool		 pf_frent_pl, pf_frag_pl, pf_frnode_pl;
 struct pool		 pf_state_scrub_pl;
 
-struct mutex		 pf_frag_mtx;
+struct rwlock		 pf_frag_lock;
 
-#define PF_FRAG_LOCK_INIT()	mtx_init(&pf_frag_mtx, IPL_SOFTNET)
+#define PF_FRAG_LOCK_INIT()	rw_init(&pf_frag_lock, "pffrag")
 
 void
 pf_normalize_init(void)
