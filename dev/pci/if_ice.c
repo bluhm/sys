@@ -13111,6 +13111,7 @@ ice_up(struct ice_softc *sc)
 	}
 
 	ice_configure_all_rxq_interrupts(&sc->pf_vsi);
+	sc->pf_vsi.rx_itr = ICE_DFLT_RX_ITR;
 	ice_configure_rx_itr(&sc->pf_vsi);
 
 	ice_configure_all_txq_interrupts(&sc->pf_vsi);
