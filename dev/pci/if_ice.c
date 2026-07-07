@@ -11250,6 +11250,25 @@ ice_configure_rx_itr(struct ice_vsi *vsi)
 	ice_flush(hw);
 }
 
+void
+ice_configure_tx_itr(struct ice_vsi *vsi)
+{
+	struct ice_hw *hw = &vsi->sc->hw;
+	int i;
+
+	/* TODO: Handle per-queue/per-vector ITR? */
+
+	for (i = 0; i < vsi->num_tx_queues; i++) {
+		struct ice_tx_queue *txq = &vsi->tx_queues[i];
+		int v = txq->irqv->iv_qid + 1;
+
+		ICE_WRITE(hw, GLINT_ITR(ICE_TX_ITR, v),
+		     ice_itr_to_reg(hw, vsi->tx_itr));
+	}
+
+	ice_flush(hw);
+}
+
 /**
  * ice_set_default_promisc_mask - Set default config for promisc settings
  * @promisc_mask: bitmask to setup
@@ -13115,6 +13134,8 @@ ice_up(struct ice_softc *sc)
 	ice_configure_rx_itr(&sc->pf_vsi);
 
 	ice_configure_all_txq_interrupts(&sc->pf_vsi);
+	sc->pf_vsi.tx_itr = ICE_DFLT_TX_ITR;
+	ice_configure_tx_itr(&sc->pf_vsi);
 
 	/* Configure promiscuous mode */
 	ice_if_promisc_set(sc);
