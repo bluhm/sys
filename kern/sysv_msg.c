@@ -1,4 +1,4 @@
-/*	$OpenBSD: sysv_msg.c,v 1.44 2026/06/23 08:36:45 mvs Exp $	*/
+/*	$OpenBSD: sysv_msg.c,v 1.46 2026/06/30 13:49:06 mvs Exp $	*/
 /*	$NetBSD: sysv_msg.c,v 1.19 1996/02/09 19:00:18 christos Exp $	*/
 /*
  * Copyright (c) 2009 Bret S. Lambert <blambert@openbsd.org>
@@ -60,7 +60,15 @@ int msg_copyin(struct msg *, const char *, size_t);
 int msg_copyout(struct msg *, char *, size_t *);
 
 struct	pool sysvmsgpl;
-struct	msginfo msginfo;
+
+const struct msginfo msginfo = {
+	.msgmax = MSGMAX,
+	.msgmni = MSGMNI,
+	.msgmnb = MSGMNB,
+	.msgtql = MSGTQL,
+	.msgssz = MSGSSZ,
+	.msgseg = MSGSEG,
+};
 
 TAILQ_HEAD(, que) msg_queues;
 
@@ -72,13 +80,6 @@ int maxmsgs;
 void
 msginit(void)
 {
-	msginfo.msgmax = MSGMAX;
-	msginfo.msgmni = MSGMNI;
-	msginfo.msgmnb = MSGMNB;
-	msginfo.msgtql = MSGTQL;
-	msginfo.msgssz = MSGSSZ;
-	msginfo.msgseg = MSGSEG;
-
 	pool_init(&sysvmsgpl, sizeof(struct msg), 0, IPL_NONE, PR_WAITOK,
 	    "sysvmsgpl", NULL);
 
@@ -653,7 +654,7 @@ sysctl_sysvmsg(int *name, u_int namelen, void *where, size_t *sizep)
 {
 	struct msg_sysctl_info *info;
 	struct que *que;
-	size_t infolen, infolen0;
+	size_t infolen;
 	int error;
 
 	switch (*name) {
@@ -670,10 +671,10 @@ sysctl_sysvmsg(int *name, u_int namelen, void *where, size_t *sizep)
 		 * message queues; for now, emulate this behavior
 		 * until a more thorough fix can be made.
 		 */
-		infolen0 = sizeof(msginfo) +
+		infolen = sizeof(msginfo) +
 		    msginfo.msgmni * sizeof(struct msqid_ds);
 		if (where == NULL) {
-			*sizep = infolen0;
+			*sizep = infolen;
 			return (0);
 		}
 
@@ -686,17 +687,10 @@ sysctl_sysvmsg(int *name, u_int namelen, void *where, size_t *sizep)
 		 */
 		if (*sizep == sizeof(struct msginfo))
 			return (copyout(&msginfo, where, sizeof(msginfo)));
-
-		info = malloc(infolen0, M_TEMP, M_WAIT|M_ZERO);
-
-		/* if the malloc slept, this may have changed */
-		infolen = sizeof(msginfo) +
-		    msginfo.msgmni * sizeof(struct msqid_ds);
-
-		if (*sizep < infolen) {
-			free(info, M_TEMP, infolen0);
+		if (*sizep < infolen)
 			return (ENOMEM);
-		}
+
+		info = malloc(infolen, M_TEMP, M_WAIT|M_ZERO);
 
 		memcpy(&info->msginfo, &msginfo, sizeof(struct msginfo));
 
@@ -711,7 +705,7 @@ sysctl_sysvmsg(int *name, u_int namelen, void *where, size_t *sizep)
 
 		error = copyout(info, where, infolen);
 
-		free(info, M_TEMP, infolen0);
+		free(info, M_TEMP, infolen);
 
 		return (error);
 
