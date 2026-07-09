@@ -523,7 +523,7 @@ myx_attachhook(struct device *self)
 
 	ifp->if_softc = sc;
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
-	ifp->if_xflags = IFXF_MPSAFE;
+	ifp->if_xflags = IFXF_MPSAFE | IFXF_MBUF_64BIT;
 	ifp->if_ioctl = myx_ioctl;
 	ifp->if_qstart = myx_start;
 	ifp->if_watchdog = myx_watchdog;
@@ -661,7 +661,7 @@ myx_dmamem_alloc(struct myx_softc *sc, struct myx_dmamem *mxm,
 		return (1);
 	if (bus_dmamem_alloc(sc->sc_dmat, mxm->mxm_size,
 	    align, 0, &mxm->mxm_seg, 1, &mxm->mxm_nsegs,
-	    BUS_DMA_WAITOK | BUS_DMA_ZERO) != 0)
+	    BUS_DMA_WAITOK | BUS_DMA_ZERO | BUS_DMA_64BIT) != 0)
 		goto destroy;
 	if (bus_dmamem_map(sc->sc_dmat, &mxm->mxm_seg, mxm->mxm_nsegs,
 	    mxm->mxm_size, &mxm->mxm_kva, BUS_DMA_WAITOK) != 0)
