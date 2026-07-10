@@ -692,6 +692,12 @@ swcr_compdec(struct cryptodesc *crd, struct swcr_data *sw,
 			free(out, M_CRYPTO_DATA, result);
 			return 0;
 		}
+	} else {
+		/* Decompressed IP packet must fit into mbuf cluster. */
+		if (outtype == CRYPTO_BUF_MBUF && result > MAXMCLBYTES) {
+			free(out, M_CRYPTO_DATA, result);
+			return EMSGSIZE;
+		}
 	}
 
 	COPYBACK(outtype, buf, crd->crd_skip, result, out);
