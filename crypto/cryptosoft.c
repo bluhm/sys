@@ -656,7 +656,7 @@ swcr_compdec(struct cryptodesc *crd, struct swcr_data *sw,
 	const struct comp_algo *cxf;
 	int adj;
 	u_int32_t result;
-	int error;
+	int error = 0;
 
 	cxf = sw->sw_cxf;
 
@@ -687,22 +687,19 @@ swcr_compdec(struct cryptodesc *crd, struct swcr_data *sw,
 	if (crd->crd_flags & CRD_F_COMP) {
 		if (result > crd->crd_len) {
 			/* Compression was useless, we lost time */
-			free(out, M_CRYPTO_DATA, result);
-			return 0;
+			goto out;
 		}
 	} else {
 		/* Decompressed IP packet must fit into mbuf cluster. */
 		if (outtype == CRYPTO_BUF_MBUF && result > MAXMCLBYTES) {
-			free(out, M_CRYPTO_DATA, result);
-			return EMSGSIZE;
+			error = EMSGSIZE;
+			goto out;
 		}
 	}
 
 	error = COPYBACK(outtype, buf, crd->crd_skip, result, out);
-	if (error) {
-		free(out, M_CRYPTO_DATA, result);
-		return error;
-	}
+	if (error)
+		goto out;
 	if (result < crd->crd_len) {
 		adj = result - crd->crd_len;
 		if (outtype == CRYPTO_BUF_MBUF) {
@@ -728,8 +725,9 @@ swcr_compdec(struct cryptodesc *crd, struct swcr_data *sw,
 			}
 		}
 	}
+ out:
 	free(out, M_CRYPTO_DATA, result);
-	return 0;
+	return error;
 }
 
 /*
