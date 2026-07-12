@@ -1,4 +1,4 @@
-/*	$OpenBSD: ip_ah.c,v 1.179 2025/12/11 05:06:02 dlg Exp $ */
+/*	$OpenBSD: ip_ah.c,v 1.180 2026/07/12 21:29:51 bluhm Exp $ */
 /*
  * The authors of this code are John Ioannidis (ji@tla.org),
  * Angelos D. Keromytis (kermit@csd.uch.gr) and
