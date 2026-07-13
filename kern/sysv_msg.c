@@ -1,4 +1,4 @@
-/*	$OpenBSD: sysv_msg.c,v 1.48 2026/07/08 19:39:33 mvs Exp $	*/
+/*	$OpenBSD: sysv_msg.c,v 1.51 2026/07/12 22:06:01 kirill Exp $	*/
 /*	$NetBSD: sysv_msg.c,v 1.19 1996/02/09 19:00:18 christos Exp $	*/
 /*
  * Copyright (c) 2009 Bret S. Lambert <blambert@openbsd.org>
@@ -409,12 +409,12 @@ struct que *
 que_create(key_t key, struct ucred *cred, int mode)
 {
 	struct que *que, *que2;
-	int nextix = 1;
+	int nextix = 0;
 
 	que = malloc(sizeof(*que), M_TEMP, M_WAIT|M_ZERO);
 
 	/* if malloc slept, a queue with the same key may have been created */
-	if (que_key_lookup(key)) {
+	if (num_ques >= msginfo.msgmni || que_key_lookup(key)) {
 		free(que, M_TEMP, sizeof *que);
 		return (NULL);
 	}
@@ -726,6 +726,7 @@ sysctl_sysvmsg(int *name, u_int namelen, void *where, size_t *sizep)
 
 		memcpy(&info->msginfo, &msginfo, sizeof(struct msginfo));
 
+		KERNEL_LOCK();
 		/*
 		 * Special case #3: the previous array-based implementation
 		 * exported the array indices and userland has come to rely
@@ -734,6 +735,7 @@ sysctl_sysvmsg(int *name, u_int namelen, void *where, size_t *sizep)
 		TAILQ_FOREACH(que, &msg_queues, que_next)
 			memcpy(&info->msgids[que->que_ix], &que->msqid_ds,
 			    sizeof(struct msqid_ds));
+		KERNEL_UNLOCK();
 
 		error = copyout(info, where, infolen);
 
