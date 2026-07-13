@@ -78,9 +78,12 @@ u_int32_t swcr_sesnum = 0;
 int32_t swcr_id = -1;
 
 #define COPYBACK(x, a, b, c, d) \
-	(((x) == CRYPTO_BUF_MBUF) ? \
-	    m_copyback((struct mbuf *)a,b,c,d,M_NOWAIT) : \
-	    (cuio_copyback((struct uio *)a,b,c,d), 0))
+	do { \
+		if ((x) == CRYPTO_BUF_MBUF) \
+			m_copyback((struct mbuf *)a,b,c,d,M_NOWAIT); \
+		else \
+			cuio_copyback((struct uio *)a,b,c,d); \
+	} while (0)
 #define COPYDATA(x, a, b, c, d) \
 	do { \
 		if ((x) == CRYPTO_BUF_MBUF) \
@@ -697,9 +700,13 @@ swcr_compdec(struct cryptodesc *crd, struct swcr_data *sw,
 		}
 	}
 
-	error = COPYBACK(outtype, buf, crd->crd_skip, result, out);
-	if (error)
-		goto out;
+	if (outtype == CRYPTO_BUF_MBUF) {
+		error = m_copyback((struct mbuf *)buf, crd->crd_skip, result,
+		    out, M_NOWAIT);
+		if (error)
+			goto out;
+	} else
+		cuio_copyback((struct uio *)buf, crd->crd_skip, result, out);
 	if (result < crd->crd_len) {
 		adj = result - crd->crd_len;
 		if (outtype == CRYPTO_BUF_MBUF) {
