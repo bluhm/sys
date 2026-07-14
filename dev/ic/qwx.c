@@ -1,4 +1,4 @@
-/*	$OpenBSD: qwx.c,v 1.127 2026/07/07 18:20:58 kettenis Exp $	*/
+/*	$OpenBSD: qwx.c,v 1.137 2026/07/14 12:35:14 stsp Exp $	*/
 
 /*
  * Copyright 2023 Stefan Sperling <stsp@openbsd.org>
@@ -239,6 +239,7 @@ qwx_init(struct ifnet *ifp)
 	int error;
 	struct qwx_softc *sc = ifp->if_softc;
 	struct ieee80211com *ic = &sc->sc_ic;
+	int s = splnet();
 
 	sc->fw_mode = ATH11K_FIRMWARE_MODE_NORMAL;
 	/*
@@ -271,12 +272,17 @@ qwx_init(struct ifnet *ifp)
 	sc->scan.state = ATH11K_SCAN_IDLE;
 	sc->vdev_id_11d_scan = QWX_11D_INVALID_VDEV_ID;
 
-	error = qwx_core_init(sc);
-	if (error)
-		return error;
-
 	memset(&sc->qrtr_server, 0, sizeof(sc->qrtr_server));
 	sc->qrtr_server.node = QRTR_NODE_BCAST;
+
+	/* This flag will be cleared if firmware starts up successfully. */
+	set_bit(ATH11K_FLAG_QMI_FAIL, sc->sc_flags);
+
+	error = qwx_core_init(sc);
+	if (error) {
+		splx(s);
+		return error;
+	}
 
 	/* wait for QRTR init to be done */
 	while (sc->qrtr_server.node == QRTR_NODE_BCAST) {
@@ -284,13 +290,16 @@ qwx_init(struct ifnet *ifp)
 		    SEC_TO_NSEC(5));
 		if (error) {
 			printf("%s: qrtr init timeout\n", sc->sc_dev.dv_xname);
+			splx(s);
 			return error;
 		}
 	}
 
 	error = qwx_qmi_event_server_arrive(sc);
-	if (error)
+	if (error) {
+		splx(s);
 		return error;
+	}
 
 	if (sc->attached) {
 		/* Update MAC in case the upper layers changed it. */
@@ -309,24 +318,26 @@ qwx_init(struct ifnet *ifp)
 			    sc->sc_dev.dv_xname, ether_sprintf(ic->ic_myaddr),
 			    error);
 
-		ieee80211_media_init(ifp, qwx_media_change,
+		ieee80211_media_init(ifp, ieee80211_media_change,
 		    ieee80211_media_status);
 	}
 
 	if (ifp->if_flags & IFF_UP) {
-		refcnt_init(&sc->task_refs);
-
-		ifq_clr_oactive(&ifp->if_snd);
-
 		error = qwx_mac_start(sc);
-		if (error)
+		if (error) {
+			splx(s);
 			return error;
+		}
+
+		refcnt_init(&sc->task_refs);
+		ifq_clr_oactive(&ifp->if_snd);
 
 		ifp->if_flags |= IFF_RUNNING;
 		sc->ops.irq_enable(sc);
 		ieee80211_begin_scan(ifp);
 	}
 
+	splx(s);
 	return 0;
 }
 
@@ -414,10 +425,12 @@ qwx_stop(struct ifnet *ifp)
 	struct qwx_softc *sc = ifp->if_softc;
 	struct ieee80211com *ic = &sc->sc_ic;
 	int s = splnet();
+	int was_running;
 
 	rw_assert_wrlock(&sc->ioctl_rwl);
 
-	if (ic->ic_opmode == IEEE80211_M_STA &&
+	was_running = (ifp->if_flags & IFF_RUNNING) != 0;
+	if (was_running && ic->ic_opmode == IEEE80211_M_STA &&
 	    ic->ic_state == IEEE80211_S_RUN &&
 	    (ic->ic_bss->ni_flags & IEEE80211_NODE_MFP) &&
 	    ic->ic_bss->ni_port_valid)
@@ -433,7 +446,8 @@ qwx_stop(struct ifnet *ifp)
 	/* Cancel scheduled tasks and let any stale tasks finish up. */
 	task_del(systq, &sc->init_task);
 	qwx_del_task_all(sc);
-	refcnt_finalize(&sc->task_refs, "qwxstop");
+	if (was_running)
+		refcnt_finalize(&sc->task_refs, "qwxstop");
 
 	ifp->if_timer = sc->sc_tx_timer = 0;
 
@@ -444,20 +458,21 @@ qwx_stop(struct ifnet *ifp)
 	sc->bgscan_unref_arg = NULL;
 	sc->bgscan_unref_arg_size = 0;
 
-	clear_bit(ATH11K_FLAG_CRASH_FLUSH, sc->sc_flags);
-
 	/*
 	 * Manually run the newstate task's code for switching to INIT state.
 	 * This reconfigures firmware state to stop scanning, or disassociate
 	 * from our current AP, and/or stop the VIF, etc.
 	 */
-	if (ic->ic_state != IEEE80211_S_INIT) {
+	if (was_running && ic->ic_state != IEEE80211_S_INIT) {
 		sc->ns_nstate = IEEE80211_S_INIT;
 		sc->ns_arg = -1; /* do not send management frames */
 		refcnt_init(&sc->task_refs);
 		refcnt_take(&sc->task_refs);
+		clear_bit(ATH11K_FLAG_CRASH_FLUSH, sc->sc_flags);
 		qwx_newstate_task(sc);
-		if (ic->ic_state != IEEE80211_S_INIT) { /* task code failed */
+		set_bit(ATH11K_FLAG_CRASH_FLUSH, sc->sc_flags);
+		if (ic->ic_state != IEEE80211_S_INIT) {
+			/* task code failed */
 			task_del(systq, &sc->init_task);
 			sc->sc_newstate(ic, IEEE80211_S_INIT, -1);
 		}
@@ -472,7 +487,14 @@ qwx_stop(struct ifnet *ifp)
 	sc->vdev_id_11d_scan = QWX_11D_INVALID_VDEV_ID;
 	sc->pdevs_active = 0;
 
-	/* power off hardware */
+	/*
+	 * If we were running then allow commands to be sent to
+	 * firmware during core_deinit().
+	 */
+	if (was_running)
+		clear_bit(ATH11K_FLAG_CRASH_FLUSH, sc->sc_flags);
+
+	/* free some DMA allocations and power off hardware */
 	qwx_core_deinit(sc);
 
 	qwx_vif_free_all(sc);
@@ -517,6 +539,10 @@ qwx_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 				/* Force reload of firmware image from disk. */
 				qwx_free_firmware(sc);
 				err = qwx_init(ifp);
+				if (err) {
+					KASSERT(!(ifp->if_flags & IFF_RUNNING));
+					qwx_stop(ifp);
+				}
 			}
 		} else {
 			if (ifp->if_flags & IFF_RUNNING)
@@ -678,24 +704,6 @@ qwx_watchdog(struct ifnet *ifp)
 	}
 
 	ieee80211_watchdog(ifp);
-}
-
-int
-qwx_media_change(struct ifnet *ifp)
-{
-	int err;
-
-	err = ieee80211_media_change(ifp);
-	if (err != ENETRESET)
-		return err;
-
-	if ((ifp->if_flags & (IFF_UP | IFF_RUNNING)) ==
-	    (IFF_UP | IFF_RUNNING)) {
-		qwx_stop(ifp);
-		err = qwx_init(ifp);
-	}
-
-	return err;
 }
 
 int
@@ -15343,6 +15351,9 @@ qwx_dp_rxdma_ring_buf_setup(struct qwx_softc *sc,
 	rx_ring->rx_data = mallocarray(num_entries, sizeof(rx_ring->rx_data[0]),
 	    M_DEVBUF, M_WAITOK | M_ZERO);
 
+	rx_ring->bufs_max = num_entries;
+	memset(rx_ring->freemap, 0xff, sizeof(rx_ring->freemap));
+
 	for (i = 0; i < num_entries; i++) {
 		struct qwx_rx_data *rx_data = &rx_ring->rx_data[i];
 
@@ -15352,9 +15363,6 @@ qwx_dp_rxdma_ring_buf_setup(struct qwx_softc *sc,
 		if (ret)
 			return ret;
 	}
-
-	rx_ring->bufs_max = num_entries;
-	memset(rx_ring->freemap, 0xff, sizeof(rx_ring->freemap));
 
 	return qwx_dp_rxbufs_replenish(sc, dp->mac_id, rx_ring, num_entries,
 	    sc->hw_params.hal_params->rx_buf_rbm);
@@ -20778,10 +20786,12 @@ qwx_flush_rx_rings(struct qwx_softc *sc)
 void
 qwx_core_stop(struct qwx_softc *sc)
 {
-	if (!test_bit(ATH11K_FLAG_CRASH_FLUSH, sc->sc_flags))
+	if (!test_bit(ATH11K_FLAG_CRASH_FLUSH, sc->sc_flags) &&
+	    !test_bit(ATH11K_FLAG_QMI_FAIL, sc->sc_flags))
 		qwx_qmi_firmware_stop(sc);
-	
-	qwx_flush_rx_rings(sc);
+
+	if (!test_bit(ATH11K_FLAG_QMI_FAIL, sc->sc_flags))
+		qwx_flush_rx_rings(sc);
 
 	sc->ops.stop(sc);
 	qwx_wmi_detach(sc);
@@ -20913,7 +20923,8 @@ qwx_core_qmi_firmware_ready(struct qwx_softc *sc)
 	default:
 		printf("%s: invalid crypto_mode: %d\n",
 		    sc->sc_dev.dv_xname, sc->crypto_mode);
-		return EINVAL;
+		ret = EINVAL;
+		goto err_dp_free;
 	}
 
 	if (sc->frame_mode == ATH11K_HW_TXRX_RAW)
@@ -20962,7 +20973,7 @@ err_firmware_stop:
 	return ret;
 }
 
-void
+int
 qwx_qmi_fw_init_done(struct qwx_softc *sc)
 {
 	int ret = 0;
@@ -20976,10 +20987,15 @@ qwx_qmi_fw_init_done(struct qwx_softc *sc)
 		clear_bit(ATH11K_FLAG_RECOVERY, sc->sc_flags);
 		ret = qwx_core_qmi_firmware_ready(sc);
 		if (ret) {
+			/*
+			 * This flags tells qwx_stop() that core is stopped
+			 * and ATH11K_FIRMWARE_MODE_OFF was already sent.
+			 */
 			set_bit(ATH11K_FLAG_QMI_FAIL, sc->sc_flags);
-			return;
 		}
 	}
+
+	return ret;
 }
 
 int
@@ -21039,8 +21055,7 @@ qwx_qmi_event_server_arrive(struct qwx_softc *sc)
 		}
 	}
 
-	qwx_qmi_fw_init_done(sc);
-	return 0;
+	return qwx_qmi_fw_init_done(sc);
 }
 
 int
@@ -21569,10 +21584,7 @@ qwx_hal_free_cont_wrp(struct qwx_softc *sc)
 int
 qwx_hal_srng_init(struct qwx_softc *sc)
 {
-	struct ath11k_hal *hal = &sc->hal;
 	int ret;
-
-	memset(hal, 0, sizeof(*hal));
 
 	ret = qwx_hal_srng_create_config(sc);
 	if (ret)
@@ -22648,7 +22660,8 @@ qwx_ce_cleanup_pipes(struct qwx_softc *sc)
 		qwx_ce_rx_pipe_cleanup(pipe);
 
 		/* Cleanup any src CE's which have interrupts disabled */
-		qwx_ce_poll_send_completed(sc, pipe_num);
+		if (!test_bit(ATH11K_FLAG_QMI_FAIL, sc->sc_flags))
+			qwx_ce_poll_send_completed(sc, pipe_num);
 	}
 }
 
@@ -24310,7 +24323,16 @@ qwx_init_task(void *arg)
 	struct qwx_softc *sc = arg;
 	struct ifnet *ifp = &sc->sc_ic.ic_if;
 	int s = splnet();
-	rw_enter_write(&sc->ioctl_rwl);
+
+	/*
+	 * Do not sleep for this lock. The init task is a one-shot
+	 * recovery mechanism. If the ioctl handler is busy then
+	 * we are being reconfigured or reset already.
+	 */
+	if (rw_enter(&sc->ioctl_rwl, RW_WRITE | RW_NOSLEEP) != 0) {
+		splx(s);
+		return;
+	}
 
 	if (ifp->if_flags & IFF_RUNNING)
 		qwx_stop(ifp);
@@ -27431,11 +27453,11 @@ qwx_activate(struct device *self, int act)
 
 	switch (act) {
 	case DVACT_QUIESCE:
+		rw_enter_write(&sc->ioctl_rwl);
 		if (ifp->if_flags & IFF_RUNNING) {
-			rw_enter_write(&sc->ioctl_rwl);
 			qwx_stop(ifp);
-			rw_exit(&sc->ioctl_rwl);
 		}
+		rw_exit(&sc->ioctl_rwl);
 		break;
 	case DVACT_RESUME:
 		err = qwx_hal_srng_init(sc);
@@ -27444,12 +27466,14 @@ qwx_activate(struct device *self, int act)
 			    sc->sc_dev.dv_xname);
 		break;
 	case DVACT_WAKEUP:
+		rw_enter_write(&sc->ioctl_rwl);
 		if ((ifp->if_flags & (IFF_UP | IFF_RUNNING)) == IFF_UP) {
 			err = qwx_init(ifp);
 			if (err)
 				printf("%s: could not initialize hardware\n",
 				    sc->sc_dev.dv_xname);
 		}
+		rw_exit(&sc->ioctl_rwl);
 		break;
 	}
 
