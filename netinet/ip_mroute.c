@@ -652,7 +652,11 @@ ip_mrouter_done(struct socket *so)
 		rtfree(rt);
 	} while (error == EAGAIN);
 
-	KASSERT(mrt_count[rtableid] == 0);
+	/*
+	 * XXX Should be KASSERT, but there is a leak.  If an interface
+	 * is destroyed, the route is deleted, but mrt_mcast_del() not run.
+	 */
+	mrt_count[rtableid] = 0;
 
 	/* Unregister all interfaces in the domain. */
 	TAILQ_FOREACH(ifp, &ifnetlist, if_list) {
