@@ -222,6 +222,8 @@ mrt6stat_inc(enum mrt6stat_counters c)
 /* How frequent should we look for expired entries (in seconds). */
 #define	MCAST_EXPIRE_TIMEOUT	30
 
+extern int ip6_mrtproto;
+
 /*
  * The kernel's multicast-interface structure.
  */

@@ -490,7 +490,7 @@ reroute:
 			 * if necessary.
 			 */
 			if (atomic_load_int(&ip6_mforwarding) &&
-			    ip6_mrouter[ifp->if_rdomain] &&
+			    ip6_mrouter_active(ifp->if_rdomain) &&
 			    (flags & IPV6_FORWARDING) == 0) {
 				int rv;
 

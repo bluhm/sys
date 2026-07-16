@@ -535,7 +535,7 @@ mld6_sendpkt(const struct mld6_pktinfo *pkt)
 	 * router, so that the process-level routing daemon can hear it.
 	 */
 #ifdef MROUTING
-	im6o.im6o_loop = (ip6_mrouter[pkt->mpi_rdomain] != NULL);
+	im6o.im6o_loop = ip6_mrouter_active(pkt->mpi_rdomain);
 #endif
 	if_put(ifp);
 

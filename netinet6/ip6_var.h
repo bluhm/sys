@@ -299,6 +299,7 @@ int	ip6_unknown_opt(struct mbuf **, u_int8_t *, int);
 int	ip6_get_prevhdr(struct mbuf *, int);
 int	ip6_nexthdr(struct mbuf *, int, int, int *);
 int	ip6_lasthdr(struct mbuf *, int, int, int *);
+int	ip6_mrouter_active(u_int);
 int	ip6_mforward(struct ip6_hdr *, struct ifnet *, struct mbuf *, int);
 int	ip6_process_hopopts(struct mbuf **, u_int8_t *, int, u_int32_t *,
 	     u_int32_t *);
