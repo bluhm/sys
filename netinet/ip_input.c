@@ -1954,11 +1954,11 @@ ip_send_do_dispatch(void *xmq, int flags)
 
 	NET_LOCK_SHARED();
 	while ((m = ml_dequeue(&ml)) != NULL) {
-		u_int32_t ipsecflowinfo = 0;
+		uint32_t ipsecflowinfo = 0;
 
 		if ((mtag = m_tag_find(m, PACKET_TAG_IPSEC_FLOWINFO, NULL))
 		    != NULL) {
-			ipsecflowinfo = *(u_int32_t *)(mtag + 1);
+			ipsecflowinfo = *(uint32_t *)(mtag + 1);
 			m_tag_delete(m, mtag);
 		}
 		ip_output(m, NULL, NULL, flags, NULL, NULL, ipsecflowinfo);

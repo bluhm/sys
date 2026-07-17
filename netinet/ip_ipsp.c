@@ -109,7 +109,7 @@ int ipsec_ids_idle = 100;		/* keep free ids for 100s */
 struct pool tdb_pool;
 
 /* Protected by the NET_LOCK(). */
-u_int32_t ipsec_ids_next_flow = 1;		/* [F] may not be zero */
+uint32_t ipsec_ids_next_flow = 1;		/* [F] may not be zero */
 struct ipsec_ids_tree ipsec_ids_tree;		/* [F] */
 struct ipsec_ids_flows ipsec_ids_flows;		/* [F] */
 struct ipsec_policy_head ipsec_policy_head =
@@ -1235,7 +1235,7 @@ struct ipsec_ids *
 ipsp_ids_insert(struct ipsec_ids *ids)
 {
 	struct ipsec_ids *found;
-	u_int32_t start_flow;
+	uint32_t start_flow;
 
 	mtx_enter(&ipsec_flows_mtx);
 
@@ -1276,7 +1276,7 @@ ipsp_ids_insert(struct ipsec_ids *ids)
 }
 
 struct ipsec_ids *
-ipsp_ids_lookup(u_int32_t ipsecflowinfo)
+ipsp_ids_lookup(uint32_t ipsecflowinfo)
 {
 	struct ipsec_ids	key;
 	struct ipsec_ids	*ids;
