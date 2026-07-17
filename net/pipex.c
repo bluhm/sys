@@ -1,4 +1,4 @@
-/*	$OpenBSD: pipex.c,v 1.163 2026/07/07 05:39:05 dlg Exp $ */
+/*	$OpenBSD: pipex.c,v 1.164 2026/07/17 18:51:29 bluhm Exp $ */
 
 /*-
  * Copyright (c) 2009 Internet Initiative Japan Inc.
