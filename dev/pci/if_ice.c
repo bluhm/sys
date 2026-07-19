@@ -13853,15 +13853,12 @@ ice_tso_detect_sparse(struct mbuf *m, struct ether_extracted *ext,
 {
 	int count, curseg, i, hlen, segsz, seglen, hdrs, maxsegs;
 	bus_dma_segment_t *segs;
-	uint64_t paylen, outlen, nsegs;
+	uint64_t paylen;
 
 	curseg = hdrs = 0;
 
 	hlen = ETHER_HDR_LEN + ext->iphlen + ext->tcphlen;
-	outlen = MIN(9668, MAX(64, m->m_pkthdr.ph_mss));
-	paylen = m->m_pkthdr.len - hlen;
-	nsegs = (paylen + outlen - 1) / outlen;
-
+	paylen = ext->paylen;
 	segs = map->dm_segs;
 
 	/* First, count the number of descriptors for the header.
@@ -13875,7 +13872,7 @@ ice_tso_detect_sparse(struct mbuf *m, struct ether_extracted *ext,
 			return (1);
 		if (curseg == 0) {
 			i++;
-			if (i == nsegs)
+			if (i == map->dm_nsegs)
 				return (1);
 
 			curseg = segs[i].ds_len;
@@ -13885,13 +13882,13 @@ ice_tso_detect_sparse(struct mbuf *m, struct ether_extracted *ext,
 		hlen -= seglen;
 	}
 
-	maxsegs = ICE_MAX_TSO_SEGS - hdrs;
+	maxsegs = ICE_MAX_TX_SEGS - hdrs;
 
-	/* We must count the headers, in order to verify that they take up
-	 * 128 or fewer descriptors. However, we don't need to check the data
-	 * if the total segments is small.
+	/* If the whole packet fits in maxsegs DMA segments, no single TSO
+	 * segment can span more than maxsegs descriptors, so we don't need
+	 * to check the data in detail.
 	 */
-	if (nsegs <= maxsegs)
+	if (map->dm_nsegs <= maxsegs)
 		return (0);
 
 	count = 0;
@@ -13908,7 +13905,7 @@ ice_tso_detect_sparse(struct mbuf *m, struct ether_extracted *ext,
 				return (1);
 			if (curseg == 0) {
 				i++;
-				if (i == nsegs)
+				if (i == map->dm_nsegs)
 					return (1);
 				curseg = segs[i].ds_len;
 			}

@@ -764,7 +764,7 @@ enum ice_fw_modes {
 #define ICE_MIN_TSO_MSS		64
 
 #define ICE_MAX_TX_SEGS		8
-#define ICE_MAX_TSO_SEGS	8
+#define ICE_MAX_TSO_SEGS	128
 
 #define ICE_MAX_DMA_SEG_SIZE	((16*1024) - 1)
 
