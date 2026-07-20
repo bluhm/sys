@@ -13855,8 +13855,6 @@ ice_tso_detect_sparse(struct mbuf *m, struct ether_extracted *ext,
 	bus_dma_segment_t *segs;
 	uint64_t paylen;
 
-	curseg = hdrs = 0;
-
 	hlen = ETHER_HDR_LEN + ext->iphlen + ext->tcphlen;
 	paylen = ext->paylen;
 	segs = map->dm_segs;
@@ -13865,6 +13863,7 @@ ice_tso_detect_sparse(struct mbuf *m, struct ether_extracted *ext,
 	 * Additionally, make sure it does not span more than 3 segments.
 	 */
 	i = 0;
+	hdrs = 0;
 	curseg = segs[0].ds_len;
 	while (hlen > 0) {
 		hdrs++;
@@ -13874,7 +13873,6 @@ ice_tso_detect_sparse(struct mbuf *m, struct ether_extracted *ext,
 			i++;
 			if (i == map->dm_nsegs)
 				return (1);
-
 			curseg = segs[i].ds_len;
 		}
 		seglen = MIN(curseg, hlen);
@@ -13884,20 +13882,19 @@ ice_tso_detect_sparse(struct mbuf *m, struct ether_extracted *ext,
 
 	maxsegs = ICE_MAX_TX_SEGS - hdrs;
 
-	/* If the whole packet fits in maxsegs DMA segments, no single TSO
-	 * segment can span more than maxsegs descriptors, so we don't need
-	 * to check the data in detail.
+	/* We must count the headers, in order to verify that they take up
+	 * 3 or fewer descriptors.  However, we don't need to check the data
+	 * if the total segments is small.
 	 */
 	if (map->dm_nsegs <= maxsegs)
 		return (0);
-
-	count = 0;
 
 	/* Now check the data to make sure that each TSO segment is made up of
 	 * no more than maxsegs descriptors. This ensures that hardware will
 	 * be capable of performing TSO offload.
 	 */
 	while (paylen > 0) {
+		count = 0;
 		segsz = m->m_pkthdr.ph_mss;
 		while (segsz > 0 && paylen != 0) {
 			count++;
@@ -13914,7 +13911,6 @@ ice_tso_detect_sparse(struct mbuf *m, struct ether_extracted *ext,
 			curseg -= seglen;
 			paylen -= seglen;
 		}
-		count = 0;
 	}
 
 	return (0);
