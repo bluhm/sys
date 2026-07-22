@@ -1255,6 +1255,13 @@ tcp_softtso_chop(struct mbuf_list *ml, struct mbuf *m0, struct ifnet *ifp,
 		len = MIN(tlen - off, mss);
 
 		MGETHDR(m, M_DONTWAIT, MT_HEADER);
+		if (m != NULL && hlen + len > MHLEN) {
+			MCLGETL(m, M_DONTWAIT, hlen + len);
+			if ((m->m_flags & M_EXT) == 0) {
+				m_freem(m);
+				m = NULL;
+			}
+		}
 		if (m == NULL) {
 			error = ENOBUFS;
 			goto bad;
@@ -1264,8 +1271,8 @@ tcp_softtso_chop(struct mbuf_list *ml, struct mbuf *m0, struct ifnet *ifp,
 			goto bad;
 
 		/* IP and TCP header to the end, space for link layer header */
-		m->m_len = hlen;
-		m_align(m, hlen);
+		m->m_len = hlen + len;
+		m_align(m, hlen + len);
 
 		/* copy and adjust TCP header */
 		mhth = (struct tcphdr *)(mtod(m, caddr_t) + iphlen);
@@ -1276,10 +1283,7 @@ tcp_softtso_chop(struct mbuf_list *ml, struct mbuf *m0, struct ifnet *ifp,
 
 		/* add mbuf chain with payload */
 		m->m_pkthdr.len = hlen + len;
-		if ((m->m_next = m_copym(m0, off, len, M_DONTWAIT)) == NULL) {
-			error = ENOBUFS;
-			goto bad;
-		}
+		m_copydata(m0, off, len, mtod(m, caddr_t) + hlen);
 
 		/* copy and adjust IP header, calculate checksum */
 		SET(m->m_pkthdr.csum_flags, M_TCP_CSUM_OUT);
