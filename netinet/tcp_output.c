@@ -667,9 +667,20 @@ send:
 			tcpstat_pkt(tcps_sndpack, tcps_sndbyte, len);
 		}
 		MGETHDR(m, M_DONTWAIT, MT_HEADER);
-		if (m != NULL && max_linkhdr + hdrlen > MHLEN) {
-			MCLGET(m, M_DONTWAIT);
-			if ((m->m_flags & M_EXT) == 0) {
+		if (m != NULL && (max_linkhdr + hdrlen > MHLEN ||
+		    M_SIZE(so->so_snd.sb_mb) * 5 < len)) {
+			/*
+			 * m_copym() many small clusters is expensive.
+			 * It costs pool get and ref count performance.
+			 * Allocate a large cluster and copy all data.
+			 */
+			if (M_SIZE(so->so_snd.sb_mb) * 5 < len)
+				MCLGETL(m, M_DONTWAIT,
+				    max_linkhdr + hdrlen + len);
+			if ((m->m_flags & M_EXT) == 0)
+				MCLGET(m, M_DONTWAIT);
+			if (((m->m_flags & M_EXT) == 0) &&
+			    max_linkhdr + hdrlen > MHLEN) {
 				m_freem(m);
 				m = NULL;
 			}
@@ -681,10 +692,14 @@ send:
 		m->m_data += max_linkhdr;
 		m->m_len = hdrlen;
 		if (len <= m_trailingspace(m)) {
+			m->m_data -= max_linkhdr;
+			m_align(m, hdrlen + len);
 			m_copydata(so->so_snd.sb_mb, off, (int) len,
 			    mtod(m, caddr_t) + hdrlen);
 			m->m_len += len;
 		} else {
+			m->m_data -= max_linkhdr;
+			m_align(m, hdrlen);
 			m->m_next = m_copym(so->so_snd.sb_mb, off, (int) len,
 			    M_NOWAIT);
 			if (m->m_next == 0) {

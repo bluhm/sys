@@ -249,6 +249,13 @@ struct mbuf {
 #define	M_DONTWAIT	M_NOWAIT
 #define	M_WAIT		M_WAITOK
 
+#ifdef _KERNEL
+#define M_DATABUF(m)	((m)->m_flags & M_EXT ? (m)->m_ext.ext_buf : \
+			(m)->m_flags & M_PKTHDR ? (m)->m_pktdat : (m)->m_dat)
+#define M_SIZE(m)	((m)->m_flags & M_EXT ? (m)->m_ext.ext_size : \
+			(m)->m_flags & M_PKTHDR ? MHLEN : MLEN)
+#endif
+
 /*
  * mbuf allocation/deallocation macros:
  *

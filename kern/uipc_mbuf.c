@@ -156,11 +156,6 @@ struct pool_allocator m_pool_allocator = {
 static void (*mextfree_fns[4])(caddr_t, u_int, void *);
 static u_int num_extfree_fns;
 
-#define M_DATABUF(m)	((m)->m_flags & M_EXT ? (m)->m_ext.ext_buf : \
-			(m)->m_flags & M_PKTHDR ? (m)->m_pktdat : (m)->m_dat)
-#define M_SIZE(m)	((m)->m_flags & M_EXT ? (m)->m_ext.ext_size : \
-			(m)->m_flags & M_PKTHDR ? MHLEN : MLEN)
-
 /*
  * Initialize the mbuf allocator.
  */
