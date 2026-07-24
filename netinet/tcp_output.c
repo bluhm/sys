@@ -657,6 +657,10 @@ send:
 	 * the template for sends on this connection.
 	 */
 	if (len) {
+		struct mbuf *n;
+		long sboff, sblen, nseg, nsegmax;
+		int deepcopy;
+
 		if (tp->t_force && len == 1)
 			tcpstat_inc(tcps_sndprobe);
 		else if (SEQ_LT(tp->snd_nxt, tp->snd_max)) {
@@ -666,10 +670,40 @@ send:
 		} else {
 			tcpstat_pkt(tcps_sndpack, tcps_sndbyte, len);
 		}
+		/*
+		 * m_copym() of many mbufs is expensive.  Each mbuf
+		 * costs a pool get and cluster reference counting
+		 * during copy and free.  If the data spans more
+		 * mbufs than needed at half cluster fill, allocate
+		 * one large cluster and copy all data into it.
+		 */
+		nsegmax = lmax(4, len / (MCLBYTES / 2));
+		nseg = 0;
+		sboff = off;
+		sblen = len;
+		for (n = so->so_snd.sb_mb; n != NULL; n = n->m_next) {
+			if (sboff >= n->m_len) {
+				sboff -= n->m_len;
+				continue;
+			}
+			if (++nseg > nsegmax)
+				break;
+			if (n->m_len - sboff >= sblen)
+				break;
+			sblen -= n->m_len - sboff;
+			sboff = 0;
+		}
+		deepcopy = (nseg > nsegmax);
+
 		MGETHDR(m, M_DONTWAIT, MT_HEADER);
-		if (m != NULL && max_linkhdr + hdrlen > MHLEN) {
-			MCLGET(m, M_DONTWAIT);
-			if ((m->m_flags & M_EXT) == 0) {
+		if (m != NULL && (max_linkhdr + hdrlen > MHLEN || deepcopy)) {
+			if (deepcopy)
+				MCLGETL(m, M_DONTWAIT,
+				    max_linkhdr + hdrlen + len);
+			if ((m->m_flags & M_EXT) == 0)
+				MCLGET(m, M_DONTWAIT);
+			if (((m->m_flags & M_EXT) == 0) &&
+			    max_linkhdr + hdrlen > MHLEN) {
 				m_freem(m);
 				m = NULL;
 			}
@@ -681,10 +715,14 @@ send:
 		m->m_data += max_linkhdr;
 		m->m_len = hdrlen;
 		if (len <= m_trailingspace(m)) {
+			m->m_data -= max_linkhdr;
+			m_align(m, hdrlen + len);
 			m_copydata(so->so_snd.sb_mb, off, (int) len,
 			    mtod(m, caddr_t) + hdrlen);
 			m->m_len += len;
 		} else {
+			m->m_data -= max_linkhdr;
+			m_align(m, hdrlen);
 			m->m_next = m_copym(so->so_snd.sb_mb, off, (int) len,
 			    M_NOWAIT);
 			if (m->m_next == 0) {
