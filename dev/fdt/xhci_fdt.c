@@ -1,4 +1,4 @@
-/*	$OpenBSD: xhci_fdt.c,v 1.29 2026/04/09 15:13:45 kettenis Exp $	*/
+/*	$OpenBSD: xhci_fdt.c,v 1.31 2026/07/21 11:15:56 kettenis Exp $	*/
 /*
  * Copyright (c) 2017 Mark Kettenis <kettenis@openbsd.org>
  *
@@ -81,7 +81,8 @@ xhci_fdt_match(struct device *parent, void *match, void *aux)
 	    OF_is_compatible(faa->fa_node, "cdns,usb3") ||
 	    OF_is_compatible(faa->fa_node, "qcom,snps-dwc3") ||
 	    OF_is_compatible(faa->fa_node, "snps,dwc3") ||
-	    OF_is_compatible(faa->fa_node, "spacemit,k1-dwc3");
+	    OF_is_compatible(faa->fa_node, "spacemit,k1-dwc3") ||
+	    OF_is_compatible(faa->fa_node, "spacemit,k3-dwc3");
 }
 
 void
@@ -151,7 +152,8 @@ xhci_fdt_attach(struct device *parent, struct device *self, void *aux)
 	if (OF_is_compatible(sc->sc_node, "apple,t8103-dwc3") ||
 	    OF_is_compatible(sc->sc_node, "qcom,snps-dwc3") ||
 	    OF_is_compatible(sc->sc_node, "snps,dwc3") ||
-	    OF_is_compatible(sc->sc_node, "spacemit,k1-dwc3"))
+	    OF_is_compatible(sc->sc_node, "spacemit,k1-dwc3") ||
+	    OF_is_compatible(sc->sc_node, "spacemit,k3-dwc3"))
 		error = xhci_snps_attach(sc);
 	if (error) {
 		printf(": can't initialize hardware\n");
@@ -340,17 +342,17 @@ xhci_snps_init(struct xhci_fdt_softc *sc)
 		reg &= ~USB3_GUSB2PHYCFG0_PHYIF;
 		reg |= USB3_GUSB2PHYCFG0_USBTRDTIM(0x9);
 	}
-	if (OF_getproplen(node, "snps,dis-u2-freeclk-exists-quirk") == 0)
+	if (OF_getpropbool(node, "snps,dis-u2-freeclk-exists-quirk"))
 		reg &= ~USB3_GUSB2PHYCFG0_U2_FREECLK_EXISTS;
-	if (OF_getproplen(node, "snps,dis_enblslpm_quirk") == 0)
+	if (OF_getpropbool(node, "snps,dis_enblslpm_quirk"))
 		reg &= ~USB3_GUSB2PHYCFG0_ENBLSLPM;
-	if (OF_getproplen(node, "snps,dis_u2_susphy_quirk") == 0)
+	if (OF_getpropbool(node, "snps,dis_u2_susphy_quirk"))
 		reg &= ~USB3_GUSB2PHYCFG0_SUSPENDUSB20;
 	bus_space_write_4(sc->sc.iot, sc->sc.ioh, USB3_GUSB2PHYCFG0, reg);
 
 	/* Configure USB3 quirks. */
 	reg = bus_space_read_4(sc->sc.iot, sc->sc.ioh, USB3_GUCTL1);
-	if (OF_getproplen(node, "snps,dis-tx-ipgap-linecheck-quirk") == 0)
+	if (OF_getpropbool(node, "snps,dis-tx-ipgap-linecheck-quirk"))
 		reg |= USB3_GUCTL1_TX_IPGAP_LINECHECK_DIS;
 	bus_space_write_4(sc->sc.iot, sc->sc.ioh, USB3_GUCTL1, reg);
 

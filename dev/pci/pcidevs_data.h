@@ -2,7 +2,7 @@
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	OpenBSD: pcidevs,v 1.2142 2026/07/09 05:12:34 kevlo Exp 
+ *	OpenBSD: pcidevs,v 1.2145 2026/07/29 02:40:09 jsg Exp 
  */
 
 /*	$NetBSD: pcidevs,v 1.30 1997/06/24 06:20:24 thorpej Exp $	*/
@@ -7057,6 +7057,10 @@ static const struct pci_known_product pci_known_products[] = {
 	},
 	{
 	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_NAVI33_3,
+	    "Navi 33",
+	},
+	{
+	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_NAVI33_6,
 	    "Navi 33",
 	},
 	{
@@ -29152,6 +29156,14 @@ static const struct pci_known_product pci_known_products[] = {
 	    "MGA Marvel G200 SD",
 	},
 	{
+	    PCI_VENDOR_MAXIO, PCI_PRODUCT_MAXIO_MAP1202,
+	    "MAP1202",
+	},
+	{
+	    PCI_VENDOR_MAXIO, PCI_PRODUCT_MAXIO_MAP1602,
+	    "MAP1602",
+	},
+	{
 	    PCI_VENDOR_MEDIATEK, PCI_PRODUCT_MEDIATEK_MT7921K,
 	    "MT7921K",
 	},
@@ -34132,6 +34144,10 @@ static const struct pci_known_product pci_known_products[] = {
 	    "PM9C1a",
 	},
 	{
+	    PCI_VENDOR_SAMSUNG2, PCI_PRODUCT_SAMSUNG2_PM9E1_NVME,
+	    "PM9E1",
+	},
+	{
 	    PCI_VENDOR_SAMSUNG2, PCI_PRODUCT_SAMSUNG2_NVME_171X,
 	    "NVMe",
 	},
@@ -35026,6 +35042,10 @@ static const struct pci_known_product pci_known_products[] = {
 	{
 	    PCI_VENDOR_SPACEMIT, PCI_PRODUCT_SPACEMIT_K1,
 	    "K1",
+	},
+	{
+	    PCI_VENDOR_SPACEMIT, PCI_PRODUCT_SPACEMIT_K3,
+	    "K3",
 	},
 	{
 	    PCI_VENDOR_SSSTC, PCI_PRODUCT_SSSTC_CL1,
@@ -39334,6 +39354,10 @@ static const struct pci_known_vendor pci_known_vendors[] = {
 	{
 	    PCI_VENDOR_YMTC,
 	    "YMTC",
+	},
+	{
+	    PCI_VENDOR_MAXIO,
+	    "Maxio",
 	},
 	{
 	    PCI_VENDOR_SSSTC,
