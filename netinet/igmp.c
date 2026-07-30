@@ -1,4 +1,4 @@
-/*	$OpenBSD: igmp.c,v 1.99 2026/07/16 12:21:40 bluhm Exp $	*/
+/*	$OpenBSD: igmp.c,v 1.100 2026/07/30 14:57:46 bluhm Exp $	*/
 /*	$NetBSD: igmp.c,v 1.15 1996/02/13 23:41:25 christos Exp $	*/
 
 /*
