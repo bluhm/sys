@@ -674,10 +674,10 @@ send:
 		 * m_copym() of many mbufs is expensive.  Each mbuf
 		 * costs a pool get and cluster reference counting
 		 * during copy and free.  If the data spans more
-		 * mbufs than needed at half cluster fill, allocate
-		 * one large cluster and copy all data into it.
+		 * than nsegmax mbufs, allocate one large cluster
+		 * and copy all data into it.
 		 */
-		nsegmax = lmax(4, len / (MCLBYTES / 2));
+		nsegmax = 4;
 		nseg = 0;
 		sboff = off;
 		sblen = len;
