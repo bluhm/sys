@@ -483,8 +483,11 @@ reroute:
 	    (error = if_output_ml(ifp, &ml, sintosa(dst), ro->ro_rt)))
 		goto done;
 	ipstat_inc(ips_fragmented);
+	goto done;
 
-done:
+ bad:
+	m_freem(m);
+ done:
 	if (ro == &iproute)
 		rtfree(ro->ro_rt);
 	if_put(ifp);
@@ -492,10 +495,6 @@ done:
 	tdb_unref(tdb);
 #endif /* IPSEC */
 	return (error);
-
-bad:
-	m_freem(m);
-	goto done;
 }
 
 #ifdef IPSEC

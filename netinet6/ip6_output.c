@@ -492,10 +492,13 @@ reroute:
 			if (atomic_load_int(&ip6_mforwarding) &&
 			    ip6_mrouter[ifp->if_rdomain] &&
 			    (flags & IPV6_FORWARDING) == 0) {
-				if (ip6_mforward(ip6, ifp, m, flags) != 0) {
-					m_freem(m);
-					goto done;
-				}
+				int rv;
+
+				KERNEL_LOCK();
+				rv = ip6_mforward(ip6, ifp, m, flags);
+				KERNEL_UNLOCK();
+				if (rv != 0)
+					goto bad;
 			}
 		}
 #endif
@@ -508,10 +511,8 @@ reroute:
 		 * destination group on the loopback interface.
 		 */
 		if (ip6->ip6_hlim == 0 || (ifp->if_flags & IFF_LOOPBACK) ||
-		    IN6_IS_ADDR_MC_INTFACELOCAL(&ip6->ip6_dst)) {
-			m_freem(m);
-			goto done;
-		}
+		    IN6_IS_ADDR_MC_INTFACELOCAL(&ip6->ip6_dst))
+			goto bad;
 	}
 
 	/*
@@ -580,8 +581,7 @@ reroute:
 #if NPF > 0
 	if (pf_test(AF_INET6, PF_OUT, ifp, &m) != PF_PASS) {
 		error = EACCES;
-		m_freem(m);
-		goto done;
+		goto bad;
 	}
 	if (m == NULL)
 		goto done;
