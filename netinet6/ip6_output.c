@@ -492,10 +492,13 @@ reroute:
 			if (atomic_load_int(&ip6_mforwarding) &&
 			    ip6_mrouter[ifp->if_rdomain] &&
 			    (flags & IPV6_FORWARDING) == 0) {
-				if (ip6_mforward(ip6, ifp, m, flags) != 0) {
-					m_freem(m);
-					goto done;
-				}
+				int rv;
+
+				KERNEL_LOCK();
+				rv = ip6_mforward(ip6, ifp, m, flags);
+				KERNEL_UNLOCK();
+				if (rv != 0)
+					goto bad;
 			}
 		}
 #endif
