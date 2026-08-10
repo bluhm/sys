@@ -72,12 +72,12 @@ RB_HEAD(pf_frag_tree, pf_fragment);
 struct pf_frnode {
 	struct pf_addr	fn_src;		/* ip source address */
 	struct pf_addr	fn_dst;		/* ip destination address */
-	sa_family_t	fn_af;		/* address family */
-	u_int16_t	fn_rdomain;	/* routing domain */
-	u_int8_t	fn_proto;	/* protocol for fragments in fn_tree */
-	u_int8_t	fn_direction;	/* pf packet direction */
 	u_int32_t	fn_fragments;	/* number of entries in fn_tree */
 	u_int32_t	fn_gen;		/* fr_gen of newest entry in fn_tree */
+	u_int16_t	fn_rdomain;	/* routing domain */
+	sa_family_t	fn_af;		/* address family */
+	u_int8_t	fn_proto;	/* protocol for fragments in fn_tree */
+	u_int8_t	fn_direction;	/* pf packet direction */
 
 	RB_ENTRY(pf_frnode) fn_entry;
 	struct pf_frag_tree fn_tree;	/* matching fragments, lookup by id */
@@ -764,8 +764,7 @@ pf_join_fragment(struct pf_fragment *frag)
 }
 
 int
-pf_reassemble(struct mbuf **m0, int dir, u_int16_t rdomain,
-    u_short *reason)
+pf_reassemble(struct mbuf **m0, int dir, u_int16_t rdomain, u_short *reason)
 {
 	struct mbuf		*m = *m0;
 	struct ip		*ip = mtod(m, struct ip *);
@@ -833,9 +832,8 @@ pf_reassemble(struct mbuf **m0, int dir, u_int16_t rdomain,
 
 #ifdef INET6
 int
-pf_reassemble6(struct mbuf **m0, struct ip6_frag *fraghdr,
-    u_int16_t hdrlen, u_int16_t extoff, int dir, u_int16_t rdomain,
-    u_short *reason)
+pf_reassemble6(struct mbuf **m0, struct ip6_frag *fraghdr, u_int16_t hdrlen,
+    u_int16_t extoff, int dir, u_int16_t rdomain, u_short *reason)
 {
 	struct mbuf		*m = *m0;
 	struct ip6_hdr		*ip6 = mtod(m, struct ip6_hdr *);

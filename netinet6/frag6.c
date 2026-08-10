@@ -122,6 +122,7 @@ frag6_input(struct mbuf **mp, int *offp, int proto, int af,
 	int offset = *offp, nxt, i, next;
 	int first_frag = 0;
 	int fragoff, frgpartlen;	/* must be larger than u_int16_t */
+	u_int rdomain;
 	u_int8_t ecn, ecn0;
 
 	ip6 = mtod(*mp, struct ip6_hdr *);
@@ -184,12 +185,14 @@ frag6_input(struct mbuf **mp, int *offp, int proto, int af,
 		goto dropfrag;
 	}
 
-	TAILQ_FOREACH(q6, &frag6_queue, ip6q_queue)
+	rdomain = rtable_l2((*mp)->m_pkthdr.ph_rtableid);
+	TAILQ_FOREACH(q6, &frag6_queue, ip6q_queue) {
 		if (ip6f->ip6f_ident == q6->ip6q_ident &&
 		    IN6_ARE_ADDR_EQUAL(&ip6->ip6_src, &q6->ip6q_src) &&
 		    IN6_ARE_ADDR_EQUAL(&ip6->ip6_dst, &q6->ip6q_dst) &&
-		    (*mp)->m_pkthdr.ph_rtableid == q6->ip6q_rtableid)
+		    rdomain == q6->ip6q_rdomain)
 			break;
+	}
 
 	if (q6 == NULL) {
 		/*
@@ -218,12 +221,12 @@ frag6_input(struct mbuf **mp, int *offp, int proto, int af,
 
 		/* ip6q_nxt will be filled afterwards, from 1st fragment */
 		LIST_INIT(&q6->ip6q_asfrag);
-		q6->ip6q_ident	= ip6f->ip6f_ident;
-		q6->ip6q_rtableid = (*mp)->m_pkthdr.ph_rtableid;
-		q6->ip6q_ttl	= IPV6_FRAGTTL;
-		q6->ip6q_src	= ip6->ip6_src;
-		q6->ip6q_dst	= ip6->ip6_dst;
-		q6->ip6q_ecn	= (ntohl(ip6->ip6_flow) >> 20) & IPTOS_ECN_MASK;
+		q6->ip6q_rdomain = rdomain;
+		q6->ip6q_ident = ip6f->ip6f_ident;
+		q6->ip6q_ttl = IPV6_FRAGTTL;
+		q6->ip6q_src = ip6->ip6_src;
+		q6->ip6q_dst = ip6->ip6_dst;
+		q6->ip6q_ecn = (ntohl(ip6->ip6_flow) >> 20) & IPTOS_ECN_MASK;
 		q6->ip6q_unfrglen = -1;	/* The 1st fragment has not arrived. */
 		q6->ip6q_nfrag = 0;
 	}

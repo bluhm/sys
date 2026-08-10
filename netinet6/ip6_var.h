@@ -138,8 +138,8 @@ struct	ip6q {
 	struct in6_addr	ip6q_src, ip6q_dst;
 	int		ip6q_unfrglen;	/* len of unfragmentable part */
 	int		ip6q_nfrag;	/* # of fragments */
+	u_int		ip6q_rdomain;	/* routing domain for reassembly */
 	u_int32_t	ip6q_ident;	/* fragment identification */
-	u_int		ip6q_rtableid;	/* routing table for reassembly */
 	u_int8_t	ip6q_nxt;	/* ip6f_nxt in first fragment */
 	u_int8_t	ip6q_ecn;
 	u_int8_t	ip6q_ttl;	/* time to live in slowtimo units */

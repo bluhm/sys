@@ -191,10 +191,10 @@ struct ipqent {
  */
 struct ipq {
 	LIST_ENTRY(ipq) ipq_q;		/* to other reass headers */
+	u_int	  ipq_rdomain;		/* routing domain for reassembly */
+	u_int16_t ipq_id;		/* sequence id for reassembly */
 	u_int8_t  ipq_ttl;		/* time for reass q to live */
 	u_int8_t  ipq_p;		/* protocol of this fragment */
-	u_int16_t ipq_id;		/* sequence id for reassembly */
-	u_int	   ipq_rtableid;	/* routing table for reassembly */
 	struct	  ipqehead ipq_fragq;	/* to ip fragment queue */
 	struct	  in_addr ipq_src, ipq_dst;
 };
