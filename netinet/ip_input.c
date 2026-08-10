@@ -690,7 +690,8 @@ ip_fragcheck(struct mbuf **mp, int *offp)
 			if (ip->ip_id == fp->ipq_id &&
 			    ip->ip_src.s_addr == fp->ipq_src.s_addr &&
 			    ip->ip_dst.s_addr == fp->ipq_dst.s_addr &&
-			    ip->ip_p == fp->ipq_p)
+			    ip->ip_p == fp->ipq_p &&
+			    (*mp)->m_pkthdr.ph_rtableid == fp->ipq_rtableid)
 				break;
 		}
 
@@ -985,6 +986,7 @@ ip_reass(struct ipqent *ipqe, struct ipq *fp)
 		fp->ipq_ttl = IPFRAGTTL;
 		fp->ipq_p = ipqe->ipqe_ip->ip_p;
 		fp->ipq_id = ipqe->ipqe_ip->ip_id;
+		fp->ipq_rtableid = m->m_pkthdr.ph_rtableid;
 		LIST_INIT(&fp->ipq_fragq);
 		fp->ipq_src = ipqe->ipqe_ip->ip_src;
 		fp->ipq_dst = ipqe->ipqe_ip->ip_dst;
