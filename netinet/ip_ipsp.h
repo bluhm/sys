@@ -425,8 +425,9 @@ struct tdb {				/* tunnel descriptor block */
 #define TDB_REPLAYWASTE	32
 #define TDB_REPLAYMAX	(2100+TDB_REPLAYWASTE)
 
-	u_int64_t	tdb_rpl;	/* Replay counter */
-	u_int32_t	tdb_seen[howmany(TDB_REPLAYMAX, 32)]; /* Anti-replay window */
+	u_int64_t	tdb_rpl;	/* [m] Replay counter */
+	u_int32_t	tdb_seen[howmany(TDB_REPLAYMAX, 32)];
+					/* [m] Anti-replay window */
 
 	u_int8_t	tdb_iv[4];	/* Used for HALF-IV ESP */
 

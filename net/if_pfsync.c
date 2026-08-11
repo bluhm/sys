@@ -2381,6 +2381,8 @@ pfsync_out_tdb(struct tdb *tdb, void *buf)
 {
 	struct pfsync_tdb *ut = buf;
 
+	MUTEX_ASSERT_LOCKED(&tdb->tdb_mtx);
+
 	memset(ut, 0, sizeof(*ut));
 	ut->spi = tdb->tdb_spi;
 	memcpy(&ut->dst, &tdb->tdb_dst, sizeof(ut->dst));
