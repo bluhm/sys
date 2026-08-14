@@ -31,7 +31,7 @@
 
 *******************************************************************************/
 
-/* $OpenBSD: if_em_hw.h,v 1.98 2024/10/22 05:11:14 jsg Exp $ */
+/* $OpenBSD: if_em_hw.h,v 1.103 2026/08/14 07:21:33 jsg Exp $ */
 /* $FreeBSD: if_em_hw.h,v 1.15 2005/05/26 23:32:02 tackerman Exp $ */
 
 /* if_em_hw.h
@@ -85,14 +85,12 @@ typedef enum {
     em_pch_cnp,
     em_pch_tgp,
     em_pch_adp,
+    em_pch_mtp,
+    em_pch_ptp,
     em_num_macs
 } em_mac_type;
 
-#define IS_ICH8(t) \
-	(t == em_ich8lan || t == em_ich9lan || t == em_ich10lan || \
-	 t == em_pchlan || t == em_pch2lan || t == em_pch_lpt || \
-	 t == em_pch_spt || t == em_pch_cnp || t == em_pch_tgp || \
-	 t == em_pch_adp)
+#define IS_ICH8(t)	(t >= em_ich8lan)
 
 typedef enum {
     em_eeprom_uninitialized = 0,
@@ -596,6 +594,11 @@ uint32_t em_translate_82542_register(uint32_t);
 #define E1000_DEV_ID_PCH_RPL_I219_V23    0x0DC6
 #define E1000_DEV_ID_PCH_ARL_I219_LM24   0x57A0
 #define E1000_DEV_ID_PCH_ARL_I219_V24    0x57A1
+#define E1000_DEV_ID_PCH_PTP_I219_LM25   0x57B3
+#define E1000_DEV_ID_PCH_PTP_I219_V25    0x57B4
+#define E1000_DEV_ID_PCH_WCL_I219_LM27   0x57B7
+#define E1000_DEV_ID_PCH_WCL_I219_V27    0x57B8
+
 #define E1000_DEV_ID_82575EB_PT          0x10A7
 #define E1000_DEV_ID_82575EB_PF          0x10A9
 #define E1000_DEV_ID_82575GB_QP          0x10D6
@@ -1039,6 +1042,7 @@ struct em_ffvt_entry {
 #define E1000_FEXTNVM3 0x0003C  /* Future Extended NVM 3 - RW */
 #define E1000_FEXTNVM4 0x00024  /* Future Extended NVM 4 - RW */
 #define E1000_FEXTNVM6 0x00010  /* Future Extended NVM 6 - RW */
+#define E1000_FEXTNVM12 0x5BC0  /* Future Extended NVM 12 - RW */
 #define E1000_FCAL     0x00028  /* Flow Control Address Low - RW */
 #define E1000_FCAH     0x0002C  /* Flow Control Address High -RW */
 #define E1000_FCT      0x00030  /* Flow Control Type - RW */
@@ -1317,6 +1321,9 @@ struct em_ffvt_entry {
 #define E1000_FEXTNVM6_REQ_PLL_CLK	0x00000100
 #define E1000_FEXTNVM6_ENABLE_K1_ENTRY_CONDITION	0x00000200
 
+#define E1000_FEXTNVM12_PHYPD_CTRL_MASK	0x00C00000
+#define E1000_FEXTNVM12_PHYPD_CTRL_P1	0x00800000
+
 /* Statistics counters collected by the MAC */
 struct em_hw_stats {
     uint64_t crcerrs;
@@ -1524,6 +1531,7 @@ struct em_hw {
 #define E1000_CTRL_FORCE_PHY_RESET 0x00008000 /* Reset both PHY ports, through PHYRST_N pin */
 #define E1000_CTRL_LANPHYPC_OVERRIDE 0x00010000 /* SW control of LANPHYPC */
 #define E1000_CTRL_LANPHYPC_VALUE    0x00020000 /* SW value of LANPHYPC */
+#define E1000_CTRL_EXT_DPG_EN        0x00000008 /* Dynamic Power Gating Enable */
 #define E1000_CTRL_EXT_FORCE_SMBUS   0x00000800 /* Force SMBus mode */
 #define E1000_CTRL_EXT_PHYPDEN       0x00100000
 #define E1000_I2CCMD_REG_ADDR_SHIFT	16
@@ -3780,6 +3788,10 @@ union ich8_hws_flash_regacc {
 #define I217_INBAND_CTRL				PHY_REG(770, 18)
 #define I217_INBAND_CTRL_LINK_STAT_TX_TIMEOUT_MASK	0x3F00
 #define I217_INBAND_CTRL_LINK_STAT_TX_TIMEOUT_SHIFT	8
+
+/* PHY Timeouts */
+#define E1000_PHY_TIMEOUTS_REG				PHY_REG(770, 21)
+#define E1000_PHY_TIMEOUTS_K1_EXIT_TO_MASK		0x0FC0
 
 /* PHY Low Power Idle Control */
 #define I82579_LPI_CTRL				PHY_REG(772, 20)
