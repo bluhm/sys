@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf_if.c,v 1.113 2026/04/21 06:38:28 sashan Exp $ */
+/*	$OpenBSD: pf_if.c,v 1.114 2026/09/08 18:42:14 bluhm Exp $ */
 
 /*
  * Copyright 2005 Henning Brauer <henning@openbsd.org>
