@@ -789,8 +789,9 @@ pfi_get_ifaces(const char *name, struct pfi_kif *buf, int *size)
 	RB_FOREACH(p, pfi_ifhead, &pfi_ifs) {
 		if (pfi_skip_if(name, p))
 			continue;
-		if (*size <= ++n)
+		if (n >= *size)
 			break;
+		n++;
 		if (!p->pfik_tzero)
 			p->pfik_tzero = gettime();
 		memcpy(buf++, p, sizeof(*buf));
