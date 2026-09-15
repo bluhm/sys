@@ -1,4 +1,4 @@
-/*	$OpenBSD: exec_elf.c,v 1.203 2026/09/08 15:33:26 deraadt Exp $	*/
+/*	$OpenBSD: exec_elf.c,v 1.205 2026/09/15 15:40:08 deraadt Exp $	*/
 
 /*
  * Copyright (c) 1996 Per Fogelstrom
@@ -1009,7 +1009,7 @@ exec_elf_fixup(struct proc *p, struct exec_package *epp)
 		a->au_v = p->p_p->ps_timekeep;
 		a++;
 
-		a->au_id = AUX_execpath;
+		a->au_id = AUX_openbsd_execpath;
 		a->au_v = (vaddr_t)epp->ep_execpath;
     		a++;
 
