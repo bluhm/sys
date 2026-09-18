@@ -1,4 +1,4 @@
-/*	$OpenBSD: vmmvar.h,v 1.117 2025/09/17 18:37:44 sf Exp $	*/
+/*	$OpenBSD: vmmvar.h,v 1.119 2026/09/18 02:35:55 mlarkin Exp $	*/
 /*
  * Copyright (c) 2014 Mike Larkin <mlarkin@openbsd.org>
  *
@@ -522,7 +522,6 @@ struct vm_rwregs_params {
  *  direct cache access (CPUIDECX_DCA)
  *  x2APIC (CPUIDECX_X2APIC)
  *  apic deadline (CPUIDECX_DEADLINE)
- *  apic (CPUID_APIC)
  *  psn (CPUID_PSN)
  *  self snoop (CPUID_SS)
  *  hyperthreading (CPUID_HTT)
@@ -537,7 +536,7 @@ struct vm_rwregs_params {
     CPUIDECX_DCA | CPUIDECX_X2APIC | CPUIDECX_DEADLINE)
 #define VMM_ECPUIDECX_MASK ~(CPUIDECX_SVM | CPUIDECX_MWAITX)
 #define VMM_CPUIDEDX_MASK ~(CPUID_ACPI | CPUID_TM | \
-    CPUID_HTT | CPUID_DS | CPUID_APIC | \
+    CPUID_HTT | CPUID_DS | \
     CPUID_PSN | CPUID_SS | CPUID_PBE | \
     CPUID_MTRR | CPUID_MCE | CPUID_MCA)
 #define VMM_AMDSPEC_EBX_MASK ~(CPUIDEBX_IBPB | CPUIDEBX_IBRS | \
@@ -976,6 +975,7 @@ struct vcpu {
 	struct vm_exit vc_exit;			/* [v] */
 
 	uint16_t vc_intr;			/* [v] */
+	u_int vc_intr_latch;			/* [a] */
 	uint8_t vc_irqready;			/* [v] */
 
 	uint8_t vc_fpuinited;			/* [v] */
