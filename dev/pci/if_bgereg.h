@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_bgereg.h,v 1.136 2023/07/04 10:22:39 jmatthew Exp $	*/
+/*	$OpenBSD: if_bgereg.h,v 1.137 2026/09/18 17:15:51 bluhm Exp $	*/
 
 /*
  * Copyright (c) 2001 Wind River Systems
