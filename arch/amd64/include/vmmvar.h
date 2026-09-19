@@ -1,4 +1,4 @@
-/*	$OpenBSD: vmmvar.h,v 1.119 2026/09/18 02:35:55 mlarkin Exp $	*/
+/*	$OpenBSD: vmmvar.h,v 1.121 2026/09/19 16:11:07 mlarkin Exp $	*/
 /*
  * Copyright (c) 2014 Mike Larkin <mlarkin@openbsd.org>
  *
@@ -87,6 +87,7 @@
 #define VMX_EXIT_XSAVES				63
 #define VMX_EXIT_XRSTORS			64
 
+#define VM_EXIT_X2APIC				0xFFFD
 #define VM_EXIT_TERMINATED			0xFFFE
 #define VM_EXIT_NONE				0xFFFF
 
@@ -348,10 +349,20 @@ struct vm_exit_inout {
 struct vm_exit_eptviolation {
 	uint8_t		vee_fault_type;		/* type of vm exit */
 	uint8_t		vee_insn_info;		/* bitfield */
-#define VEE_LEN_VALID		0x1		/* vee_insn_len is valid */
-#define VEE_BYTES_VALID		0x2		/* vee_insn_bytes is valid */
+#define VEE_LEN_VALID		(1 << 0)	/* vee_insn_len is valid */
+#define VEE_BYTES_VALID		(1 << 1)	/* vee_insn_bytes is valid */
+#define VEE_GPA_VALID		(1 << 2)	/* vee_gpa is valid */
 	uint8_t		vee_insn_len;		/* [VMX] instruction length */
 	uint8_t		vee_insn_bytes[15];	/* [SVM] bytes at {R,E,}IP */
+	uint64_t	vee_gpa;		/* GPA that caused the fault */
+};
+
+/* Userspace-assisted x2APIC MSR access. */
+struct vm_exit_x2apic {
+	uint32_t	vex_msr;
+	uint8_t		vex_write;
+	uint8_t		vex_pad[3];
+	uint64_t	vex_data;
 };
 
 /*
@@ -469,6 +480,7 @@ struct vm_exit {
 	union {
 		struct vm_exit_inout		vei;	/* IN/OUT exit */
 		struct vm_exit_eptviolation	vee;	/* EPT VIOLATION exit*/
+		struct vm_exit_x2apic		vex;	/* x2APIC MSR exit */
 	};
 
 	struct vcpu_reg_state		vrs;
@@ -991,6 +1003,7 @@ struct vcpu {
 
 	/* Shadowed MSRs */
 	uint64_t vc_shadow_pat;			/* [v] */
+	uint64_t vc_apicbase;			/* [v] */
 
 	/* Userland Protection Keys */
 	uint32_t vc_pkru;			/* [v] */
