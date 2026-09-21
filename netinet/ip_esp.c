@@ -916,6 +916,7 @@ esp_output(struct mbuf *m, struct tdb *tdb, int skip, int protoff)
 		/* GCM & friends just require a NONCE (non-repeating!) */
 		if (espx->type == CRYPTO_AES_CTR ||
 		    espx->type == CRYPTO_AES_GCM_16 ||
+		    espx->type == CRYPTO_AES_GMAC ||
 		    espx->type == CRYPTO_CHACHA20_POLY1305)
 			bcopy(&replay64, crde->crd_iv, sizeof(replay64));
 		else
