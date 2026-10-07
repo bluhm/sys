@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_qwz_pci.c,v 1.13 2026/05/26 14:55:16 kirill Exp $	*/
+/*	$OpenBSD: if_qwz_pci.c,v 1.20 2026/10/01 10:18:14 kirill Exp $	*/
 
 /*
  * Copyright 2023 Stefan Sperling <stsp@openbsd.org>
@@ -462,11 +462,11 @@ void	qwz_pci_intr_ctrl_event_ee(struct qwz_pci_softc *, uint32_t);
 void	qwz_pci_intr_ctrl_event_cmd_complete(struct qwz_pci_softc *,
 	    uint64_t, uint32_t);
 int	qwz_pci_intr_ctrl_event(struct qwz_pci_softc *,
-	    struct qwz_pci_event_ring *);
+	    struct qwz_pci_event_ring *, int);
 void	qwz_pci_intr_data_event_tx(struct qwz_pci_softc *,
 	    struct qwz_mhi_ring_element *);
 int	qwz_pci_intr_data_event(struct qwz_pci_softc *,
-	    struct qwz_pci_event_ring *);
+	    struct qwz_pci_event_ring *, int);
 int	qwz_pci_intr_mhi_ctrl(void *);
 int	qwz_pci_intr_mhi_data(void *);
 int	qwz_pci_intr(void *);
@@ -858,12 +858,16 @@ qwz_pci_attach(struct device *parent, struct device *self, void *aux)
 	if (error)
 		goto err_pci_disable_msi;
 
+	error = qwz_vif_alloc(sc);
+	if (error)
+		goto err_pci_disable_msi;
+
 	psc->chan_ctxt = qwz_dmamem_alloc(sc->sc_dmat,
 	    sizeof(struct qwz_mhi_chan_ctxt) * psc->max_chan, 0);
 	if (psc->chan_ctxt == NULL) {
 		printf("%s: could not allocate channel context array\n",
 		    sc->sc_dev.dv_xname);
-		goto err_pci_disable_msi;
+		goto err_vif_free;
 	}
 
 	if (psc->sc_pci_ops->alloc_xfer_rings(psc)) {
@@ -991,7 +995,7 @@ qwz_pci_attach(struct device *parent, struct device *self, void *aux)
 	memcpy(ifp->if_xname, sc->sc_dev.dv_xname, IFNAMSIZ);
 	if_attach(ifp);
 	ieee80211_ifattach(ifp);
-	ieee80211_media_init(ifp, qwz_media_change, ieee80211_media_status);
+	ieee80211_media_init(ifp, ieee80211_media_change, ieee80211_media_status);
 
 	ic->ic_node_alloc = qwz_node_alloc;
 
@@ -1037,6 +1041,8 @@ err_pci_free_xfer_rings:
 err_pci_free_chan_ctxt:
 	qwz_dmamem_free(sc->sc_dmat, psc->chan_ctxt);
 	psc->chan_ctxt = NULL;
+err_vif_free:
+	qwz_vif_free(sc);
 err_pci_disable_msi:
 err_pci_free_region:
 	pci_intr_disestablish(psc->sc_pc, psc->sc_ih[0]);
@@ -1048,6 +1054,14 @@ qwz_pci_detach(struct device *self, int flags)
 {
 	struct qwz_pci_softc *psc = (struct qwz_pci_softc *)self;
 	struct qwz_softc *sc = &psc->sc_sc;
+	struct ifnet *ifp = &sc->sc_ic.ic_if;
+
+	rw_enter_write(&sc->ioctl_rwl);
+	if (ifp->if_flags & IFF_RUNNING)
+		qwz_stop(ifp);
+	if (sc->fw_initialized)
+		qwz_core_deinit(sc);
+	rw_exit(&sc->ioctl_rwl);
 
 	if (psc->sc_ih[0]) {
 		pci_intr_disestablish(psc->sc_pc, psc->sc_ih[0]);
@@ -1055,6 +1069,7 @@ qwz_pci_detach(struct device *self, int flags)
 	}
 
 	qwz_detach(sc);
+	qwz_vif_free(sc);
 
 	qwz_pci_free_event_rings(psc);
 	qwz_pci_free_xfer_rings(psc);
@@ -1647,7 +1662,8 @@ qwz_pcic_ce_irq_disable_sync(struct qwz_softc *sc)
 void
 qwz_pci_stop(struct qwz_softc *sc)
 {
-	qwz_pcic_ce_irq_disable_sync(sc);
+	if (sc->powered)
+		qwz_pcic_ce_irq_disable_sync(sc);
 	qwz_ce_cleanup_pipes(sc);
 }
 
@@ -2279,16 +2295,88 @@ struct qwz_dma_vec_entry {
 	uint64_t size;
 };
 
+int
+qwz_mhi_stop_channel(struct qwz_pci_softc *psc, struct qwz_pci_xfer_ring *ring)
+{
+	struct qwz_softc *sc = &psc->sc_sc;
+	int ret = 0;
+
+	if (ring->mhi_chan_state != MHI_CH_STATE_ENABLED)
+		return 0;
+
+	DNPRINTF(QWZ_D_MHI, "%s: stop MHI channel %d in state %d\n", __func__,
+	    ring->mhi_chan_id, ring->mhi_chan_state);
+
+	bus_dmamap_sync(sc->sc_dmat, QWZ_DMA_MAP(psc->chan_ctxt), 0,
+	    QWZ_DMA_LEN(psc->chan_ctxt), BUS_DMASYNC_PREWRITE);
+
+	ring->cmd_status = MHI_EV_CC_INVALID;
+	if (qwz_mhi_send_cmd(psc, MHI_CMD_STOP_CHAN, ring->mhi_chan_id))
+		return 1;
+
+	while (ring->cmd_status != MHI_EV_CC_SUCCESS) {
+		ret = tsleep_nsec(&ring->cmd_status, 0, "qwzcmd",
+		    SEC_TO_NSEC(5));
+		if (ret)
+			break;
+	}
+
+	if (ret) {
+		printf("%s: could not stop MHI channel %d in state %d: status 0x%x\n",
+		    sc->sc_dev.dv_xname, ring->mhi_chan_id,
+		    ring->mhi_chan_state, ring->cmd_status);
+		return 1;
+	}
+
+	ring->mhi_chan_state = MHI_CH_STATE_DISABLED;
+	return 0;
+}
+
+void
+qwz_mhi_stop_channels(struct qwz_pci_softc *psc)
+{
+	struct qwz_pci_xfer_ring *ring;
+
+	if (psc->xfer_rings[QWZ_PCI_XFER_RING_IPCR_OUTBOUND].mhi_chan_state
+	    != MHI_CH_STATE_ENABLED &&
+	    psc->xfer_rings[QWZ_PCI_XFER_RING_IPCR_INBOUND].mhi_chan_state
+	    != MHI_CH_STATE_ENABLED)
+		return;
+
+	qwz_mhi_device_wake(&psc->sc_sc);
+
+	ring = &psc->xfer_rings[QWZ_PCI_XFER_RING_IPCR_OUTBOUND];
+	qwz_mhi_stop_channel(psc, ring);
+
+	ring = &psc->xfer_rings[QWZ_PCI_XFER_RING_IPCR_INBOUND];
+	qwz_mhi_stop_channel(psc, ring);
+
+	qwz_mhi_device_zzz(&psc->sc_sc);
+}
+
+void
+qwz_mhi_flush_mhi_event_rings(struct qwz_pci_softc *psc)
+{
+	qwz_pci_intr_ctrl_event(psc, &psc->event_rings[0], 1);
+	qwz_pci_intr_data_event(psc, &psc->event_rings[1], 1);
+}
+
 void
 qwz_pci_power_down(struct qwz_softc *sc)
 {
+	struct qwz_pci_softc *psc = (struct qwz_pci_softc *)sc;
+	struct qwz_pci_xfer_ring *ring;
 	uint32_t state;
 	int i;
 
 	/* Restore ASPM in case firmware bootup fails. */
 	qwz_pci_aspm_restore(sc);
 
+	qwz_pcic_ce_irq_disable_sync(sc);
 	qwz_pci_force_wake(sc);
+
+	qwz_mhi_stop_channels(psc);
+	qwz_mhi_flush_mhi_event_rings(psc);
 
 	/*
 	 * Ask firmware to transition to M3 before resetting the device
@@ -2318,6 +2406,23 @@ qwz_pci_power_down(struct qwz_softc *sc)
 	qwz_mhi_stop(sc);
 	clear_bit(ATH12K_FLAG_DEVICE_INIT_DONE, sc->sc_flags);
 	qwz_pci_sw_reset(sc, false);
+
+	for (i = 0; i < nitems(psc->xfer_rings); i++)
+		psc->xfer_rings[i].mhi_chan_state = MHI_CH_STATE_DISABLED;
+
+	ring = &psc->xfer_rings[QWZ_PCI_XFER_RING_IPCR_OUTBOUND];
+	for (i = 0; i < ring->num_elements; i++) {
+		struct qwz_xfer_data *xfer = &ring->data[i];
+
+		if (xfer->m == NULL)
+			continue;
+		bus_dmamap_sync(sc->sc_dmat, xfer->map, 0,
+		    xfer->map->dm_mapsize, BUS_DMASYNC_POSTWRITE);
+		bus_dmamap_unload(sc->sc_dmat, xfer->map);
+		m_freem(xfer->m);
+		xfer->m = NULL;
+	}
+	ring->queued = 0;
 }
 
 void
@@ -2445,6 +2550,7 @@ qwz_mhi_init_cmd_ring(struct qwz_pci_softc *psc)
 	len = ring->size;
 
 	ring->rp = ring->wp = paddr;
+	ring->queued = 0;
 
 	c = (struct qwz_mhi_cmd_ctxt *)QWZ_DMA_KVA(psc->cmd_ctxt);
 	c->rbase = htole64(paddr);
@@ -2668,6 +2774,7 @@ qwz_mhi_start_channel(struct qwz_pci_softc *psc,
 
 	paddr = QWZ_DMA_DVA(ring->dmamem);
 	ring->rp = ring->wp = paddr;
+	ring->queued = 0;
 	c->rbase = htole64(paddr);
 	c->rp = htole64(ring->rp);
 	c->wp = htole64(ring->wp);
@@ -2727,6 +2834,7 @@ qwz_mhi_start_channel(struct qwz_pci_softc *psc,
 		qwz_mhi_ring_doorbell(sc, ring->db_addr, ring->wp);
 	}
 
+	ring->mhi_chan_state = MHI_CH_STATE_ENABLED;
 	return 0;
 }
 
@@ -2925,16 +3033,15 @@ qwz_mhi_fw_load_handler(struct qwz_pci_softc *psc)
 	u_char *data;
 	size_t len;
 
-	amss_path[0] = '\0';
+	ret = snprintf(amss_path, sizeof(amss_path), "%s-%s-%s",
+	    ATH12K_FW_DIR, sc->hw_params.fw.dir, ATH12K_AMSS_FILE);
+	if (ret < 0 || ret >= sizeof(amss_path))
+		return ENOSPC;
+
 	if (sc->fw_img[QWZ_FW_AMSS].data) {
 		data = sc->fw_img[QWZ_FW_AMSS].data;
 		len = sc->fw_img[QWZ_FW_AMSS].size;
 	} else {
-		ret = snprintf(amss_path, sizeof(amss_path), "%s-%s-%s",
-		    ATH12K_FW_DIR, sc->hw_params.fw.dir, ATH12K_AMSS_FILE);
-		if (ret < 0 || ret >= sizeof(amss_path))
-			return ENOSPC;
-
 		ret = loadfirmware(amss_path, &data, &len);
 		if (ret) {
 			printf("%s: could not read %s (error %d)\n",
@@ -3388,20 +3495,24 @@ qwz_rddm_prepare(struct qwz_pci_softc *psc)
 		return;
 	}
 
-	data_adm = qwz_dmamem_alloc(sc->sc_dmat, len, 0);
-	if (data_adm == NULL) {
-		printf("%s: could not allocate BHIE DMA data buffer\n",
-		    sc->sc_dev.dv_xname);
-		return;
-	}
-
 	vec_size = nseg * sizeof(*vec);
-	vec_adm = qwz_dmamem_alloc(sc->sc_dmat, vec_size, 0);
-	if (vec_adm == NULL) {
-		printf("%s: could not allocate BHIE DMA vector buffer\n",
-		    sc->sc_dev.dv_xname);
-		qwz_dmamem_free(sc->sc_dmat, data_adm);
-		return;
+	data_adm = psc->rddm_data;
+	vec_adm = psc->rddm_vec;
+	if (data_adm == NULL) {
+		data_adm = qwz_dmamem_alloc(sc->sc_dmat, len, 0);
+		if (data_adm == NULL) {
+			printf("%s: could not allocate BHIE DMA data buffer\n",
+			    sc->sc_dev.dv_xname);
+			return;
+		}
+
+		vec_adm = qwz_dmamem_alloc(sc->sc_dmat, vec_size, 0);
+		if (vec_adm == NULL) {
+			printf("%s: could not allocate BHIE DMA vector buffer\n",
+			    sc->sc_dev.dv_xname);
+			qwz_dmamem_free(sc->sc_dmat, data_adm);
+			return;
+		}
 	}
 
 	/* Create vector which controls chunk-wise DMA copy from hardware. */
@@ -3702,7 +3813,8 @@ qwz_pci_intr_ctrl_event_cmd_complete(struct qwz_pci_softc *psc,
 }
 
 int
-qwz_pci_intr_ctrl_event(struct qwz_pci_softc *psc, struct qwz_pci_event_ring *ring)
+qwz_pci_intr_ctrl_event(struct qwz_pci_softc *psc,
+    struct qwz_pci_event_ring *ring, int flush)
 {
 	struct qwz_softc *sc = &psc->sc_sc;
 	struct qwz_mhi_event_ctxt *c;
@@ -3754,21 +3866,23 @@ qwz_pci_intr_ctrl_event(struct qwz_pci_softc *psc, struct qwz_pci_event_ring *ri
 		DNPRINTF(QWZ_D_MHI, "%s: len=%u code=0x%x type=0x%x chid=%d\n",
 		    __func__, len, code, type, chid);
 
-		switch (type) {
-		case MHI_PKT_TYPE_STATE_CHANGE_EVENT:
-			qwz_pci_intr_ctrl_event_mhi(psc, code);
-			break;
-		case MHI_PKT_TYPE_EE_EVENT:
-			qwz_pci_intr_ctrl_event_ee(psc, code);
-			break;
-		case MHI_PKT_TYPE_CMD_COMPLETION_EVENT:
-			qwz_pci_intr_ctrl_event_cmd_complete(psc,
-			    le64toh(e->ptr), code);
-			break;
-		default:
-			printf("%s: unhandled event type 0x%x\n",
-			    __func__, type);
-			break;
+		if (!flush) {
+			switch (type) {
+			case MHI_PKT_TYPE_STATE_CHANGE_EVENT:
+				qwz_pci_intr_ctrl_event_mhi(psc, code);
+				break;
+			case MHI_PKT_TYPE_EE_EVENT:
+				qwz_pci_intr_ctrl_event_ee(psc, code);
+				break;
+			case MHI_PKT_TYPE_CMD_COMPLETION_EVENT:
+				qwz_pci_intr_ctrl_event_cmd_complete(psc,
+				    le64toh(e->ptr), code);
+				break;
+			default:
+				printf("%s: unhandled event type 0x%x\n",
+				    __func__, type);
+				break;
+			}
 		}
 
 		if (ring->rp + sizeof(*e) >= base + ring->size)
@@ -3925,7 +4039,8 @@ qwz_pci_intr_data_event_tx(struct qwz_pci_softc *psc, struct qwz_mhi_ring_elemen
 }
 
 int
-qwz_pci_intr_data_event(struct qwz_pci_softc *psc, struct qwz_pci_event_ring *ring)
+qwz_pci_intr_data_event(struct qwz_pci_softc *psc,
+    struct qwz_pci_event_ring *ring, int flush)
 {
 	struct qwz_softc *sc = &psc->sc_sc;
 	struct qwz_mhi_event_ctxt *c;
@@ -3975,14 +4090,16 @@ qwz_pci_intr_data_event(struct qwz_pci_softc *psc, struct qwz_pci_event_ring *ri
 		DNPRINTF(QWZ_D_MHI, "%s: len=%u code=0x%x type=0x%x chid=%d\n",
 		    __func__, len, code, type, chid);
 
-		switch (type) {
-		case MHI_PKT_TYPE_TX_EVENT:
-			qwz_pci_intr_data_event_tx(psc, e);
-			break;
-		default:
-			printf("%s: unhandled event type 0x%x\n",
-			    __func__, type);
-			break;
+		if (!flush) {
+			switch (type) {
+			case MHI_PKT_TYPE_TX_EVENT:
+				qwz_pci_intr_data_event_tx(psc, e);
+				break;
+			default:
+				printf("%s: unhandled event type 0x%x\n",
+				    __func__, type);
+				break;
+			}
 		}
 
 		if (ring->rp + sizeof(*e) >= base + ring->size)
@@ -4010,7 +4127,7 @@ qwz_pci_intr_mhi_ctrl(void *arg)
 {
 	struct qwz_pci_softc *psc = arg;
 
-	if (qwz_pci_intr_ctrl_event(psc, &psc->event_rings[0]))
+	if (qwz_pci_intr_ctrl_event(psc, &psc->event_rings[0], 0))
 		return 1;
 
 	return 0;
@@ -4021,7 +4138,7 @@ qwz_pci_intr_mhi_data(void *arg)
 {
 	struct qwz_pci_softc *psc = arg;
 
-	if (qwz_pci_intr_data_event(psc, &psc->event_rings[1]))
+	if (qwz_pci_intr_data_event(psc, &psc->event_rings[1], 0))
 		return 1;
 
 	return 0;
@@ -4090,9 +4207,9 @@ qwz_pci_intr(void *arg)
 	if (!test_bit(ATH12K_FLAG_MULTI_MSI_VECTORS, sc->sc_flags)) {
 		int i;
 
-		if (qwz_pci_intr_ctrl_event(psc, &psc->event_rings[0]))
+		if (qwz_pci_intr_ctrl_event(psc, &psc->event_rings[0], 0))
 			ret = 1;
-		if (qwz_pci_intr_data_event(psc, &psc->event_rings[1]))
+		if (qwz_pci_intr_data_event(psc, &psc->event_rings[1], 0))
 			ret = 1;
 
 		for (i = 0; i < sc->hw_params.ce_count; i++) {

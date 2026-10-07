@@ -1,4 +1,4 @@
-/*	$OpenBSD: qwx.c,v 1.139 2026/07/18 09:47:52 stsp Exp $	*/
+/*	$OpenBSD: qwx.c,v 1.146 2026/10/02 11:24:18 stsp Exp $	*/
 
 /*
  * Copyright 2023 Stefan Sperling <stsp@openbsd.org>
@@ -9817,6 +9817,9 @@ qwx_hal_srng_access_begin(struct qwx_softc *sc, struct hal_srng *srng)
 	} else {
 		srng->u.dst_ring.cached_hp =
 			*(volatile uint32_t *)srng->u.dst_ring.hp_addr;
+
+		bus_dmamap_sync(sc->sc_dmat, QWX_DMA_MAP(sc->hal.rdpmem), 0,
+		    QWX_DMA_LEN(sc->hal.rdpmem), BUS_DMASYNC_POSTREAD);
 	}
 }
 
@@ -9826,12 +9829,14 @@ qwx_hal_srng_access_end(struct qwx_softc *sc, struct hal_srng *srng)
 #ifdef notyet
 	lockdep_assert_held(&srng->lock);
 #endif
-	/* TODO: See if we need a write memory barrier here */
 	if (srng->flags & HAL_SRNG_FLAGS_LMAC_RING) {
 		/* For LMAC rings, ring pointer updates are done through FW and
 		 * hence written to a shared memory location that is read by FW
 		 */
 		if (srng->ring_dir == HAL_SRNG_DIR_SRC) {
+			bus_dmamap_sync(sc->sc_dmat, QWX_DMA_MAP(sc->hal.wrpmem), 0,
+			    QWX_DMA_LEN(sc->hal.wrpmem), BUS_DMASYNC_POSTWRITE);
+
 			srng->u.src_ring.last_tp =
 			    *(volatile uint32_t *)srng->u.src_ring.tp_addr;
 			*srng->u.src_ring.hp_addr = srng->u.src_ring.hp;
@@ -9842,6 +9847,8 @@ qwx_hal_srng_access_end(struct qwx_softc *sc, struct hal_srng *srng)
 		}
 	} else {
 		if (srng->ring_dir == HAL_SRNG_DIR_SRC) {
+			bus_dmamap_sync(sc->sc_dmat, QWX_DMA_MAP(sc->hal.wrpmem), 0,
+			    QWX_DMA_LEN(sc->hal.wrpmem), BUS_DMASYNC_POSTWRITE);
 			srng->u.src_ring.last_tp =
 			    *(volatile uint32_t *)srng->u.src_ring.tp_addr;
 			sc->ops.write32(sc,
@@ -12813,12 +12820,194 @@ qwx_pull_reg_chan_list_update_ev(struct qwx_softc *sc, struct mbuf *m,
 	return 0;
 }
 
+struct cur_reg_rule *
+qwx_create_ext_reg_rules_from_wmi(uint32_t num_reg_rules,
+    struct wmi_regulatory_ext_rule *wmi_reg_rule)
+{
+	struct cur_reg_rule *reg_rule_ptr;
+	uint32_t count;
+
+	reg_rule_ptr = mallocarray(num_reg_rules, sizeof(*reg_rule_ptr),
+	    M_DEVBUF, M_NOWAIT | M_ZERO);
+	if (!reg_rule_ptr)
+		return NULL;
+
+	for (count = 0; count < num_reg_rules; count++) {
+		reg_rule_ptr[count].start_freq = FIELD_GET(REG_RULE_START_FREQ,
+		    wmi_reg_rule[count].freq_info);
+		reg_rule_ptr[count].end_freq = FIELD_GET(REG_RULE_END_FREQ,
+		    wmi_reg_rule[count].freq_info);
+		reg_rule_ptr[count].max_bw = FIELD_GET(REG_RULE_MAX_BW,
+		    wmi_reg_rule[count].bw_pwr_info);
+		reg_rule_ptr[count].reg_power = FIELD_GET(REG_RULE_REG_PWR,
+		    wmi_reg_rule[count].bw_pwr_info);
+		reg_rule_ptr[count].ant_gain = FIELD_GET(REG_RULE_ANT_GAIN,
+		    wmi_reg_rule[count].bw_pwr_info);
+		reg_rule_ptr[count].flags = FIELD_GET(REG_RULE_FLAGS,
+		    wmi_reg_rule[count].flag_info);
+		reg_rule_ptr[count].psd_flag = FIELD_GET(REG_RULE_PSD_INFO,
+		    wmi_reg_rule[count].psd_power_info);
+		reg_rule_ptr[count].psd_eirp = FIELD_GET(REG_RULE_PSD_EIRP,
+		    wmi_reg_rule[count].psd_power_info);
+	}
+
+	return reg_rule_ptr;
+}
+
+uint8_t
+qwx_wmi_ignore_num_extra_rules(struct wmi_regulatory_ext_rule *wmi_reg_rule,
+    uint32_t num_reg_rules)
+{
+	uint8_t num_invalid_5ghz_rules = 0;
+	uint32_t count, start_freq;
+
+	for (count = 0; count < num_reg_rules; count++) {
+		start_freq = FIELD_GET(REG_RULE_START_FREQ,
+		    wmi_reg_rule[count].freq_info);
+		if (start_freq >= ATH11K_MIN_6G_FREQ)
+			num_invalid_5ghz_rules++;
+	}
+
+	return num_invalid_5ghz_rules;
+}
+
 int
 qwx_pull_reg_chan_list_ext_update_ev(struct qwx_softc *sc, struct mbuf *m,
     struct cur_regulatory_info *reg_info)
 {
-	printf("%s: not implemented\n", __func__);
-	return ENOTSUP;
+	const void **tb;
+	const struct wmi_reg_chan_list_cc_ext_event *chan_list_event_hdr;
+	struct wmi_regulatory_ext_rule *wmi_reg_rule;
+	uint32_t num_2ghz_reg_rules, num_5ghz_reg_rules;
+	uint8_t num_invalid_5ghz_ext_rules;
+	int ret;
+
+	DNPRINTF(QWX_D_WMI, "%s: processing regulatory ext channel list\n",
+	    __func__);
+
+	tb = qwx_wmi_tlv_parse_alloc(sc, mtod(m, void *), m->m_pkthdr.len);
+	if (tb == NULL) {
+		ret = ENOMEM; /* XXX allocation failure or parsing failure? */
+		printf("%s: failed to parse tlv: %d\n", __func__, ret);
+		return ENOMEM;
+	}
+
+	chan_list_event_hdr = tb[WMI_TAG_REG_CHAN_LIST_CC_EXT_EVENT];
+	if (!chan_list_event_hdr) {
+		printf("%s: failed to fetch reg chan list ext update ev\n",
+		    __func__);
+		free(tb, M_DEVBUF, WMI_TAG_MAX * sizeof(*tb));
+		return EPROTO;
+	}
+
+	reg_info->num_2ghz_reg_rules = chan_list_event_hdr->num_2ghz_reg_rules;
+	reg_info->num_5ghz_reg_rules = chan_list_event_hdr->num_5ghz_reg_rules;
+
+	if (reg_info->num_2ghz_reg_rules > MAX_REG_RULES ||
+	    reg_info->num_5ghz_reg_rules > MAX_REG_RULES) {
+		printf("%s: Num reg rules for 2 GHz/5 GHz exceeds max "
+		    "limit (num_2ghz_reg_rules: %d num_5ghz_reg_rules: %d "
+		    "max_rules: %d)\n", __func__, reg_info->num_2ghz_reg_rules,
+		    reg_info->num_5ghz_reg_rules, MAX_REG_RULES);
+		free(tb, M_DEVBUF, WMI_TAG_MAX * sizeof(*tb));
+		return EINVAL;
+	}
+
+	if (!(reg_info->num_2ghz_reg_rules + reg_info->num_5ghz_reg_rules)) {
+		printf("%s: No 2 GHz/5 GHz regulatory rules available in "
+		    "the ext event info\n", __func__);
+		free(tb, M_DEVBUF, WMI_TAG_MAX * sizeof(*tb));
+		return EINVAL;
+	}
+
+	memcpy(reg_info->alpha2, &chan_list_event_hdr->alpha2, REG_ALPHA2_LEN);
+	reg_info->dfs_region = chan_list_event_hdr->dfs_region;
+	reg_info->phybitmap = chan_list_event_hdr->phybitmap;
+	reg_info->num_phy = chan_list_event_hdr->num_phy;
+	reg_info->phy_id = chan_list_event_hdr->phy_id;
+	reg_info->ctry_code = chan_list_event_hdr->country_id;
+	reg_info->reg_dmn_pair = chan_list_event_hdr->domain_code;
+	reg_info->status_code = qwx_wmi_cc_setting_code_to_reg(
+	    chan_list_event_hdr->status_code);
+	reg_info->is_ext_reg_event = true;
+
+	reg_info->min_bw_2ghz = chan_list_event_hdr->min_bw_2ghz;
+	reg_info->max_bw_2ghz = chan_list_event_hdr->max_bw_2ghz;
+	reg_info->min_bw_5ghz = chan_list_event_hdr->min_bw_5ghz;
+	reg_info->max_bw_5ghz = chan_list_event_hdr->max_bw_5ghz;
+
+	num_2ghz_reg_rules = reg_info->num_2ghz_reg_rules;
+	num_5ghz_reg_rules = reg_info->num_5ghz_reg_rules;
+
+	DNPRINTF(QWX_D_WMI,
+	    "%s: cc_ext %s dfs %d BW: min_2ghz %d max_2ghz %d min_5ghz %d "
+	    "max_5ghz %d phybitmap 0x%x\n", __func__, reg_info->alpha2,
+	    reg_info->dfs_region, reg_info->min_bw_2ghz,
+	    reg_info->max_bw_2ghz, reg_info->min_bw_5ghz,
+	    reg_info->max_bw_5ghz, reg_info->phybitmap);
+
+	DNPRINTF(QWX_D_WMI,
+	    "%s: num_2ghz_reg_rules %d num_5ghz_reg_rules %d\n", __func__,
+	    num_2ghz_reg_rules, num_5ghz_reg_rules);
+
+	wmi_reg_rule = (struct wmi_regulatory_ext_rule *)
+	    ((uint8_t *)chan_list_event_hdr + sizeof(*chan_list_event_hdr)
+	    + sizeof(struct wmi_tlv));
+
+	if (num_2ghz_reg_rules) {
+		reg_info->reg_rules_2ghz_ptr =
+		    qwx_create_ext_reg_rules_from_wmi(num_2ghz_reg_rules,
+		    wmi_reg_rule);
+		if (!reg_info->reg_rules_2ghz_ptr) {
+			free(tb, M_DEVBUF, WMI_TAG_MAX * sizeof(*tb));
+			printf("%s: Unable to allocate memory for "
+			    "2 GHz rules\n", __func__);
+			return ENOMEM;
+		}
+
+		qwx_print_reg_rule(sc, "2 GHz", num_2ghz_reg_rules,
+		    reg_info->reg_rules_2ghz_ptr);
+	}
+
+	wmi_reg_rule += num_2ghz_reg_rules;
+
+	/*
+	 * Firmware may include 6 GHz rules in the 5 GHz ext rule list.
+	 * Ignore them here until the stack grows real 6 GHz support.
+	 * XXX implement the 6 GHz regulatory rule path as well.
+	 */
+	num_invalid_5ghz_ext_rules = qwx_wmi_ignore_num_extra_rules(
+	    wmi_reg_rule, num_5ghz_reg_rules);
+	if (num_invalid_5ghz_ext_rules) {
+		DNPRINTF(QWX_D_WMI,
+		    "%s: cc %s 5 GHz reg rules %d from fw, %d invalid "
+		    "5 GHz rules\n", __func__, reg_info->alpha2,
+		    reg_info->num_5ghz_reg_rules,
+		    num_invalid_5ghz_ext_rules);
+		num_5ghz_reg_rules -= num_invalid_5ghz_ext_rules;
+		reg_info->num_5ghz_reg_rules = num_5ghz_reg_rules;
+	}
+
+	if (num_5ghz_reg_rules) {
+		reg_info->reg_rules_5ghz_ptr =
+		    qwx_create_ext_reg_rules_from_wmi(num_5ghz_reg_rules,
+		    wmi_reg_rule);
+		if (!reg_info->reg_rules_5ghz_ptr) {
+			free(tb, M_DEVBUF, WMI_TAG_MAX * sizeof(*tb));
+			printf("%s: Unable to allocate memory for "
+			    "5 GHz rules\n", __func__);
+			return ENOMEM;
+		}
+
+		qwx_print_reg_rule(sc, "5 GHz", num_5ghz_reg_rules,
+		    reg_info->reg_rules_5ghz_ptr);
+	}
+
+	DNPRINTF(QWX_D_WMI, "%s: processed regulatory ext channel list\n",
+	    __func__);
+
+	free(tb, M_DEVBUF, WMI_TAG_MAX * sizeof(*tb));
+	return 0;
 }
 
 void
@@ -12908,6 +13097,64 @@ qwx_init_channels(struct qwx_softc *sc, struct cur_regulatory_info *reg_info)
 			}
 			chnum += 4;
 			freq = ieee80211_ieee2mhz(chnum, IEEE80211_CHAN_5GHZ);
+		}
+	}
+}
+
+/*
+ * Populate a conservative channel list if no regulatory information
+ * could be processed yet.  Channels configured by an earlier event are
+ * kept as they are.
+ */
+void
+qwx_init_channels_world(struct qwx_softc *sc)
+{
+	struct ieee80211com *ic = &sc->sc_ic;
+	struct ieee80211_channel *chan;
+	uint32_t supported_bands = 0;
+	int i;
+
+	/* Same world fallback channels as ath11k reg.c. */
+	static const uint8_t channels_2ghz[] = {
+		1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
+	};
+	static const uint8_t channels_5ghz[] = {
+		36, 40, 44, 48, 52, 56, 60, 64,
+		149, 153, 157, 161, 165
+	};
+
+	for (i = 0; i <= IEEE80211_CHAN_MAX; i++) {
+		if (ic->ic_channels[i].ic_flags != 0)
+			return;
+	}
+
+	for (i = 0; i < sc->num_radios; i++)
+		supported_bands |= sc->pdevs[i].cap.supported_bands;
+
+	if (!(supported_bands & (WMI_HOST_WLAN_2G_CAP | WMI_HOST_WLAN_5G_CAP)))
+		supported_bands = WMI_HOST_WLAN_2G_CAP | WMI_HOST_WLAN_5G_CAP;
+
+	if (supported_bands & WMI_HOST_WLAN_2G_CAP) {
+		for (i = 0; i < nitems(channels_2ghz); i++) {
+			chan = &ic->ic_channels[channels_2ghz[i]];
+			chan->ic_freq = ieee80211_ieee2mhz(channels_2ghz[i],
+			    IEEE80211_CHAN_2GHZ);
+			chan->ic_flags = IEEE80211_CHAN_CCK |
+			    IEEE80211_CHAN_OFDM |
+			    IEEE80211_CHAN_DYN |
+			    IEEE80211_CHAN_2GHZ |
+			    IEEE80211_CHAN_HT;
+		}
+	}
+
+	if (supported_bands & WMI_HOST_WLAN_5G_CAP) {
+		for (i = 0; i < nitems(channels_5ghz); i++) {
+			chan = &ic->ic_channels[channels_5ghz[i]];
+			chan->ic_freq = ieee80211_ieee2mhz(channels_5ghz[i],
+			    IEEE80211_CHAN_5GHZ);
+			chan->ic_flags = IEEE80211_CHAN_A |
+			    IEEE80211_CHAN_HT |
+			    IEEE80211_CHAN_PASSIVE;
 		}
 	}
 }
@@ -13038,6 +13285,7 @@ fallback:
 	 * reverted at the fw and the old SCAN_CHAN_LIST cmd needs to be sent.
 	 */
 	/* TODO: This is rare, but still should also be handled */
+	qwx_init_channels_world(sc);
 mem_free:
 	if (reg_info) {
 		free(reg_info->reg_rules_2ghz_ptr, M_DEVBUF,
@@ -16588,7 +16836,7 @@ qwx_hal_wbm_desc_parse_err(void *desc, struct hal_rx_wbm_rel_info *rel_info)
 
 	/* We expect only WBM_REL buffer type */
 	if (type != HAL_WBM_REL_DESC_TYPE_REL_MSDU)
-		return -EINVAL;
+		return EINVAL;
 
 	rel_src = FIELD_GET(HAL_WBM_RELEASE_INFO0_REL_SRC_MODULE,
 	    wbm_desc->info0);
@@ -19531,7 +19779,7 @@ qwx_wmi_vdev_install_key(struct qwx_softc *sc,
 
 	m = qwx_wmi_alloc_mbuf(len);
 	if (m == NULL)
-		return -ENOMEM;
+		return ENOMEM;
 
 	cmd = (struct wmi_vdev_install_key_cmd *)(mtod(m, uint8_t *) +
 	    sizeof(struct ath11k_htc_hdr) + sizeof(struct wmi_cmd_hdr));
@@ -23017,10 +23265,6 @@ qwx_ce_completed_recv_next(struct qwx_ce_pipe *pipe,
 	}
 
 	*nbytes = qwx_hal_ce_dst_status_get_length(desc);
-	if (*nbytes == 0) {
-		ret = EIO;
-		goto err;
-	}
 
 	if (per_transfer_contextp) {
 		*per_transfer_contextp =
@@ -23044,6 +23288,8 @@ int
 qwx_ce_recv_process_cb(struct qwx_ce_pipe *pipe)
 {
 	struct qwx_softc *sc = pipe->sc;
+	struct ieee80211com *ic = &sc->sc_ic;
+	struct ifnet *ifp = &ic->ic_if;
 	struct mbuf *m;
 	struct mbuf_list ml = MBUF_LIST_INITIALIZER();
 	void *transfer_context;
@@ -23059,9 +23305,8 @@ qwx_ce_recv_process_cb(struct qwx_ce_pipe *pipe)
 		rx_data->m = NULL;
 
 		max_nbytes = m->m_pkthdr.len;
-		if (max_nbytes < nbytes) {
-			printf("%s: received more than expected (nbytes %d, "
-			    "max %d)", __func__, nbytes, max_nbytes);
+		if (nbytes == 0 || max_nbytes < nbytes) {
+			ifp->if_ierrors++;
 			m_freem(m);
 			continue;
 		}
@@ -25791,7 +26036,7 @@ qwx_wmi_start_scan_init(struct qwx_softc *sc, struct scan_req_params *arg)
 	/* fill bssid_list[0] with 0xff, otherwise bssid and RA will be
 	 * ZEROs in probe request
 	 */
-	IEEE80211_ADDR_COPY(arg->bssid_list[0].addr, etheranyaddr);
+	IEEE80211_ADDR_COPY(arg->bssid_list[0].addr, etherbroadcastaddr);
 }
 
 int
