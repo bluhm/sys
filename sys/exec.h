@@ -1,4 +1,4 @@
-/*	$OpenBSD: exec.h,v 1.61 2026/09/17 19:45:07 dgl Exp $	*/
+/*	$OpenBSD: exec.h,v 1.62 2026/10/10 22:05:36 deraadt Exp $	*/
 /*	$NetBSD: exec.h,v 1.59 1996/02/09 18:25:09 christos Exp $	*/
 
 /*-
@@ -134,6 +134,7 @@ struct exec_package {
 	vaddr_t	ep_pinstart, ep_pinend;	/* executable region */
 	u_int	*ep_pins;		/* array of system call offsets */
 	int	ep_npins;		/* entries in array */
+	mode_t	ep_execmode;		/* setuid, setgid, u+r flags */
 	char	*ep_execpath;		/* execve path on userland stack */
 };
 #define	EXEC_INDIR	0x0001		/* script handling already done */

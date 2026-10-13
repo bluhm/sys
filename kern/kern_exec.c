@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_exec.c,v 1.275 2026/09/17 19:45:07 dgl Exp $	*/
+/*	$OpenBSD: kern_exec.c,v 1.276 2026/10/10 22:05:36 deraadt Exp $	*/
 /*	$NetBSD: kern_exec.c,v 1.75 1996/02/09 18:59:28 christos Exp $	*/
 
 /*-
@@ -208,6 +208,11 @@ check_exec(struct proc *p, struct exec_package *epp)
 		error = EACCES;
 		goto bad1;
 	}
+	epp->ep_execmode =
+	    ((epp->ep_vap->va_mode & VSUID) ? S_ISUID : 0) |
+	    ((epp->ep_vap->va_mode & VSGID) ? S_ISGID : 0);
+	if ((error = VOP_ACCESS(vp, VREAD, p->p_ucred, p)) == 0)
+		epp->ep_execmode |= S_IRUSR;
 
 	if ((vp->v_mount->mnt_flag & MNT_NOSUID))
 		epp->ep_vap->va_mode &= ~(VSUID | VSGID);

@@ -1,4 +1,4 @@
-/*	$OpenBSD: in6.c,v 1.279 2026/03/22 23:14:00 bluhm Exp $	*/
+/*	$OpenBSD: in6.c,v 1.280 2026/10/10 19:05:46 miod Exp $	*/
 /*	$KAME: in6.c,v 1.372 2004/06/14 08:14:21 itojun Exp $	*/
 
 /*
@@ -107,10 +107,8 @@ const struct in6_addr in6addr_linklocal_allnodes =
 const struct in6_addr in6addr_linklocal_allrouters =
 	IN6ADDR_LINKLOCAL_ALLROUTERS_INIT;
 
-const struct in6_addr in6mask0 = IN6MASK0;
 const struct in6_addr in6mask32 = IN6MASK32;
 const struct in6_addr in6mask64 = IN6MASK64;
-const struct in6_addr in6mask96 = IN6MASK96;
 const struct in6_addr in6mask128 = IN6MASK128;
 
 int in6_ioctl(u_long, caddr_t, struct ifnet *, int);

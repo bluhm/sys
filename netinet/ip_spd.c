@@ -1,4 +1,4 @@
-/* $OpenBSD: ip_spd.c,v 1.122 2025/07/08 00:47:41 jsg Exp $ */
+/* $OpenBSD: ip_spd.c,v 1.123 2026/10/10 19:06:34 miod Exp $ */
 /*
  * The author of this code is Angelos D. Keromytis (angelos@cis.upenn.edu)
  *
@@ -42,7 +42,6 @@ int	ipsp_acquire_sa(struct ipsec_policy *, union sockaddr_union *,
 int	ipsp_pending_acquire(struct ipsec_policy *, union sockaddr_union *);
 void	ipsp_delete_acquire_timer(void *);
 void	ipsp_delete_acquire_locked(struct ipsec_acquire *);
-void	ipsp_delete_acquire(struct ipsec_acquire *);
 void	ipsp_unref_acquire_locked(struct ipsec_acquire *);
 
 struct pool ipsec_policy_pool;
@@ -718,14 +717,6 @@ ipsp_delete_acquire_timer(void *v)
 /*
  * Delete a pending IPsec acquire record.
  */
-void
-ipsp_delete_acquire(struct ipsec_acquire *ipa)
-{
-	mtx_enter(&ipsec_acquire_mtx);
-	ipsp_delete_acquire_locked(ipa);
-	mtx_leave(&ipsec_acquire_mtx);
-}
-
 void
 ipsp_delete_acquire_locked(struct ipsec_acquire *ipa)
 {
