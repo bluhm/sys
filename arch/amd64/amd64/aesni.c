@@ -454,15 +454,19 @@ aesni_encdec(struct cryptop *crp, struct cryptodesc *crd,
 	uint32_t *dw;
 
 	aadlen = rlen = err = iskip = oskip = 0;
+	rlen = crd->crd_len;
+	if (crda != NULL)
+		rlen = MAX(rlen, crda->crd_len +
+		    ((crda->crd_flags & CRD_F_ESN) ? 4 : 0));
 
-	if (crd->crd_len > ses->ses_buflen) {
+	if (rlen > ses->ses_buflen) {
 		if (buf != NULL) {
 			explicit_bzero(buf, ses->ses_buflen);
 			free(buf, M_DEVBUF, ses->ses_buflen);
 		}
 
 		ses->ses_buflen = 0;
-		rlen = roundup(crd->crd_len, EALG_MAX_BLOCK_LEN);
+		rlen = roundup(rlen, EALG_MAX_BLOCK_LEN);
 		ses->ses_buf = buf = malloc(rlen, M_DEVBUF, M_NOWAIT |
 		    M_ZERO);
 		if (buf == NULL)
