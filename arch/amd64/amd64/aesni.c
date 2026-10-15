@@ -446,7 +446,7 @@ int
 aesni_encdec(struct cryptop *crp, struct cryptodesc *crd,
     struct cryptodesc *crda, struct aesni_session *ses)
 {
-	int aadlen, err, ivlen, iskip, oskip, rlen;
+	int aadlen, err, ivlen, iskip, oskip, rlen, buflen;
 	uint8_t iv[EALG_MAX_BLOCK_LEN];
 	uint8_t icb[AESCTR_BLOCKSIZE];
 	uint8_t tag[GMAC_DIGEST_LEN];
@@ -454,24 +454,26 @@ aesni_encdec(struct cryptop *crp, struct cryptodesc *crd,
 	uint32_t *dw;
 
 	aadlen = rlen = err = iskip = oskip = 0;
-	rlen = crd->crd_len;
-	if (crda != NULL)
-		rlen = MAX(rlen, crda->crd_len +
-		    ((crda->crd_flags & CRD_F_ESN) ? 4 : 0));
 
-	if (rlen > ses->ses_buflen) {
+	if (crda) {
+		aadlen = crda->crd_len;
+		if (crda->crd_flags & CRD_F_ESN)
+			aadlen += 4;
+	}
+	buflen = MAX(crd->crd_len, aadlen);
+	if (buflen > ses->ses_buflen) {
 		if (buf != NULL) {
 			explicit_bzero(buf, ses->ses_buflen);
 			free(buf, M_DEVBUF, ses->ses_buflen);
 		}
 
 		ses->ses_buflen = 0;
-		rlen = roundup(rlen, EALG_MAX_BLOCK_LEN);
-		ses->ses_buf = buf = malloc(rlen, M_DEVBUF, M_NOWAIT |
+		buflen = roundup(buflen, EALG_MAX_BLOCK_LEN);
+		ses->ses_buf = buf = malloc(buflen, M_DEVBUF, M_NOWAIT |
 		    M_ZERO);
 		if (buf == NULL)
 			return (ENOMEM);
-		ses->ses_buflen = rlen;
+		ses->ses_buflen = buflen;
 	}
 
 	/* CBC uses 16, CTR/XTS only 8. */
@@ -511,9 +513,7 @@ aesni_encdec(struct cryptop *crp, struct cryptodesc *crd,
 
 	if (crda) {
 		/* Supply GMAC with AAD */
-		aadlen = crda->crd_len;
 		if (crda->crd_flags & CRD_F_ESN) {
-			aadlen += 4;
 			/* SPI */
 			if (crp->crp_flags & CRYPTO_F_IMBUF)
 				m_copydata((struct mbuf *)crp->crp_buf,
