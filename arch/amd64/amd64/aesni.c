@@ -1,4 +1,4 @@
-/*	$OpenBSD: aesni.c,v 1.54 2026/08/13 21:08:17 kettenis Exp $	*/
+/*	$OpenBSD: aesni.c,v 1.55 2026/10/19 01:03:17 bluhm Exp $	*/
 /*-
  * Copyright (c) 2003 Jason Wright
  * Copyright (c) 2003, 2004 Theo de Raadt
