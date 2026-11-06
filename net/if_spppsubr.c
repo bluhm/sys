@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_spppsubr.c,v 1.202 2026/06/14 05:39:23 mvs Exp $	*/
+/*	$OpenBSD: if_spppsubr.c,v 1.204 2026/11/04 08:51:51 claudio Exp $	*/
 /*
  * Synchronous PPP link level subroutines.
  *
@@ -62,8 +62,6 @@
 #endif
 
 #include <net/if_sppp.h>
-
-extern unsigned int	rtmap_limit;
 
 # define UNTIMEOUT(fun, arg, handle)	\
 	timeout_del(&(handle))
@@ -3388,6 +3386,9 @@ sppp_chap_input(struct sppp *sp, struct mbuf *m)
 	h = mtod (m, struct lcp_header*);
 	if (len > ntohs (h->len))
 		len = ntohs (h->len);
+	if ((h->type == CHAP_RESPONSE && sp->hisauth.proto != PPP_CHAP) ||
+	    (h->type != CHAP_RESPONSE && sp->myauth.proto != PPP_CHAP))
+		return;
 
 	switch (h->type) {
 	/* challenge, failure and success are his authproto */
@@ -3781,6 +3782,9 @@ sppp_pap_input(struct sppp *sp, struct mbuf *m)
 	h = mtod (m, struct lcp_header*);
 	if (len > ntohs (h->len))
 		len = ntohs (h->len);
+	if ((h->type == PAP_REQ && sp->hisauth.proto != PPP_PAP) ||
+	    (h->type != PAP_REQ && sp->myauth.proto != PPP_PAP))
+		return;
 	switch (h->type) {
 	/* PAP request is my authproto */
 	case PAP_REQ:
@@ -4261,7 +4265,10 @@ sppp_update_gw(struct ifnet *ifp)
 	u_int tid;
 
 	/* update routing table */
-	for (tid = 0; tid <= rtmap_limit; tid++) {
+	for (tid = 0; tid <= rt_tableid_max; tid++) {
+		if (!rtable_exists(tid) ||
+		    rtable_l2(tid) != ifp->if_rdomain)
+			continue;
 		rtable_walk(tid, AF_INET, NULL, sppp_update_gw_walker, ifp);
 	}
 }

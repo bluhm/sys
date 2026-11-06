@@ -1,4 +1,4 @@
-/*	$OpenBSD: nvme.c,v 1.130 2026/09/06 19:27:01 kettenis Exp $ */
+/*	$OpenBSD: nvme.c,v 1.132 2026/11/06 05:18:53 jmatthew Exp $ */
 
 /*
  * Copyright (c) 2014 David Gwynne <dlg@openbsd.org>
@@ -472,10 +472,9 @@ nvme_resume(struct nvme_softc *sc)
 		return (1);
 	}
 
-	sc->sc_q = nvme_q_alloc(sc, NVME_IO_Q, 128, sc->sc_dstrd);
-	if (sc->sc_q == NULL) {
-		printf("%s: unable to allocate io q\n", DEVNAME(sc));
-		goto disable;
+	if (nvme_q_reset(sc, sc->sc_q) != 0) {
+		printf("%s: unable to reset io q\n", DEVNAME(sc));
+		goto free_q;
 	}
 
 	if (nvme_q_create(sc, sc->sc_q) != 0) {
@@ -489,7 +488,6 @@ nvme_resume(struct nvme_softc *sc)
 
 free_q:
 	nvme_q_free(sc, sc->sc_q);
-disable:
 	nvme_disable(sc);
 
 	return (1);
@@ -1318,7 +1316,7 @@ nvme_q_create(struct nvme_softc *sc, struct nvme_queue *q)
 	struct nvme_ccb *ccb;
 	int rv;
 
-	ccb = scsi_io_get(&sc->sc_iopool, 0);
+	ccb = nvme_ccb_get(sc);
 	KASSERT(ccb != NULL);
 
 	ccb->ccb_done = nvme_empty_done;
@@ -1351,7 +1349,7 @@ nvme_q_create(struct nvme_softc *sc, struct nvme_queue *q)
 		goto fail;
 
 fail:
-	scsi_io_put(&sc->sc_iopool, ccb);
+	nvme_ccb_put(sc, ccb);
 	return (rv);
 }
 
@@ -1362,7 +1360,7 @@ nvme_q_delete(struct nvme_softc *sc, struct nvme_queue *q)
 	struct nvme_ccb *ccb;
 	int rv;
 
-	ccb = scsi_io_get(&sc->sc_iopool, 0);
+	ccb = nvme_ccb_get(sc);
 	KASSERT(ccb != NULL);
 
 	ccb->ccb_done = nvme_empty_done;
@@ -1384,15 +1382,10 @@ nvme_q_delete(struct nvme_softc *sc, struct nvme_queue *q)
 	htolem16(&sqe.qid, q->q_id);
 
 	rv = nvme_poll(sc, sc->sc_admin_q, ccb, nvme_sqe_fill, NVME_TIMO_QOP);
-	if (rv != 0)
-		goto fail;
-
-	nvme_q_free(sc, q);
 
 fail:
-	scsi_io_put(&sc->sc_iopool, ccb);
+	nvme_ccb_put(sc, ccb);
 	return (rv);
-
 }
 
 void

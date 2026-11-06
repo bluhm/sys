@@ -1,4 +1,4 @@
-/* $OpenBSD: bwfmreg.h,v 1.26 2022/03/04 22:34:41 kettenis Exp $ */
+/* $OpenBSD: bwfmreg.h,v 1.28 2026/10/20 11:46:34 stsp Exp $ */
 /*
  * Copyright (c) 2010-2016 Broadcom Corporation
  * Copyright (c) 2016,2017 Patrick Wildt <patrick@blueri.se>
@@ -343,6 +343,7 @@ struct bwfm_proto_bcdc_hdr {
 
 #define BWFM_MCSSET_LEN				16
 #define BWFM_MAX_SSID_LEN			32
+#define BWFM_BSS_INFO_LENGTH_MAX		2048
 struct bwfm_bss_info {
 	uint32_t version;
 	uint32_t length;
@@ -770,7 +771,7 @@ struct bwfm_event_msg {
 	uint32_t auth_type;
 	uint32_t datalen;
 	struct ether_addr addr;
-	char ifname[IFNAMSIZ];
+	char ifname[16];
 	uint8_t ifidx;
 	uint8_t bsscfgidx;
 } __packed;

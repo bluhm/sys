@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_rge.c,v 1.47 2026/10/13 01:35:47 kevlo Exp $	*/
+/*	$OpenBSD: if_rge.c,v 1.49 2026/11/05 07:54:52 kevlo Exp $	*/
 
 /*
  * Copyright (c) 2019, 2020, 2023-2026
@@ -35,10 +35,16 @@
 #include <net/toeplitz.h>
 
 #include <netinet/in.h>
+#include <netinet/ip.h>
 #include <netinet/if_ether.h>
 #include <netinet/tcp.h>
 #include <netinet/tcp_timer.h>
 #include <netinet/tcp_var.h>
+#include <netinet/udp.h>
+
+#ifdef INET6
+#include <netinet/ip6.h>
+#endif
 
 #if NBPFILTER > 0
 #include <net/bpf.h>
@@ -58,7 +64,6 @@
 #include <dev/pci/pcidevs.h>
 
 #include <dev/pci/if_rgereg.h>
-#include <dev/microcode/rge/rgemcode.h>
 
 #ifdef RGE_DEBUG
 #define DPRINTF(x)	do { if (rge_debug > 0) printf x; } while (0)
@@ -69,6 +74,7 @@ int rge_debug = 0;
 
 int		rge_match(struct device *, void *, void *);
 void		rge_attach(struct device *, struct device *, void *);
+void		rge_attachhook(struct device *);
 int		rge_activate(struct device *, int);
 int		rge_intr(void *);
 int		rge_intr_link(void *);
@@ -81,6 +87,7 @@ void		rge_init(struct ifnet *);
 void		rge_stop(struct ifnet *);
 int		rge_ifmedia_upd(struct ifnet *);
 void		rge_ifmedia_sts(struct ifnet *, struct ifmediareq *);
+int		rge_loadfirmware(struct rge_softc *);
 int		rge_rx_dma_alloc(struct rge_softc *, struct rge_queues *);
 int		rge_tx_dma_alloc(struct rge_softc *, struct rge_queues *);
 int		rge_newbuf(struct rge_queues *);
@@ -94,7 +101,8 @@ void		rge_free_rx_ring(struct rge_softc *, struct rge_queues *);
 void		rge_free_tx_ring(struct rge_softc *, struct rge_queues *);
 void		rge_rxcsum(struct rge_softc *, uint32_t, uint32_t,
 		    struct mbuf *);
-void		rge_tx_offload(struct mbuf *, uint32_t *, uint32_t *);
+int		rge_tx_offload(struct rge_softc *, struct mbuf *, uint32_t *,
+		    uint32_t *);
 int		rge_rxeof(struct rge_queues *);
 int		rge_txeof(struct rge_queues *);
 int		rge_reset(struct rge_softc *);
@@ -108,7 +116,7 @@ void		rge_ephy_config_mac_r25b(struct rge_softc *);
 void		rge_ephy_config_mac_r27(struct rge_softc *);
 void		rge_mac_config_mcu(struct rge_softc *, enum rge_mac_type);
 void		rge_mac_config_ext_mcu(struct rge_softc *, enum rge_mac_type);
-uint64_t	rge_mcu_get_bin_version(const uint16_t *, uint16_t);
+uint64_t	rge_mcu_get_bin_version(const struct rge_pair *, uint16_t);
 void		rge_mcu_set_version(struct rge_softc *, uint64_t);
 int		rge_phy_config(struct rge_softc *);
 void		rge_phy_config_mac_r27(struct rge_softc *);
@@ -163,16 +171,10 @@ void		rge_wol_power(struct rge_softc *);
 void		rge_kstat_attach(struct rge_softc *);
 #endif
 
-static const struct {
-	uint16_t reg;
-	uint16_t val;
-}  mac_r25_mcu[] = {
-	MAC_R25_MCU
-}, mac_r25b_mcu[] = {
-	MAC_R25B_MCU
-}, mac_r25d_1_mcu[] = {
-	MAC_R25D_MCU
-};
+void		in_delayed_cksum(struct mbuf *);
+#ifdef INET6
+void		in6_delayed_cksum(struct mbuf *, uint8_t);
+#endif
 
 const struct cfattach rge_ca = {
 	sizeof(struct rge_softc), rge_match, rge_attach, NULL, rge_activate
@@ -204,13 +206,12 @@ rge_attach(struct device *parent, struct device *self, void *aux)
 	struct pci_attach_args *pa = aux;
 	pci_chipset_tag_t pc = pa->pa_pc;
 	pci_intr_handle_t ih;
-	struct ifnet *ifp;
 	int (*isr)(void *);
 	const char *intrstr = NULL;
 	pcireg_t reg;
 	uint32_t hwrev;
 	uint8_t eaddr[ETHER_ADDR_LEN];
-	int i, nmsix, offset;
+	int nmsix, offset;
 
 	pci_set_powerstate(pa->pa_pc, pa->pa_tag, PCI_PMCSR_STATE_D0);
 
@@ -235,29 +236,36 @@ rge_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_dmat = pa->pa_dmat;
 	sc->sc_pc = pa->pa_pc;
 	sc->sc_tag = pa->pa_tag;
+	sc->sc_pa = *pa;
 
 	/* Determine hardware revision */
 	hwrev = RGE_READ_4(sc, RGE_TXCFG) & RGE_TXCFG_HWREV;
 	switch (hwrev) {
 	case 0x60900000:
 		sc->rge_type = MAC_R25;
+		sc->sc_fwname = RGE_RTL8125_FW;
 		break;
 	case 0x64100000:
 		sc->rge_type = MAC_R25B;
+		sc->sc_fwname = RGE_RTL8125B_FW;
 		printf(": RTL8125B");
 		break;
 	case 0x64900000:
 		sc->rge_type = MAC_R26_1;
+		sc->sc_fwname = RGE_RTL8126_1_FW;
 		break;
 	case 0x64a00000:
 		sc->rge_type = MAC_R26_2;
+		sc->sc_fwname = RGE_RTL8126_2_FW;
 		break;
 	case 0x68800000:
 		sc->rge_type = MAC_R25D_1;
+		sc->sc_fwname = RGE_RTL8125D_1_FW;
 		printf(": RTL8125D");
 		break;
 	case 0x68900000:
 		sc->rge_type = MAC_R25D_2;
+		sc->sc_fwname = RGE_RTL8125D_2_FW;
 		printf(": RTL8125D");
 		break;
 	case 0x6c900000:
@@ -266,6 +274,7 @@ rge_attach(struct device *parent, struct device *self, void *aux)
 			printf(": RTL8127ATF");
 		} else
 			sc->rge_type = MAC_R27;
+		sc->sc_fwname = RGE_RTL8127_FW;
 		sc->sc_linkvec = RGE_LINK_VECTOR_8127;
 		sc->rge_min_msix = RGE_MIN_MSIX_VECTORS_8127;
 		sc->rge_flags |= RGE_FLAG_DESCV2;
@@ -350,13 +359,36 @@ rge_attach(struct device *parent, struct device *self, void *aux)
 		    reg);
 	}
 
-	if (rge_chipinit(sc))
-		goto intrunmap;
-
 	rge_get_macaddr(sc, eaddr);
 	printf(", address %s\n", ether_sprintf(eaddr));
 
 	memcpy(sc->sc_arpcom.ac_enaddr, eaddr, ETHER_ADDR_LEN);
+
+	config_mountroot(self, rge_attachhook);
+	return;
+
+intrunmap:
+	if (sc->rge_flags & RGE_FLAG_MULTIVEC) {
+		intrmap_destroy(sc->sc_intrmap);
+		sc->sc_intrmap = NULL;
+	}
+}
+
+void
+rge_attachhook(struct device *self)
+{
+	struct rge_softc *sc = (struct rge_softc *)self;
+	struct pci_attach_args *pa = &sc->sc_pa;
+	pci_intr_handle_t ih;
+	struct ifnet *ifp = &sc->sc_arpcom.ac_if;
+	int i;
+
+	/* Try the firmware stored on disk. */
+	if (rge_loadfirmware(sc))
+		goto intrunmap;
+
+	if (rge_chipinit(sc))
+		goto intrunmap;
 
 	for (i = 0; i < sc->sc_nqueues; i++) {
 		if (rge_rx_dma_alloc(sc, &sc->sc_queues[i]))
@@ -365,7 +397,6 @@ rge_attach(struct device *parent, struct device *self, void *aux)
 	if (rge_tx_dma_alloc(sc, &sc->sc_queues[0]))
 		goto intrunmap;
 
-	ifp = &sc->sc_arpcom.ac_if;
 	ifp->if_softc = sc;
 	strlcpy(ifp->if_xname, sc->sc_dev.dv_xname, IFNAMSIZ);
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
@@ -491,8 +522,8 @@ intrdisestablish:
 			q->q_tx_ihc = NULL;
 		}
 	}
-	free(sc->sc_queues, M_DEVBUF, sc->sc_nqueues * sizeof(*sc->sc_queues));
 intrunmap:
+	free(sc->sc_queues, M_DEVBUF, sc->sc_nqueues * sizeof(*sc->sc_queues));
 	if (sc->rge_flags & RGE_FLAG_MULTIVEC) {
 		intrmap_destroy(sc->sc_intrmap);
 		sc->sc_intrmap = NULL;
@@ -664,6 +695,9 @@ rge_encap(struct ifnet *ifp, struct rge_queues *q, struct mbuf *m, int idx)
 	caddr_t if_bpf;
 #endif
 
+	if (rge_tx_offload(sc, m, &cflags, &tflags))
+		return (0);
+
 	txq = &q->q_tx.rge_txq[idx];
 	txmap = txq->txq_dmamap;
 
@@ -690,8 +724,6 @@ rge_encap(struct ifnet *ifp, struct rge_queues *q, struct mbuf *m, int idx)
 
 	bus_dmamap_sync(sc->sc_dmat, txmap, 0, txmap->dm_mapsize,
 	    BUS_DMASYNC_PREWRITE);
-
-	rge_tx_offload(m, &cflags, &tflags);
 
 	cur = idx;
 	for (i = 1; i < txmap->dm_nsegs; i++) {
@@ -1301,6 +1333,55 @@ rge_ifmedia_sts(struct ifnet *ifp, struct ifmediareq *ifmr)
 }
 
 int
+rge_loadfirmware(struct rge_softc *sc)
+{
+	struct rge_fw_hdr *hdr;
+	struct rge_pair *p;
+	u_char *fw;
+	size_t fwlen;
+	uint32_t maclen, phylen;
+	int error, i;
+
+	if ((error = loadfirmware(sc->sc_fwname, &fw, &fwlen)) != 0) {
+		printf("%s: could not load firmware %s\n",
+		    sc->sc_dev.dv_xname, sc->sc_fwname);
+		return (error);
+	}
+
+	if (fwlen < sizeof(struct rge_fw_hdr)) {
+		printf("%s: firmware too short\n", sc->sc_dev.dv_xname);
+		free(fw, M_DEVBUF, fwlen);
+		return (EINVAL);
+	}
+
+	hdr = (struct rge_fw_hdr *)fw;
+	maclen = letoh32(hdr->rge_maclen);
+	phylen = letoh32(hdr->rge_phylen);
+
+	if (maclen > fwlen - sizeof(*hdr) ||
+	    phylen != fwlen - sizeof(*hdr) - maclen) {
+		printf("%s: invalid firmware %s\n",
+		    sc->sc_dev.dv_xname, sc->sc_fwname);
+		free(fw, M_DEVBUF, fwlen);
+		return (EINVAL);
+	}
+
+	sc->rge_nmac = maclen / sizeof(*p);
+	sc->rge_nphy = phylen / sizeof(*p);
+
+	p = (struct rge_pair *)(fw + sizeof(*hdr));
+	for (i = 0; i < sc->rge_nmac + sc->rge_nphy; i++) {
+		p[i].reg = letoh16(p[i].reg);
+		p[i].val = letoh16(p[i].val);
+	}
+
+	sc->rge_macp = p;
+	sc->rge_phyp = p + sc->rge_nmac;
+
+	return (0);
+}
+
+int
 rge_rx_dma_alloc(struct rge_softc *sc, struct rge_queues *q)
 {
 	void **desc;
@@ -1726,11 +1807,15 @@ rge_rxcsum(struct rge_softc *sc, uint32_t cmdsts, uint32_t extsts,
 	}
 }
 
-void
-rge_tx_offload(struct mbuf *m, uint32_t *cflags, uint32_t *tflags)
+int
+rge_tx_offload(struct rge_softc *sc, struct mbuf *m, uint32_t *cflags,
+    uint32_t *tflags)
 {
 	struct ether_extracted ext;
 	uint32_t hdrlen;
+	uint16_t port;
+	uint8_t proto = 0;
+	int udplen, totlen, padlen = 0;
 
 	/* Set up hardware VLAN tagging. */
 #if NVLAN > 0
@@ -1740,6 +1825,94 @@ rge_tx_offload(struct mbuf *m, uint32_t *cflags, uint32_t *tflags)
 
 	ether_extract_headers(m, &ext);
 	hdrlen = sizeof(*ext.eh) + ext.iphlen;
+	totlen = m->m_pkthdr.len;
+
+	/*
+	 * Workaround for a bug in RTL8125/RTL8125B.
+	 * The chip hangs when a short UDP frame reads port 319 or 320
+	 * with fewer than 47 bytes of data.
+	 */
+	if ((sc->rge_type == MAC_R25 || sc->rge_type == MAC_R25B) &&
+	    totlen < 128 + RGE_MIN_PATCHLEN) {
+		if (ext.ip4)
+			proto = ext.ip4->ip_p;
+#ifdef INET6
+		else if (ext.ip6)
+			proto = ext.ip6->ip6_nxt;
+#endif
+		if (proto == IPPROTO_UDP) {
+			udplen = totlen - hdrlen;
+			if (udplen > 3 && udplen < RGE_MIN_PATCHLEN) {
+				m_copydata(m,
+				    hdrlen + offsetof(struct udphdr, uh_dport),
+				    sizeof(port), &port);
+				port = ntohs(port);
+				if (port == 319 || port == 320)
+					padlen = RGE_MIN_PATCHLEN - udplen;
+			}
+			if (udplen < sizeof(struct udphdr))
+				padlen = MAX(padlen,
+				    sizeof(struct udphdr) - udplen);
+		}
+	}
+
+	/*
+	 * MAC does not checksum transmit packets that are fewer than
+	 * 60 bytes correctly.
+	 */
+	if (totlen + padlen < RGE_MIN_FRAMELEN)
+		padlen = RGE_MIN_FRAMELEN - totlen;
+
+	if (padlen > 0) {
+		struct mbuf *n;
+
+		if (m->m_pkthdr.csum_flags &
+		    (M_IPV4_CSUM_OUT | M_TCP_CSUM_OUT | M_UDP_CSUM_OUT)) {
+			struct mbuf mh, *mp;
+			int off;
+
+			mp = m_getptr(m, sizeof(*ext.eh), &off);
+			if (mp == NULL)
+				return (EINVAL);
+
+			mh.m_flags = 0;
+			mh.m_data = mtod(mp, caddr_t) + off;
+			mh.m_next = mp->m_next;
+			mh.m_pkthdr.len = totlen - sizeof(*ext.eh);
+			mh.m_len = mp->m_len - off;
+
+			if (ext.ip4) {
+				if (m->m_pkthdr.csum_flags & M_IPV4_CSUM_OUT)
+					ext.ip4->ip_sum = in_cksum(&mh,
+					    ext.iphlen);
+				if (m->m_pkthdr.csum_flags &
+				    (M_TCP_CSUM_OUT | M_UDP_CSUM_OUT))
+					in_delayed_cksum(&mh);
+			}
+#ifdef INET6
+			else if (ext.ip6) {
+				if (m->m_pkthdr.csum_flags & M_TCP_CSUM_OUT)
+					in6_delayed_cksum(&mh, IPPROTO_TCP);
+				else if (m->m_pkthdr.csum_flags &
+				    M_UDP_CSUM_OUT)
+					in6_delayed_cksum(&mh, IPPROTO_UDP);
+			}
+#endif
+
+			m->m_pkthdr.csum_flags &=
+			    ~(M_IPV4_CSUM_OUT | M_TCP_CSUM_OUT |
+			    M_UDP_CSUM_OUT);
+		}
+
+		MGET(n, M_DONTWAIT, MT_DATA);
+		if (n == NULL)
+			return (ENOBUFS);
+
+		memset(mtod(n, caddr_t), 0, padlen);
+		n->m_len = padlen;
+		m_cat(m, n);
+		m->m_pkthdr.len += padlen;
+	}
 
 	if (m->m_pkthdr.csum_flags & M_TCP_TSO) {
 		uint32_t outlen;
@@ -1771,6 +1944,8 @@ rge_tx_offload(struct mbuf *m, uint32_t *cflags, uint32_t *tflags)
 		if (m->m_pkthdr.csum_flags & M_UDP_CSUM_OUT)
 			*cflags |= RGE_TDEXTSTS_UDPCSUM;
 	}
+
+	return (0);
 }
 
 int
@@ -2158,24 +2333,23 @@ rge_set_phy_power(struct rge_softc *sc, int on)
 void
 rge_mac_config_mcu(struct rge_softc *sc, enum rge_mac_type type)
 {
+	const struct rge_pair *macp = sc->rge_macp;
 	uint16_t reg;
 	int i, npages;
 
 	if (type == MAC_R25) {
 		for (npages = 0; npages < 3; npages++) {
 			rge_switch_mcu_ram_page(sc, npages);
-			for (i = 0; i < nitems(rtl8125_mac_bps); i++) {
+			for (i = 0; i < sc->rge_nmac; i++) {
 				if (npages == 0)
-					rge_write_mac_ocp(sc,
-					    rtl8125_mac_bps[i].reg,
-					    rtl8125_mac_bps[i].val);
+					rge_write_mac_ocp(sc, macp[i].reg,
+					    macp[i].val);
 				else if (npages == 1)
-					rge_write_mac_ocp(sc,
-					    rtl8125_mac_bps[i].reg, 0);
+					rge_write_mac_ocp(sc, macp[i].reg, 0);
 				else {
-					if (rtl8125_mac_bps[i].reg < 0xf9f8)
+					if (macp[i].reg < 0xf9f8)
 						rge_write_mac_ocp(sc,
-						    rtl8125_mac_bps[i].reg, 0);
+						    macp[i].reg, 0);
 				}
 			}
 			if (npages == 2) {
@@ -2196,10 +2370,8 @@ rge_mac_config_mcu(struct rge_softc *sc, enum rge_mac_type type)
 		rge_write_mac_ocp(sc, 0xfc48, 0x307a);
 	} else if (type == MAC_R25B) {
 		rge_switch_mcu_ram_page(sc, 0);
-		for (i = 0; i < nitems(rtl8125b_mac_bps); i++) {
-			rge_write_mac_ocp(sc, rtl8125b_mac_bps[i].reg,
-			    rtl8125b_mac_bps[i].val);
-		}
+		for (i = 0; i < sc->rge_nmac; i++)
+			rge_write_mac_ocp(sc, macp[i].reg, macp[i].val);
 	} else if (type == MAC_R25D_1) {
 		for (npages = 0; npages < 3; npages++) {
 			rge_switch_mcu_ram_page(sc, npages);
@@ -2242,14 +2414,12 @@ rge_mac_config_mcu(struct rge_softc *sc, enum rge_mac_type type)
 		for (npages = 0; npages < 3; npages++) {
 			rge_switch_mcu_ram_page(sc, npages);
 
-			for (i = 0; i < nitems(rtl8125d_2_mac_bps); i++) {
+			for (i = 0; i < sc->rge_nmac; i++) {
 				if (npages == 0)
-					rge_write_mac_ocp(sc,
-					    rtl8125d_2_mac_bps[i].reg,
-					    rtl8125d_2_mac_bps[i].val);
+					rge_write_mac_ocp(sc, macp[i].reg,
+					    macp[i].val);
 				else
-					rge_write_mac_ocp(sc,
-					    rtl8125d_2_mac_bps[i].reg, 0);
+					rge_write_mac_ocp(sc, macp[i].reg, 0);
 			}
 
 			for (reg = 0xf884; reg <= 0xf9f6; reg += 2)
@@ -2273,7 +2443,7 @@ rge_mac_config_mcu(struct rge_softc *sc, enum rge_mac_type type)
 void
 rge_mac_config_ext_mcu(struct rge_softc *sc, enum rge_mac_type type)
 {
-	const struct rge_mac_bps *bps;
+	const struct rge_pair *macp = sc->rge_macp;
 	uint64_t mcodever = 0;
 	int i;
 
@@ -2286,16 +2456,14 @@ rge_mac_config_ext_mcu(struct rge_softc *sc, enum rge_mac_type type)
 	}
 	rge_switch_mcu_ram_page(sc, 0);
 
+	mcodever = rge_mcu_get_bin_version(macp, sc->rge_nmac);
+
 	if (type == MAC_R26_1) {
-		bps = &rtl8126_1_mac_bps;
-		mcodever =
-		    rge_mcu_get_bin_version(rtl8126_1_mac_bps_vals, bps->count);
 		if (sc->rge_mcodever != mcodever) {
 			/* Switch to page 0. */
 			rge_switch_mcu_ram_page(sc, 0);
-			for (i = 0; i < bps->count; i++)
-				rge_write_mac_ocp(sc, bps->regs[i],
-				    bps->vals[i]);
+			for (i = 0; i < sc->rge_nmac; i++)
+				rge_write_mac_ocp(sc, macp[i].reg, macp[i].val);
 		}
 		rge_write_mac_ocp(sc, 0xfc26, 0x8000);
 		rge_write_mac_ocp(sc, 0xfc2c, 0x2360);
@@ -2306,20 +2474,15 @@ rge_mac_config_ext_mcu(struct rge_softc *sc, enum rge_mac_type type)
 		rge_write_mac_ocp(sc, 0xfc36, 0x234a);
 		rge_write_mac_ocp(sc, 0xfc48, 0x00fc);
 	} else if (type == MAC_R26_2) {
-		bps = &rtl8126_2_mac_bps;
-		mcodever =
-		    rge_mcu_get_bin_version(rtl8126_2_mac_bps_vals, bps->count);
 		if (sc->rge_mcodever != mcodever) {
 			/* Switch to page 0. */
 			rge_switch_mcu_ram_page(sc, 0);
 			for (i = 0; i < 256; i++)
-				rge_write_mac_ocp(sc, bps->regs[i],
-				    bps->vals[i]);
+				rge_write_mac_ocp(sc, macp[i].reg, macp[i].val);
 		    	/* Switch to page 1. */
 			rge_switch_mcu_ram_page(sc, 1);
-			for (; i < bps->count; i++)
-				rge_write_mac_ocp(sc, bps->regs[i],
-				    bps->vals[i]);
+			for (; i < sc->rge_nmac; i++)
+				rge_write_mac_ocp(sc, macp[i].reg, macp[i].val);
 		}
 		rge_write_mac_ocp(sc, 0xfc26, 0x8000);
 		rge_write_mac_ocp(sc, 0xfc2c, 0x14a4);
@@ -2329,25 +2492,19 @@ rge_mac_config_ext_mcu(struct rge_softc *sc, enum rge_mac_type type)
 		rge_write_mac_ocp(sc, 0xfc3a, 0x234a);
 		rge_write_mac_ocp(sc, 0xfc48, 0x023c);
 	} else {
-		bps = &rtl8127_mac_bps;
-		mcodever =
-		    rge_mcu_get_bin_version(rtl8127_mac_bps_vals, bps->count);
 		if (sc->rge_mcodever != mcodever) {
 			/* Switch to page 0. */
 			rge_switch_mcu_ram_page(sc, 0);
 			for (i = 0; i < 256; i++)
-				rge_write_mac_ocp(sc, bps->regs[i],
-				    bps->vals[i]);
+				rge_write_mac_ocp(sc, macp[i].reg, macp[i].val);
 		    	/* Switch to page 1. */
 			rge_switch_mcu_ram_page(sc, 1);
 			for (; i < 512; i++)
-				rge_write_mac_ocp(sc, bps->regs[i],
-				    bps->vals[i]);
+				rge_write_mac_ocp(sc, macp[i].reg, macp[i].val);
 		    	/* Switch to page 2. */
 			rge_switch_mcu_ram_page(sc, 2);
-			for (; i < bps->count; i++)
-				rge_write_mac_ocp(sc, bps->regs[i],
-				    bps->vals[i]);
+			for (; i < sc->rge_nmac; i++)
+				rge_write_mac_ocp(sc, macp[i].reg, macp[i].val);
 		}
 		rge_write_mac_ocp(sc, 0xfc26, 0x8000);
 		rge_write_mac_ocp(sc, 0xfc28, 0x1520);
@@ -2367,14 +2524,14 @@ rge_mac_config_ext_mcu(struct rge_softc *sc, enum rge_mac_type type)
 };
 
 uint64_t
-rge_mcu_get_bin_version(const uint16_t *mac_bps, uint16_t entries)
+rge_mcu_get_bin_version(const struct rge_pair *macp, uint16_t entries)
 {
 	uint64_t binver = 0;
 	int i;
 
 	for (i = 0; i < 4; i++) {
 		binver <<= 16;
-		binver |= mac_bps[entries - 4 + i];
+		binver |= macp[entries - 4 + i].val;
 	}
 
 	return binver;
@@ -2536,8 +2693,6 @@ rge_phy_config(struct rge_softc *sc)
 	}
 
 	RGE_PHY_CLRBIT(sc, 0xa5b4, 0x8000);
-
-	/* kevlo FIBER PHY */
 
 	/* Disable EEE. */
 	RGE_MAC_CLRBIT(sc, 0xe040, 0x0003);
@@ -3646,6 +3801,8 @@ rge_phy_config_mac_r25d_2(struct rge_softc *sc)
 void
 rge_phy_config_mcu(struct rge_softc *sc, uint16_t rcodever)
 {
+	const struct rge_pair *phyp = sc->rge_phyp;
+
 	if (sc->rge_rcodever != rcodever) {
 		int i;
 
@@ -3659,9 +3816,8 @@ rge_phy_config_mcu(struct rge_softc *sc, uint16_t rcodever)
 
 			RGE_PHY_SETBIT(sc, 0xb820, 0x0080);
 
-			for (i = 0; i < nitems(mac_r25_mcu); i++)
-				rge_write_phy_ocp(sc,
-				    mac_r25_mcu[i].reg, mac_r25_mcu[i].val);
+			for (i = 0; i < sc->rge_nphy; i++)
+				rge_write_phy_ocp(sc, phyp[i].reg, phyp[i].val);
 
 			RGE_PHY_CLRBIT(sc, 0xb820, 0x0080);
 
@@ -3671,64 +3827,48 @@ rge_phy_config_mcu(struct rge_softc *sc, uint16_t rcodever)
 			rge_write_phy_ocp(sc, 0xa436, 0x8024);
 			rge_write_phy_ocp(sc, 0xa438, 0);
 		} else if (sc->rge_type == MAC_R25B) {
-			for (i = 0; i < nitems(mac_r25b_mcu); i++)
-				rge_write_phy_ocp(sc,
-				    mac_r25b_mcu[i].reg, mac_r25b_mcu[i].val);
+			for (i = 0; i < sc->rge_nphy; i++)
+				rge_write_phy_ocp(sc, phyp[i].reg, phyp[i].val);
 		} else if (sc->rge_type == MAC_R25D_1) {
 			for (i = 0; i < 2403; i++)
-				rge_write_phy_ocp(sc,
-				    mac_r25d_1_mcu[i].reg,
-				    mac_r25d_1_mcu[i].val);
+				rge_write_phy_ocp(sc, phyp[i].reg, phyp[i].val);
 			rge_patch_phy_mcu(sc, 0);
 
 			rge_patch_phy_mcu(sc, 1);
 			for (; i < 2528; i++)
-				rge_write_phy_ocp(sc,
-				    mac_r25d_1_mcu[i].reg,
-				    mac_r25d_1_mcu[i].val);
+				rge_write_phy_ocp(sc, phyp[i].reg, phyp[i].val);
 			rge_patch_phy_mcu(sc, 0);
 
 			rge_patch_phy_mcu(sc, 1);
-			for (; i < nitems(mac_r25d_1_mcu); i++)
-				rge_write_phy_ocp(sc,
-				    mac_r25d_1_mcu[i].reg,
-				    mac_r25d_1_mcu[i].val);
+			for (; i < sc->rge_nphy; i++)
+				rge_write_phy_ocp(sc, phyp[i].reg, phyp[i].val);
 		} else if (sc->rge_type == MAC_R25D_2) {
 			for (i = 0; i < 1269; i++)
-				rge_write_phy_ocp(sc,
-				    mac_r25d_2_mcu[i].reg,
-				    mac_r25d_2_mcu[i].val);
+				rge_write_phy_ocp(sc, phyp[i].reg, phyp[i].val);
 			rge_patch_phy_mcu(sc, 0);
 
 			rge_patch_phy_mcu(sc, 1);
-			for (; i < nitems(mac_r25d_2_mcu); i++)
-				rge_write_phy_ocp(sc,
-				    mac_r25d_2_mcu[i].reg,
-				    mac_r25d_2_mcu[i].val);
+			for (; i < sc->rge_nphy; i++)
+				rge_write_phy_ocp(sc, phyp[i].reg, phyp[i].val);
 		} else if (sc->rge_type == MAC_R26_1) {
 			for (i = 0; i < 6989; i++)
-				rge_write_phy_ocp(sc,
-				    mac_r26_1_mcu[i].reg, mac_r26_1_mcu[i].val);
+				rge_write_phy_ocp(sc, phyp[i].reg, phyp[i].val);
 			rge_patch_phy_mcu(sc, 0);
 
 			rge_patch_phy_mcu(sc, 1);
-			for (; i < nitems(mac_r26_1_mcu); i++)
-				rge_write_phy_ocp(sc,
-				    mac_r26_1_mcu[i].reg, mac_r26_1_mcu[i].val);
+			for (; i < sc->rge_nphy; i++)
+				rge_write_phy_ocp(sc, phyp[i].reg, phyp[i].val);
 		} else if (sc->rge_type == MAC_R26_2) {
-			for (i = 0; i < nitems(mac_r26_2_mcu); i++)
-				rge_write_phy_ocp(sc,
-				    mac_r26_2_mcu[i].reg, mac_r26_2_mcu[i].val);
+			for (i = 0; i < sc->rge_nphy; i++)
+				rge_write_phy_ocp(sc, phyp[i].reg, phyp[i].val);
 		} else if (RGE_TYPE_R27(sc)) {
 			for (i = 0; i < 4097; i++)
-				rge_write_phy_ocp(sc,
-				    mac_r27_mcu[i].reg, mac_r27_mcu[i].val);
+				rge_write_phy_ocp(sc, phyp[i].reg, phyp[i].val);
 			rge_patch_phy_mcu(sc, 0);
 
 			rge_patch_phy_mcu(sc, 1);
-			for (; i < nitems(mac_r27_mcu); i++)
-				rge_write_phy_ocp(sc,
-				    mac_r27_mcu[i].reg, mac_r27_mcu[i].val);
+			for (; i < sc->rge_nphy; i++)
+				rge_write_phy_ocp(sc, phyp[i].reg, phyp[i].val);
 		}
 
 		rge_patch_phy_mcu(sc, 0);

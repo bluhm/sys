@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf_ioctl.c,v 1.434 2026/09/10 12:28:04 deraadt Exp $ */
+/*	$OpenBSD: pf_ioctl.c,v 1.437 2026/11/06 10:51:28 henning Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -109,8 +109,6 @@ int			 pf_validate_range(u_int8_t, u_int16_t[2], int);
 int			 pf_rule_copyin(struct pf_rule *, struct pf_rule *);
 int			 pf_rule_checkaf(struct pf_rule *);
 u_int16_t		 pf_qname2qid(char *, int);
-void			 pf_qid2qname(u_int16_t, char *);
-void			 pf_qid_unref(u_int16_t);
 int			 pf_states_clr(struct pfioc_state_kill *);
 int			 pf_states_get(struct pfioc_states *);
 
@@ -550,18 +548,6 @@ u_int16_t
 pf_qname2qid(char *qname, int create)
 {
 	return (tagname2tag(&pf_qids, qname, create));
-}
-
-void
-pf_qid2qname(u_int16_t qid, char *p)
-{
-	tag2tagname(&pf_qids, qid, p);
-}
-
-void
-pf_qid_unref(u_int16_t qid)
-{
-	tag_unref(&pf_qids, (u_int16_t)qid);
 }
 
 int
@@ -1948,62 +1934,6 @@ pfioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 {
 	int			 error = 0;
 
-	/* XXX keep in sync with switch() below */
-	if (securelevel > 1)
-		switch (cmd) {
-		case DIOCGETRULES:
-		case DIOCGETRULE:
-		case DIOCGETSTATE:
-		case DIOCSETSTATUSIF:
-		case DIOCGETSTATUS:
-		case DIOCCLRSTATUS:
-		case DIOCNATLOOK:
-		case DIOCSETDEBUG:
-		case DIOCGETSTATES:
-		case DIOCGETTIMEOUT:
-		case DIOCGETLIMIT:
-		case DIOCGETSTATELIM:
-		case DIOCGETNSTATELIM:
-		case DIOCGETSOURCELIM:
-		case DIOCGETNSOURCELIM:
-		case DIOCGETSOURCE:
-		case DIOCGETNSOURCE:
-		case DIOCGETRULESETS:
-		case DIOCGETRULESET:
-		case DIOCGETQUEUES:
-		case DIOCGETQUEUE:
-		case DIOCGETQSTATS:
-		case DIOCRGETTABLES:
-		case DIOCRGETTSTATS:
-		case DIOCRCLRTSTATS:
-		case DIOCRCLRADDRS:
-		case DIOCRADDADDRS:
-		case DIOCRDELADDRS:
-		case DIOCRSETADDRS:
-		case DIOCRGETADDRS:
-		case DIOCRGETASTATS:
-		case DIOCRCLRASTATS:
-		case DIOCRTSTADDRS:
-		case DIOCOSFPGET:
-		case DIOCGETSRCNODES:
-		case DIOCCLRSRCNODES:
-		case DIOCIGETIFACES:
-		case DIOCSETIFFLAG:
-		case DIOCCLRIFFLAG:
-		case DIOCGETSYNFLWATS:
-			break;
-		case DIOCRCLRTABLES:
-		case DIOCRADDTABLES:
-		case DIOCRDELTABLES:
-		case DIOCRSETTFLAGS:
-			if (((struct pfioc_table *)addr)->pfrio_flags &
-			    PFR_FLAG_DUMMY)
-				break; /* dummy operation ok */
-			return (EPERM);
-		default:
-			return (EPERM);
-		}
-
 	if (!(flags & FWRITE))
 		switch (cmd) {
 		case DIOCGETRULES:
@@ -2997,8 +2927,7 @@ pfioctl(dev_t dev, u_long cmd, caddr_t addr, int flags, struct proc *p)
 		    PF_AZERO(&pnl->daddr, pnl->af) ||
 		    ((pnl->proto == IPPROTO_TCP ||
 		    pnl->proto == IPPROTO_UDP) &&
-		    (!pnl->dport || !pnl->sport)) ||
-		    pnl->rdomain > RT_TABLEID_MAX)
+		    (!pnl->dport || !pnl->sport)))
 			error = EINVAL;
 		else {
 			key.af = pnl->af;
@@ -4154,8 +4083,7 @@ pf_rule_copyin(struct pf_rule *from, struct pf_rule *to)
 	if (to->rtableid >= 0 && !rtable_exists(to->rtableid))
 		return (EBUSY);
 	to->onrdomain = from->onrdomain;
-	if (to->onrdomain != -1 && (to->onrdomain < 0 ||
-	    to->onrdomain > RT_TABLEID_MAX))
+	if (to->onrdomain != -1 && to->onrdomain < 0)
 		return (EINVAL);
 
 	for (i = 0; i < PFTM_MAX; i++)

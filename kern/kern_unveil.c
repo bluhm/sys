@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_unveil.c,v 1.57 2026/04/11 17:04:55 deraadt Exp $	*/
+/*	$OpenBSD: kern_unveil.c,v 1.59 2026/11/04 08:00:52 dgl Exp $	*/
 
 /*
  * Copyright (c) 2017-2019 Bob Beck <beck@openbsd.org>
@@ -246,7 +246,7 @@ unveil_find_cover(struct vnode *dp, struct proc *p)
 	root = p->p_fd->fd_rdir ? p->p_fd->fd_rdir : rootvnode;
 	vp = dp;
 
-	while (vp != root) {
+	while (vp != root && vp != rootvnode) {
 		struct componentname cn = {
 			.cn_nameiop = LOOKUP,
 			.cn_flags = ISLASTCN | ISDOTDOT | RDONLY,
@@ -647,6 +647,7 @@ unveil_check_final(struct proc *p, struct nameidata *ni)
 	struct process *pr = p->p_p;
 	struct unveil *uv = NULL, *nuv;
 	struct unvname *tname = NULL;
+	size_t nvisited = 0;
 
 	if (ni->ni_pledge == PLEDGE_UNVEIL || pr->ps_uvpaths == NULL)
 		return (0);
@@ -754,6 +755,8 @@ done:
 	 * access is allowed or not.
 	 */
 	for (uv = ni->ni_unveil_match; uv != NULL; uv = nuv) {
+		if (nvisited++ >= pr->ps_uvvcount)
+			break;
 		if (unveil_flagmatch(ni, uv->uv_flags)) {
 			DPRINTF("unveil: %s(%d): matched \"%s\" underneath/at "
 			    "vnode %p\n", pr->ps_comm, pr->ps_pid,

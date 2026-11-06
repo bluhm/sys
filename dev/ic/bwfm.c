@@ -1,4 +1,4 @@
-/* $OpenBSD: bwfm.c,v 1.113 2025/08/21 17:03:58 mbuhl Exp $ */
+/* $OpenBSD: bwfm.c,v 1.118 2026/10/20 11:59:15 stsp Exp $ */
 /*
  * Copyright (c) 2010-2016 Broadcom Corporation
  * Copyright (c) 2016,2017 Patrick Wildt <patrick@blueri.se>
@@ -102,7 +102,7 @@ int	 bwfm_proto_bcdc_query_dcmd(struct bwfm_softc *, int,
 int	 bwfm_proto_bcdc_set_dcmd(struct bwfm_softc *, int,
 	     int, char *, size_t);
 void	 bwfm_proto_bcdc_rx(struct bwfm_softc *, struct mbuf *,
-	     struct mbuf_list *);
+	     struct mbuf_list *, enum bwfm_rx_type);
 int	 bwfm_proto_bcdc_txctl(struct bwfm_softc *, int, char *, size_t *);
 void	 bwfm_proto_bcdc_rxctl(struct bwfm_softc *, char *, size_t);
 
@@ -1763,7 +1763,8 @@ bwfm_proto_bcdc_rxctl(struct bwfm_softc *sc, char *buf, size_t len)
 }
 
 void
-bwfm_proto_bcdc_rx(struct bwfm_softc *sc, struct mbuf *m, struct mbuf_list *ml)
+bwfm_proto_bcdc_rx(struct bwfm_softc *sc, struct mbuf *m, struct mbuf_list *ml,
+    enum bwfm_rx_type rx_type)
 {
 	struct bwfm_proto_bcdc_hdr *hdr;
 
@@ -1778,7 +1779,7 @@ bwfm_proto_bcdc_rx(struct bwfm_softc *sc, struct mbuf *m, struct mbuf_list *ml)
 	}
 	m_adj(m, sizeof(*hdr) + (hdr->data_offset << 2));
 
-	bwfm_rx(sc, m, ml);
+	bwfm_rx(sc, m, ml, rx_type);
 }
 
 /* FW Variable code */
@@ -2343,11 +2344,13 @@ bwfm_newbuf(void)
 }
 
 void
-bwfm_rx(struct bwfm_softc *sc, struct mbuf *m, struct mbuf_list *ml)
+bwfm_rx(struct bwfm_softc *sc, struct mbuf *m, struct mbuf_list *ml,
+    enum bwfm_rx_type rx_type)
 {
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ifnet *ifp = &ic->ic_if;
 	struct ieee80211_node *ni;
+	uint32_t datalen;
 	struct bwfm_event *e;
 
 #ifdef __STRICT_ALIGNMENT
@@ -2363,13 +2366,30 @@ bwfm_rx(struct bwfm_softc *sc, struct mbuf *m, struct mbuf_list *ml)
 		m = m0;
 	}
 #endif
-
 	e = mtod(m, struct bwfm_event *);
-	if (m->m_len >= sizeof(e->ehdr) &&
+	if ((rx_type == BWFM_RX_ANY || rx_type == BWFM_RX_FW_EVENT) &&
+	    m->m_len >= sizeof(*e) &&
 	    ntohs(e->ehdr.ether_type) == BWFM_ETHERTYPE_LINK_CTL &&
 	    memcmp(BWFM_BRCM_OUI, e->hdr.oui, sizeof(e->hdr.oui)) == 0 &&
 	    ntohs(e->hdr.usr_subtype) == BWFM_BRCM_SUBTYPE_EVENT) {
+		datalen = ntohl(e->msg.datalen);
+		if (datalen > m->m_len - sizeof(*e)) {
+			m_freem(m);
+			ifp->if_ierrors++;
+			return;
+		}
 		bwfm_rx_event(sc, m);
+		return;
+	}
+
+	/*
+	 * If possible, drop forged firmware event messages which
+	 * did in fact arrive on data frame Rx rings. PCI and SDIO
+	 * devices provide this information, but USB devices do not.
+	 */
+	if (rx_type != BWFM_RX_ANY && rx_type != BWFM_RX_FRAME) {
+		m_freem(m);
+		ifp->if_ierrors++;
 		return;
 	}
 
@@ -2416,6 +2436,8 @@ bwfm_rx_auth_ind(struct bwfm_softc *sc, struct bwfm_event *e, size_t len)
 
 	/* Build a fake beacon frame to let net80211 do all the parsing. */
 	ieslen = betoh32(e->msg.datalen);
+	if (ieslen >= len - sizeof(*wh) - 6)
+		return;
 	pktlen = sizeof(*wh) + ieslen + 6;
 	if (pktlen > MCLBYTES)
 		return;
@@ -2455,6 +2477,8 @@ bwfm_rx_assoc_ind(struct bwfm_softc *sc, struct bwfm_event *e, size_t len,
 
 	/* Build a fake beacon frame to let net80211 do all the parsing. */
 	ieslen = betoh32(e->msg.datalen);
+	if (ieslen >= len - sizeof(*wh) - 4)
+		return;
 	pktlen = sizeof(*wh) + ieslen + 4;
 	if (reassoc)
 		pktlen += IEEE80211_ADDR_LEN;
@@ -2600,7 +2624,12 @@ bwfm_rx_event_cb(struct bwfm_softc *sc, struct mbuf *m)
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ifnet *ifp = &ic->ic_if;
 	struct bwfm_event *e = mtod(m, void *);
-	size_t len = m->m_len;
+	size_t len = m->m_len, remain;
+
+	if (len < sizeof(*e)) {
+		m_freem(m);
+		return;
+	}
 
 	if (ntohl(e->msg.event_type) >= BWFM_E_LAST) {
 		m_freem(m);
@@ -2610,9 +2639,9 @@ bwfm_rx_event_cb(struct bwfm_softc *sc, struct mbuf *m)
 	switch (ntohl(e->msg.event_type)) {
 	case BWFM_E_ESCAN_RESULT: {
 		struct bwfm_escan_results *res;
-		struct bwfm_bss_info *bss;
+		struct bwfm_bss_info *bss, *this_bss;
 		size_t reslen;
-		int i;
+
 		/* Abort event triggered by SCAN -> INIT */
 		if (ic->ic_state == IEEE80211_S_INIT &&
 		    ntohl(e->msg.status) == BWFM_E_STATUS_ABORT)
@@ -2639,10 +2668,17 @@ bwfm_rx_event_cb(struct bwfm_softc *sc, struct mbuf *m)
 			return;
 		}
 		reslen = len;
-		res = malloc(len, M_TEMP, M_WAITOK);
-		memcpy(res, (void *)&e[1], len);
-		if (len < letoh32(res->buflen)) {
-			DPRINTF(("%s: results too small\n", DEVNAME(sc)));
+		res = malloc(reslen, M_TEMP, M_WAITOK);
+		memcpy(res, (void *)&e[1], reslen);
+		if (reslen < letoh32(res->buflen)) {
+			DPRINTF(("%s: bad scan results size\n", DEVNAME(sc)));
+			free(res, M_TEMP, reslen);
+			m_freem(m);
+			return;
+		}
+		if (letoh16(res->bss_count) * sizeof(struct bwfm_bss_info) <
+		    letoh16(res->bss_count)) {
+			DPRINTF(("%s: bad scan results count\n", DEVNAME(sc)));
 			free(res, M_TEMP, reslen);
 			m_freem(m);
 			return;
@@ -2655,16 +2691,35 @@ bwfm_rx_event_cb(struct bwfm_softc *sc, struct mbuf *m)
 			return;
 		}
 		bss = &res->bss_info[0];
-		for (i = 0; i < letoh16(res->bss_count); i++) {
-			bwfm_scan_node(sc, &res->bss_info[i], len);
-			len -= sizeof(*bss) + letoh32(bss->length);
-			bss = (void *)((char *)bss) + letoh32(bss->length);
-			if (len <= 0)
-				break;
+		remain = len;
+		this_bss = malloc(BWFM_BSS_INFO_LENGTH_MAX, M_TEMP, M_WAITOK);
+		while (remain >= sizeof(*bss)) {
+			size_t bss_maxlen;
+
+			bss_maxlen = remain < BWFM_BSS_INFO_LENGTH_MAX ?
+			    remain : BWFM_BSS_INFO_LENGTH_MAX;
+
+			/* Don't allow device to cause unaligned access. */
+			memcpy(this_bss, bss, bss_maxlen);
+
+			if (letoh32(this_bss->length) < sizeof(*bss) ||
+			    letoh32(this_bss->length) > remain) {
+				free(res, M_TEMP, reslen);
+				m_freem(m);
+				free(this_bss, M_TEMP,
+				    BWFM_BSS_INFO_LENGTH_MAX);
+				return;
+			}
+
+			bwfm_scan_node(sc, this_bss, letoh32(this_bss->length));
+
+			remain -= letoh32(this_bss->length);
+			bss = (void *)((char *)bss) + letoh32(this_bss->length);
 		}
 		free(res, M_TEMP, reslen);
+		free(this_bss, M_TEMP, BWFM_BSS_INFO_LENGTH_MAX);
 		break;
-		}
+	}
 	case BWFM_E_AUTH:
 		if (ntohl(e->msg.status) != BWFM_E_STATUS_SUCCESS &&
 		    ic->ic_state == IEEE80211_S_AUTH)
@@ -2728,7 +2783,7 @@ bwfm_scan_node(struct bwfm_softc *sc, struct bwfm_bss_info *bss, size_t len)
 
 	iesoff = letoh16(bss->ie_offset);
 	ieslen = letoh32(bss->ie_length);
-	if (ieslen > len - iesoff)
+	if (iesoff > len || ieslen > len - iesoff)
 		return;
 
 	/* Build a fake beacon frame to let net80211 do all the parsing. */
