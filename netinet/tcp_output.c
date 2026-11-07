@@ -931,10 +931,8 @@ send:
 				tp->t_flags |= TF_SENTFIN;
 			}
 		}
-		if (tp->sack_enable) {
-			if (sack_rxmit && (tcp_seq)(p->rxmit - len) != startseq)
-				goto timer;
-		}
+		if (tp->sack_enable && sack_rxmit)
+			goto timer;
 		tp->snd_nxt += len;
 		if (SEQ_GT(tp->snd_nxt, tp->snd_max)) {
 			tp->snd_max = tp->snd_nxt;
