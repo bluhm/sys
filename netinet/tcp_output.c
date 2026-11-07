@@ -196,6 +196,7 @@ tcp_output(struct tcpcb *tp)
 	int doing_sosend, idle, sendalot = 0;
 	int i, sack_rxmit = 0;
 	struct sackhole *p;
+	tcp_seq sack_rxmit_seq = 0;
 	uint64_t now;
 #ifdef TCP_SIGNATURE
 	unsigned int sigoff;
@@ -785,7 +786,8 @@ send:
 		 */
 		if (sendalot)
 			sendalot = 0;
-		th->th_seq = htonl(p->rxmit);
+		sack_rxmit_seq = p->rxmit;
+		th->th_seq = htonl(sack_rxmit_seq);
 		p->rxmit += len;
 		tcpstat_pkt(tcps_sack_rexmits, tcps_sack_rexmit_bytes, len);
 	}
@@ -932,7 +934,7 @@ send:
 			}
 		}
 		if (tp->sack_enable) {
-			if (sack_rxmit && (p->rxmit != tp->snd_nxt)) {
+			if (sack_rxmit && (sack_rxmit_seq != tp->snd_nxt)) {
 				goto timer;
 			}
 		}
