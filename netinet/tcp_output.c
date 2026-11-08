@@ -1,4 +1,4 @@
-/*	$OpenBSD: tcp_output.c,v 1.158 2026/01/01 05:28:23 jsg Exp $	*/
+/*	$OpenBSD: tcp_output.c,v 1.159 2026/11/08 11:14:17 bluhm Exp $	*/
 /*	$NetBSD: tcp_output.c,v 1.16 1997/06/03 16:17:09 kml Exp $	*/
 
 /*
