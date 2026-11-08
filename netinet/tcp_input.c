@@ -3369,6 +3369,10 @@ syn_cache_timer(void *arg)
 	uint64_t now;
 	int lastref, do_ecn = 0;
 
+	/*
+	 * Routes in rt_timer are only protected by exclusive netlock.  Grab
+	 * shared netlock here to avoid that syn_cache_put() frees a route.
+	 */
 	NET_LOCK_SHARED();
 	mtx_enter(&syn_cache_mtx);
 	inp = in_pcbref(sc->sc_inplisten);
