@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_sysctl.c,v 1.498 2026/11/05 18:20:53 mvs Exp $	*/
+/*	$OpenBSD: kern_sysctl.c,v 1.501 2026/11/13 00:32:04 mvs Exp $	*/
 /*	$NetBSD: kern_sysctl.c,v 1.17 1996/05/20 17:49:05 mrg Exp $	*/
 
 /*-
@@ -127,6 +127,8 @@
 /*
  * Locks used to protect data:
  *	a	atomic
+ *	H	hostname_mtx
+ *	K	kernel lock
  */
 
 extern struct forkstat forkstat;
@@ -318,13 +320,15 @@ sys_sysctl(struct proc *p, void *v, register_t *retval)
 	return (error);
 }
 
+struct mutex hostname_mtx = MUTEX_INITIALIZER(IPL_MPFLOOR);
+
 /*
  * Attributes stored in the kernel.
  */
-char hostname[MAXHOSTNAMELEN];
-int hostnamelen;
-char domainname[MAXHOSTNAMELEN];
-int domainnamelen;
+char hostname[MAXHOSTNAMELEN];		/* [H,K] */
+int hostnamelen;			/* [H,K] */
+char domainname[MAXHOSTNAMELEN];	/* [H,K] */
+int domainnamelen;			/* [H,K] */
 int hostid;
 char *disknames = NULL;
 size_t disknameslen;
@@ -538,6 +542,59 @@ kern_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		return (sysctl_rdstring(oldp, oldlenp, newp, osversion));
 	case KERN_VERSION:
 		return (sysctl_rdstring(oldp, oldlenp, newp, version));
+	case KERN_HOSTNAME: {
+		char buf[MAXHOSTNAMELEN];
+
+		mtx_enter(&hostname_mtx);
+		strlcpy(buf, hostname, sizeof(buf));
+		mtx_leave(&hostname_mtx);
+
+		error = sysctl_tstring(oldp, oldlenp, newp, newlen,
+		    buf, sizeof(buf));
+
+		if (newp && !error) {
+			KERNEL_LOCK();
+			mtx_enter(&hostname_mtx);
+			strlcpy(hostname, buf, sizeof(hostname));
+			hostnamelen = newlen;
+			mtx_leave(&hostname_mtx);
+			KERNEL_UNLOCK();
+		}
+
+		return (error);
+	}
+	case KERN_DOMAINNAME: {
+		char buf[MAXHOSTNAMELEN];
+
+		mtx_enter(&hostname_mtx);
+		strlcpy(buf, domainname, sizeof(buf));
+		mtx_leave(&hostname_mtx);
+
+		error = sysctl_tstring(oldp, oldlenp, newp, newlen,
+		    buf, sizeof(buf));
+
+		if (newp && !error) {
+			int securelevel_local = atomic_load_int(&securelevel);
+
+			/* try to avoid locking */
+			if (securelevel_local >= 1 &&
+			    atomic_load_int(&domainnamelen))
+				return (EPERM);
+
+			KERNEL_LOCK();
+			mtx_enter(&hostname_mtx);
+			if (securelevel_local >= 1 && domainnamelen)
+				error = EPERM;
+			else {
+				strlcpy(domainname, buf, sizeof(domainname));
+				atomic_store_int(&domainnamelen, newlen);
+			}
+			mtx_leave(&hostname_mtx);
+			KERNEL_UNLOCK();
+		}
+
+		return (error);
+	}
 	case KERN_CONSBUF:
 		if ((error = suser(p)))
 			return (error);
@@ -743,27 +800,11 @@ int
 kern_sysctl_locked(int *name, u_int namelen, void *oldp, size_t *oldlenp,
     void *newp, size_t newlen, struct proc *p)
 {
-	int error;
 	dev_t dev;
 
 	switch (name[0]) {
 	case KERN_SECURELVL:
 		return (sysctl_securelevel(oldp, oldlenp, newp, newlen, p));
-	case KERN_HOSTNAME:
-		error = sysctl_tstring(oldp, oldlenp, newp, newlen,
-		    hostname, sizeof(hostname));
-		if (newp && !error)
-			hostnamelen = newlen;
-		return (error);
-	case KERN_DOMAINNAME:
-		if (securelevel >= 1 && domainnamelen && newp)
-			error = EPERM;
-		else
-			error = sysctl_tstring(oldp, oldlenp, newp, newlen,
-			    domainname, sizeof(domainname));
-		if (newp && !error)
-			domainnamelen = newlen;
-		return (error);
 #ifndef SMALL_KERNEL
 	case KERN_NCHSTATS:
 		return (sysctl_rdstruct(oldp, oldlenp, newp, &nchstats,
@@ -772,7 +813,7 @@ kern_sysctl_locked(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 		return (sysctl_rdstruct(oldp, oldlenp, newp, &forkstat,
 		    sizeof(struct forkstat)));
 	case KERN_STACKGAPRANDOM: {
-		int stackgap = stackgap_random;
+		int error, stackgap = stackgap_random;
 
 		error = sysctl_int(oldp, oldlenp, newp, newlen, &stackgap);
 		if (error)
@@ -788,7 +829,7 @@ kern_sysctl_locked(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 	    }
 	case KERN_CACHEPCT: {
 		u_int64_t pages;
-		int opct, pgs;
+		int error, opct, pgs;
 		opct = bufcachepercent;
 		error = sysctl_int(oldp, oldlenp, newp, newlen,
 		    &bufcachepercent);
@@ -2499,35 +2540,6 @@ sysctl_proc_vmmap(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 		}
 	}
 
-	pid = name[0];
-	if (pid == cp->p_p->ps_pid) {
-		/* Self process mapping. */
-		findpr = cp->p_p;
-	} else if (pid > 0) {
-		if ((findpr = prfind(pid)) == NULL)
-			return (ESRCH);
-
-		/* Either system process or exiting/zombie */
-		if (findpr->ps_flags & (PS_SYSTEM | PS_EXITING))
-			return (EINVAL);
-
-#if 1
-		/* XXX Allow only root for now */
-		if ((error = suser(cp)) != 0)
-			return (error);
-#else
-		/* Only owner or root can get vmmap */
-		if (findpr->ps_ucred->cr_uid != cp->p_ucred->cr_uid &&
-		    (error = suser(cp)) != 0)
-			return (error);
-#endif
-	} else {
-		/* Only root can get kernel_map */
-		if ((error = suser(cp)) != 0)
-			return (error);
-		findpr = NULL;
-	}
-
 	/* Check the given size. */
 	oldlen = *oldlenp;
 	if (oldlen == 0 || oldlen % sizeof(*kve) != 0)
@@ -2549,11 +2561,49 @@ sysctl_proc_vmmap(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 
 	/* Allocate wired memory to not block. */
 	kve = malloc(oldlen, M_TEMP, M_WAITOK | M_ZERO);
-
-	/* Set the base address and read entries. */
+	/* Set the base address. */
 	kve[0].kve_start = start;
+
+	pid = name[0];
+	if (pid == cp->p_p->ps_pid) {
+		/* Self process mapping. */
+		findpr = cp->p_p;
+	} else if (pid > 0) {
+		if ((findpr = prfind(pid)) == NULL) {
+			error = ESRCH;
+			goto free;
+		}
+
+		/* Either system process or exiting/zombie */
+		if (findpr->ps_flags & (PS_SYSTEM | PS_EXITING)) {
+			error = EINVAL;
+			goto free;
+		}
+
+#if 1
+		/* XXX Allow only root for now */
+		if ((error = suser(cp)) != 0)
+			goto free;
+#else
+		/* Only owner or root can get vmmap */
+		if (findpr->ps_ucred->cr_uid != cp->p_ucred->cr_uid &&
+		    (error = suser(cp)) != 0)
+			goto free;
+#endif
+	} else {
+		/* Only root can get kernel_map */
+		if ((error = suser(cp)) != 0)
+			goto free;
+		findpr = NULL;
+	}
+
+	/* Read entries. */
 	len = oldlen;
+	if (findpr)
+		refcnt_take(&findpr->ps_refcnt);
 	error = fill_vmmap(findpr, kve, &len);
+	if (findpr)
+		refcnt_rele_wake(&findpr->ps_refcnt);
 	if (error != 0 && error != ENOMEM)
 		goto done;
 	if (len == 0)
@@ -2566,7 +2616,7 @@ sysctl_proc_vmmap(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 
 done:
 	*oldlenp = len;
-
+free:
 	free(kve, M_TEMP, oldlen);
 
 	return (error);

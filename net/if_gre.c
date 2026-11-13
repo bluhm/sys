@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_gre.c,v 1.193 2026/11/04 08:51:51 claudio Exp $ */
+/*	$OpenBSD: if_gre.c,v 1.197 2026/11/13 02:07:13 dlg Exp $ */
 /*	$NetBSD: if_gre.c,v 1.9 1999/10/25 19:18:11 drochner Exp $ */
 
 /*
@@ -58,7 +58,6 @@
 #include <net/if.h>
 #include <net/if_var.h>
 #include <net/if_types.h>
-#include <net/if_media.h>
 #include <net/route.h>
 
 #include <netinet/in.h>
@@ -368,7 +367,6 @@ struct egre_softc {
 	RBT_ENTRY(egre_softc)	sc_entry;
 
 	struct arpcom		sc_ac;
-	struct ifmedia		sc_media;
 };
 
 RBT_HEAD(egre_tree, egre_softc);
@@ -383,8 +381,6 @@ static int	egre_clone_destroy(struct ifnet *);
 
 static void	egre_start(struct ifnet *);
 static int	egre_ioctl(struct ifnet *, u_long, caddr_t);
-static int	egre_media_change(struct ifnet *);
-static void	egre_media_status(struct ifnet *, struct ifmediareq *);
 
 static int	egre_up(struct egre_softc *);
 static int	egre_down(struct egre_softc *);
@@ -408,10 +404,6 @@ struct nvgre_softc {
 	RBT_ENTRY(nvgre_softc)	 sc_mentry;
 
 	struct arpcom		 sc_ac;
-	struct ifmedia		 sc_media;
-
-	struct mbuf_queue	 sc_send_list;
-	struct task		 sc_send_task;
 
 	void			*sc_inm;
 	struct task		 sc_ltask;
@@ -441,7 +433,8 @@ RBT_PROTOTYPE(nvgre_mcast_tree, nvgre_softc, sc_mentry, nvgre_cmp_mcast_sc);
 static int	nvgre_clone_create(struct if_clone *, int);
 static int	nvgre_clone_destroy(struct ifnet *);
 
-static void	nvgre_start(struct ifnet *);
+static int	nvgre_enqueue(struct ifnet *, struct mbuf *m);
+static void	nvgre_start(struct ifqueue *);
 static int	nvgre_ioctl(struct ifnet *, u_long, caddr_t);
 
 static int	nvgre_up(struct nvgre_softc *);
@@ -452,7 +445,6 @@ static void	nvgre_detach(void *);
 
 static int	nvgre_input(const struct gre_tunnel *, struct mbuf *, int,
 		    uint8_t, struct netstack *);
-static void	nvgre_send(void *);
 
 static int	nvgre_add_addr(struct nvgre_softc *, const struct ifbareq *);
 static int	nvgre_del_addr(struct nvgre_softc *, const struct ifbareq *);
@@ -490,7 +482,6 @@ struct eoip_softc {
 	RBT_ENTRY(eoip_softc)	sc_entry;
 
 	struct arpcom		sc_ac;
-	struct ifmedia		sc_media;
 
 	struct timeout		sc_ka_send;
 	struct timeout		sc_ka_hold;
@@ -788,10 +779,6 @@ egre_clone_create(struct if_clone *ifc, int unit)
 	sc->sc_tunnel.t_rxhprio = IF_HDRPRIO_PACKET;
 	sc->sc_tunnel.t_df = htons(0);
 
-	ifmedia_init(&sc->sc_media, 0, egre_media_change, egre_media_status);
-	ifmedia_add(&sc->sc_media, IFM_ETHER | IFM_AUTO, 0, NULL);
-	ifmedia_set(&sc->sc_media, IFM_ETHER | IFM_AUTO);
-
 	if_counters_alloc(ifp);
 	if_attach(ifp);
 	ether_ifattach(ifp);
@@ -809,7 +796,6 @@ egre_clone_destroy(struct ifnet *ifp)
 		egre_down(sc);
 	NET_UNLOCK();
 
-	ifmedia_delete_instance(&sc->sc_media, IFM_INST_ANY);
 	ether_ifdetach(ifp);
 	if_detach(ifp);
 
@@ -847,8 +833,9 @@ nvgre_clone_create(struct if_clone *ifc, int unit)
 	ifp->if_softc = sc;
 	ifp->if_hardmtu = ETHER_MAX_HARDMTU_LEN;
 	ifp->if_ioctl = nvgre_ioctl;
-	ifp->if_start = nvgre_start;
-	ifp->if_xflags = IFXF_CLONED;
+	ifp->if_enqueue = nvgre_enqueue;
+	ifp->if_qstart = nvgre_start;
+	ifp->if_xflags = IFXF_CLONED | IFXF_MPSAFE;
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
 	ether_fakeaddr(ifp);
 
@@ -861,14 +848,8 @@ nvgre_clone_create(struct if_clone *ifc, int unit)
 	tunnel->t_key = htonl((NVGRE_VSID_RES_MAX + 1) <<
 	    GRE_KEY_ENTROPY_SHIFT);
 
-	mq_init(&sc->sc_send_list, IFQ_MAXLEN * 2, IPL_SOFTNET);
-	task_set(&sc->sc_send_task, nvgre_send, sc);
 	task_set(&sc->sc_ltask, nvgre_link_change, sc);
 	task_set(&sc->sc_dtask, nvgre_detach, sc);
-
-	ifmedia_init(&sc->sc_media, 0, egre_media_change, egre_media_status);
-	ifmedia_add(&sc->sc_media, IFM_ETHER | IFM_AUTO, 0, NULL);
-	ifmedia_set(&sc->sc_media, IFM_ETHER | IFM_AUTO);
 
 	if_counters_alloc(ifp);
 	if_attach(ifp);
@@ -889,7 +870,6 @@ nvgre_clone_destroy(struct ifnet *ifp)
 
 	etherbridge_destroy(&sc->sc_eb);
 
-	ifmedia_delete_instance(&sc->sc_media, IFM_INST_ANY);
 	ether_ifdetach(ifp);
 	if_detach(ifp);
 
@@ -930,10 +910,6 @@ eoip_clone_create(struct if_clone *ifc, int unit)
 	timeout_set_proc(&sc->sc_ka_hold, eoip_keepalive_hold, sc);
 	sc->sc_ka_state = GRE_KA_DOWN;
 
-	ifmedia_init(&sc->sc_media, 0, egre_media_change, egre_media_status);
-	ifmedia_add(&sc->sc_media, IFM_ETHER | IFM_AUTO, 0, NULL);
-	ifmedia_set(&sc->sc_media, IFM_ETHER | IFM_AUTO);
-
 	if_counters_alloc(ifp);
 	if_attach(ifp);
 	ether_ifattach(ifp);
@@ -951,7 +927,6 @@ eoip_clone_destroy(struct ifnet *ifp)
 		eoip_down(sc);
 	NET_UNLOCK();
 
-	ifmedia_delete_instance(&sc->sc_media, IFM_INST_ANY);
 	ether_ifdetach(ifp);
 	if_detach(ifp);
 
@@ -2692,13 +2667,13 @@ nvgre_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		break;
 
 	case SIOCSVNETID:
-		if (ISSET(ifp->if_flags, IFF_RUNNING)) {
-			error = EBUSY;
-			break;
-		}
 		if (ifr->ifr_vnetid < GRE_KEY_ENTROPY_MIN ||
 		    ifr->ifr_vnetid > GRE_KEY_ENTROPY_MAX) {
 			error = EINVAL;
+			break;
+		}
+		if (ISSET(ifp->if_flags, IFF_RUNNING)) {
+			error = EBUSY;
 			break;
 		}
 
@@ -2711,6 +2686,11 @@ nvgre_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		break;
 
 	case SIOCSLIFPHYRTABLE:
+		if (ISSET(ifp->if_flags, IFF_RUNNING)) {
+			error = EBUSY;
+			break;
+		}
+
 		if (ifr->ifr_rdomainid < 0 ||
 		    !rtable_exists(ifr->ifr_rdomainid)) {
 			error = EINVAL;
@@ -3470,19 +3450,6 @@ egre_down(struct egre_softc *sc)
 }
 
 static int
-egre_media_change(struct ifnet *ifp)
-{
-	return (ENOTTY);
-}
-
-static void
-egre_media_status(struct ifnet *ifp, struct ifmediareq *imr)
-{
-	imr->ifm_active = IFM_ETHER | IFM_AUTO;
-	imr->ifm_status = IFM_AVALID | IFM_ACTIVE;
-}
-
-static int
 nvgre_up(struct nvgre_softc *sc)
 {
 	struct gre_tunnel *tunnel = &sc->sc_tunnel;
@@ -3501,7 +3468,7 @@ nvgre_up(struct nvgre_softc *sc)
 		goto put;
 	}
 
-	NET_ASSERT_LOCKED();
+	NET_ASSERT_LOCKED_EXCLUSIVE();
 
 	if (RBT_INSERT(nvgre_mcast_tree, &nvgre_mcast_tree, sc) != NULL) {
 		error = EADDRINUSE;
@@ -3512,12 +3479,16 @@ nvgre_up(struct nvgre_softc *sc)
 		goto remove_mcast;
 	}
 
+	error = etherbridge_up(&sc->sc_eb);
+	if (error != 0)
+		goto remove_ucast;
+
 	switch (tunnel->t_af) {
 	case AF_INET:
 		inm = in_addmulti(&tunnel->t_dst4, ifp0);
 		if (inm == NULL) {
 			error = ECONNABORTED;
-			goto remove_ucast;
+			goto etherbridge_down;
 		}
 		break;
 #ifdef INET6
@@ -3525,7 +3496,7 @@ nvgre_up(struct nvgre_softc *sc)
 		inm = in6_addmulti(&tunnel->t_dst6, ifp0, &error);
 		if (inm == NULL) {
 			/* error is already set */
-			goto remove_ucast;
+			goto etherbridge_down;
 		}
 		break;
 #endif /* INET6 */
@@ -3543,6 +3514,8 @@ nvgre_up(struct nvgre_softc *sc)
 
 	return (0);
 
+etherbridge_down:
+	etherbridge_down(&sc->sc_eb);
 remove_ucast:
 	RBT_REMOVE(nvgre_ucast_tree, &nvgre_ucast_tree, sc);
 remove_mcast:
@@ -3557,19 +3530,10 @@ nvgre_down(struct nvgre_softc *sc)
 {
 	struct gre_tunnel *tunnel = &sc->sc_tunnel;
 	struct ifnet *ifp = &sc->sc_ac.ac_if;
-	struct taskq *softnet = net_tq(ifp->if_index);
 	struct ifnet *ifp0;
 
-	NET_ASSERT_LOCKED();
-
+	NET_ASSERT_LOCKED_EXCLUSIVE();
 	CLR(ifp->if_flags, IFF_RUNNING);
-
-	NET_UNLOCK();
-	ifq_barrier(&ifp->if_snd);
-	taskq_del_barrier(softnet, &sc->sc_send_task);
-	NET_LOCK();
-
-	mq_purge(&sc->sc_send_list);
 
 	ifp0 = if_get(sc->sc_ifp0);
 	if (ifp0 != NULL) {
@@ -3591,6 +3555,8 @@ nvgre_down(struct nvgre_softc *sc)
 	default:
 		unhandled_af(tunnel->t_af);
 	}
+
+	etherbridge_down(&sc->sc_eb);
 
 	RBT_REMOVE(nvgre_ucast_tree, &nvgre_ucast_tree, sc);
 	RBT_REMOVE(nvgre_mcast_tree, &nvgre_mcast_tree, sc);
@@ -3717,9 +3683,71 @@ nvgre_del_addr(struct nvgre_softc *sc, const struct ifbareq *ifba)
 	return (etherbridge_del_addr(&sc->sc_eb, 0, &ifba->ifba_dst));
 }
 
-static void
-nvgre_start(struct ifnet *ifp)
+static int
+nvgre_enqueue(struct ifnet *ifp, struct mbuf *m)
 {
+	struct ifqueue *ifq = &ifp->if_snd;
+	int error;
+
+	if (!atomic_load_int(&gre_allow)) {
+		m_freem(m);
+		return (EACCES);
+	}
+
+	error = ifq_enqueue(ifq, m);
+	if (error != 0)
+		return (error);
+
+	/* always defer to a softnet thread to control NET_LOCK scope */
+	task_add(ifq->ifq_softnet, &ifq->ifq_bundle);
+
+	return (0);
+}
+
+static uint64_t
+nvgre_send4(struct nvgre_softc *sc, struct mbuf_list *ml)
+{
+	struct ip_moptions imo;
+	struct mbuf *m;
+	uint64_t oerrors = 0;
+
+	imo.imo_ifidx = sc->sc_ifp0;
+	imo.imo_ttl = sc->sc_tunnel.t_ttl;
+	imo.imo_loop = 0;
+
+	while ((m = ml_dequeue(ml)) != NULL) {
+		if (ip_output(m, NULL, NULL, IP_RAWOUTPUT, &imo, NULL, 0) != 0)
+			oerrors++;
+	}
+
+	return (oerrors);
+}
+
+#ifdef INET6
+static uint64_t
+nvgre_send6(struct nvgre_softc *sc, struct mbuf_list *ml)
+{
+	struct ip6_moptions im6o;
+	struct mbuf *m;
+	uint64_t oerrors = 0;
+
+	im6o.im6o_ifidx = sc->sc_ifp0;
+	im6o.im6o_hlim = sc->sc_tunnel.t_ttl;
+	im6o.im6o_loop = 0;
+
+	while ((m = ml_dequeue(ml)) != NULL) {
+		if (ip6_output(m, NULL, NULL, 0, &im6o, NULL) != 0)
+			oerrors++;
+	}
+
+	return (oerrors);
+}
+#endif /* INET6 */
+
+static void
+nvgre_start(struct ifqueue *ifq)
+{
+	struct ifnet *ifp = ifq->ifq_if;
 	struct nvgre_softc *sc = ifp->if_softc;
 	const struct gre_tunnel *tunnel = &sc->sc_tunnel;
 	union gre_addr gateway;
@@ -3730,12 +3758,15 @@ nvgre_start(struct ifnet *ifp)
 	caddr_t if_bpf;
 #endif
 
-	if (!atomic_load_int(&gre_allow)) {
-		ifq_purge(&ifp->if_snd);
+	NET_LOCK_SHARED();
+
+	if (!ISSET(ifp->if_flags, IFF_RUNNING)) {
+		ifq_purge(ifq);
+		NET_UNLOCK_SHARED();
 		return;
 	}
 
-	while ((m0 = ifq_dequeue(&ifp->if_snd)) != NULL) {
+	while ((m0 = ifq_dequeue(ifq)) != NULL) {
 #if NBPFILTER > 0
 		if_bpf = ifp->if_bpf;
 		if (if_bpf)
@@ -3789,87 +3820,27 @@ nvgre_start(struct ifnet *ifp)
 	}
 
 	if (!ml_empty(&ml)) {
-		if (mq_enlist(&sc->sc_send_list, &ml) == 0)
-			task_add(net_tq(ifp->if_index), &sc->sc_send_task);
-		/* else set OACTIVE? */
-	}
-}
+		sa_family_t af = sc->sc_tunnel.t_af;
+		uint64_t oerrors;
 
-static uint64_t
-nvgre_send4(struct nvgre_softc *sc, struct mbuf_list *ml)
-{
-	struct ip_moptions imo;
-	struct mbuf *m;
-	uint64_t oerrors = 0;
+		switch (af) {
+		case AF_INET:
+			oerrors = nvgre_send4(sc, &ml);
+			break;
+	#ifdef INET6
+		case AF_INET6:
+			oerrors = nvgre_send6(sc, &ml);
+			break;
+	#endif
+		default:
+			unhandled_af(af);
+			/* NOTREACHED */
+		}
 
-	imo.imo_ifidx = sc->sc_ifp0;
-	imo.imo_ttl = sc->sc_tunnel.t_ttl;
-	imo.imo_loop = 0;
-
-	NET_LOCK();
-	while ((m = ml_dequeue(ml)) != NULL) {
-		if (ip_output(m, NULL, NULL, IP_RAWOUTPUT, &imo, NULL, 0) != 0)
-			oerrors++;
-	}
-	NET_UNLOCK();
-
-	return (oerrors);
-}
-
-#ifdef INET6
-static uint64_t
-nvgre_send6(struct nvgre_softc *sc, struct mbuf_list *ml)
-{
-	struct ip6_moptions im6o;
-	struct mbuf *m;
-	uint64_t oerrors = 0;
-
-	im6o.im6o_ifidx = sc->sc_ifp0;
-	im6o.im6o_hlim = sc->sc_tunnel.t_ttl;
-	im6o.im6o_loop = 0;
-
-	NET_LOCK();
-	while ((m = ml_dequeue(ml)) != NULL) {
-		if (ip6_output(m, NULL, NULL, 0, &im6o, NULL) != 0)
-			oerrors++;
-	}
-	NET_UNLOCK();
-
-	return (oerrors);
-}
-#endif /* INET6 */
-
-static void
-nvgre_send(void *arg)
-{
-	struct nvgre_softc *sc = arg;
-	struct ifnet *ifp = &sc->sc_ac.ac_if;
-	sa_family_t af = sc->sc_tunnel.t_af;
-	struct mbuf_list ml;
-	uint64_t oerrors;
-
-	if (!ISSET(ifp->if_flags, IFF_RUNNING))
-		return;
-
-	mq_delist(&sc->sc_send_list, &ml);
-	if (ml_empty(&ml))
-		return;
-
-	switch (af) {
-	case AF_INET:
-		oerrors = nvgre_send4(sc, &ml);
-		break;
-#ifdef INET6
-	case AF_INET6:
-		oerrors = nvgre_send6(sc, &ml);
-		break;
-#endif
-	default:
-		unhandled_af(af);
-		/* NOTREACHED */
+		ifq->ifq_errors += oerrors;
 	}
 
-	ifp->if_oerrors += oerrors; /* XXX should be ifq_oerrors */
+	NET_UNLOCK_SHARED();
 }
 
 static int

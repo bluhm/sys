@@ -1,4 +1,4 @@
-/*	$OpenBSD: pf.c,v 1.1250 2026/11/08 08:42:55 miod Exp $ */
+/*	$OpenBSD: pf.c,v 1.1254 2026/11/12 13:59:44 henning Exp $ */
 
 /*
  * Copyright (c) 2001 Daniel Hartmeier
@@ -797,13 +797,12 @@ pf_src_connlimit(struct pf_state **stp)
 		if (pf_status.debug >= LOG_NOTICE) {
 			log(LOG_NOTICE,
 			    "pf: pf_src_connlimit: blocking address ");
-			pf_print_host(&sn->addr, 0,
-			    (*stp)->key[PF_SK_WIRE]->af);
+			pf_print_host(&sn->addr, 0, sn->af);
 		}
 
 		memset(&p, 0, sizeof(p));
-		p.pfra_af = (*stp)->key[PF_SK_WIRE]->af;
-		switch ((*stp)->key[PF_SK_WIRE]->af) {
+		p.pfra_af = sn->af;
+		switch (sn->af) {
 		case AF_INET:
 			p.pfra_net = 32;
 			p.pfra_ip4addr = sn->addr.v4;
@@ -823,22 +822,25 @@ pf_src_connlimit(struct pf_state **stp)
 		if ((*stp)->rule.ptr->flush) {
 			struct pf_state_key *sk;
 			struct pf_state *st;
+			int sidx;
 
 			pf_status.lcounters[LCNT_OVERLOAD_FLUSH]++;
 			PF_STATE_ENTER_READ();
 			RBT_FOREACH(st, pf_state_tree_id, &tree_id) {
-				sk = st->key[PF_SK_WIRE];
+				if (st->direction == PF_IN) {
+					sk = st->key[PF_SK_WIRE];
+					sidx = 0;
+				} else {
+					sk = st->key[PF_SK_STACK];
+					sidx = 1;
+				}
 				/*
 				 * Kill states from this source.  (Only those
 				 * from the same rule if PF_FLUSH_GLOBAL is not
 				 * set)
 				 */
-				if (sk->af ==
-				    (*stp)->key[PF_SK_WIRE]->af &&
-				    (((*stp)->direction == PF_OUT &&
-				    PF_AEQ(&sn->addr, &sk->addr[1], sk->af)) ||
-				    ((*stp)->direction == PF_IN &&
-				    PF_AEQ(&sn->addr, &sk->addr[0], sk->af))) &&
+				if (sk->af == sn->af &&
+				    PF_AEQ(&sn->addr, &sk->addr[sidx], sk->af) &&
 				    ((*stp)->rule.ptr->flush &
 				    PF_FLUSH_GLOBAL ||
 				    (*stp)->rule.ptr == st->rule.ptr)) {
@@ -1338,11 +1340,14 @@ pf_state_insert(struct pfi_kif *kif, struct pf_state_key **skwp,
 			sks = pf_state_key_ref(skw);
 		}
 		st->key[PF_SK_STACK] = sks;
-	} else if (pf_state_key_attach(sks, st, PF_SK_STACK) == NULL) {
-		pf_state_key_detach(st, PF_SK_WIRE);
-		pf_state_key_unref(skw);
-		PF_STATE_EXIT_WRITE();
-		return (-1);
+	} else {
+		sks = pf_state_key_attach(sks, st, PF_SK_STACK);
+		if (sks == NULL) {
+			pf_state_key_detach(st, PF_SK_WIRE);
+			pf_state_key_unref(skw);
+			PF_STATE_EXIT_WRITE();
+			return (-1);
+		}
 	}
 
 	if (st->id == 0 && st->creatorid == 0) {
@@ -3692,7 +3697,7 @@ pf_build_tcp(const struct pf_rule *r, sa_family_t af,
 		return (NULL);
 	}
 	if (tag)
-		m->m_pkthdr.pf.flags |= PF_TAG_GENERATED;
+		m->m_pkthdr.pf.flags |= PF_FLAG_GENERATED;
 	m->m_pkthdr.pf.tag = rtag;
 	m->m_pkthdr.ph_rtableid = rdom;
 	if (r && (r->scrub_flags & PFSTATE_SETPRIO))
@@ -3817,7 +3822,7 @@ pf_send_icmp(struct mbuf *m, u_int8_t type, u_int8_t code, int param,
 	if ((m0 = m_copym(m, 0, M_COPYALL, M_NOWAIT)) == NULL)
 		return;
 
-	m0->m_pkthdr.pf.flags |= PF_TAG_GENERATED;
+	m0->m_pkthdr.pf.flags |= PF_FLAG_GENERATED;
 	m0->m_pkthdr.ph_rtableid = rdomain;
 	if (r && (r->scrub_flags & PFSTATE_SETPRIO))
 		m0->m_pkthdr.pf.prio = r->set_prio[0];
@@ -8281,7 +8286,15 @@ pf_st_counters_inc(struct pf_pdesc *pd, struct pf_state *st, int dirndx)
 			sni->sn->packets[dirndx]++;
 			sni->sn->bytes[dirndx] += pd->tot_len;
 		}
-		dirndx = (pd->dir == st->direction) ? 0 : 1;
+		/*
+		 * af-to states only see inbound packets; the reply
+		 * is told apart by its address family.
+		 */
+		if (pd->af != st->key[PF_SK_WIRE]->af)
+			dirndx = 1;
+		else
+			dirndx = (pd->dir == st->direction) ? 0 : 1;
+
 		st->packets[dirndx]++;
 		st->bytes[dirndx] += pd->tot_len;
 
@@ -8382,16 +8395,16 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 		panic("non-M_PKTHDR is passed to pf_test");
 #endif /* DIAGNOSTIC */
 
-	if ((*m0)->m_pkthdr.pf.flags & PF_TAG_GENERATED)
+	if ((*m0)->m_pkthdr.pf.flags & PF_FLAG_GENERATED)
 		return (PF_PASS);
 
-	if ((*m0)->m_pkthdr.pf.flags & PF_TAG_DIVERTED_PACKET) {
-		(*m0)->m_pkthdr.pf.flags &= ~PF_TAG_DIVERTED_PACKET;
+	if ((*m0)->m_pkthdr.pf.flags & PF_FLAG_DIVERTED_PACKET) {
+		(*m0)->m_pkthdr.pf.flags &= ~PF_FLAG_DIVERTED_PACKET;
 		return (PF_PASS);
 	}
 
-	if ((*m0)->m_pkthdr.pf.flags & PF_TAG_REFRAGMENTED) {
-		(*m0)->m_pkthdr.pf.flags &= ~PF_TAG_REFRAGMENTED;
+	if ((*m0)->m_pkthdr.pf.flags & PF_FLAG_REFRAGMENTED) {
+		(*m0)->m_pkthdr.pf.flags &= ~PF_FLAG_REFRAGMENTED;
 		return (PF_PASS);
 	}
 
@@ -8436,7 +8449,7 @@ pf_test(sa_family_t af, int fwdir, struct ifnet *ifp, struct mbuf **m0)
 			goto done;
 		}
 	}
-	pd.m->m_pkthdr.pf.flags |= PF_TAG_PROCESSED;
+	pd.m->m_pkthdr.pf.flags |= PF_FLAG_PROCESSED;
 
 	/*
 	 * Avoid pcb-lookups from the forwarding path.  They should never
@@ -8706,10 +8719,10 @@ done:
 		if ((pd.af == AF_INET && (ntohl(pd.dst->v4.s_addr) >>
 		    IN_CLASSA_NSHIFT) == IN_LOOPBACKNET) ||
 		    (pd.af == AF_INET6 && IN6_IS_ADDR_LOOPBACK(&pd.dst->v6)))
-			pd.m->m_pkthdr.pf.flags |= PF_TAG_TRANSLATE_LOCALHOST;
+			pd.m->m_pkthdr.pf.flags |= PF_FLAG_TRANSLATE_LOCALHOST;
 	/* We need to redo the route lookup on outgoing routes. */
 	if (pd.destchg && pd.dir == PF_OUT)
-		pd.m->m_pkthdr.pf.flags |= PF_TAG_REROUTE;
+		pd.m->m_pkthdr.pf.flags |= PF_FLAG_REROUTE;
 
 	if (pd.dir == PF_IN && action == PF_PASS &&
 	    (r->divert.type == PF_DIVERT_TO ||
@@ -8717,7 +8730,7 @@ done:
 		struct pf_divert *divert;
 
 		if ((divert = pf_get_divert(pd.m))) {
-			pd.m->m_pkthdr.pf.flags |= PF_TAG_DIVERTED;
+			pd.m->m_pkthdr.pf.flags |= PF_FLAG_DIVERTED;
 			divert->addr = r->divert.addr;
 			divert->port = r->divert.port;
 			divert->rdomain = pd.rdomain;
@@ -8778,7 +8791,7 @@ done:
 			action = PF_DROP;
 			goto out;
 		}
-		pd.m->m_pkthdr.pf.flags |= PF_TAG_GENERATED;
+		pd.m->m_pkthdr.pf.flags |= PF_FLAG_GENERATED;
 		switch (pd.naf) {
 		case AF_INET:
 			if (pd.dir == PF_IN) {
@@ -8879,7 +8892,7 @@ pf_ouraddr(struct mbuf *m)
 {
 	struct pf_state_key	*sk;
 
-	if (m->m_pkthdr.pf.flags & PF_TAG_DIVERTED)
+	if (m->m_pkthdr.pf.flags & PF_FLAG_DIVERTED)
 		return (1);
 
 	sk = m->m_pkthdr.pf.statekey;
