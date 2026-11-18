@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_trunk.h,v 1.34 2026/05/08 03:36:04 jsg Exp $	*/
+/*	$OpenBSD: if_trunk.h,v 1.36 2026/11/15 05:00:26 dlg Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006, 2007 Reyk Floeter <reyk@openbsd.org>
@@ -175,7 +175,6 @@ struct trunk_port {
 	u_int8_t			tp_lladdr[ETHER_ADDR_LEN];
 	caddr_t				tp_psc;		/* protocol data */
 
-	u_char				tp_iftype;	/* interface type */
 	u_int32_t			tp_prio;	/* port priority */
 	u_int32_t			tp_flags;	/* port flags */
 	struct task			tp_ltask;	/* if state hook */
@@ -224,7 +223,6 @@ struct trunk_softc {
 	enum trunk_proto		tr_proto;	/* trunk protocol */
 	u_int				tr_count;	/* number of ports */
 	struct trunk_port		*tr_primary;	/* primary port */
-	struct ifmedia			tr_media;	/* media config */
 	caddr_t				tr_psc;		/* protocol data */
 
 	SLIST_HEAD(__tplhd, trunk_port)	tr_ports;	/* list of interfaces */

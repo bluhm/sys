@@ -1,4 +1,4 @@
-#	$OpenBSD: files,v 1.752 2026/03/16 14:57:34 claudio Exp $
+#	$OpenBSD: files,v 1.755 2026/11/16 04:23:00 deraadt Exp $
 #	$NetBSD: files,v 1.87 1996/05/19 17:17:50 jonathan Exp $
 
 #	@(#)files.newconf	7.5 (Berkeley) 5/10/93

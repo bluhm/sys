@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_aggr.c,v 1.54 2026/11/05 05:49:59 dlg Exp $ */
+/*	$OpenBSD: if_aggr.c,v 1.56 2026/11/15 03:47:44 dlg Exp $ */
 
 /*
  * Copyright (c) 2019 The University of Queensland
@@ -72,8 +72,6 @@
 
 #include <net/if.h>
 #include <net/if_types.h>
-
-#include <net/if_media.h>
 
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
@@ -413,7 +411,6 @@ struct aggr_softc {
 #define sc_if			 sc_ac.ac_if
 	unsigned int		 sc_dead;
 	unsigned int		 sc_promisc;
-	struct ifmedia		 sc_media;
 
 	struct aggr_multiaddrs	 sc_multiaddrs;
 
@@ -461,9 +458,6 @@ static int	aggr_clone_destroy(struct ifnet *);
 static int	aggr_ioctl(struct ifnet *, u_long, caddr_t);
 static void	aggr_start(struct ifqueue *);
 static int	aggr_enqueue(struct ifnet *, struct mbuf *);
-
-static int	aggr_media_change(struct ifnet *);
-static void	aggr_media_status(struct ifnet *, struct ifmediareq *);
 
 static int	aggr_up(struct aggr_softc *);
 static int	aggr_down(struct aggr_softc *);
@@ -539,6 +533,12 @@ static void	aggr_port_kstat_detach(struct aggr_port *);
 static struct if_clone aggr_cloner =
     IF_CLONE_INITIALIZER("aggr", aggr_clone_create, aggr_clone_destroy);
 
+static inline int
+if_is_aggr(struct ifnet *ifp)
+{
+	return (ifp->if_drvid == &aggr_cloner);
+}
+
 void
 aggrattach(int count)
 {
@@ -558,6 +558,7 @@ aggr_clone_create(struct if_clone *ifc, int unit)
 	sc->sc_mix = arc4random();
 
 	ifp = &sc->sc_if;
+	ifp->if_drvid = &aggr_cloner;
 
 	snprintf(ifp->if_xname, sizeof(ifp->if_xname), "%s%d",
 	    ifc->ifc_name, unit);
@@ -577,10 +578,6 @@ aggr_clone_create(struct if_clone *ifc, int unit)
 	sc->sc_lacp_timeout = AGGR_LACP_TIMEOUT_SLOW;
 	sc->sc_lacp_prio = 0x8000; /* medium */
 	sc->sc_lacp_port_prio = 0x8000; /* medium */
-
-	ifmedia_init(&sc->sc_media, 0, aggr_media_change, aggr_media_status);
-	ifmedia_add(&sc->sc_media, IFM_ETHER | IFM_AUTO, 0, NULL);
-	ifmedia_set(&sc->sc_media, IFM_ETHER | IFM_AUTO);
 
 	ifp->if_softc = sc;
 	ifp->if_hardmtu = ETHER_MAX_HARDMTU_LEN;
@@ -996,13 +993,6 @@ aggr_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		error = aggr_multi_del(sc, ifr);
 		break;
 
-	case SIOCSIFMEDIA:
-		error = EOPNOTSUPP;
-		break;
-	case SIOCGIFMEDIA:
-		error = ifmedia_ioctl(ifp, ifr, &sc->sc_media, cmd);
-		break;
-
 	default:
 		error = ether_ioctl(ifp, &sc->sc_ac, cmd, data);
 		break;
@@ -1203,6 +1193,11 @@ aggr_add_port(struct aggr_softc *sc, const struct trunk_reqport *rp)
 		return (EINVAL);
 
 	if (ifp0->if_index == ifp->if_index) {
+		error = EINVAL;
+		goto put;
+	}
+
+	if (if_is_aggr(ifp0)) { /* it doesnt make sense to stack aggr */
 		error = EINVAL;
 		goto put;
 	}
@@ -2794,26 +2789,6 @@ aggr_multi(struct aggr_softc *sc, struct aggr_port *p,
 	ifr.if_addr = ma->m_addr;
 
 	return ((*p->p_ioctl)(ifp0, cmd, (caddr_t)&ifr));
-}
-
-static void
-aggr_media_status(struct ifnet *ifp, struct ifmediareq *imr)
-{
-	struct aggr_softc *sc = ifp->if_softc;
-
-	imr->ifm_status = IFM_AVALID;
-	imr->ifm_active = IFM_ETHER | IFM_AUTO;
-
-	smr_read_enter(); /* there's no reason to block... */
-	if (SMR_PTR_GET(&sc->sc_map) != NULL)
-		imr->ifm_status |= IFM_ACTIVE;
-	smr_read_leave();
-}
-
-static int
-aggr_media_change(struct ifnet *ifp)
-{
-	return (EOPNOTSUPP);
 }
 
 static void

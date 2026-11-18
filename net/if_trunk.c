@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_trunk.c,v 1.162 2026/11/08 08:42:55 miod Exp $	*/
+/*	$OpenBSD: if_trunk.c,v 1.168 2026/11/16 11:20:30 dlg Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006, 2007 Reyk Floeter <reyk@openbsd.org>
@@ -30,7 +30,6 @@
 
 #include <net/if.h>
 #include <net/if_dl.h>
-#include <net/if_media.h>
 #include <net/if_types.h>
 
 #include <netinet/in.h>
@@ -81,8 +80,6 @@ struct mbuf *
 void	 trunk_start(struct ifnet *);
 void	 trunk_init(struct ifnet *);
 void	 trunk_stop(struct ifnet *);
-int	 trunk_media_change(struct ifnet *);
-void	 trunk_media_status(struct ifnet *, struct ifmediareq *);
 struct trunk_port *trunk_link_active(struct trunk_softc *,
 	    struct trunk_port *);
 const void *trunk_gethdr(struct mbuf *, u_int, u_int, void *);
@@ -164,12 +161,6 @@ trunk_clone_create(struct if_clone *ifc, int unit)
 	}
 	SLIST_INIT(&tr->tr_ports);
 
-	/* Initialise pseudo media types */
-	ifmedia_init(&tr->tr_media, 0, trunk_media_change,
-	    trunk_media_status);
-	ifmedia_add(&tr->tr_media, IFM_ETHER | IFM_AUTO, 0, NULL);
-	ifmedia_set(&tr->tr_media, IFM_ETHER | IFM_AUTO);
-
 	ifp = &tr->tr_ac.ac_if;
 	ifp->if_softc = tr;
 	ifp->if_start = trunk_start;
@@ -181,10 +172,6 @@ trunk_clone_create(struct if_clone *ifc, int unit)
 	snprintf(ifp->if_xname, sizeof(ifp->if_xname), "%s%d",
 	    ifc->ifc_name, unit);
 
-	/*
-	 * Attach as an ordinary ethernet device, children will be attached
-	 * as special device IFT_IEEE8023ADLAG.
-	 */
 	if_counters_alloc(ifp);
 	if_attach(ifp);
 	ether_ifattach(ifp);
@@ -215,7 +202,6 @@ trunk_clone_destroy(struct ifnet *ifp)
 	}
 	NET_UNLOCK();
 
-	ifmedia_delete_instance(&tr->tr_media, IFM_INST_ANY);
 	ether_ifdetach(ifp);
 	if_detach(ifp);
 
@@ -287,6 +273,9 @@ trunk_port_create(struct trunk_softc *tr, struct ifnet *ifp)
 	if (trunk_port_get(NULL, ifp) != NULL)
 		return (EBUSY);
 
+	if (ifp == &tr->tr_ac.ac_if)
+		return (EINVAL);
+
 	/* XXX Disallow non-ethernet interfaces (this should be any of 802) */
 	if (ifp->if_type != IFT_ETHER)
 		return (EPROTONOSUPPORT);
@@ -332,16 +321,6 @@ trunk_port_create(struct trunk_softc *tr, struct ifnet *ifp)
 		}
 	}
 
-	/* Change the interface type */
-	tp->tp_iftype = ifp->if_type;
-	ifp->if_type = IFT_IEEE8023ADLAG;
-
-	tp->tp_ioctl = ifp->if_ioctl;
-	ifp->if_ioctl = trunk_port_ioctl;
-
-	tp->tp_output = ifp->if_output;
-	ifp->if_output = trunk_port_output;
-
 	tp->tp_if = ifp;
 	tp->tp_trunk = tr;
 
@@ -383,6 +362,12 @@ trunk_port_create(struct trunk_softc *tr, struct ifnet *ifp)
 	NET_ASSERT_LOCKED();
 	SMR_PTR_SET_LOCKED(&ac0->ac_trport, &tp->tp_ether_port);
 
+	tp->tp_ioctl = ifp->if_ioctl;
+	ifp->if_ioctl = trunk_port_ioctl;
+
+	tp->tp_output = ifp->if_output;
+	ifp->if_output = trunk_port_output;
+
 	/* update linkstate */
 	trunk_link_active(tr, tp);
 
@@ -414,8 +399,15 @@ trunk_port_destroy(struct trunk_port *tp)
 	struct ifnet *ifp = tp->tp_if;
 	struct arpcom *ac0 = (struct arpcom *)ifp;
 
+	if_detachhook_del(ifp, &tp->tp_dtask);
+	if_linkstatehook_del(ifp, &tp->tp_ltask);
+
 	/* Restore previous input handler. */
 	NET_ASSERT_LOCKED();
+
+	ifp->if_ioctl = tp->tp_ioctl;
+	ifp->if_output = tp->tp_output;
+
 	KASSERT(SMR_PTR_GET_LOCKED(&ac0->ac_trport) == &tp->tp_ether_port);
 	SMR_PTR_SET_LOCKED(&ac0->ac_trport, NULL);
 	smr_barrier();
@@ -428,15 +420,6 @@ trunk_port_destroy(struct trunk_port *tp)
 
 	if (tr->tr_port_destroy != NULL)
 		(*tr->tr_port_destroy)(tp);
-
-	/* Restore interface type. */
-	ifp->if_type = tp->tp_iftype;
-
-	ifp->if_ioctl = tp->tp_ioctl;
-	ifp->if_output = tp->tp_output;
-
-	if_detachhook_del(ifp, &tp->tp_dtask);
-	if_linkstatehook_del(ifp, &tp->tp_ltask);
 
 	/* Finally, remove the port from the trunk */
 	SLIST_REMOVE(&tr->tr_ports, tp, trunk_port, tp_entries);
@@ -476,19 +459,23 @@ trunk_port_destroy(struct trunk_port *tp)
 int
 trunk_port_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 {
+	struct arpcom *ac0 = (struct arpcom *)ifp;
+	const struct ether_port *ep = SMR_PTR_GET_LOCKED(&ac0->ac_trport);
 	struct trunk_reqport *rp = (struct trunk_reqport *)data;
 	struct trunk_softc *tr;
 	struct trunk_port *tp = NULL;
 	struct ifnet *ifp0 = NULL;
 	int error = 0;
 
-	/* Should be checked by the caller */
-	if (ifp->if_type != IFT_IEEE8023ADLAG ||
-	    (tp = trunk_port_get(NULL, ifp)) == NULL ||
-	    (tr = (struct trunk_softc *)tp->tp_trunk) == NULL) {
-		error = EINVAL;
-		goto fallback;
-	}
+	KASSERTMSG(ep != NULL,
+	    "%s: %s called without an ether_port set",
+	    ifp->if_xname, __func__);
+	KASSERTMSG(ep->ep_input == trunk_input,
+	    "%s called %s, but ep_input (%p) seems wrong",
+	    ifp->if_xname, __func__, ep->ep_input);
+
+	tp = ep->ep_port;
+	tr = tp->tp_trunk;
 
 	switch (cmd) {
 	case SIOCGTRUNKPORT:
@@ -532,8 +519,7 @@ trunk_port_output(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst,
     struct rtentry *rt)
 {
 	/* restrict transmission on trunk members to bpf only */
-	if (ifp->if_type == IFT_IEEE8023ADLAG &&
-	    (m_tag_find(m, PACKET_TAG_DLT, NULL) == NULL)) {
+	if (m_tag_find(m, PACKET_TAG_DLT, NULL) == NULL) {
 		m_freem(m);
 		return (EBUSY);
 	}
@@ -779,10 +765,6 @@ trunk_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		break;
 	case SIOCDELMULTI:
 		error = trunk_ether_delmulti(tr, ifr);
-		break;
-	case SIOCSIFMEDIA:
-	case SIOCGIFMEDIA:
-		error = ifmedia_ioctl(ifp, ifr, &tr->tr_media, cmd);
 		break;
 	case SIOCSIFLLADDR:
 		/* Update the port lladdrs as well */
@@ -1100,10 +1082,6 @@ trunk_input(struct ifnet *ifp, struct mbuf *m, uint64_t dst, void *port,
 	if (ETHER_IS_MULTICAST(eh->ether_dhost))
 		ifp->if_imcasts++;
 
-	/* Should be checked by the caller */
-	if (ifp->if_type != IFT_IEEE8023ADLAG)
-		goto bad;
-
 	if ((tr = (struct trunk_softc *)tp->tp_trunk) == NULL)
 		goto bad;
 
@@ -1143,33 +1121,6 @@ trunk_input(struct ifnet *ifp, struct mbuf *m, uint64_t dst, void *port,
 drop:
 	m_freem(m);
 	return (NULL);
-}
-
-int
-trunk_media_change(struct ifnet *ifp)
-{
-	struct trunk_softc *tr = (struct trunk_softc *)ifp->if_softc;
-
-	if (tr->tr_ifflags & IFF_DEBUG)
-		printf("%s\n", __func__);
-
-	/* Ignore */
-	return (0);
-}
-
-void
-trunk_media_status(struct ifnet *ifp, struct ifmediareq *imr)
-{
-	struct trunk_softc *tr = (struct trunk_softc *)ifp->if_softc;
-	struct trunk_port *tp;
-
-	imr->ifm_status = IFM_AVALID;
-	imr->ifm_active = IFM_ETHER | IFM_AUTO;
-
-	SLIST_FOREACH(tp, &tr->tr_ports, tp_entries) {
-		if (TRUNK_PORTACTIVE(tp))
-			imr->ifm_status |= IFM_ACTIVE;
-	}
 }
 
 void

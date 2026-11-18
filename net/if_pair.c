@@ -1,4 +1,4 @@
-/*	$OpenBSD: if_pair.c,v 1.18 2025/07/07 02:28:50 jsg Exp $	*/
+/*	$OpenBSD: if_pair.c,v 1.22 2026/11/15 00:14:34 dlg Exp $	*/
 
 /*
  * Copyright (c) 2015 Reyk Floeter <reyk@openbsd.org>
@@ -23,7 +23,6 @@
 #include <sys/sockio.h>
 
 #include <net/if.h>
-#include <net/if_media.h>
 
 #include <netinet/in.h>
 #include <netinet/if_ether.h>
@@ -38,41 +37,15 @@ int	pairioctl(struct ifnet *, u_long, caddr_t);
 void	pairstart(struct ifqueue *);
 int	pair_clone_create(struct if_clone *, int);
 int	pair_clone_destroy(struct ifnet *);
-int	pair_media_change(struct ifnet *);
-void	pair_media_status(struct ifnet *, struct ifmediareq *);
 void	pair_link_state(struct ifnet *);
 
 struct pair_softc {
 	struct arpcom		sc_ac;
-	struct ifmedia		sc_media;
 	unsigned int		sc_pairedif;
 };
 
 struct if_clone	pair_cloner =
     IF_CLONE_INITIALIZER("pair", pair_clone_create, pair_clone_destroy);
-
-int
-pair_media_change(struct ifnet *ifp)
-{
-	return (0);
-}
-
-void
-pair_media_status(struct ifnet *ifp, struct ifmediareq *imr)
-{
-	struct pair_softc	*sc = ifp->if_softc;
-	struct ifnet		*pairedifp;
-
-	imr->ifm_active = IFM_ETHER | IFM_AUTO;
-
-	if ((pairedifp = if_get(sc->sc_pairedif)) == NULL) {
-		imr->ifm_status = 0;
-		return;
-	}
-	if_put(pairedifp);
-
-	imr->ifm_status = IFM_AVALID | IFM_ACTIVE;
-}
 
 void
 pair_link_state(struct ifnet *ifp)
@@ -100,6 +73,12 @@ pairattach(int npair)
 	if_clone_attach(&pair_cloner);
 }
 
+static inline int
+if_is_pair(struct ifnet *ifp)
+{
+	return (ifp->if_drvid == &pair_cloner);
+}
+
 int
 pair_clone_create(struct if_clone *ifc, int unit)
 {
@@ -113,17 +92,13 @@ pair_clone_create(struct if_clone *ifc, int unit)
 	ether_fakeaddr(ifp);
 
 	ifp->if_softc = sc;
+	ifp->if_drvid = &pair_cloner;
 	ifp->if_ioctl = pairioctl;
 	ifp->if_qstart = pairstart;
 	ifp->if_xflags = IFXF_CLONED | IFXF_MPSAFE;
 
 	ifp->if_hardmtu = ETHER_MAX_HARDMTU_LEN;
 	ifp->if_capabilities = IFCAP_VLAN_MTU;
-
-	ifmedia_init(&sc->sc_media, 0, pair_media_change,
-	    pair_media_status);
-	ifmedia_add(&sc->sc_media, IFM_ETHER | IFM_AUTO, 0, NULL);
-	ifmedia_set(&sc->sc_media, IFM_ETHER | IFM_AUTO);
 
 	if_attach(ifp);
 	ether_ifattach(ifp);
@@ -147,7 +122,6 @@ pair_clone_destroy(struct ifnet *ifp)
 		if_put(pairedifp);
 	}
 
-	ifmedia_delete_instance(&sc->sc_media, IFM_INST_ANY);
 	ether_ifdetach(ifp);
 	if_detach(ifp);
 	free(sc, M_DEVBUF, sizeof(*sc));
@@ -191,10 +165,9 @@ pairioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 {
 	struct pair_softc	*sc = (struct pair_softc *)ifp->if_softc;
 	struct ifreq		*ifr = (struct ifreq *)data;
-	struct if_clone		*ifc;
 	struct pair_softc	*pairedsc = ifp->if_softc;
-	struct ifnet		*oldifp = NULL, *newifp = NULL;
-	int			 error = 0, unit;
+	struct ifnet		*reqifp = NULL, *oldifp = NULL, *newifp = NULL;
+	int			 error = 0;
 
 	switch (cmd) {
 	case SIOCSIFADDR:
@@ -212,11 +185,6 @@ pairioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 	case SIOCDELMULTI:
 		break;
 
-	case SIOCGIFMEDIA:
-	case SIOCSIFMEDIA:
-		error = ifmedia_ioctl(ifp, ifr, &sc->sc_media, cmd);
-		break;
-
 	case SIOCSIFPAIR:
 		if (sc->sc_pairedif == ifr->ifr_index)
 			break;
@@ -228,26 +196,24 @@ pairioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		}
 
 		oldifp = if_get(sc->sc_pairedif);
-		newifp = if_get(ifr->ifr_index);
+		reqifp = if_get(ifr->ifr_index);
 
-		if (newifp != NULL) {
-			pairedsc = newifp->if_softc;
+		if (reqifp != NULL) {
+			/* Only allow pair(4) interfaces for the pair */
+			if (!if_is_pair(reqifp)) {
+				error = ENODEV;
+				break;
+			}
 
+			pairedsc = reqifp->if_softc;
 			if (pairedsc->sc_pairedif != 0) {
 				error = EBUSY;
 				break;
 			}
 
-			/* Only allow pair(4) interfaces for the pair */
-			if ((ifc = if_clone_lookup(newifp->if_xname,
-			    &unit)) == NULL || strcmp("pair",
-			    ifc->ifc_name) != 0) {
-				error = ENODEV;
-				break;
-			}
-
 			pairedsc->sc_pairedif = ifp->if_index;
 			sc->sc_pairedif = ifr->ifr_index;
+			newifp = reqifp;
 		} else
 			sc->sc_pairedif = 0;
 
@@ -271,10 +237,9 @@ pairioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		pair_link_state(oldifp);
 		if_put(oldifp);
 	}
-	if (newifp != NULL) {
+	if (newifp != NULL)
 		pair_link_state(newifp);
-		if_put(newifp);
-	}
+	if_put(reqifp);
 
 	return (error);
 }
