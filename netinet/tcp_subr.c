@@ -543,6 +543,7 @@ tcp_freeq(struct tcpcb *tp)
 		pool_put(&tcpqe_pool, qe);
 		rv = 1;
 	}
+	tp->t_segqlen = 0;
 	return (rv);
 }
 

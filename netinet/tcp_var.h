@@ -58,6 +58,7 @@ struct sackhole {
  * TCP sequence queue structures.
  */
 TAILQ_HEAD(tcpqehead, tcpqent);
+#define	TCP_REASS_MAXQLEN 100	/* Max # segments per reassembly queue */
 struct tcpqent {
 	TAILQ_ENTRY(tcpqent) tcpqe_q;
 	struct tcphdr	*tcpqe_tcp;
@@ -69,6 +70,7 @@ struct tcpqent {
  */
 struct tcpcb {
 	struct tcpqehead t_segq;		/* sequencing queue */
+	u_int	t_segqlen;		/* segment count in sequencing queue */
 	struct timeout t_timer[TCPT_NTIMERS];	/* tcp timers */
 	short	t_state;		/* state of this connection */
 	short	t_rxtshift;		/* log(2) of rexmt exp. backoff */

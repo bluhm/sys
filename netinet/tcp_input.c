@@ -197,6 +197,13 @@ tcp_reass(struct tcpcb *tp, struct tcphdr *th, struct mbuf *m, int *tlen)
 {
 	struct tcpqent *p, *q, *nq, *tiqe;
 
+	/* Bound the linear search through a per-connection queue. */
+	if (tp->t_segqlen >= TCP_REASS_MAXQLEN && th->th_seq != tp->rcv_nxt) {
+		tcpstat_inc(tcps_rcvmemdrop);
+		m_freem(m);
+		return (-1);
+	}
+
 	/*
 	 * Allocate a new queue entry, before we throw away any data.
 	 * If we can't, just drop the packet.  XXX
@@ -211,6 +218,7 @@ tcp_reass(struct tcpcb *tp, struct tcphdr *th, struct mbuf *m, int *tlen)
 			/* Reuse last entry since new segment fills a hole */
 			m_freem(tiqe->tcpqe_m);
 			TAILQ_REMOVE(&tp->t_segq, tiqe, tcpqe_q);
+			tp->t_segqlen--;
 		}
 		if (tiqe == NULL || th->th_seq != tp->rcv_nxt) {
 			/* Flush segment queue for this connection */
@@ -275,6 +283,7 @@ tcp_reass(struct tcpcb *tp, struct tcphdr *th, struct mbuf *m, int *tlen)
 		nq = TAILQ_NEXT(q, tcpqe_q);
 		m_freem(q->tcpqe_m);
 		TAILQ_REMOVE(&tp->t_segq, q, tcpqe_q);
+		tp->t_segqlen--;
 		pool_put(&tcpqe_pool, q);
 	}
 
@@ -287,6 +296,7 @@ tcp_reass(struct tcpcb *tp, struct tcphdr *th, struct mbuf *m, int *tlen)
 	} else {
 		TAILQ_INSERT_AFTER(&tp->t_segq, p, tiqe, tcpqe_q);
 	}
+	tp->t_segqlen++;
 
 	if (th->th_seq != tp->rcv_nxt)
 		return (0);
@@ -318,6 +328,7 @@ tcp_flush_queue(struct tcpcb *tp)
 
 		nq = TAILQ_NEXT(q, tcpqe_q);
 		TAILQ_REMOVE(&tp->t_segq, q, tcpqe_q);
+		tp->t_segqlen--;
 		if (so->so_rcv.sb_state & SS_CANTRCVMORE)
 			m_freem(q->tcpqe_m);
 		else {
