@@ -58,7 +58,6 @@ struct sackhole {
  * TCP sequence queue structures.
  */
 TAILQ_HEAD(tcpqehead, tcpqent);
-#define	TCP_REASS_MAXQLEN 100	/* Max # segments per reassembly queue */
 struct tcpqent {
 	TAILQ_ENTRY(tcpqent) tcpqe_q;
 	struct tcphdr	*tcpqe_tcp;
@@ -70,7 +69,6 @@ struct tcpqent {
  */
 struct tcpcb {
 	struct tcpqehead t_segq;		/* sequencing queue */
-	u_int	t_segqlen;		/* segment count in sequencing queue */
 	struct timeout t_timer[TCPT_NTIMERS];	/* tcp timers */
 	short	t_state;		/* state of this connection */
 	short	t_rxtshift;		/* log(2) of rexmt exp. backoff */
@@ -131,6 +129,7 @@ struct tcpcb {
 	tcp_seq	irs;			/* initial receive sequence number */
 	tcp_seq rcv_lastsack;		/* last seq number(+1) sack'd by rcv'r*/
 	int	rcv_numsacks;		/* # distinct sack blks present */
+	u_int	t_segqlen;		/* segment count in sequencing queue */
 	struct sackblk sackblks[MAX_SACK_BLKS]; /* seq nos. of sack blocks */
 
 /*
@@ -369,6 +368,7 @@ struct	tcpstat {
 	u_int32_t tcps_rcvbadsum;	/* packets received with ccksum errs */
 	u_int32_t tcps_rcvbadoff;	/* packets received with bad offset */
 	u_int32_t tcps_rcvmemdrop;	/* packets dropped for lack of memory */
+	u_int32_t tcps_rcvreassfull;	/* packets dropped for no reass space */
 	u_int32_t tcps_rcvnosec;	/* packets dropped for lack of ipsec */
 	u_int32_t tcps_rcvshort;	/* packets received too short */
 	u_int32_t tcps_rcvduppack;	/* duplicate-only packets received */
@@ -561,6 +561,7 @@ enum tcpstat_counters {
 	tcps_rcvbadsum,
 	tcps_rcvbadoff,
 	tcps_rcvmemdrop,
+	tcps_rcvreassfull,
 	tcps_rcvnosec,
 	tcps_rcvshort,
 	tcps_rcvduppack,

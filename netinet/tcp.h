@@ -104,6 +104,7 @@ struct tcphdr {
 #define	MAX_SACK_BLKS	6	/* Max # SACK blocks stored at sender side */
 #define	TCP_MAX_SACK	3	/* Max # SACKs sent in any segment */
 #define	TCP_SACKHOLE_LIMIT 128	/* Max # SACK holes per connection */
+#define	TCP_REASS_MAXQLEN 100	/* Max # segments per reassembly queue */
 
 /*
  * Default maximum segment size for TCP.

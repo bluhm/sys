@@ -1310,6 +1310,7 @@ tcp_sysctl_tcpstat(void *oldp, size_t *oldlenp, void *newp)
 	ASSIGN(tcps_rcvbadsum);
 	ASSIGN(tcps_rcvbadoff);
 	ASSIGN(tcps_rcvmemdrop);
+	ASSIGN(tcps_rcvreassfull);
 	ASSIGN(tcps_rcvnosec);
 	ASSIGN(tcps_rcvshort);
 	ASSIGN(tcps_rcvduppack);

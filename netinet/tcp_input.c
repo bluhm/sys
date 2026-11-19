@@ -195,11 +195,16 @@ struct syn_cache *syn_cache_lookup(const struct sockaddr *,
 int
 tcp_reass(struct tcpcb *tp, struct tcphdr *th, struct mbuf *m, int *tlen)
 {
+	struct socket *so = tp->t_inpcb->inp_socket;
 	struct tcpqent *p, *q, *nq, *tiqe;
+	u_int qlimit;
+
+	/* Room for a full window of segments of at least 1 KB. */
+	qlimit = max(TCP_REASS_MAXQLEN, READ_ONCE(so->so_rcv.sb_hiwat) / 1024);
 
 	/* Bound the linear search through a per-connection queue. */
-	if (tp->t_segqlen >= TCP_REASS_MAXQLEN && th->th_seq != tp->rcv_nxt) {
-		tcpstat_inc(tcps_rcvmemdrop);
+	if (tp->t_segqlen >= qlimit && th->th_seq != tp->rcv_nxt) {
+		tcpstat_inc(tcps_rcvreassfull);
 		m_freem(m);
 		return (-1);
 	}
