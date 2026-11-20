@@ -987,7 +987,7 @@ udp_output(struct inpcb *inp, struct mbuf *m, struct mbuf *addr,
 				goto release;
 			}
 			cm = (struct cmsghdr *)cmsgs;
-			if (cm->cmsg_len < CMSG_LEN(0) ||
+			if (cm->cmsg_len < CMSG_LEN(0) || cm->cmsg_len > clen ||
 			    CMSG_ALIGN(cm->cmsg_len) > clen) {
 				error = EINVAL;
 				goto release;
