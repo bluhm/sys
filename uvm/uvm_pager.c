@@ -1,4 +1,4 @@
-/*	$OpenBSD: uvm_pager.c,v 1.99 2026/07/11 13:13:16 kettenis Exp $	*/
+/*	$OpenBSD: uvm_pager.c,v 1.102 2026/11/20 16:48:12 renaud Exp $	*/
 /*	$NetBSD: uvm_pager.c,v 1.36 2000/11/27 18:26:41 chs Exp $	*/
 
 /*
@@ -721,7 +721,7 @@ uvm_swap_dropcluster(struct vm_page **pgs, int npages, int error, vaddr_t kva)
 				    pg->offset >> PAGE_SHIFT, 0);
 			else
 				pg->uanon->an_swslot = 0;
-		} else {
+		} else if (pg->uobject != NULL || !anon_disposed) {
 			/*
 			 * The page has been successfully written to swap.
 			 * Release it now: mark it PG_RELEASED and let
@@ -778,5 +778,7 @@ uvm_aio_aiodone(struct buf *bp)
 		/* XXX daddr_t -> int */
 		uvm_swap_markbad(slot, npages);
 	}
+	if (bp->b_vp)
+		brelvp(bp);
 	pool_put(&bufpool, bp);
 }

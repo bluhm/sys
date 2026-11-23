@@ -1,4 +1,4 @@
-/* $OpenBSD: if_pppoe.c,v 1.93 2026/11/08 08:42:55 miod Exp $ */
+/* $OpenBSD: if_pppoe.c,v 1.95 2026/11/22 07:08:13 gnezdo Exp $ */
 /* $NetBSD: if_pppoe.c,v 1.51 2003/11/28 08:56:48 keihan Exp $ */
 
 /*
@@ -542,9 +542,13 @@ pppoe_dispatch_disc_pkt(struct mbuf *m)
 			break;
 		case PPPOE_TAG_MAX_PAYLOAD:
 			if (!max_payloadtag) {
+				if (len != sizeof(max_payload)) {
+					err_msg = "TAG MAX_PAYLOAD ERROR";
+					break;
+				}
 				n = m_pulldown(m, off, len,
 				    &noff);
-				if (n == NULL || len != sizeof(max_payload)) {
+				if (n == NULL) {
 					err_msg = "TAG MAX_PAYLOAD ERROR";
 					m = NULL;
 					break;
@@ -1595,7 +1599,7 @@ int
 pppoe_enqueue(struct ifnet *ifp, struct mbuf *m)
 {
 	struct pppoe_softc *sc;
-	int error;
+	int error, len;
 
 	if (!ifq_is_priq(&ifp->if_snd))
 		return (if_enqueue_ifq(ifp, m));
@@ -1606,9 +1610,12 @@ pppoe_enqueue(struct ifnet *ifp, struct mbuf *m)
 		return (ENETDOWN);
 	}
 
+	len = m->m_pkthdr.len;
 	error = pppoe_transmit(sc, m);
 	if (error != 0)
 		counters_inc(ifp->if_counters, ifc_oerrors);
+	else
+		counters_pkt(ifp->if_counters, ifc_opackets, ifc_obytes, len);
 
 	return (error);
 }
