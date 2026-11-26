@@ -1,4 +1,4 @@
-/*	$OpenBSD: kern_sysctl.c,v 1.502 2026/11/21 20:06:50 mvs Exp $	*/
+/*	$OpenBSD: kern_sysctl.c,v 1.504 2026/11/25 12:44:38 mvs Exp $	*/
 /*	$NetBSD: kern_sysctl.c,v 1.17 1996/05/20 17:49:05 mrg Exp $	*/
 
 /*-
@@ -417,6 +417,8 @@ kern_sysctl_dirs(int top_name, int *name, u_int namelen,
 #ifndef SMALL_KERNEL
 	case KERN_FILE:
 		return (sysctl_file(name, namelen, oldp, oldlenp, p));
+	case KERN_PROC_VMMAP:
+		return (sysctl_proc_vmmap(name, namelen, oldp, oldlenp, p));
 	case KERN_MALLOCSTATS:
 		return (sysctl_malloc(name, namelen, oldp, oldlenp,
 		    newp, newlen, p));
@@ -482,8 +484,6 @@ kern_sysctl_dirs_locked(int top_name, int *name, u_int namelen,
 	case KERN_PROC_NOBROADCASTKILL:
 		return (sysctl_proc_nobroadcastkill(name, namelen,
 		     newp, newlen, oldp, oldlenp, p));
-	case KERN_PROC_VMMAP:
-		return (sysctl_proc_vmmap(name, namelen, oldp, oldlenp, p));
 	case KERN_INTRCNT:
 		return (sysctl_intrcnt(name, namelen, oldp, oldlenp));
 	case KERN_WATCHDOG:
@@ -542,6 +542,8 @@ kern_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		return (sysctl_rdstring(oldp, oldlenp, newp, osversion));
 	case KERN_VERSION:
 		return (sysctl_rdstring(oldp, oldlenp, newp, version));
+	case KERN_SECURELVL:
+		return (sysctl_securelevel(oldp, oldlenp, newp, newlen, p));
 	case KERN_HOSTNAME: {
 		char buf[MAXHOSTNAMELEN];
 
@@ -803,8 +805,6 @@ kern_sysctl_locked(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 	dev_t dev;
 
 	switch (name[0]) {
-	case KERN_SECURELVL:
-		return (sysctl_securelevel(oldp, oldlenp, newp, newlen, p));
 #ifndef SMALL_KERNEL
 	case KERN_NCHSTATS:
 		return (sysctl_rdstruct(oldp, oldlenp, newp, &nchstats,
@@ -1254,15 +1254,21 @@ sysctl_securelevel(void *oldp, size_t *oldlenp, void *newp, size_t newlen,
 	*oldlenp = sizeof(int);
 
 	if (newp) {
+		int curval;
+
 		if ((error = copyin(newp, &newval, sizeof(int))))
 			return (error);
-		do {
-			oldval = atomic_load_int(&securelevel);
-			if ((oldval > 0 || newval < -1) && newval < oldval &&
-			    p->p_p->ps_pid != 1)
-				return (EPERM);
-		} while (atomic_cas_uint(&securelevel, oldval, newval) !=
-		    oldval);
+again:
+		oldval = atomic_load_int(&securelevel);
+		if ((oldval > 0 || newval < -1) && newval < oldval &&
+		    p->p_p->ps_pid != 1)
+			return (EPERM);
+		KERNEL_LOCK();
+		/* Not all the `securelevel' read paths are mp-safe */
+		curval = atomic_cas_uint(&securelevel, oldval, newval);
+		KERNEL_UNLOCK();
+		if (curval != oldval)
+			goto again;
 
 		if (oldp) {
 			/* new value has been set although user gets error */
@@ -2570,6 +2576,7 @@ sysctl_proc_vmmap(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 	kve[0].kve_start = start;
 
 	pid = name[0];
+	KERNEL_LOCK();
 	if (pid == cp->p_p->ps_pid) {
 		/* Self process mapping. */
 		findpr = cp->p_p;
@@ -2622,6 +2629,7 @@ sysctl_proc_vmmap(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 done:
 	*oldlenp = len;
 free:
+	KERNEL_UNLOCK();
 	free(kve, M_TEMP, oldlen);
 
 	return (error);
